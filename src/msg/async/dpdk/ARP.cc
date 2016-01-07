@@ -46,30 +46,32 @@ arp_for_protocol::~arp_for_protocol()
   _arp.del(_proto_num);
 }
 
-arp::arp(interface* netif) : _netif(netif), _proto(netif, eth_protocol_num::arp, [this] { return get_packet(); }),
-                             _rx_packets(
-                                 _proto.receive(
-                                     [this] (packet p, ethernet_address ea) {
-                                       return process_packet(std::move(p), ea);
-                                     },
-                                     [this](forward_hash& out_hash_data, packet& p, size_t off) {
-                                       return forward(out_hash_data, p, off);
-                                     }
-                                 )
-                             )
+arp::arp(interface* netif):
+    _netif(netif),
+    _proto(netif, eth_protocol_num::arp, [this] { return get_packet(); }),
+    _rx_packets(
+        _proto.receive(
+            [this] (Packet p, ethernet_address ea) {
+              return process_packet(std::move(p), ea);
+            },
+            [this](forward_hash& out_hash_data, Packet& p, size_t off) {
+              return forward(out_hash_data, p, off);
+            }
+        )
+    )
 {}
 
 Tub<l3_protocol::l3packet> arp::get_packet()
 {
   Tub<l3_protocol::l3packet> p;
   if (!_packetq.empty()) {
-    p.construct(_packetq.front());
+    p = std::move(_packetq.front());
     _packetq.pop_front();
   }
   return p;
 }
 
-bool arp::forward(forward_hash& out_hash_data, packet& p, size_t off)
+bool arp::forward(forward_hash& out_hash_data, Packet& p, size_t off)
 {
   auto ah = p.get_header<arp_hdr>(off);
   auto i = _arp_for_protocol.find(ntoh(ah->ptype));
@@ -89,7 +91,7 @@ void arp::del(uint16_t proto_num)
   _arp_for_protocol.erase(proto_num);
 }
 
-int arp::process_packet(packet p, ethernet_address from)
+int arp::process_packet(Packet p, ethernet_address from)
 {
   auto ah = p.get_header<arp_hdr>()->ntoh();
   auto i = _arp_for_protocol.find(ah.ptype);

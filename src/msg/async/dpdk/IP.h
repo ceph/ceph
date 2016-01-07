@@ -47,11 +47,13 @@
 #include <chrono>
 
 #include "msg/async/Event.h"
+#include "common/Throttle.h"
 
 #include "array_map.h"
 #include "ARP.h"
 #include "IPChecksum.h"
 #include "const.h"
+#include "net.h"
 #include "PacketUtil.h"
 #include "toeplitz.h"
 
@@ -72,7 +74,7 @@ struct ipv4_addr {
   ipv4_addr(const std::string &addr);
   ipv4_addr(const std::string &addr, uint16_t port);
 
-  ipv4_addr(const entity_addr_t &addr) {
+  ipv4_addr(entity_addr_t &addr) {
     ip = ntoh(addr.in4_addr().sin_addr.s_addr);
     port = addr.get_port();
   }
@@ -94,12 +96,12 @@ struct ipv4_address {
 
   ipv4_address hton() {
     ipv4_address addr = *this;
-    addr.ip = hton(ip);
+    addr.ip = ::hton(ip);
     return addr;
   }
   ipv4_address ntoh() {
     ipv4_address addr = *this;
-    addr.ip = ntoh(ip);
+    addr.ip = ::ntoh(ip);
     return addr;
   }
 
@@ -135,10 +137,12 @@ struct ipv4_traits {
   };
   using packet_provider_type = std::function<Tub<l4packet> ()>;
   static void tcp_pseudo_header_checksum(checksummer& csum, ipv4_address src, ipv4_address dst, uint16_t len) {
-    csum.sum_many(src.ip.raw, dst.ip.raw, uint8_t(0), uint8_t(ip_protocol_num::tcp), len);
+    csum.sum_many(src.ip, dst.ip, uint8_t(0), uint8_t(ip_protocol_num::tcp), len);
   }
   static constexpr uint8_t ip_hdr_len_min = ipv4_hdr_len_min;
 };
+
+using resolution_cb = std::function<void (const ethernet_address&, int)>;
 
 template <ip_protocol_num ProtoNum>
 class ipv4_l4 {
@@ -212,14 +216,14 @@ class icmp {
  public:
   using ipaddr = ipv4_address;
   using inet_type = ipv4_l4<ip_protocol_num::icmp>;
-  explicit icmp(inet_type& inet)
-      : _inet(inet), _queue_space(inet.cct, "DPDK::icmp::_queue_space", 212992) {
+  explicit icmp(CephContext *cct, inet_type& inet)
+      : _inet(inet), _queue_space(cct, "DPDK::icmp::_queue_space", 212992) {
     _inet.register_packet_provider([this] {
       Tub<ipv4_traits::l4packet> l4p;
       if (!_packetq.empty()) {
-        l4p.construct(_packetq.front());
+        l4p = std::move(_packetq.front());
         _packetq.pop_front();
-        _queue_space.put(l4p.value().p.len());
+        _queue_space.put(l4p->p.len());
       }
       return l4p;
     });
@@ -229,14 +233,15 @@ class icmp {
  private:
   inet_type& _inet;
   circular_buffer<ipv4_traits::l4packet> _packetq;
-  Throttler _queue_space;
+  Throttle _queue_space;
 };
 
 class ipv4_icmp final : public ip_protocol {
+  CephContext *cct;
   ipv4_l4<ip_protocol_num::icmp> _inet_l4;
   icmp _icmp;
  public:
-  ipv4_icmp(ipv4& inet) : _inet_l4(inet), _icmp(_inet_l4) {}
+  ipv4_icmp(CephContext *c, ipv4& inet) : cct(c), _inet_l4(inet), _icmp(c,_inet_l4) {}
   virtual void received(Packet p, ipv4_address from, ipv4_address to) {
     _icmp.received(std::move(p), from, to);
   }
@@ -280,6 +285,8 @@ struct ipv4_frag_id::hash : private std::hash<ipv4_address>,
 struct ipv4_tag {};
 using ipv4_packet_merger = packet_merger<uint32_t, ipv4_tag>;
 
+class interface;
+
 class ipv4 {
  public:
   using address_type = ipv4_address;
@@ -294,7 +301,7 @@ class ipv4 {
   std::vector<ipv4_traits::packet_provider_type> _pkt_providers;
   Tub<uint64_t> frag_timefd;
   EventCallbackRef frag_handler;
-  ARP _global_arp;
+  arp _global_arp;
   arp_for<ipv4> _arp;
   ipv4_address _host_address;
   ipv4_address _gw_address;
@@ -319,13 +326,14 @@ class ipv4 {
   };
   std::unordered_map<ipv4_frag_id, frag, ipv4_frag_id::hash> _frags;
   std::list<ipv4_frag_id> _frags_age;
-  static constexpr utime_t _frag_timeout{30};
+  static utime_t _frag_timeout;
   static constexpr uint32_t _frag_low_thresh{3 * 1024 * 1024};
   static constexpr uint32_t _frag_high_thresh{4 * 1024 * 1024};
   uint32_t _frag_mem = 0;
   circular_buffer<l3_protocol::l3packet> _packetq;
   unsigned _pkt_provider_idx = 0;
   PerfCounters *perf_logger;
+
  private:
   int handle_received_packet(Packet p, ethernet_address from);
   bool forward(forward_hash& out_hash_data, Packet& p, size_t off);
@@ -334,7 +342,6 @@ class ipv4 {
     return !((a.ip ^ _host_address.ip) & _netmask.ip);
   }
   void frag_limit_mem();
-  void frag_timeout();
   void frag_drop(ipv4_frag_id frag_id, uint32_t dropped_size) {
     _frags.erase(frag_id);
     _frag_mem -= dropped_size;
@@ -347,6 +354,7 @@ class ipv4 {
     auto now = ceph_clock_now(cct);
     frag_timefd.construct(center->create_time_event(now.to_nsec() / 1000, frag_handler));
   }
+  void frag_timeout();
 
  public:
   explicit ipv4(interface* netif);
@@ -378,7 +386,7 @@ class ipv4 {
   // TODO or something. Should perhaps truly be a list
   // of filters. With ordering. And blackjack. Etc.
   // But for now, a simple single raw pointer suffices
-  void set_packet_filter(ip_packet_filter *) {
+  void set_packet_filter(ip_packet_filter *f) {
     _packet_filter = f;
   }
   ip_packet_filter * packet_filter() const {
@@ -387,12 +395,12 @@ class ipv4 {
   void send(ipv4_address to, ip_protocol_num proto_num, Packet p, ethernet_address e_dst);
   tcp<ipv4_traits>& get_tcp() { return *_tcp._tcp; }
   void register_l4(proto_type id, ip_protocol* handler);
-  const hw_features& hw_features() const { return _netif->hw_features(); }
+  const hw_features& get_hw_features() const;
   static bool needs_frag(Packet& p, ip_protocol_num proto_num, hw_features hw_features) {
     if (p.len() + ipv4_hdr_len_min <= hw_features.mtu)
       return false;
 
-    if ((prot_num == ip_protocol_num::tcp && hw_features.tx_tso))
+    if ((proto_num == ip_protocol_num::tcp && hw_features.tx_tso))
       return false;
 
     return true;
@@ -409,11 +417,10 @@ class ipv4 {
 template <ip_protocol_num ProtoNum>
 inline void ipv4_l4<ProtoNum>::register_packet_provider(
     ipv4_traits::packet_provider_type func) {
-  auto func = std::move(func);
   _inet.register_packet_provider([func] {
     auto l4p = func();
     if (l4p) {
-      l4p.value().proto_num = ProtoNum;
+      *l4p.proto_num = ProtoNum;
     }
     return l4p;
   });
@@ -421,7 +428,7 @@ inline void ipv4_l4<ProtoNum>::register_packet_provider(
 
 template <ip_protocol_num ProtoNum>
 inline void ipv4_l4<ProtoNum>::wait_l2_dst_address(ipv4_address to, resolution_cb &&cb) {
-  _inet.wait_l2_dst_address(to, cb);
+  _inet.wait_l2_dst_address(to, std::forward(cb));
 }
 
 struct ip_hdr {
@@ -441,22 +448,22 @@ struct ip_hdr {
   uint8_t options[0];
   ip_hdr hton() {
     ip_hdr hdr = *this;
-    hdr.len = hton(len);
-    hdr.id = hton(id);
-    hdr.frag = hton(frag);
-    hdr.csum = hton(csum);
-    hdr.src_ip = hton(src_ip);
-    hdr.dst_ip = hton(dst_ip);
+    hdr.len = ::hton(len);
+    hdr.id = ::hton(id);
+    hdr.frag = ::hton(frag);
+    hdr.csum = ::hton(csum);
+    hdr.src_ip = ::hton(src_ip);
+    hdr.dst_ip = ::hton(dst_ip);
     return hdr;
   }
   ip_hdr ntoh() {
     ip_hdr hdr = *this;
-    hdr.len = ntoh(len);
-    hdr.id = ntoh(id);
-    hdr.frag = ntoh(frag);
-    hdr.csum = ntoh(csum);
-    hdr.src_ip = ntoh(src_ip);
-    hdr.dst_ip = ntoh(dst_ip);
+    hdr.len = ::ntoh(len);
+    hdr.id = ::ntoh(id);
+    hdr.frag = ::ntoh(frag);
+    hdr.csum = ::ntoh(csum);
+    hdr.src_ip = ::ntoh(src_ip);
+    hdr.dst_ip = ::ntoh(dst_ip);
     return hdr;
   }
 

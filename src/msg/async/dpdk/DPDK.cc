@@ -176,8 +176,8 @@ int DPDKDevice::init_port_start()
   // DPDK i40e driver. This and all related to _is_i40e_device code should be
   // removed once this handling is added.
   //
-  if (sstring("rte_i40evf_pmd") == _dev_info.driver_name ||
-      sstring("rte_i40e_pmd") == _dev_info.driver_name) {
+  if (std::string("rte_i40evf_pmd") == _dev_info.driver_name ||
+      std::string("rte_i40e_pmd") == _dev_info.driver_name) {
     printf("Device is an Intel's 40G NIC. Enabling 8 fragments hack!\n");
     _is_i40e_device = true;
   }
@@ -189,13 +189,13 @@ int DPDKDevice::init_port_start()
   // i40e PF NICs support up to 64 RSS queues.
   // i40e VF NICs support up to 16 RSS queues.
   //
-  if (sstring("rte_ixgbe_pmd") == _dev_info.driver_name) {
+  if (std::string("rte_ixgbe_pmd") == _dev_info.driver_name) {
     _dev_info.max_rx_queues = std::min(_dev_info.max_rx_queues, (uint16_t)16);
-  } else if (sstring("rte_ixgbevf_pmd") == _dev_info.driver_name) {
+  } else if (std::string("rte_ixgbevf_pmd") == _dev_info.driver_name) {
     _dev_info.max_rx_queues = std::min(_dev_info.max_rx_queues, (uint16_t)4);
-  } else if (sstring("rte_i40e_pmd") == _dev_info.driver_name) {
+  } else if (std::string("rte_i40e_pmd") == _dev_info.driver_name) {
     _dev_info.max_rx_queues = std::min(_dev_info.max_rx_queues, (uint16_t)64);
-  } else if (sstring("rte_i40evf_pmd") == _dev_info.driver_name) {
+  } else if (std::string("rte_i40evf_pmd") == _dev_info.driver_name) {
     _dev_info.max_rx_queues = std::min(_dev_info.max_rx_queues, (uint16_t)16);
   }
 
@@ -485,8 +485,7 @@ void DPDKQueuePair::build_sw_reta(const std::map<unsigned, float>& cpu_weights) 
 }
 
 
-template <bool HugetlbfsMemBackend>
-void* DPDKQueuePair<HugetlbfsMemBackend>::alloc_mempool_xmem(
+void* DPDKQueuePair::alloc_mempool_xmem(
     uint16_t num_bufs, uint16_t buf_sz, std::vector<phys_addr_t>& mappings)
 {
   using namespace memory;
@@ -518,11 +517,9 @@ void* DPDKQueuePair<HugetlbfsMemBackend>::alloc_mempool_xmem(
   return xmem;
 }
 
-template <bool HugetlbfsMemBackend>
-bool DPDKQueuePair<HugetlbfsMemBackend>::init_rx_mbuf_pool()
+bool DPDKQueuePair::init_rx_mbuf_pool()
 {
-  using namespace memory;
-  sstring name = sstring(pktmbuf_pool_name) + to_sstring(_qid) + "_rx";
+  std::string name = std::string(pktmbuf_pool_name) + std::to_string(_qid) + "_rx";
 
   printf("Creating Rx mbuf pool '%s' [%u mbufs] ...\n",
          name.c_str(), mbufs_per_queue_rx);
@@ -533,73 +530,60 @@ bool DPDKQueuePair<HugetlbfsMemBackend>::init_rx_mbuf_pool()
   // memory for DPDK pools and this way significantly reduce the memory needed
   // for the DPDK in this case.
   //
-  if (HugetlbfsMemBackend) {
-    std::vector<phys_addr_t> mappings;
+  std::vector<phys_addr_t> mappings;
 
-    _rx_xmem.reset(alloc_mempool_xmem(mbufs_per_queue_rx, mbuf_overhead,
-                                      mappings));
-    if (!_rx_xmem.get()) {
-      printf("Can't allocate a memory for Rx buffers\n");
-      return false;
-    }
-
-    //
-    // Don't pass single-producer/single-consumer flags to mbuf create as it
-    // seems faster to use a cache instead.
-    //
-    struct rte_pktmbuf_pool_private roomsz = {};
-    roomsz.mbuf_data_room_size = mbuf_data_size + RTE_PKTMBUF_HEADROOM;
-    _pktmbuf_pool_rx =
-        rte_mempool_xmem_create(name.c_str(),
-                                mbufs_per_queue_rx, mbuf_overhead,
-                                mbuf_cache_size,
-                                sizeof(struct rte_pktmbuf_pool_private),
-                                rte_pktmbuf_pool_init, as_cookie(roomsz),
-                                rte_pktmbuf_init, nullptr,
-                                rte_socket_id(), 0,
-                                _rx_xmem.get(), mappings.data(),
-                                mappings.size(),
-                                page_bits);
-
-    // reserve the memory for Rx buffers containers
-    _rx_free_pkts.reserve(mbufs_per_queue_rx);
-    _rx_free_bufs.reserve(mbufs_per_queue_rx);
-
-    //
-    // 1) Pull all entries from the pool.
-    // 2) Bind data buffers to each of them.
-    // 3) Return them back to the pool.
-    //
-    for (int i = 0; i < mbufs_per_queue_rx; i++) {
-      rte_mbuf* m = rte_pktmbuf_alloc(_pktmbuf_pool_rx);
-      assert(m);
-      _rx_free_bufs.push_back(m);
-    }
-
-    for (auto&& m : _rx_free_bufs) {
-      if (!init_noninline_rx_mbuf(m)) {
-        printf("Failed to allocate data buffers for Rx ring. "
-               "Consider increasing the amount of memory.\n");
-        exit(1);
-      }
-    }
-
-    rte_mempool_put_bulk(_pktmbuf_pool_rx, (void**)_rx_free_bufs.data(),
-                         _rx_free_bufs.size());
-
-    _rx_free_bufs.clear();
-  } else {
-    struct rte_pktmbuf_pool_private roomsz = {};
-    roomsz.mbuf_data_room_size = inline_mbuf_data_size + RTE_PKTMBUF_HEADROOM;
-    _pktmbuf_pool_rx =
-        rte_mempool_create(name.c_str(),
-                           mbufs_per_queue_rx, inline_mbuf_size,
-                           mbuf_cache_size,
-                           sizeof(struct rte_pktmbuf_pool_private),
-                           rte_pktmbuf_pool_init, as_cookie(roomsz),
-                           rte_pktmbuf_init, nullptr,
-                           rte_socket_id(), 0);
+  _rx_xmem.reset(alloc_mempool_xmem(mbufs_per_queue_rx, mbuf_overhead,
+                                    mappings));
+  if (!_rx_xmem.get()) {
+    printf("Can't allocate a memory for Rx buffers\n");
+    return false;
   }
+
+  //
+  // Don't pass single-producer/single-consumer flags to mbuf create as it
+  // seems faster to use a cache instead.
+  //
+  struct rte_pktmbuf_pool_private roomsz = {};
+  roomsz.mbuf_data_room_size = mbuf_data_size + RTE_PKTMBUF_HEADROOM;
+  _pktmbuf_pool_rx =
+      rte_mempool_xmem_create(name.c_str(),
+                              mbufs_per_queue_rx, mbuf_overhead,
+                              mbuf_cache_size,
+                              sizeof(struct rte_pktmbuf_pool_private),
+                              rte_pktmbuf_pool_init, as_cookie(roomsz),
+                              rte_pktmbuf_init, nullptr,
+                              rte_socket_id(), 0,
+                              _rx_xmem.get(), mappings.data(),
+                              mappings.size(),
+                              page_bits);
+
+  // reserve the memory for Rx buffers containers
+  _rx_free_pkts.reserve(mbufs_per_queue_rx);
+  _rx_free_bufs.reserve(mbufs_per_queue_rx);
+
+  //
+  // 1) Pull all entries from the pool.
+  // 2) Bind data buffers to each of them.
+  // 3) Return them back to the pool.
+  //
+  for (int i = 0; i < mbufs_per_queue_rx; i++) {
+    rte_mbuf* m = rte_pktmbuf_alloc(_pktmbuf_pool_rx);
+    assert(m);
+    _rx_free_bufs.push_back(m);
+  }
+
+  for (auto&& m : _rx_free_bufs) {
+    if (!init_noninline_rx_mbuf(m, mbuf_data_size)) {
+      printf("Failed to allocate data buffers for Rx ring. "
+             "Consider increasing the amount of memory.\n");
+      exit(1);
+    }
+  }
+
+  rte_mempool_put_bulk(_pktmbuf_pool_rx, (void**)_rx_free_bufs.data(),
+                       _rx_free_bufs.size());
+
+  _rx_free_bufs.clear();
 
   return _pktmbuf_pool_rx != nullptr;
 }
@@ -632,8 +616,7 @@ void DPDKDevice::check_port_link_status()
   }
 }
 
-template <bool HugetlbfsMemBackend>
-DPDKQueuePair<HugetlbfsMemBackend>::DPDKQueuePair(EventCenter *c, DPDKDevice* dev, uint8_t qid)
+DPDKQueuePair::DPDKQueuePair(EventCenter *c, DPDKDevice* dev, uint8_t qid)
   : _tx_poller(this), _dev(dev), center(c), _qid(qid),
     _rx_gc_poller(this), _tx_buf_factory(qid),
     _tx_gc_poller(this)
@@ -663,7 +646,7 @@ DPDKQueuePair<HugetlbfsMemBackend>::DPDKQueuePair(EventCenter *c, DPDKDevice* de
     rte_exit(EXIT_FAILURE, "Cannot initialize tx queue\n");
   }
 
-  string name(std::string("queue") + std::to_string(qid));
+  std::string name(std::string("queue") + std::to_string(qid));
   PerfCountersBuilder plb(cct, name, l_dpdk_qp_first, l_dpdk_qp_last);
 
   plb.add_u64_counter(l_dpdk_qp_rx_packets, "dpdk_receive_packets", "DPDK received packets");
@@ -716,8 +699,7 @@ inline bool DPDKQueuePair::poll_tx() {
 }
 
 
-template <bool HugetlbfsMemBackend>
-void DPDKQueuePair<HugetlbfsMemBackend>::rx_start() {
+void DPDKQueuePair::rx_start() {
   _rx_poller.construct(this);
 }
 
@@ -823,11 +805,10 @@ inline Tub<Packet> DPDKQueuePair<true>::from_mbuf(rte_mbuf* m)
   }
 }
 
-template <bool HugetlbfsMemBackend>
-inline bool DPDKQueuePair<HugetlbfsMemBackend>::refill_one_cluster(rte_mbuf* head)
+inline bool DPDKQueuePair::refill_one_cluster(rte_mbuf* head)
 {
   for (; head != nullptr; head = head->next) {
-    if (!refill_rx_mbuf(head)) {
+    if (!refill_rx_mbuf(head, mbuf_data_size)) {
       //
       // If we failed to allocate a new buffer - push the rest of the
       // cluster back to the free_packets list for a later retry.
@@ -841,8 +822,7 @@ inline bool DPDKQueuePair<HugetlbfsMemBackend>::refill_one_cluster(rte_mbuf* hea
   return true;
 }
 
-template <bool HugetlbfsMemBackend>
-bool DPDKQueuePair<HugetlbfsMemBackend>::rx_gc()
+bool DPDKQueuePair::rx_gc()
 {
   if (_num_rx_free_segs >= rx_gc_thresh) {
     while (!_rx_free_pkts.empty()) {
@@ -880,8 +860,7 @@ bool DPDKQueuePair<HugetlbfsMemBackend>::rx_gc()
 }
 
 
-template <bool HugetlbfsMemBackend>
-void DPDKQueuePair<HugetlbfsMemBackend>::process_packets(
+void DPDKQueuePair::process_packets(
     struct rte_mbuf **bufs, uint16_t count)
 {
   uint64_t nr_frags = 0, bytes = 0;
@@ -928,15 +907,9 @@ void DPDKQueuePair<HugetlbfsMemBackend>::process_packets(
 
   _stats.rx.good.update_pkts_bunch(count);
   _stats.rx.good.update_frags_stats(nr_frags, bytes);
-
-  if (!HugetlbfsMemBackend) {
-    _stats.rx.good.copy_frags = _stats.rx.good.nr_frags;
-    _stats.rx.good.copy_bytes = _stats.rx.good.bytes;
-  }
 }
 
-template <bool HugetlbfsMemBackend>
-bool DPDKQueuePair<HugetlbfsMemBackend>::poll_rx_once()
+bool DPDKQueuePair::poll_rx_once()
 {
   struct rte_mbuf *buf[packet_read_size];
 
@@ -950,6 +923,312 @@ bool DPDKQueuePair<HugetlbfsMemBackend>::poll_rx_once()
   }
 
   return rx_count;
+}
+
+DPDKQueuePair::tx_buf_factory::tx_buf_factory(uint8_t qid)
+{
+  std::string name = std::string(pktmbuf_pool_name) + std::to_string(qid) + "_tx";
+  printf("Creating Tx mbuf pool '%s' [%u mbufs] ...\n",
+         name.c_str(), mbufs_per_queue_tx);
+
+  std::vector<phys_addr_t> mappings;
+
+  _xmem.reset(DPDKQueuePair::alloc_mempool_xmem(mbufs_per_queue_tx,
+                                                inline_mbuf_size,
+                                                mappings));
+  if (!_xmem.get()) {
+    printf("Can't allocate a memory for Tx buffers\n");
+    exit(1);
+  }
+
+  //
+  // We are going to push the buffers from the mempool into
+  // the circular_buffer and then poll them from there anyway, so
+  // we prefer to make a mempool non-atomic in this case.
+  //
+  _pool =
+      rte_mempool_xmem_create(name.c_str(),
+                              mbufs_per_queue_tx, inline_mbuf_size,
+                              mbuf_cache_size,
+                              sizeof(struct rte_pktmbuf_pool_private),
+                              rte_pktmbuf_pool_init, nullptr,
+                              rte_pktmbuf_init, nullptr,
+                              rte_socket_id(), 0,
+                              _xmem.get(), mappings.data(),
+                              mappings.size(), page_bits);
+
+  if (!_pool) {
+    printf("Failed to create mempool for Tx\n");
+    exit(1);
+  }
+
+  //
+  // Fill the factory with the buffers from the mempool allocated
+  // above.
+  //
+  init_factory();
+}
+
+static bool DPDKQueuePair::tx_buf::i40e_should_linearize(rte_mbuf *head)
+{
+  bool is_tso = head->ol_flags & PKT_TX_TCP_SEG;
+
+  // For a non-TSO case: number of fragments should not exceed 8
+  if (!is_tso){
+    return head->nb_segs > i40e_max_xmit_segment_frags;
+  }
+
+  //
+  // For a TSO case each MSS window should not include more than 8
+  // fragments including headers.
+  //
+
+  // Calculate the number of frags containing headers.
+  //
+  // Note: we support neither VLAN nor tunneling thus headers size
+  // accounting is super simple.
+  //
+  size_t headers_size = head->l2_len + head->l3_len + head->l4_len;
+  unsigned hdr_frags = 0;
+  size_t cur_payload_len = 0;
+  rte_mbuf *cur_seg = head;
+
+  while (cur_seg && cur_payload_len < headers_size) {
+    cur_payload_len += cur_seg->data_len;
+    cur_seg = cur_seg->next;
+    hdr_frags++;
+  }
+
+  //
+  // Header fragments will be used for each TSO segment, thus the
+  // maximum number of data segments will be 8 minus the number of
+  // header fragments.
+  //
+  // It's unclear from the spec how the first TSO segment is treated
+  // if the last fragment with headers contains some data bytes:
+  // whether this fragment will be accounted as a single fragment or
+  // as two separate fragments. We prefer to play it safe and assume
+  // that this fragment will be accounted as two separate fragments.
+  //
+  size_t max_win_size = i40e_max_xmit_segment_frags - hdr_frags;
+
+  if (head->nb_segs <= max_win_size) {
+    return false;
+  }
+
+  // Get the data (without headers) part of the first data fragment
+  size_t prev_frag_data = cur_payload_len - headers_size;
+  auto mss = head->tso_segsz;
+
+  while (cur_seg) {
+    unsigned frags_in_seg = 0;
+    size_t cur_seg_size = 0;
+
+    if (prev_frag_data) {
+      cur_seg_size = prev_frag_data;
+      frags_in_seg++;
+      prev_frag_data = 0;
+    }
+
+    while (cur_seg_size < mss && cur_seg) {
+      cur_seg_size += cur_seg->data_len;
+      cur_seg = cur_seg->next;
+      frags_in_seg++;
+
+      if (frags_in_seg > max_win_size) {
+        return true;
+      }
+    }
+
+    if (cur_seg_size > mss) {
+      prev_frag_data = cur_seg_size - mss;
+    }
+  }
+
+  return false;
+}
+
+static tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(Packet&& p, DPDKQueuePair& qp)
+{
+  // Too fragmented - linearize
+  if (p.nr_frags() > max_frags) {
+    p.linearize();
+    ++qp._stats.tx.linearized;
+  }
+
+  build_mbuf_cluster:
+  rte_mbuf *head = nullptr, *last_seg = nullptr;
+  unsigned nsegs = 0;
+
+  //
+  // Create a HEAD of the fragmented packet: check if frag0 has to be
+  // copied and if yes - send it in a copy way
+  //
+  if (!check_frag0(p)) {
+    if (!copy_one_frag(qp, p.frag(0), head, last_seg, nsegs)) {
+      return nullptr;
+    }
+  } else if (!translate_one_frag(qp, p.frag(0), head, last_seg, nsegs)) {
+    return nullptr;
+  }
+
+  unsigned total_nsegs = nsegs;
+
+  for (unsigned i = 1; i < p.nr_frags(); i++) {
+    rte_mbuf *h = nullptr, *new_last_seg = nullptr;
+    if (!translate_one_frag(qp, p.frag(i), h, new_last_seg, nsegs)) {
+      me(head)->recycle();
+      return nullptr;
+    }
+
+    total_nsegs += nsegs;
+
+    // Attach a new buffers' chain to the packet chain
+    last_seg->next = h;
+    last_seg = new_last_seg;
+  }
+
+  // Update the HEAD buffer with the packet info
+  head->pkt_len = p.len();
+  head->nb_segs = total_nsegs;
+
+  set_cluster_offload_info(p, qp, head);
+
+  //
+  // If a packet hasn't been linearized already and the resulting
+  // cluster requires the linearisation due to HW limitation:
+  //
+  //    - Recycle the cluster.
+  //    - Linearize the packet.
+  //    - Build the cluster once again
+  //
+  if (head->nb_segs > max_frags ||
+      (p.nr_frags() > 1 && qp.port().is_i40e_device() && i40e_should_linearize(head))) {
+    me(head)->recycle();
+    p.linearize();
+    ++qp._stats.tx.linearized;
+
+    goto build_mbuf_cluster;
+  }
+
+  me(last_seg)->set_packet(std::move(p));
+
+  return me(head);
+}
+
+static void DPDKQueuePair::tx_buf::copy_packet_to_cluster(const Packet& p, rte_mbuf* head)
+{
+  rte_mbuf* cur_seg = head;
+  size_t cur_seg_offset = 0;
+  unsigned cur_frag_idx = 0;
+  size_t cur_frag_offset = 0;
+
+  while (true) {
+    size_t to_copy = std::min(p.frag(cur_frag_idx).size - cur_frag_offset,
+                              inline_mbuf_data_size - cur_seg_offset);
+
+    memcpy(rte_pktmbuf_mtod_offset(cur_seg, void*, cur_seg_offset),
+           p.frag(cur_frag_idx).base + cur_frag_offset, to_copy);
+
+    cur_frag_offset += to_copy;
+    cur_seg_offset += to_copy;
+
+    if (cur_frag_offset >= p.frag(cur_frag_idx).size) {
+      ++cur_frag_idx;
+      if (cur_frag_idx >= p.nr_frags()) {
+        //
+        // We are done - set the data size of the last segment
+        // of the cluster.
+        //
+        cur_seg->data_len = cur_seg_offset;
+        break;
+      }
+
+      cur_frag_offset = 0;
+    }
+
+    if (cur_seg_offset >= inline_mbuf_data_size) {
+      cur_seg->data_len = inline_mbuf_data_size;
+      cur_seg = cur_seg->next;
+      cur_seg_offset = 0;
+
+      // FIXME: assert in a fast-path - remove!!!
+      assert(cur_seg);
+    }
+  }
+}
+
+static tx_buf* DPDKQueuePair::tx_buf::from_packet_copy(Packet&& p, DPDKQueuePair& qp)
+{
+  // sanity
+  if (!p.len()) {
+    return nullptr;
+  }
+
+  /*
+   * Here we are going to use the fact that the inline data size is a
+   * power of two.
+   *
+   * We will first try to allocate the cluster and only if we are
+   * successful - we will go and copy the data.
+   */
+  auto aligned_len = align_up((size_t)p.len(), inline_mbuf_data_size);
+  unsigned nsegs = aligned_len / inline_mbuf_data_size;
+  rte_mbuf *head = nullptr, *last_seg = nullptr;
+
+  tx_buf* buf = qp.get_tx_buf();
+  if (!buf) {
+    return nullptr;
+  }
+
+  head = buf->rte_mbuf_p();
+  last_seg = head;
+  for (unsigned i = 1; i < nsegs; i++) {
+    buf = qp.get_tx_buf();
+    if (!buf) {
+      me(head)->recycle();
+      return nullptr;
+    }
+
+    last_seg->next = buf->rte_mbuf_p();
+    last_seg = last_seg->next;
+  }
+
+  //
+  // If we've got here means that we have succeeded already!
+  // We only need to copy the data and set the head buffer with the
+  // relevant info.
+  //
+  head->pkt_len = p.len();
+  head->nb_segs = nsegs;
+
+  copy_packet_to_cluster(p, head);
+  set_cluster_offload_info(p, qp, head);
+
+  return me(head);
+}
+
+static size_t DPDKQueuePair::tx_buf::copy_one_data_buf(
+    DPDKQueuePair& qp, rte_mbuf*& m, char* data, size_t buf_len)
+{
+  tx_buf* buf = qp.get_tx_buf();
+  if (!buf) {
+    return 0;
+  }
+
+  size_t len = std::min(buf_len, inline_mbuf_data_size);
+
+  m = buf->rte_mbuf_p();
+
+  // mbuf_put()
+  m->data_len = len;
+  m->pkt_len  = len;
+
+  qp._stats.tx.good.update_copy_stats(1, len);
+
+  memcpy(rte_pktmbuf_mtod(m, void*), data, len);
+
+  return len;
 }
 
 void DPDKDevice::set_rss_table()

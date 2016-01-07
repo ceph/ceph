@@ -36,12 +36,15 @@
 #include <cryptopp/md5.h>
 
 #include "include/utime.h"
+#include "common/Throttle.h"
+#include "msg/async/Event.h"
 #include "IPChecksum.h"
 #include "IP.h"
 #include "const.h"
 #include "byteorder.h"
 #include "shared_ptr.h"
 #include "PacketUtil.h"
+#include "queue.h"
 
 struct tcp_hdr;
 
@@ -207,7 +210,6 @@ class tcp {
   class tcb;
 
   class tcb : public enable_lw_shared_from_this<tcb> {
-    using clock_type = lowres_clock;
     static constexpr tcp_state CLOSED         = tcp_state::CLOSED;
     static constexpr tcp_state LISTEN         = tcp_state::LISTEN;
     static constexpr tcp_state SYN_SENT       = tcp_state::SYN_SENT;
@@ -282,7 +284,7 @@ class tcp {
     EventCenter *center;
     UserspaceEventManager &manager;
     int fd;
-    int16_t errno = 1;
+    int16_t _errno = 0;
     tcp_option _option;
     EventCallbackRef delayed_ack_event;
     Tub<uint64_t> _delayed_ack_fd;
@@ -359,8 +361,8 @@ class tcp {
       }
     }
 
-    const int16_t errno() const {
-      return errno;
+    const int16_t _errno() const {
+      return _errno;
     }
 
     tcp_state& state() {
@@ -471,7 +473,7 @@ class tcp {
       _snd.user_queue_space.reset();
       cleanup();
       manager.notify(fd, EVENT_READABLE, -ECONNRESET);
-      errno = -ECONNRESET;
+      _errno = -ECONNRESET;
 
       if (_snd._all_data_acked_fd >= 0)
         manager.notify(_snd._all_data_acked_fd, EVENT_READABLE, -ECONNRESET);
@@ -562,25 +564,31 @@ class tcp {
     Tub<Packet> read() {
       return _tcb->read();
     }
-    const int16_t errno() const {
-      return errno;
+    const int16_t get_errno() const {
+      return _errno;
     }
     void close_read();
     void close_write();
+    entity_addr_t remote_addr() const {
+      entity_addr_t addr;
+      addr.in4_addr().sin_addr.s_addr = _tcb->_foreign_ip.hton();
+      addr.ss_addr().ss_family = AF_INET;
+      return addr;
+    }
   };
   class listener {
     tcp& _tcp;
     uint16_t _port;
-    int16_t errno;
+    int16_t _errno;
     queue<connection> _q;
    private:
     listener(tcp& t, uint16_t port, size_t queue_length)
-        : _tcp(t), _port(port), _q(queue_length) {
+        : _tcp(t), _port(port), _errno(0), _q(queue_length) {
       _tcp._listening.emplace(_port, this);
     }
    public:
     listener(listener&& x)
-        : _tcp(x._tcp), _port(x._port), _q(std::move(x._q)) {
+        : _tcp(x._tcp), _port(x._port), _errno(x._errno), _q(std::move(x._q)) {
       _tcp._listening[_port] = this;
       x._port = 0;
     }
@@ -599,8 +607,8 @@ class tcp {
     void abort_accept() {
       _q.clear();
     }
-    const int16_t errno() const {
-      return errno;
+    int16_t get_errno() const {
+      return _errno;
     }
     friend class tcp;
   };
@@ -1995,7 +2003,7 @@ class socket_options;
 class ServerSocket;
 class ConnectedSocket;
 
-ServerSocket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, socket_options opts);
+ServerSocket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, const socket_options &opts);
 
 ConnectedSocket tcpv4_connect(tcp<ipv4_traits>& tcpv4, const entity_addr_t &addr);
 

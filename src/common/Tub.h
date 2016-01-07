@@ -85,8 +85,24 @@ class Tub {
 	 */
   Tub(const Tub<ElementType>& other) // NOLINT
           : occupied(false) {
-    if (other.occupied)
+    if (other.occupied) {
       construct(*other.object); // use ElementType's copy constructor
+    }
+  }
+
+  /**
+	 * Move constructor.
+	 * The object will be initialized if and only if the source of the move is
+	 * initialized.
+	 * \pre
+	 *      ElementType is MoveConstructible.
+	 * \param other
+	 *      Source of the move.
+	 */
+  Tub(Tub<ElementType>&& other) // NOLINT
+          : occupied(false) {
+    if (other.occupied)
+      construct(std::move(*other.object)); // use ElementType's copy constructor
   }
 
   /**
@@ -125,6 +141,19 @@ class Tub {
   }
 
   /**
+	 * Assignment: destroy current object if initialized, replace with
+	 * source.  Result will be uninitialized if source is uninitialized.
+	 * \pre
+	 *      ElementType is Assignable.
+	 */
+  Tub<ElementType>& operator=(ElementType &&elt) {
+    destroy();
+    new(object) ElementType(std::move(elt));
+    occupied = true;
+    return *this;
+  }
+
+  /**
 	 * Initialize the object.
 	 * If the object was already initialized, it will be destroyed first.
 	 * \param args
@@ -137,7 +166,7 @@ class Tub {
   template<typename... Args>
   ElementType* construct(Args&&... args) {
     destroy();
-    new(object) ElementType(static_cast<Args&&>(args)...);
+    new(object) ElementType(std::forward<Args>(args)...);
     occupied = true;
     return object;
   }

@@ -15,9 +15,9 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 #include "DPDK.h"
 #include "dpdk_rte.h"
-#include <rte_pci.h>
 
 namespace dpdk {
 

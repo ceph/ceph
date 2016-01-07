@@ -62,6 +62,8 @@ libmsg_la_SOURCES += msg/async/EventKqueue.h
 endif
 
 if HAVE_DPDK
+libmsg_la_CXXFLAGS += -I ${with_dpdk}/include -fPIC
+libmsg_la_LIBADD += ${DPDK_LIBS}
 libmsg_la_SOURCES += \
 	msg/async/dpdk/ARP.cc \
 	msg/async/dpdk/DPDK.cc \

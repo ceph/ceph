@@ -103,7 +103,7 @@ class stream {
   // Produce a value.  Call only after started(), and after
   // a previous produce() is ready.
   int produce(T... data) {
-      return futurize<void>::apply(_sub->_next, std::move(data)...);
+      return _sub->_next(std::move(data)...);
   }
 
   // End the stream.   Call only after started(), and after

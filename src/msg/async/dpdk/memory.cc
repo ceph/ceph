@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 /*
  * This file is open source software, licensed to you under the terms
  * of the Apache License, Version 2.0 (the "License").  See the NOTICE file
@@ -33,53 +33,8 @@
  *
  */
 
-#ifndef CEPH_MSG_CHECKSUM_H_
-#define CEPH_MSG_CHECKSUM_H_
+#include "memory.h"
 
-#include <cstdint>
-#include <cstddef>
-#include <arpa/inet.h>
-
-#include "Packet.h"
-
-uint16_t ip_checksum(const void* data, size_t len);
-
-struct checksummer {
-  __int128 csum = 0;
-  bool odd = false;
-  void sum(const char* data, size_t len);
-  void sum(const Packet& p);
-  void sum(uint8_t data) {
-    if (!odd) {
-      csum += data << 8;
-    } else {
-      csum += data;
-    }
-    odd = !odd;
-  }
-  void sum(uint16_t data) {
-    if (odd) {
-      sum(uint8_t(data >> 8));
-      sum(uint8_t(data));
-    } else {
-      csum += data;
-    }
-  }
-  void sum(uint32_t data) {
-    if (odd) {
-      sum(uint16_t(data));
-      sum(uint16_t(data >> 16));
-    } else {
-      csum += data;
-    }
-  }
-  void sum_many() {}
-  template <typename T0, typename... T>
-  void sum_many(T0 data, T... rest) {
-    sum(data);
-    sum_many(rest...);
-  }
-  uint16_t get() const;
-};
-
-#endif /* CEPH_MSG_CHECKSUM_H_ */
+translation translate(const void* addr, size_t size) {
+  return {}
+}

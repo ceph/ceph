@@ -37,11 +37,16 @@
 #ifndef CEPH_MSG_ARP_H_
 #define CEPH_MSG_ARP_H_
 
+#include <errno.h>
+
 #include <unordered_map>
 #include <functional>
 
-#include "DPDKStack.h"
+#include "msg/async/Event.h"
+
 #include "ethernet.h"
+#include "circular_buffer.h"
+#include "net.h"
 #include "Packet.h"
 
 class arp;
@@ -60,6 +65,8 @@ class arp_for_protocol {
   virtual bool forward(forward_hash& out_hash_data, Packet& p, size_t off) { return false; }
 };
 
+class interface;
+
 class arp {
   interface* _netif;
   l3_protocol _proto;
@@ -70,6 +77,12 @@ class arp {
   struct arp_hdr {
     uint16_t htype;
     uint16_t ptype;
+    arp_hdr ntoh() {
+      arp_hdr hdr = *this;
+      hdr.htype = htype;
+      hdr.ptype = ptype;
+      return hdr;
+    }
   };
  public:
   explicit arp(interface* netif);
@@ -77,8 +90,8 @@ class arp {
   void del(uint16_t proto_num);
  private:
   ethernet_address l2self() { return _netif->hw_address(); }
-  int process_packet(packet p, ethernet_address from);
-  bool forward(forward_hash& out_hash_data, packet& p, size_t off);
+  int process_packet(Packet p, ethernet_address from);
+  bool forward(forward_hash& out_hash_data, Packet& p, size_t off);
   Tub<l3_protocol::l3packet> get_packet();
   template <class l3_proto>
   friend class arp_for;
@@ -123,22 +136,45 @@ class arp_for : public arp_for_protocol {
     std::vector<resolution_cb> _waiters;
     uint64_t timeout_fd;
   };
+  class C_handle_arp_timeout : public EventCallback {
+    arp_for *arp;
+    l3addr paddr;
+    bool first_request;
+
+   public:
+    C_handle_arp_timeout(arp_for *a, l3addr addr, bool first):
+        arp(), paddr(addr), first_request(first) {}
+    void do_request(int r) {
+      arp->send_query(paddr);
+      auto &res = arp->_in_progress[paddr];
+
+      for (auto& w : res._waiters) {
+        w(ethernet_address(), -ETIMEDOUT);
+      }
+      res._waiters.clear();
+      delete this;
+    }
+  };
+  friend class C_handle_arp_timeout;
+
  private:
+  EventCenter *center;
   l3addr _l3self = L3::broadcast_address();
   std::unordered_map<l3addr, l2addr> _table;
   std::unordered_map<l3addr, resolution> _in_progress;
  private:
-  packet make_query_packet(l3addr paddr);
-  virtual int received(packet p) override;
+  Packet make_query_packet(l3addr paddr);
+  virtual int received(Packet p) override;
   int handle_request(arp_hdr* ah);
   l2addr l2self() { return _arp.l2self(); }
-  void send(l2addr to, packet p);
+  void send(l2addr to, Packet p);
  public:
   void send_query(const l3addr& paddr);
-  explicit arp_for(arp& a) : arp_for_protocol(a, L3::arp_protocol_type()) {
+  explicit arp_for(arp& a, EventCenter *c)
+      : arp_for_protocol(a, L3::arp_protocol_type()), center(c) {
     _table[L3::broadcast_address()] = ethernet::broadcast_address();
   }
-  std::pair<ethernet_address, int> wait(const l3addr& addr, resolution_cb &&cb);
+  void wait(const l3addr& addr, resolution_cb &&cb);
   void learn(l2addr l2, l3addr l3);
   void run();
   void set_self_addr(l3addr addr) { _l3self = addr; }
@@ -146,7 +182,7 @@ class arp_for : public arp_for_protocol {
 };
 
 template <typename L3>
-packet
+Packet
 arp_for<L3>::make_query_packet(l3addr paddr) {
   arp_hdr hdr;
   hdr.htype = ethernet::arp_hardware_type();
@@ -159,11 +195,11 @@ arp_for<L3>::make_query_packet(l3addr paddr) {
   hdr.target_hwaddr = ethernet::broadcast_address();
   hdr.target_paddr = paddr;
   hdr = hdr.hton();
-  return packet(reinterpret_cast<char*>(&hdr), sizeof(hdr));
+  return Packet(reinterpret_cast<char*>(&hdr), sizeof(hdr));
 }
 
 template <typename L3>
-void arp_for<L3>::send(l2addr to, packet p) {
+void arp_for<L3>::send(l2addr to, Packet p) {
   _arp._packetq.push_back(l3_protocol::l3packet{eth_protocol_num::arp, to, std::move(p)});
 }
 
@@ -188,24 +224,6 @@ class arp_queue_full_error : public arp_error {
   arp_queue_full_error() : arp_error("ARP waiter's queue is full") {}
 };
 
-class C_handle_arp_timeout : public EventCallback {
-  arp_for<l3> *arp;
-  resolution::iterator &res;
-  l3addr paddr;
-
- public:
-  C_handle_arp_timeout(arp_for<l3> *arp, resolution::iterator &res, l3addr addr):
-          arp(arp), res(res), paddr(addr) {}
-  void do_request(int r) {
-    arp->send_query(paddr);
-    for (auto& w : res._waiters) {
-      w(ethernet_address(), -ETIMEOUT);
-    }
-    res._waiters.clear();
-    delete this;
-  }
-};
-
 template <typename L3>
 void arp_for<L3>::wait(const l3addr& paddr, resolution_cb &&cb) {
   auto i = _table.find(paddr);
@@ -219,7 +237,7 @@ void arp_for<L3>::wait(const l3addr& paddr, resolution_cb &&cb) {
 
   if (first_request) {
     res.timeout_fd = center->create_time_event(
-        1*1000*1000, new C_handle_arp_timeout(this, res, paddr));
+        1*1000*1000, new C_handle_arp_timeout(this, paddr, first_request));
     send_query(paddr);
   }
 
@@ -277,7 +295,7 @@ int arp_for<L3>::handle_request(arp_hdr* ah) {
     ah->sender_hwaddr = l2self();
     ah->sender_paddr = _l3self;
     *ah = ah->hton();
-    send(ah->target_hwaddr, packet(reinterpret_cast<char*>(ah), sizeof(*ah)));
+    send(ah->target_hwaddr, Packet(reinterpret_cast<char*>(ah), sizeof(*ah)));
   }
   return 0;
 }

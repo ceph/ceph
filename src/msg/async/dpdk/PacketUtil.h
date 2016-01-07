@@ -36,9 +36,10 @@
 #ifndef CEPH_MSG_PACKET_UTIL_H_
 #define CEPH_MSG_PACKET_UTIL_H_
 
-#include "Packet.h"
 #include <map>
 #include <iostream>
+
+#include "Packet.h"
 
 template <typename Offset, typename Tag>
 class packet_merger {
@@ -48,13 +49,13 @@ class packet_merger {
     return linearization_count;
   }
  public:
-  std::map<Offset, packet> map;
+  std::map<Offset, Packet> map;
 
   static uint64_t linearizations() {
     return linearizations_ref();
   }
 
-  void merge(Offset offset, packet p) {
+  void merge(Offset offset, Packet p) {
     bool insert;
     auto beg = offset;
     auto end = beg + p.len();

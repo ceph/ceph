@@ -44,6 +44,8 @@
 #include "include/types.h"
 #include "common/Tub.h"
 #include "msg/async/Event.h"
+
+#include "const.h"
 #include "deleter.h"
 
 struct fragment {
@@ -192,8 +194,8 @@ class Packet {
               to->frags[0].base);
     }
   };
-  Packet(std::unique_ptr<impl>&& impl) : impl(std::move(impl)) {}
-  std::unique_ptr<impl> impl;
+  Packet(std::unique_ptr<impl>&& impl) : _impl(std::move(impl)) {}
+  std::unique_ptr<impl> _impl;
 public:
   static Packet from_static_data(const char* data, size_t len) {
     return {fragment{const_cast<char*>(data), len}, deleter()};
@@ -224,8 +226,6 @@ public:
   Packet(fragment frag, deleter del, Packet&& x);
   // append fragment (zero-copy)
   Packet(Packet&& x, fragment frag, deleter d);
-  // append temporary_buffer (zero-copy)
-  Packet(Packet&& x, temporary_buffer<char> buf);
   // append deleter
   Packet(Packet&& x, deleter d);
 
@@ -237,15 +237,15 @@ public:
     return *this;
   }
 
-  unsigned len() const { return impl->_len; }
+  unsigned len() const { return _impl->_len; }
   unsigned memory() const { return len() +  sizeof(Packet::impl); }
 
-  fragment frag(unsigned idx) const { return impl->frags[idx]; }
-  fragment& frag(unsigned idx) { return impl->frags[idx]; }
+  fragment frag(unsigned idx) const { return _impl->frags[idx]; }
+  fragment& frag(unsigned idx) { return _impl->frags[idx]; }
 
-  unsigned nr_frags() const { return impl->_nr_frags; }
-  pseudo_vector fragments() const { return { impl->frags, impl->_nr_frags }; }
-  fragment* fragment_array() const { return impl->frags; }
+  unsigned nr_frags() const { return _impl->_nr_frags; }
+  pseudo_vector fragments() const { return { _impl->frags, _impl->_nr_frags }; }
+  fragment* fragment_array() const { return _impl->frags; }
 
   // share Packet data (reference counted, non COW)
   Packet share();
@@ -274,33 +274,33 @@ public:
 
   void linearize() { return linearize(0, len()); }
 
-  void reset() { impl.reset(); }
+  void reset() { _impl.reset(); }
 
   void reserve(int n_frags) {
-    if (n_frags > impl->_nr_frags) {
-      auto extra = n_frags - impl->_nr_frags;
-      impl = impl::allocate_if_needed(std::move(impl), extra);
+    if (n_frags > _impl->_nr_frags) {
+      auto extra = n_frags - _impl->_nr_frags;
+      _impl = impl::allocate_if_needed(std::move(_impl), extra);
     }
   }
   Tub<uint32_t> rss_hash() {
-    return impl->rss_hash;
+    return *_impl->rss_hash;
   }
   void set_rss_hash(uint32_t hash) {
-    return impl->rss_hash.construct(hash);
+    _impl->rss_hash.construct(hash);
   }
 private:
   void linearize(size_t at_frag, size_t desired_size);
   bool allocate_headroom(size_t size);
 public:
-  class offload_info offload_info() const { return impl->_offload_info; }
-  class offload_info& offload_info_ref() { return impl->_offload_info; }
-  void set_offload_info(class offload_info oi) { impl->_offload_info = oi; }
+  class offload_info offload_info() const { return _impl->_offload_info; }
+  class offload_info& offload_info_ref() { return _impl->_offload_info; }
+  void set_offload_info(class offload_info oi) { _impl->_offload_info = oi; }
 };
 
 std::ostream& operator<<(std::ostream& os, const Packet& p);
 
 inline Packet::Packet(Packet&& x) noexcept
-    : impl(std::move(x.impl)) {
+    : _impl(std::move(x._impl)) {
 }
 
 inline Packet::impl::impl(size_t nr_frags)
@@ -326,13 +326,13 @@ inline Packet::impl::impl(fragment frag, size_t nr_frags)
   ++_nr_frags;
 }
 
-inline Packet::Packet(): impl(impl::allocate(1)) {
+inline Packet::Packet(): _impl(impl::allocate(1)) {
 }
 
-inline Packet::Packet(size_t nr_frags): impl(impl::allocate(nr_frags)) {
+inline Packet::Packet(size_t nr_frags): _impl(impl::allocate(nr_frags)) {
 }
 
-inline Packet::Packet(fragment frag): impl(new impl(frag)) {
+inline Packet::Packet(fragment frag): _impl(new impl(frag)) {
 }
 
 inline Packet::Packet(const char* data, size_t size):
@@ -340,20 +340,20 @@ inline Packet::Packet(const char* data, size_t size):
 }
 
 inline Packet::Packet(fragment frag, deleter d)
-    : impl(impl::allocate(1)) {
-  impl->_deleter = std::move(d);
-  impl->frags[impl->_nr_frags++] = frag;
-  impl->_len = frag.size;
+    : _impl(impl::allocate(1)) {
+  _impl->_deleter = std::move(d);
+  _impl->frags[_impl->_nr_frags++] = frag;
+  _impl->_len = frag.size;
 }
 
 inline Packet::Packet(std::vector<fragment> frag, deleter d)
-    : impl(impl::allocate(frag.size())) {
-  impl->_deleter = std::move(d);
-  std::copy(frag.begin(), frag.end(), impl->frags);
-  impl->_nr_frags = frag.size();
-  impl->_len = 0;
-  for (auto&& f : impl->fragments()) {
-    impl->_len += f.size;
+    : _impl(impl::allocate(frag.size())) {
+  _impl->_deleter = std::move(d);
+  std::copy(frag.begin(), frag.end(), _impl->frags);
+  _impl->_nr_frags = frag.size();
+  _impl->_len = 0;
+  for (auto&& f : _impl->fragments()) {
+    _impl->_len += f.size;
   }
 }
 
@@ -362,38 +362,38 @@ inline Packet::Packet(Iterator begin, Iterator end, deleter del) {
   unsigned nr_frags = 0, len = 0;
   nr_frags = std::distance(begin, end);
   std::for_each(begin, end, [&] (fragment& frag) { len += frag.size; });
-  impl = impl::allocate(nr_frags);
-  impl->_deleter = std::move(del);
-  impl->_len = len;
-  impl->_nr_frags = nr_frags;
-  std::copy(begin, end, impl->frags);
+  _impl = impl::allocate(nr_frags);
+  _impl->_deleter = std::move(del);
+  _impl->_len = len;
+  _impl->_nr_frags = nr_frags;
+  std::copy(begin, end, _impl->frags);
 }
 
 inline Packet::Packet(Packet&& x, fragment frag)
-    : impl(impl::allocate_if_needed(std::move(x.impl), 1)) {
-  impl->_len += frag.size;
+    : _impl(impl::allocate_if_needed(std::move(x._impl), 1)) {
+  _impl->_len += frag.size;
   std::unique_ptr<char[]> buf(new char[frag.size]);
   std::copy(frag.base, frag.base + frag.size, buf.get());
-  impl->frags[impl->_nr_frags++] = {buf.get(), frag.size};
-  auto buf = buf.release();
-  impl->_deleter = make_deleter(std::move(impl->_deleter), [buf] {
-    delete[] buf;
+  _impl->frags[_impl->_nr_frags++] = {buf.get(), frag.size};
+  auto bufp = buf.release();
+  _impl->_deleter = make_deleter(std::move(_impl->_deleter), [bufp] {
+    delete[] bufp;
   });
 }
 
 inline bool Packet::allocate_headroom(size_t size) {
-  if (impl->headroom >= size) {
-    impl->_len += size;
-    if (!impl->using_internal_data()) {
-      impl = impl::allocate_if_needed(std::move(impl), 1);
-      std::copy_backward(impl->frags, impl->frags + impl->_nr_frags,
-              impl->frags + impl->_nr_frags + 1);
-      impl->frags[0] = { impl->data + internal_data_size, 0 };
-      ++impl->_nr_frags;
+  if (_impl->headroom >= size) {
+    _impl->_len += size;
+    if (!_impl->using_internal_data()) {
+      _impl = impl::allocate_if_needed(std::move(_impl), 1);
+      std::copy_backward(_impl->frags, _impl->frags + _impl->_nr_frags,
+              _impl->frags + _impl->_nr_frags + 1);
+      _impl->frags[0] = { _impl->data + internal_data_size, 0 };
+      ++_impl->_nr_frags;
     }
-    impl->headroom -= size;
-    impl->frags[0].base -= size;
-    impl->frags[0].size += size;
+    _impl->headroom -= size;
+    _impl->frags[0].base -= size;
+    _impl->frags[0].size += size;
     return true;
   } else {
     return false;
@@ -402,73 +402,68 @@ inline bool Packet::allocate_headroom(size_t size) {
 
 
 inline Packet::Packet(fragment frag, Packet&& x)
-    : impl(std::move(x.impl)) {
+    : _impl(std::move(x._impl)) {
   // try to prepend into existing internal fragment
   if (allocate_headroom(frag.size)) {
-    std::copy(frag.base, frag.base + frag.size, impl->frags[0].base);
+    std::copy(frag.base, frag.base + frag.size, _impl->frags[0].base);
     return;
   } else {
     // didn't work out, allocate and copy
-    impl->unuse_internal_data();
-    impl = impl::allocate_if_needed(std::move(impl), 1);
-    impl->_len += frag.size;
-    std::unique_ptr<char[]> buf(new char[frag.size]);
-    std::copy(frag.base, frag.base + frag.size, buf.get());
-    std::copy_backward(impl->frags, impl->frags + impl->_nr_frags,
-            impl->frags + impl->_nr_frags + 1);
-    ++impl->_nr_frags;
-    impl->frags[0] = {buf.get(), frag.size};
-    auto buf = std::move(buf);
-    impl->_deleter = make_deleter(std::move(impl->_deleter), [buf] {});
+    _impl->unuse_internal_data();
+    _impl = impl::allocate_if_needed(std::move(_impl), 1);
+    _impl->_len += frag.size;
+    char *buf = new char[frag.size];
+    std::copy(frag.base, frag.base + frag.size, buf);
+    std::copy_backward(_impl->frags, _impl->frags + _impl->_nr_frags,
+            _impl->frags + _impl->_nr_frags + 1);
+    ++_impl->_nr_frags;
+    _impl->frags[0] = {buf, frag.size};
+    _impl->_deleter = make_deleter(std::move(_impl->_deleter), [buf] { delete buf; });
   }
 }
 
 inline Packet::Packet(Packet&& x, fragment frag, deleter d)
-    : impl(impl::allocate_if_needed(std::move(x.impl), 1)) {
-  impl->_len += frag.size;
-  impl->frags[impl->_nr_frags++] = frag;
-  d.append(std::move(impl->_deleter));
-  impl->_deleter = std::move(d);
+    : _impl(impl::allocate_if_needed(std::move(x._impl), 1)) {
+  _impl->_len += frag.size;
+  _impl->frags[_impl->_nr_frags++] = frag;
+  d.append(std::move(_impl->_deleter));
+  _impl->_deleter = std::move(d);
 }
 
-inline Packet::Packet(Packet&& x, deleter d): impl(std::move(x.impl)) {
-  impl->_deleter.append(std::move(d));
-}
-
-inline Packet::Packet(Packet&& x, temporary_buffer<char> buf)
-    : Packet(std::move(x), fragment{buf.get_write(), buf.size()}, buf.release()) {
+inline Packet::Packet(Packet&& x, deleter d): _impl(std::move(x._impl)) {
+  _impl->_deleter.append(std::move(d));
 }
 
 inline void Packet::append(Packet&& p) {
-  if (!impl->_len) {
+  if (!_impl->_len) {
     *this = std::move(p);
     return;
   }
-  impl = impl::allocate_if_needed(std::move(impl), p.impl->_nr_frags);
-  impl->_len += p.impl->_len;
-  p.impl->unuse_internal_data();
-  std::copy(p.impl->frags, p.impl->frags + p.impl->_nr_frags,
-            impl->frags + impl->_nr_frags);
-  impl->_nr_frags += p.impl->_nr_frags;
-  p.impl->_deleter.append(std::move(impl->_deleter));
-  impl->_deleter = std::move(p.impl->_deleter);
+  _impl = impl::allocate_if_needed(std::move(_impl), p._impl->_nr_frags);
+  _impl->_len += p._impl->_len;
+  p._impl->unuse_internal_data();
+  std::copy(p._impl->frags, p._impl->frags + p._impl->_nr_frags,
+            _impl->frags + _impl->_nr_frags);
+  _impl->_nr_frags += p._impl->_nr_frags;
+  p._impl->_deleter.append(std::move(_impl->_deleter));
+  _impl->_deleter = std::move(p._impl->_deleter);
 }
 
 inline char* Packet::get_header(size_t offset, size_t size) {
-  if (offset + size > impl->_len) {
+  if (offset + size > _impl->_len) {
     return nullptr;
   }
   size_t i = 0;
-  while (i != impl->_nr_frags && offset >= impl->frags[i].size) {
-    offset -= impl->frags[i++].size;
+  while (i != _impl->_nr_frags && offset >= _impl->frags[i].size) {
+    offset -= _impl->frags[i++].size;
   }
-  if (i == impl->_nr_frags) {
+  if (i == _impl->_nr_frags) {
     return nullptr;
   }
-  if (offset + size > impl->frags[i].size) {
+  if (offset + size > _impl->frags[i].size) {
     linearize(i, offset + size);
   }
-  return impl->frags[i].base + offset;
+  return _impl->frags[i].base + offset;
 }
 
 template <typename Header>
@@ -477,38 +472,38 @@ inline Header* Packet::get_header(size_t offset) {
 }
 
 inline void Packet::trim_front(size_t how_much) {
-  assert(how_much <= impl->_len);
-  impl->_len -= how_much;
+  assert(how_much <= _impl->_len);
+  _impl->_len -= how_much;
   size_t i = 0;
-  while (how_much && how_much >= impl->frags[i].size) {
-    how_much -= impl->frags[i++].size;
+  while (how_much && how_much >= _impl->frags[i].size) {
+    how_much -= _impl->frags[i++].size;
   }
-  std::copy(impl->frags + i, impl->frags + impl->_nr_frags, impl->frags);
-  impl->_nr_frags -= i;
-  if (!impl->using_internal_data()) {
-    impl->headroom = internal_data_size;
+  std::copy(_impl->frags + i, _impl->frags + _impl->_nr_frags, _impl->frags);
+  _impl->_nr_frags -= i;
+  if (!_impl->using_internal_data()) {
+    _impl->headroom = internal_data_size;
   }
   if (how_much) {
-    if (impl->using_internal_data()) {
-      impl->headroom += how_much;
+    if (_impl->using_internal_data()) {
+      _impl->headroom += how_much;
     }
-    impl->frags[0].base += how_much;
-    impl->frags[0].size -= how_much;
+    _impl->frags[0].base += how_much;
+    _impl->frags[0].size -= how_much;
   }
 }
 
 inline void Packet::trim_back(size_t how_much) {
-  assert(how_much <= impl->_len);
-  impl->_len -= how_much;
-  size_t i = impl->_nr_frags - 1;
-  while (how_much && how_much >= impl->frags[i].size) {
-    how_much -= impl->frags[i--].size;
+  assert(how_much <= _impl->_len);
+  _impl->_len -= how_much;
+  size_t i = _impl->_nr_frags - 1;
+  while (how_much && how_much >= _impl->frags[i].size) {
+    how_much -= _impl->frags[i--].size;
   }
-  impl->_nr_frags = i + 1;
+  _impl->_nr_frags = i + 1;
   if (how_much) {
-    impl->frags[i].size -= how_much;
-    if (i == 0 && impl->using_internal_data()) {
-        impl->headroom += how_much;
+    _impl->frags[i].size -= how_much;
+    if (i == 0 && _impl->using_internal_data()) {
+        _impl->headroom += how_much;
     }
   }
 }
@@ -523,47 +518,46 @@ Header* Packet::prepend_header(size_t extra_size) {
 inline char* Packet::prepend_uninitialized_header(size_t size) {
   if (!allocate_headroom(size)) {
     // didn't work out, allocate and copy
-    impl->unuse_internal_data();
+    _impl->unuse_internal_data();
     // try again, after unuse_internal_data we may have space after all
     if (!allocate_headroom(size)) {
       // failed
-      impl->_len += size;
-      impl = impl::allocate_if_needed(std::move(impl), 1);
-      std::unique_ptr<char[]> buf(new char[size]);
-      std::copy_backward(impl->frags, impl->frags + impl->_nr_frags,
-              impl->frags + impl->_nr_frags + 1);
-      ++impl->_nr_frags;
-      impl->frags[0] = {buf.get(), size};
-      auto buf = std::move(buf);
-      impl->_deleter = make_deleter(std::move(impl->_deleter),
-              [buf] {});
+      _impl->_len += size;
+      _impl = impl::allocate_if_needed(std::move(_impl), 1);
+      char *buf = new char[size];
+      std::copy_backward(_impl->frags, _impl->frags + _impl->_nr_frags,
+              _impl->frags + _impl->_nr_frags + 1);
+      ++_impl->_nr_frags;
+      _impl->frags[0] = {buf, size};
+      _impl->_deleter = make_deleter(std::move(_impl->_deleter),
+              [buf] { delete buf; });
     }
   }
-  return impl->frags[0].base;
+  return _impl->frags[0].base;
 }
 
 inline Packet Packet::share() {
-    return share(0, impl->_len);
+    return share(0, _impl->_len);
 }
 
 inline Packet Packet::share(size_t offset, size_t len) {
-  impl->unuse_internal_data(); // FIXME: eliminate?
+  _impl->unuse_internal_data(); // FIXME: eliminate?
   Packet n;
-  n.impl = impl::allocate_if_needed(std::move(n.impl), impl->_nr_frags);
+  n._impl = impl::allocate_if_needed(std::move(n._impl), _impl->_nr_frags);
   size_t idx = 0;
-  while (offset > 0 && offset >= impl->frags[idx].size) {
-    offset -= impl->frags[idx++].size;
+  while (offset > 0 && offset >= _impl->frags[idx].size) {
+    offset -= _impl->frags[idx++].size;
   }
-  while (n.impl->_len < len) {
-    auto& f = impl->frags[idx++];
-    auto fsize = std::min(len - n.impl->_len, f.size - offset);
-    n.impl->frags[n.impl->_nr_frags++] = { f.base + offset, fsize };
-    n.impl->_len += fsize;
+  while (n._impl->_len < len) {
+    auto& f = _impl->frags[idx++];
+    auto fsize = std::min(len - n._impl->_len, f.size - offset);
+    n._impl->frags[n._impl->_nr_frags++] = { f.base + offset, fsize };
+    n._impl->_len += fsize;
     offset = 0;
   }
-  n.impl->_offload_info = impl->_offload_info;
-  assert(!n.impl->_deleter);
-  n.impl->_deleter = impl->_deleter.share();
+  n._impl->_offload_info = _impl->_offload_info;
+  assert(!n._impl->_deleter);
+  n._impl->_deleter = _impl->_deleter.share();
   return n;
 }
 

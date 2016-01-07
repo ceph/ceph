@@ -41,10 +41,10 @@
 #include <utility>
 
 inline uint64_t ntohq(uint64_t v) {
-    return __builtin_bswap64(v);
+  return __builtin_bswap64(v);
 }
 inline uint64_t htonq(uint64_t v) {
-    return __builtin_bswap64(v);
+  return __builtin_bswap64(v);
 }
 
 inline void ntoh() {}

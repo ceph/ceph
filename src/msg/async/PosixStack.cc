@@ -85,7 +85,7 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, entity_addr_t *out) {
     return r;
   }
   std::unique_ptr<PosixServerSocketImpl> csi(new PosixServerSocketImpl(sa, fd));
-  *sock = ConnectedSocketstd::move(csi));
+  *sock = ConnectedSocket(std::move(csi));
   if (out)
     *out = sa;
   return 0;

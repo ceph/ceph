@@ -140,7 +140,7 @@ bool ipv4_tcp::forward(forward_hash& out_hash_data, packet& p, size_t off) {
 	return _tcp->forward(out_hash_data, p, off);
 }
 
-ServerSocket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, socket_options opts) {
+ServerSocket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, const SocketOptions &opts) {
 	return ServerSocket(std::make_unique<DPDKServerSocketImpl<tcp<ipv4_traits>>>(
 			tcpv4, port, opts));
 }

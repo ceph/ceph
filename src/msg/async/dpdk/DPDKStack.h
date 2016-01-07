@@ -21,81 +21,14 @@
 #include "common/Tub.h"
 
 #include "msg/async/GenericSocket.h"
+#include "DPDK.h"
+#include "net.h"
 #include "const.h"
+#include "IP.h"
 #include "Packet.h"
 
 class interface;
 
-class forward_hash {
-  uint8_t data[64];
-  size_t end_idx = 0;
- public:
-  size_t size() const {
-    return end_idx;
-  }
-  void push_back(uint8_t b) {
-    assert(end_idx < sizeof(data));
-    data[end_idx++] = b;
-  }
-  void push_back(uint16_t b) {
-    push_back(uint8_t(b));
-    push_back(uint8_t(b >> 8));
-  }
-  void push_back(uint32_t b) {
-    push_back(uint16_t(b));
-    push_back(uint16_t(b >> 16));
-  }
-  const uint8_t& operator[](size_t idx) const {
-    return data[idx];
-  }
-};
-
-struct hw_features {
-  // Enable tx ip header checksum offload
-  bool tx_csum_ip_offload = false;
-  // Enable tx l4 (TCP or UDP) checksum offload
-  bool tx_csum_l4_offload = false;
-  // Enable rx checksum offload
-  bool rx_csum_offload = false;
-  // LRO is enabled
-  bool rx_lro = false;
-  // Enable tx TCP segment offload
-  bool tx_tso = false;
-  // Enable tx UDP fragmentation offload
-  bool tx_ufo = false;
-  // Maximum Transmission Unit
-  uint16_t mtu = 1500;
-  // Maximun packet len when TCP/UDP offload is enabled
-  uint16_t max_packet_len = ip_packet_len_max - eth_hdr_len;
-};
-
-
-class l3_protocol {
- public:
-  struct l3packet {
-    eth_protocol_num proto_num;
-    ethernet_address to;
-    Packet p;
-  };
-  using packet_provider_type = std::function<Tub<l3packet> ()>;
-
- private:
-  interface* _netif;
-  eth_protocol_num _proto_num;
-
- public:
-  explicit l3_protocol(interface* netif, eth_protocol_num proto_num, packet_provider_type func) : _netif(netif), _proto_num(proto_num)  {
-    _netif->register_packet_provider(std::move(func));
-  }
-  subscription<Packet, ethernet_address> l3_protocol::receive(
-      std::function<int (Packet, ethernet_address)> rx_fn,
-      std::function<bool (forward_hash &h, Packet &p, size_t s)> forward) {
-    return _netif->register_l3(_proto_num, std::move(rx_fn), std::move(forward));
-  };
-
- private:
-  friend class interface;
-};
 
 
 template <typename Protocol>
@@ -106,31 +39,11 @@ template <typename Protocol>
 class DPDKServerSocketImpl : public ServerSocketImpl {
   typename Protocol::listener _listener;
  public:
-  DPDKServerSocketImpl(Protocol& proto, uint16_t port, listen_options opt);
-  virtual int accept(ConnectedSocket *s) override;
+  DPDKServerSocketImpl(Protocol& proto, uint16_t port, const SocketOptions &opt);
+  virtual int accept(ConnectedSocket *s, entity_addr_t *out) override;
   virtual void abort_accept() override;
 };
 
-template <typename Protocol>
-DPDKServerSocketImpl<Protocol>::DPDKServerSocketImpl(
-        Protocol& proto, uint16_t port, listen_options opt)
-        : _listener(proto.listen(port)) {}
-
-template <typename Protocol>
-int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s) {
-  if (_listener.errno() < 0)
-    return _listener.errno();
-  auto c = _listener.accept();
-  if (c)
-    return -EAGAIN;
-  *s = std::make_unique<NativeConnectedSocketImpl<Protocol>>(std::move(conn));
-  return 0;
-}
-
-template <typename Protocol>
-void DPDKServerSocketImpl<Protocol>::abort_accept() {
-  _listener.abort_accept();
-}
 
 // NativeConnectedSocketImpl
 template <typename Protocol>
@@ -142,12 +55,12 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
  public:
   explicit NativeConnectedSocketImpl(typename Protocol::connection conn)
           : _conn(std::move(conn)) {}
-  virtual int connected() override {
+  virtual int is_connected() override {
     return 1;
   }
   virtual int read(char *buf, size_t len) override {
-    if (_conn.errno() <= 0)
-      return _conn.errno();
+    if (_conn.get_errno() <= 0)
+      return _conn.get_errno();
 
     if (_cur_frag == _buf.nr_frags()) {
       _buf = _conn.read();
@@ -194,45 +107,32 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   virtual int set_rcvbuf(size_t s) override { return 0; }
 };
 
-class interface {
-  CephContext *cct;
-  struct l3_rx_stream {
-    stream<Packet, ethernet_address> packet_stream;
-    std::function<bool (forward_hash&, Packet&, size_t)> forward;
-    bool ready() { return packet_stream.started(); }
-    l3_rx_stream(std::function<bool (forward_hash&, Packet&, size_t)>&& fw) : forward(fw) {}
-  };
-  std::unordered_map<uint16_t, l3_rx_stream> _proto_map;
-  std::shared_ptr<DPDKDevice> _dev;
-  subscription<Packet> _rx;
-  ethernet_address _hw_address;
-  hw_features _hw_features;
-  std::vector<l3_protocol::packet_provider_type> _pkt_providers;
+template <typename Protocol>
+DPDKServerSocketImpl<Protocol>::DPDKServerSocketImpl(
+        Protocol& proto, uint16_t port, const SocketOptions &opt)
+        : _listener(proto.listen(port)) {}
 
- private:
-  void dispatch_packet(Packet p);
- public:
-  explicit interface(CephContext *cct, std::shared_ptr<device> dev, unsigned cpuid);
-  ethernet_address hw_address() { return _hw_address; }
-  const hw_features& hw_features() const { return _hw_features; }
-  subscription<Packet, ethernet_address> register_l3(
-      eth_protocol_num proto_num,
-      std::function<int (Packet, ethernet_address)> next,
-      std::function<bool (forward_hash&, Packet&, size_t)> forward);
-  void forward(unsigned cpuid, Packet p);
-  unsigned hash2cpu(uint32_t hash);
-  void register_packet_provider(l3_protocol::packet_provider_type func) {
-    _pkt_providers.push_back(std::move(func));
-  }
-  const rss_key_type& rss_key() const;
-  friend class l3_protocol;
-};
+template <typename Protocol>
+int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, entity_addr_t *out){
+  if (_listener.get_errno() < 0)
+    return _listener.get_errno();
+  auto c = _listener.accept();
+  if (!c)
+    return -EAGAIN;
 
-static NetworkStack* stacks[];
+  std::unique_ptr<NativeConnectedSocketImpl<Protocol>> csi(new NativeConnectedSocketImpl<Protocol>(*c));
+  *s = ConnectedSocket(std::move(csi));
+  if (out)
+    *out = c->remote_addr();
+  return 0;
+}
+
+template <typename Protocol>
+void DPDKServerSocketImpl<Protocol>::abort_accept() {
+  _listener.abort_accept();
+}
 
 class DPDKStack : public NetworkStack {
-  static bool created = false;
-
   interface _netif;
   ipv4 _inet;
   EventCenter *center;
@@ -246,7 +146,7 @@ class DPDKStack : public NetworkStack {
 
  public:
   explicit DPDKStack(CephContext *cct, std::shared_ptr<device> dev, unsigned cores, unsigned i);
-  virtual int listen(const entity_addr_t &sa, const listen_options &opt, ServerSocket *sock) override;
+  virtual int listen(const entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) override;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
   static std::unique_ptr<NetworkStack> create(CephContext *cct, unsigned i);
   void arp_learn(ethernet_address l2, ipv4_address l3) {

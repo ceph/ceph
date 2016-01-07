@@ -34,6 +34,8 @@
  *
  */
 
+#include "perf_counters.h"
+
 #include "IP.h"
 #include "shared_ptr.h"
 #include "toeplitz.h"
@@ -47,7 +49,7 @@ std::ostream& operator<<(std::ostream& os, ipv4_address a) {
                 (ip >> 0) & 0xff);
 }
 
-constexpr utime_t ipv4::_frag_timeout;
+utime_t ipv4::_frag_timeout = utime_t(30, 0);
 constexpr uint32_t ipv4::_frag_low_thresh;
 constexpr uint32_t ipv4::_frag_high_thresh;
 
@@ -62,7 +64,7 @@ class C_handle_frag_timeout : public EventCallback {
 };
 
 ipv4::ipv4(CephContext *c, EventCenter *cen, interface* netif)
-  : cct(c), center(cen), _netif(netif), _global_arp(netif), _arp(_global_arp),
+  : cct(c), center(cen), _netif(netif), _global_arp(netif), _arp(_global_arp, cen),
     _host_address(0), _gw_address(0), _netmask(0),
     _l3(netif, eth_protocol_num::ipv4, [this] { return get_packet(); }),
     _rx_packets(
@@ -229,6 +231,11 @@ void ipv4::wait_l2_dst_address(ipv4_address to, resolution_cb &&cb) {
   }
 
   _arp.wait(dst, cb);
+}
+
+const hw_features& ipv4::get_hw_features() const
+{
+  return _netif->get_hw_features();
 }
 
 void ipv4::send(ipv4_address to, ip_protocol_num proto_num, packet p, ethernet_address e_dst) {
