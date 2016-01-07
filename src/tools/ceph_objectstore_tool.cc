@@ -341,12 +341,6 @@ void myexit(int ret)
   exit(ret);
 }
 
-static void invalid_filestore_path(string &path)
-{
-  cerr << "Invalid filestore path specified: " << path << "\n";
-  myexit(1);
-}
-
 int get_log(ObjectStore *fs, __u8 struct_ver,
    coll_t coll, spg_t pgid, const pg_info_t &info,
    PGLog::IndexedLog &log, pg_missing_t &missing,
@@ -2444,20 +2438,6 @@ int main(int argc, char **argv)
     string err = string("data-path: ") + dpath;
     perror(err.c_str());
     myexit(1);
-  }
-  //Verify data data-path really is a filestore
-  if (type == "filestore") {
-    if (!S_ISDIR(st.st_mode)) {
-      invalid_filestore_path(dpath);
-    }
-    check = dpath + "/current";
-    if (::stat(check.c_str(), &st) == -1) {
-       perror("current");
-       invalid_filestore_path(dpath);
-    }
-    if (!S_ISDIR(st.st_mode)) {
-      invalid_filestore_path(dpath);
-    }
   }
 
   if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
