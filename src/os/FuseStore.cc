@@ -214,6 +214,26 @@ static int os_getattr(const char *path, struct stat *stbuf)
   case FN_OBJECT_OMAP:
   case FN_OBJECT_ATTR:
   case FN_OBJECT:
+  case FN_OBJECT_DATA:
+  case FN_OBJECT_OMAP_HEADER:
+  case FN_OBJECT_OMAP_VAL:
+    {
+      spg_t pgid;
+      if (cid.is_pg(&pgid)) {
+	int bits = fs->store->collection_bits(cid);
+	if (bits >= 0 && !oid.match(bits, pgid.ps())) {
+	  // sorry, not part of this PG
+	  return -ENOENT;
+	}
+      }
+    }
+    break;
+  }
+
+  switch (t) {
+  case FN_OBJECT_OMAP:
+  case FN_OBJECT_ATTR:
+  case FN_OBJECT:
     if (!fs->store->exists(cid, oid))
       return -ENOENT;
     // fall-thru
