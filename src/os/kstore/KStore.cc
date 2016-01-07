@@ -1621,9 +1621,8 @@ int KStore::fiemap(
 
   dout(20) << __func__ << " " << offset << "~" << len << " size "
 	   << o->onode.size << dendl;
-
-#warning write fiemap
-
+  // FIXME: do something smarter here
+  m[0] = o->onode.size;
   ::encode(m, bl);
   dout(20) << __func__ << " " << offset << "~" << len
 	   << " size = 0 (" << m << ")" << dendl;
