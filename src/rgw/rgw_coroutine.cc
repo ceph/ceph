@@ -137,6 +137,13 @@ RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *
   pos = ops.begin();
 }
 
+RGWCoroutinesStack::~RGWCoroutinesStack()
+{
+  for (auto op : ops) {
+    op->put();
+  }
+}
+
 int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
 {
   env = _env;
@@ -517,6 +524,9 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   }
 
   lock.get_write();
+  for (auto stack : context_stacks) {
+    stack->put();
+  }
   run_contexts.erase(run_context);
   lock.unlock();
 
