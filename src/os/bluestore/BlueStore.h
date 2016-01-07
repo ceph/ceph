@@ -585,6 +585,10 @@ public:
   BlueStore(CephContext *cct, const string& path);
   ~BlueStore();
 
+  string get_type() {
+    return "bluestore";
+  }
+
   bool needs_journal() { return false; };
   bool wants_journal() { return false; };
   bool allows_journal() { return false; };
