@@ -113,9 +113,11 @@ public:
     lru.clear();
     last_val = VPtr();
     if (!weak_refs.empty()) {
-      lderr(cct) << "leaked refs:\n";
-      dump_weak_refs(*_dout);
-      *_dout << dendl;
+      if (cct) {
+        lderr(cct) << "leaked refs:\n";
+        dump_weak_refs(*_dout);
+        *_dout << dendl;
+      }
       assert(weak_refs.empty());
     }
   }
