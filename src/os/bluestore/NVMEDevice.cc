@@ -52,6 +52,7 @@ enum {
   l_bluestore_nvmedevice_aio_write_lat,
   l_bluestore_nvmedevice_read_lat,
   l_bluestore_nvmedevice_flush_lat,
+  l_bluestore_nvmedevice_queue_ops,
   l_bluestore_nvmedevice_last
 };
 
@@ -353,8 +354,10 @@ int NVMEDevice::open(string p)
 
   PerfCountersBuilder b(g_ceph_context, string("nvmedevice-") + name + "-" + std::to_string(this),
                         l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
-  b.add_time_avg(l_bluestore_nvmedevice_aio_write_lat, "aio_write_lat", "Average journal
-  b.add_time_avg(l_bluestore_nvmedevice_read_lat, "read_lat", "Average read completing l
+  b.add_time_avg(l_bluestore_nvmedevice_aio_write_lat, "aio_write_lat", "Average write completing latency");
+  b.add_time_avg(l_bluestore_nvmedevice_read_lat, "read_lat", "Average read completing latency");
+  b.add_time_avg(l_bluestore_nvmedevice_flush_lat, "flush_lat", "Average flush completing latency");
+  b.add_u64(l_bluestore_nvmedevice_queue_ops, "queue_ops", "Operations in nvme queue");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 
@@ -400,6 +403,7 @@ void NVMEDevice::_aio_thread()
       if (!task_queue.empty()) {
         t = task_queue.front();
         task_queue.pop();
+        logger->set(l_bluestore_nvmedevice_queue_ops, task_queue.size());
       }
       if (!t)
         queue_empty.inc();
@@ -480,6 +484,10 @@ void NVMEDevice::_aio_thread()
 int NVMEDevice::flush()
 {
   dout(10) << __func__ << " start" << dendl;
+  return 0;
+  // nvme device will cause terriable performance degraded
+  // while issuing flush command
+  /*
   Task *t;
   int r = rte_mempool_get(task_pool, (void **)&t);
   if (r < 0) {
@@ -513,6 +521,7 @@ int NVMEDevice::flush()
   r = t->return_code;
   rte_mempool_put(task_pool, t);
   return 0;
+   */
 }
 
 void NVMEDevice::aio_submit(IOContext *ioc)
