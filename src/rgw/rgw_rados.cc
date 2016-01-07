@@ -1008,17 +1008,7 @@ int RGWPeriod::set_latest_epoch(epoch_t epoch)
 
   ::encode(info, bl);
 
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
-  if (ret < 0)
-    return ret;
-
-  ret = reflect();
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: period.reflect(): " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  return 0;
+  return rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
 }
 
 int RGWPeriod::delete_obj()
@@ -1342,6 +1332,11 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
   r = set_latest_epoch(epoch);
   if (r < 0) {
     lderr(cct) << "failed to set latest epoch: " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+  r = reflect();
+  if (r < 0) {
+    lderr(cct) << "failed to update local objects: " << cpp_strerror(-r) << dendl;
     return r;
   }
   ldout(cct, 4) << "Committed new epoch " << epoch

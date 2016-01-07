@@ -1424,6 +1424,11 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
     cerr << "Error updating period epoch: " << cpp_strerror(ret) << std::endl;
     return ret;
   }
+  ret = period.reflect();
+  if (ret < 0) {
+    cerr << "Error updating local objects: " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
   realm.notify_new_period(period);
   return ret;
 }
