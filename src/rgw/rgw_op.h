@@ -82,6 +82,7 @@ protected:
   bool cors_exist;
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
+  int ret;
 
   virtual int init_quota();
 public:
@@ -120,6 +121,7 @@ public:
   virtual uint32_t op_mask() { return 0; }
 
   virtual int error_handler(int err_no, string *error_content);
+  int get_ret() { return ret; };
 };
 
 class RGWGetObj : public RGWOp {
@@ -139,7 +141,6 @@ protected:
   time_t *mod_ptr;
   time_t *unmod_ptr;
   map<string, bufferlist> attrs;
-  int ret;
   bool get_data;
   bool partial_content;
   bool range_parsed;
@@ -169,7 +170,6 @@ public:
     partial_content = false;
     range_parsed = false;
     skip_manifest = false;
-    ret = 0;
     is_slo = false;
  }
 
@@ -298,7 +298,6 @@ inline ostream& operator<<(ostream& out, const RGWBulkDelete::acct_path_t &o) {
 
 class RGWListBuckets : public RGWOp {
 protected:
-  int ret;
   bool sent_data;
   string marker;
   string end_marker;
@@ -311,7 +310,7 @@ protected:
   map<string, bufferlist> attrs;
 
 public:
-  RGWListBuckets() : ret(0), sent_data(false) {
+  RGWListBuckets() : sent_data(false) {
     limit = limit_max = RGW_LIST_BUCKETS_LIMIT_MAX;
     buckets_count = 0;
     buckets_objcount = 0;
@@ -338,7 +337,6 @@ public:
 
 class RGWStatAccount : public RGWOp {
 protected:
-  int ret;
   uint32_t buckets_count;
   uint64_t buckets_objcount;
   uint64_t buckets_size;
@@ -374,7 +372,6 @@ protected:
   string encoding_type;
   bool list_versions;
   int max;
-  int ret;
   vector<RGWObjEnt> objs;
   map<string, bool> common_prefixes;
 
@@ -384,7 +381,7 @@ protected:
   int parse_max_keys();
 
 public:
-  RGWListBucket() : list_versions(false), max(0), ret(0),
+  RGWListBucket() : list_versions(false), max(0),
                     default_max(0), is_truncated(false) {}
   int verify_permission();
   void pre_exec();
@@ -402,7 +399,7 @@ class RGWGetBucketLogging : public RGWOp {
 public:
   RGWGetBucketLogging() {}
   int verify_permission();
-  void execute() {}
+  void execute() { ret = 0; }
 
   virtual void send_response() = 0;
   virtual const string name() { return "get_bucket_logging"; }
@@ -415,7 +412,7 @@ public:
   RGWGetBucketLocation() {}
   ~RGWGetBucketLocation() {}
   int verify_permission();
-  void execute() {}
+  void execute() { ret = 0; }
 
   virtual void send_response() = 0;
   virtual const string name() { return "get_bucket_location"; }
@@ -442,9 +439,8 @@ public:
 class RGWSetBucketVersioning : public RGWOp {
 protected:
   bool enable_versioning;
-  int ret;
 public:
-  RGWSetBucketVersioning() : enable_versioning(false), ret(0) {}
+  RGWSetBucketVersioning() : enable_versioning(false) {}
 
   int verify_permission();
   void pre_exec();
@@ -459,10 +455,8 @@ public:
 };
 
 class RGWGetBucketWebsite : public RGWOp {
-protected:
-  int ret;
 public:
-  RGWGetBucketWebsite() : ret(0) {}
+  RGWGetBucketWebsite() {}
 
   int verify_permission();
   void pre_exec();
@@ -476,10 +470,9 @@ public:
 
 class RGWSetBucketWebsite : public RGWOp {
 protected:
-  int ret;
   RGWBucketWebsiteConf website_conf;
 public:
-  RGWSetBucketWebsite() : ret(0) {}
+  RGWSetBucketWebsite() {}
 
   int verify_permission();
   void pre_exec();
@@ -494,10 +487,8 @@ public:
 };
 
 class RGWDeleteBucketWebsite : public RGWOp {
-protected:
-  int ret;
 public:
-  RGWDeleteBucketWebsite() : ret(0) {}
+  RGWDeleteBucketWebsite() {}
 
   int verify_permission();
   void pre_exec();
@@ -511,11 +502,10 @@ public:
 
 class RGWStatBucket : public RGWOp {
 protected:
-  int ret;
   RGWBucketEnt bucket;
 
 public:
-  RGWStatBucket() : ret(0) {}
+  RGWStatBucket() {}
   ~RGWStatBucket() {}
 
   int verify_permission();
@@ -530,7 +520,6 @@ public:
 
 class RGWCreateBucket : public RGWOp {
 protected:
-  int ret;
   RGWAccessControlPolicy policy;
   string location_constraint;
   string placement_rule;
@@ -542,7 +531,7 @@ protected:
   bufferlist in_data;
 
 public:
-  RGWCreateBucket() : ret(0), has_cors(false) {}
+  RGWCreateBucket() : has_cors(false) {}
 
   int verify_permission();
   void pre_exec();
@@ -560,12 +549,10 @@ public:
 
 class RGWDeleteBucket : public RGWOp {
 protected:
-  int ret;
-
   RGWObjVersionTracker objv_tracker;
 
 public:
-  RGWDeleteBucket() : ret(0) {}
+  RGWDeleteBucket() {}
 
   int verify_permission();
   void pre_exec();
@@ -638,7 +625,6 @@ class RGWPutObj : public RGWOp {
   friend class RGWPutObjProcessor;
 
 protected:
-  int ret;
   off_t ofs;
   const char *supplied_md5_b64;
   const char *supplied_etag;
@@ -657,7 +643,7 @@ protected:
   time_t delete_at;
 
 public:
-  RGWPutObj() : ret(0), ofs(0),
+  RGWPutObj() : ofs(0),
                 supplied_md5_b64(NULL),
                 supplied_etag(NULL),
                 if_match(NULL),
@@ -700,7 +686,6 @@ class RGWPostObj : public RGWOp {
 protected:
   off_t min_len;
   off_t max_len;
-  int ret;
   int len;
   off_t ofs;
   const char *supplied_md5_b64;
@@ -714,7 +699,7 @@ protected:
   time_t delete_at;
 
 public:
-  RGWPostObj() : min_len(0), max_len(LLONG_MAX), ret(0), len(0), ofs(0),
+  RGWPostObj() : min_len(0), max_len(LLONG_MAX), len(0), ofs(0),
 		 supplied_md5_b64(NULL), supplied_etag(NULL),
 		 data_pending(false), delete_at(0) {}
 
@@ -740,21 +725,18 @@ public:
 
 class RGWPutMetadataAccount : public RGWOp {
 protected:
-  int ret;
   set<string> rmattr_names;
   RGWAccessControlPolicy policy;
 
 public:
-  RGWPutMetadataAccount()
-    : ret(0)
-  {}
+  RGWPutMetadataAccount() {}
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
   int verify_permission();
-  void pre_exec() { return; }
+  void pre_exec() { ret = 0; }
   void execute();
 
   virtual int get_params() = 0;
@@ -770,7 +752,6 @@ public:
 
 class RGWPutMetadataBucket : public RGWOp {
 protected:
-  int ret;
   set<string> rmattr_names;
   bool has_policy, has_cors;
   RGWAccessControlPolicy policy;
@@ -779,7 +760,7 @@ protected:
 
 public:
   RGWPutMetadataBucket()
-    : ret(0), has_policy(false), has_cors(false)
+    : has_policy(false), has_cors(false)
   {}
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
@@ -799,7 +780,6 @@ public:
 
 class RGWPutMetadataObject : public RGWOp {
 protected:
-  int ret;
   RGWAccessControlPolicy policy;
   string placement_rule;
   time_t delete_at;
@@ -807,8 +787,7 @@ protected:
 
 public:
   RGWPutMetadataObject()
-    : ret(0),
-      delete_at(0),
+    : delete_at(0),
       dlo_manifest(NULL)
   {}
 
@@ -830,7 +809,6 @@ public:
 
 class RGWDeleteObj : public RGWOp {
 protected:
-  int ret;
   bool delete_marker;
   bool multipart_delete;
   string version_id;
@@ -838,8 +816,7 @@ protected:
 
 public:
   RGWDeleteObj()
-    : ret(0),
-      delete_marker(false),
+    : delete_marker(false),
       multipart_delete(false),
       deleter(nullptr) {
   }
@@ -871,7 +848,6 @@ protected:
   time_t unmod_time;
   time_t *mod_ptr;
   time_t *unmod_ptr;
-  int ret;
   map<string, bufferlist> attrs;
   string src_tenant_name, src_bucket_name;
   rgw_bucket src_bucket;
@@ -944,11 +920,10 @@ public:
 
 class RGWGetACLs : public RGWOp {
 protected:
-  int ret;
   string acls;
 
 public:
-  RGWGetACLs() : ret(0) {}
+  RGWGetACLs() {}
 
   int verify_permission();
   void pre_exec();
@@ -962,7 +937,6 @@ public:
 
 class RGWPutACLs : public RGWOp {
 protected:
-  int ret;
   size_t len;
   char *data;
   ACLOwner owner;
@@ -991,10 +965,9 @@ public:
 
 class RGWGetCORS : public RGWOp {
 protected:
-  int ret;
 
 public:
-  RGWGetCORS() : ret(0) {}
+  RGWGetCORS() {}
 
   int verify_permission();
   void execute();
@@ -1007,7 +980,6 @@ public:
 
 class RGWPutCORS : public RGWOp {
 protected:
-  int ret;
   bufferlist cors_bl;
 
 public:
@@ -1028,10 +1000,9 @@ public:
 
 class RGWDeleteCORS : public RGWOp {
 protected:
-  int ret;
 
 public:
-  RGWDeleteCORS() : ret(0) {}
+  RGWDeleteCORS() {}
 
   int verify_permission();
   void execute();
@@ -1044,12 +1015,11 @@ public:
 
 class RGWOptionsCORS : public RGWOp {
 protected:
-  int ret;
   RGWCORSRule *rule;
   const char *origin, *req_hdrs, *req_meth;
 
 public:
-  RGWOptionsCORS() : ret(0), rule(NULL), origin(NULL),
+  RGWOptionsCORS() : rule(NULL), origin(NULL),
                      req_hdrs(NULL), req_meth(NULL) {
   }
 
@@ -1083,9 +1053,8 @@ public:
 class RGWSetRequestPayment : public RGWOp {
 protected:
   bool requester_pays;
-  int ret;
 public:
- RGWSetRequestPayment() : requester_pays(false), ret(0) {}
+ RGWSetRequestPayment() : requester_pays(false) {}
 
   int verify_permission();
   void pre_exec();
@@ -1101,7 +1070,6 @@ public:
 
 class RGWInitMultipart : public RGWOp {
 protected:
-  int ret;
   string upload_id;
   RGWAccessControlPolicy policy;
 
@@ -1127,7 +1095,6 @@ public:
 
 class RGWCompleteMultipart : public RGWOp {
 protected:
-  int ret;
   string upload_id;
   string etag;
   char *data;
@@ -1156,10 +1123,8 @@ public:
 
 class RGWAbortMultipart : public RGWOp {
 protected:
-  int ret;
-
 public:
-  RGWAbortMultipart() : ret(0) {}
+  RGWAbortMultipart() {}
 
   int verify_permission();
   void pre_exec();
@@ -1173,7 +1138,6 @@ public:
 
 class RGWListMultipart : public RGWOp {
 protected:
-  int ret;
   string upload_id;
   map<uint32_t, RGWUploadPartInfo> parts;
   int max_parts;
@@ -1282,7 +1246,6 @@ protected:
   RGWMultipartUploadEntry next_marker; 
   int max_uploads;
   string delimiter;
-  int ret;
   vector<RGWMultipartUploadEntry> uploads;
   map<string, bool> common_prefixes;
   bool is_truncated;
@@ -1315,7 +1278,6 @@ public:
 
 class RGWDeleteMultiObj : public RGWOp {
 protected:
-  int ret;
   int max_to_delete;
   size_t len;
   char *data;
