@@ -6871,11 +6871,7 @@ void OSD::consume_map()
   for (set<spg_t>::iterator p = pgs_to_check.begin();
        p != pgs_to_check.end();
        ++p) {
-    vector<int> acting;
-    int nrep = osdmap->pg_to_acting_osds(p->pgid, acting);
-    int role = osdmap->calc_pg_role(whoami, acting, nrep);
-
-    if (role < 0) {
+    if (!(osdmap->is_acting_osd_shard(p->pgid, whoami, p->shard))) {
       set<Session*> concerned_sessions;
       get_sessions_possibly_interested_in_pg(*p, &concerned_sessions);
       for (set<Session*>::iterator i = concerned_sessions.begin();
