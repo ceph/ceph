@@ -825,7 +825,10 @@ int FuseStore::start()
     "-f", // foreground
     "-d", // debug
   };
-  fuse_args a = FUSE_ARGS_INIT(4, (char**)v);
+  int c = 3;
+  if (g_conf->fuse_debug)
+    ++c;
+  fuse_args a = FUSE_ARGS_INIT(c, (char**)v);
   info->args = a;
   if (fuse_parse_cmdline(&info->args, &info->mountpoint, NULL, NULL) == -1) {
     derr << __func__ << " failed to parse args" << dendl;
