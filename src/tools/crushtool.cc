@@ -643,7 +643,7 @@ int main(int argc, const char **argv)
 	  break;
 	}
       if (buckettype < 0) {
-	cerr << "unknown bucket type '" << l.buckettype << "'" << std::endl << std::endl;
+	cerr << "unknown bucket type '" << l.buckettype << "'" << std::endl;
 	exit(EXIT_FAILURE);
       }
 
@@ -678,8 +678,9 @@ int main(int argc, const char **argv)
 	int id;
 	int r = crush.add_bucket(0, buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights, &id);
 	if (r < 0) {
-	  dout(2) << "Couldn't add bucket: " << cpp_strerror(r) << dendl;
-	}
+          cerr << " Couldn't add bucket: " << cpp_strerror(r) << std::endl;
+          return r;
+        }
 
 	char format[20];
 	format[sizeof(format)-1] = '\0';
