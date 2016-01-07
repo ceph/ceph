@@ -2138,11 +2138,11 @@ ceph_tid_t Objecter::_op_submit_with_budget(Op *op, RWLock::Context& lc,
 
   // throttle.  before we look at any state, because
   // _take_op_budget() may drop our lock while it blocks.
-  if (!op->ctx_budgeted || (ctx_budget && (*ctx_budget == -1))) {
-    int op_budget = _take_op_budget(op);
-    // take and pass out the budget for the first OP
-    // in the context session
-    if (ctx_budget && (*ctx_budget == -1)) {
+  if (NULL != ctx_budget) {
+    if (!op->ctx_budgeted && (*ctx_budget == -1)) {
+      int op_budget = _take_op_budget(op);
+      // take and pass out the budget for the first OP
+      // in the context session
       *ctx_budget = op_budget;
     }
   }
