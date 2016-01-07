@@ -35,6 +35,7 @@ import errno
 from unittest import suite
 import unittest
 from teuthology.orchestra.run import Raw, quote
+from teuthology.orchestra.daemon import DaemonGroup
 
 import logging
 
@@ -570,23 +571,13 @@ class LocalFilesystem(Filesystem):
 
         self.admin_remote = LocalRemote()
 
-        # Hack: cheeky inspection of ceph.conf to see what MDSs exist
-        self.mds_ids = set()
-        for line in open("ceph.conf").readlines():
-            match = re.match("^\[mds\.(.+)\]$", line)
-            if match:
-                self.mds_ids.add(match.group(1))
-
+        self.mds_ids = ctx.daemons.daemons['mds'].keys()
         if not self.mds_ids:
             raise RuntimeError("No MDSs found in ceph.conf!")
 
-        self.mds_ids = list(self.mds_ids)
-
-        log.info("Discovered MDS IDs: {0}".format(self.mds_ids))
-
         self.mon_manager = LocalCephManager()
 
-        self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
+        self.mds_daemons = ctx.daemons.daemons["mds"]
 
         self.client_remote = LocalRemote()
 
@@ -734,6 +725,19 @@ def exec_test():
                 'test_path': test_dir
             }
             self.cluster = LocalCluster()
+            self.daemons = DaemonGroup()
+
+            # Shove some LocalDaemons into the ctx.daemons DaemonGroup instance so that any
+            # tests that want to look these up via ctx can do so.
+            # Inspect ceph.conf to see what roles exist
+            for conf_line in open("ceph.conf").readlines():
+                for svc_type in ["mon", "osd", "mds"]:
+                    if svc_type not in self.daemons.daemons:
+                        self.daemons.daemons[svc_type] = {}
+                    match = re.match("^\[{0}\.(.+)\]$".format(svc_type), conf_line)
+                    if match:
+                        svc_id = match.group(1)
+                        self.daemons.daemons[svc_type][svc_id] = LocalDaemon(svc_type, svc_id)
 
         def __del__(self):
             shutil.rmtree(self.teuthology_config['test_path'])
