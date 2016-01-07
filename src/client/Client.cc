@@ -5823,19 +5823,9 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
       (in->cap_dirtier_gid >= 0 && gid != in->cap_dirtier_gid)) {
     ldout(cct, 10) << __func__ << " caller " << uid << ":" << gid
 		   << " != cap dirtier " << in->cap_dirtier_uid << ":"
-		   << in->cap_dirtier_gid << ", forcing sync setattr"
+		   << in->cap_dirtier_gid << ", flushing caps and forcing sync setattr"
 		   << dendl;
-    /*
-     * This works because we implicitly flush the caps as part of the
-     * request, so the cap update check will happen with the writeback
-     * cap context, and then the setattr check will happen with the
-     * caller's context.
-     *
-     * In reality this pattern is likely pretty rare (different users
-     * setattr'ing the same file).  If that turns out not to be the
-     * case later, we can build a more complex pipelined cap writeback
-     * infrastructure...
-     */
+    check_caps(in, true);
     if (!mask)
       mask |= CEPH_SETATTR_CTIME;
     goto force_request;
