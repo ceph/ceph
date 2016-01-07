@@ -614,6 +614,11 @@ static int os_mkdir(const char *path, mode_t mode)
   return 0;
 }
 
+static int os_chmod(const char *path, mode_t mode)
+{
+  return 0;
+}
+
 static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
   coll_t cid;
@@ -907,7 +912,7 @@ static struct fuse_operations fs_oper = {
   symlink: 0,
   rename: 0,
   link: 0,
-  chmod: 0,
+  chmod: os_chmod,
   chown: 0,
   truncate: os_truncate,
   utime: 0,
