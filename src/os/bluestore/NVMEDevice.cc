@@ -36,6 +36,7 @@
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/Initialize.h"
+#include "common/perf_counters.h"
 
 #include "NVMEDevice.h"
 
@@ -45,6 +46,14 @@
 
 rte_mempool *request_mempool = nullptr;
 rte_mempool *task_pool = nullptr;
+
+enum {
+  l_bluestore_nvmedevice_first = 632430,
+  l_bluestore_nvmedevice_aio_write_lat,
+  l_bluestore_nvmedevice_read_lat,
+  l_bluestore_nvmedevice_flush_lat,
+  l_bluestore_nvmedevice_last
+};
 
 static void io_complete(void *t, const struct nvme_completion *completion) {
   Task *task = static_cast<Task*>(t);
@@ -65,6 +74,9 @@ static void io_complete(void *t, const struct nvme_completion *completion) {
         ctx->cond.Signal();
       }
     }
+    utime_t lat = ceph_clock_now(g_ceph_context);
+    lat -= task->start;
+    task->device->logger->tinc(l_bluestore_nvmedevice_aio_write_lat, lat);
     rte_free(task->buf);
     rte_mempool_put(task_pool, task);
   } else if (task->command == IOCommand::READ_COMMAND) {
@@ -74,8 +86,13 @@ static void io_complete(void *t, const struct nvme_completion *completion) {
       task->return_code = -1; // FIXME
     else
       task->return_code = 0;
-    Mutex::Locker l(ctx->lock);
-    ctx->cond.Signal();
+    {
+      Mutex::Locker l(ctx->lock);
+      ctx->cond.Signal();
+    }
+    utime_t lat = ceph_clock_now(g_ceph_context);
+    lat -= task->start;
+    task->device->logger->tinc(l_bluestore_nvmedevice_read_lat, lat);
   } else {
     assert(task->command == IOCommand::FLUSH_COMMAND);
     dout(20) << __func__ << " flush op successfully" << dendl;
@@ -83,8 +100,13 @@ static void io_complete(void *t, const struct nvme_completion *completion) {
       task->return_code = -1; // FIXME
     else
       task->return_code = 0;
-    Mutex::Locker l(ctx->lock);
-    ctx->cond.Signal();
+    {
+      Mutex::Locker l(ctx->lock);
+      ctx->cond.Signal();
+    }
+    utime_t lat = ceph_clock_now(g_ceph_context);
+    lat -= task->start;
+    task->device->logger->tinc(l_bluestore_nvmedevice_flush_lat, lat);
   }
 }
 
@@ -296,6 +318,7 @@ NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
 {
   zeros = buffer::create_page_aligned(1048576);
   zeros.zero();
+
 }
 
 
@@ -328,6 +351,13 @@ int NVMEDevice::open(string p)
           << " block_size " << block_size << " (" << pretty_si_t(block_size)
           << "B)" << dendl;
 
+  PerfCountersBuilder b(g_ceph_context, string("nvmedevice-") + name + "-" + std::to_string(this),
+                        l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
+  b.add_time_avg(l_bluestore_nvmedevice_aio_write_lat, "aio_write_lat", "Average journal
+  b.add_time_avg(l_bluestore_nvmedevice_read_lat, "read_lat", "Average read completing l
+  logger = b.create_perf_counters();
+  g_ceph_context->get_perfcounters_collection()->add(logger);
+
   return 0;
 }
 
@@ -342,6 +372,10 @@ void NVMEDevice::close()
   }
   aio_thread.join();
   aio_stop = false;
+
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
+  delete logger;
+
   name.clear();
   driver_data.release(ctrlr);
   ctrlr = nullptr;
@@ -367,7 +401,8 @@ void NVMEDevice::_aio_thread()
         t = task_queue.front();
         task_queue.pop();
       }
-      queue_empty.inc();
+      if (!t)
+        queue_empty.inc();
     } else if (!inflight_ops.read()) {
       Mutex::Locker l(queue_lock);
       if (queue_empty.read())
@@ -452,6 +487,7 @@ int NVMEDevice::flush()
     return r;
   }
 
+  t->start = ceph_clock_now(g_ceph_context);
   IOContext ioc(nullptr);
   t->buf = nullptr;
   t->ctx = &ioc;
@@ -518,6 +554,7 @@ int NVMEDevice::aio_write(
 		derr << __func__ << " task_pool rte_mempool_get failed" << dendl;
     return r;
 	}
+  t->start = ceph_clock_now(g_ceph_context);
 
   t->buf = rte_malloc(NULL, len, block_size);
 	if (t->buf == NULL) {
@@ -588,6 +625,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     derr << __func__ << " task_pool rte_mempool_get failed" << dendl;
     return r;
   }
+  t->start = ceph_clock_now(g_ceph_context);
 
   bufferptr p = buffer::create_page_aligned(len);
   t->buf = rte_malloc(NULL, len, block_size);
