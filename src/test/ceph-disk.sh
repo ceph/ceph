@@ -74,12 +74,16 @@ function setup() {
 }
 
 function teardown() {
+    PROCPATH=/proc
     kill_daemons
-    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
+    if [ X`uname`X = XLinuxX ] && [ $(stat -f -c '%T' .) == "btrfs" ]; then
         rm -fr $DIR/*/*db
         teardown_btrfs $DIR
     fi
-    grep " $(pwd)/$DIR/" < /proc/mounts | while read mounted rest ; do
+    if [ X`uname`X = XFreeBSDX ]; then
+	PROCPATH=/compat/linux/proc
+    fi
+    grep " $(pwd)/$DIR/" < $PROCPATH/mounts | while read mounted rest ; do
         umount $mounted
     done
     rm -fr $DIR
