@@ -49,9 +49,6 @@ private:
    * SHUTDOWN_CACHE
    *    |
    *    v
-   * FLUSH_COPYUP (skip if copyup
-   *    |          disabled)
-   *    v
    * FLUSH_OP_WORK_QUEUE  . . . . .
    *    |                         .
    *    v                         .
@@ -89,9 +86,6 @@ private:
 
   void send_shut_down_cache();
   void handle_shut_down_cache(int r);
-
-  void send_flush_copyup();
-  void handle_flush_copyup(int r);
 
   void send_flush_op_work_queue();
   void handle_flush_op_work_queue(int r);
