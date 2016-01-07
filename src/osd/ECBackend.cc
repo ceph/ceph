@@ -1131,7 +1131,8 @@ void ECBackend::handle_sub_read(
             pair<uint64_t, uint64_t> &ver_off = shards_to_write[shard_id];
             // ver_off = sinfo.offset_len_to_stripe_bounds(ow_iter->second);
             // no overlap
-            if ( (j->get<0>() + j->get<1>() ) < ver_off.first
+            // this shard no overwrite or needed read scope has no overlap with overwrite
+            if ( ver_off.second == 0 || (j->get<0>() + j->get<1>() ) < ver_off.first
                 || j->get<0>() > (ver_off.first + ver_off.second) )
               continue;
 

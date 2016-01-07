@@ -84,7 +84,7 @@ public:
     return make_pair(off, len);
   }
   map<int, pair<uint64_t, uint64_t>> offset_len_to_chunk_offset(
-    pair<uint64_t, uint64_t> in, int chunk_count) const {
+      pair<uint64_t, uint64_t> in, int chunk_count) const {
     pair<uint64_t, uint64_t> bounds = offset_len_to_stripe_bounds(in);
     pair<uint64_t, uint64_t> chunk_off_len = aligned_offset_len_to_chunk(bounds);
 
@@ -97,7 +97,7 @@ public:
         tmp.first += stripe_width;
       }
       // find the chunk end
-      if (tmp.first < in.second && tmp.first < bounds.first + bounds.second) {
+      if (tmp.first < (in.first + in.second) && tmp.first < bounds.first + bounds.second) {
         uint64_t tmp_end = tmp.first + chunk_size;
         tmp.second += chunk_size;
         while (tmp_end < in.second) {
