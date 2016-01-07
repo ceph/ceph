@@ -35,6 +35,7 @@ extern "C" {
 #endif
 
 #include "include/atomic.h"
+#include "include/utime.h"
 #include "common/Mutex.h"
 #include "BlockDevice.h"
 
@@ -54,7 +55,10 @@ struct Task {
   void *buf;
   Task *next, *prev;
   int64_t return_code;
+  utime_t start;
 };
+
+class PerfCounters;
 
 class NVMEDevice : public BlockDevice {
   /**
@@ -91,6 +95,7 @@ class NVMEDevice : public BlockDevice {
   static void init();
 
  public:
+  PerfCounters *logger;
   atomic_t inflight_ops;
   aio_callback_t aio_callback;
   void *aio_callback_priv;
