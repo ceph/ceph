@@ -229,7 +229,7 @@ int SharedDriverData::try_get(const string &sn_tag, nvme_controller **c, string 
       return r;
     }
 
-	  request_mempool = rte_mempool_create("nvme_request", 8192,
+	  request_mempool = rte_mempool_create("nvme_request", 512,
                                          nvme_request_size(), 128, 0,
                                          NULL, NULL, NULL, NULL,
                                          SOCKET_ID_ANY, 0);
@@ -239,7 +239,7 @@ int SharedDriverData::try_get(const string &sn_tag, nvme_controller **c, string 
     }
 
  	  task_pool = rte_mempool_create(
-        "task_pool", 8192, sizeof(Task),
+        "task_pool", 512, sizeof(Task),
         64, 0, NULL, NULL, NULL, NULL,
         SOCKET_ID_ANY, 0);
     if (task_pool == NULL) {
@@ -371,7 +371,7 @@ void NVMEDevice::_aio_thread()
     } else if (!inflight_ops.read()) {
       Mutex::Locker l(queue_lock);
       if (queue_empty.read())
-        queue_cond.Wait();
+        queue_cond.Wait(queue_lock);
     }
 
     if (t) {
