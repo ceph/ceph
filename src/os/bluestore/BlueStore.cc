@@ -2739,6 +2739,17 @@ bool BlueStore::collection_empty(coll_t cid)
   return empty;
 }
 
+int BlueStore::collection_bits(coll_t cid)
+{
+  dout(15) << __func__ << " " << cid << dendl;
+  CollectionRef c = _get_collection(cid);
+  if (!c)
+    return -ENOENT;
+  RWLock::RLocker l(c->lock);
+  dout(10) << __func__ << " " << cid << " = " << c->cnode.bits << dendl;
+  return c->cnode.bits;
+}
+
 int BlueStore::collection_list(
   coll_t cid, ghobject_t start, ghobject_t end,
   bool sort_bitwise, int max,
