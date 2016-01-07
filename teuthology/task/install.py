@@ -1263,7 +1263,7 @@ def task(ctx, config):
                 flavor=flavor,
                 extra_packages=config.get('extra_packages', []),
                 extras=config.get('extras', None),
-                wait_for_package=ctx.config.get('wait_for_package', False),
+                wait_for_package=config.get('wait_for_package', False),
                 project=project,
             )),
             lambda: ship_utilities(ctx=ctx, config=None),

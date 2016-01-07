@@ -3,6 +3,7 @@ import pytest
 from mock import patch, Mock
 
 from teuthology import packaging
+from teuthology.exceptions import VersionNotFoundError
 
 KOJI_TASK_RPMS_MATRIX = [
     ('tasks/6745/9666745/kernel-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'kernel'),
@@ -276,6 +277,30 @@ class TestPackaging(object):
     def test_get_koji_task_result_package_name(self, input, expected):
         assert packaging._get_koji_task_result_package_name(input) == expected
 
+    @patch("requests.get")
+    def test_get_response_success(self, m_get):
+        resp = Mock()
+        resp.ok = True
+        m_get.return_value = resp
+        result = packaging._get_response("google.com")
+        assert result == resp
+
+    @patch("requests.get")
+    def test_get_response_failed_wait(self, m_get):
+        resp = Mock()
+        resp.ok = False
+        m_get.return_value = resp
+        packaging._get_response("google.com", wait=True, sleep=1, tries=2)
+        assert m_get.call_count == 2
+
+    @patch("requests.get")
+    def test_get_response_failed_no_wait(self, m_get):
+        resp = Mock()
+        resp.ok = False
+        m_get.return_value = resp
+        packaging._get_response("google.com", sleep=1, tries=2)
+        assert m_get.call_count == 1
+
 
 class TestGitbuilderProject(object):
 
@@ -333,8 +358,8 @@ class TestGitbuilderProject(object):
 
     @patch("teuthology.packaging.config")
     @patch("teuthology.packaging._get_config_value_for_remote")
-    @patch("requests.get")
-    def test_get_package_version_found(self, m_get, m_get_config_value,
+    @patch("teuthology.packaging._get_response")
+    def test_get_package_version_found(self, m_get_response, m_get_config_value,
                                        m_config):
         m_config.baseurl_template = 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}'
         m_config.gitbuilder_host = "gitbuilder.ceph.com"
@@ -342,27 +367,28 @@ class TestGitbuilderProject(object):
         resp = Mock()
         resp.ok = True
         resp.text = "0.90.0"
-        m_get.return_value = resp
+        m_get_response.return_value = resp
         rem = self._get_remote()
         ctx = dict(foo="bar")
         gp = packaging.GitbuilderProject("ceph", {}, ctx=ctx, remote=rem)
         assert gp.version == "0.90.0"
 
+    @patch("teuthology.packaging._get_response")
     @patch("teuthology.packaging.config")
     @patch("teuthology.packaging._get_config_value_for_remote")
-    @patch("requests.get")
-    def test_get_package_version_not_found(self, m_get, m_get_config_value,
-                                           m_config):
+    def test_get_package_version_not_found(self, m_get_config_value,
+                                           m_config, m_get_response):
         m_config.baseurl_template = 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}'
         m_config.gitbuilder_host = "gitbuilder.ceph.com"
         m_get_config_value.return_value = None
-        resp = Mock()
-        resp.ok = False
-        m_get.return_value = resp
         rem = self._get_remote()
         ctx = dict(foo="bar")
+        resp = Mock()
+        resp.ok = False
+        m_get_response.return_value = resp
         gp = packaging.GitbuilderProject("ceph", {}, ctx=ctx, remote=rem)
-        assert not gp.version
+        with pytest.raises(VersionNotFoundError):
+            gp.version
 
     @patch("teuthology.packaging.config")
     @patch("teuthology.packaging._get_config_value_for_remote")
