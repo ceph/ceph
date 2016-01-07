@@ -475,9 +475,8 @@ class Filesystem(object):
         :return: number of seconds waited, rounded down to integer
         """
 
-        elapsed = 0
+        started_at = time.time()
         while True:
-
             if mds_id is not None:
                 # mds_info is None if no daemon with this ID exists in the map
                 mds_info = self.mon_manager.get_mds_status(mds_id)
@@ -495,6 +494,7 @@ class Filesystem(object):
                     current_state = None
                 log.info("mapped states {0} to {1}".format(states, current_state))
 
+            elapsed = time.time() - started_at
             if current_state == goal_state:
                 log.info("reached state '{0}' in {1}s".format(current_state, elapsed))
                 return elapsed
@@ -508,7 +508,6 @@ class Filesystem(object):
                     ))
             else:
                 time.sleep(1)
-                elapsed += 1
 
     def _read_data_xattr(self, ino_no, xattr_name, type, pool):
         mds_id = self.mds_ids[0]
