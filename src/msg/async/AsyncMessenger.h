@@ -510,6 +510,16 @@ public:
     Mutex::Locker l(deleted_lock);
     deleted_conns.insert(conn);
   }
+
+  /**
+   * Reap dead connection from `deleted_conns`
+   *
+   * @return the number of dead connections
+   *
+   * See "deleted_conns"
+   */
+  int reap_dead(int max);
+
   /**
    * @} // AsyncMessenger Internals
    */
