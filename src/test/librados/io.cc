@@ -3,6 +3,7 @@
 
 #include <climits>
 
+#include "include/compat.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "test/librados/test.h"

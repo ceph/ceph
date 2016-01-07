@@ -12,6 +12,7 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 
+#include "include/compat.h"
 #include "rgw_rados.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"

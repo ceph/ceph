@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <sys/uio.h>
 
+#include "include/compat.h"
 #include "include/buffer.h"
 #include "include/utime.h"
 #include "include/encoding.h"

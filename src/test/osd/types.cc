@@ -16,6 +16,7 @@
  */
 
 #include "include/types.h"
+#include "include/compat.h"
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
 #include "gtest/gtest.h"

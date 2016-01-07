@@ -12,6 +12,7 @@
  *
  */
 
+#include "include/compat.h"
 #include "common/TextTable.h"
 #include <iostream>
 #include "gtest/gtest.h"
