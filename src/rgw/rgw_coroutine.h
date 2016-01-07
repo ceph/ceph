@@ -339,6 +339,7 @@ protected:
   bool collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesStack **collected_stack); /* returns true if found a stack to collect */
 public:
   RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start = NULL);
+  ~RGWCoroutinesStack();
 
   int operate(RGWCoroutinesEnv *env);
 
