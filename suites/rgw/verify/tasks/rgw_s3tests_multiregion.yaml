@@ -26,6 +26,8 @@ tasks:
         rgw log meta: False
 - rgw:
     default_idle_timeout: 300
+    realm:
+      realm0
     regions:
       zero:
         api name: api1
