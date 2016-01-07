@@ -93,7 +93,7 @@ public:
   void expect_update_snap_context(MockImageCtx &mock_image_ctx) {
     // state machine checks to ensure a refresh hasn't already added the snap
     EXPECT_CALL(mock_image_ctx, get_snap_info(_))
-                  .WillOnce(Return(reinterpret_cast<const librbd::SnapInfo*>(NULL)));
+                 .WillOnce(Return(static_cast<const librbd::SnapInfo*>(NULL)));
     EXPECT_CALL(mock_image_ctx, add_snap("snap1", _, _, _, _, _));
   }
 
