@@ -72,6 +72,7 @@ class NVMEDevice : public BlockDevice {
   bool aio_stop;
   bufferptr zeros;
 
+  atomic_t queue_empty;
   Mutex queue_lock;
   Cond queue_cond;
   std::queue<Task*> task_queue;
