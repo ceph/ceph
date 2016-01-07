@@ -7212,20 +7212,6 @@ int RGWRados::Object::Delete::delete_obj()
       if (r < 0) {
         return r;
       }
-
-      BucketShard *bs;
-      r = target->get_bucket_shard(&bs);
-      if (r < 0) {
-        ldout(store->ctx(), 5) << "failed to get BucketShard object: r=" << r << dendl;
-        return r;
-      }
-
-      r = store->data_log->add_entry(bs->bucket, bs->shard_id);
-      if (r < 0) {
-        lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
-        return r;
-      }
-
     } else {
       rgw_bucket_dir_entry dirent;
 
@@ -7239,6 +7225,19 @@ int RGWRados::Object::Delete::delete_obj()
         return r;
       }
       result.version_id = instance;
+    }
+
+    BucketShard *bs;
+    int r = target->get_bucket_shard(&bs);
+    if (r < 0) {
+      ldout(store->ctx(), 5) << "failed to get BucketShard object: r=" << r << dendl;
+      return r;
+    }
+
+    r = store->data_log->add_entry(bs->bucket, bs->shard_id);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+      return r;
     }
 
     return 0;
