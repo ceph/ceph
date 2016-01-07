@@ -58,7 +58,7 @@ enum {
   FN_ROOT = 1,
   FN_COLLECTION,
   FN_HASH_START,
-  //FN_HASH_END,
+  FN_HASH_END,
   FN_OBJECT,
   FN_OBJECT_HASH,
   FN_OBJECT_DATA,
@@ -101,8 +101,8 @@ static int parse_fn(const char *path, coll_t *cid, ghobject_t *oid, string *key,
 
   if (v.front() == "bitwise_hash_start")
     return FN_HASH_START;
-  //if (v.front() == "bitwise_hash_end")
-  //return FN_HASH_END;
+  if (v.front() == "bitwise_hash_end")
+    return FN_HASH_END;
   if (v.front() == "pgmeta") {
     spg_t pgid;
     if (cid->is_pg(&pgid)) {
@@ -219,7 +219,7 @@ static int os_getattr(const char *path, struct stat *stbuf)
     return 0;
 
   case FN_HASH_START:
-    //case FN_HASH_END:
+  case FN_HASH_END:
   case FN_OBJECT_HASH:
     stbuf->st_size = 9;
     return 0;
@@ -305,7 +305,7 @@ static int os_readdir(const char *path,
   case FN_COLLECTION:
     {
       filler(buf, "bitwise_hash_start", NULL, 0);
-      //filler(buf, "bitwise_hash_end", NULL, 0);
+      filler(buf, "bitwise_hash_end", NULL, 0);
       filler(buf, "all", NULL, 0);
       filler(buf, "by_bitwise_hash", NULL, 0);
       spg_t pgid;
@@ -421,7 +421,7 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 	unsigned long h;
 	h = hobject_t::_reverse_bits(pgid.ps());
 	char buf[10];
-	snprintf(buf, sizeof(buf), "%08lX\n", h);
+	snprintf(buf, sizeof(buf), "%08lx\n", h);
 	pbl->append(buf);
       } else {
 	pbl->append("00000000\n");
@@ -429,11 +429,34 @@ static int os_open(const char *path, struct fuse_file_info *fi)
     }
     break;
 
+  case FN_HASH_END:
+    {
+      pbl = new bufferlist;
+      spg_t pgid;
+      unsigned long h;
+      if (cid.is_pg(&pgid)) {
+	int hash_bits = fs->store->collection_bits(cid);
+	if (hash_bits >= 0) {
+	  uint64_t rev_start = hobject_t::_reverse_bits(pgid.ps());
+	  uint64_t rev_end = (rev_start | (0xffffffff >> hash_bits));
+	  h = rev_end;
+	} else {
+	  h = 0xffffffff;
+	}
+      } else {
+	h = 0xffffffff;
+      }
+      char buf[10];
+      snprintf(buf, sizeof(buf), "%08lx\n", h);
+      pbl->append(buf);
+    }
+    break;
+
   case FN_OBJECT_HASH:
     {
       pbl = new bufferlist;
       char buf[10];
-      snprintf(buf, sizeof(buf), "%08X\n",
+      snprintf(buf, sizeof(buf), "%08x\n",
 	       (unsigned)oid.hobj.get_bitwise_key_u32());
       pbl->append(buf);
     }
@@ -642,7 +665,7 @@ int os_flush(const char *path, struct fuse_file_info *fi)
     break;
 
   default:
-    return -EPERM;
+    return 0;
   }
 
   ceph::shared_ptr<ObjectStore::Sequencer> osr(
