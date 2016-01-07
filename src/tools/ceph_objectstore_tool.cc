@@ -2467,7 +2467,7 @@ int main(int argc, char **argv)
 
   ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
-    cerr << "Need a valid --type e.g. filestore, memstore" << std::endl;
+    cerr << "Unable to create store of type " << type << std::endl;
     myexit(1);
   }
 
