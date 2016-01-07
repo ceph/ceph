@@ -32,6 +32,8 @@ tasks:
         rgw log data: False
         rgw log meta: False
 - rgw:
+    realm:
+      realm0
     regions:
       region0:
         api name: api1
