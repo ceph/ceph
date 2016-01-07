@@ -91,7 +91,8 @@ int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 		memset(map->rules + oldsize, 0, (map->max_rules-oldsize) * sizeof(map->rules[0]));
 	}
 
-	/* add it */
+       /* add it */ 
+       assert(map->rules[r] == NULL);
 	map->rules[r] = rule;
 	return r;
 }
