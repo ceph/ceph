@@ -144,7 +144,7 @@ void* echoclient(void *arg)
   sa.sin_family = AF_INET;
   sa.sin_port = htons(port);
   char addr[] = "127.0.0.1";
-  int r = inet_aton(addr, &sa.sin_addr);
+  int r = inet_pton(AF_INET, addr, &sa.sin_addr);
 
   int connect_sd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (connect_sd >= 0) {
