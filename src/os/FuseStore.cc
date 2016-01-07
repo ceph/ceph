@@ -211,28 +211,43 @@ static int os_getattr(const char *path, struct stat *stbuf)
   stbuf->st_mode = S_IFREG | 0700;
 
   switch (t) {
-  case FN_OBJECT:
   case FN_OBJECT_OMAP:
   case FN_OBJECT_ATTR:
+  case FN_OBJECT:
+    if (!fs->store->exists(cid, oid))
+      return -ENOENT;
+    // fall-thru
   case FN_ALL:
   case FN_HASH_DIR:
   case FN_HASH_VAL:
-  case FN_ROOT:
   case FN_COLLECTION:
+    if (!fs->store->collection_exists(cid))
+      return -ENOENT;
+    // fall-thru
+  case FN_ROOT:
     stbuf->st_mode = S_IFDIR | 0700;
     return 0;
 
+  case FN_OBJECT_HASH:
+    if (!fs->store->exists(cid, oid))
+      return -ENOENT;
+    stbuf->st_size = 9;
+    return 0;
+
   case FN_HASH_END:
+    if (!fs->store->collection_exists(cid))
+      return -ENOENT;
     if (fs->store->collection_bits(cid) < 0)
       return -ENOENT;
     // fall-thru
   case FN_HASH_START:
-  case FN_OBJECT_HASH:
     stbuf->st_size = 9;
     return 0;
 
   case FN_HASH_BITS:
     {
+      if (!fs->store->collection_exists(cid))
+	return -ENOENT;
       int bits = fs->store->collection_bits(cid);
       if (bits < 0)
 	return -ENOENT;
@@ -244,6 +259,8 @@ static int os_getattr(const char *path, struct stat *stbuf)
 
   case FN_OBJECT_DATA:
     {
+      if (!fs->store->exists(cid, oid))
+	return -ENOENT;
       int r = fs->store->stat(cid, oid, stbuf);
       if (r < 0)
 	return r;
@@ -252,6 +269,8 @@ static int os_getattr(const char *path, struct stat *stbuf)
 
   case FN_OBJECT_OMAP_HEADER:
     {
+      if (!fs->store->exists(cid, oid))
+	return -ENOENT;
       bufferlist bl;
       fs->store->omap_get_header(cid, oid, &bl);
       stbuf->st_size = bl.length();
@@ -260,6 +279,8 @@ static int os_getattr(const char *path, struct stat *stbuf)
 
   case FN_OBJECT_OMAP_VAL:
     {
+      if (!fs->store->exists(cid, oid))
+	return -ENOENT;
       set<string> k;
       k.insert(key);
       map<string,bufferlist> v;
@@ -273,6 +294,8 @@ static int os_getattr(const char *path, struct stat *stbuf)
 
   case FN_OBJECT_ATTR_VAL:
     {
+      if (!fs->store->exists(cid, oid))
+	return -ENOENT;
       bufferptr v;
       int r = fs->store->getattr(cid, oid, key.c_str(), v);
       if (r == -ENODATA)
