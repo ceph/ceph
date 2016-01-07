@@ -655,9 +655,24 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
     goto done;
   }
 
-  req->log(s, "executing");
+  req->log(s, "pre-executing");
   op->pre_exec();
+  ret = op->get_ret();
+  if (ret < 0) {
+    dout(2) << "pre_exec ret=" << ret << dendl;
+    abort_early(s, op, ret, handler);
+    goto done;
+  }
+
+  req->log(s, "executing");
   op->execute();
+  ret = op->get_ret();
+  if (ret < 0) {
+    dout(2) << "execute ret=" << ret << dendl;
+    abort_early(s, op, ret, handler);
+    goto done;
+  }
+  req->log(s, "completing");
   op->complete();
 done:
   int r = client_io->complete_request();
