@@ -408,8 +408,8 @@ TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
   profile["m"] = "4";
   Isa.init(profile, &cerr);
 
-  int k = 12;
-  int m = 4;
+  const int k = 12;
+  const int m = 4;
 
 #define LARGE_ENOUGH 2048
   bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
@@ -535,8 +535,8 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
 
   Isa.init(profile, &cerr);
 
-  int k = 12;
-  int m = 4;
+  const int k = 12;
+  const int m = 4;
 
 #define LARGE_ENOUGH 2048
   bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
@@ -662,8 +662,8 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
 
   Isa.init(profile, &cerr);
 
-  int k = 16;
-  int m = 4;
+  const int k = 16;
+  const int m = 4;
 
 #define LARGE_ENOUGH 2048
   bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
@@ -788,8 +788,8 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
   profile["m"] = "1";
   Isa.init(profile, &cerr);
 
-  int k = 4;
-  int m = 1;
+  const int k = 4;
+  const int m = 1;
 
 #define LARGE_ENOUGH 2048
   bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
