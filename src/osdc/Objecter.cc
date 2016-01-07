@@ -454,8 +454,8 @@ void Objecter::shutdown()
   if (tick_event) {
     if (timer.cancel_event(tick_event)) {
       ldout(cct, 10) <<  " successfully canceled tick" << dendl;
-      tick_event = 0;
     }
+    tick_event = 0;
   }
 
   if (m_request_state_hook) {
@@ -473,8 +473,6 @@ void Objecter::shutdown()
 
   // Let go of Objecter write lock so timer thread can shutdown
   rwlock.unlock();
-
-  assert(tick_event == 0);
 }
 
 void Objecter::_send_linger(LingerOp *info)
@@ -1986,7 +1984,6 @@ void Objecter::tick()
   ldout(cct, 10) << "tick" << dendl;
 
   // we are only called by C_Tick
-  assert(tick_event);
   tick_event = 0;
 
   if (!initialized.read()) {
@@ -2062,9 +2059,11 @@ void Objecter::tick()
     }
   }
 
-  // reschedule
-  tick_event = timer.reschedule_me(ceph::make_timespan(
-				     cct->_conf->objecter_tick_interval));
+  // Make sure we don't resechedule if we wake up after shutdown
+  if (initialized.read()) {
+    tick_event = timer.reschedule_me(ceph::make_timespan(
+				       cct->_conf->objecter_tick_interval));
+  }
 }
 
 void Objecter::resend_mon_ops()
@@ -4795,7 +4794,6 @@ Objecter::~Objecter()
   assert(check_latest_map_ops.empty());
   assert(check_latest_map_commands.empty());
 
-  assert(!tick_event);
   assert(!m_request_state_hook);
   assert(!logger);
 }
