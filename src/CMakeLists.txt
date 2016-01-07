@@ -660,11 +660,11 @@ add_custom_target(build_rocksdb
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/rocksdb
     COMMENT "rocksdb building")
 
-# add a dummy target to attach librocksdb.a and it's include_directories
-add_library(rocksdb INTERFACE)
-set_target_properties(rocksdb PROPERTIES INTERFACE_LINK_LIBRARIES "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a") 
+# add a imported library for librocksdb.a 
+add_library(rocksdb STATIC IMPORTED)
+set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a") 
 add_dependencies(rocksdb build_rocksdb)
-target_include_directories(rocksdb INTERFACE "${CMAKE_SOURCE_DIR}/src/rocksdb/include")
+set(ROCKSDB_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
 
 add_subdirectory(kv)
 

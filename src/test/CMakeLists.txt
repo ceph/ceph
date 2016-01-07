@@ -1414,9 +1414,8 @@ add_executable(unittest_rocksdb_option EXCLUDE_FROM_ALL
   )
 add_test(unittest_rocksdb_option unittest_rocksdb_option)
 add_dependencies(check unittest_rocksdb_option)
-target_link_libraries(unittest_rocksdb_option global os rocksdb ${CMAKE_DL_LIBS}
+target_link_libraries(unittest_rocksdb_option global os ${CMAKE_DL_LIBS}
   ${BLKID_LIBRARIES} ${ALLOC_LIBS} ${UNITTEST_LIBS})
-target_include_directories(unittest_rocksdb_option PUBLIC ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
 set_target_properties(unittest_rocksdb_option PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unittest_bluefs
