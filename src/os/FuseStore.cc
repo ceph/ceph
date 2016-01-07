@@ -43,6 +43,7 @@ FuseStore::~FuseStore()
 /*
  * / - root directory
  * $cid/
+ * $cid/type - objectstore type
  * $cid/bitwise_hash_start = lowest hash value
  * $cid/bitwise_hash_end = highest hash value
  * $cid/bitwise_hash_bits - how many bits are significant
@@ -57,6 +58,7 @@ FuseStore::~FuseStore()
  */
 enum {
   FN_ROOT = 1,
+  FN_TYPE,
   FN_COLLECTION,
   FN_HASH_START,
   FN_HASH_END,
@@ -93,6 +95,9 @@ static int parse_fn(const char *path, coll_t *cid, ghobject_t *oid, string *key,
 
   if (v.empty())
     return FN_ROOT;
+
+  if (v.front() == "type")
+    return FN_TYPE;
 
   if (!cid->parse(v.front())) {
     return -ENOENT;
@@ -248,6 +253,10 @@ static int os_getattr(const char *path, struct stat *stbuf)
     stbuf->st_mode = S_IFDIR | 0700;
     return 0;
 
+  case FN_TYPE:
+    stbuf->st_size = fs->store->get_type().length() + 1;
+    break;
+
   case FN_OBJECT_HASH:
     if (!fs->store->exists(cid, oid))
       return -ENOENT;
@@ -353,6 +362,7 @@ static int os_readdir(const char *path,
   switch (t) {
   case FN_ROOT:
     {
+      filler(buf, "type", NULL, 0);
       vector<coll_t> cls;
       fs->store->list_collections(cls);
       for (auto c : cls) {
@@ -477,6 +487,12 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 
   bufferlist *pbl = 0;
   switch (t) {
+  case FN_TYPE:
+    pbl = new bufferlist;
+    pbl->append(fs->store->get_type());
+    pbl->append("\n");
+    break;
+
   case FN_HASH_START:
     {
       pbl = new bufferlist;
