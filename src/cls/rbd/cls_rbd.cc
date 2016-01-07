@@ -2116,6 +2116,8 @@ int object_map_save(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
+  object_map.set_crc_enabled(true);
+
   bufferlist bl;
   ::encode(object_map, bl);
   CLS_LOG(20, "object_map_save: object size=%" PRIu64 ", byte size=%u",
