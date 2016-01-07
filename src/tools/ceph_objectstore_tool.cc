@@ -2450,14 +2450,6 @@ int main(int argc, char **argv)
     if (!S_ISDIR(st.st_mode)) {
       invalid_filestore_path(dpath);
     }
-    string check = dpath + "/whoami";
-    if (::stat(check.c_str(), &st) == -1) {
-       perror("whoami");
-       invalid_filestore_path(dpath);
-    }
-    if (!S_ISREG(st.st_mode)) {
-      invalid_filestore_path(dpath);
-    }
     check = dpath + "/current";
     if (::stat(check.c_str(), &st) == -1) {
        perror("current");
