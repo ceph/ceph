@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_RENAME_REQUEST_HH
+#ifndef CEPH_LIBRBD_RENAME_REQUEST_H
 #define CEPH_LIBRBD_RENAME_REQUEST_H
 
 #include "librbd/operation/Request.h"
