@@ -732,7 +732,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
   }
 
   list<Context*> ls;
-  int err = 0;
 
   if (objects[poolid].count(oid) == 0) {
     ldout(cct, 7) << "bh_read_finish no object cache" << dendl;
@@ -847,9 +846,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
       assert(bh->start() == opos);   // we don't merge rx bh's... yet!
       assert(bh->length() <= start+(loff_t)length-opos);
 
-      if (bh->error < 0)
-	err = bh->error;
-
       loff_t oldpos = opos;
       opos = bh->end();
 
@@ -884,7 +880,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
   // called with lock held.
   ldout(cct, 20) << "finishing waiters " << ls << dendl;
 
-  finish_contexts(cct, ls, err);
+  finish_contexts(cct, ls, r >= 0 ? 0 : r);
   retry_waiting_reads();
 
   --reads_outstanding;
