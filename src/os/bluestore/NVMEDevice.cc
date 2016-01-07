@@ -31,6 +31,7 @@
 #include <rte_malloc.h>
 #include <rte_lcore.h>
 
+#include "include/stringify.h"
 #include "include/types.h"
 #include "include/compat.h"
 #include "common/errno.h"
@@ -352,7 +353,7 @@ int NVMEDevice::open(string p)
           << " block_size " << block_size << " (" << pretty_si_t(block_size)
           << "B)" << dendl;
 
-  PerfCountersBuilder b(g_ceph_context, string("nvmedevice-") + name + "-" + std::to_string(this),
+  PerfCountersBuilder b(g_ceph_context, string("nvmedevice-") + name + "-" + stringify(this),
                         l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
   b.add_time_avg(l_bluestore_nvmedevice_aio_write_lat, "aio_write_lat", "Average write completing latency");
   b.add_time_avg(l_bluestore_nvmedevice_read_lat, "read_lat", "Average read completing latency");
