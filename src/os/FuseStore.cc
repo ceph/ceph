@@ -45,6 +45,7 @@ FuseStore::~FuseStore()
  * $cid/
  * $cid/bitwise_hash_start = lowest hash value
  * $cid/bitwise_hash_end = highest hash value
+ * $cid/bitwise_hash_bits - how many bits are significant
  * $cid/pgmeta/ - pgmeta object
  * $cid/all/ - all objects
  * $cid/all/$obj/
@@ -59,6 +60,7 @@ enum {
   FN_COLLECTION,
   FN_HASH_START,
   FN_HASH_END,
+  FN_HASH_BITS,
   FN_OBJECT,
   FN_OBJECT_HASH,
   FN_OBJECT_DATA,
@@ -103,6 +105,8 @@ static int parse_fn(const char *path, coll_t *cid, ghobject_t *oid, string *key,
     return FN_HASH_START;
   if (v.front() == "bitwise_hash_end")
     return FN_HASH_END;
+  if (v.front() == "bitwise_hash_bits")
+    return FN_HASH_BITS;
   if (v.front() == "pgmeta") {
     spg_t pgid;
     if (cid->is_pg(&pgid)) {
@@ -218,10 +222,24 @@ static int os_getattr(const char *path, struct stat *stbuf)
     stbuf->st_mode = S_IFDIR | 0700;
     return 0;
 
-  case FN_HASH_START:
   case FN_HASH_END:
+    if (fs->store->collection_bits(cid) < 0)
+      return -ENOENT;
+    // fall-thru
+  case FN_HASH_START:
   case FN_OBJECT_HASH:
     stbuf->st_size = 9;
+    return 0;
+
+  case FN_HASH_BITS:
+    {
+      int bits = fs->store->collection_bits(cid);
+      if (bits < 0)
+	return -ENOENT;
+      char buf[8];
+      snprintf(buf, sizeof(buf), "%d\n", bits);
+      stbuf->st_size = strlen(buf);
+    }
     return 0;
 
   case FN_OBJECT_DATA:
@@ -305,7 +323,10 @@ static int os_readdir(const char *path,
   case FN_COLLECTION:
     {
       filler(buf, "bitwise_hash_start", NULL, 0);
-      filler(buf, "bitwise_hash_end", NULL, 0);
+      if (fs->store->collection_bits(cid) >= 0) {
+	filler(buf, "bitwise_hash_end", NULL, 0);
+	filler(buf, "bitwise_hash_bits", NULL, 0);
+      }
       filler(buf, "all", NULL, 0);
       filler(buf, "by_bitwise_hash", NULL, 0);
       spg_t pgid;
@@ -441,13 +462,22 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 	  uint64_t rev_end = (rev_start | (0xffffffff >> hash_bits));
 	  h = rev_end;
 	} else {
-	  h = 0xffffffff;
+	  return -ENOENT;
 	}
       } else {
 	h = 0xffffffff;
       }
       char buf[10];
       snprintf(buf, sizeof(buf), "%08lx\n", h);
+      pbl->append(buf);
+    }
+    break;
+
+  case FN_HASH_BITS:
+    {
+      char buf[8];
+      snprintf(buf, sizeof(buf), "%d\n", fs->store->collection_bits(cid));
+      pbl = new bufferlist;
       pbl->append(buf);
     }
     break;
