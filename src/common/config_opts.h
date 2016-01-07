@@ -248,6 +248,7 @@ OPTION(mon_accept_timeout_factor, OPT_FLOAT, 2.0)    // on leader, if paxos upda
 OPTION(mon_clock_drift_allowed, OPT_FLOAT, .050) // allowed clock drift between monitors
 OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT, 5) // exponential backoff for clock drift warnings
 OPTION(mon_timecheck_interval, OPT_FLOAT, 300.0) // on leader, timecheck (clock drift check) interval (seconds)
+OPTION(mon_timecheck_skew_interval, OPT_FLOAT, 30.0) // on leader, timecheck (clock drift check) interval when in presence of a skew (seconds)
 OPTION(mon_pg_create_interval, OPT_FLOAT, 30.0) // no more than every 30s
 OPTION(mon_pg_stuck_threshold, OPT_INT, 300) // number of seconds after which pgs can be considered inactive, unclean, or stale (see doc/control.rst under dump_stuck for more info)
 OPTION(mon_pg_min_inactive, OPT_U64, 1) // the number of PGs which have to be inactive longer than 'mon_pg_stuck_threshold' before health goes into ERR. 0 means disabled, never go into ERR.
