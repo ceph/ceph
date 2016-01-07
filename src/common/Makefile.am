@@ -84,7 +84,8 @@ endif
 
 if LINUX
 libcommon_internal_la_SOURCES += \
-	common/linux_version.c 
+	common/linux_version.c \
+	common/blkdev.cc
 endif
 
 if SOLARIS
@@ -101,11 +102,6 @@ if FREEBSD
 libcommon_internal_la_SOURCES += \
        common/freebsd_version.c \
        common/blkdev.cc
-endif
-
-if LINUX
-libcommon_internal_la_SOURCES += \
-	common/blkdev.cc
 endif
 
 if ENABLE_XIO

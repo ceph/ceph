@@ -1,5 +1,4 @@
 #!/bin/bash
-set -xv
 
 #
 # Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
