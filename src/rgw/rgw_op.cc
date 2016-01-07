@@ -37,6 +37,8 @@ using ceph::crypto::MD5;
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
+static int forward_request_to_master(struct req_state *s, obj_version *objv, RGWRados *store, bufferlist& in_data, JSONParser *jp);
+
 #define MULTIPART_UPLOAD_ID_PREFIX_LEGACY "2/"
 #define MULTIPART_UPLOAD_ID_PREFIX "2~" // must contain a unique char that may not come up in gen_rand_alpha()
 
@@ -1437,6 +1439,16 @@ void RGWSetBucketVersioning::pre_exec()
 
 void RGWSetBucketVersioning::execute()
 {
+  if (!store->is_meta_master()) {
+    bufferlist in_data;
+    JSONParser jp;
+    ret = forward_request_to_master(s, NULL, store, in_data, &jp);
+    if (ret < 0) {
+      ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << ret << dendl;
+    }
+    return;
+  }
+  
   ret = get_params();
 
   if (ret < 0)
