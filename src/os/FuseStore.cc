@@ -558,6 +558,62 @@ static int os_open(const char *path, struct fuse_file_info *fi)
   return 0;
 }
 
+static int os_mkdir(const char *path, mode_t mode)
+{
+  coll_t cid;
+  ghobject_t oid;
+  string key;
+  uint32_t hash_value, hash_bits;
+  int f = parse_fn(path, &cid, &oid, &key, &hash_value, &hash_bits);
+  if (f < 0)
+    return f;
+
+  fuse_context *fc = fuse_get_context();
+  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+
+  ObjectStore::Transaction t;
+  switch (f) {
+  case FN_OBJECT:
+    {
+      spg_t pgid;
+      if (cid.is_pg(&pgid)) {
+	int bits = fs->store->collection_bits(cid);
+	if (bits >= 0 && !oid.match(bits, pgid.ps())) {
+	  // sorry, not part of this PG
+	  return -EINVAL;
+	}
+      }
+      t.touch(cid, oid);
+    }
+    break;
+
+  case FN_COLLECTION:
+    if (cid.is_pg()) {
+      // use the mode for the bit count.  e.g., mkdir --mode=0003
+      // mnt/0.7_head will create 0.7 with bits = 3.
+      mode &= 0777;
+      if (mode >= 32)
+	return -EINVAL;
+    } else {
+      mode = 0;
+    }
+    t.create_collection(cid, mode);
+    break;
+
+  default:
+    return -EPERM;
+  }
+
+  if (!t.empty()) {
+    ceph::shared_ptr<ObjectStore::Sequencer> osr(
+      new ObjectStore::Sequencer("fuse"));
+    fs->store->apply_transaction(&*osr, t);
+    osr->flush();
+  }
+
+  return 0;
+}
+
 static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
   coll_t cid;
@@ -845,7 +901,7 @@ static struct fuse_operations fs_oper = {
   readlink: 0,
   getdir: 0,
   mknod: 0,
-  mkdir: 0,
+  mkdir: os_mkdir,
   unlink: os_unlink,
   rmdir: os_unlink,
   symlink: 0,
