@@ -211,7 +211,7 @@ int SharedDriverData::_scan_nvme_device(const string &sn_tag, nvme_controller **
     if (r < 0) {
       derr << __func__ << " device " << *name << " " << pci_dev->bus
            << ":" << pci_dev->dev << ":" << pci_dev->func
-           << " bind to uio driver failed" << dendl;
+           << " bind to uio driver failed, may lack of uio_pci_generic kernel module" << dendl;
       return r;
     }
   }
