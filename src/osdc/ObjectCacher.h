@@ -668,8 +668,6 @@ private:
 
 public:
   bool set_is_empty(ObjectSet *oset);
-  bool set_is_cached(ObjectSet *oset);
-  bool set_is_dirty_or_committing(ObjectSet *oset);
 
   bool flush_set(ObjectSet *oset, Context *onfinish=0);
   bool flush_set(ObjectSet *oset, vector<ObjectExtent>& ex,

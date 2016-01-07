@@ -1704,50 +1704,6 @@ bool ObjectCacher::set_is_empty(ObjectSet *oset)
   return true;
 }
 
-bool ObjectCacher::set_is_cached(ObjectSet *oset)
-{
-  assert(lock.is_locked());
-  if (oset->objects.empty())
-    return false;
-
-  for (xlist<Object*>::iterator p = oset->objects.begin();
-       !p.end(); ++p) {
-    Object *ob = *p;
-    for (map<loff_t,BufferHead*>::iterator q = ob->data.begin();
-	 q != ob->data.end();
-	 ++q) {
-      BufferHead *bh = q->second;
-      if (!bh->is_dirty() && !bh->is_tx())
-	return true;
-    }
-  }
-
-  return false;
-}
-
-bool ObjectCacher::set_is_dirty_or_committing(ObjectSet *oset)
-{
-  assert(lock.is_locked());
-  if (oset->objects.empty())
-    return false;
-
-  for (xlist<Object*>::iterator i = oset->objects.begin();
-       !i.end(); ++i) {
-    Object *ob = *i;
-
-    for (map<loff_t,BufferHead*>::iterator p = ob->data.begin();
-	 p != ob->data.end();
-	 ++p) {
-      BufferHead *bh = p->second;
-      if (bh->is_dirty() || bh->is_tx())
-	return true;
-    }
-  }
-
-  return false;
-}
-
-
 // purge.  non-blocking.  violently removes dirty buffers from cache.
 void ObjectCacher::purge(Object *ob)
 {
