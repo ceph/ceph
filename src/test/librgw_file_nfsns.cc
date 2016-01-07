@@ -214,7 +214,7 @@ TEST(LibRGW, ENUMERATE1) {
       case RGW_FS_TYPE_DIRECTORY:
 	if (! elt.state.readdir) {
 	  // descending
-	  uint64_t offset;
+	  uint64_t offset = 0;
 	  bool eof; // XXX
 	  lsubdout(cct, rgw, 10)
 	    << "readdir in"
@@ -335,7 +335,7 @@ TEST(LibRGW, MARKER1_READDIR)
     using std::get;
 
     dirent_vec dvec;
-    uint64_t offset;
+    uint64_t offset = 0;
     bool eof = false;
 
     /* because RGWReaddirRequest::default_max is 1000 (XXX make
