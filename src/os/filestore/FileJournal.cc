@@ -1664,9 +1664,9 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
     completions.push_back(
       completion_item(
 	seq, oncommit, ceph_clock_now(g_ceph_context), osd_op));
-    if (writeq.empty())
-      writeq_cond.Signal();
     writeq.push_back(write_item(seq, e, orig_len, osd_op));
+    if (!writeq.empty())
+      writeq_cond.Signal();
   }
 }
 
