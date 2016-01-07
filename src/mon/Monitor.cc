@@ -178,6 +178,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   timecheck_round(0),
   timecheck_acks(0),
+  timecheck_rounds_since_clean(0),
   timecheck_event(NULL),
 
   probe_timeout_event(NULL),
@@ -3685,8 +3686,7 @@ void Monitor::timecheck_start_round()
   timecheck();
 out:
   dout(10) << __func__ << " setting up next event" << dendl;
-  timecheck_event = new C_TimeCheck(this);
-  timer.add_event_after(g_conf->mon_timecheck_interval, timecheck_event);
+  timecheck_reset_event();
 }
 
 void Monitor::timecheck_finish_round(bool success)
@@ -3700,6 +3700,7 @@ void Monitor::timecheck_finish_round(bool success)
     assert(timecheck_waiting.empty());
     assert(timecheck_acks == quorum.size());
     timecheck_report();
+    timecheck_check_skews();
     return;
   }
 
@@ -3733,6 +3734,65 @@ void Monitor::timecheck_cleanup()
   timecheck_waiting.clear();
   timecheck_skews.clear();
   timecheck_latencies.clear();
+
+  timecheck_rounds_since_clean = 0;
+}
+
+void Monitor::timecheck_reset_event()
+{
+  if (timecheck_event) {
+    timer.cancel_event(timecheck_event);
+    timecheck_event = NULL;
+  }
+
+  double delay =
+    cct->_conf->mon_timecheck_skew_interval * timecheck_rounds_since_clean;
+
+  if (delay <= 0 || delay > cct->_conf->mon_timecheck_interval) {
+    delay = cct->_conf->mon_timecheck_interval;
+  }
+
+  dout(10) << __func__ << " delay " << delay
+           << " rounds_since_clean " << timecheck_rounds_since_clean
+           << dendl;
+
+  timecheck_event = new C_TimeCheck(this);
+  timer.add_event_after(delay, timecheck_event);
+}
+
+void Monitor::timecheck_check_skews()
+{
+  dout(10) << __func__ << dendl;
+  assert(is_leader());
+  assert((timecheck_round % 2) == 0);
+  if (monmap->size() == 1) {
+    assert(0 == "We are alone; we shouldn't have gotten here!");
+    return;
+  }
+  assert(timecheck_latencies.size() == timecheck_skews.size());
+
+  bool found_skew = false;
+  for (map<entity_inst_t, double>::iterator p = timecheck_skews.begin();
+       p != timecheck_skews.end(); ++p) {
+
+    double abs_skew;
+    if (timecheck_has_skew(p->second, &abs_skew)) {
+      dout(10) << __func__
+               << " " << p->first << " skew " << abs_skew << dendl;
+      found_skew = true;
+    }
+  }
+
+  if (found_skew) {
+    ++timecheck_rounds_since_clean;
+    timecheck_reset_event();
+  } else if (timecheck_rounds_since_clean > 0) {
+    dout(1) << __func__
+      << " no clock skews found after " << timecheck_rounds_since_clean
+      << " rounds" << dendl;
+    timecheck_rounds_since_clean = 0;
+  }
+
 }
 
 void Monitor::timecheck_report()
@@ -3755,7 +3815,8 @@ void Monitor::timecheck_report()
     m->epoch = get_epoch();
     m->round = timecheck_round;
 
-    for (map<entity_inst_t, double>::iterator it = timecheck_skews.begin(); it != timecheck_skews.end(); ++it) {
+    for (map<entity_inst_t, double>::iterator it = timecheck_skews.begin();
+         it != timecheck_skews.end(); ++it) {
       double skew = it->second;
       double latency = timecheck_latencies[it->first];
 
@@ -3814,10 +3875,10 @@ health_status_t Monitor::timecheck_status(ostringstream &ss,
                                           const double latency)
 {
   health_status_t status = HEALTH_OK;
-  double abs_skew = (skew_bound > 0 ? skew_bound : -skew_bound);
   assert(latency >= 0);
 
-  if (abs_skew > g_conf->mon_clock_drift_allowed) {
+  double abs_skew;
+  if (timecheck_has_skew(skew_bound, &abs_skew)) {
     status = HEALTH_WARN;
     ss << "clock skew " << abs_skew << "s"
        << " > max " << g_conf->mon_clock_drift_allowed << "s";
