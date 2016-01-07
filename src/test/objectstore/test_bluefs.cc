@@ -80,7 +80,7 @@ TEST(BlueFS, write_read) {
     bl.append("baz");
     h->append(bl);
     fs.fsync(h);
-    delete h;
+    fs.close_writer(h);
   }
   {
     BlueFS::FileReader *h;
@@ -114,7 +114,7 @@ TEST(BlueFS, small_appends) {
       h->append(bl);
     }
     fs.fsync(h);
-    delete h;
+    fs.close_writer(h);
   }
   {
     BlueFS::FileWriter *h;
@@ -125,7 +125,7 @@ TEST(BlueFS, small_appends) {
       h->append(bl);
       fs.fsync(h);
     }
-    delete h;
+    fs.close_writer(h);
   }
   fs.umount();
   rm_temp_bdev(fn);
