@@ -2483,11 +2483,11 @@ int main(int argc, char **argv)
     int r = fs->fsck();
     if (r < 0) {
       cerr << "fsck failed: " << cpp_strerror(r) << std::endl;
-      exit(1);
+      myexit(1);
     }
     if (r > 0) {
       cerr << "fsck found " << r << " errors" << std::endl;
-      exit(1);
+      myexit(1);
     }
     cout << "fsck found no errors" << std::endl;
     exit(0);
