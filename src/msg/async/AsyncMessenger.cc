@@ -736,3 +736,21 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   }
   lock.Unlock();
 }
+
+int AsyncMessenger::reap_dead(int max)
+{
+  int num;
+  Mutex::Locker l(lock);
+  Mutex::Locker l(deleted_lock);
+
+  while (!deleted_conns.empty() && num < max) {
+    set<AsyncConnectionRef>::iterator it = deleted_conns.begin();
+    AsyncConnectionRef p = *it;
+    ldout(cct, 5) << __func__ << " delete " << p << dendl;
+    conns.erase(p);
+    deleted_conns.erase(it);
+    ++num;
+  }
+
+  return num;
+}
