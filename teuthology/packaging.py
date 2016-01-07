@@ -428,7 +428,16 @@ def _get_response(url, wait=False, sleep=15, tries=10):
     with safe_while(sleep=sleep, tries=tries, _raise=False) as proceed:
         while proceed():
             resp = requests.get(url)
-            if resp.ok or not wait:
+            if resp.ok:
+                log.info('Package found...')
+                break
+
+            if not wait:
+                log.info(
+                    'Package is not found at: %s (got HTTP code %s)...',
+                    url,
+                    resp.status_code,
+                )
                 break
 
             log.info(
