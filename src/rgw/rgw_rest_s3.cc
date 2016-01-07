@@ -75,6 +75,26 @@ static struct response_attr_param resp_attr_params[] = {
   {NULL, NULL},
 };
 
+int RGWGetObj_ObjStore_S3Website::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+  map<string, bufferlist>::iterator iter;
+  iter = attrs.find(RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION);
+  if (iter != attrs.end()) {
+    bufferlist &bl = iter->second;
+    s->redirect = string(bl.c_str(), bl.length());
+    s->err.http_ret = 301;
+    ldout(s->cct, 20) << __CEPH_ASSERT_FUNCTION << " redirectng per x-amz-website-redirect-location=" << s->redirect << dendl;
+    ret = -ERR_WEBSITE_REDIRECT;
+    return ret;
+  } else {
+    return RGWGetObj_ObjStore_S3::send_response_data(bl, bl_ofs, bl_len);
+  }
+}
+
+int RGWGetObj_ObjStore_S3Website::send_response_data_error()
+{
+  return RGWGetObj_ObjStore_S3::send_response_data_error();
+}
+
 int RGWGetObj_ObjStore_S3::send_response_data_error()
 {
   bufferlist bl;

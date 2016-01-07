@@ -75,6 +75,8 @@ public:
   RGWGetObj_ObjStore_S3Website() : is_errordoc_request(false) {}
   RGWGetObj_ObjStore_S3Website(bool is_errordoc_request) : is_errordoc_request(false) { this->is_errordoc_request = is_errordoc_request; }
   ~RGWGetObj_ObjStore_S3Website() {}
+  int send_response_data_error();
+  int send_response_data(bufferlist& bl, off_t ofs, off_t len);
   // We override RGWGetObj_ObjStore::get_params here, to allow ignoring all
   // conditional params for error pages.
   int get_params() {
@@ -84,7 +86,7 @@ public:
         if_unmod = NULL;
         if_match = NULL;
         if_nomatch = NULL;
-		return 0;
+               return 0;
       } else {
         return RGWGetObj_ObjStore_S3::get_params();
       }
