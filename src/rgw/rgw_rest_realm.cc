@@ -171,6 +171,13 @@ void RGWOp_Period_Post::execute()
     lderr(cct) << "failed to set latest epoch" << dendl;
     return;
   }
+  // reflect the period into our local objects
+  http_ret  = period.reflect();
+  if (http_ret  < 0) {
+    lderr(cct) << "failed to update local objects: "
+        << cpp_strerror(-http_ret) << dendl;
+    return;
+  }
   ldout(cct, 4) << "period epoch " << period.get_epoch()
       << " is newer than current epoch " << current_period.get_epoch()
       << ", updating latest epoch and notifying zone" << dendl;
