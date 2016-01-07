@@ -3927,6 +3927,10 @@ void Monitor::timecheck_check_skews()
     dout(1) << __func__
       << " no clock skews found after " << timecheck_rounds_since_clean
       << " rounds" << dendl;
+    // make sure the skews are really gone and not just a transient success
+    // this will run just once if not in the presence of skews again.
+    timecheck_rounds_since_clean = 1;
+    timecheck_reset_event();
     timecheck_rounds_since_clean = 0;
   }
 
@@ -4130,11 +4134,7 @@ void Monitor::handle_timecheck_leader(MonOpRequestRef op)
 	   << " delta " << delta << " skew_bound " << skew_bound
 	   << " latency " << latency << dendl;
 
-  if (timecheck_skews.count(other) == 0) {
-    timecheck_skews[other] = skew_bound;
-  } else {
-    timecheck_skews[other] = (timecheck_skews[other]*0.8)+(skew_bound*0.2);
-  }
+  timecheck_skews[other] = skew_bound;
 
   timecheck_acks++;
   if (timecheck_acks == quorum.size()) {
