@@ -36,7 +36,6 @@ KernelDevice::KernelDevice(aio_callback_t cb, void *cbpriv)
     size(0), block_size(0),
     fs(NULL), aio(false), dio(false),
     debug_lock("KernelDevice::debug_lock"),
-    ioc_reap_lock("KernelDevice::ioc_reap_lock"),
     flush_lock("KernelDevice::flush_lock"),
     aio_queue(g_conf->bdev_aio_max_queue_depth),
     aio_callback(cb),
@@ -257,15 +256,7 @@ void KernelDevice::_aio_thread()
 	}
       }
     }
-    if (ioc_reap_count.read()) {
-      Mutex::Locker l(ioc_reap_lock);
-      for (auto p : ioc_reap_queue) {
-	dout(20) << __func__ << " reap ioc " << p << dendl;
-	delete p;
-      }
-      ioc_reap_queue.clear();
-      ioc_reap_count.dec();
-    }
+    reap_ioc();
   }
   dout(10) << __func__ << " end" << dendl;
 }
@@ -532,10 +523,3 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   return r;
 }
 
-void KernelDevice::queue_reap_ioc(IOContext *ioc)
-{
-  Mutex::Locker l(ioc_reap_lock);
-  if (ioc_reap_count.read() == 0)
-    ioc_reap_count.inc();
-  ioc_reap_queue.push_back(ioc);
-}

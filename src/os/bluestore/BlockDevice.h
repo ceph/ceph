@@ -57,7 +57,12 @@ struct IOContext {
 
 
 class BlockDevice {
+  Mutex ioc_reap_lock;
+  vector<IOContext*> ioc_reap_queue;
+  atomic_t ioc_reap_count;
+
 public:
+  BlockDevice(): ioc_reap_lock("BlockDevice::ioc_reap_lock") {}
   virtual ~BlockDevice() {}
   typedef void (*aio_callback_t)(void *handle, void *aio);
 
@@ -76,6 +81,9 @@ public:
 		IOContext *ioc, bool buffered) = 0;
   virtual int aio_zero(uint64_t off, uint64_t len, IOContext *ioc) = 0;
   virtual int flush() = 0;
+
+  void queue_reap_ioc(IOContext *ioc);
+  void reap_ioc();
 
   // for managing buffered readers/writers
   virtual int invalidate_cache(uint64_t off, uint64_t len) = 0;

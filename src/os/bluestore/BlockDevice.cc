@@ -54,3 +54,23 @@ BlockDevice *BlockDevice::create(const string& type, aio_callback_t cb, void *cb
   return NULL;
 }
 
+void BlockDevice::queue_reap_ioc(IOContext *ioc)
+{
+  Mutex::Locker l(ioc_reap_lock);
+  if (ioc_reap_count.read() == 0)
+    ioc_reap_count.inc();
+  ioc_reap_queue.push_back(ioc);
+}
+
+void BlockDevice::reap_ioc()
+{
+  if (ioc_reap_count.read()) {
+    Mutex::Locker l(ioc_reap_lock);
+    for (auto p : ioc_reap_queue) {
+      dout(20) << __func__ << " reap ioc " << p << dendl;
+      delete p;
+    }
+    ioc_reap_queue.clear();
+    ioc_reap_count.dec();
+  }
+}

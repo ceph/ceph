@@ -32,10 +32,6 @@ class KernelDevice : public BlockDevice {
   Mutex debug_lock;
   interval_set<uint64_t> debug_inflight;
 
-  Mutex ioc_reap_lock;
-  vector<IOContext*> ioc_reap_queue;
-  atomic_t ioc_reap_count;
-
   Mutex flush_lock;
   atomic_t io_since_flush;
 
@@ -85,8 +81,6 @@ public:
   int aio_zero(uint64_t off, uint64_t len,
 	       IOContext *ioc) override;
   int flush() override;
-
-  void queue_reap_ioc(IOContext *ioc);
 
   // for managing buffered readers/writers
   int invalidate_cache(uint64_t off, uint64_t len) override;
