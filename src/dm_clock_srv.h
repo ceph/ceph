@@ -27,6 +27,8 @@ namespace c = crimson;
 namespace crimson {
   namespace dmclock {
 
+    static bool info = true;
+
     typedef double Time;
 
     inline Time getTime() {
@@ -213,9 +215,9 @@ namespace crimson {
       };
 
 
-      ClientInfoFunc clientInfoF;
+      ClientInfoFunc       clientInfoF;
       CanHandleRequestFunc canHandleF;
-      HandleRequestFunc handleF;
+      HandleRequestFunc    handleF;
 
 
       typedef typename std::lock_guard<std::mutex> Guard;
@@ -243,6 +245,12 @@ namespace crimson {
       // proportion to still get issued
       bool allowLimitBreak;
 
+
+      // performance data collection
+      size_t res_sched_count;
+      size_t prop_sched_count;
+      size_t limit_break_sched_count;
+
     public:
 
       PriorityQueue(ClientInfoFunc _clientInfoF,
@@ -252,9 +260,25 @@ namespace crimson {
 	clientInfoF(_clientInfoF),
 	canHandleF(_canHandleF),
 	handleF(_handleF),
-	allowLimitBreak(_allowLimitBreak)
+	allowLimitBreak(_allowLimitBreak),
+	res_sched_count(0),
+	prop_sched_count(0),
+	limit_break_sched_count(0)
       {
 	// empty
+      }
+
+      ~PriorityQueue() {
+	if (info) {
+	  std::cout << "Ops scheduled via reservation: " <<
+	    res_sched_count << std::endl;
+	  std::cout << "Ops scheduled via proportion: " <<
+	    prop_sched_count << std::endl;
+	  if (limit_break_sched_count > 0) {
+	    std::cout << "Ops scheduled via limit break: " <<
+	      limit_break_sched_count << std::endl;
+	  }
+	}
       }
 
 
@@ -347,12 +371,13 @@ namespace crimson {
       // should not be empty and the top element of the heap should
       // not be already handled
       template<typename K>
-      void submitTopRequest(Heap<EntryRef, K>& heap) {
-	auto top = heap.top();
+      C submitTopRequest(Heap<EntryRef, K>& heap) {
+	EntryRef& top = heap.top();
 	top->handled = true;
-	heap.pop();
-
 	handleF(std::move(top->request));
+	C client_result = top->client;
+	heap.pop();
+	return client_result;
       }
 
 
@@ -377,7 +402,8 @@ namespace crimson {
 
 	prepareQueue(resQ);
 	if (!resQ.empty() && resQ.top()->tag.reservation <= now) {
-	  submitTopRequest(resQ);
+	  (void) submitTopRequest(resQ);
+	  ++res_sched_count;
 	  return;
 	}
 
@@ -400,15 +426,18 @@ namespace crimson {
 
 	prepareQueue(readyQ);
 	if (!readyQ.empty()) {
-	  submitTopRequest(readyQ);
+	  C client = submitTopRequest(readyQ);
+	  reduceReservationTags(client);
+	  ++prop_sched_count;
 	  return;
 	}
 
 	if (allowLimitBreak) {
 	  prepareQueue(propQ);
 	  if (!propQ.empty()) {
-	    submitTopRequest(propQ);
-	    reduceReservationTags(propQ.top()->client);
+	    C client = submitTopRequest(propQ);
+	    reduceReservationTags(client);
+	    ++limit_break_sched_count;
 	    return;
 	  }
 	}

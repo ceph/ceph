@@ -40,7 +40,7 @@ static dmc::ClientInfo client_info[] = {
 };
 
 
-static int client_goals[] = {300, 300, 300, 300}; // in IOPS
+static int client_goals[] = {200, 200, 200, 50}; // in IOPS
 // static int client_goals[] = {150, 150, 150, 150}; // in IOPS
 
 
@@ -76,7 +76,7 @@ int main(int argc, char* argv[]) {
   TestServer::ClientResponseFunc client_response_f =
     std::bind(&send_response, clients, _1, _2);
 
-  TestServer server(300, 7, client_info_f, client_response_f);
+  TestServer server(400, 7, client_info_f, client_response_f);
 
   for (int i = 0; i < client_count; ++i) {
     clients[i] = new TestClient(i,
