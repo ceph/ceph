@@ -1430,11 +1430,13 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents)
       assert(r == 0);
 
       bluestore_extent_t e;
-      r =  alloc->allocate(MIN(gift, 1ull<<31), min_alloc_size, 0,
-			   &e.offset, &e.length);
+      r = alloc->allocate(gift, min_alloc_size, 0, &e.offset, &e.length);
       if (r < 0) {
 	assert(0 == "allocate failed, wtf");
 	return r;
+      }
+      if (e.length < gift) {
+	alloc->unreserve(gift - e.length);
       }
 
       dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
