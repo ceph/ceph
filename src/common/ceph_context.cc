@@ -33,6 +33,7 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/PluginRegistry.h"
+#include "common/valgrind.h"
 
 #include <iostream>
 #include <pthread.h>
@@ -531,6 +532,16 @@ CephContext::~CephContext()
   delete _crypto_aes;
   if (_crypto_inited)
     ceph::crypto::shutdown();
+}
+
+void CephContext::put() {
+  if (nref.dec() == 0) {
+    ANNOTATE_HAPPENS_AFTER(&nref);
+    ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&nref);
+    delete this;
+  } else {
+    ANNOTATE_HAPPENS_BEFORE(&nref);
+  }
 }
 
 void CephContext::init_crypto()

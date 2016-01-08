@@ -21,6 +21,7 @@
 #include "HeartbeatMap.h"
 #include "ceph_context.h"
 #include "common/errno.h"
+#include "common/valgrind.h"
 
 #include "debug.h"
 #define dout_subsys ceph_subsys_heartbeatmap
@@ -48,6 +49,10 @@ heartbeat_handle_d *HeartbeatMap::add_worker(const string& name)
   m_rwlock.get_write();
   ldout(m_cct, 10) << "add_worker '" << name << "'" << dendl;
   heartbeat_handle_d *h = new heartbeat_handle_d(name);
+  ANNOTATE_BENIGN_RACE_SIZED(&h->timeout, sizeof(h->timeout),
+                             "heartbeat_handle_d timeout");
+  ANNOTATE_BENIGN_RACE_SIZED(&h->suicide_timeout, sizeof(h->suicide_timeout),
+                             "heartbeat_handle_d suicide_timeout");
   m_workers.push_front(h);
   h->list_item = m_workers.begin();
   m_rwlock.put_write();
