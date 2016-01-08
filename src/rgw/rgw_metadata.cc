@@ -291,10 +291,10 @@ void RGWMetadataLog::mark_modified(int shard_id)
   modified_shards.insert(shard_id);
 }
 
-void RGWMetadataLog::read_clear_modified(set<int> *modified)
+void RGWMetadataLog::read_clear_modified(set<int> &modified)
 {
   RWLock::WLocker wl(lock);
-  modified->swap(modified_shards);
+  modified.swap(modified_shards);
   modified_shards.clear();
 }
 
