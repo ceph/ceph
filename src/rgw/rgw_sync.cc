@@ -1069,8 +1069,6 @@ class RGWCloneMetaLogCoroutine : public RGWCoroutine {
 
   RGWRESTReadResource *http_op;
 
-  RGWAioCompletionNotifier *md_op_notifier;
-
   int req_ret;
   RGWMetadataLogInfo shard_info;
   rgw_mdlog_shard_data data;
@@ -1082,7 +1080,7 @@ public:
                                                       shard_id(_id),
                                                       marker(_marker), truncated(false), new_marker(_new_marker),
                                                       max_entries(CLONE_MAX_ENTRIES),
-						      http_op(NULL), md_op_notifier(NULL),
+						      http_op(NULL),
 						      req_ret(0) {
     if (new_marker) {
       *new_marker = marker;
