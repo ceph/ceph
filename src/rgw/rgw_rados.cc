@@ -3073,6 +3073,14 @@ void RGWRados::finalize()
      */
     delete finisher;
   }
+  if (meta_notifier) {
+    meta_notifier->stop();
+    delete meta_notifier;
+  }
+  if (data_notifier) {
+    data_notifier->stop();
+    delete data_notifier;
+  }
   delete meta_mgr;
   delete data_log;
   if (use_gc_thread) {
@@ -3085,14 +3093,6 @@ void RGWRados::finalize()
   delete obj_expirer;
   obj_expirer = NULL;
 
-  if (meta_notifier) {
-    meta_notifier->stop();
-    delete meta_notifier;
-  }
-  if (data_notifier) {
-    data_notifier->stop();
-    delete data_notifier;
-  }
   delete rest_master_conn;
 
   map<string, RGWRESTConn *>::iterator iter;
