@@ -145,7 +145,7 @@ class DPDKStack : public NetworkStack {
   using tcp4 = tcp<ipv4_traits>;
 
  public:
-  explicit DPDKStack(CephContext *cct, std::shared_ptr<device> dev, unsigned cores, unsigned i);
+  explicit DPDKStack(CephContext *cct, std::shared_ptr<DPDKDevice> dev, unsigned cores, unsigned i);
   virtual int listen(const entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) override;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
   static std::unique_ptr<NetworkStack> create(CephContext *cct, unsigned i);

@@ -21,12 +21,18 @@
 
 namespace dpdk {
 
-bool eal::initialized = false;
+  static inline std::vector<char> string2vector(std::string str) {
+    auto v = std::vector<char>(str.begin(), str.end());
+    v.push_back('\0');
+    return v;
+  }
 
-void eal::init(cpuset cpus, CephContext *c)
-{
+  bool eal::initialized = false;
+
+  void eal::init(cpuset cpus, CephContext *c)
+  {
     if (initialized) {
-        return;
+      return;
     }
 
     std::stringstream mask;
@@ -34,53 +40,53 @@ void eal::init(cpuset cpus, CephContext *c)
 
     // TODO: Inherit these from the app parameters - "opts"
     std::vector<std::vector<char>> args {
-        string2vector(string("ceph").as<std::string>()),
-        string2vector("-c"), string2vector(mask.str()),
-        string2vector("-n"), string2vector("1")
+        string2vector(string("ceph")),
+        string2vector("-c"), string2vector(c->_conf->ms_dpdk_coremask),
+        string2vector("-n"), string2vector(c->_conf->ms_dpdk_memory_channel),
     };
 
     Tub<std::string> hugepages_path;
     if (!c->_conf->ms_dpdk_hugepages.empty()) {
-        hugepages_path.construct(c->_conf->ms_dpdk_hugepages.as<std::string>());
+      hugepages_path.construct(c->_conf->ms_dpdk_hugepages);
     }
 
     // If "hugepages" is not provided and DPDK PMD drivers mode is requested -
     // use the default DPDK huge tables configuration.
     if (hugepages_path) {
-        args.push_back(string2vector("--huge-dir"));
-        args.push_back(string2vector(*hugepages_path));
+      args.push_back(string2vector("--huge-dir"));
+      args.push_back(string2vector(*hugepages_path));
 
-        //
-        // We don't know what is going to be our networking configuration so we
-        // assume there is going to be a queue per-CPU. Plus we'll give a DPDK
-        // 64MB for "other stuff".
-        //
-        size_t size_MB = mem_size(cpus.count()) >> 20;
-        std::stringstream size_MB_str;
-        size_MB_str << size_MB;
+      //
+      // We don't know what is going to be our networking configuration so we
+      // assume there is going to be a queue per-CPU. Plus we'll give a DPDK
+      // 64MB for "other stuff".
+      //
+      size_t size_MB = mem_size(cpus.count()) >> 20;
+      std::stringstream size_MB_str;
+      size_MB_str << size_MB;
 
-        args.push_back(string2vector("-m"));
-        args.push_back(string2vector(size_MB_str.str()));
+      args.push_back(string2vector("-m"));
+      args.push_back(string2vector(size_MB_str.str()));
     } else if (!c->_conf->ms_dpdk_pmd.empty()) {
-        args.push_back(string2vector("--no-huge"));
+      args.push_back(string2vector("--no-huge"));
     }
 
     std::vector<char*> cargs;
 
     for (auto&& a: args) {
-        cargs.push_back(a.data());
+      cargs.push_back(a.data());
     }
     /* initialise the EAL for all */
     int ret = rte_eal_init(cargs.size(), cargs.data());
     if (ret < 0) {
-        rte_exit(EXIT_FAILURE, "Cannot init EAL\n");
+      rte_exit(EXIT_FAILURE, "Cannot init EAL\n");
     }
 
     initialized = true;
-}
+  }
 
-size_t eal::mem_size(int num_cpus, bool hugetlbfs_membackend)
-{
+  size_t eal::mem_size(int num_cpus, bool hugetlbfs_membackend)
+  {
     size_t memsize = 0;
     //
     // PMD mempool memory:
@@ -94,6 +100,6 @@ size_t eal::mem_size(int num_cpus, bool hugetlbfs_membackend)
     memsize += (64UL << 20);
 
     return memsize;
-}
+  }
 
 } // namespace dpdk

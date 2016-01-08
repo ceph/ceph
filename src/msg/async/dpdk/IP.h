@@ -95,12 +95,12 @@ struct ipv4_address {
   uint32_t ip;
 
   ipv4_address hton() {
-    ipv4_address addr = *this;
+    ipv4_address addr;
     addr.ip = ::hton(ip);
     return addr;
   }
   ipv4_address ntoh() {
-    ipv4_address addr = *this;
+    ipv4_address addr;
     addr.ip = ::ntoh(ip);
     return addr;
   }
@@ -420,7 +420,7 @@ inline void ipv4_l4<ProtoNum>::register_packet_provider(
   _inet.register_packet_provider([func] {
     auto l4p = func();
     if (l4p) {
-      *l4p.proto_num = ProtoNum;
+      (*l4p).proto_num = ProtoNum;
     }
     return l4p;
   });
@@ -428,7 +428,7 @@ inline void ipv4_l4<ProtoNum>::register_packet_provider(
 
 template <ip_protocol_num ProtoNum>
 inline void ipv4_l4<ProtoNum>::wait_l2_dst_address(ipv4_address to, resolution_cb &&cb) {
-  _inet.wait_l2_dst_address(to, std::forward(cb));
+  _inet.wait_l2_dst_address(to, std::move(cb));
 }
 
 struct ip_hdr {
@@ -452,8 +452,8 @@ struct ip_hdr {
     hdr.id = ::hton(id);
     hdr.frag = ::hton(frag);
     hdr.csum = ::hton(csum);
-    hdr.src_ip = ::hton(src_ip);
-    hdr.dst_ip = ::hton(dst_ip);
+    hdr.src_ip.ip = ::hton(src_ip.ip);
+    hdr.dst_ip.ip = ::hton(dst_ip.ip);
     return hdr;
   }
   ip_hdr ntoh() {
@@ -462,8 +462,8 @@ struct ip_hdr {
     hdr.id = ::ntoh(id);
     hdr.frag = ::ntoh(frag);
     hdr.csum = ::ntoh(csum);
-    hdr.src_ip = ::ntoh(src_ip);
-    hdr.dst_ip = ::ntoh(dst_ip);
+    hdr.src_ip = src_ip.ntoh();
+    hdr.dst_ip = dst_ip.ntoh();
     return hdr;
   }
 

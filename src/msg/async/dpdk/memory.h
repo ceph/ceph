@@ -36,7 +36,10 @@
 #ifndef CEPH_MSG_DPDK_MEMORY_H_H
 #define CEPH_MSG_DPDK_MEMORY_H_H
 
+#include "include/page.h"
+
 using physical_address = uint64_t;
+static size_t huge_page_size = 512 * CEPH_PAGE_SIZE;
 
 struct translation {
   translation() = default;

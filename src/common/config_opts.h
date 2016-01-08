@@ -209,6 +209,8 @@ OPTION(ms_async_send_inline, OPT_BOOL, true)
 
 // path to accessible hugetlbfs mount (typically /dev/hugepages/something)")
 OPTION(ms_dpdk_enable, OPT_BOOL, false)
+OPTION(ms_dpdk_coremask, OPT_STR, "1")
+OPTION(ms_dpdk_memory_channel, OPT_STR, "1")
 OPTION(ms_dpdk_hugepages, OPT_STR, "")
 OPTION(ms_dpdk_pmd, OPT_STR, "")
 OPTION(ms_dpdk_host_ipv4_addr, OPT_STR, "")

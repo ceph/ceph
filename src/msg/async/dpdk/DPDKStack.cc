@@ -42,10 +42,11 @@
 #include "DPDKStack.h"
 #include "IP.h"
 #include "DPDK.h"
+#include "dpdk_rte.h"
 
 #define dout_subsys ceph_subsys_dpdk
 
-static NetworkStack **stacks[];
+static NetworkStack **stacks;
 
 static std::unique_ptr<NetworkStack> create(CephContext *cct, unsigned i) {
   static bool created = false;

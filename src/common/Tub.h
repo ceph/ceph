@@ -146,10 +146,18 @@ class Tub {
 	 * \pre
 	 *      ElementType is Assignable.
 	 */
-  Tub<ElementType>& operator=(ElementType &&elt) {
-    destroy();
-    new(object) ElementType(std::move(elt));
-    occupied = true;
+  Tub<ElementType>& operator=(Tub<ElementType> &&other) {
+    if (this != &other) {
+      if (other.occupied) {
+        if (occupied)
+          *object = std::move(*other.object);
+        else
+          construct(std::move(*other.object));
+      } else {
+        destroy();
+
+      }
+    }
     return *this;
   }
 
