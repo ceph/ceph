@@ -123,13 +123,15 @@ def task(ctx, config):
     decorating_loader = DecoratingLoader({
         "ctx": ctx,
         "mounts": mounts,
-        "fs": fs
+        "fs": fs,
+        "mds_cluster": mds_cluster
     })
 
     fail_on_skip = config.get('fail_on_skip', True)
 
     # Put useful things onto ctx for interactive debugging
     ctx.fs = fs
+    ctx.mds_cluster = mds_cluster
 
     # Depending on config, either load specific modules, or scan for moduless
     if config and 'modules' in config and config['modules']:
