@@ -152,9 +152,13 @@ int rgw_unlink(struct rgw_fs *rgw_fs,
 */
 typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset);
 
+#define RGW_READDIR_FLAG_NONE      0x0000
+#define RGW_READDIR_FLAG_DOTDOT    0x0001 /* send dot names */
+
 int rgw_readdir(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *parent_fh, uint64_t *offset,
-		rgw_readdir_cb rcb, void *cb_arg, bool *eof);
+		rgw_readdir_cb rcb, void *cb_arg, bool *eof,
+		uint32_t flags);
 
 /* XXX (get|set)attr mask bits */
 #define RGW_SETATTR_MODE   1
