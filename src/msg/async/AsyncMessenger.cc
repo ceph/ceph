@@ -743,14 +743,17 @@ int AsyncMessenger::reap_dead(bool is_timer)
 {
   int num;
 
-  Mutex::Locker l(lock);
-  Mutex::Locker l(deleted_lock);
+  Mutex::Locker l1(lock);
+  Mutex::Locker l2(deleted_lock);
 
   while (!deleted_conns.empty()) {
-    set<AsyncConnectionRef>::iterator it = deleted_conns.begin();
+    auto it = deleted_conns.begin();
     AsyncConnectionRef p = *it;
     ldout(cct, 5) << __func__ << " delete " << p << dendl;
-    conns.erase(p);
+    auto conns_it = conns.find(p->peer_addr);
+    if (conns_it->second == p)
+      conns.erase(conns_it);
+    accepting_conns.erase(p);
     deleted_conns.erase(it);
     ++num;
   }

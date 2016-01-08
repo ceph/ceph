@@ -381,7 +381,6 @@ private:
    *
    * These are not yet in the conns map.
    */
-  // FIXME clear up
   set<AsyncConnectionRef> accepting_conns;
 
   /**
@@ -530,9 +529,9 @@ public:
     deleted_conns.insert(conn);
 
     if (deleted_conns.size() >= ReapDeadConnectionThreshold) {
-      local_worker->dispatch_event_external(reap_handler);
+      local_worker->center.dispatch_event_external(reap_handler);
     } else if (!reap_time_fd) {
-      reap_time_fd = local_worker->create_time_event(
+      reap_time_fd = local_worker->center.create_time_event(
           ReapDeadConnectionMaxPeriod, reap_handler);
     }
   }
