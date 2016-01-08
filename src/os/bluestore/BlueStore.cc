@@ -2464,21 +2464,21 @@ int BlueStore::fiemap(
   }
   _dump_onode(o);
 
-  if (offset == len && offset == 0)
-    len = o->onode.size;
-
-  if (offset > o->onode.size)
-    return 0;
-
-  if (offset + len > o->onode.size) {
-    len = o->onode.size - offset;
-  }
-
   dout(20) << __func__ << " " << offset << "~" << len << " size "
 	   << o->onode.size << dendl;
 
   map<uint64_t,bluestore_extent_t>::iterator bp, bend;
   map<uint64_t,bluestore_overlay_t>::iterator op, oend;
+
+  if (offset == len && offset == 0)
+    len = o->onode.size;
+
+  if (offset > o->onode.size)
+    goto out;
+
+  if (offset + len > o->onode.size) {
+    len = o->onode.size - offset;
+  }
 
   // loop over overlays and data fragments.  overlays take precedence.
   bend = o->onode.block_map.end();
@@ -2542,6 +2542,7 @@ int BlueStore::fiemap(
     continue;
   }
 
+ out:
   ::encode(m, bl);
   dout(20) << __func__ << " " << offset << "~" << len
 	   << " size = 0 (" << m << ")" << dendl;
