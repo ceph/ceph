@@ -167,8 +167,12 @@ extern "C" {
 			   << " dir=" << rgw_fh->full_object_name()
 			   << " called back name=" << name
 			   << dendl;
-    obj_stack.push(
-      obj_rec{name, nullptr, parent_fh, nullptr});
+    string name_str{name};
+    if (! ((name_str == ".") ||
+	   (name_str == ".."))) {
+      obj_stack.push(
+	obj_rec{std::move(name_str), nullptr, parent_fh, nullptr});
+    }
     return true; /* XXX */
   }
 }
@@ -222,7 +226,8 @@ TEST(LibRGW, ENUMERATE1) {
 	    << " object_name: " << elt.rgw_fh->object_name()
 	    << " full_name: " << elt.rgw_fh->full_object_name()
 	    << dendl;
-	  rc = rgw_readdir(fs, elt.fh, &offset, r1_cb, elt.fh, &eof);
+	  rc = rgw_readdir(fs, elt.fh, &offset, r1_cb, elt.fh, &eof,
+			   RGW_READDIR_FLAG_DOTDOT);
 	  elt.state.readdir = true;
 	  ASSERT_EQ(rc, 0);
 	  // ASSERT_TRUE(eof); // XXXX working incorrectly w/single readdir
@@ -324,7 +329,11 @@ extern "C" {
 			   << " iv count=" << dvec.count
 			   << " called back name=" << name
 			   << dendl;
-    dvec.obj_names.push_back(dirent_t{name, offset});
+    string name_str{name};
+    if (! ((name_str == ".") ||
+	   (name_str == ".."))) {
+      dvec.obj_names.push_back(dirent_t{std::move(name_str), offset});
+    }
     return true; /* XXX */
   }
 }
@@ -347,7 +356,8 @@ TEST(LibRGW, MARKER1_READDIR)
 
     do {
       ASSERT_TRUE(dvec.count <= max_iterations);
-      int ret = rgw_readdir(fs, marker_fh, &offset, r2_cb, &dvec, &eof);
+      int ret = rgw_readdir(fs, marker_fh, &offset, r2_cb, &dvec, &eof,
+			    RGW_READDIR_FLAG_DOTDOT);
       ASSERT_EQ(ret, 0);
       ASSERT_EQ(offset, get<1>(dvec.obj_names.back())); // cookie check
       ++dvec.count;

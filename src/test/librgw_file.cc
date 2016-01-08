@@ -97,7 +97,8 @@ TEST(LibRGW, LIST_BUCKETS) {
 
   bool eof = false;
   uint64_t offset = 0;
-  int ret = rgw_readdir(fs, fs->root_fh, &offset, r1_cb, &fids1, &eof);
+  int ret = rgw_readdir(fs, fs->root_fh, &offset, r1_cb, &fids1, &eof,
+			RGW_READDIR_FLAG_NONE);
   for (auto& fid : fids1) {
     std::cout << "fname: " << get<0>(fid) << " fid: " << get<1>(fid)
 	      << std::endl;
@@ -170,7 +171,8 @@ TEST(LibRGW, LIST_OBJECTS) {
 
     bool eof = false;
     uint64_t offset = 0;
-    int ret = rgw_readdir(fs, bucket_fh, &offset, r2_cb, &obj_vector, &eof);
+    int ret = rgw_readdir(fs, bucket_fh, &offset, r2_cb, &obj_vector, &eof,
+			  RGW_READDIR_FLAG_NONE);
     for (auto& obj : obj_vector) {
       std::cout << "fname: " << get<0>(obj) << " fid: " << get<1>(obj)
 		<< std::endl;
