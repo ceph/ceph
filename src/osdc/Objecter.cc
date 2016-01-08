@@ -4974,6 +4974,12 @@ void Objecter::_enumerate_reply(
     // drop anything after 'end'
     rwlock.get_read();
     const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
+    if (!pool) {
+      // pool is gone, drop any results which are now meaningless.
+      rwlock.put_read();
+      on_finish->complete(-ENOENT);
+      return;
+    }
     while (!response.entries.empty()) {
       uint32_t hash = response.entries.back().locator.empty() ?
 	pool->hash_key(response.entries.back().oid,
