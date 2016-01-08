@@ -34,6 +34,6 @@
 /* linux/slab.h */
 
 #define kmalloc(size, flags) malloc(size)
-#define kfree(x) do { if (x) free(x); } while (0)
+#define kfree(x) do { if (x) free(x); x=NULL; } while (0)
 
 #endif /* CEPH_CRUSH_COMPAT_H */
