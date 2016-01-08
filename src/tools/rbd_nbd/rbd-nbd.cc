@@ -1,6 +1,21 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+/*
+ * rbd-nbd - RBD in userspace
+ *
+ * Copyright (C) 2015 - 2016 Kylin Corporation
+ *
+ * Author: Yunchuan Wen <yunchuan.wen@kylin-cloud.com>
+ *         Li Wang <li.wang@kylin-cloud.com>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+*/
+
 #include "include/int_types.h"
 
 #include <stdio.h>
