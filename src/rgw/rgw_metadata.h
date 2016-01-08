@@ -189,7 +189,7 @@ public:
 
   int update_shards(list<int>& shards);
 
-  void read_clear_modified(set<int> *modified);
+  void read_clear_modified(set<int> &modified);
 };
 
 struct LogStatusDump {

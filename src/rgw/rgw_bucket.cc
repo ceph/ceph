@@ -1593,10 +1593,10 @@ void RGWDataChangesLog::mark_modified(int shard_id, rgw_bucket_shard& bs)
   modified_shards[shard_id].insert(key);
 }
 
-void RGWDataChangesLog::read_clear_modified(map<int, set<string> > *modified)
+void RGWDataChangesLog::read_clear_modified(map<int, set<string> > &modified)
 {
   RWLock::WLocker wl(modified_lock);
-  modified->swap(modified_shards);
+  modified.swap(modified_shards);
   modified_shards.clear();
 }
 

@@ -2815,7 +2815,7 @@ int RGWMetaNotifier::process()
 
   RGWMetadataLog *log = store->meta_mgr->get_log();
 
-  log->read_clear_modified(&shards);
+  log->read_clear_modified(shards);
 
   if (shards.empty()) {
     return 0;
@@ -2850,7 +2850,7 @@ int RGWDataNotifier::process()
 
   map<int, set<string> > shards;
 
-  store->data_log->read_clear_modified(&shards);
+  store->data_log->read_clear_modified(shards);
 
   if (shards.empty()) {
     return 0;
