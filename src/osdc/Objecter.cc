@@ -4902,6 +4902,7 @@ void Objecter::enumerate_objects(
                      "osd epoch " << osdmap->get_epoch() << dendl;
     rwlock.unlock();
     on_finish->complete(-ENOENT);
+    return;
   } else {
     rwlock.unlock();
   }
