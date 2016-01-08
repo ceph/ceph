@@ -4943,6 +4943,7 @@ void Objecter::_enumerate_reply(
   if (r < 0) {
     ldout(cct, 4) << __func__ << ": remote error " << r << dendl;
     on_finish->complete(r);
+    return;
   }
 
   assert(next != NULL);
