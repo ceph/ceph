@@ -215,20 +215,32 @@ class MDSCluster(object):
     def clear_firewall(self):
         clear_firewall(self._ctx)
 
+    def _all_info(self):
+        """
+        Iterator for all the mds_info components in the FSMap
+        """
+        fs_map = self.get_fs_map()
+        for i in fs_map['standbys']:
+            yield i
+        for fs in fs_map['filesystems']:
+            for i in fs['mdsmap']['info'].values():
+                yield i
+
     def get_mds_addr(self, mds_id):
         """
         Return the instance addr as a string, like "10.214.133.138:6807\/10825"
         """
-        fs_map = self.get_fs_map()
-        infos = fs_map.standbys
-        for fs in fs_map['filesystems']:
-            infos += fs['mdsmap']['info'].values()
-        for mds_info in infos:
+        for mds_info in self._all_info():
             if mds_info['name'] == mds_id:
                 return mds_info['addr']
 
-        log.warn(json.dumps(infos, indent=2))  # dump for debugging
+        log.warn(json.dumps(list(self._all_info()), indent=2))  # dump for debugging
         raise RuntimeError("MDS id '{0}' not found in map".format(mds_id))
+
+    def get_mds_info(self, mds_id):
+        for mds_info in self._all_info():
+            if mds_info['name'] == mds_id:
+                return mds_info
 
 
 class Filesystem(MDSCluster):
@@ -310,7 +322,12 @@ class Filesystem(MDSCluster):
         return self.data_pool_name
 
     def get_data_pool_names(self):
-        return self.get_mds_map()['data_pools']
+        osd_map = self.mon_manager.get_osd_dump_json()
+        id_to_name = {}
+        for p in osd_map['pools']:
+            id_to_name[p['pool']] = p['pool_name']
+
+        return [id_to_name[pool_id] for pool_id in self.get_mds_map()['data_pools']]
 
     def get_metadata_pool_name(self):
         return self.metadata_pool_name
