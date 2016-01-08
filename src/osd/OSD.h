@@ -653,6 +653,24 @@ public:
   void reply_op_error(OpRequestRef op, int err, eversion_t v, version_t uv);
   void handle_misdirected_op(PG *pg, OpRequestRef op);
 
+  // cache tier promotion
+  Mutex promotion_lock;
+  Cond promotion_cond;
+  bool promotion_stop_flag;
+  SimpleMRU<hobject_t, pair<object_locator_t, PGRef> > waiting_for_promotion;
+  unordered_set<hobject_t> in_promotion;
+  struct PromotionThread : public Thread {
+    OSDService *osd;
+    PromotionThread(OSDService *o) : osd(o) {}
+    void *entry() {
+      osd->promotion_entry();
+      return NULL;
+    }
+  } promotion_thread;
+  Throttle promotion_ops;
+
+  void promotion_entry();
+  void promotion_stop();
 
   // -- agent shared state --
   Mutex agent_lock;

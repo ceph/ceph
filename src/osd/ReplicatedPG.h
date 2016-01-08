@@ -1002,15 +1002,31 @@ protected:
   void get_obc_watchers(ObjectContextRef obc, list<obj_watch_item_t> &pg_watchers);
 public:
   void handle_watch_timeout(WatchRef watch);
-protected:
-
-  ObjectContextRef create_object_context(const object_info_t& oi, SnapSetContext *ssc);
   ObjectContextRef get_object_context(
     const hobject_t& soid,
     bool can_create,
     map<string, bufferlist> *attrs = 0
     );
 
+  /**
+   * This function attempts to start a promote.  Either it succeeds,
+   * or places op on a wait list.  If op is null, failure means that
+   * this is a noop.  If a future user wants to be able to distinguish
+   * these cases, a return value should be added.
+   */
+  void queue_async_promote(
+    ObjectContextRef obc,            ///< [optional] obc
+    const hobject_t& missing_object, ///< oid (if !obc)
+    const object_locator_t& oloc,    ///< locator for obc|oid
+    OpRequestRef op,                 ///< [optional] client op
+    ObjectContextRef *promote_obc = nullptr ///< [optional] new obc for object
+    );
+   
+  void promote_object(ObjectContextRef obc, const object_locator_t& loc);
+
+protected:
+
+  ObjectContextRef create_object_context(const object_info_t& oi, SnapSetContext *ssc);
   void context_registry_on_change();
   void object_context_destructor_callback(ObjectContext *obc);
   struct C_PG_ObjectContext : public Context {
@@ -1219,19 +1235,6 @@ protected:
    * This helper function tells the client to redirect their request elsewhere.
    */
   void do_cache_redirect(OpRequestRef op);
-  /**
-   * This function attempts to start a promote.  Either it succeeds,
-   * or places op on a wait list.  If op is null, failure means that
-   * this is a noop.  If a future user wants to be able to distinguish
-   * these cases, a return value should be added.
-   */
-  void promote_object(
-    ObjectContextRef obc,            ///< [optional] obc
-    const hobject_t& missing_object, ///< oid (if !obc)
-    const object_locator_t& oloc,    ///< locator for obc|oid
-    OpRequestRef op,                 ///< [optional] client op
-    ObjectContextRef *promote_obc = nullptr ///< [optional] new obc for object
-    );
 
   int prepare_transaction(OpContext *ctx);
   list<pair<OpRequestRef, OpContext*> > in_progress_async_reads;
