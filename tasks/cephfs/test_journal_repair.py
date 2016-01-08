@@ -11,6 +11,7 @@ import time
 from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.filesystem import ObjectNotFound, ROOT_INO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, long_running
+from tasks.workunit import task as workunit
 
 log = logging.getLogger(__name__)
 
@@ -242,8 +243,12 @@ class TestJournalRepair(CephFSTestCase):
 
         self.wait_until_true(is_marked_damaged, 60)
 
+        def get_state():
+            info = self.mds_cluster.get_mds_info(damaged_id)
+            return info['state'] if info is not None else None
+
         self.wait_until_equal(
-                lambda: self.mds_cluster.get_mds_info(mds_id)['state'],
+                get_state,
                 "up:standby",
                 timeout=60)
 
@@ -387,3 +392,45 @@ class TestJournalRepair(CephFSTestCase):
                                      "len": initial_range_len - 101}]}},
                    "result": 0}}
         )
+
+    @long_running  # Hack: "long running" because .sh doesn't work outside teuth
+    def test_journal_smoke(self):
+        workunit(self.ctx, {
+            'clients': {
+                "client.{0}".format(self.mount_a.client_id): [
+                    "fs/misc/trivial_sync.sh"],
+            },
+            "timeout": "1h"
+        })
+
+        for mount in self.mounts:
+            mount.umount_wait()
+
+        self.fs.mds_stop()
+        self.fs.mds_fail()
+
+        # journal tool smoke
+        workunit(self.ctx, {
+            'clients': {
+                "client.{0}".format(self.mount_a.client_id): [
+                    "suites/cephfs_journal_tool_smoke.sh"],
+            },
+            "timeout": "1h"
+        })
+
+
+
+        self.fs.mds_restart()
+        self.fs.wait_for_daemons()
+
+        self.mount_a.mount()
+
+        # trivial sync moutn a
+        workunit(self.ctx, {
+            'clients': {
+                "client.{0}".format(self.mount_a.client_id): [
+                    "fs/misc/trivial_sync.sh"],
+            },
+            "timeout": "1h"
+        })
+
