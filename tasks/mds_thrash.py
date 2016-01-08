@@ -6,9 +6,12 @@ import contextlib
 import ceph_manager
 import random
 import time
+
 from gevent.greenlet import Greenlet
 from gevent.event import Event
 from teuthology import misc as teuthology
+
+from tasks.cephfs.filesystem import MDSCluster, Filesystem
 
 log = logging.getLogger(__name__)
 
@@ -82,12 +85,13 @@ class MDSThrasher(Greenlet):
 
     """
 
-    def __init__(self, ctx, manager, config, logger, failure_group, weight):
+    def __init__(self, ctx, manager, mds_cluster, config, logger, failure_group, weight):
         super(MDSThrasher, self).__init__()
 
         self.ctx = ctx
         self.manager = manager
         assert self.manager.is_clean()
+        self.mds_cluster = mds_cluster
 
         self.stopping = Event()
         self.logger = logger
@@ -126,6 +130,11 @@ class MDSThrasher(Greenlet):
         """
         Perform the random thrashing action
         """
+
+        # TODO support multiple filesystems: will require behavioural change to select
+        # which filesystem to act on when doing rank-ish things
+        fs = Filesystem(self.ctx)
+
         self.log('starting mds_do_thrash for failure group: ' + ', '.join(
             ['mds.{_id}'.format(_id=_f) for _f in self.failure_group]))
         while not self.stopping.is_set():
@@ -146,7 +155,7 @@ class MDSThrasher(Greenlet):
                 continue
 
             # find the active mds in the failure group
-            statuses = [self.manager.get_mds_status(m) for m in self.failure_group]
+            statuses = [self.mds_cluster.get_mds_info(m) for m in self.failure_group]
             actives = filter(lambda s: s and s['state'] == 'up:active', statuses)
             assert len(actives) == 1, 'Can only have one active in a failure group'
 
@@ -160,8 +169,8 @@ class MDSThrasher(Greenlet):
             last_laggy_since = None
             itercount = 0
             while True:
-                failed = self.manager.get_mds_status_all()['failed']
-                status = self.manager.get_mds_status(active_mds)
+                failed = fs.get_mds_map()['failed']
+                status = self.mds_cluster.get_mds_info(active_mds)
                 if not status:
                     break
                 if 'laggy_since' in status:
@@ -174,7 +183,7 @@ class MDSThrasher(Greenlet):
                         _id=active_mds))
                 itercount = itercount + 1
                 if itercount > 10:
-                    self.log('mds map: {status}'.format(status=self.manager.get_mds_status_all()))
+                    self.log('mds map: {status}'.format(status=self.mds_cluster.get_fs_map()))
                 time.sleep(2)
             if last_laggy_since:
                 self.log(
@@ -187,7 +196,7 @@ class MDSThrasher(Greenlet):
             takeover_rank = None
             itercount = 0
             while True:
-                statuses = [self.manager.get_mds_status(m) for m in self.failure_group]
+                statuses = [self.mds_cluster.get_mds_info(m) for m in self.failure_group]
                 actives = filter(lambda s: s and s['state'] == 'up:active', statuses)
                 if len(actives) > 0:
                     assert len(actives) == 1, 'Can only have one active in failure group'
@@ -196,7 +205,7 @@ class MDSThrasher(Greenlet):
                     break
                 itercount = itercount + 1
                 if itercount > 10:
-                    self.log('mds map: {status}'.format(status=self.manager.get_mds_status_all()))
+                    self.log('mds map: {status}'.format(status=self.mds_cluster.get_fs_map()))
 
             self.log('New active mds is mds.{_id}'.format(_id=takeover_mds))
 
@@ -215,7 +224,7 @@ class MDSThrasher(Greenlet):
 
             status = {}
             while True:
-                status = self.manager.get_mds_status(active_mds)
+                status = self.mds_cluster.get_mds_info(active_mds)
                 if status and (status['state'] == 'up:standby' or status['state'] == 'up:standby-replay'):
                     break
                 self.log(
@@ -256,6 +265,9 @@ def task(ctx, config):
     Please refer to MDSThrasher class for further information on the
     available options.
     """
+
+    mds_cluster = MDSCluster(ctx)
+
     if config is None:
         config = {}
     assert isinstance(config, dict), \
@@ -286,7 +298,7 @@ def task(ctx, config):
     statuses = None
     statuses_by_rank = None
     while True:
-        statuses = {m: manager.get_mds_status(m) for m in mdslist}
+        statuses = {m: mds_cluster.get_mds_info(m) for m in mdslist}
         statuses_by_rank = {}
         for _, s in statuses.iteritems():
             if isinstance(s, dict):
@@ -324,7 +336,7 @@ def task(ctx, config):
         failure_group.extend(standbys)
 
         thrasher = MDSThrasher(
-            ctx, manager, config,
+            ctx, manager, mds_cluster, config,
             logger=log.getChild('mds_thrasher.failure_group.[{a}, {sbs}]'.format(
                 a=active,
                 sbs=', '.join(standbys)
