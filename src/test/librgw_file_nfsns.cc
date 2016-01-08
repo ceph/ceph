@@ -123,7 +123,21 @@ TEST(LibRGW, MOUNT) {
 
 TEST(LibRGW, SETUP_ENUMERATE1)
 {
-  if (do_create) {
+
+  (void) rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
+		    RGW_LOOKUP_FLAG_NONE);
+  if (! bucket_fh) {
+    if (do_create) {
+      struct stat st;
+      int rc = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st,
+			 &bucket_fh);
+      ASSERT_EQ(rc, 0);
+    }
+  }
+
+  ASSERT_NE(bucket_fh, nullptr);
+  
+  if (do_create) {    
     /* create objects directly */
     std::vector<std::string> obj_names =
       {"foo/bar/baz/quux",
@@ -259,17 +273,6 @@ TEST(LibRGW, MARKER1_SETUP_BUCKET)
   if (do_marker1) {
     struct stat st;
     int ret;
-
-    if (do_create) {
-      ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st,
-		      &bucket_fh);
-    }
-    if (! bucket_fh) {
-      ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
-		       RGW_LOOKUP_FLAG_NONE);
-      ASSERT_EQ(ret, 0);
-    }
-    ASSERT_NE(bucket_fh, nullptr);
 
     if (do_create) {
       ret = rgw_mkdir(fs, bucket_fh, marker_dir.c_str(), 755, &st, &marker_fh);
