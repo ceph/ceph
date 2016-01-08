@@ -88,6 +88,8 @@ void _usage()
   cout << "  log list                   list log objects\n";
   cout << "  log show                   dump a log from specific object or (bucket + date\n";
   cout << "                             + bucket-id)\n";
+  cout << "                             (NOTE: required to specify formatting of date\n";
+  cout << "                             to \"YYYY-MM-DD-hh\")\n";
   cout << "  log rm                     remove log object\n";
   cout << "  usage show                 show usage (by user, date range)\n";
   cout << "  usage trim                 trim usage (by user, date range)\n";
