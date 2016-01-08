@@ -1010,7 +1010,7 @@ int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)
   }
 
   if (!is_valid_cap_type(type))
-    return -EINVAL;
+    return -ERR_INVALID_CAP;
 
   string cap_perm;
   uint32_t perm = 0;
