@@ -1602,7 +1602,29 @@ int BlueStore::mkfs()
     } else {
       reserved = BLUEFS_START;
     }
-    fm->release(reserved, bdev->get_size() - reserved, t);
+    uint64_t end = bdev->get_size() - reserved;
+    if (g_conf->bluestore_debug_prefill > 0) {
+      dout(1) << __func__ << " pre-fragmenting freespace, using "
+	      << g_conf->bluestore_debug_prefill << " with max free extent "
+	      << g_conf->bluestore_debug_prefragment_max << dendl;
+      uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
+      uint64_t start = ROUND_UP_TO(reserved, min_alloc_size);
+      uint64_t max_b = g_conf->bluestore_debug_prefragment_max / min_alloc_size;
+      float r = g_conf->bluestore_debug_prefill;
+      while (start < end) {
+	uint64_t l = (rand() % max_b + 1) * min_alloc_size;
+	if (start + l > end)
+	  l = end - start;
+	l = ROUND_UP_TO(l, min_alloc_size);
+	fm->release(start, l, t);
+	uint64_t u = 1 + (uint64_t)(r * (double)l / (1.0 - r));
+	u = ROUND_UP_TO(u, min_alloc_size);
+	dout(20) << "  free " << start << "~" << l << " use " << u << dendl;
+	start += l + u;
+      }
+    } else {
+      fm->release(reserved, end, t);
+    }
     db->submit_transaction_sync(t);
   }
 
