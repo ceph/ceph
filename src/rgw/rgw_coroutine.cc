@@ -90,6 +90,11 @@ void RGWCompletionManager::_wakeup(void *opaque)
   }
 }
 
+RGWCoroutine::~RGWCoroutine() {
+  for (auto stack : spawned.entries) {
+    stack->put();
+  }
+}
 
 void RGWCoroutine::set_io_blocked(bool flag) {
   stack->set_io_blocked(flag);
@@ -141,6 +146,10 @@ RGWCoroutinesStack::~RGWCoroutinesStack()
 {
   for (auto op : ops) {
     op->put();
+  }
+
+  for (auto stack : spawned.entries) {
+    stack->put();
   }
 }
 

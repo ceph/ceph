@@ -65,7 +65,7 @@ class RGWReadDataSyncStatusCoroutine : public RGWSimpleRadosReadCR<rgw_data_sync
 
   rgw_data_sync_status *sync_status;
 
-  list<RGWCoroutinesStack *> crs;
+  list<RGWSimpleRadosReadCR<rgw_data_sync_marker> *> crs;
 
 public:
   RGWReadDataSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
@@ -94,8 +94,9 @@ int RGWReadDataSyncStatusCoroutine::handle_data(rgw_data_sync_info& data)
 
   map<uint32_t, rgw_data_sync_marker>& markers = sync_status->sync_markers;
   for (int i = 0; i < (int)data.num_shards; i++) {
-    RGWCoroutinesStack *cr = spawn(new RGWSimpleRadosReadCR<rgw_data_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
-                                                    RGWDataSyncStatusManager::shard_obj_name(source_zone, i), &markers[i]), true);
+    RGWSimpleRadosReadCR<rgw_data_sync_marker> *cr = new RGWSimpleRadosReadCR<rgw_data_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+                                                    RGWDataSyncStatusManager::shard_obj_name(source_zone, i), &markers[i]);
+    spawn(cr, true);
     crs.push_back(cr);
   }
   return 0;
