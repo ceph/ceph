@@ -242,7 +242,10 @@ class TestJournalRepair(CephFSTestCase):
 
         self.wait_until_true(is_marked_damaged, 60)
 
-        self.fs.wait_for_state("up:standby", timeout=60, mds_id=damaged_id)
+        self.wait_until_equal(
+                lambda: self.mds_cluster.get_mds_info(mds_id)['state'],
+                "up:standby",
+                timeout=60)
 
         self.fs.mds_stop(damaged_id)
         self.fs.mds_fail(damaged_id)

@@ -19,7 +19,7 @@ class TestJournalMigration(CephFSTestCase):
         # Create a filesystem using the older journal format.
         self.mount_a.umount_wait()
         self.fs.mds_stop()
-        self.fs.reset()
+        self.fs.recreate()
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
 

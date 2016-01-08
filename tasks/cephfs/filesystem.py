@@ -242,6 +242,8 @@ class MDSCluster(object):
             if mds_info['name'] == mds_id:
                 return mds_info
 
+        return None
+
 
 class Filesystem(MDSCluster):
     """
@@ -458,7 +460,7 @@ class Filesystem(MDSCluster):
         else:
             return self.mds_ids[0]
 
-    def reset(self):
+    def recreate(self):
         log.info("Creating new filesystem")
 
         self.mon_manager.raw_cluster_cmd_result('mds', 'set', "max_mds", "0")
@@ -466,8 +468,9 @@ class Filesystem(MDSCluster):
         for mds_id in self.mds_ids:
             assert not self.mds_daemons[mds_id].running()
             self.mon_manager.raw_cluster_cmd_result('mds', 'fail', mds_id)
-        self.mon_manager.raw_cluster_cmd_result('fs', 'rm', "default", "--yes-i-really-mean-it")
-        self.mon_manager.raw_cluster_cmd_result('fs', 'new', "default", "metadata", "data")
+        self.mon_manager.raw_cluster_cmd_result('fs', 'rm', self.name, "--yes-i-really-mean-it")
+        self.mon_manager.raw_cluster_cmd_result('fs', 'new', self.name,
+                self.metadata_pool_name, self.data_pool_name)
 
     def get_metadata_object(self, object_type, object_id):
         """
