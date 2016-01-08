@@ -48,15 +48,13 @@ void TestClient::waitUntilDone() {
 
 
 void TestClient::run_req() {
-#if 0
-  auto request_complete_callback =
-    std::bind(&TestClient::submitResponse, this, _1);
-#endif
   std::chrono::microseconds delay(int(0.5 + 1000000.0 / iops_goal));
   auto now = std::chrono::high_resolution_clock::now();
 
-  std::cout << "client " << id << " about to run " << ops_to_run <<
-    " ops." << std::endl;
+  if (info) {
+    std::cout << "client " << id << " about to run " << ops_to_run <<
+      " ops." << std::endl;
+  }
 
   Guard guard(mtx_req);
   for (int i = 0; i < ops_to_run; ++i) {
@@ -101,8 +99,10 @@ void TestClient::run_resp() {
     }
   }
 
-  std::cout << "client " << id << " finishing " <<
-    outstanding_ops.load() << " ops." << std::endl;
+  if (info) {
+    std::cout << "client " << id << " finishing " <<
+      outstanding_ops.load() << " ops." << std::endl;
+  }
 
   while(outstanding_ops.load() > 0) {
     while(resp_queue.empty() && outstanding_ops.load() > 0) {
@@ -117,7 +117,9 @@ void TestClient::run_resp() {
     }
   }
 
-  std::cout << "client " << id << " finished." << std::endl;
+  if (info) {
+    std::cout << "client " << id << " finished." << std::endl;
+  }
 
   // all responses received, thread ends
 }

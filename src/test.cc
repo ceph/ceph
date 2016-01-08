@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <memory>
+#include <chrono>
 #include <iostream>
 
 #include "test_server.h"
@@ -16,6 +17,7 @@
 using namespace std::placeholders;
 
 namespace dmc = crimson::dmclock;
+namespace chrono = std::chrono;
 
 
 TestServer* testServer;
@@ -38,7 +40,8 @@ static dmc::ClientInfo client_info[] = {
 };
 
 
-static int client_goals[] = {150, 150, 150, 150}; // in IOPS
+static int client_goals[] = {300, 300, 300, 300}; // in IOPS
+// static int client_goals[] = {150, 150, 150, 150}; // in IOPS
 
 
 dmc::ClientInfo getClientInfo(int c) {
@@ -55,7 +58,12 @@ void send_response(TestClient** clients,
 
 
 int main(int argc, char* argv[]) {
-  const int goal_secs_to_run = 15;
+  const TestClient::TimePoint early_time = TestClient::now();
+  const chrono::seconds skip_amount(10); // skip first 10 secondsd of data
+  const chrono::seconds measure_unit(10); // calculate in groups of 10 seconds
+  const chrono::seconds report_unit(1); // unit to output reports in
+
+  const int goal_secs_to_run = 30;
   
   assert(COUNT(client_info) == COUNT(client_goals));
   const int client_count = COUNT(client_info);
@@ -82,18 +90,41 @@ int main(int argc, char* argv[]) {
     clients[i]->waitUntilDone();
   }
 
+  const TestClient::TimePoint late_time = TestClient::now();
+  TestClient::TimePoint latest_start = early_time;
+  TestClient::TimePoint earliest_finish = late_time;
+  
   // all clients are done
-  for (int i = 0; i < client_count; ++i) {
-    auto start = clients[i]->getOpTimes().front().time_since_epoch().count();
-    auto end = clients[i]->getOpTimes().back().time_since_epoch().count();
-    std::cout << "client " << i << ": " << start << ", " << end <<
-      ", " << end - start << std::endl;
+  for (int c = 0; c < client_count; ++c) {
+    auto start = clients[c]->getOpTimes().front();
+    auto end = clients[c]->getOpTimes().back();
+
+    if (start > latest_start) { latest_start = start; }
+    if (end < earliest_finish) { earliest_finish = end; }
+  }
+
+  const auto start_edge = latest_start + skip_amount;
+
+  for (int c = 0; c < client_count; ++c) {
+    auto it = clients[c]->getOpTimes().begin();
+    const auto end = clients[c]->getOpTimes().end();
+    while (it != end && *it < start_edge) { ++it; }
+
+    for (auto time_edge = start_edge + measure_unit;
+	 time_edge < earliest_finish;
+	 time_edge += measure_unit) {
+      int count = 0;
+      for (; *it < time_edge; ++count, ++it) { /* empty */ }
+      double ops_per_second = double(count) / (measure_unit / report_unit);
+      std::cout << "client " << c << ": " << ops_per_second << 
+	" ops per second." << std::endl;
+    }
   }
 
   // clean up
 
-  for (int i = 0; i < client_count; ++i) {
-    delete clients[i];
+  for (int c = 0; c < client_count; ++c) {
+    delete clients[c];
   }
   delete[] clients;
 
