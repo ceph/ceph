@@ -2644,6 +2644,9 @@ int main(int argc, char **argv)
 	if (ret < 0) {
 	  return 1;
 	}
+	if (zonegroup.realm_id.empty()) {
+	  zonegroup.realm_id = realm.get_id();
+	}
 	ret = zonegroup.create();
 	if (ret < 0 && ret != -EEXIST) {
 	  cerr << "ERROR: couldn't create zonegroup info: " << cpp_strerror(-ret) << std::endl;
@@ -2927,6 +2930,16 @@ int main(int argc, char **argv)
 	ret = read_decode_json(infile, zone);
 	if (ret < 0) {
 	  return 1;
+	}
+
+	if(zone.realm_id.empty()) {
+	  RGWRealm realm(realm_id, realm_name);
+	  int ret = realm.init(g_ceph_context, store);
+	  if (ret < 0) {
+	    cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+	    return -ret;
+	  }
+	  zone.realm_id = realm.get_id();
 	}
 
         if (zone.get_name().empty()) {
