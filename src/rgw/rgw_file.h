@@ -417,7 +417,8 @@ namespace rgw {
       return EPERM;
     }
 
-    int readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset, bool *eof);
+    int readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset, bool *eof,
+		uint32_t flags);
     int write(uint64_t off, size_t len, size_t *nbytes, void *buffer);
     int write_finish();
     int close();
