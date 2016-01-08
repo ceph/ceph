@@ -254,6 +254,7 @@ int RGWCoroutinesStack::unwind(int retcode)
 
   if (pos == ops.begin()) {
     spawned.inherit(src_spawned);
+    ops.clear();
     pos = ops.end();
     return retcode;
   }
