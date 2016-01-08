@@ -2449,7 +2449,11 @@ int BlueStore::fiemap(
   size_t len,
   bufferlist& bl)
 {
+  assert(len != 0);
   map<uint64_t, uint64_t> m;
+  map<uint64_t,bluestore_extent_t>::iterator bp, bend;
+  map<uint64_t,bluestore_overlay_t>::iterator op, oend;
+  uint64_t start = offset;
   CollectionRef c = _get_collection(cid);
   if (!c)
     return -ENOENT;
@@ -2460,11 +2464,8 @@ int BlueStore::fiemap(
     return -ENOENT;
   }
 
-  if (offset == len && offset == 0)
-    len = o->onode.size;
-
   if (offset > o->onode.size)
-    return 0;
+    goto out;
 
   if (offset + len > o->onode.size) {
     len = o->onode.size - offset;
@@ -2472,9 +2473,6 @@ int BlueStore::fiemap(
 
   dout(20) << __func__ << " " << offset << "~" << len << " size "
 	   << o->onode.size << dendl;
-
-  map<uint64_t,bluestore_extent_t>::iterator bp, bend;
-  map<uint64_t,bluestore_overlay_t>::iterator op, oend;
 
   // loop over overlays and data fragments.  overlays take precedence.
   bend = o->onode.block_map.end();
@@ -2487,7 +2485,6 @@ int BlueStore::fiemap(
   if (op != o->onode.overlay_map.begin()) {
     --op;
   }
-  uint64_t start = offset;
   while (len > 0) {
     if (op != oend && op->first + op->second.length < offset) {
       ++op;
@@ -2517,6 +2514,7 @@ int BlueStore::fiemap(
     }
 
     // extent?
+    // FIXME: when bluestore_extent_t contains actual data_map
     if (bp != bend && bp->first <= offset) {
       uint64_t x_off = offset - bp->first;
       x_len = MIN(x_len, bp->second.length - x_off);
@@ -2528,8 +2526,10 @@ int BlueStore::fiemap(
       continue;
     }
     // we are seeing a hole, time to add an entry to fiemap.
-    m[start] = offset - start;
-    dout(20) << __func__ << " out " << start << "~" << m[start] << dendl;
+    if (offset - start != 0) {
+      m[start] = offset - start;
+      dout(20) << __func__ << " out " << start << "~" << m[start] << dendl;
+    }
     offset += x_len;
     start = offset;
     len -= x_len;
@@ -2541,6 +2541,7 @@ int BlueStore::fiemap(
     dout(20) << __func__ << " out " << start << "~" << m[start] << dendl;
   }
 
+out:
   ::encode(m, bl);
   dout(20) << __func__ << " " << offset << "~" << len
 	   << " size = 0 (" << m << ")" << dendl;
