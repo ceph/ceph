@@ -215,6 +215,7 @@ namespace rgw {
       {
 	/* root */
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
+	variant_type = directory();
 	/* stat */
 	state.dev = fs_inst;
 	/* pointer to self */

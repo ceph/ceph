@@ -216,17 +216,16 @@ namespace rgw {
     int rc = 0;
     struct timespec now;
     CephContext* cct = fs->get_context();
-    directory* d = parent->get_directory(); /* already type-checked */
+    directory* d = get_directory(); /* already type-checked */
 
     (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 
-    // XXXX finish marker handling
     if (is_root()) {
       RGWListBucketsRequest req(cct, fs->get_user(), this, rcb, cb_arg,
 				offset);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
-	parent->set_nlink(3 + d->name_cache.size());
+	set_nlink(3 + d->name_cache.size());
 	state.atime = now;
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
@@ -238,7 +237,7 @@ namespace rgw {
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
 	state.atime = now;
-	parent->set_nlink(3 + d->name_cache.size());
+	set_nlink(3 + d->name_cache.size());
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
 	fs->state.push_event(ev);
