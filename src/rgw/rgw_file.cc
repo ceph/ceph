@@ -210,7 +210,7 @@ namespace rgw {
   } /* RGWFileHandle::reclaim */
 
   int RGWFileHandle::readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset,
-			     bool *eof)
+			     bool *eof, uint32_t flags)
   {
     using event = RGWLibFS::event;
     int rc = 0;
@@ -219,6 +219,12 @@ namespace rgw {
     directory* d = get_directory(); /* already type-checked */
 
     (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
+
+    if (flags & RGW_READDIR_FLAG_DOTDOT) {
+      /* send '.' and '..' with their NFS-defined offsets */
+      rcb(".", cb_arg, 1);
+      rcb("..", cb_arg, 2);
+    }
 
     if (is_root()) {
       RGWListBucketsRequest req(cct, fs->get_user(), this, rcb, cb_arg,
@@ -957,14 +963,15 @@ int rgw_close(struct rgw_fs *rgw_fs,
 
 int rgw_readdir(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *parent_fh, uint64_t *offset,
-		rgw_readdir_cb rcb, void *cb_arg, bool *eof)
+		rgw_readdir_cb rcb, void *cb_arg, bool *eof,
+		uint32_t flags)
 {
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if (! parent) {
     /* bad parent */
     return -EINVAL;
   }
-  int rc = parent->readdir(rcb, cb_arg, offset, eof);
+  int rc = parent->readdir(rcb, cb_arg, offset, eof, flags);
   return -rc;
 }
 

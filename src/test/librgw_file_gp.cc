@@ -208,7 +208,7 @@ TEST(LibRGW, LIST_OBJECTS) {
     bool eof = false;
     uint64_t offset = 0;
     int ret = rgw_readdir(fs, bucket_fh, &offset, r2_cb, &fids,
-			  &eof);
+			  &eof, RGW_READDIR_FLAG_NONE);
     for (auto& fid : fids) {
       std::cout << "fname: " << get<0>(fid) << " fid: " << get<1>(fid)
 		<< std::endl;
