@@ -5117,6 +5117,10 @@ int BlueStore::_do_write(
     if (offset + length == orig_offset + orig_length && cow_rmw_tail) {
       op->src_rmw_tail = cow_rmw_tail;
       dout(20) << __func__ << " src_rmw_tail " << op->src_rmw_tail << dendl;
+    } else if (((offset + length) & ~block_mask) &&
+	       offset + length > o->onode.size) {
+      dout(20) << __func__ << " past eof, padding out tail block" << dendl;
+      _pad_zeros_tail(o, &bl, offset, &length, block_size);
     }
     bp->second.clear_flag(bluestore_extent_t::FLAG_COW_HEAD);
     bp->second.clear_flag(bluestore_extent_t::FLAG_COW_TAIL);
