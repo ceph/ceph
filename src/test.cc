@@ -58,6 +58,8 @@ void send_response(TestClient** clients,
 
 
 int main(int argc, char* argv[]) {
+  std::cout << "simulation started" << std::endl;
+
   const TestClient::TimePoint early_time = TestClient::now();
   const chrono::seconds skip_amount(10); // skip first 10 secondsd of data
   const chrono::seconds measure_unit(10); // calculate in groups of 10 seconds
@@ -128,8 +130,5 @@ int main(int argc, char* argv[]) {
   }
   delete[] clients;
 
-  {
-    Guard g(cout_mtx);
-    std::cout << "done" << std::endl;
-  }
+  std::cout << "simulation complete" << std::endl;
 }
