@@ -307,7 +307,8 @@ class ProvisionOpenStack(OpenStack):
             net = ''
         flavor = self.flavor(resources_hint['machine'],
                              config['openstack'].get('flavor-select-regexp'))
-        misc.sh("flock --close /tmp/teuthology-server-create.lock openstack server create" +
+        misc.sh("flock --close /tmp/teuthology-server-create.lock --timeout 28800" +
+                " openstack server create" +
                 " " + config['openstack'].get('server-create', '') +
                 " -f json " +
                 " --image '" + str(image) + "'" +
