@@ -91,6 +91,10 @@ namespace rgw {
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
 	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_NONE);
+	  if (get<0>(fhr)) {
+	    RGWFileHandle* rgw_fh = get<0>(fhr);
+	    rgw_fh->set_mtime({req.get_mtime(), 0});
+	  }
 	  goto done;
 	}
       }
@@ -231,7 +235,7 @@ namespace rgw {
 				offset);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
-	set_nlink(3 + d->name_cache.size());
+	set_nlink(2 + d->name_cache.size());
 	state.atime = now;
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
@@ -243,7 +247,7 @@ namespace rgw {
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
 	state.atime = now;
-	set_nlink(3 + d->name_cache.size());
+	set_nlink(2 + d->name_cache.size());
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
 	fs->state.push_event(ev);
@@ -640,9 +644,6 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
 {
   int rc, rc2;
 
-  /* XXXX remove uri, deal with bucket names */
-  string uri;
-
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
 
@@ -657,18 +658,23 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
 
   if (parent->is_root()) {
     /* bucket */
-    uri += "/"; /* XXX */
+    string uri = "/"; /* XXX get rid of URI some day soon */
     uri += name;
     RGWCreateBucketRequest req(cct, fs->get_user(), uri);
     rc = rgwlib.get_fe()->execute_req(&req);
     rc2 = req.get_ret();
   } else {
-    /* create an object representing the directory (naive version) */
+    /* create an object representing the directory */
     buffer::list bl;
-    fhr = fs->lookup_fh(parent, name, RGWFileHandle::FLAG_PSEUDO);
-    rgw_fh = get<0>(fhr);
-    string dir_name = rgw_fh->relative_object_name() + "/";
-    RGWPutObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
+    string dir_name = /* XXX get rid of this some day soon, too */
+      parent->relative_object_name();
+    /* creating objects w/leading '/' makes a mess */
+    if ((dir_name.size() > 0) &&
+	(dir_name.back() != '/'))
+      dir_name += "/";
+    dir_name += name;
+    dir_name += "/";
+    RGWPutObjRequest req(cct, fs->get_user(), parent->bucket_name(),
 			 dir_name, bl);
     rc = rgwlib.get_fe()->execute_req(&req);
     rc2 = req.get_ret();
@@ -679,6 +685,9 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
     fhr = fs->lookup_fh(parent, name, RGWFileHandle::FLAG_CREATE);
     rgw_fh = get<0>(fhr);
     if (rgw_fh) {
+      /* XXX unify timestamps */
+      time_t now = time(0);
+      rgw_fh->set_times(now);
       struct rgw_file_handle *rfh = rgw_fh->get_fh();
       *fh = rfh;
     } else

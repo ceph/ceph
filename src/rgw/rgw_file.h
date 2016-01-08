@@ -1440,6 +1440,10 @@ public:
   virtual const string name() { return "stat_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_STAT_OBJ; }
 
+  time_t get_mtime() const {
+    return lastmod;
+  }
+
   /* attributes */
   uint64_t size() { return _size; }
   time_t ctime() { return mod_time; } // XXX
