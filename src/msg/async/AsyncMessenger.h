@@ -321,10 +321,26 @@ private:
   int _send_message(Message *m, const entity_inst_t& dest);
 
  private:
+  static const uint64_t ReapDeadConnectionThreshold = 10;
+  static const uint64_t ReapDeadConnectionMaxPeriod = 30*1000*1000;
+
   WorkerPool *pool;
 
   Processor processor;
   friend class Processor;
+
+  class C_handle_reap : public EventCallback {
+    AsyncMessenger *msgr;
+
+   public:
+    C_handle_reap(AsyncMessenger *m): msgr(m) {}
+    void do_request(int id) {
+      // judge whether is a time event
+      msgr->reap_dead(id ? id : 0);
+    }
+  };
+  // the worker run messenger's cron jobs
+  Worker *local_worker;
 
   /// overall lock used for AsyncMessenger data structures
   Mutex lock;
@@ -381,6 +397,9 @@ private:
    */
   Mutex deleted_lock;
   set<AsyncConnectionRef> deleted_conns;
+
+  EventCallbackRef reap_handler;
+  uint64_t reap_time_fd;
 
   /// internal cluster protocol version, if any, for talking to entities of the same type.
   int cluster_protocol;
@@ -509,6 +528,13 @@ public:
   void unregister_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(deleted_lock);
     deleted_conns.insert(conn);
+
+    if (deleted_conns.size() >= ReapDeadConnectionThreshold) {
+      local_worker->dispatch_event_external(reap_handler);
+    } else if (!reap_time_fd) {
+      reap_time_fd = local_worker->create_time_event(
+          ReapDeadConnectionMaxPeriod, reap_handler);
+    }
   }
 
   /**
@@ -518,7 +544,7 @@ public:
    *
    * See "deleted_conns"
    */
-  int reap_dead(int max);
+  int reap_dead(bool is_timer);
 
   /**
    * @} // AsyncMessenger Internals
