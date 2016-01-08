@@ -1162,6 +1162,7 @@ int RGWPeriod::add_zonegroup(const RGWZoneGroup& zonegroup)
 
 int RGWPeriod::update()
 {
+  ldout(cct, 20) << __func__ << " realm " << realm_id << " period " << get_id() << dendl;
   list<string> zonegroups;
   int ret = store->list_zonegroups(zonegroups);
   if (ret < 0) {
@@ -1178,7 +1179,7 @@ int RGWPeriod::update()
     }
 
     if (zg.realm_id != realm_id) {
-      ldout(cct, 20) << "skipping zonegroup " << zg.get_name() << ", not on our realm" << dendl;
+      ldout(cct, 20) << "skipping zonegroup " << zg.get_name() << " zone realm id " << zg.realm_id << ", not on our realm " << realm_id << dendl;
       continue;
     }
     
@@ -1213,6 +1214,7 @@ int RGWPeriod::reflect()
 
 void RGWPeriod::fork()
 {
+  ldout(cct, 20) << __func__ << " realm " << realm_id << " period " << id << dendl;
   predecessor_uuid = id;
   id = get_staging_id(realm_id);
   period_map.reset();
@@ -1220,6 +1222,7 @@ void RGWPeriod::fork()
 
 void RGWPeriod::update(const RGWZoneGroupMap& map)
 {
+  ldout(cct, 20) << __func__ << " realm " << realm_id << " period " << id << dendl;
   for (std::map<string, RGWZoneGroup>::const_iterator iter = map.zonegroups.begin();
        iter != map.zonegroups.end(); iter++) {
     period_map.zonegroups_by_api[iter->second.api_name] = iter->second;
@@ -1266,6 +1269,7 @@ int RGWPeriod::update_sync_status()
 
 int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
 {
+  ldout(cct, 20) << __func__ << " realm " << realm.get_id() << " period " << current_period.get_id() << dendl;
   // gateway must be in the master zone to commit
   if (master_zone != store->get_zone_params().get_id()) {
     lderr(cct) << "period commit sent to zone " << store->get_zone_params().get_id()

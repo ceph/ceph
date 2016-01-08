@@ -1451,7 +1451,11 @@ static int update_period(const string& realm_id, const string& realm_name,
     return ret;
   }
   period.fork();
-  period.update();
+  ret = period.update();
+  if(ret , 0) {
+    cerr << "failed to update period: " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
   ret = period.store_info(false);
   if (ret < 0) {
     cerr << "failed to store period: " << cpp_strerror(-ret) << std::endl;
@@ -2464,7 +2468,7 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 
-	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name, is_master, g_ceph_context, store, realm.get_id(), endpoints);
+	RGWZoneGroup zonegroup(zonegroup_name, is_master, g_ceph_context, store, realm.get_id(), endpoints);
         zonegroup.api_name = (api_name.empty() ? zonegroup_name : api_name);
 	ret = zonegroup.create();
 	if (ret < 0) {
