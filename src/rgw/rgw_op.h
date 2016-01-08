@@ -285,7 +285,8 @@ protected:
   int ret;
   bool sent_data;
   string marker;
-  int64_t limit;
+  string end_marker;
+  uint64_t limit;
   uint64_t limit_max;
   uint32_t buckets_count;
   uint64_t buckets_objcount;

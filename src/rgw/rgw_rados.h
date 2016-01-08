@@ -2182,9 +2182,12 @@ public:
   int cls_user_sync_bucket_stats(rgw_obj& user_obj, rgw_bucket& bucket);
   int update_user_bucket_stats(const string& user_id, rgw_bucket& bucket, RGWStorageStats& stats);
   int cls_user_list_buckets(rgw_obj& obj,
-                            const string& in_marker, int max_entries,
+                            const string& in_marker,
+                            const string& end_marker,
+                            int max_entries,
                             list<cls_user_bucket_entry>& entries,
-                            string *out_marker, bool *truncated);
+                            string *out_marker,
+                            bool *truncated);
   int cls_user_add_bucket(rgw_obj& obj, const cls_user_bucket_entry& entry);
   int cls_user_update_buckets(rgw_obj& obj, list<cls_user_bucket_entry>& entries, bool add);
   int cls_user_complete_stats_sync(rgw_obj& obj);

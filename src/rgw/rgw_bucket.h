@@ -119,6 +119,7 @@ extern int rgw_read_user_buckets(RGWRados *store,
                                  const rgw_user& user_id,
                                  RGWUserBuckets& buckets,
                                  const string& marker,
+                                 const string& end_marker,
                                  uint64_t max,
                                  bool need_stats,
                                  uint64_t default_amount = 1000);
