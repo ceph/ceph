@@ -561,8 +561,7 @@ public:
   void start_write(Op *op);
 
   friend struct OnOverwriteReadComplete;
-  void start_write2(Op *op);
-  void continue_write_op(WriteOp *op);
+  void continue_write_op(Op *op);
   void handle_write_read_complete(
     const hobject_t &hoid,
     boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
@@ -570,9 +569,20 @@ public:
     RecoveryMessages *m);
 
   map<ceph_tid_t, WriteOp> tid_to_overwrite_map;
-  map<hobject_t, list<ceph_tid_t>, hobject_t::BitwiseComparator> in_progress_write_tid;
-  Mutex in_progress_write_lock;
-  void continue_same_oid_write(const hobject_t &hoid);
+  map<hobject_t, ceph_tid_t, hobject_t::BitwiseComparator> in_progress_write_tid;
+  list<Op*> pending_op;
+  void continue_next_op();
+  void update_op_version(Op *op) {
+    // update the write version
+    eversion_t now_e = get_parent()->get_version();
+    // update op version, used for ECSubWrite apply
+    op->version = now_e;
+    // update pg log version
+    for (vector<pg_log_entry_t>::iterator i = op->log_entries.begin();
+         i != op->log_entries.end(); ++i) {
+      i->version = now_e;
+    }
+  }
 
   // history overwrite
   SharedPtrRegistry<hobject_t, OverwriteInfo, hobject_t::BitwiseComparator> overwrite_info_registry;
