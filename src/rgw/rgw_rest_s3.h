@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_RGW_REST_S3_H
+
 #define CEPH_RGW_REST_S3_H
 #define TIME_BUF_SIZE 128
 
@@ -504,4 +505,27 @@ public:
 
 class RGWHandler_REST_Obj_S3Website;
 
-#endif
+static inline bool looks_like_ip_address(const char *bucket)
+{
+  int num_periods = 0;
+  bool expect_period = false;
+  for (const char *b = bucket; *b; ++b) {
+    if (*b == '.') {
+      if (!expect_period)
+	return false;
+      ++num_periods;
+      if (num_periods > 3)
+	return false;
+      expect_period = false;
+    }
+    else if (isdigit(*b)) {
+      expect_period = true;
+    }
+    else {
+      return false;
+    }
+  }
+  return (num_periods == 3);
+}
+
+#endif /* CEPH_RGW_REST_S3_H */
