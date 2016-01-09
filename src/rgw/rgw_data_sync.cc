@@ -65,8 +65,6 @@ class RGWReadDataSyncStatusCoroutine : public RGWSimpleRadosReadCR<rgw_data_sync
 
   rgw_data_sync_status *sync_status;
 
-  list<RGWSimpleRadosReadCR<rgw_data_sync_marker> *> crs;
-
 public:
   RGWReadDataSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      RGWObjectCtx& _obj_ctx, const string& _source_zone,
@@ -78,11 +76,6 @@ public:
                                                                             obj_ctx(_obj_ctx), source_zone(_source_zone),
 									    sync_status(_status) {}
 
-  ~RGWReadDataSyncStatusCoroutine() {
-    for (auto cr : crs) {
-      cr->put();
-    }
-  }
   int handle_data(rgw_data_sync_info& data);
 };
 
@@ -94,10 +87,8 @@ int RGWReadDataSyncStatusCoroutine::handle_data(rgw_data_sync_info& data)
 
   map<uint32_t, rgw_data_sync_marker>& markers = sync_status->sync_markers;
   for (int i = 0; i < (int)data.num_shards; i++) {
-    RGWSimpleRadosReadCR<rgw_data_sync_marker> *cr = new RGWSimpleRadosReadCR<rgw_data_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
-                                                    RGWDataSyncStatusManager::shard_obj_name(source_zone, i), &markers[i]);
-    spawn(cr, true);
-    crs.push_back(cr);
+    spawn(new RGWSimpleRadosReadCR<rgw_data_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+                                                    RGWDataSyncStatusManager::shard_obj_name(source_zone, i), &markers[i]), true);
   }
   return 0;
 }
@@ -1251,7 +1242,6 @@ int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status
   
   lock.get_write();
   data_sync_cr = new RGWDataSyncControlCR(store, &http_manager, async_rados, conn, source_zone, num_shards);
-  data_sync_cr->get();
   lock.unlock();
   r = run(data_sync_cr);
   if (r < 0) {
