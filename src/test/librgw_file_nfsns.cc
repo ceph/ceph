@@ -44,6 +44,7 @@ namespace {
   CephContext* cct = nullptr;
 
   string bucket_name("nfsroot");
+  string dirs1_bucket_name("b1");
 
   class obj_rec
   {
@@ -81,6 +82,8 @@ namespace {
   std::stack<obj_rec> obj_stack;
   std::deque<obj_rec> cleanup_queue;
 
+  bool do_hier1 = false;
+  bool do_dirs1 = false;
   bool do_marker1 = false;
   bool do_create = false;
   bool do_delete = false;
@@ -121,52 +124,78 @@ TEST(LibRGW, MOUNT) {
   cct = static_cast<RGWLibFS*>(fs->fs_private)->get_context();
 }
 
-TEST(LibRGW, SETUP_ENUMERATE1)
+TEST(LibRGW, SETUP_HIER1)
 {
+  if (do_hier1) {
+    (void) rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
+		      RGW_LOOKUP_FLAG_NONE);
+    if (! bucket_fh) {
+      if (do_create) {
+	struct stat st;
+	int rc = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st,
+			  &bucket_fh);
+	ASSERT_EQ(rc, 0);
+      }
+    }
 
-  (void) rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
-		    RGW_LOOKUP_FLAG_NONE);
-  if (! bucket_fh) {
+    ASSERT_NE(bucket_fh, nullptr);
+
     if (do_create) {
-      struct stat st;
-      int rc = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st,
-			 &bucket_fh);
-      ASSERT_EQ(rc, 0);
+      /* create objects directly */
+      std::vector<std::string> obj_names =
+	{"foo/bar/baz/quux",
+	 "foo/f1",
+	 "foo/f2",
+	 "foo/bar/f1",
+	 "foo/bar/d1/",
+	 "foo/bar/baz/hungry",
+	 "foo/bar/baz/hungry/",
+	 "foo/bar/baz/momma",
+	 "foo/bar/baz/bear/",
+	 "foo/bar/baz/sasquatch",
+	 "foo/bar/baz/sasquatch/",
+	 "foo/bar/baz/frobozz"};
+
+      buffer::list bl; // empty object
+      RGWLibFS *fs_private = static_cast<RGWLibFS*>(fs->fs_private);
+
+      for (const auto& obj_name : obj_names) {
+	if (verbose) {
+	  std::cout << "creating: " << bucket_name << ":" << obj_name
+		    << std::endl;
+	}
+	RGWPutObjRequest req(cct, fs_private->get_user(), bucket_name, obj_name,
+			    bl);
+	int rc = rgwlib.get_fe()->execute_req(&req);
+	int rc2 = req.get_ret();
+	ASSERT_EQ(rc, 0);
+	ASSERT_EQ(rc2, 0);
+      }
     }
   }
+}
 
-  ASSERT_NE(bucket_fh, nullptr);
-  
-  if (do_create) {    
-    /* create objects directly */
-    std::vector<std::string> obj_names =
-      {"foo/bar/baz/quux",
-       "foo/f1",
-       "foo/f2",
-       "foo/bar/f1",
-       "foo/bar/d1/",
-       "foo/bar/baz/hungry",
-       "foo/bar/baz/hungry/",
-       "foo/bar/baz/momma",
-       "foo/bar/baz/bear/",
-       "foo/bar/baz/sasquatch",
-       "foo/bar/baz/sasquatch/",
-       "foo/bar/baz/frobozz"};
-
-    buffer::list bl; // empty object
-    RGWLibFS *fs_private = static_cast<RGWLibFS*>(fs->fs_private);
-
-    for (const auto& obj_name : obj_names) {
-      if (verbose) {
-	std::cout << "creating: " << bucket_name << ":" << obj_name
-		  << std::endl;
-      }
-      RGWPutObjRequest req(cct, fs_private->get_user(), bucket_name, obj_name,
-			   bl);
-      int rc = rgwlib.get_fe()->execute_req(&req);
-      int rc2 = req.get_ret();
+// create b2
+// create dirs in b2
+// create files in dirs in b2
+TEST(LibRGW, DIRS1) {
+  if (do_dirs1) {
+    int rc;
+    obj_rec dirs1_b{dirs1_bucket_name, nullptr, fs->root_fh, nullptr};
+    if (do_create) {
+      struct stat st;
+      rc = rgw_mkdir(fs, dirs1_b.parent_fh, dirs1_b.name.c_str(), 755, &st,
+		    &dirs1_b.fh);
       ASSERT_EQ(rc, 0);
-      ASSERT_EQ(rc2, 0);
+    }
+
+    if (do_delete) {
+      if (dirs1_b.fh) {
+	rc = rgw_fh_rele(fs, dirs1_b.fh, 0 /* flags */);
+	ASSERT_EQ(rc, 0);
+      }
+      rc = rgw_unlink(fs,  dirs1_b.parent_fh, dirs1_b.name.c_str());
+      ASSERT_EQ(rc, 0);
     }
   }
 }
@@ -191,85 +220,85 @@ extern "C" {
   }
 }
 
-TEST(LibRGW, ENUMERATE1) {
-  int rc;
-  obj_stack.push(
-    obj_rec{bucket_name, nullptr, nullptr, nullptr});
-  while (! obj_stack.empty()) {
-    auto& elt = obj_stack.top();
-    if (! elt.fh) {
-      struct rgw_file_handle* parent_fh = elt.parent_fh
-	? elt.parent_fh : fs->root_fh;
-      RGWFileHandle* pfh = get_rgwfh(parent_fh);
-      rgw::ignore(pfh);
-      lsubdout(cct, rgw, 10)
-	<< "rgw_lookup:"
-	<< " parent object_name()=" << pfh->object_name()
-	<< " parent full_object_name()=" << pfh->full_object_name()
-	<< " elt.name=" << elt.name
-	<< dendl;
-      rc = rgw_lookup(fs, parent_fh, elt.name.c_str(), &elt.fh,
-		      RGW_LOOKUP_FLAG_NONE);
-      ASSERT_EQ(rc, 0);
-      // XXXX
-      RGWFileHandle* efh = get_rgwfh(elt.fh);
-      rgw::ignore(efh);
-      lsubdout(cct, rgw, 10)
-	<< "rgw_lookup result:"
-	<< " elt object_name()=" << efh->object_name()
-	<< " elt full_object_name()=" << efh->full_object_name()
-	<< " elt.name=" << elt.name
-	<< dendl;
+TEST(LibRGW, HIER1) {
+  if (do_hier1) {
+    int rc;
+    obj_stack.push(
+      obj_rec{bucket_name, nullptr, nullptr, nullptr});
+    while (! obj_stack.empty()) {
+      auto& elt = obj_stack.top();
+      if (! elt.fh) {
+	struct rgw_file_handle* parent_fh = elt.parent_fh
+	  ? elt.parent_fh : fs->root_fh;
+	RGWFileHandle* pfh = get_rgwfh(parent_fh);
+	rgw::ignore(pfh);
+	lsubdout(cct, rgw, 10)
+	  << "rgw_lookup:"
+	  << " parent object_name()=" << pfh->object_name()
+	  << " parent full_object_name()=" << pfh->full_object_name()
+	  << " elt.name=" << elt.name
+	  << dendl;
+	rc = rgw_lookup(fs, parent_fh, elt.name.c_str(), &elt.fh,
+			RGW_LOOKUP_FLAG_NONE);
+	ASSERT_EQ(rc, 0);
+	// XXXX
+	RGWFileHandle* efh = get_rgwfh(elt.fh);
+	rgw::ignore(efh);
+	lsubdout(cct, rgw, 10)
+	  << "rgw_lookup result:"
+	  << " elt object_name()=" << efh->object_name()
+	  << " elt full_object_name()=" << efh->full_object_name()
+	  << " elt.name=" << elt.name
+	  << dendl;
 
-      ASSERT_NE(elt.fh, nullptr);
-      elt.rgw_fh = get_rgwfh(elt.fh);
-      elt.parent_fh = elt.rgw_fh->get_parent()->get_fh();
-      ASSERT_EQ(elt.parent_fh, parent_fh);
-      continue;
-    } else {
-      // we have a handle in some state in top position
-      switch(elt.fh->fh_type) {
-      case RGW_FS_TYPE_DIRECTORY:
-	if (! elt.state.readdir) {
-	  // descending
-	  uint64_t offset = 0;
-	  bool eof; // XXX
-	  lsubdout(cct, rgw, 10)
-	    << "readdir in"
-	    << " bucket: " << elt.rgw_fh->bucket_name()
-	    << " object_name: " << elt.rgw_fh->object_name()
-	    << " full_name: " << elt.rgw_fh->full_object_name()
-	    << dendl;
-	  rc = rgw_readdir(fs, elt.fh, &offset, r1_cb, elt.fh, &eof,
-			   RGW_READDIR_FLAG_DOTDOT);
-	  elt.state.readdir = true;
-	  ASSERT_EQ(rc, 0);
-	  // ASSERT_TRUE(eof); // XXXX working incorrectly w/single readdir
-	} else {
+	ASSERT_NE(elt.fh, nullptr);
+	elt.rgw_fh = get_rgwfh(elt.fh);
+	elt.parent_fh = elt.rgw_fh->get_parent()->get_fh();
+	ASSERT_EQ(elt.parent_fh, parent_fh);
+	continue;
+      } else {
+	// we have a handle in some state in top position
+	switch(elt.fh->fh_type) {
+	case RGW_FS_TYPE_DIRECTORY:
+	  if (! elt.state.readdir) {
+	    // descending
+	    uint64_t offset = 0;
+	    bool eof; // XXX
+	    lsubdout(cct, rgw, 10)
+	      << "readdir in"
+	      << " bucket: " << elt.rgw_fh->bucket_name()
+	      << " object_name: " << elt.rgw_fh->object_name()
+	      << " full_name: " << elt.rgw_fh->full_object_name()
+	      << dendl;
+	    rc = rgw_readdir(fs, elt.fh, &offset, r1_cb, elt.fh, &eof,
+			    RGW_READDIR_FLAG_DOTDOT);
+	    elt.state.readdir = true;
+	    ASSERT_EQ(rc, 0);
+	    // ASSERT_TRUE(eof); // XXXX working incorrectly w/single readdir
+	  } else {
+	    // ascending
+	    std::cout << elt << std::endl;
+	    cleanup_queue.push_back(elt);
+	    obj_stack.pop();
+	  }
+	  break;
+	case RGW_FS_TYPE_FILE:
 	  // ascending
 	  std::cout << elt << std::endl;
 	  cleanup_queue.push_back(elt);
 	  obj_stack.pop();
-	}
-	break;
-      case RGW_FS_TYPE_FILE:
-	// ascending
-	std::cout << elt << std::endl;
-	cleanup_queue.push_back(elt);
-	obj_stack.pop();
-	break;
-      default:
-	abort();
-      };
+	  break;
+	default:
+	  abort();
+	};
+      }
     }
   }
 }
 
-TEST(LibRGW, MARKER1_SETUP_BUCKET)
-{
+TEST(LibRGW, MARKER1_SETUP_BUCKET) {
   /* "large" directory enumeration test.  this one deals only with
    * file objects */
-
   if (do_marker1) {
     struct stat st;
     int ret;
@@ -288,7 +317,6 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
 {
   /* "large" directory enumeration test.  this one deals only with
    * file objects */
-
   if (do_marker1 && do_create) {
     int ret;
 
@@ -450,6 +478,12 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--bn",
 				     (char*) nullptr)) {
       bucket_name = val;
+    } else if (ceph_argparse_flag(args, arg_iter, "--hier1",
+					    (char*) nullptr)) {
+      do_hier1 = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--dirs1",
+					    (char*) nullptr)) {
+      do_dirs1 = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--marker1",
 					    (char*) nullptr)) {
       do_marker1 = true;
