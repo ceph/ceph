@@ -269,7 +269,8 @@ noinst_HEADERS += \
 	common/event_socket.h \
 	common/PluginRegistry.h \
 	common/ceph_time.h \
-	common/ceph_timer.h
+	common/ceph_timer.h \
+	common/align.h
 
 if ENABLE_XIO
 noinst_HEADERS += \
