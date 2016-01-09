@@ -44,7 +44,7 @@ namespace {
   CephContext* cct = nullptr;
 
   string bucket_name("nfsroot");
-  string dirs1_bucket_name("b1");
+  string dirs1_bucket_name("bdirs1");
 
   class obj_rec
   {

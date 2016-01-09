@@ -2528,31 +2528,8 @@ int RGWHandler_REST_S3::postauth_init()
   return 0;
 }
 
-static bool looks_like_ip_address(const char *bucket)
-{
-  int num_periods = 0;
-  bool expect_period = false;
-  for (const char *b = bucket; *b; ++b) {
-    if (*b == '.') {
-      if (!expect_period)
-	return false;
-      ++num_periods;
-      if (num_periods > 3)
-	return false;
-      expect_period = false;
-    }
-    else if (isdigit(*b)) {
-      expect_period = true;
-    }
-    else {
-      return false;
-    }
-  }
-  return (num_periods == 3);
-}
-
 int RGWHandler_REST_S3::validate_bucket_name(const string& bucket,
-						 bool relaxed_names)
+					    bool relaxed_names)
 {
   int ret = RGWHandler_REST::validate_bucket_name(bucket);
   if (ret < 0)
