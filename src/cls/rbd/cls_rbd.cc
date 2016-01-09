@@ -2801,7 +2801,7 @@ int old_snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   if (header->snap_count) {
     int snaps_len = 0;
     int names_len = 0;
-    CLS_LOG(20, "i=%d\n", i);
+    CLS_LOG(20, "i=%u\n", i);
     if (i > 0) {
       snaps_len = sizeof(header->snaps[0]) * i;
       names_len =  snap_names - orig_names;
@@ -2898,7 +2898,7 @@ int old_snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
   if (header->snap_count) {
     int names_len = 0;
-    CLS_LOG(20, "i=%d\n", i);
+    CLS_LOG(20, "i=%u\n", i);
     if (i > 0) {
       names_len =  snap_names - orig_names;
       memcpy(new_names_bp.c_str(), orig_names, names_len);
