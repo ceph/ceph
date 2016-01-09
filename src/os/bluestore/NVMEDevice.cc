@@ -253,7 +253,7 @@ int SharedDriverData::try_get(const string &sn_tag, nvme_controller **c, string 
       return r;
     }
 
-	  request_mempool = rte_mempool_create("nvme_request", 512,
+    request_mempool = rte_mempool_create("nvme_request", 512,
                                          nvme_request_size(), 128, 0,
                                          NULL, NULL, NULL, NULL,
                                          SOCKET_ID_ANY, 0);
@@ -262,7 +262,7 @@ int SharedDriverData::try_get(const string &sn_tag, nvme_controller **c, string 
       return -ENOMEM;
     }
 
- 	  task_pool = rte_mempool_create(
+    task_pool = rte_mempool_create(
         "task_pool", 512, sizeof(Task),
         64, 0, NULL, NULL, NULL, NULL,
         SOCKET_ID_ANY, 0);
@@ -273,8 +273,8 @@ int SharedDriverData::try_get(const string &sn_tag, nvme_controller **c, string 
 
     pci_system_init();
     nvme_retry_count = g_conf->bdev_nvme_retry_count;
-	  if (nvme_retry_count < 0)
-		  nvme_retry_count = NVME_DEFAULT_RETRY_COUNT;
+    if (nvme_retry_count < 0)
+      nvme_retry_count = NVME_DEFAULT_RETRY_COUNT;
 
     init = true;
   }
@@ -561,9 +561,9 @@ int NVMEDevice::aio_write(
   Task *t;
   int r = rte_mempool_get(task_pool, (void **)&t);
   if (r < 0) {
-		derr << __func__ << " task_pool rte_mempool_get failed" << dendl;
+    derr << __func__ << " task_pool rte_mempool_get failed" << dendl;
     return r;
-	}
+  }
   t->start = ceph_clock_now(g_ceph_context);
 
   t->buf = rte_malloc(NULL, len, block_size);
