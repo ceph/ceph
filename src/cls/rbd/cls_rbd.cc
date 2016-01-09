@@ -2377,17 +2377,21 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     object_map.encode_data(data_bl, byte_offset, byte_length);
     r = cls_cxx_write(hctx, object_map.get_header_length() + byte_offset,
 		      data_bl.length(), &data_bl);
-
+    if (r < 0) {
+      CLS_ERR("failed to write object map header: %s", cpp_strerror(r).c_str());  
+      return r;         
+    }
+   
     footer_bl.clear();
     object_map.encode_footer(footer_bl);
     r = cls_cxx_write(hctx, object_map.get_footer_offset(), footer_bl.length(),
 		      &footer_bl);
+    if (r < 0) {
+      CLS_ERR("failed to write object map footer: %s", cpp_strerror(r).c_str());  
+      return r;
+    } 
   } else {
     CLS_LOG(20, "object_map_update: no update necessary");
-  }
-
-  if (r < 0) {
-    return r;
   }
 
   return 0;
