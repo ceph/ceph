@@ -34,6 +34,7 @@
 #include "include/stringify.h"
 #include "include/types.h"
 #include "include/compat.h"
+#include "common/align.h"
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/Initialize.h"
@@ -320,7 +321,6 @@ NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
 {
   zeros = buffer::create_page_aligned(1048576);
   zeros.zero();
-
 }
 
 
@@ -679,6 +679,58 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     Mutex::Locker l(ioc->lock);
     ioc->cond.Signal();
   }
+  return r;
+}
+
+int NVMEDevice::read_buffered(uint64_t off, uint64_t len, char *buf)
+{
+  dout(5) << __func__ << " " << off << "~" << len << dendl;
+  assert(len > 0);
+  assert(off < size);
+  assert(off + len <= size);
+
+  uint64_t aligned_off = align_down(off, block_size);
+  uint64_t aligned_len = align_up(len, block_size);
+  IOContext ioc(nullptr);
+  Task *t;
+  int r = rte_mempool_get(task_pool, (void **)&t);
+  if (r < 0) {
+    derr << __func__ << " task_pool rte_mempool_get failed" << dendl;
+    return r;
+  }
+  t->start = ceph_clock_now(g_ceph_context);
+  t->buf = rte_malloc(NULL, aligned_len, block_size);
+  if (t->buf == NULL) {
+    derr << __func__ << " task->buf rte_malloc failed" << dendl;
+    r = -ENOMEM;
+    goto out;
+  }
+  t->ctx = ioc;
+  t->command = IOCommand::READ_COMMAND;
+  t->offset = aligned_off;
+  t->len = aligned_len;
+  t->device = this;
+  t->return_code = 1;
+  t->next = t->prev = nullptr;
+  ioc->num_reading.inc();;
+  {
+    Mutex::Locker l(queue_lock);
+    task_queue.push(t);
+    if (queue_empty.read()) {
+      queue_empty.dec();
+      queue_cond.Signal();
+    }
+  }
+
+  {
+    Mutex::Locker l(ioc->lock);
+    while (t->return_code > 0)
+      ioc->cond.Wait(ioc->lock);
+  }
+  memcpy(buf, t->buf+off-aligned_off, len);
+  r = t->return_code;
+  rte_free(t->buf);
+
   return r;
 }
 
