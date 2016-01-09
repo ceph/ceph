@@ -208,7 +208,6 @@ RGWCoroutinesStack *RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCorout
   if (!op) {
     return NULL;
   }
-  op->get();
 
   rgw_spawned_stacks *s = (source_op ? &source_op->spawned : &spawned);
 
@@ -481,13 +480,14 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       }
       context_stacks.erase(stack);
       stack->put();
+      stack = NULL;
     } else {
       op_not_blocked = true;
       stack->run_count++;
       stack->schedule();
     }
 
-    if (!op_not_blocked) {
+    if (!op_not_blocked && stack) {
       stack->run_count = 0;
     }
 
@@ -535,6 +535,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 
   lock.get_write();
   for (auto stack : context_stacks) {
+    ldout(cct, 20) << "clearing stack on run() exit: stack=" << (void *)stack << " nref=" << stack->get_nref() << dendl;
     stack->put();
   }
   run_contexts.erase(run_context);
@@ -589,9 +590,7 @@ void RGWCoroutinesManager::dump(Formatter *f) const {
 }
 
 RGWCoroutinesStack *RGWCoroutinesManager::allocate_stack() {
-  RGWCoroutinesStack *stack = new RGWCoroutinesStack(cct, this);
-  stack->get();
-  return stack;
+  return new RGWCoroutinesStack(cct, this);
 }
 
 string RGWCoroutinesManager::get_id()
