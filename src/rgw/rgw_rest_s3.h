@@ -466,5 +466,27 @@ public:
   virtual RGWHandler_REST *get_handler(struct req_state *s);
 };
 
+static inline bool looks_like_ip_address(const char *bucket)
+{
+  int num_periods = 0;
+  bool expect_period = false;
+  for (const char *b = bucket; *b; ++b) {
+    if (*b == '.') {
+      if (!expect_period)
+	return false;
+      ++num_periods;
+      if (num_periods > 3)
+	return false;
+      expect_period = false;
+    }
+    else if (isdigit(*b)) {
+      expect_period = true;
+    }
+    else {
+      return false;
+    }
+  }
+  return (num_periods == 3);
+}
 
 #endif
