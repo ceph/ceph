@@ -2317,6 +2317,11 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   bufferlist footer_bl;
   r = cls_cxx_read(hctx, object_map.get_footer_offset(),
 		   size - object_map.get_footer_offset(), &footer_bl);
+  if (r < 0) {
+    CLS_ERR("object map footer read failed");
+    return r;
+  }
+ 
   try {
     bufferlist::iterator it = footer_bl.begin();
     object_map.decode_footer(it);
