@@ -201,7 +201,7 @@ namespace rgw {
     static constexpr uint32_t FLAG_OPEN =    0x0001;
     static constexpr uint32_t FLAG_ROOT =    0x0002;
     static constexpr uint32_t FLAG_CREATE =  0x0004;
-    static constexpr uint32_t FLAG_PSEUDO =  0x0008;
+    static constexpr uint32_t FLAG_CREATING =  0x0008;
     static constexpr uint32_t FLAG_DIRECTORY = 0x0010;
     static constexpr uint32_t FLAG_BUCKET = 0x0020;
     static constexpr uint32_t FLAG_LOCK =   0x0040;
@@ -405,8 +405,7 @@ namespace rgw {
     bool is_object() const { return !is_bucket(); }
     bool is_file() const { return (fh.fh_type == RGW_FS_TYPE_FILE); }
     bool is_dir() const { return (fh.fh_type == RGW_FS_TYPE_DIRECTORY); }
-    bool creating() const { return flags & FLAG_CREATE; }
-    bool pseudo() const { return flags & FLAG_PSEUDO; }
+    bool creating() const { return flags & FLAG_CREATING; }
 
     uint32_t open(uint32_t gsh_flags) {
       lock_guard guard(mtx);
@@ -425,11 +424,12 @@ namespace rgw {
 
     void open_for_create() {
       lock_guard guard(mtx);
-      flags |= FLAG_CREATE;
+      flags |= FLAG_CREATING;
     }
 
-    void set_pseudo() {
-      flags |= FLAG_PSEUDO;
+    void clear_creating() {
+      lock_guard guard(mtx);
+      flags &= ~FLAG_CREATING;
     }
 
     void set_nlink(const uint64_t n) {
