@@ -109,6 +109,8 @@ namespace {
     dirent_vec() : count(0) {}
   };
 
+  obj_rec dirs1_b{dirs1_bucket_name, nullptr, nullptr, nullptr};
+
   struct {
     int argc;
     char **argv;
@@ -184,45 +186,63 @@ TEST(LibRGW, SETUP_HIER1)
 // create b2
 // create dirs in b2
 // create files in dirs in b2
-TEST(LibRGW, DIRS1) {
+// do getattrs (check type and times)
+TEST(LibRGW, SETUP_DIRS1) {
   if (do_dirs1) {
     int rc;
     struct stat st;
-    obj_rec dirs1_b{dirs1_bucket_name, nullptr, fs->root_fh, nullptr};
-    if (do_create) {
-      rc = rgw_mkdir(fs, dirs1_b.parent_fh, dirs1_b.name.c_str(), 755, &st,
-		    &dirs1_b.fh);
-      ASSERT_EQ(rc, 0);
-    } else {
-      /* TODO: look it up */
-    }
 
-    /* make top-level dirs */
-    int ix;
-    dirs1_vec dirs_vec;
-    for (ix = 0; ix < n_dirs1_dirs; ++ix) {
-      obj_vec ovec;
-      std::string dname{"dir_"};
-      dname += to_string(ix);
-      obj_rec dir{dname, nullptr, dirs1_b.fh, nullptr};
+    dirs1_b.parent_fh = fs->root_fh;
+
+    (void) rgw_lookup(fs, dirs1_b.parent_fh, dirs1_bucket_name.c_str(),
+		      &dirs1_b.fh, RGW_LOOKUP_FLAG_NONE);
+
+    if (! dirs1_b.fh) {
       if (do_create) {
-	rc = rgw_mkdir(fs, dir.parent_fh, dir.name.c_str(), 755, &st, &dir.fh);
+	rc = rgw_mkdir(fs, dirs1_b.parent_fh, dirs1_b.name.c_str(), 755, &st,
+		      &dirs1_b.fh);
 	ASSERT_EQ(rc, 0);
-      } else {
-	/* TODO: look it up */
       }
 
-      //dirs_vec.push_back({dir, ovec});
-    }
+      /* make top-level dirs */
+      int ix;
+      dirs1_vec dirs_vec;
+      for (ix = 0; ix < n_dirs1_dirs; ++ix) {
+	obj_vec ovec;
+	std::string dname{"dir_"};
+	dname += to_string(ix);
+	obj_rec dir{dname, nullptr, dirs1_b.fh, nullptr};
 
+	(void) rgw_lookup(fs, dir.parent_fh, dir.name.c_str(), &dir.fh,
+			  RGW_LOOKUP_FLAG_NONE);
+	if (! dir.fh) {
+	  if (do_create) {
+	    rc = rgw_mkdir(fs, dir.parent_fh, dir.name.c_str(), 755, &st,
+			  &dir.fh);
+	    ASSERT_EQ(rc, 0);
+	  }
+	}
+	//dirs_vec.push_back({dir, ovec});
+      }
+    } /* dirs1 top-level !exist */
+  }
+}
+
+TEST(LibRGW, BAD_DELETES_DIRS1) {
+  if (do_dirs1) {
+    int rc;
     if (do_delete) {
+      /* try to unlink a non-empty directory (bucket) */
       if (dirs1_b.fh) {
-	rc = rgw_fh_rele(fs, dirs1_b.fh, 0 /* flags */);
-	ASSERT_EQ(rc, 0);
+	// we must eventually release dirs1_b.fh
+	//rc = rgw_fh_rele(fs, dirs1_b.fh, 0 /* flags */);
+	//ASSERT_EQ(rc, 0);
       }
-      rc = rgw_unlink(fs,  dirs1_b.parent_fh, dirs1_b.name.c_str());
-      ASSERT_EQ(rc, 0);
+      rc = rgw_unlink(fs, dirs1_b.parent_fh, dirs1_b.name.c_str());
+      ASSERT_NE(rc, 0);
     }
+    /* try to unlink a non-empty directory (non-bucket) */
+    /* TODO: implement */
   }
 }
 
