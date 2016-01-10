@@ -159,8 +159,9 @@ class StripedStashedLayout(Workload):
 
         self._mount.run_shell([
             "setfattr", "-n", "ceph.dir.layout", "-v",
-            "stripe_unit={ss} stripe_count={sc} object_size={os} pool=data".format(
-                ss=self.ss, os=self.os, sc=self.sc
+            "stripe_unit={ss} stripe_count={sc} object_size={os} pool={pool}".format(
+                ss=self.ss, os=self.os, sc=self.sc,
+                pool=self._filesystem.get_data_pool_name()
             ),
             "./stripey"])
 
@@ -344,9 +345,16 @@ class TestDataScan(CephFSTestCase):
         # Attempt to start an MDS, see that it goes into damaged state
         self.fs.mds_restart()
 
+        def get_state(mds_id):
+            info = self.mds_cluster.get_mds_info(mds_id)
+            return info['state'] if info is not None else None
+
         self.wait_until_true(lambda: self.is_marked_damaged(0), 60)
         for mds_id in self.fs.mds_ids:
-            self.fs.wait_for_state("up:standby", timeout=60, mds_id=mds_id)
+            self.wait_until_equal(
+                    lambda: get_state(mds_id),
+                    "up:standby",
+                    timeout=60)
 
         # Run the recovery procedure
         self.fs.table_tool(["0", "reset", "session"])
@@ -367,6 +375,8 @@ class TestDataScan(CephFSTestCase):
         # Start the MDS
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
+        import json
+        log.info(json.dumps(self.mds_cluster.get_fs_map(), indent=2))
 
         # Mount a client
         self.mount_a.mount()
