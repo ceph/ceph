@@ -415,6 +415,9 @@ public:
     map<version_t, pair<uint64_t, uint64_t> >::iterator end() {
       return overwrite_history.end();
     }
+    map<version_t, pair<uint64_t, uint64_t> >::size_type size() {
+      return overwrite_history.size();
+    }
   };
   typedef ceph::shared_ptr<OverwriteInfo> OverwriteInfoRef;
 
@@ -557,7 +560,7 @@ public:
 				    const map<string,bufferptr> *attr = NULL);
 
   friend struct ReadCB;
-  bool check_op(Op *op);
+  void check_op(Op *op);
   void start_write(Op *op);
 
   friend struct OnOverwriteReadComplete;
@@ -569,8 +572,11 @@ public:
     RecoveryMessages *m);
 
   map<ceph_tid_t, WriteOp> tid_to_overwrite_map;
+  // kepp the tid util write apply
   map<hobject_t, ceph_tid_t, hobject_t::BitwiseComparator> in_progress_write_tid;
+  // keep the op util write submit
   list<Op*> pending_op;
+  void write_submit_done(Op *op);
   void continue_next_op();
   void update_op_version(Op *op) {
     // update the write version

@@ -1140,15 +1140,15 @@ void ECBackend::handle_sub_read(
             uint64_t _len = flag ? 
                   MIN(j->get<1>() - _off, ver_off.second) 
                   : MIN(j->get<1>(), ver_off.second - _off);
-            dout(10) << __func__ << " read " << i->first
-              << " version " << ow_iter->first
-              << " ver_off " << ver_off.first
-              << " ver_len " << ver_off.second
-              << " req_off " << j->get<0>()
-              << " req_len " << j->get<1>()
-              << " off " << (flag ? ver_off.first : j->get<0>())
-              << " len " << _len
-              << dendl;
+            dout(20) << __func__ << " read " << i->first
+                     << " version " << ow_iter->first
+                     << " ver_off " << ver_off.first
+                     << " ver_len " << ver_off.second
+                     << " req_off " << j->get<0>()
+                     << " req_len " << j->get<1>()
+                     << " off " << (flag ? ver_off.first : j->get<0>())
+                     << " len " << _len
+                     << dendl;
             bufferlist ver_bl;
             r = store->read(
               coll,
@@ -1296,7 +1296,7 @@ error:
         bl.substr_of(total_bl, ver_off.first, shards_write_len);
       }
 
-      dout(10) << __func__ << " recovery read request=" << *j << " r=" << r << " len=" << bl.length() << dendl;
+      dout(20) << __func__ << " recovery read request=" << *j << " r=" << r << " len=" << bl.length() << dendl;
       reply->recovery_buffers_read[i->first].push_back(
         make_pair(*j, bl));
     }
@@ -1339,9 +1339,7 @@ void ECBackend::handle_sub_write_reply(
     tid_op->pending_apply.erase(from);
   }
   // check_op(&(i->second));
-  if (check_op(tid_op)) {
-    continue_next_op();
-  }
+  check_op(tid_op);
 }
 
 void ECBackend::handle_sub_read_reply(
@@ -1397,7 +1395,7 @@ void ECBackend::handle_sub_read_reply(
     rop.complete[i->first].attrs = map<string, bufferlist>();
     (*(rop.complete[i->first].attrs)).swap(i->second);
   }
-  dout(10) << __func__ << " recovery_buffers_read size "
+  dout(20) << __func__ << " recovery_buffers_read size "
            << op.recovery_buffers_read.size() << dendl;
   for (map<hobject_t, list<pair<version_t, bufferlist> >, hobject_t::BitwiseComparator>::iterator i =
          op.recovery_buffers_read.begin();
@@ -1420,8 +1418,8 @@ void ECBackend::handle_sub_read_reply(
       assert(riter != rop.complete[i->first].recovery_returned.end());
       assert(*req_iter == j->first);
       riter->get<1>()[from].claim(j->second);
-      dout(0) << __func__ << " recovery returned length "
-              << j->second.length() << " " << riter->get<1>()[from].length() << dendl;
+      dout(20) << __func__ << " recovery returned length "
+               << j->second.length() << " " << riter->get<1>()[from].length() << dendl;
     }
   }
   for (map<hobject_t, int, hobject_t::BitwiseComparator>::iterator i = op.errors.begin();
@@ -1741,8 +1739,6 @@ void ECBackend::submit_transaction(
     w_op->len = ec_tran->get_writeop()->len;
     w_op->fadvise_flags = ec_tran->get_writeop()->fadvise_flags;
     w_op->bl.claim(ec_tran->get_writeop()->bl);
-    // get history overwrite info
-    w_op->overwrite_info = get_overwrite_info(hoid);
   }
   else
     op = &(tid_to_op_map[tid]);
@@ -1804,9 +1800,12 @@ void ECBackend::submit_transaction(
 
   pending_op.push_back(op);
   // if has same hoid write or one more waiting op, then wait
-  if (pending_op.size() > 2 || 
-      (pending_op.size() > 1 && 
-        (!ec_tran->offset_write || op->hoid == pending_op.front()->hoid) ))
+  // if (pending_op.size() > 2 || 
+  //     (pending_op.size() > 1 && 
+  //       (!ec_tran->offset_write || op->hoid == pending_op.front()->hoid) ))
+  // simple way: not the first op, and wait the same hoid write
+  if (pending_op.size() > 1 || 
+      in_progress_write_tid.count(op->hoid) > 0)
   {
     dout(10) << __func__ << " tid " << tid << " is waiting " << dendl;
     return;
@@ -1814,11 +1813,14 @@ void ECBackend::submit_transaction(
 
   dout(10) << __func__ << ": op " << *op << " starting" << dendl;
 
+  // mark on write
+  in_progress_write_tid.insert(make_pair(op->hoid, op->tid));
   if (ec_tran->offset_write)
     continue_write_op(op);
   else {
     start_write(op);
-    writing.push_back(op);
+    // writing.push_back(op);
+    write_submit_done(op);
   }
   dout(10) << "onreadable_sync: " << op->on_local_applied_sync << dendl;
 }
@@ -2163,7 +2165,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
   return ref;
 }
 
-bool ECBackend::check_op(Op *op)
+void ECBackend::check_op(Op *op)
 {
   if (op->pending_apply.empty() && op->on_all_applied) {
     dout(10) << __func__ << " Calling on_all_applied on " << *op << dendl;
@@ -2180,17 +2182,21 @@ bool ECBackend::check_op(Op *op)
     assert(writing.front() == op);
     dout(10) << __func__ << " Completing " << *op << dendl;
     writing.pop_front();
+
+    assert(in_progress_write_tid.count(op->hoid));
+    in_progress_write_tid.erase(op->hoid);
+
     tid_to_op_map.erase(op->tid);
     tid_to_overwrite_map.erase(op->tid);
-    pending_op.pop_front();
-    return true;
+    
+    // continue next op, one case: same hoid write's wait
+    continue_next_op();
   }
   for (map<ceph_tid_t, Op>::iterator i = tid_to_op_map.begin();
        i != tid_to_op_map.end();
        ++i) {
     dout(20) << __func__ << " tid " << i->first <<": " << i->second << dendl;
   }
-  return false;
 }
 
 void ECBackend::start_write(Op *op) {
@@ -2270,8 +2276,6 @@ void ECBackend::continue_write_op(Op *_op)
   switch (op->state) {
     case WriteOp::IDLE: {
       op->state = WriteOp::READING;
-      // mark in progress
-      in_progress_write_tid[op->hoid] = op->tid;
 
       const hobject_t &hoid = op->hoid;
       uint64_t off = op->t->get_writeop()->off;
@@ -2327,7 +2331,6 @@ void ECBackend::continue_write_op(Op *_op)
       }
 
       op->state = WriteOp::WRITING;
-      writing.push_back(op);
 
       // update the write version
       update_op_version(op);
@@ -2358,15 +2361,14 @@ void ECBackend::continue_write_op(Op *_op)
 
       const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
               
-      // set overwrite info
-      // overwrite info holds the true offset & length
-      // assume all the chunk has the same length
-      // to_write.first = sinfo.logical_to_prev_chunk_offset(to_write.first);
-      // to_write.second = target[0].length();
+      // get history overwrite info
+      op->overwrite_info = get_overwrite_info(op->hoid);
       assert(op->overwrite_info);
       op->overwrite_info->overwrite(
         op->version.version,
         to_write);
+      bufferlist ow_buf;
+      ::encode(*(op->overwrite_info), ow_buf);
 
       map<shard_id_t, ObjectStore::Transaction> trans;
       pg_t pgid = get_parent()->get_info().pgid.pgid;
@@ -2374,7 +2376,7 @@ void ECBackend::continue_write_op(Op *_op)
                 get_parent()->get_actingbackfill_shards().begin();
            i != get_parent()->get_actingbackfill_shards().end();
            ++i) {
-        dout(0) << __func__ << " trans " << i->shard << dendl;
+        dout(20) << __func__ << " trans " << i->shard << dendl;
         trans[i->shard];
         trans[i->shard].set_use_tbl(parent->transaction_use_tbl());
 
@@ -2385,7 +2387,7 @@ void ECBackend::continue_write_op(Op *_op)
         int shard_id = i->shard >= (int)chunk_mapping.size() ? i->shard : chunk_mapping[i->shard];
         assert(shards_to_write.count(shard_id));
         pair<uint64_t, uint64_t> real_write_offset = shards_to_write[shard_id];
-        dout(10) << __func__ << " shard " << shard_id
+        dout(20) << __func__ << " shard " << shard_id
                  << " osd " << i->osd
                  << " real_write_offset " << real_write_offset.first - to_write_chunk.first
                  << " real_write_len " << real_write_offset.second
@@ -2405,8 +2407,6 @@ void ECBackend::continue_write_op(Op *_op)
             op->fadvise_flags);
         }
         
-        bufferlist ow_buf;
-        ::encode(*(op->overwrite_info), ow_buf);
         trans[i->shard].setattr(
           coll_t(spg_t(pgid, i->shard)),
           ghobject_t(op->hoid, ghobject_t::NO_GEN, i->shard),
@@ -2451,22 +2451,11 @@ void ECBackend::continue_write_op(Op *_op)
         }
 
       }
-
+      write_submit_done(op);
       break;
     }
     case WriteOp::WRITING: {
       op->state = WriteOp::COMPLETE;
-      // in_progress_write_lock.Lock();
-      // in_progress_write_tid[op->hoid].pop_front();
-      // int remain_size = in_progress_write_write_tid[op->hoid].size();
-      // in_progress_write_lock.Unlock();
-      // // check whether remain waiting write
-      // if (remain_size > 0) {
-      //   ceph_tid_t tid = in_progress_write_tid[op->hoid].front();
-      //   assert(tid_to_overwrite_map.count(tid));
-      //   WriteOp *w_op = &(tid_to_overwrite_map[tid]);
-      //   start_write2(w_op);
-      // }
       break;
     }
     case WriteOp::COMPLETE:
@@ -2476,19 +2465,36 @@ void ECBackend::continue_write_op(Op *_op)
   }
 }
 
+void ECBackend::write_submit_done(Op *op) {
+  assert(op == pending_op.front());
+  pending_op.pop_front();
+  writing.push_back(op);
+  continue_next_op();
+}
+
 void ECBackend::continue_next_op() {
   if (pending_op.size() > 0) {
 
     Op *next_op = pending_op.front();
+    if (in_progress_write_tid.count(next_op->hoid)) {
+      // exist same hoid write, then wait 
+      dout(10) << __func__ << " wait in progress write, Op: " << *next_op << dendl;
+      return;
+    }
+
     dout(10) << __func__ << " op " << *next_op << " continuing " << dendl;
 
+    // mark on writing
+    in_progress_write_tid.insert(make_pair(next_op->hoid, next_op->tid));
     if (next_op->t->offset_write) {
       continue_write_op(next_op);
     }
     else {
+      // update op version, because it is delayed
       update_op_version(next_op);
       start_write(next_op);
-      writing.push_back(next_op);
+      // writing.push_back(next_op);
+      write_submit_done(next_op);
     }
 
     dout(10) << "onreadable_sync: " << next_op->on_local_applied_sync << dendl;
@@ -2567,17 +2573,23 @@ ECBackend::OverwriteInfoRef ECBackend::get_overwrite_info(const hobject_t &hoid)
       &st);
     OverwriteInfo ow_info;
     if (r >= 0) {
-      dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
       bufferlist bl;
       r = store->getattr(
         coll,
         ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
         OW_KEY,
         bl);
+      dout(10) << __func__ << ": ret " << r 
+               << " found on disk, length " << bl.length() 
+               << dendl;
       if (r >= 0) {
         bufferlist::iterator bp = bl.begin();
         ::decode(ow_info, bp);
       }
+      dout(10) << __func__ << " info size " << ow_info.size() << dendl;
+    }else {
+      // object not exists ?
+      dout(5) << __func__ << " object not exist, Error: " << r << dendl;
     }
     ref = overwrite_info_registry.lookup_or_create(hoid, ow_info);
   }
