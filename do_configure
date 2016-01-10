@@ -2,7 +2,9 @@
 
 set -x
 
-if [ "$(uname)" = FreeBSD -a -f autogen_freebsd.sh ]; then
+echo Running $0
+
+if [ x`uname`x = xFreeBSDx -a -f autogen_freebsd.sh ]; then
 	. ./autogen_freebsd.sh
 fi
 

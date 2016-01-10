@@ -1,6 +1,7 @@
 # Set the FreeBSD specific configure flags
 FREEBSD_CONFIGURE_FLAGS=
-if [ "$(uname)" = FreeBSD ]; then
+if [ `uname` = FreeBSD ]; then
+    MAKE=gmake
     CC=clang
     CXX=clang++
     CWARN=""
@@ -35,6 +36,7 @@ fi
 CONFIGURE_FLAGS="${FREEBSD_CONFIGURE_FLAGS}"
 
 # Export these so that ./configure will pick up 
+export MAKE
 export CC
 export CXX
 export CFLAGS
