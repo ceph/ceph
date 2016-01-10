@@ -1693,6 +1693,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       }
       catch (const std::runtime_error& e) {
 	cerr << e.what() << std::endl;
+	if (!stdout)
+	  delete outstream;
 	ret = -1;
 	goto out;
       }
@@ -2042,7 +2044,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       if (ret < 0) {
 	cerr << "error getting omap keys " << pool_name << "/" << oid << ": "
 	     << cpp_strerror(ret) << std::endl;
-	return 1;
+	goto out;
       }
       ret = values.size();
       for (map<string, bufferlist>::const_iterator it = values.begin();
