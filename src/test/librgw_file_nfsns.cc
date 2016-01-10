@@ -66,6 +66,11 @@ namespace {
       : name(std::move(_name)), fh(_fh), parent_fh(_parent_fh),
 	rgw_fh(_rgw_fh) {}
 
+    void sync() {
+      if (fh)
+	rgw_fh = get_rgwfh(fh);
+    }
+
     friend ostream& operator<<(ostream& os, const obj_rec& rec);
   };
 
@@ -87,6 +92,8 @@ namespace {
   typedef std::vector<obj_rec> obj_vec;
   typedef std::tuple<obj_rec, obj_vec> dirs1_rec;
   typedef std::vector<dirs1_rec> dirs1_vec;
+
+  dirs1_vec dirs_vec;
 
   bool do_hier1 = false;
   bool do_dirs1 = false;
@@ -203,29 +210,99 @@ TEST(LibRGW, SETUP_DIRS1) {
 		      &dirs1_b.fh);
 	ASSERT_EQ(rc, 0);
       }
+    }
 
-      /* make top-level dirs */
-      int ix;
-      dirs1_vec dirs_vec;
-      for (ix = 0; ix < n_dirs1_dirs; ++ix) {
-	obj_vec ovec;
-	std::string dname{"dir_"};
-	dname += to_string(ix);
-	obj_rec dir{dname, nullptr, dirs1_b.fh, nullptr};
+    /* make top-level dirs */
+    int d_ix;
+    obj_vec ovec;
+    for (d_ix = 0; d_ix < n_dirs1_dirs; ++d_ix) {
+      std::string dname{"dir_"};
+      dname += to_string(d_ix);
+      obj_rec dir{dname, nullptr, dirs1_b.fh, nullptr};
+      ovec.clear();
 
-	(void) rgw_lookup(fs, dir.parent_fh, dir.name.c_str(), &dir.fh,
+      (void) rgw_lookup(fs, dir.parent_fh, dir.name.c_str(), &dir.fh,
+			RGW_LOOKUP_FLAG_NONE);
+      if (! dir.fh) {
+	if (do_create) {
+	  rc = rgw_mkdir(fs, dir.parent_fh, dir.name.c_str(), 755, &st,
+			&dir.fh);
+	  ASSERT_EQ(rc, 0);
+	}
+      }
+
+      ASSERT_NE(dir.fh, nullptr);
+      dir.sync();
+      ASSERT_NE(dir.rgw_fh, nullptr);
+      ASSERT_TRUE(dir.rgw_fh->is_dir());
+
+      int f_ix;
+      for (f_ix = 0; f_ix < n_dirs1_objs; ++f_ix) {
+	/* child dir */
+	std::string sdname{"sdir_"};
+	sdname += to_string(f_ix);
+	obj_rec sdir{sdname, nullptr, dir.fh, nullptr};
+
+	(void) rgw_lookup(fs, sdir.parent_fh, sdir.name.c_str(), &sdir.fh,
 			  RGW_LOOKUP_FLAG_NONE);
-	if (! dir.fh) {
+
+	if (! sdir.fh) {
 	  if (do_create) {
-	    rc = rgw_mkdir(fs, dir.parent_fh, dir.name.c_str(), 755, &st,
-			  &dir.fh);
+	    rc = rgw_mkdir(fs, sdir.parent_fh, sdir.name.c_str(), 755,
+			  &st, &sdir.fh);
 	    ASSERT_EQ(rc, 0);
 	  }
+	} else {
+	  sdir.sync();
+	  ASSERT_TRUE(sdir.rgw_fh->is_dir());
 	}
-	//dirs_vec.push_back({dir, ovec});
+
+	if (sdir.fh)
+	  ovec.push_back(sdir);
+
+	/* child file */
+	std::string sfname{"sfile_"};
+
+	sfname += to_string(f_ix);
+	obj_rec sf{sfname, nullptr, dir.fh, nullptr};
+
+	(void) rgw_lookup(fs, sf.parent_fh, sf.name.c_str(), &sf.fh,
+			  RGW_LOOKUP_FLAG_NONE);
+
+	if (! sf.fh) {
+	  if (do_create) {
+	    /* make a new file object */
+	    rc = rgw_lookup(fs, sf.parent_fh, sf.name.c_str(), &sf.fh,
+			    RGW_LOOKUP_FLAG_CREATE);
+	    ASSERT_EQ(rc, 0);
+	    sf.sync();
+	    ASSERT_TRUE(sf.rgw_fh->is_file());
+	    /* open handle */
+	    rc = rgw_open(fs, sf.fh, 0 /* flags */);
+	    ASSERT_EQ(rc, 0);
+	    ASSERT_TRUE(sf.rgw_fh->is_open());
+	    /* stage seq write */
+	    size_t nbytes;
+	    string data = "data for " + sf.name;
+	    rc = rgw_write(fs, sf.fh, 0, data.length(), &nbytes,
+			  (void*) data.c_str());
+	    ASSERT_EQ(rc, 0);
+	    ASSERT_EQ(nbytes, data.length());
+	    /* commit write transaction */
+	    rc = rgw_close(fs, sf.fh, 0 /* flags */);
+	    ASSERT_EQ(rc, 0);
+	  }
+	} else {
+	  sf.sync();
+	  ASSERT_TRUE(sf.rgw_fh->is_file());
+	}
+	
+	if (sf.fh)
+	  ovec.push_back(sf);
       }
-    } /* dirs1 top-level !exist */
-  }
+      dirs_vec.push_back(dirs1_rec{dir, ovec});
+    }
+  } /* dirs1 top-level !exist */
 }
 
 TEST(LibRGW, BAD_DELETES_DIRS1) {
@@ -233,16 +310,20 @@ TEST(LibRGW, BAD_DELETES_DIRS1) {
     int rc;
     if (do_delete) {
       /* try to unlink a non-empty directory (bucket) */
-      if (dirs1_b.fh) {
-	// we must eventually release dirs1_b.fh
-	//rc = rgw_fh_rele(fs, dirs1_b.fh, 0 /* flags */);
-	//ASSERT_EQ(rc, 0);
-      }
       rc = rgw_unlink(fs, dirs1_b.parent_fh, dirs1_b.name.c_str());
       ASSERT_NE(rc, 0);
     }
     /* try to unlink a non-empty directory (non-bucket) */
-    /* TODO: implement */
+    obj_rec& sdir_0 = get<1>(dirs_vec[0])[0];
+    ASSERT_EQ(sdir_0.name, "sdir_0");
+    ASSERT_TRUE(sdir_0.rgw_fh->is_dir());
+    /* XXX we can't enforce this currently */
+#if 0
+    ASSERT_EQ(sdir_0.name, "sdir_0");
+    ASSERT_TRUE(sdir_0.rgw_fh->is_dir());
+    rc = rgw_unlink(fs, sdir_0.parent_fh, sdir_0.name.c_str());
+    ASSERT_NE(rc, 0);
+#endif
   }
 }
 
