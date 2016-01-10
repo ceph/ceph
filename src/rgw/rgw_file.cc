@@ -771,6 +771,9 @@ int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
     uri += name;
     RGWDeleteBucketRequest req(cct, fs->get_user(), uri);
     rc = rgwlib.get_fe()->execute_req(&req);
+    if (! rc) {
+      rc = req.get_ret();
+    }
   } else {
     /*
      * leaf object
@@ -787,12 +790,15 @@ int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
       RGWDeleteObjRequest req(cct, fs->get_user(), parent->bucket_name(),
 			      oname);
       rc = rgwlib.get_fe()->execute_req(&req);
+      if (! rc) {
+	rc = req.get_ret();
+      }
       /* release */
       (void) rgw_fh_rele(rgw_fs, fh, 0 /* flags */);
     }
   }
 
-  return rc;
+  return -rc;
 }
 
 void dump_buckets(void) {
