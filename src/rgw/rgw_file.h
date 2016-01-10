@@ -272,6 +272,10 @@ namespace rgw {
 
     size_t get_size() const { return state.size; }
 
+    const char* stype() {
+      return is_dir() ? "DIR" : "FILE";
+    }
+
     uint16_t get_depth() const { return depth; }
 
     struct rgw_file_handle* get_fh() { return &fh; }
