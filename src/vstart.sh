@@ -573,7 +573,9 @@ if [ "$start_osd" -eq 1 ]; then
         host = $HOSTNAME
 EOF
 		    rm -rf $CEPH_DEV_DIR/osd$osd || true
-		    for f in $CEPH_DEV_DIR/osd$osd/* ; do btrfs sub delete $f || true ; done || true
+		    if [ X`uname`X = XLinuxX ]; then
+		        for f in $CEPH_DEV_DIR/osd$osd/* ; do btrfs sub delete $f || true ; done || true
+		    fi
 		    mkdir -p $CEPH_DEV_DIR/osd$osd
 	    fi
 
