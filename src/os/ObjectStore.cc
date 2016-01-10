@@ -96,11 +96,13 @@ int ObjectStore::probe_block_device_fsid(
 {
   int r;
 
+#if defined(HAVE_LIBAIO)
   // first try bluestore -- it has a crc on its header and will fail
   // reliably.
   r = BlueStore::get_block_device_fsid(path, fsid);
   if (r == 0)
     return r;
+#endif
 
   // okay, try FileStore (journal).
   r = FileStore::get_block_device_fsid(path, fsid);
