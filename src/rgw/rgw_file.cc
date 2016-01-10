@@ -739,7 +739,9 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
 
   if ((rc == 0) &&
       (rc2 == 0)) {
-    fhr = fs->lookup_fh(parent, name, RGWFileHandle::FLAG_CREATE);
+    fhr = fs->lookup_fh(parent, name,
+			RGWFileHandle::FLAG_CREATE|
+			RGWFileHandle::FLAG_DIRECTORY);
     rgw_fh = get<0>(fhr);
     if (rgw_fh) {
       /* XXX unify timestamps */
