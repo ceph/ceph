@@ -82,7 +82,12 @@ TEST_F(ErasureCodePluginRegistryTest, all)
 				   g_conf->erasure_code_dir,
 				   profile, &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(-ENOENT, instance.factory("missing_version",
+#if defined(__FreeBSD__)
+#define MISSING_VERSION_ERROR ENOENT
+#else
+#define MISSING_VERSION_ERROR EXDEV
+#endif
+  EXPECT_EQ(-MISSING_VERSION_ERROR, instance.factory("missing_version",
 				     g_conf->erasure_code_dir,
 				     profile,
 				     &erasure_code, &cerr));
