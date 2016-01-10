@@ -280,6 +280,8 @@ namespace rgw {
 
     RGWFileHandle* get_parent() { return parent; }
 
+    struct timespec get_mtime() const { return state.mtime; }
+
     int stat(struct stat *st) {
       /* partial Unix attrs */
       memset(st, 0, sizeof(struct stat));
@@ -1565,6 +1567,10 @@ public:
     s->user = user;
 
     return 0;
+  }
+
+  time_t get_ctime() const {
+    return bucket.creation_time;
   }
 
   virtual int get_params() {
