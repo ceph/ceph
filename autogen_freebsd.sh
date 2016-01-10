@@ -2,8 +2,15 @@
 FREEBSD_CONFIGURE_FLAGS=
 if [ `uname` = FreeBSD ]; then
     MAKE=gmake
-    CC=clang
-    CXX=clang++
+    # We need at least something > clang 3.4
+    # tested with package clang37 on 10.2 ( Which has 3.4 as default )
+    if [ -f /usr/local/bin/clang37 ]; then
+        CC=clang37
+        CXX=clang++37
+    else
+        CC=clang
+        CXX=clang++
+    fi
     CWARN=""
     CLANGWARN="-Wno-unused-local-typedef -Wno-mismatched-tags -Wno-macro-redefined -Wno-unused-function -Wno-unused-label -Wno-undefined-bool-conversion -Wno-unused-private-field -Wno-unused-local-typedef -Wno-uninitialized -Wno-gnu-designator -Wno-inconsistent-missing-override -Wno-deprecated-declarations"
     CFLAGS="-g -I/usr/local/include ${CWARN} ${CLANGWARN}"
