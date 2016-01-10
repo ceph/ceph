@@ -190,10 +190,6 @@ TEST(LibRGW, SETUP_HIER1)
   }
 }
 
-// create b2
-// create dirs in b2
-// create files in dirs in b2
-// do getattrs (check type and times)
 TEST(LibRGW, SETUP_DIRS1) {
   if (do_dirs1) {
     int rc;
@@ -326,6 +322,36 @@ TEST(LibRGW, BAD_DELETES_DIRS1) {
 #endif
   }
 }
+
+TEST(LibRGW, RELEASE_DIRS1) {
+  if (do_dirs1) {
+    /* force release of handles for children of dirs1--force subsequent
+     * checks to reload them from the cluster.
+     *
+     * while doing this, verify handle cleanup and correct LRU state
+     * (not reachable)
+     */
+    int rc;
+    for (auto& dirs_rec : dirs_vec) {
+      for (auto& obj : get<1>(dirs_rec)) {
+	if (verbose) {
+	  std::cout << "release " << obj.name
+		    << " type: " << obj.rgw_fh->stype()
+		    << " refs: " << obj.rgw_fh->get_refcnt()
+		    << std::endl;
+	}
+	ASSERT_EQ(obj.rgw_fh->get_refcnt(), 2);
+	rc = rgw_fh_rele(fs, obj.fh, 0 /* flags */);
+	ASSERT_EQ(rc, 0);
+	ASSERT_EQ(obj.rgw_fh->get_refcnt(), 1);
+	/* try-discard handle */
+	/* clear obj_rec vec */
+      }
+    }
+  }
+}
+
+// do getattrs (check type and times)
 
 extern "C" {
   static bool r1_cb(const char* name, void *arg, uint64_t offset) {
