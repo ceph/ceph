@@ -279,7 +279,7 @@ WRITE_CLASS_ENCODER(bluestore_wal_op_t)
 
 /// writeahead-logged transaction
 struct bluestore_wal_transaction_t {
-  uint64_t seq;
+  uint64_t seq = 0;
   list<bluestore_wal_op_t> ops;
   interval_set<uint64_t> released;  ///< allocations to release after wal
 
