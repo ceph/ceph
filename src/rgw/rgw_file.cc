@@ -52,6 +52,10 @@ namespace rgw {
       fhr = lookup_fh(parent, path,
 		      RGWFileHandle::FLAG_CREATE|
 		      RGWFileHandle::FLAG_BUCKET);
+      if (get<0>(fhr)) {
+	RGWFileHandle* rgw_fh = get<0>(fhr);
+	rgw_fh->set_times(req.get_ctime());
+      }
     }
     return fhr;
   }
@@ -109,8 +113,17 @@ namespace rgw {
 	    fhr = lookup_fh(parent, path,
 			    RGWFileHandle::FLAG_CREATE|
 			    ((req.is_dir) ?
-			     RGWFileHandle::FLAG_DIRECTORY :
-			     RGWFileHandle::FLAG_NONE));
+			      RGWFileHandle::FLAG_DIRECTORY :
+			      RGWFileHandle::FLAG_NONE));
+	    /* XXX we don't have an object--in general, there need not
+	     * be one (just a path segment in some other object).  In
+	     * actual leaf an object exists, but we'd need another round
+	     * trip to get attrs */
+	    if (get<0>(fhr)) {
+	      /* for now use the parent object's mtime */
+	      RGWFileHandle* rgw_fh = get<0>(fhr);
+	      rgw_fh->set_mtime(parent->get_mtime());
+	    }
 	  }
 	}
       }
