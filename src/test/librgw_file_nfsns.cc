@@ -45,6 +45,8 @@ namespace {
 
   string bucket_name("nfsroot");
   string dirs1_bucket_name("bdirs1");
+  int n_dirs1_dirs = 3;
+  int n_dirs1_objs = 2;
 
   class obj_rec
   {
@@ -81,6 +83,10 @@ namespace {
   
   std::stack<obj_rec> obj_stack;
   std::deque<obj_rec> cleanup_queue;
+
+  typedef std::vector<obj_rec> obj_vec;
+  typedef std::tuple<obj_rec, obj_vec> dirs1_rec;
+  typedef std::vector<dirs1_rec> dirs1_vec;
 
   bool do_hier1 = false;
   bool do_dirs1 = false;
@@ -181,12 +187,32 @@ TEST(LibRGW, SETUP_HIER1)
 TEST(LibRGW, DIRS1) {
   if (do_dirs1) {
     int rc;
+    struct stat st;
     obj_rec dirs1_b{dirs1_bucket_name, nullptr, fs->root_fh, nullptr};
     if (do_create) {
-      struct stat st;
       rc = rgw_mkdir(fs, dirs1_b.parent_fh, dirs1_b.name.c_str(), 755, &st,
 		    &dirs1_b.fh);
       ASSERT_EQ(rc, 0);
+    } else {
+      /* TODO: look it up */
+    }
+
+    /* make top-level dirs */
+    int ix;
+    dirs1_vec dirs_vec;
+    for (ix = 0; ix < n_dirs1_dirs; ++ix) {
+      obj_vec ovec;
+      std::string dname{"dir_"};
+      dname += to_string(ix);
+      obj_rec dir{dname, nullptr, dirs1_b.fh, nullptr};
+      if (do_create) {
+	rc = rgw_mkdir(fs, dir.parent_fh, dir.name.c_str(), 755, &st, &dir.fh);
+	ASSERT_EQ(rc, 0);
+      } else {
+	/* TODO: look it up */
+      }
+
+      //dirs_vec.push_back({dir, ovec});
     }
 
     if (do_delete) {
