@@ -267,7 +267,7 @@ TEST(LibRGW, SETUP_DIRS1) {
 
 	if (! sf.fh) {
 	  if (do_create) {
-	    /* make a new file object */
+	    /* make a new file object (the hard way) */
 	    rc = rgw_lookup(fs, sf.parent_fh, sf.name.c_str(), &sf.fh,
 			    RGW_LOOKUP_FLAG_CREATE);
 	    ASSERT_EQ(rc, 0);
@@ -299,6 +299,25 @@ TEST(LibRGW, SETUP_DIRS1) {
       dirs_vec.push_back(dirs1_rec{dir, ovec});
     }
   } /* dirs1 top-level !exist */
+}
+
+TEST(LibRGW, RGW_CREATE_DIRS1) {
+  /* verify rgw_create (create [empty] file objects the easy way) */
+  if (do_dirs1) {
+    int rc;
+    struct stat st;
+    for (auto& dirs_rec : dirs_vec) {
+      /* create 1 more file in each sdir */
+      obj_rec& dir = get<0>(dirs_rec);
+      std::string sfname{"sfile_" + to_string(n_dirs1_objs)};
+      obj_rec sf{sfname, nullptr, dir.fh, nullptr};
+      rc = rgw_create(fs, sf.parent_fh, sf.name.c_str(), 644, &st, &sf.fh,
+		      RGW_CREATE_FLAG_NONE);
+      ASSERT_EQ(rc, 0);
+      sf.sync();
+    }
+    n_dirs1_objs++;
+  }
 }
 
 TEST(LibRGW, BAD_DELETES_DIRS1) {
