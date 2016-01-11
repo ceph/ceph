@@ -115,13 +115,6 @@ namespace crimson {
 	}
       }
 
-#if 0
-      RequestTag() : RequestTag(0, 0, 0)
-      {
-	// empty
-      }
-#endif
-
       friend std::ostream& operator<<(std::ostream&, const RequestTag&);
     }; // class RequestTag
 
@@ -328,6 +321,10 @@ namespace crimson {
 					    client_it->second.info,
 					    time),
 				 std::move(request)));
+
+	// copy tag to previous tag for client
+	client_it->second.prev_tag = entry->tag;
+
 	if (0.0 != entry->tag.reservation) {
 	  resQ.push(entry);
 	}
