@@ -2373,6 +2373,11 @@ int BlueStore::_do_read(
   if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
     dout(20) << __func__ << " will do buffered read" << dendl;
     buffered = true;
+  } else if (g_conf->bluestore_default_buffered_read &&
+	     (op_flags & (CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
+			  CEPH_OSD_OP_FLAG_FADVISE_NOCACHE)) == 0) {
+    dout(20) << __func__ << " defaulting to buffered read" << dendl;
+    buffered = true;
   }
 
   dout(20) << __func__ << " " << offset << "~" << length << " size "
