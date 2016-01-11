@@ -1160,9 +1160,10 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
     if (store->list_buckets_init(&handle) >= 0) {
       RGWObjEnt obj;
       while (store->list_buckets_next(obj, &handle) >= 0) {
-	formatter->dump_string("bucket", obj.key.name);
         if (show_stats)
           bucket_stats(store, user_id.tenant, obj.key.name, formatter);
+        else
+          formatter->dump_string("bucket", obj.key.name);
       }
     }
 
