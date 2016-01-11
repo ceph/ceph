@@ -343,7 +343,7 @@ void Log::start()
   pthread_mutex_lock(&m_queue_mutex);
   m_stop = false;
   pthread_mutex_unlock(&m_queue_mutex);
-  create();
+  create("log");
 }
 
 void Log::stop()

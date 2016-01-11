@@ -130,7 +130,7 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
     EXPECT_FALSE(registry.get_contents()[key].first.lock());
 
     Thread_wait t(registry, key, 0, Thread_wait::LOOKUP_OR_CREATE);
-    t.create();
+    t.create("wait_lookcreate");
     ASSERT_TRUE(wait_for(registry, 1));
     EXPECT_FALSE(t.ptr);
     // waiting on a key does not block lookups on other keys
@@ -150,7 +150,7 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
     EXPECT_FALSE(registry.get_contents()[key].first.lock());
 
     Thread_wait t(registry, key, value, Thread_wait::LOOKUP_OR_CREATE);
-    t.create();
+    t.create("wait_lookcreate");
     ASSERT_TRUE(wait_for(registry, 1));
     EXPECT_FALSE(t.ptr);
     // waiting on a key does not block lookups on other keys
@@ -193,7 +193,7 @@ TEST_F(SharedPtrRegistry_all, wait_lookup) {
   EXPECT_FALSE(registry.get_contents()[key].first.lock());
 
   Thread_wait t(registry, key, value, Thread_wait::LOOKUP);
-  t.create();
+  t.create("wait_lookup");
   ASSERT_TRUE(wait_for(registry, 1));
   EXPECT_EQ(value, *t.ptr);
   // waiting on a key does not block lookups on other keys

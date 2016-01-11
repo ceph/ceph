@@ -556,7 +556,7 @@ bool AdminSocket::init(const std::string &path)
   register_command("get_command_descriptions", "get_command_descriptions",
 		   m_getdescs_hook, "list available commands");
 
-  create();
+  create("admin_socket");
   add_cleanup_file(m_path.c_str());
   return true;
 }

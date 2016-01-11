@@ -515,7 +515,7 @@ void RocksDBStore::compact_range_async(const string& start, const string& end)
   }
   compact_queue_cond.Signal();
   if (!compact_thread.is_started()) {
-    compact_thread.create();
+    compact_thread.create("rstore_commpact");
   }
 }
 bool RocksDBStore::check_omap_dir(string &omap_dir)

@@ -204,7 +204,7 @@ int BlockDevice::_aio_start()
       derr << __func__ << " failed: " << cpp_strerror(r) << dendl;
       return r;
     }
-    aio_thread.create();
+    aio_thread.create("bstore_aio");
   }
   return 0;
 }

@@ -379,6 +379,6 @@ void LevelDBStore::compact_range_async(const string& start, const string& end)
   }
   compact_queue_cond.Signal();
   if (!compact_thread.is_started()) {
-    compact_thread.create();
+    compact_thread.create("levdbst_compact");
   }
 }
