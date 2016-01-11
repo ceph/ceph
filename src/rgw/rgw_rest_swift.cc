@@ -58,11 +58,12 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
 }
 
 static void dump_account_metadata(struct req_state * const s,
-				  const uint32_t buckets_count,
-				  const uint64_t buckets_object_count,
-				  const uint64_t buckets_size,
-				  const uint64_t buckets_size_rounded,
-				  map<string, bufferlist>& attrs)
+                                  const uint32_t buckets_count,
+                                  const uint64_t buckets_object_count,
+                                  const uint64_t buckets_size,
+                                  const uint64_t buckets_size_rounded,
+                                  map<string, bufferlist>& attrs,
+                                  const RGWAccessControlPolicy_SWIFTAcct &policy)
 {
   char buf[32];
   utime_t now = ceph_clock_now(g_ceph_context);
@@ -109,6 +110,13 @@ static void dump_account_metadata(struct req_state * const s,
 			  iter->second.c_str());
     }
   }
+
+  /* Dump account ACLs */
+  string acct_acl;
+  policy.to_str(acct_acl);
+  if (acct_acl.size()) {
+    STREAM_IO(s)->print("X-Account-Access-Control: %s\r\n", acct_acl.c_str());
+  }
 }
 
 void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
@@ -127,7 +135,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             buckets_objcount,
             buckets_size,
             buckets_size_rounded,
-            attrs);
+            attrs,
+            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     end_header(s, NULL, NULL, NO_CONTENT_LENGTH, true);
   }
@@ -177,7 +186,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             buckets_objcount,
             buckets_size,
             buckets_size_rounded,
-            attrs);
+            attrs,
+            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     end_header(s, NULL, NULL, s->formatter->get_len(), true);
   }
@@ -394,8 +404,13 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size,
-			  buckets_size_rounded, attrs);
+    dump_account_metadata(s,
+            buckets_count,
+            buckets_objcount,
+            buckets_size,
+            buckets_size_rounded,
+            attrs,
+            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
   }
 
   set_req_state_err(s, op_ret);
