@@ -197,6 +197,7 @@ namespace buffer CEPH_BUFFER_API {
       return (length() % align) == 0;
     }
     bool is_n_page_sized() const { return is_n_align_sized(CEPH_PAGE_SIZE); }
+    bool is_partial() const { return start() > 0 || end() < raw_length(); }
 
     // accessors
     raw *get_raw() const { return _raw; }
