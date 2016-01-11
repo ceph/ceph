@@ -853,7 +853,6 @@ OPTION(bluefs_min_flush_size, OPT_U64, 65536)  // ignore flush until its this bi
 
 OPTION(bluestore_bluefs, OPT_BOOL, true)
 OPTION(bluestore_bluefs_env_mirror, OPT_BOOL, false) // mirror to normal Env for debug
-OPTION(bluestore_bluefs_initial_length, OPT_U64, 65536*1024)
 OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .01)
 OPTION(bluestore_bluefs_min_free_ratio, OPT_FLOAT, .1)
 OPTION(bluestore_bluefs_max_free_fs_main_ratio, OPT_FLOAT, .8)
