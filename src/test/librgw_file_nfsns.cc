@@ -248,13 +248,13 @@ TEST(LibRGW, SETUP_DIRS1) {
 			  &st, &sdir.fh);
 	    ASSERT_EQ(rc, 0);
 	  }
-	} else {
-	  sdir.sync();
-	  ASSERT_TRUE(sdir.rgw_fh->is_dir());
 	}
 
-	if (sdir.fh)
-	  ovec.push_back(sdir);
+	ASSERT_NE(sdir.fh, nullptr); // suppress !lookup && !create case
+
+	sdir.sync();
+	ASSERT_TRUE(sdir.rgw_fh->is_dir());
+	ovec.push_back(sdir);
 
 	/* child file */
 	std::string sfname{"sfile_"};
@@ -340,10 +340,10 @@ TEST(LibRGW, RELEASE_DIRS1) {
 		    << " refs: " << obj.rgw_fh->get_refcnt()
 		    << std::endl;
 	}
-	ASSERT_EQ(obj.rgw_fh->get_refcnt(), 2);
+	ASSERT_EQ(obj.rgw_fh->get_refcnt(), 2UL);
 	rc = rgw_fh_rele(fs, obj.fh, 0 /* flags */);
 	ASSERT_EQ(rc, 0);
-	ASSERT_EQ(obj.rgw_fh->get_refcnt(), 1);
+	ASSERT_EQ(obj.rgw_fh->get_refcnt(), 1UL);
 	/* try-discard handle */
 	/* clear obj_rec vec */
       }
