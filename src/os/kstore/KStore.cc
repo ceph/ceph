@@ -1010,7 +1010,7 @@ int KStore::mount()
     goto out_db;
 
   finisher.start();
-  kv_sync_thread.create();
+  kv_sync_thread.create("kstore_kv_sync");
 
   mounted = true;
   return 0;

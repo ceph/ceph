@@ -307,8 +307,8 @@ TEST(EventCenterTest, DispatchTest) {
   atomic_t count(0);
   Mutex lock("DispatchTest::lock");
   Cond cond;
-  worker1.create();
-  worker2.create();
+  worker1.create("worker_1");
+  worker2.create("worker_2");
   for (int i = 0; i < 10000; ++i) {
     count.inc();
     worker1.center.dispatch_event_external(EventCallbackRef(new CountEvent(&count, &lock, &cond)));

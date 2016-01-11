@@ -371,7 +371,7 @@ bool OutputDataSocket::init(const std::string &path)
   m_shutdown_rd_fd = pipe_rd;
   m_shutdown_wr_fd = pipe_wr;
   m_path = path;
-  create();
+  create("out_data_socket");
   add_cleanup_file(m_path.c_str());
   return true;
 }

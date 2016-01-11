@@ -519,11 +519,11 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   fdcache(g_ceph_context),
   wbthrottle(g_ceph_context),
   next_osr_id(0),
-  throttle_ops(g_ceph_context, "filestore_ops",g_conf->filestore_queue_max_ops),
-  throttle_bytes(g_ceph_context, "filestore_bytes",g_conf->filestore_queue_max_bytes),
+  throttle_ops(g_ceph_context, "filestore_ops", g_conf->filestore_queue_max_ops),
+  throttle_bytes(g_ceph_context, "filestore_bytes", g_conf->filestore_queue_max_bytes),
   m_ondisk_finisher_num(g_conf->filestore_ondisk_finisher_threads),
   m_apply_finisher_num(g_conf->filestore_apply_finisher_threads),
-  op_tp(g_ceph_context, "FileStore::op_tp", g_conf->filestore_op_threads, "filestore_op_threads"),
+  op_tp(g_ceph_context, "FileStore::op_tp", "tp_fstore_op", g_conf->filestore_op_threads, "filestore_op_threads"),
   op_wq(this, g_conf->filestore_op_thread_timeout,
 	g_conf->filestore_op_thread_suicide_timeout, &op_tp),
   logger(NULL),
@@ -560,13 +560,13 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   for (int i = 0; i < m_ondisk_finisher_num; ++i) {
     ostringstream oss;
     oss << "filestore-ondisk-" << i;
-    Finisher *f = new Finisher(g_ceph_context, oss.str());
+    Finisher *f = new Finisher(g_ceph_context, oss.str(), "fn_odsk_fstore");
     ondisk_finishers.push_back(f);
   }
   for (int i = 0; i < m_apply_finisher_num; ++i) {
     ostringstream oss;
     oss << "filestore-apply-" << i;
-    Finisher *f = new Finisher(g_ceph_context, oss.str());
+    Finisher *f = new Finisher(g_ceph_context, oss.str(), "fn_appl_fstore");
     apply_finishers.push_back(f);
   }
 
@@ -1596,7 +1596,7 @@ int FileStore::mount()
   }
 
   wbthrottle.start();
-  sync_thread.create();
+  sync_thread.create("filestore_sync");
 
   if (!(generic_flags & SKIP_JOURNAL_REPLAY)) {
     ret = journal_replay(initial_op_seq);

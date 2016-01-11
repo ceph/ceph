@@ -626,7 +626,7 @@ class MonitorDBStore
       do_dump(false),
       dump_fd_binary(-1),
       dump_fmt(true),
-      io_work(g_ceph_context, "monstore"),
+      io_work(g_ceph_context, "monstore", "fn_monstore"),
       is_open(false) {
     string::const_reverse_iterator rit;
     int pos = 0;

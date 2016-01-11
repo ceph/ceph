@@ -28,6 +28,7 @@ class CephContext;
 class ThreadPool : public md_config_obs_t {
   CephContext *cct;
   string name;
+  string thread_name;
   string lockname;
   Mutex _lock;
   Cond _cond;
@@ -459,7 +460,7 @@ private:
   void worker(WorkThread *wt);
 
 public:
-  ThreadPool(CephContext *cct_, string nm, int n, const char *option = NULL);
+  ThreadPool(CephContext *cct_, string nm, string tn, int n, const char *option = NULL);
   virtual ~ThreadPool();
 
   /// return number of threads currently running
@@ -618,6 +619,7 @@ class ShardedThreadPool {
 
   CephContext *cct;
   string name;
+  string thread_name;
   string lockname;
   Mutex shardedpool_lock;
   Cond shardedpool_cond;
@@ -698,7 +700,7 @@ private:
 
 public:
 
-  ShardedThreadPool(CephContext *cct_, string nm, uint32_t pnum_threads);
+  ShardedThreadPool(CephContext *cct_, string nm, string tn, uint32_t pnum_threads);
 
   ~ShardedThreadPool(){};
 
