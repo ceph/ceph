@@ -1925,7 +1925,7 @@ void Objecter::tick()
 
   for (map<int,OSDSession*>::iterator siter = osd_sessions.begin(); siter != osd_sessions.end(); ++siter) {
     OSDSession *s = siter->second;
-    RWLock::RLocker l(s->lock);
+    RWLock::WLocker l(s->lock);
     bool found = false;
     for (map<ceph_tid_t,Op*>::iterator p = s->ops.begin();
 	p != s->ops.end();
