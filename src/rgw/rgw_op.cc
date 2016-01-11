@@ -124,7 +124,9 @@ done:
   return r;
 }
 
-static int decode_policy(CephContext *cct, bufferlist& bl, RGWAccessControlPolicy *policy)
+static int decode_policy(CephContext *cct,
+                         bufferlist& bl,
+                         RGWAccessControlPolicy *policy)
 {
   bufferlist::iterator iter = bl.begin();
   try {
@@ -188,9 +190,13 @@ static int get_bucket_policy_from_attr(CephContext *cct,
   return 0;
 }
 
-static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, RGWObjectCtx& obj_ctx,
-                                    RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                                    RGWAccessControlPolicy *policy, rgw_obj& obj)
+static int get_obj_policy_from_attr(CephContext *cct,
+                                    RGWRados *store,
+                                    RGWObjectCtx& obj_ctx,
+                                    RGWBucketInfo& bucket_info,
+                                    map<string, bufferlist>& bucket_attrs,
+                                    RGWAccessControlPolicy *policy,
+                                    rgw_obj& obj)
 {
   bufferlist bl;
   int ret = 0;
@@ -224,9 +230,13 @@ static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, RGWObject
  * object: name of the object to get the ACL for.
  * Returns: 0 on success, -ERR# otherwise.
  */
-static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
-                                RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                                RGWAccessControlPolicy *policy, rgw_obj& obj)
+static int get_policy_from_attr(CephContext *cct,
+                                RGWRados *store,
+                                void *ctx,
+                                RGWBucketInfo& bucket_info,
+                                map<string, bufferlist>& bucket_attrs,
+                                RGWAccessControlPolicy *policy,
+                                rgw_obj& obj)
 {
   if (obj.bucket.name.empty()) {
     return 0;
@@ -266,9 +276,13 @@ static int get_system_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& o
   return ret;
 }
 
-static int read_policy(RGWRados *store, struct req_state *s,
-                       RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                       RGWAccessControlPolicy *policy, rgw_bucket& bucket, rgw_obj_key& object)
+static int read_policy(RGWRados *store,
+                       struct req_state *s,
+                       RGWBucketInfo& bucket_info,
+                       map<string, bufferlist>& bucket_attrs,
+                       RGWAccessControlPolicy *policy,
+                       rgw_bucket& bucket,
+                       rgw_obj_key& object)
 {
   string upload_id;
   upload_id = s->info.args.get("uploadId");
