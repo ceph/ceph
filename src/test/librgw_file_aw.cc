@@ -170,7 +170,7 @@ TEST(LibRGW, INIT) {
 
 TEST(LibRGW, MOUNT) {
   int ret = rgw_mount(rgw, uid.c_str(), access_key.c_str(), secret_key.c_str(),
-		      &fs);
+		      &fs, RGW_MOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
 }
@@ -179,14 +179,15 @@ TEST(LibRGW, CREATE_BUCKET) {
   if (do_create) {
     struct stat st;
     struct rgw_file_handle *fh;
-    int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st, &fh);
+    int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st, &fh,
+			RGW_MKDIR_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
 }
 
 TEST(LibRGW, LOOKUP_BUCKET) {
   int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
-		      0 /* flags */);
+		      RGW_LOOKUP_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 
@@ -197,7 +198,7 @@ TEST(LibRGW, LOOKUP_OBJECT) {
 }
 
 TEST(LibRGW, OPEN1) {
-  int ret = rgw_open(fs, object_fh, 0 /* flags */);
+  int ret = rgw_open(fs, object_fh, RGW_OPEN_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 
@@ -211,7 +212,7 @@ TEST(LibRGW, PUT_OBJECT) {
     sprintf(static_cast<char*>(iov->iov_base), "::hi mom (%d)", ix);
     iov->iov_len = 14;
     int ret = rgw_write(fs, object_fh, offset, iov->iov_len, &nbytes,
-			iov->iov_base);
+			iov->iov_base, RGW_WRITE_FLAG_NONE);
     offset += iov->iov_len;
     ASSERT_EQ(ret, 0);
     ASSERT_EQ(nbytes, iov->iov_len);
@@ -219,12 +220,12 @@ TEST(LibRGW, PUT_OBJECT) {
 }
 
 TEST(LibRGW, CLOSE1) {
-  int ret = rgw_close(fs, object_fh, 0 /* flags */);
+  int ret = rgw_close(fs, object_fh, RGW_CLOSE_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 
 TEST(LibRGW, OPEN2) {
-  int ret = rgw_open(fs, object_fh, 0 /* flags */);
+  int ret = rgw_open(fs, object_fh, RGW_OPEN_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 
@@ -235,7 +236,7 @@ TEST(LibRGW, GET_OBJECT) {
   for (int ix : {2 , 3}) {
     struct iovec *iov = &iovs[ix];
     int ret = rgw_read(fs, object_fh, offset, iovs[ix-2].iov_len, &nread,
-		       iov->iov_base);
+		       iov->iov_base, RGW_READ_FLAG_NONE);
     iov->iov_len = nread;
     offset += iov->iov_len;
     ASSERT_EQ(ret, 0);
@@ -245,13 +246,13 @@ TEST(LibRGW, GET_OBJECT) {
 }
 
 TEST(LibRGW, CLOSE2) {
-  int ret = rgw_close(fs, object_fh, 0 /* flags */);
+  int ret = rgw_close(fs, object_fh, RGW_CLOSE_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 
 TEST(LibRGW, STAT_OBJECT) {
   struct stat st;
-  int ret = rgw_getattr(fs, object_fh, &st);
+  int ret = rgw_getattr(fs, object_fh, &st, RGW_GETATTR_FLAG_NONE);
   ASSERT_EQ(ret, 0);
   dout(15) << "rgw_getattr on " << object_name << " size = "
 	   << st.st_size << dendl;
@@ -259,7 +260,8 @@ TEST(LibRGW, STAT_OBJECT) {
 
 TEST(LibRGW, DELETE_OBJECT) {
   if (do_delete) {
-    int ret = rgw_unlink(fs, bucket_fh, object_name.c_str());
+    int ret = rgw_unlink(fs, bucket_fh, object_name.c_str(),
+			 RGW_UNLINK_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -267,7 +269,7 @@ TEST(LibRGW, DELETE_OBJECT) {
 TEST(LibRGW, CLEANUP) {
   int ret;
   if (object_fh) {
-    ret = rgw_fh_rele(fs, object_fh, 0 /* flags */);
+    ret = rgw_fh_rele(fs, object_fh, RGW_FH_RELE_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
   ret = rgw_fh_rele(fs, bucket_fh, 0 /* flags */);
@@ -278,7 +280,7 @@ TEST(LibRGW, UMOUNT) {
   if (! fs)
     return;
 
-  int ret = rgw_umount(fs);
+  int ret = rgw_umount(fs, RGW_UMOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 

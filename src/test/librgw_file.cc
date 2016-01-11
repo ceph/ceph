@@ -54,7 +54,7 @@ TEST(LibRGW, INIT) {
 
 TEST(LibRGW, MOUNT) {
   int ret = rgw_mount(rgw, uid.c_str(), access_key.c_str(), secret_key.c_str(),
-		      &fs);
+		      &fs, RGW_MOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
 }
@@ -67,7 +67,7 @@ TEST(LibRGW, GETATTR_ROOT) {
       return;
 
     struct stat st;
-    int ret = rgw_getattr(fs, fs->root_fh, &st);
+    int ret = rgw_getattr(fs, fs->root_fh, &st, RGW_GETATTR_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -140,7 +140,7 @@ TEST(LibRGW, GETATTR_BUCKETS) {
     for (auto& fid_row : bucket_matrix) {
       auto& fid = get<0>(fid_row);
       struct rgw_file_handle *rgw_fh = get<2>(fid);
-      ret = rgw_getattr(fs, rgw_fh, &st);
+      ret = rgw_getattr(fs, rgw_fh, &st, RGW_GETATTR_FLAG_NONE);
       ASSERT_EQ(ret, 0);
     }
   }
@@ -204,7 +204,8 @@ TEST(LibRGW, GETATTR_OBJECTS) {
 	ASSERT_EQ(ret, 0);
 	get<2>(obj) = obj_fh; // stash obj_fh for cleanup
 	ASSERT_NE(get<2>(obj), nullptr);
-	ret = rgw_getattr(fs, obj_fh, &st); // now, getattr
+	ret = rgw_getattr(fs, obj_fh, &st,
+			  RGW_GETATTR_FLAG_NONE); // now, getattr
 	ASSERT_EQ(ret, 0);
       }
     }
@@ -239,7 +240,7 @@ TEST(LibRGW, UMOUNT) {
   if (! fs)
     return;
 
-  int ret = rgw_umount(fs);
+  int ret = rgw_umount(fs, RGW_UMOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 
