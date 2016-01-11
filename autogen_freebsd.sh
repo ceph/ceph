@@ -18,6 +18,7 @@ if [ `uname` = FreeBSD ]; then
     LDFLAGS="-g ${LDFLAGS} -L/usr/local/lib -export-dynamic -luuid"
     FREEBSD_CONFIGURE_FLAGS="
       --disable-silent-rules
+      --disable-gitversion
       --with-debug
       --with-rados
       --with-rbd 
