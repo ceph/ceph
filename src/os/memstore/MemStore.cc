@@ -198,7 +198,9 @@ int MemStore::mkfs()
     if (r < 0)
       return r;
     dout(1) << __func__ << " new fsid " << fsid_str << dendl;
-  } else {
+  } else if (r < 0) {
+    return r;
+  } else {  
     dout(1) << __func__ << " had fsid " << fsid_str << dendl;
   }
 
@@ -305,7 +307,7 @@ int MemStore::read(
   if (offset >= o->get_size())
     return 0;
   size_t l = len;
-  if (l == 0)  // note: len == 0 means read the entire object
+  if (l == 0 && offset == 0)  // note: len == 0 means read the entire object
     l = o->get_size();
   else if (offset + l > o->get_size())
     l = o->get_size() - offset;
@@ -396,7 +398,7 @@ bool MemStore::collection_empty(coll_t cid)
   dout(10) << __func__ << " " << cid << dendl;
   CollectionRef c = get_collection(cid);
   if (!c)
-    return -ENOENT;
+    return false;
   RWLock::RLocker l(c->lock);
 
   return c->object_map.empty();
