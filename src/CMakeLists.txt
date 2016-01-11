@@ -885,19 +885,19 @@ target_link_libraries(ceph-authtool global ${EXTRALIBS} ${CRYPTO_LIBS})
 install(TARGETS ceph-authtool DESTINATION bin)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-debugpack.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-crush-location.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crush-location @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crush-location @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/init-ceph.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph @ONLY)
 
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
