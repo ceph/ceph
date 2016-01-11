@@ -366,7 +366,10 @@ class MDSRank {
 
     int get_req_rate() { return logger->get(l_mds_request); }
 
+    void dump_status(Formatter *f) const;
+
   protected:
+    void dump_clientreplay_status(Formatter *f) const;
     void command_scrub_path(Formatter *f, const string& path);
     void command_tag_path(Formatter *f, const string& path,
                           const string &tag);
@@ -390,7 +393,6 @@ class MDSRank {
     CDir *_command_dirfrag_get(
         const cmdmap_t &cmdmap,
         std::ostream &ss);
-    // <<<
 
   protected:
     Messenger    *messenger;

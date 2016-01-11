@@ -171,28 +171,7 @@ bool MDSDaemon::asok_command(string command, cmdmap_t& cmdmap, string format,
   Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   bool handled = false;
   if (command == "status") {
-    const OSDMap *osdmap = objecter->get_osdmap_read();
-    const epoch_t osd_epoch = osdmap->get_epoch();
-    objecter->put_osdmap_read();
-
-    f->open_object_section("status");
-    f->dump_stream("cluster_fsid") << monc->get_fsid();
-    if (mds_rank) {
-      f->dump_unsigned("whoami", mds_rank->get_nodeid());
-    } else {
-      f->dump_unsigned("whoami", MDS_RANK_NONE);
-    }
-
-    f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
-        monc->get_global_id()))));
-    f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
-    f->dump_unsigned("osdmap_epoch", osd_epoch);
-    if (mds_rank) {
-      f->dump_unsigned("osdmap_epoch_barrier", mds_rank->get_osd_epoch_barrier());
-    } else {
-      f->dump_unsigned("osdmap_epoch_barrier", 0);
-    }
-    f->close_section(); // status
+    dump_status(f);
     handled = true;
   } else {
     if (mds_rank == NULL) {
@@ -209,6 +188,38 @@ bool MDSDaemon::asok_command(string command, cmdmap_t& cmdmap, string format,
   dout(1) << "asok_command: " << command << " (complete)" << dendl;
   
   return handled;
+}
+
+void MDSDaemon::dump_status(Formatter *f)
+{
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  const epoch_t osd_epoch = osdmap->get_epoch();
+  objecter->put_osdmap_read();
+
+  f->open_object_section("status");
+  f->dump_stream("cluster_fsid") << monc->get_fsid();
+  if (mds_rank) {
+    f->dump_unsigned("whoami", mds_rank->get_nodeid());
+  } else {
+    f->dump_unsigned("whoami", MDS_RANK_NONE);
+  }
+
+  f->dump_string("want_state", ceph_mds_state_name(beacon.get_want_state()));
+  f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
+	    monc->get_global_id()))));
+  if (mds_rank) {
+    Mutex::Locker l(mds_lock);
+    mds_rank->dump_status(f);
+  }
+
+  f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
+  f->dump_unsigned("osdmap_epoch", osd_epoch);
+  if (mds_rank) {
+    f->dump_unsigned("osdmap_epoch_barrier", mds_rank->get_osd_epoch_barrier());
+  } else {
+    f->dump_unsigned("osdmap_epoch_barrier", 0);
+  }
+  f->close_section(); // status
 }
 
 void MDSDaemon::set_up_admin_socket()
