@@ -1059,7 +1059,7 @@ void RGWStatAccount::execute()
   do {
     RGWUserBuckets buckets;
 
-    ret = rgw_read_user_buckets(store, s->user.user_id, buckets, marker, max_buckets, true);
+    ret = rgw_read_user_buckets(store, s->user.user_id, buckets, marker, max_buckets, false);
     if (ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
          should exist */
