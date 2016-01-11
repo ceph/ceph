@@ -1613,7 +1613,7 @@ int KStore::fiemap(
     len = o->onode.size;
 
   if (offset > o->onode.size)
-    return 0;
+    goto out;
 
   if (offset + len > o->onode.size) {
     len = o->onode.size - offset;
@@ -1622,8 +1622,10 @@ int KStore::fiemap(
   dout(20) << __func__ << " " << offset << "~" << len << " size "
 	   << o->onode.size << dendl;
 
-#warning write fiemap
+  // FIXME: do something smarter here
+  m[0] = o->onode.size;
 
+ out:
   ::encode(m, bl);
   dout(20) << __func__ << " " << offset << "~" << len
 	   << " size = 0 (" << m << ")" << dendl;

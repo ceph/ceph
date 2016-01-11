@@ -127,11 +127,13 @@ public:
   struct FileReader {
     FileRef file;
     FileReaderBuffer buf;
+    bool random;
     bool ignore_eof;        ///< used when reading our log file
 
-    FileReader(FileRef f, uint64_t mpf, bool ie = false)
+    FileReader(FileRef f, uint64_t mpf, bool rand, bool ie)
       : file(f),
 	buf(mpf),
+	random(rand),
 	ignore_eof(ie) {
       file->num_readers.inc();
     }
@@ -180,8 +182,6 @@ private:
   vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
   vector<Allocator*> alloc;                   ///< allocators for bdevs
 
-  vector<IOContext*> ioc_reap_queue;          ///< iocs from closed writers
-
   void _init_alloc();
   void _stop_alloc();
 
@@ -214,6 +214,11 @@ private:
     uint64_t offset, ///< [in] offset
     size_t len,      ///< [in] this many bytes
     bufferlist *outbl,   ///< [out] optional: reference the result here
+    char *out);      ///< [out] optional: or copy it here
+  int _read_random(
+    FileReader *h,   ///< [in] read from here
+    uint64_t offset, ///< [in] offset
+    size_t len,      ///< [in] this many bytes
     char *out);      ///< [out] optional: or copy it here
 
   void _invalidate_cache(FileRef f, uint64_t offset, uint64_t length);
@@ -315,8 +320,14 @@ public:
     // no need to hold the global lock here; we only touch h and
     // h->file, and read vs write or delete is already protected (via
     // atomics and asserts).
-    Mutex::Locker l(lock);
     return _read(h, buf, offset, len, outbl, out);
+  }
+  int read_random(FileReader *h, uint64_t offset, size_t len,
+		  char *out) {
+    // no need to hold the global lock here; we only touch h and
+    // h->file, and read vs write or delete is already protected (via
+    // atomics and asserts).
+    return _read_random(h, offset, len, out);
   }
   void invalidate_cache(FileRef f, uint64_t offset, uint64_t len) {
     Mutex::Locker l(lock);

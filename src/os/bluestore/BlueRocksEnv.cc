@@ -91,9 +91,8 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   // Safe for concurrent use by multiple threads.
   rocksdb::Status Read(uint64_t offset, size_t n, rocksdb::Slice* result,
 		       char* scratch) const {
-    BlueFS::FileReaderBuffer buf(4096);
-    int r = fs->read(h, &buf, offset, n, NULL, scratch);
-    assert (r >= 0);
+    int r = fs->read_random(h, offset, n, scratch);
+    assert(r >= 0);
     *result = rocksdb::Slice(scratch, r);
     return rocksdb::Status::OK();
   }
