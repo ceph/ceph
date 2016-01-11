@@ -25,6 +25,45 @@ class TestStrays(CephFSTestCase):
     def test_files_throttle(self):
         self._test_throttling(self.FILES_THROTTLE)
 
+    def test_dir_deletion(self):
+        """
+        That when deleting a bunch of dentries and the containing
+        directory, everything gets purged.
+        Catches cases where the client might e.g. fail to trim
+        the unlinked dir from its cache.
+        """
+        file_count = 1000
+        create_script = dedent("""
+            import os
+
+            mount_path = "{mount_path}"
+            subdir = "delete_me"
+            size = {size}
+            file_count = {file_count}
+            os.mkdir(os.path.join(mount_path, subdir))
+            for i in xrange(0, file_count):
+                filename = "{{0}}_{{1}}.bin".format(i, size)
+                f = open(os.path.join(mount_path, subdir, filename), 'w')
+                f.write(size * 'x')
+                f.close()
+        """.format(
+            mount_path=self.mount_a.mountpoint,
+            size=1024,
+            file_count=file_count
+        ))
+
+        self.mount_a.run_python(create_script)
+        self.mount_a.run_shell(["rm", "-rf", "delete_me"])
+        self.fs.mds_asok(["flush", "journal"])
+        strays = self.get_mdc_stat("strays_created")
+        self.assertEqual(strays, file_count + 1)
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("strays_purged"),
+            strays,
+            timeout=600
+
+        )
+
     def _test_throttling(self, throttle_type):
         """
         That the mds_max_purge_ops setting is respected
