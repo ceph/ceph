@@ -558,7 +558,7 @@ def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
 
 def main(argv):
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
-    if len(argv) > 1 and argv[1] == "debug":
+    if len(argv) > 0 and argv[0] == "debug":
         nullfd = sys.stdout
     else:
         nullfd = open(os.devnull, "w")
