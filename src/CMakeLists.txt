@@ -92,8 +92,14 @@ endif(USE_NSS)
 
 set(GCOV_PREFIX_STRIP 4)
 
-get_git_head_revision(GIT_REFSPEC CEPH_GIT_VER)
-git_describe(CEPH_GIT_NICE_VER --always)
+option(ENABLE_GIT_VERSION "build Ceph with git version string" ON)
+if(${ENABLE_GIT_VERSION})
+  get_git_head_revision(GIT_REFSPEC CEPH_GIT_VER)
+  git_describe(CEPH_GIT_NICE_VER --always)
+else(${ENABLE_GIT_VERSION})
+  set(CEPH_GIT_VER "no_version")
+  set(CEPH_GIT_NICE_VER "Development")
+endif(${ENABLE_GIT_VERSION})
 
 # Python stuff
 find_package(PythonInterp 2 QUIET)
