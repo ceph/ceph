@@ -36,7 +36,8 @@ class TestFailover(CephFSTestCase):
             active = self.fs.get_active_names()
             return active and active[0] in original_standbys
 
-        log.info("Waiting for promotion of one of the original standbys {0}".format(original_standbys))
+        log.info("Waiting for promotion of one of the original standbys {0}".format(
+            original_standbys))
         self.wait_until_true(
             promoted,
             timeout=grace*2)
@@ -76,7 +77,7 @@ class TestFailover(CephFSTestCase):
 
         # Wait for everyone to go laggy
         def laggy():
-            mdsmap = self.fs.mon_manager.get_mds_status_all()
+            mdsmap = self.fs.get_mds_map()
             for info in mdsmap['info'].values():
                 if "laggy_since" not in info:
                     return False
