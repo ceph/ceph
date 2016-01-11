@@ -3970,10 +3970,7 @@ void OSD::tick()
   }
 
   if (is_waiting_for_healthy()) {
-    if (_is_healthy()) {
-      dout(1) << "healthy again, booting" << dendl;
-      start_boot();
-    }
+    start_boot();
   }
 
   if (is_active()) {
@@ -4458,6 +4455,16 @@ struct C_OSD_GetVersion : public Context {
 
 void OSD::start_boot()
 {
+  if (!_is_healthy()) {
+    // if we are not healthy, do not mark ourselves up (yet)
+    dout(1) << "not healthy; waiting to boot" << dendl;
+    if (!is_waiting_for_healthy())
+      start_waiting_for_healthy();
+    // send pings sooner rather than later
+    heartbeat_kick();
+    return;
+  }
+  dout(1) << "We are healthy, booting" << dendl;
   set_state(STATE_PREBOOT);
   dout(10) << "start_boot - have maps " << superblock.oldest_map
 	   << ".." << superblock.newest_map << dendl;
@@ -4489,13 +4496,6 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
 	     (osdmap->get_up_osd_features() & CEPH_FEATURE_HAMMER_0_94_4) == 0) {
     dout(1) << "osdmap indicates one or more pre-v0.94.4 hammer OSDs is running"
 	    << dendl;
-  } else if (is_waiting_for_healthy() || !_is_healthy()) {
-    // if we are not healthy, do not mark ourselves up (yet)
-    dout(1) << "not healthy; waiting to boot" << dendl;
-    if (!is_waiting_for_healthy())
-      start_waiting_for_healthy();
-    // send pings sooner rather than later
-    heartbeat_kick();
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + cct->_conf->osd_map_message_max > newest) {
     _send_boot();
