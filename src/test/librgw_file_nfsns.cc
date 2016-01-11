@@ -132,7 +132,7 @@ TEST(LibRGW, INIT) {
 
 TEST(LibRGW, MOUNT) {
   int ret = rgw_mount(rgw_h, uid.c_str(), access_key.c_str(),
-		      secret_key.c_str(), &fs);
+		      secret_key.c_str(), &fs, RGW_MOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
 
@@ -148,7 +148,7 @@ TEST(LibRGW, SETUP_HIER1)
       if (do_create) {
 	struct stat st;
 	int rc = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st,
-			  &bucket_fh);
+			   &bucket_fh, RGW_MKDIR_FLAG_NONE);
 	ASSERT_EQ(rc, 0);
       }
     }
@@ -203,7 +203,7 @@ TEST(LibRGW, SETUP_DIRS1) {
     if (! dirs1_b.fh) {
       if (do_create) {
 	rc = rgw_mkdir(fs, dirs1_b.parent_fh, dirs1_b.name.c_str(), 755, &st,
-		      &dirs1_b.fh);
+		       &dirs1_b.fh, RGW_MKDIR_FLAG_NONE);
 	ASSERT_EQ(rc, 0);
       }
     }
@@ -222,7 +222,7 @@ TEST(LibRGW, SETUP_DIRS1) {
       if (! dir.fh) {
 	if (do_create) {
 	  rc = rgw_mkdir(fs, dir.parent_fh, dir.name.c_str(), 755, &st,
-			&dir.fh);
+			 &dir.fh, RGW_MKDIR_FLAG_NONE);
 	  ASSERT_EQ(rc, 0);
 	}
       }
@@ -245,7 +245,7 @@ TEST(LibRGW, SETUP_DIRS1) {
 	if (! sdir.fh) {
 	  if (do_create) {
 	    rc = rgw_mkdir(fs, sdir.parent_fh, sdir.name.c_str(), 755,
-			  &st, &sdir.fh);
+			   &st, &sdir.fh, RGW_MKDIR_FLAG_NONE);
 	    ASSERT_EQ(rc, 0);
 	  }
 	}
@@ -281,7 +281,7 @@ TEST(LibRGW, SETUP_DIRS1) {
 	    size_t nbytes;
 	    string data = "data for " + sf.name;
 	    rc = rgw_write(fs, sf.fh, 0, data.length(), &nbytes,
-			  (void*) data.c_str());
+			   (void*) data.c_str(), RGW_WRITE_FLAG_NONE);
 	    ASSERT_EQ(rc, 0);
 	    ASSERT_EQ(nbytes, data.length());
 	    /* commit write transaction */
@@ -306,7 +306,8 @@ TEST(LibRGW, BAD_DELETES_DIRS1) {
     int rc;
     if (do_delete) {
       /* try to unlink a non-empty directory (bucket) */
-      rc = rgw_unlink(fs, dirs1_b.parent_fh, dirs1_b.name.c_str());
+      rc = rgw_unlink(fs, dirs1_b.parent_fh, dirs1_b.name.c_str(),
+		      RGW_UNLINK_FLAG_NONE);
       ASSERT_NE(rc, 0);
     }
     /* try to unlink a non-empty directory (non-bucket) */
@@ -317,10 +318,16 @@ TEST(LibRGW, BAD_DELETES_DIRS1) {
 #if 0
     ASSERT_EQ(sdir_0.name, "sdir_0");
     ASSERT_TRUE(sdir_0.rgw_fh->is_dir());
-    rc = rgw_unlink(fs, sdir_0.parent_fh, sdir_0.name.c_str());
+    rc = rgw_unlink(fs, sdir_0.parent_fh, sdir_0.name.c_str(),
+		    RGW_UNLINK_FLAG_NONE);
     ASSERT_NE(rc, 0);
 #endif
   }
+}
+
+TEST(LibRGW, GETATTR_DIRS1)
+{
+
 }
 
 TEST(LibRGW, RELEASE_DIRS1) {
@@ -350,8 +357,6 @@ TEST(LibRGW, RELEASE_DIRS1) {
     }
   }
 }
-
-// do getattrs (check type and times)
 
 extern "C" {
   static bool r1_cb(const char* name, void *arg, uint64_t offset) {
@@ -457,7 +462,8 @@ TEST(LibRGW, MARKER1_SETUP_BUCKET) {
     int ret;
 
     if (do_create) {
-      ret = rgw_mkdir(fs, bucket_fh, marker_dir.c_str(), 755, &st, &marker_fh);
+      ret = rgw_mkdir(fs, bucket_fh, marker_dir.c_str(), 755, &st, &marker_fh,
+		      RGW_MKDIR_FLAG_NONE);
     } else {
       ret = rgw_lookup(fs, bucket_fh, marker_dir.c_str(), &marker_fh,
 		       RGW_LOOKUP_FLAG_NONE);
@@ -483,7 +489,7 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
       ASSERT_EQ(ret, 0);
       obj.rgw_fh = get_rgwfh(obj.fh);
       // open object--open transaction
-      ret = rgw_open(fs, obj.fh, 0 /* flags */);
+      ret = rgw_open(fs, obj.fh, RGW_OPEN_FLAG_NONE);
       ASSERT_EQ(ret, 0);
       ASSERT_TRUE(obj.rgw_fh->is_open());
       // unstable write data
@@ -491,7 +497,7 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
       string data("data for ");
       data += object_name;
       int ret = rgw_write(fs, obj.fh, 0, data.length(), &nbytes,
-			  (void*) data.c_str());
+			  (void*) data.c_str(), RGW_WRITE_FLAG_NONE);
       ASSERT_EQ(ret, 0);
       ASSERT_EQ(nbytes, data.length());
       // commit transaction (write on close)
@@ -561,7 +567,7 @@ TEST(LibRGW, MARKER1_OBJ_CLEANUP)
 	  std::cout << "unlinking: " << bucket_name << ":" << obj.name
 		    << std::endl;
 	}
-	rc = rgw_unlink(fs, marker_fh, obj.name.c_str());
+	rc = rgw_unlink(fs, marker_fh, obj.name.c_str(), RGW_UNLINK_FLAG_NONE);
       }
       rc = rgw_fh_rele(fs, obj.fh, 0 /* flags */);
       ASSERT_EQ(rc, 0);
@@ -591,7 +597,7 @@ TEST(LibRGW, UMOUNT) {
   if (! fs)
     return;
 
-  int ret = rgw_umount(fs);
+  int ret = rgw_umount(fs, RGW_UMOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 

@@ -536,7 +536,8 @@ extern "C" {
  attach rgw namespace
 */
   int rgw_mount(librgw_t rgw, const char *uid, const char *acc_key,
-		const char *sec_key, struct rgw_fs **rgw_fs)
+		const char *sec_key, struct rgw_fs **rgw_fs,
+		uint32_t flags)
 {
   int rc = 0;
 
@@ -568,7 +569,7 @@ extern "C" {
 /*
  detach rgw namespace
 */
-int rgw_umount(struct rgw_fs *rgw_fs)
+int rgw_umount(struct rgw_fs *rgw_fs, uint32_t flags)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   fs->close();
@@ -581,7 +582,7 @@ int rgw_umount(struct rgw_fs *rgw_fs)
 */
 int rgw_statfs(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *parent_fh,
-	       struct rgw_statvfs *vfs_st)
+	       struct rgw_statvfs *vfs_st, uint32_t flags)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
 
@@ -647,7 +648,7 @@ static int valid_s3_bucket_name(const string& name, bool relaxed=false)
 int rgw_create(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *parent_fh,
 	       const char *name, mode_t mode, struct stat *st,
-	       struct rgw_file_handle **fh)
+	       struct rgw_file_handle **fh, uint32_t flags)
 {
   /* XXX a CREATE operation can be a precursor to the canonical
    * OPEN, WRITE*, CLOSE transaction which writes or overwrites
@@ -693,7 +694,7 @@ int rgw_create(struct rgw_fs *rgw_fs,
 int rgw_mkdir(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh,
 	      const char *name, mode_t mode, struct stat *st,
-	      struct rgw_file_handle **fh)
+	      struct rgw_file_handle **fh, uint32_t flags)
 {
   int rc, rc2;
 
@@ -761,7 +762,8 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
 */
 int rgw_rename(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *olddir, const char* old_name,
-	       struct rgw_file_handle *newdir, const char* new_name)
+	       struct rgw_file_handle *newdir, const char* new_name,
+	       uint32_t flags)
 {
   /* -ENOTSUP */
   return -EINVAL;
@@ -771,7 +773,7 @@ int rgw_rename(struct rgw_fs *rgw_fs,
   remove file or directory
 */
 int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
-	      const char *name)
+	       const char *name, uint32_t flags)
 {
   int rc = 0;
 
@@ -931,7 +933,7 @@ int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
    get unix attributes for object
 */
 int rgw_getattr(struct rgw_fs *rgw_fs,
-		struct rgw_file_handle *fh, struct stat *st)
+		struct rgw_file_handle *fh, struct stat *st, uint32_t flags)
 {
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
@@ -980,7 +982,7 @@ done:
 */
 int rgw_setattr(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *fh, struct stat *st,
-		uint32_t mask)
+		uint32_t mask, uint32_t flags)
 {
   /* XXX no-op */
   return 0;
@@ -990,7 +992,7 @@ int rgw_setattr(struct rgw_fs *rgw_fs,
    truncate file
 */
 int rgw_truncate(struct rgw_fs *rgw_fs,
-		 struct rgw_file_handle *fh, uint64_t size)
+		 struct rgw_file_handle *fh, uint64_t size, uint32_t flags)
 {
   return 0;
 }
@@ -1053,8 +1055,9 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
    read data from file
 */
 int rgw_read(struct rgw_fs *rgw_fs,
-	    struct rgw_file_handle *fh, uint64_t offset,
-	    size_t length, size_t *bytes_read, void *buffer)
+	     struct rgw_file_handle *fh, uint64_t offset,
+	     size_t length, size_t *bytes_read, void *buffer,
+	     uint32_t flags)
 {
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
@@ -1081,7 +1084,8 @@ int rgw_read(struct rgw_fs *rgw_fs,
 */
 int rgw_write(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, uint64_t offset,
-	      size_t length, size_t *bytes_written, void *buffer)
+	      size_t length, size_t *bytes_written, void *buffer,
+	      uint32_t flags)
 {
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
@@ -1123,7 +1127,7 @@ void rgw_readv_rele(struct rgw_uio *uio, uint32_t flags)
 }
 
 int rgw_readv(struct rgw_fs *rgw_fs,
-	      struct rgw_file_handle *fh, rgw_uio *uio)
+	      struct rgw_file_handle *fh, rgw_uio *uio, uint32_t flags)
 {
 #if 0 /* XXX */
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
@@ -1179,7 +1183,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
    write data to file (vector)
 */
   int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
-		rgw_uio *uio)
+		 rgw_uio *uio, uint32_t flags)
 {
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
@@ -1210,7 +1214,8 @@ int rgw_readv(struct rgw_fs *rgw_fs,
 /*
    sync written data
 */
-int rgw_fsync(struct rgw_fs *rgw_fs, struct rgw_file_handle *handle)
+int rgw_fsync(struct rgw_fs *rgw_fs, struct rgw_file_handle *handle,
+	      uint32_t flags)
 {
   return 0;
 }

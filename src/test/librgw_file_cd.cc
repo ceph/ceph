@@ -54,7 +54,7 @@ TEST(LibRGW, INIT) {
 
 TEST(LibRGW, MOUNT) {
   int ret = rgw_mount(rgw, uid.c_str(), access_key.c_str(), secret_key.c_str(),
-		      &fs);
+		      &fs, RGW_MOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
 }
@@ -63,14 +63,16 @@ TEST(LibRGW, CREATE_BUCKET) {
   if (do_create) {
     struct stat st;
     struct rgw_file_handle *fh;
-    int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st, &fh);
+    int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st, &fh,
+			RGW_MKDIR_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
 }
 
 TEST(LibRGW, DELETE_BUCKET) {
   if (do_delete) {
-    int ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str());
+    int ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str(),
+			 RGW_UNLINK_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -83,7 +85,8 @@ TEST(LibRGW, CREATE_BUCKET_MULTI) {
     for (int ix = 0; ix < multi_cnt; ++ix) {
       string bn = bucket_name;
       bn += to_string(ix);
-      ret = rgw_mkdir(fs, fs->root_fh, bn.c_str(), 755, &st, &fh);
+      ret = rgw_mkdir(fs, fs->root_fh, bn.c_str(), 755, &st, &fh,
+		      RGW_MKDIR_FLAG_NONE);
       ASSERT_EQ(ret, 0);
       std::cout << "created: " << bn << std::endl;
     }
@@ -95,7 +98,8 @@ TEST(LibRGW, DELETE_BUCKET_MULTI) {
     for (int ix = 0; ix < multi_cnt; ++ix) {
       string bn = bucket_name;
       bn += to_string(ix);
-      int ret = rgw_unlink(fs, fs->root_fh, bn.c_str());
+      int ret = rgw_unlink(fs, fs->root_fh, bn.c_str(),
+			   RGW_UNLINK_FLAG_NONE);
       ASSERT_EQ(ret, 0);
     }
   }
@@ -109,7 +113,7 @@ TEST(LibRGW, UMOUNT) {
   if (! fs)
     return;
 
-  int ret = rgw_umount(fs);
+  int ret = rgw_umount(fs, RGW_UMOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 
