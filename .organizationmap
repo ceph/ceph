@@ -149,7 +149,6 @@ Huazhong University of Science and Technology <contact@hust.edu.cn> runsisi <run
 Igalia <contact@igalia.com> Javier M. Mellid <jmunhoz@igalia.com>
 Igalia <contact@igalia.com> Juan A. Suarez Romero <jasuarez@igalia.com>
 Imagination Technologies Ltd. <contact@imgtec.com> Alistair Strachan <alistair.strachan@imgtec.com>
-IO <contact@io.com> Joe Julian <jjulian@io.com>
 iNic <contact@inic.no> Bjørnar Ness <bjornar.ness@gmail.com>
 Inktank <contact@inktank.com> Alexandre Marangone <alexandre.marangone@inktank.com>
 Inktank <contact@inktank.com> Alex Elder <elder@inktank.com>
@@ -195,6 +194,7 @@ Intel <contact@intel.com> Xiaoxi Chen <xiaoxi.chen@intel.com>
 Intel <contact@intel.com> Yan, Zheng <zheng.z.yan@intel.com>
 Intel <contact@intel.com> Yuan Zhou <yuan.zhou@intel.com>
 Intel <contact@intel.com> Zhiqiang Wang <zhiqiang.wang@intel.com>
+IO <contact@io.com> Joe Julian <jjulian@io.com>
 Iron Systems Inc. <info@ironsystems.com> Harpreet Dhillon <harpreet@ironsystems.com>
 IT Refined <contact@itrefined.com> Ron Allred <rallred@itrefined.com>
 IWeb <contact@iweb.com> David Moreau Simard <dmsimard@iweb.com>
@@ -205,9 +205,9 @@ Kylin Cloud <contact@kylin-cloud.com> Li Wang <li.wang@kylin-cloud.com>
 Kylin Cloud <contact@kylin-cloud.com> MingXin Liu <mingxin.liu@kylin-cloud.com>
 Kylin Cloud <contact@kylin-cloud.com> Yunchuan Wen <yunchuan.wen@kylin-cloud.com>
 Lebanon Evangelical School <contact@lesbg.com> Jonathan Dieter <jdieter@lesbg.com>
+LETV <contact@letv.com> Dongmao Zhang <deanraccoon@gmail.com>
 LETV <contact@letv.com> Ji Chen <insomnia@139.com>
 LETV <contact@letv.com> Wu Xingyi <wuxingyi@letv.com>
-LETV <contact@letv.com> Dongmao Zhang <deanraccoon@gmail.com>
 Linaro <contact@linaro.org> Steve Capper <steve.capper@linaro.org>
 Linaro <contact@linaro.org> Yazen Ghannam <yazen.ghannam@linaro.org>
 Los Alamos National Laboratory <contact@lanl.gov> Esteban Molina-Estolano <eestolan@lanl.gov>
@@ -332,17 +332,17 @@ Telecom Bretagne <contact@telecom-bretagne.eu> Ahoussi Armand <ahoussi.say@telec
 Telecom Bretagne <contact@telecom-bretagne.eu> Baptiste Veuillez <baptiste.veuillez--mainard@telecom-bretagne.eu>
 Telecom Bretagne <contact@telecom-bretagne.eu> Hazem Amara <hazem.amara@telecom-bretagne.eu>
 Telecom Bretagne <contact@telecom-bretagne.eu> Thomas Cantin <thomas.cantin@telecom-bretagne.eu>
-Tencent <contact@tencent.com> Zhi Zhang <zhangz.david@outlook.com>
-Tencent <contact@tencent.com> Wenjun Huang <wenjunhuang@tencent.com>
 Tencent <contact@tencent.com> Wei Luo <weilluo@tencent.com>
+Tencent <contact@tencent.com> Wenjun Huang <wenjunhuang@tencent.com>
+Tencent <contact@tencent.com> Zhi Zhang <zhangz.david@outlook.com>
 The Linux Box <contact@linuxbox.com> Adam C. Emerson <aemerson@linuxbox.com>
 The Linux Box <contact@linuxbox.com> Ali Maredia <ali@linuxbox.com>
 The Linux Box <contact@linuxbox.com> Casey Bodley <casey@linuxbox.com>
 The Linux Box <contact@linuxbox.com> Matt Benjamin <matt@linuxbox.com>
 The University of Arizona <contact@arizona.edu> James Ryan Cresawn <jrcresawn@gmail.com>
-UMCloud <contact@umcloud.com> Rongze Zhu <zrzhit@gmail.com>
-UMCloud <contact@umcloud.com> Jiaying Ren <mikulely@gmail.com>
 Ubuntu Kylin <contact@ubuntukylin.com> Min Chen <minchen@ubuntukylin.com>
+UMCloud <contact@umcloud.com> Jiaying Ren <mikulely@gmail.com>
+UMCloud <contact@umcloud.com> Rongze Zhu <zrzhit@gmail.com>
 Unaffiliated <no@organization.net> Abhishek Dixit <dixitabhi@gmail.com>
 Unaffiliated <no@organization.net> Accela Zhao <accelazh@gmail.com>
 Unaffiliated <no@organization.net> Ailing Zhang <zhangal1992@gmail.com> 
@@ -352,9 +352,9 @@ Unaffiliated <no@organization.net> Anis Ayari <ayari_anis@live.fr>
 Unaffiliated <no@organization.net> Armando Segnini <armaseg@gmail.com>
 Unaffiliated <no@organization.net> Arthur Gorjux <arthurgorjux@gmail.com>
 Unaffiliated <no@organization.net> BJ Lougee <almightybeeij@gmail.com>
-Unaffiliated <no@organization.net> Burkhard Linke <Burkhard.Linke@computational.bio.uni-giessen.de>
 Unaffiliated <no@organization.net> Bosse Klykken <larkly@gmail.com>
 Unaffiliated <no@organization.net> Brian Felton <bjfelton@gmail.com>
+Unaffiliated <no@organization.net> Burkhard Linke <Burkhard.Linke@computational.bio.uni-giessen.de>
 Unaffiliated <no@organization.net> Cheng Cheng <ccheng.leo@gmail.com>
 Unaffiliated <no@organization.net> Christos Stavrakakis <stavr.chris@gmail.com>
 Unaffiliated <no@organization.net> Claire Massot <claire.massot93@gmail.com>
@@ -366,7 +366,6 @@ Unaffiliated <no@organization.net> David Anderson <dave@natulte.net>
 Unaffiliated <no@organization.net> Dennis Schafroth <dennis@schafroth.com>
 Unaffiliated <no@organization.net> Ding Dinghua <dingdinghua85@gmail.com>
 Unaffiliated <no@organization.net> Dominik Hannen <cantares1+github@gmail.com>
-Unaffiliated <no@organization.net> Dongmao Zhang <deanraccoon@gmail.com>
 Unaffiliated <no@organization.net> Erik Logtenberg <erik@logtenberg.eu>
 Unaffiliated <no@organization.net> Fabio Alessandro Locati <fabiolocati@gmail.com>
 Unaffiliated <no@organization.net> Federico Gimenez <fgimenez@coit.es>
@@ -461,11 +460,11 @@ Unaffiliated <no@organization.net> Yongyue Sun <abioy.sun@gmail.com>
 Unaffiliated <no@organization.net> Zhe Zhang <zzxuanyuan@gmail.com>
 Unaffiliated <no@organization.net> Zhicheng Wei <zhicheng@opensourceforge.net>
 Unilogic Networks B.V <contact@unilogicnetworks.net> Pascal de Bruijn <pascal@unilogicnetworks.net> 
+UnitedStack <contact@unitedstack.com> Chen Dihao <tobeg3oogle@gmail.com>
 UnitedStack <contact@unitedstack.com> Dong Yuan <yuandong1222@gmail.com>
 UnitedStack <contact@unitedstack.com> Guangliang Zhao <guangliang@unitedstack.com>
 UnitedStack <contact@unitedstack.com> Jevon Qiao <qiaojianfeng@unitedstack.com>
 UnitedStack <contact@unitedstack.com> Kun Huang <academicgareth@gmail.com>
-UnitedStack <contact@unitedstack.com> Chen Dihao <tobeg3oogle@gmail.com>
 University of California, Santa Cruz <contact@cs.ucsc.edu> Adam Crume <adamcrume@gmail.com>
 University of California, Santa Cruz <contact@cs.ucsc.edu> Andrew Leung <aleung@cs.ucsc.edu>
 University of California, Santa Cruz <contact@cs.ucsc.edu> Carlos Maltzahn <carlosm@cs.ucsc.edu>
