@@ -32,16 +32,20 @@ typedef typename std::lock_guard<std::mutex> Guard;
 #define COUNT(array) (sizeof(array) / sizeof(array[0]))
 
 
+static const int goal_secs_to_run = 20;
+
+static const int server_ops = 1000;
+static const int server_threads = 7;
+
 static dmc::ClientInfo client_info[] = {
-  {1.0, 100.0, 250.0},
-  {2.0, 100.0, 250.0},
-  {2.0,  50.0, 100.0},
-  {3.0,  50.0,   0.0},
+  // as of C++ 11 this will invoke the constructor with three doubles
+  // as parameters
+  {2.0, 50.0, 0.0},
+  {2.0, 50.0, 0.0},
+  {2.0, 50.0, 0.0},
 };
 
-
-static int client_goals[] = {200, 200, 200, 50}; // in IOPS
-// static int client_goals[] = {150, 150, 150, 150}; // in IOPS
+static int client_goals[] = {80, 80, 80}; // in IOPS
 
 
 dmc::ClientInfo getClientInfo(int c) {
@@ -62,11 +66,9 @@ int main(int argc, char* argv[]) {
 
   const TestClient::TimePoint early_time = TestClient::now();
   const chrono::seconds skip_amount(10); // skip first 10 secondsd of data
-  const chrono::seconds measure_unit(10); // calculate in groups of 10 seconds
+  const chrono::seconds measure_unit(5); // calculate in groups of 10 seconds
   const chrono::seconds report_unit(1); // unit to output reports in
 
-  const int goal_secs_to_run = 30;
-  
   assert(COUNT(client_info) == COUNT(client_goals));
   const int client_count = COUNT(client_info);
 
@@ -76,7 +78,7 @@ int main(int argc, char* argv[]) {
   TestServer::ClientResponseFunc client_response_f =
     std::bind(&send_response, clients, _1, _2);
 
-  TestServer server(400, 7, client_info_f, client_response_f);
+  TestServer server(server_ops, server_threads, client_info_f, client_response_f);
 
   for (int i = 0; i < client_count; ++i) {
     clients[i] = new TestClient(i,
