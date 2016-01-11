@@ -897,6 +897,7 @@ int BlueStore::_read_bdev_label(string path, bluestore_bdev_label_t *label)
   }
   catch (buffer::error& e) {
     derr << __func__ << " unable to decode label at offset " << p.get_off()
+	 << ": " << e.what()
 	 << dendl;
     return -EINVAL;
   }
@@ -1021,6 +1022,7 @@ int BlueStore::_open_fsid(bool create)
 int BlueStore::_read_fsid(uuid_d *uuid)
 {
   char fsid_str[40];
+  memset(fsid_str, 0, sizeof(fsid_str));
   int ret = safe_read(fsid_fd, fsid_str, sizeof(fsid_str));
   if (ret < 0) {
     derr << __func__ << " failed: " << cpp_strerror(ret) << dendl;
@@ -1428,11 +1430,13 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents)
       assert(r == 0);
 
       bluestore_extent_t e;
-      r =  alloc->allocate(MIN(gift, 1ull<<31), min_alloc_size, 0,
-			   &e.offset, &e.length);
+      r = alloc->allocate(gift, min_alloc_size, 0, &e.offset, &e.length);
       if (r < 0) {
 	assert(0 == "allocate failed, wtf");
 	return r;
+      }
+      if (e.length < gift) {
+	alloc->unreserve(gift - e.length);
       }
 
       dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
@@ -1441,8 +1445,7 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents)
     }
   }
 
-// reclaim?
-#warning reclaim freespace from bluefs?
+  // FIXME: reclaim from bluefs?
 
   return ret;
 }
@@ -1598,8 +1601,32 @@ int BlueStore::mkfs()
       ::encode(bluefs_extents, bl);
       t->set(PREFIX_SUPER, "bluefs_extents", bl);
       dout(20) << __func__ << " bluefs_extents " << bluefs_extents << dendl;
+    } else {
+      reserved = BLUEFS_START;
     }
-    fm->release(reserved, bdev->get_size() - reserved, t);
+    uint64_t end = bdev->get_size() - reserved;
+    if (g_conf->bluestore_debug_prefill > 0) {
+      dout(1) << __func__ << " pre-fragmenting freespace, using "
+	      << g_conf->bluestore_debug_prefill << " with max free extent "
+	      << g_conf->bluestore_debug_prefragment_max << dendl;
+      uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
+      uint64_t start = ROUND_UP_TO(reserved, min_alloc_size);
+      uint64_t max_b = g_conf->bluestore_debug_prefragment_max / min_alloc_size;
+      float r = g_conf->bluestore_debug_prefill;
+      while (start < end) {
+	uint64_t l = (rand() % max_b + 1) * min_alloc_size;
+	if (start + l > end)
+	  l = end - start;
+	l = ROUND_UP_TO(l, min_alloc_size);
+	fm->release(start, l, t);
+	uint64_t u = 1 + (uint64_t)(r * (double)l / (1.0 - r));
+	u = ROUND_UP_TO(u, min_alloc_size);
+	dout(20) << "  free " << start << "~" << l << " use " << u << dendl;
+	start += l + u;
+      }
+    } else {
+      fm->release(reserved, end, t);
+    }
     db->submit_transaction_sync(t);
   }
 
@@ -1834,8 +1861,8 @@ int BlueStore::fsck()
   if (r < 0)
     goto out_alloc;
 
+  used_blocks.insert(0, BLUEFS_START);
   if (bluefs) {
-    used_blocks.insert(0, BLUEFS_START);
     used_blocks.insert(bluefs_extents);
     r = bluefs->fsck();
     if (r < 0)
@@ -2353,7 +2380,7 @@ int BlueStore::_do_read(
       continue;
     }
     if (bp != bend && bp->first + bp->second.length <= offset) {
-      dout(30) << __func__ << " skip frag " << bp->first << "~" << bp->second
+      dout(30) << __func__ << " skip frag " << bp->first << " " << bp->second
 	       << dendl;
       ++bp;
       continue;
@@ -2449,7 +2476,7 @@ int BlueStore::fiemap(
   size_t len,
   bufferlist& bl)
 {
-  map<uint64_t, uint64_t> m;
+  interval_set<uint64_t> m;
   CollectionRef c = _get_collection(cid);
   if (!c)
     return -ENOENT;
@@ -2459,22 +2486,23 @@ int BlueStore::fiemap(
   if (!o || !o->exists) {
     return -ENOENT;
   }
-
-  if (offset == len && offset == 0)
-    len = o->onode.size;
-
-  if (offset > o->onode.size)
-    return 0;
-
-  if (offset + len > o->onode.size) {
-    len = o->onode.size - offset;
-  }
+  _dump_onode(o);
 
   dout(20) << __func__ << " " << offset << "~" << len << " size "
 	   << o->onode.size << dendl;
 
   map<uint64_t,bluestore_extent_t>::iterator bp, bend;
   map<uint64_t,bluestore_overlay_t>::iterator op, oend;
+
+  if (offset == len && offset == 0)
+    len = o->onode.size;
+
+  if (offset > o->onode.size)
+    goto out;
+
+  if (offset + len > o->onode.size) {
+    len = o->onode.size - offset;
+  }
 
   // loop over overlays and data fragments.  overlays take precedence.
   bend = o->onode.block_map.end();
@@ -2487,8 +2515,8 @@ int BlueStore::fiemap(
   if (op != o->onode.overlay_map.begin()) {
     --op;
   }
-  uint64_t start = offset;
   while (len > 0) {
+    dout(20) << __func__ << " offset " << offset << dendl;
     if (op != oend && op->first + op->second.length < offset) {
       ++op;
       continue;
@@ -2501,8 +2529,8 @@ int BlueStore::fiemap(
     // overlay?
     if (op != oend && op->first <= offset) {
       uint64_t x_len = MIN(op->first + op->second.length - offset, len);
-      //m[offset] = x_len;
       dout(30) << __func__ << " overlay " << offset << "~" << x_len << dendl;
+      m.insert(offset, x_len);
       len -= x_len;
       offset += x_len;
       ++op;
@@ -2521,26 +2549,24 @@ int BlueStore::fiemap(
       uint64_t x_off = offset - bp->first;
       x_len = MIN(x_len, bp->second.length - x_off);
       dout(30) << __func__ << " extent " << offset << "~" << x_len << dendl;
+      m.insert(offset, x_len);
       len -= x_len;
       offset += x_len;
       if (x_off + x_len == bp->second.length)
 	++bp;
       continue;
     }
-    // we are seeing a hole, time to add an entry to fiemap.
-    m[start] = offset - start;
-    dout(20) << __func__ << " out " << start << "~" << m[start] << dendl;
+    if (bp != bend &&
+	bp->first > offset &&
+	bp->first - offset < x_len) {
+      x_len = bp->first - offset;
+    }
     offset += x_len;
-    start = offset;
     len -= x_len;
     continue;
   }
-  // add tailing
-  if (offset - start != 0) {
-    m[start] = offset - start;
-    dout(20) << __func__ << " out " << start << "~" << m[start] << dendl;
-  }
 
+ out:
   ::encode(m, bl);
   dout(20) << __func__ << " " << offset << "~" << len
 	   << " size = 0 (" << m << ")" << dendl;
@@ -4279,7 +4305,6 @@ int BlueStore::_do_write_overlays(TransContext *txc,
     return 0;
 
   assert(0 == "this is all broken");
-#warning overlays are broken
 
   uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
 
@@ -4343,7 +4368,6 @@ int BlueStore::_do_write_overlays(TransContext *txc,
 			   &cow_rmw_head, &cow_rmw_tail);
       if (r < 0)
 	return r;
-#warning fixme rmw cow?
       bp = o->onode.find_extent(offset);
       if (bp->second.has_flag(bluestore_extent_t::FLAG_UNWRITTEN)) {
 	dout(10) << __func__ << " zero new allocation " << bp->second << dendl;
@@ -5117,6 +5141,10 @@ int BlueStore::_do_write(
     if (offset + length == orig_offset + orig_length && cow_rmw_tail) {
       op->src_rmw_tail = cow_rmw_tail;
       dout(20) << __func__ << " src_rmw_tail " << op->src_rmw_tail << dendl;
+    } else if (((offset + length) & ~block_mask) &&
+	       offset + length > o->onode.size) {
+      dout(20) << __func__ << " past eof, padding out tail block" << dendl;
+      _pad_zeros_tail(o, &bl, offset, &length, block_size);
     }
     bp->second.clear_flag(bluestore_extent_t::FLAG_COW_HEAD);
     bp->second.clear_flag(bluestore_extent_t::FLAG_COW_TAIL);

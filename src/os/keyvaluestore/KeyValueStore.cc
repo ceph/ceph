@@ -730,6 +730,7 @@ int KeyValueStore::mkfs()
 int KeyValueStore::read_fsid(int fd, uuid_d *uuid)
 {
   char fsid_str[40];
+  memset(fsid_str, 0, sizeof(fsid_str));
   int ret = safe_read(fd, fsid_str, sizeof(fsid_str));
   if (ret < 0)
     return ret;
