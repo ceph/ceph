@@ -176,6 +176,7 @@ void MDLog::open(MDSInternalContextBase *c)
 {
   dout(5) << "open discovering log bounds" << dendl;
 
+  assert(!recovery_thread.is_started());
   recovery_thread.set_completion(c);
   recovery_thread.create();
 
@@ -214,6 +215,11 @@ void MDLog::reopen(MDSInternalContextBase *c)
 
   delete journaler;
   journaler = NULL;
+
+  // recovery_thread was started at some point in the past.  Although
+  // it has called it's completion if we made it back here, it might
+  // still not have been cleaned up: join it.
+  recovery_thread.join();
 
   recovery_thread.set_completion(new C_ReopenComplete(this, c));
   recovery_thread.create();
@@ -840,6 +846,11 @@ void MDLog::replay(MDSInternalContextBase *c)
 	   << " to " << journaler->get_write_pos() << dendl;
 
   assert(num_events == 0 || already_replayed);
+  if (already_replayed) {
+    // Ensure previous instance of ReplayThread is joined before
+    // we create another one
+    replay_thread.join();
+  }
   already_replayed = true;
 
   replay_thread.create();
