@@ -2736,6 +2736,12 @@ void RGWPutMetadataAccount::execute()
   prepare_add_del_attrs(orig_attrs, rmattr_names, attrs, rmattrs);
   populate_with_generic_attrs(s, attrs);
 
+  if (has_policy) {
+    bufferlist acl_bl;
+    policy.encode(acl_bl);
+    attrs[RGW_ATTR_ACL] = acl_bl;
+  }
+
   /* Handle the TempURL-related stuff. */
   map<int, string> temp_url_keys;
   filter_out_temp_url(attrs, rmattr_names, temp_url_keys);
