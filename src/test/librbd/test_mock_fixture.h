@@ -24,7 +24,12 @@ ACTION_P(CopyInBufferlist, str) {
 }
 
 ACTION_P2(CompleteContext, r, wq) {
+#if defined(__FreeBSD__)
+  ContextWQ *context_wq = static_cast<ContextWQ *>(wq);
+#else
   ContextWQ *context_wq = reinterpret_cast<ContextWQ *>(wq);
+#endif
+
   if (context_wq != NULL) {
     context_wq->queue(arg0, r);
   } else {
