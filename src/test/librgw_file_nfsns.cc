@@ -419,6 +419,41 @@ TEST(LibRGW, GETATTR_DIRS1)
   }
 }
 
+TEST(LibRGW, READ_DIRS1)
+{
+  if (do_dirs1) {
+    int rc;
+    char buf[256];
+    uint64_t nread;
+    for (auto& dirs_rec : dirs_vec) {
+      obj_rec& dir = get<0>(dirs_rec);
+      if (verbose) {
+	std::cout << "read back objects in "
+		  << dir.rgw_fh->full_object_name()
+		  << std::endl;
+      }
+      for (auto& sobj : get<1>(dirs_rec)) {
+	/* only the first 2 file objects have data */
+	if ((sobj.rgw_fh->object_name().find("sfile_0")
+	     != std::string::npos) ||
+	    (sobj.rgw_fh->object_name().find("sfile_1")
+	     != std::string::npos)) {
+	  ASSERT_TRUE(sobj.rgw_fh->is_file());
+	  // do it
+	  memset(buf, 0, 256);
+	  rc = rgw_read(fs, sobj.fh, 0, 256, &nread, buf, RGW_READ_FLAG_NONE);
+	  ASSERT_EQ(rc, 0);
+	  if (verbose) {
+	    std::cout << "\tread back from " << sobj.name
+		      << " : \"" << buf << "\""
+		      << std::endl;
+	  }
+	}
+      }
+    }
+  }
+}
+
 TEST(LibRGW, RELEASE_DIRS1) {
   if (do_dirs1) {
     /* force release of handles for children of dirs1--force subsequent

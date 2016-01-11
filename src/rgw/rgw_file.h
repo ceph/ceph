@@ -1286,18 +1286,17 @@ class RGWReadRequest : public RGWLibRequest,
 		       public RGWGetObj /* RGWOp */
 {
 public:
-  const std::string& bucket_name;
-  const std::string& obj_name;
+  RGWFileHandle* rgw_fh;
   void *ulp_buffer;
   size_t nread;
   size_t read_len;
   bool do_hexdump = false;
 
   RGWReadRequest(CephContext* _cct, RGWUserInfo *_user,
-		const std::string& _bname, const std::string& _oname,
-		uint64_t off, uint64_t len, void *_ulp_buffer)
-    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname),
-      ulp_buffer(_ulp_buffer), nread(0), read_len(len) {
+		 RGWFileHandle* _rgw_fh, uint64_t off, uint64_t len,
+		 void *_ulp_buffer)
+    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), ulp_buffer(_ulp_buffer),
+      nread(0), read_len(len) {
     magic = 76;
     op = this;
 
@@ -1329,10 +1328,10 @@ public:
     s->op = OP_GET;
 
     /* XXX derp derp derp */
-    std::string uri = make_uri(bucket_name, obj_name);
-    s->relative_uri = uri;
-    s->info.request_uri = uri; // XXX
-    s->info.effective_uri = uri;
+    s->relative_uri = make_uri(rgw_fh->bucket_name(),
+			       rgw_fh->relative_object_name());
+    s->info.request_uri = s->relative_uri; // XXX
+    s->info.effective_uri = s->relative_uri;
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
 

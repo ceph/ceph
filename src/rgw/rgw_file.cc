@@ -1048,9 +1048,7 @@ int rgw_read(struct rgw_fs *rgw_fs,
   if (! rgw_fh->is_file())
     return -EINVAL;
 
-  RGWReadRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
-		    rgw_fh->object_name(), offset, length,
-		    buffer);
+  RGWReadRequest req(cct, fs->get_user(), rgw_fh, offset, length, buffer);
 
   int rc = rgwlib.get_fe()->execute_req(&req);
   if ((rc == 0) &&
