@@ -643,17 +643,15 @@ static int valid_s3_bucket_name(const string& name, bool relaxed=false)
 }
 
 /*
-  generic create -- creates a regular file
+  generic create -- create an empty regular file
 */
 int rgw_create(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *parent_fh,
 	       const char *name, mode_t mode, struct stat *st,
 	       struct rgw_file_handle **fh, uint32_t flags)
 {
-  /* XXX a CREATE operation can be a precursor to the canonical
-   * OPEN, WRITE*, CLOSE transaction which writes or overwrites
-   * an object in S3 */
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
 
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if ((! parent) ||
@@ -665,27 +663,49 @@ int rgw_create(struct rgw_fs *rgw_fs,
 
   using std::get;
 
-  LookupFHResult fhr = fs->lookup_fh(parent, name);
-  RGWFileHandle* rgw_fh = get<0>(fhr);
+  rgw_file_handle *lfh;
+  int rc = rgw_lookup(rgw_fs, parent_fh, name, &lfh,
+		      RGW_LOOKUP_FLAG_NONE);
+  if (! rc) {
+    /* conflict! */
+    rc = rgw_fh_rele(rgw_fs, lfh, RGW_FH_RELE_FLAG_NONE);
+    return -EEXIST;
+  } else {
+    /* expand and check name */
+    std::string obj_name{parent->relative_object_name() + "/" + name};
+    if (! valid_s3_object_name(obj_name)) {
+      return -EINVAL;
+    } else {
+      /* create it */
+      buffer::list bl;
+      RGWPutObjRequest req(cct, fs->get_user(), parent->bucket_name(),
+			   obj_name, bl);
+      rc = rgwlib.get_fe()->execute_req(&req);
+      int rc2 = req.get_ret();
 
-  if (! rgw_fh)
-    return -EINVAL;
-
-
-  /* mark if we created it */
-  if (get<1>(fhr) & RGWFileHandle::FLAG_CREATE) {
-        /* fill in stat data */
-    time_t now = time(0);
-    rgw_fh->set_times(now);
-    rgw_fh->open_for_create();
+      if ((rc == 0) &&
+	  (rc2 == 0)) {
+	/* XXX atomicity */
+	LookupFHResult fhr = fs->lookup_fh(parent, name,
+					   RGWFileHandle::FLAG_CREATE);
+	RGWFileHandle* rgw_fh = get<0>(fhr);
+	if (rgw_fh) {
+	  if (get<1>(fhr) & RGWFileHandle::FLAG_CREATE) {
+	    /* fill in stat data */
+	    time_t now = time(0);
+	    rgw_fh->set_times(now);
+	    rgw_fh->open_for_create(); // XXX needed?
+	  }
+	  (void) rgw_fh->stat(st);
+	  struct rgw_file_handle *rfh = rgw_fh->get_fh();
+	  *fh = rfh;
+	} else
+	  rc = -EIO;
+      }
+    }
   }
 
-  (void) rgw_fh->stat(st);
-
-  struct rgw_file_handle *rfh = rgw_fh->get_fh();
-  *fh = rfh;
-
-  return 0;
+  return rc;
 }
 
 /*
