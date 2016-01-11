@@ -17,4 +17,4 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-../qa/workunits/ceph-helpers.sh TESTS
+$CEPH_ROOT/qa/workunits/ceph-helpers.sh TESTS
