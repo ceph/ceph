@@ -2084,6 +2084,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   } else {
     if (auth_handler->check_message_signature(message)) {
       ldout(msgr->cct, 0) << "Signature check failed" << dendl;
+      message->put();
       ret = -EINVAL;
       goto out_dethrottle;
     } 
