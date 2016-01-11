@@ -179,14 +179,14 @@ TEST(LibRGW, INIT) {
 
 TEST(LibRGW, MOUNT) {
   int ret = rgw_mount(rgw, uid.c_str(), access_key.c_str(), secret_key.c_str(),
-		      &fs);
+		      &fs, RGW_MOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
 }
 
 TEST(LibRGW, LOOKUP_BUCKET) {
   int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
-		      0 /* flags */);
+		       RGW_LOOKUP_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 
@@ -238,7 +238,7 @@ TEST(LibRGW, PUT_OBJECT) {
     size_t nbytes;
     string data = "hi mom"; // fix this
     int ret = rgw_write(fs, object_fh, 0, data.length(), &nbytes,
-			(void*) data.c_str());
+			(void*) data.c_str(), RGW_WRITE_FLAG_NONE);
     ASSERT_EQ(ret, 0);
     ASSERT_EQ(nbytes, data.length());
   }
@@ -249,7 +249,8 @@ TEST(LibRGW, GET_OBJECT) {
     char sbuf[512];
     memset(sbuf, 0, 512);
     uint64_t nread;
-    int ret = rgw_read(fs, object_fh, 0 /* off */, 512 /* len */, &nread, sbuf);
+    int ret = rgw_read(fs, object_fh, 0 /* off */, 512 /* len */, &nread, sbuf,
+		       RGW_READ_FLAG_NONE);
     ASSERT_EQ(ret, 0);
     buffer::list bl;
     bl.push_back(buffer::create_static(nread, sbuf));
@@ -264,7 +265,7 @@ TEST(LibRGW, GET_OBJECT) {
 TEST(LibRGW, STAT_OBJECT) {
   if (do_stat) {
     struct stat st;
-    int ret = rgw_getattr(fs, object_fh, &st);
+    int ret = rgw_getattr(fs, object_fh, &st, RGW_GETATTR_FLAG_NONE);
     ASSERT_EQ(ret, 0);
     dout(15) << "rgw_getattr on " << object_name << " size = "
 	     << st.st_size << dendl;
@@ -282,7 +283,7 @@ TEST(LibRGW, WRITE_READ_VERIFY)
     for (int ix = 0; ix < 16; ++ix, off += page_size) {
       struct iovec *iov = &iovs[ix];
       int ret = rgw_write(fs, object_fh, off, page_size, &nbytes,
-			  iov->iov_base);
+			  iov->iov_base, RGW_WRITE_FLAG_NONE);
       ASSERT_EQ(ret, 0);
       ASSERT_EQ(nbytes, size_t(page_size));
     }
@@ -320,7 +321,7 @@ TEST(LibRGW, WRITEV)
     uio->uio_cnt = iovcnt;
     uio->uio_offset = iovcnt * page_size;
 
-    int ret = rgw_writev(fs, object_fh, uio);
+    int ret = rgw_writev(fs, object_fh, uio, RGW_WRITE_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -331,7 +332,7 @@ TEST(LibRGW, READV)
     memset(uio, 0, sizeof(rgw_uio));
     uio->uio_offset = 0; // ok, it was already 0
     uio->uio_resid = UINT64_MAX;
-    int ret = rgw_readv(fs, object_fh, uio);
+    int ret = rgw_readv(fs, object_fh, uio, RGW_READ_FLAG_NONE);
     ASSERT_EQ(ret, 0);
     buffer::list bl;
     for (unsigned int ix = 0; ix < uio->uio_cnt; ++ix) {
@@ -362,7 +363,8 @@ TEST(LibRGW, READV_AFTER_WRITEV)
 
 TEST(LibRGW, DELETE_OBJECT) {
   if (do_delete) {
-    int ret = rgw_unlink(fs, bucket_fh, object_name.c_str());
+    int ret = rgw_unlink(fs, bucket_fh, object_name.c_str(),
+			 RGW_UNLINK_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -377,7 +379,7 @@ TEST(LibRGW, CLEANUP) {
   }
   int ret;
   if (object_open) {
-    ret = rgw_close(fs, object_fh, 0 /* flags */);
+    ret = rgw_close(fs, object_fh, RGW_CLOSE_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
   if (object_fh) {
@@ -392,7 +394,7 @@ TEST(LibRGW, UMOUNT) {
   if (! fs)
     return;
 
-  int ret = rgw_umount(fs);
+  int ret = rgw_umount(fs, RGW_UMOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 

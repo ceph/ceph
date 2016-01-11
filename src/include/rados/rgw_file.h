@@ -95,57 +95,77 @@ int rgw_lookup_handle(struct rgw_fs *rgw_fs, struct rgw_fh_hk *fh_hk,
 /*
  * release file handle
  */
+#define RGW_FH_RELE_FLAG_NONE   0x0000
+
 int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 		uint32_t flags);
 
 /*
  attach rgw namespace
 */
+#define RGW_MOUNT_FLAG_NONE     0x0000
+
 int rgw_mount(librgw_t rgw, const char *uid, const char *key,
-	      const char *secret, struct rgw_fs **rgw_fs);
+	      const char *secret, struct rgw_fs **rgw_fs,
+	      uint32_t flags);
 
 /*
  detach rgw namespace
 */
-int rgw_umount(struct rgw_fs *rgw_fs);
+#define RGW_UMOUNT_FLAG_NONE    0x0000
+
+int rgw_umount(struct rgw_fs *rgw_fs, uint32_t flags);
 
 
 /*
   get filesystem attributes
 */
+#define RGW_STATFS_FLAG_NONE     0x0000
+
 int rgw_statfs(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *parent_fh,
-	       struct rgw_statvfs *vfs_st);
+	       struct rgw_statvfs *vfs_st,
+	       uint32_t flags);
 
 
 /*
   create file
 */
+#define RGW_CREATE_FLAG_NONE     0x0000
+
 int rgw_create(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *parent_fh,
 	       const char *name, mode_t mode, struct stat *st,
-	       struct rgw_file_handle **fh);
+	       struct rgw_file_handle **fh, uint32_t flags);
 
 /*
   create a new directory
 */
+#define RGW_MKDIR_FLAG_NONE      0x0000
+
 int rgw_mkdir(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh,
 	      const char *name, mode_t mode, struct stat *st,
-	      struct rgw_file_handle **fh);
+	      struct rgw_file_handle **fh, uint32_t flags);
 
 /*
   rename object
 */
+#define RGW_RENAME_FLAG_NONE      0x0000
+
 int rgw_rename(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *olddir, const char* old_name,
-	       struct rgw_file_handle *newdir, const char* new_name);
+	       struct rgw_file_handle *newdir, const char* new_name,
+	       uint32_t flags);
 
 /*
   remove file or directory
 */
+#define RGW_UNLINK_FLAG_NONE      0x0000
+
 int rgw_unlink(struct rgw_fs *rgw_fs,
-	       struct rgw_file_handle *parent_fh, const char* path);
+	       struct rgw_file_handle *parent_fh, const char* path,
+	       uint32_t flags);
 
 /*
     read  directory content
@@ -172,27 +192,35 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
 /*
    get unix attributes for object
 */
+#define RGW_GETATTR_FLAG_NONE      0x0000
+
 int rgw_getattr(struct rgw_fs *rgw_fs,
-		struct rgw_file_handle *fh, struct stat *st);
+		struct rgw_file_handle *fh, struct stat *st,
+		uint32_t flags);
 
 /*
    set unix attributes for object
 */
+#define RGW_SETATTR_FLAG_NONE      0x0000
+
 int rgw_setattr(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *fh, struct stat *st,
-		uint32_t mask);
+		uint32_t mask, uint32_t flags);
 
 /*
    truncate file
 */
+#define RGW_TRUNCATE_FLAG_NONE     0x0000
+
 int rgw_truncate(struct rgw_fs *rgw_fs,
-		 struct rgw_file_handle *fh, uint64_t size);
+		 struct rgw_file_handle *fh, uint64_t size,
+		 uint32_t flags);
 
 /*
    open file
 */
-#define RGW_OPEN_FLAG_NONE    0x0000
-#define RGW_OPEN_FLAG_CREATE  0x0001
+#define RGW_OPEN_FLAG_NONE         0x0000
+#define RGW_OPEN_FLAG_CREATE       0x0001
 
 int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 	    uint32_t flags);
@@ -201,8 +229,8 @@ int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
    close file
 */
 
-#define RGW_CLOSE_FLAG_NONE 0x0000
-#define RGW_CLOSE_FLAG_RELE 0x0001
+#define RGW_CLOSE_FLAG_NONE        0x0000
+#define RGW_CLOSE_FLAG_RELE        0x0001
   
 int rgw_close(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 	      uint32_t flags);
@@ -210,16 +238,22 @@ int rgw_close(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 /*
    read data from file
 */
+#define RGW_READ_FLAG_NONE 0x0000
+
 int rgw_read(struct rgw_fs *rgw_fs,
-	    struct rgw_file_handle *fh, uint64_t offset,
-	    size_t length, size_t *bytes_read, void *buffer);
-  
+	     struct rgw_file_handle *fh, uint64_t offset,
+	     size_t length, size_t *bytes_read, void *buffer,
+	     uint32_t flags);
+
 /*
    write data to file
 */
+#define RGW_WRITE_FLAG_NONE      0x0000
+
 int rgw_write(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, uint64_t offset,
-	      size_t length, size_t *bytes_written, void *buffer);
+	      size_t length, size_t *bytes_written, void *buffer,
+	      uint32_t flags);
 
 #define RGW_UIO_NONE    0x0000
 #define RGW_UIO_GIFT    0x0001
@@ -251,33 +285,18 @@ struct rgw_uio {
 typedef struct rgw_uio rgw_uio;
 
 int rgw_readv(struct rgw_fs *rgw_fs,
-	      struct rgw_file_handle *fh, rgw_uio *uio);
-  
+	      struct rgw_file_handle *fh, rgw_uio *uio, uint32_t flags);
+
 int rgw_writev(struct rgw_fs *rgw_fs,
-	      struct rgw_file_handle *fh, rgw_uio *uio);
+	       struct rgw_file_handle *fh, rgw_uio *uio, uint32_t flags);
 
 /*
    sync written data
 */
-int rgw_fsync(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh);
+#define RGW_FSYNC_FLAG_NONE        0x0000
 
-/* XXXX not implemented (needed?) */
-
-int set_user_permissions(const char *uid);
-
-int get_user_permissions(const char *uid);
-
-int set_dir_permissions(const struct rgw_file_handle *fh);
-
-int get_dir_permissions(const struct rgw_file_handle *fh);
-
-int set_file_permissions(const struct rgw_file_handle *fh);
-
-int get_file_permissions(const struct rgw_file_handle *fh);
-
-int rgw_acl2perm();
-
-int rgw_perm2acl();
+int rgw_fsync(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+	      uint32_t flags);
 
 #ifdef __cplusplus
 }
