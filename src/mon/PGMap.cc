@@ -1181,11 +1181,13 @@ void PGMap::client_io_rate_summary(Formatter *f, ostream *out,
 	*out << pretty_si_t(wr) << "B/s wr, ";
       }
     }
-    int64_t iops = (pos_delta.stats.sum.num_rd + pos_delta.stats.sum.num_wr) / (double)delta_stamp;
+    int64_t iops_rd = pos_delta.stats.sum.num_rd / (double)delta_stamp;
+    int64_t iops_wr = pos_delta.stats.sum.num_wr / (double)delta_stamp;
     if (f) {
-      f->dump_int("op_per_sec", iops);
+      f->dump_int("read_op_per_sec", iops_rd);
+      f->dump_int("write_op_per_sec", iops_wr);
     } else {
-      *out << pretty_si_t(iops) << "op/s";
+      *out << pretty_si_t(iops_rd) << "op/s rd, " << pretty_si_t(iops_wr) << "op/s wr";
     }
   }
 }
