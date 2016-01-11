@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms type: random
+        enable experimental unrecoverable data corrupting features: '*'
