@@ -95,6 +95,40 @@ namespace {
 
   dirs1_vec dirs_vec;
 
+  struct obj_rec_st
+  {
+    const obj_rec& obj;
+    const struct stat& st;
+
+    obj_rec_st(const obj_rec& _obj, const struct stat& _st)
+      : obj(_obj), st(_st) {}
+  };
+
+  ostream& operator<<(ostream& os, const obj_rec_st& rec)
+  {
+    RGWFileHandle* rgw_fh = rec.obj.rgw_fh;
+    if (rgw_fh) {
+      const char* type = rgw_fh->is_dir() ? "DIR " : "FILE ";
+      os << rgw_fh->full_object_name()
+	 << " (" << rgw_fh->object_name() << "): "
+	 << type;
+      const struct stat& st = rec.st;
+      switch(uint8_t(rgw_fh->is_dir())) {
+      case 1:
+	os << " mode: " << st.st_mode;
+	os << " nlinks: " << st.st_nlink;
+	break;
+      case 0:
+      default:
+	os << " mode: " << st.st_mode;
+	os << " size: " << st.st_size;
+	// xxx
+	break;
+      }
+    }
+    return os;
+  }
+
   bool do_hier1 = false;
   bool do_dirs1 = false;
   bool do_marker1 = false;
@@ -304,19 +338,25 @@ TEST(LibRGW, SETUP_DIRS1) {
 TEST(LibRGW, RGW_CREATE_DIRS1) {
   /* verify rgw_create (create [empty] file objects the easy way) */
   if (do_dirs1) {
-    int rc;
-    struct stat st;
-    for (auto& dirs_rec : dirs_vec) {
-      /* create 1 more file in each sdir */
-      obj_rec& dir = get<0>(dirs_rec);
-      std::string sfname{"sfile_" + to_string(n_dirs1_objs)};
-      obj_rec sf{sfname, nullptr, dir.fh, nullptr};
-      rc = rgw_create(fs, sf.parent_fh, sf.name.c_str(), 644, &st, &sf.fh,
-		      RGW_CREATE_FLAG_NONE);
-      ASSERT_EQ(rc, 0);
-      sf.sync();
+    if (do_create) {
+      int rc;
+      struct stat st;
+      for (auto& dirs_rec : dirs_vec) {
+	/* create 1 more file in each sdir */
+	obj_rec& dir = get<0>(dirs_rec);
+	std::string sfname{"sfile_" + to_string(n_dirs1_objs)};
+	obj_rec sf{sfname, nullptr, dir.fh, nullptr};
+	(void) rgw_lookup(fs, sf.parent_fh, sf.name.c_str(), &sf.fh,
+			  RGW_LOOKUP_FLAG_NONE);
+	if (! sf.fh) {
+	  rc = rgw_create(fs, sf.parent_fh, sf.name.c_str(), 644, &st, &sf.fh,
+			  RGW_CREATE_FLAG_NONE);
+	  ASSERT_EQ(rc, 0);
+	}
+	sf.sync();
+      }
+      n_dirs1_objs++;
     }
-    n_dirs1_objs++;
   }
 }
 
@@ -346,7 +386,37 @@ TEST(LibRGW, BAD_DELETES_DIRS1) {
 
 TEST(LibRGW, GETATTR_DIRS1)
 {
-
+  if (do_dirs1) {
+    int rc;
+    struct stat st;
+    for (auto& dirs_rec : dirs_vec) {
+      obj_rec& dir = get<0>(dirs_rec);
+      if (verbose) {
+	std::cout << "scanning objects in "
+		  << dir.rgw_fh->full_object_name()
+		  << std::endl;
+      }
+      for (auto& sobj : get<1>(dirs_rec)) {
+	rc = rgw_getattr(fs, sobj.fh, &st, RGW_GETATTR_FLAG_NONE);
+	ASSERT_EQ(rc, 0);
+	/* validate, pretty-print */
+	if (sobj.rgw_fh->object_name().find("sfile") != std::string::npos) {
+	  ASSERT_TRUE(sobj.rgw_fh->is_file());
+	  ASSERT_TRUE(S_ISREG(st.st_mode));
+	}
+	if (sobj.rgw_fh->object_name().find("sdir") != std::string::npos) {
+	  ASSERT_TRUE(sobj.rgw_fh->is_dir());
+	  ASSERT_TRUE(S_ISDIR(st.st_mode));
+	}
+	if (verbose) {
+	  obj_rec_st rec_st{sobj, st};
+	  std::cout << "\t"
+		    << rec_st
+		    << std::endl;
+	}
+      }
+    }
+  }
 }
 
 TEST(LibRGW, RELEASE_DIRS1) {
