@@ -81,6 +81,30 @@ void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
   dout(10) << __func__ << " done" << dendl;
 }
 
+int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
+			   uint64_t *offset, uint32_t *length)
+{
+  dout(1) << __func__ << " bdev " << id << " want " << want << dendl;
+  assert(id < alloc.size());
+  int r = alloc[id]->reserve(want);
+  assert(r == 0); // caller shouldn't ask for more than they can get
+
+  r = alloc[id]->allocate(want, g_conf->bluefs_alloc_size, 0,
+			    offset, length);
+  assert(r >= 0);
+  if (*length < want)
+    alloc[id]->unreserve(want - *length);
+
+  block_all[id].erase(*offset, *length);
+  log_t.op_alloc_rm(id, *offset, *length);
+  r = _flush_log();
+  assert(r == 0);
+
+  dout(1) << __func__ << " bdev " << id << " want " << want
+	  << " got " << *offset << "~" << *length << dendl;
+  return 0;
+}
+
 uint64_t BlueFS::get_total(unsigned id)
 {
   Mutex::Locker l(lock);
