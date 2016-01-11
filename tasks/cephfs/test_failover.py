@@ -88,6 +88,67 @@ class TestFailover(CephFSTestCase):
             self.mounts[0].mount()
 
 
+class TestStandbyReplay(CephFSTestCase):
+    MDSS_REQUIRED = 2
+    REQUIRE_FILESYSTEM = False
+
+    def test_standby_failure(self):
+        """
+        That the failure of a standby-replay daemon happens cleanly
+        and doesn't interrupt anything else.
+        """
+        # Pick out exactly 2 daemons to be run during test
+        use_daemons = sorted(self.mds_cluster.mds_ids[0:2])
+        mds_a, mds_b = use_daemons
+        log.info("Using MDS daemons: {0}".format(use_daemons))
+
+        def set_standby_for(leader, follower, replay):
+            self.set_conf("mds.{0}".format(follower), "mds_standby_for_name", leader)
+            if replay:
+                self.set_conf("mds.{0}".format(follower), "mds_standby_replay", "true")
+
+        # Configure two pairs of MDSs that are standby for each other
+        set_standby_for(mds_a, mds_b, True)
+        set_standby_for(mds_b, mds_a, False)
+
+        # Create FS alpha and get mds_a to come up as active
+        fs_a = self.mds_cluster.get_filesystem("alpha")
+        fs_a.create()
+        self.mds_cluster.mds_restart(mds_a)
+        fs_a.wait_for_daemons()
+        self.assertEqual(fs_a.get_active_names(), [mds_a])
+
+        # Start the standbys
+        self.mds_cluster.mds_restart(mds_b)
+        self.wait_for_daemon_start([mds_b])
+
+        def get_info_by_name(fs, mds_name):
+            mds_map = fs.get_mds_map()
+            for gid_str, info in mds_map['info'].items():
+                if info['name'] == mds_name:
+                    return info
+
+            log.warn(json.dumps(mds_map, indent=2))
+            raise RuntimeError("MDS '{0}' not found in filesystem MDSMap".format(mds_name))
+
+        # See the standby come up as the correct rank
+        info_b = get_info_by_name(fs_a, mds_b)
+        self.assertEqual(info_b['state'], "up:standby-replay")
+        self.assertEqual(info_b['standby_for_name'], mds_a)
+        self.assertEqual(info_b['rank'], 0)
+
+        # Kill the standby
+        self.mds_cluster.mds_stop(mds_b)
+        self.mds_cluster.mds_fail(mds_b)
+
+        # See that the standby is gone and the active remains
+        self.assertEqual(fs_a.get_active_names(), [mds_a])
+        mds_map = fs_a.get_mds_map()
+        self.assertEqual(len(mds_map['info']), 1)
+        self.assertEqual(mds_map['failed'], [])
+        self.assertEqual(mds_map['damaged'], [])
+        self.assertEqual(mds_map['stopped'], [])
+
 class TestMultiFilesystems(CephFSTestCase):
     CLIENTS_REQUIRED = 2
     MDSS_REQUIRED = 4
