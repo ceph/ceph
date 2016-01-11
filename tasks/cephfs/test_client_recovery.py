@@ -143,6 +143,9 @@ class TestClientRecovery(CephFSTestCase):
         self.fs.mds_restart()
 
         self.fs.wait_for_state('up:reconnect', reject='up:active', timeout=MDS_RESTART_GRACE)
+        # Check that the MDS locally reports its state correctly
+        status = self.fs.mds_asok(['status'])
+        self.assertIn("reconnect_status", status)
 
         ls_data = self._session_list()
         self.assert_session_count(2, ls_data)
