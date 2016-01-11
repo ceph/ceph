@@ -677,8 +677,13 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     string last_read = "";
     do {
       map<string, string> images;
-      cls_client::dir_list(&io_ctx, RBD_DIRECTORY,
+      r = cls_client::dir_list(&io_ctx, RBD_DIRECTORY,
 			   last_read, max_read, &images);
+      if (r < 0) {
+        lderr(cct) << "error listing image in directory: " 
+                   << cpp_strerror(r) << dendl;   
+        return r;
+      }
       for (map<string, string>::const_iterator it = images.begin();
 	   it != images.end(); ++it) {
 	names.push_back(it->first);
@@ -711,7 +716,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     // search all pools for children depending on this snapshot
     Rados rados(ictx->md_ctx);
     std::list<std::pair<int64_t, string> > pools;
-    rados.pool_list2(pools);
+    r = rados.pool_list2(pools);
+    if (r < 0) {
+      lderr(cct) << "error listing pools: " << cpp_strerror(r) << dendl; 
+      return r;
+    }
 
     for (std::list<std::pair<int64_t, string> >::const_iterator it =
          pools.begin(); it != pools.end(); ++it) {
