@@ -955,46 +955,8 @@ int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 int rgw_getattr(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *fh, struct stat *st, uint32_t flags)
 {
-  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
-  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
-
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
-
-  if (rgw_fh->is_root() ||
-      rgw_fh->is_bucket()) {
-    /* XXX nothing */
-  } else {
-    /* object */
-
-    /* an object being created isn't expected to exist (if it does,
-     * we'll detect the conflict later */
-    if (rgw_fh->creating())
-      goto done;
-
-    const std::string& bname = rgw_fh->bucket_name();
-    const std::string& oname = rgw_fh->object_name();
-
-    RGWStatObjRequest req(cct, fs->get_user(), bname, oname,
-			  RGWStatObjRequest::FLAG_NONE);
-
-    int rc = rgwlib.get_fe()->execute_req(&req);
-    if ((rc != 0) ||
-	(req.get_ret() != 0)) {
-      /* XXX EINVAL is likely illegal protocol return--if the object
-       * should but doesn't exist, it should probably be ENOENT */
-      return -EINVAL;
-    }
-
-    /* fill in stat data */
-    rgw_fh->set_size(req.size());
-    rgw_fh->set_ctime({req.ctime(), 0});
-    rgw_fh->set_mtime({req.mtime(), 0});
-    rgw_fh->set_atime({req.mtime(), 0});
-  }
-
-done:
-  (void) rgw_fh->stat(st);
-  return 0;
+  return -(rgw_fh->stat(st));
 }
 
 /*
