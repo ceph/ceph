@@ -49,7 +49,7 @@ void WBThrottle::start()
     Mutex::Locker l(lock);
     stopping = false;
   }
-  create();
+  create("wb_throttle");
 }
 
 void WBThrottle::stop()

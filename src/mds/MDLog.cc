@@ -169,7 +169,7 @@ void MDLog::create(MDSInternalContextBase *c)
   logger->set(l_mdl_expos, journaler->get_expire_pos());
   logger->set(l_mdl_wrpos, journaler->get_write_pos());
 
-  submit_thread.create();
+  submit_thread.create("md_submit");
 }
 
 void MDLog::open(MDSInternalContextBase *c)
@@ -178,9 +178,9 @@ void MDLog::open(MDSInternalContextBase *c)
 
   assert(!recovery_thread.is_started());
   recovery_thread.set_completion(c);
-  recovery_thread.create();
+  recovery_thread.create("md_recov_open");
 
-  submit_thread.create();
+  submit_thread.create("md_submit");
   // either append() or replay() will follow.
 }
 
@@ -222,7 +222,7 @@ void MDLog::reopen(MDSInternalContextBase *c)
   recovery_thread.join();
 
   recovery_thread.set_completion(new C_ReopenComplete(this, c));
-  recovery_thread.create();
+  recovery_thread.create("md_recov_reopen");
 }
 
 void MDLog::append()
@@ -853,7 +853,7 @@ void MDLog::replay(MDSInternalContextBase *c)
   }
   already_replayed = true;
 
-  replay_thread.create();
+  replay_thread.create("md_log_replay");
 }
 
 

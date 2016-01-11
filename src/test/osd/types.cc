@@ -1161,7 +1161,7 @@ TEST_F(ObjectContextTest, read_write_lock)
     EXPECT_EQ(1, obc.unstable_writes);
 
     Thread_read_lock t(obc);
-    t.create();
+    t.create("obc_read");
 
     do {
       cout << "Trying (1) with delay " << delay << "us\n";
@@ -1218,7 +1218,7 @@ TEST_F(ObjectContextTest, read_write_lock)
     EXPECT_EQ(0, obc.unstable_writes);
 
     Thread_write_lock t(obc);
-    t.create();
+    t.create("obc_write");
 
     do {
       cout << "Trying (3) with delay " << delay << "us\n";
