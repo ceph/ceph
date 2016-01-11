@@ -1279,6 +1279,7 @@ struct req_state {
    * through a well-defined interface. For more details, see rgw_auth.h. */
   std::unique_ptr<RGWIdentityApplier> auth_identity;
 
+  std::unique_ptr<RGWAccessControlPolicy> user_acl;
   RGWAccessControlPolicy *bucket_acl;
   RGWAccessControlPolicy *object_acl;
 
