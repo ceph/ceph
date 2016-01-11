@@ -244,6 +244,13 @@ class MDSCluster(object):
 
         return None
 
+    def get_mds_info_by_rank(self, mds_rank):
+        for mds_info in self._all_info():
+            if mds_info['rank'] == mds_rank:
+                return mds_info
+
+        return None
+
 
 class Filesystem(MDSCluster):
     """
