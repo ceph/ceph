@@ -1528,6 +1528,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (r < 0) {
       lderr(cct) << "error opening parent image: "
 		 << cpp_strerror(-r) << dendl;
+      delete p_imctx;
       return r;
     }
 
@@ -1579,6 +1580,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     r = c_imctx->state->open();
     if (r < 0) {
       lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
+      delete c_imctx;
       goto err_remove;
     }
 
@@ -1658,6 +1660,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (r < 0) {
       lderr(ictx->cct) << "error opening source image: " << cpp_strerror(r)
 		       << dendl;
+      delete ictx;
       return r;
     }
     BOOST_SCOPE_EXIT((ictx)) {
@@ -2031,6 +2034,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     int r = ictx->state->open();
     if (r < 0) {
       ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
+      delete ictx;
     } else {
       string header_oid = ictx->header_oid;
       old_format = ictx->old_format;
@@ -2374,6 +2378,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 					  dest_md_ctx, false);
     r = dest->state->open();
     if (r < 0) {
+      delete dest;
       lderr(cct) << "failed to read newly created header" << dendl;
       return r;
     }
