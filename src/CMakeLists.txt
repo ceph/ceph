@@ -16,5 +16,5 @@ target_link_libraries(sim PUBLIC pthread)
 
 add_custom_target(runsim
   DEPENDS sim
-  COMMAND
-  $<TARGET_FILE:sim>)
+  COMMAND $<TARGET_FILE:sim>
+  COMMAND printf '\\a\\a\\a')
