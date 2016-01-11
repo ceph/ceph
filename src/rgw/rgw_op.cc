@@ -142,9 +142,32 @@ static int decode_policy(CephContext *cct, bufferlist& bl, RGWAccessControlPolic
   return 0;
 }
 
-static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
-                                       RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                                       RGWAccessControlPolicy *policy, rgw_obj& obj)
+
+static int get_user_policy_from_attr(CephContext * const cct,
+                                     RGWRados * const store,
+                                     map<string, bufferlist>& attrs,
+                                     RGWAccessControlPolicy& policy    /* out */)
+{
+  auto aiter = attrs.find(RGW_ATTR_ACL);
+  if (aiter != attrs.end()) {
+    int ret = decode_policy(cct, aiter->second, &policy);
+    if (ret < 0) {
+      return ret;
+    }
+  } else {
+    return -ENOENT;
+  }
+
+  return 0;
+}
+
+static int get_bucket_policy_from_attr(CephContext *cct,
+                                       RGWRados *store,
+                                       void *ctx,
+                                       RGWBucketInfo& bucket_info,
+                                       map<string, bufferlist>& bucket_attrs,
+                                       RGWAccessControlPolicy *policy,
+                                       rgw_obj& obj)
 {
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
 
@@ -294,9 +317,9 @@ static int read_policy(RGWRados *store, struct req_state *s,
 }
 
 /**
- * Get the AccessControlPolicy for a bucket or object off of disk.
+ * Get the AccessControlPolicy for an user, bucket or object off of disk.
  * s: The req_state to draw information from.
- * only_bucket: If true, reads the bucket ACL rather than the object ACL.
+ * only_bucket: If true, reads the user and bucket ACLs rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
 int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
@@ -317,6 +340,8 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   if(s->dialect.compare("s3") == 0) {
     s->bucket_acl = new RGWAccessControlPolicy_S3(s->cct);
   } else if(s->dialect.compare("swift")  == 0) {
+    s->user_acl = std::unique_ptr<RGWAccessControlPolicy>(
+        new RGWAccessControlPolicy_SWIFTAcct(s->cct));
     s->bucket_acl = new RGWAccessControlPolicy_SWIFT(s->cct);
   } else {
     s->bucket_acl = new RGWAccessControlPolicy(s->cct);
@@ -336,6 +361,8 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
       s->local_source = store->get_zonegroup().equals(zonegroup);
     }
   }
+
+  rgw_user acct_acl_user = s->user->user_id;
 
   if (!s->bucket_name.empty()) {
     s->bucket_exists = true;
@@ -358,6 +385,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     if (s->bucket_exists) {
       rgw_obj_key no_obj;
       ret = read_policy(store, s, s->bucket_info, s->bucket_attrs, s->bucket_acl, s->bucket, no_obj);
+      acct_acl_user = s->bucket_info.owner;
     } else {
       s->bucket_acl->create_default(s->user->user_id, s->user->display_name);
       ret = -ERR_NO_SUCH_BUCKET;
@@ -391,6 +419,40 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
       }
     }
   }
+
+  /* handle user ACL only for those APIs which support it */
+  if (s->user_acl) {
+    map<string, bufferlist> uattrs;
+
+    ret = rgw_get_user_attrs_by_uid(store, acct_acl_user, uattrs);
+    if (!ret) {
+      ret = get_user_policy_from_attr(s->cct, store, uattrs, *s->user_acl);
+    }
+    if (-ENOENT == ret) {
+      /* In already existing clusters users won't have ACL. In such case
+       * assuming that only account owner has the rights seems to be
+       * reasonable. That allows to have only one verification logic.
+       * NOTE: there is small compatibility kludge for global, empty tenant:
+       *  1. if we try to reach an existing bucket, its owner is considered
+       *     as account owner.
+       *  2. otherwise account owner is identity stored in s->user->user_id.  */
+
+      if (acct_acl_user == s->user->user_id) {
+        s->user_acl->create_default(acct_acl_user, s->user->display_name);
+      } else {
+        s->user_acl->create_default(acct_acl_user, s->user->display_name);
+      }
+      ret = 0;
+    } else {
+      ldout(s->cct, 0) << "NOTICE: couldn't get user attrs for handling ACL (user_id="
+                       << s->user->user_id
+                       << ", ret="
+                       << ret
+                       << ")" << dendl;
+      return ret;
+    }
+  }
+
 
   return ret;
 }

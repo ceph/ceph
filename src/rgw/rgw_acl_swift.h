@@ -24,4 +24,19 @@ public:
   void to_str(string& read, string& write);
 };
 
+class RGWAccessControlPolicy_SWIFTAcct : public RGWAccessControlPolicy
+{
+public:
+  RGWAccessControlPolicy_SWIFTAcct(CephContext * const _cct)
+    : RGWAccessControlPolicy(_cct)
+  {}
+  ~RGWAccessControlPolicy_SWIFTAcct() {}
+
+  void add_grants(RGWRados *store, const list<string>& uids, int perm);
+  bool create(RGWRados *store,
+              const rgw_user& id,
+              const string& name,
+              const string& acl_str);
+  void to_str(string& acl) const;
+};
 #endif

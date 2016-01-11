@@ -1264,6 +1264,7 @@ struct req_state {
   /* Account we are performing operations on. */
   RGWUserInfo *user;
 
+  std::unique_ptr<RGWAccessControlPolicy> user_acl;
   RGWAccessControlPolicy *bucket_acl;
   RGWAccessControlPolicy *object_acl;
 
