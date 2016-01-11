@@ -1181,8 +1181,11 @@ int BlueStore::_open_db(bool create)
     if (create) {
       // note: we might waste a 4k block here if block.db is used, but it's
       // simpler.
-      bluefs->add_block_extent(id, BLUEFS_START,
-			       g_conf->bluestore_bluefs_initial_length);
+      uint64_t initial =
+	bdev->get_size() * g_conf->bluestore_bluefs_min_ratio;
+      initial = ROUND_UP_TO(initial, g_conf->bluefs_alloc_size);
+      bluefs->add_block_extent(id, BLUEFS_START, initial);
+      bluefs_extents.insert(BLUEFS_START, initial);
     }
     bluefs_shared_bdev = id;
     ++id;
@@ -1593,11 +1596,10 @@ int BlueStore::mkfs()
     KeyValueDB::Transaction t = db->get_transaction();
     uint64_t reserved = 0;
     if (g_conf->bluestore_bluefs) {
-      reserved = BLUEFS_START + g_conf->bluestore_bluefs_initial_length;
-      dout(20) << __func__ << " reserved first " << reserved
-	       << " bytes for bluefs" << dendl;
-      bluefs_extents.insert(BLUEFS_START,
-			    g_conf->bluestore_bluefs_initial_length);
+      assert(bluefs_extents.num_intervals() == 1);
+      interval_set<uint64_t>::iterator p = bluefs_extents.begin();
+      reserved = p.get_start() + p.get_len();
+      dout(20) << __func__ << " reserved " << reserved << " for bluefs" << dendl;
       bufferlist bl;
       ::encode(bluefs_extents, bl);
       t->set(PREFIX_SUPER, "bluefs_extents", bl);
