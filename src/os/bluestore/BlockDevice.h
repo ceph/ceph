@@ -55,6 +55,13 @@ private:
   Mutex debug_lock;
   interval_set<uint64_t> debug_inflight;
 
+  Mutex ioc_reap_lock;
+  vector<IOContext*> ioc_reap_queue;
+  atomic_t ioc_reap_count;
+
+  Mutex flush_lock;
+  atomic_t io_since_flush;
+
   FS::aio_queue_t aio_queue;
   aio_callback_t aio_callback;
   void *aio_callback_priv;
@@ -93,6 +100,7 @@ public:
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
 	   IOContext *ioc,
 	   bool buffered);
+  int read_buffered(uint64_t off, uint64_t len, char *buf);
 
   int aio_write(uint64_t off, bufferlist& bl,
 		IOContext *ioc,
@@ -100,6 +108,8 @@ public:
   int aio_zero(uint64_t off, uint64_t len,
 	       IOContext *ioc);
   int flush();
+
+  void queue_reap_ioc(IOContext *ioc);
 
   // for managing buffered readers/writers
   int invalidate_cache(uint64_t off, uint64_t len);

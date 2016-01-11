@@ -109,10 +109,10 @@ vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
       offset -= p->length;
       ++p;
     } else {
-      *x_off = offset;
       break;
     }
   }
+  *x_off = offset;
   return p;
 }
 
