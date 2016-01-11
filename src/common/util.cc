@@ -152,6 +152,9 @@ static bool lsb_release_set(char *buf, const char *prefix,
 
 static void lsb_release_parse(map<string, string> *m, CephContext *cct)
 {
+#if defined(__FreeBSD__)
+    return;
+#else
   FILE *fp = popen("lsb_release -idrc", "r");
   if (!fp) {
     int ret = -errno;
@@ -177,6 +180,7 @@ static void lsb_release_parse(map<string, string> *m, CephContext *cct)
     int ret = -errno;
     lderr(cct) << "lsb_release_parse - pclose failed: " << cpp_strerror(ret) << dendl;
   }
+#endif
 }
 
 void collect_sys_info(map<string, string> *m, CephContext *cct)
