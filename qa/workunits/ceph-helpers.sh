@@ -213,7 +213,13 @@ function kill_daemons() {
                 kill_complete=true
                 break
             fi
-            send_signal=0
+	    if [ $try -ge 5 ] ; then 
+		# start signaling again
+		send_signal=$signal
+	    else
+		# wait for the process to go away
+            	send_signal=0
+	    fi
         done
         if ! $kill_complete ; then
             status=1
