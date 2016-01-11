@@ -1105,6 +1105,9 @@ public:
   void dump_cache(const std::string &filename);
   void dump_cache(Formatter *f);
 
+  void dump_resolve_status(Formatter *f) const;
+  void dump_rejoin_status(Formatter *f) const;
+
   // == crap fns ==
  public:
   void show_cache();

@@ -1397,3 +1397,14 @@ void MDLog::standby_trim_segments()
   } else
     dout(20) << " removed no segments!" << dendl;
 }
+
+void MDLog::dump_replay_status(Formatter *f) const
+{
+  f->open_object_section("replay_status");
+  f->dump_unsigned("journal_read_pos", journaler ? journaler->get_read_pos() : 0);
+  f->dump_unsigned("journal_write_pos", journaler ? journaler->get_write_pos() : 0);
+  f->dump_unsigned("journal_expire_pos", journaler ? journaler->get_expire_pos() : 0);
+  f->dump_unsigned("num_events", get_num_events());
+  f->dump_unsigned("num_segments", get_num_segments());
+  f->close_section();
+}
