@@ -719,10 +719,45 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+static int get_swift_account_settings(req_state * const s,
+                                      RGWRados * const store,
+                                      RGWAccessControlPolicy_SWIFTAcct * const policy,
+                                      bool * const has_policy)
+{
+  *has_policy = false;
+
+  const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
+  if (acl_attr) {
+    RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
+    int r = swift_acct_policy.create(store,
+                                     s->user->user_id,
+                                     s->user->display_name,
+                                     string(acl_attr));
+    if (r < 0) {
+      return r;
+    }
+
+    *policy = swift_acct_policy;
+    *has_policy = true;
+  }
+
+  return 0;
+}
+
 int RGWPutMetadataAccount_ObjStore_SWIFT::get_params()
 {
   if (s->has_bad_meta) {
     return -EINVAL;
+  }
+
+  int ret = get_swift_account_settings(s,
+                                       store,
+                                       // FIXME: we need to carry unique_ptr in generic class
+                                       // and allocate appropriate ACL class in the ctor
+                                       static_cast<RGWAccessControlPolicy_SWIFTAcct *>(&policy),
+                                       &has_policy);
+  if (ret < 0) {
+    return ret;
   }
 
   get_rmattrs_from_headers(s, ACCT_PUT_ATTR_PREFIX, ACCT_REMOVE_ATTR_PREFIX,
