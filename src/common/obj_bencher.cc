@@ -146,15 +146,16 @@ void *ObjBencher::status_printer(void *_bencher) {
       previous_writes = data.finished;
       cycleSinceChange = 0;
       if (!formatter) {
-        bencher->out(cout, cur_time) << setfill(' ')
+        bencher->out(cout, cur_time)
+	  << setfill(' ')
           << setw(5) << i
-          << setw(8) << data.in_flight
-          << setw(10) << data.started
-          << setw(10) << data.finished
-          << setw(10) << avg_bandwidth
-          << setw(10) << bandwidth
-          << setw(10) << (double)data.cur_latency
-          << setw(10) << data.avg_latency << std::endl;
+	  << ' ' << setw(7) << data.in_flight
+          << ' ' << setw(9) << data.started
+          << ' ' << setw(9) << data.finished
+          << ' ' << setw(9) << avg_bandwidth
+          << ' ' << setw(9) << bandwidth
+          << ' ' << setw(9) << (double)data.cur_latency
+          << ' ' << setw(9) << data.avg_latency << std::endl;
       } else {
         formatter->dump_format("sec", "%d", i);
         formatter->dump_format("cur_ops", "%d", data.in_flight);
@@ -168,15 +169,16 @@ void *ObjBencher::status_printer(void *_bencher) {
     }
     else {
       if (!formatter) {
-        bencher->out(cout, cur_time) << setfill(' ')
+        bencher->out(cout, cur_time)
+	  << setfill(' ')
           << setw(5) << i
-          << setw(8) << data.in_flight
-          << setw(10) << data.started
-          << setw(10) << data.finished
-          << setw(10) << avg_bandwidth
-          << setw(10) << '0'
-          << setw(10) << '-'
-          << setw(10) << data.avg_latency << std::endl;
+	  << ' ' << setw(7) << data.in_flight
+          << ' ' << setw(9) << data.started
+          << ' ' << setw(9) << data.finished
+          << ' ' << setw(9) << avg_bandwidth
+	  << ' ' << setw(9) << '0'
+          << ' ' << setw(9) << '-'
+          << ' '<< setw(9) << data.avg_latency << std::endl;
       } else {
         formatter->dump_format("sec", "%d", i);
         formatter->dump_format("cur_ops", "%d", data.in_flight);
