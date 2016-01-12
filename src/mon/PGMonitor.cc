@@ -1252,8 +1252,12 @@ inline string percentify(const float& a) {
 //void PGMonitor::dump_object_stat_sum(stringstream& ss, Formatter *f,
 void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
 				     object_stat_sum_t &sum, uint64_t avail,
-				     bool verbose)
+				     float raw_used_rate, bool verbose)
 {
+  float curr_object_copies_rate = 0.0;
+  if (sum.num_object_copies > 0)
+    curr_object_copies_rate = (float)(sum.num_object_copies - sum.num_objects_degraded) / sum.num_object_copies;
+
   if (f) {
     f->dump_int("kb_used", SHIFT_ROUND_UP(sum.num_bytes, 10));
     f->dump_int("bytes_used", sum.num_bytes);
@@ -1265,6 +1269,7 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
       f->dump_int("rd_bytes", sum.num_rd_kb * 1024ull);
       f->dump_int("wr", sum.num_wr);
       f->dump_int("wr_bytes", sum.num_wr_kb * 1024ull);
+      f->dump_int("raw_bytes_used", sum.num_bytes * raw_used_rate * curr_object_copies_rate);
     }
   } else {
     tbl << stringify(si_t(sum.num_bytes));
@@ -1277,8 +1282,9 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
     tbl << sum.num_objects;
     if (verbose) {
       tbl << stringify(si_t(sum.num_objects_dirty))
-	  << stringify(si_t(sum.num_rd))
-          << stringify(si_t(sum.num_wr));
+          << stringify(si_t(sum.num_rd))
+          << stringify(si_t(sum.num_wr))
+          << stringify(si_t(sum.num_bytes * raw_used_rate * curr_object_copies_rate));
     }
   }
 }
@@ -1333,6 +1339,7 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
       tbl.define_column("DIRTY", TextTable::LEFT, TextTable::RIGHT);
       tbl.define_column("READ", TextTable::LEFT, TextTable::RIGHT);
       tbl.define_column("WRITE", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("RAW USED", TextTable::LEFT, TextTable::RIGHT);
     }
   }
 
@@ -1351,6 +1358,7 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
 					 pool->get_type(),
 					 pool->get_size());
     int64_t avail;
+    float raw_used_rate;
     if (avail_by_rule.count(ruleno) == 0) {
       avail = get_rule_avail(osdmap, ruleno);
       if (avail < 0)
@@ -1362,20 +1370,24 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
     switch (pool->get_type()) {
     case pg_pool_t::TYPE_REPLICATED:
       avail /= pool->get_size();
+      raw_used_rate = pool->get_size();
       break;
     case pg_pool_t::TYPE_ERASURE:
-      {
-	const map<string,string>& ecp =
-	  osdmap.get_erasure_code_profile(pool->erasure_code_profile);
-	map<string,string>::const_iterator pm = ecp.find("m");
-	map<string,string>::const_iterator pk = ecp.find("k");
-	if (pm != ecp.end() && pk != ecp.end()) {
-	  int k = atoi(pk->second.c_str());
-	  int m = atoi(pm->second.c_str());
-	  avail = avail * k / (m + k);
-	}
+    {
+      const map<string,string>& ecp =
+        osdmap.get_erasure_code_profile(pool->erasure_code_profile);
+      map<string,string>::const_iterator pm = ecp.find("m");
+      map<string,string>::const_iterator pk = ecp.find("k");
+      if (pm != ecp.end() && pk != ecp.end()) {
+	int k = atoi(pk->second.c_str());
+	int m = atoi(pm->second.c_str());
+	avail = avail * k / (m + k);
+	raw_used_rate = (float)(m + k) / k;
+      } else {
+	raw_used_rate = 0.0;
       }
       break;
+    }
     default:
       assert(0 == "unrecognized pool type");
     }
@@ -1391,7 +1403,7 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
       if (verbose)
         tbl << "-";
     }
-    dump_object_stat_sum(tbl, f, stat.stats.sum, avail, verbose);
+    dump_object_stat_sum(tbl, f, stat.stats.sum, avail, raw_used_rate, verbose);
     if (f)
       f->close_section(); // stats
     else

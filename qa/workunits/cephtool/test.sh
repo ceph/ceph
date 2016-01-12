@@ -1519,6 +1519,30 @@ EOF
   ceph osd setcrushmap -i $map
 }
 
+function test_mon_cephdf_commands()
+{
+  # ceph df detail:
+  # pool section:
+  # RAW USED The near raw used per pool in raw total
+
+  ceph osd pool create cephdf_for_test 32 32 replicated
+  ceph osd pool set cephdf_for_test size 2
+
+  dd if=/dev/zero of=./cephdf_for_test bs=4k count=1
+  rados put cephdf_for_test cephdf_for_test -p cephdf_for_test
+
+  #wait for update
+  sleep 10
+
+  cal_raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' ' '{printf "%d\n", 2 * $4}'`
+  raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' '  '{print $11}'`
+
+  ceph osd pool delete cephdf_for_test cephdf_for_test --yes-i-really-really-mean-it
+  rm ./cephdf_for_test
+
+  expect_false test $cal_raw_used_size != $raw_used_size
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -1560,6 +1584,7 @@ OSD_TESTS+=" tiering_agent"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
+MDS_TESTS+=" mon_cephdf_commands"
 
 TESTS+=$MON_TESTS
 TESTS+=$OSD_TESTS
