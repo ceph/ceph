@@ -2510,7 +2510,6 @@ int BlueStore::_do_read(
 	if (r < 0) {
 	  goto out;
 	}
-	r = r_len;
 	bufferlist u;
 	u.substr_of(t, front_extra, x_len);
 	bl.claim_append(u);
