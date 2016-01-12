@@ -30,6 +30,7 @@ public:
   ~ExclusiveLock();
 
   bool is_lock_owner() const;
+  bool accept_requests() const;
 
   void init(Context *on_init);
   void shut_down(Context *on_shutdown);
