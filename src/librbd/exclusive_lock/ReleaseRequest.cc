@@ -8,6 +8,7 @@
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "include/stringify.h"
+#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
@@ -28,21 +29,56 @@ using util::create_rados_safe_callback;
 template <typename I>
 ReleaseRequest<I>* ReleaseRequest<I>::create(I &image_ctx,
                                              const std::string &cookie,
+                                             Context *on_releasing,
                                              Context *on_finish) {
-  return new ReleaseRequest(image_ctx, cookie, on_finish);
+  return new ReleaseRequest(image_ctx, cookie, on_releasing, on_finish);
 }
 
 template <typename I>
 ReleaseRequest<I>::ReleaseRequest(I &image_ctx, const std::string &cookie,
-                                  Context *on_finish)
-  : m_image_ctx(image_ctx), m_cookie(cookie),
+                                  Context *on_releasing, Context *on_finish)
+  : m_image_ctx(image_ctx), m_cookie(cookie), m_on_releasing(on_releasing),
     m_on_finish(create_async_context_callback(image_ctx, on_finish)),
     m_object_map(nullptr), m_journal(nullptr) {
 }
 
 template <typename I>
+ReleaseRequest<I>::~ReleaseRequest() {
+  delete m_on_releasing;
+}
+
+template <typename I>
 void ReleaseRequest<I>::send() {
+  send_block_writes();
+}
+
+template <typename I>
+void ReleaseRequest<I>::send_block_writes() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  using klass = ReleaseRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_block_writes>(this);
+
+  {
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    m_image_ctx.aio_work_queue->block_writes(ctx);
+  }
+}
+
+template <typename I>
+Context *ReleaseRequest<I>::handle_block_writes(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+
+  if (*ret_val < 0) {
+    m_image_ctx.aio_work_queue->unblock_writes();
+    return m_on_finish;
+  }
+
   send_cancel_op_requests();
+  return nullptr;
 }
 
 template <typename I>
@@ -51,8 +87,8 @@ void ReleaseRequest<I>::send_cancel_op_requests() {
   ldout(cct, 10) << __func__ << dendl;
 
   using klass = ReleaseRequest<I>;
-  Context *ctx = create_context_callback<klass,
-                                         &klass::handle_cancel_op_requests>(this);
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_cancel_op_requests>(this);
   m_image_ctx.cancel_async_requests(ctx);
 }
 
@@ -62,6 +98,13 @@ Context *ReleaseRequest<I>::handle_cancel_op_requests(int *ret_val) {
   ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
 
   assert(*ret_val == 0);
+
+  if (m_on_releasing != nullptr) {
+    // alert caller that we no longer own the exclusive lock
+    m_on_releasing->complete(0);
+    m_on_releasing = nullptr;
+  }
+
   send_close_journal();
   return nullptr;
 }

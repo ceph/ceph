@@ -53,16 +53,22 @@ struct C_BlacklistClient : public Context {
 template <typename I>
 AcquireRequest<I>* AcquireRequest<I>::create(I &image_ctx,
                                              const std::string &cookie,
+                                             Context *on_acquire,
                                              Context *on_finish) {
-  return new AcquireRequest(image_ctx, cookie, on_finish);
+  return new AcquireRequest(image_ctx, cookie, on_acquire, on_finish);
 }
 
 template <typename I>
 AcquireRequest<I>::AcquireRequest(I &image_ctx, const std::string &cookie,
-                                  Context *on_finish)
-  : m_image_ctx(image_ctx), m_cookie(cookie),
+                                  Context *on_acquire, Context *on_finish)
+  : m_image_ctx(image_ctx), m_cookie(cookie), m_on_acquire(on_acquire),
     m_on_finish(create_async_context_callback(image_ctx, on_finish)),
     m_object_map(nullptr), m_journal(nullptr), m_error_result(0) {
+}
+
+template <typename I>
+AcquireRequest<I>::~AcquireRequest() {
+  delete m_on_acquire;
 }
 
 template <typename I>
@@ -106,6 +112,10 @@ Context *AcquireRequest<I>::handle_lock(int *ret_val) {
 
 template <typename I>
 Context *AcquireRequest<I>::send_open_journal() {
+  // alert caller that we now own the exclusive lock
+  m_on_acquire->complete(0);
+  m_on_acquire = nullptr;
+
   if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
     apply();
     return m_on_finish;
