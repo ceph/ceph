@@ -17,7 +17,7 @@ class TestLocking(object):
         if ctx.config.get("os_type") == "debian":
             pytest.skip('known issue with debian versions; see: issue #10878')
         for remote in ctx.cluster.remotes.iterkeys():
-            assert remote.os.version == os_version
+            assert remote.inventory_info['os_version'] == os_version
 
     def test_correct_machine_type(self, ctx, config):
         machine_type = ctx.machine_type
