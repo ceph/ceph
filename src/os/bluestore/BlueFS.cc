@@ -422,7 +422,8 @@ int BlueFS::_replay()
     catch (buffer::error& e) {
       dout(10) << __func__ << " " << pos << ": stop: failed to decode: "
 	       << e.what() << dendl;
-      break;
+      delete log_reader;
+      return -EIO;
     }
     assert(seq == t.seq);
     dout(10) << __func__ << " " << pos << ": " << t << dendl;
