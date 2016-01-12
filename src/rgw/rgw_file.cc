@@ -152,7 +152,7 @@ namespace rgw {
       break;
     };
 
-    return rgw_fh->stat(st);;
+    return rgw_fh->stat(st);
   } /* RGWLibFS::getattr */
 
   void RGWLibFS::close()

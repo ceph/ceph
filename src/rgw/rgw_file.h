@@ -1587,7 +1587,9 @@ public:
     return 0;
   }
 
-  virtual void send_response() {}
+  virtual void send_response() {
+    bucket.creation_time = get_state()->bucket_info.creation_time;
+  }
 
   bool matched() {
     return (bucket.bucket.name.length() > 0);
