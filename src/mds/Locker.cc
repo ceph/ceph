@@ -2517,7 +2517,13 @@ void Locker::handle_client_caps(MClientCaps *m)
 
   CInode *head_in = mdcache->get_inode(m->get_ino());
   if (!head_in) {
-    dout(7) << "handle_client_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
+    if (mds->is_clientreplay()) {
+      dout(7) << "handle_client_caps on unknown ino " << m->get_ino()
+	<< ", will try again after replayed client requests" << dendl;
+      mdcache->wait_replay_cap_reconnect(m->get_ino(), new C_MDS_RetryMessage(mds, m));
+      return;
+    }
+    dout(1) << "handle_client_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
     m->put();
     return;
   }
