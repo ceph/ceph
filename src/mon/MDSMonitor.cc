@@ -1709,7 +1709,6 @@ int MDSMonitor::filesystem_command(
       string err;
       poolid = strict_strtol(poolname.c_str(), 10, &err);
       if (err.length()) {
-	poolid = -1;
 	ss << "pool '" << poolname << "' does not exist";
 	return -ENOENT;
       }
