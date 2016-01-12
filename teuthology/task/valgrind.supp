@@ -265,3 +265,23 @@
 	fun:call_init.part.0
 	...
 }
+{
+	fun:PK11_CreateContextBySymKey race
+	Helgrind:Race
+	obj:/usr/*lib*/libfreebl*3.so
+	...
+	obj:/usr/*lib*/libsoftokn3.so
+	...
+	obj:/usr/*lib*/libnss3.so
+	fun:PK11_CreateContextBySymKey
+	...
+}
+{
+	thread init race
+	Helgrind:Race
+	fun:mempcpy
+	fun:_dl_allocate_tls_init
+	...
+	fun:pthread_create@*
+	...
+}
