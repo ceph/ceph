@@ -46,6 +46,9 @@ void file_layout_t::from_legacy(const ceph_file_layout& fl)
   stripe_count = fl.fl_stripe_count;
   object_size = fl.fl_object_size;
   pool_id = (int32_t)fl.fl_pg_pool;
+  // in the legacy encoding, pool 0 was undefined.
+  if (pool_id == 0)
+    pool_id = -1;
   pool_ns.clear();
 }
 
@@ -57,7 +60,11 @@ void file_layout_t::to_legacy(ceph_file_layout *fl) const
   fl->fl_cas_hash = 0;
   fl->fl_object_stripe_unit = 0;
   fl->fl_unused = 0;
-  fl->fl_pg_pool = pool_id;
+  // in the legacy encoding, pool 0 was undefined.
+  if (pool_id >= 0)
+    fl->fl_pg_pool = pool_id;
+  else
+    fl->fl_pg_pool = 0;
 }
 
 void file_layout_t::encode(bufferlist& bl, uint64_t features) const
