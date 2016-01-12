@@ -568,7 +568,7 @@ bool ImageWatcher::handle_payload(const RequestLockPayload &payload,
 
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr &&
-      m_image_ctx.exclusive_lock->is_lock_owner()) {
+      m_image_ctx.exclusive_lock->accept_requests()) {
     // need to send something back so the client can detect a missing leader
     ::encode(ResponseMessage(0), ack_ctx->out);
 
@@ -621,7 +621,7 @@ bool ImageWatcher::handle_payload(const FlattenPayload &payload,
 
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr &&
-      m_image_ctx.exclusive_lock->is_lock_owner()) {
+      m_image_ctx.exclusive_lock->accept_requests()) {
     bool new_request;
     Context *ctx;
     ProgressContext *prog_ctx;
@@ -642,7 +642,7 @@ bool ImageWatcher::handle_payload(const ResizePayload &payload,
 				  C_NotifyAck *ack_ctx) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr &&
-      m_image_ctx.exclusive_lock->is_lock_owner()) {
+      m_image_ctx.exclusive_lock->accept_requests()) {
     bool new_request;
     Context *ctx;
     ProgressContext *prog_ctx;
@@ -664,7 +664,7 @@ bool ImageWatcher::handle_payload(const SnapCreatePayload &payload,
 				  C_NotifyAck *ack_ctx) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr &&
-      m_image_ctx.exclusive_lock->is_lock_owner()) {
+      m_image_ctx.exclusive_lock->accept_requests()) {
     ldout(m_image_ctx.cct, 10) << this << " remote snap_create request: "
 			       << payload.snap_name << dendl;
 
@@ -679,7 +679,7 @@ bool ImageWatcher::handle_payload(const SnapRenamePayload &payload,
 				  C_NotifyAck *ack_ctx) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr &&
-      m_image_ctx.exclusive_lock->is_lock_owner()) {
+      m_image_ctx.exclusive_lock->accept_requests()) {
     ldout(m_image_ctx.cct, 10) << this << " remote snap_rename request: "
 			       << payload.snap_id << " to "
 			       << payload.snap_name << dendl;
@@ -695,7 +695,7 @@ bool ImageWatcher::handle_payload(const SnapRemovePayload &payload,
 				  C_NotifyAck *ack_ctx) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr &&
-      m_image_ctx.exclusive_lock->is_lock_owner()) {
+      m_image_ctx.exclusive_lock->accept_requests()) {
     ldout(m_image_ctx.cct, 10) << this << " remote snap_remove request: "
 			       << payload.snap_name << dendl;
 
@@ -710,7 +710,7 @@ bool ImageWatcher::handle_payload(const SnapProtectPayload& payload,
                                   C_NotifyAck *ack_ctx) {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr &&
-      m_image_ctx.exclusive_lock->is_lock_owner()) {
+      m_image_ctx.exclusive_lock->accept_requests()) {
     ldout(m_image_ctx.cct, 10) << this << " remote snap_protect request: "
                                << payload.snap_name << dendl;
 
@@ -725,7 +725,7 @@ bool ImageWatcher::handle_payload(const SnapUnprotectPayload& payload,
                                   C_NotifyAck *ack_ctx) {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr &&
-      m_image_ctx.exclusive_lock->is_lock_owner()) {
+      m_image_ctx.exclusive_lock->accept_requests()) {
     ldout(m_image_ctx.cct, 10) << this << " remote snap_unprotect request: "
                                << payload.snap_name << dendl;
 
@@ -740,7 +740,7 @@ bool ImageWatcher::handle_payload(const RebuildObjectMapPayload& payload,
                                   C_NotifyAck *ack_ctx) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr &&
-      m_image_ctx.exclusive_lock->is_lock_owner()) {
+      m_image_ctx.exclusive_lock->accept_requests()) {
     bool new_request;
     Context *ctx;
     ProgressContext *prog_ctx;
@@ -762,7 +762,7 @@ bool ImageWatcher::handle_payload(const RenamePayload& payload,
                                   C_NotifyAck *ack_ctx) {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr &&
-      m_image_ctx.exclusive_lock->is_lock_owner()) {
+      m_image_ctx.exclusive_lock->accept_requests()) {
     ldout(m_image_ctx.cct, 10) << this << " remote rename request: "
                                << payload.image_name << dendl;
 
@@ -777,7 +777,7 @@ bool ImageWatcher::handle_payload(const UnknownPayload &payload,
 				  C_NotifyAck *ack_ctx) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr &&
-      m_image_ctx.exclusive_lock->is_lock_owner()) {
+      m_image_ctx.exclusive_lock->accept_requests()) {
     ::encode(ResponseMessage(-EOPNOTSUPP), ack_ctx->out);
   }
   return true;
@@ -847,19 +847,18 @@ void ImageWatcher::acknowledge_notify(uint64_t notify_id, uint64_t handle,
 void ImageWatcher::reregister_watch() {
   ldout(m_image_ctx.cct, 10) << this << " re-registering image watch" << dendl;
 
-  bool was_lock_owner = false;
+  bool releasing_lock = false;
   C_SaferCond release_lock_ctx;
   {
     RWLock::WLocker l(m_image_ctx.owner_lock);
-    if (m_image_ctx.exclusive_lock != nullptr &&
-        m_image_ctx.exclusive_lock->is_lock_owner()) {
-      was_lock_owner = true;
+    if (m_image_ctx.exclusive_lock != nullptr) {
+      releasing_lock = true;
       m_image_ctx.exclusive_lock->release_lock(&release_lock_ctx);
     }
   }
 
   int r;
-  if (was_lock_owner) {
+  if (releasing_lock) {
     r = release_lock_ctx.wait();
     assert(r == 0);
   }

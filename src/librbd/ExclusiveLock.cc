@@ -64,6 +64,16 @@ bool ExclusiveLock<I>::is_lock_owner() const {
 }
 
 template <typename I>
+bool ExclusiveLock<I>::accept_requests() const {
+  Mutex::Locker locker(m_lock);
+
+  bool accept_requests = (!is_shutdown() && m_state == STATE_LOCKED);
+  ldout(m_image_ctx.cct, 20) << this << " " << __func__ << "="
+                             << accept_requests << dendl;
+  return accept_requests;
+}
+
+template <typename I>
 void ExclusiveLock<I>::init(Context *on_init) {
   assert(m_image_ctx.owner_lock.is_locked());
   ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
