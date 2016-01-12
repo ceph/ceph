@@ -592,7 +592,8 @@ public:
 
   // history overwrite
   SharedPtrRegistry<hobject_t, OverwriteInfo, hobject_t::BitwiseComparator> overwrite_info_registry;
-  OverwriteInfoRef get_overwrite_info(const hobject_t &hoid);
+  OverwriteInfoRef get_overwrite_info(const hobject_t &hoid,
+                                      const version_t version = ghobject_t::NO_GEN);
 
 public:
   ECBackend(
@@ -630,6 +631,11 @@ public:
   void rollback_ec_overwrite(
     const hobject_t &hoid,
     version_t write_version,
+    ObjectStore::Transaction *t);
+
+  void trim_stashed_object(
+    const hobject_t &hoid,
+    version_t old_version,
     ObjectStore::Transaction *t);
 
   bool scrub_supported() { return true; }

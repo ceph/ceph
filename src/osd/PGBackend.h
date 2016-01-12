@@ -523,13 +523,13 @@
      const hobject_t &hoid,
      ObjectStore::Transaction *t);
 
-   void rollback_ec_overwrite(
+   virtual void rollback_ec_overwrite(
      const hobject_t &hoid,
      version_t write_version,
      ObjectStore::Transaction *t);
 
    /// Trim object stashed at stashed_version
-   void trim_stashed_object(
+   virtual void trim_stashed_object(
      const hobject_t &hoid,
      version_t stashed_version,
      ObjectStore::Transaction *t);

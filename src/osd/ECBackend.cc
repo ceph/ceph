@@ -2561,22 +2561,30 @@ void ECBackend::OverwriteInfo::decode(bufferlist::iterator &bl) {
   DECODE_FINISH(bl);
 }
 
-ECBackend::OverwriteInfoRef ECBackend::get_overwrite_info(const hobject_t &hoid) {
+ECBackend::OverwriteInfoRef ECBackend::get_overwrite_info(
+    const hobject_t &hoid,
+    const version_t version) {
   dout(10) << __func__ << ": get overwrite info on " << hoid << dendl;
-  OverwriteInfoRef ref = overwrite_info_registry.lookup(hoid);
+
+  OverwriteInfoRef ref;
+  // if get the info with version, should not use cache
+  if (version == ghobject_t::NO_GEN)
+    ref = overwrite_info_registry.lookup(hoid);
+  else
+    overwrite_info_registry.remove(hoid);
   if (!ref) {
     dout(10) << __func__ << ": not in cache " << hoid << dendl;
     struct stat st;
     int r = store->stat(
       coll,
-      ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      ghobject_t(hoid, version, get_parent()->whoami_shard().shard),
       &st);
     OverwriteInfo ow_info;
     if (r >= 0) {
       bufferlist bl;
       r = store->getattr(
         coll,
-        ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+        ghobject_t(hoid, version, get_parent()->whoami_shard().shard),
         OW_KEY,
         bl);
       dout(10) << __func__ << ": ret " << r 
@@ -2816,6 +2824,30 @@ void ECBackend::rollback_ec_overwrite(
   t->remove(
     coll,
     ghobject_t(hoid, write_version, get_parent()->whoami_shard().shard));
+}
+
+void ECBackend::trim_stashed_object(
+  const hobject_t &hoid,
+  version_t old_version,
+  ObjectStore::Transaction *t)
+{
+  dout(10) << __func__ << " obj " << hoid
+           << " version " << old_version << dendl;
+  // suppport rm overwrite data
+  assert(!hoid.is_temp());
+  t->remove(
+    coll, ghobject_t(hoid, old_version, get_parent()->whoami_shard().shard));
+  // delete unapplied overwrite data
+  OverwriteInfoRef ow_info = get_overwrite_info(hoid, old_version);
+  for (map<uint64_t, pair<uint64_t, uint64_t> >::iterator i =
+         ow_info->overwrite_history.begin();
+       i != ow_info->overwrite_history.end();
+       ++i) {
+    t->remove(
+      coll, ghobject_t(hoid, i->first, get_parent()->whoami_shard().shard));
+  }
+  // old info, delete from cache
+  overwrite_info_registry.remove(hoid);
 }
 
 void ECBackend::be_deep_scrub(
