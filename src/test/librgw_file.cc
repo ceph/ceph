@@ -73,14 +73,6 @@ TEST(LibRGW, GETATTR_ROOT) {
 }
 
 extern "C" {
-extern void dump_buckets(void);
-}
-
-TEST(LibRGW, DUMP_BUCKETS) {
-  dump_buckets();
-}
-
-extern "C" {
   static bool r1_cb(const char* name, void *arg, uint64_t offset) {
     // don't need arg--it would point to fids1
     fids1.push_back(fid_type(name, offset, nullptr /* handle */));
