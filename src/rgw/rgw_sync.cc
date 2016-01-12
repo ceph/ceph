@@ -172,6 +172,7 @@ int RGWRemoteMetaLog::init()
 
 void RGWRemoteMetaLog::finish()
 {
+  going_down.set(1);
   stop();
   if (async_rados) {
     async_rados->stop();
@@ -1717,7 +1718,7 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
         ldout(store->ctx(), 0) << "ERROR: bad sync state!" << dendl;
         return -EIO;
     }
-  } while (true);
+  } while (!going_down.read());
 
   return 0;
 }
