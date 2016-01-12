@@ -189,6 +189,7 @@ struct bluestore_onode_t {
 
   uint32_t expected_object_size;
   uint32_t expected_write_size;
+  uint32_t alloc_hint_flags;
 
   bluestore_onode_t()
     : nid(0),
@@ -196,7 +197,8 @@ struct bluestore_onode_t {
       last_overlay_key(0),
       omap_head(0),
       expected_object_size(0),
-      expected_write_size(0) {}
+      expected_write_size(0),
+      alloc_hint_flags(0) {}
 
   map<uint64_t,bluestore_extent_t>::iterator find_extent(uint64_t offset) {
     map<uint64_t,bluestore_extent_t>::iterator fp = block_map.lower_bound(offset);
