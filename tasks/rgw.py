@@ -691,7 +691,7 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
                  check_status=True)
 
     rgwadmin(ctx, master_client,
-             cmd=['-n', master_client, 'zonegroup', 'default', '--rgw-zonegroup', region],
+             cmd=['-n', master_client, 'zonegroup', 'default', '--rgw-zonegroup', master_zonegroup],
              check_status=True)
 
     for role, (zonegroup, zone, zone_info, user_info) in role_zones.iteritems():
