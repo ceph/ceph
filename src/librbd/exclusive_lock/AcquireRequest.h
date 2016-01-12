@@ -24,8 +24,9 @@ template <typename ImageCtxT = ImageCtx>
 class AcquireRequest {
 public:
   static AcquireRequest* create(ImageCtxT &image_ctx, const std::string &cookie,
-                                Context *on_finish);
+                                Context *on_acquire, Context *on_finish);
 
+  ~AcquireRequest();
   void send();
 
 private:
@@ -61,10 +62,11 @@ private:
    */
 
   AcquireRequest(ImageCtxT &image_ctx, const std::string &cookie,
-                 Context *on_finish);
+                 Context *on_acquire, Context *on_finish);
 
   ImageCtxT &m_image_ctx;
   std::string m_cookie;
+  Context *m_on_acquire;
   Context *m_on_finish;
 
   bufferlist m_out_bl;
