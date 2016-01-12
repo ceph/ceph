@@ -410,6 +410,7 @@ void RGWCoroutinesManager::schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *s
 
 int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 {
+  int ret = 0;
   int blocked_count = 0;
   int interval_wait_count = 0;
   RGWCoroutinesEnv env;
@@ -504,7 +505,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
      * these aren't really waiting for IOs
      */
     while (blocked_count - interval_wait_count >= ops_window) {
-      int ret = completion_mgr.get_next((void **)&blocked_stack);
+      ret = completion_mgr.get_next((void **)&blocked_stack);
       if (ret < 0) {
        ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       }
@@ -516,13 +517,14 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 
 
     while (scheduled_stacks.empty() && blocked_count > 0) {
-      int ret = completion_mgr.get_next((void **)&blocked_stack);
+      ret = completion_mgr.get_next((void **)&blocked_stack);
       if (ret < 0) {
 	ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       }
       if (going_down.read() > 0) {
 	ldout(cct, 5) << __func__ << "(): was stopped, exiting" << dendl;
-	return -ECANCELED;
+	ret = -ECANCELED;
+        break;
       }
       handle_unblocked_stack(context_stacks, scheduled_stacks, blocked_stack, &blocked_count);
       iter = scheduled_stacks.begin();
@@ -531,6 +533,8 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     if (iter == scheduled_stacks.end()) {
       iter = scheduled_stacks.begin();
     }
+
+    ret = 0;
   }
 
   lock.get_write();
@@ -541,7 +545,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   run_contexts.erase(run_context);
   lock.unlock();
 
-  return 0;
+  return ret;
 }
 
 int RGWCoroutinesManager::run(RGWCoroutine *op)

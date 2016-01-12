@@ -108,6 +108,8 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
 
   void init_sync_env(RGWMetaSyncEnv *env);
 
+  atomic_t going_down;
+
 public:
   RGWRemoteMetaLog(RGWRados *_store, RGWMetaSyncStatusManager *_sm) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
                                        conn(NULL), async_rados(nullptr),
