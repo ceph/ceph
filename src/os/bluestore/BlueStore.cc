@@ -4691,11 +4691,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_SETALLOCHINT:
       {
-        uint64_t expected_object_size = op->expected_object_size;
-        uint64_t expected_write_size = op->expected_write_size;
 	r = _setallochint(txc, c, o,
-			  expected_object_size,
-			  expected_write_size);
+			  op->expected_object_size,
+			  op->expected_write_size,
+			  op->alloc_hint_flags);
       }
       break;
 
@@ -6292,19 +6291,23 @@ int BlueStore::_setallochint(TransContext *txc,
 			     CollectionRef& c,
 			     OnodeRef& o,
 			     uint64_t expected_object_size,
-			     uint64_t expected_write_size)
+			     uint64_t expected_write_size,
+			     uint32_t flags)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
+	   << " flags " << flags
 	   << dendl;
   int r = 0;
   o->onode.expected_object_size = expected_object_size;
   o->onode.expected_write_size = expected_write_size;
+  o->onode.alloc_hint_flags = flags;
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
+	   << " flags " << flags
 	   << " = " << r << dendl;
   return r;
 }
