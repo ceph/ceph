@@ -17,12 +17,14 @@ namespace exclusive_lock {
 template<typename T>
 struct BaseRequest {
   static std::list<T *> s_requests;
+  Context *on_lock_unlock;
   Context *on_finish;
 
   static T* create(MockImageCtx &image_ctx, const std::string &cookie,
-                   Context *on_finish) {
+                   Context *on_lock_unlock, Context *on_finish) {
     assert(!s_requests.empty());
     T* req = s_requests.front();
+    req->on_lock_unlock = on_lock_unlock;
     req->on_finish = on_finish;
     s_requests.pop_front();
     return req;
@@ -87,21 +89,14 @@ public:
                   .WillOnce(FinishRequest(&acquire_request, r, &mock_image_ctx));
     if (r == 0) {
       expect_notify_acquired_lock(mock_image_ctx);
-      expect_unblock_writes(mock_image_ctx);
     }
   }
 
   void expect_release_lock(MockImageCtx &mock_image_ctx,
                            MockReleaseRequest &release_request, int r,
                            bool shutting_down = false) {
-    if (!shutting_down) {
-      expect_block_writes(mock_image_ctx);
-    }
     EXPECT_CALL(release_request, send())
                   .WillOnce(FinishRequest(&release_request, r, &mock_image_ctx));
-    if (!shutting_down && r < 0) {
-      expect_unblock_writes(mock_image_ctx);
-    }
     if (r == 0) {
       expect_notify_released_lock(mock_image_ctx);
       expect_writes_empty(mock_image_ctx);
@@ -506,7 +501,6 @@ TEST_F(TestMockExclusiveLock, ConcurrentRequests) {
 
   MockReleaseRequest release;
   C_SaferCond wait_for_send_ctx2;
-  expect_block_writes(mock_image_ctx);
   EXPECT_CALL(release, send())
                 .WillOnce(Notify(&wait_for_send_ctx2));
   expect_notify_released_lock(mock_image_ctx);
