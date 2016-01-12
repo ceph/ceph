@@ -569,7 +569,8 @@ int BlueFS::_replay()
       default:
 	derr << __func__ << " " << pos << ": stop: unrecognized op " << (int)op
 	     << dendl;
-	return -EIO;
+	delete log_reader;
+        return -EIO;
       }
     }
     assert(p.end());
