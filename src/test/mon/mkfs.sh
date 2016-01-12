@@ -177,8 +177,10 @@ function run() {
     actions+="auth_none "
     for action in $actions  ; do
         setup
-        $action || return 1
+        $action 
+	exit_status=$?
         teardown
+	[ $exit_status -eq 0 ] || return $exit_status
     done
 }
 
