@@ -47,6 +47,7 @@ public class CephMountTest {
     String conf_file = System.getProperty("CEPH_CONF_FILE");
     if (conf_file != null)
       mount.conf_read_file(conf_file);
+    mount.conf_set("client_permissions", "0");
 
     mount.mount(null);
 
