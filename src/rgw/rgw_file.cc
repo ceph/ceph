@@ -70,6 +70,7 @@ namespace rgw {
 
     LookupFHResult fhr{nullptr, 0};
     RGWFileHandle::directory* d = parent->get_directory();
+#if 0
     if (! d->name_cache.empty()) {
       RGWFileHandle::dirent_string name{path};
       const auto& diter = d->name_cache.find(name);
@@ -83,6 +84,7 @@ namespace rgw {
 	  return fhr;
       }
     }
+#endif
     std::string object_name{path};
     for (auto ix : { 0, 1 }) {
       switch (ix) {
@@ -98,7 +100,7 @@ namespace rgw {
 	int rc = rgwlib.get_fe()->execute_req(&req);
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
-	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_NONE);
+	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_CREATE);
 	  if (get<0>(fhr)) {
 	    RGWFileHandle* rgw_fh = get<0>(fhr);
 	    rgw_fh->set_size(req.get_size());
