@@ -15,7 +15,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source ../qa/workunits/ceph-helpers.sh
+source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -33,21 +33,21 @@ function run() {
         run_mon $dir b --public-addr $MONB || return 1
     )
 
-    timeout 360 ./ceph --mon-host $MONA mon stat || return 1
+    timeout 360 ceph --mon-host $MONA mon stat || return 1
     # check that MONB is indeed a peon
-    ./ceph --admin-daemon $dir/ceph-mon.b.asok mon_status |
+    ceph --admin-daemon $dir/ceph-mon.b.asok mon_status |
        grep '"peon"' || return 1
     # when the leader ( MONA ) is used, there is no message forwarding
-    ./ceph --mon-host $MONA osd pool create POOL1 12 
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
+    ceph --mon-host $MONA osd pool create POOL1 12 
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     grep 'mon_command(.*"POOL1"' $dir/a/mon.a.log
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.b.asok log flush || return 1
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.b.asok log flush || return 1
     grep 'mon_command(.*"POOL1"' $dir/mon.b.log && return 1
     # when the peon ( MONB ) is used, the message is forwarded to the leader
-    ./ceph --mon-host $MONB osd pool create POOL2 12
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.b.asok log flush || return 1
+    ceph --mon-host $MONB osd pool create POOL2 12
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.b.asok log flush || return 1
     grep 'forward_request.*mon_command(.*"POOL2"' $dir/mon.b.log
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     grep ' forward(mon_command(.*"POOL2"' $dir/mon.a.log
     # forwarded messages must retain features from the original connection
     features=$(sed -n -e 's|.*127.0.0.1:0.*accept features \([0-9][0-9]*\)|\1|p' < \
