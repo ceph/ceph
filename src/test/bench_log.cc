@@ -46,7 +46,7 @@ int main(int argc, const char **argv)
   list<T*> ls;
   for (int i=0; i<threads; i++) {
     T *t = new T(num);
-    t->create();
+    t->create("t");
     ls.push_back(t);
   }
 

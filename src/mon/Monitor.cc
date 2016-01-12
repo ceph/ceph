@@ -3092,19 +3092,19 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
 struct AnonConnection : public Connection {
   AnonConnection(CephContext *cct) : Connection(cct, NULL) {}
 
-  int send_message(Message *m) {
+  int send_message(Message *m) override {
     assert(!"send_message on anonymous connection");
   }
-  void send_keepalive() {
+  void send_keepalive() override {
     assert(!"send_keepalive on anonymous connection");
   }
-  void mark_down() {
+  void mark_down() override {
     // silently ignore
   }
-  void mark_disposable() {
+  void mark_disposable() override {
     // silengtly ignore
   }
-  bool is_connected() { return false; }
+  bool is_connected() override { return false; }
 };
 
 //extract the original message and put it into the regular dispatch function
@@ -4145,6 +4145,18 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
     // if there are any non-onetime subscriptions, we need to reply to start the resubscribe timer
     if ((p->second.flags & CEPH_SUBSCRIBE_ONETIME) == 0)
       reply = true;
+
+    // remove conflicting subscribes
+    if (logmon()->sub_name_to_id(p->first) >= 0) {
+      for (map<string, Subscription*>::iterator it = s->sub_map.begin();
+	   it != s->sub_map.end(); ) {
+	if (it->first != p->first && logmon()->sub_name_to_id(it->first) >= 0) {
+	  session_map.remove_sub((it++)->second);
+	} else {
+	  ++it;
+	}
+      }
+    }
 
     session_map.add_update_sub(s, p->first, p->second.start, 
 			       p->second.flags & CEPH_SUBSCRIBE_ONETIME,

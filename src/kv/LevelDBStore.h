@@ -298,6 +298,12 @@ public:
     bufferlist value() {
       return to_bufferlist(dbiter->value());
     }
+
+    bufferptr value_as_ptr() {
+      leveldb::Slice data = dbiter->value();
+      return bufferptr(data.data(), data.size());
+    }
+
     int status() {
       return dbiter->status().ok() ? 0 : -1;
     }

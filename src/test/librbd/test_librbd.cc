@@ -3223,7 +3223,7 @@ TEST_F(TestLibRBD, ObjectMapConsistentSnap)
   ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
 
   RBDWriter writer(image1);
-  writer.create();
+  writer.create("rbd_writer");
 
   int num_snaps = 10;
   for (int i = 0; i < num_snaps; ++i) {

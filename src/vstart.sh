@@ -91,7 +91,7 @@ overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
 memstore=0
-newstore=0
+bluestore=0
 journal=1
 
 MON_ADDR=""
@@ -230,8 +230,8 @@ case $1 in
     --memstore )
 	    memstore=1
 	    ;;
-    --newstore )
-	    newstore=1
+    --bluestore )
+	    bluestore=1
 	    ;;
     --hitset )
 	    hitset="$hitset $2 $3"
@@ -308,7 +308,10 @@ else
         debug monc = 20
         debug journal = 20
         debug filestore = 20
-        debug newstore = 30
+        debug bluestore = 30
+        debug bluefs = 20
+        debug rocksdb = 10
+        debug bdev = 20
         debug rgw = 20
         debug objclass = 20'
     CMDSDEBUG='
@@ -331,9 +334,12 @@ if [ "$memstore" -eq 1 ]; then
     COSDMEMSTORE='
 	osd objectstore = memstore'
 fi
-if [ "$newstore" -eq 1 ]; then
+if [ "$bluestore" -eq 1 ]; then
     COSDMEMSTORE='
-	osd objectstore = newstore'
+	osd objectstore = bluestore
+	bluestore fsck on mount = true
+	bluestore block db size = 67108864
+	bluestore block wal size = 134217728'
 fi
 
 # lockdep everywhere?
@@ -575,6 +581,7 @@ EOF
 		    rm -rf $CEPH_DEV_DIR/osd$osd || true
 		    for f in $CEPH_DEV_DIR/osd$osd/* ; do btrfs sub delete $f || true ; done || true
 		    mkdir -p $CEPH_DEV_DIR/osd$osd
+
 	    fi
 
 	    uuid=`uuidgen`
@@ -664,9 +671,8 @@ fi
 
 if [ "$ec" -eq 1 ]; then
     $SUDO $CEPH_ADM <<EOF
-osd erasure-code-profile set ec-profile m=2 k=1
+osd erasure-code-profile set ec-profile m=2 k=2
 osd pool create ec 8 8 erasure ec-profile
-quit
 EOF
 fi
 
@@ -680,7 +686,6 @@ osd pool create ${p}-cache 8
 osd tier add $p ${p}-cache
 osd tier cache-mode ${p}-cache writeback
 osd tier set-overlay $p ${p}-cache
-quit
 EOF
     done
 }
@@ -697,7 +702,6 @@ do_hitsets() {
 osd pool set $pool hit_set_type $type
 osd pool set $pool hit_set_count 8
 osd pool set $pool hit_set_period 30
-quit
 EOF
     done
 }

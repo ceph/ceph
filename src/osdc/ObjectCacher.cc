@@ -1825,17 +1825,46 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   C_GatherBuilder gather(cct);
   set<Object*> waitfor_commit;
 
-  set<BufferHead*>::iterator next, it;
-  next = it = dirty_or_tx_bh.begin();
-  while (it != dirty_or_tx_bh.end()) {
-    ++next;
-    BufferHead *bh = *it;
-    waitfor_commit.insert(bh->ob);
+  set<BufferHead*, BufferHead::ptr_lt>::iterator it, p, q;
 
+  // Buffer heads in dirty_or_tx_bh are sorted in ObjectSet/Object/offset
+  // order. But items in oset->objects are not sorted. So the iterator can
+  // point to any buffer head in the ObjectSet
+  BufferHead key(*oset->objects.begin());
+  it = dirty_or_tx_bh.lower_bound(&key);
+  p = q = it;
+
+  bool backwards = true;
+  if (it != dirty_or_tx_bh.begin())
+    --it;
+  else
+    backwards = false;
+
+  for (; p != dirty_or_tx_bh.end(); p = q) {
+    ++q;
+    BufferHead *bh = *p;
+    if (bh->ob->oset != oset)
+      break;
+    waitfor_commit.insert(bh->ob);
     if (bh->is_dirty())
       bh_write(bh);
+  }
 
-    it = next;
+  if (backwards) {
+    for(p = q = it; true; p = q) {
+      if (q != dirty_or_tx_bh.begin())
+	--q;
+      else
+	backwards = false;
+      BufferHead *bh = *p;
+      if (bh->ob->oset != oset)
+	break;
+      waitfor_commit.insert(bh->ob);
+      if (bh->is_dirty())
+	bh_write(bh);
+      if (!backwards)
+	break;
+    }
   }
 
   for (set<Object*>::iterator i = waitfor_commit.begin();
@@ -1888,6 +1917,46 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv,
 		     << ob->last_write_tid << " on " << *ob << dendl;
       ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
     }
+  }
+
+  return _flush_set_finish(&gather, onfinish);
+}
+
+// flush all dirty data.  non-blocking, takes callback.
+// returns true if already flushed
+bool ObjectCacher::flush_all(Context *onfinish)
+{
+  assert(lock.is_locked());
+  assert(onfinish != NULL);
+
+  ldout(cct, 10) << "flush_all " << dendl;
+
+  // we'll need to wait for all objects to flush!
+  C_GatherBuilder gather(cct);
+  set<Object*> waitfor_commit;
+
+  set<BufferHead*, BufferHead::ptr_lt>::iterator next, it;
+  next = it = dirty_or_tx_bh.begin();
+  while (it != dirty_or_tx_bh.end()) {
+    ++next;
+    BufferHead *bh = *it;
+    waitfor_commit.insert(bh->ob);
+
+    if (bh->is_dirty())
+      bh_write(bh);
+
+    it = next;
+  }
+
+  for (set<Object*>::iterator i = waitfor_commit.begin();
+       i != waitfor_commit.end();
+       ++i) {
+    Object *ob = *i;
+
+    // we'll need to gather...
+    ldout(cct, 10) << "flush_all will wait for ack tid "
+		   << ob->last_write_tid << " on " << *ob << dendl;
+    ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
   }
 
   return _flush_set_finish(&gather, onfinish);

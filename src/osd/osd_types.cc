@@ -588,11 +588,6 @@ void coll_t::calc_str()
   case TYPE_PG_TEMP:
     _str = stringify(pgid) + "_TEMP";
     break;
-  case TYPE_PG_REMOVAL:
-    _str = string("FORREMOVAL_") +
-      stringify(removal_seq) + "_" +
-      stringify(pgid);
-    break;
   default:
     assert(0 == "unknown collection type");
   }
@@ -624,29 +619,12 @@ bool coll_t::parse(const std::string& s)
     assert(s == _str);
     return true;
   }
-  if (s.find("FORREMOVAL_") == 0) {
-    type = TYPE_PG_REMOVAL;
-    stringstream ss(s.substr(11));
-    ss >> removal_seq;
-    char sep;
-    ss >> sep;
-    assert(sep == '_');
-    string pgid_str;
-    ss >> pgid_str;
-    if (!pgid.parse(pgid_str.c_str())) {
-      assert(0);
-      return false;
-    }
-    calc_str();
-    assert(s == _str);
-    return true;
-  }
   return false;
 }
 
 void coll_t::encode(bufferlist& bl) const
 {
-  if (is_removal() || is_temp()) {
+  if (is_temp()) {
     // can't express this as v2...
     __u8 struct_v = 3;
     ::encode(struct_v, bl);
@@ -730,8 +708,6 @@ void coll_t::generate_test_instances(list<coll_t*>& o)
   o.push_back(new coll_t(spg_t(pg_t(3, 2), shard_id_t(12))));
   o.push_back(new coll_t(o.back()->get_temp()));
   o.push_back(new coll_t());
-  o.back()->parse("FORREMOVAL_0_0.1");
-  o.back()->parse("FORREMOVAL_123_2.2a3f");
 }
 
 // ---
@@ -5314,7 +5290,7 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
 
 void ScrubMap::object::encode(bufferlist& bl) const
 {
-  ENCODE_START(6, 2, bl);
+  ENCODE_START(7, 2, bl);
   ::encode(size, bl);
   ::encode(negative, bl);
   ::encode(attrs, bl);
@@ -5325,12 +5301,13 @@ void ScrubMap::object::encode(bufferlist& bl) const
   ::encode(omap_digest, bl);
   ::encode(omap_digest_present, bl);
   ::encode(read_error, bl);
+  ::encode(stat_error, bl);
   ENCODE_FINISH(bl);
 }
 
 void ScrubMap::object::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 2, 2, bl);
   ::decode(size, bl);
   bool tmp;
   ::decode(tmp, bl);
@@ -5357,6 +5334,10 @@ void ScrubMap::object::decode(bufferlist::iterator& bl)
   if (struct_v >= 6) {
     ::decode(tmp, bl);
     read_error = tmp;
+  }
+  if (struct_v >= 7) {
+    ::decode(tmp, bl);
+    stat_error = tmp;
   }
   DECODE_FINISH(bl);
 }

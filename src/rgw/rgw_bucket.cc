@@ -88,6 +88,7 @@ int rgw_read_user_buckets(RGWRados * store,
                           const rgw_user& user_id,
                           RGWUserBuckets& buckets,
                           const string& marker,
+                          const string& end_marker,
                           uint64_t max,
                           bool need_stats,
                           uint64_t default_amount)
@@ -111,7 +112,7 @@ int rgw_read_user_buckets(RGWRados * store,
   }
 
   do {
-    ret = store->cls_user_list_buckets(obj, m, max - total, entries, &m, &truncated);
+    ret = store->cls_user_list_buckets(obj, m, end_marker, max - total, entries, &m, &truncated);
     if (ret == -ENOENT)
       ret = 0;
 
@@ -369,7 +370,8 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id, boo
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
 
   do {
-    int ret = rgw_read_user_buckets(store, user_id, user_buckets, marker, max_entries, false);
+    int ret = rgw_read_user_buckets(store, user_id, user_buckets,
+                                    marker, string(), max_entries, false);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "failed to read user buckets: " << cpp_strerror(-ret) << dendl;
       return;
@@ -1128,7 +1130,8 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
     bool done;
 
     do {
-      ret = rgw_read_user_buckets(store, user_id, buckets, marker, max_entries, false);
+      ret = rgw_read_user_buckets(store, user_id, buckets,
+                                  marker, string(), max_entries, false);
       if (ret < 0)
         return ret;
 
@@ -1639,7 +1642,11 @@ public:
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
           time_t mtime, JSONObj *obj, sync_type_t sync_type) {
     RGWBucketEntryPoint be, old_be;
-    decode_json_obj(be, obj);
+    try {
+      decode_json_obj(be, obj);
+    } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+    }
 
     time_t orig_mtime;
     map<string, bufferlist> attrs;
@@ -1790,7 +1797,11 @@ public:
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
           time_t mtime, JSONObj *obj, sync_type_t sync_type) {
     RGWBucketCompleteInfo bci, old_bci;
-    decode_json_obj(bci, obj);
+    try {
+      decode_json_obj(bci, obj);
+    } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+    }
 
     time_t orig_mtime;
     RGWObjectCtx obj_ctx(store);

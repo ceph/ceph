@@ -887,7 +887,6 @@ protected:
   // replica ops
   // [primary|tail]
   xlist<RepGather*> repop_queue;
-  ceph::unordered_map<ceph_tid_t, RepGather*> repop_map;
 
   friend class C_OSD_RepopApplied;
   friend class C_OSD_RepopCommit;
@@ -935,7 +934,7 @@ protected:
   }
   bool agent_work(int max, int agent_flush_quota);
   bool agent_maybe_flush(ObjectContextRef& obc);  ///< maybe flush
-  bool agent_maybe_evict(ObjectContextRef& obc);  ///< maybe evict
+  bool agent_maybe_evict(ObjectContextRef& obc, bool after_flush);  ///< maybe evict
 
   void agent_load_hit_sets();  ///< load HitSets, if needed
 

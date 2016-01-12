@@ -84,9 +84,12 @@ namespace librbd {
   }
 
   static inline bool is_copy_on_read(ImageCtx *ictx, librados::snap_t snap_id) {
+    assert(ictx->owner_lock.is_locked());
     assert(ictx->snap_lock.is_locked());
-    return (ictx->clone_copy_on_read) &&
-           (!ictx->read_only) && (snap_id == CEPH_NOSNAP);
+    return (ictx->clone_copy_on_read &&
+            !ictx->read_only && snap_id == CEPH_NOSNAP &&
+            (ictx->exclusive_lock == nullptr ||
+             ictx->exclusive_lock->is_lock_owner()));
   }
 
   /** read **/
@@ -132,6 +135,7 @@ namespace librbd {
       // This is the step to read from parent
       if (!m_tried_parent && r == -ENOENT) {
         {
+          RWLock::RLocker owner_locker(m_ictx->owner_lock);
           RWLock::RLocker snap_locker(m_ictx->snap_lock);
           RWLock::RLocker parent_locker(m_ictx->parent_lock);
           if (m_ictx->parent == NULL) {
@@ -240,9 +244,12 @@ namespace librbd {
   void AioObjectRead::send_copyup()
   {
     {
+      RWLock::RLocker owner_locker(m_ictx->owner_lock);
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
       RWLock::RLocker parent_locker(m_ictx->parent_lock);
-      if (!compute_parent_extents()) {
+      if (!compute_parent_extents() ||
+          (m_ictx->exclusive_lock != nullptr &&
+           !m_ictx->exclusive_lock->is_lock_owner())) {
         return;
       }
     }
@@ -255,7 +262,7 @@ namespace librbd {
       CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid, m_object_no,
     					         m_parent_extents);
       m_ictx->copyup_list[m_object_no] = new_req;
-      new_req->queue_send();
+      new_req->send();
     }
   }
 
@@ -549,7 +556,7 @@ namespace librbd {
 			   << m_object_off << "~" << m_object_len
                            << " object exist " << m_object_exist
 			   << " write_full " << write_full << dendl;
-    if (write_full) {
+    if (write_full && !has_parent()) {
       send_write_op(false);
     } else {
       AbstractAioObjectWrite::send_write();

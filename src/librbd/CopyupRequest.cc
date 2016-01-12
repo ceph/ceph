@@ -195,18 +195,6 @@ private:
                               &m_copyup_data, 0);
   }
 
-  void CopyupRequest::queue_send()
-  {
-    // TODO: once the ObjectCacher allows reentrant read requests, the finisher
-    // should be eliminated
-    ldout(m_ictx->cct, 20) << __func__ << " " << this
-			   << ": oid " << m_oid << " "
-			   << ", extents " << m_image_extents << dendl;
-    FunctionContext *ctx = new FunctionContext(
-      boost::bind(&CopyupRequest::send, this));
-    m_ictx->copyup_finisher->queue(ctx);
-  }
-
   void CopyupRequest::complete(int r)
   {
     if (should_complete(r)) {
@@ -277,12 +265,7 @@ private:
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
       if (m_ictx->object_map != nullptr) {
         bool copy_on_read = m_pending_requests.empty();
-        if (!m_ictx->exclusive_lock->is_lock_owner()) {
-          ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
-                                 << dendl;
-          assert(copy_on_read);
-          return true;
-        }
+        assert(m_ictx->exclusive_lock->is_lock_owner());
 
         RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
         if (copy_on_read &&

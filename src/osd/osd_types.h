@@ -518,7 +518,6 @@ class coll_t {
     TYPE_LEGACY_TEMP = 1,  /* no longer used */
     TYPE_PG = 2,
     TYPE_PG_TEMP = 3,
-    TYPE_PG_REMOVAL = 4,   /* note: deprecated, not encoded */
   };
   type_t type;
   spg_t pgid;
@@ -575,7 +574,7 @@ public:
     return type == TYPE_META;
   }
   bool is_pg_prefix(spg_t *pgid_) const {
-    if (type == TYPE_PG || type == TYPE_PG_TEMP || type == TYPE_PG_REMOVAL) {
+    if (type == TYPE_PG || type == TYPE_PG_TEMP) {
       *pgid_ = pgid;
       return true;
     }
@@ -596,16 +595,6 @@ public:
   }
   bool is_temp(spg_t *pgid_) const {
     if (type == TYPE_PG_TEMP) {
-      *pgid_ = pgid;
-      return true;
-    }
-    return false;
-  }
-  bool is_removal() const {
-    return type == TYPE_PG_REMOVAL;
-  }
-  bool is_removal(spg_t *pgid_) const {
-    if (type == TYPE_PG_REMOVAL) {
       *pgid_ = pgid;
       return true;
     }
@@ -632,6 +621,22 @@ public:
   coll_t get_temp() const {
     assert(type == TYPE_PG);
     return coll_t(TYPE_PG_TEMP, pgid, 0);
+  }
+
+  ghobject_t get_min_hobj() const {
+    ghobject_t o;
+    switch (type) {
+    case TYPE_PG:
+      o.hobj.pool = pgid.pool();
+      o.set_shard(pgid.shard);
+      break;
+    case TYPE_META:
+      o.hobj.pool = -1;
+      break;
+    default:
+      break;
+    }
+    return o;
   }
 
   void dump(Formatter *f) const;
@@ -3845,12 +3850,13 @@ struct ScrubMap {
     bool digest_present:1;
     bool omap_digest_present:1;
     bool read_error:1;
+    bool stat_error:1;
 
     object() :
       // Init invalid size so it won't match if we get a stat EIO error
       size(-1), omap_digest(0), digest(0), nlinks(0), 
       negative(false), digest_present(false), omap_digest_present(false), 
-      read_error(false) {}
+      read_error(false), stat_error(false) {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);

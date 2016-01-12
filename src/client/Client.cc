@@ -2176,7 +2176,11 @@ void Client::handle_client_reply(MClientReply *reply)
     if (is_dir_operation(request)) {
       Inode *dir = request->inode();
       assert(dir);
-      dir->unsafe_dir_ops.push_back(&request->unsafe_dir_item);
+      dir->unsafe_ops.push_back(&request->unsafe_dir_item);
+    }
+    if (request->target) {
+      InodeRef &in = request->target;
+      in->unsafe_ops.push_back(&request->unsafe_target_item);
     }
   }
 
@@ -2203,6 +2207,7 @@ void Client::handle_client_reply(MClientReply *reply)
     if (request->got_unsafe) {
       request->unsafe_item.remove_myself();
       request->unsafe_dir_item.remove_myself();
+      request->unsafe_target_item.remove_myself();
       signal_cond_list(request->waitfor_safe);
     }
     request->item.remove_myself();
@@ -2565,6 +2570,30 @@ void Client::resend_unsafe_requests(MetaSession *session)
   }
 }
 
+void Client::wait_unsafe_requests()
+{
+  list<MetaRequest*> last_unsafe_reqs;
+  for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end();
+       ++p) {
+    MetaSession *s = p->second;
+    if (!s->unsafe_requests.empty()) {
+      MetaRequest *req = s->unsafe_requests.back();
+      req->get();
+      last_unsafe_reqs.push_back(req);
+    }
+  }
+
+  for (list<MetaRequest*>::iterator p = last_unsafe_reqs.begin();
+       p != last_unsafe_reqs.end();
+       ++p) {
+    MetaRequest *req = *p;
+    if (req->unsafe_item.is_on_list())
+      wait_on_list(req->waitfor_safe);
+    put_request(req);
+  }
+}
+
 void Client::kick_requests_closed(MetaSession *session)
 {
   ldout(cct, 10) << "kick_requests_closed for mds." << session->mds_num << dendl;
@@ -2582,6 +2611,7 @@ void Client::kick_requests_closed(MetaSession *session)
 	lderr(cct) << "kick_requests_closed removing unsafe request " << req->get_tid() << dendl;
 	req->unsafe_item.remove_myself();
 	req->unsafe_dir_item.remove_myself();
+	req->unsafe_target_item.remove_myself();
 	signal_cond_list(req->waitfor_safe);
 	unregister_request(req);
       }
@@ -6275,7 +6305,6 @@ int Client::_opendir(Inode *in, dir_result_t **dirpp, int uid, int gid)
   if (!in->is_dir())
     return -ENOTDIR;
   *dirpp = new dir_result_t(in);
-  (*dirpp)->set_frag(in->dirfragtree[0]);
   if (in->dir) {
     (*dirpp)->release_count = in->dir->release_count;
     (*dirpp)->ordered_count = in->dir->ordered_count;
@@ -8062,11 +8091,11 @@ int Client::fsync(int fd, bool syncdataonly)
 int Client::_fsync(Inode *in, bool syncdataonly)
 {
   int r = 0;
-  bool flushed_metadata = false;
   Mutex lock("Client::_fsync::lock");
   Cond cond;
   bool done = false;
   C_SafeCond *object_cacher_completion = NULL;
+  ceph_tid_t flush_tid = 0;
   InodeRef tmp_ref;
 
   ldout(cct, 3) << "_fsync on " << *in << " " << (syncdataonly ? "(dataonly)":"(data+metadata)") << dendl;
@@ -8081,8 +8110,17 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {
     check_caps(in, true);
     if (in->flushing_caps)
-      flushed_metadata = true;
+      flush_tid = last_flush_tid;
   } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
+
+  if (!syncdataonly && !in->unsafe_ops.empty()) {
+    MetaRequest *req = in->unsafe_ops.back();
+    ldout(cct, 15) << "waiting on unsafe requests, last tid " << req->get_tid() <<  dendl;
+
+    req->get();
+    wait_on_list(req->waitfor_safe);
+    put_request(req);
+  }
 
   if (object_cacher_completion) { // wait on a real reply instead of guessing
     client_lock.Unlock();
@@ -8102,24 +8140,9 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     }
   }
 
-  if (!in->unsafe_dir_ops.empty()) {
-    MetaRequest *req = in->unsafe_dir_ops.back();
-    uint64_t last_tid = req->get_tid();
-    ldout(cct, 15) << "waiting on unsafe requests, last tid " << last_tid <<  dendl;
-
-    do {
-      req->get();
-      wait_on_list(req->waitfor_safe);
-      put_request(req);
-      if (in->unsafe_dir_ops.empty())
-	break;
-      req = in->unsafe_dir_ops.front();
-    } while (req->tid < last_tid);
-  }
-
   if (!r) {
-    if (flushed_metadata)
-      wait_sync_caps(in, last_flush_tid);
+    if (flush_tid > 0)
+      wait_sync_caps(in, flush_tid);
 
     ldout(cct, 10) << "ino " << in->ino << " has no uncommitted writes" << dendl;
   } else {
@@ -8616,15 +8639,33 @@ int Client::_sync_fs()
 {
   ldout(cct, 10) << "_sync_fs" << dendl;
 
-  // wait for unsafe mds requests
-  // FIXME
-  
+  // flush file data
+  Mutex lock("Client::_fsync::lock");
+  Cond cond;
+  bool flush_done = false;
+  if (cct->_conf->client_oc)
+    objectcacher->flush_all(new C_SafeCond(&lock, &cond, &flush_done));
+  else
+    flush_done = true;
+
   // flush caps
   flush_caps();
-  wait_sync_caps(last_flush_tid);
+  ceph_tid_t flush_tid = last_flush_tid;
 
-  // flush file data
-  // FIXME
+  // wait for unsafe mds requests
+  wait_unsafe_requests();
+
+  wait_sync_caps(flush_tid);
+
+  if (!flush_done) {
+    client_lock.Unlock();
+    lock.Lock();
+    ldout(cct, 15) << "waiting on data to flush" << dendl;
+    while (!flush_done)
+      cond.Wait(lock);
+    lock.Unlock();
+    client_lock.Lock();
+  }
 
   return 0;
 }

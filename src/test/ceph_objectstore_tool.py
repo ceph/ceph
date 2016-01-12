@@ -887,16 +887,13 @@ def main(argv):
     ERRORS += test_failure(cmd, "stdin is a tty and no --file filename specified", tty=True)
 
     # Specify a bad --type
-    cmd = (CFSD_PREFIX + "--type foobar --op list --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure(cmd, "Must provide --type (filestore, memstore, keyvaluestore)")
+    os.mkdir(OSDDIR + "/fakeosd")
+    cmd = ("./ceph-objectstore-tool --data-path " + OSDDIR + "/{osd} --type foobar --op list --pgid {pg}").format(osd="fakeosd", pg=ONEPG)
+    ERRORS += test_failure(cmd, "Need a valid --type e.g. filestore, memstore, keyvaluestore")
 
     # Don't specify a data-path
     cmd = "./ceph-objectstore-tool --journal-path {dir}/{osd}.journal --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --data-path")
-
-    # Don't specify a journal-path for filestore
-    cmd = "./ceph-objectstore-tool --type filestore --data-path {dir}/{osd} --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure(cmd, "Must provide --journal-path")
 
     cmd = (CFSD_PREFIX + "--op remove").format(osd=ONEOSD)
     ERRORS += test_failure(cmd, "Must provide pgid")
@@ -907,7 +904,7 @@ def main(argv):
 
     # Specify a bad --op command
     cmd = (CFSD_PREFIX + "--op oops").format(osd=ONEOSD)
-    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)")
+    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)")
 
     # Provide just the object param not a command
     cmd = (CFSD_PREFIX + "object").format(osd=ONEOSD)

@@ -122,7 +122,7 @@ class AsyncConnection : public Connection {
 
   ostream& _conn_prefix(std::ostream *_dout);
 
-  bool is_connected() {
+  bool is_connected() override {
     Mutex::Locker l(lock);
     return state >= STATE_OPEN && state <= STATE_OPEN_TAG_CLOSE;
   }
@@ -136,11 +136,11 @@ class AsyncConnection : public Connection {
   }
   // Only call when AsyncConnection first construct
   void accept(int sd);
-  int send_message(Message *m);
+  int send_message(Message *m) override;
 
-  void send_keepalive();
-  void mark_down();
-  void mark_disposable() {
+  void send_keepalive() override;
+  void mark_down() override;
+  void mark_disposable() override {
     Mutex::Locker l(lock);
     policy.lossy = true;
   }
@@ -316,13 +316,13 @@ class AsyncConnection : public Connection {
     mark_down();
   }
   void cleanup_handler() {
-    read_handler.reset();
-    write_handler.reset();
-    reset_handler.reset();
-    remote_reset_handler.reset();
-    connect_handler.reset();
-    local_deliver_handler.reset();
-    wakeup_handler.reset();
+    delete read_handler;
+    delete write_handler;
+    delete reset_handler;
+    delete remote_reset_handler;
+    delete connect_handler;
+    delete local_deliver_handler;
+    delete wakeup_handler;
   }
   PerfCounters *get_perf_counter() {
     return logger;

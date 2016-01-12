@@ -1400,8 +1400,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     if (!order)
       order = cct->_conf->rbd_default_order;
-    if (!order)
-      order = RBD_DEFAULT_OBJ_ORDER;
 
     if (order > 25 || order < 12) {
       lderr(cct) << "order must be in the range [12, 25]" << dendl;
@@ -2104,8 +2102,10 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       r = tmap_rm(io_ctx, imgname);
       old_format = (r == 0);
       if (r < 0 && !unknown_format) {
-	lderr(cct) << "error removing img from old-style directory: "
-		   << cpp_strerror(-r) << dendl;
+        if (r != -ENOENT) {
+	  lderr(cct) << "error removing img from old-style directory: "
+		     << cpp_strerror(-r) << dendl;
+        }
 	return r;
       }
     }
@@ -2138,11 +2138,13 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       ldout(cct, 2) << "removing rbd image from directory..." << dendl;
       r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY, imgname, id);
       if (r < 0) {
-	lderr(cct) << "error removing img from new-style directory: "
-		   << cpp_strerror(-r) << dendl;
+        if (r != -ENOENT) {
+	  lderr(cct) << "error removing img from new-style directory: "
+		     << cpp_strerror(-r) << dendl;
+        }
 	return r;
       }
-    } 
+    }
 
     ldout(cct, 2) << "done." << dendl;
     return 0;
@@ -2506,8 +2508,10 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     int r = ctx.wait();
     if (r < 0) {
-      lderr(ictx->cct) << "failed to " << (name.empty() ? "un" : "") << "set "
-                       << "snapshot: " << cpp_strerror(r) << dendl;
+      if (r != -ENOENT) {
+        lderr(ictx->cct) << "failed to " << (name.empty() ? "un" : "") << "set "
+                         << "snapshot: " << cpp_strerror(r) << dendl;
+      }
       return r;
     }
 

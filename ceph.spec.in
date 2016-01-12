@@ -167,7 +167,6 @@ BuildRequires:	libatomic-ops-devel
 %if 0%{?_with_systemd}
 Requires:	systemd
 %endif
-BuildRequires:  bzip2-devel
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
@@ -789,6 +788,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds
 %{_bindir}/ceph-objectstore-tool
+%{_bindir}/ceph-bluefs-tool
 %{_bindir}/ceph-osd
 %{_bindir}/ceph-detect-init
 %{_bindir}/librados-config
@@ -1203,7 +1203,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph_smalliobenchdumb
 %{_bindir}/ceph_smalliobenchfs
 %{_bindir}/ceph_smalliobenchrbd
-%{_bindir}/ceph_streamtest
 %{_bindir}/ceph_test_*
 %{_bindir}/ceph_tpbench
 %{_bindir}/ceph_xattr_bench

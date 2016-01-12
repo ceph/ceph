@@ -137,6 +137,10 @@ SUBSYS(refs, 0, 0)
 SUBSYS(xio, 1, 5)
 SUBSYS(compressor, 1, 5)
 SUBSYS(newstore, 1, 5)
+SUBSYS(bluestore, 1, 5)
+SUBSYS(bluefs, 1, 5)
+SUBSYS(bdev, 1, 3)
+SUBSYS(kstore, 1, 5)
 SUBSYS(rocksdb, 4, 5)
 SUBSYS(leveldb, 4, 5)
 
@@ -772,6 +776,8 @@ OPTION(kinetic_hmac_key, OPT_STR, "asdfasdf") // kinetic key to authenticate wit
 OPTION(kinetic_use_ssl, OPT_BOOL, false) // whether to secure kinetic traffic with TLS
 
 
+OPTION(rocksdb_separate_wal_dir, OPT_BOOL, false) // use $path.wal for wal
+OPTION(rocksdb_db_paths, OPT_STR, "")   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
 // rocksdb options that will be used for keyvaluestore(if backend is rocksdb)
 OPTION(keyvaluestore_rocksdb_options, OPT_STR, "")
@@ -827,34 +833,78 @@ OPTION(memstore_device_bytes, OPT_U64, 1024*1024*1024)
 OPTION(memstore_page_set, OPT_BOOL, true)
 OPTION(memstore_page_size, OPT_U64, 64 << 10)
 
-OPTION(newstore_max_dir_size, OPT_U32, 1000000)
-OPTION(newstore_onode_map_size, OPT_U32, 1024)   // onodes per collection
-OPTION(newstore_backend, OPT_STR, "rocksdb")
-OPTION(newstore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=6")
-OPTION(newstore_fail_eio, OPT_BOOL, true)
-OPTION(newstore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
-OPTION(newstore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
-OPTION(newstore_sync_submit_transaction, OPT_BOOL, false)
-OPTION(newstore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
-OPTION(newstore_fsync_threads, OPT_INT, 16)  // num threads calling fsync
-OPTION(newstore_fsync_thread_timeout, OPT_INT, 30) // thread timeout value
-OPTION(newstore_fsync_thread_suicide_timeout, OPT_INT, 120) // suicide timeout value
-OPTION(newstore_wal_threads, OPT_INT, 4)
-OPTION(newstore_wal_thread_timeout, OPT_INT, 30)
-OPTION(newstore_wal_thread_suicide_timeout, OPT_INT, 120)
-OPTION(newstore_max_ops, OPT_U64, 512)
-OPTION(newstore_max_bytes, OPT_U64, 64*1024*1024)
-OPTION(newstore_wal_max_ops, OPT_U64, 512)
-OPTION(newstore_wal_max_bytes, OPT_U64, 128*1024*1024)
-OPTION(newstore_fid_prealloc, OPT_INT, 1024)
-OPTION(newstore_nid_prealloc, OPT_INT, 1024)
-OPTION(newstore_overlay_max_length, OPT_INT, 65536)
-OPTION(newstore_overlay_max, OPT_INT, 32)
-OPTION(newstore_open_by_handle, OPT_BOOL, true)
-OPTION(newstore_o_direct, OPT_BOOL, true)
-OPTION(newstore_aio, OPT_BOOL, true)
-OPTION(newstore_aio_poll_ms, OPT_INT, 250)  // milliseconds
-OPTION(newstore_aio_max_queue_depth, OPT_INT, 4096)
+OPTION(bdev_debug_inflight_ios, OPT_BOOL, false)
+OPTION(bdev_inject_crash, OPT_INT, 0)  // if N>0, then ~ 1/N IOs will complete before we crash on flush.
+OPTION(bdev_aio, OPT_BOOL, true)
+OPTION(bdev_aio_poll_ms, OPT_INT, 250)  // milliseconds
+OPTION(bdev_aio_max_queue_depth, OPT_INT, 32)
+
+OPTION(bluefs_alloc_size, OPT_U64, 1048576)
+OPTION(bluefs_max_prefetch, OPT_U64, 1048576)
+OPTION(bluefs_min_log_runway, OPT_U64, 1048576)  // alloc when we get this low
+OPTION(bluefs_max_log_runway, OPT_U64, 4194304)  // alloc this much at a time
+OPTION(bluefs_log_compact_min_ratio, OPT_FLOAT, 5.0)      // before we consider
+OPTION(bluefs_log_compact_min_size, OPT_U64, 16*1048576)  // before we consider
+OPTION(bluefs_min_flush_size, OPT_U64, 65536)  // ignore flush until its this big
+
+OPTION(bluestore_bluefs, OPT_BOOL, true)
+OPTION(bluestore_bluefs_env_mirror, OPT_BOOL, false) // mirror to normal Env for debug
+OPTION(bluestore_bluefs_initial_length, OPT_U64, 65536*1024)
+OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .01)
+OPTION(bluestore_bluefs_min_free_ratio, OPT_FLOAT, .1)
+OPTION(bluestore_bluefs_max_free_fs_main_ratio, OPT_FLOAT, .8)
+OPTION(bluestore_bluefs_min_gift_ratio, OPT_FLOAT, 1)
+OPTION(bluestore_block_path, OPT_STR, "")
+OPTION(bluestore_block_size, OPT_U64, 10 * 1024*1024*1024)  // 10gb for testing
+OPTION(bluestore_block_db_path, OPT_STR, "")
+OPTION(bluestore_block_db_size, OPT_U64, 0)      // rocksdb primary storage
+OPTION(bluestore_block_wal_path, OPT_STR, "")
+OPTION(bluestore_block_wal_size, OPT_U64, 0)     // rocksdb wal
+OPTION(bluestore_max_dir_size, OPT_U32, 1000000)
+OPTION(bluestore_min_alloc_size, OPT_U32, 64*1024)
+OPTION(bluestore_onode_map_size, OPT_U32, 1024)   // onodes per collection
+OPTION(bluestore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
+OPTION(bluestore_backend, OPT_STR, "rocksdb")
+OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=3,recycle_log_file_num=16")
+OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
+OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
+OPTION(bluestore_fail_eio, OPT_BOOL, true)
+OPTION(bluestore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
+OPTION(bluestore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
+OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false)
+OPTION(bluestore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
+OPTION(bluestore_wal_threads, OPT_INT, 4)
+OPTION(bluestore_wal_thread_timeout, OPT_INT, 30)
+OPTION(bluestore_wal_thread_suicide_timeout, OPT_INT, 120)
+OPTION(bluestore_max_ops, OPT_U64, 512)
+OPTION(bluestore_max_bytes, OPT_U64, 64*1024*1024)
+OPTION(bluestore_wal_max_ops, OPT_U64, 512)
+OPTION(bluestore_wal_max_bytes, OPT_U64, 128*1024*1024)
+OPTION(bluestore_fid_prealloc, OPT_INT, 1024)
+OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
+OPTION(bluestore_overlay_max_length, OPT_INT, 65536)
+OPTION(bluestore_overlay_max, OPT_INT, 0)
+OPTION(bluestore_open_by_handle, OPT_BOOL, true)
+OPTION(bluestore_o_direct, OPT_BOOL, true)
+OPTION(bluestore_clone_cow, OPT_BOOL, true)  // do copy-on-write for clones
+OPTION(bluestore_debug_misc, OPT_BOOL, false)
+OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL, false)
+OPTION(bluestore_debug_small_allocations, OPT_INT, 0)
+OPTION(bluestore_debug_freelist, OPT_BOOL, false)
+OPTION(bluestore_debug_prefill, OPT_FLOAT, 0)
+OPTION(bluestore_debug_prefragment_max, OPT_INT, 1048576)
+
+OPTION(kstore_max_ops, OPT_U64, 512)
+OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
+OPTION(kstore_backend, OPT_STR, "rocksdb")
+OPTION(kstore_rocksdb_options, OPT_STR, "compression=kNoCompression")
+OPTION(kstore_fsck_on_mount, OPT_BOOL, false)
+OPTION(kstore_nid_prealloc, OPT_U64, 1024)
+OPTION(kstore_sync_transaction, OPT_BOOL, false)
+OPTION(kstore_sync_submit_transaction, OPT_BOOL, false)
+OPTION(kstore_onode_map_size, OPT_U64, 1024)
+OPTION(kstore_cache_tails, OPT_BOOL, true)
+OPTION(kstore_default_stripe_size, OPT_INT, 65536)
 
 OPTION(filestore_omap_backend, OPT_STR, "leveldb")
 

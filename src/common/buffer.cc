@@ -1402,6 +1402,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     if (nb.length())
       _buffers.push_back(nb);
     invalidate_crc();
+    last_p = begin();
   }
 
   void buffer::list::rebuild_aligned(unsigned align)
@@ -1449,6 +1450,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       }
       _buffers.insert(p, unaligned._buffers.front());
     }
+    last_p = begin();
   }
   
   void buffer::list::rebuild_page_aligned()
@@ -1692,6 +1694,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       _buffers.insert(curbuf, tmp._buffers.front());
       return tmp.c_str() + off;
     }
+
+    last_p = begin();  // we modified _buffers
 
     return curbuf->c_str() + off;
   }
@@ -2093,24 +2097,58 @@ void buffer::list::write_stream(std::ostream &out) const
 
 void buffer::list::hexdump(std::ostream &out) const
 {
+  if (!length())
+    return;
+
   std::ios_base::fmtflags original_flags = out.flags();
+
+  // do our best to match the output of hexdump -C, for better
+  // diff'ing!
 
   out.setf(std::ios::right);
   out.fill('0');
 
   unsigned per = 16;
-
+  bool was_zeros = false, did_star = false;
   for (unsigned o=0; o<length(); o += per) {
-    out << std::hex << std::setw(4) << o << " :";
+    bool row_is_zeros = false;
+    if (o + per < length()) {
+      row_is_zeros = true;
+      for (unsigned i=0; i<per && o+i<length(); i++) {
+	if ((*this)[o+i]) {
+	  row_is_zeros = false;
+	}
+      }
+      if (row_is_zeros) {
+	if (was_zeros) {
+	  if (!did_star) {
+	    out << "*\n";
+	    did_star = true;
+	  }
+	  continue;
+	}
+	was_zeros = true;
+      } else {
+	was_zeros = false;
+	did_star = false;
+      }
+    }
+
+    out << std::hex << std::setw(8) << o << " ";
 
     unsigned i;
     for (i=0; i<per && o+i<length(); i++) {
+      if (i == 8)
+	out << ' ';
       out << " " << std::setw(2) << ((unsigned)(*this)[o+i] & 0xff);
     }
-    for (; i<per; i++)
+    for (; i<per; i++) {
+      if (i == 8)
+	out << ' ';
       out << "   ";
+    }
     
-    out << " : ";
+    out << "  |";
     for (i=0; i<per && o+i<length(); i++) {
       char c = (*this)[o+i];
       if (isupper(c) || islower(c) || isdigit(c) || c == ' ' || ispunct(c))
@@ -2118,8 +2156,9 @@ void buffer::list::hexdump(std::ostream &out) const
       else
 	out << '.';
     }
-    out << std::dec << std::endl;
+    out << '|' << std::dec << std::endl;
   }
+  out << std::hex << std::setw(8) << length() << "\n";
 
   out.flags(original_flags);
 }

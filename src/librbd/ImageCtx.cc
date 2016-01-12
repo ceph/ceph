@@ -47,7 +47,7 @@ namespace {
 class ThreadPoolSingleton : public ThreadPool {
 public:
   ThreadPoolSingleton(CephContext *cct)
-    : ThreadPool(cct, "librbd::thread_pool", cct->_conf->rbd_op_threads,
+    : ThreadPool(cct, "librbd::thread_pool", "tp_librbd", cct->_conf->rbd_op_threads,
                  "rbd_op_threads") {
     start();
   }
@@ -161,7 +161,7 @@ struct C_InvalidateCache : public Context {
       stripe_unit(0), stripe_count(0), flags(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
-      total_bytes_read(0), copyup_finisher(NULL),
+      total_bytes_read(0),
       state(new ImageState<>(this)), exclusive_lock(nullptr),
       object_map(nullptr), aio_work_queue(NULL), op_work_queue(NULL)
   {
@@ -206,10 +206,6 @@ struct C_InvalidateCache : public Context {
     if (object_set) {
       delete object_set;
       object_set = NULL;
-    }
-    if (copyup_finisher != NULL) {
-      delete copyup_finisher;
-      copyup_finisher = NULL;
     }
     delete[] format_string;
 
@@ -278,11 +274,6 @@ struct C_InvalidateCache : public Context {
       object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
       object_set->return_enoent = true;
       object_cacher->start();
-    }
-
-    if (clone_copy_on_read) {
-      copyup_finisher = new Finisher(cct);
-      copyup_finisher->start();
     }
 
     readahead.set_trigger_requests(readahead_trigger_requests);
@@ -868,16 +859,6 @@ struct C_InvalidateCache : public Context {
     }
 
     on_finish->complete(0);
-  }
-
-  void ImageCtx::flush_copyup(Context *on_finish) {
-    on_finish = util::create_async_context_callback(*this, on_finish);
-    if (copyup_finisher == nullptr) {
-      on_finish->complete(0);
-      return;
-    }
-
-    copyup_finisher->queue(on_finish);
   }
 
   void ImageCtx::clear_pending_completions() {

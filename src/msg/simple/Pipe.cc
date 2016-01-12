@@ -135,7 +135,7 @@ void Pipe::start_reader()
     reader_needs_join = false;
   }
   reader_running = true;
-  reader_thread.create(msgr->cct->_conf->ms_rwthread_stack_bytes);
+  reader_thread.create("ms_pipe_read", msgr->cct->_conf->ms_rwthread_stack_bytes);
 }
 
 void Pipe::maybe_start_delay_thread()
@@ -144,7 +144,7 @@ void Pipe::maybe_start_delay_thread()
       msgr->cct->_conf->ms_inject_delay_type.find(ceph_entity_type_name(connection_state->peer_type)) != string::npos) {
     lsubdout(msgr->cct, ms, 1) << "setting up a delay queue on Pipe " << this << dendl;
     delay_thread = new DelayedDelivery(this);
-    delay_thread->create();
+    delay_thread->create("ms_pipe_delay");
   }
 }
 
@@ -153,7 +153,7 @@ void Pipe::start_writer()
   assert(pipe_lock.is_locked());
   assert(!writer_running);
   writer_running = true;
-  writer_thread.create(msgr->cct->_conf->ms_rwthread_stack_bytes);
+  writer_thread.create("ms_pipe_write", msgr->cct->_conf->ms_rwthread_stack_bytes);
 }
 
 void Pipe::join_reader()
@@ -2084,6 +2084,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   } else {
     if (auth_handler->check_message_signature(message)) {
       ldout(msgr->cct, 0) << "Signature check failed" << dendl;
+      message->put();
       ret = -EINVAL;
       goto out_dethrottle;
     } 

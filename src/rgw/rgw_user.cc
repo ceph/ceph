@@ -55,7 +55,8 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
 
   do {
     RGWUserBuckets user_buckets;
-    ret = rgw_read_user_buckets(store, user_id, user_buckets, marker, max_entries, false);
+    ret = rgw_read_user_buckets(store, user_id, user_buckets,
+                                marker, string(), max_entries, false);
     if (ret < 0) {
       ldout(cct, 0) << "failed to read user buckets: ret=" << ret << dendl;
       return ret;
@@ -401,7 +402,8 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
 
   do {
     RGWUserBuckets user_buckets;
-    ret = rgw_read_user_buckets(store, info.user_id, user_buckets, marker, max_buckets, false);
+    ret = rgw_read_user_buckets(store, info.user_id, user_buckets,
+                                marker, string(), max_buckets, false);
     if (ret < 0)
       return ret;
 
@@ -838,7 +840,7 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
   if (key_type == KEY_TYPE_S3 && !op_state.will_gen_access() && 
       op_state.get_access_key().empty()) {
     set_err_msg(err_msg, "empty access key");
-    return -EINVAL;
+    return -ERR_INVALID_ACCESS_KEY;
   }
 
   // don't check for secret key because we may be doing a removal
@@ -870,7 +872,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
 
   if (op_state.has_existing_key()) {
     set_err_msg(err_msg, "cannot create existing key");
-    return -EEXIST;
+    return -ERR_KEY_EXIST;
   }
 
   if (!gen_access) {
@@ -882,13 +884,13 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
     case KEY_TYPE_SWIFT:
       if (rgw_get_user_info_by_swift(store, id, duplicate_check) >= 0) {
         set_err_msg(err_msg, "existing swift key in RGW system:" + id);
-        return -EEXIST;
+        return -ERR_KEY_EXIST;
       }
       break;
     case KEY_TYPE_S3:
       if (rgw_get_user_info_by_access_key(store, id, duplicate_check) >= 0) {
         set_err_msg(err_msg, "existing S3 key in RGW system:" + id);
-        return -EEXIST;
+        return -ERR_KEY_EXIST;
       }
     }
   }
@@ -905,7 +907,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
   if (!gen_secret) {
     if (op_state.get_secret_key().empty()) {
       set_err_msg(err_msg, "empty secret key");
-      return -EINVAL; 
+      return -ERR_INVALID_SECRET_KEY;
     }
   
     key = op_state.get_secret_key();
@@ -946,13 +948,13 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
     id = op_state.build_default_swift_kid();
     if (id.empty()) {
       set_err_msg(err_msg, "empty swift access key");
-      return -EINVAL;
+      return -ERR_INVALID_ACCESS_KEY;
     }
 
     // check that the access key doesn't exist
     if (rgw_get_user_info_by_swift(store, id, duplicate_check) >= 0) {
       set_err_msg(err_msg, "cannot create existing swift key");
-      return -EEXIST;
+      return -ERR_KEY_EXIST;
     }
   }
 
@@ -989,7 +991,7 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
     id = op_state.get_access_key();
     if (id.empty()) {
       set_err_msg(err_msg, "no access key specified");
-      return -EINVAL;
+      return -ERR_INVALID_ACCESS_KEY;
     }
     break;
   case KEY_TYPE_SWIFT:
@@ -1001,12 +1003,12 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
     break;
   default:
     set_err_msg(err_msg, "invalid key type");
-    return -EINVAL;
+    return -ERR_INVALID_KEY_TYPE;
   }
 
   if (!op_state.has_existing_key()) {
     set_err_msg(err_msg, "key does not exist");
-    return -EINVAL;
+    return -ERR_INVALID_ACCESS_KEY;
   }
 
   key_pair.first = id;
@@ -1037,7 +1039,7 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
 
   if (key.empty()) {
       set_err_msg(err_msg, "empty secret key");
-      return  -EINVAL;
+      return -ERR_INVALID_SECRET_KEY;
   }
 
   // update the access key with the new secret key
@@ -1127,7 +1129,7 @@ int RGWAccessKeyPool::execute_remove(RGWUserAdminOpState& op_state, std::string 
 
   if (!op_state.has_existing_key()) {
     set_err_msg(err_msg, "unable to find access key");
-    return -EINVAL;
+    return -ERR_INVALID_ACCESS_KEY;
   }
 
   if (key_type == KEY_TYPE_S3) {
@@ -1137,13 +1139,13 @@ int RGWAccessKeyPool::execute_remove(RGWUserAdminOpState& op_state, std::string 
   } else {
     keys_map = NULL;
     set_err_msg(err_msg, "invalid access key");
-    return -EINVAL;
+    return -ERR_INVALID_ACCESS_KEY;
   }
 
   kiter = keys_map->find(id);
   if (kiter == keys_map->end()) {
     set_err_msg(err_msg, "key not found");
-    return -EINVAL;
+    return -ERR_INVALID_ACCESS_KEY;
   }
 
   rgw_remove_key_index(store, kiter->second);
@@ -1180,6 +1182,63 @@ int RGWAccessKeyPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg
     set_err_msg(err_msg, "unable to remove access key, " + subprocess_msg);
     return ret;
   }
+
+  return 0;
+}
+
+// remove all keys associated with a subuser
+int RGWAccessKeyPool::remove_subuser_keys(RGWUserAdminOpState& op_state,
+        std::string *err_msg, bool defer_user_update)
+{
+  int ret = 0;
+
+  if (!op_state.is_populated()) {
+    set_err_msg(err_msg, "user info was not populated");
+    return -EINVAL;
+  }
+
+  if (!op_state.has_subuser()) {
+    set_err_msg(err_msg, "no subuser specified");
+    return -EINVAL;
+  }
+
+  std::string swift_kid = op_state.build_default_swift_kid();
+  if (swift_kid.empty()) {
+    set_err_msg(err_msg, "empty swift access key");
+    return -EINVAL;
+  }
+
+  map<std::string, RGWAccessKey>::iterator kiter;
+  map<std::string, RGWAccessKey> *keys_map;
+
+  // a subuser can have at most one swift key
+  keys_map = swift_keys;
+  kiter = keys_map->find(swift_kid);
+  if (kiter != keys_map->end()) {
+    rgw_remove_key_index(store, kiter->second);
+    keys_map->erase(kiter);
+  }
+
+  // a subuser may have multiple s3 key pairs
+  std::string subuser_str = op_state.get_subuser();
+  keys_map = access_keys;
+  RGWUserInfo user_info = op_state.get_user_info();
+  map<std::string, RGWAccessKey>::iterator user_kiter = user_info.access_keys.begin();
+  for (; user_kiter != user_info.access_keys.end(); ++user_kiter) {
+    if (user_kiter->second.subuser == subuser_str) {
+      kiter = keys_map->find(user_kiter->first);
+      if (kiter != keys_map->end()) {
+        rgw_remove_key_index(store, kiter->second);
+        keys_map->erase(kiter);
+      }
+    }
+  }
+
+  if (!defer_user_update)
+    ret = user->update(op_state, err_msg);
+
+  if (ret < 0)
+    return ret;
 
   return 0;
 }
@@ -1365,12 +1424,10 @@ int RGWSubUserPool::execute_remove(RGWUserAdminOpState& op_state,
     return -EINVAL;
   }
 
-  if (op_state.will_purge_keys()) {
-    // error would be non-existance so don't check
-    user->keys.remove(op_state, &subprocess_msg, true);
-  }
+  // always purge all associate keys
+  user->keys.remove_subuser_keys(op_state, &subprocess_msg, defer_user_update);
 
-  //remove the subuser from the user info
+  // remove the subuser from the user info
   subuser_map->erase(siter);
 
   // attempt to save the subuser
@@ -1509,7 +1566,7 @@ int RGWUserCapPool::init(RGWUserAdminOpState& op_state)
   caps = op_state.get_caps_obj();
   if (!caps) {
     caps_allowed = false;
-    return -EINVAL;
+    return -ERR_INVALID_CAP;
   }
 
   caps_allowed = true;
@@ -1539,7 +1596,7 @@ int RGWUserCapPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, boo
 
   if (caps_str.empty()) {
     set_err_msg(err_msg, "empty user caps");
-    return -EINVAL;
+    return -ERR_INVALID_CAP;
   }
 
   int r = caps->add_from_string(caps_str);
@@ -1580,7 +1637,7 @@ int RGWUserCapPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg, 
 
   if (caps_str.empty()) {
     set_err_msg(err_msg, "empty user caps");
-    return -EINVAL;
+    return -ERR_INVALID_CAP;
   }
 
   int r = caps->remove_from_string(caps_str);
@@ -1824,12 +1881,15 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
 
     if (op_state.found_by_email) {
       set_err_msg(err_msg, "email: " + user_email + " exists");
+      ret = -ERR_EMAIL_EXIST;
     } else if (op_state.found_by_key) {
       set_err_msg(err_msg, "duplicate key provided");
+      ret = -ERR_KEY_EXIST;
     } else {
       set_err_msg(err_msg, "user: " + op_state.user_id.to_str() + " exists");
+      ret = -EEXIST;
     }
-    return -EEXIST;
+    return ret;
   }
 
   // fail if the user_info has already been populated
@@ -1955,7 +2015,8 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
   size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
   do {
     RGWUserBuckets buckets;
-    ret = rgw_read_user_buckets(store, uid, buckets, marker, max_buckets, false);
+    ret = rgw_read_user_buckets(store, uid, buckets,
+                                marker, string(), max_buckets, false);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to read user bucket info");
       return ret;
@@ -2054,7 +2115,7 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
       ret = rgw_get_user_info_by_email(store, op_email, duplicate_check);
       if (ret >= 0 && duplicate_check.user_id.compare(user_id) != 0) {
         set_err_msg(err_msg, "cannot add duplicate email");
-        return -EEXIST;
+        return -ERR_EMAIL_EXIST;
       }
     }
     user_info.user_email = op_email;
@@ -2104,7 +2165,8 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
     CephContext *cct = store->ctx();
     size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
     do {
-      ret = rgw_read_user_buckets(store, user_id, buckets, marker, max_buckets, false);
+      ret = rgw_read_user_buckets(store, user_id, buckets,
+                                  marker, string(), max_buckets, false);
       if (ret < 0) {
         set_err_msg(err_msg, "could not get buckets for uid:  " + user_id.to_str());
         return ret;
@@ -2540,7 +2602,11 @@ public:
           time_t mtime, JSONObj *obj, sync_type_t sync_mode) {
     RGWUserCompleteInfo uci;
 
-    decode_json_obj(uci, obj);
+    try {
+      decode_json_obj(uci, obj);
+    } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+    }
 
     map<string, bufferlist> *pattrs = NULL;
     if (uci.has_attrs) {
@@ -2616,8 +2682,13 @@ public:
 
     int ret = store->list_raw_objects(store->get_zone_params().user_uid_pool, no_filter,
                                       max, info->ctx, unfiltered_keys, truncated);
-    if (ret < 0)
-      return ret;
+    if (ret < 0 && ret != -ENOENT)
+      return ret;		        
+    if (ret == -ENOENT) {
+      if (truncated)
+        *truncated = false;
+      return -ENOENT;
+    }
 
     // now filter out the buckets entries
     list<string>::iterator iter;

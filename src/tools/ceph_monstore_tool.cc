@@ -200,6 +200,8 @@ void usage(const char *n, po::options_description &d)
   << "                                  (default: last committed)\n"
   << "  get crushmap [-- options]       get crushmap (version VER if specified)\n"
   << "                                  (default: last committed)\n"
+  << "  show-versions [-- options]      show the first&last committed version of map\n"
+  << "                                  (show-versions -- --help for more info)\n"
   << "  dump-keys                       dumps store keys to FILE\n"
   << "                                  (default: stdout)\n"
   << "  dump-paxos [-- options]         dump paxos transactions\n"
@@ -676,6 +678,38 @@ int main(int argc, char **argv) {
                 << " version " << v << " to " << outpath
                 << std::endl;
     }
+  } else if (cmd == "show-versions") {
+    string map_type; //map type:osdmap,monmap...
+    // visible options for this command
+    po::options_description op_desc("Allowed 'show-versions' options");
+    op_desc.add_options()
+      ("help,h", "produce this help message")
+      ("map-type", po::value<string>(&map_type), "map_type");
+
+    po::positional_options_description op_positional;
+    op_positional.add("map-type", 1);
+
+    po::variables_map op_vm;
+    int r = parse_cmd_args(&op_desc, NULL, &op_positional,
+                           subcmds, &op_vm);
+    if (r < 0) {
+      err = -r;
+      goto done;
+    }
+
+    if (op_vm.count("help") || map_type.empty()) {
+      usage(argv[0], op_desc);
+      err = 0;
+      goto done;
+    }
+
+    unsigned int v_first = 0;
+    unsigned int v_last = 0;
+    v_first = st.get(map_type, "first_committed");
+    v_last = st.get(map_type, "last_committed");
+
+    std::cout << "first committed:\t" << v_first << "\n"
+              << "last  committed:\t" << v_last << std::endl;
   } else if (cmd == "dump-paxos") {
     unsigned dstart = 0;
     unsigned dstop = ~0;

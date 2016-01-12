@@ -99,7 +99,8 @@ public:
 
   /// create a new instance
   static KeyValueDB *create(CephContext *cct, const std::string& type,
-			    const std::string& dir);
+			    const std::string& dir,
+			    void *p = NULL);
 
   /// test whether we can successfully initialize; may have side effects (e.g., create)
   static int test_init(const std::string& type, const std::string& dir);
@@ -163,6 +164,14 @@ public:
     virtual std::pair<std::string,std::string> raw_key() = 0;
     virtual bool raw_key_is_prefixed(const std::string &prefix) = 0;
     virtual bufferlist value() = 0;
+    virtual bufferptr value_as_ptr() {
+      bufferlist bl = value();
+      if (bl.length()) {
+        return *bl.buffers().begin();
+      } else {
+        return bufferptr();
+      }
+    }
     virtual int status() = 0;
     virtual ~WholeSpaceIteratorImpl() { }
   };
@@ -222,6 +231,9 @@ public:
     }
     bufferlist value() {
       return generic_iter->value();
+    }
+    bufferptr value_as_ptr() {
+      return generic_iter->value_as_ptr();
     }
     int status() {
       return generic_iter->status();

@@ -513,7 +513,7 @@ int RGWHTTPManager::set_threaded()
 {
   is_threaded = true;
   reqs_thread = new ReqsThread(this);
-  reqs_thread->create();
+  reqs_thread->create("http_manager");
 
   int r = pipe(thread_pipe);
   if (r < 0) {

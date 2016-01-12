@@ -2739,7 +2739,7 @@ public:
 void RGWRadosThread::start()
 {
   worker = new Worker(cct, this);
-  worker->create();
+  worker->create("radosgw");
 }
 
 void RGWRadosThread::stop()
@@ -2880,6 +2880,7 @@ class RGWMetaSyncProcessorThread : public RGWSyncProcessorThread
   uint64_t interval_msec() {
     return 0; /* no interval associated, it'll run once until stopped */
   }
+
   void stop_process() {
     sync.stop();
   }
@@ -11227,9 +11228,12 @@ int RGWRados::update_user_bucket_stats(const string& user_id, rgw_bucket& bucket
 }
 
 int RGWRados::cls_user_list_buckets(rgw_obj& obj,
-                                    const string& in_marker, int max_entries,
+                                    const string& in_marker,
+                                    const string& end_marker,
+                                    const int max_entries,
                                     list<cls_user_bucket_entry>& entries,
-                                    string *out_marker, bool *truncated)
+                                    string * const out_marker,
+                                    bool * const truncated)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -11241,7 +11245,7 @@ int RGWRados::cls_user_list_buckets(rgw_obj& obj,
   librados::ObjectReadOperation op;
   int rc;
 
-  cls_user_bucket_list(op, in_marker, max_entries, entries, out_marker, truncated, &rc);
+  cls_user_bucket_list(op, in_marker, end_marker, max_entries, entries, out_marker, truncated, &rc);
   bufferlist ibl;
   r = ref.ioctx.operate(ref.oid, &op, &ibl);
   if (r < 0)

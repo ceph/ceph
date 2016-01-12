@@ -119,6 +119,8 @@ void _usage()
   cout << "  log list                   list log objects\n";
   cout << "  log show                   dump a log from specific object or (bucket + date\n";
   cout << "                             + bucket-id)\n";
+  cout << "                             (NOTE: required to specify formatting of date\n";
+  cout << "                             to \"YYYY-MM-DD-hh\")\n";
   cout << "  log rm                     remove log object\n";
   cout << "  usage show                 show usage (by user, date range)\n";
   cout << "  usage trim                 trim usage (by user, date range)\n";
@@ -3212,6 +3214,7 @@ int main(int argc, char **argv)
   bucket_op.set_object(object);
   bucket_op.set_check_objects(check_objects);
   bucket_op.set_delete_children(delete_child_objects);
+  bucket_op.set_fix_index(fix);
 
   // required to gather errors from operations
   std::string err_msg;
