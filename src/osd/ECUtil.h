@@ -83,6 +83,14 @@ public:
       (in.first - off) + in.second);
     return make_pair(off, len);
   }
+  /**
+   * calculate each chunk need write offset and length.
+   * if length=0, then it means no write in this shard.
+   *
+   * in: to write offset and lengt, no need to align
+   * chunk_count: total chunk count, k+m
+   * return: k+m records indicate each shards need write scope
+   */
   map<int, pair<uint64_t, uint64_t>> offset_len_to_chunk_offset(
       pair<uint64_t, uint64_t> in, int chunk_count) const {
     pair<uint64_t, uint64_t> bounds = offset_len_to_stripe_bounds(in);
@@ -93,20 +101,23 @@ public:
     for (int i = 0; i < (int)stripe_size; ++i) {
       pair<uint64_t, uint64_t> tmp = make_pair(bounds.first + chunk_size * i, 0);
       // find the chunk start
-      while (tmp.first < in.first && tmp.first < bounds.first + bounds.second) {
+      while (tmp.first < bounds.first && tmp.first < bounds.first + bounds.second) {
         tmp.first += stripe_width;
       }
-      // find the chunk end
-      if (tmp.first < (in.first + in.second) && tmp.first < bounds.first + bounds.second) {
-        uint64_t tmp_end = tmp.first + chunk_size;
-        tmp.second += chunk_size;
-        while (tmp_end < in.second) {
+      uint64_t tmp_start = tmp.first;
+      while (tmp_start < (in.first + in.second) && tmp_start < bounds.first + bounds.second) {
+        if (tmp.first + chunk_size > in.first) {
           tmp.second += chunk_size;
-          tmp_end += stripe_width;
+        } else {
+          tmp.first += stripe_width;
         }
+        tmp_start += stripe_width;
       }
-      tmp.first = aligned_logical_offset_to_chunk_offset(
-        logical_to_prev_stripe_offset(tmp.first));
+      if (tmp.second)
+        tmp.first = aligned_logical_offset_to_chunk_offset(
+          logical_to_prev_stripe_offset(tmp.first));
+      else
+        tmp.first = 0;
       chunk_offsets.insert(make_pair(i, tmp));
     }
     // parity chunk
