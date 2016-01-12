@@ -33,8 +33,6 @@ public:
 
   typedef std::chrono::time_point<std::chrono::system_clock> TimePoint;
 
-  // typedef std::deque<TimePoint>                              OpTiming;
-
   static TimePoint now() { return std::chrono::system_clock::now(); }
 
 protected:
