@@ -967,13 +967,15 @@ public:
 
   int operator()(const boost::string_ref name, const boost::string_ref marker,
 		uint8_t type) {
+
+    assert(name.length() > 0); // XXX
+
     /* hash offset of name in parent (short name) for NFS readdir cookie */
-    std::string sname{name};
     uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
     *offset = off;
     /* update traversal cache */
     rgw_fh->add_marker(off, marker, type);
-    rcb(name.data(), cb_arg, off);
+    rcb(name.data(), cb_arg, off); // XXX has to be legit C-style string
     return 0;
   }
 
@@ -1019,6 +1021,10 @@ public:
 			     << " iter first: " << iter.first
 			     << " iter second: " << iter.second
 			     << dendl;
+
+      /* XXX aieee--I have seen this case! */
+      if (iter.first == "/")
+	continue;
 
       /* it's safest to modify the element in place--a suffix-modifying
        * string_ref operation is problematic since ULP rgw_file callers
