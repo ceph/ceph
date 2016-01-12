@@ -57,6 +57,7 @@ void kstore_onode_t::encode(bufferlist& bl) const
   ::encode(stripe_size, bl);
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
+  ::encode(alloc_hint_flags, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -70,6 +71,7 @@ void kstore_onode_t::decode(bufferlist::iterator& p)
   ::decode(stripe_size, p);
   ::decode(expected_object_size, p);
   ::decode(expected_write_size, p);
+  ::decode(alloc_hint_flags, p);
   DECODE_FINISH(p);
 }
 
@@ -90,6 +92,7 @@ void kstore_onode_t::dump(Formatter *f) const
   f->dump_unsigned("stripe_size", stripe_size);
   f->dump_unsigned("expected_object_size", expected_object_size);
   f->dump_unsigned("expected_write_size", expected_write_size);
+  f->dump_unsigned("alloc_hint_flags", alloc_hint_flags);
 }
 
 void kstore_onode_t::generate_test_instances(list<kstore_onode_t*>& o)
