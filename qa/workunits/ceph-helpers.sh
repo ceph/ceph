@@ -194,7 +194,7 @@ function test_teardown() {
 #
 function kill_daemons() {
     local trace=$(shopt -q -o xtrace && echo true || echo false)
-    $trace && shopt -u -o xtrace
+    # $trace && shopt -u -o xtrace
     local dir=$1
     local signal=${2:-TERM}
     local name_prefix=$3 # optional, osd, mon, osd.1
