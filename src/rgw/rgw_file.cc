@@ -88,8 +88,12 @@ namespace rgw {
       switch (ix) {
       case 0:
       {
+	std::string obj_name{parent->relative_object_name()};
+	if (obj_name.back() != '/')
+	  obj_name += "/";
+	obj_name += path;
 	RGWStatObjRequest req(cct, get_user(),
-			      parent->bucket_name(), object_name,
+			      parent->bucket_name(), obj_name,
 			      RGWStatObjRequest::FLAG_NONE);
 	int rc = rgwlib.get_fe()->execute_req(&req);
 	if ((rc == 0) &&
@@ -97,6 +101,7 @@ namespace rgw {
 	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_NONE);
 	  if (get<0>(fhr)) {
 	    RGWFileHandle* rgw_fh = get<0>(fhr);
+	    rgw_fh->set_size(req.get_size());
 	    rgw_fh->set_mtime({req.get_mtime(), 0});
 	  }
 	  goto done;
@@ -136,6 +141,19 @@ namespace rgw {
   done:
     return fhr;
   } /* RGWLibFS::stat_leaf */
+
+  int RGWLibFS::getattr(RGWFileHandle* rgw_fh, struct stat* st)
+  {
+    switch(rgw_fh->fh.fh_type) {
+    case RGW_FS_TYPE_FILE:
+      break;
+    case RGW_FS_TYPE_DIRECTORY:
+    default:
+      break;
+    };
+
+    return rgw_fh->stat(st);;
+  } /* RGWLibFS::getattr */
 
   void RGWLibFS::close()
   {
@@ -955,8 +973,10 @@ int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 int rgw_getattr(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *fh, struct stat *st, uint32_t flags)
 {
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
-  return -(rgw_fh->stat(st));
+
+  return -(fs->getattr(rgw_fh, st));
 }
 
 /*

@@ -439,6 +439,7 @@ TEST(LibRGW, READ_DIRS1)
 	    (sobj.rgw_fh->object_name().find("sfile_1")
 	     != std::string::npos)) {
 	  ASSERT_TRUE(sobj.rgw_fh->is_file());
+	  ASSERT_EQ(sobj.rgw_fh->get_size(), 16UL);
 	  // do it
 	  memset(buf, 0, 256);
 	  rc = rgw_read(fs, sobj.fh, 0, 256, &nread, buf, RGW_READ_FLAG_NONE);
