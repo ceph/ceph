@@ -291,8 +291,8 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     log.tail = eversion_t(2, 1);
     TestHandler h(remove_snap);
-    //WjW EXPECT_DEATH(rewind_divergent_log(t, eversion_t(1, 1), info, &h,
-    //				      dirty_info, dirty_big_info), "");
+    EXPECT_DEATH(rewind_divergent_log(t, eversion_t(1, 1), info, &h,
+    	      dirty_info, dirty_big_info), "");
   }
 
   /*        +----------------+

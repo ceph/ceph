@@ -117,9 +117,7 @@ TEST(SignalHandler, Multiple)
 TEST(SignalHandler, LogInternal)
 {
   g_ceph_context->_log->inject_segv();
-#if !(__FreeBSD__)
   ASSERT_DEATH(derr << "foo" << dendl, ".*");
-#endif
 }
 
 

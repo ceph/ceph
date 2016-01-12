@@ -208,8 +208,5 @@ void do_segv()
 
 TEST(Log, InternalSegv)
 {
-#if !defined(__FreeBSD__) 
   ASSERT_DEATH(do_segv(), ".*");
-#endif
-
 }
