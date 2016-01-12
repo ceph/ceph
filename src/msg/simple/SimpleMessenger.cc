@@ -70,6 +70,7 @@ SimpleMessenger::~SimpleMessenger()
   assert(!did_bind); // either we didn't bind or we shut down the Accepter
   assert(rank_pipe.empty()); // we don't have any running Pipes.
   assert(!reaper_started); // the reaper thread is stopped
+  ceph_spin_destroy(&global_seq_lock);
 }
 
 void SimpleMessenger::ready()
