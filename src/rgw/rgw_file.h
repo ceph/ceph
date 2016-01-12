@@ -724,6 +724,8 @@ namespace rgw {
       return fh;
     }
 
+    int getattr(RGWFileHandle* rgw_fh, struct stat* st);
+
     LookupFHResult stat_bucket(RGWFileHandle* parent,
 			       const char *path, uint32_t flags);
 
@@ -1374,7 +1376,7 @@ public:
     return 0;
   }
 
-}; /* RGWGetObjRequest */
+}; /* RGWReadRequest */
 
 /*
   delete object
@@ -1466,7 +1468,7 @@ public:
   }
 
   /* attributes */
-  uint64_t size() { return _size; }
+  uint64_t get_size() { return _size; }
   time_t ctime() { return mod_time; } // XXX
   time_t mtime() { return mod_time; }
   map<string, bufferlist>& get_attrs() { return attrs; }
@@ -1491,10 +1493,9 @@ public:
     s->op = OP_GET;
 
     /* XXX derp derp derp */
-    std::string uri = make_uri(bucket_name, obj_name);
-    s->relative_uri = uri;
-    s->info.request_uri = uri; // XXX
-    s->info.effective_uri = uri;
+    s->relative_uri = make_uri(bucket_name, obj_name);
+    s->info.request_uri = s->relative_uri; // XXX
+    s->info.effective_uri = s->relative_uri;
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
 
