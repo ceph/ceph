@@ -91,7 +91,8 @@ namespace rgw {
       case 0:
       {
 	std::string obj_name{parent->relative_object_name()};
-	if (obj_name.back() != '/')
+	if ((obj_name.length() > 0) &&
+	    (obj_name.back() != '/'))
 	  obj_name += "/";
 	obj_name += path;
 	RGWStatObjRequest req(cct, get_user(),
@@ -692,7 +693,11 @@ int rgw_create(struct rgw_fs *rgw_fs,
     return -EEXIST;
   } else {
     /* expand and check name */
-    std::string obj_name{parent->relative_object_name() + "/" + name};
+    std::string obj_name{parent->relative_object_name()};
+    if ((obj_name.size() > 0) &&
+	(obj_name.back() != '/'))
+      obj_name += "/";
+    obj_name += name;
     if (! valid_s3_object_name(obj_name)) {
       return -EINVAL;
     } else {
@@ -857,37 +862,6 @@ int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 
   return -rc;
 }
-
-void dump_buckets(void) {
-  /* get the bucket list */
-  string marker; // XXX need to match offset
-  string end_marker;
-  uint64_t bucket_count, bucket_objcount;
-
-  RGWUserBuckets buckets;
-  uint64_t max_buckets = g_ceph_context->_conf->rgw_list_buckets_max_chunk;
-  bool is_truncated;
-
-  RGWRados* store = rgwlib.get_store();
-
-  /* XXX check offsets */
-  uint64_t ix = 3;
-  rgw_user uid("testuser");
-  int rc = rgw_read_user_buckets(store, uid, buckets, marker, end_marker,
-				 max_buckets, true, &is_truncated);
-  if (rc == 0) {
-    bucket_count = 0;
-    bucket_objcount = 0;
-    map<string, RGWBucketEnt>& m = buckets.get_buckets();
-    for (auto& ib : m) {
-      RGWBucketEnt& bent = ib.second;
-      bucket_objcount += bent.count;
-      marker = ib.first;
-      std::cout << bent.bucket.name.c_str() << " ix: " << ix++ << std::endl;
-    }
-    bucket_count += m.size();
-  }
-} /* dump_buckets */
 
 /*
   lookup object by name (POSIX style)
