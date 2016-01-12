@@ -16,7 +16,7 @@
 # GNU Library Public License for more details.
 #
 
-source ../qa/workunits/ceph-helpers.sh
+source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -47,7 +47,7 @@ function TEST_config_init() {
         --osd-map-cache-size $cache \
         --osd-pg-epoch-persisted-max-stale $stale \
         || return 1
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
     grep 'is not > osd_map_max_advance' $dir/osd.0.log || return 1
     grep 'is not > osd_pg_epoch_persisted_max_stale' $dir/osd.0.log || return 1
 }
@@ -58,30 +58,30 @@ function TEST_config_track() {
     run_mon $dir a || return 1
     run_osd $dir 0 || return 1
 
-    local osd_map_cache_size=$(CEPH_ARGS='' ./ceph-conf \
+    local osd_map_cache_size=$(CEPH_ARGS='' ceph-conf \
         --show-config-value osd_map_cache_size)
-    local osd_map_max_advance=$(CEPH_ARGS='' ./ceph-conf \
+    local osd_map_max_advance=$(CEPH_ARGS='' ceph-conf \
         --show-config-value osd_map_max_advance)
-    local osd_pg_epoch_persisted_max_stale=$(CEPH_ARGS='' ./ceph-conf \
+    local osd_pg_epoch_persisted_max_stale=$(CEPH_ARGS='' ceph-conf \
         --show-config-value osd_pg_epoch_persisted_max_stale)
     #
     # lower cache_size under max_advance to trigger the warning
     #
     ! grep 'is not > osd_map_max_advance' $dir/osd.0.log || return 1
     local cache=$(($osd_map_max_advance / 2))
-    ./ceph tell osd.0 injectargs "--osd-map-cache-size $cache" || return 1
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
+    ceph tell osd.0 injectargs "--osd-map-cache-size $cache" || return 1
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
     grep 'is not > osd_map_max_advance' $dir/osd.0.log || return 1
     rm $dir/osd.0.log
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok log reopen || return 1
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log reopen || return 1
 
     #
     # reset cache_size to the default and assert that it does not trigger the warning
     #
     ! grep 'is not > osd_map_max_advance' $dir/osd.0.log || return 1
     local cache=$osd_map_cache_size
-    ./ceph tell osd.0 injectargs "--osd-map-cache-size $cache" || return 1
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
+    ceph tell osd.0 injectargs "--osd-map-cache-size $cache" || return 1
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
     ! grep 'is not > osd_map_max_advance' $dir/osd.0.log || return 1
 
     #
@@ -89,8 +89,8 @@ function TEST_config_track() {
     #
     ! grep 'is not > osd_map_max_advance' $dir/osd.0.log || return 1
     local advance=$(($osd_map_cache_size * 2))
-    ./ceph tell osd.0 injectargs "--osd-map-max-advance $advance" || return 1
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
+    ceph tell osd.0 injectargs "--osd-map-max-advance $advance" || return 1
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
     grep 'is not > osd_map_max_advance' $dir/osd.0.log || return 1
 
     #
@@ -99,7 +99,7 @@ function TEST_config_track() {
     ! grep 'is not > osd_pg_epoch_persisted_max_stale' $dir/osd.0.log || return 1
     local stale=$(($osd_map_cache_size * 2))
     ceph tell osd.0 injectargs "--osd-pg-epoch-persisted-max-stale $stale" || return 1
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
     grep 'is not > osd_pg_epoch_persisted_max_stale' $dir/osd.0.log || return 1
 }
 
