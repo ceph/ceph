@@ -69,7 +69,7 @@ function mon_run() {
 function kill_daemons() {
     for pidfile in $(find $DIR -name pidfile) ; do
         pid=$(cat $pidfile)
-        for try in 0 1 1 1 2 3 ; do
+        for try in 0 1 1 1 2 3 5 10; do
             kill $pid || break
             sleep $try
         done
