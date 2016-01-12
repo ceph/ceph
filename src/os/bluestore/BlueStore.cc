@@ -1586,7 +1586,11 @@ int BlueStore::_setup_block_symlink_or_file(
       dout(1) << __func__ << " created " << name << " file with size "
 	      << pretty_si_t(size) << "B" << dendl;
       VOID_TEMP_FAILURE_RETRY(::close(fd));
-    }
+    } else if (r < 0) {
+      derr << __func__ << " failed to stat " << name << " file: "
+           << cpp_strerror(r) << dendl;
+      return r;
+    } 
   }
   return 0;
 }
