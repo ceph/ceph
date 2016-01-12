@@ -962,6 +962,28 @@ Keystone Settings
 :Default: None
 
 
+``rgw keystone admin tenant``
+
+:Description: The name of OpenStack tenant with admin privilege (Service Tenant) when
+              using OpenStack Identity API v2
+:Type: String
+:Default: None
+
+
+``rgw keystone admin user``
+:Description: The name of OpenStack user with admin privilege for Keystone
+              authentication (Service User) when OpenStack Identity API v2
+:Type: String
+:Default: None
+
+
+``rgw keystone admin password``
+:Description: The password for OpenStack admin user when using OpenStack
+              Identity API v2
+:Type: String
+:Default: None
+
+
 ``rgw keystone accepted roles``
 
 :Description: The roles requires to serve requests.
