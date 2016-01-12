@@ -321,7 +321,7 @@ void ExclusiveLock<I>::handle_acquire_lock(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  if (r == -EBUSY) {
+  if (r == -EBUSY || r == -EAGAIN) {
     ldout(cct, 5) << "unable to acquire exclusive lock" << dendl;
   } else if (r < 0) {
     lderr(cct) << "failed to acquire exclusive lock:" << cpp_strerror(r)
