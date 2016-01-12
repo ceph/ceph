@@ -58,21 +58,6 @@ add_executable(ceph_bench_log
   )
 target_link_libraries(ceph_bench_log global pthread rt ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
-# ceph_test_rados
-add_executable(ceph_test_rados 
-  osd/TestRados.cc
-  osd/TestOpStat.cc
-  osd/Object.cc osd/RadosModel.cc
-  )
-target_link_libraries(ceph_test_rados
-  librados
-  global
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  ${EXTRALIBS}
-  ${CMAKE_DL_LIBS}
-  )
-
 # ceph_test_mutate
 add_executable(ceph_test_mutate
   test_mutate.cc
@@ -1491,64 +1476,7 @@ add_executable(unittest_lfnindex EXCLUDE_FROM_ALL
 add_ceph_unittest(unittest_lfnindex ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_lfnindex)
 target_link_libraries(unittest_lfnindex os global)
 
-#osd directory
-add_ceph_test(osd-bench.sh ${CMAKE_SOURCE_DIR}/src/test/osd/osd-bench.sh)
-add_ceph_test(osd-config.sh ${CMAKE_SOURCE_DIR}/src/test/osd/osd-config.sh)
-add_ceph_test(osd-copy-from.sh ${CMAKE_SOURCE_DIR}/src/test/osd/osd-copy-from.sh)
-add_ceph_test(osd-mark-down.sh ${CMAKE_SOURCE_DIR}/src/test/osd/osd-mark-down.sh)
-add_ceph_test(osd-reactivate.sh ${CMAKE_SOURCE_DIR}/src/test/osd/osd-reactivate.sh)
-add_ceph_test(osd-reuse-id.sh ${CMAKE_SOURCE_DIR}/src/test/osd/osd-reuse-id.sh)
-add_ceph_test(osd-scrub-repair.sh ${CMAKE_SOURCE_DIR}/src/test/osd/osd-scrub-repair.sh)
-add_ceph_test(osd-scrub-snaps.sh ${CMAKE_SOURCE_DIR}/src/test/osd/osd-scrub-snaps.sh)
-
-# unittest_osdmap
-add_executable(unittest_osdmap EXCLUDE_FROM_ALL
-  osd/TestOSDMap.cc
-  )
-add_ceph_unittest(unittest_osdmap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_osdmap)
-target_link_libraries(unittest_osdmap global ${BLKID_LIBRARIES})
-
-# unittest_osd_types
-add_executable(unittest_osd_types EXCLUDE_FROM_ALL
-  osd/types.cc
-  )
-add_ceph_unittest(unittest_osd_types ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_osd_types)
-target_link_libraries(unittest_osd_types global)
-
-# unittest_ecbackend
-add_executable(unittest_ecbackend EXCLUDE_FROM_ALL
-  osd/TestECBackend.cc
-  )
-add_ceph_unittest(unittest_ecbackend ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_ecbackend)
-target_link_libraries(unittest_ecbackend osd global)
-
-# unittest_osdscrub
-add_executable(unittest_osdscrub EXCLUDE_FROM_ALL
-  osd/TestOSDScrub.cc
-  )
-add_ceph_unittest(unittest_osdscrub ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_osdscrub)
-target_link_libraries(unittest_osdscrub osd global dl os mon ${BLKID_LIBRARIES})
-
-# unittest_pglog
-add_executable(unittest_pglog EXCLUDE_FROM_ALL
-  osd/TestPGLog.cc
-  )
-add_ceph_unittest(unittest_pglog ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_pglog)
-target_link_libraries(unittest_pglog osd global dl ${BLKID_LIBRARIES})
-
-# unittest_hitset
-add_executable(unittest_hitset EXCLUDE_FROM_ALL
-  osd/hitset.cc
-  )
-add_ceph_unittest(unittest_hitset ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_hitset)
-target_link_libraries(unittest_hitset osd global ${BLKID_LIBRARIES})
-
-# unittest_osd_osdcap
-add_executable(unittest_osd_osdcap EXCLUDE_FROM_ALL
-  osd/osdcap.cc
-)
-add_ceph_unittest(unittest_osd_osdcap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_osd_osdcap)
-target_link_libraries(unittest_osd_osdcap osd global ${BLKID_LIBRARIES})
+add_subdirectory(osd)
 
 #pybind
 add_ceph_test(test_ceph_daemon.py ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_daemon.py)
