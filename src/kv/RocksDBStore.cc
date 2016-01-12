@@ -456,7 +456,8 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
 void RocksDBStore::compact()
 {
   logger->inc(l_rocksdb_compact);
-  db->CompactRange(NULL, NULL);
+  rocksdb::CompactRangeOptions options;
+  db->CompactRange(options, nullptr, nullptr);
 }
 
 
@@ -529,9 +530,10 @@ bool RocksDBStore::check_omap_dir(string &omap_dir)
 }
 void RocksDBStore::compact_range(const string& start, const string& end)
 {
-    rocksdb::Slice cstart(start);
-    rocksdb::Slice cend(end);
-    db->CompactRange(&cstart, &cend);
+  rocksdb::CompactRangeOptions options;
+  rocksdb::Slice cstart(start);
+  rocksdb::Slice cend(end);
+  db->CompactRange(options, &cstart, &cend);
 }
 RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()
 {
