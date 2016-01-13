@@ -1577,14 +1577,14 @@ void ReplicatedBackend::prep_push_to_replica(
     // we need the head (and current SnapSet) locally to do that.
     if (get_parent()->get_local_missing().is_missing(head)) {
       dout(15) << "push_to_replica missing head " << head << ", pushing raw clone" << dendl;
-      return prep_push(obc, soid, peer, pop);
+      return prep_push(obc, soid, peer, pop, cache_dont_need);
     }
     hobject_t snapdir = head;
     snapdir.snap = CEPH_SNAPDIR;
     if (get_parent()->get_local_missing().is_missing(snapdir)) {
       dout(15) << "push_to_replica missing snapdir " << snapdir
 	       << ", pushing raw clone" << dendl;
-      return prep_push(obc, soid, peer, pop);
+      return prep_push(obc, soid, peer, pop, cache_dont_need);
     }
 
     SnapSetContext *ssc = obc->ssc;
@@ -1618,7 +1618,7 @@ void ReplicatedBackend::prep_push_to_replica(
 
 void ReplicatedBackend::prep_push(ObjectContextRef obc,
 			     const hobject_t& soid, pg_shard_t peer,
-			     PushOp *pop)
+			     PushOp *pop, bool cache_dont_need)
 {
   interval_set<uint64_t> data_subset;
   if (obc->obs.oi.size)
@@ -1627,7 +1627,7 @@ void ReplicatedBackend::prep_push(ObjectContextRef obc,
 
   prep_push(obc, soid, peer,
 	    obc->obs.oi.version, data_subset, clone_subsets,
-	    pop);
+	    pop, cache_dont_need);
 }
 
 void ReplicatedBackend::prep_push(
