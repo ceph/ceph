@@ -369,12 +369,19 @@ class Filesystem(MDSCluster):
 
         active_count = 0
         status = self.get_mds_map()
+
+        log.info("are_daemons_healthy: mds map: {0}".format(status))
+
         for mds_id, mds_status in status['info'].items():
             if mds_status['state'] not in ["up:active", "up:standby", "up:standby-replay"]:
                 log.warning("Unhealthy mds state {0}:{1}".format(mds_id, mds_status['state']))
                 return False
             elif mds_status['state'] == 'up:active':
                 active_count += 1
+
+        log.info("are_daemons_healthy: {0}/{1}".format(
+            active_count, status['max_mds']
+        ))
 
         if active_count >= status['max_mds']:
             # The MDSMap says these guys are active, but let's check they really are
