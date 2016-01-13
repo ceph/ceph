@@ -812,6 +812,19 @@ int RGWPutObj_ObjStore_S3::get_params()
   return RGWPutObj_ObjStore::get_params();
 }
 
+int RGWPutObj_ObjStore_S3::get_data(bufferlist& bl)
+{
+  int ret = RGWPutObj_ObjStore::get_data(bl);
+  if (ret < 0)
+    s->aws4_auth_needs_complete = false;
+  if ((ret == 0) && s->aws4_auth_needs_complete) {
+    int ret_auth = do_aws4_auth_completion();
+    if (ret_auth)
+      return ret_auth;
+  }
+  return ret;
+}
+
 static int get_success_retcode(int code)
 {
   switch (code) {

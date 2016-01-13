@@ -189,7 +189,7 @@ public:
 
   virtual int verify_params();
   virtual int get_params();
-  int get_data(bufferlist& bl);
+  virtual int get_data(bufferlist& bl);
 };
 
 class RGWPostObj_ObjStore : public RGWPostObj

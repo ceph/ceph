@@ -140,6 +140,7 @@ public:
   ~RGWPutObj_ObjStore_S3() {}
 
   int get_params();
+  int get_data(bufferlist& bl);
   void send_response();
 };
 
