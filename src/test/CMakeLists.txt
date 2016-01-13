@@ -361,7 +361,8 @@ add_dependencies(check
   rbd
   radosgw-admin
   ceph_example
-  ceph_snappy)
+  ceph_snappy
+  cls_lock)
 
 add_ceph_test(test-ceph-helpers.sh ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-helpers.sh)
 add_ceph_test(erasure-decode-non-regression.sh ${CMAKE_SOURCE_DIR}/qa/workunits/erasure-code/encode-decode-non-regression.sh)
