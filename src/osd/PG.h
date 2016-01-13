@@ -273,8 +273,8 @@ public:
   void put_with_id(uint64_t);
   void dump_live_ids();
 #endif
-  void get(const string &tag);
-  void put(const string &tag);
+  void get(const char* tag);
+  void put(const char* tag);
 
   bool dirty_info, dirty_big_info;
 
