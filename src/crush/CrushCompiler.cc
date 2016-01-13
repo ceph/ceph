@@ -19,6 +19,7 @@
 
 #include <typeinfo>
 #include "common/errno.h"
+#include <boost/algorithm/string.hpp>
 
 // -------------
 
@@ -332,11 +333,7 @@ int CrushCompiler::decompile(ostream &out)
 
 string CrushCompiler::string_node(node_t &node)
 {
-  string s = string(node.value.begin(), node.value.end());
-  while (s.length() > 0 &&
-	 s[0] == ' ')
-    s = string(s.begin() + 1, s.end());
-  return s;
+  return boost::trim_copy(string(node.value.begin(), node.value.end()));
 }
 
 int CrushCompiler::int_node(node_t &node) 
