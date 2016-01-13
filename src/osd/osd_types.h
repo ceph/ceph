@@ -3655,6 +3655,22 @@ public:
       *requeue_snaptrimmer = true;
     }
   }
+  void put_lock_type(
+    ObjectContext::RWState::State type,
+    list<OpRequestRef> *to_wake,
+    bool *requeue_recovery,
+    bool *requeue_snaptrimmer) {
+    switch (type) {
+    case ObjectContext::RWState::RWWRITE:
+      return put_write(to_wake, requeue_recovery, requeue_snaptrimmer);
+    case ObjectContext::RWState::RWREAD:
+      return put_read(to_wake);
+    case ObjectContext::RWState::RWEXCL:
+      return put_excl(to_wake, requeue_recovery, requeue_snaptrimmer);
+    default:
+      assert(0 == "invalid lock type");
+    }
+  }
   bool is_request_pending() {
     return (rwstate.count > 0);
   }
@@ -3749,6 +3765,104 @@ inline ostream& operator<<(ostream& out, const ObjectContext& obc)
 
 
 ostream& operator<<(ostream& out, const object_info_t& oi);
+
+class ObcLockManager {
+  struct ObjectLockState {
+    ObjectContextRef obc;
+    ObjectContext::RWState::State type;
+    ObjectLockState(
+      ObjectContextRef obc,
+      ObjectContext::RWState::State type)
+      : obc(obc), type(type) {}
+  };
+  map<hobject_t, ObjectLockState, hobject_t::BitwiseComparator> locks;
+public:
+  ObcLockManager() = default;
+  ObcLockManager(ObcLockManager &&) = default;
+  ObcLockManager(const ObcLockManager &) = delete;
+  bool empty() const {
+    return locks.empty();
+  }
+  bool get_lock_type(
+    ObjectContext::RWState::State type,
+    const hobject_t &hoid,
+    ObjectContextRef obc,
+    OpRequestRef op) {
+    assert(locks.find(hoid) == locks.end());
+    if (obc->get_lock_type(op, type)) {
+      locks.insert(make_pair(hoid, ObjectLockState(obc, type)));
+      return true;
+    } else {
+      return false;
+    }
+  }
+  /// Get write lock, ignore starvation
+  bool take_write_lock(
+    const hobject_t &hoid,
+    ObjectContextRef obc) {
+    assert(locks.find(hoid) == locks.end());
+    if (obc->rwstate.take_write_lock()) {
+      locks.insert(
+	make_pair(
+	  hoid, ObjectLockState(obc, ObjectContext::RWState::RWWRITE)));
+      return true;
+    } else {
+      return false;
+    }
+  }
+  /// Get write lock for snap trim
+  bool get_snaptrimmer_write(
+    const hobject_t &hoid,
+    ObjectContextRef obc) {
+    assert(locks.find(hoid) == locks.end());
+    if (obc->get_snaptrimmer_write()) {
+      locks.insert(
+	make_pair(
+	  hoid, ObjectLockState(obc, ObjectContext::RWState::RWWRITE)));
+      return true;
+    } else {
+      return false;
+    }
+  }
+  /// Get write lock greedy
+  bool get_write_greedy(
+    const hobject_t &hoid,
+    ObjectContextRef obc,
+    OpRequestRef op) {
+    assert(locks.find(hoid) == locks.end());
+    if (obc->get_write_greedy(op)) {
+      locks.insert(
+	make_pair(
+	  hoid, ObjectLockState(obc, ObjectContext::RWState::RWWRITE)));
+      return true;
+    } else {
+      return false;
+    }
+  }
+  void put_locks(
+    list<pair<hobject_t, list<OpRequestRef> > > *to_requeue,
+    bool *requeue_recovery,
+    bool *requeue_snaptrimmer) {
+    for (auto p: locks) {
+      list<OpRequestRef> _to_requeue;
+      p.second.obc->put_lock_type(
+	p.second.type,
+	&_to_requeue,
+	requeue_recovery,
+	requeue_snaptrimmer);
+      if (to_requeue) {
+	to_requeue->push_back(
+	  make_pair(
+	    p.second.obc->obs.oi.soid,
+	    std::move(_to_requeue)));
+      }
+    }
+    locks.clear();
+  }
+  ~ObcLockManager() {
+    assert(locks.empty());
+  }
+};
 
 
 
