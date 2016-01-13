@@ -2488,8 +2488,14 @@ void Locker::handle_client_caps(MClientCaps *m)
     ack->set_snap_follows(follows);
     ack->set_client_tid(m->get_client_tid());
     mds->send_message_client_counted(ack, m->get_connection());
-    m->put();
-    return;
+    if (m->get_op() == CEPH_CAP_OP_FLUSHSNAP) {
+      m->put();
+      return;
+    } else {
+      // fall-thru because the message may release some caps
+      m->clear_dirty();
+      m->set_op(CEPH_CAP_OP_UPDATE);
+    }
   }
 
   // "oldest flush tid" > 0 means client uses unique TID for each flush
