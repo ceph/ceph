@@ -186,7 +186,8 @@ private:
 
     if (ret < 0) {
       ctx->reply.error = htonl(-ret);
-    } else if (ret != static_cast<int>(ctx->request.len)) {
+    } else if ((ctx->command == NBD_CMD_WRITE || ctx->command == NBD_CMD_READ)
+	       && ret != static_cast<int>(ctx->request.len)) {
       derr << __func__ << ": " << *ctx << ": unexpected return value: " << ret
 	   << " (" << ctx->request.len << " expected)" << dendl;
       ctx->reply.error = htonl(EIO);
@@ -485,15 +486,15 @@ static int do_map()
 
   if (global_init_prefork(g_ceph_context) >= 0) {
     std::string err;
-    if (forker.prefork(err) < 0) {
+    r = forker.prefork(err);
+    if (r < 0) {
       cerr << err << std::endl;
-      return EXIT_FAILURE;
+      return r;
     }
 
     if (forker.is_parent()) {
-      if (forker.parent_wait(err) < 0) {
-	cerr << err << std::endl;
-	return EXIT_FAILURE;
+      if (forker.parent_wait(err) != 0) {
+	return -ENXIO;
       }
       return 0;
     }
