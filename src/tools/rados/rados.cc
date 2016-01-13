@@ -162,6 +162,8 @@ void usage(ostream& out)
 "        set the block size for put/get ops and for write benchmarking\n"
 "   -o object_size\n"
 "        set the object size for put/get ops and for write benchmarking\n"
+"   --max-objects\n"
+"        set the max number of objects for write benchmarking\n"
 "   -s name\n"
 "   --snap name\n"
 "        select given snap name for (read) IO\n"
@@ -1222,6 +1224,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   int concurrent_ios = 16;
   unsigned op_size = default_op_size;
   unsigned object_size = 0;
+  unsigned max_objects = 0;
   bool block_size_specified = false;
   int bench_write_dest = 0;
   bool cleanup = true;
@@ -1312,6 +1315,12 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return -EINVAL;
     }
     block_size_specified = true;
+  }
+  i = opts.find("max-objects");
+  if (i != opts.end()) {
+    if (rados_sistrtoll(i, &max_objects)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("snap");
   if (i != opts.end()) {
@@ -2537,7 +2546,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       object_size = op_size;
     ret = bencher.aio_bench(operation, seconds,
 			    concurrent_ios, op_size, object_size,
-			    cleanup, run_name, no_verify);
+			    max_objects, cleanup, run_name, no_verify);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
     if (formatter && output)
@@ -3016,6 +3025,8 @@ int main(int argc, const char **argv)
       opts["block-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--object-size", (char*)NULL)) {
       opts["object-size"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-objects", (char*)NULL)) {
+      opts["max-objects"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", (char*)NULL)) {
       opts["object-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-s", "--snap", (char*)NULL)) {
