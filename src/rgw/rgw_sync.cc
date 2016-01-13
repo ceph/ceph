@@ -356,15 +356,20 @@ class RGWAsyncReadMDLogEntries : public RGWAsyncRadosRequest {
   list<cls_log_entry> *entries;
   bool *truncated;
 
-  void *handle;
 protected:
   int _send_request() {
     utime_t from_time;
     utime_t end_time;
 
+    void *handle;
+
     mdlog->init_list_entries(shard_id, from_time, end_time, *marker, &handle);
 
-    return mdlog->list_entries(handle, max_entries, *entries, marker, truncated);
+    int ret = mdlog->list_entries(handle, max_entries, *entries, marker, truncated);
+
+    mdlog->complete_list_entries(handle);
+
+    return ret;
   }
 public:
   RGWAsyncReadMDLogEntries(RGWAioCompletionNotifier *cn, RGWRados *_store,
@@ -1085,6 +1090,11 @@ public:
 						      req_ret(0) {
     if (new_marker) {
       *new_marker = marker;
+    }
+  }
+  ~RGWCloneMetaLogCoroutine() {
+    if (http_op) {
+      http_op->put();
     }
   }
 
@@ -1823,6 +1833,7 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request()
     ldout(cct, 0) << "ERROR: failed to fetch mdlog data" << dendl;
     log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
     http_op->put();
+    http_op = NULL;
     return ret;
   }
 
@@ -1836,9 +1847,11 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
     error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
     ldout(cct, 0) << "ERROR: failed to wait for op, ret=" << ret << dendl;
     http_op->put();
+    http_op = NULL;
     return set_cr_error(ret);
   }
   http_op->put();
+  http_op = NULL;
 
   ldout(cct, 20) << "remote mdlog, shard_id=" << shard_id << " num of shard entries: " << data.entries.size() << dendl;
 

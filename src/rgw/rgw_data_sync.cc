@@ -1250,7 +1250,6 @@ int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status
   }
 
   lock.get_write();
-  data_sync_cr->put();
   data_sync_cr = NULL;
   lock.unlock();
 
