@@ -395,6 +395,7 @@ class ObjectCacher {
   // ObjectCacher fields
  private:
   WritebackHandler& writeback_handler;
+  bool scattered_write;
 
   string name;
   Mutex& lock;
@@ -521,6 +522,9 @@ class ObjectCacher {
   // io
   void bh_read(BufferHead *bh, int op_flags);
   void bh_write(BufferHead *bh);
+  void bh_write_scattered(list<BufferHead*>& blist);
+  void bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
+			    int64_t *amount, int *max_count);
 
   void trim();
   void flush(loff_t amount=0);
@@ -552,8 +556,10 @@ class ObjectCacher {
 		      loff_t offset, uint64_t length,
 		      bufferlist &bl, int r,
 		      bool trust_enoent);
-  void bh_write_commit(int64_t poolid, sobject_t oid, loff_t offset,
-		       uint64_t length, ceph_tid_t t, int r);
+  void bh_write_commit(int64_t poolid, sobject_t oid,
+		       vector<pair<loff_t, uint64_t> >& ranges,
+		       ceph_tid_t t, int r);
+
 
   class C_ReadFinish : public Context {
     ObjectCacher *oc;
@@ -592,17 +598,23 @@ class ObjectCacher {
     ObjectCacher *oc;
     int64_t poolid;
     sobject_t oid;
-    loff_t start;
-    uint64_t length;
+    vector<pair<loff_t, uint64_t> > ranges;
   public:
     ceph_tid_t tid;
     C_WriteCommit(ObjectCacher *c, int64_t _poolid, sobject_t o, loff_t s,
 		  uint64_t l) :
-      oc(c), poolid(_poolid), oid(o), start(s), length(l), tid(0) {}
+      oc(c), poolid(_poolid), oid(o), tid(0) {
+	ranges.push_back(make_pair(s, l));
+      }
+    C_WriteCommit(ObjectCacher *c, int64_t _poolid, sobject_t o,
+		  vector<pair<loff_t, uint64_t> >& _ranges) :
+      oc(c), poolid(_poolid), oid(o), tid(0) {
+	ranges.swap(_ranges);
+      }
     void finish(int r) {
-      oc->bh_write_commit(poolid, oid, start, length, tid, r);
+      oc->bh_write_commit(poolid, oid, ranges, tid, r);
     }
-  };
+ };
 
   class C_WaitForWrite : public Context {
   public:
