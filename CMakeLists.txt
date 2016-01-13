@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 
-# set(CMAKE_MODULE_PATH
-#   ${CMAKE_MODULE_PATH}
-#  "${CMAKE_CURRENT_LIST_DIR}/cmake/modules/")
+enable_testing()
 
 set(CMAKE_CXX_FLAGS "-std=gnu++11")
 include_directories(src)
