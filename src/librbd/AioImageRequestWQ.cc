@@ -54,6 +54,7 @@ ssize_t AioImageRequestWQ::write(uint64_t off, uint64_t len, const char *buf,
   int r = clip_io(&m_image_ctx, off, &len);
   m_image_ctx.snap_lock.put_read();
   if (r < 0) {
+    lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -77,6 +78,7 @@ int AioImageRequestWQ::discard(uint64_t off, uint64_t len) {
   int r = clip_io(&m_image_ctx, off, &len);
   m_image_ctx.snap_lock.put_read();
   if (r < 0) {
+    lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
   }
 
