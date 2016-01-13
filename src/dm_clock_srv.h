@@ -33,6 +33,14 @@ static void debugger() {
 }
 
 
+#define TIME_SHORTENER
+
+
+#ifdef TIME_SHORTENER
+static const double time_shortener = 1452723900.0;
+#endif
+
+
 namespace crimson {
   
   namespace dmclock {
@@ -44,7 +52,11 @@ namespace crimson {
     inline Time getTime() {
       struct timeval now;
       assert(0 == gettimeofday(&now, NULL));
-      return now.tv_sec + (now.tv_usec / 1000000.0) - 1452712000.0;
+#ifdef TIME_SHORTENER
+      return now.tv_sec + (now.tv_usec / 1000000.0) - time_shortener;
+#else
+      return now.tv_sec + (now.tv_usec / 1000000.0);
+#endif
     }
 
 
@@ -176,21 +188,26 @@ namespace crimson {
 	  // empty
 	}
 
-#if NOT_WORKING
-	template<typename X, typename Y>
-	friend std::ostream& operator<<(std::ostream&,
-					const typename PriorityQueue<X,Y>::Entry&);
-#endif
+	friend std::ostream& operator<<(std::ostream& out,
+					const typename PriorityQueue<C,R>::Entry& e) {
+	  out << "{ client:" << e.client <<
+	    ", tag:" << e.tag <<
+	    ", handled:" << (e.handled ? "T" : "f") << " }";
+	  return out;
+	}
       }; // struct Entry
 
 
       typedef std::shared_ptr<Entry> EntryRef;
 
-#if NOT_WORKING
-      template<typename X, typename Y>
-      friend std::ostream& operator<<(std::ostream&,
-				      const typename PriorityQueue<X,Y>::EntryRef&);
-#endif
+      // if you try to display an EntryRef (shared pointer to an
+      // Entry), dereference the shared pointer so we get data, not
+      // addresses
+      friend std::ostream& operator<<(std::ostream& out,
+				      const typename PriorityQueue<C,R>::EntryRef& e) {
+	out << *e;
+	return out;
+      }
 
     public:
 
@@ -311,28 +328,32 @@ namespace crimson {
       }
 
 
+#if 0
       template<typename X>
       void displayHeap(std::ostream& out, const c::Heap<EntryRef,X> orig) {
 	c::Heap<EntryRef,X> other = orig;
-	out << "{ ";
+	out << "[ ";
 	bool first = true;
 	while (!other.empty()) {
-	  auto t = other.top();
-
 	  if (!first) {
 	    out << ", ";
 	  } else {
 	    first = false;
 	  }
 
+//	  auto t = other.top();
+	  out << *other.top();
+// #if 0
 	  out << "{ client:" << t->client <<
 	    ", tag:" << t->tag <<
 	    ", handled:" << (t->handled ? "T" : "f") << " }";
+// #endif
 
 	  other.pop();
 	}
-	out << " }" << std::endl;
+	out << " ]" << std::endl;
       }
+#endif
 
 
       void addRequest(RequestRef&& request,
@@ -346,17 +367,13 @@ namespace crimson {
 	if (50 == count) {
 	  debugger();
 	  std::cout << "RESERVATION" << std::endl;
-	  displayHeap(std::cout, resQ);
-	  // std::cout << resQ << std::endl;
+	  std::cout << resQ << std::endl;
 	  std::cout << "LIMIT" << std::endl;
-	  displayHeap(std::cout, limQ);
-	  // std::cout << limQ << std::endl;
+	  std::cout << limQ << std::endl;
 	  std::cout << "READY" << std::endl;
-	  displayHeap(std::cout, readyQ);
-	  // std::cout << readyQ << std::endl;
+	  std::cout << readyQ << std::endl;
 	  std::cout << "PROPORTION" << std::endl;
-	  displayHeap(std::cout, propQ);
-	  // std::cout << propQ << std::endl;
+	  std::cout << propQ << std::endl;
 	}
 #endif
 
@@ -507,22 +524,11 @@ namespace crimson {
 	// nothing scheduled
       } // scheduleRequest
     }; // class PriorityQueue
-
-    
   } // namespace dmclock
 } // namespace crimson
 
 
 #if NOT_WORKING
-template<typename C, typename R>
-std::ostream& operator<<(std::ostream& out,
-			 const typename crimson::dmclock::PriorityQueue<C,R>::Entry& e) {
-  out << "{ client:" << e.client <<
-    ", tag:" << e.tag <<
-    ", handled:" << (e.handled ? "T" : "f") << " }";
-  return out;
-}
-
 template<typename C, typename R>
 std::ostream& operator<<(std::ostream& out,
 			 const typename crimson::dmclock::PriorityQueue<C,R>::EntryRef& e) {
