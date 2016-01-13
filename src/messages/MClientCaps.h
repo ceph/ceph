@@ -92,6 +92,8 @@ class MClientCaps : public Message {
   void set_oldest_flush_tid(ceph_tid_t tid) { oldest_flush_tid = tid; }
   ceph_tid_t get_oldest_flush_tid() { return oldest_flush_tid; }
 
+  void clear_dirty() { head.dirty = 0; }
+
   MClientCaps()
     : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
       osd_epoch_barrier(0),
