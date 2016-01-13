@@ -1,4 +1,7 @@
 #!/bin/sh -ex
+#
+# simple script to repeat a test until it fails
+#
 
 if [ $1 = "-a" ]; then
     shift
