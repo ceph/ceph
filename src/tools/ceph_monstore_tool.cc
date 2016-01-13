@@ -170,6 +170,7 @@ int parse_cmd_args(
  *  replay-trace
  *  random-gen
  *  rewrite-crush
+ *  inflate-pgmap
  *
  * wanted syntax:
  *
@@ -214,6 +215,8 @@ void usage(const char *n, po::options_description &d)
   << "                                  (random-gen -- --help for more info)\n"
   << "  rewrite-crush [-- options]      add a rewrite commit to the store\n"
   << "                                  (rewrite-crush -- --help for more info)\n"
+  << "  inflate-pgmap [-- options]      add given number of pgmaps to store\n"
+  << "                                  (inflate-pgmap -- --help for more info)\n"
   << std::endl;
   std::cerr << d << std::endl;
   std::cerr
@@ -439,6 +442,70 @@ int rewrite_crush(const char* progname,
   version_t pending_pn = (store.get(prefix, "accepted_pn") / 100 + 4) * 100 + 1;
   t->put(prefix, "pending_pn", pending_pn);
   store.apply_transaction(t);
+  return 0;
+}
+
+int inflate_pgmap(MonitorDBStore& st, unsigned n, bool can_be_trimmed) {
+  // put latest pg map into monstore to bloat it up
+  // only format version == 1 is supported
+  version_t last = st.get("pgmap", "last_committed");
+  bufferlist bl;
+
+  // get the latest delta
+  int r = st.get("pgmap", last, bl);
+  if (r) {
+    std::cerr << "Error getting pgmap: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  // try to pull together an idempotent "delta"
+  ceph::unordered_map<pg_t, pg_stat_t> pg_stat;
+  for (KeyValueDB::Iterator i = st.get_iterator("pgmap_pg");
+       i->valid(); i->next()) {
+    pg_t pgid;
+    if (!pgid.parse(i->key().c_str())) {
+      std::cerr << "unable to parse key " << i->key() << std::endl;
+      continue;
+    }
+    bufferlist pg_bl = i->value();
+    pg_stat_t ps;
+    bufferlist::iterator p = pg_bl.begin();
+    ::decode(ps, p);
+    // will update the last_epoch_clean of all the pgs.
+    pg_stat[pgid] = ps;
+  }
+
+  version_t first = st.get("pgmap", "first_committed");
+  version_t ver = last;
+  MonitorDBStore::TransactionRef txn(new MonitorDBStore::Transaction);
+  for (unsigned i = 0; i < n; i++) {
+    bufferlist trans_bl;
+    bufferlist dirty_pgs;
+    for (ceph::unordered_map<pg_t, pg_stat_t>::iterator ps = pg_stat.begin();
+	 ps != pg_stat.end(); ++ps) {
+      ::encode(ps->first, dirty_pgs);
+      if (!can_be_trimmed) {
+	ps->second.last_epoch_clean = first;
+      }
+      ::encode(ps->second, dirty_pgs);
+    }
+    utime_t inc_stamp = ceph_clock_now(NULL);
+    ::encode(inc_stamp, trans_bl);
+    ::encode_destructively(dirty_pgs, trans_bl);
+    bufferlist dirty_osds;
+    ::encode(dirty_osds, trans_bl);
+    txn->put("pgmap", ++ver, trans_bl);
+    // update the db in batch
+    if (txn->size() > 1024) {
+      st.apply_transaction(txn);
+      // reset the transaction
+      txn.reset(new MonitorDBStore::Transaction);
+    }
+  }
+  txn->put("pgmap", "last_committed", ver);
+  txn->put("pgmap_meta", "version", ver);
+  // this will also piggy back the leftover pgmap added in the loop above
+  st.apply_transaction(txn);
   return 0;
 }
 
@@ -1004,6 +1071,29 @@ int main(int argc, char **argv) {
               << std::endl;
   } else if (cmd == "rewrite-crush") {
     err = rewrite_crush(argv[0], subcmds, st);
+  } else if (cmd == "inflate-pgmap") {
+    unsigned n = 2000;
+    bool can_be_trimmed = false;
+    po::options_description op_desc("Allowed 'inflate-pgmap' options");
+    op_desc.add_options()
+      ("num-maps,n", po::value<unsigned>(&n),
+       "number of maps to add (default: 2000)")
+      ("can-be-trimmed", po::value<bool>(&can_be_trimmed),
+       "can be trimmed (default: false)")
+      ;
+
+    po::variables_map op_vm;
+    try {
+      po::parsed_options op_parsed = po::command_line_parser(subcmds).
+        options(op_desc).run();
+      po::store(op_parsed, op_vm);
+      po::notify(op_vm);
+    } catch (po::error &e) {
+      std::cerr << "error: " << e.what() << std::endl;
+      err = EINVAL;
+      goto done;
+    }
+    err = inflate_pgmap(st, n, can_be_trimmed);
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     usage(argv[0], desc);
