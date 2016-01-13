@@ -2281,13 +2281,13 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
 
   if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
       osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
-    ldout(cct, 10) << " paused modify " << op << " tid " << last_tid.read()
+    ldout(cct, 10) << " paused modify " << op << " tid " << op->tid
 		   << dendl;
     op->target.paused = true;
     _maybe_request_map();
   } else if ((op->target.flags & CEPH_OSD_FLAG_READ) &&
 	     osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
-    ldout(cct, 10) << " paused read " << op << " tid " << last_tid.read()
+    ldout(cct, 10) << " paused read " << op << " tid " << op->tid
 		   << dendl;
     op->target.paused = true;
     _maybe_request_map();
@@ -2297,7 +2297,7 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
 	     (_osdmap_full_flag() ||
 	      _osdmap_pool_full(op->target.base_oloc.pool))) {
     ldout(cct, 0) << " FULL, paused modify " << op << " tid "
-		  << last_tid.read() << dendl;
+		  << op->tid << dendl;
     op->target.paused = true;
     _maybe_request_map();
   } else if (!s->is_homeless()) {
@@ -4222,7 +4222,6 @@ bool Objecter::ms_handle_reset(Connection *con)
   if (!initialized.read())
     return false;
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
-    //
     int osd = osdmap->identify_osd(con->get_peer_addr());
     if (osd >= 0) {
       ldout(cct, 1) << "ms_handle_reset on osd." << osd << dendl;
@@ -4484,7 +4483,7 @@ void Objecter::dump_pool_stat_ops(Formatter *fmt) const
 	 ++it) {
       fmt->dump_string("pool", *it);
     }
-    fmt->close_section(); // pool_op object
+    fmt->close_section(); // pools array
 
     fmt->close_section(); // pool_stat_op object
   }
@@ -4501,9 +4500,9 @@ void Objecter::dump_statfs_ops(Formatter *fmt) const
     fmt->open_object_section("statfs_op");
     fmt->dump_unsigned("tid", op->tid);
     fmt->dump_stream("last_sent") << op->last_submit;
-    fmt->close_section(); // pool_stat_op object
+    fmt->close_section(); // statfs_op object
   }
-  fmt->close_section(); // pool_stat_ops array
+  fmt->close_section(); // statfs_ops array
 }
 
 Objecter::RequestStateHook::RequestStateHook(Objecter *objecter) :
@@ -4900,6 +4899,7 @@ void Objecter::enumerate_objects(
                      "osd epoch " << osdmap->get_epoch() << dendl;
     rwlock.unlock();
     on_finish->complete(-ENOENT);
+    return;
   } else {
     rwlock.unlock();
   }
@@ -4940,6 +4940,7 @@ void Objecter::_enumerate_reply(
   if (r < 0) {
     ldout(cct, 4) << __func__ << ": remote error " << r << dendl;
     on_finish->complete(r);
+    return;
   }
 
   assert(next != NULL);
@@ -4970,6 +4971,12 @@ void Objecter::_enumerate_reply(
     // drop anything after 'end'
     rwlock.get_read();
     const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
+    if (!pool) {
+      // pool is gone, drop any results which are now meaningless.
+      rwlock.put_read();
+      on_finish->complete(-ENOENT);
+      return;
+    }
     while (!response.entries.empty()) {
       uint32_t hash = response.entries.back().locator.empty() ?
 	pool->hash_key(response.entries.back().oid,
