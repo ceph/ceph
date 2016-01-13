@@ -1459,7 +1459,7 @@ static int update_period(const string& realm_id, const string& realm_name,
   }
   period.fork();
   ret = period.update();
-  if(ret , 0) {
+  if(ret < 0) {
     cerr << "failed to update period: " << cpp_strerror(-ret) << std::endl;
     return ret;
   }
