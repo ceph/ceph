@@ -677,8 +677,13 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     string last_read = "";
     do {
       map<string, string> images;
-      cls_client::dir_list(&io_ctx, RBD_DIRECTORY,
+      r = cls_client::dir_list(&io_ctx, RBD_DIRECTORY,
 			   last_read, max_read, &images);
+      if (r < 0) {
+        lderr(cct) << "error listing image in directory: " 
+                   << cpp_strerror(r) << dendl;   
+        return r;
+      }
       for (map<string, string>::const_iterator it = images.begin();
 	   it != images.end(); ++it) {
 	names.push_back(it->first);
@@ -711,7 +716,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     // search all pools for children depending on this snapshot
     Rados rados(ictx->md_ctx);
     std::list<std::pair<int64_t, string> > pools;
-    rados.pool_list2(pools);
+    r = rados.pool_list2(pools);
+    if (r < 0) {
+      lderr(cct) << "error listing pools: " << cpp_strerror(r) << dendl; 
+      return r;
+    }
 
     for (std::list<std::pair<int64_t, string> >::const_iterator it =
          pools.begin(); it != pools.end(); ++it) {
@@ -1528,6 +1537,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (r < 0) {
       lderr(cct) << "error opening parent image: "
 		 << cpp_strerror(-r) << dendl;
+      delete p_imctx;
       return r;
     }
 
@@ -1579,6 +1589,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     r = c_imctx->state->open();
     if (r < 0) {
       lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
+      delete c_imctx;
       goto err_remove;
     }
 
@@ -1658,6 +1669,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (r < 0) {
       lderr(ictx->cct) << "error opening source image: " << cpp_strerror(r)
 		       << dendl;
+      delete ictx;
       return r;
     }
     BOOST_SCOPE_EXIT((ictx)) {
@@ -1938,13 +1950,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     parent_spec parent_spec;
 
     if (ictx->snap_id == CEPH_NOSNAP) {
-      if (!ictx->parent)
-	return -ENOENT;
       parent_spec = ictx->parent_md.spec;
     } else {
       r = ictx->get_parent_spec(ictx->snap_id, &parent_spec);
       if (r < 0) {
-	lderr(ictx->cct) << "Can't find snapshot id" << ictx->snap_id << dendl;
+	lderr(ictx->cct) << "Can't find snapshot id = " << ictx->snap_id << dendl;
 	return r;
       }
       if (parent_spec.pool_id == -1)
@@ -1955,7 +1965,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       r = rados.pool_reverse_lookup(parent_spec.pool_id,
 				    parent_pool_name);
       if (r < 0) {
-	lderr(ictx->cct) << "error looking up pool name" << cpp_strerror(r)
+	lderr(ictx->cct) << "error looking up pool name: " << cpp_strerror(r)
 			 << dendl;
 	return r;
       }
@@ -2031,6 +2041,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     int r = ictx->state->open();
     if (r < 0) {
       ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
+      delete ictx;
     } else {
       string header_oid = ictx->header_oid;
       old_format = ictx->old_format;
@@ -2374,6 +2385,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 					  dest_md_ctx, false);
     r = dest->state->open();
     if (r < 0) {
+      delete dest;
       lderr(cct) << "failed to read newly created header" << dendl;
       return r;
     }
