@@ -426,6 +426,12 @@ class TestStrays(CephFSTestCase):
         log.info("Ranks 0 and 1 are {0} and {1}".format(
             rank_0_id, rank_1_id))
 
+        # Get rid of other MDS daemons so that it's easier to know which
+        # daemons to expect in which ranks after restarts
+        for unneeded_mds in set(self.mds_cluster.mds_ids) - {rank_0_id, rank_1_id}:
+            self.mds_cluster.mds_stop(unneeded_mds)
+            self.mds_cluster.mds_fail(unneeded_mds)
+
         # Set the purge file throttle to 0 on MDS rank 1
         self.set_conf("mds.{0}".format(rank_1_id), 'mds_max_purge_files', "0")
         self.fs.mds_fail_restart(rank_1_id)
@@ -443,7 +449,7 @@ class TestStrays(CephFSTestCase):
         result = self.fs.mds_asok(["export", "dir", "/ALPHA", "1"], rank_0_id)
         self.assertEqual(result["return_code"], 0)
 
-        # Pool the MDS cache dump to watch for the export completing
+        # Poll the MDS cache dump to watch for the export completing
         migrated = False
         migrate_timeout = 60
         migrate_elapsed = 0
