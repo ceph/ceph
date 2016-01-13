@@ -168,6 +168,7 @@ void Objecter::handle_conf_change(const struct md_config_t *conf,
 
 void Objecter::update_crush_location()
 {
+  RWLock::WLocker rwlocker(rwlock);
   crush_location.clear();
   vector<string> lvec;
   get_str_vec(cct->_conf->crush_location, ";, \t", lvec);
