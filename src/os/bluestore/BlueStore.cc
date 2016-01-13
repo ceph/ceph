@@ -981,7 +981,7 @@ int BlueStore::_open_alloc()
 
   alloc = Allocator::create("stupid");
   uint64_t num = 0, bytes = 0;
-  const map<uint64_t,uint64_t>& fl = fm->get_freelist();
+  const auto& fl = fm->get_freelist();
   for (auto& p : fl) {
     alloc->init_add_free(p.first, p.second);
     ++num;
@@ -2157,8 +2157,8 @@ int BlueStore::fsck()
 
   dout(1) << __func__ << " checking freelist vs allocated" << dendl;
   {
-    const map<uint64_t,uint64_t>& free = fm->get_freelist();
-    for (map<uint64_t,uint64_t>::const_iterator p = free.begin();
+    const auto& free = fm->get_freelist();
+    for (auto p = free.begin();
 	 p != free.end(); ++p) {
       if (used_blocks.intersects(p->first, p->second)) {
 	derr << __func__ << " free extent " << p->first << "~" << p->second
