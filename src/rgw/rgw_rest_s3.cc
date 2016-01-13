@@ -1713,6 +1713,19 @@ void RGWGetACLs_ObjStore_S3::send_response()
   s->cio->write(acls.c_str(), acls.size());
 }
 
+int RGWPutACLs_ObjStore_S3::get_params()
+{
+  int ret =  RGWPutACLs_ObjStore::get_params();
+  if (ret < 0)
+    s->aws4_auth_needs_complete = false;
+  if (s->aws4_auth_needs_complete) {
+    int ret_auth = do_aws4_auth_completion();
+    if (ret_auth)
+      return ret_auth;
+  }
+  return ret;
+}
+
 int RGWPutACLs_ObjStore_S3::get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss)
 {
   RGWAccessControlPolicy_S3 s3policy(s->cct);
