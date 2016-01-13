@@ -3,6 +3,7 @@ include(AddCephTest)
 set(UNITTEST_LIBS gmock_main gmock gtest ${PTHREAD_LIBS} ${CMAKE_DL_LIBS})
 set(UNITTEST_CXX_FLAGS "-I${CMAKE_SOURCE_DIR}/src/gmock/include -I${CMAKE_BINARY_DIR}/src/gmock/include -I${CMAKE_SOURCE_DIR}/src/gmock/gtest/include -I${CMAKE_BINARY_DIR}/src/gmock/gtest/include -fno-strict-aliasing")
 
+add_subdirectory(bench)
 add_subdirectory(cls_hello)
 add_subdirectory(cls_lock)
 add_subdirectory(cls_log)
@@ -13,16 +14,29 @@ add_subdirectory(cls_replica_log)
 add_subdirectory(cls_rgw)
 add_subdirectory(cls_statelog)
 add_subdirectory(cls_version)
+add_subdirectory(common)
 add_subdirectory(compressor)
+add_subdirectory(crush)
+add_subdirectory(encoding)
+add_subdirectory(erasure-code)
 add_subdirectory(filestore)
+add_subdirectory(fs)
 add_subdirectory(journal)
 add_subdirectory(libcephfs)
+add_subdirectory(librados)
 add_subdirectory(librados_test_stub)
+add_subdirectory(libradosstriper)
 add_subdirectory(librbd)
 add_subdirectory(messenger)
+add_subdirectory(mds)
+add_subdirectory(mon)
 add_subdirectory(msgr)
 add_subdirectory(ObjectMap)
+add_subdirectory(objectstore)
+add_subdirectory(os)
+add_subdirectory(osd)
 add_subdirectory(osdc)
+add_subdirectory(pybind)
 add_subdirectory(rgw)
 add_subdirectory(system)
 
@@ -96,7 +110,6 @@ target_link_libraries(test_trans os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 ## Benchmarks
 
-add_subdirectory(bench)
 
 # ceph_omapbench
 set(omapbench_srcs
@@ -384,24 +397,6 @@ add_dependencies(check run-tox-ceph-disk)
 add_test(NAME run-tox-ceph-detect-init COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-detect-init/run-tox.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check run-tox-ceph-disk)
 
-add_subdirectory(common)
-add_subdirectory(crush)
-add_subdirectory(encoding)
-
-# erasure-code directory
-add_ceph_test(test-erasure-code.sh ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test-erasure-code.sh)
-add_ceph_test(test-erasure-eio.sh ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test-erasure-eio.sh)
-
-add_subdirectory(fs)
-add_subdirectory(libradosstriper)
-add_subdirectory(librados)
-add_subdirectory(mds)
-add_subdirectory(mon)
-add_subdirectory(objectstore)
-add_subdirectory(os)
-add_subdirectory(osd)
-add_subdirectory(pybind)
-
 # unittest_admin_socket
 add_executable(unittest_admin_socket EXCLUDE_FROM_ALL
   admin_socket.cc
@@ -675,8 +670,6 @@ target_link_libraries(unittest_subprocess global)
 # unittest_pageset
 add_executable(unittest_pageset EXCLUDE_FROM_ALL test_pageset.cc)
 add_ceph_unittest(unittest_pageset ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_pageset)
-
-add_subdirectory(erasure-code EXCLUDE_FROM_ALL)
 
 #make check ends here
 

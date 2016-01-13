@@ -17,6 +17,7 @@
 
 #include <errno.h>
 #include <signal.h>
+#include <stdlib.h>
 #include "common/Thread.h"
 #include "global/global_init.h"
 #include "erasure-code/ErasureCodePlugin.h"
@@ -82,7 +83,7 @@ TEST_F(ErasureCodePluginRegistryTest, factory_mutex) {
 TEST_F(ErasureCodePluginRegistryTest, all)
 {
   ErasureCodeProfile profile;
-  string directory(".libs");
+  string directory = getenv("CEPH_LIB");
   ErasureCodeInterfaceRef erasure_code;
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   EXPECT_FALSE(erasure_code);
@@ -131,7 +132,8 @@ int main(int argc, char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  g_conf->set_val("erasure_code_dir", ".libs", false, false);
+  string directory = getenv("CEPH_LIB");
+  g_conf->set_val("erasure_code_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
