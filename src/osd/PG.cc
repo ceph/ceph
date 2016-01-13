@@ -2725,19 +2725,29 @@ int PG::_prepare_write_info(map<string,bufferlist> *km,
 			    map<epoch_t,pg_interval_t> &past_intervals,
 			    ghobject_t &pgmeta_oid,
 			    bool dirty_big_info,
-			    bool dirty_epoch)
+			    bool dirty_epoch,
+			    ObjectStore::Transaction* t)
 {
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
-  if (dirty_epoch)
+  if (dirty_epoch) {
+    if (t)
+      (*km)[epoch_key].set_append_buffer(t->get_trans_buf());
     ::encode(epoch, (*km)[epoch_key]);
+  }
+
   purged_snaps.swap(info.purged_snaps);
+  if (t)
+    (*km)[info_key].set_append_buffer(t->get_trans_buf());
   ::encode(info, (*km)[info_key]);
+
   purged_snaps.swap(info.purged_snaps);
 
   if (dirty_big_info) {
     // potentially big stuff
     bufferlist& bigbl = (*km)[biginfo_key];
+    if (t)
+      bigbl.set_append_buffer(t->get_trans_buf());
     ::encode(past_intervals, bigbl);
     ::encode(info.purged_snaps, bigbl);
     //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
@@ -2775,7 +2785,7 @@ void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
   t.omap_setkeys(coll, pgmeta_oid, values);
 }
 
-void PG::prepare_write_info(map<string,bufferlist> *km)
+void PG::prepare_write_info(map<string,bufferlist> *km, ObjectStore::Transaction* t)
 {
   info.stats.stats.add(unstable_stats);
   unstable_stats.clear();
@@ -2783,7 +2793,7 @@ void PG::prepare_write_info(map<string,bufferlist> *km)
   bool need_update_epoch = last_epoch < get_osdmap()->get_epoch();
   int ret = _prepare_write_info(km, get_osdmap()->get_epoch(), info, coll,
 				past_intervals, pgmeta_oid,
-				dirty_big_info, need_update_epoch);
+				dirty_big_info, need_update_epoch, t);
   assert(ret == 0);
   if (need_update_epoch)
     last_epoch = get_osdmap()->get_epoch();
@@ -2896,7 +2906,7 @@ void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
   map<string,bufferlist> km;
   if (dirty_big_info || dirty_info)
-    prepare_write_info(&km);
+    prepare_write_info(&km, &t);
   pg_log.write_log(t, &km, coll, pgmeta_oid, pool.info.require_rollback());
   if (!km.empty())
     t.omap_setkeys(coll, pgmeta_oid, km);

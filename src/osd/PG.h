@@ -2166,7 +2166,7 @@ public:
 		    spg_t pgid, const pg_pool_t *pool);
 
 private:
-  void prepare_write_info(map<string,bufferlist> *km);
+  void prepare_write_info(map<string,bufferlist> *km, ObjectStore::Transaction* t = NULL);
 
 public:
   static int _prepare_write_info(map<string,bufferlist> *km,
@@ -2175,7 +2175,8 @@ public:
     map<epoch_t,pg_interval_t> &past_intervals,
     ghobject_t &pgmeta_oid,
     bool dirty_big_info,
-    bool dirty_epoch);
+    bool dirty_epoch,
+    ObjectStore::Transaction* t = NULL);
   void write_if_dirty(ObjectStore::Transaction& t);
 
   eversion_t get_next_version() const {

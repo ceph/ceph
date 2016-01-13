@@ -6442,6 +6442,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 
   // snapset
   bufferlist bss;
+  bss.set_append_buffer(ctx->op_t->get_trans_buf());
 
   if (soid.snap == CEPH_NOSNAP && maintain_ssc) {
     ::encode(ctx->new_snapset, bss);
@@ -6509,8 +6510,10 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       ctx->snapset_obc->obs.oi.local_mtime = now;
 
       map<string, bufferlist> attrs;
-      bufferlist bv(sizeof(ctx->new_obs.oi));
+      bufferlist bv;
+      bv.set_append_buffer(ctx->op_t->get_trans_buf());
       ::encode(ctx->snapset_obc->obs.oi, bv);
+
       ctx->op_t->touch(snapoid);
       attrs[OI_ATTR].claim(bv);
       attrs[SS_ATTR].claim(bss);
@@ -6555,7 +6558,8 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     }
 
     map <string, bufferlist> attrs;
-    bufferlist bv(sizeof(ctx->new_obs.oi));
+    bufferlist bv;
+    bv.set_append_buffer(ctx->op_t->get_trans_buf());
     ::encode(ctx->new_obs.oi, bv);
     attrs[OI_ATTR].claim(bv);
 

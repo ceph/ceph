@@ -256,7 +256,8 @@ namespace buffer CEPH_BUFFER_API {
     std::list<ptr> _buffers;
     unsigned _len;
     unsigned _memcopy_count; //the total of memcopy using rebuild().
-    ptr append_buffer;  // where i put small appends.
+    ptr* append_buffer;  // where i put small appends.
+    bool outer_buf;  // whether the append_buffer is outer one
 
     template <bool is_const>
     class iterator_impl: public std::iterator<std::forward_iterator_tag, char> {
@@ -353,14 +354,22 @@ namespace buffer CEPH_BUFFER_API {
 
   public:
     // cons/des
-    list() : _len(0), _memcopy_count(0), last_p(this) {}
+    list() : _len(0), _memcopy_count(0), append_buffer(NULL), outer_buf(false), last_p(this) {}
     list(unsigned prealloc) : _len(0), _memcopy_count(0), last_p(this) {
-      append_buffer = buffer::create(prealloc);
-      append_buffer.set_length(0);   // unused, so far.
+      append_buffer = new ptr(buffer::create(prealloc));
+      append_buffer->set_length(0);   // unused, so far.
+      outer_buf = false;
+    }
+    ~list() {
+      if (!outer_buf && append_buffer) {
+        delete append_buffer;
+        append_buffer = NULL;
+      }
     }
 
     list(const list& other) : _buffers(other._buffers), _len(other._len),
-			      _memcopy_count(other._memcopy_count), last_p(this) {
+			      _memcopy_count(other._memcopy_count),
+                              append_buffer(NULL), outer_buf(false), last_p(this) {
       make_shareable();
     }
     list(list&& other);
@@ -371,6 +380,17 @@ namespace buffer CEPH_BUFFER_API {
 	make_shareable();
       }
       return *this;
+    }
+
+    void set_append_buffer(ptr* bp) {
+      if (bp == NULL) {
+        return;
+      }
+      if (!outer_buf && append_buffer) {
+        delete append_buffer;
+      }
+      outer_buf = true;
+      append_buffer = bp;
     }
 
     unsigned get_memcopy_count() const {return _memcopy_count; }
@@ -406,6 +426,10 @@ namespace buffer CEPH_BUFFER_API {
       _buffers.clear();
       _len = 0;
       _memcopy_count = 0;
+      if (!outer_buf && append_buffer) {
+        delete append_buffer;
+        append_buffer = NULL;
+      }
       last_p = begin();
     }
     void push_front(ptr& bp) {
