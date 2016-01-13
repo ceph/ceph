@@ -1,0 +1,5 @@
+add_executable(test_rgw_period_history EXCLUDE_FROM_ALL test_rgw_period_history.cc)
+target_link_libraries(test_rgw_period_history rgw_a ${UNITTEST_LIBS})
+set_target_properties(test_rgw_period_history PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+add_test(RGWPeriodHistory test_rgw_period_history)
+add_dependencies(check test_rgw_period_history)

@@ -8,6 +8,9 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+// reject 'period push' if we would have to fetch too many intermediate periods
+static const uint32_t PERIOD_HISTORY_FETCH_MAX = 64;
+
 // base period op, shared between Get and Post
 class RGWOp_Period_Base : public RGWRESTOp {
  protected:
@@ -122,32 +125,59 @@ void RGWOp_Period_Post::execute()
     return;
   }
 
+  // write the period to rados
+  http_ret = period.store_info(false);
+  if (http_ret < 0) {
+    lderr(cct) << "failed to store period " << period.get_id() << dendl;
+    return;
+  }
+
+  // decide whether we can set_current_period() or set_latest_epoch()
   if (period.get_id() != current_period.get_id()) {
-    // new period must follow current period
-    if (period.get_predecessor() != current_period.get_id()) {
-      ldout(cct, 10) << "current period " << current_period.get_id()
-          << " is not period " << period.get_id() << "'s predecessor" << dendl;
-      // XXX: this indicates a race between successive period updates. we should
-      // fetch this new period's predecessors until we have a full history, then
-      // set the latest period as the realm's current_period
+    auto current_epoch = current_period.get_realm_epoch();
+    // discard periods in the past
+    if (period.get_realm_epoch() < current_epoch) {
+      ldout(cct, 10) << "discarding period " << period.get_id()
+          << " with realm epoch " << period.get_realm_epoch()
+          << " older than current epoch " << current_epoch << dendl;
+      // return success to ack that we have this period
+      return;
+    }
+    // discard periods too far in the future
+    if (period.get_realm_epoch() > current_epoch + PERIOD_HISTORY_FETCH_MAX) {
+      lderr(cct) << "discarding period " << period.get_id()
+          << " with realm epoch " << period.get_realm_epoch() << " too far in "
+          "the future from current epoch " << current_epoch << dendl;
       http_ret = -ENOENT; // XXX: error code
       return;
     }
-    // write the period to rados
-    http_ret = period.store_info(false);
-    if (http_ret < 0) {
-      lderr(cct) << "failed to store new period" << dendl;
+    // attach a copy of the period into the period history
+    auto cursor = store->period_history->attach(RGWPeriod{period});
+    if (!cursor) {
+      // we're missing some history between the new period and current_period
+      http_ret = cursor.get_error();
+      lderr(cct) << "failed to collect the periods between current period "
+          << current_period.get_id() << " (realm epoch " << current_epoch
+          << ") and the new period " << period.get_id()
+          << " (realm epoch " << period.get_realm_epoch()
+          << "): " << cpp_strerror(-http_ret) << dendl;
+      return;
+    }
+    if (cursor.has_next()) {
+      // don't switch if we have a newer period in our history
+      ldout(cct, 4) << "attached period " << period.get_id()
+          << " to history, but the history contains newer periods" << dendl;
       return;
     }
     // set as current period
-    http_ret = realm.set_current_period(period.get_id()); // TODO: add sync status argument
+    http_ret = realm.set_current_period(period);
     if (http_ret < 0) {
       lderr(cct) << "failed to update realm's current period" << dendl;
       return;
     }
-    ldout(cct, 4) << "current period " << current_period.get_id()
-        << " is period " << period.get_id() << "'s predecessor, "
-        "updating current period and notifying zone" << dendl;
+    ldout(cct, 4) << "period " << period.get_id()
+        << " is newer than current period " << current_period.get_id()
+        << ", updating realm's current period and notifying zone" << dendl;
     realm.notify_new_period(period);
     return;
   }
@@ -158,23 +188,25 @@ void RGWOp_Period_Post::execute()
         << ", discarding update" << dendl;
     return;
   }
-
-  // write the period to rados
-  http_ret = period.store_info(false);
-  if (http_ret < 0) {
-    lderr(cct) << "failed to store period " << period.get_id() << dendl;
-    return;
-  }
   // set as latest epoch
   http_ret = period.set_latest_epoch(period.get_epoch());
   if (http_ret < 0) {
     lderr(cct) << "failed to set latest epoch" << dendl;
     return;
   }
+  // reflect the period into our local objects
+  http_ret  = period.reflect();
+  if (http_ret  < 0) {
+    lderr(cct) << "failed to update local objects: "
+        << cpp_strerror(-http_ret) << dendl;
+    return;
+  }
   ldout(cct, 4) << "period epoch " << period.get_epoch()
       << " is newer than current epoch " << current_period.get_epoch()
-      << ", updating latest epoch and notifying zone" << dendl;
+      << ", updating period's latest epoch and notifying zone" << dendl;
   realm.notify_new_period(period);
+  // update the period history
+  store->period_history->insert(RGWPeriod{period});
 }
 
 class RGWHandler_Period : public RGWHandler_Auth_S3 {

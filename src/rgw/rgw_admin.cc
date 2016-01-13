@@ -1426,6 +1426,11 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
     cerr << "Error updating period epoch: " << cpp_strerror(ret) << std::endl;
     return ret;
   }
+  ret = period.reflect();
+  if (ret < 0) {
+    cerr << "Error updating local objects: " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
   realm.notify_new_period(period);
   return ret;
 }
@@ -2397,12 +2402,14 @@ int main(int argc, char **argv)
           return -EINVAL;
         }
         RGWPeriod period;
-        if (!realm.get_current_period().empty()) {
+        auto& current_period = realm.get_current_period();
+        if (!current_period.empty()) {
+          // pull the latest epoch of the realm's current period
           ret = do_period_pull(remote, url, access_key, secret_key,
-                               realm_id, realm_name, period_id, period_epoch,
+                               realm_id, realm_name, current_period, "",
                                &period);
           if (ret < 0) {
-            cerr << "could not fetch period " << realm.get_current_period() << std::endl;
+            cerr << "could not fetch period " << current_period << std::endl;
             return -ret;
           }
         }

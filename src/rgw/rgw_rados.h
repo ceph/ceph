@@ -17,6 +17,7 @@
 #include "rgw_log.h"
 #include "rgw_metadata.h"
 #include "rgw_meta_sync_status.h"
+#include "rgw_period_puller.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -1268,6 +1269,7 @@ class RGWPeriod;
 class RGWRealm : public RGWSystemMetaObj
 {
   string current_period;
+  epoch_t epoch{0}; //< realm epoch, incremented for each new period
 
   int create_control();
   int delete_control();
@@ -1281,6 +1283,7 @@ public:
     ENCODE_START(1, 1, bl);
     RGWSystemMetaObj::encode(bl);
     ::encode(current_period, bl);
+    ::encode(epoch, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -1288,6 +1291,7 @@ public:
     DECODE_START(1, bl);
     RGWSystemMetaObj::decode(bl);
     ::decode(current_period, bl);
+    ::decode(epoch, bl);
     DECODE_FINISH(bl);
   }
 
@@ -1305,7 +1309,9 @@ public:
   const string& get_current_period() const {
     return current_period;
   }
-  int set_current_period(const string& period_id);
+  int set_current_period(RGWPeriod& period);
+
+  epoch_t get_epoch() const { return epoch; }
 
   string get_control_oid();
   /// send a notify on the realm control object
@@ -1348,6 +1354,7 @@ class RGWPeriod
 
   string realm_id;
   string realm_name;
+  epoch_t realm_epoch{1}; //< realm epoch when period was made current
 
   CephContext *cct;
   RGWRados *store;
@@ -1371,6 +1378,7 @@ public:
 
   const string& get_id() const { return id; }
   epoch_t get_epoch() const { return epoch; }
+  epoch_t get_realm_epoch() const { return realm_epoch; }
   const string& get_predecessor() const { return predecessor_uuid; }
   const string& get_master_zone() const { return master_zone; }
   const string& get_master_zonegroup() const { return master_zonegroup; }
@@ -1387,6 +1395,7 @@ public:
     period_map.id = id;
   }
   void set_epoch(epoch_t epoch) { this->epoch = epoch; }
+  void set_realm_epoch(epoch_t epoch) { realm_epoch = epoch; }
 
   void set_predecessor(const string& predecessor)
   {
@@ -1406,7 +1415,7 @@ public:
   bool is_single_zonegroup(CephContext *cct, RGWRados *store);
 
   int get_latest_epoch(epoch_t& epoch);
-  int set_latest_epoch(epoch_t epoch);
+  int set_latest_epoch(epoch_t epoch, bool exclusive = false);
 
   int init(CephContext *_cct, RGWRados *_store, const string &period_realm_id, const string &period_realm_name = "",
 	   bool setup_obj = true);
@@ -1425,9 +1434,10 @@ public:
   int commit(RGWRealm& realm, const RGWPeriod &current_period);
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);    
+    ENCODE_START(1, 1, bl);
     ::encode(id, bl);
     ::encode(epoch, bl);
+    ::encode(realm_epoch, bl);
     ::encode(predecessor_uuid, bl);
     ::encode(sync_status, bl);
     ::encode(period_map, bl);
@@ -1443,6 +1453,7 @@ public:
     DECODE_START(1, bl);
     ::decode(id, bl);
     ::decode(epoch, bl);
+    ::decode(realm_epoch, bl);
     ::decode(predecessor_uuid, bl);
     ::decode(sync_status, bl);
     ::decode(period_map, bl);
@@ -1858,6 +1869,11 @@ public:
   const RGWQuotaInfo& get_user_quota() {
     return current_period.get_config().user_quota;
   }
+
+  // pulls missing periods for period_history
+  std::unique_ptr<RGWPeriodPuller> period_puller;
+  // maintains a connected history of periods
+  std::unique_ptr<RGWPeriodHistory> period_history;
 
   RGWMetadataManager *meta_mgr;
 
