@@ -153,14 +153,6 @@ int main(int argc, char **argv) {
 
   global_init(0, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
-  if (args[0] == string("omap")) {
-    std::cerr << "using omap xattrs" << std::endl;
-    g_ceph_context->_conf->set_val("filestore_xattr_use_omap", "true");
-  } else {
-    std::cerr << "not using omap xattrs" << std::endl;
-    g_ceph_context->_conf->set_val("filestore_xattr_use_omap", "false");
-  }
-  g_ceph_context->_conf->apply_changes(NULL);
 
   std::cerr << "args: " << args << std::endl;
   if (args.size() < 3) {
