@@ -328,6 +328,9 @@ struct pg_t {
     return m_preferred;
   }
 
+  static const uint8_t calc_name_buf_size = 36;  // max length for max values len("18446744073709551615.ffffffff") + future suffix len("_head") + '\0'
+  char *calc_name(char *buf, const char *suffix_backwords) const;
+
   void set_ps(ps_t p) {
     m_seed = p;
   }
@@ -448,6 +451,10 @@ struct spg_t {
   int32_t preferred() const {
     return pgid.preferred();
   }
+
+  static const uint8_t calc_name_buf_size = pg_t::calc_name_buf_size + 4; // 36 + len('s') + len("255");
+  char *calc_name(char *buf, const char *suffix_backwords) const;
+ 
   bool parse(const char *s);
   bool parse(const std::string& s) {
     return parse(s.c_str());
@@ -523,7 +530,8 @@ class coll_t {
   spg_t pgid;
   uint64_t removal_seq;  // note: deprecated, not encoded
 
-  string _str;  // cached string
+  char _str_buff[spg_t::calc_name_buf_size];
+  char *_str;
 
   void calc_str();
 
@@ -549,6 +557,15 @@ public:
     calc_str();
   }
 
+  coll_t& operator=(const coll_t& rhs)
+  {
+    this->type = rhs.type;
+    this->pgid = rhs.pgid;
+    this->removal_seq = rhs.removal_seq;
+    this->calc_str();
+    return *this;
+  }
+
   // named constructors
   static coll_t meta() {
     return coll_t();
@@ -557,12 +574,13 @@ public:
     return coll_t(p);
   }
 
-  const std::string& to_str() const {
-    return _str;
+  const std::string to_str() const {
+    return string(_str);
   }
   const char *c_str() const {
-    return _str.c_str();
+    return _str;
   }
+
   bool parse(const std::string& s);
 
   int operator<(const coll_t &rhs) const {
