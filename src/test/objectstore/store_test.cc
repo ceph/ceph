@@ -267,13 +267,13 @@ TEST_P(StoreTest, FiemapHoles) {
   }
   {
     bufferlist bl;
-    store->fiemap(cid, oid, 0, 0, bl);
+    store->fiemap(cid, oid, 0, 4194304 + 3, bl);
     map<uint64_t,uint64_t> m, e;
     bufferlist::iterator p = bl.begin();
     ::decode(m, p);
     cout << " got " << m << std::endl;
     ASSERT_TRUE(!m.empty());
-    ASSERT_GE(m[0], 3);
+    ASSERT_GE(m[0], 3U);
     ASSERT_TRUE((m.size() == 1 &&
 		 m[0] > 4194304u) ||
 		(m.size() == 3 &&
