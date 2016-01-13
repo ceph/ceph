@@ -3323,6 +3323,7 @@ int main(int argc, char **argv)
       cerr << "could not remove key: " << err_msg << std::endl;
       return -ret;
     }
+    break;
   case OPT_PERIOD_PUSH:
     {
       RGWEnv env;
