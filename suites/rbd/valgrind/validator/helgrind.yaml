@@ -1,4 +1,6 @@
 overrides:
+  rbd_fsx:
+    valgrind: ["--tool=helgrind"]
   workunit:
     env:
       VALGRIND: "helgrind"
