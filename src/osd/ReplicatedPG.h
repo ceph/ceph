@@ -383,6 +383,7 @@ public:
     map<string, bufferlist> &attrs) {
     return get_object_context(hoid, true, &attrs);
   }
+
   void log_operation(
     const vector<pg_log_entry_t> &logv,
     boost::optional<pg_hit_set_history_t> &hset_history,
@@ -622,12 +623,11 @@ public:
 
     ObjectModDesc mod_desc;
 
-    enum { W_LOCK, R_LOCK, E_LOCK, NONE } lock_to_release;
+    ObjectContext::RWState::State lock_type;
+    ObcLockManager lock_manager;
 
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
-
-    bool release_snapset_obc;
 
     OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectContextRef& obc,
@@ -648,8 +648,7 @@ public:
       sent_ack(false), sent_disk(false),
       async_read_result(0),
       inflightreads(0),
-      lock_to_release(NONE),
-      release_snapset_obc(false) {
+      lock_type(ObjectContext::RWState::RWNONE) {
       if (obc->ssc) {
 	new_snapset = obc->ssc->snapset;
 	snapset = &obc->ssc->snapset;
@@ -668,8 +667,7 @@ public:
       copy_cb(NULL),
       async_read_result(0),
       inflightreads(0),
-      lock_to_release(NONE),
-      release_snapset_obc(false) { }
+      lock_type(ObjectContext::RWState::RWNONE) {}
     void reset_obs(ObjectContextRef obc) {
       new_obs = ObjectState(obc->obs.oi, obc->obs.exists);
       if (obc->ssc) {
@@ -679,7 +677,7 @@ public:
     }
     ~OpContext() {
       assert(!op_t);
-      assert(lock_to_release == NONE);
+      assert(lock_type == ObjectContext::RWState::RWNONE);
       if (reply)
 	reply->put();
       for (list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
@@ -768,33 +766,35 @@ protected:
      * this (read or write) if we get the first we will be guaranteed
      * to get the second.
      */
-    ObjectContext::RWState::State type = ObjectContext::RWState::RWNONE;
     if (write_ordered && ctx->op->may_read()) {
-      type = ObjectContext::RWState::RWEXCL;
-      ctx->lock_to_release = OpContext::E_LOCK;
+      ctx->lock_type = ObjectContext::RWState::RWEXCL;
     } else if (write_ordered) {
-      type = ObjectContext::RWState::RWWRITE;
-      ctx->lock_to_release = OpContext::W_LOCK;
+      ctx->lock_type = ObjectContext::RWState::RWWRITE;
     } else {
       assert(ctx->op->may_read());
-      type = ObjectContext::RWState::RWREAD;
-      ctx->lock_to_release = OpContext::R_LOCK;
+      ctx->lock_type = ObjectContext::RWState::RWREAD;
     }
 
     if (ctx->snapset_obc) {
       assert(!ctx->obc->obs.exists);
-      if (ctx->snapset_obc->get_lock_type(ctx->op, type)) {
-	ctx->release_snapset_obc = true;
-      } else {
-	ctx->lock_to_release = OpContext::NONE;
+      if (!ctx->lock_manager.get_lock_type(
+	    ctx->lock_type,
+	    ctx->snapset_obc->obs.oi.soid,
+	    ctx->snapset_obc,
+	    ctx->op)) {
+	ctx->lock_type = ObjectContext::RWState::RWNONE;
 	return false;
       }
     }
-    if (ctx->obc->get_lock_type(ctx->op, type)) {
+    if (ctx->lock_manager.get_lock_type(
+	  ctx->lock_type,
+	  ctx->obc->obs.oi.soid,
+	  ctx->obc,
+	  ctx->op)) {
       return true;
     } else {
       assert(!ctx->snapset_obc);
-      ctx->lock_to_release = OpContext::NONE;
+      ctx->lock_type = ObjectContext::RWState::RWNONE;
       return false;
     }
   }
@@ -823,74 +823,23 @@ protected:
   void release_op_ctx_locks(OpContext *ctx) {
     list<OpRequestRef> to_req;
     bool requeue_recovery = false;
-    bool requeue_recovery_clone = false;
-    bool requeue_recovery_snapset = false;
-    bool requeue_snaptrimmer = false;
-    bool requeue_snaptrimmer_clone = false;
-    bool requeue_snaptrimmer_snapset = false;
-    switch (ctx->lock_to_release) {
-    case OpContext::W_LOCK:
-      if (ctx->snapset_obc && ctx->release_snapset_obc) {
-	ctx->snapset_obc->put_write(
-	  &to_req,
-	  &requeue_recovery_snapset,
-	  &requeue_snaptrimmer_snapset);
-	ctx->release_snapset_obc = false;
-      }
-      ctx->obc->put_write(
-	&to_req,
-	&requeue_recovery,
-	&requeue_snaptrimmer);
-      if (ctx->clone_obc)
-	ctx->clone_obc->put_write(
-	  &to_req,
-	  &requeue_recovery_clone,
-	  &requeue_snaptrimmer_clone);
-      break;
-    case OpContext::E_LOCK:
-      if (ctx->snapset_obc && ctx->release_snapset_obc) {
-	ctx->snapset_obc->put_excl(
-	  &to_req,
-	  &requeue_recovery_snapset,
-	  &requeue_snaptrimmer_snapset);
-	ctx->release_snapset_obc = false;
-      }
-      ctx->obc->put_excl(
-	&to_req,
-	&requeue_recovery,
-	&requeue_snaptrimmer);
-      if (ctx->clone_obc)
-	ctx->clone_obc->put_write(
-	  &to_req,
-	  &requeue_recovery_clone,
-	  &requeue_snaptrimmer_clone);
-      break;
-    case OpContext::R_LOCK:
-      if (ctx->snapset_obc && ctx->release_snapset_obc) {
-	ctx->snapset_obc->put_read(&to_req);
-	ctx->release_snapset_obc = false;
-      }
-      ctx->obc->put_read(&to_req);
-      break;
-    case OpContext::NONE:
-      break;
-    default:
-      assert(0);
-    };
-    assert(ctx->release_snapset_obc == false);
-    ctx->lock_to_release = OpContext::NONE;
-    if (requeue_recovery || requeue_recovery_clone || requeue_recovery_snapset)
+    bool requeue_snaptrim = false;
+    ctx->lock_manager.put_locks(
+      &to_req,
+      &requeue_recovery,
+      &requeue_snaptrim);
+    ctx->lock_type = ObjectContext::RWState::RWNONE;
+    if (requeue_recovery)
       osd->recovery_wq.queue(this);
-    if (requeue_snaptrimmer ||
-	requeue_snaptrimmer_clone ||
-	requeue_snaptrimmer_snapset)
+    if (requeue_snaptrim)
       queue_snap_trim();
 
     if (!to_req.empty()) {
       assert(ctx->obc);
       // requeue at front of scrub blocking queue if we are blocked by scrub
-      if (scrubber.write_blocked_by_scrub(ctx->obc->obs.oi.soid.get_head(),
-					  get_sort_bitwise())) {
+      if (scrubber.write_blocked_by_scrub(
+	    ctx->obc->obs.oi.soid.get_head(),
+	    get_sort_bitwise())) {
 	waiting_for_active.splice(
 	  waiting_for_active.begin(),
 	  to_req,
@@ -1687,8 +1636,8 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
       << " rep_tid=" << repop.rep_tid 
       << " committed?=" << repop.all_committed
       << " applied?=" << repop.all_applied;
-  if (repop.ctx->lock_to_release != ReplicatedPG::OpContext::NONE)
-    out << " lock=" << (int)repop.ctx->lock_to_release;
+  if (repop.ctx->lock_type != ObjectContext::RWState::RWNONE)
+    out << " lock=" << (int)repop.ctx->lock_type;
   if (repop.ctx->op)
     out << " op=" << *(repop.ctx->op->get_req());
   out << ")";
