@@ -25,7 +25,7 @@ std::ostream& dmc::operator<<(std::ostream& out,
 
 std::ostream& dmc::operator<<(std::ostream& out,
 			      const dmc::RequestTag& tag) {
-  out << "{p:" << tag.proportion << " r:" << tag.reservation <<
-    " l:" << tag.limit << "}";
+  out << "{ p:" << tag.proportion << " r:" << tag.reservation <<
+    " l:" << tag.limit << " }";
   return out;
 }

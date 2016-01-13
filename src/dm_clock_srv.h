@@ -5,11 +5,15 @@
  */
 
 
+#define DEBUGGER
+
+
 #pragma once
 
 
 #include <sys/time.h>
 #include <assert.h>
+#include <signal.h>
 
 #include <memory>
 #include <map>
@@ -24,7 +28,13 @@
 namespace c = crimson;
 
 
+static void debugger() {
+  raise(SIGCONT);
+}
+
+
 namespace crimson {
+  
   namespace dmclock {
 
     static bool info = true;
@@ -34,7 +44,7 @@ namespace crimson {
     inline Time getTime() {
       struct timeval now;
       assert(0 == gettimeofday(&now, NULL));
-      return now.tv_sec + (now.tv_usec / 1000000.0);
+      return now.tv_sec + (now.tv_usec / 1000000.0) - 1452712000.0;
     }
 
 
@@ -166,10 +176,21 @@ namespace crimson {
 	  // empty
 	}
 
+#if NOT_WORKING
+	template<typename X, typename Y>
+	friend std::ostream& operator<<(std::ostream&,
+					const typename PriorityQueue<X,Y>::Entry&);
+#endif
       }; // struct Entry
 
 
       typedef std::shared_ptr<Entry> EntryRef;
+
+#if NOT_WORKING
+      template<typename X, typename Y>
+      friend std::ostream& operator<<(std::ostream&,
+				      const typename PriorityQueue<X,Y>::EntryRef&);
+#endif
 
     public:
 
@@ -290,10 +311,54 @@ namespace crimson {
       }
 
 
+      template<typename X>
+      void displayHeap(std::ostream& out, const c::Heap<EntryRef,X> orig) {
+	c::Heap<EntryRef,X> other = orig;
+	out << "{ ";
+	bool first = true;
+	while (!other.empty()) {
+	  auto t = other.top();
+
+	  if (!first) {
+	    out << ", ";
+	  } else {
+	    first = false;
+	  }
+
+	  out << "{ client:" << t->client <<
+	    ", tag:" << t->tag <<
+	    ", handled:" << (t->handled ? "T" : "f") << " }";
+
+	  other.pop();
+	}
+	out << " }" << std::endl;
+      }
+
+
       void addRequest(RequestRef&& request,
 		      const C& client_id,
 		      const Time& time) {
 	Guard g(data_mutex);
+
+#if 1
+	static uint count = 0;
+	++count;
+	if (50 == count) {
+	  debugger();
+	  std::cout << "RESERVATION" << std::endl;
+	  displayHeap(std::cout, resQ);
+	  // std::cout << resQ << std::endl;
+	  std::cout << "LIMIT" << std::endl;
+	  displayHeap(std::cout, limQ);
+	  // std::cout << limQ << std::endl;
+	  std::cout << "READY" << std::endl;
+	  displayHeap(std::cout, readyQ);
+	  // std::cout << readyQ << std::endl;
+	  std::cout << "PROPORTION" << std::endl;
+	  displayHeap(std::cout, propQ);
+	  // std::cout << propQ << std::endl;
+	}
+#endif
 
 	auto client_it = clientMap.find(client_id);
 	if (clientMap.end() == client_it) {
@@ -329,14 +394,14 @@ namespace crimson {
 	  resQ.push(entry);
 	}
 
-	if (0.0 == entry->tag.limit) {
-	  readyQ.push(entry);
-	} else {
-	  limQ.push(entry);
-	}
-
 	if (0.0 != entry->tag.proportion) {
 	  propQ.push(entry);
+
+	  if (0.0 == entry->tag.limit) {
+	    readyQ.push(entry);
+	  } else {
+	    limQ.push(entry);
+	  }
 	}
 
 	scheduleRequest();
@@ -442,5 +507,26 @@ namespace crimson {
 	// nothing scheduled
       } // scheduleRequest
     }; // class PriorityQueue
+
+    
   } // namespace dmclock
 } // namespace crimson
+
+
+#if NOT_WORKING
+template<typename C, typename R>
+std::ostream& operator<<(std::ostream& out,
+			 const typename crimson::dmclock::PriorityQueue<C,R>::Entry& e) {
+  out << "{ client:" << e.client <<
+    ", tag:" << e.tag <<
+    ", handled:" << (e.handled ? "T" : "f") << " }";
+  return out;
+}
+
+template<typename C, typename R>
+std::ostream& operator<<(std::ostream& out,
+			 const typename crimson::dmclock::PriorityQueue<C,R>::EntryRef& e) {
+  out << "spX" << *e;
+  return out;
+}
+#endif
