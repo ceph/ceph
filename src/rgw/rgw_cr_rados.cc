@@ -8,6 +8,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 bool RGWAsyncRadosProcessor::RGWWQ::_enqueue(RGWAsyncRadosRequest *req) {
+  req->get();
   processor->m_req_queue.push_back(req);
   dout(20) << "enqueued request req=" << hex << req << dec << dendl;
   _dump_queue();
@@ -62,10 +63,14 @@ void RGWAsyncRadosProcessor::start() {
 void RGWAsyncRadosProcessor::stop() {
   m_tp.drain(&req_wq);
   m_tp.stop();
+  for (auto iter = m_req_queue.begin(); iter != m_req_queue.end(); ++iter) {
+    (*iter)->put();
+  }
 }
 
 void RGWAsyncRadosProcessor::handle_request(RGWAsyncRadosRequest *req) {
   req->send_request();
+  req->put();
 }
 
 void RGWAsyncRadosProcessor::queue(RGWAsyncRadosRequest *req) {
@@ -296,7 +301,9 @@ RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados,
 
 RGWSimpleRadosLockCR::~RGWSimpleRadosLockCR()
 {
-  delete req;
+  if (req) {
+    req->finish();
+  }
 }
 
 int RGWSimpleRadosLockCR::send_request()
@@ -330,7 +337,9 @@ RGWSimpleRadosUnlockCR::RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_ra
 
 RGWSimpleRadosUnlockCR::~RGWSimpleRadosUnlockCR()
 {
-  delete req;
+  if (req) {
+    req->finish();
+  }
 }
 
 int RGWSimpleRadosUnlockCR::send_request()
