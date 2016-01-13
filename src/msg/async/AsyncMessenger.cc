@@ -378,7 +378,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
     processor(this, cct, _nonce),
     lock("AsyncMessenger::lock"),
     nonce(_nonce), need_addr(true), listen_sd(-1), did_bind(false),
-    global_seq(0), deleted_lock("AsyncMessenger::deleted_lock"), reap_time_fd(0),
+    global_seq(0), deleted_lock("AsyncMessenger::deleted_lock"),
     cluster_protocol(0), stopped(true)
 {
   ceph_spin_init(&global_seq_lock);
@@ -396,8 +396,6 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
  */
 AsyncMessenger::~AsyncMessenger()
 {
-  if (reap_time_fd)
-    local_worker->center.delete_time_event(reap_time_fd);
   delete reap_handler;
   assert(!did_bind); // either we didn't bind or we shut down the Processor
   local_connection->mark_down();
@@ -741,7 +739,7 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   lock.Unlock();
 }
 
-int AsyncMessenger::reap_dead(bool is_timer)
+int AsyncMessenger::reap_dead()
 {
   int num = 0;
 
@@ -759,9 +757,6 @@ int AsyncMessenger::reap_dead(bool is_timer)
     deleted_conns.erase(it);
     ++num;
   }
-
-  if (is_timer)
-    reap_time_fd = 0;
 
   return num;
 }
