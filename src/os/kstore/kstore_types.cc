@@ -85,6 +85,7 @@ void kstore_onode_t::dump(Formatter *f) const
     f->dump_unsigned("len", p->second.length());
     f->close_section();
   }
+  f->close_section();
   f->dump_unsigned("omap_head", omap_head);
   f->dump_unsigned("stripe_size", stripe_size);
   f->dump_unsigned("expected_object_size", expected_object_size);
