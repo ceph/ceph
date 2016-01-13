@@ -147,6 +147,23 @@ namespace crimson {
       // empty
     }
 
+    Heap(const Heap<T,C>& other) {
+      data.resize(other.data.size());
+      for (int i = 0; i < other.count; ++i) {
+	data[i] = other.data[i];
+      }
+      count = other.count;
+    }
+
+    const Heap<T,C>& operator=(const Heap<T,C>& other) {
+      data.resize(other.data.size());
+      for (int i = 0; i < other.count; ++i) {
+	data[i] = other.data[i];
+      }
+      count = other.count;
+      return *this;
+    }
+
     bool empty() const { return 0 == count; }
 
     T& top() { return data[0]; }
