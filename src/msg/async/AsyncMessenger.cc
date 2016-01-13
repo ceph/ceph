@@ -741,7 +741,7 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 
 int AsyncMessenger::reap_dead(bool is_timer)
 {
-  int num;
+  int num = 0;
 
   Mutex::Locker l1(lock);
   Mutex::Locker l2(deleted_lock);
@@ -751,7 +751,7 @@ int AsyncMessenger::reap_dead(bool is_timer)
     AsyncConnectionRef p = *it;
     ldout(cct, 5) << __func__ << " delete " << p << dendl;
     auto conns_it = conns.find(p->peer_addr);
-    if (conns_it->second == p)
+    if (conns_it != conns.end() && conns_it->second == p)
       conns.erase(conns_it);
     accepting_conns.erase(p);
     deleted_conns.erase(it);
