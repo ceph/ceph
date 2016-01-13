@@ -846,8 +846,11 @@ int main(int argc, const char **argv)
   }
 
   if (check) {
-    if (!tester.check_name_maps(max_id)) {
-      exit(1);
+    tester.check_overlapped_rules();
+    if (max_id >= 0) {
+      if (!tester.check_name_maps(max_id)) {
+	exit(1);
+      }
     }
   }
 
