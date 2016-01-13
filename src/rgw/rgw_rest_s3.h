@@ -226,6 +226,7 @@ public:
 
   int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss);
   void send_response();
+  int get_params();
 };
 
 class RGWGetCORS_ObjStore_S3 : public RGWGetCORS_ObjStore {

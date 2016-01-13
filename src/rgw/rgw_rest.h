@@ -245,7 +245,7 @@ public:
   RGWPutACLs_ObjStore() {}
   ~RGWPutACLs_ObjStore() {}
 
-  int get_params();
+  virtual int get_params();
 };
 
 class RGWGetCORS_ObjStore : public RGWGetCORS {
