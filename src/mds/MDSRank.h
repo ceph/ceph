@@ -347,13 +347,7 @@ class MDSRank {
       replay_queue.push_back(c);
     }
 
-    bool queue_one_replay() {
-      if (replay_queue.empty())
-        return false;
-      queue_waiter(replay_queue.front());
-      replay_queue.pop_front();
-      return true;
-    }
+    bool queue_one_replay();
 
     void set_osd_epoch_barrier(epoch_t e);
     epoch_t get_osd_epoch_barrier() const {return osd_epoch_barrier;}
