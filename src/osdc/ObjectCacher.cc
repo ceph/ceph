@@ -1168,7 +1168,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
     if (oset->return_enoent && !o->exists) {
       ldout(cct, 10) << "readx  object !exists, 1 extent..." << dendl;
 
-      // should we worry about COW underneaeth us?
+      // should we worry about COW underneath us?
       if (writeback_handler.may_copy_on_write(soid.oid, ex_it->offset,
 					      ex_it->length, soid.snap)) {
 	ldout(cct, 20) << "readx  may copy on write" << dendl;
@@ -1223,7 +1223,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       missing.insert(errors.begin(), errors.end());
     } else {
       // some reads had errors, fail later so completions
-      // are cleaned up up properly
+      // are cleaned up properly
       // TODO: make read path not call _readx for every completion
       hits.insert(errors.begin(), errors.end());
     }

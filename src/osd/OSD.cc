@@ -3250,7 +3250,7 @@ void OSD::handle_pg_peering_evt(
 
       pg->queue_peering_event(evt);
       pg->unlock();
-      wake_pg_waiters(pg, pgid);
+      wake_pg_waiters(pgid);
       return;
     }
     case RES_SELF: {
@@ -3285,7 +3285,7 @@ void OSD::handle_pg_peering_evt(
 
       pg->queue_peering_event(evt);
       pg->unlock();
-      wake_pg_waiters(pg, resurrected);
+      wake_pg_waiters(resurrected);
       return;
     }
     case RES_PARENT: {
@@ -3326,7 +3326,7 @@ void OSD::handle_pg_peering_evt(
       //parent->queue_peering_event(evt);
       parent->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
       parent->unlock();
-      wake_pg_waiters(parent, resurrected);
+      wake_pg_waiters(resurrected);
       return;
     }
     }
@@ -7211,7 +7211,7 @@ void OSD::handle_pg_create(OpRequestRef op)
     pg->write_if_dirty(*rctx.transaction);
     pg->publish_stats_to_osd();
     pg->unlock();
-    wake_pg_waiters(pg, pgid);
+    wake_pg_waiters(pgid);
     dispatch_context(rctx, pg, osdmap);
   }
 
@@ -8488,7 +8488,7 @@ struct C_CompleteSplits : public Context {
       osd->dispatch_context_transaction(rctx, &**i);
 	to_complete.insert((*i)->info.pgid);
       (*i)->unlock();
-      osd->wake_pg_waiters(&**i, (*i)->info.pgid);
+      osd->wake_pg_waiters((*i)->info.pgid);
       to_complete.clear();
     }
 
