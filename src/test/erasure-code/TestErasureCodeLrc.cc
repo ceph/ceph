@@ -16,6 +16,7 @@
  */
 
 #include <errno.h>
+#include <stdlib.h>
 
 #include "crush/CrushWrapper.h"
 #include "common/config.h"
@@ -401,9 +402,10 @@ TEST(ErasureCodeLrc, layers_init)
     ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
 
-    const char *description_string =
-      "[ "
-      "  [ \"_cDDD_cDD_\", \"directory=.libs\" ],"
+    string directory = getenv("CEPH_LIB");
+    string description_string = 
+      "[ " 
+      "  [ \"_cDDD_cDD_\", \"directory=" + directory + "\" ]," 
       "]";
     profile["layers"] = description_string;
     json_spirit::mArray description;
@@ -913,7 +915,8 @@ int main(int argc, char **argv)
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  g_conf->set_val("erasure_code_dir", ".libs", false, false);
+  string directory = getenv("CEPH_LIB");
+  g_conf->set_val("erasure_code_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

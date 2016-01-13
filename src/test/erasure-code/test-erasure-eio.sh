@@ -16,7 +16,7 @@
 # GNU Library Public License for more details.
 #
 
-source ../qa/workunits/ceph-helpers.sh
+source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -32,7 +32,7 @@ function run() {
         setup $dir || return 1
         run_mon $dir a || return 1
         # check that erasure code plugins are preloaded
-        CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
+        CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
         grep 'load: jerasure.*lrc' $dir/mon.a.log || return 1
         $func $dir || return 1
         teardown $dir || return 1
@@ -53,18 +53,18 @@ function setup_osds() {
     wait_for_clean || return 1
 
     # check that erasure code plugins are preloaded
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
     grep 'load: jerasure.*lrc' $dir/osd.0.log || return 1
 }
 
 function create_erasure_coded_pool() {
     local poolname=$1
 
-    ./ceph osd erasure-code-profile set myprofile \
+    ceph osd erasure-code-profile set myprofile \
         plugin=jerasure \
         k=2 m=1 \
         ruleset-failure-domain=osd || return 1
-    ./ceph osd pool create $poolname 1 1 erasure myprofile \
+    ceph osd pool create $poolname 1 1 erasure myprofile \
         || return 1
     wait_for_clean || return 1
 }
@@ -72,8 +72,8 @@ function create_erasure_coded_pool() {
 function delete_pool() {
     local poolname=$1
 
-    ./ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it
-    ./ceph osd erasure-code-profile rm myprofile
+    ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it
+    ceph osd erasure-code-profile rm myprofile
 }
 
 function rados_put() {
@@ -87,7 +87,7 @@ function rados_put() {
     #
     # get and put an object, compare they are equal
     #
-    ./rados --pool $poolname put $objname $dir/ORIGINAL || return 1
+    rados --pool $poolname put $objname $dir/ORIGINAL || return 1
 }
 
 function rados_get() {
@@ -101,13 +101,13 @@ function rados_get() {
     #
     if [ $expect = "1" ];
     then
-        ! ./rados --pool $poolname get $objname $dir/COPY
+        ! rados --pool $poolname get $objname $dir/COPY
         return
     fi
     #
     # get an object, compare with $dir/ORIGINAL
     #
-    ./rados --pool $poolname get $objname $dir/COPY || return 1
+    rados --pool $poolname get $objname $dir/COPY || return 1
     diff $dir/ORIGINAL $dir/COPY || return 1
     rm $dir/COPY
 }
@@ -134,10 +134,10 @@ function rados_put_get() {
         #
         local -a initial_osds=($(get_osds $poolname $objname))
         local last=$((${#initial_osds[@]} - 1))
-        ./ceph osd out ${initial_osds[$last]} || return 1
+        ceph osd out ${initial_osds[$last]} || return 1
         ! get_osds $poolname $objname | grep '\<'${initial_osds[$last]}'\>' || return 1
         rados_get $dir $poolname $objname $expect || return 1
-        ./ceph osd in ${initial_osds[$last]} || return 1
+        ceph osd in ${initial_osds[$last]} || return 1
     fi
 
     rm $dir/ORIGINAL
@@ -155,7 +155,7 @@ function inject_eio() {
     local -a initial_osds=($(get_osds $poolname $objname))
     local osd_id=${initial_osds[$shard_id]}
     set_config osd $osd_id filestore_debug_inject_read_err true || return 1
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.$osd_id.asok \
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.$osd_id.asok \
              injectdataerr $poolname $objname $shard_id || return 1
 }
 

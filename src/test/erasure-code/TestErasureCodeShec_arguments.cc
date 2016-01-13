@@ -19,6 +19,7 @@
 // SUMMARY: shec's gtest for each argument of minimum_to_decode()/decode()
 
 #include <errno.h>
+#include <stdlib.h>
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
@@ -395,7 +396,8 @@ int main(int argc, char **argv)
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  g_conf->set_val("erasure_code_dir", ".libs", false, false);
+  char *CEPH_LIB = getenv("CEPH_LIB");
+  g_conf->set_val("erasure_code_dir", CEPH_LIB, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
 
