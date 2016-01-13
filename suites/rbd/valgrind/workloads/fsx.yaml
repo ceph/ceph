@@ -2,4 +2,3 @@ tasks:
 - rbd_fsx:
     clients: [client.0]
     size: 134217728
-    valgrind: [--tool=memcheck]
