@@ -409,6 +409,7 @@ bool librados::RadosClient::ms_dispatch(Message *m)
 {
   bool ret;
 
+  Mutex::Locker l(lock);
   if (state == DISCONNECTED) {
     ldout(cct, 10) << "disconnected, discarding " << *m << dendl;
     m->put();
@@ -435,12 +436,11 @@ void librados::RadosClient::ms_handle_remote_reset(Connection *con)
 
 bool librados::RadosClient::_dispatch(Message *m)
 {
+  assert(lock.is_locked());
   switch (m->get_type()) {
   // OSD
   case CEPH_MSG_OSD_MAP:
-    lock.Lock();
     cond.Signal();
-    lock.Unlock();
     m->put();
     break;
 
@@ -873,7 +873,7 @@ int librados::RadosClient::monitor_log(const string& level, rados_log_callback_t
 
 void librados::RadosClient::handle_log(MLog *m)
 {
-  Mutex::Locker l(lock);
+  assert(lock.is_locked());
   ldout(cct, 10) << __func__ << " version " << m->version << dendl;
 
   if (log_last_version < m->version) {
