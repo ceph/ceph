@@ -1372,6 +1372,25 @@ TEST(coll_t, temp) {
   ASSERT_EQ(pgid, pgid2);
 }
 
+TEST(coll_t, assigment) {
+  spg_t pgid;
+  coll_t right(pgid);
+  ASSERT_EQ(right.to_str(), string("0.0_head"));
+
+  coll_t left, middle;
+
+  ASSERT_EQ(left.to_str(), string("meta"));
+  ASSERT_EQ(middle.to_str(), string("meta"));
+
+  left = middle = right;
+
+  ASSERT_EQ(left.to_str(), string("0.0_head"));
+  ASSERT_EQ(middle.to_str(), string("0.0_head"));
+  
+  ASSERT_NE(middle.c_str(), right.c_str());
+  ASSERT_NE(left.c_str(), middle.c_str());
+}
+
 TEST(ghobject_t, cmp) {
   ghobject_t min;
   ghobject_t sep;
