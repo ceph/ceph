@@ -181,8 +181,9 @@ class OpenStack(object):
     # wget -O fedora-20.qcow2 http://fedora.mirrors.ovh.net/linux/releases/20/Images/x86_64/Fedora-x86_64-20-20131211.1-sda.qcow2
     image2url = {
         'centos-6.5': 'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud-1508.qcow2',
-        'centos-7.0': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1508.qcow2',
-        'centos-7.1': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1508.qcow2',
+        'centos-7.0': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1503.qcow2',
+        'centos-7.1': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1503.qcow2',
+        'centos-7.2': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1511.qcow2',
         'ubuntu-12.04': 'https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img',
         'ubuntu-14.04': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img',
         'debian-8.0': 'http://cdimage.debian.org/cdimage/openstack/current/debian-8.2.0-openstack-amd64.qcow2',
