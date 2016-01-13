@@ -178,19 +178,22 @@ function ceph_watch_wait()
 
 function test_mon_injectargs()
 {
-  CEPH_ARGS='--mon_debug_dump_location the.dump' ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'false'"
+  CEPH_ARGS='--mon_debug_dump_location the.dump' ceph tell osd.0 injectargs --no-osd_enable_op_tracker >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'false'"
   ! grep "the.dump" $TMPFILE || return 1
-  ceph tell osd.0 injectargs '--osd_debug_op_order --osd_failsafe_full_ratio .99' >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.99'"
-  ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'false'"
-  ceph tell osd.0 injectargs -- --osd_debug_op_order >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'true'"
-  ceph tell osd.0 injectargs -- '--osd_debug_op_order --osd_failsafe_full_ratio .98' >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.98'" 
-  ceph tell osd.0 injectargs -- '--osd_failsafe_full_ratio' >& $TMPFILE || return 1
-  check_response "Option --osd_failsafe_full_ratio requires an argument"
+  ceph tell osd.0 injectargs '--osd_enable_op_tracker --osd_op_history_duration 500' >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'true' osd_op_history_duration = '500'"
+  ceph tell osd.0 injectargs --no-osd_enable_op_tracker >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'false'"
+  ceph tell osd.0 injectargs -- --osd_enable_op_tracker >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'true'"
+  ceph tell osd.0 injectargs -- '--osd_enable_op_tracker --osd_op_history_duration 600' >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'true' osd_op_history_duration = '600'"
+  ceph tell osd.0 injectargs -- '--osd_op_history_duration' >& $TMPFILE || return 1
+  check_response "Option --osd_op_history_duration requires an argument"
+
+  ceph tell osd.0 injectargs -- '--mon-lease 6' >& $TMPFILE || return 1
+  check_response "mon_lease = '6' (unchangeable)"
 }
 
 function test_mon_injectargs_SI()
