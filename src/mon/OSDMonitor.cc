@@ -2067,8 +2067,11 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
       dout(10) << " not laggy, new xi " << xi << dendl;
     } else {
       if (xi.down_stamp.sec()) {
-	int interval = ceph_clock_now(g_ceph_context).sec() - xi.down_stamp.sec();
-	xi.laggy_interval =
+        int interval = ceph_clock_now(g_ceph_context).sec() - xi.down_stamp.sec();
+        if (g_conf->mon_osd_laggy_max_interval && (interval > g_conf->mon_osd_laggy_max_interval)) {
+          interval =  g_conf->mon_osd_laggy_max_interval;
+        }
+        xi.laggy_interval =
 	  interval * g_conf->mon_osd_laggy_weight +
 	  xi.laggy_interval * (1.0 - g_conf->mon_osd_laggy_weight);
       }
