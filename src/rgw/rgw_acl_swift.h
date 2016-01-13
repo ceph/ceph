@@ -11,17 +11,19 @@
 
 #include "rgw_acl.h"
 
-using namespace std;
-
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 {
 public:
   explicit RGWAccessControlPolicy_SWIFT(CephContext *_cct) : RGWAccessControlPolicy(_cct) {}
   ~RGWAccessControlPolicy_SWIFT() {}
 
-  void add_grants(RGWRados *store, list<string>& uids, int perm);
-  bool create(RGWRados *store, rgw_user& id, string& name, string& read_list, string& write_list);
-  void to_str(string& read, string& write);
+  void add_grants(RGWRados *store,
+                  std::list<string>& uids, int perm);
+  bool create(RGWRados *store, rgw_user& id,
+              std::string& name,
+              std::string& read_list,
+              std::string& write_list);
+  void to_str(std::string& read, std::string& write);
 };
 
 class RGWAccessControlPolicy_SWIFTAcct : public RGWAccessControlPolicy
@@ -32,11 +34,11 @@ public:
   {}
   ~RGWAccessControlPolicy_SWIFTAcct() {}
 
-  void add_grants(RGWRados *store, const list<string>& uids, int perm);
+  void add_grants(RGWRados *store, const std::list<string>& uids, int perm);
   bool create(RGWRados *store,
               const rgw_user& id,
-              const string& name,
-              const string& acl_str);
-  void to_str(string& acl) const;
+              const std::string& name,
+              const std::string& acl_str);
+  void to_str(std::string& acl) const;
 };
 #endif
