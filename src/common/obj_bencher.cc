@@ -207,9 +207,10 @@ void *ObjBencher::status_printer(void *_bencher) {
 int ObjBencher::aio_bench(
   int operation, int secondsToRun,
   int concurrentios, size_t op_size, size_t object_size,
+  unsigned max_objects,
   bool cleanup, const std::string& run_name, bool no_verify) {
 
-  if (concurrentios <= 0) 
+  if (concurrentios <= 0)
     return -EINVAL;
 
   int num_objects = 0;
@@ -221,7 +222,9 @@ int ObjBencher::aio_bench(
 
   //get data from previous write run, if available
   if (operation != OP_WRITE) {
-    r = fetch_bench_metadata(run_name_meta, &op_size, &object_size, &num_objects, &prevPid);
+    size_t prev_op_size, prev_object_size;
+    r = fetch_bench_metadata(run_name_meta, &prev_op_size, &prev_object_size,
+			     &num_objects, &prevPid);
     if (r < 0) {
       if (r == -ENOENT)
         cerr << "Must write data before running a read benchmark!" << std::endl;
@@ -250,7 +253,7 @@ int ObjBencher::aio_bench(
     formatter->open_object_section("bench");
 
   if (OP_WRITE == operation) {
-    r = write_bench(secondsToRun, concurrentios, run_name_meta);
+    r = write_bench(secondsToRun, concurrentios, run_name_meta, max_objects);
     if (r != 0) goto out;
   }
   else if (OP_SEQ_READ == operation) {
@@ -352,7 +355,8 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
 }
 
 int ObjBencher::write_bench(int secondsToRun,
-			    int concurrentios, const string& run_name_meta) {
+			    int concurrentios, const string& run_name_meta,
+			    unsigned max_objects) {
   if (concurrentios <= 0) 
     return -EINVAL;
   
@@ -360,13 +364,15 @@ int ObjBencher::write_bench(int secondsToRun,
     out(cout) << "Maintaining " << concurrentios << " concurrent writes of "
 	      << data.op_size << " bytes to objects of size "
 	      << data.object_size << " for up to "
-	      << secondsToRun << " seconds"
+	      << secondsToRun << " seconds or "
+	      << max_objects << " objects"
 	      << std::endl;
   } else {
     formatter->dump_format("concurrent_ios", "%d", concurrentios);
     formatter->dump_format("object_size", "%d", data.object_size);
     formatter->dump_format("op_size", "%d", data.op_size);
     formatter->dump_format("seconds_to_run", "%d", secondsToRun);
+    formatter->dump_format("max_objects", "%d", max_objects);
   }
   bufferlist* newContents = 0;
 
@@ -436,7 +442,7 @@ int ObjBencher::write_bench(int secondsToRun,
   stopTime = data.start_time + runtime;
   slot = 0;
   lock.Lock();
-  while(ceph_clock_now(cct) < stopTime) {
+  while (!secondsToRun || ceph_clock_now(cct) < stopTime) {
     bool found = false;
     while (1) {
       int old_slot = slot;
@@ -495,6 +501,10 @@ int ObjBencher::write_bench(int secondsToRun,
     lock.Lock();
     ++data.started;
     ++data.in_flight;
+    if (max_objects &&
+	data.started > (data.object_size * max_objects + data.op_size - 1) /
+	data.op_size)
+      break;
   }
   lock.Unlock();
 
@@ -662,8 +672,8 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   bufferlist *cur_contents;
 
   slot = 0;
-  while (seconds_to_run && (ceph_clock_now(cct) < finish_time) &&
-      num_objects > data.started) {
+  while ((!seconds_to_run || ceph_clock_now(cct) < finish_time) &&
+	 num_objects > data.started) {
     lock.Lock();
     int old_slot = slot;
     bool found = false;
@@ -892,7 +902,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   int rand_id;
 
   slot = 0;
-  while (seconds_to_run && (ceph_clock_now(g_ceph_context) < finish_time)) {
+  while ((!seconds_to_run || ceph_clock_now(g_ceph_context) < finish_time)) {
     lock.Lock();
     int old_slot = slot;
     bool found = false;
