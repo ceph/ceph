@@ -720,6 +720,73 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
              cmd=['-n', master_client, 'period', 'update', '--commit'],
              check_status=True)
 
+    yield
+
+
+@contextlib.contextmanager
+def pull_configuration(ctx, config, regions, role_endpoints, realm):
+    """
+    Configure regions and zones from rados and rgw.
+    """
+    if not regions:
+        log.debug(
+            'In rgw.configure_regions_and_zones() and regions is None. '
+            'Bailing')
+        yield
+        return
+
+    if not realm:
+        log.debug(
+            'In rgw.configure_regions_and_zones() and realm is None. '
+            'Bailing')
+        yield
+        return
+
+    log.info('Configuring regions and zones...')
+
+    log.debug('config is %r', config)
+    log.debug('regions are %r', regions)
+    log.debug('role_endpoints = %r', role_endpoints)
+    log.debug('realm is %r', realm)
+    # extract the zone info
+    role_zones = dict([(client, extract_zone_info(ctx, client, c_config))
+                       for client, c_config in config.iteritems()])
+    log.debug('roles_zones = %r', role_zones)
+
+    # extract the user info and append it to the payload tuple for the given
+    # client
+    for client, c_config in config.iteritems():
+        if not c_config:
+            user_info = None
+        else:
+            user_info = extract_user_info(c_config)
+
+        (region, zone, zone_info) = role_zones[client]
+        role_zones[client] = (region, zone, zone_info, user_info)
+
+    region_info = dict([
+        (region_name, extract_region_info(region_name, r_config))
+        for region_name, r_config in regions.iteritems()])
+
+    fill_in_endpoints(region_info, role_zones, role_endpoints)
+
+    # read master zonegroup and master_zone
+    for zonegroup, zg_info in region_info.iteritems():
+        if zg_info['is_master']:
+            master_zonegroup = zonegroup
+            master_zone = zg_info['master_zone']
+            break
+
+    for client in config.iterkeys():
+        (zonegroup, zone, zone_info, user_info) = role_zones[client]
+        if zonegroup == master_zonegroup and zone == master_zone:
+            master_client = client
+            break
+
+    log.debug('master zonegroup =%r', master_zonegroup)
+    log.debug('master zone = %r', master_zone)
+    log.debug('master client = %r', master_client)
+
     for client in config.iterkeys():
         if client != master_client:
             host, port = role_endpoints[client]
