@@ -67,6 +67,12 @@ public:
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
+  void expect_unlock_object_map(MockImageCtx &mock_image_ctx,
+                              MockObjectMap &mock_object_map) {
+    EXPECT_CALL(mock_object_map, unlock(_))
+                  .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
+  }
+
   void expect_create_journal(MockImageCtx &mock_image_ctx,
                              MockJournal *mock_journal) {
     EXPECT_CALL(mock_image_ctx, create_journal())
@@ -155,22 +161,24 @@ TEST_F(TestMockExclusiveLockAcquireRequest, Success) {
   InSequence seq;
   expect_lock(mock_image_ctx, 0);
 
-  MockJournal mock_journal;
-  expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
-  expect_create_journal(mock_image_ctx, &mock_journal);
-  expect_open_journal(mock_image_ctx, mock_journal, 0);
-
   MockObjectMap mock_object_map;
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
   expect_create_object_map(mock_image_ctx, &mock_object_map);
   expect_open_object_map(mock_image_ctx, mock_object_map);
   expect_lock_object_map(mock_image_ctx, mock_object_map);
 
+  MockJournal mock_journal;
+  expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
+  expect_create_journal(mock_image_ctx, &mock_journal);
+  expect_open_journal(mock_image_ctx, mock_journal, 0);
+
+  C_SaferCond acquire_ctx;
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       &acquire_ctx, &ctx);
   req->send();
+  ASSERT_EQ(0, acquire_ctx.wait());
   ASSERT_EQ(0, ctx.wait());
 }
 
@@ -186,19 +194,21 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessJournalDisabled) {
   InSequence seq;
   expect_lock(mock_image_ctx, 0);
 
-  expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, false);
-
   MockObjectMap mock_object_map;
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
   expect_create_object_map(mock_image_ctx, &mock_object_map);
   expect_open_object_map(mock_image_ctx, mock_object_map);
   expect_lock_object_map(mock_image_ctx, mock_object_map);
 
+  expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, false);
+
+  C_SaferCond acquire_ctx;
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       &acquire_ctx, &ctx);
   req->send();
+  ASSERT_EQ(0, acquire_ctx.wait());
   ASSERT_EQ(0, ctx.wait());
 }
 
@@ -214,19 +224,54 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessObjectMapDisabled) {
   InSequence seq;
   expect_lock(mock_image_ctx, 0);
 
+  expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
+
   MockJournal mock_journal;
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
   expect_create_journal(mock_image_ctx, &mock_journal);
   expect_open_journal(mock_image_ctx, mock_journal, 0);
 
-  expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
-
+  C_SaferCond acquire_ctx;
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       &acquire_ctx, &ctx);
   req->send();
+  ASSERT_EQ(0, acquire_ctx.wait());
   ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockExclusiveLockAcquireRequest, JournalError) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_lock(mock_image_ctx, 0);
+
+  MockObjectMap *mock_object_map = new MockObjectMap();
+  expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
+  expect_create_object_map(mock_image_ctx, mock_object_map);
+  expect_open_object_map(mock_image_ctx, *mock_object_map);
+  expect_lock_object_map(mock_image_ctx, *mock_object_map);
+
+  MockJournal *mock_journal = new MockJournal();
+  expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
+  expect_create_journal(mock_image_ctx, mock_journal);
+  expect_open_journal(mock_image_ctx, *mock_journal, -EINVAL);
+  expect_unlock_object_map(mock_image_ctx, *mock_object_map);
+
+  C_SaferCond acquire_ctx;
+  C_SaferCond ctx;
+  MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
+                                                       TEST_COOKIE,
+                                                       &acquire_ctx, &ctx);
+  req->send();
+  ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
 TEST_F(TestMockExclusiveLockAcquireRequest, LockBusy) {
@@ -251,7 +296,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, LockBusy) {
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       nullptr, &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
@@ -273,7 +318,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoError) {
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -296,7 +341,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoEmpty) {
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -318,7 +363,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoExternalTag) {
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EBUSY, ctx.wait());
 }
@@ -341,7 +386,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoShared) {
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EBUSY, ctx.wait());
 }
@@ -364,7 +409,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoExternalCookie) {
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EBUSY, ctx.wait());
 }
@@ -388,7 +433,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetWatchersError) {
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -412,7 +457,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetWatchersAlive) {
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EAGAIN, ctx.wait());
 }
@@ -439,7 +484,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BlacklistDisabled) {
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       nullptr, &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
@@ -464,7 +509,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BlacklistError) {
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -491,7 +536,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BreakLockMissing) {
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -517,7 +562,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BreakLockError) {
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &ctx);
+                                                       nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
