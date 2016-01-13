@@ -95,6 +95,15 @@ int BlockDevice::open(string p)
     assert(0 == "non-aio not supported");
   }
 
+  // disable readahead as it will wreak havoc on our mix of
+  // directio/aio and buffered io.
+  r = posix_fadvise(fd_buffered, 0, 0, POSIX_FADV_RANDOM);
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
+    goto out_fail;
+  }
+
   r = _lock();
   if (r < 0) {
     derr << __func__ << " failed to lock " << path << ": " << cpp_strerror(r)
