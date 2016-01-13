@@ -917,10 +917,14 @@ def main():
             if suffix != '':
                 outbuf = outbuf.rstrip()
             if outbuf != '':
-                # Write directly to binary stdout
-                raw_stdout.write(prefix)
-                raw_stdout.write(outbuf)
-                raw_stdout.write(suffix)
+                try:
+                    # Write directly to binary stdout
+                    raw_stdout.write(prefix)
+                    raw_stdout.write(outbuf)
+                    raw_stdout.write(suffix)
+                except IOError as e:
+                    if e.errno != errno.EPIPE:
+                        raise e
 
         sys.stdout.flush()
 
