@@ -364,7 +364,7 @@ namespace crimson {
 #if 1
 	static uint count = 0;
 	++count;
-	if (50 == count) {
+	if (50 <= count && count <= 55) {
 	  debugger();
 	  std::cout << "RESERVATION" << std::endl;
 	  std::cout << resQ << std::endl;
@@ -374,6 +374,7 @@ namespace crimson {
 	  std::cout << readyQ << std::endl;
 	  std::cout << "PROPORTION" << std::endl;
 	  std::cout << propQ << std::endl;
+	  std::cout << std::endl << std::endl;
 	}
 #endif
 
@@ -475,11 +476,17 @@ namespace crimson {
 	  return;
 	}
 
+	// so queue management is handled incrementally, remove
+	// handled items from each of the queues
+	prepareQueue(resQ);
+	prepareQueue(readyQ);
+	prepareQueue(limQ);
+	prepareQueue(propQ);
+
 	Time now = getTime();
 
 	// try constraint (reservation) based scheduling
 
-	prepareQueue(resQ);
 	if (!resQ.empty() && resQ.top()->tag.reservation <= now) {
 	  (void) submitTopRequest(resQ);
 	  ++res_sched_count;
@@ -503,7 +510,6 @@ namespace crimson {
 	  }
 	}
 
-	prepareQueue(readyQ);
 	if (!readyQ.empty()) {
 	  C client = submitTopRequest(readyQ);
 	  reduceReservationTags(client);
@@ -512,7 +518,6 @@ namespace crimson {
 	}
 
 	if (allowLimitBreak) {
-	  prepareQueue(propQ);
 	  if (!propQ.empty()) {
 	    C client = submitTopRequest(propQ);
 	    reduceReservationTags(client);
