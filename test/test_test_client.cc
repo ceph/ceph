@@ -35,8 +35,8 @@ TEST(test_client, full_bore_timing) {
     EXPECT_EQ(count, 1000) << "didn't get right number of ops";
 
     int milliseconds = (end - start) / std::chrono::milliseconds(1);
-    EXPECT_GT(milliseconds, 10000) << "timing to fast to be correct";
-    EXPECT_LT(milliseconds, 11000) << "timing suspiciously slow";
+    EXPECT_GT(milliseconds, 10000) << "timing too fast to be correct";
+    EXPECT_LT(milliseconds, 12000) << "timing suspiciously slow";
 }
 
 
@@ -79,7 +79,7 @@ TEST(test_client, paused_timing) {
     // the 50 outstanding ops allowed means the first half-second of
     // requests get responded to during the 5 second pause. So we have
     // to adjust our expectations by a half-second.
-    EXPECT_GT(milliseconds, 15000 - 500) << "timing to fast to be correct";
-    EXPECT_LT(milliseconds, 16000 - 500) << "timing suspiciously slow";
+    EXPECT_GT(milliseconds, 15000 - 500) << "timing too fast to be correct";
+    EXPECT_LT(milliseconds, 17000 - 500) << "timing suspiciously slow";
     t.join();
 }
