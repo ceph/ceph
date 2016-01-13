@@ -5,24 +5,41 @@
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
 
-class RGWAsyncRadosRequest {
+class RGWAsyncRadosRequest : public RefCountedObject {
   RGWAioCompletionNotifier *notifier;
 
   void *user_info;
   int retcode;
 
+  bool done;
+
+  Mutex lock;
+
 protected:
   virtual int _send_request() = 0;
 public:
-  RGWAsyncRadosRequest(RGWAioCompletionNotifier *_cn) : notifier(_cn) {}
+  RGWAsyncRadosRequest(RGWAioCompletionNotifier *_cn) : notifier(_cn), done(false), lock("RGWAsyncRadosRequest::lock") {}
   virtual ~RGWAsyncRadosRequest() {}
 
   void send_request() {
     retcode = _send_request();
-    notifier->cb();
+    {
+      Mutex::Locker l(lock);
+      if (!done) {
+        notifier->cb();
+      }
+    }
   }
 
   int get_ret_status() { return retcode; }
+
+  void finish() {
+    {
+      Mutex::Locker l(lock);
+      done = true;
+    }
+    put();
+  }
 };
 
 
@@ -168,7 +185,9 @@ public:
                                                 req(NULL) { }
                                                          
   ~RGWSimpleRadosReadCR() {
-    delete req;
+    if (req) {
+      req->finish();
+    }
   }
 
   int send_request();
@@ -241,7 +260,9 @@ public:
                                                 req(NULL) { }
                                                          
   ~RGWSimpleRadosReadAttrsCR() {
-    delete req;
+    if (req) {
+      req->finish();
+    }
   }
 
   int send_request();
@@ -271,7 +292,9 @@ public:
   }
 
   ~RGWSimpleRadosWriteCR() {
-    delete req;
+    if (req) {
+      req->finish();
+    }
   }
 
   int send_request() {
@@ -305,11 +328,13 @@ public:
                                                 async_rados(_async_rados),
 						store(_store),
 						pool(_pool), oid(_oid),
-                                                attrs(_attrs) {
+                                                attrs(_attrs), req(NULL) {
   }
 
   ~RGWSimpleRadosWriteAttrsCR() {
-    delete req;
+    if (req) {
+      req->finish();
+    }
   }
 
   int send_request() {
@@ -478,12 +503,14 @@ public:
   RGWWaitCR(RGWAsyncRadosProcessor *_async_rados, CephContext *_cct,
 	    Mutex *_lock, Cond *_cond,
             int _secs) : RGWSimpleCoroutine(cct), cct(_cct),
-                         async_rados(_async_rados), lock(_lock), cond(_cond), secs(_secs) {
+                         async_rados(_async_rados), lock(_lock), cond(_cond), secs(_secs), req(NULL) {
   }
 
   ~RGWWaitCR() {
     wakeup();
-    delete req;
+    if (req) {
+      req->finish();
+    }
   }
 
   int send_request() {
@@ -578,7 +605,9 @@ public:
                                                        bucket_name(_bucket_name), bucket_id(_bucket_id),
                                                        bucket_info(_bucket_info), req(NULL) {}
   ~RGWGetBucketInstanceInfoCR() {
-    delete req;
+    if (req) {
+      req->finish();
+    }
   }
 
   int send_request() {
@@ -653,7 +682,9 @@ public:
 
 
   ~RGWFetchRemoteObjCR() {
-    delete req;
+    if (req) {
+      req->finish();
+    }
   }
 
   int send_request() {
@@ -750,7 +781,7 @@ public:
                                        key(_key),
                                        versioned(_versioned),
                                        versioned_epoch(_versioned_epoch),
-                                       delete_marker(_delete_marker) {
+                                       delete_marker(_delete_marker), req(NULL) {
     del_if_older = (_timestamp != NULL);
     if (_timestamp) {
       timestamp = *_timestamp;
@@ -766,7 +797,9 @@ public:
   }
 
   ~RGWRemoveObjCR() {
-    delete req;
+    if (req) {
+      req->finish();
+    }
   }
 
   int send_request() {
