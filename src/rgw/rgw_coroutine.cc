@@ -369,6 +369,10 @@ void RGWCoroutinesManager::report_error(RGWCoroutinesStack *op)
   if (!op) {
     return;
   }
+  string err = op->error_str();
+  if (err.empty()) {
+    return;
+  }
 #warning need to have error logging infrastructure that logs on backend
   lderr(cct) << "ERROR: failed operation: " << op->error_str() << dendl;
 }
