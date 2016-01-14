@@ -148,7 +148,7 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_snap_set(rbd_image_t image, const char *snapname)
     int rbd_flatten(rbd_image_t image)
     int rbd_rebuild_object_map(rbd_image_t image, librbd_progress_fn_t cb,
-                               void *cbdata);
+                               void *cbdata)
     ssize_t rbd_list_children(rbd_image_t image, char *pools, size_t *pools_len,
                               char *images, size_t *images_len)
     ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
