@@ -983,7 +983,7 @@ void PGMap::print_osd_blocked_by_stats(std::ostream *ss) const
 void PGMap::recovery_summary(Formatter *f, list<string> *psl,
                              const pool_stat_t& delta_sum) const
 {
-  if (delta_sum.stats.sum.num_objects_degraded) {
+  if (delta_sum.stats.sum.num_objects_degraded && delta_sum.stats.sum.num_object_copies > 0) {
     double pc = (double)delta_sum.stats.sum.num_objects_degraded /
       (double)delta_sum.stats.sum.num_object_copies * (double)100.0;
     char b[20];
@@ -999,7 +999,7 @@ void PGMap::recovery_summary(Formatter *f, list<string> *psl,
       psl->push_back(ss.str());
     }
   }
-  if (delta_sum.stats.sum.num_objects_misplaced) {
+  if (delta_sum.stats.sum.num_objects_misplaced && delta_sum.stats.sum.num_object_copies > 0) {
     double pc = (double)delta_sum.stats.sum.num_objects_misplaced /
       (double)delta_sum.stats.sum.num_object_copies * (double)100.0;
     char b[20];
@@ -1015,7 +1015,7 @@ void PGMap::recovery_summary(Formatter *f, list<string> *psl,
       psl->push_back(ss.str());
     }
   }
-  if (delta_sum.stats.sum.num_objects_unfound) {
+  if (delta_sum.stats.sum.num_objects_unfound && delta_sum.stats.sum.num_objects) {
     double pc = (double)delta_sum.stats.sum.num_objects_unfound /
       (double)delta_sum.stats.sum.num_objects * (double)100.0;
     char b[20];
