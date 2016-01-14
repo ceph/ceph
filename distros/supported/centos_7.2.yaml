@@ -1,2 +1,1 @@
-os_type: centos
-os_version: "7.2"
+../all/centos_7.2.yaml
