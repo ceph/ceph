@@ -37,7 +37,7 @@ static void debugger() {
 
 
 #ifdef TIME_SHORTENER
-static const double time_shortener = 1452723900.0;
+static const double time_shortener = 1452813400.0;
 #endif
 
 
@@ -103,6 +103,7 @@ namespace crimson {
 	reservation(tagCalc(time, prev_tag.reservation, client.reservation_inv)),
 	limit(tagCalc(time, prev_tag.limit, client.limit_inv))
       {
+	std::cout << std::fixed << reservation << std::endl;
 	// empty
       }
 
@@ -123,11 +124,13 @@ namespace crimson {
 
     private:
 
+#if 0
       RequestTag(double p, double r, double l) :
 	proportion(p), reservation(r), limit(l)
       {
 	// empty
       }
+#endif
 
       static double tagCalc(Time time, double prev, double increment) {
 	if (0.0 == increment) {
@@ -328,53 +331,19 @@ namespace crimson {
       }
 
 
-#if 0
-      template<typename X>
-      void displayHeap(std::ostream& out, const c::Heap<EntryRef,X> orig) {
-	c::Heap<EntryRef,X> other = orig;
-	out << "[ ";
-	bool first = true;
-	while (!other.empty()) {
-	  if (!first) {
-	    out << ", ";
-	  } else {
-	    first = false;
-	  }
-
-//	  auto t = other.top();
-	  out << *other.top();
-// #if 0
-	  out << "{ client:" << t->client <<
-	    ", tag:" << t->tag <<
-	    ", handled:" << (t->handled ? "T" : "f") << " }";
-// #endif
-
-	  other.pop();
-	}
-	out << " ]" << std::endl;
-      }
-#endif
-
-
       void addRequest(RequestRef&& request,
 		      const C& client_id,
 		      const Time& time) {
 	Guard g(data_mutex);
 
-#if 1
+#if 0
 	static uint count = 0;
 	++count;
 	if (50 <= count && count <= 55) {
 	  debugger();
-	  std::cout << "RESERVATION" << std::endl;
-	  std::cout << resQ << std::endl;
-	  std::cout << "LIMIT" << std::endl;
-	  std::cout << limQ << std::endl;
-	  std::cout << "READY" << std::endl;
-	  std::cout << readyQ << std::endl;
-	  std::cout << "PROPORTION" << std::endl;
-	  std::cout << propQ << std::endl;
-	  std::cout << std::endl << std::endl;
+	  std::cout << "addRequest:" << std::endl;
+	  displayQueues();
+	  std::cout << std::endl;
 	}
 #endif
 
@@ -434,6 +403,15 @@ namespace crimson {
 
     protected:
 
+
+      void displayQueues() {
+	std::cout << "RESER:" << resQ << std::endl;
+	std::cout << "LIMIT:" << limQ << std::endl;
+	std::cout << "READY:" << readyQ << std::endl;
+	std::cout << "PROP:" << propQ << std::endl;
+      }
+
+      
       void reduceReservationTags(C client_id) {
 	auto client_it = clientMap.find(client_id);
 	assert(clientMap.end() != client_it);
@@ -476,14 +454,14 @@ namespace crimson {
 	  return;
 	}
 
+	Time now = getTime();
+
 	// so queue management is handled incrementally, remove
 	// handled items from each of the queues
 	prepareQueue(resQ);
 	prepareQueue(readyQ);
 	prepareQueue(limQ);
 	prepareQueue(propQ);
-
-	Time now = getTime();
 
 	// try constraint (reservation) based scheduling
 
@@ -492,6 +470,18 @@ namespace crimson {
 	  ++res_sched_count;
 	  return;
 	}
+
+#if 1
+	static uint count = 0;
+	++count;
+	if (50 <= count && count <= 55) {
+	  std::cout << "scheduleRequest:" << std::endl;
+	  std::cout << "now:" << std::fixed << now << std::endl;
+	  displayQueues();
+	  std::cout << std::endl;
+	  debugger();
+	}
+#endif
 
 	// no existing reservations before now, so try weight-based
 	// scheduling
