@@ -3458,11 +3458,13 @@ void Client::_invalidate_kernel_dcache()
 void Client::trim_caps(MetaSession *s, int max)
 {
   mds_rank_t mds = s->mds_num;
-  ldout(cct, 10) << "trim_caps mds." << mds << " max " << max << dendl;
+  int caps_size = s->caps.size();
+  ldout(cct, 10) << "trim_caps mds." << mds << " max " << max 
+    << " caps " << caps_size << dendl;
 
   int trimmed = 0;
   xlist<Cap*>::iterator p = s->caps.begin();
-  while ((s->caps.size() - trimmed) > max && !p.end()) {
+  while ((caps_size - trimmed) > max && !p.end()) {
     Cap *cap = *p;
     s->s_cap_iterator = cap;
     Inode *in = cap->inode;
