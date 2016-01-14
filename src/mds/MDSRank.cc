@@ -1236,6 +1236,19 @@ void MDSRank::clientreplay_start()
   queue_one_replay();
 }
 
+bool MDSRank::queue_one_replay()
+{
+  if (replay_queue.empty()) {
+    if (mdcache->get_num_client_requests() == 0) {
+      clientreplay_done();
+    }
+    return false;
+  }
+  queue_waiter(replay_queue.front());
+  replay_queue.pop_front();
+  return true;
+}
+
 void MDSRank::clientreplay_done()
 {
   dout(1) << "clientreplay_done" << dendl;

@@ -1165,8 +1165,7 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
     client_con->send_message(reply);
   }
 
-  if (mdr->has_completed && mds->is_clientreplay())
-    mds->queue_one_replay();
+  const bool completed = mdr->has_completed;
 
   // clean up request
   mdcache->request_finish(mdr);
@@ -1176,6 +1175,11 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
       tracedn &&
       tracedn->get_projected_linkage()->is_remote()) {
     mdcache->eval_remote(tracedn);
+  }
+
+  // Advance clientreplay process if we're in it
+  if (completed && mds->is_clientreplay()) {
+    mds->queue_one_replay();
   }
 }
 
