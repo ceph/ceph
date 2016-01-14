@@ -13,7 +13,9 @@
  */
 
 #include "gtest/gtest.h"
+#include "common/ceph_argparse.h"
 #include "include/buffer.h"
+#include "include/stringify.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/rados/librados.h"
 #include <errno.h>
@@ -26,8 +28,6 @@
 #include <sys/uio.h>
 #include <iostream>
 #include <vector>
-#include "common/ceph_argparse.h"
-#include "include/stringify.h"
 #include "json_spirit/json_spirit.h"
 
 #ifdef __linux__
@@ -247,6 +247,7 @@ TEST(AccessTest, User) {
   ASSERT_EQ(0, ceph_create(&admin, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
   ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
+  ASSERT_EQ(0, ceph_conf_set(admin, "client_permissions", "0"));
   ASSERT_EQ(0, ceph_mount(admin, "/"));
   ASSERT_EQ(0, ceph_mkdir(admin, dir.c_str(), 0755));
 
@@ -266,6 +267,7 @@ TEST(AccessTest, User) {
   ASSERT_EQ(-EACCES, ceph_mount(cmount, "/"));
   ASSERT_EQ(0, ceph_conf_set(cmount, "client_mount_uid", "123"));
   ASSERT_EQ(0, ceph_conf_set(cmount, "client_mount_gid", "456"));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_permissions", "0"));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
 
   // user bits
@@ -337,8 +339,31 @@ TEST(AccessTest, User) {
   ceph_shutdown(admin);
 }
 
+static int update_root_mode()
+{
+  struct ceph_mount_info *admin;
+  int r = ceph_create(&admin, NULL);
+  if (r < 0)
+    return r;
+  ceph_conf_read_file(admin, NULL);
+  ceph_conf_parse_env(admin, NULL);
+  ceph_conf_set(admin, "client_permissions", "false");
+  r = ceph_mount(admin, "/");
+  if (r < 0)
+    goto out;
+  r = ceph_chmod(admin, "/", 0777);
+out:
+  ceph_shutdown(admin);
+  return r;
+}
+
+
 int main(int argc, char **argv)
 {
+  int r = update_root_mode();
+  if (r < 0)
+    exit(1);
+
   ::testing::InitGoogleTest(&argc, argv);
 
   srand(getpid());
@@ -346,7 +371,7 @@ int main(int argc, char **argv)
   rados_create(&cluster, NULL);
   rados_conf_read_file(cluster, NULL);
   rados_conf_parse_env(cluster, NULL);
-  int r = rados_connect(cluster);
+  r = rados_connect(cluster);
   if (r < 0)
     exit(1);
 
