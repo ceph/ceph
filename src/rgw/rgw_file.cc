@@ -793,6 +793,7 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
       /* XXX unify timestamps */
       time_t now = time(0);
       rgw_fh->set_times(now);
+      rgw_fh->stat(st);
       struct rgw_file_handle *rfh = rgw_fh->get_fh();
       *fh = rfh;
     } else
@@ -1071,7 +1072,20 @@ int rgw_write(struct rgw_fs *rgw_fs,
   if (! rgw_fh->is_open())
     return -EPERM;
 
-  return rgw_fh->write(offset, length, bytes_written, buffer);
+  char tbuf[256];
+  size_t tlen = std::min(length, 255UL);
+  memset(tbuf, 0, 256);
+  memcpy(tbuf, buffer, tlen);
+  std::cout << __func__ << " " << length << " bytes"
+	    << " at offset " << offset
+	    << " {{" << tbuf << "}}" << std::endl;
+#if 1 /* XXXX buffer::create_static w/buffer corrupts data  */
+  string xxx_bogus{tbuf};
+  return rgw_fh->write(0, xxx_bogus.size(), bytes_written,
+		       const_cast<char*>(xxx_bogus.c_str()));
+#else
+  return rgw_fh->write(offset, length+1, bytes_written, tbuf);
+#endif
 }
 
 /*
