@@ -591,7 +591,7 @@ int init_and_open_image(const std::string &pool_name,
   return 0;
 }
 
-int snap_set(librbd::Image &image, const std::string snap_name) {
+int snap_set(librbd::Image &image, const std::string &snap_name) {
   int r = image.snap_set(snap_name.c_str());
   if (r < 0) {
     std::cerr << "error setting snapshot context: " << cpp_strerror(r)
