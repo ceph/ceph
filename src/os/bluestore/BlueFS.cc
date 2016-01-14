@@ -731,7 +731,7 @@ int BlueFS::_read(
     left = buf->get_buf_remaining(off);
     dout(20) << __func__ << " left " << left << " len " << len << dendl;
 
-    int r = MIN(len, left);
+    int r = MIN((int)len, left);
     if (outbl) {
       bufferlist t;
       t.substr_of(buf->bl, off - buf->bl_off, r);
