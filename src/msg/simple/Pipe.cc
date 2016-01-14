@@ -27,6 +27,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/valgrind.h"
 
 // Below included to get encode_encrypt(); That probably should be in Crypto.h, instead
 
@@ -83,6 +84,9 @@ Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
     send_keepalive_ack(false),
     connect_seq(0), peer_global_seq(0),
     out_seq(0), in_seq(0), in_seq_acked(0) {
+  ANNOTATE_BENIGN_RACE_SIZED(&state, sizeof(state), "Pipe state");
+  ANNOTATE_BENIGN_RACE_SIZED(&recv_len, sizeof(recv_len), "Pipe recv_len");
+  ANNOTATE_BENIGN_RACE_SIZED(&recv_ofs, sizeof(recv_ofs), "Pipe recv_ofs");
   if (con) {
     connection_state = con;
     connection_state->reset_pipe(this);

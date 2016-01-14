@@ -616,17 +616,21 @@ void md_config_t::_apply_changes(std::ostream *oss)
 
 void md_config_t::call_all_observers()
 {
-  Mutex::Locker l(lock);
-
-  expand_all_meta();
-
   std::map<md_config_obs_t*,std::set<std::string> > obs;
-  for (obs_map_t::iterator r = observers.begin(); r != observers.end(); ++r)
-    obs[r->second].insert(r->first);
+  {
+    Mutex::Locker l(lock);
+
+    expand_all_meta();
+
+    for (obs_map_t::iterator r = observers.begin(); r != observers.end(); ++r) {
+      obs[r->second].insert(r->first);
+    }
+  }
   for (std::map<md_config_obs_t*,std::set<std::string> >::iterator p = obs.begin();
        p != obs.end();
-       ++p)
+       ++p) {
     p->first->handle_conf_change(this, p->second);
+  }
 }
 
 int md_config_t::injectargs(const std::string& s, std::ostream *oss)
