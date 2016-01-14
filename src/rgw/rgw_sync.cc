@@ -399,7 +399,9 @@ public:
 						}
 
   ~RGWReadMDLogEntriesCR() {
-    delete req;
+    if (req) {
+      req->finish();
+    }
   }
 
   int send_request() {
@@ -890,7 +892,9 @@ public:
   }
 
   ~RGWMetaStoreEntryCR() {
-    delete req;
+    if (req) {
+      req->finish();
+    }
   }
 
   int send_request() {
@@ -937,7 +941,9 @@ public:
   }
 
   ~RGWMetaRemoveEntryCR() {
-    delete req;
+    if (req) {
+      req->finish();
+    }
   }
 
   int send_request() {
