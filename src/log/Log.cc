@@ -12,6 +12,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/Clock.h"
+#include "common/valgrind.h"
 #include "include/assert.h"
 #include "include/compat.h"
 #include "include/on_exit.h"
@@ -189,6 +190,8 @@ Entry *Log::create_entry(int level, int subsys)
 Entry *Log::create_entry(int level, int subsys, size_t* expected_size)
 {
   if (true) {
+    ANNOTATE_BENIGN_RACE_SIZED(expected_size, sizeof(*expected_size),
+                               "Log hint");
     size_t size = __atomic_load_n(expected_size, __ATOMIC_RELAXED);
     void *ptr = ::operator new(sizeof(Entry) + size);
     return new(ptr) Entry(ceph_clock_now(NULL),

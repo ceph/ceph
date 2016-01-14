@@ -30,6 +30,7 @@ public:
   ~ExclusiveLock();
 
   bool is_lock_owner() const;
+  bool accept_requests() const;
 
   void init(Context *on_init);
   void shut_down(Context *on_shutdown);
@@ -107,28 +108,6 @@ private:
     }
   };
 
-  struct C_BlockWrites : public Context {
-    ImageCtxT &image_ctx;
-    Context *on_finish;
-    C_BlockWrites(ImageCtxT &image_ctx, Context *on_finish)
-      : image_ctx(image_ctx), on_finish(on_finish) {
-    }
-    virtual void finish(int r) override {
-      RWLock::RLocker owner_locker(image_ctx.owner_lock);
-      image_ctx.aio_work_queue->block_writes(on_finish);
-    }
-  };
-
-  struct C_ReleaseBlockWrites : public Context {
-    ExclusiveLock *exclusive_lock;
-    C_ReleaseBlockWrites(ExclusiveLock *exclusive_lock)
-      : exclusive_lock(exclusive_lock) {
-    }
-    virtual void finish(int r) override {
-      exclusive_lock->handle_release_blocked_writes(r);
-    }
-  };
-
   struct C_ShutDownRelease : public Context {
     ExclusiveLock *exclusive_lock;
     C_ShutDownRelease(ExclusiveLock *exclusive_lock)
@@ -163,10 +142,11 @@ private:
   void handle_init_complete();
 
   void send_acquire_lock();
+  void handle_acquiring_lock(int r);
   void handle_acquire_lock(int r);
 
   void send_release_lock();
-  void handle_release_blocked_writes(int r);
+  void handle_releasing_lock(int r);
   void handle_release_lock(int r);
 
   void send_shutdown();
