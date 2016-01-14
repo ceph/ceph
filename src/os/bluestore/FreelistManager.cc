@@ -78,9 +78,14 @@ void FreelistManager::shutdown()
 void FreelistManager::dump()
 {
   Mutex::Locker l(lock);
+  _dump();
+}
+
+void FreelistManager::_dump()
+{
   dout(30) << __func__ << " " << total_free
 	   << " in " << kv_free.size() << " extents" << dendl;
-  for (std::map<uint64_t,uint64_t>::iterator p = kv_free.begin();
+  for (auto p = kv_free.begin();
        p != kv_free.end();
        ++p) {
     dout(30) << __func__ << "  " << p->first << "~" << p->second << dendl;
@@ -109,7 +114,7 @@ int FreelistManager::allocate(
   Mutex::Locker l(lock);
   dout(10) << __func__ << " " << offset << "~" << length << dendl;
   total_free -= length;
-  map<uint64_t,uint64_t>::iterator p = kv_free.lower_bound(offset);
+  auto p = kv_free.lower_bound(offset);
   if ((p == kv_free.end() || p->first > offset) &&
       p != kv_free.begin()) {
     --p;
@@ -121,7 +126,7 @@ int FreelistManager::allocate(
     if (p != kv_free.end()) {
       derr << " existing extent " << p->first << "~" << p->second << dendl;
     }
-    dump();
+    _dump();
     assert(0 == "bad allocate");
   }
 
@@ -182,7 +187,7 @@ int FreelistManager::release(
   Mutex::Locker l(lock);
   dout(10) << __func__ << " " << offset << "~" << length << dendl;
   total_free += length;
-  map<uint64_t,uint64_t>::iterator p = kv_free.lower_bound(offset);
+  auto p = kv_free.lower_bound(offset);
 
   // contiguous with previous extent?
   if (p != kv_free.begin()) {
@@ -199,7 +204,7 @@ int FreelistManager::release(
     } else if (p->first + p->second > offset) {
       derr << __func__ << " bad release " << offset << "~" << length
 	   << " overlaps with " << p->first << "~" << p->second << dendl;
-      dump();
+      _dump();
       assert(0 == "bad release overlap");
     } else {
       dout(30) << __func__ << " previous extent " << p->first << "~" << p->second
@@ -221,7 +226,7 @@ int FreelistManager::release(
     } else if (p->first < offset + length) {
       derr << __func__ << " bad release " << offset << "~" << length
 	   << " overlaps with " << p->first << "~" << p->second << dendl;
-      dump();
+      _dump();
       assert(0 == "bad release overlap");
     } else {
       dout(30) << __func__ << " next extent " << p->first << "~" << p->second
