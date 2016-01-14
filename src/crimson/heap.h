@@ -204,14 +204,14 @@ namespace crimson {
   
   template<typename T1, typename T2>
   std::ostream& operator<<(std::ostream& out, const Heap<T1,T2>& h) {
-    out << "{";
+    out << "[ ";
     if (h.count) {
       out << h.data[0];
     }
     for (int i = 1; i < h.count; i++) {
       out << ", " << h.data[i];
     }
-    out << "}";
+    out << " ]";
     return out;
   }
 } // namespace
