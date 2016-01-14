@@ -2593,7 +2593,6 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_COLL_HINT:
       {
-        coll_t cid = i.get_cid(op->cid);
         uint32_t type = op->hint_type;
         bufferlist hint;
         i.decode_bl(hint);
