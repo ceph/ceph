@@ -20,6 +20,7 @@
 #include "common/simple_spin.h"
 #include "common/strtol.h"
 #include "common/likely.h"
+#include "common/valgrind.h"
 #include "include/atomic.h"
 #include "common/RWLock.h"
 #include "include/types.h"
@@ -746,7 +747,11 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       _raw = tr->clone();
       _raw->nref.set(1);
       if (unlikely(tr->nref.dec() == 0)) {
+        ANNOTATE_HAPPENS_AFTER(&tr->nref);
+        ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&tr->nref);
         delete tr;
+      } else {
+        ANNOTATE_HAPPENS_BEFORE(&tr->nref);
       }
     }
     return *this;
@@ -771,7 +776,11 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       bdout << "ptr " << this << " release " << _raw << bendl;
       if (_raw->nref.dec() == 0) {
 	//cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
+        ANNOTATE_HAPPENS_AFTER(&_raw->nref);
+        ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&_raw->nref);
 	delete _raw;  // dealloc old (if any)
+      } else {
+        ANNOTATE_HAPPENS_BEFORE(&_raw->nref);
       }
       _raw = 0;
     }

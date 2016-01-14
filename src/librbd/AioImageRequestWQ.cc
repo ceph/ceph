@@ -27,6 +27,7 @@ AioImageRequestWQ::AioImageRequestWQ(ImageCtx *image_ctx, const string &name,
     m_shutdown(false), m_on_shutdown(nullptr) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << ": ictx=" << image_ctx << dendl;
+  tp->add_work_queue(this);
 }
 
 ssize_t AioImageRequestWQ::read(uint64_t off, uint64_t len, char *buf,
@@ -54,6 +55,7 @@ ssize_t AioImageRequestWQ::write(uint64_t off, uint64_t len, const char *buf,
   int r = clip_io(&m_image_ctx, off, &len);
   m_image_ctx.snap_lock.put_read();
   if (r < 0) {
+    lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -77,6 +79,7 @@ int AioImageRequestWQ::discard(uint64_t off, uint64_t len) {
   int r = clip_io(&m_image_ctx, off, &len);
   m_image_ctx.snap_lock.put_read();
   if (r < 0) {
+    lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
   }
 

@@ -6078,11 +6078,9 @@ OSDService::ScrubJob::ScrubJob(const spg_t& pg, const utime_t& timestamp,
       pool_scrub_max_interval : g_conf->osd_scrub_max_interval;
 
     sched_time += scrub_min_interval;
-    int divisor = scrub_min_interval *
-      g_conf->osd_scrub_interval_randomize_ratio;
-    if (divisor > 0) {
-      sched_time += rand() % divisor;
-    }
+    double r = rand() / RAND_MAX;
+    sched_time +=
+      scrub_min_interval * g_conf->osd_scrub_interval_randomize_ratio * r;
     deadline += scrub_max_interval;
   }
 }
