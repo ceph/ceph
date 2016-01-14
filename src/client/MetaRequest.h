@@ -25,6 +25,7 @@ private:
   InodeRef _inode, _old_inode, _other_inode;
   Dentry *_dentry; //associated with path
   Dentry *_old_dentry; //associated with path2
+  int abort_rc;
 public:
   uint64_t tid;
   utime_t  op_stamp;
@@ -52,7 +53,6 @@ public:
   
   MClientReply *reply;         // the reply
   bool kick;
-  bool aborted;
   bool success;
   
   // readdir result
@@ -82,7 +82,7 @@ public:
   InodeRef target;
 
   MetaRequest(int op) :
-    _dentry(NULL), _old_dentry(NULL),
+    _dentry(NULL), _old_dentry(NULL), abort_rc(0),
     tid(0),
     inode_drop(0), inode_unless(0),
     old_inode_drop(0), old_inode_unless(0),
@@ -93,7 +93,7 @@ public:
     mds(-1), resend_mds(-1), send_to_auth(false), sent_on_mseq(0),
     num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
-    kick(false), aborted(false), success(false),
+    kick(false), success(false),
     readdir_offset(0), readdir_end(false), readdir_num(0),
     got_unsafe(false), item(this), unsafe_item(this),
     unsafe_dir_item(this), unsafe_target_item(this),
@@ -103,6 +103,33 @@ public:
     head.op = op;
   }
   ~MetaRequest();
+
+  /**
+   * Prematurely terminate the request, such that callers
+   * to make_request will receive `rc` as their result.
+   */
+  void abort(int rc)
+  {
+    assert(rc != 0);
+    abort_rc = rc;
+  }
+
+  /**
+   * Whether abort() has been called for this request
+   */
+  inline bool aborted() const
+  {
+    return abort_rc != 0;
+  }
+
+  /**
+   * Given that abort() has been called for this request, what `rc` was
+   * passed into it?
+   */
+  int get_abort_code() const
+  {
+    return abort_rc;
+  }
 
   void set_inode(Inode *in) {
     _inode = in;

@@ -44,6 +44,7 @@ public class CephMountCreateTest {
     CephMount mount = new CephMount("admin");
     if (conf_file != null)
       mount.conf_read_file(conf_file);
+    mount.conf_set("client_permissions", "0");
     mount.mount(root);
     return mount;
   }

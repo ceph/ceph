@@ -23,6 +23,7 @@ struct SnapRealm;
 struct Inode;
 class ceph_lock_state_t;
 class MetaRequest;
+class UserGroups;
 
 struct Cap {
   MetaSession *session;
@@ -334,7 +335,7 @@ struct Inode {
     }
   };
 
-  bool check_mode(uid_t uid, gid_t gid, gid_t *sgids, int sgid_count, uint32_t flags);
+  bool check_mode(uid_t uid, UserGroups& groups, unsigned want);
 
   // CAPS --------
   void get_open_ref(int mode);
