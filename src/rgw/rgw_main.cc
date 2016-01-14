@@ -583,6 +583,8 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
   req->op = op;
   dout(10) << "op=" << typeid(*op).name() << dendl;
 
+  s->op_type = op->get_type();
+
   req->log(s, "authorizing");
   ret = handler->authorize();
   if (ret < 0) {

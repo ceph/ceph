@@ -3117,9 +3117,24 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
     /* aws4 auth not completed... delay aws4 auth */
 
-    s->aws4_auth_needs_complete = true;
-
     dout(10) << "body content detected... delaying v4 auth" << dendl;
+
+    switch (s->op_type)
+    {
+      case RGW_OP_PUT_OBJ:
+      case RGW_OP_PUT_ACLS:
+      /* ops requiring aws4 completion but not implemented yet */
+      //case RGW_OP_PUT_CORS:
+      //case RGW_OP_COMPLETE_MULTIPART:
+      //case RGW_OP_SET_BUCKET_VERSIONING:
+      //case RGW_OP_DELETE_MULTI_OBJ:
+        break;
+      default:
+        dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
+        return -ERR_NOT_IMPLEMENTED;
+    }
+
+    s->aws4_auth_needs_complete = true;
 
   }
 
