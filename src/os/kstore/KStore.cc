@@ -3737,6 +3737,10 @@ int KStore::_split_collection(TransContext *txc,
   assert(d->cnode.bits == bits);
   r = 0;
 
+  bufferlist bl;
+  ::encode(c->cnode, bl);
+  txc->t->set(PREFIX_COLL, stringify(c->cid), bl);
+
   dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "
 	   << " bits " << bits << " = " << r << dendl;
   return r;

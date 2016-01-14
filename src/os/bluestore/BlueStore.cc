@@ -981,7 +981,7 @@ int BlueStore::_open_alloc()
 
   alloc = Allocator::create("stupid");
   uint64_t num = 0, bytes = 0;
-  const map<uint64_t,uint64_t>& fl = fm->get_freelist();
+  const auto& fl = fm->get_freelist();
   for (auto& p : fl) {
     alloc->init_add_free(p.first, p.second);
     ++num;
@@ -1181,8 +1181,15 @@ int BlueStore::_open_db(bool create)
     if (create) {
       // note: we might waste a 4k block here if block.db is used, but it's
       // simpler.
-      bluefs->add_block_extent(id, BLUEFS_START,
-			       g_conf->bluestore_bluefs_initial_length);
+      uint64_t initial =
+	bdev->get_size() * (g_conf->bluestore_bluefs_min_ratio +
+			    g_conf->bluestore_bluefs_gift_ratio);
+      initial = MAX(initial, g_conf->bluestore_bluefs_min);
+      // align to bluefs's alloc_size
+      initial = ROUND_UP_TO(initial, g_conf->bluefs_alloc_size);
+      initial += g_conf->bluefs_alloc_size - BLUEFS_START;
+      bluefs->add_block_extent(id, BLUEFS_START, initial);
+      bluefs_extents.insert(BLUEFS_START, initial);
     }
     bluefs_shared_bdev = id;
     ++id;
@@ -1362,7 +1369,8 @@ int BlueStore::_reconcile_bluefs_freespace()
   return 0;
 }
 
-int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents)
+int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents,
+					 KeyValueDB::Transaction t)
 {
   int ret = 0;
   assert(bluefs);
@@ -1380,73 +1388,97 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents)
   uint64_t total = bdev->get_size();
   float my_free_ratio = (float)my_free / (float)total;
 
-  dout(10) << __func__ << " bluefs " << pretty_si_t(bluefs_free)
-	   << " free of " << pretty_si_t(bluefs_total)
-	   << " free_ratio " << bluefs_free_ratio << dendl;
-  dout(10) << __func__ << " bluestore " << pretty_si_t(my_free)
-	   << " free of " << pretty_si_t(total)
-	   << " free_ratio " << my_free_ratio << dendl;
+  uint64_t total_free = bluefs_free + my_free;
+
+  float bluefs_ratio = (float)bluefs_free / (float)total_free;
+
+  dout(10) << __func__
+	   << " bluefs " << pretty_si_t(bluefs_free)
+	   << " free (" << bluefs_free_ratio
+	   << ") bluestore " << pretty_si_t(my_free)
+	   << " free (" << my_free_ratio
+	   << "), bluefs_ratio " << bluefs_ratio
+	   << dendl;
 
   uint64_t gift = 0;
-  if (bluefs_free_ratio < g_conf->bluestore_bluefs_min_free_ratio &&
-      bluefs_free_ratio < my_free_ratio) {
-    // give it more
-    gift = g_conf->bluestore_bluefs_min_free_ratio * bluefs_total;
-    dout(10) << __func__ << " bluefs_free_ratio " << bluefs_free_ratio
-	     << " < min_free_ratio " << g_conf->bluestore_bluefs_min_free_ratio
-	     << ", should gift " << pretty_si_t(gift) << dendl;
-  }
-  float bluefs_ratio = (float)bluefs_total / (float)total;
+  uint64_t reclaim = 0;
   if (bluefs_ratio < g_conf->bluestore_bluefs_min_ratio) {
-    uint64_t g = total * g_conf->bluestore_bluefs_min_ratio;
+    gift = g_conf->bluestore_bluefs_gift_ratio * total_free;
     dout(10) << __func__ << " bluefs_ratio " << bluefs_ratio
 	     << " < min_ratio " << g_conf->bluestore_bluefs_min_ratio
+	     << ", should gift " << pretty_si_t(gift) << dendl;
+  } else if (bluefs_ratio > g_conf->bluestore_bluefs_max_ratio) {
+    reclaim = g_conf->bluestore_bluefs_reclaim_ratio * total_free;
+    if (bluefs_total - reclaim < g_conf->bluestore_bluefs_min)
+      reclaim = bluefs_total - g_conf->bluestore_bluefs_min;
+    dout(10) << __func__ << " bluefs_ratio " << bluefs_ratio
+	     << " > max_ratio " << g_conf->bluestore_bluefs_max_ratio
+	     << ", should reclaim " << pretty_si_t(reclaim) << dendl;
+  }
+  if (bluefs_total < g_conf->bluestore_bluefs_min) {
+    uint64_t g = g_conf->bluestore_bluefs_min;
+    dout(10) << __func__ << " bluefs_total " << bluefs_total
+	     << " < min " << g_conf->bluestore_bluefs_min
 	     << ", should gift " << pretty_si_t(g) << dendl;
     if (g > gift)
       gift = g;
+    reclaim = 0;
   }
-
-  float fs_main_ratio = (float)bluefs_free / (float)my_free;
-  dout(10) << __func__ << " fs:main free ratio " << fs_main_ratio << dendl;
 
   if (gift) {
-    float gift_ratio = (float)gift / (float)bluefs_free;
-    if (gift_ratio < g_conf->bluestore_bluefs_min_gift_ratio) {
-      dout(10) << __func__ << " proposed gift of " << pretty_si_t(gift)
-	       << " gift_ratio " << gift_ratio
-	       << " < min_gift_ratio " << g_conf->bluestore_bluefs_min_gift_ratio
-	       << dendl;
-    } else {
-      // round up to alloc size
-      uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
-      gift = ROUND_UP_TO(gift, min_alloc_size);
+    // round up to alloc size
+    uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
+    gift = ROUND_UP_TO(gift, min_alloc_size);
 
-      // hard cap to fit into 32 bits
-      gift = MIN(gift, 1ull<<31);
-      dout(10) << __func__ << " gifting " << gift
+    // hard cap to fit into 32 bits
+    gift = MIN(gift, 1ull<<31);
+    dout(10) << __func__ << " gifting " << gift
 	     << " (" << pretty_si_t(gift) << ")" << dendl;
 
-      // fixme: just do one allocation to start...
-      int r = alloc->reserve(gift);
-      assert(r == 0);
+    // fixme: just do one allocation to start...
+    int r = alloc->reserve(gift);
+    assert(r == 0);
 
-      bluestore_extent_t e;
-      r = alloc->allocate(gift, min_alloc_size, 0, &e.offset, &e.length);
-      if (r < 0) {
-	assert(0 == "allocate failed, wtf");
-	return r;
-      }
-      if (e.length < gift) {
-	alloc->unreserve(gift - e.length);
-      }
-
-      dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
-      extents->push_back(e);
-      ret = 1;
+    bluestore_extent_t e;
+    r = alloc->allocate(gift, min_alloc_size, 0, &e.offset, &e.length);
+    if (r < 0) {
+      assert(0 == "allocate failed, wtf");
+      return r;
     }
+    if (e.length < gift) {
+      alloc->unreserve(gift - e.length);
+    }
+
+    dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
+    extents->push_back(e);
+    ret = 1;
   }
 
-  // FIXME: reclaim from bluefs?
+  // reclaim from bluefs?
+  if (reclaim) {
+    // round up to alloc size
+    uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
+    reclaim = ROUND_UP_TO(reclaim, min_alloc_size);
+
+    // hard cap to fit into 32 bits
+    reclaim = MIN(reclaim, 1ull<<31);
+    dout(10) << __func__ << " reclaiming " << reclaim
+	     << " (" << pretty_si_t(reclaim) << ")" << dendl;
+
+    uint64_t offset = 0;
+    uint32_t length = 0;
+
+    // NOTE: this will block and do IO.
+    int r = bluefs->reclaim_blocks(bluefs_shared_bdev, reclaim,
+				   &offset, &length);
+    assert(r >= 0);
+
+    bluefs_extents.erase(offset, length);
+
+    fm->release(offset, length, t);
+    alloc->release(offset, length);
+    ret = 1;
+  }
 
   return ret;
 }
@@ -1593,11 +1625,10 @@ int BlueStore::mkfs()
     KeyValueDB::Transaction t = db->get_transaction();
     uint64_t reserved = 0;
     if (g_conf->bluestore_bluefs) {
-      reserved = BLUEFS_START + g_conf->bluestore_bluefs_initial_length;
-      dout(20) << __func__ << " reserved first " << reserved
-	       << " bytes for bluefs" << dendl;
-      bluefs_extents.insert(BLUEFS_START,
-			    g_conf->bluestore_bluefs_initial_length);
+      assert(bluefs_extents.num_intervals() == 1);
+      interval_set<uint64_t>::iterator p = bluefs_extents.begin();
+      reserved = p.get_start() + p.get_len();
+      dout(20) << __func__ << " reserved " << reserved << " for bluefs" << dendl;
       bufferlist bl;
       ::encode(bluefs_extents, bl);
       t->set(PREFIX_SUPER, "bluefs_extents", bl);
@@ -2126,8 +2157,8 @@ int BlueStore::fsck()
 
   dout(1) << __func__ << " checking freelist vs allocated" << dendl;
   {
-    const map<uint64_t,uint64_t>& free = fm->get_freelist();
-    for (map<uint64_t,uint64_t>::const_iterator p = free.begin();
+    const auto& free = fm->get_freelist();
+    for (auto p = free.begin();
 	 p != free.end(); ++p) {
       if (used_blocks.intersects(p->first, p->second)) {
 	derr << __func__ << " free extent " << p->first << "~" << p->second
@@ -2341,6 +2372,11 @@ int BlueStore::_do_read(
   bool buffered = false;
   if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
     dout(20) << __func__ << " will do buffered read" << dendl;
+    buffered = true;
+  } else if (g_conf->bluestore_default_buffered_read &&
+	     (op_flags & (CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
+			  CEPH_OSD_OP_FLAG_FADVISE_NOCACHE)) == 0) {
+    dout(20) << __func__ << " defaulting to buffered read" << dendl;
     buffered = true;
   }
 
@@ -3523,7 +3559,7 @@ void BlueStore::_kv_sync_thread()
 
       vector<bluestore_extent_t> bluefs_gift_extents;
       if (bluefs) {
-	int r = _balance_bluefs_freespace(&bluefs_gift_extents);
+	int r = _balance_bluefs_freespace(&bluefs_gift_extents, t);
 	assert(r >= 0);
 	if (r > 0) {
 	  for (auto& p : bluefs_gift_extents) {
@@ -6127,6 +6163,10 @@ int BlueStore::_split_collection(TransContext *txc,
   c->cnode.bits = bits;
   assert(d->cnode.bits == bits);
   r = 0;
+
+  bufferlist bl;
+  ::encode(c->cnode, bl);
+  txc->t->set(PREFIX_COLL, stringify(c->cid), bl);
 
   dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "
 	   << " bits " << bits << " = " << r << dendl;
