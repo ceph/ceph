@@ -81,7 +81,7 @@ namespace rgw {
   void RGWLibProcess::run()
   {
     while (! shutdown) {
-      std::cout << "RGWLibProcess GC" << std::endl;
+      lsubdout(cct, rgw, 5) << "RGWLibProcess GC" << dendl;
       unique_lock uniq(mtx);
     restart:
       int cur_gen = gen;
