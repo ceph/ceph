@@ -353,10 +353,6 @@ public:
   template<typename T>
   class PointerWQ : public WorkQueue_ {
   public:
-    PointerWQ(string n, time_t ti, time_t sti, ThreadPool* p)
-      : WorkQueue_(n, ti, sti), m_pool(p), m_processing(0) {
-      m_pool->add_work_queue(this);
-    }
     ~PointerWQ() {
       m_pool->remove_work_queue(this);
       assert(m_processing == 0);
@@ -382,6 +378,9 @@ public:
       return _empty();
     }
   protected:
+    PointerWQ(string n, time_t ti, time_t sti, ThreadPool* p)
+      : WorkQueue_(n, ti, sti), m_pool(p), m_processing(0) {
+    }
     virtual void _clear() {
       assert(m_pool->_lock.is_locked());
       m_items.clear();
@@ -579,6 +578,7 @@ public:
   ContextWQ(const string &name, time_t ti, ThreadPool *tp)
     : ThreadPool::PointerWQ<Context>(name, ti, 0, tp),
       m_lock("ContextWQ::m_lock") {
+    tp->add_work_queue(this);
   }
 
   void queue(Context *ctx, int result = 0) {
