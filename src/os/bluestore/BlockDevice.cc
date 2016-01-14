@@ -136,10 +136,10 @@ int BlockDevice::open(string p)
   return 0;
 
  out_fail:
-  ::close(fd_buffered);
+  VOID_TEMP_FAILURE_RETRY(::close(fd_buffered));
   fd_buffered = -1;
  out_direct:
-  ::close(fd_direct);
+  VOID_TEMP_FAILURE_RETRY(::close(fd_direct));
   fd_direct = -1;
   return r;
 }
