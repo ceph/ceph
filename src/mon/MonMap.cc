@@ -202,23 +202,6 @@ void MonMap::set_initial_members(CephContext *cct,
 				 string my_name, const entity_addr_t& my_addr,
 				 set<entity_addr_t> *removed)
 {
-  // remove non-initial members
-  unsigned i = 0;
-  while (i < size()) {
-    string n = get_name(i);
-    if (std::find(initial_members.begin(), initial_members.end(), n) != initial_members.end()) {
-      lgeneric_dout(cct, 1) << " keeping " << n << " " << get_addr(i) << dendl;
-      i++;
-      continue;
-    }
-
-    lgeneric_dout(cct, 1) << " removing " << get_name(i) << " " << get_addr(i) << dendl;
-    if (removed)
-      removed->insert(get_addr(i));
-    remove(n);
-    assert(!contains(n));
-  }
-
   // add missing initial members
   for (list<string>::iterator p = initial_members.begin(); p != initial_members.end(); ++p) {
     if (!contains(*p)) {
