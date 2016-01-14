@@ -398,7 +398,8 @@ int BlueFS::_replay()
     catch (buffer::error& e) {
       dout(10) << __func__ << " " << pos << ": stop: failed to decode: "
 	       << e.what() << dendl;
-      break;
+      delete log_reader;
+      return -EIO;
     }
     assert(seq == t.seq);
     dout(10) << __func__ << " " << pos << ": " << t << dendl;
@@ -545,7 +546,8 @@ int BlueFS::_replay()
       default:
 	derr << __func__ << " " << pos << ": stop: unrecognized op " << (int)op
 	     << dendl;
-	return -EIO;
+	delete log_reader;
+        return -EIO;
       }
     }
     assert(p.end());
