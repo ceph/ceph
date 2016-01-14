@@ -359,6 +359,9 @@ static int os_readdir(const char *path,
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
 
+  // we can't shift 32 bits or else off_t will go negative
+  const int hash_shift = 31;
+
   switch (t) {
   case FN_ROOT:
     {
@@ -400,38 +403,36 @@ static int os_readdir(const char *path,
     }
     break;
 
+  case FN_HASH_VAL:
   case FN_ALL:
     {
-      ghobject_t next;
-      while (true) {
-	vector<ghobject_t> ls;
-	int r = fs->store->collection_list(
-	  cid, next, ghobject_t::get_max(), true, 1000, &ls, &next);
-	if (r < 0)
-	  break;
-	for (auto p : ls) {
-	  string s = stringify(p);
-	  filler(buf, s.c_str(), NULL, 0);
-	}
-	if (next == ghobject_t::get_max())
-	  break;
-      }
-    }
-    break;
-
-  case FN_HASH_VAL:
-    {
+      uint32_t bitwise_hash = (offset >> hash_shift) & 0xffffffff;
+      uint32_t hashoff = offset - (bitwise_hash << hash_shift);
+      int skip = hashoff;
       ghobject_t next = cid.get_min_hobj();
-      next.hobj.set_hash(hobject_t::_reverse_bits(hash_value));
-      ghobject_t last = next;
-      uint64_t rev_end = (hash_value | (0xffffffff >> hash_bits)) + 1;
-      if (rev_end >= 0x100000000)
+      if (offset) {
+	// obey the offset
+	next.hobj.set_hash(hobject_t::_reverse_bits(bitwise_hash));
+      } else if (t == FN_HASH_VAL) {
+	next.hobj.set_hash(hobject_t::_reverse_bits(hash_value));
+      }
+      ghobject_t last;
+      if (t == FN_HASH_VAL) {
+	last = next;
+	uint64_t rev_end = (hash_value | (0xffffffff >> hash_bits)) + 1;
+	if (rev_end >= 0x100000000)
+	  last = ghobject_t::get_max();
+	else
+	  last.hobj.set_hash(hobject_t::_reverse_bits(rev_end));
+      } else {
 	last = ghobject_t::get_max();
-      else
-	last.hobj.set_hash(hobject_t::_reverse_bits(rev_end));
-      dout(10) << __func__ << " hash " << std::hex
-	       << hobject_t::_reverse_bits(hash_value) << std::dec
-	       << "/" << hash_bits << " first " << next << " last " << last
+      }
+      dout(10) << __func__ << std::hex
+	       << " offset " << offset << " hash "
+	       << hobject_t::_reverse_bits(hash_value)
+	       << std::dec
+	       << "/" << hash_bits
+	       << " first " << next << " last " << last
 	       << dendl;
       while (true) {
 	vector<ghobject_t> ls;
@@ -440,9 +441,25 @@ static int os_readdir(const char *path,
 	if (r < 0)
 	  break;
 	for (auto p : ls) {
+	  if (skip) {
+	    --skip;
+	    continue;
+	  }
+	  uint32_t cur_bitwise_hash = p.hobj.get_bitwise_key_u32();
+	  if (cur_bitwise_hash != bitwise_hash) {
+	    bitwise_hash = cur_bitwise_hash;
+	    hashoff = 0;
+	  }
+	  ++hashoff;
+	  uint64_t cur_off = ((uint64_t)bitwise_hash << hash_shift) |
+	    (uint64_t)hashoff;
 	  string s = stringify(p);
-	  filler(buf, s.c_str(), NULL, 0);
+	  r = filler(buf, s.c_str(), NULL, cur_off);
+	  if (r)
+	    break;
 	}
+	if (r)
+	  break;
 	if (next == ghobject_t::get_max() || next == last)
 	  break;
       }
