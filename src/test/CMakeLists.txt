@@ -2096,12 +2096,15 @@ if(${WITH_CEPHFS})
     libcephfs/caps.cc
     libcephfs/multiclient.cc
     libcephfs/flock.cc
+    libcephfs/acl.cc
+    libcephfs/access.cc
     $<TARGET_OBJECTS:heap_profiler_objs>
   )
   set_target_properties(test_libcephfs PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
   target_link_libraries(test_libcephfs
     cephfs
+    librados
     ${UNITTEST_LIBS}
     ${EXTRALIBS}
     ${ALLOC_LIBS}
