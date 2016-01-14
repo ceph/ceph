@@ -72,18 +72,18 @@ int MemStore::_save()
     p->second->encode(bl);
     string fn = path + "/" + stringify(p->first);
     int r = bl.write_file(fn.c_str());
-    if (r < 0)
+    if (r < 0) { 
+      coll_map.clear(); // drop refs from _load
       return r;
+    }
   }
 
   string fn = path + "/collections";
   bufferlist bl;
   ::encode(collections, bl);
   int r = bl.write_file(fn.c_str());
-  if (r < 0)
-    return r;
-
-  return 0;
+  coll_map.clear();
+  return r < 0 ? r : 0;
 }
 
 void MemStore::dump_all()
@@ -155,8 +155,10 @@ int MemStore::_load()
     string fn = path + "/" + stringify(*q);
     bufferlist cbl;
     int r = cbl.read_file(fn.c_str(), &err);
-    if (r < 0)
+    if (r < 0) {
+      coll_map.clear();
       return r;
+    }
     CollectionRef c(new Collection(cct));
     bufferlist::iterator p = cbl.begin();
     c->decode(p);
