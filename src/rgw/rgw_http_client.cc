@@ -406,14 +406,24 @@ void RGWHTTPManager::link_pending_requests()
 
   map<uint64_t, rgw_http_req_data *>::iterator iter = reqs.find(max_threaded_req);
 
+  list<std::pair<rgw_http_req_data *, int> > remove_reqs;
+
   for (; iter != reqs.end(); ++iter) {
     rgw_http_req_data *req_data = iter->second;
     int r = link_request(req_data);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to link http request" << dendl;
-      _finish_request(req_data, r);
+      remove_reqs.push_back(std::make_pair(iter->second, r));
+    } else {
+      max_threaded_req = iter->first + 1;
     }
-    max_threaded_req = iter->first + 1;
+  }
+
+  for (auto piter : remove_reqs) {
+    rgw_http_req_data *req_data = piter.first;
+    int r = piter.second;
+
+    _finish_request(req_data, r);
   }
 }
 
@@ -605,6 +615,8 @@ void *RGWHTTPManager::reqs_thread_entry()
   for (; iter != reqs.end(); ++iter) {
     _finish_request(iter->second, -ECANCELED);
   }
+
+  reqs.clear();
 
   if (completion_mgr) {
     completion_mgr->go_down();
