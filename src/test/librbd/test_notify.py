@@ -65,6 +65,7 @@ def master(ioctx):
         while offset < IMG_SIZE:
             image.write(data, offset)
             offset += (1 << IMG_ORDER)
+        image.write('1', IMG_SIZE - 1)
         assert(image.is_exclusive_lock_owner())
 
         print("waiting for slave to complete")
@@ -81,7 +82,8 @@ def slave(ioctx):
     while True:
         try:
             with Image(ioctx, CLONE_IMG_NAME) as image:
-                if image.list_lockers() != []:
+                if (image.list_lockers() != [] and
+                    image.read(IMG_SIZE - 1, 1) == '1'):
                     break
         except Exception:
             pass
