@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
 
-enable_testing()
 
 set(CMAKE_CXX_FLAGS "-std=gnu++11")
 include_directories(src)
@@ -13,10 +12,15 @@ else()
   set(my_compile_flags "-g -O0 -Wno-write-strings")
 endif()
 
+add_subdirectory(src)
+
 find_package(gtest REQUIRED)
 if(GTEST_FOUND)
+  add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
+  enable_testing()
   include_directories(${GTEST_INCLUDE_DIRS})
+  add_subdirectory(test)
+else()
+  error("Could not find gtest; cannot continue.")
 endif(GTEST_FOUND)
 
-add_subdirectory(src)
-add_subdirectory(test)
