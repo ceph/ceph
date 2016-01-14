@@ -134,6 +134,8 @@ MOUNT_OPTIONS = dict(
 
 MKFS_ARGS = dict(
     btrfs=[
+        # btrfs requires -f, for the same reason as xfs (see comment below)
+        '-f',
         '-m', 'single',
         '-l', '32768',
         '-n', '32768',
