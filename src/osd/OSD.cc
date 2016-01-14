@@ -3949,7 +3949,7 @@ bool OSD::heartbeat_reset(Connection *con)
 void OSD::tick()
 {
   assert(osd_lock.is_locked());
-  dout(5) << "tick" << dendl;
+  dout(10) << "tick" << dendl;
 
   logger->set(l_osd_buf, buffer::get_total_alloc());
   logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
@@ -3998,7 +3998,7 @@ void OSD::tick()
 void OSD::tick_without_osd_lock()
 {
   assert(tick_timer_lock.is_locked());
-  dout(5) << "tick_without_osd_lock" << dendl;
+  dout(10) << "tick_without_osd_lock" << dendl;
 
   // osd_lock is not being held, which means the OSD state
   // might change when doing the monitor report
