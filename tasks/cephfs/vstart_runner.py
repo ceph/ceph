@@ -160,6 +160,10 @@ class LocalRemote(object):
         shutil.copy(path, tmpfile)
         return tmpfile
 
+    def put_file(self, src, dst, sudo=False):
+        assert sudo is False
+        shutil.copy(src, dst)
+
     def run(self, args, check_status=True, wait=True,
             stdout=None, stderr=None, cwd=None, stdin=None,
             logger=None, label=None):
@@ -354,10 +358,17 @@ class MountDaemon(object):
 
 
 class LocalFuseMount(FuseMount):
-    def __init__(self, client_id, mount_point):
-        test_dir = "/tmp/not_there"
+    def __init__(self, test_dir, client_id):
         super(LocalFuseMount, self).__init__(None, test_dir, client_id, LocalRemote())
-        self.mountpoint = mount_point
+
+    @property
+    def config_path(self):
+        return "./ceph.conf"
+
+    def get_keyring_path(self):
+        # This is going to end up in a config file, so use an absolute path
+        # to avoid assumptions about daemons' pwd
+        return os.path.abspath("./client.{0}.keyring".format(self.client_id))
 
     def run_shell(self, args, wait=True):
         # FIXME maybe should add a pwd arg to teuthology.orchestra so that
@@ -387,7 +398,7 @@ class LocalFuseMount(FuseMount):
         if self.is_mounted():
             super(LocalFuseMount, self).umount()
 
-    def mount(self):
+    def mount(self, mount_path=None):
         self.client_remote.run(
             args=[
                 'mkdir',
@@ -423,6 +434,9 @@ class LocalFuseMount(FuseMount):
         prefix = [os.path.join(BIN_PREFIX, "ceph-fuse")]
         if os.getuid() != 0:
             prefix += ["--client-die-on-failed-remount=false"]
+
+        if mount_path is not None:
+            prefix += ["--client_mountpoint={0}".format(mount_path)]
 
         self._proc = self.client_remote.run(args=
                                             prefix + [
@@ -485,6 +499,10 @@ class LocalCephManager(CephManager):
         daemon_id like 'a', '0'
         """
         return LocalRemote()
+
+    def run_ceph_w(self):
+        proc = self.controller.run(["./ceph", "-w"], wait=False, stdout=StringIO())
+        return proc
 
     def raw_cluster_cmd(self, *args):
         """
@@ -610,9 +628,23 @@ class LocalFilesystem(Filesystem):
         for subsys, kvs in self._conf.items():
             existing_str += "\n[{0}]\n".format(subsys)
             for key, val in kvs.items():
-                # comment out any existing instances
-                if key in existing_str:
-                    existing_str = existing_str.replace(key, "#{0}".format(key))
+                # Comment out existing instance if it exists
+                log.info("Searching for existing instance {0}/{1}".format(
+                    key, subsys
+                ))
+                existing_section = re.search("^\[{0}\]$([\n]|[^\[])+".format(
+                    subsys
+                ), existing_str, re.MULTILINE)
+
+                if existing_section:
+                    section_str = existing_str[existing_section.start():existing_section.end()]
+                    existing_val = re.search("^\s*[^#]({0}) =".format(key), section_str, re.MULTILINE)
+                    if existing_val:
+                        start = existing_section.start() + existing_val.start(1)
+                        log.info("Found string to replace at {0}".format(
+                            start
+                        ))
+                        existing_str = existing_str[0:start] + "#" + existing_str[start:]
 
                 existing_str += "{0} = {1}\n".format(key, val)
 
@@ -665,8 +697,8 @@ def exec_test():
 
     test_dir = tempfile.mkdtemp()
 
-    # Run with two clients because some tests require the second one
-    clients = ["0", "1"]
+    # Create as many of these as the biggest test requires
+    clients = ["0", "1", "2"]
 
     remote = LocalRemote()
 
@@ -718,15 +750,14 @@ def exec_test():
 
             open("./keyring", "a").write(p.stdout.getvalue())
 
-        mount_point = os.path.join(test_dir, "mnt.{0}".format(client_id))
-        mount = LocalFuseMount(client_id, mount_point)
+        mount = LocalFuseMount(test_dir, client_id)
         mounts.append(mount)
         if mount.is_mounted():
-            log.warn("unmounting {0}".format(mount_point))
+            log.warn("unmounting {0}".format(mount.mountpoint))
             mount.umount_wait()
         else:
-            if os.path.exists(mount_point):
-                os.rmdir(mount_point)
+            if os.path.exists(mount.mountpoint):
+                os.rmdir(mount.mountpoint)
     filesystem = LocalFilesystem(ctx)
 
     from tasks.cephfs_test_runner import DecoratingLoader

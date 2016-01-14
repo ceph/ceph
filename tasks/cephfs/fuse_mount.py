@@ -2,7 +2,6 @@
 from StringIO import StringIO
 import json
 import time
-import os
 import logging
 from textwrap import dedent
 
@@ -23,22 +22,21 @@ class FuseMount(CephFSMount):
         self.fuse_daemon = None
         self._fuse_conn = None
 
-    def mount(self):
+    def mount(self, mount_path=None):
         log.info("Client client.%s config is %s" % (self.client_id, self.client_config))
 
         daemon_signal = 'kill'
         if self.client_config.get('coverage') or self.client_config.get('valgrind') is not None:
             daemon_signal = 'term'
 
-        mnt = os.path.join(self.test_dir, 'mnt.{id}'.format(id=self.client_id))
         log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
-            id=self.client_id, remote=self.client_remote, mnt=mnt))
+            id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
 
         self.client_remote.run(
             args=[
                 'mkdir',
                 '--',
-                mnt,
+                self.mountpoint,
             ],
         )
 
@@ -50,12 +48,16 @@ class FuseMount(CephFSMount):
             'daemon-helper',
             daemon_signal,
         ]
-        run_cmd_tail = [
-            'ceph-fuse',
-            '-f',
+
+        fuse_cmd = ['ceph-fuse', "-f"]
+
+        if mount_path is not None:
+            fuse_cmd += ["--client_mountpoint={0}".format(mount_path)]
+
+        fuse_cmd += [
             '--name', 'client.{id}'.format(id=self.client_id),
             # TODO ceph-fuse doesn't understand dash dash '--',
-            mnt,
+            self.mountpoint,
         ]
 
         if self.client_config.get('valgrind') is not None:
@@ -66,7 +68,7 @@ class FuseMount(CephFSMount):
                 self.client_config.get('valgrind'),
             )
 
-        run_cmd.extend(run_cmd_tail)
+        run_cmd.extend(fuse_cmd)
 
         def list_connections():
             self.client_remote.run(
@@ -110,6 +112,10 @@ class FuseMount(CephFSMount):
 
         post_mount_conns = list_connections()
         while len(post_mount_conns) <= len(pre_mount_conns):
+            if self.fuse_daemon.finished:
+                # Did mount fail?  Raise the CommandFailedError instead of
+                # hitting the "failed to populate /sys/" timeout
+                self.fuse_daemon.wait()
             time.sleep(1)
             waited += 1
             if waited > timeout:
@@ -224,10 +230,7 @@ class FuseMount(CephFSMount):
                     stderr=stderr
                 )
             except CommandFailedError:
-                if "not found" in stderr.getvalue():
-                    # Missing mount point, so we are unmounted already, yay.
-                    pass
-                else:
+                if self.is_mounted():
                     raise
 
         assert not self.is_mounted()

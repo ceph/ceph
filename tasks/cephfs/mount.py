@@ -24,15 +24,18 @@ class CephFSMount(object):
         self.client_id = client_id
         self.client_remote = client_remote
 
-        self.mountpoint = os.path.join(self.test_dir, 'mnt.{id}'.format(id=self.client_id))
         self.test_files = ['a', 'b', 'c']
 
         self.background_procs = []
 
+    @property
+    def mountpoint(self):
+        return os.path.join(self.test_dir, 'mnt.{id}'.format(id=self.client_id))
+
     def is_mounted(self):
         raise NotImplementedError()
 
-    def mount(self):
+    def mount(self, mount_path=None):
         raise NotImplementedError()
 
     def umount(self):
@@ -52,6 +55,17 @@ class CephFSMount(object):
 
     def wait_until_mounted(self):
         raise NotImplementedError()
+
+    def get_keyring_path(self):
+        return '/etc/ceph/ceph.client.{id}.keyring'.format(id=self.client_id)
+
+    @property
+    def config_path(self):
+        """
+        Path to ceph.conf: override this if you're not a normal systemwide ceph install
+        :return: stringv
+        """
+        return "/etc/ceph/ceph.conf"
 
     @contextmanager
     def mounted(self):
@@ -107,6 +121,7 @@ class CephFSMount(object):
     def run_python(self, pyscript):
         p = self._run_python(pyscript)
         p.wait()
+        return p.stdout.getvalue().strip()
 
     def run_shell(self, args, wait=True):
         args = ["cd", self.mountpoint, run.Raw('&&'), "sudo"] + args
