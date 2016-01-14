@@ -1019,9 +1019,6 @@ int KStore::mount()
   mounted = true;
   return 0;
 
-  _kv_stop();
-  finisher.wait_for_empty();
-  finisher.stop();
  out_db:
   _close_db();
  out_fsid:
@@ -1714,7 +1711,7 @@ bool KStore::collection_empty(coll_t cid)
   dout(15) << __func__ << " " << cid << dendl;
   vector<ghobject_t> ls;
   ghobject_t next;
-  int r = collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, 5,
+  int r = collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, 1,
 			  &ls, &next);
   if (r < 0)
     return false;  // fixme?
@@ -2593,7 +2590,6 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_COLL_HINT:
       {
-        coll_t cid = i.get_cid(op->cid);
         uint32_t type = op->hint_type;
         bufferlist hint;
         i.decode_bl(hint);
