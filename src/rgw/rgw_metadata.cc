@@ -240,10 +240,14 @@ int RGWMetadataLog::get_info_async(int shard_id, RGWMetadataLogInfo *info, RGWCo
 
   RGWMetadataLogInfoCompletion *req_completion = new RGWMetadataLogInfoCompletion(info, completion_manager, user_info, pret);
 
+  req_completion->get();
+
   int ret = store->time_log_info_async(req_completion->get_io_ctx(), oid, req_completion->get_header(), req_completion->get_completion());
   if (ret < 0) {
     return ret;
   }
+
+  req_completion->put();
 
   return 0;
 }
