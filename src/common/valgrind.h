@@ -4,12 +4,16 @@
 #ifndef CEPH_VALGRIND_H
 #define CEPH_VALGRIND_H
 
+#include "acconfig.h"
+
 #ifdef HAVE_VALGRIND_HELGRIND_H
   #include <valgrind/helgrind.h>
 #else
-  #define ANNOTATE_HAPPENS_AFTER(x)             do {} while (0)
-  #define ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(x) ANNOTATE_HAPPENS_AFTER(x)
-  #define ANNOTATE_HAPPENS_BEFORE(x)            ANNOTATE_HAPPENS_AFTER(x)
+  #define ANNOTATE_HAPPENS_AFTER(x)             (void)0
+  #define ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(x) (void)0
+  #define ANNOTATE_HAPPENS_BEFORE(x)            (void)0
+
+  #define ANNOTATE_BENIGN_RACE_SIZED(address, size, description) (void)0
 #endif
 
 #endif // CEPH_VALGRIND_H
