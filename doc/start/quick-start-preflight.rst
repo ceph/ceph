@@ -54,7 +54,7 @@ Red Hat Package Manager (RPM)
 For Red Hat(rhel6, rhel7), CentOS (el6, el7), and Fedora 19-20 (f19-f20) perform the
 following steps:
 
-#. On Red Hat Enterprise Linux 7, register the target machine with ``subscription-manager``, verify your subscriptions, and enable the Extras repoistory for package dependencies. For example::
+#. On Red Hat Enterprise Linux 7, register the target machine with ``subscription-manager``, verify your subscriptions, and enable the "Extras" repoistory for package dependencies. For example::
 
         sudo subscription-manager repos --enable=rhel-7-server-extras-rpms
 
