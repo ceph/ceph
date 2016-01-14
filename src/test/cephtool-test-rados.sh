@@ -15,5 +15,5 @@
 # GNU Library Public License for more details.
 #
 CEPH_CLI_TEST_DUP_COMMAND=1 \
-MON=1 OSD=3 CEPH_START='mon osd' CEPH_PORT=7205 test/vstart_wrapper.sh \
-    test/test_rados_tool.sh
+MON=1 OSD=3 CEPH_START='mon osd' CEPH_PORT=7205 $CEPH_ROOT/src/test/vstart_wrapper.sh \
+    $CEPH_ROOT/src/test/test_rados_tool.sh
