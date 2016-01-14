@@ -282,7 +282,7 @@ public:
    *
    * @return 'true' if we are on the Recovering state; 'false' otherwise.
    */
-  bool is_recovering() const { return (state & STATE_RECOVERING); }
+  bool is_recovering() const { return (state == STATE_RECOVERING); }
   /**
    * Check if we are active.
    *
