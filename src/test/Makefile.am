@@ -89,7 +89,8 @@ check_SCRIPTS += \
 	test/osd/osd-markdown.sh \
 	test/mon/mon-handle-forward.sh \
 	test/libradosstriper/rados-striper.sh \
-	test/test_objectstore_memstore.sh
+	test/test_objectstore_memstore.sh \
+        test/test_pidfile.sh
 
 check_SCRIPTS += test/ceph-disk.sh
 
