@@ -54,6 +54,16 @@ Red Hat Package Manager (RPM)
 For Red Hat(rhel6, rhel7), CentOS (el6, el7), and Fedora 19-20 (f19-f20) perform the
 following steps:
 
+#. On Red Hat Enterprise Linux 7, register the target machine with ``subscription-manager``, verify your subscriptions, and enable the "Extras" repoistory for package dependencies. For example::
+
+        sudo subscription-manager repos --enable=rhel-7-server-extras-rpms
+
+#. On Red Hat Enterprise Linux 6, install and enable the Extra Packages for Enterprise Linux (EPEL) repository. Please see the `EPEL wiki`_ page for more information.
+
+#. On CentOS, you can execute the following command chain::
+
+        sudo yum install -y yum-utils && sudo yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/7/x86_64/ && sudo yum install --nogpgcheck -y epel-release && sudo rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7 && sudo rm /etc/yum.repos.d/dl.fedoraproject.org*
+
 #. Add the package to your repository. Open a text editor and create a
    Yellowdog Updater, Modified (YUM) entry. Use the file path
    ``/etc/yum.repos.d/ceph.repo``. For example::
@@ -327,3 +337,4 @@ Quick Start`_.
 .. _Clock: ../../rados/configuration/mon-config-ref#clock
 .. _NTP: http://www.ntp.org/
 .. _Infernalis release: ../../release-notes/#v9-1-0-infernalis-release-candidate
+.. _EPEL wiki: https://fedoraproject.org/wiki/EPEL
