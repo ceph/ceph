@@ -426,6 +426,7 @@ public:
     uint64_t len;
     uint32_t fadvise_flags;
     bufferlist bl;
+    uint64_t append_off;
 
     set<pg_shard_t> missing_on;
     set<shard_id_t> missing_on_shards;

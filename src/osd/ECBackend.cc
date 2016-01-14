@@ -1115,72 +1115,89 @@ void ECBackend::handle_sub_read(
 	dout(5) << __func__ << ": Error " << r
 		<< " reading " << i->first << dendl;
 	goto error;
-      } else {
-        dout(20) << __func__ << " read request=" << j->get<1>() << " r=" << r << " len=" << bl.length() << dendl;
+      } 
+      
+      dout(10) << __func__ << " read request off=" << j->get<0>() 
+               << " len=" << j->get<1>() << " r=" << r << " len=" << bl.length() << dendl;
 
-        if (op.for_recovery) {
-        }
-        else {
-          // read overwrite data
-          for (map<version_t, pair<uint64_t, uint64_t> >::iterator ow_iter =
-              ow_info->begin(); ow_iter != ow_info->end(); ++ow_iter) {
-            map<int, pair<uint64_t, uint64_t>> shards_to_write =
-              sinfo.offset_len_to_chunk_offset(ow_iter->second, ec_impl->get_chunk_count());
+      // recovery read don't need overwrite data
+      if (!op.for_recovery) {
+        // read overwrite data
+        for (map<version_t, pair<uint64_t, uint64_t> >::iterator ow_iter =
+            ow_info->begin(); ow_iter != ow_info->end(); ++ow_iter) {
+          map<int, pair<uint64_t, uint64_t>> shards_to_write =
+            sinfo.offset_len_to_chunk_offset(ow_iter->second, ec_impl->get_chunk_count());
 
-            pair<uint64_t, uint64_t> &ver_off = shards_to_write[shard_id];
-            // ver_off = sinfo.offset_len_to_stripe_bounds(ow_iter->second);
-            // no overlap
-            // this shard no overwrite or needed read scope has no overlap with overwrite
-            if ( ver_off.second == 0 || (j->get<0>() + j->get<1>() ) < ver_off.first
-                || j->get<0>() > (ver_off.first + ver_off.second) )
-              continue;
+          pair<uint64_t, uint64_t> &ver_off = shards_to_write[shard_id];
+          // ver_off = sinfo.offset_len_to_stripe_bounds(ow_iter->second);
+          // no overlap
+          // this shard no overwrite or needed read scope has no overlap with overwrite
+          if ( ver_off.second == 0 || (j->get<0>() + j->get<1>() ) <= ver_off.first
+              || j->get<0>() >= (ver_off.first + ver_off.second) )
+            continue;
 
-            bool flag = ver_off.first > j->get<0>();
-            uint64_t _off = flag ? (ver_off.first - j->get<0>()) : (j->get<0>() - ver_off.first); 
-            uint64_t _len = flag ? 
-                  MIN(j->get<1>() - _off, ver_off.second) 
-                  : MIN(j->get<1>(), ver_off.second - _off);
-            dout(20) << __func__ << " read " << i->first
-                     << " version " << ow_iter->first
-                     << " ver_off " << ver_off.first
-                     << " ver_len " << ver_off.second
-                     << " req_off " << j->get<0>()
-                     << " req_len " << j->get<1>()
-                     << " off " << (flag ? ver_off.first : j->get<0>())
-                     << " len " << _len
-                     << dendl;
-            bufferlist ver_bl;
-            r = store->read(
-              coll,
-              ghobject_t(i->first, ow_iter->first, shard),
-              flag ? ver_off.first : j->get<0>(),
-              _len,
-              ver_bl, j->get<2>(),
-              true);
-            if (r < 0) {
-              // TODO: shard did not write
-              get_parent()->clog_error() << __func__
-                                     << ": Error " << r
-                                     << " reading "
-                                     << i->first;
-              dout(5) << __func__ << ": Error " << r
-                      << " reading " << i->first << dendl;
-              goto error;
-            } else {
+          bool flag = ver_off.first > j->get<0>();
+          uint64_t _off = flag ? (ver_off.first - j->get<0>()) : (j->get<0>() - ver_off.first); 
+          uint64_t _len = flag ? 
+                MIN(j->get<1>() - _off, ver_off.second) 
+                : MIN(j->get<1>(), ver_off.second - _off);
+          dout(20) << __func__ << " read " << i->first
+                   << " version " << ow_iter->first
+                   << " ver_off " << ver_off.first
+                   << " ver_len " << ver_off.second
+                   << " read_off " << (flag ? ver_off.first : j->get<0>())
+                   << " read_len " << _len
+                   << dendl;
+          bufferlist ver_bl;
+          r = store->read(
+            coll,
+            ghobject_t(i->first, ow_iter->first, shard),
+            flag ? ver_off.first : j->get<0>(),
+            _len,
+            ver_bl, j->get<2>(),
+            true);
+          if (r < 0) {
+            get_parent()->clog_error() << __func__
+                                   << ": Error " << r
+                                   << " reading "
+                                   << i->first;
+            dout(5) << __func__ << ": Error " << r
+                    << " reading " << i->first << dendl;
+            goto error;
+          }
+          // in case last overwrite exceed the original data length
+          // and the data is in overwrite version object
+          uint64_t merge_off = flag ? _off : 0;
+          assert(merge_off <= bl.length());
+          if (merge_off + _len > bl.length()) {
+            // overlaped data part
+            if (bl.length() - merge_off) {
               bl.copy_in(
-                flag ? _off : 0,
-                _len,
-                ver_bl.c_str()); 
+                merge_off,
+                bl.length() - merge_off,
+                ver_bl.c_str()
+                );
             }
+            // exceeded data part
+            bl.append(
+              ver_bl.c_str() + (bl.length() - merge_off),
+              merge_off + _len - bl.length()
+              );
+          } else {
+            bl.copy_in(
+              merge_off,
+              _len,
+              ver_bl.c_str()
+              ); 
           }
         }
+      } // End of read overwrite data
 
-	reply->buffers_read[i->first].push_back(
-	  make_pair(
-	    j->get<0>(),
-	    bl)
-	  );
-      }
+      reply->buffers_read[i->first].push_back(
+	make_pair(
+	  j->get<0>(),
+	  bl)
+	);
 
       // This shows that we still need deep scrub because large enough files
       // are read in sections, so the digest check here won't be done here.
@@ -2345,19 +2362,22 @@ void ECBackend::continue_write_op(Op *_op)
       assert(r == 0);
 
       // prepare shard transaction
-      pair<uint64_t, uint64_t> to_write = make_pair(op->off, op->len);
+      pair<uint64_t, uint64_t> to_write;
+      if (op->append_off) {
+        uint64_t append_len = op->len - (op->append_off - op->off);
+        append_len += sinfo.get_stripe_width() - (append_len % sinfo.get_stripe_width());
+        to_write = make_pair(
+          op->off,
+          op->append_off - op->off + append_len
+          );
+      } else {
+        to_write = make_pair(op->off, op->len);
+      }
+
       pair<uint64_t, uint64_t> to_write_bound = sinfo.offset_len_to_stripe_bounds(to_write);
       pair<uint64_t, uint64_t> to_write_chunk = sinfo.aligned_offset_len_to_chunk(to_write_bound);
       map<int, pair<uint64_t, uint64_t>> shards_to_write =
         sinfo.offset_len_to_chunk_offset(to_write, ec_impl->get_chunk_count());
-      dout(10) << __func__ 
-          << " write_len " << to_write.second
-          << " data_len " << target[0].length()
-          << " shard_to_write length " << shards_to_write.size()
-          << " data_chunk_count " << ec_impl->get_data_chunk_count()
-          << " strip_size " << sinfo.get_stripe_width() 
-          << " chunk_size " << sinfo.get_chunk_size()
-          << dendl;
 
       const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
               
@@ -2538,12 +2558,33 @@ void ECBackend::handle_write_read_complete(
   to_write = sinfo.offset_len_to_stripe_bounds(make_pair(op->off, op->len));
 
   dout(10) << __func__ << " decode done "
-      << " op_off " << op->off
-      << " op_len " << op->len
-      << " data_len " << op->bl.length()
-      << dendl;
+           << " op_off " << op->off
+           << " op_len " << op->len
+           << " read_data_len " << old_data->length()
+           << dendl;
   // apply write data
-  old_data->copy_in(op->off - to_write.first, op->len, op->bl.c_str());
+  // if data is begin than original data
+  if (op->off - to_write.first + op->len > old_data->length()) {
+    // this is original data length
+    op->append_off = to_write.first + old_data->length();
+    uint64_t before_len = old_data->length() - (op->off - to_write.first);
+    if (before_len) {
+      old_data->copy_in(
+        op->off - to_write.first,
+        before_len, op->bl.c_str());
+    }
+    old_data->append(op->bl.c_str() + before_len, op->len - before_len);
+    if (old_data->length() % sinfo.get_stripe_width()) {
+      old_data->append_zero(
+        sinfo.get_stripe_width() - 
+          (old_data->length() % sinfo.get_stripe_width()));
+    }
+  }else {
+    // append write path is start_write
+    // so use 0 indicate no append
+    op->append_off = 0;
+    old_data->copy_in(op->off - to_write.first, op->len, op->bl.c_str());
+  }
   
   // go into write state
   continue_write_op(op);
