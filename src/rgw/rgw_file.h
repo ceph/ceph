@@ -355,7 +355,16 @@ namespace rgw {
     inline std::string relative_object_name() {
       return full_object_name(true /* omit_bucket */);
     }
-    
+
+    inline std::string format_child_name(const std::string& cbasename) {
+      std::string child_name{relative_object_name()};
+      if ((child_name.size() > 0) &&
+	  (child_name.back() != '/'))
+	child_name += "/";
+      child_name += cbasename;
+      return child_name;
+    }
+
     inline std::string make_key_name(const char *name) {
       std::string key_name{full_object_name()};
       if (key_name.length() > 0)
@@ -732,6 +741,9 @@ namespace rgw {
 
     LookupFHResult stat_leaf(RGWFileHandle* parent, const char *path,
 			     uint32_t flags);
+
+    int rename(RGWFileHandle* old_fh, RGWFileHandle* new_fh,
+	       const char *old_name, const char *new_name);
 
     /* find existing RGWFileHandle */
     RGWFileHandle* lookup_handle(struct rgw_fh_hk fh_hk) {
@@ -1199,7 +1211,6 @@ static inline bool valid_s3_object_name(const string& name) {
 /*
   put object
 */
-
 class RGWPutObjRequest : public RGWLibRequest,
 			 public RGWPutObj /* RGWOp */
 {
@@ -1806,6 +1817,89 @@ public:
     return 0;
   }
 }; /* RGWWriteRequest */
+
+/*
+  copy object
+*/
+class RGWCopyObjRequest : public RGWLibRequest,
+			  public RGWCopyObj /* RGWOp */
+{
+public:
+  RGWFileHandle* src_parent;
+  RGWFileHandle* dst_parent;
+  const std::string& src_name;
+  const std::string& dst_name;
+
+  RGWCopyObjRequest(CephContext* _cct, RGWUserInfo *_user,
+		    RGWFileHandle* _src_parent, RGWFileHandle* _dst_parent,
+		    const std::string& _src_name, const std::string& _dst_name)
+    : RGWLibRequest(_cct, _user), src_parent(_src_parent),
+      dst_parent(_dst_parent), src_name(_src_name), dst_name(_dst_name) {
+    magic = 82;
+    op = this;
+  }
+
+  virtual bool only_bucket() { return true; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "PUT"; // XXX check
+    s->op = OP_PUT;
+
+    src_bucket_name = src_parent->bucket_name();
+    // need s->src_bucket_name?
+    src_object.name = src_parent->format_child_name(src_name);
+    // need s->src_object?
+
+    dest_bucket_name = dst_parent->bucket_name();
+    // need s->bucket.name?
+    dest_object = dst_parent->format_child_name(dst_name);
+    // need s->object_name?
+
+    if (! valid_s3_object_name(dest_object))
+      return -ERR_INVALID_OBJECT_NAME;
+
+#if 0 /* XXX needed? */
+    s->relative_uri = uri;
+    s->info.request_uri = uri; // XXX
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+#endif
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+
+  virtual int get_params() {
+    struct req_state* s = get_state();
+    RGWAccessControlPolicy_S3 s3policy(s->cct);
+    /* we don't have (any) headers, so just create canned ACLs */
+    int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
+    dest_policy = s3policy;
+    return ret;
+  }
+
+  virtual void send_response() {}
+  virtual void send_partial_response(off_t ofs) {}
+
+}; /* RGWCopyObjRequest */
+
 
 } /* namespace rgw */
 
