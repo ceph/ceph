@@ -1,0 +1,10 @@
+
+overrides:
+    ceph:
+        conf:
+        mds:
+            mds bal frag: true
+            mds bal split size: 100
+            mds bal merge size: 5
+            mds bal split bits: 3
+
