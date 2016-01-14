@@ -35,6 +35,7 @@ class RGWFrontendConfig;
 class RGWProcess {
   deque<RGWRequest*> m_req_queue;
 protected:
+  CephContext *cct;
   RGWRados* store;
   OpsLogSocket* olog;
   ThreadPool m_tp;
@@ -94,13 +95,11 @@ protected:
 
 public:
   RGWProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
-	     RGWFrontendConfig* _conf)
-    : store(pe->store), olog(pe->olog),
+	    RGWFrontendConfig* _conf)
+    : cct(cct), store(pe->store), olog(pe->olog),
       m_tp(cct, "RGWProcess::m_tp", "tp_rgw_process", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
-      rest(pe->rest),
-      conf(_conf),
-      sock_fd(-1),
+      rest(pe->rest), conf(_conf), sock_fd(-1),
       req_wq(this, g_conf->rgw_op_thread_timeout,
 	     g_conf->rgw_op_thread_suicide_timeout, &m_tp) {}
   
