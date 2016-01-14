@@ -1,0 +1,9 @@
+roles:
+- [mon.0, osd.0, osd.1, client.0]
+tasks:
+- install:
+- workunit:
+    clients:
+      all:
+        - objectstore/test_fuse.sh
+
