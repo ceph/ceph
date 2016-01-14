@@ -703,6 +703,7 @@ namespace rgw {
 			cohort::lru::FLAG_INITIAL));
 	if (fh) {
 	  fh_cache.insert_latched(fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
+	  get<1>(fhr) |= RGWFileHandle::FLAG_CREATE;
 	  goto out; /* !LATCHED */
 	} else {
 	  lat.lock->unlock();
