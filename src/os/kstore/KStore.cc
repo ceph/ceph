@@ -1015,9 +1015,6 @@ int KStore::mount()
   mounted = true;
   return 0;
 
-  _kv_stop();
-  finisher.wait_for_empty();
-  finisher.stop();
  out_db:
   _close_db();
  out_fsid:
