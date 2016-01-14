@@ -27,6 +27,7 @@ AioImageRequestWQ::AioImageRequestWQ(ImageCtx *image_ctx, const string &name,
     m_shutdown(false), m_on_shutdown(nullptr) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << ": ictx=" << image_ctx << dendl;
+  tp->add_work_queue(this);
 }
 
 ssize_t AioImageRequestWQ::read(uint64_t off, uint64_t len, char *buf,
