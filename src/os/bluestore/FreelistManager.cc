@@ -77,7 +77,7 @@ void FreelistManager::shutdown()
 
 void FreelistManager::dump()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   _dump();
 }
 
@@ -94,7 +94,6 @@ void FreelistManager::_dump()
 
 void FreelistManager::_audit()
 {
-  assert(lock.is_locked());
   uint64_t sum = 0;
   for (auto& p : kv_free) {
     sum += p.second;
@@ -111,7 +110,7 @@ int FreelistManager::allocate(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << offset << "~" << length << dendl;
   total_free -= length;
   auto p = kv_free.lower_bound(offset);
@@ -184,7 +183,7 @@ int FreelistManager::release(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << offset << "~" << length << dendl;
   total_free += length;
   auto p = kv_free.lower_bound(offset);
