@@ -456,7 +456,7 @@ CephContext::~CephContext()
 {
   join_service_thread();
 
-  for (map<string, AssociatedSingletonObject*>::iterator it = _associated_objs.begin();
+  for (map<string, SingletonWrapper*>::iterator it = _associated_objs.begin();
        it != _associated_objs.end(); ++it)
     delete it->second;
 
