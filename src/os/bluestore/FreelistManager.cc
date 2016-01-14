@@ -78,6 +78,11 @@ void FreelistManager::shutdown()
 void FreelistManager::dump()
 {
   Mutex::Locker l(lock);
+  _dump();
+}
+
+void FreelistManager::_dump()
+{
   dout(30) << __func__ << " " << total_free
 	   << " in " << kv_free.size() << " extents" << dendl;
   for (auto p = kv_free.begin();
@@ -121,7 +126,7 @@ int FreelistManager::allocate(
     if (p != kv_free.end()) {
       derr << " existing extent " << p->first << "~" << p->second << dendl;
     }
-    dump();
+    _dump();
     assert(0 == "bad allocate");
   }
 
@@ -199,7 +204,7 @@ int FreelistManager::release(
     } else if (p->first + p->second > offset) {
       derr << __func__ << " bad release " << offset << "~" << length
 	   << " overlaps with " << p->first << "~" << p->second << dendl;
-      dump();
+      _dump();
       assert(0 == "bad release overlap");
     } else {
       dout(30) << __func__ << " previous extent " << p->first << "~" << p->second
@@ -221,7 +226,7 @@ int FreelistManager::release(
     } else if (p->first < offset + length) {
       derr << __func__ << " bad release " << offset << "~" << length
 	   << " overlaps with " << p->first << "~" << p->second << dendl;
-      dump();
+      _dump();
       assert(0 == "bad release overlap");
     } else {
       dout(30) << __func__ << " next extent " << p->first << "~" << p->second
