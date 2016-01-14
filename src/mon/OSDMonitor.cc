@@ -2148,7 +2148,7 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
       return;
   }
 
-  if (s && first < get_first_committed()) {
+  if (first < get_first_committed()) {
     first = get_first_committed();
     bufferlist bl;
     int err = get_version_full(first, bl);
@@ -2164,7 +2164,9 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
     m->maps[first] = bl;
     mon->send_reply(req, m);
 
-    s->osd_epoch = osdmap.get_epoch();
+    if (s) {
+      s->osd_epoch = osdmap.get_epoch();
+    }
     return;
   }
 
