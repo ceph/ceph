@@ -887,9 +887,9 @@ public:
   }
 
   bool eof() {
-    std::cout << "READDIR offset: " << *offset
-	      << " is_truncated: " << is_truncated
-	      << std::endl;
+    lsubdout(cct, rgw, 15) << "READDIR offset: " << *offset
+			   << " is_truncated: " << is_truncated
+			   << dendl;
     return !is_truncated;
   }
 
@@ -921,8 +921,6 @@ public:
 	marker.name += "/";
       marker.name += sm;
     }
-    std::cout << __func__ << " offset: " << *offset
-	      <<  " marker: " << marker << std::endl;
     default_max = 1000; // XXX was being omitted
     magic = 72;
     op = this;
@@ -1055,10 +1053,10 @@ public:
   }
 
   bool eof() {
-    std::cout << "READDIR offset: " << *offset
-	      << " next marker: " << next_marker
-	      << " is_truncated: " << is_truncated
-	      << std::endl;
+    lsubdout(cct, rgw, 15) << "READDIR offset: " << *offset
+			   << " next marker: " << next_marker
+			   << " is_truncated: " << is_truncated
+			   << dendl;
     return !is_truncated;
   }
 
