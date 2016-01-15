@@ -40,14 +40,14 @@ static const int server_threads = 7;
 static dmc::ClientInfo client_info[] = {
   // as of C++ 11 this will invoke the constructor with three doubles
   // as parameters
-  {1.0, 50.0, 0.0},
+  {1.0, 50.0, 120.0},
   // {1.0, 50.0, 0.0},
   // {2.0, 50.0, 0.0},
   // {2.0, 50.0, 0.0},
 };
 
 static int client_goals[] = {
-  40,
+  125,
   // 40,
   // 80,
   // 80,
