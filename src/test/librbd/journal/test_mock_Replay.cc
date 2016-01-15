@@ -447,6 +447,7 @@ TEST_F(TestMockJournalReplay, OpEventError) {
 
   MockImageCtx mock_image_ctx(*ictx);
   MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
   Context *on_finish;
@@ -513,6 +514,7 @@ TEST_F(TestMockJournalReplay, SnapRemoveEvent) {
 
   MockImageCtx mock_image_ctx(*ictx);
   MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
   Context *on_finish;
@@ -543,6 +545,7 @@ TEST_F(TestMockJournalReplay, SnapRenameEvent) {
 
   MockImageCtx mock_image_ctx(*ictx);
   MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
   Context *on_finish;
@@ -574,6 +577,7 @@ TEST_F(TestMockJournalReplay, SnapProtectEvent) {
 
   MockImageCtx mock_image_ctx(*ictx);
   MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
   Context *on_finish;
@@ -604,6 +608,7 @@ TEST_F(TestMockJournalReplay, SnapUnprotectEvent) {
 
   MockImageCtx mock_image_ctx(*ictx);
   MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
   Context *on_finish;
@@ -634,6 +639,7 @@ TEST_F(TestMockJournalReplay, SnapRollbackEvent) {
 
   MockImageCtx mock_image_ctx(*ictx);
   MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
   Context *on_finish;
@@ -664,6 +670,7 @@ TEST_F(TestMockJournalReplay, RenameEvent) {
 
   MockImageCtx mock_image_ctx(*ictx);
   MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
   Context *on_finish;
@@ -730,6 +737,7 @@ TEST_F(TestMockJournalReplay, FlattenEvent) {
 
   MockImageCtx mock_image_ctx(*ictx);
   MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
   Context *on_finish;
@@ -760,6 +768,7 @@ TEST_F(TestMockJournalReplay, UnknownEvent) {
 
   MockImageCtx mock_image_ctx(*ictx);
   MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
 
