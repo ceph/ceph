@@ -254,6 +254,7 @@ public:
   bool is_capped() { return capped; }
   void cap();
 
+  void kick_submitter();
   void shutdown();
 
   // -- events --
