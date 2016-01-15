@@ -108,4 +108,5 @@ void TestServer::innerPost(std::unique_ptr<TestRequest> request) {
   Lock l(inner_queue_mtx);
   assert(!finishing);
   inner_queue.emplace_back(std::move(request));
+  inner_queue_cv.notify_one();
 }
