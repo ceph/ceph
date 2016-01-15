@@ -16,7 +16,7 @@ simple_server_LDADD = \
 	$(LIBOS) $(LIBCOMMON) $(CEPH_GLOBAL) $(PTHREAD_LIBS) $(EXTRALIBS)
 
 if LINUX
-simple_server_LDADD += -ldl
+simple_server_LDADD += 
 endif
 
 simple_client_SOURCES = \
@@ -30,7 +30,7 @@ simple_client_LDADD = \
 	$(LIBOS) $(LIBCOMMON) $(CEPH_GLOBAL) $(PTHREAD_LIBS) $(EXTRALIBS)
 
 if LINUX
-simple_client_LDADD += -ldl
+simple_client_LDADD += 
 endif
 
 noinst_PROGRAMS += \
@@ -51,7 +51,7 @@ xio_server_LDADD = \
 	$(LIBOS) $(CEPH_GLOBAL) $(LIBCOMMON) $(PTHREAD_LIBS) $(EXTRALIBS)
 
 if LINUX
-xio_server_LDADD += -ldl
+xio_server_LDADD += 
 endif
 
 xio_client_SOURCES = \
@@ -65,7 +65,7 @@ xio_client_LDADD = \
 	$(LIBOS) $(CEPH_GLOBAL) $(LIBCOMMON) $(PTHREAD_LIBS) $(EXTRALIBS)
 
 if LINUX
-xio_client_LDADD += -ldl
+xio_client_LDADD += 
 endif
 
 noinst_PROGRAMS += \

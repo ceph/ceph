@@ -186,7 +186,7 @@ unittest_osdscrub_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_osdscrub_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_osdscrub
 if LINUX
-unittest_osdscrub_LDADD += -ldl
+unittest_osdscrub_LDADD += 
 endif # LINUX
 
 unittest_pglog_SOURCES = test/osd/TestPGLog.cc
@@ -194,7 +194,7 @@ unittest_pglog_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_pglog_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_pglog
 if LINUX
-unittest_pglog_LDADD += -ldl
+unittest_pglog_LDADD += 
 endif # LINUX
 
 unittest_hitset_SOURCES = test/osd/hitset.cc
