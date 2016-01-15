@@ -420,6 +420,24 @@ TEST(LibRGW, RGW_INTRABUCKET_RENAME1) {
   }
 }
 
+TEST(LibRGW, RGW_CROSSBUCKET_RENAME1) {
+  /* rgw_rename a file within a bucket */
+  if (do_rename) {
+    int rc;
+    obj_rec& bdir0 = get<0>(renames_vec[0]);
+    obj_rec& bdir1 = get<0>(renames_vec[1]);
+    obj_rec& src_obj = get<1>(renames_vec[0])[1];
+    std::string rfname{"rfile_rhilldog"};
+    std::cout << "rename file " << src_obj.name
+	      << " (bucket " << bdir0.name << ") to "
+	      << rfname << " (bucket " << bdir1.name << ")"
+	      << std::endl;
+    rc = rgw_rename(fs, bdir0.fh, src_obj.name.c_str(), bdir1.fh,
+		    rfname.c_str(), RGW_RENAME_FLAG_NONE);
+    ASSERT_EQ(rc, 0);
+  }
+}
+
 TEST(LibRGW, BAD_DELETES_DIRS1) {
   if (do_dirs1) {
     int rc;
