@@ -157,6 +157,13 @@ void RGWOp_Metadata_Put::execute() {
   if (http_ret < 0) {
     return;
   }
+
+  if (s->aws4_auth_needs_complete) {
+    http_ret = do_aws4_auth_completion();
+    if (http_ret < 0) {
+      return;
+    }
+  }
   
   frame_metadata_key(s, metadata_key);
   
