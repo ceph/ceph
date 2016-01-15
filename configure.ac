@@ -750,7 +750,7 @@ AM_CONDITIONAL(WITH_SPDK, [test "x$with_spdk" != "xno"])
 
 if test "x$with_spdk" != x"no"; then
    CPPFLAGS="$CPPFLAGS -I$with_spdk/include"
-   LDFLAGS="$LDFLAGS -L$with_spdk/lib"
+   LDFLAGS="$LDFLAGS -L$with_spdk/lib/nvme -L$with_spdk/lib/memory -L$with_spdk/lib/util"
    AC_CHECK_HEADER([spdk/nvme.h], [], AC_MSG_ERROR([Cannot find header 'spdk/nvme.h'.]))
    #AC_CHECK_LIB([spdk_nvme], [nvme_attach], [], AC_MSG_FAILURE([SPDK nvme_attach not found]))
 

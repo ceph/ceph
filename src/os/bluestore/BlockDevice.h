@@ -24,7 +24,8 @@
 struct IOContext {
   void *priv;
 #ifdef HAVE_SPDK
-  void *backend_priv = nullptr;
+  void *nvme_task_first = nullptr;
+  void *nvme_task_last = nullptr;
 #endif
 
   Mutex lock;
