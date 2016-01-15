@@ -26,8 +26,6 @@
 #include "include/unordered_map.h"
 #include "include/memory.h"
 #include "common/errno.h"
-#include "common/Formatter.h"
-#include "common/JSONFormatter.h"
 #include "MemStore.h"
 #include "include/compat.h"
 

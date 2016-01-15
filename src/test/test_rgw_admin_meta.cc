@@ -30,8 +30,6 @@ extern "C"{
 #include "common/code_environment.h"
 #include "common/ceph_argparse.h"
 #include "common/Finisher.h"
-#include "common/Formatter.h"
-#include "common/JSONFormatter.h"
 #include "global/global_init.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_rados.h"

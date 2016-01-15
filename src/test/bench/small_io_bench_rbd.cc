@@ -13,7 +13,6 @@
 #include <fstream>
 
 #include "common/Formatter.h"
-#include "common/JSONFormatter.h"
 
 #include "bencher.h"
 #include "rbd_backend.h"
