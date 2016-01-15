@@ -404,6 +404,9 @@ enum RGWOpType {
   RGW_OP_LIST_MULTIPART,
   RGW_OP_LIST_BUCKET_MULTIPARTS,
   RGW_OP_DELETE_MULTI_OBJ,
+
+  /* rgw specific */
+  RGW_OP_ADMIN_SET_METADATA,
 };
 
 class RGWAccessControlPolicy;
