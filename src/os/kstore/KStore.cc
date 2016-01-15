@@ -1437,7 +1437,6 @@ void KStore::_reap_collections()
   }
 
   dout(10) << __func__ << " all reaped" << dendl;
-  reap_cond.Signal();
 }
 
 // ---------------
