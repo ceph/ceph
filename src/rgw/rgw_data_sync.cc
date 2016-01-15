@@ -1616,7 +1616,8 @@ struct bucket_list_entry {
     struct tm t;
     if (parse_iso8601(mtime_str.c_str(), &t)) {
       time_t sec = timegm(&t);
-#warning more high def clock?
+
+      /* FIXME: eventually we'll want to have a high def clock for rgw objects */
       mtime = utime_t(sec, 0);
     }
     JSONDecoder::decode_json("ETag", etag, obj);
