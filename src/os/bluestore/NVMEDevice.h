@@ -53,7 +53,7 @@ struct Task {
   IOCommand command;
   uint64_t offset, len;
   void *buf;
-  Task *next, *prev;
+  Task *next;
   int64_t return_code;
   utime_t start;
 };
