@@ -37,7 +37,7 @@ static void debugger() {
 
 
 #ifdef TIME_SHORTENER
-static const double time_shortener = 1452813400.0;
+static const double time_shortener = 1452895900.0;
 #endif
 
 
@@ -103,7 +103,6 @@ namespace crimson {
 	reservation(tagCalc(time, prev_tag.reservation, client.reservation_inv)),
 	limit(tagCalc(time, prev_tag.limit, client.limit_inv))
       {
-	std::cout << std::fixed << reservation << std::endl;
 	// empty
       }
 
@@ -404,6 +403,7 @@ namespace crimson {
     protected:
 
 
+      // for debugging
       void displayQueues() {
 	std::cout << "RESER:" << resQ << std::endl;
 	std::cout << "LIMIT:" << limQ << std::endl;
@@ -465,13 +465,7 @@ namespace crimson {
 
 	// try constraint (reservation) based scheduling
 
-	if (!resQ.empty() && resQ.top()->tag.reservation <= now) {
-	  (void) submitTopRequest(resQ);
-	  ++res_sched_count;
-	  return;
-	}
-
-#if 1
+#if 0
 	static uint count = 0;
 	++count;
 	if (50 <= count && count <= 55) {
@@ -482,6 +476,12 @@ namespace crimson {
 	  debugger();
 	}
 #endif
+
+	if (!resQ.empty() && resQ.top()->tag.reservation <= now) {
+	  (void) submitTopRequest(resQ);
+	  ++res_sched_count;
+	  return;
+	}
 
 	// no existing reservations before now, so try weight-based
 	// scheduling
