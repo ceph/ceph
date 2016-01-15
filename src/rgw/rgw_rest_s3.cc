@@ -2861,6 +2861,37 @@ static inline bool is_base64_for_content_md5(unsigned char c) {
   return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
 }
 
+static bool char_needs_aws4_escaping(char c)
+{
+  if ((c >= 'a' && c <= 'z') ||
+      (c >= 'A' && c <= 'Z') ||
+      (c >= '0' && c <= '9')) {
+    return false;
+  }
+
+  switch (c) {
+    case '-':
+    case '_':
+    case '.':
+    case '~':
+      return false;
+  }
+  return true;
+}
+
+static void aws4_uri_encode(const string& src, string& dst)
+{
+  const char *p = src.c_str();
+  for (unsigned i = 0; i < src.size(); i++, p++) {
+    if (char_needs_aws4_escaping(*p)) {
+      rgw_uri_escape_char(*p, dst);
+      continue;
+    }
+
+    dst.append(p, 1);
+  }
+}
+
 /*
  * handle v4 signatures (rados auth only)
  */
@@ -3063,7 +3094,13 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
       getline(kv, key, '=');
       getline(kv, val, '=');
       if (!using_qs || key != "X-Amz-Signature") {
-	canonical_qs_map[key] = val;
+        string encoded_key;
+        string encoded_val;
+
+        aws4_uri_encode(key, encoded_key);
+        aws4_uri_encode(val, encoded_val);
+
+	canonical_qs_map[encoded_key] = encoded_val;
       }
     }
 

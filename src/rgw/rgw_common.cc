@@ -943,7 +943,7 @@ bool url_decode(const string& src_str, string& dest_str, bool in_query)
   return true;
 }
 
-static void escape_char(char c, string& dst)
+void rgw_uri_escape_char(char c, string& dst)
 {
   char buf[16];
   snprintf(buf, sizeof(buf), "%%%.2X", (int)(unsigned char)c);
@@ -987,7 +987,7 @@ void url_encode(const string& src, string& dst)
   const char *p = src.c_str();
   for (unsigned i = 0; i < src.size(); i++, p++) {
     if (char_needs_url_encoding(*p)) {
-      escape_char(*p, dst);
+      rgw_uri_escape_char(*p, dst);
       continue;
     }
 
