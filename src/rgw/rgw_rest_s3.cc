@@ -1433,6 +1433,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
     // deep copy
     *(s->user) = user_info;
+    s->auth_user = s->user->user_id;
     s->owner.set_id(user_info.user_id);
     s->owner.set_name(user_info.display_name);
   } else {
@@ -2647,7 +2648,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
 
 static void init_anon_user(struct req_state *s)
 {
-  rgw_get_anon_user(*(s->user));
+  rgw_get_anon_user(*(s->user), s->auth_user);
   s->perm_mask = RGW_PERM_FULL_CONTROL;
 }
 
@@ -2736,6 +2737,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
 	  return -ERR_REQUEST_TIME_SKEWED;
 	}
 
+	s->auth_user = keystone_validator.response.token.tenant.id;
 	s->user->user_id = keystone_validator.response.token.tenant.id;
         s->user->display_name
 	  = keystone_validator.response.token.tenant.name; // wow.
@@ -2843,7 +2845,10 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
 
   } /* if keystone_result < 0 */
 
-  // populate the owner info
+  /* populate the owner info */
+  if (s->auth_user.empty()) {
+    s->auth_user = s->user->user_id;
+  }
   s->owner.set_id(s->user->user_id);
   s->owner.set_name(s->user->display_name);
 

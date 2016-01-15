@@ -268,16 +268,18 @@ static int read_policy(RGWRados *store, struct req_state *s,
     string no_object;
     rgw_obj no_obj(bucket, no_object);
     ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, &bucket_policy, no_obj);
-    if (ret < 0)
+    if (ret < 0) {
       return ret;
+    }
+
     rgw_user& owner = bucket_policy.get_owner().get_id();
     if (!s->system_request && owner.compare(s->user->user_id) != 0 &&
-        !bucket_policy.verify_permission(s->user->user_id, s->perm_mask,
-					RGW_PERM_READ))
+        !bucket_policy.verify_permission(s->auth_user, s->perm_mask,
+            RGW_PERM_READ)) {
       ret = -EACCES;
-    else
+    } else {
       ret = -ENOENT;
-
+    }
   } else if (ret == -ENOENT) {
       ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -417,11 +419,13 @@ int RGWGetObj::verify_permission()
 {
   obj = rgw_obj(s->bucket, s->object);
   store->set_atomic(s->obj_ctx, obj);
-  if (get_data)
+  if (get_data) {
     store->set_prefetch_data(s->obj_ctx, obj);
+  }
 
-  if (!verify_object_permission(s, RGW_PERM_READ))
+  if (!verify_object_permission(s, RGW_PERM_READ)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1362,8 +1366,9 @@ void RGWStatAccount::execute()
 
 int RGWGetBucketVersioning::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (s->auth_user.compare(s->bucket_owner.get_id()) != 0) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1381,8 +1386,9 @@ void RGWGetBucketVersioning::execute()
 
 int RGWSetBucketVersioning::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (s->auth_user.compare(s->bucket_owner.get_id()) != 0) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1491,8 +1497,9 @@ void RGWDeleteBucketWebsite::execute()
 
 int RGWStatBucket::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_READ))
+  if (!verify_bucket_permission(s, RGW_PERM_READ)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1524,8 +1531,9 @@ void RGWStatBucket::execute()
 
 int RGWListBucket::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_READ))
+  if (!verify_bucket_permission(s, RGW_PERM_READ)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1587,24 +1595,27 @@ void RGWListBucket::execute()
 
 int RGWGetBucketLogging::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (s->auth_user.compare(s->bucket_owner.get_id()) != 0) {
     return -EACCES;
+  }
 
   return 0;
 }
 
 int RGWGetBucketLocation::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (s->auth_user.compare(s->bucket_owner.get_id()) != 0) {
     return -EACCES;
+  }
 
   return 0;
 }
 
 int RGWCreateBucket::verify_permission()
 {
-  if (!rgw_user_is_authenticated(*(s->user)))
+  if (!rgw_user_is_authenticated(*(s->user))) {
     return -EACCES;
+  }
 
   if (s->user->user_id.tenant != s->bucket_tenant) {
     ldout(s->cct, 10)
@@ -1810,8 +1821,9 @@ void RGWCreateBucket::execute()
 
 int RGWDeleteBucket::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1886,8 +1898,9 @@ void RGWDeleteBucket::execute()
 
 int RGWPutObj::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -2740,8 +2753,9 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
 
 int RGWDeleteObj::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -2893,14 +2907,15 @@ int RGWCopyObj::verify_permission()
 
     /* check source object permissions */
     op_ret = read_policy(store, s, src_bucket_info, src_attrs, &src_policy,
-			 src_bucket, src_object);
-    if (op_ret < 0)
+                         src_bucket, src_object);
+    if (op_ret < 0) {
       return op_ret;
+    }
 
     if (!s->system_request && /* system request overrides permission checks */
-        !src_policy.verify_permission(s->user->user_id, s->perm_mask,
-				      RGW_PERM_READ))
+        !src_policy.verify_permission(s->auth_user, s->perm_mask, RGW_PERM_READ)) {
       return -EACCES;
+    }
   }
 
   RGWAccessControlPolicy dest_bucket_policy(s->cct);
@@ -2911,9 +2926,10 @@ int RGWCopyObj::verify_permission()
     dest_attrs = src_attrs;
   } else {
     op_ret = store->get_bucket_info(obj_ctx, dest_tenant_name, dest_bucket_name,
-				    dest_bucket_info, NULL, &dest_attrs);
-    if (op_ret < 0)
+                                    dest_bucket_info, NULL, &dest_attrs);
+    if (op_ret < 0) {
       return op_ret;
+    }
   }
 
   dest_bucket = dest_bucket_info.bucket;
@@ -2925,18 +2941,21 @@ int RGWCopyObj::verify_permission()
 
   /* check dest bucket permissions */
   op_ret = read_policy(store, s, dest_bucket_info, dest_attrs,
-		       &dest_bucket_policy, dest_bucket, no_obj);
-  if (op_ret < 0)
+                       &dest_bucket_policy, dest_bucket, no_obj);
+  if (op_ret < 0) {
     return op_ret;
+  }
 
   if (!s->system_request && /* system request overrides permission checks */
-      !dest_bucket_policy.verify_permission(s->user->user_id, s->perm_mask,
-					    RGW_PERM_WRITE))
+      !dest_bucket_policy.verify_permission(s->auth_user, s->perm_mask,
+                                            RGW_PERM_WRITE)) {
     return -EACCES;
+  }
 
   op_ret = init_dest_policy();
-  if (op_ret < 0)
+  if (op_ret < 0) {
     return op_ret;
+  }
 
   return 0;
 }
@@ -3187,8 +3206,9 @@ void RGWPutACLs::execute()
 
 int RGWGetCORS::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (s->auth_user.compare(s->bucket_owner.get_id()) != 0) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -3208,8 +3228,9 @@ void RGWGetCORS::execute()
 
 int RGWPutCORS::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (s->auth_user.compare(s->bucket_owner.get_id()) != 0) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -3238,8 +3259,9 @@ void RGWPutCORS::execute()
 
 int RGWDeleteCORS::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (s->auth_user.compare(s->bucket_owner.get_id()) != 0) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -3366,8 +3388,9 @@ void RGWGetRequestPayment::execute()
 
 int RGWSetRequestPayment::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (s->auth_user.compare(s->bucket_owner.get_id()) != 0) {
     return -EACCES;
+  }
 
   return 0;
 }
