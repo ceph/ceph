@@ -47,6 +47,8 @@ void Replay<I>::process(bufferlist::iterator *it, Context *on_ready,
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
+  on_ready = util::create_async_context_callback(m_image_ctx, on_ready);
+
   journal::EventEntry event_entry;
   try {
     ::decode(event_entry, *it);
@@ -255,8 +257,7 @@ void Replay<I>::handle_event(const journal::SnapCreateEvent &event,
   // do not process more events until the state machine is ready
   // since it will affect IO
   op_event->op_in_progress = true;
-  op_event->on_start_ready = util::create_async_context_callback(
-    m_image_ctx, on_ready);
+  op_event->on_start_ready = on_ready;
 }
 
 template <typename I>
@@ -393,8 +394,7 @@ void Replay<I>::handle_event(const journal::ResizeEvent &event,
   // do not process more events until the state machine is ready
   // since it will affect IO
   op_event->op_in_progress = true;
-  op_event->on_start_ready = util::create_async_context_callback(
-    m_image_ctx, on_ready);
+  op_event->on_start_ready = on_ready;
 }
 
 template <typename I>
