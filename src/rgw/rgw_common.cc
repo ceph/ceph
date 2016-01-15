@@ -864,7 +864,7 @@ bool verify_requester_payer_permission(struct req_state *s)
   if (!s->bucket_info.requester_pays)
     return true;
 
-  if (s->bucket_info.owner == s->user->user_id)
+  if (s->bucket_info.owner == s->auth_user)
     return true;
 
   const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
@@ -896,7 +896,7 @@ bool verify_bucket_permission(struct req_state * const s,
   if (!verify_requester_payer_permission(s))
     return false;
 
-  return bucket_acl->verify_permission(s->user->user_id, perm, perm);
+  return bucket_acl->verify_permission(s->auth_user, perm, perm);
 }
 
 bool verify_bucket_permission(struct req_state * const s, const int perm)
@@ -926,13 +926,14 @@ bool verify_object_permission(struct req_state * const s,
     return true;
   }
 
-  if (!object_acl)
+  if (!object_acl) {
     return false;
+  }
 
-  bool ret = object_acl->verify_permission(s->user->user_id, s->perm_mask,
-					  perm);
-  if (ret)
+  bool ret = object_acl->verify_permission(s->auth_user, s->perm_mask, perm);
+  if (ret) {
     return true;
+  }
 
   if (!s->cct->_conf->rgw_enforce_swift_acls)
     return ret;
@@ -950,8 +951,7 @@ bool verify_object_permission(struct req_state * const s,
     return false;
   /* we already verified the user mask above, so we pass swift_perm as the mask here,
      otherwise the mask might not cover the swift permissions bits */
-  return bucket_acl->verify_permission(s->user->user_id, swift_perm,
-				      swift_perm);
+  return bucket_acl->verify_permission(s->auth_user, swift_perm, swift_perm);
 }
 
 bool verify_object_permission(struct req_state *s, int perm)

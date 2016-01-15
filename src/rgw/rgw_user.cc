@@ -33,11 +33,13 @@ static RGWMetadataHandler *user_meta_handler = NULL;
 /**
  * Get the anonymous (ie, unauthenticated) user info.
  */
-void rgw_get_anon_user(RGWUserInfo& info)
+void rgw_get_anon_user(RGWUserInfo& info, rgw_user& auth_user)
 {
   info.user_id = RGW_USER_ANON_ID;
   info.display_name.clear();
   info.access_keys.clear();
+
+  auth_user = RGW_USER_ANON_ID;
 }
 
 bool rgw_user_is_authenticated(RGWUserInfo& info)
@@ -1684,8 +1686,7 @@ RGWUser::~RGWUser()
 void RGWUser::init_default()
 {
   // use anonymous user info as a placeholder
-  rgw_get_anon_user(old_info);
-  user_id = RGW_USER_ANON_ID;
+  rgw_get_anon_user(old_info, user_id);
 
   clear_populated();
 }

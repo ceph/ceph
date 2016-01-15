@@ -1353,14 +1353,19 @@ int RGWHandler_REST_SWIFT::authorize()
   if ((!s->os_auth_token && s->info.args.get("temp_url_sig").empty()) ||
       (s->op == OP_OPTIONS)) {
     /* anonymous access */
-    rgw_get_anon_user(*(s->user));
+    rgw_get_anon_user(*(s->user), s->auth_user);
     s->perm_mask = RGW_PERM_FULL_CONTROL;
     return 0;
   }
 
-  bool authorized = rgw_swift->verify_swift_token(store, s);
-  if (!authorized)
+  const bool authorized = rgw_swift->verify_swift_token(store, s);
+  if (!authorized) {
     return -EPERM;
+  }
+
+  if (s->auth_user.empty()) {
+    s->auth_user = s->user->user_id;
+  }
 
   if (s->user->system) {
     s->system_request = true;
