@@ -52,6 +52,7 @@ int MemStore::mount()
 
 int MemStore::umount()
 {
+  finisher.wait_for_empty();
   finisher.stop();
   return _save();
 }
