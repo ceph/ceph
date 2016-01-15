@@ -1,5 +1,4 @@
 
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
@@ -646,7 +645,7 @@ int RGWSystemMetaObj::create(bool exclusive)
     return ret;
   }
 
-  return store_name(true);
+  return store_name(exclusive);
 }
 
 int RGWSystemMetaObj::store_info(bool exclusive)
