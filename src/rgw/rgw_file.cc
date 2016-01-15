@@ -69,8 +69,8 @@ namespace rgw {
     using std::get;
 
     LookupFHResult fhr{nullptr, 0};
-    RGWFileHandle::directory* d = parent->get_directory();
 #if 0
+    RGWFileHandle::directory* d = parent->get_directory();
     if (! d->name_cache.empty()) {
       RGWFileHandle::dirent_string name{path};
       const auto& diter = d->name_cache.find(name);
@@ -201,15 +201,18 @@ namespace rgw {
   } /* RGWLibFS::unlink */
 
   int RGWLibFS::rename(RGWFileHandle* src_fh, RGWFileHandle* dst_fh,
-		       const char *src_name, const char *dst_name)
+		       const char *_src_name, const char *_dst_name)
 
   {
     /* XXX initial implementation: try-copy, and delete if copy
      * succeeds */
     int rc = -EINVAL;
 
+    std::string src_name{_src_name};
+    std::string dst_name{_dst_name};
+
     /* atomicity */
-    LookupFHResult fhr = lookup_fh(src_fh, src_name, RGWFileHandle::FLAG_LOCK);
+    LookupFHResult fhr = lookup_fh(src_fh, _src_name, RGWFileHandle::FLAG_LOCK);
     RGWFileHandle* rgw_fh = get<0>(fhr);
 
     for (int ix : {0, 1}) {
@@ -229,7 +232,7 @@ namespace rgw {
       {
 	RGWDeleteObjRequest req(cct, get_user(), src_fh->bucket_name(),
 				src_name);
-	int rc = rgwlib.get_fe()->execute_req(&req);
+	rc = rgwlib.get_fe()->execute_req(&req);
 	if (! rc) {
 	  rc = req.get_ret();
 	  goto out;
@@ -912,16 +915,16 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
   rename object
 */
 int rgw_rename(struct rgw_fs *rgw_fs,
-	       struct rgw_file_handle *olddir, const char* old_name,
-	       struct rgw_file_handle *newdir, const char* new_name,
+	       struct rgw_file_handle *src, const char* src_name,
+	       struct rgw_file_handle *dst, const char* dst_name,
 	       uint32_t flags)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
 
-  RGWFileHandle* old_fh = get_rgwfh(olddir);
-  RGWFileHandle* new_fh = get_rgwfh(newdir);
+  RGWFileHandle* src_fh = get_rgwfh(src);
+  RGWFileHandle* dst_fh = get_rgwfh(dst);
 
-  return fs->rename(old_fh, new_fh, old_name, new_name);
+  return fs->rename(src_fh, dst_fh, src_name, dst_name);
 }
 
 /*
