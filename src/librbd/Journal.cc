@@ -217,7 +217,9 @@ bool Journal<I>::is_journal_ready() const {
 template <typename I>
 bool Journal<I>::is_journal_replaying() const {
   Mutex::Locker locker(m_lock);
-  return (m_state == STATE_REPLAYING);
+  return (m_state == STATE_REPLAYING ||
+          m_state == STATE_FLUSHING_REPLAY ||
+          m_state == STATE_RESTARTING_REPLAY);
 }
 
 template <typename I>
@@ -581,7 +583,7 @@ void Journal<I>::handle_replay_ready() {
   bufferlist data = replay_entry.get_data();
   bufferlist::iterator it = data.begin();
   Context *on_ready = create_context_callback<
-      Journal<I>, &Journal<I>::handle_replay_process_ready>(this);
+    Journal<I>, &Journal<I>::handle_replay_process_ready>(this);
   Context *on_commit = new C_ReplayProcessSafe(this, std::move(replay_entry));
 
   m_journal_replay->process(&it, on_ready, on_commit);
