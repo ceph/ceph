@@ -6,7 +6,6 @@
 #include <unistd.h>
 
 #include "common/ceph_json.h"
-#include "common/JSONFormatter.h"
 #include "rgw_common.h"
 #include "rgw_swift.h"
 #include "rgw_swift_auth.h"

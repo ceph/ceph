@@ -61,8 +61,6 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/admin_socket.h"
-#include "common/Formatter.h"
-#include "common/JSONFormatter.h"
 
 #include "include/color.h"
 #include "include/ceph_fs.h"

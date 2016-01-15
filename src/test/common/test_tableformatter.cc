@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "common/TableFormatter.h"
+#include "common/Formatter.h"
 #include <iostream>
 #include <sstream>
 #include <string>

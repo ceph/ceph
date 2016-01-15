@@ -34,8 +34,6 @@
 
 #include "common/blkdev.h"
 #include "common/linux_version.h"
-#include "common/Formatter.h"
-#include "common/JSONFormatter.h"
 
 #if defined(__FreeBSD__)
 #define O_DSYNC O_SYNC
