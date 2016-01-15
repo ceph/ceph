@@ -48,8 +48,6 @@
 #include "common/safe_io.h"
 #include "common/perf_counters.h"
 #include "common/sync_filesystem.h"
-#include "common/Formatter.h"
-#include "common/JSONFormatter.h"
 
 #ifdef HAVE_KINETIC
 #include "KineticStore.h"

@@ -10,7 +10,6 @@
 #include "include/types.h"
 
 #include "common/Formatter.h"
-#include "common/JSONFormatter.h"
 #include "common/ceph_json.h"
 
 #include "rgw_common.h"

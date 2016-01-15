@@ -26,8 +26,6 @@ using namespace libradosstriper;
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
-#include "common/JSONFormatter.h"
-#include "common/XMLFormatter.h"
 #include "common/obj_bencher.h"
 #include "mds/inode_backtrace.h"
 #include "auth/Crypto.h"

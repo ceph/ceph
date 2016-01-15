@@ -16,7 +16,6 @@
 #include <fstream>
 
 #include "common/errno.h"
-#include "common/JSONFormatter.h"
 #include "mds/mdstypes.h"
 #include "mds/events/EUpdate.h"
 #include "mds/LogEvent.h"

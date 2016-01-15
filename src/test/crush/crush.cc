@@ -13,7 +13,6 @@
 
 #include "include/stringify.h"
 #include "common/ceph_argparse.h"
-#include "common/JSONFormatter.h"
 #include "global/global_init.h"
 #include "global/global_context.h"
 

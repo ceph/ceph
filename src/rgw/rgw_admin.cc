@@ -15,8 +15,6 @@ using namespace std;
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
-#include "common/XMLFormatter.h"
-#include "common/JSONFormatter.h"
 #include "common/errno.h"
 
 #include "global/global_init.h"
