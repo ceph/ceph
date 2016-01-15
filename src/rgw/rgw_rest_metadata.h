@@ -52,6 +52,7 @@ public:
   void execute();
   void send_response();
   virtual const string name() { return "set_metadata"; }
+  RGWOpType get_type() { return RGW_OP_ADMIN_SET_METADATA; }
 };
 
 class RGWOp_Metadata_Delete : public RGWRESTOp {
