@@ -218,7 +218,9 @@ RGWRadosSetOmapKeysCR::RGWRadosSetOmapKeysCR(RGWRados *_store,
 
 RGWRadosSetOmapKeysCR::~RGWRadosSetOmapKeysCR()
 {
-  cn->put();
+  if (cn) {
+    cn->put();
+  }
 }
 
 int RGWRadosSetOmapKeysCR::send_request()
@@ -572,4 +574,39 @@ int RGWContinuousLeaseCR::operate()
     return set_state(RGWCoroutine_Done);
   }
   return 0;
+}
+
+RGWRadosTimelogAddCR::RGWRadosTimelogAddCR(RGWRados *_store, const string& _oid,
+                      const cls_log_entry& entry) : RGWSimpleCoroutine(_store->ctx()),
+                                                store(_store),
+                                                oid(_oid), cn(NULL)
+{
+  stringstream& s = set_description();
+  s << "timelog add entry oid=" <<  oid << "entry={id=" << entry.id << ", section=" << entry.section << ", name=" << entry.name << "}";
+  entries.push_back(entry);
+}
+
+RGWRadosTimelogAddCR::~RGWRadosTimelogAddCR()
+{
+  if (cn) {
+    cn->put();
+  }
+}
+
+int RGWRadosTimelogAddCR::send_request()
+{
+  set_status() << "sending request";
+
+  cn = stack->create_completion_notifier();
+  cn->get();
+  return store->time_log_add(oid, entries, cn->completion(), true);
+}
+
+int RGWRadosTimelogAddCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+
+  set_status() << "request complete; ret=" << r;
+
+  return r;
 }
