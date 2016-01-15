@@ -1343,9 +1343,7 @@ add_executable(unittest_async_compressor EXCLUDE_FROM_ALL
 add_ceph_unittest(unittest_async_compressor ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_async_compressor)
 target_link_libraries(unittest_async_compressor global compressor)
 
-#encoding directory
-add_ceph_test(check-generated.sh ${CMAKE_SOURCE_DIR}/src/test/encoding/check-generated.sh)
-add_ceph_test(readable.sh ${CMAKE_SOURCE_DIR}/src/test/encoding/readable.sh)
+add_subdirectory(encoding)
 
 # erasure-code directory
 add_ceph_test(test-erasure-code.sh ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test-erasure-code.sh)
