@@ -1494,16 +1494,16 @@ int OSD::peek_meta(ObjectStore *store, std::string& magic,
   if (r < 0)
     return r;
   r = cluster_fsid.parse(val.c_str());
-  if (r < 0)
-    return r;
+  if (!r)
+    return -EINVAL;
 
   r = store->read_meta("fsid", &val);
   if (r < 0) {
     osd_fsid = uuid_d();
   } else {
     r = osd_fsid.parse(val.c_str());
-    if (r < 0)
-      return r;
+    if (!r)
+      return -EINVAL;
   }
 
   return 0;

@@ -1601,10 +1601,9 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
     return ret;
 
   ldout(s->cct, 20) << "response: " << response.c_str() << dendl;
-  ret = jp->parse(response.c_str(), response.length());
-  if (ret < 0) {
+  if (!jp->parse(response.c_str(), response.length())) {
     ldout(s->cct, 0) << "failed parsing response from master region" << dendl;
-    return ret;
+    return -EINVAL;
   }
 
   return 0;
