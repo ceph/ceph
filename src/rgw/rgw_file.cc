@@ -145,12 +145,73 @@ namespace rgw {
     return fhr;
   } /* RGWLibFS::stat_leaf */
 
+  int RGWLibFS::unlink(RGWFileHandle* parent, const char *name)
+  {
+    int rc = 0;
+
+    /* atomicity */
+    LookupFHResult fhr = lookup_fh(parent, name, RGWFileHandle::FLAG_LOCK);
+    RGWFileHandle* rgw_fh = get<0>(fhr);
+
+    if (parent->is_root()) {
+      /* XXXX remove uri and deal with bucket and object names */
+      string uri = "/";
+      uri += name;
+      RGWDeleteBucketRequest req(cct, get_user(), uri);
+      rc = rgwlib.get_fe()->execute_req(&req);
+      if (! rc) {
+	rc = req.get_ret();
+      }
+    } else {
+      /*
+       * leaf object
+       */
+      if (! rgw_fh) {
+	/* XXX for now, peform a hard lookup to deduce the type of
+	 * object to be deleted ("foo" vs. "foo/")--also, ensures
+	 * atomicity at this endpoint */
+	struct rgw_file_handle *fh;
+	rc = rgw_lookup(get_fs(), parent->get_fh(), name, &fh,
+			RGW_LOOKUP_FLAG_NONE);
+	if (!! rc)
+	  return rc;
+
+	/* rgw_fh ref+ */
+	rgw_fh = get_rgwfh(fh);
+	rgw_fh->mtx.lock();
+      }
+
+      std::string oname = rgw_fh->relative_object_name();
+      if (rgw_fh->is_dir())
+	oname += "/";
+      RGWDeleteObjRequest req(cct, get_user(), parent->bucket_name(),
+			      oname);
+      rc = rgwlib.get_fe()->execute_req(&req);
+      if (! rc) {
+	rc = req.get_ret();
+      }
+    }
+
+    rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
+    fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh, cohort::lru::FLAG_NONE);
+    rgw_fh->mtx.unlock();
+    unref(rgw_fh);
+
+    return rc;
+  } /* RGWLibFS::unlink */
+
   int RGWLibFS::rename(RGWFileHandle* src_fh, RGWFileHandle* dst_fh,
-		      const char *src_name, const char *dst_name)
+		       const char *src_name, const char *dst_name)
 
   {
     /* XXX initial implementation: try-copy, and delete if copy
      * succeeds */
+    int rc = -EINVAL;
+
+    /* atomicity */
+    LookupFHResult fhr = lookup_fh(src_fh, src_name, RGWFileHandle::FLAG_LOCK);
+    RGWFileHandle* rgw_fh = get<0>(fhr);
+
     for (int ix : {0, 1}) {
       switch (ix) {
       case 0:
@@ -160,7 +221,7 @@ namespace rgw {
 	int rc = rgwlib.get_fe()->execute_req(&req);
 	if ((rc != 0) ||
 	    ((rc = req.get_ret()) != 0)) {
-	  return rc;
+	  goto out;
 	}
       }
       break;
@@ -171,18 +232,22 @@ namespace rgw {
 	int rc = rgwlib.get_fe()->execute_req(&req);
 	if (! rc) {
 	  rc = req.get_ret();
-	  return rc;
+	  goto out;
 	}
       }
       break;
       default:
 	abort();
       } /* switch */
-
-      return -EINVAL;
+    } /* ix */
+  out:
+    if (rgw_fh) {
+      rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
+      fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh, cohort::lru::FLAG_NONE);
+      rgw_fh->mtx.unlock();
+      unref(rgw_fh);
     }
-
-    return EINVAL;
+    return rc;
   } /* RGWLibFS::rename */
 
   int RGWLibFS::getattr(RGWFileHandle* rgw_fh, struct stat* st)
@@ -856,7 +921,7 @@ int rgw_rename(struct rgw_fs *rgw_fs,
   RGWFileHandle* old_fh = get_rgwfh(olddir);
   RGWFileHandle* new_fh = get_rgwfh(newdir);
 
-  return -(fs->rename(old_fh, new_fh, old_name, new_name));
+  return fs->rename(old_fh, new_fh, old_name, new_name);
 }
 
 /*
@@ -865,47 +930,10 @@ int rgw_rename(struct rgw_fs *rgw_fs,
 int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 	       const char *name, uint32_t flags)
 {
-  int rc = 0;
-
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
-  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
-
   RGWFileHandle* parent = get_rgwfh(parent_fh);
 
-  if (parent->is_root()) {
-    /* XXXX remove uri and deal with bucket and object names */
-    string uri = "/";
-    uri += name;
-    RGWDeleteBucketRequest req(cct, fs->get_user(), uri);
-    rc = rgwlib.get_fe()->execute_req(&req);
-    if (! rc) {
-      rc = req.get_ret();
-    }
-  } else {
-    /*
-     * leaf object
-     */
-    /* XXX we must peform a hard lookup to deduce the type of
-     * object to be deleted ("foo" vs. "foo/"), and as a side effect
-     * can do no further work if no object existed */
-    struct rgw_file_handle *fh;
-    rc = rgw_lookup(rgw_fs, parent_fh, name, &fh, RGW_LOOKUP_FLAG_NONE);
-    if (! rc)  {
-      /* rgw_fh ref+ */
-      RGWFileHandle* rgw_fh = get_rgwfh(fh);
-      std::string oname = rgw_fh->relative_object_name();
-      RGWDeleteObjRequest req(cct, fs->get_user(), parent->bucket_name(),
-			      oname);
-      rc = rgwlib.get_fe()->execute_req(&req);
-      if (! rc) {
-	rc = req.get_ret();
-      }
-      /* release */
-      (void) rgw_fh_rele(rgw_fs, fh, 0 /* flags */);
-    }
-  }
-
-  return -rc;
+  return fs->unlink(parent, name);
 }
 
 /*
