@@ -470,8 +470,16 @@ static int os_readdir(const char *path,
     {
       set<string> keys;
       fs->store->omap_get_keys(cid, oid, &keys);
+      unsigned skip = offset;
       for (auto k : keys) {
-	filler(buf, k.c_str(), NULL, 0);
+	if (skip) {
+	  --skip;
+	  continue;
+	}
+	++offset;
+	int r = filler(buf, k.c_str(), NULL, offset);
+	if (r)
+	  break;
       }
     }
     break;
@@ -480,8 +488,16 @@ static int os_readdir(const char *path,
     {
       map<string,bufferptr> aset;
       fs->store->getattrs(cid, oid, aset);
+      unsigned skip = offset;
       for (auto a : aset) {
-	filler(buf, a.first.c_str(), NULL, 0);
+	if (skip) {
+	  --skip;
+	  continue;
+	}
+	++offset;
+	int r = filler(buf, a.first.c_str(), NULL, offset);
+	if (r)
+	  break;
       }
     }
     break;
