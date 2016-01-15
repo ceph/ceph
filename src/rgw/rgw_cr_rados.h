@@ -869,5 +869,22 @@ public:
   }
 };
 
+class RGWRadosTimelogAddCR : public RGWSimpleCoroutine {
+  RGWRados *store;
+  list<cls_log_entry> entries;
+
+  string oid;
+
+  RGWAioCompletionNotifier *cn;
+
+public:
+  RGWRadosTimelogAddCR(RGWRados *_store, const string& _oid,
+		        const cls_log_entry& entry);
+  ~RGWRadosTimelogAddCR();
+
+  int send_request();
+  int request_complete();
+};
+
 
 #endif
