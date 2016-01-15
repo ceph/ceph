@@ -1,5 +1,6 @@
 include test/erasure-code/Makefile.am
 include test/messenger/Makefile.am
+include test/compressor/Makefile.am
 
 if ENABLE_CLIENT
 include test/Makefile-client.am
@@ -425,7 +426,7 @@ check_PROGRAMS += unittest_subprocess
 
 unittest_async_compressor_SOURCES = test/common/test_async_compressor.cc
 unittest_async_compressor_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR)
+unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR) $(LIBCOMMON)
 check_PROGRAMS += unittest_async_compressor
 
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
