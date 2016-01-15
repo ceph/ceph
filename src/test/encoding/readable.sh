@@ -1,6 +1,6 @@
 #!/bin/sh -e
 
-dir=../ceph-object-corpus
+dir=$CEPH_ROOT/ceph-object-corpus
 
 set -e
 
@@ -10,7 +10,7 @@ tmp2=`mktemp /tmp/typ-XXXXXXXXX`
 failed=0
 numtests=0
 
-myversion=`./ceph-dencoder version`
+myversion=`ceph-dencoder version`
 
 for arversion in `ls -v $dir/archive`; do
   vdir="$dir/archive/$arversion"
@@ -21,7 +21,7 @@ for arversion in `ls -v $dir/archive`; do
   fi
 
   for type in `ls $vdir/objects`; do
-    if ./ceph-dencoder type $type 2>/dev/null; then
+    if ceph-dencoder type $type 2>/dev/null; then
       #echo "type $type";
       echo "        $vdir/objects/$type"
 
@@ -85,12 +85,12 @@ for arversion in `ls -v $dir/archive`; do
         fi;
 
         #echo "\t$vdir/$type/$f"
-        if ! ./ceph-dencoder type $type import $vdir/objects/$type/$f decode dump_json > $tmp1; then
+        if ! ceph-dencoder type $type import $vdir/objects/$type/$f decode dump_json > $tmp1; then
           echo "**** failed to decode $vdir/objects/$type/$f ****"
           failed=$(($failed + 1))
           continue      
         fi
-        if ! ./ceph-dencoder type $type import $vdir/objects/$type/$f decode encode decode dump_json > $tmp2; then
+        if ! ceph-dencoder type $type import $vdir/objects/$type/$f decode encode decode dump_json > $tmp2; then
           echo "**** failed to decode+encode+decode $vdir/objects/$type/$f ****"
           failed=$(($failed + 1))
           continue
@@ -100,7 +100,7 @@ for arversion in `ls -v $dir/archive`; do
         # nondeterministically.  compare the sorted json
         # output.  this is a weaker test, but is better than
         # nothing.
-        if ! ./ceph-dencoder type $type is_deterministic; then
+        if ! ceph-dencoder type $type is_deterministic; then
           echo "  sorting json output for nondeterministic object"
           for f in $tmp1 $tmp2; do
             sort $f | sed 's/,$//' > $f.new

@@ -13,26 +13,26 @@ failed=0
 numtests=0
 echo "checking ceph-dencoder generated test instances..."
 echo "numgen type"
-for type in `./ceph-dencoder list_types`; do
-    num=`./ceph-dencoder type $type count_tests`
+for type in `ceph-dencoder list_types`; do
+    num=`ceph-dencoder type $type count_tests`
     echo "$num $type"
     for n in `seq 1 1 $num 2>/dev/null`; do
-	if ! ./ceph-dencoder type $type select_test $n encode decode; then
+	if ! ceph-dencoder type $type select_test $n encode decode; then
 	    echo "**** $type test $n encode+decode check failed ****"
 	    echo "   ceph-dencoder type $type select_test $n encode decode"
 	    failed=$(($failed + 3))
 	    continue
 	fi
 
-	./ceph-dencoder type $type select_test $n dump_json > $tmp1
-	./ceph-dencoder type $type select_test $n encode decode dump_json > $tmp2
-	./ceph-dencoder type $type select_test $n copy dump_json > $tmp3
-	./ceph-dencoder type $type select_test $n copy_ctor dump_json > $tmp4
+	ceph-dencoder type $type select_test $n dump_json > $tmp1
+	ceph-dencoder type $type select_test $n encode decode dump_json > $tmp2
+	ceph-dencoder type $type select_test $n copy dump_json > $tmp3
+	ceph-dencoder type $type select_test $n copy_ctor dump_json > $tmp4
 
 	# nondeterministic classes may dump nondeterministically.  compare
 	# the sorted json output.  this is a weaker test, but is better
 	# than nothing.
-	if ! ./ceph-dencoder type $type is_deterministic
+	if ! ceph-dencoder type $type is_deterministic
 	then
 	    echo "  sorting json output for nondeterministic object"
 	    for f in $tmp1 $tmp2 $tmp3 $tmp4; do
@@ -43,36 +43,36 @@ for type in `./ceph-dencoder list_types`; do
 
 	if ! cmp $tmp1 $tmp2; then
 	    echo "**** $type test $n dump_json check failed ****"
-	    echo "   ./ceph-dencoder type $type select_test $n dump_json > $tmp1"
-	    echo "   ./ceph-dencoder type $type select_test $n encode decode dump_json > $tmp2"
+	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
+	    echo "   ceph-dencoder type $type select_test $n encode decode dump_json > $tmp2"
 	    echo "   diff $tmp1 $tmp2"
 	    failed=$(($failed + 1))
 	fi
 
 	if ! cmp $tmp1 $tmp3; then
 	    echo "**** $type test $n copy dump_json check failed ****"
-	    echo "   ./ceph-dencoder type $type select_test $n dump_json > $tmp1"
-	    echo "   ./ceph-dencoder type $type select_test $n copy dump_json > $tmp2"
+	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
+	    echo "   ceph-dencoder type $type select_test $n copy dump_json > $tmp2"
 	    echo "   diff $tmp1 $tmp2"
 	    failed=$(($failed + 1))
 	fi
 
 	if ! cmp $tmp1 $tmp4; then
 	    echo "**** $type test $n copy_ctor dump_json check failed ****"
-	    echo "   ./ceph-dencoder type $type select_test $n dump_json > $tmp1"
-	    echo "   ./ceph-dencoder type $type select_test $n copy_ctor dump_json > $tmp2"
+	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
+	    echo "   ceph-dencoder type $type select_test $n copy_ctor dump_json > $tmp2"
 	    echo "   diff $tmp1 $tmp2"
 	    failed=$(($failed + 1))
 	fi
 
-	if ./ceph-dencoder type $type is_deterministic
+	if ceph-dencoder type $type is_deterministic
 	then
-	    ./ceph-dencoder type $type select_test $n encode export $tmp1
-	    ./ceph-dencoder type $type select_test $n encode decode encode export $tmp2
+	    ceph-dencoder type $type select_test $n encode export $tmp1
+	    ceph-dencoder type $type select_test $n encode decode encode export $tmp2
 	    if ! cmp $tmp1 $tmp2; then
 		echo "**** $type test $n binary reencode check failed ****"
-		echo "   ./ceph-dencoder type $type select_test $n encode export $tmp1"
-		echo "   ./ceph-dencoder type $type select_test $n encode decode encode export $tmp2"
+		echo "   ceph-dencoder type $type select_test $n encode export $tmp1"
+		echo "   ceph-dencoder type $type select_test $n encode decode encode export $tmp2"
 		echo "   cmp $tmp1 $tmp2"
 		failed=$(($failed + 1))
 	    fi
