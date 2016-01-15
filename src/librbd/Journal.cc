@@ -114,7 +114,16 @@ int Journal::create(librados::IoCtx &io_ctx, const std::string &image_id,
     return r;
   }
 
-  r = journaler.register_client(CLIENT_DESCRIPTION);
+  std::string fsid;
+  librados::Rados rados(io_ctx);
+  r = rados.cluster_fsid(&fsid);
+  if (r < 0) {
+    lderr(cct) << "Failed to retreive cluster fsid" << dendl;
+    return r;
+  }
+
+  r = journaler.register_client(CLIENT_DESCRIPTION,
+				librbd::journal::ClientPayload(fsid, image_id));
   if (r < 0) {
     lderr(cct) << "failed to register client: " << cpp_strerror(r) << dendl;
     return r;
@@ -179,6 +188,10 @@ int Journal::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
   int64_t pool_id;
   journaler.get_metadata(&order, &splay_width, &pool_id);
 
+  std::string description;
+  journal::ClientPayload payload;
+  journaler.get_registered_client(&description, &payload);
+
   r = journaler.remove(true);
   if (r < 0) {
     lderr(cct) << "failed to reset journal: " << cpp_strerror(r) << dendl;
@@ -189,7 +202,7 @@ int Journal::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
     lderr(cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
     return r;
   }
-  r = journaler.register_client(CLIENT_DESCRIPTION);
+  r = journaler.register_client(description, payload);
   if (r < 0) {
     lderr(cct) << "failed to register client: " << cpp_strerror(r) << dendl;
     return r;

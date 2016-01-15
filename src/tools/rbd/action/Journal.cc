@@ -87,6 +87,18 @@ static int do_show_journal_info(librados::Rados& rados, librados::IoCtx& io_ctx,
   return 0;
 }
 
+static librbd::journal::ClientPayload client_payload(cls::journal::Client& c) {
+  librbd::journal::ClientPayload payload;
+  bufferlist::iterator p = c.payload.begin();
+  try {
+    ::decode(payload, p);
+  } catch (const buffer::error &err) {
+    std::cerr << "failed to decode input parameters: " << err.what()
+	      << std::endl;
+  }
+  return payload;
+}
+
 static int do_show_journal_status(librados::IoCtx& io_ctx,
 				  const std::string& journal_id, Formatter *f)
 {
@@ -112,9 +124,11 @@ static int do_show_journal_status(librados::IoCtx& io_ctx,
     f->dump_unsigned("minimum_set", minimum_set);
     f->dump_unsigned("active_set", active_set);
     f->open_object_section("registered_clients");
-    for (std::set<cls::journal::Client>::iterator c =
-          registered_clients.begin(); c != registered_clients.end(); c++) {
-      c->dump(f);
+    for (auto c : registered_clients) {
+      f->open_object_section("client");
+      c.dump(f);
+      client_payload(c).dump(f);
+      f->close_section();
     }
     f->close_section();
     f->close_section();
@@ -123,9 +137,9 @@ static int do_show_journal_status(librados::IoCtx& io_ctx,
     std::cout << "minimum_set: " << minimum_set << std::endl;
     std::cout << "active_set: " << active_set << std::endl;
     std::cout << "registered clients: " << std::endl;
-    for (std::set<cls::journal::Client>::iterator c =
-          registered_clients.begin(); c != registered_clients.end(); c++) {
-      std::cout << "\t" << *c << std::endl;
+    for (auto c : registered_clients) {
+      std::cout << "\t" << c << std::endl;
+      std::cout << "\t\t" << client_payload(c) << std::endl;
     }
   }
   return 0;
@@ -153,6 +167,10 @@ static int do_reset_journal(librados::IoCtx& io_ctx,
   int64_t pool_id;
   journaler.get_metadata(&order, &splay_width, &pool_id);
 
+  std::string description;
+  librbd::journal::ClientPayload payload;
+  journaler.get_registered_client(&description, &payload);
+
   r = journaler.remove(true);
   if (r < 0) {
     std::cerr << "failed to reset journal: " << cpp_strerror(r) << std::endl;
@@ -163,11 +181,7 @@ static int do_reset_journal(librados::IoCtx& io_ctx,
     std::cerr << "failed to create journal: " << cpp_strerror(r) << std::endl;
     return r;
   }
-
-  // XXXMG
-  const std::string CLIENT_DESCRIPTION = "master image";
-
-  r = journaler.register_client(CLIENT_DESCRIPTION);
+  r = journaler.register_client(description, payload);
   if (r < 0) {
     std::cerr << "failed to register client: " << cpp_strerror(r) << std::endl;
     return r;

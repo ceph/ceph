@@ -51,7 +51,8 @@ public:
   void add_listener(Listener *listener);
   void remove_listener(Listener *listener);
 
-  int register_client(const std::string &description);
+  int register_client(const std::string &description,
+		      const bufferlist &payload = bufferlist());
   int unregister_client();
 
   inline const std::string &get_client_id() const {
@@ -101,6 +102,11 @@ public:
   void get_registered_clients(RegisteredClients *registered_clients) {
     Mutex::Locker locker(m_lock);
     *registered_clients = m_registered_clients;
+  }
+
+  void get_registered_client(Client *registered_client) {
+    Mutex::Locker locker(m_lock);
+    *registered_client = m_client;
   }
 
   inline uint64_t allocate_tid(const std::string &tag) {

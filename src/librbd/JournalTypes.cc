@@ -298,6 +298,25 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(FlattenEvent(901)));
 }
 
+void ClientPayload::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(fsid, bl);
+  ::encode(image_id, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ClientPayload::decode(bufferlist::iterator& it) {
+  DECODE_START(1, it);
+  ::decode(fsid, it);
+  ::decode(image_id, it);
+  DECODE_FINISH(it);
+}
+
+void ClientPayload::dump(Formatter *f) const {
+  f->dump_string("fsid", fsid);
+  f->dump_string("image_id", image_id);
+}
+
 } // namespace journal
 } // namespace librbd
 
@@ -349,5 +368,11 @@ std::ostream &operator<<(std::ostream &out,
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";
     break;
   }
+  return out;
+}
+
+std::ostream &operator<<(std::ostream &out,
+                         const librbd::journal::ClientPayload &payload) {
+  out << "[fsid=" << payload.fsid << ", image_id=" << payload.image_id << "]";
   return out;
 }

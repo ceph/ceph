@@ -42,7 +42,15 @@ public:
   void init(Context *on_init);
   void shutdown();
 
-  int register_client(const std::string &description);
+  int register_client(const std::string &description,
+		      const bufferlist &payload = bufferlist());
+  template <typename ClientPayload>
+  int register_client(const std::string &description,
+		      const ClientPayload &payload) {
+    bufferlist bl;
+    payload.encode(bl);
+    return register_client(description, bl);
+  }
   int unregister_client();
 
   void start_replay(ReplayHandler *replay_handler);
@@ -59,6 +67,14 @@ public:
   void committed(const Future &future);
 
   void get_metadata(uint8_t *order, uint8_t *splay_width, int64_t *pool_id);
+  void get_registered_client(std::string *description, bufferlist *payload);
+  template <typename ClientPayload>
+  void get_registered_client(std::string *description, ClientPayload *payload) {
+    bufferlist bl;
+    get_registered_client(description, &bl);
+    bufferlist::iterator p = bl.begin();
+    payload->decode(p);
+  }
 
 private:
   struct C_InitJournaler : public Context {

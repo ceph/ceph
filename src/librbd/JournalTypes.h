@@ -273,12 +273,28 @@ struct EventEntry {
   static void generate_test_instances(std::list<EventEntry *> &o);
 };
 
+struct ClientPayload {
+  std::string fsid;
+  std::string image_id;
+
+  ClientPayload() {}
+  ClientPayload(const std::string &fsid, const std::string &image_id) :
+    fsid(fsid), image_id(image_id) {}
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
 } // namespace journal
 } // namespace librbd
 
 std::ostream &operator<<(std::ostream &out,
                          const librbd::journal::EventType &type);
+std::ostream &operator<<(std::ostream &out,
+                         const librbd::journal::ClientPayload &payload);
 
 WRITE_CLASS_ENCODER(librbd::journal::EventEntry);
+WRITE_CLASS_ENCODER(librbd::journal::ClientPayload);
 
 #endif // CEPH_LIBRBD_JOURNAL_TYPES_H

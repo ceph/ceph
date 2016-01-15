@@ -350,10 +350,12 @@ int journal_client_register(cls_method_context_t hctx, bufferlist *in,
                             bufferlist *out) {
   std::string id;
   std::string description;
+  bufferlist payload;
   try {
     bufferlist::iterator iter = in->begin();
     ::decode(id, iter);
     ::decode(description, iter);
+    ::decode(payload, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -369,7 +371,8 @@ int journal_client_register(cls_method_context_t hctx, bufferlist *in,
     return -EEXIST;
   }
 
-  cls::journal::Client client(id, description);
+  cls::journal::Client client(id, description,
+			      cls::journal::ObjectSetPosition(), payload);
   r = write_key(hctx, key, client);
   if (r < 0) {
     return r;

@@ -159,8 +159,9 @@ int Journaler::remove(bool force) {
   return 0;
 }
 
-int Journaler::register_client(const std::string &description) {
-  return m_metadata->register_client(description);
+  int Journaler::register_client(const std::string &description,
+				 const bufferlist &payload) {
+    return m_metadata->register_client(description, payload);
 }
 
 int Journaler::unregister_client() {
@@ -250,6 +251,16 @@ void Journaler::get_metadata(uint8_t *order, uint8_t *splay_width,
   *order = m_metadata->get_order();
   *splay_width = m_metadata->get_splay_width();
   *pool_id = m_metadata->get_pool_id();
+}
+
+void Journaler::get_registered_client(std::string *description,
+				      bufferlist *payload) {
+  assert(m_metadata != NULL);
+
+  ::cls::journal::Client client;
+  m_metadata->get_registered_client(&client);
+  *description = client.description;
+  *payload = client.payload;
 }
 
 std::ostream &operator<<(std::ostream &os,

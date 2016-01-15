@@ -67,11 +67,14 @@ struct Client {
   std::string id;
   std::string description;
   ObjectSetPosition commit_position;
+  bufferlist payload;
 
   Client() {}
-  Client(const std::string& _id, const std::string& _description,
-         const ObjectSetPosition &_commit_position = ObjectSetPosition())
-    : id(_id), description(_description), commit_position(_commit_position) {}
+  Client(const std::string &id, const std::string &description,
+         const ObjectSetPosition &commit_position = ObjectSetPosition(),
+	 const bufferlist &payload = bufferlist())
+    : id(id), description(description), commit_position(commit_position),
+      payload(payload) {}
 
   inline bool operator==(const Client &rhs) const {
     return (id == rhs.id && description == rhs.description &&
