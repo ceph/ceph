@@ -281,7 +281,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
 
 #else
 
-static int do_curl_wait(CephContext *cct, CURLM *handle)
+static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
 {
   fd_set fdread;
   fd_set fdwrite;
@@ -295,8 +295,12 @@ static int do_curl_wait(CephContext *cct, CURLM *handle)
   /* get file descriptors from the transfers */ 
   int ret = curl_multi_fdset(handle, &fdread, &fdwrite, &fdexcep, &maxfd);
   if (ret) {
-    dout(0) << "ERROR: curl_multi_fdset returned " << ret << dendl;
+    generic_dout(0) << "ERROR: curl_multi_fdset returned " << ret << dendl;
     return -EIO;
+  }
+
+  if (signal_fd >= maxfd) {
+    maxfd = signal_fd + 1;
   }
 
   /* forcing a strict timeout, as the returned fdsets might not reference all fds we wait on */
@@ -315,11 +319,20 @@ static int do_curl_wait(CephContext *cct, CURLM *handle)
     return ret;
   }
 
+  if (signal_fd > 0 && FD_ISSET(signal_fd, &fdread)) {
+    uint32_t buf;
+    ret = read(signal_fd, (void *)&buf, sizeof(buf));
+    if (ret < 0) {
+      ret = -errno;
+      dout(0) << "ERROR: " << __func__ << "(): read() returned " << ret << dendl;
+      return ret;
+    }
+  }
+
   return 0;
 }
 
 #endif
-#warning need to fix do_curl_wait() in second case
 
 void *RGWHTTPManager::ReqsThread::entry()
 {
