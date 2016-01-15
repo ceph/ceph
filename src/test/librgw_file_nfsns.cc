@@ -134,6 +134,7 @@ namespace {
   bool do_marker1 = false;
   bool do_create = false;
   bool do_delete = false;
+  bool do_rename = false;
   bool verbose = false;
 
   string marker_dir("nfs_marker");
@@ -151,6 +152,8 @@ namespace {
   };
 
   obj_rec dirs1_b{dirs1_bucket_name, nullptr, nullptr, nullptr};
+
+  dirs1_vec renames_vec;
 
   struct {
     int argc;
@@ -357,6 +360,63 @@ TEST(LibRGW, RGW_CREATE_DIRS1) {
       }
       n_dirs1_objs++;
     }
+  }
+}
+
+TEST(LibRGW, RGW_SETUP_RENAME1) {
+  /* verify rgw_create (create [empty] file objects the easy way) */
+  if (do_rename) {
+    int rc;
+    struct stat st;
+    obj_vec ovec;
+    for (int b_ix : {0, 1}) {
+      std::string bname{"brename_" + to_string(b_ix)};
+      obj_rec brec{bname, nullptr, nullptr, nullptr};
+      (void) rgw_lookup(fs, fs->root_fh, brec.name.c_str(), &brec.fh,
+			RGW_LOOKUP_FLAG_NONE);
+      if (! brec.fh) {
+	if (do_create) {
+	  struct stat st;
+	  int rc = rgw_mkdir(fs, fs->root_fh, brec.name.c_str(), 755, &st,
+			     &brec.fh, RGW_MKDIR_FLAG_NONE);
+	  ASSERT_EQ(rc, 0);
+	}
+      }
+      ASSERT_NE(brec.fh, nullptr);
+      brec.sync();
+      for (int f_ix : {0, 1}) {
+	std::string rfname{"rfile_"};
+	rfname += to_string(f_ix);
+	obj_rec rf{rfname, nullptr, brec.fh, nullptr};
+	(void) rgw_lookup(fs, rf.parent_fh, rf.name.c_str(), &rf.fh,
+			  RGW_LOOKUP_FLAG_NONE);
+	if (! rf.fh) {
+	  rc = rgw_create(fs, rf.parent_fh, rf.name.c_str(), 644, &st, &rf.fh,
+			  RGW_CREATE_FLAG_NONE);
+	  ASSERT_EQ(rc, 0);
+	}
+	rf.sync();
+	ovec.push_back(rf);
+      }
+      renames_vec.push_back(dirs1_rec{brec, ovec});
+      ovec.clear();
+    } /* b_ix */
+  }
+}
+
+TEST(LibRGW, RGW_INTRABUCKET_RENAME1) {
+  /* rgw_rename a file within a bucket */
+  if (do_rename) {
+    int rc;
+    obj_rec& bdir0 = get<0>(renames_vec[0]);
+    obj_rec& src_obj = get<1>(renames_vec[0])[0];
+    std::string rfname{"rfile_r0"};
+    std::cout << "rename file " << src_obj.name << " to "
+	      << rfname << " (bucket " << bdir0.name << ")"
+	      << std::endl;
+    rc = rgw_rename(fs, bdir0.fh, src_obj.name.c_str(), bdir0.fh,
+		    rfname.c_str(), RGW_RENAME_FLAG_NONE);
+    ASSERT_EQ(rc, 0);
   }
 }
 
@@ -777,6 +837,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--delete",
 					    (char*) nullptr)) {
       do_delete = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--rename",
+					    (char*) nullptr)) {
+      do_rename = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--verbose",
 					    (char*) nullptr)) {
       verbose = true;
