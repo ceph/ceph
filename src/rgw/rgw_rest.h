@@ -283,7 +283,7 @@ public:
   RGWCompleteMultipart_ObjStore() {}
   ~RGWCompleteMultipart_ObjStore() {}
 
-  int get_params();
+  virtual int get_params();
 };
 
 class RGWAbortMultipart_ObjStore : public RGWAbortMultipart {
@@ -319,7 +319,7 @@ public:
   RGWDeleteMultiObj_ObjStore() {}
   ~RGWDeleteMultiObj_ObjStore() {}
 
-  int get_params();
+  virtual int get_params();
 };
 
 class RGWRESTOp : public RGWOp {
