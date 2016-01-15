@@ -1,6 +1,6 @@
 #!/bin/sh -e
 
-dir=../ceph-object-corpus
+dir=$CEPH_ROOT/ceph-object-corpus
 
 set -e
 
@@ -8,7 +8,7 @@ failed=0
 numtests=0
 pids=""
 
-myversion=`./ceph-dencoder version`
+myversion=`ceph-dencoder version`
 DEBUG=0
 WAITALL_DELAY=.1
 debug() { if [ "$DEBUG" -gt 0 ]; then echo "DEBUG: $*" >&2; fi }
@@ -23,7 +23,7 @@ test_object() {
     tmp2=`mktemp /tmp/typ-XXXXXXXXX`
 
     rm -f $output_file
-    if ./ceph-dencoder type $type 2>/dev/null; then
+    if ceph-dencoder type $type 2>/dev/null; then
       #echo "type $type";
       echo "        $vdir/objects/$type"
 
@@ -108,7 +108,7 @@ test_object() {
         # nondeterministically.  compare the sorted json
         # output.  this is a weaker test, but is better than
         # nothing.
-        if ! ./ceph-dencoder type $type is_deterministic; then
+        if ! ceph-dencoder type $type is_deterministic; then
           echo "  sorting json output for nondeterministic object"
           for f in $tmp1 $tmp2; do
             sort $f | sed 's/,$//' > $f.new
