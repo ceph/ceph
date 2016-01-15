@@ -2194,7 +2194,8 @@ int BlueStore::fsck()
       } catch (buffer::error& e) {
 	derr << __func__ << " failed to decode wal txn "
 	     << pretty_binary_string(it->key()) << dendl;
-	return -EIO;
+	r = -EIO;
+        goto out_scan;
       }
       dout(20) << __func__ << "  wal " << wt.seq
 	       << " ops " << wt.ops.size()
@@ -2229,6 +2230,7 @@ int BlueStore::fsck()
     }
   }
 
+ out_scan:
   coll_map.clear();
  out_alloc:
   _close_alloc();
