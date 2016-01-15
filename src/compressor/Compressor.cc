@@ -13,13 +13,21 @@
  */
 
 #include "Compressor.h"
-#include "SnappyCompressor.h"
+#include "CompressionPlugin.h"
 
 
-Compressor* Compressor::create(const string &type)
+CompressorRef Compressor::create(CephContext *cct, const string &type)
 {
-  if (type == "snappy")
-    return new SnappyCompressor();
-
-  assert(0);
+  CompressorRef cs_impl = NULL;
+  stringstream ss;
+  PluginRegistry *reg = cct->get_plugin_registry();
+  CompressionPlugin *factory = dynamic_cast<CompressionPlugin*>(reg->get_with_load("compressor", type));
+  if (factory == NULL) {
+    lderr(cct) << __func__ << " cannot load compressor of type " << type << dendl;
+    return NULL;
+  }
+  int err = factory->factory(&cs_impl, &ss);
+  if (err)
+    lderr(cct) << __func__ << " factory return error " << err << dendl;
+  return cs_impl;
 }
