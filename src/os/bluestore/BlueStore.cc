@@ -97,11 +97,11 @@ const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
  * string encoding in the key
  *
  * The key string needs to lexicographically sort the same way that
- * ghobject_t does.  We do this by escaping anything <= to '%' with %
+ * ghobject_t does.  We do this by escaping anything <= to '#' with #
  * plus a 2 digit hex string, and anything >= '~' with ~ plus the two
  * hex digits.
  *
- * We use ! as a terminator for strings; this works because it is < %
+ * We use ! as a terminator for strings; this works because it is < #
  * and will get escaped if it is present in the string.
  *
  */
