@@ -240,8 +240,9 @@ void rgw_assemble_s3_v4_canonical_request(const char *method, const char *canoni
   }
   dest.append("\n");
 
-  if (canonical_qs)
+  if (canonical_qs) {
     dest.append(canonical_qs);
+  }
   dest.append("\n");
 
   if (canonical_hdrs)
