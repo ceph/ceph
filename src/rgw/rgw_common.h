@@ -1176,6 +1176,8 @@ struct req_state {
   utime_t header_time;
 
   /* Set once when url_bucket is parsed and not violated thereafter. */
+  string account_name;
+
   string bucket_tenant;
   string bucket_name;
 
