@@ -106,6 +106,7 @@ class C_handle_dispatch : public EventCallback {
   C_handle_dispatch(AsyncMessenger *msgr, Message *m): msgr(msgr), m(m) {}
   void do_request(int id) {
     msgr->ms_deliver_dispatch(m);
+    delete this;
   }
 };
 
@@ -128,6 +129,7 @@ class C_deliver_accept : public EventCallback {
   C_deliver_accept(AsyncMessenger *msgr, AsyncConnectionRef c): msgr(msgr), conn(c) {}
   void do_request(int id) {
     msgr->ms_deliver_handle_accept(conn.get());
+    delete this;
   }
 };
 
