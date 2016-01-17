@@ -405,9 +405,6 @@ namespace rgw {
     lock_guard guard(mtx);
 
     int rc = 0;
-    buffer::list bl;
-    bl.push_back(
-      buffer::create_static(len, static_cast<char*>(buffer)));
 
     file* f = get<file>(&variant_type);
     if (! f)
@@ -421,6 +418,10 @@ namespace rgw {
 			    bucket_name(), object_name);
       rc = rgwlib.get_fe()->start_req(f->write_req);
     }
+
+    buffer::list bl;
+    bl.push_back(
+      buffer::create_static(len, static_cast<char*>(buffer)));
 
     f->write_req->put_data(off, bl);
     rc = f->write_req->exec_continue();
@@ -1142,6 +1143,8 @@ int rgw_write(struct rgw_fs *rgw_fs,
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
   int rc;
 
+  *bytes_written = 0;
+
   if (! rgw_fh->is_file())
     return -EISDIR;
 
@@ -1159,11 +1162,6 @@ int rgw_write(struct rgw_fs *rgw_fs,
 	    << " wrote " << *bytes_written
 	    << " rc " << rc
 	    << std::endl;
-
-  std::string str;
-  str.reserve(length+1);
-  str.assign(static_cast<char*>(buffer), uint32_t(length));
-  str += '\0';
 
   return rc;
 }
