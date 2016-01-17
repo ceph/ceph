@@ -317,6 +317,7 @@ NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
       queue_empty(1),
       queue_lock("NVMEDevice::queue_lock"),
       aio_thread(this),
+      logger(nullptr),
       inflight_ops(0),
       aio_callback(cb),
       aio_callback_priv(cbpriv)
@@ -349,7 +350,6 @@ int NVMEDevice::open(string p)
   }
   block_size = nvme_ns_get_sector_size(ns);
   size = block_size * nvme_ns_get_num_sectors(ns);
-  aio_thread.create("nvme_aio_thread");
 
   dout(1) << __func__ << " size " << size << " (" << pretty_si_t(size) << "B)"
           << " block_size " << block_size << " (" << pretty_si_t(block_size)
@@ -363,6 +363,8 @@ int NVMEDevice::open(string p)
   b.add_u64(l_bluestore_nvmedevice_queue_ops, "queue_ops", "Operations in nvme queue");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
+
+  aio_thread.create("nvme_aio_thread");
 
   return 0;
 }
@@ -381,6 +383,7 @@ void NVMEDevice::close()
 
   g_ceph_context->get_perfcounters_collection()->remove(logger);
   delete logger;
+  logger = nullptr;
 
   name.clear();
   driver_data.release(ctrlr);
@@ -398,7 +401,7 @@ void NVMEDevice::_aio_thread()
   int r = 0;
   const int max = 16;
   uint64_t lba_off, lba_count;
-  while (!aio_stop) {
+  while (true) {
     dout(40) << __func__ << " polling" << dendl;
     t = nullptr;
     if (!queue_empty.read()) {
@@ -412,8 +415,11 @@ void NVMEDevice::_aio_thread()
         queue_empty.inc();
     } else if (!inflight_ops.read()) {
       Mutex::Locker l(queue_lock);
-      if (queue_empty.read())
+      if (queue_empty.read()) {
+        if (aio_stop)
+          break;
         queue_cond.Wait(queue_lock);
+      }
     }
 
     if (t) {
