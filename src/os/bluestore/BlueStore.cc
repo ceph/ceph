@@ -3867,17 +3867,19 @@ int BlueStore::_wal_replay()
   for (it->lower_bound(string()); it->valid(); it->next(), ++count) {
     dout(20) << __func__ << " replay " << pretty_binary_string(it->key())
 	     << dendl;
-    TransContext *txc = _txc_create(osr.get());
-    txc->wal_txn = new bluestore_wal_transaction_t;
+    bluestore_wal_transaction_t *wal_txn = new bluestore_wal_transaction_t;
     bufferlist bl = it->value();
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(*txc->wal_txn, p);
+      ::decode(*wal_txn, p);
     } catch (buffer::error& e) {
       derr << __func__ << " failed to decode wal txn "
 	   << pretty_binary_string(it->key()) << dendl;
+      delete wal_txn;
       return -EIO;
     }
+    TransContext *txc = _txc_create(osr.get());
+    txc->wal_txn = wal_txn;
     txc->state = TransContext::STATE_KV_DONE;
     _txc_state_proc(txc);
   }
