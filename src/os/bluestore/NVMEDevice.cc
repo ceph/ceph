@@ -62,28 +62,28 @@ static void io_complete(void *t, const struct nvme_completion *completion) {
   Task *task = static_cast<Task*>(t);
   IOContext *ctx = task->ctx;
   task->device->inflight_ops.dec();
+  utime_t lat = ceph_clock_now(g_ceph_context);
+  lat -= task->start;
   if (task->command == IOCommand::WRITE_COMMAND) {
+    task->device->logger->tinc(l_bluestore_nvmedevice_aio_write_lat, lat);
     auto left = ctx->num_running.dec();
     assert(!nvme_completion_is_error(completion));
     // check waiting count before doing callback (which may
     // destroy this ioc).
     dout(20) << __func__ << " write op successfully, left " << left << dendl;
     if (!left) {
-      bool exist_priv = ctx->priv != nullptr;
       if (ctx->num_waiting.read()) {
         Mutex::Locker l(ctx->lock);
         ctx->cond.Signal();
       }
-      if (exist_priv) {
+      if (task->device->aio_callback && ctx->priv) {
         task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
       }
     }
-    utime_t lat = ceph_clock_now(g_ceph_context);
-    lat -= task->start;
-    task->device->logger->tinc(l_bluestore_nvmedevice_aio_write_lat, lat);
     rte_free(task->buf);
     rte_mempool_put(task_pool, task);
   } else if (task->command == IOCommand::READ_COMMAND) {
+    task->device->logger->tinc(l_bluestore_nvmedevice_read_lat, lat);
     ctx->num_reading.dec();
     dout(20) << __func__ << " read op successfully" << dendl;
     if (nvme_completion_is_error(completion))
@@ -94,11 +94,9 @@ static void io_complete(void *t, const struct nvme_completion *completion) {
       Mutex::Locker l(ctx->lock);
       ctx->cond.Signal();
     }
-    utime_t lat = ceph_clock_now(g_ceph_context);
-    lat -= task->start;
-    task->device->logger->tinc(l_bluestore_nvmedevice_read_lat, lat);
   } else {
     assert(task->command == IOCommand::FLUSH_COMMAND);
+    task->device->logger->tinc(l_bluestore_nvmedevice_flush_lat, lat);
     dout(20) << __func__ << " flush op successfully" << dendl;
     if (nvme_completion_is_error(completion))
       task->return_code = -1; // FIXME
@@ -108,9 +106,6 @@ static void io_complete(void *t, const struct nvme_completion *completion) {
       Mutex::Locker l(ctx->lock);
       ctx->cond.Signal();
     }
-    utime_t lat = ceph_clock_now(g_ceph_context);
-    lat -= task->start;
-    task->device->logger->tinc(l_bluestore_nvmedevice_flush_lat, lat);
   }
 }
 
@@ -390,6 +385,8 @@ void NVMEDevice::close()
   name.clear();
   driver_data.release(ctrlr);
   ctrlr = nullptr;
+
+  dout(1) << __func__ << " end" << dendl;
 }
 
 void NVMEDevice::_aio_thread()
@@ -415,7 +412,7 @@ void NVMEDevice::_aio_thread()
       }
       if (!t)
         queue_empty.inc();
-    } else if (!inflight_ops.read()) {
+    } else if (!inflight_ops.read() && !flush_waiters.read()) {
       Mutex::Locker l(queue_lock);
       if (queue_empty.read()) {
         if (aio_stop)
