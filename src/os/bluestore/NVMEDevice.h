@@ -92,6 +92,10 @@ class NVMEDevice : public BlockDevice {
 
   void _aio_thread();
 
+  Mutex flush_lock;
+  Cond flush_cond;
+  atomic_t flush_waiters;
+
   static void init();
 
  public:

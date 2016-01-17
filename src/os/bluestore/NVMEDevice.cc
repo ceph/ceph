@@ -317,6 +317,8 @@ NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
       queue_empty(1),
       queue_lock("NVMEDevice::queue_lock"),
       aio_thread(this),
+      flush_lock("NVMEDevice::flush_lock"),
+      flush_waiters(0),
       logger(nullptr),
       inflight_ops(0),
       aio_callback(cb),
@@ -418,6 +420,7 @@ void NVMEDevice::_aio_thread()
       if (queue_empty.read()) {
         if (aio_stop)
           break;
+        assert(flush_waiters.read() == 0);
         queue_cond.Wait(queue_lock);
       }
     }
@@ -477,6 +480,10 @@ void NVMEDevice::_aio_thread()
       }
     } else if (!inflight_ops.read()) {
       dout(20) << __func__ << " idle, have a pause" << dendl;
+      if (flush_waiters.read()) {
+        Mutex::Locker l(flush_lock);
+        flush_cond.Signal();
+      }
 #ifdef HAVE_SSE
       _mm_pause();
 #else
@@ -494,6 +501,16 @@ void NVMEDevice::_aio_thread()
 int NVMEDevice::flush()
 {
   dout(10) << __func__ << " start" << dendl;
+  if (inflight_ops.read()) {
+    // TODO: this may contains read op
+    dout(1) << __func__ << " existed inflight ops " << inflight_ops.read() << dendl;
+    Mutex::Locker l(flush_lock);
+    flush_waiters.inc();
+    while (inflight_ops.read()) {
+      flush_cond.Wait(flush_lock);
+    }
+    flush_waiters.dec();
+  }
   return 0;
   // nvme device will cause terriable performance degraded
   // while issuing flush command
