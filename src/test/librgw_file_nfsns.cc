@@ -47,6 +47,8 @@ namespace {
   string bucket_name("nfsroot");
   string dirs1_bucket_name("bdirs1");
   string readf_name("toyland");
+  string readf_out_name("rgwlib_readf.out");
+  std::string writef_name{"bigbird"};
 
   int n_dirs1_dirs = 3;
   int n_dirs1_objs = 2;
@@ -135,6 +137,7 @@ namespace {
   bool do_hier1 = false;
   bool do_dirs1 = false;
   bool do_readf = false;
+  bool do_writef = false;
   bool do_marker1 = false;
   bool do_create = false;
   bool do_delete = false;
@@ -415,9 +418,11 @@ TEST(LibRGW, RGW_INTRABUCKET_RENAME1) {
     obj_rec& bdir0 = get<0>(renames_vec[0]);
     obj_rec& src_obj = get<1>(renames_vec[0])[0];
     std::string rfname{"rfile_r0"};
-    std::cout << "rename file " << src_obj.name << " to "
-	      << rfname << " (bucket " << bdir0.name << ")"
-	      << std::endl;
+    if (verbose) {
+      std::cout << "rename file " << src_obj.name << " to "
+		<< rfname << " (bucket " << bdir0.name << ")"
+		<< std::endl;
+    }
     rc = rgw_rename(fs, bdir0.fh, src_obj.name.c_str(), bdir0.fh,
 		    rfname.c_str(), RGW_RENAME_FLAG_NONE);
     ASSERT_EQ(rc, 0);
@@ -432,10 +437,12 @@ TEST(LibRGW, RGW_CROSSBUCKET_RENAME1) {
     obj_rec& bdir1 = get<0>(renames_vec[1]);
     obj_rec& src_obj = get<1>(renames_vec[0])[1];
     std::string rfname{"rfile_rhilldog"};
-    std::cout << "rename file " << src_obj.name
-	      << " (bucket " << bdir0.name << ") to "
-	      << rfname << " (bucket " << bdir1.name << ")"
-	      << std::endl;
+    if (verbose) {
+      std::cout << "rename file " << src_obj.name
+		<< " (bucket " << bdir0.name << ") to "
+		<< rfname << " (bucket " << bdir1.name << ")"
+		<< std::endl;
+    }
     rc = rgw_rename(fs, bdir0.fh, src_obj.name.c_str(), bdir1.fh,
 		    rfname.c_str(), RGW_RENAME_FLAG_NONE);
     ASSERT_EQ(rc, 0);
@@ -548,7 +555,7 @@ TEST(LibRGW, READF_DIRS1) {
       fobj.sync();
 
       ofstream of;
-      of.open("rgwlib_readf.out", ios::out|ios::app|ios::binary);
+      of.open(readf_out_name, ios::out|ios::app|ios::binary);
       int bufsz = 1024 * 1024 * sizeof(char);
       char *buffer = (char*) malloc(bufsz);
 
@@ -565,6 +572,72 @@ TEST(LibRGW, READF_DIRS1) {
 	offset += nread;
       }
       of.close();
+      free(buffer);
+      rgw_fh_rele(fs, fobj.fh, 0 /* flags */);
+    }
+  }
+}
+
+TEST(LibRGW, WRITEF_DIRS1) {
+  if (do_dirs1) {
+    if (do_writef) {
+      int rc;
+      ifstream ifs;
+      ifs.open(readf_out_name, ios::out|ios::app|ios::binary);
+      ASSERT_TRUE(ifs.is_open());
+
+      obj_rec fobj{writef_name, nullptr, dirs1_b.fh, nullptr};
+
+      (void) rgw_lookup(fs, fobj.parent_fh, fobj.name.c_str(), &fobj.fh,
+			RGW_LOOKUP_FLAG_NONE);
+      if (! fobj.fh) {
+	if (do_create) {
+	  /* make a new file object (the hard way) */
+	  rc = rgw_lookup(fs, fobj.parent_fh, fobj.name.c_str(), &fobj.fh,
+			  RGW_LOOKUP_FLAG_CREATE);
+	  ASSERT_EQ(rc, 0);
+	}
+      }
+      ASSERT_NE(fobj.fh, nullptr);
+      fobj.sync();
+
+      /* begin write transaction */
+      rc = rgw_open(fs, fobj.fh, 0 /* flags */);
+      ASSERT_EQ(rc, 0);
+      ASSERT_TRUE(fobj.rgw_fh->is_open());
+
+      int bufsz = 1024 * 1024 * sizeof(char);
+      char *buffer = (char*) malloc(bufsz);
+
+      uint64_t offset = 0;
+      uint64_t length = bufsz;
+      for (int ix = 0; ix < 6; ++ix) {
+	ASSERT_TRUE(ifs.good());
+	ifs.read(buffer, bufsz);
+	uint64_t nwritten = 0;
+	string str;
+	str.assign(buffer, 4);
+	if (verbose) {
+	  std::cout << "read and writing " << length << " bytes"
+		    << " from " << readf_out_name
+		    << " at offset " << offset
+		    << " (" << str << "... [first 4 chars])"
+		    << std::endl;
+	}
+	rc = rgw_write(fs, fobj.fh, offset, length, &nwritten, buffer,
+		      RGW_WRITE_FLAG_NONE);
+	ASSERT_EQ(rc, 0);
+	ASSERT_EQ(nwritten, length);
+	offset += length;
+      }
+
+      /* commit write transaction */
+      rc = rgw_close(fs, fobj.fh, RGW_CLOSE_FLAG_NONE);
+      ASSERT_EQ(rc, 0);
+
+      ifs.close();
+      free(buffer);
+      rgw_fh_rele(fs, fobj.fh, 0 /* flags */);
     }
   }
 }
@@ -897,6 +970,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--readf",
 					    (char*) nullptr)) {
       do_readf = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--writef",
+					    (char*) nullptr)) {
+      do_writef = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--verbose",
 					    (char*) nullptr)) {
       verbose = true;
