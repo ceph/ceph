@@ -498,6 +498,7 @@ void NVMEDevice::_aio_thread()
 int NVMEDevice::flush()
 {
   dout(10) << __func__ << " start" << dendl;
+  utime_t start = ceph_clock_now(g_ceph_context);
   if (inflight_ops.read()) {
     // TODO: this may contains read op
     dout(1) << __func__ << " existed inflight ops " << inflight_ops.read() << dendl;
@@ -508,6 +509,9 @@ int NVMEDevice::flush()
     }
     flush_waiters.dec();
   }
+  utime_t lat = ceph_clock_now(g_ceph_context);
+  lat -= start;
+  logger->tinc(l_bluestore_nvmedevice_flush_lat, lat);
   return 0;
   // nvme device will cause terriable performance degraded
   // while issuing flush command
