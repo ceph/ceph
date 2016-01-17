@@ -41,6 +41,7 @@ extern "C" {
 #define LIBRBD_SUPPORTS_WATCH 0
 #define LIBRBD_SUPPORTS_AIO_FLUSH 1
 #define LIBRBD_SUPPORTS_INVALIDATE 1
+#define LIBRBD_SUPPORTS_AIO_OPEN 1
 
 #if __GNUC__ >= 4
   #define CEPH_RBD_API    __attribute__ ((visibility ("default")))
@@ -54,6 +55,9 @@ extern "C" {
 typedef void *rbd_snap_t;
 typedef void *rbd_image_t;
 typedef void *rbd_image_options_t;
+
+typedef void *rbd_completion_t;
+typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
 
 typedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void *ptr);
 
@@ -188,6 +192,9 @@ CEPH_RBD_API int rbd_mirror_peer_set_cluster(rados_ioctx_t io_ctx,
 CEPH_RBD_API int rbd_open(rados_ioctx_t io, const char *name,
                           rbd_image_t *image, const char *snap_name);
 
+CEPH_RBD_API int rbd_aio_open(rados_ioctx_t io, const char *name,
+			      rbd_image_t *image, const char *snap_name,
+			      rbd_completion_t c);
 /**
  * Open an image in read-only mode.
  *
@@ -209,7 +216,11 @@ CEPH_RBD_API int rbd_open(rados_ioctx_t io, const char *name,
  */
 CEPH_RBD_API int rbd_open_read_only(rados_ioctx_t io, const char *name,
                                     rbd_image_t *image, const char *snap_name);
+CEPH_RBD_API int rbd_aio_open_read_only(rados_ioctx_t io, const char *name,
+					rbd_image_t *image, const char *snap_name,
+					rbd_completion_t c);
 CEPH_RBD_API int rbd_close(rbd_image_t image);
+CEPH_RBD_API int rbd_aio_close(rbd_image_t image, rbd_completion_t c);
 CEPH_RBD_API int rbd_resize(rbd_image_t image, uint64_t size);
 CEPH_RBD_API int rbd_resize_with_progress(rbd_image_t image, uint64_t size,
 			     librbd_progress_fn_t cb, void *cbdata);
@@ -423,8 +434,6 @@ CEPH_RBD_API int rbd_break_lock(rbd_image_t image, const char *client,
 /** @} locking */
 
 /* I/O */
-typedef void *rbd_completion_t;
-typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
 CEPH_RBD_API ssize_t rbd_read(rbd_image_t image, uint64_t ofs, size_t len,
                               char *buf);
 /*

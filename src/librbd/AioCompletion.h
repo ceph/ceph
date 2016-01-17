@@ -21,11 +21,13 @@ namespace librbd {
   class AioObjectRead;
 
   typedef enum {
-    AIO_TYPE_READ = 0,
+    AIO_TYPE_NONE = 0,
+    AIO_TYPE_OPEN,
+    AIO_TYPE_CLOSE,
+    AIO_TYPE_READ,
     AIO_TYPE_WRITE,
     AIO_TYPE_DISCARD,
     AIO_TYPE_FLUSH,
-    AIO_TYPE_NONE,
   } aio_type_t;
 
   /**
@@ -156,11 +158,17 @@ namespace librbd {
       int n = --ref;
       lock.Unlock();
       if (!n) {
-        if (ictx && event_notify) {
-          ictx->completed_reqs_lock.Lock();
-          m_xlist_item.remove_myself();
-          ictx->completed_reqs_lock.Unlock();
-        }
+        if (ictx) {
+	  if (event_notify) {
+	    ictx->completed_reqs_lock.Lock();
+	    m_xlist_item.remove_myself();
+	    ictx->completed_reqs_lock.Unlock();
+	  }
+	  if (aio_type == AIO_TYPE_CLOSE || (aio_type == AIO_TYPE_OPEN &&
+					     rval < 0)) {
+	    delete ictx;
+	  }
+	}
         delete this;
       }
     }
