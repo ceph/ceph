@@ -420,8 +420,14 @@ namespace rgw {
     }
 
     buffer::list bl;
+    /* XXXX */
+#if 0
     bl.push_back(
       buffer::create_static(len, static_cast<char*>(buffer)));
+#else
+    bl.push_back(
+      buffer::copy(static_cast<char*>(buffer), len));
+#endif
 
     f->write_req->put_data(off, bl);
     rc = f->write_req->exec_continue();
@@ -506,8 +512,9 @@ namespace rgw {
     if (! len)
       return 0;
 
-    /* XXX won't see multipart */
-    bool need_to_wait = (ofs == 0) && multipart;
+    /* XXX we are currently synchronous--supplied data buffers cannot
+     * be used after the caller returns  */
+    bool need_to_wait = true;
     bufferlist orig_data;
 
     if (need_to_wait) {

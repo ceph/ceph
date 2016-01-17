@@ -624,7 +624,9 @@ TEST(LibRGW, WRITEF_DIRS1) {
 		    << " (" << str << "... [first 4 chars])"
 		    << std::endl;
 	}
-	rc = rgw_write(fs, fobj.fh, offset, length, &nwritten, buffer,
+	char* leakbuf = (char*) malloc(bufsz);
+	memcpy(leakbuf, buffer, length);
+	rc = rgw_write(fs, fobj.fh, offset, length, &nwritten, leakbuf,
 		      RGW_WRITE_FLAG_NONE);
 	ASSERT_EQ(rc, 0);
 	ASSERT_EQ(nwritten, length);
