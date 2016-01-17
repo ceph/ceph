@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <tuple>
 #include <iostream>
+#include <fstream>
 #include <stack>
 
 #include "include/rados/librgw.h"
@@ -45,6 +46,8 @@ namespace {
 
   string bucket_name("nfsroot");
   string dirs1_bucket_name("bdirs1");
+  string readf_name("toyland");
+
   int n_dirs1_dirs = 3;
   int n_dirs1_objs = 2;
 
@@ -131,6 +134,7 @@ namespace {
 
   bool do_hier1 = false;
   bool do_dirs1 = false;
+  bool do_readf = false;
   bool do_marker1 = false;
   bool do_create = false;
   bool do_delete = false;
@@ -448,8 +452,7 @@ TEST(LibRGW, BAD_DELETES_DIRS1) {
       ASSERT_NE(rc, 0);
     }
     /* try to unlink a non-empty directory (non-bucket) */
-    obj_rec& sdir_0 = get<1>(dirs_vec[0])[0];
-    ASSERT_EQ(sdir_0.name, "sdir_0");
+    obj_rec& sdir_0 = get<1>(dirs_vec[0])[0];    ASSERT_EQ(sdir_0.name, "sdir_0");
     ASSERT_TRUE(sdir_0.rgw_fh->is_dir());
     /* XXX we can't enforce this currently */
 #if 0
@@ -529,6 +532,39 @@ TEST(LibRGW, READ_DIRS1)
 	  }
 	}
       }
+    }
+  }
+}
+
+TEST(LibRGW, READF_DIRS1) {
+  if (do_dirs1) {
+    if (do_readf) {
+      obj_rec fobj{readf_name, nullptr, dirs1_b.fh, nullptr};
+
+      int rc = rgw_lookup(fs, dirs1_b.fh, fobj.name.c_str(), &fobj.fh,
+			  RGW_LOOKUP_FLAG_NONE);
+      ASSERT_EQ(rc, 0);
+      ASSERT_NE(fobj.fh, nullptr);
+      fobj.sync();
+
+      ofstream of;
+      of.open("rgwlib_readf.out", ios::out|ios::app|ios::binary);
+      int bufsz = 1024 * 1024 * sizeof(char);
+      char *buffer = (char*) malloc(bufsz);
+
+      uint64_t offset = 0;
+      uint64_t length = bufsz;
+      for (int ix = 0; ix < 6; ++ix) {
+	uint64_t nread = 0;
+	memset(buffer, 0, length); // XXX
+	rc = rgw_read(fs, fobj.fh, offset, length, &nread, buffer,
+		      RGW_READ_FLAG_NONE);
+	ASSERT_EQ(rc, 0);
+	ASSERT_EQ(nread, length);
+	of.write(buffer, length);
+	offset += nread;
+      }
+      of.close();
     }
   }
 }
@@ -858,6 +894,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--rename",
 					    (char*) nullptr)) {
       do_rename = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--readf",
+					    (char*) nullptr)) {
+      do_readf = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--verbose",
 					    (char*) nullptr)) {
       verbose = true;
