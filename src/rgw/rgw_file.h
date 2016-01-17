@@ -1334,14 +1334,14 @@ public:
   RGWFileHandle* rgw_fh;
   void *ulp_buffer;
   size_t nread;
-  size_t read_len;
+  size_t read_resid; /* initialize to len, <= sizeof(ulp_buffer) */
   bool do_hexdump = false;
 
   RGWReadRequest(CephContext* _cct, RGWUserInfo *_user,
 		 RGWFileHandle* _rgw_fh, uint64_t off, uint64_t len,
 		 void *_ulp_buffer)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), ulp_buffer(_ulp_buffer),
-      nread(0), read_len(len) {
+      nread(0), read_resid(len) {
     magic = 76;
     op = this;
 
@@ -1390,25 +1390,25 @@ public:
     return 0;
   }
 
-  virtual int send_response_data(ceph::buffer::list& bl, off_t s_off,
-				off_t e_off) {
-    if (do_hexdump) {
-      dout(15) << __func__ << " s_off " << s_off
-	       << " e_off " << e_off << " len " << bl.length()
-	       << " ";
-      bl.hexdump(*_dout);
-      *_dout << dendl;
-    }
-    uint64_t off = 0;
+  virtual int send_response_data(ceph::buffer::list& bl, off_t bl_off,
+				off_t bl_len) {
+    size_t bytes;
     for (auto& bp : bl.buffers()) {
-      if (nread >= read_len)
-	break;
-      size_t bytes = std::min(std::min(read_len, size_t(bp.length())),
-			      size_t(e_off));
-      memcpy(static_cast<char*>(ulp_buffer)+off, bp.c_str()+s_off, bytes);
+      /* if for some reason bl_off indicates the start-of-data is not at
+       * the current buffer::ptr, skip it and account */
+      if (bl_off > bp.length()) {
+	bl_off -= bp.length();
+	continue;
+      }
+      /* read no more than read_resid */
+      bytes = std::min(read_resid, size_t(bp.length()-bl_off));
+      memcpy(static_cast<char*>(ulp_buffer)+nread, bp.c_str()+bl_off, bytes);
+      read_resid -= bytes; /* reduce read_resid by bytes read */
       nread += bytes;
-      off += bytes;
-      s_off -= bytes;
+      bl_off = 0;
+      /* stop if we have no residual ulp_buffer */
+      if (! read_resid)
+	break;
     }
     return 0;
   }
@@ -1823,8 +1823,8 @@ public:
 
   virtual int get_data(buffer::list& _bl) {
     /* XXX for now, use sharing semantics */
+    uint32_t len = data.length();
     _bl.claim(data);
-    uint32_t len = _bl.length();
     bytes_written += len;
     return len;
   }

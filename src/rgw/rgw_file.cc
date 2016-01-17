@@ -1140,6 +1140,7 @@ int rgw_write(struct rgw_fs *rgw_fs,
 	      uint32_t flags)
 {
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
+  int rc;
 
   if (! rgw_fh->is_file())
     return -EISDIR;
@@ -1147,20 +1148,24 @@ int rgw_write(struct rgw_fs *rgw_fs,
   if (! rgw_fh->is_open())
     return -EPERM;
 
-  char tbuf[256];
-  size_t tlen = std::min(length, 255UL);
-  memset(tbuf, 0, 256);
-  memcpy(tbuf, buffer, tlen);
-  std::cout << __func__ << " " << length << " bytes"
-	    << " at offset " << offset
-	    << " {{" << tbuf << "}}" << std::endl;
-#if 1 /* XXXX buffer::create_static w/buffer corrupts data  */
-  string xxx_bogus{tbuf};
-  return rgw_fh->write(0, xxx_bogus.size(), bytes_written,
-		       const_cast<char*>(xxx_bogus.c_str()));
-#else
-  return rgw_fh->write(offset, length+1, bytes_written, tbuf);
-#endif
+  std::cout << __func__ << " before write of "
+	    << length << " bytes at offset " << offset
+	    << std::endl;
+
+  rc = rgw_fh->write(offset, length, bytes_written, buffer);
+
+  std::cout << __func__ << " after write of "
+	    << length << " bytes at offset " << offset
+	    << " wrote " << *bytes_written
+	    << " rc " << rc
+	    << std::endl;
+
+  std::string str;
+  str.reserve(length+1);
+  str.assign(static_cast<char*>(buffer), uint32_t(length));
+  str += '\0';
+
+  return rc;
 }
 
 /*
