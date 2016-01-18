@@ -383,10 +383,11 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
 {
   ceph_spin_init(&global_seq_lock);
   cct->lookup_or_create_singleton_object<WorkerPool>(pool, WorkerPool::name);
-  Worker *w = pool->get_worker();
-  local_connection = new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+  local_worker = pool->get_worker();
+  local_connection = new AsyncConnection(cct, this, &local_worker->center, local_worker->get_perf_counter());
   local_features = features;
   init_local_connection();
+  reap_handler = new C_handle_reap(this);
 }
 
 /**
@@ -395,6 +396,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
  */
 AsyncMessenger::~AsyncMessenger()
 {
+  delete reap_handler;
   assert(!did_bind); // either we didn't bind or we shut down the Processor
   local_connection->mark_down();
 }
@@ -735,4 +737,26 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
     _init_local_connection();
   }
   lock.Unlock();
+}
+
+int AsyncMessenger::reap_dead()
+{
+  int num = 0;
+
+  Mutex::Locker l1(lock);
+  Mutex::Locker l2(deleted_lock);
+
+  while (!deleted_conns.empty()) {
+    auto it = deleted_conns.begin();
+    AsyncConnectionRef p = *it;
+    ldout(cct, 5) << __func__ << " delete " << p << dendl;
+    auto conns_it = conns.find(p->peer_addr);
+    if (conns_it != conns.end() && conns_it->second == p)
+      conns.erase(conns_it);
+    accepting_conns.erase(p);
+    deleted_conns.erase(it);
+    ++num;
+  }
+
+  return num;
 }

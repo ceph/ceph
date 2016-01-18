@@ -248,7 +248,6 @@ void EventCenter::delete_time_event(uint64_t id)
   if (id >= time_event_next_id)
     return ;
 
-
   for (map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
        it != time_events.end(); ++it) {
     for (list<TimeEvent>::iterator j = it->second.begin();
