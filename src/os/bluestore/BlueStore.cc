@@ -345,20 +345,17 @@ static int get_key_object(const string& key, ghobject_t *oid)
   int r;
   const char *p = key.c_str();
 
-  p = _key_decode_shard(p, &oid->shard_id);
-  if (!*p)
+  if (key.length() < 2 + 8 + 4)
     return -2;
+  p = _key_decode_shard(p, &oid->shard_id);
 
   uint64_t pool;
   p = _key_decode_u64(p, &pool);
-  if (!*p)
-    return -3;
   oid->hobj.pool = pool - 0x8000000000000000ull;
 
   unsigned hash;
   p = _key_decode_u32(p, &hash);
-  if (!*p)
-    return -4;
+
   oid->hobj.set_bitwise_key_u32(hash);
   if (*p != '.')
     return -5;
@@ -395,8 +392,6 @@ static int get_key_object(const string& key, ghobject_t *oid)
   }
 
   p = _key_decode_u64(p, &oid->hobj.snap.val);
-  if (!*p)
-    return -11;
   p = _key_decode_u64(p, &oid->generation);
   if (*p) {
     // if we get something other than a null terminator here, 
