@@ -74,6 +74,18 @@ public:
   void expect_op_work_queue(librbd::MockImageCtx &mock_image_ctx);
   void expect_unlock_exclusive_lock(librbd::ImageCtx &ictx);
 
+  void initialize_features(librbd::ImageCtx *ictx,
+                           librbd::MockImageCtx &mock_image_ctx,
+                           librbd::MockExclusiveLock &mock_exclusive_lock,
+                           librbd::MockJournal &mock_journal,
+                           librbd::MockObjectMap &mock_object_map);
+
+  void expect_is_journal_replaying(librbd::MockJournal &mock_journal);
+  void expect_is_journal_ready(librbd::MockJournal &mock_journal);
+  void expect_allocate_op_tid(librbd::MockImageCtx &mock_image_ctx);
+  void expect_append_op_event(librbd::MockImageCtx &mock_image_ctx, int r);
+  void expect_commit_op_event(librbd::MockImageCtx &mock_image_ctx, int r);
+
 private:
   static TestRadosClientPtr s_test_rados_client;
   static ::testing::NiceMock<librados::MockTestMemRadosClient> *s_mock_rados_client;

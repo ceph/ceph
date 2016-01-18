@@ -46,7 +46,7 @@ void ResizeRequest::send() {
   rados_completion->release();
 }
 
-void ResizeRequest::finish() {
+void ResizeRequest::finish_request() {
   CephContext *cct = m_image_ctx.cct;
 
   ldout(cct, 5) << &m_image_ctx << " resizing in-memory object map: "

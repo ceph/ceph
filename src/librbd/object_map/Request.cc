@@ -33,7 +33,7 @@ bool Request::should_complete(int r) {
 
     {
       RWLock::WLocker l2(m_image_ctx.object_map_lock);
-      finish();
+      finish_request();
     }
     return true;
 

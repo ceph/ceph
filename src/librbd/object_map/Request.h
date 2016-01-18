@@ -33,8 +33,8 @@ protected:
     // never propagate an error back to the caller
     return 0;
   }
-  virtual void finish() = 0;
-  using AsyncRequest<>::finish;
+  virtual void finish_request() {
+  }
 
 private:
   /**

@@ -16,8 +16,12 @@ struct MockObjectMap {
   MOCK_METHOD1(lock, void(Context *on_finish));
   MOCK_METHOD1(unlock, void(Context *on_finish));
 
+  MOCK_METHOD3(aio_resize, void(uint64_t new_size, uint8_t default_object_state,
+                                Context *on_finish));
+
   MOCK_METHOD2(snapshot_add, void(uint64_t snap_id, Context *on_finish));
   MOCK_METHOD2(snapshot_remove, void(uint64_t snap_id, Context *on_finish));
+  MOCK_METHOD2(rollback, void(uint64_t snap_id, Context *on_finish));
 };
 
 } // namespace librbd
