@@ -11,7 +11,7 @@ from StringIO import StringIO
 import teuthology
 from . import orchestra
 import orchestra.remote
-from .openstack import OpenStack, OpenStackInstance
+from .openstack import OpenStack, OpenStackInstance, enforce_json_dictionary
 from .orchestra import run
 from .config import config, FakeNamespace
 from .lock import list_locks
@@ -435,7 +435,7 @@ def stale_openstack_volumes(ctx, volumes):
             log.debug("stale-openstack: {id} disappeared, ignored"
                       .format(id=volume['ID']))
             continue
-        volume = dict(map(lambda v: (v['Field'], v['Value']), volume))
+        enforce_json_dictionary(volume)
         created_at = datetime.datetime.strptime(
             volume['created_at'], '%Y-%m-%dT%H:%M:%S.%f')
         created = (now - created_at).total_seconds()

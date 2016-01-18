@@ -28,12 +28,11 @@ class TestNuke(object):
         # A volume created a second ago is left untouched
         #
         volume_show = (
-            '['
-            ' {"Field": "id", "Value": "' + id + '"},'
-            ' {"Field": "created_at", "Value": "' + now + '"},'
-            ' {"Field": "display_name", "Value": "' + name + '"}'
-            ']'
+            '{"id": "' + id + '", '
+            '"created_at": "' + now + '", '
+            '"display_name": "' + name + '"}'
         )
+
         def sh(cmd):
             if 'volume show' in cmd:
                 return volume_show
@@ -51,12 +50,11 @@ class TestNuke(object):
         #
         ancient = "2000-11-02T15:43:12.000000"
         volume_show = (
-            '['
-            ' {"Field": "id", "Value": "' + id + '"},'
-            ' {"Field": "created_at", "Value": "' + ancient + '"},'
-            ' {"Field": "display_name", "Value": "' + name + '"}'
-            ']'
+            '{"id": "' + id + '", '
+            '"created_at": "' + ancient + '", '
+            '"display_name": "' + name + '"}'
         )
+
         def sh(cmd):
             if 'volume show' in cmd:
                 return volume_show
@@ -147,7 +145,7 @@ class TestNuke(object):
             nuke.stale_openstack_nodes(ctx, {
                 uuid: {
                     'ID': uuid,
-                    'Name': name, 
+                    'Name': name,
                 },
             }, {
                 name: { 'locked_since': ancient,
