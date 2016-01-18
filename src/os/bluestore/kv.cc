@@ -16,13 +16,21 @@ void _key_encode_u32(uint32_t u, std::string *key)
 #else
 # error wtf
 #endif
-  key->append((char*)&bu, 4);
+  
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%08X", (uint32_t)bu);
+  key->append(buf);
 }
 
 const char *_key_decode_u32(const char *key, uint32_t *pu)
 {
   uint32_t bu;
-  memcpy(&bu, key, 4);
+  char buf[32]; 
+
+  strncpy(buf, key, 8);
+  buf[8] = 0;
+  bu = strtoul(buf, NULL, 16);
+
 #ifdef CEPH_BIG_ENDIAN
   *pu = bu;
 #elif defined(CEPH_LITTLE_ENDIAN)
@@ -30,7 +38,7 @@ const char *_key_decode_u32(const char *key, uint32_t *pu)
 #else
 # error wtf
 #endif
-  return key + 4;
+  return key + 8;
 }
 
 void _key_encode_u64(uint64_t u, std::string *key)
@@ -43,13 +51,20 @@ void _key_encode_u64(uint64_t u, std::string *key)
 #else
 # error wtf
 #endif
-  key->append((char*)&bu, 8);
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)bu);
+  key->append(buf);
 }
 
 const char *_key_decode_u64(const char *key, uint64_t *pu)
 {
   uint64_t bu;
-  memcpy(&bu, key, 8);
+  char buf[32]; 
+
+  strncpy(buf, key, 16);
+  buf[16] = 0;
+  bu = strtoull(buf, NULL, 16);
+
 #ifdef CEPH_BIG_ENDIAN
   *pu = bu;
 #elif defined(CEPH_LITTLE_ENDIAN)
@@ -57,5 +72,5 @@ const char *_key_decode_u64(const char *key, uint64_t *pu)
 #else
 # error wtf
 #endif
-  return key + 8;
+  return key + 16;
 }

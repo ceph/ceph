@@ -429,6 +429,11 @@ unittest_async_compressor_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR) $(LIBCOMMON)
 check_PROGRAMS += unittest_async_compressor
 
+unittest_object_name_key_SOURCES = test/os/TestObjectNameKey.cc
+unittest_object_name_key_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_object_name_key_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR)
+check_PROGRAMS += unittest_object_name_key
+
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
 check_SCRIPTS += test/pybind/test_ceph_daemon.py
 
