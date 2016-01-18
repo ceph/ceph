@@ -274,12 +274,13 @@ PGBackend *PGBackend::build_pg_backend(
   const OSDMapRef curmap,
   Listener *l,
   coll_t coll,
+  ObjectStore::CollectionHandle &ch,
   ObjectStore *store,
   CephContext *cct)
 {
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED: {
-    return new ReplicatedBackend(l, coll, store, cct);
+    return new ReplicatedBackend(l, coll, ch, store, cct);
   }
   case pg_pool_t::TYPE_ERASURE: {
     ErasureCodeInterfaceRef ec_impl;
