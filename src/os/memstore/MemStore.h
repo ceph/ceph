@@ -156,17 +156,23 @@ public:
     }
   };
 
-  struct Collection : public RefCountedObject {
+  struct Collection : public CollectionImpl {
+    coll_t cid;
     CephContext *cct;
     bool use_page_set;
     ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
     map<ghobject_t, ObjectRef,ghobject_t::BitwiseComparator> object_map;        ///< for iteration
     map<string,bufferptr> xattr;
     RWLock lock;   ///< for object_{map,hash}
+    bool exists;
 
     typedef boost::intrusive_ptr<Collection> Ref;
     friend void intrusive_ptr_add_ref(Collection *c) { c->get(); }
     friend void intrusive_ptr_release(Collection *c) { c->put(); }
+
+    const coll_t &get_cid() override {
+      return cid;
+    }
 
     ObjectRef create_object() const {
       if (use_page_set)
@@ -239,7 +245,7 @@ public:
 
     Collection(CephContext *cct)
       : cct(cct), use_page_set(cct->_conf->memstore_page_set),
-        lock("MemStore::Collection::lock") {}
+        lock("MemStore::Collection::lock"), exists(true) {}
   };
   typedef Collection::Ref CollectionRef;
 
@@ -396,6 +402,10 @@ public:
   int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset);
 
   int list_collections(vector<coll_t>& ls);
+
+  CollectionHandle open_collection(const coll_t& c) {
+    return get_collection(c);
+  }
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);
   int collection_list(coll_t cid, ghobject_t start, ghobject_t end,
