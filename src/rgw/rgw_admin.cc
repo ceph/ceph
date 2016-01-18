@@ -2398,7 +2398,7 @@ int main(int argc, char **argv)
         try {
           decode_json_obj(realm, &p);
         } catch (JSONDecoder::err& e) {
-          cout << "failed to decode JSON response: " << e.message << std::endl;
+          cerr << "failed to decode JSON response: " << e.message << std::endl;
           return -EINVAL;
         }
         RGWPeriod period;
@@ -2414,11 +2414,17 @@ int main(int argc, char **argv)
           }
         }
         ret = realm.create(false);
-        if (ret < 0) {
+        if (ret < 0 && ret != -EEXIST) {
           cerr << "Error storing realm " << realm.get_id() << ": "
             << cpp_strerror(ret) << std::endl;
           return ret;
-        }
+        } else if (ret ==-EEXIST) {
+	  ret = realm.update();
+	  if (ret < 0) {
+	    cerr << "Error storing realm " << realm.get_id() << ": "
+		 << cpp_strerror(ret) << std::endl;
+	  }
+	}
 
         if (set_default) {
           ret = realm.set_as_default();
@@ -2568,6 +2574,7 @@ int main(int argc, char **argv)
 	}
 	string default_zonegroup;
 	ret = zonegroup.read_default_id(default_zonegroup);
+	cout << "read_default_id : " << ret << std::endl;
 	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "could not determine default zonegroup: " << cpp_strerror(-ret) << std::endl;
 	}
