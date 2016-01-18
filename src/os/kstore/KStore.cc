@@ -301,28 +301,27 @@ static int get_key_object(const string& key, ghobject_t *oid)
   int r;
   const char *p = key.c_str();
 
+  // Note: DO NOT check against null terminator in any intermediate
+  // position of key string. That may happen as we directly store
+  // the integer fields of gobject into the key string without 
+  // performing the necessary visual conversion in advance and
+  // rocksdb has no problem with null characters in the key string.
   p = _key_decode_shard(p, &oid->shard_id);
-  if (!*p)
-    return -2;
 
   uint64_t pool;
   p = _key_decode_u64(p, &pool);
-  if (!*p)
-    return -3;
   oid->hobj.pool = pool - 0x8000000000000000ull;
 
   unsigned hash;
   p = _key_decode_u32(p, &hash);
-  if (!*p)
-    return -4;
   oid->hobj.set_bitwise_key_u32(hash);
   if (*p != '.')
-    return -5;
+    return -1;
   ++p;
 
   r = decode_escaped(p, &oid->hobj.nspace);
   if (r < 0)
-    return -6;
+    return -2;
   p += r + 1;
 
   if (*p == '=') {
@@ -330,7 +329,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
     ++p;
     r = decode_escaped(p, &oid->hobj.oid.name);
     if (r < 0)
-      return -7;
+      return -3;
     p += r + 1;
   } else if (*p == '<' || *p == '>') {
     // key + name
@@ -338,26 +337,23 @@ static int get_key_object(const string& key, ghobject_t *oid)
     string okey;
     r = decode_escaped(p, &okey);
     if (r < 0)
-      return -8;
+      return -4;
     p += r + 1;
     r = decode_escaped(p, &oid->hobj.oid.name);
     if (r < 0)
-      return -9;
+      return -5;
     p += r + 1;
     oid->hobj.set_key(okey);
   } else {
     // malformed
-    return -10;
+    return -6;
   }
 
   p = _key_decode_u64(p, &oid->hobj.snap.val);
-  if (!*p)
-    return -11;
   p = _key_decode_u64(p, &oid->generation);
   if (*p) {
-    // if we get something other than a null terminator here, 
-    // something goes wrong.
-    return -12;
+    // there shall be no more contents, for now.
+    return -7;
   }
 
   return 0;
