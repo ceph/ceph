@@ -273,4 +273,7 @@
 /* Defined if curl headers define curl_multi_wait() */
 #cmakedefine HAVE_CURL_MULTI_WAIT 1
 
+/* Define to 1 if you have the <execinfo.h> header file. */
+#cmakedefine HAVE_EXECINFO_H 1
+
 #endif /* CONFIG_H */
