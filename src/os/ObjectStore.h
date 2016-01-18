@@ -1913,6 +1913,9 @@ public:
    * @returns true if object exists, false otherwise
    */
   virtual bool exists(coll_t cid, const ghobject_t& oid) = 0;                   // useful?
+  virtual bool exists(CollectionHandle& c, const ghobject_t& oid) {
+    return exists(c->get_cid(), oid);
+  }
 
   /**
    * stat -- get information for an object
@@ -1928,6 +1931,13 @@ public:
     const ghobject_t& oid,
     struct stat *st,
     bool allow_eio = false) = 0; // struct stat?
+  virtual int stat(
+    CollectionHandle &c,
+    const ghobject_t& oid,
+    struct stat *st,
+    bool allow_eio = false) {
+    return stat(c->get_cid(), oid, st, allow_eio);
+  }
 
   /**
    * read -- read a byte range of data from an object
@@ -1952,6 +1962,16 @@ public:
     bufferlist& bl,
     uint32_t op_flags = 0,
     bool allow_eio = false) = 0;
+   virtual int read(
+     CollectionHandle &c,
+     const ghobject_t& oid,
+     uint64_t offset,
+     size_t len,
+     bufferlist& bl,
+     uint32_t op_flags = 0,
+     bool allow_eio = false) {
+     return read(c->get_cid(), oid, offset, len, bl, op_flags, allow_eio);
+   }
 
   /**
    * fiemap -- get extent map of data of an object
@@ -1969,7 +1989,12 @@ public:
    * @param bl output bufferlist for extent map information.
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
+  virtual int fiemap(coll_t cid, const ghobject_t& oid,
+		     uint64_t offset, size_t len, bufferlist& bl) = 0;
+  virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
+		     uint64_t offset, size_t len, bufferlist& bl) {
+    return fiemap(c->get_cid(), oid, offset, len, bl);
+  }
 
   /**
    * getattr -- get an xattr of an object
@@ -1980,7 +2005,12 @@ public:
    * @param value place to put output result.
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr& value) = 0;
+  virtual int getattr(coll_t cid, const ghobject_t& oid,
+		      const char *name, bufferptr& value) = 0;
+  virtual int getattr(CollectionHandle &c, const ghobject_t& oid,
+		      const char *name, bufferptr& value) {
+    return getattr(c->get_cid(), oid, name, value);
+  }
 
   /**
    * getattr -- get an xattr of an object
@@ -2006,6 +2036,14 @@ public:
     value.push_back(bp);
     return r;
   }
+  int getattr(
+    CollectionHandle &c, const ghobject_t& oid,
+    const string& name, bufferlist& value) {
+    bufferptr bp;
+    int r = getattr(c, oid, name.c_str(), bp);
+    value.push_back(bp);
+    return r;
+  }
 
   /**
    * getattrs -- get all of the xattrs of an object
@@ -2015,7 +2053,12 @@ public:
    * @param aset place to put output result.
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset) = 0;
+  virtual int getattrs(coll_t cid, const ghobject_t& oid,
+		       map<string,bufferptr>& aset) = 0;
+  virtual int getattrs(CollectionHandle &c, const ghobject_t& oid,
+		       map<string,bufferptr>& aset) {
+    return getattrs(c->get_cid(), oid, aset);
+  }
 
   /**
    * getattrs -- get all of the xattrs of an object
@@ -2028,6 +2071,17 @@ public:
   int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferlist>& aset) {
     map<string,bufferptr> bmap;
     int r = getattrs(cid, oid, bmap);
+    for (map<string,bufferptr>::iterator i = bmap.begin();
+	i != bmap.end();
+	++i) {
+      aset[i->first].append(i->second);
+    }
+    return r;
+  }
+  int getattrs(CollectionHandle &c, const ghobject_t& oid,
+	       map<string,bufferlist>& aset) {
+    map<string,bufferptr> bmap;
+    int r = getattrs(c, oid, bmap);
     for (map<string,bufferptr>::iterator i = bmap.begin();
 	i != bmap.end();
 	++i) {
@@ -2122,6 +2176,12 @@ public:
   virtual int collection_list(coll_t c, ghobject_t start, ghobject_t end,
 			      bool sort_bitwise, int max,
 			      vector<ghobject_t> *ls, ghobject_t *next) = 0;
+  virtual int collection_list(CollectionHandle &c,
+			      ghobject_t start, ghobject_t end,
+			      bool sort_bitwise, int max,
+			      vector<ghobject_t> *ls, ghobject_t *next) {
+    return collection_list(c->get_cid(), start, end, sort_bitwise, max, ls, next);
+  }
 
   /// OMAP
   /// Get omap contents
@@ -2131,6 +2191,14 @@ public:
     bufferlist *header,      ///< [out] omap header
     map<string, bufferlist> *out /// < [out] Key to value map
     ) = 0;
+  virtual int omap_get(
+    CollectionHandle &c,     ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    bufferlist *header,      ///< [out] omap header
+    map<string, bufferlist> *out /// < [out] Key to value map
+    ) {
+    return omap_get(c->get_cid(), oid, header, out);
+  }
 
   /// Get omap header
   virtual int omap_get_header(
@@ -2139,6 +2207,14 @@ public:
     bufferlist *header,      ///< [out] omap header
     bool allow_eio = false ///< [in] don't assert on eio
     ) = 0;
+  virtual int omap_get_header(
+    CollectionHandle &c,     ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    bufferlist *header,      ///< [out] omap header
+    bool allow_eio = false ///< [in] don't assert on eio
+    ) {
+    return omap_get_header(c->get_cid(), oid, header, allow_eio);
+  }
 
   /// Get keys defined on oid
   virtual int omap_get_keys(
@@ -2146,6 +2222,13 @@ public:
     const ghobject_t &oid, ///< [in] Object containing omap
     set<string> *keys      ///< [out] Keys defined on oid
     ) = 0;
+  virtual int omap_get_keys(
+    CollectionHandle &c,   ///< [in] Collection containing oid
+    const ghobject_t &oid, ///< [in] Object containing omap
+    set<string> *keys      ///< [out] Keys defined on oid
+    ) {
+    return omap_get_keys(c->get_cid(), oid, keys);
+  }
 
   /// Get key values
   virtual int omap_get_values(
@@ -2154,6 +2237,14 @@ public:
     const set<string> &keys,     ///< [in] Keys to get
     map<string, bufferlist> *out ///< [out] Returned keys and values
     ) = 0;
+  virtual int omap_get_values(
+    CollectionHandle &c,         ///< [in] Collection containing oid
+    const ghobject_t &oid,       ///< [in] Object containing omap
+    const set<string> &keys,     ///< [in] Keys to get
+    map<string, bufferlist> *out ///< [out] Returned keys and values
+    ) {
+    return omap_get_values(c->get_cid(), oid, keys, out);
+  }
 
   /// Filters keys into out which are defined on oid
   virtual int omap_check_keys(
@@ -2162,6 +2253,14 @@ public:
     const set<string> &keys, ///< [in] Keys to check
     set<string> *out         ///< [out] Subset of keys defined on oid
     ) = 0;
+  virtual int omap_check_keys(
+    CollectionHandle &c,     ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    const set<string> &keys, ///< [in] Keys to check
+    set<string> *out         ///< [out] Subset of keys defined on oid
+    ) {
+    return omap_check_keys(c->get_cid(), oid, keys, out);
+  }
 
   /**
    * Returns an object map iterator
@@ -2176,7 +2275,12 @@ public:
     coll_t c,              ///< [in] collection
     const ghobject_t &oid  ///< [in] object
     ) = 0;
-
+  virtual ObjectMap::ObjectMapIterator get_omap_iterator(
+    CollectionHandle &c,   ///< [in] collection
+    const ghobject_t &oid  ///< [in] object
+    ) {
+    return get_omap_iterator(c->get_cid(), oid);
+  }
 
   virtual int flush_journal() { return -EOPNOTSUPP; }
 
