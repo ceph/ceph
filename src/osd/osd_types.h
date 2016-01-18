@@ -33,6 +33,7 @@
 #include "include/CompatSet.h"
 #include "common/histogram.h"
 #include "include/interval_set.h"
+#include "include/inline_memory.h"
 #include "common/Formatter.h"
 #include "common/bloom_filter.hpp"
 #include "common/hobject.h"
@@ -1642,8 +1643,7 @@ struct object_stat_sum_t {
   }
 
   bool is_zero() const {
-    object_stat_sum_t zero;
-    return memcmp(this, &zero, sizeof(zero)) == 0;
+    return mem_is_zero((char*)this, sizeof(*this));
   }
 
   void add(const object_stat_sum_t& o);
