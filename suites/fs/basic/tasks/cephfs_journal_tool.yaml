@@ -12,6 +12,7 @@ tasks:
     clients:
         client.0: [suites/cephfs_journal_tool_smoke.sh]
 - ceph.restart: [mds.*]
+    wait-for-healthy: true
 - ceph-fuse:
     client.0: 
         mounted: true
