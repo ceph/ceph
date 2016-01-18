@@ -66,8 +66,8 @@ LIBRGW_DEPS += \
 	-lcurl \
 	-lexpat \
 	-lm \
-	-lfcgi \
-	-ldl
+	-lfcgi 
+	
 
 CIVETWEB_INCLUDE = --include $(srcdir)/civetweb/include/civetweb_conf.h
 

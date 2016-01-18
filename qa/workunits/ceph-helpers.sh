@@ -1,4 +1,6 @@
 #!/bin/bash
+set -xv
+
 #
 # Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
 # Copyright (C) 2014,2015 Red Hat <contact@redhat.com>
@@ -116,7 +118,7 @@ function test_setup() {
 function teardown() {
     local dir=$1
     kill_daemons $dir KILL
-    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
+    if [ `uname` = Linux ] && [ $(stat -f -c '%T' .) == "btrfs" ]; then
         __teardown_btrfs $dir
     fi
     rm -fr $dir

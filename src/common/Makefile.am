@@ -14,7 +14,6 @@ libcommon_internal_la_SOURCES = \
 	common/cmdparse.cc \
 	common/escape.c \
 	common/io_priority.cc \
-	common/ceph_time.cc \
 	common/Clock.cc \
 	common/Throttle.cc \
 	common/Timer.cc \
@@ -85,7 +84,8 @@ endif
 
 if LINUX
 libcommon_internal_la_SOURCES += \
-	common/linux_version.c 
+	common/linux_version.c \
+	common/blkdev.cc
 endif
 
 if SOLARIS
@@ -98,10 +98,10 @@ libcommon_internal_la_SOURCES += \
         common/aix_errno.cc
 endif
 
-# used by RBD and FileStore
-if LINUX
+if FREEBSD
 libcommon_internal_la_SOURCES += \
-	common/blkdev.cc
+       common/freebsd_version.c \
+       common/blkdev.cc
 endif
 
 if ENABLE_XIO
@@ -265,9 +265,7 @@ noinst_HEADERS += \
 	common/valgrind.h \
 	common/TracepointProvider.h \
 	common/event_socket.h \
-	common/PluginRegistry.h \
-	common/ceph_time.h \
-	common/ceph_timer.h
+	common/PluginRegistry.h
 
 if ENABLE_XIO
 noinst_HEADERS += \

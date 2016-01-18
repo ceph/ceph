@@ -16,7 +16,7 @@ liberasure_code_la_SOURCES = \
 erasure-code/ErasureCodePlugin.cc: ./ceph_ver.h
 liberasure_code_la_DEPENDENCIES = $(erasure_codelib_LTLIBRARIES)
 if LINUX
-liberasure_code_la_LIBADD = -ldl
+liberasure_code_la_LIBADD = 
 endif # LINUX
 noinst_LTLIBRARIES += liberasure_code.la
 

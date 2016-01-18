@@ -44,6 +44,8 @@ core
 cscope.*
 depcomp
 gmon.out
+gmake.log
+gmake_check.log
 install-sh
 libtool
 ltmain.sh

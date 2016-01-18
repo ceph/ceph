@@ -17,7 +17,12 @@ endif
 include arch/Makefile.am
 include auth/Makefile.am
 include brag/Makefile.am
+if LINUX
 include ceph-detect-init/Makefile.am
+else
+# FreeBSD does not (yet) have init detection
+# But then again FreeBSD only has /etc/rc.d scripts
+endif
 include crush/Makefile.am
 include kv/Makefile.am
 include mon/Makefile.am

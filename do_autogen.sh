@@ -123,6 +123,8 @@ export CXXFLAGS
 
 ./autogen.sh || die "autogen failed"
 
+chmod 755 ./configure
+
 ./configure \
 --prefix=/usr --sbindir=/sbin --localstatedir=/var --sysconfdir=/etc \
 --with-debug $with_profiler --with-nss --without-cryptopp --with-radosgw \
