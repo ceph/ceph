@@ -117,7 +117,7 @@ static char *ealargs[] = {
 };
 
 class SharedDriverData {
-  std::map<string, std::pair<nvme_controller*, int> > controllers;
+  std::map<string, std::pair<nvme_controller*, string> > controllers;
   bool init = false;
   Mutex lock;
 
@@ -145,7 +145,7 @@ int SharedDriverData::_scan_nvme_device(const string &sn_tag, nvme_controller **
 
   auto ctr_it = controllers.find(sn_tag);
   if (ctr_it != controllers.end()) {
-    ctr_it->second.second++;
+    *name = ctr_it->second.second;
     *c = ctr_it->second.first;
     return 0;
   }
@@ -231,7 +231,7 @@ int SharedDriverData::_scan_nvme_device(const string &sn_tag, nvme_controller **
     return r;
   }
 
-  controllers[sn_tag] = make_pair(*c, 1);
+  controllers[sn_tag] = make_pair(*c, *name);
 
   pci_iterator_destroy(iter);
 
@@ -293,12 +293,6 @@ void SharedDriverData::release(nvme_controller *c)
   if (it == controllers.end()) {
     derr << __func__ << " not found registered nvme controller " << c << dendl;
     assert(0);
-  }
-
-  if (--it->second.second == 0) {
-    dout(1) << __func__ << " detach device " << c << dendl;
-    nvme_detach(c);
-    controllers.erase(it);
   }
 }
 
