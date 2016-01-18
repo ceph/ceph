@@ -72,6 +72,7 @@ const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
 // for bluefs, label (4k) + bluefs super (4k), means we start at 8k.
 #define BLUEFS_START  8192
 
+
 /*
  * object name key structure
  *
@@ -789,12 +790,29 @@ BlueStore::~BlueStore()
 
 void BlueStore::_init_logger()
 {
-  // XXX
+  PerfCountersBuilder b(g_ceph_context, "BlueStore",
+                        l_bluestore_first, l_bluestore_last);
+  b.add_time_avg(l_bluestore_state_prepare_lat, "state_prepare_lat", "Average prepare state latency");
+  b.add_time_avg(l_bluestore_state_aio_wait_lat, "state_aio_wait_lat", "Average aio_wait state latency");
+  b.add_time_avg(l_bluestore_state_io_done_lat, "state_io_done_lat", "Average io_done state latency");
+  b.add_time_avg(l_bluestore_state_kv_queued_lat, "state_kv_queued_lat", "Average kv_queued state latency");
+  b.add_time_avg(l_bluestore_state_kv_committing_lat, "state_kv_commiting_lat", "Average kv_commiting state latency");
+  b.add_time_avg(l_bluestore_state_kv_done_lat, "state_kv_done_lat", "Average kv_done state latency");
+  b.add_time_avg(l_bluestore_state_wal_queued_lat, "state_wal_queued_lat", "Average wal_queued state latency");
+  b.add_time_avg(l_bluestore_state_wal_applying_lat, "state_wal_applying_lat", "Average wal_applying state latency");
+  b.add_time_avg(l_bluestore_state_wal_aio_wait_lat, "state_wal_aio_wait_lat", "Average aio_wait state latency");
+  b.add_time_avg(l_bluestore_state_wal_cleanup_lat, "state_wal_cleanup_lat", "Average cleanup state latency");
+  b.add_time_avg(l_bluestore_state_wal_done_lat, "state_wal_done_lat", "Average wal_done state latency");
+  b.add_time_avg(l_bluestore_state_finishing_lat, "state_finishing_lat", "Average finishing state latency");
+  b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat", "Average done state latency");
+  logger = b.create_perf_counters();
+  g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
 void BlueStore::_shutdown_logger()
 {
-  // XXX
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
+  delete logger;
 }
 
 int BlueStore::get_block_device_fsid(const string& path, uuid_d *fsid)
@@ -3460,6 +3478,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	     << " " << txc->get_state_name() << dendl;
     switch (txc->state) {
     case TransContext::STATE_PREPARE:
+      txc->log_state_latency(logger, l_bluestore_state_prepare_lat);
       if (txc->ioc.has_aios()) {
 	txc->state = TransContext::STATE_AIO_WAIT;
 	_txc_aio_submit(txc);
@@ -3468,11 +3487,13 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       // ** fall-thru **
 
     case TransContext::STATE_AIO_WAIT:
+      txc->log_state_latency(logger, l_bluestore_state_aio_wait_lat);
       _txc_finish_io(txc);  // may trigger blocked txc's too
       return;
 
     case TransContext::STATE_IO_DONE:
       //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
+      txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
       if (!g_conf->bluestore_sync_transaction) {
 	std::lock_guard<std::mutex> l(kv_lock);
@@ -3487,11 +3508,13 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       break;
 
     case TransContext::STATE_KV_QUEUED:
+      txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
       txc->state = TransContext::STATE_KV_DONE;
       _txc_finish_kv(txc);
       // ** fall-thru **
 
     case TransContext::STATE_KV_DONE:
+      txc->log_state_latency(logger, l_bluestore_state_kv_done_lat);
       if (txc->wal_txn) {
 	txc->state = TransContext::STATE_WAL_QUEUED;
 	if (g_conf->bluestore_sync_wal_apply) {
@@ -3505,6 +3528,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       break;
 
     case TransContext::STATE_WAL_APPLYING:
+      txc->log_state_latency(logger, l_bluestore_state_wal_applying_lat);
       if (txc->ioc.has_aios()) {
 	txc->state = TransContext::STATE_WAL_AIO_WAIT;
 	_txc_aio_submit(txc);
@@ -3513,14 +3537,17 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       // ** fall-thru **
 
     case TransContext::STATE_WAL_AIO_WAIT:
+      txc->log_state_latency(logger, l_bluestore_state_wal_aio_wait_lat);
       _wal_finish(txc);
       return;
 
     case TransContext::STATE_WAL_CLEANUP:
+      txc->log_state_latency(logger, l_bluestore_state_wal_cleanup_lat);
       txc->state = TransContext::STATE_FINISHING;
       // ** fall-thru **
 
     case TransContext::TransContext::STATE_FINISHING:
+      txc->log_state_latency(logger, l_bluestore_state_finishing_lat);
       _txc_finish(txc);
       return;
 
@@ -3693,6 +3720,7 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
     }
 
     osr->q.pop_front();
+    txc->log_state_latency(logger, l_bluestore_state_done_lat);
     delete txc;
     osr->qcond.notify_all();
     if (osr->q.empty())
@@ -3889,6 +3917,7 @@ int BlueStore::_wal_apply(TransContext *txc)
 {
   bluestore_wal_transaction_t& wt = *txc->wal_txn;
   dout(20) << __func__ << " txc " << txc << " seq " << wt.seq << dendl;
+  txc->log_state_latency(logger, l_bluestore_state_wal_queued_lat);
   txc->state = TransContext::STATE_WAL_APPLYING;
 
   assert(txc->ioc.pending_aios.empty());
