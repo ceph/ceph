@@ -1,3 +1,4 @@
+os_type: ubuntu
 overrides:
   install:
     ceph:
