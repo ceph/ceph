@@ -54,6 +54,9 @@ enum {
   l_bluestore_nvmedevice_aio_write_lat,
   l_bluestore_nvmedevice_read_lat,
   l_bluestore_nvmedevice_flush_lat,
+  l_bluestore_nvmedevice_aio_write_queue_lat,
+  l_bluestore_nvmedevice_read_queue_lat,
+  l_bluestore_nvmedevice_flush_queue_lat,
   l_bluestore_nvmedevice_queue_ops,
   l_bluestore_nvmedevice_polling_lat,
   l_bluestore_nvmedevice_last
@@ -370,6 +373,9 @@ int NVMEDevice::open(string p)
   b.add_time_avg(l_bluestore_nvmedevice_flush_lat, "flush_lat", "Average flush completing latency");
   b.add_u64(l_bluestore_nvmedevice_queue_ops, "queue_ops", "Operations in nvme queue");
   b.add_time_avg(l_bluestore_nvmedevice_polling_lat, "polling_lat", "Average polling latency");
+  b.add_time_avg(l_bluestore_nvmedevice_aio_write_queue_lat, "aio_write_queue_lat", "Average queue write request latency");
+  b.add_time_avg(l_bluestore_nvmedevice_read_queue_lat, "read_queue_lat", "Average queue read request latency");
+  b.add_time_avg(l_bluestore_nvmedevice_flush_queue_lat, "flush_queue_lat", "Average queue flush request latency");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 
@@ -458,6 +464,9 @@ void NVMEDevice::_aio_thread()
               derr << __func__ << " failed to do write command" << dendl;
               assert(0);
             }
+            lat = ceph_clock_now(g_ceph_context);
+            lat -= t->start;
+            logger->tinc(l_bluestore_nvmedevice_aio_write_queue_lat, lat);
             inflight_ops.inc();
             t = t->next;
           }
@@ -477,6 +486,9 @@ void NVMEDevice::_aio_thread()
             t->ctx->cond.Signal();
           } else {
             inflight_ops.inc();
+            lat = ceph_clock_now(g_ceph_context);
+            lat -= t->start;
+            logger->tinc(l_bluestore_nvmedevice_read_queue_lat, lat);
           }
           break;
         }
@@ -491,6 +503,9 @@ void NVMEDevice::_aio_thread()
             t->ctx->cond.Signal();
           } else {
             inflight_ops.inc();
+            lat = ceph_clock_now(g_ceph_context);
+            lat -= t->start;
+            logger->tinc(l_bluestore_nvmedevice_flush_queue_lat, lat);
           }
           break;
         }
