@@ -643,26 +643,17 @@ int NVMEDevice::aio_write(
   t->device = this;
   t->return_code = 0;
 
-  if (0 && buffered) {
-    Mutex::Locker l(queue_lock);
-    task_queue.push(t);
-    if (queue_empty.read()) {
-      queue_empty.dec();
-      queue_cond.Signal();
-    }
-    ioc->num_running.inc();
-    t->next = nullptr;
-  } else {
-    Task *first = static_cast<Task*>(ioc->nvme_task_first);
-    Task *last = static_cast<Task*>(ioc->nvme_task_last);
-    if (last)
-      last->next = t;
-    t->next = nullptr;
-    if (!first)
-      ioc->nvme_task_first = t;
-    ioc->nvme_task_last = t;
-    ioc->num_pending.inc();
+  if (buffered) {
   }
+  Task *first = static_cast<Task*>(ioc->nvme_task_first);
+  Task *last = static_cast<Task*>(ioc->nvme_task_last);
+  if (last)
+    last->next = t;
+  t->next = nullptr;
+  if (!first)
+    ioc->nvme_task_first = t;
+  ioc->nvme_task_last = t;
+  ioc->num_pending.inc();
 
   dout(5) << __func__ << " " << off << "~" << len << dendl;
 
