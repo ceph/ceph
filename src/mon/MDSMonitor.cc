@@ -1567,6 +1567,14 @@ int MDSMonitor::filesystem_command(
     }
     r = 0;
   } else if (prefix == "mds setmap") {
+    string confirm;
+    if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
+	confirm != "--yes-i-really-mean-it") {
+      ss << "WARNING: this can make your filesystem inaccessible! "
+	    "Add --yes-i-really-mean-it if you are sure you wish to continue.";
+      return -EINVAL;;
+    }
+
     MDSMap map;
     try {
       map.decode(m->get_data());
