@@ -1804,10 +1804,11 @@ int BlueStore::mount()
 
  out_stop:
   _kv_stop();
+  wal_wq.drain();
   wal_tp.stop();
   finisher.wait_for_empty();
   finisher.stop();
-out_coll:
+ out_coll:
   coll_map.clear();
  out_alloc:
   _close_alloc();
