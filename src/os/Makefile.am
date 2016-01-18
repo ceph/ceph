@@ -1,22 +1,18 @@
 libos_types_a_SOURCES = \
-	os/bluestore/bluestore_types.cc \
-	os/bluestore/bluefs_types.cc \
 	os/kstore/kstore_types.cc \
 	os/Transaction.cc
 libos_types_a_CXXFLAGS = ${AM_CXXFLAGS}
 noinst_LIBRARIES += libos_types.a
 
+if WITH_LIBAIO
+libos_types_a_SOURCES += \
+	os/bluestore/bluestore_types.cc \
+	os/bluestore/bluefs_types.cc
+endif
+
 if ENABLE_SERVER
 
 libos_a_SOURCES = \
-	os/bluestore/kv.cc \
-	os/bluestore/Allocator.cc \
-	os/bluestore/BlockDevice.cc \
-	os/bluestore/BlueFS.cc \
-	os/bluestore/BlueRocksEnv.cc \
-	os/bluestore/BlueStore.cc \
-	os/bluestore/FreelistManager.cc \
-	os/bluestore/StupidAllocator.cc \
 	os/filestore/chain_xattr.cc \
 	os/filestore/DBObjectMap.cc \
 	os/filestore/FileJournal.cc \
@@ -34,6 +30,18 @@ libos_a_SOURCES = \
 	os/kstore/KStore.cc \
 	os/memstore/MemStore.cc \
 	os/ObjectStore.cc
+
+if WITH_LIBAIO
+libos_a_SOURCES += \
+	os/bluestore/kv.cc \
+	os/bluestore/Allocator.cc \
+	os/bluestore/BlockDevice.cc \
+	os/bluestore/BlueFS.cc \
+	os/bluestore/BlueRocksEnv.cc \
+	os/bluestore/BlueStore.cc \
+	os/bluestore/FreelistManager.cc \
+	os/bluestore/StupidAllocator.cc
+endif
 
 if LINUX
 libos_a_SOURCES += os/filestore/BtrfsFileStoreBackend.cc
@@ -58,16 +66,6 @@ libos_a_LIBADD += $(LIBOS_TP)
 endif
 
 noinst_HEADERS += \
-	os/bluestore/bluefs_types.h \
-	os/bluestore/bluestore_types.h \
-	os/bluestore/kv.h \
-	os/bluestore/Allocator.h \
-	os/bluestore/BlockDevice.h \
-	os/bluestore/BlueFS.h \
-	os/bluestore/BlueRocksEnv.h \
-	os/bluestore/BlueStore.h \
-	os/bluestore/FreelistManager.h \
-	os/bluestore/StupidAllocator.h \
 	os/filestore/chain_xattr.h \
 	os/filestore/BtrfsFileStoreBackend.h \
 	os/filestore/CollectionIndex.h \
@@ -98,6 +96,20 @@ noinst_HEADERS += \
 	os/ObjectMap.h \
 	os/ObjectStore.h
 
+if WITH_LIBAIO
+noinst_HEADERS += \
+	os/bluestore/bluefs_types.h \
+	os/bluestore/bluestore_types.h \
+	os/bluestore/kv.h \
+	os/bluestore/Allocator.h \
+	os/bluestore/BlockDevice.h \
+	os/bluestore/BlueFS.h \
+	os/bluestore/BlueRocksEnv.h \
+	os/bluestore/BlueStore.h \
+	os/bluestore/FreelistManager.h \
+	os/bluestore/StupidAllocator.h
+endif
+
 if WITH_LIBZFS
 libos_zfs_a_SOURCES = os/fs/ZFS.cc
 libos_zfs_a_CXXFLAGS = ${AM_CXXFLAGS} ${LIBZFS_CFLAGS}
@@ -105,8 +117,10 @@ noinst_LIBRARIES += libos_zfs.a
 noinst_HEADERS += os/fs/ZFS.h
 endif
 
+if WITH_LIBAIO
 ceph_bluefs_tool_SOURCES = os/bluestore/bluefs_tool.cc
 ceph_bluefs_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL)
 bin_PROGRAMS += ceph-bluefs-tool
+endif
 
 endif # ENABLE_SERVER
