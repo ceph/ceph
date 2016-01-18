@@ -327,11 +327,11 @@ public:
   void send_message(int to_osd, Message *m) {
     osd->send_message_osd_cluster(to_osd, m, get_osdmap()->get_epoch());
   }
-  void queue_transaction(ObjectStore::Transaction *t, OpRequestRef op) {
-    osd->store->queue_transaction(osr.get(), t, 0, 0, 0, op);
+  void queue_transaction(ObjectStore::Transaction&& t, OpRequestRef op) {
+    osd->store->queue_transaction(osr.get(), std::move(t), 0, 0, 0, op);
   }
-  void queue_transactions(list<ObjectStore::Transaction*>& tls, OpRequestRef op) {
-    osd->store->queue_transactions(osr.get(), tls, 0, 0, 0, op);
+  void queue_transactions(vector<ObjectStore::Transaction>& tls, OpRequestRef op) {
+    osd->store->queue_transactions(osr.get(), tls, 0, 0, 0, op, NULL);
   }
   epoch_t get_epoch() const {
     return get_osdmap()->get_epoch();

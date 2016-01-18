@@ -676,7 +676,7 @@ static int os_mkdir(const char *path, mode_t mode)
   if (!t.empty()) {
     ceph::shared_ptr<ObjectStore::Sequencer> osr(
       new ObjectStore::Sequencer("fuse"));
-    fs->store->apply_transaction(&*osr, t);
+    fs->store->apply_transaction(&*osr, std::move(t));
     C_SaferCond waiter;
     if (!osr->flush_commit(&waiter))
       waiter.wait();
@@ -747,7 +747,7 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   if (!t.empty()) {
     ceph::shared_ptr<ObjectStore::Sequencer> osr(
       new ObjectStore::Sequencer("fuse"));
-    fs->store->apply_transaction(&*osr, t);
+    fs->store->apply_transaction(&*osr, std::move(t));
     C_SaferCond waiter;
     if (!osr->flush_commit(&waiter))
       waiter.wait();
@@ -857,7 +857,7 @@ int os_flush(const char *path, struct fuse_file_info *fi)
 
   ceph::shared_ptr<ObjectStore::Sequencer> osr(
     new ObjectStore::Sequencer("fuse"));
-  fs->store->apply_transaction(&*osr, t);
+  fs->store->apply_transaction(&*osr, std::move(t));
   C_SaferCond waiter;
   if (!osr->flush_commit(&waiter))
     waiter.wait();
@@ -920,7 +920,7 @@ static int os_unlink(const char *path)
 
   ceph::shared_ptr<ObjectStore::Sequencer> osr(
     new ObjectStore::Sequencer("fuse"));
-  fs->store->apply_transaction(&*osr, t);
+  fs->store->apply_transaction(&*osr, std::move(t));
   C_SaferCond waiter;
   if (!osr->flush_commit(&waiter))
     waiter.wait();
@@ -955,7 +955,7 @@ static int os_truncate(const char *path, off_t size)
   t.truncate(cid, oid, size);
   ceph::shared_ptr<ObjectStore::Sequencer> osr(
     new ObjectStore::Sequencer("fuse"));
-  fs->store->apply_transaction(&*osr, t);
+  fs->store->apply_transaction(&*osr, std::move(t));
   C_SaferCond waiter;
   if (!osr->flush_commit(&waiter))
     waiter.wait();

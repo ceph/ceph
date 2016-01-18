@@ -9,12 +9,10 @@
 class OnApplied : public Context {
   FileStoreTracker *tracker;
   list<pair<pair<coll_t, string>, uint64_t> > in_flight;
-  ObjectStore::Transaction *t;
 public:
   OnApplied(FileStoreTracker *tracker,
-	    list<pair<pair<coll_t, string>, uint64_t> > in_flight,
-	    ObjectStore::Transaction *t)
-    : tracker(tracker), in_flight(in_flight), t(t) {}
+	    list<pair<pair<coll_t, string>, uint64_t> > in_flight)
+    : tracker(tracker), in_flight(in_flight) {}
 
   void finish(int r) {
     for (list<pair<pair<coll_t, string>, uint64_t> >::iterator i =
@@ -23,7 +21,6 @@ public:
 	 ++i) {
       tracker->applied(i->first, i->second);
     }
-    delete t;
   }
 };
 
@@ -77,9 +74,10 @@ void FileStoreTracker::submit_transaction(Transaction &t)
     (**i)(this, &out);
   }
   store->queue_transaction(
-    0, out.t,
-    new OnApplied(this, in_flight, out.t),
+    0, std::move(*out.t),
+    new OnApplied(this, in_flight),
     new OnCommitted(this, in_flight));
+  delete out.t;
 }
 
 void FileStoreTracker::write(const pair<coll_t, string> &obj,

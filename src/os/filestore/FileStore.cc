@@ -1774,22 +1774,22 @@ int FileStore::umount()
 
 /// -----------------------------
 
-FileStore::Op *FileStore::build_op(list<Transaction*>& tls,
+FileStore::Op *FileStore::build_op(vector<Transaction>& tls,
 				   Context *onreadable,
 				   Context *onreadable_sync,
 				   TrackedOpRef osd_op)
 {
   uint64_t bytes = 0, ops = 0;
-  for (list<Transaction*>::iterator p = tls.begin();
+  for (vector<Transaction>::iterator p = tls.begin();
        p != tls.end();
        ++p) {
-    bytes += (*p)->get_num_bytes();
-    ops += (*p)->get_num_ops();
+    bytes += (*p).get_num_bytes();
+    ops += (*p).get_num_ops();
   }
 
   Op *o = new Op;
   o->start = ceph_clock_now(g_ceph_context);
-  o->tls.swap(tls);
+  o->tls = std::move(tls);
   o->onreadable = onreadable;
   o->onreadable_sync = onreadable_sync;
   o->ops = ops;
@@ -1879,6 +1879,9 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
   apply_manager.op_apply_finish(o->op);
   dout(10) << "_do_op " << o << " seq " << o->op << " r = " << r
 	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
+
+  o->tls.clear();
+
 }
 
 void FileStore::_finish_op(OpSequencer *osr)
@@ -1923,7 +1926,7 @@ struct C_JournaledAhead : public Context {
   }
 };
 
-int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
+int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
 				  TrackedOpRef osd_op,
 				  ThreadPool::TPHandle *handle)
 {
@@ -1956,8 +1959,8 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   }
 
   // used to include osr information in tracepoints during transaction apply
-  for (list<ObjectStore::Transaction*>::iterator i = tls.begin(); i != tls.end(); ++i) {
-    (*i)->set_osr(osr);
+  for (vector<Transaction>::iterator i = tls.begin(); i != tls.end(); ++i) {
+    (*i).set_osr(osr);
   }
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
@@ -2078,16 +2081,16 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
 }
 
 int FileStore::_do_transactions(
-  list<Transaction*> &tls,
+  vector<Transaction> &tls,
   uint64_t op_seq,
   ThreadPool::TPHandle *handle)
 {
   int trans_num = 0;
 
-  for (list<Transaction*>::iterator p = tls.begin();
+  for (vector<Transaction>::iterator p = tls.begin();
        p != tls.end();
        ++p, trans_num++) {
-    _do_transaction(**p, op_seq, trans_num, handle);
+    _do_transaction(*p, op_seq, trans_num, handle);
     if (handle)
       handle->reset_tp_timeout();
   }
@@ -5526,16 +5529,16 @@ void FileStore::dump_stop()
   }
 }
 
-void FileStore::dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr)
+void FileStore::dump_transactions(vector<ObjectStore::Transaction>& ls, uint64_t seq, OpSequencer *osr)
 {
   m_filestore_dump_fmt.open_array_section("transactions");
   unsigned trans_num = 0;
-  for (list<ObjectStore::Transaction*>::iterator i = ls.begin(); i != ls.end(); ++i, ++trans_num) {
+  for (vector<ObjectStore::Transaction>::iterator i = ls.begin(); i != ls.end(); ++i, ++trans_num) {
     m_filestore_dump_fmt.open_object_section("transaction");
     m_filestore_dump_fmt.dump_string("osr", osr->get_name());
     m_filestore_dump_fmt.dump_unsigned("seq", seq);
     m_filestore_dump_fmt.dump_unsigned("trans_num", trans_num);
-    (*i)->dump(&m_filestore_dump_fmt);
+    (*i).dump(&m_filestore_dump_fmt);
     m_filestore_dump_fmt.close_section();
   }
   m_filestore_dump_fmt.close_section();
