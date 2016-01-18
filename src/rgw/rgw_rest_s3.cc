@@ -2900,6 +2900,9 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
   string::size_type pos;
   bool using_qs;
 
+  time_t now, now_req=0;
+  time(&now);
+
   /* v4 requires rados auth */
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {
     return -EPERM;
@@ -2920,9 +2923,28 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     if (s->aws4_auth->credential.size() == 0) {
       return -EPERM;
     }
+
     s->aws4_auth->date = s->info.args.get("X-Amz-Date");
-    if (s->aws4_auth->date.size() == 0) {
+    struct tm date_t;
+    if (!parse_iso8601(s->aws4_auth->date.c_str(), &date_t, false))
       return -EPERM;
+
+    s->aws4_auth->expires = s->info.args.get("X-Amz-Expires");
+    if (s->aws4_auth->expires.size() != 0) {
+      /* X-Amz-Expires provides the time period, in seconds, for which
+         the generated presigned URL is valid. The minimum value
+         you can set is 1, and the maximum is 604800 (seven days) */
+      time_t exp = atoll(s->aws4_auth->expires.c_str());
+      if ((exp < 1) || (exp > 604800)) {
+        dout(10) << "NOTICE: exp out of range, exp = " << exp << dendl;
+        return -EPERM;
+      }
+      /* handle expiration in epoch time */
+      now_req = mktime(&date_t);
+      if (now >= now_req + exp) {
+        dout(10) << "NOTICE: now = " << now << ", now_req = " << now_req << ", exp = " << exp << dendl;
+        return -EPERM;
+      }
     }
     s->aws4_auth->signedheaders = s->info.args.get("X-Amz-SignedHeaders");
     if (s->aws4_auth->signedheaders.size() == 0) {
