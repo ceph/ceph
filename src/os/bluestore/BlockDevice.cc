@@ -14,6 +14,8 @@
  *
  */
 
+#include <unistd.h>
+
 #include "KernelDevice.h"
 #if defined(HAVE_SPDK)
 #include "NVMEDevice.h"
@@ -40,8 +42,16 @@ void IOContext::aio_wait()
   dout(20) << __func__ << " " << this << " done" << dendl;
 }
 
-BlockDevice *BlockDevice::create(const string& type, aio_callback_t cb, void *cbpriv)
+BlockDevice *BlockDevice::create(const string& path, aio_callback_t cb, void *cbpriv)
 {
+  char buf[2];
+  int r = ::readlink(path.c_str(), buf, 2);
+
+  string type = "kernel";
+  if (r < 0)
+    type = "ust-nvme";
+  dout(1) << __func__ << " path " << path << " type " << type << dendl;
+
   if (type == "kernel") {
     return new KernelDevice(cb, cbpriv);
   }
@@ -51,6 +61,8 @@ BlockDevice *BlockDevice::create(const string& type, aio_callback_t cb, void *cb
   }
 #endif
 
+  derr << __func__ << " unknown bacend " << type << dendl;
+  assert(0);
   return NULL;
 }
 

@@ -106,6 +106,8 @@ class NVMEDevice : public BlockDevice {
 
   NVMEDevice(aio_callback_t cb, void *cbpriv);
 
+  bool supported_bdev_label() override { return false; }
+
   void aio_submit(IOContext *ioc) override;
 
   uint64_t get_size() const override {
