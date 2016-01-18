@@ -14,7 +14,7 @@
 using namespace std::placeholders;
 
 
-static const bool info = false;
+static const uint info = 1;
 
 
 TestClient::TestClient(int _id,
@@ -51,7 +51,7 @@ void TestClient::run_req() {
   std::chrono::microseconds delay(int(0.5 + 1000000.0 / iops_goal));
   auto now = std::chrono::high_resolution_clock::now();
 
-  if (info) {
+  if (info >= 1) {
     std::cout << "client " << id << " about to run " << ops_to_run <<
       " ops." << std::endl;
   }
@@ -75,6 +75,12 @@ void TestClient::run_req() {
 
   requests_complete = true;
 
+  if (info >= 1) {
+    std::cout << "client " << id << " finished running " << ops_to_run <<
+      " ops." << std::endl;
+  }
+
+
   // thread ends
 }
 
@@ -92,14 +98,14 @@ void TestClient::run_resp() {
     }
     if (!resp_queue.empty()) {
       op_times[op++] = now();
-      if (info) std::cout << "resp->" << id << std::endl;
+      if (info >= 3) std::cout << "resp->" << id << std::endl;
       resp_queue.pop_front();
       --outstanding_ops;
       cv_req.notify_one();
     }
   }
 
-  if (info) {
+  if (info >= 1) {
     std::cout << "client " << id << " finishing " <<
       outstanding_ops.load() << " ops." << std::endl;
   }
@@ -110,14 +116,14 @@ void TestClient::run_resp() {
     }
     if (!resp_queue.empty()) {
       op_times[op++] = now();
-      if (info) std::cout << "resp->" << id << std::endl;
+      if (info >= 3) std::cout << "resp->" << id << std::endl;
       resp_queue.pop_front();
       --outstanding_ops;
       // not needed since all requests completed cv_req.notify_one();
     }
   }
 
-  if (info) {
+  if (info >= 1) {
     std::cout << "client " << id << " finished." << std::endl;
   }
 

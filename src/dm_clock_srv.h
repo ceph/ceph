@@ -466,14 +466,16 @@ namespace crimson {
 	// try constraint (reservation) based scheduling
 
 #if 0
-	static uint count = 0;
-	++count;
-	if (50 <= count && count <= 55) {
-	  std::cout << "scheduleRequest:" << std::endl;
-	  std::cout << "now:" << std::fixed << now << std::endl;
-	  displayQueues();
-	  std::cout << std::endl;
-	  debugger();
+	{
+	  static uint count = 0;
+	  ++count;
+	  if (50 <= count && count <= 55) {
+	    std::cout << "scheduleRequest A:" << std::endl;
+	    std::cout << "now:" << std::fixed << now << std::endl;
+	    displayQueues();
+	    std::cout << std::endl;
+	    debugger();
+	  }
 	}
 #endif
 
@@ -499,6 +501,20 @@ namespace crimson {
 	    break;
 	  }
 	}
+
+#if 1
+	{
+	  static uint count = 0;
+	  ++count;
+	  if (50 <= count && count <= 55) {
+	    std::cout << "scheduleRequest B:" << std::endl;
+	    std::cout << "now:" << std::fixed << now << std::endl;
+	    displayQueues();
+	    std::cout << std::endl;
+	    debugger();
+	  }
+	}
+#endif
 
 	if (!readyQ.empty()) {
 	  C client = submitTopRequest(readyQ);
