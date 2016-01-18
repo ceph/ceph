@@ -1250,6 +1250,7 @@ int MemStore::_destroy_collection(coll_t cid)
     RWLock::RLocker l2(cp->second->lock);
     if (!cp->second->object_map.empty())
       return -ENOTEMPTY;
+    cp->second->exists = false;
   }
   used_bytes -= cp->second->used_bytes();
   coll_map.erase(cp);
