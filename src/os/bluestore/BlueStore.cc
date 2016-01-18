@@ -859,7 +859,7 @@ int BlueStore::_write_bdev_label(string path, bluestore_bdev_label_t label)
 
   int fd = ::open(path.c_str(), O_WRONLY);
   if (fd < 0) {
-    fd = errno;
+    fd = -errno;
     derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
 	 << dendl;
     return fd;
