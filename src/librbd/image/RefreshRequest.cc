@@ -460,7 +460,7 @@ Context *RefreshRequest<I>::send_v2_open_journal() {
     klass, &klass::handle_v2_open_journal>(this);
 
   // TODO need safe close
-  m_journal = new Journal(m_image_ctx);
+  m_journal = m_image_ctx.create_journal();
   m_journal->open(ctx);
   return nullptr;
 }

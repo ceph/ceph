@@ -7,6 +7,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Operations.h"
 #include "librbd/TaskFinisher.h"
 #include "librbd/Utils.h"
 #include "include/encoding.h"
@@ -630,7 +631,7 @@ bool ImageWatcher::handle_payload(const FlattenPayload &payload,
     if (new_request) {
       ldout(m_image_ctx.cct, 10) << this << " remote flatten request: "
 				 << payload.async_request_id << dendl;
-      librbd::async_flatten(&m_image_ctx, ctx, *prog_ctx);
+      m_image_ctx.operations->flatten(*prog_ctx, ctx);
     }
 
     ::encode(ResponseMessage(r), ack_ctx->out);
@@ -652,7 +653,7 @@ bool ImageWatcher::handle_payload(const ResizePayload &payload,
       ldout(m_image_ctx.cct, 10) << this << " remote resize request: "
 				 << payload.async_request_id << " "
 				 << payload.size << dendl;
-      librbd::async_resize(&m_image_ctx, ctx, payload.size, *prog_ctx);
+      m_image_ctx.operations->resize(payload.size, *prog_ctx, ctx, 0);
     }
 
     ::encode(ResponseMessage(r), ack_ctx->out);
@@ -668,8 +669,8 @@ bool ImageWatcher::handle_payload(const SnapCreatePayload &payload,
     ldout(m_image_ctx.cct, 10) << this << " remote snap_create request: "
 			       << payload.snap_name << dendl;
 
-    librbd::snap_create_helper(&m_image_ctx, new C_ResponseMessage(ack_ctx),
-                               payload.snap_name.c_str());
+    m_image_ctx.operations->snap_create(payload.snap_name.c_str(),
+                                        new C_ResponseMessage(ack_ctx), 0);
     return false;
   }
   return true;
@@ -684,8 +685,9 @@ bool ImageWatcher::handle_payload(const SnapRenamePayload &payload,
 			       << payload.snap_id << " to "
 			       << payload.snap_name << dendl;
 
-    librbd::snap_rename_helper(&m_image_ctx, new C_ResponseMessage(ack_ctx),
-                               payload.snap_id, payload.snap_name.c_str());
+    m_image_ctx.operations->snap_rename(payload.snap_id,
+                                        payload.snap_name.c_str(),
+                                        new C_ResponseMessage(ack_ctx));
     return false;
   }
   return true;
@@ -699,8 +701,8 @@ bool ImageWatcher::handle_payload(const SnapRemovePayload &payload,
     ldout(m_image_ctx.cct, 10) << this << " remote snap_remove request: "
 			       << payload.snap_name << dendl;
 
-    librbd::snap_remove_helper(&m_image_ctx, new C_ResponseMessage(ack_ctx),
-                               payload.snap_name.c_str());
+    m_image_ctx.operations->snap_remove(payload.snap_name.c_str(),
+                                        new C_ResponseMessage(ack_ctx));
     return false;
   }
   return true;
@@ -714,8 +716,8 @@ bool ImageWatcher::handle_payload(const SnapProtectPayload& payload,
     ldout(m_image_ctx.cct, 10) << this << " remote snap_protect request: "
                                << payload.snap_name << dendl;
 
-    librbd::snap_protect_helper(&m_image_ctx, new C_ResponseMessage(ack_ctx),
-                                payload.snap_name.c_str());
+    m_image_ctx.operations->snap_protect(payload.snap_name.c_str(),
+                                         new C_ResponseMessage(ack_ctx));
     return false;
   }
   return true;
@@ -729,8 +731,8 @@ bool ImageWatcher::handle_payload(const SnapUnprotectPayload& payload,
     ldout(m_image_ctx.cct, 10) << this << " remote snap_unprotect request: "
                                << payload.snap_name << dendl;
 
-    librbd::snap_unprotect_helper(&m_image_ctx, new C_ResponseMessage(ack_ctx),
-                                  payload.snap_name.c_str());
+    m_image_ctx.operations->snap_unprotect(payload.snap_name.c_str(),
+                                           new C_ResponseMessage(ack_ctx));
     return false;
   }
   return true;
@@ -750,7 +752,7 @@ bool ImageWatcher::handle_payload(const RebuildObjectMapPayload& payload,
       ldout(m_image_ctx.cct, 10) << this
                                  << " remote rebuild object map request: "
                                  << payload.async_request_id << dendl;
-      librbd::async_rebuild_object_map(&m_image_ctx, ctx, *prog_ctx);
+      m_image_ctx.operations->rebuild_object_map(*prog_ctx, ctx);
     }
 
     ::encode(ResponseMessage(r), ack_ctx->out);
@@ -766,8 +768,8 @@ bool ImageWatcher::handle_payload(const RenamePayload& payload,
     ldout(m_image_ctx.cct, 10) << this << " remote rename request: "
                                << payload.image_name << dendl;
 
-    librbd::rename_helper(&m_image_ctx, new C_ResponseMessage(ack_ctx),
-                          payload.image_name.c_str());
+    m_image_ctx.operations->rename(payload.image_name.c_str(),
+                                   new C_ResponseMessage(ack_ctx));
     return false;
   }
   return true;
