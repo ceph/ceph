@@ -1067,6 +1067,7 @@ OPTION(rbd_skip_partial_discard, OPT_BOOL, false) // when trying to discard a ra
 OPTION(rbd_enable_alloc_hint, OPT_BOOL, true) // when writing a object, it will issue a hint to osd backend to indicate the expected size object need
 OPTION(rbd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 OPTION(rbd_validate_pool, OPT_BOOL, true) // true if empty pools should be validated for RBD compatibility
+OPTION(rbd_snap_max_nums, OPT_U64, 255) // the number snap of image
 
 /*
  * The following options change the behavior for librbd's image creation methods that
