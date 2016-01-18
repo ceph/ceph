@@ -1613,7 +1613,7 @@ int RGWGetBucketLocation::verify_permission()
 
 int RGWCreateBucket::verify_permission()
 {
-  if (!rgw_user_is_authenticated(*(s->user))) {
+  if (!rgw_user_is_authenticated(s->auth_user)) {
     return -EACCES;
   }
 
@@ -2508,7 +2508,7 @@ int RGWPutMetadataAccount::handle_temp_url_update(
 
 int RGWPutMetadataAccount::verify_permission()
 {
-  if (!rgw_user_is_authenticated(*(s->user))) {
+  if (!rgw_user_is_authenticated(s->auth_user)) {
     return -EACCES;
   }
   // if ((s->perm_mask & RGW_PERM_WRITE) == 0) {
