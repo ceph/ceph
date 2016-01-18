@@ -1066,8 +1066,6 @@ ssize_t AsyncConnection::_process_connection()
           break;
         }
 
-        net.set_socket_options(sd);
-
         state = STATE_CONNECTING_WAIT_BANNER;
         break;
       }
