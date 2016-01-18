@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/JournalTypes.h"
+#include "librbd/journal/Entries.h"
 #include "include/assert.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
@@ -106,29 +106,47 @@ void AioFlushEvent::dump(Formatter *f) const {
 }
 
 void OpEventBase::encode(bufferlist& bl) const {
-  ::encode(tid, bl);
+  ::encode(op_tid, bl);
 }
 
 void OpEventBase::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(tid, it);
+  ::decode(op_tid, it);
 }
 
 void OpEventBase::dump(Formatter *f) const {
-  f->dump_unsigned("tid", tid);
+  f->dump_unsigned("op_tid", op_tid);
+}
+
+void OpFinishEvent::encode(bufferlist& bl) const {
+  OpEventBase::encode(bl);
+  ::encode(op_tid, bl);
+  ::encode(r, bl);
+}
+
+void OpFinishEvent::decode(__u8 version, bufferlist::iterator& it) {
+  OpEventBase::decode(version, it);
+  ::decode(op_tid, it);
+  ::decode(r, it);
+}
+
+void OpFinishEvent::dump(Formatter *f) const {
+  OpEventBase::dump(f);
+  f->dump_unsigned("op_tid", op_tid);
+  f->dump_int("result", r);
 }
 
 void SnapEventBase::encode(bufferlist& bl) const {
-  OpStartEventBase::encode(bl);
+  OpEventBase::encode(bl);
   ::encode(snap_name, bl);
 }
 
 void SnapEventBase::decode(__u8 version, bufferlist::iterator& it) {
-  OpStartEventBase::decode(version, it);
+  OpEventBase::decode(version, it);
   ::decode(snap_name, it);
 }
 
 void SnapEventBase::dump(Formatter *f) const {
-  OpStartEventBase::dump(f);
+  OpEventBase::dump(f);
   f->dump_string("snap_name", snap_name);
 }
 
@@ -143,38 +161,38 @@ void SnapRenameEvent::decode(__u8 version, bufferlist::iterator& it) {
 }
 
 void SnapRenameEvent::dump(Formatter *f) const {
-  OpStartEventBase::dump(f);
+  SnapEventBase::dump(f);
   f->dump_unsigned("src_snap_id", snap_id);
   f->dump_string("dest_snap_name", snap_name);
 }
 
 void RenameEvent::encode(bufferlist& bl) const {
-  OpStartEventBase::encode(bl);
+  OpEventBase::encode(bl);
   ::encode(image_name, bl);
 }
 
 void RenameEvent::decode(__u8 version, bufferlist::iterator& it) {
-  OpStartEventBase::decode(version, it);
+  OpEventBase::decode(version, it);
   ::decode(image_name, it);
 }
 
 void RenameEvent::dump(Formatter *f) const {
-  OpStartEventBase::dump(f);
+  OpEventBase::dump(f);
   f->dump_string("image_name", image_name);
 }
 
 void ResizeEvent::encode(bufferlist& bl) const {
-  OpStartEventBase::encode(bl);
+  OpEventBase::encode(bl);
   ::encode(size, bl);
 }
 
 void ResizeEvent::decode(__u8 version, bufferlist::iterator& it) {
-  OpStartEventBase::decode(version, it);
+  OpEventBase::decode(version, it);
   ::decode(size, it);
 }
 
 void ResizeEvent::dump(Formatter *f) const {
-  OpStartEventBase::dump(f);
+  OpEventBase::dump(f);
   f->dump_unsigned("size", size);
 }
 
@@ -278,24 +296,24 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(SnapRemoveEvent(345, "snap")));
 
   o.push_back(new EventEntry(SnapRenameEvent()));
-  o.push_back(new EventEntry(SnapRenameEvent(345, 1, "snap")));
+  o.push_back(new EventEntry(SnapRenameEvent(456, 1, "snap")));
 
   o.push_back(new EventEntry(SnapProtectEvent()));
-  o.push_back(new EventEntry(SnapProtectEvent(456, "snap")));
+  o.push_back(new EventEntry(SnapProtectEvent(567, "snap")));
 
   o.push_back(new EventEntry(SnapUnprotectEvent()));
-  o.push_back(new EventEntry(SnapUnprotectEvent(567, "snap")));
+  o.push_back(new EventEntry(SnapUnprotectEvent(678, "snap")));
 
   o.push_back(new EventEntry(SnapRollbackEvent()));
-  o.push_back(new EventEntry(SnapRollbackEvent(678, "snap")));
+  o.push_back(new EventEntry(SnapRollbackEvent(789, "snap")));
 
   o.push_back(new EventEntry(RenameEvent()));
-  o.push_back(new EventEntry(RenameEvent(789, "image name")));
+  o.push_back(new EventEntry(RenameEvent(890, "image name")));
 
   o.push_back(new EventEntry(ResizeEvent()));
-  o.push_back(new EventEntry(ResizeEvent(890, 1234)));
+  o.push_back(new EventEntry(ResizeEvent(901, 1234)));
 
-  o.push_back(new EventEntry(FlattenEvent(901)));
+  o.push_back(new EventEntry(FlattenEvent(123)));
 }
 
 } // namespace journal

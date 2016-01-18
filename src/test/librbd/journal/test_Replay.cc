@@ -10,7 +10,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
-#include "librbd/JournalTypes.h"
+#include "librbd/journal/Entries.h"
 
 void register_test_journal_replay() {
 }
@@ -63,10 +63,11 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
 
   librbd::journal::EventEntry event_entry(
     librbd::journal::AioDiscardEvent(0, payload.size()));
-  librbd::Journal::AioObjectRequests requests;
+  librbd::Journal<>::AioObjectRequests requests;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
+    ictx->journal->append_io_event(NULL, std::move(event_entry), requests, 0, 0,
+                                   true);
   }
 
   // re-open the journal so that it replays the new entry
@@ -94,10 +95,11 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
   payload_bl.append(payload);
   librbd::journal::EventEntry event_entry(
     librbd::journal::AioWriteEvent(0, payload.size(), payload_bl));
-  librbd::Journal::AioObjectRequests requests;
+  librbd::Journal<>::AioObjectRequests requests;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
+    ictx->journal->append_io_event(NULL, std::move(event_entry), requests, 0, 0,
+                                   true);
   }
 
   // re-open the journal so that it replays the new entry
@@ -124,22 +126,23 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
 
   librbd::journal::AioFlushEvent aio_flush_event;
   librbd::journal::EventEntry event_entry(aio_flush_event);
-  librbd::Journal::AioObjectRequests requests;
+  librbd::Journal<>::AioObjectRequests requests;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
+    ictx->journal->append_io_event(NULL, std::move(event_entry), requests, 0, 0,
+                                   true);
   }
 
   // start an AIO write op
-  librbd::Journal *journal = ictx->journal;
+  librbd::Journal<> *journal = ictx->journal;
   ictx->journal = NULL;
 
   std::string payload(m_image_size, '1');
   librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
   {
     RWLock::RLocker owner_lock(ictx->owner_lock);
-    librbd::AioImageRequest::aio_write(ictx, aio_comp, 0, payload.size(),
-                                       payload.c_str(), 0);
+    librbd::AioImageRequest<>::aio_write(ictx, aio_comp, 0, payload.size(),
+                                         payload.c_str(), 0);
   }
   ictx->journal = journal;
 

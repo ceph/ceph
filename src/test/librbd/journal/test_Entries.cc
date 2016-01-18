@@ -7,7 +7,7 @@
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
-#include "librbd/JournalTypes.h"
+#include "librbd/journal/Entries.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"

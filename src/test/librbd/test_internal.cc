@@ -9,6 +9,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Operations.h"
 #include <boost/scope_exit.hpp>
 #include <boost/assign/list_of.hpp>
 #include <utility>
@@ -30,9 +31,9 @@ public:
       librbd::ImageCtx *ictx;
       EXPECT_EQ(0, open_image(m_image_name, &ictx));
       if (iter->second) {
-	EXPECT_EQ(0, librbd::snap_unprotect(ictx, iter->first.c_str()));
+	EXPECT_EQ(0, ictx->operations->snap_unprotect(iter->first.c_str()));
       }
-      EXPECT_EQ(0, librbd::snap_remove(ictx, iter->first.c_str()));
+      EXPECT_EQ(0, ictx->operations->snap_remove(iter->first.c_str()));
     }
 
     TestFixture::TearDown();
@@ -45,14 +46,14 @@ public:
       return r;
     }
 
-    r = librbd::snap_create(ictx, snap_name);
+    r = snap_create(*ictx, snap_name);
     if (r < 0) {
       return r;
     }
 
     m_snaps.push_back(std::make_pair(snap_name, snap_protect));
     if (snap_protect) {
-      r = librbd::snap_protect(ictx, snap_name);
+      r = ictx->operations->snap_protect(snap_name);
       if (r < 0) {
 	return r;
       }
@@ -97,7 +98,7 @@ TEST_F(TestInternal, ResizeLocksImage) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(0, librbd::resize(ictx, m_image_size >> 1, no_op));
+  ASSERT_EQ(0, ictx->operations->resize(m_image_size >> 1, no_op));
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -112,7 +113,7 @@ TEST_F(TestInternal, ResizeFailsToLockImage) {
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE, "manually locked"));
 
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(-EROFS, librbd::resize(ictx, m_image_size >> 1, no_op));
+  ASSERT_EQ(-EROFS, ictx->operations->resize(m_image_size >> 1, no_op));
 }
 
 TEST_F(TestInternal, SnapCreateLocksImage) {
@@ -121,9 +122,9 @@ TEST_F(TestInternal, SnapCreateLocksImage) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
   BOOST_SCOPE_EXIT( (ictx) ) {
-    ASSERT_EQ(0, librbd::snap_remove(ictx, "snap1"));
+    ASSERT_EQ(0, ictx->operations->snap_remove("snap1"));
   } BOOST_SCOPE_EXIT_END;
 
   bool is_owner;
@@ -138,7 +139,7 @@ TEST_F(TestInternal, SnapCreateFailsToLockImage) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE, "manually locked"));
 
-  ASSERT_EQ(-EROFS, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(-EROFS, snap_create(*ictx, "snap1"));
 }
 
 TEST_F(TestInternal, SnapRollbackLocksImage) {
@@ -150,7 +151,7 @@ TEST_F(TestInternal, SnapRollbackLocksImage) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(0, librbd::snap_rollback(ictx, "snap1", no_op));
+  ASSERT_EQ(0, ictx->operations->snap_rollback("snap1", no_op));
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -168,7 +169,7 @@ TEST_F(TestInternal, SnapRollbackFailsToLockImage) {
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE, "manually locked"));
 
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(-EROFS, librbd::snap_rollback(ictx, "snap1", no_op));
+  ASSERT_EQ(-EROFS, ictx->operations->snap_rollback("snap1", no_op));
 }
 
 TEST_F(TestInternal, SnapSetReleasesLock) {
@@ -205,7 +206,7 @@ TEST_F(TestInternal, FlattenLocksImage) {
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
 
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(0, librbd::flatten(ictx2, no_op));
+  ASSERT_EQ(0, ictx2->operations->flatten(no_op));
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx2, &is_owner));
@@ -243,7 +244,7 @@ TEST_F(TestInternal, FlattenFailsToLockImage) {
   ASSERT_EQ(0, lock_image(*ictx2, LOCK_EXCLUSIVE, "manually locked"));
 
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(-EROFS, librbd::flatten(ictx2, no_op));
+  ASSERT_EQ(-EROFS, ictx2->operations->flatten(no_op));
 }
 
 TEST_F(TestInternal, AioWriteRequestsLock) {
@@ -320,7 +321,7 @@ TEST_F(TestInternal, CancelAsyncResize) {
     size -= MIN(size, 1<<18);
     {
       RWLock::RLocker l(ictx->owner_lock);
-      librbd::async_resize(ictx, &ctx, size, prog_ctx);
+      ictx->operations->resize(size, prog_ctx, &ctx, 0);
     }
 
     // try to interrupt the in-progress resize
@@ -368,7 +369,7 @@ TEST_F(TestInternal, MultipleResize) {
 
     RWLock::RLocker l(ictx->owner_lock);
     contexts.push_back(new C_SaferCond());
-    librbd::async_resize(ictx, contexts.back(), new_size, prog_ctx);
+    ictx->operations->resize(new_size, prog_ctx, contexts.back(), 0);
   }
 
   for (uint32_t i = 0; i < contexts.size(); ++i) {
@@ -478,8 +479,8 @@ TEST_F(TestInternal, SnapshotCopyup)
   bl.append(std::string(256, '1'));
   ASSERT_EQ(256, ictx->aio_work_queue->write(0, bl.length(), bl.c_str(), 0));
 
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::snap_protect(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->operations->snap_protect("snap1"));
 
   uint64_t features;
   ASSERT_EQ(0, librbd::get_features(ictx, &features));
@@ -492,8 +493,8 @@ TEST_F(TestInternal, SnapshotCopyup)
   librbd::ImageCtx *ictx2;
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
 
-  ASSERT_EQ(0, librbd::snap_create(ictx2, "snap1"));
-  ASSERT_EQ(0, librbd::snap_create(ictx2, "snap2"));
+  ASSERT_EQ(0, snap_create(*ictx2, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx2, "snap2"));
 
   ASSERT_EQ(256, ictx2->aio_work_queue->write(256, bl.length(), bl.c_str(), 0));
 
@@ -576,8 +577,8 @@ TEST_F(TestInternal, ResizeCopyup)
                                                        bl.c_str(), 0));
   }
 
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::snap_protect(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->operations->snap_protect("snap1"));
 
   std::string clone_name = get_temp_image_name();
   ASSERT_EQ(0, librbd::clone(m_ioctx, m_image_name.c_str(), "snap1", m_ioctx,
@@ -586,7 +587,7 @@ TEST_F(TestInternal, ResizeCopyup)
   librbd::ImageCtx *ictx2;
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
 
-  ASSERT_EQ(0, librbd::snap_create(ictx2, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx2, "snap1"));
 
   bufferptr read_ptr(bl.length());
   bufferlist read_bl;
@@ -594,7 +595,8 @@ TEST_F(TestInternal, ResizeCopyup)
 
   // verify full / partial object removal properly copyup
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(0, librbd::resize(ictx2, m_image_size - (1 << order) - 32, no_op));
+  ASSERT_EQ(0, ictx2->operations->resize(m_image_size - (1 << order) - 32,
+                                         no_op));
   ASSERT_EQ(0, librbd::snap_set(ictx2, "snap1"));
 
   {
@@ -633,8 +635,8 @@ TEST_F(TestInternal, DiscardCopyup)
                                                        bl.c_str(), 0));
   }
 
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::snap_protect(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->operations->snap_protect("snap1"));
 
   std::string clone_name = get_temp_image_name();
   ASSERT_EQ(0, librbd::clone(m_ioctx, m_image_name.c_str(), "snap1", m_ioctx,
@@ -643,7 +645,7 @@ TEST_F(TestInternal, DiscardCopyup)
   librbd::ImageCtx *ictx2;
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
 
-  ASSERT_EQ(0, librbd::snap_create(ictx2, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx2, "snap1"));
 
   bufferptr read_ptr(bl.length());
   bufferlist read_bl;
@@ -681,7 +683,7 @@ TEST_F(TestInternal, ShrinkFlushesCache) {
   ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0);
 
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(0, librbd::resize(ictx, m_image_size >> 1, no_op));
+  ASSERT_EQ(0, ictx->operations->resize(m_image_size >> 1, no_op));
 
   ASSERT_TRUE(c->is_complete());
   ASSERT_EQ(0, c->wait_for_complete());
@@ -763,7 +765,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(0, librbd::resize(ictx, 1 << ictx->order, no_op));
+  ASSERT_EQ(0, ictx->operations->resize(1 << ictx->order, no_op));
 
   bufferlist bl;
   bl.append(std::string(1 << ictx->order, '1'));
@@ -782,7 +784,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
   librbd::ImageCtx *ictx2 = NULL;
   BOOST_SCOPE_EXIT( (&m_ioctx) (clone_name) (parent) (&ictx2) ) {
     if (ictx2 != NULL) {
-      librbd::snap_remove(ictx2, "snap1");
+      ictx2->operations->snap_remove("snap1");
       parent->close_image(ictx2);
     }
 
@@ -791,7 +793,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
   } BOOST_SCOPE_EXIT_END;
 
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
-  ASSERT_EQ(0, librbd::snap_create(ictx2, "snap1"));
+  ASSERT_EQ(0, ictx2->operations->snap_create("snap1"));
 
   bufferlist write_full_bl;
   write_full_bl.append(std::string(1 << ictx2->order, '2'));
@@ -799,7 +801,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
             ictx2->aio_work_queue->write(0, write_full_bl.length(),
             write_full_bl.c_str(), 0));
 
-  ASSERT_EQ(0, librbd::flatten(ictx2, no_op));
+  ASSERT_EQ(0, ictx2->operations->flatten(no_op));
 
   bufferptr read_ptr(bl.length());
   bufferlist read_bl;

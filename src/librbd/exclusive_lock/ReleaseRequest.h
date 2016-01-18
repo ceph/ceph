@@ -13,7 +13,7 @@ class Context;
 namespace librbd {
 
 class ImageCtx;
-class Journal;
+template <typename> class Journal;
 
 namespace exclusive_lock {
 
