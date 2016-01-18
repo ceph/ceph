@@ -551,14 +551,29 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   if (temp_url_expires.empty())
     return -EPERM;
 
-  /* need to get user info of bucket owner */
-  RGWBucketInfo bucket_info;
+  /* TempURL case is completely different than the Keystone auth - you may
+   * get account name only through extraction from URL. In turn, knowledge
+   * about account is neccessary to obtain its bucket tenant. Without that,
+   * the access would be limited to accounts with empty tenant. */
+  string bucket_tenant;
+  if (!s->account_name.empty()) {
+    RGWUserInfo uinfo;
 
+    if (rgw_get_user_info_by_uid(store, s->account_name, uinfo) < 0) {
+      return -EPERM;
+    }
+
+    bucket_tenant = uinfo.user_id.tenant;
+  }
+
+  /* Need to get user info of bucket owner. */
+  RGWBucketInfo bucket_info;
   int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-                                   s->bucket_tenant, s->bucket_name,
+                                   bucket_tenant, s->bucket_name,
                                    bucket_info, NULL);
-  if (ret < 0)
+  if (ret < 0) {
     return -EPERM;
+  }
 
   dout(20) << "temp url user (bucket owner): " << bucket_info.owner << dendl;
   if (rgw_get_user_info_by_uid(store, bucket_info.owner, *(s->user)) < 0) {
@@ -570,8 +585,9 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
     return -EPERM;
   }
 
-  if (!s->info.method)
+  if (!s->info.method) {
     return -EPERM;
+  }
 
   utime_t now = ceph_clock_now(g_ceph_context);
 
