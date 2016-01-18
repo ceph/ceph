@@ -267,7 +267,7 @@ TEST_P(StoreTest, FiemapHoles) {
   }
   {
     bufferlist bl;
-    store->fiemap(cid, oid, 0, 0, bl);
+    store->fiemap(cid, oid, 0, 4194307, bl);
     map<uint64_t,uint64_t> m, e;
     bufferlist::iterator p = bl.begin();
     ::decode(m, p);
