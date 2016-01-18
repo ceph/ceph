@@ -919,7 +919,7 @@ void ECBackend::handle_sub_read(
 	   i->second.begin(); j != i->second.end(); ++j) {
       bufferlist bl;
       r = store->read(
-	coll,
+	ch,
 	ghobject_t(i->first, ghobject_t::NO_GEN, shard),
 	j->get<0>(),
 	j->get<1>(),
@@ -976,7 +976,7 @@ error:
     if (reply->errors.count(*i))
       continue;
     int r = store->getattrs(
-      coll,
+      ch,
       ghobject_t(
 	*i, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       reply->attrs_read[*i]);
@@ -1712,7 +1712,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
     dout(10) << __func__ << ": not in cache " << hoid << dendl;
     struct stat st;
     int r = store->stat(
-      coll,
+      ch,
       ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &st);
     ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
@@ -1729,7 +1729,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
 	}
       } else {
 	r = store->getattr(
-	  coll,
+	  ch,
 	  ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
 	  ECUtil::get_hinfo_key(),
 	  bl);
@@ -2033,7 +2033,7 @@ int ECBackend::objects_get_attrs(
   map<string, bufferlist> *out)
 {
   int r = store->getattrs(
-    coll,
+    ch,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     *out);
   if (r < 0)
@@ -2081,7 +2081,7 @@ void ECBackend::be_deep_scrub(
     bufferlist bl;
     handle.reset_tp_timeout();
     r = store->read(
-      coll,
+      ch,
       ghobject_t(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       pos,

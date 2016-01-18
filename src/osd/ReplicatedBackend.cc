@@ -260,7 +260,7 @@ int ReplicatedBackend::objects_read_sync(
   uint32_t op_flags,
   bufferlist *bl)
 {
-  return store->read(coll, ghobject_t(hoid), off, len, *bl, op_flags);
+  return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
 }
 
 struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
@@ -291,7 +291,7 @@ void ReplicatedBackend::objects_read_async(
 	   to_read.begin();
        i != to_read.end() && r >= 0;
        ++i) {
-    int _r = store->read(coll, ghobject_t(hoid), i->first.get<0>(),
+    int _r = store->read(ch, ghobject_t(hoid), i->first.get<0>(),
 			 i->first.get<1>(), *(i->second.first),
 			 i->first.get<2>());
     if (i->second.second) {
@@ -762,7 +762,7 @@ void ReplicatedBackend::be_deep_scrub(
   while (true) {
     handle.reset_tp_timeout();
     r = store->read(
-	  coll,
+	  ch,
 	  ghobject_t(
 	    poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
 	  pos,
@@ -2014,7 +2014,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
   if (progress.first) {
     store->omap_get_header(coll, ghobject_t(recovery_info.soid), &out_op->omap_header);
-    store->getattrs(coll, ghobject_t(recovery_info.soid), out_op->attrset);
+    store->getattrs(ch, ghobject_t(recovery_info.soid), out_op->attrset);
 
     // Debug
     bufferlist bv = out_op->attrset[OI_ATTR];
@@ -2060,7 +2060,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     if (!recovery_info.copy_subset.empty()) {
       interval_set<uint64_t> copy_subset = recovery_info.copy_subset;
       bufferlist bl;
-      int r = store->fiemap(coll, ghobject_t(recovery_info.soid), 0,
+      int r = store->fiemap(ch, ghobject_t(recovery_info.soid), 0,
                             copy_subset.range_end(), bl);
       if (r >= 0)  {
         interval_set<uint64_t> fiemap_included;
@@ -2089,7 +2089,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
        p != out_op->data_included.end();
        ++p) {
     bufferlist bit;
-    store->read(coll, ghobject_t(recovery_info.soid),
+    store->read(ch, ghobject_t(recovery_info.soid),
 		p.get_start(), p.get_len(), bit,
                 cache_dont_need ? CEPH_OSD_OP_FLAG_FADVISE_DONTNEED: 0);
     if (p.get_len() != bit.length()) {
@@ -2275,7 +2275,7 @@ void ReplicatedBackend::handle_pull(pg_shard_t peer, PullOp &op, PushOp *reply)
 {
   const hobject_t &soid = op.soid;
   struct stat st;
-  int r = store->stat(coll, ghobject_t(soid), &st);
+  int r = store->stat(ch, ghobject_t(soid), &st);
   if (r != 0) {
     get_parent()->clog_error() << get_info().pgid << " "
 			       << peer << " tried to pull " << soid
