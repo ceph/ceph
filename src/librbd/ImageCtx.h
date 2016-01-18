@@ -47,9 +47,10 @@ namespace librbd {
   template <typename> class ExclusiveLock;
   template <typename> class ImageState;
   class ImageWatcher;
-  class Journal;
+  template <typename> class Journal;
   class LibrbdAdminSocketHook;
   class ObjectMap;
+  template <typename> class Operations;
 
   namespace operation {
   template <typename> class ResizeRequest;
@@ -79,7 +80,7 @@ namespace librbd {
     std::string snap_name;
     IoCtx data_ctx, md_ctx;
     ImageWatcher *image_watcher;
-    Journal *journal;
+    Journal<ImageCtx> *journal;
 
     /**
      * Lock ordering:
@@ -137,10 +138,10 @@ namespace librbd {
     std::list<Context*> async_requests_waiters;
 
     ImageState<ImageCtx> *state;
+    Operations<ImageCtx> *operations;
+
     ExclusiveLock<ImageCtx> *exclusive_lock;
     ObjectMap *object_map;
-
-    atomic_t async_request_seq;
 
     xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
@@ -270,7 +271,7 @@ namespace librbd {
     void apply_metadata_confs();
 
     ObjectMap *create_object_map(uint64_t snap_id);
-    Journal *create_journal();
+    Journal<ImageCtx> *create_journal();
 
     void clear_pending_completions();
   };

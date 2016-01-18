@@ -59,8 +59,8 @@ protected:
   virtual void send_op();
   virtual bool should_complete(int r);
 
-  virtual journal::Event create_event() const {
-    return journal::RenameEvent(0, m_dest_name);
+  virtual journal::Event create_event(uint64_t op_tid) const {
+    return journal::RenameEvent(op_tid, m_dest_name);
   }
 
 private:

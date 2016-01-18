@@ -31,7 +31,7 @@ public:
 
   void expect_block_writes(MockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.aio_work_queue, block_writes(_))
-                  .WillRepeatedly(CompleteContext(0, NULL));
+                  .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_verify_lock_ownership(MockImageCtx &mock_image_ctx) {
@@ -133,7 +133,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, Success) {
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -162,7 +162,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, AllocateSnapIdError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -198,7 +198,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, CreateSnapStale) {
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -228,7 +228,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, CreateSnapError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -258,7 +258,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, ReleaseSnapIdError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();

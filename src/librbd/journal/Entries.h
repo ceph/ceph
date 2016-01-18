@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_JOURNAL_TYPES_H
-#define CEPH_LIBRBD_JOURNAL_TYPES_H
+#ifndef CEPH_LIBRBD_JOURNAL_ENTRIES_H
+#define CEPH_LIBRBD_JOURNAL_ENTRIES_H
 
 #include "include/int_types.h"
 #include "include/buffer.h"
@@ -78,26 +78,17 @@ struct AioFlushEvent {
 };
 
 struct OpEventBase {
-  uint64_t tid;
-
-  virtual void encode(bufferlist& bl) const;
-  virtual void decode(__u8 version, bufferlist::iterator& it);
-  virtual void dump(Formatter *f) const;
+  uint64_t op_tid;
 
 protected:
-  OpEventBase() : tid(0) {
+  OpEventBase() : op_tid(0) {
   }
-  OpEventBase(uint64_t _tid) : tid(_tid) {
+  OpEventBase(uint64_t op_tid) : op_tid(op_tid) {
   }
-  virtual ~OpEventBase() {}
-};
 
-struct OpStartEventBase : public OpEventBase {
-protected:
-  OpStartEventBase() {
-  }
-  OpStartEventBase(uint64_t tid) : OpEventBase(tid) {
-  }
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
 };
 
 struct OpFinishEvent : public OpEventBase {
@@ -107,22 +98,27 @@ struct OpFinishEvent : public OpEventBase {
 
   OpFinishEvent() : r(0) {
   }
-  OpFinishEvent(uint64_t tid, int _r) : OpEventBase(tid), r(_r) {
+  OpFinishEvent(uint64_t op_tid, int r) : OpEventBase(op_tid), r(r) {
   }
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
 };
 
-struct SnapEventBase : public OpStartEventBase {
+struct SnapEventBase : public OpEventBase {
   std::string snap_name;
 
+protected:
   SnapEventBase() {
   }
-  SnapEventBase(uint64_t tid, const std::string &_snap_name)
-    : OpStartEventBase(tid), snap_name(_snap_name) {
+  SnapEventBase(uint64_t op_tid, const std::string &_snap_name)
+    : OpEventBase(op_tid), snap_name(_snap_name) {
   }
 
-  virtual void encode(bufferlist& bl) const;
-  virtual void decode(__u8 version, bufferlist::iterator& it);
-  virtual void dump(Formatter *f) const;
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
 };
 
 struct SnapCreateEvent : public SnapEventBase {
@@ -130,9 +126,13 @@ struct SnapCreateEvent : public SnapEventBase {
 
   SnapCreateEvent() {
   }
-  SnapCreateEvent(uint64_t tid, const std::string &snap_name)
-    : SnapEventBase(tid, snap_name) {
+  SnapCreateEvent(uint64_t op_tid, const std::string &snap_name)
+    : SnapEventBase(op_tid, snap_name) {
   }
+
+  using SnapEventBase::encode;
+  using SnapEventBase::decode;
+  using SnapEventBase::dump;
 };
 
 struct SnapRemoveEvent : public SnapEventBase {
@@ -140,9 +140,13 @@ struct SnapRemoveEvent : public SnapEventBase {
 
   SnapRemoveEvent() {
   }
-  SnapRemoveEvent(uint64_t tid, const std::string &snap_name)
-    : SnapEventBase(tid, snap_name) {
+  SnapRemoveEvent(uint64_t op_tid, const std::string &snap_name)
+    : SnapEventBase(op_tid, snap_name) {
   }
+
+  using SnapEventBase::encode;
+  using SnapEventBase::decode;
+  using SnapEventBase::dump;
 };
 
 struct SnapRenameEvent : public SnapEventBase {
@@ -152,14 +156,14 @@ struct SnapRenameEvent : public SnapEventBase {
 
   SnapRenameEvent() : snap_id(CEPH_NOSNAP) {
   }
-  SnapRenameEvent(uint64_t tid, uint64_t src_snap_id,
+  SnapRenameEvent(uint64_t op_tid, uint64_t src_snap_id,
                   const std::string &dest_snap_name)
-    : SnapEventBase(tid, dest_snap_name), snap_id(src_snap_id) {
+    : SnapEventBase(op_tid, dest_snap_name), snap_id(src_snap_id) {
   }
 
-  virtual void encode(bufferlist& bl) const;
-  virtual void decode(__u8 version, bufferlist::iterator& it);
-  virtual void dump(Formatter *f) const;
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
 };
 
 struct SnapProtectEvent : public SnapEventBase {
@@ -167,9 +171,13 @@ struct SnapProtectEvent : public SnapEventBase {
 
   SnapProtectEvent() {
   }
-  SnapProtectEvent(uint64_t tid, const std::string &snap_name)
-    : SnapEventBase(tid, snap_name) {
+  SnapProtectEvent(uint64_t op_tid, const std::string &snap_name)
+    : SnapEventBase(op_tid, snap_name) {
   }
+
+  using SnapEventBase::encode;
+  using SnapEventBase::decode;
+  using SnapEventBase::dump;
 };
 
 struct SnapUnprotectEvent : public SnapEventBase {
@@ -177,9 +185,13 @@ struct SnapUnprotectEvent : public SnapEventBase {
 
   SnapUnprotectEvent() {
   }
-  SnapUnprotectEvent(uint64_t tid, const std::string &snap_name)
-    : SnapEventBase(tid, snap_name) {
+  SnapUnprotectEvent(uint64_t op_tid, const std::string &snap_name)
+    : SnapEventBase(op_tid, snap_name) {
   }
+
+  using SnapEventBase::encode;
+  using SnapEventBase::decode;
+  using SnapEventBase::dump;
 };
 
 struct SnapRollbackEvent : public SnapEventBase {
@@ -187,50 +199,58 @@ struct SnapRollbackEvent : public SnapEventBase {
 
   SnapRollbackEvent() {
   }
-  SnapRollbackEvent(uint64_t tid, const std::string &snap_name)
-    : SnapEventBase(tid, snap_name) {
+  SnapRollbackEvent(uint64_t op_tid, const std::string &snap_name)
+    : SnapEventBase(op_tid, snap_name) {
   }
+
+  using SnapEventBase::encode;
+  using SnapEventBase::decode;
+  using SnapEventBase::dump;
 };
 
-struct RenameEvent : public OpStartEventBase {
+struct RenameEvent : public OpEventBase {
   static const EventType EVENT_TYPE = EVENT_TYPE_RENAME;
 
   std::string image_name;
 
   RenameEvent() {
   }
-  RenameEvent(uint64_t tid, const std::string &_image_name)
-    : OpStartEventBase(tid), image_name(_image_name) {
+  RenameEvent(uint64_t op_tid, const std::string &_image_name)
+    : OpEventBase(op_tid), image_name(_image_name) {
   }
 
-  virtual void encode(bufferlist& bl) const;
-  virtual void decode(__u8 version, bufferlist::iterator& it);
-  virtual void dump(Formatter *f) const;
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
 };
 
-struct ResizeEvent : public OpStartEventBase {
+struct ResizeEvent : public OpEventBase {
   static const EventType EVENT_TYPE = EVENT_TYPE_RESIZE;
 
   uint64_t size;
 
   ResizeEvent() : size(0) {
   }
-  ResizeEvent(uint64_t tid, uint64_t _size)
-    : OpStartEventBase(tid), size(_size) {
+  ResizeEvent(uint64_t op_tid, uint64_t _size)
+    : OpEventBase(op_tid), size(_size) {
   }
 
-  virtual void encode(bufferlist& bl) const;
-  virtual void decode(__u8 version, bufferlist::iterator& it);
-  virtual void dump(Formatter *f) const;
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
 };
 
-struct FlattenEvent : public OpStartEventBase {
+struct FlattenEvent : public OpEventBase {
   static const EventType EVENT_TYPE = EVENT_TYPE_FLATTEN;
 
   FlattenEvent() {
   }
-  FlattenEvent(uint64_t tid) : OpStartEventBase(tid) {
+  FlattenEvent(uint64_t op_tid) : OpEventBase(op_tid) {
   }
+
+  using OpEventBase::encode;
+  using OpEventBase::decode;
+  using OpEventBase::dump;
 };
 
 struct UnknownEvent {
@@ -281,4 +301,4 @@ std::ostream &operator<<(std::ostream &out,
 
 WRITE_CLASS_ENCODER(librbd::journal::EventEntry);
 
-#endif // CEPH_LIBRBD_JOURNAL_TYPES_H
+#endif // CEPH_LIBRBD_JOURNAL_ENTRIES_H

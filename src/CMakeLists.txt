@@ -974,12 +974,11 @@ if(${WITH_RBD})
     librbd/ImageWatcher.cc
     librbd/internal.cc
     librbd/Journal.cc
-    librbd/JournalReplay.cc
-    librbd/JournalTypes.cc
     librbd/librbd.cc
     librbd/LibrbdAdminSocketHook.cc
     librbd/LibrbdWriteback.cc
     librbd/ObjectMap.cc
+    librbd/Operations.cc
     librbd/Utils.cc
     librbd/exclusive_lock/AcquireRequest.cc
     librbd/exclusive_lock/ReleaseRequest.cc
@@ -988,6 +987,8 @@ if(${WITH_RBD})
     librbd/image/RefreshParentRequest.cc
     librbd/image/RefreshRequest.cc
     librbd/image/SetSnapRequest.cc
+    librbd/journal/Entries.cc
+    librbd/journal/Replay.cc
     librbd/object_map/InvalidateRequest.cc
     librbd/object_map/LockRequest.cc
     librbd/object_map/Request.cc

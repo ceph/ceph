@@ -21,6 +21,7 @@
 #include "librbd/Journal.h"
 #include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Operations.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/Utils.h"
 
@@ -162,8 +163,11 @@ struct C_InvalidateCache : public Context {
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0),
-      state(new ImageState<>(this)), exclusive_lock(nullptr),
-      object_map(nullptr), aio_work_queue(NULL), op_work_queue(NULL)
+      state(new ImageState<>(this)),
+      operations(new Operations<>(*this)),
+      exclusive_lock(nullptr), object_map(nullptr),
+      aio_work_queue(nullptr), op_work_queue(nullptr),
+      asok_hook(nullptr)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -217,6 +221,7 @@ struct C_InvalidateCache : public Context {
     delete op_work_queue;
     delete aio_work_queue;
     delete asok_hook;
+    delete operations;
     delete state;
   }
 
@@ -1004,7 +1009,7 @@ struct C_InvalidateCache : public Context {
     return new ObjectMap(*this, snap_id);
   }
 
-  Journal *ImageCtx::create_journal() {
-    return new Journal(*this);
+  Journal<ImageCtx> *ImageCtx::create_journal() {
+    return new Journal<ImageCtx>(*this);
   }
 }
