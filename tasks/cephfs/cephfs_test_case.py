@@ -132,12 +132,26 @@ class CephFSTestCase(unittest.TestCase):
             self.fs.mon_manager.raw_cluster_cmd("osd", "blacklist", "rm", addr)
 
         # In case some test messed with auth caps, reset them
-        for mount in self.mounts:
+        client_mount_ids = [m.client_id for m in self.mounts]
+        for client_id in client_mount_ids:
             self.fs.mon_manager.raw_cluster_cmd_result(
-                'auth', 'caps', "client.{0}".format(mount.client_id),
+                'auth', 'caps', "client.{0}".format(client_id),
                 'mds', 'allow',
                 'mon', 'allow r',
                 'osd', 'allow rw pool={0}'.format(self.fs.get_data_pool_name()))
+
+        log.info(client_mount_ids)
+
+        # In case the test changes the IDs of clients, stash them so that we can
+        # reset in tearDown
+        self._original_client_ids = client_mount_ids
+
+        # In case there were any extra auth identities around from a previous
+        # test, delete them
+        for entry in self.auth_list():
+            ent_type, ent_id = entry['entity'].split(".")
+            if ent_type == "client" and ent_id not in client_mount_ids and ent_id != "admin":
+                self.fs.mon_manager.raw_cluster_cmd("auth", "del", entry['entity'])
 
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
@@ -163,12 +177,23 @@ class CephFSTestCase(unittest.TestCase):
         for m in self.mounts:
             m.teardown()
 
+        for i, m in enumerate(self.mounts):
+            m.client_id = self._original_client_ids[i]
+
         for subsys, key in self.configs_set:
             self.fs.clear_ceph_conf(subsys, key)
 
     def set_conf(self, subsys, key, value):
         self.configs_set.add((subsys, key))
         self.fs.set_ceph_conf(subsys, key, value)
+
+    def auth_list(self):
+        """
+        Convenience wrapper on "ceph auth list"
+        """
+        return json.loads(self.fs.mon_manager.raw_cluster_cmd(
+            "auth", "list", "--format=json-pretty"
+        ))['auth_dump']
 
     def assert_session_count(self, expected, ls_data=None, mds_id=None):
         if ls_data is None:
