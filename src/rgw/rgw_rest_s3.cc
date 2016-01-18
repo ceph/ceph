@@ -2946,6 +2946,14 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
         return -EPERM;
       }
     }
+
+    if ( (now_req < now - RGW_AUTH_GRACE_MINS * 60) ||
+         (now_req > now + RGW_AUTH_GRACE_MINS * 60) ) {
+      dout(10) << "NOTICE: request time skew too big." << dendl;
+      dout(10) << "now_req = " << now_req << " now = " << now << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60 << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
+      return -ERR_REQUEST_TIME_SKEWED;
+    }
+
     s->aws4_auth->signedheaders = s->info.args.get("X-Amz-SignedHeaders");
     if (s->aws4_auth->signedheaders.size() == 0) {
       return -EPERM;
