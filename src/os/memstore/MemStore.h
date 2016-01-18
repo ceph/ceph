@@ -383,12 +383,12 @@ public:
 
   int statfs(struct statfs *buf);
 
-  bool exists(coll_t cid, const ghobject_t& oid);
-  int stat(
-    coll_t cid,
-    const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio = false); // struct stat?
+  bool exists(coll_t cid, const ghobject_t& oid) override;
+  bool exists(CollectionHandle &c, const ghobject_t& oid) override;
+  int stat(coll_t cid, const ghobject_t& oid,
+	   struct stat *st, bool allow_eio = false) override;
+  int stat(CollectionHandle &c, const ghobject_t& oid,
+	   struct stat *st, bool allow_eio = false) override;
   int read(
     coll_t cid,
     const ghobject_t& oid,
@@ -396,10 +396,24 @@ public:
     size_t len,
     bufferlist& bl,
     uint32_t op_flags = 0,
-    bool allow_eio = false);
+    bool allow_eio = false) override;
+  int read(
+    CollectionHandle &c,
+    const ghobject_t& oid,
+    uint64_t offset,
+    size_t len,
+    bufferlist& bl,
+    uint32_t op_flags = 0,
+    bool allow_eio = false) override;
   int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
-  int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr& value);
-  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset);
+  int getattr(coll_t cid, const ghobject_t& oid, const char *name,
+	      bufferptr& value) override;
+  int getattr(CollectionHandle &c, const ghobject_t& oid, const char *name,
+	      bufferptr& value) override;
+  int getattrs(coll_t cid, const ghobject_t& oid,
+	       map<string,bufferptr>& aset) override;
+  int getattrs(CollectionHandle &c, const ghobject_t& oid,
+	       map<string,bufferptr>& aset) override;
 
   int list_collections(vector<coll_t>& ls);
 
