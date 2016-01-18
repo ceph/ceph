@@ -1618,7 +1618,7 @@ int BlueStore::mkfs()
     goto out_close_fsid;
 
   r = _read_fsid(&old_fsid);
-  if (r < 0 && old_fsid.is_zero()) {
+  if (r < 0 || old_fsid.is_zero()) {
     if (fsid.is_zero()) {
       fsid.generate_random();
       dout(1) << __func__ << " generated fsid " << fsid << dendl;
