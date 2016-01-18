@@ -115,7 +115,7 @@ int PGBackend::objects_list_partial(
   while (!_next.is_max() && ls->size() < (unsigned)min) {
     vector<ghobject_t> objects;
     int r = store->collection_list(
-      coll,
+      ch,
       _next,
       ghobject_t::get_max(),
       parent->sort_bitwise(),
@@ -150,7 +150,7 @@ int PGBackend::objects_list_range(
   assert(ls);
   vector<ghobject_t> objects;
   int r = store->collection_list(
-    coll,
+    ch,
     ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     parent->sort_bitwise(),
@@ -180,7 +180,7 @@ int PGBackend::objects_get_attr(
 {
   bufferptr bp;
   int r = store->getattr(
-    coll,
+    ch,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     attr.c_str(),
     bp);
@@ -196,7 +196,7 @@ int PGBackend::objects_get_attrs(
   map<string, bufferlist> *out)
 {
   return store->getattrs(
-    coll,
+    ch,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     *out);
 }
@@ -297,6 +297,7 @@ PGBackend *PGBackend::build_pg_backend(
     return new ECBackend(
       l,
       coll,
+      ch,
       store,
       cct,
       ec_impl,
@@ -326,7 +327,7 @@ void PGBackend::be_scan_list(
 
     struct stat st;
     int r = store->stat(
-      coll,
+      ch,
       ghobject_t(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &st,
@@ -336,7 +337,7 @@ void PGBackend::be_scan_list(
       o.size = st.st_size;
       assert(!o.negative);
       store->getattrs(
-	coll,
+	ch,
 	ghobject_t(
 	  poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
 	o.attrs);
