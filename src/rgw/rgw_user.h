@@ -5,6 +5,8 @@
 #define CEPH_RGW_USER_H
 
 #include <string>
+#include <boost/algorithm/string.hpp>
+#include "include/assert.h"
 
 #include "include/types.h"
 #include "rgw_common.h"
@@ -244,6 +246,8 @@ struct RGWUserAdminOpState {
     if (email.empty())
       return;
 
+    /* always lowercase email address */
+    boost::algorithm::to_lower(email);
     user_email = email;
     user_email_specified = true;
   }
