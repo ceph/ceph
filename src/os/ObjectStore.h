@@ -206,6 +206,20 @@ public:
     }
   };
 
+  struct CollectionImpl : public RefCountedObject {
+    virtual const coll_t &get_cid() = 0;
+    CollectionImpl() : RefCountedObject(NULL, 0) {}
+  };
+  typedef boost::intrusive_ptr<CollectionImpl> CollectionHandle;
+
+  struct CompatCollectionHandle : public CollectionImpl {
+    coll_t cid;
+    CompatCollectionHandle(coll_t c) : cid(c) {}
+    const coll_t &get_cid() override {
+      return cid;
+    }
+  };
+
   /*********************************
    *
    * Object Contents and semantics
@@ -1875,10 +1889,21 @@ public:
    */
   virtual int get_ideal_list_max() { return 64; }
 
+
+  /**
+   * get a collection handle
+   *
+   * Provide a trivial handle as a default to avoid converting legacy
+   * implementations.
+   */
+  virtual CollectionHandle open_collection(const coll_t &cid) {
+    return new CompatCollectionHandle(cid);
+  }
+
+
   /**
    * Synchronous read operations
    */
-
 
   /**
    * exists -- Test for existance of object
