@@ -68,7 +68,8 @@ public:
   typedef void (*aio_callback_t)(void *handle, void *aio);
 
   static BlockDevice *create(
-      const string& type, aio_callback_t cb, void *cbpriv);
+      const string& path, aio_callback_t cb, void *cbpriv);
+  virtual bool supported_bdev_label() { return true; }
 
   virtual void aio_submit(IOContext *ioc) = 0;
 

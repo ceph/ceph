@@ -848,17 +848,12 @@ OPTION(memstore_device_bytes, OPT_U64, 1024*1024*1024)
 OPTION(memstore_page_set, OPT_BOOL, true)
 OPTION(memstore_page_size, OPT_U64, 64 << 10)
 
-OPTION(bdev_backend_type, OPT_STR, "kernel")
 OPTION(bdev_debug_inflight_ios, OPT_BOOL, false)
 OPTION(bdev_inject_crash, OPT_INT, 0)  // if N>0, then ~ 1/N IOs will complete before we crash on flush.
 OPTION(bdev_aio, OPT_BOOL, true)
 OPTION(bdev_aio_poll_ms, OPT_INT, 250)  // milliseconds
 OPTION(bdev_aio_max_queue_depth, OPT_INT, 32)
 
-// Define the whitelist of NVMe controllers to initialize.
-// Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
-// get the serial number of Intel(R) Fultondale NVMe controllers.
-OPTION(bdev_nvme_serial_number, OPT_STR, "")
 // if yes, osd will unbind all NVMe devices from kernel driver and bind them
 // to the uio_pci_generic driver. The purpose is to prevent the case where
 // NVMe driver is loaded while osd is running.
@@ -880,6 +875,12 @@ OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .02)  // min fs free / total free
 OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT, .90)  // max fs free / total free
 OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT, .02) // how much to add at a time
 OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at a time
+// If you want to use spdk driver, you need to specify NVMe serial number here
+// with "spdk:" prefix.
+// Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
+// get the serial number of Intel(R) Fultondale NVMe controllers.
+// Example:
+// bluestore_block_path = spdk:55cd2e404bd73932
 OPTION(bluestore_block_path, OPT_STR, "")
 OPTION(bluestore_block_size, OPT_U64, 10 * 1024*1024*1024)  // 10gb for testing
 OPTION(bluestore_block_db_path, OPT_STR, "")

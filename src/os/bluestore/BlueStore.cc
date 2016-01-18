@@ -931,15 +931,17 @@ int BlueStore::_open_bdev(bool create)
 {
   bluestore_bdev_label_t label;
   assert(bdev == NULL);
-  bdev = BlockDevice::create(g_conf->bdev_backend_type, aio_cb, static_cast<void*>(this));
   string p = path + "/block";
+  bdev = BlockDevice::create(p, aio_cb, static_cast<void*>(this));
   int r = bdev->open(p);
   if (r < 0)
     goto fail;
 
-  r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
-  if (r < 0)
-    goto fail_close;
+  if (bdev->supported_bdev_label()) {
+    r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
+    if (r < 0)
+      goto fail_close;
+  }
   return 0;
 
  fail_close:
@@ -1550,17 +1552,34 @@ int BlueStore::_setup_block_symlink_or_file(
 {
   dout(20) << __func__ << " name " << name << " path " << path
 	   << " size " << size << dendl;
+  int r = 0;
   if (path.length()) {
-    int r = ::symlinkat(path.c_str(), path_fd, name.c_str());
-    if (r < 0) {
-      r = -errno;
-      derr << __func__ << " failed to create " << name << " symlink to "
-	   << path << ": " << cpp_strerror(r) << dendl;
-      return r;
+    string spdk_prefix = "spdk:";
+    if (!path.compare(0, spdk_prefix.size(), spdk_prefix)) {
+      int fd = ::openat(path_fd, name.c_str(), O_CREAT|O_RDWR, 0644);
+      if (fd < 0) {
+	r = -errno;
+	derr << __func__ << " failed to create " << name << " file: "
+	     << cpp_strerror(r) << dendl;
+	return r;
+      }
+      string serial_number = path.substr(spdk_prefix.size());
+      r = ::write(fd, serial_number.c_str(), serial_number.size());
+      assert(r == (int)serial_number.size());
+      dout(1) << __func__ << " created " << name << " file with " << dendl;
+      VOID_TEMP_FAILURE_RETRY(::close(fd));
+    } else {
+      r = ::symlinkat(path.c_str(), path_fd, name.c_str());
+      if (r < 0) {
+        r = -errno;
+        derr << __func__ << " failed to create " << name << " symlink to "
+    	   << path << ": " << cpp_strerror(r) << dendl;
+        return r;
+      }
     }
   } else if (size) {
     struct stat st;
-    int r = ::fstatat(path_fd, name.c_str(), &st, 0);
+    r = ::fstatat(path_fd, name.c_str(), &st, 0);
     if (r < 0)
       r = -errno;
     if (r == -ENOENT) {
@@ -1571,7 +1590,7 @@ int BlueStore::_setup_block_symlink_or_file(
 	     << cpp_strerror(r) << dendl;
 	return r;
       }
-      int r = ::ftruncate(fd, size);
+      r = ::ftruncate(fd, size);
       assert(r == 0);
       dout(1) << __func__ << " created " << name << " file with size "
 	      << pretty_si_t(size) << "B" << dendl;

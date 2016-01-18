@@ -324,9 +324,25 @@ int NVMEDevice::open(string p)
   int r = 0;
   dout(1) << __func__ << " path " << p << dendl;
 
-  r = driver_data.try_get(g_conf->bdev_nvme_serial_number, &ctrlr, &name);
+  string serial_number;
+  int fd = ::open(p.c_str(), O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    derr << __func__ << " unable to open " << p << ": " << cpp_strerror(r)
+	 << dendl;
+    return r;
+  }
+  char buf[100];
+  r = ::read(fd, buf, sizeof(buf));
+  if (r <= 0) {
+    r = -errno;
+    derr << __func__ << " unable to read " << p << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  serial_number = string(buf, r);
+  r = driver_data.try_get(serial_number, &ctrlr, &name);
   if (r < 0) {
-    derr << __func__ << " failed to get nvme deivce with sn " << g_conf->bdev_nvme_serial_number << dendl;
+    derr << __func__ << " failed to get nvme deivce with sn " << serial_number << dendl;
     return r;
   }
 
