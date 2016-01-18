@@ -185,7 +185,7 @@ private:
   struct Op {
     utime_t start;
     uint64_t op;
-    list<Transaction*> tls;
+    vector<Transaction> tls;
     Context *onreadable, *onreadable_sync;
     uint64_t ops, bytes;
     TrackedOpRef osd_op;
@@ -378,7 +378,7 @@ private:
 
   void _do_op(OpSequencer *o, ThreadPool::TPHandle &handle);
   void _finish_op(OpSequencer *o);
-  Op *build_op(list<Transaction*>& tls,
+  Op *build_op(vector<Transaction>& tls,
 	       Context *onreadable, Context *onreadable_sync,
 	       TrackedOpRef osd_op);
   void queue_op(OpSequencer *osr, Op *o);
@@ -461,16 +461,16 @@ public:
   int statfs(struct statfs *buf);
 
   int _do_transactions(
-    list<Transaction*> &tls, uint64_t op_seq,
+    vector<Transaction> &tls, uint64_t op_seq,
     ThreadPool::TPHandle *handle);
-  int do_transactions(list<Transaction*> &tls, uint64_t op_seq) {
+  int do_transactions(vector<Transaction> &tls, uint64_t op_seq) {
     return _do_transactions(tls, op_seq, 0);
   }
   void _do_transaction(
     Transaction& t, uint64_t op_seq, int trans_num,
     ThreadPool::TPHandle *handle);
 
-  int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
+  int queue_transactions(Sequencer *osr, vector<Transaction>& tls,
 			 TrackedOpRef op = TrackedOpRef(),
 			 ThreadPool::TPHandle *handle = NULL);
 
@@ -665,7 +665,7 @@ public:
 
   void dump_start(const std::string& file);
   void dump_stop();
-  void dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr);
+  void dump_transactions(vector<Transaction>& ls, uint64_t seq, OpSequencer *osr);
 
 private:
   void _inject_failure();

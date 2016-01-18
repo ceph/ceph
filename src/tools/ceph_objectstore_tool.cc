@@ -479,7 +479,7 @@ int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid,
   if (r < 0) {
     return r;
   }
-  store->apply_transaction(&osr, rmt);
+  store->apply_transaction(&osr, std::move(rmt));
   finish_remove_pgs(store);
   return r;
 }
@@ -698,7 +698,7 @@ int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force,
   ObjectStore::Transaction t;
   t.write(coll_t::meta(), inc_oid, 0, bl.length(), bl);
   t.truncate(coll_t::meta(), inc_oid, bl.length());
-  int ret = store->apply_transaction(&osr, t);
+  int ret = store->apply_transaction(&osr, std::move(t));
   if (ret) {
     cerr << "Failed to set inc-osdmap (" << inc_oid << "): " << ret << std::endl;
   } else {
@@ -745,7 +745,7 @@ int set_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force,
   ObjectStore::Transaction t;
   t.write(coll_t::meta(), full_oid, 0, bl.length(), bl);
   t.truncate(coll_t::meta(), full_oid, bl.length());
-  int ret = store->apply_transaction(&osr, t);
+  int ret = store->apply_transaction(&osr, std::move(t));
   if (ret) {
     cerr << "Failed to set osdmap (" << full_oid << "): " << ret << std::endl;
   } else {
@@ -997,7 +997,7 @@ int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
     }
   }
   if (!dry_run)
-    store->apply_transaction(&osr, *t);
+    store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
@@ -1303,7 +1303,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     ::encode((char)1, values["_remove"]);
     t.omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
 
-    store->apply_transaction(&osr, t);
+    store->apply_transaction(&osr, std::move(t));
   }
 
   cout << "Importing pgid " << pgid;
@@ -1399,7 +1399,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     set<string> remove;
     remove.insert("_remove");
     t.omap_rmkeys(coll, pgid.make_pgmeta_oid(), remove);
-    store->apply_transaction(&osr, t);
+    store->apply_transaction(&osr, std::move(t));
   }
 
   return 0;
@@ -1466,7 +1466,7 @@ int do_remove_object(ObjectStore *store, coll_t coll,
 
   t.remove(coll, ghobj);
 
-  store->apply_transaction(&osr, t);
+  store->apply_transaction(&osr, std::move(t));
   return 0;
 }
 
@@ -1593,7 +1593,7 @@ int do_set_bytes(ObjectStore *store, coll_t coll,
   } while(true);
 
   if (!dry_run)
-    store->apply_transaction(&osr, *t);
+    store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
@@ -1639,7 +1639,7 @@ int do_set_attr(ObjectStore *store, coll_t coll,
 
   t->setattr(coll, ghobj, key,  bl);
 
-  store->apply_transaction(&osr, *t);
+  store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
@@ -1658,7 +1658,7 @@ int do_rm_attr(ObjectStore *store, coll_t coll,
 
   t->rmattr(coll, ghobj, key);
 
-  store->apply_transaction(&osr, *t);
+  store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
@@ -1718,7 +1718,7 @@ int do_set_omap(ObjectStore *store, coll_t coll,
 
   t->omap_setkeys(coll, ghobj, attrset);
 
-  store->apply_transaction(&osr, *t);
+  store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
@@ -1740,7 +1740,7 @@ int do_rm_omap(ObjectStore *store, coll_t coll,
 
   t->omap_rmkeys(coll, ghobj, keys);
 
-  store->apply_transaction(&osr, *t);
+  store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
@@ -1786,7 +1786,7 @@ int do_set_omaphdr(ObjectStore *store, coll_t coll,
 
   t->omap_setheader(coll, ghobj, hdrbl);
 
-  store->apply_transaction(&osr, *t);
+  store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
@@ -1809,7 +1809,7 @@ struct do_fix_lost : public action_on_object_t {
       ::encode(oi, bl);
       ObjectStore::Transaction t;
       t.setattr(coll, ghobj, OI_ATTR, bl);
-      int r = store->apply_transaction(osr, t);
+      int r = store->apply_transaction(osr, std::move(t));
       if (r < 0) {
 	cerr << "Error getting fixing attr on : " << make_pair(coll, ghobj)
 	     << ", "
@@ -1988,7 +1988,7 @@ int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsiz
       ::encode(ss, snapattr);
       t.setattr(coll, head, SS_ATTR, snapattr);
     }
-    r = store->apply_transaction(&osr, t);
+    r = store->apply_transaction(&osr, std::move(t));
     if (r < 0) {
       cerr << "Error writing object info: " << make_pair(coll, ghobj) << ", "
          << cpp_strerror(r) << std::endl;
@@ -2042,7 +2042,7 @@ int clear_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj,
     ::encode(ss, bl);
     ObjectStore::Transaction t;
     t.setattr(coll, ghobj, SS_ATTR, bl);
-    int r = store->apply_transaction(&osr, t);
+    int r = store->apply_transaction(&osr, std::move(t));
     if (r < 0) {
       cerr << "Error setting snapset on : " << make_pair(coll, ghobj) << ", "
 	   << cpp_strerror(r) << std::endl;
@@ -2140,7 +2140,7 @@ int remove_clone(ObjectStore *store, coll_t coll, ghobject_t &ghobj, snapid_t cl
   ::encode(snapset, bl);
   ObjectStore::Transaction t;
   t.setattr(coll, ghobj, SS_ATTR, bl);
-  int r = store->apply_transaction(&osr, t);
+  int r = store->apply_transaction(&osr, std::move(t));
   if (r < 0) {
     cerr << "Error setting snapset on : " << make_pair(coll, ghobj) << ", "
 	 << cpp_strerror(r) << std::endl;
@@ -3131,7 +3131,7 @@ int main(int argc, char **argv)
       ret = write_info(*t, map_epoch, info, past_intervals);
 
       if (ret == 0) {
-        fs->apply_transaction(osr, *t);
+        fs->apply_transaction(osr, std::move(*t));
         cout << "Removal succeeded" << std::endl;
       }
     } else if (op == "mark-complete") {
@@ -3159,7 +3159,7 @@ int main(int argc, char **argv)
 	ret = write_info(*t, map_epoch, info, past_intervals);
 	if (ret != 0)
 	  goto out;
-	fs->apply_transaction(osr, *t);
+	fs->apply_transaction(osr, std::move(*t));
       }
       cout << "Marking complete succeeded" << std::endl;
     } else {

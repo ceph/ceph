@@ -72,7 +72,7 @@ public:
 
   virtual bool should_commit_now() = 0;
 
-  virtual int prepare_entry(list<ObjectStore::Transaction*>& tls, bufferlist* tbl) = 0;
+  virtual int prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl) = 0;
 
   // reads/recovery
 
