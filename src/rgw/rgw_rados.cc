@@ -700,6 +700,7 @@ int RGWRealm::create(bool exclusive)
   // create the control object for watch/notify
   ret = create_control();
   if (ret < 0) {
+    ldout(cct, 0) << "ERROR creating control for new realm " << name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
   RGWPeriod period;
@@ -724,6 +725,7 @@ int RGWRealm::create(bool exclusive)
   }
   ret = set_current_period(period);
   if (ret < 0) {
+    lderr(cct) << "ERROR: failed set current period " << current_period << dendl;
     return ret;
   }
 
