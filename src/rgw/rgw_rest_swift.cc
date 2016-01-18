@@ -1353,7 +1353,7 @@ int RGWHandler_REST_SWIFT::authorize()
   if ((!s->os_auth_token && s->info.args.get("temp_url_sig").empty()) ||
       (s->op == OP_OPTIONS)) {
     /* anonymous access */
-    rgw_get_anon_user(*(s->user), s->auth_user);
+    rgw_get_anon_user(*(s->user), s->auth_user, store, s->account_name);
     s->perm_mask = RGW_PERM_FULL_CONTROL;
     return 0;
   }
