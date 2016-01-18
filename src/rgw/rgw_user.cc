@@ -286,10 +286,10 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
 int rgw_get_user_info_by_uid(RGWRados *store,
                              const rgw_user& uid,
                              RGWUserInfo& info,
-                             RGWObjVersionTracker *objv_tracker,
-                             real_time *pmtime,
-                             rgw_cache_entry_info *cache_info,
-                             map<string, bufferlist> *pattrs)
+                             RGWObjVersionTracker * const objv_tracker,
+                             real_time * const pmtime,
+                             rgw_cache_entry_info * const cache_info,
+                             map<string, bufferlist> * const pattrs)
 {
   bufferlist bl;
   RGWUID user_id;
