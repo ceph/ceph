@@ -634,6 +634,7 @@ BlueStore::Collection::Collection(BlueStore *ns, coll_t c)
   : store(ns),
     cid(c),
     lock("BlueStore::Collection::lock"),
+    exists(true),
     onode_map(),
     enode_set(g_conf->bluestore_onode_map_size)
 {
@@ -2328,6 +2329,11 @@ void BlueStore::_reap_collections()
 
 // ---------------
 // read operations
+
+ObjectStore::CollectionHandle BlueStore::open_collection(const coll_t& cid)
+{
+  return _get_collection(cid);
+}
 
 bool BlueStore::exists(coll_t cid, const ghobject_t& oid)
 {
@@ -6145,6 +6151,7 @@ int BlueStore::_create_collection(
       r = -EEXIST;
       goto out;
     }
+    assert((*c)->exists);
     c->reset(new Collection(this, cid));
     (*c)->cnode.bits = bits;
     coll_map[cid] = *c;
@@ -6159,7 +6166,7 @@ int BlueStore::_create_collection(
 }
 
 int BlueStore::_remove_collection(TransContext *txc, coll_t cid,
-				 CollectionRef *c)
+				  CollectionRef *c)
 {
   dout(15) << __func__ << " " << cid << dendl;
   int r;
@@ -6170,6 +6177,7 @@ int BlueStore::_remove_collection(TransContext *txc, coll_t cid,
       r = -ENOENT;
       goto out;
     }
+    assert((*c)->exists);
     pair<ghobject_t,OnodeRef> next;
     while ((*c)->onode_map.get_next(next.first, &next)) {
       if (next.second->exists) {
@@ -6179,6 +6187,7 @@ int BlueStore::_remove_collection(TransContext *txc, coll_t cid,
     }
     coll_map.erase(cid);
     txc->removed_collections.push_back(*c);
+    (*c)->exists = false;
     c->reset();
   }
   txc->t->rmkey(PREFIX_COLL, stringify(cid));

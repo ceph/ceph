@@ -166,11 +166,13 @@ public:
     int trim(int max=-1);
   };
 
-  struct Collection {
+  struct Collection : public CollectionImpl {
     BlueStore *store;
     coll_t cid;
     bluestore_cnode_t cnode;
     RWLock lock;
+
+    bool exists;
 
     // cache onodes on a per-collection basis to avoid lock
     // contention.
@@ -180,6 +182,10 @@ public:
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
     EnodeRef get_enode(uint32_t hash);
+
+    const coll_t &get_cid() override {
+      return cid;
+    }
 
     bool contains(const ghobject_t& oid) {
       if (cid.is_meta())
@@ -194,7 +200,7 @@ public:
 
     Collection(BlueStore *ns, coll_t c);
   };
-  typedef ceph::shared_ptr<Collection> CollectionRef;
+  typedef boost::intrusive_ptr<Collection> CollectionRef;
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
     CollectionRef c;
