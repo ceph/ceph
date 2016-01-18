@@ -281,17 +281,17 @@ class CephFSMount(object):
         self.background_procs.append(rproc)
         return rproc
 
-    def write_n_mb(self, filename, n_mb, seek=0):
+    def write_n_mb(self, filename, n_mb, seek=0, wait=True):
         """
         Write the requested number of megabytes to a file
         """
         assert(self.is_mounted())
 
-        self.run_shell(["dd", "if=/dev/urandom", "of={0}".format(filename),
-                        "bs=1M",
-                        "count={0}".format(n_mb),
-                        "seek={0}".format(seek)
-        ])
+        return self.run_shell(["dd", "if=/dev/urandom", "of={0}".format(filename),
+                               "bs=1M",
+                               "count={0}".format(n_mb),
+                               "seek={0}".format(seek)
+                               ], wait=wait)
 
     def write_test_pattern(self, filename, size):
         log.info("Writing {0} bytes to {1}".format(size, filename))
