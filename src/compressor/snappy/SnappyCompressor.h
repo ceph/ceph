@@ -26,7 +26,7 @@ class BufferlistSource : public snappy::Source {
   size_t left;
 
  public:
-  BufferlistSource(bufferlist &data): pb(data.buffers().begin()), pb_off(0), left(data.length()) {}
+  BufferlistSource(const bufferlist &data): pb(data.buffers().begin()), pb_off(0), left(data.length()) {}
   virtual ~BufferlistSource() {}
   virtual size_t Available() const { return left; }
   virtual const char* Peek(size_t* len) {
@@ -53,7 +53,7 @@ class SnappyCompressor : public Compressor {
  public:
   virtual ~SnappyCompressor() {}
   virtual const char* get_method_name() { return "snappy"; }
-  virtual int compress(bufferlist &src, bufferlist &dst) {
+  virtual int compress(const bufferlist &src, bufferlist &dst) {
     BufferlistSource source(src);
     bufferptr ptr(snappy::MaxCompressedLength(src.length()));
     snappy::UncheckedByteArraySink sink(ptr.c_str());
@@ -61,12 +61,14 @@ class SnappyCompressor : public Compressor {
     dst.append(ptr, 0, sink.CurrentDestination()-ptr.c_str());
     return 0;
   }
-  virtual int decompress(bufferlist &src, bufferlist &dst) {
-    BufferlistSource source(src);
+  virtual int decompress(const bufferlist &src, bufferlist &dst) {
     size_t res_len = 0;
     // Trick, decompress only need first 32bits buffer
-    if (!snappy::GetUncompressedLength(src.get_contiguous(0, 8), 8, &res_len))
+    bufferlist tmp;
+    tmp.substr_of( src, 0, 4 );
+    if (!snappy::GetUncompressedLength(tmp.c_str(), tmp.length(), &res_len))
       return -1;
+    BufferlistSource source(src);
     bufferptr ptr(res_len);
     if (snappy::RawUncompress(&source, ptr.c_str())) {
       dst.append(ptr);
