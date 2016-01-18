@@ -33,6 +33,7 @@ public:
   ReplicatedBackend(
     PGBackend::Listener *pg,
     coll_t coll,
+    ObjectStore::CollectionHandle &ch,
     ObjectStore *store,
     CephContext *cct);
 

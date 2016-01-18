@@ -171,11 +171,12 @@ void ECBackend::RecoveryOp::dump(Formatter *f) const
 ECBackend::ECBackend(
   PGBackend::Listener *pg,
   coll_t coll,
+  ObjectStore::CollectionHandle &ch,
   ObjectStore *store,
   CephContext *cct,
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
-  : PGBackend(pg, store, coll),
+  : PGBackend(pg, store, coll, ch),
     cct(cct),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {

@@ -62,9 +62,10 @@ static void log_subop_stats(
 ReplicatedBackend::ReplicatedBackend(
   PGBackend::Listener *pg,
   coll_t coll,
+  ObjectStore::CollectionHandle &c,
   ObjectStore *store,
   CephContext *cct) :
-  PGBackend(pg, store, coll),
+  PGBackend(pg, store, coll, c),
   cct(cct) {}
 
 void ReplicatedBackend::run_recovery_op(
