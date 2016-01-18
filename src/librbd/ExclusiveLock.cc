@@ -339,8 +339,8 @@ void ExclusiveLock<I>::send_acquire_lock() {
 
 template <typename I>
 void ExclusiveLock<I>::handle_acquiring_lock(int r) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  Mutex::Locker locker(m_lock);
+  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
 
   assert(r == 0);
   assert(m_state == STATE_ACQUIRING);
