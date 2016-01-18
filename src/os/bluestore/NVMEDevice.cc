@@ -55,6 +55,7 @@ enum {
   l_bluestore_nvmedevice_read_lat,
   l_bluestore_nvmedevice_flush_lat,
   l_bluestore_nvmedevice_queue_ops,
+  l_bluestore_nvmedevice_polling_lat,
   l_bluestore_nvmedevice_last
 };
 
@@ -358,6 +359,7 @@ int NVMEDevice::open(string p)
   b.add_time_avg(l_bluestore_nvmedevice_read_lat, "read_lat", "Average read completing latency");
   b.add_time_avg(l_bluestore_nvmedevice_flush_lat, "flush_lat", "Average flush completing latency");
   b.add_u64(l_bluestore_nvmedevice_queue_ops, "queue_ops", "Operations in nvme queue");
+  b.add_time_avg(l_bluestore_nvmedevice_polling_lat, "polling_lat", "Average polling latency");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 
@@ -400,6 +402,7 @@ void NVMEDevice::_aio_thread()
   int r = 0;
   const int max = 16;
   uint64_t lba_off, lba_count;
+  utime_t lat, start = ceph_clock_now(g_ceph_context);
   while (true) {
     dout(40) << __func__ << " polling" << dendl;
     t = nullptr;
@@ -412,13 +415,20 @@ void NVMEDevice::_aio_thread()
       }
       if (!t)
         queue_empty.inc();
-    } else if (!inflight_ops.read() && !flush_waiters.read()) {
+    } else if (!inflight_ops.read()) {
+      if (flush_waiters.read()) {
+        Mutex::Locker l(flush_lock);
+        flush_cond.Signal();
+      }
       Mutex::Locker l(queue_lock);
       if (queue_empty.read()) {
+        lat = ceph_clock_now(g_ceph_context);
+        lat -= start;
+        logger->tinc(l_bluestore_nvmedevice_polling_lat, lat);
         if (aio_stop)
           break;
-        assert(flush_waiters.read() == 0);
         queue_cond.Wait(queue_lock);
+        start = ceph_clock_now(g_ceph_context);
       }
     }
 
@@ -475,12 +485,9 @@ void NVMEDevice::_aio_thread()
           break;
         }
       }
-    } else if (!inflight_ops.read()) {
+    } else if (inflight_ops.read()) {
       dout(20) << __func__ << " idle, have a pause" << dendl;
-      if (flush_waiters.read()) {
-        Mutex::Locker l(flush_lock);
-        flush_cond.Signal();
-      }
+
 #ifdef HAVE_SSE
       _mm_pause();
 #else
