@@ -69,6 +69,10 @@ int main(int argc, const char **argv, const char *envp[]) {
   //cerr << "ceph-fuse starting " << myrank << "/" << world << std::endl;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  if (args.empty()) {
+    usage();
+    return 0;
+  }
   env_to_vec(args);
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
