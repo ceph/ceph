@@ -1,0 +1,6 @@
+tasks:
+- kclient:
+- workunit:
+    clients:
+      all:
+        - fs/snaps
