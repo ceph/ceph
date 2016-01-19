@@ -377,11 +377,11 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, 
     int r;
     if (name.empty()) {
       name = get_predefined_name(cct);
-      if (id.empty()) {
-	r = use_default(old_format);
-	if (r < 0) {
-	  return r;
-	}
+    }
+    if (name.empty()) {
+      r = use_default(old_format);
+      if (r < 0) {
+	return r;
       }
     } else if (!old_format) {
       r = read_id(name, id);
@@ -1040,7 +1040,6 @@ int RGWPeriod::read_info()
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
-
 
   RGWObjectCtx obj_ctx(store);
   int ret = rgw_get_system_obj(store, obj_ctx, pool, get_period_oid(), bl, NULL, NULL);
