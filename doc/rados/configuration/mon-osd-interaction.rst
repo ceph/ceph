@@ -289,7 +289,7 @@ Monitor Settings
 :Default: ``300``
 
 
-``mon osd downout subtree limit``
+``mon osd down out subtree limit``
 
 :Description: The largest :term:`CRUSH` unit type that Ceph will 
               automatically mark ``out``. 
