@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
 				std::bind(&TestServer::post, &server, _1),
 				client_goals[i] * goal_secs_to_run,
 				client_goals[i],
-				4);
+				10);
   }
 
   // clients are now running

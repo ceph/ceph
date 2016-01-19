@@ -34,11 +34,11 @@ static void debugger() {
 }
 
 
-// #define TIME_SHORTENER
+#define TIME_SHORTENER
 
 
 #ifdef TIME_SHORTENER
-static const double time_shortener = 1452895900.0;
+static const double time_shortener = 1453228100.0;
 #endif
 
 
@@ -128,14 +128,6 @@ namespace crimson {
       }
 
     private:
-
-#if 0
-      RequestTag(double p, double r, double l) :
-	proportion(p), reservation(r), limit(l)
-      {
-	// empty
-      }
-#endif
 
       static double tagCalc(Time time, double prev, double increment) {
 	if (0.0 == increment) {
@@ -425,7 +417,7 @@ namespace crimson {
 	for (auto i = resQ.begin(); i != resQ.end(); ++i) {
 	  if ((*i)->client == client_id) {
 	    (*i)->tag.reservation -= reduction;
-	    i.increase();
+	    i.increase(); // since tag goes down, priority increases
 	  }
 	}
       }
