@@ -1,6 +1,5 @@
 from mock import patch, DEFAULT
 import os
-import pytest
 import io
 import subprocess
 import unittest
@@ -20,7 +19,7 @@ class TestCephDisk(object):
         args = main.parse_args(['list', '--format', 'json'])
         with patch.multiple(
                 main,
-                list_devices=lambda args: {}):
+                list_devices=lambda: {}):
             main.main_list(args)
             out, err = capsys.readouterr()
             assert '{}\n' == out
@@ -29,7 +28,7 @@ class TestCephDisk(object):
         args = main.parse_args(['list'])
         with patch.multiple(
                 main,
-                list_devices=lambda args: {}):
+                list_devices=lambda: {}):
             main.main_list(args)
             out, err = capsys.readouterr()
             assert '' == out
@@ -124,14 +123,10 @@ class TestCephDisk(object):
         #
         ptype2type = {
             main.DMCRYPT_OSD_UUID: 'plain',
-            main.DMCRYPT_LUKS_OSD_UUID: 'LUKS',
+            main.DMCRYPT_LUKS_OSD_UUID: 'luks',
         }
         for (ptype, type) in ptype2type.iteritems():
             for holders in ((), ("dm_0",), ("dm_0", "dm_1")):
-                devices = [{
-                    'path': '/dev/dm_0',
-                    'whoami': '1234',
-                }]
                 dev = {
                     'dmcrypt': {
                         'holders': holders,
@@ -140,17 +135,14 @@ class TestCephDisk(object):
                     'path': '/dev/Xda1',
                     'ptype': ptype,
                     'state': 'prepared',
+                    'whoami': '1234',
                 }
-                with patch.multiple(
-                        main,
-                        list_devices=lambda path: devices,
-                ):
-                    out = main.list_format_dev_plain(dev, devices)
+                out = main.list_format_dev_plain(dev)
                 assert 'data' in out
                 assert 'dmcrypt' in out
                 assert type in out
                 if len(holders) == 1:
-                    assert devices[0]['whoami'] in out
+                    assert dev['whoami'] in out
                 for holder in holders:
                     assert holder in out
 
@@ -172,7 +164,7 @@ class TestCephDisk(object):
                         'type': type,
                     },
                 }
-                out = main.list_format_dev_plain(dev, devices)
+                out = main.list_format_dev_plain(dev)
                 assert 'journal' in out
                 assert 'dmcrypt' in out
                 assert type in out
@@ -246,38 +238,6 @@ class TestCephDisk(object):
                     'magic': main.CEPH_OSD_ONDISK_MAGIC,
                     'state': 'prepared'} == desc
 
-    @patch('os.path.exists')
-    def test_list_paths_to_names(self, m_exists):
-
-        def exists(path):
-            return path in (
-                '/sys/block/sda',
-                '/sys/block/sdb',
-                '/sys/block/cciss!c0d0',
-                '/sys/block/cciss!c0d1',
-                '/sys/block/cciss!c0d2',
-            )
-
-        m_exists.side_effect = exists
-        paths = [
-            '/dev/sda',
-            '/dev/cciss/c0d0',
-            'cciss!c0d1',
-            'cciss/c0d2',
-            'sdb',
-        ]
-        expected = [
-            'sda',
-            'cciss!c0d0',
-            'cciss!c0d1',
-            'cciss!c0d2',
-            'sdb',
-        ]
-        assert expected == main.list_paths_to_names(paths)
-        with pytest.raises(main.Error) as excinfo:
-            main.list_paths_to_names(['unknown'])
-        assert 'unknown' in excinfo.value.message
-
     def test_list_all_partitions(self):
         disk = "Xda"
         partition = "Xda1"
@@ -289,16 +249,9 @@ class TestCephDisk(object):
             main,
             list_partitions=lambda dev: [partition],
         ):
-                assert {disk: [partition]} == main.list_all_partitions([])
-
-        with patch.multiple(
-                main,
-                list_partitions=lambda dev: [partition],
-        ):
-                assert {disk: [partition]} == main.list_all_partitions([disk])
+                assert {disk: [partition]} == main.list_all_partitions()
 
     def test_list_data(self):
-        args = main.parse_args(['list'])
         #
         # a data partition that fails to mount is silently
         # ignored
@@ -310,7 +263,7 @@ class TestCephDisk(object):
 
         with patch.multiple(
                 main,
-                list_all_partitions=lambda names: {disk: [partition]},
+                list_all_partitions=lambda: {disk: [partition]},
                 get_partition_uuid=lambda dev: partition_uuid,
                 get_partition_type=lambda dev: main.OSD_UUID,
                 get_dev_fs=lambda dev: fs_type,
@@ -330,10 +283,9 @@ class TestCephDisk(object):
                            'type': 'data',
                            'uuid': partition_uuid,
                        }]}]
-            assert expect == main.list_devices(args)
+            assert expect == main.list_devices()
 
     def test_list_dmcrypt_data(self):
-        args = main.parse_args(['list'])
         partition_type2type = {
             main.DMCRYPT_OSD_UUID: 'plain',
             main.DMCRYPT_LUKS_OSD_UUID: 'LUKS',
@@ -349,7 +301,7 @@ class TestCephDisk(object):
             with patch.multiple(
                     main,
                     is_held=lambda dev: holders,
-                    list_all_partitions=lambda names: {disk: [partition]},
+                    list_all_partitions=lambda: {disk: [partition]},
                     get_partition_uuid=lambda dev: partition_uuid,
                     get_partition_type=lambda dev: partition_type,
                     is_partition=lambda dev: True,
@@ -369,7 +321,7 @@ class TestCephDisk(object):
                                'type': 'data',
                                'uuid': partition_uuid,
                            }]}]
-                assert expect == main.list_devices(args)
+                assert expect == main.list_devices()
             #
             # dmcrypt data partition with two holders
             #
@@ -380,7 +332,7 @@ class TestCephDisk(object):
             with patch.multiple(
                     main,
                     is_held=lambda dev: holders,
-                    list_all_partitions=lambda names: {disk: [partition]},
+                    list_all_partitions=lambda: {disk: [partition]},
                     get_partition_uuid=lambda dev: partition_uuid,
                     get_partition_type=lambda dev: partition_type,
                     is_partition=lambda dev: True,
@@ -397,10 +349,9 @@ class TestCephDisk(object):
                                'type': 'data',
                                'uuid': partition_uuid,
                            }]}]
-                assert expect == main.list_devices(args)
+                assert expect == main.list_devices()
 
     def test_list_multipath(self):
-        args = main.parse_args(['list'])
         #
         # multipath data partition
         #
@@ -409,7 +360,7 @@ class TestCephDisk(object):
         partition = "Xda1"
         with patch.multiple(
                 main,
-                list_all_partitions=lambda names: {disk: [partition]},
+                list_all_partitions=lambda: {disk: [partition]},
                 get_partition_uuid=lambda dev: partition_uuid,
                 get_partition_type=lambda dev: main.MPATH_OSD_UUID,
                 is_partition=lambda dev: True,
@@ -427,14 +378,14 @@ class TestCephDisk(object):
                            'type': 'data',
                            'uuid': partition_uuid,
                        }]}]
-            assert expect == main.list_devices(args)
+            assert expect == main.list_devices()
         #
         # multipath journal partition
         #
         journal_partition_uuid = "2cc40457-259e-4542-b029-785c7cc37871"
         with patch.multiple(
                 main,
-                list_all_partitions=lambda names: {disk: [partition]},
+                list_all_partitions=lambda: {disk: [partition]},
                 get_partition_uuid=lambda dev: journal_partition_uuid,
                 get_partition_type=lambda dev: main.MPATH_JOURNAL_UUID,
                 is_partition=lambda dev: True,
@@ -449,7 +400,7 @@ class TestCephDisk(object):
                            'type': 'journal',
                            'uuid': journal_partition_uuid,
                        }]}]
-            assert expect == main.list_devices(args)
+            assert expect == main.list_devices()
 
     def test_list_dmcrypt(self):
         self.list(main.DMCRYPT_OSD_UUID, main.DMCRYPT_JOURNAL_UUID)
@@ -459,7 +410,6 @@ class TestCephDisk(object):
         self.list(main.OSD_UUID, main.JOURNAL_UUID)
 
     def list(self, data_ptype, journal_ptype):
-        args = main.parse_args(['--verbose', 'list'])
         #
         # a single disk has a data partition and a journal
         # partition and the osd is active
@@ -548,7 +498,7 @@ class TestCephDisk(object):
 
         with patch.multiple(
                 main,
-                list_all_partitions=lambda names: {disk: [data, journal]},
+                list_all_partitions=lambda: {disk: [data, journal]},
                 get_dev_fs=lambda dev: fs_type,
                 is_mounted=lambda dev: mount_path,
                 get_partition_uuid=get_partition_uuid,
@@ -585,10 +535,9 @@ class TestCephDisk(object):
                            'type': 'journal',
                            'uuid': journal_uuid,
                        }]}]
-            assert expect == main.list_devices(args)
+            assert expect == main.list_devices()
 
     def test_list_other(self):
-        args = main.parse_args(['list'])
         #
         # not swap, unknown fs type, not mounted, with uuid
         #
@@ -598,7 +547,7 @@ class TestCephDisk(object):
         partition = "Xda1"
         with patch.multiple(
                 main,
-                list_all_partitions=lambda names: {disk: [partition]},
+                list_all_partitions=lambda: {disk: [partition]},
                 get_partition_uuid=lambda dev: partition_uuid,
                 get_partition_type=lambda dev: partition_type,
                 is_partition=lambda dev: True,
@@ -610,7 +559,7 @@ class TestCephDisk(object):
                                        'ptype': partition_type,
                                        'type': 'other',
                                        'uuid': partition_uuid}]}]
-            assert expect == main.list_devices(args)
+            assert expect == main.list_devices()
         #
         # not swap, mounted, ext4 fs type, with uuid
         #
@@ -622,7 +571,7 @@ class TestCephDisk(object):
         fs_type = 'ext4'
         with patch.multiple(
                 main,
-                list_all_partitions=lambda names: {disk: [partition]},
+                list_all_partitions=lambda: {disk: [partition]},
                 get_dev_fs=lambda dev: fs_type,
                 is_mounted=lambda dev: mount_path,
                 get_partition_uuid=lambda dev: partition_uuid,
@@ -640,7 +589,7 @@ class TestCephDisk(object):
                            'type': 'other',
                            'uuid': partition_uuid,
                        }]}]
-            assert expect == main.list_devices(args)
+            assert expect == main.list_devices()
 
         #
         # swap, with uuid
@@ -651,7 +600,7 @@ class TestCephDisk(object):
         partition = "Xda1"
         with patch.multiple(
                 main,
-                list_all_partitions=lambda names: {disk: [partition]},
+                list_all_partitions=lambda: {disk: [partition]},
                 is_swap=lambda dev: True,
                 get_partition_uuid=lambda dev: partition_uuid,
                 get_partition_type=lambda dev: partition_type,
@@ -664,7 +613,7 @@ class TestCephDisk(object):
                                        'ptype': partition_type,
                                        'type': 'swap',
                                        'uuid': partition_uuid}]}]
-            assert expect == main.list_devices(args)
+            assert expect == main.list_devices()
 
         #
         # whole disk
@@ -674,7 +623,7 @@ class TestCephDisk(object):
         partition = "Xda1"
         with patch.multiple(
                 main,
-                list_all_partitions=lambda names: {disk: []},
+                list_all_partitions=lambda: {disk: []},
                 is_partition=lambda dev: False,
         ):
             expect = [{'path': '/dev/' + disk,
@@ -682,7 +631,7 @@ class TestCephDisk(object):
                        'is_partition': False,
                        'ptype': 'unknown',
                        'type': 'other'}]
-            assert expect == main.list_devices(args)
+            assert expect == main.list_devices()
 
 
 class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
@@ -708,7 +657,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                         }]}]
         with patch.multiple(
                 main,
-                list_devices=lambda dev: fake_device,
+                list_devices=lambda: fake_device,
         ):
             main.setup_statedir(main.STATEDIR)
             self.assertRaises(Exception, main.main_deactivate, args)
@@ -731,7 +680,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                         }]}]
         with patch.multiple(
                 main,
-                list_devices=lambda dev: fake_device,
+                list_devices=lambda: fake_device,
                 _check_osd_status=lambda cluster, osd_id: 2,
                 _mark_osd_out=lambda cluster, osd_id: True
         ):
@@ -754,7 +703,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                         }]}]
         with patch.multiple(
                 main,
-                list_devices=lambda dev: fake_device,
+                list_devices=lambda: fake_device,
                 _check_osd_status=lambda cluster, osd_id: 0,
         ):
             main.setup_statedir(main.STATEDIR)
@@ -785,7 +734,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         with patch.multiple(
                 main,
                 mock_open,
-                list_devices=lambda dev: fake_device,
+                list_devices=lambda: fake_device,
                 _check_osd_status=lambda cluster, osd_id: 3,
                 _mark_osd_out=lambda cluster, osd_id: True,
                 stop_daemon=lambda cluster, osd_id: True,
@@ -820,7 +769,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         with patch.multiple(
                 main,
                 mock_open,
-                list_devices=lambda dev: fake_device,
+                list_devices=lambda: fake_device,
                 _check_osd_status=lambda cluster, osd_id: 1,
                 _mark_osd_out=lambda cluster, osd_id: True,
                 stop_daemon=lambda cluster, osd_id: True,
@@ -899,12 +848,6 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         # fail on init type
         #
         with patch('os.path.exists', return_value=False):
-            self.assertRaises(Exception, main.stop_daemon, 'ceph', '5566')
-
-        #
-        # faile on os path
-        #
-        with patch('os.path.exists', return_value=Exception):
             self.assertRaises(Exception, main.stop_daemon, 'ceph', '5566')
 
         #
@@ -1174,14 +1117,11 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
             main.unmount(path)
 
     def test_main_destroy(self):
-        DMCRYPT_OSD_UUID = '4fbd7e29-9d25-41b8-afd0-5ec00ceff05d'
-        DMCRYPT_LUKS_OSD_UUID = '4fbd7e29-9d25-41b8-afd0-35865ceff05d'
         OSD_UUID = '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
         MPATH_OSD_UUID = '4fbd7e29-8ae0-4982-bf9d-5a8d867af560'
         part_uuid = '0ce28a16-6d5d-11e5-aec3-fa163e5c167b'
         journal_uuid = "7ad5e65a-0ca5-40e4-a896-62a74ca61c55"
         mount_5566 = '/var/lib/ceph/osd/ceph-5566/'
-        ptype_0 = '00000000-0000-0000-0000-000000000000'
 
         fake_devices_normal = [{'path': '/dev/sdY',
                                 'partitions': [{
@@ -1201,54 +1141,9 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                                     'mount': '/var/lib/ceph/osd/ceph-7788/',
                                     'uuid': part_uuid,
                                     'journal_uuid': journal_uuid}]}]
-        fake_devices_dmcrypt_unmap = [{'path': '/dev/sdY',
-                                       'partitions': [{
-                                           'dmcrypt': {
-                                               'holders': '',
-                                               'type': type,
-                                           },
-                                           'ptype': DMCRYPT_OSD_UUID,
-                                           'path': '/dev/sdX1',
-                                           'whoami': '5566',
-                                           'mount': mount_5566,
-                                           'uuid': part_uuid,
-                                           'journal_uuid': journal_uuid}]}]
-        fake_devices_dmcrypt_luk_unmap = [{'path': '/dev/sdY',
-                                           'partitions': [{
-                                               'dmcrypt': {
-                                                   'holders': '',
-                                                   'type': type,
-                                               },
-                                               'ptype': DMCRYPT_LUKS_OSD_UUID,
-                                               'path': '/dev/sdX1',
-                                               'whoami': '5566',
-                                               'mount': mount_5566,
-                                               'uuid': part_uuid,
-                                               'journal_uuid': journal_uuid}]}]
-        fake_devices_dmcrypt_unknow = [{'path': '/dev/sdY',
-                                        'partitions': [{
-                                            'dmcrypt': {
-                                                'holders': '',
-                                                'type': type,
-                                            },
-                                            'ptype': ptype_0,
-                                            'path': '/dev/sdX1',
-                                            'whoami': '5566',
-                                            'mount': mount_5566,
-                                            'uuid': part_uuid,
-                                            'journal_uuid': journal_uuid}]}]
-        fake_devices_dmcrypt_map = [{'dmcrypt': {'holders': 'dm_0',
-                                                 'type': type},
-                                     'ptype': DMCRYPT_OSD_UUID,
-                                     'path': '/dev/sdX1',
-                                     'whoami': '5566',
-                                     'mount': mount_5566,
-                                     'uuid': part_uuid,
-                                     'journal_uuid': journal_uuid}]
 
-        def list_devices_return(dev):
-            if dev == []:
-                return fake_devices_normal
+        def list_devices_return():
+            return fake_devices_normal
 
         #
         # input device is not the device partition
@@ -1313,78 +1208,6 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 list_devices=list_devices_return,
                 get_partition_base_mpath=lambda dev_path: '/dev/sdX',
                 _check_osd_status=lambda cluster, osd_id: 1,
-        ):
-            self.assertRaises(Exception, main.main_destroy, args)
-
-        #
-        # skip the redundent devices and found by dev
-        # with dmcrypt (plain)
-        #
-        args = main.parse_args(['destroy', '--cluster', 'ceph',
-                                '/dev/sdX1', '--zap'])
-
-        def list_devices_return(dev):
-            if dev == []:
-                return fake_devices_dmcrypt_unmap
-            elif dev == ['/dev/sdX1']:
-                return fake_devices_dmcrypt_map
-
-        with patch.multiple(
-                main,
-                is_partition=lambda path: True,
-                list_devices=list_devices_return,
-                get_dmcrypt_key_path=lambda *args, **kwargs: True,
-                dmcrypt_map=lambda *args, **kwargs: True,
-                dmcrypt_unmap=lambda part_uuid: True,
-                get_partition_base=lambda dev_path: '/dev/sdX',
-                _check_osd_status=lambda cluster, osd_id: 0,
-                _remove_from_crush_map=lambda cluster, osd_id: True,
-                _delete_osd_auth_key=lambda cluster, osd_id: True,
-                _deallocate_osd_id=lambda cluster, osd_id: True,
-                zap=lambda dev: True
-        ):
-            main.main_destroy(args)
-
-        #
-        # skip the redundent devices and found by osd-id
-        # with dmcrypt (luk) and status: active
-        #
-        args = main.parse_args(['destroy', '--cluster', 'ceph',
-                                '--destroy-by-id', '5566'])
-
-        def list_devices_return(dev):
-            if dev == []:
-                return fake_devices_dmcrypt_luk_unmap
-            elif dev == ['/dev/sdX1']:
-                return fake_devices_dmcrypt_map
-
-        with patch.multiple(
-                main,
-                is_partition=lambda path: True,
-                list_devices=list_devices_return,
-                get_dmcrypt_key_path=lambda *args, **kwargs: True,
-                dmcrypt_map=lambda *args, **kwargs: True,
-                dmcrypt_unmap=lambda part_uuid: True,
-                get_partition_base=lambda dev_path: '/dev/sdX',
-                _check_osd_status=lambda cluster, osd_id: 1,
-        ):
-            self.assertRaises(Exception, main.main_destroy, args)
-
-        #
-        # skip the redundent devices and found by osd-id
-        # with unknow dmcrypt type
-        #
-        args = main.parse_args(['destroy', '--cluster', 'ceph',
-                                '--destroy-by-id', '5566'])
-
-        def list_devices_return(dev):
-            if dev == []:
-                return fake_devices_dmcrypt_unknow
-
-        with patch.multiple(
-                main,
-                is_partition=lambda path: True,
-                list_devices=list_devices_return,
         ):
             self.assertRaises(Exception, main.main_destroy, args)
 
