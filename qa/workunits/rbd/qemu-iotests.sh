@@ -23,6 +23,10 @@ then
     QEMU='/usr/bin/qemu-system-x86_64'
 else
     QEMU='/usr/libexec/qemu-kvm'
+
+    # disable test 055 since qemu-kvm (RHEL/CentOS) doesn't support the
+    # required QMP commands
+    testlist=$(echo ${testlist} | sed "s/ 055//g")
 fi
 ln -s $QEMU bin/qemu
 
