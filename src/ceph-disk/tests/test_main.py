@@ -1,7 +1,9 @@
 from mock import patch, DEFAULT
 import os
 import io
+import shutil
 import subprocess
+import tempfile
 import unittest
 from ceph_disk import main
 
@@ -641,6 +643,8 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
 
     @patch('__builtin__.open')
     def test_main_deactivate(self, mock_open):
+        data = tempfile.mkdtemp()
+        main.setup_statedir(data)
         DMCRYPT_LUKS_OSD_UUID = '4fbd7e29-9d25-41b8-afd0-35865ceff05d'
         part_uuid = '0ce28a16-6d5d-11e5-aec3-fa163e5c167b'
         disk = 'sdX'
@@ -659,7 +663,6 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 main,
                 list_devices=lambda: fake_device,
         ):
-            main.setup_statedir(main.STATEDIR)
             self.assertRaises(Exception, main.main_deactivate, args)
 
         #
@@ -684,7 +687,6 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 _check_osd_status=lambda cluster, osd_id: 2,
                 _mark_osd_out=lambda cluster, osd_id: True
         ):
-            main.setup_statedir(main.STATEDIR)
             main.main_deactivate(args)
 
         #
@@ -706,7 +708,6 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 list_devices=lambda: fake_device,
                 _check_osd_status=lambda cluster, osd_id: 0,
         ):
-            main.setup_statedir(main.STATEDIR)
             main.main_deactivate(args)
 
         #
@@ -743,7 +744,6 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 unmount=lambda path: True,
                 dmcrypt_unmap=lambda part_uuid: True,
         ):
-            main.setup_statedir(main.STATEDIR)
             main.main_deactivate(args)
 
         #
@@ -778,8 +778,8 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 unmount=lambda path: True,
                 dmcrypt_unmap=lambda part_uuid: True,
         ):
-            main.setup_statedir(main.STATEDIR)
             main.main_deactivate(args)
+        shutil.rmtree(data)
 
     def test_mark_out_out(self):
         def mark_osd_out_fail(osd_id):
