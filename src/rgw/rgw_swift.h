@@ -18,8 +18,13 @@ struct rgw_swift_auth_info {
   rgw_user user;
   string display_name;
   long long ttl;
+  bool is_admin;
 
-  rgw_swift_auth_info() : ttl(0) {}
+  rgw_swift_auth_info()
+    : status(0),
+      ttl(0),
+      is_admin(false) {
+  }
 };
 
 class RGWSwift {

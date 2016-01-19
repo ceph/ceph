@@ -18,6 +18,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 static list<string> roles_list;
+static list<string> admin_roles_list;
 
 class RGWValidateSwiftToken : public RGWHTTPClient {
   struct rgw_swift_auth_info *info;
@@ -371,15 +372,27 @@ int RGWSwift::check_revoked()
   return 0;
 }
 
-static void rgw_set_keystone_token_auth_info(KeystoneToken& token, struct rgw_swift_auth_info *info)
+static void rgw_set_keystone_token_auth_info(const KeystoneToken& token,
+                                             struct rgw_swift_auth_info * const info)
 {
   info->user = token.get_project_id();
   info->display_name = token.get_project_name();
+  info->status = 200;
+
+  /* Check whether the user has an admin status. */
+  bool is_admin = false;
+  for (const auto admin_role : admin_roles_list) {
+    if (token.user.has_role(admin_role)) {
+      is_admin = true;
+      break;
+    }
+  }
+  info->is_admin = is_admin;
 }
 
 int RGWSwift::parse_keystone_token_response(const string& token,
                                             bufferlist& bl,
-                                            struct rgw_swift_auth_info *info,
+                                            struct rgw_swift_auth_info * const info,
                                             KeystoneToken& t)
 {
   int ret = t.parse(cct, token, bl);
@@ -391,8 +404,10 @@ int RGWSwift::parse_keystone_token_response(const string& token,
   list<string>::iterator iter;
   for (iter = roles_list.begin(); iter != roles_list.end(); ++iter) {
     const string& role = *iter;
-    if ((found=t.has_role(role))==true)
+    if (t.has_role(role) == true) {
+      found = true;
       break;
+    }
   }
 
   if (!found) {
@@ -415,7 +430,6 @@ int RGWSwift::update_user_info(RGWRados *const store,
                                const struct rgw_swift_auth_info * const info,
                                RGWUserInfo& user_info)
 {
-<<<<<<< HEAD
   ldout(cct, 20) << "updating user=" << info->user << dendl; // P3 XXX
   /*
    * Normally once someone parsed the token, the tenant and user are set
@@ -561,11 +575,7 @@ int RGWSwift::validate_keystone_token(RGWRados * const store,
 
   keystone_token_cache->add(token_id, t);
 
-<<<<<<< HEAD
-  ret = update_user_info(store, &info, rgw_user);
-=======
   ret = update_user_info(store, account_name, info, rgw_user);
->>>>>>> rgw: use Swift account name in Keystone authentication.
   if (ret < 0)
     return ret;
 
@@ -787,25 +797,22 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
   }
 
   if (supports_keystone()) {
-<<<<<<< HEAD
-    int ret = validate_keystone_token(store, s->os_auth_token, *(s->user));
-    return (ret >= 0);
-=======
-    ret = validate_keystone_token(store, s->account_name, s->os_auth_token,
-            &info, *(s->user));
+    int ret = validate_keystone_token(store, s->account_name, s->os_auth_token,
+                                      &info, *(s->user));
     if (ret < 0) {
       /* Authentication failed. */
       return false;
     }
 
-    if (!s->account_name.empty() && info.user.to_str() != s->account_name) {
+    if (!s->account_name.empty() && info.user.to_str() != s->account_name
+        && !info.is_admin) {
       /* Authentication succeeded but completely different account (tenant
-       * in Keystone terminology) has been requested. */
+       * in Keystone terminology) has been requested and the user is not
+       * a reseller admin. */
       return false;
     }
 
     return true;
->>>>>>> rgw: use Swift account name in Keystone authentication.
   }
 
   struct rgw_swift_auth_info info;
@@ -840,8 +847,14 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
 void RGWSwift::init()
 {
   get_str_list(cct->_conf->rgw_keystone_accepted_roles, roles_list);
-  if (supports_keystone())
-      init_keystone();
+  get_str_list(cct->_conf->rgw_keystone_accepted_admin_roles, admin_roles_list);
+
+  roles_list.insert(roles_list.end(), admin_roles_list.begin(),
+          admin_roles_list.end());
+
+  if (supports_keystone()) {
+    init_keystone();
+  }
 }
 
 

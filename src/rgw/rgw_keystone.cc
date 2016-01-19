@@ -149,10 +149,10 @@ KeystoneApiVersion KeystoneService::get_api_version()
   }
 }
 
-bool KeystoneToken::has_role(const string& r)
+bool KeystoneToken::has_role(const string& r) const
 {
-  list<Role>::iterator iter;
-  for (iter = roles.begin(); iter != roles.end(); ++iter) {
+  list<Role>::const_iterator iter;
+  for (iter = roles.cbegin(); iter != roles.cend(); ++iter) {
       if (fnmatch(r.c_str(), ((*iter).name.c_str()), 0) == 0) {
         return true;
       }

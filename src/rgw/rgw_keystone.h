@@ -82,7 +82,7 @@ public:
   string get_project_name() {return project.name;};
   string get_user_id() {return user.id;};
   string get_user_name() {return user.name;};
-  bool has_role(const string& r);
+  bool has_role(const string& r) const;
   bool expired() {
     uint64_t now = ceph_clock_now(NULL).sec();
     return (now >= (uint64_t)get_expires());
