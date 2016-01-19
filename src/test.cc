@@ -32,22 +32,24 @@ typedef typename std::lock_guard<std::mutex> Guard;
 #define COUNT(array) (sizeof(array) / sizeof(array[0]))
 
 
-static const int goal_secs_to_run = 20;
+static const int goal_secs_to_run = 30;
 
-static const int server_ops = 1000;
+static const int server_ops = 150;
 static const int server_threads = 7;
 
 static dmc::ClientInfo client_info[] = {
   // as of C++ 11 this will invoke the constructor with three doubles
   // as parameters
-  {1.0, 50.0, 120.0},
+  {1.0, 50.0, 200.0},
+  {2.0, 50.0, 200.0},
   // {1.0, 50.0, 0.0},
   // {2.0, 50.0, 0.0},
   // {2.0, 50.0, 0.0},
 };
 
 static int client_goals[] = {
-  125,
+  100,
+  100,
   // 40,
   // 80,
   // 80,
