@@ -48,8 +48,12 @@ namespace crimson {
 
     static bool info = true;
 
+    // we're using double to represent time, but we could change it by
+    // changing the following declarations (and by making sure a min
+    // function existed)
     typedef double Time;
-    static const double MaxTime = std::numeric_limits<Time>::max();
+    static const double TimeZero = 0.0;
+    static const double TimeMax = std::numeric_limits<Time>::max();
 
     inline Time getTime() {
       struct timeval now;
@@ -504,7 +508,7 @@ namespace crimson {
 	  }
 	}
 
-#if 1
+#if 0
 	{
 	  static uint count = 0;
 	  ++count;
@@ -537,25 +541,25 @@ namespace crimson {
 	// nothing scheduled; make sure we re-run when next queued
 	// item is ready
 
-	auto min_not_zero = [](const Time& current, const Time& possible)->const Time& {
-	  return 0.0 == possible ? current : std::min(current, possible);
-	};
-
-	Time nextCall = MaxTime;
+	Time nextCall = TimeMax;
 	if (!resQ.empty()) {
-	  nextCall = min_not_zero(nextCall, resQ.top()->tag.reservation);
+	  nextCall = minNotZeroTime(nextCall, resQ.top()->tag.reservation);
 	}
 	if (!limQ.empty()) {
-	  nextCall = min_not_zero(nextCall, limQ.top()->tag.limit);
+	  nextCall = minNotZeroTime(nextCall, limQ.top()->tag.limit);
 	}
 	if (!readyQ.empty()) {
-	  nextCall = min_not_zero(nextCall, readyQ.top()->tag.proportion);
+	  nextCall = minNotZeroTime(nextCall, readyQ.top()->tag.proportion);
 	}
 	if (!propQ.empty()) {
-	  nextCall = min_not_zero(nextCall, propQ.top()->tag.proportion);
+	  nextCall = minNotZeroTime(nextCall, propQ.top()->tag.proportion);
 	}
-	if (nextCall < MaxTime) {
+	if (nextCall < TimeMax) {
 	  now = getTime();
+	  // TODO rather than starting a thread, consider having a
+	  // service thread that just calls into scheduleRequest based
+	  // on the nearest interesting time; communicate to it w a
+	  // mutex/cv.
 	  std::thread t(
 	    [this, nextCall, now]() {
 	      long microseconds_l = long(1 + 1000000 * (nextCall - now));
@@ -567,16 +571,11 @@ namespace crimson {
 	  t.detach();
 	}
       } // scheduleRequest
+
+      static inline const Time& minNotZeroTime(const Time& current,
+					       const Time& possible) {
+	return TimeZero == possible ? current : std::min(current, possible);
+      }
     }; // class PriorityQueue
   } // namespace dmclock
 } // namespace crimson
-
-
-#if NOT_WORKING
-template<typename C, typename R>
-std::ostream& operator<<(std::ostream& out,
-			 const typename crimson::dmclock::PriorityQueue<C,R>::EntryRef& e) {
-  out << "spX" << *e;
-  return out;
-}
-#endif
