@@ -128,3 +128,17 @@ endif (WITH_CEPHFS)
 
 add_library(cls_numops_client STATIC numops/cls_numops_client.cc)
 
+add_library(cls_lua SHARED
+    lua/cls_lua.cc
+    lua/lua_bufferlist.cc
+)
+set_target_properties(cls_lua PROPERTIES VERSION "1.0.0" SOVERSION "1")
+install(TARGETS cls_lua DESTINATION lib/rados-classes)
+target_link_libraries(cls_lua
+    liblua
+    json_spirit
+)
+
+add_library(cls_lua_client
+    lua/cls_lua_client.cc
+)

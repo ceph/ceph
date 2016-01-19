@@ -67,6 +67,11 @@ libcls_journal_client_la_SOURCES = \
 noinst_LTLIBRARIES += libcls_journal_client.la
 DENCODER_DEPS += libcls_journal_client.la
 
+libcls_lua_client_la_SOURCES = cls/lua/cls_lua_client.cc
+libcls_lua_client_la_CPPFLAGS = $(LIBLUA_CPPFLAGS) $(AM_CPPFLAGS)
+libcls_lua_client_la_LIBADD = $(LIBLUA)
+noinst_LTLIBRARIES += libcls_lua_client.la
+
 noinst_HEADERS += \
 	cls/lock/cls_lock_types.h \
 	cls/lock/cls_lock_ops.h \
@@ -101,4 +106,7 @@ noinst_HEADERS += \
 	cls/cephfs/cls_cephfs.h \
 	cls/cephfs/cls_cephfs_client.h \
 	cls/journal/cls_journal_client.h \
-	cls/journal/cls_journal_types.h
+	cls/journal/cls_journal_types.h \
+	cls/lua/cls_lua.h \
+	cls/lua/cls_lua_client.h \
+	cls/lua/cls_lua_ops.h

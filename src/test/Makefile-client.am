@@ -199,6 +199,13 @@ ceph_test_cls_journal_LDADD = \
 ceph_test_cls_journal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_journal
 
+ceph_test_cls_lua_SOURCES = test/cls_lua/test_cls_lua.cc
+ceph_test_cls_lua_LDADD = $(LIBRADOS) libcls_lua_client.la $(LIBCOMMON) \
+    $(UNITTEST_LDADD) $(RADOS_TEST_LDADD) $(LIBLUA)
+ceph_test_cls_lua_CPPFLAGS = $(LIBLUA_CPPFLAGS) ${AM_CPPFLAGS}
+ceph_test_cls_lua_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_cls_lua
+
 ceph_test_rados_api_cmd_SOURCES = test/librados/cmd.cc
 ceph_test_rados_api_cmd_LDADD = \
 	$(LIBCOMMON) $(LIBRADOS) $(CRYPTO_LIBS) \

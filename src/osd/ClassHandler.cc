@@ -28,6 +28,15 @@
 
 int ClassHandler::open_class(const string& cname, ClassData **pcls)
 {
+  /*
+   * Block access to Lua?
+   */
+  if (!cct->_conf->osd_lua_class_enable && cname == "lua") {
+    dout(0) << "_load_class lua not permitted (lua class enable = false)"
+      << dendl;
+    return -EPERM;
+  }
+
   Mutex::Locker lock(mutex);
   ClassData *cls = _get_class(cname);
   if (cls->status != ClassData::CLASS_OPEN) {

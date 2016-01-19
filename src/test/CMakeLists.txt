@@ -1874,6 +1874,22 @@ if(${WITH_RADOSGW})
     radostest)
 endif(${WITH_RADOSGW})
 
+add_executable(test_cls_lua
+    cls_lua/test_cls_lua.cc
+)
+set_target_properties(test_cls_lua PROPERTIES COMPILE_FLAGS
+    ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_cls_lua
+    liblua
+    cls_lua_client
+    librados
+    ${UNITTEST_LIBS}
+    ${EXTRALIBS}
+    ${ALLOC_LIBS}
+    ${CMAKE_DL_LIBS}
+    radostest
+)
+
 # test_async_driver
 add_executable(test_async_driver
   msgr/test_async_driver.cc

@@ -81,4 +81,12 @@ libcls_journal_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_journal_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
 radoslib_LTLIBRARIES += libcls_journal.la
 
+libcls_lua_la_SOURCES = \
+	cls/lua/cls_lua.cc \
+	cls/lua/lua_bufferlist.cc
+libcls_lua_la_CPPFLAGS = $(LIBLUA_CPPFLAGS) $(AM_CPPFLAGS)
+libcls_lua_la_LIBADD = $(LIBLUA)
+libcls_lua_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
+radoslib_LTLIBRARIES += libcls_lua.la
+
 endif # WITH_OSD
