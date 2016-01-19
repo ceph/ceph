@@ -23,8 +23,17 @@ bool is_feature_enabled(uint64_t feature) {
 
 int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
                     const std::string &name, uint64_t size) {
-  uint64_t features = 0;
-  get_features(&features);
   int order = 0;
-  return rbd.create2(ioctx, name.c_str(), size, features, &order);
+  uint64_t features = 0;
+  if (!get_features(&features)) {
+    // ensure old-format tests actually use the old format
+    librados::Rados rados(ioctx);
+    int r = rados.conf_set("rbd_default_format", "1");
+    if (r < 0) {
+      return r;
+    }
+    return rbd.create(ioctx, name.c_str(), size, &order);
+  } else {
+    return rbd.create2(ioctx, name.c_str(), size, features, &order);
+  }
 }
