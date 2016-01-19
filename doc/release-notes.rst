@@ -2,12 +2,520 @@
  Release Notes
 ===============
 
-v9.1.0
-======
+v10.0.2
+=======
 
-This is the first Infernalis release candidate.  There have been some
-major changes since hammer, and the upgrade process is non-trivial.
-Please read carefully.
+This development release includes a raft of changes and improvements
+for Jewel.  Key additions include CephFS scrub/repair improvements, an
+AIX and Solaris port of librados, many librbd journaling additions and
+fixes, extended per-pool options, and NBD driver for RBD (rbd-nbd)
+that allows librbd to present a kernel-level block device on Linux,
+multitenancy support for RGW, RGW bucket lifecycle support, RGW
+support for Swift static large objects (SLO), and RGW support for
+Swift bulk delete.
+
+There are also lots of smaller optimizations and performance fixes
+going in all over the tree, particular in the OSD and common code.
+
+Notable Changes
+---------------
+
+* auth: fail if rotating key is missing (do not spam log) (`pr#6473 <http://github.com/ceph/ceph/pull/6473>`_, Qiankun Zheng)
+* auth: fix crash when bad keyring is passed (`pr#6698 <http://github.com/ceph/ceph/pull/6698>`_, Dunrong Huang)
+* auth: make keyring without mon entity type return -EACCES (`pr#5734 <http://github.com/ceph/ceph/pull/5734>`_, Xiaowei Chen)
+* buffer: make usable outside of ceph source again (`pr#6863 <http://github.com/ceph/ceph/pull/6863>`_, Josh Durgin)
+* build: cmake check fixes (`pr#6787 <http://github.com/ceph/ceph/pull/6787>`_, Orit Wasserman)
+* build: fix bz2-dev dependency (`pr#6948 <http://github.com/ceph/ceph/pull/6948>`_, Samuel Just)
+* build: Gentoo: _FORTIFY_SOURCE fix. (`issue#13920 <http://tracker.ceph.com/issues/13920>`_, `pr#6739 <http://github.com/ceph/ceph/pull/6739>`_, Robin H. Johnson)
+* build/ops: systemd ceph-disk unit must not assume /bin/flock (`issue#13975 <http://tracker.ceph.com/issues/13975>`_, `pr#6803 <http://github.com/ceph/ceph/pull/6803>`_, Loic Dachary)
+* ceph-detect-init: Ubuntu >= 15.04 uses systemd (`pr#6873 <http://github.com/ceph/ceph/pull/6873>`_, James Page)
+* cephfs-data-scan: scan_frags (`pr#5941 <http://github.com/ceph/ceph/pull/5941>`_, John Spray)
+* cephfs-data-scan: scrub tag filtering (#12133 and #12145) (`issue#12133 <http://tracker.ceph.com/issues/12133>`_, `issue#12145 <http://tracker.ceph.com/issues/12145>`_, `pr#5685 <http://github.com/ceph/ceph/pull/5685>`_, John Spray)
+* ceph-fuse: add process to ceph-fuse --help (`pr#6821 <http://github.com/ceph/ceph/pull/6821>`_, Wei Feng)
+* ceph-kvstore-tool: handle bad out file on command line (`pr#6093 <http://github.com/ceph/ceph/pull/6093>`_, Kefu Chai)
+* ceph-mds:add --help/-h (`pr#6850 <http://github.com/ceph/ceph/pull/6850>`_, Cilang Zhao)
+* ceph_objectstore_bench: fix race condition, bugs (`issue#13516 <http://tracker.ceph.com/issues/13516>`_, `pr#6681 <http://github.com/ceph/ceph/pull/6681>`_, Igor Fedotov)
+* ceph.spec.in: add BuildRequires: systemd (`issue#13860 <http://tracker.ceph.com/issues/13860>`_, `pr#6692 <http://github.com/ceph/ceph/pull/6692>`_, Nathan Cutler)
+* client: a better check for MDS availability (`pr#6253 <http://github.com/ceph/ceph/pull/6253>`_, John Spray)
+* client: close mds sessions in shutdown() (`pr#6269 <http://github.com/ceph/ceph/pull/6269>`_, John Spray)
+* client: don't invalidate page cache when inode is no longer used (`pr#6380 <http://github.com/ceph/ceph/pull/6380>`_, Yan, Zheng)
+* client: modify a word in log (`pr#6906 <http://github.com/ceph/ceph/pull/6906>`_, YongQiang He)
+* cls/cls_rbd.cc: fix misused metadata_name_from_key (`issue#13922 <http://tracker.ceph.com/issues/13922>`_, `pr#6661 <http://github.com/ceph/ceph/pull/6661>`_, Xiaoxi Chen)
+* cmake: Add common/PluginRegistry.cc to CMakeLists.txt (`pr#6805 <http://github.com/ceph/ceph/pull/6805>`_, Pete Zaitcev)
+* cmake: add rgw_basic_types.cc to librgw.a (`pr#6786 <http://github.com/ceph/ceph/pull/6786>`_, Orit Wasserman)
+* cmake: add TracepointProvider.cc to libcommon (`pr#6823 <http://github.com/ceph/ceph/pull/6823>`_, Orit Wasserman)
+* cmake: define STRERROR_R_CHAR_P for GNU-specific strerror_r (`pr#6751 <http://github.com/ceph/ceph/pull/6751>`_, Ilya Dryomov)
+* cmake: update for recent librbd changes (`pr#6715 <http://github.com/ceph/ceph/pull/6715>`_, John Spray)
+* cmake: update for recent rbd changes (`pr#6818 <http://github.com/ceph/ceph/pull/6818>`_, Mykola Golub)
+* common: add generic plugin infrastructure (`pr#6696 <http://github.com/ceph/ceph/pull/6696>`_, Sage Weil)
+* common: add latency perf counter for finisher (`pr#6175 <http://github.com/ceph/ceph/pull/6175>`_, Xinze Chi)
+* common: buffer: add cached_crc and cached_crc_adjust counts to perf dump (`pr#6535 <http://github.com/ceph/ceph/pull/6535>`_, Ning Yao)
+* common: buffer: remove unneeded list destructor (`pr#6456 <http://github.com/ceph/ceph/pull/6456>`_, Michal Jarzabek)
+* common/ceph_context.cc:fix order of initialisers (`pr#6838 <http://github.com/ceph/ceph/pull/6838>`_, Michal Jarzabek)
+* common: don't reverse hobject_t hash bits when zero (`pr#6653 <http://github.com/ceph/ceph/pull/6653>`_, Piotr Dałek)
+* common: log: Assign LOG_DEBUG priority to syslog calls (`issue#13993 <http://tracker.ceph.com/issues/13993>`_, `pr#6815 <http://github.com/ceph/ceph/pull/6815>`_, Brad Hubbard)
+* common: log: predict log message buffer allocation size (`pr#6641 <http://github.com/ceph/ceph/pull/6641>`_, Adam Kupczyk)
+* common: optimize debug logging code (`pr#6441 <http://github.com/ceph/ceph/pull/6441>`_, Adam Kupczyk)
+* common: perf counter for bufferlist history total alloc (`pr#6198 <http://github.com/ceph/ceph/pull/6198>`_, Xinze Chi)
+* common: reduce CPU usage by making stringstream in stringify function thread local (`pr#6543 <http://github.com/ceph/ceph/pull/6543>`_, Evgeniy Firsov)
+* common: re-enable backtrace support (`pr#6771 <http://github.com/ceph/ceph/pull/6771>`_, Jason Dillaman)
+* common: SubProcess: fix multiple definition bug (`pr#6790 <http://github.com/ceph/ceph/pull/6790>`_, Yunchuan Wen)
+* common: use namespace instead of subclasses for buffer (`pr#6686 <http://github.com/ceph/ceph/pull/6686>`_, Michal Jarzabek)
+* configure.ac: macro fix (`pr#6769 <http://github.com/ceph/ceph/pull/6769>`_, Igor Podoski)
+* doc: admin/build-doc: add lxml dependencies on debian (`pr#6610 <http://github.com/ceph/ceph/pull/6610>`_, Ken Dreyer)
+* doc/cephfs/posix: update (`pr#6922 <http://github.com/ceph/ceph/pull/6922>`_, Sage Weil)
+* doc: CodingStyle: fix broken URLs (`pr#6733 <http://github.com/ceph/ceph/pull/6733>`_, Kefu Chai)
+* doc: correct typo 'restared' to 'restarted' (`pr#6734 <http://github.com/ceph/ceph/pull/6734>`_, Yilong Zhao)
+* doc/dev/index: refactor/reorg (`pr#6792 <http://github.com/ceph/ceph/pull/6792>`_, Nathan Cutler)
+* doc/dev/index.rst: begin writing Contributing to Ceph (`pr#6727 <http://github.com/ceph/ceph/pull/6727>`_, Nathan Cutler)
+* doc/dev/index.rst: fix headings (`pr#6780 <http://github.com/ceph/ceph/pull/6780>`_, Nathan Cutler)
+* doc: dev: introduction to tests (`pr#6910 <http://github.com/ceph/ceph/pull/6910>`_, Loic Dachary)
+* doc: file must be empty when writing layout fields of file use "setfattr" (`pr#6848 <http://github.com/ceph/ceph/pull/6848>`_, Cilang Zhao)
+* doc: Fixed incorrect name of a "List Multipart Upload Parts" Response Entity (`issue#14003 <http://tracker.ceph.com/issues/14003>`_, `pr#6829 <http://github.com/ceph/ceph/pull/6829>`_, Lenz Grimmer)
+* doc: Fixes a spelling error (`pr#6705 <http://github.com/ceph/ceph/pull/6705>`_, Jeremy Qian)
+* doc: fix typo in cephfs/quota (`pr#6745 <http://github.com/ceph/ceph/pull/6745>`_, Drunkard Zhang)
+* doc: fix typo in developer guide (`pr#6943 <http://github.com/ceph/ceph/pull/6943>`_, Nathan Cutler)
+* doc: INSTALL redirect to online documentation (`pr#6749 <http://github.com/ceph/ceph/pull/6749>`_, Loic Dachary)
+* doc: little improvements for troubleshooting scrub issues (`pr#6827 <http://github.com/ceph/ceph/pull/6827>`_, Mykola Golub)
+* doc: Modified a note section in rbd-snapshot doc. (`pr#6908 <http://github.com/ceph/ceph/pull/6908>`_, Nilamdyuti Goswami)
+* doc: note that cephfs auth stuff is new in jewel (`pr#6858 <http://github.com/ceph/ceph/pull/6858>`_, John Spray)
+* doc: osd: s/schedued/scheduled/ (`pr#6872 <http://github.com/ceph/ceph/pull/6872>`_, Loic Dachary)
+* doc: remove unnecessary period in headline (`pr#6775 <http://github.com/ceph/ceph/pull/6775>`_, Marc Koderer)
+* doc: rst style fix for pools document (`pr#6816 <http://github.com/ceph/ceph/pull/6816>`_, Drunkard Zhang)
+* doc: Update list of admin/build-doc dependencies (`issue#14070 <http://tracker.ceph.com/issues/14070>`_, `pr#6934 <http://github.com/ceph/ceph/pull/6934>`_, Nathan Cutler)
+* init-ceph: do umount when the path exists. (`pr#6866 <http://github.com/ceph/ceph/pull/6866>`_, Xiaoxi Chen)
+* journal: disconnect watch after watch error (`issue#14168 <http://tracker.ceph.com/issues/14168>`_, `pr#7113 <http://github.com/ceph/ceph/pull/7113>`_, Jason Dillaman)
+* journal: fire replay complete event after reading last object (`issue#13924 <http://tracker.ceph.com/issues/13924>`_, `pr#6762 <http://github.com/ceph/ceph/pull/6762>`_, Jason Dillaman)
+* journal: support replaying beyond skipped splay objects (`pr#6687 <http://github.com/ceph/ceph/pull/6687>`_, Jason Dillaman)
+* librados: aix gcc librados port (`pr#6675 <http://github.com/ceph/ceph/pull/6675>`_, Rohan Mars)
+* librados: avoid malloc(0) (which can return NULL on some platforms) (`issue#13944 <http://tracker.ceph.com/issues/13944>`_, `pr#6779 <http://github.com/ceph/ceph/pull/6779>`_, Dan Mick)
+* librados: clean up Objecter.h (`pr#6731 <http://github.com/ceph/ceph/pull/6731>`_, Jie Wang)
+* librados: include/rados/librados.h: fix typo (`pr#6741 <http://github.com/ceph/ceph/pull/6741>`_, Nathan Cutler)
+* librbd: automatically flush IO after blocking write operations (`issue#13913 <http://tracker.ceph.com/issues/13913>`_, `pr#6742 <http://github.com/ceph/ceph/pull/6742>`_, Jason Dillaman)
+* librbd: better handling of exclusive lock transition period (`pr#7204 <http://github.com/ceph/ceph/pull/7204>`_, Jason Dillaman)
+* librbd: check for presence of journal before attempting to remove  (`issue#13912 <http://tracker.ceph.com/issues/13912>`_, `pr#6737 <http://github.com/ceph/ceph/pull/6737>`_, Jason Dillaman)
+* librbd: clear error when older OSD doesn't support image flags (`issue#14122 <http://tracker.ceph.com/issues/14122>`_, `pr#7035 <http://github.com/ceph/ceph/pull/7035>`_, Jason Dillaman)
+* librbd: correct include guard in RenameRequest.h (`pr#7143 <http://github.com/ceph/ceph/pull/7143>`_, Jason Dillaman)
+* librbd: correct issues discovered during teuthology testing (`issue#14108 <http://tracker.ceph.com/issues/14108>`_, `issue#14107 <http://tracker.ceph.com/issues/14107>`_, `pr#6974 <http://github.com/ceph/ceph/pull/6974>`_, Jason Dillaman)
+* librbd: correct issues discovered when cache is disabled (`issue#14123 <http://tracker.ceph.com/issues/14123>`_, `pr#6979 <http://github.com/ceph/ceph/pull/6979>`_, Jason Dillaman)
+* librbd: correct race conditions discovered during unit testing (`issue#14060 <http://tracker.ceph.com/issues/14060>`_, `pr#6923 <http://github.com/ceph/ceph/pull/6923>`_, Jason Dillaman)
+* librbd: disable copy-on-read when not exclusive lock owner (`issue#14167 <http://tracker.ceph.com/issues/14167>`_, `pr#7129 <http://github.com/ceph/ceph/pull/7129>`_, Jason Dillaman)
+* librbd: do not ignore self-managed snapshot release result (`issue#14170 <http://tracker.ceph.com/issues/14170>`_, `pr#7043 <http://github.com/ceph/ceph/pull/7043>`_, Jason Dillaman)
+* librbd: ensure copy-on-read requests are complete prior to closing parent image  (`pr#6740 <http://github.com/ceph/ceph/pull/6740>`_, Jason Dillaman)
+* librbd: ensure librados callbacks are flushed prior to destroying (`issue#14092 <http://tracker.ceph.com/issues/14092>`_, `pr#7040 <http://github.com/ceph/ceph/pull/7040>`_, Jason Dillaman)
+* librbd: fix journal iohint (`pr#6917 <http://github.com/ceph/ceph/pull/6917>`_, Jianpeng Ma)
+* librbd: fix known test case race condition failures (`issue#13969 <http://tracker.ceph.com/issues/13969>`_, `pr#6800 <http://github.com/ceph/ceph/pull/6800>`_, Jason Dillaman)
+* librbd: fix merge-diff for >2GB diff-files (`issue#14030 <http://tracker.ceph.com/issues/14030>`_, `pr#6889 <http://github.com/ceph/ceph/pull/6889>`_, Yunchuan Wen)
+* librbd: fix test case race condition for journaling ops (`pr#6877 <http://github.com/ceph/ceph/pull/6877>`_, Jason Dillaman)
+* librbd: fix tracepoint parameter in diff_iterate (`pr#6892 <http://github.com/ceph/ceph/pull/6892>`_, Yunchuan Wen)
+* librbd: image refresh code paths converted to async state machines (`pr#6859 <http://github.com/ceph/ceph/pull/6859>`_, Jason Dillaman)
+* librbd: include missing header for bool type (`pr#6798 <http://github.com/ceph/ceph/pull/6798>`_, Mykola Golub)
+* librbd: initial collection of state machine unit tests (`pr#6703 <http://github.com/ceph/ceph/pull/6703>`_, Jason Dillaman)
+* librbd: integrate journaling for maintenance operations (`pr#6625 <http://github.com/ceph/ceph/pull/6625>`_, Jason Dillaman)
+* librbd: journaling-related lock dependency cleanup (`pr#6777 <http://github.com/ceph/ceph/pull/6777>`_, Jason Dillaman)
+* librbd: not necessary to hold owner_lock while releasing snap id (`issue#13914 <http://tracker.ceph.com/issues/13914>`_, `pr#6736 <http://github.com/ceph/ceph/pull/6736>`_, Jason Dillaman)
+* librbd: only send signal when AIO completions queue empty (`pr#6729 <http://github.com/ceph/ceph/pull/6729>`_, Jianpeng Ma)
+* librbd: optionally validate new RBD pools for snapshot support (`issue#13633 <http://tracker.ceph.com/issues/13633>`_, `pr#6925 <http://github.com/ceph/ceph/pull/6925>`_, Jason Dillaman)
+* librbd: partial revert of commit 9b0e359 (`issue#13969 <http://tracker.ceph.com/issues/13969>`_, `pr#6789 <http://github.com/ceph/ceph/pull/6789>`_, Jason Dillaman)
+* librbd: properly handle replay of snap remove RPC message (`issue#14164 <http://tracker.ceph.com/issues/14164>`_, `pr#7042 <http://github.com/ceph/ceph/pull/7042>`_, Jason Dillaman)
+* librbd: reduce verbosity of common error condition logging (`issue#14234 <http://tracker.ceph.com/issues/14234>`_, `pr#7114 <http://github.com/ceph/ceph/pull/7114>`_, Jason Dillaman)
+* librbd: simplify IO method signatures for 32bit environments (`pr#6700 <http://github.com/ceph/ceph/pull/6700>`_, Jason Dillaman)
+* librbd: support eventfd for AIO completion notifications (`pr#5465 <http://github.com/ceph/ceph/pull/5465>`_, Haomai Wang)
+* mailmap: add UMCloud affiliation (`pr#6820 <http://github.com/ceph/ceph/pull/6820>`_, Jiaying Ren)
+* mailmap: Jewel updates (`pr#6750 <http://github.com/ceph/ceph/pull/6750>`_, Abhishek Lekshmanan)
+* makefiles: remove bz2-dev from dependencies (`issue#13981 <http://tracker.ceph.com/issues/13981>`_, `pr#6939 <http://github.com/ceph/ceph/pull/6939>`_, Piotr Dałek)
+* mds: add 'p' flag in auth caps to control setting pool in layout (`pr#6567 <http://github.com/ceph/ceph/pull/6567>`_, John Spray)
+* mds: fix client capabilities during reconnect (client.XXXX isn't responding to mclientcaps(revoke)) (`issue#11482 <http://tracker.ceph.com/issues/11482>`_, `pr#6432 <http://github.com/ceph/ceph/pull/6432>`_, Yan, Zheng)
+* mds: fix setvxattr (broken in a536d114) (`issue#14029 <http://tracker.ceph.com/issues/14029>`_, `pr#6941 <http://github.com/ceph/ceph/pull/6941>`_, John Spray)
+* mds: repair the command option "--hot-standby" (`pr#6454 <http://github.com/ceph/ceph/pull/6454>`_, Wei Feng)
+* mds: tear down connections from `tell` commands (`issue#14048 <http://tracker.ceph.com/issues/14048>`_, `pr#6933 <http://github.com/ceph/ceph/pull/6933>`_, John Spray)
+* mon: fix ceph df pool available calculation for 0-weighted OSDs (`pr#6660 <http://github.com/ceph/ceph/pull/6660>`_, Chengyuan Li)
+* mon: fix routed_request_tids leak (`pr#6102 <http://github.com/ceph/ceph/pull/6102>`_, Ning Yao)
+* mon: support min_down_reporter by subtree level (default by host) (`pr#6709 <http://github.com/ceph/ceph/pull/6709>`_, Xiaoxi Chen)
+* mount.ceph: memory leaks (`pr#6905 <http://github.com/ceph/ceph/pull/6905>`_, Qiankun Zheng)
+* osd: add osd op queue latency perfcounter (`pr#5793 <http://github.com/ceph/ceph/pull/5793>`_, Haomai Wang)
+* osd: Allow repair of history.last_epoch_started using config (`pr#6793 <http://github.com/ceph/ceph/pull/6793>`_, David Zafman)
+* osd: avoid duplicate op->mark_started in ReplicatedBackend (`pr#6689 <http://github.com/ceph/ceph/pull/6689>`_, Jacek J. Łakis)
+* osd: cancel failure reports if we fail to rebind network (`pr#6278 <http://github.com/ceph/ceph/pull/6278>`_, Xinze Chi)
+* osd: correctly handle small osd_scrub_interval_randomize_ratio (`pr#7147 <http://github.com/ceph/ceph/pull/7147>`_, Samuel Just)
+* osd: defer decoding of MOSDRepOp/MOSDRepOpReply (`pr#6503 <http://github.com/ceph/ceph/pull/6503>`_, Xinze Chi)
+* osd: don't update epoch and rollback_info objects attrs if there is no need (`pr#6555 <http://github.com/ceph/ceph/pull/6555>`_, Ning Yao)
+* osd: dump number of missing objects for each peer with pg query (`pr#6058 <http://github.com/ceph/ceph/pull/6058>`_, Guang Yang)
+* osd: enable perfcounters on sharded work queue mutexes (`pr#6455 <http://github.com/ceph/ceph/pull/6455>`_, Jacek J. Łakis)
+* osd: FileJournal: reduce locking scope in write_aio_bl (`issue#12789 <http://tracker.ceph.com/issues/12789>`_, `pr#5670 <http://github.com/ceph/ceph/pull/5670>`_, Zhi Zhang)
+* osd: FileStore: remove __SWORD_TYPE dependency (`pr#6263 <http://github.com/ceph/ceph/pull/6263>`_, John Coyle)
+* osd: fix FileStore::_destroy_collection error return code (`pr#6612 <http://github.com/ceph/ceph/pull/6612>`_, Ruifeng Yang)
+* osd: fix incorrect throttle in WBThrottle (`pr#6713 <http://github.com/ceph/ceph/pull/6713>`_, Zhang Huan)
+* osd: fix MOSDRepScrub reference counter in replica_scrub (`pr#6730 <http://github.com/ceph/ceph/pull/6730>`_, Jie Wang)
+* osd: fix rollback_info_trimmed_to before index() (`issue#13965 <http://tracker.ceph.com/issues/13965>`_, `pr#6801 <http://github.com/ceph/ceph/pull/6801>`_, Samuel Just)
+* osd: fix trivial scrub bug (`pr#6533 <http://github.com/ceph/ceph/pull/6533>`_, Li Wang)
+* osd: KeyValueStore: don't queue NULL context (`pr#6783 <http://github.com/ceph/ceph/pull/6783>`_, Haomai Wang)
+* osd: make backend and block device code a bit more generic (`pr#6759 <http://github.com/ceph/ceph/pull/6759>`_, Sage Weil)
+* osd: move newest decode version of MOSDOp and MOSDOpReply to the front (`pr#6642 <http://github.com/ceph/ceph/pull/6642>`_, Jacek J. Łakis)
+* osd: pg_pool_t: add dictionary for pool options (`issue#13077 <http://tracker.ceph.com/issues/13077>`_, `pr#6081 <http://github.com/ceph/ceph/pull/6081>`_, Mykola Golub)
+* osd: reduce memory consumption of some structs (`pr#6475 <http://github.com/ceph/ceph/pull/6475>`_, Piotr Dałek)
+* osd: release the message throttle when OpRequest unregistered (`issue#14248 <http://tracker.ceph.com/issues/14248>`_, `pr#7148 <http://github.com/ceph/ceph/pull/7148>`_, Samuel Just)
+* osd: remove __SWORD_TYPE dependency (`pr#6262 <http://github.com/ceph/ceph/pull/6262>`_, John Coyle)
+* osd: slightly reduce actual size of pg_log_entry_t (`pr#6690 <http://github.com/ceph/ceph/pull/6690>`_, Piotr Dałek)
+* osd: support pool level recovery_priority and recovery_op_priority (`pr#5953 <http://github.com/ceph/ceph/pull/5953>`_, Guang Yang)
+* osd: use pg id (without shard) when referring the PG (`pr#6236 <http://github.com/ceph/ceph/pull/6236>`_, Guang Yang)
+* packaging: add build dependency on python devel package (`pr#7205 <http://github.com/ceph/ceph/pull/7205>`_, Josh Durgin)
+* pybind/cephfs: add symlink and its unit test (`pr#6323 <http://github.com/ceph/ceph/pull/6323>`_, Shang Ding)
+* pybind: decode empty string in conf_parse_argv() correctly (`pr#6711 <http://github.com/ceph/ceph/pull/6711>`_, Josh Durgin)
+* pybind: Implementation of rados_ioctx_snapshot_rollback (`pr#6878 <http://github.com/ceph/ceph/pull/6878>`_, Florent Manens)
+* pybind: port the rbd bindings to Cython (`issue#13115 <http://tracker.ceph.com/issues/13115>`_, `pr#6768 <http://github.com/ceph/ceph/pull/6768>`_, Hector Martin)
+* pybind: support ioctx:exec (`pr#6795 <http://github.com/ceph/ceph/pull/6795>`_, Noah Watkins)
+* qa: erasure-code benchmark plugin selection (`pr#6685 <http://github.com/ceph/ceph/pull/6685>`_, Loic Dachary)
+* qa/krbd: Expunge generic/247 (`pr#6831 <http://github.com/ceph/ceph/pull/6831>`_, Douglas Fuller)
+* qa/workunits/cephtool/test.sh: false positive fail on /tmp/obj1. (`pr#6837 <http://github.com/ceph/ceph/pull/6837>`_, Robin H. Johnson)
+* qa/workunits/cephtool/test.sh: no ./ (`pr#6748 <http://github.com/ceph/ceph/pull/6748>`_, Sage Weil)
+* qa/workunits/rbd: rbd-nbd test should use sudo for map/unmap ops (`issue#14221 <http://tracker.ceph.com/issues/14221>`_, `pr#7101 <http://github.com/ceph/ceph/pull/7101>`_, Jason Dillaman)
+* rados: bench: fix off-by-one to avoid writing past object_size (`pr#6677 <http://github.com/ceph/ceph/pull/6677>`_, Tao Chang)
+* rbd: add --object-size option, deprecate --order (`issue#12112 <http://tracker.ceph.com/issues/12112>`_, `pr#6830 <http://github.com/ceph/ceph/pull/6830>`_, Vikhyat Umrao)
+* rbd: add RBD pool mirroring configuration API + CLI (`pr#6129 <http://github.com/ceph/ceph/pull/6129>`_, Jason Dillaman)
+* rbd: fix build with "--without-rbd" (`issue#14058 <http://tracker.ceph.com/issues/14058>`_, `pr#6899 <http://github.com/ceph/ceph/pull/6899>`_, Piotr Dałek)
+* rbd: journal: configuration via conf, cli, api and some fixes (`pr#6665 <http://github.com/ceph/ceph/pull/6665>`_, Mykola Golub)
+* rbd: merge_diff test should use new --object-size parameter instead of --order (`issue#14106 <http://tracker.ceph.com/issues/14106>`_, `pr#6972 <http://github.com/ceph/ceph/pull/6972>`_, Na Xie, Jason Dillaman)
+* rbd-nbd: network block device (NBD) support for RBD  (`pr#6657 <http://github.com/ceph/ceph/pull/6657>`_, Yunchuan Wen, Li Wang)
+* rbd: output formatter may not be closed upon error (`issue#13711 <http://tracker.ceph.com/issues/13711>`_, `pr#6706 <http://github.com/ceph/ceph/pull/6706>`_, xie xingguo)
+* rgw: add a missing cap type (`pr#6774 <http://github.com/ceph/ceph/pull/6774>`_, Yehuda Sadeh)
+* rgw: add an inspection to the field of type when assigning user caps (`pr#6051 <http://github.com/ceph/ceph/pull/6051>`_, Kongming Wu)
+* rgw: add LifeCycle feature (`pr#6331 <http://github.com/ceph/ceph/pull/6331>`_, Ji Chen)
+* rgw: add support for Static Large Objects of Swift API (`issue#12886 <http://tracker.ceph.com/issues/12886>`_, `issue#13452 <http://tracker.ceph.com/issues/13452>`_, `pr#6643 <http://github.com/ceph/ceph/pull/6643>`_, Yehuda Sadeh, Radoslaw Zarzynski)
+* rgw: fix a glaring syntax error (`pr#6888 <http://github.com/ceph/ceph/pull/6888>`_, Pavan Rallabhandi)
+* rgw: fix the build failure (`pr#6927 <http://github.com/ceph/ceph/pull/6927>`_, Kefu Chai)
+* rgw: multitenancy support (`pr#6784 <http://github.com/ceph/ceph/pull/6784>`_, Yehuda Sadeh, Pete Zaitcev)
+* rgw: Remove unused code in PutMetadataAccount:execute (`pr#6668 <http://github.com/ceph/ceph/pull/6668>`_, Pete Zaitcev)
+* rgw: remove unused variable in RGWPutMetadataBucket::execute (`pr#6735 <http://github.com/ceph/ceph/pull/6735>`_, Radoslaw Zarzynski)
+* rgw/rgw_resolve: fallback to res_query when res_nquery not implemented (`pr#6292 <http://github.com/ceph/ceph/pull/6292>`_, John Coyle)
+* rgw: static large objects (Radoslaw Zarzynski, Yehuda Sadeh)
+* rgw: swift bulk delete (Radoslaw Zarzynski)
+* systemd: start/stop/restart ceph services by daemon type (`issue#13497 <http://tracker.ceph.com/issues/13497>`_, `pr#6276 <http://github.com/ceph/ceph/pull/6276>`_, Zhi Zhang)
+* sysvinit: allow custom cluster names (`pr#6732 <http://github.com/ceph/ceph/pull/6732>`_, Richard Chan)
+* test/encoding/readable.sh fix (`pr#6714 <http://github.com/ceph/ceph/pull/6714>`_, Igor Podoski)
+* test: fix osd-scrub-snaps.sh (`pr#6697 <http://github.com/ceph/ceph/pull/6697>`_, Xinze Chi)
+* test/librados/test.cc: clean up EC pools' crush rules too (`issue#13878 <http://tracker.ceph.com/issues/13878>`_, `pr#6788 <http://github.com/ceph/ceph/pull/6788>`_, Loic Dachary, Dan Mick)
+* tests: allow object corpus readable test to skip specific incompat instances (`pr#6932 <http://github.com/ceph/ceph/pull/6932>`_, Igor Podoski)
+* tests: ceph-helpers assert success getting backfills (`pr#6699 <http://github.com/ceph/ceph/pull/6699>`_, Loic Dachary)
+* tests: ceph_test_keyvaluedb_iterators: fix broken test (`pr#6597 <http://github.com/ceph/ceph/pull/6597>`_, Haomai Wang)
+* tests: fix failure for osd-scrub-snap.sh (`issue#13986 <http://tracker.ceph.com/issues/13986>`_, `pr#6890 <http://github.com/ceph/ceph/pull/6890>`_, Loic Dachary, Ning Yao)
+* tests: fix race condition testing auto scrub (`issue#13592 <http://tracker.ceph.com/issues/13592>`_, `pr#6724 <http://github.com/ceph/ceph/pull/6724>`_, Xinze Chi, Loic Dachary)
+* tests: flush op work queue prior to destroying MockImageCtx (`issue#14092 <http://tracker.ceph.com/issues/14092>`_, `pr#7002 <http://github.com/ceph/ceph/pull/7002>`_, Jason Dillaman)
+* tests: --osd-scrub-load-threshold=2000 for more consistency (`issue#14027 <http://tracker.ceph.com/issues/14027>`_, `pr#6871 <http://github.com/ceph/ceph/pull/6871>`_, Loic Dachary)
+* tests: osd-scrub-snaps.sh to display full osd logs on error (`issue#13986 <http://tracker.ceph.com/issues/13986>`_, `pr#6857 <http://github.com/ceph/ceph/pull/6857>`_, Loic Dachary)
+* test: use sequential journal_tid for object cacher test (`issue#13877 <http://tracker.ceph.com/issues/13877>`_, `pr#6710 <http://github.com/ceph/ceph/pull/6710>`_, Josh Durgin)
+* tools: add cephfs-table-tool 'take_inos' (`pr#6655 <http://github.com/ceph/ceph/pull/6655>`_, John Spray)
+* tools: Fix layout handing in cephfs-data-scan (#13898) (`pr#6719 <http://github.com/ceph/ceph/pull/6719>`_, John Spray)
+* tools: support printing part cluster map in readable fashion (`issue#13079 <http://tracker.ceph.com/issues/13079>`_, `pr#5921 <http://github.com/ceph/ceph/pull/5921>`_, Bo Cai)
+* vstart.sh: add mstart, mstop, mrun wrappers for running multiple vstart-style test clusters out of src tree (`pr#6901 <http://github.com/ceph/ceph/pull/6901>`_, Yehuda Sadeh)
+
+v10.0.1
+=======
+
+This is the second development release for the Jewel cycle.
+Highlights include some KeyValueDB interface optimizations, initial
+journaling support in librbd, MDS scrubbing progress, and a bunch of
+OSD optimizations and improvements (removal of an unnecessary CRUSH
+calculation in the IO path, sharding for FileStore completions,
+improved temperature calculation for cache tiering, fixed
+randomization of scrub times, and various optimizations).
+
+Notable Changes
+---------------
+
+* build: build internal plugins and classes as modules (`pr#6462 <http://github.com/ceph/ceph/pull/6462>`_, James Page)
+* build: fix Jenkins make check errors due to deep-scrub randomization (`pr#6671 <http://github.com/ceph/ceph/pull/6671>`_, David Zafman)
+* build/ops: enable CR in CentOS 7 (`issue#13997 <http://tracker.ceph.com/issues/13997>`_, `pr#6844 <http://github.com/ceph/ceph/pull/6844>`_, Loic Dachary)
+* build/ops: rbd-replay moved from ceph-test-dbg to ceph-common-dbg (`issue#13785 <http://tracker.ceph.com/issues/13785>`_, `pr#6578 <http://github.com/ceph/ceph/pull/6578>`_, Loic Dachary)
+* ceph-disk: Add destroy and deactivate option (`issue#7454 <http://tracker.ceph.com/issues/7454>`_, `pr#5867 <http://github.com/ceph/ceph/pull/5867>`_, Vicente Cheng)
+* ceph-disk: compare parted output with the dereferenced path (`issue#13438 <http://tracker.ceph.com/issues/13438>`_, `pr#6219 <http://github.com/ceph/ceph/pull/6219>`_, Joe Julian)
+* ceph-objectstore-tool: fix --dry-run for many ceph-objectstore-tool operations (`pr#6545 <http://github.com/ceph/ceph/pull/6545>`_, David Zafman)
+* ceph.spec.in: limit _smp_mflags when lowmem_builder is set in SUSE's OBS (`issue#13858 <http://tracker.ceph.com/issues/13858>`_, `pr#6691 <http://github.com/ceph/ceph/pull/6691>`_, Nathan Cutler)
+* ceph_test_msgr: Use send_message instead of keepalive to wakeup connection (`pr#6605 <http://github.com/ceph/ceph/pull/6605>`_, Haomai Wang)
+* client: avoid creating orphan object in Client::check_pool_perm() (`issue#13782 <http://tracker.ceph.com/issues/13782>`_, `pr#6603 <http://github.com/ceph/ceph/pull/6603>`_, Yan, Zheng)
+* client: use null snapc to check pool permission (`issue#13714 <http://tracker.ceph.com/issues/13714>`_, `pr#6497 <http://github.com/ceph/ceph/pull/6497>`_, Yan, Zheng)
+* cmake: add nss as a suffix for pk11pub.h (`pr#6556 <http://github.com/ceph/ceph/pull/6556>`_, Samuel Just)
+* cmake: fix files list (`pr#6539 <http://github.com/ceph/ceph/pull/6539>`_, Yehuda Sadeh)
+* cmake: librbd and libjournal build fixes (`pr#6557 <http://github.com/ceph/ceph/pull/6557>`_, Ilya Dryomov)
+* coc: fix typo in the apt-get command (`pr#6659 <http://github.com/ceph/ceph/pull/6659>`_, Chris Holcombe)
+* common: allow enable/disable of optracker at runtime (`pr#5168 <http://github.com/ceph/ceph/pull/5168>`_, Jianpeng Ma)
+* common: fix reset max in Throttle using perf reset command (`issue#13517 <http://tracker.ceph.com/issues/13517>`_, `pr#6300 <http://github.com/ceph/ceph/pull/6300>`_, Xinze Chi)
+* doc: add v0.80.11 to the release timeline (`pr#6658 <http://github.com/ceph/ceph/pull/6658>`_, Loic Dachary)
+* doc: release-notes: draft v0.80.11 release notes (`pr#6374 <http://github.com/ceph/ceph/pull/6374>`_, Loic Dachary)
+* doc: release-notes: draft v10.0.0 release notes (`pr#6666 <http://github.com/ceph/ceph/pull/6666>`_, Loic Dachary)
+* doc: SubmittingPatches: there is no next; only jewel (`pr#6811 <http://github.com/ceph/ceph/pull/6811>`_, Nathan Cutler)
+* doc: Update ceph-disk manual page with new feature deactivate/destroy. (`pr#6637 <http://github.com/ceph/ceph/pull/6637>`_, Vicente Cheng)
+* doc: update infernalis release notes (`pr#6575 <http://github.com/ceph/ceph/pull/6575>`_, vasukulkarni)
+* fix: use right init_flags to finish CephContext (`pr#6549 <http://github.com/ceph/ceph/pull/6549>`_, Yunchuan Wen)
+* init-ceph: use getopt to make option processing more flexible (`issue#3015 <http://tracker.ceph.com/issues/3015>`_, `pr#6089 <http://github.com/ceph/ceph/pull/6089>`_, Nathan Cutler)
+* journal: incremental improvements and fixes (`pr#6552 <http://github.com/ceph/ceph/pull/6552>`_, Mykola Golub)
+* krbd: remove deprecated --quiet param from udevadm (`issue#13560 <http://tracker.ceph.com/issues/13560>`_, `pr#6394 <http://github.com/ceph/ceph/pull/6394>`_, Jason Dillaman)
+* kv: fix bug in kv key optimization (`pr#6511 <http://github.com/ceph/ceph/pull/6511>`_, Sage Weil)
+* kv/KineticStore: fix broken split_key (`pr#6574 <http://github.com/ceph/ceph/pull/6574>`_, Haomai Wang)
+* kv: optimize and clean up internal key/value interface (`pr#6312 <http://github.com/ceph/ceph/pull/6312>`_, Piotr Dałek, Sage Weil)
+* librados: do cleanup (`pr#6488 <http://github.com/ceph/ceph/pull/6488>`_, xie xingguo)
+* librados: fix pool alignment API overflow issue (`issue#13715 <http://tracker.ceph.com/issues/13715>`_, `pr#6489 <http://github.com/ceph/ceph/pull/6489>`_, xie xingguo)
+* librados: fix potential null pointer access when do pool_snap_list (`issue#13639 <http://tracker.ceph.com/issues/13639>`_, `pr#6422 <http://github.com/ceph/ceph/pull/6422>`_, xie xingguo)
+* librados: fix PromoteOn2ndRead test for EC (`pr#6373 <http://github.com/ceph/ceph/pull/6373>`_, Sage Weil)
+* librados: fix rare race where pool op callback may hang forever (`issue#13642 <http://tracker.ceph.com/issues/13642>`_, `pr#6426 <http://github.com/ceph/ceph/pull/6426>`_, xie xingguo)
+* librados: Solaris port (`pr#6416 <http://github.com/ceph/ceph/pull/6416>`_, Rohan Mars)
+* librbd: flush and invalidate cache via admin socket (`issue#2468 <http://tracker.ceph.com/issues/2468>`_, `pr#6453 <http://github.com/ceph/ceph/pull/6453>`_, Mykola Golub)
+* librbd: integrate journaling support for IO operations (`pr#6541 <http://github.com/ceph/ceph/pull/6541>`_, Jason Dillaman)
+* librbd: perf counters might not be initialized on error (`issue#13740 <http://tracker.ceph.com/issues/13740>`_, `pr#6523 <http://github.com/ceph/ceph/pull/6523>`_, Jason Dillaman)
+* librbd: perf section name: use hyphen to separate components (`issue#13719 <http://tracker.ceph.com/issues/13719>`_, `pr#6516 <http://github.com/ceph/ceph/pull/6516>`_, Mykola Golub)
+* librbd: resize should only update image size within header (`issue#13674 <http://tracker.ceph.com/issues/13674>`_, `pr#6447 <http://github.com/ceph/ceph/pull/6447>`_, Jason Dillaman)
+* librbd: start perf counters after id is initialized (`issue#13720 <http://tracker.ceph.com/issues/13720>`_, `pr#6494 <http://github.com/ceph/ceph/pull/6494>`_, Mykola Golub)
+* mailmap: revise organization (`pr#6519 <http://github.com/ceph/ceph/pull/6519>`_, Li Wang)
+* mailmap: Ubuntu Kylin name changed to Kylin Cloud (`pr#6532 <http://github.com/ceph/ceph/pull/6532>`_, Loic Dachary)
+* mailmap: update .organizationmap (`pr#6565 <http://github.com/ceph/ceph/pull/6565>`_, chenji-kael)
+* mailmap: updates for infernalis. (`pr#6495 <http://github.com/ceph/ceph/pull/6495>`_, Yann Dupont)
+* mailmap: updates (`pr#6594 <http://github.com/ceph/ceph/pull/6594>`_, chenji-kael)
+* mds: fix scrub_path (`pr#6684 <http://github.com/ceph/ceph/pull/6684>`_, John Spray)
+* mds: properly set STATE_STRAY/STATE_ORPHAN for stray dentry/inode (`issue#13777 <http://tracker.ceph.com/issues/13777>`_, `pr#6553 <http://github.com/ceph/ceph/pull/6553>`_, Yan, Zheng)
+* mds: ScrubStack and "tag path" command (`pr#5662 <http://github.com/ceph/ceph/pull/5662>`_, Yan, Zheng, John Spray, Greg Farnum)
+* mon: block 'ceph osd pg-temp ...' if pg_temp update is already pending (`pr#6704 <http://github.com/ceph/ceph/pull/6704>`_, Sage Weil)
+* mon: don't require OSD W for MRemoveSnaps (`issue#13777 <http://tracker.ceph.com/issues/13777>`_, `pr#6601 <http://github.com/ceph/ceph/pull/6601>`_, John Spray)
+* mon: initialize recorded election epoch properly even when standalone (`issue#13627 <http://tracker.ceph.com/issues/13627>`_, `pr#6407 <http://github.com/ceph/ceph/pull/6407>`_, huanwen ren)
+* mon: revert MonitorDBStore's WholeStoreIteratorImpl::get (`issue#13742 <http://tracker.ceph.com/issues/13742>`_, `pr#6522 <http://github.com/ceph/ceph/pull/6522>`_, Piotr Dałek)
+* msg/async: let receiver ack message ASAP (`pr#6478 <http://github.com/ceph/ceph/pull/6478>`_, Haomai Wang)
+* msg/async: support of non-block connect in async messenger (`issue#12802 <http://tracker.ceph.com/issues/12802>`_, `pr#5848 <http://github.com/ceph/ceph/pull/5848>`_, Jianhui Yuan)
+* msg/async: will crash if enabling async msg because of an assertion (`pr#6640 <http://github.com/ceph/ceph/pull/6640>`_, Zhi Zhang)
+* osd: avoid calculating crush mapping for most ops (`pr#6371 <http://github.com/ceph/ceph/pull/6371>`_, Sage Weil)
+* osd: avoid double-check for replaying and can_checkpoint() in FileStore::_check_replay_guard (`pr#6471 <http://github.com/ceph/ceph/pull/6471>`_, Ning Yao)
+* osd: call on_new_interval on newly split child PG (`issue#13962 <http://tracker.ceph.com/issues/13962>`_, `pr#6778 <http://github.com/ceph/ceph/pull/6778>`_, Sage Weil)
+* osd: change mutex to spinlock to optimize thread context switch. (`pr#6492 <http://github.com/ceph/ceph/pull/6492>`_, Xiaowei Chen)
+* osd: check do_shutdown before do_restart (`pr#6547 <http://github.com/ceph/ceph/pull/6547>`_, Xiaoxi Chen)
+* osd: clarify the scrub result report (`pr#6534 <http://github.com/ceph/ceph/pull/6534>`_, Li Wang)
+* osd: don't do random deep scrubs for user initiated scrubs (`pr#6673 <http://github.com/ceph/ceph/pull/6673>`_, David Zafman)
+* osd: FileStore: support multiple ondisk finish and apply finishers (`pr#6486 <http://github.com/ceph/ceph/pull/6486>`_, Xinze Chi, Haomai Wang)
+* osd: fix broken balance / localized read handling (`issue#13491 <http://tracker.ceph.com/issues/13491>`_, `pr#6364 <http://github.com/ceph/ceph/pull/6364>`_, Jason Dillaman)
+* osd: fix bug in last_* PG state timestamps (`pr#6517 <http://github.com/ceph/ceph/pull/6517>`_, Li Wang)
+* osd: fix ClassHandler::ClassData::get_filter() (`pr#6747 <http://github.com/ceph/ceph/pull/6747>`_, Yan, Zheng)
+* osd: fixes for several cases where op result code was not checked or set (`issue#13566 <http://tracker.ceph.com/issues/13566>`_, `pr#6347 <http://github.com/ceph/ceph/pull/6347>`_, xie xingguo)
+* osd: fix reactivate (check OSDSuperblock in mkfs() when we already have the superblock) (`issue#13586 <http://tracker.ceph.com/issues/13586>`_, `pr#6385 <http://github.com/ceph/ceph/pull/6385>`_, Vicente Cheng)
+* osd: fix wrong use of right parenthesis in localized read logic (`pr#6566 <http://github.com/ceph/ceph/pull/6566>`_, Jie Wang)
+* osd: improve temperature calculation for cache tier agent (`pr#4737 <http://github.com/ceph/ceph/pull/4737>`_, MingXin Liu)
+* osd: merge local_t and op_t txn to single one (`pr#6439 <http://github.com/ceph/ceph/pull/6439>`_, Xinze Chi)
+* osd: newstore: misc updates (including kv and os/fs stuff) (`pr#6609 <http://github.com/ceph/ceph/pull/6609>`_, Sage Weil)
+* osd: note down the number of missing clones (`pr#6654 <http://github.com/ceph/ceph/pull/6654>`_, Kefu Chai)
+* osd: optimize clone write path if object-map is enabled (`pr#6403 <http://github.com/ceph/ceph/pull/6403>`_, xinxin shu)
+* osd: optimize scrub subset_last_update calculation (`pr#6518 <http://github.com/ceph/ceph/pull/6518>`_, Li Wang)
+* osd: partial revert of "ReplicatedPG: result code not correctly set in some cases." (`issue#13796 <http://tracker.ceph.com/issues/13796>`_, `pr#6622 <http://github.com/ceph/ceph/pull/6622>`_, Sage Weil)
+* osd: randomize deep scrubbing (`pr#6550 <http://github.com/ceph/ceph/pull/6550>`_, Dan van der Ster, Herve Rousseau)
+* osd: scrub: do not assign value if read error (`pr#6568 <http://github.com/ceph/ceph/pull/6568>`_, Li Wang)
+* osd: write file journal optimization (`pr#6484 <http://github.com/ceph/ceph/pull/6484>`_, Xinze Chi)
+* rbd: accept --user, refuse -i command-line optionals (`pr#6590 <http://github.com/ceph/ceph/pull/6590>`_, Ilya Dryomov)
+* rbd: add missing command aliases to refactored CLI (`issue#13806 <http://tracker.ceph.com/issues/13806>`_, `pr#6606 <http://github.com/ceph/ceph/pull/6606>`_, Jason Dillaman)
+* rbd: dynamically generated bash completion (`issue#13494 <http://tracker.ceph.com/issues/13494>`_, `pr#6316 <http://github.com/ceph/ceph/pull/6316>`_, Jason Dillaman)
+* rbd: fixes for refactored CLI and related tests (`pr#6738 <http://github.com/ceph/ceph/pull/6738>`_, Ilya Dryomov)
+* rbd: make config changes actually apply (`pr#6520 <http://github.com/ceph/ceph/pull/6520>`_, Mykola Golub)
+* rbd: refactor cli command handling (`pr#5987 <http://github.com/ceph/ceph/pull/5987>`_, Jason Dillaman)
+* rbd: stripe unit/count set incorrectly from config (`pr#6593 <http://github.com/ceph/ceph/pull/6593>`_, Mykola Golub)
+* rbd: support negative boolean command-line optionals (`issue#13784 <http://tracker.ceph.com/issues/13784>`_, `pr#6607 <http://github.com/ceph/ceph/pull/6607>`_, Jason Dillaman)
+* rbd: unbreak rbd map + cephx_sign_messages option (`pr#6583 <http://github.com/ceph/ceph/pull/6583>`_, Ilya Dryomov)
+* rgw: bucket request payment support (`issue#13427 <http://tracker.ceph.com/issues/13427>`_, `pr#6214 <http://github.com/ceph/ceph/pull/6214>`_, Javier M. Mellid)
+* rgw: extend rgw_extended_http_attrs to affect Swift accounts and containers as well (`pr#5969 <http://github.com/ceph/ceph/pull/5969>`_, Radoslaw Zarzynski)
+* rgw: fix openssl linkage (`pr#6513 <http://github.com/ceph/ceph/pull/6513>`_, Yehuda Sadeh)
+* rgw: fix partial read issue in rgw_admin and rgw_tools (`pr#6761 <http://github.com/ceph/ceph/pull/6761>`_, Jiaying Ren)
+* rgw: fix reload on non Debian systems. (`pr#6482 <http://github.com/ceph/ceph/pull/6482>`_, Hervé Rousseau)
+* rgw: fix response of delete expired objects (`issue#13469 <http://tracker.ceph.com/issues/13469>`_, `pr#6228 <http://github.com/ceph/ceph/pull/6228>`_, Yuan Zhou)
+* rgw: fix swift API returning incorrect account metadata (`issue#13140 <http://tracker.ceph.com/issues/13140>`_, `pr#6047 <http://github.com/ceph/ceph/pull/6047>`_, Sangdi Xu)
+* rgw: link against system openssl (instead of dlopen at runtime) (`pr#6419 <http://github.com/ceph/ceph/pull/6419>`_, Sage Weil)
+* rgw: prevent anonymous user from reading bucket with authenticated read ACL (`issue#13207 <http://tracker.ceph.com/issues/13207>`_, `pr#6057 <http://github.com/ceph/ceph/pull/6057>`_, root)
+* rgw: use smart pointer for C_Reinitwatch (`pr#6767 <http://github.com/ceph/ceph/pull/6767>`_, Orit Wasserman)
+* systemd: fix typos (`pr#6679 <http://github.com/ceph/ceph/pull/6679>`_, Tobias Suckow)
+* tests: centos7 needs the Continuous Release (CR) Repository enabled for (`issue#13997 <http://tracker.ceph.com/issues/13997>`_, `pr#6842 <http://github.com/ceph/ceph/pull/6842>`_, Brad Hubbard)
+* tests: concatenate test_rados_test_tool from src and qa (`issue#13691 <http://tracker.ceph.com/issues/13691>`_, `pr#6464 <http://github.com/ceph/ceph/pull/6464>`_, Loic Dachary)
+* tests: fix test_rados_tools.sh rados lookup (`issue#13691 <http://tracker.ceph.com/issues/13691>`_, `pr#6502 <http://github.com/ceph/ceph/pull/6502>`_, Loic Dachary)
+* tests: fix typo in TestClsRbd.snapshots test case (`issue#13727 <http://tracker.ceph.com/issues/13727>`_, `pr#6504 <http://github.com/ceph/ceph/pull/6504>`_, Jason Dillaman)
+* tests: ignore test-suite.log (`pr#6584 <http://github.com/ceph/ceph/pull/6584>`_, Loic Dachary)
+* tests: restore run-cli-tests (`pr#6571 <http://github.com/ceph/ceph/pull/6571>`_, Loic Dachary, Sage Weil, Jason Dillaman)
+* tools/cephfs: fix overflow writing header to fixed size buffer (#13816) (`pr#6617 <http://github.com/ceph/ceph/pull/6617>`_, John Spray)
+
+v10.0.0
+=======
+
+This is the first development release for the Jewel cycle.
+
+Notable Changes
+---------------
+
+* build: cmake tweaks (`pr#6254 <http://github.com/ceph/ceph/pull/6254>`_, John Spray)
+* build: more CMake package check fixes (`pr#6108 <http://github.com/ceph/ceph/pull/6108>`_, Daniel Gryniewicz)
+* ceph-disk: get Nonetype when ceph-disk list with --format plain on single device. (`pr#6410 <http://github.com/ceph/ceph/pull/6410>`_, Vicente Cheng)
+* ceph: fix tell behavior (`pr#6329 <http://github.com/ceph/ceph/pull/6329>`_, David Zafman)
+* ceph-fuse: While starting ceph-fuse, start the log thread first (`issue#13443 <http://tracker.ceph.com/issues/13443>`_, `pr#6224 <http://github.com/ceph/ceph/pull/6224>`_, Wenjun Huang)
+* client: don't mark_down on command reply (`pr#6204 <http://github.com/ceph/ceph/pull/6204>`_, John Spray)
+* client: drop prefix from ints (`pr#6275 <http://github.com/ceph/ceph/pull/6275>`_, John Coyle)
+* client: sys/file.h includes for flock operations (`pr#6282 <http://github.com/ceph/ceph/pull/6282>`_, John Coyle)
+* cls_rbd: change object_map_update to return 0 on success, add logging (`pr#6467 <http://github.com/ceph/ceph/pull/6467>`_, Douglas Fuller)
+* cmake: Use uname instead of arch. (`pr#6358 <http://github.com/ceph/ceph/pull/6358>`_, John Coyle)
+* common: assert: __STRING macro is not defined by musl libc. (`pr#6210 <http://github.com/ceph/ceph/pull/6210>`_, John Coyle)
+* common: fix OpTracker age histogram calculation (`pr#5065 <http://github.com/ceph/ceph/pull/5065>`_, Zhiqiang Wang)
+* common/MemoryModel: Added explicit feature check for mallinfo(). (`pr#6252 <http://github.com/ceph/ceph/pull/6252>`_, John Coyle)
+* common/obj_bencher.cc: fix verification crashing when there's no objects (`pr#5853 <http://github.com/ceph/ceph/pull/5853>`_, Piotr Dałek)
+* common: optimize debug logging (`pr#6307 <http://github.com/ceph/ceph/pull/6307>`_, Adam Kupczyk)
+* common: Thread: move copy constructor and assignment op (`pr#5133 <http://github.com/ceph/ceph/pull/5133>`_, Michal Jarzabek)
+* common: WorkQueue: new PointerWQ base class for ContextWQ (`issue#13636 <http://tracker.ceph.com/issues/13636>`_, `pr#6525 <http://github.com/ceph/ceph/pull/6525>`_, Jason Dillaman)
+* compat: use prefixed typeof extension (`pr#6216 <http://github.com/ceph/ceph/pull/6216>`_, John Coyle)
+* crush: validate bucket id before indexing buckets array (`issue#13477 <http://tracker.ceph.com/issues/13477>`_, `pr#6246 <http://github.com/ceph/ceph/pull/6246>`_, Sage Weil)
+* doc: download GPG key from download.ceph.com (`issue#13603 <http://tracker.ceph.com/issues/13603>`_, `pr#6384 <http://github.com/ceph/ceph/pull/6384>`_, Ken Dreyer)
+* doc: fix outdated content in cache tier (`pr#6272 <http://github.com/ceph/ceph/pull/6272>`_, Yuan Zhou)
+* doc/release-notes: v9.1.0 (`pr#6281 <http://github.com/ceph/ceph/pull/6281>`_, Loic Dachary)
+* doc/releases-notes: fix build error (`pr#6483 <http://github.com/ceph/ceph/pull/6483>`_, Kefu Chai)
+* doc: remove toctree items under Create CephFS (`pr#6241 <http://github.com/ceph/ceph/pull/6241>`_, Jevon Qiao)
+* doc: rename the "Create a Ceph User" section and add verbage about… (`issue#13502 <http://tracker.ceph.com/issues/13502>`_, `pr#6297 <http://github.com/ceph/ceph/pull/6297>`_, ritz303)
+* docs: Fix styling of newly added mirror docs (`pr#6127 <http://github.com/ceph/ceph/pull/6127>`_, Wido den Hollander)
+* doc, tests: update all http://ceph.com/ to download.ceph.com (`pr#6435 <http://github.com/ceph/ceph/pull/6435>`_, Alfredo Deza)
+* doc: update doc for with new pool settings (`pr#5951 <http://github.com/ceph/ceph/pull/5951>`_, Guang Yang)
+* doc: update radosgw-admin example (`pr#6256 <http://github.com/ceph/ceph/pull/6256>`_, YankunLi)
+* doc: update the OS recommendations for newer Ceph releases (`pr#6355 <http://github.com/ceph/ceph/pull/6355>`_, ritz303)
+* drop envz.h includes (`pr#6285 <http://github.com/ceph/ceph/pull/6285>`_, John Coyle)
+* libcephfs: Improve portability by replacing loff_t type usage with off_t (`pr#6301 <http://github.com/ceph/ceph/pull/6301>`_, John Coyle)
+* libcephfs: only check file offset on glibc platforms (`pr#6288 <http://github.com/ceph/ceph/pull/6288>`_, John Coyle)
+* librados: fix examples/librados/Makefile error. (`pr#6320 <http://github.com/ceph/ceph/pull/6320>`_, You Ji)
+* librados: init crush_location from config file. (`issue#13473 <http://tracker.ceph.com/issues/13473>`_, `pr#6243 <http://github.com/ceph/ceph/pull/6243>`_, Wei Luo)
+* librados: wrongly passed in argument for stat command (`issue#13703 <http://tracker.ceph.com/issues/13703>`_, `pr#6476 <http://github.com/ceph/ceph/pull/6476>`_, xie xingguo)
+* librbd: deadlock while attempting to flush AIO requests (`issue#13726 <http://tracker.ceph.com/issues/13726>`_, `pr#6508 <http://github.com/ceph/ceph/pull/6508>`_, Jason Dillaman)
+* librbd: fix enable objectmap feature issue (`issue#13558 <http://tracker.ceph.com/issues/13558>`_, `pr#6339 <http://github.com/ceph/ceph/pull/6339>`_, xinxin shu)
+* librbd: remove duplicate read_only test in librbd::async_flatten (`pr#5856 <http://github.com/ceph/ceph/pull/5856>`_, runsisi)
+* mailmap: modify member info  (`pr#6468 <http://github.com/ceph/ceph/pull/6468>`_, Xiaowei Chen)
+* mailmap: updates (`pr#6258 <http://github.com/ceph/ceph/pull/6258>`_, M Ranga Swami Reddy)
+* mailmap: Xie Xingguo affiliation (`pr#6409 <http://github.com/ceph/ceph/pull/6409>`_, Loic Dachary)
+* mds: implement snapshot rename (`pr#5645 <http://github.com/ceph/ceph/pull/5645>`_, xinxin shu)
+* mds: messages/MOSDOp: cast in assert to eliminate warnings (`issue#13625 <http://tracker.ceph.com/issues/13625>`_, `pr#6414 <http://github.com/ceph/ceph/pull/6414>`_, David Zafman)
+* mds: new filtered MDS tell commands for sessions (`pr#6180 <http://github.com/ceph/ceph/pull/6180>`_, John Spray)
+* mds/Session: use projected parent for auth path check (`issue#13364 <http://tracker.ceph.com/issues/13364>`_, `pr#6200 <http://github.com/ceph/ceph/pull/6200>`_, Sage Weil)
+* mon: should not set isvalid = true when cephx_verify_authorizer return false (`issue#13525 <http://tracker.ceph.com/issues/13525>`_, `pr#6306 <http://github.com/ceph/ceph/pull/6306>`_, Ruifeng Yang)
+* osd: Add config option osd_read_ec_check_for_errors for testing (`pr#5865 <http://github.com/ceph/ceph/pull/5865>`_, David Zafman)
+* osd: add pin/unpin support to cache tier (11066) (`pr#6326 <http://github.com/ceph/ceph/pull/6326>`_, Zhiqiang Wang)
+* osd: auto repair EC pool (`issue#12754 <http://tracker.ceph.com/issues/12754>`_, `pr#6196 <http://github.com/ceph/ceph/pull/6196>`_, Guang Yang)
+* osd: drop the interim set from load_pgs() (`pr#6277 <http://github.com/ceph/ceph/pull/6277>`_, Piotr Dałek)
+* osd: FileJournal: _fdump wrongly returns if journal is currently unreadable. (`issue#13626 <http://tracker.ceph.com/issues/13626>`_, `pr#6406 <http://github.com/ceph/ceph/pull/6406>`_, xie xingguo)
+* osd: FileStore: add a field indicate xattr only one chunk for set xattr. (`pr#6244 <http://github.com/ceph/ceph/pull/6244>`_, Jianpeng Ma)
+* osd: FileStore: LFNIndex: remove redundant local variable 'obj'. (`issue#13552 <http://tracker.ceph.com/issues/13552>`_, `pr#6333 <http://github.com/ceph/ceph/pull/6333>`_, xiexingguo)
+* osd: FileStore: potential memory leak if _fgetattrs fails (`issue#13597 <http://tracker.ceph.com/issues/13597>`_, `pr#6377 <http://github.com/ceph/ceph/pull/6377>`_, xie xingguo)
+* osd: FileStore: remove unused local variable 'handle' (`pr#6381 <http://github.com/ceph/ceph/pull/6381>`_, xie xingguo)
+* osd: fix bogus scrub results when missing a clone (`issue#12738 <http://tracker.ceph.com/issues/12738>`_, `issue#12740 <http://tracker.ceph.com/issues/12740>`_, `pr#5783 <http://github.com/ceph/ceph/pull/5783>`_, David Zafman)
+* osd: fix debug message in OSD::is_healthy (`pr#6226 <http://github.com/ceph/ceph/pull/6226>`_, Xiaoxi Chen)
+* osd: fix MOSDOp encoding (`pr#6174 <http://github.com/ceph/ceph/pull/6174>`_, Sage Weil)
+* osd: init started to 0 (`issue#13206 <http://tracker.ceph.com/issues/13206>`_, `pr#6107 <http://github.com/ceph/ceph/pull/6107>`_, Sage Weil)
+* osd: KeyValueStore: fix the name's typo of keyvaluestore_default_strip_size (`pr#6375 <http://github.com/ceph/ceph/pull/6375>`_, Zhi Zhang)
+* osd: new and delete ObjectStore::Transaction in a function is not necessary (`pr#6299 <http://github.com/ceph/ceph/pull/6299>`_, Ruifeng Yang)
+* osd: optimize get_object_context (`pr#6305 <http://github.com/ceph/ceph/pull/6305>`_, Jianpeng Ma)
+* osd: optimize MOSDOp/do_op/handle_op (`pr#5211 <http://github.com/ceph/ceph/pull/5211>`_, Jacek J. Lakis)
+* osd: os/chain_xattr: On linux use linux/limits.h for XATTR_NAME_MAX. (`pr#6343 <http://github.com/ceph/ceph/pull/6343>`_, John Coyle)
+* osd: reorder bool fields in PGLog struct (`pr#6279 <http://github.com/ceph/ceph/pull/6279>`_, Piotr Dałek)
+* osd: ReplicatedPG: remove unused local variables (`issue#13575 <http://tracker.ceph.com/issues/13575>`_, `pr#6360 <http://github.com/ceph/ceph/pull/6360>`_, xiexingguo)
+* osd: reset primary and up_primary when building a new past_interval. (`issue#13471 <http://tracker.ceph.com/issues/13471>`_, `pr#6240 <http://github.com/ceph/ceph/pull/6240>`_, xiexingguo)
+* radosgw-admin: Checking the legality of the parameters (`issue#13018 <http://tracker.ceph.com/issues/13018>`_, `pr#5879 <http://github.com/ceph/ceph/pull/5879>`_, Qiankun Zheng)
+* radosgw-admin: Create --secret-key alias for --secret (`issue#5821 <http://tracker.ceph.com/issues/5821>`_, `pr#5335 <http://github.com/ceph/ceph/pull/5335>`_, Yuan Zhou)
+* radosgw-admin: metadata list user should return an empty list when user pool is empty (`issue#13596 <http://tracker.ceph.com/issues/13596>`_, `pr#6465 <http://github.com/ceph/ceph/pull/6465>`_, Orit Wasserman)
+* rados: new options for write benchmark (`pr#6340 <http://github.com/ceph/ceph/pull/6340>`_, Joaquim Rocha)
+* rbd: fix clone isssue (`issue#13553 <http://tracker.ceph.com/issues/13553>`_, `pr#6334 <http://github.com/ceph/ceph/pull/6334>`_, xinxin shu)
+* rbd: fix init-rbdmap CMDPARAMS (`issue#13214 <http://tracker.ceph.com/issues/13214>`_, `pr#6109 <http://github.com/ceph/ceph/pull/6109>`_, Sage Weil)
+* rbdmap: systemd support (`issue#13374 <http://tracker.ceph.com/issues/13374>`_, `pr#6479 <http://github.com/ceph/ceph/pull/6479>`_, Boris Ranto)
+* rbd: rbdmap improvements (`pr#6445 <http://github.com/ceph/ceph/pull/6445>`_, Boris Ranto)
+* release-notes: draft v0.94.4 release notes (`pr#5907 <http://github.com/ceph/ceph/pull/5907>`_, Loic Dachary)
+* release-notes: draft v0.94.4 release notes (`pr#6195 <http://github.com/ceph/ceph/pull/6195>`_, Loic Dachary)
+* release-notes: draft v0.94.4 release notes (`pr#6238 <http://github.com/ceph/ceph/pull/6238>`_, Loic Dachary)
+* rgw: add compat header for TEMP_FAILURE_RETRY (`pr#6294 <http://github.com/ceph/ceph/pull/6294>`_, John Coyle)
+* rgw: add default quota config (`pr#6400 <http://github.com/ceph/ceph/pull/6400>`_, Daniel Gryniewicz)
+* rgw: add support for getting Swift's DLO without manifest handling (`pr#6206 <http://github.com/ceph/ceph/pull/6206>`_, Radoslaw Zarzynski)
+* rgw: clarify the error message when trying to create an existed user (`pr#5938 <http://github.com/ceph/ceph/pull/5938>`_, Zeqiang Zhuang)
+* rgw: fix objects can not be displayed which object name does not cont… (`issue#12963 <http://tracker.ceph.com/issues/12963>`_, `pr#5738 <http://github.com/ceph/ceph/pull/5738>`_, Weijun Duan)
+* rgw: fix typo in RGWHTTPClient::process error message (`pr#6424 <http://github.com/ceph/ceph/pull/6424>`_, Brad Hubbard)
+* rgw: fix wrong etag calculation during POST on S3 bucket. (`issue#11241 <http://tracker.ceph.com/issues/11241>`_, `pr#6030 <http://github.com/ceph/ceph/pull/6030>`_, Radoslaw Zarzynski)
+* rgw: mdlog trim add usage prompt (`pr#6059 <http://github.com/ceph/ceph/pull/6059>`_, Weijun Duan)
+* rgw: modify the conditional statement in parse_metadata_key method. (`pr#5875 <http://github.com/ceph/ceph/pull/5875>`_, Zengran Zhang)
+* rgw: refuse to calculate digest when the s3 secret key is empty (`issue#13133 <http://tracker.ceph.com/issues/13133>`_, `pr#6045 <http://github.com/ceph/ceph/pull/6045>`_, Sangdi Xu)
+* rgw: remove extra check in RGWGetObj::execute (`issue#12352 <http://tracker.ceph.com/issues/12352>`_, `pr#5262 <http://github.com/ceph/ceph/pull/5262>`_, Javier M. Mellid)
+* rgw: support core file limit for radosgw daemon (`pr#6346 <http://github.com/ceph/ceph/pull/6346>`_, Guang Yang)
+* rgw: swift use Civetweb ssl can not get right url (`issue#13628 <http://tracker.ceph.com/issues/13628>`_, `pr#6408 <http://github.com/ceph/ceph/pull/6408>`_, Weijun Duan)
+* rocksdb: build with PORTABLE=1 (`pr#6311 <http://github.com/ceph/ceph/pull/6311>`_, Sage Weil)
+* rocksdb: remove rdb source files from dist tarball (`issue#13554 <http://tracker.ceph.com/issues/13554>`_, `pr#6379 <http://github.com/ceph/ceph/pull/6379>`_, Kefu Chai)
+* rocksdb: use native rocksdb makefile (and our autotools) (`pr#6290 <http://github.com/ceph/ceph/pull/6290>`_, Sage Weil)
+* rpm: ceph.spec.in: correctly declare systemd dependency for SLE/openSUSE (`pr#6114 <http://github.com/ceph/ceph/pull/6114>`_, Nathan Cutler)
+* rpm: ceph.spec.in: fix libs-compat / devel-compat conditional (`issue#12315 <http://tracker.ceph.com/issues/12315>`_, `pr#5219 <http://github.com/ceph/ceph/pull/5219>`_, Ken Dreyer)
+* rpm: rhel 5.9 librados compile fix, moved blkid to RBD check/compilation (`issue#13177 <http://tracker.ceph.com/issues/13177>`_, `pr#5954 <http://github.com/ceph/ceph/pull/5954>`_, Rohan Mars)
+* scripts: release_notes can track original issue (`pr#6009 <http://github.com/ceph/ceph/pull/6009>`_, Abhishek Lekshmanan)
+* test/libcephfs/flock: add sys/file.h include for flock operations (`pr#6310 <http://github.com/ceph/ceph/pull/6310>`_, John Coyle)
+* test_rgw_admin: use freopen for output redirection. (`pr#6303 <http://github.com/ceph/ceph/pull/6303>`_, John Coyle)
+* tests: allow docker-test.sh to run under root (`issue#13355 <http://tracker.ceph.com/issues/13355>`_, `pr#6173 <http://github.com/ceph/ceph/pull/6173>`_, Loic Dachary)
+* tests: ceph-disk workunit uses configobj  (`pr#6342 <http://github.com/ceph/ceph/pull/6342>`_, Loic Dachary)
+* tests: destroy testprofile before creating one (`issue#13664 <http://tracker.ceph.com/issues/13664>`_, `pr#6446 <http://github.com/ceph/ceph/pull/6446>`_, Loic Dachary)
+* tests: port uniqueness reminder (`pr#6387 <http://github.com/ceph/ceph/pull/6387>`_, Loic Dachary)
+* tests: test/librados/test.cc must create profile (`issue#13664 <http://tracker.ceph.com/issues/13664>`_, `pr#6452 <http://github.com/ceph/ceph/pull/6452>`_, Loic Dachary)
+* tools/cephfs: fix overflow writing header to fixed size buffer (#13816) (`pr#6617 <http://github.com/ceph/ceph/pull/6617>`_, John Spray)
+* tools: ceph-monstore-update-crush: add "--test" when testing crushmap (`pr#6418 <http://github.com/ceph/ceph/pull/6418>`_, Kefu Chai)
+* tools:remove duplicate references (`pr#5917 <http://github.com/ceph/ceph/pull/5917>`_, Bo Cai)
+* vstart: grant full access to Swift testing account (`pr#6239 <http://github.com/ceph/ceph/pull/6239>`_, Yuan Zhou)
+* vstart: set cephfs root uid/gid to caller (`pr#6255 <http://github.com/ceph/ceph/pull/6255>`_, John Spray)
+
+
+v9.2.0 Infernalis
+=================
+
+This major release will be the foundation for the next stable series.
+There have been some major changes since v0.94.x Hammer, and the
+upgrade process is non-trivial.  Please read these release notes carefully.
+
+Major Changes from Hammer
+-------------------------
+
+- *General*:
+
+  * Ceph daemons are now managed via systemd (with the exception of
+    Ubuntu Trusty, which still uses upstart).
+  * Ceph daemons run as 'ceph' user instead root.
+  * On Red Hat distros, there is also an SELinux policy.
+
+- *RADOS*:
+
+  * The RADOS cache tier can now proxy write operations to the base
+    tier, allowing writes to be handled without forcing migration of
+    an object into the cache.
+  * The SHEC erasure coding support is no longer flagged as
+    experimental. SHEC trades some additional storage space for faster
+    repair.
+  * There is now a unified queue (and thus prioritization) of client
+    IO, recovery, scrubbing, and snapshot trimming.
+  * There have been many improvements to low-level repair tooling
+    (ceph-objectstore-tool).
+  * The internal ObjectStore API has been significantly cleaned up in order
+    to faciliate new storage backends like NewStore.
+
+- *RGW*:
+
+  * The Swift API now supports object expiration.
+  * There are many Swift API compatibility improvements.
+
+- *RBD*:
+
+  * The ``rbd du`` command shows actual usage (quickly, when
+    object-map is enabled).
+  * The object-map feature has seen many stability improvements.
+  * Object-map and exclusive-lock features can be enabled or disabled
+    dynamically.
+  * You can now store user metadata and set persistent librbd options
+    associated with individual images.
+  * The new deep-flatten features allows flattening of a clone and all
+    of its snapshots.  (Previously snapshots could not be flattened.)
+  * The export-diff command command is now faster (it uses aio).  There is also
+    a new fast-diff feature.
+  * The --size argument can be specified with a suffix for units
+    (e.g., ``--size 64G``).
+  * There is a new ``rbd status`` command that, for now, shows who has
+    the image open/mapped.
+
+- *CephFS*:
+
+  * You can now rename snapshots.
+  * There have been ongoing improvements around administration, diagnostics,
+    and the check and repair tools.
+  * The caching and revocation of client cache state due to unused
+    inodes has been dramatically improved.
+  * The ceph-fuse client behaves better on 32-bit hosts.
 
 Distro compatibility
 --------------------
@@ -16,6 +524,706 @@ We have decided to drop support for many older distributions so that we can
 move to a newer compiler toolchain (e.g., C++11).  Although it is still possible
 to build Ceph on older distributions by installing backported development tools,
 we are not building and publishing release packages for ceph.com.
+
+We now build packages for:
+
+* CentOS 7 or later.  We have dropped support for CentOS 6 (and other
+  RHEL 6 derivatives, like Scientific Linux 6).
+* Debian Jessie 8.x or later.  Debian Wheezy 7.x's g++ has incomplete
+  support for C++11 (and no systemd).
+* Ubuntu Trusty 14.04 or later.  Ubuntu Precise 12.04 is no longer
+  supported.
+* Fedora 22 or later.
+
+Upgrading from Firefly
+----------------------
+
+Upgrading directly from Firefly v0.80.z is not recommended.  It is
+possible to do a direct upgrade, but not without downtime.  We
+recommend that clusters are first upgraded to Hammer v0.94.4 or a
+later v0.94.z release; only then is it possible to upgrade to
+Infernalis 9.2.z for an online upgrade (see below).
+
+To do an offline upgrade directly from Firefly, all Firefly OSDs must
+be stopped and marked down before any Infernalis OSDs will be allowed
+to start up.  This fencing is enforced by the Infernalis monitor, so
+use an upgrade procedure like:
+
+  #. Upgrade Ceph on monitor hosts
+  #. Restart all ceph-mon daemons
+  #. Upgrade Ceph on all OSD hosts
+  #. Stop all ceph-osd daemons
+  #. Mark all OSDs down with something like::
+       ceph osd down `seq 0 1000`
+  #. Start all ceph-osd daemons
+  #. Upgrade and restart remaining daemons (ceph-mds, radosgw)
+
+Upgrading from Hammer
+---------------------
+
+* All cluster nodes must first upgrade to Hammer v0.94.4 or a later v0.94.z release; only
+  then is it possible to upgrade to Infernalis 9.2.z.
+
+* For all distributions that support systemd (CentOS 7, Fedora, Debian
+  Jessie 8.x, OpenSUSE), ceph daemons are now managed using native systemd
+  files instead of the legacy sysvinit scripts.  For example,::
+
+    systemctl start ceph.target       # start all daemons
+    systemctl status ceph-osd@12      # check status of osd.12
+
+  The main notable distro that is *not* yet using systemd is Ubuntu trusty
+  14.04.  (The next Ubuntu LTS, 16.04, will use systemd instead of upstart.)
+
+* Ceph daemons now run as user and group ``ceph`` by default.  The
+  ceph user has a static UID assigned by Fedora and Debian (also used
+  by derivative distributions like RHEL/CentOS and Ubuntu).  On SUSE
+  the ceph user will currently get a dynamically assigned UID when the
+  user is created.
+
+  If your systems already have a ceph user, upgrading the package will cause
+  problems.  We suggest you first remove or rename the existing 'ceph' user
+  and 'ceph' group before upgrading.
+
+  When upgrading, administrators have two options:
+
+   #. Add the following line to ``ceph.conf`` on all hosts::
+
+        setuser match path = /var/lib/ceph/$type/$cluster-$id
+
+      This will make the Ceph daemons run as root (i.e., not drop
+      privileges and switch to user ceph) if the daemon's data
+      directory is still owned by root.  Newly deployed daemons will
+      be created with data owned by user ceph and will run with
+      reduced privileges, but upgraded daemons will continue to run as
+      root.
+
+   #. Fix the data ownership during the upgrade.  This is the
+      preferred option, but it is more work and can be very time
+      consuming.  The process for each host is to:
+
+      #. Upgrade the ceph package.  This creates the ceph user and group.  For
+	 example::
+
+	   ceph-deploy install --stable infernalis HOST
+
+      #. Stop the daemon(s).::
+
+	   service ceph stop           # fedora, centos, rhel, debian
+	   stop ceph-all               # ubuntu
+
+      #. Fix the ownership::
+
+	   chown -R ceph:ceph /var/lib/ceph
+
+      #. Restart the daemon(s).::
+
+	   start ceph-all                # ubuntu
+	   systemctl start ceph.target   # debian, centos, fedora, rhel
+
+      Alternatively, the same process can be done with a single daemon
+      type, for example by stopping only monitors and chowning only
+      ``/var/lib/ceph/mon``.
+
+* The on-disk format for the experimental KeyValueStore OSD backend has
+  changed.  You will need to remove any OSDs using that backend before you
+  upgrade any test clusters that use it.
+
+* When a pool quota is reached, librados operations now block indefinitely,
+  the same way they do when the cluster fills up.  (Previously they would return
+  -ENOSPC).  By default, a full cluster or pool will now block.  If your
+  librados application can handle ENOSPC or EDQUOT errors gracefully, you can
+  get error returns instead by using the new librados OPERATION_FULL_TRY flag.
+
+* The return code for librbd's rbd_aio_read and Image::aio_read API methods no
+  longer returns the number of bytes read upon success.  Instead, it returns 0
+  upon success and a negative value upon failure.
+
+* 'ceph scrub', 'ceph compact' and 'ceph sync force are now DEPRECATED.  Users
+  should instead use 'ceph mon scrub', 'ceph mon compact' and
+  'ceph mon sync force'.
+
+* 'ceph mon_metadata' should now be used as 'ceph mon metadata'. There is no
+  need to deprecate this command (same major release since it was first
+  introduced).
+
+* The `--dump-json` option of "osdmaptool" is replaced by `--dump json`.
+
+* The commands of "pg ls-by-{pool,primary,osd}" and "pg ls" now take "recovering"
+  instead of "recovery", to include the recovering pgs in the listed pgs.
+
+Notable Changes since Hammer
+----------------------------
+
+* aarch64: add optimized version of crc32c (Yazen Ghannam, Steve Capper)
+* auth: cache/reuse crypto lib key objects, optimize msg signature check (Sage Weil)
+* auth: reinit NSS after fork() (#11128 Yan, Zheng)
+* autotools: fix out of tree build (Krxysztof Kosinski)
+* autotools: improve make check output (Loic Dachary)
+* buffer: add invalidate_crc() (Piotr Dalek)
+* buffer: fix zero bug (#12252 Haomai Wang)
+* buffer: some cleanup (Michal Jarzabek)
+* build: allow tcmalloc-minimal (Thorsten Behrens)
+* build: C++11 now supported
+* build: cmake: fix nss linking (Danny Al-Gaaf)
+* build: cmake: misc fixes (Orit Wasserman, Casey Bodley)
+* build: disable LTTNG by default (#11333 Josh Durgin)
+* build: do not build ceph-dencoder with tcmalloc (#10691 Boris Ranto)
+* build: fix junit detection on Fedora 22 (Ira Cooper)
+* build: fix pg ref disabling (William A. Kennington III)
+* build: fix ppc build (James Page)
+* build: install-deps: misc fixes (Loic Dachary)
+* build: install-deps.sh improvements (Loic Dachary)
+* build: install-deps: support OpenSUSE (Loic Dachary)
+* build: make_dist_tarball.sh (Sage Weil)
+* build: many cmake improvements
+* build: misc cmake fixes (Matt Benjamin)
+* build: misc fixes (Boris Ranto, Ken Dreyer, Owen Synge)
+* build: OSX build fixes (Yan, Zheng)
+* build: remove rest-bench
+* ceph-authtool: fix return code on error (Gerhard Muntingh)
+* ceph-detect-init: added Linux Mint (Michal Jarzabek)
+* ceph-detect-init: robust init system detection (Owen Synge)
+* ceph-disk: ensure 'zap' only operates on a full disk (#11272 Loic Dachary)
+* ceph-disk: fix zap sgdisk invocation (Owen Synge, Thorsten Behrens)
+* ceph-disk: follow ceph-osd hints when creating journal (#9580 Sage Weil)
+* ceph-disk: handle re-using existing partition (#10987 Loic Dachary)
+* ceph-disk: improve parted output parsing (#10983 Loic Dachary)
+* ceph-disk: install pip > 6.1 (#11952 Loic Dachary)
+* ceph-disk: make suppression work for activate-all and activate-journal (Dan van der Ster)
+* ceph-disk: many fixes (Loic Dachary, Alfredo Deza)
+* ceph-disk: fixes to respect init system (Loic Dachary, Owen Synge)
+* ceph-disk: pass --cluster arg on prepare subcommand (Kefu Chai)
+* ceph-disk: support for multipath devices (Loic Dachary)
+* ceph-disk: support NVMe device partitions (#11612 Ilja Slepnev)
+* ceph: fix 'df' units (Zhe Zhang)
+* ceph: fix parsing in interactive cli mode (#11279 Kefu Chai)
+* cephfs-data-scan: many additions, improvements (John Spray)
+* ceph-fuse: do not require successful remount when unmounting (#10982 Greg Farnum)
+* ceph-fuse, libcephfs: don't clear COMPLETE when trimming null (Yan, Zheng)
+* ceph-fuse, libcephfs: drop inode when rmdir finishes (#11339 Yan, Zheng)
+* ceph-fuse,libcephfs: fix uninline (#11356 Yan, Zheng)
+* ceph-fuse, libcephfs: hold exclusive caps on dirs we "own" (#11226 Greg Farnum)
+* ceph-fuse: mostly behave on 32-bit hosts (Yan, Zheng)
+* ceph: improve error output for 'tell' (#11101 Kefu Chai)
+* ceph-monstore-tool: fix store-copy (Huangjun)
+* ceph: new 'ceph daemonperf' command (John Spray, Mykola Golub)
+* ceph-objectstore-tool: many many improvements (David Zafman)
+* ceph-objectstore-tool: refactoring and cleanup (John Spray)
+* ceph-post-file: misc fixes (Joey McDonald, Sage Weil)
+* ceph_test_rados: test pipelined reads (Zhiqiang Wang)
+* client: avoid sending unnecessary FLUSHSNAP messages (Yan, Zheng)
+* client: exclude setfilelock when calculating oldest tid (Yan, Zheng)
+* client: fix error handling in check_pool_perm (John Spray)
+* client: fsync waits only for inode's caps to flush (Yan, Zheng)
+* client: invalidate kernel dcache when cache size exceeds limits (Yan, Zheng)
+* client: make fsync wait for unsafe dir operations (Yan, Zheng)
+* client: pin lookup dentry to avoid inode being freed (Yan, Zheng)
+* common: add descriptions to perfcounters (Kiseleva Alyona)
+* common: add perf counter descriptions (Alyona Kiseleva)
+* common: bufferlist performance tuning (Piotr Dalek, Sage Weil)
+* common: detect overflow of int config values (#11484 Kefu Chai)
+* common: fix bit_vector extent calc (#12611 Jason Dillaman)
+* common: fix json parsing of utf8 (#7387 Tim Serong)
+* common: fix leak of pthread_mutexattr (#11762 Ketor Meng)
+* common: fix LTTNG vs fork issue (Josh Durgin)
+* common: fix throttle max change (Henry Chang)
+* common: make mutex more efficient
+* common: make work queue addition/removal thread safe (#12662 Jason Dillaman)
+* common: optracker improvements (Zhiqiang Wang, Jianpeng Ma)
+* common: PriorityQueue tests (Kefu Chai)
+* common: some async compression infrastructure (Haomai Wang)
+* crush: add --check to validate dangling names, max osd id (Kefu Chai)
+* crush: cleanup, sync with kernel (Ilya Dryomov)
+* crush: fix crash from invalid 'take' argument (#11602 Shiva Rkreddy, Sage Weil)
+* crush: fix divide-by-2 in straw2 (#11357 Yann Dupont, Sage Weil)
+* crush: fix has_v4_buckets (#11364 Sage Weil)
+* crush: fix subtree base weight on adjust_subtree_weight (#11855 Sage Weil)
+* crush: respect default replicated ruleset config on map creation (Ilya Dryomov)
+* crushtool: fix order of operations, usage (Sage Weil)
+* crypto: fix NSS leak (Jason Dillaman)
+* crypto: fix unbalanced init/shutdown (#12598 Zheng Yan)
+* deb: fix rest-bench-dbg and ceph-test-dbg dependendies (Ken Dreyer)
+* debian: minor package reorg (Ken Dreyer)
+* deb, rpm: move ceph-objectstore-tool to ceph (Ken Dreyer)
+* doc: docuemnt object corpus generation (#11099 Alexis Normand)
+* doc: document region hostnames (Robin H. Johnson)
+* doc: fix gender neutrality (Alexandre Maragone)
+* doc: fix install doc (#10957 Kefu Chai)
+* doc: fix sphinx issues (Kefu Chai)
+* doc: man page updates (Kefu Chai)
+* doc: mds data structure docs (Yan, Zheng)
+* doc: misc updates (Fracois Lafont, Ken Dreyer, Kefu Chai, Owen Synge, Gael Fenet-Garde, Loic Dachary, Yannick Atchy-Dalama, Jiaying Ren, Kevin Caradant, Robert Maxime, Nicolas Yong, Germain Chipaux, Arthur Gorjux, Gabriel Sentucq, Clement Lebrun, Jean-Remi Deveaux, Clair Massot, Robin Tang, Thomas Laumondais, Jordan Dorne, Yuan Zhou, Valentin Thomas, Pierre Chaumont, Benjamin Troquereau, Benjamin Sesia, Vikhyat Umrao, Nilamdyuti Goswami, Vartika Rai, Florian Haas, Loic Dachary, Simon Guinot, Andy Allan, Alistair Israel, Ken Dreyer, Robin Rehu, Lee Revell, Florian Marsylle, Thomas Johnson, Bosse Klykken, Travis Rhoden, Ian Kelling)
+* doc: swift tempurls (#10184 Abhishek Lekshmanan)
+* doc: switch doxygen integration back to breathe (#6115 Kefu Chai)
+* doc: update release schedule docs (Loic Dachary)
+* erasure-code: cleanup (Kefu Chai)
+* erasure-code: improve tests (Loic Dachary)
+* erasure-code: shec: fix recovery bugs (Takanori Nakao, Shotaro Kawaguchi)
+* erasure-code: update ISA-L to 2.13 (Yuan Zhou)
+* gmock: switch to submodule (Danny Al-Gaaf, Loic Dachary)
+* hadoop: add terasort test (Noah Watkins)
+* init-radosgw: merge with sysv version; fix enumeration (Sage Weil)
+* java: fix libcephfs bindings (Noah Watkins)
+* libcephfs: add pread, pwrite (Jevon Qiao)
+* libcephfs,ceph-fuse: cache cleanup (Zheng Yan)
+* libcephfs,ceph-fuse: fix request resend on cap reconnect (#10912 Yan, Zheng)
+* librados: add config observer (Alistair Strachan)
+* librados: add FULL_TRY and FULL_FORCE flags for dealing with full clusters or pools (Sage Weil)
+* librados: add src_fadvise_flags for copy-from (Jianpeng Ma)
+* librados: define C++ flags from C constants (Josh Durgin)
+* librados: fadvise flags per op (Jianpeng Ma)
+* librados: fix last_force_resent handling (#11026 Jianpeng Ma)
+* librados: fix memory leak from C_TwoContexts (Xiong Yiliang)
+* librados: fix notify completion race (#13114 Sage Weil)
+* librados: fix striper when stripe_count = 1 and stripe_unit != object_size (#11120 Yan, Zheng)
+* librados, libcephfs: randomize client nonces (Josh Durgin)
+* librados: op perf counters (John Spray)
+* librados: pybind: fix binary omap values (Robin H. Johnson)
+* librados: pybind: fix write() method return code (Javier Guerra)
+* librados: respect default_crush_ruleset on pool_create (#11640 Yuan Zhou)
+* libradosstriper: fix leak (Danny Al-Gaaf)
+* librbd: add const for single-client-only features (Josh Durgin)
+* librbd: add deep-flatten operation (Jason Dillaman)
+* librbd: add purge_on_error cache behavior (Jianpeng Ma)
+* librbd: allow additional metadata to be stored with the image (Haomai Wang)
+* librbd: avoid blocking aio API methods (#11056 Jason Dillaman)
+* librbd: better handling for dup flatten requests (#11370 Jason Dillaman)
+* librbd: cancel in-flight ops on watch error (#11363 Jason Dillaman)
+* librbd: default new images to format 2 (#11348 Jason Dillaman)
+* librbd: fadvise for copy, export, import (Jianpeng Ma)
+* librbd: fast diff implementation that leverages object map (Jason Dillaman)
+* librbd: fix fast diff bugs (#11553 Jason Dillaman)
+* librbd: fix image format detection (Zhiqiang Wang)
+* librbd: fix lock ordering issue (#11577 Jason Dillaman)
+* librbd: fix reads larger than the cache size (Lu Shi)
+* librbd: fix snapshot creation when other snap is active (#11475 Jason Dillaman)
+* librbd: flatten/copyup fixes (Jason Dillaman)
+* librbd: handle NOCACHE fadvise flag (Jinapeng Ma)
+* librbd: lockdep, helgrind validation (Jason Dillaman, Josh Durgin)
+* librbd: metadata filter fixes (Haomai Wang)
+* librbd: misc aio fixes (#5488 Jason Dillaman)
+* librbd: misc rbd fixes (#11478 #11113 #11342 #11380 Jason Dillaman, Zhiqiang Wang)
+* librbd: new diff_iterate2 API (Jason Dillaman)
+* librbd: object map rebuild support (Jason Dillaman)
+* librbd: only update image flags while hold exclusive lock (#11791 Jason Dillaman)
+* librbd: optionally disable allocation hint (Haomai Wang)
+* librbd: prevent race between resize requests (#12664 Jason Dillaman)
+* librbd: readahead fixes (Zhiqiang Wang)
+* librbd: return result code from close (#12069 Jason Dillaman)
+* librbd: store metadata, including config options, in image (Haomai Wang)
+* librbd: tolerate old osds when getting image metadata (#11549 Jason Dillaman)
+* librbd: use write_full when possible (Zhiqiang Wang)
+* log: fix data corruption race resulting from log rotation (#12465 Samuel Just)
+* logrotate.d: prefer service over invoke-rc.d (#11330 Win Hierman, Sage Weil)
+* mds: add 'damaged' state to MDSMap (John Spray)
+* mds: add nicknames for perfcounters (John Spray)
+* mds: avoid emitting cap warnigns before evicting session (John Spray)
+* mds: avoid getting stuck in XLOCKDONE (#11254 Yan, Zheng)
+* mds: disable problematic rstat propagation into snap parents (Yan, Zheng)
+* mds: do not add snapped items to bloom filter (Yan, Zheng)
+* mds: expose frags via asok (John Spray)
+* mds: fix expected holes in journal objects (#13167 Yan, Zheng)
+* mds: fix handling for missing mydir dirfrag (#11641 John Spray)
+* mds: fix integer truncateion on large client ids (Henry Chang)
+* mds: fix mydir replica issue with shutdown (#10743 John Spray)
+* mds: fix out-of-order messages (#11258 Yan, Zheng)
+* mds: fix rejoin (Yan, Zheng)
+* mds: fix setting entire file layout in one setxattr (John Spray)
+* mds: fix shutdown (John Spray)
+* mds: fix shutdown with strays (#10744 John Spray)
+* mds: fix SnapServer crash on deleted pool (John Spray)
+* mds: fix snapshot bugs (Yan, Zheng)
+* mds: fix stray reintegration (Yan, Zheng)
+* mds: fix stray handling (John Spray)
+* mds: fix suicide beacon (John Spray)
+* mds: flush immediately in do_open_truncate (#11011 John Spray)
+* mds: handle misc corruption issues (John Spray)
+* mds: improve dump methods (John Spray)
+* mds: many fixes (Yan, Zheng, John Spray, Greg Farnum)
+* mds: many snapshot and stray fixes (Yan, Zheng)
+* mds: misc fixes (Jianpeng Ma, Dan van der Ster, Zhang Zhi)
+* mds: misc journal cleanups and fixes (#10368 John Spray)
+* mds: misc repair improvements (John Spray)
+* mds: misc snap fixes (Zheng Yan)
+* mds: misc snapshot fixes (Yan, Zheng)
+* mds: new SessionMap storage using omap (#10649 John Spray)
+* mds: persist completed_requests reliably (#11048 John Spray)
+* mds: reduce memory consumption (Yan, Zheng)
+* mds: respawn instead of suicide on blacklist (John Spray)
+* mds: separate safe_pos in Journaler (#10368 John Spray)
+* mds: snapshot rename support (#3645 Yan, Zheng)
+* mds: store layout on header object (#4161 John Spray)
+* mds: throttle purge stray operations (#10390 John Spray)
+* mds: tolerate clock jumping backwards (#11053 Yan, Zheng)
+* mds: warn when clients fail to advance oldest_client_tid (#10657 Yan, Zheng)
+* misc cleanups and fixes (Danny Al-Gaaf)
+* misc coverity fixes (Danny Al-Gaaf)
+* misc performance and cleanup (Nathan Cutler, Xinxin Shu)
+* mon: add cache over MonitorDBStore (Kefu Chai)
+* mon: add 'mon_metadata <id>' command (Kefu Chai)
+* mon: add 'node ls ...' command (Kefu Chai)
+* mon: add NOFORWARD, OBSOLETE, DEPRECATE flags for mon commands (Joao Eduardo Luis)
+* mon: add PG count to 'ceph osd df' output (Michal Jarzabek)
+* mon: 'ceph osd metadata' can dump all osds (Haomai Wang)
+* mon: clean up, reorg some mon commands (Joao Eduardo Luis)
+* monclient: flush_log (John Spray)
+* mon: detect kv backend failures (Sage Weil)
+* mon: disallow >2 tiers (#11840 Kefu Chai)
+* mon: disallow ec pools as tiers (#11650 Samuel Just)
+* mon: do not deactivate last mds (#10862 John Spray)
+* mon: fix average utilization calc for 'osd df' (Mykola Golub)
+* mon: fix CRUSH map test for new pools (Sage Weil)
+* mon: fix log dump crash when debugging (Mykola Golub)
+* mon: fix mds beacon replies (#11590 Kefu Chai)
+* mon: fix metadata update race (Mykola Golub)
+* mon: fix min_last_epoch_clean tracking (Kefu Chai)
+* mon: fix 'pg ls' sort order, state names (#11569 Kefu Chai)
+* mon: fix refresh (#11470 Joao Eduardo Luis)
+* mon: fix variance calc in 'osd df' (Sage Weil)
+* mon: improve callout to crushtool (Mykola Golub)
+* mon: make blocked op messages more readable (Jianpeng Ma)
+* mon: make osd get pool 'all' only return applicable fields (#10891 Michal Jarzabek)
+* mon: misc scaling fixes (Sage Weil)
+* mon: normalize erasure-code profile for storage and comparison (Loic Dachary)
+* mon: only send mon metadata to supporting peers (Sage Weil)
+* mon: optionally specify osd id on 'osd create' (Mykola Golub)
+* mon: 'osd tree' fixes (Kefu Chai)
+* mon: periodic background scrub (Joao Eduardo Luis)
+* mon: prevent bucket deletion when referenced by a crush rule (#11602 Sage Weil)
+* mon: prevent pgp_num > pg_num (#12025 Xinxin Shu)
+* mon: prevent pool with snapshot state from being used as a tier (#11493 Sage Weil)
+* mon: prime pg_temp when CRUSH map changes (Sage Weil)
+* mon: refine check_remove_tier checks (#11504 John Spray)
+* mon: reject large max_mds values (#12222 John Spray)
+* mon: remove spurious who arg from 'mds rm ...' (John Spray)
+* mon: streamline session handling, fix memory leaks (Sage Weil)
+* mon: upgrades must pass through hammer (Sage Weil)
+* mon: warn on bogus cache tier config (Jianpeng Ma)
+* msgr: add ceph_perf_msgr tool (Hoamai Wang)
+* msgr: async: fix seq handling (Haomai Wang)
+* msgr: async: many many fixes (Haomai Wang)
+* msgr: simple: fix clear_pipe (#11381 Haomai Wang)
+* msgr: simple: fix connect_seq assert (Haomai Wang)
+* msgr: xio: fastpath improvements (Raju Kurunkad)
+* msgr: xio: fix ip and nonce (Raju Kurunkad)
+* msgr: xio: improve lane assignment (Vu Pham)
+* msgr: xio: sync with accellio v1.4 (Vu Pham)
+* msgr: xio: misc fixes (#10735 Matt Benjamin, Kefu Chai, Danny Al-Gaaf, Raju Kurunkad, Vu Pham, Casey Bodley)
+* msg: unit tests (Haomai Wang)
+* objectcacher: misc bug fixes (Jianpeng Ma)
+* osd: add latency perf counters for tier operations (Xinze Chi)
+* osd: add misc perfcounters (Xinze Chi)
+* osd: add simple sleep injection in recovery (Sage Weil)
+* osd: allow SEEK_HOLE/SEEK_DATA for sparse read (Zhiqiang Wang)
+* osd: avoid dup omap sets for in pg metadata (Sage Weil)
+* osd: avoid multiple hit set insertions (Zhiqiang Wang)
+* osd: avoid transaction append in some cases (Sage Weil)
+* osd: break PG removal into multiple iterations (#10198 Guang Yang)
+* osd: cache proxy-write support (Zhiqiang Wang, Samuel Just)
+* osd: check scrub state when handling map (Jianpeng Ma)
+* osd: clean up some constness, privateness (Kefu Chai)
+* osd: clean up temp object if promotion fails (Jianpeng Ma)
+* osd: configure promotion based on write recency (Zhiqiang Wang)
+* osd: constrain collections to meta and PGs (normal and temp) (Sage Weil)
+* osd: don't send dup MMonGetOSDMap requests (Sage Weil, Kefu Chai)
+* osd: EIO injection (David Zhang)
+* osd: elminiate txn apend, ECSubWrite copy (Samuel Just)
+* osd: erasure-code: drop entries according to LRU (Andreas-Joachim Peters)
+* osd: erasure-code: fix SHEC floating point bug (#12936 Loic Dachary)
+* osd: erasure-code: update to ISA-L 2.14 (Yuan Zhou)
+* osd: filejournal: cleanup (David Zafman)
+* osd: filestore: clone using splice (Jianpeng Ma)
+* osd: filestore: fix recursive lock (Xinxin Shu)
+* osd: fix check_for_full (Henry Chang)
+* osd: fix dirty accounting in make_writeable (Zhiqiang Wang)
+* osd: fix dup promotion lost op bug (Zhiqiang Wang)
+* osd: fix endless repair when object is unrecoverable (Jianpeng Ma, Kefu Chai)
+* osd: fix hitset object naming to use GMT (Kefu Chai)
+* osd: fix misc memory leaks (Sage Weil)
+* osd: fix negative degraded stats during backfill (Guang Yang)
+* osd: fix osdmap dump of blacklist items (John Spray)
+* osd: fix peek_queue locking in FileStore (Xinze Chi)
+* osd: fix pg resurrection (#11429 Samuel Just)
+* osd: fix promotion vs full cache tier (Samuel Just)
+* osd: fix replay requeue when pg is still activating (#13116 Samuel Just)
+* osd: fix scrub stat bugs (Sage Weil, Samuel Just)
+* osd: fix snap flushing from cache tier (again) (#11787 Samuel Just)
+* osd: fix snap handling on promotion (#11296 Sam Just)
+* osd: fix temp-clearing (David Zafman)
+* osd: force promotion for ops EC can't handle (Zhiqiang Wang)
+* osd: handle log split with overlapping entries (#11358 Samuel Just)
+* osd: ignore non-existent osds in unfound calc (#10976 Mykola Golub)
+* osd: improve behavior on machines with large memory pages (Steve Capper)
+* osd: include a temp namespace within each collection/pgid (Sage Weil)
+* osd: increase default max open files (Owen Synge)
+* osd: keyvaluestore: misc fixes (Varada Kari)
+* osd: low and high speed flush modes (Mingxin Liu)
+* osd: make suicide timeouts individually configurable (Samuel Just)
+* osd: merge multiple setattr calls into a setattrs call (Xinxin Shu)
+* osd: misc fixes (Ning Yao, Kefu Chai, Xinze Chi, Zhiqiang Wang, Jianpeng Ma)
+* osd: move scrub in OpWQ (Samuel Just)
+* osd: newstore prototype (Sage Weil)
+* osd: ObjectStore internal API refactor (Sage Weil)
+* osd: peer_features includes self (David Zafman)
+* osd: pool size change triggers new interval (#11771 Samuel Just)
+* osd: prepopulate needs_recovery_map when only one peer has missing (#9558 Guang Yang)
+* osd: randomize scrub times (#10973 Kefu Chai)
+* osd: recovery, peering fixes (#11687 Samuel Just)
+* osd: refactor scrub and digest recording (Sage Weil)
+* osd: refuse first write to EC object at non-zero offset (Jianpeng Ma)
+* osd: relax reply order on proxy read (#11211 Zhiqiang Wang)
+* osd: require firefly features (David Zafman)
+* osd: set initial crush weight with more precision (Sage Weil)
+* osd: SHEC no longer experimental
+* osd: skip promotion for flush/evict op (Zhiqiang Wang)
+* osd: stripe over small xattrs to fit in XFS's 255 byte inline limit (Sage Weil, Ning Yao)
+* osd: sync object_map on syncfs (Samuel Just)
+* osd: take excl lock of op is rw (Samuel Just)
+* osd: throttle evict ops (Yunchuan Wen)
+* osd: upgrades must pass through hammer (Sage Weil)
+* osd: use a temp object for recovery (Sage Weil)
+* osd: use blkid to collection partition information (Joseph Handzik)
+* osd: use SEEK_HOLE / SEEK_DATA for sparse copy (Xinxin Shu)
+* osd: WBThrottle cleanups (Jianpeng Ma)
+* osd: write journal header on clean shutdown (Xinze Chi)
+* osdc/Objecter: allow per-pool calls to op_cancel_writes (John Spray)
+* os/filestore: enlarge getxattr buffer size (Jianpeng Ma)
+* pybind: pep8 cleanups (Danny Al-Gaaf)
+* pycephfs: many fixes for bindings (Haomai Wang)
+* qa: fix filelock_interrupt.py test (Yan, Zheng)
+* qa: improve ceph-disk tests (Loic Dachary)
+* qa: improve docker build layers (Loic Dachary)
+* qa: run-make-check.sh script (Loic Dachary)
+* rados: add --striper option to use libradosstriper (#10759 Sebastien Ponce)
+* rados: bench: add --no-verify option to improve performance (Piotr Dalek)
+* rados bench: misc fixes (Dmitry Yatsushkevich)
+* rados: fix error message on failed pool removal (Wido den Hollander)
+* radosgw-admin: add 'bucket check' function to repair bucket index (Yehuda Sadeh)
+* radosgw-admin: fix subuser modify output (#12286 Guce)
+* rados: handle --snapid arg properly (Abhishek Lekshmanan)
+* rados: improve bench buffer handling, performance (Piotr Dalek)
+* rados: misc bench fixes (Dmitry Yatsushkevich)
+* rados: new pool import implementation (John Spray)
+* rados: translate errno to string in CLI (#10877 Kefu Chai)
+* rbd: accept map options config option (Ilya Dryomov)
+* rbd: add disk usage tool (#7746 Jason Dillaman)
+* rbd: allow unmapping by spec (Ilya Dryomov)
+* rbd: cli: fix arg parsing with --io-pattern (Dmitry Yatsushkevich)
+* rbd: deprecate --new-format option (Jason Dillman)
+* rbd: fix error messages (#2862 Rajesh Nambiar)
+* rbd: fix link issues (Jason Dillaman)
+* rbd: improve CLI arg parsing, usage (Ilya Dryomov)
+* rbd: rbd-replay-prep and rbd-replay improvements (Jason Dillaman)
+* rbd: recognize queue_depth kernel option (Ilya Dryomov)
+* rbd: support G and T units for CLI (Abhishek Lekshmanan)
+* rbd: update rbd man page (Ilya Dryomov)
+* rbd: update xfstests tests (Douglas Fuller)
+* rbd: use image-spec and snap-spec in help (Vikhyat Umrao, Ilya Dryomov)
+* rest-bench: misc fixes (Shawn Chen)
+* rest-bench: support https (#3968 Yuan Zhou)
+* rgw: add max multipart upload parts (#12146 Abshishek Dixit)
+* rgw: add missing headers to Swift container details (#10666 Ahmad Faheem, Dmytro Iurchenko)
+* rgw: add stats to headers for account GET (#10684 Yuan Zhou)
+* rgw: add Trasnaction-Id to response (Abhishek Dixit)
+* rgw: add X-Timestamp for Swift containers (#10938 Radoslaw Zarzynski)
+* rgw: always check if token is expired (#11367 Anton Aksola, Riku Lehto)
+* rgw: conversion tool to repair broken multipart objects (#12079 Yehuda Sadeh)
+* rgw: document layout of pools and objects (Pete Zaitcev)
+* rgw: do not enclose bucket header in quotes (#11860 Wido den Hollander)
+* rgw: do not prefetch data for HEAD requests (Guang Yang)
+* rgw: do not preserve ACLs when copying object (#12370 Yehuda Sadeh)
+* rgw: do not set content-type if length is 0 (#11091 Orit Wasserman)
+* rgw: don't clobber bucket/object owner when setting ACLs (#10978 Yehuda Sadeh)
+* rgw: don't use end_marker for namespaced object listing (#11437 Yehuda Sadeh)
+* rgw: don't use rgw_socket_path if frontend is configured (#11160 Yehuda Sadeh)
+* rgw: enforce Content-Length for POST on Swift cont/obj (#10661 Radoslaw Zarzynski)
+* rgw: error out if frontend did not send all data (#11851 Yehuda Sadeh)
+* rgw: expose the number of unhealthy workers through admin socket (Guang Yang)
+* rgw: fail if parts not specified on multipart upload (#11435 Yehuda Sadeh)
+* rgw: fix assignment of copy obj attributes (#11563 Yehuda Sadeh)
+* rgw: fix broken stats in container listing (#11285 Radoslaw Zarzynski)
+* rgw: fix bug in domain/subdomain splitting (Robin H. Johnson)
+* rgw: fix casing of Content-Type header (Robin H. Johnson)
+* rgw: fix civetweb max threads (#10243 Yehuda Sadeh)
+* rgw: fix Connection: header handling (#12298 Wido den Hollander)
+* rgw: fix copy metadata, support X-Copied-From for swift (#10663 Radoslaw Zarzynski)
+* rgw: fix data corruptions race condition (#11749 Wuxingyi)
+* rgw: fix decoding of X-Object-Manifest from GET on Swift DLO (Radslow Rzarzynski)
+* rgw: fix GET on swift account when limit == 0 (#10683 Radoslaw Zarzynski)
+* rgw: fix handling empty metadata items on Swift container (#11088 Radoslaw Zarzynski)
+* rgw: fix JSON response when getting user quota (#12117 Wuxingyi)
+* rgw: fix locator for objects starting with _ (#11442 Yehuda Sadeh)
+* rgw: fix log rotation (Wuxingyi)
+* rgw: fix mulitipart upload in retry path (#11604 Yehuda Sadeh)
+* rgw: fix quota enforcement on POST (#11323 Sergey Arkhipov)
+* rgw: fix reset_loc (#11974 Yehuda Sadeh)
+* rgw: fix return code on missing upload (#11436 Yehuda Sadeh)
+* rgw: fix sysvinit script
+* rgw: fix sysvinit script w/ multiple instances (Sage Weil, Pavan Rallabhandi)
+* rgw: force content_type for swift bucket stats requests (#12095 Orit Wasserman)
+* rgw: force content type header on responses with no body (#11438 Orit Wasserman)
+* rgw: generate Date header for civetweb (#10873 Radoslaw Zarzynski)
+* rgw: generate new object tag when setting attrs (#11256 Yehuda Sadeh)
+* rgw: improve content-length env var handling (#11419 Robin H. Johnson)
+* rgw: improved support for swift account metadata (Radoslaw Zarzynski)
+* rgw: improve handling of already removed buckets in expirer (Radoslaw Rzarzynski)
+* rgw: issue aio for first chunk before flush cached data (#11322 Guang Yang)
+* rgw: log to /var/log/ceph instead of /var/log/radosgw
+* rgw: make init script wait for radosgw to stop (#11140 Dmitry Yatsushkevich)
+* rgw: make max put size configurable (#6999 Yuan Zhou)
+* rgw: make quota/gc threads configurable (#11047 Guang Yang)
+* rgw: make read user buckets backward compat (#10683 Radoslaw Zarzynski)
+* rgw: merge manifests properly with prefix override (#11622 Yehuda Sadeh)
+* rgw: only scan for objects not in a namespace (#11984 Yehuda Sadeh)
+* rgw: orphan detection tool (Yehuda Sadeh)
+* rgw: pass in civetweb configurables (#10907 Yehuda Sadeh)
+* rgw: rectify 202 Accepted in PUT response (#11148 Radoslaw Zarzynski)
+* rgw: remove meta file after deleting bucket (#11149 Orit Wasserman)
+* rgw: remove trailing :port from HTTP_HOST header (Sage Weil)
+* rgw: return 412 on bad limit when listing buckets (#11613 Yehuda Sadeh)
+* rgw: rework X-Trans-Id header to conform with Swift API (Radoslaw Rzarzynski)
+* rgw: s3 encoding-type for get bucket (Jeff Weber)
+* rgw: send ETag, Last-Modified for swift (#11087 Radoslaw Zarzynski)
+* rgw: set content length on container GET, PUT, DELETE, HEAD (#10971, #11036 Radoslaw Zarzynski)
+* rgw: set max buckets per user in ceph.conf (Vikhyat Umrao)
+* rgw: shard work over multiple librados instances (Pavan Rallabhandi)
+* rgw: support end marker on swift container GET (#10682 Radoslaw Zarzynski)
+* rgw: support for Swift expiration API (Radoslaw Rzarzynski, Yehuda Sadeh)
+* rgw: swift: allow setting attributes with COPY (#10662 Ahmad Faheem, Dmytro Iurchenko)
+* rgw: swift: do not override sent content type (#12363 Orit Wasserman)
+* rgw: swift: enforce Content-Type in response (#12157 Radoslaw Zarzynski)
+* rgw: swift: fix account listing (#11501 Radoslaw Zarzynski)
+* rgw: swift: fix metadata handling on copy (#10645 Radoslaw Zarzynski)
+* rgw: swift: send Last-Modified header (#10650 Radoslaw Zarzynski)
+* rgw: swift: set Content-Length for account GET (#12158 Radoslav Zarzynski)
+* rgw: swift: set content-length on keystone tokens (#11473 Herv Rousseau)
+* rgw: update keystone cache with token info (#11125 Yehuda Sadeh)
+* rgw: update to latest civetweb, enable config for IPv6 (#10965 Yehuda Sadeh)
+* rgw: use attrs from source bucket on copy (#11639 Javier M. Mellid)
+* rgw: use correct oid for gc chains (#11447 Yehuda Sadeh)
+* rgw: user rm is idempotent (Orit Wasserman)
+* rgw: use unique request id for civetweb (#10295 Orit Wasserman)
+* rocksdb: add perf counters for get/put latency (Xinxin Shu)
+* rocksdb, leveldb: fix compact_on_mount (Xiaoxi Chen)
+* rocksdb: pass options as single string (Xiaoxi Chen)
+* rocksdb: update to latest (Xiaoxi Chen)
+* rpm: add suse firewall files (Tim Serong)
+* rpm: always rebuild and install man pages for rpm (Owen Synge)
+* rpm: loosen ceph-test dependencies (Ken Dreyer)
+* rpm: many spec file fixes (Owen Synge, Ken Dreyer)
+* rpm: misc fixes (Boris Ranto, Owen Synge, Ken Dreyer, Ira Cooper)
+* rpm: misc systemd and SUSE fixes (Owen Synge, Nathan Cutler)
+* selinux policy (Boris Ranto, Milan Broz)
+* systemd: logrotate fixes (Tim Serong, Lars Marowsky-Bree, Nathan Cutler)
+* systemd: many fixes (Sage Weil, Owen Synge, Boris Ranto, Dan van der Ster)
+* systemd: run daemons as user ceph
+* sysvinit compat: misc fixes (Owen Synge)
+* test: misc fs test improvements (John Spray, Loic Dachary)
+* test: python tests, linter cleanup (Alfredo Deza)
+* tests: fixes for rbd xstests (Douglas Fuller)
+* tests: fix tiering health checks (Loic Dachary)
+* tests for low-level performance (Haomai Wang)
+* tests: many ec non-regression improvements (Loic Dachary)
+* tests: many many ec test improvements (Loic Dachary)
+* upstart: throttle restarts (#11798 Sage Weil, Greg Farnum)
+
+
+v9.1.0 Infernalis release candidate
+===================================
+
+This is the first Infernalis release candidate.  There have been some
+major changes since Hammer, and the upgrade process is non-trivial.
+Please read carefully.
+
+Getting the release candidate
+-----------------------------
+
+The v9.1.0 packages are pushed to the development release repositories::
+  
+  http://download.ceph.com/rpm-testing
+  http://download.ceph.com/debian-testing
+
+For for info, see::
+  
+  http://docs.ceph.com/docs/master/install/get-packages/
+
+Or install with ceph-deploy via::
+  
+  ceph-deploy install --testing HOST
+
+
+Known issues
+------------
+
+* librbd and librados ABI compatibility is broken.  Be careful
+  installing this RC on client machines (e.g., those running qemu).
+  It will be fixed in the final v9.2.0 release.
+
+
+Major Changes from Hammer
+-------------------------
+
+- *General*:
+
+  * Ceph daemons are now managed via systemd (with the exception of
+    Ubuntu Trusty, which still uses upstart).
+  * Ceph daemons run as 'ceph' user instead of root.
+  * On Red Hat distros, there is also an SELinux policy.
+
+- *RADOS*:
+
+  * The RADOS cache tier can now proxy write operations to the base
+    tier, allowing writes to be handled without forcing migration of
+    an object into the cache.
+  * The SHEC erasure coding support is no longer flagged as
+    experimental. SHEC trades some additional storage space for faster
+    repair.
+  * There is now a unified queue (and thus prioritization) of client
+    IO, scrubbing, and snapshot trimming.
+  * There have been many improvements to low-level repair tooling
+    (ceph-objectstore-tool).
+  * The internal ObjectStore API has been significantly cleaned up in order
+    to faciliate new storage backends like NewStore.
+
+- *RGW*:
+
+  * The Swift API now supports object expiration.
+  * There are many Swift API compatibility improvements.
+
+- *RBD*:
+
+  * The ``rbd du`` command shows actual usage (quickly, when
+    object-map is enabled).
+  * The object-map feature has seen many stability improvements.
+  * Object-map and exclusive-lock features can be enabled or disabled
+    dynamically.
+  * You can now store user metadata and set persistent librbd options
+    associated with individual images.
+  * The new deep-flatten features allows flattening of a clone and all
+    of its snapshots.  (Previously snapshots could not be flattened.)
+  * The export-diff command command is now faster (it uses aio).  There is also
+    a new fast-diff feature.
+  * The --size argument can be specified with a suffix for units
+    (e.g., ``--size 64G``).
+  * There is a new ``rbd status`` command that, for now, shows who has
+    the image open/mapped.
+
+- *CephFS*:
+
+  * You can now rename snapshots.
+  * There have been ongoing improvements around administration, diagnostics,
+    and the check and repair tools.
+  * The caching and revocation of client cache state due to unused
+    inodes has been dramatically improved.
+  * The ceph-fuse client behaves better on 32-bit hosts.
+
+Distro compatibility
+--------------------
+
+We have decided to drop support for many older distributions so that we can
+move to a newer compiler toolchain (e.g., C++11).  Although it is still possible
+to build Ceph on older distributions by installing backported development tools,
+we are not building and publishing release packages for them on ceph.com.
 
 In particular,
 
@@ -32,10 +1240,19 @@ Upgrading from Firefly
 
 Upgrading directly from Firefly v0.80.z is not possible.  All clusters
 must first upgrade to Hammer v0.94.4 or a later v0.94.z release; only
-then is it possible to upgrade to Infernalis 9.2.z.
+then is it possible to do online upgrade to Infernalis 9.2.z.
+
+User can upgrade to latest hammer v0.94.z 
+from gitbuilder with(also refer the hammer release notes for more details)::
+
+  ceph-deploy install --release hammer HOST
+
 
 Upgrading from Hammer
 ---------------------
+
+* All cluster nodes must first upgrade to Hammer v0.94.4 or a later v0.94.z release; only
+  then is it possible to do online upgrade to Infernalis 9.2.z.
 
 * For all distributions that support systemd (CentOS 7, Fedora, Debian
   Jessie 8.x, OpenSUSE), ceph daemons are now managed using native systemd
@@ -53,9 +1270,9 @@ Upgrading from Hammer
   the ceph user will currently get a dynamically assigned UID when the
   user is created.
 
-  If your systems already have a ceph user, upgrading the package will cause
-  problems.  We suggest you first remove or rename the existing 'ceph' user
-  before upgrading.
+  If your systems already have a ceph user, the package upgrade
+  process will usually fail with an error.  We suggest you first
+  remove or rename the existing 'ceph' user and then upgrade.
 
   When upgrading, administrators have two options:
 
@@ -108,7 +1325,77 @@ Upgrade notes
 Notable changes
 ---------------
 
-(write me)
+NOTE: These notes are somewhat abbreviated while we find a less
+time-consuming process for generating them.
+
+* build: C++11 now supported
+* build: many cmake improvements
+* build: OSX build fixes (Yan, Zheng)
+* build: remove rest-bench
+* ceph-disk: many fixes (Loic Dachary)
+* ceph-disk: support for multipath devices (Loic Dachary)
+* ceph-fuse: mostly behave on 32-bit hosts (Yan, Zheng)
+* ceph-objectstore-tool: many improvements (David Zafman)
+* common: bufferlist performance tuning (Piotr Dalek, Sage Weil)
+* common: make mutex more efficient
+* common: some async compression infrastructure (Haomai Wang)
+* librados: add FULL_TRY and FULL_FORCE flags for dealing with full clusters or pools (Sage Weil)
+* librados: fix notify completion race (#13114 Sage Weil)
+* librados, libcephfs: randomize client nonces (Josh Durgin)
+* librados: pybind: fix binary omap values (Robin H. Johnson)
+* librbd: fix reads larger than the cache size (Lu Shi)
+* librbd: metadata filter fixes (Haomai Wang)
+* librbd: use write_full when possible (Zhiqiang Wang)
+* mds: avoid emitting cap warnigns before evicting session (John Spray)
+* mds: fix expected holes in journal objects (#13167 Yan, Zheng)
+* mds: fix SnapServer crash on deleted pool (John Spray)
+* mds: many fixes (Yan, Zheng, John Spray, Greg Farnum)
+* mon: add cache over MonitorDBStore (Kefu Chai)
+* mon: 'ceph osd metadata' can dump all osds (Haomai Wang)
+* mon: detect kv backend failures (Sage Weil)
+* mon: fix CRUSH map test for new pools (Sage Weil)
+* mon: fix min_last_epoch_clean tracking (Kefu Chai)
+* mon: misc scaling fixes (Sage Weil)
+* mon: streamline session handling, fix memory leaks (Sage Weil)
+* mon: upgrades must pass through hammer (Sage Weil)
+* msg/async: many fixes (Haomai Wang)
+* osd: cache proxy-write support (Zhiqiang Wang, Samuel Just)
+* osd: configure promotion based on write recency (Zhiqiang Wang)
+* osd: don't send dup MMonGetOSDMap requests (Sage Weil, Kefu Chai)
+* osd: erasure-code: fix SHEC floating point bug (#12936 Loic Dachary)
+* osd: erasure-code: update to ISA-L 2.14 (Yuan Zhou)
+* osd: fix hitset object naming to use GMT (Kefu Chai)
+* osd: fix misc memory leaks (Sage Weil)
+* osd: fix peek_queue locking in FileStore (Xinze Chi)
+* osd: fix promotion vs full cache tier (Samuel Just)
+* osd: fix replay requeue when pg is still activating (#13116 Samuel Just)
+* osd: fix scrub stat bugs (Sage Weil, Samuel Just)
+* osd: force promotion for ops EC can't handle (Zhiqiang Wang)
+* osd: improve behavior on machines with large memory pages (Steve Capper)
+* osd: merge multiple setattr calls into a setattrs call (Xinxin Shu)
+* osd: newstore prototype (Sage Weil)
+* osd: ObjectStore internal API refactor (Sage Weil)
+* osd: SHEC no longer experimental
+* osd: throttle evict ops (Yunchuan Wen)
+* osd: upgrades must pass through hammer (Sage Weil)
+* osd: use SEEK_HOLE / SEEK_DATA for sparse copy (Xinxin Shu)
+* rbd: rbd-replay-prep and rbd-replay improvements (Jason Dillaman)
+* rgw: expose the number of unhealthy workers through admin socket (Guang Yang)
+* rgw: fix casing of Content-Type header (Robin H. Johnson)
+* rgw: fix decoding of X-Object-Manifest from GET on Swift DLO (Radslow Rzarzynski)
+* rgw: fix sysvinit script
+* rgw: fix sysvinit script w/ multiple instances (Sage Weil, Pavan Rallabhandi)
+* rgw: improve handling of already removed buckets in expirer (Radoslaw Rzarzynski)
+* rgw: log to /var/log/ceph instead of /var/log/radosgw
+* rgw: rework X-Trans-Id header to be conform with Swift API (Radoslaw Rzarzynski)
+* rgw: s3 encoding-type for get bucket (Jeff Weber)
+* rgw: set max buckets per user in ceph.conf (Vikhyat Umrao)
+* rgw: support for Swift expiration API (Radoslaw Rzarzynski, Yehuda Sadeh)
+* rgw: user rm is idempotent (Orit Wasserman)
+* selinux policy (Boris Ranto, Milan Broz)
+* systemd: many fixes (Sage Weil, Owen Synge, Boris Ranto, Dan van der Ster)
+* systemd: run daemons as user ceph
+
 
 v9.0.3
 ======
@@ -126,18 +1413,16 @@ Upgrading
   longer returns the number of bytes read upon success.  Instead, it returns 0
   upon success and a negative value upon failure.
 
-* 'ceph scrub', 'ceph compact' and 'ceph sync force are now DEPRECATED.  Users
+* 'ceph scrub', 'ceph compact' and 'ceph sync force' are now deprecated.  Users
   should instead use 'ceph mon scrub', 'ceph mon compact' and
   'ceph mon sync force'.
 
-* 'ceph mon_metadata' should now be used as 'ceph mon metadata'. There is no
-  need to deprecate this command (same major release since it was first
-  introduced).
+* 'ceph mon_metadata' should now be used as 'ceph mon metadata'.
 
 * The `--dump-json` option of "osdmaptool" is replaced by `--dump json`.
 
-* The commands of "pg ls-by-{pool,primary,osd}" and "pg ls" now take "recovering"
-  instead of "recovery", to include the recovering pgs in the listed pgs.
+* The commands of 'pg ls-by-{pool,primary,osd}' and 'pg ls' now take 'recovering'
+  instead of 'recovery' to include the recovering pgs in the listed pgs.
 
 
 Notable Changes
@@ -263,7 +1548,7 @@ Notable Changes
 * build: install-deps: misc fixes (Loic Dachary)
 * build: make_dist_tarball.sh (Sage Weil)
 * ceph-detect-init: added Linux Mint (Michal Jarzabek)
-* ceph-detect-init: robust init system detection (Owen Synge)
+* ceph-detect-init: robust init system detection (Owen Synge, Loic Dachary)
 * ceph-disk: ensure 'zap' only operates on a full disk (#11272 Loic Dachary)
 * ceph-disk: misc fixes to respect init system (Loic Dachary, Owen Synge)
 * ceph-disk: support NVMe device partitions (#11612 Ilja Slepnev)
@@ -616,10 +1901,26 @@ Notable Changes
 * rocksdb: update to latest (Xiaoxi Chen)
 * rpm: loosen ceph-test dependencies (Ken Dreyer)
 
-v0.94.4 Hammer (draft)
-======================
+v0.94.5 Hammer
+==============
 
-This Hammer point fixes several important bugs in Hammer, as well as
+This Hammer point release fixes a critical regression in librbd that can cause
+Qemu/KVM to crash when caching is enabled on images that have been cloned.
+
+All v0.94.4 Hammer users are strongly encouraged to upgrade.
+
+Notable Changes
+---------------
+* librbd: potential assertion failure during cache read (`issue#13559 <http://tracker.ceph.com/issues/13559>`_, `pr#6348 <http://github.com/ceph/ceph/pull/6348>`_, Jason Dillaman)
+* osd: osd/ReplicatedPG: remove stray debug line (`issue#13455 <http://tracker.ceph.com/issues/13455>`_, `pr#6362 <http://github.com/ceph/ceph/pull/6362>`_, Sage Weil)
+* tests: qemu workunit refers to apt-mirror.front.sepia.ceph.com (`issue#13420 <http://tracker.ceph.com/issues/13420>`_, `pr#6330 <http://github.com/ceph/ceph/pull/6330>`_, Yuan Zhou)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.94.5.txt>`.
+
+v0.94.4 Hammer
+==============
+
+This Hammer point release fixes several important bugs in Hammer, as well as
 fixing interoperability issues that are required before an upgrade to
 Infernalis. That is, all users of earlier version of Hammer or any
 version of Firefly will first need to upgrade to hammer v0.94.4 or
@@ -640,6 +1941,10 @@ Notable Changes
 * build/ops: ceph.spec.in: useless %py_requires breaks SLE11-SP3 build (`issue#12351 <http://tracker.ceph.com/issues/12351>`_, `pr#5412 <http://github.com/ceph/ceph/pull/5412>`_, Nathan Cutler)
 * build/ops: error in ext_mime_map_init() when /etc/mime.types is missing (`issue#11864 <http://tracker.ceph.com/issues/11864>`_, `pr#5385 <http://github.com/ceph/ceph/pull/5385>`_, Ken Dreyer)
 * build/ops: upstart: limit respawn to 3 in 30 mins (instead of 5 in 30s) (`issue#11798 <http://tracker.ceph.com/issues/11798>`_, `pr#5930 <http://github.com/ceph/ceph/pull/5930>`_, Sage Weil)
+* build/ops: With root as default user, unable to have multiple RGW instances running (`issue#10927 <http://tracker.ceph.com/issues/10927>`_, `pr#6161 <http://github.com/ceph/ceph/pull/6161>`_, Sage Weil)
+* build/ops: With root as default user, unable to have multiple RGW instances running (`issue#11140 <http://tracker.ceph.com/issues/11140>`_, `pr#6161 <http://github.com/ceph/ceph/pull/6161>`_, Sage Weil)
+* build/ops: With root as default user, unable to have multiple RGW instances running (`issue#11686 <http://tracker.ceph.com/issues/11686>`_, `pr#6161 <http://github.com/ceph/ceph/pull/6161>`_, Sage Weil)
+* build/ops: With root as default user, unable to have multiple RGW instances running (`issue#12407 <http://tracker.ceph.com/issues/12407>`_, `pr#6161 <http://github.com/ceph/ceph/pull/6161>`_, Sage Weil)
 * cli: ceph: cli throws exception on unrecognized errno (`issue#11354 <http://tracker.ceph.com/issues/11354>`_, `pr#5368 <http://github.com/ceph/ceph/pull/5368>`_, Kefu Chai)
 * cli: ceph tell: broken error message / misleading hinting (`issue#11101 <http://tracker.ceph.com/issues/11101>`_, `pr#5371 <http://github.com/ceph/ceph/pull/5371>`_, Kefu Chai)
 * common: arm: all programs that link to librados2 hang forever on startup (`issue#12505 <http://tracker.ceph.com/issues/12505>`_, `pr#5366 <http://github.com/ceph/ceph/pull/5366>`_, Boris Ranto)
@@ -672,6 +1977,7 @@ Notable Changes
 * mon: the output is wrong when runing ceph osd reweight (`issue#12251 <http://tracker.ceph.com/issues/12251>`_, `pr#5372 <http://github.com/ceph/ceph/pull/5372>`_, Joao Eduardo Luis)
 * osd: allow peek_map_epoch to return an error (`issue#13060 <http://tracker.ceph.com/issues/13060>`_, `pr#5892 <http://github.com/ceph/ceph/pull/5892>`_, Sage Weil)
 * osd: cache agent is idle although one object is left in the cache (`issue#12673 <http://tracker.ceph.com/issues/12673>`_, `pr#5765 <http://github.com/ceph/ceph/pull/5765>`_, Loic Dachary)
+* osd: copy-from doesn't preserve truncate_{seq,size} (`issue#12551 <http://tracker.ceph.com/issues/12551>`_, `pr#5885 <http://github.com/ceph/ceph/pull/5885>`_, Samuel Just)
 * osd: crash creating/deleting pools (`issue#12429 <http://tracker.ceph.com/issues/12429>`_, `pr#5527 <http://github.com/ceph/ceph/pull/5527>`_, John Spray)
 * osd: fix repair when recorded digest is wrong (`issue#12577 <http://tracker.ceph.com/issues/12577>`_, `pr#5468 <http://github.com/ceph/ceph/pull/5468>`_, Sage Weil)
 * osd: include/ceph_features: define HAMMER_0_94_4 feature (`issue#13026 <http://tracker.ceph.com/issues/13026>`_, `pr#5687 <http://github.com/ceph/ceph/pull/5687>`_, Sage Weil)
@@ -686,88 +1992,37 @@ Notable Changes
 * osd: suicide timeout during peering - search for missing objects (`issue#12523 <http://tracker.ceph.com/issues/12523>`_, `pr#5762 <http://github.com/ceph/ceph/pull/5762>`_, Guang G Yang)
 * osd: WBThrottle::clear_object: signal on cond when we reduce throttle values (`issue#12223 <http://tracker.ceph.com/issues/12223>`_, `pr#5757 <http://github.com/ceph/ceph/pull/5757>`_, Samuel Just)
 * rbd: crash during shutdown after writeback blocked by IO errors (`issue#12597 <http://tracker.ceph.com/issues/12597>`_, `pr#5767 <http://github.com/ceph/ceph/pull/5767>`_, Jianpeng Ma)
+* rgw: add delimiter to prefix only when path is specified (`issue#12960 <http://tracker.ceph.com/issues/12960>`_, `pr#5860 <http://github.com/ceph/ceph/pull/5860>`_, Sylvain Baubeau)
 * rgw: create a tool for orphaned objects cleanup (`issue#9604 <http://tracker.ceph.com/issues/9604>`_, `pr#5717 <http://github.com/ceph/ceph/pull/5717>`_, Yehuda Sadeh)
+* rgw: don't preserve acls when copying object (`issue#11563 <http://tracker.ceph.com/issues/11563>`_, `pr#6039 <http://github.com/ceph/ceph/pull/6039>`_, Yehuda Sadeh)
+* rgw: don't preserve acls when copying object (`issue#12370 <http://tracker.ceph.com/issues/12370>`_, `pr#6039 <http://github.com/ceph/ceph/pull/6039>`_, Yehuda Sadeh)
+* rgw: don't preserve acls when copying object (`issue#13015 <http://tracker.ceph.com/issues/13015>`_, `pr#6039 <http://github.com/ceph/ceph/pull/6039>`_, Yehuda Sadeh)
 * rgw: Ensure that swift keys don't include backslashes (`issue#7647 <http://tracker.ceph.com/issues/7647>`_, `pr#5716 <http://github.com/ceph/ceph/pull/5716>`_, Yehuda Sadeh)
+* rgw: GWWatcher::handle_error -> common/Mutex.cc: 95: FAILED assert(r == 0) (`issue#12208 <http://tracker.ceph.com/issues/12208>`_, `pr#6164 <http://github.com/ceph/ceph/pull/6164>`_, Yehuda Sadeh)
 * rgw: HTTP return code is not being logged by CivetWeb  (`issue#12432 <http://tracker.ceph.com/issues/12432>`_, `pr#5498 <http://github.com/ceph/ceph/pull/5498>`_, Yehuda Sadeh)
+* rgw: init_rados failed leads to repeated delete (`issue#12978 <http://tracker.ceph.com/issues/12978>`_, `pr#6165 <http://github.com/ceph/ceph/pull/6165>`_, Xiaowei Chen)
 * rgw: init some manifest fields when handling explicit objs (`issue#11455 <http://tracker.ceph.com/issues/11455>`_, `pr#5732 <http://github.com/ceph/ceph/pull/5732>`_, Yehuda Sadeh)
+* rgw: Keystone Fernet tokens break auth (`issue#12761 <http://tracker.ceph.com/issues/12761>`_, `pr#6162 <http://github.com/ceph/ceph/pull/6162>`_, Abhishek Lekshmanan)
+* rgw: region data still exist in region-map after region-map update (`issue#12964 <http://tracker.ceph.com/issues/12964>`_, `pr#6163 <http://github.com/ceph/ceph/pull/6163>`_, dwj192)
+* rgw: remove trailing :port from host for purposes of subdomain matching (`issue#12353 <http://tracker.ceph.com/issues/12353>`_, `pr#6042 <http://github.com/ceph/ceph/pull/6042>`_, Yehuda Sadeh)
 * rgw: rest-bench common/WorkQueue.cc: 54: FAILED assert(_threads.empty()) (`issue#3896 <http://tracker.ceph.com/issues/3896>`_, `pr#5383 <http://github.com/ceph/ceph/pull/5383>`_, huangjun)
 * rgw: returns requested bucket name raw in Bucket response header (`issue#12537 <http://tracker.ceph.com/issues/12537>`_, `pr#5715 <http://github.com/ceph/ceph/pull/5715>`_, Yehuda Sadeh)
 * rgw: segmentation fault when rgw_gc_max_objs > HASH_PRIME (`issue#12630 <http://tracker.ceph.com/issues/12630>`_, `pr#5719 <http://github.com/ceph/ceph/pull/5719>`_, Ruifeng Yang)
+* rgw: segments are read during HEAD on Swift DLO (`issue#12780 <http://tracker.ceph.com/issues/12780>`_, `pr#6160 <http://github.com/ceph/ceph/pull/6160>`_, Yehuda Sadeh)
+* rgw: setting max number of buckets for user via ceph.conf option  (`issue#12714 <http://tracker.ceph.com/issues/12714>`_, `pr#6166 <http://github.com/ceph/ceph/pull/6166>`_, Vikhyat Umrao)
 * rgw: Swift API: X-Trans-Id header is wrongly formatted (`issue#12108 <http://tracker.ceph.com/issues/12108>`_, `pr#5721 <http://github.com/ceph/ceph/pull/5721>`_, Radoslaw Zarzynski)
+* rgw: testGetContentType and testHead failed (`issue#11091 <http://tracker.ceph.com/issues/11091>`_, `pr#5718 <http://github.com/ceph/ceph/pull/5718>`_, Radoslaw Zarzynski)
+* rgw: testGetContentType and testHead failed (`issue#11438 <http://tracker.ceph.com/issues/11438>`_, `pr#5718 <http://github.com/ceph/ceph/pull/5718>`_, Radoslaw Zarzynski)
+* rgw: testGetContentType and testHead failed (`issue#12157 <http://tracker.ceph.com/issues/12157>`_, `pr#5718 <http://github.com/ceph/ceph/pull/5718>`_, Radoslaw Zarzynski)
+* rgw: testGetContentType and testHead failed (`issue#12158 <http://tracker.ceph.com/issues/12158>`_, `pr#5718 <http://github.com/ceph/ceph/pull/5718>`_, Radoslaw Zarzynski)
+* rgw: testGetContentType and testHead failed (`issue#12363 <http://tracker.ceph.com/issues/12363>`_, `pr#5718 <http://github.com/ceph/ceph/pull/5718>`_, Radoslaw Zarzynski)
 * rgw: the arguments 'domain' should not be assigned when return false (`issue#12629 <http://tracker.ceph.com/issues/12629>`_, `pr#5720 <http://github.com/ceph/ceph/pull/5720>`_, Ruifeng Yang)
 * tests: qa/workunits/cephtool/test.sh: don't assume crash_replay_interval=45 (`issue#13406 <http://tracker.ceph.com/issues/13406>`_, `pr#6172 <http://github.com/ceph/ceph/pull/6172>`_, Sage Weil)
+* tests: TEST_crush_rule_create_erasure consistently fails on i386 builder (`issue#12419 <http://tracker.ceph.com/issues/12419>`_, `pr#6201 <http://github.com/ceph/ceph/pull/6201>`_, Loic Dachary)
 * tools: ceph-disk zap should ensure block device (`issue#11272 <http://tracker.ceph.com/issues/11272>`_, `pr#5755 <http://github.com/ceph/ceph/pull/5755>`_, Loic Dachary)
 
-Here is the same as above, in plain text:
+For more detailed information, see :download:`the complete changelog <changelog/v0.94.4.txt>`.
 
-* build/ops: ceph.spec.in: 50-rbd.rules conditional is wrong (#12166, Nathan Cutler)
-* build/ops: ceph.spec.in: ceph-common needs python-argparse on older distros, but doesn't require it (#12034, Nathan Cutler)
-* build/ops: ceph.spec.in: radosgw requires apache for SUSE only -- makes no sense (#12358, Nathan Cutler)
-* build/ops: ceph.spec.in: rpm: cephfs_java not fully conditionalized (#11991, Nathan Cutler)
-* build/ops: ceph.spec.in: rpm: not possible to turn off Java (#11992, Owen Synge)
-* build/ops: ceph.spec.in: running fdupes unnecessarily (#12301, Nathan Cutler)
-* build/ops: ceph.spec.in: snappy-devel for all supported distros (#12361, Nathan Cutler)
-* build/ops: ceph.spec.in: SUSE/openSUSE builds need libbz2-devel (#11629, Nathan Cutler)
-* build/ops: ceph.spec.in: useless %py_requires breaks SLE11-SP3 build (#12351, Nathan Cutler)
-* build/ops: error in ext_mime_map_init() when /etc/mime.types is missing (#11864, Ken Dreyer)
-* build/ops: upstart: limit respawn to 3 in 30 mins (instead of 5 in 30s) (#11798, Sage Weil)
-* cli: ceph: cli throws exception on unrecognized errno (#11354, Kefu Chai)
-* cli: ceph tell: broken error message / misleading hinting (#11101, Kefu Chai)
-* common: arm: all programs that link to librados2 hang forever on startup (#12505, Boris Ranto)
-* common: buffer: critical bufferlist::zero bug (#12252, Haomai Wang)
-* common: ceph-object-corpus: add 0.94.2-207-g88e7ee7 hammer objects (#13070, Sage Weil)
-* common: do not insert emtpy ptr when rebuild emtpy bufferlist (#12775, Xinze Chi)
-* common: [  FAILED  ] TestLibRBD.BlockingAIO (#12479, Jason Dillaman)
-* common: LibCephFS.GetPoolId failure (#12598, Yan, Zheng)
-* common: Memory leak in Mutex.cc, pthread_mutexattr_init without pthread_mutexattr_destroy (#11762, Ketor Meng)
-* common: object_map_update fails with -EINVAL return code (#12611, Jason Dillaman)
-* common: Pipe: Drop connect_seq increase line (#13093, Haomai Wang)
-* common: recursive lock of md_config_t (0) (#12614, Josh Durgin)
-* crush: ceph osd crush reweight-subtree does not reweight parent node (#11855, Sage Weil)
-* doc: update docs to point to download.ceph.com (#13162, Alfredo Deza)
-* fs: ceph-fuse 0.94.2-1trusty segfaults / aborts (#12297, Greg Farnum)
-* fs: segfault launching ceph-fuse with bad --name (#12417, John Spray)
-* librados: Change radosgw pools default crush ruleset (#11640, Yuan Zhou)
-* librbd: correct issues discovered via lockdep / helgrind (#12345, Jason Dillaman)
-* librbd: Crash during TestInternal.MultipleResize (#12664, Jason Dillaman)
-* librbd: deadlock during cooperative exclusive lock transition (#11537, Jason Dillaman)
-* librbd: Possible crash while concurrently writing and shrinking an image (#11743, Jason Dillaman)
-* mon: add a cache layer over MonitorDBStore (#12638, Kefu Chai)
-* mon: fix crush testing for new pools (#13400, Sage Weil)
-* mon: get pools health'info have error (#12402, renhwztetecs)
-* mon: implicit erasure code crush ruleset is not validated (#11814, Loic Dachary)
-* mon: PaxosService: call post_refresh() instead of post_paxos_update() (#11470, Joao Eduardo Luis)
-* mon: pgmonitor: wrong at/near target max“ reporting (#12401, huangjun)
-* mon: register_new_pgs() should check ruleno instead of its index (#12210, Xinze Chi)
-* mon: Show osd as NONE in ceph osd map <pool> <object>  output (#11820, Shylesh Kumar)
-* mon: the output is wrong when runing ceph osd reweight (#12251, Joao Eduardo Luis)
-* osd: allow peek_map_epoch to return an error (#13060, Sage Weil)
-* osd: cache agent is idle although one object is left in the cache (#12673, Loic Dachary)
-* osd: crash creating/deleting pools (#12429, John Spray)
-* osd: fix repair when recorded digest is wrong (#12577, Sage Weil)
-* osd: include/ceph_features: define HAMMER_0_94_4 feature (#13026, Sage Weil)
-* osd: is_new_interval() fixes (#10399, Jason Dillaman)
-* osd: is_new_interval() fixes (#11771, Jason Dillaman)
-* osd: long standing slow requests: connection->session->waiting_for_map->connection ref cycle (#12338, Samuel Just)
-* osd: Mutex Assert from PipeConnection::try_get_pipe (#12437, David Zafman)
-* osd: pg_interval_t::check_new_interval - for ec pool, should not rely on min_size to determine if the PG was active at the interval (#12162, Guang G Yang)
-* osd: PGLog.cc: 732: FAILED assert(log.log.size() == log_keys_debug.size()) (#12652, Sage Weil)
-* osd: PGLog::proc_replica_log: correctly handle case where entries between olog.head and log.tail were split out (#11358, Samuel Just)
-* osd: read on chunk-aligned xattr not handled (#12309, Sage Weil)
-* osd: suicide timeout during peering - search for missing objects (#12523, Guang G Yang)
-* osd: WBThrottle::clear_object: signal on cond when we reduce throttle values (#12223, Samuel Just)
-* rbd: crash during shutdown after writeback blocked by IO errors (#12597, Jianpeng Ma)
-* rgw: create a tool for orphaned objects cleanup (#9604, Yehuda Sadeh)
-* rgw: Ensure that swift keys don't include backslashes (#7647, Yehuda Sadeh)
-* rgw: HTTP return code is not being logged by CivetWeb  (#12432, Yehuda Sadeh)
-* rgw: init some manifest fields when handling explicit objs (#11455, Yehuda Sadeh)
-* rgw: rest-bench common/WorkQueue.cc: 54: FAILED assert(_threads.empty()) (#3896, huangjun)
-* rgw: returns requested bucket name raw in Bucket response header (#12537, Yehuda Sadeh)
-* rgw: segmentation fault when rgw_gc_max_objs > HASH_PRIME (#12630, Ruifeng Yang)
-* rgw: Swift API: X-Trans-Id header is wrongly formatted (#12108, Radoslaw Zarzynski)
-* rgw: the arguments 'domain' should not be assigned when return false (#12629, Ruifeng Yang)
-* tests: qa/workunits/cephtool/test.sh: don't assume crash_replay_interval=45 (#13406, Sage Weil)
-* tools: ceph-disk zap should ensure block device (#11272, Loic Dachary)
 
 v0.94.3 Hammer
 ==============
@@ -3877,6 +5132,107 @@ Notable Changes
 * rgw: prevent multiobject PUT race (Yehuda Sadeh)
 * rgw: send user manifest header (Yehuda Sadeh)
 * test_librbd_fsx: test krbd as well as librbd (Ilya Dryomov)
+
+v0.80.11 Firefly
+================
+
+This is a bugfix release for Firefly.  This Firefly 0.80.x is nearing
+its planned end of life in January 2016 it may also be the last.
+
+We recommend that all Firefly users upgrade.
+
+For more detailed information, see :download:`the complete changelog
+<changelog/v0.80.11.txt>`.
+
+Notable Changes
+---------------
+
+* build/ops: /etc/init.d/radosgw restart does not work correctly (`issue#11140 <http://tracker.ceph.com/issues/11140>`_, `pr#5831 <http://github.com/ceph/ceph/pull/5831>`_, Dmitry Yatsushkevich)
+* build/ops: Fix -Wno-format and -Werror=format-security options clash  (`issue#13417 <http://tracker.ceph.com/issues/13417>`_, `pr#6207 <http://github.com/ceph/ceph/pull/6207>`_, Boris Ranto)
+* build/ops: ceph-common needs python-argparse on older distros, but doesn't require it (`issue#12034 <http://tracker.ceph.com/issues/12034>`_, `pr#5217 <http://github.com/ceph/ceph/pull/5217>`_, Nathan Cutler)
+* build/ops: ceph.spec.in running fdupes unnecessarily (`issue#12301 <http://tracker.ceph.com/issues/12301>`_, `pr#5224 <http://github.com/ceph/ceph/pull/5224>`_, Nathan Cutler)
+* build/ops: ceph.spec.in: 50-rbd.rules conditional is wrong (`issue#12166 <http://tracker.ceph.com/issues/12166>`_, `pr#5225 <http://github.com/ceph/ceph/pull/5225>`_, Nathan Cutler)
+* build/ops: ceph.spec.in: useless %py_requires breaks SLE11-SP3 build (`issue#12351 <http://tracker.ceph.com/issues/12351>`_, `pr#5394 <http://github.com/ceph/ceph/pull/5394>`_, Nathan Cutler)
+* build/ops: fedora21 has junit, not junit4  (`issue#10728 <http://tracker.ceph.com/issues/10728>`_, `pr#6203 <http://github.com/ceph/ceph/pull/6203>`_, Ken Dreyer, Loic Dachary)
+* build/ops: upstart: configuration is too generous on restarts (`issue#11798 <http://tracker.ceph.com/issues/11798>`_, `pr#5992 <http://github.com/ceph/ceph/pull/5992>`_, Sage Weil)
+* common: Client admin socket leaks file descriptors (`issue#11535 <http://tracker.ceph.com/issues/11535>`_, `pr#4633 <http://github.com/ceph/ceph/pull/4633>`_, Jon Bernard)
+* common: FileStore calls syncfs(2) even it is not supported (`issue#12512 <http://tracker.ceph.com/issues/12512>`_, `pr#5529 <http://github.com/ceph/ceph/pull/5529>`_, Danny Al-Gaaf, Kefu Chai, Jianpeng Ma)
+* common: HeartBeat: include types (`issue#13088 <http://tracker.ceph.com/issues/13088>`_, `pr#6038 <http://github.com/ceph/ceph/pull/6038>`_, Sage Weil)
+* common: Malformed JSON command output when non-ASCII strings are present  (`issue#7387 <http://tracker.ceph.com/issues/7387>`_, `pr#4635 <http://github.com/ceph/ceph/pull/4635>`_, Kefu Chai, Tim Serong)
+* common: Memory leak in Mutex.cc, pthread_mutexattr_init without pthread_mutexattr_destroy (`issue#11762 <http://tracker.ceph.com/issues/11762>`_, `pr#5403 <http://github.com/ceph/ceph/pull/5403>`_, Ketor Meng)
+* common: Thread:pthread_attr_destroy(thread_attr) when done with it (`issue#12570 <http://tracker.ceph.com/issues/12570>`_, `pr#6325 <http://github.com/ceph/ceph/pull/6325>`_, Piotr Dałek, Zheng Qiankun)
+* common: ThreadPool add/remove work queue methods not thread safe (`issue#12662 <http://tracker.ceph.com/issues/12662>`_, `pr#5991 <http://github.com/ceph/ceph/pull/5991>`_, Jason Dillaman)
+* common: buffer: critical bufferlist::zero bug (`issue#12252 <http://tracker.ceph.com/issues/12252>`_, `pr#5388 <http://github.com/ceph/ceph/pull/5388>`_, Haomai Wang)
+* common: log: take mutex while opening fd (`issue#12465 <http://tracker.ceph.com/issues/12465>`_, `pr#5406 <http://github.com/ceph/ceph/pull/5406>`_, Samuel Just)
+* common: recursive lock of md_config_t (0) (`issue#12614 <http://tracker.ceph.com/issues/12614>`_, `pr#5814 <http://github.com/ceph/ceph/pull/5814>`_, Josh Durgin)
+* crush: take crashes due to invalid arg (`issue#11602 <http://tracker.ceph.com/issues/11602>`_, `pr#4769 <http://github.com/ceph/ceph/pull/4769>`_, Sage Weil)
+* doc: backport v0.80.10 release notes to firefly (`issue#11090 <http://tracker.ceph.com/issues/11090>`_, `pr#5307 <http://github.com/ceph/ceph/pull/5307>`_, Loic Dachary, Sage Weil)
+* doc: update docs to point to download.ceph.com (`issue#13162 <http://tracker.ceph.com/issues/13162>`_, `pr#5993 <http://github.com/ceph/ceph/pull/5993>`_, Alfredo Deza)
+* fs: MDSMonitor: handle MDSBeacon messages properly (`issue#11590 <http://tracker.ceph.com/issues/11590>`_, `pr#5199 <http://github.com/ceph/ceph/pull/5199>`_, Kefu Chai)
+* fs: client nonce collision due to unshared pid namespaces (`issue#13032 <http://tracker.ceph.com/issues/13032>`_, `pr#6087 <http://github.com/ceph/ceph/pull/6087>`_, Josh Durgin, Sage Weil)
+* librbd: Objectcacher setting max object counts too low (`issue#7385 <http://tracker.ceph.com/issues/7385>`_, `pr#4639 <http://github.com/ceph/ceph/pull/4639>`_, Jason Dillaman)
+* librbd: aio calls may block (`issue#11056 <http://tracker.ceph.com/issues/11056>`_, `pr#4854 <http://github.com/ceph/ceph/pull/4854>`_, Haomai Wang, Sage Weil, Jason Dillaman)
+* librbd: internal.cc: 1967: FAILED assert(watchers.size() == 1) (`issue#12176 <http://tracker.ceph.com/issues/12176>`_, `pr#5171 <http://github.com/ceph/ceph/pull/5171>`_, Jason Dillaman)
+* mon: Clock skew causes missing summary and confuses Calamari (`issue#11877 <http://tracker.ceph.com/issues/11877>`_, `pr#4867 <http://github.com/ceph/ceph/pull/4867>`_, Thorsten Behrens)
+* mon: EC pools are not allowed as cache pools, disallow in the mon (`issue#11650 <http://tracker.ceph.com/issues/11650>`_, `pr#5389 <http://github.com/ceph/ceph/pull/5389>`_, Samuel Just)
+* mon: Make it more difficult to delete pools in firefly (`issue#11800 <http://tracker.ceph.com/issues/11800>`_, `pr#4788 <http://github.com/ceph/ceph/pull/4788>`_, Sage Weil)
+* mon: MonitorDBStore: get_next_key() only if prefix matches (`issue#11786 <http://tracker.ceph.com/issues/11786>`_, `pr#5360 <http://github.com/ceph/ceph/pull/5360>`_, Joao Eduardo Luis)
+* mon: PaxosService: call post_refresh() instead of post_paxos_update() (`issue#11470 <http://tracker.ceph.com/issues/11470>`_, `pr#5358 <http://github.com/ceph/ceph/pull/5358>`_, Joao Eduardo Luis)
+* mon: add a cache layer over MonitorDBStore (`issue#12638 <http://tracker.ceph.com/issues/12638>`_, `pr#5698 <http://github.com/ceph/ceph/pull/5698>`_, Kefu Chai)
+* mon: adding exsting pool as tier with --force-nonempty clobbers removed_snaps (`issue#11493 <http://tracker.ceph.com/issues/11493>`_, `pr#5236 <http://github.com/ceph/ceph/pull/5236>`_, Sage Weil, Samuel Just)
+* mon: ceph fails to compile with boost 1.58 (`issue#11576 <http://tracker.ceph.com/issues/11576>`_, `pr#5129 <http://github.com/ceph/ceph/pull/5129>`_, Kefu Chai)
+* mon: does not check for IO errors on every transaction (`issue#13089 <http://tracker.ceph.com/issues/13089>`_, `pr#6091 <http://github.com/ceph/ceph/pull/6091>`_, Sage Weil)
+* mon: get pools health'info have error (`issue#12402 <http://tracker.ceph.com/issues/12402>`_, `pr#5410 <http://github.com/ceph/ceph/pull/5410>`_, renhwztetecs)
+* mon: increase globalid default for firefly (`issue#13255 <http://tracker.ceph.com/issues/13255>`_, `pr#6010 <http://github.com/ceph/ceph/pull/6010>`_, Sage Weil)
+* mon: pgmonitor: wrong at/near target max“ reporting (`issue#12401 <http://tracker.ceph.com/issues/12401>`_, `pr#5409 <http://github.com/ceph/ceph/pull/5409>`_, huangjun)
+* mon: register_new_pgs() should check ruleno instead of its index (`issue#12210 <http://tracker.ceph.com/issues/12210>`_, `pr#5404 <http://github.com/ceph/ceph/pull/5404>`_, Xinze Chi)
+* mon: scrub error (osdmap encoding mismatch?) upgrading from 0.80 to ~0.80.2 (`issue#8815 <http://tracker.ceph.com/issues/8815>`_, `issue#8674 <http://tracker.ceph.com/issues/8674>`_, `issue#9064 <http://tracker.ceph.com/issues/9064>`_, `pr#5200 <http://github.com/ceph/ceph/pull/5200>`_, Sage Weil, Zhiqiang Wang, Samuel Just)
+* mon: the output is wrong when runing ceph osd reweight (`issue#12251 <http://tracker.ceph.com/issues/12251>`_, `pr#5408 <http://github.com/ceph/ceph/pull/5408>`_, Joao Eduardo Luis)
+* objecter: can get stuck in redirect loop if osdmap epoch == last_force_op_resend (`issue#11026 <http://tracker.ceph.com/issues/11026>`_, `pr#4597 <http://github.com/ceph/ceph/pull/4597>`_, Jianpeng Ma, Sage Weil)
+* objecter: pg listing can deadlock when throttling is in use (`issue#9008 <http://tracker.ceph.com/issues/9008>`_, `pr#5043 <http://github.com/ceph/ceph/pull/5043>`_, Guang Yang)
+* objecter: resend linger ops on split (`issue#9806 <http://tracker.ceph.com/issues/9806>`_, `pr#5062 <http://github.com/ceph/ceph/pull/5062>`_, Josh Durgin, Samuel Just)
+* osd: Cleanup boost optionals for boost 1.56 (`issue#9983 <http://tracker.ceph.com/issues/9983>`_, `pr#5039 <http://github.com/ceph/ceph/pull/5039>`_, William A. Kennington III)
+* osd: LibRadosTwoPools[EC]PP.PromoteSnap failure (`issue#10052 <http://tracker.ceph.com/issues/10052>`_, `pr#5050 <http://github.com/ceph/ceph/pull/5050>`_, Sage Weil)
+* osd: Mutex Assert from PipeConnection::try_get_pipe (`issue#12437 <http://tracker.ceph.com/issues/12437>`_, `pr#5815 <http://github.com/ceph/ceph/pull/5815>`_, David Zafman)
+* osd: PG stuck with remapped (`issue#9614 <http://tracker.ceph.com/issues/9614>`_, `pr#5044 <http://github.com/ceph/ceph/pull/5044>`_, Guang Yang)
+* osd: PG::handle_advance_map: on_pool_change after handling the map change (`issue#12809 <http://tracker.ceph.com/issues/12809>`_, `pr#5988 <http://github.com/ceph/ceph/pull/5988>`_, Samuel Just)
+* osd: PGLog: split divergent priors as well (`issue#11069 <http://tracker.ceph.com/issues/11069>`_, `pr#4631 <http://github.com/ceph/ceph/pull/4631>`_, Samuel Just)
+* osd: PGLog::proc_replica_log: correctly handle case where entries between olog.head and log.tail were split out (`issue#11358 <http://tracker.ceph.com/issues/11358>`_, `pr#5287 <http://github.com/ceph/ceph/pull/5287>`_, Samuel Just)
+* osd: WBThrottle::clear_object: signal on cond when we reduce throttle values (`issue#12223 <http://tracker.ceph.com/issues/12223>`_, `pr#5822 <http://github.com/ceph/ceph/pull/5822>`_, Samuel Just)
+* osd: cache full mode still skips young objects (`issue#10006 <http://tracker.ceph.com/issues/10006>`_, `pr#5051 <http://github.com/ceph/ceph/pull/5051>`_, Xinze Chi, Zhiqiang Wang)
+* osd: crash creating/deleting pools (`issue#12429 <http://tracker.ceph.com/issues/12429>`_, `pr#5526 <http://github.com/ceph/ceph/pull/5526>`_, John Spray)
+* osd: explicitly specify OSD features in MOSDBoot (`issue#10911 <http://tracker.ceph.com/issues/10911>`_, `pr#4960 <http://github.com/ceph/ceph/pull/4960>`_, Sage Weil)
+* osd: is_new_interval() fixes (`issue#11771 <http://tracker.ceph.com/issues/11771>`_, `issue#10399 <http://tracker.ceph.com/issues/10399>`_, `pr#5726 <http://github.com/ceph/ceph/pull/5726>`_, Samuel Just, Jason Dillaman)
+* osd: make the all osd/filestore thread pool suicide timeouts separately configurable (`issue#11439 <http://tracker.ceph.com/issues/11439>`_, `pr#5823 <http://github.com/ceph/ceph/pull/5823>`_, Samuel Just)
+* osd: object creation by write cannot use an offset on an erasure coded pool (`issue#11507 <http://tracker.ceph.com/issues/11507>`_, `pr#4632 <http://github.com/ceph/ceph/pull/4632>`_, Jianpeng Ma, Loic Dachary)
+* osd: os/FileJournal: Fix journal write fail, align for direct io (`issue#12943 <http://tracker.ceph.com/issues/12943>`_, `pr#5619 <http://github.com/ceph/ceph/pull/5619>`_, Xie Rui)
+* osd: osd/PGLog.cc: 732: FAILED assert(log.log.size() == log_keys_debug.size()) (`issue#12652 <http://tracker.ceph.com/issues/12652>`_, `pr#5820 <http://github.com/ceph/ceph/pull/5820>`_, Sage Weil)
+* osd: read on chunk-aligned xattr not handled (`issue#12309 <http://tracker.ceph.com/issues/12309>`_, `pr#5235 <http://github.com/ceph/ceph/pull/5235>`_, Sage Weil)
+* rgw: Change variable length array of std::strings (not legal in C++) to std::vector<std::string> (`issue#12467 <http://tracker.ceph.com/issues/12467>`_, `pr#4583 <http://github.com/ceph/ceph/pull/4583>`_, Daniel J. Hofmann)
+* rgw: Civetweb RGW appears to report full size of object as downloaded when only partially downloaded (`issue#11851 <http://tracker.ceph.com/issues/11851>`_, `pr#5234 <http://github.com/ceph/ceph/pull/5234>`_, Yehuda Sadeh)
+* rgw: Keystone PKI token expiration is not enforced (`issue#11367 <http://tracker.ceph.com/issues/11367>`_, `pr#4765 <http://github.com/ceph/ceph/pull/4765>`_, Anton Aksola)
+* rgw: Object copy bug (`issue#11639 <http://tracker.ceph.com/issues/11639>`_, `pr#4762 <http://github.com/ceph/ceph/pull/4762>`_, Javier M. Mellid)
+* rgw: RGW returns requested bucket name raw in "Bucket" response header (`issue#11860 <http://tracker.ceph.com/issues/11860>`_, `issue#12537 <http://tracker.ceph.com/issues/12537>`_, `pr#5730 <http://github.com/ceph/ceph/pull/5730>`_, Yehuda Sadeh, Wido den Hollander)
+* rgw: Swift API: response for PUT on /container does not contain the mandatory Content-Length header when FCGI is used (`issue#11036 <http://tracker.ceph.com/issues/11036>`_, `pr#5170 <http://github.com/ceph/ceph/pull/5170>`_, Radoslaw Zarzynski)
+* rgw: content length parsing calls strtol() instead of strtoll() (`issue#10701 <http://tracker.ceph.com/issues/10701>`_, `pr#5997 <http://github.com/ceph/ceph/pull/5997>`_, Yehuda Sadeh)
+* rgw: delete bucket does not remove .bucket.meta file (`issue#11149 <http://tracker.ceph.com/issues/11149>`_, `pr#4641 <http://github.com/ceph/ceph/pull/4641>`_, Orit Wasserman)
+* rgw: doesn't return 'x-timestamp' in header which is used by 'View Details' of OpenStack (`issue#8911 <http://tracker.ceph.com/issues/8911>`_, `pr#4584 <http://github.com/ceph/ceph/pull/4584>`_, Yehuda Sadeh)
+* rgw: init some manifest fields when handling explicit objs (`issue#11455 <http://tracker.ceph.com/issues/11455>`_, `pr#5729 <http://github.com/ceph/ceph/pull/5729>`_, Yehuda Sadeh)
+* rgw: logfile does not get chowned properly (`issue#12073 <http://tracker.ceph.com/issues/12073>`_, `pr#5233 <http://github.com/ceph/ceph/pull/5233>`_, Thorsten Behrens)
+* rgw: logrotate.conf calls service with wrong init script name (`issue#12043 <http://tracker.ceph.com/issues/12043>`_, `pr#5390 <http://github.com/ceph/ceph/pull/5390>`_, wuxingyi)
+* rgw: quota not respected in POST object (`issue#11323 <http://tracker.ceph.com/issues/11323>`_, `pr#4642 <http://github.com/ceph/ceph/pull/4642>`_, Sergey Arkhipov)
+* rgw: swift smoke test fails on TestAccountUTF8 (`issue#11091 <http://tracker.ceph.com/issues/11091>`_, `issue#11438 <http://tracker.ceph.com/issues/11438>`_, `issue#12939 <http://tracker.ceph.com/issues/12939>`_, `issue#12157 <http://tracker.ceph.com/issues/12157>`_, `issue#12158 <http://tracker.ceph.com/issues/12158>`_, `issue#12363 <http://tracker.ceph.com/issues/12363>`_, `pr#5532 <http://github.com/ceph/ceph/pull/5532>`_, Radoslaw Zarzynski, Orit Wasserman, Robin H. Johnson)
+* rgw: use correct objv_tracker for bucket instance (`issue#11416 <http://tracker.ceph.com/issues/11416>`_, `pr#4535 <http://github.com/ceph/ceph/pull/4535>`_, Yehuda Sadeh)
+* tests: ceph-fuse crash in test_client_recovery (`issue#12673 <http://tracker.ceph.com/issues/12673>`_, `pr#5813 <http://github.com/ceph/ceph/pull/5813>`_, Loic Dachary)
+* tests: kernel_untar_build fails on EL7 (`issue#11758 <http://tracker.ceph.com/issues/11758>`_, `pr#6000 <http://github.com/ceph/ceph/pull/6000>`_, Greg Farnum)
+* tests: qemu workunit refers to apt-mirror.front.sepia.ceph.com (`issue#13420 <http://tracker.ceph.com/issues/13420>`_, `pr#6328 <http://github.com/ceph/ceph/pull/6328>`_, Yuan Zhou, Sage Weil)
+* tools:  src/ceph-disk : disk zap sgdisk invocation (`issue#11143 <http://tracker.ceph.com/issues/11143>`_, `pr#4636 <http://github.com/ceph/ceph/pull/4636>`_, Thorsten Behrens, Owen Synge)
+* tools: ceph-disk: sometimes the journal symlink is not created (`issue#10146 <http://tracker.ceph.com/issues/10146>`_, `pr#5541 <http://github.com/ceph/ceph/pull/5541>`_, Dan van der Ster)
+* tools: ceph-disk: support NVMe device partitions (`issue#11612 <http://tracker.ceph.com/issues/11612>`_, `pr#4771 <http://github.com/ceph/ceph/pull/4771>`_, Ilja Slepnev)
+* tools: ceph-post-file fails on rhel7 (`issue#11836 <http://tracker.ceph.com/issues/11836>`_, `pr#5037 <http://github.com/ceph/ceph/pull/5037>`_, Joseph McDonald, Sage Weil)
+* tools: ceph_argparse_flag has no regular 3rd parameter (`issue#11543 <http://tracker.ceph.com/issues/11543>`_, `pr#4582 <http://github.com/ceph/ceph/pull/4582>`_, Thorsten Behrens)
+* tools: use a new disk as journal disk,ceph-disk prepare fail (`issue#10983 <http://tracker.ceph.com/issues/10983>`_, `pr#4630 <http://github.com/ceph/ceph/pull/4630>`_, Loic Dachary)
+
 
 v0.80.10 Firefly
 ================

@@ -156,13 +156,13 @@ class DirEntry(namedtuple('DirEntry',
     DT_REG = 0xA
     DT_LNK = 0xC
     def is_dir(self):
-        return self.d_type == DT_DIR
+        return self.d_type == self.DT_DIR
 
     def is_symbol_file(self):
-        return self.d_type == DT_LNK
+        return self.d_type == self.DT_LNK
 
     def is_file(self):
-        return self.d_type == DT_REG
+        return self.d_type == self.DT_REG
 
 StatResult = namedtuple('StatResult',
                         ["st_dev", "st_ino", "st_mode", "st_nlink", "st_uid",
@@ -508,6 +508,19 @@ class LibCephFS(object):
                           st_blocks=statbuf.st_blocks,
                           st_atime=statbuf.st_atime, st_mtime=statbuf.st_mtime,
                           st_ctime=statbuf.st_ctime)
+
+    def symlink(self, existing, newname):
+        if not isinstance(existing, str):
+            raise TypeError('existing must be a string')
+        if not isinstance(newname, str):
+            raise TypeError('newname must be a string')
+        self.require_state("mounted")
+        ret = self.libcephfs.ceph_symlink(
+            self.cluster,
+            c_char_p(existing),
+            c_char_p(newname))
+        if ret < 0:
+            raise make_ex(ret, "error in symlink")
 
     def unlink(self, path):
         self.require_state("mounted")

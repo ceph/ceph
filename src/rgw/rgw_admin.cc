@@ -16,6 +16,7 @@ using namespace std;
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
+#include "common/safe_io.h"
 
 #include "global/global_init.h"
 
@@ -87,6 +88,8 @@ void _usage()
   cout << "  log list                   list log objects\n";
   cout << "  log show                   dump a log from specific object or (bucket + date\n";
   cout << "                             + bucket-id)\n";
+  cout << "                             (NOTE: required to specify formatting of date\n";
+  cout << "                             to \"YYYY-MM-DD-hh\")\n";
   cout << "  log rm                     remove log object\n";
   cout << "  usage show                 show usage (by user, date range)\n";
   cout << "  usage trim                 trim usage (by user, date range)\n";
@@ -100,7 +103,8 @@ void _usage()
   cout << "  metadata rm                remove metadata info\n";
   cout << "  metadata list              list metadata info\n";
   cout << "  mdlog list                 list metadata log\n";
-  cout << "  mdlog trim                 trim metadata log\n";
+  cout << "  mdlog trim                 trim metadata log (use start-date, end-date or\n";
+  cout << "                             start-marker, end-marker)\n";
   cout << "  bilog list                 list bucket index log\n";
   cout << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
   cout << "  datalog list               list data log\n";
@@ -118,7 +122,8 @@ void _usage()
   cout << "   --subuser=<name>          subuser name\n";
   cout << "   --access-key=<key>        S3 access key\n";
   cout << "   --email=<email>\n";
-  cout << "   --secret=<key>            specify secret key\n";
+  cout << "   --secret/--secret-key=<key>\n";
+  cout << "                             specify secret key\n";
   cout << "   --gen-access-key          generate random access key (for S3)\n";
   cout << "   --gen-secret              generate random secret key\n";
   cout << "   --key-type=<type>         key type, options are: swift, s3\n";
@@ -587,7 +592,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   RGWBucketInfo bucket_info;
   time_t mtime;
   RGWObjectCtx obj_ctx(store);
-  int r = store->get_bucket_info(obj_ctx, bucket.name, bucket_info, &mtime);
+  int r = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, bucket_info, &mtime);
   if (r < 0)
     return r;
 
@@ -606,7 +611,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
-  formatter->dump_string("owner", bucket_info.owner);
+  ::encode_json("owner", bucket_info.owner, formatter);
   formatter->dump_int("mtime", mtime);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
@@ -626,14 +631,14 @@ public:
   }
 };
 
-static int init_bucket(const string& bucket_name, const string& bucket_id,
+static int init_bucket(const string& tenant_name, const string& bucket_name, const string& bucket_id,
                        RGWBucketInfo& bucket_info, rgw_bucket& bucket)
 {
   if (!bucket_name.empty()) {
     RGWObjectCtx obj_ctx(store);
     int r;
     if (bucket_id.empty()) {
-      r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL);
+      r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL);
     } else {
       string bucket_instance_id = bucket_name + ":" + bucket_id;
       r = store->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, NULL, NULL);
@@ -666,7 +671,7 @@ static int read_input(const string& infile, bufferlist& bl)
   do {
     char buf[READ_CHUNK];
 
-    r = read(fd, buf, READ_CHUNK);
+    r = safe_read(fd, buf, READ_CHUNK);
     if (r < 0) {
       err = -errno;
       cerr << "error while reading input" << std::endl;
@@ -807,13 +812,15 @@ void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t 
   }
 }
 
-int set_bucket_quota(RGWRados *store, int opt_cmd, string& bucket_name, int64_t max_size, int64_t max_objects,
+int set_bucket_quota(RGWRados *store, int opt_cmd,
+                     const string& tenant_name, const string& bucket_name,
+                     int64_t max_size, int64_t max_objects,
                      bool have_max_size, bool have_max_objects)
 {
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
   RGWObjectCtx obj_ctx(store);
-  int r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL, &attrs);
+  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, &attrs);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1001,7 +1008,8 @@ int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, 
   return 0;
 }
 
-int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad, Formatter *f)
+int do_check_object_locator(const string& tenant_name, const string& bucket_name,
+                            bool fix, bool remove_bad, Formatter *f)
 {
   if (remove_bad && !fix) {
     cerr << "ERROR: can't have remove_bad specified without fix" << std::endl;
@@ -1014,7 +1022,7 @@ int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad
 
   f->open_object_section("bucket");
   f->dump_string("bucket", bucket_name);
-  int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+  int ret = init_bucket(tenant_name, bucket_name, bucket_id, bucket_info, bucket);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -1075,7 +1083,6 @@ int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad
   return 0;
 }
 
-
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -1085,7 +1092,9 @@ int main(int argc, char **argv)
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  std::string user_id, access_key, secret_key, user_email, display_name;
+  rgw_user user_id;
+  string tenant;
+  std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
   std::string date, subuser, access, format;
   std::string start_date, end_date;
@@ -1175,12 +1184,14 @@ int main(int argc, char **argv)
       usage();
       return 0;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*)NULL)) {
-      user_id = val;
+      user_id.from_str(val);
+    } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
+      tenant = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
       access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
       subuser = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--secret", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--secret", "--secret-key", (char*)NULL)) {
       secret_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*)NULL)) {
       user_email = val;
@@ -1238,9 +1249,17 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*)NULL)) {
       min_rewrite_stripe_size = (uint64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*)NULL)) {
-      max_buckets = atoi(val.c_str());
+      max_buckets = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max buckets: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
-      max_entries = atoi(val.c_str());
+      max_entries = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max entries: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-size", (char*)NULL)) {
       max_size = (int64_t)strict_strtoll(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -1264,13 +1283,29 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--end-date", "--end-time", (char*)NULL)) {
       end_date = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--num-shards", (char*)NULL)) {
-      num_shards = atoi(val.c_str());
+      num_shards = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse num shards: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*)NULL)) {
-      max_concurrent_ios = atoi(val.c_str());
+      max_concurrent_ios = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max concurrent ios: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*)NULL)) {
-      orphan_stale_secs = (uint64_t)atoi(val.c_str());
+      orphan_stale_secs = (uint64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse orphan stale secs: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--shard-id", (char*)NULL)) {
-      shard_id = atoi(val.c_str());
+      shard_id = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse shard id: " << err << std::endl;
+        return EINVAL;
+      }
       specified_shard_id = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--daemon-id", (char*)NULL)) {
       daemon_id = val;
@@ -1359,6 +1394,15 @@ int main(int argc, char **argv)
     } else {
       ++i;
     }
+  }
+  if (tenant.empty()) {
+    tenant = user_id.tenant;
+  } else {
+    if (user_id.empty()) {
+      cerr << "ERROR: --tennant is set, but there's no user ID" << std::endl;
+      return EINVAL;
+    }
+    user_id.tenant = tenant;
   }
 
   if (args.empty()) {
@@ -1736,6 +1780,7 @@ int main(int argc, char **argv)
   bucket_op.set_object(object);
   bucket_op.set_check_objects(check_objects);
   bucket_op.set_delete_children(delete_child_objects);
+  bucket_op.set_fix_index(fix);
 
   // required to gather errors from operations
   std::string err_msg;
@@ -1865,7 +1910,7 @@ int main(int argc, char **argv)
       RGWBucketAdminOp::info(store, bucket_op, f);
     } else {
       RGWBucketInfo bucket_info;
-      int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+      int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -2010,7 +2055,7 @@ int main(int argc, char **argv)
 	return -r;
       }
       formatter->dump_string("bucket_id", entry.bucket_id);
-      formatter->dump_string("bucket_owner", entry.bucket_owner);
+      formatter->dump_string("bucket_owner", entry.bucket_owner.to_str());
       formatter->dump_string("bucket", entry.bucket);
 
       uint64_t agg_time = 0;
@@ -2187,7 +2232,7 @@ next:
       return EINVAL;
     }
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2234,7 +2279,7 @@ next:
 
   if (opt_cmd == OPT_BI_GET) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2258,7 +2303,7 @@ next:
 
   if (opt_cmd == OPT_BI_PUT) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2283,7 +2328,7 @@ next:
 
   if (opt_cmd == OPT_BI_LIST) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2320,7 +2365,7 @@ next:
 
   if (opt_cmd == OPT_OBJECT_RM) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2345,7 +2390,7 @@ next:
     }
 
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2386,7 +2431,7 @@ next:
     }
 
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2483,7 +2528,7 @@ next:
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2500,7 +2545,7 @@ next:
 
   if (opt_cmd == OPT_OBJECT_STAT) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2560,7 +2605,7 @@ next:
         cerr << "ERROR: need to specify bucket name" << std::endl;
         return EINVAL;
       }
-      do_check_object_locator(bucket_name, fix, remove_bad, formatter);
+      do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter);
     } else {
       RGWBucketAdminOp::check_index(store, bucket_op, f);
     }
@@ -2670,7 +2715,7 @@ next:
   if (opt_cmd == OPT_USER_STATS) {
     if (sync_stats) {
       if (!bucket_name.empty()) {
-        int ret = rgw_bucket_sync_user_stats(store, bucket_name);
+        int ret = rgw_bucket_sync_user_stats(store, tenant, bucket_name);
         if (ret < 0) {
           cerr << "ERROR: could not sync bucket stats: " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -2689,7 +2734,8 @@ next:
       return EINVAL;
     }
     cls_user_header header;
-    int ret = store->cls_user_get_header(user_id, &header);
+    string user_str = user_id.to_str();
+    int ret = store->cls_user_get_header(user_str, &header);
     if (ret < 0) {
       cerr << "ERROR: can't read user header: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2747,16 +2793,15 @@ next:
     do {
       list<string> keys;
       ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
-      if (ret < 0) {
+      if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
+      } if (ret != -ENOENT) {
+	for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+	  formatter->dump_string("key", *iter);
+	}
+	formatter->flush(cout);
       }
-
-      for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
-	formatter->dump_string("key", *iter);
-      }
-      formatter->flush(cout);
-
     } while (truncated);
 
     formatter->close_section();
@@ -2844,7 +2889,7 @@ next:
       return -EINVAL;
     }
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2884,7 +2929,7 @@ next:
       return -EINVAL;
     }
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -3066,7 +3111,7 @@ next:
         return -EINVAL;
       }
       RGWBucketInfo bucket_info;
-      int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+      int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -3117,7 +3162,7 @@ next:
         return -EINVAL;
       }
       RGWBucketInfo bucket_info;
-      int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+      int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -3179,7 +3224,7 @@ next:
         return -EINVAL;
       }
       RGWBucketInfo bucket_info;
-      int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+      int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -3207,7 +3252,8 @@ next:
         cerr << "ERROR: invalid quota scope specification." << std::endl;
         return EINVAL;
       }
-      set_bucket_quota(store, opt_cmd, bucket_name, max_size, max_objects, have_max_size, have_max_objects);
+      set_bucket_quota(store, opt_cmd, tenant, bucket_name,
+                       max_size, max_objects, have_max_size, have_max_objects);
     } else if (!user_id.empty()) {
       if (quota_scope == "bucket") {
         set_user_bucket_quota(opt_cmd, user, user_op, max_size, max_objects, have_max_size, have_max_objects);

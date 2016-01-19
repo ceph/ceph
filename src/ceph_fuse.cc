@@ -34,16 +34,34 @@ using namespace std;
 #include "global/global_init.h"
 #include "common/safe_io.h"
        
-#if !defined(DARWIN) && !defined(__FreeBSD__)
-#include <envz.h>
-#endif // DARWIN
-
 #include <sys/types.h>
 #include <fcntl.h>
 
+#include <fuse.h>
+
+static void fuse_usage()
+{
+  const char **argv = (const char **) malloc((2) * sizeof(char *));
+  argv[0] = "ceph-fuse";
+  argv[1] = "-h";
+  struct fuse_args args = FUSE_ARGS_INIT(2, (char**)argv);
+  if (fuse_parse_cmdline(&args, NULL, NULL, NULL) == -1) {
+    derr << "fuse_parse_cmdline failed." << dendl;
+    fuse_opt_free_args(&args);
+  }
+
+  assert(args.allocated);  // Checking fuse has realloc'd args so we can free newargv
+  free(argv);
+}
 void usage()
 {
-  cerr << "usage: ceph-fuse [-m mon-ip-addr:mon-port] <mount point>" << std::endl;
+  cout <<
+"usage: ceph-fuse [-m mon-ip-addr:mon-port] <mount point> [OPTIONS]\n"
+"  --client_mountpoint/-r <root_directory>\n"
+"                    use root_directory as the mounted root, rather than the full Ceph tree.\n"
+"\n";
+  fuse_usage();
+  generic_client_usage();
 }
 
 int main(int argc, const char **argv, const char *envp[]) {
@@ -61,6 +79,9 @@ int main(int argc, const char **argv, const char *envp[]) {
     } else if (ceph_argparse_flag(args, i, "--localize-reads", (char*)NULL)) {
       cerr << "setting CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+      usage();
+      assert(0);
     } else {
       ++i;
     }
@@ -103,13 +124,12 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
 
   if (childpid == 0) {
+    if (restart_log)
+      g_ceph_context->_log->start();
     common_init_finish(g_ceph_context);
 
     //cout << "child, mounting" << std::endl;
     ::close(fd[0]);
-
-    if (restart_log)
-      g_ceph_context->_log->start();
 
     class RemountTest : public Thread {
     public:
@@ -224,7 +244,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     cerr << "ceph-fuse[" << getpid() << "]: starting fuse" << std::endl;
     tester.init(cfuse, client);
-    tester.create();
+    tester.create("tester");
     r = cfuse->loop();
     tester.join(&tester_rp);
     tester_r = static_cast<int>(reinterpret_cast<uint64_t>(tester_rp));

@@ -22,10 +22,10 @@ struct plain_stack_entry {
 class RGWFormatter_Plain : public Formatter {
   void reset_buf();
 public:
-  RGWFormatter_Plain();
+  RGWFormatter_Plain(bool use_kv = false);
   virtual ~RGWFormatter_Plain();
 
-  virtual void set_status(const char* status, const char* status_name) {};
+  virtual void set_status(int status, const char* status_name) {};
   virtual void output_header() {};
   virtual void output_footer() {};
   virtual void flush(ostream& os);
@@ -55,6 +55,7 @@ private:
 
   std::list<struct plain_stack_entry> stack;
   size_t min_stack_level;
+  bool use_kv;
 };
 
 class RGWFormatterFlusher {

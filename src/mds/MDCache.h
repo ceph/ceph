@@ -491,7 +491,7 @@ protected:
   map<inodeno_t,mds_rank_t> cap_export_targets; // ino -> auth mds
 
   map<inodeno_t,map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
-  map<inodeno_t,filepath> cap_import_paths;
+  map<inodeno_t,int> cap_imports_dirty;
   set<inodeno_t> cap_imports_missing;
   int cap_imports_num_opening;
   
@@ -534,7 +534,6 @@ public:
   void rejoin_recovered_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr, 
 			     mds_rank_t frommds=MDS_RANK_NONE) {
     cap_imports[ino][client][frommds] = icr.capinfo;
-    cap_import_paths[ino] = filepath(icr.path, (uint64_t)icr.capinfo.pathbase);
   }
   ceph_mds_cap_reconnect *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
     if (cap_imports.count(ino) &&
@@ -548,6 +547,9 @@ public:
     assert(cap_imports[ino].size() == 1);
     assert(cap_imports[ino][client].size() == 1);
     cap_imports.erase(ino);
+  }
+  void set_reconnect_dirty_caps(inodeno_t ino, int dirty) {
+    cap_imports_dirty[ino] |= dirty;
   }
 
   // [reconnect/rejoin caps]
@@ -1103,6 +1105,9 @@ public:
   void dump_cache(const std::string &filename);
   void dump_cache(Formatter *f);
 
+  void dump_resolve_status(Formatter *f) const;
+  void dump_rejoin_status(Formatter *f) const;
+
   // == crap fns ==
  public:
   void show_cache();
@@ -1115,10 +1120,31 @@ public:
     while (n--) ++p;
     return p->second;
   }
+
   void scrub_dentry(const string& path, Formatter *f, Context *fin);
+  /**
+   * Scrub the named dentry only (skip the scrubstack)
+   */
   void scrub_dentry_work(MDRequestRef& mdr);
+
   void flush_dentry(const string& path, Context *fin);
   void flush_dentry_work(MDRequestRef& mdr);
+
+  /**
+   * Create and start an OP_ENQUEUE_SCRUB
+   */
+  void enqueue_scrub(const string& path, const std::string &tag,
+                     Formatter *f, Context *fin);
+
+  /**
+   * Resolve path to a dentry and pass it onto the ScrubStack.
+   *
+   * TODO: return enough information to the original mdr formatter
+   * and completion that they can subsequeuntly check the progress of
+   * this scrub (we won't block them on a whole scrub as it can take a very
+   * long time)
+   */
+  void enqueue_scrub_work(MDRequestRef& mdr);
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {

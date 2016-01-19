@@ -94,30 +94,70 @@ int64_t librados::RadosClient::lookup_pool(const char *name)
 
 bool librados::RadosClient::pool_requires_alignment(int64_t pool_id)
 {
+  bool requires;
+  int r = pool_requires_alignment2(pool_id, &requires);
+  if (r < 0) {
+    // Cast answer to false, this is a little bit problematic
+    // since we really don't know the answer yet, say.
+    return false;
+  }
+
+  return requires;
+}
+
+// a safer version of pool_requires_alignment
+int librados::RadosClient::pool_requires_alignment2(int64_t pool_id,
+	bool *requires)
+{
+  if (!requires)
+    return -EINVAL;
+
   int r = wait_for_osdmap();
   if (r < 0) {
     return r;
   }
 
   const OSDMap *osdmap = objecter->get_osdmap_read();
-  bool ret = osdmap->have_pg_pool(pool_id) &&
-    osdmap->get_pg_pool(pool_id)->requires_aligned_append();
+  if (!osdmap->have_pg_pool(pool_id)) { 
+    objecter->put_osdmap_read();
+    return -ENOENT;
+  }
+  *requires = osdmap->get_pg_pool(pool_id)->requires_aligned_append();
   objecter->put_osdmap_read();
-  return ret;
+  return 0;
 }
 
 uint64_t librados::RadosClient::pool_required_alignment(int64_t pool_id)
 {
+  uint64_t alignment;
+  int r = pool_required_alignment2(pool_id, &alignment);
+  if (r < 0) {
+    return 0;
+  }
+
+  return alignment;
+}
+
+// a safer version of pool_required_alignment
+int librados::RadosClient::pool_required_alignment2(int64_t pool_id,
+	uint64_t *alignment)
+{
+  if (!alignment)
+    return -EINVAL;
+
   int r = wait_for_osdmap();
   if (r < 0) {
     return r;
   }
 
   const OSDMap *osdmap = objecter->get_osdmap_read();
-  uint64_t ret = osdmap->have_pg_pool(pool_id) ?
-    osdmap->get_pg_pool(pool_id)->required_alignment() : 0;
+  if (!osdmap->have_pg_pool(pool_id)) {
+    objecter->put_osdmap_read();
+    return -ENOENT;
+  }
+  *alignment = osdmap->get_pg_pool(pool_id)->required_alignment();
   objecter->put_osdmap_read();
-  return ret;
+  return 0;
 }
 
 int librados::RadosClient::pool_get_auid(uint64_t pool_id, unsigned long long *auid)
@@ -216,7 +256,6 @@ int librados::RadosClient::connect()
 
   ldout(cct, 1) << "starting objecter" << dendl;
 
-  err = -ENOMEM;
   objecter = new (std::nothrow) Objecter(cct, messenger, &monclient,
 			  &finisher,
 			  cct->_conf->rados_mon_op_timeout,
@@ -265,8 +304,6 @@ int librados::RadosClient::connect()
   instance_id = monclient.get_global_id();
 
   lock.Unlock();
-
-  cct->_conf->call_all_observers();
 
   ldout(cct, 1) << "init done" << dendl;
   err = 0;

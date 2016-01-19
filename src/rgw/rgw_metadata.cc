@@ -275,10 +275,10 @@ void RGWMetadataManager::parse_metadata_key(const string& metadata_key, string& 
   int pos = metadata_key.find(':');
   if (pos < 0) {
     type = metadata_key;
+  } else {
+    type = metadata_key.substr(0, pos);
+    entry = metadata_key.substr(pos + 1);
   }
-
-  type = metadata_key.substr(0, pos);
-  entry = metadata_key.substr(pos + 1);
 }
 
 int RGWMetadataManager::find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry)
@@ -355,9 +355,13 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
 
   time_t mtime = 0;
 
-  JSONDecoder::decode_json("key", metadata_key, &parser);
-  JSONDecoder::decode_json("ver", *objv, &parser);
-  JSONDecoder::decode_json("mtime", mtime, &parser);
+  try {
+    JSONDecoder::decode_json("key", metadata_key, &parser);
+    JSONDecoder::decode_json("ver", *objv, &parser);
+    JSONDecoder::decode_json("mtime", mtime, &parser);
+  } catch (JSONDecoder::err& e) {
+    return -EINVAL;
+  }
 
   JSONObj *jo = parser.find_obj("data");
   if (!jo) {

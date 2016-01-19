@@ -439,6 +439,23 @@ You may set values for the following keys:
 :Type: Integer
 :Example: ``1000000`` #1M objects
 
+
+``hit_set_grade_decay_rate``
+
+:Description: Temperature decay rate between two successive hit_sets
+:Type: Integer
+:Valid Range: 0 - 100
+:Default: ``20``
+
+
+``hit_set_grade_search_last_n``
+
+:Description: Count at most N appearance in hit_sets for temperature calculation
+:Type: Integer
+:Valid Range: 0 - hit_set_count
+:Default: ``1``
+
+
 .. _cache_min_flush_age:
 
 ``cache_min_flush_age``
@@ -473,6 +490,39 @@ You may set values for the following keys:
 
 :Type: Boolean
 :Defaults: ``0``
+
+.. _scrub_min_interval:
+
+``scrub_min_interval``
+
+:Description: The maximum interval in seconds for pool scrubbing when
+              load is low. If it is 0, the value osd_scrub_min_interval
+              from config is used.
+
+:Type: Double
+:Default: ``0``
+
+.. _scrub_max_interval:
+
+``scrub_max_interval``
+
+:Description: The maximum interval in seconds for pool scrubbing
+              irrespective of cluster load. If it is 0, the value
+              osd_scrub_max_interval from config is used.
+
+:Type: Double
+:Default: ``0``
+
+.. _deep_scrub_interval:
+
+``deep_scrub_interval``
+
+:Description: The interval in seconds for pool “deep” scrubbing. If it
+              is 0, the value osd_deep_scrub_interval from config is used.
+
+:Type: Double
+:Default: ``0``
+
 
 Get Pool Values
 ===============
@@ -598,6 +648,28 @@ You may get values for the following keys:
 :Description: see fast_read_
 
 :Type: Boolean
+
+
+``scrub_min_interval``
+
+:Description: see scrub_min_interval_
+
+:Type: Double
+
+
+``scrub_max_interval``
+
+:Description: see scrub_max_interval_
+
+:Type: Double
+
+
+``deep_scrub_interval``
+
+:Description: see deep_scrub_interval_
+
+:Type: Double
+
 
 Set the Number of Object Replicas
 =================================

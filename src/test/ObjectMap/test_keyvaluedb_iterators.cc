@@ -17,8 +17,7 @@
 #include <boost/scoped_ptr.hpp>
 
 #include "test/ObjectMap/KeyValueDBMemory.h"
-#include "os/KeyValueDB.h"
-#include "os/LevelDBStore.h"
+#include "kv/KeyValueDB.h"
 #include <sys/types.h>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
@@ -37,7 +36,7 @@ public:
   virtual void SetUp() {
     assert(!store_path.empty());
 
-    LevelDBStore *db_ptr = new LevelDBStore(g_ceph_context, store_path);
+    KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context, "leveldb", store_path);
     assert(!db_ptr->create_and_open(std::cerr));
     db.reset(db_ptr);
     mock.reset(new KeyValueDBMemory());
@@ -101,6 +100,21 @@ public:
 	      << __func__
 	      << " iterator not valid";
     }
+    
+    if (!it->raw_key_is_prefixed(expected_prefix)) {
+      return ::testing::AssertionFailure()
+	      << __func__
+	      << " expected raw_key_is_prefixed() == TRUE"
+	      << " got FALSE";
+    }
+    
+    if (it->raw_key_is_prefixed("??__SomeUnexpectedValue__??")) {
+      return ::testing::AssertionFailure()
+	      << __func__
+	      << " expected raw_key_is_prefixed() == FALSE"
+	      << " got TRUE";
+    }
+ 
     pair<string,string> key = it->raw_key();
 
     if (expected_prefix != key.first) {

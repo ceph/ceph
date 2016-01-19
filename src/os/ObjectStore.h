@@ -27,7 +27,7 @@
 #include <vector>
 #include <map>
 
-#if defined(DARWIN) || defined(__FreeBSD__)
+#if defined(DARWIN) || defined(__FreeBSD__) || defined(__sun)
 #include <sys/statvfs.h>
 #else
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
@@ -84,6 +84,10 @@ static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) 
   ::encode(*attrset, bl);
 }
 
+// this isn't the best place for these, but...
+void decode_str_str_map_to_bl(bufferlist::iterator& p, bufferlist *out);
+void decode_str_set_to_bl(bufferlist::iterator& p, bufferlist *out);
+
 // Flag bits
 typedef uint32_t osflagbits_t;
 const int SKIP_JOURNAL_REPLAY = 1 << 0;
@@ -109,6 +113,16 @@ public:
 			     const string& data,
 			     const string& journal,
 			     osflagbits_t flags = 0);
+
+  /**
+   * probe a block device to learn the uuid of the owning OSD
+   *
+   * @param cct cct
+   * @param path path to device
+   * @param fsid [out] osd uuid
+   */
+  static int probe_block_device_fsid(const string& path,
+				     uuid_d *fsid);
 
   Logger *logger;
 
@@ -358,9 +372,9 @@ public:
       OP_RMCOLL =       21,  // cid
       OP_COLL_ADD =     22,  // cid, oldcid, oid
       OP_COLL_REMOVE =  23,  // cid, oid
-      OP_COLL_SETATTR = 24,  // cid, attrname, bl  **DEPRECATED**
-      OP_COLL_RMATTR =  25,  // cid, attrname  **DEPRECATED**
-      OP_COLL_SETATTRS = 26,  // cid, attrset  **DEPRECATED**
+      OP_COLL_SETATTR = 24,  // cid, attrname, bl
+      OP_COLL_RMATTR =  25,  // cid, attrname
+      OP_COLL_SETATTRS = 26,  // cid, attrset
       OP_COLL_MOVE =    8,   // newcid, oldcid, oid
 
       OP_STARTSYNC =    27,  // start a sync
@@ -836,8 +850,14 @@ public:
       void decode_attrset(map<string,bufferlist>& aset) {
         ::decode(aset, data_bl_p);
       }
+      void decode_attrset_bl(bufferlist *pbl) {
+	decode_str_str_map_to_bl(data_bl_p, pbl);
+      }
       void decode_keyset(set<string> &keys){
         ::decode(keys, data_bl_p);
+      }
+      void decode_keyset_bl(bufferlist *pbl){
+        decode_str_set_to_bl(data_bl_p, pbl);
       }
 
       const ghobject_t &get_oid(__le32 oid_id) {
@@ -1296,6 +1316,76 @@ public:
       data.ops++;
     }
 
+    // NOTE: Collection attr operations are all DEPRECATED.  new
+    // backends need not implement these at all.
+
+    /// Set an xattr on a collection
+    void collection_setattr(coll_t cid, const string& name, bufferlist& val)
+      __attribute__ ((deprecated)) {
+      if (use_tbl) {
+        __u32 op = OP_COLL_SETATTR;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(name, tbl);
+        ::encode(val, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_COLL_SETATTR;
+        _op->cid = _get_coll_id(cid);
+        ::encode(name, data_bl);
+        ::encode(val, data_bl);
+      }
+      data.ops++;
+    }
+
+    /// Remove an xattr from a collection
+    void collection_rmattr(coll_t cid, const string& name)
+      __attribute__ ((deprecated)) {
+      if (use_tbl) {
+        __u32 op = OP_COLL_RMATTR;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(name, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_COLL_RMATTR;
+        _op->cid = _get_coll_id(cid);
+        ::encode(name, data_bl);
+      }
+      data.ops++;
+    }
+    /// Set multiple xattrs on a collection
+    void collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
+      __attribute__ ((deprecated)) {
+      if (use_tbl) {
+        __u32 op = OP_COLL_SETATTRS;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(aset, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_COLL_SETATTRS;
+        _op->cid = _get_coll_id(cid);
+        ::encode(aset, data_bl);
+      }
+      data.ops++;
+    }
+    /// Set multiple xattrs on a collection
+    void collection_setattrs(coll_t cid, map<string,bufferlist>& aset)
+      __attribute__ ((deprecated)) {
+      if (use_tbl) {
+        __u32 op = OP_COLL_SETATTRS;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(aset, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_COLL_SETATTRS;
+        _op->cid = _get_coll_id(cid);
+        ::encode(aset, data_bl);
+      }
+      data.ops++;
+    }
     /// Remove omap from oid
     void omap_clear(
       coll_t cid,           ///< [in] Collection containing oid
@@ -1335,6 +1425,29 @@ public:
       }
       data.ops++;
     }
+
+    /// Set keys on an oid omap (bufferlist variant).
+    void omap_setkeys(
+      coll_t cid,                           ///< [in] Collection containing oid
+      const ghobject_t &oid,                ///< [in] Object to update
+      const bufferlist &attrset_bl          ///< [in] Replacement keys and values
+      ) {
+      if (use_tbl) {
+        __u32 op = OP_OMAP_SETKEYS;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        tbl.append(attrset_bl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_OMAP_SETKEYS;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        data_bl.append(attrset_bl);
+      }
+      data.ops++;
+    }
+
     /// Remove keys from oid omap
     void omap_rmkeys(
       coll_t cid,             ///< [in] Collection containing oid
@@ -1353,6 +1466,28 @@ public:
         _op->cid = _get_coll_id(cid);
         _op->oid = _get_object_id(oid);
         ::encode(keys, data_bl);
+      }
+      data.ops++;
+    }
+
+    /// Remove keys from oid omap
+    void omap_rmkeys(
+      coll_t cid,             ///< [in] Collection containing oid
+      const ghobject_t &oid,  ///< [in] Object from which to remove the omap
+      const bufferlist &keys_bl ///< [in] Keys to clear
+      ) {
+      if (use_tbl) {
+        __u32 op = OP_OMAP_RMKEYS;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        tbl.append(keys_bl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_OMAP_RMKEYS;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        data_bl.append(keys_bl);
       }
       data.ops++;
     }
@@ -1683,6 +1818,9 @@ public:
   virtual bool test_mount_in_use() = 0;
   virtual int mount() = 0;
   virtual int umount() = 0;
+  virtual int fsck() {
+    return -EOPNOTSUPP;
+  }
   virtual unsigned get_max_object_name_length() = 0;
   virtual unsigned get_max_attr_name_length() = 0;
   virtual int mkfs() = 0;  // wipe
@@ -1690,8 +1828,6 @@ public:
   virtual bool needs_journal() = 0;  //< requires a journal
   virtual bool wants_journal() = 0;  //< prefers a journal
   virtual bool allows_journal() = 0; //< allows a journal
-  virtual void set_allow_sharded_objects() = 0;
-  virtual bool get_allow_sharded_objects() = 0;
 
   virtual bool can_sort_nibblewise() {
     return false;   // assume a backend cannot, unless it says otherwise
@@ -1700,11 +1836,6 @@ public:
   virtual int statfs(struct statfs *buf) = 0;
 
   virtual void collect_metadata(map<string,string> *pm) { }
-
-  /**
-   * check the journal uuid/fsid, without opening
-   */
-  virtual int peek_journal_fsid(uuid_d *fsid) = 0;
 
   /**
    * write_meta - write a simple configuration key out-of-band
@@ -1902,6 +2033,45 @@ public:
    * @returns true if it exists, false otherwise
    */
   virtual bool collection_exists(coll_t c) = 0;
+  /**
+   * collection_getattr - get an xattr of a collection
+   *
+   * @param cid collection name
+   * @param name xattr name
+   * @param value pointer of buffer to receive value
+   * @param size size of buffer to receive value
+   * @returns 0 on success, negative error code on failure
+   */
+  virtual int collection_getattr(coll_t cid, const char *name,
+	                         void *value, size_t size)
+    __attribute__ ((deprecated)) {
+    return -EOPNOTSUPP;
+  }
+
+  /**
+   * collection_getattr - get an xattr of a collection
+   *
+   * @param cid collection name
+   * @param name xattr name
+   * @param bl buffer to receive value
+   * @returns 0 on success, negative error code on failure
+   */
+  virtual int collection_getattr(coll_t cid, const char *name, bufferlist& bl)
+    __attribute__ ((deprecated)) {
+    return -EOPNOTSUPP;
+  }
+
+  /**
+   * collection_getattrs - get all xattrs of a collection
+   *
+   * @param cid collection name
+   * @param aset map of keys and buffers that contain the values
+   * @returns 0 on success, negative error code on failure
+   */
+  virtual int collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
+    __attribute__ ((deprecated)) {
+    return -EOPNOTSUPP;
+  }
 
   /**
    * is a collection empty?

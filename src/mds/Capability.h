@@ -16,7 +16,7 @@
 #ifndef CEPH_CAPABILITY_H
 #define CEPH_CAPABILITY_H
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/xlist.h"
 
 #include "common/config.h"

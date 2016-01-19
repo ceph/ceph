@@ -32,6 +32,7 @@ CHECK_FUNCTION_EXISTS(posix_fadvise HAVE_POSIX_FADVISE)
 CHECK_FUNCTION_EXISTS(posix_fallocate HAVE_POSIX_FALLOCATE)
 CHECK_FUNCTION_EXISTS(syncfs HAVE_SYS_SYNCFS) 
 CHECK_FUNCTION_EXISTS(sync_file_range HAVE_SYNC_FILE_RANGE)
+CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
 CHECK_INCLUDE_FILES("arpa/inet.h" HAVE_ARPA_INET_H)
 CHECK_INCLUDE_FILES("boost/random/discrete_distribution.hpp" HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION)
 CHECK_INCLUDE_FILES("dirent.h" HAVE_DIRENT_H)
@@ -81,6 +82,14 @@ include(CheckSymbolExists)
 CHECK_SYMBOL_EXISTS(__u8 "sys/types.h;linux/types.h" HAVE___U8)
 CHECK_SYMBOL_EXISTS(__u64 "sys/types.h;linux/types.h" HAVE___U64)
 CHECK_SYMBOL_EXISTS(__s64 "sys/types.h;linux/types.h" HAVE___S64)
+
+CHECK_SYMBOL_EXISTS(res_nquery "resolv.h" HAVE_RES_NQUERY)
+
+include(CheckCXXSourceCompiles)
+CHECK_CXX_SOURCE_COMPILES("
+  #include <string.h>
+  int main() { char x = *strerror_r(0, &x, sizeof(x)); return 0; }
+  " STRERROR_R_CHAR_P)
 
 set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
 
@@ -143,6 +152,7 @@ find_package(expat REQUIRED)
 set(HAVE_EXPAT ${EXPAT_FOUND})
 endif(${WITH_EXPAT})
 
+find_package(Cython REQUIRED)
 find_package(fcgi REQUIRED)
 
 find_package(atomic_ops REQUIRED)
@@ -162,11 +172,23 @@ endif(${WITH_GPERFTOOLS})
 
 find_package(snappy REQUIRED)
 
-option(WITH_TCMALLOC "Use TCMalloc as Allocator" ON)
-if(${WITH_TCMALLOC})
-find_package(tcmalloc REQUIRED)
-set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
-endif(${WITH_TCMALLOC})
+#if allocator is set on command line make sure it matches below strings
+if(ALLOCATOR)
+  if(${ALLOCATOR} STREQUAL "tcmalloc")
+    find_package(tcmalloc REQUIRED)
+    set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
+  elseif(${ALLOCATOR} STREQUAL "jemalloc")
+    find_package(JeMalloc REQUIRED)
+  endif()
+else(ALLOCATOR)
+  find_package(tcmalloc)
+  set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
+  find_package(JeMalloc)
+  if(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+    message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
+    set(ALLOCATOR "libc")
+  endif(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+endif(ALLOCATOR)
 
 find_package(keyutils REQUIRED)
 
@@ -197,9 +219,9 @@ else()
 	endif(NSS_FOUND)
 endif(CRYPTOPP_FOUND)
 
-option(WITH_XIO "Enable XIO messaging" ON)
+option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
-find_package(xio)
+  find_package(xio REQUIRED)
 set(HAVE_XIO ${Xio_FOUND})
 endif(WITH_XIO)
 
@@ -208,6 +230,37 @@ option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
+
+option(WITH_THREAD_SAFE_RES_QUERY "res_query is thread safe" OFF)
+if(WITH_THREAD_SAFE_RES_QUERY)
+    set(HAVE_THREAD_SAFE_RES_QUERY 1 CACHE INTERNAL "Thread safe res_query supported.")
+endif(WITH_THREAD_SAFE_RES_QUERY)
+
+option(WITH_REENTRANT_STRSIGNAL "strsignal is reentrant" OFF)
+if(WITH_REENTRANT_STRSIGNAL)
+    set(HAVE_REENTRANT_STRSIGNAL 1 CACHE INTERNAL "Reentrant strsignal is supported.")
+endif(WITH_REENTRANT_STRSIGNAL)
+
+set(HAVE_LIBROCKSDB 1)
+
+# -lz link into kv
+find_package(ZLIB REQUIRED)
+
+#option for LTTng
+option(WITH_LTTNG "LTTng tracing is enabled" ON)
+if(${WITH_LTTNG})
+  find_package(lttng-ust)
+  set(WITH_LTTNG ${LTTNG_FOUND})
+endif(${WITH_LTTNG})
+
+#option for Babeltrace
+option(HAVE_BABELTRACE "Babeltrace libraries are enabled" ON)
+if(${HAVE_BABELTRACE})
+  find_package(babeltrace REQUIRED)
+  set(WITH_BABELTRACE ${BABELTRACE_FOUND})
+  set(HAVE_BABELTRACE_BABELTRACE_H ${BABELTRACE_FOUND})
+  set(HAVE_BABELTRACE_CTF_EVENTS_H ${BABELTRACE_FOUND})
+endif(${HAVE_BABELTRACE})
 
 # Now create a useable config.h
 configure_file(
@@ -225,7 +278,7 @@ else(${ENABLE_SHARED})
 endif(${ENABLE_SHARED})
 
 set(Boost_USE_MULTITHREADED ON)
-find_package(Boost COMPONENTS thread system regex random REQUIRED)
+find_package(Boost COMPONENTS thread system regex random program_options date_time REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 
 find_package(Threads REQUIRED)

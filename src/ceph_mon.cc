@@ -339,7 +339,7 @@ int main(int argc, const char **argv)
     // resolve public_network -> public_addr
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
-    common_init_finish(g_ceph_context, flags);
+    common_init_finish(g_ceph_context);
 
     bufferlist monmapbl, osdmapbl;
     std::string error;
@@ -496,7 +496,7 @@ int main(int argc, const char **argv)
   // screwing us over
   Preforker prefork;
   if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
-    if (global_init_prefork(g_ceph_context, 0) >= 0) {
+    if (global_init_prefork(g_ceph_context) >= 0) {
       string err_msg;
       err = prefork.prefork(err_msg);
       if (err < 0) {
@@ -527,7 +527,7 @@ int main(int argc, const char **argv)
 
   bufferlist magicbl;
   err = store->get(Monitor::MONITOR_NAME, "magic", magicbl);
-  if (!magicbl.length()) {
+  if (err || !magicbl.length()) {
     derr << "unable to read magic from mon data" << dendl;
     prefork.exit(1);
   }
@@ -749,7 +749,7 @@ int main(int argc, const char **argv)
   }
 
   if (g_conf->daemonize) {
-    global_init_postfork_finish(g_ceph_context, 0);
+    global_init_postfork_finish(g_ceph_context);
     prefork.daemonize();
   }
 

@@ -48,7 +48,8 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
     if (0) {								\
       char __array[((v >= -1) && (v <= 200)) ? 0 : -1] __attribute__((unused)); \
     }									\
-    ceph::log::Entry *_dout_e = cct->_log->create_entry(v, sub);	\
+    static size_t _log_exp_length=80; \
+    ceph::log::Entry *_dout_e = cct->_log->create_entry(v, sub, &_log_exp_length);	\
     ostream _dout_os(&_dout_e->m_streambuf);				\
     CephContext *_dout_cct = cct;					\
     std::ostream* _dout = &_dout_os;

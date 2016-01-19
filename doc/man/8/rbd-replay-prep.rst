@@ -29,6 +29,9 @@ Options
 
    Anonymizes image and snap names.
 
+.. option:: --verbose
+
+   Print all processed events to console
 
 Examples
 ========

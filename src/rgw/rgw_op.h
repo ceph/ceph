@@ -13,6 +13,7 @@
 
 #include <limits.h>
 
+#include <memory>
 #include <string>
 #include <set>
 #include <map>
@@ -58,12 +59,15 @@ enum RGWOpType {
   RGW_OP_PUT_CORS,
   RGW_OP_DELETE_CORS,
   RGW_OP_OPTIONS_CORS,
+  RGW_OP_GET_REQUEST_PAYMENT,
+  RGW_OP_SET_REQUEST_PAYMENT,
   RGW_OP_INIT_MULTIPART,
   RGW_OP_COMPLETE_MULTIPART,
   RGW_OP_ABORT_MULTIPART,
   RGW_OP_LIST_MULTIPART,
   RGW_OP_LIST_BUCKET_MULTIPARTS,
   RGW_OP_DELETE_MULTI_OBJ,
+  RGW_OP_BULK_DELETE
 };
 
 /**
@@ -142,6 +146,7 @@ protected:
   bool skip_manifest;
   rgw_obj obj;
   utime_t gc_invalidate_time;
+  bool is_slo;
 
   int init_common();
 public:
@@ -165,6 +170,7 @@ public:
     range_parsed = false;
     skip_manifest = false;
     ret = 0;
+    is_slo = false;
  }
 
   bool prefetch_data();
@@ -175,12 +181,18 @@ public:
   int verify_permission();
   void pre_exec();
   void execute();
-  int read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs);
+  int read_user_manifest_part(rgw_bucket& bucket,
+                              const RGWObjEnt& ent,
+                              RGWAccessControlPolicy *bucket_policy,
+                              off_t start_ofs,
+                              off_t end_ofs);
   int handle_user_manifest(const char *prefix);
+  int handle_slo_manifest(bufferlist& bl);
 
   int get_data_cb(bufferlist& bl, off_t ofs, off_t len);
 
   virtual int get_params() = 0;
+  virtual int send_response_data_error() = 0;
   virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) = 0;
 
   virtual const string name() { return "get_obj"; }
@@ -201,6 +213,87 @@ public:
   }
 };
 
+class RGWBulkDelete : public RGWOp {
+public:
+  struct acct_path_t {
+    std::string bucket_name;
+    rgw_obj_key obj_key;
+  };
+
+  struct fail_desc_t {
+    int err;
+    acct_path_t path;
+  };
+
+  class Deleter {
+  protected:
+    unsigned int num_deleted;
+    unsigned int num_unfound;
+    std::list<fail_desc_t> failures;
+
+    RGWRados * const store;
+    req_state * const s;
+
+  public:
+    Deleter(RGWRados * const str, req_state * const s)
+      : num_deleted(0),
+        num_unfound(0),
+        store(str),
+        s(s) {
+    }
+
+    unsigned int get_num_deleted() const {
+      return num_deleted;
+    }
+
+    unsigned int get_num_unfound() const {
+      return num_unfound;
+    }
+
+    const std::list<fail_desc_t> get_failures() const {
+      return failures;
+    }
+
+    bool verify_permission(RGWBucketInfo& binfo,
+                           map<string, bufferlist>& battrs,
+                           rgw_obj& obj,
+                           ACLOwner& bucket_owner /* out */);
+    bool verify_permission(RGWBucketInfo& binfo,
+                           map<string, bufferlist>& battrs);
+    bool delete_single(const acct_path_t& path);
+    bool delete_chunk(const std::list<acct_path_t>& paths);
+  };
+  /* End of Deleter subclass */
+
+  static const size_t MAX_CHUNK_ENTRIES = 1024;
+
+protected:
+  int ret;
+  std::unique_ptr<Deleter> deleter;
+
+public:
+  RGWBulkDelete()
+    : ret(0),
+      deleter(nullptr) {
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_data(std::list<acct_path_t>& items,
+                       bool * is_truncated) = 0;
+  virtual void send_response() = 0;
+
+  virtual const string name() { return "bulk_delete"; }
+  virtual RGWOpType get_type() { return RGW_OP_BULK_DELETE; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
+};
+
+inline ostream& operator<<(ostream& out, const RGWBulkDelete::acct_path_t &o) {
+  return out << o.bucket_name << "/" << o.obj_key;
+}
+
 #define RGW_LIST_BUCKETS_LIMIT_MAX 10000
 
 class RGWListBuckets : public RGWOp {
@@ -208,6 +301,7 @@ protected:
   int ret;
   bool sent_data;
   string marker;
+  string end_marker;
   int64_t limit;
   uint64_t limit_max;
   uint32_t buckets_count;
@@ -483,6 +577,62 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
+struct rgw_slo_entry {
+  string path;
+  string etag;
+  uint64_t size_bytes;
+
+  rgw_slo_entry() : size_bytes(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(path, bl);
+    ::encode(etag, bl);
+    ::encode(size_bytes, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(path, bl);
+     ::decode(etag, bl);
+     ::decode(size_bytes, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_slo_entry)
+
+struct RGWSLOInfo {
+  vector<rgw_slo_entry> entries;
+  uint64_t total_size;
+
+  /* in memory only */
+  char *raw_data;
+  int raw_data_len;
+
+  RGWSLOInfo() : raw_data(NULL), raw_data_len(0) {}
+  ~RGWSLOInfo() {
+    free(raw_data);
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entries, bl);
+    ::encode(total_size, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(entries, bl);
+     ::decode(total_size, bl);
+     DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWSLOInfo)
+
 class RGWPutObj : public RGWOp {
 
   friend class RGWPutObjProcessor;
@@ -497,30 +647,30 @@ protected:
   string etag;
   bool chunked_upload;
   RGWAccessControlPolicy policy;
-  const char *obj_manifest;
+  const char *dlo_manifest;
+  RGWSLOInfo *slo_info;
+
   time_t mtime;
-
-  MD5 *user_manifest_parts_hash;
-
   uint64_t olh_epoch;
   string version_id;
 
   time_t delete_at;
 
 public:
-  RGWPutObj() {
-    ret = 0;
-    ofs = 0;
-    supplied_md5_b64 = NULL;
-    supplied_etag = NULL;
-    if_match = NULL;
-    if_nomatch = NULL;
-    chunked_upload = false;
-    obj_manifest = NULL;
-    mtime = 0;
-    user_manifest_parts_hash = NULL;
-    olh_epoch = 0;
-    delete_at = 0;
+  RGWPutObj() : ret(0), ofs(0),
+                supplied_md5_b64(NULL),
+                supplied_etag(NULL),
+                if_match(NULL),
+                if_nomatch(NULL),
+                chunked_upload(0),
+                dlo_manifest(NULL),
+                slo_info(NULL),
+                mtime(0),
+                olh_epoch(0),
+                delete_at(0) {}
+
+  ~RGWPutObj() {
+    delete slo_info;
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
@@ -653,10 +803,13 @@ protected:
   RGWAccessControlPolicy policy;
   string placement_rule;
   time_t delete_at;
+  const char *dlo_manifest;
 
 public:
   RGWPutMetadataObject()
-    : ret(0), delete_at(0)
+    : ret(0),
+      delete_at(0),
+      dlo_manifest(NULL)
   {}
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
@@ -679,19 +832,29 @@ class RGWDeleteObj : public RGWOp {
 protected:
   int ret;
   bool delete_marker;
+  bool multipart_delete;
   string version_id;
+  std::unique_ptr<RGWBulkDelete::Deleter> deleter;
 
 public:
-  RGWDeleteObj() : ret(0), delete_marker(false) {}
+  RGWDeleteObj()
+    : ret(0),
+      delete_marker(false),
+      multipart_delete(false),
+      deleter(nullptr) {
+  }
 
   int verify_permission();
   void pre_exec();
   void execute();
+  int handle_slo_manifest(bufferlist& bl);
 
+  virtual int get_params() { return 0; };
   virtual void send_response() = 0;
   virtual const string name() { return "delete_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_DELETE_OBJ; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
+  virtual bool need_object_expiration() { return false; }
 };
 
 class RGWCopyObj : public RGWOp {
@@ -710,10 +873,10 @@ protected:
   time_t *unmod_ptr;
   int ret;
   map<string, bufferlist> attrs;
-  string src_bucket_name;
+  string src_tenant_name, src_bucket_name;
   rgw_bucket src_bucket;
   rgw_obj_key src_object;
-  string dest_bucket_name;
+  string dest_tenant_name, dest_bucket_name;
   rgw_bucket dest_bucket;
   string dest_object;
   time_t src_mtime;
@@ -757,7 +920,9 @@ public:
     delete_at = 0;
   }
 
-  static bool parse_copy_location(const string& src, string& bucket_name, rgw_obj_key& object);
+  static bool parse_copy_location(const string& src,
+                                  string& bucket_name,
+                                  rgw_obj_key& object);
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
@@ -896,6 +1061,42 @@ public:
   virtual const string name() { return "options_cors"; }
   virtual RGWOpType get_type() { return RGW_OP_OPTIONS_CORS; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
+class RGWGetRequestPayment : public RGWOp {
+protected:
+  bool requester_pays;
+
+public:
+  RGWGetRequestPayment() : requester_pays(0) {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_request_payment"; }
+  virtual RGWOpType get_type() { return RGW_OP_GET_REQUEST_PAYMENT; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
+class RGWSetRequestPayment : public RGWOp {
+protected:
+  bool requester_pays;
+  int ret;
+public:
+ RGWSetRequestPayment() : requester_pays(false), ret(0) {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() { return 0; }
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "set_request_payment"; }
+  virtual RGWOpType get_type() { return RGW_OP_SET_REQUEST_PAYMENT; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWInitMultipart : public RGWOp {
@@ -1111,13 +1312,13 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
+
 class RGWDeleteMultiObj : public RGWOp {
 protected:
   int ret;
   int max_to_delete;
   size_t len;
   char *data;
-  string bucket_name;
   rgw_bucket bucket;
   bool quiet;
   bool status_dumped;

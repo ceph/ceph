@@ -146,6 +146,8 @@ void usage()
   cout << "                         set chooseleaf to (not) retry the recursive descent\n";
   cout << "   --set-chooseleaf-vary-r <0|1>\n";
   cout << "                         set chooseleaf to (not) vary r based on parent\n";
+  cout << "   --set-chooseleaf-stable <0|1>\n";
+  cout << "                         set chooseleaf firstn to (not) return stable results\n";
   cout << "\n";
   cout << "Options for the modifications stage\n";
   cout << "\n";
@@ -255,6 +257,7 @@ int main(int argc, const char **argv)
   int choose_total_tries = -1;
   int chooseleaf_descend_once = -1;
   int chooseleaf_vary_r = -1;
+  int chooseleaf_stable = -1;
   int straw_calc_version = -1;
   int allowed_bucket_algs = -1;
 
@@ -337,6 +340,9 @@ int main(int argc, const char **argv)
       adjust = true;
     } else if (ceph_argparse_witharg(args, i, &chooseleaf_vary_r, err,
 				     "--set_chooseleaf_vary_r", (char*)NULL)) {
+      adjust = true;
+    } else if (ceph_argparse_witharg(args, i, &chooseleaf_stable, err,
+				     "--set_chooseleaf_stable", (char*)NULL)) {
       adjust = true;
     } else if (ceph_argparse_witharg(args, i, &straw_calc_version, err,
 				     "--set_straw_calc_version", (char*)NULL)) {
@@ -617,6 +623,7 @@ int main(int argc, const char **argv)
       crush.set_item_name(i, "osd." + stringify(i));
     }
 
+    crush.set_type_name(0, "osd");
     int type = 1;
     for (vector<layer_t>::iterator p = layers.begin(); p != layers.end(); ++p, type++) {
       layer_t &l = *p;
@@ -738,6 +745,10 @@ int main(int argc, const char **argv)
     crush.set_chooseleaf_vary_r(chooseleaf_vary_r);
     modified = true;
   }
+  if (chooseleaf_stable >= 0) {
+    crush.set_chooseleaf_stable(chooseleaf_stable);
+    modified = true;
+  }
   if (straw_calc_version >= 0) {
     crush.set_straw_calc_version(straw_calc_version);
     modified = true;
@@ -835,8 +846,11 @@ int main(int argc, const char **argv)
   }
 
   if (check) {
-    if (!tester.check_name_maps(max_id)) {
-      exit(1);
+    tester.check_overlapped_rules();
+    if (max_id >= 0) {
+      if (!tester.check_name_maps(max_id)) {
+	exit(1);
+      }
     }
   }
 

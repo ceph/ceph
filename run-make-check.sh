@@ -66,7 +66,7 @@ function run() {
 	$DRY_RUN ./install-deps.sh || return 1
     fi
     $DRY_RUN ./autogen.sh || return 1
-    $DRY_RUN ./configure "$@" --disable-static --with-radosgw --with-debug --without-lttng \
+    $DRY_RUN ./configure "$@"  --with-librocksdb-static --disable-static --with-radosgw --with-debug --without-lttng \
         CC="ccache gcc" CXX="ccache g++" CFLAGS="-Wall -g" CXXFLAGS="-Wall -g" || return 1
     $DRY_RUN make $BUILD_MAKEOPTS || return 1
     $DRY_RUN make $CHECK_MAKEOPTS check || return 1

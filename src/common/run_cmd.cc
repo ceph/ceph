@@ -47,6 +47,9 @@ std::string run_cmd(const char *cmd, ...)
   }
   else if (fret == 0) {
     // execvp doesn't modify its arguments, so the const-cast here is safe.
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
     execvp(cmd, (char * const*)&arr[0]);
     _exit(127);
   }

@@ -6,7 +6,12 @@
 
 template<typename T>
 inline std::string stringify(const T& a) {
+#if defined(__GNUC__) && !(defined(__clang__) || defined(__INTEL_COMPILER))
+  static __thread std::ostringstream ss;
+  ss.str("");
+#else
   std::ostringstream ss;
+#endif
   ss << a;
   return ss.str();
 }

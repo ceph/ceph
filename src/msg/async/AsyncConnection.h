@@ -18,6 +18,7 @@
 #define CEPH_MSG_ASYNCCONNECTION_H
 
 #include <pthread.h>
+#include <signal.h>
 #include <climits>
 #include <list>
 #include <map>
@@ -45,6 +46,8 @@ class AsyncMessenger;
 class AsyncConnection : public Connection {
 
   int read_bulk(int fd, char *buf, int len);
+  void suppress_sigpipe();
+  void restore_sigpipe();
   int do_sendmsg(struct msghdr &msg, int len, bool more);
   int try_send(bufferlist &bl, bool send=true) {
     Mutex::Locker l(write_lock);
@@ -119,7 +122,7 @@ class AsyncConnection : public Connection {
 
   ostream& _conn_prefix(std::ostream *_dout);
 
-  bool is_connected() {
+  bool is_connected() override {
     Mutex::Locker l(lock);
     return state >= STATE_OPEN && state <= STATE_OPEN_TAG_CLOSE;
   }
@@ -133,11 +136,11 @@ class AsyncConnection : public Connection {
   }
   // Only call when AsyncConnection first construct
   void accept(int sd);
-  int send_message(Message *m);
+  int send_message(Message *m) override;
 
-  void send_keepalive();
-  void mark_down();
-  void mark_disposable() {
+  void send_keepalive() override;
+  void mark_down() override;
+  void mark_disposable() override {
     Mutex::Locker l(lock);
     policy.lossy = true;
   }
@@ -160,6 +163,7 @@ class AsyncConnection : public Connection {
     STATE_OPEN_TAG_CLOSE,
     STATE_WAIT_SEND,
     STATE_CONNECTING,
+    STATE_CONNECTING_RE,
     STATE_CONNECTING_WAIT_BANNER,
     STATE_CONNECTING_WAIT_IDENTIFY_PEER,
     STATE_CONNECTING_SEND_CONNECT_MSG,
@@ -196,6 +200,7 @@ class AsyncConnection : public Connection {
                                         "STATE_OPEN_TAG_CLOSE",
                                         "STATE_WAIT_SEND",
                                         "STATE_CONNECTING",
+                                        "STATE_CONNECTING_RE",
                                         "STATE_CONNECTING_WAIT_BANNER",
                                         "STATE_CONNECTING_WAIT_IDENTIFY_PEER",
                                         "STATE_CONNECTING_SEND_CONNECT_MSG",
@@ -291,6 +296,12 @@ class AsyncConnection : public Connection {
   EventCenter *center;
   ceph::shared_ptr<AuthSessionHandler> session_security;
 
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+  sigset_t sigpipe_mask;
+  bool sigpipe_pending;
+  bool sigpipe_unblock;
+#endif
+
  public:
   // used by eventcallback
   void handle_write();
@@ -305,13 +316,13 @@ class AsyncConnection : public Connection {
     mark_down();
   }
   void cleanup_handler() {
-    read_handler.reset();
-    write_handler.reset();
-    reset_handler.reset();
-    remote_reset_handler.reset();
-    connect_handler.reset();
-    local_deliver_handler.reset();
-    wakeup_handler.reset();
+    delete read_handler;
+    delete write_handler;
+    delete reset_handler;
+    delete remote_reset_handler;
+    delete connect_handler;
+    delete local_deliver_handler;
+    delete wakeup_handler;
   }
   PerfCounters *get_perf_counter() {
     return logger;
