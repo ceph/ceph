@@ -696,14 +696,12 @@ public:
    */
   class RepGather {
   public:
+    hobject_t hoid;
+    OpRequestRef op;
     xlist<RepGather*>::item queue_item;
     int nref;
 
     eversion_t v;
-
-    OpContext *ctx;
-    ObjectContextRef obc;
-    map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator> src_obc;
 
     ceph_tid_t rep_tid;
 
@@ -716,20 +714,24 @@ public:
     
     eversion_t          pg_local_last_complete;
 
+    ObcLockManager lock_manager;
+
     list<std::function<void()>> on_applied;
     list<std::function<void()>> on_committed;
     list<std::function<void()>> on_success;
     list<std::function<void()>> on_finish;
     
-    RepGather(OpContext *c, ObjectContextRef pi, ceph_tid_t rt,
+    RepGather(OpContext *c, ceph_tid_t rt,
 	      eversion_t lc) :
+      hoid(c->obc->obs.oi.soid),
+      op(c->op),
       queue_item(this),
       nref(1),
-      ctx(c), obc(pi),
       rep_tid(rt), 
       rep_aborted(false), rep_done(false),
       all_applied(false), all_committed(false),
       pg_local_last_complete(lc),
+      lock_manager(std::move(c->lock_manager)),
       on_applied(std::move(c->on_applied)),
       on_committed(std::move(c->on_committed)),
       on_success(std::move(c->on_success)),
@@ -742,7 +744,6 @@ public:
     void put() {
       assert(nref > 0);
       if (--nref == 0) {
-	delete ctx; // must already be unlocked
 	assert(on_applied.empty());
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
@@ -860,7 +861,7 @@ protected:
   void repop_all_applied(RepGather *repop);
   void repop_all_committed(RepGather *repop);
   void eval_repop(RepGather*);
-  void issue_repop(RepGather *repop);
+  void issue_repop(RepGather *repop, OpContext *ctx);
   RepGather *new_repop(
     OpContext *ctx,
     ObjectContextRef obc,
@@ -1636,10 +1637,6 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
       << " rep_tid=" << repop.rep_tid 
       << " committed?=" << repop.all_committed
       << " applied?=" << repop.all_applied;
-  if (repop.ctx->lock_type != ObjectContext::RWState::RWNONE)
-    out << " lock=" << (int)repop.ctx->lock_type;
-  if (repop.ctx->op)
-    out << " op=" << *(repop.ctx->op->get_req());
   out << ")";
   return out;
 }
