@@ -3515,17 +3515,20 @@ int KStore::_clone(TransContext *txc,
     r = -ENOENT;
     goto out;
   }
-  newo = c->get_onode(new_oid, true);
-  assert(newo);
-  newo->exists = true;
-  _assign_nid(txc, newo);
+ 
+  newo = c->get_onode(new_oid, false);
+  if (newo) {
+    // already exist, truncate any old data
+    r = _do_truncate(txc, newo, 0);
+    if (r < 0)
+      goto out;
+  } else {
+    // does not exist, create it
+    newo = c->get_onode(new_oid, true);
+    _assign_nid(txc, newo);
+  }
 
   r = _do_read(oldo, 0, oldo->onode.size, bl, 0);
-  if (r < 0)
-    goto out;
-
-  // truncate any old data
-  r = _do_truncate(txc, newo, 0);
   if (r < 0)
     goto out;
 
