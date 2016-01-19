@@ -37,6 +37,8 @@ static const int goal_secs_to_run = 30;
 static const int server_ops = 150;
 static const int server_threads = 7;
 
+static const int client_outstanding_ops = 10;
+
 static dmc::ClientInfo client_info[] = {
   // as of C++ 11 this will invoke the constructor with three doubles
   // as parameters
@@ -93,7 +95,7 @@ int main(int argc, char* argv[]) {
 				std::bind(&TestServer::post, &server, _1),
 				client_goals[i] * goal_secs_to_run,
 				client_goals[i],
-				10);
+				client_outstanding_ops);
   }
 
   // clients are now running
