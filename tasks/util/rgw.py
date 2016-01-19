@@ -71,7 +71,7 @@ def get_user_successful_ops(out, user):
 def get_zone_host_and_port(ctx, client, zone):
     _, region_map = rgwadmin(ctx, client, check_status=True,
                              cmd=['-n', client, 'region-map', 'get'])
-    regions = region_map['regions']
+    regions = region_map['zonegroups']
     for region in regions:
         for zone_info in region['val']['zones']:
             if zone_info['name'] == zone:
@@ -85,7 +85,7 @@ def get_zone_host_and_port(ctx, client, zone):
 def get_master_zone(ctx, client):
     _, region_map = rgwadmin(ctx, client, check_status=True,
                              cmd=['-n', client, 'region-map', 'get'])
-    regions = region_map['regions']
+    regions = region_map['zonegroups']
     for region in regions:
         is_master = (region['val']['is_master'] == "true")
         log.info('region={r} is_master={ism}'.format(r=region, ism=is_master))
