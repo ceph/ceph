@@ -197,6 +197,29 @@ namespace crimson {
       return iterator(*this, count);
     }
 
+    std::ostream& displaySorted(std::ostream& out,
+				std::function<bool(const T&)> filter) const {
+      Heap<T,C> temp = *this;
+
+      bool first = true;
+      out << "[ ";
+
+      while(!temp.empty()) {
+	const T& top = temp.top();
+	if (filter(top)) {
+	  if (!first) {
+	    out << ", ";
+	  }
+	  out << temp.top();
+	  first = false;
+	}
+	temp.pop();
+      }
+
+      out << " ]";
+      return out;
+    }
+
     template<typename T1, typename T2>
     friend std::ostream& operator<<(std::ostream&, const Heap<T1,T2>&);
   }; // class Heap

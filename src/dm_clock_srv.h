@@ -403,10 +403,11 @@ namespace crimson {
 
       // for debugging
       void displayQueues() {
-	std::cout << "RESER:" << resQ << std::endl;
-	std::cout << "LIMIT:" << limQ << std::endl;
-	std::cout << "READY:" << readyQ << std::endl;
-	std::cout << "PROP:" << propQ << std::endl;
+	auto filter = [](const EntryRef& e)->bool { return !e->handled; };
+	resQ.displaySorted(std::cout << "RESER:", filter) << std::endl;
+	limQ.displaySorted(std::cout << "LIMIT:", filter) << std::endl;
+	readyQ.displaySorted(std::cout << "READY:", filter) << std::endl;
+	propQ.displaySorted(std::cout << "PROPO:", filter) << std::endl;
       }
 
       
