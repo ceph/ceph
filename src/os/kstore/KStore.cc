@@ -2986,8 +2986,11 @@ int KStore::_write(TransContext *txc,
 	   << " " << offset << "~" << length
 	   << dendl;
   RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, true);
-  _assign_nid(txc, o);
+  OnodeRef o = c->get_onode(oid, false);
+  if (!o) {
+    o = c->get_onode(oid, true);
+    _assign_nid(txc, o);
+  }
   int r = _do_write(txc, o, offset, length, bl, fadvise_flags);
   txc->write_onode(o);
 
@@ -3008,8 +3011,11 @@ int KStore::_zero(TransContext *txc,
   int r = 0;
 
   RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, true);
-  _assign_nid(txc, o);
+  OnodeRef o = c->get_onode(oid, false);
+  if (!o) {
+    o = c->get_onode(oid, true);
+    _assign_nid(txc, o);
+  }
 
   uint64_t stripe_size = o->onode.stripe_size;
   if (stripe_size) {
