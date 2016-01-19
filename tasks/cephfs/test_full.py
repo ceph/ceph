@@ -314,7 +314,12 @@ class FullnessTestCase(CephFSTestCase):
             full = False
 
             for n in range(0, {fill_mb} + 1):
-                bytes += os.write(f, 'x' * 1024 * 1024)
+                try:
+                    bytes += os.write(f, 'x' * 1024 * 1024)
+                except OSError as e:
+                    print "Unexpected error %s from write() instead of fsync()" % e
+                    raise
+
                 try:
                     os.fsync(f)
                 except OSError as e:
