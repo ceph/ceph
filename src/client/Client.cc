@@ -6209,7 +6209,8 @@ int Client::_do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid
 
   // make the change locally?
   if ((in->cap_dirtier_uid >= 0 && uid != in->cap_dirtier_uid) ||
-      (in->cap_dirtier_gid >= 0 && gid != in->cap_dirtier_gid)) {
+      (in->cap_dirtier_uid < 0 &&
+       in->cap_dirtier_gid >= 0 && gid != in->cap_dirtier_gid)) {
     ldout(cct, 10) << __func__ << " caller " << uid << ":" << gid
 		   << " != cap dirtier " << in->cap_dirtier_uid << ":"
 		   << in->cap_dirtier_gid << ", forcing sync setattr"
