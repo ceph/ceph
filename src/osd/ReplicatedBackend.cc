@@ -1163,7 +1163,6 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 
   bufferlist::iterator p = m->get_data().begin();
   ::decode(rm->opt, p);
-  rm->localt.set_use_tbl(rm->opt.get_use_tbl());
 
   if (m->new_temp_oid != hobject_t()) {
     dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
@@ -1171,11 +1170,6 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
   }
   if (m->discard_temp_oid != hobject_t()) {
     dout(20) << __func__ << " stop tracking temp " << m->discard_temp_oid << dendl;
-    if (rm->opt.empty()) {
-      dout(10) << __func__ << ": removing object " << m->discard_temp_oid
-	       << " since we won't get the transaction" << dendl;
-      rm->localt.remove(coll, ghobject_t(m->discard_temp_oid));
-    }
     clear_temp_obj(m->discard_temp_oid);
   }
 
@@ -1198,17 +1192,15 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
     m->pg_trim_to,
     m->pg_trim_rollback_to,
     update_snaps,
-    &(rm->localt));
+    &(rm->opt));
 
   rm->opt.register_on_commit(
     parent->bless_context(
       new C_OSD_RepModifyCommit(this, rm)));
-  rm->localt.register_on_applied(
+  rm->opt.register_on_applied(
     parent->bless_context(
       new C_OSD_RepModifyApply(this, rm)));
   vector<ObjectStore::Transaction> tls;
-  tls.reserve(2);
-  tls.push_back(std::move(rm->localt));
   tls.push_back(std::move(rm->opt));
   parent->queue_transactions(tls, op);
   // op is cleaned up by oncommit/onapply when both are executed

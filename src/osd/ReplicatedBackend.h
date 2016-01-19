@@ -405,7 +405,9 @@ private:
     eversion_t last_complete;
     epoch_t epoch_started;
 
-    ObjectStore::Transaction opt, localt;
+    uint64_t bytes_written;
+
+    ObjectStore::Transaction opt;
     
     RepModify() : applied(false), committed(false), ackerosd(-1),
 		  epoch_started(0) {}
