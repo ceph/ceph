@@ -11,7 +11,8 @@ tasks:
 - workunit:
     clients:
         client.0: [suites/cephfs_journal_tool_smoke.sh]
-- ceph.restart: [mds.*]
+- ceph.restart:
+    daemons: [mds.*]
     wait-for-healthy: true
 - ceph-fuse:
     client.0: 
