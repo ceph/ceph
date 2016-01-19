@@ -1,3 +1,4 @@
+configobj
 coverage>=3.6
 discover
 fixtures>=0.3.14
