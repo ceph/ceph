@@ -42,7 +42,7 @@ private:
    * CLOSE_JOURNAL                            .
    *    |                (journal disabled,   .
    *    v                 object map enabled) .
-   * UNLOCK_OBJECT_MAP  < . . . . . . . . . . .
+   * CLOSE_OBJECT_MAP < . . . . . . . . . . . .
    *    |                                     .
    *    v               (object map disabled) .
    * UNLOCK < . . . . . . . . . . . . . . . . .
@@ -73,8 +73,8 @@ private:
   void send_close_journal();
   Context *handle_close_journal(int *ret_val);
 
-  void send_unlock_object_map();
-  Context *handle_unlock_object_map(int *ret_val);
+  void send_close_object_map();
+  Context *handle_close_object_map(int *ret_val);
 
   void send_unlock();
   Context *handle_unlock(int *ret_val);
