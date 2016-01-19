@@ -9,6 +9,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/object_map/InvalidateRequest.h"
+#include "librbd/object_map/LockRequest.h"
 #include "librbd/object_map/ResizeRequest.h"
 #include "librbd/Utils.h"
 #include "osdc/Striper.h"
@@ -41,7 +42,7 @@ void RefreshRequest<I>::send() {
       m_image_ctx.layout, m_image_ctx.get_image_size(m_snap_id));
   }
 
-  send_load();
+  send_lock();
 }
 
 template <typename I>
@@ -55,6 +56,35 @@ void RefreshRequest<I>::apply() {
   assert(m_on_disk_object_map.size() >= num_objs);
 
   *m_object_map = m_on_disk_object_map;
+}
+
+template <typename I>
+void RefreshRequest<I>::send_lock() {
+  if (m_snap_id != CEPH_NOSNAP) {
+    send_load();
+    return;
+  }
+
+  CephContext *cct = m_image_ctx.cct;
+  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
+  ldout(cct, 10) << this << " " << __func__ << ": oid=" << oid << dendl;
+
+  using klass = RefreshRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_lock>(this);
+
+  LockRequest<I> *req = LockRequest<I>::create(m_image_ctx, ctx);
+  req->send();
+}
+
+template <typename I>
+Context *RefreshRequest<I>::handle_lock(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  assert(*ret_val == 0);
+  send_load();
+  return nullptr;
 }
 
 template <typename I>

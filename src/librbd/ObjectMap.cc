@@ -6,7 +6,6 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/object_map/InvalidateRequest.h"
-#include "librbd/object_map/LockRequest.h"
 #include "librbd/object_map/RefreshRequest.h"
 #include "librbd/object_map/ResizeRequest.h"
 #include "librbd/object_map/SnapshotCreateRequest.h"
@@ -17,6 +16,7 @@
 #include "librbd/Utils.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/WorkQueue.h"
 #include "include/stringify.h"
 #include "cls/lock/cls_lock_client.h"
 #include <sstream>
@@ -89,15 +89,12 @@ void ObjectMap::open(Context *on_finish) {
   req->send();
 }
 
-void ObjectMap::lock(Context *on_finish) {
-  assert(m_snap_id == CEPH_NOSNAP);
-  object_map::LockRequest<> *req = new object_map::LockRequest<>(
-    m_image_ctx, on_finish);
-  req->send();
-}
+void ObjectMap::close(Context *on_finish) {
+  if (m_snap_id != CEPH_NOSNAP) {
+    m_image_ctx.op_work_queue->queue(on_finish, 0);
+    return;
+  }
 
-void ObjectMap::unlock(Context *on_finish) {
-  assert(m_snap_id == CEPH_NOSNAP);
   object_map::UnlockRequest<> *req = new object_map::UnlockRequest<>(
     m_image_ctx, on_finish);
   req->send();

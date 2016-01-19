@@ -55,9 +55,9 @@ public:
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
-  void expect_unlock_object_map(MockImageCtx &mock_image_ctx,
-                                MockObjectMap &mock_object_map) {
-    EXPECT_CALL(mock_object_map, unlock(_))
+  void expect_close_object_map(MockImageCtx &mock_image_ctx,
+                               MockObjectMap &mock_object_map) {
+    EXPECT_CALL(mock_object_map, close(_))
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 };
@@ -81,7 +81,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
 
   MockObjectMap *mock_object_map = new MockObjectMap();
   mock_image_ctx.object_map = mock_object_map;
-  expect_unlock_object_map(mock_image_ctx, *mock_object_map);
+  expect_close_object_map(mock_image_ctx, *mock_object_map);
 
   expect_unlock(mock_image_ctx, 0);
 
@@ -110,7 +110,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessJournalDisabled) {
 
   MockObjectMap *mock_object_map = new MockObjectMap();
   mock_image_ctx.object_map = mock_object_map;
-  expect_unlock_object_map(mock_image_ctx, *mock_object_map);
+  expect_close_object_map(mock_image_ctx, *mock_object_map);
 
   expect_unlock(mock_image_ctx, 0);
 

@@ -9,9 +9,38 @@
 #include "common/bit_vector.hpp"
 #include "librbd/ObjectMap.h"
 #include "librbd/object_map/RefreshRequest.h"
+#include "librbd/object_map/LockRequest.h"
+
+namespace librbd {
+namespace object_map {
+
+template <>
+class LockRequest<MockImageCtx> {
+public:
+  static LockRequest *s_instance;
+  static LockRequest *create(MockImageCtx &image_ctx, Context *on_finish) {
+    assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  Context *on_finish = nullptr;
+
+  LockRequest() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+LockRequest<MockImageCtx> *LockRequest<MockImageCtx>::s_instance = nullptr;
+
+} // namespace object_map
+} // namespace librbd
 
 // template definitions
 #include "librbd/object_map/RefreshRequest.cc"
+#include "librbd/object_map/LockRequest.cc"
 
 namespace librbd {
 namespace object_map {
@@ -28,10 +57,19 @@ public:
   static const uint64_t TEST_SNAP_ID = 123;
 
   typedef RefreshRequest<MockImageCtx> MockRefreshRequest;
+  typedef LockRequest<MockImageCtx> MockLockRequest;
+
+  void expect_object_map_lock(MockImageCtx &mock_image_ctx,
+                              MockLockRequest &mock_lock_request) {
+    EXPECT_CALL(mock_lock_request, send())
+                  .WillOnce(FinishRequest(&mock_lock_request, 0,
+                                          &mock_image_ctx));
+  }
 
   void expect_object_map_load(MockImageCtx &mock_image_ctx,
-                              ceph::BitVector<2> *object_map, int r) {
-    std::string oid(ObjectMap::object_map_name(mock_image_ctx.id, TEST_SNAP_ID));
+                              ceph::BitVector<2> *object_map, uint64_t snap_id,
+                              int r) {
+    std::string oid(ObjectMap::object_map_name(mock_image_ctx.id, snap_id));
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(oid, _, "rbd", "object_map_load", _, _, _));
     if (r < 0) {
@@ -48,8 +86,9 @@ public:
     }
   }
 
-  void expect_get_image_size(MockImageCtx &mock_image_ctx, uint64_t size) {
-    EXPECT_CALL(mock_image_ctx, get_image_size(TEST_SNAP_ID))
+  void expect_get_image_size(MockImageCtx &mock_image_ctx, uint64_t snap_id,
+                             uint64_t size) {
+    EXPECT_CALL(mock_image_ctx, get_image_size(snap_id))
                   .WillOnce(Return(size));
   }
 
@@ -85,7 +124,35 @@ public:
   }
 };
 
-TEST_F(TestMockObjectMapRefreshRequest, Success) {
+TEST_F(TestMockObjectMapRefreshRequest, SuccessHead) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+
+  ceph::BitVector<2> on_disk_object_map;
+  init_object_map(mock_image_ctx, &on_disk_object_map);
+
+  C_SaferCond ctx;
+  ceph::BitVector<2> object_map;
+  MockLockRequest mock_lock_request;
+  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &object_map,
+                                                   CEPH_NOSNAP, &ctx);
+
+  InSequence seq;
+  expect_get_image_size(mock_image_ctx, CEPH_NOSNAP,
+                        mock_image_ctx.image_ctx->size);
+  expect_object_map_lock(mock_image_ctx, mock_lock_request);
+  expect_object_map_load(mock_image_ctx, &on_disk_object_map, CEPH_NOSNAP, 0);
+  expect_get_image_size(mock_image_ctx, CEPH_NOSNAP,
+                        mock_image_ctx.image_ctx->size);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  ASSERT_EQ(on_disk_object_map, object_map);
+}
+
+TEST_F(TestMockObjectMapRefreshRequest, SuccessSnapshot) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -100,9 +167,11 @@ TEST_F(TestMockObjectMapRefreshRequest, Success) {
                                                    TEST_SNAP_ID, &ctx);
 
   InSequence seq;
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
-  expect_object_map_load(mock_image_ctx, &on_disk_object_map, 0);
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
+  expect_object_map_load(mock_image_ctx, &on_disk_object_map, TEST_SNAP_ID, 0);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -124,12 +193,14 @@ TEST_F(TestMockObjectMapRefreshRequest, LoadError) {
                                                    TEST_SNAP_ID, &ctx);
 
   InSequence seq;
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
-  expect_object_map_load(mock_image_ctx, nullptr, -ENOENT);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
+  expect_object_map_load(mock_image_ctx, nullptr, TEST_SNAP_ID, -ENOENT);
 
   MockInvalidateRequest invalidate_request;
   expect_invalidate_request(mock_image_ctx, invalidate_request);
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
@@ -150,14 +221,16 @@ TEST_F(TestMockObjectMapRefreshRequest, LoadCorrupt) {
                                                    TEST_SNAP_ID, &ctx);
 
   InSequence seq;
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
-  expect_object_map_load(mock_image_ctx, nullptr, -EINVAL);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
+  expect_object_map_load(mock_image_ctx, nullptr, TEST_SNAP_ID, -EINVAL);
 
   MockInvalidateRequest invalidate_request;
   expect_invalidate_request(mock_image_ctx, invalidate_request);
   expect_truncate_request(mock_image_ctx);
   expect_object_map_resize(mock_image_ctx, on_disk_object_map.size(), 0);
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
@@ -180,13 +253,15 @@ TEST_F(TestMockObjectMapRefreshRequest, TooSmall) {
                                                    TEST_SNAP_ID, &ctx);
 
   InSequence seq;
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
-  expect_object_map_load(mock_image_ctx, &small_object_map, 0);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
+  expect_object_map_load(mock_image_ctx, &small_object_map, TEST_SNAP_ID, 0);
 
   MockInvalidateRequest invalidate_request;
   expect_invalidate_request(mock_image_ctx, invalidate_request);
   expect_object_map_resize(mock_image_ctx, on_disk_object_map.size(), 0);
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
@@ -210,9 +285,11 @@ TEST_F(TestMockObjectMapRefreshRequest, TooLarge) {
                                                    TEST_SNAP_ID, &ctx);
 
   InSequence seq;
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
-  expect_object_map_load(mock_image_ctx, &large_object_map, 0);
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
+  expect_object_map_load(mock_image_ctx, &large_object_map, TEST_SNAP_ID, 0);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -234,13 +311,15 @@ TEST_F(TestMockObjectMapRefreshRequest, ResizeError) {
                                                    TEST_SNAP_ID, &ctx);
 
   InSequence seq;
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
-  expect_object_map_load(mock_image_ctx, &small_object_map, 0);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
+  expect_object_map_load(mock_image_ctx, &small_object_map, TEST_SNAP_ID, 0);
 
   MockInvalidateRequest invalidate_request;
   expect_invalidate_request(mock_image_ctx, invalidate_request);
   expect_object_map_resize(mock_image_ctx, on_disk_object_map.size(), -ESTALE);
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
