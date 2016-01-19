@@ -198,7 +198,8 @@ namespace crimson {
     }
 
     std::ostream& displaySorted(std::ostream& out,
-				std::function<bool(const T&)> filter) const {
+				std::function<bool(const T&)> filter,
+				bool insert_line_breaks = true) const {
       Heap<T,C> temp = *this;
 
       bool first = true;
@@ -210,6 +211,9 @@ namespace crimson {
 	  if (!first) {
 	    out << ", ";
 	  }
+	  if (insert_line_breaks) {
+	    out << std::endl << "    ";
+	  }
 	  out << temp.top();
 	  first = false;
 	}
@@ -217,6 +221,9 @@ namespace crimson {
       }
 
       out << " ]";
+      if (insert_line_breaks) {
+	out << std::endl;
+      }
       return out;
     }
 
