@@ -1348,8 +1348,11 @@ static http_op op_from_method(const char *method)
   return OP_UNKNOWN;
 }
 
-int RGWHandler_ObjStore::init_permissions()
+int RGWHandler_ObjStore::init_permissions(RGWOp *op)
 {
+  if (op->get_type() == RGW_OP_CREATE_BUCKET)
+    return 0;
+
   return do_init_permissions();
 }
 

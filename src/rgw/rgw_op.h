@@ -1370,7 +1370,7 @@ public:
 
   virtual RGWOp *get_op(RGWRados *store);
   virtual void put_op(RGWOp *op);
-  virtual int init_permissions() {
+  virtual int init_permissions(RGWOp *op) {
     return 0;
   }
   virtual int retarget(RGWOp *op, RGWOp **new_op) {
