@@ -356,7 +356,7 @@ protected:
 public:
   RGWHandler_ObjStore() {}
   virtual ~RGWHandler_ObjStore() {}
-  int init_permissions();
+  int init_permissions(RGWOp *op);
   int read_permissions(RGWOp *op);
   virtual int retarget(RGWOp *op, RGWOp **new_op) {
     *new_op = op;

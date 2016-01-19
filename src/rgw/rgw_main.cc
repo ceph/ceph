@@ -598,7 +598,7 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
   }
 
   req->log(s, "init permissions");
-  ret = handler->init_permissions();
+  ret = handler->init_permissions(op);
   if (ret < 0) {
     abort_early(s, op, ret, handler);
     goto done;
