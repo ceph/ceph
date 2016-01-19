@@ -17,18 +17,8 @@
 
 # run from the ceph-disk directory or from its parent
 test -d ceph-disk && cd ceph-disk
-trap "rm -fr make-check" EXIT
-virtualenv make-check
-. make-check/bin/activate
-# older versions of pip will not install wrap_console scripts
-# when using wheel packages
-pip --log make-check/log.txt install --upgrade 'pip >= 6.1'
-if test -d wheelhouse ; then
-    export NO_INDEX=--no-index
-fi
-pip --log make-check/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse --upgrade distribute
-pip --log make-check/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse 'tox >=1.9' 
-tox > make-check/tox.out 2>&1 
+source virtualenv/bin/activate
+tox > virtualenv/tox.out 2>&1
 status=$?
-grep -v InterpreterNotFound < make-check/tox.out
+grep -v InterpreterNotFound < virtualenv/tox.out
 exit $status
