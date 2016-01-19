@@ -21,6 +21,8 @@ public:
 
   virtual int aio_remove(const std::string& oid, AioCompletionImpl *c);
 
+  virtual int append(const std::string& oid, const bufferlist &bl,
+                     const SnapContext &snapc);
   virtual int assert_exists(const std::string &oid);
 
   virtual int create(const std::string& oid, bool exclusive);

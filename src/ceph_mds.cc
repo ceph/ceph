@@ -105,6 +105,10 @@ int main(int argc, const char **argv)
     if (ceph_argparse_double_dash(args, i)) {
       break;
     }
+    else if (ceph_argparse_flag(args, i, "--help", "-h", (char*)NULL)) {
+      usage();
+      break;
+    }
     else if (ceph_argparse_witharg(args, i, &val, "--journal-check", (char*)NULL)) {
       int r = parse_rank("journal-check", val);
       if (shadow != MDSMap::STATE_NULL) {
@@ -120,7 +124,7 @@ int main(int argc, const char **argv)
     }
     else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)NULL)) {
       int r = parse_rank("hot-standby", val);
-      if (shadow) {
+      if (shadow != MDSMap::STATE_NULL) {
         dout(0) << "Error: can only select one standby state" << dendl;
         return -1;
       }
@@ -187,7 +191,7 @@ int main(int argc, const char **argv)
     exit(1);
 
   if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
-    global_init_daemonize(g_ceph_context, 0);
+    global_init_daemonize(g_ceph_context);
   common_init_finish(g_ceph_context);
 
   // get monmap
@@ -209,8 +213,10 @@ int main(int argc, const char **argv)
     r = mds->init(shadow);
   else
     r = mds->init();
-  if (r < 0)
+  if (r < 0) {
+    msgr->wait();
     goto shutdown;
+  }
 
   // set up signal handlers, now that we've daemonized/forked.
   init_async_signal_handler();

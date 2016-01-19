@@ -20,10 +20,11 @@ namespace librbd {
                   vector<pair<uint64_t,uint64_t> >& image_extents);
     ~CopyupRequest();
 
-    void append_request(AioRequest *req);
+    void append_request(AioObjectRequest *req);
 
     void send();
-    void queue_send();
+
+    void complete(int r);
 
   private:
     /**
@@ -65,7 +66,7 @@ namespace librbd {
     vector<pair<uint64_t,uint64_t> > m_image_extents;
     State m_state;
     ceph::bufferlist m_copyup_data;
-    vector<AioRequest *> m_pending_requests;
+    vector<AioObjectRequest *> m_pending_requests;
     atomic_t m_pending_copyups;
 
     AsyncOperation m_async_op;
@@ -74,15 +75,12 @@ namespace librbd {
 
     void complete_requests(int r);
 
-    void complete(int r);
     bool should_complete(int r);
 
     void remove_from_list();
 
     bool send_object_map();
     bool send_copyup();
-
-    Context *create_callback_context();
   };
 }
 

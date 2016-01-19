@@ -64,7 +64,7 @@ public:
     STATE_KILLING = 5
   };
 
-  const char *get_state_name(int s) {
+  const char *get_state_name(int s) const {
     switch (s) {
     case STATE_CLOSED: return "closed";
     case STATE_OPENING: return "opening";
@@ -89,6 +89,8 @@ private:
   // Versions in this this session was projected: used to verify
   // that appropriate mark_dirty calls follow.
   std::deque<version_t> projected;
+
+
 
 public:
 
@@ -171,7 +173,7 @@ public:
   }
 
   int get_state() { return state; }
-  const char *get_state_name() { return get_state_name(state); }
+  const char *get_state_name() const { return get_state_name(state); }
   uint64_t get_state_seq() { return state_seq; }
   bool is_closed() const { return state == STATE_CLOSED; }
   bool is_opening() const { return state == STATE_OPENING; }
@@ -331,6 +333,33 @@ public:
     cap_push_seq = 0;
     last_cap_renew = utime_t();
 
+  }
+};
+
+class SessionFilter
+{
+protected:
+  // First is whether to filter, second is filter value
+  std::pair<bool, bool> reconnecting;
+
+public:
+  std::map<std::string, std::string> metadata;
+  std::string auth_name;
+  std::string state;
+  int64_t id;
+
+  SessionFilter()
+    : reconnecting(false, false), id(0)
+  {}
+
+  bool match(
+      const Session &session,
+      std::function<bool(client_t)> is_reconnecting) const;
+  int parse(const std::vector<std::string> &args, std::stringstream *ss);
+  void set_reconnecting(bool v)
+  {
+    reconnecting.first = true;
+    reconnecting.second = v;
   }
 };
 

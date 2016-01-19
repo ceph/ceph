@@ -788,11 +788,13 @@ TEST(CrushWrapper, dump_rules) {
   // no ruleset by default
   {
     Formatter *f = Formatter::create("json-pretty");
+    f->open_array_section("rules");
     c->dump_rules(f);
+    f->close_section();
     stringstream ss;
     f->flush(ss);
     delete f;
-    EXPECT_EQ("\n", ss.str());
+    EXPECT_EQ("[]\n", ss.str());
   }
 
   string name("NAME");

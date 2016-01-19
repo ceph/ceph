@@ -40,7 +40,7 @@ struct Subscription {
 struct MonSession : public RefCountedObject {
   ConnectionRef con;
   entity_inst_t inst;
-  utime_t until;
+  utime_t session_timeout;
   utime_t time_established;
   bool closed;
   xlist<MonSession*>::item item;

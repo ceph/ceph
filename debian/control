@@ -10,9 +10,9 @@ Uploaders: Ken Dreyer <kdreyer@redhat.com>,
 Build-Depends: autoconf,
                automake,
                autotools-dev,
-	       libbz2-dev,
 	       cmake,
 	       cryptsetup-bin | cryptsetup,
+               cython,
                debhelper (>= 6.0.7~),
                default-jdk,
                git,
@@ -50,6 +50,7 @@ Build-Depends: autoconf,
                python (>= 2.6.6-3~),
                python-argparse,
                python-nose,
+	       python-setuptools,
                python-sphinx,
                python-virtualenv,
                sdparm | hdparm,
@@ -189,6 +190,33 @@ Description: debugging symbols for rbd-fuse
  .
  This package contains the debugging symbols for rbd-fuse.
 
+Package: rbd-nbd
+Architecture: linux-any
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: NBD-based rbd client for the Ceph distributed file system
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a
+ NBD-based client that allows one to map Ceph rbd images as local
+ block device.
+ .
+ NBD base client that allows one to map Ceph rbd images as local
+ block device.
+
+Package: rbd-nbd-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: rbd-nbd (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for rbd-nbd
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a
+ NBD-based client that allows one to map Ceph rbd images as local
+ block device.
+ .
+ This package contains the debugging symbols for rbd-nbd.
+
 Package: ceph-common
 Architecture: linux-any
 Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
@@ -217,7 +245,9 @@ Package: ceph-common-dbg
 Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}), ${misc:Depends}
 Conflicts: ceph-client-tools-dbg
-Replaces: ceph-client-tools-dbg
+Replaces: ceph-client-tools-dbg,
+	  ceph-test-dbg (<< 9.0.3-1646)
+Breaks: ceph-test-dbg (<< 9.0.3-1646)
 Section: debug
 Priority: extra
 Description: debugging symbols for ceph-common
@@ -499,7 +529,7 @@ Description: Python libraries for the Ceph librados library
 Package: python-rbd
 Architecture: linux-any
 Section: python
-Depends: librbd1, ${misc:Depends}, ${python:Depends}
+Depends: librbd1 (>= ${binary:Version}), ${misc:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
 X-Python-Version: >= 2.6

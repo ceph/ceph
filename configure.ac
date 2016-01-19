@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [9.0.3], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [10.0.1], [ceph-devel@vger.kernel.org])
 
 AX_CXX_COMPILE_STDCXX_11(, mandatory)
 
@@ -67,10 +67,18 @@ linux*)
 freebsd*)
 	freebsd="yes"
 	;;
+solaris*)
+	solaris="yes"
+	;;
+aix*)
+	aix="yes"
+	;;
 esac
 AM_CONDITIONAL(LINUX, test x"$linux" = x"yes")
 AM_CONDITIONAL(FREEBSD, test x"$freebsd" = x"yes")
 AM_CONDITIONAL(DARWIN, test x"$darwin" = x"yes")
+AM_CONDITIONAL(SOLARIS, test x"$solaris" = x"yes")
+AM_CONDITIONAL(AIX, test x"$aix" = x"yes")
 
 # Checks for programs.
 AC_PROG_CXX
@@ -116,6 +124,12 @@ AC_ARG_WITH([rbd],
 	[with_rbd=yes])
 AM_CONDITIONAL(WITH_RBD, test "$with_rbd" = "yes")
 #AS_IF([test "$with_rbd" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_RBD])])
+
+AC_ARG_WITH([cython],
+	[AS_HELP_STRING([--with-cython], [build python bindings for librbd])],
+	[],
+	[with_cython=yes])
+AM_CONDITIONAL(WITH_CYTHON, test "$with_cython" = "yes")
 
 # cephfs?
 # cephfs requires rados
@@ -193,6 +207,14 @@ AC_ARG_ENABLE([server],
 AM_CONDITIONAL(ENABLE_SERVER, test "$enable_server" = "yes")
 #AS_IF([test "$enable_server" = "yes"], [AC_DEFINE([WITH_MON, WITH_OSD, WITH_MDS, ENABLE_SERVER])])
 
+# cython is required to build librbd python bindings
+if test x"$with_cython" = xyes; then
+    AC_CHECK_PROG(CYTHON_CHECK, cython, yes)
+    if test x"$CYTHON_CHECK" != xyes; then
+        AC_MSG_FAILURE([cython not found])
+    fi
+fi
+
 # cond-check if snappy-devel is installed, needed by leveldb that is need by server parts of the project
 AS_IF([test "$enable_server" = "yes" -a \( "$with_osd" = "yes" -o "$with_mon" = "yes" \)],
 	[AC_CHECK_LIB([snappy], [snappy_compress], [true], [AC_MSG_FAILURE([libsnappy not found])])])
@@ -262,6 +284,8 @@ AC_CHECK_CC_FLAG([-Wtype-limits], [WARN_TYPE_LIMITS])
 AC_CHECK_CC_FLAG([-Wignored-qualifiers], [WARN_IGNORED_QUALIFIERS])
 AC_CHECK_CC_FLAG([-Werror=format-security], [WARN_ERROR_FORMAT_SECURITY])
 
+AC_CHECK_CC_FLAG([-rdynamic], [RDYNAMIC_FLAG])
+
 # Check for compiler VTA support
 AX_CHECK_COMPILE_FLAG([-fvar-tracking-assignments], [HAS_VTA_SUPPORT=1], [HAS_VTA_SUPPORT=0])
 AM_CONDITIONAL(COMPILER_HAS_VTA, [test "$HAS_VTA_SUPPORT" = 1])
@@ -276,19 +300,19 @@ ACX_PTHREAD
 
 #Linux only dependencies
 if test x"$linux" = x"yes"; then
-  # libblkid
-  AC_CHECK_HEADER([blkid/blkid.h], [],
-    AC_MSG_ERROR([blkid/blkid.h not found (libblkid-dev, libblkid-devel)]))
-  AC_CHECK_LIB([blkid], [blkid_get_cache], [true],
-    AC_MSG_FAILURE([libblkid not found]))
-  AC_CHECK_LIB([blkid], [blkid_find_dev_with_tag], [true],
-    AC_MSG_FAILURE([libblkid not found]))
-  AC_CHECK_LIB([blkid], [blkid_dev_devname], [true],
-    AC_MSG_FAILURE([libblkid not found]))
 
   # rbd {map,unmap,showmapped} dependencies, Linux only
   if test x"$with_rbd" = x"yes"; then
+
     # libblkid
+    AC_CHECK_HEADER([blkid/blkid.h], [],
+      AC_MSG_ERROR([blkid/blkid.h not found (libblkid-dev, libblkid-devel)]))
+    AC_CHECK_LIB([blkid], [blkid_get_cache], [true],
+      AC_MSG_FAILURE([libblkid not found]))
+    AC_CHECK_LIB([blkid], [blkid_find_dev_with_tag], [true],
+      AC_MSG_FAILURE([libblkid not found]))
+    AC_CHECK_LIB([blkid], [blkid_dev_devname], [true],
+      AC_MSG_FAILURE([libblkid not found]))
     AC_CHECK_LIB([blkid], [blkid_devno_to_wholedisk], [true],
       AC_MSG_FAILURE([libblkid not found]))
 
@@ -338,6 +362,7 @@ if test x"$resolv_libs" != "xok"; then
   fi
 fi
 AC_SUBST([RESOLV_LIBS])
+AC_DEFINE(HAVE_RES_NQUERY, 1, [Define if you have res_nquery])
 
 dnl check for libkeyutils on linux
 KEYUTILS_LIB=""
@@ -790,11 +815,16 @@ AC_ARG_WITH([librocksdb-static],
 AS_IF([test "x$with_librocksdb_static" = "xcheck" -a "x$HAVE_CXX11" = "x1" ],
             [with_librocksdb_static="yes"])
 AS_IF([test "x$with_librocksdb_static" = "xyes"],
-            [AC_CONFIG_SUBDIRS([src/rocksdb])])
-AS_IF([test "x$with_librocksdb_static" = "xyes"],
             [AC_DEFINE([HAVE_LIBROCKSDB], [1], [Defined if you have librocksdb enabled])])
 AM_CONDITIONAL(WITH_SLIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" ])
 AM_CONDITIONAL(WITH_LIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" -o "x$with_librocksdb" = "xyes" ])
+
+# rocksdb detects bzlib and lz4 in its Makefile, which forces us to do the same.
+AS_IF([test "x$with_librocksdb_static" = "xyes"], [
+  AC_CHECK_HEADER([bzlib.h], [have_bzlib=yes])
+  AC_CHECK_HEADER([lz4.h], [have_lz4=yes])])
+AM_CONDITIONAL(HAVE_BZLIB, [test "x$have_bzlib" = "xyes"])
+AM_CONDITIONAL(HAVE_LZ4, [test "x$have_lz4" = "xyes"])
 
 # error out if --with-jemalloc and --with-librocksdb_static as rocksdb uses tcmalloc
 if test "x$with_jemalloc" = "xyes"; then
@@ -879,6 +909,8 @@ AC_CHECK_HEADER([boost/random/discrete_distribution.hpp],
 
 AC_CHECK_HEADER([boost/statechart/state.hpp], [],
     AC_MSG_FAILURE(["Can't find boost statechart headers; need 1.34 or later"]))
+AC_CHECK_HEADER([boost/regex.hpp], [],
+    AC_MSG_FAILURE(["Can't find boost regex headers"]))
 AC_CHECK_HEADER([boost/program_options/option.hpp], [],
     AC_MSG_FAILURE(["Can't find boost program_options headers"]))
 
@@ -909,6 +941,17 @@ AC_CHECK_LIB(boost_random-mt, main, [],
 BOOST_RANDOM_LIBS="${LIBS}"
 LIBS="${saved_LIBS}"
 AC_SUBST(BOOST_RANDOM_LIBS)
+
+# boost-regex
+BOOST_REGEX_LIBS=""
+saved_LIBS="${LIBS}"
+LIBS=""
+AC_CHECK_LIB(boost_regex-mt, main, [],
+    [AC_CHECK_LIB(boost_regex, main, [],
+        AC_MSG_FAILURE(["Boost regex library not found."]))])
+BOOST_REGEX_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_REGEX_LIBS)
 
 #
 # Check for boost_program_options library (defines BOOST_PROGRAM_OPTIONS_LIBS).
@@ -945,8 +988,10 @@ AC_CHECK_HEADERS([ \
 	sys/time.h \
 	sys/vfs.h \
 	sys/xattr.h \
+	sys/cdefs.h \
 	syslog.h \
 	utime.h \
+	execinfo.h
 ])
 
 # name_to_handle_at
@@ -964,6 +1009,10 @@ AC_CHECK_FUNC([fallocate],
 	[AC_DEFINE([CEPH_HAVE_FALLOCATE], [], [fallocate(2) is supported])],
 	[])
 
+# mallinfo
+AC_CHECK_FUNC([mallinfo],
+  [AC_DEFINE(HAVE_MALLINFO, 1, [Define if you have mallinfo])])
+
 # getgrouplist
 AC_CHECK_FUNCS([getgrouplist])
 
@@ -980,9 +1029,16 @@ AC_CHECK_MEMBER([struct stat.st_mtimespec.tv_nsec],
     [Define if you have struct stat.st_mtimespec.tv_nsec])])
 
 # splice/tee
-AC_CHECK_FUNC([splice],
-	[AC_DEFINE([CEPH_HAVE_SPLICE], [], [splice(2) is supported])],
-	[])
+case "${target_os}" in
+aix*)
+	# AIX splice() is something else
+	;;
+*)
+	AC_CHECK_FUNC([splice],
+		[AC_DEFINE([CEPH_HAVE_SPLICE], [], [splice(2) is supported])],
+		[])
+	;;
+esac
 
 # F_SETPIPE_SZ in fcntl.h
 AC_MSG_CHECKING([for F_SETPIPE_SZ in fcntl.h])
@@ -1274,8 +1330,15 @@ AC_ARG_WITH(
     ]
 )
 
-
-
+# Force not to use eventfd
+AC_ARG_WITH([eventfd],
+            [AS_HELP_STRING([--without-eventfd], [disable eventfd [default=no]])],
+            ,
+            [with_eventfd=yes])
+AS_IF([test "x$with_eventfd" != xno],
+    [AC_CHECK_HEADERS(sys/eventfd.h,
+                     [AC_DEFINE(HAVE_EVENTFD, 1, [Have eventfd extension.])])])
+AM_CONDITIONAL(WITH_EVENTFD, [ test "$with_eventfd" = "yes" ])
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
@@ -1336,7 +1399,6 @@ AC_CONFIG_FILES([Makefile
 	src/ocf/ceph
 	src/ocf/rbd
 	src/java/Makefile
-	src/tracing/Makefile
 	systemd/Makefile
 	man/Makefile
 	doc/Makefile

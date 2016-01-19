@@ -29,7 +29,7 @@ libradostest_la_SOURCES = \
 	test/librados/TestCase.cc
 noinst_LTLIBRARIES += libradostest.la
 libradostest_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-RADOS_TEST_LDADD = libradostest.la
+RADOS_TEST_LDADD = libradostest.la $(LIBCOMMON) $(CRYPTO_LIBS)
 
 ceph_test_rados_SOURCES = \
 	test/osd/TestRados.cc \
@@ -184,6 +184,13 @@ ceph_test_cls_numops_LDADD = \
 ceph_test_cls_numops_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_numops
 
+ceph_test_cls_journal_SOURCES = test/cls_journal/test_cls_journal.cc
+ceph_test_cls_journal_LDADD = \
+        libcls_journal_client.la $(LIBRADOS) \
+        $(LIBCOMMON) $(CRYPTO_LIBS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD) -luuid
+ceph_test_cls_journal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_cls_journal
+
 ceph_test_rados_api_cmd_SOURCES = test/librados/cmd.cc
 ceph_test_rados_api_cmd_LDADD = \
 	$(LIBCOMMON) $(LIBRADOS) $(CRYPTO_LIBS) \
@@ -283,6 +290,8 @@ librados_test_stub_la_SOURCES = \
 	test/librados_test_stub/TestWatchNotify.cc
 noinst_HEADERS += \
 	test/librados_test_stub/LibradosTestStub.h \
+	test/librados_test_stub/MockTestMemIoCtxImpl.h \
+	test/librados_test_stub/MockTestMemRadosClient.h \
 	test/librados_test_stub/TestClassHandler.h \
 	test/librados_test_stub/TestRadosClient.h \
 	test/librados_test_stub/TestMemRadosClient.h \
@@ -291,6 +300,24 @@ noinst_HEADERS += \
 	test/librados_test_stub/TestIoCtxImpl.h
 noinst_LTLIBRARIES += librados_test_stub.la
 
+unittest_journal_SOURCES = \
+	test/journal/test_main.cc \
+        test/journal/test_Entry.cc \
+	test/journal/test_FutureImpl.cc \
+	test/journal/test_Journaler.cc \
+	test/journal/test_JournalMetadata.cc \
+	test/journal/test_JournalPlayer.cc \
+	test/journal/test_JournalRecorder.cc \
+	test/journal/test_JournalTrimmer.cc \
+	test/journal/test_ObjectPlayer.cc \
+	test/journal/test_ObjectRecorder.cc \
+	test/journal/RadosTestFixture.cc
+unittest_journal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_journal_LDADD = \
+	libjournal.la libcls_journal_client.la \
+	librados_test_stub.la librados_internal.la \
+	$(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD) $(LIBRADOS)
+check_TESTPROGRAMS += unittest_journal
 
 if WITH_RBD
 ceph_smalliobenchrbd_SOURCES = \
@@ -317,19 +344,38 @@ librbd_test_la_SOURCES = \
 	test/librbd/test_librbd.cc \
 	test/librbd/test_ImageWatcher.cc \
 	test/librbd/test_internal.cc \
+	test/librbd/test_JournalEntries.cc \
+	test/librbd/test_JournalReplay.cc \
 	test/librbd/test_ObjectMap.cc
 librbd_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 noinst_LTLIBRARIES += librbd_test.la
 
 unittest_librbd_SOURCES = \
         test/librbd/test_main.cc \
-	test/librbd/test_mock_fixture.cc
+	test/librbd/test_mock_fixture.cc \
+	test/librbd/test_mock_ExclusiveLock.cc \
+	test/librbd/exclusive_lock/test_mock_AcquireRequest.cc \
+	test/librbd/exclusive_lock/test_mock_ReleaseRequest.cc \
+	test/librbd/object_map/test_mock_InvalidateRequest.cc \
+	test/librbd/object_map/test_mock_LockRequest.cc \
+	test/librbd/object_map/test_mock_RefreshRequest.cc \
+	test/librbd/object_map/test_mock_ResizeRequest.cc \
+	test/librbd/object_map/test_mock_SnapshotCreateRequest.cc \
+	test/librbd/object_map/test_mock_SnapshotRemoveRequest.cc \
+	test/librbd/object_map/test_mock_SnapshotRollbackRequest.cc \
+	test/librbd/object_map/test_mock_UnlockRequest.cc \
+	test/librbd/object_map/test_mock_UpdateRequest.cc \
+	test/librbd/operation/test_mock_SnapshotCreateRequest.cc \
+	test/librbd/operation/test_mock_SnapshotProtectRequest.cc \
+	test/librbd/operation/test_mock_SnapshotRemoveRequest.cc \
+	test/librbd/operation/test_mock_SnapshotUnprotectRequest.cc
 unittest_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS) -DTEST_LIBRBD_INTERNALS
 unittest_librbd_LDADD = \
 	librbd_test.la librbd_api.la librbd_internal.la $(LIBRBD_TYPES) \
 	libcls_rbd_client.la libcls_lock_client.la \
+	libjournal.la libcls_journal_client.la \
 	librados_test_stub.la librados_internal.la \
-	$(LIBOSDC) $(UNITTEST_LDADD) \
+	$(LIBRADOS) $(LIBOSDC) $(UNITTEST_LDADD) \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 check_PROGRAMS += unittest_librbd
 check_SCRIPTS += test/run-rbd-unit-tests.sh
@@ -340,6 +386,7 @@ ceph_test_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS) -DTEST_LIBRBD_INTERNALS
 ceph_test_librbd_LDADD = \
 	librbd_test.la librbd_api.la librbd_internal.la $(LIBRBD_TYPES) \
 	libcls_rbd_client.la libcls_lock_client.la \
+	libjournal.la libcls_journal_client.la \
 	librados_api.la $(LIBRADOS_DEPS) $(UNITTEST_LDADD) \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_test_librbd
@@ -357,16 +404,15 @@ noinst_HEADERS += \
 	test/librbd/test_fixture.h \
 	test/librbd/test_mock_fixture.h \
 	test/librbd/test_support.h \
+	test/librbd/mock/MockAioImageRequestWQ.h \
 	test/librbd/mock/MockContextWQ.h \
+	test/librbd/mock/MockExclusiveLock.h \
 	test/librbd/mock/MockImageCtx.h \
 	test/librbd/mock/MockImageWatcher.h \
-	test/librbd/mock/MockObjectMap.h
-
-if WITH_LTTNG
-unittest_librbd_LDADD += $(LIBRBD_TP)
-ceph_test_librbd_LDADD += $(LIBRBD_TP)
-ceph_test_librbd_api_LDADD += $(LIBRBD_TP)
-endif
+	test/librbd/mock/MockJournal.h \
+	test/librbd/mock/MockObjectMap.h \
+	test/librbd/mock/MockReadahead.h \
+	test/librbd/object_map/mock/MockInvalidateRequest.h
 
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc
@@ -451,7 +497,9 @@ ceph_test_libcephfs_SOURCES = \
 	test/libcephfs/readdir_r_cb.cc \
 	test/libcephfs/caps.cc \
 	test/libcephfs/multiclient.cc \
-	test/libcephfs/access.cc
+	test/libcephfs/access.cc \
+	test/libcephfs/acl.cc
+
 if LINUX
 ceph_test_libcephfs_SOURCES += test/libcephfs/flock.cc
 endif # LINUX

@@ -54,6 +54,7 @@ release
 stamp-h1
 systemd/Makefile
 vgcore.*
+test-suite.log
 
 # specific local dir files
 /build-doc

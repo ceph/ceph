@@ -6,6 +6,7 @@ Makefile
 /.git_version
 /.libs
 /acconfig.h*
+/build
 /ceph
 /cephfs
 /crushtool
@@ -43,7 +44,6 @@ Makefile
 /ceph_rgw_multiparser
 /ceph_scratchtool
 /ceph_scratchtoolpp
-/ceph_streamtest
 /ceph_test_*
 /ceph_tpbench
 /ceph_xattr_bench
@@ -57,6 +57,7 @@ Makefile
 /ceph-monstore-tool
 /ceph-osdomap-tool
 /ceph-kvstore-tool
+/ceph-bluefs-tool
 /ceph_ver.h
 /dev
 /get_command_descriptions
@@ -74,6 +75,7 @@ Makefile
 /radosgw-admin
 /radosgw-object-expirer
 /rbd
+/rbd-nbd
 /rbd-fuse
 /rbd-replay
 /rbd-replay-prep

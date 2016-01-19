@@ -739,7 +739,8 @@ void PGLog::check() {
 void PGLog::write_log(
   ObjectStore::Transaction& t,
   map<string,bufferlist> *km,
-  const coll_t& coll, const ghobject_t &log_oid)
+  const coll_t& coll, const ghobject_t &log_oid,
+  bool require_rollback)
 {
   if (is_dirty()) {
     dout(5) << "write_log with: "
@@ -759,6 +760,7 @@ void PGLog::write_log(
       trimmed,
       dirty_divergent_priors,
       !touched_log,
+      require_rollback,
       (pg_log_debug ? &log_keys_debug : 0));
     undirty();
   } else {
@@ -771,13 +773,14 @@ void PGLog::write_log(
     map<string,bufferlist> *km,
     pg_log_t &log,
     const coll_t& coll, const ghobject_t &log_oid,
-    map<eversion_t, hobject_t> &divergent_priors)
+    map<eversion_t, hobject_t> &divergent_priors,
+    bool require_rollback)
 {
   _write_log(
     t, km, log, coll, log_oid,
     divergent_priors, eversion_t::max(), eversion_t(), eversion_t(),
     set<eversion_t>(),
-    true, true, 0);
+    true, true, require_rollback, 0);
 }
 
 void PGLog::_write_log(
@@ -792,6 +795,7 @@ void PGLog::_write_log(
   const set<eversion_t> &trimmed,
   bool dirty_divergent_priors,
   bool touch_log,
+  bool require_rollback,
   set<string> *log_keys_debug
   )
 {
@@ -856,8 +860,10 @@ void PGLog::_write_log(
     //dout(10) << "write_log: writing divergent_priors" << dendl;
     ::encode(divergent_priors, (*km)["divergent_priors"]);
   }
-  ::encode(log.can_rollback_to, (*km)["can_rollback_to"]);
-  ::encode(log.rollback_info_trimmed_to, (*km)["rollback_info_trimmed_to"]);
+  if (require_rollback) {
+    ::encode(log.can_rollback_to, (*km)["can_rollback_to"]);
+    ::encode(log.rollback_info_trimmed_to, (*km)["rollback_info_trimmed_to"]);
+  }
 
   if (!to_remove.empty())
     t.omap_rmkeys(coll, log_oid, to_remove);
@@ -887,7 +893,7 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
   log.rollback_info_trimmed_to = eversion_t();
   ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
   if (p) {
-    for (p->seek_to_first(); p->valid() ; p->next()) {
+    for (p->seek_to_first(); p->valid() ; p->next(false)) {
       // non-log pgmeta_oid keys are prefixed with _; skip those
       if (p->key()[0] == '_')
 	continue;
@@ -897,12 +903,8 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	::decode(divergent_priors, bp);
 	dout(20) << "read_log " << divergent_priors.size() << " divergent_priors" << dendl;
       } else if (p->key() == "can_rollback_to") {
-	bufferlist bl = p->value();
-	bufferlist::iterator bp = bl.begin();
 	::decode(log.can_rollback_to, bp);
       } else if (p->key() == "rollback_info_trimmed_to") {
-	bufferlist bl = p->value();
-	bufferlist::iterator bp = bl.begin();
 	::decode(log.rollback_info_trimmed_to, bp);
       } else {
 	pg_log_entry_t e;

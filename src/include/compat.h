@@ -34,7 +34,7 @@
 
 #ifndef TEMP_FAILURE_RETRY
 #define TEMP_FAILURE_RETRY(expression) ({     \
-  typeof(expression) __result;                \
+  __typeof(expression) __result;              \
   do {                                        \
     __result = (expression);                  \
   } while (__result == -1 && errno == EINTR); \
@@ -51,6 +51,17 @@
 
 #if defined(__FreeBSD__) || defined(__APPLE__)
 #define lseek64(fd, offset, whence) lseek(fd, offset, whence)
+#endif
+
+#if defined(__sun) || defined(_AIX)
+#define LOG_AUTHPRIV    (10<<3)
+#define LOG_FTP         (11<<3)
+#define __STRING(x)     "x"
+#define IFTODT(mode)   (((mode) & 0170000) >> 12)
+#endif
+
+#if defined(_AIX)
+#define MSG_DONTWAIT MSG_NONBLOCK
 #endif
 
 #endif /* !CEPH_COMPAT_H */

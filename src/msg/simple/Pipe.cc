@@ -135,7 +135,7 @@ void Pipe::start_reader()
     reader_needs_join = false;
   }
   reader_running = true;
-  reader_thread.create(msgr->cct->_conf->ms_rwthread_stack_bytes);
+  reader_thread.create("ms_pipe_read", msgr->cct->_conf->ms_rwthread_stack_bytes);
 }
 
 void Pipe::maybe_start_delay_thread()
@@ -144,7 +144,7 @@ void Pipe::maybe_start_delay_thread()
       msgr->cct->_conf->ms_inject_delay_type.find(ceph_entity_type_name(connection_state->peer_type)) != string::npos) {
     lsubdout(msgr->cct, ms, 1) << "setting up a delay queue on Pipe " << this << dendl;
     delay_thread = new DelayedDelivery(this);
-    delay_thread->create();
+    delay_thread->create("ms_pipe_delay");
   }
 }
 
@@ -153,7 +153,7 @@ void Pipe::start_writer()
   assert(pipe_lock.is_locked());
   assert(!writer_running);
   writer_running = true;
-  writer_thread.create(msgr->cct->_conf->ms_rwthread_stack_bytes);
+  writer_thread.create("ms_pipe_write", msgr->cct->_conf->ms_rwthread_stack_bytes);
 }
 
 void Pipe::join_reader()
@@ -827,7 +827,7 @@ void Pipe::set_socket_options()
   }
 
   // block ESIGPIPE
-#ifdef CEPH_USE_SO_NOSIGPIPE
+#if defined(SO_NOSIGPIPE)
   int val = 1;
   int r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
   if (r) {
@@ -847,6 +847,7 @@ void Pipe::set_socket_options()
                          << ": " << cpp_strerror(errno) << dendl;
     }
 #endif
+#if defined(SO_PRIORITY) 
     // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
     // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
     // We need to call setsockopt(SO_PRIORITY) after it.
@@ -857,6 +858,7 @@ void Pipe::set_socket_options()
       ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
                          << ": " << cpp_strerror(errno) << dendl;
     }
+#endif
   }
 }
 
@@ -935,7 +937,12 @@ int Pipe::connect()
 
   // identify peer
   {
+#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
     bufferptr p(sizeof(paddr) * 2);
+#else
+    int wirelen = sizeof(__u32) * 2 + sizeof(ceph_sockaddr_storage);
+    bufferptr p(wirelen * 2);
+#endif
     addrbl.push_back(p);
   }
   if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
@@ -1515,8 +1522,9 @@ void Pipe::reader()
     }
 
     if (tag == CEPH_MSGR_TAG_KEEPALIVE) {
-      ldout(msgr->cct,20) << "reader got KEEPALIVE" << dendl;
+      ldout(msgr->cct,2) << "reader got KEEPALIVE" << dendl;
       pipe_lock.Lock();
+      connection_state->set_last_keepalive(ceph_clock_now(NULL));
       continue;
     }
     if (tag == CEPH_MSGR_TAG_KEEPALIVE2) {
@@ -1531,14 +1539,15 @@ void Pipe::reader()
       } else {
 	send_keepalive_ack = true;
 	keepalive_ack_stamp = utime_t(t);
-	ldout(msgr->cct,20) << "reader got KEEPALIVE2 " << keepalive_ack_stamp
-			    << dendl;
+	ldout(msgr->cct,2) << "reader got KEEPALIVE2 " << keepalive_ack_stamp
+			   << dendl;
+	connection_state->set_last_keepalive(ceph_clock_now(NULL));
 	cond.Signal();
       }
       continue;
     }
     if (tag == CEPH_MSGR_TAG_KEEPALIVE2_ACK) {
-      ldout(msgr->cct,20) << "reader got KEEPALIVE_ACK" << dendl;
+      ldout(msgr->cct,2) << "reader got KEEPALIVE_ACK" << dendl;
       struct ceph_timespec t;
       int rc = tcp_read((char*)&t, sizeof(t));
       pipe_lock.Lock();
@@ -1546,7 +1555,7 @@ void Pipe::reader()
 	ldout(msgr->cct,2) << "reader couldn't read KEEPALIVE2 stamp " << cpp_strerror(errno) << dendl;
 	fault(true);
       } else {
-	connection_state->last_keepalive_ack = utime_t(t);
+	connection_state->set_last_keepalive_ack(utime_t(t));
       }
       continue;
     }
@@ -2075,6 +2084,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   } else {
     if (auth_handler->check_message_signature(message)) {
       ldout(msgr->cct, 0) << "Signature check failed" << dendl;
+      message->put();
       ret = -EINVAL;
       goto out_dethrottle;
     } 
@@ -2115,8 +2125,73 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   return ret;
 }
 
+/* 
+ SIGPIPE suppression - for platforms without SO_NOSIGPIPE or MSG_NOSIGNAL
+  http://krokisplace.blogspot.in/2010/02/suppressing-sigpipe-in-library.html 
+  http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html 
+*/
+void Pipe::suppress_sigpipe()
+{
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+  /*
+    We want to ignore possible SIGPIPE that we can generate on write.
+    SIGPIPE is delivered *synchronously* and *only* to the thread
+    doing the write.  So if it is reported as already pending (which
+    means the thread blocks it), then we do nothing: if we generate
+    SIGPIPE, it will be merged with the pending one (there's no
+    queuing), and that suits us well.  If it is not pending, we block
+    it in this thread (and we avoid changing signal action, because it
+    is per-process).
+  */
+  sigset_t pending;
+  sigemptyset(&pending);
+  sigpending(&pending);
+  sigpipe_pending = sigismember(&pending, SIGPIPE);
+  if (!sigpipe_pending) {
+    sigset_t blocked;
+    sigemptyset(&blocked);
+    pthread_sigmask(SIG_BLOCK, &sigpipe_mask, &blocked);
+
+    /* Maybe is was blocked already?  */
+    sigpipe_unblock = ! sigismember(&blocked, SIGPIPE);
+  }
+#endif  /* !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE) */
+}
+
+
+void Pipe::restore_sigpipe()
+{
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+  /*
+    If SIGPIPE was pending already we do nothing.  Otherwise, if it
+    become pending (i.e., we generated it), then we sigwait() it (thus
+    clearing pending status).  Then we unblock SIGPIPE, but only if it
+    were us who blocked it.
+  */
+  if (!sigpipe_pending) {
+    sigset_t pending;
+    sigemptyset(&pending);
+    sigpending(&pending);
+    if (sigismember(&pending, SIGPIPE)) {
+      /*
+        Protect ourselves from a situation when SIGPIPE was sent
+        by the user to the whole process, and was delivered to
+        other thread before we had a chance to wait for it.
+      */
+      static const struct timespec nowait = { 0, 0 };
+      TEMP_FAILURE_RETRY(sigtimedwait(&sigpipe_mask, NULL, &nowait));
+    }
+
+    if (sigpipe_unblock)
+      pthread_sigmask(SIG_UNBLOCK, &sigpipe_mask, NULL);
+  }
+#endif  /* !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE) */
+}
+
+
 int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
 {
+  suppress_sigpipe();
   while (len > 0) {
     if (0) { // sanity
       int l = 0;
@@ -2125,16 +2200,23 @@ int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
       assert(l == len);
     }
 
-    int r = ::sendmsg(sd, msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
+    int r;
+#if defined(MSG_NOSIGNAL)
+    r = ::sendmsg(sd, msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
+#else
+    r = ::sendmsg(sd, msg, (more ? MSG_MORE : 0));
+#endif
     if (r == 0) 
       ldout(msgr->cct,10) << "do_sendmsg hmm do_sendmsg got r==0!" << dendl;
     if (r < 0) { 
       ldout(msgr->cct,1) << "do_sendmsg error " << cpp_strerror(errno) << dendl;
+      restore_sigpipe();
       return -1;
     }
     if (state == STATE_CLOSED) {
       ldout(msgr->cct,10) << "do_sendmsg oh look, state == CLOSED, giving up" << dendl;
       errno = EINTR;
+      restore_sigpipe();
       return -1; // close enough
     }
 
@@ -2159,6 +2241,7 @@ int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
       }
     }
   }
+  restore_sigpipe();
   return 0;
 }
 
@@ -2522,8 +2605,15 @@ int Pipe::tcp_write(const char *buf, int len)
 
   //lgeneric_dout(cct, DBL) << "tcp_write writing " << len << dendl;
   assert(len > 0);
+  suppress_sigpipe();
+
   while (len > 0) {
-    int did = ::send( sd, buf, len, MSG_NOSIGNAL );
+    int did;
+#if defined(MSG_NOSIGNAL)
+    did = ::send( sd, buf, len, MSG_NOSIGNAL );
+#else
+    did = ::send( sd, buf, len, 0);
+#endif
     if (did < 0) {
       //lgeneric_dout(cct, 1) << "tcp_write error did = " << did << " " << cpp_strerror(errno) << dendl;
       //lgeneric_derr(cct, 1) << "tcp_write error did = " << did << " " << cpp_strerror(errno) << dendl;
@@ -2533,5 +2623,7 @@ int Pipe::tcp_write(const char *buf, int len)
     buf += did;
     //lgeneric_dout(cct, DBL) << "tcp_write did " << did << ", " << len << " left" << dendl;
   }
+  restore_sigpipe();
+
   return 0;
 }

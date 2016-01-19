@@ -92,7 +92,7 @@ void NetHandler::set_socket_options(int sd)
   }
 
   // block ESIGPIPE
-#ifdef CEPH_USE_SO_NOSIGPIPE
+#ifdef SO_NOSIGPIPE
   int val = 1;
   int r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
   if (r) {
@@ -130,6 +130,20 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
   }
 
   return s;
+}
+
+int NetHandler::reconnect(const entity_addr_t &addr, int sd)
+{
+  int ret = ::connect(sd, (sockaddr*)&addr.addr, addr.addr_size());
+
+  if (ret < 0 && errno != EISCONN) {
+    ldout(cct, 10) << __func__ << " reconnect: " << strerror(errno) << dendl;
+    if (errno == EINPROGRESS || errno == EALREADY)
+      return 1;
+    return -errno;
+  }
+
+  return 0;
 }
 
 int NetHandler::connect(const entity_addr_t &addr)

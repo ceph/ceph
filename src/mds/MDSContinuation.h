@@ -17,19 +17,15 @@
 #include "mds/Server.h"
  
 class MDSContinuation : public Continuation {
-  MDRequestRef mdr;
-  Server *server;
-public:
-  MDSContinuation(MDRequestRef& mdrequest, Server *s) :
-    Continuation(NULL), mdr(mdrequest), server(s) {}
 protected:
-  void _done() {
-    server->respond_to_request(mdr, get_rval());
-  }
+  Server *server;
   MDSInternalContextBase *get_internal_callback(int stage) {
     return new MDSInternalContextWrapper(server->mds, get_callback(stage));
   }
   MDSIOContextBase *get_io_callback(int stage) {
     return new MDSIOContextWrapper(server->mds, get_callback(stage));
   }
+public:
+  MDSContinuation(Server *s) :
+    Continuation(NULL), server(s) {}
 };

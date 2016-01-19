@@ -351,9 +351,9 @@ void PGBackend::be_scan_list(
 	       << ", skipping" << dendl;
     } else if (r == -EIO) {
       dout(25) << __func__ << "  " << poid << " got " << r
-	       << ", read_error" << dendl;
+	       << ", stat_error" << dendl;
       ScrubMap::object &o = map.objects[poid];
-      o.read_error = true;
+      o.stat_error = true;
     } else {
       derr << __func__ << " got: " << cpp_strerror(r) << dendl;
       assert(0);
@@ -370,9 +370,11 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
   ostream &errorstream)
 {
   enum scrub_error_type error = CLEAN;
+  if (candidate.stat_error) {
+    error = SHALLOW_ERROR;
+    errorstream << "candidate had a stat error";
+  }
   if (candidate.read_error) {
-    // This can occur on stat() of a shallow scrub, but in that case size will
-    // be invalid, and this will be over-ridden below.
     error = DEEP_ERROR;
     errorstream << "candidate had a read error";
   }
@@ -396,7 +398,7 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
         errorstream << ", ";
       error = DEEP_ERROR;
       bool known = okseed && auth_oi.is_omap_digest() &&
-	auth.digest == auth_oi.omap_digest;
+	auth.omap_digest == auth_oi.omap_digest;
       errorstream << "omap_digest 0x" << std::hex << candidate.omap_digest
 		  << " != "
 		  << (known ? "known" : "best guess")
@@ -404,14 +406,16 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
 		  << " from auth shard " << auth_shard;
     }
   }
-  // Shallow error takes precendence because this will be seen by
-  // both types of scrubs.
-  if (auth.size != candidate.size) {
+  if (!candidate.stat_error && auth.size != candidate.size) {
     if (error != CLEAN)
       errorstream << ", ";
-    error = SHALLOW_ERROR;
+    if (error != DEEP_ERROR)
+      error = SHALLOW_ERROR;
+    bool known = auth.size == be_get_ondisk_size(auth_oi.size);
     errorstream << "size " << candidate.size
-		<< " != known size " << auth.size;
+		<< " != "
+                << (known ? "known" : "best guess")
+                << " size " << auth.size;
   }
   for (map<string,bufferptr>::const_iterator i = auth.attrs.begin();
        i != auth.attrs.end();
@@ -419,12 +423,14 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
     if (!candidate.attrs.count(i->first)) {
       if (error != CLEAN)
         errorstream << ", ";
-      error = SHALLOW_ERROR;
+      if (error != DEEP_ERROR)
+	error = SHALLOW_ERROR;
       errorstream << "missing attr " << i->first;
     } else if (candidate.attrs.find(i->first)->second.cmp(i->second)) {
       if (error != CLEAN)
         errorstream << ", ";
-      error = SHALLOW_ERROR;
+      if (error != DEEP_ERROR)
+	error = SHALLOW_ERROR;
       errorstream << "attr value mismatch " << i->first;
     }
   }
@@ -434,7 +440,8 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
     if (!auth.attrs.count(i->first)) {
       if (error != CLEAN)
         errorstream << ", ";
-      error = SHALLOW_ERROR;
+      if (error != DEEP_ERROR)
+	error = SHALLOW_ERROR;
       errorstream << "extra attr " << i->first;
     }
   }
@@ -457,11 +464,12 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     if (i == j->second->objects.end()) {
       continue;
     }
-    if (i->second.read_error) {
-      // scrub encountered read error, probably corrupt
+    if (i->second.read_error || i->second.stat_error) {
+      // scrub encountered read error or stat_error, probably corrupt
       dout(10) << __func__ << ": rejecting osd " << j->first
 	       << " for obj " << obj
-	       << ", read_error"
+	       << "," << (i->second.read_error ? " read_error" : "")
+	       << (i->second.stat_error ? " stat_error" : "")
 	       << dendl;
       continue;
     }
@@ -647,9 +655,9 @@ void PGBackend::be_compare_scrubmaps(
 	  auth_oi.omap_digest != auth_object.omap_digest) {
 	++deep_errors;
 	errorstream << pgid << " recorded omap digest 0x"
-		    << std::hex << auth_oi.data_digest << " != on disk 0x"
-		    << auth_object.digest << std::dec << " on " << auth_oi.soid
-		    << "\n";
+		    << std::hex << auth_oi.omap_digest << " != on disk 0x"
+		    << auth_object.omap_digest << std::dec
+		    << " on " << auth_oi.soid << "\n";
 	if (repair)
 	  update = FORCE;
       }
