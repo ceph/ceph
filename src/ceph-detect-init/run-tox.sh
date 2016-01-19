@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2015 SUSE LINUX GmbH
-# Copyright (C) 2015 <contact@redhat.com>
+# Copyright (C) 2016 <contact@redhat.com>
 #
 # Author: Owen Synge <osynge@suse.com>
 # Author: Loic Dachary <loic@dachary.org>
@@ -19,18 +19,8 @@
 
 # run from the ceph-detect-init directory or from its parent
 test -d ceph-detect-init && cd ceph-detect-init
-trap "rm -fr make-check" EXIT
-virtualenv make-check
-. make-check/bin/activate
-# older versions of pip will not install wrap_console scripts
-# when using wheel packages
-pip --log make-check/log.txt install --upgrade 'pip >= 6.1'
-if test -d wheelhouse ; then
-    export NO_INDEX=--no-index
-fi
-pip --log make-check/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse --upgrade distribute
-pip --log make-check/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse 'tox >=1.9' 
-tox > make-check/tox.out 2>&1 
+source virtualenv/bin/activate
+tox > virtualenv/tox.out 2>&1
 status=$?
-grep -v InterpreterNotFound < make-check/tox.out
+grep -v InterpreterNotFound < virtualenv/tox.out
 exit $status

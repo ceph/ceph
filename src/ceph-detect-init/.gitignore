@@ -6,7 +6,7 @@
 *.egg-info
 *.egg
 dist
-build
+virtualenv
 wheelhouse*
 *.log
 *.trs
