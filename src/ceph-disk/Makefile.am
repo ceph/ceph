@@ -29,11 +29,13 @@ EXTRA_DIST += \
 	ceph-disk/tests/test_main.py \
 	ceph-disk/tox.ini
 
-ceph-disk-all:
-	cd $(srcdir)/ceph-disk ; python setup.py build
+ceph-disk-all: ceph-disk/virtualenv
+
+ceph-disk/virtualenv:
+	cd $(srcdir)/ceph-disk ; ../tools/setup-virtualenv.sh ; virtualenv/bin/python setup.py develop
 
 ceph-disk-clean:
-	cd $(srcdir)/ceph-disk ; python setup.py clean ; rm -fr wheelhouse .tox build .coverage *.egg-info
+	cd $(srcdir)/ceph-disk ; python setup.py clean ; rm -fr wheelhouse .tox virtualenv .coverage *.egg-info
 
 ceph-disk-install-data:
 	cd $(srcdir)/ceph-disk ; \

@@ -1312,7 +1312,7 @@ function main() {
     shopt -s -o xtrace
     PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
-    export PATH=:$PATH # make sure program from sources are prefered
+    export PATH=ceph-disk/virtualenv/bin:ceph-detect-init/virtualenv/bin:.:$PATH # make sure program from sources are prefered
 
     export CEPH_CONF=/dev/null
     unset CEPH_ARGS
@@ -1334,7 +1334,8 @@ function run_tests() {
     shopt -s -o xtrace
     PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
-    export PATH=":$PATH"
+    export PATH=ceph-disk/virtualenv/bin:ceph-detect-init/virtualenv/bin:.:$PATH # make sure program from sources are prefered
+
     export CEPH_MON="127.0.0.1:7109" # git grep '\<7109\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
