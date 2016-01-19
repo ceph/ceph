@@ -20,6 +20,7 @@
 #include <deque>
 #include <queue>
 #include <mutex>
+#include <thread>
 #include <iostream>
 
 #include "crimson/heap.h"
@@ -33,7 +34,7 @@ static void debugger() {
 }
 
 
-#define TIME_SHORTENER
+// #define TIME_SHORTENER
 
 
 #ifdef TIME_SHORTENER
@@ -48,6 +49,7 @@ namespace crimson {
     static bool info = true;
 
     typedef double Time;
+    static const double MaxTime = std::numeric_limits<Time>::max();
 
     inline Time getTime() {
       struct timeval now;
@@ -532,7 +534,28 @@ namespace crimson {
 	  }
 	}
 
-	// nothing scheduled
+	// nothing scheduled; make sure we re-run when next queued
+	// item is ready
+
+	Time nextCall = MaxTime;
+	if (!resQ.empty()) nextCall = resQ.top()->tag.reservation;
+	if (!limQ.empty()) nextCall = std::min(nextCall,
+					       limQ.top()->tag.limit);
+	if (!readyQ.empty()) nextCall = std::min(nextCall,
+						 readyQ.top()->tag.proportion);
+	if (!propQ.empty()) nextCall = std::min(nextCall,
+						propQ.top()->tag.proportion);
+	if (nextCall < MaxTime) {
+	  std::thread t(
+	    [&]() {
+	      std::this_thread::sleep_for(std::chrono::microseconds(
+					    long(1 +
+						 1000000 * (nextCall - now))));
+	      Guard g(data_mutex);
+	      scheduleRequest();
+	    });
+	  t.detach();
+	}
       } // scheduleRequest
     }; // class PriorityQueue
   } // namespace dmclock
