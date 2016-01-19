@@ -33,6 +33,7 @@ def task(ctx, config):
           seed: <random seed number, or 0 to use the time>
           ops: <number of operations to do>
           size: <maximum image size in bytes>
+          valgrind: [--tool=<valgrind tool>]
     """
     log.info('starting rbd_fsx...')
     with parallel() as p:
@@ -54,6 +55,9 @@ def _run_one_client(ctx, config, role):
         'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir)
     ])
+
+    overrides = ctx.config.get('overrides', {})
+    teuthology.deep_merge(config, overrides.get('rbd_fsx', {}))
 
     if config.get('valgrind'):
         args = teuthology.get_valgrind_args(

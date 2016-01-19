@@ -69,7 +69,7 @@ def task(ctx, config):
     manager.mark_down_osd(0)
     manager.kill_osd(3)
     manager.mark_down_osd(3)
-
+    
     for f in range(1, 10):
         rados(ctx, mon, ['-p', pool, 'put', 'new_%d' % f, dummyfile])
         rados(ctx, mon, ['-p', pool, 'put', 'existed_%d' % f, dummyfile])
@@ -99,7 +99,6 @@ def task(ctx, config):
 
     # mark stuff lost
     pgs = manager.get_pg_stats()
-    unfound_objs = {}
     for pg in pgs:
         if pg['stat_sum']['num_objects_unfound'] > 0:
             # verify that i can list them direct from the osd
@@ -107,8 +106,6 @@ def task(ctx, config):
                      pg['state']);
             m = manager.list_pg_missing(pg['pgid'])
             log.info('%s' % m)
-            for obj in m['objects']:
-                unfound_objs[obj['oid']['oid']] = True
             assert m['num_unfound'] == pg['stat_sum']['num_objects_unfound']
 
             log.info("reverting unfound in %s", pg['pgid'])
@@ -116,12 +113,6 @@ def task(ctx, config):
                                     'mark_unfound_lost', 'delete')
         else:
             log.info("no unfound in %s", pg['pgid'])
-
-    # Verify the unfound objects list
-    for f in range(1, 10):
-        assert unfound_objs['new_%d' % f] == True
-        assert unfound_objs['existed_%d' % f] == True
-        assert unfound_objs['existing_%d' % f] == True
 
     manager.raw_cluster_cmd('tell', 'osd.0', 'debug', 'kick_recovery_wq', '5')
     manager.raw_cluster_cmd('tell', 'osd.2', 'debug', 'kick_recovery_wq', '5')

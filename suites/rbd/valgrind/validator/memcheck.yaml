@@ -1,4 +1,6 @@
 overrides:
+  rbd_fsx:
+    valgrind: ["--tool=memcheck"]
   workunit:
     env:
       VALGRIND: "memcheck"
