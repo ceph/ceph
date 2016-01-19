@@ -7163,9 +7163,11 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
       }
     }
     for (map<ceph_tid_t, ProxyWriteOpRef>::iterator it = proxywrite_ops.begin();
-	 it != proxywrite_ops.end(); ++it) {
+	 it != proxywrite_ops.end();) {
       if (it->second->soid == cobc->obs.oi.soid) {
-	cancel_proxy_write(it->second);
+	cancel_proxy_write((it++)->second);
+      } else {
+	++it;
       }
     }
     kick_proxy_ops_blocked(cobc->obs.oi.soid);
