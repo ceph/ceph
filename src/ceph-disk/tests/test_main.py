@@ -1,3 +1,17 @@
+#!/bin/bash
+#
+# Copyright (C) 2015, 2016 Red Hat <contact@redhat.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Library Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Library Public License for more details.
+#
 from mock import patch, DEFAULT
 import os
 import io
@@ -100,7 +114,7 @@ class TestCephDisk(object):
         #
         dev = {
             'path': '/dev/Xda1',
-            'ptype': main.OSD_UUID,
+            'ptype': main.PTYPE['regular']['osd']['ready'],
             'state': 'prepared',
             'whoami': '1234',
         }
@@ -113,7 +127,7 @@ class TestCephDisk(object):
         #
         dev = {
             'path': '/dev/Xda2',
-            'ptype': main.JOURNAL_UUID,
+            'ptype': main.PTYPE['regular']['journal']['ready'],
             'journal_for': '/dev/Xda1',
         }
         out = main.list_format_dev_plain(dev)
@@ -124,8 +138,8 @@ class TestCephDisk(object):
         # dmcrypt data
         #
         ptype2type = {
-            main.DMCRYPT_OSD_UUID: 'plain',
-            main.DMCRYPT_LUKS_OSD_UUID: 'luks',
+            main.PTYPE['plain']['osd']['ready']: 'plain',
+            main.PTYPE['luks']['osd']['ready']: 'luks',
         }
         for (ptype, type) in ptype2type.iteritems():
             for holders in ((), ("dm_0",), ("dm_0", "dm_1")):
@@ -152,8 +166,8 @@ class TestCephDisk(object):
         # dmcrypt journal
         #
         ptype2type = {
-            main.DMCRYPT_JOURNAL_UUID: 'plain',
-            main.DMCRYPT_LUKS_JOURNAL_UUID: 'LUKS',
+            main.PTYPE['plain']['journal']['ready']: 'plain',
+            main.PTYPE['luks']['journal']['ready']: 'luks',
         }
         for (ptype, type) in ptype2type.iteritems():
             for holders in ((), ("dm_0",)):
@@ -263,11 +277,13 @@ class TestCephDisk(object):
         partition = "Xda1"
         fs_type = "ext4"
 
+        def get_partition_type(dev):
+            return main.PTYPE['regular']['osd']['ready']
         with patch.multiple(
                 main,
                 list_all_partitions=lambda: {disk: [partition]},
                 get_partition_uuid=lambda dev: partition_uuid,
-                get_partition_type=lambda dev: main.OSD_UUID,
+                get_partition_type=get_partition_type,
                 get_dev_fs=lambda dev: fs_type,
                 mount=fail_to_mount,
                 unmount=DEFAULT,
@@ -280,7 +296,7 @@ class TestCephDisk(object):
                            'is_partition': True,
                            'mount': None,
                            'path': '/dev/' + partition,
-                           'ptype': main.OSD_UUID,
+                           'ptype': main.PTYPE['regular']['osd']['ready'],
                            'state': 'unprepared',
                            'type': 'data',
                            'uuid': partition_uuid,
@@ -289,8 +305,8 @@ class TestCephDisk(object):
 
     def test_list_dmcrypt_data(self):
         partition_type2type = {
-            main.DMCRYPT_OSD_UUID: 'plain',
-            main.DMCRYPT_LUKS_OSD_UUID: 'LUKS',
+            main.PTYPE['plain']['osd']['ready']: 'plain',
+            main.PTYPE['luks']['osd']['ready']: 'LUKS',
         }
         for (partition_type, type) in partition_type2type.iteritems():
             #
@@ -360,11 +376,14 @@ class TestCephDisk(object):
         partition_uuid = "56244cf5-83ef-4984-888a-2d8b8e0e04b2"
         disk = "Xda"
         partition = "Xda1"
+
+        def get_partition_type(dev):
+            return main.PTYPE['mpath']['osd']['ready']
         with patch.multiple(
                 main,
                 list_all_partitions=lambda: {disk: [partition]},
                 get_partition_uuid=lambda dev: partition_uuid,
-                get_partition_type=lambda dev: main.MPATH_OSD_UUID,
+                get_partition_type=get_partition_type,
                 is_partition=lambda dev: True,
         ):
             expect = [{'path': '/dev/' + disk,
@@ -375,7 +394,7 @@ class TestCephDisk(object):
                            'mount': None,
                            'multipath': True,
                            'path': '/dev/' + partition,
-                           'ptype': main.MPATH_OSD_UUID,
+                           'ptype': main.PTYPE['mpath']['osd']['ready'],
                            'state': 'unprepared',
                            'type': 'data',
                            'uuid': partition_uuid,
@@ -385,11 +404,14 @@ class TestCephDisk(object):
         # multipath journal partition
         #
         journal_partition_uuid = "2cc40457-259e-4542-b029-785c7cc37871"
+
+        def get_partition_type(dev):
+            return main.PTYPE['mpath']['journal']['ready']
         with patch.multiple(
                 main,
                 list_all_partitions=lambda: {disk: [partition]},
                 get_partition_uuid=lambda dev: journal_partition_uuid,
-                get_partition_type=lambda dev: main.MPATH_JOURNAL_UUID,
+                get_partition_type=get_partition_type,
                 is_partition=lambda dev: True,
         ):
             expect = [{'path': '/dev/' + disk,
@@ -398,18 +420,21 @@ class TestCephDisk(object):
                            'is_partition': True,
                            'multipath': True,
                            'path': '/dev/' + partition,
-                           'ptype': main.MPATH_JOURNAL_UUID,
+                           'ptype': main.PTYPE['mpath']['journal']['ready'],
                            'type': 'journal',
                            'uuid': journal_partition_uuid,
                        }]}]
             assert expect == main.list_devices()
 
     def test_list_dmcrypt(self):
-        self.list(main.DMCRYPT_OSD_UUID, main.DMCRYPT_JOURNAL_UUID)
-        self.list(main.DMCRYPT_LUKS_OSD_UUID, main.DMCRYPT_LUKS_JOURNAL_UUID)
+        self.list(main.PTYPE['plain']['osd']['ready'],
+                  main.PTYPE['plain']['journal']['ready'])
+        self.list(main.PTYPE['luks']['osd']['ready'],
+                  main.PTYPE['luks']['journal']['ready'])
 
     def test_list_normal(self):
-        self.list(main.OSD_UUID, main.JOURNAL_UUID)
+        self.list(main.PTYPE['regular']['osd']['ready'],
+                  main.PTYPE['regular']['journal']['ready'])
 
     def list(self, data_ptype, journal_ptype):
         #
@@ -456,14 +481,14 @@ class TestCephDisk(object):
             else:
                 raise Exception('unknown ' + dev)
         cluster = 'ceph'
-        if data_ptype == main.OSD_UUID:
+        if data_ptype == main.PTYPE['regular']['osd']['ready']:
             data_dmcrypt = {}
-        elif data_ptype == main.DMCRYPT_OSD_UUID:
+        elif data_ptype == main.PTYPE['plain']['osd']['ready']:
             data_dmcrypt = {
                 'type': 'plain',
                 'holders': [data_holder],
             }
-        elif data_ptype == main.DMCRYPT_LUKS_OSD_UUID:
+        elif data_ptype == main.PTYPE['luks']['osd']['ready']:
             data_dmcrypt = {
                 'type': 'LUKS',
                 'holders': [data_holder],
@@ -471,14 +496,14 @@ class TestCephDisk(object):
         else:
             raise Exception('unknown ' + data_ptype)
 
-        if journal_ptype == main.JOURNAL_UUID:
+        if journal_ptype == main.PTYPE['regular']['journal']['ready']:
             journal_dmcrypt = {}
-        elif journal_ptype == main.DMCRYPT_JOURNAL_UUID:
+        elif journal_ptype == main.PTYPE['plain']['journal']['ready']:
             journal_dmcrypt = {
                 'type': 'plain',
                 'holders': [journal_holder],
             }
-        elif journal_ptype == main.DMCRYPT_LUKS_JOURNAL_UUID:
+        elif journal_ptype == main.PTYPE['luks']['journal']['ready']:
             journal_dmcrypt = {
                 'type': 'LUKS',
                 'holders': [journal_holder],
