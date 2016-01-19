@@ -149,8 +149,6 @@ int rgw_store_user_info(RGWRados *store,
 
   RGWUID ui;
   ui.user_id = info.user_id;
-  // P3
-  ldout(store->ctx(), 0) << "DEBUG: rgw_store_user_info: user_id " << ui.user_id << dendl;
 
   bufferlist link_bl;
   ::encode(ui, link_bl);
