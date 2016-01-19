@@ -7155,9 +7155,11 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
   // cancel and requeue proxy ops on this object
   if (!r) {
     for (map<ceph_tid_t, ProxyReadOpRef>::iterator it = proxyread_ops.begin();
-	it != proxyread_ops.end(); ++it) {
+	it != proxyread_ops.end();) {
       if (it->second->soid == cobc->obs.oi.soid) {
-	cancel_proxy_read(it->second);
+	cancel_proxy_read((it++)->second);
+      } else {
+	++it;
       }
     }
     for (map<ceph_tid_t, ProxyWriteOpRef>::iterator it = proxywrite_ops.begin();
