@@ -1182,6 +1182,25 @@ def get_free_partition_index(dev):
         return 1
 
 
+def check_journal_reqs(args):
+    _, _, allows_journal = command([
+        'ceph-osd', '--check-allows-journal',
+        '-i', '0',
+        '--cluster', args.cluster,
+    ])
+    _, _, wants_journal = command([
+        'ceph-osd', '--check-wants-journal',
+        '-i', '0',
+        '--cluster', args.cluster,
+    ])
+    _, _, needs_journal = command([
+        'ceph-osd', '--check-needs-journal',
+        '-i', '0',
+        '--cluster', args.cluster,
+    ])
+    return (not allows_journal, not wants_journal, not needs_journal)
+
+
 def update_partition(dev, description):
     """
     Must be called after modifying a partition table so the kernel
@@ -1689,23 +1708,6 @@ def prepare_dev(
                             os.path.basename(rawdev)])
 
 
-def check_journal_reqs(args):
-    _, _, allows_journal = command([
-        'ceph-osd', '--check-allows-journal',
-        '-i', '0',
-        '--cluster', args.cluster,
-    ])
-    _, _, wants_journal = command([
-        'ceph-osd', '--check-wants-journal',
-        '-i', '0',
-        '--cluster', args.cluster,
-    ])
-    _, _, needs_journal = command([
-        'ceph-osd', '--check-needs-journal',
-        '-i', '0',
-        '--cluster', args.cluster,
-    ])
-    return (not allows_journal, not wants_journal, not needs_journal)
 
 
 def main_prepare(args):
