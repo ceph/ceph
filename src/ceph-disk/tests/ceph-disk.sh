@@ -36,19 +36,9 @@ function teardown_btrfs() {
 PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
 export PATH=..:.:$PATH # make sure program from sources are prefered
+export PATH=../ceph-detect-init/virtualenv/bin:$PATH
+export PATH=virtualenv/bin:$PATH
 DIR=test-ceph-disk
-if virtualenv virtualenv-$DIR && test -d ceph-detect-init ; then
-    . virtualenv-$DIR/bin/activate
-    (
-	# older versions of pip will not install wrap_console scripts
-	# when using wheel packages
-	pip install --upgrade 'pip >= 6.1'
-	if test -d ceph-detect-init/wheelhouse ; then
-            wheelhouse="--no-index --use-wheel --find-links=ceph-detect-init/wheelhouse"
-	fi
-	pip --log virtualenv-$DIR/log.txt install $wheelhouse --editable ceph-detect-init
-    )
-fi
 : ${CEPH_DISK:=ceph-disk}
 OSD_DATA=$DIR/osd
 MON_ID=a
@@ -200,7 +190,7 @@ function test_path() {
 }
 
 function test_no_path() {
-    ( export PATH=..:${VIRTUAL_ENV}/bin:/usr/bin:/bin ; test_activate_dir ) || return 1
+    ( export PATH=../ceph-detect-init/virtualenv/bin:virtualenv/bin:..:/usr/bin:/bin ; test_activate_dir ) || return 1
 }
 
 function test_mark_init() {
