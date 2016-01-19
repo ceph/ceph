@@ -5286,8 +5286,11 @@ int BlueStore::_write(TransContext *txc,
 	   << " " << offset << "~" << length
 	   << dendl;
   RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, true);
-  _assign_nid(txc, o);
+  OnodeRef o = c->get_onode(oid, false);
+  if (!o) {
+    o = c->get_onode(oid, true);
+    _assign_nid(txc, o);
+  }
   int r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
   txc->write_onode(o);
 
@@ -5323,9 +5326,13 @@ int BlueStore::_zero(TransContext *txc,
 
   RWLock::WLocker l(c->lock);
   EnodeRef enode;
-  OnodeRef o = c->get_onode(oid, true);
-  _dump_onode(o);
-  _assign_nid(txc, o);
+  OnodeRef o = c->get_onode(oid, false);
+  if (o) {
+    _dump_onode(o);
+  } else {
+    o = c->get_onode(oid, true); 
+    _assign_nid(txc, o);
+  } 
 
   // overlay
   _do_overlay_trim(txc, o, offset, length);
