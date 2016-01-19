@@ -5970,17 +5970,21 @@ int BlueStore::_clone(TransContext *txc,
     r = -ENOENT;
     goto out;
   }
-  newo = c->get_onode(new_oid, true);
+
+  newo = c->get_onode(new_oid, false);
+  if (newo) {
+    r = _do_truncate(txc, c, newo, 0);
+    if (r < 0)
+      goto out;
+  } else {
+    newo = c->get_onode(new_oid, true);
+    _assign_nid(txc, newo);
+  }
   assert(newo);
   newo->exists = true;
-  _assign_nid(txc, newo);
 
   // data
   oldo->flush();
-
-  r = _do_truncate(txc, c, newo, 0);
-  if (r < 0)
-    goto out;
 
   if (g_conf->bluestore_clone_cow) {
     EnodeRef e = c->get_enode(newo->oid.hobj.get_hash());
