@@ -92,6 +92,9 @@ Pool specific commands
 :command:`rm` *name*
   Remove object name.
 
+:command:`listwatchers` *name*
+  List the watchers of object name.
+
 :command:`ls` *outfile*
   List objects in given pool and write to outfile.
 

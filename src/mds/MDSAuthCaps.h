@@ -28,7 +28,8 @@ enum {
   MAY_WRITE = 2,
   MAY_EXECUTE = 4,
   MAY_CHOWN = 16,
-  MAY_CHGRP = 32
+  MAY_CHGRP = 32,
+  MAY_SET_POOL = 64,
 };
 
 class CephContext;
@@ -37,12 +38,17 @@ class CephContext;
 struct MDSCapSpec {
   bool read, write, any;
 
-  MDSCapSpec() : read(false), write(false), any(false) {}
-  MDSCapSpec(bool r, bool w, bool a) : read(r), write(w), any(a) {}
+  // True if the capability permits modifying the pool on file layouts
+  bool layout_pool;
+
+  MDSCapSpec() : read(false), write(false), any(false), layout_pool(false) {}
+  MDSCapSpec(bool r, bool w, bool a, bool lop)
+    : read(r), write(w), any(a), layout_pool(lop) {}
 
   bool allow_all() const {
     return any;
   }
+
   bool allows(bool r, bool w) const {
     if (any)
       return true;
@@ -51,6 +57,10 @@ struct MDSCapSpec {
     if (w && !write)
       return false;
     return true;
+  }
+
+  bool allows_set_pool() const {
+    return layout_pool;
   }
 };
 
@@ -84,6 +94,14 @@ struct MDSCapMatch {
   bool match(const std::string &target_path,
 	     const int caller_uid,
 	     const int caller_gid) const;
+
+  /**
+   * Check whether this path *might* be accessible (actual permission
+   * depends on the stronger check in match()).
+   *
+   * @param target_path filesystem path without leading '/'
+   */
+  bool match_path(const std::string &target_path) const;
 };
 
 struct MDSCapGrant {
@@ -116,6 +134,7 @@ public:
 		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
 		  uid_t uid, gid_t gid, unsigned mask,
 		  uid_t new_uid, gid_t new_gid) const;
+  bool path_capable(const std::string &inode_path) const;
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 };

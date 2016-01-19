@@ -140,6 +140,8 @@ public:
   int get_val(const char *key, char **buf, int len) const;
   int _get_val(const char *key, char **buf, int len) const;
 
+  void get_all_keys(std::vector<std::string> *keys) const;
+
   // Return a list of all the sections that the current entity is a member of.
   void get_my_sections(std::vector <std::string> &sections) const;
 

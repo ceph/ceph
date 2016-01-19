@@ -90,7 +90,7 @@ public:
     ClassFilter *get_filter(const std::string &filter_name)
     {
       Mutex::Locker l(handler->mutex);
-      std::map<std::string, ClassFilter>::iterator i = filters_map.find(name);
+      std::map<std::string, ClassFilter>::iterator i = filters_map.find(filter_name);
       if (i == filters_map.end()) {
         return NULL;
       } else {

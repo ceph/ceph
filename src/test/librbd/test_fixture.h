@@ -30,6 +30,8 @@ public:
                  const std::string &cookie);
   int unlock_image();
 
+  int acquire_exclusive_lock(librbd::ImageCtx &ictx);
+
   static std::string _pool_name;
   static librados::Rados _rados;
   static uint64_t _image_number;

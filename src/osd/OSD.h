@@ -54,6 +54,7 @@ using namespace std;
 #include "common/sharedptr_registry.hpp"
 #include "common/PrioritizedQueue.h"
 #include "messages/MOSDOp.h"
+#include "include/Spinlock.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -66,21 +67,25 @@ enum {
   l_osd_op_outb,
   l_osd_op_lat,
   l_osd_op_process_lat,
+  l_osd_op_prepare_lat,
   l_osd_op_r,
   l_osd_op_r_outb,
   l_osd_op_r_lat,
   l_osd_op_r_process_lat,
+  l_osd_op_r_prepare_lat,
   l_osd_op_w,
   l_osd_op_w_inb,
   l_osd_op_w_rlat,
   l_osd_op_w_lat,
   l_osd_op_w_process_lat,
+  l_osd_op_w_prepare_lat,
   l_osd_op_rw,
   l_osd_op_rw_inb,
   l_osd_op_rw_outb,
   l_osd_op_rw_rlat,
   l_osd_op_rw_lat,
   l_osd_op_rw_process_lat,
+  l_osd_op_rw_prepare_lat,
 
   l_osd_sop,
   l_osd_sop_inb,
@@ -105,6 +110,10 @@ enum {
 
   l_osd_loadavg,
   l_osd_buf,
+  l_osd_history_alloc_bytes,
+  l_osd_history_alloc_num,
+  l_osd_cached_crc,
+  l_osd_cached_crc_adjusted,
 
   l_osd_pg,
   l_osd_pg_primary,
@@ -589,15 +598,19 @@ public:
     /// the hard upper bound of scrub time
     utime_t deadline;
     ScrubJob() {}
-    explicit ScrubJob(const spg_t& pg, const utime_t& timestamp, bool must = true);
+    explicit ScrubJob(const spg_t& pg, const utime_t& timestamp,
+		      double pool_scrub_min_interval = 0,
+		      double pool_scrub_max_interval = 0, bool must = true);
     /// order the jobs by sched_time
     bool operator<(const ScrubJob& rhs) const;
   };
   set<ScrubJob> sched_scrub_pg;
 
   /// @returns the scrub_reg_stamp used for unregister the scrub job
-  utime_t reg_pg_scrub(spg_t pgid, utime_t t, bool must) {
-    ScrubJob scrub(pgid, t, must);
+  utime_t reg_pg_scrub(spg_t pgid, utime_t t, double pool_scrub_min_interval,
+		       double pool_scrub_max_interval, bool must) {
+    ScrubJob scrub(pgid, t, pool_scrub_min_interval, pool_scrub_max_interval,
+		   must);
     Mutex::Locker l(sched_scrub_lock);
     sched_scrub_pg.insert(scrub);
     return scrub.sched_time;
@@ -785,14 +798,9 @@ public:
 
   // -- tids --
   // for ops i issue
-  ceph_tid_t last_tid;
-  Mutex tid_lock;
+  atomic_t last_tid;
   ceph_tid_t get_tid() {
-    ceph_tid_t t;
-    tid_lock.Lock();
-    t = ++last_tid;
-    tid_lock.Unlock();
-    return t;
+    return (ceph_tid_t)last_tid.inc();
   }
 
   // -- backfill_reservation --
@@ -801,13 +809,15 @@ public:
   AsyncReserver<spg_t> remote_reserver;
 
   // -- pg_temp --
+private:
   Mutex pg_temp_lock;
   map<pg_t, vector<int> > pg_temp_wanted;
+  map<pg_t, vector<int> > pg_temp_pending;
+  void _sent_pg_temp();
+public:
   void queue_want_pg_temp(pg_t pgid, vector<int>& want);
-  void remove_want_pg_temp(pg_t pgid) {
-    Mutex::Locker l(pg_temp_lock);
-    pg_temp_wanted.erase(pgid);
-  }
+  void remove_want_pg_temp(pg_t pgid);
+  void requeue_pg_temp();
   void send_pg_temp();
 
   void queue_for_peering(PG *pg);
@@ -881,6 +891,7 @@ public:
   void pg_stat_queue_dequeue(PG *pg);
 
   void init();
+  void final_init();  
   void start_shutdown();
   void shutdown();
 
@@ -968,14 +979,19 @@ public:
   enum {
     NOT_STOPPING,
     PREPARING_TO_STOP,
-    STOPPING } state;
+    STOPPING };
+  atomic_t state;
+  int get_state() {
+    return state.read();
+  }
+  void set_state(int s) {
+    state.set(s);
+  }
   bool is_stopping() {
-    Mutex::Locker l(is_stopping_lock);
-    return state == STOPPING;
+    return get_state() == STOPPING;
   }
   bool is_preparing_to_stop() {
-    Mutex::Locker l(is_stopping_lock);
-    return state == PREPARING_TO_STOP;
+    return get_state() == PREPARING_TO_STOP;
   }
   bool prepare_to_stop();
   void got_stop_ack();
@@ -1185,15 +1201,19 @@ private:
 
   // -- state --
 public:
-  static const int STATE_INITIALIZING = 1;
-  static const int STATE_BOOTING = 2;
-  static const int STATE_ACTIVE = 3;
-  static const int STATE_STOPPING = 4;
-  static const int STATE_WAITING_FOR_HEALTHY = 5;
+  typedef enum {
+    STATE_INITIALIZING = 1,
+    STATE_PREBOOT,
+    STATE_BOOTING,
+    STATE_ACTIVE,
+    STATE_STOPPING,
+    STATE_WAITING_FOR_HEALTHY
+  } osd_state_t;
 
   static const char *get_state_name(int s) {
     switch (s) {
     case STATE_INITIALIZING: return "initializing";
+    case STATE_PREBOOT: return "preboot";
     case STATE_BOOTING: return "booting";
     case STATE_ACTIVE: return "active";
     case STATE_STOPPING: return "stopping";
@@ -1214,6 +1234,9 @@ public:
   }
   bool is_initializing() {
     return get_state() == STATE_INITIALIZING;
+  }
+  bool is_preboot() {
+    return get_state() == STATE_PREBOOT;
   }
   bool is_booting() {
     return get_state() == STATE_BOOTING;
@@ -1285,17 +1308,16 @@ public:
     OSDMapRef osdmap;  /// Map as of which waiting_for_pg is current
     map<spg_t, list<OpRequestRef> > waiting_for_pg;
 
-    Mutex sent_epoch_lock;
+    Spinlock sent_epoch_lock;
     epoch_t last_sent_epoch;
-    Mutex received_map_lock;
+    Spinlock received_map_lock;
     epoch_t received_map_epoch; // largest epoch seen in MOSDMap from here
 
     Session(CephContext *cct) :
       RefCountedObject(cct),
       auid(-1), con(0),
-      session_dispatch_lock("Session::session_dispatch_lock"),
-      sent_epoch_lock("Session::sent_epoch_lock"), last_sent_epoch(0),
-      received_map_lock("Session::received_map_lock"), received_map_epoch(0)
+      session_dispatch_lock("Session::session_dispatch_lock"), 
+      last_sent_epoch(0), received_map_epoch(0)
     {}
 
 
@@ -1364,7 +1386,7 @@ public:
       (*i)->put();
     }
   }
-  void clear_session_waiting_on_pg(Session *session, spg_t pgid) {
+  void clear_session_waiting_on_pg(Session *session, const spg_t &pgid) {
     Mutex::Locker l(session_waiting_lock);
     map<spg_t, set<Session*> >::iterator i = session_waiting_for_pg.find(pgid);
     if (i == session_waiting_for_pg.end()) {
@@ -1382,19 +1404,14 @@ public:
   void session_handle_reset(Session *session) {
     Mutex::Locker l(session->session_dispatch_lock);
     clear_session_waiting_on_map(session);
-    vector<spg_t> pgs_to_clear;
-    pgs_to_clear.reserve(session->waiting_for_pg.size());
+
     for (map<spg_t, list<OpRequestRef> >::iterator i =
 	   session->waiting_for_pg.begin();
 	 i != session->waiting_for_pg.end();
 	 ++i) {
-      pgs_to_clear.push_back(i->first);
-    }
-    for (vector<spg_t>::iterator i = pgs_to_clear.begin();
-	 i != pgs_to_clear.end();
-	 ++i) {
-      clear_session_waiting_on_pg(session, *i);
-    }
+      clear_session_waiting_on_pg(session, i->first);
+    }    
+
     /* Messages have connection refs, we need to clear the
      * connection->session->message->connection
      * cycles which result.
@@ -1497,13 +1514,13 @@ private:
   bool heartbeat_stop;
   Mutex heartbeat_update_lock; // orders under heartbeat_lock
   bool heartbeat_need_update;   ///< true if we need to refresh our heartbeat peers
-  epoch_t heartbeat_epoch;      ///< last epoch we updated our heartbeat peers
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
   utime_t last_mon_heartbeat;
   Messenger *hbclient_messenger;
   Messenger *hb_front_server_messenger;
   Messenger *hb_back_server_messenger;
   utime_t last_heartbeat_resample;   ///< last time we chose random peers in waiting-for-healthy state
+  double daily_loadavg;
   
   void _add_heartbeat_peer(int p);
   void _remove_heartbeat_peer(int p);
@@ -1601,9 +1618,9 @@ private:
       PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t> pqueue;
       ShardData(
 	string lock_name, string ordering_lock,
-	uint64_t max_tok_per_prio, uint64_t min_cost)
-	: sdata_lock(lock_name.c_str()),
-	  sdata_op_ordering_lock(ordering_lock.c_str()),
+	uint64_t max_tok_per_prio, uint64_t min_cost, CephContext *cct)
+	: sdata_lock(lock_name.c_str(), false, true, false, cct),
+	  sdata_op_ordering_lock(ordering_lock.c_str(), false, true, false, cct),
 	  pqueue(max_tok_per_prio, min_cost) {}
     };
     
@@ -1625,7 +1642,7 @@ private:
 	ShardData* one_shard = new ShardData(
 	  lock_name, order_lock,
 	  osd->cct->_conf->osd_op_pq_max_tokens_per_priority, 
-	  osd->cct->_conf->osd_op_pq_min_cost);
+	  osd->cct->_conf->osd_op_pq_min_cost, osd->cct);
 	shard_list.push_back(one_shard);
       }
     }
@@ -1806,6 +1823,7 @@ private:
   utime_t         had_map_since;
   RWLock          map_lock;
   list<OpRequestRef>  waiting_for_osdmap;
+  deque<utime_t> osd_markdown_log;
 
   friend struct send_map_on_destruct;
 
@@ -1879,7 +1897,6 @@ protected:
   PG   *_create_lock_pg(
     OSDMapRef createmap,
     spg_t pgid,
-    bool newly_created,
     bool hold_map_lock,
     bool backfill,
     int role,
@@ -1906,9 +1923,6 @@ protected:
   void load_pgs();
   void build_past_intervals_parallel();
 
-  void calc_priors_during(
-    spg_t pgid, epoch_t start, epoch_t end, set<pg_shard_t>& pset);
-
   /// project pg history from from to now
   bool project_pg_history(
     spg_t pgid, pg_history_t& h, epoch_t from,
@@ -1918,7 +1932,7 @@ protected:
     int lastactingprimary
     ); ///< @return false if there was a map gap between from and now
 
-  void wake_pg_waiters(PG* pg, spg_t pgid) {
+  void wake_pg_waiters(spg_t pgid) {
     assert(osd_lock.is_locked());
     // Need write lock on pg_map_lock
     set<Session*> concerned_sessions;
@@ -1936,19 +1950,9 @@ protected:
     }
   }
 
-  // -- pg creation --
-  struct create_pg_info {
-    pg_history_t history;
-    vector<int> acting;
-    set<pg_shard_t> prior;
-    pg_t parent;
-  };
-  ceph::unordered_map<spg_t, create_pg_info> creating_pgs;
-  double debug_drop_pg_create_probability;
-  int debug_drop_pg_create_duration;
-  int debug_drop_pg_create_left;  // 0 if we just dropped the last one, -1 if we can drop more
 
-  bool can_create_pg(spg_t pgid);
+  epoch_t last_pg_create_epoch;
+
   void handle_pg_create(OpRequestRef op);
 
   void split_pgs(
@@ -1959,6 +1963,7 @@ protected:
     PG::RecoveryCtx *rctx);
 
   // == monitor interaction ==
+  Mutex mon_report_lock;
   utime_t last_mon_report;
   utime_t last_pg_stats_sent;
 
@@ -1969,29 +1974,13 @@ protected:
    *  elsewhere.
    */
   utime_t last_pg_stats_ack;
-  bool outstanding_pg_stats; // some stat updates haven't been acked yet
-  bool timeout_mon_on_pg_stats;
-  void restart_stats_timer() {
-    Mutex::Locker l(osd_lock);
-    last_pg_stats_ack = ceph_clock_now(cct);
-    timeout_mon_on_pg_stats = true;
-  }
-
-  class C_MonStatsAckTimer : public Context {
-    OSD *osd;
-  public:
-    C_MonStatsAckTimer(OSD *o) : osd(o) {}
-    void finish(int r) {
-      osd->restart_stats_timer();
-    }
-  };
-  friend class C_MonStatsAckTimer;
-
-  void do_mon_report();
+  float stats_ack_timeout;
+  set<uint64_t> outstanding_pg_stats; // how many stat updates haven't been acked yet
 
   // -- boot --
   void start_boot();
-  void _maybe_boot(epoch_t oldest, epoch_t newest);
+  void _got_mon_epochs(epoch_t oldest, epoch_t newest);
+  void _preboot(epoch_t oldest, epoch_t newest);
   void _send_boot();
   void _collect_metadata(map<string,string> *pmeta);
   bool _lsb_release_set(char *buf, const char *str, map<string,string> *pm, const char *key);
@@ -2017,9 +2006,9 @@ protected:
 
   // -- failures --
   map<int,utime_t> failure_queue;
-  map<int,entity_inst_t> failure_pending;
+  map<int,pair<utime_t,entity_inst_t> > failure_pending;
 
-
+  void requeue_failures();
   void send_failures();
   void send_still_alive(epoch_t epoch, const entity_inst_t &i);
 

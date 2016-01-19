@@ -48,6 +48,13 @@ public:
                                   snapc);
   }
 
+  MOCK_METHOD2(list_watchers, int(const std::string& o,
+                                  std::list<obj_watch_t> *out_watchers));
+  int do_list_watchers(const std::string& o,
+                       std::list<obj_watch_t> *out_watchers) {
+    return TestMemIoCtxImpl::list_watchers(o, out_watchers);
+  }
+
   MOCK_METHOD4(read, int(const std::string& oid,
                          size_t len,
                          uint64_t off,
@@ -72,6 +79,14 @@ public:
     return TestMemIoCtxImpl::selfmanaged_snap_remove(snap_id);
   }
 
+  MOCK_METHOD3(truncate, int(const std::string& oid,
+                             uint64_t size,
+                             const SnapContext &snapc));
+  int do_truncate(const std::string& oid, uint64_t size,
+                  const SnapContext &snapc) {
+    return TestMemIoCtxImpl::truncate(oid, size, snapc);
+  }
+
   MOCK_METHOD3(write_full, int(const std::string& oid,
                                bufferlist& bl,
                                const SnapContext &snapc));
@@ -84,10 +99,12 @@ public:
     using namespace ::testing;
 
     ON_CALL(*this, exec(_, _, _, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_exec));
+    ON_CALL(*this, list_watchers(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_list_watchers));
     ON_CALL(*this, read(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_read));
     ON_CALL(*this, remove(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_remove));
     ON_CALL(*this, selfmanaged_snap_create(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_selfmanaged_snap_create));
     ON_CALL(*this, selfmanaged_snap_remove(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_selfmanaged_snap_remove));
+    ON_CALL(*this, truncate(_,_,_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_truncate));
     ON_CALL(*this, write_full(_, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_write_full));
   }
 

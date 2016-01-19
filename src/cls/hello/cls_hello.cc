@@ -319,7 +319,7 @@ void __cls_init()
 			  CLS_METHOD_RD,
 			  say_hello, &h_say_hello);
   cls_register_cxx_method(h_class, "record_hello",
-			  CLS_METHOD_WR,
+			  CLS_METHOD_WR | CLS_METHOD_PROMOTE,
 			  record_hello, &h_record_hello);
   cls_register_cxx_method(h_class, "writes_dont_return_data",
 			  CLS_METHOD_WR,
@@ -330,7 +330,7 @@ void __cls_init()
 
   // RD | WR is a read-modify-write method.
   cls_register_cxx_method(h_class, "turn_it_to_11",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PROMOTE,
 			  turn_it_to_11, &h_turn_it_to_11);
 
   // counter-examples

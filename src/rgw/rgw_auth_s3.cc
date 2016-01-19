@@ -127,6 +127,9 @@ void rgw_create_s3_canonical_header(const char *method, const char *content_md5,
 
 int rgw_get_s3_header_digest(const string& auth_hdr, const string& key, string& dest)
 {
+  if (key.empty())
+    return -EINVAL;
+
   char hmac_sha1[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
   calc_hmac_sha1(key.c_str(), key.size(), auth_hdr.c_str(), auth_hdr.size(), hmac_sha1);
 

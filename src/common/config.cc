@@ -590,13 +590,16 @@ void md_config_t::_apply_changes(std::ostream *oss)
   for (changed_set_t::const_iterator c = changed.begin();
        c != changed.end(); ++c) {
     const std::string &key(*c);
+    pair < obs_map_t::iterator, obs_map_t::iterator >
+      range(observers.equal_range(key));
     if ((oss) &&
 	(!_get_val(key.c_str(), &bufptr, sizeof(buf))) &&
 	!_internal_field(key)) {
       (*oss) << key << " = '" << buf << "' ";
+      if (range.first == range.second) {
+	(*oss) << "(unchangeable) ";
+      }
     }
-    pair < obs_map_t::iterator, obs_map_t::iterator >
-      range(observers.equal_range(key));
     for (obs_map_t::iterator r = range.first; r != range.second; ++r) {
       rev_obs_map_t::value_type robs_val(r->second, empty_set);
       pair < rev_obs_map_t::iterator, bool > robs_ret(robs.insert(robs_val));
@@ -809,6 +812,22 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
 
   // couldn't find a configuration option with key 'k'
   return -ENOENT;
+}
+
+void md_config_t::get_all_keys(std::vector<std::string> *keys) const {
+  const std::string negative_flag_prefix("no_");
+
+  keys->clear();
+  keys->reserve(NUM_CONFIG_OPTIONS);
+  for (size_t i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
+    keys->push_back(config_optionsp[i].name);
+    if (config_optionsp[i].type == OPT_BOOL) {
+      keys->push_back(negative_flag_prefix + config_optionsp[i].name);
+    }
+  }
+  for (int i = 0; i < subsys.get_num(); ++i) {
+    keys->push_back("debug_" + subsys.get_name(i));
+  }
 }
 
 /* The order of the sections here is important.  The first section in the

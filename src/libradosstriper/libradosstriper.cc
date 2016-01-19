@@ -273,6 +273,10 @@ int libradosstriper::RadosStriper::remove(const std::string& soid)
 {
   return rados_striper_impl->remove(soid);
 }
+int libradosstriper::RadosStriper::remove(const std::string& soid, int flags)
+{
+  return rados_striper_impl->remove(soid, flags); 
+}
 
 int libradosstriper::RadosStriper::trunc(const std::string& soid, uint64_t size)
 {

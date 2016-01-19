@@ -151,6 +151,29 @@ namespace librados
     std::pair<std::string, std::string> cur_obj;
   };
 
+  class CEPH_RADOS_API ObjectCursor
+  {
+    public:
+    ObjectCursor();
+    ObjectCursor(const ObjectCursor &rhs);
+    ~ObjectCursor();
+    bool operator<(const ObjectCursor &rhs);
+    void set(rados_object_list_cursor c);
+
+    friend class IoCtx;
+
+    protected:
+    rados_object_list_cursor c_cursor;
+  };
+
+  class CEPH_RADOS_API ObjectItem
+  {
+    public:
+    std::string oid;
+    std::string nspace;
+    std::string locator;
+  };
+
   /// DEPRECATED; do not use
   class CEPH_RADOS_API WatchCtx {
   public:
@@ -422,7 +445,9 @@ namespace librados
      * @param src_fadvise_flags the fadvise flags for source object
      */
     void copy_from(const std::string& src, const IoCtx& src_ioctx,
-		   uint64_t src_version, uint32_t src_fadvise_flags);
+		   uint64_t src_version);
+    void copy_from2(const std::string& src, const IoCtx& src_ioctx,
+                    uint64_t src_version, uint32_t src_fadvise_flags);
 
     /**
      * undirty an object
@@ -439,6 +464,14 @@ namespace librados
      */
     void set_alloc_hint(uint64_t expected_object_size,
                         uint64_t expected_write_size);
+
+    /**
+     * Pin/unpin an object in cache tier
+     *
+     * @returns 0 on success, negative error code on failure
+     */
+    void cache_pin();
+    void cache_unpin();
 
     friend class IoCtx;
   };
@@ -637,7 +670,9 @@ namespace librados
     std::string get_pool_name();
 
     bool pool_requires_alignment();
+    int pool_requires_alignment2(bool * requires);
     uint64_t pool_required_alignment();
+    int pool_required_alignment2(uint64_t * alignment);
 
     // create an object
     int create(const std::string& oid, bool exclusive);
@@ -667,6 +702,7 @@ namespace librados
                    size_t len);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int remove(const std::string& oid);
+    int remove(const std::string& oid, int flags);
     int trunc(const std::string& oid, uint64_t size);
     int mapext(const std::string& o, uint64_t off, size_t len, std::map<uint64_t,uint64_t>& m);
     int sparse_read(const std::string& o, std::map<uint64_t,uint64_t>& m, bufferlist& bl, size_t len, uint64_t off);
@@ -775,10 +811,12 @@ namespace librados
 
 
     /// Start enumerating objects for a pool
-    NObjectIterator nobjects_begin(const bufferlist &filter=bufferlist());
+    NObjectIterator nobjects_begin();
+    NObjectIterator nobjects_begin(const bufferlist &filter);
     /// Start enumerating objects for a pool starting from a hash position
+    NObjectIterator nobjects_begin(uint32_t start_hash_position);
     NObjectIterator nobjects_begin(uint32_t start_hash_position,
-                                   const bufferlist &filter=bufferlist());
+                                   const bufferlist &filter);
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
 
@@ -788,6 +826,21 @@ namespace librados
     ObjectIterator objects_begin(uint32_t start_hash_position) __attribute__ ((deprecated));
     /// Iterator indicating the end of a pool
     const ObjectIterator& objects_end() const __attribute__ ((deprecated));
+
+    ObjectCursor object_list_begin();
+    ObjectCursor object_list_end();
+    bool object_list_is_end(const ObjectCursor &oc);
+    int object_list(const ObjectCursor &start, const ObjectCursor &finish,
+                    const size_t result_count,
+                    std::vector<ObjectItem> *result,
+                    ObjectCursor *next);
+    void object_list_slice(
+        const ObjectCursor start,
+        const ObjectCursor finish,
+        const size_t n,
+        const size_t m,
+        ObjectCursor *split_start,
+        ObjectCursor *split_finish);
 
     /**
      * List available hit set objects
@@ -976,6 +1029,12 @@ namespace librados
 		bufferlist& bl,         ///< optional broadcast payload
 		uint64_t timeout_ms,    ///< timeout (in ms)
 		bufferlist *pbl);       ///< reply buffer
+    int aio_notify(const std::string& o,   ///< object
+                   AioCompletion *c,       ///< completion when notify completes
+                   bufferlist& bl,         ///< optional broadcast payload
+                   uint64_t timeout_ms,    ///< timeout (in ms)
+                   bufferlist *pbl);       ///< reply buffer
+
     int list_watchers(const std::string& o, std::list<obj_watch_t> *out_watchers);
     int list_snaps(const std::string& o, snap_set_t *out_snaps);
     void set_notify_timeout(uint32_t timeout);
@@ -1029,6 +1088,15 @@ namespace librados
     // assert version for next sync operations
     void set_assert_version(uint64_t ver);
     void set_assert_src_version(const std::string& o, uint64_t ver);
+
+    /**
+     * Pin/unpin an object in cache tier
+     *
+     * @param o the name of the object
+     * @returns 0 on success, negative error code on failure
+     */
+    int cache_pin(const std::string& o);
+    int cache_unpin(const std::string& o);
 
     const std::string& get_pool_name() const;
 
@@ -1094,6 +1162,10 @@ namespace librados
 
     int mon_command(std::string cmd, const bufferlist& inbl,
 		    bufferlist *outbl, std::string *outs);
+    int osd_command(int osdid, std::string cmd, const bufferlist& inbl,
+                    bufferlist *outbl, std::string *outs);
+    int pg_command(const char *pgstr, std::string cmd, const bufferlist& inbl,
+                   bufferlist *outbl, std::string *outs);
 
     int ioctx_create(const char *name, IoCtx &pioctx);
     int ioctx_create2(int64_t pool_id, IoCtx &pioctx);

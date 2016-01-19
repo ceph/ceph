@@ -32,6 +32,7 @@
 #include "common/Throttle.h"
 #include "common/QueueRing.h"
 #include "common/safe_io.h"
+#include "include/compat.h"
 #include "include/str_list.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -242,7 +243,7 @@ protected:
 
 public:
   RGWProcess(CephContext *cct, RGWProcessEnv *pe, int num_threads, RGWFrontendConfig *_conf)
-    : store(pe->store), olog(pe->olog), m_tp(cct, "RGWProcess::m_tp", num_threads),
+    : store(pe->store), olog(pe->olog), m_tp(cct, "RGWProcess::m_tp", "tp_rgw_process", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
       rest(pe->rest),
       conf(_conf),
@@ -905,7 +906,7 @@ public:
   int run() {
     assert(pprocess); /* should have initialized by init() */
     thread = new RGWProcessControlThread(pprocess);
-    thread->create();
+    thread->create("rgw_frontend");
     return 0;
   }
 
@@ -940,12 +941,14 @@ public:
 
     pprocess = pp;
 
-    string uid;
-    conf->get_val("uid", "", &uid);
-    if (uid.empty()) {
+    string uid_str;
+    conf->get_val("uid", "", &uid_str);
+    if (uid_str.empty()) {
       derr << "ERROR: uid param must be specified for loadgen frontend" << dendl;
       return EINVAL;
     }
+
+    rgw_user uid(uid_str);
 
     RGWUserInfo user_info;
     int ret = rgw_get_user_info_by_uid(env.store, uid, user_info, NULL);
@@ -1067,7 +1070,7 @@ int main(int argc, const char **argv)
   check_curl();
 
   if (g_conf->daemonize) {
-    global_init_daemonize(g_ceph_context, 0);
+    global_init_daemonize(g_ceph_context);
   }
   Mutex mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);
@@ -1188,6 +1191,16 @@ int main(int argc, const char **argv)
   }
   for (list<string>::iterator iter = frontends.begin(); iter != frontends.end(); ++iter) {
     string& f = *iter;
+
+    if (f.find("civetweb") != string::npos) {
+      if (f.find("port") != string::npos) {
+	// check for the most common ws problems
+	if ((f.find("port=") == string::npos) ||
+	    (f.find("port= ") != string::npos)) {
+	  derr << "WARNING: civetweb frontend config found unexpected spacing around 'port' (ensure civetweb port parameter has the form 'port=80' with no spaces before or after '=')" << dendl;
+	}
+      }
+    }
 
     RGWFrontendConfig *config = new RGWFrontendConfig(f);
     int r = config->init();

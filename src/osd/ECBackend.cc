@@ -88,7 +88,7 @@ ostream &operator<<(ostream &lhs, const ECBackend::read_result_t &rhs)
   } else {
     lhs << ", noattrs";
   }
-  return lhs << ", returned=" << rhs.returned;
+  return lhs << ", returned=" << rhs.returned << ")";
 }
 
 ostream &operator<<(ostream &lhs, const ECBackend::ReadOp &rhs)
@@ -150,7 +150,8 @@ ostream &operator<<(ostream &lhs, const ECBackend::RecoveryOp &rhs)
 	     << " obc refcount=" << rhs.obc.use_count()
 	     << " state=" << ECBackend::RecoveryOp::tostr(rhs.state)
 	     << " waiting_on_pushes=" << rhs.waiting_on_pushes
-	     << " extent_requested=" << rhs.extent_requested;
+	     << " extent_requested=" << rhs.extent_requested
+	     << ")";
 }
 
 void ECBackend::RecoveryOp::dump(Formatter *f) const
@@ -1121,11 +1122,21 @@ void ECBackend::handle_sub_read_reply(
 	  ++is_complete;
 	}
       } else {
-	if (!rop.complete[iter->first].errors.empty())
-	  dout(10) << __func__ << " Enough copies for " << iter->first << " (ignore errors)" << dendl;
-	++is_complete;
-	rop.complete[iter->first].errors.clear();
         assert(rop.complete[iter->first].r == 0);
+	if (!rop.complete[iter->first].errors.empty()) {
+	  if (cct->_conf->osd_read_ec_check_for_errors) {
+	    dout(10) << __func__ << ": Not ignoring errors, use one shard err=" << err << dendl;
+	    err = rop.complete[iter->first].errors.begin()->second;
+            rop.complete[iter->first].r = err;
+	  } else {
+	    get_parent()->clog_error() << __func__ << ": Error(s) ignored for "
+				       << iter->first << " enough copies available" << "\n";
+	    dout(10) << __func__ << " Error(s) ignored for " << iter->first
+		     << " enough copies available" << dendl;
+	    rop.complete[iter->first].errors.clear();
+	  }
+	}
+	++is_complete;
       }
     }
   }
@@ -1692,7 +1703,7 @@ void ECBackend::start_remaining_read_op(
 }
 
 ECUtil::HashInfoRef ECBackend::get_hash_info(
-  const hobject_t &hoid, bool checks)
+  const hobject_t &hoid, bool checks, const map<string,bufferptr> *attrs)
 {
   dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
   ECUtil::HashInfoRef ref = unstable_hashinfo_registry.lookup(hoid);
@@ -1708,12 +1719,25 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
     if (r >= 0) {
       dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
       bufferlist bl;
-      r = store->getattr(
-	coll,
-	ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-	ECUtil::get_hinfo_key(),
-	bl);
-      if (r >= 0) {
+      if (attrs) {
+	map<string, bufferptr>::const_iterator k = attrs->find(ECUtil::get_hinfo_key());
+	if (k == attrs->end()) {
+	  dout(5) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
+	} else {
+	  bl.push_back(k->second);
+	}
+      } else {
+	r = store->getattr(
+	  coll,
+	  ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	  ECUtil::get_hinfo_key(),
+	  bl);
+	if (r < 0) {
+	  dout(5) << __func__ << ": getattr failed: " << cpp_strerror(r) << dendl;
+	  bl.clear(); // just in case
+	}
+      }
+      if (bl.length() > 0) {
 	bufferlist::iterator bp = bl.begin();
 	::decode(hinfo, bp);
 	if (checks && hinfo.get_total_chunk_size() != (uint64_t)st.st_size) {
@@ -2078,22 +2102,26 @@ void ECBackend::be_deep_scrub(
     dout(0) << "_scan_list  " << poid << " got "
 	    << r << " on read, read_error" << dendl;
     o.read_error = true;
+    return;
   }
 
-  ECUtil::HashInfoRef hinfo = get_hash_info(poid, false);
+  ECUtil::HashInfoRef hinfo = get_hash_info(poid, false, &o.attrs);
   if (!hinfo) {
     dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;
     o.digest_present = false;
+    return;
   } else {
     if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) != h.digest()) {
       dout(0) << "_scan_list  " << poid << " got incorrect hash on read" << dendl;
       o.read_error = true;
+      return;
     }
 
     if (hinfo->get_total_chunk_size() != pos) {
       dout(0) << "_scan_list  " << poid << " got incorrect size on read" << dendl;
       o.read_error = true;
+      return;
     }
 
     /* We checked above that we match our own stored hash.  We cannot

@@ -937,9 +937,19 @@ void OSDMap::set_max_osd(int m)
 int OSDMap::calc_num_osds()
 {
   num_osd = 0;
-  for (int i=0; i<max_osd; i++)
-    if (osd_state[i] & CEPH_OSD_EXISTS)
-      num_osd++;
+  num_up_osd = 0;
+  num_in_osd = 0;
+  for (int i=0; i<max_osd; i++) {
+    if (osd_state[i] & CEPH_OSD_EXISTS) {
+      ++num_osd;
+      if (osd_state[i] & CEPH_OSD_UP) {
+	++num_up_osd;
+      }
+      if (get_weight(i) != CEPH_OSD_OUT) {
+	++num_in_osd;
+      }
+    }
+  }
   return num_osd;
 }
 
@@ -956,24 +966,6 @@ void OSDMap::get_up_osds(set<int32_t>& ls) const
     if (is_up(i))
       ls.insert(i);
   }
-}
-
-unsigned OSDMap::get_num_up_osds() const
-{
-  unsigned n = 0;
-  for (int i=0; i<max_osd; i++)
-    if ((osd_state[i] & CEPH_OSD_EXISTS) &&
-	(osd_state[i] & CEPH_OSD_UP)) n++;
-  return n;
-}
-
-unsigned OSDMap::get_num_in_osds() const
-{
-  unsigned n = 0;
-  for (int i=0; i<max_osd; i++)
-    if ((osd_state[i] & CEPH_OSD_EXISTS) &&
-	get_weight(i) != CEPH_OSD_OUT) n++;
-  return n;
 }
 
 void OSDMap::calc_state_set(int state, set<string>& st)
@@ -1040,6 +1032,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_TUNABLES3;
   if (crush->has_v4_buckets())
     features |= CEPH_FEATURE_CRUSH_V4;
+  if (crush->has_nondefault_tunables5())
+    features |= CEPH_FEATURE_CRUSH_TUNABLES5;
   mask |= CEPH_FEATURES_CRUSH;
 
   for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
@@ -1062,6 +1056,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	features |= CEPH_FEATURE_CRUSH_V2;
       if (crush->is_v3_rule(ruleid))
 	features |= CEPH_FEATURE_CRUSH_TUNABLES3;
+      if (crush->is_v5_rule(ruleid))
+	features |= CEPH_FEATURE_CRUSH_TUNABLES5;
     }
   }
   if (entity_type == CEPH_ENTITY_TYPE_OSD) {
@@ -1355,9 +1351,21 @@ int OSDMap::apply_incremental(const Incremental &inc)
       osd_xinfo[i->first].down_stamp = modified;
     }
     if ((osd_state[i->first] & CEPH_OSD_EXISTS) &&
-	(s & CEPH_OSD_EXISTS))
+	(s & CEPH_OSD_EXISTS)) {
+      // osd is destroyed; clear out anything interesting.
       (*osd_uuid)[i->first] = uuid_d();
-    osd_state[i->first] ^= s;
+      osd_info[i->first] = osd_info_t();
+      osd_xinfo[i->first] = osd_xinfo_t();
+      osd_weight[i->first] = CEPH_OSD_IN;
+      set_primary_affinity(i->first, CEPH_OSD_DEFAULT_PRIMARY_AFFINITY);
+      osd_addrs->client_addr[i->first].reset(new entity_addr_t());
+      osd_addrs->cluster_addr[i->first].reset(new entity_addr_t());
+      osd_addrs->hb_front_addr[i->first].reset(new entity_addr_t());
+      osd_addrs->hb_back_addr[i->first].reset(new entity_addr_t());
+      osd_state[i->first] = 0;
+    } else {
+      osd_state[i->first] ^= s;
+    }
   }
   for (map<int32_t,entity_addr_t>::const_iterator i = inc.new_up_client.begin();
        i != inc.new_up_client.end();
@@ -2783,8 +2791,6 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
 
   crush.create();
 
-  set<string> hosts, racks;
-
   // root
   int root_type = _build_crush_types(crush);
   int rootid;
@@ -2822,9 +2828,6 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
       host = "unknownhost";
     if (rack.length() == 0)
       rack = "unknownrack";
-
-    hosts.insert(host);
-    racks.insert(rack);
 
     map<string,string> loc;
     loc["host"] = host;

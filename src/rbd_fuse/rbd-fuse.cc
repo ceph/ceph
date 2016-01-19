@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <assert.h>
+#include <string>
 
 #if defined(__FreeBSD__)
 #include <sys/param.h>
@@ -522,16 +523,59 @@ rbdfs_destroy(void *unused)
 	rados_shutdown(cluster);
 }
 
+int
+rbdfs_checkname(const char *checkname)
+{
+    const char *extra[] = {"@", "/"};
+    std::string strCheckName(checkname);
+    
+    if (strCheckName.empty())
+        return -EINVAL;
+
+    unsigned int sz = sizeof(extra) / sizeof(const char*);
+    for (unsigned int i = 0; i < sz; i++)
+    {
+        std::string ex(extra[i]);
+        if (std::string::npos != strCheckName.find(ex))
+            return -EINVAL;
+    }
+
+    return 0;
+}
+
 // return -errno on error.  fi->fh is not set until open time
 
 int
 rbdfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-	int r;
-	int order = imageorder;
+         int r;
+         int order = imageorder;
 
-	r = rbd_create2(ioctx, path+1, imagesize, imagefeatures, &order);
-	return r;
+         r = rbdfs_checkname(path+1);
+         if (r != 0)
+         {
+            return r;  
+         }
+
+         r = rbd_create2(ioctx, path+1, imagesize, imagefeatures, &order);
+         return r;
+}
+
+int
+rbdfs_rename(const char *path, const char *destname)
+{
+    int r;
+
+    r = rbdfs_checkname(destname+1);
+    if (r != 0)
+    {
+      return r;
+    }
+
+    if (strcmp(path, "/") == 0)
+        return -EINVAL;
+
+    return rbd_rename(ioctx, path+1, destname+1);
 }
 
 int
@@ -678,7 +722,7 @@ const static struct fuse_operations rbdfs_oper = {
   unlink:     rbdfs_unlink,
   rmdir:      0,
   symlink:    0,
-  rename:     0,
+  rename:     rbdfs_rename,
   link:       0,
   chmod:      0,
   chown:      0,

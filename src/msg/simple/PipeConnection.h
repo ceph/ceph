@@ -41,12 +41,12 @@ public:
 
   void reset_pipe(Pipe* p);
 
-  bool is_connected();
+  bool is_connected() override;
 
-  int send_message(Message *m);
-  void send_keepalive();
-  void mark_down();
-  void mark_disposable();
+  int send_message(Message *m) override;
+  void send_keepalive() override;
+  void mark_down() override;
+  void mark_disposable() override;
 
 }; /* PipeConnection */
 

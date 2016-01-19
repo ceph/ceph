@@ -259,14 +259,14 @@ public:
       xio_connection_destroy(conn);
   }
 
-  bool is_connected() { return connected.read(); }
+  bool is_connected() override { return connected.read(); }
 
-  int send_message(Message *m);
-  void send_keepalive() {}
-  virtual void mark_down();
+  int send_message(Message *m) override;
+  void send_keepalive() override {}
+  void mark_down() override;
   int _mark_down(uint32_t flags);
-  virtual void mark_disposable();
-  int _mark_disposable(uint32_t flags);
+  virtual void mark_disposable() override;
+  int _mark_disposable(uint32_t flags) override;
 
   const entity_inst_t& get_peer() const { return peer; }
 
@@ -334,12 +334,12 @@ public:
     return static_cast<XioLoopbackConnection*>(RefCountedObject::get());
   }
 
-  virtual bool is_connected() { return true; }
+  bool is_connected() override { return true; }
 
-  int send_message(Message *m);
-  void send_keepalive() {}
-  void mark_down() {}
-  void mark_disposable() {}
+  int send_message(Message *m) override;
+  void send_keepalive()i override {}
+  void mark_down() override {}
+  void mark_disposable() override {}
 
   uint32_t get_seq() {
     return seq.read();

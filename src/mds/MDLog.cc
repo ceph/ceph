@@ -169,17 +169,18 @@ void MDLog::create(MDSInternalContextBase *c)
   logger->set(l_mdl_expos, journaler->get_expire_pos());
   logger->set(l_mdl_wrpos, journaler->get_write_pos());
 
-  submit_thread.create();
+  submit_thread.create("md_submit");
 }
 
 void MDLog::open(MDSInternalContextBase *c)
 {
   dout(5) << "open discovering log bounds" << dendl;
 
+  assert(!recovery_thread.is_started());
   recovery_thread.set_completion(c);
-  recovery_thread.create();
+  recovery_thread.create("md_recov_open");
 
-  submit_thread.create();
+  submit_thread.create("md_submit");
   // either append() or replay() will follow.
 }
 
@@ -215,8 +216,13 @@ void MDLog::reopen(MDSInternalContextBase *c)
   delete journaler;
   journaler = NULL;
 
+  // recovery_thread was started at some point in the past.  Although
+  // it has called it's completion if we made it back here, it might
+  // still not have been cleaned up: join it.
+  recovery_thread.join();
+
   recovery_thread.set_completion(new C_ReopenComplete(this, c));
-  recovery_thread.create();
+  recovery_thread.create("md_recov_reopen");
 }
 
 void MDLog::append()
@@ -840,9 +846,14 @@ void MDLog::replay(MDSInternalContextBase *c)
 	   << " to " << journaler->get_write_pos() << dendl;
 
   assert(num_events == 0 || already_replayed);
+  if (already_replayed) {
+    // Ensure previous instance of ReplayThread is joined before
+    // we create another one
+    replay_thread.join();
+  }
   already_replayed = true;
 
-  replay_thread.create();
+  replay_thread.create("md_log_replay");
 }
 
 
@@ -1385,4 +1396,15 @@ void MDLog::standby_trim_segments()
     mds->mdcache->trim(-1);
   } else
     dout(20) << " removed no segments!" << dendl;
+}
+
+void MDLog::dump_replay_status(Formatter *f) const
+{
+  f->open_object_section("replay_status");
+  f->dump_unsigned("journal_read_pos", journaler ? journaler->get_read_pos() : 0);
+  f->dump_unsigned("journal_write_pos", journaler ? journaler->get_write_pos() : 0);
+  f->dump_unsigned("journal_expire_pos", journaler ? journaler->get_expire_pos() : 0);
+  f->dump_unsigned("num_events", get_num_events());
+  f->dump_unsigned("num_segments", get_num_segments());
+  f->close_section();
 }

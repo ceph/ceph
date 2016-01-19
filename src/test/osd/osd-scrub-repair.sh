@@ -20,7 +20,7 @@ function run() {
     local dir=$1
     shift
 
-    export CEPH_MON="127.0.0.1:7107"
+    export CEPH_MON="127.0.0.1:7107" # git grep '\<7107\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
@@ -34,6 +34,7 @@ function run() {
 function add_something() {
     local dir=$1
     local poolname=$2
+    local obj=${3:-SOMETHING}
 
     wait_for_clean || return 1
 
@@ -42,7 +43,7 @@ function add_something() {
 
     local payload=ABCDEF
     echo $payload > $dir/ORIGINAL
-    rados --pool $poolname put SOMETHING $dir/ORIGINAL || return 1
+    rados --pool $poolname put $obj $dir/ORIGINAL || return 1
 }
 
 #
@@ -144,6 +145,48 @@ function corrupt_and_repair_erasure_coded() {
 
 }
 
+function TEST_auto_repair_erasure_coded() {
+    local dir=$1
+    local poolname=ecpool
+
+    # Launch a cluster with 5 seconds scrub interval
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    for id in $(seq 0 2) ; do
+        run_osd $dir $id \
+            --osd-scrub-auto-repair=true \
+            --osd-deep-scrub-interval=5 \
+            --osd-scrub-max-interval=5 \
+            --osd-scrub-min-interval=5 \
+            --osd-scrub-interval-randomize-ratio=0
+    done
+
+    # Create an EC pool
+    ceph osd erasure-code-profile set myprofile \
+        k=2 m=1 ruleset-failure-domain=osd || return 1
+    ceph osd pool create $poolname 8 8 erasure myprofile || return 1
+
+    # Put an object
+    local payload=ABCDEF
+    echo $payload > $dir/ORIGINAL
+    rados --pool $poolname put SOMETHING $dir/ORIGINAL || return 1
+    wait_for_clean || return 1
+
+    # Remove the object from one shard physically
+    objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING remove || return 1
+    # Wait for auto repair
+    local pgid=$(get_pg $poolname SOMETHING)
+    wait_for_scrub $pgid "$(get_last_scrub_stamp $pgid)"
+    wait_for_clean || return 1
+    # Verify - the file should be back
+    objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING list-attrs || return 1
+    rados --pool $poolname get SOMETHING $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
+
+    # Tear down
+    teardown $dir || return 1
+}
+
 function TEST_corrupt_and_repair_jerasure() {
     local dir=$1
     local poolname=ecpool
@@ -231,6 +274,56 @@ function TEST_unfound_erasure_coded() {
 
     teardown $dir || return 1
 }
+
+#
+# list_missing for EC pool
+#
+function TEST_list_missing_erasure_coded() {
+    local dir=$1
+    local poolname=ecpool
+    local profile=myprofile
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    for id in $(seq 0 2) ; do
+        run_osd $dir $id || return 1
+    done
+    wait_for_clean || return 1
+
+    ceph osd erasure-code-profile set $profile \
+        k=2 m=1 ruleset-failure-domain=osd || return 1
+    ceph osd pool create $poolname 1 1 erasure $profile \
+        || return 1
+    wait_for_clean || return 1
+
+    # Put an object and remove the two shards (including primary)
+    add_something $dir $poolname OBJ0 || return 1
+    local -a osds=($(get_osds $poolname OBJ0))
+    objectstore_tool $dir ${osds[0]} OBJ0 remove || return 1
+    objectstore_tool $dir ${osds[1]} OBJ0 remove || return 1
+
+    # Put another object and remove two shards (excluding primary)
+    add_something $dir $poolname OBJ1 || return 1
+    local -a osds=($(get_osds $poolname OBJ1))
+    objectstore_tool $dir ${osds[1]} OBJ1 remove || return 1
+    objectstore_tool $dir ${osds[2]} OBJ1 remove || return 1
+
+    # Get get - both objects should in the same PG
+    local pg=$(get_pg $poolname OBJ0)
+
+    # Repair the PG, which triggers the recovering,
+    # and should mark the object as unfound
+    ceph pg repair $pg
+    
+    for i in $(seq 0 120) ; do
+        [ $i -lt 60 ] || return 1
+        matches=$(ceph pg $pg list_missing | egrep "OBJ0|OBJ1" | wc -l)
+        [ $matches -eq 2 ] && break
+    done
+
+    teardown $dir || return 1
+}
+
 
 main osd-scrub-repair "$@"
 

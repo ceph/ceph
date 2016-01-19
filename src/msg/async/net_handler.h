@@ -30,6 +30,15 @@ namespace ceph {
     int set_nonblock(int sd);
     void set_socket_options(int sd);
     int connect(const entity_addr_t &addr);
+    
+    /**
+     * Try to reconnect the socket.
+     *
+     * @return    0         success
+     *            > 0       just break, and wait for event
+     *            < 0       need to goto fail
+     */
+    int reconnect(const entity_addr_t &addr, int sd);
     int nonblock_connect(const entity_addr_t &addr);
   };
 }

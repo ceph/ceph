@@ -151,8 +151,9 @@ namespace std {
  * ipv4 for now.
  */
 
+#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
 /*
- * encode sockaddr.ss_family in big endian
+ * encode sockaddr.ss_family as network byte order 
  */
 static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
   struct sockaddr_storage ss = a;
@@ -174,6 +175,28 @@ static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
   a.ss_family = ntohs(a.ss_family);
 #endif
 }
+#endif
+
+// define a wire format for sockaddr that matches Linux's.
+struct ceph_sockaddr_storage {
+  __le16 ss_family;
+  __u8 __ss_padding[128 - sizeof(__le16)];
+
+  void encode(bufferlist& bl) const {
+    struct ceph_sockaddr_storage ss = *this;
+    ss.ss_family = htons(ss.ss_family);
+    ::encode_raw(ss, bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    struct ceph_sockaddr_storage ss;
+    ::decode_raw(ss, bl);
+    ss.ss_family = ntohs(ss.ss_family);
+    *this = ss;
+  }
+} __attribute__ ((__packed__));
+
+WRITE_CLASS_ENCODER(ceph_sockaddr_storage)
 
 struct entity_addr_t {
   __u32 type;
@@ -330,15 +353,37 @@ struct entity_addr_t {
 
   bool parse(const char *s, const char **end = 0);
 
+  // Right now, these only deal with sockaddr_storage that have only family and content.
+  // Apparently on BSD there is also an ss_len that we need to handle; this requires
+  // broader study
+
+
   void encode(bufferlist& bl) const {
     ::encode(type, bl);
     ::encode(nonce, bl);
+#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
     ::encode(addr, bl);
+#else
+    ceph_sockaddr_storage wireaddr;
+    ::memset(&wireaddr, '\0', sizeof(wireaddr));
+    unsigned copysize = MIN(sizeof(wireaddr), sizeof(addr));
+    // ceph_sockaddr_storage is in host byte order
+    ::memcpy(&wireaddr, &addr, copysize);
+    ::encode(wireaddr, bl);
+#endif
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(type, bl);
     ::decode(nonce, bl);
+#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
     ::decode(addr, bl);
+#else
+    ceph_sockaddr_storage wireaddr;
+    ::memset(&wireaddr, '\0', sizeof(wireaddr));
+    ::decode(wireaddr, bl);
+    unsigned copysize = MIN(sizeof(wireaddr), sizeof(addr));
+    ::memcpy(&addr, &wireaddr, copysize);
+#endif
   }
 
   void dump(Formatter *f) const;

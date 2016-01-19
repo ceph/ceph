@@ -15,7 +15,7 @@
 #include <map>
 
 #include "include/buffer.h"
-#include "XMLFormatter.h"
+#include "Formatter.h"
 
 namespace ceph {
   class HTMLFormatter : public XMLFormatter {
@@ -24,7 +24,7 @@ namespace ceph {
     ~HTMLFormatter();
     void reset();
 
-    virtual void set_status(const char* status, const char* status_name);
+    virtual void set_status(int status, const char* status_name);
     virtual void output_header();
 
     void dump_unsigned(const char *name, uint64_t u);
@@ -41,7 +41,7 @@ namespace ceph {
 
     bool m_header_done;
 
-    const char* m_status;
+    int m_status;
     const char* m_status_name;
   };
 

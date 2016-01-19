@@ -59,6 +59,7 @@ int entity_addr_from_url(entity_addr_t *addr /* out */, const char *url)
 				break;
 			};
 			addr->set_port(std::atoi(port.c_str()));
+			freeaddrinfo(res);
 			return 0;
 		}
 	}

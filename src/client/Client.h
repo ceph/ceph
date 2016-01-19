@@ -54,6 +54,7 @@ using std::fstream;
 #include "osdc/ObjectCacher.h"
 
 #include "InodeRef.h"
+#include "UserGroups.h"
 
 class MDSMap;
 class MonClient;
@@ -139,8 +140,9 @@ typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
 					 vinodeno_t ino, string& name);
 typedef int (*client_remount_callback_t)(void *handle);
 
-typedef int (*client_getgroups_callback_t)(void *handle, uid_t uid, gid_t **sgids);
-typedef void(*client_switch_interrupt_callback_t)(void *req, void *data);
+typedef int (*client_getgroups_callback_t)(void *handle, gid_t **sgids);
+typedef void(*client_switch_interrupt_callback_t)(void *handle, void *data);
+typedef mode_t (*client_umask_callback_t)(void *handle);
 
 struct client_callback_args {
   void *handle;
@@ -149,6 +151,7 @@ struct client_callback_args {
   client_switch_interrupt_callback_t switch_intr_cb;
   client_remount_callback_t remount_cb;
   client_getgroups_callback_t getgroups_cb;
+  client_umask_callback_t umask_cb;
 };
 
 // ========================================================
@@ -245,6 +248,7 @@ class Client : public Dispatcher, public md_config_obs_t {
   client_ino_callback_t ino_invalidate_cb;
   client_dentry_callback_t dentry_invalidate_cb;
   client_getgroups_callback_t getgroups_cb;
+  client_umask_callback_t umask_cb;
   bool can_invalidate_dentries;
   bool require_remount;
 
@@ -268,6 +272,7 @@ protected:
   client_t whoami;
 
   int user_id, group_id;
+  int acl_type;
 
   int get_uid() {
     if (user_id >= 0)
@@ -306,6 +311,7 @@ protected:
   void handle_client_session(MClientSession *m);
   void send_reconnect(MetaSession *s);
   void resend_unsafe_requests(MetaSession *s);
+  void wait_unsafe_requests();
 
   // mds requests
   ceph_tid_t last_tid;
@@ -348,6 +354,12 @@ protected:
   bool   authenticated;
   bool   mounted;
   bool   unmounting;
+
+  // When an MDS has sent us a REJECT, remember that and don't
+  // contact it again.  Remember which inst rejected us, so that
+  // when we talk to another inst with the same rank we can
+  // try again.
+  std::map<mds_rank_t, entity_inst_t> rejected_by_mds;
 
   int local_osd;
   epoch_t local_osd_epoch;
@@ -534,6 +546,8 @@ protected:
    */
   void _handle_full_flag(int64_t pool);
 
+  void _close_sessions();
+
  public:
   void set_filer_flags(int flags);
   void clear_filer_flags(int flags);
@@ -610,11 +624,11 @@ protected:
   void _async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name);
   void _try_to_trim_inode(Inode *in);
 
-  void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, bool keep_caps);
+  void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len);
   void _invalidate_inode_cache(Inode *in);
   void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len);
-  void _async_invalidate(InodeRef& in, int64_t off, int64_t len, bool keep_caps);
-  void _release(Inode *in);
+  void _async_invalidate(InodeRef& in, int64_t off, int64_t len);
+  bool _release(Inode *in);
   
   /**
    * Initiate a flush of the data associated with the given inode.
@@ -709,23 +723,26 @@ private:
   int _rmdir(Inode *dir, const char *name, int uid=-1, int gid=-1);
   int _symlink(Inode *dir, const char *name, const char *target, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1, InodeRef *inp = 0);
+  int _do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, InodeRef *inp);
   int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0);
-  int _setattr(InodeRef &in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0) {
-    return _setattr(in.get(), attr, mask, uid, gid, inp);
-  }
+  int _setattr(InodeRef &in, struct stat *attr, int mask);
   int _getattr(Inode *in, int mask, int uid=-1, int gid=-1, bool force=false);
   int _getattr(InodeRef &in, int mask, int uid=-1, int gid=-1, bool force=false) {
     return _getattr(in.get(), mask, uid, gid, force);
   }
   int _readlink(Inode *in, char *buf, size_t size);
   int _getxattr(Inode *in, const char *name, void *value, size_t len, int uid=-1, int gid=-1);
+  int _getxattr(InodeRef &in, const char *name, void *value, size_t len);
   int _listxattr(Inode *in, char *names, size_t len, int uid=-1, int gid=-1);
+  int _do_setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid, int gid);
   int _setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid=-1, int gid=-1);
+  int _setxattr(InodeRef &in, const char *name, const void *value, size_t len, int flags);
   int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
-  int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
+  int _removexattr(InodeRef &in, const char *nm);
+  int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid);
   int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp, Fh **fhp,
               int stripe_unit, int stripe_count, int object_size, const char *data_pool,
-	      bool *created = NULL, int uid=-1, int gid=-1);
+	      bool *created, int uid, int gid);
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
@@ -738,13 +755,53 @@ private:
   int _sync_fs();
   int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
   int _getlk(Fh *fh, struct flock *fl, uint64_t owner);
-  int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req=NULL);
-  int _flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req=NULL);
+  int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
+  int _flock(Fh *fh, int cmd, uint64_t owner);
 
   int get_or_create(Inode *dir, const char* name,
 		    Dentry **pdn, bool expect_null=false);
 
-  int check_permissions(Inode *in, int flags, int uid, int gid);
+  enum {
+    NO_ACL = 0,
+    POSIX_ACL,
+  };
+
+  enum {
+    MAY_EXEC = 1,
+    MAY_WRITE = 2,
+    MAY_READ = 4,
+  };
+
+  class RequestUserGroups : public UserGroups {
+    Client *client;
+    uid_t uid;
+    gid_t gid;
+    int sgid_count;
+    gid_t *sgids;
+    void init() {
+      sgid_count = client->_getgrouplist(&sgids, uid, gid);
+    }
+    public:
+    RequestUserGroups(Client *c, uid_t u, gid_t g) :
+      client(c), uid(u), gid(g), sgid_count(-1), sgids(NULL) {}
+    ~RequestUserGroups() {
+      free(sgids);
+    }
+    gid_t get_gid() { return gid; }
+    bool is_in(gid_t id);
+    int get_gids(const gid_t **out);
+  };
+
+  int inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
+  int xattr_permission(Inode *in, const char *name, unsigned want, int uid=-1, int gid=-1);
+  int may_setattr(Inode *in, struct stat *st, int mask, int uid=-1, int gid=-1);
+  int may_open(Inode *in, int flags, int uid=-1, int gid=-1);
+  int may_lookup(Inode *dir, int uid=-1, int gid=-1);
+  int may_create(Inode *dir, int uid=-1, int gid=-1);
+  int may_delete(Inode *dir, const char *name, int uid=-1, int gid=-1);
+  int may_hardlink(Inode *in, int uid=-1, int gid=-1);
+  int _getattr_for_perm(Inode *in, int uid, int gid);
+  int _getgrouplist(gid_t **sgids, int uid, int gid);
 
   int check_data_pool_exist(string name, string value, const OSDMap *osdmap);
 
@@ -800,11 +857,15 @@ private:
   }
 
   int _do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
-		   struct flock *fl, uint64_t owner, void *fuse_req=NULL);
+		   struct flock *fl, uint64_t owner);
   int _interrupt_filelock(MetaRequest *req);
   void _encode_filelocks(Inode *in, bufferlist& bl);
   void _release_filelocks(Fh *fh);
   void _update_lock_state(struct flock *fl, uint64_t owner, ceph_lock_state_t *lock_state);
+
+  int _posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl, int uid, int gid);
+  int _posix_acl_chmod(Inode *in, mode_t mode, int uid, int gid);
+  int _posix_acl_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
 public:
   int mount(const std::string &mount_root, bool require_mds=false);
   void unmount();
@@ -865,7 +926,7 @@ public:
 
   // dirs
   int mkdir(const char *path, mode_t mode);
-  int mkdirs(const char *path, mode_t mode, int uid=-1, int gid=-1);
+  int mkdirs(const char *path, mode_t mode);
   int rmdir(const char *path);
 
   // symlinks
@@ -982,7 +1043,7 @@ public:
 		  int flags, int uid=-1, int gid=-1);
   int ll_removexattr(Inode *in, const char *name, int uid=-1, int gid=-1);
   int ll_listxattr(Inode *in, char *list, size_t size, int uid=-1, int gid=-1);
-  int ll_opendir(Inode *in, dir_result_t **dirpp, int uid = -1, int gid = -1);
+  int ll_opendir(Inode *in, int flags, dir_result_t **dirpp, int uid = -1, int gid = -1);
   int ll_releasedir(dir_result_t* dirp);
   int ll_fsyncdir(dir_result_t* dirp);
   int ll_readlink(Inode *in, char *buf, size_t bufsize, int uid = -1, int gid = -1);
@@ -1027,10 +1088,14 @@ public:
   int ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length);
   int ll_release(Fh *fh);
   int ll_getlk(Fh *fh, struct flock *fl, uint64_t owner);
-  int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req);
-  int ll_flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req);
+  int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
+  int ll_flock(Fh *fh, int cmd, uint64_t owner);
   int ll_file_layout(Fh *fh, ceph_file_layout *layout);
   void ll_interrupt(void *d);
+  bool ll_handle_umask() {
+    return acl_type != NO_ACL;
+  }
+
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
 			ceph_file_layout* layout);
   uint64_t ll_get_internal_offset(struct Inode *in, uint64_t blockno);

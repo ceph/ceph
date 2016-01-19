@@ -43,7 +43,8 @@ namespace ceph {
     g_assert_context = cct;
   }
 
-  void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *func)
+  void __ceph_assert_fail(const char *assertion, const char *file, int line,
+			  const char *func)
   {
     ostringstream tss;
     tss << ceph_clock_now(g_assert_context);
@@ -74,10 +75,11 @@ namespace ceph {
       g_assert_context->_log->dump_recent();
     }
 
-    throw FailedAssertion(bt);
+    abort();
   }
 
-  void __ceph_assertf_fail(const char *assertion, const char *file, int line, const char *func, const char* msg, ...)
+  void __ceph_assertf_fail(const char *assertion, const char *file, int line,
+			   const char *func, const char* msg, ...)
   {
     ostringstream tss;
     tss << ceph_clock_now(g_assert_context);
@@ -143,7 +145,7 @@ namespace ceph {
       g_assert_context->_log->dump_recent();
     }
 
-    throw FailedAssertion(bt);
+    abort();
   }
 
   void __ceph_assert_warn(const char *assertion, const char *file,

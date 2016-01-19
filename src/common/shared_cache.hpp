@@ -21,8 +21,9 @@
 #include <utility>
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "include/unordered_map.h"
 
-template <class K, class V, class C = std::less<K> >
+template <class K, class V, class C = std::less<K>, class H = std::hash<K> >
 class SharedLRU {
   CephContext *cct;
   typedef ceph::shared_ptr<V> VPtr;
@@ -34,7 +35,7 @@ class SharedLRU {
 public:
   int waiting;
 private:
-  map<K, typename list<pair<K, VPtr> >::iterator, C> contents;
+  ceph::unordered_map<K, typename list<pair<K, VPtr> >::iterator, H> contents;
   list<pair<K, VPtr> > lru;
 
   map<K, pair<WeakVPtr, V*>, C> weak_refs;
@@ -47,7 +48,7 @@ private:
   }
 
   void lru_remove(const K& key) {
-    typename map<K, typename list<pair<K, VPtr> >::iterator, C>::iterator i =
+    typename ceph::unordered_map<K, typename list<pair<K, VPtr> >::iterator, H>::iterator i = 
       contents.find(key);
     if (i == contents.end())
       return;
@@ -57,7 +58,7 @@ private:
   }
 
   void lru_add(const K& key, const VPtr& val, list<VPtr> *to_release) {
-    typename map<K, typename list<pair<K, VPtr> >::iterator, C>::iterator i =
+    typename ceph::unordered_map<K, typename list<pair<K, VPtr> >::iterator, H>::iterator i =
       contents.find(key);
     if (i != contents.end()) {
       lru.splice(lru.begin(), lru, i->second);
@@ -92,7 +93,9 @@ private:
 public:
   SharedLRU(CephContext *cct = NULL, size_t max_size = 20)
     : cct(cct), lock("SharedLRU::lock"), max_size(max_size), 
-      size(0), waiting(0) {}
+      size(0), waiting(0) {
+    contents.rehash(max_size); 
+  }
   
   ~SharedLRU() {
     contents.clear();
@@ -161,8 +164,9 @@ public:
     VPtr val; // release any ref we have after we drop the lock
     {
       Mutex::Locker l(lock);
-      if (weak_refs.count(key)) {
-	val = weak_refs[key].first.lock();
+      typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
+      if (i != weak_refs.end()) {
+	val = i->second.first.lock();
       }
       lru_remove(key);
     }
@@ -172,11 +176,12 @@ public:
     VPtr val; // release any ref we have after we drop the lock
     {
       Mutex::Locker l(lock);
-      if (weak_refs.count(key)) {
-	val = weak_refs[key].first.lock();
+      typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
+      if (i != weak_refs.end()) {
+	val = i->second.first.lock();
+        weak_refs.erase(i);
       }
       lru_remove(key);
-      weak_refs.erase(key);
     }
   }
 

@@ -265,6 +265,12 @@ void SnapServer::check_osd_map(bool force)
        ++p) {
     int id = p->first;
     const pg_pool_t *pi = osdmap->get_pg_pool(id);
+    if (pi == NULL) {
+      // The pool is gone.  So are the snapshots.
+      all_purged[id] = std::vector<snapid_t>(p->second.begin(), p->second.end());
+      continue;
+    }
+
     for (set<snapid_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {

@@ -1,7 +1,12 @@
 include Makefile-env.am
 
-SUBDIRS += ocf java tracing
-DIST_SUBDIRS += gmock ocf java tracing
+SUBDIRS += ocf java
+DIST_SUBDIRS += gmock ocf java
+
+LOCAL_ALL =
+LOCAL_CLEAN =
+LOCAL_INSTALLDATA =
+LOCAL_INSTALLEXEC =
 
 if NO_GIT_VERSION
 export NO_VERSION="yes"
@@ -14,6 +19,7 @@ include auth/Makefile.am
 include brag/Makefile.am
 include ceph-detect-init/Makefile.am
 include crush/Makefile.am
+include kv/Makefile.am
 include mon/Makefile.am
 include mds/Makefile.am
 include os/Makefile.am
@@ -31,6 +37,7 @@ include messages/Makefile.am
 include include/Makefile.am
 include librados/Makefile.am
 include libradosstriper/Makefile.am
+include journal/Makefile.am
 include librbd/Makefile.am
 include rgw/Makefile.am
 include cls/Makefile.am
@@ -40,6 +47,8 @@ include test/Makefile.am
 include tools/Makefile.am
 include Makefile-rocksdb.am
 include compressor/Makefile.am
+include tracing/Makefile.am
+include pybind/Makefile.am
 
 
 # shell scripts
@@ -105,6 +114,7 @@ EXTRA_DIST += \
 	mount.fuse.ceph \
 	rbd-replay-many \
 	rbdmap \
+	etc-rbdmap \
 	yasm-wrapper
 
 EXTRA_DIST += \
@@ -188,11 +198,12 @@ CLEANFILES += ceph_ver.h sample.fetch_config
 
 # cleaning
 
-clean-local::
+base-clean-local::
 	rm -f *.so 
 	find . -name '*.gcno' -o -name '*.gcda' -o -name '*.lcov' -o -name "*.o" -o -name "*.lo" | xargs rm -f
 	rm -f ceph java/java/com/ceph/crush/Bucket.class
 
+LOCAL_CLEAN += base-clean-local
 
 # pybind
 
@@ -238,10 +249,12 @@ if ENABLE_COVERAGE
 	-test/coverage.sh -d $(srcdir) -o check-coverage make check
 endif
 
-install-data-local:: install-coverage
+base-install-data-local:: install-coverage
 	-mkdir -p $(DESTDIR)$(sysconfdir)/ceph
 	-mkdir -p $(DESTDIR)$(localstatedir)/log/ceph
 	-mkdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
+
+LOCAL_INSTALLDATA += base-install-data-local
 
 uninstall-local:: uninstall-coverage
 	-rmdir -p $(DESTDIR)$(sysconfdir)/ceph/
@@ -273,3 +286,9 @@ if ENABLE_SERVER
 include Makefile-server.am
 endif
 
+# local targets
+
+all-local: $(LOCAL_ALL)
+clean-local: $(LOCAL_CLEAN)
+install-exec-local: $(LOCAL_INSTALLEXEC)
+install-data-local: $(LOCAL_INSTALLDATA)

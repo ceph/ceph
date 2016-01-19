@@ -147,6 +147,7 @@ class C_clean_handler : public EventCallback {
   C_clean_handler(AsyncConnectionRef c): conn(c) {}
   void do_request(int id) {
     conn->cleanup_handler();
+    delete this;
   }
 };
 
@@ -183,13 +184,13 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
     recv_start(0), recv_end(0), got_bad_auth(false), authorizer(NULL), replacing(false),
     is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), net(cct), center(c)
 {
-  read_handler.reset(new C_handle_read(this));
-  write_handler.reset(new C_handle_write(this));
-  reset_handler.reset(new C_handle_reset(async_msgr, this));
-  remote_reset_handler.reset(new C_handle_remote_reset(async_msgr, this));
-  connect_handler.reset(new C_deliver_connect(async_msgr, this));
-  local_deliver_handler.reset(new C_local_deliver(this));
-  wakeup_handler.reset(new C_time_wakeup(this));
+  read_handler = new C_handle_read(this);
+  write_handler = new C_handle_write(this);
+  reset_handler = new C_handle_reset(async_msgr, this);
+  remote_reset_handler = new C_handle_remote_reset(async_msgr, this);
+  connect_handler = new C_deliver_connect(async_msgr, this);
+  local_deliver_handler = new C_local_deliver(this);
+  wakeup_handler = new C_time_wakeup(this);
   memset(msgvec, 0, sizeof(msgvec));
   // double recv_max_prefetch see "read_until"
   recv_buf = new char[2*recv_max_prefetch];
@@ -229,12 +230,82 @@ int AsyncConnection::read_bulk(int fd, char *buf, int len)
   return nread;
 }
 
+/* 
+ SIGPIPE suppression - for platforms without SO_NOSIGPIPE or MSG_NOSIGNAL
+  http://krokisplace.blogspot.in/2010/02/suppressing-sigpipe-in-library.html 
+  http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html 
+*/
+void AsyncConnection::suppress_sigpipe()
+{
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+  /*
+    We want to ignore possible SIGPIPE that we can generate on write.
+    SIGPIPE is delivered *synchronously* and *only* to the thread
+    doing the write.  So if it is reported as already pending (which
+    means the thread blocks it), then we do nothing: if we generate
+    SIGPIPE, it will be merged with the pending one (there's no
+    queuing), and that suits us well.  If it is not pending, we block
+    it in this thread (and we avoid changing signal action, because it
+    is per-process).
+  */
+  sigset_t pending;
+  sigemptyset(&pending);
+  sigpending(&pending);
+  sigpipe_pending = sigismember(&pending, SIGPIPE);
+  if (!sigpipe_pending) {
+    sigset_t blocked;
+    sigemptyset(&blocked);
+    pthread_sigmask(SIG_BLOCK, &sigpipe_mask, &blocked);
+
+    /* Maybe is was blocked already?  */
+    sigpipe_unblock = ! sigismember(&blocked, SIGPIPE);
+  }
+#endif /* !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE) */
+}
+
+
+void AsyncConnection::restore_sigpipe()
+{
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+  /*
+    If SIGPIPE was pending already we do nothing.  Otherwise, if it
+    become pending (i.e., we generated it), then we sigwait() it (thus
+    clearing pending status).  Then we unblock SIGPIPE, but only if it
+    were us who blocked it.
+  */
+  if (!sigpipe_pending) {
+    sigset_t pending;
+    sigemptyset(&pending);
+    sigpending(&pending);
+    if (sigismember(&pending, SIGPIPE)) {
+      /*
+        Protect ourselves from a situation when SIGPIPE was sent
+        by the user to the whole process, and was delivered to
+        other thread before we had a chance to wait for it.
+      */
+      static const struct timespec nowait = { 0, 0 };
+      TEMP_FAILURE_RETRY(sigtimedwait(&sigpipe_mask, NULL, &nowait));
+    }
+
+    if (sigpipe_unblock)
+      pthread_sigmask(SIG_UNBLOCK, &sigpipe_mask, NULL);
+  }
+#endif  /* !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE) */
+}
+
 // return the length of msg needed to be sent,
 // < 0 means error occured
 int AsyncConnection::do_sendmsg(struct msghdr &msg, int len, bool more)
 {
+  suppress_sigpipe();
+
   while (len > 0) {
-    int r = ::sendmsg(sd, &msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
+    int r;
+#if defined(MSG_NOSIGNAL)
+    r = ::sendmsg(sd, &msg, MSG_NOSIGNAL);
+#else
+    r = ::sendmsg(sd, &msg, 0);
+#endif /* defined(MSG_NOSIGNAL) */
 
     if (r == 0) {
       ldout(async_msgr->cct, 10) << __func__ << " sendmsg got r==0!" << dendl;
@@ -266,6 +337,7 @@ int AsyncConnection::do_sendmsg(struct msghdr &msg, int len, bool more)
         break;
       }
     }
+    restore_sigpipe();
   }
   return len;
 }
@@ -437,6 +509,7 @@ void AsyncConnection::process()
 {
   int r = 0;
   int prev_state = state;
+  bool already_dispatch_writer = false;
   Mutex::Locker l(lock);
   do {
     ldout(async_msgr->cct, 20) << __func__ << " state is " << get_state_name(state)
@@ -457,6 +530,7 @@ void AsyncConnection::process()
 
           if (tag == CEPH_MSGR_TAG_KEEPALIVE) {
             ldout(async_msgr->cct, 20) << __func__ << " got KEEPALIVE" << dendl;
+	    set_last_keepalive(ceph_clock_now(NULL));
           } else if (tag == CEPH_MSGR_TAG_KEEPALIVE2) {
             state = STATE_OPEN_KEEPALIVE2;
           } else if (tag == CEPH_MSGR_TAG_KEEPALIVE2_ACK) {
@@ -491,8 +565,9 @@ void AsyncConnection::process()
           utime_t kp_t = utime_t(*t);
           write_lock.Lock();
           _send_keepalive_or_ack(true, &kp_t);
-          write_lock.Unlock();
+	  write_lock.Unlock();
           ldout(async_msgr->cct, 20) << __func__ << " got KEEPALIVE2 " << kp_t << dendl;
+	  set_last_keepalive(ceph_clock_now(NULL));
           state = STATE_OPEN;
           break;
         }
@@ -509,7 +584,7 @@ void AsyncConnection::process()
           }
 
           t = (ceph_timespec*)state_buffer;
-          last_keepalive_ack = utime_t(*t);
+          set_last_keepalive_ack(utime_t(*t));
           ldout(async_msgr->cct, 20) << __func__ << " got KEEPALIVE_ACK" << dendl;
           state = STATE_OPEN;
           break;
@@ -842,10 +917,12 @@ void AsyncConnection::process()
 	  ldout(async_msgr->cct, 1) << " == rx == " << message->get_source() << " seq "
                                     << message->get_seq() << " " << message << " " << *message << dendl;
 
-          // if send_message always successfully send, it may have no
-          // opportunity to send seq ack. 10 is a experience value.
-          if (ack_left.inc() > 10) {
+          ack_left.inc();
+          // if send_message always send inline, it may have no
+          // opportunity to send seq ack.
+          if (!already_dispatch_writer) {
             center->dispatch_event_external(write_handler);
+            already_dispatch_writer = true;
           }
 
           state = STATE_OPEN;
@@ -969,16 +1046,28 @@ int AsyncConnection::_process_connection()
           ::close(sd);
         }
 
-        sd = net.connect(get_peer_addr());
+        sd = net.nonblock_connect(get_peer_addr());
         if (sd < 0) {
-          goto fail;
-        }
-        r = net.set_nonblock(sd);
-        if (r < 0) {
           goto fail;
         }
 
         center->create_file_event(sd, EVENT_READABLE, read_handler);
+        state = STATE_CONNECTING_RE;
+        break;
+      }
+
+    case STATE_CONNECTING_RE:
+      {
+        r = net.reconnect(get_peer_addr(), sd);
+        if (r < 0) {
+          ldout(async_msgr->cct, 1) << __func__ << " reconnect failed " << dendl;
+          goto fail;
+        } else if (r > 0) {
+          break;
+        }
+
+        net.set_socket_options(sd);
+
         state = STATE_CONNECTING_WAIT_BANNER;
         break;
       }
@@ -2131,6 +2220,7 @@ void AsyncConnection::fault()
       if (backoff > async_msgr->cct->_conf->ms_max_backoff)
         backoff.set_from_double(async_msgr->cct->_conf->ms_max_backoff);
     }
+
     state = STATE_CONNECTING;
     ldout(async_msgr->cct, 10) << __func__ << " waiting " << backoff << dendl;
   }
@@ -2423,7 +2513,7 @@ void AsyncConnection::handle_write()
       ldout(async_msgr->cct, 10) << __func__ << " state is " << get_state_name(state)
                                  << " policy.server is false" << dendl;
       _connect();
-    } else if (sd >= 0 && state != STATE_CONNECTING && state != STATE_CLOSED) {
+    } else if (sd >= 0 && state != STATE_CONNECTING && state != STATE_CONNECTING_RE && state != STATE_CLOSED) {
       r = _try_send(bl);
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " send outcoming bl failed" << dendl;

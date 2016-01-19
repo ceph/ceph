@@ -47,6 +47,7 @@
 
 #include "page.h"
 #include "crc32c.h"
+#include "buffer_fwd.h"
 
 #ifdef __CEPH__
 # include "include/assert.h"
@@ -69,12 +70,11 @@ namespace ceph {
 
 const static int CEPH_BUFFER_APPEND_SIZE(4096);
 
-class CEPH_BUFFER_API buffer {
+namespace buffer CEPH_BUFFER_API {
   /*
    * exceptions
    */
 
-public:
   struct error : public std::exception{
     const char *what() const throw ();
   };
@@ -99,28 +99,28 @@ public:
 
 
   /// total bytes allocated
-  static int get_total_alloc();
+  int get_total_alloc();
+
+  /// history total bytes allocated
+  uint64_t get_history_alloc_bytes();
+
+  /// total num allocated
+  uint64_t get_history_alloc_num();
 
   /// enable/disable alloc tracking
-  static void track_alloc(bool b);
+  void track_alloc(bool b);
 
   /// count of cached crc hits (matching input)
-  static int get_cached_crc();
+  int get_cached_crc();
   /// count of cached crc hits (mismatching input, required adjustment)
-  static int get_cached_crc_adjusted();
+  int get_cached_crc_adjusted();
   /// enable/disable tracking of cached crcs
-  static void track_cached_crc(bool b);
+  void track_cached_crc(bool b);
 
   /// count of calls to buffer::ptr::c_str()
-  static int get_c_str_accesses();
+  int get_c_str_accesses();
   /// enable/disable tracking of buffer::ptr::c_str() calls
-  static void track_c_str(bool b);
-
-private:
- 
-  /* hack for memory utilization debugging. */
-  static void inc_total_alloc(unsigned len);
-  static void dec_total_alloc(unsigned len);
+  void track_c_str(bool b);
 
   /*
    * an abstract raw buffer.  with a reference count.
@@ -135,28 +135,26 @@ private:
   class raw_pipe;
   class raw_unshareable; // diagnostic, unshareable char buffer
 
-  friend std::ostream& operator<<(std::ostream& out, const raw &r);
 
-public:
   class xio_mempool;
   class xio_msg_buffer;
 
   /*
    * named constructors 
    */
-  static raw* copy(const char *c, unsigned len);
-  static raw* create(unsigned len);
-  static raw* claim_char(unsigned len, char *buf);
-  static raw* create_malloc(unsigned len);
-  static raw* claim_malloc(unsigned len, char *buf);
-  static raw* create_static(unsigned len, char *buf);
-  static raw* create_aligned(unsigned len, unsigned align);
-  static raw* create_page_aligned(unsigned len);
-  static raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
-  static raw* create_unshareable(unsigned len);
+  raw* copy(const char *c, unsigned len);
+  raw* create(unsigned len);
+  raw* claim_char(unsigned len, char *buf);
+  raw* create_malloc(unsigned len);
+  raw* claim_malloc(unsigned len, char *buf);
+  raw* create_static(unsigned len, char *buf);
+  raw* create_aligned(unsigned len, unsigned align);
+  raw* create_page_aligned(unsigned len);
+  raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
+  raw* create_unshareable(unsigned len);
 
 #if defined(HAVE_XIO)
-  static raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
+  raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
 #endif
 
   /*
@@ -199,6 +197,7 @@ public:
       return (length() % align) == 0;
     }
     bool is_n_page_sized() const { return is_n_align_sized(CEPH_PAGE_SIZE); }
+    bool is_partial() const { return start() > 0 || end() < raw_length(); }
 
     // accessors
     raw *get_raw() const { return _raw; }
@@ -238,13 +237,15 @@ public:
 
     unsigned append(char c);
     unsigned append(const char *p, unsigned l);
-    void copy_in(unsigned o, unsigned l, const char *src, bool crc_reset = true);
-    void zero(bool crc_reset = true);
-    void zero(unsigned o, unsigned l, bool crc_reset = true);
+    void copy_in(unsigned o, unsigned l, const char *src);
+    void copy_in(unsigned o, unsigned l, const char *src, bool crc_reset);
+    void zero();
+    void zero(bool crc_reset);
+    void zero(unsigned o, unsigned l);
+    void zero(unsigned o, unsigned l, bool crc_reset);
 
   };
 
-  friend std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp);
 
   /*
    * list - the useful bit!
@@ -258,7 +259,7 @@ public:
     ptr append_buffer;  // where i put small appends.
 
     template <bool is_const>
-      class iterator_impl: public std::iterator<std::forward_iterator_tag, char> {
+    class iterator_impl: public std::iterator<std::forward_iterator_tag, char> {
     protected:
       typedef typename std::conditional<is_const,
 					const list,
@@ -326,8 +327,23 @@ public:
 	iterator_impl(l, o) {}
       iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po) :
 	iterator_impl(l, o, ip, po) {}
+
+      void advance(int o);
+      void seek(unsigned o);
+      char operator*();
+      iterator& operator++();
+      ptr get_current_ptr();
+
+      // copy data out
+      void copy(unsigned len, char *dest);
+      void copy(unsigned len, ptr &dest);
+      void copy(unsigned len, list &dest);
+      void copy(unsigned len, std::string &dest);
+      void copy_all(list &dest);
+
       // copy data in
-      void copy_in(unsigned len, const char *src, bool crc_reset = true);
+      void copy_in(unsigned len, const char *src);
+      void copy_in(unsigned len, const char *src, bool crc_reset);
       void copy_in(unsigned len, const list& otherl);
     };
 
@@ -342,7 +358,7 @@ public:
       append_buffer = buffer::create(prealloc);
       append_buffer.set_length(0);   // unused, so far.
     }
-    ~list() {}
+
     list(const list& other) : _buffers(other._buffers), _len(other._len),
 			      _memcopy_count(other._memcopy_count), last_p(this) {
       make_shareable();
@@ -373,6 +389,8 @@ public:
 #endif
       return _len;
     }
+
+    bool contents_equal(buffer::list& other);
     bool contents_equal(const buffer::list& other) const;
 
     bool can_zero_copy() const;
@@ -414,7 +432,7 @@ public:
     void zero();
     void zero(unsigned o, unsigned l);
 
-    bool is_contiguous();
+    bool is_contiguous() const;
     void rebuild();
     void rebuild(ptr& nb);
     void rebuild_aligned(unsigned align);
@@ -469,7 +487,8 @@ public:
     void copy(unsigned off, unsigned len, char *dest) const;
     void copy(unsigned off, unsigned len, list &dest) const;
     void copy(unsigned off, unsigned len, std::string& dest) const;
-    void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset = true);
+    void copy_in(unsigned off, unsigned len, const char *src);
+    void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset);
     void copy_in(unsigned off, unsigned len, const list& src);
 
     void append(char c);
@@ -534,16 +553,6 @@ public:
       return crc;
     }
   };
-};
-
-#if defined(HAVE_XIO)
-xio_reg_mem* get_xio_mp(const buffer::ptr& bp);
-#endif
-
-typedef buffer::ptr bufferptr;
-typedef buffer::list bufferlist;
-typedef buffer::hash bufferhash;
-
 
 inline bool operator>(bufferlist& l, bufferlist& r) {
   for (unsigned p = 0; ; p++) {
@@ -582,6 +591,7 @@ inline bool operator<=(bufferlist& l, bufferlist& r) {
 
 std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp);
 
+std::ostream& operator<<(std::ostream& out, const raw &r);
 
 std::ostream& operator<<(std::ostream& out, const buffer::list& bl);
 
@@ -591,6 +601,12 @@ inline bufferhash& operator<<(bufferhash& l, bufferlist &r) {
   l.update(r);
   return l;
 }
+}
+
+#if defined(HAVE_XIO)
+xio_reg_mem* get_xio_mp(const buffer::ptr& bp);
+#endif
+
 }
 
 #endif

@@ -347,6 +347,10 @@ public:
    *         large, true otherwise
    */
   bool check_name_maps(unsigned max_id = 0) const;
+  /**
+   * print out overlapped crush rules belonging to the same ruleset
+   */
+  void check_overlapped_rules() const;
   int test();
   int test_with_crushtool(const char *crushtool_cmd = "crushtool",
 			  int max_id = -1,

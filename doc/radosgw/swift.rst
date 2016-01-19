@@ -31,7 +31,7 @@ The following table describes the support status for current Swift functional fe
 +=================================+=================+========================================+
 | **Authentication**              | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
-| **Get Account Metadata**        | Supported       | No custom metadata                     |
+| **Get Account Metadata**        | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
 | **Swift ACLs**                  | Supported       | Supports a subset of Swift ACLs        |
 +---------------------------------+-----------------+----------------------------------------+
@@ -65,7 +65,7 @@ The following table describes the support status for current Swift functional fe
 +---------------------------------+-----------------+----------------------------------------+
 | **Update Object Metadata**      | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
-| **Expiring Objects**            | Not Supported   |                                        |
+| **Expiring Objects**            | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
 | **Object Versioning**           | Not Supported   |                                        |
 +---------------------------------+-----------------+----------------------------------------+

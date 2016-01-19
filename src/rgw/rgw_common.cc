@@ -171,7 +171,6 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   bucket_exists = false;
   has_bad_meta = false;
   length = NULL;
-  copy_source = NULL;
   http_auth = NULL;
   local_source = false;
 
@@ -614,6 +613,7 @@ int RGWHTTPArgs::parse()
           (name.compare("versions") == 0) ||
           (name.compare("versioning") == 0) ||
           (name.compare("website") == 0) ||
+          (name.compare("requestPayment") == 0) ||
           (name.compare("torrent") == 0)) {
         sub_resources[name] = val;
       } else if (name[0] == 'r') { // root of all evil
@@ -704,26 +704,70 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
   }
 }
 
-bool verify_bucket_permission(struct req_state *s, int perm)
+bool verify_requester_payer_permission(struct req_state *s)
 {
-  if (!s->bucket_acl)
+  if (!s->bucket_info.requester_pays)
+    return true;
+
+  if (s->bucket_info.owner == s->user.user_id)
+    return true;
+
+  const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
+  if (!request_payer) {
+    bool exists;
+    request_payer = s->info.args.get("x-amz-request-payer", &exists).c_str();
+    if (!exists) {
+      return false;
+    }
+  }
+
+  if (strcasecmp(request_payer, "requester") == 0) {
+    return true;
+  }
+
+  return false;
+}
+
+bool verify_bucket_permission(struct req_state * const s,
+                              RGWAccessControlPolicy * const bucket_acl,
+                              const int perm)
+{
+  if (!bucket_acl)
     return false;
 
   if ((perm & (int)s->perm_mask) != perm)
     return false;
 
-  return s->bucket_acl->verify_permission(s->user.user_id, perm, perm);
+  if (!verify_requester_payer_permission(s))
+    return false;
+
+  return bucket_acl->verify_permission(s->user.user_id, perm, perm);
 }
 
-static inline bool check_deferred_bucket_acl(struct req_state *s, uint8_t deferred_check, int perm)
+bool verify_bucket_permission(struct req_state * const s, const int perm)
 {
-  return (s->defer_to_bucket_acls == deferred_check && verify_bucket_permission(s, perm));
+  return verify_bucket_permission(s, s->bucket_acl, perm);
 }
 
-bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy *bucket_acl, RGWAccessControlPolicy *object_acl, int perm)
+static inline bool check_deferred_bucket_acl(struct req_state * const s,
+                                             RGWAccessControlPolicy * const bucket_acl,
+                                             const uint8_t deferred_check,
+                                             const int perm)
 {
-  if (check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
-      check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
+  if (!verify_requester_payer_permission(s))
+    return false;
+
+  return (s->defer_to_bucket_acls == deferred_check \
+              && verify_bucket_permission(s, bucket_acl, perm));
+}
+
+bool verify_object_permission(struct req_state * const s,
+                              RGWAccessControlPolicy * const bucket_acl,
+                              RGWAccessControlPolicy * const object_acl,
+                              const int perm)
+{
+  if (check_deferred_bucket_acl(s, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
+      check_deferred_bucket_acl(s, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
     return true;
   }
 
@@ -785,7 +829,7 @@ static char hex_to_num(char c)
   return hex_table.to_num(c);
 }
 
-bool url_decode(string& src_str, string& dest_str, bool in_query)
+bool url_decode(const string& src_str, string& dest_str, bool in_query)
 {
   const char *src = src_str.c_str();
   char dest[src_str.size() + 1];
@@ -966,8 +1010,8 @@ int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)
     trim_whitespace(cap.substr(0, pos), type);
   }
 
-  if (type.size() == 0)
-    return -EINVAL;
+  if (!is_valid_cap_type(type))
+    return -ERR_INVALID_CAP;
 
   string cap_perm;
   uint32_t perm = 0;
@@ -1126,6 +1170,27 @@ int RGWUserCaps::check_cap(const string& cap, uint32_t perm)
   return 0;
 }
 
+bool RGWUserCaps::is_valid_cap_type(const string& tp)
+{
+  static const char *cap_type[] = { "user",
+                                    "users",
+                                    "buckets",
+                                    "metadata",
+                                    "usage",
+                                    "zone",
+                                    "bilog",
+                                    "mdlog",
+                                    "datalog",
+                                    "opstate" };
+
+  for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
+    if (tp.compare(cap_type[i]) == 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 static struct rgw_name_to_flag op_type_mapping[] = { {"*",  RGW_OP_TYPE_ALL},
                   {"read",  RGW_OP_TYPE_READ},

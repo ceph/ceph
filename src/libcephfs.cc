@@ -1453,8 +1453,8 @@ extern "C" int ceph_ll_fsync(class ceph_mount_info *cmount,
   return (cmount->get_client()->ll_fsync(fh, syncdataonly));
 }
 
-extern "C" loff_t ceph_ll_lseek(class ceph_mount_info *cmount,
-				Fh *fh, loff_t offset, int whence)
+extern "C" off_t ceph_ll_lseek(class ceph_mount_info *cmount,
+				Fh *fh, off_t offset, int whence)
 {
   return (cmount->get_client()->ll_lseek(fh, offset, whence));
 }
@@ -1528,8 +1528,8 @@ extern "C" int ceph_ll_opendir(class ceph_mount_info *cmount,
 			       struct ceph_dir_result **dirpp,
 			       int uid, int gid)
 {
-  return (cmount->get_client()->ll_opendir(in, (dir_result_t**) dirpp, uid,
-					   gid));
+  return (cmount->get_client()->ll_opendir(in, O_RDONLY, (dir_result_t**) dirpp,
+					   uid, gid));
 }
 
 extern "C" int ceph_ll_releasedir(class ceph_mount_info *cmount,

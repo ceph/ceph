@@ -210,9 +210,14 @@ bool ObjectDesc::check_sparse(const std::map<uint64_t, uint64_t>& extents,
   }
   uint64_t size = layers.empty() ? 0 :
     most_recent_gen()->get_length(most_recent());
-  if (pos != size) {
-    std::cout << "only read " << pos << " out of size " << size << std::endl;
-    return false;
+  while (pos < size) {
+    if (*i != '\0') {
+      std::cout << "sparse read omitted non-zero data at " << pos << std::endl;
+      return false;
+    }
+    ++i;
+    ++pos;
   }
+  assert(pos == size);
   return true;
 }

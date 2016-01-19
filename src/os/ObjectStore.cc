@@ -16,14 +16,50 @@
 #include "include/memory.h"
 #include "ObjectStore.h"
 #include "common/Formatter.h"
-#include "FileStore.h"
-#include "MemStore.h"
-#include "KeyValueStore.h"
 #include "common/safe_io.h"
 
+#include "filestore/FileStore.h"
+#include "memstore/MemStore.h"
+#include "keyvaluestore/KeyValueStore.h"
 #if defined(HAVE_LIBAIO)
-#include "newstore/NewStore.h"
+#include "bluestore/BlueStore.h"
 #endif
+#include "kstore/KStore.h"
+
+void decode_str_str_map_to_bl(bufferlist::iterator& p,
+			      bufferlist *out)
+{
+  bufferlist::iterator start = p;
+  __u32 n;
+  ::decode(n, p);
+  unsigned len = 4;
+  while (n--) {
+    __u32 l;
+    ::decode(l, p);
+    p.advance(l);
+    len += 4 + l;
+    ::decode(l, p);
+    p.advance(l);
+    len += 4 + l;
+  }
+  start.copy(len, *out);
+}
+
+void decode_str_set_to_bl(bufferlist::iterator& p,
+			  bufferlist *out)
+{
+  bufferlist::iterator start = p;
+  __u32 n;
+  ::decode(n, p);
+  unsigned len = 4;
+  while (n--) {
+    __u32 l;
+    ::decode(l, p);
+    p.advance(l);
+    len += 4 + l;
+  }
+  start.copy(len, *out);
+}
 
 ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& type,
@@ -42,12 +78,36 @@ ObjectStore *ObjectStore::create(CephContext *cct,
     return new KeyValueStore(data);
   }
 #if defined(HAVE_LIBAIO)
-  if (type == "newstore" &&
-      cct->check_experimental_feature_enabled("newstore")) {
-    return new NewStore(cct, data);
+  if (type == "bluestore" &&
+      cct->check_experimental_feature_enabled("bluestore")) {
+    return new BlueStore(cct, data);
   }
 #endif
+  if (type == "kstore" &&
+      cct->check_experimental_feature_enabled("kstore")) {
+    return new KStore(cct, data);
+  }
   return NULL;
+}
+
+int ObjectStore::probe_block_device_fsid(
+  const string& path,
+  uuid_d *fsid)
+{
+  int r;
+
+  // first try bluestore -- it has a crc on its header and will fail
+  // reliably.
+  r = BlueStore::get_block_device_fsid(path, fsid);
+  if (r == 0)
+    return r;
+
+  // okay, try FileStore (journal).
+  r = FileStore::get_block_device_fsid(path, fsid);
+  if (r == 0)
+    return r;
+
+  return -EINVAL;
 }
 
 int ObjectStore::write_meta(const std::string& key,

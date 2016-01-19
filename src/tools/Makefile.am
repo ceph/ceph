@@ -7,7 +7,7 @@ include tools/Makefile-server.am
 endif
 
 monmaptool_SOURCES = tools/monmaptool.cc
-monmaptool_LDADD = $(CEPH_GLOBAL) $(LIBCOMMON)
+monmaptool_LDADD = $(CEPH_GLOBAL)
 bin_PROGRAMS += monmaptool
 
 crushtool_SOURCES = tools/crushtool.cc
@@ -23,11 +23,11 @@ ceph_psim_LDADD = $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_psim
 
 ceph_conf_SOURCES = tools/ceph_conf.cc
-ceph_conf_LDADD = $(CEPH_GLOBAL) $(LIBCOMMON)
+ceph_conf_LDADD = $(CEPH_GLOBAL)
 bin_PROGRAMS += ceph-conf
 
 ceph_authtool_SOURCES = tools/ceph_authtool.cc
-ceph_authtool_LDADD = $(CEPH_GLOBAL) $(LIBCOMMON)
+ceph_authtool_LDADD = $(CEPH_GLOBAL)
 bin_PROGRAMS += ceph-authtool
 
 noinst_HEADERS += \

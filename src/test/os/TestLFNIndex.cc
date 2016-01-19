@@ -21,8 +21,8 @@
 
 #include <stdio.h>
 #include <signal.h>
-#include "os/LFNIndex.h"
-#include "os/chain_xattr.h"
+#include "os/filestore/LFNIndex.h"
+#include "os/filestore/chain_xattr.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include <gtest/gtest.h>

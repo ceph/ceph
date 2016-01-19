@@ -144,3 +144,18 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   return 0;
 }
 
+void ClsCephFSClient::build_tag_filter(
+          const std::string &scrub_tag,
+          bufferlist *out_bl)
+{
+  assert(out_bl != NULL);
+
+  // Leading part of bl is un-versioned string naming the filter
+  ::encode(std::string("cephfs.inode_tag"), *out_bl);
+
+  // Filter-specific part of the bl: in our case this is a versioned structure
+  InodeTagFilterArgs args;
+  args.scrub_tag = scrub_tag;
+  args.encode(*out_bl);
+}
+

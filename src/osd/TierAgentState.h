@@ -23,7 +23,6 @@ struct TierAgentState {
   bool delaying;
 
   /// histogram of ages we've encountered
-  pow2_hist_t atime_hist;
   pow2_hist_t temp_hist;
   int hist_age;
 
@@ -109,9 +108,6 @@ struct TierAgentState {
     f->dump_string("evict_mode", get_evict_mode_name());
     f->dump_unsigned("evict_effort", evict_effort);
     f->dump_stream("position") << position;
-    f->open_object_section("atime_hist");
-    atime_hist.dump(f);
-    f->close_section();
     f->open_object_section("temp_hist");
     temp_hist.dump(f);
     f->close_section();

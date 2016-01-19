@@ -55,7 +55,7 @@ TEST_F(ErasureCodePluginRegistryTest, factory_mutex) {
   useconds_t delay = 0;
   const useconds_t DELAY_MAX = 20 * 1000 * 1000;
   Thread_factory sleep_forever;
-  sleep_forever.create();
+  sleep_forever.create("sleep_forever");
   do {
     cout << "Trying (1) with delay " << delay << "us\n";
     if (delay > 0)

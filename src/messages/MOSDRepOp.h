@@ -34,9 +34,14 @@ public:
   // metadata from original request
   osd_reqid_t reqid;
 
+  spg_t pgid;
+
+  bufferlist::iterator p;
+  // Decoding flags. Decoding is only needed for messages catched by pipe reader.
+  bool final_decode_needed;
+
   // subop
   pg_shard_t from;
-  spg_t pgid;
   hobject_t poid;
 
   __u8 acks_wanted;
@@ -64,10 +69,16 @@ public:
   }
 
   virtual void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+    p = payload.begin();
+    // splitted to partial and final
     ::decode(map_epoch, p);
     ::decode(reqid, p);
     ::decode(pgid, p);
+  }
+
+  void finish_decode() {
+    if (!final_decode_needed)
+      return; // Message is already final decoded
     ::decode(poid, p);
 
     ::decode(acks_wanted, p);
@@ -83,6 +94,7 @@ public:
     ::decode(from, p);
     ::decode(updated_hit_set_history, p);
     ::decode(pg_trim_rollback_to, p);
+    final_decode_needed = false;
   }
 
   virtual void encode_payload(uint64_t features) {
@@ -105,15 +117,17 @@ public:
 
   MOSDRepOp()
     : Message(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
-      map_epoch(0), acks_wanted (0) {}
+      map_epoch(0),
+      final_decode_needed(true), acks_wanted (0) {}
   MOSDRepOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po, int aw,
 	    epoch_t mape, ceph_tid_t rtid, eversion_t v)
     : Message(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(mape),
       reqid(r),
-      from(from),
       pgid(p),
+      final_decode_needed(false),
+      from(from),
       poid(po),
       acks_wanted(aw),
       version(v) {
@@ -126,11 +140,12 @@ public:
   const char *get_type_name() const { return "osd_repop"; }
   void print(ostream& out) const {
     out << "osd_repop(" << reqid
-	<< " " << pgid
-	<< " " << poid;
-    out << " v " << version;
-    if (updated_hit_set_history)
-      out << ", has_updated_hit_set_history";
+          << " " << pgid;
+    if (!final_decode_needed) {
+        out << " " << poid << " v " << version;
+      if (updated_hit_set_history)
+        out << ", has_updated_hit_set_history";
+    }
     out << ")";
   }
 };

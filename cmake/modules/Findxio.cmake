@@ -18,14 +18,10 @@ endif()
 find_path(Xio_INCLUDE_DIR libxio.h NO_DEFAULT_PATH PATHS ${_xio_include_path})
 
 find_library(Xio_LIBRARY NO_DEFAULT_PATH NAMES xio PATHS ${_xio_lib_path})
+set(Xio_LIBRARIES ${Xio_LIBRARY})
 
-if (Xio_INCLUDE_DIR AND Xio_LIBRARY)
-  set(Xio_FOUND TRUE)
-  set(Xio_LIBRARIES ${Xio_LIBRARY} )
-else ()
-  set(Xio_FOUND FALSE)
-  set(Xio_LIBRARIES )
-endif ()
+INCLUDE(FindPackageHandleStandardArgs)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(xio DEFAULT_MSG Xio_LIBRARY Xio_INCLUDE_DIR)
 
 if (Xio_FOUND)
   message(STATUS "Found Xio: ${Xio_INCLUDE_DIR} ${Xio_LIBRARY}")

@@ -329,7 +329,7 @@ int SimpleMessenger::start()
   lock.Unlock();
 
   reaper_started = true;
-  reaper_thread.create();
+  reaper_thread.create("ms_reaper");
   return 0;
 }
 

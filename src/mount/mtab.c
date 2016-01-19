@@ -289,4 +289,6 @@ update_mtab_entry(const char *spec, const char *node, const char *type,
 
 	free(mnt.mnt_fsname);
 	free(mnt.mnt_dir);
+	free(mnt.mnt_type);
+	free(mnt.mnt_opts);
 }

@@ -14,6 +14,7 @@ libcommon_internal_la_SOURCES = \
 	common/cmdparse.cc \
 	common/escape.c \
 	common/io_priority.cc \
+	common/ceph_time.cc \
 	common/Clock.cc \
 	common/Throttle.cc \
 	common/Timer.cc \
@@ -26,7 +27,6 @@ libcommon_internal_la_SOURCES = \
 	common/MemoryModel.cc \
 	common/armor.c \
 	common/fd.cc \
-	common/xattr.c \
 	common/safe_io.c \
 	common/snap_types.cc \
 	common/str_list.cc \
@@ -58,10 +58,6 @@ libcommon_internal_la_SOURCES = \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
 	common/ceph_crypto_cms.cc \
-	common/ceph_json.cc \
-	common/ipaddr.cc \
-	common/pick_address.cc \
-	common/util.cc \
 	common/TextTable.cc \
 	common/ceph_fs.cc \
 	common/ceph_hash.cc \
@@ -70,14 +66,44 @@ libcommon_internal_la_SOURCES = \
 	common/addr_parsing.c \
 	common/hobject.cc \
 	common/bloom_filter.cc \
-	common/linux_version.c \
 	common/module.c \
 	common/Readahead.cc \
 	common/Cycles.cc \
-	common/ContextCompletion.cc
+	common/ContextCompletion.cc \
+	common/TracepointProvider.cc \
+	common/PluginRegistry.cc
 
+common/PluginRegistry.cc: ./ceph_ver.h
+
+if ENABLE_SERVER
+libcommon_internal_la_SOURCES += \
+	common/xattr.c \
+	common/ipaddr.cc \
+	common/ceph_json.cc \
+	common/util.cc \
+	common/pick_address.cc
+endif
+
+if LINUX
+libcommon_internal_la_SOURCES += \
+	common/linux_version.c 
+endif
+
+if SOLARIS
+libcommon_internal_la_SOURCES += \
+        common/solaris_errno.cc
+endif
+
+if AIX
+libcommon_internal_la_SOURCES += \
+        common/aix_errno.cc
+endif
+
+# used by RBD and FileStore
+if LINUX
 libcommon_internal_la_SOURCES += \
 	common/blkdev.cc
+endif
 
 if ENABLE_XIO
 libcommon_internal_la_SOURCES += \
@@ -237,7 +263,12 @@ noinst_HEADERS += \
 	common/ContextCompletion.h \
 	common/bit_vector.hpp \
 	common/SubProcess.h \
-	common/valgrind.h
+	common/valgrind.h \
+	common/TracepointProvider.h \
+	common/event_socket.h \
+	common/PluginRegistry.h \
+	common/ceph_time.h \
+	common/ceph_timer.h
 
 if ENABLE_XIO
 noinst_HEADERS += \

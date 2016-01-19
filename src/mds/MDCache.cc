@@ -26,6 +26,7 @@
 #include "MDLog.h"
 #include "MDBalancer.h"
 #include "Migrator.h"
+#include "ScrubStack.h"
 
 #include "SnapClient.h"
 
@@ -2651,6 +2652,13 @@ ESubtreeMap *MDCache::create_subtree_map()
   return le;
 }
 
+void MDCache::dump_resolve_status(Formatter *f) const
+{
+  f->open_object_section("resolve_status");
+  f->dump_stream("resolve_gather") << resolve_gather;
+  f->dump_stream("resolve_ack_gather") << resolve_gather;
+  f->close_section();
+}
 
 void MDCache::resolve_start(MDSInternalContext *resolve_done_)
 {
@@ -3847,6 +3855,15 @@ void MDCache::recalc_auth_bits(bool replay)
  * - replica discards changes any time the scatterlock syncs, and
  *   after recovery.
  */
+
+void MDCache::dump_rejoin_status(Formatter *f) const
+{
+  f->open_object_section("rejoin_status");
+  f->dump_stream("rejoin_gather") << rejoin_gather;
+  f->dump_stream("rejoin_ack_gather") << rejoin_ack_gather;
+  f->dump_unsigned("num_opening_inodes", cap_imports_num_opening);
+  f->close_section();
+}
 
 void MDCache::rejoin_start(MDSInternalContext *rejoin_done_)
 {
@@ -5374,7 +5391,11 @@ void MDCache::choose_lock_states_and_reconnect_caps()
     if (in->is_auth() && !in->is_base() && in->inode.is_dirty_rstat())
       in->mark_dirty_rstat();
 
-    in->choose_lock_states();
+    int dirty_caps = 0;
+    map<inodeno_t, int>::iterator it = cap_imports_dirty.find(in->ino());
+    if (it != cap_imports_dirty.end())
+      dirty_caps = it->second;
+    in->choose_lock_states(dirty_caps);
     dout(15) << " chose lock states on " << *in << dendl;
 
     SnapRealm *realm = in->find_snaprealm();
@@ -5520,6 +5541,7 @@ void MDCache::export_remaining_imported_caps()
   }
 
   cap_imports.clear();
+  cap_imports_dirty.clear();
 
   if (warn_str.peek() != EOF) {
     mds->clog->warn() << "failed to reconnect caps for missing inodes:" << "\n";
@@ -5542,7 +5564,11 @@ void MDCache::try_reconnect_cap(CInode *in, Session *session)
     if (in->is_replicated()) {
       mds->locker->try_eval(in, CEPH_CAP_LOCKS);
     } else {
-      in->choose_lock_states();
+      int dirty_caps = 0;
+      map<inodeno_t, int>::iterator it = cap_imports_dirty.find(in->ino());
+      if (it != cap_imports_dirty.end())
+	dirty_caps = it->second;
+      in->choose_lock_states(dirty_caps);
       dout(15) << " chose lock states on " << *in << dendl;
     }
   }
@@ -6104,7 +6130,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
   dout(10) << "_truncate_inode  snapc " << snapc << " on " << *in << dendl;
   filer.truncate(in->inode.ino, &in->inode.layout, *snapc,
 		 pi->truncate_size, pi->truncate_from-pi->truncate_size,
-		 pi->truncate_seq, utime_t(), 0,
+		 pi->truncate_seq, ceph::real_time::min(), 0,
 		 0, new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in,
 								       ls),
 					   mds->finisher));
@@ -6621,12 +6647,6 @@ void MDCache::trim_non_auth()
 
       if (dnl->is_remote() && dnl->get_inode() && !dnl->get_inode()->is_auth())
 	dn->unlink_remote(dnl);
-
-      if (dn->get_dir()->get_inode()->is_stray()) {
-	dn->state_set(CDentry::STATE_STRAY);
-	if (dnl->is_primary() && dnl->get_inode()->inode.nlink == 0)
-	  dnl->get_inode()->state_set(CInode::STATE_ORPHAN);
-      }
 
       if (!first_auth) {
 	first_auth = dn;
@@ -8821,6 +8841,9 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
     case CEPH_MDS_OP_VALIDATE:
       scrub_dentry_work(mdr);
       break;
+    case CEPH_MDS_OP_ENQUEUE_SCRUB:
+      enqueue_scrub_work(mdr);
+      break;
     case CEPH_MDS_OP_FLUSH:
       flush_dentry_work(mdr);
       break;
@@ -9185,10 +9208,14 @@ void MDCache::scan_stray_dir(dirfrag_t next)
     }
     for (CDir::map_t::iterator q = dir->items.begin(); q != dir->items.end(); ++q) {
       CDentry *dn = q->second;
+      dn->state_set(CDentry::STATE_STRAY);
       CDentry::linkage_t *dnl = dn->get_projected_linkage();
       stray_manager.notify_stray_created();
       if (dnl->is_primary()) {
-	maybe_eval_stray(dnl->get_inode());
+	CInode *in = dnl->get_inode();
+	if (in->inode.nlink == 0)
+	  in->state_set(CInode::STATE_ORPHAN);
+	maybe_eval_stray(in);
       }
     }
   }
@@ -11090,7 +11117,8 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, list<CDir*>& resultfrag
       dout(10) << " removing orphan dirfrag " << oid << dendl;
       op.remove();
     }
-    mds->objecter->mutate(oid, oloc, op, nullsnapc, ceph_clock_now(g_ceph_context),
+    mds->objecter->mutate(oid, oloc, op, nullsnapc,
+			  ceph::real_clock::now(g_ceph_context),
 			  0, NULL, gather.new_sub());
   }
 
@@ -11674,6 +11702,21 @@ void MDCache::scrub_dentry(const string& path, Formatter *f, Context *fin)
   scrub_dentry_work(mdr);
 }
 
+/**
+ * The private data for an OP_ENQUEUE_SCRUB MDRequest
+ */
+class EnqueueScrubParams
+{
+  public:
+  const bool recursive;
+  const bool children;
+  const std::string tag;
+  EnqueueScrubParams(bool r, bool c, const std::string &tag_)
+    : recursive(r), children(c), tag(tag_)
+  {}
+};
+
+
 void MDCache::scrub_dentry_work(MDRequestRef& mdr)
 {
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
@@ -11691,9 +11734,98 @@ void MDCache::scrub_dentry_work(MDRequestRef& mdr)
   CInode::validated_data *vr =
       static_cast<CInode::validated_data*>(mdr->internal_op_private);
 
-  in->validate_disk_state(vr, mdr);
+  in->validate_disk_state(vr, mdr, NULL);
   return;
 }
+
+
+class C_ScrubEnqueued : public Context
+{
+public:
+  MDRequestRef mdr;
+  Context *on_finish;
+  Formatter *formatter;
+  C_ScrubEnqueued(MDRequestRef& mdr,
+                  Context *fin, Formatter *f) :
+    mdr(mdr), on_finish(fin), formatter(f) {}
+
+  void finish(int r) {
+#if 0
+    if (r >= 0) { // we got into the scrubbing dump it
+      results.dump(formatter);
+    } else { // we failed the lookup or something; dump ourselves
+      formatter->open_object_section("results");
+      formatter->dump_int("return_code", r);
+      formatter->close_section(); // results
+    }
+#endif
+    on_finish->complete(r);
+  }
+};
+
+void MDCache::enqueue_scrub(
+    const string& path,
+    const std::string &tag,
+    Formatter *f, Context *fin)
+{
+  dout(10) << "scrub_dentry " << path << dendl;
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_ENQUEUE_SCRUB);
+  filepath fp(path.c_str());
+  mdr->set_filepath(fp);
+
+  C_ScrubEnqueued *se = new C_ScrubEnqueued(mdr, fin, f);
+  mdr->internal_op_finish = se;
+  // TODO pass through tag/args
+  mdr->internal_op_private = new EnqueueScrubParams(true, true, tag);
+  enqueue_scrub_work(mdr);
+}
+
+void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
+{
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (NULL == in)
+    return;
+
+  // TODO: Remove this restriction
+  assert(in->is_auth());
+
+  bool locked = mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (!locked)
+    return;
+
+  CDentry *dn = in->get_parent_dn();
+
+  // We got to this inode by path, so it must have a parent
+  assert(dn != NULL);
+
+  // Not setting a completion context here because we don't
+  // want to block asok caller on long running scrub
+  EnqueueScrubParams *args = static_cast<EnqueueScrubParams*>(
+      mdr->internal_op_private);
+  assert(args != NULL);
+
+  // Cannot scrub same dentry twice at same time
+  if (dn->scrub_info()->dentry_scrubbing) {
+    mds->server->respond_to_request(mdr, -EBUSY);
+    return;
+  }
+
+  ScrubHeaderRef header(new ScrubHeader());
+
+  header->tag = args->tag;
+  header->origin = dn;
+
+  mds->scrubstack->enqueue_dentry_bottom(dn, true, true, header, NULL);
+  delete args;
+  mdr->internal_op_private = NULL;
+
+  // Successfully enqueued
+  mds->server->respond_to_request(mdr, 0);
+  return;
+}
+
+
 
 void MDCache::flush_dentry(const string& path, Context *fin)
 {

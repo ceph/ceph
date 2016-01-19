@@ -175,7 +175,7 @@ TEST_F(SharedLRU_all, wait_lookup) {
   EXPECT_FALSE(cache.get_weak_refs()[key].first.lock());
 
   Thread_wait t(cache, key, value, Thread_wait::LOOKUP);
-  t.create();
+  t.create("wait_lookup_1");
   ASSERT_TRUE(wait_for(cache, 1));
   EXPECT_EQ(value, *t.ptr);
   // waiting on a key does not block lookups on other keys
@@ -201,7 +201,7 @@ TEST_F(SharedLRU_all, wait_lookup_or_create) {
   EXPECT_FALSE(cache.get_weak_refs()[key].first.lock());
 
   Thread_wait t(cache, key, value, Thread_wait::LOOKUP);
-  t.create();
+  t.create("wait_lookup_2");
   ASSERT_TRUE(wait_for(cache, 1));
   EXPECT_EQ(value, *t.ptr);
   // waiting on a key does not block lookups on other keys
@@ -246,7 +246,7 @@ TEST_F(SharedLRU_all, wait_lower_bound) {
   EXPECT_FALSE(cache.get_weak_refs()[key].first.lock());
 
   Thread_wait t(cache, key, value, Thread_wait::LOWER_BOUND);
-  t.create();
+  t.create("wait_lower_bnd");
   ASSERT_TRUE(wait_for(cache, 1));
   EXPECT_FALSE(t.ptr);
   // waiting on a key does not block getting lower_bound on other keys

@@ -461,7 +461,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       decode_list_index_key(kiter->first, &key, &ver);
 
       start_key = kiter->first;
-      CLS_LOG(20, "start_key=%s len=%d", start_key.c_str(), start_key.size());
+      CLS_LOG(20, "start_key=%s len=%lu", start_key.c_str(), start_key.size());
 
       if (!entry.is_valid()) {
         CLS_LOG(20, "entry %s[%s] is not valid\n", key.name.c_str(), key.instance.c_str());

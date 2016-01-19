@@ -294,6 +294,9 @@ enum {
 	CEPH_SESSION_FLUSHMSG,
 	CEPH_SESSION_FLUSHMSG_ACK,
 	CEPH_SESSION_FORCE_RO,
+    // A response to REQUEST_OPEN indicating that the client should
+    // permanently desist from contacting the MDS
+	CEPH_SESSION_REJECT
 };
 
 extern const char *ceph_session_op_name(int op);
@@ -351,19 +354,22 @@ enum {
 	CEPH_MDS_OP_FRAGMENTDIR= 0x01500,
 	CEPH_MDS_OP_EXPORTDIR  = 0x01501,
 	CEPH_MDS_OP_VALIDATE   = 0x01502,
-	CEPH_MDS_OP_FLUSH      = 0x01503
+	CEPH_MDS_OP_FLUSH      = 0x01503,
+	CEPH_MDS_OP_ENQUEUE_SCRUB = 0x01504
 };
 
 extern const char *ceph_mds_op_name(int op);
 
 
-#define CEPH_SETATTR_MODE   1
-#define CEPH_SETATTR_UID    2
-#define CEPH_SETATTR_GID    4
-#define CEPH_SETATTR_MTIME  8
-#define CEPH_SETATTR_ATIME 16
-#define CEPH_SETATTR_SIZE  32
-#define CEPH_SETATTR_CTIME 64
+#define CEPH_SETATTR_MODE	(1 << 0)
+#define CEPH_SETATTR_UID	(1 << 1)
+#define CEPH_SETATTR_GID	(1 << 2)
+#define CEPH_SETATTR_MTIME	(1 << 3)
+#define CEPH_SETATTR_ATIME	(1 << 4)
+#define CEPH_SETATTR_SIZE	(1 << 5)
+#define CEPH_SETATTR_CTIME	(1 << 6)
+#define CEPH_SETATTR_MTIME_NOW	(1 << 7)
+#define CEPH_SETATTR_ATIME_NOW	(1 << 8)
 
 /*
  * Ceph setxattr request flags.

@@ -20,7 +20,7 @@
 
 #include "include/memory.h"
 #include "erasure-code/ErasureCodeInterface.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/assert.h"
 #include "include/encoding.h"
 #include "common/Formatter.h"
@@ -112,20 +112,7 @@ public:
   HashInfo(unsigned num_chunks)
   : total_chunk_size(0),
     cumulative_shard_hashes(num_chunks, -1) {}
-  void append(uint64_t old_size, map<int, bufferlist> &to_append) {
-    assert(to_append.size() == cumulative_shard_hashes.size());
-    assert(old_size == total_chunk_size);
-    uint64_t size_to_append = to_append.begin()->second.length();
-    for (map<int, bufferlist>::iterator i = to_append.begin();
-	 i != to_append.end();
-	 ++i) {
-      assert(size_to_append == i->second.length());
-      assert((unsigned)i->first < cumulative_shard_hashes.size());
-      uint32_t new_hash = i->second.crc32c(cumulative_shard_hashes[i->first]);
-      cumulative_shard_hashes[i->first] = new_hash;
-    }
-    total_chunk_size += size_to_append;
-  }
+  void append(uint64_t old_size, map<int, bufferlist> &to_append);
   void clear() {
     total_chunk_size = 0;
     cumulative_shard_hashes = vector<uint32_t>(

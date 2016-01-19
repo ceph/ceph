@@ -1,115 +1,112 @@
-libos_types_la_SOURCES = \
+libos_types_a_SOURCES = \
+	os/bluestore/bluestore_types.cc \
+	os/bluestore/bluefs_types.cc \
+	os/kstore/kstore_types.cc \
 	os/Transaction.cc
-libos_types_la_CXXFLAGS = ${AM_CXXFLAGS}
-noinst_LTLIBRARIES += libos_types.la
+libos_types_a_CXXFLAGS = ${AM_CXXFLAGS}
+noinst_LIBRARIES += libos_types.a
 
 if ENABLE_SERVER
 
-libos_la_SOURCES = \
-	os/chain_xattr.cc \
+libos_a_SOURCES = \
+	os/bluestore/kv.cc \
+	os/bluestore/Allocator.cc \
+	os/bluestore/BlockDevice.cc \
+	os/bluestore/BlueFS.cc \
+	os/bluestore/BlueRocksEnv.cc \
+	os/bluestore/BlueStore.cc \
+	os/bluestore/FreelistManager.cc \
+	os/bluestore/StupidAllocator.cc \
+	os/filestore/chain_xattr.cc \
+	os/filestore/DBObjectMap.cc \
+	os/filestore/FileJournal.cc \
+	os/filestore/FileStore.cc \
+	os/filestore/GenericFileStoreBackend.cc \
+	os/filestore/HashIndex.cc \
+	os/filestore/IndexManager.cc \
+	os/filestore/JournalingObjectStore.cc \
+	os/filestore/LFNIndex.cc \
+	os/filestore/WBThrottle.cc \
 	os/fs/FS.cc \
-	os/DBObjectMap.cc \
-	os/GenericObjectMap.cc \
-	os/FileJournal.cc \
-	os/FileStore.cc \
-	os/GenericFileStoreBackend.cc \
-	os/HashIndex.cc \
-	os/IndexManager.cc \
-	os/JournalingObjectStore.cc \
-	os/LevelDBStore.cc \
-	os/LFNIndex.cc \
-	os/MemStore.cc \
-	os/KeyValueDB.cc \
-	os/KeyValueStore.cc \
-	os/ObjectStore.cc \
-	os/WBThrottle.cc \
-	common/TrackedOp.cc
+	os/keyvaluestore/GenericObjectMap.cc \
+	os/keyvaluestore/KeyValueStore.cc \
+	os/kstore/kv.cc \
+	os/kstore/KStore.cc \
+	os/memstore/MemStore.cc \
+	os/ObjectStore.cc
 
 if LINUX
-libos_la_SOURCES += os/BtrfsFileStoreBackend.cc
-endif
-
-if WITH_LIBAIO
-libos_types_la_SOURCES += os/newstore/newstore_types.cc
-libos_la_SOURCES += os/newstore/NewStore.cc
+libos_a_SOURCES += os/filestore/BtrfsFileStoreBackend.cc
 endif
 
 if WITH_LIBXFS
-libos_la_SOURCES += \
-    os/fs/XFS.cc \
-    os/XfsFileStoreBackend.cc
+libos_a_SOURCES += \
+    os/filestore/XfsFileStoreBackend.cc \
+    os/fs/XFS.cc
 endif
 
 if WITH_LIBZFS
-libos_la_SOURCES += os/ZFSFileStoreBackend.cc
+libos_a_SOURCES += os/filestore/ZFSFileStoreBackend.cc
 endif
 
-libos_la_CXXFLAGS = ${AM_CXXFLAGS}
-libos_la_LIBADD = $(LIBOS_TYPES)
+libos_a_CXXFLAGS = ${AM_CXXFLAGS} -I rocksdb/include -fPIC
+libos_a_LIBADD = libos_types.a libkv.a
+noinst_LIBRARIES += libos.a
+
 if WITH_LTTNG
-libos_la_LIBADD += $(LIBOS_TP)
+libos_a_LIBADD += $(LIBOS_TP)
 endif
-
-noinst_LTLIBRARIES += libos.la
 
 noinst_HEADERS += \
-	os/btrfs_ioctl.h \
-	os/chain_xattr.h \
-	os/newstore/newstore_types.h \
-	os/newstore/NewStore.h \
-	os/BtrfsFileStoreBackend.h \
-	os/CollectionIndex.h \
-	os/DBObjectMap.h \
-	os/GenericObjectMap.h \
-	os/FileJournal.h \
-	os/FileStore.h \
-	os/FDCache.h \
+	os/bluestore/bluefs_types.h \
+	os/bluestore/bluestore_types.h \
+	os/bluestore/kv.h \
+	os/bluestore/Allocator.h \
+	os/bluestore/BlockDevice.h \
+	os/bluestore/BlueFS.h \
+	os/bluestore/BlueRocksEnv.h \
+	os/bluestore/BlueStore.h \
+	os/bluestore/FreelistManager.h \
+	os/bluestore/StupidAllocator.h \
+	os/filestore/chain_xattr.h \
+	os/filestore/BtrfsFileStoreBackend.h \
+	os/filestore/CollectionIndex.h \
+	os/filestore/DBObjectMap.h \
+	os/filestore/FileJournal.h \
+	os/filestore/FileStore.h \
+	os/filestore/FDCache.h \
+	os/filestore/GenericFileStoreBackend.h \
+	os/filestore/HashIndex.h \
+	os/filestore/IndexManager.h \
+	os/filestore/Journal.h \
+	os/filestore/JournalingObjectStore.h \
+	os/filestore/LFNIndex.h \
+	os/filestore/SequencerPosition.h \
+	os/filestore/WBThrottle.h \
+	os/filestore/XfsFileStoreBackend.h \
+	os/filestore/ZFSFileStoreBackend.h \
+	os/fs/btrfs_ioctl.h \
 	os/fs/FS.h \
 	os/fs/XFS.h \
-	os/GenericFileStoreBackend.h \
-	os/HashIndex.h \
-	os/IndexManager.h \
-	os/Journal.h \
-	os/JournalingObjectStore.h \
-	os/KeyValueDB.h \
-	os/LevelDBStore.h \
-	os/LFNIndex.h \
-	os/MemStore.h \
-	os/KeyValueStore.h \
+	os/keyvaluestore/GenericObjectMap.h \
+	os/keyvaluestore/KeyValueStore.h \
+	os/kstore/kstore_types.h \
+	os/kstore/KStore.h \
+	os/kstore/kv.h \
+	os/memstore/MemStore.h \
+	os/memstore/PageSet.h \
 	os/ObjectMap.h \
-	os/ObjectStore.h \
-	os/PageSet.h \
-	os/SequencerPosition.h \
-	os/WBThrottle.h \
-	os/XfsFileStoreBackend.h \
-	os/ZFSFileStoreBackend.h
+	os/ObjectStore.h
 
-if WITH_SLIBROCKSDB
-libos_rocksdb_la_SOURCES = os/RocksDBStore.cc
-libos_rocksdb_la_CXXFLAGS = ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11 -I rocksdb/include
-libos_rocksdb_la_LIBADD = rocksdb/librocksdb.la
-noinst_LTLIBRARIES += libos_rocksdb.la
-noinst_HEADERS += os/RocksDBStore.h
-endif
-if WITH_DLIBROCKSDB
-libos_rocksdb_la_SOURCES = os/RocksDBStore.cc
-libos_rocksdb_la_CXXFLAGS = ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11
-libos_rocksdb_la_LIBADD = -lrocksdb
-noinst_LTLIBRARIES += libos_rocksdb.la
-noinst_HEADERS += os/RocksDBStore.h
-endif
 if WITH_LIBZFS
-libos_zfs_a_SOURCES = os/ZFS.cc
+libos_zfs_a_SOURCES = os/fs/ZFS.cc
 libos_zfs_a_CXXFLAGS = ${AM_CXXFLAGS} ${LIBZFS_CFLAGS}
 noinst_LIBRARIES += libos_zfs.a
-noinst_HEADERS += os/ZFS.h
+noinst_HEADERS += os/fs/ZFS.h
 endif
 
-if WITH_KINETIC
-libos_la_SOURCES += os/KineticStore.cc
-libos_la_CXXFLAGS += -std=gnu++11
-libos_la_LIBADD += -lkinetic_client -lprotobuf -lglog -lgflags libcrypto.a
-noinst_HEADERS += os/KineticStore.h
-endif
+ceph_bluefs_tool_SOURCES = os/bluestore/bluefs_tool.cc
+ceph_bluefs_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+bin_PROGRAMS += ceph-bluefs-tool
 
 endif # ENABLE_SERVER

@@ -6,6 +6,7 @@
 
 #include "Mutex.h"
 #include "Cond.h"
+#include <list>
 
 /**
    This class provides common state and logic for code that needs to perform readahead
@@ -70,6 +71,7 @@ public:
      Waits until the pending count reaches 0.
    */
   void wait_for_pending();
+  void wait_for_pending(Context *ctx);
 
   /**
      Sets the number of sequential requests necessary to trigger readahead.
@@ -146,8 +148,8 @@ private:
   /// Lock for m_pending
   Mutex m_pending_lock;
 
-  /// Signalled when m_pending reaches 0
-  Cond m_pending_cond;
+  /// Waiters for pending readahead
+  std::list<Context *> m_pending_waiting;
 };
 
 #endif

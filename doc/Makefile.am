@@ -27,6 +27,7 @@ EXTRA_DIST = \
 	man/8/radosgw.rst	\
 	man/8/rados.rst	\
 	man/8/rbd-fuse.rst	\
+	man/8/rbd-nbd.rst	\
 	man/8/rbd-replay-many.rst	\
 	man/8/rbd-replay-prep.rst	\
 	man/8/rbd-replay.rst	\

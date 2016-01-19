@@ -30,8 +30,12 @@ function rebuild()
   clear_all
   echo Starting test $testno
   ((testno++))
-  rbd create $gen --size 100 --order $1 --stripe_unit $2 --stripe_count $3 --image-format $4
-  rbd create $out --size 1 --order 19
+  if [[ "$2" -lt "$1" ]] && [[ "$3" -gt "1" ]]; then
+    rbd create $gen --size 100 --object-size $1 --stripe-unit $2 --stripe-count $3 --image-format $4
+  else
+    rbd create $gen --size 100 --object-size $1 --image-format $4
+  fi
+  rbd create $out --size 1 --object-size 524288
   mkdir -p mnt diffs
   # lttng has atexit handlers that need to be fork/clone aware
   LD_PRELOAD=liblttng-ust-fork.so.0 rbd-fuse -p $pool mnt
@@ -89,7 +93,7 @@ function check()
 }
 
 #test f/t header
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 1
 snap a
 write 1 1
@@ -98,7 +102,7 @@ export_diff a head
 merge_diff null a head
 check null head
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 1
 snap a
 write 1 1
@@ -110,7 +114,7 @@ export_diff b head
 merge_diff null a b
 check null b
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 1
 snap a
 write 1 1
@@ -123,7 +127,7 @@ merge_diff a b head
 check null a
 check a head
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 1
 snap a
 write 1 1
@@ -136,7 +140,7 @@ rbd merge-diff diffs/null.a diffs/a.b - | rbd merge-diff - diffs/b.head - > diff
 check null head
 
 #data test
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 4 2
 snap s101
 write 0 3
@@ -147,7 +151,7 @@ export_diff s101 s102
 merge_diff null s101 s102
 check null s102
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 3
 write 2 5
 write 8 2
@@ -160,7 +164,7 @@ export_diff s201 s202
 merge_diff null s201 s202
 check null s202
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 4
 write 12 6
 snap s301
@@ -173,7 +177,7 @@ export_diff s301 s302
 merge_diff null s301 s302
 check null s302
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 12
 write 14 2
 write 18 2
@@ -188,7 +192,7 @@ export_diff s401 s402
 merge_diff null s401 s402
 check null s402
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 2 4
 write 10 12
 write 27 6
@@ -203,7 +207,7 @@ export_diff s501 s502
 merge_diff null s501 s502
 check null s502
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 8
 resize 5
 snap r1
@@ -220,7 +224,7 @@ merge_diff null r1 r2
 merge_diff null r2 r3
 check null r3
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 8
 resize 5
 snap r1
@@ -241,16 +245,17 @@ merge_diff null r2 r3
 merge_diff null r3 r4
 check null r4
 
-rebuild 22 65536 8 2
-write 0 32
-snap r1
-write 16 32
-snap r2
-export_diff null r1
-export_diff r1 r2
-expect_false merge_diff null r1 r2
+# merge diff doesn't yet support fancy striping
+# rebuild 4194304 65536 8 2
+# write 0 32
+# snap r1
+# write 16 32
+# snap r2
+# export_diff null r1
+# export_diff r1 r2
+# expect_false merge_diff null r1 r2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 1
 write 2 1
 write 4 1
@@ -265,7 +270,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 1 1
 write 3 1
 write 5 1
@@ -280,7 +285,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 3
 write 6 3
 write 12 3
@@ -294,7 +299,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 3
 write 6 3
 write 12 3
@@ -308,7 +313,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 3
 write 6 3
 write 12 3
@@ -322,7 +327,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 1 1
 write 7 1
 write 13 1
@@ -336,7 +341,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 1
 write 6 1
 write 12 1
@@ -350,7 +355,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 2 1
 write 8 1
 write 14 1
@@ -364,7 +369,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 3
 write 6 3
 write 12 3
@@ -378,7 +383,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 2 4
 write 8 4
 write 14 4
@@ -392,7 +397,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 4
 write 6 4
 write 12 4
@@ -406,7 +411,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 6
 write 6 6
 write 12 6
@@ -420,7 +425,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 3 6
 write 9 6
 write 15 6
@@ -434,7 +439,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 8
 snap s1
 resize 2
@@ -445,7 +450,7 @@ export_diff s1 s2
 merge_diff null s1 s2
 check null s2
 
-rebuild 22 4194304 1 2
+rebuild 4194304 4194304 1 2
 write 0 8
 snap s1
 resize 2

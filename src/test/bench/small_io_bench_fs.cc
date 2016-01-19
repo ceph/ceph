@@ -20,7 +20,7 @@
 #include "detailed_stat_collector.h"
 #include "distribution.h"
 #include "global/global_init.h"
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "testfilestore_backend.h"
 #include "common/perf_counters.h"
 
@@ -236,7 +236,7 @@ int main(int argc, char **argv)
   for (vector<ceph::shared_ptr<Bencher> >::iterator i = benchers.begin();
        i != benchers.end();
        ++i) {
-    (*i)->create();
+    (*i)->create("bencher");
   }
   for (vector<ceph::shared_ptr<Bencher> >::iterator i = benchers.begin();
        i != benchers.end();

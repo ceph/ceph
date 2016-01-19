@@ -40,10 +40,26 @@ fi
 
 usage_exit() {
     echo "usage: $0 [options] {start|stop|restart|condrestart} [mon|osd|mds]..."
-    printf "\t-c ceph.conf\n"
-    printf "\t--cluster [cluster name]\tdefine the cluster name\n"
-    printf "\t--valgrind\trun via valgrind\n"
-    printf "\t--hostname [hostname]\toverride hostname lookup\n"
+    printf "Core options:\n"
+    printf "\t--allhosts / -a           execute (via ssh) on all hosts in conf file\n"
+    printf "\t--cluster [cluster name]  define the cluster name\n"
+    printf "\t--conf / -c [conf file]   use [conf file] instead of default\n"
+    printf "\t--help / -h               show this usage message\n"
+    printf "\t--hostname [hostname]     override hostname lookup\n"
+    printf "\t-m [mon addr]             mon address\n"
+    printf "\n"
+    printf "Other options:\n"
+    printf "\t--btrfs                   btrfs\n"
+    printf "\t--nobtrfs                 no btrfs\n"
+    printf "\t--btrfsumount             btrfs umount\n"
+    printf "\t--fsmount                 fsmount\n"
+    printf "\t--nofsmount               no fsmount\n"
+    printf "\t--fsumount                fsumount\n"
+    printf "\t--restart                 restart on core dump\n"
+    printf "\t--norestart               do not restart on core dump\n"
+    printf "\t--valgrind                run via valgrind\n"
+    printf "\t--novalgrind              do not run via valgrind\n"
+    printf "\t--verbose / -v            be verbose\n"
     exit
 }
 
@@ -109,16 +125,26 @@ stop_daemon() {
 ## command line options
 options=
 
-version=0
+OPTS=$(getopt -n 'init-ceph' -o 'hvam:c:' -l 'help,verbose,valgrind,novalgrind,allhosts,restart,norestart,btrfs,nobtrfs,fsmount,nofsmount,btrfsumount,fsumount,conf:,cluster:,hostname:' -- "$@")
+if [ $? != 0 ]
+then
+    exit 1
+fi
+
+eval set -- "$OPTS"
+
 dovalgrind=
 docrun=
 allhosts=0
-debug=0
 monaddr=
 dofsmount=1
 dofsumount=0
 verbose=0
 use_default_conf=1
+
+## set variables like cluster or conf
+[ -e /etc/sysconfig/ceph ] && . /etc/sysconfig/ceph
+[ -e /etc/default/ceph ] && . /etc/default/ceph
 
 
 while echo $1 | grep -q '^-'; do     # FIXME: why not '^-'?
@@ -141,6 +167,9 @@ case $1 in
     --norestart)
 	    docrun=0
 	    ;;
+    -h | --help)
+            usage_exit
+            ;;
     -m )
 	    [ -z "$2" ] && usage_exit
 	    options="$options $1"
@@ -175,6 +204,10 @@ case $1 in
 	    shift
 	    hostname=$1
             ;;
+    -- )
+            shift
+            break
+            ;;
     *)
 	    echo unrecognized option \'$1\'
 	    usage_exit
@@ -183,7 +216,6 @@ esac
 options="$options $1"
 shift
 done
-
 
 # if `--cluster` was not passed in, fallback to looking at the config name
 if [ -z "$cluster" ]; then
@@ -285,7 +317,7 @@ for name in $what; do
 	lockfile=""
     fi
 
-    get_conf asok "$run_dir/ceph-$type.$id.asok" "admin socket"
+    get_conf asok "$run_dir/$cluster-$type.$id.asok" "admin socket"
 
     case "$command" in
 	start)
@@ -307,7 +339,8 @@ for name in $what; do
 	    [ -n "$max_open_files" ] && files="ulimit -n $max_open_files;"
 
 	    if [ -n "$SYSTEMD_RUN" ]; then
-		cmd="$SYSTEMD_RUN -r bash -c '$files $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
+                time=`date +%s.%N` 
+		cmd="$SYSTEMD_RUN --unit=ceph-$name.$time -r bash -c '$files $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
 	    else
 		cmd="$files $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
 	    fi
@@ -350,10 +383,10 @@ for name in $what; do
 		do_root_cmd_okfail "mkdir -p $fs_path"
 		if [ "$fs_type" = "btrfs" ]; then
 		    echo Mounting Btrfs on $host:$fs_path
-		    do_root_cmd_okfail "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts || mount -t btrfs $fs_opt $first_dev $fs_path"
+		    do_root_cmd_okfail "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts && umount $fs_path ; mount -t btrfs $fs_opt $first_dev $fs_path"
 		else
 		    echo Mounting $fs_type on $host:$fs_path
-		    do_root_cmd_okfail "modprobe $fs_type ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts || mount -t $fs_type $fs_opt $first_dev $fs_path"
+		    do_root_cmd_okfail "modprobe $fs_type ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts && umount $fs_path ; mount -t $fs_type $fs_opt $first_dev $fs_path"
 		fi
 		if [ "$ERR" != "0" ]; then
 		    EXIT_STATUS=$ERR
@@ -402,8 +435,8 @@ for name in $what; do
 		# these keys.  it's also true for legacy installs
 		# via mkcephfs, which is fine too; there is no harm
 		# in creating these keys.
-		get_conf mon_data "/var/lib/ceph/mon/ceph-$id" "mon data"
-		if [ "$mon_data" = "/var/lib/ceph/mon/ceph-$id" -a "$asok" = "/var/run/ceph/ceph-mon.$id.asok" ]; then
+		get_conf mon_data "/var/lib/ceph/mon/$cluster-$id" "mon data"
+		if [ "$mon_data" = "/var/lib/ceph/mon/$cluster-$id" -a "$asok" = "/var/run/ceph/$cluster-mon.$id.asok" ]; then
 		    echo Starting ceph-create-keys on $host...
 		    cmd2="$SBINDIR/ceph-create-keys --cluster $cluster -i $id 2> /dev/null &"
 		    do_cmd "$cmd2"

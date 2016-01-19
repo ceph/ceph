@@ -40,6 +40,8 @@
                            set chooseleaf to (not) retry the recursive descent
      --set-chooseleaf-vary-r <0|1>
                            set chooseleaf to (not) vary r based on parent
+     --set-chooseleaf-stable <0|1>
+                           set chooseleaf firstn to (not) return stable results
   
   Options for the modifications stage
   
@@ -64,7 +66,7 @@
                            show location for given device id
      -i mapfn --test       test a range of inputs on the map
         [--min-x x] [--max-x x] [--x x]
-        [--min-rule r] [--max-rule r] [--rule r]
+        [--min-rule r] [--max-rule r] [--rule r] [--ruleset rs]
         [--num-rep n]
         [--batches b]      split the CRUSH mapping into b > 1 rounds
         [--weight|-w devno weight]

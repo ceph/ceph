@@ -54,7 +54,7 @@ class Trace {
   const char *peek_string(char *buf, const char *prefix);
   const char *get_string(char *buf, const char *prefix);
 
-  __int64_t get_int() {
+  int64_t get_int() {
     char buf[20];
     return atoll(get_string(buf, 0));
   }

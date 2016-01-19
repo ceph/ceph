@@ -103,9 +103,22 @@ class Processor {
   Worker *worker;
   int listen_sd;
   uint64_t nonce;
+  EventCallbackRef listen_handler;
+
+  class C_processor_accept : public EventCallback {
+    Processor *pro;
+
+   public:
+    C_processor_accept(Processor *p): pro(p) {}
+    void do_request(int id) {
+      pro->accept();
+    }
+  };
 
  public:
-  Processor(AsyncMessenger *r, CephContext *c, uint64_t n): msgr(r), net(c), worker(NULL), listen_sd(-1), nonce(n) {}
+  Processor(AsyncMessenger *r, CephContext *c, uint64_t n)
+          : msgr(r), net(c), worker(NULL), listen_sd(-1), nonce(n), listen_handler(new C_processor_accept(this)) {}
+  ~Processor() { delete listen_handler; };
 
   void stop();
   int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
@@ -114,7 +127,7 @@ class Processor {
   void accept();
 };
 
-class WorkerPool: CephContext::AssociatedSingletonObject {
+class WorkerPool {
   WorkerPool(const WorkerPool &);
   WorkerPool& operator=(const WorkerPool &);
   CephContext *cct;
@@ -135,6 +148,7 @@ class WorkerPool: CephContext::AssociatedSingletonObject {
       Mutex::Locker l(pool->barrier_lock);
       pool->barrier_count.dec();
       pool->barrier_cond.Signal();
+      delete this;
     }
   };
   friend class C_barrier;

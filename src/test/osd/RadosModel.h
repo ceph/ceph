@@ -1657,7 +1657,7 @@ public:
     }
 
     string src = context->prefix+oid_src;
-    op.copy_from(src.c_str(), context->io_ctx, src_value.version, 0);
+    op.copy_from(src.c_str(), context->io_ctx, src_value.version);
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,

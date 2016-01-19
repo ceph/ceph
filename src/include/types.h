@@ -83,6 +83,11 @@ typedef off_t loff_t;
 typedef off_t off64_t;
 #endif
 
+#if defined(__sun) || defined(_AIX)
+typedef off_t loff_t;
+#endif
+
+
 // -- io helpers --
 
 template<class A, class B>
@@ -514,5 +519,35 @@ WRITE_CLASS_ENCODER(shard_id_t)
 WRITE_EQ_OPERATORS_1(shard_id_t, id)
 WRITE_CMP_OPERATORS_1(shard_id_t, id)
 ostream &operator<<(ostream &lhs, const shard_id_t &rhs);
+
+#if defined(__sun) || defined(_AIX)
+__s32  ceph_to_host_errno(__s32 e);
+#else
+#define  ceph_to_host_errno(e) (e)
+#endif
+
+struct errorcode32_t {
+  int32_t code;
+
+  errorcode32_t() {}
+  errorcode32_t(int32_t i) : code(i) {}
+
+  operator int() const { return code; }
+  int operator==(int i) {
+    return code==i;
+  }
+
+  void encode(bufferlist &bl) const {
+    ::encode(code, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(code, bl);
+    code = ceph_to_host_errno(code);
+  }
+};
+WRITE_CLASS_ENCODER(errorcode32_t)
+WRITE_EQ_OPERATORS_1(errorcode32_t, code)
+WRITE_CMP_OPERATORS_1(errorcode32_t, code)
+
 
 #endif

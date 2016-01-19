@@ -18,7 +18,7 @@
 #define CEPH_CDIR_H
 
 #include "include/types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "mdstypes.h"
 #include "common/config.h"
 #include "common/DecayCounter.h"
@@ -233,7 +233,103 @@ private:
 
 public:
   typedef std::map<dentry_key_t, CDentry*> map_t;
+
+  class scrub_info_t {
+  public:
+    /// inodes we contain with dirty scrub stamps
+    map<dentry_key_t,CInode*> dirty_scrub_stamps; // TODO: make use of this!
+    struct scrub_stamps {
+      version_t version;
+      utime_t time;
+      scrub_stamps() : version(0) {}
+      void operator=(const scrub_stamps &o) {
+        version = o.version;
+        time = o.time;
+      }
+    };
+
+    scrub_stamps recursive_start; // when we last started a recursive scrub
+    scrub_stamps last_recursive; // when we last finished a recursive scrub
+    scrub_stamps last_local; // when we last did a local scrub
+
+    bool directory_scrubbing; /// safety check
+    bool last_scrub_dirty; /// is scrub info dirty or is it flushed to fnode?
+
+    /// these are lists of children in each stage of scrubbing
+    set<dentry_key_t> directories_to_scrub;
+    set<dentry_key_t> directories_scrubbing;
+    set<dentry_key_t> directories_scrubbed;
+    set<dentry_key_t> others_to_scrub;
+    set<dentry_key_t> others_scrubbing;
+    set<dentry_key_t> others_scrubbed;
+
+    scrub_info_t() : directory_scrubbing(false), last_scrub_dirty(false) {}
+  };
+  /**
+   * Call to start this CDir on a new scrub.
+   * @pre It is not currently scrubbing
+   * @pre The CDir is marked complete.
+   * @post It has set up its internal scrubbing state.
+   */
+  void scrub_initialize();
+  /**
+   * Get the next dentry to scrub. Gives you a CDentry* and its meaning. This
+   * function will give you all directory-representing dentries before any
+   * others.
+   * 0: success, you should scrub this CDentry right now
+   * EAGAIN: is currently fetching the next CDentry into memory for you.
+   *   It will activate your callback when done; try again when it does!
+   * ENOENT: there are no remaining dentries to scrub
+   * <0: There was an unexpected error
+   *
+   * @param cb An MDSInternalContext which will be activated only if
+   *   we return EAGAIN via rcode, or else ignored
+   * @param dnout CDentry * which you should next scrub, or NULL
+   * @returns a value as described above
+   */
+  int scrub_dentry_next(MDSInternalContext *cb, CDentry **dnout);
+  /**
+   * Get the currently scrubbing dentries. When returned, the passed-in
+   * list will be filled with all CDentry * which have been returned
+   * from scrub_dentry_next() but not sent back via scrub_dentry_finished().
+   */
+  void scrub_dentries_scrubbing(list<CDentry*> *out_dentries);
+  /**
+   * Report to the CDir that a CDentry has been scrubbed. Call this
+   * for every CDentry returned from scrub_dentry_next().
+   * @param dn The CDentry which has been scrubbed.
+   */
+  void scrub_dentry_finished(CDentry *dn);
+  /**
+   * Call this once all CDentries have been scrubbed, according to
+   * scrub_dentry_next's listing. It finalizes the scrub statistics.
+   */
+  void scrub_finished();
+  /**
+   * Tell the CDir to do a local scrub of itself.
+   * @pre The CDir is_complete().
+   * @returns true if the rstats and directory contents match, false otherwise.
+   */
+  bool scrub_local();
+private:
+  /**
+   * Create a scrub_info_t struct for the scrub_infop pointer.
+   */
+  void scrub_info_create() const;
+  /**
+   * Delete the scrub_infop if it's not got any useful data.
+   */
+  void scrub_maybe_delete_info();
+  /**
+   * Check the given set (presumably one of those in scrub_info_t) for the
+   * next key to scrub and look it up (or fail!).
+   */
+  int _next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
+                          MDSInternalContext *cb, CDentry **dnout);
+
+
 protected:
+  scrub_info_t *scrub_infop;
 
   // contents of this directory
   map_t items;       // non-null AND null
@@ -297,11 +393,18 @@ protected:
  public:
   CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth);
   ~CDir() {
+    delete scrub_infop;
     remove_bloom();
     g_num_dir--;
     g_num_dirs++;
   }
 
+  const scrub_info_t *scrub_info() const {
+    if (!scrub_infop) {
+      scrub_info_create();
+    }
+    return scrub_infop;
+  }
 
 
   // -- accessors --

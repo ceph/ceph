@@ -3,16 +3,20 @@
 #ifndef CEPH_LIBRBD_PARENT_TYPES_H
 #define CEPH_LIBRBD_PARENT_TYPES_H
 
+#include "include/int_types.h"
+#include "include/types.h"
+#include <string>
+
 namespace librbd {
   /** @brief Unique identification of a parent in clone relationship.
    * Cloning an image creates a child image that keeps a reference
    * to its parent. This allows copy-on-write images. */
   struct parent_spec {
     int64_t pool_id;
-    string image_id;
+    std::string image_id;
     snapid_t snap_id;
     parent_spec() : pool_id(-1), snap_id(CEPH_NOSNAP) {}
-    parent_spec(uint64_t pool_id, string image_id, snapid_t snap_id) :
+    parent_spec(uint64_t pool_id, std::string image_id, snapid_t snap_id) :
       pool_id(pool_id), image_id(image_id), snap_id(snap_id) {}
     bool operator==(const parent_spec &other) {
       return ((this->pool_id == other.pool_id) &&

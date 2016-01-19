@@ -34,6 +34,21 @@
 # endif
 #endif
 
+#if defined(__sun) && defined(__SVR4)
+# if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#  define CEPH_BIG_ENDIAN
+# elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#  define CEPH_LITTLE_ENDIAN
+# endif
+#endif
+
+#if defined(_AIX)
+# define CEPH_BIG_ENDIAN
+#endif
+
+
+
+
 static __inline__ __u16 swab16(__u16 val) 
 {
   return (val >> 8) | (val << 8);

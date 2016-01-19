@@ -41,8 +41,11 @@ libcls_rgw_client_la_SOURCES = \
 noinst_LTLIBRARIES += libcls_rgw_client.la
 DENCODER_DEPS += libcls_rgw_client.la
 
-libcls_rbd_client_la_SOURCES = cls/rbd/cls_rbd_client.cc
+libcls_rbd_client_la_SOURCES = \
+	cls/rbd/cls_rbd_client.cc \
+	cls/rbd/cls_rbd_types.cc
 noinst_LTLIBRARIES += libcls_rbd_client.la
+DENCODER_DEPS += libcls_rbd_client.la
 
 libcls_user_client_a_SOURCES = cls/user/cls_user_client.cc \
 	cls/user/cls_user_types.cc \
@@ -58,6 +61,12 @@ libcls_numops_client_la_SOURCES = cls/numops/cls_numops_client.cc
 noinst_LTLIBRARIES += libcls_numops_client.la
 DENCODER_DEPS += libcls_numops_client.la
 
+libcls_journal_client_la_SOURCES = \
+	cls/journal/cls_journal_client.cc \
+	cls/journal/cls_journal_types.cc
+noinst_LTLIBRARIES += libcls_journal_client.la
+DENCODER_DEPS += libcls_journal_client.la
+
 noinst_HEADERS += \
 	cls/lock/cls_lock_types.h \
 	cls/lock/cls_lock_ops.h \
@@ -65,6 +74,7 @@ noinst_HEADERS += \
 	cls/numops/cls_numops_client.h \
 	cls/rbd/cls_rbd.h \
 	cls/rbd/cls_rbd_client.h \
+	cls/rbd/cls_rbd_types.h \
 	cls/refcount/cls_refcount_ops.h \
 	cls/refcount/cls_refcount_client.h \
 	cls/version/cls_version_types.h \
@@ -89,4 +99,6 @@ noinst_HEADERS += \
 	cls/user/cls_user_ops.h \
 	cls/user/cls_user_types.h \
 	cls/cephfs/cls_cephfs.h \
-	cls/cephfs/cls_cephfs_client.h
+	cls/cephfs/cls_cephfs_client.h \
+	cls/journal/cls_journal_client.h \
+	cls/journal/cls_journal_types.h

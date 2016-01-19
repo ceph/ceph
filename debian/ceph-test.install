@@ -19,7 +19,6 @@ usr/bin/ceph_smalliobench
 usr/bin/ceph_smalliobenchdumb
 usr/bin/ceph_smalliobenchfs
 usr/bin/ceph_smalliobenchrbd
-usr/bin/ceph_streamtest
 usr/bin/ceph_test_*
 usr/bin/ceph_tpbench
 usr/bin/ceph_xattr_bench

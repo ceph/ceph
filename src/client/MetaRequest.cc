@@ -53,6 +53,8 @@ void MetaRequest::dump(Formatter *f) const
   f->dump_unsigned("num_retry", head.num_retry);
   f->dump_unsigned("num_fwd", head.num_fwd);
   f->dump_unsigned("num_releases", head.num_releases);
+
+  f->dump_int("abort_rc", abort_rc);
 }
 
 MetaRequest::~MetaRequest()

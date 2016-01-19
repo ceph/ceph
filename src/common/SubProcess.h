@@ -26,9 +26,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include <sstream>
 #include <vector>
+#include <iostream>
 
 #include <include/assert.h>
 #include <common/errno.h>
@@ -39,14 +41,14 @@
  *
  * Example:
  *
- *   SubProcess cat("cat", true, true);
+ *   SubProcess cat("cat", SubProcess::PIPE, SubProcess::PIPE);
  *   if (cat.spawn() != 0) {
  *     std::cerr << "cat failed: " << cat.err() << std::endl;
  *     return false;
  *   }
- *   write_to_fd(cat.stdout(), "hello world!\n");
+ *   write_to_fd(cat.get_stdout(), "hello world!\n");
  *   cat.close_stdout();
- *   read_from_fd(cat.stdin(), buf);
+ *   read_from_fd(cat.get_stdin(), buf);
  *   if (cat.join() != 0) {
  *     std::cerr << cat.err() << std::endl;
  *     return false;
@@ -55,8 +57,16 @@
 
 class SubProcess {
 public:
-  SubProcess(const char *cmd, bool pipe_stdin = false, bool pipe_stdout = false,
-	     bool pipe_stderr = false);
+  enum std_fd_op{
+    KEEP,
+    CLOSE,
+    PIPE
+  };
+public:
+  SubProcess(const char *cmd,
+             std_fd_op stdin_op = CLOSE,
+             std_fd_op stdout_op = CLOSE,
+             std_fd_op stderr_op = CLOSE);
   virtual ~SubProcess();
 
   void add_cmd_args(const char *arg, ...);
@@ -67,9 +77,9 @@ public:
 
   bool is_spawned() const { return pid > 0; }
 
-  int stdin() const;
-  int stdout() const;
-  int stderr() const;
+  int get_stdin() const;
+  int get_stdout() const;
+  int get_stderr() const;
 
   void close_stdin();
   void close_stdout();
@@ -89,9 +99,9 @@ private:
 protected:
   std::string cmd;
   std::vector<std::string> cmd_args;
-  bool pipe_stdin;
-  bool pipe_stdout;
-  bool pipe_stderr;
+  std_fd_op stdin_op;
+  std_fd_op stdout_op;
+  std_fd_op stderr_op;
   int stdin_pipe_out_fd;
   int stdout_pipe_in_fd;
   int stderr_pipe_in_fd;
@@ -101,8 +111,8 @@ protected:
 
 class SubProcessTimed : public SubProcess {
 public:
-  SubProcessTimed(const char *cmd, bool pipe_stdin = false,
-		  bool pipe_stdout = false, bool pipe_stderr = false,
+  SubProcessTimed(const char *cmd, std_fd_op stdin_op = CLOSE,
+		  std_fd_op stdout_op = CLOSE, std_fd_op stderr_op = CLOSE,
 		  int timeout = 0, int sigkill = SIGKILL);
 
 protected:
@@ -113,12 +123,12 @@ private:
   int sigkill;
 };
 
-SubProcess::SubProcess(const char *cmd_, bool stdin, bool stdout, bool stderr) :
+inline SubProcess::SubProcess(const char *cmd_, std_fd_op stdin_op_, std_fd_op stdout_op_, std_fd_op stderr_op_) :
   cmd(cmd_),
   cmd_args(),
-  pipe_stdin(stdin),
-  pipe_stdout(stdout),
-  pipe_stderr(stderr),
+  stdin_op(stdin_op_),
+  stdout_op(stdout_op_),
+  stderr_op(stderr_op_),
   stdin_pipe_out_fd(-1),
   stdout_pipe_in_fd(-1),
   stderr_pipe_in_fd(-1),
@@ -126,14 +136,14 @@ SubProcess::SubProcess(const char *cmd_, bool stdin, bool stdout, bool stderr) :
   errstr() {
 }
 
-SubProcess::~SubProcess() {
+inline SubProcess::~SubProcess() {
   assert(!is_spawned());
   assert(stdin_pipe_out_fd == -1);
   assert(stdout_pipe_in_fd == -1);
   assert(stderr_pipe_in_fd == -1);
 }
 
-void SubProcess::add_cmd_args(const char *arg, ...) {
+inline void SubProcess::add_cmd_args(const char *arg, ...) {
   assert(!is_spawned());
 
   va_list ap;
@@ -146,34 +156,34 @@ void SubProcess::add_cmd_args(const char *arg, ...) {
   va_end(ap);
 }
 
-void SubProcess::add_cmd_arg(const char *arg) {
+inline void SubProcess::add_cmd_arg(const char *arg) {
   assert(!is_spawned());
 
   cmd_args.push_back(arg);
 }
 
-int SubProcess::stdin() const {
+inline int SubProcess::get_stdin() const {
   assert(is_spawned());
-  assert(pipe_stdin);
+  assert(stdin_op == PIPE);
 
   return stdin_pipe_out_fd;
 }
 
-int SubProcess::stdout() const {
+inline int SubProcess::get_stdout() const {
   assert(is_spawned());
-  assert(pipe_stdout);
+  assert(stdout_op == PIPE);
 
   return stdout_pipe_in_fd;
 }
 
-int SubProcess::stderr() const {
+inline int SubProcess::get_stderr() const {
   assert(is_spawned());
-  assert(pipe_stderr);
+  assert(stderr_op == PIPE);
 
   return stderr_pipe_in_fd;
 }
 
-void SubProcess::close(int &fd) {
+inline void SubProcess::close(int &fd) {
   if (fd == -1)
     return;
 
@@ -181,35 +191,35 @@ void SubProcess::close(int &fd) {
   fd = -1;
 }
 
-void SubProcess::close_stdin() {
+inline void SubProcess::close_stdin() {
   assert(is_spawned());
-  assert(pipe_stdin);
+  assert(stdin_op == PIPE);
 
   close(stdin_pipe_out_fd);
 }
 
-void SubProcess::close_stdout() {
+inline void SubProcess::close_stdout() {
   assert(is_spawned());
-  assert(pipe_stdout);
+  assert(stdout_op == PIPE);
 
   close(stdout_pipe_in_fd);
 }
 
-void SubProcess::close_stderr() {
+inline void SubProcess::close_stderr() {
   assert(is_spawned());
-  assert(pipe_stderr);
+  assert(stderr_op == PIPE);
 
   close(stderr_pipe_in_fd);
 }
 
-void SubProcess::kill(int signo) const {
+inline void SubProcess::kill(int signo) const {
   assert(is_spawned());
 
   int ret = ::kill(pid, signo);
   assert(ret == 0);
 }
 
-const char* SubProcess::err() const {
+inline const char* SubProcess::err() const {
   return errstr.str().c_str();
 }
 
@@ -232,7 +242,7 @@ protected:
   }
 };
 
-int SubProcess::spawn() {
+inline int SubProcess::spawn() {
   assert(!is_spawned());
   assert(stdin_pipe_out_fd == -1);
   assert(stdout_pipe_in_fd == -1);
@@ -246,9 +256,9 @@ int SubProcess::spawn() {
 
   int ret = 0;
 
-  if ((pipe_stdin  && ::pipe(ipipe) == -1) ||
-      (pipe_stdout && ::pipe(opipe) == -1) ||
-      (pipe_stderr && ::pipe(epipe) == -1)) {
+  if ((stdin_op == PIPE  && ::pipe(ipipe) == -1) ||
+      (stdout_op == PIPE && ::pipe(opipe) == -1) ||
+      (stderr_op == PIPE && ::pipe(epipe) == -1)) {
     ret = -errno;
     errstr << "pipe failed: " << cpp_strerror(errno);
     goto fail;
@@ -289,11 +299,11 @@ int SubProcess::spawn() {
     if (maxfd == -1)
       maxfd = 16384;
     for (int fd = 0; fd <= maxfd; fd++) {
-      if (fd == STDIN_FILENO && pipe_stdin)
+      if (fd == STDIN_FILENO && stdin_op != CLOSE)
 	continue;
-      if (fd == STDOUT_FILENO && pipe_stdout)
+      if (fd == STDOUT_FILENO && stdout_op != CLOSE)
 	continue;
-      if (fd == STDERR_FILENO && pipe_stderr)
+      if (fd == STDERR_FILENO && stderr_op != CLOSE)
 	continue;
       ::close(fd);
     }
@@ -316,7 +326,7 @@ fail:
   return ret;
 }
 
-void SubProcess::exec() {
+inline void SubProcess::exec() {
   assert(is_child());
 
   std::vector<const char *> args;
@@ -335,7 +345,7 @@ void SubProcess::exec() {
   _exit(EXIT_FAILURE);
 }
 
-int SubProcess::join() {
+inline int SubProcess::join() {
   assert(is_spawned());
 
   close(stdin_pipe_out_fd);
@@ -362,10 +372,10 @@ int SubProcess::join() {
   return EXIT_FAILURE;
 }
 
-SubProcessTimed::SubProcessTimed(const char *cmd, bool pipe_stdin,
-				 bool pipe_stdout, bool pipe_stderr,
+inline SubProcessTimed::SubProcessTimed(const char *cmd, std_fd_op stdin_op,
+				 std_fd_op stdout_op, std_fd_op stderr_op,
 				 int timeout_, int sigkill_) :
-  SubProcess(cmd, pipe_stdin, pipe_stdout, pipe_stderr),
+  SubProcess(cmd, stdin_op, stdout_op, stderr_op),
   timeout(timeout_),
   sigkill(sigkill_) {
 }
@@ -376,7 +386,7 @@ static void timeout_sighandler(int sig) {
 }
 static void dummy_sighandler(int sig) {}
 
-void SubProcessTimed::exec() {
+inline void SubProcessTimed::exec() {
   assert(is_child());
 
   if (timeout <= 0) {

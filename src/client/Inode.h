@@ -23,6 +23,7 @@ struct SnapRealm;
 struct Inode;
 class ceph_lock_state_t;
 class MetaRequest;
+class UserGroups;
 
 struct Cap {
   MetaSession *session;
@@ -295,7 +296,7 @@ struct Inode {
   ceph_lock_state_t *fcntl_locks;
   ceph_lock_state_t *flock_locks;
 
-  xlist<MetaRequest*> unsafe_dir_ops;
+  xlist<MetaRequest*> unsafe_ops;
 
   Inode(Client *c, vinodeno_t vino, ceph_file_layout *newlayout)
     : client(c), ino(vino.ino), snapid(vino.snapid), faked_ino(0),
@@ -334,7 +335,7 @@ struct Inode {
     }
   };
 
-  bool check_mode(uid_t uid, gid_t gid, gid_t *sgids, int sgid_count, uint32_t flags);
+  bool check_mode(uid_t uid, UserGroups& groups, unsigned want);
 
   // CAPS --------
   void get_open_ref(int mode);

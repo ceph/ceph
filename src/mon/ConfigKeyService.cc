@@ -39,9 +39,6 @@ const string ConfigKeyService::STORE_PREFIX = "mon_config_key";
 
 int ConfigKeyService::store_get(string key, bufferlist &bl)
 {
-  if (!store_exists(key))
-    return -ENOENT;
-
   return mon->store->get(STORE_PREFIX, key, bl);
 }
 

@@ -85,7 +85,8 @@ a maximum capacity  that you set with the ``--size`` option. If you want to
 increase (or decrease) the maximum size of a Ceph Block Device image, execute
 the following:: 
 
-	rbd resize --size 2048 foo
+	rbd resize --size 2048 foo (to increase)
+	rbd resize --size 2048 foo --allow-shrink (to decrease)
 
 
 Removing a Block Device Image

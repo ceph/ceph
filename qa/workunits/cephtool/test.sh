@@ -178,19 +178,22 @@ function ceph_watch_wait()
 
 function test_mon_injectargs()
 {
-  CEPH_ARGS='--mon_debug_dump_location the.dump' ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'false'"
+  CEPH_ARGS='--mon_debug_dump_location the.dump' ceph tell osd.0 injectargs --no-osd_enable_op_tracker >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'false'"
   ! grep "the.dump" $TMPFILE || return 1
-  ceph tell osd.0 injectargs '--osd_debug_op_order --osd_failsafe_full_ratio .99' >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.99'"
-  ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'false'"
-  ceph tell osd.0 injectargs -- --osd_debug_op_order >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'true'"
-  ceph tell osd.0 injectargs -- '--osd_debug_op_order --osd_failsafe_full_ratio .98' >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.98'" 
-  ceph tell osd.0 injectargs -- '--osd_failsafe_full_ratio' >& $TMPFILE || return 1
-  check_response "Option --osd_failsafe_full_ratio requires an argument"
+  ceph tell osd.0 injectargs '--osd_enable_op_tracker --osd_op_history_duration 500' >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'true' osd_op_history_duration = '500'"
+  ceph tell osd.0 injectargs --no-osd_enable_op_tracker >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'false'"
+  ceph tell osd.0 injectargs -- --osd_enable_op_tracker >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'true'"
+  ceph tell osd.0 injectargs -- '--osd_enable_op_tracker --osd_op_history_duration 600' >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'true' osd_op_history_duration = '600'"
+  ceph tell osd.0 injectargs -- '--osd_op_history_duration' >& $TMPFILE || return 1
+  check_response "Option --osd_op_history_duration requires an argument"
+
+  ceph tell osd.0 injectargs -- '--mon-lease 6' >& $TMPFILE || return 1
+  check_response "mon_lease = '6' (unchangeable)"
 }
 
 function test_mon_injectargs_SI()
@@ -247,7 +250,7 @@ function test_tiering_agent()
   done
   $evicted # assert
   # the object is proxy read and promoted to the cache
-  rados -p $slow get obj1 /tmp/obj1
+  rados -p $slow get obj1 - >/dev/null
   # wait for the promoted object to be evicted again
   evicted=false
   for i in 1 2 4 8 16 32 64 128 256 ; do
@@ -572,6 +575,27 @@ function test_auth_profiles()
   # remove the remaining role-definer with admin
   ceph auth del client.xx-profile-rd2
   rm -f client.xx.keyring client.xx.keyring.2
+}
+
+function test_mon_caps()
+{
+  ceph-authtool --create-keyring $TMPDIR/ceph.client.bug.keyring
+  chmod +r  $TMPDIR/ceph.client.bug.keyring
+  ceph-authtool  $TMPDIR/ceph.client.bug.keyring -n client.bug --gen-key
+  ceph auth add client.bug -i  $TMPDIR/ceph.client.bug.keyring
+
+  rados lspools --keyring $TMPDIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  check_response "Permission denied"
+
+  rm -rf $TMPDIR/ceph.client.bug.keyring
+  ceph auth del client.bug
+  ceph-authtool --create-keyring $TMPDIR/ceph.client.bug.keyring
+  chmod +r  $TMPDIR/ceph.client.bug.keyring
+  ceph-authtool  $TMPDIR/ceph.client.bug.keyring -n client.bug --gen-key
+  ceph-authtool -n client.bug --cap mon '' $TMPDIR/ceph.client.bug.keyring
+  ceph auth add client.bug -i  $TMPDIR/ceph.client.bug.keyring
+  rados lspools --keyring $TMPDIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  check_response "Permission denied"  
 }
 
 function test_mon_misc()
@@ -987,6 +1011,12 @@ function test_mon_osd()
   expect_false "ceph osd blacklist $bl/-1"
   expect_false "ceph osd blacklist $bl/foo"
 
+  # Test `clear`
+  ceph osd blacklist add $bl
+  ceph osd blacklist ls | grep $bl
+  ceph osd blacklist clear
+  expect_false "ceph osd blacklist ls | grep $bl"
+
   #
   # osd crush
   #
@@ -1016,6 +1046,7 @@ function test_mon_osd()
     ceph osd set $f
     ceph osd unset $f
   done
+  ceph osd set sortbitwise  # new backends can't handle nibblewise
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
 
@@ -1281,7 +1312,6 @@ function test_mon_pg()
   ceph pg repair 0.0
   ceph pg scrub 0.0
 
-  ceph pg send_pg_creates
   ceph pg set_full_ratio 0.90
   ceph pg dump --format=plain | grep '^full_ratio 0.9'
   ceph pg set_full_ratio 0.95
@@ -1368,6 +1398,36 @@ function test_mon_osd_pool_set()
       expect_false ceph osd pool set $TEST_POOL_GETSET $flag asdf
       expect_false ceph osd pool set $TEST_POOL_GETSET $flag 2
   done
+
+  expect_false "ceph osd pool get $TEST_POOL_GETSET scrub_min_interval | grep '.'"
+  ceph osd pool set $TEST_POOL_GETSET scrub_min_interval 123456
+  ceph osd pool get $TEST_POOL_GETSET scrub_min_interval | grep 'scrub_min_interval: 123456'
+  ceph osd pool set $TEST_POOL_GETSET scrub_min_interval 0
+  expect_false "ceph osd pool get $TEST_POOL_GETSET scrub_min_interval | grep '.'"
+
+  expect_false "ceph osd pool get $TEST_POOL_GETSET scrub_max_interval | grep '.'"
+  ceph osd pool set $TEST_POOL_GETSET scrub_max_interval 123456
+  ceph osd pool get $TEST_POOL_GETSET scrub_max_interval | grep 'scrub_max_interval: 123456'
+  ceph osd pool set $TEST_POOL_GETSET scrub_max_interval 0
+  expect_false "ceph osd pool get $TEST_POOL_GETSET scrub_max_interval | grep '.'"
+
+  expect_false "ceph osd pool get $TEST_POOL_GETSET deep_scrub_interval | grep '.'"
+  ceph osd pool set $TEST_POOL_GETSET deep_scrub_interval 123456
+  ceph osd pool get $TEST_POOL_GETSET deep_scrub_interval | grep 'deep_scrub_interval: 123456'
+  ceph osd pool set $TEST_POOL_GETSET deep_scrub_interval 0
+  expect_false "ceph osd pool get $TEST_POOL_GETSET deep_scrub_interval | grep '.'"
+
+  expect_false "ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep '.'"
+  ceph osd pool set $TEST_POOL_GETSET recovery_priority 5 
+  ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep 'recovery_priority: 5'
+  ceph osd pool set $TEST_POOL_GETSET recovery_priority 0
+  expect_false "ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep '.'"
+
+  expect_false "ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | grep '.'"
+  ceph osd pool set $TEST_POOL_GETSET recovery_op_priority 5 
+  ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | grep 'recovery_op_priority: 5'
+  ceph osd pool set $TEST_POOL_GETSET recovery_op_priority 0
+  expect_false "ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | grep '.'"
 
   ceph osd pool set $TEST_POOL_GETSET nopgchange 1
   expect_false ceph osd pool set $TEST_POOL_GETSET pg_num 10
@@ -1732,7 +1792,7 @@ MON_TESTS+=" mon_tell"
 MON_TESTS+=" mon_crushmap_validation"
 MON_TESTS+=" mon_ping"
 MON_TESTS+=" mon_deprecated_commands"
-
+MON_TESTS+=" mon_caps"
 OSD_TESTS+=" osd_bench"
 OSD_TESTS+=" tiering_agent"
 

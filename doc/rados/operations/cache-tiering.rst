@@ -64,6 +64,23 @@ configure how this migration takes place. There are two main scenarios:
   might contain out-of-date data provides weak consistency. Do not use 
   ``readonly`` mode for mutable data.
 
+And the modes above are accomodated to adapt different configurations:
+
+- **Read-forward Mode:** this mode is the same as the ``writeback`` mode
+  when serving write requests. But when Ceph clients is trying to read objects
+  not yet copied to the cache tier, Ceph **forward** them to the backing tier by
+  replying with a "redirect" message. And the clients will instead turn to the
+  backing tier for the data. If the read performance of the backing tier is on
+  a par with that of its cache tier, while its write performance or endurance
+  falls far behind, this mode might be a better choice.
+
+- **Read-proxy Mode:** this mode is similar to ``readforward`` mode: both
+  of them do not promote/copy the data when the requested object does not
+  exist in the cache tier. But instead of redirecting the Ceph clients to the
+  backing tier when cache misses, the cache tier reads from the backing tier
+  on behalf of the clients. Under some circumstances, this mode can help to
+  reduce the latency.
+
 Since all Ceph clients can use cache tiering, it has the potential to 
 improve I/O performance for Ceph Block Devices, Ceph Object Storage, 
 the Ceph Filesystem and native bindings.
@@ -174,9 +191,7 @@ For example::
 	ceph osd pool set hot-storage hit_set_type bloom
 
 The ``hit_set_count`` and ``hit_set_period`` define how much time each HitSet
-should cover, and how many such HitSets to store. Currently there is minimal
-benefit for ``hit_set_count`` > 1 since the agent does not yet act intelligently
-on that information. ::
+should cover, and how many such HitSets to store. ::
 
 	ceph osd pool set {cachepool} hit_set_count 1
 	ceph osd pool set {cachepool} hit_set_period 3600

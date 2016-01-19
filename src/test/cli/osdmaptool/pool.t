@@ -7,6 +7,7 @@
 #
   $ osdmaptool myosdmap --test-map-object foo --pool
   Option --pool requires an argument.
+  
   [1]
 
   $ osdmaptool myosdmap --test-map-object foo --pool bar
@@ -32,6 +33,7 @@
 #
   $ osdmaptool myosdmap --test-map-pgs --pool
   Option --pool requires an argument.
+  
   [1]
 
   $ osdmaptool myosdmap --test-map-pgs --pool baz
