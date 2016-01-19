@@ -3596,7 +3596,11 @@ int KStore::_clone_range(TransContext *txc,
     r = -ENOENT;
     goto out;
   }
-  newo = c->get_onode(new_oid, true);
+  newo = c->get_onode(new_oid, false);
+  if (!newo) {
+    newo = c->get_onode(new_oid, true);
+    _assign_nid(txc, newo);
+  }
   assert(newo);
   newo->exists = true;
 
