@@ -4112,11 +4112,11 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_ADD:
-      assert(0 == "not implmeented");
+      assert(0 == "not implemented");
       break;
 
     case Transaction::OP_COLL_REMOVE:
-      assert(0 == "not implmeented");
+      assert(0 == "not implemented");
       break;
 
     case Transaction::OP_COLL_MOVE:
@@ -4141,7 +4141,7 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_RENAME:
-      assert(0 == "not implmeneted");
+      assert(0 == "not implemented");
       break;
 
     case Transaction::OP_OMAP_CLEAR:
