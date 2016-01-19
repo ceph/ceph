@@ -3096,7 +3096,7 @@ def list_format_more_osd_info_plain(dev):
     return desc
 
 
-def list_format_dev_plain(dev, devices=[], prefix=''):
+def list_format_dev_plain(dev, prefix=''):
     desc = []
     if dev['ptype'] == OSD_UUID:
         desc = (['ceph data', dev['state']] +
@@ -3140,18 +3140,16 @@ def list_format_dev_plain(dev, devices=[], prefix=''):
     return '%s%s %s' % (prefix, dev['path'], ', '.join(desc))
 
 
-def list_format_plain(devices, selected_devices):
+def list_format_plain(devices):
     lines = []
-    for device in selected_devices:
+    for device in devices:
         if device.get('partitions'):
             lines.append('%s :' % device['path'])
             for p in sorted(device['partitions']):
                 lines.append(list_format_dev_plain(dev=p,
-                                                   devices=devices,
                                                    prefix=' '))
         else:
             lines.append(list_format_dev_plain(dev=device,
-                                               devices=devices,
                                                prefix=''))
     return "\n".join(lines)
 
@@ -3306,7 +3304,7 @@ def main_list(args):
     if args.format == 'json':
         print json.dumps(selected_devices)
     else:
-        output = list_format_plain(devices, selected_devices)
+        output = list_format_plain(selected_devices)
         if output:
             print output
 
