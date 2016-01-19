@@ -5,6 +5,7 @@
 #include <list>
 #include <map>
 #include <set>
+#include <random>
 
 #ifndef OBJECT_H
 #define OBJECT_H
@@ -124,19 +125,7 @@ public:
 
 class RandGenerator : public ContentsGenerator {
 public:
-  class RandWrap {
-  public:
-    unsigned int state;
-    explicit RandWrap(unsigned int seed)
-    {
-      state = seed;
-    }
-
-    int operator()()
-    {
-      return rand_r(&state);
-    }
-  };
+  typedef std::minstd_rand0 RandWrap;
 
   class iterator_impl : public ContentsGenerator::iterator_impl {
   public:
