@@ -719,7 +719,7 @@ fi
 #
 # FreeBSD has it in base.
 #
-if test x"$freebsd" != x"yes" -a x"$with_radosgw" = x"yes"; then
+if test x"$freebsd" != x"yes" -a x"$enable_client" = x"yes"; then
 PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
                 [], AC_MSG_FAILURE([No usable version of libedit found.]))
 else
