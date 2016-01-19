@@ -537,20 +537,30 @@ namespace crimson {
 	// nothing scheduled; make sure we re-run when next queued
 	// item is ready
 
+	auto min_not_zero = [](const Time& current, const Time& possible)->const Time& {
+	  return 0.0 == possible ? current : std::min(current, possible);
+	};
+
 	Time nextCall = MaxTime;
-	if (!resQ.empty()) nextCall = resQ.top()->tag.reservation;
-	if (!limQ.empty()) nextCall = std::min(nextCall,
-					       limQ.top()->tag.limit);
-	if (!readyQ.empty()) nextCall = std::min(nextCall,
-						 readyQ.top()->tag.proportion);
-	if (!propQ.empty()) nextCall = std::min(nextCall,
-						propQ.top()->tag.proportion);
+	if (!resQ.empty()) {
+	  nextCall = min_not_zero(nextCall, resQ.top()->tag.reservation);
+	}
+	if (!limQ.empty()) {
+	  nextCall = min_not_zero(nextCall, limQ.top()->tag.limit);
+	}
+	if (!readyQ.empty()) {
+	  nextCall = min_not_zero(nextCall, readyQ.top()->tag.proportion);
+	}
+	if (!propQ.empty()) {
+	  nextCall = min_not_zero(nextCall, propQ.top()->tag.proportion);
+	}
 	if (nextCall < MaxTime) {
+	  now = getTime();
 	  std::thread t(
-	    [&]() {
-	      std::this_thread::sleep_for(std::chrono::microseconds(
-					    long(1 +
-						 1000000 * (nextCall - now))));
+	    [this, nextCall, now]() {
+	      long microseconds_l = long(1 + 1000000 * (nextCall - now));
+	      auto microseconds = std::chrono::microseconds(microseconds_l);
+	      std::this_thread::sleep_for(microseconds);
 	      Guard g(data_mutex);
 	      scheduleRequest();
 	    });
