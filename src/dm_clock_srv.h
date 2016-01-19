@@ -38,7 +38,7 @@ static void debugger() {
 
 
 #ifdef TIME_SHORTENER
-static const double time_shortener = 1453228100.0;
+static const double time_shortener = 1453244200.0;
 #endif
 
 
@@ -464,11 +464,11 @@ namespace crimson {
 
 	// try constraint (reservation) based scheduling
 
-#if 0
+#if 1
 	{
 	  static uint count = 0;
 	  ++count;
-	  if (50 <= count && count <= 55) {
+	  if (100 <= count && count < 101) {
 	    std::cout << "scheduleRequest A:" << std::endl;
 	    std::cout << "now:" << std::fixed << now << std::endl;
 	    displayQueues();
@@ -505,7 +505,7 @@ namespace crimson {
 	{
 	  static uint count = 0;
 	  ++count;
-	  if (50 <= count && count <= 55) {
+	  if (100 <= count && count < 101) {
 	    std::cout << "scheduleRequest B:" << std::endl;
 	    std::cout << "now:" << std::fixed << now << std::endl;
 	    displayQueues();
