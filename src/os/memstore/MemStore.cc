@@ -52,6 +52,7 @@ int MemStore::mount()
 
 int MemStore::umount()
 {
+  finisher.wait_for_empty();
   finisher.stop();
   return _save();
 }
@@ -59,7 +60,6 @@ int MemStore::umount()
 int MemStore::_save()
 {
   dout(10) << __func__ << dendl;
-  Mutex::Locker l(apply_lock); // block any writer
   dump_all();
   set<coll_t> collections;
   for (ceph::unordered_map<coll_t,CollectionRef>::iterator p = coll_map.begin();
