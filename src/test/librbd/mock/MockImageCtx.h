@@ -27,21 +27,31 @@ struct MockImageCtx {
   MockImageCtx(librbd::ImageCtx &image_ctx)
     : image_ctx(&image_ctx),
       cct(image_ctx.cct),
+      snap_name(image_ctx.snap_name),
       snap_id(image_ctx.snap_id),
+      snap_exists(image_ctx.snap_exists),
       snapc(image_ctx.snapc),
       snaps(image_ctx.snaps),
       snap_info(image_ctx.snap_info),
+      snap_ids(image_ctx.snap_ids),
       object_cacher(image_ctx.object_cacher),
       old_format(image_ctx.old_format),
       read_only(image_ctx.read_only),
+      lockers(image_ctx.lockers),
+      exclusive_locked(image_ctx.exclusive_locked),
+      lock_tag(image_ctx.lock_tag),
       owner_lock("owner_lock"),
       md_lock("md_lock"),
+      cache_lock("cache_lock"),
       snap_lock("snap_lock"),
       parent_lock("parent_lock"),
       object_map_lock("object_map_lock"),
       async_ops_lock("async_ops_lock"),
+      order(image_ctx.order),
       size(image_ctx.size),
       features(image_ctx.features),
+      flags(image_ctx.flags),
+      object_prefix(image_ctx.object_prefix),
       header_oid(image_ctx.header_oid),
       id(image_ctx.id),
       parent_md(image_ctx.parent_md),
@@ -95,6 +105,8 @@ struct MockImageCtx {
     ctx.wait();
   }
 
+  MOCK_METHOD0(init_layout, void());
+
   MOCK_CONST_METHOD1(get_object_name, std::string(uint64_t));
   MOCK_CONST_METHOD0(get_current_size, uint64_t());
   MOCK_CONST_METHOD1(get_image_size, uint64_t(librados::snap_t));
@@ -120,37 +132,53 @@ struct MockImageCtx {
   MOCK_METHOD1(shut_down_cache, void(Context *));
 
   MOCK_CONST_METHOD1(test_features, bool(uint64_t test_features));
+  MOCK_CONST_METHOD2(test_features, bool(uint64_t test_features,
+                                         const RWLock &in_snap_lock));
 
   MOCK_METHOD1(cancel_async_requests, void(Context*));
 
+  MOCK_METHOD0(create_exclusive_lock, MockExclusiveLock*());
   MOCK_METHOD1(create_object_map, MockObjectMap*(uint64_t));
   MOCK_METHOD0(create_journal, MockJournal*());
 
   ImageCtx *image_ctx;
   CephContext *cct;
 
+  std::string snap_name;
   uint64_t snap_id;
+  bool snap_exists;
+
   ::SnapContext snapc;
   std::vector<librados::snap_t> snaps;
   std::map<librados::snap_t, SnapInfo> snap_info;
+  std::map<std::string, librados::snap_t> snap_ids;
 
   ObjectCacher *object_cacher;
 
   bool old_format;
   bool read_only;
 
+  std::map<rados::cls::lock::locker_id_t,
+           rados::cls::lock::locker_info_t> lockers;
+  bool exclusive_locked;
+  std::string lock_tag;
+
   librados::IoCtx md_ctx;
   librados::IoCtx data_ctx;
 
   RWLock owner_lock;
   RWLock md_lock;
+  Mutex cache_lock;
   RWLock snap_lock;
   RWLock parent_lock;
   RWLock object_map_lock;
   Mutex async_ops_lock;
 
+  uint8_t order;
   uint64_t size;
   uint64_t features;
+  uint64_t flags;
+  std::string object_prefix;
   std::string header_oid;
   std::string id;
   parent_info parent_md;
