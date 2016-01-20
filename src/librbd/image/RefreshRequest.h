@@ -164,6 +164,9 @@ private:
   Context *send_v2_close_journal();
   Context *handle_v2_close_journal(int *result);
 
+  Context *send_v2_close_object_map();
+  Context *handle_v2_close_object_map(int *result);
+
   Context *send_flush_aio();
   Context *handle_flush_aio(int *result);
 
