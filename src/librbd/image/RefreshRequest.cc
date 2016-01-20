@@ -33,10 +33,9 @@ RefreshRequest<I>::RefreshRequest(I &image_ctx, Context *on_finish)
 
 template <typename I>
 RefreshRequest<I>::~RefreshRequest() {
-  delete m_object_map;
-
   // these require state machine to close
   assert(m_exclusive_lock == nullptr);
+  assert(m_object_map == nullptr);
   assert(m_journal == nullptr);
   assert(m_refresh_parent == nullptr);
 }
@@ -600,7 +599,7 @@ Context *RefreshRequest<I>::handle_v2_shut_down_exclusive_lock(int *result) {
 template <typename I>
 Context *RefreshRequest<I>::send_v2_close_journal() {
   if (m_journal == nullptr) {
-    return send_flush_aio();
+    return send_v2_close_object_map();
   }
 
   CephContext *cct = m_image_ctx.cct;
@@ -628,6 +627,36 @@ Context *RefreshRequest<I>::handle_v2_close_journal(int *result) {
   assert(m_journal != nullptr);
   delete m_journal;
   m_journal = nullptr;
+
+  return send_v2_close_object_map();
+}
+
+template <typename I>
+Context *RefreshRequest<I>::send_v2_close_object_map() {
+  if (m_object_map == nullptr) {
+    return send_flush_aio();
+  }
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  // object map was dynamically disabled
+  using klass = RefreshRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_v2_close_object_map>(this);
+  m_object_map->close(ctx);
+  return nullptr;
+}
+
+template <typename I>
+Context *RefreshRequest<I>::handle_v2_close_object_map(int *result) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  assert(*result == 0);
+  assert(m_object_map != nullptr);
+  delete m_object_map;
+  m_object_map = nullptr;
 
   return send_flush_aio();
 }
