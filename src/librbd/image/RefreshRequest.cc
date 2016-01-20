@@ -406,7 +406,7 @@ Context *RefreshRequest<I>::send_v2_init_exclusive_lock() {
   if ((m_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0 ||
       m_image_ctx.read_only || !m_image_ctx.snap_name.empty() ||
       m_image_ctx.exclusive_lock != nullptr) {
-    return send_v2_open_journal();
+    return send_v2_open_object_map();
   }
 
   // implies exclusive lock dynamically enabled or image open in-progress
@@ -449,7 +449,7 @@ Context *RefreshRequest<I>::send_v2_open_journal() {
       m_image_ctx.journal != nullptr ||
       m_image_ctx.exclusive_lock == nullptr ||
       !m_image_ctx.exclusive_lock->is_lock_owner()) {
-    return send_v2_open_object_map();
+    return send_v2_finalize_refresh_parent();
   }
 
   // implies journal dynamically enabled since ExclusiveLock will init
@@ -476,10 +476,9 @@ Context *RefreshRequest<I>::handle_v2_open_journal(int *result) {
     lderr(cct) << "failed to initialize journal: " << cpp_strerror(*result)
                << dendl;
     save_result(result);
-    return send_v2_open_object_map();
   }
 
-  return send_v2_open_object_map();
+  return send_v2_finalize_refresh_parent();
 }
 
 template <typename I>
@@ -490,7 +489,7 @@ Context *RefreshRequest<I>::send_v2_open_object_map() {
        (m_image_ctx.read_only ||
         m_image_ctx.exclusive_lock == nullptr ||
         !m_image_ctx.exclusive_lock->is_lock_owner()))) {
-    return send_v2_finalize_refresh_parent();
+    return send_v2_open_journal();
   }
 
   // implies object map dynamically enabled or image open in-progress
@@ -513,7 +512,7 @@ Context *RefreshRequest<I>::send_v2_open_object_map() {
     if (m_object_map == nullptr) {
       lderr(cct) << "failed to locate snapshot: " << m_image_ctx.snap_name
                  << dendl;
-      return send_v2_finalize_refresh_parent();
+      return send_v2_open_journal();
     }
   }
 
@@ -530,7 +529,7 @@ Context *RefreshRequest<I>::handle_v2_open_object_map(int *result) {
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
   assert(*result == 0);
-  return send_v2_finalize_refresh_parent();
+  return send_v2_open_journal();
 }
 
 template <typename I>

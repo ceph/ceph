@@ -61,11 +61,11 @@ private:
    *            V2_INIT_EXCLUSIVE_LOCK (skip if lock          |
    *                |                   active or disabled)   |
    *                v                                         |
-   *            V2_OPEN_JOURNAL (skip if journal              |
-   *                |            active or disabled)          |
-   *                v                                         |
    *            V2_OPEN_OBJECT_MAP (skip if map               |
    *                |               active or disabled)       |
+   *                v                                         |
+   *            V2_OPEN_JOURNAL (skip if journal              |
+   *                |            active or disabled)          |
    *                v                                         |
    *             <apply>                                      |
    *                |                                         |
