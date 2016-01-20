@@ -2160,6 +2160,12 @@ target_link_libraries(test_objectstore_workloadgen
   ${CMAKE_DL_LIBS}
   )
 
+# test_transaction
+add_executable(unittest_transaction objectstore/test_transaction.cc)
+add_test(unittest_transaction unittest_transaction)
+set_target_properties(unittest_transaction PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+target_link_libraries(unittest_transaction os common ${UNITTEST_LIBS})
+
 #test_filestore
 add_executable(test_filestore filestore/TestFileStore.cc)
 set_target_properties(test_filestore PROPERTIES COMPILE_FLAGS
