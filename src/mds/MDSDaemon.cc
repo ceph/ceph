@@ -226,6 +226,7 @@ void MDSDaemon::set_up_admin_socket()
 {
   int r;
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  assert(asok_hook == nullptr);
   asok_hook = new MDSSocketHook(this);
   r = admin_socket->register_command("status", "status", asok_hook,
 				     "high-level status of MDS");
@@ -472,6 +473,10 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
     sleep(10);
   }
 
+  // Set up admin socket before taking mds_lock, so that ordering
+  // is consistent (later we take mds_lock within asok callbacks)
+  set_up_admin_socket();
+
   mds_lock.Lock();
   if (beacon.get_want_state() == MDSMap::STATE_DNE) {
     suicide();  // we could do something more graceful here
@@ -520,7 +525,6 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
   // schedule tick
   reset_tick();
 
-  set_up_admin_socket();
   g_conf->add_observer(this);
 
   mds_lock.Unlock();
