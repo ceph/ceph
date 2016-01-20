@@ -2983,7 +2983,7 @@ int read_peers(cls_method_context_t hctx,
   return 0;
 }
 
-int read_peer(cls_method_context_t hctx, const std::string uuid,
+int read_peer(cls_method_context_t hctx, const std::string &uuid,
               cls::rbd::MirrorPeer *peer) {
   bufferlist bl;
   int r = cls_cxx_map_get_val(hctx, peer_key(uuid), &bl);
@@ -3003,7 +3003,7 @@ int read_peer(cls_method_context_t hctx, const std::string uuid,
   return 0;
 }
 
-int write_peer(cls_method_context_t hctx, const std::string uuid,
+int write_peer(cls_method_context_t hctx, const std::string &uuid,
                const cls::rbd::MirrorPeer &peer) {
   bufferlist bl;
   ::encode(peer, bl);
