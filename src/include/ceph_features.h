@@ -73,6 +73,7 @@
 #define CEPH_FEATURE_MON_STATEFUL_SUB (1ULL<<57) /* stateful mon subscription */
 #define CEPH_FEATURE_MON_ROUTE_OSDMAP (1ULL<<57) /* peon sends osdmaps */
 #define CEPH_FEATURE_OSDSUBOP_NO_SNAPCONTEXT (1ULL<<57) /* overlap, drop unused SnapContext in v12 */
+#define CEPH_FEATURE_SERVER_JEWEL (1ULL<<57)   /* overlap, features introduced in jewel */
 #define CEPH_FEATURE_CRUSH_TUNABLES5	(1ULL<<58) /* chooseleaf stable mode */
 // duplicated since it was introduced at the same time as CEPH_FEATURE_CRUSH_TUNABLES5
 #define CEPH_FEATURE_NEW_OSDOPREPLY_ENCODING   (1ULL<<58) /* New, v7 encoding */
@@ -172,6 +173,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_MON_STATEFUL_SUB |	 \
 	 CEPH_FEATURE_MON_ROUTE_OSDMAP |	 \
 	 CEPH_FEATURE_CRUSH_TUNABLES5 |	    \
+	 CEPH_FEATURE_SERVER_JEWEL |  \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
