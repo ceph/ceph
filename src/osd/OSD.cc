@@ -1781,6 +1781,25 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->close_section();
   } else if (command == "get_latest_osdmap") {
     get_latest_osdmap();
+  } else if (command == "get_heap_property") {
+    string property;
+    size_t value = 0;
+    string error;
+    bool success = false;
+    if (!cmd_getval(cct, cmdmap, "property", property)) {
+      error = "unable to get property";
+      success = false;
+    } else if (!ceph_heap_get_numeric_property(property.c_str(), &value)) {
+      error = "invalid property";
+      success = false;
+    } else {
+      success = true;
+    }
+    f->open_object_section("result");
+    f->dump_string("error", error);
+    f->dump_bool("success", success);
+    f->dump_int("value", value);
+    f->close_section();
   } else {
     assert(0 == "broken asok registration");
   }
@@ -2069,6 +2088,14 @@ void OSD::final_init()
 				     "force osd to update the latest map from "
 				     "the mon");
   assert(r == 0);
+
+  r = admin_socket->register_command("get_heap_property",
+				     "get_heap_property " \
+				     "name=property,type=CephString",
+				     asok_hook,
+				     "get malloc extension heap property");
+  assert(r == 0);
+
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   // Note: pools are CephString instead of CephPoolname because
@@ -2381,6 +2408,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("dump_watchers");
   cct->get_admin_socket()->unregister_command("dump_reservations");
   cct->get_admin_socket()->unregister_command("get_latest_osdmap");
+  cct->get_admin_socket()->unregister_command("get_heap_property");
   delete asok_hook;
   asok_hook = NULL;
 
