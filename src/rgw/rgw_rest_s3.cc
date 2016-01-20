@@ -2863,14 +2863,10 @@ int RGWHandler_ObjStore_S3Website::retarget(RGWOp *op, RGWOp **new_op) {
     return -ERR_WEBSITE_REDIRECT;
   }
 
-#warning FIXME
-#if 0
-  if (s->object.empty() != new_obj.empty()) {
-    op->put();
-    s->object = new_obj;
-    *new_op = get_op();
-  }
-#endif
+  /*
+   * FIXME: if s->object != new_obj, drop op and create a new op to handle operation. Or
+   * remove this comment if it's not applicable anymore
+   */
 
   s->object = new_obj;
 
@@ -2893,7 +2889,9 @@ int RGWHandler_ObjStore_S3Website::get_errordoc(const string errordoc_key, strin
     // 1. Check if errordoc exists
     // 2. Check if errordoc is public
     // 3. Fetch errordoc content
-#warning 2015119: FIXME need to clear all
+    /*
+     * FIXME maybe:  need to make sure all of the fields for conditional requests are cleared
+     */
     RGWGetObj_ObjStore_S3Website *getop = new RGWGetObj_ObjStore_S3Website(true);
     getop->set_get_data(true);
     getop->init(store, s, this);
@@ -2909,10 +2907,13 @@ int RGWHandler_ObjStore_S3Website::get_errordoc(const string errordoc_key, strin
     int64_t ofs = 0; 
     int64_t end = -1;
     ret = read_op.prepare(&ofs, &end);
-    if (ret < 0)
-      return ret;
+    if (ret < 0) {
+      goto done;
+    }
 
     ret = read_op.iterate(ofs, end, &cb); // FIXME: need to know the final size?
+done:
+    delete getop;
     return ret;
 }
   
