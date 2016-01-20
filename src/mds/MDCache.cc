@@ -5540,8 +5540,14 @@ void MDCache::export_remaining_imported_caps()
     }
   }
 
+  for (map<inodeno_t, list<MDSInternalContextBase*> >::iterator p = cap_reconnect_waiters.begin();
+       p != cap_reconnect_waiters.end();
+       ++p)
+    mds->queue_waiters(p->second);
+
   cap_imports.clear();
   cap_imports_dirty.clear();
+  cap_reconnect_waiters.clear();
 
   if (warn_str.peek() != EOF) {
     mds->clog->warn() << "failed to reconnect caps for missing inodes:" << "\n";
@@ -5570,6 +5576,13 @@ void MDCache::try_reconnect_cap(CInode *in, Session *session)
 	dirty_caps = it->second;
       in->choose_lock_states(dirty_caps);
       dout(15) << " chose lock states on " << *in << dendl;
+    }
+
+    map<inodeno_t, list<MDSInternalContextBase*> >::iterator it =
+      cap_reconnect_waiters.find(in->ino());
+    if (it != cap_reconnect_waiters.end()) {
+      mds->queue_waiters(it->second);
+      cap_reconnect_waiters.erase(it);
     }
   }
 }

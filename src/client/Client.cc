@@ -3975,6 +3975,8 @@ void Client::flush_caps(Inode *in, MetaSession *session)
   for (map<ceph_tid_t,int>::iterator p = in->flushing_cap_tids.begin();
        p != in->flushing_cap_tids.end();
        ++p) {
+    if (session->kicked_flush_tids.count(p->first))
+	continue;
     send_cap(in, session, cap, (get_caps_used(in) | in->caps_dirty()),
 	     in->caps_wanted(), (cap->issued | cap->implemented),
 	     p->second, p->first);
@@ -4034,10 +4036,14 @@ void Client::kick_flushing_caps(MetaSession *session)
     if (in->flushing_caps)
       flush_caps(in, session);
   }
+
+  session->kicked_flush_tids.clear();
 }
 
 void Client::early_kick_flushing_caps(MetaSession *session)
 {
+  session->kicked_flush_tids.clear();
+
   for (xlist<Inode*>::iterator p = session->flushing_caps.begin(); !p.end(); ++p) {
     Inode *in = *p;
     if (!in->flushing_caps)
@@ -4048,20 +4054,19 @@ void Client::early_kick_flushing_caps(MetaSession *session)
     // if flushing caps were revoked, we re-send the cap flush in client reconnect
     // stage. This guarantees that MDS processes the cap flush message before issuing
     // the flushing caps to other client.
-    bool send_now = (in->flushing_caps & in->auth_cap->issued) != in->flushing_caps;
+    if ((in->flushing_caps & in->auth_cap->issued) == in->flushing_caps)
+      continue;
 
-    if (send_now)
-      ldout(cct, 20) << " reflushing caps (revoked) on " << *in
-		     << " to mds." << session->mds_num << dendl;
+    ldout(cct, 20) << " reflushing caps (revoked) on " << *in
+		   << " to mds." << session->mds_num << dendl;
 
     for (map<ceph_tid_t,int>::iterator q = in->flushing_cap_tids.begin();
 	 q != in->flushing_cap_tids.end();
 	 ++q) {
-      if (send_now) {
-	send_cap(in, session, cap, (get_caps_used(in) | in->caps_dirty()),
-		 in->caps_wanted(), (cap->issued | cap->implemented),
-		 q->second, q->first);
-      }
+      send_cap(in, session, cap, (get_caps_used(in) | in->caps_dirty()),
+	       in->caps_wanted(), (cap->issued | cap->implemented),
+	       q->second, q->first);
+      session->kicked_flush_tids.insert(q->first);
     }
   }
 }
@@ -7834,6 +7839,8 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   const md_config_t *conf = cct->_conf;
   Inode *in = f->inode.get();
 
+  if ((f->mode & CEPH_FILE_MODE_RD) == 0)
+    return -EBADF;
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
   bool movepos = false;

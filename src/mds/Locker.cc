@@ -2465,7 +2465,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
     if (mds->is_reconnect() &&
 	m->get_dirty() && m->get_client_tid() > 0 &&
-	session->have_completed_flush(m->get_client_tid())) {
+	!session->have_completed_flush(m->get_client_tid())) {
       mdcache->set_reconnect_dirty_caps(m->get_ino(), m->get_dirty());
     }
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
@@ -2488,8 +2488,14 @@ void Locker::handle_client_caps(MClientCaps *m)
     ack->set_snap_follows(follows);
     ack->set_client_tid(m->get_client_tid());
     mds->send_message_client_counted(ack, m->get_connection());
-    m->put();
-    return;
+    if (m->get_op() == CEPH_CAP_OP_FLUSHSNAP) {
+      m->put();
+      return;
+    } else {
+      // fall-thru because the message may release some caps
+      m->clear_dirty();
+      m->set_op(CEPH_CAP_OP_UPDATE);
+    }
   }
 
   // "oldest flush tid" > 0 means client uses unique TID for each flush
@@ -2517,7 +2523,13 @@ void Locker::handle_client_caps(MClientCaps *m)
 
   CInode *head_in = mdcache->get_inode(m->get_ino());
   if (!head_in) {
-    dout(7) << "handle_client_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
+    if (mds->is_clientreplay()) {
+      dout(7) << "handle_client_caps on unknown ino " << m->get_ino()
+	<< ", will try again after replayed client requests" << dendl;
+      mdcache->wait_replay_cap_reconnect(m->get_ino(), new C_MDS_RetryMessage(mds, m));
+      return;
+    }
+    dout(1) << "handle_client_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
     m->put();
     return;
   }
