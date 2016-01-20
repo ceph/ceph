@@ -106,6 +106,7 @@ class C_handle_dispatch : public EventCallback {
   C_handle_dispatch(AsyncMessenger *msgr, Message *m): msgr(msgr), m(m) {}
   void do_request(int id) {
     msgr->ms_deliver_dispatch(m);
+    delete this;
   }
 };
 
@@ -128,6 +129,7 @@ class C_deliver_accept : public EventCallback {
   C_deliver_accept(AsyncMessenger *msgr, AsyncConnectionRef c): msgr(msgr), conn(c) {}
   void do_request(int id) {
     msgr->ms_deliver_handle_accept(conn.get());
+    delete this;
   }
 };
 
@@ -2023,11 +2025,17 @@ int AsyncConnection::send_message(Message *m)
   m->set_connection(this);
 
   if (async_msgr->get_myaddr() == get_peer_addr()) { //loopback connection
-   ldout(async_msgr->cct, 20) << __func__ << " " << *m << " local" << dendl;
-   Mutex::Locker l(write_lock);
-   local_messages.push_back(m);
-   center->dispatch_event_external(local_deliver_handler);
-   return 0;
+    ldout(async_msgr->cct, 20) << __func__ << " " << *m << " local" << dendl;
+    Mutex::Locker l(write_lock);
+    if (can_write != CLOSED) {
+      local_messages.push_back(m);
+      center->dispatch_event_external(local_deliver_handler);
+    } else {
+      ldout(async_msgr->cct, 10) << __func__ << " loopback connection closed."
+                                 << " Drop message " << m << dendl;
+      m->put();
+    }
+    return 0;
   }
 
   // we don't want to consider local message here, it's too lightweight which
