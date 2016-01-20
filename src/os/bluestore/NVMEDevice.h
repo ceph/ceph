@@ -62,6 +62,7 @@ struct Task {
 };
 
 class PerfCounters;
+class SharedDriverData;
 
 class NVMEDevice : public BlockDevice {
   /**
@@ -69,8 +70,7 @@ class NVMEDevice : public BlockDevice {
    * contains 4KB IDENTIFY structure for controller which is
    *  target for CONTROLLER IDENTIFY command during initialization
    */
-  nvme_controller *ctrlr;
-  nvme_namespace	*ns;
+  SharedDriverData *driver;
   string name;
 
   uint64_t size;
@@ -78,36 +78,6 @@ class NVMEDevice : public BlockDevice {
 
   bool aio_stop;
   bufferptr zeros;
-
-  atomic_t queue_empty;
-  Mutex queue_lock;
-  Cond queue_cond;
-  std::queue<Task*> task_queue;
-
-  void queue_task(Task *t, uint64_t ops = 1) {
-    inflight_ops.add(ops);
-    Mutex::Locker l(queue_lock);
-    task_queue.push(t);
-    if (queue_empty.read()) {
-      queue_empty.dec();
-      queue_cond.Signal();
-    }
-  }
-
-  struct AioCompletionThread : public Thread {
-    NVMEDevice *dev;
-    AioCompletionThread(NVMEDevice *b) : dev(b) {}
-    void *entry() {
-      dev->_aio_thread();
-      return NULL;
-    }
-  } aio_thread;
-
-  void _aio_thread();
-
-  Mutex flush_lock;
-  Cond flush_cond;
-  atomic_t flush_waiters;
 
   struct BufferedExtents {
     struct Extent {
@@ -260,9 +230,9 @@ class NVMEDevice : public BlockDevice {
     buffered_task_head = t;
   }
 
+  SharedDriverData *get_driver() { return driver; }
+
  public:
-  PerfCounters *logger;
-  atomic_t inflight_ops;
   aio_callback_t aio_callback;
   void *aio_callback_priv;
 
