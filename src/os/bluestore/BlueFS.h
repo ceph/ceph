@@ -57,9 +57,17 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&File::dirty_item> > dirty_file_list_t;
 
-  struct Dir {
+  struct Dir : public RefCountedObject {
     map<string,FileRef> file_map;
+
+    friend void intrusive_ptr_add_ref(Dir *d) {
+      d->get();
+    }
+    friend void intrusive_ptr_release(Dir *d) {
+      d->put();
+    }
   };
+  typedef boost::intrusive_ptr<Dir> DirRef;
 
   struct FileWriter {
     FileRef file;
@@ -152,7 +160,7 @@ private:
   Cond cond;
 
   // cache
-  map<string, Dir*> dir_map;                      ///< dirname -> Dir
+  map<string, DirRef> dir_map;                    ///< dirname -> Dir
   ceph::unordered_map<uint64_t,FileRef> file_map; ///< ino -> File
   dirty_file_list_t dirty_files;                  ///< list of dirty files
 
