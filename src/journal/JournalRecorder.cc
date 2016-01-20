@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "journal/JournalRecorder.h"
+#include "common/Finisher.h"
 #include "journal/Entry.h"
 #include "journal/Utils.h"
 
@@ -10,6 +11,36 @@
 #define dout_prefix *_dout << "JournalRecorder: "
 
 namespace journal {
+
+namespace {
+
+struct C_Flush : public Context {
+  JournalMetadataPtr journal_metadata;
+  Context *on_finish;
+  atomic_t pending_flushes;
+  int ret_val;
+
+  C_Flush(JournalMetadataPtr _journal_metadata, Context *_on_finish,
+          size_t _pending_flushes)
+    : journal_metadata(_journal_metadata), on_finish(_on_finish),
+      pending_flushes(_pending_flushes), ret_val(0) {
+  }
+
+  virtual void complete(int r) {
+    if (r < 0 && ret_val == 0) {
+      ret_val = r;
+    }
+    if (pending_flushes.dec() == 0) {
+      // ensure all prior callback have been flushed as well
+      journal_metadata->get_finisher().queue(on_finish, ret_val);
+      delete this;
+    }
+  }
+  virtual void finish(int r) {
+  }
+};
+
+} // anonymous namespace
 
 JournalRecorder::JournalRecorder(librados::IoCtx &ioctx,
                                  const std::string &object_oid_prefix,
@@ -76,14 +107,15 @@ void JournalRecorder::flush(Context *on_safe) {
   {
     Mutex::Locker locker(m_lock);
 
-    ctx = new C_Flush(on_safe, m_object_ptrs.size());
+    ctx = new C_Flush(m_journal_metadata, on_safe, m_object_ptrs.size() + 1);
     for (ObjectRecorderPtrs::iterator it = m_object_ptrs.begin();
          it != m_object_ptrs.end(); ++it) {
       it->second->flush(ctx);
     }
   }
 
-  ctx->unblock();
+  // avoid holding the lock in case there is nothing to flush
+  ctx->complete(0);
 }
 
 ObjectRecorderPtr JournalRecorder::get_object(uint8_t splay_offset) {
