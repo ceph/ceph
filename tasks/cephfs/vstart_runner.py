@@ -35,6 +35,7 @@ import errno
 from unittest import suite
 import unittest
 from teuthology.orchestra.run import Raw, quote
+from teuthology.orchestra.daemon import DaemonGroup
 
 import logging
 
@@ -92,7 +93,10 @@ class LocalRemoteProcess(object):
         if self.finished:
             # Avoid calling communicate() on a dead process because it'll
             # give you stick about std* already being closed
-            return
+            if self.exitstatus != 0:
+                raise CommandFailedError(self.args, self.exitstatus)
+            else:
+                return
 
         out, err = self.subproc.communicate()
         self.stdout.write(out)
@@ -161,7 +165,6 @@ class LocalRemote(object):
         return tmpfile
 
     def put_file(self, src, dst, sudo=False):
-        assert sudo is False
         shutil.copy(src, dst)
 
     def run(self, args, check_status=True, wait=True,
@@ -239,6 +242,7 @@ class LocalDaemon(object):
         self.daemon_type = daemon_type
         self.daemon_id = daemon_id
         self.controller = LocalRemote()
+        self.proc = None
 
     @property
     def remote(self):
@@ -285,7 +289,7 @@ class LocalDaemon(object):
         if self._get_pid() is not None:
             self.stop()
 
-        self.controller.run([os.path.join(BIN_PREFIX, "./ceph-{0}".format(self.daemon_type)), "-i", self.daemon_id])
+        self.proc = self.controller.run([os.path.join(BIN_PREFIX, "./ceph-{0}".format(self.daemon_type)), "-i", self.daemon_id])
 
 
 def safe_kill(pid):
@@ -316,7 +320,7 @@ class MountDaemon(object):
         Return PID as an integer or None if not found
         """
         ps_txt = self.controller.run(
-            args=["ps", "ua", "-C", "ceph-fuse"],
+            args=["ps", "uaww", "-C", "ceph-fuse"],
             check_status=False  # ps returns err if nothing running so ignore
         ).stdout.getvalue().strip()
         lines = ps_txt.split("\n")[1:]
@@ -360,6 +364,7 @@ class MountDaemon(object):
 class LocalFuseMount(FuseMount):
     def __init__(self, test_dir, client_id):
         super(LocalFuseMount, self).__init__(None, test_dir, client_id, LocalRemote())
+        self._proc = None
 
     @property
     def config_path(self):
@@ -566,23 +571,13 @@ class LocalFilesystem(Filesystem):
 
         self.admin_remote = LocalRemote()
 
-        # Hack: cheeky inspection of ceph.conf to see what MDSs exist
-        self.mds_ids = set()
-        for line in open("ceph.conf").readlines():
-            match = re.match("^\[mds\.(.+)\]$", line)
-            if match:
-                self.mds_ids.add(match.group(1))
-
+        self.mds_ids = ctx.daemons.daemons['mds'].keys()
         if not self.mds_ids:
             raise RuntimeError("No MDSs found in ceph.conf!")
 
-        self.mds_ids = list(self.mds_ids)
-
-        log.info("Discovered MDS IDs: {0}".format(self.mds_ids))
-
         self.mon_manager = LocalCephManager()
 
-        self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
+        self.mds_daemons = ctx.daemons.daemons["mds"]
 
         self.client_remote = LocalRemote()
 
@@ -730,6 +725,19 @@ def exec_test():
                 'test_path': test_dir
             }
             self.cluster = LocalCluster()
+            self.daemons = DaemonGroup()
+
+            # Shove some LocalDaemons into the ctx.daemons DaemonGroup instance so that any
+            # tests that want to look these up via ctx can do so.
+            # Inspect ceph.conf to see what roles exist
+            for conf_line in open("ceph.conf").readlines():
+                for svc_type in ["mon", "osd", "mds"]:
+                    if svc_type not in self.daemons.daemons:
+                        self.daemons.daemons[svc_type] = {}
+                    match = re.match("^\[{0}\.(.+)\]$".format(svc_type), conf_line)
+                    if match:
+                        svc_id = match.group(1)
+                        self.daemons.daemons[svc_type][svc_id] = LocalDaemon(svc_type, svc_id)
 
         def __del__(self):
             shutil.rmtree(self.teuthology_config['test_path'])
