@@ -6123,13 +6123,13 @@ int BlueStore::_rename(TransContext *txc,
     r = -ENOENT;
     goto out;
   }
-  newo = c->get_onode(new_oid, true);
-  assert(newo);
 
-  if (newo->exists) {
+  newo = c->get_onode(new_oid, false);
+  if (newo && newo->exists) {
+    // destination object already exists, remove it first
     r = _do_remove(txc, c, newo);
     if (r < 0)
-      return r;
+      goto out;
   }
 
   txc->t->rmkey(PREFIX_OBJ, oldo->key);
