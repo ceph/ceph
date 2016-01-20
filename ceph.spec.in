@@ -1182,6 +1182,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %files -n python-cephfs
 %defattr(-,root,root,-)
 %{python_sitelib}/cephfs.py*
+%{python_sitelib}/ceph_volume_client.py*
 
 #################################################################################
 %files -n ceph-test
