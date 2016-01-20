@@ -167,7 +167,7 @@ class OpenStackInstance(object):
         misc.sh("openstack server delete --wait " + self['id'] +
                 " || true")
         for volume in volumes:
-            misc.sh("openstack volume set --name REMOVE-ME " + volume)
+            misc.sh("openstack volume set --name REMOVE-ME " + volume + " || true")
             misc.sh("openstack volume delete " + volume + " || true")
         return True
 
