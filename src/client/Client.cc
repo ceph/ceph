@@ -7410,6 +7410,8 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   const md_config_t *conf = cct->_conf;
   Inode *in = f->inode.get();
 
+  if ((f->mode & CEPH_FILE_MODE_RD) == 0)
+    return -EBADF;
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
   bool movepos = false;
