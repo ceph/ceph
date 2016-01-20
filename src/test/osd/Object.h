@@ -14,8 +14,8 @@ public:
   int objnum;
   int cursnap;
   unsigned seqnum;
-  string prefix;
-  string oid;
+  std::string prefix;
+  std::string oid;
 
   ContDesc() :
     objnum(0), cursnap(0),
@@ -24,7 +24,7 @@ public:
   ContDesc(int objnum,
 	   int cursnap,
 	   unsigned seqnum,
-	   const string &prefix) :
+	   const std::string &prefix) :
     objnum(objnum), cursnap(cursnap),
     seqnum(seqnum), prefix(prefix) {}
 
@@ -48,7 +48,7 @@ public:
 };
 WRITE_CLASS_ENCODER(ContDesc)
 
-ostream &operator<<(ostream &out, const ContDesc &rhs);
+std::ostream &operator<<(std::ostream &out, const ContDesc &rhs);
 
 class ContentsGenerator {
 public:
@@ -97,11 +97,11 @@ public:
   virtual uint64_t get_length(const ContDesc &in) = 0;
 
   virtual void get_ranges_map(
-    const ContDesc &cont, map<uint64_t, uint64_t> &out) = 0;
+    const ContDesc &cont, std::map<uint64_t, uint64_t> &out) = 0;
   void get_ranges(const ContDesc &cont, interval_set<uint64_t> &out) {
-    map<uint64_t, uint64_t> ranges;
+    std::map<uint64_t, uint64_t> ranges;
     get_ranges_map(cont, ranges);
-    for (map<uint64_t, uint64_t>::iterator i = ranges.begin();
+    for (std::map<uint64_t, uint64_t>::iterator i = ranges.begin();
 	 i != ranges.end();
 	 ++i) {
       out.insert(i->first, i->second);
@@ -207,7 +207,7 @@ public:
     min_stride_size(min_stride_size),
     max_stride_size(max_stride_size) {}
   void get_ranges_map(
-    const ContDesc &cont, map<uint64_t, uint64_t> &out);
+    const ContDesc &cont, std::map<uint64_t, uint64_t> &out);
   uint64_t get_length(const ContDesc &in) {
     RandWrap rand(in.seqnum);
     if (max_length == 0)
@@ -223,8 +223,8 @@ public:
   AttrGenerator(uint64_t max_len, uint64_t big_max_len)
     : max_len(max_len), big_max_len(big_max_len) {}
   void get_ranges_map(
-    const ContDesc &cont, map<uint64_t, uint64_t> &out) {
-    out.insert(pair<uint64_t, uint64_t>(0, get_length(cont)));
+    const ContDesc &cont, std::map<uint64_t, uint64_t> &out) {
+    out.insert(std::pair<uint64_t, uint64_t>(0, get_length(cont)));
   }
   uint64_t get_length(const ContDesc &in) {
     RandWrap rand(in.seqnum);
@@ -279,7 +279,7 @@ public:
     return off + get_append_size(in);
   }
   void get_ranges_map(
-    const ContDesc &cont, map<uint64_t, uint64_t> &out);
+    const ContDesc &cont, std::map<uint64_t, uint64_t> &out);
 };
 
 class ObjectDesc {
@@ -290,19 +290,19 @@ public:
   ObjectDesc(const ContDesc &init, ContentsGenerator *cont_gen)
     : exists(false), dirty(false),
       version(0) {
-    layers.push_front(pair<ceph::shared_ptr<ContentsGenerator>, ContDesc>(ceph::shared_ptr<ContentsGenerator>(cont_gen), init));
+    layers.push_front(std::pair<ceph::shared_ptr<ContentsGenerator>, ContDesc>(ceph::shared_ptr<ContentsGenerator>(cont_gen), init));
   }
 
   class iterator {
   public:
     uint64_t pos;
     ObjectDesc &obj;
-    list<pair<list<pair<ceph::shared_ptr<ContentsGenerator>,
+    std::list<std::pair<std::list<std::pair<ceph::shared_ptr<ContentsGenerator>,
 			ContDesc> >::iterator,
 	      uint64_t> > stack;
-    map<ContDesc,ContentsGenerator::iterator> cont_iters;
+    std::map<ContDesc,ContentsGenerator::iterator> cont_iters;
     uint64_t limit;
-    list<pair<ceph::shared_ptr<ContentsGenerator>,
+    std::list<std::pair<ceph::shared_ptr<ContentsGenerator>,
 	      ContDesc> >::iterator cur_cont;
     
     iterator(ObjectDesc &obj) :
@@ -321,7 +321,7 @@ public:
       if (cur_cont == obj.layers.end()) {
 	return '\0';
       } else {
-	map<ContDesc,ContentsGenerator::iterator>::iterator j = cont_iters.find(
+	std::map<ContDesc,ContentsGenerator::iterator>::iterator j = cont_iters.find(
 	  cur_cont->second);
 	assert(j != cont_iters.end());
 	return *(j->second);
@@ -364,14 +364,14 @@ public:
   ContentsGenerator *most_recent_gen() {
     return layers.begin()->first.get();
   }
-  map<string, ContDesc> attrs; // Both omap and xattrs
+  std::map<std::string, ContDesc> attrs; // Both omap and xattrs
   bufferlist header;
   bool exists;
   bool dirty;
 
   uint64_t version;
 private:
-  list<pair<ceph::shared_ptr<ContentsGenerator>, ContDesc> > layers;
+  std::list<std::pair<ceph::shared_ptr<ContentsGenerator>, ContDesc> > layers;
 };
 
 #endif
