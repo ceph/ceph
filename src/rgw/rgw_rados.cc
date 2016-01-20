@@ -163,8 +163,8 @@ int RGWZoneGroup::create_default(bool old_format)
     r = zone_params.init(cct, store);
     if (r < 0) {
       derr << "create_default: error in init existing zone params: " << cpp_strerror(-r) << dendl;
+      return r;
     }
-    return r;
   }
   
   RGWZone& default_zone = zones[zone_params.get_id()];
