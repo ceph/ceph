@@ -335,8 +335,10 @@ TEST(LibCephFS, DirLs) {
 
   int count = 0;
   std::set<std::string> found;
-  while (count < r) {
+  while (true) {
     int len = ceph_getdents(cmount, ls_dir, (char *)getdents_entries, r * sizeof(*getdents_entries));
+    if (len == 0)
+      break;
     ASSERT_GT(len, 0);
     ASSERT_TRUE((len % sizeof(*getdents_entries)) == 0);
     int n = len / sizeof(*getdents_entries);
@@ -345,19 +347,16 @@ TEST(LibCephFS, DirLs) {
       ASSERT_STREQ(getdents_entries[0].d_name, ".");
       ASSERT_STREQ(getdents_entries[1].d_name, "..");
       j = 2;
-      count += n - 2;
     } else {
       j = 0;
-      count += n;
     }
+    count += n;
     for(; j < n; ++i, ++j) {
       const char *name = getdents_entries[j].d_name;
-      ASSERT_TRUE(found.count(name) == 0);
       found.insert(name);
     }
   }
-
-  ASSERT_EQ(count, r);
+  ASSERT_EQ(found.size(), r);
   free(getdents_entries);
 
   // test readdir_r
@@ -371,12 +370,15 @@ TEST(LibCephFS, DirLs) {
   ASSERT_STREQ(result->d_name, "..");
 
   found.clear();
-  for(i = 0; i < r; ++i) {
+  while (true) {
     struct dirent rdent;
-    ASSERT_EQ(ceph_readdir_r(cmount, ls_dir, &rdent), 1);
-    ASSERT_TRUE(found.count(rdent.d_name) ==  0);
+    int len = ceph_readdir_r(cmount, ls_dir, &rdent);
+    if (len == 0)
+      break;
+    ASSERT_EQ(len, 1);
     found.insert(rdent.d_name);
   }
+  ASSERT_EQ(found.size(), r);
 
   // test readdirplus
   ceph_rewinddir(cmount, ls_dir);
@@ -389,13 +391,15 @@ TEST(LibCephFS, DirLs) {
   ASSERT_STREQ(result->d_name, "..");
 
   found.clear();
-  for(i = 0; i < r; ++i) {
+  while (true) {
     struct dirent rdent;
     struct stat st;
     int stmask;
-    ASSERT_EQ(ceph_readdirplus_r(cmount, ls_dir, &rdent, &st, &stmask), 1);
+    int len = ceph_readdirplus_r(cmount, ls_dir, &rdent, &st, &stmask);
+    if (len == 0)
+      break;
+    ASSERT_EQ(len, 1);
     const char *name = rdent.d_name;
-    ASSERT_TRUE(found.count(name) == 0);
     found.insert(name);
     int size;
     sscanf(name, "dirf%d", &size);
@@ -403,6 +407,7 @@ TEST(LibCephFS, DirLs) {
     ASSERT_EQ(st.st_ino, rdent.d_ino);
     //ASSERT_EQ(st.st_mode, (mode_t)0666);
   }
+  ASSERT_EQ(found.size(), r);
 
   ASSERT_EQ(ceph_closedir(cmount, ls_dir), 0);
 
