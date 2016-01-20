@@ -97,11 +97,11 @@ const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
  * string encoding in the key
  *
  * The key string needs to lexicographically sort the same way that
- * ghobject_t does.  We do this by escaping anything <= to '%' with %
+ * ghobject_t does.  We do this by escaping anything <= to '#' with #
  * plus a 2 digit hex string, and anything >= '~' with ~ plus the two
  * hex digits.
  *
- * We use ! as a terminator for strings; this works because it is < %
+ * We use ! as a terminator for strings; this works because it is < #
  * and will get escaped if it is present in the string.
  *
  */
@@ -854,7 +854,7 @@ int BlueStore::_write_bdev_label(string path, bluestore_bdev_label_t label)
 
   int fd = ::open(path.c_str(), O_WRONLY);
   if (fd < 0) {
-    fd = errno;
+    fd = -errno;
     derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
 	 << dendl;
     return fd;
@@ -1613,7 +1613,7 @@ int BlueStore::mkfs()
     goto out_close_fsid;
 
   r = _read_fsid(&old_fsid);
-  if (r < 0 && old_fsid.is_zero()) {
+  if (r < 0 || old_fsid.is_zero()) {
     if (fsid.is_zero()) {
       fsid.generate_random();
       dout(1) << __func__ << " generated fsid " << fsid << dendl;
@@ -1799,10 +1799,11 @@ int BlueStore::mount()
 
  out_stop:
   _kv_stop();
+  wal_wq.drain();
   wal_tp.stop();
   finisher.wait_for_empty();
   finisher.stop();
-out_coll:
+ out_coll:
   coll_map.clear();
  out_alloc:
   _close_alloc();
@@ -2189,7 +2190,8 @@ int BlueStore::fsck()
       } catch (buffer::error& e) {
 	derr << __func__ << " failed to decode wal txn "
 	     << pretty_binary_string(it->key()) << dendl;
-	return -EIO;
+	r = -EIO;
+        goto out_scan;
       }
       dout(20) << __func__ << "  wal " << wt.seq
 	       << " ops " << wt.ops.size()
@@ -2224,6 +2226,7 @@ int BlueStore::fsck()
     }
   }
 
+ out_scan:
   coll_map.clear();
  out_alloc:
   _close_alloc();
@@ -2323,7 +2326,6 @@ void BlueStore::_reap_collections()
   }
 
   dout(10) << __func__ << " all reaped" << dendl;
-  reap_cond.Signal();
 }
 
 // ---------------
@@ -3862,17 +3864,19 @@ int BlueStore::_wal_replay()
   for (it->lower_bound(string()); it->valid(); it->next(), ++count) {
     dout(20) << __func__ << " replay " << pretty_binary_string(it->key())
 	     << dendl;
-    TransContext *txc = _txc_create(osr.get());
-    txc->wal_txn = new bluestore_wal_transaction_t;
+    bluestore_wal_transaction_t *wal_txn = new bluestore_wal_transaction_t;
     bufferlist bl = it->value();
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(*txc->wal_txn, p);
+      ::decode(*wal_txn, p);
     } catch (buffer::error& e) {
       derr << __func__ << " failed to decode wal txn "
 	   << pretty_binary_string(it->key()) << dendl;
+      delete wal_txn;
       return -EIO;
     }
+    TransContext *txc = _txc_create(osr.get());
+    txc->wal_txn = wal_txn;
     txc->state = TransContext::STATE_KV_DONE;
     _txc_state_proc(txc);
   }

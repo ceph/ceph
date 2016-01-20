@@ -952,6 +952,10 @@ int KStore::mkfs()
   if (r < 0)
     goto out_close_db;
 
+  r = write_meta("type", "kstore");
+  if (r < 0)
+    goto out_close_db;
+
   // indicate mkfs completion/success by writing the fsid file
   r = _write_fsid();
   if (r == 0)
@@ -1429,7 +1433,6 @@ void KStore::_reap_collections()
   }
 
   dout(10) << __func__ << " all reaped" << dendl;
-  reap_cond.Signal();
 }
 
 // ---------------
