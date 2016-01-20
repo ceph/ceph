@@ -328,8 +328,8 @@ public:
 
   void expect_replay_process(MockJournalReplay &mock_journal_replay) {
     EXPECT_CALL(mock_journal_replay, process(_, _, _))
-                  .WillOnce(DoAll(WithArg<2>(Invoke(this, &TestMockJournal::save_commit_context)),
-                                  WithArg<1>(CompleteContext(0, NULL))));
+                  .WillOnce(DoAll(WithArg<1>(CompleteContext(0, NULL)),
+                                  WithArg<2>(Invoke(this, &TestMockJournal::save_commit_context))));
   }
 
   void expect_start_append(::journal::MockJournaler &mock_journaler) {
@@ -389,6 +389,11 @@ public:
   void save_commit_context(Context *ctx) {
     Mutex::Locker locker(m_lock);
     m_commit_contexts.push_back(ctx);
+    m_cond.Signal();
+  }
+
+  void wake_up() {
+    Mutex::Locker locker(m_lock);
     m_cond.Signal();
   }
 
@@ -718,8 +723,10 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
   expect_try_pop_front(mock_journaler, false, mock_replay_entry);
   expect_stop_replay(mock_journaler);
 
-  Context *on_flush;
-  EXPECT_CALL(mock_journal_replay, flush(_)).WillOnce(SaveArg<0>(&on_flush));
+  Context *on_flush = nullptr;
+  EXPECT_CALL(mock_journal_replay, flush(_))
+    .WillOnce(DoAll(SaveArg<0>(&on_flush),
+                    InvokeWithoutArgs(this, &TestMockJournal::wake_up)));
 
   // replay write-to-disk failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
@@ -747,6 +754,13 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
   m_commit_contexts.clear();
 
   // proceed with the flush
+  {
+    // wait for on_flush callback
+    Mutex::Locker locker(m_lock);
+    while (on_flush == nullptr) {
+      m_cond.Wait(m_lock);
+    }
+  }
   on_flush->complete(0);
 
   ASSERT_EQ(0, ctx.wait());
