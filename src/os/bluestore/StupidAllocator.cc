@@ -68,7 +68,7 @@ void StupidAllocator::unreserve(uint64_t unused)
   Mutex::Locker l(lock);
   dout(10) << __func__ << " unused " << unused << " num_free " << num_free
 	   << " num_reserved " << num_reserved << dendl;
-  assert((int64_t)unused >= num_reserved);
+  assert(num_reserved >= (int64_t)unused);
   num_reserved -= unused;
 }
 
