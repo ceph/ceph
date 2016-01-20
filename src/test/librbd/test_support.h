@@ -17,3 +17,11 @@ int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
   } 					  \
 }
 
+#define REQUIRE_FORMAT_V1() { 	          \
+  if (is_feature_enabled(0)) { 	          \
+    std::cout << "SKIPPING" << std::endl; \
+    return SUCCEED(); 			  \
+  } 					  \
+}
+
+#define REQUIRE_FORMAT_V2() REQUIRE_FEATURE(0)
