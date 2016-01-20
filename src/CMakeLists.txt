@@ -903,12 +903,17 @@ if(WITH_LIBCEPHFS)
   add_library(client ${libclient_srcs})
   target_link_libraries(client osdc mds ${LIBEDIT_LIBS})
   set(libcephfs_srcs libcephfs.cc)
-  add_library(cephfs SHARED ${libcephfs_srcs})
+  add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs}
+    $<TARGET_OBJECTS:cls_references_objs>
+    $<TARGET_OBJECTS:heap_profiler_objs>
+    $<TARGET_OBJECTS:common_util_obj>)
+  target_link_libraries(cephfs PRIVATE client osdc osd os global common cls_lock_client
+    ${BLKID_LIBRARIES}
+    ${CRYPTO_LIBS} ${EXTRALIBS} ${TCMALLOC_LIBS})
 if(${ENABLE_SHARED})
   set_target_properties(cephfs PROPERTIES OUTPUT_NAME cephfs VERSION 1.0.0
     SOVERSION 1)
 endif(${ENABLE_SHARED})
-  target_link_libraries(cephfs client global)
   install(TARGETS cephfs DESTINATION lib)
   install(DIRECTORY
     "${CMAKE_SOURCE_DIR}/src/include/cephfs"
@@ -1197,6 +1202,7 @@ add_custom_target(vstart DEPENDS
 add_custom_target(cephfs_testing DEPENDS
     vstart
     rados
+    cephfs
     ceph-fuse
     ceph-dencoder
     cephfs-journal-tool
