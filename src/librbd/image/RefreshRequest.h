@@ -27,10 +27,11 @@ template<typename> class RefreshParentRequest;
 template<typename ImageCtxT = ImageCtx>
 class RefreshRequest {
 public:
-  static  RefreshRequest *create(ImageCtxT &image_ctx, Context *on_finish) {
+  static RefreshRequest *create(ImageCtxT &image_ctx, Context *on_finish) {
     return new RefreshRequest(image_ctx, on_finish);
   }
 
+  RefreshRequest(ImageCtxT &image_ctx, Context *on_finish);
   ~RefreshRequest();
 
   void send();
@@ -123,8 +124,6 @@ private:
            rados::cls::lock::locker_info_t> m_lockers;
   std::string m_lock_tag;
   bool m_exclusive_locked;
-
-  RefreshRequest(ImageCtxT &image_ctx, Context *on_finish);
 
   void send_v1_read_header();
   Context *handle_v1_read_header(int *result);

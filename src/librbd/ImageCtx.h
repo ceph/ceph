@@ -270,6 +270,7 @@ namespace librbd {
 
     void apply_metadata_confs();
 
+    ExclusiveLock<ImageCtx> *create_exclusive_lock();
     ObjectMap *create_object_map(uint64_t snap_id);
     Journal<ImageCtx> *create_journal();
 
