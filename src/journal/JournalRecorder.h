@@ -58,32 +58,6 @@ private:
     }
   };
 
-  struct C_Flush : public Context {
-    Context *on_finish;
-    atomic_t pending_flushes;
-    int ret_val;
-
-    C_Flush(Context *_on_finish, size_t _pending_flushes)
-      : on_finish(_on_finish), pending_flushes(_pending_flushes + 1),
-        ret_val(0) {
-    }
-
-    void unblock() {
-      complete(0);
-    }
-    virtual void complete(int r) {
-      if (r < 0 && ret_val == 0) {
-        ret_val = r;
-      }
-      if (pending_flushes.dec() == 0) {
-        on_finish->complete(ret_val);
-        delete this;
-      }
-    }
-    virtual void finish(int r) {
-    }
-  };
-
   librados::IoCtx m_ioctx;
   CephContext *m_cct;
   std::string m_object_oid_prefix;
