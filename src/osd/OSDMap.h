@@ -369,9 +369,6 @@ public:
     assert(o < max_osd);
     osd_state[o] = s;
   }
-  void set_weightf(int o, float w) {
-    set_weight(o, (int)((float)CEPH_OSD_IN * w));
-  }
   void set_weight(int o, unsigned w) {
     assert(o < max_osd);
     osd_weight[o] = w;
