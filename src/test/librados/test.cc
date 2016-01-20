@@ -104,7 +104,7 @@ int rados_pool_set(
     rados_t *cluster,
     const std::string &pool_name,
     const std::string &var,
-    const std::string val)
+    const std::string &val)
 {
   JSONFormatter cmd_f;
   cmd_f.open_object_section("command");
