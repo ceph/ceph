@@ -67,6 +67,14 @@ bool ceph_heap_get_numeric_property(
     value);
 }
 
+bool ceph_heap_set_numeric_property(
+  const char *property, size_t value)
+{
+  return MallocExtension::instance()->SetNumericProperty(
+    property,
+    value);
+}
+
 bool ceph_heap_profiler_running()
 {
 #ifdef HAVE_LIBTCMALLOC
