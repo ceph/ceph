@@ -355,6 +355,16 @@ the convenience of the 'pull request' feature.
 
    Describe the technical detail of the change(s) your patch includes.
 
+   The text up to the first empty line in a commit message is the commit
+   title. Ideally it is a single short line less than 50 characters,
+   summarizing the change. It is required to prefix it with the
+   subsystem or module you are changing. For instance, the prefix
+   could be "doc:", "osd:", or "common:". One can use::
+
+     git log
+
+   for more examples.
+
    Be as specific as possible.  The WORST descriptions possible include
    things like "update driver X", "bug fix for driver X", or "this patch
    includes updates for subsystem X.  Please apply."
@@ -387,6 +397,15 @@ the convenience of the 'pull request' feature.
    get more context of this bug, so she/he can hence update the issue on
    the bug tracker accordingly.
 
+   So a typical commit message for revising the document could look like::
+
+     doc: add "--foo" option to bar
+
+     * update the man page for bar with the newly added "--foo" option.
+     * fix a typo
+
+     Fixes: #12345
+     Signed-off-by: Random J Developer <random@developer.example.org>
 
 4. Separate your changes.
 
