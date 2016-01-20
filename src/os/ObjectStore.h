@@ -431,6 +431,36 @@ public:
         largest_data_off_in_tbl(0),
 	fadvise_flags(0) { }
 
+      // override default move operations to reset default values
+      TransactionData(TransactionData&& other) :
+        ops(other.ops),
+        largest_data_len(other.largest_data_len),
+        largest_data_off(other.largest_data_off),
+        largest_data_off_in_tbl(other.largest_data_off_in_tbl),
+        fadvise_flags(other.fadvise_flags) {
+        other.ops = 0;
+        other.largest_data_len = 0;
+        other.largest_data_off = 0;
+        other.largest_data_off_in_tbl = 0;
+        other.fadvise_flags = 0;
+      }
+      TransactionData& operator=(TransactionData&& other) {
+        ops = other.ops;
+        largest_data_len = other.largest_data_len;
+        largest_data_off = other.largest_data_off;
+        largest_data_off_in_tbl = other.largest_data_off_in_tbl;
+        fadvise_flags = other.fadvise_flags;
+        other.ops = 0;
+        other.largest_data_len = 0;
+        other.largest_data_off = 0;
+        other.largest_data_off_in_tbl = 0;
+        other.fadvise_flags = 0;
+        return *this;
+      }
+
+      TransactionData(const TransactionData& other) = default;
+      TransactionData& operator=(const TransactionData& other) = default;
+
       void encode(bufferlist& bl) const {
         bl.append((char*)this, sizeof(TransactionData));
       }
