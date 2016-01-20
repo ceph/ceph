@@ -158,3 +158,27 @@ void CloseImageIO::write_debug(std::ostream& out) const {
   write_debug_base(out, "close image");
   out << ", imagectx=" << m_imagectx;
 }
+
+void AioOpenImageIO::encode(bufferlist &bl) const {
+  action::Action action((action::AioOpenImageAction(
+    ionum(), thread_id(), convert_dependencies(start_time(), dependencies()),
+    m_imagectx, m_name, m_snap_name, m_readonly)));
+  ::encode(action, bl);
+}
+
+void AioOpenImageIO::write_debug(std::ostream& out) const {
+  write_debug_base(out, "aio open image");
+  out << ", imagectx=" << m_imagectx << ", name='" << m_name << "', snap_name='" << m_snap_name << "', readonly=" << m_readonly;
+}
+
+void AioCloseImageIO::encode(bufferlist &bl) const {
+  action::Action action((action::AioCloseImageAction(
+    ionum(), thread_id(), convert_dependencies(start_time(), dependencies()),
+    m_imagectx)));
+  ::encode(action, bl);
+}
+
+void AioCloseImageIO::write_debug(std::ostream& out) const {
+  write_debug_base(out, "aio close image");
+  out << ", imagectx=" << m_imagectx;
+}
