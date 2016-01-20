@@ -1351,7 +1351,7 @@ int RGWSubUserPool::execute_remove(RGWUserAdminOpState& op_state,
   }
 
   // always purge all associate keys
-  user->keys.remove_subuser_keys(op_state, &subprocess_msg, defer_user_update);
+  user->keys.remove_subuser_keys(op_state, &subprocess_msg, true);
 
   // remove the subuser from the user info
   subuser_map->erase(siter);
