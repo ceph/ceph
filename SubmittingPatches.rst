@@ -376,7 +376,16 @@ the convenience of the 'pull request' feature.
    probably didn't even receive earlier versions of the patch.
 
    If the patch fixes a logged bug entry, refer to that bug entry by
-   number and URL.
+   number and URL. In particular, if this patch fixes one or more issues
+   tracked by http://tracker.ceph.com, consider adding a ``Fixes:`` tag to
+   connect this change to addressed issue(s). So a line saying ::
+
+     Fixes: #12345
+
+   is added before the ``Signed-off-by:`` line stating that this commit
+   addresses http://tracker.ceph.com/issues/12345. It helps the reviewer to
+   get more context of this bug, so she/he can hence update the issue on
+   the bug tracker accordingly.
 
 
 4. Separate your changes.
