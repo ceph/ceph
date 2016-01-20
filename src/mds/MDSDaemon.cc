@@ -346,6 +346,7 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "mds_op_complaint_time", "mds_op_log_threshold",
     "mds_op_history_size", "mds_op_history_duration",
     "mds_enable_op_tracker",
+    "mds_log_pause",
     // clog & admin clog
     "clog_to_monitors",
     "clog_to_syslog",
@@ -387,6 +388,10 @@ void MDSDaemon::handle_conf_change(const struct md_config_t *conf,
     if (mds_rank) {
       mds_rank->update_log_config();
     }
+  }
+  if (!g_conf->mds_log_pause && changed.count("mds_log_pause")) {
+    if (mds_rank)
+      mds_rank->mdlog->kick_submitter();
   }
 }
 
