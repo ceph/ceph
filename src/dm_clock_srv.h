@@ -22,6 +22,7 @@
 #include <mutex>
 #include <thread>
 #include <iostream>
+#include <sstream>
 
 #include "crimson/heap.h"
 
@@ -32,14 +33,6 @@ namespace c = crimson;
 static void debugger() {
   raise(SIGCONT);
 }
-
-
-#define TIME_SHORTENER
-
-
-#ifdef TIME_SHORTENER
-static const double time_shortener = 1453228100.0;
-#endif
 
 
 namespace crimson {
@@ -58,11 +51,15 @@ namespace crimson {
     inline Time getTime() {
       struct timeval now;
       assert(0 == gettimeofday(&now, NULL));
-#ifdef TIME_SHORTENER
-      return now.tv_sec + (now.tv_usec / 1000000.0) - time_shortener;
-#else
       return now.tv_sec + (now.tv_usec / 1000000.0);
-#endif
+    }
+
+    
+    inline std::string formatTime(const Time& time, uint modulo = 10000) {
+      long subtract = long(time / modulo) * modulo;
+      std::stringstream ss;
+      ss << std::fixed << time - subtract;
+      return ss.str();
     }
 
 
@@ -333,17 +330,6 @@ namespace crimson {
 		      const Time& time) {
 	Guard g(data_mutex);
 
-#if 0
-	static uint count = 0;
-	++count;
-	if (50 <= count && count <= 55) {
-	  debugger();
-	  std::cout << "addRequest:" << std::endl;
-	  displayQueues();
-	  std::cout << std::endl;
-	}
-#endif
-
 	auto client_it = clientMap.find(client_id);
 	if (clientMap.end() == client_it) {
 	  ClientInfo ci = clientInfoF(client_id);
@@ -387,6 +373,20 @@ namespace crimson {
 	    limQ.push(entry);
 	  }
 	}
+
+#if 1
+	{
+	  static uint count = 0;
+	  ++count;
+	  if (50 <= count && count < 55) {
+	    std::cout << "addRequest:" << std::endl;
+	    std::cout << "time:" << formatTime(time) << std::endl;
+	    displayQueues();
+	    std::cout << std::endl;
+	    debugger();
+	  }
+	}
+#endif
 
 	scheduleRequest();
       }
@@ -470,7 +470,7 @@ namespace crimson {
 	  ++count;
 	  if (50 <= count && count <= 55) {
 	    std::cout << "scheduleRequest A:" << std::endl;
-	    std::cout << "now:" << std::fixed << now << std::endl;
+	    std::cout << "now:" << formatTime(now) << std::endl;
 	    displayQueues();
 	    std::cout << std::endl;
 	    debugger();
@@ -507,7 +507,7 @@ namespace crimson {
 	  ++count;
 	  if (50 <= count && count <= 55) {
 	    std::cout << "scheduleRequest B:" << std::endl;
-	    std::cout << "now:" << std::fixed << now << std::endl;
+	    std::cout << "now:" << formatTime(now) << std::endl;
 	    displayQueues();
 	    std::cout << std::endl;
 	    debugger();
