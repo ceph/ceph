@@ -698,7 +698,14 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no, RGWHandler* handler
   }
   if (!error_content.empty()) {
     ldout(s->cct, 20) << "error_content is set, we need to serve it INSTEAD of firing the formatter" << dendl;
-#warning TODO we must add all error entries as headers here
+    /*
+     * FIXME we must add all error entries as headers here:
+     * when having a working errordoc, then the s3 error fields are rendered as HTTP headers, e.g.:
+     *
+     *   x-amz-error-code: NoSuchKey
+     *   x-amz-error-message: The specified key does not exist.
+     *   x-amz-error-detail-Key: foo
+     */
     end_header(s, op, NULL, NO_CONTENT_LENGTH, false, true);
     s->cio->write(error_content.c_str(), error_content.size());
     s->formatter->reset();
