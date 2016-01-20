@@ -493,6 +493,7 @@ protected:
   map<inodeno_t,map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
   map<inodeno_t,int> cap_imports_dirty;
   set<inodeno_t> cap_imports_missing;
+  map<inodeno_t, list<MDSInternalContextBase*> > cap_reconnect_waiters;
   int cap_imports_num_opening;
   
   set<CInode*> rejoin_undef_inodes;
@@ -550,6 +551,9 @@ public:
   }
   void set_reconnect_dirty_caps(inodeno_t ino, int dirty) {
     cap_imports_dirty[ino] |= dirty;
+  }
+  void wait_replay_cap_reconnect(inodeno_t ino, MDSInternalContextBase *c) {
+    cap_reconnect_waiters[ino].push_back(c);
   }
 
   // [reconnect/rejoin caps]
