@@ -454,11 +454,6 @@ AC_ARG_WITH([profiler],
 AS_IF([test "x$with_profiler" = xyes],
 	    [AC_CHECK_LIB([profiler], [ProfilerFlush], [],
 	        	  [AC_MSG_FAILURE([--with-profiler was given but libprofiler (libgoogle-perftools-dev on debian) not found])])
-             AC_LANG_PUSH([C++])
-             AC_CHECK_HEADERS([gperftools/heap-profiler.h \
-               gperftools/malloc_extension.h \
-               gperftools/profiler.h])
-             AC_LANG_POP([C++])
             ],
 	    [])
 AM_CONDITIONAL(WITH_PROFILER, test "$with_profiler" = "yes")
@@ -590,6 +585,15 @@ AS_IF([test "x$with_tcmalloc" != xno],
 	    [AC_MSG_FAILURE(
 		  [no tcmalloc found (use --without-tcmalloc to disable)])])])
 AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
+
+AS_IF([test "$with_profiler" = yes -o \
+            "$HAVE_LIBTCMALLOC" = "1" -o \
+            "$HAVE_LIBTCMALLOC_MINIMAL" = "1"],
+      [AC_LANG_PUSH([C++])
+       AC_CHECK_HEADERS([gperftools/heap-profiler.h \
+                         gperftools/malloc_extension.h \
+                         gperftools/profiler.h])
+       AC_LANG_POP([C++])])
 
 # error out if --with-jemalloc and ! --without-tcmalloc
 if test "x$with_jemalloc" = "xyes"; then

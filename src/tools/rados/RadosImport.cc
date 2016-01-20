@@ -243,8 +243,22 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
     need_align = true;
     alignment = align;
   } else {
-    if ((need_align = ioctx.pool_requires_alignment()))
-      alignment = ioctx.pool_required_alignment();
+    int ret = ioctx.pool_requires_alignment2(&need_align);
+    if (ret < 0) {
+      cerr << "pool_requires_alignment2 failed: " << cpp_strerror(ret)
+        << std::endl;
+      return ret;
+    }
+
+    if (need_align) {
+      ret = ioctx.pool_required_alignment2(&alignment);
+      if (ret < 0) {
+        cerr << "pool_required_alignment2 failed: " << cpp_strerror(ret)
+	  << std::endl;
+	return ret;
+      }
+      assert(alignment != 0);
+    }
   }
 
   if (need_align) {

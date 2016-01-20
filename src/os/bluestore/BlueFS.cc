@@ -703,7 +703,7 @@ int BlueFS::_read(
 
   int ret = 0;
   while (len > 0) {
-    int left;
+    size_t left;
     if (off < buf->bl_off || off >= buf->get_buf_end()) {
       buf->bl.clear();
       buf->bl_off = off & super.block_mask();

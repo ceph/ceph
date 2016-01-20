@@ -3186,10 +3186,13 @@ extern "C" int rados_ioctx_pool_requires_alignment2(rados_ioctx_t io,
 {
   tracepoint(librados, rados_ioctx_pool_requires_alignment_enter2, io);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  bool requires_alignment;
   int retval = ctx->client->pool_requires_alignment2(ctx->get_id(), 
-  	(bool *)requires);
+  	&requires_alignment);
   tracepoint(librados, rados_ioctx_pool_requires_alignment_exit2, retval, 
-  	*requires);
+  	requires_alignment);
+  if (requires)
+    *requires = requires_alignment;
   return retval;
 }
 
