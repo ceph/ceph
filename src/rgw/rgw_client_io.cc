@@ -51,6 +51,10 @@ int RGWClientIO::print(const char *format, ...)
 
 int RGWClientIO::write(const char *buf, int len)
 {
+  if (len == 0) {
+    return 0;
+  }
+
   int ret = write_data(buf, len);
   if (ret < 0)
     return ret;
