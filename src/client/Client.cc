@@ -12233,6 +12233,8 @@ const char** Client::get_tracked_conf_keys() const
 void Client::handle_conf_change(const struct md_config_t *conf,
 				const std::set <std::string> &changed)
 {
+  Mutex::Locker lock(client_lock);
+
   if (changed.count("client_cache_size") ||
       changed.count("client_cache_mid")) {
     lru.lru_set_max(cct->_conf->client_cache_size);
