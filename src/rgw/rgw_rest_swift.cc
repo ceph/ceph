@@ -467,10 +467,11 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
 
 void RGWCreateBucket_ObjStore_SWIFT::send_response()
 {
-  if (!ret)
-    ret = STATUS_CREATED;
-  else if (ret == -ERR_BUCKET_EXISTS)
+  if (exist_ret == -ERR_BUCKET_EXISTS) {
     ret = STATUS_ACCEPTED;
+  } else if (!ret) {
+    ret = STATUS_CREATED;
+  }
   set_req_state_err(s, ret);
   dump_errno(s);
   /* Propose ending HTTP header with 0 Content-Length header. */

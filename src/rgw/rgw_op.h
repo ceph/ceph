@@ -530,8 +530,10 @@ protected:
 
   bufferlist in_data;
 
+  int exist_ret;
+
 public:
-  RGWCreateBucket() : has_cors(false) {}
+  RGWCreateBucket() : has_cors(false), exist_ret(0) {}
 
   int verify_permission();
   void pre_exec();
