@@ -1123,20 +1123,9 @@ def dmcrypt_new(rawdev, _uuid, cryptsetup_parameters, key_dir, luks):
         rawdev,
         ] + cryptsetup_parameters
 
-    create_args = [
-        'cryptsetup',
-        '--key-file',
-        '-',
-        'create',
-        _uuid,
-        rawdev,
-        ] + cryptsetup_parameters
-
     try:
         if luks:
             command_check_call_stdin(dmcrypt_retrieve_key(_uuid, key_dir, luks), luksFormat_args)
-        else:
-            command_check_call_stdin(dmcrypt_retrieve_key(_uuid, key_dir, luks), create_args)
     except subprocess.CalledProcessError as e:
         raise Error('unable to create dmcrypt device', rawdev, e)
 
@@ -1559,20 +1548,9 @@ def prepare_journal_dev(
                  journal_dmcrypt,
                    ] + cryptsetup_parameters
 
-            create_args = [
-                 'cryptsetup',
-                 '--key-file',
-                 journal_dm_keypath,
-                 'create',
-                 journal_uuid,
-                 journal_dmcrypt,
-                   ] + cryptsetup_parameters
-
             try:
                 if luks:
                     command_check_call(luksFormat_args)
-                else:
-                    command_check_call(create_args)
             except subprocess.CalledProcessError as e:
                 raise Error('unable to format device for LUKS', journal_symlink, e)
 
