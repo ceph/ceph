@@ -335,7 +335,7 @@ class FuseMount(CephFSMount):
     def _prefix(self):
         return ""
 
-    def _admin_socket(self, args):
+    def admin_socket(self, args):
         pyscript = """
 import glob
 import re
@@ -380,21 +380,21 @@ print find_socket("{client_name}")
         Look up the CephFS client ID for this mount
         """
 
-        return self._admin_socket(['mds_sessions'])['id']
+        return self.admin_socket(['mds_sessions'])['id']
 
     def get_osd_epoch(self):
         """
         Return 2-tuple of osd_epoch, osd_epoch_barrier
         """
-        status = self._admin_socket(['status'])
+        status = self.admin_socket(['status'])
         return status['osd_epoch'], status['osd_epoch_barrier']
 
     def get_dentry_count(self):
         """
         Return 2-tuple of dentry_count, dentry_pinned_count
         """
-        status = self._admin_socket(['status'])
+        status = self.admin_socket(['status'])
         return status['dentry_count'], status['dentry_pinned_count']
 
     def set_cache_size(self, size):
-        return self._admin_socket(['config', 'set', 'client_cache_size', str(size)])
+        return self.admin_socket(['config', 'set', 'client_cache_size', str(size)])
