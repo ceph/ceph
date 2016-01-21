@@ -117,7 +117,7 @@ int librgw_acl_xml2bin(librgw_t rgw, const char *xml, char **bin, int *bin_len)
   catch (...) {
     lderr(rgw) << "librgw_acl_bin2xml: caught unknown exception " << dendl;
   }
-  if (!bin_)
+  if (bin_)
     free(bin_);
   bin_ = NULL;
   return -2000;
