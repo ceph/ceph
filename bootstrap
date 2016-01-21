@@ -104,6 +104,12 @@ Darwin)
     ;;
 esac
 
+# Forcibly remove old virtualenvs which used system site-packages
+if [ -e ./virtualenv ]  && [ ! -e ./virtualenv/lib/python2.7/no-global-site-packages.txt ]; then
+    echo "Removing old virtualenv because it uses system site-packages"
+    rm -rf ./virtualenv
+fi
+
 if [ -z "$NO_CLOBBER" ] || [ ! -e ./virtualenv ]; then
     if ! which virtualenv > /dev/null; then
         pip install virtualenv
