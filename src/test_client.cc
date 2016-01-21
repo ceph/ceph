@@ -49,28 +49,30 @@ void TestClient::waitUntilDone() {
 
 void TestClient::run_req() {
   std::chrono::microseconds delay(int(0.5 + 1000000.0 / iops_goal));
-  auto now = std::chrono::high_resolution_clock::now();
 
   if (info >= 1) {
     std::cout << "client " << id << " about to run " << ops_to_run <<
       " ops." << std::endl;
   }
 
-  Guard guard(mtx_req);
-  for (int i = 0; i < ops_to_run; ++i) {
-    auto when = now + delay;
-    while ((now = std::chrono::high_resolution_clock::now()) < when) {
-      cv_req.wait_until(guard, when);
-    }
-    while (outstanding_ops >= outstanding_ops_allowed) {
-      cv_req.wait(guard);
-    }
+  {
+    Guard guard(mtx_req);
+    auto now = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < ops_to_run; ++i) {
+      auto when = now + delay;
+      while ((now = std::chrono::high_resolution_clock::now()) < when) {
+	cv_req.wait_until(guard, when);
+      }
+      while (outstanding_ops >= outstanding_ops_allowed) {
+	cv_req.wait(guard);
+      }
 
-    guard.unlock();
-    TestRequest req(id, i, 12);
-    submit_f(req); // TODO needed????
-    ++outstanding_ops;
-    guard.lock(); // lock for return to top of loop
+      guard.unlock();
+      TestRequest req(id, i, 12);
+      submit_f(req);
+      ++outstanding_ops;
+      guard.lock(); // lock for return to top of loop
+    }
   }
 
   requests_complete = true;
@@ -80,8 +82,7 @@ void TestClient::run_req() {
       " ops." << std::endl;
   }
 
-
-  // thread ends
+  // all requests made, thread ends
 }
 
 
