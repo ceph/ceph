@@ -75,6 +75,7 @@ setup(
                       'pyasn1',
                       'python-openstackclient',
                       'prettytable',
+                      'libvirt-python',
                       ],
 
 
