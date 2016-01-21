@@ -391,9 +391,7 @@ class interval_set {
 
   void swap(interval_set<T>& other) {
     m.swap(other.m);
-    int64_t t = _size;
-    _size = other._size;
-    other._size = t;
+    std::swap(_size, other._size);
   }    
   
   void erase(iterator &i) {
