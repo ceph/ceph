@@ -73,6 +73,23 @@ Options
 
     Launch the osd/mds/mon/all the ceph binaries using valgrind with the specified tool and arguments.
 
+.. option:: --{mon,osd,mds}_num
+
+    Set the count of mon/osd/mds daemons
+
+.. option:: --bluestore
+
+    Use bluestore as the objectstore backend for osds
+
+.. option:: --memstore
+
+    Use memstore as the objectstore backend for osds
+
+.. option:: --cache <pool>
+
+    Set a cache-tier for the specified pool
+
+
 Environment variables
 =====================
 
