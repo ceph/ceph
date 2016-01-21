@@ -930,8 +930,8 @@ int RGWPutACLs_ObjStore::get_params()
   if (cl) {
     data = (char *)malloc(cl + 1);
     if (!data) {
-       ret = -ENOMEM;
-       return ret;
+       op_ret = -ENOMEM;
+       return op_ret;
     }
     int read_len;
     int r = s->cio->read(data, cl, &read_len);
@@ -943,7 +943,7 @@ int RGWPutACLs_ObjStore::get_params()
     len = 0;
   }
 
-  return ret;
+  return op_ret;
 }
 
 static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max_read)
@@ -1039,14 +1039,14 @@ int RGWCompleteMultipart_ObjStore::get_params()
   upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty()) {
-    ret = -ENOTSUP;
-    return ret;
+    op_ret = -ENOTSUP;
+    return op_ret;
   }
 
 #define COMPLETE_MULTIPART_MAX_LEN (1024 * 1024) /* api defines max 10,000 parts, this should be enough */
-  ret = rgw_rest_read_all_input(s, &data, &len, COMPLETE_MULTIPART_MAX_LEN);
-  if (ret < 0)
-    return ret;
+  op_ret = rgw_rest_read_all_input(s, &data, &len, COMPLETE_MULTIPART_MAX_LEN);
+  if (op_ret < 0)
+    return op_ret;
 
   return 0;
 }
@@ -1056,7 +1056,7 @@ int RGWListMultipart_ObjStore::get_params()
   upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty()) {
-    ret = -ENOTSUP;
+    op_ret = -ENOTSUP;
   }
   string marker_str = s->info.args.get("part-number-marker");
 
@@ -1065,8 +1065,8 @@ int RGWListMultipart_ObjStore::get_params()
     marker = strict_strtol(marker_str.c_str(), 10, &err);
     if (!err.empty()) {
       ldout(s->cct, 20) << "bad marker: "  << marker << dendl;
-      ret = -EINVAL;
-      return ret;
+      op_ret = -EINVAL;
+      return op_ret;
     }
   }
   
@@ -1074,7 +1074,7 @@ int RGWListMultipart_ObjStore::get_params()
   if (!str.empty())
     max_parts = atoi(str.c_str());
 
-  return ret;
+  return op_ret;
 }
 
 int RGWListBucketMultiparts_ObjStore::get_params()
@@ -1099,8 +1099,8 @@ int RGWDeleteMultiObj_ObjStore::get_params()
 {
 
   if (s->bucket_name.empty()) {
-    ret = -EINVAL;
-    return ret;
+    op_ret = -EINVAL;
+    return op_ret;
   }
 
   // everything is probably fine, set the bucket
@@ -1113,20 +1113,20 @@ int RGWDeleteMultiObj_ObjStore::get_params()
   if (cl) {
     data = (char *)malloc(cl + 1);
     if (!data) {
-      ret = -ENOMEM;
-      return ret;
+      op_ret = -ENOMEM;
+      return op_ret;
     }
     int read_len;
-    ret = s->cio->read(data, cl, &read_len);
+    op_ret = s->cio->read(data, cl, &read_len);
     len = read_len;
-    if (ret < 0)
-      return ret;
+    if (op_ret < 0)
+      return op_ret;
     data[len] = '\0';
   } else {
     return -EINVAL;
   }
 
-  return ret;
+  return op_ret;
 }
 
 

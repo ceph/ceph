@@ -647,14 +647,20 @@ done:
   }
 
   int http_ret = s->err.http_ret;
+  int op_ret = op->get_ret();
 
+  req->log_format(s, "op status=%d", op_ret);
   req->log_format(s, "http status=%d", http_ret);
 
   if (handler)
     handler->put_op(op);
   rest->put_handler(handler);
 
-  dout(1) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
+  dout(1) << "====== req done req=" << hex << req << dec
+	  << " op status=" << op_ret
+	  << " http_status=" << http_ret
+	  << " ======"
+	  << dendl;
 
   return (ret < 0 ? ret : s->err.ret);
 }
