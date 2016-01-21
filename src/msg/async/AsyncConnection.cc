@@ -2073,7 +2073,7 @@ int AsyncConnection::send_message(Message *m)
                                << " Drop message " << m << dendl;
     m->put();
   } else {
-    out_q[m->get_priority()].push_back(make_pair(bl, m));
+    out_q[m->get_priority()].emplace_back(std::move(bl), m);
     ldout(async_msgr->cct, 15) << __func__ << " inline write is denied, reschedule m=" << m << dendl;
     center->dispatch_event_external(write_handler);
   }
