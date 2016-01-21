@@ -468,14 +468,12 @@ void Client::dump_status(Formatter *f)
 
 int Client::init()
 {
+  timer.init();
+  objectcacher->start();
+  objecter->init();
+
   client_lock.Lock();
   assert(!initialized);
-
-  timer.init();
-
-  objectcacher->start();
-
-  objecter->init();
 
   // ok!
   messenger->add_dispatcher_tail(objecter);
@@ -608,9 +606,9 @@ void Client::shutdown()
   assert(initialized);
   initialized = false;
   timer.shutdown();
-  objecter->shutdown();
   client_lock.Unlock();
 
+  objecter->shutdown();
   objecter_finisher.wait_for_empty();
   objecter_finisher.stop();
 
