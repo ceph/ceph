@@ -442,16 +442,16 @@ public:
   private:
     TransactionData data;
 
-    void *osr; // NULL on replay
+    void *osr {nullptr}; // NULL on replay
 
-    bool use_tbl;   //use_tbl for encode/decode
+    bool use_tbl {false};   //use_tbl for encode/decode
     bufferlist tbl;
 
     map<coll_t, __le32> coll_index;
     map<ghobject_t, __le32, ghobject_t::BitwiseComparator> object_index;
 
-    __le32 coll_id;
-    __le32 object_id;
+    __le32 coll_id {0};
+    __le32 object_id {0};
 
     bufferlist data_bl;
     bufferlist op_bl;
@@ -463,25 +463,12 @@ public:
     list<Context *> on_applied_sync;
 
   public:
-    Transaction() :
-      osr(NULL),
-      use_tbl(false),
-      coll_id(0),
-      object_id(0) { }
+    Transaction() = default;
 
-    Transaction(bufferlist::iterator &dp) :
-      osr(NULL),
-      use_tbl(false),
-      coll_id(0),
-      object_id(0) {
+    Transaction(bufferlist::iterator &dp) {
       decode(dp);
     }
-
-    Transaction(bufferlist &nbl) :
-      osr(NULL),
-      use_tbl(false),
-      coll_id(0),
-      object_id(0) {
+    Transaction(bufferlist &nbl) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp);
     }
