@@ -360,7 +360,6 @@ class btree_interval_set {
           assert(0);
         }
 
-        assert(p->first + p->second == start);
         p->second += len;               // append to end
 
         typename map_t::iterator n = p;
