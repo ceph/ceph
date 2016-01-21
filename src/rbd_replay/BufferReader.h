@@ -25,6 +25,7 @@ private:
   size_t m_max_bytes;
   bufferlist m_bl;
   bufferlist::iterator m_bl_it;
+  bool m_eof_reached;
 
 };
 
