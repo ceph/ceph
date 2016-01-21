@@ -503,6 +503,53 @@ public:
       decode(dp);
     }
 
+    // override default move operations to reset default values
+    Transaction(Transaction&& other) :
+      data(std::move(other.data)),
+      osr(other.osr),
+      use_tbl(other.use_tbl),
+      tbl(std::move(other.tbl)),
+      coll_index(std::move(other.coll_index)),
+      object_index(std::move(other.object_index)),
+      coll_id(other.coll_id),
+      object_id(other.object_id),
+      data_bl(std::move(other.data_bl)),
+      op_bl(std::move(other.op_bl)),
+      op_ptr(std::move(other.op_ptr)),
+      on_applied(std::move(other.on_applied)),
+      on_commit(std::move(other.on_commit)),
+      on_applied_sync(std::move(other.on_applied_sync)) {
+      other.osr = nullptr;
+      other.use_tbl = false;
+      other.coll_id = 0;
+      other.object_id = 0;
+    }
+
+    Transaction& operator=(Transaction&& other) {
+      data = std::move(other.data);
+      osr = other.osr;
+      use_tbl = other.use_tbl;
+      tbl = std::move(other.tbl);
+      coll_index = std::move(other.coll_index);
+      object_index = std::move(other.object_index);
+      coll_id = other.coll_id;
+      object_id = other.object_id;
+      data_bl = std::move(other.data_bl);
+      op_bl = std::move(other.op_bl);
+      op_ptr = std::move(other.op_ptr);
+      on_applied = std::move(other.on_applied);
+      on_commit = std::move(other.on_commit);
+      on_applied_sync = std::move(other.on_applied_sync);
+      other.osr = nullptr;
+      other.use_tbl = false;
+      other.coll_id = 0;
+      other.object_id = 0;
+      return *this;
+    }
+
+    Transaction(const Transaction& other) = default;
+    Transaction& operator=(const Transaction& other) = default;
+
     /* Operations on callback contexts */
     void register_on_applied(Context *c) {
       if (!c) return;
