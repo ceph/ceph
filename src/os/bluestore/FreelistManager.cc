@@ -206,16 +206,7 @@ int FreelistManager::release(
       if (map_t_has_stable_iterators) {
 	kv_free.erase(p++);
       } else {
-	uint64_t next = 0;
-	++p;
-	if (p != kv_free.end())
-	  next = p->first;
-	--p;
-	kv_free.erase(p);
-	if (next)
-	  p = kv_free.find(next);
-	else
-	  p = kv_free.end();
+	p = kv_free.erase(p);
       }
     } else if (p->first + p->second > offset) {
       derr << __func__ << " bad release " << offset << "~" << length
