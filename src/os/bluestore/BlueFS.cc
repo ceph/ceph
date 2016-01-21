@@ -249,6 +249,7 @@ int BlueFS::mount()
   r = _replay();
   if (r < 0) {
     derr << __func__ << " failed to replay log: " << cpp_strerror(r) << dendl;
+    _stop_alloc();
     goto out;
   }
 
