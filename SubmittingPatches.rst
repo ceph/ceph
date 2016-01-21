@@ -203,8 +203,10 @@ sending patches.
 
 The project will generally accept code either by pulling code directly from
 a published git tree (usually on github), or via patches emailed directly
-to the email list (ceph-devel@vger.kernel.org).  Github is preferred due to
-the convenience of the 'pull request' feature.
+to the email list (ceph-devel@vger.kernel.org).  For the kernel client,
+patches are expected to be reviewed in the email list. And for everything
+else, github is preferred due to the convenience of the 'pull request'
+feature.
 
 1. Github pull request
 
