@@ -258,6 +258,19 @@ feature.
    to ping the reviewer again or comment on the pull request to ensure the updates
    are noticed.
 
+   Sometimes your change could be based on an outdated parent commit and has
+   conflicts with the latest target branch, then you need to fetch the updates
+   from the remote branch, rebase your change onto it, and resolve the conflicts
+   before doing the force-push
+
+   .. code-block:: bash
+
+      $ git pull --rebase origin target-branch
+
+   So that the pull request does not contain any "merge" commit. Instead of "merging"
+   the target branch, we expect a linear history in a pull request where you
+   commit on top of the remote branch.
+
    Q: Which branch should I target in my pull request?
 
    A: The target branch depends on the nature of your change:
