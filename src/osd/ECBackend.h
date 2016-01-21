@@ -27,8 +27,11 @@
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "messages/MOSDECSubOpApply.h"
+#include "messages/MOSDECSubOpApplyReply.h"
 
 const string OW_KEY = "ow_key";
+const string APPLY_KEY = "apply_key";
 
 struct RecoveryMessages;
 class ECBackend : public PGBackend {
@@ -56,10 +59,14 @@ public:
     );
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
+  friend struct SubApplyApplied;
   void sub_write_applied(
     ceph_tid_t tid, eversion_t version);
   void sub_write_committed(
     ceph_tid_t tid, eversion_t version, eversion_t last_complete);
+  void sub_apply_applied(
+    ceph_tid_t tid, eversion_t version);
+
   void handle_sub_write(
     pg_shard_t from,
     OpRequestRef msg,
@@ -79,6 +86,15 @@ public:
     pg_shard_t from,
     ECSubReadReply &op,
     RecoveryMessages *m
+    );
+  void handle_sub_apply(
+    pg_shard_t from,
+    // OpRequestRef msg,
+    ECSubApply &op
+    );
+  void handle_sub_apply_reply(
+    pg_shard_t from,
+    ECSubApplyReply &op
     );
 
   /// @see ReadOp below
@@ -395,17 +411,36 @@ public:
 
   struct OverwriteInfo {
     map<version_t, pair<uint64_t, uint64_t> > overwrite_history;
+  private:
+    const int overwrite_count_limit = 1;
+    const uint64_t overwrite_size_limit = 1 << 22;
+    
+    int overwrite_count;
+    uint64_t overwrite_size;
   public:
-    void overwrite(version_t version, uint64_t off, uint64_t len) {
-      overwrite_history.insert(
-        make_pair(
-          version,
-          make_pair(off, len)));
-    }
     void overwrite(version_t version, pair<uint64_t, uint64_t> to_write) {
+      if (overwrite_count == 0) {
+        for (map<version_t, pair<uint64_t, uint64_t> >::iterator i = 
+               overwrite_history.begin();
+             i != overwrite_history.end();
+             ++i) {
+          overwrite_count += 1;
+          overwrite_size += i->second.second;
+        }
+      }
+      overwrite_count += 1;
+      overwrite_size += to_write.second;
+      
       overwrite_history.insert(
         make_pair(
           version, to_write));
+    }
+    bool need_apply() {
+      if (overwrite_count >= overwrite_count_limit ||
+            overwrite_size >= overwrite_size_limit) {
+        return true;
+      }
+      return false;
     }
     void encode(bufferlist &bl) const;
     void decode(bufferlist::iterator &bl);
@@ -417,6 +452,11 @@ public:
     }
     map<version_t, pair<uint64_t, uint64_t> >::size_type size() {
       return overwrite_history.size();
+    }
+    void clear() {
+      overwrite_history.clear();
+      overwrite_count = 0;
+      overwrite_size = 0U;
     }
   };
   typedef ceph::shared_ptr<OverwriteInfo> OverwriteInfoRef;
@@ -595,6 +635,19 @@ public:
   SharedPtrRegistry<hobject_t, OverwriteInfo, hobject_t::BitwiseComparator> overwrite_info_registry;
   OverwriteInfoRef get_overwrite_info(const hobject_t &hoid,
                                       const version_t version = ghobject_t::NO_GEN);
+  
+  struct ObjectApplyProgress {
+    hobject_t hoid;
+    set<pg_shard_t> pending_apply;
+    WriteOp *last_op;
+  };
+  
+  // apply
+  void start_apply_op(const hobject_t &hoid, WriteOp *op);
+  // map<hobject_t, 
+  //   list<boost::tuple<version_t, uint64_t, uint64_t> >,
+  //   hobject_t::BitwiseComparator> unapplied_overwrite;
+  map<ceph_tid_t, ObjectApplyProgress> in_progress_apply;
 
 public:
   ECBackend(

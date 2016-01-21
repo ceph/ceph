@@ -2281,6 +2281,8 @@ protected:
     case MSG_OSD_EC_READ:
     case MSG_OSD_EC_READ_REPLY:
     case MSG_OSD_REP_SCRUB:
+    case MSG_OSD_EC_APPLY:
+    case MSG_OSD_EC_APPLY_REPLY:
       return true;
     default:
       return false;

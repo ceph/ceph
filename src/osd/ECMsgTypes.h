@@ -125,6 +125,43 @@ struct ECSubReadReply {
 };
 WRITE_CLASS_ENCODER(ECSubReadReply)
 
+struct ECSubApply {
+  pg_shard_t from;
+  ceph_tid_t tid;
+  hobject_t hoid;
+  ObjectStore::Transaction t;
+//  vector<pg_log_entry_t> log_entries;
+  ECSubApply() :tid(0) {};
+  ECSubApply(
+    pg_shard_t from,
+    ceph_tid_t tid,
+    hobject_t hoid,
+    const ObjectStore::Transaction &t)
+    : from(from), tid(tid),
+      hoid(hoid), t(t) {}
+  void claim(ECSubApply &other) {
+    from = other.from;
+    tid = other.tid;
+    hoid = other.hoid;
+    t.swap(other.t);
+  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ECSubApply*>& o);
+};
+WRITE_CLASS_ENCODER(ECSubApply)
+
+struct ECSubApplyReply {
+  pg_shard_t from;
+  ceph_tid_t tid;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ECSubApplyReply*>& o);
+};
+WRITE_CLASS_ENCODER(ECSubApplyReply)
+
 std::ostream &operator<<(
   std::ostream &lhs, const ECSubWrite &rhs);
 std::ostream &operator<<(
@@ -133,5 +170,9 @@ std::ostream &operator<<(
   std::ostream &lhs, const ECSubRead &rhs);
 std::ostream &operator<<(
   std::ostream &lhs, const ECSubReadReply &rhs);
+std::ostream &operator<<(
+  std::ostream &lhs, const ECSubApply &rhs);
+std::ostream &operator<<(
+  std::ostream &lhs, const ECSubApplyReply &rhs);
 
 #endif

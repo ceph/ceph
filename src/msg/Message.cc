@@ -169,6 +169,8 @@ using namespace std;
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "messages/MOSDECSubOpApply.h"
+#include "messages/MOSDECSubOpApplyReply.h"
 
 #define DEBUGLVL  10    // debug level of output
 
@@ -507,7 +509,13 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_OSD_EC_READ_REPLY:
     m = new MOSDECSubOpReadReply;
     break;
-   // auth
+  case MSG_OSD_EC_APPLY:
+    m = new MOSDECSubOpApply;
+    break;
+  case MSG_OSD_EC_APPLY_REPLY:
+    m = new MOSDECSubOpApplyReply;
+    break;
+    // auth
   case CEPH_MSG_AUTH:
     m = new MAuth;
     break;

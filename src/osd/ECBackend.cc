@@ -920,6 +920,17 @@ bool ECBackend::handle_message(
     dispatch_recovery_messages(rm, priority);
     return true;
   }
+  case MSG_OSD_EC_APPLY: {
+    MOSDECSubOpApply *op = static_cast<MOSDECSubOpApply*>(_op->get_req());
+    handle_sub_apply(op->op.from, op->op);
+    return true;
+  }
+  case MSG_OSD_EC_APPLY_REPLY: {
+    MOSDECSubOpApplyReply *op = static_cast<MOSDECSubOpApplyReply*>(_op->get_req());
+    op->set_priority(priority);
+    handle_sub_apply_reply(op->op.from, op->op);
+    return true;
+  }
   default:
     return false;
   }
@@ -1006,6 +1017,47 @@ void ECBackend::sub_write_applied(
     r->op.from = get_parent()->whoami_shard();
     r->op.tid = tid;
     r->op.applied = true;
+    get_parent()->send_message_osd_cluster(
+      get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
+  }
+}
+
+struct SubApplyApplied : public Context {
+  ECBackend *pg;
+  // OpRequestRef msg;
+  ceph_tid_t tid;
+  // TODO: whether to do version update?
+  eversion_t version;
+  SubApplyApplied(
+    ECBackend *pg,
+    // OpRequestRef msg,
+    ceph_tid_t tid)
+    : pg(pg), tid(tid) {}
+  void finish(int) {
+    // if (msg)
+    //   msg->mark_event("sub_op_applied");
+    pg->sub_apply_applied(tid, version);
+  }
+};
+
+void ECBackend::sub_apply_applied(
+  ceph_tid_t tid, eversion_t version) {
+//  parent->op_applied(version);
+  if (get_parent()->pgb_is_primary()) {
+    ECSubApplyReply reply;
+    reply.from = get_parent()->whoami_shard();
+    reply.tid = tid;
+    // reply.applied = true;
+    handle_sub_apply_reply(
+      get_parent()->whoami_shard(),
+      reply);
+  } else {
+    MOSDECSubOpApplyReply *r = new MOSDECSubOpApplyReply;
+    r->pgid = get_parent()->primary_spg_t();
+    r->map_epoch = get_parent()->get_epoch();
+    r->op.from = get_parent()->whoami_shard();
+    r->op.tid = tid;
+    // r->op.applied = true;
     get_parent()->send_message_osd_cluster(
       get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
   }
@@ -1523,6 +1575,73 @@ void ECBackend::handle_sub_read_reply(
     complete_read_op(rop, m);
   } else {
     dout(10) << __func__ << " readop not complete: " << rop << dendl;
+  }
+}
+
+void ECBackend::handle_sub_apply(
+  pg_shard_t from,
+  // OpRequestRef msg,
+  ECSubApply &op)
+{
+  dout(10) << __func__ << " apply " << op.hoid << dendl;
+
+  assert(!get_parent()->get_log().get_missing().is_missing(op.hoid));
+  // update object stats ?
+  
+//  ObjectStore::Transaction *localt = new ObjectStore::Transaction;
+//  localt->set_use_tbl(op.t.get_use_tbl());
+
+  // log pg log
+//  get_parent()->log_operation(
+//    op.log_entries,
+//    op.updated_hit_set_history,
+//    op.trim_to,
+//    op.trim_rollback_to,
+//    !(op.t.empty()),
+//    localt);
+  
+  if (!(dynamic_cast<ReplicatedPG *>(get_parent())->is_undersized()) &&
+          (unsigned)get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
+    op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+
+  list<ObjectStore::Transaction*> tls;
+
+  // merge overwrite
+  tls.push_back(new ObjectStore::Transaction);
+  tls.back()->swap(op.t);
+  tls.back()->register_on_applied(
+    get_parent()->bless_context(
+      new SubApplyApplied(this, op.tid)));
+      // new SubApplyApplied(this, msg, op.tid, op.at_version)));
+  tls.back()->register_on_complete(
+    new ObjectStore::C_DeleteTransaction(tls.back()));
+  
+  // TODO: this is a backend op, whether empty OpRequestRef ok?
+//  get_parent()->queue_transactions(tls, msg);
+  get_parent()->queue_transactions(tls);
+}
+
+void ECBackend::handle_sub_apply_reply(
+  pg_shard_t from,
+  ECSubApplyReply &op)
+{
+  dout(10) << __func__ << " apply done from " << from << dendl;
+
+  map<ceph_tid_t, ObjectApplyProgress>::iterator i =
+      in_progress_apply.find(op.tid);
+  assert(i != in_progress_apply.end());
+  
+  assert(i->second.pending_apply.count(from));
+  i->second.pending_apply.erase(from);
+  
+  // check apply done
+  if (i->second.pending_apply.empty()) {
+    WriteOp *last_op = i->second.last_op;
+    last_op->overwrite_info->clear();
+    // continue the last op check
+    check_op(i->second.last_op);
+    
+    in_progress_apply.erase(op.tid);
   }
 }
 
@@ -2186,6 +2305,16 @@ void ECBackend::check_op(Op *op)
 {
   if (op->pending_apply.empty() && op->on_all_applied) {
     dout(10) << __func__ << " Calling on_all_applied on " << *op << dendl;
+
+    // check wether need apply
+    if (op->t->offset_write) {
+      WriteOp *w_op = static_cast<WriteOp*>(op);
+      if (w_op->overwrite_info->need_apply()) {
+        start_apply_op(op->hoid, w_op);
+        return;
+      }
+    }
+
     op->on_all_applied->complete(0);
     op->on_all_applied = 0;
   }
@@ -2518,6 +2647,119 @@ void ECBackend::continue_next_op() {
     }
 
     dout(10) << "onreadable_sync: " << next_op->on_local_applied_sync << dendl;
+  }
+}
+
+void ECBackend::start_apply_op(const hobject_t &hoid, WriteOp *op) {
+  dout(10) << __func__ << " start apply " << hoid << dendl;
+
+  ceph_tid_t tid = get_parent()->get_tid();
+  ObjectApplyProgress &apply_progress = in_progress_apply[tid];
+  apply_progress.hoid = hoid;
+  apply_progress.last_op = op;
+
+  OverwriteInfoRef ow_info = get_overwrite_info(hoid);
+  map<shard_id_t, ObjectStore::Transaction> trans;
+
+  const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
+  pg_t pgid = get_parent()->get_info().pgid.pgid;
+  
+  // prepare transaction
+  for (map<version_t, pair<uint64_t, uint64_t> >::iterator j = 
+         ow_info->overwrite_history.begin();
+       j != ow_info->overwrite_history.end();
+       ++j) {
+
+    map<int, pair<uint64_t, uint64_t>> shards_to_write =
+        sinfo.offset_len_to_chunk_offset(j->second, ec_impl->get_chunk_count());
+
+    for (set<pg_shard_t>::const_iterator i =
+           get_parent()->get_actingbackfill_shards().begin();
+        i != get_parent()->get_actingbackfill_shards().end();
+        ++i) {
+
+      if (trans.count(i->shard) == 0) {
+        trans[i->shard];
+        trans[i->shard].set_use_tbl(parent->transaction_use_tbl());
+      }
+
+      int shard_id = i->shard >= (int)chunk_mapping.size() ? i->shard : chunk_mapping[i->shard];
+      pair<uint64_t, uint64_t> to_write = shards_to_write[shard_id];
+
+      if (to_write.second > 0) {
+        trans[i->shard].clone_range(
+          coll_t(spg_t(pgid, i->shard)),
+          ghobject_t(hoid, j->first, i->shard),
+          ghobject_t(hoid, ghobject_t::NO_GEN, i->shard),
+          to_write.first,
+          to_write.second,
+          to_write.first);
+        trans[i->shard].remove(
+          coll_t(spg_t(pgid, i->shard)),
+          ghobject_t(hoid, j->first, i->shard));
+      }
+    }
+  }
+ 
+  version_t last_apply_version = 
+      ow_info->overwrite_history.rbegin()->first;
+  bufferlist bl;
+  ::encode(last_apply_version, bl);
+
+  for (set<pg_shard_t>::const_iterator i =
+         get_parent()->get_actingbackfill_shards().begin();
+       i != get_parent()->get_actingbackfill_shards().end();
+       ++i) {
+    dout(0) << __func__ << " send apply " << *i << dendl;
+    apply_progress.pending_apply.insert(*i);
+
+    // generator pglog
+    //    vector<pg_log_entry_t> log_entries;
+    //    eversion_t at_version = get_parent()->get_version();
+    //    log_entries.push_back(pg_log_entry_t(
+    //        pg_log_entry_t::EC_APPLY,
+    //        hoid,
+    //        at_version,
+    //        ctx->obs->oi.version,
+    //	ctx->user_at_version,
+    //        ctx->reqid,
+    //	ctx->mtime));
+    // set ObjectModDesc
+    
+    // use xattr record the applied version
+    // incase primary osd down, then scan pglog
+    // and use this version to get the apply progress
+    trans[i->shard].setattr(
+      coll_t(spg_t(pgid, i->shard)),
+      ghobject_t(hoid, ghobject_t::NO_GEN, i->shard),
+      APPLY_KEY,
+      bl);
+    // remove old overwrite info
+    trans[i->shard].rmattr(
+      coll_t(spg_t(pgid, i->shard)),
+      ghobject_t(hoid, ghobject_t::NO_GEN, i->shard),
+      OW_KEY);
+
+    // generator op
+    ECSubApply sop(
+      get_parent()->whoami_shard(),
+      tid,
+      hoid,
+      trans[i->shard]);
+    
+    // send op
+    if (*i == get_parent()->whoami_shard()) {
+      handle_sub_apply(
+        get_parent()->whoami_shard(),
+        sop);
+    } else {
+      MOSDECSubOpApply *r = new MOSDECSubOpApply(sop);
+      r->set_priority(cct->_conf->osd_client_op_priority);
+      r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
+      r->map_epoch = get_parent()->get_epoch();
+      get_parent()->send_message_osd_cluster(
+        i->osd, r, get_parent()->get_epoch());
+    }
   }
 }
 

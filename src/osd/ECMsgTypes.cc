@@ -397,3 +397,76 @@ void ECSubReadReply::generate_test_instances(list<ECSubReadReply*>& o)
   o.back()->attrs_read[hoid2]["_"] = bl2;
   o.back()->errors[hoid1] = -2;
 }
+
+void ECSubApply::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(from, bl);
+  ::encode(tid, bl);
+  ::encode(hoid, bl);
+  ::encode(t, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ECSubApply::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(from, bl);
+  ::decode(tid, bl);
+  ::decode(hoid, bl);
+  ::decode(t, bl);
+  DECODE_FINISH(bl);
+}
+
+std::ostream &operator<<(
+  std::ostream &lhs, const ECSubApply &rhs)
+{
+  return lhs
+    << "ECSubApply(tid=" << rhs.tid
+    << ")";
+}
+
+void ECSubApply::dump(Formatter *f) const
+{
+
+}
+
+void ECSubApply::generate_test_instances(list<ECSubApply*>& o)
+{
+
+}
+
+
+void ECSubApplyReply::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(from, bl);
+  ::encode(tid, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ECSubApplyReply::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(from, bl);
+  ::decode(tid, bl);
+  DECODE_FINISH(bl);
+}
+
+std::ostream &operator<<(
+  std::ostream &lhs, const ECSubApplyReply &rhs)
+{
+  return lhs
+    << "ECSubApplyReply(tid=" << rhs.tid
+    << " from=" << rhs.from << ")";
+}
+
+void ECSubApplyReply::dump(Formatter *f) const
+{
+
+}
+
+void ECSubApplyReply::generate_test_instances(list<ECSubApplyReply*>& o)
+{
+
+}
