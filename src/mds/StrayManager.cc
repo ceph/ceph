@@ -847,26 +847,6 @@ void StrayManager::_truncate_stray_logged(CDentry *dn, LogSegment *ls)
 }
 
 
-const char** StrayManager::get_tracked_conf_keys() const
-{
-  static const char* KEYS[] = {
-    "mds_max_purge_ops",
-    "mds_max_purge_ops_per_pg",
-    NULL
-  };
-  return KEYS;
-}
-
-void StrayManager::handle_conf_change(const struct md_config_t *conf,
-			  const std::set <std::string> &changed)
-{
-  if (changed.count("mds_max_purge_ops")
-      || changed.count("mds_max_purge_ops_per_pg")) {
-    update_op_limit();
-  }
-}
-
-
 void StrayManager::update_op_limit()
 {
   const OSDMap *osdmap = mds->objecter->get_osdmap_read();

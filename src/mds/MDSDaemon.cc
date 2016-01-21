@@ -353,6 +353,9 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "clog_to_syslog",
     "clog_to_syslog_facility",
     "clog_to_syslog_level",
+    // StrayManager
+    "mds_max_purge_ops",
+    "mds_max_purge_ops_per_pg",
     NULL
   };
   return KEYS;
@@ -361,7 +364,12 @@ const char** MDSDaemon::get_tracked_conf_keys() const
 void MDSDaemon::handle_conf_change(const struct md_config_t *conf,
 			     const std::set <std::string> &changed)
 {
-  Mutex::Locker l(mds_lock);
+  // We may be called within mds_lock (via `tell`) or outwith the
+  // lock (via admin socket `config set`), so handle either case.
+  const bool initially_locked = mds_lock.is_locked_by_me();
+  if (!initially_locked) {
+    mds_lock.Lock();
+  }
 
   if (changed.count("mds_op_complaint_time") ||
       changed.count("mds_op_log_threshold")) {
@@ -390,9 +398,19 @@ void MDSDaemon::handle_conf_change(const struct md_config_t *conf,
       mds_rank->update_log_config();
     }
   }
+
   if (!g_conf->mds_log_pause && changed.count("mds_log_pause")) {
-    if (mds_rank)
+    if (mds_rank) {
       mds_rank->mdlog->kick_submitter();
+    }
+  }
+
+  if (mds_rank) {
+    mds_rank->mdcache->handle_conf_change(conf, changed);
+  }
+
+  if (!initially_locked) {
+    mds_lock.Unlock();
   }
 }
 
@@ -482,6 +500,8 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
   // is consistent (later we take mds_lock within asok callbacks)
   set_up_admin_socket();
 
+  g_conf->add_observer(this);
+
   mds_lock.Lock();
   if (beacon.get_want_state() == MDSMap::STATE_DNE) {
     suicide();  // we could do something more graceful here
@@ -529,8 +549,6 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
   
   // schedule tick
   reset_tick();
-
-  g_conf->add_observer(this);
 
   mds_lock.Unlock();
 
