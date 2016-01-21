@@ -106,6 +106,7 @@ public:
     const std::set<string> &key,
     std::map<string, bufferlist> *out
     );
+  using KeyValueDB::get;
 
   class KineticWholeSpaceIteratorImpl :
     public KeyValueDB::WholeSpaceIteratorImpl {
