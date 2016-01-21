@@ -2,7 +2,7 @@
 Install Ceph Object Gateway
 ===========================
 
-As of `firefly` (v0.80), Ceph Object Gateway is runnig on Civetweb (embedded
+As of `firefly` (v0.80), Ceph Object Gateway is running on Civetweb (embedded
 into the ``ceph-radosgw`` daemon) instead of Apache and FastCGI. Using Civetweb
 simplifies the Ceph Object Gateway installation and configuration.
 
@@ -112,13 +112,13 @@ Gateway::
 
 Finally, check to ensure that the port you selected is open on the node's
 firewall (e.g., port ``80``). If it is not open, add the port and reload the
-firewall configuration. For Red Hat Enterprise Linux execute::
+firewall configuration. If you use the ``firewald``, daemon execute::
 
   sudo firewall-cmd --list-all
   sudo firewall-cmd --zone=public --add-port 80/tcp --permanent
   sudo firewall-cmd --reload
 
-For Ubuntu, execute::
+If you use ``iptables``, execute::
 
   sudo iptables --list
   sudo iptables -I INPUT 1 -i <iface> -p tcp -s <ip-address>/<netmask> --dport 80 -j ACCEPT
@@ -555,7 +555,7 @@ Enterprise Linux::
  sudo pip install --upgrade setuptools
  sudo pip install --upgrade python-swiftclient
 
-On Ubuntu::
+On Debian-based distributions::
 
  sudo apt-get install python-setuptools
  sudo easy_install pip
