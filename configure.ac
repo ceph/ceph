@@ -815,7 +815,7 @@ AM_CONDITIONAL(WITH_DLIBROCKSDB, [ test "$with_librocksdb" = "yes" ])
 AC_ARG_WITH([librocksdb-static],
             [AS_HELP_STRING([--with-librocksdb-static], [build rocksdb support])],
             [],
-            [with_librocksdb_static=no])
+            [with_librocksdb_static=check])
 AS_IF([test "x$with_librocksdb_static" = "xcheck" -a "x$HAVE_CXX11" = "x1" ],
             [with_librocksdb_static="yes"])
 AS_IF([test "x$with_librocksdb_static" = "xyes"],
