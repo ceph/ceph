@@ -355,7 +355,6 @@ class interval_set {
           assert(0);
         }
         
-        assert(p->first + p->second == start);
         p->second += len;               // append to end
         
         typename std::map<T,T>::iterator n = p;
