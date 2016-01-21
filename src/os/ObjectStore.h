@@ -463,6 +463,28 @@ public:
     list<Context *> on_applied_sync;
 
   public:
+    Transaction() :
+      osr(NULL),
+      use_tbl(false),
+      coll_id(0),
+      object_id(0) { }
+
+    Transaction(bufferlist::iterator &dp) :
+      osr(NULL),
+      use_tbl(false),
+      coll_id(0),
+      object_id(0) {
+      decode(dp);
+    }
+
+    Transaction(bufferlist &nbl) :
+      osr(NULL),
+      use_tbl(false),
+      coll_id(0),
+      object_id(0) {
+      bufferlist::iterator dp = nbl.begin();
+      decode(dp);
+    }
 
     /* Operations on callback contexts */
     void register_on_applied(Context *c) {
@@ -1586,30 +1608,6 @@ public:
         _op->expected_write_size = expected_write_size;
       }
       data.ops++;
-    }
-
-    // etc.
-    Transaction() :
-      osr(NULL),
-      use_tbl(false),
-      coll_id(0),
-      object_id(0) { }
-
-    Transaction(bufferlist::iterator &dp) :
-      osr(NULL),
-      use_tbl(false),
-      coll_id(0),
-      object_id(0) {
-      decode(dp);
-    }
-
-    Transaction(bufferlist &nbl) :
-      osr(NULL),
-      use_tbl(false),
-      coll_id(0),
-      object_id(0) {
-      bufferlist::iterator dp = nbl.begin();
-      decode(dp);
     }
 
     void encode(bufferlist& bl) const {
