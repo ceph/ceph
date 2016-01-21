@@ -86,7 +86,7 @@ static CompatSet get_kv_supported_compat_set() {
 
 // ============== StripObjectMap Implementation =================
 
-int StripObjectMap::save_strip_header(StripObjectHeaderRef strip_header,
+void StripObjectMap::save_strip_header(StripObjectHeaderRef strip_header,
                                       KeyValueDB::Transaction t)
 {
   if (strip_header->updated) {
@@ -96,7 +96,6 @@ int StripObjectMap::save_strip_header(StripObjectHeaderRef strip_header,
     set_header(strip_header->cid, strip_header->oid, *(strip_header->header), t);
     strip_header->updated = false;
   }
-  return 0;
 }
 
 int StripObjectMap::create_strip_header(const coll_t &cid,
@@ -467,14 +466,8 @@ int KeyValueStore::BufferTransaction::submit_transaction()
     if (header->deleted)
       continue;
 
-    if (header->updated) {
-      r = store->backend->save_strip_header(header, t);
-
-      if (r < 0) {
-        dout(10) << __func__ << " save strip header failed " << dendl;
-        goto out;
-      }
-    }
+    if (header->updated)
+      store->backend->save_strip_header(header, t);
   }
 
   r = store->backend->submit_transaction_sync(t);
@@ -482,7 +475,6 @@ int KeyValueStore::BufferTransaction::submit_transaction()
     (*it)->complete(r);
   }
 
-out:
   dout(5) << __func__ << " r = " << r << dendl;
   return r;
 }
