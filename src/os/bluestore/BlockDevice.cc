@@ -44,12 +44,12 @@ void IOContext::aio_wait()
 
 BlockDevice *BlockDevice::create(const string& path, aio_callback_t cb, void *cbpriv)
 {
-  char buf[2];
-  int r = ::readlink(path.c_str(), buf, 2);
-
   string type = "kernel";
-  if (r < 0)
+  char buf[10];
+  int r = ::readlink(path.c_str(), buf, sizeof(buf));
+  if (r >= 0 && strncmp(buf, SPDK_PREFIX, sizeof(SPDK_PREFIX)-1) == 0) {
     type = "ust-nvme";
+  }
   dout(1) << __func__ << " path " << path << " type " << type << dendl;
 
   if (type == "kernel") {
@@ -61,7 +61,7 @@ BlockDevice *BlockDevice::create(const string& path, aio_callback_t cb, void *cb
   }
 #endif
 
-  derr << __func__ << " unknown bacend " << type << dendl;
+  derr << __func__ << " unknown backend " << type << dendl;
   assert(0);
   return NULL;
 }

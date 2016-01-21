@@ -20,6 +20,8 @@
 #include "acconfig.h"
 #include "os/fs/FS.h"
 
+#define SPDK_PREFIX "spdk:"
+
 /// track in-flight io
 struct IOContext {
   void *priv;

@@ -1565,33 +1565,40 @@ int BlueStore::_open_collections(int *errors)
 
 int BlueStore::_setup_block_symlink_or_file(
   string name,
-  string path,
+  string epath,
   uint64_t size)
 {
-  dout(20) << __func__ << " name " << name << " path " << path
+  dout(20) << __func__ << " name " << name << " path " << epath
 	   << " size " << size << dendl;
   int r = 0;
-  if (path.length()) {
-    string spdk_prefix = "spdk:";
-    if (!path.compare(0, spdk_prefix.size(), spdk_prefix)) {
-      int fd = ::openat(path_fd, name.c_str(), O_CREAT|O_RDWR, 0644);
+  if (epath.length()) {
+    if (!epath.compare(0, sizeof(SPDK_PREFIX-1), SPDK_PREFIX)) {
+      string symbol_spdk_file = path + "/" + epath;
+      r = ::symlinkat(symbol_spdk_file.c_str(), path_fd, name.c_str());
+      if (r < 0) {
+        r = -errno;
+        derr << __func__ << " failed to create " << name << " symlink to "
+    	     << symbol_spdk_file << ": " << cpp_strerror(r) << dendl;
+        return r;
+      }
+      int fd = ::openat(path_fd, epath.c_str(), O_RDWR, 0644);
       if (fd < 0) {
 	r = -errno;
-	derr << __func__ << " failed to create " << name << " file: "
+	derr << __func__ << " failed to open " << epath << " file: "
 	     << cpp_strerror(r) << dendl;
 	return r;
       }
-      string serial_number = path.substr(spdk_prefix.size());
+      string serial_number = epath.substr(sizeof(SPDK_PREFIX)-1);
       r = ::write(fd, serial_number.c_str(), serial_number.size());
       assert(r == (int)serial_number.size());
       dout(1) << __func__ << " created " << name << " file with " << dendl;
       VOID_TEMP_FAILURE_RETRY(::close(fd));
     } else {
-      r = ::symlinkat(path.c_str(), path_fd, name.c_str());
+      r = ::symlinkat(epath.c_str(), path_fd, name.c_str());
       if (r < 0) {
         r = -errno;
         derr << __func__ << " failed to create " << name << " symlink to "
-    	   << path << ": " << cpp_strerror(r) << dendl;
+    	   << epath << ": " << cpp_strerror(r) << dendl;
         return r;
       }
     }
