@@ -17,21 +17,12 @@ class TestVpsOsVersionParamCheck(object):
                       self.fake_ctx.machine_type,
                       self.fake_ctx.os_type,
                       self.fake_ctx.os_version)
-                            
+
         assert check_value
 
     def test_ubuntu_number(self):
         self.fake_ctx.os_type = 'ubuntu'
         self.fake_ctx.os_version = '12.04'
-        check_value = lock.vps_version_or_type_valid(
-                      self.fake_ctx.machine_type,
-                      self.fake_ctx.os_type,
-                      self.fake_ctx.os_version)
-        assert check_value
-
-    def test_rhel(self):
-        self.fake_ctx.os_type = 'rhel'
-        self.fake_ctx.os_version = '6.5'
         check_value = lock.vps_version_or_type_valid(
                       self.fake_ctx.machine_type,
                       self.fake_ctx.os_type,
