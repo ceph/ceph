@@ -214,7 +214,8 @@ namespace crimson {
 
       // a function to submit a request to the server; the second
       // parameter is a callback when it's completed
-      typedef typename std::function<void(RequestRef)> HandleRequestFunc;
+      typedef
+      typename std::function<void(RequestRef,PhaseType)> HandleRequestFunc;
 
 
     protected:
@@ -426,10 +427,10 @@ namespace crimson {
       // should not be empty and the top element of the heap should
       // not be already handled
       template<typename K>
-      C submitTopRequest(Heap<EntryRef, K>& heap) {
+      C submitTopRequest(Heap<EntryRef, K>& heap, PhaseType phase) {
 	EntryRef& top = heap.top();
 	top->handled = true;
-	handleF(std::move(top->request));
+	handleF(std::move(top->request), phase);
 	C client_result = top->client;
 	heap.pop();
 	return client_result;
@@ -477,7 +478,7 @@ namespace crimson {
 #endif
 
 	if (!resQ.empty() && resQ.top()->tag.reservation <= now) {
-	  (void) submitTopRequest(resQ);
+	  (void) submitTopRequest(resQ, PhaseType::reservation);
 	  ++res_sched_count;
 	  return;
 	}
@@ -514,7 +515,7 @@ namespace crimson {
 #endif
 
 	if (!readyQ.empty()) {
-	  C client = submitTopRequest(readyQ);
+	  C client = submitTopRequest(readyQ, PhaseType::priority);
 	  reduceReservationTags(client);
 	  ++prop_sched_count;
 	  return;
@@ -522,7 +523,7 @@ namespace crimson {
 
 	if (allowLimitBreak) {
 	  if (!propQ.empty()) {
-	    C client = submitTopRequest(propQ);
+	    C client = submitTopRequest(propQ, PhaseType::priority);
 	    reduceReservationTags(client);
 	    ++limit_break_sched_count;
 	    return;

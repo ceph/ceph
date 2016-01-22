@@ -27,7 +27,7 @@ TestServer::TestServer(int _iops,
 		       const ClientResponseFunc& _client_resp_f) :
   priority_queue(_client_info_f,
 		 std::bind(&TestServer::hasAvailThread, this),
-		 std::bind(&TestServer::innerPost, this, _1)),
+		 std::bind(&TestServer::innerPost, this, _1, _2)),
   client_resp_f(_client_resp_f),
   iops(_iops),
   thread_pool_size(_thread_pool_size),
@@ -104,9 +104,10 @@ bool TestServer::hasAvailThread() {
 }
 
 
-void TestServer::innerPost(std::unique_ptr<TestRequest> request) {
+void TestServer::innerPost(std::unique_ptr<TestRequest> request,
+			   PhaseType phase) {
   Lock l(inner_queue_mtx);
   assert(!finishing);
-  inner_queue.emplace_back(std::move(request));
+  inner_queue.emplace_back(QueueItem(std::move(request), phase));
   inner_queue_cv.notify_one();
 }

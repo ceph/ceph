@@ -14,18 +14,35 @@
 #include <chrono>
 #include <deque>
 
+#include "dm_clock_recs.h"
 #include "dm_clock_server.h"
 #include "test_request.h"
 
 
 using crimson::dmclock::PriorityQueue;
 using crimson::dmclock::ClientInfo;
+using crimson::dmclock::PhaseType;
 
 
 class TestServer {
 
+  struct QueueItem {
+    std::unique_ptr<TestRequest> request;
+    PhaseType phase;
+
+    QueueItem(std::unique_ptr<TestRequest>&& _request,
+	      PhaseType _phase) :
+      request(std::move(_request)),
+      phase(_phase)
+    {
+      // empty
+    }
+  };
+  
   typedef std::lock_guard<std::mutex>  Guard;
+#if 0
   typedef std::unique_ptr<TestRequest> QueueItem;
+#endif
 
 public:
 
@@ -64,7 +81,7 @@ public:
 
 protected:
 
-  void innerPost(std::unique_ptr<TestRequest> request);
+  void innerPost(std::unique_ptr<TestRequest> request, PhaseType phase);
 
   void run(std::chrono::milliseconds wait_delay);
 
