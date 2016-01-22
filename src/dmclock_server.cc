@@ -5,7 +5,7 @@
  */
 
 
-#include "dm_clock_server.h"
+#include "dmclock_server.h"
 
 
 namespace dmc = crimson::dmclock;

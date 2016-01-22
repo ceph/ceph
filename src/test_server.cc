@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <iostream>
 
-#include "dm_clock_recs.h"
+#include "dmclock_recs.h"
 #include "test_server.h"
 
 

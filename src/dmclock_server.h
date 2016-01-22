@@ -24,8 +24,8 @@
 #include <sstream>
 
 #include "crimson/heap.h"
-#include "dm_clock_util.h"
-#include "dm_clock_recs.h"
+#include "dmclock_util.h"
+#include "dmclock_recs.h"
 
 
 namespace c = crimson;

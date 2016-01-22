@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 
 # include_directories($ENV{NATIVE_CLIENT_ROOT} ${COCL2_DIR})
 
-set(core_srcs dm_clock_server.cc dm_clock_util.cc)
+set(core_srcs dmclock_server.cc dmclock_util.cc)
 set(test_srcs test_server.cc test_client.cc test.cc)
 
 set_source_files_properties(${core_srcs} ${test_srcs}

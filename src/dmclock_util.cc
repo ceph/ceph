@@ -7,7 +7,7 @@
 
 #include <signal.h>
 
-#include "dm_clock_util.h"
+#include "dmclock_util.h"
 
 
 void crimson::dmclock::debugger() {

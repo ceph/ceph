@@ -14,8 +14,8 @@
 #include <chrono>
 #include <deque>
 
-#include "dm_clock_recs.h"
-#include "dm_clock_server.h"
+#include "dmclock_recs.h"
+#include "dmclock_server.h"
 #include "test_request.h"
 
 
