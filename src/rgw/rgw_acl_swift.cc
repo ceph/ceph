@@ -38,7 +38,7 @@ static int parse_list(string& uid_list, list<string>& uids)
   return 0;
 }
 
-static bool uid_is_public(string& uid)
+static bool uid_is_public(const string& uid)
 {
   if (uid[0] != '.' || uid[1] != 'r')
     return false;
