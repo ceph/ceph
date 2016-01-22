@@ -114,7 +114,7 @@ public:
   RGWRESTMgr_Metadata() {}
   virtual ~RGWRESTMgr_Metadata() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s){
+  virtual RGWHandler *get_handler(struct req_init_state *t){
     return new RGWHandler_Metadata;
   }
 };

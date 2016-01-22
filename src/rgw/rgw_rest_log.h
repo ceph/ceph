@@ -293,7 +293,7 @@ public:
   RGWRESTMgr_Log() {}
   virtual ~RGWRESTMgr_Log() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s){
+  virtual RGWHandler *get_handler(struct req_init_state *t){
     return new RGWHandler_Log;
   }
 };

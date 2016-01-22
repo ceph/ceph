@@ -69,15 +69,22 @@ string rgw_make_bucket_entry_name(const string& tenant_name, const string& bucke
  * Tenants are separated from buckets in URLs by a colon in S3.
  * This function is not to be used on Swift URLs, not even for COPY arguments.
  */
-void rgw_parse_url_bucket(const string &bucket,
+void rgw_parse_url_bucket(const string &bucket, const string& auth_tenant,
                           string &tenant_name, string &bucket_name) {
+
   int pos = bucket.find(':');
   if (pos >= 0) {
+    /*
+     * N.B.: We allow ":bucket" syntax with explicit empty tenant in order
+     * to refer to the legacy tenant, in case users in new named tenants
+     * want to access old global buckets.
+     */
     tenant_name = bucket.substr(0, pos);
+    bucket_name = bucket.substr(pos + 1);
   } else {
-    tenant_name.clear();
+    tenant_name = auth_tenant;
+    bucket_name = bucket;
   }
-  bucket_name = bucket.substr(pos + 1);
 }
 
 /**

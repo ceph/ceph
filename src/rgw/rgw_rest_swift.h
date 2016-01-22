@@ -185,15 +185,16 @@ protected:
     return false;
   }
 
-  static int init_from_header(struct req_state *s);
+  static int init_from_header(struct req_init_state *t);
 public:
   RGWHandler_ObjStore_SWIFT() {}
   virtual ~RGWHandler_ObjStore_SWIFT() {}
 
   int validate_bucket_name(const string& bucket);
 
-  int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
+  int init(RGWRados *store, struct req_init_state *t, RGWClientIO *cio);
   int authorize();
+  int postauth_init(struct req_init_state *t);
 
   RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
   void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
@@ -252,7 +253,7 @@ public:
   RGWRESTMgr_SWIFT() {}
   virtual ~RGWRESTMgr_SWIFT() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s);
+  virtual RGWHandler *get_handler(struct req_init_state *t);
 };
 
 #endif

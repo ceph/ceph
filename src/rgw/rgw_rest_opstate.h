@@ -100,7 +100,7 @@ public:
   RGWRESTMgr_Opstate() {}
   virtual ~RGWRESTMgr_Opstate() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s){
+  virtual RGWHandler *get_handler(struct req_init_state *t){
     return new RGWHandler_Opstate;
   }
 };

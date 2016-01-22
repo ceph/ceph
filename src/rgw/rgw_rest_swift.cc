@@ -893,7 +893,6 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
   if_match = s->info.env->get("HTTP_COPY_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_COPY_IF_NONE_MATCH");
 
-  /* XXX why copy this? just use req_state in rgw_op.cc:verify_permission */
   src_tenant_name = s->src_tenant_name;
   src_bucket_name = s->src_bucket_name;
   src_object = s->src_object;
@@ -1231,7 +1230,7 @@ RGWOp *RGWHandler_ObjStore_Obj_SWIFT::op_put()
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_SWIFT;
   }
-  if (s->src_bucket_name.empty())
+  if (s->init_state.src_bucket.empty()) /* XXX aargh, using init_state */
     return new RGWPutObj_ObjStore_SWIFT;
   else
     return new RGWCopyObj_ObjStore_SWIFT;
@@ -1270,6 +1269,49 @@ int RGWHandler_ObjStore_SWIFT::authorize()
   bool authorized = rgw_swift->verify_swift_token(store, s);
   if (!authorized)
     return -EPERM;
+
+  return 0;
+}
+
+int RGWHandler_ObjStore_SWIFT::postauth_init(struct req_init_state *t)
+{
+  struct req_state *s = t->s;
+
+  /* XXX Stub this until Swift Auth sets account into URL. */
+  s->bucket_tenant = s->user.user_id.tenant;
+  s->bucket_name = t->url_bucket;
+
+  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>"))
+           << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
+
+  int ret;
+  ret = validate_tenant_name(s->bucket_tenant);
+  if (ret)
+    return ret;
+  ret = validate_bucket_name(s->bucket_name);
+  if (ret)
+    return ret;
+  ret = validate_object_name(s->object.name);
+  if (ret)
+    return ret;
+
+  if (!t->src_bucket.empty()) {
+    /*
+     * We don't allow cross-tenant copy at present. It requires account
+     * names in the URL for Swift.
+     */
+    s->src_tenant_name = s->user.user_id.tenant;
+    s->src_bucket_name = t->src_bucket;
+
+    ret = validate_bucket_name(s->src_bucket_name);
+    if (ret < 0) {
+      return ret;
+    }
+    ret = validate_object_name(s->src_object.name);
+    if (ret < 0) {
+      return ret;
+    }
+  }
 
   return 0;
 }
@@ -1317,8 +1359,9 @@ static void next_tok(string& str, string& tok, char delim)
   }
 }
 
-int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
+int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_init_state *t)
 {
+  struct req_state *s = t->s;
   string req;
   string first;
 
@@ -1360,7 +1403,7 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
       s->formatter = new RGWFormatter_Plain;
       return -ERR_BAD_URL;
     }
-    first = req;
+    first = req; // XXX first is unused
   }
 
   string tenant_path;
@@ -1399,9 +1442,7 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
 
   s->info.effective_uri = "/" + first;
 
-  /* XXX Temporarily not parsing URL until Auth puts something in there. */
-  s->bucket_tenant = s->user.user_id.tenant;
-  s->bucket_name = first;
+  t->url_bucket = first;  /* Save bucket to tide us over until token is parsed. */
 
   if (req.size()) {
     s->object = rgw_obj_key(req, s->info.env->get("HTTP_X_OBJECT_VERSION_ID", "")); /* rgw swift extension */
@@ -1411,77 +1452,55 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
   return 0;
 }
 
-int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
+int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_init_state *t, RGWClientIO *cio)
 {
-  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>"))
-           << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
+  struct req_state *s = t->s;
 
-  int ret;
-  ret = validate_tenant_name(s->bucket_tenant);
-  if (ret)
-    return ret;
-  ret = validate_bucket_name(s->bucket_name);
-  if (ret)
-    return ret;
-  ret = validate_object_name(s->object.name);
-  if (ret)
-    return ret;
+  s->dialect = "swift";
 
   const char *copy_source = s->info.env->get("HTTP_X_COPY_FROM");
   if (copy_source) {
-    bool result = RGWCopyObj::parse_copy_location(copy_source, s->src_bucket_name, s->src_object);
+    bool result = RGWCopyObj::parse_copy_location(copy_source, t->src_bucket, s->src_object);
     if (!result)
        return -ERR_BAD_URL;
-    s->src_tenant_name = s->user.user_id.tenant;
   }
-
-  s->dialect = "swift";
 
   if (s->op == OP_COPY) {
     const char *req_dest = s->info.env->get("HTTP_DESTINATION");
     if (!req_dest)
       return -ERR_BAD_URL;
 
-    string dest_tenant_name, dest_bucket_name;
+    string dest_bucket_name;
     rgw_obj_key dest_obj_key;
     bool result = RGWCopyObj::parse_copy_location(req_dest, dest_bucket_name, dest_obj_key);
     if (!result)
        return -ERR_BAD_URL;
-    dest_tenant_name = s->user.user_id.tenant;
 
     string dest_object = dest_obj_key.name;
-    if (dest_bucket_name != s->bucket_name) {
-      ret = validate_bucket_name(dest_bucket_name);
-      if (ret < 0)
-        return ret;
-    }
-
-    ret = validate_tenant_name(dest_tenant_name);
-    if (ret < 0)
-      return ret;
 
     /* convert COPY operation into PUT */
-    s->src_tenant_name = s->bucket_tenant;
-    s->src_bucket_name = s->bucket_name;
+    t->src_bucket = t->url_bucket;
     s->src_object = s->object;
-    s->bucket_tenant = dest_tenant_name;
-    s->bucket_name = dest_bucket_name;
+    t->url_bucket = dest_bucket_name;
     s->object = rgw_obj_key(dest_object);
     s->op = OP_PUT;
   }
 
-  return RGWHandler_ObjStore::init(store, s, cio);
+  return RGWHandler_ObjStore::init(store, t, cio);
 }
 
 
-RGWHandler *RGWRESTMgr_SWIFT::get_handler(struct req_state *s)
+RGWHandler *RGWRESTMgr_SWIFT::get_handler(struct req_init_state *t)
 {
-  int ret = RGWHandler_ObjStore_SWIFT::init_from_header(s);
+  struct req_state *s = t->s;
+
+  int ret = RGWHandler_ObjStore_SWIFT::init_from_header(t);
   if (ret < 0)
     return NULL;
 
-  if (s->bucket_name.empty())
+  if (t->url_bucket.empty())
     return new RGWHandler_ObjStore_Service_SWIFT;
+
   if (s->object.empty())
     return new RGWHandler_ObjStore_Bucket_SWIFT;
 

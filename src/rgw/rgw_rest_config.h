@@ -47,7 +47,7 @@ public:
   RGWRESTMgr_Config() {}
   virtual ~RGWRESTMgr_Config() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s){
+  virtual RGWHandler *get_handler(struct req_init_state *t){
     return new RGWHandler_Config;
   }
 };

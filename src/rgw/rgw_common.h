@@ -1034,6 +1034,14 @@ inline ostream& operator<<(ostream& out, const rgw_obj_key &o) {
   }
 }
 
+struct req_init_state {
+  struct req_state *s;
+
+  /* Keeps [[tenant]:]bucket until we parse the token. */
+  string url_bucket;
+  string src_bucket;
+};
+
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
    CephContext *cct;
@@ -1057,7 +1065,7 @@ struct req_state {
    uint32_t perm_mask;
    utime_t header_time;
 
-   /* Set once when req_state is initialized and not violated thereafter */
+   /* Set once when url_bucket is parsed and not violated thereafter. */
    string bucket_tenant;
    string bucket_name;
 
@@ -1106,6 +1114,7 @@ struct req_state {
    string trans_id;
 
    req_info info;
+   req_init_state init_state; /* don't access this as s->init_state ever */
 
    req_state(CephContext *_cct, class RGWEnv *e);
    ~req_state();
