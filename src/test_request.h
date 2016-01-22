@@ -31,25 +31,31 @@ struct TestRequest {
 
 
 struct TestResponse {
-  int                         server;
-  uint32_t                    epoch;
-  crimson::dmclock::PhaseType phase;
+  uint32_t                          epoch;
+  crimson::dmclock::RespParams<int> resp_params;
 
-  TestResponse(int                         _server,
-	       uint32_t                    _epoch,
-	       crimson::dmclock::PhaseType _phase) :
-    server(_server),
+  TestResponse(uint32_t                                 _epoch,
+	       const crimson::dmclock::RespParams<int>& _resp_params) :
     epoch(_epoch),
-    phase(_phase)
+    resp_params(_resp_params)
   {
     // empty
   }
 
   TestResponse(const TestResponse& r) :
-    server(r.server),
     epoch(r.epoch),
-    phase(r.phase)
+    resp_params(r.resp_params)
   {
     // empty
+  }
+
+  friend std::ostream& operator<<(std::ostream& out, const TestResponse& resp) {
+    out << "{ server:" << resp.resp_params.server <<
+      ", phase:" <<
+      (resp.resp_params.phase == crimson::dmclock::PhaseType::reservation ?
+       "resv" : "prop") <<
+      ", epoch:" << resp.epoch <<
+      " }";
+    return out;
   }
 }; // class TestResponse

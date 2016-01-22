@@ -8,12 +8,14 @@
 #include <unistd.h>
 #include <iostream>
 
+#include "dm_clock_recs.h"
 #include "test_server.h"
 
 
 using namespace std::placeholders;
-namespace dmc = crimson::dmclock;
 
+namespace dmc = crimson::dmclock;
+using dmc::RespParams;
 
 typedef std::unique_lock<std::mutex> Lock;
 
@@ -21,10 +23,12 @@ typedef std::unique_lock<std::mutex> Lock;
 static const bool info = false;
 
 
-TestServer::TestServer(int _iops,
+TestServer::TestServer(int _id,
+		       int _iops,
 		       int _thread_pool_size,
 		       const std::function<ClientInfo(int)>& _client_info_f,
 		       const ClientResponseFunc& _client_resp_f) :
+  id(_id),
   priority_queue(_client_info_f,
 		 std::bind(&TestServer::hasAvailThread, this),
 		 std::bind(&TestServer::innerPost, this, _1, _2)),
@@ -78,7 +82,7 @@ void TestServer::run(std::chrono::milliseconds wait_delay) {
       // notify server of completion
       std::this_thread::sleep_for(op_time);
 
-      TestResponse resp(13, req->epoch, phase);
+      TestResponse resp(req->epoch, RespParams<int>(id, phase));
       sendResponse(req->client, resp);
 
       priority_queue.requestCompleted();

@@ -19,26 +19,33 @@ namespace crimson {
       struct RequestParams {
       };
 
-      struct ReplyParams {
+      // S is server id type
+      template<typename S>
+      struct RespParams {
+          S         server;
           PhaseType phase;
 
-          ReplyParams(const PhaseType& _phase) :
+          RespParams(const S& _server, const PhaseType& _phase) :
+              server(_server),
               phase(_phase)
           {
               // empty
           }
 
-          ReplyParams(const ReplyParams& other) :
+          RespParams(const RespParams& other) :
+              server(other.server),
               phase(other.phase)
           {
               // empty
           }
-
-          ReplyParams& operator=(const ReplyParams& other)
+#if 0
+          RespParams& operator=(const RespParams& other)
           {
+              server = other.server;
               phase = other.phase;
               return *this;
           }
+#endif
       };
   }
 }

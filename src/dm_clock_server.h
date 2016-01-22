@@ -295,6 +295,7 @@ namespace crimson {
 	// empty
       }
 
+
       ~PriorityQueue() {
 	if (info) {
 	  std::cout << "Ops scheduled via reservation: " <<
@@ -373,7 +374,7 @@ namespace crimson {
 	  }
 	}
 
-#if 1
+#if 0
 	{
 	  static uint count = 0;
 	  ++count;

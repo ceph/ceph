@@ -103,9 +103,7 @@ void TestClient::run_resp() {
       op_times[op++] = now();
       TestResponse resp = resp_queue.front();
       if (info >= 3) {
-	std::cout << "resp->" << id << ", phase:" <<
-	  (resp.phase == PhaseType::reservation ? "reservation" : "proportion") <<
-	  std::endl;
+	std::cout << resp << std::endl;
       }
       resp_queue.pop_front();
       --outstanding_ops;

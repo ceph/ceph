@@ -88,7 +88,9 @@ int main(int argc, char* argv[]) {
   TestServer::ClientResponseFunc client_response_f =
     std::bind(&send_response, clients, _1, _2);
 
-  TestServer server(server_ops, server_threads, client_info_f, client_response_f);
+  TestServer server(0,
+		    server_ops, server_threads,
+		    client_info_f, client_response_f);
 
   for (int i = 0; i < client_count; ++i) {
     clients[i] = new TestClient(i,

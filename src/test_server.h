@@ -46,10 +46,11 @@ class TestServer {
 
 public:
 
-  typedef std::function<void(int,const TestResponse&)> ClientResponseFunc;
+  typedef std::function<void(int, const TestResponse&)> ClientResponseFunc;
 
 protected:
 
+  const int                      id;
   PriorityQueue<int,TestRequest> priority_queue;
   ClientResponseFunc             client_resp_f;
   int                            iops;
@@ -67,7 +68,8 @@ protected:
 public:
 
   // TestServer(int _thread_pool_size);
-  TestServer(int iops,
+  TestServer(int _id,
+	     int _iops,
 	     int _thread_pool_size,
 	     const std::function<ClientInfo(int)>& _client_info_f,
 	     const ClientResponseFunc& _client_resp_f);
