@@ -18,8 +18,7 @@
 extern "C" {
 #endif
 
-class CephContext;
-typedef CephContext* librgw_t;
+typedef void* librgw_t;
 int librgw_create(librgw_t* rgw, const char* const id);
 int librgw_acl_bin2xml(librgw_t rgw, const char* bin, int bin_len, char** xml);
 void librgw_free_xml(librgw_t rgw, char* xml);
