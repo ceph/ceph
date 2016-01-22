@@ -345,18 +345,21 @@ namespace ceph {
 template<typename Clock, typename Duration>
 void encode(const std::chrono::time_point<Clock, Duration>& t,
 	    ceph::bufferlist &bl) {
-  struct timespec ts = Clock::to_timespec();
+  auto ts = Clock::to_timespec(t);
   // A 32 bit count of seconds causes me vast unhappiness.
-  ::encode((uint32_t) ts.tv_sec, bl);
-  ::encode((uint32_t) ts.tv_nsec, bl);
+  uint32_t s = ts.tv_sec;
+  uint32_t ns = ts.tv_nsec;
+  ::encode(s, bl);
+  ::encode(ns, bl);
 }
 
 template<typename Clock, typename Duration>
 void decode(std::chrono::time_point<Clock, Duration>& t,
 	    bufferlist::iterator& p) {
-  struct timespec ts;
-  ::decode((uint32_t&) ts.tv_sec, p);
-  ::decode((uint32_t&) ts.tv_nsec, p);
+  uint32_t s, ns;
+  ::decode(s, p);
+  ::decode(ns, p);
+  struct timespec ts = {s, ns};
 
   t = Clock::from_timespec(ts);
 }
