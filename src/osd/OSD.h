@@ -1515,6 +1515,7 @@ private:
   Mutex heartbeat_update_lock; // orders under heartbeat_lock
   bool heartbeat_need_update;   ///< true if we need to refresh our heartbeat peers
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
+  map<string,uint32_t> heartbeat_peers_by_subtree;
   utime_t last_mon_heartbeat;
   Messenger *hbclient_messenger;
   Messenger *hb_front_server_messenger;

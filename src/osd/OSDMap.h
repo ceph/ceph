@@ -344,6 +344,7 @@ public:
 
   void get_all_osds(set<int32_t>& ls) const;
   void get_up_osds(set<int32_t>& ls) const;
+  string get_osd_subtree(int osd, const string& level) const;
   unsigned get_num_pg_temp() const {
     return pg_temp->size();
   }

@@ -968,6 +968,22 @@ void OSDMap::get_up_osds(set<int32_t>& ls) const
   }
 }
 
+string OSDMap::get_osd_subtree(int osd, const string& level) const
+{
+  if (!exists(osd))
+    return "";
+
+  map<string, string> reporter_loc;
+  crush->get_full_location(osd);
+  map<string, string>::iterator iter = reporter_loc.find(level);
+
+  if (iter == reporter_loc.end()) {
+    return ("osd." + to_string(osd));
+  } else {
+    return iter->second;
+  }
+}
+
 void OSDMap::calc_state_set(int state, set<string>& st)
 {
   unsigned t = state;
