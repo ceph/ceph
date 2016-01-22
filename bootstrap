@@ -90,7 +90,7 @@ Darwin)
         echo "You need Homebrew: http://brew.sh/"
         exit 1
     fi
-    for keg in python libvirt libev mysql; do
+    for keg in python libvirt libev mysql libffi; do
         if brew list $keg >/dev/null 2>&1; then
             echo "Found $keg"
         else
