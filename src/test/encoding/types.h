@@ -14,6 +14,9 @@ TYPE(BitVector<2>)
 TYPE(bloom_filter)
 TYPE(compressible_bloom_filter)
 
+#include "test_ceph_time.h"
+TYPE(real_time_wrapper)
+
 #include "common/snap_types.h"
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)
