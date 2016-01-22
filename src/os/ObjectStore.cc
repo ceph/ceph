@@ -20,7 +20,6 @@
 
 #include "filestore/FileStore.h"
 #include "memstore/MemStore.h"
-#include "keyvaluestore/KeyValueStore.h"
 #if defined(HAVE_LIBAIO)
 #include "bluestore/BlueStore.h"
 #endif
@@ -72,10 +71,6 @@ ObjectStore *ObjectStore::create(CephContext *cct,
   }
   if (type == "memstore") {
     return new MemStore(cct, data);
-  }
-  if (type == "keyvaluestore" &&
-      cct->check_experimental_feature_enabled("keyvaluestore")) {
-    return new KeyValueStore(data);
   }
 #if defined(HAVE_LIBAIO)
   if (type == "bluestore" &&
