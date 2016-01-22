@@ -923,6 +923,7 @@ namespace librados
      * other than SNAP_HEAD
      */
     int aio_remove(const std::string& oid, AioCompletion *c);
+    int aio_remove(const std::string& oid, AioCompletion *c, int flags);
 
     /**
      * Wait for all currently pending aio writes to be safe.
