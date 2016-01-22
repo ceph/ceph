@@ -582,7 +582,6 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name,
 {
   perf_start();
   finisher.start();
-  scattered_write = writeback_handler.can_scattered_write();
 }
 
 ObjectCacher::~ObjectCacher()
@@ -977,7 +976,7 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
   C_WriteCommit *oncommit = new C_WriteCommit(this, ob->oloc.pool, ob->get_soid(), ranges);
 
   ceph_tid_t tid = writeback_handler.write(ob->get_oid(), ob->get_oloc(),
-					   io_vec, snapc, last_write,
+					   std::move(io_vec), snapc, last_write,
 					   ob->truncate_size, ob->truncate_seq,
 					   oncommit);
   oncommit->tid = tid;
@@ -990,39 +989,6 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
 
   if (perfcounter)
     perfcounter->inc(l_objectcacher_data_flushed, total_len);
-}
-
-void ObjectCacher::bh_write(BufferHead *bh)
-{
-  assert(lock.is_locked());
-  ldout(cct, 7) << "bh_write " << *bh << dendl;
-
-  bh->ob->get();
-
-  // finishers
-  C_WriteCommit *oncommit = new C_WriteCommit(this, bh->ob->oloc.pool,
-					      bh->ob->get_soid(), bh->start(),
-					      bh->length());
-  // go
-  ceph_tid_t tid = writeback_handler.write(bh->ob->get_oid(),
-					   bh->ob->get_oloc(),
-					   bh->start(), bh->length(),
-					   bh->snapc, bh->bl, bh->last_write,
-					   bh->ob->truncate_size,
-					   bh->ob->truncate_seq,
-					   bh->journal_tid, oncommit);
-  ldout(cct, 20) << " tid " << tid << " on " << bh->ob->get_oid() << dendl;
-
-  // set bh last_write_tid
-  oncommit->tid = tid;
-  bh->ob->last_write_tid = tid;
-  bh->last_write_tid = tid;
-
-  if (perfcounter) {
-    perfcounter->inc(l_objectcacher_data_flushed, bh->length());
-  }
-
-  mark_tx(bh);
 }
 
 void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
@@ -1058,7 +1024,6 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
       }
     }
 
-    list <BufferHead*> hit;
     // apply to bh's!
     for (map<loff_t, BufferHead*>::iterator p = ob->data_lower_bound(start);
 	 p != ob->data.end();
@@ -1093,7 +1058,6 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
 	bh->set_journal_tid(0);
 	if (bh->get_nocache())
 	  bh_lru_rest.lru_bottouch(bh);
-	hit.push_back(bh);
 	ldout(cct, 10) << "bh_write_commit clean " << *bh << dendl;
       } else {
 	mark_dirty(bh);
@@ -1101,13 +1065,6 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
 		       << *bh << " r = " << r << " " << cpp_strerror(-r)
 		       << dendl;
       }
-    }
-
-    for (list<BufferHead*>::iterator bh = hit.begin();
-	bh != hit.end();
-	++bh) {
-      assert(*bh);
-      ob->try_merge_bh(*bh);
     }
   }
 
@@ -1156,13 +1113,8 @@ void ObjectCacher::flush(loff_t amount)
     if (!bh) break;
     if (bh->last_write > cutoff) break;
 
-    if (scattered_write) {
-      bh_write_adjacencies(bh, cutoff, amount > 0 ? &left : NULL, NULL);
-    } else {
-      left -= bh->length();
-      bh_write(bh);
-    }
-  }    
+    bh_write_adjacencies(bh, cutoff, amount > 0 ? &left : NULL, NULL);
+  }
 }
 
 
@@ -1292,15 +1244,13 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	    ldout(cct, 10) << "readx  flushing " << *bh << dendl;
 	    wait = true;
 	    if (bh->is_dirty()) {
-	      if (scattered_write)
-		blist.push_back(bh);
-	      else
-		bh_write(bh);
+	      blist.push_back(bh);
 	    }
 	  }
 	}
-	if (scattered_write && !blist.empty())
+	if (!blist.empty()) {
 	  bh_write_scattered(blist);
+        }
 	if (wait) {
 	  ldout(cct, 10) << "readx  waiting on tid " << o->last_write_tid
 			 << " on " << *o << dendl;
@@ -1770,12 +1720,7 @@ void ObjectCacher::flusher_entry()
 	     bh->last_write < cutoff &&
 	     max > 0) {
 	ldout(cct, 10) << "flusher flushing aged dirty bh " << *bh << dendl;
-	if (scattered_write) {
-	  bh_write_adjacencies(bh, cutoff, NULL, &max);
-        } else {
-	  bh_write(bh);
-	  --max;
-	}
+	bh_write_adjacencies(bh, cutoff, NULL, &max);
       }
       if (!max) {
 	// back off the lock to avoid starving other threads
@@ -1910,14 +1855,12 @@ bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length)
       continue;
     }
 
-    if (scattered_write)
-      blist.push_back(bh);
-    else
-      bh_write(bh);
+    blist.push_back(bh);
     clean = false;
   }
-  if (scattered_write && !blist.empty())
+  if (!blist.empty()) {
     bh_write_scattered(blist);
+  }
 
   return clean;
 }
@@ -1979,18 +1922,14 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
       break;
     waitfor_commit.insert(bh->ob);
     if (bh->is_dirty()) {
-      if (scattered_write) {
-	if (last_ob != bh->ob) {
-	  if (!blist.empty()) {
-	    bh_write_scattered(blist);
-	    blist.clear();
-	  }
-	  last_ob = bh->ob;
+      if (last_ob != bh->ob) {
+	if (!blist.empty()) {
+	  bh_write_scattered(blist);
+	  blist.clear();
 	}
-	blist.push_back(bh);
-      } else {
-	bh_write(bh);
+        last_ob = bh->ob;
       }
+      blist.push_back(bh);
     }
   }
 
@@ -2005,26 +1944,23 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 	break;
       waitfor_commit.insert(bh->ob);
       if (bh->is_dirty()) {
-	if (scattered_write) {
-	  if (last_ob != bh->ob) {
-	    if (!blist.empty()) {
-	      bh_write_scattered(blist);
-	      blist.clear();
-	    }
-	    last_ob = bh->ob;
+	if (last_ob != bh->ob) {
+	  if (!blist.empty()) {
+	    bh_write_scattered(blist);
+	    blist.clear();
 	  }
-	  blist.push_front(bh);
-	} else {
-	  bh_write(bh);
+	  last_ob = bh->ob;
 	}
+	blist.push_front(bh);
       }
       if (!backwards)
 	break;
     }
   }
 
-  if (scattered_write && !blist.empty())
+  if (!blist.empty()) {
     bh_write_scattered(blist);
+  }
 
   for (set<Object*>::iterator i = waitfor_commit.begin();
        i != waitfor_commit.end(); ++i) {
@@ -2104,24 +2040,20 @@ bool ObjectCacher::flush_all(Context *onfinish)
     waitfor_commit.insert(bh->ob);
 
     if (bh->is_dirty()) {
-      if (scattered_write) {
-	if (last_ob != bh->ob) {
-	  if (!blist.empty()) {
-	    bh_write_scattered(blist);
-	    blist.clear();
-	  }
-	  last_ob = bh->ob;
+      if (last_ob != bh->ob) {
+	if (!blist.empty()) {
+	  bh_write_scattered(blist);
+	  blist.clear();
 	}
-	blist.push_back(bh);
-      } else {
-	bh_write(bh);
+	last_ob = bh->ob;
       }
+      blist.push_back(bh);
     }
 
     it = next;
   }
 
-  if (scattered_write && !blist.empty())
+  if (!blist.empty())
     bh_write_scattered(blist);
 
   for (set<Object*>::iterator i = waitfor_commit.begin();

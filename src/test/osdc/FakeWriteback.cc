@@ -70,15 +70,14 @@ void FakeWriteback::read(const object_t& oid, uint64_t object_no,
 }
 
 ceph_tid_t FakeWriteback::write(const object_t& oid,
-				const object_locator_t& oloc,
-				uint64_t off, uint64_t len,
-				const SnapContext& snapc,
-				const bufferlist &bl, ceph::real_time mtime,
-				uint64_t trunc_size, __u32 trunc_seq,
-				ceph_tid_t journal_tid, Context *oncommit)
+			        const object_locator_t& oloc,
+                                std::vector<std::pair<uint64_t, ceph::buffer::list> >&& io_vec,
+			        const SnapContext& snapc, ceph::real_time mtime,
+			        uint64_t trunc_size, __u32 trunc_seq,
+			        Context *oncommit)
 {
-  C_Delay *wrapper = new C_Delay(m_cct, oncommit, m_lock, off, NULL,
-				 m_delay_ns);
+  C_Delay *wrapper = new C_Delay(m_cct, oncommit, m_lock, io_vec.front().first,
+                                 NULL, m_delay_ns);
   m_finisher->queue(wrapper, 0);
   return m_tid.inc();
 }
