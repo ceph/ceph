@@ -1218,10 +1218,10 @@ void BlueFS::sync_metadata()
   for (auto p : alloc) {
     p->commit_finish();
   }
+  _maybe_compact_log();
   utime_t end = ceph_clock_now(NULL);
   utime_t dur = end - start;
   dout(10) << __func__ << " done in " << dur << dendl;
-  _maybe_compact_log();
 }
 
 int BlueFS::open_for_write(
