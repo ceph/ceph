@@ -411,33 +411,42 @@ public:
 
   struct OverwriteInfo {
     map<version_t, pair<uint64_t, uint64_t> > overwrite_history;
-  private:
-    const int overwrite_count_limit = 1;
-    const uint64_t overwrite_size_limit = 1 << 22;
-    
-    int overwrite_count;
-    uint64_t overwrite_size;
   public:
+    // limit on unapplied overwrite max count
+    int max_count;
+    // limit on unapplied overwrite max size
+    uint64_t max_size;
+    
+    int cur_count;
+    uint64_t cur_size;
+  public:
+    OverwriteInfo(int max_count, int max_size) :
+      max_count(max_count),
+      max_size(max_size) {
+      cur_count = 0;
+      cur_size = 0U;
+    }
+
     void overwrite(version_t version, pair<uint64_t, uint64_t> to_write) {
-      if (overwrite_count == 0) {
+      if (cur_count == 0) {
         for (map<version_t, pair<uint64_t, uint64_t> >::iterator i = 
                overwrite_history.begin();
              i != overwrite_history.end();
              ++i) {
-          overwrite_count += 1;
-          overwrite_size += i->second.second;
+          cur_count += 1;
+          cur_size += i->second.second;
         }
       }
-      overwrite_count += 1;
-      overwrite_size += to_write.second;
+      cur_count += 1;
+      cur_size += to_write.second;
       
       overwrite_history.insert(
         make_pair(
           version, to_write));
     }
     bool need_apply() {
-      if (overwrite_count >= overwrite_count_limit ||
-            overwrite_size >= overwrite_size_limit) {
+      if (cur_count >= max_count ||
+            cur_size >= max_size) {
         return true;
       }
       return false;
@@ -455,8 +464,8 @@ public:
     }
     void clear() {
       overwrite_history.clear();
-      overwrite_count = 0;
-      overwrite_size = 0U;
+      cur_count = 0;
+      cur_size = 0U;
     }
   };
   typedef ceph::shared_ptr<OverwriteInfo> OverwriteInfoRef;

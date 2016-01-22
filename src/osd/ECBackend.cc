@@ -2701,10 +2701,10 @@ void ECBackend::start_apply_op(const hobject_t &hoid, WriteOp *op) {
     }
   }
  
-  version_t last_apply_version = 
-      ow_info->overwrite_history.rbegin()->first;
-  bufferlist bl;
-  ::encode(last_apply_version, bl);
+  // version_t last_apply_version = 
+  //     ow_info->overwrite_history.rbegin()->first;
+  // bufferlist bl;
+  // ::encode(last_apply_version, bl);
 
   for (set<pg_shard_t>::const_iterator i =
          get_parent()->get_actingbackfill_shards().begin();
@@ -2714,26 +2714,26 @@ void ECBackend::start_apply_op(const hobject_t &hoid, WriteOp *op) {
     apply_progress.pending_apply.insert(*i);
 
     // generator pglog
-    //    vector<pg_log_entry_t> log_entries;
-    //    eversion_t at_version = get_parent()->get_version();
-    //    log_entries.push_back(pg_log_entry_t(
-    //        pg_log_entry_t::EC_APPLY,
-    //        hoid,
-    //        at_version,
-    //        ctx->obs->oi.version,
-    //	ctx->user_at_version,
-    //        ctx->reqid,
-    //	ctx->mtime));
+    // vector<pg_log_entry_t> log_entries;
+    // eversion_t at_version = get_parent()->get_version();
+    // log_entries.push_back(pg_log_entry_t(
+    //     pg_log_entry_t::EC_APPLY,
+    //     hoid,
+    //     at_version,
+    //     ctx->obs->oi.version,
+    //     ctx->user_at_version,
+    //     ctx->reqid,
+    //     ctx->mtime));
     // set ObjectModDesc
     
     // use xattr record the applied version
     // incase primary osd down, then scan pglog
     // and use this version to get the apply progress
-    trans[i->shard].setattr(
-      coll_t(spg_t(pgid, i->shard)),
-      ghobject_t(hoid, ghobject_t::NO_GEN, i->shard),
-      APPLY_KEY,
-      bl);
+    // trans[i->shard].setattr(
+    //   coll_t(spg_t(pgid, i->shard)),
+    //   ghobject_t(hoid, ghobject_t::NO_GEN, i->shard),
+    //   APPLY_KEY,
+    //   bl);
     // remove old overwrite info
     trans[i->shard].rmattr(
       coll_t(spg_t(pgid, i->shard)),
@@ -2862,7 +2862,9 @@ ECBackend::OverwriteInfoRef ECBackend::get_overwrite_info(
       coll,
       ghobject_t(hoid, version, get_parent()->whoami_shard().shard),
       &st);
-    OverwriteInfo ow_info;
+    OverwriteInfo ow_info(
+        cct->_conf->osd_ec_overwrite_max_count,
+        cct->_conf->osd_ec_overwrite_max_size);
     if (r >= 0) {
       bufferlist bl;
       r = store->getattr(
