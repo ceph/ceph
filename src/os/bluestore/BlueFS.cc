@@ -469,7 +469,7 @@ int BlueFS::_replay()
 	  ::decode(id, p);
 	  ::decode(offset, p);
 	  ::decode(length, p);
-	  dout(20) << __func__ << " " << pos << ":  op_alloc_add "
+	  dout(20) << __func__ << " " << pos << ":  op_alloc_rm "
 		   << " " << (int)id << ":" << offset << "~" << length << dendl;
 	  block_all[id].erase(offset, length);
 	  alloc[id]->init_rm_free(offset, length);
