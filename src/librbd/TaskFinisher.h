@@ -45,6 +45,7 @@ public:
     typename TaskContexts::iterator it = m_task_contexts.find(task);
     if (it != m_task_contexts.end()) {
       delete it->second.first;
+      m_safe_timer->cancel_event(it->second.second);
       m_task_contexts.erase(it);
     }
   }
