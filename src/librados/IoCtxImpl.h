@@ -202,7 +202,7 @@ struct librados::IoCtxImpl {
 		     const bufferlist& bl);
   int aio_writesame(const object_t &oid, AioCompletionImpl *c,
 		    const bufferlist& bl, size_t write_len, uint64_t off);
-  int aio_remove(const object_t &oid, AioCompletionImpl *c);
+  int aio_remove(const object_t &oid, AioCompletionImpl *c, int flags=0);
   int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
 	       const char *method, bufferlist& inbl, bufferlist *outbl);
   int aio_stat(const object_t& oid, AioCompletionImpl *c, uint64_t *psize, time_t *pmtime);
