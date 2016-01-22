@@ -69,13 +69,14 @@ int librgw_create(librgw_t* rgw, const char* const id)
 
 int librgw_acl_bin2xml(librgw_t rgw, const char* bin, int bin_len, char** xml)
 {
+  CephContext* cct = static_cast<CephContext*>(rgw);
   try {
     // convert to bufferlist
     bufferlist bl;
     bl.append(bin, bin_len);
 
     // convert to RGWAccessControlPolicy
-    RGWAccessControlPolicy_S3 acl((CephContext *)rgw);
+    RGWAccessControlPolicy_S3 acl(cct);
     bufferlist::iterator bli(bl.begin());
     acl.decode(bli);
 
@@ -90,11 +91,11 @@ int librgw_acl_bin2xml(librgw_t rgw, const char* bin, int bin_len, char** xml)
     return 0;
   }
   catch (const std::exception& e) {
-    lderr(rgw) << "librgw_acl_bin2xml: caught exception " << e.what() << dendl;
+    lderr(cct) << "librgw_acl_bin2xml: caught exception " << e.what() << dendl;
     return -2000;
   }
   catch (...) {
-    lderr(rgw) << "librgw_acl_bin2xml: caught unknown exception " << dendl;
+    lderr(cct) << "librgw_acl_bin2xml: caught unknown exception " << dendl;
     return -2000;
   }
 }
@@ -106,9 +107,10 @@ void librgw_free_xml(librgw_t rgw, char *xml)
 
 int librgw_acl_xml2bin(librgw_t rgw, const char* xml, char** bin, int* bin_len)
 {
+  CephContext* cct = static_cast<CephContext*>(rgw);
   char *bin_ = NULL;
   try {
-    RGWACLXMLParser_S3 parser((CephContext*)rgw);
+    RGWACLXMLParser_S3 parser(cct);
     if (!parser.init()) {
       return -1000;
     }
@@ -135,10 +137,10 @@ int librgw_acl_xml2bin(librgw_t rgw, const char* xml, char** bin, int* bin_len)
     return 0;
   }
   catch (const std::exception& e) {
-    lderr(rgw) << "librgw_acl_bin2xml: caught exception " << e.what() << dendl;
+    lderr(cct) << "librgw_acl_bin2xml: caught exception " << e.what() << dendl;
   }
   catch (...) {
-    lderr(rgw) << "librgw_acl_bin2xml: caught unknown exception " << dendl;
+    lderr(cct) << "librgw_acl_bin2xml: caught unknown exception " << dendl;
   }
   if (!bin_)
     free(bin_);
@@ -153,7 +155,8 @@ void librgw_free_bin(librgw_t rgw, char* bin)
 
 void librgw_shutdown(librgw_t rgw)
 {
-  rgw->put();
+  CephContext* cct = static_cast<CephContext*>(rgw);
+  cct->put();
 }
 
 class C_InitTimeout : public Context {
