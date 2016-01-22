@@ -4,7 +4,8 @@
  * Copyright (C) 2015 Red Hat Inc.
  */
 
-#include "dm_clock_srv.h"
+
+#include "dm_clock_server.h"
 
 
 namespace dmc = crimson::dmclock;

@@ -13,7 +13,6 @@
 
 #include <sys/time.h>
 #include <assert.h>
-#include <signal.h>
 
 #include <memory>
 #include <map>
@@ -25,14 +24,11 @@
 #include <sstream>
 
 #include "crimson/heap.h"
+#include "dm_clock_util.h"
+#include "dm_clock_recs.h"
 
 
 namespace c = crimson;
-
-
-static void debugger() {
-  raise(SIGCONT);
-}
 
 
 namespace crimson {
@@ -142,7 +138,7 @@ namespace crimson {
 			     const crimson::dmclock::RequestTag& tag);
 
 
-    // T is client identifier type, R is request type
+    // C is client identifier type, R is request type
     template<typename C, typename R>
     class PriorityQueue {
 
@@ -185,8 +181,9 @@ namespace crimson {
 	  // empty
 	}
 
-	friend std::ostream& operator<<(std::ostream& out,
-					const typename PriorityQueue<C,R>::Entry& e) {
+	friend
+	std::ostream& operator<<(std::ostream& out,
+				 const typename PriorityQueue<C,R>::Entry& e) {
 	  out << "{ client:" << e.client <<
 	    ", tag:" << e.tag <<
 	    ", handled:" << (e.handled ? "T" : "f") << " }";
@@ -200,8 +197,9 @@ namespace crimson {
       // if you try to display an EntryRef (shared pointer to an
       // Entry), dereference the shared pointer so we get data, not
       // addresses
-      friend std::ostream& operator<<(std::ostream& out,
-				      const typename PriorityQueue<C,R>::EntryRef& e) {
+      friend
+      std::ostream& operator<<(std::ostream& out,
+			       const typename PriorityQueue<C,R>::EntryRef& e) {
 	out << *e;
 	return out;
       }

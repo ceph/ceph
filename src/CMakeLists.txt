@@ -2,13 +2,14 @@ cmake_minimum_required(VERSION 2.8)
 
 # include_directories($ENV{NATIVE_CLIENT_ROOT} ${COCL2_DIR})
 
-set(cxx_srcs dm_clock_srv.cc test_server.cc test_client.cc test.cc)
+set(core_srcs dm_clock_server.cc dm_clock_util.cc)
+set(test_srcs test_server.cc test_client.cc test.cc)
 
-set_source_files_properties(${cxx_srcs}
+set_source_files_properties(${core_srcs} ${test_srcs}
   PROPERTIES
   COMPILE_FLAGS "${my_compile_flags} -std=gnu++11 -pthread")
 
-add_executable(sim ${cxx_srcs})
+add_executable(sim ${core_srcs} ${test_srcs})
 
 target_link_libraries(sim PUBLIC pthread)
 
