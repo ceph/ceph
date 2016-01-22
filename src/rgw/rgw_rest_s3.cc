@@ -2224,8 +2224,12 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWGetBucketVersioning_ObjStore_S3;
 
-  if (s->info.args.sub_resource_exists("website"))
+  if (s->info.args.sub_resource_exists("website")) {
+    if (!s->cct->_conf->rgw_enable_static_website) {
+      return NULL;
+    }
     return new RGWGetBucketWebsite_ObjStore_S3;
+  }
 
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
@@ -2255,8 +2259,12 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
     return NULL;
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWSetBucketVersioning_ObjStore_S3;
-  if (s->info.args.sub_resource_exists("website"))
+  if (s->info.args.sub_resource_exists("website")) {
+    if (!s->cct->_conf->rgw_enable_static_website) {
+      return NULL;
+    }
     return new RGWSetBucketWebsite_ObjStore_S3;
+  }
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
   } else if (is_cors_op()) {
@@ -2273,8 +2281,12 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_delete()
     return new RGWDeleteCORS_ObjStore_S3;
   }
 
-  if (s->info.args.sub_resource_exists("website"))
+  if (s->info.args.sub_resource_exists("website")) {
+    if (!s->cct->_conf->rgw_enable_static_website) {
+      return NULL;
+    }
     return new RGWDeleteBucketWebsite_ObjStore_S3;
+  }
 
   return new RGWDeleteBucket_ObjStore_S3;
 }
