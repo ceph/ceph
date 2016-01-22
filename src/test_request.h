@@ -8,6 +8,9 @@
 #pragma once
 
 
+#include "dm_clock_recs.h"
+
+
 struct TestRequest {
   int client;
   uint32_t epoch;
@@ -28,20 +31,24 @@ struct TestRequest {
 
 
 struct TestResponse {
-  int      server;
-  uint32_t epoch;
+  int                         server;
+  uint32_t                    epoch;
+  crimson::dmclock::PhaseType phase;
 
-  TestResponse(int _server,
-	       uint32_t _epoch) :
+  TestResponse(int                         _server,
+	       uint32_t                    _epoch,
+	       crimson::dmclock::PhaseType _phase) :
     server(_server),
-    epoch(_epoch)
+    epoch(_epoch),
+    phase(_phase)
   {
     // empty
   }
 
   TestResponse(const TestResponse& r) :
     server(r.server),
-    epoch(r.epoch)
+    epoch(r.epoch),
+    phase(r.phase)
   {
     // empty
   }

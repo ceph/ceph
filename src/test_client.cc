@@ -8,13 +8,15 @@
 #include <chrono>
 #include <iostream>
 
+#include "dm_clock_recs.h"
 #include "test_client.h"
 
 
 using namespace std::placeholders;
+using crimson::dmclock::PhaseType;
 
 
-static const uint info = 1;
+static const uint info = 0;
 
 
 TestClient::TestClient(int _id,
@@ -99,7 +101,12 @@ void TestClient::run_resp() {
     }
     if (!resp_queue.empty()) {
       op_times[op++] = now();
-      if (info >= 3) std::cout << "resp->" << id << std::endl;
+      TestResponse resp = resp_queue.front();
+      if (info >= 3) {
+	std::cout << "resp->" << id << ", phase:" <<
+	  (resp.phase == PhaseType::reservation ? "reservation" : "proportion") <<
+	  std::endl;
+      }
       resp_queue.pop_front();
       --outstanding_ops;
       cv_req.notify_one();

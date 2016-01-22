@@ -66,7 +66,8 @@ void TestServer::run(std::chrono::milliseconds wait_delay) {
       inner_queue_cv.wait_for(l, wait_delay);
     }
     if (!inner_queue.empty()) {
-      auto req = std::move(inner_queue.front());
+      auto req = std::move(inner_queue.front().request);
+      auto phase = inner_queue.front().phase;
       inner_queue.pop_front();
 
       l.unlock();
@@ -77,7 +78,7 @@ void TestServer::run(std::chrono::milliseconds wait_delay) {
       // notify server of completion
       std::this_thread::sleep_for(op_time);
 
-      TestResponse resp(13, req->epoch);
+      TestResponse resp(13, req->epoch, phase);
       sendResponse(req->client, resp);
 
       priority_queue.requestCompleted();
