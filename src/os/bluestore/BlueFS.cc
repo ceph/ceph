@@ -249,6 +249,7 @@ int BlueFS::mount()
   r = _replay();
   if (r < 0) {
     derr << __func__ << " failed to replay log: " << cpp_strerror(r) << dendl;
+    _stop_alloc();
     goto out;
   }
 
@@ -892,8 +893,6 @@ void BlueFS::_pad_bl(bufferlist& bl)
     bufferptr z(super.block_size - partial);
     dout(10) << __func__ << " padding with " << z.length() << " zeros" << dendl;
     z.zero();
-    bufferlist zbl;
-    zbl.append(z);
     bl.append(z);
   }
 }
