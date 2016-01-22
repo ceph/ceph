@@ -37,22 +37,8 @@ namespace librados
   typedef uint64_t auid_t;
   typedef void *config_t;
 
-  struct cluster_stat_t {
-    uint64_t kb, kb_used, kb_avail;
-    uint64_t num_objects;
-  };
-
-  struct pool_stat_t {
-    uint64_t num_bytes;    // in bytes
-    uint64_t num_kb;       // in KB
-    uint64_t num_objects;
-    uint64_t num_object_clones;
-    uint64_t num_object_copies;  // num_objects * num_replicas
-    uint64_t num_objects_missing_on_primary;
-    uint64_t num_objects_unfound;
-    uint64_t num_objects_degraded;
-    uint64_t num_rd, num_rd_kb, num_wr, num_wr_kb;
-  };
+  typedef struct rados_cluster_stat_t cluster_stat_t;
+  typedef struct rados_pool_stat_t pool_stat_t;
 
   typedef struct {
     std::string client;
