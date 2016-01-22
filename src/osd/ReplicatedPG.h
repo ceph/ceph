@@ -1588,6 +1588,12 @@ public:
   ObjectContextRef mark_object_lost(ObjectStore::Transaction *t,
 				  const hobject_t& oid, eversion_t version,
 				  utime_t mtime, int what);
+
+  void do_update_log_missing(
+    OpRequestRef &op);
+
+  void do_update_log_missing_reply(
+    OpRequestRef &op);
   void _finish_mark_all_unfound_lost(list<ObjectContextRef>& obcs);
 
   void on_role_change();

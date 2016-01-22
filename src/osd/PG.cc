@@ -38,6 +38,8 @@
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "messages/MOSDPGUpdateLogMissing.h"
+#include "messages/MOSDPGUpdateLogMissingReply.h"
 
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDRepOp.h"
@@ -5314,6 +5316,12 @@ bool PG::can_discard_request(OpRequestRef& op)
     return can_discard_replica_op<MOSDECSubOpReadReply, MSG_OSD_EC_READ_REPLY>(op);
   case MSG_OSD_REP_SCRUB:
     return can_discard_replica_op<MOSDRepScrub, MSG_OSD_REP_SCRUB>(op);
+  case MSG_OSD_PG_UPDATE_LOG_MISSING:
+    return can_discard_replica_op<
+      MOSDPGUpdateLogMissing, MSG_OSD_PG_UPDATE_LOG_MISSING>(op);
+  case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
+    return can_discard_replica_op<
+      MOSDPGUpdateLogMissingReply, MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY>(op);
 
   case MSG_OSD_PG_SCAN:
     return can_discard_scan(op);
@@ -5400,6 +5408,16 @@ bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
     return !have_same_or_newer_map(
       cur_epoch,
       static_cast<MOSDRepScrub*>(op->get_req())->map_epoch);
+
+  case MSG_OSD_PG_UPDATE_LOG_MISSING:
+    return !have_same_or_newer_map(
+      cur_epoch,
+      static_cast<MOSDPGUpdateLogMissing*>(op->get_req())->map_epoch);
+
+  case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
+    return !have_same_or_newer_map(
+      cur_epoch,
+      static_cast<MOSDPGUpdateLogMissingReply*>(op->get_req())->map_epoch);
   }
   assert(0);
   return false;

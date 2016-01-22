@@ -47,6 +47,8 @@
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPull.h"
 #include "messages/MOSDPGPushReply.h"
+#include "messages/MOSDPGUpdateLogMissing.h"
+#include "messages/MOSDPGUpdateLogMissingReply.h"
 
 #include "Watch.h"
 
@@ -1488,6 +1490,14 @@ void ReplicatedPG::do_request(
 
   case MSG_OSD_REP_SCRUB:
     replica_scrub(op, handle);
+    break;
+
+  case MSG_OSD_PG_UPDATE_LOG_MISSING:
+    do_update_log_missing(op);
+    break;
+
+  case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
+    do_update_log_missing_reply(op);
     break;
 
   default:
@@ -9463,6 +9473,14 @@ struct C_PG_MarkUnfoundLost : public Context {
     pg->_finish_mark_all_unfound_lost(obcs);
   }
 };
+
+void ReplicatedPG::do_update_log_missing(OpRequestRef &op)
+{
+}
+
+void ReplicatedPG::do_update_log_missing_reply(OpRequestRef &op)
+{
+}
 
 /* Mark all unfound objects as lost.
  */

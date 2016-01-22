@@ -90,6 +90,8 @@
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "messages/MOSDPGUpdateLogMissing.h"
+#include "messages/MOSDPGUpdateLogMissingReply.h"
 
 #include "messages/MOSDAlive.h"
 
@@ -5948,6 +5950,14 @@ epoch_t op_required_epoch(OpRequestRef op)
     return replica_op_required_epoch<MOSDECSubOpReadReply, MSG_OSD_EC_READ_REPLY>(op);
   case MSG_OSD_REP_SCRUB:
     return replica_op_required_epoch<MOSDRepScrub, MSG_OSD_REP_SCRUB>(op);
+  case MSG_OSD_PG_UPDATE_LOG_MISSING:
+    return replica_op_required_epoch<
+      MOSDPGUpdateLogMissing, MSG_OSD_PG_UPDATE_LOG_MISSING>(
+      op);
+  case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
+    return replica_op_required_epoch<
+      MOSDPGUpdateLogMissingReply, MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY>(
+      op);
   default:
     assert(0);
     return 0;
@@ -6063,6 +6073,15 @@ bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap)
     break;
   case MSG_OSD_REP_SCRUB:
     handle_replica_op<MOSDRepScrub, MSG_OSD_REP_SCRUB>(op, osdmap);
+    break;
+  case MSG_OSD_PG_UPDATE_LOG_MISSING:
+    handle_replica_op<MOSDPGUpdateLogMissing, MSG_OSD_PG_UPDATE_LOG_MISSING>(
+      op, osdmap);
+    break;
+  case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
+    handle_replica_op<MOSDPGUpdateLogMissingReply,
+		      MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY>(
+      op, osdmap);
     break;
   default:
     assert(0);

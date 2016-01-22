@@ -116,6 +116,8 @@
 
 #define MSG_OSD_REPOP         112
 #define MSG_OSD_REPOPREPLY    113
+#define MSG_OSD_PG_UPDATE_LOG_MISSING  114
+#define MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY  115
 
 
 // *** MDS ***
