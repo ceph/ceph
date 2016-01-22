@@ -117,7 +117,6 @@ SUBSYS(osd, 0, 5)
 SUBSYS(optracker, 0, 5)
 SUBSYS(objclass, 0, 5)
 SUBSYS(filestore, 1, 3)
-SUBSYS(keyvaluestore, 1, 3)
 SUBSYS(journal, 1, 3)
 SUBSYS(ms, 0, 5)
 SUBSYS(mon, 1, 5)
@@ -144,6 +143,7 @@ SUBSYS(bdev, 1, 3)
 SUBSYS(kstore, 1, 5)
 SUBSYS(rocksdb, 4, 5)
 SUBSYS(leveldb, 4, 5)
+SUBSYS(kinetic, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -788,8 +788,6 @@ OPTION(kinetic_use_ssl, OPT_BOOL, false) // whether to secure kinetic traffic wi
 OPTION(rocksdb_separate_wal_dir, OPT_BOOL, false) // use $path.wal for wal
 OPTION(rocksdb_db_paths, OPT_STR, "")   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
-// rocksdb options that will be used for keyvaluestore(if backend is rocksdb)
-OPTION(keyvaluestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
 OPTION(filestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used in monstore
@@ -1013,18 +1011,6 @@ OPTION(filestore_debug_verify_split, OPT_BOOL, false)
 OPTION(journal_dio, OPT_BOOL, true)
 OPTION(journal_aio, OPT_BOOL, true)
 OPTION(journal_force_aio, OPT_BOOL, false)
-
-OPTION(keyvaluestore_queue_max_ops, OPT_INT, 50)
-OPTION(keyvaluestore_queue_max_bytes, OPT_INT, 100 << 20)
-OPTION(keyvaluestore_debug_check_backend, OPT_BOOL, 0) // Expensive debugging check on sync
-OPTION(keyvaluestore_op_threads, OPT_INT, 2)
-OPTION(keyvaluestore_op_thread_timeout, OPT_INT, 60)
-OPTION(keyvaluestore_op_thread_suicide_timeout, OPT_INT, 180)
-OPTION(keyvaluestore_default_strip_size, OPT_INT, 4096) // Only affect new object
-OPTION(keyvaluestore_max_expected_write_size, OPT_U64, 1ULL << 24) // bytes
-OPTION(keyvaluestore_header_cache_size, OPT_INT, 4096)    // Header cache size
-OPTION(keyvaluestore_backend, OPT_STR, "leveldb")
-OPTION(keyvaluestore_dump_file, OPT_STR, "")         // file onto which store transaction dumps
 
 // max bytes to search ahead in journal searching for corruption
 OPTION(journal_max_corrupt_search, OPT_U64, 10<<20)
