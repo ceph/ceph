@@ -417,7 +417,7 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
                                                                         osdmap_file=osdmap_file.name)
     output = check_output(cmd, shell=True)
     epoch = int(re.findall('#(\d+)', output)[0])
-    
+
     new_crush_file = tempfile.NamedTemporaryFile(delete=False)
     old_crush_file = tempfile.NamedTemporaryFile(delete=False)
     ret = call("./osdmaptool --export-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
@@ -889,7 +889,7 @@ def main(argv):
     # Specify a bad --type
     os.mkdir(OSDDIR + "/fakeosd")
     cmd = ("./ceph-objectstore-tool --data-path " + OSDDIR + "/{osd} --type foobar --op list --pgid {pg}").format(osd="fakeosd", pg=ONEPG)
-    ERRORS += test_failure(cmd, "Need a valid --type e.g. filestore, memstore, keyvaluestore")
+    ERRORS += test_failure(cmd, "Need a valid --type e.g. filestore, memstore")
 
     # Don't specify a data-path
     cmd = "./ceph-objectstore-tool --journal-path {dir}/{osd}.journal --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)

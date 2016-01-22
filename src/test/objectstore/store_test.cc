@@ -104,8 +104,6 @@ TEST_P(StoreTest, collect_metadata) {
     ASSERT_NE(pm.count("filestore_f_type"), 0u);
     ASSERT_NE(pm.count("backend_filestore_partition_path"), 0u);
     ASSERT_NE(pm.count("backend_filestore_dev_node"), 0u);
-  } else if (GetParam() == string("keyvaluestore")) {
-    ASSERT_NE(pm.count("keyvaluestore_backend"), 0u);
   }
 }
 
@@ -3258,7 +3256,6 @@ INSTANTIATE_TEST_CASE_P(
   ::testing::Values(
     "memstore",
     "filestore",
-    "keyvaluestore",
     "bluestore",
     "kstore"));
 
