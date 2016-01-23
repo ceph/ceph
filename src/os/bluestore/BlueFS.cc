@@ -1164,6 +1164,8 @@ int BlueFS::_allocate(unsigned id, uint64_t len, vector<bluefs_extent_t> *ev)
   }
 
   uint64_t hint = 0;
+  uint64_t origin = left;
+  uint64_t actual = 0;
   if (!ev->empty()) {
     hint = ev->back().end();
   }
@@ -1173,9 +1175,15 @@ int BlueFS::_allocate(unsigned id, uint64_t len, vector<bluefs_extent_t> *ev)
     int r = alloc[id]->allocate(left, g_conf->bluefs_alloc_size, hint,
 				&e.offset, &e.length);
     if (r < 0) {
+      // FixMe: we don't bother to unreserve and return the space has been
+      // successfully allocated by the former loops here as we are going to
+      // abort anyway. However this shall be fixed when ENOSPC is the 
+      // acceptable answer someday.
       assert(0 == "allocate failed... wtf");
       return r;
     }
+ 
+    actual += e.length;
     if (!ev->empty() && ev->back().end() == e.offset)
       ev->back().length += e.length;
     else
@@ -1185,6 +1193,13 @@ int BlueFS::_allocate(unsigned id, uint64_t len, vector<bluefs_extent_t> *ev)
     left -= e.length;
     hint = e.end();
   }
+
+  if (actual > origin) {
+    // we got more than we expect, fix reserve.
+    r = alloc[id]->reserve(actual - origin);
+    assert(r == 0);
+  }
+
   return 0;
 }
 
