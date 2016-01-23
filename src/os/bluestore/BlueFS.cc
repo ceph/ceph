@@ -175,9 +175,10 @@ int BlueFS::mkfs(uuid_d osd_uuid)
   FileRef log_file = new File;
   log_file->fnode.ino = 1;
   log_file->fnode.prefer_bdev = bdev.size() - 1;
-  _allocate(log_file->fnode.prefer_bdev,
+  int r = _allocate(log_file->fnode.prefer_bdev,
 	    g_conf->bluefs_max_log_runway,
 	    &log_file->fnode.extents);
+  assert(r == 0);
   log_writer = new FileWriter(log_file, bdev.size());
 
   // initial txn
