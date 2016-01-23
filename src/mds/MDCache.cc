@@ -7406,7 +7406,7 @@ bool MDCache::shutdown_pass()
   assert(subtrees.empty());
 
   // Still replicas of mydir?
-  if (mydir->inode->is_replicated()) {
+  if ((mydir != NULL) && mydir->inode->is_replicated()) {
     // We do this because otherwise acks to locks could come in after
     // we cap the log.
     dout(7) << "waiting for mydir replicas to release: " << *mydir << dendl;
@@ -10196,8 +10196,10 @@ void MDCache::handle_dentry_link(MDentryLink *m)
       __u8 d_type;
       ::decode(ino, p);
       ::decode(d_type, p);
-      dir->link_remote_inode(dn, ino, d_type);
-    }
+        if (dir != NULL) {
+          dir->link_remote_inode(dn, ino, d_type);
+        }
+      }
   } else {
     assert(0);
   }
