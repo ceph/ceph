@@ -3126,11 +3126,14 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
       if (!using_qs || key != "X-Amz-Signature") {
         string encoded_key;
         string encoded_val;
-
-        aws4_uri_encode(key, encoded_key);
-        aws4_uri_encode(val, encoded_val);
-
-	canonical_qs_map[encoded_key] = encoded_val;
+        if (key != "X-Amz-Credential") {
+          aws4_uri_encode(key, encoded_key);
+          aws4_uri_encode(val, encoded_val);
+        } else {
+          encoded_key = key;
+          encoded_val = val;
+        }
+        canonical_qs_map[encoded_key] = encoded_val;
       }
     }
 
