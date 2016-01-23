@@ -2031,8 +2031,82 @@ int PGMonitor::_warn_slow_request_histogram(const pow2_hist_t& h, string suffix,
   return sum;
 }
 
+namespace {
+  enum class scrubbed_or_deepscrubbed_t { SCRUBBED, DEEPSCRUBBED };
+
+  void print_unscrubbed_detailed(const std::pair<const pg_t,pg_stat_t> &pg_entry,
+				 list<pair<health_status_t,string> > *detail,
+				 scrubbed_or_deepscrubbed_t how_scrubbed) {
+
+    std::stringstream ss;
+    const auto& pg_stat(pg_entry.second);
+
+    ss << "pg " << pg_entry.first << " is not ";
+    if (how_scrubbed == scrubbed_or_deepscrubbed_t::SCRUBBED) {
+      ss << "scrubbed, last_scrub_stamp "
+	 << pg_stat.last_scrub_stamp;
+    } else if (how_scrubbed == scrubbed_or_deepscrubbed_t::DEEPSCRUBBED) {
+      ss << "deep-scrubbed, last_deep_scrub_stamp "
+	 << pg_stat.last_deep_scrub_stamp;
+    }
+
+    detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+  }
+
+
+  using pg_stat_map_t = const ceph::unordered_map<pg_t,pg_stat_t>;
+
+  void print_unscrubbed_pgs(pg_stat_map_t& pg_stats,
+			    list<pair<health_status_t,string> > &summary,
+			    list<pair<health_status_t,string> > *detail,
+			    const CephContext* cct) {
+    int pgs_count = 0;
+    const utime_t now = ceph_clock_now(nullptr);
+    for (const auto& pg_entry : pg_stats) {
+      const auto& pg_stat(pg_entry.second);
+      const utime_t time_since_ls = now - pg_stat.last_scrub_stamp;
+      const utime_t time_since_lds = now - pg_stat.last_deep_scrub_stamp;
+
+      const int mon_warn_not_scrubbed =
+	cct->_conf->mon_warn_not_scrubbed + cct->_conf->mon_scrub_interval;
+
+      const int mon_warn_not_deep_scrubbed =
+	cct->_conf->mon_warn_not_deep_scrubbed + cct->_conf->mon_scrub_interval;
+
+      bool not_scrubbed = (time_since_ls >= mon_warn_not_scrubbed &&
+			   cct->_conf->mon_warn_not_scrubbed != 0);
+
+      bool not_deep_scrubbed = (time_since_lds >= mon_warn_not_deep_scrubbed &&
+				cct->_conf->mon_warn_not_deep_scrubbed != 0);
+
+      if (detail != nullptr) {
+	if (not_scrubbed) {
+	  print_unscrubbed_detailed(pg_entry,
+				    detail,
+				    scrubbed_or_deepscrubbed_t::SCRUBBED);
+	} else if (not_deep_scrubbed) {
+	  print_unscrubbed_detailed(pg_entry,
+				    detail,
+				    scrubbed_or_deepscrubbed_t::DEEPSCRUBBED);
+	}
+      }
+      if (not_scrubbed || not_deep_scrubbed) {
+	++pgs_count;
+      }
+    }
+
+    if (pgs_count > 0) {
+      std::stringstream ss;
+      ss << pgs_count << " unscrubbed pgs";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+
+  }
+}
+
 void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
-                           list<pair<health_status_t,string> > *detail) const
+			   list<pair<health_status_t,string> > *detail,
+			   CephContext *cct) const
 {
   map<string,int> note;
   ceph::unordered_map<int,int>::const_iterator p = pg_map.num_pg_by_state.begin();
@@ -2310,6 +2384,9 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       }
     }
   }
+
+  print_unscrubbed_pgs(pg_map.pg_stat, summary, detail, cct);
+
 }
 
 void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summary,

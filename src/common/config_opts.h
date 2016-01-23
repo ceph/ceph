@@ -273,6 +273,8 @@ OPTION(mon_health_to_clog_tick_interval, OPT_DOUBLE, 60.0)
 OPTION(mon_data_avail_crit, OPT_INT, 5)
 OPTION(mon_data_avail_warn, OPT_INT, 30)
 OPTION(mon_data_size_warn, OPT_U64, 15*1024*1024*1024) // issue a warning when the monitor's data store goes over 15GB (in bytes)
+OPTION(mon_warn_not_scrubbed, OPT_INT, 0)
+OPTION(mon_warn_not_deep_scrubbed, OPT_INT, 0)
 OPTION(mon_scrub_interval, OPT_INT, 3600*24) // once a day
 OPTION(mon_scrub_timeout, OPT_INT, 60*5) // let's give it 5 minutes; why not.
 OPTION(mon_scrub_max_keys, OPT_INT, 100) // max number of keys to scrub each time
