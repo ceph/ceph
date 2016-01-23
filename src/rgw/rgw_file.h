@@ -32,7 +32,8 @@ public:
   virtual bool only_bucket() { return false; }
 
   int operator()(const std::string& name, const std::string& marker) {
-    (void) rcb(name.c_str(), cb_arg, (*offset)++);
+    rcb(name.c_str(), cb_arg, (*offset)++);
+    return 0;
   }
 
 }; /* RGWListBucketsRequest */
