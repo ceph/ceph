@@ -2290,7 +2290,7 @@ health_status_t Monitor::get_health(list<string>& status,
        p != paxos_service.end();
        ++p) {
     PaxosService *s = *p;
-    s->get_health(summary, detailbl ? &detail : NULL);
+    s->get_health(summary, detailbl ? &detail : NULL, cct);
   }
 
   health_monitor->get_health(f, summary, (detailbl ? &detail : NULL));
