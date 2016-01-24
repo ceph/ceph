@@ -290,13 +290,12 @@ function test_pool_read_write() {
 function test_activate() {
     local to_prepare=$1
     local to_activate=$2
-    local journal=$3
     local osd_uuid=$($uuidgen)
 
     $mkdir -p $OSD_DATA
 
     ${CEPH_DISK} $CEPH_DISK_ARGS \
-        prepare --osd-uuid $osd_uuid $to_prepare $journal || return 1
+        prepare --osd-uuid $osd_uuid $to_prepare || return 1
 
     $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
