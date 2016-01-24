@@ -29,7 +29,6 @@ int FreelistManager::init(KeyValueDB *db, string p)
     uint64_t offset, length;
     string k = it->key();
     const char *p = _key_decode_u64(k.c_str(), &offset);
-    assert(p);
     bufferlist bl = it->value();
     bufferlist::iterator bp = bl.begin();
     ::decode(length, bp);
