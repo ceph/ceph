@@ -151,7 +151,18 @@ namespace ceph {
 
       static time_point now() noexcept {
 	struct timespec ts;
+#if defined(CLOCK_REALTIME_COARSE)
+	// Linux systems have _COARSE clocks.
 	clock_gettime(CLOCK_REALTIME_COARSE, &ts);
+#elif defined(CLOCK_REALTIME_FAST)
+	// BSD systems have _FAST clocks.
+	clock_gettime(CLOCK_REALTIME_FAST, &ts);
+#else
+	// And if we find neither, you may wish to consult your system's
+	// documentation.
+#warning Falling back to CLOCK_REALTIME, may be slow.
+	clock_gettime(CLOCK_REALTIME, &ts);
+#endif
 	return from_timespec(ts);
       }
       static time_point now(const CephContext* cct) noexcept;
@@ -233,7 +244,18 @@ namespace ceph {
 
       static time_point now() noexcept {
 	struct timespec ts;
+#if defined(CLOCK_MONOTONIC_COARSE)
+	// Linux systems have _COARSE clocks.
 	clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+#elif defined(CLOCK_MONOTONIC_FAST)
+	// BSD systems have _FAST clocks.
+	clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
+#else
+	// And if we find neither, you may wish to consult your system's
+	// documentation.
+#warning Falling back to CLOCK_MONOTONIC, may be slow.
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+#endif
 	return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
       }
     };
