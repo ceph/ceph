@@ -2412,11 +2412,9 @@ def mkfs(
         ],
     )
 
-    osd_objectstore = get_conf(
-                cluster=cluster,
-                variable='osd_objectstore',
-            )
-    if osd_objectstore == 'bluestore':
+    osd_type = read_one_line(path, 'type')
+
+    if osd_type == 'bluestore':
         command_check_call(
             [
                 'ceph-osd',
