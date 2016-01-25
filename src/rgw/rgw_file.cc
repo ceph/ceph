@@ -24,346 +24,351 @@
 #include "rgw_bucket.h"
 
 #include "rgw_file.h"
+#include "rgw_lib_frontend.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace rgw;
 
-extern RGWLib librgw;
+namespace rgw {
 
-const string RGWFileHandle::root_name = "/";
+  extern RGWLib librgw;
 
-atomic<uint32_t> RGWLibFS::fs_inst;
+  const string RGWFileHandle::root_name = "/";
 
-LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent,
-				     const char *path, uint32_t flags)
-{
-  LookupFHResult fhr{nullptr, 0};
-  std::string bucket_name{path};
-  RGWStatBucketRequest req(cct, get_user(), bucket_name);
+  atomic<uint32_t> RGWLibFS::fs_inst;
 
-  int rc = librgw.get_fe()->execute_req(&req);
-  if ((rc == 0) &&
-      (req.get_ret() == 0) &&
-      (req.matched())) {
-    fhr = lookup_fh(parent, path,
-		    RGWFileHandle::FLAG_CREATE|
-		    RGWFileHandle::FLAG_BUCKET);
+  LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent,
+				       const char *path, uint32_t flags)
+  {
+    LookupFHResult fhr{nullptr, 0};
+    std::string bucket_name{path};
+    RGWStatBucketRequest req(cct, get_user(), bucket_name);
+
+    int rc = librgw.get_fe()->execute_req(&req);
+    if ((rc == 0) &&
+	(req.get_ret() == 0) &&
+	(req.matched())) {
+      fhr = lookup_fh(parent, path,
+		      RGWFileHandle::FLAG_CREATE|
+		      RGWFileHandle::FLAG_BUCKET);
+    }
+    return fhr;
   }
-  return fhr;
-}
 
-LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
-				  const char *path,
-				  uint32_t flags)
-{
-  /* find either-of <object_name>, <object_name/>, only one of
-   * which should exist;  atomicity? */
-  LookupFHResult fhr{nullptr, 0};
-  std::string object_name{path};
+  LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
+				     const char *path,
+				     uint32_t flags)
+  {
+    /* find either-of <object_name>, <object_name/>, only one of
+     * which should exist;  atomicity? */
+    LookupFHResult fhr{nullptr, 0};
+    std::string object_name{path};
 
-  for (auto ix : { 0, 1 }) {
-    switch (ix) {
-    case 0:
-    {
-      RGWStatObjRequest req(cct, get_user(),
-			    parent->bucket_name(), object_name,
-			    RGWStatObjRequest::FLAG_NONE);
-      int rc = librgw.get_fe()->execute_req(&req);
-      if ((rc == 0) &&
-	  (req.get_ret() == 0)) {
-	fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_NONE);
+    for (auto ix : { 0, 1 }) {
+      switch (ix) {
+      case 0:
+      {
+	RGWStatObjRequest req(cct, get_user(),
+			      parent->bucket_name(), object_name,
+			      RGWStatObjRequest::FLAG_NONE);
+	int rc = librgw.get_fe()->execute_req(&req);
+	if ((rc == 0) &&
+	    (req.get_ret() == 0)) {
+	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_NONE);
+	  goto done;
+	}
+      }
+      break;
+      case 1:
+      {
+	RGWStatLeafRequest req(cct, get_user(), parent, object_name);
+	int rc = librgw.get_fe()->execute_req(&req);
+	if ((rc == 0) &&
+	    (req.get_ret() == 0)) {
+	  if (req.matched) {
+	    fhr = lookup_fh(parent, path,
+			    RGWFileHandle::FLAG_CREATE|
+			    ((req.is_dir) ?
+			     RGWFileHandle::FLAG_DIRECTORY :
+			     RGWFileHandle::FLAG_NONE));
+	  }
+	}
+      }
+      break;
+      default:
+	/* not reached */
+	break;
+      }
+    }
+  done:
+    return fhr;
+  } /* RGWLibFS::stat_leaf */
+
+  bool RGWFileHandle::reclaim() {
+    fs->fh_cache.remove(fh.fh_hk.object, this, cohort::lru::FLAG_NONE);
+    return true;
+  } /* RGWFileHandle::reclaim */
+
+  int RGWFileHandle::write(uint64_t off, size_t len, size_t *bytes_written,
+			   void *buffer)
+  {
+    using std::get;
+    lock_guard guard(mtx);
+
+    int rc = 0;
+    buffer::list bl;
+    bl.push_back(
+      buffer::create_static(len, static_cast<char*>(buffer)));
+
+    file* f = get<file>(&variant_type);
+    if (! f)
+      return -EISDIR;
+
+    if (! f->write_req) {
+      /* start */
+      std::string object_name = full_object_name();
+      f->write_req =
+	new RGWWriteRequest(fs->get_context(), fs->get_user(), this,
+			    bucket_name(), object_name);
+      rc = librgw.get_fe()->start_req(f->write_req);
+    }
+
+    f->write_req->put_data(off, bl);
+    rc = f->write_req->exec_continue();
+
+    size_t min_size = off + len;
+    if (min_size > get_size())
+      set_size(min_size);
+
+    *bytes_written = (rc == 0) ? len : 0;
+    return rc;
+  } /* RGWFileHandle::write */
+
+  int RGWFileHandle::close()
+  {
+    lock_guard guard(mtx);
+
+    int rc = 0;
+    file* f = get<file>(&variant_type);
+    if (f && (f->write_req)) {
+      rc = librgw.get_fe()->finish_req(f->write_req);
+      if (! rc) {
+	rc = f->write_req->get_ret();
+      }
+      delete f->write_req;
+      f->write_req = nullptr;
+    }
+
+    flags &= ~FLAG_OPEN;
+    return rc;
+  } /* RGWFileHandle::close */
+
+  RGWFileHandle::file::~file()
+  {
+    delete write_req;
+  }
+
+  int RGWWriteRequest::exec_start() {
+    struct req_state* s = get_state();
+
+    // XXX check this
+    need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
+
+    perfcounter->inc(l_rgw_put);
+    op_ret = -EINVAL;
+
+    // XXX check this
+    if (s->object.empty()) {
+      goto done;
+    }
+
+    op_ret = get_params();
+    if (op_ret < 0)
+      goto done;
+
+    op_ret = get_system_versioning_params(s, &olh_epoch, &version_id);
+    if (op_ret < 0) {
+      goto done;
+    }
+
+    /* user-supplied MD5 check skipped (not supplied) */
+    /* early quota check skipped--we don't have size yet */
+    /* skipping user-supplied etag--we might have one in future, but
+     * like data it and other attrs would arrive after open */
+    processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+				 &multipart);
+    op_ret = processor->prepare(get_store(), NULL);
+
+  done:
+    return op_ret;
+  } /* exec_start */
+
+  int RGWWriteRequest::exec_continue()
+  {
+    struct req_state* s = get_state();
+    op_ret = 0;
+
+#if 0 // TODO: check offsets
+    if (next_off != last_off)
+      return -EIO;
+#endif
+    size_t len = data.length();
+    if (! len)
+      return 0;
+
+    /* XXX won't see multipart */
+    bool need_to_wait = (ofs == 0) && multipart;
+    bufferlist orig_data;
+
+    if (need_to_wait) {
+      orig_data = data;
+    }
+
+    op_ret = put_data_and_throttle(processor, data, ofs,
+				   (need_calc_md5 ? &hash : NULL), need_to_wait);
+    if (op_ret < 0) {
+      if (!need_to_wait || op_ret != -EEXIST) {
+	ldout(s->cct, 20) << "processor->thottle_data() returned ret="
+			  << op_ret << dendl;
+	goto done;
+      }
+
+      ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
+
+      /* restore original data */
+      data.swap(orig_data);
+
+      /* restart processing with different oid suffix */
+      dispose_processor(processor);
+      processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+				   &multipart);
+
+      string oid_rand;
+      char buf[33];
+      gen_rand_alphanumeric(get_store()->ctx(), buf, sizeof(buf) - 1);
+      oid_rand.append(buf);
+
+      op_ret = processor->prepare(get_store(), &oid_rand);
+      if (op_ret < 0) {
+	ldout(s->cct, 0) << "ERROR: processor->prepare() returned "
+			 << op_ret << dendl;
+	goto done;
+      }
+
+      op_ret = put_data_and_throttle(processor, data, ofs, NULL, false);
+      if (op_ret < 0) {
 	goto done;
       }
     }
-    break;
-    case 1:
-    {
-      RGWStatLeafRequest req(cct, get_user(), parent, object_name);
-      int rc = librgw.get_fe()->execute_req(&req);
-      if ((rc == 0) &&
-	  (req.get_ret() == 0)) {
-	if (req.matched) {
-	  fhr = lookup_fh(parent, path,
-			  RGWFileHandle::FLAG_CREATE|
-			  ((req.is_dir) ?
-			    RGWFileHandle::FLAG_DIRECTORY :
-			    RGWFileHandle::FLAG_NONE));
-	}
-      }
-    }
-    break;
-    default:
-      /* not reached */
-      break;
-    }
-  }
-done:
-  return fhr;
-} /* RGWLibFS::stat_leaf */
+    bytes_written += len;
 
-bool RGWFileHandle::reclaim() {
-  fs->fh_cache.remove(fh.fh_hk.object, this, cohort::lru::FLAG_NONE);
-  return true;
-} /* RGWFileHandle::reclaim */
+  done:
+    return op_ret;
+  } /* exec_continue */
 
-int RGWFileHandle::write(uint64_t off, size_t len, size_t *bytes_written,
-			void *buffer)
-{
-  using std::get;
-  lock_guard guard(mtx);
+  int RGWWriteRequest::exec_finish()
+  {
+    bufferlist bl, aclbl;
+    map<string, bufferlist> attrs;
+    map<string, string>::iterator iter;
+    char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+    unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+    struct req_state* s = get_state();
 
-  int rc = 0;
-  buffer::list bl;
-  bl.push_back(
-    buffer::create_static(len, static_cast<char*>(buffer)));
+    s->obj_size = ofs; // XXX check ofs
+    perfcounter->inc(l_rgw_put_b, s->obj_size);
 
-  file* f = get<file>(&variant_type);
-  if (! f)
-    return -EISDIR;
-
-  if (! f->write_req) {
-    /* start */
-    std::string object_name = full_object_name();
-    f->write_req =
-      new RGWWriteRequest(fs->get_context(), fs->get_user(), this,
-			  bucket_name(), object_name);
-    rc = librgw.get_fe()->start_req(f->write_req);
-  }
-
-  f->write_req->put_data(off, bl);
-  rc = f->write_req->exec_continue();
-
-  size_t min_size = off + len;
-  if (min_size > get_size())
-    set_size(min_size);
-
-  *bytes_written = (rc == 0) ? len : 0;
-  return rc;
-} /* RGWFileHandle::write */
-
-int RGWFileHandle::close()
-{
-  lock_guard guard(mtx);
-
-  int rc = 0;
-  file* f = get<file>(&variant_type);
-  if (f && (f->write_req)) {
-    rc = librgw.get_fe()->finish_req(f->write_req);
-    if (! rc) {
-      rc = f->write_req->get_ret();
-    }
-    delete f->write_req;
-    f->write_req = nullptr;
-  }
-
-  flags &= ~FLAG_OPEN;
-  return rc;
-} /* RGWFileHandle::close */
-
-RGWFileHandle::file::~file()
-{
-  delete write_req;
-}
-
-int RGWWriteRequest::exec_start() {
-  struct req_state* s = get_state();
-
-  // XXX check this
-  need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
-
-  perfcounter->inc(l_rgw_put);
-  op_ret = -EINVAL;
-
-  // XXX check this
-  if (s->object.empty()) {
-    goto done;
-  }
-
-  op_ret = get_params();
-  if (op_ret < 0)
-    goto done;
-
-  op_ret = get_system_versioning_params(s, &olh_epoch, &version_id);
-  if (op_ret < 0) {
-    goto done;
-  }
-
-  /* user-supplied MD5 check skipped (not supplied) */
-  /* early quota check skipped--we don't have size yet */
-  /* skipping user-supplied etag--we might have one in future, but
-   * like data it and other attrs would arrive after open */
-  processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-			       &multipart);
-  op_ret = processor->prepare(get_store(), NULL);
-
-done:
-  return op_ret;
-} /* exec_start */
-
-int RGWWriteRequest::exec_continue()
-{
-  struct req_state* s = get_state();
-  op_ret = 0;
-
-#if 0 // TODO: check offsets
-  if (next_off != last_off)
-    return -EIO;
-#endif
-  size_t len = data.length();
-  if (! len)
-    return 0;
-
-  /* XXX won't see multipart */
-  bool need_to_wait = (ofs == 0) && multipart;
-  bufferlist orig_data;
-
-  if (need_to_wait) {
-    orig_data = data;
-  }
-
-  op_ret = put_data_and_throttle(processor, data, ofs,
-				 (need_calc_md5 ? &hash : NULL), need_to_wait);
-  if (op_ret < 0) {
-    if (!need_to_wait || op_ret != -EEXIST) {
-      ldout(s->cct, 20) << "processor->thottle_data() returned ret="
-			<< op_ret << dendl;
-      goto done;
-    }
-
-    ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
-
-    /* restore original data */
-    data.swap(orig_data);
-
-    /* restart processing with different oid suffix */
-    dispose_processor(processor);
-    processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-				 &multipart);
-
-    string oid_rand;
-    char buf[33];
-    gen_rand_alphanumeric(get_store()->ctx(), buf, sizeof(buf) - 1);
-    oid_rand.append(buf);
-
-    op_ret = processor->prepare(get_store(), &oid_rand);
-    if (op_ret < 0) {
-      ldout(s->cct, 0) << "ERROR: processor->prepare() returned "
-		       << op_ret << dendl;
-      goto done;
-    }
-
-    op_ret = put_data_and_throttle(processor, data, ofs, NULL, false);
+    op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
+				      user_quota, bucket_quota, s->obj_size);
     if (op_ret < 0) {
       goto done;
     }
-  }
-  bytes_written += len;
 
-done:
-  return op_ret;
-} /* exec_continue */
+    if (need_calc_md5) {
+      processor->complete_hash(&hash);
+    }
+    hash.Final(m);
 
-int RGWWriteRequest::exec_finish()
-{
-  bufferlist bl, aclbl;
-  map<string, bufferlist> attrs;
-  map<string, string>::iterator iter;
-  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  struct req_state* s = get_state();
-
-  s->obj_size = ofs; // XXX check ofs
-  perfcounter->inc(l_rgw_put_b, s->obj_size);
-
-  op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
-				    user_quota, bucket_quota, s->obj_size);
-  if (op_ret < 0) {
-    goto done;
-  }
-
-  if (need_calc_md5) {
-    processor->complete_hash(&hash);
-  }
-  hash.Final(m);
-
-  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
-  etag = calc_md5;
+    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+    etag = calc_md5;
 
 #if 0 /* XXX only in PostObj currently */
-  if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
-    op_ret = -ERR_BAD_DIGEST;
-    goto done;
-  }
-#endif
-
-  policy.encode(aclbl);
-
-  attrs[RGW_ATTR_ACL] = aclbl;
-
-  /* XXX most of the following cases won't currently arise */
-  if (unlikely(!! dlo_manifest)) {
-    op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
-    if (op_ret < 0) {
-      ldout(s->cct, 0) << "bad user manifest: " << dlo_manifest << dendl;
+    if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+      op_ret = -ERR_BAD_DIGEST;
       goto done;
     }
-    complete_etag(hash, &etag);
-    ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: "
-		      << etag << dendl;
-  }
+#endif
 
-  if (unlikely(!! slo_info)) {
-    bufferlist manifest_bl;
-    ::encode(*slo_info, manifest_bl);
-    attrs[RGW_ATTR_SLO_MANIFEST] = manifest_bl;
+    policy.encode(aclbl);
 
-    hash.Update((byte *)slo_info->raw_data, slo_info->raw_data_len);
-    complete_etag(hash, &etag);
-    ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: "
-		      << etag << dendl;
-  }
+    attrs[RGW_ATTR_ACL] = aclbl;
 
-  if (supplied_etag && etag.compare(supplied_etag) != 0) {
-    op_ret = -ERR_UNPROCESSABLE_ENTITY;
-    goto done;
-  }
-  bl.append(etag.c_str(), etag.size() + 1);
-  attrs[RGW_ATTR_ETAG] = bl;
+    /* XXX most of the following cases won't currently arise */
+    if (unlikely(!! dlo_manifest)) {
+      op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
+      if (op_ret < 0) {
+	ldout(s->cct, 0) << "bad user manifest: " << dlo_manifest << dendl;
+	goto done;
+      }
+      complete_etag(hash, &etag);
+      ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: "
+			<< etag << dendl;
+    }
 
-  for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end();
-       ++iter) {
-    bufferlist& attrbl = attrs[iter->first];
-    const string& val = iter->second;
-    attrbl.append(val.c_str(), val.size() + 1);
-  }
+    if (unlikely(!! slo_info)) {
+      bufferlist manifest_bl;
+      ::encode(*slo_info, manifest_bl);
+      attrs[RGW_ATTR_SLO_MANIFEST] = manifest_bl;
 
-  rgw_get_request_metadata(s->cct, s->info, attrs);
-  encode_delete_at_attr(delete_at, attrs);
+      hash.Update((byte *)slo_info->raw_data, slo_info->raw_data_len);
+      complete_etag(hash, &etag);
+      ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: "
+			<< etag << dendl;
+    }
 
-  /* Add a custom metadata to expose the information whether an object
-   * is an SLO or not. Appending the attribute must be performed AFTER
-   * processing any input from user in order to prohibit overwriting. */
-  if (unlikely(!! slo_info)) {
-    bufferlist slo_userindicator_bl;
-    ::encode("True", slo_userindicator_bl);
-    attrs[RGW_ATTR_SLO_UINDICATOR] = slo_userindicator_bl;
-  }
+    if (supplied_etag && etag.compare(supplied_etag) != 0) {
+      op_ret = -ERR_UNPROCESSABLE_ENTITY;
+      goto done;
+    }
+    bl.append(etag.c_str(), etag.size() + 1);
+    attrs[RGW_ATTR_ETAG] = bl;
 
-  op_ret = processor->complete(etag, &mtime, 0, attrs, delete_at, if_match,
-			       if_nomatch);
-  if (! op_ret) {
-    /* update stats */
-    rgw_fh->set_mtime({mtime, 0});
-    rgw_fh->set_size(bytes_written);
-  }
+    for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end();
+	 ++iter) {
+      bufferlist& attrbl = attrs[iter->first];
+      const string& val = iter->second;
+      attrbl.append(val.c_str(), val.size() + 1);
+    }
 
-done:
-  dispose_processor(processor);
-  perfcounter->tinc(l_rgw_put_lat,
-                   (ceph_clock_now(s->cct) - s->time));
-  return op_ret;
-} /* exec_finish */
+    rgw_get_request_metadata(s->cct, s->info, attrs);
+    encode_delete_at_attr(delete_at, attrs);
+
+    /* Add a custom metadata to expose the information whether an object
+     * is an SLO or not. Appending the attribute must be performed AFTER
+     * processing any input from user in order to prohibit overwriting. */
+    if (unlikely(!! slo_info)) {
+      bufferlist slo_userindicator_bl;
+      ::encode("True", slo_userindicator_bl);
+      attrs[RGW_ATTR_SLO_UINDICATOR] = slo_userindicator_bl;
+    }
+
+    op_ret = processor->complete(etag, &mtime, 0, attrs, delete_at, if_match,
+				 if_nomatch);
+    if (! op_ret) {
+      /* update stats */
+      rgw_fh->set_mtime({mtime, 0});
+      rgw_fh->set_size(bytes_written);
+    }
+
+  done:
+    dispose_processor(processor);
+    perfcounter->tinc(l_rgw_put_lat,
+		      (ceph_clock_now(s->cct) - s->time));
+    return op_ret;
+  } /* exec_finish */
+
+} /* namespace rgw */
 
 /* librgw */
 extern "C" {
