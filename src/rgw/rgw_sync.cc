@@ -622,6 +622,7 @@ public:
 	}
         yield;
       }
+      drain_all();
       return set_cr_done();
     }
     return 0;
@@ -826,6 +827,7 @@ public:
 	}
         yield;
       }
+      drain_all();
       if (failed) {
         yield return set_cr_error(-EIO);
       }
