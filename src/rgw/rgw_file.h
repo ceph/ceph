@@ -12,6 +12,8 @@
 
 #include <atomic>
 #include <mutex>
+#include <vector>
+#include <deque>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 #include <boost/container/flat_map.hpp>
@@ -500,6 +502,8 @@ namespace rgw {
     struct rgw_fs fs;
     RGWFileHandle root_fh;
 
+    mutable std::atomic<uint64_t> refcnt;
+
     RGWFileHandle::FHCache fh_cache;
     RGWFileHandle::FhLRU fh_lru;
     
@@ -521,7 +525,7 @@ namespace rgw {
 
     RGWLibFS(CephContext* _cct, const char *_uid, const char *_user_id,
 	    const char* _key)
-      : cct(_cct), root_fh(this, get_inst()),
+      : cct(_cct), root_fh(this, get_inst()), refcnt(1),
 	fh_cache(cct->_conf->rgw_nfs_fhcache_partitions,
 		 cct->_conf->rgw_nfs_fhcache_size),
 	fh_lru(cct->_conf->rgw_nfs_lru_lanes,
@@ -540,6 +544,26 @@ namespace rgw {
 
       /* expose public root fh */
       fs.root_fh = root_fh.get_fh();
+    }
+
+    friend void intrusive_ptr_add_ref(const RGWLibFS* fs) {
+      fs->refcnt.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    friend void intrusive_ptr_release(const RGWLibFS* fs) {
+      if (fs->refcnt.fetch_sub(1, std::memory_order_release) == 0) {
+	std::atomic_thread_fence(std::memory_order_acquire);
+	delete fs;
+      }
+    }
+
+    RGWLibFS* ref() {
+      intrusive_ptr_add_ref(this);
+      return this;
+    }
+
+    inline void rele() {
+      intrusive_ptr_release(this);
     }
 
     int authorize(RGWRados* store) {
