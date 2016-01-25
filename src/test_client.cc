@@ -9,6 +9,7 @@
 #include <iostream>
 
 #include "dmclock_recs.h"
+#include "dmclock_util.h"
 #include "test_client.h"
 
 
@@ -58,22 +59,22 @@ void TestClient::run_req() {
   }
 
   {
-    Guard guard(mtx_req);
+    dmc::Lock l(mtx_req);
     auto now = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < ops_to_run; ++i) {
       auto when = now + delay;
       while ((now = std::chrono::high_resolution_clock::now()) < when) {
-	cv_req.wait_until(guard, when);
+	cv_req.wait_until(l, when);
       }
       while (outstanding_ops >= outstanding_ops_allowed) {
-	cv_req.wait(guard);
+	cv_req.wait(l);
       }
 
-      guard.unlock();
+      l.unlock();
       TestRequest req(id, i, 12);
       submit_f(req);
       ++outstanding_ops;
-      guard.lock(); // lock for return to top of loop
+      l.lock(); // lock for return to top of loop
     }
   }
 
@@ -91,13 +92,13 @@ void TestClient::run_req() {
 void TestClient::run_resp() {
   std::chrono::milliseconds delay(1000);
 
-  Guard g(mtx_resp);
+  dmc::Lock l(mtx_resp);
 
   int op = 0;
 
   while(!requests_complete.load()) {
     while(resp_queue.empty() && !requests_complete.load()) {
-      cv_resp.wait_for(g, delay);
+      cv_resp.wait_for(l, delay);
     }
     if (!resp_queue.empty()) {
       op_times[op++] = now();
@@ -118,7 +119,7 @@ void TestClient::run_resp() {
 
   while(outstanding_ops.load() > 0) {
     while(resp_queue.empty() && outstanding_ops.load() > 0) {
-      cv_resp.wait_for(g, delay);
+      cv_resp.wait_for(l, delay);
     }
     if (!resp_queue.empty()) {
       op_times[op++] = now();
@@ -138,7 +139,7 @@ void TestClient::run_resp() {
 
 
 void TestClient::submitResponse(const TestResponse& resp) {
-  Guard g(mtx_resp);
+  dmc::Guard g(mtx_resp);
   resp_queue.push_back(resp);
   cv_resp.notify_one();
 }

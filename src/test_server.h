@@ -39,10 +39,6 @@ class TestServer {
     }
   };
   
-  typedef std::lock_guard<std::mutex>  Guard;
-#if 0
-  typedef std::unique_ptr<TestRequest> QueueItem;
-#endif
 
 public:
 

@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <iostream>
 
+#include "dmclock_util.h"
 #include "dmclock_recs.h"
 #include "test_server.h"
 
@@ -16,8 +17,6 @@ using namespace std::placeholders;
 
 namespace dmc = crimson::dmclock;
 using dmc::RespParams;
-
-typedef std::unique_lock<std::mutex> Lock;
 
 
 static const bool info = false;
@@ -50,7 +49,7 @@ TestServer::TestServer(int _id,
 
 
 TestServer::~TestServer() {
-  Lock l(inner_queue_mtx);
+  dmc::Lock l(inner_queue_mtx);
   finishing = true;
   inner_queue_cv.notify_all();
   l.unlock();
@@ -64,7 +63,7 @@ TestServer::~TestServer() {
 
 
 void TestServer::run(std::chrono::milliseconds wait_delay) {
-  Lock l(inner_queue_mtx);
+  dmc::Lock l(inner_queue_mtx);
   while(true) {
     while(inner_queue.empty() && !finishing) {
       inner_queue_cv.wait_for(l, wait_delay);
@@ -104,14 +103,14 @@ void TestServer::post(const TestRequest& request) {
 
 
 bool TestServer::hasAvailThread() {
-  Lock l(inner_queue_mtx);
+  dmc::Guard g(inner_queue_mtx);
   return inner_queue.size() <= thread_pool_size;
 }
 
 
 void TestServer::innerPost(std::unique_ptr<TestRequest> request,
 			   PhaseType phase) {
-  Lock l(inner_queue_mtx);
+  dmc::Lock l(inner_queue_mtx);
   assert(!finishing);
   inner_queue.emplace_back(QueueItem(std::move(request), phase));
   inner_queue_cv.notify_one();

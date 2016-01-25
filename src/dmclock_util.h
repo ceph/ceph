@@ -8,8 +8,14 @@
 #pragma once
 
 
+#include <mutex>
+
+
 namespace crimson {
   namespace dmclock {
-      void debugger();
+    typedef std::unique_lock<std::mutex> Lock;
+    typedef std::lock_guard<std::mutex> Guard;
+
+    void debugger();
   }
 }

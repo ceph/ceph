@@ -246,11 +246,7 @@ namespace crimson {
       CanHandleRequestFunc canHandleF;
       HandleRequestFunc    handleF;
 
-
-      typedef typename std::lock_guard<std::mutex> Guard;
-
       mutable std::mutex data_mutex;
-
 
       // stable mappiing between client ids and client queues
       std::map<C,ClientRec> clientMap;

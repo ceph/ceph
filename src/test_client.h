@@ -27,8 +27,6 @@ namespace c = crimson;
 class TestClient {
   typedef std::function<void(const TestRequest&)> SubmitFunc;
 
-  typedef std::unique_lock<std::mutex> Guard;
-
 public:
 
   typedef std::chrono::time_point<std::chrono::system_clock> TimePoint;
