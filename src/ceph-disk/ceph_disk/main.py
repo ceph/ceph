@@ -223,6 +223,10 @@ if LOG_NAME == '__main__':
     LOG_NAME = os.path.basename(sys.argv[0])
 LOG = logging.getLogger(LOG_NAME)
 
+# Allow user-preferred values for subprocess user and group
+CEPH_PREF_USER = None
+CEPH_PREF_GROUP = None
+
 
 class filelock(object):
     def __init__(self, fn):
@@ -931,12 +935,38 @@ def get_osd_id(path):
 
 
 def get_ceph_user():
-    try:
-        pwd.getpwnam('ceph')
-        grp.getgrnam('ceph')
-        return 'ceph'
-    except KeyError:
-        return 'root'
+    global CEPH_PREF_USER
+
+    if CEPH_PREF_USER != None:
+        try:
+            pwd.getpwnam(CEPH_PREF_USER)
+            return CEPH_PREF_USER
+        except KeyError:
+            print "No such user: " + CEPH_PREF_USER
+            sys.exit(2)
+    else:
+        try:
+            pwd.getpwnam('ceph')
+            return 'ceph'
+        except KeyError:
+            return 'root'
+
+def get_ceph_group():
+    global CEPH_PREF_GROUP
+
+    if CEPH_PREF_GROUP != None:
+        try:
+            grp.getgrnam(CEPH_PREF_GROUP)
+            return CEPH_PREF_GROUP
+        except KeyError:
+            print "No such group: " + CEPH_PREF_GROUP
+            sys.exit(2)
+    else:
+        try:
+            grp.getgrnam('ceph')
+            return 'ceph'
+        except KeyError:
+            return 'root'
 
 
 def path_set_context(path):
@@ -2444,7 +2474,7 @@ def mkfs(
                 '--osd-uuid', fsid,
                 '--keyring', os.path.join(path, 'keyring'),
                 '--setuser', get_ceph_user(),
-                '--setgroup', get_ceph_user(),
+                '--setgroup', get_ceph_group(),
             ],
         )
 
@@ -4164,6 +4194,18 @@ def parse_args(argv):
         default='/etc/ceph',
         help=('directory in which ceph configuration files are found '
               '(default /etc/ceph)'),
+        )
+    parser.add_argument(
+        '--setuser',
+        metavar='USER',
+        default=None,
+        help='use the given user for subprocesses, rather than ceph or root'
+        )
+    parser.add_argument(
+        '--setgroup',
+        metavar='GROUP',
+        default=None,
+        help='use the given group for subprocesses, rather than ceph or root'
     )
     parser.set_defaults(
         # we want to hold on to this, for later
@@ -4493,6 +4535,11 @@ def main(argv):
 
     setup_statedir(args.statedir)
     setup_sysconfdir(args.sysconfdir)
+
+    global CEPH_PREF_USER
+    CEPH_PREF_USER = args.setuser
+    global CEPH_PREF_GROUP
+    CEPH_PREF_GROUP = args.setgroup
 
     if args.verbose:
         args.func(args)
