@@ -804,7 +804,7 @@ add_library(compressor STATIC ${compressor_srcs})
 target_link_libraries(compressor common snappy)
 
 add_executable(ceph-client-debug tools/ceph-client-debug.cc)
-target_link_libraries(ceph-client-debug cephfs librados global common)
+target_link_libraries(ceph-client-debug cephfs librados global common ${ALLOC_LIBS})
 install(TARGETS ceph-client-debug DESTINATION bin/debug)
 
 add_executable(ceph-kvstore-tool tools/ceph_kvstore_tool.cc)
