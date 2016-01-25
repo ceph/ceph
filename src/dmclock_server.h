@@ -315,15 +315,16 @@ namespace crimson {
 
 
       void addRequest(const R& request,
-		      const C& client_id,
+		      const ReqParams<C>& req_params,
 		      const Time& time) {
-	addRequest(RequestRef(new R(request)), client_id, time);
+	addRequest(RequestRef(new R(request)), req_params, time);
       }
 
 
       void addRequest(RequestRef&& request,
-		      const C& client_id,
+		      const ReqParams<C>& req_params,
 		      const Time& time) {
+	C& client_id = req_params.client;
 	Guard g(data_mutex);
 
 	auto client_it = clientMap.find(client_id);

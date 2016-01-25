@@ -94,7 +94,7 @@ int main(int argc, char* argv[]) {
 
   for (int i = 0; i < client_count; ++i) {
     clients[i] = new TestClient(i,
-				std::bind(&TestServer::post, &server, _1),
+				std::bind(&TestServer::post, &server, _1, _2),
 				client_goals[i] * goal_secs_to_run,
 				client_goals[i],
 				client_outstanding_ops);

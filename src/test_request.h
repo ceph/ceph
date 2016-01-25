@@ -12,18 +12,18 @@
 
 
 struct TestRequest {
-  int client;
   uint32_t epoch;
   uint32_t op;
 
-  TestRequest(int _client, uint32_t _epoch, uint32_t _op) :
-    client(_client), epoch(_epoch), op(_op)
+  TestRequest(uint32_t _epoch,
+	      uint32_t _op) :
+    epoch(_epoch), op(_op)
   {
     // empty
   }
 
   TestRequest(const TestRequest& r) :
-    TestRequest(r.client, r.epoch, r.op)
+    TestRequest(r.epoch, r.op)
   {
     // empty
   }

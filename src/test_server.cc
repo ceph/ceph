@@ -75,18 +75,20 @@ void TestServer::run(std::chrono::milliseconds wait_delay) {
 
       l.unlock();
 
-      if (info) std::cout << "start req " << req->client << std::endl;
+#if 0
+      if (info) std::cout << "start req " << req->req_params.client << std::endl;
+#endif
 
       // simulation operation by sleeping; then call function to
       // notify server of completion
       std::this_thread::sleep_for(op_time);
 
       TestResponse resp(req->epoch, RespParams<int>(id, phase));
-      sendResponse(req->client, resp);
+      sendResponse(req->req_params.client, resp);
 
       priority_queue.requestCompleted();
 
-      if (info) std::cout << "end req " << req->client << std::endl;
+      if (info) std::cout << "end req " << req->req_params.client << std::endl;
 
       l.lock(); // in prep for next iteration of loop
     } else {
@@ -96,9 +98,10 @@ void TestServer::run(std::chrono::milliseconds wait_delay) {
 }
 
 
-void TestServer::post(const TestRequest& request) {
+void TestServer::post(const TestRequest& request,
+		      const dmc::ReqParams<int>& req_params) {
   auto now = dmc::getTime();
-  priority_queue.addRequest(request, request.client, now);
+  priority_queue.addRequest(request, req_params, now);
 }
 
 

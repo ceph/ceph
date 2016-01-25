@@ -72,8 +72,8 @@ public:
 
   virtual ~TestServer();
 
-  // void post(double delay, std::function<void()> done);
-  void post(const TestRequest& request);
+  void post(const TestRequest& request,
+	    const crimson::dmclock::ReqParams<int>& req_params);
 
   bool hasAvailThread();
 

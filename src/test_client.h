@@ -23,7 +23,8 @@
 
 
 class TestClient {
-  typedef std::function<void(const TestRequest&)> SubmitFunc;
+  typedef std::function<void(const TestRequest&,
+			     const crimson::dmclock::ReqParams&)> SubmitFunc;
 
 public:
 
