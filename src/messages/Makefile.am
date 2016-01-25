@@ -95,6 +95,8 @@ noinst_HEADERS += \
 	messages/MOSDECSubOpWriteReply.h \
 	messages/MOSDECSubOpRead.h \
 	messages/MOSDECSubOpReadReply.h \
+	messages/MOSDECSubOpApply.h \
+	messages/MOSDECSubOpApplyReply.h \
 	messages/MBackfillReserve.h \
 	messages/MRecoveryReserve.h \
 	messages/MMonQuorumService.h \
