@@ -90,7 +90,7 @@ void bluefs_super_t::generate_test_instances(list<bluefs_super_t*>& ls)
 
 ostream& operator<<(ostream& out, const bluefs_super_t& s)
 {
-  return out << "super(" << s.uuid
+  return out << "super(uuid " << s.uuid
 	     << " osd " << s.osd_uuid
 	     << " v " << s.version
 	     << " block_size " << s.block_size
@@ -163,7 +163,7 @@ void bluefs_fnode_t::generate_test_instances(list<bluefs_fnode_t*>& ls)
 
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 {
-  return out << "file(" << file.ino
+  return out << "file(ino " << file.ino
 	     << " size " << file.size
 	     << " mtime " << file.mtime
 	     << " bdev " << (int)file.prefer_bdev
@@ -229,7 +229,7 @@ void bluefs_transaction_t::generate_test_instance(
 
 ostream& operator<<(ostream& out, const bluefs_transaction_t& t)
 {
-  return out << "txn(" << t.seq
+  return out << "txn(seq " << t.seq
 	     << " len " << t.op_bl.length()
 	     << " crc " << t.op_bl.crc32c(-1)
 	     << ")";
