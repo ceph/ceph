@@ -19,9 +19,7 @@
 #include "crimson/queue.h"
 
 #include "test_request.h"
-
-
-namespace c = crimson;
+#include "dmclock_client.h"
 
 
 class TestClient {
@@ -40,6 +38,8 @@ protected:
   int ops_to_run;
   int iops_goal; // per second
   int outstanding_ops_allowed;
+
+  crimson::dmclock::ServiceTracker<int> service_tracker;
 
   std::vector<TimePoint>   op_times;
 

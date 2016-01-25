@@ -14,7 +14,7 @@
 
 
 using namespace std::placeholders;
-using crimson::dmclock::PhaseType;
+namespace dmc = crimson::dmclock;
 
 
 static const uint info = 0;
@@ -103,10 +103,10 @@ void TestClient::run_resp() {
     if (!resp_queue.empty()) {
       op_times[op++] = now();
       TestResponse resp = resp_queue.front();
+      resp_queue.pop_front();
       if (info >= 3) {
 	std::cout << resp << std::endl;
       }
-      resp_queue.pop_front();
       --outstanding_ops;
       cv_req.notify_one();
     }
@@ -123,8 +123,11 @@ void TestClient::run_resp() {
     }
     if (!resp_queue.empty()) {
       op_times[op++] = now();
-      if (info >= 3) std::cout << "resp->" << id << std::endl;
+      TestResponse resp = resp_queue.front();
       resp_queue.pop_front();
+      if (info >= 3) {
+	std::cout << resp << std::endl;
+      }
       --outstanding_ops;
       // not needed since all requests completed cv_req.notify_one();
     }
