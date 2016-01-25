@@ -3238,14 +3238,6 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
     return NULL;
   }
 
-  RepGather *repop = simple_repop_create(obc);
-  OpContext *ctx = repop->ctx;
-  ctx->snapset_obc = snapset_obc;
-  ctx->lock_to_release = OpContext::W_LOCK;
-  ctx->release_snapset_obc = true;
-  ctx->at_version = get_next_version();
-
-  PGBackend::PGTransaction *t = ctx->op_t;
   set<snapid_t> new_snaps;
   for (set<snapid_t>::iterator i = old_snaps.begin();
        i != old_snaps.end();
@@ -3269,6 +3261,15 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
       osd->clog->error() << __func__ << " Snap " << coid.snap << " not in clones" << "\n";
       return NULL;
     }
+
+    RepGather *repop = simple_repop_create(obc);
+    OpContext *ctx = repop->ctx;
+    ctx->snapset_obc = snapset_obc;
+    ctx->lock_to_release = OpContext::W_LOCK;
+    ctx->release_snapset_obc = true;
+    ctx->at_version = get_next_version();
+
+    PGBackend::PGTransaction *t = ctx->op_t;
 
     ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(last);
 
