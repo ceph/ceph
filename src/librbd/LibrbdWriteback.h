@@ -39,6 +39,7 @@ namespace librbd {
 			     ceph::real_time mtime, uint64_t trunc_size,
 			     __u32 trunc_seq, ceph_tid_t journal_tid,
 			     Context *oncommit);
+    using WritebackHandler::write;
 
     virtual void overwrite_extent(const object_t& oid, uint64_t off,
 				  uint64_t len, ceph_tid_t journal_tid);
