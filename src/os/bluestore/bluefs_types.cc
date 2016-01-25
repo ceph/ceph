@@ -218,11 +218,13 @@ void bluefs_transaction_t::generate_test_instance(
   ls.back()->op_alloc_rm(1, 0, 123);
   ls.back()->op_dir_create("dir");
   ls.back()->op_dir_create("dir2");
-  ls.back()->op_dir_link("dir", "file1", 1);
-  ls.back()->op_dir_unlink("dir", "oldfile");
-  ls.back()->op_file_update(bluefs_fnode_t());
-  ls.back()->op_dir_remove("dir3");
+  bluefs_fnode_t fnode;
+  fnode.ino = 2;
+  ls.back()->op_file_update(fnode);
+  ls.back()->op_dir_link("dir", "file1", 2);
+  ls.back()->op_dir_unlink("dir", "file1");
   ls.back()->op_file_remove(2);
+  ls.back()->op_dir_remove("dir2");
 }
 
 ostream& operator<<(ostream& out, const bluefs_transaction_t& t)
