@@ -1954,8 +1954,18 @@ int buffer::list::write_file(const char *fn, int mode)
 
 static int do_writev(int fd, struct iovec *vec, uint64_t offset, unsigned veclen, unsigned bytes)
 {
+  ssize_t r = 0;
   while (bytes > 0) {
-    ssize_t r = ::pwritev(fd, vec, veclen, offset);
+#ifdef HAVE_PWRITEV
+    r = ::pwritev(fd, vec, veclen, offset);
+#else
+    r = ::lseek64(fd, offset, SEEK_SET);
+    if (r != offset) {
+      r = -errno;
+      return r;
+    }
+    r = ::writev(fd, vec, veclen);
+#endif
     if (r < 0) {
       if (errno == EINTR)
         continue;
