@@ -304,9 +304,9 @@ ssize_t AsyncConnection::do_sendmsg(struct msghdr &msg, unsigned len, bool more)
   while (len > 0) {
     ssize_t r;
 #if defined(MSG_NOSIGNAL)
-    r = ::sendmsg(sd, &msg, MSG_NOSIGNAL);
+    r = ::sendmsg(sd, &msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
 #else
-    r = ::sendmsg(sd, &msg, 0);
+    r = ::sendmsg(sd, &msg, (more ? MSG_MORE : 0));
 #endif /* defined(MSG_NOSIGNAL) */
 
     if (r == 0) {
@@ -318,6 +318,7 @@ ssize_t AsyncConnection::do_sendmsg(struct msghdr &msg, unsigned len, bool more)
         break;
       } else {
         ldout(async_msgr->cct, 1) << __func__ << " sendmsg error: " << cpp_strerror(errno) << dendl;
+        restore_sigpipe();
         return r;
       }
     }
@@ -339,8 +340,8 @@ ssize_t AsyncConnection::do_sendmsg(struct msghdr &msg, unsigned len, bool more)
         break;
       }
     }
-    restore_sigpipe();
   }
+  restore_sigpipe();
   return (ssize_t)len;
 }
 
@@ -350,10 +351,7 @@ ssize_t AsyncConnection::_try_send(bufferlist &send_bl, bool send)
 {
   ldout(async_msgr->cct, 20) << __func__ << " send bl length is " << send_bl.length() << dendl;
   if (send_bl.length()) {
-    if (outcoming_bl.length())
-      outcoming_bl.claim_append(send_bl);
-    else
-      outcoming_bl.swap(send_bl);
+    outcoming_bl.claim_append(send_bl);
   }
 
   if (!send)
@@ -386,7 +384,7 @@ ssize_t AsyncConnection::_try_send(bufferlist &send_bl, bool send)
       size--;
     }
 
-    ssize_t r = do_sendmsg(msg, msglen, false);
+    ssize_t r = do_sendmsg(msg, msglen, left_pbrs);
     if (r < 0)
       return r;
 
@@ -404,9 +402,12 @@ ssize_t AsyncConnection::_try_send(bufferlist &send_bl, bool send)
   // trim already sent for outcoming_bl
   if (sent_bytes) {
     bufferlist bl;
-    if (sent_bytes < outcoming_bl.length())
+    if (sent_bytes < outcoming_bl.length()) {
       outcoming_bl.splice(sent_bytes, outcoming_bl.length()-sent_bytes, &bl);
-    bl.swap(outcoming_bl);
+      bl.swap(outcoming_bl);
+    } else {
+      outcoming_bl.clear();
+    }
   }
 
   ldout(async_msgr->cct, 20) << __func__ << " sent bytes " << sent_bytes
