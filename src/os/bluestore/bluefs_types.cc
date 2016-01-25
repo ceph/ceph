@@ -39,7 +39,7 @@ void bluefs_extent_t::generate_test_instances(list<bluefs_extent_t*>& ls)
   ls.push_back(new bluefs_extent_t);
   ls.back()->offset = 1;
   ls.back()->length = 2;
-  ls.back()->bdev = 3;
+  ls.back()->bdev = 1;
 }
 
 ostream& operator<<(ostream& out, bluefs_extent_t e)
