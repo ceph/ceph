@@ -11,10 +11,12 @@ Synopsis
 
 | **ceph-disk** **prepare** [--cluster *clustername*] [--cluster-uuid *uuid*]
 	[--fs-type *xfs|ext4|btrfs*] [*data-path*] [*journal-path*]
+	[--setuser *user*] [--setgroup *group*]
 
 | **ceph-disk** **activate** [*data-path*] [--activate-key *path*]
         [--mark-init *sysvinit|upstart|systemd|auto|none*]
         [--no-start-daemon] [--reactivate]
+        [--setuser *user*] [--setgroup *group*]
 
 | **ceph-disk** **activate-all**
 
@@ -322,6 +324,14 @@ Options
 .. option:: --dmcrypt-key-dir
 
 	Directory where ``dm-crypt`` keys are stored.
+
+.. option:: --setuser
+
+    Define the user for ceph-disk's child processes (default ``ceph``, or ``root``)
+
+.. option:: --setgroup
+
+    Define the group for ceph-disk's child processes (default ``ceph``, or ``root``)
 
 Availability
 ============
