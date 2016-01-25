@@ -1273,6 +1273,10 @@ int BlueFS::open_for_write(
 	       << ") file " << filename
 	       << " already exists, truncate + overwrite" << dendl;
       file->fnode.size = 0;
+      for (auto& p : file->fnode.extents) {
+        alloc[p.bdev]->release(p.offset, p.length);
+      }
+      file->fnode.extents.clear();
     }
     file->fnode.mtime = ceph_clock_now(NULL);
     log_t.op_file_update(file->fnode);
