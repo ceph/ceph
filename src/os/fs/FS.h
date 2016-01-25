@@ -137,7 +137,7 @@ public:
 	timeout_ms / 1000,
 	(timeout_ms % 1000) * 1000 * 1000
       };
-      int r = io_getevents(ctx, 1, 1, event, &t);
+      int r = io_getevents(ctx, 1, max, event, &t);
       if (r <= 0) {
 	return r;
       }
