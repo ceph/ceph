@@ -1952,6 +1952,36 @@ int buffer::list::write_file(const char *fn, int mode)
   return 0;
 }
 
+static int do_writev(int fd, struct iovec *vec, uint64_t offset, unsigned veclen, unsigned bytes)
+{
+  while (bytes > 0) {
+    ssize_t r = ::pwritev(fd, vec, veclen, offset);
+    if (r < 0) {
+      if (errno == EINTR)
+        continue;
+      return -errno;
+    }
+
+    bytes -= r;
+    offset += r;
+    if (bytes == 0) break;
+
+    while (r > 0) {
+      if (vec[0].iov_len <= (size_t)r) {
+        // drain this whole item
+        r -= vec[0].iov_len;
+        ++vec;
+        --veclen;
+      } else {
+        vec[0].iov_base = (char *)vec[0].iov_base + r;
+        vec[0].iov_len -= r;
+        break;
+      }
+    }
+  }
+  return 0;
+}
+
 int buffer::list::write_fd(int fd) const
 {
   if (can_zero_copy())
@@ -2009,53 +2039,28 @@ int buffer::list::write_fd(int fd) const
 
 int buffer::list::write_fd(int fd, uint64_t offset) const
 {
-  // use writev!
   iovec iov[IOV_MAX];
-  int iovlen = 0;
-  ssize_t bytes = 0;
 
   std::list<ptr>::const_iterator p = _buffers.begin();
-  while (p != _buffers.end()) {
-    if (p->length() > 0) {
+  uint64_t left_pbrs = _buffers.size();
+  while (left_pbrs) {
+    ssize_t bytes = 0;
+    unsigned iovlen = 0;
+    uint64_t size = MIN(left_pbrs, IOV_MAX);
+    left_pbrs -= size;
+    while (size > 0) {
       iov[iovlen].iov_base = (void *)p->c_str();
       iov[iovlen].iov_len = p->length();
-      bytes += p->length();
       iovlen++;
+      bytes += p->length();
+      ++p;
+      size--;
     }
-    ++p;
 
-    if (iovlen == IOV_MAX-1 ||
-	p == _buffers.end()) {
-      iovec *start = iov;
-      int num = iovlen;
-      ssize_t wrote;
-    retry:
-      wrote = ::pwritev(fd, start, num, offset);
-      if (wrote < 0) {
-	int err = errno;
-	if (err == EINTR)
-	  goto retry;
-	return -err;
-      }
-      offset += wrote;
-      if (wrote < bytes) {
-	// partial write, recover!
-	while ((size_t)wrote >= start[0].iov_len) {
-	  wrote -= start[0].iov_len;
-	  bytes -= start[0].iov_len;
-	  start++;
-	  num--;
-	}
-	if (wrote > 0) {
-	  start[0].iov_len -= wrote;
-	  start[0].iov_base = (char *)start[0].iov_base + wrote;
-	  bytes -= wrote;
-	}
-	goto retry;
-      }
-      iovlen = 0;
-      bytes = 0;
-    }
+    int r = do_writev(fd, iov, offset, iovlen, bytes);
+    if (r < 0)
+      return r;
+    offset += bytes;
   }
   return 0;
 }
