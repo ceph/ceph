@@ -144,8 +144,6 @@ endif()
 set(heap_profiler_files ${TCMALLOC_srcs})
 add_library(heap_profiler_objs OBJECT ${heap_profiler_files})
 
-set(LIBEDIT_LIBS edit)
-
 # Common infrastructure
 configure_file(
   ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake
@@ -813,10 +811,6 @@ add_executable(ceph-kvstore-tool tools/ceph_kvstore_tool.cc)
 target_link_libraries(ceph-kvstore-tool os global ${UNITTEST_CXX_FLAGS})
 install(TARGETS ceph-kvstore-tool DESTINATION bin)
 
-#set(ceph_srcs tools/ceph.cc tools/common.cc)
-#add_executable(ceph ${ceph_srcs})
-#target_link_libraries(ceph global ${LIBEDIT_LIBS})
-
 set(ceph_conf_srcs
   tools/ceph_conf.cc)
 add_executable(ceph-conf ${ceph_conf_srcs})
@@ -901,7 +895,7 @@ if(WITH_LIBCEPHFS)
     client/Trace.cc
     client/posix_acl.cc)
   add_library(client ${libclient_srcs})
-  target_link_libraries(client osdc mds ${LIBEDIT_LIBS})
+  target_link_libraries(client osdc mds)
   set(libcephfs_srcs libcephfs.cc)
   add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs}
     $<TARGET_OBJECTS:cls_references_objs>
