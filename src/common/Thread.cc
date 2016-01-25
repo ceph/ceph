@@ -143,7 +143,7 @@ int Thread::try_create(size_t stacksize)
   return r;
 }
 
-void Thread::create(size_t stacksize)
+void Thread::create(const char *name, size_t stacksize)
 {
   int ret = try_create(stacksize);
   if (ret != 0) {
@@ -152,6 +152,9 @@ void Thread::create(size_t stacksize)
 	     "failed with error %d", ret);
     dout_emergency(buf);
     assert(ret == 0);
+  } else if (thread_id > 0) {
+      assert(strlen(name) < 16);
+      pthread_setname_np(thread_id, name);
   }
 }
 

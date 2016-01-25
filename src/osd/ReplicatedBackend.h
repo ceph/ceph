@@ -298,7 +298,8 @@ private:
     PushOp *pop, bool cache_dont_need = true);
   void prep_push(ObjectContextRef obc,
 		 const hobject_t& oid, pg_shard_t dest,
-		 PushOp *op);
+		 PushOp *op,
+		 bool cache_dont_need);
   void prep_push(ObjectContextRef obc,
 		 const hobject_t& soid, pg_shard_t peer,
 		 eversion_t version,
@@ -403,12 +404,10 @@ private:
     eversion_t last_complete;
     epoch_t epoch_started;
 
-    uint64_t bytes_written;
-
     ObjectStore::Transaction opt, localt;
     
     RepModify() : applied(false), committed(false), ackerosd(-1),
-		  epoch_started(0), bytes_written(0) {}
+		  epoch_started(0) {}
   };
   typedef ceph::shared_ptr<RepModify> RepModifyRef;
 

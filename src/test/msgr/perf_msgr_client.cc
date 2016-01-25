@@ -142,7 +142,7 @@ class MessengerClient {
   }
   void start() {
     for (uint64_t i = 0; i < clients.size(); ++i)
-      clients[i]->create();
+      clients[i]->create("client");
     for (uint64_t i = 0; i < msgrs.size(); ++i)
       msgrs[i]->wait();
   }

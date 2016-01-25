@@ -171,28 +171,7 @@ bool MDSDaemon::asok_command(string command, cmdmap_t& cmdmap, string format,
   Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   bool handled = false;
   if (command == "status") {
-    const OSDMap *osdmap = objecter->get_osdmap_read();
-    const epoch_t osd_epoch = osdmap->get_epoch();
-    objecter->put_osdmap_read();
-
-    f->open_object_section("status");
-    f->dump_stream("cluster_fsid") << monc->get_fsid();
-    if (mds_rank) {
-      f->dump_unsigned("whoami", mds_rank->get_nodeid());
-    } else {
-      f->dump_unsigned("whoami", MDS_RANK_NONE);
-    }
-
-    f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
-        monc->get_global_id()))));
-    f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
-    f->dump_unsigned("osdmap_epoch", osd_epoch);
-    if (mds_rank) {
-      f->dump_unsigned("osdmap_epoch_barrier", mds_rank->get_osd_epoch_barrier());
-    } else {
-      f->dump_unsigned("osdmap_epoch_barrier", 0);
-    }
-    f->close_section(); // status
+    dump_status(f);
     handled = true;
   } else {
     if (mds_rank == NULL) {
@@ -209,6 +188,38 @@ bool MDSDaemon::asok_command(string command, cmdmap_t& cmdmap, string format,
   dout(1) << "asok_command: " << command << " (complete)" << dendl;
   
   return handled;
+}
+
+void MDSDaemon::dump_status(Formatter *f)
+{
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  const epoch_t osd_epoch = osdmap->get_epoch();
+  objecter->put_osdmap_read();
+
+  f->open_object_section("status");
+  f->dump_stream("cluster_fsid") << monc->get_fsid();
+  if (mds_rank) {
+    f->dump_unsigned("whoami", mds_rank->get_nodeid());
+  } else {
+    f->dump_unsigned("whoami", MDS_RANK_NONE);
+  }
+
+  f->dump_string("want_state", ceph_mds_state_name(beacon.get_want_state()));
+  f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
+	    monc->get_global_id()))));
+  if (mds_rank) {
+    Mutex::Locker l(mds_lock);
+    mds_rank->dump_status(f);
+  }
+
+  f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
+  f->dump_unsigned("osdmap_epoch", osd_epoch);
+  if (mds_rank) {
+    f->dump_unsigned("osdmap_epoch_barrier", mds_rank->get_osd_epoch_barrier());
+  } else {
+    f->dump_unsigned("osdmap_epoch_barrier", 0);
+  }
+  f->close_section(); // status
 }
 
 void MDSDaemon::set_up_admin_socket()
@@ -335,6 +346,7 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "mds_op_complaint_time", "mds_op_log_threshold",
     "mds_op_history_size", "mds_op_history_duration",
     "mds_enable_op_tracker",
+    "mds_log_pause",
     // clog & admin clog
     "clog_to_monitors",
     "clog_to_syslog",
@@ -376,6 +388,10 @@ void MDSDaemon::handle_conf_change(const struct md_config_t *conf,
     if (mds_rank) {
       mds_rank->update_log_config();
     }
+  }
+  if (!g_conf->mds_log_pause && changed.count("mds_log_pause")) {
+    if (mds_rank)
+      mds_rank->mdlog->kick_submitter();
   }
 }
 

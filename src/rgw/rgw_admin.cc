@@ -88,6 +88,8 @@ void _usage()
   cout << "  log list                   list log objects\n";
   cout << "  log show                   dump a log from specific object or (bucket + date\n";
   cout << "                             + bucket-id)\n";
+  cout << "                             (NOTE: required to specify formatting of date\n";
+  cout << "                             to \"YYYY-MM-DD-hh\")\n";
   cout << "  log rm                     remove log object\n";
   cout << "  usage show                 show usage (by user, date range)\n";
   cout << "  usage trim                 trim usage (by user, date range)\n";
@@ -696,10 +698,9 @@ static int read_decode_json(const string& infile, T& t)
     return ret;
   }
   JSONParser p;
-  ret = p.parse(bl.c_str(), bl.length());
-  if (ret < 0) {
+  if (!p.parse(bl.c_str(), bl.length())) {
     cout << "failed to parse JSON" << std::endl;
-    return ret;
+    return -EINVAL;
   }
 
   try {
@@ -721,10 +722,9 @@ static int read_decode_json(const string& infile, T& t, K *k)
     return ret;
   }
   JSONParser p;
-  ret = p.parse(bl.c_str(), bl.length());
-  if (ret < 0) {
+  if (!p.parse(bl.c_str(), bl.length())) {
     cout << "failed to parse JSON" << std::endl;
-    return ret;
+    return -EINVAL;
   }
 
   try {
@@ -1778,6 +1778,7 @@ int main(int argc, char **argv)
   bucket_op.set_object(object);
   bucket_op.set_check_objects(check_objects);
   bucket_op.set_delete_children(delete_child_objects);
+  bucket_op.set_fix_index(fix);
 
   // required to gather errors from operations
   std::string err_msg;

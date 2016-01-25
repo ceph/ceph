@@ -21,9 +21,9 @@
 #define dout_prefix *_dout << "compressor "
 
 AsyncCompressor::AsyncCompressor(CephContext *c):
-  compressor(Compressor::create(c->_conf->async_compressor_type)), cct(c),
+  compressor(Compressor::create(c, c->_conf->async_compressor_type)), cct(c),
   job_id(0),
-  compress_tp(g_ceph_context, "AsyncCompressor::compressor_tp", cct->_conf->async_compressor_threads, "async_compressor_threads"),
+  compress_tp(cct, "AsyncCompressor::compressor_tp", "tp_async_compr", cct->_conf->async_compressor_threads, "async_compressor_threads"),
   job_lock("AsyncCompressor::job_lock"),
   compress_wq(this, c->_conf->async_compressor_thread_timeout, c->_conf->async_compressor_thread_suicide_timeout, &compress_tp) {
 }

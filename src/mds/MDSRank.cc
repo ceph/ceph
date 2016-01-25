@@ -142,7 +142,7 @@ void MDSRankDispatcher::init()
   // who is interested in it.
   handle_osd_map();
 
-  progress_thread.create();
+  progress_thread.create("mds_rank_progr");
 
   finisher->start();
 }
@@ -1236,6 +1236,19 @@ void MDSRank::clientreplay_start()
   queue_one_replay();
 }
 
+bool MDSRank::queue_one_replay()
+{
+  if (replay_queue.empty()) {
+    if (mdcache->get_num_client_requests() == 0) {
+      clientreplay_done();
+    }
+    return false;
+  }
+  queue_waiter(replay_queue.front());
+  replay_queue.pop_front();
+  return true;
+}
+
 void MDSRank::clientreplay_done()
 {
   dout(1) << "clientreplay_done" << dendl;
@@ -1795,7 +1808,13 @@ std::vector<entity_name_t> MDSRankDispatcher::evict_sessions(
     }
   }
 
+  dout(20) << __func__ << " matched " << victims.size() << " sessions" << dendl;
+
   std::vector<entity_name_t> result;
+
+  if (victims.empty()) {
+    return result;
+  }
 
   C_SaferCond on_safe;
   C_GatherBuilder gather(g_ceph_context, &on_safe);
@@ -2228,6 +2247,30 @@ bool MDSRank::command_dirfrag_ls(
   f->close_section();
 
   return true;
+}
+
+void MDSRank::dump_status(Formatter *f) const
+{
+  if (state == MDSMap::STATE_REPLAY ||
+      state == MDSMap::STATE_STANDBY_REPLAY) {
+    mdlog->dump_replay_status(f);
+  } else if (state == MDSMap::STATE_RESOLVE) {
+    mdcache->dump_resolve_status(f);
+  } else if (state == MDSMap::STATE_RECONNECT) {
+    server->dump_reconnect_status(f);
+  } else if (state == MDSMap::STATE_REJOIN) {
+    mdcache->dump_rejoin_status(f);
+  } else if (state == MDSMap::STATE_CLIENTREPLAY) {
+    dump_clientreplay_status(f);
+  }
+}
+
+void MDSRank::dump_clientreplay_status(Formatter *f) const
+{
+  f->open_object_section("clientreplay_status");
+  f->dump_unsigned("clientreplay_queue", replay_queue.size());
+  f->dump_unsigned("active_replay", mdcache->get_num_client_requests());
+  f->close_section();
 }
 
 void MDSRankDispatcher::update_log_config()

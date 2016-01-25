@@ -137,9 +137,7 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
                 with Image(ioctx, image_name) as image:
                     eq(format == 1, image.old_format())
 
-                    expected_order = order
-                    if not order:
-                        expected_order = 22
+                    expected_order = int(rados.conf_get('rbd_default_order'))
                     actual_order = image.stat()['order']
                     eq(expected_order, actual_order)
 
@@ -171,10 +169,9 @@ def test_create_defaults():
     # basic format 1 and 2
     check_default_params(1)
     check_default_params(2)
-    # default order still works
-    check_default_params(1, 0)
-    check_default_params(2, 0)
     # invalid order
+    check_default_params(1, 0, exception=ArgumentOutOfRange)
+    check_default_params(2, 0, exception=ArgumentOutOfRange)
     check_default_params(1, 11, exception=ArgumentOutOfRange)
     check_default_params(2, 11, exception=ArgumentOutOfRange)
     check_default_params(1, 65, exception=ArgumentOutOfRange)

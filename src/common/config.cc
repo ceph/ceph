@@ -590,13 +590,16 @@ void md_config_t::_apply_changes(std::ostream *oss)
   for (changed_set_t::const_iterator c = changed.begin();
        c != changed.end(); ++c) {
     const std::string &key(*c);
+    pair < obs_map_t::iterator, obs_map_t::iterator >
+      range(observers.equal_range(key));
     if ((oss) &&
 	(!_get_val(key.c_str(), &bufptr, sizeof(buf))) &&
 	!_internal_field(key)) {
       (*oss) << key << " = '" << buf << "' ";
+      if (range.first == range.second) {
+	(*oss) << "(unchangeable) ";
+      }
     }
-    pair < obs_map_t::iterator, obs_map_t::iterator >
-      range(observers.equal_range(key));
     for (obs_map_t::iterator r = range.first; r != range.second; ++r) {
       rev_obs_map_t::value_type robs_val(r->second, empty_set);
       pair < rev_obs_map_t::iterator, bool > robs_ret(robs.insert(robs_val));
@@ -616,17 +619,21 @@ void md_config_t::_apply_changes(std::ostream *oss)
 
 void md_config_t::call_all_observers()
 {
-  Mutex::Locker l(lock);
-
-  expand_all_meta();
-
   std::map<md_config_obs_t*,std::set<std::string> > obs;
-  for (obs_map_t::iterator r = observers.begin(); r != observers.end(); ++r)
-    obs[r->second].insert(r->first);
+  {
+    Mutex::Locker l(lock);
+
+    expand_all_meta();
+
+    for (obs_map_t::iterator r = observers.begin(); r != observers.end(); ++r) {
+      obs[r->second].insert(r->first);
+    }
+  }
   for (std::map<md_config_obs_t*,std::set<std::string> >::iterator p = obs.begin();
        p != obs.end();
-       ++p)
+       ++p) {
     p->first->handle_conf_change(this, p->second);
+  }
 }
 
 int md_config_t::injectargs(const std::string& s, std::ostream *oss)

@@ -1312,7 +1312,7 @@ void RGWListBuckets::execute()
     }
 
     ret = rgw_read_user_buckets(store, s->user.user_id, buckets,
-                                marker, read_count, should_get_stats(), 0);
+                                marker, end_marker, read_count, should_get_stats(), 0);
 
     if (ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
@@ -1369,7 +1369,8 @@ void RGWStatAccount::execute()
   do {
     RGWUserBuckets buckets;
 
-    ret = rgw_read_user_buckets(store, s->user.user_id, buckets, marker, max_buckets, false);
+    ret = rgw_read_user_buckets(store, s->user.user_id, buckets,
+                                marker, string(), max_buckets, false);
     if (ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
          should exist */
@@ -1571,7 +1572,8 @@ int RGWCreateBucket::verify_permission()
   if (s->user.max_buckets) {
     RGWUserBuckets buckets;
     string marker;
-    int ret = rgw_read_user_buckets(store, s->user.user_id, buckets, marker, s->user.max_buckets, false);
+    int ret = rgw_read_user_buckets(store, s->user.user_id, buckets,
+                                    marker, string(), s->user.max_buckets, false);
     if (ret < 0)
       return ret;
 
@@ -1599,10 +1601,9 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
     return ret;
 
   ldout(s->cct, 20) << "response: " << response.c_str() << dendl;
-  ret = jp->parse(response.c_str(), response.length());
-  if (ret < 0) {
+  if (!jp->parse(response.c_str(), response.length())) {
     ldout(s->cct, 0) << "failed parsing response from master region" << dendl;
-    return ret;
+    return -EINVAL;
   }
 
   return 0;

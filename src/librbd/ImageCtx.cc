@@ -21,6 +21,7 @@
 #include "librbd/Journal.h"
 #include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Operations.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/Utils.h"
 
@@ -47,7 +48,7 @@ namespace {
 class ThreadPoolSingleton : public ThreadPool {
 public:
   ThreadPoolSingleton(CephContext *cct)
-    : ThreadPool(cct, "librbd::thread_pool", cct->_conf->rbd_op_threads,
+    : ThreadPool(cct, "librbd::thread_pool", "tp_librbd", cct->_conf->rbd_op_threads,
                  "rbd_op_threads") {
     start();
   }
@@ -161,9 +162,12 @@ struct C_InvalidateCache : public Context {
       stripe_unit(0), stripe_count(0), flags(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
-      total_bytes_read(0), copyup_finisher(NULL),
-      state(new ImageState<>(this)), exclusive_lock(nullptr),
-      object_map(nullptr), aio_work_queue(NULL), op_work_queue(NULL)
+      total_bytes_read(0),
+      state(new ImageState<>(this)),
+      operations(new Operations<>(*this)),
+      exclusive_lock(nullptr), object_map(nullptr),
+      aio_work_queue(nullptr), op_work_queue(nullptr),
+      asok_hook(nullptr)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -207,10 +211,6 @@ struct C_InvalidateCache : public Context {
       delete object_set;
       object_set = NULL;
     }
-    if (copyup_finisher != NULL) {
-      delete copyup_finisher;
-      copyup_finisher = NULL;
-    }
     delete[] format_string;
 
     md_ctx.aio_flush();
@@ -221,6 +221,7 @@ struct C_InvalidateCache : public Context {
     delete op_work_queue;
     delete aio_work_queue;
     delete asok_hook;
+    delete operations;
     delete state;
   }
 
@@ -278,11 +279,6 @@ struct C_InvalidateCache : public Context {
       object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
       object_set->return_enoent = true;
       object_cacher->start();
-    }
-
-    if (clone_copy_on_read) {
-      copyup_finisher = new Finisher(cct);
-      copyup_finisher->start();
     }
 
     readahead.set_trigger_requests(readahead_trigger_requests);
@@ -870,16 +866,6 @@ struct C_InvalidateCache : public Context {
     on_finish->complete(0);
   }
 
-  void ImageCtx::flush_copyup(Context *on_finish) {
-    on_finish = util::create_async_context_callback(*this, on_finish);
-    if (copyup_finisher == nullptr) {
-      on_finish->complete(0);
-      return;
-    }
-
-    copyup_finisher->queue(on_finish);
-  }
-
   void ImageCtx::clear_pending_completions() {
     Mutex::Locker l(completed_reqs_lock);
     ldout(cct, 10) << "clear pending AioCompletion: count="
@@ -1023,7 +1009,7 @@ struct C_InvalidateCache : public Context {
     return new ObjectMap(*this, snap_id);
   }
 
-  Journal *ImageCtx::create_journal() {
-    return new Journal(*this);
+  Journal<ImageCtx> *ImageCtx::create_journal() {
+    return new Journal<ImageCtx>(*this);
   }
 }

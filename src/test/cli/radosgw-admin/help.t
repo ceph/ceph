@@ -44,6 +44,8 @@
     log list                   list log objects
     log show                   dump a log from specific object or (bucket + date
                                + bucket-id)
+                               (NOTE: required to specify formatting of date
+                               to "YYYY-MM-DD-hh")
     log rm                     remove log object
     usage show                 show usage (by user, date range)
     usage trim                 trim usage (by user, date range)

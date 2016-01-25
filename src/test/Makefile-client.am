@@ -19,6 +19,14 @@ ceph_dencoder_CFLAGS += -fno-var-tracking-assignments
 ceph_dencoder_CXXFLAGS += -fno-var-tracking-assignments
 endif
 
+if WITH_RBD
+ceph_dencoder_CXXFLAGS += -DWITH_RBD
+endif
+if WITH_RADOSGW
+ceph_dencoder_CXXFLAGS += -DWITH_RADOSGW
+endif
+
+
 bin_PROGRAMS += ceph-dencoder
 
 
@@ -344,9 +352,9 @@ librbd_test_la_SOURCES = \
 	test/librbd/test_librbd.cc \
 	test/librbd/test_ImageWatcher.cc \
 	test/librbd/test_internal.cc \
-	test/librbd/test_JournalEntries.cc \
-	test/librbd/test_JournalReplay.cc \
-	test/librbd/test_ObjectMap.cc
+	test/librbd/test_ObjectMap.cc \
+	test/librbd/journal/test_Entries.cc \
+	test/librbd/journal/test_Replay.cc
 librbd_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 noinst_LTLIBRARIES += librbd_test.la
 
@@ -354,8 +362,10 @@ unittest_librbd_SOURCES = \
         test/librbd/test_main.cc \
 	test/librbd/test_mock_fixture.cc \
 	test/librbd/test_mock_ExclusiveLock.cc \
+	test/librbd/test_mock_Journal.cc \
 	test/librbd/exclusive_lock/test_mock_AcquireRequest.cc \
 	test/librbd/exclusive_lock/test_mock_ReleaseRequest.cc \
+	test/librbd/journal/test_mock_Replay.cc \
 	test/librbd/object_map/test_mock_InvalidateRequest.cc \
 	test/librbd/object_map/test_mock_LockRequest.cc \
 	test/librbd/object_map/test_mock_RefreshRequest.cc \
@@ -365,9 +375,11 @@ unittest_librbd_SOURCES = \
 	test/librbd/object_map/test_mock_SnapshotRollbackRequest.cc \
 	test/librbd/object_map/test_mock_UnlockRequest.cc \
 	test/librbd/object_map/test_mock_UpdateRequest.cc \
+	test/librbd/operation/test_mock_ResizeRequest.cc \
 	test/librbd/operation/test_mock_SnapshotCreateRequest.cc \
 	test/librbd/operation/test_mock_SnapshotProtectRequest.cc \
 	test/librbd/operation/test_mock_SnapshotRemoveRequest.cc \
+	test/librbd/operation/test_mock_SnapshotRollbackRequest.cc \
 	test/librbd/operation/test_mock_SnapshotUnprotectRequest.cc
 unittest_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS) -DTEST_LIBRBD_INTERNALS
 unittest_librbd_LDADD = \
@@ -411,6 +423,7 @@ noinst_HEADERS += \
 	test/librbd/mock/MockImageWatcher.h \
 	test/librbd/mock/MockJournal.h \
 	test/librbd/mock/MockObjectMap.h \
+	test/librbd/mock/MockOperations.h \
 	test/librbd/mock/MockReadahead.h \
 	test/librbd/object_map/mock/MockInvalidateRequest.h
 
@@ -497,7 +510,9 @@ ceph_test_libcephfs_SOURCES = \
 	test/libcephfs/readdir_r_cb.cc \
 	test/libcephfs/caps.cc \
 	test/libcephfs/multiclient.cc \
-	test/libcephfs/access.cc
+	test/libcephfs/access.cc \
+	test/libcephfs/acl.cc
+
 if LINUX
 ceph_test_libcephfs_SOURCES += test/libcephfs/flock.cc
 endif # LINUX

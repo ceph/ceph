@@ -10,7 +10,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
-#include "librbd/JournalTypes.h"
+#include "librbd/journal/Entries.h"
 #include "include/rados/librados.hpp"
 #include "osdc/Striper.h"
 
@@ -77,39 +77,46 @@ struct C_FlushJournalCommit : public Context {
 
 } // anonymous namespace
 
-void AioImageRequest::aio_read(
-    ImageCtx *ictx, AioCompletion *c,
+template <typename I>
+void AioImageRequest<I>::aio_read(
+    I *ictx, AioCompletion *c,
     const std::vector<std::pair<uint64_t,uint64_t> > &extents,
     char *buf, bufferlist *pbl, int op_flags) {
   AioImageRead req(*ictx, c, extents, buf, pbl, op_flags);
   req.send();
 }
 
-void AioImageRequest::aio_read(ImageCtx *ictx, AioCompletion *c, uint64_t off,
-                               size_t len, char *buf, bufferlist *pbl,
-                               int op_flags) {
+template <typename I>
+void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
+                                  uint64_t off, size_t len, char *buf,
+                                  bufferlist *pbl, int op_flags) {
   AioImageRead req(*ictx, c, off, len, buf, pbl, op_flags);
   req.send();
 }
 
-void AioImageRequest::aio_write(ImageCtx *ictx, AioCompletion *c, uint64_t off,
-                                size_t len, const char *buf, int op_flags) {
+template <typename I>
+void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
+                                   uint64_t off, size_t len, const char *buf,
+                                   int op_flags) {
   AioImageWrite req(*ictx, c, off, len, buf, op_flags);
   req.send();
 }
 
-void AioImageRequest::aio_discard(ImageCtx *ictx, AioCompletion *c,
-                                  uint64_t off, uint64_t len) {
+template <typename I>
+void AioImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
+                                     uint64_t off, uint64_t len) {
   AioImageDiscard req(*ictx, c, off, len);
   req.send();
 }
 
-void AioImageRequest::aio_flush(ImageCtx *ictx, AioCompletion *c) {
+template <typename I>
+void AioImageRequest<I>::aio_flush(I *ictx, AioCompletion *c) {
   AioImageFlush req(*ictx, c);
   req.send();
 }
 
-void AioImageRequest::send() {
+template <typename I>
+void AioImageRequest<I>::send() {
   assert(m_image_ctx.owner_lock.is_locked());
 
   CephContext *cct = m_image_ctx.cct;
@@ -120,7 +127,8 @@ void AioImageRequest::send() {
   send_request();
 }
 
-void AioImageRequest::fail(int r) {
+template <typename I>
+void AioImageRequest<I>::fail(int r) {
   m_aio_comp->get();
   m_aio_comp->fail(m_image_ctx.cct, r);
 }
@@ -311,7 +319,8 @@ uint64_t AioImageWrite::append_journal_event(
   bl.append(m_buf, m_len);
 
   journal::EventEntry event_entry(journal::AioWriteEvent(m_off, m_len, bl));
-  uint64_t tid = m_image_ctx.journal->append_io_event(m_aio_comp, event_entry,
+  uint64_t tid = m_image_ctx.journal->append_io_event(m_aio_comp,
+                                                      std::move(event_entry),
                                                       requests, m_off, m_len,
                                                       synchronous);
   if (m_image_ctx.object_cacher == NULL) {
@@ -371,7 +380,8 @@ void AioImageWrite::update_stats(size_t length) {
 uint64_t AioImageDiscard::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
   journal::EventEntry event_entry(journal::AioDiscardEvent(m_off, m_len));
-  uint64_t tid = m_image_ctx.journal->append_io_event(m_aio_comp, event_entry,
+  uint64_t tid = m_image_ctx.journal->append_io_event(m_aio_comp,
+                                                      std::move(event_entry),
                                                       requests, m_off, m_len,
                                                       synchronous);
   m_aio_comp->associate_journal_event(tid);
@@ -464,3 +474,5 @@ void AioImageFlush::send_request() {
 }
 
 } // namespace librbd
+
+template class librbd::AioImageRequest<librbd::ImageCtx>;

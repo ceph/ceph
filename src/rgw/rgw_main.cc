@@ -243,7 +243,7 @@ protected:
 
 public:
   RGWProcess(CephContext *cct, RGWProcessEnv *pe, int num_threads, RGWFrontendConfig *_conf)
-    : store(pe->store), olog(pe->olog), m_tp(cct, "RGWProcess::m_tp", num_threads),
+    : store(pe->store), olog(pe->olog), m_tp(cct, "RGWProcess::m_tp", "tp_rgw_process", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
       rest(pe->rest),
       conf(_conf),
@@ -884,7 +884,7 @@ public:
   int run() {
     assert(pprocess); /* should have initialized by init() */
     thread = new RGWProcessControlThread(pprocess);
-    thread->create();
+    thread->create("rgw_frontend");
     return 0;
   }
 
@@ -1167,6 +1167,16 @@ int main(int argc, const char **argv)
   }
   for (list<string>::iterator iter = frontends.begin(); iter != frontends.end(); ++iter) {
     string& f = *iter;
+
+    if (f.find("civetweb") != string::npos) {
+      if (f.find("port") != string::npos) {
+	// check for the most common ws problems
+	if ((f.find("port=") == string::npos) ||
+	    (f.find("port= ") != string::npos)) {
+	  derr << "WARNING: civetweb frontend config found unexpected spacing around 'port' (ensure civetweb port parameter has the form 'port=80' with no spaces before or after '=')" << dendl;
+	}
+      }
+    }
 
     RGWFrontendConfig *config = new RGWFrontendConfig(f);
     int r = config->init();

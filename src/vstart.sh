@@ -33,17 +33,31 @@ if [ -e CMakeCache.txt ]; then
     ln -sf ../${file} ec_plugins/`basename $file`
   done
   [ -z "$EC_PATH" ] && EC_PATH=./ec_plugins
+  # check for compression plugins
+  mkdir -p .libs/compressor
+  for file in ./src/compressor/*/libcs_*.so*;
+  do
+    ln -sf ../${file} .libs/compressor/`basename $file`
+  done
+else
+    mkdir -p .libs/compressor
+    for f in `ls -d compressor/*/`; 
+    do 
+        cp .libs/libceph_`basename $f`.so* .libs/compressor/;
+    done
 fi
 
 if [ -z "$CEPH_BUILD_ROOT" ]; then
         [ -z "$CEPH_BIN" ] && CEPH_BIN=.
         [ -z "$CEPH_LIB" ] && CEPH_LIB=.libs
         [ -z $EC_PATH ] && EC_PATH=$CEPH_LIB
+        [ -z $CS_PATH ] && CS_PATH=$CEPH_LIB
         [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB
 else
         [ -z $CEPH_BIN ] && CEPH_BIN=$CEPH_BUILD_ROOT/bin
         [ -z $CEPH_LIB ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
         [ -z $EC_PATH ] && EC_PATH=$CEPH_LIB/erasure-code
+        [ -z $CS_PATH ] && CS_PATH=$CEPH_LIB/compressor
         [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
 fi
 
@@ -124,6 +138,9 @@ usage=$usage"\t--mon_num specify ceph monitor count\n"
 usage=$usage"\t--osd_num specify ceph osd count\n"
 usage=$usage"\t--mds_num specify ceph mds count\n"
 usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
+usage=$usage"\t--bluestore use bluestore as the osd objectstore backend\n"
+usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
+usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 
 usage_exit() {
 	printf "$usage"
@@ -308,7 +325,7 @@ else
         debug monc = 20
         debug journal = 20
         debug filestore = 20
-        debug bluestore = 20
+        debug bluestore = 30
         debug bluefs = 20
         debug rocksdb = 10
         debug bdev = 20
@@ -433,6 +450,7 @@ if [ "$start_mon" -eq 1 ]; then
         mon data avail warn = 10
         mon data avail crit = 1
         erasure code dir = $EC_PATH
+        plugin dir = $CS_PATH
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         rgw frontends = fastcgi, civetweb port=$CEPH_RGW_PORT
         rgw dns name = localhost

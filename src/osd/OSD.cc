@@ -482,7 +482,7 @@ void OSDService::init()
   watch_timer.init();
   agent_timer.init();
 
-  agent_thread.create();
+  agent_thread.create("osd_srv_agent");
 }
 
 void OSDService::final_init()
@@ -1494,16 +1494,16 @@ int OSD::peek_meta(ObjectStore *store, std::string& magic,
   if (r < 0)
     return r;
   r = cluster_fsid.parse(val.c_str());
-  if (r < 0)
-    return r;
+  if (!r)
+    return -EINVAL;
 
   r = store->read_meta("fsid", &val);
   if (r < 0) {
     osd_fsid = uuid_d();
   } else {
     r = osd_fsid.parse(val.c_str());
-    if (r < 0)
-      return r;
+    if (!r)
+      return -EINVAL;
   }
 
   return 0;
@@ -1553,12 +1553,12 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
   state(STATE_INITIALIZING),
-  osd_tp(cct, "OSD::osd_tp", cct->_conf->osd_op_threads, "osd_op_threads"),
-  osd_op_tp(cct, "OSD::osd_op_tp", 
+  osd_tp(cct, "OSD::osd_tp", "tp_osd", cct->_conf->osd_op_threads, "osd_op_threads"),
+  osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
     cct->_conf->osd_op_num_threads_per_shard * cct->_conf->osd_op_num_shards),
-  recovery_tp(cct, "OSD::recovery_tp", cct->_conf->osd_recovery_threads, "osd_recovery_threads"),
-  disk_tp(cct, "OSD::disk_tp", cct->_conf->osd_disk_threads, "osd_disk_threads"),
-  command_tp(cct, "OSD::command_tp", 1),
+  recovery_tp(cct, "OSD::recovery_tp", "tp_osd_recov", cct->_conf->osd_recovery_threads, "osd_recovery_threads"),
+  disk_tp(cct, "OSD::disk_tp", "tp_osd_disk", cct->_conf->osd_disk_threads, "osd_disk_threads"),
+  command_tp(cct, "OSD::command_tp", "tp_osd_cmd",  1),
   paused_recovery(false),
   session_waiting_lock("OSD::session_waiting_lock"),
   heartbeat_lock("OSD::heartbeat_lock"),
@@ -1960,7 +1960,7 @@ int OSD::init()
   set_disk_tp_priority();
 
   // start the heartbeat
-  heartbeat_thread.create();
+  heartbeat_thread.create("osd_srv_heartbt");
 
   // tick
   tick_timer.add_event_after(cct->_conf->osd_heartbeat_interval, new C_Tick(this));
@@ -2361,6 +2361,7 @@ int OSD::shutdown()
       p->second->osr->flush();
     }
   }
+  clear_pg_stat_queue();
   
   // finish ops
   op_shardedwq.drain(); // should already be empty except for lagard PGs
@@ -3249,7 +3250,7 @@ void OSD::handle_pg_peering_evt(
 
       pg->queue_peering_event(evt);
       pg->unlock();
-      wake_pg_waiters(pg, pgid);
+      wake_pg_waiters(pgid);
       return;
     }
     case RES_SELF: {
@@ -3284,7 +3285,7 @@ void OSD::handle_pg_peering_evt(
 
       pg->queue_peering_event(evt);
       pg->unlock();
-      wake_pg_waiters(pg, resurrected);
+      wake_pg_waiters(resurrected);
       return;
     }
     case RES_PARENT: {
@@ -3325,7 +3326,7 @@ void OSD::handle_pg_peering_evt(
       //parent->queue_peering_event(evt);
       parent->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
       parent->unlock();
-      wake_pg_waiters(parent, resurrected);
+      wake_pg_waiters(resurrected);
       return;
     }
     }
@@ -3948,7 +3949,7 @@ bool OSD::heartbeat_reset(Connection *con)
 void OSD::tick()
 {
   assert(osd_lock.is_locked());
-  dout(5) << "tick" << dendl;
+  dout(10) << "tick" << dendl;
 
   logger->set(l_osd_buf, buffer::get_total_alloc());
   logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
@@ -3969,10 +3970,7 @@ void OSD::tick()
   }
 
   if (is_waiting_for_healthy()) {
-    if (_is_healthy()) {
-      dout(1) << "healthy again, booting" << dendl;
-      start_boot();
-    }
+    start_boot();
   }
 
   if (is_active()) {
@@ -4000,7 +3998,7 @@ void OSD::tick()
 void OSD::tick_without_osd_lock()
 {
   assert(tick_timer_lock.is_locked());
-  dout(5) << "tick_without_osd_lock" << dendl;
+  dout(10) << "tick_without_osd_lock" << dendl;
 
   // osd_lock is not being held, which means the OSD state
   // might change when doing the monitor report
@@ -4457,6 +4455,16 @@ struct C_OSD_GetVersion : public Context {
 
 void OSD::start_boot()
 {
+  if (!_is_healthy()) {
+    // if we are not healthy, do not mark ourselves up (yet)
+    dout(1) << "not healthy; waiting to boot" << dendl;
+    if (!is_waiting_for_healthy())
+      start_waiting_for_healthy();
+    // send pings sooner rather than later
+    heartbeat_kick();
+    return;
+  }
+  dout(1) << "We are healthy, booting" << dendl;
   set_state(STATE_PREBOOT);
   dout(10) << "start_boot - have maps " << superblock.oldest_map
 	   << ".." << superblock.newest_map << dendl;
@@ -4488,13 +4496,6 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
 	     (osdmap->get_up_osd_features() & CEPH_FEATURE_HAMMER_0_94_4) == 0) {
     dout(1) << "osdmap indicates one or more pre-v0.94.4 hammer OSDs is running"
 	    << dendl;
-  } else if (is_waiting_for_healthy() || !_is_healthy()) {
-    // if we are not healthy, do not mark ourselves up (yet)
-    dout(1) << "not healthy; waiting to boot" << dendl;
-    if (!is_waiting_for_healthy())
-      start_waiting_for_healthy();
-    // send pings sooner rather than later
-    heartbeat_kick();
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + cct->_conf->osd_map_message_max > newest) {
     _send_boot();
@@ -6077,11 +6078,9 @@ OSDService::ScrubJob::ScrubJob(const spg_t& pg, const utime_t& timestamp,
       pool_scrub_max_interval : g_conf->osd_scrub_max_interval;
 
     sched_time += scrub_min_interval;
-    int divisor = scrub_min_interval *
-      g_conf->osd_scrub_interval_randomize_ratio;
-    if (divisor > 0) {
-      sched_time += rand() % divisor;
-    }
+    double r = rand() / RAND_MAX;
+    sched_time +=
+      scrub_min_interval * g_conf->osd_scrub_interval_randomize_ratio * r;
     deadline += scrub_max_interval;
   }
 }
@@ -7210,7 +7209,7 @@ void OSD::handle_pg_create(OpRequestRef op)
     pg->write_if_dirty(*rctx.transaction);
     pg->publish_stats_to_osd();
     pg->unlock();
-    wake_pg_waiters(pg, pgid);
+    wake_pg_waiters(pgid);
     dispatch_context(rctx, pg, osdmap);
   }
 
@@ -7912,9 +7911,11 @@ bool OSD::_recover_now()
 void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
 {
   if (g_conf->osd_recovery_sleep > 0) {
+    handle.suspend_tp_timeout();
     utime_t t;
     t.set_from_double(g_conf->osd_recovery_sleep);
     t.sleep();
+    handle.reset_tp_timeout();
     dout(20) << __func__ << " slept for " << t << dendl;
   }
 
@@ -8485,7 +8486,7 @@ struct C_CompleteSplits : public Context {
       osd->dispatch_context_transaction(rctx, &**i);
 	to_complete.insert((*i)->info.pgid);
       (*i)->unlock();
-      osd->wake_pg_waiters(&**i, (*i)->info.pgid);
+      osd->wake_pg_waiters((*i)->info.pgid);
       to_complete.clear();
     }
 
@@ -8817,6 +8818,7 @@ int OSD::init_op_flags(OpRequestRef& op)
     case CEPH_OSD_OP_READ:
     case CEPH_OSD_OP_SYNC_READ:
     case CEPH_OSD_OP_SPARSE_READ:
+    case CEPH_OSD_OP_WRITEFULL:
       if (m->ops.size() == 1 &&
           (iter->op.flags & CEPH_OSD_OP_FLAG_FADVISE_NOCACHE ||
            iter->op.flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED)) {

@@ -77,7 +77,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesSnapOnDiskFlag) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
   ASSERT_EQ(0, librbd::snap_set(ictx, "snap1"));
 
   C_SaferCond cond_ctx;

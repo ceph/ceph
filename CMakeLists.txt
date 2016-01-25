@@ -77,6 +77,7 @@ CHECK_INCLUDE_FILES("fcgios.h" FASTCGI_FASTCGIOS_DIR)
 CHECK_INCLUDE_FILES("fcgi_stdio.h" HAVE_FASTCGI_STDIO_H)
 CHECK_INCLUDE_FILES("openssl/ssl.h" HAVE_SSL_H)
 CHECK_INCLUDE_FILES("keyutils.h" HAVE_KEYUTILS_H)
+CHECK_INCLUDE_FILES("execinfo.h" HAVE_EXECINFO_H)
 
 include(CheckSymbolExists)
 CHECK_SYMBOL_EXISTS(__u8 "sys/types.h;linux/types.h" HAVE___U8)
@@ -152,6 +153,7 @@ find_package(expat REQUIRED)
 set(HAVE_EXPAT ${EXPAT_FOUND})
 endif(${WITH_EXPAT})
 
+find_package(Cython REQUIRED)
 find_package(fcgi REQUIRED)
 
 find_package(atomic_ops REQUIRED)
@@ -171,19 +173,29 @@ endif(${WITH_GPERFTOOLS})
 
 find_package(snappy REQUIRED)
 
-option(WITH_TCMALLOC "Use TCMalloc as Allocator" ON)
-if(${WITH_TCMALLOC})
-find_package(tcmalloc REQUIRED)
-set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
-endif(${WITH_TCMALLOC})
+#if allocator is set on command line make sure it matches below strings
+if(ALLOCATOR)
+  if(${ALLOCATOR} STREQUAL "tcmalloc")
+    find_package(tcmalloc REQUIRED)
+    set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
+  elseif(${ALLOCATOR} STREQUAL "jemalloc")
+    find_package(JeMalloc REQUIRED)
+  endif()
+else(ALLOCATOR)
+  find_package(tcmalloc)
+  set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
+  find_package(JeMalloc)
+  if(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+    message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
+    set(ALLOCATOR "libc")
+  endif(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+endif(ALLOCATOR)
 
 find_package(keyutils REQUIRED)
 
 find_package(libuuid REQUIRED)
 
 find_package(libcurl REQUIRED)
-
-find_package(libedit REQUIRED)
 
 option(USE_CRYPTOPP "Cryptopp is ON" ON)
 find_package(cryptopp)
@@ -206,9 +218,9 @@ else()
 	endif(NSS_FOUND)
 endif(CRYPTOPP_FOUND)
 
-option(WITH_XIO "Enable XIO messaging" ON)
+option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
-find_package(xio)
+  find_package(xio REQUIRED)
 set(HAVE_XIO ${Xio_FOUND})
 endif(WITH_XIO)
 
@@ -228,6 +240,27 @@ if(WITH_REENTRANT_STRSIGNAL)
     set(HAVE_REENTRANT_STRSIGNAL 1 CACHE INTERNAL "Reentrant strsignal is supported.")
 endif(WITH_REENTRANT_STRSIGNAL)
 
+set(HAVE_LIBROCKSDB 1)
+
+# -lz link into kv
+find_package(ZLIB REQUIRED)
+
+#option for LTTng
+option(WITH_LTTNG "LTTng tracing is enabled" ON)
+if(${WITH_LTTNG})
+  find_package(lttng-ust)
+  set(WITH_LTTNG ${LTTNG_FOUND})
+endif(${WITH_LTTNG})
+
+#option for Babeltrace
+option(HAVE_BABELTRACE "Babeltrace libraries are enabled" ON)
+if(${HAVE_BABELTRACE})
+  find_package(babeltrace REQUIRED)
+  set(WITH_BABELTRACE ${BABELTRACE_FOUND})
+  set(HAVE_BABELTRACE_BABELTRACE_H ${BABELTRACE_FOUND})
+  set(HAVE_BABELTRACE_CTF_EVENTS_H ${BABELTRACE_FOUND})
+endif(${HAVE_BABELTRACE})
+
 # Now create a useable config.h
 configure_file(
   ${PROJECT_SOURCE_DIR}/src/include/config-h.in.cmake
@@ -244,7 +277,7 @@ else(${ENABLE_SHARED})
 endif(${ENABLE_SHARED})
 
 set(Boost_USE_MULTITHREADED ON)
-find_package(Boost COMPONENTS thread system regex random REQUIRED)
+find_package(Boost COMPONENTS thread system regex random program_options date_time REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 
 find_package(Threads REQUIRED)

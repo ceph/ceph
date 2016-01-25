@@ -278,9 +278,6 @@ public:
 
     IOContext ioc;
 
-    Mutex lock;
-    Cond cond;
-
     CollectionRef first_collection;  ///< first referenced collection
 
     TransContext(OpSequencer *o)
@@ -292,8 +289,7 @@ public:
 	onreadable(NULL),
 	onreadable_sync(NULL),
 	wal_txn(NULL),
-	ioc(this),
-	lock("BlueStore::TransContext::lock") {
+	ioc(this) {
       //cout << "txc new " << this << std::endl;
     }
     ~TransContext() {
@@ -498,7 +494,6 @@ private:
   Logger *logger;
 
   Mutex reap_lock;
-  Cond reap_cond;
   list<CollectionRef> removed_collections;
 
 
@@ -534,7 +529,8 @@ private:
   int _open_super_meta();
 
   int _reconcile_bluefs_freespace();
-  int _balance_bluefs_freespace(vector<bluestore_extent_t> *extents);
+  int _balance_bluefs_freespace(vector<bluestore_extent_t> *extents,
+				KeyValueDB::Transaction t);
   void _commit_bluefs_freespace(const vector<bluestore_extent_t>& extents);
 
   CollectionRef _get_collection(coll_t cid);

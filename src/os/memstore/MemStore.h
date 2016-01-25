@@ -292,7 +292,6 @@ private:
 
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
   RWLock coll_lock;    ///< rwlock to protect coll_map
-  Mutex apply_lock;    ///< serialize all updates
 
   CollectionRef get_collection(coll_t cid);
 
@@ -342,7 +341,6 @@ public:
     : ObjectStore(path),
       cct(cct),
       coll_lock("MemStore::coll_lock"),
-      apply_lock("MemStore::apply_lock"),
       finisher(cct),
       used_bytes(0) {}
   ~MemStore() { }

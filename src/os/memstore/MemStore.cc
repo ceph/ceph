@@ -52,6 +52,7 @@ int MemStore::mount()
 
 int MemStore::umount()
 {
+  finisher.wait_for_empty();
   finisher.stop();
   return _save();
 }
@@ -59,7 +60,6 @@ int MemStore::umount()
 int MemStore::_save()
 {
   dout(10) << __func__ << dendl;
-  Mutex::Locker l(apply_lock); // block any writer
   dump_all();
   set<coll_t> collections;
   for (ceph::unordered_map<coll_t,CollectionRef>::iterator p = coll_map.begin();
@@ -198,7 +198,9 @@ int MemStore::mkfs()
     if (r < 0)
       return r;
     dout(1) << __func__ << " new fsid " << fsid_str << dendl;
-  } else {
+  } else if (r < 0) {
+    return r;
+  } else {  
     dout(1) << __func__ << " had fsid " << fsid_str << dendl;
   }
 
@@ -305,7 +307,7 @@ int MemStore::read(
   if (offset >= o->get_size())
     return 0;
   size_t l = len;
-  if (l == 0)  // note: len == 0 means read the entire object
+  if (l == 0 && offset == 0)  // note: len == 0 means read the entire object
     l = o->get_size();
   else if (offset + l > o->get_size())
     l = o->get_size() - offset;
@@ -325,12 +327,15 @@ int MemStore::fiemap(coll_t cid, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  if (offset >= o->get_size())
-    return 0;
+  map<uint64_t, uint64_t> m;
   size_t l = len;
+  if (offset == 0 && len == 0)
+    l = o->get_size();
   if (offset + l > o->get_size())
     l = o->get_size() - offset;
-  map<uint64_t, uint64_t> m;
+  if (offset >= o->get_size())
+    goto out;
+ out:
   m[offset] = l;
   ::encode(m, bl);
   return 0;
@@ -396,7 +401,7 @@ bool MemStore::collection_empty(coll_t cid)
   dout(10) << __func__ << " " << cid << dendl;
   CollectionRef c = get_collection(cid);
   if (!c)
-    return -ENOENT;
+    return false;
   RWLock::RLocker l(c->lock);
 
   return c->object_map.empty();

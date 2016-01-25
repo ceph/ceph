@@ -1161,7 +1161,7 @@ TEST_F(ObjectContextTest, read_write_lock)
     EXPECT_EQ(1, obc.unstable_writes);
 
     Thread_read_lock t(obc);
-    t.create();
+    t.create("obc_read");
 
     do {
       cout << "Trying (1) with delay " << delay << "us\n";
@@ -1218,7 +1218,7 @@ TEST_F(ObjectContextTest, read_write_lock)
     EXPECT_EQ(0, obc.unstable_writes);
 
     Thread_write_lock t(obc);
-    t.create();
+    t.create("obc_write");
 
     do {
       cout << "Trying (3) with delay " << delay << "us\n";
@@ -1370,6 +1370,25 @@ TEST(coll_t, temp) {
   ASSERT_TRUE(temp.is_temp());
   ASSERT_TRUE(temp.is_temp(&pgid2));
   ASSERT_EQ(pgid, pgid2);
+}
+
+TEST(coll_t, assigment) {
+  spg_t pgid;
+  coll_t right(pgid);
+  ASSERT_EQ(right.to_str(), string("0.0_head"));
+
+  coll_t left, middle;
+
+  ASSERT_EQ(left.to_str(), string("meta"));
+  ASSERT_EQ(middle.to_str(), string("meta"));
+
+  left = middle = right;
+
+  ASSERT_EQ(left.to_str(), string("0.0_head"));
+  ASSERT_EQ(middle.to_str(), string("0.0_head"));
+  
+  ASSERT_NE(middle.c_str(), right.c_str());
+  ASSERT_NE(left.c_str(), middle.c_str());
 }
 
 TEST(ghobject_t, cmp) {

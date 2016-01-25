@@ -19,7 +19,7 @@ namespace librbd {
 
 AioImageRequestWQ::AioImageRequestWQ(ImageCtx *image_ctx, const string &name,
                                      time_t ti, ThreadPool *tp)
-  : ThreadPool::PointerWQ<AioImageRequest>(name, ti, 0, tp),
+  : ThreadPool::PointerWQ<AioImageRequest<> >(name, ti, 0, tp),
     m_image_ctx(*image_ctx),
     m_lock(util::unique_lock_name("AioImageRequestWQ::m_lock", this)),
     m_write_blockers(0), m_in_progress_writes(0), m_queued_writes(0),
@@ -27,6 +27,7 @@ AioImageRequestWQ::AioImageRequestWQ(ImageCtx *image_ctx, const string &name,
     m_shutdown(false), m_on_shutdown(nullptr) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << ": ictx=" << image_ctx << dendl;
+  tp->add_work_queue(this);
 }
 
 ssize_t AioImageRequestWQ::read(uint64_t off, uint64_t len, char *buf,
@@ -54,6 +55,7 @@ ssize_t AioImageRequestWQ::write(uint64_t off, uint64_t len, const char *buf,
   int r = clip_io(&m_image_ctx, off, &len);
   m_image_ctx.snap_lock.put_read();
   if (r < 0) {
+    lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -77,6 +79,7 @@ int AioImageRequestWQ::discard(uint64_t off, uint64_t len) {
   int r = clip_io(&m_image_ctx, off, &len);
   m_image_ctx.snap_lock.put_read();
   if (r < 0) {
+    lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -112,7 +115,7 @@ void AioImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty()) {
     queue(new AioImageRead(m_image_ctx, c, off, len, buf, pbl, op_flags));
   } else {
-    AioImageRequest::aio_read(&m_image_ctx, c, off, len, buf, pbl, op_flags);
+    AioImageRequest<>::aio_read(&m_image_ctx, c, off, len, buf, pbl, op_flags);
     finish_in_flight_op();
   }
 }
@@ -139,7 +142,7 @@ void AioImageRequestWQ::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
       writes_blocked()) {
     queue(new AioImageWrite(m_image_ctx, c, off, len, buf, op_flags));
   } else {
-    AioImageRequest::aio_write(&m_image_ctx, c, off, len, buf, op_flags);
+    AioImageRequest<>::aio_write(&m_image_ctx, c, off, len, buf, op_flags);
     finish_in_flight_op();
   }
 }
@@ -165,7 +168,7 @@ void AioImageRequestWQ::aio_discard(AioCompletion *c, uint64_t off,
       writes_blocked()) {
     queue(new AioImageDiscard(m_image_ctx, c, off, len));
   } else {
-    AioImageRequest::aio_discard(&m_image_ctx, c, off, len);
+    AioImageRequest<>::aio_discard(&m_image_ctx, c, off, len);
     finish_in_flight_op();
   }
 }
@@ -189,7 +192,7 @@ void AioImageRequestWQ::aio_flush(AioCompletion *c, bool native_async) {
       writes_blocked() || !writes_empty()) {
     queue(new AioImageFlush(m_image_ctx, c));
   } else {
-    AioImageRequest::aio_flush(&m_image_ctx, c);
+    AioImageRequest<>::aio_flush(&m_image_ctx, c);
     finish_in_flight_op();
   }
 }
@@ -262,7 +265,7 @@ void AioImageRequestWQ::unblock_writes() {
 }
 
 void *AioImageRequestWQ::_void_dequeue() {
-  AioImageRequest *peek_item = front();
+  AioImageRequest<> *peek_item = front();
   if (peek_item == NULL || m_refresh_in_progress) {
     return NULL;
   }
@@ -275,8 +278,8 @@ void *AioImageRequestWQ::_void_dequeue() {
     m_in_progress_writes.inc();
   }
 
-  AioImageRequest *item = reinterpret_cast<AioImageRequest *>(
-    ThreadPool::PointerWQ<AioImageRequest>::_void_dequeue());
+  AioImageRequest<> *item = reinterpret_cast<AioImageRequest<> *>(
+    ThreadPool::PointerWQ<AioImageRequest<> >::_void_dequeue());
   assert(peek_item == item);
 
   if (m_image_ctx.state->is_refresh_required()) {
@@ -292,7 +295,7 @@ void *AioImageRequestWQ::_void_dequeue() {
   return item;
 }
 
-void AioImageRequestWQ::process(AioImageRequest *req) {
+void AioImageRequestWQ::process(AioImageRequest<> *req) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << __func__ << ": ictx=" << &m_image_ctx << ", "
                  << "req=" << req << dendl;
@@ -373,7 +376,7 @@ bool AioImageRequestWQ::is_lock_required() const {
   return (!m_image_ctx.exclusive_lock->is_lock_owner());
 }
 
-void AioImageRequestWQ::queue(AioImageRequest *req) {
+void AioImageRequestWQ::queue(AioImageRequest<> *req) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << __func__ << ": ictx=" << &m_image_ctx << ", "
                  << "req=" << req << dendl;
@@ -384,14 +387,14 @@ void AioImageRequestWQ::queue(AioImageRequest *req) {
     m_queued_writes.inc();
   }
 
-  ThreadPool::PointerWQ<AioImageRequest>::queue(req);
+  ThreadPool::PointerWQ<AioImageRequest<> >::queue(req);
 
   if (write_op && is_lock_required()) {
     m_image_ctx.exclusive_lock->request_lock(nullptr);
   }
 }
 
-void AioImageRequestWQ::handle_refreshed(int r, AioImageRequest *req) {
+void AioImageRequestWQ::handle_refreshed(int r, AioImageRequest<> *req) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 15) << "resuming IO after image refresh: r=" << r << ", "
                  << "req=" << req << dendl;

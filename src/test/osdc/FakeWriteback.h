@@ -29,6 +29,8 @@ public:
 			   __u32 trunc_seq, ceph_tid_t journal_tid,
 			   Context *oncommit);
 
+  using WritebackHandler::write;
+
   virtual bool may_copy_on_write(const object_t&, uint64_t, uint64_t,
 				 snapid_t);
 private:

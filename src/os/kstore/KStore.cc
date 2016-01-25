@@ -69,11 +69,11 @@ const string PREFIX_OMAP = "M"; // u64 + keyname -> value
  * string encoding in the key
  *
  * The key string needs to lexicographically sort the same way that
- * ghobject_t does.  We do this by escaping anything <= to '%' with %
+ * ghobject_t does.  We do this by escaping anything <= to '#' with #
  * plus a 2 digit hex string, and anything >= '~' with ~ plus the two
  * hex digits.
  *
- * We use ! as a terminator for strings; this works because it is < %
+ * We use ! as a terminator for strings; this works because it is < #
  * and will get escaped if it is present in the string.
  *
  */
@@ -302,19 +302,13 @@ static int get_key_object(const string& key, ghobject_t *oid)
   const char *p = key.c_str();
 
   p = _key_decode_shard(p, &oid->shard_id);
-  if (!p)
-    return -2;
 
   uint64_t pool;
   p = _key_decode_u64(p, &pool);
-  if (!p)
-    return -3;
-  oid->hobj.pool = pool - 0x8000000000000000;
+  oid->hobj.pool = pool - 0x8000000000000000ull;
 
   unsigned hash;
   p = _key_decode_u32(p, &hash);
-  if (!p)
-    return -4;
   oid->hobj.set_bitwise_key_u32(hash);
   if (*p != '.')
     return -5;
@@ -330,7 +324,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
     ++p;
     r = decode_escaped(p, &oid->hobj.oid.name);
     if (r < 0)
-      return -8;
+      return -7;
     p += r + 1;
   } else if (*p == '<' || *p == '>') {
     // key + name
@@ -347,15 +341,17 @@ static int get_key_object(const string& key, ghobject_t *oid)
     oid->hobj.set_key(okey);
   } else {
     // malformed
-    return -7;
+    return -10;
   }
 
   p = _key_decode_u64(p, &oid->hobj.snap.val);
-  if (!p)
-    return -10;
   p = _key_decode_u64(p, &oid->generation);
-  if (!p)
-    return -11;
+  if (*p) {
+    // if we get something other than a null terminator here, 
+    // something goes wrong.
+    return -12;
+  }
+
   return 0;
 }
 
@@ -754,6 +750,7 @@ int KStore::_write_fsid()
   }
   r = ::fsync(fsid_fd);
   if (r < 0) {
+    r = -errno;
     derr << __func__ << " fsid fsync failed: " << cpp_strerror(r) << dendl;
     return r;
   }
@@ -854,8 +851,6 @@ int KStore::_open_db(bool create)
 			  fn);
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
-    delete db;
-    db = NULL;
     return -EIO;
   }
   string options;
@@ -957,6 +952,10 @@ int KStore::mkfs()
   if (r < 0)
     goto out_close_db;
 
+  r = write_meta("type", "kstore");
+  if (r < 0)
+    goto out_close_db;
+
   // indicate mkfs completion/success by writing the fsid file
   r = _write_fsid();
   if (r == 0)
@@ -1011,14 +1010,11 @@ int KStore::mount()
     goto out_db;
 
   finisher.start();
-  kv_sync_thread.create();
+  kv_sync_thread.create("kstore_kv_sync");
 
   mounted = true;
   return 0;
 
-  _kv_stop();
-  finisher.wait_for_empty();
-  finisher.stop();
  out_db:
   _close_db();
  out_fsid:
@@ -1437,7 +1433,6 @@ void KStore::_reap_collections()
   }
 
   dout(10) << __func__ << " all reaped" << dendl;
-  reap_cond.Signal();
 }
 
 // ---------------
@@ -1614,7 +1609,7 @@ int KStore::fiemap(
     len = o->onode.size;
 
   if (offset > o->onode.size)
-    return 0;
+    goto out;
 
   if (offset + len > o->onode.size) {
     len = o->onode.size - offset;
@@ -1623,8 +1618,10 @@ int KStore::fiemap(
   dout(20) << __func__ << " " << offset << "~" << len << " size "
 	   << o->onode.size << dendl;
 
-#warning write fiemap
+  // FIXME: do something smarter here
+  m[0] = o->onode.size;
 
+ out:
   ::encode(m, bl);
   dout(20) << __func__ << " " << offset << "~" << len
 	   << " size = 0 (" << m << ")" << dendl;
@@ -1709,7 +1706,7 @@ bool KStore::collection_empty(coll_t cid)
   dout(15) << __func__ << " " << cid << dendl;
   vector<ghobject_t> ls;
   ghobject_t next;
-  int r = collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, 5,
+  int r = collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, 1,
 			  &ls, &next);
   if (r < 0)
     return false;  // fixme?
@@ -2588,7 +2585,6 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_COLL_HINT:
       {
-        coll_t cid = i.get_cid(op->cid);
         uint32_t type = op->hint_type;
         bufferlist hint;
         i.decode_bl(hint);
@@ -3127,7 +3123,7 @@ int KStore::_truncate(TransContext *txc,
 
   RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
-  if (!o->exists) {
+  if (!o || !o->exists) {
     r = -ENOENT;
     goto out;
   }
@@ -3144,7 +3140,6 @@ int KStore::_do_remove(TransContext *txc,
 		       OnodeRef o)
 {
   string key;
-  o->exists = false;
 
   _do_truncate(txc, o, 0);
 
@@ -3411,10 +3406,6 @@ int KStore::_omap_rmkeys(TransContext *txc,
   if (!o->onode.omap_head) {
     r = 0;
     goto out;
-  }
-  if (!o->onode.omap_head) {
-    o->onode.omap_head = o->onode.nid;
-    txc->write_onode(o);
   }
   ::decode(num, p);
   while (num--) {
@@ -3695,7 +3686,6 @@ int KStore::_remove_collection(TransContext *txc, coll_t cid,
 {
   dout(15) << __func__ << " " << cid << dendl;
   int r;
-  bufferlist empty;
 
   {
     RWLock::WLocker l(coll_lock);
@@ -3737,6 +3727,10 @@ int KStore::_split_collection(TransContext *txc,
   c->cnode.bits = bits;
   assert(d->cnode.bits == bits);
   r = 0;
+
+  bufferlist bl;
+  ::encode(c->cnode, bl);
+  txc->t->set(PREFIX_COLL, stringify(c->cid), bl);
 
   dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "
 	   << " bits " << bits << " = " << r << dendl;

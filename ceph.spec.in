@@ -117,7 +117,6 @@ BuildRequires:	hdparm
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	libaio-devel
 BuildRequires:	libcurl-devel
-BuildRequires:	libedit-devel
 BuildRequires:	libxml2-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libudev-devel
@@ -127,11 +126,13 @@ BuildRequires:	parted
 BuildRequires:	perl
 BuildRequires:	pkgconfig
 BuildRequires:	python
+BuildRequires:	python-devel
 BuildRequires:	python-nose
 BuildRequires:	python-requests
 BuildRequires:	python-virtualenv
 BuildRequires:	snappy-devel
 BuildRequires:	util-linux
+BuildRequires:	valgrind-devel
 BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
@@ -843,6 +844,8 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/rados-classes/libcls_journal.so*
 %dir %{_libdir}/ceph/erasure-code
 %{_libdir}/ceph/erasure-code/libec_*.so*
+%dir %{_libdir}/ceph/compressor
+%{_libdir}/ceph/compressor/libceph_*.so*
 %if 0%{?_with_lttng}
 %{_libdir}/libos_tp.so*
 %{_libdir}/libosd_tp.so*
@@ -1178,6 +1181,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %files -n python-cephfs
 %defattr(-,root,root,-)
 %{python_sitelib}/cephfs.py*
+%{python_sitelib}/ceph_volume_client.py*
 
 #################################################################################
 %files -n ceph-test

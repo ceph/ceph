@@ -6,22 +6,22 @@
 
 #include <string>
 #include <map>
+#include <mutex>
 #include <ostream>
-#include "common/Mutex.h"
 #include "kv/KeyValueDB.h"
 
 class FreelistManager {
   std::string prefix;
-  Mutex lock;
+  std::mutex lock;
   uint64_t total_free;
 
   std::map<uint64_t, uint64_t> kv_free;    ///< mirrors our kv values in the db
 
   void _audit();
+  void _dump();
 
 public:
   FreelistManager() :
-    lock("FreelistManager::lock"),
     total_free(0) {
   }
 
@@ -31,7 +31,7 @@ public:
   void dump();
 
   uint64_t get_total_free() {
-    Mutex::Locker l(lock);
+    std::lock_guard<std::mutex> l(lock);
     return total_free;
   }
 

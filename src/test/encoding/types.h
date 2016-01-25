@@ -236,7 +236,7 @@ TYPE(ETableServer)
 TYPE(EUpdate)
 
 #ifdef WITH_RBD
-#include "librbd/JournalTypes.h"
+#include "librbd/journal/Entries.h"
 TYPE(librbd::journal::EventEntry)
 #include "librbd/WatchNotifyTypes.h"
 TYPE(librbd::watch_notify::NotifyMessage)

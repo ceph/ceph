@@ -178,19 +178,22 @@ function ceph_watch_wait()
 
 function test_mon_injectargs()
 {
-  CEPH_ARGS='--mon_debug_dump_location the.dump' ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'false'"
+  CEPH_ARGS='--mon_debug_dump_location the.dump' ceph tell osd.0 injectargs --no-osd_enable_op_tracker >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'false'"
   ! grep "the.dump" $TMPFILE || return 1
-  ceph tell osd.0 injectargs '--osd_debug_op_order --osd_failsafe_full_ratio .99' >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.99'"
-  ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'false'"
-  ceph tell osd.0 injectargs -- --osd_debug_op_order >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'true'"
-  ceph tell osd.0 injectargs -- '--osd_debug_op_order --osd_failsafe_full_ratio .98' >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.98'" 
-  ceph tell osd.0 injectargs -- '--osd_failsafe_full_ratio' >& $TMPFILE || return 1
-  check_response "Option --osd_failsafe_full_ratio requires an argument"
+  ceph tell osd.0 injectargs '--osd_enable_op_tracker --osd_op_history_duration 500' >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'true' osd_op_history_duration = '500'"
+  ceph tell osd.0 injectargs --no-osd_enable_op_tracker >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'false'"
+  ceph tell osd.0 injectargs -- --osd_enable_op_tracker >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'true'"
+  ceph tell osd.0 injectargs -- '--osd_enable_op_tracker --osd_op_history_duration 600' >& $TMPFILE || return 1
+  check_response "osd_enable_op_tracker = 'true' osd_op_history_duration = '600'"
+  ceph tell osd.0 injectargs -- '--osd_op_history_duration' >& $TMPFILE || return 1
+  check_response "Option --osd_op_history_duration requires an argument"
+
+  ceph tell osd.0 injectargs -- '--mon-lease 6' >& $TMPFILE || return 1
+  check_response "mon_lease = '6' (unchangeable)"
 }
 
 function test_mon_injectargs_SI()
@@ -1752,6 +1755,30 @@ function test_mon_deprecated_commands()
   ceph tell mon.a injectargs '--no-mon-debug-deprecated-as-obsolete'
 }
 
+function test_mon_cephdf_commands()
+{
+  # ceph df detail:
+  # pool section:
+  # RAW USED The near raw used per pool in raw total
+
+  ceph osd pool create cephdf_for_test 32 32 replicated
+  ceph osd pool set cephdf_for_test size 2
+
+  dd if=/dev/zero of=./cephdf_for_test bs=4k count=1
+  rados put cephdf_for_test cephdf_for_test -p cephdf_for_test
+
+  #wait for update
+  sleep 10
+
+  cal_raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' ' '{printf "%d\n", 2 * $4}'`
+  raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' '  '{print $11}'`
+
+  ceph osd pool delete cephdf_for_test cephdf_for_test --yes-i-really-really-mean-it
+  rm ./cephdf_for_test
+
+  expect_false test $cal_raw_used_size != $raw_used_size
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -1796,6 +1823,7 @@ OSD_TESTS+=" tiering_agent"
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
 MDS_TESTS+=" mon_mds_metadata"
+MDS_TESTS+=" mon_cephdf_commands"
 
 TESTS+=$MON_TESTS
 TESTS+=$OSD_TESTS

@@ -162,7 +162,7 @@ unittest_erasure_code_isa_SOURCES = \
 	erasure-code/ErasureCode.cc \
 	test/erasure-code/TestErasureCodeIsa.cc
 unittest_erasure_code_isa_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_erasure_code_isa_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL) .libs/libec_isa.la $(LIBERASURE_CODE)
+unittest_erasure_code_isa_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL) libisa.la $(LIBERASURE_CODE)
 if LINUX
 unittest_erasure_code_isa_LDADD += -ldl
 endif
@@ -172,7 +172,7 @@ unittest_erasure_code_plugin_isa_SOURCES = \
 	erasure-code/ErasureCode.cc \
 	test/erasure-code/TestErasureCodePluginIsa.cc
 unittest_erasure_code_plugin_isa_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_erasure_code_plugin_isa_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL) .libs/libec_isa.la $(LIBERASURE_CODE)
+unittest_erasure_code_plugin_isa_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBERASURE_CODE)
 if LINUX
 unittest_erasure_code_plugin_isa_LDADD += -ldl
 endif

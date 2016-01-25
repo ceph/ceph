@@ -258,7 +258,7 @@ struct bluestore_wal_op_t {
     OP_COPY = 2,
     OP_ZERO = 4,
   } type_t;
-  __u8 op;
+  __u8 op = 0;
   bluestore_extent_t extent;
   bluestore_extent_t src_extent;
   uint64_t src_rmw_head, src_rmw_tail;
@@ -279,7 +279,7 @@ WRITE_CLASS_ENCODER(bluestore_wal_op_t)
 
 /// writeahead-logged transaction
 struct bluestore_wal_transaction_t {
-  uint64_t seq;
+  uint64_t seq = 0;
   list<bluestore_wal_op_t> ops;
   interval_set<uint64_t> released;  ///< allocations to release after wal
 

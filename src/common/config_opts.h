@@ -39,6 +39,7 @@ OPTION(restapi_log_level, OPT_STR, "") 	// default set by Python code
 OPTION(restapi_base_url, OPT_STR, "")	// "
 OPTION(fatal_signal_handlers, OPT_BOOL, true)
 OPTION(erasure_code_dir, OPT_STR, CEPH_PKGLIBDIR"/erasure-code") // default location for erasure-code plugins
+OPTION(compression_dir, OPT_STR, CEPH_PKGLIBDIR"/compressor") // default location for compression plugins
 
 OPTION(log_file, OPT_STR, "/var/log/ceph/$cluster-$name.log") // default changed by common_preinit()
 OPTION(log_max_new, OPT_INT, 1000) // default changed by common_preinit()
@@ -139,7 +140,7 @@ SUBSYS(compressor, 1, 5)
 SUBSYS(newstore, 1, 5)
 SUBSYS(bluestore, 1, 5)
 SUBSYS(bluefs, 1, 5)
-SUBSYS(bdev, 1, 5)
+SUBSYS(bdev, 1, 3)
 SUBSYS(kstore, 1, 5)
 SUBSYS(rocksdb, 4, 5)
 SUBSYS(leveldb, 4, 5)
@@ -207,6 +208,7 @@ OPTION(mon_subscribe_interval, OPT_DOUBLE, 24*3600)  // for legacy clients only
 OPTION(mon_delta_reset_interval, OPT_DOUBLE, 10)   // seconds of inactivity before we reset the pg delta to 0
 OPTION(mon_osd_laggy_halflife, OPT_INT, 60*60)        // (seconds) how quickly our laggy estimations decay
 OPTION(mon_osd_laggy_weight, OPT_DOUBLE, .3)          // weight for new 'samples's in laggy estimations
+OPTION(mon_osd_laggy_max_interval, OPT_INT, 300)      // maximum value of laggy_interval in laggy estimations
 OPTION(mon_osd_adjust_heartbeat_grace, OPT_BOOL, true)    // true if we should scale based on laggy estimations
 OPTION(mon_osd_adjust_down_out_interval, OPT_BOOL, true)  // true if we should scale based on laggy estimations
 OPTION(mon_osd_auto_mark_in, OPT_BOOL, false)         // mark any booting osds 'in'
@@ -366,6 +368,9 @@ OPTION(client_debug_inject_tick_delay, OPT_INT, 0) // delay the client tick for 
 OPTION(client_max_inline_size, OPT_U64, 4096)
 OPTION(client_inject_release_failure, OPT_BOOL, false)  // synthetic client bug for testing
 OPTION(client_inject_fixed_oldest_tid, OPT_BOOL, false)  // synthetic client bug for testing
+OPTION(client_metadata, OPT_STR, "")
+OPTION(client_acl_type, OPT_STR, "")
+OPTION(client_permissions, OPT_BOOL, true)
 
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
@@ -427,6 +432,7 @@ OPTION(mds_client_prealloc_inos, OPT_INT, 1000)
 OPTION(mds_early_reply, OPT_BOOL, true)
 OPTION(mds_default_dir_hash, OPT_INT, CEPH_STR_HASH_RJENKINS)
 OPTION(mds_log, OPT_BOOL, true)
+OPTION(mds_log_pause, OPT_BOOL, false)
 OPTION(mds_log_skip_corrupt_events, OPT_BOOL, false)
 OPTION(mds_log_max_events, OPT_INT, -1)
 OPTION(mds_log_events_per_segment, OPT_INT, 1024)
@@ -571,6 +577,9 @@ OPTION(osd_pool_default_size, OPT_INT, 3)
 OPTION(osd_pool_default_min_size, OPT_INT, 0)  // 0 means no specific default; ceph will use size-size/2
 OPTION(osd_pool_default_pg_num, OPT_INT, 8) // number of PGs for new pools. Configure in global or mon section of ceph.conf
 OPTION(osd_pool_default_pgp_num, OPT_INT, 8) // number of PGs for placement purposes. Should be equal to pg_num
+OPTION(osd_compression_plugins, OPT_STR,
+       "snappy"
+       ) // list of compression plugins
 OPTION(osd_pool_default_erasure_code_profile,
        OPT_STR,
        "plugin=jerasure "
@@ -837,7 +846,7 @@ OPTION(bdev_debug_inflight_ios, OPT_BOOL, false)
 OPTION(bdev_inject_crash, OPT_INT, 0)  // if N>0, then ~ 1/N IOs will complete before we crash on flush.
 OPTION(bdev_aio, OPT_BOOL, true)
 OPTION(bdev_aio_poll_ms, OPT_INT, 250)  // milliseconds
-OPTION(bdev_aio_max_queue_depth, OPT_INT, 4096)
+OPTION(bdev_aio_max_queue_depth, OPT_INT, 32)
 
 OPTION(bluefs_alloc_size, OPT_U64, 1048576)
 OPTION(bluefs_max_prefetch, OPT_U64, 1048576)
@@ -849,11 +858,11 @@ OPTION(bluefs_min_flush_size, OPT_U64, 65536)  // ignore flush until its this bi
 
 OPTION(bluestore_bluefs, OPT_BOOL, true)
 OPTION(bluestore_bluefs_env_mirror, OPT_BOOL, false) // mirror to normal Env for debug
-OPTION(bluestore_bluefs_initial_length, OPT_U64, 65536*1024)
-OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .01)
-OPTION(bluestore_bluefs_min_free_ratio, OPT_FLOAT, .1)
-OPTION(bluestore_bluefs_max_free_fs_main_ratio, OPT_FLOAT, .8)
-OPTION(bluestore_bluefs_min_gift_ratio, OPT_FLOAT, 1)
+OPTION(bluestore_bluefs_min, OPT_U64, 1*1024*1024*1024) // 1gb
+OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .02)  // min fs free / total free
+OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT, .90)  // max fs free / total free
+OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT, .02) // how much to add at a time
+OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at a time
 OPTION(bluestore_block_path, OPT_STR, "")
 OPTION(bluestore_block_size, OPT_U64, 10 * 1024*1024*1024)  // 10gb for testing
 OPTION(bluestore_block_db_path, OPT_STR, "")
@@ -887,10 +896,13 @@ OPTION(bluestore_overlay_max, OPT_INT, 0)
 OPTION(bluestore_open_by_handle, OPT_BOOL, true)
 OPTION(bluestore_o_direct, OPT_BOOL, true)
 OPTION(bluestore_clone_cow, OPT_BOOL, true)  // do copy-on-write for clones
+OPTION(bluestore_default_buffered_read, OPT_BOOL, false)
 OPTION(bluestore_debug_misc, OPT_BOOL, false)
 OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL, false)
 OPTION(bluestore_debug_small_allocations, OPT_INT, 0)
 OPTION(bluestore_debug_freelist, OPT_BOOL, false)
+OPTION(bluestore_debug_prefill, OPT_FLOAT, 0)
+OPTION(bluestore_debug_prefragment_max, OPT_INT, 1048576)
 
 OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
@@ -968,7 +980,10 @@ OPTION(filestore_collect_device_partition_information, OPT_BOOL, true)
 // data corruption in xfs prior to kernel 3.5.  filestore will
 // implicity disable this if it cannot confirm the kernel is newer
 // than that.
-OPTION(filestore_xfs_extsize, OPT_BOOL, true)
+// NOTE: This option involves a tradeoff: When disabled, fragmentation is
+// worse, but large sequential writes are faster. When enabled, large
+// sequential writes are slower, but fragmentation is reduced.
+OPTION(filestore_xfs_extsize, OPT_BOOL, false)
 
 OPTION(filestore_journal_parallel, OPT_BOOL, false)
 OPTION(filestore_journal_writeahead, OPT_BOOL, false)

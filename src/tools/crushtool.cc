@@ -68,19 +68,19 @@ static int get_fd_data(int fd, bufferlist &bl)
 void data_analysis_usage()
 {
 cout << "data output from testing routine ...\n";
-cout << "          absolute_weights\n";
-cout << "                the decimal weight of each OSD\n";
-cout << "                data layout: ROW MAJOR\n";
-cout << "                             OSD id (int), weight (int)\n";
+cout << "           absolute_weights\n";
+cout << "                  the decimal weight of each OSD\n";
+cout << "                  data layout: ROW MAJOR\n";
+cout << "                               OSD id (int), weight (int)\n";
 cout << "           batch_device_expected_utilization_all\n";
-cout << "                 the expected number of objects each OSD should receive per placement batch\n";
-cout << "                 which may be a decimal value\n";
-cout << "                 data layout: COLUMN MAJOR\n";
-cout << "                              round (int), objects expected on OSD 0...OSD n (float)\n";
+cout << "                  the expected number of objects each OSD should receive per placement batch\n";
+cout << "                  which may be a decimal value\n";
+cout << "                  data layout: COLUMN MAJOR\n";
+cout << "                               round (int), objects expected on OSD 0...OSD n (float)\n";
 cout << "           batch_device_utilization_all\n";
-cout << "                 the number of objects stored on each OSD during each placement round\n";
-cout << "                 data layout: COLUMN MAJOR\n";
-cout << "                              round (int), objects stored on OSD 0...OSD n (int)\n";
+cout << "                  the number of objects stored on each OSD during each placement round\n";
+cout << "                  data layout: COLUMN MAJOR\n";
+cout << "                               round (int), objects stored on OSD 0...OSD n (int)\n";
 cout << "           device_utilization_all\n";
 cout << "                  the number of objects stored on each OSD at the end of placements\n";
 cout << "                  data_layout: ROW MAJOR\n";
@@ -128,10 +128,11 @@ void usage()
   cout << "   [--outfn|-o outfile]\n";
   cout << "                         specify output for for (de)compilation\n";
   cout << "   --compile|-c map.txt  compile a map from source\n";
-  cout << "   --enable-unsafe-tunables compile with unsafe tunables\n";
+  cout << "   --enable-unsafe-tunables\n";
+  cout << "                         compile with unsafe tunables\n";
   cout << "   --build --num_osds N layer1 ...\n";
   cout << "                         build a new map, where each 'layer' is\n";
-  cout << "                           'name (uniform|straw|list|tree) size'\n";
+  cout << "                         'name (uniform|straw|list|tree) size'\n";
   cout << "\n";
   cout << "Options for the tunables adjustments stage\n";
   cout << "\n";
@@ -181,7 +182,7 @@ void usage()
   cout << "                         number generator in place of the CRUSH\n";
   cout << "                         algorithm\n";
   cout << "   --show-utilization    show OSD usage\n";
-  cout << "   --show utilization-all\n";
+  cout << "   --show-utilization-all\n";
   cout << "                         include zero weight items\n";
   cout << "   --show-statistics     show chi squared statistics\n";
   cout << "   --show-mappings       show mappings\n";
@@ -198,7 +199,7 @@ void usage()
   cout << "Options for the output stage\n";
   cout << "\n";
   cout << "   [--outfn|-o outfile]\n";
-  cout << "                         specify output for for modified crush map\n";
+  cout << "                         specify output for modified crush map\n";
   cout << "\n";
 }
 
@@ -643,7 +644,7 @@ int main(int argc, const char **argv)
 	  break;
 	}
       if (buckettype < 0) {
-	cerr << "unknown bucket type '" << l.buckettype << "'" << std::endl << std::endl;
+	cerr << "unknown bucket type '" << l.buckettype << "'" << std::endl;
 	exit(EXIT_FAILURE);
       }
 
@@ -678,8 +679,9 @@ int main(int argc, const char **argv)
 	int id;
 	int r = crush.add_bucket(0, buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights, &id);
 	if (r < 0) {
-	  dout(2) << "Couldn't add bucket: " << cpp_strerror(r) << dendl;
-	}
+          cerr << " Couldn't add bucket: " << cpp_strerror(r) << std::endl;
+          return r;
+        }
 
 	char format[20];
 	format[sizeof(format)-1] = '\0';
@@ -846,8 +848,11 @@ int main(int argc, const char **argv)
   }
 
   if (check) {
-    if (!tester.check_name_maps(max_id)) {
-      exit(1);
+    tester.check_overlapped_rules();
+    if (max_id >= 0) {
+      if (!tester.check_name_maps(max_id)) {
+	exit(1);
+      }
     }
   }
 

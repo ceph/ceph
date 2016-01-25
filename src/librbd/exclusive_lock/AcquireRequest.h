@@ -16,7 +16,7 @@ class Context;
 
 namespace librbd {
 
-class Journal;
+template <typename> class Journal;
 
 namespace exclusive_lock {
 
@@ -24,8 +24,9 @@ template <typename ImageCtxT = ImageCtx>
 class AcquireRequest {
 public:
   static AcquireRequest* create(ImageCtxT &image_ctx, const std::string &cookie,
-                                Context *on_finish);
+                                Context *on_acquire, Context *on_finish);
 
+  ~AcquireRequest();
   void send();
 
 private:
@@ -44,26 +45,28 @@ private:
    *          .   |                       |                             |
    *    . . . .   |                       |                             |
    *    .         v                       v                             |
-   *    .     OPEN_JOURNAL  . . .       GET_WATCHERS . . .              |
-   *    .         |             .         |              .              |
-   *    .         v             .         v              .              |
-   *    . . > OPEN_OBJECT_MAP   .       BLACKLIST        . (blacklist   |
-   *    .         |             .         |              .  disabled)   |
-   *    .         v             .         v              .              |
-   *    .     LOCK_OBJECT_MAP   .       BREAK_LOCK < . . .              |
-   *    .         |             .         |                             |
-   *    .         v             .         |                             |
-   *    . . > <finish>  < . . . .         |                             |
-   *                                      \-----------------------------/
-   *
+   *    .     OPEN_OBJECT_MAP           GET_WATCHERS . . .              |
+   *    .         |                       |              .              |
+   *    .         v                       v              .              |
+   *    .     LOCK_OBJECT_MAP           BLACKLIST        . (blacklist   |
+   *    .         |                       |              .  disabled)   |
+   *    .         v                       v              .              |
+   *    . . > OPEN_JOURNAL * *          BREAK_LOCK < . . .              |
+   *    .         |          *            |                             |
+   *    .         |          v            |                             |
+   *    .         |    UNLOCK_OBJECT_MAP  |                             |
+   *    .         |          |            \-----------------------------/
+   *    .         v          |
+   *    . . > <finish> <-----/
    * @endverbatim
    */
 
   AcquireRequest(ImageCtxT &image_ctx, const std::string &cookie,
-                 Context *on_finish);
+                 Context *on_acquire, Context *on_finish);
 
   ImageCtxT &m_image_ctx;
   std::string m_cookie;
+  Context *m_on_acquire;
   Context *m_on_finish;
 
   bufferlist m_out_bl;
@@ -79,6 +82,8 @@ private:
   std::string m_locker_address;
   uint64_t m_locker_handle;
 
+  int m_error_result;
+
   void send_lock();
   Context *handle_lock(int *ret_val);
 
@@ -90,6 +95,9 @@ private:
 
   Context *send_lock_object_map();
   Context *handle_lock_object_map(int *ret_val);
+
+  Context *send_unlock_object_map();
+  Context *handle_unlock_object_map(int *ret_val);
 
   void send_get_lockers();
   Context *handle_get_lockers(int *ret_val);
@@ -104,6 +112,7 @@ private:
   Context *handle_break_lock(int *ret_val);
 
   void apply();
+  void revert();
 };
 
 } // namespace exclusive_lock

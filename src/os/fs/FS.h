@@ -110,13 +110,16 @@ public:
     }
 
     int submit(aio_t &aio, int *retries) {
-      int attempts = 10;
+      // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
+      int attempts = 16;
+      int delay = 125;
       iocb *piocb = &aio.iocb;
       while (true) {
 	int r = io_submit(ctx, 1, &piocb);
 	if (r < 0) {
 	  if (r == -EAGAIN && attempts-- > 0) {
-	    usleep(500);
+	    usleep(delay);
+	    delay *= 2;
 	    (*retries)++;
 	    continue;
 	  }

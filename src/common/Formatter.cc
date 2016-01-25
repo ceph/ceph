@@ -139,8 +139,6 @@ void JSONFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
   os << m_ss.str();
-  if (m_pretty)
-    os << "\n";
   m_ss.clear();
   m_ss.str("");
 }
@@ -251,6 +249,8 @@ void JSONFormatter::close_section()
   }
   m_ss << (entry.is_array ? ']' : '}');
   m_stack.pop_back();
+  if (m_pretty && m_stack.empty())
+    m_ss << "\n";
 }
 
 void JSONFormatter::finish_pending_string()

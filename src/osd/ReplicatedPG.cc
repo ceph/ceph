@@ -63,7 +63,7 @@
 #include "include/rados/rados_types.hpp"
 
 #ifdef WITH_LTTNG
-#include "tracing/osd.h" // ??
+#include "tracing/osd.h"
 #else
 #define tracepoint(...)
 #endif
@@ -5696,16 +5696,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_read;
       tracepoint(osd, do_osd_op_pre_copy_get_classic, soid.oid.name.c_str(), soid.snap.val);
       result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc, true);
-      if (result == -EINVAL)
-	goto fail;
       break;
 
     case CEPH_OSD_OP_COPY_GET:
       ++ctx->num_read;
       tracepoint(osd, do_osd_op_pre_copy_get, soid.oid.name.c_str(), soid.snap.val);
       result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc, false);
-      if (result == -EINVAL)
-	goto fail;
       break;
 
     case CEPH_OSD_OP_COPY_FROM:

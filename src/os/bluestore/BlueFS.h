@@ -57,9 +57,17 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&File::dirty_item> > dirty_file_list_t;
 
-  struct Dir {
+  struct Dir : public RefCountedObject {
     map<string,FileRef> file_map;
+
+    friend void intrusive_ptr_add_ref(Dir *d) {
+      d->get();
+    }
+    friend void intrusive_ptr_release(Dir *d) {
+      d->put();
+    }
   };
+  typedef boost::intrusive_ptr<Dir> DirRef;
 
   struct FileWriter {
     FileRef file;
@@ -127,11 +135,13 @@ public:
   struct FileReader {
     FileRef file;
     FileReaderBuffer buf;
+    bool random;
     bool ignore_eof;        ///< used when reading our log file
 
-    FileReader(FileRef f, uint64_t mpf, bool ie = false)
+    FileReader(FileRef f, uint64_t mpf, bool rand, bool ie)
       : file(f),
 	buf(mpf),
+	random(rand),
 	ignore_eof(ie) {
       file->num_readers.inc();
     }
@@ -150,7 +160,7 @@ private:
   Cond cond;
 
   // cache
-  map<string, Dir*> dir_map;                      ///< dirname -> Dir
+  map<string, DirRef> dir_map;                    ///< dirname -> Dir
   ceph::unordered_map<uint64_t,FileRef> file_map; ///< ino -> File
   dirty_file_list_t dirty_files;                  ///< list of dirty files
 
@@ -179,8 +189,6 @@ private:
   vector<IOContext*> ioc;                     ///< IOContexts for bdevs
   vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
   vector<Allocator*> alloc;                   ///< allocators for bdevs
-
-  vector<IOContext*> ioc_reap_queue;          ///< iocs from closed writers
 
   void _init_alloc();
   void _stop_alloc();
@@ -214,6 +222,11 @@ private:
     uint64_t offset, ///< [in] offset
     size_t len,      ///< [in] this many bytes
     bufferlist *outbl,   ///< [out] optional: reference the result here
+    char *out);      ///< [out] optional: or copy it here
+  int _read_random(
+    FileReader *h,   ///< [in] read from here
+    uint64_t offset, ///< [in] offset
+    size_t len,      ///< [in] this many bytes
     char *out);      ///< [out] optional: or copy it here
 
   void _invalidate_cache(FileRef f, uint64_t offset, uint64_t length);
@@ -298,6 +311,10 @@ public:
   /// gift more block space
   void add_block_extent(unsigned bdev, uint64_t offset, uint64_t len);
 
+  /// reclaim block space
+  int reclaim_blocks(unsigned bdev, uint64_t want,
+		     uint64_t *offset, uint32_t *length);
+
   void flush(FileWriter *h) {
     Mutex::Locker l(lock);
     _flush(h, false);
@@ -315,8 +332,14 @@ public:
     // no need to hold the global lock here; we only touch h and
     // h->file, and read vs write or delete is already protected (via
     // atomics and asserts).
-    Mutex::Locker l(lock);
     return _read(h, buf, offset, len, outbl, out);
+  }
+  int read_random(FileReader *h, uint64_t offset, size_t len,
+		  char *out) {
+    // no need to hold the global lock here; we only touch h and
+    // h->file, and read vs write or delete is already protected (via
+    // atomics and asserts).
+    return _read_random(h, offset, len, out);
   }
   void invalidate_cache(FileRef f, uint64_t offset, uint64_t len) {
     Mutex::Locker l(lock);

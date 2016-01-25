@@ -402,12 +402,13 @@ int RocksDBStore::get(
     const string &key,
     bufferlist *out)
 {
+  assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now(g_ceph_context);
   int r = 0;
   KeyValueDB::Iterator it = get_iterator(prefix);
   it->lower_bound(key);
   if (it->valid() && it->key() == key) {
-    *out = it->value();
+    out->append(it->value_as_ptr());
   } else {
     r = -ENOENT;
   }
@@ -455,7 +456,8 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
 void RocksDBStore::compact()
 {
   logger->inc(l_rocksdb_compact);
-  db->CompactRange(NULL, NULL);
+  rocksdb::CompactRangeOptions options;
+  db->CompactRange(options, nullptr, nullptr);
 }
 
 
@@ -514,7 +516,7 @@ void RocksDBStore::compact_range_async(const string& start, const string& end)
   }
   compact_queue_cond.Signal();
   if (!compact_thread.is_started()) {
-    compact_thread.create();
+    compact_thread.create("rstore_commpact");
   }
 }
 bool RocksDBStore::check_omap_dir(string &omap_dir)
@@ -528,9 +530,10 @@ bool RocksDBStore::check_omap_dir(string &omap_dir)
 }
 void RocksDBStore::compact_range(const string& start, const string& end)
 {
-    rocksdb::Slice cstart(start);
-    rocksdb::Slice cend(end);
-    db->CompactRange(&cstart, &cend);
+  rocksdb::CompactRangeOptions options;
+  rocksdb::Slice cstart(start);
+  rocksdb::Slice cend(end);
+  db->CompactRange(options, &cstart, &cend);
 }
 RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()
 {
@@ -625,6 +628,13 @@ bufferlist RocksDBStore::RocksDBWholeSpaceIteratorImpl::value()
 {
   return to_bufferlist(dbiter->value());
 }
+
+bufferptr RocksDBStore::RocksDBWholeSpaceIteratorImpl::value_as_ptr()
+{
+  rocksdb::Slice val = dbiter->value();
+  return bufferptr(val.data(), val.size());
+}
+
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::status()
 {
   return dbiter->status().ok() ? 0 : -1;
@@ -636,7 +646,6 @@ string RocksDBStore::past_prefix(const string &prefix)
   limit.push_back(1);
   return limit;
 }
-
 
 RocksDBStore::WholeSpaceIterator RocksDBStore::_get_iterator()
 {

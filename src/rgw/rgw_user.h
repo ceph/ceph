@@ -267,9 +267,8 @@ struct RGWUserAdminOpState {
       return;
 
     size_t pos = _subuser.find(":");
-
     if (pos != string::npos) {
-      user_id.id = _subuser.substr(0, pos);
+      user_id.from_str(_subuser.substr(0, pos));
       subuser = _subuser.substr(pos+1);
     } else {
       subuser = _subuser;
@@ -522,6 +521,7 @@ private:
   /* API Contract Fulfilment */
   int execute_add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
   int execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
+  int remove_subuser_keys(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
 
   int add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
   int remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
