@@ -4955,6 +4955,19 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "crush ruleset " << n << " does not exist";
       return -ENOENT;
     }
+    const int64_t poolsize = p.get_size();
+    const int64_t minsize = osdmap.crush->get_rule_mask_min_size(n);
+    if (poolsize < minsize) {
+      ss << "pool size " << poolsize << " is smaller than crush ruleset " 
+         << n << " min size " << minsize;
+      return -EINVAL;
+    }
+    const int64_t maxsize = osdmap.crush->get_rule_mask_max_size(n);
+    if (poolsize > maxsize) {
+      ss << "pool size " << poolsize << " is bigger than crush ruleset " 
+         << n << " max size " << maxsize;
+      return -EINVAL;
+    }
     p.crush_ruleset = n;
   } else if (var == "hashpspool" || var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
