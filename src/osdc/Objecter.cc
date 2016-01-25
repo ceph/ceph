@@ -4364,7 +4364,6 @@ void Objecter::_dump_ops(const OSDSession *s, Formatter *fmt)
 void Objecter::dump_ops(Formatter *fmt)
 {
   fmt->open_array_section("ops");
-  rwlock.get_read();
   for (map<int, OSDSession *>::const_iterator siter = osd_sessions.begin();
        siter != osd_sessions.end(); ++siter) {
     OSDSession *s = siter->second;
@@ -4372,7 +4371,6 @@ void Objecter::dump_ops(Formatter *fmt)
     _dump_ops(s, fmt);
     s->lock.unlock();
   }
-  rwlock.unlock();
   _dump_ops(homeless_session, fmt);
   fmt->close_section(); // ops array
 }
@@ -4395,7 +4393,6 @@ void Objecter::_dump_linger_ops(const OSDSession *s, Formatter *fmt)
 void Objecter::dump_linger_ops(Formatter *fmt)
 {
   fmt->open_array_section("linger_ops");
-  rwlock.get_read();
   for (map<int, OSDSession *>::const_iterator siter = osd_sessions.begin();
        siter != osd_sessions.end(); ++siter) {
     OSDSession *s = siter->second;
@@ -4403,7 +4400,6 @@ void Objecter::dump_linger_ops(Formatter *fmt)
     _dump_linger_ops(s, fmt);
     s->lock.unlock();
   }
-  rwlock.unlock();
   _dump_linger_ops(homeless_session, fmt);
   fmt->close_section(); // linger_ops array
 }
@@ -4433,7 +4429,6 @@ void Objecter::_dump_command_ops(const OSDSession *s, Formatter *fmt)
 void Objecter::dump_command_ops(Formatter *fmt)
 {
   fmt->open_array_section("command_ops");
-  rwlock.get_read();
   for (map<int, OSDSession *>::const_iterator siter = osd_sessions.begin();
        siter != osd_sessions.end(); ++siter) {
     OSDSession *s = siter->second;
@@ -4441,7 +4436,6 @@ void Objecter::dump_command_ops(Formatter *fmt)
     _dump_command_ops(s, fmt);
     s->lock.unlock();
   }
-  rwlock.unlock();
   _dump_command_ops(homeless_session, fmt);
   fmt->close_section(); // command_ops array
 }
