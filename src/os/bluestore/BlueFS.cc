@@ -872,6 +872,7 @@ void BlueFS::_compact_log()
   log_writer->append(bl);
   int r = _flush(log_writer, true);
   assert(r == 0);
+  _flush_wait(log_writer);
 
   dout(10) << __func__ << " writing super" << dendl;
   super.log_fnode = log_file->fnode;
