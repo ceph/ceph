@@ -8,7 +8,7 @@ libclient_la_SOURCES = \
 	client/MetaSession.cc \
 	client/Trace.cc \
 	client/posix_acl.cc
-libclient_la_LIBADD = $(LIBOSDC) $(LIBEDIT_LIBS)
+libclient_la_LIBADD = $(LIBOSDC)
 noinst_LTLIBRARIES += libclient.la
 
 noinst_HEADERS += \

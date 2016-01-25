@@ -117,7 +117,6 @@ BuildRequires:	hdparm
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	libaio-devel
 BuildRequires:	libcurl-devel
-BuildRequires:	libedit-devel
 BuildRequires:	libxml2-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libudev-devel
