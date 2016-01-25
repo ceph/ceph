@@ -1610,9 +1610,6 @@ void Monitor::handle_probe(MonOpRequestRef op)
   }
 }
 
-/**
- * @todo fix this. This is going to cause trouble.
- */
 void Monitor::handle_probe_probe(MonOpRequestRef op)
 {
   MMonProbe *m = static_cast<MMonProbe*>(op->get_req());
