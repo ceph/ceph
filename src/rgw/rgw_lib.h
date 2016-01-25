@@ -3,6 +3,7 @@
 #ifndef RGW_LIB_H
 #define RGW_LIB_H
 
+#include <mutex>
 #include "include/unordered_map.h"
 #include "rgw_common.h"
 #include "rgw_client_io.h"
