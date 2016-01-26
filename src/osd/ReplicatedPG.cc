@@ -3238,14 +3238,6 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
     return NULL;
   }
 
-  RepGather *repop = simple_repop_create(obc);
-  OpContext *ctx = repop->ctx;
-  ctx->snapset_obc = snapset_obc;
-  ctx->lock_to_release = OpContext::W_LOCK;
-  ctx->release_snapset_obc = true;
-  ctx->at_version = get_next_version();
-
-  PGBackend::PGTransaction *t = ctx->op_t;
   set<snapid_t> new_snaps;
   for (set<snapid_t>::iterator i = old_snaps.begin();
        i != old_snaps.end();
@@ -3254,22 +3246,33 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
       new_snaps.insert(*i);
   }
 
+  vector<snapid_t>::iterator p = snapset.clones.end();
+
+  if (new_snaps.empty()) {
+    p = std::find(snapset.clones.begin(), snapset.clones.end(), coid.snap);
+    if (p == snapset.clones.end()) {
+      osd->clog->error() << __func__ << " Snap " << coid.snap << " not in clones" << "\n";
+      return NULL;
+    }
+  }
+
+  RepGather *repop = simple_repop_create(obc);
+  OpContext *ctx = repop->ctx;
+  ctx->snapset_obc = snapset_obc;
+  ctx->lock_to_release = OpContext::W_LOCK;
+  ctx->release_snapset_obc = true;
+  ctx->at_version = get_next_version();
+  PGBackend::PGTransaction *t = ctx->op_t;
+ 
   if (new_snaps.empty()) {
     // remove clone
     dout(10) << coid << " snaps " << old_snaps << " -> "
 	     << new_snaps << " ... deleting" << dendl;
 
     // ...from snapset
+    assert(p != snapset.clones.end());
+  
     snapid_t last = coid.snap;
-    vector<snapid_t>::iterator p;
-    for (p = snapset.clones.begin(); p != snapset.clones.end(); ++p)
-      if (*p == last)
-	break;
-    if (p == snapset.clones.end()) {
-      osd->clog->error() << __func__ << " Snap " << coid.snap << " not in clones" << "\n";
-      return NULL;
-    }
-
     ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(last);
 
     if (p != snapset.clones.begin()) {
