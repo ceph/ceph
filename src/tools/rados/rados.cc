@@ -3060,5 +3060,10 @@ int main(int argc, const char **argv)
     return 1;
   }
 
+  if (args.begin() != args.end()) {
+    cerr << "rados: unknown command: " << *args.begin() << std::endl;
+    return 1;
+  }
+
   return rados_tool_common(opts, args);
 }
