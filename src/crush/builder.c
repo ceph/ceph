@@ -176,7 +176,7 @@ int crush_add_bucket(struct crush_map *map,
 int crush_remove_bucket(struct crush_map *map, struct crush_bucket *bucket)
 {
 	int pos = -1 - bucket->id;
-
+       assert(pos < map->max_buckets);
 	map->buckets[pos] = NULL;
 	crush_destroy_bucket(bucket);
 	return 0;
