@@ -351,13 +351,13 @@ int RGWRemoteDataLog::read_log_info(rgw_datalog_info *log_info)
   return 0;
 }
 
-int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn)
+int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger)
 {
   if (initialized) {
     return 0;
   }
 
-  sync_env.init(store->ctx(), store, _conn, async_rados, &http_manager, NULL /* error_logger */, _source_zone);
+  sync_env.init(store->ctx(), store, _conn, async_rados, &http_manager, _error_logger, _source_zone);
 
   int ret = http_manager.set_threaded();
   if (ret < 0) {
@@ -1192,7 +1192,9 @@ int RGWDataSyncStatusManager::init()
 
   source_status_obj = rgw_obj(store->get_zone_params().log_pool, RGWDataSyncStatusManager::sync_status_oid(source_zone));
 
-  r = source_log.init(source_zone, conn);
+  error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
+
+  r = source_log.init(source_zone, conn, error_logger);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to init remote log, r=" << r << dendl;
     return r;
@@ -1231,7 +1233,7 @@ string RGWDataSyncStatusManager::shard_obj_name(const string& source_zone, int s
 }
 
 int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn, const string& _bucket_name,
-                             const string& _bucket_id, int _shard_id)
+                             const string& _bucket_id, int _shard_id, RGWSyncErrorLogger *_error_logger)
 {
   conn = _conn;
   source_zone = _source_zone;
@@ -1239,7 +1241,7 @@ int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn, con
   bucket_id = _bucket_id;
   shard_id = _shard_id;
 
-  sync_env.init(store->ctx(), store, conn, async_rados, http_manager, error_logger, source_zone);
+  sync_env.init(store->ctx(), store, conn, async_rados, http_manager, _error_logger, source_zone);
 
   return 0;
 }
@@ -1477,6 +1479,7 @@ RGWBucketSyncStatusManager::~RGWBucketSyncStatusManager() {
   for (map<int, RGWRemoteBucketLog *>::iterator iter = source_logs.begin(); iter != source_logs.end(); ++iter) {
     delete iter->second;
   }
+  delete error_logger;
 }
 
 
@@ -2284,12 +2287,13 @@ int RGWBucketSyncStatusManager::init()
   RGWBucketInfo& bi = result.data.get_bucket_info();
   num_shards = bi.num_shards;
 
+  error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
 
   int effective_num_shards = (num_shards ? num_shards : 1);
 
   for (int i = 0; i < effective_num_shards; i++) {
     RGWRemoteBucketLog *l = new RGWRemoteBucketLog(store, this, async_rados, &http_manager);
-    ret = l->init(source_zone, conn, bucket_name, bucket_id, (num_shards ? i : -1));
+    ret = l->init(source_zone, conn, bucket_name, bucket_id, (num_shards ? i : -1), error_logger);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed to initialize RGWRemoteBucketLog object" << dendl;
       return ret;

@@ -187,8 +187,7 @@ public:
       http_manager(store->ctx(), &completion_mgr),
       lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
       initialized(false) {}
-
-  int init(const string& _source_zone, RGWRESTConn *_conn);
+  int init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger);
   void finish();
 
   int read_log_info(rgw_datalog_info *log_info);
@@ -206,6 +205,7 @@ class RGWDataSyncStatusManager {
 
   string source_zone;
   RGWRESTConn *conn;
+  RGWSyncErrorLogger *error_logger;
 
   RGWRemoteDataLog source_log;
 
@@ -221,8 +221,11 @@ class RGWDataSyncStatusManager {
 public:
   RGWDataSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
                            const string& _source_zone)
-    : store(_store), source_zone(_source_zone), conn(NULL),
+    : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
       source_log(store, async_rados), num_shards(0) {}
+  ~RGWDataSyncStatusManager() {
+    delete error_logger;
+  }
   int init();
 
   rgw_data_sync_status& get_sync_status() { return sync_status; }
@@ -371,7 +374,6 @@ class RGWRemoteBucketLog : public RGWCoroutinesManager {
   RGWBucketSyncStatusManager *status_manager;
   RGWAsyncRadosProcessor *async_rados;
   RGWHTTPManager *http_manager;
-  RGWSyncErrorLogger *error_logger;
 
   RGWDataSyncEnv sync_env;
 
@@ -381,10 +383,10 @@ public:
   RGWRemoteBucketLog(RGWRados *_store, RGWBucketSyncStatusManager *_sm,
                      RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
                                        conn(NULL), shard_id(0),
-                                       status_manager(_sm), async_rados(_async_rados), http_manager(_http_manager), error_logger(NULL),
+                                       status_manager(_sm), async_rados(_async_rados), http_manager(_http_manager),
                                        sync_cr(NULL) {}
 
-  int init(const string& _source_zone, RGWRESTConn *_conn, const string& _bucket_name, const string& _bucket_id, int _shard_id);
+  int init(const string& _source_zone, RGWRESTConn *_conn, const string& _bucket_name, const string& _bucket_id, int _shard_id, RGWSyncErrorLogger *_error_logger);
   void finish();
 
   RGWCoroutine *read_sync_status_cr(rgw_bucket_shard_sync_info *sync_status);
@@ -405,6 +407,7 @@ class RGWBucketSyncStatusManager {
 
   string source_zone;
   RGWRESTConn *conn;
+  RGWSyncErrorLogger *error_logger;
 
   string bucket_name;
   string bucket_id;
@@ -427,7 +430,7 @@ public:
                                                                                      async_rados(NULL),
                                                                                      http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
                                                                                      source_zone(_source_zone),
-                                                                                     conn(NULL),
+                                                                                     conn(NULL), error_logger(NULL),
                                                                                      bucket_name(_bucket_name), bucket_id(_bucket_id),
                                                                                      num_shards(0) {}
   ~RGWBucketSyncStatusManager();

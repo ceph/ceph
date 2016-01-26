@@ -7,6 +7,9 @@
 
 #include "common/RWLock.h"
 
+#define ERROR_LOGGER_SHARDS 32
+#define RGW_SYNC_ERROR_LOG_SHARD_PREFIX "sync.error-log"
+
 struct rgw_mdlog_info {
   uint32_t num_shards;
 
@@ -20,6 +23,18 @@ class RGWAsyncRadosProcessor;
 class RGWMetaSyncStatusManager;
 class RGWMetaSyncCR;
 class RGWRESTConn;
+
+class RGWSyncErrorLogger {
+  RGWRados *store;
+
+  vector<string> oids;
+  int num_shards;
+
+  atomic_t counter;
+public:
+  RGWSyncErrorLogger(RGWRados *_store, const string oid_prefix, int _num_shards);
+  RGWCoroutine *log_error_cr(const string& section, const string& name, uint32_t error_code, const string& message);
+};
 
 #define DEFAULT_BACKOFF_MAX 30
 
@@ -82,11 +97,13 @@ struct RGWMetaSyncEnv {
   RGWRESTConn *conn;
   RGWAsyncRadosProcessor *async_rados;
   RGWHTTPManager *http_manager;
+  RGWSyncErrorLogger *error_logger;
 
-  RGWMetaSyncEnv() : cct(NULL), store(NULL), conn(NULL), async_rados(NULL), http_manager(NULL) {}
+  RGWMetaSyncEnv() : cct(NULL), store(NULL), conn(NULL), async_rados(NULL), http_manager(NULL), error_logger(NULL) {}
 
   void init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
-            RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager);
+            RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
+            RGWSyncErrorLogger *_error_logger);
 
   string shard_obj_name(int shard_id);
   string status_oid();
@@ -99,6 +116,7 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
 
   RGWHTTPManager http_manager;
   RGWMetaSyncStatusManager *status_manager;
+  RGWSyncErrorLogger *error_logger;
 
   RGWMetaSyncCR *meta_sync_cr;
 
@@ -116,7 +134,9 @@ public:
     : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
       store(_store), conn(NULL), async_rados(async_rados),
       http_manager(store->ctx(), &completion_mgr),
-      status_manager(_sm), meta_sync_cr(NULL) {}
+      status_manager(_sm), error_logger(NULL), meta_sync_cr(NULL) {}
+
+  ~RGWRemoteMetaLog();
 
   int init();
   void finish();

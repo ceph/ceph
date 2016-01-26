@@ -24,6 +24,52 @@ static string mdlog_sync_status_oid = "mdlog.sync-status";
 static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
 static string mdlog_sync_full_sync_index_prefix = "meta.full-sync.index";
 
+struct rgw_sync_error_info {
+  uint32_t error_code;
+  string message;
+
+  rgw_sync_error_info() : error_code(0) {}
+  rgw_sync_error_info(uint32_t _error_code, const string& _message) : error_code(_error_code), message(_message) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(error_code, bl);
+    ::encode(message, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(error_code, bl);
+    ::decode(message, bl);
+    DECODE_FINISH(bl);
+  } 
+};
+WRITE_CLASS_ENCODER(rgw_sync_error_info)
+
+RGWSyncErrorLogger::RGWSyncErrorLogger(RGWRados *_store, const string oid_prefix, int _num_shards) : store(_store), num_shards(_num_shards) {
+  char buf[oid_prefix.size() + 16];
+
+  for (int i = 0; i < num_shards; i++) {
+    snprintf(buf, sizeof(buf), "%s.%d", oid_prefix.c_str(), i);
+    oids.push_back(buf);
+  }
+}
+
+RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const string& section, const string& name, uint32_t error_code, const string& message) {
+  cls_log_entry entry;
+
+  rgw_sync_error_info info(error_code, message);
+  bufferlist bl;
+  ::encode(info, bl);
+  store->time_log_prepare_entry(entry, ceph_clock_now(store->ctx()), section, name, bl);
+
+  uint32_t shard_id = counter.inc() % num_shards;
+
+
+  return new RGWRadosTimelogAddCR(store, oids[shard_id], entry);
+}
+
 void RGWSyncBackoff::update_wait_time()
 {
   if (cur_wait == 0) {
@@ -135,6 +181,11 @@ void rgw_mdlog_shard_data::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("entries", entries, obj);
 };
 
+RGWRemoteMetaLog::~RGWRemoteMetaLog()
+{
+  delete error_logger;
+}
+
 int RGWRemoteMetaLog::read_log_info(rgw_mdlog_info *log_info)
 {
   rgw_http_param_pair pairs[] = { { "type", "metadata" },
@@ -160,6 +211,8 @@ int RGWRemoteMetaLog::init()
     ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
     return ret;
   }
+
+  error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
 
   init_sync_env(&sync_env);
 
@@ -290,12 +343,14 @@ int RGWMetaSyncStatusManager::init()
 }
 
 void RGWMetaSyncEnv::init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
-                          RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager) {
+                          RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
+                          RGWSyncErrorLogger *_error_logger) {
   cct = _cct;
   store = _store;
   conn = _conn;
   async_rados = _async_rados;
   http_manager = _http_manager;
+  error_logger = _error_logger;
 }
 
 string RGWMetaSyncEnv::status_oid()
@@ -1577,6 +1632,7 @@ void RGWRemoteMetaLog::init_sync_env(RGWMetaSyncEnv *env) {
   env->conn = conn;
   env->async_rados = async_rados;
   env->http_manager = &http_manager;
+  env->error_logger = error_logger;
 }
 
 int RGWRemoteMetaLog::clone_shards(int num_shards, vector<string>& clone_markers)
