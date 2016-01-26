@@ -375,10 +375,11 @@ public:
 
   virtual int validate_object_name(const string& bucket) { return 0; }
 
-  virtual int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
+  virtual int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
+  int postauth_init() { return 0; }
 };
 
 class RGWHandler_ObjStore_S3 : public RGWHandler_ObjStore {
@@ -392,10 +393,11 @@ public:
   int validate_bucket_name(const string& bucket, bool relaxed_names);
   using RGWHandler_ObjStore::validate_bucket_name;
   
-  virtual int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
+  virtual int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
+  int postauth_init();
 };
 
 class RGWHandler_ObjStore_Service_S3 : public RGWHandler_ObjStore_S3 {

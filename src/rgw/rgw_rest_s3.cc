@@ -2206,7 +2206,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_put()
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
   }
-  if (s->src_bucket_name.empty())
+  if (s->init_state.src_bucket.empty())
     return new RGWPutObj_ObjStore_S3;
   else
     return new RGWCopyObj_ObjStore_S3;
@@ -2286,12 +2286,9 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_fo
    * the bucket (and its tenant) from DNS and Host: header (HTTP_HOST)
    * into req_status.bucket_name directly.
    */
-  if (s->bucket_name.empty()) {
-    rgw_parse_url_bucket(first, s->bucket_tenant, s->bucket_name);
-    if (s->bucket_tenant.empty())
-      s->bucket_tenant = s->user.user_id.tenant;
-
-    ldout(s->cct, 20) << "s->user.user_id=" << s->user.user_id << " s->bucket_tenant=" << s->bucket_tenant << " s->bucket_name=" << s->bucket_name << dendl;
+  if (s->init_state.url_bucket.empty()) {
+    // Save bucket to tide us over until token is parsed.
+    s->init_state.url_bucket = first;
 
     if (pos >= 0) {
       string encoded_obj_str = req.substr(pos+1);
@@ -2299,6 +2296,39 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_fo
     }
   } else {
     s->object = rgw_obj_key(req_name, s->info.args.get("versionId"));
+  }
+  return 0;
+}
+
+int RGWHandler_ObjStore_S3::postauth_init()
+{
+  struct req_init_state *t = &s->init_state;
+  bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
+
+  rgw_parse_url_bucket(t->url_bucket, s->user.user_id.tenant, s->bucket_tenant, s->bucket_name);
+
+  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>"))
+           << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
+
+  int ret;
+  ret = validate_tenant_name(s->bucket_tenant);
+  if (ret)
+    return ret;
+  ret = validate_bucket_name(s->bucket_name, relaxed_names);
+  if (ret)
+    return ret;
+  ret = validate_object_name(s->object.name);
+  if (ret)
+    return ret;
+
+  if (!t->src_bucket.empty()) {
+    rgw_parse_url_bucket(t->src_bucket, s->user.user_id.tenant, s->src_tenant_name, s->src_bucket_name);
+    ret = validate_tenant_name(s->src_tenant_name);
+    if (ret)
+      return ret;
+    ret = validate_bucket_name(s->src_bucket_name, relaxed_names);
+    if (ret)
+      return ret;
   }
   return 0;
 }
@@ -2363,20 +2393,9 @@ int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket, bool rela
 
 int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
 {
-  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>"))
-           << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
-
   int ret;
-  ret = validate_tenant_name(s->bucket_tenant);
-  if (ret)
-    return ret;
-  bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
-  ret = validate_bucket_name(s->bucket_name, relaxed_names);
-  if (ret)
-    return ret;
-  ret = validate_object_name(s->object.name);
-  if (ret)
-    return ret;
+
+  s->dialect = "s3";
 
   const char *cacl = s->info.env->get("HTTP_X_AMZ_ACL");
   if (cacl)
@@ -2386,18 +2405,12 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
 
   const char *copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
   if (copy_source) {
-    string src_bucket_str;
-    ret = RGWCopyObj::parse_copy_location(copy_source, src_bucket_str, s->src_object);
+    ret = RGWCopyObj::parse_copy_location(copy_source, s->init_state.src_bucket, s->src_object);
     if (!ret) {
       ldout(s->cct, 0) << "failed to parse copy location" << dendl;
       return -EINVAL; // XXX why not -ERR_INVALID_BUCKET_NAME or -ERR_BAD_URL?
     }
-    rgw_parse_url_bucket(src_bucket_str, s->src_tenant_name, s->src_bucket_name);
-    if (s->src_tenant_name.empty())
-      s->src_tenant_name = s->user.user_id.tenant;
   }
-
-  s->dialect = "s3";
 
   return RGWHandler_ObjStore::init(store, s, cio);
 }
@@ -2565,10 +2578,6 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
         }
 
         s->perm_mask = RGW_PERM_FULL_CONTROL;
-
-        if (s->bucket_tenant.empty()) {
-          s->bucket_tenant = s->user.user_id.tenant;
-        }
       }
     }
   }
@@ -2584,10 +2593,6 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     if (rgw_get_user_info_by_access_key(store, auth_id, s->user) < 0) {
       dout(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << dendl;
       return -ERR_INVALID_ACCESS_KEY;
-    }
-
-    if (s->bucket_tenant.empty()) {
-      s->bucket_tenant = s->user.user_id.tenant;
     }
 
     /* now verify signature */
@@ -2662,7 +2667,6 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
   s->owner.set_id(s->user.user_id);
   s->owner.set_name(s->user.display_name);
 
-
   return  0;
 }
 
@@ -2681,7 +2685,7 @@ RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
   if (ret < 0)
     return NULL;
 
-  if (s->bucket_name.empty())
+  if (s->init_state.url_bucket.empty())
     return new RGWHandler_ObjStore_Service_S3;
 
   if (s->object.empty())
