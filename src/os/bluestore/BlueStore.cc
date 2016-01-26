@@ -2009,12 +2009,14 @@ int BlueStore::fsck()
 	    derr << " " << oid << " overlay " << v.first << " " << v.second
 		 << " extends past end of object" << dendl;
 	    ++errors;
+            continue; // go for next overlay
 	  }
 	  if (v.second.key > o->onode.last_overlay_key) {
 	    derr << " " << oid << " overlay " << v.first << " " << v.second
 		 << " is > last_overlay_key " << o->onode.last_overlay_key
 		 << dendl;
 	    ++errors;
+            continue; // go for next overlay
 	  }
 	  ++refs[v.second.key];
 	  string key;
@@ -2026,6 +2028,7 @@ int BlueStore::fsck()
 	    derr << " " << oid << " overlay " << v.first << " " << v.second
 		 << " failed to fetch: " << cpp_strerror(r) << dendl;
 	    ++errors;
+            continue;
 	  }
 	  if (val.length() < v.second.value_offset + v.second.length) {
 	    derr << " " << oid << " overlay " << v.first << " " << v.second
