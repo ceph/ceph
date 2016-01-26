@@ -1605,9 +1605,6 @@ int KStore::fiemap(
     return -ENOENT;
   }
 
-  if (offset == len && offset == 0)
-    len = o->onode.size;
-
   if (offset > o->onode.size)
     goto out;
 

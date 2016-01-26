@@ -2580,9 +2580,6 @@ int BlueStore::fiemap(
   map<uint64_t,bluestore_extent_t>::iterator bp, bend;
   map<uint64_t,bluestore_overlay_t>::iterator op, oend;
 
-  if (offset == len && offset == 0)
-    len = o->onode.size;
-
   if (offset > o->onode.size)
     goto out;
 
