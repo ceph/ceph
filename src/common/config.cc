@@ -987,8 +987,10 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
   return -ENOSYS;
 }
 
-static const char *CONF_METAVARIABLES[] =
-  { "cluster", "type", "name", "host", "num", "id", "pid", "cctid" };
+static const char *CONF_METAVARIABLES[] = {
+  "data_dir", // put this first: it may contain some of the others
+  "cluster", "type", "name", "host", "num", "id", "pid", "cctid"
+};
 static const int NUM_CONF_METAVARIABLES =
       (sizeof(CONF_METAVARIABLES) / sizeof(CONF_METAVARIABLES[0]));
 
@@ -1102,7 +1104,20 @@ bool md_config_t::expand_meta(std::string &origval,
 	  out += stringify(getpid());
 	else if (var == "cctid")
 	  out += stringify((unsigned long long)this);
-	else
+	else if (var == "data_dir") {
+	  if (data_dir_option.length()) {
+	    char *vv = NULL;
+	    _get_val(data_dir_option.c_str(), &vv, -1);
+	    string tmp = vv;
+	    free(vv);
+	    expand_meta(tmp, NULL, stack, oss);
+	    out += tmp;
+	  } else {
+	    // this isn't really right, but it'll result in a mangled
+	    // non-existent path that will fail any search list
+	    out += "$data_dir";
+	  }
+	} else
 	  assert(0); // unreachable
 	expanded = true;
       }
