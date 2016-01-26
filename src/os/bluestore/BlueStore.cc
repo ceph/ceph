@@ -4113,11 +4113,11 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_ADD:
-      assert(0 == "not implmeented");
+      assert(0 == "not implemented");
       break;
 
     case Transaction::OP_COLL_REMOVE:
-      assert(0 == "not implmeented");
+      assert(0 == "not implemented");
       break;
 
     case Transaction::OP_COLL_MOVE:
@@ -4142,7 +4142,7 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_RENAME:
-      assert(0 == "not implmeneted");
+      assert(0 == "not implemented");
       break;
 
     case Transaction::OP_OMAP_CLEAR:
@@ -5287,8 +5287,11 @@ int BlueStore::_write(TransContext *txc,
 	   << " " << offset << "~" << length
 	   << dendl;
   RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, true);
-  _assign_nid(txc, o);
+  OnodeRef o = c->get_onode(oid, false);
+  if (!o) {
+    o = c->get_onode(oid, true);
+    _assign_nid(txc, o);
+  }
   int r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
   txc->write_onode(o);
 
@@ -5324,9 +5327,13 @@ int BlueStore::_zero(TransContext *txc,
 
   RWLock::WLocker l(c->lock);
   EnodeRef enode;
-  OnodeRef o = c->get_onode(oid, true);
-  _dump_onode(o);
-  _assign_nid(txc, o);
+  OnodeRef o = c->get_onode(oid, false);
+  if (o) {
+    _dump_onode(o);
+  } else {
+    o = c->get_onode(oid, true); 
+    _assign_nid(txc, o);
+  } 
 
   // overlay
   _do_overlay_trim(txc, o, offset, length);
@@ -5964,17 +5971,21 @@ int BlueStore::_clone(TransContext *txc,
     r = -ENOENT;
     goto out;
   }
-  newo = c->get_onode(new_oid, true);
+
+  newo = c->get_onode(new_oid, false);
+  if (newo) {
+    r = _do_truncate(txc, c, newo, 0);
+    if (r < 0)
+      goto out;
+  } else {
+    newo = c->get_onode(new_oid, true);
+    _assign_nid(txc, newo);
+  }
   assert(newo);
   newo->exists = true;
-  _assign_nid(txc, newo);
 
   // data
   oldo->flush();
-
-  r = _do_truncate(txc, c, newo, 0);
-  if (r < 0)
-    goto out;
 
   if (g_conf->bluestore_clone_cow) {
     EnodeRef e = c->get_enode(newo->oid.hobj.get_hash());
@@ -6068,10 +6079,15 @@ int BlueStore::_clone_range(TransContext *txc,
     r = -ENOENT;
     goto out;
   }
-  newo = c->get_onode(new_oid, true);
+  
+  newo = c->get_onode(new_oid, false);
+  if (!newo) {
+    newo = c->get_onode(new_oid, true);
+    _assign_nid(txc, newo);	
+  }
   assert(newo);
   newo->exists = true;
-
+ 
   r = _do_read(oldo, srcoff, length, bl, 0);
   if (r < 0)
     goto out;
@@ -6108,13 +6124,13 @@ int BlueStore::_rename(TransContext *txc,
     r = -ENOENT;
     goto out;
   }
-  newo = c->get_onode(new_oid, true);
-  assert(newo);
 
-  if (newo->exists) {
+  newo = c->get_onode(new_oid, false);
+  if (newo && newo->exists) {
+    // destination object already exists, remove it first
     r = _do_remove(txc, c, newo);
     if (r < 0)
-      return r;
+      goto out;
   }
 
   txc->t->rmkey(PREFIX_OBJ, oldo->key);
