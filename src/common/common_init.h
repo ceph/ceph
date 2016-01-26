@@ -57,7 +57,8 @@ enum common_init_flags_t {
  * Your library may also supply functions to read a configuration file.
  */
 CephContext *common_preinit(const CephInitParameters &iparams,
-			    enum code_environment_t code_env, int flags);
+			    enum code_environment_t code_env, int flags,
+			    const char *data_dir_option = 0);
 
 /* Print out some parse errors. */
 void complain_about_parse_errors(CephContext *cct,

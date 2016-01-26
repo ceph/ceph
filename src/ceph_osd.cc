@@ -119,7 +119,8 @@ int main(int argc, const char **argv)
   // option, therefore we will pass it as a default argument to global_init().
   def_args.push_back("--leveldb-log=");
 
-  global_init(&def_args, args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON, 0);
+  global_init(&def_args, args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON,
+	      0, "osd_data");
   ceph_heap_profiler_init();
 
   // osd specific args
