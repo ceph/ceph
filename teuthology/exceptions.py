@@ -138,3 +138,10 @@ class SELinuxError(Exception):
     def __str__(self):
         return "SELinux denials found on {node}: {denials}".format(
             node=self.node, denials=self.denials)
+
+class QuotaExceededError(Exception):
+    def __init__(self, message):
+        self.message = message
+
+    def __str__(self):
+        return self.message
