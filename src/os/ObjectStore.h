@@ -431,6 +431,36 @@ public:
         largest_data_off_in_tbl(0),
 	fadvise_flags(0) { }
 
+      // override default move operations to reset default values
+      TransactionData(TransactionData&& other) :
+        ops(other.ops),
+        largest_data_len(other.largest_data_len),
+        largest_data_off(other.largest_data_off),
+        largest_data_off_in_tbl(other.largest_data_off_in_tbl),
+        fadvise_flags(other.fadvise_flags) {
+        other.ops = 0;
+        other.largest_data_len = 0;
+        other.largest_data_off = 0;
+        other.largest_data_off_in_tbl = 0;
+        other.fadvise_flags = 0;
+      }
+      TransactionData& operator=(TransactionData&& other) {
+        ops = other.ops;
+        largest_data_len = other.largest_data_len;
+        largest_data_off = other.largest_data_off;
+        largest_data_off_in_tbl = other.largest_data_off_in_tbl;
+        fadvise_flags = other.fadvise_flags;
+        other.ops = 0;
+        other.largest_data_len = 0;
+        other.largest_data_off = 0;
+        other.largest_data_off_in_tbl = 0;
+        other.fadvise_flags = 0;
+        return *this;
+      }
+
+      TransactionData(const TransactionData& other) = default;
+      TransactionData& operator=(const TransactionData& other) = default;
+
       void encode(bufferlist& bl) const {
         bl.append((char*)this, sizeof(TransactionData));
       }
@@ -442,16 +472,16 @@ public:
   private:
     TransactionData data;
 
-    void *osr; // NULL on replay
+    void *osr {nullptr}; // NULL on replay
 
-    bool use_tbl;   //use_tbl for encode/decode
+    bool use_tbl {false};   //use_tbl for encode/decode
     bufferlist tbl;
 
     map<coll_t, __le32> coll_index;
     map<ghobject_t, __le32, ghobject_t::BitwiseComparator> object_index;
 
-    __le32 coll_id;
-    __le32 object_id;
+    __le32 coll_id {0};
+    __le32 object_id {0};
 
     bufferlist data_bl;
     bufferlist op_bl;
@@ -463,6 +493,62 @@ public:
     list<Context *> on_applied_sync;
 
   public:
+    Transaction() = default;
+
+    Transaction(bufferlist::iterator &dp) {
+      decode(dp);
+    }
+    Transaction(bufferlist &nbl) {
+      bufferlist::iterator dp = nbl.begin();
+      decode(dp);
+    }
+
+    // override default move operations to reset default values
+    Transaction(Transaction&& other) :
+      data(std::move(other.data)),
+      osr(other.osr),
+      use_tbl(other.use_tbl),
+      tbl(std::move(other.tbl)),
+      coll_index(std::move(other.coll_index)),
+      object_index(std::move(other.object_index)),
+      coll_id(other.coll_id),
+      object_id(other.object_id),
+      data_bl(std::move(other.data_bl)),
+      op_bl(std::move(other.op_bl)),
+      op_ptr(std::move(other.op_ptr)),
+      on_applied(std::move(other.on_applied)),
+      on_commit(std::move(other.on_commit)),
+      on_applied_sync(std::move(other.on_applied_sync)) {
+      other.osr = nullptr;
+      other.use_tbl = false;
+      other.coll_id = 0;
+      other.object_id = 0;
+    }
+
+    Transaction& operator=(Transaction&& other) {
+      data = std::move(other.data);
+      osr = other.osr;
+      use_tbl = other.use_tbl;
+      tbl = std::move(other.tbl);
+      coll_index = std::move(other.coll_index);
+      object_index = std::move(other.object_index);
+      coll_id = other.coll_id;
+      object_id = other.object_id;
+      data_bl = std::move(other.data_bl);
+      op_bl = std::move(other.op_bl);
+      op_ptr = std::move(other.op_ptr);
+      on_applied = std::move(other.on_applied);
+      on_commit = std::move(other.on_commit);
+      on_applied_sync = std::move(other.on_applied_sync);
+      other.osr = nullptr;
+      other.use_tbl = false;
+      other.coll_id = 0;
+      other.object_id = 0;
+      return *this;
+    }
+
+    Transaction(const Transaction& other) = default;
+    Transaction& operator=(const Transaction& other) = default;
 
     /* Operations on callback contexts */
     void register_on_applied(Context *c) {
@@ -1586,30 +1672,6 @@ public:
         _op->expected_write_size = expected_write_size;
       }
       data.ops++;
-    }
-
-    // etc.
-    Transaction() :
-      osr(NULL),
-      use_tbl(false),
-      coll_id(0),
-      object_id(0) { }
-
-    Transaction(bufferlist::iterator &dp) :
-      osr(NULL),
-      use_tbl(false),
-      coll_id(0),
-      object_id(0) {
-      decode(dp);
-    }
-
-    Transaction(bufferlist &nbl) :
-      osr(NULL),
-      use_tbl(false),
-      coll_id(0),
-      object_id(0) {
-      bufferlist::iterator dp = nbl.begin();
-      decode(dp);
     }
 
     void encode(bufferlist& bl) const {
