@@ -346,6 +346,29 @@ def remove_configuration_files(ctx):
         proc.wait()
 
 
+def undo_multipath(ctx):
+    """
+    Undo any multipath device mappings created, an
+    remove the packages/daemon that manages them so they don't
+    come back unless specifically requested by the test.
+    """
+    for remote in ctx.cluster.remotes.iterkeys():
+        remote.run(
+            args=[
+                'sudo', 'multipath', '-F',
+            ],
+            check_status=False,
+        )
+        install_task.remove_packages(
+            ctx,
+            dict(),     # task config not relevant here
+            {
+                "rpm": ['multipath-tools', 'device-mapper-multipath'],
+                "deb": ['multipath-tools'],
+            }
+        )
+
+
 def synch_clocks(remotes):
     nodes = {}
     for remote in remotes:
@@ -701,6 +724,8 @@ def nuke_helper(ctx, should_unlock):
                           '/lib/firmware/updates/.git/index.lock', ])
 
     remove_configuration_files(ctx)
+    log.info('Removing any multipath config/pkgs...')
+    undo_multipath(ctx)
     log.info('Reseting syslog output locations...')
     reset_syslog_dir(ctx)
     log.info('Clearing filesystem of test data...')
