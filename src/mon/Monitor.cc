@@ -1603,8 +1603,8 @@ void Monitor::handle_probe(MonOpRequestRef op)
 
   case MMonProbe::OP_MISSING_FEATURES:
     derr << __func__ << " missing features, have " << CEPH_FEATURES_ALL
-	 << ", required " << required_features
-	 << ", missing " << (required_features & ~CEPH_FEATURES_ALL)
+	 << ", required " << m->required_features
+	 << ", missing " << (m->required_features & ~CEPH_FEATURES_ALL)
 	 << dendl;
     break;
   }
