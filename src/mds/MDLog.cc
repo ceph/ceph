@@ -356,6 +356,11 @@ void MDLog::_submit_thread()
   submit_mutex.Lock();
 
   while (!mds->is_daemon_stopping()) {
+    if (g_conf->mds_log_pause) {
+      submit_cond.Wait(submit_mutex);
+      continue;
+    }
+
     map<uint64_t,list<PendingEvent> >::iterator it = pending_events.begin();
     if (it == pending_events.end()) {
       submit_cond.Wait(submit_mutex);
@@ -458,6 +463,12 @@ void MDLog::flush()
 
   if (do_flush)
     journaler->flush();
+}
+
+void MDLog::kick_submitter()
+{
+  Mutex::Locker l(submit_mutex);
+  submit_cond.Signal();
 }
 
 void MDLog::cap()

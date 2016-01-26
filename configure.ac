@@ -454,11 +454,6 @@ AC_ARG_WITH([profiler],
 AS_IF([test "x$with_profiler" = xyes],
 	    [AC_CHECK_LIB([profiler], [ProfilerFlush], [],
 	        	  [AC_MSG_FAILURE([--with-profiler was given but libprofiler (libgoogle-perftools-dev on debian) not found])])
-             AC_LANG_PUSH([C++])
-             AC_CHECK_HEADERS([gperftools/heap-profiler.h \
-               gperftools/malloc_extension.h \
-               gperftools/profiler.h])
-             AC_LANG_POP([C++])
             ],
 	    [])
 AM_CONDITIONAL(WITH_PROFILER, test "$with_profiler" = "yes")
@@ -591,6 +586,15 @@ AS_IF([test "x$with_tcmalloc" != xno],
 		  [no tcmalloc found (use --without-tcmalloc to disable)])])])
 AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
 
+AS_IF([test "$with_profiler" = yes -o \
+            "$HAVE_LIBTCMALLOC" = "1" -o \
+            "$HAVE_LIBTCMALLOC_MINIMAL" = "1"],
+      [AC_LANG_PUSH([C++])
+       AC_CHECK_HEADERS([gperftools/heap-profiler.h \
+                         gperftools/malloc_extension.h \
+                         gperftools/profiler.h])
+       AC_LANG_POP([C++])])
+
 # error out if --with-jemalloc and ! --without-tcmalloc
 if test "x$with_jemalloc" = "xyes"; then
 	if test "x$with_tcmalloc" != "xno"; then
@@ -716,16 +720,6 @@ if test "x$enable_xio" = x"yes"; then
    AC_SUBST(XIO_LIBS)
 fi
 
-#
-# FreeBSD has it in base.
-#
-if test x"$freebsd" != x"yes" -a x"$with_radosgw" = x"yes"; then
-PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
-                [], AC_MSG_FAILURE([No usable version of libedit found.]))
-else
-	LIBEDIT_LIBS="-ledit"
-fi
-
 #libatomic-ops? You want it!
 AC_ARG_WITH([libatomic-ops],
             [AS_HELP_STRING([--without-libatomic-ops],
@@ -811,7 +805,7 @@ AM_CONDITIONAL(WITH_DLIBROCKSDB, [ test "$with_librocksdb" = "yes" ])
 AC_ARG_WITH([librocksdb-static],
             [AS_HELP_STRING([--with-librocksdb-static], [build rocksdb support])],
             [],
-            [with_librocksdb_static=no])
+            [with_librocksdb_static=check])
 AS_IF([test "x$with_librocksdb_static" = "xcheck" -a "x$HAVE_CXX11" = "x1" ],
             [with_librocksdb_static="yes"])
 AS_IF([test "x$with_librocksdb_static" = "xyes"],

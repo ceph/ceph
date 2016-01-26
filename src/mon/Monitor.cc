@@ -196,8 +196,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   routed_request_tid(0),
   op_tracker(cct, true, 1)
 {
-  rank = -1;
-
   clog = log_client.create_channel(CLOG_CHANNEL_CLUSTER);
   audit_clog = log_client.create_channel(CLOG_CHANNEL_AUDIT);
 
@@ -550,6 +548,7 @@ int Monitor::preinit()
   int r = sanitize_options();
   if (r < 0) {
     derr << "option sanitization failed!" << dendl;
+    lock.Unlock();
     return r;
   }
 
@@ -639,6 +638,7 @@ int Monitor::preinit()
               << "'mon_force_quorum_join' is set -- allowing boot" << dendl;
     } else {
       derr << "commit suicide!" << dendl;
+      lock.Unlock();
       return -ENOENT;
     }
   }

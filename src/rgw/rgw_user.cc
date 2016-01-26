@@ -149,8 +149,6 @@ int rgw_store_user_info(RGWRados *store,
 
   RGWUID ui;
   ui.user_id = info.user_id;
-  // P3
-  ldout(store->ctx(), 0) << "DEBUG: rgw_store_user_info: user_id " << ui.user_id << dendl;
 
   bufferlist link_bl;
   ::encode(ui, link_bl);
@@ -1430,14 +1428,17 @@ int RGWSubUserPool::execute_remove(RGWUserAdminOpState& op_state,
 
   map<std::string, RGWSubUser>::iterator siter;
   siter = subuser_map->find(subuser_str);
-
+  if (siter == subuser_map->end()){
+    set_err_msg(err_msg, "subuser not found: " + subuser_str);
+    return -EINVAL;
+  }
   if (!op_state.has_existing_subuser()) {
     set_err_msg(err_msg, "subuser not found: " + subuser_str);
     return -EINVAL;
   }
 
   // always purge all associate keys
-  user->keys.remove_subuser_keys(op_state, &subprocess_msg, defer_user_update);
+  user->keys.remove_subuser_keys(op_state, &subprocess_msg, true);
 
   // remove the subuser from the user info
   subuser_map->erase(siter);

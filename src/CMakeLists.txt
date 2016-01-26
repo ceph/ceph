@@ -144,8 +144,6 @@ endif()
 set(heap_profiler_files ${TCMALLOC_srcs})
 add_library(heap_profiler_objs OBJECT ${heap_profiler_files})
 
-set(LIBEDIT_LIBS edit)
-
 # Common infrastructure
 configure_file(
   ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake
@@ -806,16 +804,12 @@ add_library(compressor STATIC ${compressor_srcs})
 target_link_libraries(compressor common snappy)
 
 add_executable(ceph-client-debug tools/ceph-client-debug.cc)
-target_link_libraries(ceph-client-debug cephfs librados global common)
+target_link_libraries(ceph-client-debug cephfs librados global common ${ALLOC_LIBS})
 install(TARGETS ceph-client-debug DESTINATION bin/debug)
 
 add_executable(ceph-kvstore-tool tools/ceph_kvstore_tool.cc)
 target_link_libraries(ceph-kvstore-tool os global ${UNITTEST_CXX_FLAGS})
 install(TARGETS ceph-kvstore-tool DESTINATION bin)
-
-#set(ceph_srcs tools/ceph.cc tools/common.cc)
-#add_executable(ceph ${ceph_srcs})
-#target_link_libraries(ceph global ${LIBEDIT_LIBS})
 
 set(ceph_conf_srcs
   tools/ceph_conf.cc)
@@ -901,14 +895,19 @@ if(WITH_LIBCEPHFS)
     client/Trace.cc
     client/posix_acl.cc)
   add_library(client ${libclient_srcs})
-  target_link_libraries(client osdc mds ${LIBEDIT_LIBS})
+  target_link_libraries(client osdc mds)
   set(libcephfs_srcs libcephfs.cc)
-  add_library(cephfs SHARED ${libcephfs_srcs})
+  add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs}
+    $<TARGET_OBJECTS:cls_references_objs>
+    $<TARGET_OBJECTS:heap_profiler_objs>
+    $<TARGET_OBJECTS:common_util_obj>)
+  target_link_libraries(cephfs PRIVATE client osdc osd os global common cls_lock_client
+    ${BLKID_LIBRARIES}
+    ${CRYPTO_LIBS} ${EXTRALIBS} ${TCMALLOC_LIBS})
 if(${ENABLE_SHARED})
   set_target_properties(cephfs PROPERTIES OUTPUT_NAME cephfs VERSION 1.0.0
     SOVERSION 1)
 endif(${ENABLE_SHARED})
-  target_link_libraries(cephfs client global)
   install(TARGETS cephfs DESTINATION lib)
   install(DIRECTORY
     "${CMAKE_SOURCE_DIR}/src/include/cephfs"
@@ -1197,6 +1196,7 @@ add_custom_target(vstart DEPENDS
 add_custom_target(cephfs_testing DEPENDS
     vstart
     rados
+    cephfs
     ceph-fuse
     ceph-dencoder
     cephfs-journal-tool

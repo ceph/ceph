@@ -502,7 +502,7 @@ A rule takes the following form::
 		type [ replicated | erasure ]
 		min_size <min-size>
 		max_size <max-size>
-		step take <bucket-type>
+		step take <bucket-name>
 		step [choose|chooseleaf] [firstn|indep] <N> <bucket-type>
 		step emit
 	}
