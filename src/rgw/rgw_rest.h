@@ -359,6 +359,7 @@ public:
   int read_permissions(RGWOp *op);
 
   virtual int authorize() = 0;
+  // virtual int postauth_init(struct req_init_state *t) = 0;
 };
 
 class RGWHandler_ObjStore_SWIFT;
