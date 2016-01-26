@@ -488,7 +488,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
     }
   }
 
-  ret = rgw_bucket_sync_user_stats(store, bucket.name);
+  ret = rgw_bucket_sync_user_stats(store, bucket.tenant, bucket.name);
   if ( ret < 0) {
      dout(1) << "WARNING: failed sync user stats before bucket delete. ret=" << ret << dendl;
   }
