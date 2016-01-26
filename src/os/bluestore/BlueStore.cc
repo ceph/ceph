@@ -2510,7 +2510,13 @@ int BlueStore::_do_read(
       bufferlist v;
       string key;
       get_overlay_key(o->onode.nid, op->second.key, &key);
-      db->get(PREFIX_OVERLAY, key, &v);
+      r = db->get(PREFIX_OVERLAY, key, &v);
+      if (r < 0) {
+        derr << " failed to fetch overlay(nid = " << o->onode.nid
+             << ", key = " << key 
+             << "): " << cpp_strerror(r) << dendl;
+        goto out;
+      }
       bufferlist frag;
       frag.substr_of(v, x_off, x_len);
       bl.claim_append(frag);
@@ -4653,7 +4659,8 @@ void BlueStore::_do_read_all_overlays(bluestore_wal_op_t& wo)
     string key;
     get_overlay_key(wo.nid, q->key, &key);
     bufferlist bl, bl_data;
-    db->get(PREFIX_OVERLAY, key, &bl);
+    int r = db->get(PREFIX_OVERLAY, key, &bl);
+    assert(r >= 0); 
     bl_data.substr_of(bl, q->value_offset, q->length);
     wo.data.claim_append(bl_data);
   }
