@@ -117,6 +117,9 @@ dofsumount=0
 verbose=0
 use_default_conf=1
 
+## set variables like cluster or conf
+[ -e /etc/sysconfig/ceph ] && . /etc/sysconfig/ceph
+[ -e /etc/default/ceph ] && . /etc/default/ceph
 
 while echo $1 | grep -q '^-'; do     # FIXME: why not '^-'?
 case $1 in
@@ -303,11 +306,13 @@ for name in $what; do
 	    [ -n "$wrap" ] && runmode="-f &" && runarg="-f"
 	    [ -n "$max_open_files" ] && files="ulimit -n $max_open_files;"
 
+	    [ -n "$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES" ] && tcmalloc="TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES"
+
 	    if [ -n "$SYSTEMD_RUN" ]; then
                 time=`date +%s.%N` 
-		cmd="$SYSTEMD_RUN --unit=ceph-$name.$time -r bash -c '$files $cmd --cluster $cluster -f'"
+		cmd="$SYSTEMD_RUN --unit=ceph-$name.$time -r bash -c '$files $tcmalloc $cmd --cluster $cluster -f'"
 	    else
-		cmd="$files $wrap $cmd --cluster $cluster $runmode"
+		cmd="$files $tcmalloc $wrap $cmd --cluster $cluster $runmode"
 	    fi
 
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
