@@ -924,7 +924,7 @@ int KStore::mkfs()
     goto out_close_fsid;
 
   r = _read_fsid(&old_fsid);
-  if (r < 0 && old_fsid.is_zero()) {
+  if (r < 0 || old_fsid.is_zero()) {
     if (fsid.is_zero()) {
       fsid.generate_random();
       dout(1) << __func__ << " generated fsid " << fsid << dendl;
@@ -2609,11 +2609,11 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_ADD:
-      assert(0 == "not implmeented");
+      assert(0 == "not implemented");
       break;
 
     case Transaction::OP_COLL_REMOVE:
-      assert(0 == "not implmeented");
+      assert(0 == "not implemented");
       break;
 
     case Transaction::OP_COLL_MOVE:
@@ -2638,7 +2638,7 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_RENAME:
-      assert(0 == "not implmeneted");
+      assert(0 == "not implemented");
       break;
 
     case Transaction::OP_OMAP_CLEAR:
@@ -2986,8 +2986,11 @@ int KStore::_write(TransContext *txc,
 	   << " " << offset << "~" << length
 	   << dendl;
   RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, true);
-  _assign_nid(txc, o);
+  OnodeRef o = c->get_onode(oid, false);
+  if (!o) {
+    o = c->get_onode(oid, true);
+    _assign_nid(txc, o);
+  }
   int r = _do_write(txc, o, offset, length, bl, fadvise_flags);
   txc->write_onode(o);
 
@@ -3008,8 +3011,11 @@ int KStore::_zero(TransContext *txc,
   int r = 0;
 
   RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, true);
-  _assign_nid(txc, o);
+  OnodeRef o = c->get_onode(oid, false);
+  if (!o) {
+    o = c->get_onode(oid, true);
+    _assign_nid(txc, o);
+  }
 
   uint64_t stripe_size = o->onode.stripe_size;
   if (stripe_size) {
@@ -3509,17 +3515,20 @@ int KStore::_clone(TransContext *txc,
     r = -ENOENT;
     goto out;
   }
-  newo = c->get_onode(new_oid, true);
-  assert(newo);
-  newo->exists = true;
-  _assign_nid(txc, newo);
+ 
+  newo = c->get_onode(new_oid, false);
+  if (newo) {
+    // already exist, truncate any old data
+    r = _do_truncate(txc, newo, 0);
+    if (r < 0)
+      goto out;
+  } else {
+    // does not exist, create it
+    newo = c->get_onode(new_oid, true);
+    _assign_nid(txc, newo);
+  }
 
   r = _do_read(oldo, 0, oldo->onode.size, bl, 0);
-  if (r < 0)
-    goto out;
-
-  // truncate any old data
-  r = _do_truncate(txc, newo, 0);
   if (r < 0)
     goto out;
 
@@ -3587,7 +3596,11 @@ int KStore::_clone_range(TransContext *txc,
     r = -ENOENT;
     goto out;
   }
-  newo = c->get_onode(new_oid, true);
+  newo = c->get_onode(new_oid, false);
+  if (!newo) {
+    newo = c->get_onode(new_oid, true);
+    _assign_nid(txc, newo);
+  }
   assert(newo);
   newo->exists = true;
 
@@ -3627,13 +3640,13 @@ int KStore::_rename(TransContext *txc,
     r = -ENOENT;
     goto out;
   }
-  newo = c->get_onode(new_oid, true);
-  assert(newo);
 
-  if (newo->exists) {
+  newo = c->get_onode(new_oid, false);
+  if (newo && newo->exists) {
+    // destination object already exists, remove it first
     r = _do_remove(txc, newo);
     if (r < 0)
-      return r;
+      goto out;
   }
 
   txc->t->rmkey(PREFIX_OBJ, oldo->key);
