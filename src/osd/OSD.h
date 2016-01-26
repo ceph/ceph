@@ -52,7 +52,9 @@ using namespace std;
 #include "common/shared_cache.hpp"
 #include "common/simple_cache.hpp"
 #include "common/sharedptr_registry.hpp"
+#include "common/WeightedPriorityQueue.h"
 #include "common/PrioritizedQueue.h"
+#include "common/OpQueue.h"
 #include "messages/MOSDOp.h"
 #include "include/Spinlock.h"
 
@@ -1617,6 +1619,11 @@ private:
   friend struct C_CompleteSplits;
 
   // -- op queue --
+  enum io_queue {
+    prioritized,
+    weightedpriority};
+  const io_queue op_queue;
+  const unsigned int op_prio_cutoff;
 
   friend class PGQueueable;
   class ShardedOpWQ: public ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> > {
@@ -1626,13 +1633,25 @@ private:
       Cond sdata_cond;
       Mutex sdata_op_ordering_lock;
       map<PG*, list<PGQueueable> > pg_for_processing;
-      PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t> pqueue;
+      std::unique_ptr<OpQueue< pair<PGRef, PGQueueable>, entity_inst_t>> pqueue;
       ShardData(
 	string lock_name, string ordering_lock,
-	uint64_t max_tok_per_prio, uint64_t min_cost, CephContext *cct)
+	uint64_t max_tok_per_prio, uint64_t min_cost, CephContext *cct,
+	io_queue opqueue)
 	: sdata_lock(lock_name.c_str(), false, true, false, cct),
-	  sdata_op_ordering_lock(ordering_lock.c_str(), false, true, false, cct),
-	  pqueue(max_tok_per_prio, min_cost) {}
+	  sdata_op_ordering_lock(ordering_lock.c_str(), false, true, false, cct) {
+	    if (opqueue == weightedpriority) {
+	      pqueue = std::unique_ptr
+		<WeightedPriorityQueue< pair<PGRef, PGQueueable>, entity_inst_t>>(
+		  new WeightedPriorityQueue< pair<PGRef, PGQueueable>, entity_inst_t>(
+		    max_tok_per_prio, min_cost));
+	    } else if (opqueue == prioritized) {
+	      pqueue = std::unique_ptr
+		<PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t>>(
+		  new PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t>(
+		    max_tok_per_prio, min_cost));
+	    }
+	  }
     };
     
     vector<ShardData*> shard_list;
@@ -1653,7 +1672,7 @@ private:
 	ShardData* one_shard = new ShardData(
 	  lock_name, order_lock,
 	  osd->cct->_conf->osd_op_pq_max_tokens_per_priority, 
-	  osd->cct->_conf->osd_op_pq_min_cost, osd->cct);
+	  osd->cct->_conf->osd_op_pq_min_cost, osd->cct, osd->op_queue);
 	shard_list.push_back(one_shard);
       }
     }
@@ -1687,7 +1706,7 @@ private:
 	assert (NULL != sdata);
 	sdata->sdata_op_ordering_lock.Lock();
 	f->open_object_section(lock_name);
-	sdata->pqueue.dump(f);
+	sdata->pqueue->dump(f);
 	f->close_section();
 	sdata->sdata_op_ordering_lock.Unlock();
       }
@@ -1708,7 +1727,7 @@ private:
       sdata = shard_list[shard_index];
       assert(sdata != NULL);
       sdata->sdata_op_ordering_lock.Lock();
-      sdata->pqueue.remove_by_filter(Pred(pg));
+      sdata->pqueue->remove_by_filter(Pred(pg), 0);
       sdata->pg_for_processing.erase(pg);
       sdata->sdata_op_ordering_lock.Unlock();
     }
@@ -1722,7 +1741,7 @@ private:
       assert(dequeued);
       list<pair<PGRef, PGQueueable> > _dequeued;
       sdata->sdata_op_ordering_lock.Lock();
-      sdata->pqueue.remove_by_filter(Pred(pg), &_dequeued);
+      sdata->pqueue->remove_by_filter(Pred(pg), &_dequeued);
       for (list<pair<PGRef, PGQueueable> >::iterator i = _dequeued.begin();
 	   i != _dequeued.end(); ++i) {
 	boost::optional<OpRequestRef> mop = i->second.maybe_get_op();
@@ -1749,7 +1768,7 @@ private:
       ShardData* sdata = shard_list[shard_index];
       assert(NULL != sdata);
       Mutex::Locker l(sdata->sdata_op_ordering_lock);
-      return sdata->pqueue.empty();
+      return sdata->pqueue->empty();
     }
   } op_shardedwq;
 
@@ -2309,6 +2328,28 @@ protected:
   void ms_handle_fast_accept(Connection *con);
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
+
+  io_queue get_io_queue() const {
+    if (cct->_conf->osd_op_queue == "debug_random") {
+      srand(time(NULL));
+      return (rand() % 2 < 1) ? prioritized : weightedpriority;
+    } else if (cct->_conf->osd_op_queue == "wpq") {
+      return weightedpriority;
+    } else {
+      return prioritized;
+    }
+  }
+
+  unsigned int get_io_prio_cut() const {
+    if (cct->_conf->osd_op_queue_cut_off == "debug_random") {
+      srand(time(NULL));
+      return (rand() % 2 < 1) ? CEPH_MSG_PRIO_HIGH : CEPH_MSG_PRIO_LOW;
+    } else if (cct->_conf->osd_op_queue_cut_off == "low") {
+      return CEPH_MSG_PRIO_LOW;
+    } else {
+      return CEPH_MSG_PRIO_HIGH;
+    }
+  }
 
  public:
   /* internal and external can point to the same messenger, they will still
