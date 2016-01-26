@@ -1019,6 +1019,7 @@
   rbd help snap rename
   usage: rbd snap rename [--pool <pool>] [--image <image>] [--snap <snap>] 
                          [--dest-pool <dest-pool>] [--dest <dest>] 
+                         [--dest-snap <dest-snap>] 
                          <source-snap-spec> <dest-snap-spec> 
   
   Rename a snapshot.
@@ -1035,6 +1036,7 @@
     --snap arg           source snapshot name
     --dest-pool arg      destination pool name
     --dest arg           destination image name
+    --dest-snap arg      destination snapshot name
   
   rbd help snap rollback
   usage: rbd snap rollback [--pool <pool>] [--image <image>] [--snap <snap>] 
