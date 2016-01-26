@@ -1945,13 +1945,13 @@ int BlueStore::fsck()
 
   // walk collections, objects
   for (ceph::unordered_map<coll_t, CollectionRef>::iterator p = coll_map.begin();
-       p != coll_map.end() && !errors;
+       p != coll_map.end();
        ++p) {
     dout(1) << __func__ << " collection " << p->first << dendl;
     CollectionRef c = _get_collection(p->first);
     RWLock::RLocker l(c->lock);
     ghobject_t pos;
-    while (!errors) {
+    while (true) {
       vector<ghobject_t> ols;
       int r = collection_list(p->first, pos, ghobject_t::get_max(), true,
 			      100, &ols, &pos);
@@ -1967,7 +1967,7 @@ int BlueStore::fsck()
 	OnodeRef o = c->get_onode(oid, false);
 	if (!o || !o->exists) {
 	  ++errors;
-	  break;
+	  continue; // go for next object
 	}
 	if (!enode || enode->hash != o->oid.hobj.get_hash()) {
 	  if (enode)
@@ -1980,7 +1980,7 @@ int BlueStore::fsck()
 	    derr << " " << oid << " nid " << o->onode.nid << " already in use"
 		 << dendl;
 	    ++errors;
-	    break;
+	    continue; // go for next object
 	  }
 	  used_nids.insert(o->onode.nid);
 	}
@@ -2129,7 +2129,7 @@ int BlueStore::fsck()
 	c = NULL;
 	for (ceph::unordered_map<coll_t, CollectionRef>::iterator p =
 	       coll_map.begin();
-	     p != coll_map.end() && !errors;
+	     p != coll_map.end();
 	     ++p) {
 	  if (p->second->contains(oid)) {
 	    c = p->second;
