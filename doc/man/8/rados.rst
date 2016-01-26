@@ -118,7 +118,9 @@ Pool specific commands
   object size is 4 MB, and the default number of simulated threads
   (parallel writes) is 16. The *--run-name <label>* option is useful
   for benchmarking a workload test from multiple clients. The *<label>*
-  is an arbitrary object name.
+  is an arbitrary object name. It is "benchmark_last_metadata" by
+  default, and is used as the underlying object name for "read" and
+  "write" ops.
   Note: -b *objsize* option is valid only in *write* mode.
 
 :command:`cleanup`
