@@ -205,6 +205,7 @@ public:
   ceph::log::SubsystemMap subsys;
 
   EntityName name;
+  string data_dir_option;  ///< data_dir config option, if any
 
   /// cluster name
   string cluster;
