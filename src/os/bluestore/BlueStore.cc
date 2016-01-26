@@ -1969,7 +1969,7 @@ int BlueStore::fsck()
 	  ++errors;
 	  break;
 	}
-	if (enode && enode->hash != o->oid.hobj.get_hash()) {
+	if (!enode || enode->hash != o->oid.hobj.get_hash()) {
 	  if (enode)
 	    errors += _verify_enode_shared(enode, hash_shared);
 	  enode = c->get_enode(o->oid.hobj.get_hash());
