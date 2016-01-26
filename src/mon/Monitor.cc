@@ -1049,7 +1049,9 @@ set<string> Monitor::get_sync_targets_names()
   targets.insert(paxos->get_name());
   for (int i = 0; i < PAXOS_NUM; ++i)
     paxos_service[i]->get_store_prefixes(targets);
-
+  ConfigKeyService *config_key_service_ptr = dynamic_cast<ConfigKeyService*>(config_key_service);
+  assert(config_key_service_ptr);
+  config_key_service_ptr->get_store_prefixes(targets);
   return targets;
 }
 
@@ -1718,7 +1720,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
   } else {
     if (paxos->get_version() < m->paxos_first_version &&
 	m->paxos_first_version > 1) {  // no need to sync if we're 0 and they start at 1.
-      dout(10) << " peer paxos versions [" << m->paxos_first_version
+      dout(10) << " peer paxos first versions [" << m->paxos_first_version
 	       << "," << m->paxos_last_version << "]"
 	       << " vs my version " << paxos->get_version()
 	       << " (too far ahead)"
@@ -1728,7 +1730,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
       return;
     }
     if (paxos->get_version() + g_conf->paxos_max_join_drift < m->paxos_last_version) {
-      dout(10) << " peer paxos version " << m->paxos_last_version
+      dout(10) << " peer paxos last version " << m->paxos_last_version
 	       << " vs my version " << paxos->get_version()
 	       << " (too far ahead)"
 	       << dendl;
