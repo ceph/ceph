@@ -428,13 +428,16 @@ def openstack_delete_volume(id):
 def stale_openstack_volumes(ctx, volumes):
     now = datetime.datetime.now()
     for volume in volumes:
+        volume_id = volume.get('ID') or volume['id']
         try:
             volume = json.loads(sh("openstack volume show -f json " +
-                                   volume['ID']))
+                                   volume_id))
         except subprocess.CalledProcessError:
             log.debug("stale-openstack: {id} disappeared, ignored"
-                      .format(id=volume['ID']))
+                      .format(id=volume_id))
             continue
+        volume_name = (volume.get('Display Name') or volume.get('display_name')
+                       or volume['name'])
         enforce_json_dictionary(volume)
         created_at = datetime.datetime.strptime(
             volume['created_at'], '%Y-%m-%dT%H:%M:%S.%f')
@@ -445,15 +448,15 @@ def stale_openstack_volumes(ctx, volumes):
                 " because it was created {created} seconds ago"
                 " which is older than"
                 " max_job_time {max_job_time} + {delay}"
-                .format(volume=volume['display_name'],
-                        id=volume['id'],
+                .format(volume=volume_name,
+                        id=volume_id,
                         created=created,
                         max_job_time=config['max_job_time'],
                         delay=OPENSTACK_DELAY))
             if not ctx.dry_run:
-                openstack_delete_volume(volume['id'])
+                openstack_delete_volume(volume_id)
             continue
-        log.debug("stale-openstack: volume " + volume['id'] + " OK")
+        log.debug("stale-openstack: volume " + volume_id + " OK")
 
 
 def stale_openstack_nodes(ctx, instances, locked_nodes):
