@@ -3267,6 +3267,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 	break;
     if (p == snapset.clones.end()) {
       osd->clog->error() << __func__ << " Snap " << coid.snap << " not in clones" << "\n";
+      remove_repop(repop);
       return NULL;
     }
 
