@@ -903,7 +903,7 @@ if(WITH_LIBCEPHFS)
     $<TARGET_OBJECTS:common_util_obj>)
   target_link_libraries(cephfs PRIVATE client osdc osd os global common cls_lock_client
     ${BLKID_LIBRARIES}
-    ${CRYPTO_LIBS} ${EXTRALIBS} ${TCMALLOC_LIBS})
+    ${CRYPTO_LIBS} ${EXTRALIBS} ${ALLOC_LIBS})
 if(${ENABLE_SHARED})
   set_target_properties(cephfs PROPERTIES OUTPUT_NAME cephfs VERSION 1.0.0
     SOVERSION 1)
