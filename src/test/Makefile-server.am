@@ -94,6 +94,11 @@ ceph_test_filestore_idempotent_sequence_SOURCES = \
 ceph_test_filestore_idempotent_sequence_LDADD = $(LIBOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_filestore_idempotent_sequence
 
+unittest_transaction_SOURCES = test/objectstore/test_transaction.cc
+unittest_transaction_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_transaction_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_transaction
+
 ceph_xattr_bench_SOURCES = test/xattr_bench.cc
 ceph_xattr_bench_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_xattr_bench_CXXFLAGS = $(UNITTEST_CXXFLAGS)
