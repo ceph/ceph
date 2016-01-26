@@ -11957,3 +11957,13 @@ void MDCache::notify_osdmap_changed()
   stray_manager.update_op_limit();
 }
 
+void MDCache::handle_conf_change(const struct md_config_t *conf,
+			     const std::set <std::string> &changed)
+{
+  assert(mds->mds_lock.is_locked_by_me());
+
+  if (changed.count("mds_max_purge_ops")
+      || changed.count("mds_max_purge_ops_per_pg")) {
+    stray_manager.update_op_limit();
+  }
+}

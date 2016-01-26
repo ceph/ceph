@@ -23,7 +23,7 @@ class PerfCounters;
 class CInode;
 class CDentry;
 
-class StrayManager : public md_config_obs_t
+class StrayManager
 {
   protected:
   class QueuedStray {
@@ -236,17 +236,6 @@ class StrayManager : public md_config_obs_t
    * Call this whenever one of those operands changes.
    */
   void update_op_limit();
-
-  /**
-   * Subscribe to changes on mds_max_purge_ops
-   */
-  virtual const char** get_tracked_conf_keys() const;
-
-  /**
-   * Call update_op_limit if mds_max_purge_ops changes
-   */
-  virtual void handle_conf_change(const struct md_config_t *conf,
-			  const std::set <std::string> &changed);
 };
 
 #endif  // STRAY_MANAGER_H
