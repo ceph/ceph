@@ -3915,6 +3915,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
 {
   const uint64_t block_size = bdev->get_block_size();
   const uint64_t block_mask = ~(block_size - 1);
+  int r = 0;
 
   // read all the overlay data first for apply
   _do_read_all_overlays(wo);
@@ -3941,7 +3942,8 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       offset = offset & block_mask;
       dout(20) << __func__ << "  reading initial partial block "
 	       << src_offset << "~" << block_size << dendl;
-      bdev->read(src_offset, block_size, &first, ioc, true);
+      r = bdev->read(src_offset, block_size, &first, ioc, true);
+      assert(r == 0);
       bufferlist t;
       t.substr_of(first, 0, first_len);
       t.claim_append(bl);
@@ -3959,7 +3961,8 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       } else {
 	dout(20) << __func__ << "  reading trailing partial block "
 		 << last_offset << "~" << block_size << dendl;
-	bdev->read(last_offset, block_size, &last, ioc, true);
+	r = bdev->read(last_offset, block_size, &last, ioc, true);
+        assert(r == 0);
       }
       bufferlist t;
       uint64_t endoff = wo.extent.end() & ~block_mask;
@@ -3967,7 +3970,8 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       bl.claim_append(t);
     }
     assert((bl.length() & ~block_mask) == 0);
-    bdev->aio_write(offset, bl, ioc, true);
+    r = bdev->aio_write(offset, bl, ioc, true);
+    assert(r == 0);
   }
   break;
 
@@ -3980,11 +3984,12 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
     assert(wo.extent.length == wo.src_extent.length);
     assert((wo.src_extent.offset & ~block_mask) == 0);
     bufferlist bl;
-    int r = bdev->read(wo.src_extent.offset, wo.src_extent.length, &bl, ioc,
+    r = bdev->read(wo.src_extent.offset, wo.src_extent.length, &bl, ioc,
 		       true);
-    assert(r >= 0);
+    assert(r == 0);
     assert(bl.length() == wo.extent.length);
-    bdev->aio_write(wo.extent.offset, bl, ioc, true);
+    r = bdev->aio_write(wo.extent.offset, bl, ioc, true);
+    assert(r == 0);
   }
   break;
 
@@ -3999,10 +4004,12 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       uint64_t first_offset = offset & block_mask;
       dout(20) << __func__ << "  reading initial partial block "
 	       << first_offset << "~" << block_size << dendl;
-      bdev->read(first_offset, block_size, &first, ioc, true);
+      r = bdev->read(first_offset, block_size, &first, ioc, true);
+      assert(r == 0);
       size_t z_len = MIN(block_size - first_len, length);
       memset(first.c_str() + first_len, 0, z_len);
-      bdev->aio_write(first_offset, first, ioc, true);
+      r = bdev->aio_write(first_offset, first, ioc, true);
+      assert(r == 0);
       offset += block_size - first_len;
       length -= z_len;
     }
@@ -4010,7 +4017,8 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
     if (length >= block_size) {
       uint64_t middle_len = length & block_mask;
       dout(20) << __func__ << "  zero " << offset << "~" << length << dendl;
-      bdev->aio_zero(offset, middle_len, ioc);
+      r = bdev->aio_zero(offset, middle_len, ioc);
+      assert(r == 0);
       offset += middle_len;
       length -= middle_len;
     }
@@ -4020,9 +4028,11 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       bufferlist last;
       dout(20) << __func__ << "  reading trailing partial block "
 	       << offset << "~" << block_size << dendl;
-      bdev->read(offset, block_size, &last, ioc, true);
+      r = bdev->read(offset, block_size, &last, ioc, true);
+      assert(r == 0);
       memset(last.c_str(), 0, length);
-      bdev->aio_write(offset, last, ioc, true);
+      r = bdev->aio_write(offset, last, ioc, true);
+      assert(r == 0);
     }
   }
   break;
