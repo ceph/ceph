@@ -217,8 +217,25 @@ int md_config_t::parse_config_files(const char *conf_files,
       conf_files = CEPH_CONF_FILE_DEFAULT;
     }
   }
+
   std::list<std::string> cfl;
   get_str_list(conf_files, cfl);
+  auto p = cfl.begin();
+  while (p != cfl.end()) {
+    // expand $data_dir?
+    string &s = *p;
+    if (s.find("$data_dir") != string::npos) {
+      if (data_dir_option.length()) {
+	list<config_option*> stack;
+	expand_meta(s, NULL, stack, warnings);
+	p++;
+      } else {
+	cfl.erase(p++);  // ignore this item
+      }
+    } else {
+      ++p;
+    }
+  }
   return parse_config_files_impl(cfl, parse_errors, warnings);
 }
 
