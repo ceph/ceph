@@ -185,8 +185,6 @@ void ScrubStack::scrub_dir_inode(CInode *in,
       scrub_dirfrag(cur_dir, header,
 		    &frag_added_children, &frag_terminal, &frag_done);
       if (frag_done) {
-	// FIXME is this right?  Can we end up hitting this more than
-	// once and is that a problem?
 	cur_dir->inode->scrub_dirfrag_finished(cur_dir->frag);
       }
       *added_children |= frag_added_children;
@@ -317,8 +315,6 @@ void ScrubStack::scrub_dirfrag(CDir *dir,
     scrubs_in_progress++;
     r = dir->scrub_dentry_next(&scrub_kick, &dn);
     if (r != EAGAIN) {
-      // ctx only used by scrub_dentry_next in EAGAIN case
-      // FIXME It's kind of annoying to keep allocating and deleting a ctx here
       scrubs_in_progress--;
     }
 
@@ -360,8 +356,6 @@ void ScrubStack::scrub_dirfrag(CDir *dir,
     // never get random IO errors here.
     assert(r == 0);
 
-    // FIXME: Do I *really* need to construct a kick context for every
-    // single dentry I'm going to scrub?
     _enqueue_inode(dn->get_projected_inode(), dn, header, NULL, true);
 
     *added_children = true;
