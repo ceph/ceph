@@ -667,7 +667,11 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
 
   // fill in osd stats too
   struct statfs stbuf;
-  osd->store->statfs(&stbuf);
+  int r = osd->store->statfs(&stbuf);
+  if (r < 0) {
+    derr << "statfs() failed: " << cpp_strerror(r) << dendl; 
+    return;
+  }
 
   uint64_t bytes = stbuf.f_blocks * stbuf.f_bsize;
   uint64_t used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize;
