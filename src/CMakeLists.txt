@@ -639,8 +639,6 @@ set(libos_srcs
   os/filestore/LFNIndex.cc
   os/filestore/WBThrottle.cc
   os/filestore/ZFSFileStoreBackend.cc
-  os/keyvaluestore/GenericObjectMap.cc
-  os/keyvaluestore/KeyValueStore.cc
   os/memstore/MemStore.cc
   os/kstore/KStore.cc
   os/kstore/kstore_types.cc
