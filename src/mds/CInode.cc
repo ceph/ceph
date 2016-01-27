@@ -4164,7 +4164,10 @@ void CInode::scrub_initialize(CDentry *scrub_parent,
     for (std::list<frag_t>::iterator i = frags.begin();
         i != frags.end();
         ++i) {
-      scrub_infop->dirfrag_stamps[*i];
+      if (header->force)
+	scrub_infop->dirfrag_stamps[*i].reset();
+      else
+	scrub_infop->dirfrag_stamps[*i];
     }
   }
 

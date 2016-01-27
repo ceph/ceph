@@ -1149,7 +1149,8 @@ public:
    * Create and start an OP_ENQUEUE_SCRUB
    */
   void enqueue_scrub(const string& path, const std::string &tag,
-                     bool recursive, bool repair, Formatter *f, Context *fin);
+                     bool force, bool recursive, bool repair,
+		     Formatter *f, Context *fin);
   void repair_inode_stats(CInode *diri, Context *fin);
   void repair_dirfrag_stats(CDir *dir, Context *fin);
 };
