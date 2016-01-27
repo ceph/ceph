@@ -144,9 +144,11 @@ int FreelistManager::allocate(
       txn->set(prefix, newkey, newvalue);
       dout(20) << __func__ << "  set " << newoff << "~" << newlen
 	       << " (remaining tail)" << dendl;
+      kv_free.erase(p);
       kv_free[newoff] = newlen;
+    } else {
+      kv_free.erase(p);
     }
-    kv_free.erase(p);
   } else {
     assert(p->first < offset);
     // shorten
@@ -170,9 +172,11 @@ int FreelistManager::allocate(
       dout(20) << __func__ << "  set " << tailoff << "~" << taillen
 	       << " (remaining tail from " << p->first << "~" << p->second << ")"
 	       << dendl;
+      p->second = newlen;
       kv_free[tailoff] = taillen;
+    } else {
+      p->second = newlen;
     }
-    p->second = newlen;
   }
   if (g_conf->bluestore_debug_freelist)
     _audit();
@@ -199,7 +203,11 @@ int FreelistManager::release(
 	       << " (merge with previous)" << dendl;
       length += p->second;
       offset = p->first;
-      kv_free.erase(p++);
+      if (map_t_has_stable_iterators) {
+	kv_free.erase(p++);
+      } else {
+	p = kv_free.erase(p);
+      }
     } else if (p->first + p->second > offset) {
       derr << __func__ << " bad release " << offset << "~" << length
 	   << " overlaps with " << p->first << "~" << p->second << dendl;

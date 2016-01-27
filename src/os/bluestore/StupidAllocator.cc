@@ -73,7 +73,7 @@ void StupidAllocator::unreserve(uint64_t unused)
 }
 
 /// return the effective length of the extent if we align to alloc_unit
-static uint64_t aligned_len(interval_set<uint64_t>::iterator p,
+static uint64_t aligned_len(btree_interval_set<uint64_t>::iterator p,
 			    uint64_t alloc_unit)
 {
   uint64_t skew = p.get_start() % alloc_unit;
@@ -98,7 +98,7 @@ int StupidAllocator::allocate(
   int bin = _choose_bin(want);
   int orig_bin = bin;
 
-  interval_set<uint64_t>::iterator p = free[0].begin();
+  auto p = free[0].begin();
 
   if (!hint)
     hint = last_alloc;
@@ -223,7 +223,7 @@ void StupidAllocator::dump(ostream& out)
   for (unsigned bin = 0; bin < free.size(); ++bin) {
     dout(30) << __func__ << " free bin " << bin << ": "
 	     << free[bin].num_intervals() << " extents" << dendl;
-    for (interval_set<uint64_t>::iterator p = free[bin].begin();
+    for (auto p = free[bin].begin();
 	 p != free[bin].end();
 	 ++p) {
       dout(30) << __func__ << "  " << p.get_start() << "~" << p.get_len() << dendl;
@@ -231,14 +231,14 @@ void StupidAllocator::dump(ostream& out)
   }
   dout(30) << __func__ << " committing: "
 	   << committing.num_intervals() << " extents" << dendl;
-  for (interval_set<uint64_t>::iterator p = committing.begin();
+  for (auto p = committing.begin();
        p != committing.end();
        ++p) {
     dout(30) << __func__ << "  " << p.get_start() << "~" << p.get_len() << dendl;
   }
   dout(30) << __func__ << " uncommitted: "
 	   << uncommitted.num_intervals() << " extents" << dendl;
-  for (interval_set<uint64_t>::iterator p = uncommitted.begin();
+  for (auto p = uncommitted.begin();
        p != uncommitted.end();
        ++p) {
     dout(30) << __func__ << "  " << p.get_start() << "~" << p.get_len() << dendl;
@@ -257,10 +257,10 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
   Mutex::Locker l(lock);
   dout(10) << __func__ << " " << offset << "~" << length << dendl;
-  interval_set<uint64_t> rm;
+  btree_interval_set<uint64_t> rm;
   rm.insert(offset, length);
   for (unsigned i = 0; i < free.size() && !rm.empty(); ++i) {
-    interval_set<uint64_t> overlap;
+    btree_interval_set<uint64_t> overlap;
     overlap.intersection_of(rm, free[i]);
     if (!overlap.empty()) {
       dout(20) << __func__ << " bin " << i << " rm " << overlap << dendl;
@@ -295,7 +295,7 @@ void StupidAllocator::commit_finish()
   Mutex::Locker l(lock);
   dout(10) << __func__ << " released " << num_committing
 	   << " in extents " << committing.num_intervals() << dendl;
-  for (interval_set<uint64_t>::iterator p = committing.begin();
+  for (auto p = committing.begin();
        p != committing.end();
        ++p) {
     _insert_free(p.get_start(), p.get_len());
