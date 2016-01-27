@@ -6062,15 +6062,10 @@ int BlueStore::_clone_range(TransContext *txc,
     r = -ENOENT;
     goto out;
   }
-  
-  newo = c->get_onode(new_oid, false);
-  if (!newo) {
-    newo = c->get_onode(new_oid, true);
-    _assign_nid(txc, newo);	
-  }
+  newo = c->get_onode(new_oid, true);
   assert(newo);
   newo->exists = true;
- 
+
   r = _do_read(oldo, srcoff, length, bl, 0);
   if (r < 0)
     goto out;
