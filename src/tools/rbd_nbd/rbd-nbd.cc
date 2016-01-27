@@ -751,13 +751,22 @@ static int rbd_nbd(int argc, const char *argv[])
               CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
   std::vector<const char*>::iterator i;
+  std::ostringstream err;
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
       return 0;
     } else if (ceph_argparse_witharg(args, i, &devpath, "--device", (char *)NULL)) {
-    } else if (ceph_argparse_witharg(args, i, &nbds_max, cerr, "--nbds_max", (char *)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &nbds_max, err, "--nbds_max", (char *)NULL)) {
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        return EXIT_FAILURE;
+      }
+      if (nbds_max < 0) {
+        cerr << "rbd-nbd: Invalid argument for nbds_max!" << std::endl;
+        return EXIT_FAILURE;
+      }
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
       readonly = true;
     } else {
