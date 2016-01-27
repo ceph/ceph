@@ -93,7 +93,7 @@ class StripObjectMap: public GenericObjectMap {
                              vector<StripExtent> &extents);
   int lookup_strip_header(const coll_t & cid, const ghobject_t &oid,
                           StripObjectHeaderRef *header);
-  int save_strip_header(StripObjectHeaderRef header, KeyValueDB::Transaction t);
+  void save_strip_header(StripObjectHeaderRef header, KeyValueDB::Transaction t);
   int create_strip_header(const coll_t &cid, const ghobject_t &oid,
                           StripObjectHeaderRef *strip_header,
                           KeyValueDB::Transaction t);
