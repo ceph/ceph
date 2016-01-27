@@ -110,7 +110,6 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
   map<string, cmd_vartype> cmdmap;
 
   if (!cmdmap_from_json(cmd->cmd, &cmdmap, ss)) {
-    ret = -EINVAL;
     return false;
   }
 

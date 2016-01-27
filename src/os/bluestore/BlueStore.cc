@@ -2413,7 +2413,7 @@ int BlueStore::_do_read(
   map<uint64_t,bluestore_extent_t>::iterator bp, bend;
   map<uint64_t,bluestore_overlay_t>::iterator op, oend;
   uint64_t block_size = bdev->get_block_size();
-  int r;
+  int r = 0;
   IOContext ioc(NULL);   // FIXME?
 
   // generally, don't buffer anything, unless the client explicitly requests
@@ -2435,7 +2435,6 @@ int BlueStore::_do_read(
   _dump_onode(o);
 
   if (offset > o->onode.size) {
-    r = 0;
     goto out;
   }
 
@@ -2444,8 +2443,6 @@ int BlueStore::_do_read(
   }
 
   o->flush();
-
-  r = 0;
 
   // loop over overlays and data fragments.  overlays take precedence.
   bend = o->onode.block_map.end();
@@ -2515,7 +2512,6 @@ int BlueStore::_do_read(
 	if (r < 0) {
 	  goto out;
 	}
-	r = r_len;
 	bufferlist u;
 	u.substr_of(t, front_extra, x_len);
 	bl.claim_append(u);
