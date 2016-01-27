@@ -2897,7 +2897,7 @@ void CDir::scrub_info_create() const
   me->scrub_infop = si;
 }
 
-void CDir::scrub_initialize()
+void CDir::scrub_initialize(const ScrubHeaderRefConst& header)
 {
   dout(20) << __func__ << dendl;
   assert(is_complete());
@@ -2935,6 +2935,7 @@ void CDir::scrub_initialize()
     }
   }
   scrub_infop->directory_scrubbing = true;
+  scrub_infop->header = header;
 }
 
 void CDir::scrub_finished()
@@ -2986,7 +2987,8 @@ int CDir::_next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
     // okay, we got a  dentry
     dns.erase(dnkey);
 
-    if (dn->get_projected_version() < scrub_infop->last_recursive.version) {
+    if (dn->get_projected_version() < scrub_infop->last_recursive.version &&
+	!(scrub_infop->header && scrub_infop->header->force)) {
       dout(15) << " skip dentry " << dnkey.name
 	       << ", no change since last scrub" << dendl;
       continue;
@@ -3088,9 +3090,9 @@ bool CDir::scrub_local()
     scrub_infop->last_local.time = ceph_clock_now(g_ceph_context);
     scrub_infop->last_local.version = get_projected_version();
     scrub_infop->last_scrub_dirty = true;
-  } else if (inode->scrub_infop &&
-	     inode->scrub_infop->header &&
-	     inode->scrub_infop->header->repair) {
+  } else if (scrub_infop &&
+	     scrub_infop->header &&
+	     scrub_infop->header->repair) {
     cache->repair_dirfrag_stats(this, NULL);
   }
   return rval;

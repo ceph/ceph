@@ -11707,7 +11707,7 @@ public:
 void MDCache::enqueue_scrub(
     const string& path,
     const std::string &tag,
-    bool recursive, bool repair,
+    bool force, bool recursive, bool repair,
     Formatter *f, Context *fin)
 {
   dout(10) << __func__ << path << dendl;
@@ -11718,6 +11718,7 @@ void MDCache::enqueue_scrub(
   C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(f, fin);
   ScrubHeaderRef &header = cs->header;
   header->tag = tag;
+  header->force = force;
   header->recursive = recursive;
   header->repair = repair;
   header->formatter = f;

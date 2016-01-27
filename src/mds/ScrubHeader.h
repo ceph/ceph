@@ -16,6 +16,7 @@ public:
   CInode *origin;
   std::string tag;
 
+  bool force;
   bool recursive;
   bool repair;
   Formatter *formatter;
