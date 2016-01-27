@@ -144,7 +144,7 @@ Context *AcquireRequest<I>::handle_open_journal(int *ret_val) {
   if (*ret_val < 0) {
     lderr(cct) << "failed to open journal: " << cpp_strerror(*ret_val) << dendl;
     m_error_result = *ret_val;
-    return send_unlock_object_map();
+    return send_close_object_map();
   }
 
   return m_on_finish;
@@ -175,35 +175,11 @@ Context *AcquireRequest<I>::handle_open_object_map(int *ret_val) {
 
   // object map should never result in an error
   assert(*ret_val == 0);
-  return send_lock_object_map();
-}
-
-template <typename I>
-Context *AcquireRequest<I>::send_lock_object_map() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
-
-  assert(m_object_map != nullptr);
-
-  using klass = AcquireRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_lock_object_map>(
-    this);
-  m_object_map->lock(ctx);
-  return nullptr;
-}
-
-template <typename I>
-Context *AcquireRequest<I>::handle_lock_object_map(int *ret_val) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
-
-  // object map should never result in an error
-  assert(*ret_val == 0);
   return send_open_journal();
 }
 
 template <typename I>
-Context *AcquireRequest<I>::send_unlock_object_map() {
+Context *AcquireRequest<I>::send_close_object_map() {
   if (m_object_map == nullptr) {
     revert();
     return m_on_finish;
@@ -214,13 +190,13 @@ Context *AcquireRequest<I>::send_unlock_object_map() {
 
   using klass = AcquireRequest<I>;
   Context *ctx = create_context_callback<
-    klass, &klass::handle_unlock_object_map>(this);
-  m_object_map->unlock(ctx);
+    klass, &klass::handle_close_object_map>(this);
+  m_object_map->close(ctx);
   return nullptr;
 }
 
 template <typename I>
-Context *AcquireRequest<I>::handle_unlock_object_map(int *ret_val) {
+Context *AcquireRequest<I>::handle_close_object_map(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
 

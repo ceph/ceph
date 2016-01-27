@@ -12,9 +12,7 @@ struct MockObjectMap {
   MOCK_CONST_METHOD1(enabled, bool(const RWLock &object_map_lock));
 
   MOCK_METHOD1(open, void(Context *on_finish));
-
-  MOCK_METHOD1(lock, void(Context *on_finish));
-  MOCK_METHOD1(unlock, void(Context *on_finish));
+  MOCK_METHOD1(close, void(Context *on_finish));
 
   MOCK_METHOD3(aio_resize, void(uint64_t new_size, uint8_t default_object_state,
                                 Context *on_finish));

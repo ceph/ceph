@@ -31,8 +31,7 @@ public:
   }
 
   void open(Context *on_finish);
-  void lock(Context *on_finish);
-  void unlock(Context *on_finish);
+  void close(Context *on_finish);
 
   bool object_may_exist(uint64_t object_no) const;
 
