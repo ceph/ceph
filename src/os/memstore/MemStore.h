@@ -345,6 +345,10 @@ public:
       used_bytes(0) {}
   ~MemStore() { }
 
+  string get_type() {
+    return "memstore";
+  }
+
   bool test_mount_in_use() {
     return false;
   }
