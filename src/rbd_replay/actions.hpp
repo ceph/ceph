@@ -280,6 +280,35 @@ protected:
   }
 };
 
+class AioOpenImageAction : public TypedAction<action::AioOpenImageAction> {
+public:
+  AioOpenImageAction(const action::AioOpenImageAction &action)
+    : TypedAction<action::AioOpenImageAction>(action) {
+  }
+
+  virtual void perform(ActionCtx &ctx);
+
+protected:
+  virtual const char *get_action_name() const {
+    return "AioOpenImageAction";
+  }
+};
+
+
+class AioCloseImageAction : public TypedAction<action::AioCloseImageAction> {
+public:
+  AioCloseImageAction(const action::AioCloseImageAction &action)
+    : TypedAction<action::AioCloseImageAction>(action) {
+  }
+
+  virtual void perform(ActionCtx &ctx);
+
+protected:
+  virtual const char *get_action_name() const {
+    return "AioCloseImageAction";
+  }
+};
+
 }
 
 #endif

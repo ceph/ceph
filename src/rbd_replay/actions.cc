@@ -65,6 +65,14 @@ struct ConstructVisitor : public boost::static_visitor<Action::ptr> {
     return Action::ptr(new CloseImageAction(action));
   }
 
+  inline Action::ptr operator()(const action::AioOpenImageAction &action) const {
+    return Action::ptr(new AioOpenImageAction(action));
+  }
+
+  inline Action::ptr operator()(const action::AioCloseImageAction &action) const {
+    return Action::ptr(new AioCloseImageAction(action));
+  }
+
   inline Action::ptr operator()(const action::UnknownAction &action) const {
     return Action::ptr();
   }
@@ -175,3 +183,35 @@ void CloseImageAction::perform(ActionCtx &worker) {
   worker.set_action_complete(pending_io_id());
 }
 
+void AioOpenImageAction::perform(ActionCtx &worker) {
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
+  // TODO: Make it async
+  PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
+  worker.add_pending(io);
+  librbd::Image *image = new librbd::Image();
+  librbd::RBD *rbd = worker.rbd();
+  rbd_loc name(worker.map_image_name(m_action.name, m_action.snap_name));
+  int r;
+  if (m_action.read_only || worker.readonly()) {
+    r = rbd->open_read_only(*worker.ioctx(), *image, name.image.c_str(), name.snap.c_str());
+  } else {
+    r = rbd->open(*worker.ioctx(), *image, name.image.c_str(), name.snap.c_str());
+  }
+  if (r) {
+    cerr << "Unable to open image '" << m_action.name
+	 << "' with snap '" << m_action.snap_name
+	 << "' (mapped to '" << name.str()
+	 << "') and readonly " << m_action.read_only
+	 << ": (" << -r << ") " << strerror(-r) << std::endl;
+    exit(1);
+  }
+  worker.put_image(m_action.imagectx_id, image);
+  worker.remove_pending(io);
+}
+
+void AioCloseImageAction::perform(ActionCtx &worker) {
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
+  // TODO: Make it async
+  worker.erase_image(m_action.imagectx_id);
+  worker.set_action_complete(pending_io_id());
+}
