@@ -830,7 +830,7 @@ private:
 
   int _write(TransContext *txc,
 	     CollectionRef& c,
-	     const ghobject_t& oid,
+	     OnodeRef& o,
 	     uint64_t offset, size_t len,
 	     bufferlist& bl,
 	     uint32_t fadvise_flags);
@@ -871,14 +871,14 @@ private:
 		uint32_t fadvise_flags);
   int _touch(TransContext *txc,
 	     CollectionRef& c,
-	     const ghobject_t& oid);
+	     OnodeRef& o);
   int _do_write_zero(TransContext *txc,
 		     CollectionRef &c,
 		     OnodeRef o,
 		     uint64_t offset, uint64_t length);
   int _zero(TransContext *txc,
 	    CollectionRef& c,
-	    const ghobject_t& oid,
+	    OnodeRef& o,
 	    uint64_t offset, size_t len);
   int _do_truncate(TransContext *txc,
 		   CollectionRef& c,
@@ -886,67 +886,68 @@ private:
 		   uint64_t offset);
   int _truncate(TransContext *txc,
 		CollectionRef& c,
-		const ghobject_t& oid,
+		OnodeRef& o,
 		uint64_t offset);
   int _remove(TransContext *txc,
 	      CollectionRef& c,
-	      const ghobject_t& oid);
+	      OnodeRef& o);
   int _do_remove(TransContext *txc,
 		 CollectionRef& c,
 		 OnodeRef o);
   int _setattr(TransContext *txc,
 	       CollectionRef& c,
-	       const ghobject_t& oid,
+	       OnodeRef& o,
 	       const string& name,
 	       bufferptr& val);
   int _setattrs(TransContext *txc,
 		CollectionRef& c,
-		const ghobject_t& oid,
+		OnodeRef& o,
 		const map<string,bufferptr>& aset);
   int _rmattr(TransContext *txc,
 	      CollectionRef& c,
-	      const ghobject_t& oid,
+	      OnodeRef& o,
 	      const string& name);
   int _rmattrs(TransContext *txc,
 	       CollectionRef& c,
-	       const ghobject_t& oid);
+	       OnodeRef& o);
   void _do_omap_clear(TransContext *txc, uint64_t id);
   int _omap_clear(TransContext *txc,
 		  CollectionRef& c,
-		  const ghobject_t& oid);
+		  OnodeRef& o);
   int _omap_setkeys(TransContext *txc,
 		    CollectionRef& c,
-		    const ghobject_t& oid,
+		    OnodeRef& o,
 		    bufferlist& bl);
   int _omap_setheader(TransContext *txc,
 		      CollectionRef& c,
-		      const ghobject_t& oid,
+		      OnodeRef& o,
 		      bufferlist& header);
   int _omap_rmkeys(TransContext *txc,
 		   CollectionRef& c,
-		   const ghobject_t& oid,
+		   OnodeRef& o,
 		   bufferlist& bl);
   int _omap_rmkey_range(TransContext *txc,
 			CollectionRef& c,
-			const ghobject_t& oid,
+			OnodeRef& o,
 			const string& first, const string& last);
   int _setallochint(TransContext *txc,
 		    CollectionRef& c,
-		    const ghobject_t& oid,
+		    OnodeRef& o,
 		    uint64_t expected_object_size,
 		    uint64_t expected_write_size);
   int _clone(TransContext *txc,
 	     CollectionRef& c,
-	     const ghobject_t& old_oid,
-	     const ghobject_t& new_oid);
+	     OnodeRef& oldo,
+	     OnodeRef& newo);
   int _clone_range(TransContext *txc,
 		   CollectionRef& c,
-		   const ghobject_t& old_oid,
-		   const ghobject_t& new_oid,
+		   OnodeRef& oldo,
+		   OnodeRef& newo,
 		   uint64_t srcoff, uint64_t length, uint64_t dstoff);
   int _rename(TransContext *txc,
 	      CollectionRef& c,
-	      const ghobject_t& old_oid,
+	      OnodeRef& oldo,
+	      OnodeRef& newo,
 	      const ghobject_t& new_oid);
   int _create_collection(TransContext *txc, coll_t cid, unsigned bits,
 			 CollectionRef *c);
