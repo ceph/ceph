@@ -634,6 +634,7 @@ BlueStore::Collection::Collection(BlueStore *ns, coll_t c)
   : store(ns),
     cid(c),
     lock("BlueStore::Collection::lock"),
+    exists(true),
     onode_map(),
     enode_set(g_conf->bluestore_onode_map_size)
 {
@@ -2331,11 +2332,24 @@ void BlueStore::_reap_collections()
 // ---------------
 // read operations
 
+ObjectStore::CollectionHandle BlueStore::open_collection(const coll_t& cid)
+{
+  return _get_collection(cid);
+}
+
 bool BlueStore::exists(coll_t cid, const ghobject_t& oid)
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c)
+    return false;
+  return exists(c, oid);
+}
+
+bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(10) << __func__ << " " << c->cid << " " << oid << dendl;
+  if (!c->exists)
     return false;
   RWLock::RLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
@@ -2350,10 +2364,22 @@ int BlueStore::stat(
     struct stat *st,
     bool allow_eio)
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c)
     return -ENOENT;
+  return stat(c, oid, st, allow_eio);
+}
+
+int BlueStore::stat(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  struct stat *st,
+  bool allow_eio)
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  if (c->exists)
+    return -ENOENT;
+  dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
   RWLock::RLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists)
@@ -2374,14 +2400,31 @@ int BlueStore::read(
   uint32_t op_flags,
   bool allow_eio)
 {
+  CollectionHandle c = _get_collection(cid);
+  if (!c)
+    return -ENOENT;
+  return read(c, oid, offset, length, bl, op_flags, allow_eio);
+}
+
+int BlueStore::read(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t length,
+  bufferlist& bl,
+  uint32_t op_flags,
+  bool allow_eio)
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  const coll_t &cid = c->get_cid();
   dout(15) << __func__ << " " << cid << " " << oid
 	   << " " << offset << "~" << length
 	   << dendl;
-  bl.clear();
-  CollectionRef c = _get_collection(cid);
-  if (!c)
+  if (!c->exists)
     return -ENOENT;
   RWLock::RLocker l(c->lock);
+
+  bl.clear();
 
   int r;
 
@@ -2558,10 +2601,23 @@ int BlueStore::fiemap(
   size_t len,
   bufferlist& bl)
 {
-  interval_set<uint64_t> m;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c)
     return -ENOENT;
+  return fiemap(c, oid, offset, len, bl);
+}
+
+int BlueStore::fiemap(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t len,
+  bufferlist& bl)
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  if (!c->exists)
+    return -ENOENT;
+  interval_set<uint64_t> m;
   RWLock::RLocker l(c->lock);
 
   OnodeRef o = c->get_onode(oid, false);
@@ -2658,9 +2714,21 @@ int BlueStore::getattr(
   const char *name,
   bufferptr& value)
 {
-  dout(15) << __func__ << " " << cid << " " << oid << " " << name << dendl;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c)
+    return -ENOENT;
+  return getattr(c, oid, name, value);
+}
+
+int BlueStore::getattr(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  const char *name,
+  bufferptr& value)
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(15) << __func__ << " " << c->cid << " " << oid << " " << name << dendl;
+  if (!c->exists)
     return -ENOENT;
   RWLock::RLocker l(c->lock);
   int r;
@@ -2679,19 +2747,31 @@ int BlueStore::getattr(
   value = o->onode.attrs[k];
   r = 0;
  out:
-  dout(10) << __func__ << " " << cid << " " << oid << " " << name
+  dout(10) << __func__ << " " << c->cid << " " << oid << " " << name
 	   << " = " << r << dendl;
   return r;
 }
+
 
 int BlueStore::getattrs(
   coll_t cid,
   const ghobject_t& oid,
   map<string,bufferptr>& aset)
 {
-  dout(15) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c)
+    return -ENOENT;
+  return getattrs(c, oid, aset);
+}
+
+int BlueStore::getattrs(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  map<string,bufferptr>& aset)
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
+  if (!c->exists)
     return -ENOENT;
   RWLock::RLocker l(c->lock);
   int r;
@@ -2704,7 +2784,7 @@ int BlueStore::getattrs(
   aset = o->onode.attrs;
   r = 0;
  out:
-  dout(10) << __func__ << " " << cid << " " << oid
+  dout(10) << __func__ << " " << c->cid << " " << oid
 	   << " = " << r << dendl;
   return r;
 }
@@ -2755,13 +2835,24 @@ int BlueStore::collection_list(
   bool sort_bitwise, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
-  dout(15) << __func__ << " " << cid
-	   << " start " << start << " end " << end << " max " << max << dendl;
-  if (!sort_bitwise)
-    return -EOPNOTSUPP;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c)
     return -ENOENT;
+  return collection_list(c, start, end, sort_bitwise, max, ls, pnext);
+}
+
+int BlueStore::collection_list(
+  CollectionHandle &c_, ghobject_t start, ghobject_t end,
+  bool sort_bitwise, int max,
+  vector<ghobject_t> *ls, ghobject_t *pnext)
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(15) << __func__ << " " << c->cid
+	   << " start " << start << " end " << end << " max " << max << dendl;
+  if (!c->exists)
+    return -ENOENT;
+  if (!sort_bitwise)
+    return -EOPNOTSUPP;
   RWLock::RLocker l(c->lock);
   int r = 0;
   KeyValueDB::Iterator it;
@@ -2779,7 +2870,7 @@ int BlueStore::collection_list(
       start.hobj == hobject_t::get_max()) {
     goto out;
   }
-  get_coll_key_range(cid, c->cnode.bits, &temp_start_key, &temp_end_key,
+  get_coll_key_range(c->cid, c->cnode.bits, &temp_start_key, &temp_end_key,
 		     &start_key, &end_key);
   dout(20) << __func__
 	   << " range " << pretty_binary_string(temp_start_key)
@@ -2790,7 +2881,7 @@ int BlueStore::collection_list(
   it = db->get_iterator(PREFIX_OBJ);
   if (start == ghobject_t() ||
       start.hobj == hobject_t() ||
-      start == cid.get_min_hobj()) {
+      start == c->cid.get_min_hobj()) {
     it->upper_bound(temp_start_key);
     temp = true;
   } else {
@@ -2865,7 +2956,7 @@ int BlueStore::collection_list(
     *pnext = ghobject_t::get_max();
   }
  out:
-  dout(10) << __func__ << " " << cid
+  dout(10) << __func__ << " " << c->cid
 	   << " start " << start << " end " << end << " max " << max
 	   << " = " << r << ", ls.size() = " << ls->size()
 	   << ", next = " << *pnext << dendl;
@@ -2968,9 +3059,22 @@ int BlueStore::omap_get(
   map<string, bufferlist> *out /// < [out] Key to value map
   )
 {
-  dout(15) << __func__ << " " << cid << " oid " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c)
+    return -ENOENT;
+  return omap_get(c, oid, header, out);
+}
+
+int BlueStore::omap_get(
+  CollectionHandle &c_,    ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  bufferlist *header,      ///< [out] omap header
+  map<string, bufferlist> *out /// < [out] Key to value map
+  )
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
+  if (!c->exists)
     return -ENOENT;
   RWLock::RLocker l(c->lock);
   int r = 0;
@@ -3007,7 +3111,8 @@ int BlueStore::omap_get(
     }
   }
  out:
-  dout(10) << __func__ << " " << cid << " oid " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+	   << dendl;
   return r;
 }
 
@@ -3018,9 +3123,22 @@ int BlueStore::omap_get_header(
   bool allow_eio ///< [in] don't assert on eio
   )
 {
-  dout(15) << __func__ << " " << cid << " oid " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c)
+    return -ENOENT;
+  return omap_get_header(c, oid, header, allow_eio);
+}
+
+int BlueStore::omap_get_header(
+  CollectionHandle &c_,                ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  bufferlist *header,      ///< [out] omap header
+  bool allow_eio ///< [in] don't assert on eio
+  )
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
+  if (!c->exists)
     return -ENOENT;
   RWLock::RLocker l(c->lock);
   int r = 0;
@@ -3042,7 +3160,8 @@ int BlueStore::omap_get_header(
     }
   }
  out:
-  dout(10) << __func__ << " " << cid << " oid " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+	   << dendl;
   return r;
 }
 
@@ -3052,9 +3171,21 @@ int BlueStore::omap_get_keys(
   set<string> *keys      ///< [out] Keys defined on oid
   )
 {
-  dout(15) << __func__ << " " << cid << " oid " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c)
+    return -ENOENT;
+  return omap_get_keys(c, oid, keys);
+}
+
+int BlueStore::omap_get_keys(
+  CollectionHandle &c_,              ///< [in] Collection containing oid
+  const ghobject_t &oid, ///< [in] Object containing omap
+  set<string> *keys      ///< [out] Keys defined on oid
+  )
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
+  if (!c->exists)
     return -ENOENT;
   RWLock::RLocker l(c->lock);
   int r = 0;
@@ -3087,7 +3218,8 @@ int BlueStore::omap_get_keys(
     }
   }
  out:
-  dout(10) << __func__ << " " << cid << " oid " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+	   << dendl;
   return r;
 }
 
@@ -3098,9 +3230,22 @@ int BlueStore::omap_get_values(
   map<string, bufferlist> *out ///< [out] Returned keys and values
   )
 {
-  dout(15) << __func__ << " " << cid << " oid " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c)
+    return -ENOENT;
+  return omap_get_values(c, oid, keys, out);
+}
+
+int BlueStore::omap_get_values(
+  CollectionHandle &c_,        ///< [in] Collection containing oid
+  const ghobject_t &oid,       ///< [in] Object containing omap
+  const set<string> &keys,     ///< [in] Keys to get
+  map<string, bufferlist> *out ///< [out] Returned keys and values
+  )
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
+  if (!c->exists)
     return -ENOENT;
   RWLock::RLocker l(c->lock);
   int r = 0;
@@ -3123,7 +3268,8 @@ int BlueStore::omap_get_values(
     }
   }
  out:
-  dout(10) << __func__ << " " << cid << " oid " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+	   << dendl;
   return r;
 }
 
@@ -3134,9 +3280,22 @@ int BlueStore::omap_check_keys(
   set<string> *out         ///< [out] Subset of keys defined on oid
   )
 {
-  dout(15) << __func__ << " " << cid << " oid " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c)
+    return -ENOENT;
+  return omap_check_keys(c, oid, keys, out);
+}
+
+int BlueStore::omap_check_keys(
+  CollectionHandle &c_,    ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  const set<string> &keys, ///< [in] Keys to check
+  set<string> *out         ///< [out] Subset of keys defined on oid
+  )
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
+  if (!c->exists)
     return -ENOENT;
   RWLock::RLocker l(c->lock);
   int r = 0;
@@ -3162,7 +3321,8 @@ int BlueStore::omap_check_keys(
     }
   }
  out:
-  dout(10) << __func__ << " " << cid << " oid " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+	   << dendl;
   return r;
 }
 
@@ -3171,11 +3331,22 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
   const ghobject_t &oid  ///< [in] object
   )
 {
-
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c) {
     dout(10) << __func__ << " " << cid << "doesn't exist" <<dendl;
+    return ObjectMap::ObjectMapIterator();
+  }
+  return get_omap_iterator(c, oid);
+}
+
+ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
+  CollectionHandle &c_,              ///< [in] collection
+  const ghobject_t &oid  ///< [in] object
+  )
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
+  if (!c->exists) {
     return ObjectMap::ObjectMapIterator();
   }
   RWLock::RLocker l(c->lock);
@@ -6169,6 +6340,7 @@ int BlueStore::_create_collection(
       r = -EEXIST;
       goto out;
     }
+    assert((*c)->exists);
     c->reset(new Collection(this, cid));
     (*c)->cnode.bits = bits;
     coll_map[cid] = *c;
@@ -6183,7 +6355,7 @@ int BlueStore::_create_collection(
 }
 
 int BlueStore::_remove_collection(TransContext *txc, coll_t cid,
-				 CollectionRef *c)
+				  CollectionRef *c)
 {
   dout(15) << __func__ << " " << cid << dendl;
   int r;
@@ -6194,6 +6366,7 @@ int BlueStore::_remove_collection(TransContext *txc, coll_t cid,
       r = -ENOENT;
       goto out;
     }
+    assert((*c)->exists);
     pair<ghobject_t,OnodeRef> next;
     while ((*c)->onode_map.get_next(next.first, &next)) {
       if (next.second->exists) {
@@ -6203,6 +6376,7 @@ int BlueStore::_remove_collection(TransContext *txc, coll_t cid,
     }
     coll_map.erase(cid);
     txc->removed_collections.push_back(*c);
+    (*c)->exists = false;
     c->reset();
   }
   txc->t->rmkey(PREFIX_COLL, stringify(cid));

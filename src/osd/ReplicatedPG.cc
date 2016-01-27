@@ -1287,7 +1287,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	    wait_for_unreadable_object(oid, op);
 	    return;
 	  }
-	  result = osd->store->read(coll, ghobject_t(oid), 0, 0, osd_op.outdata);
+	  result = osd->store->read(ch, ghobject_t(oid), 0, 0, osd_op.outdata);
 	}
       }
       break;
@@ -1352,7 +1352,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
   PG(o, curmap, _pool, p),
   pgbackend(
     PGBackend::build_pg_backend(
-      _pool.info, curmap, this, coll_t(p), o->store, cct)),
+      _pool.info, curmap, this, coll_t(p), ch, o->store, cct)),
   object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
   backfills_in_flight(hobject_t::Comparator(true)),
@@ -4110,8 +4110,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	// read into a buffer
 	bufferlist bl;
-	int r = osd->store->fiemap(coll, ghobject_t(soid, ghobject_t::NO_GEN,
-						    info.pgid.shard),
+	int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
+						  info.pgid.shard),
 				   op.extent.offset, op.extent.length, bl);
 	osd_op.outdata.claim(bl);
 	if (r < 0)
@@ -4144,8 +4144,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	// read into a buffer
 	bufferlist bl;
         uint32_t total_read = 0;
-	int r = osd->store->fiemap(coll, ghobject_t(soid, ghobject_t::NO_GEN,
-						    info.pgid.shard),
+	int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
+						  info.pgid.shard),
 				   op.extent.offset, op.extent.length, bl);
 	if (r < 0)  {
 	  result = r;
@@ -5480,7 +5480,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_read;
       {
-	osd->store->omap_get_header(coll, ghobject_t(soid), &osd_op.outdata);
+	osd->store->omap_get_header(ch, ghobject_t(soid), &osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
@@ -5501,7 +5501,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, list_entries(keys_to_get).c_str());
 	map<string, bufferlist> out;
 	if (pool.info.supports_omap()) {
-	  osd->store->omap_get_values(coll, ghobject_t(soid), keys_to_get, &out);
+	  osd->store->omap_get_values(ch, ghobject_t(soid), keys_to_get, &out);
 	} // else return empty omap entries
 	::encode(out, osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
@@ -5536,7 +5536,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	       i != assertions.end();
 	       ++i)
 	    to_get.insert(i->first);
-	  int r = osd->store->omap_get_values(coll, ghobject_t(soid),
+	  int r = osd->store->omap_get_values(ch, ghobject_t(soid),
 					      to_get, &out);
 	  if (r < 0) {
 	    result = r;
@@ -6846,7 +6846,7 @@ int ReplicatedPG::fill_in_copy_get(
     if (left > 0 && !cursor.omap_complete) {
       assert(cursor.data_complete);
       if (cursor.omap_offset.empty()) {
-	osd->store->omap_get_header(coll, ghobject_t(oi.soid),
+	osd->store->omap_get_header(ch, ghobject_t(oi.soid),
 				    &reply_obj.omap_header);
       }
       bufferlist omap_data;
@@ -11000,7 +11000,7 @@ void ReplicatedPG::check_local()
 	       << " at " << p->version << dendl;
       struct stat st;
       int r = osd->store->stat(
-	coll,
+	ch,
 	ghobject_t(p->soid, ghobject_t::NO_GEN, pg_whoami.shard),
 	&st);
       if (r != -ENOENT) {
@@ -11647,7 +11647,7 @@ void ReplicatedPG::agent_load_hit_sets()
 	bufferlist bl;
 	{
 	  obc->ondisk_read_lock();
-	  int r = osd->store->read(coll, ghobject_t(oid), 0, 0, bl);
+	  int r = osd->store->read(ch, ghobject_t(oid), 0, 0, bl);
 	  assert(r >= 0);
 	  obc->ondisk_read_unlock();
 	}

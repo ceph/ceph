@@ -255,9 +255,17 @@ MemStore::CollectionRef MemStore::get_collection(coll_t cid)
 
 bool MemStore::exists(coll_t cid, const ghobject_t& oid)
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
+  CollectionHandle c = get_collection(cid);
   if (!c)
+    return false;
+  return exists(c, oid);
+}
+
+bool MemStore::exists(CollectionHandle &c_, const ghobject_t& oid)
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
+  if (!c->exists)
     return false;
 
   // Perform equivalent of c->get_object_(oid) != NULL. In C++11 the
@@ -271,11 +279,22 @@ int MemStore::stat(
     struct stat *st,
     bool allow_eio)
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
+  CollectionHandle c = get_collection(cid);
   if (!c)
     return -ENOENT;
+  return stat(c, oid, st, allow_eio);
+}
 
+int MemStore::stat(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  struct stat *st,
+  bool allow_eio)
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(10) << __func__ << " " << c->cid << " " << oid << dendl;
+  if (!c->exists)
+    return -ENOENT;
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
@@ -295,12 +314,26 @@ int MemStore::read(
     uint32_t op_flags,
     bool allow_eio)
 {
-  dout(10) << __func__ << " " << cid << " " << oid << " "
-	   << offset << "~" << len << dendl;
-  CollectionRef c = get_collection(cid);
+  CollectionHandle c = get_collection(cid);
   if (!c)
     return -ENOENT;
+  return read(c, oid, offset, len, bl, op_flags, allow_eio);
+}
 
+int MemStore::read(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t len,
+  bufferlist& bl,
+  uint32_t op_flags,
+  bool allow_eio)
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(10) << __func__ << " " << c->cid << " " << oid << " "
+	   << offset << "~" << len << dendl;
+  if (!c->exists)
+    return -ENOENT;
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
@@ -342,11 +375,19 @@ int MemStore::fiemap(coll_t cid, const ghobject_t& oid,
 int MemStore::getattr(coll_t cid, const ghobject_t& oid,
 		      const char *name, bufferptr& value)
 {
-  dout(10) << __func__ << " " << cid << " " << oid << " " << name << dendl;
-  CollectionRef c = get_collection(cid);
+  CollectionHandle c = get_collection(cid);
   if (!c)
     return -ENOENT;
+  return getattr(c, oid, name, value);
+}
 
+int MemStore::getattr(CollectionHandle &c_, const ghobject_t& oid,
+		      const char *name, bufferptr& value)
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(10) << __func__ << " " << c->cid << " " << oid << " " << name << dendl;
+  if (!c->exists)
+    return -ENOENT;
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
@@ -362,9 +403,18 @@ int MemStore::getattr(coll_t cid, const ghobject_t& oid,
 int MemStore::getattrs(coll_t cid, const ghobject_t& oid,
 		       map<string,bufferptr>& aset)
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
+  CollectionHandle c = get_collection(cid);
   if (!c)
+    return -ENOENT;
+  return getattrs(c, oid, aset);
+}
+
+int MemStore::getattrs(CollectionHandle &c_, const ghobject_t& oid,
+		       map<string,bufferptr>& aset)
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(10) << __func__ << " " << c->cid << " " << oid << dendl;
+  if (!c->exists)
     return -ENOENT;
 
   ObjectRef o = c->get_object(oid);
@@ -1248,6 +1298,7 @@ int MemStore::_destroy_collection(coll_t cid)
     RWLock::RLocker l2(cp->second->lock);
     if (!cp->second->object_map.empty())
       return -ENOTEMPTY;
+    cp->second->exists = false;
   }
   used_bytes -= cp->second->used_bytes();
   coll_map.erase(cp);
