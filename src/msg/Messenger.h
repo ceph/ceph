@@ -400,6 +400,11 @@ public:
    */
   virtual int rebind(const set<int>& avoid_ports) { return -EOPNOTSUPP; }
   /**
+   * @return 1 on unlinked, or 0 on linked, or -errno if
+   * we can be more specific about the failure.
+   */
+  virtual int is_linked() { return -EOPNOTSUPP; }
+  /**
    * @} // Configuration
    */
 
