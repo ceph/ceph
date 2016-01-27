@@ -232,6 +232,7 @@ struct bluestore_onode_t {
     assert(q->second >= 2);
     if (--q->second == 1) {
       overlay_refs.erase(q);
+      return true;
     }
     return false;
   }
