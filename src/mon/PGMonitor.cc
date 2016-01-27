@@ -2071,10 +2071,12 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   ceph::unordered_map<pg_t, pg_stat_t> stuck_pgs;
   utime_t now(ceph_clock_now(g_ceph_context));
   utime_t cutoff = now - utime_t(g_conf->mon_pg_stuck_threshold, 0);
+  uint64_t num_inactive_pgs = 0;
 
   pg_map.get_stuck_stats(PGMap::STUCK_INACTIVE, cutoff, stuck_pgs);
   if (!stuck_pgs.empty()) {
     note["stuck inactive"] = stuck_pgs.size();
+    num_inactive_pgs += stuck_pgs.size();
     if (detail)
       note_stuck_detail(PGMap::STUCK_INACTIVE, stuck_pgs, detail);
   }
@@ -2107,8 +2109,15 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   pg_map.get_stuck_stats(PGMap::STUCK_STALE, cutoff, stuck_pgs);
   if (!stuck_pgs.empty()) {
     note["stuck stale"] = stuck_pgs.size();
+    num_inactive_pgs += stuck_pgs.size();
     if (detail)
       note_stuck_detail(PGMap::STUCK_STALE, stuck_pgs, detail);
+  }
+
+  if (g_conf->mon_pg_min_inactive > 0 && num_inactive_pgs >= g_conf->mon_pg_min_inactive) {
+    ostringstream ss;
+    ss << num_inactive_pgs << " pgs are stuck inactive for more than " << g_conf->mon_pg_stuck_threshold << " seconds";
+    summary.push_back(make_pair(HEALTH_ERR, ss.str()));
   }
 
   if (!note.empty()) {
