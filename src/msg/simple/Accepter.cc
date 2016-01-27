@@ -14,9 +14,16 @@
 
 #include <sys/socket.h>
 #include <netinet/tcp.h>
+#include <ifaddrs.h>
 #include <sys/uio.h>
+#include <sys/ioctl.h> 
 #include <limits.h>
 #include <poll.h>
+#if defined(__linux__)
+#include <linux/if.h>
+#include <linux/sockios.h>
+#include <linux/ethtool.h>
+#endif
 
 #include "msg/Message.h"
 
@@ -284,6 +291,49 @@ void Accepter::stop()
   done = false;
 }
 
+int Accepter::is_linked()
+{
+#if defined(ETHTOOL_GLINK) && defined(SIOCETHTOOL)
+  entity_addr_t iaddr = msgr->get_myaddr();
 
-
-
+  struct ifaddrs *ifList;
+  if(getifaddrs(&ifList) < 0){
+    assert(0 == "unable to fetch interfaces and addresses");
+  }
+  
+  string ifname;
+  for (struct ifaddrs *ifa = ifList; ifa != NULL; ifa = ifa->ifa_next) {
+    entity_addr_t ifaddr;
+    ifaddr.set_sockaddr(ifa->ifa_addr);
+    if (iaddr.is_same_host(ifaddr)) {
+      ifname = ifa->ifa_name;
+      break;
+    }
+  }
+  freeifaddrs(ifList);
+  
+  if (ifname != "") {
+    struct ifreq ifr;
+    struct ethtool_value edata;
+    edata.cmd = ETHTOOL_GLINK;
+    edata.data = 0;
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, ifname.c_str(), ifname.length()+1);
+    ifr.ifr_data = (char *)&edata;
+  
+    int tfd = socket(iaddr.addr.ss_family, SOCK_DGRAM, 0 );
+    if (tfd < 0)
+      return -errno;;
+    if(ioctl( tfd, SIOCETHTOOL, &ifr ) == -1){
+      close(tfd);
+      return -EOPNOTSUPP;
+    }
+  
+    close(tfd);  
+    return edata.data;  
+  }
+  return -ENOENT;
+#else
+  return -EOPNOTSUPP; 
+#endif 
+}

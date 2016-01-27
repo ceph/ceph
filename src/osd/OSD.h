@@ -1251,6 +1251,14 @@ public:
     return get_state() == STATE_WAITING_FOR_HEALTHY;
   }
 
+  // -- network state --
+public:
+  static const int NETWORK_NEED_REBIND = (1<<0);
+  static const int NETWORK_IS_UNLINKED = (1<<1);
+
+  int network_state;
+  bool network_rebind_and_check();
+
 private:
 
   ThreadPool osd_tp;
