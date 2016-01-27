@@ -7354,7 +7354,7 @@ done:
     string field;
     cmd_getval(g_ceph_context, cmdmap, "field", field);
     if (field != "max_objects" && field != "max_bytes") {
-      ss << "unrecognized field '" << field << "'; max_bytes of max_objects";
+      ss << "unrecognized field '" << field << "'; should be 'max_bytes' or 'max_objects'";
       err = -EINVAL;
       goto reply;
     }
