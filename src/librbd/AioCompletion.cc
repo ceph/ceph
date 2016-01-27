@@ -69,6 +69,9 @@ namespace librbd {
     assert(lock.is_locked());
     elapsed = ceph_clock_now(cct) - start_time;
     switch (aio_type) {
+    case AIO_TYPE_OPEN:
+    case AIO_TYPE_CLOSE:
+      break;
     case AIO_TYPE_READ:
       ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed); break;
     case AIO_TYPE_WRITE:
