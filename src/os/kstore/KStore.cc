@@ -2429,6 +2429,8 @@ int KStore::queue_transactions(
     _txc_add_transaction(txc, *p);
   }
 
+  reset_coll_object_tbl(tls);
+
   r = _txc_finalize(osr, txc);
   assert(r == 0);
 
