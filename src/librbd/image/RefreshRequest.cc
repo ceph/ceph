@@ -33,10 +33,9 @@ RefreshRequest<I>::RefreshRequest(I &image_ctx, Context *on_finish)
 
 template <typename I>
 RefreshRequest<I>::~RefreshRequest() {
-  delete m_object_map;
-
   // these require state machine to close
   assert(m_exclusive_lock == nullptr);
+  assert(m_object_map == nullptr);
   assert(m_journal == nullptr);
   assert(m_refresh_parent == nullptr);
 }
@@ -404,9 +403,9 @@ Context *RefreshRequest<I>::handle_v2_refresh_parent(int *result) {
 template <typename I>
 Context *RefreshRequest<I>::send_v2_init_exclusive_lock() {
   if ((m_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0 ||
-      !m_image_ctx.snap_name.empty() ||
+      m_image_ctx.read_only || !m_image_ctx.snap_name.empty() ||
       m_image_ctx.exclusive_lock != nullptr) {
-    return send_v2_open_journal();
+    return send_v2_open_object_map();
   }
 
   // implies exclusive lock dynamically enabled or image open in-progress
@@ -414,7 +413,7 @@ Context *RefreshRequest<I>::send_v2_init_exclusive_lock() {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   // TODO need safe shut down
-  m_exclusive_lock = ExclusiveLock<I>::create(m_image_ctx);
+  m_exclusive_lock = m_image_ctx.create_exclusive_lock();
 
   using klass = RefreshRequest<I>;
   Context *ctx = create_context_callback<
@@ -434,20 +433,22 @@ Context *RefreshRequest<I>::handle_v2_init_exclusive_lock(int *result) {
     lderr(cct) << "failed to initialize exclusive lock: "
                << cpp_strerror(*result) << dendl;
     save_result(result);
-    return send_v2_finalize_refresh_parent();
   }
 
-  return send_v2_open_journal();
+  // object map and journal will be opened when exclusive lock is
+  // acquired (if features are enabled)
+  return send_v2_finalize_refresh_parent();
 }
 
 template <typename I>
 Context *RefreshRequest<I>::send_v2_open_journal() {
   if ((m_features & RBD_FEATURE_JOURNALING) == 0 ||
       m_image_ctx.read_only ||
+      !m_image_ctx.snap_name.empty() ||
       m_image_ctx.journal != nullptr ||
       m_image_ctx.exclusive_lock == nullptr ||
       !m_image_ctx.exclusive_lock->is_lock_owner()) {
-    return send_v2_open_object_map();
+    return send_v2_finalize_refresh_parent();
   }
 
   // implies journal dynamically enabled since ExclusiveLock will init
@@ -474,17 +475,20 @@ Context *RefreshRequest<I>::handle_v2_open_journal(int *result) {
     lderr(cct) << "failed to initialize journal: " << cpp_strerror(*result)
                << dendl;
     save_result(result);
-    return send_v2_finalize_refresh_parent();
   }
 
-  return send_v2_shut_down_exclusive_lock();
+  return send_v2_finalize_refresh_parent();
 }
 
 template <typename I>
 Context *RefreshRequest<I>::send_v2_open_object_map() {
   if ((m_features & RBD_FEATURE_OBJECT_MAP) == 0 ||
-      m_image_ctx.object_map != nullptr || m_image_ctx.snap_name.empty()) {
-    return send_v2_finalize_refresh_parent();
+      m_image_ctx.object_map != nullptr ||
+      (m_image_ctx.snap_name.empty() &&
+       (m_image_ctx.read_only ||
+        m_image_ctx.exclusive_lock == nullptr ||
+        !m_image_ctx.exclusive_lock->is_lock_owner()))) {
+    return send_v2_open_journal();
   }
 
   // implies object map dynamically enabled or image open in-progress
@@ -493,21 +497,29 @@ Context *RefreshRequest<I>::send_v2_open_object_map() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  for (size_t snap_idx = 0; snap_idx < m_snap_names.size(); ++snap_idx) {
-    if (m_snap_names[snap_idx] == m_image_ctx.snap_name) {
-      using klass = RefreshRequest<I>;
-      Context *ctx = create_context_callback<
-        klass, &klass::handle_v2_open_object_map>(this);
+  if (m_image_ctx.snap_name.empty()) {
+    m_object_map = m_image_ctx.create_object_map(CEPH_NOSNAP);
+  } else {
+    for (size_t snap_idx = 0; snap_idx < m_snap_names.size(); ++snap_idx) {
+      if (m_snap_names[snap_idx] == m_image_ctx.snap_name) {
+        m_object_map = m_image_ctx.create_object_map(
+          m_snapc.snaps[snap_idx].val);
+        break;
+      }
+    }
 
-      m_object_map = m_image_ctx.create_object_map(m_snapc.snaps[snap_idx].val);
-      m_object_map->open(ctx);
-      return nullptr;
+    if (m_object_map == nullptr) {
+      lderr(cct) << "failed to locate snapshot: " << m_image_ctx.snap_name
+                 << dendl;
+      return send_v2_open_journal();
     }
   }
 
-  lderr(cct) << "failed to locate snapshot: " << m_image_ctx.snap_name
-             << dendl;
-  return send_v2_finalize_refresh_parent();
+  using klass = RefreshRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_v2_open_object_map>(this);
+  m_object_map->open(ctx);
+  return nullptr;
 }
 
 template <typename I>
@@ -516,7 +528,7 @@ Context *RefreshRequest<I>::handle_v2_open_object_map(int *result) {
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
   assert(*result == 0);
-  return send_v2_finalize_refresh_parent();
+  return send_v2_open_journal();
 }
 
 template <typename I>
@@ -587,7 +599,7 @@ Context *RefreshRequest<I>::handle_v2_shut_down_exclusive_lock(int *result) {
 template <typename I>
 Context *RefreshRequest<I>::send_v2_close_journal() {
   if (m_journal == nullptr) {
-    return send_flush_aio();
+    return send_v2_close_object_map();
   }
 
   CephContext *cct = m_image_ctx.cct;
@@ -611,6 +623,40 @@ Context *RefreshRequest<I>::handle_v2_close_journal(int *result) {
     lderr(cct) << "failed to close journal: " << cpp_strerror(*result)
                << dendl;
   }
+
+  assert(m_journal != nullptr);
+  delete m_journal;
+  m_journal = nullptr;
+
+  return send_v2_close_object_map();
+}
+
+template <typename I>
+Context *RefreshRequest<I>::send_v2_close_object_map() {
+  if (m_object_map == nullptr) {
+    return send_flush_aio();
+  }
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  // object map was dynamically disabled
+  using klass = RefreshRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_v2_close_object_map>(this);
+  m_object_map->close(ctx);
+  return nullptr;
+}
+
+template <typename I>
+Context *RefreshRequest<I>::handle_v2_close_object_map(int *result) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  assert(*result == 0);
+  assert(m_object_map != nullptr);
+  delete m_object_map;
+  m_object_map = nullptr;
 
   return send_flush_aio();
 }
@@ -722,20 +768,26 @@ void RefreshRequest<I>::apply() {
                                                         m_image_ctx.snaps);
 
     // handle dynamically enabled / disabled features
-    if (!m_image_ctx.test_features(RBD_FEATURE_EXCLUSIVE_LOCK,
-                                   m_image_ctx.snap_lock) ||
-        m_exclusive_lock != nullptr) {
+    if (m_image_ctx.exclusive_lock != nullptr &&
+        !m_image_ctx.test_features(RBD_FEATURE_EXCLUSIVE_LOCK,
+                                   m_image_ctx.snap_lock)) {
+      // disabling exclusive lock will automatically handle closing
+      // object map and journaling
       std::swap(m_exclusive_lock, m_image_ctx.exclusive_lock);
-    }
-    if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
-                                   m_image_ctx.snap_lock) ||
-        m_journal != nullptr) {
-      std::swap(m_journal, m_image_ctx.journal);
-    }
-    if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
-                                   m_image_ctx.snap_lock) ||
-        m_object_map != nullptr) {
-      std::swap(m_object_map, m_image_ctx.object_map);
+    } else {
+      if (m_exclusive_lock != nullptr) {
+        std::swap(m_exclusive_lock, m_image_ctx.exclusive_lock);
+      }
+      if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
+                                     m_image_ctx.snap_lock) ||
+          m_journal != nullptr) {
+        std::swap(m_journal, m_image_ctx.journal);
+      }
+      if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
+                                     m_image_ctx.snap_lock) ||
+          m_object_map != nullptr) {
+        std::swap(m_object_map, m_image_ctx.object_map);
+      }
     }
   }
 }

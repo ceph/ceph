@@ -127,12 +127,6 @@ public:
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
-  void expect_lock_object_map(MockImageCtx &mock_image_ctx,
-                              MockObjectMap &mock_object_map) {
-    EXPECT_CALL(mock_object_map, lock(_))
-                  .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
-  }
-
   void expect_refresh_object_map(MockImageCtx &mock_image_ctx,
                                  MockObjectMap &mock_object_map) {
     if (mock_image_ctx.object_map != nullptr) {

@@ -26,8 +26,11 @@ public:
 private:
   /**
    * @verbatim
-   *                         (other errors)
-   * <start> -----> LOAD * * * * * * * > INVALIDATE ------------\
+   *
+   * <start> -----> LOCK (skip if snapshot)
+   *                  |
+   *                  v  (other errors)
+   *                LOAD * * * * * * * > INVALIDATE ------------\
    *                  |    *                                    |
    *                  |    * (-EINVAL or too small)             |
    *                  |    * * * * * * > INVALIDATE_AND_RESIZE  |
@@ -39,7 +42,10 @@ private:
    *                  |                      |  * * * * * * *   |
    *                  |                      |  *               |
    *                  |                      v  v               |
-   *                  \-----------------> <finish> <------------/
+   *                  \--------------------> LOCK <-------------/
+   *                                          |
+   *                                          v
+   *                                      <finish>
    * @endverbatim
    */
 
@@ -52,6 +58,9 @@ private:
   ceph::BitVector<2> m_on_disk_object_map;
   bool m_truncate_on_disk_object_map;
   bufferlist m_out_bl;
+
+  void send_lock();
+  Context *handle_lock(int *ret_val);
 
   void send_load();
   Context *handle_load(int *ret_val);

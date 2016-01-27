@@ -27,10 +27,11 @@ template<typename> class RefreshParentRequest;
 template<typename ImageCtxT = ImageCtx>
 class RefreshRequest {
 public:
-  static  RefreshRequest *create(ImageCtxT &image_ctx, Context *on_finish) {
+  static RefreshRequest *create(ImageCtxT &image_ctx, Context *on_finish) {
     return new RefreshRequest(image_ctx, on_finish);
   }
 
+  RefreshRequest(ImageCtxT &image_ctx, Context *on_finish);
   ~RefreshRequest();
 
   void send();
@@ -60,11 +61,11 @@ private:
    *            V2_INIT_EXCLUSIVE_LOCK (skip if lock          |
    *                |                   active or disabled)   |
    *                v                                         |
-   *            V2_OPEN_JOURNAL (skip if journal              |
-   *                |            active or disabled)          |
-   *                v                                         |
    *            V2_OPEN_OBJECT_MAP (skip if map               |
    *                |               active or disabled)       |
+   *                v                                         |
+   *            V2_OPEN_JOURNAL (skip if journal              |
+   *                |            active or disabled)          |
    *                v                                         |
    *             <apply>                                      |
    *                |                                         |
@@ -124,8 +125,6 @@ private:
   std::string m_lock_tag;
   bool m_exclusive_locked;
 
-  RefreshRequest(ImageCtxT &image_ctx, Context *on_finish);
-
   void send_v1_read_header();
   Context *handle_v1_read_header(int *result);
 
@@ -164,6 +163,9 @@ private:
 
   Context *send_v2_close_journal();
   Context *handle_v2_close_journal(int *result);
+
+  Context *send_v2_close_object_map();
+  Context *handle_v2_close_object_map(int *result);
 
   Context *send_flush_aio();
   Context *handle_flush_aio(int *result);
