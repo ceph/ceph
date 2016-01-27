@@ -3,6 +3,7 @@
 #ifndef CEPH_OS_BLUESTORE_BLUEFS_H
 #define CEPH_OS_BLUESTORE_BLUEFS_H
 
+#include <atomic>
 #include <mutex>
 
 #include "bluefs_types.h"
@@ -24,20 +25,23 @@ public:
     bool deleted;
     boost::intrusive::list_member_hook<> dirty_item;
 
-    atomic_t num_readers, num_writers;
-    atomic_t num_reading;
+    std::atomic_int num_readers, num_writers;
+    std::atomic_int num_reading;
 
     File()
       : RefCountedObject(NULL, 0),
 	refs(0),
 	dirty(false),
 	locked(false),
-	deleted(false)
+	deleted(false),
+	num_readers(0),
+	num_writers(0),
+	num_reading(0)
       {}
     ~File() {
-      assert(num_readers.read() == 0);
-      assert(num_writers.read() == 0);
-      assert(num_reading.read() == 0);
+      assert(num_readers.load() == 0);
+      assert(num_writers.load() == 0);
+      assert(num_reading.load() == 0);
       assert(!locked);
     }
 
@@ -81,14 +85,14 @@ public:
     FileWriter(FileRef f, unsigned num_bdev)
       : file(f),
 	pos(0) {
-      file->num_writers.inc();
+      ++file->num_writers;
       iocv.resize(num_bdev);
       for (unsigned i = 0; i < num_bdev; ++i) {
 	iocv[i] = new IOContext(NULL);
       }
     }
     ~FileWriter() {
-      file->num_writers.dec();
+      --file->num_writers;
       assert(iocv.empty());  // caller must call BlueFS::close_writer()
     }
 
@@ -142,10 +146,10 @@ public:
 	buf(mpf),
 	random(rand),
 	ignore_eof(ie) {
-      file->num_readers.inc();
+      ++file->num_readers;
     }
     ~FileReader() {
-      file->num_readers.dec();
+      --file->num_readers;
     }
   };
 
