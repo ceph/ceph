@@ -44,6 +44,10 @@ namespace ceph {
     void flush(bufferlist &bl);
     virtual void reset() = 0;
 
+    virtual void set_status(int status, const char* status_name) = 0;
+    virtual void output_header() = 0;
+    virtual void output_footer() = 0;
+
     virtual void open_array_section(const char *name) = 0;
     virtual void open_array_section_in_ns(const char *name, const char *ns) = 0;
     virtual void open_object_section(const char *name) = 0;
@@ -89,6 +93,9 @@ namespace ceph {
   public:
     JSONFormatter(bool p = false);
 
+    virtual void set_status(int status, const char* status_name) {};
+    virtual void output_header() {};
+    virtual void output_footer() {};
     void flush(std::ostream& os);
     void reset();
     virtual void open_array_section(const char *name);
@@ -130,6 +137,10 @@ namespace ceph {
     static const char *XML_1_DTD;
     XMLFormatter(bool pretty = false, bool lowercased_underscored = false);
 
+    virtual void set_status(int status, const char* status_name) {}
+    virtual void output_header();
+    virtual void output_footer();
+
     void flush(std::ostream& os);
     void reset();
     void open_array_section(const char *name);
@@ -150,7 +161,7 @@ namespace ceph {
     void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs);
     void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs);
     void dump_string_with_attrs(const char *name, const std::string& s, const FormatterAttrs& attrs);
-  private:
+  protected:
     void open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs);
     void finish_pending_string();
     void print_spaces();
@@ -162,12 +173,16 @@ namespace ceph {
     bool m_pretty;
     bool m_lowercased_underscored;
     std::string m_pending_string_name;
+    bool m_header_done;
   };
 
   class TableFormatter : public Formatter {
   public:
     TableFormatter(bool keyval = false);
 
+    virtual void set_status(int status, const char* status_name) {};
+    virtual void output_header() {};
+    virtual void output_footer() {};
     void flush(std::ostream& os);
     void reset();
     virtual void open_array_section(const char *name);
