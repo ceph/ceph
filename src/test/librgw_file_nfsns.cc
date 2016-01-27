@@ -543,6 +543,26 @@ TEST(LibRGW, READ_DIRS1)
   }
 }
 
+TEST(LibRGW, READF_SETUP1)
+{
+  struct stat st;
+  if (do_dirs1) {
+    if (do_create) {
+      if ((! stat(readf_out_name.c_str(), &st)) &&
+	  (S_ISREG(st.st_mode)) &&
+	  (st.st_size == 6291456))
+	return;
+      ofstream of;
+      of.open(readf_out_name, ios::out|ios::app|ios::binary);
+      for (int ix1 = 0; ix1 < 6; ++ix1) {
+	for (int ix2 = 0; ix2 < 1024*1024; ++ix2) {
+	  of << ix1;
+	}
+      }
+    }
+  }
+}
+
 TEST(LibRGW, READF_DIRS1) {
   if (do_dirs1) {
     if (do_readf) {
