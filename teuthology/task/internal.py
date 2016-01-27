@@ -110,8 +110,14 @@ def lock_machines(ctx, config):
                 assert 0, ('not enough machines free; need %s + %s, have %s' %
                            (reserved, requested, len(machines)))
 
-        newly_locked = lock.lock_many(ctx, requested, machine_type, ctx.owner,
-                                      ctx.archive, os_type, os_version, arch)
+        try:
+            newly_locked = lock.lock_many(ctx, requested, machine_type,
+                                          ctx.owner, ctx.archive, os_type,
+                                          os_version, arch)
+        except Exception:
+            # Lock failures should map to the 'dead' status instead of 'fail'
+            set_status(ctx.summary, 'dead')
+            raise
         all_locked.update(newly_locked)
         log.info(
             '{newly_locked} {mtype} machines locked this try, '

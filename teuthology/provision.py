@@ -9,9 +9,12 @@ import time
 import tempfile
 import yaml
 
+from subprocess import CalledProcessError
+
 from .openstack import OpenStack, OpenStackInstance
 from .config import config
 from .contextutil import safe_while
+from .exceptions import QuotaExceededError
 from .misc import decanonicalize_hostname, get_distro, get_distro_version
 from .lockstatus import get_status
 
@@ -307,22 +310,28 @@ class ProvisionOpenStack(OpenStack):
             net = ''
         flavor = self.flavor(resources_hint['machine'],
                              config['openstack'].get('flavor-select-regexp'))
-        misc.sh("flock --close --timeout 28800 /tmp/teuthology-server-create.lock" +
-                " openstack server create" +
-                " " + config['openstack'].get('server-create', '') +
-                " -f json " +
-                " --image '" + str(image) + "'" +
-                " --flavor '" + str(flavor) + "'" +
-                " --key-name teuthology " +
-                " --user-data " + str(self.user_data) +
-                " " + net +
-                " --min " + str(num) +
-                " --max " + str(num) +
-                " --security-group teuthology" +
-                " --property teuthology=" + self.property +
-                " --property ownedby=" + config.openstack['ip'] +
-                " --wait " +
-                " " + self.basename)
+        cmd = ("flock --close --timeout 28800 /tmp/teuthology-server-create.lock" +
+               " openstack server create" +
+               " " + config['openstack'].get('server-create', '') +
+               " -f json " +
+               " --image '" + str(image) + "'" +
+               " --flavor '" + str(flavor) + "'" +
+               " --key-name teuthology " +
+               " --user-data " + str(self.user_data) +
+               " " + net +
+               " --min " + str(num) +
+               " --max " + str(num) +
+               " --security-group teuthology" +
+               " --property teuthology=" + self.property +
+               " --property ownedby=" + config.openstack['ip'] +
+               " --wait " +
+               " " + self.basename)
+        try:
+            misc.sh(cmd)
+        except CalledProcessError as exc:
+            if "quota exceeded" in exc.output.lower():
+                raise QuotaExceededError(message=exc.output)
+            raise
         instances = filter(
             lambda instance: self.property in instance['Properties'],
             self.list_instances())
