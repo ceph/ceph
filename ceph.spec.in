@@ -675,7 +675,7 @@ rm -rf $RPM_BUILD_ROOT
   %endif
   # Disable and stop on removal.
   if [ $1 = 0 ] ; then
-    SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-create-keys@|^ceph-osd@|^ceph-mds@|^ceph-disk-'  | cut -d' ' -f1)
+    SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-create-keys@|^ceph-osd@|^ceph-mds@|^ceph-disk-|^system-ceph\\x2' | cut -d' ' -f1)
     if [ -n "$SERVICE_LIST" ]; then
       for SERVICE in $SERVICE_LIST; do
         /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
