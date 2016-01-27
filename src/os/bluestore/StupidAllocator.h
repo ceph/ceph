@@ -4,12 +4,13 @@
 #ifndef CEPH_OS_BLUESTORE_STUPIDALLOCATOR_H
 #define CEPH_OS_BLUESTORE_STUPIDALLOCATOR_H
 
+#include <mutex>
+
 #include "Allocator.h"
 #include "include/btree_interval_set.h"
-#include "common/Mutex.h"
 
 class StupidAllocator : public Allocator {
-  Mutex lock;
+  std::mutex lock;
 
   int64_t num_free;     ///< total bytes in freelist
   int64_t num_uncommitted;
