@@ -41,7 +41,7 @@ _ceph()
                 return 0
                 ;;
             osd)
-                COMPREPLY=( $(compgen -W "stat pool dump getmaxosd tree getmap getcrushmap lspools reweight-by-utilization trash tier" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "stat pool dump getmaxosd tree getmap getcrushmap lspools reweight-by-utilization trash tier set unset df perf" -- ${cur}) )
                 return 0
                 ;;
             mon)
@@ -53,7 +53,7 @@ _ceph()
                 return 0
                 ;;
             pool)
-                COMPREPLY=( $(compgen -W "create delete rename stats set set-quota get rmsnap mksnap" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "create delete rename stats set unset get-quota set-quota get rmsnap mksnap" -- ${cur}) )
                 return 0
                 ;;
             health)
@@ -64,8 +64,12 @@ _ceph()
                 COMPREPLY=( $(compgen -W "remove cache-mode" -- ${cur}) )
                 return 0
                 ;;
+            fs)
+                COMPREPLY=( $(compgen -W "ls new reset rm" -- ${cur}) )
+                return 0
+                ;;
             ceph)
-                COMPREPLY=( $(compgen -W "osd mon mds pg auth health df" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "osd mon mds pg auth health df daemon fs" -- ${cur}) )
                 return 0
                 ;;
         esac

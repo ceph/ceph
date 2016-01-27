@@ -33,7 +33,7 @@ _radosgw_admin()
                 return 0
                 ;;
             user)
-                COMPREPLY=( $(compgen -W "create modify info rm" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "create modify info rm suspend enable check stats" -- ${cur}) )
                 return 0
                 ;;
             subuser)
@@ -44,12 +44,44 @@ _radosgw_admin()
                 COMPREPLY=( $(compgen -W "create rm" -- ${cur}) )
                 return 0
                 ;;
-            buckets)
-                COMPREPLY=( $(compgen -W "list unlink" -- ${cur}) )
+            log)
+                COMPREPLY=( $(compgen -W "list show" -- ${cur}) )
+                return 0
+                ;;
+            caps)
+                COMPREPLY=( $(compgen -W "add rm" -- ${cur}) )
+                return 0
+                ;;
+            key)
+                COMPREPLY=( $(compgen -W "rm unlink" -- ${cur}) )
+                return 0
+                ;;
+            quota)
+                COMPREPLY=( $(compgen -W "set enable disable" -- ${cur}) )
+                return 0
+                ;;
+            zone)
+                COMPREPLY=( $(compgen -W "get set list" -- ${cur}) )
+                return 0
+                ;;
+            region)
+                COMPREPLY=( $(compgen -W "get set default" -- ${cur}) )
+                return 0
+                ;;
+            regions)
+                COMPREPLY=( $(compgen -W "list" -- ${cur}) )
+                return 0
+                ;;
+            region-map)
+                COMPREPLY=( $(compgen -W "get set" -- ${cur}) )
+                return 0
+                ;;
+            bucket)
+                COMPREPLY=( $(compgen -W "list unlink link stats rm check" -- ${cur}) )
                 return 0
                 ;;
             *)
-                COMPREPLY=( $(compgen -W "user subuser key buckets policy log" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "user subuser key bucket policy log object pool region regions region-map zone caps quota" -- ${cur}) )
                 return 0
             ;;
         esac
