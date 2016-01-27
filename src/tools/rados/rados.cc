@@ -2403,6 +2403,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       operation = OP_SEQ_READ;
     else if (strcmp(nargs[2], "rand") == 0)
       operation = OP_RAND_READ;
+    else if (strcmp(nargs[2], "randseq") == 0)
+      operation = OP_RANDSEQ_READ;
     else
       usage_exit();
     if (block_size_specified && (operation != OP_WRITE)){
