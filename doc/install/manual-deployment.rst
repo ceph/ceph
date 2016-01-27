@@ -212,7 +212,6 @@ The procedure is as follows:
 	auth service required = cephx
 	auth client required = cephx
 	osd journal size = {n}
-	filestore xattr use omap = true
 	osd pool default size = {n}  # Write an object n times.
 	osd pool default min size = {n} # Allow writing n copy in a degraded state.
 	osd pool default pg num = {n}
@@ -231,7 +230,6 @@ The procedure is as follows:
 	auth service required = cephx
 	auth client required = cephx
 	osd journal size = 1024
-	filestore xattr use omap = true
 	osd pool default size = 2
 	osd pool default min size = 1
 	osd pool default pg num = 333

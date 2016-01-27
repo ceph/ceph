@@ -29,13 +29,6 @@ XATTRs will be stored in an key/value database ( aka ``omap`` ) when
 the ``filestore max inline xattr size`` or ``filestore max inline
 xattrs`` threshold are reached.
 
-``filestore xattr use omap``
-
-:Description: Use object map for XATTRS. Set to ``true`` for ``ext4`` file systems. 
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
 
 ``filestore max inline xattr size``
 
