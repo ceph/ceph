@@ -47,7 +47,7 @@ setup(
         'Topic :: System :: Distributed Computing',
         'Topic :: System :: Filesystems',
     ],
-    install_requires=['setuptools < 18.6',
+    install_requires=['setuptools',
                       'gevent',
                       'MySQL-python == 1.2.3',
                       'PyYAML',
