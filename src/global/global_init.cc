@@ -76,7 +76,7 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
   md_config_t *conf = cct->_conf;
 
   if (alt_def_args)
-    conf->parse_argv(*alt_def_args);  // alternative default args
+    conf->parse_argv(*alt_def_args, code_env);  // alternative default args
 
   std::deque<std::string> parse_errors;
   int ret = conf->parse_config_files(c_str_or_null(conf_file_list), &parse_errors, &cerr, flags);
@@ -104,7 +104,7 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
 
   conf->parse_env(); // environment variables override
 
-  conf->parse_argv(args); // argv override
+  conf->parse_argv(args, code_env); // argv override
 
   // Expand metavariables. Invoke configuration observers.
   conf->apply_changes(NULL);
