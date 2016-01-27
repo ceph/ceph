@@ -6271,6 +6271,8 @@ int BlueStore::_clone_range(TransContext *txc,
     goto out;
 
   r = _do_write(txc, c, newo, dstoff, bl.length(), bl, 0);
+  if (r < 0)
+    goto out;
 
   txc->write_onode(newo);
 
