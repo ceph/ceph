@@ -30,7 +30,7 @@ TestServer::TestServer(int _id,
   id(_id),
   priority_queue(_client_info_f,
 		 std::bind(&TestServer::hasAvailThread, this),
-		 std::bind(&TestServer::innerPost, this, _1, _2)),
+		 std::bind(&TestServer::innerPost, this, _1, _2, _3)),
   client_resp_f(_client_resp_f),
   iops(_iops),
   thread_pool_size(_thread_pool_size),
@@ -69,26 +69,30 @@ void TestServer::run(std::chrono::milliseconds wait_delay) {
       inner_queue_cv.wait_for(l, wait_delay);
     }
     if (!inner_queue.empty()) {
-      auto req = std::move(inner_queue.front().request);
-      auto phase = inner_queue.front().phase;
+      auto& front = inner_queue.front();
+      auto client = front.client;
+      auto req = std::move(front.request);
+      auto phase = front.phase;
       inner_queue.pop_front();
 
       l.unlock();
 
-#if 0
-      if (info) std::cout << "start req " << req->req_params.client << std::endl;
-#endif
+      if (info > 3) {
+	std::cout << "start req " << client << std::endl;
+      }
 
       // simulation operation by sleeping; then call function to
       // notify server of completion
       std::this_thread::sleep_for(op_time);
 
       TestResponse resp(req->epoch, RespParams<int>(id, phase));
-      sendResponse(req->req_params.client, resp);
+      sendResponse(client, resp);
 
       priority_queue.requestCompleted();
 
-      if (info) std::cout << "end req " << req->req_params.client << std::endl;
+      if (info > 3) {
+	std::cout << "end req " << client << std::endl;
+      }
 
       l.lock(); // in prep for next iteration of loop
     } else {
@@ -111,10 +115,11 @@ bool TestServer::hasAvailThread() {
 }
 
 
-void TestServer::innerPost(std::unique_ptr<TestRequest> request,
+void TestServer::innerPost(const int& client,
+			   std::unique_ptr<TestRequest> request,
 			   PhaseType phase) {
   dmc::Lock l(inner_queue_mtx);
   assert(!finishing);
-  inner_queue.emplace_back(QueueItem(std::move(request), phase));
+  inner_queue.emplace_back(QueueItem(client, std::move(request), phase));
   inner_queue_cv.notify_one();
 }

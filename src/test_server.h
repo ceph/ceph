@@ -27,11 +27,14 @@ using crimson::dmclock::PhaseType;
 class TestServer {
 
   struct QueueItem {
+    int client;
     std::unique_ptr<TestRequest> request;
     PhaseType phase;
 
-    QueueItem(std::unique_ptr<TestRequest>&& _request,
+    QueueItem(const int& _client,
+	      std::unique_ptr<TestRequest>&& _request,
 	      PhaseType _phase) :
+      client(_client),
       request(std::move(_request)),
       phase(_phase)
     {
@@ -79,7 +82,9 @@ public:
 
 protected:
 
-  void innerPost(std::unique_ptr<TestRequest> request, PhaseType phase);
+  void innerPost(const int& client,
+		 std::unique_ptr<TestRequest> request,
+		 PhaseType phase);
 
   void run(std::chrono::milliseconds wait_delay);
 

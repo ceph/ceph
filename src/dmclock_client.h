@@ -60,18 +60,18 @@ namespace crimson {
       }
 
       template<typename C>
-      RequestParams<S> getRequestParams(const C& client, const S& server) const {
+      ReqParams<C> getRequestParams(const C& client, const S& server) const {
 	Guard g(data_mtx);
 	auto it = service_map.find(server);
 	if (service_map.end() == it) {
-	  return RequestParams<S>(client, 0, 0);
+	  return ReqParams<C>(client, 0, 0);
 	} else {
-	  return RequestParams<S>(
+	  return ReqParams<C>(
 	    client,
 	    uint32_t(delta_counter - it->second.delta_last),
 	    uint32_t(rho_counter - it->second.rho_last));
 	}
       }
-    };
+    }; // class ServiceTracker
   }
 }

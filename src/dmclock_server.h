@@ -215,7 +215,7 @@ namespace crimson {
       // a function to submit a request to the server; the second
       // parameter is a callback when it's completed
       typedef
-      typename std::function<void(RequestRef,PhaseType)> HandleRequestFunc;
+      typename std::function<void(const C&,RequestRef,PhaseType)> HandleRequestFunc;
 
 
     protected:
@@ -324,7 +324,7 @@ namespace crimson {
       void addRequest(RequestRef&& request,
 		      const ReqParams<C>& req_params,
 		      const Time& time) {
-	C& client_id = req_params.client;
+	const C& client_id = req_params.client;
 	Guard g(data_mutex);
 
 	auto client_it = clientMap.find(client_id);
@@ -428,7 +428,7 @@ namespace crimson {
       C submitTopRequest(Heap<EntryRef, K>& heap, PhaseType phase) {
 	EntryRef& top = heap.top();
 	top->handled = true;
-	handleF(std::move(top->request), phase);
+	handleF(top->client, std::move(top->request), phase);
 	C client_result = top->client;
 	heap.pop();
 	return client_result;

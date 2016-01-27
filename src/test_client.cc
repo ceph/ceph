@@ -71,9 +71,9 @@ void TestClient::run_req() {
       }
 
       l.unlock();
-      dmc::RequestParams<int> rp = service_tracker.getRequestParams(id, 0);
-      TestRequest req(rp, i, 12);
-      submit_f(req);
+      dmc::ReqParams<int> rp = service_tracker.getRequestParams(id, 0);
+      TestRequest req(i, 12);
+      submit_f(req, rp);
       ++outstanding_ops;
       l.lock(); // lock for return to top of loop
     }
