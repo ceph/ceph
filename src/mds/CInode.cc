@@ -2143,7 +2143,7 @@ void CInode::finish_scatter_gather_update(int type)
 	  }
 	if (all) {
 	  if (state_test(CInode::STATE_REPAIRSTATS)) {
-	    dout(20) << " rstat mismatch, fixinga" << dendl;
+	    dout(20) << " rstat mismatch, fixing" << dendl;
 	  } else {
 	    clog->error() << "unmatched rstat on " << ino() << ", inode has "
 			  << pi->rstat << ", dirfrags have " << rstat << "\n";
