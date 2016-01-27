@@ -449,6 +449,7 @@ const char** Monitor::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
     "crushtool", // helpful for testing
+    "mon_election_timeout",
     "mon_lease",
     "mon_lease_renew_interval_factor",
     "mon_lease_ack_timeout_factor",

@@ -226,6 +226,7 @@ OPTION(mon_osd_prime_pg_temp, OPT_BOOL, false)  // prime osdmap with pg mapping 
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT, .5)  // max time to spend priming
 OPTION(mon_osd_pool_ec_fast_read, OPT_BOOL, false) // whether turn on fast read on the pool or not
 OPTION(mon_stat_smooth_intervals, OPT_INT, 2)  // smooth stats over last N PGMap maps
+OPTION(mon_election_timeout, OPT_FLOAT, 5)  // on election proposer, max waiting time for all ACKs
 OPTION(mon_lease, OPT_FLOAT, 5)       // lease interval
 OPTION(mon_lease_renew_interval_factor, OPT_FLOAT, .6) // on leader, to renew the lease
 OPTION(mon_lease_ack_timeout_factor, OPT_FLOAT, 2.0) // on leader, if lease isn't acked by all peons
