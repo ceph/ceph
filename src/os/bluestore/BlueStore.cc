@@ -4208,11 +4208,62 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     if (!j && !txc->first_collection)
       txc->first_collection = cvec[j];
   }
+  vector<OnodeRef> ovec(i.objects.size());
 
-  while (i.have_op()) {
+  for (; i.have_op(); ++pos) {
     Transaction::Op *op = i.decode_op();
     int r = 0;
     CollectionRef &c = cvec[op->cid];
+
+    switch (op->op) {
+    case Transaction::OP_RMCOLL:
+      {
+        coll_t cid = i.get_cid(op->cid);
+	r = _remove_collection(txc, cid, &c);
+	if (!r)
+	  continue;
+      }
+      break;
+
+    case Transaction::OP_MKCOLL:
+      {
+	assert(!c);
+	coll_t cid = i.get_cid(op->cid);
+	r = _create_collection(txc, cid, op->split_bits, &c);
+	if (!r)
+	  continue;
+      }
+      break;
+
+    case Transaction::OP_SPLIT_COLLECTION:
+      assert(0 == "deprecated");
+      break;
+
+    case Transaction::OP_SPLIT_COLLECTION2:
+      {
+        uint32_t bits = op->split_bits;
+        uint32_t rem = op->split_rem;
+	r = _split_collection(txc, c, cvec[op->dest_cid], bits, rem);
+	if (!r)
+	  continue;
+      }
+      break;
+    }
+    if (r < 0) {
+      dout(0) << " error " << cpp_strerror(r)
+	      << " not handled on operation " << op->op
+	      << " (op " << pos << ", counting from 0)" << dendl;
+      dout(0) << " transaction dump:\n";
+      JSONFormatter f(true);
+      f.open_object_section("transaction");
+      t->dump(&f);
+      f.close_section();
+      f.flush(*_dout);
+      *_dout << dendl;
+      assert(0 == "unexpected error");
+    }
+
+    RWLock::WLocker l(c->lock);
 
     switch (op->op) {
     case Transaction::OP_NOP:
@@ -4325,14 +4376,6 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       }
       break;
 
-    case Transaction::OP_MKCOLL:
-      {
-	assert(!c);
-        coll_t cid = i.get_cid(op->cid);
-	r = _create_collection(txc, cid, op->split_bits, &c);
-      }
-      break;
-
     case Transaction::OP_COLL_HINT:
       {
         uint32_t type = op->hint_type;
@@ -4351,13 +4394,6 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
           // Ignore the hint
           dout(10) << __func__ << " unknown collection hint " << type << dendl;
         }
-      }
-      break;
-
-    case Transaction::OP_RMCOLL:
-      {
-        coll_t cid = i.get_cid(op->cid);
-	r = _remove_collection(txc, cid, &c);
       }
       break;
 
@@ -4433,16 +4469,6 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	r = _omap_setheader(txc, c, oid, bl);
       }
       break;
-    case Transaction::OP_SPLIT_COLLECTION:
-      assert(0 == "deprecated");
-      break;
-    case Transaction::OP_SPLIT_COLLECTION2:
-      {
-        uint32_t bits = op->split_bits;
-        uint32_t rem = op->split_rem;
-	r = _split_collection(txc, c, cvec[op->dest_cid], bits, rem);
-      }
-      break;
 
     case Transaction::OP_SETALLOCHINT:
       {
@@ -4502,8 +4528,6 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	assert(0 == "unexpected error");
       }
     }
-
-    ++pos;
   }
 
   return 0;
@@ -4520,7 +4544,6 @@ int BlueStore::_touch(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
   int r = 0;
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, true);
   assert(o);
   o->exists = true;
@@ -5536,7 +5559,6 @@ int BlueStore::_write(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << oid
 	   << " " << offset << "~" << length
 	   << dendl;
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, true);
   _assign_nid(txc, o);
   int r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
@@ -5572,7 +5594,6 @@ int BlueStore::_zero(TransContext *txc,
 	   << dendl;
   int r = 0;
 
-  RWLock::WLocker l(c->lock);
   EnodeRef enode;
   OnodeRef o = c->get_onode(oid, true);
   _dump_onode(o);
@@ -5817,7 +5838,6 @@ int BlueStore::_truncate(TransContext *txc,
 	   << dendl;
   int r = 0;
 
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -5854,7 +5874,6 @@ int BlueStore::_remove(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
   int r;
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -5878,7 +5897,6 @@ int BlueStore::_setattr(TransContext *txc,
 	   << dendl;
   int r = 0;
 
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -5905,7 +5923,6 @@ int BlueStore::_setattrs(TransContext *txc,
 	   << dendl;
   int r = 0;
 
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -5938,7 +5955,6 @@ int BlueStore::_rmattr(TransContext *txc,
 	   << " " << name << dendl;
   int r = 0;
 
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -5961,7 +5977,6 @@ int BlueStore::_rmattrs(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
   int r = 0;
 
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -6001,7 +6016,6 @@ int BlueStore::_omap_clear(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
   int r = 0;
 
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -6027,7 +6041,6 @@ int BlueStore::_omap_setkeys(TransContext *txc,
   bufferlist::iterator p = bl.begin();
   __u32 num;
 
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -6064,7 +6077,6 @@ int BlueStore::_omap_setheader(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
   int r = 0;
 
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   string key;
   if (!o || !o->exists) {
@@ -6094,7 +6106,6 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
   bufferlist::iterator p = bl.begin();
   __u32 num;
 
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -6131,7 +6142,6 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
   KeyValueDB::Iterator it;
   string key_first, key_last;
 
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -6173,7 +6183,6 @@ int BlueStore::_setallochint(TransContext *txc,
 	   << " write_size " << expected_write_size
 	   << dendl;
   int r = 0;
-  RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -6206,7 +6215,6 @@ int BlueStore::_clone(TransContext *txc,
     return -EINVAL;
   }
 
-  RWLock::WLocker l(c->lock);
   bufferlist bl;
   OnodeRef newo;
   OnodeRef oldo = c->get_onode(old_oid, false);
@@ -6312,7 +6320,6 @@ int BlueStore::_clone_range(TransContext *txc,
 	   << " to offset " << dstoff << dendl;
   int r = 0;
 
-  RWLock::WLocker l(c->lock);
   bufferlist bl;
   OnodeRef newo;
   OnodeRef oldo = c->get_onode(old_oid, false);
@@ -6353,7 +6360,6 @@ int BlueStore::_rename(TransContext *txc,
 	   << new_oid << dendl;
   int r;
 
-  RWLock::WLocker l(c->lock);
   bufferlist bl;
   string old_key, new_key;
   OnodeRef newo;
