@@ -454,7 +454,7 @@ static void get_wal_key(uint64_t seq, string *out)
 
 void BlueStore::Enode::put()
 {
-  int final = nref.dec();
+  int final = --nref;
   if (final == 0) {
     dout(20) << __func__ << " removing self from set " << enode_set << dendl;
     enode_set->uset.erase(*this);
@@ -466,14 +466,6 @@ void BlueStore::Enode::put()
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.onode(" << this << ") "
-
-BlueStore::Onode::Onode(const ghobject_t& o, const string& k)
-  : nref(0),
-    oid(o),
-    key(k),
-    dirty(false),
-    exists(true) {
-}
 
 void BlueStore::Onode::flush()
 {
@@ -600,7 +592,7 @@ int BlueStore::OnodeHashLRU::trim(int max)
     --p;
   while (num > 0) {
     Onode *o = &*p;
-    int refs = o->nref.read();
+    int refs = o->nref.load();
     if (refs > 1) {
       dout(20) << __func__ << "  " << o->oid << " has " << refs
 	       << " refs; stopping with " << num << " left to trim" << dendl;
