@@ -251,6 +251,7 @@ TEST(LibRGW, SETUP_DIRS1) {
 	ASSERT_EQ(rc, 0);
       }
     }
+    dirs1_b.sync();
 
     /* make top-level dirs */
     int d_ix;
