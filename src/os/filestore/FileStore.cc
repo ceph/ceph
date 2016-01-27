@@ -3692,8 +3692,13 @@ void FileStore::sync_entry()
 	apply_manager.commit_started();
 	op_tp.unpause();
 
-	object_map->sync();
-	int err = backend->syncfs();
+	int err = object_map->sync();
+	if (err < 0) {
+	  derr << "object_map sync got " << cpp_strerror(err) << dendl;
+	  assert(0 == "object_map sync returned error");
+	}
+
+	err = backend->syncfs();
 	if (err < 0) {
 	  derr << "syncfs got " << cpp_strerror(err) << dendl;
 	  assert(0 == "syncfs returned error");
