@@ -414,6 +414,10 @@ public:
     const char *internal_name = "filestore", bool update_to=false);
   ~FileStore();
 
+  string get_type() {
+    return "filestore";
+  }
+
   int _detect_fs();
   int _sanity_check_fs();
 

@@ -106,7 +106,6 @@ cephx=1 #turn cephx on by default
 cache=""
 memstore=0
 bluestore=0
-journal=1
 
 MON_ADDR=""
 
@@ -133,7 +132,6 @@ usage=$usage"\t-X disable cephx\n"
 usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-e : create an erasure pool\n";
 usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
-usage=$usage"\t-J no journal\t\tdisable filestore journal\n"
 usage=$usage"\t--mon_num specify ceph monitor count\n"
 usage=$usage"\t--osd_num specify ceph osd count\n"
 usage=$usage"\t--mds_num specify ceph mds count\n"
@@ -237,9 +235,6 @@ case $1 in
 	    ;;
     -X )
 	    cephx=0
-	    ;;
-    -J )
-	    journal=0
 	    ;;
     -k )
 	    overwrite_conf=0
@@ -469,11 +464,6 @@ cat <<EOF >> $conf_fn
 	auth client required = none
 EOF
 fi
-                        if [ $journal -eq 1 ]; then
-			    journal_path="$CEPH_DEV_DIR/osd\$id.journal"
-			else
-			    journal_path=""
-			fi
 			cat <<EOF >> $conf_fn
 
 [client]
@@ -494,7 +484,7 @@ $extra_conf
 [osd]
 $DAEMONOPTS
         osd data = $CEPH_DEV_DIR/osd\$id
-        osd journal = $journal_path
+        osd journal = $CEPH_DEV_DIR/osd\$id/journal
         osd journal size = 100
         osd class tmp = out
         osd class dir = $OBJCLASS_PATH
