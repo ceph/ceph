@@ -247,7 +247,8 @@ void MDSDaemon::set_up_admin_socket()
   assert(r == 0);
   r = admin_socket->register_command("scrub_path",
 				     "scrub_path name=path,type=CephString "
-				     "name=scrubops,type=CephChoices,strings=recursive|repair,n=N,req=false",
+				     "name=scrubops,type=CephChoices,"
+				     "strings=force|recursive|repair,n=N,req=false",
                                      asok_hook,
                                      "scrub an inode and output results");
   assert(r == 0);

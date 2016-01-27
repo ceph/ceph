@@ -306,7 +306,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir,
       return;
     }
 
-    dir->scrub_initialize();
+    dir->scrub_initialize(header);
   }
 
   int r = 0;
