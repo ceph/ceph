@@ -3,9 +3,9 @@
 #ifndef CEPH_OS_BLUESTORE_BLUEFS_H
 #define CEPH_OS_BLUESTORE_BLUEFS_H
 
+#include <mutex>
+
 #include "bluefs_types.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
 #include "common/RefCountedObj.h"
 #include "BlockDevice.h"
 
@@ -75,13 +75,12 @@ public:
     bufferlist buffer;      ///< new data to write (at end of file)
     bufferlist tail_block;  ///< existing partial block at end of file, if any
 
-    Mutex lock;
+    std::mutex lock;
     vector<IOContext*> iocv;  ///< one for each bdev
 
     FileWriter(FileRef f, unsigned num_bdev)
       : file(f),
-	pos(0),
-	lock("BlueFS::FileWriter::lock") {
+	pos(0) {
       file->num_writers.inc();
       iocv.resize(num_bdev);
       for (unsigned i = 0; i < num_bdev; ++i) {
@@ -156,8 +155,7 @@ public:
   };
 
 private:
-  Mutex lock;
-  Cond cond;
+  std::mutex lock;
 
   // cache
   map<string, DirRef> dir_map;                    ///< dirname -> Dir
@@ -277,7 +275,7 @@ public:
     bool random = false);
 
   void close_writer(FileWriter *h) {
-    Mutex::Locker l(lock);
+    std::lock_guard<std::mutex> l(lock);
     _close_writer(h);
   }
 
@@ -316,15 +314,15 @@ public:
 		     uint64_t *offset, uint32_t *length);
 
   void flush(FileWriter *h) {
-    Mutex::Locker l(lock);
+    std::lock_guard<std::mutex> l(lock);
     _flush(h, false);
   }
   void flush_range(FileWriter *h, uint64_t offset, uint64_t length) {
-    Mutex::Locker l(lock);
+    std::lock_guard<std::mutex> l(lock);
     _flush_range(h, offset, length);
   }
   void fsync(FileWriter *h) {
-    Mutex::Locker l(lock);
+    std::lock_guard<std::mutex> l(lock);
     _fsync(h);
   }
   int read(FileReader *h, FileReaderBuffer *buf, uint64_t offset, size_t len,
@@ -342,15 +340,15 @@ public:
     return _read_random(h, offset, len, out);
   }
   void invalidate_cache(FileRef f, uint64_t offset, uint64_t len) {
-    Mutex::Locker l(lock);
+    std::lock_guard<std::mutex> l(lock);
     _invalidate_cache(f, offset, len);
   }
   int preallocate(FileRef f, uint64_t offset, uint64_t len) {
-    Mutex::Locker l(lock);
+    std::lock_guard<std::mutex> l(lock);
     return _preallocate(f, offset, len);
   }
   int truncate(FileWriter *h, uint64_t offset) {
-    Mutex::Locker l(lock);
+    std::lock_guard<std::mutex> l(lock);
     return _truncate(h, offset);
   }
 
