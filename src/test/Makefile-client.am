@@ -613,18 +613,6 @@ test_build_librgw_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_build_librgw
 endif # WITH_BUILD_TESTS
 
-#unittest_librgw_link_SOURCES = test/librgw_link.cc
-#unittest_librgw_link_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
-#unittest_librgw_link_LDADD = $(LIBRGW) ${UNITTEST_LDADD}
-#unittest_librgw_link_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-#check_TESTPROGRAMS += unittest_librgw_link
-
-#unittest_librgw_SOURCES = test/librgw.cc
-#unittest_librgw_LDFLAGS = -lrt $(PTHREAD_CFLAGS) -lcurl ${AM_LDFLAGS}
-#unittest_librgw_LDADD =  librgw.la $(LIBRADOS) ${UNITTEST_LDADD} -lexpat $(CEPH_GLOBAL)
-#unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-#check_TESTPROGRAMS += unittest_librgw
-
 ceph_test_cors_SOURCES = test/test_cors.cc
 ceph_test_cors_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
