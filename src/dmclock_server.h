@@ -354,6 +354,8 @@ namespace crimson {
 					    time),
 				 std::move(request)));
 
+	auto x = make_shared<Type>(Arg1, Arg2...);
+
 	// copy tag to previous tag for client
 	client_it->second.prev_tag = entry->tag;
 
