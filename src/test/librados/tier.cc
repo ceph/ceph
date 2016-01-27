@@ -14,6 +14,7 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/Cond.h"
+#include "common/SubProcess.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
 #include "json_spirit/json_spirit.h"
@@ -2363,6 +2364,256 @@ TEST_F(LibRadosTwoPoolsPP, HitSetTrim) {
     ASSERT_TRUE(now < hard_stop);
 
     sleep(1);
+  }
+}
+
+TEST_F(LibRadosTwoPoolsPP, WriteBeforeScheduleFlush) {
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+  {
+    int pg_num = _get_pg_num(cluster, cache_pool_name);
+    ASSERT_NE(-1, pg_num);
+    std::ostringstream stream;
+    stream << pg_num * 32;
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd pool set\", \"pool\": \"" + cache_pool_name +
+      "\", \"var\": \"target_max_objects\", \"val\": \"" + stream.str() +"\"}",
+      inbl, NULL, NULL));
+  }
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd pool set\", \"pool\": \"" + cache_pool_name +
+    "\", \"var\": \"cache_target_full_ratio\", \"val\": \"1\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd pool set\", \"pool\": \"" + cache_pool_name +
+    "\", \"var\": \"cache_target_dirty_high_ratio\", \"val\": \"0.5\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd pool set\", \"pool\": \"" + cache_pool_name +
+    "\", \"var\": \"cache_target_dirty_ratio\", \"val\": \"0.5\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    char obj[64];
+    for (int i = 0; i < 2; ++i) {
+      bufferlist bl;
+      bl.append("hi there");
+      ObjectWriteOperation op;
+      op.write_full(bl);
+      snprintf(obj, sizeof(obj), "foo-%d", i);
+      ioctx.locator_set_key("SCHEFLUSH"); //for observing convinience, let objs locate in the same pg
+      ASSERT_EQ(0, ioctx.operate(obj, &op));
+    }
+  }
+
+  sleep(5);
+
+  {
+    NObjectIterator it = cache_ioctx.nobjects_begin();
+    for (int i = 0; i < 2; ++i) {
+      ASSERT_TRUE(it != cache_ioctx.nobjects_end());
+      ++it;
+    }
+    ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+  }
+  {
+    NObjectIterator it = ioctx.nobjects_begin();
+    ASSERT_TRUE(it == ioctx.nobjects_end());
+  }
+
+  time_t t_now = time(NULL);
+  srand(unsigned(t_now));
+  int offset = rand() % 90 - 30; //offset range [-30,60)
+  time_t t_start = t_now + offset;
+  {
+    struct tm t;
+    localtime_r(&t_now, &t);
+    cout << "now " << t.tm_hour << ":" << t.tm_min << ":" << t.tm_sec << " rand_offset:" << offset << std::endl;
+
+    localtime_r(&t_start, &t);
+    char start[1024];
+    snprintf(start, sizeof(start), "--osd_tier_schedule_flush_start=%d:%d --osd_tier_schedule_flush_end=%d:%d", t.tm_hour, t.tm_min, t.tm_hour, t.tm_min + 2);
+    SubProcess process("ceph", SubProcess::KEEP, SubProcess::KEEP, SubProcess::KEEP);
+    process.add_cmd_args("tell", "osd.*", "injectargs", start, NULL);
+    ASSERT_EQ(0, process.spawn());
+    ASSERT_EQ(0, process.join());
+  }
+
+  cluster.wait_for_latest_osdmap();
+
+  int wait_for_flush_start = 5;
+  if (t_now % 60 + offset > 60)
+    wait_for_flush_start = 60; //flush_start will start at next minute
+
+  sleep(wait_for_flush_start);  // specified time flush will start after 5 second
+
+  sleep(5); // agent will flush all
+
+  //verify objects was flushed into base pool
+  {
+    NObjectIterator it = ioctx.nobjects_begin();
+    for (int i = 0; i < 2; ++i) {
+      ASSERT_TRUE(it != ioctx.nobjects_end());
+      ++it;
+    }
+    ASSERT_TRUE(it == ioctx.nobjects_end());
+  }
+
+  {
+    SubProcess process("ceph", SubProcess::KEEP, SubProcess::KEEP, SubProcess::KEEP);
+    process.add_cmd_args("tell", "osd.*", "injectargs", "--osd_tier_schedule_flush_start=0:0 --osd_tier_schedule_flush_end=0:0", NULL);
+    ASSERT_EQ(0, process.spawn());
+    ASSERT_EQ(0, process.join());
+  }
+}
+
+TEST_F(LibRadosTwoPoolsPP, WriteDuringScheduleFlush) {
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+  {
+    int pg_num = _get_pg_num(cluster, cache_pool_name);
+    ASSERT_NE(-1, pg_num);
+    std::ostringstream stream;
+    stream << pg_num * 32;
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd pool set\", \"pool\": \"" + cache_pool_name +
+      "\", \"var\": \"target_max_objects\", \"val\": \"" + stream.str() +"\"}",
+      inbl, NULL, NULL));
+  }
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd pool set\", \"pool\": \"" + cache_pool_name +
+    "\", \"var\": \"cache_target_full_ratio\", \"val\": \"1\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd pool set\", \"pool\": \"" + cache_pool_name +
+    "\", \"var\": \"cache_target_dirty_high_ratio\", \"val\": \"0.5\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd pool set\", \"pool\": \"" + cache_pool_name +
+    "\", \"var\": \"cache_target_dirty_ratio\", \"val\": \"0.5\"}",
+    inbl, NULL, NULL));
+
+  time_t t_now = time(NULL);
+  time_t t_start = t_now;
+  {
+    struct tm t;
+    localtime_r(&t_start, &t);
+
+    char start[1024];
+    snprintf(start, sizeof(start), "--osd_tier_schedule_flush_start=%d:%d --osd_tier_schedule_flush_end=%d:%d", t.tm_hour, t.tm_min, t.tm_hour, t.tm_min + 2);
+    SubProcess process("ceph", SubProcess::KEEP, SubProcess::KEEP, SubProcess::KEEP);
+    process.add_cmd_args("tell", "osd.*", "injectargs", start, NULL);
+    ASSERT_EQ(0, process.spawn());
+    ASSERT_EQ(0, process.join());
+  }
+
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    char obj[64];
+    for (int i = 0; i < 2; ++i) {
+      bufferlist bl;
+      bl.append("hi there");
+      ObjectWriteOperation op;
+      op.write_full(bl);
+      snprintf(obj, sizeof(obj), "foo-%d", i);
+      ioctx.locator_set_key("SCHEFLUSH"); //for observing convinience, let objs locate in the same pg
+      ASSERT_EQ(0, ioctx.operate(obj, &op));
+    }
+  }
+
+  sleep(5); // wait for flushing
+
+  {
+    NObjectIterator it = cache_ioctx.nobjects_begin();
+    for (int i = 0; i < 2; ++i) {
+      ASSERT_TRUE(it != cache_ioctx.nobjects_end());
+      ++it;
+    }
+    ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+  }
+
+  {
+    NObjectIterator it = ioctx.nobjects_begin();
+    for (int i = 0; i < 2; ++i) {
+      ASSERT_TRUE(it != ioctx.nobjects_end());
+      ++it;
+    }
+    ASSERT_TRUE(it == ioctx.nobjects_end());
+  }
+
+  {
+    SubProcess process("ceph", SubProcess::KEEP, SubProcess::KEEP, SubProcess::KEEP);
+    process.add_cmd_args("tell", "osd.*", "injectargs", "--osd_tier_schedule_flush_start=0:0 --osd_tier_schedule_flush_end=0:0", NULL);
+    ASSERT_EQ(0, process.spawn());
+    ASSERT_EQ(0, process.join());
+  }
+
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    char obj[64];
+    for (int i = 0; i < 2; ++i) {
+      bufferlist bl;
+      bl.append("hi there");
+      ObjectWriteOperation op;
+      op.write_full(bl);
+      snprintf(obj, sizeof(obj), "bar-%d", i);
+      ioctx.locator_set_key("SCHEFLUSH"); //for observing convinience, let objs locate in the same pg
+      ASSERT_EQ(0, ioctx.operate(obj, &op));
+    }
+  }
+
+  sleep(5); // waiting
+
+  {
+    NObjectIterator it = cache_ioctx.nobjects_begin();
+    for (int i = 0; i < 4; ++i) {
+      ASSERT_TRUE(it != cache_ioctx.nobjects_end());
+      ++it;
+    }
+    ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+  }
+  //not in schedule_flush_time,will not flush into base pool
+  {
+    NObjectIterator it = ioctx.nobjects_begin();
+    for (int i = 0; i < 2; ++i) {
+      ASSERT_TRUE(it != ioctx.nobjects_end());
+      ++it;
+    }
+    ASSERT_TRUE(it == ioctx.nobjects_end());
   }
 }
 
