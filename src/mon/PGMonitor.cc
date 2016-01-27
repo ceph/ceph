@@ -1697,7 +1697,6 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
 	}
 	if (what.count("pools")) {
 	  pg_map.dump_pool_stats(ds, header);
-	  header = false;
 	}
 	if (what.count("osds")) {
 	  pg_map.dump_osd_stats(ds);
