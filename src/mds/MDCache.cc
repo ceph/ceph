@@ -11754,11 +11754,11 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 
   // only set completion context for non-recursive scrub, because we don't 
   // want to block asok caller on long running scrub
-  Context *fin = NULL;
-  if (!header->recursive)
-    fin = cs->take_finisher();
-
-  mds->scrubstack->enqueue_inode_bottom(in, header, fin);
+  if (!header->recursive) {
+    Context *fin = cs->take_finisher();
+    mds->scrubstack->enqueue_inode_top(in, header, fin);
+  } else
+    mds->scrubstack->enqueue_inode_bottom(in, header, NULL);
 
   mds->server->respond_to_request(mdr, 0);
   return;
