@@ -202,6 +202,7 @@ class Message;
 class MonClient;
 class PerfCounters;
 class ObjectStore;
+class FuseStore;
 class OSDMap;
 class MLog;
 class MClass;
@@ -1079,6 +1080,7 @@ protected:
   PerfCounters      *logger;
   PerfCounters      *recoverystate_perf;
   ObjectStore *store;
+  FuseStore *fuse_store;
 
   LogClient log_client;
   LogChannelRef clog;
@@ -2353,6 +2355,8 @@ public:
   int pre_init();
   int init();
   void final_init();
+
+  int enable_disable_fuse(bool stop);
 
   void suicide(int exitcode);
   int shutdown();

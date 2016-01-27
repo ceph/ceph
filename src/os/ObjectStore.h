@@ -1876,6 +1876,8 @@ public:
     return 0;
   }
 
+  virtual string get_type() = 0;
+
   // mgmt
   virtual bool test_mount_in_use() = 0;
   virtual int mount() = 0;
@@ -2144,6 +2146,17 @@ public:
   virtual bool collection_empty(coll_t c) = 0;
 
   /**
+   * return the number of significant bits of the coll_t::pgid.
+   *
+   * This should return what the last create_collection or split_collection
+   * set.  A lazy backend can choose not to store and report this (e.g.,
+   * FileStore).
+   */
+  virtual int collection_bits(coll_t c) {
+    return -EOPNOTSUPP;
+  }
+
+  /**
    * list contents of a collection that fall in the range [start, end) and no more than a specified many result
    *
    * @param c collection
@@ -2159,6 +2172,7 @@ public:
   virtual int collection_list(coll_t c, ghobject_t start, ghobject_t end,
 			      bool sort_bitwise, int max,
 			      vector<ghobject_t> *ls, ghobject_t *next) = 0;
+
 
   /// OMAP
   /// Get omap contents

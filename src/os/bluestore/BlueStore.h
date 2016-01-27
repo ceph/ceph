@@ -585,6 +585,10 @@ public:
   BlueStore(CephContext *cct, const string& path);
   ~BlueStore();
 
+  string get_type() {
+    return "bluestore";
+  }
+
   bool needs_journal() { return false; };
   bool wants_journal() { return false; };
   bool allows_journal() { return false; };
@@ -642,6 +646,7 @@ public:
   int list_collections(vector<coll_t>& ls);
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);
+  int collection_bits(coll_t c);
 
   int collection_list(coll_t cid, ghobject_t start, ghobject_t end,
 		      bool sort_bitwise, int max,

@@ -370,6 +370,10 @@ public:
   KStore(CephContext *cct, const string& path);
   ~KStore();
 
+  string get_type() {
+    return "kstore";
+  }
+
   bool needs_journal() { return false; };
   bool wants_journal() { return false; };
   bool allows_journal() { return false; };
