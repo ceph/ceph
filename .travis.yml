@@ -1,5 +1,12 @@
 env: HOME=/home/travis
 
+sudo: required
+dist: trusty
+
+before_install:
+  - sudo apt-get -qq update
+  - ./bootstrap install
+
 language: python
 python:
     - 2.7
