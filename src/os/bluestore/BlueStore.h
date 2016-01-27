@@ -19,6 +19,7 @@
 
 #include <unistd.h>
 
+#include <atomic>
 #include <mutex>
 #include <condition_variable>
 
@@ -54,7 +55,7 @@ public:
   struct EnodeSet;
 
   struct Enode : public boost::intrusive::unordered_set_base_hook<> {
-    atomic_t nref;        ///< reference count
+    std::atomic_int nref;        ///< reference count
     uint32_t hash;
     string key;           ///< key under PREFIX_OBJ where we are stored
     EnodeSet *enode_set;  ///< reference to the containing set
@@ -70,7 +71,7 @@ public:
 	enode_set(s) {}
 
     void get() {
-      nref.inc();
+      ++nref;
     }
     void put();
 
@@ -109,7 +110,7 @@ public:
 
   /// an in-memory object
   struct Onode {
-    atomic_t nref;  ///< reference count
+    std::atomic_int nref;  ///< reference count
 
     ghobject_t oid;
     string key;     ///< key under PREFIX_OBJ where we are stored
@@ -128,14 +129,20 @@ public:
     uint64_t tail_offset;
     bufferlist tail_bl;
 
-    Onode(const ghobject_t& o, const string& k);
+    Onode(const ghobject_t& o, const string& k)
+      : nref(0),
+	oid(o),
+	key(k),
+	dirty(false),
+	exists(true) {
+    }
 
     void flush();
     void get() {
-      nref.inc();
+      ++nref;
     }
     void put() {
-      if (nref.dec() == 0)
+      if (--nref == 0)
 	delete this;
     }
 
