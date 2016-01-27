@@ -290,6 +290,7 @@ set(libcommon_files
   common/simple_spin.cc
   common/Thread.cc
   common/Formatter.cc
+  common/HTMLFormatter.cc
   common/HeartbeatMap.cc
   common/PluginRegistry.cc
   common/ceph_fs.cc
@@ -1121,7 +1122,9 @@ if(${WITH_RADOSGW})
     rgw/rgw_keystone.cc
     rgw/rgw_quota.cc
     rgw/rgw_dencoder.cc
-    rgw/rgw_object_expirer_core.cc)
+    rgw/rgw_object_expirer_core.cc
+    rgw/rgw_website.cc
+    rgw/rgw_xml_enc.cc)
 
   add_library(rgw_a STATIC ${rgw_a_srcs})
 
