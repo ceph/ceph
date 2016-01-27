@@ -733,7 +733,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
   }
 
   list<Context*> ls;
-  int err = 0;
 
   if (objects[poolid].count(oid) == 0) {
     ldout(cct, 7) << "bh_read_finish no object cache" << dendl;
@@ -774,7 +773,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 	 * the waiters will be retried and get -ENOENT immediately, so
 	 * it's safe to clean up the unneeded bh's now. Since we know
 	 * it's safe to remove them now, do so, so they aren't hanging
-	 *around waiting for more -ENOENTs from rados while the cache
+	 * around waiting for more -ENOENTs from rados while the cache
 	 * is being shut down.
 	 *
 	 * Only do this when all the bhs are rx or clean, to match the
@@ -848,9 +847,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
       assert(bh->start() == opos);   // we don't merge rx bh's... yet!
       assert(bh->length() <= start+(loff_t)length-opos);
 
-      if (bh->error < 0)
-	err = bh->error;
-
       loff_t oldpos = opos;
       opos = bh->end();
 
@@ -885,7 +881,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
   // called with lock held.
   ldout(cct, 20) << "finishing waiters " << ls << dendl;
 
-  finish_contexts(cct, ls, err);
+  finish_contexts(cct, ls, r >= 0 ? 0 : r);
   retry_waiting_reads();
 
   --reads_outstanding;
@@ -1829,50 +1825,6 @@ bool ObjectCacher::set_is_empty(ObjectSet *oset)
 
   return true;
 }
-
-bool ObjectCacher::set_is_cached(ObjectSet *oset)
-{
-  assert(lock.is_locked());
-  if (oset->objects.empty())
-    return false;
-
-  for (xlist<Object*>::iterator p = oset->objects.begin();
-       !p.end(); ++p) {
-    Object *ob = *p;
-    for (map<loff_t,BufferHead*>::iterator q = ob->data.begin();
-	 q != ob->data.end();
-	 ++q) {
-      BufferHead *bh = q->second;
-      if (!bh->is_dirty() && !bh->is_tx())
-	return true;
-    }
-  }
-
-  return false;
-}
-
-bool ObjectCacher::set_is_dirty_or_committing(ObjectSet *oset)
-{
-  assert(lock.is_locked());
-  if (oset->objects.empty())
-    return false;
-
-  for (xlist<Object*>::iterator i = oset->objects.begin();
-       !i.end(); ++i) {
-    Object *ob = *i;
-
-    for (map<loff_t,BufferHead*>::iterator p = ob->data.begin();
-	 p != ob->data.end();
-	 ++p) {
-      BufferHead *bh = p->second;
-      if (bh->is_dirty() || bh->is_tx())
-	return true;
-    }
-  }
-
-  return false;
-}
-
 
 // purge.  non-blocking.  violently removes dirty buffers from cache.
 void ObjectCacher::purge(Object *ob)
