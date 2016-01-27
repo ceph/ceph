@@ -74,6 +74,8 @@ void JournalMetadata::shutdown() {
     }
   }
 
+  flush_commit_position();
+
   if (m_timer != NULL) {
     Mutex::Locker locker(m_timer_lock);
     m_timer->shutdown();
