@@ -823,6 +823,7 @@ def get_scratch_devices(remote):
     Read the scratch disk list from remote host
     """
     devs = []
+    dev_blkid_data = {}
     try:
         file_data = get_file(remote, "/scratch_devs")
         devs = file_data.split()
@@ -833,11 +834,77 @@ def get_scratch_devices(remote):
         )
         devs = r.stdout.getvalue().strip().split('\n')
 
-    # Remove root device (vm guests) from the disk list
+    # Look for disks that we need to not touch based on various properties.
     for dev in devs:
+        # Remove root device (vm guests) from the disk list
         if 'vda' in dev:
             devs.remove(dev)
             log.warn("Removing root device: %s from device list" % dev)
+            continue
+
+        # Remove read-only devices, based on sysfs
+        sysfsdev = dev.replace('/dev/', '')
+        try:
+            sysfspath = "/sys/block/%s/ro" % (sysfsdev, )
+            rofile = get_file(remote, sysfspath).strip()
+            if rofile is '1':
+                devs.remove(dev)
+                log.warn("Removing read-only device: %s" % (dev, ))
+                continue
+        except Exception:
+            pass
+
+        # Fetch blkid data for the device
+        r = remote.run(
+            args=['sudo', 'blkid', '-o', 'export', '-p', dev],
+            stdout=StringIO(),
+            stderr=StringIO(),
+            check_status=False,
+        )
+        blkid_stderr = r.stderr.getvalue().strip()
+
+        # retval 2 -> does not exist
+        if r.exitstatus == 2:
+            devs.remove(dev)
+            continue
+
+        if len(blkid_stderr) > 0 or r.exitstatus != 0:
+            devs.remove(dev)
+            log.warn("Removing device due to blkid failure: %s: %s"
+                     % (dev, blkid_stderr))
+            continue
+
+        dev_blkid_data[dev] = \
+                dict([_.strip().split('=', 2)
+                     for _ in r.stdout.getvalue().split('\n')])
+        # Look for cloud-init stuff to ignore
+        # cloud-init part1:
+        # Ignore all CDROMs, as they are quite common:
+        # - config-drive
+        # - OpenNubula
+        # - NoCloud
+        # - vSphere
+        # - OVF
+        if 'TYPE' in dev_blkid_data[dev] and \
+                dev_blkid_data[dev]['TYPE'] is 'iso9660':
+            devs.remove(dev)
+            log.warn("Removing cloud-init device by cdrom: %s" % (dev, ))
+
+        # cloud-init, part3:
+        # Disk labels
+        # - "config-2": ConfigDrive v2
+        # - "cidata": NoCloud
+        # - "CONTEXT", "CDROM": OpenNebula
+        if 'LABEL' in dev_blkid_data[dev] and \
+                dev_blkid_data[dev]['LABEL'] \
+                in ['config-2', 'cidata', 'CONTEXT', 'CDROM']:
+            log.warn("Removing cloud-init device by label: %s" % (dev, ))
+            devs.remove(dev)
+
+        # cloud-init, part2:
+        # filenames on a volume
+        # TODO: this requires mounting the filesystem
+        pass
 
     log.debug('devs={d}'.format(d=devs))
 
