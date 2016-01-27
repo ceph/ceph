@@ -827,7 +827,7 @@ int BlueStore::_open_path()
     return r;
   }
   assert(fs == NULL);
-  fs = FS::create(path_fd);
+  fs = FS::create_by_fd(path_fd);
   dout(1) << __func__ << " using fs driver '" << fs->get_name() << "'" << dendl;
   return 0;
 }
