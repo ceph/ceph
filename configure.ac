@@ -826,14 +826,6 @@ AS_IF([test "x$with_librocksdb_static" = "xyes"], [
 AM_CONDITIONAL(HAVE_BZLIB, [test "x$have_bzlib" = "xyes"])
 AM_CONDITIONAL(HAVE_LZ4, [test "x$have_lz4" = "xyes"])
 
-# error out if --with-jemalloc and --with-librocksdb_static as rocksdb uses tcmalloc
-if test "x$with_jemalloc" = "xyes"; then
-	if test "x$with_librocksdb_static" != "xno"; then
-		AC_MSG_FAILURE([--with-jemalloc called with --with-librocksdb_static, turn off
-			        --with-librocksdb-static or --with-jemalloc])
-	fi
-fi
-
 # needs libcurl and libxml2
 if test "x$with_rest_bench" = xyes && test "x$with_system_libs3" = xno; then
    AC_CHECK_LIB([curl], [curl_easy_init], [], AC_MSG_ERROR([libcurl not found]))
