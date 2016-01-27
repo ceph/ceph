@@ -24,7 +24,7 @@ nodist_libosd_tp_la_SOURCES = \
 	tracing/osd.h \
 	tracing/pg.h
 endif
-libosd_tp_la_LIBADD = -llttng-ust -ldl
+libosd_tp_la_LIBADD = -ldl -llttng-ust
 libosd_tp_la_CFLAGS = -I$(top_srcdir)/src/tracing -I$(top_srcdir)/src $(AM_CFLAGS) -fpic
 libosd_tp_la_LDFLAGS = -version-info 1:0:0
 
@@ -34,7 +34,7 @@ librados_tp_la_SOURCES = \
 nodist_librados_tp_la_SOURCES = \
 	tracing/librados.h
 endif
-librados_tp_la_LIBADD = -llttng-ust -ldl
+librados_tp_la_LIBADD = -ldl -llttng-ust
 librados_tp_la_CFLAGS = -I$(top_srcdir)/src/tracing -I$(top_srcdir)/src $(AM_CFLAGS) -fpic
 librados_tp_la_LDFLAGS = -version-info 2:0:0
 
@@ -44,7 +44,7 @@ librbd_tp_la_SOURCES = \
 nodist_librbd_tp_la_SOURCES = \
 	tracing/librbd.h
 endif
-librbd_tp_la_LIBADD = -llttng-ust -ldl
+librbd_tp_la_LIBADD = -ldl -llttng-ust
 librbd_tp_la_CFLAGS = -I$(top_srcdir)/src/tracing -I$(top_srcdir)/src $(AM_CFLAGS) -fpic
 librbd_tp_la_LDFLAGS = -version-info 1:0:0
 
@@ -54,7 +54,7 @@ libos_tp_la_SOURCES = \
 nodist_libos_tp_la_SOURCES = \
 	tracing/objectstore.h
 endif
-libos_tp_la_LIBADD = -llttng-ust -ldl
+libos_tp_la_LIBADD = -ldl -llttng-ust
 libos_tp_la_CFLAGS = -I$(top_srcdir)/src/tracing -I$(top_srcdir)/src $(AM_CFLAGS) -fpic
 libos_tp_la_LDFLAGS = -version-info 1:0:0
 
