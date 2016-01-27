@@ -4102,7 +4102,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     pg_t rawpg;
     int64_t pool;
     OSDMapRef curmap = service->get_osdmap();
-    int r;
+    int r = -1;
 
     string poolstr;
 
@@ -4115,7 +4115,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       ss << "Invalid pool" << poolstr;
       return;
     }
-    r = -1;
+
     string objname, nspace;
     cmd_getval(service->cct, cmdmap, "objname", objname);
     std::size_t found = objname.find_first_of('/');
