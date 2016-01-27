@@ -166,5 +166,13 @@ and analyze results.
         type=int,
         default=15,
     )
+    parser.add_argument(
+        '--ceph-git-url',
+        help=("git clone url for Ceph"),
+    )
+    parser.add_argument(
+        '--ceph-qa-suite-git-url',
+        help=("git clone url for ceph-qa-suite"),
+    )
 
     return parser.parse_args(argv)
