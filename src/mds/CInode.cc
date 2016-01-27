@@ -3954,9 +3954,9 @@ next:
     }
 
     void _done() {
-      if (results->raw_stats.passed &&
-	  results->backtrace.passed &&
-	  results->inode.passed)
+      if ((!results->raw_stats.checked || results->raw_stats.passed) &&
+	  (!results->backtrace.checked || results->backtrace.passed) &&
+	  (!results->inode.checked || results->inode.passed))
         results->passed_validation = true;
       if (fin) {
         fin->complete(get_rval());
