@@ -76,6 +76,8 @@ setup(
                       'python-openstackclient',
                       'prettytable',
                       'libvirt-python',
+                      # For teuthology-coverage
+                      'mysqlclient',
                       ],
 
 
