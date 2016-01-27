@@ -28,6 +28,7 @@ Standard arguments:
   <config_yaml>               Optional extra job yaml to include
   -s <suite>, --suite <suite>
                               The suite to schedule
+  --wait                      Block until the suite is finished
   -c <ceph>, --ceph <ceph>    The ceph branch to run against
                               [default: master]
   -k <kernel>, --kernel <kernel>
