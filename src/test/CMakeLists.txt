@@ -1370,6 +1370,23 @@ add_dependencies(check unittest_bit_vector)
 set_target_properties(unittest_bit_vector PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
+# unittest_interval_set
+add_executable(unittest_interval_set EXCLUDE_FROM_ALL
+  common/test_interval_set.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+add_test(unittest_interval_set unittest_interval_set)
+add_dependencies(check unittest_interval_set)
+target_link_libraries(unittest_interval_set
+  global
+  ${CMAKE_DL_LIBS}
+  ${ALLOC_LIBS}
+  ${UNITTEST_LIBS})
+add_test(unittest_interval_set unittest_interval_set)
+add_dependencies(check unittest_interval_set)
+set_target_properties(unittest_interval_set PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
 # unittest_subprocess
 add_executable(unittest_subprocess EXCLUDE_FROM_ALL
   test_subprocess.cc

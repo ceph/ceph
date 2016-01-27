@@ -5,7 +5,7 @@
 #define CEPH_OS_BLUESTORE_STUPIDALLOCATOR_H
 
 #include "Allocator.h"
-#include "include/interval_set.h"
+#include "include/btree_interval_set.h"
 #include "common/Mutex.h"
 
 class StupidAllocator : public Allocator {
@@ -16,9 +16,9 @@ class StupidAllocator : public Allocator {
   int64_t num_committing;
   int64_t num_reserved; ///< reserved bytes
 
-  vector<interval_set<uint64_t> > free;        ///< leading-edge copy
-  interval_set<uint64_t> uncommitted; ///< released but not yet usable
-  interval_set<uint64_t> committing;  ///< released but not yet usable
+  std::vector<btree_interval_set<uint64_t> > free;        ///< leading-edge copy
+  btree_interval_set<uint64_t> uncommitted; ///< released but not yet usable
+  btree_interval_set<uint64_t> committing;  ///< released but not yet usable
 
   uint64_t last_alloc;
 
@@ -44,7 +44,7 @@ public:
 
   uint64_t get_free();
 
-  void dump(ostream& out);
+  void dump(std::ostream& out);
 
   void init_add_free(uint64_t offset, uint64_t length);
   void init_rm_free(uint64_t offset, uint64_t length);
