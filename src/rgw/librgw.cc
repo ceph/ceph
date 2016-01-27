@@ -438,7 +438,8 @@ namespace rgw {
     rgw_init_resolver();
 
     store = RGWStoreManager::get_storage(g_ceph_context,
-					 g_conf->rgw_enable_gc_threads, g_conf->rgw_enable_quota_threads);
+					 g_conf->rgw_enable_gc_threads,
+					 g_conf->rgw_enable_quota_threads);
 
     if (!store) {
       mutex.Lock();
@@ -447,7 +448,7 @@ namespace rgw {
       mutex.Unlock();
 
       derr << "Couldn't init storage provider (RADOS)" << dendl;
-      return EIO;
+      return -EIO;
     }
 
     r = rgw_perf_start(g_ceph_context);
@@ -460,7 +461,7 @@ namespace rgw {
     mutex.Unlock();
 
     if (r)
-      return 1;
+      return -EIO;
 
     rgw_user_init(store);
     rgw_bucket_init(store->meta_mgr);
@@ -482,7 +483,7 @@ namespace rgw {
     fe->init();
     if (r < 0) {
       derr << "ERROR: failed initializing frontend" << dendl;
-      return -r;
+      return r;
     }
 
     fe->run();
@@ -572,18 +573,20 @@ int librgw_create(librgw_t* rgw, int argc, char **argv)
 {
   using namespace rgw;
 
+  int rc = -EINVAL;
+
   if (! g_ceph_context) {
     std::lock_guard<std::mutex> lg(librgw_mtx);
     if (! g_ceph_context) {
       vector<const char*> args;
       argv_to_vec(argc, const_cast<const char**>(argv), args);
-      rgwlib.init(args);
+      rc = rgwlib.init(args);
     }
   }
 
   *rgw = g_ceph_context->get();
 
-  return 0;
+  return rc;
 }
 
 void librgw_shutdown(librgw_t rgw)
