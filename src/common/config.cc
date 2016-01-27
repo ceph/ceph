@@ -199,6 +199,7 @@ void md_config_t::remove_observer(md_config_obs_t* observer_)
 }
 
 int md_config_t::parse_config_files(const char *conf_files,
+				    const std::string& extra_config,
 				    std::deque<std::string> *parse_errors,
 				    std::ostream *warnings,
 				    int flags)
@@ -236,7 +237,20 @@ int md_config_t::parse_config_files(const char *conf_files,
       ++p;
     }
   }
-  return parse_config_files_impl(cfl, parse_errors, warnings);
+  int r = parse_config_files_impl(cfl, parse_errors, warnings);
+  if (extra_config.length() == 0)
+    return r;
+
+  // parse extra_config too?
+  string extra_config_expanded = extra_config;
+  list<config_option*> stack;
+  expand_meta(extra_config_expanded, NULL, stack, warnings);
+  cfl.clear();
+  cfl.push_back(extra_config_expanded);
+  int r2 = parse_config_files_impl(cfl, parse_errors, warnings);
+  if (r >= 0)
+    return 0;
+  return r2;
 }
 
 int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_files,

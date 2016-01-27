@@ -68,9 +68,11 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
   // You can only call global_init once.
   assert(!g_ceph_context);
   std::string conf_file_list;
+  std::string extra_config = "$data_dir/config";
   std::string cluster = "ceph";
-  CephInitParameters iparams = ceph_argparse_early_args(args, module_type, flags,
-							&cluster, &conf_file_list);
+  CephInitParameters iparams = ceph_argparse_early_args(
+    args, module_type, flags,
+    &cluster, &conf_file_list, &extra_config);
   CephContext *cct = common_preinit(iparams, code_env, flags, data_dir_option);
   cct->_conf->cluster = cluster;
   global_init_set_globals(cct);
@@ -80,7 +82,9 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
     conf->parse_argv(*alt_def_args);  // alternative default args
 
   std::deque<std::string> parse_errors;
-  int ret = conf->parse_config_files(c_str_or_null(conf_file_list), &parse_errors, &cerr, flags);
+  int ret = conf->parse_config_files(c_str_or_null(conf_file_list),
+				     extra_config,
+				     &parse_errors, &cerr, flags);
   if (ret == -EDOM) {
     dout_emergency("global_init: error parsing config file.\n");
     _exit(1);

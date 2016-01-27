@@ -106,6 +106,7 @@ public:
 
   // Parse a config file
   int parse_config_files(const char *conf_files,
+			 const std::string& extra_config,
 			 std::deque<std::string> *parse_errors,
 			 std::ostream *warnings, int flags);
 
