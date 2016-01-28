@@ -10,6 +10,7 @@
 #include <chrono>
 #include <iostream>
 
+#include "test_recs.h"
 #include "test_server.h"
 #include "test_client.h"
 
@@ -65,9 +66,9 @@ dmc::ClientInfo getClientInfo(int c) {
 
 
 void send_response(TestClient** clients,
-		   int client_id,
+		   ClientId client_id,
 		   const TestResponse& resp,
-		   const dmc::RespParams<int>& resp_params) {
+		   const dmc::RespParams<ServerId>& resp_params) {
   clients[client_id]->receiveResponse(resp, resp_params);
 }
 
@@ -85,7 +86,7 @@ int main(int argc, char* argv[]) {
 
   TestClient** clients = new TestClient*[client_count];
 
-  auto client_info_f = std::function<dmc::ClientInfo(int)>(getClientInfo);
+  auto client_info_f = std::function<dmc::ClientInfo(ClientId)>(getClientInfo);
   TestServer::ClientRespFunc client_response_f =
     std::bind(&send_response, clients, _1, _2, _3);
 

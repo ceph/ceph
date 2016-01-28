@@ -20,10 +20,10 @@ namespace dmc = crimson::dmclock;
 static const bool info = false;
 
 
-TestServer::TestServer(int _id,
+TestServer::TestServer(ServerId _id,
 		       int _iops,
 		       int _thread_pool_size,
-		       const std::function<dmc::ClientInfo(int)>& _client_info_f,
+		       const std::function<dmc::ClientInfo(ClientId)>& _client_info_f,
 		       const ClientRespFunc& _client_resp_f) :
   id(_id),
   priority_queue(_client_info_f,
@@ -84,7 +84,7 @@ void TestServer::run(std::chrono::milliseconds wait_delay) {
       std::this_thread::sleep_for(op_time);
 
       TestResponse resp(req->epoch);
-      sendResponse(client, resp, dmc::RespParams<int>(id, phase));
+      sendResponse(client, resp, dmc::RespParams<ServerId>(id, phase));
 
       priority_queue.requestCompleted();
 
@@ -101,7 +101,7 @@ void TestServer::run(std::chrono::milliseconds wait_delay) {
 
 
 void TestServer::post(const TestRequest& request,
-		      const dmc::ReqParams<int>& req_params) {
+		      const dmc::ReqParams<ClientId>& req_params) {
   auto now = dmc::getTime();
   priority_queue.addRequest(request, req_params, now);
 }
@@ -113,7 +113,7 @@ bool TestServer::hasAvailThread() {
 }
 
 
-void TestServer::innerPost(const int& client,
+void TestServer::innerPost(const ClientId& client,
 			   std::unique_ptr<TestRequest> request,
 			   dmc::PhaseType phase) {
   Lock l(inner_queue_mtx);

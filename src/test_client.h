@@ -24,11 +24,11 @@
 class TestClient {
   using SubmitFunc =
     std::function<void(const TestRequest&,
-		       const crimson::dmclock::ReqParams<int>&)>;
+		       const crimson::dmclock::ReqParams<ClientId>&)>;
 
   struct RespQueueItem {
     TestResponse response;
-    crimson::dmclock::RespParams<int> resp_params;
+    crimson::dmclock::RespParams<ServerId> resp_params;
   };
 
 public:
@@ -39,13 +39,13 @@ public:
 
 protected:
 
-  int id;
+  const ClientId id;
   SubmitFunc submit_f;
   int ops_to_run;
   int iops_goal; // per second
   int outstanding_ops_allowed;
 
-  crimson::dmclock::ServiceTracker<int> service_tracker;
+  crimson::dmclock::ServiceTracker<ServerId> service_tracker;
 
   std::vector<TimePoint>   op_times;
 
@@ -67,7 +67,7 @@ protected:
 
 public:
 
-  TestClient(int _id,
+  TestClient(ClientId _id,
 	     const SubmitFunc& _submit_f,
 	     int _ops_to_run,
 	     int _iops_goal,
@@ -76,7 +76,7 @@ public:
   virtual ~TestClient();
 
   void receiveResponse(const TestResponse&,
-		       const crimson::dmclock::RespParams<int>&);
+		       const crimson::dmclock::RespParams<ServerId>&);
 
   const std::vector<TimePoint>& getOpTimes() const { return op_times; }
 

@@ -16,9 +16,8 @@
 
 #include "dmclock_recs.h"
 #include "dmclock_server.h"
+
 #include "test_recs.h"
-
-
 
 
 class TestServer {
@@ -46,12 +45,12 @@ public:
   using ClientRespFunc =
     std::function<void(int,
 		       const TestResponse&,
-		       const crimson::dmclock::RespParams<int>&)>;
+		       const crimson::dmclock::RespParams<ServerId>&)>;
 
 protected:
 
-  const int                      id;
-  crimson::dmclock::PriorityQueue<int,TestRequest> priority_queue;
+  const ServerId                 id;
+  crimson::dmclock::PriorityQueue<ClientId,TestRequest> priority_queue;
   ClientRespFunc                 client_resp_f;
   int                            iops;
   int                            thread_pool_size;
@@ -70,31 +69,30 @@ protected:
 
 public:
 
-  // TestServer(int _thread_pool_size);
-  TestServer(int _id,
+  TestServer(ServerId _id,
 	     int _iops,
 	     int _thread_pool_size,
-	     const std::function<crimson::dmclock::ClientInfo(int)>& _client_info_f,
+	     const std::function<crimson::dmclock::ClientInfo(ClientId)>& _client_info_f,
 	     const ClientRespFunc& _client_resp_f);
 
   virtual ~TestServer();
 
   void post(const TestRequest& request,
-	    const crimson::dmclock::ReqParams<int>& req_params);
+	    const crimson::dmclock::ReqParams<ClientId>& req_params);
 
   bool hasAvailThread();
 
 protected:
 
-  void innerPost(const int& client,
+  void innerPost(const ClientId& client,
 		 std::unique_ptr<TestRequest> request,
 		 crimson::dmclock::PhaseType phase);
 
   void run(std::chrono::milliseconds wait_delay);
 
-  inline void sendResponse(int client,
+  inline void sendResponse(const ClientId& client,
 			   const TestResponse& resp,
-			   const crimson::dmclock::RespParams<int>& resp_params) {
+			   const crimson::dmclock::RespParams<ServerId>& resp_params) {
     client_resp_f(client, resp, resp_params);
   }
 }; // class TestServer

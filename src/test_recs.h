@@ -11,6 +11,10 @@
 #include "dmclock_recs.h"
 
 
+using ClientId = float;
+using ServerId = double;
+
+
 struct TestRequest {
   uint32_t epoch;
   uint32_t op;

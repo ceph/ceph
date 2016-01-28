@@ -19,7 +19,7 @@ namespace dmc = crimson::dmclock;
 static const uint info = 0;
 
 
-TestClient::TestClient(int _id,
+TestClient::TestClient(ClientId _id,
 		       const SubmitFunc& _submit_f,
 		       int _ops_to_run,
 		       int _iops_goal,
@@ -70,7 +70,7 @@ void TestClient::run_req() {
       }
 
       l.unlock();
-      dmc::ReqParams<int> rp = service_tracker.getRequestParams(id, 0);
+      dmc::ReqParams<ClientId> rp = service_tracker.getRequestParams(id, 0);
       TestRequest req(i, 12);
       submit_f(req, rp);
       ++outstanding_ops;
@@ -149,7 +149,7 @@ void TestClient::run_resp() {
 
 
 void TestClient::receiveResponse(const TestResponse& resp,
-				 const dmc::RespParams<int>& resp_params) {
+				 const dmc::RespParams<ServerId>& resp_params) {
   RespGuard g(mtx_resp);
   resp_queue.push_back(RespQueueItem{resp, resp_params});
   cv_resp.notify_one();
