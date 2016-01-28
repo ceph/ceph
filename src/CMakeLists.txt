@@ -626,7 +626,6 @@ if(${HAVE_XFS})
     os/fs/XFS.cc)
 endif(${HAVE_XFS})
 set(libos_srcs
-  os/FuseStore.cc
   os/ObjectStore.cc
   os/Transaction.cc
   os/filestore/chain_xattr.cc
@@ -656,6 +655,10 @@ set(libos_srcs
   os/bluestore/StupidAllocator.cc
   os/fs/FS.cc
   ${libos_xfs_srcs})
+if(${HAVE_LIBFUSE})
+  list(APPEND libos_srcs
+    os/FuseStore.cc)
+endif(${HAVE_LIBFUSE})
 
 # make rocksdb statically
 add_custom_target(build_rocksdb
@@ -679,6 +682,9 @@ endif(${HAVE_LIBAIO})
 if(${WITH_LTTNG})
   target_link_libraries(os libos_tp)
 endif(${WITH_LTTNG})
+if(${HAVE_LIBFUSE})
+  target_link_libraries(os ${FUSE_LIBRARIES})
+endif(${HAVE_LIBFUSE})
 target_link_libraries(os kv)
 
 set(cls_references_files objclass/class_api.cc)
@@ -728,7 +734,10 @@ add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(ceph-osd erasure_code_plugins)
-target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES} ${ALLOC_LIBS} fuse)
+target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES} ${ALLOC_LIBS})
+if(${HAVE_LIBFUSE})
+  target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
+endif(${HAVE_LIBFUSE})
 install(TARGETS ceph-osd DESTINATION bin)
 
 # MDS
@@ -928,15 +937,15 @@ endif(${ENABLE_SHARED})
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION sbin)
 
-  if(HAVE_FUSE)
+  if(HAVE_LIBFUSE)
     set(ceph_fuse_srcs
       ceph_fuse.cc
       client/fuse_ll.cc)
     add_executable(ceph-fuse ${ceph_fuse_srcs})
-    target_link_libraries(ceph-fuse fuse client global)
+    target_link_libraries(ceph-fuse ${FUSE_LIBRARIES} client global)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
-  endif(HAVE_FUSE)
+  endif(HAVE_LIBFUSE)
 endif(WITH_LIBCEPHFS)
 
 set(journal_srcs
