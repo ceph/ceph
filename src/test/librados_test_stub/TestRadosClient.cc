@@ -84,7 +84,8 @@ private:
 
 TestRadosClient::TestRadosClient(CephContext *cct)
   : m_cct(cct->get()),
-    m_watch_notify(m_cct)
+    m_aio_finisher(new Finisher(m_cct)),
+    m_watch_notify(m_cct, m_aio_finisher)
 {
   get();
 
@@ -96,7 +97,6 @@ TestRadosClient::TestRadosClient(CephContext *cct)
   }
 
   // replicate AIO callback processing
-  m_aio_finisher = new Finisher(m_cct);
   m_aio_finisher->start();
 }
 
