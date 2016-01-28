@@ -355,11 +355,6 @@ if(${WITH_RADOSGW})
     ${UNITTEST_CXX_FLAGS})
 endif(${WITH_RADOSGW})
 
-# radostest 
-set(libradostest_srcs librados/test.cc librados/TestCase.cc)
-add_library(radostest STATIC ${libradostest_srcs})
-set_target_properties(radostest PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
-
 # ceph_multi_stress_watch
 add_executable(ceph_multi_stress_watch
   multi_stress_watch.cc
@@ -852,127 +847,6 @@ add_executable(ceph_test_snap_mapper EXCLUDE_FROM_ALL
   )
 target_link_libraries(ceph_test_snap_mapper osd global ${BLKID_LIBRARIES})
 
-add_executable(ceph_test_rados_api_cmd
-  librados/cmd.cc
-  )
-set_target_properties(ceph_test_rados_api_cmd PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_cmd
-  librados global ${UNITTEST_LIBS} radostest)
-
-add_executable(ceph_test_rados_api_io
-  librados/io.cc
-  )
-set_target_properties(ceph_test_rados_api_io PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_io
-  librados ${UNITTEST_LIBS} radostest)
-
-add_executable(ceph_test_rados_api_c_write_operations
-  librados/c_write_operations.cc
-  )
-set_target_properties(ceph_test_rados_api_c_write_operations PROPERTIES
-  COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_c_write_operations
-  librados ${UNITTEST_LIBS} radostest)
-
-add_executable(ceph_test_rados_api_c_read_operations
-  librados/c_read_operations.cc
-  )
-set_target_properties(ceph_test_rados_api_c_read_operations PROPERTIES COMPILE_FLAGS 
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_c_read_operations
-  librados ${UNITTEST_LIBS} radostest)
-
-add_executable(ceph_test_rados_api_aio
-  librados/aio.cc
-  )
-set_target_properties(ceph_test_rados_api_aio PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_aio
-  librados ${UNITTEST_LIBS} radostest)
-
-add_executable(ceph_test_rados_api_list
-  librados/list.cc
-  )
-set_target_properties(ceph_test_rados_api_list PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_list
-  librados ${UNITTEST_LIBS} radostest)
-
-add_executable(ceph_test_rados_api_nlist
-  librados/nlist.cc
-  )
-set_target_properties(ceph_test_rados_api_nlist PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_nlist
-  librados ${UNITTEST_LIBS} radostest)
-
-add_executable(ceph_test_rados_api_pool
-  librados/pool.cc
-  )
-set_target_properties(ceph_test_rados_api_pool PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS}
-  )
-target_link_libraries(ceph_test_rados_api_pool
-  librados ${UNITTEST_LIBS} radostest)
-
-add_executable(ceph_test_rados_api_stat
-  librados/stat.cc
-  )
-set_target_properties(ceph_test_rados_api_stat PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_stat
-  librados ${UNITTEST_LIBS} radostest)
-
-add_executable(ceph_test_rados_api_watch_notify
-  librados/watch_notify.cc
-  )
-set_target_properties(ceph_test_rados_api_watch_notify PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_watch_notify
-  librados ${UNITTEST_LIBS} radostest)
-
-add_executable(ceph_test_rados_api_cls
-  librados/cls.cc
-  )
-set_target_properties(ceph_test_rados_api_cls PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_cls
-  librados ${UNITTEST_LIBS} radostest)
-
-add_executable(ceph_test_rados_api_misc
-  librados/misc.cc
-  )
-set_target_properties(ceph_test_rados_api_misc PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_misc
-  librados global ${UNITTEST_LIBS} radostest)
-
-add_executable(ceph_test_rados_api_lock
-  librados/lock.cc
-  )
-set_target_properties(ceph_test_rados_api_lock PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_lock
-  librados ${UNITTEST_LIBS} radostest)
-
-add_executable(ceph_test_rados_api_tier
-  librados/tier.cc
-  )
-set_target_properties(ceph_test_rados_api_tier PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_tier
-  global librados ${UNITTEST_LIBS} ${Boost_SYSTEM_LIBRARY} radostest)
-
-add_executable(ceph_test_rados_api_snapshots
-  librados/snapshots.cc
-  )
-set_target_properties(ceph_test_rados_api_snapshots PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_snapshots
-  librados ${UNITTEST_LIBS} radostest)
-
 add_library(rados_striper_test STATIC libradosstriper/TestCase.cc)
 target_link_libraries(rados_striper_test radostest)
 set_target_properties(rados_striper_test PROPERTIES COMPILE_FLAGS
@@ -1173,26 +1047,7 @@ add_subdirectory(fs)
 #libradosstriper directory
 add_ceph_test(rados-striper.sh ${CMAKE_SOURCE_DIR}/src/test/libradosstriper/rados-striper.sh)
 
-
-#libradosdirectory
-# unittest_librados
-add_executable(unittest_librados EXCLUDE_FROM_ALL
-  librados/librados.cc
-  )
-add_ceph_unittest(unittest_librados ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_librados)
-target_link_libraries(unittest_librados librados global ${BLKID_LIBRARIES})
-
-# unittest_librados_config
-set(unittest_librados_config_srcs librados/librados_config.cc)
-add_executable(unittest_librados_config EXCLUDE_FROM_ALL
-  ${unittest_librados_config_srcs}
-  )
-add_ceph_unittest(unittest_librados_config ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_librados_config)
-target_link_libraries(unittest_librados_config
-  librados
-  global
-  ${BLKID_LIBRARIES}
-  )
+add_subdirectory(librados)
 
 #mds directory
 # unittest_mds_authcap
