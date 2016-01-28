@@ -4198,6 +4198,14 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
   Transaction::iterator i = t->begin();
   int pos = 0;
 
+  dout(30) << __func__ << " transaction dump:\n";
+  JSONFormatter f(true);
+  f.open_object_section("transaction");
+  t->dump(&f);
+  f.close_section();
+  f.flush(*_dout);
+  *_dout << dendl;
+
   vector<CollectionRef> cvec(i.colls.size());
   unsigned j = 0;
   for (vector<coll_t>::iterator p = i.colls.begin(); p != i.colls.end();
