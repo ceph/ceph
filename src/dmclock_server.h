@@ -249,6 +249,7 @@ namespace crimson {
       HandleRequestFunc    handleF;
 
       mutable std::mutex data_mutex;
+      using DataGuard = std::lock_guard<decltype(data_mutex)>;
 
       // stable mappiing between client ids and client queues
       std::map<C,ClientRec> clientMap;
@@ -327,7 +328,7 @@ namespace crimson {
 		      const ReqParams<C>& req_params,
 		      const Time& time) {
 	const C& client_id = req_params.client;
-	Guard g(data_mutex);
+	DataGuard g(data_mutex);
 
 	auto client_it = clientMap.find(client_id);
 	if (clientMap.end() == client_it) {
@@ -393,7 +394,7 @@ namespace crimson {
 
 
       void requestCompleted() {
-	Guard g(data_mutex);
+	DataGuard g(data_mutex);
 	scheduleRequest();
       }
 
@@ -558,7 +559,7 @@ namespace crimson {
 	      long microseconds_l = long(1 + 1000000 * (nextCall - now));
 	      auto microseconds = std::chrono::microseconds(microseconds_l);
 	      std::this_thread::sleep_for(microseconds);
-	      Guard g(data_mutex);
+	      DataGuard g(data_mutex);
 	      scheduleRequest();
 	    });
 	  t.detach();

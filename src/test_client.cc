@@ -9,7 +9,6 @@
 #include <iostream>
 
 #include "dmclock_recs.h"
-#include "dmclock_util.h"
 #include "test_client.h"
 
 
@@ -59,7 +58,7 @@ void TestClient::run_req() {
   }
 
   {
-    dmc::Lock l(mtx_req);
+    Lock l(mtx_req);
     auto now = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < ops_to_run; ++i) {
       auto when = now + delay;
@@ -93,7 +92,7 @@ void TestClient::run_req() {
 void TestClient::run_resp() {
   std::chrono::milliseconds delay(1000);
 
-  dmc::Lock l(mtx_resp);
+  Lock l(mtx_resp);
 
   int op = 0;
 
@@ -143,7 +142,7 @@ void TestClient::run_resp() {
 
 
 void TestClient::submitResponse(const TestResponse& resp) {
-  dmc::Guard g(mtx_resp);
+  RespGuard g(mtx_resp);
   resp_queue.push_back(resp);
   cv_resp.notify_one();
 }

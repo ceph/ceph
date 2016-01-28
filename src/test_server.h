@@ -64,6 +64,9 @@ protected:
 
   std::thread*                   threads;
 
+  using InnerQGuard = std::lock_guard<decltype(inner_queue_mtx)>;
+  using Lock = std::unique_lock<std::mutex>;
+
 public:
 
   // TestServer(int _thread_pool_size);

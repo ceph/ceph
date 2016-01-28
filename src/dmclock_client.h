@@ -31,6 +31,8 @@ namespace crimson {
       std::map<S,ServerInfo> service_map;
       mutable std::mutex     data_mtx;      // protects Counters and map
 
+      using DataGuard = std::lock_guard<decltype(data_mtx)>;
+
     public:
 
       ServiceTracker() :
@@ -41,7 +43,7 @@ namespace crimson {
       }
 
       void trackResponse(const RespParams<S>& resp_params) {
-	Guard g(data_mtx);
+	DataGuard g(data_mtx);
 	++delta_counter;
 	if (PhaseType::reservation == resp_params.phase) {
 	  ++rho_counter;
@@ -61,7 +63,7 @@ namespace crimson {
 
       template<typename C>
       ReqParams<C> getRequestParams(const C& client, const S& server) const {
-	Guard g(data_mtx);
+	DataGuard g(data_mtx);
 	auto it = service_map.find(server);
 	if (service_map.end() == it) {
 	  return ReqParams<C>(client, 0, 0);

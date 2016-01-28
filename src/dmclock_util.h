@@ -13,9 +13,6 @@
 
 namespace crimson {
   namespace dmclock {
-    typedef std::unique_lock<std::mutex> Lock;
-    typedef std::lock_guard<std::mutex> Guard;
-
     void debugger();
   }
 }

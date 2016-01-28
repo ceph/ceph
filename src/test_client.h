@@ -57,6 +57,9 @@ protected:
   std::condition_variable  cv_resp;
   std::thread              thd_resp;
 
+  using RespGuard = std::lock_guard<decltype(mtx_resp)>;
+  using Lock = std::unique_lock<std::mutex>;
+
 public:
 
   TestClient(int _id,
