@@ -15,8 +15,7 @@
 #include <thread>
 #include <chrono>
 #include <vector>
-
-#include "crimson/queue.h"
+#include <deque>
 
 #include "test_recs.h"
 #include "dmclock_client.h"
