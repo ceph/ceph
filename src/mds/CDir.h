@@ -255,6 +255,7 @@ public:
     bool directory_scrubbing; /// safety check
     bool need_scrub_local;
     bool last_scrub_dirty; /// is scrub info dirty or is it flushed to fnode?
+    bool pending_scrub_error;
 
     /// these are lists of children in each stage of scrubbing
     set<dentry_key_t> directories_to_scrub;
@@ -267,8 +268,10 @@ public:
     ScrubHeaderRefConst header;
 
     scrub_info_t() :
-      directory_scrubbing(false), need_scrub_local(false),
-      last_scrub_dirty(false) {}
+      directory_scrubbing(false),
+      need_scrub_local(false),
+      last_scrub_dirty(false),
+      pending_scrub_error(false) {}
   };
   /**
    * Call to start this CDir on a new scrub.
