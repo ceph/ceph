@@ -212,7 +212,7 @@ struct C_MonOp : public Context
 {
   MonOpRequestRef op;
 
-  C_MonOp(MonOpRequestRef o) :
+  explicit C_MonOp(MonOpRequestRef o) :
     op(o) { }
 
   void finish(int r) {

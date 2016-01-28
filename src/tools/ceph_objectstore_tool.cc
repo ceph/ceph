@@ -1795,7 +1795,7 @@ int do_set_omaphdr(ObjectStore *store, coll_t coll,
 struct do_fix_lost : public action_on_object_t {
   ObjectStore::Sequencer *osr;
 
-  do_fix_lost(ObjectStore::Sequencer *_osr) : osr(_osr) {}
+  explicit do_fix_lost(ObjectStore::Sequencer *_osr) : osr(_osr) {}
 
   virtual int call(ObjectStore *store, coll_t coll,
 		   ghobject_t &ghobj, object_info_t &oi) {

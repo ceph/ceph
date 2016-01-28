@@ -646,7 +646,7 @@ struct UserQuotas {
 
   UserQuotas() {}
 
-  UserQuotas(RGWUserInfo& info) : bucket_quota(info.bucket_quota), 
+  explicit UserQuotas(RGWUserInfo& info) : bucket_quota(info.bucket_quota), 
 				  user_quota(info.user_quota) {}
 
   void dump(Formatter *f) const {

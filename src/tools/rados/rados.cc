@@ -542,7 +542,7 @@ public:
     librados::AioCompletion *completion;
 
     LoadGenOp() : id(0), type(0), off(0), len(0), lg(NULL), completion(NULL) {}
-    LoadGenOp(LoadGen *_lg) : id(0), type(0), off(0), len(0), lg(_lg), completion(NULL) {}
+    explicit LoadGenOp(LoadGen *_lg) : id(0), type(0), off(0), len(0), lg(_lg), completion(NULL) {}
   };
 
   int max_op;
@@ -577,7 +577,7 @@ public:
   Mutex lock;
   Cond cond;
 
-  LoadGen(Rados *_rados) : rados(_rados), going_down(false), lock("LoadGen") {
+  explicit LoadGen(Rados *_rados) : rados(_rados), going_down(false), lock("LoadGen") {
     read_percent = 80;
     min_obj_len = 1024;
     max_obj_len = 5ull * 1024ull * 1024ull * 1024ull;

@@ -51,7 +51,7 @@ class Log : private Thread
   void _log_message(const char *s, bool crash);
 
 public:
-  Log(SubsystemMap *s);
+  explicit Log(SubsystemMap *s);
   virtual ~Log();
 
   void set_flush_on_exit();

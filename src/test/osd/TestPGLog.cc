@@ -265,7 +265,7 @@ public:
 
 struct TestHandler : public PGLog::LogEntryHandler {
   list<hobject_t> &removed;
-  TestHandler(list<hobject_t> &removed) : removed(removed) {}
+  explicit TestHandler(list<hobject_t> &removed) : removed(removed) {}
 
   void rollback(
     const pg_log_entry_t &entry) {}

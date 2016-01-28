@@ -29,7 +29,7 @@ class EpollDriver : public EventDriver {
   int size;
 
  public:
-  EpollDriver(CephContext *c): epfd(-1), events(NULL), cct(c), size(0) {}
+  explicit EpollDriver(CephContext *c): epfd(-1), events(NULL), cct(c), size(0) {}
   virtual ~EpollDriver() {
     if (epfd != -1)
       close(epfd);

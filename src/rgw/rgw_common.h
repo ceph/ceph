@@ -260,7 +260,7 @@ class NameVal
    string name;
    string val;
  public:
-    NameVal(string nv) : str(nv) {}
+    explicit NameVal(string nv) : str(nv) {}
 
     int parse();
 
@@ -1183,11 +1183,11 @@ struct RGWBucketEnt {
 
   RGWBucketEnt() : size(0), size_rounded(0), creation_time(0), count(0) {}
 
-  RGWBucketEnt(const cls_user_bucket_entry& e) : bucket(e.bucket),
-						 size(e.size), 
-						 size_rounded(e.size_rounded),
-						 creation_time(e.creation_time),
-						 count(e.count) {}
+  explicit RGWBucketEnt(const cls_user_bucket_entry& e) : bucket(e.bucket),
+		  					  size(e.size), 
+			  				  size_rounded(e.size_rounded),
+							  creation_time(e.creation_time),
+							  count(e.count) {}
 
   void convert(cls_user_bucket_entry *b) {
     bucket.convert(&b->bucket);

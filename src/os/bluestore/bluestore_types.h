@@ -45,7 +45,7 @@ ostream& operator<<(ostream& out, const bluestore_bdev_label_t& l);
 struct bluestore_cnode_t {
   uint32_t bits;   ///< how many bits of coll pgid are significant
 
-  bluestore_cnode_t(int b=0) : bits(b) {}
+  explicit bluestore_cnode_t(int b=0) : bits(b) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);

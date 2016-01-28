@@ -95,7 +95,7 @@ public:
   struct err {
     string message;
 
-    err(const string& m) : message(m) {}
+    explicit err(const string& m) : message(m) {}
   };
 
   class XMLParser : public RGWXMLParser {
@@ -104,7 +104,7 @@ public:
     virtual ~XMLParser() {}
   } parser;
 
-  RGWXMLDecoder(bufferlist& bl) {
+  explicit RGWXMLDecoder(bufferlist& bl) {
     if (!parser.parse(bl.c_str(), bl.length(), 1)) {
       cout << "RGWXMLDecoder::err()" << std::endl;
       throw RGWXMLDecoder::err("failed to parse XML input");

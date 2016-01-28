@@ -629,7 +629,7 @@ public:
   Migrator *migrator;
 
  public:
-  MDCache(MDSRank *m);
+  explicit MDCache(MDSRank *m);
   ~MDCache();
   
   // debug

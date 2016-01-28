@@ -118,7 +118,7 @@ struct DirEntry {
   string d_name;
   struct stat st;
   int stmask;
-  DirEntry(const string &s) : d_name(s), stmask(0) {}
+  explicit DirEntry(const string &s) : d_name(s), stmask(0) {}
   DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
 };
 
@@ -192,7 +192,7 @@ struct dir_result_t {
 
   string at_cache_name;  // last entry we successfully returned
 
-  dir_result_t(Inode *in);
+  explicit dir_result_t(Inode *in);
 
   frag_t frag() { return frag_t(offset >> SHIFT); }
   unsigned fragpos() { return offset & MASK; }
@@ -231,7 +231,7 @@ class Client : public Dispatcher, public md_config_obs_t {
   class CommandHook : public AdminSocketHook {
     Client *m_client;
   public:
-    CommandHook(Client *client);
+    explicit CommandHook(Client *client);
     bool call(std::string command, cmdmap_t &cmdmap, std::string format,
 	      bufferlist& out);
   };

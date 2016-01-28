@@ -77,7 +77,7 @@ private:
 
 class Replayer {
 public:
-  Replayer(int num_action_trackers);
+  explicit Replayer(int num_action_trackers);
 
   ~Replayer();
 

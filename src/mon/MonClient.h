@@ -155,7 +155,7 @@ private:
 
   struct C_Tick : public Context {
     MonClient *monc;
-    C_Tick(MonClient *m) : monc(m) {}
+    explicit C_Tick(MonClient *m) : monc(m) {}
     void finish(int r) {
       monc->tick();
     }
@@ -300,7 +300,7 @@ public:
   RotatingKeyRing *rotating_secrets;
 
  public:
-  MonClient(CephContext *cct_);
+  explicit MonClient(CephContext *cct_);
   ~MonClient();
 
   int init();
@@ -406,7 +406,7 @@ private:
     int *prval;
     Context *onfinish, *ontimeout;
 
-    MonCommand(uint64_t t)
+    explicit MonCommand(uint64_t t)
       : target_rank(-1),
 	tid(t),
 	poutbl(NULL), prs(NULL), prval(NULL), onfinish(NULL), ontimeout(NULL)

@@ -207,7 +207,7 @@ class RGWGetObj_CB : public RGWGetDataCB
 {
   RGWGetObj *op;
 public:
-  RGWGetObj_CB(RGWGetObj *_op) : op(_op) {}
+  explicit RGWGetObj_CB(RGWGetObj *_op) : op(_op) {}
   virtual ~RGWGetObj_CB() {}
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {

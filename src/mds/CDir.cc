@@ -51,7 +51,7 @@ protected:
   MDSRank* get_mds() {return dir->cache->mds;}
 
 public:
-  CDirContext(CDir *d) : dir(d) {
+  explicit CDirContext(CDir *d) : dir(d) {
     assert(dir != NULL);
   }
 };
@@ -64,7 +64,7 @@ protected:
   MDSRank* get_mds() {return dir->cache->mds;}
 
 public:
-  CDirIOContext(CDir *d) : dir(d) {
+  explicit CDirIOContext(CDir *d) : dir(d) {
     assert(dir != NULL);
   }
 };
@@ -2714,7 +2714,7 @@ CDir *CDir::get_frozen_tree_root()
 
 class C_Dir_AuthUnpin : public CDirContext {
   public:
-  C_Dir_AuthUnpin(CDir *d) : CDirContext(d) {}
+  explicit C_Dir_AuthUnpin(CDir *d) : CDirContext(d) {}
   void finish(int r) {
     dir->auth_unpin(dir->get_inode());
   }

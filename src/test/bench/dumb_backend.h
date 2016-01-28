@@ -42,7 +42,7 @@ class DumbBackend : public Backend {
   class SyncThread : public Thread {
     DumbBackend *backend;
   public:
-    SyncThread(DumbBackend *backend) : backend(backend) {}
+    explicit SyncThread(DumbBackend *backend) : backend(backend) {}
     void *entry() {
       backend->sync_loop();
       return 0;

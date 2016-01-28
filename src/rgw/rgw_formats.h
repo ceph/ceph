@@ -22,7 +22,7 @@ struct plain_stack_entry {
 class RGWFormatter_Plain : public Formatter {
   void reset_buf();
 public:
-  RGWFormatter_Plain(bool use_kv = false);
+  explicit RGWFormatter_Plain(bool use_kv = false);
   virtual ~RGWFormatter_Plain();
 
   virtual void set_status(int status, const char* status_name) {};
@@ -69,7 +69,7 @@ protected:
     formatter = f;
   }
 public:
-  RGWFormatterFlusher(Formatter *f) : formatter(f), flushed(false), started(false) {}
+  explicit RGWFormatterFlusher(Formatter *f) : formatter(f), flushed(false), started(false) {}
   virtual ~RGWFormatterFlusher() {}
 
   void flush() {
