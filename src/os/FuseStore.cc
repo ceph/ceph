@@ -544,7 +544,6 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 
   case FN_HASH_END:
     {
-      pbl = new bufferlist;
       spg_t pgid;
       unsigned long h;
       if (cid.is_pg(&pgid)) {
@@ -561,6 +560,7 @@ static int os_open(const char *path, struct fuse_file_info *fi)
       }
       char buf[10];
       snprintf(buf, sizeof(buf), "%08lx\n", h);
+      pbl = new bufferlist;
       pbl->append(buf);
     }
     break;
