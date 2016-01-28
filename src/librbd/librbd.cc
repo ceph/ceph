@@ -64,12 +64,9 @@ TracepointProvider::Traits tracepoint_traits("librbd_tp.so", "rbd_tracing");
 
 buffer::raw* create_write_raw(librbd::ImageCtx *ictx, const char *buf,
                               size_t len) {
-  // cannot allow the cache (if enabled) to retain reference to user memory
-  if (ictx->cache) {
-    return buffer::copy(buf, len);
-  } else {
-    return buffer::create_static(len, const_cast<char*>(buf));
-  }
+  // TODO: until librados can guarantee memory won't be referenced after
+  // it ACKs a request, always make a copy of the user-provided memory
+  return buffer::copy(buf, len);
 }
 
 CephContext* get_cct(IoCtx &io_ctx) {
