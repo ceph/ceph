@@ -959,10 +959,7 @@ add_ceph_unittest(unittest_lfnindex ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_l
 target_link_libraries(unittest_lfnindex os global)
 
 add_subdirectory(osd)
-
-#pybind
-add_ceph_test(test_ceph_daemon.py ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_daemon.py)
-add_ceph_test(test_ceph_argparse.py ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_argparse.py)
+add_subdirectory(pybind)
 
 # unittest_admin_socket
 add_executable(unittest_admin_socket EXCLUDE_FROM_ALL
