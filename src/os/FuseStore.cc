@@ -1073,6 +1073,7 @@ int FuseStore::start()
   info->f = fuse_new(info->ch, &info->args, &fs_oper, sizeof(fs_oper),
 		     (void*)this);
   if (!info->f) {
+    fuse_unmount(info->mountpoint, info->ch);
     derr << __func__ << " fuse_new failed" << dendl;
     return -EIO;
   }
