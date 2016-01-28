@@ -20,21 +20,17 @@
 
 
 
-using crimson::dmclock::PriorityQueue;
-using crimson::dmclock::ClientInfo;
-using crimson::dmclock::PhaseType;
-
 
 class TestServer {
 
   struct QueueItem {
     int client;
     std::unique_ptr<TestRequest> request;
-    PhaseType phase;
+    crimson::dmclock::PhaseType phase;
 
     QueueItem(const int& _client,
 	      std::unique_ptr<TestRequest>&& _request,
-	      PhaseType _phase) :
+	      crimson::dmclock::PhaseType _phase) :
       client(_client),
       request(std::move(_request)),
       phase(_phase)
@@ -55,7 +51,7 @@ public:
 protected:
 
   const int                      id;
-  PriorityQueue<int,TestRequest> priority_queue;
+  crimson::dmclock::PriorityQueue<int,TestRequest> priority_queue;
   ClientRespFunc                 client_resp_f;
   int                            iops;
   int                            thread_pool_size;
@@ -78,7 +74,7 @@ public:
   TestServer(int _id,
 	     int _iops,
 	     int _thread_pool_size,
-	     const std::function<ClientInfo(int)>& _client_info_f,
+	     const std::function<crimson::dmclock::ClientInfo(int)>& _client_info_f,
 	     const ClientRespFunc& _client_resp_f);
 
   virtual ~TestServer();
@@ -92,7 +88,7 @@ protected:
 
   void innerPost(const int& client,
 		 std::unique_ptr<TestRequest> request,
-		 PhaseType phase);
+		 crimson::dmclock::PhaseType phase);
 
   void run(std::chrono::milliseconds wait_delay);
 

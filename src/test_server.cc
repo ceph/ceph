@@ -23,7 +23,7 @@ static const bool info = false;
 TestServer::TestServer(int _id,
 		       int _iops,
 		       int _thread_pool_size,
-		       const std::function<ClientInfo(int)>& _client_info_f,
+		       const std::function<dmc::ClientInfo(int)>& _client_info_f,
 		       const ClientRespFunc& _client_resp_f) :
   id(_id),
   priority_queue(_client_info_f,
@@ -115,7 +115,7 @@ bool TestServer::hasAvailThread() {
 
 void TestServer::innerPost(const int& client,
 			   std::unique_ptr<TestRequest> request,
-			   PhaseType phase) {
+			   dmc::PhaseType phase) {
   Lock l(inner_queue_mtx);
   assert(!finishing);
   inner_queue.emplace_back(QueueItem(client, std::move(request), phase));

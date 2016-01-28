@@ -10,7 +10,7 @@
 
 namespace crimson {
   namespace dmclock {
-    typedef uint64_t Counter;
+    using Counter = uint64_t;
 
     enum class PhaseType { reservation, priority };
 
