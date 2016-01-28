@@ -758,6 +758,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     mounted(false),
     coll_lock("BlueStore::coll_lock"),
     nid_lock("BlueStore::nid_lock"),
+    nid_last(0),
     nid_max(0),
     throttle_ops(cct, "bluestore_max_ops", cct->_conf->bluestore_max_ops),
     throttle_bytes(cct, "bluestore_max_bytes", cct->_conf->bluestore_max_bytes),
