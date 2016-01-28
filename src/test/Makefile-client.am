@@ -152,23 +152,23 @@ ceph_test_cls_refcount_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_refcount
 
 ceph_test_cls_version_SOURCES = test/cls_version/test_cls_version.cc
-ceph_test_cls_version_LDADD = $(LIBRADOS) libcls_version_client.a $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
+ceph_test_cls_version_LDADD = $(LIBRADOS) libcls_version_client.la $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_cls_version_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_version
 
 ceph_test_cls_log_SOURCES = test/cls_log/test_cls_log.cc
-ceph_test_cls_log_LDADD = $(LIBRADOS) libcls_log_client.a $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+ceph_test_cls_log_LDADD = $(LIBRADOS) libcls_log_client.la $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_cls_log_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_log
 
 ceph_test_cls_statelog_SOURCES = test/cls_statelog/test_cls_statelog.cc
-ceph_test_cls_statelog_LDADD = $(LIBRADOS) libcls_statelog_client.a $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+ceph_test_cls_statelog_LDADD = $(LIBRADOS) libcls_statelog_client.la $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_cls_statelog_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_statelog
 
 ceph_test_cls_replica_log_SOURCES = test/cls_replica_log/test_cls_replica_log.cc
 ceph_test_cls_replica_log_LDADD = \
-	$(LIBRADOS) libcls_replica_log_client.a \
+	$(LIBRADOS) libcls_replica_log_client.la \
 	$(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_cls_replica_log_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_replica_log
@@ -644,9 +644,9 @@ ceph_test_cls_rgw_meta_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
 	-lcurl -lexpat \
-	libcls_version_client.a libcls_log_client.a \
-	libcls_statelog_client.a libcls_refcount_client.la \
-	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la
+	libcls_version_client.la libcls_log_client.la \
+	libcls_statelog_client.la libcls_refcount_client.la \
+	libcls_rgw_client.la libcls_user_client.la libcls_lock_client.la
 ceph_test_cls_rgw_meta_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw_meta
 
@@ -655,9 +655,9 @@ ceph_test_cls_rgw_log_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
 	-lcurl -lexpat \
-	libcls_version_client.a libcls_log_client.a \
-	libcls_statelog_client.a libcls_refcount_client.la \
-	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la
+	libcls_version_client.la libcls_log_client.la \
+	libcls_statelog_client.la libcls_refcount_client.la \
+	libcls_rgw_client.la libcls_user_client.la libcls_lock_client.la
 ceph_test_cls_rgw_log_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw_log
 
@@ -666,9 +666,10 @@ ceph_test_cls_rgw_opstate_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
 	-lcurl -lexpat \
-	libcls_version_client.a libcls_log_client.a  libcls_timeindex_client.a \
-	libcls_statelog_client.a libcls_refcount_client.la \
-	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la \
+	libcls_version_client.la libcls_log_client.la \
+	libcls_timeindex_client.la \
+	libcls_statelog_client.la libcls_refcount_client.la \
+	libcls_rgw_client.la libcls_user_client.la libcls_lock_client.la \
 	$(LIBRADOS)
 ceph_test_cls_rgw_opstate_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw_opstate
@@ -679,6 +680,37 @@ ceph_test_cls_rgw_LDADD = \
 	$(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_cls_rgw_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw
+
+# librgw/RGW-NFS
+librgw_file_SOURCES = test/librgw_file.cc
+librgw_file_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
+librgw_file_LDADD = $(UNITTEST_LDADD)  \
+	librgw.la librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS) 
+bin_DEBUGPROGRAMS += librgw_file
+
+librgw_file_cd_SOURCES = test/librgw_file_cd.cc
+librgw_file_cd_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
+librgw_file_cd_LDADD = $(UNITTEST_LDADD) \
+	librgw.la librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
+bin_DEBUGPROGRAMS += librgw_file_cd
+
+librgw_file_gp_SOURCES = test/librgw_file_gp.cc
+librgw_file_gp_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
+librgw_file_gp_LDADD = $(UNITTEST_LDADD) \
+	librgw.la librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
+bin_DEBUGPROGRAMS += librgw_file_gp
+
+librgw_file_aw_SOURCES = test/librgw_file_aw.cc
+librgw_file_aw_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
+librgw_file_aw_LDADD = $(UNITTEST_LDADD) \
+	librgw.la librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
+bin_DEBUGPROGRAMS += librgw_file_aw
+
+librgw_file_nfsns_SOURCES = test/librgw_file_nfsns.cc
+librgw_file_nfsns_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
+librgw_file_nfsns_LDADD = $(UNITTEST_LDADD) \
+	librgw.la librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
+bin_DEBUGPROGRAMS += librgw_file_nfsns
 
 endif # WITH_RADOSGW
 

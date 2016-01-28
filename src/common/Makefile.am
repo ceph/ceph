@@ -22,6 +22,7 @@ libcommon_internal_la_SOURCES = \
 	common/Finisher.cc \
 	common/environment.cc\
 	common/assert.cc \
+	xxHash/xxhash.c \
 	common/run_cmd.cc \
 	common/WorkQueue.cc \
 	common/ConfUtils.cc \
@@ -124,6 +125,7 @@ libcommon_internal_la_SOURCES += \
 	mds/inode_backtrace.cc \
 	mds/mdstypes.cc \
 	mds/flock.cc
+
 LIBCOMMON_DEPS += libcommon_internal.la
 noinst_LTLIBRARIES += libcommon_internal.la
 
