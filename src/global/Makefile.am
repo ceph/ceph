@@ -4,6 +4,7 @@ libglobal_la_SOURCES = \
 	global/pidfile.cc \
 	global/signal_handler.cc \
 	common/TrackedOp.cc
+
 libglobal_la_LIBADD = $(LIBCOMMON)
 noinst_LTLIBRARIES += libglobal.la
 
