@@ -27,8 +27,11 @@ libos_a_SOURCES = \
 	os/kstore/kv.cc \
 	os/kstore/KStore.cc \
 	os/memstore/MemStore.cc \
-	os/FuseStore.cc \
 	os/ObjectStore.cc
+
+if WITH_FUSE
+libos_a_SOURCES += os/FuseStore.cc
+endif
 
 if WITH_LIBAIO
 libos_a_SOURCES += \
