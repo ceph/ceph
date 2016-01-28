@@ -6573,6 +6573,8 @@ void OSD::handle_osd_map(MOSDMap *m)
       if (!osdmap->is_up(whoami)) {
 	if (service.is_preparing_to_stop() || service.is_stopping()) {
 	  service.got_stop_ack();
+	  m->put();
+	  return;
 	} else {
 	  clog->warn() << "map e" << osdmap->get_epoch()
 		      << " wrongly marked me down";
