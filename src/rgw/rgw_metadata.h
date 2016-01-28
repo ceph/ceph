@@ -156,9 +156,9 @@ class RGWMetadataLog {
 public:
   RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), prefix(META_LOG_OBJ_PREFIX), lock("RGWMetaLog::lock") {}
 
-  int add_entry(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl);
-  int get_log_shard_id(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key);
-  int store_entries_in_shard(RGWRados *store, list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
+  int add_entry(RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl);
+  int get_log_shard_id(RGWMetadataHandler *handler, const string& section, const string& key);
+  int store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
 
   struct LogListCtx {
     int cur_shard;
@@ -270,7 +270,7 @@ public:
       return -EINVAL;
     }
 
-    *shard_id = md_log->get_log_shard_id(store, handler, section, key);
+    *shard_id = md_log->get_log_shard_id(handler, section, key);
 
     return 0;
   }
