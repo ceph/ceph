@@ -11756,7 +11756,8 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
   // want to block asok caller on long running scrub
   if (!header->recursive) {
     Context *fin = cs->take_finisher();
-    mds->scrubstack->enqueue_inode_top(in, header, fin);
+    mds->scrubstack->enqueue_inode_top(in, header,
+				       new MDSInternalContextWrapper(mds, fin));
   } else
     mds->scrubstack->enqueue_inode_bottom(in, header, NULL);
 
