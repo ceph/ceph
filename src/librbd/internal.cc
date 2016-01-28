@@ -399,7 +399,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     os << "[";
 
     for (image_options_t::const_iterator i = (*opts_)->begin();
-	 i != (*opts_)->end(); i++) {
+	 i != (*opts_)->end(); ++i) {
       os << (i == (*opts_)->begin() ? "" : ", ") << image_option_name(i->first)
 	 << "=" << i->second;
     }
