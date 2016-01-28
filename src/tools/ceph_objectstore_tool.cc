@@ -26,7 +26,9 @@
 
 #include "os/ObjectStore.h"
 #include "os/filestore/FileJournal.h"
+#ifdef HAVE_LIBFUSE
 #include "os/FuseStore.h"
+#endif
 
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
@@ -2485,6 +2487,7 @@ int main(int argc, char **argv)
   }
 
   if (op == "fuse") {
+#ifdef HAVE_LIBFUSE
     FuseStore fuse(fs, mountpoint);
     cout << "mounting fuse at " << mountpoint << " ..." << std::endl;
     int r = fuse.main();
@@ -2492,6 +2495,9 @@ int main(int argc, char **argv)
       cerr << "failed to mount fuse: " << cpp_strerror(r) << std::endl;
       myexit(1);
     }
+#else
+    cerr << "fuse support not enabled" << std::endl;
+#endif
     myexit(0);
   }
 
