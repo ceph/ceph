@@ -19,8 +19,9 @@ namespace crimson {
     struct ServerInfo {
       Counter delta_last;
       Counter rho_last;
+
       // track last update to allow clean-up
-      std::chrono::steady_clock last_update; 
+      decltype(std::chrono::steady_clock::now()) last_update;
     };
 
     // S is server identifier type

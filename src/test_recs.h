@@ -48,13 +48,7 @@ struct TestResponse {
   friend std::ostream& operator<<(std::ostream& out, const TestResponse& resp) {
     out << "{ ";
     out << "epoch:" << resp.epoch;
-#if 0
-    out << ", server:" << resp.resp_params.server <<
-      ", phase:" <<
-      (resp.resp_params.phase == crimson::dmclock::PhaseType::reservation ?
-       "resv" : "prop");
-#endif
-      out << " }";
+    out << " }";
     return out;
   }
 }; // class TestResponse

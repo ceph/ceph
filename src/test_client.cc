@@ -91,29 +91,41 @@ void TestClient::run_req() {
 
 void TestClient::run_resp() {
   std::chrono::milliseconds delay(1000);
+  int op = 0;
 
   Lock l(mtx_resp);
 
-  int op = 0;
-
-  while(!requests_complete.load()) {
-    while(resp_queue.empty() && !requests_complete.load()) {
-      cv_resp.wait_for(l, delay);
-    }
+  // since the following code would otherwise be repeated (except for
+  // the call to notify_one) in the two loops below; let's avoid
+  // repetition and define it once.
+  const auto proc_resp = [this, &delay, &op, &l](const bool notify_req_cv) {
     if (!resp_queue.empty()) {
       op_times[op++] = now();
 
       RespQueueItem item = resp_queue.front();
       resp_queue.pop_front();
 
+      l.unlock();
+
       TestResponse& resp = item.response;
-      dmc::RespParams<int>& resp_params = item.resp_params;
+      service_tracker.trackResponse(item.resp_params);
       if (info >= 3) {
 	std::cout << resp << std::endl;
       }
       --outstanding_ops;
-      cv_req.notify_one();
+      if (notify_req_cv) {
+	cv_req.notify_one();
+      }
+
+      l.lock();
     }
+  };
+
+  while(!requests_complete.load()) {
+    while(resp_queue.empty() && !requests_complete.load()) {
+      cv_resp.wait_for(l, delay);
+    }
+    proc_resp(true);
   }
 
   if (info >= 1) {
@@ -125,20 +137,7 @@ void TestClient::run_resp() {
     while(resp_queue.empty() && outstanding_ops.load() > 0) {
       cv_resp.wait_for(l, delay);
     }
-    if (!resp_queue.empty()) {
-      op_times[op++] = now();
-
-      RespQueueItem item = resp_queue.front();
-      resp_queue.pop_front();
-
-      TestResponse& resp = item.response;
-      dmc::RespParams<int>& resp_params = item.resp_params;
-      if (info >= 3) {
-	std::cout << resp << std::endl;
-      }
-      --outstanding_ops;
-      // not needed since all requests completed cv_req.notify_one();
-    }
+    proc_resp(false); // don't call notify_one as all requests are complete
   }
 
   if (info >= 1) {
