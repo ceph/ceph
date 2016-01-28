@@ -1168,14 +1168,7 @@ add_subdirectory(encoding)
 add_ceph_test(test-erasure-code.sh ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test-erasure-code.sh)
 add_ceph_test(test-erasure-eio.sh ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test-erasure-eio.sh)
 
-# fs directory
-
-# unittest_mds_types
-add_executable(unittest_mds_types EXCLUDE_FROM_ALL
-  fs/mds_types.cc
-  )
-add_ceph_unittest(unittest_mds_types ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mds_types)
-target_link_libraries(unittest_mds_types global)
+add_subdirectory(fs)
 
 #libradosstriper directory
 add_ceph_test(rados-striper.sh ${CMAKE_SOURCE_DIR}/src/test/libradosstriper/rados-striper.sh)
