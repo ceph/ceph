@@ -808,7 +808,7 @@ TEST_F(LibRadosListPP, EnumerateObjectsPP) {
     std::vector<ObjectItem> result;
     int r = ioctx.object_list(c, end, 12, &result, &c);
     ASSERT_GE(r, 0);
-    ASSERT_EQ(r, result.size());
+    ASSERT_EQ(r, (int)result.size());
     for (int i = 0; i < r; ++i) {
       auto oid = result[i].oid;
       if (saw_obj.count(oid)) {
