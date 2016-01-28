@@ -31,7 +31,7 @@ struct Index {
   CollectionIndex *index;
 
   Index() : index(NULL) {}
-  Index(CollectionIndex* index) : index(index) {}
+  explicit Index(CollectionIndex* index) : index(index) {}
 
   CollectionIndex *operator->() { return index; }
   CollectionIndex &operator*() { return *index; }
@@ -67,8 +67,8 @@ class IndexManager {
   int build_index(coll_t c, const char *path, CollectionIndex **index);
 public:
   /// Constructor
-  IndexManager(bool upgrade) : lock("IndexManager lock"),
-			       upgrade(upgrade) {}
+  explicit IndexManager(bool upgrade) : lock("IndexManager lock"),
+		    		        upgrade(upgrade) {}
 
   ~IndexManager();
 

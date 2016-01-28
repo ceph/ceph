@@ -126,7 +126,7 @@ class PageSet {
   }
 
  public:
-  PageSet(size_t page_size) : page_size(page_size) {}
+  explicit PageSet(size_t page_size) : page_size(page_size) {}
   PageSet(PageSet &&rhs)
     : pages(std::move(rhs.pages)), page_size(rhs.page_size) {}
   ~PageSet() {

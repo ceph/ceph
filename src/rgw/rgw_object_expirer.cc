@@ -41,7 +41,7 @@ class StoreDestructor {
   RGWRados *store;
 
 public:
-  StoreDestructor(RGWRados *_s) : store(_s) {}
+  explicit StoreDestructor(RGWRados *_s) : store(_s) {}
   ~StoreDestructor() {
     if (store) {
       RGWStoreManager::close_storage(store);

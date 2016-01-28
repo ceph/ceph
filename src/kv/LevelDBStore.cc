@@ -18,7 +18,7 @@ using std::string;
 class CephLevelDBLogger : public leveldb::Logger {
   CephContext *cct;
 public:
-  CephLevelDBLogger(CephContext *c) : cct(c) {
+  explicit CephLevelDBLogger(CephContext *c) : cct(c) {
     cct->get();
   }
   ~CephLevelDBLogger() {

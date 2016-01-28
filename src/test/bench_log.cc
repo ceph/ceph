@@ -13,7 +13,7 @@ struct T : public Thread {
   int num;
   set<int> myset;
   map<int,string> mymap;
-  T(int n) : num(n) {
+  explicit T(int n) : num(n) {
     myset.insert(123);
     myset.insert(456);
     mymap[1] = "foo";

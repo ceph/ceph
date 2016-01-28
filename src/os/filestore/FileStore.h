@@ -174,7 +174,7 @@ private:
   void sync_entry();
   struct SyncThread : public Thread {
     FileStore *fs;
-    SyncThread(FileStore *f) : fs(f) {}
+    explicit SyncThread(FileStore *f) : fs(f) {}
     void *entry() {
       fs->sync_entry();
       return 0;
@@ -314,7 +314,7 @@ private:
       }
     }
 
-    OpSequencer(int i)
+    explicit OpSequencer(int i)
       : qlock("FileStore::OpSequencer::qlock", false, false),
 	parent(0),
 	apply_lock("FileStore::OpSequencer::apply_lock", false, false),
@@ -785,7 +785,7 @@ protected:
   }
 
 public:
-  FileStoreBackend(FileStore *fs) : filestore(fs) {}
+  explicit FileStoreBackend(FileStore *fs) : filestore(fs) {}
   virtual ~FileStoreBackend() {}
 
   static FileStoreBackend *create(long f_type, FileStore *fs);

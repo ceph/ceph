@@ -277,7 +277,7 @@ public:
 class InoTableHandler : public TableHandler<InoTable>
 {
   public:
-  InoTableHandler(mds_rank_t r)
+  explicit InoTableHandler(mds_rank_t r)
     : TableHandler(r, "inotable", true)
   {}
 

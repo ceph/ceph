@@ -1074,7 +1074,7 @@ protected:
   public:
     ObjectContext &obc;
 
-    Thread_read_lock(ObjectContext& _obc) :
+    explicit Thread_read_lock(ObjectContext& _obc) :
       obc(_obc)
     {
     }
@@ -1089,7 +1089,7 @@ protected:
   public:
     ObjectContext &obc;
 
-    Thread_write_lock(ObjectContext& _obc) :
+    explicit Thread_write_lock(ObjectContext& _obc) :
       obc(_obc)
     {
     }

@@ -142,7 +142,7 @@ private:
 
     uint32_t flags;
 
-    CState(XioConnection* _xcon)
+    explicit CState(XioConnection* _xcon)
       : xcon(_xcon),
 	protocol_version(0),
 	session_state(INIT),
@@ -322,7 +322,7 @@ class XioLoopbackConnection : public Connection
 private:
   atomic_t seq;
 public:
-  XioLoopbackConnection(Messenger *m) : Connection(m->cct, m), seq(0)
+  explicit XioLoopbackConnection(Messenger *m) : Connection(m->cct, m), seq(0)
     {
       const entity_inst_t& m_inst = m->get_myinst();
       peer_addr = m_inst.addr;

@@ -69,7 +69,7 @@ public:
     default_ctor++;
   }
 
-  ConstructorCounter(const T& data_)
+  explicit ConstructorCounter(const T& data_)
     : data(data_)
   {
     one_arg_ctor++;

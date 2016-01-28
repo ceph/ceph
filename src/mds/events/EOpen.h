@@ -24,7 +24,7 @@ public:
   vector<inodeno_t> inos;
 
   EOpen() : LogEvent(EVENT_OPEN) { }
-  EOpen(MDLog *mdlog) : 
+  explicit EOpen(MDLog *mdlog) :
     LogEvent(EVENT_OPEN), metablob(mdlog) { }
 
   void print(ostream& out) const {

@@ -29,7 +29,7 @@ public:
   EntityName entity_name;
   uint64_t global_id;
 
-  AuthServiceHandler(CephContext *cct_) : cct(cct_), global_id(0) {}
+  explicit AuthServiceHandler(CephContext *cct_) : cct(cct_), global_id(0) {}
 
   virtual ~AuthServiceHandler() { }
 

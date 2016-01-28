@@ -23,7 +23,7 @@ public:
   metareqid_t reqid;
 
   ECommitted() : LogEvent(EVENT_COMMITTED) { }
-  ECommitted(metareqid_t r) : 
+  explicit ECommitted(metareqid_t r) :
     LogEvent(EVENT_COMMITTED), reqid(r) { }
 
   void print(ostream& out) const {

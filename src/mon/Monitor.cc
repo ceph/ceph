@@ -266,7 +266,7 @@ Monitor::~Monitor()
 class AdminHook : public AdminSocketHook {
   Monitor *mon;
 public:
-  AdminHook(Monitor *m) : mon(m) {}
+  explicit AdminHook(Monitor *m) : mon(m) {}
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) {
     stringstream ss;
@@ -3091,7 +3091,7 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
 
 // fake connection attached to forwarded messages
 struct AnonConnection : public Connection {
-  AnonConnection(CephContext *cct) : Connection(cct, NULL) {}
+  explicit AnonConnection(CephContext *cct) : Connection(cct, NULL) {}
 
   int send_message(Message *m) override {
     assert(!"send_message on anonymous connection");
@@ -4692,7 +4692,7 @@ void Monitor::scrub_reset_timeout()
 class C_Mon_Tick : public Context {
   Monitor *mon;
 public:
-  C_Mon_Tick(Monitor *m) : mon(m) {}
+  explicit C_Mon_Tick(Monitor *m) : mon(m) {}
   void finish(int r) {
     mon->tick();
   }

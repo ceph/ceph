@@ -90,7 +90,7 @@ protected:
     return mig->mds;
   }
 public:
-  MigratorContext(Migrator *mig_) : mig(mig_) {
+  explicit MigratorContext(Migrator *mig_) : mig(mig_) {
     assert(mig != NULL);
   }
 };

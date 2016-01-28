@@ -61,7 +61,7 @@ protected:
   int check_revoked();
 public:
 
-  RGWSwift(CephContext *_cct) : cct(_cct), keystone_revoke_thread(NULL) {
+  explicit RGWSwift(CephContext *_cct) : cct(_cct), keystone_revoke_thread(NULL) {
     init();
   }
   ~RGWSwift() {

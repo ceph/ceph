@@ -191,7 +191,7 @@ private:
   class ReaperThread : public Thread {
     SimpleMessenger *msgr;
   public:
-    ReaperThread(SimpleMessenger *m) : msgr(m) {}
+    explicit ReaperThread(SimpleMessenger *m) : msgr(m) {}
     void *entry() {
       msgr->reaper_entry();
       return 0;

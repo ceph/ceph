@@ -39,7 +39,7 @@ inline bool operator==(ceph_filelock& l, ceph_filelock& r) {
 class ceph_lock_state_t {
   CephContext *cct;
 public:
-  ceph_lock_state_t(CephContext *cct_) : cct(cct_) {}
+  explicit ceph_lock_state_t(CephContext *cct_) : cct(cct_) {}
   multimap<uint64_t, ceph_filelock> held_locks;    // current locks
   multimap<uint64_t, ceph_filelock> waiting_locks; // locks waiting for other locks
   // both of the above are keyed by starting offset

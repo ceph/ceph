@@ -150,7 +150,7 @@ class StrayManager
 
   // My public interface is for consumption by MDCache
   public:
-  StrayManager(MDSRank *mds);
+  explicit StrayManager(MDSRank *mds);
   void set_logger(PerfCounters *l) {logger = l;}
 
   bool eval_stray(CDentry *dn, bool delay=false);

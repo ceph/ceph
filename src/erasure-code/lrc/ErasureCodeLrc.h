@@ -49,7 +49,7 @@ public:
   static const string DEFAULT_KML;
 
   struct Layer {
-    Layer(string _chunks_map) : chunks_map(_chunks_map) { }
+    explicit Layer(string _chunks_map) : chunks_map(_chunks_map) { }
     ErasureCodeInterfaceRef erasure_code;
     vector<int> data;
     vector<int> coding;
@@ -74,7 +74,7 @@ public:
   };
   vector<Step> ruleset_steps;
 
-  ErasureCodeLrc(const std::string &dir)
+  explicit ErasureCodeLrc(const std::string &dir)
     : directory(dir),
       chunk_count(0), data_chunk_count(0), ruleset_root("default")
   {

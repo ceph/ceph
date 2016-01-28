@@ -24,7 +24,7 @@ class LogSegment;
 
 class SnapClient : public MDSTableClient {
 public:
-  SnapClient(MDSRank *m) : MDSTableClient(m, TABLE_SNAP) {}
+  explicit SnapClient(MDSRank *m) : MDSTableClient(m, TABLE_SNAP) {}
 
   void resend_queries() {}
   void handle_query_result(MMDSTableRequest *m) {}

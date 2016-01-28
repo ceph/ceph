@@ -1021,7 +1021,7 @@ void pool_opts_t::dump(Formatter* f) const
 class pool_opts_encoder_t : public boost::static_visitor<>
 {
 public:
-  pool_opts_encoder_t(bufferlist& bl_) : bl(bl_) {}
+  explicit pool_opts_encoder_t(bufferlist& bl_) : bl(bl_) {}
 
   void operator()(std::string s) const {
     ::encode(static_cast<int32_t>(pool_opts_t::STR), bl);
@@ -3284,7 +3284,7 @@ void ObjectModDesc::visit(Visitor *visitor) const
 
 struct DumpVisitor : public ObjectModDesc::Visitor {
   Formatter *f;
-  DumpVisitor(Formatter *f) : f(f) {}
+  explicit DumpVisitor(Formatter *f) : f(f) {}
   void append(uint64_t old_size) {
     f->open_object_section("op");
     f->dump_string("code", "APPEND");

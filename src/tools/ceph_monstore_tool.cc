@@ -37,7 +37,7 @@ class TraceIter {
   unsigned idx;
   MonitorDBStore::TransactionRef t;
 public:
-  TraceIter(string fname) : fd(-1), idx(-1) {
+  explicit TraceIter(string fname) : fd(-1), idx(-1) {
     fd = ::open(fname.c_str(), O_RDONLY);
     t.reset(new MonitorDBStore::Transaction);
   }

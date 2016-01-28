@@ -71,7 +71,7 @@ class NotifyTimeoutCB : public CancelableContext {
   NotifyRef notif;
   bool canceled; // protected by notif lock
 public:
-  NotifyTimeoutCB(NotifyRef notif) : notif(notif), canceled(false) {}
+  explicit NotifyTimeoutCB(NotifyRef notif) : notif(notif), canceled(false) {}
   void finish(int) {
     notif->osd->watch_lock.Unlock();
     notif->lock.Lock();
@@ -234,7 +234,7 @@ class HandleWatchTimeout : public CancelableContext {
   WatchRef watch;
 public:
   bool canceled; // protected by watch->pg->lock
-  HandleWatchTimeout(WatchRef watch) : watch(watch), canceled(false) {}
+  explicit HandleWatchTimeout(WatchRef watch) : watch(watch), canceled(false) {}
   void cancel() {
     canceled = true;
   }
@@ -258,7 +258,7 @@ class HandleDelayedWatchTimeout : public CancelableContext {
   WatchRef watch;
 public:
   bool canceled;
-  HandleDelayedWatchTimeout(WatchRef watch) : watch(watch), canceled(false) {}
+  explicit HandleDelayedWatchTimeout(WatchRef watch) : watch(watch), canceled(false) {}
   void cancel() {
     canceled = true;
   }

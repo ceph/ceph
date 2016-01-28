@@ -1729,7 +1729,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   }
 
   struct CopyProgressCtx {
-    CopyProgressCtx(ProgressContext &p)
+    explicit CopyProgressCtx(ProgressContext &p)
       : destictx(NULL), src_size(0), prog_ctx(p)
     { }
 

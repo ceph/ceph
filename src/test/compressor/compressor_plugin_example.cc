@@ -23,7 +23,7 @@
 class CompressorPluginExample : public CompressionPlugin {
 public:
 
-  CompressorPluginExample(CephContext* cct) : CompressionPlugin(cct)
+  explicit CompressorPluginExample(CephContext* cct) : CompressionPlugin(cct)
   {}
 
   virtual int factory(CompressorRef *cs,

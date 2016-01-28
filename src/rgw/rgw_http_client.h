@@ -18,7 +18,7 @@ protected:
   list<pair<string, string> > headers;
 public:
   virtual ~RGWHTTPClient() {}
-  RGWHTTPClient(CephContext *_cct): send_len (0), has_send_len(false), cct(_cct) {}
+  explicit RGWHTTPClient(CephContext *_cct): send_len (0), has_send_len(false), cct(_cct) {}
 
   void append_header(const string& name, const string& val) {
     headers.push_back(pair<string, string>(name, val));

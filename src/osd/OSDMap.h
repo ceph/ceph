@@ -171,17 +171,17 @@ public:
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Incremental*>& o);
 
-    Incremental(epoch_t e=0) :
+    explicit Incremental(epoch_t e=0) :
       encode_features(0),
       epoch(e), new_pool_max(-1), new_flags(-1), new_max_osd(-1),
       have_crc(false), full_crc(0), inc_crc(0) {
       memset(&fsid, 0, sizeof(fsid));
     }
-    Incremental(bufferlist &bl) {
+    explicit Incremental(bufferlist &bl) {
       bufferlist::iterator p = bl.begin();
       decode(p);
     }
-    Incremental(bufferlist::iterator &p) {
+    explicit Incremental(bufferlist::iterator &p) {
       decode(p);
     }
 

@@ -262,7 +262,7 @@ public:
 protected:
   struct ReplayHandler : public ::journal::ReplayHandler {
     JournalPlayer *journal;
-    ReplayHandler(JournalPlayer *_journal) : journal(_journal) {}
+    explicit ReplayHandler(JournalPlayer *_journal) : journal(_journal) {}
 
     virtual void get() {}
     virtual void put() {}

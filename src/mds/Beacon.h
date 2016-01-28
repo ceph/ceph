@@ -67,7 +67,7 @@ class Beacon : public Dispatcher
   class C_MDS_BeaconSender : public Context {
     Beacon *beacon;
   public:
-    C_MDS_BeaconSender(Beacon *beacon_) : beacon(beacon_) {}
+    explicit C_MDS_BeaconSender(Beacon *beacon_) : beacon(beacon_) {}
     void finish(int r) {
       assert(beacon->lock.is_locked_by_me());
       beacon->sender = NULL;

@@ -3586,7 +3586,7 @@ int FileStore::_clone_range(coll_t cid, const ghobject_t& oldoid, const ghobject
 
 class SyncEntryTimeout : public Context {
 public:
-  SyncEntryTimeout(int commit_timeo)
+  explicit SyncEntryTimeout(int commit_timeo)
     : m_commit_timeo(commit_timeo)
   {
   }

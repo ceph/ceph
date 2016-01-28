@@ -272,7 +272,7 @@ class Worker : public Thread {
 
  public:
   EventCenter center;
-  Worker(CephContext *c): cct(c), done(false), center(c) {
+  explicit Worker(CephContext *c): cct(c), done(false), center(c) {
     center.init(100);
   }
   void stop() {

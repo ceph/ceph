@@ -92,7 +92,7 @@ public:
     };
 
     Params()  {}
-    Params(Impl *i) : impl(i) {}
+    explicit Params(Impl *i) : impl(i) {}
     virtual ~Params() {}
 
     boost::scoped_ptr<Params::Impl> impl;
@@ -115,8 +115,8 @@ public:
   };
 
   HitSet() : impl(NULL), sealed(false) {}
-  HitSet(Impl *i) : impl(i), sealed(false) {}
-  HitSet(const HitSet::Params& params);
+  explicit HitSet(Impl *i) : impl(i), sealed(false) {}
+  explicit HitSet(const HitSet::Params& params);
 
   HitSet(const HitSet& o) {
     sealed = o.sealed;
@@ -195,7 +195,7 @@ public:
   };
 
   ExplicitHashHitSet() : count(0) {}
-  ExplicitHashHitSet(const ExplicitHashHitSet::Params *p) : count(0) {}
+  explicit ExplicitHashHitSet(const ExplicitHashHitSet::Params *p) : count(0) {}
   ExplicitHashHitSet(const ExplicitHashHitSet &o) : count(o.count),
       hits(o.hits) {}
 
@@ -272,7 +272,7 @@ public:
   };
 
   ExplicitObjectHitSet() : count(0) {}
-  ExplicitObjectHitSet(const ExplicitObjectHitSet::Params *p) : count(0) {}
+  explicit ExplicitObjectHitSet(const ExplicitObjectHitSet::Params *p) : count(0) {}
   ExplicitObjectHitSet(const ExplicitObjectHitSet &o) : count(o.count),
       hits(o.hits) {}
 
@@ -409,7 +409,7 @@ public:
   BloomHitSet(unsigned inserts, double fpp, int seed)
     : bloom(inserts, fpp, seed)
   {}
-  BloomHitSet(const BloomHitSet::Params *p) : bloom(p->target_size,
+  explicit BloomHitSet(const BloomHitSet::Params *p) : bloom(p->target_size,
                                                     p->get_fpp(),
                                                     p->seed)
   {}

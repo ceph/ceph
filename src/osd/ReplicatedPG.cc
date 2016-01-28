@@ -132,7 +132,7 @@ public:
   ReplicatedPG::CopyResults *results;
   int retval;
   ReplicatedPG::OpContext *ctx;
-  CopyFromCallback(ReplicatedPG::OpContext *ctx_)
+  explicit CopyFromCallback(ReplicatedPG::OpContext *ctx_)
     : results(NULL),
       retval(0),
       ctx(ctx_) {}
@@ -9364,7 +9364,7 @@ ObjectContextRef ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
 struct C_PG_MarkUnfoundLost : public Context {
   ReplicatedPGRef pg;
   list<ObjectContextRef> obcs;
-  C_PG_MarkUnfoundLost(ReplicatedPG *p) : pg(p) {}
+  explicit C_PG_MarkUnfoundLost(ReplicatedPG *p) : pg(p) {}
   void finish(int r) {
     pg->_finish_mark_all_unfound_lost(obcs);
   }
@@ -11729,7 +11729,7 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
 
 struct C_AgentEvictStartStop : public Context {
   ReplicatedPGRef pg;
-  C_AgentEvictStartStop(ReplicatedPG *p) : pg(p) {
+  explicit C_AgentEvictStartStop(ReplicatedPG *p) : pg(p) {
     pg->osd->agent_start_evict_op();
   }
   void finish(int r) {
@@ -12120,7 +12120,7 @@ bool ReplicatedPG::_range_available_for_scrub(
 
 struct C_ScrubDigestUpdated : public Context {
   ReplicatedPGRef pg;
-  C_ScrubDigestUpdated(ReplicatedPG *pg) : pg(pg) {}
+  explicit C_ScrubDigestUpdated(ReplicatedPG *pg) : pg(pg) {}
   void finish(int r) {
     pg->_scrub_digest_updated();
   }

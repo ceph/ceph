@@ -10,7 +10,7 @@
 class RBDBackend : public Backend {
   map<string, ceph::shared_ptr<librbd::Image> > *m_images;
 public:
-  RBDBackend(map<string, ceph::shared_ptr<librbd::Image> > *images)
+  explicit RBDBackend(map<string, ceph::shared_ptr<librbd::Image> > *images)
     : m_images(images) {}
   void write(
     const string &oid,

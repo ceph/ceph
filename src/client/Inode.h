@@ -66,7 +66,7 @@ struct CapSnap {
   uint64_t flush_tid;
   xlist<CapSnap*>::item flushing_item;
 
-  CapSnap(Inode *i)
+  explicit CapSnap(Inode *i)
     : in(i), issued(0), dirty(0),
       size(0), time_warp_seq(0), mode(0), uid(0), gid(0), xattr_version(0),
       inline_version(0), writing(false), dirty_data(false), flush_tid(0),
@@ -95,7 +95,7 @@ private:
   }
   ~QuotaTree() {}
 public:
-  QuotaTree(Inode *i) :
+  explicit QuotaTree(Inode *i) :
     _in(i),
     _ancestor_ref(0),
     _ancestor(NULL),

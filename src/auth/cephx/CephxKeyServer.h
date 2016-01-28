@@ -35,7 +35,7 @@ struct KeyServerData {
   version_t rotating_ver;
   map<uint32_t, RotatingSecrets> rotating_secrets;
 
-  KeyServerData(KeyRing *extra)
+  explicit KeyServerData(KeyRing *extra)
     : version(0),
       extra_secrets(extra),
       rotating_ver(0) {}

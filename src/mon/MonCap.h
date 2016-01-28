@@ -118,7 +118,7 @@ struct MonCap {
   std::vector<MonCapGrant> grants;
 
   MonCap() {}
-  MonCap(std::vector<MonCapGrant> g) : grants(g) {}
+  explicit MonCap(std::vector<MonCapGrant> g) : grants(g) {}
 
   string get_str() const {
     return text;

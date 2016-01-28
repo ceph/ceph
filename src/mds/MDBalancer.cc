@@ -113,7 +113,7 @@ void MDBalancer::tick()
 
 class C_Bal_SendHeartbeat : public MDSInternalContext {
 public:
-  C_Bal_SendHeartbeat(MDSRank *mds_) : MDSInternalContext(mds_) { }
+  explicit C_Bal_SendHeartbeat(MDSRank *mds_) : MDSInternalContext(mds_) { }
   virtual void finish(int f) {
     mds->balancer->send_heartbeat();
   }

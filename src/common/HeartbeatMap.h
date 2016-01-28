@@ -46,7 +46,7 @@ struct heartbeat_handle_d {
   time_t grace, suicide_grace;
   std::list<heartbeat_handle_d*>::iterator list_item;
 
-  heartbeat_handle_d(const std::string& n)
+  explicit heartbeat_handle_d(const std::string& n)
     : name(n), grace(0), suicide_grace(0)
   { }
 };
@@ -74,7 +74,7 @@ class HeartbeatMap {
   // get the number of total workers
   int get_total_workers() const;
 
-  HeartbeatMap(CephContext *cct);
+  explicit HeartbeatMap(CephContext *cct);
   ~HeartbeatMap();
 
  private:

@@ -26,7 +26,7 @@ class InoTable : public MDSTable {
   interval_set<inodeno_t> projected_free;
 
  public:
-  InoTable(MDSRank *m) : MDSTable(m, "inotable", true) { }
+  explicit InoTable(MDSRank *m) : MDSTable(m, "inotable", true) { }
 
   inodeno_t project_alloc_id(inodeno_t id=0);
   void apply_alloc_id(inodeno_t id);

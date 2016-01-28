@@ -164,7 +164,7 @@ TEST_F(PrioritizedQueueTest, fairness_by_class) {
 template <typename T>
 struct Greater {
   const T rhs;
-  Greater(const T& v) : rhs(v)
+  explicit Greater(const T& v) : rhs(v)
   {}
   bool operator()(const T& lhs) const {
     return lhs > rhs;

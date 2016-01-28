@@ -58,7 +58,7 @@ protected:
   CInode *in;
   MDSRank *get_mds() {return in->mdcache->mds;}
 public:
-  CInodeIOContext(CInode *in_) : in(in_) {
+  explicit CInodeIOContext(CInode *in_) : in(in_) {
     assert(in != NULL);
   }
 };

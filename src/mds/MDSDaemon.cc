@@ -153,7 +153,7 @@ MDSDaemon::~MDSDaemon() {
 class MDSSocketHook : public AdminSocketHook {
   MDSDaemon *mds;
 public:
-  MDSSocketHook(MDSDaemon *m) : mds(m) {}
+  explicit MDSSocketHook(MDSDaemon *m) : mds(m) {}
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) {
     stringstream ss;
@@ -700,7 +700,7 @@ int MDSDaemon::_handle_command(
     MDSDaemon *mds;
 
     public:
-    SuicideLater(MDSDaemon *mds_) : mds(mds_) {}
+    explicit SuicideLater(MDSDaemon *mds_) : mds(mds_) {}
     void finish(int r) {
       // Wait a little to improve chances of caller getting
       // our response before seeing us disappear from mdsmap
@@ -717,7 +717,7 @@ int MDSDaemon::_handle_command(
 
     public:
 
-    RespawnLater(MDSDaemon *mds_) : mds(mds_) {}
+    explicit RespawnLater(MDSDaemon *mds_) : mds(mds_) {}
     void finish(int r) {
       // Wait a little to improve chances of caller getting
       // our response before seeing us disappear from mdsmap
