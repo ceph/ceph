@@ -435,16 +435,20 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
   dump_start(s);
 }
 
-static int get_swift_container_settings(req_state *s, RGWRados *store, RGWAccessControlPolicy *policy, bool *has_policy,
-                                        RGWCORSConfiguration *cors_config, bool *has_cors)
+static int get_swift_container_settings(req_state * const s,
+                                        RGWRados * const store,
+                                        RGWAccessControlPolicy * const policy,
+                                        bool * const has_policy,
+                                        RGWCORSConfiguration * const cors_config,
+                                        bool * const has_cors)
 {
   string read_list, write_list;
 
-  const char *read_attr = s->info.env->get("HTTP_X_CONTAINER_READ");
+  const char * const read_attr = s->info.env->get("HTTP_X_CONTAINER_READ");
   if (read_attr) {
     read_list = read_attr;
   }
-  const char *write_attr = s->info.env->get("HTTP_X_CONTAINER_WRITE");
+  const char * const write_attr = s->info.env->get("HTTP_X_CONTAINER_WRITE");
   if (write_attr) {
     write_list = write_attr;
   }
@@ -453,9 +457,14 @@ static int get_swift_container_settings(req_state *s, RGWRados *store, RGWAccess
 
   if (read_attr || write_attr) {
     RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-    int r = swift_policy.create(store, s->user->user_id, s->user->display_name, read_list, write_list);
-    if (r < 0)
+    int r = swift_policy.create(store,
+                                s->user->user_id,
+                                s->user->display_name,
+                                read_list,
+                                write_list);
+    if (r < 0) {
       return r;
+    }
 
     *policy = swift_policy;
     *has_policy = true;
