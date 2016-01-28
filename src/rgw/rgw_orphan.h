@@ -127,9 +127,7 @@ class RGWOrphanStore {
   string oid;
 
 public:
-  RGWOrphanStore(RGWRados *_store) : store(_store) {
-    oid = RGW_ORPHAN_INDEX_OID;
-  }
+  RGWOrphanStore(RGWRados *_store) : store(_store), oid(RGW_ORPHAN_INDEX_OID) {}
 
   librados::IoCtx& get_ioctx() { return ioctx; }
 
