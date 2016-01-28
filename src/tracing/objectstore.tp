@@ -520,6 +520,19 @@ TRACEPOINT_EVENT(objectstore, coll_move_rename_exit,
     )
 )
 
+TRACEPOINT_EVENT(objectstore, coll_try_rename_enter,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(objectstore, coll_try_rename_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(objectstore, coll_remove_enter,
     TP_ARGS(
         const char *, osr_name),

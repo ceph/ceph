@@ -2671,6 +2671,17 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       }
       break;
 
+    case Transaction::OP_TRY_RENAME:
+      {
+	const ghobject_t& noid = i.get_oid(op->dest_oid);
+	OnodeRef no = c->get_onode(noid, true);
+	r = _rename(txc, c, o, no, noid);
+	if (r == -ENOENT)
+	  r = 0;
+	o.reset();
+      }
+      break;
+
     case Transaction::OP_OMAP_CLEAR:
       {
 	r = _omap_clear(txc, c, o);
