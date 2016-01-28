@@ -3074,6 +3074,7 @@ void CDir::scrub_maybe_delete_info()
       !scrub_infop->directory_scrubbing &&
       !scrub_infop->need_scrub_local &&
       !scrub_infop->last_scrub_dirty &&
+      !scrub_infop->pending_scrub_error &&
       scrub_infop->dirty_scrub_stamps.empty()) {
     delete scrub_infop;
     scrub_infop = NULL;
@@ -3085,15 +3086,17 @@ bool CDir::scrub_local()
   assert(is_complete());
   bool rval = check_rstats(true);
 
+  scrub_info();
   if (rval) {
-    scrub_info();
     scrub_infop->last_local.time = ceph_clock_now(g_ceph_context);
     scrub_infop->last_local.version = get_projected_version();
+    scrub_infop->pending_scrub_error = false;
     scrub_infop->last_scrub_dirty = true;
-  } else if (scrub_infop &&
-	     scrub_infop->header &&
-	     scrub_infop->header->repair) {
-    cache->repair_dirfrag_stats(this, NULL);
+  } else {
+    scrub_infop->pending_scrub_error = true;
+    if (scrub_infop->header &&
+	scrub_infop->header->repair)
+      cache->repair_dirfrag_stats(this, NULL);
   }
   return rval;
 }
