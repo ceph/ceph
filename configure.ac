@@ -523,7 +523,8 @@ AC_ARG_WITH([fuse],
 LIBFUSE=
 AS_IF([test "x$with_fuse" != xno], [
   PKG_CHECK_MODULES([LIBFUSE], [fuse],
-    [HAVE_LIBFUSE=1],
+    [HAVE_LIBFUSE=1
+     AC_DEFINE([HAVE_LIBFUSE], [1], [Define if you have fuse])],
     [AC_MSG_FAILURE([no FUSE found (use --without-fuse to disable)])])
 ])
 AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
