@@ -44,7 +44,9 @@
 #include "common/io_priority.h"
 
 #include "os/ObjectStore.h"
+#ifdef HAVE_LIBFUSE
 #include "os/FuseStore.h"
+#endif
 
 #include "ReplicatedPG.h"
 
@@ -1550,7 +1552,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   logger(NULL),
   recoverystate_perf(NULL),
   store(store_),
-  fuse_store(NULL),
   log_client(cct, client_messenger, &mc->monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel()),
   whoami(id),
@@ -1814,6 +1815,7 @@ public:
 
 int OSD::enable_disable_fuse(bool stop)
 {
+#ifdef HAVE_LIBFUSE
   int r;
   string mntpath = g_conf->osd_data + "/fuse";
   if (fuse_store && (stop || !g_conf->osd_objectstore_fuse)) {
@@ -1848,6 +1850,7 @@ int OSD::enable_disable_fuse(bool stop)
       return r;
     }
   }
+#endif  // HAVE_LIBFUSE
   return 0;
 }
 
@@ -8684,12 +8687,13 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
       changed.count("clog_to_syslog_facility")) {
     update_log_config();
   }
+#ifdef HAVE_LIBFUSE
   if (changed.count("osd_objectstore_fuse")) {
     if (store) {
       enable_disable_fuse(false);
     }
   }
-
+#endif
   check_config();
 }
 

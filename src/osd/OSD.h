@@ -1080,8 +1080,9 @@ protected:
   PerfCounters      *logger;
   PerfCounters      *recoverystate_perf;
   ObjectStore *store;
-  FuseStore *fuse_store;
-
+#ifdef HAVE_LIBFUSE
+  FuseStore *fuse_store = nullptr;
+#endif
   LogClient log_client;
   LogChannelRef clog;
 
