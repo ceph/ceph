@@ -479,7 +479,7 @@ std::ostream &operator<<(std::ostream &os,
 			 const JournalMetadata::RegisteredClients &clients) {
   os << "[";
   for (JournalMetadata::RegisteredClients::const_iterator c = clients.begin();
-       c != clients.end(); c++) {
+       c != clients.end(); ++c) {
     os << (c == clients.begin() ? "" : ", " ) << *c;
   }
   os << "]";
