@@ -86,7 +86,7 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
 }
 
 
-int RGWMetadataLog::add_entry(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl) {
+int RGWMetadataLog::add_entry(RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl) {
   if (!store->need_to_log_metadata())
     return 0;
 
@@ -102,7 +102,7 @@ int RGWMetadataLog::add_entry(RGWRados *store, RGWMetadataHandler *handler, cons
   return store->time_log_add(oid, now, section, key, bl);
 }
 
-int RGWMetadataLog::get_log_shard_id(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key)
+int RGWMetadataLog::get_log_shard_id(RGWMetadataHandler *handler, const string& section, const string& key)
 {
   string oid;
 
@@ -115,7 +115,7 @@ int RGWMetadataLog::get_log_shard_id(RGWRados *store, RGWMetadataHandler *handle
   return shard_id;
 }
 
-int RGWMetadataLog::store_entries_in_shard(RGWRados *store, list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
+int RGWMetadataLog::store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
 {
   string oid;
 
@@ -373,7 +373,7 @@ RGWMetadataManager::~RGWMetadataManager()
 
 int RGWMetadataManager::store_md_log_entries(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
 {
-  return md_log->store_entries_in_shard(store, entries, shard_id, completion);
+  return md_log->store_entries_in_shard(entries, shard_id, completion);
 }
 
 int RGWMetadataManager::register_handler(RGWMetadataHandler *handler)
@@ -663,7 +663,7 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
   bufferlist logbl;
   ::encode(log_data, logbl);
 
-  int ret = md_log->add_entry(store, handler, section, key, logbl);
+  int ret = md_log->add_entry(handler, section, key, logbl);
   if (ret < 0)
     return ret;
 
@@ -681,7 +681,7 @@ int RGWMetadataManager::post_modify(RGWMetadataHandler *handler, const string& s
   bufferlist logbl;
   ::encode(log_data, logbl);
 
-  int r = md_log->add_entry(store, handler, section, key, logbl);
+  int r = md_log->add_entry(handler, section, key, logbl);
   if (ret < 0)
     return ret;
 
