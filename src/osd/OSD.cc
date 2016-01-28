@@ -8716,6 +8716,7 @@ void OSD::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
         recovery_wq._dequeue(pg);
     else
     {
+        //好吧 只要没恢复完，这里又丢到队列里面了
         recovery_wq._queue_front(pg);
     }
 
