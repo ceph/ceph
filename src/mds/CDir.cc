@@ -3096,7 +3096,7 @@ bool CDir::scrub_local()
     scrub_infop->pending_scrub_error = true;
     if (scrub_infop->header &&
 	scrub_infop->header->repair)
-      cache->repair_dirfrag_stats(this, NULL);
+      cache->repair_dirfrag_stats(this);
   }
   return rval;
 }
