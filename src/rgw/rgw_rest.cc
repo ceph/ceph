@@ -378,9 +378,10 @@ void dump_content_length(struct req_state *s, uint64_t len)
 {
   int r = s->cio->send_content_length(len);
   if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+    ldout(s->cct, 0) << "ERROR: s->cio->send_content_length() returned err="
+                     << r << dendl;
   }
-  r = s->cio->print("Accept-Ranges: %s\r\n", "bytes");
+  r = s->cio->print("Accept-Ranges: bytes\r\n");
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
