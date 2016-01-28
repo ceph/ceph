@@ -5578,7 +5578,7 @@ int BlueStore::_zero(TransContext *txc,
       dout(20) << __func__ << "  wal zero " << x_off << "~" << x_len
 	       << " " << op->extent << dendl;
     }
-    bp++;
+    ++bp;
   }
 
   if (offset + length > o->onode.size) {
