@@ -266,7 +266,7 @@ public:
   class scrub_info_t : public scrub_stamp_info_t {
   public:
     CDentry *scrub_parent;
-    Context *on_finish;
+    MDSInternalContextBase *on_finish;
 
     bool last_scrub_dirty; /// are our stamps dirty with respect to disk state?
     bool scrub_in_progress; /// are we currently scrubbing?
@@ -297,7 +297,8 @@ public:
    * directory's get_projected_version())
    */
   void scrub_initialize(CDentry *scrub_parent,
-			const ScrubHeaderRefConst& header, Context *f);
+			const ScrubHeaderRefConst& header,
+			MDSInternalContextBase *f);
   /**
    * Get the next dirfrag to scrub. Gives you a frag_t in output param which
    * you must convert to a CDir (and possibly load off disk).
@@ -328,14 +329,14 @@ public:
    * @param c An out param which is filled in with a Context* that must
    * be complete()ed.
    */
-  void scrub_finished(Context **c);
+  void scrub_finished(MDSInternalContextBase **c);
   /**
    * Report to the CInode that alldirfrags it owns have been scrubbed.
    */
   void scrub_children_finished() {
     scrub_infop->children_scrubbed = true;
   }
-  void scrub_set_finisher(Context *c) {
+  void scrub_set_finisher(MDSInternalContextBase *c) {
     assert(!scrub_infop->on_finish);
     scrub_infop->on_finish = c;
   }
