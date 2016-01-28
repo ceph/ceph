@@ -111,6 +111,44 @@ class Ptype(object):
         return [x[name]['ready'] for x in PTYPE.values()]
 
     @staticmethod
+    def is_regular_space(ptype):
+        return Ptype.is_what_space('regular', ptype)
+
+    @staticmethod
+    def is_mpath_space(ptype):
+        return Ptype.is_what_space('mpath', ptype)
+
+    @staticmethod
+    def is_plain_space(ptype):
+        return Ptype.is_what_space('plain', ptype)
+
+    @staticmethod
+    def is_luks_space(ptype):
+        return Ptype.is_what_space('luks', ptype)
+
+    @staticmethod
+    def is_what_space(what, ptype):
+        for name in Space.NAMES:
+            if ptype == PTYPE[what][name]['ready']:
+                return True
+        return False
+
+    @staticmethod
+    def space_ptype_to_name(ptype):
+        for what in PTYPE.values():
+            for name in Space.NAMES:
+                if ptype == what[name]['ready']:
+                    return name
+        raise ValueError('ptype ' + ptype + ' not found')
+
+    @staticmethod
+    def is_dmcrypt_space(ptype):
+        for name in Space.NAMES:
+            if Ptype.is_dmcrypt(ptype, name):
+                return True
+        return False
+
+    @staticmethod
     def is_dmcrypt(ptype, name):
         for what in ('plain', 'luks'):
             if ptype == PTYPE[what][name]['ready']:
@@ -1700,6 +1738,11 @@ class PrepareBluestore(Prepare):
 
     def prepare_locked(self):
         self.data.prepare(self.block)
+
+
+class Space(object):
+
+    NAMES = ('block', 'journal')
 
 
 class PrepareSpace(object):
@@ -3472,11 +3515,12 @@ def more_osd_info(path, uuid_map, desc):
     if desc['ceph_fsid']:
         desc['cluster'] = find_cluster_by_uuid(desc['ceph_fsid'])
     desc['whoami'] = get_oneliner(path, 'whoami')
-    desc['journal_uuid'] = get_oneliner(path, 'journal_uuid')
-    if desc['journal_uuid']:
-        desc['journal_uuid'] = desc['journal_uuid'].lower()
-        if desc['journal_uuid'] in uuid_map:
-            desc['journal_dev'] = uuid_map[desc['journal_uuid']]
+    for name in Space.NAMES:
+        uuid = get_oneliner(path, name + '_uuid')
+        if uuid:
+            desc[name + '_uuid'] = uuid.lower()
+            if desc[name + '_uuid'] in uuid_map:
+                desc[name + '_dev'] = uuid_map[desc[name + '_uuid']]
 
 
 def list_dev_osd(dev, uuid_map, desc):
@@ -3511,8 +3555,9 @@ def list_format_more_osd_info_plain(dev):
             desc.append('unknown cluster ' + dev['ceph_fsid'])
     if dev.get('whoami'):
         desc.append('osd.%s' % dev['whoami'])
-    if dev.get('journal_dev'):
-        desc.append('journal %s' % dev['journal_dev'])
+    for name in Space.NAMES:
+        if dev.get(name + '_dev'):
+            desc.append(name + ' %s' % dev[name + '_dev'])
     return desc
 
 
@@ -3534,19 +3579,22 @@ def list_format_dev_plain(dev, prefix=''):
         else:
             desc = ['ceph data (dmcrypt %s)' % dmcrypt['type'],
                     'holders: ' + ','.join(dmcrypt['holders'])]
-    elif dev['ptype'] == PTYPE['regular']['journal']['ready']:
-        desc.append('ceph journal')
-        if dev.get('journal_for'):
-            desc.append('for %s' % dev['journal_for'])
-    elif Ptype.is_dmcrypt(dev['ptype'], 'journal'):
+    elif Ptype.is_regular_space(dev['ptype']):
+        name = Ptype.space_ptype_to_name(dev['ptype'])
+        desc.append('ceph ' + name)
+        if dev.get(name + '_for'):
+            desc.append('for %s' % dev[name + '_for'])
+    elif Ptype.is_dmcrypt_space(dev['ptype']):
+        name = Ptype.space_ptype_to_name(dev['ptype'])
         dmcrypt = dev['dmcrypt']
         if dmcrypt['holders'] and len(dmcrypt['holders']) == 1:
             holder = get_dev_path(dmcrypt['holders'][0])
-            desc = ['ceph journal (dmcrypt %s %s)' % (dmcrypt['type'], holder)]
+            desc = ['ceph ' + name + ' (dmcrypt %s %s)' %
+                    (dmcrypt['type'], holder)]
         else:
-            desc = ['ceph journal (dmcrypt %s)' % dmcrypt['type']]
-        if dev.get('journal_for'):
-            desc.append('for %s' % dev['journal_for'])
+            desc = ['ceph ' + name + ' (dmcrypt %s)' % dmcrypt['type']]
+        if dev.get(name + '_for'):
+            desc.append('for %s' % dev[name + '_for'])
     else:
         desc.append(dev['type'])
         if dev.get('fs_type'):
@@ -3572,7 +3620,7 @@ def list_format_plain(devices):
     return "\n".join(lines)
 
 
-def list_dev(dev, uuid_map, journal_map):
+def list_dev(dev, uuid_map, space_map):
     info = {
         'path': dev,
         'dmcrypt': {},
@@ -3606,27 +3654,29 @@ def list_dev(dev, uuid_map, journal_map):
         info['dmcrypt']['type'] = 'LUKS'
         if len(holders) == 1:
             list_dev_osd(get_dev_path(holders[0]), uuid_map, info)
-    elif ptype in (PTYPE['regular']['journal']['ready'],
-                   PTYPE['mpath']['journal']['ready']):
-        info['type'] = 'journal'
-        if ptype == PTYPE['mpath']['journal']['ready']:
+    elif Ptype.is_regular_space(ptype) or Ptype.is_mpath_space(ptype):
+        name = Ptype.space_ptype_to_name(ptype)
+        info['type'] = name
+        if ptype == PTYPE['mpath'][name]['ready']:
             info['multipath'] = True
-        if info.get('uuid') in journal_map:
-            info['journal_for'] = journal_map[info['uuid']]
-    elif ptype == PTYPE['plain']['journal']['ready']:
+        if info.get('uuid') in space_map:
+            info[name + '_for'] = space_map[info['uuid']]
+    elif Ptype.is_plain_space(ptype):
+        name = Ptype.space_ptype_to_name(ptype)
         holders = is_held(dev)
-        info['type'] = 'journal'
+        info['type'] = name
         info['dmcrypt']['type'] = 'plain'
         info['dmcrypt']['holders'] = holders
-        if info.get('uuid') in journal_map:
-            info['journal_for'] = journal_map[info['uuid']]
-    elif ptype == PTYPE['luks']['journal']['ready']:
+        if info.get('uuid') in space_map:
+            info[name + '_for'] = space_map[info['uuid']]
+    elif Ptype.is_luks_space(ptype):
+        name = Ptype.space_ptype_to_name(ptype)
         holders = is_held(dev)
-        info['type'] = 'journal'
+        info['type'] = name
         info['dmcrypt']['type'] = 'LUKS'
         info['dmcrypt']['holders'] = holders
-        if info.get('uuid') in journal_map:
-            info['journal_for'] = journal_map[info['uuid']]
+        if info.get('uuid') in space_map:
+            info[name + '_for'] = space_map[info['uuid']]
     else:
         path = is_mounted(dev)
         fs_type = get_dev_fs(dev)
@@ -3646,7 +3696,7 @@ def list_devices():
     partmap = list_all_partitions()
 
     uuid_map = {}
-    journal_map = {}
+    space_map = {}
     for base, parts in sorted(partmap.iteritems()):
         for p in parts:
             dev = get_dev_path(p)
@@ -3672,16 +3722,18 @@ def list_devices():
                         tpath = mount(dev=dev_to_mount,
                                       fstype=fs_type, options='')
                         try:
-                            journal_uuid = get_oneliner(tpath, 'journal_uuid')
-                            if journal_uuid:
-                                journal_map[journal_uuid.lower()] = dev
+                            for name in Space.NAMES:
+                                space_uuid = get_oneliner(tpath,
+                                                          name + '_uuid')
+                                if space_uuid:
+                                    space_map[space_uuid.lower()] = dev
                         finally:
                             unmount(tpath)
                     except MountError:
                         pass
 
     LOG.debug("main_list: " + str(partmap) + ", uuid_map = " +
-              str(uuid_map) + ", journal_map = " + str(journal_map))
+              str(uuid_map) + ", space_map = " + str(space_map))
 
     devices = []
     for base, parts in sorted(partmap.iteritems()):
@@ -3691,11 +3743,11 @@ def list_devices():
             for p in sorted(parts):
                 partitions.append(list_dev(get_dev_path(p),
                                            uuid_map,
-                                           journal_map))
+                                           space_map))
             disk['partitions'] = partitions
             devices.append(disk)
         else:
-            device = list_dev(get_dev_path(base), uuid_map, journal_map)
+            device = list_dev(get_dev_path(base), uuid_map, space_map)
             device['path'] = get_dev_path(base)
             devices.append(device)
     LOG.debug("list_devices: " + str(devices))

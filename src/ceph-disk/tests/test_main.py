@@ -426,36 +426,46 @@ class TestCephDisk(object):
                        }]}]
             assert expect == main.list_devices()
 
-    def test_list_dmcrypt(self):
+    def test_list_default(self):
         self.list(main.PTYPE['plain']['osd']['ready'],
                   main.PTYPE['plain']['journal']['ready'])
         self.list(main.PTYPE['luks']['osd']['ready'],
                   main.PTYPE['luks']['journal']['ready'])
-
-    def test_list_normal(self):
         self.list(main.PTYPE['regular']['osd']['ready'],
                   main.PTYPE['regular']['journal']['ready'])
 
-    def list(self, data_ptype, journal_ptype):
+    def test_list_bluestore(self):
+        self.list(main.PTYPE['plain']['osd']['ready'],
+                  main.PTYPE['plain']['block']['ready'])
+        self.list(main.PTYPE['luks']['osd']['ready'],
+                  main.PTYPE['luks']['block']['ready'])
+        self.list(main.PTYPE['regular']['osd']['ready'],
+                  main.PTYPE['regular']['block']['ready'])
+
+    def list(self, data_ptype, space_ptype):
         #
         # a single disk has a data partition and a journal
         # partition and the osd is active
         #
+        name = main.Ptype.space_ptype_to_name(space_ptype)
         data_uuid = "56244cf5-83ef-4984-888a-2d8b8e0e04b2"
         disk = "Xda"
         data = "Xda1"
         data_holder = "dm-0"
-        journal = "Xda2"
-        journal_holder = "dm-0"
+        space = "Xda2"
+        space_holder = "dm-0"
         mount_path = '/mount/path'
         fs_type = 'ext4'
-        journal_uuid = "7ad5e65a-0ca5-40e4-a896-62a74ca61c55"
+        space_uuid = "7ad5e65a-0ca5-40e4-a896-62a74ca61c55"
         ceph_fsid = "60a2ef70-d99b-4b9b-a83c-8a86e5e60091"
         osd_id = '1234'
 
         def get_oneliner(path, what):
-            if what == 'journal_uuid':
-                return journal_uuid
+            if '_uuid' in what:
+                if what == name + '_uuid':
+                    return space_uuid
+                else:
+                    return None
             elif what == 'ceph_fsid':
                 return ceph_fsid
             elif what == 'whoami':
@@ -466,8 +476,8 @@ class TestCephDisk(object):
         def get_partition_uuid(dev):
             if dev == '/dev/' + data:
                 return data_uuid
-            elif dev == '/dev/' + journal:
-                return journal_uuid
+            elif dev == '/dev/' + space:
+                return space_uuid
             else:
                 raise Exception('unknown ' + dev)
 
@@ -475,9 +485,9 @@ class TestCephDisk(object):
             if (dev == '/dev/' + data or
                     dev == '/dev/' + data_holder):
                 return data_ptype
-            elif (dev == '/dev/' + journal or
-                    dev == '/dev/' + journal_holder):
-                return journal_ptype
+            elif (dev == '/dev/' + space or
+                    dev == '/dev/' + space_holder):
+                return space_ptype
             else:
                 raise Exception('unknown ' + dev)
         cluster = 'ceph'
@@ -496,27 +506,27 @@ class TestCephDisk(object):
         else:
             raise Exception('unknown ' + data_ptype)
 
-        if journal_ptype == main.PTYPE['regular']['journal']['ready']:
-            journal_dmcrypt = {}
-        elif journal_ptype == main.PTYPE['plain']['journal']['ready']:
-            journal_dmcrypt = {
+        if space_ptype == main.PTYPE['regular'][name]['ready']:
+            space_dmcrypt = {}
+        elif space_ptype == main.PTYPE['plain'][name]['ready']:
+            space_dmcrypt = {
                 'type': 'plain',
-                'holders': [journal_holder],
+                'holders': [space_holder],
             }
-        elif journal_ptype == main.PTYPE['luks']['journal']['ready']:
-            journal_dmcrypt = {
+        elif space_ptype == main.PTYPE['luks'][name]['ready']:
+            space_dmcrypt = {
                 'type': 'LUKS',
-                'holders': [journal_holder],
+                'holders': [space_holder],
             }
         else:
-            raise Exception('unknown ' + journal_ptype)
+            raise Exception('unknown ' + space_ptype)
 
         if data_dmcrypt:
             def is_held(dev):
                 if dev == '/dev/' + data:
                     return [data_holder]
-                elif dev == '/dev/' + journal:
-                    return [journal_holder]
+                elif dev == '/dev/' + space:
+                    return [space_holder]
                 else:
                     raise Exception('unknown ' + dev)
         else:
@@ -525,7 +535,7 @@ class TestCephDisk(object):
 
         with patch.multiple(
                 main,
-                list_all_partitions=lambda: {disk: [data, journal]},
+                list_all_partitions=lambda: {disk: [data, space]},
                 get_dev_fs=lambda dev: fs_type,
                 is_mounted=lambda dev: mount_path,
                 get_partition_uuid=get_partition_uuid,
@@ -544,8 +554,8 @@ class TestCephDisk(object):
                            'dmcrypt': data_dmcrypt,
                            'fs_type': fs_type,
                            'is_partition': True,
-                           'journal_dev': '/dev/' + journal,
-                           'journal_uuid': journal_uuid,
+                           name + '_dev': '/dev/' + space,
+                           name + '_uuid': space_uuid,
                            'mount': mount_path,
                            'path': '/dev/' + data,
                            'ptype': data_ptype,
@@ -554,13 +564,13 @@ class TestCephDisk(object):
                            'whoami': osd_id,
                            'uuid': data_uuid,
                        }, {
-                           'dmcrypt': journal_dmcrypt,
+                           'dmcrypt': space_dmcrypt,
                            'is_partition': True,
-                           'journal_for': '/dev/' + data,
-                           'path': '/dev/' + journal,
-                           'ptype': journal_ptype,
-                           'type': 'journal',
-                           'uuid': journal_uuid,
+                           name + '_for': '/dev/' + data,
+                           'path': '/dev/' + space,
+                           'ptype': space_ptype,
+                           'type': name,
+                           'uuid': space_uuid,
                        }]}]
             assert expect == main.list_devices()
 
