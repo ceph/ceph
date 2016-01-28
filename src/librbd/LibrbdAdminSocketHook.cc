@@ -81,7 +81,7 @@ LibrbdAdminSocketHook::LibrbdAdminSocketHook(ImageCtx *ictx) :
 
 LibrbdAdminSocketHook::~LibrbdAdminSocketHook() {
   for (Commands::const_iterator i = commands.begin(); i != commands.end();
-       i++) {
+       ++i) {
     (void)admin_socket->unregister_command(i->first);
     delete i->second;
   }
