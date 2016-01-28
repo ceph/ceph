@@ -5,6 +5,7 @@
 #include <limits.h>
 
 #include "common/Formatter.h"
+#include "common/HTMLFormatter.h"
 #include "common/utf8.h"
 #include "include/str_list.h"
 #include "rgw_common.h"
@@ -20,6 +21,8 @@
 
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
+
+#include <numeric>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -39,6 +42,11 @@ static const struct rgw_http_attr base_rgw_to_http_attrs[] = {
   { RGW_ATTR_CONTENT_DISP,      "Content-Disposition" },
   { RGW_ATTR_CONTENT_ENC,       "Content-Encoding" },
   { RGW_ATTR_USER_MANIFEST,     "X-Object-Manifest" },
+  /* RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION header depends on access mode:
+   * S3 endpoint: x-amz-website-redirect-location
+   * S3Website endpoint: Location
+   */
+  { RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION, "x-amz-website-redirect-location" },
 };
 
 
@@ -160,8 +168,9 @@ string camelcase_dash_http_attr(const string& orig)
   return string(buf);
 }
 
-/* avoid duplicate hostnames in hostnames list */
+/* avoid duplicate hostnames in hostnames lists */
 static set<string> hostnames_set;
+static set<string> hostnames_s3website_set;
 
 void rgw_rest_init(CephContext *cct, RGWRegion& region)
 {
@@ -197,6 +206,8 @@ void rgw_rest_init(CephContext *cct, RGWRegion& region)
     hostnames_set.insert(cct->_conf->rgw_dns_name);
   }
   hostnames_set.insert(region.hostnames.begin(),  region.hostnames.end());
+  string s;
+  ldout(cct, 20) << "RGW hostnames: " << std::accumulate(hostnames_set.begin(), hostnames_set.end(), s) << dendl;
   /* TODO: We should have a sanity check that no hostname matches the end of
    * any other hostname, otherwise we will get ambigious results from
    * rgw_find_host_in_domains.
@@ -205,6 +216,16 @@ void rgw_rest_init(CephContext *cct, RGWRegion& region)
    * Inputs: [Z.A, X.B.A]
    * Z.A clearly splits to subdomain=Z, domain=Z
    * X.B.A ambigously splits to both {X, B.A} and {X.B, A}
+   */
+
+  if (!cct->_conf->rgw_dns_s3website_name.empty()) {
+    hostnames_s3website_set.insert(cct->_conf->rgw_dns_s3website_name);
+  }
+  hostnames_s3website_set.insert(region.hostnames_s3website.begin(), region.hostnames_s3website.end());
+  s.clear();
+  ldout(cct, 20) << "RGW S3website hostnames: " << std::accumulate(hostnames_s3website_set.begin(), hostnames_s3website_set.end(), s) << dendl;
+  /* TODO: we should repeat the hostnames_set sanity check here
+   * and ALSO decide about overlap, if any
    */
 }
 
@@ -223,10 +244,14 @@ static bool str_ends_with(const string& s, const string& suffix, size_t *pos)
   return s.compare(p, len, suffix) == 0;
 }
 
-static bool rgw_find_host_in_domains(const string& host, string *domain, string *subdomain)
+static bool rgw_find_host_in_domains(const string& host, string *domain, string *subdomain, set<string> valid_hostnames_set)
 {
   set<string>::iterator iter;
-  for (iter = hostnames_set.begin(); iter != hostnames_set.end(); ++iter) {
+  /** TODO, Future optimization
+   * store hostnames_set elements _reversed_, and look for a prefix match,
+   * which is much faster than a suffix match.
+   */
+  for (iter = valid_hostnames_set.begin(); iter != valid_hostnames_set.end(); ++iter) {
     size_t pos;
     if (!str_ends_with(host, *iter, &pos))
       continue;
@@ -249,6 +274,7 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
 
 static void dump_status(struct req_state *s, int status, const char *status_name)
 {
+  s->formatter->set_status(status, status_name);
   int r = s->cio->send_status(status, status_name);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_status() returned err=" << r << dendl;
@@ -258,6 +284,7 @@ static void dump_status(struct req_state *s, int status, const char *status_name
 void rgw_flush_formatter_and_reset(struct req_state *s, Formatter *formatter)
 {
   std::ostringstream oss;
+  formatter->output_footer();
   formatter->flush(oss);
   std::string outs(oss.str());
   if (!outs.empty() && s->op != OP_HEAD) {
@@ -294,9 +321,14 @@ void set_req_state_err(struct rgw_err& err,     /* out */
       return;
     }
   }
+
   r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
   if (r) {
-    err.http_ret = r->http_ret;
+    if (prot_flags & RGW_REST_WEBSITE && err_no == ERR_WEBSITE_REDIRECT && err.is_clear()) {
+      // http_ret was custom set, so don't change it!
+    } else {
+      err.http_ret = r->http_ret;
+    }
     err.s3_code = r->s3_code;
     return;
   }
@@ -521,8 +553,7 @@ void dump_access_control(req_state *s, RGWOp *op)
 void dump_start(struct req_state *s)
 {
   if (!s->content_started) {
-    if (s->format == RGW_FORMAT_XML)
-      s->formatter->write_raw_data(XMLFormatter::XML_1_DTD);
+    s->formatter->output_header();
     s->content_started = true;
   }
 }
@@ -538,7 +569,7 @@ void dump_trans_id(req_state *s)
 }
 
 void end_header(struct req_state *s, RGWOp *op, const char *content_type, const int64_t proposed_content_length,
-		bool force_content_type)
+		bool force_content_type, bool force_no_error)
 {
   string ctype;
 
@@ -568,6 +599,9 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
     case RGW_FORMAT_JSON:
       ctype = "application/json";
       break;
+    case RGW_FORMAT_HTML:
+      ctype = "text/html";
+      break;
     default:
       ctype = "text/plain";
       break;
@@ -576,16 +610,24 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
       ctype.append("; charset=utf-8");
     content_type = ctype.c_str();
   }
-  if (s->err.is_err()) {
+  if (!force_no_error && s->err.is_err()) {
     dump_start(s);
-    s->formatter->open_object_section("Error");
+    if (s->format != RGW_FORMAT_HTML) {
+      s->formatter->open_object_section("Error");
+    }
     if (!s->err.s3_code.empty())
       s->formatter->dump_string("Code", s->err.s3_code);
     if (!s->err.message.empty())
       s->formatter->dump_string("Message", s->err.message);
-    if (!s->trans_id.empty())
+    if (!s->bucket_name.empty()) // TODO: connect to expose_bucket
+      s->formatter->dump_string("BucketName", s->bucket_name);
+    if (!s->trans_id.empty()) // TODO: connect to expose_bucket or another toggle
       s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->close_section();
+    s->formatter->dump_string("HostId", "FIXME-TODO-How-does-amazon-generate-HostId"); // TODO, FIXME
+    if (s->format != RGW_FORMAT_HTML) {
+      s->formatter->close_section();
+    }
+    s->formatter->output_footer();
     dump_content_length(s, s->formatter->get_len());
   } else {
     if (proposed_content_length != NO_CONTENT_LENGTH) {
@@ -609,32 +651,68 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void abort_early(struct req_state *s, RGWOp *op, int err_no)
+void abort_early(struct req_state *s, RGWOp *op, int err_no, RGWHandler* handler)
 {
+  string error_content("");
   if (!s->formatter) {
     s->formatter = new JSONFormatter;
     s->format = RGW_FORMAT_JSON;
   }
+
+  // op->error_handler is responsible for calling it's handler error_handler
+  if (op != NULL) {
+    int new_err_no;
+    new_err_no = op->error_handler(err_no, &error_content);
+    ldout(s->cct, 20) << "op->ERRORHANDLER: err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
+    err_no = new_err_no;
+  } else if (handler != NULL) {
+    int new_err_no;
+    new_err_no = handler->error_handler(err_no, &error_content);
+    ldout(s->cct, 20) << "handler->ERRORHANDLER: err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
+    err_no = new_err_no;
+  }
   set_req_state_err(s, err_no);
   dump_errno(s);
   dump_bucket_from_state(s);
-  if (err_no == -ERR_PERMANENT_REDIRECT && !s->region_endpoint.empty()) {
-    string dest_uri = s->region_endpoint;
-    /*
-     * reqest_uri is always start with slash, so we need to remove
-     * the unnecessary slash at the end of dest_uri.
-     */
-    if (dest_uri[dest_uri.size() - 1] == '/') {
-      dest_uri = dest_uri.substr(0, dest_uri.size() - 1);
+  if (err_no == -ERR_PERMANENT_REDIRECT || err_no == -ERR_WEBSITE_REDIRECT) {
+    string dest_uri;
+    if (!s->redirect.empty()) {
+      dest_uri = s->redirect;
+    } else if (!s->region_endpoint.empty()) {
+      string dest_uri = s->region_endpoint;
+      /*
+       * reqest_uri is always start with slash, so we need to remove
+       * the unnecessary slash at the end of dest_uri.
+       */
+      if (dest_uri[dest_uri.size() - 1] == '/') {
+        dest_uri = dest_uri.substr(0, dest_uri.size() - 1);
+      }
+      dest_uri += s->info.request_uri;
+      dest_uri += "?";
+      dest_uri += s->info.request_params;
     }
-    dest_uri += s->info.request_uri;
-    dest_uri += "?";
-    dest_uri += s->info.request_params;
 
-    dump_redirect(s, dest_uri);
+    if (!dest_uri.empty()) {
+      dump_redirect(s, dest_uri);
+    }
   }
-  end_header(s, op);
-  rgw_flush_formatter_and_reset(s, s->formatter);
+  if (!error_content.empty()) {
+    ldout(s->cct, 20) << "error_content is set, we need to serve it INSTEAD of firing the formatter" << dendl;
+    /*
+     * FIXME we must add all error entries as headers here:
+     * when having a working errordoc, then the s3 error fields are rendered as HTTP headers, e.g.:
+     *
+     *   x-amz-error-code: NoSuchKey
+     *   x-amz-error-message: The specified key does not exist.
+     *   x-amz-error-detail-Key: foo
+     */
+    end_header(s, op, NULL, NO_CONTENT_LENGTH, false, true);
+    s->cio->write(error_content.c_str(), error_content.size());
+    s->formatter->reset();
+  } else {
+    end_header(s, op);
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  }
   perfcounter->inc(l_rgw_failed_req);
 }
 
@@ -930,8 +1008,8 @@ int RGWPutACLs_ObjStore::get_params()
   if (cl) {
     data = (char *)malloc(cl + 1);
     if (!data) {
-       ret = -ENOMEM;
-       return ret;
+       op_ret = -ENOMEM;
+       return op_ret;
     }
     int read_len;
     int r = s->cio->read(data, cl, &read_len);
@@ -943,7 +1021,7 @@ int RGWPutACLs_ObjStore::get_params()
     len = 0;
   }
 
-  return ret;
+  return op_ret;
 }
 
 static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max_read)
@@ -1039,14 +1117,14 @@ int RGWCompleteMultipart_ObjStore::get_params()
   upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty()) {
-    ret = -ENOTSUP;
-    return ret;
+    op_ret = -ENOTSUP;
+    return op_ret;
   }
 
 #define COMPLETE_MULTIPART_MAX_LEN (1024 * 1024) /* api defines max 10,000 parts, this should be enough */
-  ret = rgw_rest_read_all_input(s, &data, &len, COMPLETE_MULTIPART_MAX_LEN);
-  if (ret < 0)
-    return ret;
+  op_ret = rgw_rest_read_all_input(s, &data, &len, COMPLETE_MULTIPART_MAX_LEN);
+  if (op_ret < 0)
+    return op_ret;
 
   return 0;
 }
@@ -1056,7 +1134,7 @@ int RGWListMultipart_ObjStore::get_params()
   upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty()) {
-    ret = -ENOTSUP;
+    op_ret = -ENOTSUP;
   }
   string marker_str = s->info.args.get("part-number-marker");
 
@@ -1065,8 +1143,8 @@ int RGWListMultipart_ObjStore::get_params()
     marker = strict_strtol(marker_str.c_str(), 10, &err);
     if (!err.empty()) {
       ldout(s->cct, 20) << "bad marker: "  << marker << dendl;
-      ret = -EINVAL;
-      return ret;
+      op_ret = -EINVAL;
+      return op_ret;
     }
   }
   
@@ -1074,7 +1152,7 @@ int RGWListMultipart_ObjStore::get_params()
   if (!str.empty())
     max_parts = atoi(str.c_str());
 
-  return ret;
+  return op_ret;
 }
 
 int RGWListBucketMultiparts_ObjStore::get_params()
@@ -1099,8 +1177,8 @@ int RGWDeleteMultiObj_ObjStore::get_params()
 {
 
   if (s->bucket_name.empty()) {
-    ret = -EINVAL;
-    return ret;
+    op_ret = -EINVAL;
+    return op_ret;
   }
 
   // everything is probably fine, set the bucket
@@ -1113,20 +1191,20 @@ int RGWDeleteMultiObj_ObjStore::get_params()
   if (cl) {
     data = (char *)malloc(cl + 1);
     if (!data) {
-      ret = -ENOMEM;
-      return ret;
+      op_ret = -ENOMEM;
+      return op_ret;
     }
     int read_len;
-    ret = s->cio->read(data, cl, &read_len);
+    op_ret = s->cio->read(data, cl, &read_len);
     len = read_len;
-    if (ret < 0)
-      return ret;
+    if (op_ret < 0)
+      return op_ret;
     data[len] = '\0';
   } else {
     return -EINVAL;
   }
 
-  return ret;
+  return op_ret;
 }
 
 
@@ -1155,6 +1233,8 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
       s->format = RGW_FORMAT_XML;
     } else if (format_str.compare("json") == 0) {
       s->format = RGW_FORMAT_JSON;
+    } else if (format_str.compare("html") == 0) {
+      s->format = RGW_FORMAT_HTML;
     } else {
       const char *accept = s->info.env->get("HTTP_ACCEPT");
       if (accept) {
@@ -1168,6 +1248,8 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
           s->format = RGW_FORMAT_XML;
         } else if (strcmp(format_buf, "application/json") == 0) {
           s->format = RGW_FORMAT_JSON;
+        } else if (strcmp(format_buf, "text/html") == 0) {
+          s->format = RGW_FORMAT_HTML;
         }
       }
     }
@@ -1192,24 +1274,27 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
     case RGW_FORMAT_JSON:
       s->formatter = new JSONFormatter(false);
       break;
+    case RGW_FORMAT_HTML:
+      s->formatter = new HTMLFormatter(s->prot_flags & RGW_REST_WEBSITE);
+      break;
     default:
       return -EINVAL;
 
   };
-  s->formatter->reset();
+  //s->formatter->reset(); // All formatters should reset on create already
 
   return 0;
 }
 
 int RGWHandler_ObjStore::validate_tenant_name(string const& t)
 {
-  struct tench {
-    static bool is_good(char ch) {
-      return isalnum(ch) || ch == '_';
-    }
-  };
-  std::string::const_iterator it = std::find_if(t.begin(), t.end(), tench::is_good);
-  return (it == t.end())? 0: -ERR_INVALID_BUCKET_NAME;
+  const char *p = t.c_str();
+  for (int i = 0; i < t.size(); i++) {
+    char ch = p[i];
+    if (!(isalnum(ch) || ch == '_'))
+      return -ERR_INVALID_TENANT_NAME;
+  }
+  return 0;
 }
 
 // This function enforces Amazon's spec for bucket names.
@@ -1272,6 +1357,14 @@ static http_op op_from_method(const char *method)
     return OP_OPTIONS;
 
   return OP_UNKNOWN;
+}
+
+int RGWHandler_ObjStore::init_permissions(RGWOp *op)
+{
+  if (op->get_type() == RGW_OP_CREATE_BUCKET)
+    return 0;
+
+  return do_init_permissions();
 }
 
 int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
@@ -1411,24 +1504,59 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
     ldout(s->cct, 10) << "host=" << info.host << dendl;
     string domain;
     string subdomain;
-    bool in_hosted_domain = rgw_find_host_in_domains(info.host, &domain,
-						     &subdomain);
-    ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain
-		      << " in_hosted_domain=" << in_hosted_domain << dendl;
+    bool in_hosted_domain_s3website = false;
+    bool in_hosted_domain = rgw_find_host_in_domains(info.host, &domain, &subdomain, hostnames_set);
 
-    if (g_conf->rgw_resolve_cname && !in_hosted_domain) {
+    bool s3website_enabled = g_conf->rgw_enable_apis.find("s3website") != std::string::npos;
+    string s3website_domain;
+    string s3website_subdomain;
+
+    if (s3website_enabled) {
+      in_hosted_domain_s3website = rgw_find_host_in_domains(info.host, &s3website_domain, &s3website_subdomain, hostnames_s3website_set);
+      if (in_hosted_domain_s3website) {
+	in_hosted_domain = true; // TODO: should hostnames be a strict superset of hostnames_s3website?
+        domain = s3website_domain;
+        subdomain = s3website_subdomain;
+        s->prot_flags |= RGW_REST_WEBSITE;
+      }
+    }
+
+    ldout(s->cct, 20)
+      << "subdomain=" << subdomain 
+      << " domain=" << domain 
+      << " in_hosted_domain=" << in_hosted_domain 
+      << " in_hosted_domain_s3website=" << in_hosted_domain_s3website 
+      << dendl;
+
+    if (g_conf->rgw_resolve_cname && !in_hosted_domain && !in_hosted_domain_s3website) {
       string cname;
       bool found;
       int r = rgw_resolver->resolve_cname(info.host, cname, &found);
       if (r < 0) {
-	ldout(s->cct, 0) << "WARNING: rgw_resolver->resolve_cname() returned r=" << r << dendl;
+        ldout(s->cct, 0) << "WARNING: rgw_resolver->resolve_cname() returned r=" << r << dendl;
       }
+
       if (found) {
         ldout(s->cct, 5) << "resolved host cname " << info.host << " -> "
 			 << cname << dendl;
-        in_hosted_domain = rgw_find_host_in_domains(cname, &domain, &subdomain);
-        ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain
-			  << " in_hosted_domain=" << in_hosted_domain << dendl;
+        in_hosted_domain = rgw_find_host_in_domains(cname, &domain, &subdomain, hostnames_set);
+
+        if (s3website_enabled && !in_hosted_domain_s3website) {
+            in_hosted_domain_s3website = rgw_find_host_in_domains(cname, &s3website_domain, &s3website_subdomain, hostnames_s3website_set);
+	    if (in_hosted_domain_s3website) {
+	      in_hosted_domain = true; // TODO: should hostnames be a strict superset of hostnames_s3website?
+	      domain = s3website_domain;
+	      subdomain = s3website_subdomain;
+	      s->prot_flags |= RGW_REST_WEBSITE;
+	    }
+        }
+
+        ldout(s->cct, 20)
+          << "subdomain=" << subdomain 
+          << " domain=" << domain 
+          << " in_hosted_domain=" << in_hosted_domain 
+          << " in_hosted_domain_s3website=" << in_hosted_domain_s3website 
+          << dendl;
       }
     }
 

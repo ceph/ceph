@@ -290,6 +290,7 @@ set(libcommon_files
   common/simple_spin.cc
   common/Thread.cc
   common/Formatter.cc
+  common/HTMLFormatter.cc
   common/HeartbeatMap.cc
   common/PluginRegistry.cc
   common/ceph_fs.cc
@@ -461,7 +462,7 @@ add_executable(ceph-objectstore-tool
   tools/RadosDump.cc
   $<TARGET_OBJECTS:common_util_obj>
   $<TARGET_OBJECTS:heap_profiler_objs>)
-target_link_libraries(ceph-objectstore-tool tcmalloc osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} dl)
+target_link_libraries(ceph-objectstore-tool tcmalloc osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse dl)
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
 
@@ -625,6 +626,7 @@ if(${HAVE_XFS})
     os/fs/XFS.cc)
 endif(${HAVE_XFS})
 set(libos_srcs
+  os/FuseStore.cc
   os/ObjectStore.cc
   os/Transaction.cc
   os/filestore/chain_xattr.cc
@@ -639,8 +641,6 @@ set(libos_srcs
   os/filestore/LFNIndex.cc
   os/filestore/WBThrottle.cc
   os/filestore/ZFSFileStoreBackend.cc
-  os/keyvaluestore/GenericObjectMap.cc
-  os/keyvaluestore/KeyValueStore.cc
   os/memstore/MemStore.cc
   os/kstore/KStore.cc
   os/kstore/kstore_types.cc
@@ -728,7 +728,7 @@ add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(ceph-osd erasure_code_plugins)
-target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES} ${ALLOC_LIBS})
+target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES} ${ALLOC_LIBS} fuse)
 install(TARGETS ceph-osd DESTINATION bin)
 
 # MDS
@@ -1121,7 +1121,9 @@ if(${WITH_RADOSGW})
     rgw/rgw_keystone.cc
     rgw/rgw_quota.cc
     rgw/rgw_dencoder.cc
-    rgw/rgw_object_expirer_core.cc)
+    rgw/rgw_object_expirer_core.cc
+    rgw/rgw_website.cc
+    rgw/rgw_xml_enc.cc)
 
   add_library(rgw_a STATIC ${rgw_a_srcs})
 

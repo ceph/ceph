@@ -46,7 +46,9 @@ void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id)
  * with the legacy or S3 buckets.
  */
 void rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry) {
-  if (tenant_name.empty()) {
+  if (bucket_name.empty()) {
+    bucket_entry.clear();
+  } else if (tenant_name.empty()) {
     bucket_entry = bucket_name;
   } else {
     bucket_entry = tenant_name + "/" + bucket_name;
@@ -56,7 +58,9 @@ void rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_
 string rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_name) {
   string bucket_entry;
 
-  if (tenant_name.empty()) {
+  if (bucket_name.empty()) {
+    bucket_entry.clear();
+  } else if (tenant_name.empty()) {
     bucket_entry = bucket_name;
   } else {
     bucket_entry = tenant_name + "/" + bucket_name;
@@ -69,15 +73,22 @@ string rgw_make_bucket_entry_name(const string& tenant_name, const string& bucke
  * Tenants are separated from buckets in URLs by a colon in S3.
  * This function is not to be used on Swift URLs, not even for COPY arguments.
  */
-void rgw_parse_url_bucket(const string &bucket,
+void rgw_parse_url_bucket(const string &bucket, const string& auth_tenant,
                           string &tenant_name, string &bucket_name) {
+
   int pos = bucket.find(':');
   if (pos >= 0) {
+    /*
+     * N.B.: We allow ":bucket" syntax with explicit empty tenant in order
+     * to refer to the legacy tenant, in case users in new named tenants
+     * want to access old global buckets.
+     */
     tenant_name = bucket.substr(0, pos);
+    bucket_name = bucket.substr(pos + 1);
   } else {
-    tenant_name.clear();
+    tenant_name = auth_tenant;
+    bucket_name = bucket;
   }
-  bucket_name = bucket.substr(pos + 1);
 }
 
 /**

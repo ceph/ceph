@@ -48,16 +48,13 @@ private:
    *    .     OPEN_OBJECT_MAP           GET_WATCHERS . . .              |
    *    .         |                       |              .              |
    *    .         v                       v              .              |
-   *    .     LOCK_OBJECT_MAP           BLACKLIST        . (blacklist   |
-   *    .         |                       |              .  disabled)   |
-   *    .         v                       v              .              |
-   *    . . > OPEN_JOURNAL * *          BREAK_LOCK < . . .              |
-   *    .         |          *            |                             |
-   *    .         |          v            |                             |
-   *    .         |    UNLOCK_OBJECT_MAP  |                             |
-   *    .         |          |            \-----------------------------/
-   *    .         v          |
-   *    . . > <finish> <-----/
+   *    . . > OPEN_JOURNAL * *          BLACKLIST        . (blacklist   |
+   *    .         |          *            |              .  disabled)   |
+   *    .         |          v            v              .              |
+   *    .         | CLOSE_OBJECT_MAP    BREAK_LOCK < . . .              |
+   *    .         v          |            |                             |
+   *    . . > <finish> <-----/            \-----------------------------/
+   *
    * @endverbatim
    */
 
@@ -93,11 +90,8 @@ private:
   Context *send_open_object_map();
   Context *handle_open_object_map(int *ret_val);
 
-  Context *send_lock_object_map();
-  Context *handle_lock_object_map(int *ret_val);
-
-  Context *send_unlock_object_map();
-  Context *handle_unlock_object_map(int *ret_val);
+  Context *send_close_object_map();
+  Context *handle_close_object_map(int *ret_val);
 
   void send_get_lockers();
   Context *handle_get_lockers(int *ret_val);

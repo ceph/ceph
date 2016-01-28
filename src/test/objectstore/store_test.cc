@@ -104,8 +104,6 @@ TEST_P(StoreTest, collect_metadata) {
     ASSERT_NE(pm.count("filestore_f_type"), 0u);
     ASSERT_NE(pm.count("backend_filestore_partition_path"), 0u);
     ASSERT_NE(pm.count("backend_filestore_dev_node"), 0u);
-  } else if (GetParam() == string("keyvaluestore")) {
-    ASSERT_NE(pm.count("keyvaluestore_backend"), 0u);
   }
 }
 
@@ -3258,7 +3256,6 @@ INSTANTIATE_TEST_CASE_P(
   ::testing::Values(
     "memstore",
     "filestore",
-    "keyvaluestore",
     "bluestore",
     "kstore"));
 
@@ -3273,64 +3270,6 @@ INSTANTIATE_TEST_CASE_P(
 TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
 
 #endif
-
-
-//
-// support tests for qa/workunits/filestore/filestore.sh
-//
-TEST(EXT4StoreTest, _detect_fs) {
-  if (::getenv("DISK") == NULL || ::getenv("MOUNTPOINT") == NULL) {
-    cerr << "SKIP because DISK and MOUNTPOINT environment variables are not set. It is meant to run from qa/workunits/filestore/filestore.sh " << std::endl;
-    return;
-  }
-  const string disk(::getenv("DISK"));
-  EXPECT_LT((unsigned)0, disk.size());
-  const string mnt(::getenv("MOUNTPOINT"));
-  EXPECT_LT((unsigned)0, mnt.size());
-  ::umount(mnt.c_str());
-
-  const string dir("store_test_temp_dir");
-  const string journal("store_test_temp_journal");
-
-  //
-  // without user_xattr, ext4 fails
-  //
-  {
-    g_ceph_context->_conf->set_val("filestore_xattr_use_omap", "true");
-    EXPECT_EQ(::system((string("mount -o loop,nouser_xattr ") + disk + " " + mnt).c_str()), 0);
-    EXPECT_EQ(::chdir(mnt.c_str()), 0);
-    EXPECT_EQ(::mkdir(dir.c_str(), 0755), 0);
-    FileStore store(dir, journal);
-    EXPECT_EQ(store._detect_fs(), -ENOTSUP);
-    EXPECT_EQ(::chdir(".."), 0);
-    EXPECT_EQ(::umount(mnt.c_str()), 0);
-  }
-  //
-  // mounted with user_xattr, ext4 fails if filestore_xattr_use_omap is false
-  //
-  {
-    g_ceph_context->_conf->set_val("filestore_xattr_use_omap", "false");
-    EXPECT_EQ(::system((string("mount -o loop,user_xattr ") + disk + " " + mnt).c_str()), 0);
-    EXPECT_EQ(::chdir(mnt.c_str()), 0);
-    FileStore store(dir, journal);
-    EXPECT_EQ(store._detect_fs(), -ENOTSUP);
-    EXPECT_EQ(::chdir(".."), 0);
-    EXPECT_EQ(::umount(mnt.c_str()), 0);
-  }
-  //
-  // mounted with user_xattr, ext4 succeeds if filestore_xattr_use_omap is true
-  //
-  {
-    g_ceph_context->_conf->set_val("filestore_xattr_use_omap", "true");
-    EXPECT_EQ(::system((string("mount -o loop,user_xattr ") + disk + " " + mnt).c_str()), 0);
-    EXPECT_EQ(::chdir(mnt.c_str()), 0);
-    FileStore store(dir, journal);
-    EXPECT_EQ(store._detect_fs(), 0);
-    EXPECT_EQ(::chdir(".."), 0);
-    EXPECT_EQ(::umount(mnt.c_str()), 0);
-  }
-}
-
 
 int main(int argc, char **argv) {
   vector<const char*> args;

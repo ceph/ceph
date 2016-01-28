@@ -117,7 +117,6 @@ SUBSYS(osd, 0, 5)
 SUBSYS(optracker, 0, 5)
 SUBSYS(objclass, 0, 5)
 SUBSYS(filestore, 1, 3)
-SUBSYS(keyvaluestore, 1, 3)
 SUBSYS(journal, 1, 3)
 SUBSYS(ms, 0, 5)
 SUBSYS(mon, 1, 5)
@@ -144,6 +143,8 @@ SUBSYS(bdev, 1, 3)
 SUBSYS(kstore, 1, 5)
 SUBSYS(rocksdb, 4, 5)
 SUBSYS(leveldb, 4, 5)
+SUBSYS(kinetic, 1, 5)
+SUBSYS(fuse, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -226,6 +227,7 @@ OPTION(mon_osd_prime_pg_temp, OPT_BOOL, false)  // prime osdmap with pg mapping 
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT, .5)  // max time to spend priming
 OPTION(mon_osd_pool_ec_fast_read, OPT_BOOL, false) // whether turn on fast read on the pool or not
 OPTION(mon_stat_smooth_intervals, OPT_INT, 2)  // smooth stats over last N PGMap maps
+OPTION(mon_election_timeout, OPT_FLOAT, 5)  // on election proposer, max waiting time for all ACKs
 OPTION(mon_lease, OPT_FLOAT, 5)       // lease interval
 OPTION(mon_lease_renew_interval_factor, OPT_FLOAT, .6) // on leader, to renew the lease
 OPTION(mon_lease_ack_timeout_factor, OPT_FLOAT, 2.0) // on leader, if lease isn't acked by all peons
@@ -236,6 +238,7 @@ OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT, 5) // exponential backoff for cl
 OPTION(mon_timecheck_interval, OPT_FLOAT, 300.0) // on leader, timecheck (clock drift check) interval (seconds)
 OPTION(mon_pg_create_interval, OPT_FLOAT, 30.0) // no more than every 30s
 OPTION(mon_pg_stuck_threshold, OPT_INT, 300) // number of seconds after which pgs can be considered inactive, unclean, or stale (see doc/control.rst under dump_stuck for more info)
+OPTION(mon_pg_min_inactive, OPT_U64, 1) // the number of PGs which have to be inactive longer than 'mon_pg_stuck_threshold' before health goes into ERR. 0 means disabled, never go into ERR.
 OPTION(mon_pg_warn_min_per_osd, OPT_INT, 30)  // min # pgs per (in) osd before we warn the admin
 OPTION(mon_pg_warn_max_per_osd, OPT_INT, 300)  // max # pgs per (in) osd before we warn the admin
 OPTION(mon_pg_warn_max_object_skew, OPT_FLOAT, 10.0) // max skew few average in objects per pg
@@ -788,8 +791,6 @@ OPTION(kinetic_use_ssl, OPT_BOOL, false) // whether to secure kinetic traffic wi
 OPTION(rocksdb_separate_wal_dir, OPT_BOOL, false) // use $path.wal for wal
 OPTION(rocksdb_db_paths, OPT_STR, "")   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
-// rocksdb options that will be used for keyvaluestore(if backend is rocksdb)
-OPTION(keyvaluestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
 OPTION(filestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used in monstore
@@ -832,6 +833,7 @@ OPTION(osd_objectstore_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoint
 // Override maintaining compatibility with older OSDs
 // Set to true for testing.  Users should NOT set this.
 OPTION(osd_debug_override_acting_compat, OPT_BOOL, false)
+OPTION(osd_objectstore_fuse, OPT_BOOL, false)
 
 OPTION(osd_bench_small_size_max_iops, OPT_U32, 100) // 100 IOPS
 OPTION(osd_bench_large_size_max_throughput, OPT_U64, 100 << 20) // 100 MB/s
@@ -1014,18 +1016,6 @@ OPTION(journal_dio, OPT_BOOL, true)
 OPTION(journal_aio, OPT_BOOL, true)
 OPTION(journal_force_aio, OPT_BOOL, false)
 
-OPTION(keyvaluestore_queue_max_ops, OPT_INT, 50)
-OPTION(keyvaluestore_queue_max_bytes, OPT_INT, 100 << 20)
-OPTION(keyvaluestore_debug_check_backend, OPT_BOOL, 0) // Expensive debugging check on sync
-OPTION(keyvaluestore_op_threads, OPT_INT, 2)
-OPTION(keyvaluestore_op_thread_timeout, OPT_INT, 60)
-OPTION(keyvaluestore_op_thread_suicide_timeout, OPT_INT, 180)
-OPTION(keyvaluestore_default_strip_size, OPT_INT, 4096) // Only affect new object
-OPTION(keyvaluestore_max_expected_write_size, OPT_U64, 1ULL << 24) // bytes
-OPTION(keyvaluestore_header_cache_size, OPT_INT, 4096)    // Header cache size
-OPTION(keyvaluestore_backend, OPT_STR, "leveldb")
-OPTION(keyvaluestore_dump_file, OPT_STR, "")         // file onto which store transaction dumps
-
 // max bytes to search ahead in journal searching for corruption
 OPTION(journal_max_corrupt_search, OPT_U64, 10<<20)
 OPTION(journal_block_align, OPT_BOOL, true)
@@ -1138,13 +1128,14 @@ OPTION(rgw_enable_quota_threads, OPT_BOOL, true)
 OPTION(rgw_enable_gc_threads, OPT_BOOL, true)
 
 OPTION(rgw_data, OPT_STR, "/var/lib/ceph/radosgw/$cluster-$id")
-OPTION(rgw_enable_apis, OPT_STR, "s3, swift, swift_auth, admin")
+OPTION(rgw_enable_apis, OPT_STR, "s3, s3website, swift, swift_auth, admin")
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
 OPTION(rgw_host, OPT_STR, "")  // host for radosgw, can be an IP, default is 0.0.0.0
 OPTION(rgw_port, OPT_STR, "")  // port to listen, format as "8080" "5000", if not specified, rgw will not run external fcgi
-OPTION(rgw_dns_name, OPT_STR, "")
+OPTION(rgw_dns_name, OPT_STR, "") // hostname suffix on buckets
+OPTION(rgw_dns_s3website_name, OPT_STR, "") // hostname suffix on buckets for s3-website endpoint
 OPTION(rgw_content_length_compat, OPT_BOOL, false) // Check both HTTP_CONTENT_LENGTH and CONTENT_LENGTH in fcgi env
 OPTION(rgw_script_uri, OPT_STR, "") // alternative value for SCRIPT_URI if not set in request
 OPTION(rgw_request_uri, OPT_STR,  "") // alternative value for REQUEST_URI if not set in request
@@ -1252,6 +1243,8 @@ OPTION(rgw_objexp_gc_interval, OPT_U32, 60 * 10) // maximum time between round o
 OPTION(rgw_objexp_time_step, OPT_U32, 4096) // number of seconds for rounding the timestamps
 OPTION(rgw_objexp_hints_num_shards, OPT_U32, 127) // maximum number of parts in which the hint index is stored in
 OPTION(rgw_objexp_chunk_size, OPT_U32, 100) // maximum number of entries in a single operation when processing objexp data
+
+OPTION(rgw_enable_static_website, OPT_BOOL, false) // enable static website feature
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter

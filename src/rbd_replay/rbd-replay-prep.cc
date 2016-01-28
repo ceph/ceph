@@ -372,6 +372,29 @@ private:
       boost::shared_ptr<CloseImageIO> io(boost::dynamic_pointer_cast<CloseImageIO>(thread->latest_io()));
       assert(io);
       m_open_images.erase(io->imagectx());
+    } else if (strcmp(event_name, "librbd:aio_open_image_enter") == 0) {
+      string name(fields.string("name"));
+      string snap_name(fields.string("snap_name"));
+      bool readonly = fields.uint64("read_only");
+      imagectx_id_t imagectx = fields.uint64("imagectx");
+      uint64_t completion = fields.uint64("completion");
+      action_id_t ionum = next_id();
+      pair<string, string> aname(map_image_snap(name, snap_name));
+      IO::ptr io(new AioOpenImageIO(ionum, ts, threadID, m_recent_completions,
+				    imagectx, aname.first, aname.second,
+				    readonly));
+      thread->issued_io(io, &m_latest_ios);
+      ios->push_back(io);
+      m_pending_ios[completion] = io;
+    } else if (strcmp(event_name, "librbd:aio_close_image_enter") == 0) {
+      imagectx_id_t imagectx = fields.uint64("imagectx");
+      uint64_t completion = fields.uint64("completion");
+      action_id_t ionum = next_id();
+      IO::ptr io(new AioCloseImageIO(ionum, ts, threadID, m_recent_completions,
+				     imagectx));
+      thread->issued_io(io, &m_latest_ios);
+      ios->push_back(thread->latest_io());
+      m_pending_ios[completion] = io;
     } else if (strcmp(event_name, "librbd:read_enter") == 0 ||
                strcmp(event_name, "librbd:read2_enter") == 0) {
       string name(fields.string("name"));

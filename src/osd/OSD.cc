@@ -44,6 +44,7 @@
 #include "common/io_priority.h"
 
 #include "os/ObjectStore.h"
+#include "os/FuseStore.h"
 
 #include "ReplicatedPG.h"
 
@@ -667,7 +668,11 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
 
   // fill in osd stats too
   struct statfs stbuf;
-  osd->store->statfs(&stbuf);
+  int r = osd->store->statfs(&stbuf);
+  if (r < 0) {
+    derr << "statfs() failed: " << cpp_strerror(r) << dendl; 
+    return;
+  }
 
   uint64_t bytes = stbuf.f_blocks * stbuf.f_bsize;
   uint64_t used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize;
@@ -1545,6 +1550,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   logger(NULL),
   recoverystate_perf(NULL),
   store(store_),
+  fuse_store(NULL),
   log_client(cct, client_messenger, &mc->monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel()),
   whoami(id),
@@ -1806,6 +1812,45 @@ public:
 
 };
 
+int OSD::enable_disable_fuse(bool stop)
+{
+  int r;
+  string mntpath = g_conf->osd_data + "/fuse";
+  if (fuse_store && (stop || !g_conf->osd_objectstore_fuse)) {
+    dout(1) << __func__ << " disabling" << dendl;
+    fuse_store->stop();
+    delete fuse_store;
+    fuse_store = NULL;
+    r = ::rmdir(mntpath.c_str());
+    if (r < 0)
+      r = -errno;
+    if (r < 0) {
+      derr << __func__ << " failed to rmdir " << mntpath << dendl;
+      return r;
+    }
+  }
+  if (!fuse_store && g_conf->osd_objectstore_fuse) {
+    dout(1) << __func__ << " enabling" << dendl;
+    r = ::mkdir(mntpath.c_str(), 0700);
+    if (r < 0)
+      r = -errno;
+    if (r < 0 && r != -EEXIST) {
+      derr << __func__ << " unable to create " << mntpath << ": "
+	   << cpp_strerror(r) << dendl;
+      return r;
+    }
+    fuse_store = new FuseStore(store, mntpath);
+    r = fuse_store->start();
+    if (r < 0) {
+      derr << __func__ << " unable to start fuse: " << cpp_strerror(r) << dendl;
+      delete fuse_store;
+      fuse_store = NULL;
+      return r;
+    }
+  }
+  return 0;
+}
+
 int OSD::init()
 {
   CompatSet initial, diff;
@@ -1827,6 +1872,8 @@ int OSD::init()
     derr << "OSD:init: unable to mount object store" << dendl;
     return r;
   }
+
+  enable_disable_fuse(false);
 
   dout(2) << "boot" << dendl;
 
@@ -2018,8 +2065,10 @@ monout:
   monc->shutdown();
 
 out:
+  enable_disable_fuse(true);
   store->umount();
   delete store;
+  store = NULL;
   return r;
 }
 
@@ -2451,6 +2500,7 @@ int OSD::shutdown()
   }
 
   dout(10) << "syncing store" << dendl;
+  enable_disable_fuse(true);
   store->umount();
   delete store;
   store = 0;
@@ -2945,6 +2995,8 @@ void OSD::load_pgs()
       pg = _open_lock_pg(osdmap, pgid);
     }
     // there can be no waiters here, so we don't call wake_pg_waiters
+
+    pg->ch = store->open_collection(pg->coll);
 
     // read pg state, log
     pg->read_state(store, bl);
@@ -4102,7 +4154,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     pg_t rawpg;
     int64_t pool;
     OSDMapRef curmap = service->get_osdmap();
-    int r;
+    int r = -1;
 
     string poolstr;
 
@@ -4115,7 +4167,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       ss << "Invalid pool" << poolstr;
       return;
     }
-    r = -1;
+
     string objname, nspace;
     cmd_getval(service->cct, cmdmap, "objname", objname);
     std::size_t found = objname.find_first_of('/');
@@ -7077,6 +7129,7 @@ void OSD::split_pgs(
     PG* child = _make_pg(nextmap, *i);
     child->lock(true);
     out_pgs->insert(child);
+    rctx->created_pgs.insert(child);
 
     unsigned split_bits = i->get_split_bits(pg_num);
     dout(10) << "pg_num is " << pg_num << dendl;
@@ -7238,10 +7291,27 @@ PG::RecoveryCtx OSD::create_context()
   return rctx;
 }
 
+struct C_OpenPGs : public Context {
+  set<PGRef> pgs;
+  ObjectStore *store;
+  C_OpenPGs(set<PGRef>& p, ObjectStore *s) : store(s) {
+    pgs.swap(p);
+  }
+  void finish(int r) {
+    for (auto p : pgs) {
+      p->ch = store->open_collection(p->coll);
+      assert(p->ch);
+    }
+  }
+};
+
 void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
                                        ThreadPool::TPHandle *handle)
 {
   if (!ctx.transaction->empty()) {
+    if (!ctx.created_pgs.empty()) {
+      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store));
+    }
     ctx.on_applied->add(new ObjectStore::C_DeleteTransaction(ctx.transaction));
     int tr = store->queue_transaction(
       pg->osr.get(),
@@ -7268,11 +7338,16 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
   delete ctx.info_map;
   if ((ctx.on_applied->empty() &&
        ctx.on_safe->empty() &&
-       ctx.transaction->empty()) || !pg) {
+       ctx.transaction->empty() &&
+       ctx.created_pgs.empty()) || !pg) {
     delete ctx.transaction;
     delete ctx.on_applied;
     delete ctx.on_safe;
+    assert(ctx.created_pgs.empty());
   } else {
+    if (!ctx.created_pgs.empty()) {
+      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store));
+    }
     ctx.on_applied->add(new ObjectStore::C_DeleteTransaction(ctx.transaction));
     int tr = store->queue_transaction(
       pg->osr.get(),
@@ -8564,6 +8639,7 @@ const char** OSD::get_tracked_conf_keys() const
     "clog_to_syslog",
     "clog_to_syslog_facility",
     "clog_to_syslog_level",
+    "osd_objectstore_fuse",
     NULL
   };
   return KEYS;
@@ -8607,6 +8683,11 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
       changed.count("clog_to_syslog_level") ||
       changed.count("clog_to_syslog_facility")) {
     update_log_config();
+  }
+  if (changed.count("osd_objectstore_fuse")) {
+    if (store) {
+      enable_disable_fuse(false);
+    }
   }
 
   check_config();

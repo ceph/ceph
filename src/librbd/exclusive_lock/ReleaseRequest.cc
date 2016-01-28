@@ -117,7 +117,7 @@ void ReleaseRequest<I>::send_close_journal() {
   }
 
   if (m_journal == nullptr) {
-    send_unlock_object_map();
+    send_close_object_map();
     return;
   }
 
@@ -143,12 +143,12 @@ Context *ReleaseRequest<I>::handle_close_journal(int *ret_val) {
 
   delete m_journal;
 
-  send_unlock_object_map();
+  send_close_object_map();
   return nullptr;
 }
 
 template <typename I>
-void ReleaseRequest<I>::send_unlock_object_map() {
+void ReleaseRequest<I>::send_close_object_map() {
   {
     RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
     std::swap(m_object_map, m_image_ctx.object_map);
@@ -164,12 +164,12 @@ void ReleaseRequest<I>::send_unlock_object_map() {
 
   using klass = ReleaseRequest<I>;
   Context *ctx = create_context_callback<
-    klass, &klass::handle_unlock_object_map>(this);
-  m_object_map->unlock(ctx);
+    klass, &klass::handle_close_object_map>(this);
+  m_object_map->close(ctx);
 }
 
 template <typename I>
-Context *ReleaseRequest<I>::handle_unlock_object_map(int *ret_val) {
+Context *ReleaseRequest<I>::handle_close_object_map(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
 

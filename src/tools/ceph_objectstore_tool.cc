@@ -26,6 +26,7 @@
 
 #include "os/ObjectStore.h"
 #include "os/filestore/FileJournal.h"
+#include "os/FuseStore.h"
 
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
@@ -338,12 +339,6 @@ void myexit(int ret)
   if (g_ceph_context)
     g_ceph_context->put();
   exit(ret);
-}
-
-static void invalid_filestore_path(string &path)
-{
-  cerr << "Invalid filestore path specified: " << path << "\n";
-  myexit(1);
 }
 
 int get_log(ObjectStore *fs, __u8 struct_ver,
@@ -2207,7 +2202,7 @@ int mydump_journal(Formatter *f, string journalpath, bool m_journal_dio)
 
 int main(int argc, char **argv)
 {
-  string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type, format;
+  string dpath, jpath, pgidstr, op, file, mountpoint, object, objcmd, arg1, arg2, type, format;
   spg_t pgid;
   unsigned epoch = 0;
   ghobject_t ghobj;
@@ -2220,7 +2215,7 @@ int main(int argc, char **argv)
   desc.add_options()
     ("help", "produce help message")
     ("type", po::value<string>(&type),
-     "Arg is one of [filestore (default), memstore, keyvaluestore]")
+     "Arg is one of [filestore (default), memstore]")
     ("data-path", po::value<string>(&dpath),
      "path to object store, mandatory")
     ("journal-path", po::value<string>(&jpath),
@@ -2228,12 +2223,14 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory for info, log, remove, export, rm-past-intervals, mark-complete")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
+     "Arg is one of [info, log, remove, mkfs, fsck, fuse, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
 	 "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
      "path of file to export, import, get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap")
+    ("mountpoint", po::value<string>(&mountpoint),
+     "fuse mountpoint")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
      "Output format which may be json, json-pretty, xml, xml-pretty")
     ("debug", "Enable diagnostic output to stderr")
@@ -2342,13 +2339,19 @@ int main(int argc, char **argv)
     usage(desc);
     myexit(1);
   }
-  if (op != "list" && op != "fsck" && vm.count("op") && vm.count("object")) {
+  if (op != "list" &&
+      vm.count("op") && vm.count("object")) {
     cerr << "Can't specify both --op and object command syntax" << std::endl;
     usage(desc);
     myexit(1);
   }
   if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
     cerr << "Invalid syntax, missing command" << std::endl;
+    usage(desc);
+    myexit(1);
+  }
+  if (op == "fuse" && mountpoint.length() == 0) {
+    cerr << "Missing fuse mountpoint" << std::endl;
     usage(desc);
     myexit(1);
   }
@@ -2436,28 +2439,6 @@ int main(int argc, char **argv)
     perror(err.c_str());
     myexit(1);
   }
-  //Verify data data-path really is a filestore
-  if (type == "filestore") {
-    if (!S_ISDIR(st.st_mode)) {
-      invalid_filestore_path(dpath);
-    }
-    string check = dpath + "/whoami";
-    if (::stat(check.c_str(), &st) == -1) {
-       perror("whoami");
-       invalid_filestore_path(dpath);
-    }
-    if (!S_ISREG(st.st_mode)) {
-      invalid_filestore_path(dpath);
-    }
-    check = dpath + "/current";
-    if (::stat(check.c_str(), &st) == -1) {
-       perror("current");
-       invalid_filestore_path(dpath);
-    }
-    if (!S_ISDIR(st.st_mode)) {
-      invalid_filestore_path(dpath);
-    }
-  }
 
   if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
     cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
@@ -2466,12 +2447,7 @@ int main(int argc, char **argv)
 
   ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
-    cerr << "Need a valid --type e.g. filestore, memstore, keyvaluestore" << std::endl;
-    if (type == "keyvaluestore") {
-      cerr << "Add \"keyvaluestore\" to "
-           << "enable_experimental_unrecoverable_data_corrupting_features"
-           << std::endl;
-    }
+    cerr << "Unable to create store of type " << type << std::endl;
     myexit(1);
   }
 
@@ -2479,14 +2455,22 @@ int main(int argc, char **argv)
     int r = fs->fsck();
     if (r < 0) {
       cerr << "fsck failed: " << cpp_strerror(r) << std::endl;
-      exit(1);
+      myexit(1);
     }
     if (r > 0) {
       cerr << "fsck found " << r << " errors" << std::endl;
-      exit(1);
+      myexit(1);
     }
     cout << "fsck found no errors" << std::endl;
     exit(0);
+  }
+  if (op == "mkfs") {
+    int r = fs->mkfs();
+    if (r < 0) {
+      cerr << "fsck failed: " << cpp_strerror(r) << std::endl;
+      myexit(1);
+    }
+    myexit(0);
   }
 
   ObjectStore::Sequencer *osr = new ObjectStore::Sequencer(__func__);
@@ -2498,6 +2482,17 @@ int main(int argc, char **argv)
       cerr << "Mount failed with '" << cpp_strerror(ret) << "'" << std::endl;
     }
     myexit(1);
+  }
+
+  if (op == "fuse") {
+    FuseStore fuse(fs, mountpoint);
+    cout << "mounting fuse at " << mountpoint << " ..." << std::endl;
+    int r = fuse.main();
+    if (r < 0) {
+      cerr << "failed to mount fuse: " << cpp_strerror(r) << std::endl;
+      myexit(1);
+    }
+    myexit(0);
   }
 
   vector<coll_t> ls;
@@ -2823,7 +2818,7 @@ int main(int argc, char **argv)
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete") {
-    cerr << "Must provide --op (info, log, remove, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
+    cerr << "Must provide --op (info, log, remove, mkfs, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
       "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)"
 	 << std::endl;
     usage(desc);

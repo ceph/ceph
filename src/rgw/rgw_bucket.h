@@ -49,7 +49,8 @@ extern void rgw_make_bucket_entry_name(const string& tenant_name,
                                        string& bucket_entry);
 extern string rgw_make_bucket_entry_name(const string& tenant_name,
                                        const string& bucket_name);
-extern void rgw_parse_url_bucket(const string &bucket,
+extern void rgw_parse_url_bucket(const string& bucket,
+                                 const string& auth_tenant,
                                  string &tenant_name, string &bucket_name);
 
 /**
