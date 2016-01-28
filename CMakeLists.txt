@@ -10,6 +10,18 @@ endif(NOT (CMAKE_MAJOR_VERSION LESS 3))
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
+option(WITH_CCACHE "Build with ccache.")
+if(WITH_CCACHE)
+  find_program(CCACHE_FOUND ccache)
+  if(CCACHE_FOUND)
+    message(STATUS "Building with ccache: ${CCACHE_FOUND}, CCACHE_DIR=$ENV{CCACHE_DIR}")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
+  else(CCACHE_FOUND)
+    message(FATAL_ERROR "Can't find ccache. Is it installed?")
+  endif(CCACHE_FOUND)
+endif(WITH_CCACHE)
+
 include_directories(  
   ${PROJECT_BINARY_DIR}/src/include
   ${OFED_PREFIX}/include
