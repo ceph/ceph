@@ -25,7 +25,7 @@
 
 class MOSDRepOp : public Message {
 
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -64,6 +64,8 @@ public:
   /// non-empty if this transaction involves a hit_set history update
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
 
+  map<string, bufferlist> pglog_encode_checksum;
+
   int get_cost() const {
     return data.length();
   }
@@ -94,6 +96,8 @@ public:
     ::decode(from, p);
     ::decode(updated_hit_set_history, p);
     ::decode(pg_trim_rollback_to, p);
+    if (header.version >= 2)
+      ::decode(pglog_encode_checksum, p);
     final_decode_needed = false;
   }
 
@@ -113,6 +117,7 @@ public:
     ::encode(from, payload);
     ::encode(updated_hit_set_history, payload);
     ::encode(pg_trim_rollback_to, payload);
+    ::encode(pglog_encode_checksum, payload);
   }
 
   MOSDRepOp()
