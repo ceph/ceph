@@ -34,15 +34,16 @@ ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
     m_watch_lock(util::unique_lock_name("librbd::ImageWatcher::m_watch_lock", this)),
     m_watch_ctx(*this), m_watch_handle(0),
     m_watch_state(WATCH_STATE_UNREGISTERED),
-    m_task_finisher(new TaskFinisher<Task>(*m_image_ctx.cct)),
     m_async_request_lock(util::unique_lock_name("librbd::ImageWatcher::m_async_request_lock", this)),
     m_owner_client_id_lock(util::unique_lock_name("librbd::ImageWatcher::m_owner_client_id_lock", this))
 {
+  m_image_ctx.cct->lookup_or_create_singleton_object<TaskFinisher<Task> >(
+    m_task_finisher, "librbd::task_finisher");
 }
 
 ImageWatcher::~ImageWatcher()
 {
-  delete m_task_finisher;
+  m_task_finisher = nullptr;
   {
     RWLock::RLocker l(m_watch_lock);
     assert(m_watch_state != WATCH_STATE_REGISTERED);
