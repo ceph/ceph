@@ -172,6 +172,8 @@ namespace crimson {
 	RequestRef request;
 	bool       handled;
 
+      public:
+
 	Entry(C _client, RequestTag _tag, RequestRef&& _request) :
 	  client(_client),
 	  tag(_tag),
@@ -348,13 +350,12 @@ namespace crimson {
 	  client_it->second.idle = false;
 	}
 
-	EntryRef entry(new Entry(client_id,
-				 RequestTag(client_it->second.prev_tag,
-					    client_it->second.info,
-					    time),
-				 std::move(request)));
-
-	auto x = make_shared<Type>(Arg1, Arg2...);
+	EntryRef entry =
+	  std::make_shared<Entry>(client_id,
+				  RequestTag(client_it->second.prev_tag,
+					     client_it->second.info,
+					     time),
+				  std::move(request));
 
 	// copy tag to previous tag for client
 	client_it->second.prev_tag = entry->tag;
