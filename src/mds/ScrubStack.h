@@ -74,14 +74,14 @@ public:
    *               was initiated
    */
   void enqueue_inode_top(CInode *in, const ScrubHeaderRefConst& header,
-			 Context *on_finish) {
+			 MDSInternalContextBase *on_finish) {
     enqueue_inode(in, header, on_finish, true);
   }
   /** Like enqueue_inode_top, but we wait for all pending scrubs before
    * starting this one.
    */
   void enqueue_inode_bottom(CInode *in, const ScrubHeaderRefConst& header,
-			    Context *on_finish) {
+			    MDSInternalContextBase *on_finish) {
     enqueue_inode(in, header, on_finish, false);
   }
 
@@ -91,9 +91,9 @@ private:
    * the given scrub params, and then try and kick off more scrubbing.
    */
   void enqueue_inode(CInode *in, const ScrubHeaderRefConst& header,
-                      Context *on_finish, bool top);
+                      MDSInternalContextBase *on_finish, bool top);
   void _enqueue_inode(CInode *in, CDentry *parent, const ScrubHeaderRefConst& header,
-                      Context *on_finish, bool top);
+                      MDSInternalContextBase *on_finish, bool top);
   /**
    * Kick off as many scrubs as are appropriate, based on the current
    * state of the stack.

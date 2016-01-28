@@ -59,7 +59,7 @@ void ScrubStack::pop_inode(CInode *in)
 
 void ScrubStack::_enqueue_inode(CInode *in, CDentry *parent,
 				const ScrubHeaderRefConst& header,
-				Context *on_finish, bool top)
+				MDSInternalContextBase *on_finish, bool top)
 {
   dout(10) << __func__ << " with {" << *in << "}"
            << ", on_finish=" << on_finish << ", top=" << top << dendl;
@@ -72,7 +72,7 @@ void ScrubStack::_enqueue_inode(CInode *in, CDentry *parent,
 }
 
 void ScrubStack::enqueue_inode(CInode *in, const ScrubHeaderRefConst& header,
-                               Context *on_finish, bool top)
+                               MDSInternalContextBase *on_finish, bool top)
 {
   _enqueue_inode(in, NULL, header, on_finish, top);
   kick_off_scrubs();
@@ -383,7 +383,7 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
 #endif
   const ScrubHeaderRefConst header = in->scrub_info()->header;
 
-  Context *c = NULL;
+  MDSInternalContextBase *c = NULL;
   in->scrub_finished(&c);
 
   if (!header->recursive && in == header->origin) {
