@@ -446,7 +446,7 @@ int execute_rename(const po::variables_map &vm) {
               << std::endl;
     return -EINVAL;
   }
-
+  
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;

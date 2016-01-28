@@ -144,6 +144,8 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
     at::DEST_POOL_NAME : at::POOL_NAME);
   std::string image_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
     at::DEST_IMAGE_NAME : at::IMAGE_NAME);
+  std::string snap_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+	at::DEST_SNAPSHOT_NAME : at::SNAPSHOT_NAME);
 
   if (vm.count(pool_key) && pool_name != nullptr) {
     *pool_name = vm[pool_key].as<std::string>();
@@ -151,11 +153,10 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
   if (vm.count(image_key) && image_name != nullptr) {
     *image_name = vm[image_key].as<std::string>();
   }
-  if (vm.count(at::SNAPSHOT_NAME) && snap_name != nullptr &&
-      mod != at::ARGUMENT_MODIFIER_DEST) {
-    *snap_name = vm[at::SNAPSHOT_NAME].as<std::string>();
-  }
-
+  if (vm.count(snap_key) && snap_name != nullptr) {
+     *snap_name = vm[snap_key].as<std::string>();
+   }
+  
   if (image_name != nullptr && !image_name->empty()) {
     // despite the separate pool and snapshot name options,
     // we can also specify them via the image option

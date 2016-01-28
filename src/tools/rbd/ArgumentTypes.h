@@ -50,6 +50,7 @@ static const std::string DEST_POOL_NAME("dest-pool");
 static const std::string IMAGE_NAME("image");
 static const std::string DEST_IMAGE_NAME("dest");
 static const std::string SNAPSHOT_NAME("snap");
+static const std::string DEST_SNAPSHOT_NAME("dest-snap");
 static const std::string JOURNAL_NAME("journal");
 static const std::string DEST_JOURNAL_NAME("dest-journal");
 static const std::string PATH("path");
