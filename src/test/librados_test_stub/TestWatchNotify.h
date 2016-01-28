@@ -21,13 +21,14 @@ namespace librados {
 
 class TestWatchNotify : boost::noncopyable {
 public:
+  typedef std::pair<uint64_t, uint64_t> WatcherID;
+  typedef std::set<WatcherID> WatcherIDs;
   typedef std::map<std::pair<uint64_t, uint64_t>, bufferlist> NotifyResponses;
 
   struct NotifyHandle {
     NotifyHandle();
+    WatcherIDs pending_watcher_ids;
     NotifyResponses notify_responses;
-    bufferlist *pbl;
-    size_t pending_responses;
     Mutex lock;
     Cond cond;
   };
@@ -35,7 +36,7 @@ public:
   typedef std::map<uint64_t, SharedNotifyHandle> NotifyHandles;
 
   struct WatchHandle {
-    uint64_t instance_id;
+    uint64_t gid;
     uint64_t handle;
     librados::WatchCtx* watch_ctx;
     librados::WatchCtx2* watch_ctx2;
@@ -51,7 +52,7 @@ public:
   };
   typedef boost::shared_ptr<Watcher> SharedWatcher;
 
-  TestWatchNotify(CephContext *cct);
+  TestWatchNotify(CephContext *cct, Finisher *finisher);
   ~TestWatchNotify();
 
   void flush();
@@ -61,7 +62,7 @@ public:
              uint64_t timeout_ms, bufferlist *pbl);
   void notify_ack(const std::string& o, uint64_t notify_id,
                   uint64_t handle, uint64_t gid, bufferlist& bl);
-  int watch(const std::string& o, uint64_t instance_id, uint64_t *handle,
+  int watch(const std::string& o, uint64_t gid, uint64_t *handle,
             librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2);
   int unwatch(uint64_t handle);
 
@@ -84,7 +85,7 @@ private:
   SharedWatcher get_watcher(const std::string& oid);
   SharedWatcher _get_watcher(const std::string& oid);
   void execute_notify(const std::string &oid, bufferlist &bl,
-                      uint64_t notify_id, Mutex *lock, Cond *cond, bool *done);
+                      uint64_t notify_id);
 
 };
 
