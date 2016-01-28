@@ -16,7 +16,7 @@
 
 #include "dmclock_recs.h"
 #include "dmclock_server.h"
-#include "test_request.h"
+#include "test_recs.h"
 
 
 using crimson::dmclock::PriorityQueue;
