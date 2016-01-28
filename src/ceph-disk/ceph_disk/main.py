@@ -3191,8 +3191,9 @@ def main_deactivate_locked(args):
 
     if dmcrypt:
         dmcrypt_unmap(target_dev['uuid'])
-        if 'journal_uuid' in target_dev:
-            dmcrypt_unmap(target_dev['journal_uuid'])
+        for name in Space.NAMES:
+            if name + '_uuid' in target_dev:
+                dmcrypt_unmap(target_dev[name + '_uuid'])
 
 ###########################
 
@@ -3264,7 +3265,6 @@ def main_destroy(args):
 
     osd_id = target_dev['whoami']
     dev_path = target_dev['path']
-    journal_part_uuid = target_dev['journal_uuid']
     if target_dev['ptype'] == PTYPE['mpath']['osd']['ready']:
         base_dev = get_partition_base_mpath(dev_path)
     else:
@@ -3288,8 +3288,9 @@ def main_destroy(args):
 
     # we remove the crypt map and device mapper (if dmcrypt is True)
     if dmcrypt:
-        if journal_part_uuid:
-            dmcrypt_unmap(journal_part_uuid)
+        for name in Space.NAMES:
+            if target_dev.get(name + '_uuid'):
+                dmcrypt_unmap(target_dev[name + '_uuid'])
 
     # Check zap flag. If we found zap flag, we need to find device for
     # destroy this osd data.
@@ -4301,7 +4302,8 @@ def make_activate_space_parser(name, subparsers):
     activate_space_parser.add_argument(
         '--dmcrypt',
         action='store_true', default=None,
-        help='map data and/or auxiliariy (journal, etc.) devices with dm-crypt',
+        help=('map data and/or auxiliariy (journal, etc.) '
+              'devices with dm-crypt'),
     )
     activate_space_parser.add_argument(
         '--dmcrypt-key-dir',
