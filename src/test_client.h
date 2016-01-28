@@ -22,8 +22,14 @@
 
 
 class TestClient {
-  typedef std::function<void(const TestRequest&,
-			     const crimson::dmclock::ReqParams<int>&)> SubmitFunc;
+  using SubmitFunc =
+    std::function<void(const TestRequest&,
+		       const crimson::dmclock::ReqParams<int>&)>;
+
+  struct RespQueueItem {
+    TestResponse response;
+    crimson::dmclock::RespParams<int> resp_params;
+  };
 
 public:
 
@@ -46,7 +52,7 @@ protected:
   std::atomic_ulong        outstanding_ops;
   std::atomic_bool         requests_complete;
 
-  std::deque<TestResponse> resp_queue;
+  std::deque<RespQueueItem> resp_queue;
 
   std::mutex               mtx_req;
   std::condition_variable  cv_req;
@@ -69,7 +75,8 @@ public:
 
   virtual ~TestClient();
 
-  void submitResponse(const TestResponse&);
+  void receiveResponse(const TestResponse&,
+		       const crimson::dmclock::RespParams<int>&);
 
   const std::vector<TimePoint>& getOpTimes() const { return op_times; }
 

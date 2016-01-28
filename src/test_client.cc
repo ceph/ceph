@@ -102,8 +102,12 @@ void TestClient::run_resp() {
     }
     if (!resp_queue.empty()) {
       op_times[op++] = now();
-      TestResponse resp = resp_queue.front();
+
+      RespQueueItem item = resp_queue.front();
       resp_queue.pop_front();
+
+      TestResponse& resp = item.response;
+      dmc::RespParams<int>& resp_params = item.resp_params;
       if (info >= 3) {
 	std::cout << resp << std::endl;
       }
@@ -123,8 +127,12 @@ void TestClient::run_resp() {
     }
     if (!resp_queue.empty()) {
       op_times[op++] = now();
-      TestResponse resp = resp_queue.front();
+
+      RespQueueItem item = resp_queue.front();
       resp_queue.pop_front();
+
+      TestResponse& resp = item.response;
+      dmc::RespParams<int>& resp_params = item.resp_params;
       if (info >= 3) {
 	std::cout << resp << std::endl;
       }
@@ -141,8 +149,9 @@ void TestClient::run_resp() {
 }
 
 
-void TestClient::submitResponse(const TestResponse& resp) {
+void TestClient::receiveResponse(const TestResponse& resp,
+				 const dmc::RespParams<int>& resp_params) {
   RespGuard g(mtx_resp);
-  resp_queue.push_back(resp);
+  resp_queue.push_back(RespQueueItem{resp, resp_params});
   cv_resp.notify_one();
 }

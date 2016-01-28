@@ -15,7 +15,6 @@
 using namespace std::placeholders;
 
 namespace dmc = crimson::dmclock;
-using dmc::RespParams;
 
 
 static const bool info = false;
@@ -25,7 +24,7 @@ TestServer::TestServer(int _id,
 		       int _iops,
 		       int _thread_pool_size,
 		       const std::function<ClientInfo(int)>& _client_info_f,
-		       const ClientResponseFunc& _client_resp_f) :
+		       const ClientRespFunc& _client_resp_f) :
   id(_id),
   priority_queue(_client_info_f,
 		 std::bind(&TestServer::hasAvailThread, this),
@@ -84,8 +83,8 @@ void TestServer::run(std::chrono::milliseconds wait_delay) {
       // notify server of completion
       std::this_thread::sleep_for(op_time);
 
-      TestResponse resp(req->epoch, RespParams<int>(id, phase));
-      sendResponse(client, resp);
+      TestResponse resp(req->epoch);
+      sendResponse(client, resp, dmc::RespParams<int>(id, phase));
 
       priority_queue.requestCompleted();
 

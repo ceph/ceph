@@ -19,6 +19,7 @@
 #include "test_recs.h"
 
 
+
 using crimson::dmclock::PriorityQueue;
 using crimson::dmclock::ClientInfo;
 using crimson::dmclock::PhaseType;
@@ -45,13 +46,17 @@ class TestServer {
 
 public:
 
-  typedef std::function<void(int, const TestResponse&)> ClientResponseFunc;
+#warning "rename this ClientRespFunc"
+  using ClientRespFunc =
+    std::function<void(int,
+		       const TestResponse&,
+		       const crimson::dmclock::RespParams<int>&)>;
 
 protected:
 
   const int                      id;
   PriorityQueue<int,TestRequest> priority_queue;
-  ClientResponseFunc             client_resp_f;
+  ClientRespFunc                 client_resp_f;
   int                            iops;
   int                            thread_pool_size;
 
@@ -74,7 +79,7 @@ public:
 	     int _iops,
 	     int _thread_pool_size,
 	     const std::function<ClientInfo(int)>& _client_info_f,
-	     const ClientResponseFunc& _client_resp_f);
+	     const ClientRespFunc& _client_resp_f);
 
   virtual ~TestServer();
 
@@ -91,7 +96,9 @@ protected:
 
   void run(std::chrono::milliseconds wait_delay);
 
-  inline void sendResponse(int client, const TestResponse& resp) {
-    client_resp_f(client, resp);
+  inline void sendResponse(int client,
+			   const TestResponse& resp,
+			   const crimson::dmclock::RespParams<int>& resp_params) {
+    client_resp_f(client, resp, resp_params);
   }
 }; // class TestServer

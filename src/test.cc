@@ -66,8 +66,9 @@ dmc::ClientInfo getClientInfo(int c) {
 
 void send_response(TestClient** clients,
 		   int client_id,
-		   const TestResponse& resp) {
-  clients[client_id]->submitResponse(resp);
+		   const TestResponse& resp,
+		   const dmc::RespParams<int>& resp_params) {
+  clients[client_id]->receiveResponse(resp, resp_params);
 }
 
 
@@ -85,8 +86,8 @@ int main(int argc, char* argv[]) {
   TestClient** clients = new TestClient*[client_count];
 
   auto client_info_f = std::function<dmc::ClientInfo(int)>(getClientInfo);
-  TestServer::ClientResponseFunc client_response_f =
-    std::bind(&send_response, clients, _1, _2);
+  TestServer::ClientRespFunc client_response_f =
+    std::bind(&send_response, clients, _1, _2, _3);
 
   TestServer server(0,
 		    server_ops, server_threads,
