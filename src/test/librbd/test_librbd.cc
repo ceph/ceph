@@ -2502,8 +2502,12 @@ TEST_F(TestLibRBD, SnapCreateViaLockOwner)
   librbd::Image image1;
   ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
 
+  // switch to writeback cache
+  ASSERT_EQ(0, image1.flush());
+
   bufferlist bl;
-  ASSERT_EQ(0, image1.write(0, 0, bl));
+  bl.append(std::string(4096, '1'));
+  ASSERT_EQ(bl.length(), image1.write(0, bl.length(), bl));
 
   bool lock_owner;
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
