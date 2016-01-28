@@ -3913,6 +3913,7 @@ next:
     }
 
     bool _dirfrags(int rval) {
+      int frags_errors = 0;
       // basic reporting setup
       results->raw_stats.checked = true;
       results->raw_stats.ondisk_read_retval = rval;
@@ -3935,6 +3936,13 @@ next:
 	assert(dir->get_version() > 0);
 	nest_info.add(dir->fnode.accounted_rstat);
 	dir_info.add(dir->fnode.accounted_fragstat);
+	if (dir->scrub_infop &&
+	    dir->scrub_infop->pending_scrub_error) {
+	  dir->scrub_infop->pending_scrub_error = false;
+	  results->raw_stats.error_str
+	    << "dirfrag(" << p->first << ") has bad stats; ";
+	  frags_errors++;
+	}
       }
       nest_info.rsubdirs++; // it gets one to account for self
       // ...and that their sum matches our inode settings
@@ -3948,6 +3956,9 @@ next:
 	  in->mdcache->repair_inode_stats(in, NULL);
 	goto next;
       }
+      if (frags_errors > 0)
+	goto next;
+
       results->raw_stats.passed = true;
 next:
       return true;
