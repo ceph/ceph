@@ -11775,14 +11775,12 @@ struct C_MDC_RepairDirfragStats : public MDSInternalContext {
   }
 };
 
-void MDCache::repair_dirfrag_stats(CDir *dir, Context *fin)
+void MDCache::repair_dirfrag_stats(CDir *dir)
 {
-  if (!fin)
-    fin = new C_MDSInternalNoop;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_REPAIR_FRAGSTATS);
   mdr->pin(dir);
   mdr->internal_op_private = dir;
-  mdr->internal_op_finish = fin;
+  mdr->internal_op_finish = new C_MDSInternalNoop;
   repair_dirfrag_stats_work(mdr);
 }
 
@@ -11877,14 +11875,12 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
   mds->mdlog->submit_entry(le, new C_MDC_RepairDirfragStats(mds, mdr));
 }
 
-void MDCache::repair_inode_stats(CInode *diri, Context *fin)
+void MDCache::repair_inode_stats(CInode *diri)
 {
-  if (!fin)
-    fin = new C_MDSInternalNoop;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_REPAIR_INODESTATS);
   mdr->pin(diri);
   mdr->internal_op_private = diri;
-  mdr->internal_op_finish = fin;
+  mdr->internal_op_finish = new C_MDSInternalNoop;
   repair_inode_stats_work(mdr);
 }
 
