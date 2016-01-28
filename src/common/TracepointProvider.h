@@ -45,7 +45,7 @@ public:
   template <const Traits &traits>
   class TypedSingleton : public Singleton {
   public:
-    TypedSingleton(CephContext *cct)
+    explicit TypedSingleton(CephContext *cct)
       : Singleton(cct, traits.library, traits.config_key) {
     }
   };

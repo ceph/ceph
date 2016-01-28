@@ -51,7 +51,7 @@ static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
 // observe this change
 struct Observer : public md_config_obs_t {
   const char *keys[2];
-  Observer(const char *c) {
+  explicit Observer(const char *c) {
     keys[0] = c;
     keys[1] = NULL;
   }

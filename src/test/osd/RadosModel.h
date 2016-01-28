@@ -122,7 +122,7 @@ public:
    */
   struct CallbackInfo {
     uint64_t id;
-    CallbackInfo(uint64_t id) : id(id) {}
+    explicit CallbackInfo(uint64_t id) : id(id) {}
     virtual ~CallbackInfo() {};
   };
 

@@ -52,11 +52,11 @@ public:
   };
   struct TouchOp {
     hobject_t oid;
-    TouchOp(const hobject_t &oid) : oid(oid) {}
+    explicit TouchOp(const hobject_t &oid) : oid(oid) {}
   };
   struct RemoveOp {
     hobject_t oid;
-    RemoveOp(const hobject_t &oid) : oid(oid) {}
+    explicit RemoveOp(const hobject_t &oid) : oid(oid) {}
   };
   struct SetAttrsOp {
     hobject_t oid;

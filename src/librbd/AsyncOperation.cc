@@ -18,7 +18,7 @@ struct C_CompleteFlushes : public Context {
   ImageCtx *image_ctx;
   std::list<Context *> flush_contexts;
 
-  C_CompleteFlushes(ImageCtx *image_ctx, std::list<Context *> &&flush_contexts)
+  explicit C_CompleteFlushes(ImageCtx *image_ctx, std::list<Context *> &&flush_contexts)
     : image_ctx(image_ctx), flush_contexts(std::move(flush_contexts)) {
   }
   virtual void finish(int r) {

@@ -89,7 +89,7 @@ public:
     int max_iodepth;
     io_context_t ctx;
 
-    aio_queue_t(unsigned max_iodepth)
+    explicit aio_queue_t(unsigned max_iodepth)
       : max_iodepth(max_iodepth),
 	ctx(0) {
     }

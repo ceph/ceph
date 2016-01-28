@@ -80,7 +80,7 @@ class ServerContext : public MDSInternalContextBase {
   }
 
   public:
-  ServerContext(Server *s) : server(s) {
+  explicit ServerContext(Server *s) : server(s) {
     assert(server != NULL);
   }
 };
@@ -558,7 +558,7 @@ class C_MDS_TerminatedSessions : public ServerContext {
     server->terminating_sessions = false;
   }
   public:
-  C_MDS_TerminatedSessions(Server *s) : ServerContext(s) {}
+  explicit C_MDS_TerminatedSessions(Server *s) : ServerContext(s) {}
 };
 
 void Server::terminate_sessions()

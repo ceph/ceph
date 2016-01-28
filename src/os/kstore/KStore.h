@@ -201,7 +201,7 @@ public:
 
     CollectionRef first_collection;  ///< first referenced collection
 
-    TransContext(OpSequencer *o)
+    explicit TransContext(OpSequencer *o)
       : state(STATE_PREPARE),
 	osr(o),
 	ops(0),
@@ -272,7 +272,7 @@ public:
 
   struct KVSyncThread : public Thread {
     KStore *store;
-    KVSyncThread(KStore *s) : store(s) {}
+    explicit KVSyncThread(KStore *s) : store(s) {}
     void *entry() {
       store->_kv_sync_thread();
       return NULL;

@@ -1080,7 +1080,7 @@ inline void MDSRank::standby_replay_restart()
 
 class MDSRank::C_MDS_StandbyReplayRestart : public MDSInternalContext {
 public:
-  C_MDS_StandbyReplayRestart(MDSRank *m) : MDSInternalContext(m) {}
+  explicit C_MDS_StandbyReplayRestart(MDSRank *m) : MDSInternalContext(m) {}
   void finish(int r) {
     assert(!r);
     mds->standby_replay_restart();

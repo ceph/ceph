@@ -55,7 +55,7 @@ struct failure_reporter_t {
   MonOpRequestRef op;       ///< failure op request
 
   failure_reporter_t() {}
-  failure_reporter_t(utime_t s) : failed_since(s) {}
+  explicit failure_reporter_t(utime_t s) : failed_since(s) {}
   ~failure_reporter_t() { }
 };
 

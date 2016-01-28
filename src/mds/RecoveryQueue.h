@@ -30,7 +30,7 @@ public:
   void enqueue(CInode *in);
   void advance();
   void prioritize(CInode *in);   ///< do this inode now/soon
-  RecoveryQueue(MDSRank *mds_);
+  explicit RecoveryQueue(MDSRank *mds_);
 
   void set_logger(PerfCounters *p) {logger=p;}
 

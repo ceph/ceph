@@ -35,7 +35,7 @@ class SessionMapIOContext : public MDSIOContextBase
     SessionMap *sessionmap;
     MDSRank *get_mds() {return sessionmap->mds;}
   public:
-    SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
+    explicit SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
       assert(sessionmap != NULL);
     }
 };
@@ -253,7 +253,7 @@ void SessionMap::load(MDSInternalContextBase *onload)
 class C_IO_SM_LoadLegacy : public SessionMapIOContext {
 public:
   bufferlist bl;
-  C_IO_SM_LoadLegacy(SessionMap *cm) : SessionMapIOContext(cm) {}
+  explicit C_IO_SM_LoadLegacy(SessionMap *cm) : SessionMapIOContext(cm) {}
   void finish(int r) {
     sessionmap->_load_legacy_finish(r, bl);
   }

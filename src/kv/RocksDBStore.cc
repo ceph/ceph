@@ -35,7 +35,7 @@ using std::string;
 class CephRocksdbLogger : public rocksdb::Logger {
   CephContext *cct;
 public:
-  CephRocksdbLogger(CephContext *c) : cct(c) {
+  explicit CephRocksdbLogger(CephContext *c) : cct(c) {
     cct->get();
   }
   ~CephRocksdbLogger() {

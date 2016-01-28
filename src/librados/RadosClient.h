@@ -75,7 +75,7 @@ private:
 public:
   Finisher finisher;
 
-  RadosClient(CephContext *cct_);
+  explicit RadosClient(CephContext *cct_);
   ~RadosClient();
   int ping_monitor(string mon_id, string *result);
   int connect();

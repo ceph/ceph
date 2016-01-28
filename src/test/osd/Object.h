@@ -127,7 +127,7 @@ public:
   class RandWrap {
   public:
     unsigned int state;
-    RandWrap(unsigned int seed)
+    explicit RandWrap(unsigned int seed)
     {
       state = seed;
     }
@@ -305,7 +305,7 @@ public:
     std::list<std::pair<ceph::shared_ptr<ContentsGenerator>,
 	      ContDesc> >::iterator cur_cont;
     
-    iterator(ObjectDesc &obj) :
+    explicit iterator(ObjectDesc &obj) :
       pos(0), obj(obj) {
       limit = obj.layers.begin()->first->get_length(obj.layers.begin()->second);
       cur_cont = obj.layers.begin();

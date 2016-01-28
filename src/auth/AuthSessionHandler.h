@@ -44,7 +44,7 @@ public:
   int messages_encrypted;
   int messages_decrypted;
 
-  AuthSessionHandler(CephContext *cct_) : cct(cct_), protocol(CEPH_AUTH_UNKNOWN), messages_signed(0),
+  explicit AuthSessionHandler(CephContext *cct_) : cct(cct_), protocol(CEPH_AUTH_UNKNOWN), messages_signed(0),
     signatures_checked(0), signatures_matched(0), signatures_failed(0), messages_encrypted(0),
     messages_decrypted(0) {}
 

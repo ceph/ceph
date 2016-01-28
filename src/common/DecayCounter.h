@@ -56,7 +56,7 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(list<DecayCounter*>& ls);
 
-  DecayCounter(const utime_t &now)
+  explicit DecayCounter(const utime_t &now)
     : val(0), delta(0), vel(0), last_decay(now)
   {
   }
