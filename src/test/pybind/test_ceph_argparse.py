@@ -25,7 +25,8 @@ import re
 import json
 
 def get_command_descriptions(what):
-    return os.popen("./get_command_descriptions " + "--" + what).read()
+    CEPH_BIN = os.environ['CEPH_BIN']
+    return os.popen(CEPH_BIN + "/get_command_descriptions " + "--" + what).read()
 
 def test_parse_json_funcsigs():
     commands = get_command_descriptions("all")
