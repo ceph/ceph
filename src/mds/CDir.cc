@@ -274,8 +274,15 @@ bool CDir::check_rstats(bool scrub)
 
   if (!good) {
     if (!scrub) {
-      for (map_t::iterator i = items.begin(); i != items.end(); ++i)
-	dout(1) << *(i->second) << dendl;
+      for (map_t::iterator i = items.begin(); i != items.end(); ++i) {
+	CDentry *dn = i->second;
+	if (dn->get_linkage()->is_primary()) {
+	  CInode *in = dn->get_linkage()->inode;
+	  dout(1) << *dn << " rstat " << in->inode.accounted_rstat << dendl;
+	} else {
+	  dout(1) << *dn << dendl;
+	}
+      }
 
       assert(frag_info.nfiles == fnode.fragstat.nfiles);
       assert(frag_info.nsubdirs == fnode.fragstat.nsubdirs);
