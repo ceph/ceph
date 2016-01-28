@@ -1007,7 +1007,7 @@ void pool_opts_t::dump(const std::string& name, Formatter* f) const
 void pool_opts_t::dump(Formatter* f) const
 {
   for (opt_mapping_t::iterator i = opt_mapping.begin(); i != opt_mapping.end();
-       i++) {
+       ++i) {
     const std::string& name = i->first;
     const opt_desc_t& desc = i->second;
     opts_t::const_iterator j = opts.find(desc.key);
@@ -1082,7 +1082,7 @@ void pool_opts_t::decode(bufferlist::iterator& bl) {
 ostream& operator<<(ostream& out, const pool_opts_t& opts)
 {
   for (opt_mapping_t::iterator i = opt_mapping.begin(); i != opt_mapping.end();
-       i++) {
+       ++i) {
     const std::string& name = i->first;
     const pool_opts_t::opt_desc_t& desc = i->second;
     pool_opts_t::opts_t::const_iterator j = opts.opts.find(desc.key);
