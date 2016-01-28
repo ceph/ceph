@@ -3921,6 +3921,81 @@ def main_trigger(args):
             ]
         )
 
+    elif parttype in (PTYPE['regular']['block']['ready'],
+                      PTYPE['mpath']['block']['ready']):
+        command(
+            [
+                'ceph-disk',
+                'activate-block',
+                args.dev,
+            ]
+        )
+
+        # blocks are easy: map, chown, activate-block
+    elif parttype == PTYPE['plain']['block']['ready']:
+        command(
+            [
+                '/sbin/cryptsetup',
+                '--key-file',
+                '/etc/ceph/dmcrypt-keys/{partid}'.format(partid=partid),
+                '--key-size',
+                '256',
+                'create',
+                partid,
+                args.dev,
+            ]
+        )
+        newdev = '/dev/mapper/' + partid
+        count = 0
+        while not os.path.exists(newdev) and count <= 10:
+            time.sleep(1)
+            count += 1
+        command(
+            [
+                '/bin/chown',
+                'ceph:ceph',
+                newdev,
+            ]
+        )
+        command(
+            [
+                '/usr/sbin/ceph-disk',
+                'activate-block',
+                newdev,
+            ]
+        )
+    elif parttype == PTYPE['luks']['block']['ready']:
+        command(
+            [
+                '/sbin/cryptsetup',
+                '--key-file',
+                '/etc/ceph/dmcrypt-keys/{partid}.luks.key'.format(
+                    partid=partid),
+                'luksOpen',
+                args.dev,
+                partid,
+            ]
+        )
+        newdev = '/dev/mapper/' + partid
+        count = 0
+        while not os.path.exists(newdev) and count <= 10:
+            time.sleep(1)
+            count += 1
+        command(
+            [
+                '/bin/chown',
+                'ceph:ceph',
+                newdev,
+            ]
+        )
+        command(
+            [
+                '/usr/sbin/ceph-disk',
+                'activate-block',
+                newdev,
+            ]
+        )
+
         # osd data: map, activate
     elif parttype == PTYPE['plain']['osd']['ready']:
         command(
