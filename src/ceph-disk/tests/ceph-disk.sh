@@ -60,6 +60,10 @@ if test -d ../.libs ; then
 fi
 CEPH_ARGS+=" --auth-supported=none"
 CEPH_ARGS+=" --osd-journal-size=100"
+CEPH_ARGS+=" --debug-mon=20"
+CEPH_ARGS+=" --debug-osd=20"
+CEPH_ARGS+=" --debug-bdev=20"
+CEPH_ARGS+=" --debug-bluestore=20"
 CEPH_DISK_ARGS=
 CEPH_DISK_ARGS+=" --statedir=$DIR"
 CEPH_DISK_ARGS+=" --sysconfdir=$DIR"
@@ -314,6 +318,27 @@ function test_activate_dir() {
     $rm -fr $osd_data
 }
 
+function test_activate_dir_bluestore() {
+    run_mon
+
+    local osd_data=$DIR/dir
+    $mkdir -p $osd_data
+    local to_prepare=$osd_data
+    local to_activate=$osd_data
+    local osd_uuid=$($uuidgen)
+
+    CEPH_ARGS=" --bluestore-block-size=10737418240 $CEPH_ARGS" \
+      ${CEPH_DISK} $CEPH_DISK_ARGS \
+        prepare --bluestore --block-file --osd-uuid $osd_uuid $to_prepare || return 1
+
+    CEPH_ARGS=" --osd-objectstore=bluestore --bluestore-fsck-on-mount=true --enable_experimental_unrecoverable_data_corrupting_features=* --bluestore-block-db-size=67108864 --bluestore-block-wal-size=134217728 --bluestore-block-size=10737418240 $CEPH_ARGS" \
+      $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+        activate \
+        --mark-init=none \
+        $to_activate || return 1
+    test_pool_read_write $osd_uuid || return 1
+}
+
 function test_find_cluster_by_uuid() {
     setup
     test_activate_dir 2>&1 | tee $DIR/test_find
@@ -344,6 +369,7 @@ function run() {
     default_actions+="test_keyring_path "
     default_actions+="test_mark_init "
     default_actions+="test_zap "
+    default_actions+="test_activate_dir_bluestore "
     local actions=${@:-$default_actions}
     local status
     for action in $actions  ; do

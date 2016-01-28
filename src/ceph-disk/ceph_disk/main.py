@@ -2369,24 +2369,43 @@ def mkfs(
         ],
     )
 
-    command_check_call(
-        [
-            'ceph-osd',
-            '--cluster', cluster,
-            '--mkfs',
-            '--mkkey',
-            '-i', osd_id,
-            '--monmap', monmap,
-            '--osd-data', path,
-            '--osd-journal', os.path.join(path, 'journal'),
-            '--osd-uuid', fsid,
-            '--keyring', os.path.join(path, 'keyring'),
-            '--setuser', get_ceph_user(),
-            '--setgroup', get_ceph_user(),
-        ],
-    )
-    # TODO ceph-osd --mkfs removes the monmap file?
-    # os.unlink(monmap)
+    osd_objectstore = get_conf(
+                cluster=cluster,
+                variable='osd_objectstore',
+            )
+    if osd_objectstore == 'bluestore':
+        command_check_call(
+            [
+                'ceph-osd',
+                '--cluster', cluster,
+                '--mkfs',
+                '--mkkey',
+                '-i', osd_id,
+                '--monmap', monmap,
+                '--osd-data', path,
+                '--osd-uuid', fsid,
+                '--keyring', os.path.join(path, 'keyring'),
+                '--setuser', get_ceph_user(),
+                '--setgroup', get_ceph_user(),
+            ],
+        )
+    else:
+        command_check_call(
+            [
+                'ceph-osd',
+                '--cluster', cluster,
+                '--mkfs',
+                '--mkkey',
+                '-i', osd_id,
+                '--monmap', monmap,
+                '--osd-data', path,
+                '--osd-journal', os.path.join(path, 'journal'),
+                '--osd-uuid', fsid,
+                '--keyring', os.path.join(path, 'keyring'),
+                '--setuser', get_ceph_user(),
+                '--setgroup', get_ceph_user(),
+            ],
+        )
 
 
 def auth_key(
@@ -3237,7 +3256,7 @@ def main_destroy(args):
         zap(base_dev)
 
 
-def get_journal_osd_uuid(path):
+def get_space_osd_uuid(name, path):
     if not os.path.exists(path):
         raise Error('%s does not exist' % path)
 
@@ -3246,7 +3265,8 @@ def get_journal_osd_uuid(path):
         raise Error('%s is not a block device' % path)
 
     if (is_partition(path) and
-            get_partition_type(path) == PTYPE['mpath']['journal']['ready'] and
+            get_partition_type(path) in (PTYPE['mpath']['journal']['ready'],
+                                         PTYPE['mpath']['block']['ready']) and
             not is_mpath(path)):
         raise Error('%s is not a multipath block device' %
                     path)
@@ -3262,15 +3282,15 @@ def get_journal_osd_uuid(path):
         )
     except subprocess.CalledProcessError as e:
         raise Error(
-            'failed to get osd uuid/fsid from journal',
+            'failed to get osd uuid/fsid from %s' % name,
             e,
         )
     value = str(out).split('\n', 1)[0]
-    LOG.debug('Journal %s has OSD UUID %s', path, value)
+    LOG.debug('%s %s has OSD UUID %s', name.capitalize(), path, value)
     return value
 
 
-def main_activate_journal(args):
+def main_activate_space(name, args):
     if not os.path.exists(args.dev):
         raise Error('%s does not exist' % args.dev)
 
@@ -3288,7 +3308,7 @@ def main_activate_journal(args):
         # cyphertext or plaintext dev uuid!? Also, if the journal is
         # encrypted, is the data partition also always encrypted, or
         # are mixed pairs supported!?
-        osd_uuid = get_journal_osd_uuid(dev)
+        osd_uuid = get_space_osd_uuid(name, dev)
         path = os.path.join('/dev/disk/by-partuuid/', osd_uuid.lower())
 
         if is_suppressed(path):
@@ -4032,6 +4052,7 @@ def parse_args(argv):
 
     Prepare.set_subparser(subparsers)
     make_activate_parser(subparsers)
+    make_activate_block_parser(subparsers)
     make_activate_journal_parser(subparsers)
     make_activate_all_parser(subparsers)
     make_list_parser(subparsers)
@@ -4120,49 +4141,57 @@ def make_activate_parser(subparsers):
     return activate_parser
 
 
+def make_activate_block_parser(subparsers):
+    return make_activate_space_parser('block', subparsers)
+
+
 def make_activate_journal_parser(subparsers):
-    activate_journal_parser = subparsers.add_parser(
-        'activate-journal',
-        help='Activate an OSD via its journal device')
-    activate_journal_parser.add_argument(
+    return make_activate_space_parser('journal', subparsers)
+
+
+def make_activate_space_parser(name, subparsers):
+    activate_space_parser = subparsers.add_parser(
+        'activate-%s' % name,
+        help='Activate an OSD via its %s device' % name)
+    activate_space_parser.add_argument(
         'dev',
         metavar='DEV',
-        help='path to journal block device',
+        help='path to %s block device' % name,
     )
-    activate_journal_parser.add_argument(
+    activate_space_parser.add_argument(
         '--activate-key',
         metavar='PATH',
         help='bootstrap-osd keyring path template (%(default)s)',
         dest='activate_key_template',
     )
-    activate_journal_parser.add_argument(
+    activate_space_parser.add_argument(
         '--mark-init',
         metavar='INITSYSTEM',
         help='init system to manage this dir',
         default='auto',
         choices=INIT_SYSTEMS,
     )
-    activate_journal_parser.add_argument(
+    activate_space_parser.add_argument(
         '--dmcrypt',
         action='store_true', default=None,
-        help='map DATA and/or JOURNAL devices with dm-crypt',
+        help='map data and/or auxiliariy (journal, etc.) devices with dm-crypt',
     )
-    activate_journal_parser.add_argument(
+    activate_space_parser.add_argument(
         '--dmcrypt-key-dir',
         metavar='KEYDIR',
         default='/etc/ceph/dmcrypt-keys',
         help='directory where dm-crypt keys are stored',
     )
-    activate_journal_parser.add_argument(
+    activate_space_parser.add_argument(
         '--reactivate',
         action='store_true', default=False,
         help='activate the deactived OSD',
     )
-    activate_journal_parser.set_defaults(
+    activate_space_parser.set_defaults(
         activate_key_template='{statedir}/bootstrap-osd/{cluster}.keyring',
-        func=main_activate_journal,
+        func=lambda args: main_activate_space(name, args),
     )
-    return activate_journal_parser
+    return activate_space_parser
 
 
 def make_activate_all_parser(subparsers):
