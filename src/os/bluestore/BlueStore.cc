@@ -4911,9 +4911,17 @@ void BlueStore::_pad_zeros_tail(
   uint64_t end = offset + *length;
   unsigned back_copy = end % block_size;
   assert(back_copy);  // or we wouldn't have been called
-  uint64_t back_pad = block_size - back_copy;
-  assert(back_copy <= *length);
-  bufferptr tail(block_size);
+  uint64_t tail_len;
+  if (back_copy <= *length) {
+    // we start at or before the block boundary
+    tail_len = block_size;
+  } else {
+    // we start partway into the tail block
+    back_copy = *length;
+    tail_len = block_size - (offset % block_size);
+  }
+  uint64_t back_pad = tail_len - back_copy;
+  bufferptr tail(tail_len);
   memcpy(tail.c_str(), bl->get_contiguous(*length - back_copy, back_copy),
 	 back_copy);
   memset(tail.c_str() + back_copy, 0, back_pad);
