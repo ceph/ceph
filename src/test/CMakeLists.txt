@@ -847,19 +847,6 @@ add_executable(ceph_test_snap_mapper EXCLUDE_FROM_ALL
   )
 target_link_libraries(ceph_test_snap_mapper osd global ${BLKID_LIBRARIES})
 
-add_library(rados_striper_test STATIC libradosstriper/TestCase.cc)
-target_link_libraries(rados_striper_test radostest)
-set_target_properties(rados_striper_test PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-
-add_executable(ceph_test_rados_api_striping
-  libradosstriper/striping.cc
-  )
-target_link_libraries(ceph_test_rados_api_striping librados libradosstriper 
-  ${UNITTEST_LIBS} rados_striper_test)
-set_target_properties(ceph_test_rados_api_striping PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-
 if(${WITH_CEPHFS})
   add_executable(ceph_test_libcephfs
     libcephfs/test.cc
@@ -1043,10 +1030,7 @@ add_ceph_test(test-erasure-code.sh ${CMAKE_SOURCE_DIR}/src/test/erasure-code/tes
 add_ceph_test(test-erasure-eio.sh ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test-erasure-eio.sh)
 
 add_subdirectory(fs)
-
-#libradosstriper directory
-add_ceph_test(rados-striper.sh ${CMAKE_SOURCE_DIR}/src/test/libradosstriper/rados-striper.sh)
-
+add_subdirectory(libradosstriper)
 add_subdirectory(librados)
 
 #mds directory
