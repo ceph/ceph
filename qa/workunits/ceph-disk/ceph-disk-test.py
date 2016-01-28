@@ -84,6 +84,9 @@ class CephDisk:
         with proc.stdout:
             for line in iter(proc.stdout.readline, b''):
                 line = line.decode('utf-8')
+                if 'dangerous and experimental' in line:
+                    LOG.debug('SKIP dangerous and experimental')
+                    continue
                 lines.append(line)
                 LOG.debug(str(line.strip()))
         if proc.wait() != 0:
@@ -206,7 +209,15 @@ class TestCephDisk(object):
         c = CephDisk()
         if c.sh("lsb_release -si").strip() == 'CentOS':
             c.helper("install multipath-tools device-mapper-multipath")
+        #
+        # objecstore
+        #
         c.conf['global']['osd journal size'] = 100
+        #
+        # bluestore
+        #
+        c.conf['global']['enable experimental unrecoverable data corrupting features'] = '*'
+        c.conf['global']['bluestore fsck on mount'] = 'true'
         c.save_conf()
 
     def setup(self):
@@ -351,6 +362,22 @@ class TestCephDisk(object):
         device = json.loads(c.sh("ceph-disk list --format json " + disk))[0]
         assert len(device['partitions']) == 2
         c.check_osd_status(osd_uuid, 'journal')
+        c.helper("pool_read_write")
+        c.destroy_osd(osd_uuid)
+
+    def test_activate_bluestore(self):
+        c = CephDisk()
+        disk = c.unused_disks()[0]
+        osd_uuid = str(uuid.uuid1())
+        c.sh("ceph-disk --verbose zap " + disk)
+        c.conf['global']['osd objectstore'] = 'bluestore'
+        c.save_conf()
+        c.sh("ceph-disk --verbose prepare --bluestore --osd-uuid " + osd_uuid +
+             " " + disk)
+        c.wait_for_osd_up(osd_uuid)
+        device = json.loads(c.sh("ceph-disk list --format json " + disk))[0]
+        assert len(device['partitions']) == 2
+        c.check_osd_status(osd_uuid, 'block')
         c.helper("pool_read_write")
         c.destroy_osd(osd_uuid)
 
