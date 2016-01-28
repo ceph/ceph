@@ -1233,7 +1233,7 @@ if(${WITH_RADOSGW})
     curl expat global
     resolv
     ${TCMALLOC_LIBS})
-  set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 1.0.0
+  set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
     SOVERSION 1)
 
   install(TARGETS rgw DESTINATION lib)

@@ -12,69 +12,93 @@ DENCODER_SOURCES += \
 if WITH_RADOS
 if WITH_RADOSGW
 
-librgw_la_SOURCES =  \
-	rgw/librgw.cc \
+librgw_la_SOURCES = \
 	rgw/rgw_acl.cc \
 	rgw/rgw_acl_s3.cc \
 	rgw/rgw_acl_swift.cc \
-	rgw/rgw_client_io.cc \
-	rgw/rgw_fcgi.cc \
-	rgw/rgw_xml.cc \
-	rgw/rgw_usage.cc \
-	rgw/rgw_json_enc.cc \
-	rgw/rgw_xml_enc.cc \
-	rgw/rgw_user.cc \
-	rgw/rgw_bucket.cc\
-	rgw/rgw_tools.cc \
-	rgw/rgw_rados.cc \
-	rgw/rgw_http_client.cc \
-	rgw/rgw_rest_client.cc \
-	rgw/rgw_rest_conn.cc \
-	rgw/rgw_op.cc \
+	rgw/rgw_auth_s3.cc \
 	rgw/rgw_basic_types.cc \
-	rgw/rgw_common.cc \
+	rgw/rgw_bucket.cc \
 	rgw/rgw_cache.cc \
-	rgw/rgw_formats.cc \
-	rgw/rgw_log.cc \
-	rgw/rgw_multi.cc \
-	rgw/rgw_policy_s3.cc \
-	rgw/rgw_gc.cc \
-	rgw/rgw_multi_del.cc \
-	rgw/rgw_env.cc \
+	rgw/rgw_client_io.cc \
+	rgw/rgw_common.cc \
 	rgw/rgw_cors.cc \
 	rgw/rgw_cors_s3.cc \
-	rgw/rgw_auth_s3.cc \
-	rgw/rgw_metadata.cc \
-	rgw/rgw_replica_log.cc \
-	rgw/rgw_keystone.cc \
-	rgw/rgw_quota.cc \
 	rgw/rgw_dencoder.cc \
-	rgw/rgw_request.cc \
-	rgw/rgw_process.cc \
+	rgw/rgw_env.cc \
+	rgw/rgw_fcgi.cc \
+	rgw/rgw_formats.cc \
 	rgw/rgw_frontend.cc \
+	rgw/rgw_gc.cc \
+	rgw/rgw_http_client.cc \
+	rgw/rgw_json_enc.cc \
+	rgw/rgw_keystone.cc \
+	rgw/rgw_loadgen.cc \
+	rgw/rgw_log.cc \
+	rgw/rgw_metadata.cc \
+	rgw/rgw_multi.cc \
+	rgw/rgw_multi_del.cc \
 	rgw/rgw_object_expirer_core.cc \
+	rgw/rgw_op.cc \
+	rgw/rgw_os_lib.cc \
+	rgw/rgw_policy_s3.cc \
+	rgw/rgw_process.cc \
+	rgw/rgw_quota.cc \
+	rgw/rgw_rados.cc \
+	rgw/rgw_replica_log.cc \
+	rgw/rgw_request.cc \
+	rgw/rgw_resolve.cc \
+	rgw/rgw_rest_bucket.cc \
+	rgw/rgw_rest.cc \
+	rgw/rgw_rest_client.cc \
+	rgw/rgw_rest_config.cc \
+	rgw/rgw_rest_conn.cc \
+	rgw/rgw_rest_log.cc \
+	rgw/rgw_rest_metadata.cc \
+	rgw/rgw_rest_opstate.cc \
+	rgw/rgw_rest_replica_log.cc \
+	rgw/rgw_rest_s3.cc \
+	rgw/rgw_rest_swift.cc \
+	rgw/rgw_rest_usage.cc \
+	rgw/rgw_rest_user.cc \
+	rgw/rgw_swift_auth.cc \
+	rgw/rgw_swift.cc \
+	rgw/rgw_tools.cc \
+	rgw/rgw_usage.cc \
+	rgw/rgw_user.cc \
+	rgw/rgw_file.cc \
+	rgw/librgw.cc \
+	rgw/rgw_xml.cc \
+	rgw/rgw_xml_enc.cc \
 	rgw/rgw_website.cc
-	rgw/rgw_os_lib.cc
 
-librgw_la_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
-noinst_LTLIBRARIES += librgw.la
+librgw_la_CXXFLAGS = -Woverloaded-virtual -fPIC -I$(srcdir)/xxHash \
+	${AM_CXXFLAGS}
 
 LIBRGW_DEPS += \
 	$(LIBRADOS) \
 	libcls_rgw_client.la \
-	libcls_log_client.a \
-	libcls_statelog_client.a \
-	libcls_timeindex_client.a \
-	libcls_user_client.a \
-	libcls_replica_log_client.a \
+	libcls_log_client.la \
+	libcls_statelog_client.la \
+	libcls_timeindex_client.la \
+	libcls_user_client.la \
+	libcls_replica_log_client.la \
 	libcls_lock_client.la \
 	libcls_refcount_client.la \
-	libcls_version_client.a \
+	libcls_version_client.la \
 	-lcurl \
 	-lexpat \
 	-lm \
 	-lfcgi \
 	-ldl
+
+librgw_la_LIBADD = $(LIBRGW_DEPS) \
+	$(PTHREAD_LIBS) $(RESOLV_LIBS) $(LIBCOMMON) \
+	$(EXTRALIBS)
+
+librgw_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0
+
+lib_LTLIBRARIES += librgw.la
 
 CIVETWEB_INCLUDE = --include $(srcdir)/civetweb/include/civetweb_conf.h
 
@@ -83,33 +107,24 @@ libcivetweb_la_SOURCES =  \
 	rgw/rgw_civetweb_log.cc \
 	civetweb/src/civetweb.c
 
-libcivetweb_la_CXXFLAGS = ${CIVETWEB_INCLUDE} -Woverloaded-virtual ${AM_CXXFLAGS}
-libcivetweb_la_CFLAGS = -I$(srcdir)/civetweb/include ${CIVETWEB_INCLUDE}
+libcivetweb_la_CXXFLAGS = ${CIVETWEB_INCLUDE} -fPIC -Woverloaded-virtual \
+	${AM_CXXFLAGS}
+libcivetweb_la_CFLAGS = -I$(srcdir)/civetweb/include ${CIVETWEB_INCLUDE} -fPIC
 
 noinst_LTLIBRARIES += libcivetweb.la
 
 radosgw_SOURCES = \
-	rgw/rgw_resolve.cc \
-	rgw/rgw_rest.cc \
-	rgw/rgw_rest_swift.cc \
-	rgw/rgw_rest_s3.cc \
-	rgw/rgw_rest_usage.cc \
-	rgw/rgw_rest_user.cc \
-	rgw/rgw_rest_bucket.cc \
-	rgw/rgw_rest_metadata.cc \
-	rgw/rgw_replica_log.cc \
-	rgw/rgw_rest_log.cc \
-	rgw/rgw_rest_opstate.cc \
-	rgw/rgw_rest_replica_log.cc \
-	rgw/rgw_rest_config.cc \
-	rgw/rgw_http_client.cc \
-	rgw/rgw_swift.cc \
-	rgw/rgw_swift_auth.cc \
-	rgw/rgw_loadgen.cc \
-	rgw/rgw_os_lib.cc \
+	rgw/rgw_fcgi_process.cc \
+	rgw/rgw_loadgen_process.cc \
+	rgw/rgw_civetweb.cc \
+	rgw/rgw_civetweb_frontend.cc \
+	rgw/rgw_civetweb_log.cc \
+	civetweb/src/civetweb.c \
 	rgw/rgw_main.cc
-radosgw_CFLAGS = -I$(srcdir)/civetweb/include
-radosgw_LDADD = $(LIBRGW) $(LIBCIVETWEB) $(LIBRGW_DEPS) $(RESOLV_LIBS) $(CEPH_GLOBAL)
+
+radosgw_CFLAGS = -I$(srcdir)/civetweb/include -fPIC -I$(srcdir)/xxHash
+radosgw_LDADD = $(LIBRGW) $(LIBCIVETWEB) $(LIBRGW_DEPS) $(RESOLV_LIBS) \
+	$(CEPH_GLOBAL)
 bin_PROGRAMS += radosgw
 
 radosgw_admin_SOURCES = rgw/rgw_admin.cc rgw/rgw_orphan.cc

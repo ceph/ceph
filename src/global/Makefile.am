@@ -4,6 +4,7 @@ libglobal_la_SOURCES = \
 	global/pidfile.cc \
 	global/signal_handler.cc \
 	common/TrackedOp.cc
+
 libglobal_la_LIBADD = $(LIBCOMMON)
 if WITH_LTTNG
 libglobal_la_LIBADD += -ldl -llttng-ust
