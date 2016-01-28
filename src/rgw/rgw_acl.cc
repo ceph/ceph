@@ -22,6 +22,9 @@ void RGWAccessControlList::_add_grant(ACLGrant *grant)
   ACLPermission& perm = grant->get_permission();
   ACLGranteeType& type = grant->get_type();
   switch (type.get_type()) {
+  case ACL_TYPE_REFERER:
+    referer_list.emplace_back(grant->get_referer(), perm.get_permissions());
+    break;
   case ACL_TYPE_GROUP:
     acl_group_map[grant->get_group()] |= perm.get_permissions();
     break;
@@ -53,8 +56,11 @@ int RGWAccessControlList::get_perm(const RGWIdentityApplier& auth_identity,
   return perm_mask & auth_identity.get_perms_from_aclspec(acl_user_map);
 }
 
-int RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group, int perm_mask) {
-  ldout(cct, 5) << "Searching permissions for group=" << (int)group << " mask=" << perm_mask << dendl;
+int RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group, int perm_mask)
+{
+  ldout(cct, 5) << "Searching permissions for group=" << (int)group
+                << " mask=" << perm_mask << dendl;
+
   map<uint32_t, int>::iterator iter = acl_group_map.find((uint32_t)group);
   if (iter != acl_group_map.end()) {
     ldout(cct, 5) << "Found permission: " << iter->second << dendl;
@@ -64,8 +70,32 @@ int RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group, int perm_mask) 
   return 0;
 }
 
+int RGWAccessControlList::get_referer_perm(const std::string http_referer,
+                                           const int perm_mask)
+{
+  ldout(cct, 5) << "Searching permissions for referer=" << http_referer
+                << " mask=" << perm_mask << dendl;
+
+  /* FIXME: C++11 doesn't have std::rbegin nor std::rend. We would like to
+   * switch when C++14 becomes available. */
+  const auto iter = std::find_if(referer_list.crbegin(), referer_list.crend(),
+    [http_referer](const ACLReferer& r) -> bool {
+      return r.is_match(http_referer);
+    }
+  );
+
+  if (referer_list.crend() == iter) {
+    ldout(cct, 5) << "Permissions for referer not found" << dendl;
+    return 0;
+  } else {
+    ldout(cct, 5) << "Found referer permission=" << iter->perm << dendl;
+    return iter->perm & perm_mask;
+  }
+}
+
 int RGWAccessControlPolicy::get_perm(const RGWIdentityApplier& auth_identity,
-                                     const int perm_mask)
+                                     const int perm_mask,
+                                     const char * const http_referer)
 {
   int perm = acl.get_perm(auth_identity, perm_mask);
 
@@ -73,8 +103,9 @@ int RGWAccessControlPolicy::get_perm(const RGWIdentityApplier& auth_identity,
     perm |= perm_mask & (RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP);
   }
 
-  if (perm == perm_mask)
+  if (perm == perm_mask) {
     return perm;
+  }
 
   /* should we continue looking up? */
   if ((perm & perm_mask) != perm_mask) {
@@ -86,6 +117,11 @@ int RGWAccessControlPolicy::get_perm(const RGWIdentityApplier& auth_identity,
     }
   }
 
+  /* Should we continue looking up even deeper? */
+  if (nullptr != http_referer && (perm & perm_mask) != perm_mask) {
+    perm |= acl.get_referer_perm(http_referer, perm_mask);
+  }
+
   ldout(cct, 5) << "Getting permissions identity=" << auth_identity
                 << " owner=" << owner.get_id()
                 << " perm=" << perm << dendl;
@@ -95,11 +131,12 @@ int RGWAccessControlPolicy::get_perm(const RGWIdentityApplier& auth_identity,
 
 bool RGWAccessControlPolicy::verify_permission(const RGWIdentityApplier& auth_identity,
                                                const int user_perm_mask,
-                                               const int perm)
+                                               const int perm,
+                                               const char * const http_referer)
 {
   int test_perm = perm | RGW_PERM_READ_OBJS | RGW_PERM_WRITE_OBJS;
 
-  int policy_perm = get_perm(auth_identity, test_perm);
+  int policy_perm = get_perm(auth_identity, test_perm, http_referer);
 
   /* the swift WRITE_OBJS perm is equivalent to the WRITE obj, just
      convert those bits. Note that these bits will only be set on
