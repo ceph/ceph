@@ -347,7 +347,7 @@ ssize_t AsyncConnection::do_sendmsg(struct msghdr &msg, unsigned len, bool more)
 
 // return the remaining bytes, it may larger than the length of ptr
 // else return < 0 means error
-ssize_t AsyncConnection::_try_send(bufferlist &send_bl, bool send)
+ssize_t AsyncConnection::_try_send(bufferlist &send_bl, bool send, bool more)
 {
   ldout(async_msgr->cct, 20) << __func__ << " send bl length is " << send_bl.length() << dendl;
   if (send_bl.length()) {
@@ -384,7 +384,7 @@ ssize_t AsyncConnection::_try_send(bufferlist &send_bl, bool send)
       size--;
     }
 
-    ssize_t r = do_sendmsg(msg, msglen, left_pbrs);
+    ssize_t r = do_sendmsg(msg, msglen, left_pbrs || more);
     if (r < 0)
       return r;
 
@@ -2459,7 +2459,7 @@ void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
   }
 
   ldout(async_msgr->cct, 10) << __func__ << " try send keepalive or ack" << dendl;
-  _try_send(bl, false);
+  _try_send(bl, false, true);
 }
 
 void AsyncConnection::handle_write()
@@ -2503,7 +2503,7 @@ void AsyncConnection::handle_write()
       bl.append((char*)&s, sizeof(s));
       ldout(async_msgr->cct, 10) << __func__ << " try send msg ack, acked " << left << " messages" << dendl;
       ack_left.sub(left);
-      r = _try_send(bl);
+      r = _try_send(bl, true, true);
     } else if (is_queued()) {
       r = _try_send(bl);
     }
