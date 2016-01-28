@@ -1032,23 +1032,7 @@ add_ceph_test(test-erasure-eio.sh ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test
 add_subdirectory(fs)
 add_subdirectory(libradosstriper)
 add_subdirectory(librados)
-
-#mds directory
-# unittest_mds_authcap
-add_executable(unittest_mds_authcap EXCLUDE_FROM_ALL
-  mds/TestMDSAuthCaps.cc
-  )
-add_ceph_unittest(unittest_mds_authcap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mds_authcap)
-target_link_libraries(unittest_mds_authcap mds global ${BLKID_LIBRARIES})
-
-# unittest_mds_sessionfilter
-add_executable(unittest_mds_sessionfilter EXCLUDE_FROM_ALL
-    mds/TestSessionFilter.cc
-  $<TARGET_OBJECTS:common_util_obj>
-  )
-add_ceph_unittest(unittest_mds_sessionfilter ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mds_sessionfilter)
-target_link_libraries(unittest_mds_sessionfilter mds osdc common global ${BLKID_LIBRARIES})
-
+add_subdirectory(mds)
 add_subdirectory(mon)
 
 #objectstore directory
