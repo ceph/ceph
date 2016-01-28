@@ -12,11 +12,8 @@ namespace crimson {
   namespace dmclock {
     typedef uint64_t Counter;
 
-    enum class PhaseType {
-      reservation, priority
-	};
+    enum class PhaseType { reservation, priority };
 
-    // TODO rename to ReqParams
     template<typename C>
     struct ReqParams {
       C        client;
