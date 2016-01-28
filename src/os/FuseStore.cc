@@ -439,7 +439,7 @@ static int os_readdir(const char *path,
 	int r = fs->store->collection_list(
 	  cid, next, last, true, 1000, &ls, &next);
 	if (r < 0)
-	  break;
+	  return r;
 	for (auto p : ls) {
 	  if (skip) {
 	    --skip;
