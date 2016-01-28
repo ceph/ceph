@@ -285,7 +285,7 @@ struct bluestore_wal_transaction_t {
 
   int64_t _bytes;  ///< cached byte count
 
-  bluestore_wal_transaction_t() : _bytes(-1) {}
+  bluestore_wal_transaction_t() : seq(0), _bytes(-1) {}
 
 #if 0
   no users for htis
