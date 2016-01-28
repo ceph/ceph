@@ -621,12 +621,6 @@ set_target_properties(ceph_perf_local PROPERTIES COMPILE_FLAGS
   ${PERF_LOCAL_FLAGS})
 target_link_libraries(ceph_perf_local os global ${UNITTEST_LIBS})
 
-#ceph_perf_objectstore
-add_executable(ceph_perf_objectstore objectstore/ObjectStoreTransactionBenchmark.cc)
-set_target_properties(ceph_perf_objectstore PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_perf_objectstore os osdc global ${UNITTEST_LIBS})
-
 #ceph_perf_msgr_server
 add_executable(ceph_perf_msgr_server msgr/perf_msgr_server.cc)
 set_target_properties(ceph_perf_msgr_server PROPERTIES COMPILE_FLAGS
@@ -639,85 +633,11 @@ set_target_properties(ceph_perf_msgr_client PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_perf_msgr_client os global ${UNITTEST_LIBS})
 
-#ceph_test_objectstore
-add_executable(ceph_test_objectstore
-  objectstore/store_test.cc
-  )
-set_target_properties(ceph_test_objectstore PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_objectstore
-  os
-  common
-  ${UNITTEST_LIBS}
-  global
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
-
-#ceph_test_keyvaluedb
-add_executable(ceph_test_keyvaluedb
-  objectstore/test_kv.cc
-  )
-set_target_properties(ceph_test_keyvaluedb PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_keyvaluedb
-  os
-  common
-  ${UNITTEST_LIBS}
-  global
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
-
 #ceph_test_filestore
 add_executable(ceph_test_filestore filestore/TestFileStore.cc)
 set_target_properties(ceph_test_filestore PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_filestore os global ${UNITTEST_LIBS})
-
-# ceph_test_objectstore_workloadgen
-add_executable(ceph_test_objectstore_workloadgen
-  objectstore/workload_generator.cc
-  objectstore/TestObjectStoreState.cc
-  )
-target_link_libraries(ceph_test_objectstore_workloadgen
-  os
-  global
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
-
-# ceph_test_filestore_idempotent
-add_executable(ceph_test_filestore_idempotent
-  objectstore/test_idempotent.cc
-  objectstore/FileStoreTracker.cc
-  common/ObjectContents.cc
-  )
-target_link_libraries(ceph_test_filestore_idempotent
-  os
-  global
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
-
-# ceph_test_filestore_idempotent_sequence
-add_executable(ceph_test_filestore_idempotent_sequence
-  objectstore/test_idempotent_sequence.cc
-  objectstore/DeterministicOpSequence.cc
-  objectstore/TestObjectStoreState.cc
-  objectstore/FileStoreDiff.cc
-  )
-target_link_libraries(ceph_test_filestore_idempotent_sequence
-  os
-  global
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
 
 # ceph_test_xattr_bench
 add_executable(ceph_test_xattr_bench
@@ -867,12 +787,6 @@ if(${WITH_CEPHFS})
     ${CMAKE_DL_LIBS}
     )
 endif(${WITH_CEPHFS})  
-
-# unittest_transaction
-add_executable(unittest_transaction EXCLUDE_FROM_ALL 
-  objectstore/test_transaction.cc)
-add_ceph_unittest(unittest_transaction ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_transaction)
-target_link_libraries(unittest_transaction os common)
 
 add_executable(ceph_test_stress_watch
   test_stress_watch.cc
@@ -1034,33 +948,7 @@ add_subdirectory(libradosstriper)
 add_subdirectory(librados)
 add_subdirectory(mds)
 add_subdirectory(mon)
-
-#objectstore directory
-
-# unittest_chain_xattr
-add_executable(unittest_chain_xattr EXCLUDE_FROM_ALL
-  objectstore/chain_xattr.cc
-  )
-add_ceph_unittest(unittest_chain_xattr ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_chain_xattr)
-target_link_libraries(unittest_chain_xattr os global)
-
-# unittest_rocksdb_option
-add_executable(unittest_rocksdb_option EXCLUDE_FROM_ALL
-  objectstore/TestRocksdbOptionParse.cc
-  )
-add_ceph_unittest(unittest_rocksdb_option ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rocksdb_option)
-target_link_libraries(unittest_rocksdb_option global os ${BLKID_LIBRARIES})
-
-# unittest_bluefs
-add_executable(unittest_bluefs EXCLUDE_FROM_ALL objectstore/test_bluefs.cc)
-add_ceph_unittest(unittest_bluefs ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bluefs)
-target_link_libraries(unittest_bluefs os global)
-
-# unittest_bluestore_types
-add_executable(unittest_bluestore_types EXCLUDE_FROM_ALL objectstore/test_bluestore_types.cc)
-add_ceph_unittest(unittest_bluestore_types ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bluestore_types)
-target_link_libraries(unittest_bluestore_types os global)
-  
+add_subdirectory(objectstore)
 
 #os directory
 # unittest_lfnindex
