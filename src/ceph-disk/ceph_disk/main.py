@@ -45,6 +45,11 @@ PTYPE = {
             'ready': '45b0969e-9b03-4f30-b4c6-b4b80ceff106',
             'tobe': '45b0969e-9b03-4f30-b4c6-b4b80ceff106',
         },
+        'block': {
+            # identical because creating a block is atomic
+            'ready': 'cafecafe-9b03-4f30-b4c6-b4b80ceff106',
+            'tobe': 'cafecafe-9b03-4f30-b4c6-b4b80ceff106',
+        },
         'osd': {
             'ready': '4fbd7e29-9d25-41b8-afd0-062c0ceff05d',
             'tobe': '89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be',
@@ -53,6 +58,10 @@ PTYPE = {
     'luks': {
         'journal': {
             'ready': '45b0969e-9b03-4f30-b4c6-35865ceff106',
+            'tobe': '89c57f98-2fe5-4dc0-89c1-35865ceff2be',
+        },
+        'block': {
+            'ready': 'cafecafe-9b03-4f30-b4c6-35865ceff106',
             'tobe': '89c57f98-2fe5-4dc0-89c1-35865ceff2be',
         },
         'osd': {
@@ -65,6 +74,10 @@ PTYPE = {
             'ready': '45b0969e-9b03-4f30-b4c6-5ec00ceff106',
             'tobe': '89c57f98-2fe5-4dc0-89c1-35865ceff2be',
         },
+        'block': {
+            'ready': 'cafecafe-9b03-4f30-b4c6-5ec00ceff106',
+            'tobe': '89c57f98-2fe5-4dc0-89c1-35865ceff2be',
+        },
         'osd': {
             'ready': '4fbd7e29-9d25-41b8-afd0-5ec00ceff05d',
             'tobe': '89c57f98-2fe5-4dc0-89c1-5ec00ceff2be',
@@ -74,6 +87,10 @@ PTYPE = {
         'journal': {
             'ready': '45b0969e-8ae0-4982-bf9d-5a8d867af560',
             'tobe': '45b0969e-8ae0-4982-bf9d-5a8d867af560',
+        },
+        'block': {
+            'ready': 'cafecafe-8ae0-4982-bf9d-5a8d867af560',
+            'tobe': 'cafecafe-8ae0-4982-bf9d-5a8d867af560',
         },
         'osd': {
             'ready': '4fbd7e29-8ae0-4982-bf9d-5a8d867af560',
@@ -1614,6 +1631,7 @@ class Prepare(object):
             PrepareData.parser(),
         ]
         parents.extend(PrepareFilestore.parent_parsers())
+        parents.extend(PrepareBluestore.parent_parsers())
         parser = subparsers.add_parser(
             'prepare',
             parents=parents,
@@ -1631,7 +1649,10 @@ class Prepare(object):
 
     @staticmethod
     def factory(args):
-        return PrepareFilestore(args)
+        if args.bluestore:
+            return PrepareBluestore(args)
+        else:
+            return PrepareFilestore(args)
 
     @staticmethod
     def main(args):
@@ -1654,6 +1675,31 @@ class PrepareFilestore(Prepare):
         self.data.prepare(self.journal)
 
 
+class PrepareBluestore(Prepare):
+
+    def __init__(self, args):
+        self.data = PrepareBluestoreData(args)
+        self.block = PrepareBluestoreBlock(args)
+
+    @staticmethod
+    def parser():
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument(
+            '--bluestore',
+            action='store_true', default=None,
+            help='bluestore objectstore',
+        )
+        return parser
+
+    @staticmethod
+    def parent_parsers():
+        return [
+            PrepareBluestore.parser(),
+            PrepareBluestoreBlock.parser(),
+        ]
+
+    def prepare_locked(self):
+        self.data.prepare(self.block)
 
 
 class PrepareSpace(object):
@@ -1942,6 +1988,25 @@ class PrepareJournal(PrepareSpace):
         return PrepareSpace.parser('journal')
 
 
+class PrepareBluestoreBlock(PrepareSpace):
+
+    def __init__(self, args):
+        self.name = 'block'
+        super(PrepareBluestoreBlock, self).__init__(args)
+
+    def get_space_size(self):
+        return 0  # get as much space as possible
+
+    def desired_partition_number(self):
+        if self.args.block == self.args.data:
+            num = 2
+        else:
+            num = 0
+        return num
+
+    @staticmethod
+    def parser():
+        return PrepareSpace.parser('block')
 
 
 class CryptHelpers(object):
@@ -2266,6 +2331,24 @@ class PrepareFilestoreData(PrepareData):
             to_prepare.prepare()
         self.set_data_partition()
         self.populate_data_path_device(*to_prepare_list)
+
+
+class PrepareBluestoreData(PrepareData):
+
+    def get_space_size(self):
+        return 100  # MB
+
+    def prepare_device(self, *to_prepare_list):
+        super(PrepareBluestoreData, self).prepare_device(*to_prepare_list)
+        self.set_data_partition()
+        for to_prepare in to_prepare_list:
+            to_prepare.prepare()
+        self.populate_data_path_device(*to_prepare_list)
+
+    def populate_data_path(self, path, *to_prepare_list):
+        super(PrepareBluestoreData, self).populate_data_path(path,
+                                                             *to_prepare_list)
+        write_one_line(path, 'type', 'bluestore')
 
 
 def mkfs(
