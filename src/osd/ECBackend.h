@@ -467,7 +467,6 @@ public:
 
   ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool checks = true,
 				    const map<string,bufferptr> *attr = NULL);
-);
 
   friend struct ReadCB;
   void check_op(Op *op);

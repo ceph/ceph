@@ -26,7 +26,7 @@ struct AppendObjectsGenerator: public boost::static_visitor<void> {
   set<hobject_t, hobject_t::BitwiseComparator> *out;
   AppendObjectsGenerator(set<hobject_t, hobject_t::BitwiseComparator> *out) : out(out) {}
   void operator()(const ECTransaction::AppendOp &op) {
-    out->insert( op.oid);
+    out->insert(op.oid);
   }
   void operator()(const ECTransaction::TouchOp &op) {
     out->insert(op.oid);
@@ -49,7 +49,6 @@ struct AppendObjectsGenerator: public boost::static_visitor<void> {
   void operator()(const ECTransaction::RmAttrOp &op) {}
   void operator()(const ECTransaction::AllocHintOp &op) {}
   void operator()(const ECTransaction::NoOp &op) {}
-
 };
 void ECTransaction::get_append_objects(
   set<hobject_t, hobject_t::BitwiseComparator> *out) const
