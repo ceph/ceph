@@ -3953,7 +3953,7 @@ next:
 	if (in->scrub_infop &&
 	    in->scrub_infop->header &&
 	    in->scrub_infop->header->repair)
-	  in->mdcache->repair_inode_stats(in, NULL);
+	  in->mdcache->repair_inode_stats(in);
 	goto next;
       }
       if (frags_errors > 0)

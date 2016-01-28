@@ -1151,8 +1151,8 @@ public:
   void enqueue_scrub(const string& path, const std::string &tag,
                      bool force, bool recursive, bool repair,
 		     Formatter *f, Context *fin);
-  void repair_inode_stats(CInode *diri, Context *fin);
-  void repair_dirfrag_stats(CDir *dir, Context *fin);
+  void repair_inode_stats(CInode *diri);
+  void repair_dirfrag_stats(CDir *dir);
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {
