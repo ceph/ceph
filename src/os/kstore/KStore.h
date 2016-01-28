@@ -402,12 +402,15 @@ public:
 
   int statfs(struct statfs *buf);
 
+  using ObjectStore::exists;
   bool exists(const coll_t& cid, const ghobject_t& oid);
+  using ObjectStore::stat;
   int stat(
     const coll_t& cid,
     const ghobject_t& oid,
     struct stat *st,
     bool allow_eio = false); // struct stat?
+  using ObjectStore::read;
   int read(
     const coll_t& cid,
     const ghobject_t& oid,
@@ -423,18 +426,23 @@ public:
     bufferlist& bl,
     uint32_t op_flags = 0);
 
+  using ObjectStore::fiemap;
   int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
+  using ObjectStore::getattr;
   int getattr(const coll_t& cid, const ghobject_t& oid, const char *name, bufferptr& value);
+  using ObjectStore::getattrs;
   int getattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& aset);
 
   int list_collections(vector<coll_t>& ls);
   bool collection_exists(const coll_t& c);
   bool collection_empty(const coll_t& c);
 
+  using ObjectStore::collection_list;
   int collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
 		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next);
 
+  using ObjectStore::omap_get;
   int omap_get(
     const coll_t& cid,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
@@ -442,6 +450,7 @@ public:
     map<string, bufferlist> *out /// < [out] Key to value map
     );
 
+  using ObjectStore::omap_get_header;
   /// Get omap header
   int omap_get_header(
     const coll_t& cid,                ///< [in] Collection containing oid
@@ -450,6 +459,7 @@ public:
     bool allow_eio = false ///< [in] don't assert on eio
     );
 
+  using ObjectStore::omap_get_keys;
   /// Get keys defined on oid
   int omap_get_keys(
     const coll_t& cid,              ///< [in] Collection containing oid
@@ -457,6 +467,7 @@ public:
     set<string> *keys      ///< [out] Keys defined on oid
     );
 
+  using ObjectStore::omap_get_values;
   /// Get key values
   int omap_get_values(
     const coll_t& cid,                    ///< [in] Collection containing oid
@@ -465,6 +476,7 @@ public:
     map<string, bufferlist> *out ///< [out] Returned keys and values
     );
 
+  using ObjectStore::omap_check_keys;
   /// Filters keys into out which are defined on oid
   int omap_check_keys(
     const coll_t& cid,                ///< [in] Collection containing oid
@@ -473,6 +485,7 @@ public:
     set<string> *out         ///< [out] Subset of keys defined on oid
     );
 
+  using ObjectStore::get_omap_iterator;
   ObjectMap::ObjectMapIterator get_omap_iterator(
     const coll_t& cid,              ///< [in] collection
     const ghobject_t &oid  ///< [in] object
