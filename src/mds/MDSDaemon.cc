@@ -499,9 +499,7 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
   // Set up admin socket before taking mds_lock, so that ordering
   // is consistent (later we take mds_lock within asok callbacks)
   set_up_admin_socket();
-
   g_conf->add_observer(this);
-
   mds_lock.Lock();
   if (beacon.get_want_state() == MDSMap::STATE_DNE) {
     suicide();  // we could do something more graceful here
@@ -549,7 +547,7 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
   
   // schedule tick
   reset_tick();
-
+  g_conf->add_observer(this);
   mds_lock.Unlock();
 
   return 0;
