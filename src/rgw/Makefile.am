@@ -93,7 +93,7 @@ LIBRGW_DEPS += \
 	-ldl
 
 librgw_la_LIBADD = $(LIBRGW_DEPS) \
-	$(PTHREAD_LIBS) $(RESOLV_LIBS) $(LIBCOMMON) \
+	$(PTHREAD_LIBS) $(RESOLV_LIBS) libglobal.la \
 	$(EXTRALIBS)
 
 librgw_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0
