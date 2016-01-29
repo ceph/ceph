@@ -9142,6 +9142,7 @@ void OSD::ShardedOpWQ::_enqueue(pair<PGRef, PGQueueable> item)
     unsigned cost = item.second.get_cost();
     sdata->sdata_op_ordering_lock.Lock();
 
+    //不同优先级的队列
     if (priority >= CEPH_MSG_PRIO_LOW)
         sdata->pqueue.enqueue_strict(
             item.second.get_owner(), priority, item);

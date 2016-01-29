@@ -218,6 +218,9 @@ void ReplicatedPG::on_local_recover(
     if (pg_log.get_missing().is_missing(recovery_info.soid) &&
             pg_log.get_missing().missing.find(recovery_info.soid)->second.need > recovery_info.version)
     {
+    
+	#xierui:刚才那个问题很可能是这样导致的，首先作为pg主本的osd节点在其pglog中有一个版本，比如说11，在副本也记录有版本，
+	# 但是实际上主本的最新数据丢了，对象持久化的版本实际上是9.
         assert(is_primary());
         const pg_log_entry_t *latest = pg_log.get_log().objects.find(recovery_info.soid)->second;
         if (latest->op == pg_log_entry_t::LOST_REVERT &&
@@ -264,6 +267,7 @@ void ReplicatedPG::on_local_recover(
 
         publish_stats_to_osd();
         assert(missing_loc.needs_recovery(hoid));
+		//恢复了就加一个路径
         missing_loc.add_location(hoid, pg_whoami);
         if (!is_unreadable_object(hoid) &&
                 waiting_for_unreadable_object.count(hoid))

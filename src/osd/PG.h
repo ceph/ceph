@@ -373,6 +373,8 @@ public:
                 *v = i->second.need;
             return true;
         }
+		//unfound  need recovery but not in missing_loc
+		//xierui, do not compare version here? what is in missing_loc
         bool is_unfound(const hobject_t &hoid) const
         {
             return needs_recovery(hoid) && (
