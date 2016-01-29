@@ -31,13 +31,13 @@ class CompressorExample : public Compressor {
 public:
   virtual ~CompressorExample() {}
 
-  virtual int compress(bufferlist &in, bufferlist &out)
+  virtual int compress(const bufferlist &in, bufferlist &out)
   {
     out = in;
     return 0;
   }
 
-  virtual int decompress(bufferlist &in, bufferlist &out)
+  virtual int decompress(const bufferlist &in, bufferlist &out)
   {
     out = in;
     return 0;
