@@ -303,9 +303,11 @@ struct pg_t {
   pg_t() : m_pool(0), m_seed(0), m_preferred(-1) {}
   pg_t(ps_t seed, uint64_t pool, int pref=-1) :
     m_pool(pool), m_seed(seed), m_preferred(pref) {}
+  // cppcheck-suppress noExplicitConstructor
   pg_t(const ceph_pg& cpg) :
     m_pool(cpg.pool), m_seed(cpg.ps), m_preferred((__s16)cpg.preferred) {}
 
+  // cppcheck-suppress noExplicitConstructor
   pg_t(const old_pg_t& opg) {
     *this = opg.v;
   }
@@ -712,6 +714,7 @@ public:
   eversion_t() : version(0), epoch(0), __pad(0) {}
   eversion_t(epoch_t e, version_t v) : version(v), epoch(e), __pad(0) {}
 
+  // cppcheck-suppress noExplicitConstructor
   eversion_t(const ceph_eversion& ce) : 
     version(ce.version),
     epoch(ce.epoch),
@@ -2100,6 +2103,7 @@ struct pg_info_t {
       last_backfill(hobject_t::get_max()),
       last_backfill_bitwise(false)
   { }
+  // cppcheck-suppress noExplicitConstructor
   pg_info_t(spg_t p)
     : pgid(p),
       last_epoch_started(0), last_user_version(0),

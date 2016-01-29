@@ -364,6 +364,7 @@ class PGQueueable {
     void operator()(PGScrub &op);
   };
 public:
+  // cppcheck-suppress noExplicitConstructor
   PGQueueable(OpRequestRef op)
     : qvariant(op), cost(op->get_req()->get_cost()),
       priority(op->get_req()->get_priority()),

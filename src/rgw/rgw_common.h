@@ -622,10 +622,12 @@ struct rgw_bucket {
                     */
 
   rgw_bucket() { }
+  // cppcheck-suppress noExplicitConstructor
   rgw_bucket(const cls_user_bucket& b) : name(b.name), data_pool(b.data_pool),
 					 data_extra_pool(b.data_extra_pool),
 					 index_pool(b.index_pool), marker(b.marker),
 					 bucket_id(b.bucket_id) {}
+  // cppcheck-suppress noExplicitConstructor
   rgw_bucket(const char *n) : name(n) {
     assert(*n == '.'); // only rgw private buckets should be initialized without pool
     data_pool = index_pool = n;
@@ -986,6 +988,7 @@ struct rgw_obj_key {
   string instance;
 
   rgw_obj_key() {}
+  // cppcheck-suppress noExplicitConstructor
   rgw_obj_key(const string& n) {
     set(n);
   }
@@ -993,6 +996,7 @@ struct rgw_obj_key {
     set(n, i);
   }
 
+  // cppcheck-suppress noExplicitConstructor
   rgw_obj_key(const cls_rgw_obj_key& k) {
     set(k);
   }
