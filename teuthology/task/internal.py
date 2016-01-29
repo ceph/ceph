@@ -48,7 +48,9 @@ def base(ctx, config):
         # just cram an rm -rf here
         run.wait(
             ctx.cluster.run(
-                args=['rmdir', '--', testdir],
+                args=['find', testdir, '-ls',
+                      run.Raw(';'),
+                      'rmdir', '--', testdir],
                 wait=False,
             ),
         )
