@@ -156,6 +156,9 @@ public:
     stray_manager.eval_stray(dn);
   }
 
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set <std::string> &changed);
+
   void maybe_eval_stray(CInode *in, bool delay=false);
   bool is_readonly() { return readonly; }
   void force_readonly();
