@@ -17,7 +17,7 @@ RPM_RELEASE=0
 AC_SUBST(RPM_RELEASE)
 if test -d ".git" ; then
   AC_CHECK_PROG(GIT_CHECK, git, yes)
-  if test x"$GIT_CHECK" = x"yes"; then
+  if test x"$GIT_CHECK" = x"yes" -a x"$freebsd" != x"yes"; then
     RPM_RELEASE=`if expr index $(git describe --always) '-' > /dev/null ; then git describe --always | cut -d- -f2- | tr '-' '.' ; else echo "0"; fi`
   fi
 fi
@@ -228,7 +228,14 @@ AC_CHECK_PROG(YASM_CHECK, yasm, yes)
 if test x"$YASM_CHECK" = x"yes"; then
   if yasm -f elf64 src/common/crc32c_intel_fast_asm.S -o /dev/null; then
      echo 'we have a modern and working yasm'
-     if test `arch` = "x86_64" ; then
+     # FreeBSD has uname -p not arch(1), so do not exec arch
+     arch_x86_64=0
+     if test `uname -p` = "amd64"; then
+	arch_x86_64=1
+     elif test  -x /usr/bin/arch -a `arch` = "x86_64" ; then
+	arch_x86_64=1
+     fi
+     if test $arch_x86_64 -eq 1 ; then
         echo 'we are x86_64'
         arch_x32=0
         AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[
@@ -719,6 +726,16 @@ if test "x$enable_xio" = x"yes"; then
 
    XIO_LIBS="-lxio -libverbs -lrdmacm"
    AC_SUBST(XIO_LIBS)
+fi
+
+#
+# FreeBSD has it in base.
+#
+if test x"$freebsd" != x"yes" -a x"$with_radosgw" = x"yes"; then
+PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
+                [], AC_MSG_FAILURE([No usable version of libedit found.]))
+else
+	LIBEDIT_LIBS="-ledit"
 fi
 
 #libatomic-ops? You want it!

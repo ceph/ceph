@@ -240,6 +240,9 @@ check_TESTPROGRAMS += unittest_str_list
 
 unittest_log_SOURCES = log/test.cc
 unittest_log_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
+if FREEBSD
+    unittest_log_LDADD += -lexecinfo
+endif
 unittest_log_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
 check_TESTPROGRAMS += unittest_log
 
@@ -295,6 +298,9 @@ check_TESTPROGRAMS += unittest_bufferlist
 
 unittest_xlist_SOURCES = test/test_xlist.cc
 unittest_xlist_LDADD = $(UNITTEST_LDADD) $(LIBCOMMON)
+if FREEBSD
+    unittest_xlist_LDADD += -lexecinfo
+endif
 unittest_xlist_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_xlist
 
@@ -398,6 +404,9 @@ check_TESTPROGRAMS += unittest_ipaddr
 
 unittest_texttable_SOURCES = test/test_texttable.cc
 unittest_texttable_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
+if FREEBSD
+    unittest_texttable_LDADD += -lexecinfo
+endif
 unittest_texttable_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_texttable
 
