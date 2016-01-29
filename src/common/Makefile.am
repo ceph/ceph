@@ -154,6 +154,8 @@ noinst_HEADERS += \
 	common/crc32c_intel_baseline.h \
 	common/crc32c_intel_fast.h \
 	common/crc32c_aarch64.h \
+	common/cohort_lru.h \
+	common/sstring.hh \
 	xxHash/xxhash.h
 
 
