@@ -4741,7 +4741,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     in->gid = m->head.gid;
   }
   bool deleted_inode = false;
-  if ((issued & CEPH_CAP_LINK_EXCL) == 0 && in->nlink != (int32_t)m->head.nlink) {
+  if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
     in->nlink = m->head.nlink;
     if (in->nlink == 0 &&
 	(new_caps & (CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL)))
