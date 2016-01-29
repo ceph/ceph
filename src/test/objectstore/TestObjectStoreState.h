@@ -131,18 +131,15 @@ public:
   class C_OnFinished: public Context {
    protected:
     TestObjectStoreState *m_state;
-    ObjectStore::Transaction *m_tx;
 
    public:
-    C_OnFinished(TestObjectStoreState *state,
-        ObjectStore::Transaction *t) : m_state(state), m_tx(t) { }
+    C_OnFinished(TestObjectStoreState *state) : m_state(state) { }
 
     void finish(int r) {
       Mutex::Locker locker(m_state->m_finished_lock);
       m_state->dec_in_flight();
       m_state->m_finished_cond.Signal();
 
-      delete m_tx;
     }
   };
 };

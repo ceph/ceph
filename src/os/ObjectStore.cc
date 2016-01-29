@@ -143,8 +143,13 @@ ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
   return out << "osr(" << s.get_name() << " " << &s << ")";
 }
 
+ostream& operator<<(ostream& out, const ObjectStore::Transaction& tx) {
+
+  return out << "Transaction(" << &tx << ")"; 
+}
+
 unsigned ObjectStore::apply_transactions(Sequencer *osr,
-					 list<Transaction*> &tls,
+					 vector<Transaction>& tls,
 					 Context *ondisk)
 {
   // use op pool
@@ -165,7 +170,7 @@ unsigned ObjectStore::apply_transactions(Sequencer *osr,
 
 int ObjectStore::queue_transactions(
   Sequencer *osr,
-  list<Transaction*>& tls,
+  vector<Transaction>& tls,
   Context *onreadable,
   Context *oncommit,
   Context *onreadable_sync,
