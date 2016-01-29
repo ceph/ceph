@@ -103,11 +103,11 @@
 
      virtual void send_message(int to_osd, Message *m) = 0;
      virtual void queue_transaction(
-       ObjectStore::Transaction *t,
+       ObjectStore::Transaction&& t,
        OpRequestRef op = OpRequestRef()
        ) = 0;
      virtual void queue_transactions(
-       list<ObjectStore::Transaction*>& tls,
+       vector<ObjectStore::Transaction>& tls,
        OpRequestRef op = OpRequestRef()
        ) = 0;
      virtual epoch_t get_epoch() const = 0;

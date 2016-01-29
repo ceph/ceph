@@ -585,7 +585,7 @@ public:
     }
 
     static void collect_contexts(
-      list<Transaction *> &t,
+      vector<Transaction>& t,
       Context **out_on_applied,
       Context **out_on_commit,
       Context **out_on_applied_sync) {
@@ -593,12 +593,12 @@ public:
       assert(out_on_commit);
       assert(out_on_applied_sync);
       list<Context *> on_applied, on_commit, on_applied_sync;
-      for (list<Transaction *>::iterator i = t.begin();
+      for (vector<Transaction>::iterator i = t.begin();
 	   i != t.end();
 	   ++i) {
-	on_applied.splice(on_applied.end(), (*i)->on_applied);
-	on_commit.splice(on_commit.end(), (*i)->on_commit);
-	on_applied_sync.splice(on_applied_sync.end(), (*i)->on_applied_sync);
+	on_applied.splice(on_applied.end(), (*i).on_applied);
+	on_commit.splice(on_commit.end(), (*i).on_commit);
+	on_applied_sync.splice(on_applied_sync.end(), (*i).on_applied_sync);
       }
       *out_on_applied = C_Contexts::list_to_context(on_applied);
       *out_on_commit = C_Contexts::list_to_context(on_commit);
@@ -1792,71 +1792,45 @@ public:
     static void generate_test_instances(list<Transaction*>& o);
   };
 
-  struct C_DeleteTransaction : public Context {
-    ObjectStore::Transaction *t;
-    C_DeleteTransaction(ObjectStore::Transaction *tt) : t(tt) {}
-    void finish(int r) {
-      delete t;
-    }
-  };
-  template<class T>
-  struct C_DeleteTransactionHolder : public Context {
-    ObjectStore::Transaction *t;
-    T obj;
-    C_DeleteTransactionHolder(ObjectStore::Transaction *tt, T &obj) :
-      t(tt), obj(obj) {}
-    void finish(int r) {
-      delete t;
-    }
-  };
-
   // synchronous wrappers
-  unsigned apply_transaction(Sequencer *osr, Transaction& t, Context *ondisk=0) {
-    list<Transaction*> tls;
-    tls.push_back(&t);
+  unsigned apply_transaction(Sequencer *osr, Transaction&& t, Context *ondisk=0) {
+    vector<Transaction> tls;
+    tls.push_back(std::move(t));
     return apply_transactions(osr, tls, ondisk);
   }
-  unsigned apply_transactions(Sequencer *osr, list<Transaction*>& tls, Context *ondisk=0);
+  unsigned apply_transactions(Sequencer *osr, vector<Transaction>& tls, Context *ondisk=0);
 
-  int queue_transaction_and_cleanup(Sequencer *osr, Transaction* t,
-				    ThreadPool::TPHandle *handle = NULL) {
-    list<Transaction *> tls;
-    tls.push_back(t);
-    return queue_transactions(osr, tls, new C_DeleteTransaction(t),
-	                      NULL, NULL, TrackedOpRef(), handle);
-  }
-
-  int queue_transaction(Sequencer *osr, Transaction *t, Context *onreadable, Context *ondisk=0,
+  int queue_transaction(Sequencer *osr, Transaction&& t, Context *onreadable, Context *ondisk=0,
 				Context *onreadable_sync=0,
 				TrackedOpRef op = TrackedOpRef(),
 				ThreadPool::TPHandle *handle = NULL) {
-    list<Transaction*> tls;
-    tls.push_back(t);
+    vector<Transaction> tls;
+    tls.push_back(std::move(t));
     return queue_transactions(osr, tls, onreadable, ondisk, onreadable_sync,
 	                      op, handle);
   }
 
-  int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
+  int queue_transactions(Sequencer *osr, vector<Transaction>& tls,
 			 Context *onreadable, Context *ondisk=0,
 			 Context *onreadable_sync=0,
 			 TrackedOpRef op = TrackedOpRef(),
 			 ThreadPool::TPHandle *handle = NULL) {
     assert(!tls.empty());
-    tls.back()->register_on_applied(onreadable);
-    tls.back()->register_on_commit(ondisk);
-    tls.back()->register_on_applied_sync(onreadable_sync);
+    tls.back().register_on_applied(onreadable);
+    tls.back().register_on_commit(ondisk);
+    tls.back().register_on_applied_sync(onreadable_sync);
     return queue_transactions(osr, tls, op, handle);
   }
 
   virtual int queue_transactions(
-    Sequencer *osr, list<Transaction*>& tls,
+    Sequencer *osr, vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) = 0;
 
 
   int queue_transactions(
     Sequencer *osr,
-    list<Transaction*>& tls,
+    vector<Transaction>& tls,
     Context *onreadable,
     Context *oncommit,
     Context *onreadable_sync,
@@ -1865,14 +1839,15 @@ public:
 
   int queue_transaction(
     Sequencer *osr,
-    Transaction* t,
+    Transaction&& t,
     Context *onreadable,
     Context *oncommit,
     Context *onreadable_sync,
     Context *oncomplete,
     TrackedOpRef op) {
-    list<Transaction*> tls;
-    tls.push_back(t);
+
+    vector<Transaction> tls;
+    tls.push_back(std::move(t));
     return queue_transactions(
       osr, tls, onreadable, oncommit, onreadable_sync, oncomplete, op);
   }
@@ -2385,5 +2360,6 @@ static inline void intrusive_ptr_release(ObjectStore::Sequencer_impl *s) {
 }
 
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s);
+ostream& operator<<(ostream& out, const ObjectStore::Transaction& tx);
 
 #endif
