@@ -2769,7 +2769,8 @@ void OSDMonitor::mark_all_down()
 }
 
 void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
-			    list<pair<health_status_t,string> > *detail) const
+			    list<pair<health_status_t,string> > *detail,
+			    CephContext *cct) const
 {
   int num_osds = osdmap.get_num_osds();
 
