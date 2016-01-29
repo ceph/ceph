@@ -156,7 +156,8 @@ noinst_HEADERS += \
 	common/sctp_crc32.h \
 	common/crc32c_intel_baseline.h \
 	common/crc32c_intel_fast.h \
-	common/crc32c_aarch64.h
+	common/crc32c_aarch64.h \
+	xxHash/xxhash.h
 
 
 # important; libmsg before libauth!
