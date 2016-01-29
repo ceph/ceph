@@ -114,7 +114,7 @@ case "$1" in
 	if [ $DEBIAN -eq 1 ]; then
             start-stop-daemon --stop --signal HUP -x $RADOSGW --oknodo
 	else
-            killproc $RADOSGW -SIGHUP
+            killproc $RADOSGW -HUP
 	fi
 	;;
     restart|force-reload)
