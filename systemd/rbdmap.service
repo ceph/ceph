@@ -1,0 +1,12 @@
+[Unit]
+Description=Map RBD devices
+
+After=network-online.target local-fs.target
+Wants=network-online.target local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/rbdmap map
+ExecReload=/usr/bin/rbdmap map
+ExecStop=/usr/bin/rbdmap unmap

@@ -48,7 +48,8 @@ bash_completion_DATA += \
 
 bin_SCRIPTS += \
 	ceph-rbdnamer \
-	rbd-replay-many
+	rbd-replay-many \
+        rbdmap
 
 python_PYTHON += pybind/rbd.py
 
