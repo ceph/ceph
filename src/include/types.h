@@ -280,6 +280,7 @@ typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 ye
 struct client_t {
   int64_t v;
 
+  // cppcheck-suppress noExplicitConstructor
   client_t(int64_t _v = -2) : v(_v) {}
   
   void encode(bufferlist& bl) const {
@@ -315,6 +316,7 @@ typedef uint64_t _inodeno_t;
 struct inodeno_t {
   _inodeno_t val;
   inodeno_t() : val(0) {}
+  // cppcheck-suppress noExplicitConstructor
   inodeno_t(_inodeno_t v) : val(v) {}
   inodeno_t operator+=(inodeno_t o) { val += o.val; return *this; }
   operator _inodeno_t() const { return val; }
@@ -366,6 +368,7 @@ void dump(const ceph_dir_layout& l, ceph::Formatter *f);
 
 struct prettybyte_t {
   uint64_t v;
+  // cppcheck-suppress noExplicitConstructor
   prettybyte_t(uint64_t _v) : v(_v) {}
 };
 
@@ -389,6 +392,7 @@ inline ostream& operator<<(ostream& out, const prettybyte_t& b)
 
 struct si_t {
   uint64_t v;
+  // cppcheck-suppress noExplicitConstructor
   si_t(uint64_t _v) : v(_v) {}
 };
 
@@ -412,6 +416,7 @@ inline ostream& operator<<(ostream& out, const si_t& b)
 
 struct pretty_si_t {
   uint64_t v;
+  // cppcheck-suppress noExplicitConstructor
   pretty_si_t(uint64_t _v) : v(_v) {}
 };
 
@@ -435,6 +440,7 @@ inline ostream& operator<<(ostream& out, const pretty_si_t& b)
 
 struct kb_t {
   uint64_t v;
+  // cppcheck-suppress noExplicitConstructor
   kb_t(uint64_t _v) : v(_v) {}
 };
 
@@ -483,6 +489,7 @@ inline ostream& operator<<(ostream &oss, health_status_t status) {
 
 struct weightf_t {
   float v;
+  // cppcheck-suppress noExplicitConstructor
   weightf_t(float _v) : v(_v) {}
 };
 
@@ -530,6 +537,7 @@ struct errorcode32_t {
   int32_t code;
 
   errorcode32_t() {}
+  // cppcheck-suppress noExplicitConstructor
   errorcode32_t(int32_t i) : code(i) {}
 
   operator int() const { return code; }

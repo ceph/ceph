@@ -35,6 +35,7 @@ class DecayRate {
 
 public:
   DecayRate() : k(0) {}
+  // cppcheck-suppress noExplicitConstructor
   DecayRate(double hl) { set_halflife(hl); }
   void set_halflife(double hl) {
     k = ::log(.5) / hl;
