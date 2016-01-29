@@ -616,7 +616,7 @@ ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(coll_t cid,
 // write operations
 
 int MemStore::queue_transactions(Sequencer *osr,
-				 list<Transaction*>& tls,
+				 vector<Transaction>& tls,
 				 TrackedOpRef op,
 				 ThreadPool::TPHandle *handle)
 {
@@ -637,12 +637,12 @@ int MemStore::queue_transactions(Sequencer *osr,
     lock = std::unique_lock<std::mutex>((*seq)->mutex);
   }
 
-  for (list<Transaction*>::iterator p = tls.begin(); p != tls.end(); ++p) {
+  for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
     // poke the TPHandle heartbeat just to exercise that code path
     if (handle)
       handle->reset_tp_timeout();
 
-    _do_transaction(**p);
+    _do_transaction(*p);
   }
 
   Context *on_apply = NULL, *on_apply_sync = NULL, *on_commit = NULL;

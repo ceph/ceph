@@ -4,17 +4,6 @@
 #include "global/global_init.h"
 #include "os/ObjectStore.h"
 
-struct C_DeleteTransWrapper : public Context {
-  Context *c;
-  ObjectStore::Transaction *t;
-  C_DeleteTransWrapper(
-    ObjectStore::Transaction *t,
-    Context *c) : c(c), t(t) {}
-  void finish(int r) {
-    c->complete(r);
-    delete t;
-  }
-};
 
 TestFileStoreBackend::TestFileStoreBackend(
   ObjectStore *os, bool write_infos)
@@ -57,9 +46,10 @@ void TestFileStoreBackend::write(
 
   os->queue_transaction(
     osr,
-    t,
-    new C_DeleteTransWrapper(t, on_applied),
+    std::move(*t),
+    on_applied,
     on_commit);
+  delete t;
 }
 
 void TestFileStoreBackend::read(

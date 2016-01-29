@@ -3171,10 +3171,10 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
 	info.stats = m->stats;
       }
 
-      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+      ObjectStore::Transaction t;
       dirty_info = true;
-      write_if_dirty(*t);
-      int tr = osd->store->queue_transaction_and_cleanup(osr.get(), t);
+      write_if_dirty(t);
+      int tr = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
       assert(tr == 0);
     }
     break;
@@ -9291,9 +9291,9 @@ void ReplicatedPG::sub_op_remove(OpRequestRef op)
 
   op->mark_started();
 
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  remove_snap_mapped_object(*t, m->poid);
-  int r = osd->store->queue_transaction_and_cleanup(osr.get(), t);
+  ObjectStore::Transaction t;
+  remove_snap_mapped_object(t, m->poid);
+  int r = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
   assert(r == 0);
 }
 
@@ -9380,7 +9380,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   pg_log.get_log().print(*_dout);
   *_dout << dendl;
 
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  ObjectStore::Transaction t;
   C_PG_MarkUnfoundLost *c = new C_PG_MarkUnfoundLost(this);
 
   utime_t mtime = ceph_clock_now(cct);
@@ -9403,7 +9403,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 
     switch (what) {
     case pg_log_entry_t::LOST_MARK:
-      obc = mark_object_lost(t, oid, m->second.need, mtime, pg_log_entry_t::LOST_MARK);
+      obc = mark_object_lost(&t, oid, m->second.need, mtime, pg_log_entry_t::LOST_MARK);
       pg_log.missing_got(m++);
       assert(0 == "actually, not implemented yet!");
       // we need to be careful about how this is handled on the replica!
@@ -9438,7 +9438,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 	pg_log.add(e);
 	dout(10) << e << dendl;
 
-	t->remove(
+	t.remove(
 	  coll,
 	  ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard));
 	pg_log.missing_add_event(e);
@@ -9467,11 +9467,11 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   }
 
   dirty_info = true;
-  write_if_dirty(*t);
+  write_if_dirty(t);
 
-  t->register_on_complete(new ObjectStore::C_DeleteTransaction(t));
-
-  osd->store->queue_transaction(osr.get(), t, c, NULL, new C_OSD_OndiskWriteUnlockList(&c->obcs));
+  
+  osd->store->queue_transaction(osr.get(), std::move(t), c, NULL, 
+                            new C_OSD_OndiskWriteUnlockList(&c->obcs));
 	      
   // Send out the PG log to all replicas
   // So that they know what is lost
@@ -10168,19 +10168,18 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 	      obc->ondisk_write_lock();
 	      obc->obs.oi.version = latest->version;
 
-	      ObjectStore::Transaction *t = new ObjectStore::Transaction;
-	      t->register_on_applied(new ObjectStore::C_DeleteTransaction(t));
+	      ObjectStore::Transaction t;
 	      bufferlist b2;
 	      obc->obs.oi.encode(b2);
 	      assert(!pool.info.require_rollback());
-	      t->setattr(coll, ghobject_t(soid), OI_ATTR, b2);
+	      t.setattr(coll, ghobject_t(soid), OI_ATTR, b2);
 
 	      recover_got(soid, latest->version);
 	      missing_loc.add_location(soid, pg_whoami);
 
 	      ++active_pushes;
 
-	      osd->store->queue_transaction(osr.get(), t,
+	      osd->store->queue_transaction(osr.get(), std::move(t),
 					    new C_OSD_AppliedRecoveredObject(this, obc),
 					    new C_OSD_CommittedPushedObject(
 					      this,
@@ -12762,10 +12761,10 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   dout(10) << "purged_snaps now " << pg->info.purged_snaps << ", snap_trimq now " 
 	   << pg->snap_trimq << dendl;
   
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  ObjectStore::Transaction t;
   pg->dirty_big_info = true;
-  pg->write_if_dirty(*t);
-  int tr = pg->osd->store->queue_transaction_and_cleanup(pg->osr.get(), t);
+  pg->write_if_dirty(t);
+  int tr = pg->osd->store->queue_transaction(pg->osr.get(), std::move(t), NULL);
   assert(tr == 0);
 
   context<SnapTrimmer>().need_share_pg_info = true;

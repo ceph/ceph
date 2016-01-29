@@ -138,7 +138,7 @@ TEST(TestFileJournal, WriteSmall) {
     ASSERT_EQ(0, j.create());
     j.make_writeable();
 
-    list<ObjectStore::Transaction*> tls;
+    vector<ObjectStore::Transaction> tls;
     bufferlist bl;
     bl.append("small");
     int orig_len = j.prepare_entry(tls, &bl);
@@ -168,7 +168,7 @@ TEST(TestFileJournal, WriteBig) {
       memset(foo, 1, sizeof(foo));
       bl.append(foo, sizeof(foo));
     }
-    list<ObjectStore::Transaction*> tls;
+    vector<ObjectStore::Transaction> tls;
     int orig_len = j.prepare_entry(tls, &bl);
     j.submit_entry(1, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
     wait();
@@ -191,7 +191,7 @@ TEST(TestFileJournal, WriteMany) {
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
-    list<ObjectStore::Transaction*> tls;
+    vector<ObjectStore::Transaction> tls;
     bufferlist bl;
     bl.append("small");
     uint64_t seq = 1;
@@ -225,7 +225,7 @@ TEST(TestFileJournal, WriteManyVecs) {
 
     bufferlist first;
     first.append("small");
-    list<ObjectStore::Transaction*> tls;
+    vector<ObjectStore::Transaction> tls;
     int orig_len = j.prepare_entry(tls, &first);
     j.submit_entry(1, first, orig_len, gb.new_sub());
 
@@ -261,7 +261,7 @@ TEST(TestFileJournal, ReplaySmall) {
   g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  list<ObjectStore::Transaction*> tls;
+  vector<ObjectStore::Transaction> tls;
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -319,7 +319,7 @@ TEST(TestFileJournal, ReplayCorrupt) {
   g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  list<ObjectStore::Transaction*> tls;
+  vector<ObjectStore::Transaction> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
@@ -416,7 +416,7 @@ TEST(TestFileJournal, WriteTrim) {
     memset(foo, 1, sizeof(foo));
 
     uint64_t seq = 1, committed = 0;
-    list<ObjectStore::Transaction*> tls;
+    vector<ObjectStore::Transaction> tls;
 
     for (unsigned i=0; i<size_mb*2; i++) {
       bl.clear();
@@ -450,7 +450,7 @@ TEST(TestFileJournal, WriteTrimSmall) {
   g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
   g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
   g_ceph_context->_conf->apply_changes(NULL);
-  list<ObjectStore::Transaction*> tls;
+  vector<ObjectStore::Transaction> tls;
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -500,7 +500,7 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
   g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  list<ObjectStore::Transaction*> tls;
+  vector<ObjectStore::Transaction> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
@@ -557,7 +557,7 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
   g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  list<ObjectStore::Transaction*> tls;
+  vector<ObjectStore::Transaction> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
@@ -614,7 +614,7 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
   g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  list<ObjectStore::Transaction*> tls;
+  vector<ObjectStore::Transaction> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
