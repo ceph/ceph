@@ -3540,6 +3540,8 @@ int KStore::_clone(TransContext *txc,
     _assign_nid(txc, newo);
   }
 
+  oldo->flush();
+
   r = _do_read(oldo, 0, oldo->onode.size, bl, 0);
   if (r < 0)
     goto out;
