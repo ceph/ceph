@@ -528,7 +528,8 @@ void MonmapMonitor::tick()
 }
 
 void MonmapMonitor::get_health(list<pair<health_status_t, string> >& summary,
-			       list<pair<health_status_t, string> > *detail) const
+			       list<pair<health_status_t, string> > *detail,
+			       CephContext *cct) const
 {
   int max = mon->monmap->size();
   int actual = mon->get_quorum().size();
