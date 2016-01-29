@@ -42,6 +42,7 @@ static const __u8 OSD_CAP_ANY   = 0xff;          // *
 struct osd_rwxa_t {
   __u8 val;
 
+  // cppcheck-suppress noExplicitConstructor
   osd_rwxa_t(__u8 v = 0) : val(v) {}
   osd_rwxa_t& operator=(__u8 v) {
     val = v;

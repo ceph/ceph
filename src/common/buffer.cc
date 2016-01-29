@@ -176,6 +176,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     virtual ~raw() {}
 
     // no copying.
+    // cppcheck-suppress noExplicitConstructor
     raw(const raw &other);
     const raw& operator=(const raw &other);
 

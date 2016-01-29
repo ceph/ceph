@@ -443,6 +443,7 @@ private:
   // threads
   struct WorkThread : public Thread {
     ThreadPool *pool;
+    // cppcheck-suppress noExplicitConstructor
     WorkThread(ThreadPool *p) : pool(p) {}
     void *entry() {
       pool->worker(this);
