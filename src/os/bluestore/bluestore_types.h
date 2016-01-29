@@ -258,7 +258,7 @@ struct bluestore_wal_op_t {
     OP_COPY = 2,
     OP_ZERO = 4,
   } type_t;
-  __u8 op;
+  __u8 op = 0;
   bluestore_extent_t extent;
   bluestore_extent_t src_extent;
   uint64_t src_rmw_head, src_rmw_tail;
