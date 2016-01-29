@@ -5004,9 +5004,9 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
       CephXServiceTicketInfo auth_ticket_info;
       
       if (authorizer_data.length()) {
-	int ret = cephx_verify_authorizer(g_ceph_context, &keyring, iter,
+	bool ret = cephx_verify_authorizer(g_ceph_context, &keyring, iter,
 					  auth_ticket_info, authorizer_reply);
-	if (ret >= 0) {
+	if (ret) {
 	  session_key = auth_ticket_info.session_key;
 	  isvalid = true;
 	} else {
