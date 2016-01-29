@@ -7661,9 +7661,6 @@ int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx,
 
   ldout(cct, 20) << "rgw_get_bucket_info: bucket instance: " << entry_point.bucket << dendl;
 
-  if (pattrs)
-    pattrs->clear();
-
   /* read bucket instance info */
 
   string oid;
