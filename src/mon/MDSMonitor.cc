@@ -682,7 +682,8 @@ void MDSMonitor::on_active()
 }
 
 void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
-			    list<pair<health_status_t, string> > *detail) const
+			    list<pair<health_status_t, string> > *detail,
+			    CephContext* cct) const
 {
   mdsmap.get_health(summary, detail);
 
