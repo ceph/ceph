@@ -39,6 +39,7 @@ OPTION(restapi_log_level, OPT_STR, "") 	// default set by Python code
 OPTION(restapi_base_url, OPT_STR, "")	// "
 OPTION(fatal_signal_handlers, OPT_BOOL, true)
 OPTION(erasure_code_dir, OPT_STR, CEPH_PKGLIBDIR"/erasure-code") // default location for erasure-code plugins
+OPTION(compression_dir, OPT_STR, CEPH_PKGLIBDIR"/compressor") // default location for compression plugins
 
 OPTION(log_file, OPT_STR, "/var/log/ceph/$cluster-$name.log") // default changed by common_preinit()
 OPTION(log_max_new, OPT_INT, 1000) // default changed by common_preinit()
@@ -575,6 +576,9 @@ OPTION(osd_pool_default_size, OPT_INT, 3)
 OPTION(osd_pool_default_min_size, OPT_INT, 0)  // 0 means no specific default; ceph will use size-size/2
 OPTION(osd_pool_default_pg_num, OPT_INT, 8) // number of PGs for new pools. Configure in global or mon section of ceph.conf
 OPTION(osd_pool_default_pgp_num, OPT_INT, 8) // number of PGs for placement purposes. Should be equal to pg_num
+OPTION(osd_compression_plugins, OPT_STR,
+       "snappy"
+       ) // list of compression plugins
 OPTION(osd_pool_default_erasure_code_profile,
        OPT_STR,
        "plugin=jerasure "
@@ -853,11 +857,11 @@ OPTION(bluefs_min_flush_size, OPT_U64, 65536)  // ignore flush until its this bi
 
 OPTION(bluestore_bluefs, OPT_BOOL, true)
 OPTION(bluestore_bluefs_env_mirror, OPT_BOOL, false) // mirror to normal Env for debug
-OPTION(bluestore_bluefs_initial_length, OPT_U64, 65536*1024)
-OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .01)
-OPTION(bluestore_bluefs_min_free_ratio, OPT_FLOAT, .1)
-OPTION(bluestore_bluefs_max_free_fs_main_ratio, OPT_FLOAT, .8)
-OPTION(bluestore_bluefs_min_gift_ratio, OPT_FLOAT, 1)
+OPTION(bluestore_bluefs_min, OPT_U64, 1*1024*1024*1024) // 1gb
+OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .02)  // min fs free / total free
+OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT, .90)  // max fs free / total free
+OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT, .02) // how much to add at a time
+OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at a time
 OPTION(bluestore_block_path, OPT_STR, "")
 OPTION(bluestore_block_size, OPT_U64, 10 * 1024*1024*1024)  // 10gb for testing
 OPTION(bluestore_block_db_path, OPT_STR, "")
@@ -891,6 +895,7 @@ OPTION(bluestore_overlay_max, OPT_INT, 0)
 OPTION(bluestore_open_by_handle, OPT_BOOL, true)
 OPTION(bluestore_o_direct, OPT_BOOL, true)
 OPTION(bluestore_clone_cow, OPT_BOOL, true)  // do copy-on-write for clones
+OPTION(bluestore_default_buffered_read, OPT_BOOL, false)
 OPTION(bluestore_debug_misc, OPT_BOOL, false)
 OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL, false)
 OPTION(bluestore_debug_small_allocations, OPT_INT, 0)

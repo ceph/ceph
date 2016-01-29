@@ -303,6 +303,10 @@ public:
   /// gift more block space
   void add_block_extent(unsigned bdev, uint64_t offset, uint64_t len);
 
+  /// reclaim block space
+  int reclaim_blocks(unsigned bdev, uint64_t want,
+		     uint64_t *offset, uint32_t *length);
+
   void flush(FileWriter *h) {
     Mutex::Locker l(lock);
     _flush(h, false);

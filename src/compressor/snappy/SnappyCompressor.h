@@ -18,7 +18,7 @@
 #include <snappy.h>
 #include <snappy-sinksource.h>
 #include "include/buffer.h"
-#include "Compressor.h"
+#include "compressor/Compressor.h"
 
 class BufferlistSource : public snappy::Source {
   list<bufferptr>::const_iterator pb;
@@ -52,6 +52,7 @@ class BufferlistSource : public snappy::Source {
 class SnappyCompressor : public Compressor {
  public:
   virtual ~SnappyCompressor() {}
+  virtual const char* get_method_name() { return "snappy"; }
   virtual int compress(bufferlist &src, bufferlist &dst) {
     BufferlistSource source(src);
     bufferptr ptr(snappy::MaxCompressedLength(src.length()));

@@ -18,6 +18,7 @@ class FreelistManager {
   std::map<uint64_t, uint64_t> kv_free;    ///< mirrors our kv values in the db
 
   void _audit();
+  void _dump();
 
 public:
   FreelistManager() :

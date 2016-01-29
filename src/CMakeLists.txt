@@ -616,7 +616,7 @@ set(ceph_mon_srcs
   common/TextTable.cc)
 add_executable(ceph-mon ${ceph_mon_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
 add_dependencies(ceph-mon erasure_code_plugins)
-      target_link_libraries(ceph-mon mon ${Boost_THREAD_LIBRARY} common os global ${EXTRALIBS}
+      target_link_libraries(ceph-mon mon common os global ${EXTRALIBS}
   ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 install(TARGETS ceph-mon DESTINATION bin)
 
@@ -681,7 +681,7 @@ endif(${HAVE_LIBAIO})
 if(${WITH_LTTNG})
   target_link_libraries(os libos_tp)
 endif(${WITH_LTTNG})
-target_link_libraries(os kv leveldb snappy rocksdb)
+target_link_libraries(os kv)
 
 set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})
