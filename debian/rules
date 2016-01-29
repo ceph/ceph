@@ -40,6 +40,14 @@ configure-stamp:
 	./configure --prefix=/usr --localstatedir=/var \
 	  --sysconfdir=/etc $(extraopts) $(confflags) \
 	  $(CEPH_EXTRA_CONFIGURE_ARGS)
+
+	# Wheezy and Precise do not support tracepoints
+	if ! grep -q 'define WITH_LTTNG' src/acconfig.h ; then   \
+	  sed -i.orig '/lib.*_tp\.so/d' debian/ceph.install      \
+	                                debian/librados2.install \
+	                                debian/librbd1.install ; \
+	fi
+
 	touch $@
 
 build-arch: build
