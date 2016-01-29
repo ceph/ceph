@@ -1567,8 +1567,21 @@ int MDSMonitor::filesystem_command(
     }
     r = 0;
   } else if (prefix == "mds setmap") {
+    string confirm;
+    if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
+	confirm != "--yes-i-really-mean-it") {
+      ss << "WARNING: this can make your filesystem inaccessible! "
+	    "Add --yes-i-really-mean-it if you are sure you wish to continue.";
+      return -EINVAL;;
+    }
+
     MDSMap map;
-    map.decode(m->get_data());
+    try {
+      map.decode(m->get_data());
+    } catch(buffer::error &e) {
+      ss << "invalid mdsmap";
+      return -EINVAL;
+    }
     epoch_t e = 0;
     int64_t epochnum;
     if (cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum))

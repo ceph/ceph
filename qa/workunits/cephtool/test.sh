@@ -778,10 +778,15 @@ function test_mon_mds()
   ((epoch2 = current_epoch + 2))
   ((epoch3 = current_epoch + 3))
   ((epoch4 = current_epoch + 4))
-  ceph mds setmap -i $mdsmapfile $epoch || \
-      ceph mds setmap -i $mdsmapfile $epoch2 || \
-      ceph mds setmap -i $mdsmapfile $epoch3 || \
-      ceph mds setmap -i $mdsmapfile $epoch4
+  # no conformation
+  expect_false ceph mds setmap -i $mdsmapfile $epoch
+  # no input
+  expect_false ceph mds setmap $epoch --yes-i-really-mean-it
+
+  ceph mds setmap -i $mdsmapfile $epoch --yes-i-really-mean-it || \
+      ceph mds setmap -i $mdsmapfile $epoch2 --yes-i-really-mean-it || \
+      ceph mds setmap -i $mdsmapfile $epoch3 --yes-i-really-mean-it || \
+      ceph mds setmap -i $mdsmapfile $epoch4 --yes-i-really-mean-it
   rm $mdsmapfile
 
   ceph osd pool create data2 10
