@@ -3084,6 +3084,8 @@ int KStore::_do_truncate(TransContext *txc, OnodeRef o, uint64_t offset)
 {
   uint64_t stripe_size = o->onode.stripe_size;
 
+  o->flush();
+
   // trim down stripes
   if (stripe_size) {
     uint64_t pos = offset;
