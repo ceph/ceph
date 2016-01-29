@@ -90,7 +90,6 @@ void usage()
        << "                    get OSD fsid for the given block device\n"
        << std::endl;
   generic_server_usage();
-  cout.flush();
 }
 
 int preload_erasure_code()
