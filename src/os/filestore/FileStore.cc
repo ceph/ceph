@@ -2959,7 +2959,10 @@ int FileStore::read(
   if (got < 0) {
     dout(10) << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
     lfn_close(fd);
-    assert(allow_eio || !m_filestore_fail_eio || got != -EIO);
+    if (!(allow_eio || !m_filestore_fail_eio || got != -EIO)) {
+      derr << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
+      assert(0 == "eio on pread");
+    }
     return got;
   }
   bptr.set_length(got);   // properly size the buffer
