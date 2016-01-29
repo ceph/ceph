@@ -71,7 +71,6 @@ class MonmapMonitor : public PaxosService {
 		  list<pair<health_status_t,string> > *detail) const;
 
   int get_monmap(bufferlist &bl);
-  int get_monmap(MonMap &m);
 
   /*
    * Since monitors are pretty
