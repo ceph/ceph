@@ -141,7 +141,13 @@ class RGWCompletionManager;
 class RGWMetadataLog {
   CephContext *cct;
   RGWRados *store;
-  string prefix;
+  const string prefix;
+
+  static std::string make_prefix(const std::string& period) {
+    if (period.empty())
+      return META_LOG_OBJ_PREFIX;
+    return META_LOG_OBJ_PREFIX + period + ".";
+  }
 
   void get_shard_oid(int id, string& oid) {
     char buf[16];
@@ -154,7 +160,10 @@ class RGWMetadataLog {
 
   void mark_modified(int shard_id);
 public:
-  RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), prefix(META_LOG_OBJ_PREFIX), lock("RGWMetaLog::lock") {}
+  RGWMetadataLog(CephContext *_cct, RGWRados *_store, const std::string& period)
+    : cct(_cct), store(_store),
+      prefix(make_prefix(period)),
+      lock("RGWMetaLog::lock") {}
 
   int add_entry(RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl);
   int get_log_shard_id(RGWMetadataHandler *handler, const string& section, const string& key);
@@ -236,6 +245,8 @@ class RGWMetadataManager {
 public:
   RGWMetadataManager(CephContext *_cct, RGWRados *_store);
   ~RGWMetadataManager();
+
+  int init(const std::string& current_period);
 
   int register_handler(RGWMetadataHandler *handler);
 

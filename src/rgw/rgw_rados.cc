@@ -3615,6 +3615,13 @@ int RGWRados::init_complete()
   period_history.reset(new RGWPeriodHistory(cct, period_puller.get(),
                                             current_period));
 
+  ret = meta_mgr->init(current_period.get_id());
+  if (ret < 0) {
+    lderr(cct) << "ERROR: failed to initialize metadata log: "
+        << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
   if (need_watch_notify()) {
     ret = init_watch();
     if (ret < 0) {
