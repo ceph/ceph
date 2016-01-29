@@ -354,9 +354,9 @@ public:
 
 static RGWMetadataTopHandler md_top_handler;
 
-RGWMetadataManager::RGWMetadataManager(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store)
+RGWMetadataManager::RGWMetadataManager(CephContext *_cct, RGWRados *_store)
+  : cct(_cct), store(_store), md_log(nullptr)
 {
-  md_log = new RGWMetadataLog(_cct, _store);
 }
 
 RGWMetadataManager::~RGWMetadataManager()
@@ -369,6 +369,12 @@ RGWMetadataManager::~RGWMetadataManager()
 
   handlers.clear();
   delete md_log;
+}
+
+int RGWMetadataManager::init(const std::string& current_period)
+{
+  md_log = new RGWMetadataLog(cct, store, current_period);
+  return 0;
 }
 
 int RGWMetadataManager::store_md_log_entries(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
