@@ -117,6 +117,9 @@ int MonClient::get_monmap_privately()
   Messenger* smessenger = NULL;
   if (!messenger) {
     messenger = smessenger = Messenger::create_client_messenger(cct, "temp_mon_client");
+    if (NULL == messenger) {
+        return -1;
+    }
     messenger->add_dispatcher_head(this);
     smessenger->start();
     temp_msgr = true;
