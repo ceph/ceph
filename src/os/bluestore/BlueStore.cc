@@ -6340,7 +6340,6 @@ int BlueStore::_create_collection(
       r = -EEXIST;
       goto out;
     }
-    assert((*c)->exists);
     c->reset(new Collection(this, cid));
     (*c)->cnode.bits = bits;
     coll_map[cid] = *c;
