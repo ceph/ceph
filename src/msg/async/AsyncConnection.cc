@@ -2007,6 +2007,7 @@ void AsyncConnection::accept(int incoming)
   ldout(async_msgr->cct, 10) << __func__ << " sd=" << incoming << dendl;
   assert(sd < 0);
 
+  Mutex::Locker l(lock);
   sd = incoming;
   state = STATE_ACCEPTING;
   center->create_file_event(sd, EVENT_READABLE, read_handler);
