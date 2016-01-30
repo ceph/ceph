@@ -12,6 +12,7 @@ namespace librados {
 }
 
 struct inconsistent_obj_wrapper;
+struct inconsistent_snapset_wrapper;
 
 namespace Scrub {
 
@@ -23,9 +24,14 @@ public:
 		       const spg_t& pgid,
 		       const coll_t& coll);
   void add_object_error(int64_t pool, const inconsistent_obj_wrapper& e);
+  void add_snap_error(int64_t pool, const inconsistent_snapset_wrapper& e);
   bool empty() const;
   void flush(ObjectStore::Transaction *);
   void cleanup(ObjectStore::Transaction *);
+  std::vector<bufferlist> get_snap_errors(ObjectStore* store,
+					  int64_t pool,
+					  const librados::object_id_t& start,
+					  uint64_t max_return);
   std::vector<bufferlist> get_object_errors(ObjectStore* store,
 					    int64_t pool,
 					    const librados::object_id_t& start,

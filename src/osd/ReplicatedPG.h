@@ -59,6 +59,8 @@ void put_with_id(ReplicatedPG *pg, uint64_t id);
   typedef boost::intrusive_ptr<ReplicatedPG> ReplicatedPGRef;
 #endif
 
+struct inconsistent_snapset_wrapper;
+
 class ReplicatedPG : public PG, public PGBackend::Listener {
   friend class OSD;
   friend class Watch;
@@ -1509,7 +1511,8 @@ private:
     const char *mode,
     bool allow_incomplete_clones,
     boost::optional<snapid_t> target,
-    vector<snapid_t>::reverse_iterator *curclone);
+    vector<snapid_t>::reverse_iterator *curclone,
+    inconsistent_snapset_wrapper &snap_error);
 
 public:
   coll_t get_coll() {
