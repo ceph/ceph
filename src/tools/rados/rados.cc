@@ -598,9 +598,9 @@ public:
   void cleanup();
 
   void io_cb(completion_t c, LoadGenOp *op) {
-    total_completed += op->len;
-
     Mutex::Locker l(lock);
+
+    total_completed += op->len;
 
     double rate = (double)cur_completed_rate() / (1024 * 1024);
     std::streamsize original_precision = cout.precision();
