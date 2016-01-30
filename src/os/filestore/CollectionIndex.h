@@ -57,14 +57,14 @@ protected:
     /// Debugging Constructor
     Path(
       string path,                              ///< [in] Path to return.
-      coll_t coll)                              ///< [in] collection
+      const coll_t& coll)                              ///< [in] collection
       : full_path(path), parent_coll(coll) {}
 
     /// Getter for the stored path.
     const char *path() const { return full_path.c_str(); }
 
     /// Getter for collection
-    coll_t coll() const { return parent_coll; }
+    const coll_t& coll() const { return parent_coll; }
 
     /// Getter for parent
     CollectionIndex* get_index() const {
@@ -78,7 +78,7 @@ protected:
   /// Type of returned paths
   typedef ceph::shared_ptr<Path> IndexedPath;
 
-  static IndexedPath get_testing_path(string path, coll_t collection) {
+  static IndexedPath get_testing_path(string path, const coll_t& collection) {
     return IndexedPath(new Path(path, collection));
   }
 
@@ -176,7 +176,7 @@ protected:
   /// Call prior to removing directory
   virtual int prep_delete() { return 0; }
 
-  CollectionIndex(coll_t collection):
+  CollectionIndex(const coll_t& collection):
     access_lock_name ("CollectionIndex::access_lock::" + collection.to_str()),
     access_lock(access_lock_name.c_str()) {}
 
