@@ -370,10 +370,9 @@ private:
       store->op_queue.pop_front();
       return osr;
     }
-    void _process(OpSequencer *osr, ThreadPool::TPHandle &handle) {
+    void _process(OpSequencer *osr, ThreadPool::TPHandle &handle) override {
       store->_do_op(osr, handle);
     }
-    using ThreadPool::WorkQueue<OpSequencer>::_process;
     void _process_finish(OpSequencer *osr) {
       store->_finish_op(osr);
     }
