@@ -218,9 +218,9 @@ void ReplicatedPG::on_local_recover(
     if (pg_log.get_missing().is_missing(recovery_info.soid) &&
             pg_log.get_missing().missing.find(recovery_info.soid)->second.need > recovery_info.version)
     {
-    
-	#xierui:刚才那个问题很可能是这样导致的，首先作为pg主本的osd节点在其pglog中有一个版本，比如说11，在副本也记录有版本，
-	# 但是实际上主本的最新数据丢了，对象持久化的版本实际上是9.
+    //刚才那个问题(也就是在这里assert)很可能是这样导致的，首先作为pg主本的osd节点在其pglog中有一个版本，比如说11，
+    //在副本也记录有版本，比如是10.在恢复的时候主本给副本同步对象，副本认为受到的版本应该是> 10的。
+    //但是实际上主本的最新数据丢了，对象持久化的版本实际上是9
         assert(is_primary());
         const pg_log_entry_t *latest = pg_log.get_log().objects.find(recovery_info.soid)->second;
         if (latest->op == pg_log_entry_t::LOST_REVERT &&
@@ -267,7 +267,7 @@ void ReplicatedPG::on_local_recover(
 
         publish_stats_to_osd();
         assert(missing_loc.needs_recovery(hoid));
-		//恢复了就加一个路径
+		//恢复了就加一个路径，唤醒等待该对象的op
         missing_loc.add_location(hoid, pg_whoami);
         if (!is_unreadable_object(hoid) &&
                 waiting_for_unreadable_object.count(hoid))
@@ -3313,6 +3313,7 @@ void ReplicatedPG::do_scan(
         bi.begin = m->begin;
         // No need to flush, there won't be any in progress writes occuring
         // past m->begin
+        //扫描得到backfill对象的信息，primary通过对比可以减少实际需要backfill的对象
         scan_range(
             cct->_conf->osd_backfill_scan_min,
             cct->_conf->osd_backfill_scan_max,

@@ -7612,7 +7612,8 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
 
     const pg_info_t& best = pg->peer_info[auth_log_shard];
 
-    // am i broken?
+    // am i broken?   
+    //主本无法恢复进入IsIncomplete状态
     if (pg->info.last_update < best.log_tail)
     {
         dout(10) << " not contiguous with osd." << auth_log_shard << ", down" << dendl;
