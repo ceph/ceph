@@ -89,4 +89,33 @@ inline void decode(librados::inconsistent_obj_t& obj,
   reinterpret_cast<inconsistent_obj_wrapper&>(obj).decode(bp);
 }
 
+struct inconsistent_snapset_wrapper : public librados::inconsistent_snapset_t {
+  inconsistent_snapset_wrapper() = default;
+  inconsistent_snapset_wrapper(const hobject_t& head);
+  void set_headless();
+  // soid claims that it is a head or a snapdir, but its SS_ATTR
+  // is missing.
+  void set_ss_attr_missing();
+  void set_ss_attr_corrupted();
+  // snapset with missing clone
+  void set_clone_missing(snapid_t);
+  // the snapset is not consistent with itself
+  void set_snapset_mismatch();
+  // soid.snap inconsistent with snapset
+  void set_head_mismatch();
+  void set_size_mismatch();
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bp);
+};
+
+WRITE_CLASS_ENCODER(inconsistent_snapset_wrapper)
+
+namespace librados {
+  inline void decode(librados::inconsistent_snapset_t& snapset,
+		     bufferlist::iterator& bp) {
+    reinterpret_cast<inconsistent_snapset_wrapper&>(snapset).decode(bp);
+  }
+}
+
 #endif
