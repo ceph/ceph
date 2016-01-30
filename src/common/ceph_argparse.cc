@@ -458,7 +458,8 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
 
 CephInitParameters ceph_argparse_early_args
 	  (std::vector<const char*>& args, uint32_t module_type, int flags,
-	   std::string *cluster, std::string *conf_file_list)
+	   std::string *cluster, std::string *conf_file_list,
+	   std::string *extra_config)
 {
   CephInitParameters iparams(module_type);
   std::string val;
@@ -478,6 +479,10 @@ CephInitParameters ceph_argparse_early_args
     }
     else if (ceph_argparse_witharg(args, i, &val, "--conf", "-c", (char*)NULL)) {
       *conf_file_list = val;
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--extra-config",
+				   (char*)NULL)) {
+      *extra_config = val;
     }
     else if (ceph_argparse_witharg(args, i, &val, "--cluster", (char*)NULL)) {
       *cluster = val;

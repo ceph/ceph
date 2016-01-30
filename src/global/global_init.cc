@@ -62,15 +62,18 @@ static const char* c_str_or_null(const std::string &str)
 void global_pre_init(std::vector < const char * > *alt_def_args,
 		     std::vector < const char* >& args,
 		     uint32_t module_type, code_environment_t code_env,
-		     int flags)
+		     int flags,
+		     const char *data_dir_option)
 {
   // You can only call global_init once.
   assert(!g_ceph_context);
   std::string conf_file_list;
+  std::string extra_config = "$data_dir/config";
   std::string cluster = "ceph";
-  CephInitParameters iparams = ceph_argparse_early_args(args, module_type, flags,
-							&cluster, &conf_file_list);
-  CephContext *cct = common_preinit(iparams, code_env, flags);
+  CephInitParameters iparams = ceph_argparse_early_args(
+    args, module_type, flags,
+    &cluster, &conf_file_list, &extra_config);
+  CephContext *cct = common_preinit(iparams, code_env, flags, data_dir_option);
   cct->_conf->cluster = cluster;
   global_init_set_globals(cct);
   md_config_t *conf = cct->_conf;
@@ -79,7 +82,9 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
     conf->parse_argv(*alt_def_args);  // alternative default args
 
   std::deque<std::string> parse_errors;
-  int ret = conf->parse_config_files(c_str_or_null(conf_file_list), &parse_errors, &cerr, flags);
+  int ret = conf->parse_config_files(c_str_or_null(conf_file_list),
+				     extra_config,
+				     &parse_errors, &cerr, flags);
   if (ret == -EDOM) {
     dout_emergency("global_init: error parsing config file.\n");
     _exit(1);
@@ -115,9 +120,12 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
 
 void global_init(std::vector < const char * > *alt_def_args,
 		 std::vector < const char* >& args,
-		 uint32_t module_type, code_environment_t code_env, int flags)
+		 uint32_t module_type, code_environment_t code_env,
+		 int flags,
+		 const char *data_dir_option)
 {
-  global_pre_init(alt_def_args, args, module_type, code_env, flags);
+  global_pre_init(alt_def_args, args, module_type, code_env, flags,
+		  data_dir_option);
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };

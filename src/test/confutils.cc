@@ -476,17 +476,17 @@ TEST(ConfUtils, Overrides) {
   std::string override_conf_1_f(next_tempfile(override_config_1));
 
   conf.name.set(CEPH_ENTITY_TYPE_MON, "0");
-  conf.parse_config_files(override_conf_1_f.c_str(), &err, &warn, 0);
+  conf.parse_config_files(override_conf_1_f.c_str(), "", &err, &warn, 0);
   ASSERT_EQ(err.size(), 0U);
   ASSERT_EQ(conf.log_file, "global_log");
 
   conf.name.set(CEPH_ENTITY_TYPE_MDS, "a");
-  conf.parse_config_files(override_conf_1_f.c_str(), &err, &warn, 0);
+  conf.parse_config_files(override_conf_1_f.c_str(), "", &err, &warn, 0);
   ASSERT_EQ(err.size(), 0U);
   ASSERT_EQ(conf.log_file, "mds_log");
 
   conf.name.set(CEPH_ENTITY_TYPE_OSD, "0");
-  conf.parse_config_files(override_conf_1_f.c_str(), &err, &warn, 0);
+  conf.parse_config_files(override_conf_1_f.c_str(), "", &err, &warn, 0);
   ASSERT_EQ(err.size(), 0U);
   ASSERT_EQ(conf.log_file, "osd0_log");
 }
@@ -498,7 +498,7 @@ TEST(ConfUtils, DupKey) {
   std::string dup_key_config_f(next_tempfile(dup_key_config_1));
 
   conf.name.set(CEPH_ENTITY_TYPE_MDS, "a");
-  conf.parse_config_files(dup_key_config_f.c_str(), &err, &warn, 0);
+  conf.parse_config_files(dup_key_config_f.c_str(), "", &err, &warn, 0);
   ASSERT_EQ(err.size(), 0U);
   ASSERT_EQ(conf.log_file, string("3"));
 }

@@ -199,6 +199,7 @@ void md_config_t::remove_observer(md_config_obs_t* observer_)
 }
 
 int md_config_t::parse_config_files(const char *conf_files,
+				    const std::string& extra_config,
 				    std::deque<std::string> *parse_errors,
 				    std::ostream *warnings,
 				    int flags)
@@ -217,9 +218,39 @@ int md_config_t::parse_config_files(const char *conf_files,
       conf_files = CEPH_CONF_FILE_DEFAULT;
     }
   }
+
   std::list<std::string> cfl;
   get_str_list(conf_files, cfl);
-  return parse_config_files_impl(cfl, parse_errors, warnings);
+  auto p = cfl.begin();
+  while (p != cfl.end()) {
+    // expand $data_dir?
+    string &s = *p;
+    if (s.find("$data_dir") != string::npos) {
+      if (data_dir_option.length()) {
+	list<config_option*> stack;
+	expand_meta(s, NULL, stack, warnings);
+	p++;
+      } else {
+	cfl.erase(p++);  // ignore this item
+      }
+    } else {
+      ++p;
+    }
+  }
+  int r = parse_config_files_impl(cfl, parse_errors, warnings);
+  if (extra_config.length() == 0)
+    return r;
+
+  // parse extra_config too?
+  string extra_config_expanded = extra_config;
+  list<config_option*> stack;
+  expand_meta(extra_config_expanded, NULL, stack, warnings);
+  cfl.clear();
+  cfl.push_back(extra_config_expanded);
+  int r2 = parse_config_files_impl(cfl, parse_errors, warnings);
+  if (r >= 0)
+    return 0;
+  return r2;
 }
 
 int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_files,
@@ -987,8 +1018,10 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
   return -ENOSYS;
 }
 
-static const char *CONF_METAVARIABLES[] =
-  { "cluster", "type", "name", "host", "num", "id", "pid", "cctid" };
+static const char *CONF_METAVARIABLES[] = {
+  "data_dir", // put this first: it may contain some of the others
+  "cluster", "type", "name", "host", "num", "id", "pid", "cctid"
+};
 static const int NUM_CONF_METAVARIABLES =
       (sizeof(CONF_METAVARIABLES) / sizeof(CONF_METAVARIABLES[0]));
 
@@ -1102,7 +1135,20 @@ bool md_config_t::expand_meta(std::string &origval,
 	  out += stringify(getpid());
 	else if (var == "cctid")
 	  out += stringify((unsigned long long)this);
-	else
+	else if (var == "data_dir") {
+	  if (data_dir_option.length()) {
+	    char *vv = NULL;
+	    _get_val(data_dir_option.c_str(), &vv, -1);
+	    string tmp = vv;
+	    free(vv);
+	    expand_meta(tmp, NULL, stack, oss);
+	    out += tmp;
+	  } else {
+	    // this isn't really right, but it'll result in a mangled
+	    // non-existent path that will fail any search list
+	    out += "$data_dir";
+	  }
+	} else
 	  assert(0); // unreachable
 	expanded = true;
       }

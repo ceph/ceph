@@ -154,7 +154,7 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path) {
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   md_config_t *conf = client->cct()->_conf;
   std::deque<std::string> parse_errors;
-  int ret = conf->parse_config_files(path, &parse_errors, NULL, 0);
+  int ret = conf->parse_config_files(path, "", &parse_errors, NULL, 0);
   if (ret == 0) {
     conf->parse_env();
     conf->apply_changes(NULL);

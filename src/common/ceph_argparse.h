@@ -69,7 +69,8 @@ bool ceph_argparse_binary_flag(std::vector<const char*> &args,
 	std::ostream *oss, ...);
 extern CephInitParameters ceph_argparse_early_args
 	    (std::vector<const char*>& args, uint32_t module_type, int flags,
-	     std::string *cluster, std::string *conf_file_list);
+	     std::string *cluster, std::string *conf_file_list,
+	     std::string *extra_config);
 extern void generic_server_usage();
 extern void generic_client_usage();
 

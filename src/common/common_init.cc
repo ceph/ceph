@@ -34,7 +34,8 @@
 #define STRINGIFY(x) _STR(x)
 
 CephContext *common_preinit(const CephInitParameters &iparams,
-			  enum code_environment_t code_env, int flags)
+			    enum code_environment_t code_env, int flags,
+			    const char *data_dir_option)
 {
   // set code environment
   ANNOTATE_BENIGN_RACE_SIZED(&g_code_env, sizeof(g_code_env), "g_code_env");
@@ -49,20 +50,15 @@ CephContext *common_preinit(const CephInitParameters &iparams,
   // Set up our entity name.
   conf->name = iparams.name;
 
+  if (data_dir_option)
+    conf->data_dir_option = data_dir_option;
+
   // Set some defaults based on code type
   switch (code_env) {
   case CODE_ENVIRONMENT_DAEMON:
     conf->set_val_or_die("daemonize", "true");
     conf->set_val_or_die("log_to_stderr", "false");
     conf->set_val_or_die("err_to_stderr", "true");
-
-    // different default keyring locations for osd and mds.  this is
-    // for backward compatibility.  moving forward, we want all keyrings
-    // in these locations.  the mon already forces $mon_data/keyring.
-    if (conf->name.is_mds())
-      conf->set_val("keyring", "$mds_data/keyring", false);
-    else if (conf->name.is_osd())
-      conf->set_val("keyring", "$osd_data/keyring", false);
     break;
 
   case CODE_ENVIRONMENT_UTILITY_NODOUT:
