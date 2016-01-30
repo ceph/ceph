@@ -5026,12 +5026,17 @@ namespace {
     bufferlist bl;
     uint32_t *interval;
     std::vector<inconsistent_obj_t> *objects = nullptr;
+    std::vector<inconsistent_snapset_t> *snapsets = nullptr;
     int *rval;
 
     C_ObjectOperation_scrub_ls(uint32_t *interval,
 			       std::vector<inconsistent_obj_t> *objects,
 			       int *rval)
       : interval(interval), objects(objects), rval(rval) {}
+    C_ObjectOperation_scrub_ls(uint32_t *interval,
+			       std::vector<inconsistent_snapset_t> *snapsets,
+			       int *rval)
+      : interval(interval), snapsets(snapsets), rval(rval) {}
     void finish(int r) override {
       if (r < 0 && r != -EAGAIN)
 	return;
@@ -5050,6 +5055,8 @@ namespace {
       *interval = result.interval;
       if (objects) {
 	do_decode(*objects, result.vals);
+      } else {
+	do_decode(*snapsets, result.vals);
       }
     }
   };
@@ -5081,4 +5088,14 @@ void ::ObjectOperation::scrub_ls(const librados::object_id_t& start_after,
 {
   scrub_ls_arg_t arg = {*interval, 0, start_after, max_to_get};
   do_scrub_ls(this, arg, objects, interval, rval);
+}
+
+void ::ObjectOperation::scrub_ls(const librados::object_id_t& start_after,
+				 uint64_t max_to_get,
+				 std::vector<librados::inconsistent_snapset_t> *snapsets,
+				 uint32_t *interval,
+				 int *rval)
+{
+  scrub_ls_arg_t arg = {*interval, 1, start_after, max_to_get};
+  do_scrub_ls(this, arg, snapsets, interval, rval);
 }
