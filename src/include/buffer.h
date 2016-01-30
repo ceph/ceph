@@ -168,7 +168,9 @@ namespace buffer CEPH_BUFFER_API {
 
   public:
     ptr() : _raw(0), _off(0), _len(0) {}
+    // cppcheck-suppress noExplicitConstructor
     ptr(raw *r);
+    // cppcheck-suppress noExplicitConstructor
     ptr(unsigned l);
     ptr(const char *d, unsigned l);
     ptr(const ptr& p);
@@ -354,6 +356,7 @@ namespace buffer CEPH_BUFFER_API {
   public:
     // cons/des
     list() : _len(0), _memcopy_count(0), last_p(this) {}
+    // cppcheck-suppress noExplicitConstructor
     list(unsigned prealloc) : _len(0), _memcopy_count(0), last_p(this) {
       append_buffer = buffer::create(prealloc);
       append_buffer.set_length(0);   // unused, so far.
@@ -543,6 +546,7 @@ namespace buffer CEPH_BUFFER_API {
 
   public:
     hash() : crc(0) { }
+    // cppcheck-suppress noExplicitConstructor
     hash(uint32_t init) : crc(init) { }
 
     void update(buffer::list& bl) {

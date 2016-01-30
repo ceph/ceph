@@ -129,7 +129,7 @@ public:
   }
 
 public:
-  JournalingObjectStore(const std::string& path)
+  explicit JournalingObjectStore(const std::string& path)
     : ObjectStore(path),
       journal(NULL),
       finisher(g_ceph_context, "JournalObjectStore", "fn_jrn_objstore"),

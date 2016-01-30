@@ -91,7 +91,7 @@ namespace ceph {
 
   class JSONFormatter : public Formatter {
   public:
-    JSONFormatter(bool p = false);
+    explicit JSONFormatter(bool p = false);
 
     virtual void set_status(int status, const char* status_name) {};
     virtual void output_header() {};
@@ -178,7 +178,7 @@ namespace ceph {
 
   class TableFormatter : public Formatter {
   public:
-    TableFormatter(bool keyval = false);
+    explicit TableFormatter(bool keyval = false);
 
     virtual void set_status(int status, const char* status_name) {};
     virtual void output_header() {};

@@ -28,7 +28,7 @@ namespace ceph {
   public:
     CompressorRef compressor;
 
-    CompressionPlugin(CephContext *cct) : Plugin(cct),
+    explicit CompressionPlugin(CephContext *cct) : Plugin(cct),
                                           compressor(0) 
     {}
     

@@ -181,7 +181,7 @@ public:
     string name;
     Sequencer_implRef p;
 
-    Sequencer(string n)
+    explicit Sequencer(string n)
       : name(n), p(NULL) {}
     ~Sequencer() {
     }
@@ -214,7 +214,7 @@ public:
 
   struct CompatCollectionHandle : public CollectionImpl {
     coll_t cid;
-    CompatCollectionHandle(coll_t c) : cid(c) {}
+    explicit CompatCollectionHandle(coll_t c) : cid(c) {}
     const coll_t &get_cid() override {
       return cid;
     }
@@ -509,10 +509,10 @@ public:
   public:
     Transaction() = default;
 
-    Transaction(bufferlist::iterator &dp) {
+    explicit Transaction(bufferlist::iterator &dp) {
       decode(dp);
     }
-    Transaction(bufferlist &nbl) {
+    explicit Transaction(bufferlist &nbl) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp);
     }
@@ -896,7 +896,7 @@ public:
       vector<ghobject_t> objects;
 
     private:
-      iterator(Transaction *t)
+      explicit iterator(Transaction *t)
         : t(t),
 	  data_bl_p(t->data_bl.begin()),
           colls(t->coll_index.size()),
@@ -1853,11 +1853,11 @@ public:
   }
 
  public:
-  ObjectStore(const std::string& path_) : path(path_), logger(NULL) {}
+  explicit ObjectStore(const std::string& path_) : path(path_), logger(NULL) {}
   virtual ~ObjectStore() {}
 
   // no copying
-  ObjectStore(const ObjectStore& o);
+  explicit ObjectStore(const ObjectStore& o);
   const ObjectStore& operator=(const ObjectStore& o);
 
   // versioning

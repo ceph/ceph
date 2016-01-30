@@ -109,7 +109,7 @@ class Processor {
     Processor *pro;
 
    public:
-    C_processor_accept(Processor *p): pro(p) {}
+    explicit C_processor_accept(Processor *p): pro(p) {}
     void do_request(int id) {
       pro->accept();
     }
@@ -143,7 +143,7 @@ class WorkerPool {
   class C_barrier : public EventCallback {
     WorkerPool *pool;
    public:
-    C_barrier(WorkerPool *p): pool(p) {}
+    explicit C_barrier(WorkerPool *p): pool(p) {}
     void do_request(int id) {
       Mutex::Locker l(pool->barrier_lock);
       pool->barrier_count.dec();
@@ -153,7 +153,7 @@ class WorkerPool {
   };
   friend class C_barrier;
  public:
-  WorkerPool(CephContext *c);
+  explicit WorkerPool(CephContext *c);
   virtual ~WorkerPool();
   void start();
   Worker *get_worker() {
@@ -332,7 +332,7 @@ private:
     AsyncMessenger *msgr;
 
    public:
-    C_handle_reap(AsyncMessenger *m): msgr(m) {}
+    explicit C_handle_reap(AsyncMessenger *m): msgr(m) {}
     void do_request(int id) {
       // judge whether is a time event
       msgr->reap_dead();

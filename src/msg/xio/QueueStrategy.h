@@ -34,7 +34,7 @@ class QueueStrategy : public DispatchStrategy {
     bi::list_member_hook<> thread_q;
     QueueStrategy *dq;
     Cond cond;
-    QSThread(QueueStrategy *dq) : thread_q(), dq(dq), cond() {}
+    explicit QSThread(QueueStrategy *dq) : thread_q(), dq(dq), cond() {}
     void* entry() {
       dq->entry(this);
       delete(this);
@@ -50,7 +50,7 @@ class QueueStrategy : public DispatchStrategy {
   QSThread::Queue disp_threads;
 
 public:
-  QueueStrategy(int n_threads);
+  explicit QueueStrategy(int n_threads);
   virtual void ds_dispatch(Message *m);
   virtual void shutdown();
   virtual void start();

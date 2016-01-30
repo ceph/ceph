@@ -980,7 +980,7 @@ class inode_load_vec_t {
   static const int NUM = 2;
   std::vector < DecayCounter > vec;
 public:
-  inode_load_vec_t(const utime_t &now)
+  explicit inode_load_vec_t(const utime_t &now)
      : vec(NUM, DecayCounter(now))
   {}
   // for dencoder infrastructure
@@ -1011,7 +1011,7 @@ class dirfrag_load_vec_t {
 public:
   static const int NUM = 5;
   std::vector < DecayCounter > vec;
-  dirfrag_load_vec_t(const utime_t &now)
+  explicit dirfrag_load_vec_t(const utime_t &now)
      : vec(NUM, DecayCounter(now))
   { }
   // for dencoder infrastructure
@@ -1115,7 +1115,7 @@ struct mds_load_t {
 
   double cpu_load_avg;
 
-  mds_load_t(const utime_t &t) : 
+  explicit mds_load_t(const utime_t &t) : 
     auth(t), all(t), req_rate(0), cache_hit_rate(0),
     queue_len(0), cpu_load_avg(0)
   {}
@@ -1227,7 +1227,7 @@ struct ClientLease {
 // print hack
 struct mdsco_db_line_prefix {
   MDSCacheObject *object;
-  mdsco_db_line_prefix(MDSCacheObject *o) : object(o) {}
+  explicit mdsco_db_line_prefix(MDSCacheObject *o) : object(o) {}
 };
 std::ostream& operator<<(std::ostream& out, mdsco_db_line_prefix o);
 

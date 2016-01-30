@@ -507,7 +507,7 @@ void OSDService::activate_map()
 class AgentTimeoutCB : public Context {
   PGRef pg;
 public:
-  AgentTimeoutCB(PGRef _pg) : pg(_pg) {}
+  explicit AgentTimeoutCB(PGRef _pg) : pg(_pg) {}
   void finish(int) {
     pg->agent_choose_mode_restart();
   }
@@ -1670,7 +1670,7 @@ int OSD::pre_init()
 class OSDSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
-  OSDSocketHook(OSD *o) : osd(o) {}
+  explicit OSDSocketHook(OSD *o) : osd(o) {}
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) {
     stringstream ss;
@@ -3848,7 +3848,7 @@ void OSD::heartbeat_check()
   assert(heartbeat_lock.is_locked());
   utime_t now = ceph_clock_now(cct);
   double age = hbclient_messenger->get_dispatch_queue_max_age(now);
-  if (age > (cct->_conf->osd_heartbeat_grace / 2)) {
+  if (age > ((double)cct->_conf->osd_heartbeat_grace / 2.0)) {
     derr << "skipping heartbeat_check, hbqueue max age: " << age << dendl;
     return; // hb dispatch is too backed up for our hb status to be meaningful
   }
@@ -4500,7 +4500,7 @@ bool OSD::ms_handle_reset(Connection *con)
 struct C_OSD_GetVersion : public Context {
   OSD *osd;
   uint64_t oldest, newest;
-  C_OSD_GetVersion(OSD *o) : osd(o), oldest(0), newest(0) {}
+  explicit C_OSD_GetVersion(OSD *o) : osd(o), oldest(0), newest(0) {}
   void finish(int r) {
     if (r >= 0)
       osd->_got_mon_epochs(oldest, newest);

@@ -329,7 +329,7 @@ class CondPingPong {
   class Consumer : public Thread {
     CondPingPong *p;
    public:
-    Consumer(CondPingPong *p): p(p) {}
+    explicit Consumer(CondPingPong *p): p(p) {}
     void* entry() {
       p->consume();
       return 0;
@@ -466,7 +466,7 @@ class CenterWorker : public Thread {
 
  public:
   EventCenter center;
-  CenterWorker(CephContext *c): cct(c), done(false), center(c) {
+  explicit CenterWorker(CephContext *c): cct(c), done(false), center(c) {
     center.init(100);
   }
   void stop() {
@@ -486,7 +486,7 @@ class CountEvent: public EventCallback {
   atomic_t *count;
 
  public:
-  CountEvent(atomic_t *atomic): count(atomic) {}
+  explicit CountEvent(atomic_t *atomic): count(atomic) {}
   void do_request(int id) {
     count->dec();
   }

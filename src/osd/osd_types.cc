@@ -1007,7 +1007,7 @@ void pool_opts_t::dump(const std::string& name, Formatter* f) const
 void pool_opts_t::dump(Formatter* f) const
 {
   for (opt_mapping_t::iterator i = opt_mapping.begin(); i != opt_mapping.end();
-       i++) {
+       ++i) {
     const std::string& name = i->first;
     const opt_desc_t& desc = i->second;
     opts_t::const_iterator j = opts.find(desc.key);
@@ -1021,7 +1021,7 @@ void pool_opts_t::dump(Formatter* f) const
 class pool_opts_encoder_t : public boost::static_visitor<>
 {
 public:
-  pool_opts_encoder_t(bufferlist& bl_) : bl(bl_) {}
+  explicit pool_opts_encoder_t(bufferlist& bl_) : bl(bl_) {}
 
   void operator()(std::string s) const {
     ::encode(static_cast<int32_t>(pool_opts_t::STR), bl);
@@ -1082,7 +1082,7 @@ void pool_opts_t::decode(bufferlist::iterator& bl) {
 ostream& operator<<(ostream& out, const pool_opts_t& opts)
 {
   for (opt_mapping_t::iterator i = opt_mapping.begin(); i != opt_mapping.end();
-       i++) {
+       ++i) {
     const std::string& name = i->first;
     const pool_opts_t::opt_desc_t& desc = i->second;
     pool_opts_t::opts_t::const_iterator j = opts.opts.find(desc.key);
@@ -3284,7 +3284,7 @@ void ObjectModDesc::visit(Visitor *visitor) const
 
 struct DumpVisitor : public ObjectModDesc::Visitor {
   Formatter *f;
-  DumpVisitor(Formatter *f) : f(f) {}
+  explicit DumpVisitor(Formatter *f) : f(f) {}
   void append(uint64_t old_size) {
     f->open_object_section("op");
     f->dump_string("code", "APPEND");

@@ -108,7 +108,7 @@ class AsyncCompressor {
   void _decompress(bufferlist &in, bufferlist &out);
 
  public:
-  AsyncCompressor(CephContext *c);
+  explicit AsyncCompressor(CephContext *c);
   virtual ~AsyncCompressor() {}
 
   int get_cpuid(int id) {

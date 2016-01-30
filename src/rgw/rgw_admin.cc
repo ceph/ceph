@@ -625,7 +625,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
 class StoreDestructor {
   RGWRados *store;
 public:
-  StoreDestructor(RGWRados *_s) : store(_s) {}
+  explicit StoreDestructor(RGWRados *_s) : store(_s) {}
   ~StoreDestructor() {
     RGWStoreManager::close_storage(store);
   }

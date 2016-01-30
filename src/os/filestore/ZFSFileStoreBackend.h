@@ -16,7 +16,7 @@ private:
   bool m_filestore_zfs_snap;
   int update_current_zh();
 public:
-  ZFSFileStoreBackend(FileStore *fs);
+  explicit ZFSFileStoreBackend(FileStore *fs);
   ~ZFSFileStoreBackend();
   int detect_features();
   bool can_checkpoint();

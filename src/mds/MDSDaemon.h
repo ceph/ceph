@@ -130,7 +130,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
     protected:
       MDSDaemon *mds_daemon;
   public:
-    C_MDS_Tick(MDSDaemon *m) : mds_daemon(m) {}
+    explicit C_MDS_Tick(MDSDaemon *m) : mds_daemon(m) {}
     void finish(int r) {
       assert(mds_daemon->mds_lock.is_locked_by_me());
 
