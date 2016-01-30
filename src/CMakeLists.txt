@@ -319,6 +319,7 @@ set(libcommon_files
   common/linux_version.c
   common/TracepointProvider.cc
   common/Cycles.cc
+  common/scrub_types.cc
   osdc/Striper.cc
   osdc/Objecter.cc
   common/Graylog.cc
@@ -753,6 +754,7 @@ set(osd_srcs
   osd/OpRequest.cc
   common/TrackedOp.cc
   osd/SnapMapper.cc
+  osd/ScrubStore.cc
   osd/osd_types.cc
   osd/ECUtil.cc
   objclass/class_api.cc

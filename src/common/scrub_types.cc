@@ -1,0 +1,143 @@
+#include "scrub_types.h"
+
+using namespace librados;
+
+void object_id_wrapper::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(name, bl);
+  ::encode(nspace, bl);
+  ::encode(locator, bl);
+  ::encode(snap, bl);
+  ENCODE_FINISH(bl);
+}
+
+void object_id_wrapper::decode(bufferlist::iterator& bp)
+{
+  DECODE_START(1, bp);
+  ::decode(name, bp);
+  ::decode(nspace, bp);
+  ::decode(locator, bp);
+  ::decode(snap, bp);
+  DECODE_FINISH(bp);
+}
+
+static void encode(const object_id_t& obj, bufferlist& bl)
+{
+  reinterpret_cast<const object_id_wrapper&>(obj).encode(bl);
+}
+
+void shard_info_wrapper::set_object(const ScrubMap::object& object)
+{
+  for (auto attr : object.attrs) {
+    bufferlist bl;
+    bl.push_back(attr.second);
+    attrs.insert(std::make_pair(attr.first, std::move(bl)));
+  }
+  size = object.size;
+  if (object.omap_digest_present) {
+    omap_digest_present = true;
+    omap_digest = object.omap_digest;
+  }
+  if (object.digest_present) {
+    data_digest_present = true;
+    data_digest = object.digest;
+  }
+  if (object.read_error) {
+    errors |= SHARD_READ_ERR;
+  }
+  if (object.stat_error) {
+    errors |= SHARD_STAT_ERR;
+  }
+}
+
+void shard_info_wrapper::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(errors, bl);
+  if (has_shard_missing()) {
+    return;
+  }
+  ::encode(attrs, bl);
+  ::encode(size, bl);
+  ::encode(omap_digest_present, bl);
+  ::encode(omap_digest, bl);
+  ::encode(data_digest_present, bl);
+  ::encode(data_digest, bl);
+  ENCODE_FINISH(bl);
+}
+
+void shard_info_wrapper::decode(bufferlist::iterator& bp)
+{
+  DECODE_START(1, bp);
+  ::decode(errors, bp);
+  if (has_shard_missing()) {
+    return;
+  }
+  ::decode(attrs, bp);
+  ::decode(size, bp);
+  ::decode(omap_digest_present, bp);
+  ::decode(omap_digest, bp);
+  ::decode(data_digest_present, bp);
+  ::decode(data_digest, bp);
+  DECODE_FINISH(bp);
+}
+
+inconsistent_obj_wrapper::inconsistent_obj_wrapper(const hobject_t& hoid)
+  : inconsistent_obj_t{librados::object_id_t{hoid.oid.name,
+                                 hoid.nspace,
+                                 hoid.get_key(), hoid.snap}}
+{}
+
+void inconsistent_obj_wrapper::add_shard(const pg_shard_t& pgs,
+                                         const shard_info_wrapper& shard)
+{
+  errors |= shard.errors;
+  shards[pgs.osd] = shard;
+}
+
+void
+inconsistent_obj_wrapper::set_auth_missing(const hobject_t& hoid,
+                                           const map<pg_shard_t, ScrubMap*>& maps)
+{
+  errors |= (err_t::SHARD_MISSING |
+             err_t::SHARD_READ_ERR |
+             err_t::OMAP_DIGEST_MISMATCH |
+             err_t::DATA_DIGEST_MISMATCH |
+             err_t::ATTR_MISMATCH);
+  for (auto pg_map : maps) {
+    auto oid_object = pg_map.second->objects.find(hoid);
+    shard_info_wrapper shard;
+    if (oid_object == pg_map.second->objects.end()) {
+      shard.set_missing();
+    } else {
+      shard.set_object(oid_object->second);
+    }
+      shards[pg_map.first.osd] = shard;
+  }
+}
+
+namespace librados {
+  static void encode(const shard_info_t& shard, bufferlist& bl)
+  {
+    reinterpret_cast<const shard_info_wrapper&>(shard).encode(bl);
+  }
+}
+
+void inconsistent_obj_wrapper::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(errors, bl);
+  ::encode(object, bl);
+  ::encode(shards, bl);
+  ENCODE_FINISH(bl);
+}
+
+void inconsistent_obj_wrapper::decode(bufferlist::iterator& bp)
+{
+  DECODE_START(1, bp);
+  ::decode(errors, bp);
+  ::decode(object, bp);
+  ::decode(shards, bp);
+  DECODE_FINISH(bp);
+}
