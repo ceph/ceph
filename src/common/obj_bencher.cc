@@ -508,8 +508,8 @@ int ObjBencher::write_bench(int secondsToRun,
     ++data.started;
     ++data.in_flight;
     if (max_objects &&
-	data.started > (data.object_size * max_objects + data.op_size - 1) /
-	data.op_size)
+	data.started > (int)((data.object_size * max_objects + data.op_size - 1) /
+			     data.op_size))
       break;
   }
   lock.Unlock();
