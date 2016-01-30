@@ -1293,6 +1293,9 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
       }
       break;
 
+   case CEPH_OSD_OP_SCRUBLS:
+      result = do_scrub_ls(m, &osd_op);
+      break;
 
     default:
       result = -EINVAL;
@@ -1309,6 +1312,41 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
   reply->set_reply_versions(info.last_update, info.last_user_version);
   osd->send_message_osd_client(reply, m->get_connection());
   delete filter;
+}
+
+int ReplicatedPG::do_scrub_ls(MOSDOp *m, OSDOp *osd_op)
+{
+  if (m->get_pg() != info.pgid.pgid) {
+    dout(10) << " scrubls pg=" << m->get_pg() << " != " << info.pgid << dendl;
+    return -EINVAL; // hmm?
+  }
+  auto bp = osd_op->indata.begin();
+  scrub_ls_arg_t arg;
+  try {
+    arg.decode(bp);
+  } catch (buffer::error&) {
+    dout(10) << " corrupted scrub_ls_arg_t" << dendl;
+    return -EINVAL;
+  }
+  int r = 0;
+  scrub_ls_result_t result = {.interval = info.history.same_interval_since};
+  if (arg.interval != 0 && arg.interval != info.history.same_interval_since) {
+    r = -EAGAIN;
+  } else if (!scrubber.store) {
+    r = -ENOENT;
+  } else if (arg.get_snapsets) {
+    result.vals = scrubber.store->get_snap_errors(osd->store,
+						  get_pgid().pool(),
+						  arg.start_after,
+						  arg.max_return);
+  } else {
+    result.vals = scrubber.store->get_object_errors(osd->store,
+						    get_pgid().pool(),
+						    arg.start_after,
+						    arg.max_return);
+  }
+  ::encode(result, osd_op->outdata);
+  return r;
 }
 
 void ReplicatedPG::calc_trim_to()

@@ -207,3 +207,42 @@ void inconsistent_snapset_wrapper::decode(bufferlist::iterator& bp)
   DECODE_FINISH(bp);
 }
 
+void scrub_ls_arg_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(interval, bl);
+  ::encode(get_snapsets, bl);
+  ::encode(start_after.name, bl);
+  ::encode(start_after.nspace, bl);
+  ::encode(start_after.snap, bl);
+  ::encode(max_return, bl);
+  ENCODE_FINISH(bl);
+}
+
+void scrub_ls_arg_t::decode(bufferlist::iterator& bp)
+{
+  DECODE_START(1, bp);
+  ::decode(interval, bp);
+  ::decode(get_snapsets, bp);
+  ::decode(start_after.name, bp);
+  ::decode(start_after.nspace, bp);
+  ::decode(start_after.snap, bp);
+  ::decode(max_return, bp);
+  DECODE_FINISH(bp);
+}
+
+void scrub_ls_result_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(interval, bl);
+  ::encode(vals, bl);
+  ENCODE_FINISH(bl);
+}
+
+void scrub_ls_result_t::decode(bufferlist::iterator& bp)
+{
+  DECODE_START(1, bp);
+  ::decode(interval, bp);
+  ::decode(vals, bp);
+  DECODE_FINISH(bp);
+}
