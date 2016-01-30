@@ -23,6 +23,7 @@ libosd_a_SOURCES = \
 	osd/ClassHandler.cc \
 	osd/OpRequest.cc \
 	osd/SnapMapper.cc \
+	osd/ScrubStore.cc \
 	objclass/class_api.cc
 
 libosd_a_CXXFLAGS = ${AM_CXXFLAGS}
@@ -49,6 +50,7 @@ noinst_HEADERS += \
 	osd/ECMsgTypes.h \
 	osd/ECTransaction.h \
 	osd/Watch.h \
+	osd/ScrubStore.h \
 	osd/osd_types.h
 
 endif # WITH_OSD
