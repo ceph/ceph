@@ -1308,12 +1308,12 @@ int FileStore::mount()
   uint32_t version_stamp;
   ret = version_stamp_is_valid(&version_stamp);
   if (ret < 0) {
-    derr << "FileStore::mount : error in version_stamp_is_valid: "
+    derr << "FileStore::mount: error in version_stamp_is_valid: "
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   } else if (ret == 0) {
     if (do_update || (int)version_stamp < g_conf->filestore_update_to) {
-      derr << "FileStore::mount : stale version stamp detected: "
+      derr << "FileStore::mount: stale version stamp detected: "
 	   << version_stamp
 	   << ". Proceeding, do_update "
 	   << "is set, performing disk format upgrade."
@@ -1321,7 +1321,7 @@ int FileStore::mount()
       do_update = true;
     } else {
       ret = -EINVAL;
-      derr << "FileStore::mount : stale version stamp " << version_stamp
+      derr << "FileStore::mount: stale version stamp " << version_stamp
 	   << ". Please run the FileStore update script before starting the "
 	   << "OSD, or set filestore_update_to to " << target_version
 	   << " (currently " << g_conf->filestore_update_to << ")"
@@ -1338,7 +1338,7 @@ int FileStore::mount()
 
   // Check if this FileStore supports all the necessary features to mount
   if (supported_compat_set.compare(superblock.compat_features) == -1) {
-    derr << "FileStore::mount : Incompatible features set "
+    derr << "FileStore::mount: Incompatible features set "
 	   << superblock.compat_features << dendl;
     ret = -EINVAL;
     goto close_fsid_fd;
@@ -1357,7 +1357,7 @@ int FileStore::mount()
   // test for btrfs, xattrs, etc.
   ret = _detect_fs();
   if (ret < 0) {
-    derr << "FileStore::mount : error in _detect_fs: "
+    derr << "FileStore::mount: error in _detect_fs: "
 	 << cpp_strerror(ret) << dendl;
     goto close_basedir_fd;
   }
@@ -1366,7 +1366,7 @@ int FileStore::mount()
     list<string> ls;
     ret = backend->list_checkpoints(ls);
     if (ret < 0) {
-      derr << "FileStore::mount : error in _list_snaps: "<< cpp_strerror(ret) << dendl;
+      derr << "FileStore::mount: error in _list_snaps: "<< cpp_strerror(ret) << dendl;
       goto close_basedir_fd;
     }
 
@@ -2112,7 +2112,7 @@ void FileStore::_set_global_replay_guard(coll_t cid,
   }
   ret = sync_filesystem(basedir_fd);
   if (ret < 0) {
-    derr << __func__ << " :sync_filesytem error " << cpp_strerror(ret) << dendl;
+    derr << __func__ << " : sync_filesytem error " << cpp_strerror(ret) << dendl;
     assert(0 == "_set_global_replay_guard failed");
   }
 
