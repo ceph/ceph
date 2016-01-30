@@ -72,7 +72,6 @@ class MonmapMonitor : public PaxosService {
 		  CephContext *cct) const override;
 
   int get_monmap(bufferlist &bl);
-  int get_monmap(MonMap &m);
 
   /*
    * Since monitors are pretty
