@@ -949,15 +949,7 @@ add_subdirectory(librados)
 add_subdirectory(mds)
 add_subdirectory(mon)
 add_subdirectory(objectstore)
-
-#os directory
-# unittest_lfnindex
-add_executable(unittest_lfnindex EXCLUDE_FROM_ALL
-  os/TestLFNIndex.cc
-  )
-add_ceph_unittest(unittest_lfnindex ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_lfnindex)
-target_link_libraries(unittest_lfnindex os global)
-
+add_subdirectory(os)
 add_subdirectory(osd)
 add_subdirectory(pybind)
 
