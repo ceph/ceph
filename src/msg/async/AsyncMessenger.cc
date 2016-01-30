@@ -286,7 +286,7 @@ void *Worker::entry()
     }
   }
 
-  center.set_owner(pthread_self());
+  center.set_owner();
   while (!done) {
     ldout(cct, 20) << __func__ << " calling event process" << dendl;
 
