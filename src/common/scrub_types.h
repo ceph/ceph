@@ -118,4 +118,24 @@ namespace librados {
   }
 }
 
+struct scrub_ls_arg_t {
+  uint32_t interval;
+  uint32_t get_snapsets;
+  librados::object_id_t start_after;
+  uint64_t max_return;
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+};
+
+WRITE_CLASS_ENCODER(scrub_ls_arg_t);
+
+struct scrub_ls_result_t {
+  epoch_t interval;
+  std::vector<bufferlist> vals;
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+};
+
+WRITE_CLASS_ENCODER(scrub_ls_result_t);
+
 #endif

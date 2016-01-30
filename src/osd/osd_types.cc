@@ -5498,6 +5498,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_PG_HITSET_GET:
       out << " " << utime_t(op.op.hit_set_get.stamp);
       break;
+    case CEPH_OSD_OP_SCRUBLS:
+      break;
     }
   } else if (ceph_osd_op_type_multi(op.op.op)) {
     switch (op.op.op) {
