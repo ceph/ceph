@@ -366,8 +366,8 @@ int MemStore::fiemap(coll_t cid, const ghobject_t& oid,
     l = o->get_size() - offset;
   if (offset >= o->get_size())
     goto out;
- out:
   m[offset] = l;
+ out:
   ::encode(m, bl);
   return 0;
 }
