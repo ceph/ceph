@@ -8628,6 +8628,7 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
 #endif
 
         int started;
+        //虽然有很多start_recovery_op，但是下面的这个才是正宗!!!
         bool more = pg->start_recovery_ops(max, handle, &started);
         dout(10) << "do_recovery started " << started << "/" << max << " on " << *pg << dendl;
         // If no recovery op is started, don't bother to manipulate the RecoveryCtx
@@ -8717,6 +8718,7 @@ void OSD::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
     else
     {
         //好吧 只要没恢复完，这里又丢到队列里面了
+        //这样通过出队入队的方式最终完成pg的恢复
         recovery_wq._queue_front(pg);
     }
 

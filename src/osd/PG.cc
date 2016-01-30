@@ -2379,6 +2379,8 @@ void PG::start_recovery_op(const hobject_t& soid)
     osd->osd->start_recovery_op(this, soid);
 }
 
+//看下这个函数调用的地方就知道怎么恢复机制是怎么触发的
+//以及怎么结束的，最终是在clean状态调用finish_recovery函数结束
 void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
 {
     dout(10) << "finish_recovery_op " << soid
@@ -2393,6 +2395,7 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
     recovering_oids.erase(soid);
 #endif
     // TODOSAM: osd->osd-> not good
+    //关键函数
     osd->osd->finish_recovery_op(this, soid, dequeue);
 }
 
