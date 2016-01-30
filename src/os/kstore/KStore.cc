@@ -544,6 +544,9 @@ int KStore::OnodeHashLRU::trim(int max)
 	   << " size " << onode_map.size() << dendl;
   int trimmed = 0;
   int num = onode_map.size() - max;
+  if (onode_map.size() == 0 || num <= 0)
+    return 0; // don't even try
+
   lru_list_t::iterator p = lru.end();
   if (num)
     --p;
@@ -891,10 +894,15 @@ int KStore::_open_collections(int *errors)
     coll_t cid;
     if (cid.parse(it->key())) {
       CollectionRef c(new Collection(this, cid));
-      bufferlist bl;
-      db->get(PREFIX_COLL, it->key(), &bl);
+      bufferlist bl = it->value();
       bufferlist::iterator p = bl.begin();
-      ::decode(c->cnode, p);
+      try {
+        ::decode(c->cnode, p);
+      } catch (buffer::error& e) {
+        derr << __func__ << " failed to decode cnode, key:"
+             << pretty_binary_string(it->key()) << dendl;
+        return -EIO;
+      } 
       dout(20) << __func__ << " opened " << cid << dendl;
       coll_map[cid] = c;
     } else {
@@ -2153,8 +2161,9 @@ int KStore::_open_super_meta()
     nid_max = 0;
     bufferlist bl;
     db->get(PREFIX_SUPER, "nid_max", &bl);
+    bufferlist::iterator p = bl.begin();
     try {
-      ::decode(nid_max, bl);
+      ::decode(nid_max, p);
     } catch (buffer::error& e) {
     }
     dout(10) << __func__ << " old nid_max " << nid_max << dendl;
@@ -3075,6 +3084,8 @@ int KStore::_do_truncate(TransContext *txc, OnodeRef o, uint64_t offset)
 {
   uint64_t stripe_size = o->onode.stripe_size;
 
+  o->flush();
+
   // trim down stripes
   if (stripe_size) {
     uint64_t pos = offset;
@@ -3528,6 +3539,8 @@ int KStore::_clone(TransContext *txc,
     newo = c->get_onode(new_oid, true);
     _assign_nid(txc, newo);
   }
+
+  oldo->flush();
 
   r = _do_read(oldo, 0, oldo->onode.size, bl, 0);
   if (r < 0)
