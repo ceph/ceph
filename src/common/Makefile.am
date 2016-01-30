@@ -85,7 +85,9 @@ libcommon_internal_la_SOURCES += \
 endif
 
 if LINUX
+# blkdev used by RBD and FileStore
 libcommon_internal_la_SOURCES += \
+	common/blkdev.cc \
 	common/linux_version.c 
 endif
 
@@ -99,10 +101,11 @@ libcommon_internal_la_SOURCES += \
         common/aix_errno.cc
 endif
 
-# used by RBD and FileStore
-if LINUX
+if FREEBSD
+# blkdev used by RBD and FileStore
 libcommon_internal_la_SOURCES += \
-	common/blkdev.cc
+	common/blkdev.cc \
+	common/freebsd_version.c 
 endif
 
 if ENABLE_XIO
