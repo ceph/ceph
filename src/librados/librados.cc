@@ -2415,6 +2415,28 @@ int librados::Rados::get_inconsistent_objects(const PlacementGroup& pg,
 						     interval);
 }
 
+int librados::Rados::get_inconsistent_snapsets(const PlacementGroup& pg,
+					       const object_id_t &start_after,
+					       unsigned max_return,
+					       AioCompletion *c,
+					       std::vector<inconsistent_snapset_t>* snapsets,
+					       uint32_t* interval)
+{
+  IoCtx ioctx;
+  const pg_t pgid = pg.impl->pgid;
+  int r = ioctx_create2(pgid.pool(), ioctx);
+  if (r < 0) {
+    return r;
+  }
+
+  return ioctx.io_ctx_impl->get_inconsistent_snapsets(pgid,
+						      start_after,
+						      max_return,
+						      c->pc,
+						      snapsets,
+						      interval);
+}
+
 int librados::Rados::wait_for_latest_osdmap()
 {
   return client->wait_for_latest_osdmap();
