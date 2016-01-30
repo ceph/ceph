@@ -899,6 +899,7 @@ OPTION(rbd_blacklist_on_break_lock, OPT_BOOL, true) // whether to blacklist clie
 OPTION(rbd_blacklist_expire_seconds, OPT_INT, 0) // number of seconds to blacklist - set to 0 for OSD default
 OPTION(rbd_request_timed_out_seconds, OPT_INT, 30) // number of seconds before maint request times out
 OPTION(rbd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
+OPTION(rbd_validate_pool, OPT_BOOL, true) // true if empty pools should be validated for RBD compatibility
 
 /*
  * The following options change the behavior for librbd's image creation methods that
