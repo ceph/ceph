@@ -3,6 +3,8 @@
 # Wrapping script to call CEPH daemons with %clustername.%daemonid
 # i.e. mycluster.mon1, joecluster.2 or maryclustername.mds3
 #
+# If cluster name is omitted "ceph" suggested
+#
 usage() {
 	echo "Usage: ceph-custom-daemon <daemon> [<cluster>.]<id> [ <daemon-options> ]"
 	echo "	<daemon> ::= mon | mds | osd | create-keys | radosgw"
