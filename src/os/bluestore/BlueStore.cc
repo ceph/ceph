@@ -596,6 +596,9 @@ int BlueStore::OnodeHashLRU::trim(int max)
 	   << " size " << onode_map.size() << dendl;
   int trimmed = 0;
   int num = onode_map.size() - max;
+  if (onode_map.size() == 0 || num <= 0)
+    return 0; // don't even try
+  
   lru_list_t::iterator p = lru.end();
   if (num)
     --p;
@@ -1125,7 +1128,7 @@ int BlueStore::_open_db(bool create)
   } else {
     r = read_meta("kv_backend", &kv_backend);
     if (r < 0) {
-      derr << __func__ << " uanble to read 'kv_backend' meta" << dendl;
+      derr << __func__ << " unable to read 'kv_backend' meta" << dendl;
       return -EIO;
     }
   }
