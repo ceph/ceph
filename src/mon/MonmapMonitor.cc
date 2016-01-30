@@ -240,10 +240,6 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
     if (p != mon->monmap)
        delete p;
   }
-  else if (prefix == "mon add")
-    return false;
-  else if (prefix == "mon remove")
-    return false;
 
 reply:
   if (r != -1) {
@@ -581,18 +577,5 @@ int MonmapMonitor::get_monmap(bufferlist &bl)
             << cpp_strerror(err) << dendl;
     return err;
   }
-  return 0;
-}
-
-int MonmapMonitor::get_monmap(MonMap &m)
-{
-  dout(10) << __func__ << dendl;
-  bufferlist monmap_bl;
-
-  int err = get_monmap(monmap_bl);
-  if (err < 0) {
-    return err;
-  }
-  m.decode(monmap_bl);
   return 0;
 }
