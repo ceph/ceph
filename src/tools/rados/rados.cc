@@ -146,6 +146,7 @@ void usage(ostream& out)
 "SCRUB AND REPAIR:\n"
 "   list-inconsistent-pg <pool>      list inconsistent PGs in given pool\n"
 "   list-inconsistent-obj <pgid>     list inconsistent objects in given pg\n"
+"   list-inconsistent-snapset <pgid> list inconsistent snapsets in the given pg\n"
 "\n"
 "CACHE POOLS: (for testing/development only)\n"
 "   cache-flush <obj-name>           flush cache pool object (blocking)\n"
@@ -1323,6 +1324,34 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
   f.close_section();
 }
 
+static void dump_inconsistent(const inconsistent_snapset_t& inc,
+			      Formatter &f)
+{
+  dump_object_id(inc.object, f);
+  f.dump_bool("ss_attr_missing", inc.ss_attr_missing());
+  f.dump_bool("ss_attr_corrupted", inc.ss_attr_corrupted());
+  f.dump_bool("clone_missing", inc.clone_missing());
+  f.dump_bool("snapset_mismatch", inc.snapset_mismatch());
+  f.dump_bool("head_mismatch", inc.head_mismatch());
+  f.dump_bool("headless", inc.headless());
+  f.dump_bool("size_mismatch", inc.size_mismatch());
+
+  if (inc.clone_missing()) {
+    f.open_array_section("clones");
+    for (auto snap : inc.clones) {
+      f.dump_unsigned("snap", snap);
+    }
+    f.close_section();
+
+    f.open_array_section("missing");
+    for (auto snap : inc.missing) {
+      f.dump_unsigned("snap", snap);
+    }
+    f.close_section();
+  }
+  f.close_section();
+}
+
 // dispatch the call by type
 static int do_get_inconsistent(Rados& rados,
 			       const PlacementGroup& pg,
@@ -1334,6 +1363,18 @@ static int do_get_inconsistent(Rados& rados,
 {
   return rados.get_inconsistent_objects(pg, start, max_return, c,
 					objs, interval);
+}
+
+static int do_get_inconsistent(Rados& rados,
+			       const PlacementGroup& pg,
+			       const librados::object_id_t &start,
+			       unsigned max_return,
+			       AioCompletion *c,
+			       std::vector<inconsistent_snapset_t>* snapsets,
+			       uint32_t* interval)
+{
+  return rados.get_inconsistent_snapsets(pg, start, max_return, c,
+					 snapsets, interval);
 }
 
 template <typename T>
@@ -3016,6 +3057,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       formatter = new JSONFormatter(pretty_format);
     }
     ret = do_get_inconsistent_cmd<inconsistent_obj_t>(nargs, rados, *formatter);
+  } else if (strcmp(nargs[0], "list-inconsistent-snapset") == 0) {
+    if (!formatter) {
+      formatter = new JSONFormatter(pretty_format);
+    }
+    ret = do_get_inconsistent_cmd<inconsistent_snapset_t>(nargs, rados, *formatter);
   } else if (strcmp(nargs[0], "cache-flush") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
