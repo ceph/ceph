@@ -280,7 +280,7 @@ class Worker : public Thread {
     center.wakeup();
   }
   void* entry() {
-    center.set_owner(pthread_self());
+    center.set_owner();
     while (!done)
       center.process_events(1000000);
     return 0;
