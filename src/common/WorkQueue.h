@@ -126,10 +126,7 @@ public:
     }
 
   protected:
-    virtual void _process(const list<T*> &) { assert(0); }
-    virtual void _process(const list<T*> &items, TPHandle &handle) {
-      _process(items);
-    }
+    virtual void _process(const list<T*> &items, TPHandle &handle) = 0;
 
   public:
     BatchWorkQueue(string n, time_t ti, time_t sti, ThreadPool* p)
@@ -257,10 +254,7 @@ public:
     void unlock() {
       pool->unlock();
     }
-    virtual void _process(U) { assert(0); }
-    virtual void _process(U u, TPHandle &) {
-      _process(u);
-    }
+    virtual void _process(U u, TPHandle &) = 0;
   };
 
   /** @brief Template by-pointer work queue.
@@ -293,10 +287,7 @@ public:
 
   protected:
     /// Process a work item. Called from the worker threads.
-    virtual void _process(T *t) { assert(0); }
-    virtual void _process(T *t, TPHandle &) {
-      _process(t);
-    }
+    virtual void _process(T *t, TPHandle &) = 0;
 
   public:
     WorkQueue(string n, time_t ti, time_t sti, ThreadPool* p) : WorkQueue_(n, ti, sti), pool(p) {
@@ -555,8 +546,8 @@ public:
     _queue.pop_front();
     return c;
   }
-  using ThreadPool::WorkQueueVal<GenContext<ThreadPool::TPHandle&>*>::_process;
-  void _process(GenContext<ThreadPool::TPHandle&> *c, ThreadPool::TPHandle &tp) {
+  void _process(GenContext<ThreadPool::TPHandle&> *c,
+		ThreadPool::TPHandle &tp) override {
     c->complete(tp);
   }
 };
