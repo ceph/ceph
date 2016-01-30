@@ -143,6 +143,9 @@ void usage(ostream& out)
 "       --lock-duration              Lock duration (in seconds)\n"
 "       --lock-type                  Lock type (shared, exclusive)\n"
 "\n"
+"SCRUB AND REPAIR:\n"
+"   list-inconsistent-pg <pool>      list inconsistent PGs in given pool\n"
+"\n"
 "CACHE POOLS: (for testing/development only)\n"
 "   cache-flush <obj-name>           flush cache pool object (blocking)\n"
 "   cache-try-flush <obj-name>       flush cache pool object (non-blocking)\n"
@@ -1208,6 +1211,33 @@ static int do_cache_flush_evict_all(IoCtx& io_ctx, bool blocking)
     return -1;
   }
   return errors ? -1 : 0;
+}
+
+static int do_get_inconsistent_pg_cmd(const std::vector<const char*> &nargs,
+				      Rados& rados,
+				      Formatter& formatter)
+{
+  if (nargs.size() < 2) {
+    usage_exit();
+  }
+  int64_t pool_id = rados.pool_lookup(nargs[1]);
+  if (pool_id < 0) {
+    cerr << "pool \"" << nargs[1] << "\" not found" << std::endl;
+    return (int)pool_id;
+  }
+  std::vector<PlacementGroup> pgs;
+  int ret = rados.get_inconsistent_pgs(pool_id, &pgs);
+  if (ret) {
+    return ret;
+  }
+  formatter.open_array_section("pgs");
+  for (auto& pg : pgs) {
+    formatter.dump_stream("pg") << pg;
+  }
+  formatter.close_section();
+  formatter.flush(cout);
+  cout << std::endl;
+  return 0;
 }
 
 /**********************************************
@@ -2830,7 +2860,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     } else {
       cout << std::endl;
     }
-
+  } else if (strcmp(nargs[0], "list-inconsistent-pg") == 0) {
+    if (!formatter) {
+      formatter = new JSONFormatter(pretty_format);
+    }
+    ret = do_get_inconsistent_pg_cmd(nargs, rados, *formatter);
   } else if (strcmp(nargs[0], "cache-flush") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
