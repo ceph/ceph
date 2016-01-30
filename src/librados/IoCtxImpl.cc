@@ -972,6 +972,25 @@ int librados::IoCtxImpl::trunc(const object_t& oid, uint64_t size)
   return operate(oid, &op, NULL);
 }
 
+int librados::IoCtxImpl::get_inconsistent_objects(const pg_t& pg,
+						  const librados::object_id_t& start_after,
+						  uint64_t max_to_get,
+						  AioCompletionImpl *c,
+						  std::vector<inconsistent_obj_t>* objects,
+						  uint32_t* interval)
+{
+  Context *onack = new C_aio_Ack(c);
+  c->is_read = true;
+  c->io = this;
+
+  ::ObjectOperation op;
+  op.scrub_ls(start_after, max_to_get, objects, interval, nullptr);
+  object_locator_t oloc{poolid, pg.ps()};
+  c->tid = objecter->pg_read(oloc.hash, oloc, op, nullptr, CEPH_OSD_FLAG_PGOP, onack,
+			     nullptr, nullptr);
+  return 0;
+}
+
 int librados::IoCtxImpl::tmap_update(const object_t& oid, bufferlist& cmdbl)
 {
   ::ObjectOperation wr;

@@ -236,6 +236,12 @@ struct ObjectOperation {
     flags |= CEPH_OSD_FLAG_PGOP;
   }
 
+  void scrub_ls(const librados::object_id_t& start_after,
+		uint64_t max_to_get,
+		std::vector<librados::inconsistent_obj_t> *objects,
+		uint32_t *interval,
+		int *rval);
+
   void create(bool excl) {
     OSDOp& o = add_op(CEPH_OSD_OP_CREATE);
     o.op.flags = (excl ? CEPH_OSD_OP_FLAG_EXCL : 0);

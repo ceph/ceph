@@ -206,6 +206,13 @@ struct librados::IoCtxImpl {
   int hit_set_get(uint32_t hash, AioCompletionImpl *c, time_t stamp,
 		  bufferlist *pbl);
 
+  int get_inconsistent_objects(const pg_t& pg,
+			       const librados::object_id_t& start_after,
+			       uint64_t max_to_get,
+			       AioCompletionImpl *c,
+			       std::vector<inconsistent_obj_t>* objects,
+			       uint32_t* interval);
+
   void set_sync_op_version(version_t ver);
   int watch(const object_t& oid, uint64_t *cookie, librados::WatchCtx *ctx,
 	    librados::WatchCtx2 *ctx2);
