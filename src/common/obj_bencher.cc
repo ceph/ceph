@@ -349,9 +349,13 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
   }
   bufferlist::iterator p = object_data.begin();
   ::decode(*object_size, p);
-  ::decode(*op_size, p);
   ::decode(*num_objects, p);
   ::decode(*prevPid, p);
+  if (!p.end()) {
+    ::decode(*op_size, p);
+  } else {
+    *op_size = *object_size;
+  }
 
   return 0;
 }
@@ -581,10 +585,10 @@ int ObjBencher::write_bench(int secondsToRun,
   }
   //write object size/number data for read benchmarks
   ::encode(data.object_size, b_write);
-  ::encode(data.op_size, b_write);
   num_objects = (data.finished + writes_per_object - 1) / writes_per_object;
   ::encode(num_objects, b_write);
   ::encode(getpid(), b_write);
+  ::encode(data.op_size, b_write);
 
   // persist meta-data for further cleanup or read
   sync_write(run_name_meta, b_write, sizeof(int)*3);
