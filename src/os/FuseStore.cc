@@ -439,7 +439,7 @@ static int os_readdir(const char *path,
 	int r = fs->store->collection_list(
 	  cid, next, last, true, 1000, &ls, &next);
 	if (r < 0)
-	  break;
+	  return r;
 	for (auto p : ls) {
 	  if (skip) {
 	    --skip;
@@ -544,7 +544,6 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 
   case FN_HASH_END:
     {
-      pbl = new bufferlist;
       spg_t pgid;
       unsigned long h;
       if (cid.is_pg(&pgid)) {
@@ -561,14 +560,18 @@ static int os_open(const char *path, struct fuse_file_info *fi)
       }
       char buf[10];
       snprintf(buf, sizeof(buf), "%08lx\n", h);
+      pbl = new bufferlist;
       pbl->append(buf);
     }
     break;
 
   case FN_HASH_BITS:
     {
+      int r = fs->store->collection_bits(cid);
+      if (r < 0)
+        return r;
       char buf[8];
-      snprintf(buf, sizeof(buf), "%d\n", fs->store->collection_bits(cid));
+      snprintf(buf, sizeof(buf), "%d\n", r);
       pbl = new bufferlist;
       pbl->append(buf);
     }
@@ -587,14 +590,20 @@ static int os_open(const char *path, struct fuse_file_info *fi)
   case FN_OBJECT_DATA:
     {
       pbl = new bufferlist;
-      fs->store->read(cid, oid, 0, 0, *pbl);
+      int r = fs->store->read(cid, oid, 0, 0, *pbl);
+      if (r < 0) {
+        delete pbl;
+        return r;
+      }
     }
     break;
 
   case FN_OBJECT_ATTR_VAL:
     {
       bufferptr bp;
-      fs->store->getattr(cid, oid, key.c_str(), bp);
+      int r = fs->store->getattr(cid, oid, key.c_str(), bp);
+      if (r < 0)
+        return r;
       pbl = new bufferlist;
       pbl->append(bp);
     }
@@ -605,7 +614,9 @@ static int os_open(const char *path, struct fuse_file_info *fi)
       set<string> k;
       k.insert(key);
       map<string,bufferlist> v;
-      fs->store->omap_get_values(cid, oid, k, &v);
+      int r = fs->store->omap_get_values(cid, oid, k, &v);
+      if (r < 0)
+        return r;
       pbl = new bufferlist;
       *pbl = v[key];
     }
@@ -614,7 +625,9 @@ static int os_open(const char *path, struct fuse_file_info *fi)
   case FN_OBJECT_OMAP_HEADER:
     {
       bufferlist bl;
-      fs->store->omap_get_header(cid, oid, &bl);
+      int r = fs->store->omap_get_header(cid, oid, &bl);
+      if (r < 0)
+       return r;
       pbl = new bufferlist;
       pbl->claim(bl);
     }
@@ -1060,6 +1073,7 @@ int FuseStore::start()
   info->f = fuse_new(info->ch, &info->args, &fs_oper, sizeof(fs_oper),
 		     (void*)this);
   if (!info->f) {
+    fuse_unmount(info->mountpoint, info->ch);
     derr << __func__ << " fuse_new failed" << dendl;
     return -EIO;
   }
