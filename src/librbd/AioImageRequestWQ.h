@@ -34,8 +34,8 @@ public:
                    bool native_async=true);
   void aio_flush(AioCompletion *c, bool native_async=true);
 
-  using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtx> >::drain;
-  using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtx> >::empty;
+  using ThreadPool::PointerWQ<AioImageRequest<ImageCtx> >::drain;
+  using ThreadPool::PointerWQ<AioImageRequest<ImageCtx> >::empty;
 
   inline bool writes_empty() const {
     RWLock::RLocker locker(m_lock);
