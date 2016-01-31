@@ -106,6 +106,11 @@ libcommon_internal_la_SOURCES += \
         common/aix_errno.cc
 endif
 
+if DARWIN
+libcommon_internal_la_SOURCES += \
+	common/darwin_errno.cc
+endif
+
 if ENABLE_XIO
 libcommon_internal_la_SOURCES += \
 	common/address_helper.cc

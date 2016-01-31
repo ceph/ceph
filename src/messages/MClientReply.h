@@ -205,7 +205,9 @@ public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
   epoch_t get_mdsmap_epoch() const { return head.mdsmap_epoch; }
 
-  int get_result() const { return (__s32)(__u32)head.result; }
+  int get_result() const {
+    return ceph_to_host_errno((__s32)(__u32)head.result);
+  }
 
   void set_result(int r) { head.result = r; }
 
