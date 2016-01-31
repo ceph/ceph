@@ -41,7 +41,6 @@ class TestServer {
 
 public:
 
-#warning "rename this ClientRespFunc"
   using ClientRespFunc =
     std::function<void(ClientId,
 		       const TestResponse&,
