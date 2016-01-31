@@ -171,7 +171,7 @@ namespace rgw {
 
     struct State {
       uint64_t dev;
-      size_t size;
+      uint64_t size;
       uint64_t nlink;
       uint32_t owner_uid; /* XXX need Unix attr */
       uint32_t owner_gid; /* XXX need Unix attr */
