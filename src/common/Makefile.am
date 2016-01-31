@@ -107,7 +107,8 @@ endif
 
 if DARWIN
 libcommon_internal_la_SOURCES += \
-	common/blkdev.cc
+	common/blkdev.cc \
+	common/darwin_errno.cc
 endif
 
 if FREEBSD
