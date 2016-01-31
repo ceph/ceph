@@ -36,8 +36,8 @@ struct bench_history {
 
 struct bench_data {
   bool done; //is the benchmark is done
-  size_t object_size; //the size of the objects
-  size_t op_size;     // the size of the read/write ops
+  uint64_t object_size; //the size of the objects
+  uint64_t op_size;     // the size of the read/write ops
   // same as object_size for write tests
   int in_flight; //number of reads/writes being waited on
   int started;
@@ -72,8 +72,8 @@ protected:
 
   struct bench_data data;
 
-  int fetch_bench_metadata(const std::string& metadata_file, size_t* op_size,
-			   size_t* object_size, int* num_objects, int* prevPid);
+  int fetch_bench_metadata(const std::string& metadata_file, uint64_t* op_size,
+			   uint64_t* object_size, int* num_objects, int* prevPid);
 
   int write_bench(int secondsToRun, int concurrentios, const string& run_name_meta, unsigned max_objects);
   int seq_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid, bool no_verify=false);
@@ -109,7 +109,7 @@ public:
   virtual ~ObjBencher() {}
   int aio_bench(
     int operation, int secondsToRun,
-    int concurrentios, size_t op_size, size_t object_size, unsigned max_objects,
+    int concurrentios, uint64_t op_size, uint64_t object_size, unsigned max_objects,
     bool cleanup, const std::string& run_name, bool no_verify=false);
   int clean_up(const std::string& prefix, int concurrentios, const std::string& run_name);
 
