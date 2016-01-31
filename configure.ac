@@ -988,7 +988,7 @@ AC_MSG_RESULT([no])
 ])
 
 AC_MSG_CHECKING([for sched.h])
-+AC_LANG_PUSH([C++])
+AC_LANG_PUSH([C++])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #define _GNU_SOURCE
 #include <sched.h>
@@ -1005,7 +1005,7 @@ AC_DEFINE([HAVE_SCHED], 1, [Define to 1 if you have sched.h.])
 ], [
 AC_MSG_RESULT([no])
 ])
-+AC_LANG_POP([C++])
+AC_LANG_POP([C++])
 
 
 #
