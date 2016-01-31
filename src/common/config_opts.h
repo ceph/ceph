@@ -817,7 +817,10 @@ OPTION(filestore_fadvise, OPT_BOOL, true)
 // data corruption in xfs prior to kernel 3.5.  filestore will
 // implicity disable this if it cannot confirm the kernel is newer
 // than that.
-OPTION(filestore_xfs_extsize, OPT_BOOL, true)
+// NOTE: This option involves a tradeoff: When disabled, fragmentation is
+// worse, but large sequential writes are faster. When enabled, large
+// sequential writes are slower, but fragmentation is reduced.
+OPTION(filestore_xfs_extsize, OPT_BOOL, false)
 
 OPTION(filestore_journal_parallel, OPT_BOOL, false)
 OPTION(filestore_journal_writeahead, OPT_BOOL, false)
