@@ -38,11 +38,11 @@ struct AioDiscardEvent {
   static const EventType EVENT_TYPE = EVENT_TYPE_AIO_DISCARD;
 
   uint64_t offset;
-  size_t length;
+  uint64_t length;
 
   AioDiscardEvent() : offset(0), length(0) {
   }
-  AioDiscardEvent(uint64_t _offset, size_t _length)
+  AioDiscardEvent(uint64_t _offset, uint64_t _length)
     : offset(_offset), length(_length) {
   }
 
@@ -55,12 +55,12 @@ struct AioWriteEvent {
   static const EventType EVENT_TYPE = EVENT_TYPE_AIO_WRITE;
 
   uint64_t offset;
-  size_t length;
+  uint64_t length;
   bufferlist data;
 
   AioWriteEvent() : offset(0), length(0) {
   }
-  AioWriteEvent(uint64_t _offset, size_t _length, const bufferlist &_data)
+  AioWriteEvent(uint64_t _offset, uint64_t _length, const bufferlist &_data)
     : offset(_offset), length(_length), data(_data) {
   }
 
