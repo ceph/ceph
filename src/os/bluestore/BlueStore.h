@@ -19,6 +19,10 @@
 
 #include <unistd.h>
 
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
+
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/unordered_set.hpp>
 #include <boost/functional/hash.hpp>
@@ -51,7 +55,7 @@ public:
   struct EnodeSet;
 
   struct Enode : public boost::intrusive::unordered_set_base_hook<> {
-    atomic_t nref;        ///< reference count
+    std::atomic_int nref;        ///< reference count
     uint32_t hash;
     string key;           ///< key under PREFIX_OBJ where we are stored
     EnodeSet *enode_set;  ///< reference to the containing set
@@ -67,7 +71,7 @@ public:
 	enode_set(s) {}
 
     void get() {
-      nref.inc();
+      ++nref;
     }
     void put();
 
@@ -106,7 +110,7 @@ public:
 
   /// an in-memory object
   struct Onode {
-    atomic_t nref;  ///< reference count
+    std::atomic_int nref;  ///< reference count
 
     ghobject_t oid;
     string key;     ///< key under PREFIX_OBJ where we are stored
@@ -118,21 +122,27 @@ public:
     bool dirty;     // ???
     bool exists;
 
-    Mutex flush_lock;  ///< protect flush_txns
-    Cond flush_cond;   ///< wait here for unapplied txns
+    std::mutex flush_lock;  ///< protect flush_txns
+    std::condition_variable flush_cond;   ///< wait here for unapplied txns
     set<TransContext*> flush_txns;   ///< committing or wal txns
 
     uint64_t tail_offset;
     bufferlist tail_bl;
 
-    Onode(const ghobject_t& o, const string& k);
+    Onode(const ghobject_t& o, const string& k)
+      : nref(0),
+	oid(o),
+	key(k),
+	dirty(false),
+	exists(true) {
+    }
 
     void flush();
     void get() {
-      nref.inc();
+      ++nref;
     }
     void put() {
-      if (nref.dec() == 0)
+      if (--nref == 0)
 	delete this;
     }
 
@@ -151,11 +161,11 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&Onode::lru_item> > lru_list_t;
 
-    Mutex lock;
+    std::mutex lock;
     ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
     lru_list_t lru;                                      ///< lru
 
-    OnodeHashLRU() : lock("BlueStore::OnodeHashLRU::lock") {}
+    OnodeHashLRU() {}
 
     void add(const ghobject_t& oid, OnodeRef o);
     void _touch(OnodeRef o);
@@ -313,8 +323,8 @@ public:
 
   class OpSequencer : public Sequencer_impl {
   public:
-    Mutex qlock;
-    Cond qcond;
+    std::mutex qlock;
+    std::condition_variable qcond;
     typedef boost::intrusive::list<
       TransContext,
       boost::intrusive::member_hook<
@@ -335,31 +345,31 @@ public:
 
     Sequencer *parent;
 
-    Mutex wal_apply_lock;
+    std::mutex wal_apply_mutex;
+    std::unique_lock<std::mutex> wal_apply_lock;
 
     OpSequencer()
 	//set the qlock to to PTHREAD_MUTEX_RECURSIVE mode
-      : qlock("BlueStore::OpSequencer::qlock", true, false),
-	parent(NULL),
-	wal_apply_lock("BlueStore::OpSequencer::wal_apply_lock") {
+      : parent(NULL),
+	wal_apply_lock(wal_apply_mutex, std::defer_lock) {
     }
     ~OpSequencer() {
       assert(q.empty());
     }
 
     void queue_new(TransContext *txc) {
-      Mutex::Locker l(qlock);
+      std::lock_guard<std::mutex> l(qlock);
       q.push_back(*txc);
     }
 
     void flush() {
-      Mutex::Locker l(qlock);
+      std::unique_lock<std::mutex> l(qlock);
       while (!q.empty())
-	qcond.Wait(qlock);
+	qcond.wait(l);
     }
 
     bool flush_commit(Context *c) {
-      Mutex::Locker l(qlock);
+      std::lock_guard<std::mutex> l(qlock);
       if (q.empty()) {
 	return true;
       }
@@ -424,12 +434,12 @@ public:
 
       // preserve wal ordering for this sequencer by taking the lock
       // while still holding the queue lock
-      i->osr->wal_apply_lock.Lock();
+      i->osr->wal_apply_lock.lock();
       return i;
     }
     void _process(TransContext *i, ThreadPool::TPHandle &handle) {
       store->_wal_apply(i);
-      i->osr->wal_apply_lock.Unlock();
+      i->osr->wal_apply_lock.unlock();
     }
     using ThreadPool::WorkQueue<TransContext>::_process;
     void _clear() {
@@ -474,7 +484,7 @@ private:
   RWLock coll_lock;    ///< rwlock to protect coll_map
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
 
-  Mutex nid_lock;
+  std::mutex nid_lock;
   uint64_t nid_last;
   uint64_t nid_max;
 
@@ -483,7 +493,7 @@ private:
 
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
 
-  Mutex wal_lock;
+  std::mutex wal_lock;
   atomic64_t wal_seq;
   ThreadPool wal_tp;
   WALWQ wal_wq;
@@ -491,15 +501,15 @@ private:
   Finisher finisher;
 
   KVSyncThread kv_sync_thread;
-  Mutex kv_lock;
-  Cond kv_cond, kv_sync_cond;
+  std::mutex kv_lock;
+  std::condition_variable kv_cond, kv_sync_cond;
   bool kv_stop;
   deque<TransContext*> kv_queue, kv_committing;
   deque<TransContext*> wal_cleanup_queue, wal_cleaning;
 
   Logger *logger;
 
-  Mutex reap_lock;
+  std::mutex reap_lock;
   list<CollectionRef> removed_collections;
 
 
@@ -570,9 +580,9 @@ private:
   void _kv_sync_thread();
   void _kv_stop() {
     {
-      Mutex::Locker l(kv_lock);
+      std::lock_guard<std::mutex> l(kv_lock);
       kv_stop = true;
-      kv_cond.Signal();
+      kv_cond.notify_all();
     }
     kv_sync_thread.join();
     kv_stop = false;

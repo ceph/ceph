@@ -2996,11 +2996,8 @@ int KStore::_write(TransContext *txc,
 	   << " " << offset << "~" << length
 	   << dendl;
   RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o) {
-    o = c->get_onode(oid, true);
-    _assign_nid(txc, o);
-  }
+  OnodeRef o = c->get_onode(oid, true);
+  _assign_nid(txc, o);
   int r = _do_write(txc, o, offset, length, bl, fadvise_flags);
   txc->write_onode(o);
 
@@ -3021,11 +3018,8 @@ int KStore::_zero(TransContext *txc,
   int r = 0;
 
   RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o) {
-    o = c->get_onode(oid, true);
-    _assign_nid(txc, o);
-  }
+  OnodeRef o = c->get_onode(oid, true);
+  _assign_nid(txc, o);
 
   uint64_t stripe_size = o->onode.stripe_size;
   if (stripe_size) {
@@ -3527,22 +3521,19 @@ int KStore::_clone(TransContext *txc,
     r = -ENOENT;
     goto out;
   }
- 
-  newo = c->get_onode(new_oid, false);
-  if (newo) {
-    // already exist, truncate any old data
-    r = _do_truncate(txc, newo, 0);
-    if (r < 0)
-      goto out;
-  } else {
-    // does not exist, create it
-    newo = c->get_onode(new_oid, true);
-    _assign_nid(txc, newo);
-  }
+  newo = c->get_onode(new_oid, true);
+  assert(newo);
+  newo->exists = true;
+  _assign_nid(txc, newo);
 
   oldo->flush();
 
   r = _do_read(oldo, 0, oldo->onode.size, bl, 0);
+  if (r < 0)
+    goto out;
+
+  // truncate any old data
+  r = _do_truncate(txc, newo, 0);
   if (r < 0)
     goto out;
 
@@ -3610,11 +3601,7 @@ int KStore::_clone_range(TransContext *txc,
     r = -ENOENT;
     goto out;
   }
-  newo = c->get_onode(new_oid, false);
-  if (!newo) {
-    newo = c->get_onode(new_oid, true);
-    _assign_nid(txc, newo);
-  }
+  newo = c->get_onode(new_oid, true);
   assert(newo);
   newo->exists = true;
 
