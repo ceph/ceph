@@ -1856,23 +1856,28 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       }
       break;
     default:
-      if (in_hit_set) {
-	promote_object(obc, missing_oid, oloc, promote_op);
-      } else {
+      unsigned count = (int)in_hit_set;
+      if (count) {
 	// Check if in other hit sets
-	map<time_t,HitSetRef>::iterator itor;
-	bool in_other_hit_sets = false;
-	for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
-	  if (itor->second->contains(missing_oid)) {
-	    in_other_hit_sets = true;
+	const hobject_t& oid = obc.get() ? obc->obs.oi.soid : missing_oid;
+	for (map<time_t,HitSetRef>::reverse_iterator itor =
+	       agent_state->hit_set_map.rbegin();
+	     itor != agent_state->hit_set_map.rend();
+	     ++itor) {
+	  if (!itor->second->contains(oid)) {
+	    break;
+	  }
+	  ++count;
+	  if (count >= pool.info.min_read_recency_for_promote) {
 	    break;
 	  }
 	}
-	if (in_other_hit_sets) {
-	  promote_object(obc, missing_oid, oloc, promote_op);
-	} else if (!can_proxy_read) {
-	  do_cache_redirect(op);
-	}
+      }
+      if (count >= pool.info.min_read_recency_for_promote) {
+	promote_object(obc, missing_oid, oloc, promote_op);
+      } else {
+	// not promoting
+	return false;
       }
       break;
     }
