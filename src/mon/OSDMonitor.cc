@@ -6704,7 +6704,8 @@ done:
   } else if (prefix == "osd pool create") {
     int64_t  pg_num;
     int64_t pgp_num;
-    cmd_getval(g_ceph_context, cmdmap, "pg_num", pg_num, int64_t(0));
+    const int64_t default_pg_num = g_conf->osd_pool_default_pg_num;
+    cmd_getval(g_ceph_context, cmdmap, "pg_num", pg_num, default_pg_num);
     cmd_getval(g_ceph_context, cmdmap, "pgp_num", pgp_num, pg_num);
 
     string pool_type_str;
