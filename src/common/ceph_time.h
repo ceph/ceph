@@ -20,6 +20,17 @@
 
 #include "include/encoding.h"
 
+#if defined(DARWIN)
+#include <sys/_types/_timespec.h>
+#include <mach/mach.h>
+#include <mach/clock.h>
+
+#define CLOCK_REALTIME CALENDAR_CLOCK
+#define CLOCK_MONOTONIC SYSTEM_CLOCK
+
+int clock_gettime(int clk_id, struct timespec *tp);
+#endif
+
 class CephContext;
 struct ceph_timespec;
 

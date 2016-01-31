@@ -19,6 +19,22 @@
 #include "ceph_time.h"
 #include "config.h"
 
+#if defined(DARWIN)
+int clock_gettime(int clk_id, struct timespec *tp)
+{
+  clock_serv_t cclock;
+  mach_timespec_t mts;
+
+  host_get_clock_service(mach_host_self(), clk_id, &cclock);
+  clock_get_time(cclock, &mts);
+  mach_port_deallocate(mach_task_self(), cclock);
+
+  tp->tv_sec = mts.tv_sec;
+  tp->tv_nsec = mts.tv_nsec;
+  return 0;
+}
+#endif
+
 namespace ceph {
   namespace time_detail {
     real_clock::time_point real_clock::now(const CephContext* cct) noexcept {
@@ -49,7 +65,18 @@ namespace ceph {
     coarse_real_clock::time_point coarse_real_clock::now(
       const CephContext* cct) noexcept {
       struct timespec ts;
+#if defined(CLOCK_REALTIME_COARSE)
+      // Linux systems have _COARSE clocks.
       clock_gettime(CLOCK_REALTIME_COARSE, &ts);
+#elif defined(CLOCK_REALTIME_FAST)
+      // BSD systems have _FAST clocks.
+      clock_gettime(CLOCK_REALTIME_FAST, &ts);
+#else
+      // And if we find neither, you may wish to consult your system's
+      // documentation.
+#warning Falling back to CLOCK_REALTIME, may be slow.
+      clock_gettime(CLOCK_REALTIME, &ts);
+#endif
       // TODO: After we get the time-literal configuration patch in,
       // just add the configured duration.
       if (cct)
