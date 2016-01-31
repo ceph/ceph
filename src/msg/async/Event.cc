@@ -157,8 +157,8 @@ void EventCenter::delete_file_event(int fd, int mask)
 {
   assert(fd > 0);
   Mutex::Locker l(file_lock);
-  if (fd > nevent) {
-    ldout(cct, 1) << __func__ << " delete event fd=" << fd << " exceed nevent=" << nevent
+  if (fd >= nevent) {
+    ldout(cct, 1) << __func__ << " delete event fd=" << fd << " is equal or greater than nevent=" << nevent
                   << "mask=" << mask << dendl;
     return ;
   }
