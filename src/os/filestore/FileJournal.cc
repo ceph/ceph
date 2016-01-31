@@ -177,6 +177,7 @@ void FileJournal::_check_disk_write_cache() const
     goto done;
   }
 
+#if defined(__linux__)
   while (true) {
     char buf[256];
     memset(buf, 0, sizeof(buf));
@@ -222,7 +223,7 @@ void FileJournal::_check_disk_write_cache() const
 	 << dendl;
     break;
   }
-
+#endif
 close_f:
   if (pclose(fp)) {
     int ret = -errno;
