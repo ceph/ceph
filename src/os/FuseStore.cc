@@ -6,7 +6,7 @@
 #include "common/errno.h"
 
 #define FUSE_USE_VERSION 30
-#include <fuse/fuse.h>
+#include <fuse.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
