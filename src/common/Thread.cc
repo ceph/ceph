@@ -17,6 +17,7 @@
 #include "common/debug.h"
 #include "common/signal.h"
 #include "common/io_priority.h"
+#include "include/compat.h"
 
 #include <dirent.h>
 #include <errno.h>

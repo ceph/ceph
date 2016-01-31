@@ -15,11 +15,15 @@
 #if defined(__FreeBSD__)
 #define	ENODATA	ENOATTR
 #define	MSG_MORE 0
+
+#define pthread_setname_np(tid, name) pthread_set_name_np(tid, name)
 #endif /* !__FreeBSD__ */
 
 #if defined(__APPLE__)
 /* PATH_MAX */
 #include <limits.h>
+/* no method to set other thread's name */
+#define pthread_setname_np(tid, name) do {} while(0)
 #endif /* __APPLE__ */
 
 /* O_LARGEFILE is not defined/required on OSX/FreeBSD */

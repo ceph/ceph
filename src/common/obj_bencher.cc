@@ -17,6 +17,7 @@
  */
 #include <pthread.h>
 #include "common/Cond.h"
+#include "include/compat.h"
 #include "obj_bencher.h"
 
 #include <iostream>

@@ -35,6 +35,7 @@ using namespace std;
 
 #include "common/errno.h"
 #include "include/assert.h"
+#include "include/compat.h"
 
 #define dout_subsys ceph_subsys_client
 #undef dout_prefix
