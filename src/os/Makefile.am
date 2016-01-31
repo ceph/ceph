@@ -30,8 +30,13 @@ libos_a_SOURCES = \
 	os/memstore/MemStore.cc \
 	os/ObjectStore.cc
 
+libos_a_CXXFLAGS = ${AM_CXXFLAGS} -I rocksdb/include -fPIC
+libos_a_LIBADD = libos_types.a libkv.a
+noinst_LIBRARIES += libos.a
+
 if WITH_FUSE
 libos_a_SOURCES += os/FuseStore.cc
+libos_a_CXXFLAGS += $(LIBFUSE_CFLAGS)
 endif
 
 if WITH_LIBAIO
@@ -64,10 +69,6 @@ endif
 if WITH_LIBZFS
 libos_a_SOURCES += os/filestore/ZFSFileStoreBackend.cc
 endif
-
-libos_a_CXXFLAGS = ${AM_CXXFLAGS} -I rocksdb/include -fPIC
-libos_a_LIBADD = libos_types.a libkv.a
-noinst_LIBRARIES += libos.a
 
 if WITH_LTTNG
 libos_a_LIBADD += $(LIBOS_TP)
