@@ -44,25 +44,42 @@ std::string create_one_pool(const std::string &pool_name, rados_t *cluster)
   return "";
 }
 
+int destroy_ec_profile(rados_t *cluster)
+{
+    char *cmd[2];
+    cmd[0] = (char *)"{\"prefix\": \"osd erasure-code-profile rm\", \"name\": \"testprofile\"}";
+    cmd[1] = NULL;
+    return rados_mon_command(*cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0);
+}
+
 std::string create_one_ec_pool(const std::string &pool_name, rados_t *cluster)
 {
   std::string err = connect_cluster(cluster);
   if (err.length())
     return err;
 
-  char *cmd[2];
-
-  cmd[1] = NULL;
-
-  cmd[0] = (char *)"{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile\", \"profile\": [ \"k=2\", \"m=1\", \"ruleset-failure-domain=osd\"]}";
-  int ret = rados_mon_command(*cluster, (const char **)cmd, 1, "", 0, NULL, NULL, NULL, NULL);
+  int ret = destroy_ec_profile(cluster);
   if (ret) {
     rados_shutdown(*cluster);
     std::ostringstream oss;
-    oss << "rados_mon_command erasure-code-profile set name:testprofile failed with error " << ret;
+    oss << "rados_mon_command erasure-code-profile rm testprofile failed with error " << ret;
     return oss.str();
   }
     
+  char *cmd[2];
+  cmd[1] = NULL;
+
+  std::string profile_create = "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile\", \"profile\": [ \"k=2\", \"m=1\", \"ruleset-failure-domain=osd\"]}";
+  cmd[0] = (char *)profile_create.c_str();
+  ret = rados_mon_command(*cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0);
+  if (ret) {
+    std::ostringstream oss;
+
+    rados_shutdown(*cluster);
+    oss << "rados_mon_command erasure-code-profile set name:testprofile failed with error " << ret;
+    return oss.str();
+  }
+
   std::string cmdstr = "{\"prefix\": \"osd pool create\", \"pool\": \"" +
      pool_name + "\", \"pool_type\":\"erasure\", \"pg_num\":8, \"pgp_num\":8, \"erasure_code_profile\":\"testprofile\"}";
   cmd[0] = (char *)cmdstr.c_str();
@@ -70,13 +87,12 @@ std::string create_one_ec_pool(const std::string &pool_name, rados_t *cluster)
   if (ret) {
     std::ostringstream oss;
 
-    cmd[0] = (char *)"{\"prefix\": \"osd erasure-code-profile rm\", \"name\": \"testprofile\"}";
-    int ret2 = rados_mon_command(*cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0);
+    int ret2 = destroy_ec_profile(cluster);
     if (ret2)
       oss << "rados_mon_command osd erasure-code-profile rm name:testprofile failed with error " << ret2 << std::endl;
 
     rados_shutdown(*cluster);
-    oss << "rados_mon_command erasure-code-profile set name:testprofile failed with error " << ret;
+    oss << "rados_mon_command osd pool create failed with error " << ret;
     return oss.str();
   }
 
@@ -99,14 +115,29 @@ std::string create_one_pool_pp(const std::string &pool_name, Rados &cluster)
   return "";
 }
 
+int destroy_ec_profile_pp(Rados &cluster)
+{
+  bufferlist inbl;
+  return cluster.mon_command("{\"prefix\": \"osd erasure-code-profile rm\", \"name\": \"testprofile\"}",
+                             inbl, NULL, NULL);
+}
+
 std::string create_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
 {
   std::string err = connect_cluster_pp(cluster);
   if (err.length())
     return err;
 
+  int ret = destroy_ec_profile_pp(cluster);
+  if (ret) {
+    cluster.shutdown();
+    std::ostringstream oss;
+    oss << "rados_mon_command erasure-code-profile rm testprofile failed with error " << ret;
+    return oss.str();
+  }
+
   bufferlist inbl;
-  int ret = cluster.mon_command(
+  ret = cluster.mon_command(
     "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile\", \"profile\": [ \"k=2\", \"m=1\", \"ruleset-failure-domain=osd\"]}",
     inbl, NULL, NULL);
   if (ret) {
@@ -122,9 +153,7 @@ std::string create_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
   if (ret) {
     std::ostringstream oss;
     bufferlist inbl;
-    int ret2 = cluster.mon_command(
-      "{\"prefix\": \"osd erasure-code-profile rm\", \"name\": \"testprofile\"}",
-      inbl, NULL, NULL);
+    int ret2 = destroy_ec_profile_pp(cluster);
     if (ret2)
       oss << "mon_command osd erasure-code-profile rm name:testprofile failed with error " << ret2 << std::endl;
 
@@ -212,12 +241,7 @@ int destroy_one_ec_pool(const std::string &pool_name, rados_t *cluster)
 {
   int ret = rados_pool_delete(*cluster, pool_name.c_str());
   if (ret == 0) {
-    char *cmd[2];
-
-    cmd[1] = NULL;
-
-    cmd[0] = (char *)"{\"prefix\": \"osd erasure-code-profile rm\", \"name\": \"testprofile\"}";
-    int ret2 = rados_mon_command(*cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0);
+    int ret2 = destroy_ec_profile(cluster);
     if (ret2) {
       rados_shutdown(*cluster);
       return ret2;
@@ -244,9 +268,7 @@ int destroy_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
   int ret = cluster.pool_delete(pool_name.c_str());
   bufferlist inbl;
   if (ret == 0) {
-    int ret2 = cluster.mon_command(
-      "{\"prefix\": \"osd erasure-code-profile rm\", \"name\": \"testprofile\"}",
-      inbl, NULL, NULL);
+    int ret2 = destroy_ec_profile_pp(cluster);
     if (ret2) {
       cluster.shutdown();
       return ret2;
