@@ -4,7 +4,9 @@
 #include "MemoryModel.h"
 #include "common/config.h"
 #include "debug.h"
+#if defined(HAVE_MALLINFO)
 #include <malloc.h>
+#endif
 
 #include <fstream>
 

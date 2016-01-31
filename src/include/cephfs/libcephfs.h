@@ -15,7 +15,6 @@
 #ifndef CEPH_LIB_H
 #define CEPH_LIB_H
 
-#include <features.h>
 #include <utime.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -23,6 +22,10 @@
 #include <sys/socket.h>
 #include <stdint.h>
 #include <stdbool.h>
+
+#if defined(__linux__)
+#include <features.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
