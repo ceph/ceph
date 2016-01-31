@@ -95,9 +95,6 @@ int main(int argc, char* argv[]) {
   const chrono::seconds measure_unit(5); // calculate in groups of 5 seconds
   const chrono::seconds report_unit(1); // unit to output reports in
 
-  assert(COUNT(client_info) == COUNT(client_goals));
-  const int client_count = COUNT(client_info);
-
   ClientMap clients;
 
   auto client_info_f = std::function<dmc::ClientInfo(ClientId)>(getClientInfo);
@@ -108,15 +105,15 @@ int main(int argc, char* argv[]) {
 		    server_ops, server_threads,
 		    client_info_f, client_response_f);
 
-  std::string clientNames[] = { "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel" };
-
-  for (int i = 0; i < client_count; ++i) {
-    auto& name = clientNames[i];
-    clients[name] = new TestClient(name,
-				   std::bind(&TestServer::post, &server, _1, _2),
-				   client_goals[i] * goal_secs_to_run,
-				   client_goals[i],
-				   client_outstanding_ops);
+  for (auto i = client_info.begin(); i != client_info.end(); ++i) {
+    std::string name = i->first;
+    int goal = i->second.second;
+    clients[name] =
+      new TestClient(name,
+		     std::bind(&TestServer::post, &server, _1, _2),
+		     goal * goal_secs_to_run,
+		     goal,
+		     client_outstanding_ops);
   }
 
   // clients are now running

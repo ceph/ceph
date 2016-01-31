@@ -88,7 +88,6 @@ namespace crimson {
     std::ostream& operator<<(std::ostream& out,
 			     const crimson::dmclock::ClientInfo& client);
 
-
     struct RequestTag {
       double proportion;
       double reservation;
