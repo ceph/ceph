@@ -15,8 +15,7 @@
 #define dout_prefix *_dout << "bluefs "
 
 BlueFS::BlueFS()
-  : lock("BlueFS::lock"),
-    ino_last(0),
+  : ino_last(0),
     log_seq(0),
     log_writer(NULL)
 {
@@ -65,7 +64,7 @@ uint64_t BlueFS::get_block_device_size(unsigned id)
 
 void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(1) << __func__ << " bdev " << id << " " << offset << "~" << length
 	  << dendl;
   assert(id < bdev.size());
@@ -107,7 +106,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
 
 uint64_t BlueFS::get_total(unsigned id)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   assert(id < block_all.size());
   uint64_t r = 0;
   interval_set<uint64_t>& p = block_all[id];
@@ -119,14 +118,14 @@ uint64_t BlueFS::get_total(unsigned id)
 
 uint64_t BlueFS::get_free(unsigned id)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   assert(id < alloc.size());
   return alloc[id]->get_free();
 }
 
 void BlueFS::get_usage(vector<pair<uint64_t,uint64_t>> *usage)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   usage->resize(bdev.size());
   for (unsigned id = 0; id < bdev.size(); ++id) {
     uint64_t total = 0;
@@ -149,7 +148,7 @@ void BlueFS::get_usage(vector<pair<uint64_t,uint64_t>> *usage)
 
 int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " bdev " << id << dendl;
   if (id >= block_all.size())
     return -EINVAL;
@@ -291,7 +290,7 @@ void BlueFS::umount()
 
 int BlueFS::fsck()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(1) << __func__ << dendl;
   // hrm, i think we check everything on mount...
   return 0;
@@ -617,7 +616,7 @@ void BlueFS::_drop_link(FileRef file)
   --file->refs;
   if (file->refs == 0) {
     dout(20) << __func__ << " destroying " << file->fnode << dendl;
-    assert(file->num_reading.read() == 0);
+    assert(file->num_reading.load() == 0);
     log_t.op_file_remove(file->fnode.ino);
     for (auto& r : file->fnode.extents) {
       alloc[r.bdev]->release(r.offset, r.length);
@@ -640,7 +639,7 @@ int BlueFS::_read_random(
   dout(10) << __func__ << " h " << h << " " << off << "~" << len
 	   << " from " << h->file->fnode << dendl;
 
-  h->file->num_reading.inc();
+  ++h->file->num_reading;
 
   if (!h->ignore_eof &&
       off + len > h->file->fnode.size) {
@@ -672,7 +671,7 @@ int BlueFS::_read_random(
   }
 
   dout(20) << __func__ << " got " << ret << dendl;
-  h->file->num_reading.dec();
+  --h->file->num_reading;
   return ret;
 }
 
@@ -687,7 +686,7 @@ int BlueFS::_read(
   dout(10) << __func__ << " h " << h << " " << off << "~" << len
 	   << " from " << h->file->fnode << dendl;
 
-  h->file->num_reading.inc();
+  ++h->file->num_reading;
 
   if (!h->ignore_eof &&
       off + len > h->file->fnode.size) {
@@ -754,7 +753,7 @@ int BlueFS::_read(
 
   dout(20) << __func__ << " got " << ret << dendl;
   assert(!outbl || (int)outbl->length() == ret);
-  h->file->num_reading.dec();
+  --h->file->num_reading;
   return ret;
 }
 
@@ -953,7 +952,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 	   << " " << offset << "~" << length
 	   << " to " << h->file->fnode << dendl;
   assert(!h->file->deleted);
-  assert(h->file->num_readers.read() == 0);
+  assert(h->file->num_readers.load() == 0);
 
   if (offset + length <= h->pos)
     return 0;
@@ -1205,7 +1204,7 @@ int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
 
 void BlueFS::sync_metadata()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   if (log_t.empty()) {
     dout(10) << __func__ << " - no pending log events" << dendl;
     return;
@@ -1231,7 +1230,7 @@ int BlueFS::open_for_write(
   FileWriter **h,
   bool overwrite)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << dirname << "/" << filename << dendl;
   map<string,DirRef>::iterator p = dir_map.find(dirname);
   DirRef dir;
@@ -1321,7 +1320,7 @@ int BlueFS::open_for_read(
   FileReader **h,
   bool random)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << dirname << "/" << filename
 	   << (random ? " (random)":" (sequential)") << dendl;
   map<string,DirRef>::iterator p = dir_map.find(dirname);
@@ -1350,7 +1349,7 @@ int BlueFS::rename(
   const string& old_dirname, const string& old_filename,
   const string& new_dirname, const string& new_filename)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << old_dirname << "/" << old_filename
 	   << " -> " << new_dirname << "/" << new_filename << dendl;
   map<string,DirRef>::iterator p = dir_map.find(old_dirname);
@@ -1397,7 +1396,7 @@ int BlueFS::rename(
 
 int BlueFS::mkdir(const string& dirname)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << dirname << dendl;
   map<string,DirRef>::iterator p = dir_map.find(dirname);
   if (p != dir_map.end()) {
@@ -1411,7 +1410,7 @@ int BlueFS::mkdir(const string& dirname)
 
 int BlueFS::rmdir(const string& dirname)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << dirname << dendl;
   map<string,DirRef>::iterator p = dir_map.find(dirname);
   if (p == dir_map.end()) {
@@ -1430,7 +1429,7 @@ int BlueFS::rmdir(const string& dirname)
 
 bool BlueFS::dir_exists(const string& dirname)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   map<string,DirRef>::iterator p = dir_map.find(dirname);
   bool exists = p != dir_map.end();
   dout(10) << __func__ << " " << dirname << " = " << (int)exists << dendl;
@@ -1440,7 +1439,7 @@ bool BlueFS::dir_exists(const string& dirname)
 int BlueFS::stat(const string& dirname, const string& filename,
 		 uint64_t *size, utime_t *mtime)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << dirname << "/" << filename << dendl;
   map<string,DirRef>::iterator p = dir_map.find(dirname);
   if (p == dir_map.end()) {
@@ -1468,7 +1467,7 @@ int BlueFS::stat(const string& dirname, const string& filename,
 int BlueFS::lock_file(const string& dirname, const string& filename,
 		      FileLock **plock)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << dirname << "/" << filename << dendl;
   map<string,DirRef>::iterator p = dir_map.find(dirname);
   if (p == dir_map.end()) {
@@ -1506,7 +1505,7 @@ int BlueFS::lock_file(const string& dirname, const string& filename,
 
 int BlueFS::unlock_file(FileLock *fl)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << fl << " on " << fl->file->fnode << dendl;
   assert(fl->file->locked);
   fl->file->locked = false;
@@ -1516,7 +1515,7 @@ int BlueFS::unlock_file(FileLock *fl)
 
 int BlueFS::readdir(const string& dirname, vector<string> *ls)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << dirname << dendl;
   if (dirname.size() == 0) {
     // list dirs
@@ -1544,7 +1543,7 @@ int BlueFS::readdir(const string& dirname, vector<string> *ls)
 
 int BlueFS::unlink(const string& dirname, const string& filename)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << dirname << "/" << filename << dendl;
   map<string,DirRef>::iterator p = dir_map.find(dirname);
   if (p == dir_map.end()) {
