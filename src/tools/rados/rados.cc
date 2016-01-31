@@ -185,6 +185,8 @@ void usage(ostream& out)
 "        Set number of concurrent I/O operations\n"
 "   --show-time\n"
 "        prefix output with date/time\n"
+"   --no-verify\n"
+"        do not verify contents of read objects\n"
 "\n"
 "LOAD GEN OPTIONS:\n"
 "   --num-objects                    total number of objects\n"
@@ -1142,6 +1144,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   int concurrent_ios = 16;
   unsigned op_size = default_op_size;
   bool cleanup = true;
+  bool no_verify = false;
   const char *snapname = NULL;
   snap_t snapid = CEPH_NOSNAP;
   std::map<std::string, std::string>::const_iterator i;
@@ -1311,7 +1314,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     nspace = i->second;
   }
-
+  i = opts.find("no-verify");
+  if (i != opts.end()) {
+    no_verify = true;
+  }
 
   // open rados
   ret = rados.init_with_context(g_ceph_context);
@@ -2262,7 +2268,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     bencher.set_show_time(show_time);
     ret = bencher.aio_bench(operation, seconds, num_objs,
-			    concurrent_ios, op_size, cleanup, run_name);
+			    concurrent_ios, op_size, cleanup, run_name, no_verify);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
   }
@@ -2641,6 +2647,8 @@ int main(int argc, const char **argv)
       opts["show-time"] = "true";
     } else if (ceph_argparse_flag(args, i, "--no-cleanup", (char*)NULL)) {
       opts["no-cleanup"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--no-verify", (char*)NULL)) {
+      opts["no-verify"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "--run-name", (char*)NULL)) {
       opts["run-name"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--prefix", (char*)NULL)) {
