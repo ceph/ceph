@@ -111,6 +111,7 @@ TYPE(ObjectStore::Transaction)
 #include "os/filestore/SequencerPosition.h"
 TYPE(SequencerPosition)
 
+#ifdef WITH_LIBAIO
 #include "os/bluestore/bluestore_types.h"
 TYPE(bluestore_cnode_t)
 TYPE(bluestore_extent_t)
@@ -119,6 +120,7 @@ TYPE(bluestore_overlay_t)
 TYPE(bluestore_onode_t)
 TYPE(bluestore_wal_op_t)
 TYPE(bluestore_wal_transaction_t)
+#endif
 
 #include "common/hobject.h"
 TYPE(hobject_t)
