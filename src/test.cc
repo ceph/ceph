@@ -9,6 +9,7 @@
 #include <memory>
 #include <chrono>
 #include <iostream>
+#include <map>
 
 #include "test_recs.h"
 #include "test_server.h"
@@ -29,6 +30,7 @@ typedef std::unique_ptr<TestRequest> TestRequestRef;
 std::mutex cout_mtx;
 typedef typename std::lock_guard<std::mutex> Guard;
 
+using ClientMap = std::map<ClientId,TestClient*>;
 
 #define COUNT(array) (sizeof(array) / sizeof(array[0]))
 
@@ -40,7 +42,14 @@ static const int server_threads = 7;
 
 static const int client_outstanding_ops = 10;
 
-static dmc::ClientInfo client_info[] = {
+static std::map<std::string,std::pair<dmc::ClientInfo,int>> client_info = {
+  {"alpha", {{ 1.0, 50.0, 200.0 }, 100 }},
+  {"bravo", {{ 2.0, 50.0, 200.0 }, 100 }},
+};
+
+
+#if 0
+static dmc::ClientInfo client_info_array[] = {
   // as of C++ 11 this will invoke the constructor with three doubles
   // as parameters
   {1.0, 50.0, 200.0},
@@ -50,6 +59,9 @@ static dmc::ClientInfo client_info[] = {
   // {2.0, 50.0, 0.0},
 };
 
+static std::map<ClientId,dmc::ClientInfo> client_info_map;
+
+
 static int client_goals[] = {
   100,
   100,
@@ -57,15 +69,17 @@ static int client_goals[] = {
   // 80,
   // 80,
 }; // in IOPS
+#endif
 
 
-dmc::ClientInfo getClientInfo(int c) {
-  assert(c < COUNT(client_info));
-  return client_info[c];
+dmc::ClientInfo getClientInfo(const ClientId& c) {
+  auto it = client_info.find(c);
+  assert(client_info.end() != it);
+  return it->second.first;
 }
 
 
-void send_response(TestClient** clients,
+void send_response(ClientMap& clients,
 		   ClientId client_id,
 		   const TestResponse& resp,
 		   const dmc::RespParams<ServerId>& resp_params) {
@@ -84,7 +98,7 @@ int main(int argc, char* argv[]) {
   assert(COUNT(client_info) == COUNT(client_goals));
   const int client_count = COUNT(client_info);
 
-  TestClient** clients = new TestClient*[client_count];
+  ClientMap clients;
 
   auto client_info_f = std::function<dmc::ClientInfo(ClientId)>(getClientInfo);
   TestServer::ClientRespFunc client_response_f =
@@ -94,18 +108,21 @@ int main(int argc, char* argv[]) {
 		    server_ops, server_threads,
 		    client_info_f, client_response_f);
 
+  std::string clientNames[] = { "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel" };
+
   for (int i = 0; i < client_count; ++i) {
-    clients[i] = new TestClient(i,
-				std::bind(&TestServer::post, &server, _1, _2),
-				client_goals[i] * goal_secs_to_run,
-				client_goals[i],
-				client_outstanding_ops);
+    auto& name = clientNames[i];
+    clients[name] = new TestClient(name,
+				   std::bind(&TestServer::post, &server, _1, _2),
+				   client_goals[i] * goal_secs_to_run,
+				   client_goals[i],
+				   client_outstanding_ops);
   }
 
   // clients are now running
 
-  for (int i = 0; i < client_count; ++i) {
-    clients[i]->waitUntilDone();
+  for (auto i = clients.begin(); i != clients.end(); ++i) {
+    i->second->waitUntilDone();
   }
 
   const TestClient::TimePoint late_time = TestClient::now();
@@ -114,9 +131,9 @@ int main(int argc, char* argv[]) {
   TestClient::TimePoint latest_finish = early_time;
   
   // all clients are done
-  for (int c = 0; c < client_count; ++c) {
-    auto start = clients[c]->getOpTimes().front();
-    auto end = clients[c]->getOpTimes().back();
+  for (auto i = clients.begin(); i != clients.end(); ++i) {
+    auto start = i->second->getOpTimes().front();
+    auto end = i->second->getOpTimes().back();
 
     if (start > latest_start) { latest_start = start; }
     if (end < earliest_finish) { earliest_finish = end; }
@@ -125,9 +142,9 @@ int main(int argc, char* argv[]) {
 
   const auto start_edge = latest_start + skip_amount;
 
-  for (int c = 0; c < client_count; ++c) {
-    auto it = clients[c]->getOpTimes().begin();
-    const auto end = clients[c]->getOpTimes().end();
+  for (auto i = clients.begin(); i != clients.end(); ++i) {
+    auto it = i->second->getOpTimes().begin();
+    const auto end = i->second->getOpTimes().end();
     while (it != end && *it < start_edge) { ++it; }
 
     for (auto time_edge = start_edge + measure_unit;
@@ -136,17 +153,17 @@ int main(int argc, char* argv[]) {
       int count = 0;
       for (; it != end && *it < time_edge; ++count, ++it) { /* empty */ }
       double ops_per_second = double(count) / (measure_unit / report_unit);
-      std::cout << "client " << c << ": " << ops_per_second << 
+      std::cout << "client " << i->first << ": " << ops_per_second << 
 	" ops per second." << std::endl;
     }
   }
 
   // clean up
 
-  for (int c = 0; c < client_count; ++c) {
-    delete clients[c];
+  for (auto i = clients.begin(); i != clients.end(); ++i) {
+    delete i->second;
+    i->second = nullptr;
   }
-  delete[] clients;
 
   std::cout << "simulation complete" << std::endl;
 }

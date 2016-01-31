@@ -8,10 +8,12 @@
 #pragma once
 
 
+#include <string>
+
 #include "dmclock_recs.h"
 
 
-using ClientId = float;
+using ClientId = std::string;
 using ServerId = double;
 
 

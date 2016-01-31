@@ -23,11 +23,11 @@
 class TestServer {
 
   struct QueueItem {
-    int client;
+    ClientId client;
     std::unique_ptr<TestRequest> request;
     crimson::dmclock::PhaseType phase;
 
-    QueueItem(const int& _client,
+    QueueItem(const ClientId& _client,
 	      std::unique_ptr<TestRequest>&& _request,
 	      crimson::dmclock::PhaseType _phase) :
       client(_client),
@@ -43,7 +43,7 @@ public:
 
 #warning "rename this ClientRespFunc"
   using ClientRespFunc =
-    std::function<void(int,
+    std::function<void(ClientId,
 		       const TestResponse&,
 		       const crimson::dmclock::RespParams<ServerId>&)>;
 
