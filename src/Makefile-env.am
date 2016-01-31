@@ -225,6 +225,17 @@ LIBKRBD = libkrbd.la
 LIBCEPHFS = libcephfs.la
 LIBERASURE_CODE = liberasure_code.la
 
+LIBLUA = liblua.la
+LIBLUA_CPPFLAGS = -I${top_srcdir}/src/lua/src
+
+if LINUX
+LIBLUA_CPPFLAGS += -DLUA_USE_LINUX
+endif
+
+if DARWIN
+LIBLUA_CPPFLAGS += -DLUA_USE_MACOSX
+endif
+
 if WITH_LIBAIO
 LIBOS += -laio
 endif # WITH_LIBAIO

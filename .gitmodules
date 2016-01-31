@@ -23,3 +23,8 @@
 	path = src/gmock
 	url = https://github.com/ceph/gmock.git
         branch = ceph-release-1.7.0
+[submodule "src/lua"]
+	path = src/lua
+	url = https://github.com/ceph/lua.git
+	branch = lua-5.3-ceph
+	ignore = dirty

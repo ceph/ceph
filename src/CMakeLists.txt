@@ -387,6 +387,8 @@ if(${ENABLE_SHARED})
     OUTPUT_NAME ceph-global VERSION "1.0.0" SOVERSION "1")
 endif(${ENABLE_SHARED})
 
+add_subdirectory(lua)
+
 # rados object classes
 add_subdirectory(cls)
 

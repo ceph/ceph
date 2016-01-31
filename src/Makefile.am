@@ -41,6 +41,7 @@ include libradosstriper/Makefile.am
 include journal/Makefile.am
 include librbd/Makefile.am
 include rgw/Makefile.am
+include lua/Makefile.am
 include cls/Makefile.am
 include key_value_store/Makefile.am
 include rbd_replay/Makefile.am
