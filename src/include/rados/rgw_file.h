@@ -3,7 +3,7 @@
 /*
  * convert RGW commands to file commands
  *
- * Copyright (C) 2011 New Dream Network
+ * Copyright (C) 2015 Red Hat, Inc.
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
