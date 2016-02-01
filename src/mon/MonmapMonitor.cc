@@ -93,7 +93,7 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   assert(mon->monmap->epoch + 1 == pending_map.epoch ||
 	 pending_map.epoch == 1);  // special case mkfs!
   bufferlist bl;
-  pending_map.encode(bl, mon->get_quorum_features());
+  pending_map.encode(bl, mon->get_quorum_con_features());
 
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);

@@ -494,7 +494,7 @@ void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   assert(get_last_committed() + 1 == version);
   pending_inc.stamp = ceph_clock_now(g_ceph_context);
 
-  uint64_t features = mon->get_quorum_features();
+  uint64_t features = mon->get_quorum_con_features();
 
   string prefix = pgmap_meta_prefix;
 
