@@ -781,6 +781,22 @@ public:
     flush_mode_high_count --;
   }
 
+  /// throttle promotion attempts
+  unsigned promote_probability_millis; ///< probability thousands. one word.
+  PromoteCounter promote_counter;
+  utime_t last_recalibrate;
+
+  bool promote_throttle() {
+    // NOTE: lockless!  we rely on the probability being a single word.
+    promote_counter.attempt();
+    if ((unsigned)rand() % 1000 > promote_probability_millis)
+      return true;  //  yes throttle (no promote)
+    return false;   //   no throttle (promote)
+  }
+  void promote_finish(uint64_t bytes) {
+    promote_counter.finish(bytes);
+  }
+  void promote_throttle_recalibrate();
 
   // -- Objecter, for teiring reads/writes from/to other OSDs --
   Objecter *objecter;
