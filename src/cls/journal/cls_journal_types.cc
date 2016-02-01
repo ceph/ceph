@@ -3,56 +3,32 @@
 
 #include "cls/journal/cls_journal_types.h"
 #include "common/Formatter.h"
-#include <set>
 
 namespace cls {
 namespace journal {
 
 void EntryPosition::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  ::encode(tag, bl);
-  ::encode(tid, bl);
+  ::encode(tag_tid, bl);
+  ::encode(entry_tid, bl);
   ENCODE_FINISH(bl);
 }
 
 void EntryPosition::decode(bufferlist::iterator& iter) {
   DECODE_START(1, iter);
-  ::decode(tag, iter);
-  ::decode(tid, iter);
+  ::decode(tag_tid, iter);
+  ::decode(entry_tid, iter);
   DECODE_FINISH(iter);
 }
 
 void EntryPosition::dump(Formatter *f) const {
-  f->dump_string("tag", tag);
-  f->dump_unsigned("tid", tid);
+  f->dump_unsigned("tag_tid", tag_tid);
+  f->dump_unsigned("entry_tid", entry_tid);
 }
 
 void EntryPosition::generate_test_instances(std::list<EntryPosition *> &o) {
   o.push_back(new EntryPosition());
-  o.push_back(new EntryPosition("id", 2));
-}
-
-bool ObjectSetPosition::operator<(const ObjectSetPosition& rhs) const {
-  if (entry_positions.size() < rhs.entry_positions.size()) {
-    return true;
-  } else if (entry_positions.size() > rhs.entry_positions.size()) {
-    return false;
-  }
-
-  std::map<std::string, uint64_t> rhs_tids;
-  for (EntryPositions::const_iterator it = rhs.entry_positions.begin();
-       it != rhs.entry_positions.end(); ++it) {
-    rhs_tids[it->tag] = it->tid;
-  }
-
-  for (EntryPositions::const_iterator it = entry_positions.begin();
-       it != entry_positions.end(); ++it) {
-    const EntryPosition &entry_position = *it;
-    if (entry_position.tid < rhs_tids[entry_position.tag]) {
-      return true;
-    }
-  }
-  return false;
+  o.push_back(new EntryPosition(1, 2));
 }
 
 void ObjectSetPosition::encode(bufferlist& bl) const {
@@ -86,8 +62,8 @@ void ObjectSetPosition::generate_test_instances(
   o.push_back(new ObjectSetPosition());
 
   EntryPositions entry_positions;
-  entry_positions.push_back(EntryPosition("tag1", 120));
-  entry_positions.push_back(EntryPosition("tag2", 121));
+  entry_positions.push_back(EntryPosition(1, 120));
+  entry_positions.push_back(EntryPosition(2, 121));
   o.push_back(new ObjectSetPosition(1, entry_positions));
 }
 
@@ -120,15 +96,15 @@ void Client::generate_test_instances(std::list<Client *> &o) {
   o.push_back(new Client("id", "desc"));
 
   EntryPositions entry_positions;
-  entry_positions.push_back(EntryPosition("tag1", 120));
-  entry_positions.push_back(EntryPosition("tag1", 121));
+  entry_positions.push_back(EntryPosition(1, 120));
+  entry_positions.push_back(EntryPosition(2, 121));
   o.push_back(new Client("id", "desc", ObjectSetPosition(1, entry_positions)));
 }
 
 std::ostream &operator<<(std::ostream &os,
                          const EntryPosition &entry_position) {
-  os << "[tag=" << entry_position.tag << ", tid="
-     << entry_position.tid << "]";
+  os << "[tag_tid=" << entry_position.tag_tid << ", entry_tid="
+     << entry_position.entry_tid << "]";
   return os;
 }
 

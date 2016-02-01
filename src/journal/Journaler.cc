@@ -179,7 +179,7 @@ void Journaler::start_live_replay(ReplayHandler *replay_handler,
 }
 
 bool Journaler::try_pop_front(ReplayEntry *replay_entry,
-			      std::string* tag) {
+			      uint64_t *tag_tid) {
   assert(m_player != NULL);
 
   Entry entry;
@@ -189,8 +189,8 @@ bool Journaler::try_pop_front(ReplayEntry *replay_entry,
   }
 
   *replay_entry = ReplayEntry(entry.get_data(), commit_tid);
-  if (tag != NULL) {
-    *tag = entry.get_tag();
+  if (tag_tid != nullptr) {
+    *tag_tid = entry.get_tag_tid();
   }
   return true;
 }
@@ -229,8 +229,8 @@ void Journaler::stop_append(Context *on_safe) {
   m_recorder = NULL;
 }
 
-Future Journaler::append(const std::string &tag, const bufferlist &payload_bl) {
-  return m_recorder->append(tag, payload_bl);
+Future Journaler::append(uint64_t tag_tid, const bufferlist &payload_bl) {
+  return m_recorder->append(tag_tid, payload_bl);
 }
 
 void Journaler::flush(Context *on_safe) {

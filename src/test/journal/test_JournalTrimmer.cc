@@ -27,7 +27,7 @@ public:
                      const std::string &oid, uint64_t object_num,
                      const std::string &payload, uint64_t *commit_tid) {
     int r = append(oid + "." + stringify(object_num), create_payload(payload));
-    uint64_t tid = metadata->allocate_commit_tid(object_num, "tag", 123);
+    uint64_t tid = metadata->allocate_commit_tid(object_num, 234, 123);
     if (commit_tid != NULL) {
       *commit_tid = tid;
     }

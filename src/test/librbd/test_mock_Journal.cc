@@ -91,7 +91,7 @@ struct MockJournaler {
 
   MOCK_METHOD3(start_append, void(int flush_interval, uint64_t flush_bytes,
                                   double flush_age));
-  MOCK_METHOD2(append, MockFutureProxy(const std::string &tag,
+  MOCK_METHOD2(append, MockFutureProxy(uint64_t tag_id,
                                        const bufferlist &bl));
   MOCK_METHOD1(flush, void(Context *on_safe));
   MOCK_METHOD1(stop_append, void(Context *on_safe));
@@ -145,8 +145,8 @@ struct MockJournalerProxy {
                                                flush_age);
   }
 
-  MockFutureProxy append(const std::string &tag, const bufferlist &bl) {
-    return MockJournaler::get_instance().append(tag, bl);
+  MockFutureProxy append(uint64_t tag_id, const bufferlist &bl) {
+    return MockJournaler::get_instance().append(tag_id, bl);
   }
 
   void flush(Context *on_safe) {

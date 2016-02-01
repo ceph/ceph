@@ -68,7 +68,7 @@ public:
   }
 
 private:
-  typedef std::pair<std::string, uint64_t> EntryKey;
+  typedef std::pair<uint64_t, uint64_t> EntryKey;
   typedef boost::unordered_map<EntryKey, Entries::iterator> EntryKeys;
 
   struct C_Fetch : public Context {

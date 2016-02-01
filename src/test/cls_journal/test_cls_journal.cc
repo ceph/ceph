@@ -249,8 +249,8 @@ TEST_F(TestClsJournal, ClientCommit) {
 
   cls::journal::EntryPositions entry_positions;
   entry_positions = {
-    cls::journal::EntryPosition("tag1", 120),
-    cls::journal::EntryPosition("tag2", 121)};
+    cls::journal::EntryPosition(234, 120),
+    cls::journal::EntryPosition(235, 121)};
   cls::journal::ObjectSetPosition object_set_position(
     1, entry_positions);
 
@@ -277,9 +277,9 @@ TEST_F(TestClsJournal, ClientCommitInvalid) {
 
   cls::journal::EntryPositions entry_positions;
   entry_positions = {
-    cls::journal::EntryPosition("tag1", 120),
-    cls::journal::EntryPosition("tag1", 121),
-    cls::journal::EntryPosition("tag2", 121)};
+    cls::journal::EntryPosition(234, 120),
+    cls::journal::EntryPosition(234, 121),
+    cls::journal::EntryPosition(235, 121)};
   cls::journal::ObjectSetPosition object_set_position(
     1, entry_positions);
 

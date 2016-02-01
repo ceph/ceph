@@ -70,7 +70,7 @@ TEST_F(TestJournalMetadata, SetCommitPositions) {
 
   journal::JournalMetadata::EntryPositions entry_positions;
   entry_positions = {
-    cls::journal::EntryPosition("tag1", 122)};
+    cls::journal::EntryPosition(123, 122)};
   commit_position = journal::JournalMetadata::ObjectSetPosition(1, entry_positions);
 
   C_SaferCond cond;

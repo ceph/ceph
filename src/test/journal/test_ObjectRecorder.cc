@@ -80,11 +80,10 @@ public:
     m_flush_age = i;
   }
 
-  journal::AppendBuffer create_append_buffer(const std::string &tag,
-                                             uint64_t tid,
+  journal::AppendBuffer create_append_buffer(uint64_t tag_tid, uint64_t entry_tid,
                                              const std::string &payload) {
     journal::FutureImplPtr future(new journal::FutureImpl(*m_finisher,
-                                                          tag, tid, 456));
+                                                          tag_tid, entry_tid, 456));
     future->init(journal::FutureImplPtr());
 
     bufferlist bl;
@@ -107,14 +106,14 @@ TEST_F(TestObjectRecorder, Append) {
 
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer1 = create_append_buffer("tag", 123,
+  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                              "payload");
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(1U, object->get_pending_appends());
 
-  journal::AppendBuffer append_buffer2 = create_append_buffer("tag", 124,
+  journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                              "payload");
   append_buffers = {append_buffer2};
   ASSERT_FALSE(object->append(append_buffers));
@@ -132,14 +131,14 @@ TEST_F(TestObjectRecorder, AppendFlushByCount) {
   set_flush_interval(2);
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer1 = create_append_buffer("tag", 123,
+  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                              "payload");
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(1U, object->get_pending_appends());
 
-  journal::AppendBuffer append_buffer2 = create_append_buffer("tag", 124,
+  journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                              "payload");
   append_buffers = {append_buffer2};
   ASSERT_FALSE(object->append(append_buffers));
@@ -156,14 +155,14 @@ TEST_F(TestObjectRecorder, AppendFlushByBytes) {
   set_flush_bytes(10);
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer1 = create_append_buffer("tag", 123,
+  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                              "payload");
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(1U, object->get_pending_appends());
 
-  journal::AppendBuffer append_buffer2 = create_append_buffer("tag", 124,
+  journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                              "payload");
   append_buffers = {append_buffer2};
   ASSERT_FALSE(object->append(append_buffers));
@@ -180,13 +179,13 @@ TEST_F(TestObjectRecorder, AppendFlushByAge) {
   set_flush_age(0.1);
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer1 = create_append_buffer("tag", 123,
+  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                              "payload");
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
 
-  journal::AppendBuffer append_buffer2 = create_append_buffer("tag", 124,
+  journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                              "payload");
   append_buffers = {append_buffer2};
   ASSERT_FALSE(object->append(append_buffers));
@@ -203,13 +202,13 @@ TEST_F(TestObjectRecorder, AppendFilledObject) {
   journal::ObjectRecorderPtr object = create_object(oid, 12);
 
   std::string payload(2048, '1');
-  journal::AppendBuffer append_buffer1 = create_append_buffer("tag", 123,
+  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               payload);
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
 
-  journal::AppendBuffer append_buffer2 = create_append_buffer("tag", 124,
+  journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                               payload);
   append_buffers = {append_buffer2};
   ASSERT_TRUE(object->append(append_buffers));
@@ -225,7 +224,7 @@ TEST_F(TestObjectRecorder, Flush) {
 
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer1 = create_append_buffer("tag", 123,
+  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                              "payload");
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
@@ -247,7 +246,7 @@ TEST_F(TestObjectRecorder, FlushFuture) {
 
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer = create_append_buffer("tag", 123,
+  journal::AppendBuffer append_buffer = create_append_buffer(234, 123,
                                                              "payload");
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer};
@@ -267,7 +266,7 @@ TEST_F(TestObjectRecorder, FlushDetachedFuture) {
 
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer = create_append_buffer("tag", 123,
+  journal::AppendBuffer append_buffer = create_append_buffer(234, 123,
                                                              "payload");
 
   journal::AppendBuffers append_buffers;
@@ -290,9 +289,9 @@ TEST_F(TestObjectRecorder, Overflow) {
   journal::ObjectRecorderPtr object2 = create_object(oid, 12);
 
   std::string payload(2048, '1');
-  journal::AppendBuffer append_buffer1 = create_append_buffer("tag", 123,
+  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               payload);
-  journal::AppendBuffer append_buffer2 = create_append_buffer("tag", 124,
+  journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                               payload);
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1, append_buffer2};
@@ -303,7 +302,7 @@ TEST_F(TestObjectRecorder, Overflow) {
   ASSERT_EQ(0, cond.wait());
   ASSERT_EQ(0U, object1->get_pending_appends());
 
-  journal::AppendBuffer append_buffer3 = create_append_buffer("bar", 123,
+  journal::AppendBuffer append_buffer3 = create_append_buffer(456, 123,
                                                               payload);
   append_buffers = {append_buffer3};
 
