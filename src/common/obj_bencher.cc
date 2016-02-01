@@ -597,13 +597,13 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   sanitize_object_contents(&data, data.object_size); //clean it up once; subsequent
   //changes will be safe because string length should remain the same
 
-  // setup random seq of indices if using randseq
-  std::vector<int> randseq;
+  // setup sequence of obj indices, randomize if using randseq
+  std::vector<int> obj_indices;
+  for (int i=0; i<num_objects; i++) {
+    obj_indices.push_back(i);
+  }
   if (use_randseq) {
-    for (int i=0; i<num_objects; i++) {
-      randseq.push_back(i);
-    }
-    std::random_shuffle ( randseq.begin(), randseq.end() );
+    std::random_shuffle (obj_indices.begin(), obj_indices.end());
   }
 
   r = completions_init(concurrentios);
@@ -612,9 +612,8 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
-    int objidx = (!use_randseq ? i : randseq[i]);
-    name[i] = generate_object_name(objidx, pid);
-    index[i] = objidx;
+    name[i] = generate_object_name(obj_indices[i], pid);
+    index[i] = obj_indices[i];
     contents[i] = new bufferlist();
   }
 
@@ -686,9 +685,8 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       }
     }
 
-    int objidx = (!use_randseq ? data.started : randseq[data.started]);
-    newName = generate_object_name(objidx, pid);
-    index[slot] = objidx;
+    newName = generate_object_name(obj_indices[data.started], pid);
+    index[slot] = obj_indices[data.started];
     lock.Unlock();
     completion_wait(slot);
     r = completion_ret(slot);
