@@ -288,6 +288,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 	dout(10) << " adding osd." << o << " to down_pending_out map" << dendl;
 	down_pending_out[o] = ceph_clock_now(g_ceph_context);
       }
+    } else if (osdmap.is_up(o) && down_pending_out.count(o) != 0 ) {
+      dout(10) << "clean osd." << o << " from down_pending_out map" << dendl;
+      down_pending_out.erase(o);
     }
   }
   // XXX: need to trim MonSession connected with a osd whose id > max_osd?
