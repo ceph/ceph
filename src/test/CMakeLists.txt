@@ -409,6 +409,9 @@ add_dependencies(check mkfs)
 add_test(NAME misc COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/misc.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check misc)
 
+add_test(NAME mon_created_time COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-created-time.sh)
+add_dependencies(check mon_created_time)
+
 add_test(NAME test_ceph_daemon COMMAND python ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_daemon.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/test/pybind)
 add_dependencies(check test_ceph_daemon)
 
