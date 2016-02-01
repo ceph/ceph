@@ -2366,7 +2366,7 @@ bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
 	}
       }
       if (count >= recency) {
-	promote_object(obc, missing_oid, oloc, promote_op);
+	promote_object(obc, missing_oid, oloc, promote_op, promote_obc);
       } else {
 	// not promoting
 	return false;
