@@ -29,7 +29,8 @@ namespace rgw {
     RGWRados* store;
 
   public:
-    RGWLib() {}
+    RGWLib() : fec(nullptr), fe(nullptr), olog(nullptr), store(nullptr)
+      {}
     ~RGWLib() {}
 
     RGWRados* get_store() { return store; }
