@@ -84,8 +84,7 @@ class DumbBackend : public Backend {
     bool _empty() {
       return item_queue.empty();
     }
-    using ThreadPool::WorkQueue<write_item>::_process;
-    void _process(write_item *item) {
+    void _process(write_item *item, ThreadPool::TPHandle &) override {
       return backend->_write(
 	item->oid,
 	item->offset,

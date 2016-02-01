@@ -663,7 +663,7 @@ endif(${HAVE_LIBFUSE})
 # make rocksdb statically
 add_custom_target(build_rocksdb
     COMMAND 
-    EXTRA_CXXFLAGS=-fPIC PORTABLE=1 make static_lib
+    PORTABLE=1 $(MAKE) static_lib EXTRA_CXXFLAGS='-fPIC -Wno-unused-variable'
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/rocksdb
     COMMENT "rocksdb building")
 

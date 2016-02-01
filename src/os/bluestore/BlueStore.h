@@ -437,11 +437,10 @@ public:
       i->osr->wal_apply_lock.lock();
       return i;
     }
-    void _process(TransContext *i, ThreadPool::TPHandle &handle) {
+    void _process(TransContext *i, ThreadPool::TPHandle &) override {
       store->_wal_apply(i);
       i->osr->wal_apply_lock.unlock();
     }
-    using ThreadPool::WorkQueue<TransContext>::_process;
     void _clear() {
       assert(wal_queue.empty());
     }

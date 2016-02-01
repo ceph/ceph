@@ -215,8 +215,7 @@ protected:
       perfcounter->inc(l_rgw_qlen, -1);
       return req;
     }
-    using ThreadPool::WorkQueue<RGWRequest>::_process;
-    void _process(RGWRequest *req) {
+    void _process(RGWRequest *req, ThreadPool::TPHandle &) override {
       perfcounter->inc(l_rgw_qactive);
       process->handle_request(req);
       process->req_throttle.put(1);

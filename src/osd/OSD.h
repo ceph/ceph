@@ -1783,7 +1783,7 @@ private:
     void _dequeue(list<PG*> *out);
     void _process(
       const list<PG *> &pgs,
-      ThreadPool::TPHandle &handle) {
+      ThreadPool::TPHandle &handle) override {
       osd->process_peering_events(pgs, handle);
       for (list<PG *>::const_iterator i = pgs.begin();
 	   i != pgs.end();
@@ -1791,7 +1791,6 @@ private:
 	(*i)->put("PeeringWQ");
       }
     }
-    using ThreadPool::BatchWorkQueue<PG>::_process;
     void _process_finish(const list<PG *> &pgs) {
       for (list<PG*>::const_iterator i = pgs.begin();
 	   i != pgs.end();
@@ -2135,7 +2134,7 @@ protected:
       osd->command_queue.pop_front();
       return c;
     }
-    void _process(Command *c) {
+    void _process(Command *c, ThreadPool::TPHandle &) override {
       osd->osd_lock.Lock();
       if (osd->is_stopping()) {
 	osd->osd_lock.Unlock();
@@ -2145,9 +2144,6 @@ protected:
       osd->do_command(c->con.get(), c->tid, c->cmd, c->indata);
       osd->osd_lock.Unlock();
       delete c;
-    }
-    void _process(Command *c, ThreadPool::TPHandle &tp) {
-      _process(c);
     }
     void _clear() {
       while (!osd->command_queue.empty()) {
@@ -2200,11 +2196,10 @@ protected:
 	osd->recovery_queue.push_front(&pg->recovery_item);
       }
     }
-    void _process(PG *pg, ThreadPool::TPHandle &handle) {
+    void _process(PG *pg, ThreadPool::TPHandle &handle) override {
       osd->do_recovery(pg, handle);
       pg->put("RecoveryWQ");
     }
-    using ThreadPool::WorkQueue<PG>::_process;
     void _clear() {
       while (!osd->recovery_queue.empty()) {
 	PG *pg = osd->recovery_queue.front();
@@ -2259,8 +2254,8 @@ protected:
       remove_queue.pop_front();
       return item;
     }
-    using ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> >::_process;
-    void _process(pair<PGRef, DeletingStateRef>, ThreadPool::TPHandle &);
+    void _process(pair<PGRef, DeletingStateRef>,
+		  ThreadPool::TPHandle &) override;
     void _clear() {
       remove_queue.clear();
     }

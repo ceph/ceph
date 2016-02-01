@@ -370,10 +370,9 @@ private:
       store->op_queue.pop_front();
       return osr;
     }
-    void _process(OpSequencer *osr, ThreadPool::TPHandle &handle) {
+    void _process(OpSequencer *osr, ThreadPool::TPHandle &handle) override {
       store->_do_op(osr, handle);
     }
-    using ThreadPool::WorkQueue<OpSequencer>::_process;
     void _process_finish(OpSequencer *osr) {
       store->_finish_op(osr);
     }
@@ -529,12 +528,15 @@ public:
   int pick_object_revision_lt(ghobject_t& oid) {
     return 0;
   }
+  using ObjectStore::exists;
   bool exists(const coll_t& cid, const ghobject_t& oid);
+  using ObjectStore::stat;
   int stat(
     const coll_t& cid,
     const ghobject_t& oid,
     struct stat *st,
     bool allow_eio = false);
+  using ObjectStore::read;
   int read(
     const coll_t& cid,
     const ghobject_t& oid,
@@ -547,6 +549,7 @@ public:
                  map<uint64_t, uint64_t> *m);
   int _do_seek_hole_data(int fd, uint64_t offset, size_t len,
                          map<uint64_t, uint64_t> *m);
+  using ObjectStore::fiemap;
   int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
 
   int _touch(const coll_t& cid, const ghobject_t& oid);
@@ -598,6 +601,8 @@ public:
   int snapshot(const string& name);
 
   // attrs
+  using ObjectStore::getattr;
+  using ObjectStore::getattrs;
   int getattr(const coll_t& cid, const ghobject_t& oid, const char *name, bufferptr &bp);
   int getattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& aset);
 
@@ -619,6 +624,7 @@ public:
 				   const SequencerPosition &spos);
 
   // collections
+  using ObjectStore::collection_list;
   int collection_list(const coll_t& c, ghobject_t start, ghobject_t end,
 		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next);
@@ -630,18 +636,24 @@ public:
   bool collection_empty(const coll_t& c);
 
   // omap (see ObjectStore.h for documentation)
+  using ObjectStore::omap_get;
   int omap_get(const coll_t& c, const ghobject_t &oid, bufferlist *header,
 	       map<string, bufferlist> *out);
+  using ObjectStore::omap_get_header;
   int omap_get_header(
     const coll_t& c,
     const ghobject_t &oid,
     bufferlist *out,
     bool allow_eio = false);
+  using ObjectStore::omap_get_keys;
   int omap_get_keys(const coll_t& c, const ghobject_t &oid, set<string> *keys);
+  using ObjectStore::omap_get_values;
   int omap_get_values(const coll_t& c, const ghobject_t &oid, const set<string> &keys,
 		      map<string, bufferlist> *out);
+  using ObjectStore::omap_check_keys;
   int omap_check_keys(const coll_t& c, const ghobject_t &oid, const set<string> &keys,
 		      set<string> *out);
+  using ObjectStore::get_omap_iterator;
   ObjectMap::ObjectMapIterator get_omap_iterator(const coll_t& c, const ghobject_t &oid);
 
   int _create_collection(const coll_t& c, const SequencerPosition &spos);
