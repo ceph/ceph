@@ -160,6 +160,12 @@ public:
       "err_to_syslog",
       "log_to_stderr",
       "err_to_stderr",
+      "log_to_graylog",
+      "err_to_graylog",
+      "log_graylog_host",
+      "log_graylog_port",
+      "fsid",
+      "host",
       NULL
     };
     return KEYS;
@@ -186,11 +192,37 @@ public:
     }
 
     if (changed.count("log_max_new")) {
+
       log->set_max_new(conf->log_max_new);
     }
 
     if (changed.count("log_max_recent")) {
       log->set_max_recent(conf->log_max_recent);
+    }
+
+    // graylog
+    if (changed.count("log_to_graylog") || changed.count("err_to_graylog")) {
+      int l = conf->log_to_graylog ? 99 : (conf->err_to_graylog ? -1 : -2);
+      log->set_graylog_level(l, l);
+
+      if (conf->log_to_graylog || conf->err_to_graylog) {
+	log->start_graylog();
+      } else if (! (conf->log_to_graylog && conf->err_to_graylog)) {
+	log->stop_graylog();
+      }
+    }
+
+    if (log->graylog() && (changed.count("log_graylog_host") || changed.count("log_graylog_port"))) {
+      log->graylog()->set_destination(conf->log_graylog_host, conf->log_graylog_port);
+    }
+
+    // metadata
+    if (log->graylog() && changed.count("host")) {
+      log->graylog()->set_hostname(conf->host);
+    }
+
+    if (log->graylog() && changed.count("fsid")) {
+      log->graylog()->set_fsid(conf->fsid);
     }
   }
 };

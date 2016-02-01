@@ -152,6 +152,15 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
                          channels.get_facility(channel));
       }
 
+      if (channels.do_log_to_graylog(channel)) {
+	ceph::log::Graylog::Ref graylog = channels.get_graylog(channel);
+	if (graylog) {
+	  graylog->log_log_entry(&le);
+	}
+	dout(7) << "graylog: " << channel << " " << graylog
+		<< " host:" << channels.log_to_graylog_host << dendl;
+      }
+
       string log_file = channels.get_log_file(channel);
       dout(20) << __func__ << " logging for channel '" << channel
                << "' to file '" << log_file << "'" << dendl;
@@ -650,6 +659,33 @@ void LogMonitor::update_log_channels()
     return;
   }
 
+  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog, oss,
+                              &channels.log_to_graylog,
+                              CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_to_graylog'"
+         << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog_host, oss,
+                              &channels.log_to_graylog_host,
+                              CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_to_graylog_host'"
+         << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog_port, oss,
+                              &channels.log_to_graylog_port,
+                              CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_to_graylog_port'"
+         << dendl;
+    return;
+  }
+
   channels.expand_channel_meta();
 }
 
@@ -714,7 +750,12 @@ void LogMonitor::handle_conf_change(const struct md_config_t *conf,
       changed.count("mon_cluster_log_to_syslog_level") ||
       changed.count("mon_cluster_log_to_syslog_facility") ||
       changed.count("mon_cluster_log_file") ||
-      changed.count("mon_cluster_log_file_level")) {
+      changed.count("mon_cluster_log_file_level") ||
+      changed.count("mon_cluster_log_to_graylog") ||
+      changed.count("mon_cluster_log_to_graylog_host") ||
+      changed.count("mon_cluster_log_to_graylog_port") ||
+      changed.count("fsid") ||
+      changed.count("host")) {
     update_log_channels();
   }
 }
