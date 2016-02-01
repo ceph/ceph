@@ -223,7 +223,7 @@ int MemStore::mkfs()
 int MemStore::statfs(struct statfs *st)
 {
   dout(10) << __func__ << dendl;
-  st->f_bsize = 1024;
+  st->f_bsize = 4096;
 
   // Device size is a configured constant
   st->f_blocks = g_conf->memstore_device_bytes / st->f_bsize;
@@ -366,8 +366,8 @@ int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
     l = o->get_size() - offset;
   if (offset >= o->get_size())
     goto out;
- out:
   m[offset] = l;
+ out:
   ::encode(m, bl);
   return 0;
 }
