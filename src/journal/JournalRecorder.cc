@@ -70,24 +70,25 @@ JournalRecorder::~JournalRecorder() {
   m_journal_metadata->remove_listener(&m_listener);
 }
 
-Future JournalRecorder::append(const std::string &tag,
+Future JournalRecorder::append(uint64_t tag_tid,
                                const bufferlist &payload_bl) {
   Mutex::Locker locker(m_lock);
 
-  uint64_t tid = m_journal_metadata->allocate_tid(tag);
+  uint64_t entry_tid = m_journal_metadata->allocate_entry_tid(tag_tid);
   uint8_t splay_width = m_journal_metadata->get_splay_width();
-  uint8_t splay_offset = tid % splay_width;
+  uint8_t splay_offset = entry_tid % splay_width;
 
   ObjectRecorderPtr object_ptr = get_object(splay_offset);
   uint64_t commit_tid = m_journal_metadata->allocate_commit_tid(
-    object_ptr->get_object_number(), tag, tid);
+    object_ptr->get_object_number(), tag_tid, entry_tid);
   FutureImplPtr future(new FutureImpl(m_journal_metadata->get_finisher(),
-                                      tag, tid, commit_tid));
+                                      tag_tid, entry_tid, commit_tid));
   future->init(m_prev_future);
   m_prev_future = future;
 
   bufferlist entry_bl;
-  ::encode(Entry(future->get_tag(), future->get_tid(), payload_bl), entry_bl);
+  ::encode(Entry(future->get_tag_tid(), future->get_entry_tid(), payload_bl),
+           entry_bl);
 
   AppendBuffers append_buffers;
   append_buffers.push_back(std::make_pair(future, entry_bl));

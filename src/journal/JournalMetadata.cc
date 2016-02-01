@@ -7,6 +7,7 @@
 #include "common/Finisher.h"
 #include "common/Timer.h"
 #include "cls/journal/cls_journal_client.h"
+#include <functional>
 #include <set>
 
 #define dout_subsys ceph_subsys_journaler
@@ -16,6 +17,39 @@
 namespace journal {
 
 using namespace cls::journal;
+
+namespace {
+
+// does not compare object number
+inline bool entry_positions_less_equal(const ObjectSetPosition &lhs,
+                                       const ObjectSetPosition &rhs) {
+  if (lhs.entry_positions == rhs.entry_positions) {
+    return true;
+  }
+
+  if (lhs.entry_positions.size() < rhs.entry_positions.size()) {
+    return true;
+  } else if (rhs.entry_positions.size() > rhs.entry_positions.size()) {
+    return false;
+  }
+
+  std::map<uint64_t, uint64_t> rhs_tids;
+  for (EntryPositions::const_iterator it = rhs.entry_positions.begin();
+       it != rhs.entry_positions.end(); ++it) {
+    rhs_tids[it->tag_tid] = it->entry_tid;
+  }
+
+  for (EntryPositions::const_iterator it = lhs.entry_positions.begin();
+       it != lhs.entry_positions.end(); ++it) {
+    const EntryPosition &entry_position = *it;
+    if (entry_position.entry_tid < rhs_tids[entry_position.tag_tid]) {
+      return true;
+    }
+  }
+  return false;
+}
+
+} // anonymous namespace
 
 JournalMetadata::JournalMetadata(librados::IoCtx &ioctx,
                                  const std::string &oid,
@@ -216,8 +250,8 @@ void JournalMetadata::set_commit_position(
     Mutex::Locker locker(m_lock);
     ldout(m_cct, 20) << __func__ << ": current=" << m_client.commit_position
                      << ", new=" << commit_position << dendl;
-    if (commit_position <= m_client.commit_position ||
-        commit_position <= m_commit_position) {
+    if (entry_positions_less_equal(commit_position, m_client.commit_position) ||
+        entry_positions_less_equal(commit_position, m_commit_position)) {
       stale_ctx = on_safe;
     } else {
       stale_ctx = m_commit_position_ctx;
@@ -234,25 +268,25 @@ void JournalMetadata::set_commit_position(
   }
 }
 
-void JournalMetadata::reserve_tid(const std::string &tag, uint64_t tid) {
+void JournalMetadata::reserve_entry_tid(uint64_t tag_tid, uint64_t entry_tid) {
   Mutex::Locker locker(m_lock);
-  uint64_t &allocated_tid = m_allocated_tids[tag];
-  if (allocated_tid <= tid) {
-    allocated_tid = tid + 1;
+  uint64_t &allocated_entry_tid = m_allocated_entry_tids[tag_tid];
+  if (allocated_entry_tid <= entry_tid) {
+    allocated_entry_tid = entry_tid + 1;
   }
 }
 
-bool JournalMetadata::get_last_allocated_tid(const std::string &tag,
-                                             uint64_t *tid) const {
+bool JournalMetadata::get_last_allocated_entry_tid(uint64_t tag_tid,
+                                                   uint64_t *entry_tid) const {
   Mutex::Locker locker(m_lock);
 
-  AllocatedTids::const_iterator it = m_allocated_tids.find(tag);
-  if (it == m_allocated_tids.end()) {
+  AllocatedEntryTids::const_iterator it = m_allocated_entry_tids.find(tag_tid);
+  if (it == m_allocated_entry_tids.end()) {
     return false;
   }
 
   assert(it->second > 0);
-  *tid = it->second - 1;
+  *entry_tid = it->second - 1;
   return true;
 }
 
@@ -393,15 +427,17 @@ void JournalMetadata::handle_watch_error(int err) {
 }
 
 uint64_t JournalMetadata::allocate_commit_tid(uint64_t object_num,
-                                              const std::string &tag,
-                                              uint64_t tid) {
+                                              uint64_t tag_tid,
+                                              uint64_t entry_tid) {
   Mutex::Locker locker(m_lock);
   uint64_t commit_tid = ++m_commit_tid;
-  m_pending_commit_tids[commit_tid] = CommitEntry(object_num, tag, tid);
+  m_pending_commit_tids[commit_tid] = CommitEntry(object_num, tag_tid,
+                                                  entry_tid);
 
   ldout(m_cct, 20) << "allocated commit tid: commit_tid=" << commit_tid << " ["
                    << "object_num=" << object_num << ", "
-                   << "tag=" << tag << ", tid=" << tid << "]" << dendl;
+                   << "tag_tid=" << tag_tid << ", entry_tid=" << entry_tid << "]"
+                   << dendl;
   return commit_tid;
 }
 
@@ -434,12 +470,13 @@ bool JournalMetadata::committed(uint64_t commit_tid,
 
     object_set_position->object_number = commit_entry.object_num;
     if (!object_set_position->entry_positions.empty() &&
-        object_set_position->entry_positions.front().tag == commit_entry.tag) {
+        object_set_position->entry_positions.front().tag_tid ==
+          commit_entry.tag_tid) {
       object_set_position->entry_positions.front() = EntryPosition(
-        commit_entry.tag, commit_entry.tid);
+        commit_entry.tag_tid, commit_entry.entry_tid);
     } else {
       object_set_position->entry_positions.push_front(EntryPosition(
-        commit_entry.tag, commit_entry.tid));
+        commit_entry.tag_tid, commit_entry.entry_tid));
     }
     m_pending_commit_tids.erase(it);
     update_commit_position = true;
@@ -447,10 +484,10 @@ bool JournalMetadata::committed(uint64_t commit_tid,
 
   if (update_commit_position) {
     // prune the position to have unique tags in commit-order
-    std::set<std::string> in_use_tags;
+    std::set<uint64_t> in_use_tag_tids;
     EntryPositions::iterator it = object_set_position->entry_positions.begin();
     while (it != object_set_position->entry_positions.end()) {
-      if (!in_use_tags.insert(it->tag).second) {
+      if (!in_use_tag_tids.insert(it->tag_tid).second) {
         it = object_set_position->entry_positions.erase(it);
       } else {
         ++it;

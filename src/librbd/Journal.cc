@@ -290,7 +290,8 @@ uint64_t Journal<I>::append_io_event(AioCompletion *aio_comp,
     tid = ++m_event_tid;
     assert(tid != 0);
 
-    future = m_journaler->append("", bl);
+    // TODO: use allocated tag_id
+    future = m_journaler->append(0, bl);
     m_events[tid] = Event(future, aio_comp, requests, offset, length);
   }
 
@@ -374,7 +375,9 @@ void Journal<I>::append_op_event(uint64_t op_tid,
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_READY);
-    future = m_journaler->append("", bl);
+
+    // TODO: use allocated tag_id
+    future = m_journaler->append(0, bl);
   }
 
   on_safe = create_async_context_callback(m_image_ctx, on_safe);
@@ -401,7 +404,9 @@ void Journal<I>::commit_op_event(uint64_t op_tid, int r) {
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_READY);
-    future = m_journaler->append("", bl);
+
+    // TODO: use allocated tag_id
+    future = m_journaler->append(0, bl);
   }
 
   future.flush(new C_OpEventSafe(this, op_tid, future, nullptr));

@@ -19,20 +19,27 @@ namespace cls {
 namespace journal {
 
 struct EntryPosition {
-  std::string tag;
-  uint64_t tid;
+  uint64_t tag_tid;
+  uint64_t entry_tid;
 
-  EntryPosition() : tid(0) {}
-  EntryPosition(const std::string& _tag, uint64_t _tid)
-    : tag(_tag), tid(_tid) {}
+  EntryPosition() : tag_tid(0), entry_tid(0) {}
+  EntryPosition(uint64_t _tag_tid, uint64_t _entry_tid)
+    : tag_tid(_tag_tid), entry_tid(_entry_tid) {}
 
   inline bool operator==(const EntryPosition& rhs) const {
-    return (tag == rhs.tag && tid == rhs.tid);
+    return (tag_tid == rhs.tag_tid && entry_tid == rhs.entry_tid);
   }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& iter);
   void dump(Formatter *f) const;
+
+  inline bool operator<(const EntryPosition &rhs) const {
+    if (tag_tid != rhs.tag_tid) {
+      return tag_tid < rhs.tag_tid;
+    }
+    return entry_tid < rhs.entry_tid;
+  }
 
   static void generate_test_instances(std::list<EntryPosition *> &o);
 };
@@ -48,17 +55,14 @@ struct ObjectSetPosition {
                     const EntryPositions &_entry_positions)
     : object_number(_object_number), entry_positions(_entry_positions) {}
 
-  bool operator<(const ObjectSetPosition& rhs) const;
-  inline bool operator<=(const ObjectSetPosition& rhs) const {
-    return (*this == rhs || *this < rhs);
-  }
-  inline bool operator==(const ObjectSetPosition &rhs) const {
-    return (entry_positions == rhs.entry_positions);
-  }
-
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& iter);
   void dump(Formatter *f) const;
+
+  inline bool operator==(const ObjectSetPosition &rhs) const {
+    return (object_number == rhs.object_number &&
+            entry_positions == rhs.entry_positions);
+  }
 
   static void generate_test_instances(std::list<ObjectSetPosition *> &o);
 };

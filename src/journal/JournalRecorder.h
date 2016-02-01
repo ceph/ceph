@@ -28,7 +28,7 @@ public:
                   double flush_age);
   ~JournalRecorder();
 
-  Future append(const std::string &tag, const bufferlist &bl);
+  Future append(uint64_t tag_tid, const bufferlist &bl);
   void flush(Context *on_safe);
 
   ObjectRecorderPtr get_object(uint8_t splay_offset);

@@ -47,11 +47,11 @@ public:
 
   void start_replay(ReplayHandler *replay_handler);
   void start_live_replay(ReplayHandler *replay_handler, double interval);
-  bool try_pop_front(ReplayEntry *replay_entry, std::string* tag = NULL);
+  bool try_pop_front(ReplayEntry *replay_entry, uint64_t *tag_tid = nullptr);
   void stop_replay();
 
   void start_append(int flush_interval, uint64_t flush_bytes, double flush_age);
-  Future append(const std::string &tag, const bufferlist &bl);
+  Future append(uint64_t tag_tid, const bufferlist &bl);
   void flush(Context *on_safe);
   void stop_append(Context *on_safe);
 
