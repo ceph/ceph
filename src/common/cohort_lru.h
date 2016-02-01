@@ -94,9 +94,7 @@ namespace cohort {
       struct Lane {
 	LK lock;
 	Object::Queue q;
-#if 0
-	Object::Queue pinned;
-#endif
+	// Object::Queue pinned; /* placeholder for possible expansion */
 	CACHE_PAD(0);
 	Lane() {}
       };
