@@ -41,8 +41,8 @@ int main(int argc, char* argv[]) {
 
   // name -> (server iops, server threads)
   const std::map<ServerId,std::pair<int,int>> server_info = {
-    {0.0, { 150, 7 }},
-    {1.0, { 150, 7 }},
+    {0, { 75, 7 }},
+    {1, { 75, 7 }},
   };
 
 
@@ -52,8 +52,8 @@ int main(int argc, char* argv[]) {
 
   // id -> (client_info, goal iops)
   const std::map<ClientId,std::pair<dmc::ClientInfo,int>> client_info = {
-    {"alpha", {{ 1.0, 50.0, 200.0 }, 100 }},
-    {"bravo", {{ 2.0, 50.0, 200.0 }, 100 }},
+    {"c1", {{ 1.0, 50.0, 200.0 }, 100 }},
+    {"c2", {{ 2.0, 50.0, 200.0 }, 100 }},
   };
 
 
@@ -75,36 +75,51 @@ int main(int argc, char* argv[]) {
     clients[client_id]->receiveResponse(resp, resp_params);
   };
 
+  std::vector<ServerId> server_ids;
+
   ServerMap servers;
   for (auto const &i : server_info) {
     const ServerId& id = i.first;
     const int& iops = i.second.first;
     const int& threads = i.second.second;
 
+    server_ids.push_back(id);
     servers[id] =
       new TestServer(id, iops, threads, client_info_f, client_response_f);
   }
 
-  auto a_server = servers.find(0.0);
-  assert(servers.end() != a_server);
-
   // construct clients
 
-  for (auto i = client_info.begin(); i != client_info.end(); ++i) {
-    ClientId name = i->first;
-    int goal = i->second.second;
-    clients[name] =
-      new TestClient(name,
-		     std::bind(&TestServer::post, a_server->second, _1, _2),
-		     goal * goal_secs_to_run,
-		     goal,
-		     client_outstanding_ops);
+  // lambda to choose a server based on a seed; called by client
+  auto server_rotate_f = [&server_ids](uint64_t seed) -> const ServerId& {
+    int index = seed % server_ids.size();
+    return server_ids[index];
+  };
+
+  // lambda to post a request to the identified server; called by client
+  auto server_post_f = [&servers](const ServerId& server,
+				  const TestRequest& request,
+				  const dmc::ReqParams<ClientId>& req_params) {
+    auto i = servers.find(server);
+    assert(servers.end() != i);
+    i->second->post(request, req_params);
+  };
+
+  for (auto const &i : client_info) {
+    ClientId name = i.first;
+    int goal = i.second.second;
+    clients[name] = new TestClient(name,
+				   server_post_f,
+				   server_rotate_f,
+				   goal * goal_secs_to_run,
+				   goal,
+				   client_outstanding_ops);
   }
 
   // clients are now running; wait for all to finish
 
-  for (auto i = clients.begin(); i != clients.end(); ++i) {
-    i->second->waitUntilDone();
+  for (auto const &i : clients) {
+    i.second->waitUntilDone();
   }
 
   // compute and display stats
@@ -113,7 +128,7 @@ int main(int argc, char* argv[]) {
   TestClient::TimePoint latest_start = early_time;
   TestClient::TimePoint earliest_finish = late_time;
   TestClient::TimePoint latest_finish = early_time;
-  
+
   for (auto i = clients.begin(); i != clients.end(); ++i) {
     auto start = i->second->getOpTimes().front();
     auto end = i->second->getOpTimes().back();
@@ -136,7 +151,7 @@ int main(int argc, char* argv[]) {
       int count = 0;
       for (; it != end && *it < time_edge; ++count, ++it) { /* empty */ }
       double ops_per_second = double(count) / (measure_unit / report_unit);
-      std::cout << "client " << i->first << ": " << ops_per_second << 
+      std::cout << "client " << i->first << ": " << ops_per_second <<
 	" ops per second." << std::endl;
     }
   }

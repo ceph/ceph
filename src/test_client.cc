@@ -21,11 +21,13 @@ static const uint info = 0;
 
 TestClient::TestClient(ClientId _id,
 		       const SubmitFunc& _submit_f,
+		       const ServerSelectFunc& _server_select_f,
 		       int _ops_to_run,
 		       int _iops_goal,
 		       int _outstanding_ops_allowed) :
   id(_id),
   submit_f(_submit_f),
+  server_select_f(_server_select_f),
   ops_to_run(_ops_to_run),
   iops_goal(_iops_goal),
   outstanding_ops_allowed(_outstanding_ops_allowed),
@@ -60,7 +62,7 @@ void TestClient::run_req() {
   {
     Lock l(mtx_req);
     auto now = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < ops_to_run; ++i) {
+    for (uint64_t i = 0; i < ops_to_run; ++i) {
       auto when = now + delay;
       while ((now = std::chrono::high_resolution_clock::now()) < when) {
 	cv_req.wait_until(l, when);
@@ -70,9 +72,10 @@ void TestClient::run_req() {
       }
 
       l.unlock();
-      dmc::ReqParams<ClientId> rp = service_tracker.getRequestParams(id, 0);
+      const ServerId& server = server_select_f(i);
+      dmc::ReqParams<ClientId> rp = service_tracker.getRequestParams(id, server);
       TestRequest req(i, 12);
-      submit_f(req, rp);
+      submit_f(server, req, rp);
       ++outstanding_ops;
       l.lock(); // lock for return to top of loop
     }

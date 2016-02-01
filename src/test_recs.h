@@ -14,7 +14,7 @@
 
 
 using ClientId = std::string;
-using ServerId = double;
+using ServerId = int;
 
 
 struct TestRequest {

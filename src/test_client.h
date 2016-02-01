@@ -23,8 +23,11 @@
 
 class TestClient {
   using SubmitFunc =
-    std::function<void(const TestRequest&,
+    std::function<void(const ServerId&,
+		       const TestRequest&,
 		       const crimson::dmclock::ReqParams<ClientId>&)>;
+
+  using ServerSelectFunc = std::function<const ServerId&(uint64_t seed)>;
 
   struct RespQueueItem {
     TestResponse response;
@@ -40,10 +43,12 @@ public:
 protected:
 
   const ClientId id;
-  SubmitFunc submit_f;
-  int ops_to_run;
-  int iops_goal; // per second
-  int outstanding_ops_allowed;
+  const SubmitFunc submit_f;
+  const ServerSelectFunc server_select_f;
+
+  const int ops_to_run;
+  const int iops_goal; // per second
+  const int outstanding_ops_allowed;
 
   crimson::dmclock::ServiceTracker<ServerId> service_tracker;
 
@@ -69,6 +74,7 @@ public:
 
   TestClient(ClientId _id,
 	     const SubmitFunc& _submit_f,
+	     const ServerSelectFunc& _server_select_f,
 	     int _ops_to_run,
 	     int _iops_goal,
 	     int _outstanding_ops_allowed);

@@ -32,7 +32,7 @@ namespace c = crimson;
 
 
 namespace crimson {
-  
+
   namespace dmclock {
 
     static bool info = true;
@@ -50,7 +50,7 @@ namespace crimson {
       return now.tv_sec + (now.tv_usec / 1000000.0);
     }
 
-    
+
     inline std::string formatTime(const Time& time, uint modulo = 10000) {
       long subtract = long(time / modulo) * modulo;
       std::stringstream ss;
@@ -410,7 +410,7 @@ namespace crimson {
 	propQ.displaySorted(std::cout << "PROPO:", filter) << std::endl;
       }
 
-      
+
       void reduceReservationTags(C client_id) {
 	auto client_it = clientMap.find(client_id);
 	assert(clientMap.end() != client_it);
