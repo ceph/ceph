@@ -467,14 +467,15 @@ namespace rgw {
   int RGWWriteRequest::exec_start() {
     struct req_state* s = get_state();
 
-    // XXX check this
-    need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
+    /* not obviously supportable */
+    assert(! dlo_manifest);
+    assert(! slo_info);
 
     perfcounter->inc(l_rgw_put);
     op_ret = -EINVAL;
 
-    // XXX check this
     if (s->object.empty()) {
+      ldout(s->cct, 0) << __func__ << " called on empty object" << dendl;
       goto done;
     }
 
@@ -522,7 +523,8 @@ namespace rgw {
     }
 
     op_ret = put_data_and_throttle(processor, data, ofs,
-				   (need_calc_md5 ? &hash : NULL), need_to_wait);
+				   (true /* md5 */ ? &hash : NULL),
+				   need_to_wait);
     if (op_ret < 0) {
       if (!need_to_wait || op_ret != -EEXIST) {
 	ldout(s->cct, 20) << "processor->thottle_data() returned ret="
@@ -581,52 +583,15 @@ namespace rgw {
       goto done;
     }
 
-    if (need_calc_md5) {
-      processor->complete_hash(&hash);
-    }
+    processor->complete_hash(&hash);
     hash.Final(m);
 
     buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
     etag = calc_md5;
 
-#if 0 /* XXX only in PostObj currently */
-    if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
-      op_ret = -ERR_BAD_DIGEST;
-      goto done;
-    }
-#endif
-
     policy.encode(aclbl);
-
     attrs[RGW_ATTR_ACL] = aclbl;
 
-    /* XXX most of the following cases won't currently arise */
-    if (unlikely(!! dlo_manifest)) {
-      op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
-      if (op_ret < 0) {
-	ldout(s->cct, 0) << "bad user manifest: " << dlo_manifest << dendl;
-	goto done;
-      }
-      complete_etag(hash, &etag);
-      ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: "
-			<< etag << dendl;
-    }
-
-    if (unlikely(!! slo_info)) {
-      bufferlist manifest_bl;
-      ::encode(*slo_info, manifest_bl);
-      attrs[RGW_ATTR_SLO_MANIFEST] = manifest_bl;
-
-      hash.Update((byte *)slo_info->raw_data, slo_info->raw_data_len);
-      complete_etag(hash, &etag);
-      ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: "
-			<< etag << dendl;
-    }
-
-    if (supplied_etag && etag.compare(supplied_etag) != 0) {
-      op_ret = -ERR_UNPROCESSABLE_ENTITY;
-      goto done;
-    }
     bl.append(etag.c_str(), etag.size() + 1);
     attrs[RGW_ATTR_ETAG] = bl;
 
