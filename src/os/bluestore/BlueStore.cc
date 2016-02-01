@@ -2366,7 +2366,7 @@ int BlueStore::stat(
   bool allow_eio)
 {
   Collection *c = static_cast<Collection*>(c_.get());
-  if (!c->exists) {
+  if (!c->exists)
     return -ENOENT;
   dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
   RWLock::RLocker l(c->lock);
