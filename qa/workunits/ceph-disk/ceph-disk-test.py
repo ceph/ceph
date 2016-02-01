@@ -209,6 +209,7 @@ class TestCephDisk(object):
         c = CephDisk()
         if c.sh("lsb_release -si").strip() == 'CentOS':
             c.helper("install multipath-tools device-mapper-multipath")
+        c.conf['global']['pid file'] = '/var/run/ceph/$cluster-$name.pid'
         #
         # objecstore
         #
