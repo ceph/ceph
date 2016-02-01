@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include <string>
 #include "QueueStrategy.h"
 #define dout_subsys ceph_subsys_ms
 #include "common/debug.h"
@@ -106,8 +107,10 @@ void QueueStrategy::start()
   assert(!stop);
   lock.Lock();
   for (int ix = 0; ix < n_threads; ++ix) {
+    string thread_name = "ms_xio_qs_";
+    thread_name.append(std::to_string(ix));
     thrd = new QSThread(this);
-    thrd->create();
+    thrd->create(thread_name.c_str());
   }
   lock.Unlock();
 }
