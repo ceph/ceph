@@ -130,20 +130,23 @@ struct ECSubApply {
   ceph_tid_t tid;
   hobject_t hoid;
   ObjectStore::Transaction t;
-//  vector<pg_log_entry_t> log_entries;
+  vector<pg_log_entry_t> log_entries;
   ECSubApply() :tid(0) {};
   ECSubApply(
     pg_shard_t from,
     ceph_tid_t tid,
     hobject_t hoid,
-    const ObjectStore::Transaction &t)
+    const ObjectStore::Transaction &t,
+    vector<pg_log_entry_t> log_entries)
     : from(from), tid(tid),
-      hoid(hoid), t(t) {}
+      hoid(hoid), t(t),
+      log_entries(log_entries) {}
   void claim(ECSubApply &other) {
     from = other.from;
     tid = other.tid;
     hoid = other.hoid;
     t.swap(other.t);
+    log_entries.swap(other.log_entries);
   }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);

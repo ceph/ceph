@@ -405,6 +405,7 @@ void ECSubApply::encode(bufferlist &bl) const
   ::encode(tid, bl);
   ::encode(hoid, bl);
   ::encode(t, bl);
+  ::encode(log_entries, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -415,6 +416,7 @@ void ECSubApply::decode(bufferlist::iterator &bl)
   ::decode(tid, bl);
   ::decode(hoid, bl);
   ::decode(t, bl);
+  ::decode(log_entries, bl);
   DECODE_FINISH(bl);
 }
 

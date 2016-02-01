@@ -2503,6 +2503,7 @@ struct pg_log_entry_t {
     PROMOTE = 8,     // promoted object from another tier
     CLEAN = 9,       // mark an object clean
     EC_OVERWRITE = 10,  // ec overwrite, belong to MODIFY
+    EC_APPLY = 11,      // ec overwrite apply
   };
   static const char *get_op_name(int op) {
     switch (op) {
@@ -2526,6 +2527,8 @@ struct pg_log_entry_t {
       return "clean   ";
     case EC_OVERWRITE:
       return "ec_overwrite";
+    case EC_APPLY:
+      return "ec_apply";
     default:
       return "unknown ";
     }
@@ -2568,11 +2571,12 @@ struct pg_log_entry_t {
   bool is_lost_delete() const { return op == LOST_DELETE; }
   bool is_lost_mark() const { return op == LOST_MARK; }
   bool is_ec_overwrite() const { return op == EC_OVERWRITE; }
+  bool is_ec_apply() const { return op == EC_APPLY; }
 
   bool is_update() const {
     return
       is_clone() || is_modify() || is_promote() || is_clean() ||
-      is_backlog() || is_lost_revert() || is_lost_mark();
+      is_backlog() || is_lost_revert() || is_lost_mark() || is_ec_apply();
   }
   bool is_delete() const {
     return op == DELETE || op == LOST_DELETE;

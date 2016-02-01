@@ -31,7 +31,6 @@
 #include "messages/MOSDECSubOpApplyReply.h"
 
 const string OW_KEY = "ow_key";
-const string APPLY_KEY = "apply_key";
 
 struct RecoveryMessages;
 class ECBackend : public PGBackend {
@@ -89,7 +88,7 @@ public:
     );
   void handle_sub_apply(
     pg_shard_t from,
-    // OpRequestRef msg,
+    OpRequestRef msg,
     ECSubApply &op
     );
   void handle_sub_apply_reply(
@@ -427,7 +426,7 @@ public:
       cur_size = 0U;
     }
 
-    void overwrite(version_t version, pair<uint64_t, uint64_t> to_write) {
+    void init() {
       if (cur_count == 0) {
         for (map<version_t, pair<uint64_t, uint64_t> >::iterator i = 
                overwrite_history.begin();
@@ -437,6 +436,9 @@ public:
           cur_size += i->second.second;
         }
       }
+    }
+
+    void overwrite(version_t version, pair<uint64_t, uint64_t> to_write) {
       cur_count += 1;
       cur_size += to_write.second;
       
@@ -622,7 +624,7 @@ public:
     RecoveryMessages *m);
 
   map<ceph_tid_t, WriteOp> tid_to_overwrite_map;
-  // kepp the tid util write apply
+  // keep the tid util write apply
   map<hobject_t, ceph_tid_t, hobject_t::BitwiseComparator> in_progress_write_tid;
   // keep the op util write submit
   list<Op*> pending_op;
@@ -648,15 +650,13 @@ public:
   struct ObjectApplyProgress {
     hobject_t hoid;
     set<pg_shard_t> pending_apply;
-    WriteOp *last_op;
   };
   
   // apply
-  void start_apply_op(const hobject_t &hoid, WriteOp *op);
-  // map<hobject_t, 
-  //   list<boost::tuple<version_t, uint64_t, uint64_t> >,
-  //   hobject_t::BitwiseComparator> unapplied_overwrite;
-  map<ceph_tid_t, ObjectApplyProgress> in_progress_apply;
+  void start_apply_op(const hobject_t &hoid, eversion_t prev_version);
+  map<ceph_tid_t, ObjectApplyProgress> tid_to_apply_map;
+  map<hobject_t, ceph_tid_t, hobject_t::BitwiseComparator> in_progress_apply_tid;
+  map<hobject_t, eversion_t, hobject_t::BitwiseComparator> to_apply;
 
 public:
   ECBackend(
