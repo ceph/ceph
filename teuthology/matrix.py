@@ -1,6 +1,11 @@
 import os
+import heapq
 from fractions import gcd
 
+def lcm(a, b):
+    return a*b // gcd(a, b)
+def lcml(l):
+    return reduce(lcm, l)
 
 class Matrix:
     """
@@ -38,6 +43,15 @@ class Matrix:
         """
         return self.size() / self.minscanlen()
 
+    def tostr(self, depth):
+        pass
+
+    def __str__(self):
+        """
+        str method
+        """
+        return self.tostr(0)
+
 
 class Cycle(Matrix):
     """
@@ -56,6 +70,8 @@ class Cycle(Matrix):
     def minscanlen(self):
         return self.mat.minscanlen()
 
+    def tostr(self, depth):
+        return '\t'*depth + "Cycle({num}):\n".format(num=self.num) + self.mat.tostr(depth + 1)
 
 class Base(Matrix):
     """
@@ -72,6 +88,9 @@ class Base(Matrix):
 
     def minscanlen(self):
         return 1
+
+    def tostr(self, depth):
+        return '\t'*depth + "Base({item})\n".format(item=self.item)
 
 
 class Product(Matrix):
@@ -95,6 +114,14 @@ class Product(Matrix):
         self.submats.reverse()
 
         self._minscanlen = max([i.minscanlen() for i in _submats])
+        if self._minscanlen + 1 > self._size:
+            self._minscanlen  = self._size
+        else:
+            self._minscanlen += 1
+
+    def tostr(self, depth):
+        ret = '\t'*depth + "Product({item}):\n".format(item=self.item)
+        return ret + ''.join([i[1].tostr(depth+1) for i in self.submats])
 
     def minscanlen(self):
         return self._minscanlen
@@ -113,7 +140,7 @@ class Product(Matrix):
 
         In general, if the gcd(lmat.size(), rmat.size()) == N,
         index(i) would be periodic on the interval (lmat.size() *
-        rmat.size()) / N.  To adjust, we increment the lmat index
+        rmat.size()) / N.  To adjust, we decrement the lmat index
         number on each repeat.  Each of the N repeats must therefore
         be distinct from the previous ones resulting in lmat.size() *
         rmat.size() combinations.
@@ -137,7 +164,7 @@ class Product(Matrix):
                 return s | r
             return s | frozenset([r])
 
-        litems = lmat.index(i + off)
+        litems = lmat.index((i - off) % lmat.size())
         ritems = self._index(i, submats[1:])
         return combine(litems, combine(ritems))
 
@@ -166,28 +193,87 @@ class Concat(Matrix):
                 out = out | frozenset([submat.index(i)])
         return (self.item, out)
 
+    def tostr(self, depth):
+        ret = '\t'*depth + "Concat({item}):\n".format(item=self.item)
+        return ret + ''.join([i[1].tostr(depth+1) for i in self.submats])
+
 class Sum(Matrix):
     """
     We want to mix the subsequences proportionately to their size.
+
+    The intuition is that we map all of the subsequences uniformly
+    onto rational numbers in [0, 1).  The ith subsequence with length
+    l will have index k map onto i*<epsilon> + k*(1/l).  i*<epsilon>
+    ensures that no two subsequences have an index which shares a
+    mapping in [0, 1) as long as <epsilon> is chosen to be small
+    enough.
+
+    Rather than actually dealing with rational numbers, however, we'll
+    instead map onto whole numbers in [0, pseudo_size) where
+    pseudo_size is the lcm of the subsequence lengths * the number of
+    subsequences.  Including the number of subsequences in the product
+    allows us to use 1 as <epsilon>.  For each subsequence, we designate
+    an offset (position in input list) and a multiple (pseudo_size / size)
+    such that the psuedo_index for index i is <offset> + i*<multiple>.
+
+    I don't have a good way to map index to pseudo index, so we'll
+    precompute a mapping in the constructor (self._i_so_sis) from
+    index to (subset_index, subset).
     """
     def __init__(self, item, _submats):
         assert len(_submats) > 0, \
             "Sum requires non-empty _submats"
         self.item = item
 
-        submats = sorted(
-            [((i.size(), ind), i) for (i, ind) in
-             zip(_submats, range(len(_submats)))], reverse=True)
-        self.submats = []
-        self._size = 0
-        for ((size, ind), submat) in submats:
-            self.submats.append((self._size, submat))
-            self._size += size
-        self.submats.reverse()
+        self._pseudo_size = lcml((i.size() for i in _submats)) * len(_submats)
+        self._size = sum((i.size() for i in _submats))
+        self._submats = [
+            ((i, self._pseudo_size / s.size()), s) for (i, s) in \
+            zip(range(len(_submats)), _submats)
+        ]
 
-        self._minscanlen = max(
-            [(self._size / i.size()) *
-             i.minscanlen() for i in _submats])
+        def sm_to_pmsl(((offset, multiple), submat)):
+            """
+            submat tuple to pseudo minscanlen
+            """
+            return submat.minscanlen() * multiple
+
+        def index_to_pindex_generator(submats):
+            assert len(submats) > 0, "submats must be non-empty"
+            h = []
+            for (offset, multiple), submat in submats:
+                heapq.heappush(h, (offset, 0, multiple, submat))
+            while True:
+                cur, si, multiple, submat = heapq.heappop(h)
+                heapq.heappush(
+                    h,
+                    (cur + multiple, si + 1, multiple, submat))
+                yield si, submat
+
+        self._i_to_sis = dict(
+            zip(range(self._size), index_to_pindex_generator(self._submats))
+        )
+
+        self._minscanlen = self.pseudo_index_to_index(
+            max(map(sm_to_pmsl, self._submats)))
+
+    def pi_to_sis(self, pi, (offset, multiple)):
+        """
+        max(i) s.t. offset + i*multiple <= pi
+        """
+        if pi < offset:
+            return -1
+        return (pi - offset) / multiple
+
+    def pseudo_index_to_index(self, pi):
+        """
+        Count all pseudoindex values <= pi with corresponding subset indices
+        """
+        return sum((self.pi_to_sis(pi, i) + 1 for i, _ in self._submats)) - 1
+
+    def tostr(self, depth):
+        ret = '\t'*depth + "Sum({item}):\n".format(item=self.item)
+        return ret + ''.join([i[1].tostr(depth+1) for i in self._submats])
 
     def minscanlen(self):
         return self._minscanlen
@@ -195,41 +281,9 @@ class Sum(Matrix):
     def size(self):
         return self._size
 
-    def _index(self, _i, submats):
-        """
-        We reduce the N sequence problem to a two sequence problem recursively.
-
-        If we have two sequences M and N of length m and n (n > m wlog), we
-        want to mix an M item into the stream every N / M items.  Once we run
-        out of N, we want to simply finish the M stream.
-        """
-        assert len(submats) > 0, \
-            "_index requires non-empty submats"
-        if len(submats) == 1:
-            return submats[0][1].index(_i)
-        lmat = submats[0][1]
-        lsize = lmat.size()
-
-        rsize = submats[0][0]
-
-        mult = rsize / lsize
-        clen = mult + 1
-        thresh = lsize * clen
-        i = _i % (rsize + lsize)
-        base = (_i / (rsize + lsize))
-        if i < thresh:
-            if i % clen == 0:
-                return lmat.index((i / clen) + (base * lsize))
-            else:
-                return self._index(((i / clen) * mult + ((i % clen) - 1)) +
-                                   (base * rsize),
-                                   submats[1:])
-        else:
-            return self._index(i - lsize, submats[1:])
-
     def index(self, i):
-        return (self.item, self._index(i, self.submats))
-
+        si, submat = self._i_to_sis[i % self._size]
+        return (self.item, submat.index(si))
 
 def generate_lists(result):
     """

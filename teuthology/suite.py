@@ -16,7 +16,6 @@ import sys
 from time import sleep
 from time import time
 import yaml
-import math
 from email.mime.text import MIMEText
 from tempfile import NamedTemporaryFile
 
@@ -918,11 +917,10 @@ def generate_combinations(path, mat, generate_from, generate_to):
             matrix.generate_paths(path, output, combine_path)))
     return ret
 
-
 def build_matrix(path, _isfile=os.path.isfile,
-                 _isdir=os.path.isdir,
-                 _listdir=os.listdir,
-                 subset=None):
+                _isdir=os.path.isdir,
+                _listdir=os.listdir,
+                subset=None):
     """
     Return a list of items descibed by path such that if the list of
     items is chunked into mincyclicity pieces, each piece is still a
@@ -961,6 +959,14 @@ def build_matrix(path, _isfile=os.path.isfile,
     :param _listdir:	Custom os.listdir(); for testing only
     :param subset:	(index, outof)
     """
+    mat, first, matlimit = _get_matrix(
+        path, _isfile, _isdir, _listdir, subset)
+    return generate_combinations(path, mat, first, matlimit)
+
+def _get_matrix(path, _isfile=os.path.isfile,
+                 _isdir=os.path.isdir,
+                 _listdir=os.listdir,
+                 subset=None):
     mat = None
     first = None
     matlimit = None
@@ -976,7 +982,7 @@ def build_matrix(path, _isfile=os.path.isfile,
         first = 0
         mat = _build_matrix(path, _isfile, _isdir, _listdir)
         matlimit = mat.size()
-    return generate_combinations(path, mat, first, matlimit)
+    return mat, first, matlimit
 
 def _build_matrix(path, _isfile=os.path.isfile,
                   _isdir=os.path.isdir, _listdir=os.listdir, mincyclicity=0, item=''):
@@ -1019,7 +1025,12 @@ def _build_matrix(path, _isfile=os.path.isfile,
                     item=fn)
                 if submat is not None:
                     submats.append(submat)
-            return matrix.Product(item, submats)
+            mat = matrix.Product(item, submats)
+            if mat and mat.cyclicity() < mincyclicity:
+                mat = matrix.Cycle(
+                (mincyclicity + mat.cyclicity() - 1) / mat.cyclicity(),
+                mat)
+            return mat
         else:
             # list items
             submats = []
@@ -1035,8 +1046,8 @@ def _build_matrix(path, _isfile=os.path.isfile,
                     continue
                 if submat.cyclicity() < mincyclicity:
                     submat = matrix.Cycle(
-                        int(math.ceil(
-                            mincyclicity / submat.cyclicity())),
+                        ((mincyclicity + submat.cyclicity() - 1) /
+                         submat.cyclicity()),
                         submat)
                 submats.append(submat)
             return matrix.Sum(item, submats)

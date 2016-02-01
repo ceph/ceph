@@ -11,6 +11,7 @@ from teuthology.config import config
 import os
 import pytest
 import tempfile
+import random
 
 @pytest.fixture
 def git_repository(request):
@@ -683,6 +684,117 @@ class TestBuildMatrix(object):
         assert fragments[0] == 'thrash/ceph/base.yaml'
         assert fragments[1] == 'thrash/ceph-thrash/default.yaml'
 
+class TestSubset(object):
+    MAX_FACETS = 10
+    MAX_FANOUT = 3
+    MAX_DEPTH = 3
+    MAX_SUBSET = 10
+    @staticmethod
+    def generate_fake_fs(max_facets, max_fanout, max_depth):
+        def yamilify(name):
+            return name + ".yaml"
+        def name_generator():
+            x = 0
+            while True:
+                yield(str(x))
+                x += 1
+        def generate_tree(
+                max_facets, max_fanout, max_depth, namegen, top=True):
+            if max_depth is 0:
+                return None
+            if max_facets is 0:
+                return None
+            items = random.choice(range(max_fanout))
+            if items is 0 and top:
+                items = 1
+            if items is 0:
+                return None
+            sub_max_facets = max_facets / items
+            tree = {}
+            for i in range(items):
+                subtree = generate_tree(
+                    sub_max_facets, max_fanout,
+                    max_depth - 1, namegen, top=False)
+                if subtree is not None:
+                    tree[namegen.next()] = subtree
+                else:
+                    tree[yamilify(namegen.next())] = None
+            random.choice([
+                lambda: tree.update({'%': None}),
+                lambda: None])()
+            return tree
+        return {
+            'root':  generate_tree(
+                max_facets, max_fanout, max_depth, name_generator())
+        }
+
+    @staticmethod
+    def generate_subset(maxsub):
+        den = random.choice(range(maxsub-1))+1
+        return (random.choice(range(den)), den)
+
+    @staticmethod
+    def generate_description_list(tree, subset):
+        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(tree)
+        mat, first, matlimit = suite._get_matrix(
+            'root', _isfile=fake_isfile, _isdir=fake_isdir,
+            _listdir=fake_listdir, subset=subset)
+        return [i[0] for i in suite.generate_combinations(
+            'root', mat, first, matlimit)], mat, first, matlimit
+
+    @staticmethod
+    def verify_facets(tree, description_list, subset, mat, first, matlimit):
+        def flatten(tree):
+            for k,v in tree.iteritems():
+                if v is None and '.yaml' in k:
+                    yield k
+                elif v is not None and '.disable' not in k:
+                    for x in flatten(v):
+                        yield x
+        def pptree(tree, tabs=0):
+            ret = ""
+            for k, v in tree.iteritems():
+                if v is None:
+                    ret += ('\t'*tabs) + k.ljust(10) + "\n"
+                else:
+                    ret += ('\t'*tabs) + (k + ':').ljust(10) + "\n"
+                    ret += pptree(v, tabs+1)
+            return ret
+        for facet in flatten(tree):
+            found = False
+            for i in description_list:
+                if facet in i:
+                    found = True
+                    break
+            if not found:
+                print "tree\n{tree}\ngenerated list\n{desc}\n\nfrom matrix\n\n{matrix}\nsubset {subset} without facet {fac}".format(
+                    tree=pptree(tree),
+                    desc='\n'.join(description_list),
+                    subset=subset,
+                    matrix=str(mat),
+                    fac=facet)
+                all_desc = suite.generate_combinations(
+                    'root',
+                    mat,
+                    0,
+                    mat.size())
+                for i, desc in zip(xrange(mat.size()), all_desc):
+                    if i == first:
+                        print '=========='
+                    print i, desc
+                    if i + 1 == matlimit:
+                        print '=========='
+            assert found
+
+    def test_random(self):
+        for i in xrange(10000):
+            tree = self.generate_fake_fs(
+                self.MAX_FACETS,
+                self.MAX_FANOUT,
+                self.MAX_DEPTH)
+            subset = self.generate_subset(self.MAX_SUBSET)
+            dlist, mat, first, matlimit = self.generate_description_list(tree, subset)
+            self.verify_facets(tree, dlist, subset, mat, first, matlimit)
 
 @patch('subprocess.check_output')
 def test_git_branch_exists(m_check_output):
