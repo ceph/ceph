@@ -785,13 +785,20 @@ public:
   unsigned promote_probability_millis; ///< probability thousands. one word.
   PromoteCounter promote_counter;
   utime_t last_recalibrate;
+  unsigned long promote_max_objects, promote_max_bytes;
 
   bool promote_throttle() {
     // NOTE: lockless!  we rely on the probability being a single word.
     promote_counter.attempt();
     if ((unsigned)rand() % 1000 > promote_probability_millis)
-      return true;  //  yes throttle (no promote)
-    return false;   //   no throttle (promote)
+      return true;  // yes throttle (no promote)
+    if (promote_max_objects &&
+	promote_counter.objects.read() > promote_max_objects)
+      return true;  // yes throttle
+    if (promote_max_bytes &&
+	promote_counter.bytes.read() > promote_max_bytes)
+      return true;  // yes throttle
+    return false;   //  no throttle (promote)
   }
   void promote_finish(uint64_t bytes) {
     promote_counter.finish(bytes);

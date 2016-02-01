@@ -236,6 +236,8 @@ OSDService::OSDService(OSD *osd) :
   agent_timer_lock("OSD::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
   promote_probability_millis(1000),
+  promote_max_objects(0),
+  promote_max_bytes(0),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
   objecter_finisher(osd->client_messenger->cct),
   watch_lock("OSD::watch_lock"),
@@ -661,6 +663,10 @@ void OSDService::promote_throttle_recalibrate()
 	   << ", prob " << promote_probability_millis << " -> " << prob
 	   << dendl;
   promote_probability_millis = prob;
+
+  // set hard limits for this interval to mitigate stampedes
+  promote_max_objects = target_obj_sec * OSD::OSD_TICK_INTERVAL * 2;
+  promote_max_bytes = target_bytes_sec * OSD::OSD_TICK_INTERVAL * 2;
 }
 
 // -------------------------------------
