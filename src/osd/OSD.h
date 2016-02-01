@@ -364,6 +364,7 @@ class PGQueueable {
     void operator()(PGScrub &op);
   };
 public:
+  PGQueueable() {}
   PGQueueable(OpRequestRef op)
     : qvariant(op), cost(op->get_req()->get_cost()),
       priority(op->get_req()->get_priority()),
@@ -413,7 +414,7 @@ public:
   PerfCounters *&logger;
   PerfCounters *&recoverystate_perf;
   MonClient   *&monc;
-  ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> > &op_wq;
+  ShardedThreadPool::ShardedWQ < const pair <PGRef, PGQueueable> &> &op_wq;
   ThreadPool::BatchWorkQueue<PG> &peering_wq;
   ThreadPool::WorkQueue<PG> &recovery_wq;
   GenContextWQ recovery_gen_wq;
@@ -1611,7 +1612,7 @@ private:
   // -- op queue --
 
   friend class PGQueueable;
-  class ShardedOpWQ: public ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> > {
+  class ShardedOpWQ: public ShardedThreadPool::ShardedWQ < const pair <PGRef, PGQueueable> &> {
 
     struct ShardData {
       Mutex sdata_lock;
@@ -1633,7 +1634,7 @@ private:
 
   public:
     ShardedOpWQ(uint32_t pnum_shards, OSD *o, time_t ti, time_t si, ShardedThreadPool* tp):
-      ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> >(ti, si, tp),
+      ShardedThreadPool::ShardedWQ < const pair <PGRef, PGQueueable> &>(ti, si, tp),
       osd(o), num_shards(pnum_shards) {
       for(uint32_t i = 0; i < num_shards; i++) {
 	char lock_name[32] = {0};
@@ -1658,8 +1659,8 @@ private:
     }
 
     void _process(uint32_t thread_index, heartbeat_handle_d *hb);
-    void _enqueue(pair <PGRef, PGQueueable> item);
-    void _enqueue_front(pair <PGRef, PGQueueable> item);
+    void _enqueue(const pair <PGRef, PGQueueable> &item);
+    void _enqueue_front(const pair <PGRef, PGQueueable> &item);
       
     void return_waiting_threads() {
       for(uint32_t i = 0; i < num_shards; i++) {
