@@ -1787,6 +1787,11 @@ void ECBackend::on_change()
   }
   in_progress_client_reads.clear();
   shard_to_read_map.clear();
+
+  in_progress_write_tid.clear();
+  tid_to_overwrite_map.clear();
+  pending_op.clear();
+
   clear_recovery_state();
 }
 
