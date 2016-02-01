@@ -89,13 +89,16 @@ void Elector::start()
   }
   start_stamp = ceph_clock_now(g_ceph_context);
   electing_me = true;
-  acked_me[mon->rank] = CEPH_FEATURES_ALL;
+  acked_me[mon->rank].cluster_features = CEPH_FEATURES_ALL;
+  acked_me[mon->rank].mon_features = ceph::features::mon::get_supported();
   leader_acked = -1;
 
   // bcast to everyone else
   for (unsigned i=0; i<mon->monmap->size(); ++i) {
     if ((int)i == mon->rank) continue;
-    Message *m = new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap);
+    MMonElection *m =
+      new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap);
+    m->mon_features = ceph::features::mon::get_supported();
     mon->messenger->send_message(m, mon->monmap->get_inst(i));
   }
   
@@ -117,6 +120,7 @@ void Elector::defer(int who)
   leader_acked = who;
   ack_stamp = ceph_clock_now(g_ceph_context);
   MMonElection *m = new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap);
+  m->mon_features = ceph::features::mon::get_supported();
   m->sharing_bl = mon->get_supported_commands_bl();
   mon->messenger->send_message(m, mon->monmap->get_inst(who));
   
@@ -167,12 +171,15 @@ void Elector::victory()
   leader_acked = -1;
   electing_me = false;
 
-  uint64_t features = CEPH_FEATURES_ALL;
+  uint64_t cluster_features = CEPH_FEATURES_ALL;
+  mon_feature_t mon_features = ceph::features::mon::get_supported();
   set<int> quorum;
-  for (map<int, uint64_t>::iterator p = acked_me.begin(); p != acked_me.end();
+  for (map<int, elector_features_t>::iterator p = acked_me.begin();
+       p != acked_me.end();
        ++p) {
     quorum.insert(p->first);
-    features &= p->second;
+    cluster_features &= p->second.cluster_features;
+    mon_features &= p->second.mon_features;
   }
 
   // decide what command set we're supporting
@@ -204,13 +211,16 @@ void Elector::victory()
     if (*p == mon->rank) continue;
     MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap);
     m->quorum = quorum;
-    m->quorum_features = features;
+    m->quorum_features = cluster_features;
+    m->mon_features = mon_features;
     m->sharing_bl = *cmds_bl;
     mon->messenger->send_message(m, mon->monmap->get_inst(*p));
   }
     
   // tell monitor
-  mon->win_election(epoch, quorum, features, cmds, cmdsize, &copy_classic_mons);
+  mon->win_election(epoch, quorum,
+                    cluster_features, mon_features,
+                    cmds, cmdsize, &copy_classic_mons);
 }
 
 
@@ -295,13 +305,24 @@ void Elector::handle_ack(MonOpRequestRef op)
 	    << " without required features" << dendl;
     return;
   }
-  
+
   if (electing_me) {
     // thanks
-    acked_me[from] = m->get_connection()->get_features();
+    acked_me[from].cluster_features = m->get_connection()->get_features();
+    acked_me[from].mon_features = m->mon_features;
     if (!m->sharing_bl.length())
       classic_mons.insert(from);
-    dout(5) << " so far i have " << acked_me << dendl;
+    dout(5) << " so far i have {";
+    for (map<int, elector_features_t>::const_iterator p = acked_me.begin();
+         p != acked_me.end();
+         ++p) {
+      if (p != acked_me.begin())
+        *_dout << ",";
+      *_dout << " mon." << p->first << ":"
+             << " features " << p->second.cluster_features
+             << " " << p->second.mon_features;
+    }
+    *_dout << " }" << dendl;
     
     // is that _everyone_?
     if (acked_me.size() == mon->monmap->size()) {
@@ -319,7 +340,10 @@ void Elector::handle_victory(MonOpRequestRef op)
 {
   op->mark_event("elector:handle_victory");
   MMonElection *m = static_cast<MMonElection*>(op->get_req());
-  dout(5) << "handle_victory from " << m->get_source() << " quorum_features " << m->quorum_features << dendl;
+  dout(5) << "handle_victory from " << m->get_source()
+          << " quorum_features " << m->quorum_features
+          << " " << m->mon_features
+          << dendl;
   int from = m->get_source().num();
 
   assert(from < mon->rank);
@@ -336,10 +360,11 @@ void Elector::handle_victory(MonOpRequestRef op)
   }
 
   bump_epoch(m->epoch);
-  
+
   // they win
-  mon->lose_election(epoch, m->quorum, from, m->quorum_features);
-  
+  mon->lose_election(epoch, m->quorum, from,
+                     m->quorum_features, m->mon_features);
+
   // cancel my timer
   cancel_timer();
 
