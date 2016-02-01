@@ -136,7 +136,11 @@ struct InodeStat {
     ::decode(version, p);
     ::decode(xattr_version, p);
     ::decode(cap, p);
-    ::decode(layout, p);
+    {
+      ceph_file_layout legacy_layout;
+      ::decode(legacy_layout, p);
+      layout.from_legacy(legacy_layout);
+    }
     ::decode(ctime, p);
     ::decode(mtime, p);
     ::decode(atime, p);
@@ -178,6 +182,9 @@ struct InodeStat {
       ::decode(quota, p);
     else
       memset(&quota, 0, sizeof(quota));
+
+    if ((features & CEPH_FEATURE_FS_FILE_LAYOUT_V2))
+      ::decode(layout.pool_ns, p);
   }
   
   // see CInode::encode_inodestat for encoder.

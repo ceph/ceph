@@ -3282,8 +3282,11 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   ::encode(xattr_version, bl);
 
   ::encode(ecap, bl);
-
-  ::encode(layout, bl, session->connection->get_features());
+  {
+    ceph_file_layout legacy_layout;
+    layout.to_legacy(&legacy_layout);
+    ::encode(legacy_layout, bl);
+  }
   ::encode(any_i->ctime, bl);
   ::encode(file_i->mtime, bl);
   ::encode(file_i->atime, bl);
@@ -3320,6 +3323,9 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   if (session->connection->has_feature(CEPH_FEATURE_MDS_QUOTA)) {
     inode_t *policy_i = ppolicy ? pi : oi;
     ::encode(policy_i->quota, bl);
+  }
+  if (session->connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
+    ::encode(layout.pool_ns, bl);
   }
 
   return valid;

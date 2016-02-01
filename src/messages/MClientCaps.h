@@ -190,35 +190,19 @@ public:
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
-    if (header.version < 8) {
-      ceph_mds_caps_body_legacy body;
-      ::decode(body, p);
-      if (head.op == CEPH_CAP_OP_EXPORT) {
-	peer = body.peer;
-      } else {
-	size = body.size;
-	max_size = body.max_size;
-	truncate_size = body.truncate_size;
-	mtime = utime_t(body.mtime);
-	atime = utime_t(body.atime);
-	ctime = utime_t(body.ctime);
-	layout.from_legacy(body.layout);
-	time_warp_seq = body.time_warp_seq;
-      }
+    ceph_mds_caps_body_legacy body;
+    ::decode(body, p);
+    if (head.op == CEPH_CAP_OP_EXPORT) {
+      peer = body.peer;
     } else {
-      if (head.op == CEPH_CAP_OP_EXPORT) {
-	::decode(peer, p);
-      } else {
-	::decode(size, p);
-	::decode(max_size, p);
-	::decode(truncate_size, p);
-	::decode(truncate_seq, p);
-	::decode(mtime, p);
-	::decode(atime, p);
-	::decode(ctime, p);
-	::decode(layout, p);
-	::decode(time_warp_seq, p);
-      }
+      size = body.size;
+      max_size = body.max_size;
+      truncate_size = body.truncate_size;
+      mtime = utime_t(body.mtime);
+      atime = utime_t(body.atime);
+      ctime = utime_t(body.ctime);
+      layout.from_legacy(body.layout);
+      time_warp_seq = body.time_warp_seq;
     }
     ::decode_nohead(head.snap_trace_len, snapbl, p);
 
@@ -252,6 +236,9 @@ public:
       ::decode(caller_uid, p);
       ::decode(caller_gid, p);
     }
+    if (header.version >= 8) {
+      ::decode(layout.pool_ns, p);
+    }
   }
   void encode_payload(uint64_t features) {
     header.version = HEAD_VERSION;
@@ -259,38 +246,21 @@ public:
     head.xattr_len = xattrbl.length();
 
     ::encode(head, payload);
-    if (features & CEPH_FEATURE_FS_FILE_LAYOUT_V2) {
-      if (head.op == CEPH_CAP_OP_EXPORT) {
-	::encode(peer, payload);
-      } else {
-	::encode(size, payload);
-	::encode(max_size, payload);
-	::encode(truncate_size, payload);
-	::encode(truncate_seq, payload);
-	::encode(mtime, payload);
-	::encode(atime, payload);
-	::encode(ctime, payload);
-	::encode(layout, payload, features);
-	::encode(time_warp_seq, payload);
-      }
+    ceph_mds_caps_body_legacy body;
+    if (head.op == CEPH_CAP_OP_EXPORT) {
+      body.peer = peer;
     } else {
-      header.version = 7;
-      ceph_mds_caps_body_legacy body;
-      if (head.op == CEPH_CAP_OP_EXPORT) {
-	body.peer = peer;
-      } else {
-	body.size = size;
-	body.max_size = max_size;
-	body.truncate_size = truncate_size;
-	body.truncate_seq = truncate_seq;
-	mtime.encode_timeval(&body.mtime);
-	atime.encode_timeval(&body.atime);
-	ctime.encode_timeval(&body.ctime);
-	layout.to_legacy(&body.layout);
-	body.time_warp_seq = time_warp_seq;
-      }
-      ::encode(body, payload);
+      body.size = size;
+      body.max_size = max_size;
+      body.truncate_size = truncate_size;
+      body.truncate_seq = truncate_seq;
+      mtime.encode_timeval(&body.mtime);
+      atime.encode_timeval(&body.atime);
+      ctime.encode_timeval(&body.ctime);
+      layout.to_legacy(&body.layout);
+      body.time_warp_seq = time_warp_seq;
     }
+    ::encode(body, payload);
     ::encode_nohead(snapbl, payload);
 
     middle = xattrbl;
@@ -323,6 +293,8 @@ public:
     ::encode(oldest_flush_tid, payload);
     ::encode(caller_uid, payload);
     ::encode(caller_gid, payload);
+
+    ::encode(layout.pool_ns, payload);
   }
 };
 
