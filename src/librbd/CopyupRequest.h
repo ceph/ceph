@@ -23,7 +23,6 @@ namespace librbd {
     void append_request(AioObjectRequest *req);
 
     void send();
-    void queue_send();
 
     void complete(int r);
 

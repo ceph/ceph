@@ -118,6 +118,16 @@ bool MDSCapMatch::match(const std::string &target_path,
     if (std::find(gids.begin(), gids.end(), caller_gid) == gids.end())
       return false;
   }
+
+  if (!match_path(target_path)) {
+    return false;
+  }
+
+  return true;
+}
+
+bool MDSCapMatch::match_path(const std::string &target_path) const
+{
   if (path.length()) {
     if (target_path.find(path) != 0)
       return false;
@@ -128,7 +138,23 @@ bool MDSCapMatch::match(const std::string &target_path,
 	target_path[path.length()] != '/')
       return false;
   }
+
   return true;
+}
+
+/**
+ * Is the client *potentially* able to access this path?  Actual
+ * permission will depend on uids/modes in the full is_capable.
+ */
+bool MDSAuthCaps::path_capable(const std::string &inode_path) const
+{
+  for (const auto &i : grants) {
+    if (i.match.match_path(inode_path)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**

@@ -11,6 +11,7 @@
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
+#include "rgw_rest_s3website.h"
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
@@ -19,6 +20,12 @@
 #include "rgw_cors_s3.h"
 
 #include "rgw_client_io.h"
+
+/* This header consists several Keystone-related primitives
+ * we want to reuse here. */
+#include "rgw_swift.h"
+
+#include <typeinfo> // for 'typeid'
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -72,6 +79,26 @@ static struct response_attr_param resp_attr_params[] = {
   {NULL, NULL},
 };
 
+int RGWGetObj_ObjStore_S3Website::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+  map<string, bufferlist>::iterator iter;
+  iter = attrs.find(RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION);
+  if (iter != attrs.end()) {
+    bufferlist &bl = iter->second;
+    s->redirect = string(bl.c_str(), bl.length());
+    s->err.http_ret = 301;
+    ldout(s->cct, 20) << __CEPH_ASSERT_FUNCTION << " redirectng per x-amz-website-redirect-location=" << s->redirect << dendl;
+    op_ret = -ERR_WEBSITE_REDIRECT;
+    return op_ret;
+  } else {
+    return RGWGetObj_ObjStore_S3::send_response_data(bl, bl_ofs, bl_len);
+  }
+}
+
+int RGWGetObj_ObjStore_S3Website::send_response_data_error()
+{
+  return RGWGetObj_ObjStore_S3::send_response_data_error();
+}
+
 int RGWGetObj_ObjStore_S3::send_response_data_error()
 {
   bufferlist bl;
@@ -86,7 +113,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
   map<string, string>::iterator riter;
   bufferlist metadata_bl;
 
-  if (ret)
+  if (op_ret)
     goto done;
 
   if (sent_header)
@@ -119,7 +146,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
 
-  if (!ret) {
+  if (! op_ret) {
     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
       bufferlist& bl = iter->second;
@@ -165,7 +192,8 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
   }
 
 done:
-  set_req_state_err(s, (partial_content && !ret) ? STATUS_PARTIAL_CONTENT : ret);
+  set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT :
+		    op_ret);
 
   dump_errno(s);
 
@@ -184,7 +212,7 @@ done:
   sent_header = true;
 
 send_data:
-  if (get_data && !ret) {
+  if (get_data && !op_ret) {
     int r = s->cio->write(bl.c_str() + bl_ofs, bl_len);
     if (r < 0)
       return r;
@@ -195,13 +223,13 @@ send_data:
 
 void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 {
-  if (ret)
-    set_req_state_err(s, ret);
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
   dump_start(s);
   end_header(s, NULL, "application/xml");
 
-  if (!ret) {
+  if (! op_ret) {
     list_all_buckets_start(s);
     dump_owner(s, s->user.user_id, s->user.display_name);
     s->formatter->open_array_section("Buckets");
@@ -244,9 +272,9 @@ int RGWListBucket_ObjStore_S3::get_params()
     marker.instance = s->info.args.get("version-id-marker");
   }
   max_keys = s->info.args.get("max-keys");
-  ret = parse_max_keys();
-  if (ret < 0) {
-    return ret;
+  op_ret = parse_max_keys();
+  if (op_ret < 0) {
+    return op_ret;
   }
   delimiter = s->info.args.get("delimiter");
   encoding_type = s->info.args.get("encoding-type");
@@ -274,7 +302,7 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
   if (strcasecmp(encoding_type.c_str(), "url") == 0)
     encode_key = true;
 
-  if (ret >= 0) {
+  if (op_ret >= 0) {
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       time_t mtime = iter->mtime.sec();
@@ -320,13 +348,13 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
 
 void RGWListBucket_ObjStore_S3::send_response()
 {
-  if (ret < 0)
-    set_req_state_err(s, ret);
+  if (op_ret < 0)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
 
   end_header(s, this, "application/xml");
   dump_start(s);
-  if (ret < 0)
+  if (op_ret < 0)
     return;
 
   if (list_versions) {
@@ -353,7 +381,7 @@ void RGWListBucket_ObjStore_S3::send_response()
   if (strcasecmp(encoding_type.c_str(), "url") == 0)
     encode_key = true;
 
-  if (ret >= 0) {
+  if (op_ret >= 0) {
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       s->formatter->open_array_section("Contents");
@@ -505,12 +533,84 @@ done:
 
 void RGWSetBucketVersioning_ObjStore_S3::send_response()
 {
-  if (ret)
-    set_req_state_err(s, ret);
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 }
 
+int RGWSetBucketWebsite_ObjStore_S3::get_params()
+{
+#define GET_BUCKET_WEBSITE_BUF_MAX (128 * 1024)
+
+  char *data;
+  int len = 0;
+  int r = rgw_rest_read_all_input(s, &data, &len, GET_BUCKET_WEBSITE_BUF_MAX);
+  if (r < 0) {
+    return r;
+  }
+
+  bufferlist bl;
+  bl.append(data, len);
+
+  RGWXMLDecoder::XMLParser parser;
+  parser.init();
+
+  if (!parser.parse(data, len, 1)) {
+    string str(data, len);
+    ldout(s->cct, 5) << "failed to parse xml: " << str << dendl;
+    return -EINVAL;
+  }
+
+  try {
+    RGWXMLDecoder::decode_xml("WebsiteConfiguration", website_conf, &parser, true);
+  } catch (RGWXMLDecoder::err& err) {
+    string str(data, len);
+    ldout(s->cct, 5) << "unexpected xml: " << str << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+void RGWSetBucketWebsite_ObjStore_S3::send_response()
+{
+  if (op_ret < 0)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWDeleteBucketWebsite_ObjStore_S3::send_response()
+{
+  if (op_ret == 0) {
+    op_ret = STATUS_NO_CONTENT;
+  }
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWGetBucketWebsite_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  if (op_ret < 0) {
+    return;
+  }
+
+  RGWBucketWebsiteConf& conf = s->bucket_info.website_conf;
+
+  s->formatter->open_object_section_in_ns("WebsiteConfiguration",
+					  "http://doc.s3.amazonaws.com/doc/2006-03-01/");
+  conf.dump_xml(s->formatter);
+  s->formatter->close_section(); // WebsiteConfiguration
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
 
 static void dump_bucket_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
@@ -523,11 +623,11 @@ static void dump_bucket_metadata(struct req_state *s, RGWBucketEnt& bucket)
 
 void RGWStatBucket_ObjStore_S3::send_response()
 {
-  if (ret >= 0) {
+  if (op_ret >= 0) {
     dump_bucket_metadata(s, bucket);
   }
 
-  set_req_state_err(s, ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
 
   end_header(s, this);
@@ -608,9 +708,9 @@ int RGWCreateBucket_ObjStore_S3::get_params()
   int len = 0;
   char *data;
 #define CREATE_BUCKET_MAX_REQ_LEN (512 * 1024) /* this is way more than enough */
-  ret = rgw_rest_read_all_input(s, &data, &len, CREATE_BUCKET_MAX_REQ_LEN);
-  if ((ret < 0) && (ret != -ERR_LENGTH_REQUIRED))
-    return ret;
+  op_ret = rgw_rest_read_all_input(s, &data, &len, CREATE_BUCKET_MAX_REQ_LEN);
+  if ((op_ret < 0) && (op_ret != -ERR_LENGTH_REQUIRED))
+    return op_ret;
 
   bufferptr in_ptr(data, len);
   in_data.append(in_ptr);
@@ -652,14 +752,14 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
 void RGWCreateBucket_ObjStore_S3::send_response()
 {
-  if (ret == -ERR_BUCKET_EXISTS)
-    ret = 0;
-  if (ret)
-    set_req_state_err(s, ret);
+  if (op_ret == -ERR_BUCKET_EXISTS)
+    op_ret = 0;
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
-  if (ret < 0)
+  if (op_ret < 0)
     return;
 
   if (s->system_request) {
@@ -676,7 +776,7 @@ void RGWCreateBucket_ObjStore_S3::send_response()
 
 void RGWDeleteBucket_ObjStore_S3::send_response()
 {
-  int r = ret;
+  int r = op_ret;
   if (!r)
     r = STATUS_NO_CONTENT;
 
@@ -725,12 +825,13 @@ static int get_success_retcode(int code)
 
 void RGWPutObj_ObjStore_S3::send_response()
 {
-  if (ret) {
-    set_req_state_err(s, ret);
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
   } else {
     if (s->cct->_conf->rgw_s3_success_create_obj_status) {
-      ret = get_success_retcode(s->cct->_conf->rgw_s3_success_create_obj_status);
-      set_req_state_err(s, ret);
+      op_ret = get_success_retcode(
+	s->cct->_conf->rgw_s3_success_create_obj_status);
+      set_req_state_err(s, op_ret);
     }
     dump_etag(s, etag.c_str());
     dump_content_length(s, 0);
@@ -1144,6 +1245,21 @@ int RGWPostObj_ObjStore_S3::get_params()
 
     attrs[attr_name] = attr_bl;
   }
+  // TODO: refactor this and the above loop to share code
+  piter = parts.find(RGW_AMZ_WEBSITE_REDIRECT_LOCATION);
+  if (piter != parts.end()) {
+    string n = piter->first;
+    string attr_name = RGW_ATTR_PREFIX;
+    attr_name.append(n);
+    /* need to null terminate it */
+    bufferlist& data = piter->second.data;
+    string str = string(data.c_str(), data.length());
+
+    bufferlist attr_bl;
+    attr_bl.append(str.c_str(), str.size() + 1);
+
+    attrs[attr_name] = attr_bl;
+  }
 
   int r = get_policy();
   if (r < 0)
@@ -1177,8 +1293,8 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
     RGWUserInfo user_info;
 
-    ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
-    if (ret < 0) {
+    op_ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
+    if (op_ret < 0) {
       // Try keystone authentication as well
       int keystone_result = -EINVAL;
       if (!store->ctx()->_conf->rgw_s3_auth_use_keystone ||
@@ -1346,7 +1462,7 @@ int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
 
 void RGWPostObj_ObjStore_S3::send_response()
 {
-  if (ret == 0 && parts.count("success_action_redirect")) {
+  if (op_ret == 0 && parts.count("success_action_redirect")) {
     string redirect;
 
     part_str("success_action_redirect", &redirect);
@@ -1390,12 +1506,12 @@ void RGWPostObj_ObjStore_S3::send_response()
 
     int r = check_utf8(redirect.c_str(), redirect.size());
     if (r < 0) {
-      ret = r;
+      op_ret = r;
       goto done;
     }
     dump_redirect(s, redirect);
-    ret = STATUS_REDIRECT;
-  } else if (ret == 0 && parts.count("success_action_status")) {
+    op_ret = STATUS_REDIRECT;
+  } else if (op_ret == 0 && parts.count("success_action_status")) {
     string status_string;
     uint32_t status_int;
 
@@ -1403,7 +1519,7 @@ void RGWPostObj_ObjStore_S3::send_response()
 
     int r = stringtoul(status_string, &status_int);
     if (r < 0) {
-      ret = r;
+      op_ret = r;
       goto done;
     }
 
@@ -1411,18 +1527,18 @@ void RGWPostObj_ObjStore_S3::send_response()
       case 200:
 	break;
       case 201:
-	ret = STATUS_CREATED;
+	op_ret = STATUS_CREATED;
 	break;
       default:
-	ret = STATUS_NO_CONTENT;
+	op_ret = STATUS_NO_CONTENT;
 	break;
     }
-  } else if (!ret) {
-    ret = STATUS_NO_CONTENT;
+  } else if (! op_ret) {
+    op_ret = STATUS_NO_CONTENT;
   }
 
 done:
-  if (ret == STATUS_CREATED) {
+  if (op_ret == STATUS_CREATED) {
     s->formatter->open_object_section("PostResponse");
     if (g_conf->rgw_dns_name.length())
       s->formatter->dump_format("Location", "%s/%s", s->info.script_uri.c_str(), s->object.name.c_str());
@@ -1433,13 +1549,13 @@ done:
     s->formatter->close_section();
   }
   s->err.message = err_msg;
-  set_req_state_err(s, ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
-  if (ret >= 0) {
+  if (op_ret >= 0) {
     dump_content_length(s, s->formatter->get_len());
   }
   end_header(s, this);
-  if (ret != STATUS_CREATED)
+  if (op_ret != STATUS_CREATED)
     return;
 
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -1448,7 +1564,7 @@ done:
 
 void RGWDeleteObj_ObjStore_S3::send_response()
 {
-  int r = ret;
+  int r = op_ret;
   if (r == -ENOENT)
     r = 0;
   if (!r)
@@ -1539,13 +1655,13 @@ int RGWCopyObj_ObjStore_S3::get_params()
 
 void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
 {
-  if (!sent_header) {
-    if (ret)
-    set_req_state_err(s, ret);
+  if (! sent_header) {
+    if (op_ret)
+    set_req_state_err(s, op_ret);
     dump_errno(s);
 
     end_header(s, this, "application/xml");
-    if (ret == 0) {
+    if (op_ret == 0) {
       s->formatter->open_object_section("CopyObjectResult");
     }
     sent_header = true;
@@ -1563,7 +1679,7 @@ void RGWCopyObj_ObjStore_S3::send_response()
   if (!sent_header)
     send_partial_response(0);
 
-  if (ret == 0) {
+  if (op_ret == 0) {
     dump_time(s, "LastModified", &mtime);
     if (!etag.empty()) {
       s->formatter->dump_string("ETag", etag);
@@ -1575,8 +1691,8 @@ void RGWCopyObj_ObjStore_S3::send_response()
 
 void RGWGetACLs_ObjStore_S3::send_response()
 {
-  if (ret)
-    set_req_state_err(s, ret);
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s, this, "application/xml");
   dump_start(s);
@@ -1605,8 +1721,8 @@ int RGWPutACLs_ObjStore_S3::get_policy_from_state(RGWRados *store, struct req_st
 
 void RGWPutACLs_ObjStore_S3::send_response()
 {
-  if (ret)
-    set_req_state_err(s, ret);
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s, this, "application/xml");
   dump_start(s);
@@ -1614,16 +1730,16 @@ void RGWPutACLs_ObjStore_S3::send_response()
 
 void RGWGetCORS_ObjStore_S3::send_response()
 {
-  if (ret) {
-    if (ret == -ENOENT) 
+  if (op_ret) {
+    if (op_ret == -ENOENT)
       set_req_state_err(s, ERR_NOT_FOUND);
-    else 
-      set_req_state_err(s, ret);
+    else
+      set_req_state_err(s, op_ret);
   }
   dump_errno(s);
   end_header(s, NULL, "application/xml");
   dump_start(s);
-  if (!ret) {
+  if (! op_ret) {
     string cors;
     RGWCORSConfiguration_S3 *s3cors = static_cast<RGWCORSConfiguration_S3 *>(&bucket_cors);
     stringstream ss;
@@ -1693,8 +1809,8 @@ done_err:
 
 void RGWPutCORS_ObjStore_S3::send_response()
 {
-  if (ret)
-    set_req_state_err(s, ret);
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s, NULL, "application/xml");
   dump_start(s);
@@ -1702,7 +1818,7 @@ void RGWPutCORS_ObjStore_S3::send_response()
 
 void RGWDeleteCORS_ObjStore_S3::send_response()
 {
-  int r = ret;
+  int r = op_ret;
   if (!r || r == -ENOENT)
     r = STATUS_NO_CONTENT;
 
@@ -1718,10 +1834,10 @@ void RGWOptionsCORS_ObjStore_S3::send_response()
   /*EACCES means, there is no CORS registered yet for the bucket
    *ENOENT means, there is no match of the Origin in the list of CORSRule
    */
-  if (ret == -ENOENT)
-    ret = -EACCES;
-  if (ret < 0) {
-    set_req_state_err(s, ret);
+  if (op_ret == -ENOENT)
+    op_ret = -EACCES;
+  if (op_ret < 0) {
+    set_req_state_err(s, op_ret);
     dump_errno(s);
     end_header(s, NULL);
     return;
@@ -1814,8 +1930,8 @@ done:
 
 void RGWSetRequestPayment_ObjStore_S3::send_response()
 {
-  if (ret)
-    set_req_state_err(s, ret);
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 }
@@ -1823,9 +1939,9 @@ void RGWSetRequestPayment_ObjStore_S3::send_response()
 int RGWInitMultipart_ObjStore_S3::get_params()
 {
   RGWAccessControlPolicy_S3 s3policy(s->cct);
-  ret = create_s3_policy(s, store, s3policy, s->owner);
-  if (ret < 0)
-    return ret;
+  op_ret = create_s3_policy(s, store, s3policy, s->owner);
+  if (op_ret < 0)
+    return op_ret;
 
   policy = s3policy;
 
@@ -1834,11 +1950,11 @@ int RGWInitMultipart_ObjStore_S3::get_params()
 
 void RGWInitMultipart_ObjStore_S3::send_response()
 {
-  if (ret)
-    set_req_state_err(s, ret);
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s, this, "application/xml");
-  if (ret == 0) { 
+  if (op_ret == 0) {
     dump_start(s);
     s->formatter->open_object_section_in_ns("InitiateMultipartUploadResult",
 		  "http://s3.amazonaws.com/doc/2006-03-01/");
@@ -1854,11 +1970,11 @@ void RGWInitMultipart_ObjStore_S3::send_response()
 
 void RGWCompleteMultipart_ObjStore_S3::send_response()
 {
-  if (ret)
-    set_req_state_err(s, ret);
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s, this, "application/xml");
-  if (ret == 0) { 
+  if (op_ret == 0) { 
     dump_start(s);
     s->formatter->open_object_section_in_ns("CompleteMultipartUploadResult",
 			  "http://s3.amazonaws.com/doc/2006-03-01/");
@@ -1887,7 +2003,7 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
 
 void RGWAbortMultipart_ObjStore_S3::send_response()
 {
-  int r = ret;
+  int r = op_ret;
   if (!r)
     r = STATUS_NO_CONTENT;
 
@@ -1898,12 +2014,12 @@ void RGWAbortMultipart_ObjStore_S3::send_response()
 
 void RGWListMultipart_ObjStore_S3::send_response()
 {
-  if (ret)
-    set_req_state_err(s, ret);
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s, this, "application/xml");
 
-  if (ret == 0) { 
+  if (op_ret == 0) {
     dump_start(s);
     s->formatter->open_object_section_in_ns("ListPartsResult",
 		    "http://s3.amazonaws.com/doc/2006-03-01/");
@@ -1956,13 +2072,13 @@ void RGWListMultipart_ObjStore_S3::send_response()
 
 void RGWListBucketMultiparts_ObjStore_S3::send_response()
 {
-  if (ret < 0)
-    set_req_state_err(s, ret);
+  if (op_ret < 0)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
 
   end_header(s, this, "application/xml");
   dump_start(s);
-  if (ret < 0)
+  if (op_ret < 0)
     return;
 
   s->formatter->open_object_section("ListMultipartUploadsResult");
@@ -1988,7 +2104,7 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
     s->formatter->dump_string("Delimiter", delimiter);
   s->formatter->dump_string("IsTruncated", (is_truncated ? "true" : "false"));
 
-  if (ret >= 0) {
+  if (op_ret >= 0) {
     vector<RGWMultipartUploadEntry>::iterator iter;
     for (iter = uploads.begin(); iter != uploads.end(); ++iter) {
       RGWMPObj& mp = iter->mp;
@@ -2017,9 +2133,9 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
 
 void RGWDeleteMultiObj_ObjStore_S3::send_status()
 {
-  if (!status_dumped) {
-    if (ret < 0)
-      set_req_state_err(s, ret);
+  if (! status_dumped) {
+    if (op_ret < 0)
+      set_req_state_err(s, op_ret);
     dump_errno(s);
     status_dumped = true;
   }
@@ -2044,7 +2160,7 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key, bool
                                                           const string& marker_version_id, int ret)
 {
   if (!key.empty()) {
-    if (ret == 0 && !quiet) {
+    if (op_ret == 0 && !quiet) {
       s->formatter->open_object_section("Deleted");
       s->formatter->dump_string("Key", key.name);
       if (!key.instance.empty()) {
@@ -2055,13 +2171,13 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key, bool
         s->formatter->dump_string("DeleteMarkerVersionId", marker_version_id);
       }
       s->formatter->close_section();
-    } else if (ret < 0) {
+    } else if (op_ret < 0) {
       struct rgw_http_errors r;
       int err_no;
 
       s->formatter->open_object_section("Error");
 
-      err_no = -ret;
+      err_no = -op_ret;
       rgw_get_errno_s3(&r, err_no);
 
       s->formatter->dump_string("Key", key.name);
@@ -2094,6 +2210,7 @@ RGWOp *RGWHandler_ObjStore_Service_S3::op_head()
 
 RGWOp *RGWHandler_ObjStore_Bucket_S3::get_obj_op(bool get_data)
 {
+  // Non-website mode
   if (get_data)
     return new RGWListBucket_ObjStore_S3;
   else
@@ -2110,6 +2227,13 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
 
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWGetBucketVersioning_ObjStore_S3;
+
+  if (s->info.args.sub_resource_exists("website")) {
+    if (!s->cct->_conf->rgw_enable_static_website) {
+      return NULL;
+    }
+    return new RGWGetBucketWebsite_ObjStore_S3;
+  }
 
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
@@ -2139,6 +2263,12 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
     return NULL;
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWSetBucketVersioning_ObjStore_S3;
+  if (s->info.args.sub_resource_exists("website")) {
+    if (!s->cct->_conf->rgw_enable_static_website) {
+      return NULL;
+    }
+    return new RGWSetBucketWebsite_ObjStore_S3;
+  }
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
   } else if (is_cors_op()) {
@@ -2154,6 +2284,14 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_delete()
   if (is_cors_op()) {
     return new RGWDeleteCORS_ObjStore_S3;
   }
+
+  if (s->info.args.sub_resource_exists("website")) {
+    if (!s->cct->_conf->rgw_enable_static_website) {
+      return NULL;
+    }
+    return new RGWDeleteBucketWebsite_ObjStore_S3;
+  }
+
   return new RGWDeleteBucket_ObjStore_S3;
 }
 
@@ -2206,7 +2344,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_put()
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
   }
-  if (s->src_bucket_name.empty())
+  if (s->init_state.src_bucket.empty())
     return new RGWPutObj_ObjStore_S3;
   else
     return new RGWCopyObj_ObjStore_S3;
@@ -2286,12 +2424,9 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_fo
    * the bucket (and its tenant) from DNS and Host: header (HTTP_HOST)
    * into req_status.bucket_name directly.
    */
-  if (s->bucket_name.empty()) {
-    rgw_parse_url_bucket(first, s->bucket_tenant, s->bucket_name);
-    if (s->bucket_tenant.empty())
-      s->bucket_tenant = s->user.user_id.tenant;
-
-    ldout(s->cct, 20) << "s->user.user_id=" << s->user.user_id << " s->bucket_tenant=" << s->bucket_tenant << " s->bucket_name=" << s->bucket_name << dendl;
+  if (s->init_state.url_bucket.empty()) {
+    // Save bucket to tide us over until token is parsed.
+    s->init_state.url_bucket = first;
 
     if (pos >= 0) {
       string encoded_obj_str = req.substr(pos+1);
@@ -2299,6 +2434,39 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_fo
     }
   } else {
     s->object = rgw_obj_key(req_name, s->info.args.get("versionId"));
+  }
+  return 0;
+}
+
+int RGWHandler_ObjStore_S3::postauth_init()
+{
+  struct req_init_state *t = &s->init_state;
+  bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
+
+  rgw_parse_url_bucket(t->url_bucket, s->user.user_id.tenant, s->bucket_tenant, s->bucket_name);
+
+  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>"))
+           << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
+
+  int ret;
+  ret = validate_tenant_name(s->bucket_tenant);
+  if (ret)
+    return ret;
+  ret = validate_bucket_name(s->bucket_name, relaxed_names);
+  if (ret)
+    return ret;
+  ret = validate_object_name(s->object.name);
+  if (ret)
+    return ret;
+
+  if (!t->src_bucket.empty()) {
+    rgw_parse_url_bucket(t->src_bucket, s->user.user_id.tenant, s->src_tenant_name, s->src_bucket_name);
+    ret = validate_tenant_name(s->src_tenant_name);
+    if (ret)
+      return ret;
+    ret = validate_bucket_name(s->src_bucket_name, relaxed_names);
+    if (ret)
+      return ret;
   }
   return 0;
 }
@@ -2363,20 +2531,9 @@ int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket, bool rela
 
 int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
 {
-  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>"))
-           << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
-
   int ret;
-  ret = validate_tenant_name(s->bucket_tenant);
-  if (ret)
-    return ret;
-  bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
-  ret = validate_bucket_name(s->bucket_name, relaxed_names);
-  if (ret)
-    return ret;
-  ret = validate_object_name(s->object.name);
-  if (ret)
-    return ret;
+
+  s->dialect = "s3";
 
   const char *cacl = s->info.env->get("HTTP_X_AMZ_ACL");
   if (cacl)
@@ -2386,18 +2543,12 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
 
   const char *copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
   if (copy_source) {
-    string src_bucket_str;
-    ret = RGWCopyObj::parse_copy_location(copy_source, src_bucket_str, s->src_object);
+    ret = RGWCopyObj::parse_copy_location(copy_source, s->init_state.src_bucket, s->src_object);
     if (!ret) {
       ldout(s->cct, 0) << "failed to parse copy location" << dendl;
       return -EINVAL; // XXX why not -ERR_INVALID_BUCKET_NAME or -ERR_BAD_URL?
     }
-    rgw_parse_url_bucket(src_bucket_str, s->src_tenant_name, s->src_bucket_name);
-    if (s->src_tenant_name.empty())
-      s->src_tenant_name = s->user.user_id.tenant;
   }
-
-  s->dialect = "s3";
 
   return RGWHandler_ObjStore::init(store, s, cio);
 }
@@ -2413,8 +2564,16 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(const string& auth_id, 
     keystone_url.append("/");
   keystone_url.append("v2.0/s3tokens");
 
+  /* get authentication token for Keystone. */
+  string admin_token_id;
+  int r = RGWSwift::get_keystone_admin_token(cct, admin_token_id);
+  if (r < 0) {
+    ldout(cct, 2) << "s3 keystone: cannot get token for keystone access" << dendl;
+    return r;
+  }
+
   /* set required headers for keystone request */
-  append_header("X-Auth-Token", cct->_conf->rgw_keystone_admin_token);
+  append_header("X-Auth-Token", admin_token_id);
   append_header("Content-Type", "application/json");
 
   /* encode token */
@@ -2565,10 +2724,6 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
         }
 
         s->perm_mask = RGW_PERM_FULL_CONTROL;
-
-        if (s->bucket_tenant.empty()) {
-          s->bucket_tenant = s->user.user_id.tenant;
-        }
       }
     }
   }
@@ -2584,10 +2739,6 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     if (rgw_get_user_info_by_access_key(store, auth_id, s->user) < 0) {
       dout(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << dendl;
       return -ERR_INVALID_ACCESS_KEY;
-    }
-
-    if (s->bucket_tenant.empty()) {
-      s->bucket_tenant = s->user.user_id.tenant;
     }
 
     /* now verify signature */
@@ -2662,7 +2813,6 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
   s->owner.set_id(s->user.user_id);
   s->owner.set_name(s->user.display_name);
 
-
   return  0;
 }
 
@@ -2677,15 +2827,185 @@ int RGWHandler_Auth_S3::init(RGWRados *store, struct req_state *state, RGWClient
 
 RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
 {
-  int ret = RGWHandler_ObjStore_S3::init_from_header(s, RGW_FORMAT_XML, false);
+  bool is_s3website = enable_s3website && (s->prot_flags & RGW_REST_WEBSITE);
+  int ret = RGWHandler_ObjStore_S3::init_from_header(s, is_s3website ? RGW_FORMAT_HTML : RGW_FORMAT_XML, false);
   if (ret < 0)
     return NULL;
 
-  if (s->bucket_name.empty())
-    return new RGWHandler_ObjStore_Service_S3;
+  RGWHandler* handler;
+  // TODO: Make this more readable
+  if (is_s3website) {
+    if (s->init_state.url_bucket.empty()) {
+      handler = new RGWHandler_ObjStore_Service_S3Website;
+    } else if (s->object.empty()) {
+      handler = new RGWHandler_ObjStore_Bucket_S3Website;
+    } else {
+      handler = new RGWHandler_ObjStore_Obj_S3Website;
+    }
+  } else {
+    if (s->init_state.url_bucket.empty()) {
+      handler = new RGWHandler_ObjStore_Service_S3;
+    } else if (s->object.empty()) {
+      handler = new RGWHandler_ObjStore_Bucket_S3;
+    } else {
+      handler = new RGWHandler_ObjStore_Obj_S3;
+    }
+  }
 
-  if (s->object.empty())
-    return new RGWHandler_ObjStore_Bucket_S3;
+  ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name() << dendl;
+  return handler;
+}
 
-  return new RGWHandler_ObjStore_Obj_S3;
+int RGWHandler_ObjStore_S3Website::retarget(RGWOp *op, RGWOp **new_op) {
+  *new_op = op;
+  ldout(s->cct, 10) << __func__ << "Starting retarget" << dendl;
+
+  if (!(s->prot_flags & RGW_REST_WEBSITE))
+    return 0;
+
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  int ret = store->get_bucket_info(obj_ctx, s->bucket_tenant, s->bucket_name, s->bucket_info, NULL, &s->bucket_attrs);
+  if (ret < 0) {
+      // TODO-FUTURE: if the bucket does not exist, maybe expose it here?
+      return -ERR_NO_SUCH_BUCKET;
+  }
+  if (!s->bucket_info.has_website) {
+      // TODO-FUTURE: if the bucket has no WebsiteConfig, expose it here
+      return -ERR_NO_SUCH_WEBSITE_CONFIGURATION;
+  }
+
+  rgw_obj_key new_obj;
+  s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name);
+  ldout(s->cct, 10) << "retarget get_effective_key " << s->object << " -> " << new_obj << dendl;
+
+  RGWBWRoutingRule rrule;
+  bool should_redirect = s->bucket_info.website_conf.should_redirect(new_obj.name, 0, &rrule);
+
+  if (should_redirect) {
+    const string& hostname = s->info.env->get("HTTP_HOST", "");
+    const string& protocol = (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
+    int redirect_code = 0;
+    rrule.apply_rule(protocol, hostname, s->object.name, &s->redirect, &redirect_code);
+    // APply a custom HTTP response code
+    if (redirect_code > 0)
+      s->err.http_ret = redirect_code; // Apply a custom HTTP response code
+    ldout(s->cct, 10) << "retarget redirect code=" << redirect_code << " proto+host:" << protocol << "://" << hostname << " -> " << s->redirect << dendl;
+    return -ERR_WEBSITE_REDIRECT;
+  }
+
+  /*
+   * FIXME: if s->object != new_obj, drop op and create a new op to handle operation. Or
+   * remove this comment if it's not applicable anymore
+   */
+
+  s->object = new_obj;
+
+  return 0;
+}
+
+RGWOp *RGWHandler_ObjStore_S3Website::op_get()
+{
+  return get_obj_op(true);
+}
+
+RGWOp *RGWHandler_ObjStore_S3Website::op_head()
+{
+  return get_obj_op(false);
+}
+
+int RGWHandler_ObjStore_S3Website::get_errordoc(const string errordoc_key, string *error_content) {
+    ldout(s->cct, 20) << "TODO Serve Custom error page here if bucket has <Error>" << dendl;
+    *error_content = errordoc_key;
+    // 1. Check if errordoc exists
+    // 2. Check if errordoc is public
+    // 3. Fetch errordoc content
+    /*
+     * FIXME maybe:  need to make sure all of the fields for conditional requests are cleared
+     */
+    RGWGetObj_ObjStore_S3Website *getop = new RGWGetObj_ObjStore_S3Website(true);
+    getop->set_get_data(true);
+    getop->init(store, s, this);
+
+    RGWGetObj_CB cb(getop);
+    rgw_obj obj(s->bucket, errordoc_key);
+    RGWObjectCtx rctx(store);
+    //RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+    RGWRados::Object op_target(store, s->bucket_info, rctx, obj);
+    RGWRados::Object::Read read_op(&op_target);
+
+    int ret;
+    int64_t ofs = 0; 
+    int64_t end = -1;
+    ret = read_op.prepare(&ofs, &end);
+    if (ret < 0) {
+      goto done;
+    }
+
+    ret = read_op.iterate(ofs, end, &cb); // FIXME: need to know the final size?
+done:
+    delete getop;
+    return ret;
+}
+  
+int RGWHandler_ObjStore_S3Website::error_handler(int err_no, string *error_content) {
+  const struct rgw_http_errors *r;
+  int http_error_code = -1;
+  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
+  if (r) {
+    http_error_code = r->http_ret;
+  }
+
+  RGWBWRoutingRule rrule;
+  bool should_redirect = s->bucket_info.website_conf.should_redirect(s->object.name, http_error_code, &rrule);
+
+  if (should_redirect) {
+    const string& hostname = s->info.env->get("HTTP_HOST", "");
+    const string& protocol = (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
+    int redirect_code = 0;
+    rrule.apply_rule(protocol, hostname, s->object.name, &s->redirect, &redirect_code);
+    // APply a custom HTTP response code
+    if (redirect_code > 0)
+      s->err.http_ret = redirect_code; // Apply a custom HTTP response code
+    ldout(s->cct, 10) << "error handler redirect code=" << redirect_code << " proto+host:" << protocol << "://" << hostname << " -> " << s->redirect << dendl;
+    return -ERR_WEBSITE_REDIRECT;
+  } else if (!s->bucket_info.website_conf.error_doc.empty()) {
+    RGWHandler_ObjStore_S3Website::get_errordoc(s->bucket_info.website_conf.error_doc, error_content);
+  } else {
+    ldout(s->cct, 20) << "No special error handling today!" << dendl;
+  }
+
+  return err_no;
+}
+
+RGWOp *RGWHandler_ObjStore_Obj_S3Website::get_obj_op(bool get_data)
+{
+  /** If we are in website mode, then it is explicitly impossible to run GET or
+   * HEAD on the actual directory. We must convert the request to run on the
+   * suffix object instead!
+   */
+  RGWGetObj_ObjStore_S3Website *op = new RGWGetObj_ObjStore_S3Website;
+  op->set_get_data(get_data);
+  return op;
+}
+
+RGWOp *RGWHandler_ObjStore_Bucket_S3Website::get_obj_op(bool get_data)
+{
+  /** If we are in website mode, then it is explicitly impossible to run GET or
+   * HEAD on the actual directory. We must convert the request to run on the
+   * suffix object instead!
+   */
+  RGWGetObj_ObjStore_S3Website *op = new RGWGetObj_ObjStore_S3Website;
+  op->set_get_data(get_data);
+  return op;
+}
+
+RGWOp *RGWHandler_ObjStore_Service_S3Website::get_obj_op(bool get_data)
+{
+  /** If we are in website mode, then it is explicitly impossible to run GET or
+   * HEAD on the actual directory. We must convert the request to run on the
+   * suffix object instead!
+   */
+  RGWGetObj_ObjStore_S3Website *op = new RGWGetObj_ObjStore_S3Website;
+  op->set_get_data(get_data);
+  return op;
 }

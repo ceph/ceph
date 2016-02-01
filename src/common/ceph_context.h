@@ -67,10 +67,7 @@ public:
     nref.inc();
     return this;
   }
-  void put() {
-    if (nref.dec() == 0)
-      delete this;
-  }
+  void put();
 
   md_config_t *_conf;
   ceph::log::Log *_log;

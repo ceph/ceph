@@ -34,6 +34,7 @@ public:
     const std::set<string> &key,
     std::map<string, bufferlist> *out
     );
+  using KeyValueDB::get;
 
   int get_keys(
     const string &prefix,

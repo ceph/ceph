@@ -121,6 +121,22 @@ string ceph_osd_op_flag_string(unsigned flags)
   return string("-");
 }
 
+const char *num_char_map = "0123456789abcdef";
+template<typename T, const int base>
+static inline
+char* ritoa(T u, char *buf) {
+  if (u < base) {
+    *--buf = num_char_map[u];
+    return buf;
+  }
+ 
+  while (u) {
+    *--buf = num_char_map[u % base]; 
+    u /= base;
+  }
+  return buf;
+}
+
 void pg_shard_t::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
@@ -441,11 +457,24 @@ bool spg_t::parse(const char *s)
   return true;
 }
 
+char *spg_t::calc_name(char *buf, const char *suffix_backwords) const
+{
+  while (*suffix_backwords)
+    *--buf = *suffix_backwords++;
+
+  if (!is_no_shard()) {
+    buf = ritoa<int8_t, 10>(shard.id, buf);
+    *--buf = 's';
+  }
+
+  return pgid.calc_name(buf, "");
+}
+
 ostream& operator<<(ostream& out, const spg_t &pg)
 {
-  out << pg.pgid;
-  if (!pg.is_no_shard())
-    out << "s" << (unsigned)pg.shard;
+  char buf[spg_t::calc_name_buf_size];
+  buf[spg_t::calc_name_buf_size - 1] = '\0';
+  out << pg.calc_name(buf + spg_t::calc_name_buf_size - 1, "");
   return out;
 }
 
@@ -561,15 +590,26 @@ void pg_t::generate_test_instances(list<pg_t*>& o)
   o.push_back(new pg_t(131223, 4, 23));
 }
 
+char *pg_t::calc_name(char *buf, const char *suffix_backwords) const
+{
+  while (*suffix_backwords)
+    *--buf = *suffix_backwords++;
+
+  if (m_preferred >= 0)
+    *--buf ='p';
+
+  buf = ritoa<uint32_t, 16>(m_seed, buf);
+
+  *--buf = '.';
+
+  return  ritoa<uint64_t, 10>(m_pool, buf);
+}
+
 ostream& operator<<(ostream& out, const pg_t &pg)
 {
-  out << pg.pool() << '.';
-  out << hex << pg.ps() << dec;
-
-  if (pg.preferred() >= 0)
-    out << 'p' << pg.preferred();
-
-  //out << "=" << hex << (__uint64_t)pg << dec;
+  char buf[pg_t::calc_name_buf_size];
+  buf[pg_t::calc_name_buf_size - 1] = '\0';
+  out << pg.calc_name(buf + pg_t::calc_name_buf_size - 1, "");
   return out;
 }
 
@@ -580,18 +620,16 @@ void coll_t::calc_str()
 {
   switch (type) {
   case TYPE_META:
-    _str = "meta";
+    strcpy(_str_buff, "meta");
+    _str = _str_buff;
     break;
   case TYPE_PG:
-    _str = stringify(pgid) + "_head";
+    _str_buff[spg_t::calc_name_buf_size - 1] = '\0';
+    _str = pgid.calc_name(_str_buff + spg_t::calc_name_buf_size - 1, "daeh_");
     break;
   case TYPE_PG_TEMP:
-    _str = stringify(pgid) + "_TEMP";
-    break;
-  case TYPE_PG_REMOVAL:
-    _str = string("FORREMOVAL_") +
-      stringify(removal_seq) + "_" +
-      stringify(pgid);
+    _str_buff[spg_t::calc_name_buf_size - 1] = '\0';
+    _str = pgid.calc_name(_str_buff + spg_t::calc_name_buf_size - 1, "PMET_");
     break;
   default:
     assert(0 == "unknown collection type");
@@ -624,29 +662,12 @@ bool coll_t::parse(const std::string& s)
     assert(s == _str);
     return true;
   }
-  if (s.find("FORREMOVAL_") == 0) {
-    type = TYPE_PG_REMOVAL;
-    stringstream ss(s.substr(11));
-    ss >> removal_seq;
-    char sep;
-    ss >> sep;
-    assert(sep == '_');
-    string pgid_str;
-    ss >> pgid_str;
-    if (!pgid.parse(pgid_str.c_str())) {
-      assert(0);
-      return false;
-    }
-    calc_str();
-    assert(s == _str);
-    return true;
-  }
   return false;
 }
 
 void coll_t::encode(bufferlist& bl) const
 {
-  if (is_removal() || is_temp()) {
+  if (is_temp()) {
     // can't express this as v2...
     __u8 struct_v = 3;
     ::encode(struct_v, bl);
@@ -730,8 +751,6 @@ void coll_t::generate_test_instances(list<coll_t*>& o)
   o.push_back(new coll_t(spg_t(pg_t(3, 2), shard_id_t(12))));
   o.push_back(new coll_t(o.back()->get_temp()));
   o.push_back(new coll_t());
-  o.back()->parse("FORREMOVAL_0_0.1");
-  o.back()->parse("FORREMOVAL_123_2.2a3f");
 }
 
 // ---
@@ -5314,7 +5333,7 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
 
 void ScrubMap::object::encode(bufferlist& bl) const
 {
-  ENCODE_START(6, 2, bl);
+  ENCODE_START(7, 2, bl);
   ::encode(size, bl);
   ::encode(negative, bl);
   ::encode(attrs, bl);
@@ -5325,12 +5344,13 @@ void ScrubMap::object::encode(bufferlist& bl) const
   ::encode(omap_digest, bl);
   ::encode(omap_digest_present, bl);
   ::encode(read_error, bl);
+  ::encode(stat_error, bl);
   ENCODE_FINISH(bl);
 }
 
 void ScrubMap::object::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 2, 2, bl);
   ::decode(size, bl);
   bool tmp;
   ::decode(tmp, bl);
@@ -5357,6 +5377,10 @@ void ScrubMap::object::decode(bufferlist::iterator& bl)
   if (struct_v >= 6) {
     ::decode(tmp, bl);
     read_error = tmp;
+  }
+  if (struct_v >= 7) {
+    ::decode(tmp, bl);
+    stat_error = tmp;
   }
   DECODE_FINISH(bl);
 }

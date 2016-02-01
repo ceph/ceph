@@ -355,9 +355,13 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
 
   time_t mtime = 0;
 
-  JSONDecoder::decode_json("key", metadata_key, &parser);
-  JSONDecoder::decode_json("ver", *objv, &parser);
-  JSONDecoder::decode_json("mtime", mtime, &parser);
+  try {
+    JSONDecoder::decode_json("key", metadata_key, &parser);
+    JSONDecoder::decode_json("ver", *objv, &parser);
+    JSONDecoder::decode_json("mtime", mtime, &parser);
+  } catch (JSONDecoder::err& e) {
+    return -EINVAL;
+  }
 
   JSONObj *jo = parser.find_obj("data");
   if (!jo) {

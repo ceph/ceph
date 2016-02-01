@@ -21,7 +21,7 @@
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
 //#include "librbd/Journal.h" // XXXMG: for librbd::Journal::reset()
-#include "librbd/JournalTypes.h"
+#include "librbd/journal/Entries.h"
 
 namespace rbd {
 namespace action {

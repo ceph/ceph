@@ -756,10 +756,18 @@ public:
       uint64_t prev_length = found && old_value.has_contents() ?
 	old_value.most_recent_gen()->get_length(old_value.most_recent()) :
 	0;
+      bool requires;
+      int r = context->io_ctx.pool_requires_alignment2(&requires);
+      assert(r == 0);
+      uint64_t alignment = 0;
+      if (requires) {
+        r = context->io_ctx.pool_required_alignment2(&alignment);
+        assert(r == 0);
+        assert(alignment != 0);
+      }
       cont_gen = new AppendGenerator(
 	prev_length,
-	(context->io_ctx.pool_requires_alignment() ?
-	 context->io_ctx.pool_required_alignment() : 0),
+	alignment,
 	context->min_stride_size,
 	context->max_stride_size,
 	3);

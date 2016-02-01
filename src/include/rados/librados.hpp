@@ -37,22 +37,8 @@ namespace librados
   typedef uint64_t auid_t;
   typedef void *config_t;
 
-  struct cluster_stat_t {
-    uint64_t kb, kb_used, kb_avail;
-    uint64_t num_objects;
-  };
-
-  struct pool_stat_t {
-    uint64_t num_bytes;    // in bytes
-    uint64_t num_kb;       // in KB
-    uint64_t num_objects;
-    uint64_t num_object_clones;
-    uint64_t num_object_copies;  // num_objects * num_replicas
-    uint64_t num_objects_missing_on_primary;
-    uint64_t num_objects_unfound;
-    uint64_t num_objects_degraded;
-    uint64_t num_rd, num_rd_kb, num_wr, num_wr_kb;
-  };
+  typedef struct rados_cluster_stat_t cluster_stat_t;
+  typedef struct rados_pool_stat_t pool_stat_t;
 
   typedef struct {
     std::string client;
@@ -1162,6 +1148,10 @@ namespace librados
 
     int mon_command(std::string cmd, const bufferlist& inbl,
 		    bufferlist *outbl, std::string *outs);
+    int osd_command(int osdid, std::string cmd, const bufferlist& inbl,
+                    bufferlist *outbl, std::string *outs);
+    int pg_command(const char *pgstr, std::string cmd, const bufferlist& inbl,
+                   bufferlist *outbl, std::string *outs);
 
     int ioctx_create(const char *name, IoCtx &pioctx);
     int ioctx_create2(int64_t pool_id, IoCtx &pioctx);

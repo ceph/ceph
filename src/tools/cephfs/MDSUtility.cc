@@ -22,7 +22,7 @@ MDSUtility::MDSUtility() :
   objecter(NULL),
   lock("MDSUtility::lock"),
   timer(g_ceph_context, lock),
-  finisher(g_ceph_context, "MDSUtility"),
+  finisher(g_ceph_context, "MDSUtility", "fn_mds_utility"),
   waiting_for_mds_map(NULL)
 {
   monc = new MonClient(g_ceph_context);

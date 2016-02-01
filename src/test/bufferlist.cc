@@ -876,6 +876,17 @@ TEST(BufferListIterator, constructors) {
   }
 }
 
+TEST(BufferListIterator, empty_create_append_copy) {
+  bufferlist bl, bl2, bl3, out;
+  bl2.append("bar");
+  bl.swap(bl2);
+  bl2.append("xxx");
+  bl.append(bl2);
+  bl.rebuild();
+  bl.copy(0, 6, out);
+  ASSERT_TRUE(out.contents_equal(bl));
+}
+
 TEST(BufferListIterator, operator_equal) {
   bufferlist bl;
   bl.append("ABC", 3);
@@ -2061,8 +2072,9 @@ TEST(BufferList, hexdump) {
   std::ostringstream stream;
   bl.append("013245678901234\0006789012345678901234", 32);
   bl.hexdump(stream);
-  EXPECT_EQ("0000 : 30 31 33 32 34 35 36 37 38 39 30 31 32 33 34 00 : 013245678901234.\n"
-	    "0010 : 36 37 38 39 30 31 32 33 34 35 36 37 38 39 30 31 : 6789012345678901\n",
+  EXPECT_EQ("00000000  30 31 33 32 34 35 36 37  38 39 30 31 32 33 34 00  |013245678901234.|\n"
+	    "00000010  36 37 38 39 30 31 32 33  34 35 36 37 38 39 30 31  |6789012345678901|\n"
+	    "00000020\n",
 	    stream.str());
 }
 

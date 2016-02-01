@@ -70,6 +70,10 @@ public:
 
   bool verify_swift_token(RGWRados *store, req_state *s);
   bool going_down();
+
+  /* Static methods shared between Swift API and S3. */
+  static int get_keystone_url(CephContext *cct, std::string& url);
+  static int get_keystone_admin_token(CephContext *cct, std::string& token);
 };
 
 extern RGWSwift *rgw_swift;

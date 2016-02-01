@@ -1305,7 +1305,6 @@ class RGWWatcher : public librados::WatchCtx2 {
         watcher->reinit();
       }
   };
-  shared_ptr<C_ReinitWatch> reinit_watch;
 public:
   RGWWatcher(RGWRados *r, int i, const string& o) : rados(r), index(i), oid(o), watch_handle(0) {}
   void handle_notify(uint64_t notify_id,
@@ -1326,8 +1325,7 @@ public:
     lderr(rados->ctx()) << "RGWWatcher::handle_error cookie " << cookie
 			<< " err " << cpp_strerror(err) << dendl;
     rados->remove_watcher(index);
-    reinit_watch.reset(new C_ReinitWatch(this));
-    rados->schedule_context(reinit_watch.get());
+    rados->schedule_context(new C_ReinitWatch(this));
   }
 
   void reinit() {
@@ -8769,9 +8767,12 @@ int RGWRados::update_user_bucket_stats(const string& user_id, rgw_bucket& bucket
 }
 
 int RGWRados::cls_user_list_buckets(rgw_obj& obj,
-                                    const string& in_marker, int max_entries,
+                                    const string& in_marker,
+                                    const string& end_marker,
+                                    const int max_entries,
                                     list<cls_user_bucket_entry>& entries,
-                                    string *out_marker, bool *truncated)
+                                    string * const out_marker,
+                                    bool * const truncated)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -8783,7 +8784,7 @@ int RGWRados::cls_user_list_buckets(rgw_obj& obj,
   librados::ObjectReadOperation op;
   int rc;
 
-  cls_user_bucket_list(op, in_marker, max_entries, entries, out_marker, truncated, &rc);
+  cls_user_bucket_list(op, in_marker, end_marker, max_entries, entries, out_marker, truncated, &rc);
   bufferlist ibl;
   r = ref.ioctx.operate(ref.oid, &op, &ibl);
   if (r < 0)

@@ -30,7 +30,7 @@ void ContDesc::decode(bufferlist::iterator &bl)
   DECODE_FINISH(bl);
 }
 
-ostream &operator<<(ostream &out, const ContDesc &rhs)
+std::ostream &operator<<(std::ostream &out, const ContDesc &rhs)
 {
   return out << "(ObjNum " << rhs.objnum
 	     << " snap " << rhs.cursnap
@@ -40,7 +40,7 @@ ostream &operator<<(ostream &out, const ContDesc &rhs)
 }
 
 void AppendGenerator::get_ranges_map(
-  const ContDesc &cont, map<uint64_t, uint64_t> &out) {
+  const ContDesc &cont, std::map<uint64_t, uint64_t> &out) {
   RandWrap rand(cont.seqnum);
   uint64_t pos = off;
   uint64_t limit = off + get_append_size(cont);
@@ -54,13 +54,13 @@ void AppendGenerator::get_ranges_map(
     }
     if (alignment)
       assert(segment_length % alignment == 0);
-    out.insert(pair<uint64_t, uint64_t>(pos, segment_length));
+    out.insert(std::pair<uint64_t, uint64_t>(pos, segment_length));
     pos += segment_length;
   }
 }
 
 void VarLenGenerator::get_ranges_map(
-  const ContDesc &cont, map<uint64_t, uint64_t> &out) {
+  const ContDesc &cont, std::map<uint64_t, uint64_t> &out) {
   RandWrap rand(cont.seqnum);
   uint64_t pos = 0;
   uint64_t limit = get_length(cont);
@@ -73,7 +73,7 @@ void VarLenGenerator::get_ranges_map(
       segment_length = limit - pos;
     }
     if (include) {
-      out.insert(pair<uint64_t, uint64_t>(pos, segment_length));
+      out.insert(std::pair<uint64_t, uint64_t>(pos, segment_length));
       include = false;
     } else {
       include = true;
@@ -104,7 +104,7 @@ ObjectDesc::iterator &ObjectDesc::iterator::advance(bool init) {
   interval_set<uint64_t> ranges;
   cur_cont->first->get_ranges(cur_cont->second, ranges);
   while (!ranges.contains(pos)) {
-    stack.push_front(pair<list<pair<ceph::shared_ptr<ContentsGenerator>,
+    stack.push_front(std::pair<std::list<std::pair<ceph::shared_ptr<ContentsGenerator>,
 				    ContDesc> >::iterator,
 		     uint64_t>(cur_cont, limit));
     uint64_t length = cur_cont->first->get_length(cur_cont->second);
@@ -135,11 +135,11 @@ ObjectDesc::iterator &ObjectDesc::iterator::advance(bool init) {
   }
 
   if (!cont_iters.count(cur_cont->second)) {
-    cont_iters.insert(pair<ContDesc,ContentsGenerator::iterator>(
+    cont_iters.insert(std::pair<ContDesc,ContentsGenerator::iterator>(
 			cur_cont->second,
 			cur_cont->first->get_iterator(cur_cont->second)));
   }
-  map<ContDesc,ContentsGenerator::iterator>::iterator j = cont_iters.find(
+  std::map<ContDesc,ContentsGenerator::iterator>::iterator j = cont_iters.find(
     cur_cont->second);
   assert(j != cont_iters.end());
   j->second.seek(pos);
@@ -151,7 +151,7 @@ const ContDesc &ObjectDesc::most_recent() {
 }
 
 void ObjectDesc::update(ContentsGenerator *gen, const ContDesc &next) {
-  layers.push_front(pair<ceph::shared_ptr<ContentsGenerator>, ContDesc>(ceph::shared_ptr<ContentsGenerator>(gen), next));
+  layers.push_front(std::pair<ceph::shared_ptr<ContentsGenerator>, ContDesc>(ceph::shared_ptr<ContentsGenerator>(gen), next));
   return;
 }
 
@@ -210,9 +210,14 @@ bool ObjectDesc::check_sparse(const std::map<uint64_t, uint64_t>& extents,
   }
   uint64_t size = layers.empty() ? 0 :
     most_recent_gen()->get_length(most_recent());
-  if (pos != size) {
-    std::cout << "only read " << pos << " out of size " << size << std::endl;
-    return false;
+  while (pos < size) {
+    if (*i != '\0') {
+      std::cout << "sparse read omitted non-zero data at " << pos << std::endl;
+      return false;
+    }
+    ++i;
+    ++pos;
   }
+  assert(pos == size);
   return true;
 }

@@ -19,6 +19,9 @@ namespace object_map {
 template <typename ImageCtxT = ImageCtx>
 class LockRequest {
 public:
+  static LockRequest* create(ImageCtxT &image_ctx, Context *on_finish) {
+    return new LockRequest(image_ctx, on_finish);
+  }
   LockRequest(ImageCtxT &image_ctx, Context *on_finish);
 
   void send();

@@ -46,7 +46,9 @@ void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id)
  * with the legacy or S3 buckets.
  */
 void rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry) {
-  if (tenant_name.empty()) {
+  if (bucket_name.empty()) {
+    bucket_entry.clear();
+  } else if (tenant_name.empty()) {
     bucket_entry = bucket_name;
   } else {
     bucket_entry = tenant_name + "/" + bucket_name;
@@ -56,7 +58,9 @@ void rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_
 string rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_name) {
   string bucket_entry;
 
-  if (tenant_name.empty()) {
+  if (bucket_name.empty()) {
+    bucket_entry.clear();
+  } else if (tenant_name.empty()) {
     bucket_entry = bucket_name;
   } else {
     bucket_entry = tenant_name + "/" + bucket_name;
@@ -69,15 +73,22 @@ string rgw_make_bucket_entry_name(const string& tenant_name, const string& bucke
  * Tenants are separated from buckets in URLs by a colon in S3.
  * This function is not to be used on Swift URLs, not even for COPY arguments.
  */
-void rgw_parse_url_bucket(const string &bucket,
+void rgw_parse_url_bucket(const string &bucket, const string& auth_tenant,
                           string &tenant_name, string &bucket_name) {
+
   int pos = bucket.find(':');
   if (pos >= 0) {
+    /*
+     * N.B.: We allow ":bucket" syntax with explicit empty tenant in order
+     * to refer to the legacy tenant, in case users in new named tenants
+     * want to access old global buckets.
+     */
     tenant_name = bucket.substr(0, pos);
+    bucket_name = bucket.substr(pos + 1);
   } else {
-    tenant_name.clear();
+    tenant_name = auth_tenant;
+    bucket_name = bucket;
   }
-  bucket_name = bucket.substr(pos + 1);
 }
 
 /**
@@ -88,6 +99,7 @@ int rgw_read_user_buckets(RGWRados * store,
                           const rgw_user& user_id,
                           RGWUserBuckets& buckets,
                           const string& marker,
+                          const string& end_marker,
                           uint64_t max,
                           bool need_stats,
                           uint64_t default_amount)
@@ -111,7 +123,7 @@ int rgw_read_user_buckets(RGWRados * store,
   }
 
   do {
-    ret = store->cls_user_list_buckets(obj, m, max - total, entries, &m, &truncated);
+    ret = store->cls_user_list_buckets(obj, m, end_marker, max - total, entries, &m, &truncated);
     if (ret == -ENOENT)
       ret = 0;
 
@@ -367,7 +379,8 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id, boo
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
 
   do {
-    int ret = rgw_read_user_buckets(store, user_id, user_buckets, marker, max_entries, false);
+    int ret = rgw_read_user_buckets(store, user_id, user_buckets,
+                                    marker, string(), max_entries, false);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "failed to read user buckets: " << cpp_strerror(-ret) << dendl;
       return;
@@ -1126,7 +1139,8 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
     bool done;
 
     do {
-      ret = rgw_read_user_buckets(store, user_id, buckets, marker, max_entries, false);
+      ret = rgw_read_user_buckets(store, user_id, buckets,
+                                  marker, string(), max_entries, false);
       if (ret < 0)
         return ret;
 
@@ -1157,9 +1171,10 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
     if (store->list_buckets_init(&handle) >= 0) {
       RGWObjEnt obj;
       while (store->list_buckets_next(obj, &handle) >= 0) {
-	formatter->dump_string("bucket", obj.key.name);
         if (show_stats)
           bucket_stats(store, user_id.tenant, obj.key.name, formatter);
+        else
+          formatter->dump_string("bucket", obj.key.name);
       }
     }
 
@@ -1605,7 +1620,11 @@ public:
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
           time_t mtime, JSONObj *obj, sync_type_t sync_type) {
     RGWBucketEntryPoint be, old_be;
-    decode_json_obj(be, obj);
+    try {
+      decode_json_obj(be, obj);
+    } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+    }
 
     time_t orig_mtime;
     map<string, bufferlist> attrs;
@@ -1756,7 +1775,11 @@ public:
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
           time_t mtime, JSONObj *obj, sync_type_t sync_type) {
     RGWBucketCompleteInfo bci, old_bci;
-    decode_json_obj(bci, obj);
+    try {
+      decode_json_obj(bci, obj);
+    } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+    }
 
     time_t orig_mtime;
     RGWObjectCtx obj_ctx(store);

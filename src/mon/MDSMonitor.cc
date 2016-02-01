@@ -682,7 +682,8 @@ void MDSMonitor::on_active()
 }
 
 void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
-			    list<pair<health_status_t, string> > *detail) const
+			    list<pair<health_status_t, string> > *detail,
+			    CephContext* cct) const
 {
   mdsmap.get_health(summary, detail);
 
@@ -1567,8 +1568,21 @@ int MDSMonitor::filesystem_command(
     }
     r = 0;
   } else if (prefix == "mds setmap") {
+    string confirm;
+    if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
+	confirm != "--yes-i-really-mean-it") {
+      ss << "WARNING: this can make your filesystem inaccessible! "
+	    "Add --yes-i-really-mean-it if you are sure you wish to continue.";
+      return -EINVAL;;
+    }
+
     MDSMap map;
-    map.decode(m->get_data());
+    try {
+      map.decode(m->get_data());
+    } catch(buffer::error &e) {
+      ss << "invalid mdsmap";
+      return -EINVAL;
+    }
     epoch_t e = 0;
     int64_t epochnum;
     if (cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum))
@@ -1709,7 +1723,6 @@ int MDSMonitor::filesystem_command(
       string err;
       poolid = strict_strtol(poolname.c_str(), 10, &err);
       if (err.length()) {
-	poolid = -1;
 	ss << "pool '" << poolname << "' does not exist";
 	return -ENOENT;
       }

@@ -58,7 +58,7 @@ class EventCallback {
   virtual ~EventCallback() {}       // we want a virtual destructor!!!
 };
 
-typedef ceph::shared_ptr<EventCallback> EventCallbackRef;
+typedef EventCallback* EventCallbackRef;
 
 struct FiredFileEvent {
   int fd;
@@ -133,7 +133,7 @@ class EventCenter {
     file_lock("AsyncMessenger::file_lock"),
     time_lock("AsyncMessenger::time_lock"),
     file_events(NULL),
-    driver(NULL), time_event_next_id(0),
+    driver(NULL), time_event_next_id(1),
     notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0), already_wakeup(0) {
     last_time = time(NULL);
   }

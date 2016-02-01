@@ -19,6 +19,7 @@
 #include "common/Cond.h"
 #include "include/atomic.h"
 #include "common/ceph_context.h"
+#include "common/valgrind.h"
 
 struct RefCountedObject {
 private:
@@ -41,8 +42,13 @@ public:
   void put() {
     CephContext *local_cct = cct;
     int v = nref.dec();
-    if (v == 0)
+    if (v == 0) {
+      ANNOTATE_HAPPENS_AFTER(&nref);
+      ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&nref);
       delete this;
+    } else {
+      ANNOTATE_HAPPENS_BEFORE(&nref);
+    }
     if (local_cct)
       lsubdout(local_cct, refs, 1) << "RefCountedObject::put " << this << " "
 				   << (v + 1) << " -> " << v

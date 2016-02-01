@@ -3,7 +3,7 @@ if ENABLE_SERVER
 libkv_a_SOURCES = \
 	kv/KeyValueDB.cc \
 	kv/LevelDBStore.cc
-libkv_a_CXXFLAGS = ${AM_CXXFLAGS} -I rocksdb/include
+libkv_a_CXXFLAGS = ${AM_CXXFLAGS}
 libkv_a_LIBADD =
 
 noinst_LIBRARIES += libkv.a
@@ -18,7 +18,7 @@ if WITH_SLIBROCKSDB
 # PORTABLE=1 fixes the aarch64 build (-march=native doesn't work there)
 rocksdb/librocksdb.a:
 	cd rocksdb && EXTRA_CXXFLAGS=-fPIC PORTABLE=1 make -j$(shell nproc) static_lib
-libkv_a_CXXFLAGS +=  -I rocksdb/include -fPIC
+libkv_a_CXXFLAGS += -I rocksdb/include -fPIC
 libkv_a_SOURCES += kv/RocksDBStore.cc
 libkv_a_LIBADD += rocksdb/librocksdb.a
 noinst_HEADERS += kv/RocksDBStore.h

@@ -516,9 +516,9 @@ public:
                                         rwlock("RGWUserStatsCache::rwlock") {
     if (quota_threads) {
       buckets_sync_thread = new BucketsSyncThread(store->ctx(), this);
-      buckets_sync_thread->create();
+      buckets_sync_thread->create("rgw_buck_st_syn");
       user_sync_thread = new UserSyncThread(store->ctx(), this);
-      user_sync_thread->create();
+      user_sync_thread->create("rgw_user_st_syn");
     } else {
       buckets_sync_thread = NULL;
       user_sync_thread = NULL;

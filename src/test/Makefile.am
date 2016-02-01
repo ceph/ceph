@@ -1,5 +1,6 @@
 include test/erasure-code/Makefile.am
 include test/messenger/Makefile.am
+include test/compressor/Makefile.am
 
 if ENABLE_CLIENT
 include test/Makefile-client.am
@@ -88,7 +89,8 @@ check_SCRIPTS += \
 	test/osd/osd-markdown.sh \
 	test/mon/mon-handle-forward.sh \
 	test/libradosstriper/rados-striper.sh \
-	test/test_objectstore_memstore.sh
+	test/test_objectstore_memstore.sh \
+        test/test_pidfile.sh
 
 check_SCRIPTS += test/ceph-disk.sh
 
@@ -418,6 +420,11 @@ unittest_bit_vector_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_bit_vector_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_bit_vector
 
+unittest_interval_set_SOURCES = test/common/test_interval_set.cc
+unittest_interval_set_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_interval_set_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_TESTPROGRAMS += unittest_interval_set
+
 unittest_subprocess_SOURCES = test/test_subprocess.cc
 unittest_subprocess_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
 unittest_subprocess_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -425,7 +432,7 @@ check_PROGRAMS += unittest_subprocess
 
 unittest_async_compressor_SOURCES = test/common/test_async_compressor.cc
 unittest_async_compressor_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR)
+unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR) $(LIBCOMMON)
 check_PROGRAMS += unittest_async_compressor
 
 check_SCRIPTS += test/pybind/test_ceph_argparse.py

@@ -107,7 +107,7 @@ TEST_F(ThrottleTest, get) {
     ASSERT_FALSE(throttle.get_or_fail(throttle_max));
 
     Thread_get t(throttle, 7);
-    t.create();
+    t.create("t_throttle_1");
     usleep(delay);
     ASSERT_EQ(throttle.put(throttle_max), 0);
     t.join();
@@ -123,11 +123,11 @@ TEST_F(ThrottleTest, get) {
     ASSERT_FALSE(throttle.get_or_fail(throttle_max));
 
     Thread_get t(throttle, throttle_max);
-    t.create();
+    t.create("t_throttle_2");
     usleep(delay);
 
     Thread_get u(throttle, 1);
-    u.create();
+    u.create("u_throttle_2");
     usleep(delay);
 
     throttle.put(throttle_max / 2);
@@ -188,7 +188,7 @@ TEST_F(ThrottleTest, wait) {
     ASSERT_FALSE(throttle.get_or_fail(throttle_max));
 
     Thread_get t(throttle, throttle_max);
-    t.create();
+    t.create("t_throttle_3");
     usleep(delay);
 
     //
@@ -223,7 +223,7 @@ TEST_F(ThrottleTest, destructor) {
     ASSERT_FALSE(throttle->get(5));
 
     t = new Thread_get(*throttle, 7);
-    t->create();
+    t->create("t_throttle");
     bool blocked;
     useconds_t delay = 1;
     do {

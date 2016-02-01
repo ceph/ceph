@@ -156,6 +156,9 @@ public:
     stray_manager.eval_stray(dn);
   }
 
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set <std::string> &changed);
+
   void maybe_eval_stray(CInode *in, bool delay=false);
   bool is_readonly() { return readonly; }
   void force_readonly();
@@ -493,6 +496,7 @@ protected:
   map<inodeno_t,map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
   map<inodeno_t,int> cap_imports_dirty;
   set<inodeno_t> cap_imports_missing;
+  map<inodeno_t, list<MDSInternalContextBase*> > cap_reconnect_waiters;
   int cap_imports_num_opening;
   
   set<CInode*> rejoin_undef_inodes;
@@ -550,6 +554,9 @@ public:
   }
   void set_reconnect_dirty_caps(inodeno_t ino, int dirty) {
     cap_imports_dirty[ino] |= dirty;
+  }
+  void wait_replay_cap_reconnect(inodeno_t ino, MDSInternalContextBase *c) {
+    cap_reconnect_waiters[ino].push_back(c);
   }
 
   // [reconnect/rejoin caps]
@@ -1104,6 +1111,9 @@ public:
   void dump_cache() {dump_cache(NULL, NULL);}
   void dump_cache(const std::string &filename);
   void dump_cache(Formatter *f);
+
+  void dump_resolve_status(Formatter *f) const;
+  void dump_rejoin_status(Formatter *f) const;
 
   // == crap fns ==
  public:

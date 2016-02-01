@@ -254,6 +254,7 @@ public:
   bool is_capped() { return capped; }
   void cap();
 
+  void kick_submitter();
   void shutdown();
 
   // -- events --
@@ -315,6 +316,8 @@ public:
   void replay(MDSInternalContextBase *onfinish);
 
   void standby_trim_segments();
+
+  void dump_replay_status(Formatter *f) const;
 };
 
 #endif

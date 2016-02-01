@@ -202,6 +202,7 @@ class Message;
 class MonClient;
 class PerfCounters;
 class ObjectStore;
+class FuseStore;
 class OSDMap;
 class MLog;
 class MClass;
@@ -798,14 +799,9 @@ public:
 
   // -- tids --
   // for ops i issue
-  ceph_tid_t last_tid;
-  Mutex tid_lock;
+  atomic_t last_tid;
   ceph_tid_t get_tid() {
-    ceph_tid_t t;
-    tid_lock.Lock();
-    t = ++last_tid;
-    tid_lock.Unlock();
-    return t;
+    return (ceph_tid_t)last_tid.inc();
   }
 
   // -- backfill_reservation --
@@ -1084,7 +1080,9 @@ protected:
   PerfCounters      *logger;
   PerfCounters      *recoverystate_perf;
   ObjectStore *store;
-
+#ifdef HAVE_LIBFUSE
+  FuseStore *fuse_store = nullptr;
+#endif
   LogClient log_client;
   LogChannelRef clog;
 
@@ -1391,7 +1389,7 @@ public:
       (*i)->put();
     }
   }
-  void clear_session_waiting_on_pg(Session *session, spg_t pgid) {
+  void clear_session_waiting_on_pg(Session *session, const spg_t &pgid) {
     Mutex::Locker l(session_waiting_lock);
     map<spg_t, set<Session*> >::iterator i = session_waiting_for_pg.find(pgid);
     if (i == session_waiting_for_pg.end()) {
@@ -1409,19 +1407,14 @@ public:
   void session_handle_reset(Session *session) {
     Mutex::Locker l(session->session_dispatch_lock);
     clear_session_waiting_on_map(session);
-    vector<spg_t> pgs_to_clear;
-    pgs_to_clear.reserve(session->waiting_for_pg.size());
+
     for (map<spg_t, list<OpRequestRef> >::iterator i =
 	   session->waiting_for_pg.begin();
 	 i != session->waiting_for_pg.end();
 	 ++i) {
-      pgs_to_clear.push_back(i->first);
-    }
-    for (vector<spg_t>::iterator i = pgs_to_clear.begin();
-	 i != pgs_to_clear.end();
-	 ++i) {
-      clear_session_waiting_on_pg(session, *i);
-    }
+      clear_session_waiting_on_pg(session, i->first);
+    }    
+
     /* Messages have connection refs, we need to clear the
      * connection->session->message->connection
      * cycles which result.
@@ -1942,7 +1935,7 @@ protected:
     int lastactingprimary
     ); ///< @return false if there was a map gap between from and now
 
-  void wake_pg_waiters(PG* pg, spg_t pgid) {
+  void wake_pg_waiters(spg_t pgid) {
     assert(osd_lock.is_locked());
     // Need write lock on pg_map_lock
     set<Session*> concerned_sessions;
@@ -2363,6 +2356,8 @@ public:
   int pre_init();
   int init();
   void final_init();
+
+  int enable_disable_fuse(bool stop);
 
   void suicide(int exitcode);
   int shutdown();

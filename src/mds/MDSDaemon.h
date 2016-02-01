@@ -161,11 +161,13 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   // admin socket handling
   friend class MDSSocketHook;
   class MDSSocketHook *asok_hook;
-  bool asok_command(string command, cmdmap_t& cmdmap, string format,
-		    ostream& ss);
   void set_up_admin_socket();
   void clean_up_admin_socket();
   void check_ops_in_flight(); // send off any slow ops to monitor
+  bool asok_command(string command, cmdmap_t& cmdmap, string format,
+		    ostream& ss);
+
+  void dump_status(Formatter *f);
 
   /**
    * Terminate this daemon process.

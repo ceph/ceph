@@ -65,8 +65,6 @@
  */
 #define RBD_POOL_SETTINGS       "rbd_pool_settings"
 
-#define RBD_DEFAULT_OBJ_ORDER	22   /* 4MB */
-
 #define RBD_MAX_OBJ_NAME_SIZE	96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
 

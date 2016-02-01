@@ -340,7 +340,7 @@ class CondPingPong {
   CondPingPong(): mutex("CondPingPong::mutex"), prod(0), cons(0), count(10000), consumer(this) {}
 
   double run() {
-    consumer.create();
+    consumer.create("consumer");
     uint64_t start = Cycles::rdtsc();
     produce();
     uint64_t stop = Cycles::rdtsc();
@@ -498,7 +498,7 @@ double eventcenter_dispatch()
 
   CenterWorker worker(g_ceph_context);
   atomic_t flag(1);
-  worker.create();
+  worker.create("evt_center_disp");
   EventCallbackRef count_event(new CountEvent(&flag));
 
   worker.center.dispatch_event_external(count_event);
@@ -759,7 +759,7 @@ double spawn_thread()
   ThreadHelper thread;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    thread.create();
+    thread.create("thread_helper");
     thread.join();
   }
   uint64_t stop = Cycles::rdtsc();

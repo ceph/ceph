@@ -28,6 +28,7 @@ class CephContext;
 class ThreadPool : public md_config_obs_t {
   CephContext *cct;
   string name;
+  string thread_name;
   string lockname;
   Mutex _lock;
   Cond _cond;
@@ -353,10 +354,6 @@ public:
   template<typename T>
   class PointerWQ : public WorkQueue_ {
   public:
-    PointerWQ(string n, time_t ti, time_t sti, ThreadPool* p)
-      : WorkQueue_(n, ti, sti), m_pool(p), m_processing(0) {
-      m_pool->add_work_queue(this);
-    }
     ~PointerWQ() {
       m_pool->remove_work_queue(this);
       assert(m_processing == 0);
@@ -382,6 +379,9 @@ public:
       return _empty();
     }
   protected:
+    PointerWQ(string n, time_t ti, time_t sti, ThreadPool* p)
+      : WorkQueue_(n, ti, sti), m_pool(p), m_processing(0) {
+    }
     virtual void _clear() {
       assert(m_pool->_lock.is_locked());
       m_items.clear();
@@ -459,7 +459,7 @@ private:
   void worker(WorkThread *wt);
 
 public:
-  ThreadPool(CephContext *cct_, string nm, int n, const char *option = NULL);
+  ThreadPool(CephContext *cct_, string nm, string tn, int n, const char *option = NULL);
   virtual ~ThreadPool();
 
   /// return number of threads currently running
@@ -579,6 +579,7 @@ public:
   ContextWQ(const string &name, time_t ti, ThreadPool *tp)
     : ThreadPool::PointerWQ<Context>(name, ti, 0, tp),
       m_lock("ContextWQ::m_lock") {
+    tp->add_work_queue(this);
   }
 
   void queue(Context *ctx, int result = 0) {
@@ -618,6 +619,7 @@ class ShardedThreadPool {
 
   CephContext *cct;
   string name;
+  string thread_name;
   string lockname;
   Mutex shardedpool_lock;
   Cond shardedpool_cond;
@@ -698,7 +700,7 @@ private:
 
 public:
 
-  ShardedThreadPool(CephContext *cct_, string nm, uint32_t pnum_threads);
+  ShardedThreadPool(CephContext *cct_, string nm, string tn, uint32_t pnum_threads);
 
   ~ShardedThreadPool(){};
 

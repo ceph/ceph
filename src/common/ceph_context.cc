@@ -33,6 +33,7 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/PluginRegistry.h"
+#include "common/valgrind.h"
 
 #include <iostream>
 #include <pthread.h>
@@ -533,6 +534,16 @@ CephContext::~CephContext()
     ceph::crypto::shutdown();
 }
 
+void CephContext::put() {
+  if (nref.dec() == 0) {
+    ANNOTATE_HAPPENS_AFTER(&nref);
+    ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&nref);
+    delete this;
+  } else {
+    ANNOTATE_HAPPENS_BEFORE(&nref);
+  }
+}
+
 void CephContext::init_crypto()
 {
   ceph::crypto::init(this);
@@ -547,7 +558,7 @@ void CephContext::start_service_thread()
     return;
   }
   _service_thread = new CephContextServiceThread(this);
-  _service_thread->create();
+  _service_thread->create("service");
   ceph_spin_unlock(&_service_thread_lock);
 
   // make logs flush on_exit()
@@ -606,8 +617,8 @@ PerfCountersCollection *CephContext::get_perfcounters_collection()
 void CephContext::enable_perf_counter()
 {
   PerfCountersBuilder plb(this, "cct", l_cct_first, l_cct_last);
-  plb.add_u64_counter(l_cct_total_workers, "total_workers", "Total workers");
-  plb.add_u64_counter(l_cct_unhealthy_workers, "unhealthy_workers", "Unhealthy workers");
+  plb.add_u64(l_cct_total_workers, "total_workers", "Total workers");
+  plb.add_u64(l_cct_unhealthy_workers, "unhealthy_workers", "Unhealthy workers");
   PerfCounters *perf_tmp = plb.create_perf_counters();
 
   ceph_spin_lock(&_cct_perf_lock);

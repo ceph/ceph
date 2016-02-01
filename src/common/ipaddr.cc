@@ -34,6 +34,9 @@ const struct sockaddr *find_ipv4_in_subnet(const struct ifaddrs *addrs,
     if (addrs->ifa_addr == NULL)
       continue;
 
+    if (strcmp(addrs->ifa_name, "lo") == 0)
+      continue;
+
     if (addrs->ifa_addr->sa_family != net->sin_family)
       continue;
 
@@ -73,6 +76,9 @@ const struct sockaddr *find_ipv6_in_subnet(const struct ifaddrs *addrs,
   for (; addrs != NULL; addrs = addrs->ifa_next) {
 
     if (addrs->ifa_addr == NULL)
+      continue;
+
+    if (strcmp(addrs->ifa_name, "lo") == 0)
       continue;
 
     if (addrs->ifa_addr->sa_family != net->sin6_family)

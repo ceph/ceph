@@ -33,17 +33,31 @@ if [ -e CMakeCache.txt ]; then
     ln -sf ../${file} ec_plugins/`basename $file`
   done
   [ -z "$EC_PATH" ] && EC_PATH=./ec_plugins
+  # check for compression plugins
+  mkdir -p .libs/compressor
+  for file in ./src/compressor/*/libcs_*.so*;
+  do
+    ln -sf ../${file} .libs/compressor/`basename $file`
+  done
+else
+    mkdir -p .libs/compressor
+    for f in `ls -d compressor/*/`; 
+    do 
+        cp .libs/libceph_`basename $f`.so* .libs/compressor/;
+    done
 fi
 
 if [ -z "$CEPH_BUILD_ROOT" ]; then
         [ -z "$CEPH_BIN" ] && CEPH_BIN=.
         [ -z "$CEPH_LIB" ] && CEPH_LIB=.libs
         [ -z $EC_PATH ] && EC_PATH=$CEPH_LIB
+        [ -z $CS_PATH ] && CS_PATH=$CEPH_LIB
         [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB
 else
         [ -z $CEPH_BIN ] && CEPH_BIN=$CEPH_BUILD_ROOT/bin
         [ -z $CEPH_LIB ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
         [ -z $EC_PATH ] && EC_PATH=$CEPH_LIB/erasure-code
+        [ -z $CS_PATH ] && CS_PATH=$CEPH_LIB/compressor
         [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
 fi
 
@@ -91,8 +105,7 @@ overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
 memstore=0
-newstore=0
-journal=1
+bluestore=0
 
 MON_ADDR=""
 
@@ -119,11 +132,13 @@ usage=$usage"\t-X disable cephx\n"
 usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-e : create an erasure pool\n";
 usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
-usage=$usage"\t-J no journal\t\tdisable filestore journal\n"
 usage=$usage"\t--mon_num specify ceph monitor count\n"
 usage=$usage"\t--osd_num specify ceph osd count\n"
 usage=$usage"\t--mds_num specify ceph mds count\n"
 usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
+usage=$usage"\t--bluestore use bluestore as the osd objectstore backend\n"
+usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
+usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 
 usage_exit() {
 	printf "$usage"
@@ -221,17 +236,14 @@ case $1 in
     -X )
 	    cephx=0
 	    ;;
-    -J )
-	    journal=0
-	    ;;
     -k )
 	    overwrite_conf=0
 	    ;;
     --memstore )
 	    memstore=1
 	    ;;
-    --newstore )
-	    newstore=1
+    --bluestore )
+	    bluestore=1
 	    ;;
     --hitset )
 	    hitset="$hitset $2 $3"
@@ -308,7 +320,10 @@ else
         debug monc = 20
         debug journal = 20
         debug filestore = 20
-        debug newstore = 30
+        debug bluestore = 30
+        debug bluefs = 20
+        debug rocksdb = 10
+        debug bdev = 20
         debug rgw = 20
         debug objclass = 20'
     CMDSDEBUG='
@@ -331,9 +346,12 @@ if [ "$memstore" -eq 1 ]; then
     COSDMEMSTORE='
 	osd objectstore = memstore'
 fi
-if [ "$newstore" -eq 1 ]; then
+if [ "$bluestore" -eq 1 ]; then
     COSDMEMSTORE='
-	osd objectstore = newstore'
+	osd objectstore = bluestore
+	bluestore fsck on mount = true
+	bluestore block db size = 67108864
+	bluestore block wal size = 134217728'
 fi
 
 # lockdep everywhere?
@@ -427,12 +445,14 @@ if [ "$start_mon" -eq 1 ]; then
         mon data avail warn = 10
         mon data avail crit = 1
         erasure code dir = $EC_PATH
+        plugin dir = $CS_PATH
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         rgw frontends = fastcgi, civetweb port=$CEPH_RGW_PORT
         rgw dns name = localhost
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
+        lockdep = true
 EOF
 if [ "$cephx" -eq 1 ] ; then
 cat <<EOF >> $conf_fn
@@ -445,11 +465,6 @@ cat <<EOF >> $conf_fn
 	auth client required = none
 EOF
 fi
-                        if [ $journal -eq 1 ]; then
-			    journal_path="$CEPH_DEV_DIR/osd\$id.journal"
-			else
-			    journal_path=""
-			fi
 			cat <<EOF >> $conf_fn
 
 [client]
@@ -470,7 +485,7 @@ $extra_conf
 [osd]
 $DAEMONOPTS
         osd data = $CEPH_DEV_DIR/osd\$id
-        osd journal = $journal_path
+        osd journal = $CEPH_DEV_DIR/osd\$id/journal
         osd journal size = 100
         osd class tmp = out
         osd class dir = $OBJCLASS_PATH
@@ -575,6 +590,7 @@ EOF
 		    rm -rf $CEPH_DEV_DIR/osd$osd || true
 		    for f in $CEPH_DEV_DIR/osd$osd/* ; do btrfs sub delete $f || true ; done || true
 		    mkdir -p $CEPH_DEV_DIR/osd$osd
+
 	    fi
 
 	    uuid=`uuidgen`
@@ -664,9 +680,8 @@ fi
 
 if [ "$ec" -eq 1 ]; then
     $SUDO $CEPH_ADM <<EOF
-osd erasure-code-profile set ec-profile m=2 k=1
+osd erasure-code-profile set ec-profile m=2 k=2
 osd pool create ec 8 8 erasure ec-profile
-quit
 EOF
 fi
 
@@ -680,7 +695,6 @@ osd pool create ${p}-cache 8
 osd tier add $p ${p}-cache
 osd tier cache-mode ${p}-cache writeback
 osd tier set-overlay $p ${p}-cache
-quit
 EOF
     done
 }
@@ -697,7 +711,6 @@ do_hitsets() {
 osd pool set $pool hit_set_type $type
 osd pool set $pool hit_set_count 8
 osd pool set $pool hit_set_period 30
-quit
 EOF
     done
 }

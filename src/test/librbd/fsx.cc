@@ -37,6 +37,8 @@
 #include <assert.h>
 #include <errno.h>
 #include <math.h>
+#include <fcntl.h>
+#include <random>
 
 #include "include/intarith.h"
 #include "include/krbd.h"
@@ -233,22 +235,12 @@ simple_err(const char *msg, int err)
 /*
  * random
  */
+std::mt19937 random_generator;
 
-#define RND_STATE_LEN	256
-char	rnd_state[RND_STATE_LEN];
-struct random_data rnd_data;
-
-int32_t
+uint_fast32_t
 get_random(void)
 {
-	int32_t val;
-
-	if (random_r(&rnd_data, &val) < 0) {
-		prterr("random_r");
-		exit(1);
-	}
-
-	return val;
+	return random_generator();
 }
 
 /*
@@ -486,7 +478,8 @@ __librbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 		features &= ~(RBD_FEATURE_EXCLUSIVE_LOCK |
 		              RBD_FEATURE_OBJECT_MAP     |
                               RBD_FEATURE_FAST_DIFF      |
-                              RBD_FEATURE_DEEP_FLATTEN);
+                              RBD_FEATURE_DEEP_FLATTEN   |
+                              RBD_FEATURE_JOURNALING);
 	}
 	ret = rbd_clone2(ioctx, ctx->name, src_snapname, ioctx,
 			 dst_imagename, features, order,
@@ -1404,12 +1397,12 @@ dowrite(unsigned offset, unsigned size)
 		       (debug &&
 		       (monitorstart == -1 ||
 			(offset + size > monitorstart &&
-			(monitorend == -1 || offset <= monitorend))))))
+			 (monitorend == -1 || (long)offset <= monitorend))))))
 		prt("%lu write\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 
 	ret = ops->write(&ctx, offset, size, good_buf + offset);
-	if (ret != size) {
+	if (ret != (ssize_t)size) {
 		if (ret < 0)
 			prterrcode("dowrite: ops->write", ret);
 		else
@@ -1449,7 +1442,7 @@ dotruncate(unsigned size)
 
 	if ((progressinterval && testcalls % progressinterval == 0) ||
 	    (debug && (monitorstart == -1 || monitorend == -1 ||
-		      size <= monitorend)))
+		       (long)size <= monitorend)))
 		prt("%lu trunc\tfrom 0x%x to 0x%x\n", testcalls, oldsize, size);
 
 	ret = ops->resize(&ctx, size);
@@ -1492,7 +1485,7 @@ do_punch_hole(unsigned offset, unsigned length)
 
 	if ((progressinterval && testcalls % progressinterval == 0) ||
 	    (debug && (monitorstart == -1 || monitorend == -1 ||
-		      end_offset <= monitorend))) {
+		       (long)end_offset <= monitorend))) {
 		prt("%lu punch\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
 			offset, offset+length, length);
 	}
@@ -2334,14 +2327,7 @@ main(int argc, char **argv)
 	signal(SIGUSR1,	cleanup);
 	signal(SIGUSR2,	cleanup);
 
-	if (initstate_r(seed, rnd_state, RND_STATE_LEN, &rnd_data) < 0) {
-		prterr("initstate_r");
-		exit(1);
-	}
-	if (setstate_r(rnd_state, &rnd_data) < 0) {
-		prterr("setstate_r");
-		exit(1);
-	}
+	random_generator.seed(seed);
 
 	ret = create_image();
 	if (ret < 0) {

@@ -1161,7 +1161,7 @@ TEST_F(ObjectContextTest, read_write_lock)
     EXPECT_EQ(1, obc.unstable_writes);
 
     Thread_read_lock t(obc);
-    t.create();
+    t.create("obc_read");
 
     do {
       cout << "Trying (1) with delay " << delay << "us\n";
@@ -1218,7 +1218,7 @@ TEST_F(ObjectContextTest, read_write_lock)
     EXPECT_EQ(0, obc.unstable_writes);
 
     Thread_write_lock t(obc);
-    t.create();
+    t.create("obc_write");
 
     do {
       cout << "Trying (3) with delay " << delay << "us\n";
@@ -1372,6 +1372,56 @@ TEST(coll_t, temp) {
   ASSERT_EQ(pgid, pgid2);
 }
 
+TEST(coll_t, assigment) {
+  spg_t pgid;
+  coll_t right(pgid);
+  ASSERT_EQ(right.to_str(), string("0.0_head"));
+
+  coll_t left, middle;
+
+  ASSERT_EQ(left.to_str(), string("meta"));
+  ASSERT_EQ(middle.to_str(), string("meta"));
+
+  left = middle = right;
+
+  ASSERT_EQ(left.to_str(), string("0.0_head"));
+  ASSERT_EQ(middle.to_str(), string("0.0_head"));
+  
+  ASSERT_NE(middle.c_str(), right.c_str());
+  ASSERT_NE(left.c_str(), middle.c_str());
+}
+
+TEST(hobject_t, parse) {
+  const char *v[] = {
+    "MIN",
+    "MAX",
+    "-1:60c2fa6d:::inc_osdmap.1:0",
+    "-1:60c2fa6d:::inc_osdmap.1:333",
+    "0:00000000::::head",
+    "1:00000000:nspace:key:obj:head",
+    "-40:00000000:nspace::obj:head",
+    "20:00000000::key:obj:head",
+    "20:00000000:::o%fdj:head",
+    "20:00000000:::o%02fdj:head",
+    "20:00000000:::_zero_%00_:head",
+    NULL
+  };
+
+  for (unsigned i=0; v[i]; ++i) {
+    hobject_t o;
+    bool b = o.parse(v[i]);
+    if (!b) {
+      cout << "failed to parse " << v[i] << std::endl;
+      ASSERT_TRUE(false);
+    }
+    string s = stringify(o);
+    if (s != v[i]) {
+      cout << v[i] << " -> " << o << " -> " << s << std::endl;
+      ASSERT_EQ(s, string(v[i]));
+    }
+  }
+}
+
 TEST(ghobject_t, cmp) {
   ghobject_t min;
   ghobject_t sep;
@@ -1386,6 +1436,37 @@ TEST(ghobject_t, cmp) {
 			 1, string()));
   cout << "o " << o << std::endl;
   ASSERT_TRUE(cmp_bitwise(o, sep) > 0);
+}
+
+TEST(ghobject_t, parse) {
+  const char *v[] = {
+    "GHMIN",
+    "GHMAX",
+    "13@0:00000000::::head@",
+    "13@0:00000000::::head@deadbeef",
+    "@-1:60c2fa6d:::inc_osdmap.1:333@deadbeef",
+    "@-1:60c2fa6d:::inc%02osdmap.1:333@deadbeef",
+    "@-1:60c2fa6d:::inc_osdmap.1:333@",
+    "1@MIN@deadbeefff",
+    "1@MAX@",
+    "@MAX@123",
+    "@-40:00000000:nspace::obj:head@",
+    NULL
+  };
+
+  for (unsigned i=0; v[i]; ++i) {
+    ghobject_t o;
+    bool b = o.parse(v[i]);
+    if (!b) {
+      cout << "failed to parse " << v[i] << std::endl;
+      ASSERT_TRUE(false);
+    }
+    string s = stringify(o);
+    if (s != v[i]) {
+      cout << v[i] << " -> " << o << " -> " << s << std::endl;
+      ASSERT_EQ(s, string(v[i]));
+    }
+  }
 }
 
 TEST(pool_opts_t, invalid_opt) {

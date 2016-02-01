@@ -36,7 +36,7 @@
   device 0 osd.0
   
   # types
-  type 0 device
+  type 0 osd
   type 1 root
   
   # buckets

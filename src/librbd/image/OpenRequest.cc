@@ -72,8 +72,10 @@ Context *OpenRequest<I>::handle_v1_detect_header(int *result) {
   ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(cct) << "failed to stat image header: " << cpp_strerror(*result)
-               << dendl;
+    if (*result != -ENOENT) {
+      lderr(cct) << "failed to stat image header: " << cpp_strerror(*result)
+                 << dendl;
+    }
     send_close_image(*result);
   } else {
     m_image_ctx->old_format = true;

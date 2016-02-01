@@ -2150,6 +2150,27 @@ int librados::Rados::mon_command(string cmd, const bufferlist& inbl,
   return client->mon_command(cmdvec, inbl, outbl, outs);
 }
 
+int librados::Rados::osd_command(int osdid, std::string cmd, const bufferlist& inbl,
+                                 bufferlist *outbl, std::string *outs)
+{
+  vector<string> cmdvec;
+  cmdvec.push_back(cmd);
+  return client->osd_command(osdid, cmdvec, inbl, outbl, outs);
+}
+
+int librados::Rados::pg_command(const char *pgstr, std::string cmd, const bufferlist& inbl,
+                                bufferlist *outbl, std::string *outs)
+{
+  vector<string> cmdvec;
+  cmdvec.push_back(cmd);
+
+  pg_t pgid;
+  if (!pgid.parse(pgstr))
+    return -EINVAL;
+
+  return client->pg_command(pgid, cmdvec, inbl, outbl, outs);
+}
+
 int librados::Rados::ioctx_create(const char *name, IoCtx &io)
 {
   rados_ioctx_t p;
@@ -3165,10 +3186,13 @@ extern "C" int rados_ioctx_pool_requires_alignment2(rados_ioctx_t io,
 {
   tracepoint(librados, rados_ioctx_pool_requires_alignment_enter2, io);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  bool requires_alignment;
   int retval = ctx->client->pool_requires_alignment2(ctx->get_id(), 
-  	(bool *)requires);
+  	&requires_alignment);
   tracepoint(librados, rados_ioctx_pool_requires_alignment_exit2, retval, 
-  	*requires);
+  	requires_alignment);
+  if (requires)
+    *requires = requires_alignment;
   return retval;
 }
 

@@ -64,8 +64,8 @@ protected:
     return 0;
   }
 
-  virtual journal::Event create_event() const {
-    return journal::SnapUnprotectEvent(0, m_snap_name);
+  virtual journal::Event create_event(uint64_t op_tid) const {
+    return journal::SnapUnprotectEvent(op_tid, m_snap_name);
   }
 
 private:

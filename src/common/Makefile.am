@@ -45,6 +45,7 @@ libcommon_internal_la_SOURCES = \
 	common/simple_spin.cc \
 	common/Thread.cc \
 	common/Formatter.cc \
+	common/HTMLFormatter.cc \
 	common/HeartbeatMap.cc \
 	common/config.cc \
 	common/utf8.c \
@@ -157,6 +158,7 @@ noinst_HEADERS += \
 # important; libmsg before libauth!
 LIBCOMMON_DEPS += \
 	$(LIBERASURE_CODE) \
+	$(LIBCOMPRESSOR) \
 	$(LIBMSG) $(LIBAUTH) \
 	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH) \
 	$(BOOST_RANDOM_LIBS)
@@ -204,6 +206,7 @@ noinst_HEADERS += \
 	common/DecayCounter.h \
 	common/Finisher.h \
 	common/Formatter.h \
+	common/HTMLFormatter.h \
 	common/perf_counters.h \
 	common/OutputDataSocket.h \
 	common/admin_socket.h \

@@ -180,29 +180,6 @@ void CloseRequest<I>::handle_shut_down_cache(int r) {
   if (r < 0) {
     lderr(cct) << "failed to shut down cache: " << cpp_strerror(r) << dendl;
   }
-  send_flush_copyup();
-}
-
-template <typename I>
-void CloseRequest<I>::send_flush_copyup() {
-  if (m_image_ctx->copyup_finisher == nullptr) {
-    send_flush_op_work_queue();
-    return;
-  }
-
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  m_image_ctx->flush_copyup(create_context_callback<
-    CloseRequest<I>, &CloseRequest<I>::handle_flush_copyup>(this));
-}
-
-template <typename I>
-void CloseRequest<I>::handle_flush_copyup(int r) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
-
-  m_image_ctx->copyup_finisher->stop();
   send_flush_op_work_queue();
 }
 

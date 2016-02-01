@@ -148,6 +148,7 @@ which are as follows:
 
 :command:`log show`
   Dump a log from specific object or (bucket + date + bucket-id).
+  (NOTE: required to specify formatting of date to "YYYY-MM-DD-hh")
 
 :command:`log rm`
   Remove log object.
@@ -432,7 +433,7 @@ Remove a bucket::
 
 Show the logs of a bucket from April 1st, 2012::
 
-        $ radosgw-admin log show --bucket=foo --date=2012-04-01
+        $ radosgw-admin log show --bucket=foo --date=2012-04-01-01 --bucket-id=default.14193.1
 
 Show usage information for user from March 1st to (but not including) April 1st, 2012::
 

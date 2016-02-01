@@ -49,7 +49,8 @@ extern void rgw_make_bucket_entry_name(const string& tenant_name,
                                        string& bucket_entry);
 extern string rgw_make_bucket_entry_name(const string& tenant_name,
                                        const string& bucket_name);
-extern void rgw_parse_url_bucket(const string &bucket,
+extern void rgw_parse_url_bucket(const string& bucket,
+                                 const string& auth_tenant,
                                  string &tenant_name, string &bucket_name);
 
 /**
@@ -119,6 +120,7 @@ extern int rgw_read_user_buckets(RGWRados *store,
                                  const rgw_user& user_id,
                                  RGWUserBuckets& buckets,
                                  const string& marker,
+                                 const string& end_marker,
                                  uint64_t max,
                                  bool need_stats,
                                  uint64_t default_amount = 1000);
@@ -375,7 +377,7 @@ public:
     }
 
     renew_thread = new ChangesRenewThread(cct, this);
-    renew_thread->create();
+    renew_thread->create("rgw_dt_lg_renew");
   }
 
   ~RGWDataChangesLog();

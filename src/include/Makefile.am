@@ -52,6 +52,7 @@ noinst_HEADERS += \
 	include/atomic.h \
 	include/bitmapper.h \
 	include/blobhash.h \
+	include/btree_interval_set.h \
 	include/buffer.h \
 	include/buffer_fwd.h \
 	include/byteorder.h \
@@ -63,9 +64,13 @@ noinst_HEADERS += \
 	include/cmp.h \
 	include/color.h \
 	include/compat.h \
+	include/cpp-btree/btree.h \
+	include/cpp-btree/btree_container.h \
+	include/cpp-btree/btree_map.h \
 	include/sock_compat.h \
 	include/crc32c.h \
 	include/encoding.h \
+	include/encoding_btree.h \
 	include/err.h \
 	include/error.h \
 	include/filepath.h \

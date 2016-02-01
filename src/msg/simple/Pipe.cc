@@ -27,6 +27,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/valgrind.h"
 
 // Below included to get encode_encrypt(); That probably should be in Crypto.h, instead
 
@@ -83,6 +84,10 @@ Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
     send_keepalive_ack(false),
     connect_seq(0), peer_global_seq(0),
     out_seq(0), in_seq(0), in_seq_acked(0) {
+  ANNOTATE_BENIGN_RACE_SIZED(&sd, sizeof(sd), "Pipe socket");
+  ANNOTATE_BENIGN_RACE_SIZED(&state, sizeof(state), "Pipe state");
+  ANNOTATE_BENIGN_RACE_SIZED(&recv_len, sizeof(recv_len), "Pipe recv_len");
+  ANNOTATE_BENIGN_RACE_SIZED(&recv_ofs, sizeof(recv_ofs), "Pipe recv_ofs");
   if (con) {
     connection_state = con;
     connection_state->reset_pipe(this);
@@ -135,7 +140,7 @@ void Pipe::start_reader()
     reader_needs_join = false;
   }
   reader_running = true;
-  reader_thread.create(msgr->cct->_conf->ms_rwthread_stack_bytes);
+  reader_thread.create("ms_pipe_read", msgr->cct->_conf->ms_rwthread_stack_bytes);
 }
 
 void Pipe::maybe_start_delay_thread()
@@ -144,7 +149,7 @@ void Pipe::maybe_start_delay_thread()
       msgr->cct->_conf->ms_inject_delay_type.find(ceph_entity_type_name(connection_state->peer_type)) != string::npos) {
     lsubdout(msgr->cct, ms, 1) << "setting up a delay queue on Pipe " << this << dendl;
     delay_thread = new DelayedDelivery(this);
-    delay_thread->create();
+    delay_thread->create("ms_pipe_delay");
   }
 }
 
@@ -153,7 +158,7 @@ void Pipe::start_writer()
   assert(pipe_lock.is_locked());
   assert(!writer_running);
   writer_running = true;
-  writer_thread.create(msgr->cct->_conf->ms_rwthread_stack_bytes);
+  writer_thread.create("ms_pipe_write", msgr->cct->_conf->ms_rwthread_stack_bytes);
 }
 
 void Pipe::join_reader()
@@ -2029,7 +2034,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       bufferptr bp = blp.get_current_ptr();
       int read = MIN(bp.length(), left);
       ldout(msgr->cct,20) << "reader reading nonblocking into " << (void*)bp.c_str() << " len " << bp.length() << dendl;
-      int got = tcp_read_nonblocking(bp.c_str(), read);
+      ssize_t got = tcp_read_nonblocking(bp.c_str(), read);
       ldout(msgr->cct,30) << "reader read " << got << " of " << read << dendl;
       connection_state->lock.Unlock();
       if (got < 0)
@@ -2084,6 +2089,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   } else {
     if (auth_handler->check_message_signature(message)) {
       ldout(msgr->cct, 0) << "Signature check failed" << dendl;
+      message->put();
       ret = -EINVAL;
       goto out_dethrottle;
     } 
@@ -2188,12 +2194,12 @@ void Pipe::restore_sigpipe()
 }
 
 
-int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
+int Pipe::do_sendmsg(struct msghdr *msg, unsigned len, bool more)
 {
   suppress_sigpipe();
   while (len > 0) {
     if (0) { // sanity
-      int l = 0;
+      unsigned l = 0;
       for (unsigned i=0; i<msg->msg_iovlen; i++)
 	l += msg->msg_iov[i].iov_len;
       assert(l == len);
@@ -2352,15 +2358,15 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
 
   // payload (front+data)
   list<bufferptr>::const_iterator pb = blist.buffers().begin();
-  int b_off = 0;  // carry-over buffer offset, if any
-  int bl_pos = 0; // blist pos
-  int left = blist.length();
+  unsigned b_off = 0;  // carry-over buffer offset, if any
+  unsigned bl_pos = 0; // blist pos
+  unsigned left = blist.length();
 
   while (left > 0) {
-    int donow = MIN(left, (int)pb->length()-b_off);
+    unsigned donow = MIN(left, pb->length()-b_off);
     if (donow == 0) {
       ldout(msgr->cct,0) << "donow = " << donow << " left " << left << " pb->length " << pb->length()
-	      << " b_off " << b_off << dendl;
+                         << " b_off " << b_off << dendl;
     }
     assert(donow > 0);
     ldout(msgr->cct,30) << " bl_pos " << bl_pos << " b_off " << b_off
@@ -2384,13 +2390,13 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
     msglen += donow;
     msg.msg_iovlen++;
     
+    assert(left >= donow);
     left -= donow;
-    assert(left >= 0);
     b_off += donow;
     bl_pos += donow;
     if (left == 0)
       break;
-    while (b_off == (int)pb->length()) {
+    while (b_off == pb->length()) {
       ++pb;
       b_off = 0;
     }
@@ -2435,7 +2441,7 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
 }
 
 
-int Pipe::tcp_read(char *buf, int len)
+int Pipe::tcp_read(char *buf, unsigned len)
 {
   if (sd < 0)
     return -1;
@@ -2452,7 +2458,7 @@ int Pipe::tcp_read(char *buf, int len)
     if (tcp_read_wait() < 0)
       return -1;
 
-    int got = tcp_read_nonblocking(buf, len);
+    ssize_t got = tcp_read_nonblocking(buf, len);
 
     if (got < 0)
       return -1;
@@ -2461,7 +2467,7 @@ int Pipe::tcp_read(char *buf, int len)
     buf += got;
     //lgeneric_dout(cct, DBL) << "tcp_read got " << got << ", " << len << " left" << dendl;
   }
-  return len;
+  return 0;
 }
 
 int Pipe::tcp_read_wait()
@@ -2495,10 +2501,10 @@ int Pipe::tcp_read_wait()
   return 0;
 }
 
-int Pipe::do_recv(char *buf, size_t len, int flags)
+ssize_t Pipe::do_recv(char *buf, size_t len, int flags)
 {
 again:
-  int got = ::recv( sd, buf, len, flags );
+  ssize_t got = ::recv( sd, buf, len, flags );
   if (got < 0) {
     if (errno == EAGAIN || errno == EINTR) {
       goto again;
@@ -2513,10 +2519,10 @@ again:
   return got;
 }
 
-int Pipe::buffered_recv(char *buf, size_t len, int flags)
+ssize_t Pipe::buffered_recv(char *buf, size_t len, int flags)
 {
-  int left = len;
-  int total_recv = 0;
+  size_t left = len;
+  ssize_t total_recv = 0;
   if (recv_len > recv_ofs) {
     int to_read = MIN(recv_len - recv_ofs, left);
     memcpy(buf, &recv_buf[recv_ofs], to_read);
@@ -2533,7 +2539,7 @@ int Pipe::buffered_recv(char *buf, size_t len, int flags)
 
   if (len > (size_t)recv_max_prefetch) {
     /* this was a large read, we don't prefetch for these */
-    int ret = do_recv(buf, left, flags );
+    ssize_t ret = do_recv(buf, left, flags );
     if (ret < 0) {
       if (total_recv > 0)
         return total_recv;
@@ -2544,7 +2550,7 @@ int Pipe::buffered_recv(char *buf, size_t len, int flags)
   }
 
 
-  int got = do_recv(recv_buf, recv_max_prefetch, flags);
+  ssize_t got = do_recv(recv_buf, recv_max_prefetch, flags);
   if (got <= 0) {
     if (total_recv > 0)
       return total_recv;
@@ -2552,17 +2558,17 @@ int Pipe::buffered_recv(char *buf, size_t len, int flags)
     return got;
   }
 
-  recv_len = got;
-  got = MIN(left, got);
+  recv_len = (size_t)got;
+  got = MIN(left, (size_t)got);
   memcpy(buf, recv_buf, got);
   recv_ofs = got;
   total_recv += got;
   return total_recv;
 }
 
-int Pipe::tcp_read_nonblocking(char *buf, int len)
+ssize_t Pipe::tcp_read_nonblocking(char *buf, unsigned len)
 {
-  int got = buffered_recv(buf, len, MSG_DONTWAIT );
+  ssize_t got = buffered_recv(buf, len, MSG_DONTWAIT );
   if (got < 0) {
     ldout(msgr->cct, 10) << __func__ << " socket " << sd << " returned "
 		         << got << " " << cpp_strerror(errno) << dendl;
@@ -2578,7 +2584,7 @@ int Pipe::tcp_read_nonblocking(char *buf, int len)
   return got;
 }
 
-int Pipe::tcp_write(const char *buf, int len)
+int Pipe::tcp_write(const char *buf, unsigned len)
 {
   if (sd < 0)
     return -1;

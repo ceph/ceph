@@ -814,9 +814,8 @@ def main():
             childargs = injectargs
         if not len(childargs):
             print >> sys.stderr, \
-                'Cannot use \'tell\' with interactive mode.', \
-                'For an interactive shell,', \
-                'please start "{0}" without non-option arguments.'.format(sys.argv[0])
+                '"{0} tell" requires additional arguments.'.format(sys.argv[0]), \
+                'Try "{0} tell <name> <command> [options...]" instead.'.format(sys.argv[0])
             return errno.EINVAL
 
     # fetch JSON sigs from command
@@ -917,10 +916,14 @@ def main():
             if suffix != '':
                 outbuf = outbuf.rstrip()
             if outbuf != '':
-                # Write directly to binary stdout
-                raw_stdout.write(prefix)
-                raw_stdout.write(outbuf)
-                raw_stdout.write(suffix)
+                try:
+                    # Write directly to binary stdout
+                    raw_stdout.write(prefix)
+                    raw_stdout.write(outbuf)
+                    raw_stdout.write(suffix)
+                except IOError as e:
+                    if e.errno != errno.EPIPE:
+                        raise e
 
         sys.stdout.flush()
 

@@ -30,6 +30,8 @@ cdef extern from "Python.h":
     char* PyBytes_AsString(PyObject *string) except NULL
     int _PyBytes_Resize(PyObject **string, Py_ssize_t newsize) except -1
 
+ctypedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void* ptr)
+
 cdef extern from "rbd/librbd.h" nogil:
     enum:
         _RBD_FEATURE_LAYERING "RBD_FEATURE_LAYERING"
@@ -75,7 +77,6 @@ cdef extern from "rbd/librbd.h" nogil:
         uint64_t id
         uint64_t size
         char *name
-
 
     void rbd_version(int *major, int *minor, int *extra)
 
@@ -146,6 +147,8 @@ cdef extern from "rbd/librbd.h" nogil:
                               int *is_protected)
     int rbd_snap_set(rbd_image_t image, const char *snapname)
     int rbd_flatten(rbd_image_t image)
+    int rbd_rebuild_object_map(rbd_image_t image, librbd_progress_fn_t cb,
+                               void *cbdata)
     ssize_t rbd_list_children(rbd_image_t image, char *pools, size_t *pools_len,
                               char *images, size_t *images_len)
     ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
@@ -295,6 +298,9 @@ cdef make_ex(ret, msg):
 
 cdef rados_ioctx_t convert_ioctx(ioctx) except? NULL:
     return <rados_ioctx_t><uintptr_t>ioctx.io.value
+
+cdef int no_op_progress_callback(uint64_t offset, uint64_t total, void* ptr):
+    return 0
 
 def cstr(val, name, encoding="utf-8", opt=False):
     """
@@ -1235,6 +1241,16 @@ written." % (self.name, ret, length))
             ret = rbd_flatten(self.image)
         if ret < 0:
             raise make_ex(ret, "error flattening %s" % self.name)
+
+    def rebuild_object_map(self):
+        """
+        Rebuilds the object map for the image HEAD or currently set snapshot
+        """
+        cdef librbd_progress_fn_t prog_cb = &no_op_progress_callback
+        with nogil:
+            ret = rbd_rebuild_object_map(self.image, prog_cb, NULL)
+        if ret < 0:
+            raise make_ex(ret, "error rebuilding object map %s" % self.name)
 
     def list_children(self):
         """

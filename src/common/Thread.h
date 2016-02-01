@@ -48,7 +48,7 @@ class Thread {
   bool am_self() const;
   int kill(int signal);
   int try_create(size_t stacksize);
-  void create(size_t stacksize = 0);
+  void create(const char *name, size_t stacksize = 0);
   int join(void **prval = 0);
   int detach();
   int set_ioprio(int cls, int prio);

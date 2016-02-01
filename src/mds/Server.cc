@@ -280,6 +280,26 @@ void Server::handle_client_session(MClientSession *m)
       dout(20) << "  " << i->first << ": " << i->second << dendl;
     }
 
+    // Special case for the 'root' metadata path; validate that the claimed
+    // root is actually within the caps of the session
+    if (session->info.client_metadata.count("root")) {
+      const auto claimed_root = session->info.client_metadata.at("root");
+      // claimed_root has a leading "/" which we strip before passing
+      // into caps check
+      if (claimed_root.empty() || claimed_root[0] != '/' ||
+          !session->auth_caps.path_capable(claimed_root.substr(1))) {
+        derr << __func__ << " forbidden path claimed as mount root: "
+             << claimed_root << " by " << m->get_source() << dendl;
+        // Tell the client we're rejecting their open
+        mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
+        mds->clog->warn() << "client session with invalid root '" <<
+          claimed_root << "' denied (" << session->info.inst << ")";
+        session->clear();
+        // Drop out; don't record this session in SessionMap or journal it.
+        break;
+      }
+    }
+
     if (session->is_closed())
       mds->sessionmap.add_session(session);
 
@@ -1165,8 +1185,7 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
     client_con->send_message(reply);
   }
 
-  if (mdr->has_completed && mds->is_clientreplay())
-    mds->queue_one_replay();
+  const bool completed = mdr->has_completed;
 
   // clean up request
   mdcache->request_finish(mdr);
@@ -1176,6 +1195,11 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
       tracedn &&
       tracedn->get_projected_linkage()->is_remote()) {
     mdcache->eval_remote(tracedn);
+  }
+
+  // Advance clientreplay process if we're in it
+  if (completed && mds->is_clientreplay()) {
+    mds->queue_one_replay();
   }
 }
 
@@ -8269,4 +8293,11 @@ void Server::_renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid
 bool Server::waiting_for_reconnect(client_t c) const
 {
   return client_reconnect_gather.count(c) > 0;
+}
+
+void Server::dump_reconnect_status(Formatter *f) const
+{
+  f->open_object_section("reconnect_status");
+  f->dump_stream("client_reconnect_gather") << client_reconnect_gather;
+  f->close_section();
 }

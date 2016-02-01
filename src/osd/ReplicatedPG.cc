@@ -63,7 +63,7 @@
 #include "include/rados/rados_types.hpp"
 
 #ifdef WITH_LTTNG
-#include "tracing/osd.h" // ??
+#include "tracing/osd.h"
 #else
 #define tracepoint(...)
 #endif
@@ -1287,7 +1287,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	    wait_for_unreadable_object(oid, op);
 	    return;
 	  }
-	  result = osd->store->read(coll, ghobject_t(oid), 0, 0, osd_op.outdata);
+	  result = osd->store->read(ch, ghobject_t(oid), 0, 0, osd_op.outdata);
 	}
       }
       break;
@@ -1352,7 +1352,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
   PG(o, curmap, _pool, p),
   pgbackend(
     PGBackend::build_pg_backend(
-      _pool.info, curmap, this, coll_t(p), o->store, cct)),
+      _pool.info, curmap, this, coll_t(p), ch, o->store, cct)),
   object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
   backfills_in_flight(hobject_t::Comparator(true)),
@@ -1365,7 +1365,6 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
     pgbackend->get_is_readable_predicate(),
     pgbackend->get_is_recoverable_predicate());
   snap_trimmer_machine.initiate();
-  repop_map.rehash(g_conf->osd_client_message_cap/_pool.info.get_pg_num() * g_conf->osd_pg_op_threshold_ratio);
 }
 
 void ReplicatedPG::get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc)
@@ -2292,33 +2291,29 @@ bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
     }
     break;
   default:
-    if (in_hit_set) {
-      promote_object(obc, missing_oid, oloc, promote_op);
-    } else {
-      // Check if in other hit sets
-      map<time_t,HitSetRef>::iterator itor;
-      bool in_other_hit_sets = false;
-      unsigned max_in_memory_read = pool.info.min_read_recency_for_promote > 0 ? pool.info.min_read_recency_for_promote - 1 : 0;
-      unsigned max_in_memory_write = pool.info.min_write_recency_for_promote > 0 ? pool.info.min_write_recency_for_promote - 1 : 0;
-      unsigned max_in_memory = MAX(max_in_memory_read, max_in_memory_write);
-      for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end() && max_in_memory--; ++itor) {
-        if (obc.get()) {
-          if (obc->obs.oi.soid != hobject_t() && itor->second->contains(obc->obs.oi.soid)) {
-            in_other_hit_sets = true;
-            break;
-          }
-        } else {
-          if (missing_oid != hobject_t() && itor->second->contains(missing_oid)) {
-            in_other_hit_sets = true;
-            break;
-          }
-        }
+    {
+      unsigned count = (int)in_hit_set;
+      if (count) {
+	// Check if in other hit sets
+	const hobject_t& oid = obc.get() ? obc->obs.oi.soid : missing_oid;
+	for (map<time_t,HitSetRef>::reverse_iterator itor =
+	       agent_state->hit_set_map.rbegin();
+	     itor != agent_state->hit_set_map.rend();
+	     ++itor) {
+	  if (!itor->second->contains(oid)) {
+	    break;
+	  }
+	  ++count;
+	  if (count >= recency) {
+	    break;
+	  }
+	}
       }
-      if (in_other_hit_sets) {
-        promote_object(obc, missing_oid, oloc, promote_op);
+      if (count >= recency) {
+	promote_object(obc, missing_oid, oloc, promote_op);
       } else {
 	// not promoting
-        return false;
+	return false;
       }
     }
     break;
@@ -3176,10 +3171,10 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
 	info.stats = m->stats;
       }
 
-      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+      ObjectStore::Transaction t;
       dirty_info = true;
-      write_if_dirty(*t);
-      int tr = osd->store->queue_transaction_and_cleanup(osr.get(), t);
+      write_if_dirty(t);
+      int tr = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
       assert(tr == 0);
     }
     break;
@@ -4115,8 +4110,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	// read into a buffer
 	bufferlist bl;
-	int r = osd->store->fiemap(coll, ghobject_t(soid, ghobject_t::NO_GEN,
-						    info.pgid.shard),
+	int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
+						  info.pgid.shard),
 				   op.extent.offset, op.extent.length, bl);
 	osd_op.outdata.claim(bl);
 	if (r < 0)
@@ -4149,8 +4144,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	// read into a buffer
 	bufferlist bl;
         uint32_t total_read = 0;
-	int r = osd->store->fiemap(coll, ghobject_t(soid, ghobject_t::NO_GEN,
-						    info.pgid.shard),
+	int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
+						  info.pgid.shard),
 				   op.extent.offset, op.extent.length, bl);
 	if (r < 0)  {
 	  result = r;
@@ -4187,6 +4182,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  data_bl.claim_append(tmpbl);
 	  last = miter->first + r;
         }
+        
+        if (r < 0) {
+          result = r;
+          break;
+        }
 
 	// verify trailing hole?
 	if (cct->_conf->osd_verify_sparse_read_holes) {
@@ -4201,11 +4201,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    }
 	  }
 	}
-
-        if (r < 0) {
-          result = r;
-          break;
-        }
 
 	// Why SPARSE_READ need checksum? In fact, librbd always use sparse-read. 
 	// Maybe at first, there is no much whole objects. With continued use, more and more whole object exist.
@@ -5485,7 +5480,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_read;
       {
-	osd->store->omap_get_header(coll, ghobject_t(soid), &osd_op.outdata);
+	osd->store->omap_get_header(ch, ghobject_t(soid), &osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
@@ -5506,7 +5501,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, list_entries(keys_to_get).c_str());
 	map<string, bufferlist> out;
 	if (pool.info.supports_omap()) {
-	  osd->store->omap_get_values(coll, ghobject_t(soid), keys_to_get, &out);
+	  osd->store->omap_get_values(ch, ghobject_t(soid), keys_to_get, &out);
 	} // else return empty omap entries
 	::encode(out, osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
@@ -5541,7 +5536,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	       i != assertions.end();
 	       ++i)
 	    to_get.insert(i->first);
-	  int r = osd->store->omap_get_values(coll, ghobject_t(soid),
+	  int r = osd->store->omap_get_values(ch, ghobject_t(soid),
 					      to_get, &out);
 	  if (r < 0) {
 	    result = r;
@@ -5661,12 +5656,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ENOENT;
 	  break;
 	}
-	t->touch(soid);
 	t->omap_clear(soid);
 	ctx->delta_stats.num_wr++;
       }
-      obs.oi.set_flag(object_info_t::FLAG_OMAP);
-      obs.oi.set_omap_digest(-1);
+      obs.oi.clear_omap_digest();
       break;
 
     case CEPH_OSD_OP_OMAPRMKEYS:
@@ -5683,7 +5676,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val);
 	  break;
 	}
-	t->touch(soid);
 	bufferlist to_rm_bl;
 	try {
 	  decode_str_set_to_bl(bp, &to_rm_bl);
@@ -5697,7 +5689,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	t->omap_rmkeys(soid, to_rm_bl);
 	ctx->delta_stats.num_wr++;
       }
-      obs.oi.set_flag(object_info_t::FLAG_OMAP);
       obs.oi.clear_omap_digest();
       break;
 
@@ -5705,16 +5696,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_read;
       tracepoint(osd, do_osd_op_pre_copy_get_classic, soid.oid.name.c_str(), soid.snap.val);
       result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc, true);
-      if (result == -EINVAL)
-	goto fail;
       break;
 
     case CEPH_OSD_OP_COPY_GET:
       ++ctx->num_read;
       tracepoint(osd, do_osd_op_pre_copy_get, soid.oid.name.c_str(), soid.snap.val);
       result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc, false);
-      if (result == -EINVAL)
-	goto fail;
       break;
 
     case CEPH_OSD_OP_COPY_FROM:
@@ -6853,13 +6840,13 @@ int ReplicatedPG::fill_in_copy_get(
 
   // omap
   uint32_t omap_keys = 0;
-  if (!pool.info.supports_omap()) {
+  if (!pool.info.supports_omap() || !oi.is_omap()) {
     cursor.omap_complete = true;
   } else {
     if (left > 0 && !cursor.omap_complete) {
       assert(cursor.data_complete);
       if (cursor.omap_offset.empty()) {
-	osd->store->omap_get_header(coll, ghobject_t(oi.soid),
+	osd->store->omap_get_header(ch, ghobject_t(oi.soid),
 				    &reply_obj.omap_header);
       }
       bufferlist omap_data;
@@ -7946,6 +7933,19 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
     }
   }
 
+  // successfully flushed, can we evict this object?
+  if (!fop->op && agent_state->evict_mode != TierAgentState::EVICT_MODE_IDLE &&
+      agent_maybe_evict(obc, true)) {
+    osd->logger->inc(l_osd_tier_clean);
+    if (fop->on_flush) {
+      Context *on_flush = fop->on_flush;
+      fop->on_flush = NULL;
+      on_flush->complete(0);
+    }
+    flush_ops.erase(oid);
+    return 0;
+  }
+
   // successfully flushed; can we clear the dirty bit?
   // try to take the lock manually, since we don't
   // have a ctx yet.
@@ -8354,10 +8354,9 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContextRe
   repop->start = ceph_clock_now(cct);
 
   repop_queue.push_back(&repop->queue_item);
-  repop_map[repop->rep_tid] = repop;
   repop->get();
 
-  osd->logger->set(l_osd_op_wip, repop_map.size());
+  osd->logger->inc(l_osd_op_wip);
 
   return repop;
 }
@@ -8373,10 +8372,9 @@ void ReplicatedPG::remove_repop(RepGather *repop)
     dout(20) << " snapset_obc " << *repop->ctx->snapset_obc << dendl;
   release_op_ctx_locks(repop->ctx);
   repop->ctx->finish(0);  // FIXME: return value here is sloppy
-  repop_map.erase(repop->rep_tid);
   repop->put();
 
-  osd->logger->set(l_osd_op_wip, repop_map.size());
+  osd->logger->dec(l_osd_op_wip);
 }
 
 ReplicatedPG::RepGather *ReplicatedPG::simple_repop_create(ObjectContextRef obc)
@@ -9293,9 +9291,9 @@ void ReplicatedPG::sub_op_remove(OpRequestRef op)
 
   op->mark_started();
 
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  remove_snap_mapped_object(*t, m->poid);
-  int r = osd->store->queue_transaction_and_cleanup(osr.get(), t);
+  ObjectStore::Transaction t;
+  remove_snap_mapped_object(t, m->poid);
+  int r = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
   assert(r == 0);
 }
 
@@ -9382,7 +9380,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   pg_log.get_log().print(*_dout);
   *_dout << dendl;
 
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  ObjectStore::Transaction t;
   C_PG_MarkUnfoundLost *c = new C_PG_MarkUnfoundLost(this);
 
   utime_t mtime = ceph_clock_now(cct);
@@ -9405,7 +9403,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 
     switch (what) {
     case pg_log_entry_t::LOST_MARK:
-      obc = mark_object_lost(t, oid, m->second.need, mtime, pg_log_entry_t::LOST_MARK);
+      obc = mark_object_lost(&t, oid, m->second.need, mtime, pg_log_entry_t::LOST_MARK);
       pg_log.missing_got(m++);
       assert(0 == "actually, not implemented yet!");
       // we need to be careful about how this is handled on the replica!
@@ -9440,7 +9438,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 	pg_log.add(e);
 	dout(10) << e << dendl;
 
-	t->remove(
+	t.remove(
 	  coll,
 	  ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard));
 	pg_log.missing_add_event(e);
@@ -9469,11 +9467,11 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   }
 
   dirty_info = true;
-  write_if_dirty(*t);
+  write_if_dirty(t);
 
-  t->register_on_complete(new ObjectStore::C_DeleteTransaction(t));
-
-  osd->store->queue_transaction(osr.get(), t, c, NULL, new C_OSD_OndiskWriteUnlockList(&c->obcs));
+  
+  osd->store->queue_transaction(osr.get(), std::move(t), c, NULL, 
+                            new C_OSD_OndiskWriteUnlockList(&c->obcs));
 	      
   // Send out the PG log to all replicas
   // So that they know what is lost
@@ -9545,7 +9543,6 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
     remove_repop(repop);
   }
 
-  assert(repop_map.empty());
   assert(repop_queue.empty());
 
   if (requeue) {
@@ -10171,19 +10168,18 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 	      obc->ondisk_write_lock();
 	      obc->obs.oi.version = latest->version;
 
-	      ObjectStore::Transaction *t = new ObjectStore::Transaction;
-	      t->register_on_applied(new ObjectStore::C_DeleteTransaction(t));
+	      ObjectStore::Transaction t;
 	      bufferlist b2;
 	      obc->obs.oi.encode(b2);
 	      assert(!pool.info.require_rollback());
-	      t->setattr(coll, ghobject_t(soid), OI_ATTR, b2);
+	      t.setattr(coll, ghobject_t(soid), OI_ATTR, b2);
 
 	      recover_got(soid, latest->version);
 	      missing_loc.add_location(soid, pg_whoami);
 
 	      ++active_pushes;
 
-	      osd->store->queue_transaction(osr.get(), t,
+	      osd->store->queue_transaction(osr.get(), std::move(t),
 					    new C_OSD_AppliedRecoveredObject(this, obc),
 					    new C_OSD_CommittedPushedObject(
 					      this,
@@ -11003,7 +10999,7 @@ void ReplicatedPG::check_local()
 	       << " at " << p->version << dendl;
       struct stat st;
       int r = osd->store->stat(
-	coll,
+	ch,
 	ghobject_t(p->soid, ghobject_t::NO_GEN, pg_whoami.shard),
 	&st);
       if (r != -ENOENT) {
@@ -11547,7 +11543,7 @@ bool ReplicatedPG::agent_work(int start_max, int agent_flush_quota)
     }
 
     if (agent_state->evict_mode != TierAgentState::EVICT_MODE_IDLE &&
-	agent_maybe_evict(obc))
+	agent_maybe_evict(obc, false))
       ++started;
     else if (agent_state->flush_mode != TierAgentState::FLUSH_MODE_IDLE &&
              agent_flush_quota > 0 && agent_maybe_flush(obc)) {
@@ -11650,7 +11646,7 @@ void ReplicatedPG::agent_load_hit_sets()
 	bufferlist bl;
 	{
 	  obc->ondisk_read_lock();
-	  int r = osd->store->read(coll, ghobject_t(oid), 0, 0, bl);
+	  int r = osd->store->read(ch, ghobject_t(oid), 0, 0, bl);
 	  assert(r >= 0);
 	  obc->ondisk_read_unlock();
 	}
@@ -11741,10 +11737,10 @@ struct C_AgentEvictStartStop : public Context {
   }
 };
 
-bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
+bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
 {
   const hobject_t& soid = obc->obs.oi.soid;
-  if (obc->obs.oi.is_dirty()) {
+  if (!after_flush && obc->obs.oi.is_dirty()) {
     dout(20) << __func__ << " skip (dirty) " << obc->obs.oi << dendl;
     return false;
   }
@@ -11814,6 +11810,8 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
     ctx->delta_stats.num_objects_omap--;
   ctx->delta_stats.num_evict++;
   ctx->delta_stats.num_evict_kb += SHIFT_ROUND_UP(obc->obs.oi.size, 10);
+  if (obc->obs.oi.is_dirty())
+    --ctx->delta_stats.num_objects_dirty;
   assert(r == 0);
   finish_ctx(ctx, pg_log_entry_t::DELETE, false);
   simple_repop_submit(repop);
@@ -12763,10 +12761,10 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   dout(10) << "purged_snaps now " << pg->info.purged_snaps << ", snap_trimq now " 
 	   << pg->snap_trimq << dendl;
   
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  ObjectStore::Transaction t;
   pg->dirty_big_info = true;
-  pg->write_if_dirty(*t);
-  int tr = pg->osd->store->queue_transaction_and_cleanup(pg->osr.get(), t);
+  pg->write_if_dirty(t);
+  int tr = pg->osd->store->queue_transaction(pg->osr.get(), std::move(t), NULL);
   assert(tr == 0);
 
   context<SnapTrimmer>().need_share_pg_info = true;

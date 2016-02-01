@@ -21,6 +21,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "common/valgrind.h"
 #include "common/version.h"
 #include "include/color.h"
 
@@ -36,6 +37,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
 			  enum code_environment_t code_env, int flags)
 {
   // set code environment
+  ANNOTATE_BENIGN_RACE_SIZED(&g_code_env, sizeof(g_code_env), "g_code_env");
   g_code_env = code_env;
 
   // Create a configuration object

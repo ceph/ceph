@@ -917,6 +917,23 @@ struct RGWRegion {
   string default_placement;
 
   list<string> hostnames;
+  list<string> hostnames_s3website;
+  // TODO: Maybe convert hostnames to a map<string,list<string>> for
+  // endpoint_type->hostnames
+/*
+20:05 < _robbat21irssi> maybe I do someting like: if (hostname_map.empty()) { populate all map keys from hostnames; };
+20:05 < _robbat21irssi> but that's a later compatability migration planning bit
+20:06 < yehudasa> more like if (!hostnames.empty()) {
+20:06 < yehudasa> for (list<string>::iterator iter = hostnames.begin(); iter != hostnames.end(); ++iter) {
+20:06 < yehudasa> hostname_map["s3"].append(iter->second);
+20:07 < yehudasa> hostname_map["s3website"].append(iter->second);
+20:07 < yehudasa> s/append/push_back/g
+20:08 < _robbat21irssi> inner loop over APIs
+20:08 < yehudasa> yeah, probably
+20:08 < _robbat21irssi> s3, s3website, swift, swith_auth, swift_website
+*/
+  map<string, list<string> > api_hostname_map;
+  map<string, list<string> > api_endpoints_map;
 
   CephContext *cct;
   RGWRados *store;
@@ -924,7 +941,7 @@ struct RGWRegion {
   RGWRegion() : is_master(false), cct(NULL), store(NULL) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     ::encode(name, bl);
     ::encode(api_name, bl);
     ::encode(is_master, bl);
@@ -934,11 +951,12 @@ struct RGWRegion {
     ::encode(placement_targets, bl);
     ::encode(default_placement, bl);
     ::encode(hostnames, bl);
+    ::encode(hostnames_s3website, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     ::decode(name, bl);
     ::decode(api_name, bl);
     ::decode(is_master, bl);
@@ -949,6 +967,9 @@ struct RGWRegion {
     ::decode(default_placement, bl);
     if (struct_v >= 2) {
       ::decode(hostnames, bl);
+    }
+    if (struct_v >= 3) {
+      ::decode(hostnames_s3website, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -2182,9 +2203,12 @@ public:
   int cls_user_sync_bucket_stats(rgw_obj& user_obj, rgw_bucket& bucket);
   int update_user_bucket_stats(const string& user_id, rgw_bucket& bucket, RGWStorageStats& stats);
   int cls_user_list_buckets(rgw_obj& obj,
-                            const string& in_marker, int max_entries,
+                            const string& in_marker,
+                            const string& end_marker,
+                            int max_entries,
                             list<cls_user_bucket_entry>& entries,
-                            string *out_marker, bool *truncated);
+                            string *out_marker,
+                            bool *truncated);
   int cls_user_add_bucket(rgw_obj& obj, const cls_user_bucket_entry& entry);
   int cls_user_update_buckets(rgw_obj& obj, list<cls_user_bucket_entry>& entries, bool add);
   int cls_user_complete_stats_sync(rgw_obj& obj);

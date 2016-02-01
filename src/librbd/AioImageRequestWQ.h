@@ -14,10 +14,10 @@
 namespace librbd {
 
 class AioCompletion;
-class AioImageRequest;
+template <typename> class AioImageRequest;
 class ImageCtx;
 
-class AioImageRequestWQ : protected ThreadPool::PointerWQ<AioImageRequest> {
+class AioImageRequestWQ : protected ThreadPool::PointerWQ<AioImageRequest<ImageCtx> > {
 public:
   AioImageRequestWQ(ImageCtx *image_ctx, const string &name, time_t ti,
                     ThreadPool *tp);
@@ -30,11 +30,12 @@ public:
                 bufferlist *pbl, int op_flags, bool native_async=true);
   void aio_write(AioCompletion *c, uint64_t off, uint64_t len, const char *buf,
                  int op_flags, bool native_async=true);
-  void aio_discard(AioCompletion *c, uint64_t off, uint64_t len, bool native_async=true);
+  void aio_discard(AioCompletion *c, uint64_t off, uint64_t len,
+                   bool native_async=true);
   void aio_flush(AioCompletion *c, bool native_async=true);
 
-  using ThreadPool::PointerWQ<AioImageRequest>::drain;
-  using ThreadPool::PointerWQ<AioImageRequest>::empty;
+  using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtx> >::drain;
+  using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtx> >::empty;
 
   inline bool writes_empty() const {
     RWLock::RLocker locker(m_lock);
@@ -54,17 +55,17 @@ public:
 
 protected:
   virtual void *_void_dequeue();
-  virtual void process(AioImageRequest *req);
+  virtual void process(AioImageRequest<ImageCtx> *req);
 
 private:
   typedef std::list<Context *> Contexts;
 
   struct C_RefreshFinish : public Context {
     AioImageRequestWQ *aio_work_queue;
-    AioImageRequest *aio_image_request;
+    AioImageRequest<ImageCtx> *aio_image_request;
 
     C_RefreshFinish(AioImageRequestWQ *aio_work_queue,
-                    AioImageRequest *aio_image_request)
+                    AioImageRequest<ImageCtx> *aio_image_request)
       : aio_work_queue(aio_work_queue), aio_image_request(aio_image_request) {
     }
     virtual void finish(int r) override {
@@ -101,9 +102,9 @@ private:
 
   bool is_journal_required() const;
   bool is_lock_required() const;
-  void queue(AioImageRequest *req);
+  void queue(AioImageRequest<ImageCtx> *req);
 
-  void handle_refreshed(int r, AioImageRequest *req);
+  void handle_refreshed(int r, AioImageRequest<ImageCtx> *req);
   void handle_blocked_writes(int r);
 };
 

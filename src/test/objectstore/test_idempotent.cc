@@ -15,7 +15,7 @@
 #include <iostream>
 #include <sstream>
 #include <boost/scoped_ptr.hpp>
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
     ObjectStore::Transaction t;
     assert(!store->mount());
     t.create_collection(coll, 0);
-    store->apply_transaction(&osr, t);
+    store->apply_transaction(&osr, std::move(t));
   } else {
     assert(!store->mount());
   }

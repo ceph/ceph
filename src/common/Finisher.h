@@ -48,6 +48,8 @@ class Finisher {
   /// should be completed in that place instead.
   vector<Context*> finisher_queue;
 
+  string thread_name;
+
   /// Queue for contexts for which the complete function will be called
   /// with a parameter other than 0.
   list<pair<Context*,int> > finisher_queue_rval;
@@ -135,14 +137,14 @@ class Finisher {
   Finisher(CephContext *cct_) :
     cct(cct_), finisher_lock("Finisher::finisher_lock"),
     finisher_stop(false), finisher_running(false),
-    logger(0),
+    thread_name("fn_anonymous"), logger(0),
     finisher_thread(this) {}
 
   /// Construct a named Finisher that logs its queue length.
-  Finisher(CephContext *cct_, string name) :
+  Finisher(CephContext *cct_, string name, string tn) :
     cct(cct_), finisher_lock("Finisher::finisher_lock"),
     finisher_stop(false), finisher_running(false),
-    logger(0),
+    thread_name(tn), logger(0),
     finisher_thread(this) {
     PerfCountersBuilder b(cct, string("finisher-") + name,
 			  l_finisher_first, l_finisher_last);

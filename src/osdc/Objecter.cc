@@ -178,6 +178,7 @@ void Objecter::handle_conf_change(const struct md_config_t *conf,
 
 void Objecter::update_crush_location()
 {
+  RWLock::WLocker rwlocker(rwlock);
   crush_location.clear();
   vector<string> lvec;
   get_str_vec(cct->_conf->crush_location, ";, \t", lvec);
@@ -454,8 +455,8 @@ void Objecter::shutdown()
   if (tick_event) {
     if (timer.cancel_event(tick_event)) {
       ldout(cct, 10) <<  " successfully canceled tick" << dendl;
-      tick_event = 0;
     }
+    tick_event = 0;
   }
 
   if (m_request_state_hook) {
@@ -473,8 +474,6 @@ void Objecter::shutdown()
 
   // Let go of Objecter write lock so timer thread can shutdown
   rwlock.unlock();
-
-  assert(tick_event == 0);
 }
 
 void Objecter::_send_linger(LingerOp *info)
@@ -1986,7 +1985,6 @@ void Objecter::tick()
   ldout(cct, 10) << "tick" << dendl;
 
   // we are only called by C_Tick
-  assert(tick_event);
   tick_event = 0;
 
   if (!initialized.read()) {
@@ -2007,7 +2005,7 @@ void Objecter::tick()
   for (map<int,OSDSession*>::iterator siter = osd_sessions.begin();
        siter != osd_sessions.end(); ++siter) {
     OSDSession *s = siter->second;
-    RWLock::RLocker l(s->lock);
+    RWLock::WLocker l(s->lock);
     bool found = false;
     for (map<ceph_tid_t,Op*>::iterator p = s->ops.begin();
 	p != s->ops.end();
@@ -2062,9 +2060,11 @@ void Objecter::tick()
     }
   }
 
-  // reschedule
-  tick_event = timer.reschedule_me(ceph::make_timespan(
-				     cct->_conf->objecter_tick_interval));
+  // Make sure we don't resechedule if we wake up after shutdown
+  if (initialized.read()) {
+    tick_event = timer.reschedule_me(ceph::make_timespan(
+				       cct->_conf->objecter_tick_interval));
+  }
 }
 
 void Objecter::resend_mon_ops()
@@ -2282,13 +2282,13 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
 
   if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
       osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
-    ldout(cct, 10) << " paused modify " << op << " tid " << last_tid.read()
+    ldout(cct, 10) << " paused modify " << op << " tid " << op->tid
 		   << dendl;
     op->target.paused = true;
     _maybe_request_map();
   } else if ((op->target.flags & CEPH_OSD_FLAG_READ) &&
 	     osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
-    ldout(cct, 10) << " paused read " << op << " tid " << last_tid.read()
+    ldout(cct, 10) << " paused read " << op << " tid " << op->tid
 		   << dendl;
     op->target.paused = true;
     _maybe_request_map();
@@ -2298,7 +2298,7 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
 	     (_osdmap_full_flag() ||
 	      _osdmap_pool_full(op->target.base_oloc.pool))) {
     ldout(cct, 0) << " FULL, paused modify " << op << " tid "
-		  << last_tid.read() << dendl;
+		  << op->tid << dendl;
     op->target.paused = true;
     _maybe_request_map();
   } else if (!s->is_homeless()) {
@@ -3372,13 +3372,18 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
     // release the listing context's budget once all
     // OPs (in the session) are finished
     put_nlist_context_budget(list_context);
-
     onfinish->complete(0);
     return;
   }
 
   rwlock.get_read();
   const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  if (!pool) { // pool is gone
+    rwlock.unlock();
+    put_nlist_context_budget(list_context);
+    onfinish->complete(-ENOENT);
+    return;
+  }
   int pg_num = pool->get_pg_num();
   rwlock.unlock();
 
@@ -3523,13 +3528,18 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish)
     // release the listing context's budget once all
     // OPs (in the session) are finished
     put_list_context_budget(list_context);
-
     onfinish->complete(0);
     return;
   }
 
   rwlock.get_read();
   const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  if (!pool) { // pool is gone
+    rwlock.unlock();
+    put_list_context_budget(list_context);
+    onfinish->complete(-ENOENT);
+    return;
+  }
   int pg_num = pool->get_pg_num();
   rwlock.unlock();
 
@@ -4213,7 +4223,6 @@ bool Objecter::ms_handle_reset(Connection *con)
   if (!initialized.read())
     return false;
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
-    //
     int osd = osdmap->identify_osd(con->get_peer_addr());
     if (osd >= 0) {
       ldout(cct, 1) << "ms_handle_reset on osd." << osd << dendl;
@@ -4355,7 +4364,6 @@ void Objecter::_dump_ops(const OSDSession *s, Formatter *fmt)
 void Objecter::dump_ops(Formatter *fmt)
 {
   fmt->open_array_section("ops");
-  rwlock.get_read();
   for (map<int, OSDSession *>::const_iterator siter = osd_sessions.begin();
        siter != osd_sessions.end(); ++siter) {
     OSDSession *s = siter->second;
@@ -4363,7 +4371,6 @@ void Objecter::dump_ops(Formatter *fmt)
     _dump_ops(s, fmt);
     s->lock.unlock();
   }
-  rwlock.unlock();
   _dump_ops(homeless_session, fmt);
   fmt->close_section(); // ops array
 }
@@ -4386,7 +4393,6 @@ void Objecter::_dump_linger_ops(const OSDSession *s, Formatter *fmt)
 void Objecter::dump_linger_ops(Formatter *fmt)
 {
   fmt->open_array_section("linger_ops");
-  rwlock.get_read();
   for (map<int, OSDSession *>::const_iterator siter = osd_sessions.begin();
        siter != osd_sessions.end(); ++siter) {
     OSDSession *s = siter->second;
@@ -4394,7 +4400,6 @@ void Objecter::dump_linger_ops(Formatter *fmt)
     _dump_linger_ops(s, fmt);
     s->lock.unlock();
   }
-  rwlock.unlock();
   _dump_linger_ops(homeless_session, fmt);
   fmt->close_section(); // linger_ops array
 }
@@ -4424,7 +4429,6 @@ void Objecter::_dump_command_ops(const OSDSession *s, Formatter *fmt)
 void Objecter::dump_command_ops(Formatter *fmt)
 {
   fmt->open_array_section("command_ops");
-  rwlock.get_read();
   for (map<int, OSDSession *>::const_iterator siter = osd_sessions.begin();
        siter != osd_sessions.end(); ++siter) {
     OSDSession *s = siter->second;
@@ -4432,7 +4436,6 @@ void Objecter::dump_command_ops(Formatter *fmt)
     _dump_command_ops(s, fmt);
     s->lock.unlock();
   }
-  rwlock.unlock();
   _dump_command_ops(homeless_session, fmt);
   fmt->close_section(); // command_ops array
 }
@@ -4475,7 +4478,7 @@ void Objecter::dump_pool_stat_ops(Formatter *fmt) const
 	 ++it) {
       fmt->dump_string("pool", *it);
     }
-    fmt->close_section(); // pool_op object
+    fmt->close_section(); // pools array
 
     fmt->close_section(); // pool_stat_op object
   }
@@ -4492,9 +4495,9 @@ void Objecter::dump_statfs_ops(Formatter *fmt) const
     fmt->open_object_section("statfs_op");
     fmt->dump_unsigned("tid", op->tid);
     fmt->dump_stream("last_sent") << op->last_submit;
-    fmt->close_section(); // pool_stat_op object
+    fmt->close_section(); // statfs_op object
   }
-  fmt->close_section(); // pool_stat_ops array
+  fmt->close_section(); // statfs_ops array
 }
 
 Objecter::RequestStateHook::RequestStateHook(Objecter *objecter) :
@@ -4785,7 +4788,6 @@ Objecter::~Objecter()
   assert(check_latest_map_ops.empty());
   assert(check_latest_map_commands.empty());
 
-  assert(!tick_event);
   assert(!m_request_state_hook);
   assert(!logger);
 }
@@ -4892,6 +4894,7 @@ void Objecter::enumerate_objects(
                      "osd epoch " << osdmap->get_epoch() << dendl;
     rwlock.unlock();
     on_finish->complete(-ENOENT);
+    return;
   } else {
     rwlock.unlock();
   }
@@ -4932,6 +4935,7 @@ void Objecter::_enumerate_reply(
   if (r < 0) {
     ldout(cct, 4) << __func__ << ": remote error " << r << dendl;
     on_finish->complete(r);
+    return;
   }
 
   assert(next != NULL);
@@ -4962,6 +4966,12 @@ void Objecter::_enumerate_reply(
     // drop anything after 'end'
     rwlock.get_read();
     const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
+    if (!pool) {
+      // pool is gone, drop any results which are now meaningless.
+      rwlock.put_read();
+      on_finish->complete(-ENOENT);
+      return;
+    }
     while (!response.entries.empty()) {
       uint32_t hash = response.entries.back().locator.empty() ?
 	pool->hash_key(response.entries.back().oid,

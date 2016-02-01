@@ -94,6 +94,14 @@ struct MDSCapMatch {
   bool match(const std::string &target_path,
 	     const int caller_uid,
 	     const int caller_gid) const;
+
+  /**
+   * Check whether this path *might* be accessible (actual permission
+   * depends on the stronger check in match()).
+   *
+   * @param target_path filesystem path without leading '/'
+   */
+  bool match_path(const std::string &target_path) const;
 };
 
 struct MDSCapGrant {
@@ -126,6 +134,7 @@ public:
 		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
 		  uid_t uid, gid_t gid, unsigned mask,
 		  uid_t new_uid, gid_t new_gid) const;
+  bool path_capable(const std::string &inode_path) const;
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 };

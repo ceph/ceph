@@ -108,8 +108,17 @@ TYPE(HitSet::Params)
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
 
-#include "os/SequencerPosition.h"
+#include "os/filestore/SequencerPosition.h"
 TYPE(SequencerPosition)
+
+#include "os/bluestore/bluestore_types.h"
+TYPE(bluestore_cnode_t)
+TYPE(bluestore_extent_t)
+TYPE(bluestore_extent_ref_map_t)
+TYPE(bluestore_overlay_t)
+TYPE(bluestore_onode_t)
+TYPE(bluestore_wal_op_t)
+TYPE(bluestore_wal_transaction_t)
 
 #include "common/hobject.h"
 TYPE(hobject_t)
@@ -135,7 +144,7 @@ TYPE(MonCap)
 #include "mon/mon_types.h"
 TYPE(LevelDBStoreStats)
 
-#include "os/DBObjectMap.h"
+#include "os/filestore/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
 
@@ -227,7 +236,7 @@ TYPE(ETableServer)
 TYPE(EUpdate)
 
 #ifdef WITH_RBD
-#include "librbd/JournalTypes.h"
+#include "librbd/journal/Entries.h"
 TYPE(librbd::journal::EventEntry)
 #include "librbd/WatchNotifyTypes.h"
 TYPE(librbd::watch_notify::NotifyMessage)

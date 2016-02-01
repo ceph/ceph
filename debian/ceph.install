@@ -8,6 +8,7 @@ usr/bin/ceph-clsinfo
 usr/bin/ceph-debugpack
 usr/bin/ceph-mon
 usr/bin/ceph-objectstore-tool
+usr/bin/ceph-bluefs-tool
 usr/bin/ceph-osd
 usr/bin/ceph-run
 usr/bin/ceph-rest-api

@@ -33,6 +33,7 @@
 #include "include/CompatSet.h"
 #include "common/histogram.h"
 #include "include/interval_set.h"
+#include "include/inline_memory.h"
 #include "common/Formatter.h"
 #include "common/bloom_filter.hpp"
 #include "common/hobject.h"
@@ -328,6 +329,9 @@ struct pg_t {
     return m_preferred;
   }
 
+  static const uint8_t calc_name_buf_size = 36;  // max length for max values len("18446744073709551615.ffffffff") + future suffix len("_head") + '\0'
+  char *calc_name(char *buf, const char *suffix_backwords) const;
+
   void set_ps(ps_t p) {
     m_seed = p;
   }
@@ -448,6 +452,10 @@ struct spg_t {
   int32_t preferred() const {
     return pgid.preferred();
   }
+
+  static const uint8_t calc_name_buf_size = pg_t::calc_name_buf_size + 4; // 36 + len('s') + len("255");
+  char *calc_name(char *buf, const char *suffix_backwords) const;
+ 
   bool parse(const char *s);
   bool parse(const std::string& s) {
     return parse(s.c_str());
@@ -518,13 +526,13 @@ class coll_t {
     TYPE_LEGACY_TEMP = 1,  /* no longer used */
     TYPE_PG = 2,
     TYPE_PG_TEMP = 3,
-    TYPE_PG_REMOVAL = 4,   /* note: deprecated, not encoded */
   };
   type_t type;
   spg_t pgid;
   uint64_t removal_seq;  // note: deprecated, not encoded
 
-  string _str;  // cached string
+  char _str_buff[spg_t::calc_name_buf_size];
+  char *_str;
 
   void calc_str();
 
@@ -550,6 +558,15 @@ public:
     calc_str();
   }
 
+  coll_t& operator=(const coll_t& rhs)
+  {
+    this->type = rhs.type;
+    this->pgid = rhs.pgid;
+    this->removal_seq = rhs.removal_seq;
+    this->calc_str();
+    return *this;
+  }
+
   // named constructors
   static coll_t meta() {
     return coll_t();
@@ -558,12 +575,13 @@ public:
     return coll_t(p);
   }
 
-  const std::string& to_str() const {
-    return _str;
+  const std::string to_str() const {
+    return string(_str);
   }
   const char *c_str() const {
-    return _str.c_str();
+    return _str;
   }
+
   bool parse(const std::string& s);
 
   int operator<(const coll_t &rhs) const {
@@ -575,7 +593,7 @@ public:
     return type == TYPE_META;
   }
   bool is_pg_prefix(spg_t *pgid_) const {
-    if (type == TYPE_PG || type == TYPE_PG_TEMP || type == TYPE_PG_REMOVAL) {
+    if (type == TYPE_PG || type == TYPE_PG_TEMP) {
       *pgid_ = pgid;
       return true;
     }
@@ -596,16 +614,6 @@ public:
   }
   bool is_temp(spg_t *pgid_) const {
     if (type == TYPE_PG_TEMP) {
-      *pgid_ = pgid;
-      return true;
-    }
-    return false;
-  }
-  bool is_removal() const {
-    return type == TYPE_PG_REMOVAL;
-  }
-  bool is_removal(spg_t *pgid_) const {
-    if (type == TYPE_PG_REMOVAL) {
       *pgid_ = pgid;
       return true;
     }
@@ -632,6 +640,22 @@ public:
   coll_t get_temp() const {
     assert(type == TYPE_PG);
     return coll_t(TYPE_PG_TEMP, pgid, 0);
+  }
+
+  ghobject_t get_min_hobj() const {
+    ghobject_t o;
+    switch (type) {
+    case TYPE_PG:
+      o.hobj.pool = pgid.pool();
+      o.set_shard(pgid.shard);
+      break;
+    case TYPE_META:
+      o.hobj.pool = -1;
+      break;
+    default:
+      break;
+    }
+    return o;
   }
 
   void dump(Formatter *f) const;
@@ -1619,8 +1643,7 @@ struct object_stat_sum_t {
   }
 
   bool is_zero() const {
-    object_stat_sum_t zero;
-    return memcmp(this, &zero, sizeof(zero)) == 0;
+    return mem_is_zero((char*)this, sizeof(*this));
   }
 
   void add(const object_stat_sum_t& o);
@@ -3845,12 +3868,13 @@ struct ScrubMap {
     bool digest_present:1;
     bool omap_digest_present:1;
     bool read_error:1;
+    bool stat_error:1;
 
     object() :
       // Init invalid size so it won't match if we get a stat EIO error
       size(-1), omap_digest(0), digest(0), nlinks(0), 
       negative(false), digest_present(false), omap_digest_present(false), 
-      read_error(false) {}
+      read_error(false), stat_error(false) {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);

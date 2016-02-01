@@ -283,9 +283,9 @@ void RebuildObjectMapRequest<I>::send_trim_image() {
     orig_size = m_image_ctx.get_object_size() *
                 m_image_ctx.object_map->size();
   }
-  TrimRequest<I> *req = new TrimRequest<I>(m_image_ctx,
-                                           this->create_callback_context(),
-                                           orig_size, new_size, m_prog_ctx);
+  TrimRequest<I> *req = TrimRequest<I>::create(m_image_ctx,
+                                               this->create_callback_context(),
+                                               orig_size, new_size, m_prog_ctx);
   req->send();
 }
 

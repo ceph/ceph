@@ -11,7 +11,8 @@
 #endif
 
 KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
-			       const string& dir)
+			       const string& dir,
+			       void *p)
 {
   if (type == "leveldb") {
     return new LevelDBStore(cct, dir);
@@ -25,7 +26,7 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
 #ifdef HAVE_LIBROCKSDB
   if (type == "rocksdb" &&
       cct->check_experimental_feature_enabled("rocksdb")) {
-    return new RocksDBStore(cct, dir);
+    return new RocksDBStore(cct, dir, p);
   }
 #endif
   return NULL;

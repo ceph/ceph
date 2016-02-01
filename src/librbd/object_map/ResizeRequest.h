@@ -33,8 +33,7 @@ public:
   virtual void send();
 
 protected:
-  virtual void finish();
-  using AsyncRequest<>::finish;
+  virtual void finish_request() override;
 
 private:
   ceph::BitVector<2> *m_object_map;
