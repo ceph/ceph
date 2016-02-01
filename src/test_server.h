@@ -37,7 +37,6 @@ class TestServer {
       // empty
     }
   };
-  
 
 public:
 

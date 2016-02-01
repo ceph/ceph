@@ -25,6 +25,7 @@ namespace chrono = std::chrono;
 int main(int argc, char* argv[]) {
   using TestRequestRef = std::unique_ptr<TestRequest> ;
   using ClientMap = std::map<ClientId,TestClient*>;
+  using ServerMap = std::map<ServerId,TestServer*>;
 
   std::cout << "simulation started" << std::endl;
 
@@ -38,13 +39,23 @@ int main(int argc, char* argv[]) {
 
   // server params
 
+#if 0
   const int server_ops = 150;
   const int server_threads = 7;
+#endif
+
+  // name -> (server iops, server threads)
+  const std::map<ServerId,std::pair<int,int>> server_info = {
+    {0.0, { 150, 7 }},
+    {1.0, { 150, 7 }},
+  };
+
 
   // client params
 
   const int client_outstanding_ops = 10;
 
+  // id -> (client_info, goal iops)
   const std::map<ClientId,std::pair<dmc::ClientInfo,int>> client_info = {
     {"alpha", {{ 1.0, 50.0, 200.0 }, 100 }},
     {"bravo", {{ 2.0, 50.0, 200.0 }, 100 }},
@@ -69,18 +80,33 @@ int main(int argc, char* argv[]) {
     clients[client_id]->receiveResponse(resp, resp_params);
   };
 
+  ServerMap servers;
+  for (auto const &i : server_info) {
+    const ServerId& id = i.first;
+    const int& iops = i.second.first;
+    const int& threads = i.second.second;
+
+    servers[id] =
+      new TestServer(id, iops, threads, client_info_f, client_response_f);
+  }
+
+#if 0
   TestServer server(0,
 		    server_ops, server_threads,
 		    client_info_f, client_response_f);
+#endif
+
+  auto a_server = servers.find(0.0);
+  assert(servers.end() != a_server);
 
   // construct clients
 
   for (auto i = client_info.begin(); i != client_info.end(); ++i) {
-    std::string name = i->first;
+    ClientId name = i->first;
     int goal = i->second.second;
     clients[name] =
       new TestClient(name,
-		     std::bind(&TestServer::post, &server, _1, _2),
+		     std::bind(&TestServer::post, a_server->second, _1, _2),
 		     goal * goal_secs_to_run,
 		     goal,
 		     client_outstanding_ops);
