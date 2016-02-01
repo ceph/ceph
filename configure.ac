@@ -758,16 +758,6 @@ if test "x$with_spdk" != x"no"; then
    AC_SUBST(SPDK_LIBS)
 fi
 
-#
-# FreeBSD has it in base.
-#
-if test x"$freebsd" != x"yes" -a x"$with_radosgw" = x"yes"; then
-PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
-                [], AC_MSG_FAILURE([No usable version of libedit found.]))
-else
-	LIBEDIT_LIBS="-ledit"
-fi
-
 #libatomic-ops? You want it!
 AC_ARG_WITH([libatomic-ops],
             [AS_HELP_STRING([--without-libatomic-ops],
