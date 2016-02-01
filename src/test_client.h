@@ -73,6 +73,11 @@ public:
 	     int _iops_goal,
 	     int _outstanding_ops_allowed);
 
+  TestClient(const TestClient&) = delete;
+  TestClient(TestClient&&) = delete;
+  TestClient& operator=(const TestClient&) = delete;
+  TestClient& operator=(TestClient&&) = delete;
+
   virtual ~TestClient();
 
   void receiveResponse(const TestResponse&,

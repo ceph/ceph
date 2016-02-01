@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
 
   auto client_info_f = std::function<dmc::ClientInfo(ClientId)>(getClientInfo);
   TestServer::ClientRespFunc client_response_f =
-    std::bind(&send_response, clients, _1, _2, _3);
+    std::bind(&send_response, std::ref(clients), _1, _2, _3);
 
   TestServer server(0,
 		    server_ops, server_threads,
