@@ -199,8 +199,7 @@ public:
   };
 
   KeyValueDB::Transaction get_transaction() {
-    return ceph::shared_ptr< LevelDBTransactionImpl >(
-      new LevelDBTransactionImpl(this));
+    return std::make_shared<LevelDBTransactionImpl>(this);
   }
 
   int submit_transaction(KeyValueDB::Transaction t);
@@ -402,11 +401,8 @@ err:
 
 protected:
   WholeSpaceIterator _get_iterator() {
-    return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
-      new LevelDBWholeSpaceIteratorImpl(
-	db->NewIterator(leveldb::ReadOptions())
-      )
-    );
+    return std::make_shared<LevelDBWholeSpaceIteratorImpl>(
+	db->NewIterator(leveldb::ReadOptions()));
   }
 
   WholeSpaceIterator _get_snapshot_iterator() {
@@ -416,10 +412,9 @@ protected:
     snapshot = db->GetSnapshot();
     options.snapshot = snapshot;
 
-    return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
-      new LevelDBSnapshotIteratorImpl(db.get(), snapshot,
-	db->NewIterator(options))
-    );
+    return std::make_shared<LevelDBSnapshotIteratorImpl>(
+        db.get(), snapshot,
+	db->NewIterator(options));
   }
 
 };

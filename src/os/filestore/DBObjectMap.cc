@@ -237,7 +237,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::init()
       assert(0);
       return -EINVAL;
     }
-    parent_iter.reset(new DBObjectMapIteratorImpl(map, parent));
+    parent_iter = std::make_shared<DBObjectMapIteratorImpl>(map, parent);
   }
   key_iter = map->db->get_iterator(map->user_prefix(header));
   assert(key_iter);
