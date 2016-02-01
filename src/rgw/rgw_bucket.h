@@ -224,7 +224,7 @@ public:
           list<rgw_obj_key>& objs_to_unlink, std::string *err_msg = NULL);
 
   int check_object_index(RGWBucketAdminOpState& op_state,
-          map<string, RGWObjEnt> result, std::string *err_msg = NULL);
+          map<string, RGWObjEnt> &result, std::string *err_msg = NULL);
 
   int check_index(RGWBucketAdminOpState& op_state,
           map<RGWObjCategory, RGWStorageStats>& existing_stats,

@@ -810,7 +810,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 }
 
 int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
-        map<string, RGWObjEnt> result, std::string *err_msg)
+        map<string, RGWObjEnt> &result, std::string *err_msg)
 {
 
   bool fix_index = op_state.will_fix_index();
@@ -832,7 +832,6 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
   bool is_truncated = true;
 
   while (is_truncated) {
-    map<string, RGWObjEnt> result;
 
     int r = store->cls_bucket_list(bucket, marker, prefix, 1000, true,
                                    result, &is_truncated, &marker,
