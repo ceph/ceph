@@ -856,7 +856,6 @@ public:
 	marker += "/";
       marker += sm;
     }
-    magic = 71;
     op = this;
   }
 
@@ -962,7 +961,6 @@ public:
       marker.name += sm;
     }
     default_max = 1000; // XXX was being omitted
-    magic = 72;
     op = this;
   }
 
@@ -1115,7 +1113,6 @@ public:
   RGWCreateBucketRequest(CephContext* _cct, RGWUserInfo *_user,
 			std::string& _uri)
     : RGWLibRequest(_cct, _user), uri(_uri) {
-    magic = 73;
     op = this;
   }
 
@@ -1183,7 +1180,6 @@ public:
   RGWDeleteBucketRequest(CephContext* _cct, RGWUserInfo *_user,
 			std::string& _uri)
     : RGWLibRequest(_cct, _user), uri(_uri) {
-    magic = 74;
     op = this;
   }
 
@@ -1252,7 +1248,6 @@ public:
 		  buffer::list& _bl)
     : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname),
       bl(_bl), bytes_written(0) {
-    magic = 75;
     op = this;
   }
 
@@ -1342,7 +1337,6 @@ public:
 		 void *_ulp_buffer)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), ulp_buffer(_ulp_buffer),
       nread(0), read_resid(len) {
-    magic = 76;
     op = this;
 
     /* fixup RGWGetObj (already know range parameters) */
@@ -1435,7 +1429,6 @@ public:
   RGWDeleteObjRequest(CephContext* _cct, RGWUserInfo *_user,
 		      const std::string& _bname, const std::string& _oname)
     : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname) {
-    magic = 77;
     op = this;
   }
 
@@ -1492,7 +1485,6 @@ public:
 		    uint32_t _flags)
     : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname),
       _size(0), flags(_flags) {
-    magic = 78;
     op = this;
 
     /* fixup RGWGetObj (already know range parameters) */
@@ -1580,7 +1572,6 @@ public:
 		       const std::string& _path)
     : RGWLibRequest(_cct, _user) {
     uri = "/" + _path;
-    magic = 79;
     op = this;
   }
 
@@ -1648,7 +1639,6 @@ public:
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), path(_path),
       matched(false), is_dir(false) {
     default_max = 1000; // logical max {"foo", "foo/"}
-    magic = 80;
     op = this;
   }
 
@@ -1761,8 +1751,6 @@ public:
     if (ret == 0) {
       ret = init_from_header(get_state());
     }
-
-    magic = 81;
     op = this;
   }
 
@@ -1862,7 +1850,6 @@ public:
 		    const std::string& _src_name, const std::string& _dst_name)
     : RGWLibRequest(_cct, _user), src_parent(_src_parent),
       dst_parent(_dst_parent), src_name(_src_name), dst_name(_dst_name) {
-    magic = 82;
     op = this;
   }
 
