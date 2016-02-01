@@ -107,6 +107,6 @@ noinst_HEADERS += \
 	cls/cephfs/cls_cephfs_client.h \
 	cls/journal/cls_journal_client.h \
 	cls/journal/cls_journal_types.h \
-	cls/lua/cls_lua.h \
 	cls/lua/cls_lua_client.h \
-	cls/lua/cls_lua_ops.h
+	lua_core/lua_core.h \
+	lua_core/lua_core_ops.h

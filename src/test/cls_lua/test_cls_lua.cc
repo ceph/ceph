@@ -5,7 +5,7 @@
 #include "gtest/gtest.h"
 #include "test/librados/test.h"
 #include "cls/lua/cls_lua_client.h"
-#include "cls/lua/cls_lua.h"
+#include "lua_core/lua_core.h"
 
 /*
  * JSON script to test JSON I/O protocol with cls_lua

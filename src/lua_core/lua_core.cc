@@ -1,5 +1,5 @@
 /*
- * Lua Bindings for RADOS Object Class
+ * Core Lua Bindings for Generic Interfaces (common to both MDS and OSD)
  */
 #include <errno.h>
 #include <setjmp.h>
@@ -7,13 +7,9 @@
 #include <sstream>
 #include <lua.hpp>
 #include "include/types.h"
-#include "objclass/objclass.h"
 #include "json_spirit/json_spirit.h"
-#include "cls_lua.h"
-#include "cls_lua_ops.h"
-
-CLS_VER(1,0)
-CLS_NAME(lua)
+#include "lua_core/lua_core.h"
+#include "lua_core/lua_core_ops.h"
 
 cls_handle_t h_class;
 cls_method_handle_t h_eval_json;
@@ -39,14 +35,6 @@ struct clslua_err {
   int ret;
 };
 
-/*
- * Input parameter encoding.
- */
-enum InputEncoding {
-  JSON_ENC,
-  BUFFERLIST_ENC,
-};
-
 struct clslua_hctx {
   struct clslua_err error;
   InputEncoding in_enc;
@@ -67,7 +55,7 @@ static char clslua_hctx_reg_key;
 /*
  * Grabs the full method handler context
  */
-static clslua_hctx *__clslua_get_hctx(lua_State *L)
+clslua_hctx *__clslua_get_hctx(lua_State *L)
 {
   /* lookup registry value */
   lua_pushlightuserdata(L, &clslua_hctx_reg_key);
@@ -89,7 +77,7 @@ static clslua_hctx *__clslua_get_hctx(lua_State *L)
  * of each clx_cxx_* wrapper, and must be set before there is any chance a Lua
  * script calling a 'cls' module function that requires it.
  */
-static cls_method_context_t clslua_get_hctx(lua_State *L)
+cls_method_context_t clslua_get_hctx(lua_State *L)
 {
   struct clslua_hctx *hctx = __clslua_get_hctx(L);
   return *hctx->hctx;
@@ -238,8 +226,8 @@ static void clslua_check_registered_handler(lua_State *L)
  * the number of Lua return arguments on the stack. Otherwise we save error
  * information in the registry and throw a Lua error.
  */
-static int clslua_opresult(lua_State *L, int ok, int ret, int nargs,
-    bool error_on_stack = false)
+int clslua_opresult(lua_State *L, int ok, int ret, int nargs,
+    bool error_on_stack)
 {
   struct clslua_err *err = clslua_checkerr(L);
 
@@ -265,387 +253,9 @@ static int clslua_opresult(lua_State *L, int ok, int ret, int nargs,
 }
 
 /*
- * cls_cxx_create
- */
-static int clslua_create(lua_State *lua)
-{
-  cls_method_context_t hctx = clslua_get_hctx(lua);
-  int exclusive = lua_toboolean(lua, 1);
-
-  int ret = cls_cxx_create(hctx, exclusive);
-  return clslua_opresult(lua, (ret == 0), ret, 0);
-}
-
-/*
- * cls_cxx_remove
- */
-static int clslua_remove(lua_State *lua)
-{
-  cls_method_context_t hctx = clslua_get_hctx(lua);
-
-  int ret = cls_cxx_remove(hctx);
-  return clslua_opresult(lua, (ret == 0), ret, 0);
-}
-
-/*
- * cls_cxx_stat
- */
-static int clslua_stat(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-
-  uint64_t size;
-  time_t mtime;
-  int ret = cls_cxx_stat(hctx, &size, &mtime);
-  if (!ret) {
-    lua_pushinteger(L, size);
-    lua_pushinteger(L, mtime);
-  }
-  return clslua_opresult(L, (ret == 0), ret, 2);
-}
-
-/*
- * cls_cxx_read
- */
-static int clslua_read(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  int offset = luaL_checkinteger(L, 1);
-  int length = luaL_checkinteger(L, 2);
-  bufferlist *bl = clslua_pushbufferlist(L, NULL);
-  int ret = cls_cxx_read(hctx, offset, length, bl);
-  return clslua_opresult(L, (ret >= 0), ret, 1);
-}
-
-/*
- * cls_cxx_write
- */
-static int clslua_write(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  int offset = luaL_checkinteger(L, 1);
-  int length = luaL_checkinteger(L, 2);
-  bufferlist *bl = clslua_checkbufferlist(L, 3);
-  int ret = cls_cxx_write(hctx, offset, length, bl);
-  return clslua_opresult(L, (ret == 0), ret, 0);
-}
-
-/*
- * cls_cxx_write_full
- */
-static int clslua_write_full(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  bufferlist *bl = clslua_checkbufferlist(L, 1);
-  int ret = cls_cxx_write_full(hctx, bl);
-  return clslua_opresult(L, (ret == 0), ret, 0);
-}
-
-/*
- * cls_cxx_getxattr
- */
-static int clslua_getxattr(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  const char *name = luaL_checkstring(L, 1);
-  bufferlist  *bl = clslua_pushbufferlist(L, NULL);
-  int ret = cls_cxx_getxattr(hctx, name, bl);
-  return clslua_opresult(L, (ret >= 0), ret, 1);
-}
-
-/*
- * cls_cxx_getxattrs
- */
-static int clslua_getxattrs(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-
-  map<string, bufferlist> attrs;
-  int ret = cls_cxx_getxattrs(hctx, &attrs);
-  if (ret < 0)
-    return clslua_opresult(L, 0, ret, 0);
-
-  lua_createtable(L, 0, attrs.size());
-
-  for (auto it = attrs.cbegin(); it != attrs.cend(); it++) {
-    lua_pushstring(L, it->first.c_str());
-    bufferlist  *bl = clslua_pushbufferlist(L, NULL);
-    *bl = it->second; // xfer ownership... will be GC'd
-    lua_settable(L, -3);
-  }
-
-  return clslua_opresult(L, 1, ret, 1);
-}
-
-/*
- * cls_cxx_setxattr
- */
-static int clslua_setxattr(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  const char *name = luaL_checkstring(L, 1);
-  bufferlist *bl = clslua_checkbufferlist(L, 2);
-  int ret = cls_cxx_setxattr(hctx, name, bl);
-  return clslua_opresult(L, (ret == 0), ret, 1);
-}
-
-/*
- * cls_cxx_map_get_val
- */
-static int clslua_map_get_val(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  const char *key = luaL_checkstring(L, 1);
-  bufferlist  *bl = clslua_pushbufferlist(L, NULL);
-  int ret = cls_cxx_map_get_val(hctx, key, bl);
-  return clslua_opresult(L, (ret == 0), ret, 1);
-}
-
-/*
- * cls_cxx_map_set_val
- */
-static int clslua_map_set_val(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  const char *key = luaL_checkstring(L, 1);
-  bufferlist *val = clslua_checkbufferlist(L, 2);
-  int ret = cls_cxx_map_set_val(hctx, key, val);
-  return clslua_opresult(L, (ret == 0), ret, 0);
-}
-
-/*
- * cls_cxx_map_clear
- */
-static int clslua_map_clear(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  int ret = cls_cxx_map_clear(hctx);
-  return clslua_opresult(L, (ret == 0), ret, 0);
-}
-
-/*
- * cls_cxx_map_get_keys
- */
-static int clslua_map_get_keys(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  const char *start_after = luaL_checkstring(L, 1);
-  int max_to_get = luaL_checkinteger(L, 2);
-
-  std::set<string> keys;
-  int ret = cls_cxx_map_get_keys(hctx, start_after, max_to_get, &keys);
-  if (ret < 0)
-    return clslua_opresult(L, 0, ret, 0);
-
-  lua_createtable(L, 0, keys.size());
-
-  for (auto it = keys.cbegin(); it != keys.cend(); it++) {
-    const std::string& key = *it;
-    lua_pushstring(L, key.c_str());
-    lua_pushboolean(L, 1);
-    lua_settable(L, -3);
-  }
-
-  return clslua_opresult(L, 1, ret, 1);
-}
-
-/*
- * cls_cxx_map_get_vals
- */
-static int clslua_map_get_vals(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  const char *start_after = luaL_checkstring(L, 1);
-  const char *filter_prefix= luaL_checkstring(L, 2);
-  int max_to_get = luaL_checkinteger(L, 3);
-
-  map<string, bufferlist> kvpairs;
-  int ret = cls_cxx_map_get_vals(hctx, start_after, filter_prefix,
-      max_to_get, &kvpairs);
-  if (ret < 0)
-    return clslua_opresult(L, 0, ret, 0);
-
-  lua_createtable(L, 0, kvpairs.size());
-
-  for (auto it = kvpairs.cbegin(); it != kvpairs.cend(); it++) {
-    lua_pushstring(L, it->first.c_str());
-    bufferlist  *bl = clslua_pushbufferlist(L, NULL);
-    *bl = it->second; // xfer ownership... will be GC'd
-    lua_settable(L, -3);
-  }
-
-  return clslua_opresult(L, 1, ret, 1);
-}
-
-/*
- * cls_cxx_map_read_header
- */
-static int clslua_map_read_header(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  bufferlist *bl = clslua_pushbufferlist(L, NULL);
-  int ret = cls_cxx_map_read_header(hctx, bl);
-  return clslua_opresult(L, (ret >= 0), ret, 1);
-}
-
-/*
- * cls_cxx_map_write_header
- */
-static int clslua_map_write_header(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  bufferlist *bl = clslua_checkbufferlist(L, 1);
-  int ret = cls_cxx_map_write_header(hctx, bl);
-  return clslua_opresult(L, (ret == 0), ret, 0);
-}
-
-/*
- * cls_cxx_map_set_vals
- */
-static int clslua_map_set_vals(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  luaL_checktype(L, 1, LUA_TTABLE);
-
-  map<string, bufferlist> kvpairs;
-
-  lua_pushnil(L);
-  while (lua_next(L, 1) != 0) {
-    /*
-     * In the case of a numeric key a copy is made on the stack because
-     * converting to a string would otherwise manipulate the original key and
-     * cause problems for iteration.
-     */
-    string key;
-    int type_code = lua_type(L, -2);
-    switch (type_code) {
-      case LUA_TSTRING:
-        key.assign(lua_tolstring(L, -2, NULL));
-        break;
-
-      case LUA_TNUMBER:
-        lua_pushvalue(L, -2);
-        key.assign(lua_tolstring(L, -1, NULL));
-        lua_pop(L, 1);
-        break;
-
-      default:
-        lua_pushfstring(L, "map_set_vals: invalid key type (%s)",
-            lua_typename(L, type_code));
-        return clslua_opresult(L, 0, -EINVAL, 0, true);
-    }
-
-    bufferlist val;
-    type_code = lua_type(L, -1);
-    switch (type_code) {
-      case LUA_TSTRING:
-        {
-          size_t len;
-          const char *data = lua_tolstring(L, -1, &len);
-          val.append(data, len);
-        }
-        break;
-
-      default:
-        lua_pushfstring(L, "map_set_vals: invalid val type (%s) for key (%s)",
-            lua_typename(L, type_code), key.c_str());
-        return clslua_opresult(L, 0, -EINVAL, 0, true);
-    }
-
-    kvpairs[key] = val;
-
-    lua_pop(L, 1);
-  }
-
-  int ret = cls_cxx_map_set_vals(hctx, &kvpairs);
-
-  return clslua_opresult(L, (ret == 0), ret, 0);
-}
-
-/*
- * cls_cxx_map_remove_key
- */
-static int clslua_map_remove_key(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  const char *key = luaL_checkstring(L, 1);
-  int ret = cls_cxx_map_remove_key(hctx, key);
-  return clslua_opresult(L, (ret == 0), ret, 0);
-}
-
-/*
- * cls_current_version
- */
-static int clslua_current_version(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  uint64_t version = cls_current_version(hctx);
-  lua_pushinteger(L, version);
-  return clslua_opresult(L, 1, 0, 1);
-}
-
-/*
- * cls_current_subop_num
- */
-static int clslua_current_subop_num(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  int num = cls_current_subop_num(hctx);
-  lua_pushinteger(L, num);
-  return clslua_opresult(L, 1, 0, 1);
-}
-
-/*
- * cls_current_subop_version
- */
-static int clslua_current_subop_version(lua_State *L)
-{
-  cls_method_context_t hctx = clslua_get_hctx(L);
-  string s;
-  cls_cxx_subop_version(hctx, &s);
-  lua_pushstring(L, s.c_str());
-  return clslua_opresult(L, 1, 0, 1);
-}
-
-/*
  * Functions registered in the 'cls' module.
  */
-static const luaL_Reg clslua_lib[] = {
-  // mgmt
-  {"register", clslua_register},
-  {"log", clslua_log},
-
-  // data
-  {"create", clslua_create},
-  {"remove", clslua_remove},
-  {"stat", clslua_stat},
-  {"read", clslua_read},
-  {"write", clslua_write},
-  {"write_full", clslua_write_full},
-
-  // xattr
-  {"getxattr", clslua_getxattr},
-  {"getxattrs", clslua_getxattrs},
-  {"setxattr", clslua_setxattr},
-
-  // omap
-  {"map_clear", clslua_map_clear},
-  {"map_get_keys", clslua_map_get_keys},
-  {"map_get_vals", clslua_map_get_vals},
-  {"map_read_header", clslua_map_read_header},
-  {"map_write_header", clslua_map_write_header},
-  {"map_get_val", clslua_map_get_val},
-  {"map_set_val", clslua_map_set_val},
-  {"map_set_vals", clslua_map_set_vals},
-  {"map_remove_key", clslua_map_remove_key},
-
-  // env
-  {"current_version", clslua_current_version},
-  {"current_subop_num", clslua_current_subop_num},
-  {"current_subop_version", clslua_current_subop_version},
-
-  {NULL, NULL}
-};
+vector<luaL_Reg> clslua_lib;
 
 /*
  * Set int const in table at top of stack
@@ -656,16 +266,23 @@ static const luaL_Reg clslua_lib[] = {
 } while (0)
 
 /*
- *
+ * Add default functions and setup errors
  */
 static int luaopen_objclass(lua_State *L)
 {
   lua_newtable(L);
 
   /*
+   * Add the functions for the core Lua sandbox wrapper
+   */
+  clslua_lib.push_back({"register", clslua_register});
+  clslua_lib.push_back({"log", clslua_log});
+  clslua_lib.push_back({NULL, NULL});
+
+  /*
    * Register cls functions (cls.log, etc...)
    */
-  luaL_setfuncs(L, clslua_lib, 0);
+  luaL_setfuncs(L, &clslua_lib[0], 0);
 
   /*
    * Register generic errno values under 'cls'
@@ -953,7 +570,7 @@ static int clslua_eval(lua_State *L)
 /*
  * Main handler. Proxies the Lua VM and the Lua-defined handler.
  */
-static int eval_generic(cls_method_context_t hctx, bufferlist *in, bufferlist *out,
+int eval_generic(cls_method_context_t hctx, bufferlist *in, bufferlist *out,
     InputEncoding in_enc)
 {
   struct clslua_hctx ctx;
@@ -1043,11 +660,13 @@ static int eval_bufferlist(cls_method_context_t hctx, bufferlist *in, bufferlist
   return eval_generic(hctx, in, out, BUFFERLIST_ENC);
 }
 
-void __cls_init()
+void cls_init(string cls_name, list<luaL_Reg> add)
 {
   CLS_LOG(20, "Loaded lua class!");
 
-  cls_register("lua", &h_class);
+  clslua_lib.insert(clslua_lib.end(), add.begin(), add.end());
+
+  cls_register(cls_name.c_str(), &h_class);
 
   cls_register_cxx_method(h_class, "eval_json",
       CLS_METHOD_RD | CLS_METHOD_WR, eval_json, &h_eval_json);
