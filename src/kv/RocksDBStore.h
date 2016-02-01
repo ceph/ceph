@@ -157,8 +157,7 @@ public:
   };
 
   KeyValueDB::Transaction get_transaction() {
-    return std::shared_ptr< RocksDBTransactionImpl >(
-      new RocksDBTransactionImpl(this));
+    return std::make_shared<RocksDBTransactionImpl>(this);
   }
 
   int submit_transaction(KeyValueDB::Transaction t);

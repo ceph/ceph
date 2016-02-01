@@ -657,11 +657,8 @@ string RocksDBStore::past_prefix(const string &prefix)
 
 RocksDBStore::WholeSpaceIterator RocksDBStore::_get_iterator()
 {
-  return std::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
-    new RocksDBWholeSpaceIteratorImpl(
-      db->NewIterator(rocksdb::ReadOptions())
-    )
-  );
+  return std::make_shared<RocksDBWholeSpaceIteratorImpl>(
+        db->NewIterator(rocksdb::ReadOptions()));
 }
 
 RocksDBStore::WholeSpaceIterator RocksDBStore::_get_snapshot_iterator()
@@ -672,10 +669,8 @@ RocksDBStore::WholeSpaceIterator RocksDBStore::_get_snapshot_iterator()
   snapshot = db->GetSnapshot();
   options.snapshot = snapshot;
 
-  return std::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
-    new RocksDBSnapshotIteratorImpl(db, snapshot,
-      db->NewIterator(options))
-  );
+  return std::make_shared<RocksDBSnapshotIteratorImpl>(
+          db, snapshot, db->NewIterator(options));
 }
 
 RocksDBStore::RocksDBSnapshotIteratorImpl::~RocksDBSnapshotIteratorImpl()

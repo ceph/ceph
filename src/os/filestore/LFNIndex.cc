@@ -124,7 +124,7 @@ int LFNIndex::lookup(const ghobject_t &oid,
   if (r < 0)
     goto out;
   string full_path = get_full_path(path, short_name);
-  *out_path = IndexedPath(new Path(full_path, this));
+  *out_path = std::make_shared<Path>(full_path, this);
   r = 0;
   );
 }

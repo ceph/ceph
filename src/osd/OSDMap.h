@@ -270,15 +270,15 @@ private:
 	     flags(0),
 	     num_osd(0), num_up_osd(0), num_in_osd(0),
 	     max_osd(0),
-	     osd_addrs(new addrs_s),
-	     pg_temp(new map<pg_t,vector<int32_t> >),
-	     primary_temp(new map<pg_t,int32_t>),
-	     osd_uuid(new vector<uuid_d>),
+	     osd_addrs(std::make_shared<addrs_s>()),
+	     pg_temp(std::make_shared<map<pg_t,vector<int32_t>>>()),
+	     primary_temp(std::make_shared<map<pg_t,int32_t>>()),
+	     osd_uuid(std::make_shared<vector<uuid_d>>()),
 	     cluster_snapshot_epoch(0),
 	     new_blacklist_entries(false),
 	     cached_up_osd_features(0),
 	     crc_defined(false), crc(0),
-	     crush(new CrushWrapper) {
+	     crush(std::make_shared<CrushWrapper>()) {
     memset(&fsid, 0, sizeof(fsid));
   }
 
