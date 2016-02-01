@@ -73,44 +73,7 @@ target_link_libraries(test_trans os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 ## Benchmarks
 
-# smalliobench
-set(smalliobench_srcs
-  bench/small_io_bench.cc
-  bench/rados_backend.cc
-  bench/detailed_stat_collector.cc
-  bench/bencher.cc
-  )
-add_executable(ceph_smalliobench
-  ${smalliobench_srcs}
-  )
-target_link_libraries(ceph_smalliobench librados ${Boost_PROGRAM_OPTIONS_LIBRARY} global
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-
-# ceph_smalliobenchrbd
-if (${WITH_RBD})
-  set(ceph_smalliobenchrbd_srcs
-    bench/small_io_bench_rbd.cc
-    bench/rbd_backend.cc
-    bench/detailed_stat_collector.cc
-    bench/bencher.cc
-    ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
-    ${CMAKE_SOURCE_DIR}/src/common/secret.c
-  )
-  add_executable(smalliobenchrbd
-    ${smalliobenchrbd_srcs}
-    )
-  target_link_libraries(smalliobenchrbd
-    librbd
-    librados
-    os
-    global
-    ${Boost_PROGRAM_OPTIONS_LIBRARY}
-    udev
-    ${BLKID_LIBRARIES}
-    ${CMAKE_DL_LIBS}
-    keyutils
-    )
-endif (${WITH_RBD})
+add_subdirectory(bench)
 
 # ceph_omapbench
 set(omapbench_srcs
@@ -719,47 +682,11 @@ target_link_libraries(ceph_test_keyvaluedb_iterators
   ${CMAKE_DL_LIBS}
   )
 
-# ceph_smalliobenchfs
-set(ceph_smalliobenchfs_srcs
-  bench/small_io_bench_fs.cc
-  bench/testfilestore_backend.cc
-  bench/detailed_stat_collector.cc
-  bench/bencher.cc
-  )
-add_executable(ceph_smalliobenchfs
-  ${ceph_smalliobenchfs_srcs}
-  )
-target_link_libraries(ceph_smalliobenchfs librados ${Boost_PROGRAM_OPTIONS_LIBRARY} os global
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-
-# ceph_smalliobenchdumb
-set(smalliobenchdumb_srcs
-  bench/small_io_bench_dumb.cc
-  bench/dumb_backend.cc
-  bench/detailed_stat_collector.cc
-  bench/bencher.cc
-  )
-add_executable(ceph_smalliobenchdumb
-  ${smalliobenchdumb_srcs}
-  )
-target_link_libraries(ceph_smalliobenchdumb librados ${Boost_PROGRAM_OPTIONS_LIBRARY} os global
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-
 # ceph_test_keys
 add_executable(ceph_test_keys
   testkeys.cc
   )
 target_link_libraries(ceph_test_keys mon global ${CMAKE_DL_LIBS})
-
-# ceph_tpbench
-set(tpbench_srcs
-  bench/tp_bench.cc
-  bench/detailed_stat_collector.cc)
-add_executable(ceph_tpbench
-  ${tpbench_srcs}
-  )
-target_link_libraries(ceph_tpbench librados ${Boost_PROGRAM_OPTIONS_LIBRARY} global
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 # ceph_test_snap_mapper
 add_executable(ceph_test_snap_mapper EXCLUDE_FROM_ALL
