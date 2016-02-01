@@ -1739,7 +1739,6 @@ public:
   off_t next_off;
   size_t bytes_written;
   bool multipart;
-  bool need_calc_md5;
 
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
 		  const std::string& _bname, const std::string& _oname)
