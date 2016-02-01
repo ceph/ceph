@@ -789,7 +789,6 @@ int Monitor::init()
   // i'm ready!
   messenger->add_dispatcher_tail(this);
 
-
   bootstrap();
 
   // encode command sets
@@ -1851,7 +1850,10 @@ void Monitor::win_standalone_election()
   const MonCommand *my_cmds;
   int cmdsize;
   get_locally_supported_monitor_commands(&my_cmds, &cmdsize);
-  win_election(elector.get_epoch(), q, CEPH_FEATURES_ALL, my_cmds, cmdsize, NULL);
+  win_election(elector.get_epoch(), q,
+               CEPH_FEATURES_ALL,
+               ceph::features::mon::get_supported(),
+               my_cmds, cmdsize, NULL);
 }
 
 const utime_t& Monitor::get_leader_since() const
@@ -1866,17 +1868,21 @@ epoch_t Monitor::get_epoch()
 }
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
+                           const mon_feature_t& mon_features,
                            const MonCommand *cmdset, int cmdsize,
                            const set<int> *classic_monitors)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
-	   << " features " << features << dendl;
+	   << " features " << features
+           << " mon_features " << mon_features
+           << dendl;
   assert(is_electing());
   state = STATE_LEADER;
   leader_since = ceph_clock_now(g_ceph_context);
   leader = rank;
   quorum = active;
   quorum_features = features;
+  quorum_mon_features = mon_features;
   outside_quorum.clear();
 
   clog->info() << "mon." << name << "@" << rank
@@ -1913,7 +1919,9 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   collect_sys_info(&metadata[rank], g_ceph_context);
 }
 
-void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
+void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
+                            uint64_t features,
+                            const mon_feature_t& mon_features)
 {
   state = STATE_PEON;
   leader_since = utime_t();
@@ -1921,8 +1929,11 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
   quorum = q;
   outside_quorum.clear();
   quorum_features = features;
+  quorum_mon_features = mon_features;
   dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
-	   << " quorum is " << quorum << " features are " << quorum_features << dendl;
+	   << " quorum is " << quorum << " features are " << quorum_features
+           << " mon_features are " << quorum_mon_features
+           << dendl;
 
   paxos->peon_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)

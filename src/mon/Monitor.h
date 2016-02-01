@@ -229,6 +229,10 @@ private:
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
   utime_t exited_quorum; // time detected as not in quorum; 0 if in
   uint64_t quorum_features;  ///< intersection of quorum member feature bits
+  /**
+   * Intersection of quorum members mon-specific feature bits
+   */
+  mon_feature_t quorum_mon_features;
   bufferlist supported_commands_bl; // encoded MonCommands we support
   bufferlist classic_commands_bl; // encoded MonCommands supported by Dumpling
   set<int> classic_mons; // set of "classic" monitors; only valid on leader
@@ -627,10 +631,13 @@ public:
   // end election (called by Elector)
   void win_election(epoch_t epoch, set<int>& q,
 		    uint64_t features,
+                    const mon_feature_t& mon_features,
 		    const MonCommand *cmdset, int cmdsize,
 		    const set<int> *classic_monitors);
   void lose_election(epoch_t epoch, set<int>& q, int l,
-		     uint64_t features); // end election (called by Elector)
+		     uint64_t features,
+                     const mon_feature_t& mon_features);
+  // end election (called by Elector)
   void finish_election();
 
   const bufferlist& get_supported_commands_bl() {
