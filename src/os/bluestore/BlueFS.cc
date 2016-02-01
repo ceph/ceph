@@ -304,9 +304,7 @@ int BlueFS::_write_super()
   uint32_t crc = bl.crc32c(-1);
   ::encode(crc, bl);
   assert(bl.length() <= get_super_length());
-  bufferptr z(get_super_length() - bl.length());
-  z.zero();
-  bl.append(z);
+  bl.append_zero(get_super_length() - bl.length());
   bl.rebuild();
 
   IOContext ioc(NULL);
@@ -889,12 +887,8 @@ void BlueFS::_pad_bl(bufferlist& bl)
 {
   uint64_t partial = bl.length() % super.block_size;
   if (partial) {
-    bufferptr z(super.block_size - partial);
-    dout(10) << __func__ << " padding with " << z.length() << " zeros" << dendl;
-    z.zero();
-    bufferlist zbl;
-    zbl.append(z);
-    bl.append(z);
+    dout(10) << __func__ << " padding with " << super.block_size - partial << " zeros" << dendl;
+    bl.append_zero(super.block_size - partial);
   }
 }
 
@@ -1038,9 +1032,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       dout(20) << __func__ << " caching tail of " << tail
 	       << " and padding block with zeros" << dendl;
       h->tail_block.substr_of(bl, bl.length() - tail, tail);
-      bufferptr z(super.block_size - tail);
-      z.zero();
-      t.append(z);
+      t.append_zero(super.block_size - tail);
     }
     bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], true);
     bloff += x_len;

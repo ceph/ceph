@@ -1541,9 +1541,7 @@ int KStore::_do_read(
     length = o->onode.size - offset;
   }
   if (stripe_size == 0) {
-    bufferptr z(length);
-    z.zero();
-    bl.append(z);
+    bl.append_zero(length);
     r = length;
     goto out;
   }
@@ -1571,17 +1569,13 @@ int KStore::_do_read(
 	  dout(30) << __func__ << " taking " << stripe_off << "~" << l << dendl;
 	}
 	if (l < swant) {
-	  bufferptr z(swant - l);
-	  z.zero();
-	  bl.append(z);
-	  dout(30) << __func__ << " adding " << z.length() << " zeros" << dendl;
+	  bl.append_zero(swant - l);
+	  dout(30) << __func__ << " adding " << swant - l << " zeros" << dendl;
 	}
       }
     } else {
       dout(30) << __func__ << " generating " << swant << " zeros" << dendl;
-      bufferptr z(swant);
-      z.zero();
-      bl.append(z);
+      bl.append_zero(swant);
     }
     offset += swant;
     length -= swant;
@@ -2945,10 +2939,8 @@ int KStore::_do_write(TransContext *txc,
 	bl.substr_of(prev, 0, p);
       }
       if (p < offset_rem) {
-	bufferptr z(offset_rem - p);
-	dout(20) << __func__ << " add leading " << z.length() << " zeros" << dendl;
-	z.zero();
-	bl.append(z);
+	dout(20) << __func__ << " add leading " << offset_rem - p << " zeros" << dendl;
+	bl.append_zero(offset_rem - p);
       }
     }
     unsigned use = stripe_size - offset_rem;
@@ -3039,10 +3031,9 @@ int KStore::_zero(TransContext *txc,
 	  dout(20) << __func__ << " truncated stripe " << pos - stripe_off
 		   << " to " << bl.length() << dendl;
 	} else {
-	  bufferptr z(end - (pos - stripe_off + bl.length()));
-	  z.zero();
-	  bl.append(z);
-	  dout(20) << __func__ << " adding " << z.length() << " of zeros" << dendl;
+          auto len = end - (pos - stripe_off + bl.length());
+	  bl.append_zero(len);
+	  dout(20) << __func__ << " adding " << len << " of zeros" << dendl;
 	  if (stripe.length() > bl.length()) {
 	    unsigned l = stripe.length() - bl.length();
 	    bufferlist t;

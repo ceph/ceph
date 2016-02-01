@@ -5304,7 +5304,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       bufferlist bl;
       bufferptr bp(osize);
       bp.zero();
-      bl.push_back(bp);
+      bl.push_back(std::move(bp));
       bl.rebuild_page_aligned();
       for (int i=0; i<onum; ++i) {
 	char nm[30];
@@ -5321,7 +5321,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     bufferlist bl;
     bufferptr bp(bsize);
     bp.zero();
-    bl.push_back(bp);
+    bl.push_back(std::move(bp));
     bl.rebuild_page_aligned();
 
     {

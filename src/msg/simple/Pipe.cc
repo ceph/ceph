@@ -333,7 +333,7 @@ int Pipe::accept()
   }
   {
     bufferptr tp(sizeof(peer_addr));
-    addrbl.push_back(tp);
+    addrbl.push_back(std::move(tp));
   }
   if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
     ldout(msgr->cct,10) << "accept couldn't read peer_addr" << dendl;
@@ -371,7 +371,7 @@ int Pipe::accept()
         ldout(msgr->cct,10) << "accept couldn't read connect authorizer" << dendl;
         goto fail_unlocked;
       }
-      authorizer.push_back(bp);
+      authorizer.push_back(std::move(bp));
       authorizer_reply.clear();
     }
 
@@ -948,7 +948,7 @@ int Pipe::connect()
     int wirelen = sizeof(__u32) * 2 + sizeof(ceph_sockaddr_storage);
     bufferptr p(wirelen * 2);
 #endif
-    addrbl.push_back(p);
+    addrbl.push_back(std::move(p));
   }
   if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
     ldout(msgr->cct,2) << "connect couldn't read peer addrs, " << cpp_strerror(errno) << dendl;
@@ -1875,19 +1875,16 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
     // head
     unsigned head = 0;
     head = MIN(CEPH_PAGE_SIZE - (off & ~CEPH_PAGE_MASK), left);
-    bufferptr bp = buffer::create(head);
-    data.push_back(bp);
+    data.push_back(buffer::create(head));
     left -= head;
   }
   unsigned middle = left & CEPH_PAGE_MASK;
   if (middle > 0) {
-    bufferptr bp = buffer::create_page_aligned(middle);
-    data.push_back(bp);
+    data.push_back(buffer::create_page_aligned(middle));
     left -= middle;
   }
   if (left) {
-    bufferptr bp = buffer::create(left);
-    data.push_back(bp);
+    data.push_back(buffer::create(left));
   }
 }
 
@@ -1975,7 +1972,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     bufferptr bp = buffer::create(front_len);
     if (tcp_read(bp.c_str(), front_len) < 0)
       goto out_dethrottle;
-    front.push_back(bp);
+    front.push_back(std::move(bp));
     ldout(msgr->cct,20) << "reader got front " << front.length() << dendl;
   }
 
@@ -1985,7 +1982,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     bufferptr bp = buffer::create(middle_len);
     if (tcp_read(bp.c_str(), middle_len) < 0)
       goto out_dethrottle;
-    middle.push_back(bp);
+    middle.push_back(std::move(bp));
     ldout(msgr->cct,20) << "reader got middle " << middle.length() << dendl;
   }
 

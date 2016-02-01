@@ -968,7 +968,7 @@ namespace librbd {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
     bufferptr ptr(len);
-    bl.push_back(ptr);
+    bl.push_back(std::move(ptr));
     int r = ictx->aio_work_queue->read(ofs, len, bl.c_str(), 0);
     tracepoint(librbd, read_exit, r);
     return r;
@@ -980,7 +980,7 @@ namespace librbd {
     tracepoint(librbd, read2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
 		ictx->read_only, ofs, len, op_flags);
     bufferptr ptr(len);
-    bl.push_back(ptr);
+    bl.push_back(std::move(ptr));
     int r = ictx->aio_work_queue->read(ofs, len, bl.c_str(), op_flags);
     tracepoint(librbd, read_exit, r);
     return r;

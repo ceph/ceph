@@ -766,7 +766,7 @@ int FileJournal::read_header(header_t *hdr) const
       memset(bpdata, 0, bp.length() - r);
   }
 
-  bl.push_back(bp);
+  bl.push_back(std::move(bp));
 
   try {
     bufferlist::iterator p = bl.begin();
@@ -1885,7 +1885,7 @@ void FileJournal::wrap_read_bl(
 	   << r << dendl;
       ceph_abort();
     }
-    bl->push_back(bp);
+    bl->push_back(std::move(bp));
     pos += len;
     olen -= len;
   }
