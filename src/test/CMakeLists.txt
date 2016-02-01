@@ -512,20 +512,7 @@ target_link_libraries(ceph_test_cls_lock
   radostest
   )
 
-add_executable(ceph_test_cls_hello
-  cls_hello/test_cls_hello.cc
-  )
-set_target_properties(ceph_test_cls_hello PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_cls_hello
-  librados
-  global
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  radostest
-  ${UNITTEST_LIBS}
-  )
+add_subdirectory(cls_hello)
 
 add_executable(ceph_test_cls_numops cls_numops/test_cls_numops.cc)
 set_target_properties(ceph_test_cls_numops PROPERTIES COMPILE_FLAGS
