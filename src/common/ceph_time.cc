@@ -22,13 +22,10 @@
 namespace ceph {
   namespace time_detail {
     real_clock::time_point real_clock::now(const CephContext* cct) noexcept {
-      struct timespec ts;
-      clock_gettime(CLOCK_REALTIME, &ts);
-      // TODO: After we get the time-literal configuration patch in,
-      // just add the configured duration.
+      auto t = now();
       if (cct)
-	ts.tv_sec += cct->_conf->clock_offset;
-      return from_timespec(ts);
+	t += make_timespan(cct->_conf->clock_offset);
+      return t;
     }
 
     void real_clock::to_ceph_timespec(const time_point& t,
@@ -48,13 +45,10 @@ namespace ceph {
 
     coarse_real_clock::time_point coarse_real_clock::now(
       const CephContext* cct) noexcept {
-      struct timespec ts;
-      clock_gettime(CLOCK_REALTIME_COARSE, &ts);
-      // TODO: After we get the time-literal configuration patch in,
-      // just add the configured duration.
+      auto t = now();
       if (cct)
-	ts.tv_sec += cct->_conf->clock_offset;
-      return from_timespec(ts);
+	t += make_timespan(cct->_conf->clock_offset);
+      return t;
     }
 
     void coarse_real_clock::to_ceph_timespec(const time_point& t,
