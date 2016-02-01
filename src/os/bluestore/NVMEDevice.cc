@@ -829,7 +829,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     dout(10) << __func__ << " read from buffer " << copied << dendl;
   }
   pbl->clear();
-  pbl->push_back(p);
+  pbl->push_back(std::move(p));
   r = t->return_code;
   rte_free(t->buf);
 
