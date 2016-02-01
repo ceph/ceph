@@ -1201,6 +1201,15 @@ OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_num_control_oids, OPT_INT, 8)
 OPTION(rgw_num_rados_handles, OPT_U32, 1)
 
+/* The following are tunables for caches of RGW NFS (and other file
+ * client) objects.
+ *
+ * The file handle cache is a partitioned hash table
+ * (fhcache_partitions), each with a closed hash part and backing
+ * b-tree mapping.  The number of partions is expected to be a small
+ * prime, the cache size something larger but less than 5K, the total
+ * size of the cache is n_part * cache_size.
+ */
 OPTION(rgw_nfs_lru_lanes, OPT_INT, 5)
 OPTION(rgw_nfs_lru_lane_hiwat, OPT_INT, 911)
 OPTION(rgw_nfs_fhcache_partitions, OPT_INT, 3)
