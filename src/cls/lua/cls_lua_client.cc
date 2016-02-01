@@ -6,7 +6,7 @@
 #include "include/rados/librados.h"
 #include "include/types.h"
 #include "cls_lua_client.h"
-#include "cls_lua_ops.h"
+#include "lua_core/lua_core_ops.h"
 
 using std::string;
 using std::vector;

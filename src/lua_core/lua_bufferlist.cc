@@ -9,7 +9,7 @@
 #include "include/types.h"
 #include "include/buffer.h"
 #include "objclass/objclass.h"
-#include "cls/lua/cls_lua.h"
+#include "lua_core/lua_core.h"
 
 #define LUA_BUFFERLIST "ClsLua.Bufferlist"
 
