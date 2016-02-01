@@ -39,11 +39,6 @@ int main(int argc, char* argv[]) {
 
   // server params
 
-#if 0
-  const int server_ops = 150;
-  const int server_threads = 7;
-#endif
-
   // name -> (server iops, server threads)
   const std::map<ServerId,std::pair<int,int>> server_info = {
     {0.0, { 150, 7 }},
@@ -89,12 +84,6 @@ int main(int argc, char* argv[]) {
     servers[id] =
       new TestServer(id, iops, threads, client_info_f, client_response_f);
   }
-
-#if 0
-  TestServer server(0,
-		    server_ops, server_threads,
-		    client_info_f, client_response_f);
-#endif
 
   auto a_server = servers.find(0.0);
   assert(servers.end() != a_server);
