@@ -22,88 +22,58 @@ namespace dmc = crimson::dmclock;
 namespace chrono = std::chrono;
 
 
-TestServer* testServer;
-
-
-typedef std::unique_ptr<TestRequest> TestRequestRef;
-
-std::mutex cout_mtx;
-typedef typename std::lock_guard<std::mutex> Guard;
-
-using ClientMap = std::map<ClientId,TestClient*>;
-
-#define COUNT(array) (sizeof(array) / sizeof(array[0]))
-
-
-static const int goal_secs_to_run = 30;
-
-static const int server_ops = 150;
-static const int server_threads = 7;
-
-static const int client_outstanding_ops = 10;
-
-static std::map<std::string,std::pair<dmc::ClientInfo,int>> client_info = {
-  {"alpha", {{ 1.0, 50.0, 200.0 }, 100 }},
-  {"bravo", {{ 2.0, 50.0, 200.0 }, 100 }},
-};
-
-
-#if 0
-static dmc::ClientInfo client_info_array[] = {
-  // as of C++ 11 this will invoke the constructor with three doubles
-  // as parameters
-  {1.0, 50.0, 200.0},
-  {2.0, 50.0, 200.0},
-  // {1.0, 50.0, 0.0},
-  // {2.0, 50.0, 0.0},
-  // {2.0, 50.0, 0.0},
-};
-
-static std::map<ClientId,dmc::ClientInfo> client_info_map;
-
-
-static int client_goals[] = {
-  100,
-  100,
-  // 40,
-  // 80,
-  // 80,
-}; // in IOPS
-#endif
-
-
-dmc::ClientInfo getClientInfo(const ClientId& c) {
-  auto it = client_info.find(c);
-  assert(client_info.end() != it);
-  return it->second.first;
-}
-
-
-void send_response(ClientMap& clients,
-		   ClientId client_id,
-		   const TestResponse& resp,
-		   const dmc::RespParams<ServerId>& resp_params) {
-  clients[client_id]->receiveResponse(resp, resp_params);
-}
-
-
 int main(int argc, char* argv[]) {
+  using TestRequestRef = std::unique_ptr<TestRequest> ;
+  using ClientMap = std::map<ClientId,TestClient*>;
+
   std::cout << "simulation started" << std::endl;
 
+  // simulation params
+
+  const int goal_secs_to_run = 30;
   const TestClient::TimePoint early_time = TestClient::now();
   const chrono::seconds skip_amount(2); // skip first 2 secondsd of data
   const chrono::seconds measure_unit(5); // calculate in groups of 5 seconds
   const chrono::seconds report_unit(1); // unit to output reports in
 
+  // server params
+
+  const int server_ops = 150;
+  const int server_threads = 7;
+
+  // client params
+
+  const int client_outstanding_ops = 10;
+
+  const std::map<ClientId,std::pair<dmc::ClientInfo,int>> client_info = {
+    {"alpha", {{ 1.0, 50.0, 200.0 }, 100 }},
+    {"bravo", {{ 2.0, 50.0, 200.0 }, 100 }},
+  };
+
+
+  // construct servers
+
+  auto client_info_f =
+    [&client_info](const ClientId& c) -> dmc::ClientInfo {
+    auto it = client_info.find(c);
+    assert(client_info.end() != it);
+    return it->second.first;
+  };
+
   ClientMap clients;
 
-  auto client_info_f = std::function<dmc::ClientInfo(ClientId)>(getClientInfo);
   TestServer::ClientRespFunc client_response_f =
-    std::bind(&send_response, std::ref(clients), _1, _2, _3);
+    [&clients](ClientId client_id,
+	       const TestResponse& resp,
+	       const dmc::RespParams<ServerId>& resp_params) {
+    clients[client_id]->receiveResponse(resp, resp_params);
+  };
 
   TestServer server(0,
 		    server_ops, server_threads,
 		    client_info_f, client_response_f);
+
+  // construct clients
 
   for (auto i = client_info.begin(); i != client_info.end(); ++i) {
     std::string name = i->first;
@@ -116,18 +86,19 @@ int main(int argc, char* argv[]) {
 		     client_outstanding_ops);
   }
 
-  // clients are now running
+  // clients are now running; wait for all to finish
 
   for (auto i = clients.begin(); i != clients.end(); ++i) {
     i->second->waitUntilDone();
   }
+
+  // compute and display stats
 
   const TestClient::TimePoint late_time = TestClient::now();
   TestClient::TimePoint latest_start = early_time;
   TestClient::TimePoint earliest_finish = late_time;
   TestClient::TimePoint latest_finish = early_time;
   
-  // all clients are done
   for (auto i = clients.begin(); i != clients.end(); ++i) {
     auto start = i->second->getOpTimes().front();
     auto end = i->second->getOpTimes().back();
@@ -159,7 +130,7 @@ int main(int argc, char* argv[]) {
 
   for (auto i = clients.begin(); i != clients.end(); ++i) {
     delete i->second;
-    i->second = nullptr;
+    clients.erase(i);
   }
 
   std::cout << "simulation complete" << std::endl;
