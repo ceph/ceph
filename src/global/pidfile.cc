@@ -29,6 +29,13 @@
 
 #include "include/compat.h"
 
+//
+// derr can be used for functions exclusively called from pidfile_write
+//
+// cerr must be used for functions called by pidfile_remove because
+// logging is not functional when it is called. cerr output is lost
+// when the caller is daemonized but it will show if not (-f)
+//
 #define dout_prefix *_dout
 
 struct pidfh {
@@ -36,139 +43,189 @@ struct pidfh {
   char pf_path[PATH_MAX + 1];
   dev_t pf_dev;
   ino_t pf_ino;
- 
-  pidfh() : pf_fd(-1), pf_dev(0), pf_ino(0) {
-    memset(pf_path, 0, sizeof(pf_path));
+
+  pidfh() {
+    reset();
   }
-  
-  void close() {
+  ~pidfh() {
+    remove();
+  }
+
+  bool is_open() {
+    return pf_path[0] != '\0' && pf_fd != -1;
+  }
+  void reset() {
     pf_fd = -1;
-    pf_path[0] = '\0';
+    memset(pf_path, 0, sizeof(pf_path));
     pf_dev = 0;
     pf_ino = 0;
   }
+  int verify();
+  int remove();
+  int open(const md_config_t *conf);
+  int write();
 };
-static pidfh pfh;
 
-static int pidfile_verify() {
-  struct stat st;
+static pidfh *pfh = NULL;
 
-  if (pfh.pf_fd == -1) {
+int pidfh::verify() {
+  // check that the file we opened still is the same
+  if (pf_fd == -1)
     return -EINVAL;
-  }
-  /*
-   * Check remembered descriptor
-   */ 
-  if (fstat(pfh.pf_fd, &st) == -1) {
+  struct stat st;
+  if (stat(pf_path, &st) == -1)
     return -errno;
-  }
-
-  if (st.st_dev != pfh.pf_dev || st.st_ino != pfh.pf_ino) {
+  if (st.st_dev != pf_dev || st.st_ino != pf_ino)
     return -ESTALE;
-  }
   return 0;
 }
 
-int pidfile_write() 
+int pidfh::remove()
 {
-  if (!pfh.pf_path[0]) {
+  if (!pf_path[0])
     return 0;
-  }
 
   int ret;
-  if ((ret = pidfile_verify()) < 0) {
-    return ret;
-  }
-  
-  char buf[32];
-  int len = snprintf(buf, sizeof(buf), "%d\n", getpid());
-  ret = safe_write(pfh.pf_fd, buf, len);
-  if (ret < 0) {
-    derr << "write_pid_file: failed to write to pid file '"
-	 << pfh.pf_path << "': " << cpp_strerror(ret) << dendl;
-    pfh.close(); 
-    return ret;
-  }
-
-  return 0;
-}
-
-int pidfile_remove()
-{
-  if (!pfh.pf_path[0]) {
-    return 0;
-  }
-
-  int ret;
-  if ((ret = pidfile_verify()) < 0) {
-    if (pfh.pf_fd != -1) {
-      ::close(pfh.pf_fd);
+  if ((ret = verify()) < 0) {
+    if (pf_fd != -1) {
+      ::close(pf_fd);
+      reset();
     }
     return ret;
   }
 
-  // only remove it if it has OUR pid in it!
-  char buf[32];
-  memset(buf, 0, sizeof(buf));
-  ssize_t res = safe_read(pfh.pf_fd, buf, sizeof(buf));
-  if (pfh.pf_fd != -1) {
-    ::close(pfh.pf_fd);
+  // seek to the beginning of the file before reading
+  ret = ::lseek(pf_fd, 0, SEEK_SET);
+  if (ret < 0) {
+    std::cerr << __func__ << " lseek failed "
+	      << cpp_strerror(errno) << std::endl;
+    return -errno;
   }
 
+  // check that the pid file still has our pid in it
+  char buf[32];
+  memset(buf, 0, sizeof(buf));
+  ssize_t res = safe_read(pf_fd, buf, sizeof(buf));
+  ::close(pf_fd);
   if (res < 0) {
+    std::cerr << __func__ << " safe_read failed "
+	      << cpp_strerror(-res) << std::endl;
     return res;
   }
-  
+
   int a = atoi(buf);
   if (a != getpid()) {
+    std::cerr << __func__ << " the pid found in the file is "
+	      << a << " which is different from getpid() "
+	      << getpid() << std::endl;
     return -EDOM;
   }
-  res = ::unlink(pfh.pf_path);
-  if (res) {
-    return res;
+  ret = ::unlink(pf_path);
+  if (ret < 0) {
+    std::cerr << __func__ << " unlink " << pf_path << " failed "
+	      << cpp_strerror(errno) << std::endl;
+    return -errno;
   }
-  pfh.close();
+  reset();
   return 0;
 }
 
-int pidfile_open(const md_config_t *conf) 
+int pidfh::open(const md_config_t *conf)
 {
-  if (conf->pid_file.empty()) {
-    return 0;
-  }
-  int len = snprintf(pfh.pf_path, sizeof(pfh.pf_path),
-                    "%s", conf->pid_file.c_str());
+  int len = snprintf(pf_path, sizeof(pf_path),
+		    "%s", conf->pid_file.c_str());
 
-  if (len >= (int)sizeof(pfh.pf_path)) { 
+  if (len >= (int)sizeof(pf_path))
     return -ENAMETOOLONG;
-  }
 
   int fd;
-  fd = ::open(pfh.pf_path, O_CREAT|O_WRONLY, 0644);
+  fd = ::open(pf_path, O_CREAT|O_RDWR, 0644);
   if (fd < 0) {
     int err = errno;
-    derr << "write_pid_file: failed to open pid file '"
-         << pfh.pf_path << "': " << cpp_strerror(err) << dendl;
-    pfh.close();
-    return -errno;
+    derr << __func__ << ": failed to open pid file '"
+	 << pf_path << "': " << cpp_strerror(err) << dendl;
+    reset();
+    return -err;
   }
-  struct stat st;   
+  struct stat st;
   if (fstat(fd, &st) == -1) {
-    close(fd);
-    pfh.close();  
-    return -errno;
+    int err = errno;
+    derr << __func__ << ": failed to fstat pid file '"
+	 << pf_path << "': " << cpp_strerror(err) << dendl;
+    ::close(fd);
+    reset();
+    return -err;
   }
-  pfh.pf_fd = fd;
-  pfh.pf_dev = st.st_dev;
-  pfh.pf_ino = st.st_ino;
-  
+
+  pf_fd = fd;
+  pf_dev = st.st_dev;
+  pf_ino = st.st_ino;
+
   struct flock l = { F_WRLCK, SEEK_SET, 0, 0, 0 };
-  int r = ::fcntl(pfh.pf_fd, F_SETLK, &l);
+  int r = ::fcntl(pf_fd, F_SETLK, &l);
   if (r < 0) {
-    derr << "failed to lock pidfile - " << pfh.pf_path << ". is there another process in use?" << dendl;
-    close(pfh.pf_fd);
-    pfh.close();
+    derr << __func__ << ": failed to lock pidfile "
+	 << pf_path << " because another process locked it." << dendl;
+    ::close(pf_fd);
+    reset();
     return -errno;
   }
+  return 0;
+}
+
+int pidfh::write()
+{
+  if (!is_open())
+    return 0;
+
+  char buf[32];
+  int len = snprintf(buf, sizeof(buf), "%d\n", getpid());
+  if (::ftruncate(pf_fd, 0) < 0) {
+    int err = errno;
+    derr << __func__ << ": failed to ftruncate the pid file '"
+	 << pf_path << "': " << cpp_strerror(err) << dendl;
+    return err;
+  }
+  ssize_t res = safe_write(pf_fd, buf, len);
+  if (res < 0) {
+    derr << __func__ << ": failed to write to pid file '"
+	 << pf_path << "': " << cpp_strerror(-res) << dendl;
+    return res;
+  }
+  return 0;
+}
+
+void pidfile_remove()
+{
+  delete pfh;
+  pfh = NULL;
+}
+
+int pidfile_write(const md_config_t *conf)
+{
+  if (conf->pid_file.empty())
+    return 0;
+
+  assert(!pfh);
+
+  pfh = new pidfh();
+  if (atexit(pidfile_remove)) {
+    derr << __func__ << ": failed to set pidfile_remove function "
+	 << "to run at exit." << dendl;
+    return -EINVAL;
+  }
+
+  int r = pfh->open(conf);
+  if (r != 0) {
+    pidfile_remove();
+    return r;
+  }
+
+  r = pfh->write();
+  if (r != 0) {
+    pidfile_remove();
+    return r;
+  }
+
   return 0;
 }
