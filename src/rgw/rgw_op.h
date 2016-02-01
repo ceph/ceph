@@ -92,12 +92,11 @@ protected:
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
   int op_ret;
-  uint32_t magic;
 
   virtual int init_quota();
 public:
 RGWOp() : s(nullptr), dialect_handler(nullptr), store(nullptr),
-    cors_exist(false), op_ret(0), magic(0) {}
+    cors_exist(false), op_ret(0) {}
 
   virtual ~RGWOp() {}
 
