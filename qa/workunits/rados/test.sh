@@ -1,22 +1,35 @@
 #!/bin/sh -ex
 
-ceph_test_rados_api_aio
-ceph_test_rados_api_io
-ceph_test_rados_api_list
-ceph_test_rados_api_lock
-ceph_test_rados_api_misc
-ceph_test_rados_api_tier
-ceph_test_rados_api_pool
-ceph_test_rados_api_snapshots
-ceph_test_rados_api_stat
-ceph_test_rados_api_watch_notify
-ceph_test_rados_api_cmd
-ceph_test_rados_api_c_write_operations
-ceph_test_rados_api_c_read_operations
+parallel=1
+[ "$1" = "--serial" ] && parallel=0
 
-ceph_test_rados_list_parallel
-ceph_test_rados_open_pools_parallel
-ceph_test_rados_delete_pools_parallel
-ceph_test_rados_watch_notify
+color=""
+[ -t 1 ] && color="--gtest_color=yes"
+
+function cleanup() {
+    pkill -P $$ || true
+}
+trap cleanup EXIT ERR HUP INT QUIT
+
+for f in \
+    api_aio api_io api_list api_lock api_misc \
+    api_tier api_pool api_snapshots api_stat api_watch_notify api_cmd \
+    api_c_write_operations \
+    api_c_read_operations \
+    list_parallel \
+    open_pools_parallel \
+    delete_pools_parallel \
+    watch_notify
+do
+    if [ $parallel -eq 1 ]; then
+	r=`printf '%25s' $f`
+	ceph_test_rados_$f $color | \
+	    tee ceph_test_rados_$f.log | \
+	    sed "s/^/$r: /" &
+    else
+	ceph_test_rados_$f
+    fi
+done
+wait
 
 exit 0
