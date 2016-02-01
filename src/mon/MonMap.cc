@@ -18,9 +18,9 @@
 
 using ceph::Formatter;
 
-void MonMap::encode(bufferlist& blist, uint64_t features) const
+void MonMap::encode(bufferlist& blist, uint64_t con_features) const
 {
-  if ((features & CEPH_FEATURE_MONNAMES) == 0) {
+  if ((con_features & CEPH_FEATURE_MONNAMES) == 0) {
     __u16 v = 1;
     ::encode(v, blist);
     ::encode_raw(fsid, blist);
@@ -28,34 +28,36 @@ void MonMap::encode(bufferlist& blist, uint64_t features) const
     vector<entity_inst_t> mon_inst(mon_addr.size());
     for (unsigned n = 0; n < mon_addr.size(); n++)
       mon_inst[n] = get_inst(n);
-    ::encode(mon_inst, blist, features);
+    ::encode(mon_inst, blist, con_features);
     ::encode(last_changed, blist);
     ::encode(created, blist);
     return;
   }
 
-  if ((features & CEPH_FEATURE_MONENC) == 0) {
+  if ((con_features & CEPH_FEATURE_MONENC) == 0) {
     __u16 v = 2;
     ::encode(v, blist);
     ::encode_raw(fsid, blist);
     ::encode(epoch, blist);
-    ::encode(mon_addr, blist, features);
+    ::encode(mon_addr, blist, con_features);
     ::encode(last_changed, blist);
     ::encode(created, blist);
   }
 
-  ENCODE_START(3, 3, blist);
+  ENCODE_START(4, 3, blist);
   ::encode_raw(fsid, blist);
   ::encode(epoch, blist);
-  ::encode(mon_addr, blist, features);
+  ::encode(mon_addr, blist, con_features);
   ::encode(last_changed, blist);
   ::encode(created, blist);
+  ::encode(persistent_features, blist);
+  ::encode(optional_features, blist);
   ENCODE_FINISH(blist);
 }
 
 void MonMap::decode(bufferlist::iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN_16(3, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(4, 3, 3, p);
   ::decode_raw(fsid, p);
   ::decode(epoch, p);
   if (struct_v == 1) {
@@ -73,6 +75,11 @@ void MonMap::decode(bufferlist::iterator &p)
   }
   ::decode(last_changed, p);
   ::decode(created, p);
+  if (struct_v >= 4) {
+    ::decode(persistent_features, p);
+    ::decode(optional_features, p);
+  }
+
   DECODE_FINISH(p);
   calc_ranks();
 }
@@ -135,6 +142,10 @@ void MonMap::dump(Formatter *f) const
   f->dump_stream("fsid") <<  fsid;
   f->dump_stream("modified") << last_changed;
   f->dump_stream("created") << created;
+  f->open_object_section("features");
+  persistent_features.dump(f, "persistent");
+  optional_features.dump(f, "optional");
+  f->close_section();
   f->open_array_section("mons");
   int i = 0;
   for (map<entity_addr_t,string>::const_iterator p = addr_name.begin();
