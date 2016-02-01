@@ -169,7 +169,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   elector(this),
   required_features(0),
   leader(0),
-  quorum_features(0),
+  quorum_con_features(0),
   // scrub
   scrub_version(0),
   scrub_event(NULL),
@@ -1881,7 +1881,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   leader_since = ceph_clock_now(g_ceph_context);
   leader = rank;
   quorum = active;
-  quorum_features = features;
+  quorum_con_features = features;
   quorum_mon_features = mon_features;
   outside_quorum.clear();
 
@@ -1928,10 +1928,10 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
   leader = l;
   quorum = q;
   outside_quorum.clear();
-  quorum_features = features;
+  quorum_con_features = features;
   quorum_mon_features = mon_features;
   dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
-	   << " quorum is " << quorum << " features are " << quorum_features
+	   << " quorum is " << quorum << " features are " << quorum_con_features
            << " mon_features are " << quorum_mon_features
            << dendl;
 
@@ -1944,7 +1944,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
 
   finish_election();
 
-  if (quorum_features & CEPH_FEATURE_MON_METADATA) {
+  if (quorum_con_features & CEPH_FEATURE_MON_METADATA) {
     Metadata sys_info;
     collect_sys_info(&sys_info, g_ceph_context);
     messenger->send_message(new MMonMetadata(sys_info),
@@ -1975,16 +1975,16 @@ void Monitor::finish_election()
 void Monitor::apply_quorum_to_compatset_features()
 {
   CompatSet new_features(features);
-  if (quorum_features & CEPH_FEATURE_OSD_ERASURE_CODES) {
+  if (quorum_con_features & CEPH_FEATURE_OSD_ERASURE_CODES) {
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
   }
-  if (quorum_features & CEPH_FEATURE_OSDMAP_ENC) {
+  if (quorum_con_features & CEPH_FEATURE_OSDMAP_ENC) {
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
   }
-  if (quorum_features & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2) {
+  if (quorum_con_features & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2) {
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
   }
-  if (quorum_features & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3) {
+  if (quorum_con_features & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3) {
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3);
   }
   if (new_features.compare(features) != 0) {
@@ -3206,7 +3206,7 @@ void Monitor::try_send_message(Message *m, const entity_inst_t& to)
   dout(10) << "try_send_message " << *m << " to " << to << dendl;
 
   bufferlist bl;
-  encode_message(m, quorum_features, bl);
+  encode_message(m, quorum_con_features, bl);
 
   messenger->send_message(m, to);
 
@@ -3262,7 +3262,7 @@ void Monitor::no_reply(MonOpRequestRef op)
   Message *req = op->get_req();
 
   if (session->proxy_con) {
-    if (get_quorum_features() & CEPH_FEATURE_MON_NULLROUTE) {
+    if (get_quorum_con_features() & CEPH_FEATURE_MON_NULLROUTE) {
       dout(10) << "no_reply to " << req->get_source_inst()
 	       << " via " << session->proxy_con->get_peer_addr()
 	       << " for request " << *req << dendl;
@@ -4496,7 +4496,7 @@ int Monitor::scrub_start()
   dout(10) << __func__ << dendl;
   assert(is_leader());
 
-  if ((get_quorum_features() & CEPH_FEATURE_MON_SCRUB) == 0) {
+  if ((get_quorum_con_features() & CEPH_FEATURE_MON_SCRUB) == 0) {
     clog->warn() << "scrub not supported by entire quorum\n";
     return -EOPNOTSUPP;
   }
