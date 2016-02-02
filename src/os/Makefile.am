@@ -42,6 +42,7 @@ libos_a_SOURCES += \
 	os/bluestore/BlueRocksEnv.cc \
 	os/bluestore/BlueStore.cc \
 	os/bluestore/FreelistManager.cc \
+	os/bluestore/KernelDevice.cc \
 	os/bluestore/StupidAllocator.cc
 endif
 
@@ -107,6 +108,7 @@ noinst_HEADERS += \
 	os/bluestore/BlueFS.h \
 	os/bluestore/BlueRocksEnv.h \
 	os/bluestore/BlueStore.h \
+	os/bluestore/KernelDevice.h \
 	os/bluestore/FreelistManager.h \
 	os/bluestore/StupidAllocator.h
 endif
@@ -116,6 +118,12 @@ libos_zfs_a_SOURCES = os/fs/ZFS.cc
 libos_zfs_a_CXXFLAGS = ${AM_CXXFLAGS} ${LIBZFS_CFLAGS}
 noinst_LIBRARIES += libos_zfs.a
 noinst_HEADERS += os/fs/ZFS.h
+endif
+
+if WITH_SPDK
+libos_a_CXXFLAGS = ${AM_CXXFLAGS} -I ${with_spdk}/include -fPIC
+libos_a_SOURCES += os/bluestore/NVMEDevice.cc
+noinst_HEADERS += os/bluestore/NVMEDevice.h
 endif
 
 if WITH_LIBAIO

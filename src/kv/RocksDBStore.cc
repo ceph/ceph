@@ -218,6 +218,14 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
     opt.env = static_cast<rocksdb::Env*>(priv);
   }
 
+  auto cache = rocksdb::NewLRUCache(g_conf->rocksdb_cache_size);
+  rocksdb::BlockBasedTableOptions bbt_opts;
+  bbt_opts.block_size = g_conf->rocksdb_block_size;
+  bbt_opts.block_cache = cache;
+  opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
+  dout(10) << __func__ << " set block size to " << g_conf->rocksdb_block_size
+           << " cache size to " << g_conf->rocksdb_cache_size << dendl;
+
   status = rocksdb::DB::Open(opt, path, &db);
   if (!status.ok()) {
     derr << status.ToString() << dendl;
