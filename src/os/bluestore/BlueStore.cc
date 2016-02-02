@@ -1893,7 +1893,6 @@ int BlueStore::fsck()
   set<uint64_t> used_omap_head;
   interval_set<uint64_t> used_blocks;
   KeyValueDB::Iterator it;
-  EnodeRef enode;
   vector<bluestore_extent_t> hash_shared;
 
   int r = _open_path();
@@ -1951,6 +1950,7 @@ int BlueStore::fsck()
     CollectionRef c = _get_collection(p->first);
     RWLock::RLocker l(c->lock);
     ghobject_t pos;
+    EnodeRef enode;
     while (true) {
       vector<ghobject_t> ols;
       int r = collection_list(p->first, pos, ghobject_t::get_max(), true,
