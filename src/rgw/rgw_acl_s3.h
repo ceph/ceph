@@ -9,8 +9,6 @@
 #include <iosfwd>
 #include <include/types.h>
 
-#include <expat.h>
-
 #include "include/str_list.h"
 #include "rgw_xml.h"
 #include "rgw_acl.h"

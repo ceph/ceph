@@ -10,8 +10,6 @@
 #include <include/types.h>
 #include <common/Formatter.h>
 
-#include <expat.h>
-
 using namespace std;
 
 
@@ -61,9 +59,10 @@ public:
   friend ostream& operator<<(ostream& out, XMLObj& obj);
 };
 
+struct XML_ParserStruct;
 class RGWXMLParser : public XMLObj
 {
-  XML_Parser p;
+  XML_ParserStruct *p;
   char *buf;
   int buf_len;
   XMLObj *cur_obj;
