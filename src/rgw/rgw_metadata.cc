@@ -355,7 +355,7 @@ public:
 static RGWMetadataTopHandler md_top_handler;
 
 RGWMetadataManager::RGWMetadataManager(CephContext *_cct, RGWRados *_store)
-  : cct(_cct), store(_store), md_log(nullptr)
+  : cct(_cct), store(_store)
 {
 }
 
@@ -368,17 +368,28 @@ RGWMetadataManager::~RGWMetadataManager()
   }
 
   handlers.clear();
-  delete md_log;
 }
 
 int RGWMetadataManager::init(const std::string& current_period)
 {
-  md_log = new RGWMetadataLog(cct, store, current_period);
+  current_log = get_log(current_period);
   return 0;
 }
 
-int RGWMetadataManager::store_md_log_entries(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
+RGWMetadataLog* RGWMetadataManager::get_log(const std::string& period)
 {
+  // construct the period's log in place if it doesn't exist
+  auto insert = md_logs.emplace(std::piecewise_construct,
+                                std::forward_as_tuple(period),
+                                std::forward_as_tuple(cct, store, period));
+  return &insert.first->second;
+}
+
+int RGWMetadataManager::store_md_log_entries(list<cls_log_entry>& entries,
+                                             const std::string& period, int shard_id,
+                                             librados::AioCompletion *completion)
+{
+  auto md_log = get_log(period);
   return md_log->store_entries_in_shard(entries, shard_id, completion);
 }
 
@@ -669,7 +680,8 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
   bufferlist logbl;
   ::encode(log_data, logbl);
 
-  int ret = md_log->add_entry(handler, section, key, logbl);
+  assert(current_log); // must have called init()
+  int ret = current_log->add_entry(handler, section, key, logbl);
   if (ret < 0)
     return ret;
 
@@ -687,7 +699,8 @@ int RGWMetadataManager::post_modify(RGWMetadataHandler *handler, const string& s
   bufferlist logbl;
   ::encode(log_data, logbl);
 
-  int r = md_log->add_entry(handler, section, key, logbl);
+  assert(current_log); // must have called init()
+  int r = current_log->add_entry(handler, section, key, logbl);
   if (ret < 0)
     return ret;
 
