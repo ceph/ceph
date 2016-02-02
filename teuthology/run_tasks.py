@@ -1,11 +1,15 @@
-import sys
 import logging
-from .sentry import get_client as get_sentry_client
-from .job_status import set_status
-from .misc import get_http_log_path
+import os
+import sys
+
+from copy import deepcopy
+
 from .config import config as teuth_config
 from .exceptions import ConnectionLostError
-from copy import deepcopy
+from .job_status import set_status
+from .misc import get_http_log_path
+from .sentry import get_client as get_sentry_client
+from .timer import Timer
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +46,11 @@ def run_one_task(taskname, **kwargs):
 
 
 def run_tasks(tasks, ctx):
+    archive_path = ctx.config.get('archive_path')
+    timer = Timer(
+        path=os.path.join(archive_path, 'timing.yaml'),
+        sync=True,
+    )
     stack = []
     try:
         for taskdict in tasks:
@@ -50,6 +59,7 @@ def run_tasks(tasks, ctx):
             except (ValueError, AttributeError):
                 raise RuntimeError('Invalid task definition: %s' % taskdict)
             log.info('Running task %s...', taskname)
+            timer.mark('%s enter' % taskname)
             manager = run_one_task(taskname, ctx=ctx, config=config)
             if hasattr(manager, '__enter__'):
                 stack.append((taskname, manager))
@@ -121,6 +131,7 @@ def run_tasks(tasks, ctx):
             while stack:
                 taskname, manager = stack.pop()
                 log.debug('Unwinding manager %s', taskname)
+                timer.mark('%s exit' % taskname)
                 try:
                     suppress = manager.__exit__(*exc_info)
                 except Exception as e:
@@ -155,3 +166,4 @@ def run_tasks(tasks, ctx):
         finally:
             # be careful about cyclic references
             del exc_info
+        timer.mark("tasks complete")
