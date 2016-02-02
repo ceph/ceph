@@ -8,6 +8,7 @@ add_subdirectory(cls_lock)
 add_subdirectory(cls_log)
 add_subdirectory(cls_numops)
 add_subdirectory(cls_rbd)
+add_subdirectory(cls_refcount)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -391,23 +392,6 @@ target_link_libraries(test_librbd_fsx
   blkid
   udev
   keyutils
-  )
-
-add_executable(ceph_test_cls_refcount
-  cls_refcount/test_cls_refcount.cc
-  )
-set_target_properties(ceph_test_cls_refcount PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_cls_refcount
-  librados
-  cls_refcount_client
-  global
-  ${UNITTEST_LIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  ${CRYPTO_LIBS}
-  ${EXTRALIBS}
-  radostest
   )
 
 add_executable(ceph_test_cls_version
