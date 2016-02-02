@@ -20,6 +20,7 @@ add_subdirectory(libcephfs)
 add_subdirectory(librados_test_stub)
 add_subdirectory(messenger)
 add_subdirectory(msgr)
+add_subdirectory(ObjectMap)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -437,53 +438,6 @@ target_link_libraries(ceph_test_filejournal
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS}
-  )
-
-# ceph_test_object_map
-add_executable(ceph_test_object_map
-  ObjectMap/test_object_map.cc
-  ObjectMap/KeyValueDBMemory.cc
-  )
-set_target_properties(ceph_test_object_map PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_object_map
-  os
-  common
-  ${UNITTEST_LIBS}
-  global
-  ${EXTRALIBS}
-  ${CMAKE_DL_LIBS}
-  )
-
-# ceph_test_keyvaluedb_atomicity
-add_executable(ceph_test_keyvaluedb_atomicity
-  ObjectMap/test_keyvaluedb_atomicity.cc
-  )
-set_target_properties(ceph_test_keyvaluedb_atomicity PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_keyvaluedb_atomicity
-  os
-  common
-  ${UNITTEST_LIBS}
-  global
-  ${EXTRALIBS}
-  ${CMAKE_DL_LIBS}
-  )
-
-# ceph_test_keyvaluedb_iterators
-add_executable(ceph_test_keyvaluedb_iterators
-  ObjectMap/test_keyvaluedb_iterators.cc
-  ObjectMap/KeyValueDBMemory.cc
-  )
-set_target_properties(ceph_test_keyvaluedb_iterators PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_keyvaluedb_iterators
-  os
-  common
-  ${UNITTEST_LIBS}
-  global
-  ${EXTRALIBS}
-  ${CMAKE_DL_LIBS}
   )
 
 # ceph_test_keys
