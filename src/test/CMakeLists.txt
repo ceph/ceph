@@ -17,6 +17,7 @@ add_subdirectory(compressor)
 add_subdirectory(filestore)
 add_subdirectory(journal)
 add_subdirectory(libcephfs)
+add_subdirectory(librados_test_stub)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -340,15 +341,6 @@ add_executable(ceph_multi_stress_watch
 target_link_libraries(ceph_multi_stress_watch librados global radostest
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
-set(librados_test_stub_srcs
-  librados_test_stub/LibradosTestStub.cc
-  librados_test_stub/TestClassHandler.cc
-  librados_test_stub/TestIoCtxImpl.cc
-  librados_test_stub/TestMemIoCtxImpl.cc
-  librados_test_stub/TestMemRadosClient.cc
-  librados_test_stub/TestRadosClient.cc)
-add_library(rados_test_stub STATIC ${librados_test_stub_srcs})
-  
 # unittest_librbd
 add_executable(unittest_librbd EXCLUDE_FROM_ALL
   librbd/test_librbd.cc
