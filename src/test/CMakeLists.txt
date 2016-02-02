@@ -7,6 +7,7 @@ add_subdirectory(cls_hello)
 add_subdirectory(cls_lock)
 add_subdirectory(cls_log)
 add_subdirectory(cls_numops)
+add_subdirectory(cls_rbd)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -387,29 +388,6 @@ target_link_libraries(test_librbd_fsx
   ${CMAKE_DL_LIBS}
   ${CRYPTO_LIBS}
   ${EXTRALIBS}
-  blkid
-  udev
-  keyutils
-  )
-
-add_executable(ceph_test_cls_rbd
-  cls_rbd/test_cls_rbd.cc
-  ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
-  ${CMAKE_SOURCE_DIR}/src/common/secret.c
-  )
-set_target_properties(ceph_test_cls_rbd PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_cls_rbd
-  librbd
-  cls_rbd
-  cls_lock
-  librados
-  global
-  ${UNITTEST_LIBS}
-  ${CMAKE_DL_LIBS}
-  ${CRYPTO_LIBS}
-  ${EXTRALIBS}
-  radostest
   blkid
   udev
   keyutils
