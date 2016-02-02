@@ -15,6 +15,7 @@ add_subdirectory(cls_statelog)
 add_subdirectory(cls_version)
 add_subdirectory(compressor)
 add_subdirectory(filestore)
+add_subdirectory(journal)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -345,7 +346,7 @@ set(librados_test_stub_srcs
   librados_test_stub/TestMemIoCtxImpl.cc
   librados_test_stub/TestMemRadosClient.cc
   librados_test_stub/TestRadosClient.cc)
-add_library(librados_test_stub STATIC ${librados_test_stub_srcs})
+add_library(rados_test_stub STATIC ${librados_test_stub_srcs})
   
 # unittest_librbd
 add_executable(unittest_librbd EXCLUDE_FROM_ALL
@@ -370,7 +371,7 @@ target_link_libraries(unittest_librbd
   journal
   cls_journal_client
   librados_api
-  librados_test_stub
+  rados_test_stub
   ${UNITTEST_LIBS}
   global
   ${CMAKE_DL_LIBS}
