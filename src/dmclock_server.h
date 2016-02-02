@@ -100,6 +100,13 @@ namespace crimson {
 	proportion(tagCalc(time, prev_tag.proportion, client.weight_inv)),
 	reservation(tagCalc(time, prev_tag.reservation, client.reservation_inv)),
 	limit(tagCalc(time, prev_tag.limit, client.limit_inv))
+      RequestTag(double _prop, double _res, double _lim) :
+	proportion(_prop),
+	reservation(_res),
+	limit(_lim)
+      {
+	// empty
+      }
       {
 	// empty
       }
@@ -109,12 +116,6 @@ namespace crimson {
 	proportion(other.proportion),
 	reservation(other.reservation),
 	limit(other.limit)
-      {
-	// empty
-      }
-
-      RequestTag() :
-	proportion(0.0), reservation(0.0), limit(0.0)
       {
 	// empty
       }
@@ -156,6 +157,7 @@ namespace crimson {
 
 	ClientRec(const ClientInfo& _info) :
 	  info(_info),
+	  prev_tag(0.0, 0.0, 0.0),
 	  idle(true)
 	{
 	  // empty
