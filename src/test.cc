@@ -45,7 +45,6 @@ int main(int argc, char* argv[]) {
     {1, { 75, 7 }},
   };
 
-
   // client params
 
   const int client_outstanding_ops = 10;
@@ -55,7 +54,6 @@ int main(int argc, char* argv[]) {
     {"c1", {{ 1.0, 50.0, 200.0 }, 100 }},
     {"c2", {{ 2.0, 50.0, 200.0 }, 100 }},
   };
-
 
   // construct servers
 

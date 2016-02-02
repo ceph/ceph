@@ -8,6 +8,9 @@
 #pragma once
 
 
+#include <ostream>
+
+
 namespace crimson {
   namespace dmclock {
     using Counter = uint64_t;
@@ -35,6 +38,12 @@ namespace crimson {
       {
 	// empty
       }
+
+      friend std::ostream& operator<<(std::ostream& out, const ReqParams& rp) {
+	out << "ReqParams{ client:" << rp.client << ", delta:" << rp.delta <<
+	  ", rho:" << rp.rho << " }";
+	return out;
+      }
     };
 
     // S is server id type
@@ -55,6 +64,12 @@ namespace crimson {
 	phase(other.phase)
       {
 	// empty
+      }
+
+      friend std::ostream& operator<<(std::ostream& out, const RespParams& rp) {
+	out << "RespParams{ server:" << rp.server <<
+	  ", phase:" << rp.phase << " }";
+	return out;
       }
     };
   }

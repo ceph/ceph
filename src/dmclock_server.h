@@ -397,9 +397,7 @@ namespace crimson {
 	scheduleRequest();
       }
 
-
     protected:
-
 
       // for debugging
       void displayQueues() {
