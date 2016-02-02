@@ -6,6 +6,7 @@ set(UNITTEST_CXX_FLAGS "-I${CMAKE_SOURCE_DIR}/src/gmock/include -I${CMAKE_BINARY
 add_subdirectory(cls_hello)
 add_subdirectory(cls_lock)
 add_subdirectory(cls_log)
+add_subdirectory(cls_numops)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -480,20 +481,6 @@ target_link_libraries(ceph_test_cls_replica_log
   ${CRYPTO_LIBS}
   ${EXTRALIBS}
   radostest
-  )
-
-add_executable(ceph_test_cls_numops cls_numops/test_cls_numops.cc)
-set_target_properties(ceph_test_cls_numops PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_cls_numops 
-  librados 
-  global
-  cls_numops_client 
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  radostest
-  ${UNITTEST_LIBS} 
   )
 
 if(${WITH_RADOSGW})
