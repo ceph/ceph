@@ -1411,10 +1411,11 @@ int RGWPostObj_ObjStore_S3::get_policy()
 	return -EACCES;
       }
 
-      user_info.user_id = keystone_validator.response.token.tenant.id;
-      user_info.display_name = keystone_validator.response.token.tenant.name;
+      string project_id = keystone_validator.response.get_project_id();
+      user_info.user_id = project_id;
+      user_info.display_name = keystone_validator.response.get_project_name();
 
-      rgw_user uid(keystone_validator.response.token.tenant.id);
+      rgw_user uid(project_id);
       /* try to store user if it not already exists */
       if (rgw_get_user_info_by_uid(store, uid, user_info) < 0) {
         int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
@@ -2669,9 +2670,15 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
   const string& auth_id, const string& auth_token, const string& auth_sign) {
   /* prepare keystone url */
   string keystone_url = cct->_conf->rgw_keystone_url;
+  string keystone_version = cct->_conf->rgw_keystone_api_version;
   if (keystone_url[keystone_url.size() - 1] != '/')
     keystone_url.append("/");
-  keystone_url.append("v2.0/s3tokens");
+  if (keystone_version == "3") {
+    keystone_url.append("v3/s3tokens");
+  }
+  else {
+    keystone_url.append("v2.0/s3tokens");
+  }
 
   /* get authentication token for Keystone. */
   string admin_token_id;
@@ -2724,7 +2731,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
   bool found = false;
   list<string>::iterator iter;
   for (iter = roles_list.begin(); iter != roles_list.end(); ++iter) {
-    if ((found=response.user.has_role(*iter))==true)
+    if ((found=response.has_role(*iter))==true)
       break;
   }
 
@@ -2735,9 +2742,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
   }
 
   /* everything seems fine, continue with this user */
-  ldout(cct, 5) << "s3 keystone: validated token: "
-		<< response.token.tenant.name << ":" << response.user.name
-		<< " expires: " << response.token.expires << dendl;
+  ldout(cct, 5) << "s3 keystone: validated token: " << response.get_project_name() << ":" << response.get_user_name() << " expires: " << response.get_expires() << dendl;
   return 0;
 }
 
@@ -2832,11 +2837,11 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
 	  return -ERR_REQUEST_TIME_SKEWED;
 	}
 
-	s->user->user_id = keystone_validator.response.token.tenant.id;
-        s->user->display_name
-	  = keystone_validator.response.token.tenant.name; // wow.
+        string project_id = keystone_validator.response.get_project_id();
+        s->user->user_id = project_id;
+        s->user->display_name = keystone_validator.response.get_project_name(); // wow.
 
-        rgw_user uid(keystone_validator.response.token.tenant.id);
+        rgw_user uid(project_id);
         /* try to store user if it not already exists */
         if (rgw_get_user_info_by_uid(store, uid, *(s->user)) < 0) {
           int ret = rgw_store_user_info(store, *(s->user), NULL, NULL, 0, true);
