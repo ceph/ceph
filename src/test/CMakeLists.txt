@@ -18,6 +18,7 @@ add_subdirectory(filestore)
 add_subdirectory(journal)
 add_subdirectory(libcephfs)
 add_subdirectory(librados_test_stub)
+add_subdirectory(messenger)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -628,58 +629,6 @@ target_link_libraries(ceph_test_get_blkdev_size
   ${ALLOC_LIBS}
   ${CMAKE_DL_LIBS}
   )
-
-add_executable(simple_server
-  messenger/simple_server.cc
-  messenger/simple_dispatcher.cc
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-target_link_libraries(simple_server
-  os global common ${Boost_REGEX_LIBRARY}
-  ${EXTRALIBS}
-  ${ALLOC_LIBS}
-  ${CMAKE_DL_LIBS}
-  )
-
-add_executable(simple_client
-  messenger/simple_client.cc
-  messenger/simple_dispatcher.cc
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-target_link_libraries(simple_client
-  os global common ${Boost_REGEX_LIBRARY}
-  ${EXTRALIBS}
-  ${ALLOC_LIBS}
-  ${CMAKE_DL_LIBS}
-  )
-
-if(HAVE_XIO)
-  add_executable(xio_server
-    messenger/xio_server.cc
-    messenger/xio_dispatcher.cc
-    $<TARGET_OBJECTS:heap_profiler_objs>
-    )
-  target_link_libraries(xio_server
-    os global common ${Boost_REGEX_LIBRARY}
-    ${Xio_LIBRARY} ibverbs rdmacm pthread rt
-    ${EXTRALIBS}
-    ${ALLOC_LIBS}
-    ${CMAKE_DL_LIBS}
-    )
-
-  add_executable(xio_client
-    messenger/xio_client.cc
-    messenger/xio_dispatcher.cc
-    $<TARGET_OBJECTS:heap_profiler_objs>
-    )
-  target_link_libraries(xio_client
-    os global common ${Boost_REGEX_LIBRARY}
-    ${Xio_LIBRARY} ibverbs rdmacm pthread rt
-    ${EXTRALIBS}
-    ${ALLOC_LIBS}
-    ${CMAKE_DL_LIBS}
-    )
-endif(HAVE_XIO)
 
 #make check starts here
 
