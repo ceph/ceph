@@ -21,6 +21,7 @@ add_subdirectory(librados_test_stub)
 add_subdirectory(messenger)
 add_subdirectory(msgr)
 add_subdirectory(ObjectMap)
+add_subdirectory(osdc)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -491,19 +492,6 @@ target_link_libraries(ceph_test_stress_watch
   radostest
   ${EXTRALIBS}
   ${BLKID_LIBRARIES}
-  ${ALLOC_LIBS}
-  ${CMAKE_DL_LIBS}
-  )
-
-add_executable(ceph_test_objectcacher_stress
-  osdc/object_cacher_stress.cc
-  osdc/FakeWriteback.cc
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-target_link_libraries(ceph_test_objectcacher_stress
-  osdc
-  global
-  ${EXTRALIBS}
   ${ALLOC_LIBS}
   ${CMAKE_DL_LIBS}
   )
