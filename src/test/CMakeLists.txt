@@ -22,6 +22,7 @@ add_subdirectory(messenger)
 add_subdirectory(msgr)
 add_subdirectory(ObjectMap)
 add_subdirectory(osdc)
+add_subdirectory(rgw)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -196,63 +197,6 @@ if(${WITH_RADOSGW})
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
   set_target_properties(test_cors PROPERTIES COMPILE_FLAGS
-    ${UNITTEST_CXX_FLAGS})
-
-  # test_rgw_manifest
-  set(test_rgw_manifest_srcs rgw/test_rgw_manifest.cc)
-  add_executable(test_rgw_manifest
-    ${test_rgw_manifest_srcs}
-    )
-  target_link_libraries(test_rgw_manifest
-    rgw_a
-    cls_rgw_client
-    cls_lock_client
-    cls_refcount_client
-    cls_log_client
-    cls_statelog_client
-    cls_timeindex_client
-    cls_version_client
-    cls_replica_log_client
-    cls_kvs
-    cls_user_client
-    librados
-    global
-    curl
-    expat
-    ${BLKID_LIBRARIES}
-    ${CMAKE_DL_LIBS}
-    ${UNITTEST_LIBS}
-    ${CRYPTO_LIBS}
-    )
-  set_target_properties(test_rgw_manifest PROPERTIES COMPILE_FLAGS
-    ${UNITTEST_CXX_FLAGS})
-
-  # test_rgw_obj
-  set(test_rgw_obj_srcs rgw/test_rgw_obj.cc)
-  add_executable(test_rgw_obj
-    ${test_rgw_obj_srcs}
-    )
-  target_link_libraries(test_rgw_obj
-    rgw_a
-    cls_rgw_client
-    cls_lock_client
-    cls_refcount_client
-    cls_log_client
-    cls_statelog_client
-    cls_version_client
-    cls_replica_log_client
-    cls_kvs
-    cls_user_client
-    librados
-    global
-    curl
-    uuid
-    expat
-    ${CMAKE_DL_LIBS}
-    ${UNITTEST_LIBS}
-    ${CRYPTO_LIBS}
-    )
-  set_target_properties(test_rgw_obj PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
 
   # test_cls_rgw_meta
