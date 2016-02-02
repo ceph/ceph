@@ -6617,6 +6617,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   map_lock.get_write();
 
+  bool do_shutdown = false;
+  bool do_restart = false;
+  bool network_error = false;
+
   // advance through the new maps
   for (epoch_t cur = start; cur <= superblock.newest_map; cur++) {
     dout(10) << " advance to epoch " << cur << " (<= newest " << superblock.newest_map << ")" << dendl;
@@ -6640,6 +6644,21 @@ void OSD::handle_osd_map(MOSDMap *m)
           waited_for_reservations = true;
         }
 	note_down_osd(*p);
+      }
+    }
+
+    if (osdmap->test_flag(CEPH_OSDMAP_NOUP) &&
+	!newmap->test_flag(CEPH_OSDMAP_NOUP)) {
+      dout(10) << __func__ << " NOUP flag cleared in " << newmap->get_epoch()
+	       << dendl;
+      if (is_booting()) {
+	// this captures the case where we sent the boot message while
+	// NOUP was being set on the mon and our boot request was
+	// dropped, and then later it is cleared.  it imperfectly
+	// handles the case where our original boot message was not
+	// dropped and we restart even though we might have booted, but
+	// that is harmless (boot will just take slightly longer).
+	do_restart = true;
       }
     }
 
@@ -6679,9 +6698,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
   }
 
-  bool do_shutdown = false;
-  bool do_restart = false;
-  bool network_error = false;
   if (osdmap->get_epoch() > 0 &&
       is_active()) {
     if (!osdmap->exists(whoami)) {
