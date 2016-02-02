@@ -17,11 +17,13 @@
 namespace crimson {
   namespace dmclock {
     struct ServerInfo {
-      Counter delta_last;
-      Counter rho_last;
+      Counter delta_prev_req;
+      Counter rho_prev_req;
 
+#if 0
       // track last update to allow clean-up
       decltype(std::chrono::steady_clock::now()) last_update;
+#endif
     };
 
     // S is server identifier type
@@ -49,30 +51,25 @@ namespace crimson {
 	if (PhaseType::reservation == resp_params.phase) {
 	  ++rho_counter;
 	}
-	
-	auto now = std::chrono::steady_clock::now();
-	auto it = service_map.find(resp_params.server);
-	if (service_map.end() == it) {
-	  service_map[resp_params.server] =
-	    ServerInfo{delta_counter, rho_counter, now};
-	} else {
-	  it->second.delta_last = delta_counter;
-	  it->second.rho_last = rho_counter;
-	  it->second.last_update = now;
-	}
       }
 
       template<typename C>
-      ReqParams<C> getRequestParams(const C& client, const S& server) const {
+      ReqParams<C> getRequestParams(const C& client, const S& server) {
 	DataGuard g(data_mtx);
 	auto it = service_map.find(server);
 	if (service_map.end() == it) {
+	  service_map[server] = ServerInfo{delta_counter, rho_counter};
 	  return ReqParams<C>(client, 1, 1);
 	} else {
-	  return ReqParams<C>(
+	  ReqParams<C> result(
 	    client,
-	    uint32_t(1 + delta_counter - it->second.delta_last),
-	    uint32_t(1 + rho_counter - it->second.rho_last));
+	    uint32_t(1 + delta_counter - it->second.delta_prev_req),
+	    uint32_t(1 + rho_counter - it->second.rho_prev_req));
+
+	  it->second.delta_prev_req = delta_counter;
+	  it->second.rho_prev_req = rho_counter;
+
+	  return result;
 	}
       }
     }; // class ServiceTracker
