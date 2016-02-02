@@ -487,7 +487,7 @@ public:
   }
 
   /*
-   * osdmap - current published amp
+   * osdmap - current published map
    * next_osdmap - pre_published map that is about to be published.
    *
    * We use the next_osdmap to send messages and initiate connections,

@@ -1661,6 +1661,13 @@ int MDSMonitor::filesystem_command(
     }
   } else if (prefix == "mds rmfailed") {
     mds_rank_t who;
+    string confirm;
+    if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
+	confirm != "--yes-i-really-mean-it") {
+	  ss << "WARNING: this can make your filesystem inaccessible! "
+		"Add --yes-i-really-mean-it if you are sure you wish to continue.";
+	  return -EPERM;
+    }
     if (!cmd_getval(g_ceph_context, cmdmap, "who", who)) {
       ss << "error parsing 'who' value '"
          << cmd_vartype_stringify(cmdmap["who"]) << "'";
