@@ -1194,6 +1194,18 @@ target_link_libraries(unittest_ecbackend osd global ${CMAKE_DL_LIBS}
 set_target_properties(unittest_ecbackend PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
+# unittest_compresscontext
+add_executable(unittest_compresscontext EXCLUDE_FROM_ALL
+  osd/TestCompressContext.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+add_test(unittest_compresscontext unittest_compresscontext)
+add_dependencies(check unittest_compresscontext)
+target_link_libraries(unittest_compresscontext osd global ${CMAKE_DL_LIBS}
+  ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
+set_target_properties(unittest_compresscontext PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
 # unittest_osdscrub
 add_executable(unittest_osdscrub EXCLUDE_FROM_ALL
   osd/TestOSDScrub.cc

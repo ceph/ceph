@@ -45,6 +45,15 @@ public:
   uint64_t get_stripe_width() const {
     return stripe_width;
   }
+  static uint64_t pad_to_stripe_width(uint64_t stripe_width, uint64_t length) {
+    if (length % stripe_width)
+      length += stripe_width - (length % stripe_width);
+    return length;
+  }
+  uint64_t pad_to_stripe_width(uint64_t length) const {
+    return pad_to_stripe_width( get_stripe_width(), length );
+  }
+
   uint64_t get_chunk_size() const {
     return chunk_size;
   }
@@ -133,8 +142,10 @@ public:
 };
 typedef ceph::shared_ptr<HashInfo> HashInfoRef;
 
-bool is_hinfo_key_string(const string &key);
+bool is_internal_key_string(const string &key);
 const string &get_hinfo_key();
+const string &get_cinfo_master_key();
+const string &get_cinfo_key_prefix();
 
 }
 WRITE_CLASS_ENCODER(ECUtil::HashInfo)

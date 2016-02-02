@@ -140,7 +140,6 @@ int ECUtil::encode(
 void ECUtil::HashInfo::append(uint64_t old_size,
 			      map<int, bufferlist> &to_append) {
   assert(to_append.size() == cumulative_shard_hashes.size());
-  assert(old_size == total_chunk_size);
   uint64_t size_to_append = to_append.begin()->second.length();
   for (map<int, bufferlist>::iterator i = to_append.begin();
        i != to_append.end();
@@ -199,13 +198,25 @@ void ECUtil::HashInfo::generate_test_instances(list<HashInfo*>& o)
 }
 
 const string HINFO_KEY = "hinfo_key";
+const string CINFO_MASTER_KEY = "@ci_master@";
+const string CINFO_KEY_PREFIX = "@ci@";
 
-bool ECUtil::is_hinfo_key_string(const string &key)
+bool ECUtil::is_internal_key_string(const string &key)
 {
-  return key == HINFO_KEY;
+  return key == HINFO_KEY || key.find(CINFO_KEY_PREFIX)==0 || key.find(CINFO_MASTER_KEY)==0;
 }
 
 const string &ECUtil::get_hinfo_key()
 {
   return HINFO_KEY;
+}
+
+const string &ECUtil::get_cinfo_key_prefix()
+{
+  return CINFO_KEY_PREFIX;
+}
+
+const string &ECUtil::get_cinfo_master_key()
+{
+  return CINFO_MASTER_KEY;
 }

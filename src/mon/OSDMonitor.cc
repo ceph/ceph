@@ -55,6 +55,7 @@
 #include "common/errno.h"
 
 #include "erasure-code/ErasureCodePlugin.h"
+#include "compressor/Compressor.h"
 
 #include "include/compat.h"
 #include "include/assert.h"
@@ -2914,7 +2915,7 @@ void OSDMonitor::dump_info(Formatter *f)
 
 namespace {
   enum osd_pool_get_choices {
-    SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL,
+    COMPRESSION_TYPE, SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL,
     PG_NUM, PGP_NUM, CRUSH_RULESET, HASHPSPOOL,
     NODELETE, NOPGCHANGE, NOSIZECHANGE,
     WRITE_FADVISE_DONTNEED, NOSCRUB, NODEEP_SCRUB,
@@ -3380,6 +3381,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
     typedef std::map<std::string, osd_pool_get_choices> choices_map_t;
     const choices_map_t ALL_CHOICES = boost::assign::map_list_of
+      ("compression_type", COMPRESSION_TYPE)
       ("size", SIZE)
       ("min_size", MIN_SIZE)
       ("crash_replay_interval", CRASH_REPLAY_INTERVAL)
@@ -3419,7 +3421,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       (CACHE_MIN_FLUSH_AGE)(CACHE_MIN_EVICT_AGE)(MIN_READ_RECENCY_FOR_PROMOTE)
       (HIT_SET_GRADE_DECAY_RATE)(HIT_SET_SEARCH_LAST_N);
     const choices_set_t ONLY_ERASURE_CHOICES = boost::assign::list_of
-      (ERASURE_CODE_PROFILE);
+      (ERASURE_CODE_PROFILE)(COMPRESSION_TYPE);
 
     choices_set_t selected_choices;
     if (var == "all") {
@@ -3565,6 +3567,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CACHE_MIN_EVICT_AGE:
 	    f->dump_unsigned("cache_min_evict_age", p->cache_min_evict_age);
 	    break;
+	  case COMPRESSION_TYPE:
+	    f->dump_string("compression_type", p->compression_type);
+	    break;
 	  case ERASURE_CODE_PROFILE:
 	    f->dump_string("erasure_code_profile", p->erasure_code_profile);
 	    break;
@@ -3681,6 +3686,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    break;
 	  case CACHE_MIN_EVICT_AGE:
 	    ss << "cache_min_evict_age: " << p->cache_min_evict_age << "\n";
+	    break;
+	  case COMPRESSION_TYPE:
+	    ss << "compression_type: " << p->compression_type << "\n";
 	    break;
 	  case ERASURE_CODE_PROFILE:
 	    ss << "erasure_code_profile: " << p->erasure_code_profile << "\n";
@@ -4179,12 +4187,12 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   if (m->auid)
     return prepare_new_pool(m->name, m->auid, m->crush_rule, ruleset_name,
 			    0, 0,
-                            erasure_code_profile,
+                            erasure_code_profile, "none",
 			    pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
   else
     return prepare_new_pool(m->name, session->auid, m->crush_rule, ruleset_name,
 			    0, 0,
-                            erasure_code_profile,
+                            erasure_code_profile, "none",
 			    pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
 }
 
@@ -4268,6 +4276,18 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
     newcrush.encode(pending_inc.crush);
     return 0;
   }
+}
+
+int OSDMonitor::get_compressor(const string &compression_type,
+         CompressorRef *compressor,
+         ostream *ss) const
+{
+  *compressor = Compressor::create(g_ceph_context, compression_type);
+
+  if (!compressor->get())
+    return -EINVAL;
+  else 
+    return 0;
 }
 
 int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
@@ -4567,6 +4587,7 @@ int OSDMonitor::get_crush_ruleset(const string &ruleset_name,
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
+ * @param compression_type The compression plugin to be used with erasure pool
  * @param pool_type TYPE_ERASURE, or TYPE_REP
  * @param expected_num_objects expected number of objects on the pool
  * @param fast_read fast read type. 
@@ -4579,6 +4600,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 				 const string &crush_ruleset_name,
                                  unsigned pg_num, unsigned pgp_num,
 				 const string &erasure_code_profile,
+         const string &compression_type,
                                  const unsigned pool_type,
                                  const uint64_t expected_num_objects,
                                  FastReadType fast_read,
@@ -4637,6 +4659,15 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   if (r) {
     dout(10) << " prepare_pool_stripe_width returns " << r << dendl;
     return r;
+  }
+
+  if (!compression_type.empty() && compression_type != "none") {
+    CompressorRef cs;
+    r = get_compressor(compression_type, &cs, ss);
+    if (r) {
+      dout(10) << " compressor " << compression_type << " failed to load" << dendl;
+      return r;
+    }
   }
 
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
@@ -4703,6 +4734,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     g_conf->osd_pool_default_cache_target_full_ratio * 1000000;
   pi->cache_min_flush_age = g_conf->osd_pool_default_cache_min_flush_age;
   pi->cache_min_evict_age = g_conf->osd_pool_default_cache_min_evict_age;
+  pi->compression_type = compression_type;
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -4886,6 +4918,21 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
        }
     }
     p.min_size = n;
+  } else if (var == "compression_type") {
+    if (p.type != pg_pool_t::TYPE_ERASURE) {
+      ss << "compression can be used with erasure pools only";
+      return -EINVAL;
+    }
+    if (val != "none") {
+      CompressorRef cs;
+      stringstream tmp;
+      int err = get_compressor(val, &cs, &tmp);
+      if (err) {
+        ss << "compressor " <<  val << " failed to load";
+        return -EINVAL;
+      }
+    }
+    p.compression_type = val;
   } else if (var == "auid") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -6712,6 +6759,9 @@ done:
     if (pool_type_str.empty())
       pool_type_str = pg_pool_t::get_default_type();
 
+    string compression_type;
+    cmd_getval(g_ceph_context, cmdmap, "compression", compression_type);
+
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
@@ -6730,6 +6780,11 @@ done:
     int pool_type;
     if (pool_type_str == "replicated") {
       pool_type = pg_pool_t::TYPE_REPLICATED;
+      if (!compression_type.empty()) {
+    	  ss << "compression cannot be used with replicated pools";
+    	  err = -EINVAL;
+    	  goto reply;
+      }
     } else if (pool_type_str == "erasure") {
       err = check_cluster_features(CEPH_FEATURE_CRUSH_V2 |
 				   CEPH_FEATURE_OSD_ERASURE_CODES,
@@ -6819,7 +6874,7 @@ done:
 			   -1, // default crush rule
 			   ruleset_name,
 			   pg_num, pgp_num,
-			   erasure_code_profile, pool_type,
+			   erasure_code_profile, compression_type, pool_type,
                            (uint64_t)expected_num_objects,
                            fast_read,
 			   &ss);
