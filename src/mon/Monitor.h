@@ -620,6 +620,9 @@ public:
   uint64_t get_required_features() const {
     return required_features;
   }
+  mon_feature_t get_required_mon_features() const {
+    return monmap->get_required_features();
+  }
   void apply_quorum_to_compatset_features();
   void apply_compatset_features_to_quorum_requirements();
 
