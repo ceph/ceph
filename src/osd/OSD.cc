@@ -6646,8 +6646,22 @@ void OSD::handle_osd_map(MOSDMap *m)
     osdmap = newmap;
 
     superblock.current_epoch = cur;
-    advance_map();
     had_map_since = ceph_clock_now(cct);
+
+    epoch_t up_epoch;
+    epoch_t boot_epoch;
+    service.retrieve_epochs(&boot_epoch, &up_epoch, NULL);
+    if (!up_epoch &&
+	osdmap->is_up(whoami) &&
+	osdmap->get_inst(whoami) == client_messenger->get_myinst()) {
+      up_epoch = osdmap->get_epoch();
+      dout(10) << "up_epoch is " << up_epoch << dendl;
+      if (!boot_epoch) {
+	boot_epoch = osdmap->get_epoch();
+	dout(10) << "boot_epoch is " << boot_epoch << dendl;
+      }
+      service.set_epochs(&boot_epoch, &up_epoch, NULL);
+    }
   }
 
   epoch_t _bind_epoch = service.get_bind_epoch();
@@ -6946,32 +6960,6 @@ bool OSD::advance_pg(
     return false;
   }
   return true;
-}
-
-/**
- * update service map; check pg creations
- */
-void OSD::advance_map()
-{
-  assert(osd_lock.is_locked());
-
-  dout(7) << "advance_map epoch " << osdmap->get_epoch()
-          << dendl;
-
-  epoch_t up_epoch;
-  epoch_t boot_epoch;
-  service.retrieve_epochs(&boot_epoch, &up_epoch, NULL);
-  if (!up_epoch &&
-      osdmap->is_up(whoami) &&
-      osdmap->get_inst(whoami) == client_messenger->get_myinst()) {
-    up_epoch = osdmap->get_epoch();
-    dout(10) << "up_epoch is " << up_epoch << dendl;
-    if (!boot_epoch) {
-      boot_epoch = osdmap->get_epoch();
-      dout(10) << "boot_epoch is " << boot_epoch << dendl;
-    }
-    service.set_epochs(&boot_epoch, &up_epoch, NULL);
-  }
 }
 
 void OSD::consume_map()
