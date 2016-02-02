@@ -10,6 +10,7 @@ add_subdirectory(cls_numops)
 add_subdirectory(cls_rbd)
 add_subdirectory(cls_refcount)
 add_subdirectory(cls_replica_log)
+add_subdirectory(cls_rgw)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -428,23 +429,6 @@ target_link_libraries(ceph_test_cls_statelog
   ${EXTRALIBS}
   radostest
   )
-
-if(${WITH_RADOSGW})
-  add_executable(ceph_test_cls_rgw
-    cls_rgw/test_cls_rgw.cc
-    )
-  set_target_properties(ceph_test_cls_rgw PROPERTIES COMPILE_FLAGS
-    ${UNITTEST_CXX_FLAGS})
-  target_link_libraries(ceph_test_cls_rgw
-    cls_rgw_client
-    librados
-    global
-    ${UNITTEST_LIBS}
-    ${EXTRALIBS}
-    ${BLKID_LIBRARIES}
-    ${CMAKE_DL_LIBS}
-    radostest)
-endif(${WITH_RADOSGW})
 
 # ceph_test_async_driver
 add_executable(ceph_test_async_driver
