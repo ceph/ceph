@@ -4802,7 +4802,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	  ctx->mod_desc.create();
 	} else if (op.extent.offset == oi.size) {
-	  ctx->mod_desc.append(oi.size);
+          if (pool.info.require_rollback() &&
+              op.extent.offset % pool.info.required_alignment() == 0) {
+	    ctx->mod_desc.append(oi.size);
+          } else {
+            ctx->ec_overwrite = true;
+          }
 	} else {
 	  // ctx->mod_desc.mark_unrollbackable();
 	  if (pool.info.require_rollback()) {

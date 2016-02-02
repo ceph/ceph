@@ -1584,8 +1584,8 @@ void ECBackend::handle_sub_apply(
   assert(!get_parent()->get_log().get_missing().is_missing(op.hoid));
   // update object stats ?
   
-  ObjectStore::Transaction *localt = new ObjectStore::Transaction;
-  localt->set_use_tbl(op.t.get_use_tbl());
+  ObjectStore::Transaction localt;
+  localt.set_use_tbl(op.t.get_use_tbl());
 
   // log apply operation
   // FIXME: is this right?
@@ -1596,25 +1596,20 @@ void ECBackend::handle_sub_apply(
     eversion_t(),
     eversion_t(),
     !(op.t.empty()),
-    localt);
+    &localt);
   
   if (!(dynamic_cast<ReplicatedPG *>(get_parent())->is_undersized()) &&
           (unsigned)get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
-  list<ObjectStore::Transaction*> tls;
-  tls.push_back(localt);
-
-  // merge overwrite
-  tls.push_back(new ObjectStore::Transaction);
-  tls.back()->swap(op.t);
-  tls.back()->register_on_applied(
+  localt.register_on_applied(
     get_parent()->bless_context(
       new SubApplyApplied(this, op.tid)));
-      // new SubApplyApplied(this, msg, op.tid, op.at_version)));
-  tls.back()->register_on_complete(
-    new ObjectStore::C_DeleteTransaction(tls.back()));
-  
+
+  vector<ObjectStore::Transaction> tls;
+  tls.reserve(2);
+  tls.push_back(std::move(localt));
+  tls.push_back(std::move(op.t));
   get_parent()->queue_transactions(tls, msg);
 }
 
@@ -2480,6 +2475,8 @@ void ECBackend::continue_write_op(Op *_op)
 
       // update the write version
       update_op_version(op);
+      // mark ObjectModDesc with new version
+      op->log_entries.back().mod_desc.ec_overwrite(op->version.version);
 
       // encode new bufferlist
       set<int> want;
