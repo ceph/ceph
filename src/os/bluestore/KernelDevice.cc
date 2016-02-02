@@ -178,7 +178,7 @@ int KernelDevice::flush()
     // sleep for a moment to give other threads a chance to submit or
     // wait on io that races with a flush.
     derr << __func__ << " injecting crash. first we sleep..." << dendl;
-    sleep(3);
+    sleep(g_conf->bdev_inject_crash_flush_delay);
     derr << __func__ << " and now we die" << dendl;
     assert(0 == "bdev_inject_crash");
   }
