@@ -627,7 +627,7 @@ int BlueStore::OnodeHashLRU::trim(int max)
 BlueStore::Collection::Collection(BlueStore *ns, coll_t c)
   : store(ns),
     cid(c),
-    lock("BlueStore::Collection::lock"),
+    lock("BlueStore::Collection::lock", true, false),
     exists(true),
     onode_map(),
     enode_set(g_conf->bluestore_onode_map_size)
