@@ -5668,7 +5668,6 @@ int BlueStore::_zero(TransContext *txc,
     }
     uint64_t x_len = MIN(offset + length - bp->first,
 			 bp->second.length) - x_off;
-
     if (bp->second.has_flag(bluestore_extent_t::FLAG_SHARED)) {
       uint64_t end = bp->first + x_off + x_len;
       _do_write_zero(txc, c, o, bp->first + x_off, x_len);
@@ -5677,6 +5676,11 @@ int BlueStore::_zero(TransContext *txc,
       bp = o->onode.seek_extent(end - 1);
     } else {
       // WAL
+      uint64_t end = bp->first + x_off + x_len;
+      if (end >= o->onode.size && end % block_size) {
+	dout(20) << __func__ << " past eof, padding out tail block" << dendl;
+	x_len += block_size - (end % block_size);
+      }
       bluestore_wal_op_t *op = _get_wal_op(txc, o);
       op->op = bluestore_wal_op_t::OP_ZERO;
       op->extent.offset = bp->second.offset + x_off;
