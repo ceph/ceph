@@ -104,7 +104,6 @@ public:
   /// Write
   void touch(
     const hobject_t &hoid) {
-    bufferlist bl;
     ops.push_back(TouchOp(hoid));
   }
   void append(

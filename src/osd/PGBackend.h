@@ -558,8 +558,8 @@
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete, bool fast_read = false) = 0;
 
-   virtual bool scrub_supported() { return false; }
-   virtual bool auto_repair_supported() const { return false; }
+   virtual bool scrub_supported() = 0;
+   virtual bool auto_repair_supported() const = 0;
    void be_scan_list(
      ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
      ThreadPool::TPHandle &handle);
@@ -588,12 +588,12 @@
      const vector<int> &acting,
      ostream &errorstream);
    virtual uint64_t be_get_ondisk_size(
-     uint64_t logical_size) { assert(0); return 0; }
+     uint64_t logical_size) = 0;
    virtual void be_deep_scrub(
      const hobject_t &poid,
      uint32_t seed,
      ScrubMap::object &o,
-     ThreadPool::TPHandle &handle) { assert(0); }
+     ThreadPool::TPHandle &handle) = 0;
 
    static PGBackend *build_pg_backend(
      const pg_pool_t &pool,
