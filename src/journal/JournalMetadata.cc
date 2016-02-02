@@ -63,6 +63,9 @@ void JournalMetadata::init(Context *on_init) {
 }
 
 void JournalMetadata::shutdown() {
+
+  ldout(m_cct, 20) << __func__ << dendl;
+
   assert(m_initialized);
   {
     Mutex::Locker locker(m_lock);
@@ -187,6 +190,9 @@ void JournalMetadata::set_active_set(uint64_t object_set) {
 }
 
 void JournalMetadata::flush_commit_position() {
+
+  ldout(m_cct, 20) << __func__ << dendl;
+
   {
     Mutex::Locker timer_locker(m_timer_lock);
     Mutex::Locker locker(m_lock);
@@ -305,6 +311,9 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
 }
 
 void JournalMetadata::schedule_commit_task() {
+
+  ldout(m_cct, 20) << __func__ << dendl;
+
   assert(m_timer_lock.is_locked());
   assert(m_lock.is_locked());
 
@@ -315,6 +324,9 @@ void JournalMetadata::schedule_commit_task() {
 }
 
 void JournalMetadata::handle_commit_position_task() {
+
+  ldout(m_cct, 20) << __func__ << dendl;
+
   Mutex::Locker locker(m_lock);
 
   librados::ObjectWriteOperation op;
@@ -329,6 +341,8 @@ void JournalMetadata::handle_commit_position_task() {
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
   assert(r == 0);
   comp->release();
+
+  m_commit_position_task_ctx = NULL;
 }
 
 void JournalMetadata::schedule_watch_reset() {
