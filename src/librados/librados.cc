@@ -1927,12 +1927,32 @@ int64_t librados::IoCtx::get_id()
 
 uint32_t librados::IoCtx::get_object_hash_position(const std::string& oid)
 {
-  return io_ctx_impl->get_object_hash_position(oid);
+  uint32_t hash;
+  int r = io_ctx_impl->get_object_hash_position(oid, &hash);
+  if (r < 0)
+    hash = 0;
+  return hash;
 }
 
 uint32_t librados::IoCtx::get_object_pg_hash_position(const std::string& oid)
 {
-  return io_ctx_impl->get_object_pg_hash_position(oid);
+  uint32_t hash;
+  int r = io_ctx_impl->get_object_pg_hash_position(oid, &hash);
+  if (r < 0)
+    hash = 0;
+  return hash;
+}
+
+int librados::IoCtx::get_object_hash_position2(
+    const std::string& oid, uint32_t *hash_position)
+{
+  return io_ctx_impl->get_object_hash_position(oid, hash_position);
+}
+
+int librados::IoCtx::get_object_pg_hash_position2(
+    const std::string& oid, uint32_t *pg_hash_position)
+{
+  return io_ctx_impl->get_object_pg_hash_position(oid, pg_hash_position);
 }
 
 librados::config_t librados::IoCtx::cct()
