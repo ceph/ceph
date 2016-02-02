@@ -1091,8 +1091,14 @@ namespace librados
 
     int64_t get_id();
 
-    uint32_t get_object_hash_position(const std::string& oid);
-    uint32_t get_object_pg_hash_position(const std::string& oid);
+    // deprecated versions
+    uint32_t get_object_hash_position(const std::string& oid)
+      __attribute__ ((deprecated));
+    uint32_t get_object_pg_hash_position(const std::string& oid)
+      __attribute__ ((deprecated));
+
+    int get_object_hash_position2(const std::string& oid, uint32_t *hash_position);
+    int get_object_pg_hash_position2(const std::string& oid, uint32_t *pg_hash_position);
 
     config_t cct();
 
