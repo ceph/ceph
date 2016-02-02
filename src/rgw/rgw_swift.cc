@@ -172,26 +172,9 @@ public:
   }
 };
 
+typedef RGWPostHTTPData RGWValidateKeystoneToken;
 typedef RGWPostHTTPData RGWGetKeystoneAdminToken;
 typedef RGWPostHTTPData RGWGetRevokedTokens;
-
-class RGWValidateKeystoneToken : public RGWHTTPClient {
-  bufferlist *bl;
-public:
-  RGWValidateKeystoneToken(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl) {}
-
-  int receive_data(void *ptr, size_t len) {
-    bl->append((char *)ptr, len);
-    return 0;
-  }
-  int receive_header(void *ptr, size_t len) {
-    return 0;
-  }
-  int send_data(void *ptr, size_t len) {
-    return 0;
-  }
-
-};
 
 static RGWKeystoneTokenCache *keystone_token_cache = NULL;
 
