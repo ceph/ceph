@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/bin/bash -ex
 
 parallel=1
 [ "$1" = "--serial" ] && parallel=0
