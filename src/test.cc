@@ -10,6 +10,7 @@
 #include <chrono>
 #include <iostream>
 #include <map>
+#include <random>
 
 #include "test_recs.h"
 #include "test_server.h"
@@ -94,6 +95,15 @@ int main(int argc, char* argv[]) {
     return server_ids[index];
   };
 
+  std::default_random_engine
+    rand(std::chrono::system_clock::now().time_since_epoch().count());
+
+  // lambda to choose a server randomly (seed is ignored); called by client
+  auto server_random_f = [&server_ids,&rand](uint64_t seed) -> const ServerId& {
+    int index = rand() % server_ids.size();
+    return server_ids[index];
+  };
+
   // lambda to post a request to the identified server; called by client
   auto server_post_f = [&servers](const ServerId& server,
 				  const TestRequest& request,
@@ -108,7 +118,7 @@ int main(int argc, char* argv[]) {
     int goal = i.second.second;
     clients[name] = new TestClient(name,
 				   server_post_f,
-				   server_rotate_f,
+				   server_random_f,
 				   goal * goal_secs_to_run,
 				   goal,
 				   client_outstanding_ops);
