@@ -12,6 +12,7 @@ overrides:
     - wrongly marked me down
     - objects unfound and apparently lost
     - log bound mismatch
+    - soft lockup
     fs: xfs
 roles:
 - - mon.a
