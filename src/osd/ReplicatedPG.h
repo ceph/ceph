@@ -509,7 +509,7 @@ public:
       boost::optional<uint64_t> watch_cookie;
       uint64_t notify_id;
       bufferlist reply_bl;
-      NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
+      explicit NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
       NotifyAck(uint64_t notify_id, uint64_t cookie, bufferlist& rbl)
 	: watch_cookie(cookie), notify_id(notify_id) {
 	reply_bl.claim(rbl);
@@ -1298,7 +1298,7 @@ protected:
   };
   struct C_OSD_OndiskWriteUnlockList : public Context {
     list<ObjectContextRef> *pls;
-    C_OSD_OndiskWriteUnlockList(list<ObjectContextRef> *l) : pls(l) {}
+    explicit C_OSD_OndiskWriteUnlockList(list<ObjectContextRef> *l) : pls(l) {}
     void finish(int r) {
       for (list<ObjectContextRef>::iterator p = pls->begin(); p != pls->end(); ++p)
 	(*p)->ondisk_write_unlock();
@@ -1327,7 +1327,7 @@ protected:
   };
   struct C_OSD_AppliedRecoveredObjectReplica : public Context {
     ReplicatedPGRef pg;
-    C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p) :
+    explicit C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p) :
       pg(p) {}
     void finish(int r) {
       pg->_applied_recovered_object_replica();
@@ -1543,7 +1543,7 @@ private:
     set<RepGather *> repops;
     snapid_t snap_to_trim;
     bool need_share_pg_info;
-    SnapTrimmer(ReplicatedPG *pg) : pg(pg), need_share_pg_info(false) {}
+    explicit SnapTrimmer(ReplicatedPG *pg) : pg(pg), need_share_pg_info(false) {}
     ~SnapTrimmer();
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
@@ -1556,7 +1556,7 @@ private:
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
     hobject_t pos;
-    TrimmingObjects(my_context ctx);
+    explicit TrimmingObjects(my_context ctx);
     void exit();
     boost::statechart::result react(const SnapTrim&);
   };
@@ -1566,7 +1566,7 @@ private:
       boost::statechart::custom_reaction< SnapTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    WaitingOnReplicas(my_context ctx);
+    explicit WaitingOnReplicas(my_context ctx);
     void exit();
     boost::statechart::result react(const SnapTrim&);
   };
@@ -1576,7 +1576,7 @@ private:
       boost::statechart::custom_reaction< SnapTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    NotTrimming(my_context ctx);
+    explicit NotTrimming(my_context ctx);
     void exit();
     boost::statechart::result react(const SnapTrim&);
   };

@@ -584,7 +584,7 @@ int KStore::OnodeHashLRU::trim(int max)
 KStore::Collection::Collection(KStore *ns, coll_t c)
   : store(ns),
     cid(c),
-    lock("KStore::Collection::lock"),
+    lock("KStore::Collection::lock", true, false),
     onode_map()
 {
 }

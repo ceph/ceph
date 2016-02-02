@@ -13,7 +13,7 @@
 struct LogStatusDump {
   RGWMDLogStatus status;
 
-  LogStatusDump(RGWMDLogStatus _status) : status(_status) {}
+  explicit LogStatusDump(RGWMDLogStatus _status) : status(_status) {}
   void dump(Formatter *f) const {
     string s;
     switch (status) {

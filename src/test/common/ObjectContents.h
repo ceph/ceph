@@ -29,7 +29,7 @@ public:
   private:
     unsigned int get_state(uint64_t pos);
   public:
-    Iterator(ObjectContents *parent) :
+    explicit Iterator(ObjectContents *parent) :
       parent(parent), iter(parent->seeds.end()),
       current_state(0), current_val(0), pos(-1) {
       seek_to_first();
@@ -77,7 +77,7 @@ public:
     seeds[0] = 0;
   }
 
-  ObjectContents(bufferlist::iterator &bp) {
+  explicit ObjectContents(bufferlist::iterator &bp) {
     ::decode(_size, bp);
     ::decode(seeds, bp);
     ::decode(written, bp);

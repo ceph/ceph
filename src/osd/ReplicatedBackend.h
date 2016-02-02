@@ -86,7 +86,7 @@ public:
   class RPCReadPred : public IsPGReadablePredicate {
     pg_shard_t whoami;
   public:
-    RPCReadPred(pg_shard_t whoami) : whoami(whoami) {}
+    explicit RPCReadPred(pg_shard_t whoami) : whoami(whoami) {}
     bool operator()(const set<pg_shard_t> &have) const {
       return have.count(whoami);
     }
@@ -433,6 +433,8 @@ private:
   void sub_op_modify_applied(RepModifyRef rm);
   void sub_op_modify_commit(RepModifyRef rm);
   bool scrub_supported() { return true; }
+  bool auto_repair_supported() const { return false; }
+
 
   void be_deep_scrub(
     const hobject_t &obj,

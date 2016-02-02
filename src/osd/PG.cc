@@ -2069,7 +2069,7 @@ bool PG::queue_scrub()
 
 struct C_PG_FinishRecovery : public Context {
   PGRef pg;
-  C_PG_FinishRecovery(PG *p) : pg(p) {}
+  explicit C_PG_FinishRecovery(PG *p) : pg(p) {}
   void finish(int r) {
     pg->_finish_recovery(this);
   }

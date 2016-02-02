@@ -42,7 +42,7 @@ protected:
     return sm->mds;
   }
 public:
-  StrayManagerIOContext(StrayManager *sm_) : sm(sm_) {}
+  explicit StrayManagerIOContext(StrayManager *sm_) : sm(sm_) {}
 };
 
 
@@ -54,7 +54,7 @@ protected:
     return sm->mds;
   }
 public:
-  StrayManagerContext(StrayManager *sm_) : sm(sm_) {}
+  explicit StrayManagerContext(StrayManager *sm_) : sm(sm_) {}
 };
 
 

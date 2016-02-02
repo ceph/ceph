@@ -21,7 +21,7 @@ public:
 
 class EncodeEventVisitor : public boost::static_visitor<void> {
 public:
-  EncodeEventVisitor(bufferlist &bl) : m_bl(bl) {
+  explicit EncodeEventVisitor(bufferlist &bl) : m_bl(bl) {
   }
 
   template <typename Event>
@@ -50,7 +50,7 @@ private:
 
 class DumpEventVisitor : public boost::static_visitor<void> {
 public:
-  DumpEventVisitor(Formatter *formatter) : m_formatter(formatter) {}
+  explicit DumpEventVisitor(Formatter *formatter) : m_formatter(formatter) {}
 
   template <typename Event>
   inline void operator()(const Event &event) const {

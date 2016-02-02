@@ -2,7 +2,8 @@ from __future__ import print_function
 from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, requires, opt,
-                   ANONYMOUS_AUID, ADMIN_AUID, LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx)
+                   ANONYMOUS_AUID, ADMIN_AUID, LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx,
+                   LIBRADOS_SNAP_HEAD)
 import time
 import threading
 import json
@@ -367,6 +368,19 @@ class TestIoctx(object):
         eq(self.ioctx.read("insnap"), b"contents1")
         self.ioctx.remove_snap("snap1")
         self.ioctx.remove_object("insnap")
+    
+    def test_snap_read(self):
+        self.ioctx.write("insnap", b"contents1")
+        self.ioctx.create_snap("snap1")
+        self.ioctx.remove_object("insnap")
+        snap = self.ioctx.lookup_snap("snap1")
+        self.ioctx.set_read(int(snap.snap_id.value))
+        eq(self.ioctx.read("insnap"), b"contents1")
+        self.ioctx.set_read(LIBRADOS_SNAP_HEAD)
+        self.ioctx.write("inhead", b"contents2")
+        eq(self.ioctx.read("inhead"), b"contents2")
+        self.ioctx.remove_snap("snap1")
+        self.ioctx.remove_object("inhead")
 
     def test_set_omap(self):
         keys = ("1", "2", "3", "4")

@@ -36,6 +36,7 @@ static void usage()
 // helper class for bytes with units
 struct byte_units {
   size_t v;
+  // cppcheck-suppress noExplicitConstructor
   byte_units(size_t v) : v(v) {}
 
   bool parse(const std::string &val, std::string *err);

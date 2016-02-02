@@ -33,6 +33,7 @@
 #include "common/Finisher.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
+#include "common/perf_counters.h"
 #include "os/ObjectStore.h"
 #include "os/fs/FS.h"
 #include "kv/KeyValueDB.h"
@@ -43,6 +44,24 @@
 class Allocator;
 class FreelistManager;
 class BlueFS;
+
+enum {
+  l_bluestore_first = 732430,
+  l_bluestore_state_prepare_lat,
+  l_bluestore_state_aio_wait_lat,
+  l_bluestore_state_io_done_lat,
+  l_bluestore_state_kv_queued_lat,
+  l_bluestore_state_kv_committing_lat,
+  l_bluestore_state_kv_done_lat,
+  l_bluestore_state_wal_queued_lat,
+  l_bluestore_state_wal_applying_lat,
+  l_bluestore_state_wal_aio_wait_lat,
+  l_bluestore_state_wal_cleanup_lat,
+  l_bluestore_state_wal_done_lat,
+  l_bluestore_state_finishing_lat,
+  l_bluestore_state_done_lat,
+  l_bluestore_last
+};
 
 class BlueStore : public ObjectStore {
   // -----------------------------------------------------
@@ -97,7 +116,7 @@ public:
 
     boost::intrusive::unordered_set<Enode> uset;
 
-    EnodeSet(unsigned n)
+    explicit EnodeSet(unsigned n)
       : num_buckets(n),
 	buckets(n),
 	uset(bucket_traits(buckets.data(), num_buckets)) {
@@ -272,6 +291,13 @@ public:
       return "???";
     }
 
+    void log_state_latency(PerfCounters *logger, int state) {
+      utime_t lat, now = ceph_clock_now(g_ceph_context);
+      lat = now - start;
+      logger->tinc(state, lat);
+      start = now;
+    }
+
     OpSequencerRef osr;
     boost::intrusive::list_member_hook<> sequencer_item;
 
@@ -296,7 +322,9 @@ public:
 
     CollectionRef first_collection;  ///< first referenced collection
 
-    TransContext(OpSequencer *o)
+    utime_t start;
+
+    explicit TransContext(OpSequencer *o)
       : state(STATE_PREPARE),
 	osr(o),
 	ops(0),
@@ -305,7 +333,8 @@ public:
 	onreadable(NULL),
 	onreadable_sync(NULL),
 	wal_txn(NULL),
-	ioc(this) {
+	ioc(this),
+	start(ceph_clock_now(g_ceph_context)) {
       //cout << "txc new " << this << std::endl;
     }
     ~TransContext() {
@@ -457,7 +486,7 @@ public:
 
   struct KVSyncThread : public Thread {
     BlueStore *store;
-    KVSyncThread(BlueStore *s) : store(s) {}
+    explicit KVSyncThread(BlueStore *s) : store(s) {}
     void *entry() {
       store->_kv_sync_thread();
       return NULL;
@@ -506,7 +535,7 @@ private:
   deque<TransContext*> kv_queue, kv_committing;
   deque<TransContext*> wal_cleanup_queue, wal_cleaning;
 
-  Logger *logger;
+  PerfCounters *logger;
 
   std::mutex reap_lock;
   list<CollectionRef> removed_collections;

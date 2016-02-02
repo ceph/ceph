@@ -38,7 +38,7 @@ public:
   class FD {
   public:
     const int fd;
-    FD(int _fd) : fd(_fd) {
+    explicit FD(int _fd) : fd(_fd) {
       assert(_fd >= 0);
     }
     int operator*() const {
@@ -55,7 +55,7 @@ private:
   SharedLRU<ghobject_t, FD, ghobject_t::BitwiseComparator> *registry;
 
 public:
-  FDCache(CephContext *cct) : cct(cct),
+  explicit FDCache(CephContext *cct) : cct(cct),
   registry_shards(cct->_conf->filestore_fd_cache_shards) {
     assert(cct);
     cct->_conf->add_observer(this);

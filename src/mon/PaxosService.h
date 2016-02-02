@@ -128,7 +128,7 @@ protected:
   class C_Active : public Context {
     PaxosService *svc;
   public:
-    C_Active(PaxosService *s) : svc(s) {}
+    explicit C_Active(PaxosService *s) : svc(s) {}
     void finish(int r) {
       if (r >= 0)
 	svc->_active();
@@ -142,7 +142,7 @@ protected:
   class C_Propose : public Context {
     PaxosService *ps;
   public:
-    C_Propose(PaxosService *p) : ps(p) { }
+    explicit C_Propose(PaxosService *p) : ps(p) { }
     void finish(int r) {
       ps->proposal_timer = 0;
       if (r >= 0)
@@ -167,7 +167,7 @@ protected:
   class C_Committed : public Context {
     PaxosService *ps;
   public:
-    C_Committed(PaxosService *p) : ps(p) { }
+    explicit C_Committed(PaxosService *p) : ps(p) { }
     void finish(int r) {
       ps->proposing = false;
       if (r >= 0)

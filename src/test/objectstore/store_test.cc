@@ -271,7 +271,7 @@ TEST_P(StoreTest, FiemapHoles) {
     ::decode(m, p);
     cout << " got " << m << std::endl;
     ASSERT_TRUE(!m.empty());
-    ASSERT_GE(m[0], 3);
+    ASSERT_GE(m[0], 3u);
     ASSERT_TRUE((m.size() == 1 &&
 		 m[0] > 4194304u) ||
 		(m.size() == 3 &&
@@ -1617,7 +1617,7 @@ class MixedGenerator : public ObjectGenerator {
 public:
   unsigned seq;
   int64_t poolid;
-  MixedGenerator(int64_t p) : seq(0), poolid(p) {}
+  explicit MixedGenerator(int64_t p) : seq(0), poolid(p) {}
   ghobject_t create_object(gen_type *gen) {
     char buf[100];
     snprintf(buf, sizeof(buf), "OBJ_%u", seq);
@@ -1672,7 +1672,7 @@ public:
 
   struct EnterExit {
     const char *msg;
-    EnterExit(const char *m) : msg(m) {
+    explicit EnterExit(const char *m) : msg(m) {
       //cout << pthread_self() << " enter " << msg << std::endl;
     }
     ~EnterExit() {
