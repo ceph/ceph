@@ -205,7 +205,7 @@ class MDSRank {
       MDSRank *mds;
       Cond cond;
       public:
-      ProgressThread(MDSRank *mds_) : mds(mds_) {}
+      explicit ProgressThread(MDSRank *mds_) : mds(mds_) {}
       void * entry(); 
       void shutdown();
       void signal() {cond.Signal();}

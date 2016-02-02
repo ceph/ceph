@@ -50,7 +50,7 @@ class C_time_wakeup : public EventCallback {
   AsyncConnectionRef conn;
 
  public:
-  C_time_wakeup(AsyncConnectionRef c): conn(c) {}
+  explicit C_time_wakeup(AsyncConnectionRef c): conn(c) {}
   void do_request(int fd_or_id) {
     conn->wakeup_from(fd_or_id);
   }
@@ -60,7 +60,7 @@ class C_handle_read : public EventCallback {
   AsyncConnectionRef conn;
 
  public:
-  C_handle_read(AsyncConnectionRef c): conn(c) {}
+  explicit C_handle_read(AsyncConnectionRef c): conn(c) {}
   void do_request(int fd_or_id) {
     conn->process();
   }
@@ -70,7 +70,7 @@ class C_handle_write : public EventCallback {
   AsyncConnectionRef conn;
 
  public:
-  C_handle_write(AsyncConnectionRef c): conn(c) {}
+  explicit C_handle_write(AsyncConnectionRef c): conn(c) {}
   void do_request(int fd) {
     conn->handle_write();
   }
@@ -136,7 +136,7 @@ class C_deliver_accept : public EventCallback {
 class C_local_deliver : public EventCallback {
   AsyncConnectionRef conn;
  public:
-  C_local_deliver(AsyncConnectionRef c): conn(c) {}
+  explicit C_local_deliver(AsyncConnectionRef c): conn(c) {}
   void do_request(int id) {
     conn->local_deliver();
   }
@@ -146,7 +146,7 @@ class C_local_deliver : public EventCallback {
 class C_clean_handler : public EventCallback {
   AsyncConnectionRef conn;
  public:
-  C_clean_handler(AsyncConnectionRef c): conn(c) {}
+  explicit C_clean_handler(AsyncConnectionRef c): conn(c) {}
   void do_request(int id) {
     conn->cleanup_handler();
     delete this;

@@ -176,7 +176,7 @@ protected:
   /// Call prior to removing directory
   virtual int prep_delete() { return 0; }
 
-  CollectionIndex(const coll_t& collection):
+  explicit CollectionIndex(const coll_t& collection):
     access_lock_name ("CollectionIndex::access_lock::" + collection.to_str()),
     access_lock(access_lock_name.c_str()) {}
 

@@ -26,7 +26,7 @@ class BufferlistSource : public snappy::Source {
   size_t left;
 
  public:
-  BufferlistSource(const bufferlist &data): pb(data.buffers().begin()), pb_off(0), left(data.length()) {}
+  explicit BufferlistSource(const bufferlist &data): pb(data.buffers().begin()), pb_off(0), left(data.length()) {}
   virtual ~BufferlistSource() {}
   virtual size_t Available() const { return left; }
   virtual const char* Peek(size_t* len) {

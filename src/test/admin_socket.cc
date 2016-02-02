@@ -30,7 +30,7 @@
 class AdminSocketTest
 {
 public:
-  AdminSocketTest(AdminSocket *asokc)
+  explicit AdminSocketTest(AdminSocket *asokc)
     : m_asokc(asokc)
   {
   }

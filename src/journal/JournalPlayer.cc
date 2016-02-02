@@ -18,7 +18,7 @@ namespace {
 struct C_HandleComplete : public Context {
   ReplayHandler *replay_handler;
 
-  C_HandleComplete(ReplayHandler *_replay_handler)
+  explicit C_HandleComplete(ReplayHandler *_replay_handler)
     : replay_handler(_replay_handler) {
     replay_handler->get();
   }
@@ -33,7 +33,7 @@ struct C_HandleComplete : public Context {
 struct C_HandleEntriesAvailable : public Context {
   ReplayHandler *replay_handler;
 
-  C_HandleEntriesAvailable(ReplayHandler *_replay_handler)
+  explicit C_HandleEntriesAvailable(ReplayHandler *_replay_handler)
       : replay_handler(_replay_handler) {
     replay_handler->get();
   }

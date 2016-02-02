@@ -39,7 +39,7 @@ class MDSTableIOContext : public MDSIOContextBase
     MDSTable *ida;
     MDSRank *get_mds() {return ida->mds;}
   public:
-    MDSTableIOContext(MDSTable *ida_) : ida(ida_) {
+    explicit MDSTableIOContext(MDSTable *ida_) : ida(ida_) {
       assert(ida != NULL);
     }
 };

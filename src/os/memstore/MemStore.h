@@ -130,7 +130,7 @@ public:
     static thread_local PageSet::page_vector tls_pages;
 #endif
 
-    PageSetObject(size_t page_size) : data(page_size), data_len(0) {}
+    explicit PageSetObject(size_t page_size) : data(page_size), data_len(0) {}
 
     size_t get_size() const override { return data_len; }
 
@@ -243,7 +243,7 @@ public:
       return result;
     }
 
-    Collection(CephContext *cct)
+    explicit Collection(CephContext *cct)
       : cct(cct), use_page_set(cct->_conf->memstore_page_set),
         lock("MemStore::Collection::lock"), exists(true) {}
   };

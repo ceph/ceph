@@ -97,7 +97,7 @@ public:
 
     boost::intrusive::unordered_set<Enode> uset;
 
-    EnodeSet(unsigned n)
+    explicit EnodeSet(unsigned n)
       : num_buckets(n),
 	buckets(n),
 	uset(bucket_traits(buckets.data(), num_buckets)) {
@@ -296,7 +296,7 @@ public:
 
     CollectionRef first_collection;  ///< first referenced collection
 
-    TransContext(OpSequencer *o)
+    explicit TransContext(OpSequencer *o)
       : state(STATE_PREPARE),
 	osr(o),
 	ops(0),
@@ -457,7 +457,7 @@ public:
 
   struct KVSyncThread : public Thread {
     BlueStore *store;
-    KVSyncThread(BlueStore *s) : store(s) {}
+    explicit KVSyncThread(BlueStore *s) : store(s) {}
     void *entry() {
       store->_kv_sync_thread();
       return NULL;

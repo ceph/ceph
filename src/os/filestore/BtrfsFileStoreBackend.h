@@ -29,7 +29,7 @@ private:
   bool m_filestore_btrfs_clone_range;
   bool m_filestore_btrfs_snap;
 public:
-  BtrfsFileStoreBackend(FileStore *fs);
+  explicit BtrfsFileStoreBackend(FileStore *fs);
   ~BtrfsFileStoreBackend() {}
   const char *get_name() {
     return "btrfs";

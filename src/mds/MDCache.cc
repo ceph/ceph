@@ -143,7 +143,7 @@ protected:
     return mdcache->mds;
   }
 public:
-  MDCacheContext(MDCache *mdc_) : mdcache(mdc_) {}
+  explicit MDCacheContext(MDCache *mdc_) : mdcache(mdc_) {}
 };
 
 
@@ -163,7 +163,7 @@ protected:
     return mdcache->mds;
   }
 public:
-  MDCacheIOContext(MDCache *mdc_) : mdcache(mdc_) {}
+  explicit MDCacheIOContext(MDCache *mdc_) : mdcache(mdc_) {}
 };
 
 
@@ -574,7 +574,7 @@ void MDCache::_create_system_file_finish(MutationRef& mut, CDentry *dn, version_
 
 struct C_MDS_RetryOpenRoot : public MDSInternalContext {
   MDCache *cache;
-  C_MDS_RetryOpenRoot(MDCache *c) : MDSInternalContext(c->mds), cache(c) {}
+  explicit C_MDS_RetryOpenRoot(MDCache *c) : MDSInternalContext(c->mds), cache(c) {}
   void finish(int r) {
     if (r < 0)
       cache->mds->suicide();
@@ -4475,7 +4475,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
 class C_MDC_RejoinGatherFinish : public MDCacheContext {
 public:
-  C_MDC_RejoinGatherFinish(MDCache *c) : MDCacheContext(c) {}
+  explicit C_MDC_RejoinGatherFinish(MDCache *c) : MDCacheContext(c) {}
   void finish(int r) {
     mdcache->rejoin_gather_finish();
   }
@@ -5633,7 +5633,7 @@ void MDCache::do_delayed_cap_imports()
 }
 
 struct C_MDC_OpenSnapParents : public MDCacheContext {
-  C_MDC_OpenSnapParents(MDCache *c) : MDCacheContext(c) {}
+  explicit C_MDC_OpenSnapParents(MDCache *c) : MDCacheContext(c) {}
   void finish(int r) {
     mdcache->open_snap_parents();
   }
@@ -7251,7 +7251,7 @@ void MDCache::check_memory_usage()
 
 class C_MDC_ShutdownCheck : public MDCacheContext {
 public:
-  C_MDC_ShutdownCheck(MDCache *m) : MDCacheContext(m) {}
+  explicit C_MDC_ShutdownCheck(MDCache *m) : MDCacheContext(m) {}
   void finish(int) {
     mdcache->shutdown_check();
   }

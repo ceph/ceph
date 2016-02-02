@@ -64,7 +64,7 @@ class LockerContext : public MDSInternalContextBase {
   }
 
   public:
-  LockerContext(Locker *locker_) : locker(locker_) {
+  explicit LockerContext(Locker *locker_) : locker(locker_) {
     assert(locker != NULL);
   }
 };

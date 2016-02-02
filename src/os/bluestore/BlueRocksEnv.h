@@ -150,7 +150,7 @@ public:
   rocksdb::Status GetAbsolutePath(const std::string& db_path,
       std::string* output_path);
 
-  BlueRocksEnv(BlueFS *f);
+  explicit BlueRocksEnv(BlueFS *f);
 private:
   BlueFS *fs;
 };

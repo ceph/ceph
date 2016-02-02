@@ -22,7 +22,7 @@ struct IOContext {
   atomic_t num_reading;
   atomic_t num_waiting;
 
-  IOContext(void *p)
+  explicit IOContext(void *p)
     : priv(p),
       lock("IOContext::lock")
     {}
@@ -69,7 +69,7 @@ private:
 
   struct AioCompletionThread : public Thread {
     BlockDevice *bdev;
-    AioCompletionThread(BlockDevice *b) : bdev(b) {}
+    explicit AioCompletionThread(BlockDevice *b) : bdev(b) {}
     void *entry() {
       bdev->_aio_thread();
       return NULL;

@@ -22,7 +22,7 @@ class ENoOp : public LogEvent {
 
 public:
   ENoOp() : LogEvent(EVENT_NOOP), pad_size(0) { }
-  ENoOp(uint32_t size_) : LogEvent(EVENT_NOOP), pad_size(size_){ }
+  explicit ENoOp(uint32_t size_) : LogEvent(EVENT_NOOP), pad_size(size_){ }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);

@@ -46,7 +46,7 @@ namespace {
 
 class LockdepObs : public md_config_obs_t {
 public:
-  LockdepObs(CephContext *cct) : m_cct(cct), m_registered(false) {
+  explicit LockdepObs(CephContext *cct) : m_cct(cct), m_registered(false) {
   }
   virtual ~LockdepObs() {
     if (m_registered) {
@@ -80,7 +80,7 @@ private:
 class CephContextServiceThread : public Thread
 {
 public:
-  CephContextServiceThread(CephContext *cct)
+  explicit CephContextServiceThread(CephContext *cct)
     : _lock("CephContextServiceThread::_lock"),
       _reopen_logs(false), _exit_thread(false), _cct(cct)
   {
@@ -149,7 +149,7 @@ class LogObs : public md_config_obs_t {
   ceph::log::Log *log;
 
 public:
-  LogObs(ceph::log::Log *l) : log(l) {}
+  explicit LogObs(ceph::log::Log *l) : log(l) {}
 
   const char** get_tracked_conf_keys() const {
     static const char *KEYS[] = {
@@ -201,7 +201,7 @@ class CephContextObs : public md_config_obs_t {
   CephContext *cct;
 
 public:
-  CephContextObs(CephContext *cct) : cct(cct) {}
+  explicit CephContextObs(CephContext *cct) : cct(cct) {}
 
   const char** get_tracked_conf_keys() const {
     static const char *KEYS[] = {
@@ -264,7 +264,7 @@ class CephContextHook : public AdminSocketHook {
   CephContext *m_cct;
 
 public:
-  CephContextHook(CephContext *cct) : m_cct(cct) {}
+  explicit CephContextHook(CephContext *cct) : m_cct(cct) {}
 
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) {
