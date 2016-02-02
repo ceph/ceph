@@ -14,6 +14,7 @@ add_subdirectory(cls_rgw)
 add_subdirectory(cls_statelog)
 add_subdirectory(cls_version)
 add_subdirectory(compressor)
+add_subdirectory(filestore)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -436,12 +437,6 @@ add_executable(ceph_perf_msgr_client msgr/perf_msgr_client.cc)
 set_target_properties(ceph_perf_msgr_client PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_perf_msgr_client os global ${UNITTEST_LIBS})
-
-#ceph_test_filestore
-add_executable(ceph_test_filestore filestore/TestFileStore.cc)
-set_target_properties(ceph_test_filestore PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_filestore os global ${UNITTEST_LIBS})
 
 # ceph_test_xattr_bench
 add_executable(ceph_test_xattr_bench
