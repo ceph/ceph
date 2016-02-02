@@ -137,7 +137,7 @@ public:
   struct ClientAsyncReadStatus {
     bool complete;
     Context *on_complete;
-    ClientAsyncReadStatus(Context *on_complete)
+    explicit ClientAsyncReadStatus(Context *on_complete)
     : complete(false), on_complete(on_complete) {}
   };
   list<ClientAsyncReadStatus> in_progress_client_reads;
@@ -412,7 +412,7 @@ public:
     set<int> want;
     ErasureCodeInterfaceRef ec_impl;
   public:
-    ECRecPred(ErasureCodeInterfaceRef ec_impl) : ec_impl(ec_impl) {
+    explicit ECRecPred(ErasureCodeInterfaceRef ec_impl) : ec_impl(ec_impl) {
       for (unsigned i = 0; i < ec_impl->get_chunk_count(); ++i) {
 	want.insert(i);
       }

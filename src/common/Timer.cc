@@ -33,7 +33,7 @@
 class SafeTimerThread : public Thread {
   SafeTimer *parent;
 public:
-  SafeTimerThread(SafeTimer *s) : parent(s) {}
+  explicit SafeTimerThread(SafeTimer *s) : parent(s) {}
   void *entry() {
     parent->timer_thread();
     return NULL;

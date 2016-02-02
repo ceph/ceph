@@ -31,7 +31,7 @@ private:
 public:
   xlist<Inode*> inodes_with_caps;
 
-  SnapRealm(inodeno_t i) : 
+  explicit SnapRealm(inodeno_t i) :
     ino(i), nref(0), created(0), seq(0),
     pparent(NULL) { }
 

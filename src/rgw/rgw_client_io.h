@@ -107,7 +107,7 @@ class RGWClientIOStream : private RGWClientIOStreamBuf, public std::istream {
  * ctor is being called prior to construction of any member of this class. */
 
 public:
-  RGWClientIOStream(RGWClientIO &c)
+  explicit RGWClientIOStream(RGWClientIO &c)
     : RGWClientIOStreamBuf(c, 1, 2),
       istream(static_cast<RGWClientIOStreamBuf *>(this)) {
   }

@@ -231,7 +231,7 @@ public:
     Message *m;
     friend class Message;
   public:
-    CompletionHook(Message *_m) : m(_m) {}
+    explicit CompletionHook(Message *_m) : m(_m) {}
     virtual void set_message(Message *_m) { m = _m; }
   };
 

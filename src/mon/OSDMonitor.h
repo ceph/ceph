@@ -55,7 +55,7 @@ struct failure_reporter_t {
   MonOpRequestRef op;       ///< failure op request
 
   failure_reporter_t() {}
-  failure_reporter_t(utime_t s) : failed_since(s) {}
+  explicit failure_reporter_t(utime_t s) : failed_since(s) {}
   ~failure_reporter_t() { }
 };
 
@@ -386,7 +386,6 @@ private:
   bool preprocess_remove_snaps(MonOpRequestRef op);
   bool prepare_remove_snaps(MonOpRequestRef op);
 
-  CephContext *cct;
   OpTracker op_tracker;
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);

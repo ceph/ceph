@@ -96,7 +96,7 @@ struct RGWRequest
   RGWOp *op;
   utime_t ts;
 
-  RGWRequest(uint64_t id) : id(id), s(NULL), op(NULL) {
+  explicit RGWRequest(uint64_t id) : id(id), s(NULL), op(NULL) {
   }
 
   virtual ~RGWRequest() {}
@@ -139,7 +139,7 @@ class RGWFrontendConfig {
   int parse_config(const string& config, map<string, string>& config_map);
   string framework;
 public:
-  RGWFrontendConfig(const string& _conf) : config(_conf) {}
+  explicit RGWFrontendConfig(const string& _conf) : config(_conf) {}
   int init() {
     int ret = parse_config(config, config_map);
     if (ret < 0)
@@ -900,7 +900,7 @@ public:
 class RGWProcessControlThread : public Thread {
   RGWProcess *pprocess;
 public:
-  RGWProcessControlThread(RGWProcess *_pprocess) : pprocess(_pprocess) {}
+  explicit RGWProcessControlThread(RGWProcess *_pprocess) : pprocess(_pprocess) {}
 
   void *entry() {
     pprocess->run();

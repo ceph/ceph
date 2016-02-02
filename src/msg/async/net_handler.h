@@ -26,7 +26,7 @@ namespace ceph {
 
     CephContext *cct;
    public:
-    NetHandler(CephContext *c): cct(c) {}
+    explicit NetHandler(CephContext *c): cct(c) {}
     int set_nonblock(int sd);
     void set_socket_options(int sd);
     int connect(const entity_addr_t &addr);

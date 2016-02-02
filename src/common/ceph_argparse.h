@@ -35,7 +35,7 @@
 class CephInitParameters
 {
 public:
-  CephInitParameters(uint32_t module_type_);
+  explicit CephInitParameters(uint32_t module_type_);
   std::list<std::string> get_conf_files() const;
 
   uint32_t module_type;

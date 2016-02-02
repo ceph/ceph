@@ -27,7 +27,7 @@
 class VectorContainer
 {
 public:
-  VectorContainer(const char** arr_) {
+  explicit VectorContainer(const char** arr_) {
     for (const char **a = arr_; *a; ++a) {
       const char *str = (const char*)strdup(*a);
       arr.push_back(str);

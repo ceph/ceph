@@ -34,7 +34,7 @@ public:
   __le32 msg_cnt;
   buffer::list bl;
 public:
-  XioMsgCnt(buffer::ptr p)
+  explicit XioMsgCnt(buffer::ptr p)
     {
       bl.append(p);
       buffer::list::iterator bl_iter = bl.begin();
@@ -145,7 +145,7 @@ struct xio_msg_ex
   struct xio_msg msg;
   struct xio_iovec_ex iovs[XIO_MSGR_IOVLEN];
 
-  xio_msg_ex(void* user_context) {
+  explicit xio_msg_ex(void* user_context) {
     // go in structure order
     msg.in.header.iov_len = 0;
     msg.in.header.iov_base = NULL;  /* XXX Accelio requires this currently */

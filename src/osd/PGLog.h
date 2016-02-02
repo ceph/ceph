@@ -478,6 +478,7 @@ protected:
     check();
   }
 public:
+  // cppcheck-suppress noExplicitConstructor
   PGLog(CephContext *cct = 0) :
     dirty_from(eversion_t::max()),
     writeout_from(eversion_t::max()), 

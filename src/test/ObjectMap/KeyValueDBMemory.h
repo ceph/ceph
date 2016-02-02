@@ -16,7 +16,7 @@ public:
   std::map<std::pair<string,string>,bufferlist> db;
 
   KeyValueDBMemory() { }
-  KeyValueDBMemory(KeyValueDBMemory *db) : db(db->db) { }
+  explicit KeyValueDBMemory(KeyValueDBMemory *db) : db(db->db) { }
   virtual ~KeyValueDBMemory() { }
 
   virtual int init(string _opt) {
@@ -62,7 +62,7 @@ public:
     list<Context *> on_commit;
     KeyValueDBMemory *db;
 
-    TransactionImpl_(KeyValueDBMemory *db) : db(db) {}
+    explicit TransactionImpl_(KeyValueDBMemory *db) : db(db) {}
 
 
     struct SetOp : public Context {

@@ -36,7 +36,7 @@ public:
   string ruleset_failure_domain;
   bool per_chunk_alignment;
 
-  ErasureCodeJerasure(const char *_technique) :
+  explicit ErasureCodeJerasure(const char *_technique) :
     k(0),
     DEFAULT_K("2"),
     m(0),
@@ -155,7 +155,7 @@ public:
   int **schedule;
   int packetsize;
 
-  ErasureCodeJerasureCauchy(const char *technique) :
+  explicit ErasureCodeJerasureCauchy(const char *technique) :
     ErasureCodeJerasure(technique),
     bitmatrix(0),
     schedule(0)
@@ -208,7 +208,7 @@ public:
   int **schedule;
   int packetsize;
 
-  ErasureCodeJerasureLiberation(const char *technique = "liberation") :
+  explicit ErasureCodeJerasureLiberation(const char *technique = "liberation") :
     ErasureCodeJerasure(technique),
     bitmatrix(0),
     schedule(0)

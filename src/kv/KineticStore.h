@@ -45,7 +45,7 @@ class KineticStore : public KeyValueDB {
   int do_open(ostream &out, bool create_if_missing);
 
 public:
-  KineticStore(CephContext *c);
+  explicit KineticStore(CephContext *c);
   ~KineticStore();
 
   static int _test_init(CephContext *c);
@@ -81,7 +81,7 @@ public:
     vector<KineticOp> ops;
     KineticStore *db;
 
-    KineticTransactionImpl(KineticStore *db) : db(db) {}
+    explicit KineticTransactionImpl(KineticStore *db) : db(db) {}
     void set(
       const string &prefix,
       const string &k,
@@ -115,7 +115,7 @@ public:
     kinetic::BlockingKineticConnection *kinetic_conn;
     kinetic::KineticStatus kinetic_status;
   public:
-    KineticWholeSpaceIteratorImpl(kinetic::BlockingKineticConnection *conn);
+    explicit KineticWholeSpaceIteratorImpl(kinetic::BlockingKineticConnection *conn);
     virtual ~KineticWholeSpaceIteratorImpl() { }
 
     int seek_to_first() {

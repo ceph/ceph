@@ -473,7 +473,7 @@ public:
 class HelpHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
-  HelpHook(AdminSocket *as) : m_as(as) {}
+  explicit HelpHook(AdminSocket *as) : m_as(as) {}
   bool call(string command, cmdmap_t &cmdmap, string format, bufferlist& out) {
     Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
     f->open_object_section("help");
@@ -495,7 +495,7 @@ public:
 class GetdescsHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
-  GetdescsHook(AdminSocket *as) : m_as(as) {}
+  explicit GetdescsHook(AdminSocket *as) : m_as(as) {}
   bool call(string command, cmdmap_t &cmdmap, string format, bufferlist& out) {
     int cmdnum = 0;
     JSONFormatter jf(false);

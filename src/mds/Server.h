@@ -63,7 +63,7 @@ private:
 public:
   bool terminating_sessions;
 
-  Server(MDSRank *m);
+  explicit Server(MDSRank *m);
   ~Server() {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
     delete logger;

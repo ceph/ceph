@@ -16,7 +16,7 @@ public:
   class FuseThread : public Thread {
     FuseStore *fs;
   public:
-    FuseThread(FuseStore *f) : fs(f) {}
+    explicit FuseThread(FuseStore *f) : fs(f) {}
     void *entry() {
       fs->loop();
       return NULL;

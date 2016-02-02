@@ -20,7 +20,7 @@
 namespace ceph {
   class HTMLFormatter : public XMLFormatter {
   public:
-    HTMLFormatter(bool pretty = false);
+    explicit HTMLFormatter(bool pretty = false);
     ~HTMLFormatter();
     void reset();
 

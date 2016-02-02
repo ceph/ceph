@@ -476,7 +476,7 @@ int CLSRGWIssueGetDirHeader::issue_op(int shard_id, const string& oid)
 class GetDirHeaderCompletion : public ObjectOperationCompletion {
   RGWGetDirHeader_CB *ret_ctx;
 public:
-  GetDirHeaderCompletion(RGWGetDirHeader_CB *_ctx) : ret_ctx(_ctx) {}
+  explicit GetDirHeaderCompletion(RGWGetDirHeader_CB *_ctx) : ret_ctx(_ctx) {}
   ~GetDirHeaderCompletion() {
     ret_ctx->put();
   }

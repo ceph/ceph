@@ -31,7 +31,7 @@ class SelectDriver : public EventDriver {
   CephContext *cct;
 
  public:
-  SelectDriver(CephContext *c): max_fd(0), cct(c) {}
+  explicit SelectDriver(CephContext *c): max_fd(0), cct(c) {}
   virtual ~SelectDriver() {}
 
   int init(int nevent);

@@ -53,6 +53,6 @@ class RGWCORSXMLParser_S3 : public RGWXMLParser
 
   XMLObj *alloc_obj(const char *el);
 public:
-  RGWCORSXMLParser_S3(CephContext *_cct) : cct(_cct) {}
+  explicit RGWCORSXMLParser_S3(CephContext *_cct) : cct(_cct) {}
 };
 #endif /*CEPH_RGW_CORS_S3_H*/

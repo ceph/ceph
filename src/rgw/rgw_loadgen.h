@@ -40,7 +40,7 @@ public:
   int complete_request();
   int send_content_length(uint64_t len);
 
-  RGWLoadGenIO(RGWLoadGenRequestEnv *_re) : left_to_read(0), req(_re) {}
+  explicit RGWLoadGenIO(RGWLoadGenRequestEnv *_re) : left_to_read(0), req(_re) {}
   void flush();
 };
 

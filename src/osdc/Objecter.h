@@ -1142,7 +1142,7 @@ private:
   class RequestStateHook : public AdminSocketHook {
     Objecter *m_objecter;
   public:
-    RequestStateHook(Objecter *objecter);
+    explicit RequestStateHook(Objecter *objecter);
     bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	      bufferlist& out);
   };

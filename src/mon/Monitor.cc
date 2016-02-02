@@ -266,7 +266,7 @@ Monitor::~Monitor()
 class AdminHook : public AdminSocketHook {
   Monitor *mon;
 public:
-  AdminHook(Monitor *m) : mon(m) {}
+  explicit AdminHook(Monitor *m) : mon(m) {}
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) {
     stringstream ss;
@@ -319,7 +319,7 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
       goto abort;
     }
     sync_force(f.get(), ss);
-  } else if (command.find("add_bootstrap_peer_hint") == 0) {
+  } else if (command.compare(0, 23, "add_bootstrap_peer_hint") == 0) {
     if (!_add_bootstrap_peer_hint(command, cmdmap, ss))
       goto abort;
   } else if (command == "quorum enter") {
@@ -1678,7 +1678,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
 
   // rename peer?
   string peer_name = monmap->get_name(m->get_source_addr());
-  if (monmap->get_epoch() == 0 && peer_name.find("noname-") == 0) {
+  if (monmap->get_epoch() == 0 && peer_name.compare(0, 7, "noname-") == 0) {
     dout(10) << " renaming peer " << m->get_source_addr() << " "
 	     << peer_name << " -> " << m->name << " in my monmap"
 	     << dendl;
@@ -3093,7 +3093,7 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
 
 // fake connection attached to forwarded messages
 struct AnonConnection : public Connection {
-  AnonConnection(CephContext *cct) : Connection(cct, NULL) {}
+  explicit AnonConnection(CephContext *cct) : Connection(cct, NULL) {}
 
   int send_message(Message *m) override {
     assert(!"send_message on anonymous connection");
@@ -4694,7 +4694,7 @@ void Monitor::scrub_reset_timeout()
 class C_Mon_Tick : public Context {
   Monitor *mon;
 public:
-  C_Mon_Tick(Monitor *m) : mon(m) {}
+  explicit C_Mon_Tick(Monitor *m) : mon(m) {}
   void finish(int r) {
     mon->tick();
   }

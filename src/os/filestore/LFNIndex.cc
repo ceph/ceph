@@ -65,7 +65,7 @@ void LFNIndex::maybe_inject_failure()
 // in combination with RetryException, thrown by the above.
 struct FDCloser {
   int fd;
-  FDCloser(int f) : fd(f) {}
+  explicit FDCloser(int f) : fd(f) {}
   ~FDCloser() {
     VOID_TEMP_FAILURE_RETRY(::close(fd));
   }

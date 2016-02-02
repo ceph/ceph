@@ -37,7 +37,7 @@
 struct ceph_mount_info
 {
 public:
-  ceph_mount_info(CephContext *cct_)
+  explicit ceph_mount_info(CephContext *cct_)
     : mounted(false),
       inited(false),
       client(NULL),

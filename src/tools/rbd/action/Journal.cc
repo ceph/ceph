@@ -113,7 +113,7 @@ static int do_show_journal_status(librados::IoCtx& io_ctx,
     f->dump_unsigned("active_set", active_set);
     f->open_object_section("registered_clients");
     for (std::set<cls::journal::Client>::iterator c =
-          registered_clients.begin(); c != registered_clients.end(); c++) {
+          registered_clients.begin(); c != registered_clients.end(); ++c) {
       c->dump(f);
     }
     f->close_section();
@@ -124,7 +124,7 @@ static int do_show_journal_status(librados::IoCtx& io_ctx,
     std::cout << "active_set: " << active_set << std::endl;
     std::cout << "registered clients: " << std::endl;
     for (std::set<cls::journal::Client>::iterator c =
-          registered_clients.begin(); c != registered_clients.end(); c++) {
+          registered_clients.begin(); c != registered_clients.end(); ++c) {
       std::cout << "\t" << *c << std::endl;
     }
   }
@@ -262,7 +262,7 @@ public:
 protected:
   struct ReplayHandler : public ::journal::ReplayHandler {
     JournalPlayer *journal;
-    ReplayHandler(JournalPlayer *_journal) : journal(_journal) {}
+    explicit ReplayHandler(JournalPlayer *_journal) : journal(_journal) {}
 
     virtual void get() {}
     virtual void put() {}

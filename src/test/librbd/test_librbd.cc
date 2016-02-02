@@ -3320,7 +3320,7 @@ TEST_F(TestLibRBD, ResizeViaLockOwner)
 
 class RBDWriter : public Thread {
  public:
-   RBDWriter(librbd::Image &image) : m_image(image) {};
+   explicit RBDWriter(librbd::Image &image) : m_image(image) {};
  protected:
   void *entry() {
     librbd::image_info_t info;

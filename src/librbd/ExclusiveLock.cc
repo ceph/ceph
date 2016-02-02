@@ -28,7 +28,7 @@ const std::string WATCHER_LOCK_COOKIE_PREFIX = "auto";
 template <typename I>
 struct C_SendReleaseRequest : public Context {
   ReleaseRequest<I>* request;
-  C_SendReleaseRequest(ReleaseRequest<I>* request) : request(request) {
+  explicit C_SendReleaseRequest(ReleaseRequest<I>* request) : request(request) {
   }
   virtual void finish(int r) override {
     request->send();

@@ -254,12 +254,6 @@ int CrushTester::random_placement(int ruleno, vector<int>& out, int maxout, vect
       crush.get_max_devices() == 0)
     return -EINVAL;
 
-  // compute each device's proportional weight
-  vector<float> proportional_weights( weight.size() );
-  for (unsigned i = 0; i < weight.size(); i++) {
-    proportional_weights[i] = (float) weight[i] / (float) total_weight;
-  }
-
   // determine the real maximum number of devices to return
   int devices_requested = min(maxout, get_maximum_affected_by_rule(ruleno));
   bool accept_placement = false;
@@ -571,7 +565,6 @@ int CrushTester::test()
 
       // create a structure to hold data for post-processing
       tester_data_set tester_data;
-      vector<int> vector_data_buffer;
       vector<float> vector_data_buffer_f;
 
       // create a map to hold batch-level placement information

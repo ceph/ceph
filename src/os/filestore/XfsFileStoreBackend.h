@@ -24,7 +24,7 @@ private:
   bool m_has_extsize;
   int set_extsize(int fd, unsigned int val);
 public:
-  XfsFileStoreBackend(FileStore *fs);
+  explicit XfsFileStoreBackend(FileStore *fs);
   ~XfsFileStoreBackend() {}
   const char *get_name() {
     return "xfs";

@@ -162,14 +162,15 @@ static uint32_t crc_check_table[] = {
 
 TEST(Crc32c, Range) {
   int len = sizeof(crc_check_table) / sizeof(crc_check_table[0]);
-  const char *b = (const char *)malloc(len);
-  memset((void *)b, 1, len);
+  unsigned char *b = (unsigned char *)malloc(len);
+  memset(b, 1, len);
   uint32_t crc = 0;
   uint32_t *check = crc_check_table;
   for (int i = 0 ; i < len; i++, check++) {
-    crc = ceph_crc32c(crc, (unsigned char *)b+i, len-i);
+    crc = ceph_crc32c(crc, b+i, len-i);
     ASSERT_EQ(crc, *check);
   }
+  free(b);
 }
 
 static uint32_t crc_zero_check_table[] = {
@@ -241,15 +242,16 @@ static uint32_t crc_zero_check_table[] = {
 
 TEST(Crc32c, RangeZero) {
   int len = sizeof(crc_zero_check_table) / sizeof(crc_zero_check_table[0]);
-  const char *b = (const char *)malloc(len);
-  memset((void *)b, 0, len);
+  unsigned char *b = (unsigned char *)malloc(len);
+  memset(b, 0, len);
   uint32_t crc = 1; /* when checking zero buffer we want to start with a non zero crc, otherwise
                        all the results are going to be zero */
   uint32_t *check = crc_zero_check_table;
   for (int i = 0 ; i < len; i++, check++) {
-    crc = ceph_crc32c(crc, (unsigned char *)b+i, len-i);
+    crc = ceph_crc32c(crc, b+i, len-i);
     ASSERT_EQ(crc, *check);
   }
+  free(b);
 }
 
 TEST(Crc32c, RangeNull) {

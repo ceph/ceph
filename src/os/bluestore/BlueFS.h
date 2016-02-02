@@ -113,7 +113,7 @@ public:
     uint64_t pos;           ///< current logical offset
     uint64_t max_prefetch;  ///< max allowed prefetch
 
-    FileReaderBuffer(uint64_t mpf)
+    explicit FileReaderBuffer(uint64_t mpf)
       : bl_off(0),
 	pos(0),
 	max_prefetch(mpf) {}
@@ -155,7 +155,7 @@ public:
 
   struct FileLock {
     FileRef file;
-    FileLock(FileRef f) : file(f) {}
+    explicit FileLock(FileRef f) : file(f) {}
   };
 
 private:

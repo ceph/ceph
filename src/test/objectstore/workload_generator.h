@@ -120,7 +120,7 @@ class WorkloadGenerator : public TestObjectStoreState {
   void do_stats();
 
 public:
-  WorkloadGenerator(vector<const char*> args);
+  explicit WorkloadGenerator(vector<const char*> args);
   ~WorkloadGenerator() {
     m_store->umount();
   }
@@ -129,7 +129,7 @@ public:
     WorkloadGenerator *wrkldgen_state;
 
   public:
-    C_OnReadable(WorkloadGenerator *state)
+    explicit C_OnReadable(WorkloadGenerator *state)
      :TestObjectStoreState::C_OnFinished(state), wrkldgen_state(state) { }
 
     void finish(int r)

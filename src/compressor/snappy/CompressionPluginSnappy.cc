@@ -23,7 +23,7 @@ class CompressionPluginSnappy : public CompressionPlugin {
 
 public:
 
-  CompressionPluginSnappy(CephContext* cct) : CompressionPlugin(cct)
+  explicit CompressionPluginSnappy(CephContext* cct) : CompressionPlugin(cct)
   {}
 
   virtual int factory(CompressorRef *cs,

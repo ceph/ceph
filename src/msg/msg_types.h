@@ -43,7 +43,7 @@ public:
   // cons
   entity_name_t() : _type(0), _num(0) { }
   entity_name_t(int t, int64_t n) : _type(t), _num(n) { }
-  entity_name_t(const ceph_entity_name &n) : 
+  explicit entity_name_t(const ceph_entity_name &n) : 
     _type(n.type), _num(n.num) { }
 
   // static cons
@@ -222,7 +222,7 @@ struct entity_addr_t {
   entity_addr_t() : type(0), nonce(0) { 
     memset(&addr, 0, sizeof(addr));
   }
-  entity_addr_t(const ceph_entity_addr &o) {
+  explicit entity_addr_t(const ceph_entity_addr &o) {
     type = o.type;
     nonce = o.nonce;
     addr = o.in_addr;
@@ -424,6 +424,7 @@ struct entity_inst_t {
   entity_addr_t addr;
   entity_inst_t() {}
   entity_inst_t(entity_name_t n, const entity_addr_t& a) : name(n), addr(a) {}
+  // cppcheck-suppress noExplicitConstructor
   entity_inst_t(const ceph_entity_inst& i) : name(i.name), addr(i.addr) { }
   entity_inst_t(const ceph_entity_name& n, const ceph_entity_addr &a) : name(n), addr(a) {}
   operator ceph_entity_inst() {

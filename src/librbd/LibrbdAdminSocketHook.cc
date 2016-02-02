@@ -21,7 +21,7 @@ public:
 
 class FlushCacheCommand : public LibrbdAdminSocketCommand {
 public:
-  FlushCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
+  explicit FlushCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
 
   bool call(stringstream *ss) {
     int r = flush(ictx);
@@ -38,7 +38,7 @@ private:
 
 struct InvalidateCacheCommand : public LibrbdAdminSocketCommand {
 public:
-  InvalidateCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
+  explicit InvalidateCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
 
   bool call(stringstream *ss) {
     int r = invalidate_cache(ictx);
@@ -81,7 +81,7 @@ LibrbdAdminSocketHook::LibrbdAdminSocketHook(ImageCtx *ictx) :
 
 LibrbdAdminSocketHook::~LibrbdAdminSocketHook() {
   for (Commands::const_iterator i = commands.begin(); i != commands.end();
-       i++) {
+       ++i) {
     (void)admin_socket->unregister_command(i->first);
     delete i->second;
   }

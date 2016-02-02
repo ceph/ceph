@@ -62,7 +62,7 @@ protected:
   atomic_t down_flag;
 
 public:
-  RGWObjectExpirer(RGWRados *_store)
+  explicit RGWObjectExpirer(RGWRados *_store)
     : store(_store)
   {}
 

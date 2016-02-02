@@ -3793,7 +3793,7 @@ class C_Client_Remount : public Context  {
 private:
   Client *client;
 public:
-  C_Client_Remount(Client *c) : client(c) {}
+  explicit C_Client_Remount(Client *c) : client(c) {}
   void finish(int r) {
     assert (r == 0);
     r = client->remount_cb(client->callback_handle);
@@ -5564,7 +5564,7 @@ void Client::unmount()
 class C_C_Tick : public Context {
   Client *client;
 public:
-  C_C_Tick(Client *c) : client(c) {}
+  explicit C_C_Tick(Client *c) : client(c) {}
   void finish(int r) {
     // Called back via Timer, which takes client_lock for us
     assert(client->client_lock.is_locked_by_me());

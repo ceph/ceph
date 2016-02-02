@@ -104,7 +104,7 @@ class C_MDL_WriteError : public MDSIOContextBase {
   }
 
   public:
-  C_MDL_WriteError(MDLog *m) : mdlog(m) {}
+  explicit C_MDL_WriteError(MDLog *m) : mdlog(m) {}
 };
 
 

@@ -28,7 +28,7 @@ namespace ceph {
 struct kstore_cnode_t {
   uint32_t bits;   ///< how many bits of coll pgid are significant
 
-  kstore_cnode_t(int b=0) : bits(b) {}
+  explicit kstore_cnode_t(int b=0) : bits(b) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);

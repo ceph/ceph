@@ -762,7 +762,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 class C_ObjectOperation : public Context {
 public:
   ::ObjectOperation m_ops;
-  C_ObjectOperation(Context *c) : m_ctx(c) {}
+  explicit C_ObjectOperation(Context *c) : m_ctx(c) {}
   virtual void finish(int r) {
     m_ctx->complete(r);
   }

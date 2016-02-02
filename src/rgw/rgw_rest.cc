@@ -1290,7 +1290,7 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
 int RGWHandler_ObjStore::validate_tenant_name(string const& t)
 {
   const char *p = t.c_str();
-  for (unsigned i = 0; i < t.size(); i++) {
+  for (unsigned int i = 0; i < t.size(); i++) {
     char ch = p[i];
     if (!(isalnum(ch) || ch == '_'))
       return -ERR_INVALID_TENANT_NAME;

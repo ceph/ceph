@@ -1406,7 +1406,7 @@ int MetadataDriver::find_or_create_dirfrag(
     bufferlist fnode_bl;
     fnode_t blank_fnode;
     blank_fnode.version = 1;
-    blank_fnode.damage_flags |= (DAMAGE_RSTATS | DAMAGE_RSTATS);
+    blank_fnode.damage_flags |= (DAMAGE_STATS | DAMAGE_RSTATS);
     blank_fnode.encode(fnode_bl);
 
 

@@ -106,7 +106,7 @@ private:
     InProgressOp(int op, const vector<string> &path)
       : op(op), path(path) {}
 
-    InProgressOp(bufferlist::iterator &bl) {
+    explicit InProgressOp(bufferlist::iterator &bl) {
       decode(bl);
     }
 

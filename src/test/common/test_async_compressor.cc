@@ -102,7 +102,7 @@ class SyntheticWorkload {
   static const uint64_t MAX_INFLIGHT = 128;
 
  public:
-  SyntheticWorkload(AsyncCompressor *ac): async_compressor(ac), rng(time(NULL)) {
+  explicit SyntheticWorkload(AsyncCompressor *ac): async_compressor(ac), rng(time(NULL)) {
     for (int i = 0; i < 100; i++) {
       bufferlist bl;
       boost::uniform_int<> u(4096, 1<<24);

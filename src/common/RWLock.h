@@ -140,7 +140,7 @@ public:
     bool locked;
 
   public:
-    RLocker(const RWLock& lock) : m_lock(lock) {
+   explicit  RLocker(const RWLock& lock) : m_lock(lock) {
       m_lock.get_read();
       locked = true;
     }
@@ -162,7 +162,7 @@ public:
     bool locked;
 
   public:
-    WLocker(RWLock& lock) : m_lock(lock) {
+    explicit WLocker(RWLock& lock) : m_lock(lock) {
       m_lock.get_write();
       locked = true;
     }
@@ -192,7 +192,7 @@ public:
     LockState state;
 
   public:
-    Context(RWLock& l) : lock(l) {}
+    explicit Context(RWLock& l) : lock(l), state(Untaken) {}
     Context(RWLock& l, LockState s) : lock(l), state(s) {}
 
     void get_write() {

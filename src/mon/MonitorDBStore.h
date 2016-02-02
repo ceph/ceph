@@ -621,7 +621,7 @@ class MonitorDBStore
     return db->get_estimated_size(extras);
   }
 
-  MonitorDBStore(const string& path)
+  explicit MonitorDBStore(const string& path)
     : db(0),
       do_dump(false),
       dump_fd_binary(-1),

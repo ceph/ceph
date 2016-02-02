@@ -1604,8 +1604,7 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
     prefix = "pg ls";
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "poolstr", poolstr);
-    int64_t pool = -2;
-    pool = mon->osdmon()->osdmap.lookup_pg_pool_name(poolstr.c_str());
+    int64_t pool = mon->osdmon()->osdmap.lookup_pg_pool_name(poolstr.c_str());
     if (pool < 0) {
       r = -ENOENT;
       ss << "pool " << poolstr << " does not exist";
@@ -1749,7 +1748,10 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
                int64_t(g_conf->mon_pg_stuck_threshold));
 
     r = dump_stuck_pg_stats(ds, f.get(), (int)threshold, stuckop_vec);
-    ss << "ok";
+    if (r < 0)
+      ss << "failed";  
+    else 
+      ss << "ok";
     r = 0;
   } else if (prefix == "pg map") {
     pg_t pgid;
@@ -2438,7 +2440,7 @@ int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
       stuck_types |= PGMap::STUCK_STALE;
     else {
       ds << "Unknown type: " << *i << std::endl;
-      return 0;
+      return -EINVAL;
     }
   }
 

@@ -109,7 +109,7 @@ class HashInfo {
   vector<uint32_t> cumulative_shard_hashes;
 public:
   HashInfo() : total_chunk_size(0) {}
-  HashInfo(unsigned num_chunks)
+  explicit HashInfo(unsigned num_chunks)
   : total_chunk_size(0),
     cumulative_shard_hashes(num_chunks, -1) {}
   void append(uint64_t old_size, map<int, bufferlist> &to_append);

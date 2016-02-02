@@ -169,7 +169,7 @@ class Elector {
   class C_ElectionExpire : public Context {
     Elector *elector;
   public:
-    C_ElectionExpire(Elector *e) : elector(e) { }
+    explicit C_ElectionExpire(Elector *e) : elector(e) { }
     void finish(int r) {
       elector->expire();
     }
@@ -348,7 +348,7 @@ class Elector {
    *
    * @param m A Monitor instance
    */
-  Elector(Monitor *m) : mon(m),
+  explicit Elector(Monitor *m) : mon(m),
 			expire_event(0),
 			epoch(0),
 			participating(true),

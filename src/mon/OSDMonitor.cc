@@ -781,7 +781,7 @@ public:
 protected:
   struct lowprecision_t {
     float v;
-    lowprecision_t(float _v) : v(_v) {}
+    explicit lowprecision_t(float _v) : v(_v) {}
   };
   friend std::ostream &operator<<(ostream& out, const lowprecision_t& v);
 

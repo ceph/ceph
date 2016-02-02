@@ -33,7 +33,9 @@ struct object_t {
   string name;
 
   object_t() {}
+  // cppcheck-suppress noExplicitConstructor
   object_t(const char *s) : name(s) {}
+  // cppcheck-suppress noExplicitConstructor
   object_t(const string& s) : name(s) {}
 
   void swap(object_t& o) {
@@ -110,6 +112,7 @@ struct file_object_t {
 
 struct snapid_t {
   uint64_t val;
+  // cppcheck-suppress noExplicitConstructor
   snapid_t(uint64_t v=0) : val(v) {}
   snapid_t operator+=(snapid_t o) { val += o.val; return *this; }
   snapid_t operator++() { ++val; return *this; }

@@ -36,7 +36,7 @@ void decode_big_endian_string(std::string &str, bufferlist::iterator &it) {
 
 class EncodeVisitor : public boost::static_visitor<void> {
 public:
-  EncodeVisitor(bufferlist &bl) : m_bl(bl) {
+  explicit EncodeVisitor(bufferlist &bl) : m_bl(bl) {
   }
 
   template <typename Action>
@@ -65,7 +65,7 @@ private:
 
 class DumpVisitor : public boost::static_visitor<void> {
 public:
-  DumpVisitor(Formatter *formatter) : m_formatter(formatter) {}
+  explicit DumpVisitor(Formatter *formatter) : m_formatter(formatter) {}
 
   template <typename Action>
   inline void operator()(const Action &action) const {

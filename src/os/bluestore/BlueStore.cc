@@ -751,6 +751,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     fsid_fd(-1),
     mounted(false),
     coll_lock("BlueStore::coll_lock"),
+    nid_last(0),
     nid_max(0),
     throttle_ops(cct, "bluestore_max_ops", cct->_conf->bluestore_max_ops),
     throttle_bytes(cct, "bluestore_max_bytes", cct->_conf->bluestore_max_bytes),
@@ -5560,7 +5561,7 @@ int BlueStore::_zero(TransContext *txc,
       dout(20) << __func__ << "  wal zero " << x_off << "~" << x_len
 	       << " " << op->extent << dendl;
     }
-    bp++;
+    ++bp;
   }
 
   if (offset + length > o->onode.size) {

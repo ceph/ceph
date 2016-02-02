@@ -26,7 +26,7 @@ namespace
 class TestContext : public Context
 {
 public:
-  TestContext(int num_)
+  explicit TestContext(int num_)
     : num(num_)
   {
   }
@@ -50,7 +50,7 @@ protected:
 class StrictOrderTestContext : public TestContext
 {
 public:
-  StrictOrderTestContext (int num_)
+  explicit StrictOrderTestContext (int num_)
     : TestContext(num_)
   {
   }
