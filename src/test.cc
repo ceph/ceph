@@ -127,9 +127,9 @@ int main(int argc, char* argv[]) {
   TestClient::TimePoint earliest_finish = late_time;
   TestClient::TimePoint latest_finish = early_time;
 
-  for (auto i = clients.begin(); i != clients.end(); ++i) {
-    auto start = i->second->getOpTimes().front();
-    auto end = i->second->getOpTimes().back();
+  for (auto const &i : clients) {
+    auto start = i.second->getOpTimes().front();
+    auto end = i.second->getOpTimes().back();
 
     if (start > latest_start) { latest_start = start; }
     if (end < earliest_finish) { earliest_finish = end; }
@@ -138,9 +138,9 @@ int main(int argc, char* argv[]) {
 
   const auto start_edge = latest_start + skip_amount;
 
-  for (auto i = clients.begin(); i != clients.end(); ++i) {
-    auto it = i->second->getOpTimes().begin();
-    const auto end = i->second->getOpTimes().end();
+  for (auto const &i : clients) {
+    auto it = i.second->getOpTimes().begin();
+    const auto end = i.second->getOpTimes().end();
     while (it != end && *it < start_edge) { ++it; }
 
     for (auto time_edge = start_edge + measure_unit;
@@ -149,7 +149,7 @@ int main(int argc, char* argv[]) {
       int count = 0;
       for (; it != end && *it < time_edge; ++count, ++it) { /* empty */ }
       double ops_per_second = double(count) / (measure_unit / report_unit);
-      std::cout << "client " << i->first << ": " << ops_per_second <<
+      std::cout << "client " << i.first << ": " << ops_per_second <<
 	" ops per second." << std::endl;
     }
   }
