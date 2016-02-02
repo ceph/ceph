@@ -19,11 +19,13 @@
 
 #include "msg/Message.h"
 #include "include/types.h"
+#include "mon/mon_types.h"
 //#include "common/config.h"
 
 namespace ceph {
   class Formatter;
 }
+
 
 class MonMap {
  public:
@@ -36,6 +38,41 @@ class MonMap {
   map<entity_addr_t,string> addr_name;
   vector<string> rank_name;
   vector<entity_addr_t> rank_addr;
+
+  /**
+   * Persistent Features are all those features that once set on a
+   * monmap cannot, and should not, be removed. These will define the
+   * non-negotiable features that a given monitor must support to
+   * properly operate in a given quorum.
+   *
+   * Should be reserved for features that we really want to make sure
+   * are sticky, and are important enough to tolerate not being able
+   * to downgrade a monitor.
+   */
+  mon_feature_t persistent_features;
+  /**
+   * Optional Features are all those features that can be enabled or
+   * disabled following a given criteria -- e.g., user-mandated via the
+   * cli --, and act much like indicators of what the cluster currently
+   * supports.
+   *
+   * They are by no means "optional" in the sense that monitors can
+   * ignore them. Just that they are not persistent.
+   */
+  mon_feature_t optional_features;
+
+  /**
+   * Returns the set of features required by this monmap.
+   *
+   * The features required by this monmap is the union of all the
+   * currently set persistent features and the currently set optional
+   * features.
+   *
+   * @returns the set of features required by this monmap
+   */
+  mon_feature_t get_required_features() const {
+    return (persistent_features | optional_features);
+  }
 
   void calc_ranks() {
     rank_name.resize(mon_addr.size());
@@ -56,7 +93,7 @@ class MonMap {
     }
   }
 
-  MonMap() 
+  MonMap()
     : epoch(0) {
     memset(&fsid, 0, sizeof(fsid));
   }
@@ -83,7 +120,7 @@ class MonMap {
     mon_addr[name] = addr;
     calc_ranks();
   }
-  
+
   void remove(const string &name) {
     assert(mon_addr.count(name));
     mon_addr.erase(name);
@@ -173,7 +210,7 @@ class MonMap {
     return i;
   }
 
-  void encode(bufferlist& blist, uint64_t features) const;
+  void encode(bufferlist& blist, uint64_t con_features) const;
   void decode(bufferlist& blist) {
     bufferlist::iterator p = blist.begin();
     decode(p);
