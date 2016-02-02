@@ -165,6 +165,11 @@ public:
     Context *on_complete,
     bool fast_read = false);
 
+  // indicate blocked read number by apply
+  uint64_t blocked_read_total;
+  bool blocked_read_redo;
+  bool is_objects_read_async_block(const hobject_t &hoid);
+
 private:
   friend struct ECRecoveryHandle;
   uint64_t get_recovery_chunk_size() const {
@@ -629,7 +634,10 @@ public:
   // keep the op util write submit
   list<Op*> pending_op;
   void write_submit_done(Op *op);
-  void continue_next_op();
+  void continue_next_op(const hobject_t last_hoid);
+  void continue_next_op() {
+    continue_next_op(hobject_t());
+  }
   void update_op_version(Op *op) {
     // update the write version
     eversion_t now_e = get_parent()->get_version();
@@ -657,6 +665,7 @@ public:
   map<ceph_tid_t, ObjectApplyProgress> tid_to_apply_map;
   map<hobject_t, ceph_tid_t, hobject_t::BitwiseComparator> in_progress_apply_tid;
   map<hobject_t, eversion_t, hobject_t::BitwiseComparator> to_apply;
+  map<hobject_t, int, hobject_t::BitwiseComparator> blocked_read_num;
 
 public:
   ECBackend(

@@ -235,6 +235,8 @@
 
      virtual LogClientTemp clog_error() = 0;
 
+     virtual int continue_blocked_async_read() = 0;
+
      virtual ~Listener() {}
    };
    Listener *parent;
@@ -570,6 +572,10 @@
      const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete, bool fast_read = false) = 0;
+   virtual bool is_objects_read_async_block(
+     const hobject_t &hoid) {
+     return false;
+   }
 
    virtual bool scrub_supported() = 0;
    virtual bool auto_repair_supported() const = 0;

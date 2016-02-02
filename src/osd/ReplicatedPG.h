@@ -474,6 +474,8 @@ public:
 
   LogClientTemp clog_error() { return osd->clog->error(); }
 
+  int continue_blocked_async_read();
+
   /*
    * Capture all object state associated with an in-progress read or write.
    */

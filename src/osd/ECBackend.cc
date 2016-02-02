@@ -194,6 +194,8 @@ ECBackend::ECBackend(
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
   : PGBackend(pg, store, coll, ch),
+    blocked_read_total(0),
+    blocked_read_redo(false),
     cct(cct),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
@@ -1628,10 +1630,11 @@ void ECBackend::handle_sub_apply_reply(
   
   // check apply done
   if (i->second.pending_apply.empty()) {
+    hobject_t hoid = i->second.hoid;
     in_progress_apply_tid.erase(i->second.hoid);
     tid_to_apply_map.erase(op.tid);
 
-    continue_next_op();
+    continue_next_op(hoid);
   }
 }
 
@@ -1777,6 +1780,7 @@ void ECBackend::on_change()
   }
   in_progress_client_reads.clear();
   shard_to_read_map.clear();
+  blocked_read_total = 0;
 
   in_progress_write_tid.clear();
   tid_to_overwrite_map.clear();
@@ -2628,7 +2632,16 @@ void ECBackend::write_submit_done(Op *op) {
   continue_next_op();
 }
 
-void ECBackend::continue_next_op() {
+void ECBackend::continue_next_op(const hobject_t last_hoid) {
+  if (blocked_read_total > 0 &&
+      blocked_read_num.count(last_hoid)) {
+    blocked_read_redo = true;
+    int ret = get_parent()->continue_blocked_async_read();
+    blocked_read_redo = false;
+    assert(ret > 0);
+    blocked_read_total -= ret;
+    return;
+  }
   if (pending_op.size() > 0) {
 
     Op *next_op = pending_op.front();
@@ -2984,6 +2997,30 @@ out:
   }
 };
 
+bool ECBackend::is_objects_read_async_block(
+  const hobject_t &hoid)
+{
+  // blocked op restart
+  if (blocked_read_redo &&
+      blocked_read_num.count(hoid) &&
+      to_apply.count(hoid) == 0 &&
+      in_progress_apply_tid.count(hoid) == 0) {
+    return false;
+  }
+  // has previous blocked op or doing apply
+  if (blocked_read_total > 0 ||
+      to_apply.count(hoid) ||
+      in_progress_apply_tid.count(hoid)) {
+    blocked_read_total ++;
+    if (blocked_read_num.count(hoid))
+      blocked_read_num[hoid] += 1;
+    else
+      blocked_read_num.insert(make_pair(hoid, 1));
+    return true;
+  }
+  return false;
+}
+
 void ECBackend::objects_read_async(
   const hobject_t &hoid,
   const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
@@ -2991,6 +3028,11 @@ void ECBackend::objects_read_async(
   Context *on_complete,
   bool fast_read)
 {
+  if (blocked_read_num.count(hoid)) {
+    blocked_read_num[hoid] -= 1;
+    if (blocked_read_num[hoid] == 0)
+      blocked_read_num.erase(hoid);
+  }
   in_progress_client_reads.push_back(ClientAsyncReadStatus(on_complete));
   CallClientContexts *c = new CallClientContexts(
     this, &(in_progress_client_reads.back()), to_read);

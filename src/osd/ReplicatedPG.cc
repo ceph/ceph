@@ -108,6 +108,9 @@ struct OnReadComplete : public Context {
 // OpContext
 void ReplicatedPG::OpContext::start_async_reads(ReplicatedPG *pg)
 {
+  if (pg->pgbackend->is_objects_read_async_block(obc->obs.oi.soid)) {
+    return;
+  }
   inflightreads = 1;
   pg->pgbackend->objects_read_async(
     obc->obs.oi.soid,
@@ -125,6 +128,24 @@ void ReplicatedPG::OpContext::finish_read(ReplicatedPG *pg)
     pg->in_progress_async_reads.pop_front();
     pg->complete_read_ctx(async_read_result, this);
   }
+}
+int ReplicatedPG::continue_blocked_async_read()
+{
+  int continue_num = 0;
+  for (list<pair<OpRequestRef, OpContext*> >::iterator i =
+         in_progress_async_reads.begin();
+       i != in_progress_async_reads.end();
+       ++i) {
+    if (i->second->inflightreads == 0) {
+      i->second->start_async_reads(this);
+      if (i->second->inflightreads) {
+        continue_num++;
+      } else {
+        return continue_num;
+      }
+    }
+  }
+  return continue_num;
 }
 
 class CopyFromCallback: public ReplicatedPG::CopyCallback {
