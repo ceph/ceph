@@ -40,10 +40,10 @@ int KeystoneToken::parse(CephContext *cct, bufferlist& bl)
   }
 
   try {
-    if (version == "2.0") {
+    if (version == 2) {
       JSONDecoder::decode_json("access", *this, &parser);
     }
-    if (version == "3") {
+    if (version == 3) {
       JSONDecoder::decode_json("token", *this, &parser);
     }
   } catch (JSONDecoder::err& err) {
@@ -181,22 +181,23 @@ int Keystone::get_keystone_admin_token(std::string &token) {
   RGWGetKeystoneAdminToken token_req(cct, &token_bl);
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
-  std::string keystone_version = cct->_conf->rgw_keystone_api_version;
-  if (keystone_version == "2.0") {
+  int keystone_version = cct->_conf->rgw_keystone_api_version;
+  if (keystone_version == 2) {
     jf.open_object_section("token_request");
       jf.open_object_section("auth");
         jf.open_object_section("passwordCredentials");
           encode_json("username", cct->_conf->rgw_keystone_admin_user, &jf);
           encode_json("password", cct->_conf->rgw_keystone_admin_password, &jf);
-        jf.close_section();
+        jf.close_section(); // passwordCredentials
         encode_json("tenantName", cct->_conf->rgw_keystone_admin_tenant, &jf);
-      jf.close_section();
-    jf.close_section();
+      jf.close_section(); // auth
+    jf.close_section(); // token_request
     std::stringstream ss;
     jf.flush(ss);
     token_req.set_post_data(ss.str());
     token_req.set_send_length(ss.str().length());
     token_url.append("v2.0/tokens");
+
     int ret = token_req.process("POST", token_url.c_str());
     if (ret < 0)
       return ret;
@@ -206,22 +207,22 @@ int Keystone::get_keystone_admin_token(std::string &token) {
     token = t.token.id;
     return 0;
   }
-  else if (keystone_version == "3") {
+  else if (keystone_version == 3) {
     jf.open_object_section("auth");
       jf.open_object_section("identity");
         jf.open_array_section("methods");
           jf.dump_string("", "password");
-        jf.close_section();
+        jf.close_section(); // methods
         jf.open_object_section("password");
           jf.open_object_section("user");
             jf.open_object_section("domain");
               encode_json("name", cct->_conf->rgw_keystone_admin_domain, &jf);
-            jf.close_section();
+            jf.close_section(); // domain
             encode_json("name", cct->_conf->rgw_keystone_admin_user, &jf);
             encode_json("password", cct->_conf->rgw_keystone_admin_password, &jf);
-          jf.close_section();
-        jf.close_section();
-      jf.close_section();
+          jf.close_section(); // user
+        jf.close_section(); // password
+      jf.close_section(); // identity
       jf.open_object_section("scope");
         jf.open_object_section("project");
           if (!cct->_conf->rgw_keystone_admin_project.empty()) {
@@ -232,10 +233,10 @@ int Keystone::get_keystone_admin_token(std::string &token) {
           }
           jf.open_object_section("domain");
             encode_json("name", cct->_conf->rgw_keystone_admin_domain, &jf);
-          jf.close_section();
-        jf.close_section();
-      jf.close_section();
-    jf.close_section();
+          jf.close_section(); // domain
+        jf.close_section(); // project
+      jf.close_section(); // scope
+    jf.close_section(); // auth
     std::stringstream ss;
     jf.flush(ss);
     token_req.set_post_data(ss.str());
@@ -333,12 +334,12 @@ int Keystone::validate_token(const string& token, KeystoneToken& t)
     RGWValidateKeystoneToken validate(cct, &bl);
     validate.append_header("X-Auth-Token", admin_token);
 
-    std::string keystone_version = cct->_conf->rgw_keystone_api_version;
-    if (keystone_version == "2.0") {
+    int keystone_version = cct->_conf->rgw_keystone_api_version;
+    if (keystone_version == 2) {
       url.append("v2.0/tokens/");
       url.append(token);
     }
-    if (keystone_version == "3") {
+    if (keystone_version == 3) {
       url.append("v3/auth/tokens");
       validate.append_header("X-Subject-Token", token);
     }
@@ -379,11 +380,11 @@ int Keystone::check_revoked() {
   if (get_keystone_url(url) < 0)
     return -EINVAL;
   req.append_header("X-Auth-Token", token);
-  std::string keystone_version = cct->_conf->rgw_keystone_api_version;
-  if (keystone_version == "2.0") {
+  int keystone_version = cct->_conf->rgw_keystone_api_version;
+  if (keystone_version == 2) {
     url.append("v2.0/tokens/revoked");
   }
-  if (keystone_version == "3") {
+  if (keystone_version == 3) {
     url.append("v3/auth/tokens/OS-PKI/revoked");
   }
   req.set_send_length(0);

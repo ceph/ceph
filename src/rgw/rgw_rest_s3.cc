@@ -2244,10 +2244,10 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
 int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(const string& auth_id, const string& auth_token, const string& auth_sign) {
   /* prepare keystone url */
   string keystone_url = cct->_conf->rgw_keystone_url;
-  string keystone_version = cct->_conf->rgw_keystone_api_version;
+  int keystone_version = cct->_conf->rgw_keystone_api_version;
   if (keystone_url[keystone_url.size() - 1] != '/')
     keystone_url.append("/");
-  if (keystone_version == "3") {
+  if (keystone_version == 3) {
     keystone_url.append("v3/s3tokens");
   }
   else {

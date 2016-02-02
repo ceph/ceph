@@ -10,7 +10,7 @@
 
 class KeystoneToken {
 protected:
-  string version;
+  int version;
 
 public:
   class Domain {
@@ -57,8 +57,8 @@ public:
   list<Role> roles;
 
 public:
-  KeystoneToken() : version("") {};
-  KeystoneToken(string _version) : version(_version) {};
+  KeystoneToken() : version(0) {};
+  KeystoneToken(int _version) : version(_version) {};
   time_t get_expires() { return token.expires; }
   string get_domain_id() {return project.domain.id;};
   string get_domain_name()  {return project.domain.name;};
