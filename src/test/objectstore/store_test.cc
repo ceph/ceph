@@ -271,7 +271,7 @@ TEST_P(StoreTest, FiemapHoles) {
     ::decode(m, p);
     cout << " got " << m << std::endl;
     ASSERT_TRUE(!m.empty());
-    ASSERT_GE(m[0], 3);
+    ASSERT_GE(m[0], 3u);
     ASSERT_TRUE((m.size() == 1 &&
 		 m[0] > 4194304u) ||
 		(m.size() == 3 &&
