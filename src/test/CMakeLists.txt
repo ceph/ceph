@@ -11,6 +11,7 @@ add_subdirectory(cls_rbd)
 add_subdirectory(cls_refcount)
 add_subdirectory(cls_replica_log)
 add_subdirectory(cls_rgw)
+add_subdirectory(cls_statelog)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -404,23 +405,6 @@ set_target_properties(ceph_test_cls_version PROPERTIES COMPILE_FLAGS
 target_link_libraries(ceph_test_cls_version
   librados
   cls_version_client
-  global
-  ${UNITTEST_LIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  ${CRYPTO_LIBS}
-  ${EXTRALIBS}
-  radostest
-  )
-
-add_executable(ceph_test_cls_statelog
-  cls_statelog/test_cls_statelog.cc
-  )
-set_target_properties(ceph_test_cls_statelog PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_cls_statelog
-  librados
-  cls_statelog_client
   global
   ${UNITTEST_LIBS}
   ${BLKID_LIBRARIES}
