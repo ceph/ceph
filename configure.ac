@@ -721,6 +721,43 @@ if test "x$enable_xio" = x"yes"; then
    AC_SUBST(XIO_LIBS)
 fi
 
+#
+# DPDK
+#
+
+AC_ARG_WITH(dpdk,
+    [AC_HELP_STRING([--with-dpdk], [build Ceph DPDK Support])], [], [with_dpdk=no])
+
+AM_CONDITIONAL(WITH_DPDK, [test "x$with_dpdk" != "xno"])
+
+if test "x$with_dpdk" != x"no"; then
+   CPPFLAGS="$CPPFLAGS -I$with_dpdk/include"
+   LDFLAGS="$LDFLAGS -L$with_dpdk/lib"
+   AC_CHECK_HEADER([rte_config.h], [], AC_MSG_ERROR([Cannot find header 'rte_config.h'.]))
+   AC_CHECK_LIB([rte_eal], [rte_eal_init], [], AC_MSG_FAILURE([DPDK rte_eal_init not found]),
+                [-lrte_mempool -lrte_ring -lpthread -ldl])
+
+   AC_DEFINE([HAVE_DPDK], [1], [DPDK conditional compilation])
+fi
+
+#
+# SPDK
+#
+AC_ARG_WITH(spdk,
+    [AC_HELP_STRING([--with-spdk], [build Ceph SPDK Support])], [], [with_spdk=no])
+
+AM_CONDITIONAL(WITH_SPDK, [test "x$with_spdk" != "xno"])
+
+if test "x$with_spdk" != x"no"; then
+   CPPFLAGS="$CPPFLAGS -I$with_spdk/include"
+   LDFLAGS="$LDFLAGS -L$with_spdk/lib/nvme -L$with_spdk/lib/memory -L$with_spdk/lib/util"
+   AC_CHECK_HEADER([spdk/nvme.h], [], AC_MSG_ERROR([Cannot find header 'spdk/nvme.h'.]))
+   #AC_CHECK_LIB([spdk_nvme], [nvme_attach], [], AC_MSG_FAILURE([SPDK nvme_attach not found]))
+
+   AC_DEFINE([HAVE_SPDK], [1], [SPDK conditional compilation])
+   AC_SUBST(SPDK_LIBS)
+fi
+
 #libatomic-ops? You want it!
 AC_ARG_WITH([libatomic-ops],
             [AS_HELP_STRING([--without-libatomic-ops],

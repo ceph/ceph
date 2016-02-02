@@ -1,15 +1,34 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+  *
+ * Copyright (C) 2015 XSky <haomai@xsky.com>
+ *
+ * Author: Haomai Wang <haomaiwang@gmail.com>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
 
-#ifndef CEPH_OS_BLUESTORE_BLOCKDEVICE
-#define CEPH_OS_BLUESTORE_BLOCKDEVICE
+#ifndef CEPH_OS_BLUESTORE_BLOCKDEVICE_H
+#define CEPH_OS_BLUESTORE_BLOCKDEVICE_H
 
+#include "acconfig.h"
 #include "os/fs/FS.h"
-#include "include/interval_set.h"
+
+#define SPDK_PREFIX "spdk:"
 
 /// track in-flight io
 struct IOContext {
   void *priv;
+#ifdef HAVE_SPDK
+  void *nvme_task_first = nullptr;
+  void *nvme_task_last = nullptr;
+#endif
 
   Mutex lock;
   Cond cond;
@@ -39,82 +58,42 @@ struct IOContext {
   void aio_wait();
 };
 
+
 class BlockDevice {
-public:
-  typedef void (*aio_callback_t)(void *handle, void *aio);
-
-private:
-  int fd_direct, fd_buffered;
-  uint64_t size;
-  uint64_t block_size;
-  string path;
-  FS *fs;
-  bool aio, dio;
-  bufferptr zeros;
-
-  Mutex debug_lock;
-  interval_set<uint64_t> debug_inflight;
-
   Mutex ioc_reap_lock;
   vector<IOContext*> ioc_reap_queue;
   atomic_t ioc_reap_count;
 
-  Mutex flush_lock;
-  atomic_t io_since_flush;
-
-  FS::aio_queue_t aio_queue;
-  aio_callback_t aio_callback;
-  void *aio_callback_priv;
-  bool aio_stop;
-
-  struct AioCompletionThread : public Thread {
-    BlockDevice *bdev;
-    AioCompletionThread(BlockDevice *b) : bdev(b) {}
-    void *entry() {
-      bdev->_aio_thread();
-      return NULL;
-    }
-  } aio_thread;
-
-  void _aio_thread();
-  int _aio_start();
-  void _aio_stop();
-
-  void _aio_log_start(IOContext *ioc, uint64_t offset, uint64_t length);
-  void _aio_log_finish(IOContext *ioc, uint64_t offset, uint64_t length);
-
-  int _lock();
-
 public:
-  BlockDevice(aio_callback_t cb, void *cbpriv);
+  BlockDevice(): ioc_reap_lock("BlockDevice::ioc_reap_lock") {}
+  virtual ~BlockDevice() {}
+  typedef void (*aio_callback_t)(void *handle, void *aio);
 
-  void aio_submit(IOContext *ioc);
+  static BlockDevice *create(
+      const string& path, aio_callback_t cb, void *cbpriv);
+  virtual bool supported_bdev_label() { return true; }
 
-  uint64_t get_size() const {
-    return size;
-  }
-  uint64_t get_block_size() const {
-    return block_size;
-  }
+  virtual void aio_submit(IOContext *ioc) = 0;
 
-  int read(uint64_t off, uint64_t len, bufferlist *pbl,
-	   IOContext *ioc,
-	   bool buffered);
-  int read_buffered(uint64_t off, uint64_t len, char *buf);
+  virtual uint64_t get_size() const = 0;
+  virtual uint64_t get_block_size() const = 0;
 
-  int aio_write(uint64_t off, bufferlist& bl,
-		IOContext *ioc,
-		bool buffered);
-  int aio_zero(uint64_t off, uint64_t len,
-	       IOContext *ioc);
-  int flush();
+  virtual int read(uint64_t off, uint64_t len, bufferlist *pbl,
+	   IOContext *ioc, bool buffered) = 0;
+  virtual int read_buffered(uint64_t off, uint64_t len, char *buf) = 0;
+
+  virtual int aio_write(uint64_t off, bufferlist& bl,
+		IOContext *ioc, bool buffered) = 0;
+  virtual int aio_zero(uint64_t off, uint64_t len, IOContext *ioc) = 0;
+  virtual int flush() = 0;
 
   void queue_reap_ioc(IOContext *ioc);
+  void reap_ioc();
 
   // for managing buffered readers/writers
-  int invalidate_cache(uint64_t off, uint64_t len);
-  int open(string path);
-  void close();
+  virtual int invalidate_cache(uint64_t off, uint64_t len) = 0;
+  virtual int open(string path) = 0;
+  virtual void close() = 0;
 };
 
-#endif
+#endif //CEPH_OS_BLUESTORE_BLOCKDEVICE_H

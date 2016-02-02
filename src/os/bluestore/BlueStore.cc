@@ -72,6 +72,7 @@ const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
 // for bluefs, label (4k) + bluefs super (4k), means we start at 8k.
 #define BLUEFS_START  8192
 
+
 /*
  * object name key structure
  *
@@ -789,12 +790,29 @@ BlueStore::~BlueStore()
 
 void BlueStore::_init_logger()
 {
-  // XXX
+  PerfCountersBuilder b(g_ceph_context, "BlueStore",
+                        l_bluestore_first, l_bluestore_last);
+  b.add_time_avg(l_bluestore_state_prepare_lat, "state_prepare_lat", "Average prepare state latency");
+  b.add_time_avg(l_bluestore_state_aio_wait_lat, "state_aio_wait_lat", "Average aio_wait state latency");
+  b.add_time_avg(l_bluestore_state_io_done_lat, "state_io_done_lat", "Average io_done state latency");
+  b.add_time_avg(l_bluestore_state_kv_queued_lat, "state_kv_queued_lat", "Average kv_queued state latency");
+  b.add_time_avg(l_bluestore_state_kv_committing_lat, "state_kv_commiting_lat", "Average kv_commiting state latency");
+  b.add_time_avg(l_bluestore_state_kv_done_lat, "state_kv_done_lat", "Average kv_done state latency");
+  b.add_time_avg(l_bluestore_state_wal_queued_lat, "state_wal_queued_lat", "Average wal_queued state latency");
+  b.add_time_avg(l_bluestore_state_wal_applying_lat, "state_wal_applying_lat", "Average wal_applying state latency");
+  b.add_time_avg(l_bluestore_state_wal_aio_wait_lat, "state_wal_aio_wait_lat", "Average aio_wait state latency");
+  b.add_time_avg(l_bluestore_state_wal_cleanup_lat, "state_wal_cleanup_lat", "Average cleanup state latency");
+  b.add_time_avg(l_bluestore_state_wal_done_lat, "state_wal_done_lat", "Average wal_done state latency");
+  b.add_time_avg(l_bluestore_state_finishing_lat, "state_finishing_lat", "Average finishing state latency");
+  b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat", "Average done state latency");
+  logger = b.create_perf_counters();
+  g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
 void BlueStore::_shutdown_logger()
 {
-  // XXX
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
+  delete logger;
 }
 
 int BlueStore::get_block_device_fsid(const string& path, uuid_d *fsid)
@@ -931,15 +949,17 @@ int BlueStore::_open_bdev(bool create)
 {
   bluestore_bdev_label_t label;
   assert(bdev == NULL);
-  bdev = new BlockDevice(aio_cb, static_cast<void*>(this));
   string p = path + "/block";
+  bdev = BlockDevice::create(p, aio_cb, static_cast<void*>(this));
   int r = bdev->open(p);
   if (r < 0)
     goto fail;
 
-  r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
-  if (r < 0)
-    goto fail_close;
+  if (bdev->supported_bdev_label()) {
+    r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
+    if (r < 0)
+      goto fail_close;
+  }
   return 0;
 
  fail_close:
@@ -1545,22 +1565,46 @@ int BlueStore::_open_collections(int *errors)
 
 int BlueStore::_setup_block_symlink_or_file(
   string name,
-  string path,
+  string epath,
   uint64_t size)
 {
-  dout(20) << __func__ << " name " << name << " path " << path
+  dout(20) << __func__ << " name " << name << " path " << epath
 	   << " size " << size << dendl;
-  if (path.length()) {
-    int r = ::symlinkat(path.c_str(), path_fd, name.c_str());
-    if (r < 0) {
-      r = -errno;
-      derr << __func__ << " failed to create " << name << " symlink to "
-	   << path << ": " << cpp_strerror(r) << dendl;
-      return r;
+  int r = 0;
+  if (epath.length()) {
+    if (!epath.compare(0, sizeof(SPDK_PREFIX-1), SPDK_PREFIX)) {
+      string symbol_spdk_file = path + "/" + epath;
+      r = ::symlinkat(symbol_spdk_file.c_str(), path_fd, name.c_str());
+      if (r < 0) {
+        r = -errno;
+        derr << __func__ << " failed to create " << name << " symlink to "
+    	     << symbol_spdk_file << ": " << cpp_strerror(r) << dendl;
+        return r;
+      }
+      int fd = ::openat(path_fd, epath.c_str(), O_RDWR, 0644);
+      if (fd < 0) {
+	r = -errno;
+	derr << __func__ << " failed to open " << epath << " file: "
+	     << cpp_strerror(r) << dendl;
+	return r;
+      }
+      string serial_number = epath.substr(sizeof(SPDK_PREFIX)-1);
+      r = ::write(fd, serial_number.c_str(), serial_number.size());
+      assert(r == (int)serial_number.size());
+      dout(1) << __func__ << " created " << name << " file with " << dendl;
+      VOID_TEMP_FAILURE_RETRY(::close(fd));
+    } else {
+      r = ::symlinkat(epath.c_str(), path_fd, name.c_str());
+      if (r < 0) {
+        r = -errno;
+        derr << __func__ << " failed to create " << name << " symlink to "
+    	   << epath << ": " << cpp_strerror(r) << dendl;
+        return r;
+      }
     }
   } else if (size) {
     struct stat st;
-    int r = ::fstatat(path_fd, name.c_str(), &st, 0);
+    r = ::fstatat(path_fd, name.c_str(), &st, 0);
     if (r < 0)
       r = -errno;
     if (r == -ENOENT) {
@@ -1571,7 +1615,7 @@ int BlueStore::_setup_block_symlink_or_file(
 	     << cpp_strerror(r) << dendl;
 	return r;
       }
-      int r = ::ftruncate(fd, size);
+      r = ::ftruncate(fd, size);
       assert(r == 0);
       dout(1) << __func__ << " created " << name << " file with size "
 	      << pretty_si_t(size) << "B" << dendl;
@@ -3441,6 +3485,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	     << " " << txc->get_state_name() << dendl;
     switch (txc->state) {
     case TransContext::STATE_PREPARE:
+      txc->log_state_latency(logger, l_bluestore_state_prepare_lat);
       if (txc->ioc.has_aios()) {
 	txc->state = TransContext::STATE_AIO_WAIT;
 	_txc_aio_submit(txc);
@@ -3449,11 +3494,13 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       // ** fall-thru **
 
     case TransContext::STATE_AIO_WAIT:
+      txc->log_state_latency(logger, l_bluestore_state_aio_wait_lat);
       _txc_finish_io(txc);  // may trigger blocked txc's too
       return;
 
     case TransContext::STATE_IO_DONE:
       //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
+      txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
       if (!g_conf->bluestore_sync_transaction) {
 	std::lock_guard<std::mutex> l(kv_lock);
@@ -3468,11 +3515,13 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       break;
 
     case TransContext::STATE_KV_QUEUED:
+      txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
       txc->state = TransContext::STATE_KV_DONE;
       _txc_finish_kv(txc);
       // ** fall-thru **
 
     case TransContext::STATE_KV_DONE:
+      txc->log_state_latency(logger, l_bluestore_state_kv_done_lat);
       if (txc->wal_txn) {
 	txc->state = TransContext::STATE_WAL_QUEUED;
 	if (g_conf->bluestore_sync_wal_apply) {
@@ -3486,6 +3535,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       break;
 
     case TransContext::STATE_WAL_APPLYING:
+      txc->log_state_latency(logger, l_bluestore_state_wal_applying_lat);
       if (txc->ioc.has_aios()) {
 	txc->state = TransContext::STATE_WAL_AIO_WAIT;
 	_txc_aio_submit(txc);
@@ -3494,14 +3544,17 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       // ** fall-thru **
 
     case TransContext::STATE_WAL_AIO_WAIT:
+      txc->log_state_latency(logger, l_bluestore_state_wal_aio_wait_lat);
       _wal_finish(txc);
       return;
 
     case TransContext::STATE_WAL_CLEANUP:
+      txc->log_state_latency(logger, l_bluestore_state_wal_cleanup_lat);
       txc->state = TransContext::STATE_FINISHING;
       // ** fall-thru **
 
     case TransContext::TransContext::STATE_FINISHING:
+      txc->log_state_latency(logger, l_bluestore_state_finishing_lat);
       _txc_finish(txc);
       return;
 
@@ -3674,6 +3727,7 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
     }
 
     osr->q.pop_front();
+    txc->log_state_latency(logger, l_bluestore_state_done_lat);
     delete txc;
     osr->qcond.notify_all();
     if (osr->q.empty())
@@ -3870,6 +3924,7 @@ int BlueStore::_wal_apply(TransContext *txc)
 {
   bluestore_wal_transaction_t& wt = *txc->wal_txn;
   dout(20) << __func__ << " txc " << txc << " seq " << wt.seq << dendl;
+  txc->log_state_latency(logger, l_bluestore_state_wal_queued_lat);
   txc->state = TransContext::STATE_WAL_APPLYING;
 
   assert(txc->ioc.pending_aios.empty());

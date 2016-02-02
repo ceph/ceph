@@ -793,6 +793,8 @@ OPTION(kinetic_use_ssl, OPT_BOOL, false) // whether to secure kinetic traffic wi
 OPTION(rocksdb_separate_wal_dir, OPT_BOOL, false) // use $path.wal for wal
 OPTION(rocksdb_db_paths, OPT_STR, "")   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
+OPTION(rocksdb_cache_size, OPT_INT, 128*1024*1024)  // default leveldb cache size
+OPTION(rocksdb_block_size, OPT_INT, 4*1024)  // default rocksdb block size
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
 OPTION(filestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used in monstore
@@ -852,6 +854,12 @@ OPTION(bdev_aio, OPT_BOOL, true)
 OPTION(bdev_aio_poll_ms, OPT_INT, 250)  // milliseconds
 OPTION(bdev_aio_max_queue_depth, OPT_INT, 32)
 
+// if yes, osd will unbind all NVMe devices from kernel driver and bind them
+// to the uio_pci_generic driver. The purpose is to prevent the case where
+// NVMe driver is loaded while osd is running.
+OPTION(bdev_nvme_unbind_from_kernel, OPT_BOOL, false)
+OPTION(bdev_nvme_retry_count, OPT_INT, -1) // -1 means by default which is 4
+
 OPTION(bluefs_alloc_size, OPT_U64, 1048576)
 OPTION(bluefs_max_prefetch, OPT_U64, 1048576)
 OPTION(bluefs_min_log_runway, OPT_U64, 1048576)  // alloc when we get this low
@@ -867,6 +875,12 @@ OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .02)  // min fs free / total free
 OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT, .90)  // max fs free / total free
 OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT, .02) // how much to add at a time
 OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at a time
+// If you want to use spdk driver, you need to specify NVMe serial number here
+// with "spdk:" prefix.
+// Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
+// get the serial number of Intel(R) Fultondale NVMe controllers.
+// Example:
+// bluestore_block_path = spdk:55cd2e404bd73932
 OPTION(bluestore_block_path, OPT_STR, "")
 OPTION(bluestore_block_size, OPT_U64, 10 * 1024*1024*1024)  // 10gb for testing
 OPTION(bluestore_block_db_path, OPT_STR, "")

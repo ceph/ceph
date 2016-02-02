@@ -43,7 +43,7 @@ int BlueFS::add_block_device(unsigned id, string path)
 {
   dout(10) << __func__ << " bdev " << id << " path " << path << dendl;
   assert(id == bdev.size());
-  BlockDevice *b = new BlockDevice(NULL, NULL); //aio_cb, this);
+  BlockDevice *b = BlockDevice::create(path, NULL, NULL); //aio_cb, this);
   int r = b->open(path);
   if (r < 0) {
     delete b;
@@ -1049,7 +1049,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     x_off = 0;
   }
   for (unsigned i = 0; i < bdev.size(); ++i) {
-    if (!h->iocv[i]->pending_aios.empty()) {
+    if (h->iocv[i]->num_pending.read()) {
       bdev[i]->aio_submit(h->iocv[i]);
     }
   }
