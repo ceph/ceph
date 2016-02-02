@@ -138,7 +138,14 @@ int lockdep_register(const char *name)
   pthread_mutex_lock(&lockdep_mutex);
   ceph::unordered_map<std::string, int>::iterator p = lock_ids.find(name);
   if (p == lock_ids.end()) {
-    assert(!free_ids.empty());
+    if (free_ids.empty()) {
+      lockdep_dout(0) << "ERROR OUT OF IDS .. have " << free_ids.size()
+		      << " max " << MAX_LOCKS << dendl;
+      for (auto& p : lock_names) {
+	lockdep_dout(0) << "  lock " << p.first << " " << p.second << dendl;
+      }
+      assert(free_ids.empty());
+    }
     id = free_ids.front();
     free_ids.pop_front();
 

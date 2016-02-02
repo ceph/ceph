@@ -245,7 +245,8 @@ public:
 
     explicit Collection(CephContext *cct)
       : cct(cct), use_page_set(cct->_conf->memstore_page_set),
-        lock("MemStore::Collection::lock"), exists(true) {}
+        lock("MemStore::Collection::lock", true, false),
+	exists(true) {}
   };
   typedef Collection::Ref CollectionRef;
 
