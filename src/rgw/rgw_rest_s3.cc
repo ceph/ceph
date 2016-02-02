@@ -2508,7 +2508,7 @@ int RGWHandler_REST_S3::postauth_init()
   ret = validate_tenant_name(s->bucket_tenant);
   if (ret)
     return ret;
-  ret = validate_bucket_name(s->bucket_name, relaxed_names);
+  ret = valid_s3_bucket_name(s->bucket_name, relaxed_names);
   if (ret)
     return ret;
   ret = validate_object_name(s->object.name);
@@ -2521,55 +2521,30 @@ int RGWHandler_REST_S3::postauth_init()
     ret = validate_tenant_name(s->src_tenant_name);
     if (ret)
       return ret;
-    ret = validate_bucket_name(s->src_bucket_name, relaxed_names);
+    ret = valid_s3_bucket_name(s->src_bucket_name, relaxed_names);
     if (ret)
       return ret;
   }
   return 0;
 }
 
-int RGWHandler_REST_S3::validate_bucket_name(const string& bucket,
-					    bool relaxed_names)
-{
-  int ret = RGWHandler_REST::validate_bucket_name(bucket);
-  if (ret < 0)
-    return ret;
-
-  if (bucket.size() == 0)
-    return 0;
-
-  // bucket names must start with a number, letter, or underscore
-  if (!(isalpha(bucket[0]) || isdigit(bucket[0]))) {
-    if (!relaxed_names)
-      return -ERR_INVALID_BUCKET_NAME;
-    else if (!(bucket[0] == '_' || bucket[0] == '.' || bucket[0] == '-'))
-      return -ERR_INVALID_BUCKET_NAME;
-  }
-
-  for (const char *s = bucket.c_str(); *s; ++s) {
-    char c = *s;
-    if (isdigit(c) || (c == '.'))
-      continue;
-    if (isalpha(c))
-      continue;
-    if ((c == '-') || (c == '_'))
-      continue;
-    // Invalid character
-    return -ERR_INVALID_BUCKET_NAME;
-  }
-
-  if (looks_like_ip_address(bucket.c_str()))
-    return -ERR_INVALID_BUCKET_NAME;
-
-  return 0;
-}
-
 int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
-				 RGWClientIO *cio)
+			    RGWClientIO *cio)
 {
   int ret;
 
   s->dialect = "s3";
+  
+  ret = validate_tenant_name(s->bucket_tenant);
+  if (ret)
+    return ret;
+  bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
+  ret = valid_s3_bucket_name(s->bucket_name, relaxed_names);
+  if (ret)
+    return ret;
+  ret = validate_object_name(s->object.name);
+  if (ret)
+    return ret;
 
   const char *cacl = s->info.env->get("HTTP_X_AMZ_ACL");
   if (cacl)

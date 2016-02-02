@@ -704,46 +704,6 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
   return 0;
 }
 
-/* XXX can't call these virtual methods from non-REST handler */
-static int valid_s3_bucket_name(const string& name, bool relaxed=false)
-{
-  // This function enforces Amazon's spec for bucket names.
-  // (The requirements, not the recommendations.)
-  int len = name.size();
-  if (len < 3) {
-    // Name too short
-    return -ERR_INVALID_BUCKET_NAME;
-  } else if (len > 255) {
-    // Name too long
-    return -ERR_INVALID_BUCKET_NAME;
-  }
-
-  // bucket names must start with a number, letter, or underscore
-  if (!(isalpha(name[0]) || isdigit(name[0]))) {
-    if (!relaxed)
-      return -ERR_INVALID_BUCKET_NAME;
-    else if (!(name[0] == '_' || name[0] == '.' || name[0] == '-'))
-      return -ERR_INVALID_BUCKET_NAME;
-  }
-
-  for (const char *s = name.c_str(); *s; ++s) {
-    char c = *s;
-    if (isdigit(c) || (c == '.'))
-      continue;
-    if (isalpha(c))
-      continue;
-    if ((c == '-') || (c == '_'))
-      continue;
-    // Invalid character
-    return -ERR_INVALID_BUCKET_NAME;
-  }
-
-  if (looks_like_ip_address(name.c_str()))
-    return -ERR_INVALID_BUCKET_NAME;
-
-  return 0;
-}
-
 /*
   generic create -- create an empty regular file
 */
