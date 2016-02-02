@@ -111,6 +111,7 @@ class RGWPostHTTPData : public RGWHTTPClient {
   bufferlist *bl;
   std::string post_data;
   size_t post_data_index;
+  std::string subject_token;
 public:
   RGWPostHTTPData(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl), post_data_index(0) {}
 
@@ -134,7 +135,40 @@ public:
   }
 
   int receive_header(void *ptr, size_t len) {
+    char line[len + 1];
+
+    char *s = (char *)ptr, *end = (char *)ptr + len;
+    char *p = line;
+    ldout(cct, 10) << "read_http_header" << dendl;
+
+    while (s != end) {
+      if (*s == '\r') {
+        s++;
+        continue;
+      }
+      if (*s == '\n') {
+        *p = '\0';
+        ldout(cct, 10) << "os_auth:" << line << dendl;
+        // TODO: fill whatever data required here
+        char *l = line;
+        char *tok = strsep(&l, " \t:");
+        if (tok) {
+          while (l && *l == ' ')
+            l++;
+
+          if (strcasecmp(tok, "X-Subject-Token") == 0) {
+            subject_token = l;
+          }
+        }
+      }
+      if (s != end)
+        *p++ = *s++;
+    }
     return 0;
+  }
+
+  std::string get_subject_token() {
+    return subject_token;
   }
 };
 
