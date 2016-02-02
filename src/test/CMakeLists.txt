@@ -16,6 +16,7 @@ add_subdirectory(cls_version)
 add_subdirectory(compressor)
 add_subdirectory(filestore)
 add_subdirectory(journal)
+add_subdirectory(libcephfs)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -564,29 +565,6 @@ add_executable(ceph_test_snap_mapper EXCLUDE_FROM_ALL
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 target_link_libraries(ceph_test_snap_mapper osd global ${BLKID_LIBRARIES} ${ALLOC_LIBS})
-
-if(${WITH_CEPHFS})
-  add_executable(ceph_test_libcephfs
-    libcephfs/test.cc
-    libcephfs/readdir_r_cb.cc
-    libcephfs/caps.cc
-    libcephfs/multiclient.cc
-    libcephfs/flock.cc
-    libcephfs/acl.cc
-    libcephfs/access.cc
-    $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-  set_target_properties(ceph_test_libcephfs PROPERTIES COMPILE_FLAGS
-    ${UNITTEST_CXX_FLAGS})
-  target_link_libraries(ceph_test_libcephfs
-    cephfs
-    librados
-    ${UNITTEST_LIBS}
-    ${EXTRALIBS}
-    ${ALLOC_LIBS}
-    ${CMAKE_DL_LIBS}
-    )
-endif(${WITH_CEPHFS})  
 
 add_executable(ceph_test_stress_watch
   test_stress_watch.cc
