@@ -14,7 +14,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-bool KeystoneToken::User::has_role(const string& r) {
+bool KeystoneToken::has_role(const string& r) {
   list<Role>::iterator iter;
   for (iter = roles.begin(); iter != roles.end(); ++iter) {
       if (fnmatch(r.c_str(), ((*iter).name.c_str()), 0) == 0) {
@@ -33,7 +33,12 @@ int KeystoneToken::parse(CephContext *cct, bufferlist& bl)
   }
 
   try {
-    JSONDecoder::decode_json("access", *this, &parser);
+    if (version == "2.0") {
+      JSONDecoder::decode_json("access", *this, &parser);
+    }
+    if (version == "3") {
+      JSONDecoder::decode_json("token", *this, &parser);
+    }
   } catch (JSONDecoder::err& err) {
     ldout(cct, 0) << "Keystone token parse error: " << err.message << dendl;
     return -EINVAL;

@@ -7,78 +7,70 @@
 #include "rgw_common.h"
 
 class KeystoneToken {
+protected:
+  string version;
+
 public:
-  class Metadata {
+  class Domain {
   public:
-    Metadata() : is_admin(false) { }
-    bool is_admin;
+    string id;
+    string name;
     void decode_json(JSONObj *obj);
   };
-
-  class Service {
+  class Project {
   public:
-    class Endpoint {
-    public:
-      string id;
-      string admin_url;
-      string public_url;
-      string internal_url;
-      string region;
-      void decode_json(JSONObj *obj);
-    };
-    string type;
+    Domain domain;
+    string id;
     string name;
-    list<Endpoint> endpoints;
     void decode_json(JSONObj *obj);
   };
 
   class Token {
   public:
     Token() : expires(0) { }
-    class Tenant {
-    public:
-      Tenant() : enabled(false) { }
-      string id;
-      string name;
-      string description;
-      bool enabled;
-      void decode_json(JSONObj *obj);
-    };
     string id;
     time_t expires;
-    Tenant tenant;
+    Project tenant_v2;
+    void decode_json(JSONObj *obj);
+  };
+
+  class Role {
+  public:
+    string id;
+    string name;
     void decode_json(JSONObj *obj);
   };
 
   class User {
   public:
-    class Role {
-    public:
-      string id;
-      string name;
-      void decode_json(JSONObj *obj);
-    };
     string id;
     string name;
-    string user_name;
-    list<Role> roles;
+    Domain domain;
+    list<Role> roles_v2;
     void decode_json(JSONObj *obj);
-    bool has_role(const string& r);
   };
 
-  Metadata metadata;
-  list<Service> service_catalog;
   Token token;
+  Project project;
   User user;
+  list<Role> roles;
 
 public:
-  int parse(CephContext *cct, bufferlist& bl);
-
+  KeystoneToken() : version("") {};
+  KeystoneToken(string _version) : version(_version) {};
+  time_t get_expires() { return token.expires; }
+  string get_domain_id() {return project.domain.id;};
+  string get_domain_name()  {return project.domain.name;};
+  string get_project_id() {return project.id;};
+  string get_project_name() {return project.name;};
+  string get_user_id() {return user.id;};
+  string get_user_name() {return user.name;};
+  bool has_role(const string& r);
   bool expired() {
     uint64_t now = ceph_clock_now(NULL).sec();
-    return (now >= (uint64_t)token.expires);
+    return (now >= (uint64_t)get_expires());
   }
-
+  int parse(CephContext *cct, bufferlist& bl);
   void decode_json(JSONObj *access_obj);
 };
 
