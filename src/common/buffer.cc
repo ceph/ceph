@@ -738,6 +738,21 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
     return *this;
   }
+  buffer::ptr& buffer::ptr::operator= (ptr&& p)
+  {
+    release();
+    buffer::raw *raw = p._raw;
+    if (raw) {
+      _raw = raw;
+      _off = p._off;
+      _len = p._len;
+      p._raw = nullptr;
+      p._off = p._len = 0;
+    } else {
+      _off = _len = 0;
+    }
+    return *this;
+  }
 
   buffer::raw *buffer::ptr::clone()
   {

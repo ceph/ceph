@@ -177,6 +177,7 @@ namespace buffer CEPH_BUFFER_API {
     ptr(ptr&& p);
     ptr(const ptr& p, unsigned o, unsigned l);
     ptr& operator= (const ptr& p);
+    ptr& operator= (ptr&& p);
     ~ptr() {
       release();
     }
@@ -374,6 +375,16 @@ namespace buffer CEPH_BUFFER_API {
         _len = other._len;
 	make_shareable();
       }
+      return *this;
+    }
+
+    list& operator= (list&& other) {
+      _buffers = std::move(other._buffers);
+      _len = other._len;
+      _memcopy_count = other._memcopy_count;
+      last_p = begin();
+      append_buffer.swap(other.append_buffer);
+      other.clear();
       return *this;
     }
 
