@@ -104,6 +104,35 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
 }
 
+void MonmapMonitor::apply_mon_features(const mon_feature_t& features)
+{
+  if (!is_writeable()) {
+    dout(5) << __func__ << " wait for service to be writeable" << dendl;
+    wait_for_writeable_ctx(new C_ApplyFeatures(this, features));
+    return;
+  }
+
+  assert(is_writeable());
+
+  mon_feature_t new_features =
+    (pending_map.persistent_features ^
+     (features & ceph::features::mon::get_persistent()));
+
+  if (new_features == ceph::features::mon::FEATURE_NONE) {
+    dout(10) << __func__ << " features match current pending: "
+             << features << dendl;
+    return;
+  }
+
+  new_features |= pending_map.persistent_features;
+
+  dout(5) << __func__ << " applying new features to monmap;"
+          << " had " << pending_map.persistent_features
+          << ", will have " << new_features << dendl;
+  pending_map.persistent_features = new_features;
+  propose_pending();
+}
+
 void MonmapMonitor::on_active()
 {
   if (get_last_committed() >= 1 && !mon->has_ever_joined) {
