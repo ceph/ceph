@@ -107,8 +107,9 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
          ++p) {
       object_t oid = CInode::get_object_name(in->inode.ino, *p, "");
       dout(10) << __func__ << " remove dirfrag " << oid << dendl;
-      mds->objecter->remove(oid, oloc, nullsnapc, ceph_clock_now(g_ceph_context),
-                            0, NULL, gather.new_sub());
+      mds->objecter->remove(oid, oloc, nullsnapc,
+			    ceph::real_clock::now(g_ceph_context),
+			    0, NULL, gather.new_sub());
     }
     assert(gather.has_subs());
     gather.activate();
@@ -140,8 +141,8 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
       dout(10) << __func__ << " 0~" << to << " objects 0~" << num
 	       << " snapc " << snapc << " on " << *in << dendl;
       filer.purge_range(in->inode.ino, &in->inode.layout, *snapc,
-			      0, num, ceph_clock_now(g_ceph_context), 0,
-			      gather.new_sub());
+			0, num, ceph::real_clock::now(g_ceph_context), 0,
+			gather.new_sub());
     }
   }
 
@@ -152,7 +153,8 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
     object_locator_t oloc(pi->layout.fl_pg_pool);
     dout(10) << __func__ << " remove backtrace object " << oid
 	     << " pool " << oloc.pool << " snapc " << snapc << dendl;
-    mds->objecter->remove(oid, oloc, *snapc, ceph_clock_now(g_ceph_context), 0,
+    mds->objecter->remove(oid, oloc, *snapc,
+			  ceph::real_clock::now(g_ceph_context), 0,
 			  NULL, gather.new_sub());
   }
   // remove old backtrace objects
@@ -162,7 +164,8 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
     object_locator_t oloc(*p);
     dout(10) << __func__ << " remove backtrace object " << oid
 	     << " old pool " << *p << " snapc " << snapc << dendl;
-    mds->objecter->remove(oid, oloc, *snapc, ceph_clock_now(g_ceph_context), 0,
+    mds->objecter->remove(oid, oloc, *snapc,
+			  ceph::real_clock::now(g_ceph_context), 0,
 			  NULL, gather.new_sub());
   }
   assert(gather.has_subs());
@@ -814,15 +817,15 @@ void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
     dout(10) << __func__ << " 0~" << to << " objects 0~" << num
       << " snapc " << snapc << " on " << *in << dendl;
     filer.purge_range(in->ino(), &in->inode.layout, *snapc,
-			    1, num, ceph_clock_now(g_ceph_context),
-			    0, gather.new_sub());
+		      1, num, ceph::real_clock::now(g_ceph_context),
+		      0, gather.new_sub());
   }
 
   // keep backtrace object
   if (period && to > 0) {
     filer.zero(in->ino(), &in->inode.layout, *snapc,
-		     0, period, ceph_clock_now(g_ceph_context),
-		     0, true, NULL, gather.new_sub());
+	       0, period, ceph::real_clock::now(g_ceph_context),
+	       0, true, NULL, gather.new_sub());
   }
 
   assert(gather.has_subs());
@@ -841,26 +844,6 @@ void StrayManager::_truncate_stray_logged(CDentry *dn, LogSegment *ls)
   in->pop_and_dirty_projected_inode(ls);
 
   eval_stray(dn);
-}
-
-
-const char** StrayManager::get_tracked_conf_keys() const
-{
-  static const char* KEYS[] = {
-    "mds_max_purge_ops",
-    "mds_max_purge_ops_per_pg",
-    NULL
-  };
-  return KEYS;
-}
-
-void StrayManager::handle_conf_change(const struct md_config_t *conf,
-			  const std::set <std::string> &changed)
-{
-  if (changed.count("mds_max_purge_ops")
-      || changed.count("mds_max_purge_ops_per_pg")) {
-    update_op_limit();
-  }
 }
 
 

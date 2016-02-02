@@ -58,7 +58,7 @@ TEST(str_map, plaintext) {
   }
   {
     map<string,string> str_map;
-    ASSERT_EQ(0, get_str_map(" key1=val1; key2=\tval2; key3\t = \t val3; \n ", "\n;", &str_map));
+    ASSERT_EQ(0, get_str_map(" key1=val1; key2=\tval2; key3\t = \t val3; \n ", &str_map, "\n;"));
     ASSERT_EQ(4u, str_map.size());
     ASSERT_EQ("val1", str_map["key1"]);
     ASSERT_EQ("val2", str_map["key2"]);

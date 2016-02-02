@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <stdlib.h>
 #include <boost/lexical_cast.hpp>
+#include <boost/icl/interval_map.hpp>
+#include <boost/algorithm/string/join.hpp>
 #include <common/SubProcess.h>
 
 void CrushTester::set_device_weight(int dev, float f)
@@ -359,7 +361,7 @@ int CrushTester::test_with_crushtool(const char *crushtool_cmd,
 				     int max_id, int timeout,
 				     int ruleset)
 {
-  SubProcessTimed crushtool(crushtool_cmd, true, false, true, timeout);
+  SubProcessTimed crushtool(crushtool_cmd, SubProcess::PIPE, SubProcess::CLOSE, SubProcess::PIPE, timeout);
   string opt_max_id = boost::lexical_cast<string>(max_id);
   crushtool.add_cmd_args(
     "-i", "-",
@@ -381,10 +383,10 @@ int CrushTester::test_with_crushtool(const char *crushtool_cmd,
 
   bufferlist bl;
   ::encode(crush, bl);
-  bl.write_fd(crushtool.stdin());
+  bl.write_fd(crushtool.get_stdin());
   crushtool.close_stdin();
   bl.clear();
-  ret = bl.read_fd(crushtool.stderr(), 100 * 1024);
+  ret = bl.read_fd(crushtool.get_stderr(), 100 * 1024);
   if (ret < 0) {
     err << "failed read from crushtool: " << cpp_strerror(-ret);
     return ret;
@@ -448,6 +450,51 @@ bool CrushTester::check_name_maps(unsigned max_id) const
     return false;
   }
   return true;
+}
+
+static string get_rule_name(CrushWrapper& crush, int rule)
+{
+  if (crush.get_rule_name(rule))
+    return crush.get_rule_name(rule);
+  else
+    return string("rule") + std::to_string(rule);
+}
+
+void CrushTester::check_overlapped_rules() const
+{
+  namespace icl = boost::icl;
+  typedef std::set<string> RuleNames;
+  typedef icl::interval_map<int, RuleNames> Rules;
+  // <ruleset, type> => interval_map<size, {names}>
+  typedef std::map<std::pair<int, int>, Rules> RuleSets;
+  using interval = icl::interval<int>;
+
+  // mimic the logic of crush_find_rule(), but it only return the first matched
+  // one, but I am collecting all of them by the overlapped sizes.
+  RuleSets rulesets;
+  for (int rule = 0; rule < crush.get_max_rules(); rule++) {
+    if (!crush.rule_exists(rule)) {
+      continue;
+    }
+    Rules& rules = rulesets[{crush.get_rule_mask_ruleset(rule),
+			     crush.get_rule_mask_type(rule)}];
+    rules += make_pair(interval::closed(crush.get_rule_mask_min_size(rule),
+					crush.get_rule_mask_max_size(rule)),
+		       RuleNames{get_rule_name(crush, rule)});
+  }
+  for (auto i : rulesets) {
+    auto ruleset_type = i.first;
+    const Rules& rules = i.second;
+    for (auto r : rules) {
+      const RuleNames& names = r.second;
+      // if there are more than one rules covering the same size range,
+      // print them out.
+      if (names.size() > 1) {
+	err << "overlapped rules in ruleset " << ruleset_type.first << ": "
+	    << boost::join(names, ", ") << "\n";
+      }
+    }
+  }
 }
 
 int CrushTester::test()

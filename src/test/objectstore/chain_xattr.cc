@@ -21,7 +21,7 @@
 
 #include <stdio.h>
 #include <signal.h>
-#include "os/chain_xattr.h"
+#include "os/filestore/chain_xattr.h"
 #include "include/Context.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
@@ -120,8 +120,8 @@ TEST(chain_xattr, get_and_set) {
   {
     int x;
     const string name = user + string(CHAIN_XATTR_MAX_NAME_LEN * 2, '@');
-    ASSERT_THROW(chain_setxattr(file, name.c_str(), &x, sizeof(x)), FailedAssertion);
-    ASSERT_THROW(chain_fsetxattr(fd, name.c_str(), &x, sizeof(x)), FailedAssertion);
+    ASSERT_DEATH(chain_setxattr(file, name.c_str(), &x, sizeof(x)), "");
+    ASSERT_DEATH(chain_fsetxattr(fd, name.c_str(), &x, sizeof(x)), "");
   }
 
   {
@@ -229,7 +229,7 @@ TEST(chain_xattr, listxattr) {
   const string name2 = user + string(CHAIN_XATTR_MAX_NAME_LEN - user.size(), '@');
   const string x(LARGE_BLOCK_LEN, 'X');
   const int y = 1234;
-  
+
   ASSERT_EQ(LARGE_BLOCK_LEN, chain_setxattr(file, name1.c_str(), x.c_str(), LARGE_BLOCK_LEN));
   ASSERT_EQ((int)sizeof(y), chain_setxattr(file, name2.c_str(), &y, sizeof(y)));
 

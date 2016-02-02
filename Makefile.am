@@ -57,6 +57,11 @@ check-local:: all
 		exit 1 ; \
 	fi
 
+# display the output of failed check_SCRIPTS after a failed make check
+export VERBOSE = true
+
+TESTS = $(check_SCRIPTS)
+
 check_SCRIPTS = \
 	src/test/run-cli-tests
 

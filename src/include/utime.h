@@ -28,6 +28,11 @@
 // --------
 // utime_t
 
+/* WARNING: If add member in utime_t, please make sure the encode/decode funtion
+ * work well. For little-endian machine, we should make sure there is no padding
+ * in 32-bit machine and 64-bit machine.
+ * You should also modify the padding_check function.
+ */
 class utime_t {
 public:
   struct {
@@ -95,14 +100,29 @@ public:
     tv.tv_sec = v->tv_sec;
     tv.tv_nsec = v->tv_usec*1000;
   }
-
+  void padding_check() {
+    static_assert(
+      sizeof(utime_t) ==
+        sizeof(tv.tv_sec) +
+        sizeof(tv.tv_nsec)
+      ,
+      "utime_t have padding");
+  }
   void encode(bufferlist &bl) const {
+#if defined(CEPH_LITTLE_ENDIAN)
+    bl.append((char *)(this), sizeof(__u32) + sizeof(__u32));
+#else
     ::encode(tv.tv_sec, bl);
     ::encode(tv.tv_nsec, bl);
+#endif
   }
   void decode(bufferlist::iterator &p) {
+#if defined(CEPH_LITTLE_ENDIAN)
+    p.copy(sizeof(__u32) + sizeof(__u32), (char *)(this));
+#else
     ::decode(tv.tv_sec, p);
     ::decode(tv.tv_nsec, p);
+#endif
   }
 
   void encode_timeval(struct ceph_timespec *t) const {
@@ -239,10 +259,20 @@ public:
     time_t tt = sec();
     localtime_r(&tt, &bdt);
 
-    return snprintf(out, outlen,
+    return ::snprintf(out, outlen,
 		    "%04d-%02d-%02d %02d:%02d:%02d.%06ld",
 		    bdt.tm_year + 1900, bdt.tm_mon + 1, bdt.tm_mday,
 		    bdt.tm_hour, bdt.tm_min, bdt.tm_sec, usec());
+  }
+
+  static int snprintf(char *out, int outlen, time_t tt) {
+    struct tm bdt;
+    localtime_r(&tt, &bdt);
+
+    return ::snprintf(out, outlen,
+        "%04d-%02d-%02d %02d:%02d:%02d",
+        bdt.tm_year + 1900, bdt.tm_mon + 1, bdt.tm_mday,
+        bdt.tm_hour, bdt.tm_min, bdt.tm_sec);
   }
 
   static int parse_date(const string& date, uint64_t *epoch, uint64_t *nsec,

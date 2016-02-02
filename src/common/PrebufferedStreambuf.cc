@@ -1,6 +1,6 @@
 
 #include "common/PrebufferedStreambuf.h"
-
+#include <string.h>
 PrebufferedStreambuf::PrebufferedStreambuf(char *buf, size_t len)
   : m_buf(buf), m_buf_len(len)
 {
@@ -15,7 +15,7 @@ PrebufferedStreambuf::int_type PrebufferedStreambuf::overflow(int_type c)
 {
   int old_len = m_overflow.size();
   if (old_len == 0) {
-    m_overflow.resize(m_buf_len);
+    m_overflow.resize(80);
   } else {
     m_overflow.resize(old_len * 2);
   }
@@ -60,4 +60,43 @@ std::string PrebufferedStreambuf::get_str() const
   } else {
     return std::string(m_buf, this->pptr() - m_buf);
   }  
+}
+// returns current size of content
+size_t PrebufferedStreambuf::size() const
+{
+  if (m_overflow.size() == 0) {
+    return this->pptr() - m_buf;
+  } else {
+    return m_buf_len + this->pptr() - &m_overflow[0];
+  }
+}
+
+// extracts up to avail chars of content
+int PrebufferedStreambuf::snprintf(char* dst, size_t avail) const
+{
+  size_t o_size = m_overflow.size();
+  size_t len_a;
+  size_t len_b;
+  if (o_size>0) {
+    len_a = m_buf_len;
+    len_b = this->pptr() - &m_overflow[0];
+  } else {
+    len_a = this->pptr() - m_buf;
+    len_b = 0;
+  }
+  if (avail > len_a + len_b) {
+    memcpy(dst, m_buf, len_a);
+    memcpy(dst + m_buf_len, m_overflow.c_str(), len_b);
+    dst[len_a + len_b] = 0;
+  } else {
+    if (avail > len_a) {
+      memcpy(dst, m_buf, len_a);
+      memcpy(dst + m_buf_len, m_overflow.c_str(), avail - len_a - 1);
+      dst[avail - 1] = 0;
+    } else {
+      memcpy(dst, m_buf, avail - 1);
+      dst[avail - 1] = 0;
+    }
+  }
+  return len_a + len_b;
 }

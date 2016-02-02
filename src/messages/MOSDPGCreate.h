@@ -81,13 +81,11 @@ public:
   }
 
   void print(ostream& out) const {
-    out << "osd_pg_create(";
-    map<pg_t,utime_t>::const_iterator ci = ctimes.begin();
+    out << "osd_pg_create(e" << epoch;
     for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
          i != mkpg.end();
-         ++i, ++ci) {
-      assert(ci != ctimes.end() && ci->first == i->first);
-      out << "pg" << i->first << "," << i->second.created << "@" << ci->second << "; ";
+         ++i) {
+      out << " " << i->first << ":" << i->second.created;
     }
     out << ")";
   }

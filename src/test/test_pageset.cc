@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #include "gtest/gtest.h"
 
-#include "os/PageSet.h"
+#include "os/memstore/PageSet.h"
 
 TEST(PageSet, AllocAligned)
 {

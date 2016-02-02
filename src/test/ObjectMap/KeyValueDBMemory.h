@@ -5,7 +5,7 @@
 #include <string>
 #include "include/memory.h"
 
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "include/buffer.h"
 #include "include/Context.h"
 
@@ -34,6 +34,7 @@ public:
     const std::set<string> &key,
     std::map<string, bufferlist> *out
     );
+  using KeyValueDB::get;
 
   int get_keys(
     const string &prefix,

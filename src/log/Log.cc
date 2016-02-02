@@ -12,6 +12,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/Clock.h"
+#include "common/valgrind.h"
 #include "include/assert.h"
 #include "include/compat.h"
 #include "include/on_exit.h"
@@ -20,6 +21,7 @@
 #define DEFAULT_MAX_RECENT 10000
 
 #define PREALLOC 1000000
+
 
 namespace ceph {
 namespace log {
@@ -167,12 +169,34 @@ void Log::submit_entry(Entry *e)
   pthread_mutex_unlock(&m_queue_mutex);
 }
 
+
 Entry *Log::create_entry(int level, int subsys)
 {
   if (true) {
     return new Entry(ceph_clock_now(NULL),
 		   pthread_self(),
 		   level, subsys);
+  } else {
+    // kludge for perf testing
+    Entry *e = m_recent.dequeue();
+    e->m_stamp = ceph_clock_now(NULL);
+    e->m_thread = pthread_self();
+    e->m_prio = level;
+    e->m_subsys = subsys;
+    return e;
+  }
+}
+
+Entry *Log::create_entry(int level, int subsys, size_t* expected_size)
+{
+  if (true) {
+    ANNOTATE_BENIGN_RACE_SIZED(expected_size, sizeof(*expected_size),
+                               "Log hint");
+    size_t size = __atomic_load_n(expected_size, __ATOMIC_RELAXED);
+    void *ptr = ::operator new(sizeof(Entry) + size);
+    return new(ptr) Entry(ceph_clock_now(NULL),
+       pthread_self(), level, subsys,
+       reinterpret_cast<char*>(ptr) + sizeof(Entry), size, expected_size);
   } else {
     // kludge for perf testing
     Entry *e = m_recent.dequeue();
@@ -209,7 +233,6 @@ void Log::flush()
 void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 {
   Entry *e;
-  char buf[80];
   while ((e = t->dequeue()) != NULL) {
     unsigned sub = e->m_subsys;
 
@@ -218,8 +241,10 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
     bool do_syslog = m_syslog_crash >= e->m_prio && should_log;
     bool do_stderr = m_stderr_crash >= e->m_prio && should_log;
 
+    e->hint_size();
     if (do_fd || do_syslog || do_stderr) {
-      int buflen = 0;
+      size_t buflen = 0;
+      char buf[80 + e->size()];
 
       if (crash)
 	buflen += snprintf(buf, sizeof(buf), "%6d> ", -t->m_len);
@@ -227,25 +252,24 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
       buflen += snprintf(buf + buflen, sizeof(buf)-buflen, " %lx %2d ",
 			(unsigned long)e->m_thread, e->m_prio);
 
-      // FIXME: this is slow
-      string s = e->get_str();
-
-      if (do_fd) {
-	int r = safe_write(m_fd, buf, buflen);
-	if (r >= 0)
-	  r = safe_write(m_fd, s.data(), s.size());
-	if (r >= 0)
-	  r = write(m_fd, "\n", 1);
-	if (r < 0)
-	  cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
+      buflen += e->snprintf(buf + buflen, sizeof(buf) - buflen - 1);
+      if (buflen > sizeof(buf) - 1) { //paranoid check, buf was declared to hold everything
+        buflen = sizeof(buf) - 1;
+        buf[buflen] = 0;
       }
 
       if (do_syslog) {
-	syslog(LOG_USER, "%s%s", buf, s.c_str());
+        syslog(LOG_USER|LOG_DEBUG, "%s", buf);
       }
 
       if (do_stderr) {
-	cerr << buf << s << std::endl;
+        cerr << buf << std::endl;
+      }
+      if (do_fd) {
+        buf[buflen] = '\n';
+        int r = safe_write(m_fd, buf, buflen+1);
+        if (r < 0)
+          cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
       }
     }
 
@@ -263,7 +287,7 @@ void Log::_log_message(const char *s, bool crash)
       cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
   }
   if ((crash ? m_syslog_crash : m_syslog_log) >= 0) {
-    syslog(LOG_USER, "%s", s);
+    syslog(LOG_USER|LOG_DEBUG, "%s", s);
   }
   
   if ((crash ? m_stderr_crash : m_stderr_log) >= 0) {
@@ -288,7 +312,7 @@ void Log::dump_recent()
 
   EntryQueue old;
   _log_message("--- begin dump of recent events ---", true);
-  _flush(&m_recent, &old, true);  
+  _flush(&m_recent, &old, true);
 
   char buf[4096];
   _log_message("--- logging levels ---", true);
@@ -322,7 +346,7 @@ void Log::start()
   pthread_mutex_lock(&m_queue_mutex);
   m_stop = false;
   pthread_mutex_unlock(&m_queue_mutex);
-  create();
+  create("log");
 }
 
 void Log::stop()

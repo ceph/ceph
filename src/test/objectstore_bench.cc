@@ -111,7 +111,7 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
     uint64_t offset = starting_offset;
     size_t len = cfg.size;
 
-    list<ObjectStore::Transaction*> tls;
+    vector<ObjectStore::Transaction> tls;
 
     std::cout << "Write cycle " << i << std::endl;
     while (len) {
@@ -119,7 +119,8 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
 
       auto t = new ObjectStore::Transaction;
       t->write(cid, oid, offset, count, data);
-      tls.push_back(t);
+      tls.push_back(std::move(*t));
+      delete t;
 
       offset += count;
       if (offset > cfg.size)
@@ -139,12 +140,9 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
     cond.wait(lock, [&done](){ return done; });
     lock.unlock();
 
-    while (!tls.empty()) {
-      auto t = tls.front();
-      tls.pop_front();
-      delete t;
-    }
+
   }
+  sequencer.flush();
 }
 
 int main(int argc, const char *argv[])
@@ -204,6 +202,40 @@ int main(int argc, const char *argv[])
                           g_conf->osd_objectstore,
                           g_conf->osd_data,
                           g_conf->osd_journal));
+
+  //Checking data folder: create if needed or error if it's not empty
+  DIR *dir = ::opendir(g_conf->osd_data.c_str());
+  if (!dir) {
+    std::string cmd("mkdir -p ");
+    cmd+=g_conf->osd_data;
+    int r = ::system( cmd.c_str() );
+    if( r<0 ){
+      derr << "Failed to create data directory, ret = " << r << dendl;
+      return 1;
+    }
+  }
+  else {
+     bool non_empty = readdir(dir) != NULL && readdir(dir) != NULL && readdir(dir) != NULL;
+     if( non_empty ){
+       derr << "Data directory '"<<g_conf->osd_data<<"' isn't empty, please clean it first."<< dendl;
+       return 1;
+     }
+  }
+  ::closedir(dir);
+
+  //Create folders for journal if needed
+  string journal_base = g_conf->osd_journal.substr(0, g_conf->osd_journal.rfind('/'));
+  struct stat sb;
+  if (stat(journal_base.c_str(), &sb) != 0 ){
+    std::string cmd("mkdir -p ");
+    cmd+=journal_base;
+    int r = ::system( cmd.c_str() );
+    if( r<0 ){
+      derr << "Failed to create journal directory, ret = " << r << dendl;
+      return 1;
+    }
+  }
+
   if (!os) {
     derr << "bad objectstore type " << g_conf->osd_objectstore << dendl;
     return 1;
@@ -226,7 +258,7 @@ int main(int argc, const char *argv[])
     ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
-    os->apply_transaction(&osr, t);
+    os->apply_transaction(&osr, std::move(t));
   }
 
   // create the objects
@@ -241,7 +273,7 @@ int main(int argc, const char *argv[])
       ObjectStore::Sequencer osr(__func__);
       ObjectStore::Transaction t;
       t.touch(cid, oids[i]);
-      int r = os->apply_transaction(&osr, t);
+      int r = os->apply_transaction(&osr, std::move(t));
       assert(r == 0);
     }
   } else {
@@ -250,7 +282,7 @@ int main(int argc, const char *argv[])
     ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.touch(cid, oids.back());
-    int r = os->apply_transaction(&osr, t);
+    int r = os->apply_transaction(&osr, std::move(t));
     assert(r == 0);
   }
 
@@ -283,7 +315,7 @@ int main(int argc, const char *argv[])
   ObjectStore::Transaction t;
   for (const auto &oid : oids)
     t.remove(cid, oid);
-  os->apply_transaction(&osr,t);
+  os->apply_transaction(&osr,std::move(t));
 
   os->umount();
   return 0;

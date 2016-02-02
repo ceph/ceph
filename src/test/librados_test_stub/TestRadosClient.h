@@ -9,7 +9,7 @@
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "include/atomic.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "test/librados_test_stub/TestWatchNotify.h"
 #include <boost/function.hpp>
 #include <boost/functional/hash.hpp>
@@ -98,6 +98,8 @@ public:
 			 const AioFunction &aio_function, AioCompletionImpl *c);
   void flush_aio_operations();
   void flush_aio_operations(AioCompletionImpl *c);
+
+  void finish_aio_completion(AioCompletionImpl *c, int r);
 
 protected:
   virtual ~TestRadosClient();

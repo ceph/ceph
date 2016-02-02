@@ -54,24 +54,13 @@ function test_crush() {
                        -v $epoch -o $osdmap > /dev/null
     osdmaptool --export-crush $crush $osdmap &> /dev/null
 
-    if crushtool --check $max_osd -i $crush > /dev/null; then
+    if crushtool --test --check $max_osd -i $crush > /dev/null; then
         good=true
     else
         good=false
     fi
     rm -f $osdmap
     $good || return 1
-}
-
-function get_crush()  {
-    local store_path=$1
-    local osdmap_epoch=$2
-    local osdmap_path=`mktemp`
-    local crush_path=`mktemp`
-
-    ceph-monstore-tool $store_path get osdmap -- \
-                       -v $osdmap_epoch -o $osdmap_path
-    osdmaptool --export-crush $crush $osdmap_path 2>&1 > /dev/null
 }
 
 function die() {

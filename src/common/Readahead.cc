@@ -18,8 +18,7 @@ Readahead::Readahead()
     m_readahead_trigger_pos(0),
     m_readahead_size(0),
     m_pending(0),
-    m_pending_lock("Readahead::m_pending_lock"),
-    m_pending_cond() {
+    m_pending_lock("Readahead::m_pending_lock") {
 }
 
 Readahead::~Readahead() {
@@ -135,19 +134,34 @@ void Readahead::dec_pending(int count) {
   assert(m_pending >= count);
   m_pending -= count;
   if (m_pending == 0) {
-    m_pending_cond.Signal();
+    std::list<Context *> pending_waiting(std::move(m_pending_waiting));
+    m_pending_lock.Unlock();
+
+    for (auto ctx : pending_waiting) {
+      ctx->complete(0);
+    }
+  } else {
+    m_pending_lock.Unlock();
   }
-  m_pending_lock.Unlock();
 }
 
 void Readahead::wait_for_pending() {
-  m_pending_lock.Lock();
-  while (m_pending > 0) {
-    m_pending_cond.Wait(m_pending_lock);
-  }
-  m_pending_lock.Unlock();
+  C_SaferCond ctx;
+  wait_for_pending(&ctx);
+  ctx.wait();
 }
 
+void Readahead::wait_for_pending(Context *ctx) {
+  m_pending_lock.Lock();
+  if (m_pending > 0) {
+    m_pending_lock.Unlock();
+    m_pending_waiting.push_back(ctx);
+    return;
+  }
+  m_pending_lock.Unlock();
+
+  ctx->complete(0);
+}
 void Readahead::set_trigger_requests(int trigger_requests) {
   m_lock.Lock();
   m_trigger_requests = trigger_requests;

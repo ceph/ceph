@@ -21,6 +21,7 @@
 #include "include/xlist.h"
 #include "msg/Message.h"
 #include "include/memory.h"
+#include "common/RWLock.h"
 
 class TrackedOp;
 typedef ceph::shared_ptr<TrackedOp> TrackedOpRef;
@@ -77,10 +78,12 @@ class OpTracker {
 public:
   bool tracking_enabled;
   CephContext *cct;
+  RWLock       lock;
   OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards) : seq(0), 
                                      num_optracker_shards(num_shards),
 				     complaint_time(0), log_threshold(0),
-				     tracking_enabled(tracking), cct(cct_) {
+				     tracking_enabled(tracking), cct(cct_),
+				     lock("OpTracker::lock") {
 
     for (uint32_t i = 0; i < num_optracker_shards; i++) {
       char lock_name[32] = {0};
@@ -96,6 +99,10 @@ public:
   }
   void set_history_size_and_duration(uint32_t new_size, uint32_t new_duration) {
     history.set_size_and_duration(new_size, new_duration);
+  }
+  void set_tracking(bool enable) {
+    RWLock::WLocker l(lock);
+    tracking_enabled = enable;
   }
   void dump_ops_in_flight(Formatter *f);
   void dump_historic_ops(Formatter *f);
@@ -151,18 +158,22 @@ protected:
   uint64_t seq; /// a unique value set by the OpTracker
 
   uint32_t warn_interval_multiplier; // limits output of a given op warning
-
+  bool is_tracked; //whether in tracker
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     xitem(this),
     tracker(_tracker),
     initiated_at(initiated),
     lock("TrackedOp::lock"),
     seq(0),
-    warn_interval_multiplier(1)
+    warn_interval_multiplier(1),
+    is_tracked(false)
   {
-    tracker->register_inflight_op(&xitem);
-    if (tracker->tracking_enabled)
+    RWLock::RLocker l(tracker->lock);
+    if (tracker->tracking_enabled) {
+      tracker->register_inflight_op(&xitem);
       events.push_back(make_pair(initiated_at, "initiated"));
+      is_tracked = true;
+    }
   }
 
   /// output any type-specific data you want to get when dump() is called

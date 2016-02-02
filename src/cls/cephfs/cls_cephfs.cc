@@ -123,6 +123,72 @@ static int accumulate_inode_metadata(cls_method_context_t hctx,
   return 0;
 }
 
+// I want to select objects that have a name ending 00000000
+// and an xattr (scrub_tag) not equal to a specific value.
+// This is so special case that we can't really pretend it's
+// generic, so just fess up and call this the cephfs filter.
+class PGLSCephFSFilter : public PGLSFilter {
+protected:
+  std::string scrub_tag;
+public:
+  int init(bufferlist::iterator& params) {
+    try {
+      InodeTagFilterArgs args;
+      args.decode(params);
+      scrub_tag = args.scrub_tag;
+    } catch (buffer::error &e) {
+      return -EINVAL;
+    }
+
+    if (scrub_tag.empty()) {
+      xattr = "";
+    } else {
+      xattr = "_scrub_tag";
+    }
+
+    return 0;
+  }
+
+  virtual ~PGLSCephFSFilter() {}
+  virtual bool reject_empty_xattr() { return false; }
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata);
+};
+
+bool PGLSCephFSFilter::filter(const hobject_t &obj,
+                             bufferlist& xattr_data, bufferlist& outdata)
+{
+  const std::string need_ending = ".00000000";
+  const std::string &obj_name = obj.oid.name;
+
+  if (obj_name.length() < need_ending.length()) {
+    return false;
+  }
+
+  const bool match = obj_name.compare (obj_name.length() - need_ending.length(), need_ending.length(), need_ending) == 0;
+  if (!match) {
+    return false;
+  }
+
+  if (!scrub_tag.empty() && xattr_data.length() > 0) {
+    std::string tag_ondisk;
+    bufferlist::iterator q = xattr_data.begin();
+    try {
+      ::decode(tag_ondisk, q);
+      if (tag_ondisk == scrub_tag)
+	return false;
+    } catch (const buffer::error &err) {
+    }
+  }
+
+  return true;
+}
+
+PGLSFilter *inode_tag_filter()
+{
+  return new PGLSCephFSFilter();
+}
+
 /**
  * initialize class
  *
@@ -139,5 +205,8 @@ void __cls_init()
   cls_register_cxx_method(h_class, "accumulate_inode_metadata",
 			  CLS_METHOD_WR | CLS_METHOD_RD,
 			  accumulate_inode_metadata, &h_accumulate_inode_metadata);
+
+  // A PGLS filter
+  cls_register_cxx_filter(h_class, "inode_tag", inode_tag_filter);
 }
 

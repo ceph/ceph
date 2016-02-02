@@ -7,6 +7,7 @@
 #include "librbd/AsyncRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
+#include "librbd/Utils.h"
 
 namespace librbd
 {
@@ -16,7 +17,7 @@ AsyncObjectThrottle<T>::AsyncObjectThrottle(
     const AsyncRequest<T>* async_request, T &image_ctx,
     const ContextFactory& context_factory, Context *ctx,
     ProgressContext *prog_ctx, uint64_t object_no, uint64_t end_object_no)
-  : m_lock(unique_lock_name("librbd::AsyncThrottle::m_lock", this)),
+  : m_lock(util::unique_lock_name("librbd::AsyncThrottle::m_lock", this)),
     m_async_request(async_request), m_image_ctx(image_ctx),
     m_context_factory(context_factory), m_ctx(ctx), m_prog_ctx(prog_ctx),
     m_object_no(object_no), m_end_object_no(end_object_no), m_current_ops(0),
@@ -39,16 +40,17 @@ void AsyncObjectThrottle<T>::start_ops(uint64_t max_concurrent) {
     complete = (m_current_ops == 0);
   }
   if (complete) {
-    m_ctx->complete(m_ret);
+    // avoid re-entrant callback
+    m_image_ctx.op_work_queue->queue(m_ctx, m_ret);
     delete this;
   }
 }
 
 template <typename T>
 void AsyncObjectThrottle<T>::finish_op(int r) {
-  assert(m_image_ctx.owner_lock.is_locked());
   bool complete;
   {
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     Mutex::Locker locker(m_lock);
     --m_current_ops;
     if (r < 0 && r != -ENOENT && m_ret == 0) {

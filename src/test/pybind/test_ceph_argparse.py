@@ -103,9 +103,6 @@ class TestPG(TestArgparse):
     def test_getmap(self):
         self.assert_valid_command(['pg', 'getmap'])
 
-    def test_send_pg_creates(self):
-        self.assert_valid_command(['pg', 'send_pg_creates'])
-
     def test_dump(self):
         self.assert_valid_command(['pg', 'dump'])
         self.assert_valid_command(['pg', 'dump',
@@ -384,7 +381,15 @@ class TestMDS(TestArgparse):
         self.check_1_natural_arg('mds', 'set_max_mds')
 
     def test_setmap(self):
-        self.check_1_natural_arg('mds', 'setmap')
+        self.assert_valid_command(['mds', 'setmap', '1'])
+        self.assert_valid_command(['mds', 'setmap', '1', '--yes-i-really-mean-it'])
+        assert_equal({}, validate_command(sigdict, ['mds', 'setmap',
+                                                    '--yes-i-really-mean-it']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'setmap', '-1',
+                                                    '--yes-i-really-mean-it']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'setmap', '1',
+                                                    '--yes-i-really-mean-it',
+                                                    'toomany']))
 
     def test_set_state(self):
         self.assert_valid_command(['mds', 'set_state', '1', '2'])
@@ -1035,7 +1040,10 @@ class TestOSD(TestArgparse):
 
     def test_pool_get(self):
         for var in ('size', 'min_size', 'crash_replay_interval',
-                    'pg_num', 'pgp_num', 'crush_ruleset', 'auid', 'fast_read'):
+                    'pg_num', 'pgp_num', 'crush_ruleset', 'auid', 'fast_read',
+                    'scrub_min_interval', 'scrub_max_interval',
+                    'deep_scrub_interval', 'recovery_priority',
+                    'recovery_op_priority'):
             self.assert_valid_command(['osd', 'pool', 'get', 'poolname', var])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool',
@@ -1052,7 +1060,10 @@ class TestOSD(TestArgparse):
     def test_pool_set(self):
         for var in ('size', 'min_size', 'crash_replay_interval',
                     'pg_num', 'pgp_num', 'crush_ruleset',
-                    'hashpspool', 'auid', 'fast_read'):
+                    'hashpspool', 'auid', 'fast_read',
+                    'scrub_min_interval', 'scrub_max_interval',
+                    'deep_scrub_interval', 'recovery_priority',
+                    'recovery_op_priority'):
             self.assert_valid_command(['osd', 'pool',
                                        'set', 'poolname', var, 'value'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool',

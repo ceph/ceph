@@ -18,7 +18,7 @@
 // This code assumes that IO IDs and timestamps are related monotonically.
 // In other words, (a.id < b.id) == (a.timestamp < b.timestamp) for all IOs a and b.
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include <boost/enable_shared_from_this.hpp>
 #include <boost/shared_ptr.hpp>
 #include <iostream>
@@ -275,6 +275,61 @@ public:
 	       thread_id_t thread_id,
                const io_set_t& deps,
 	       imagectx_id_t imagectx)
+    : IO(ionum, start_time, thread_id, deps),
+      m_imagectx(imagectx) {
+  }
+
+  virtual void encode(bufferlist &bl) const;
+
+  imagectx_id_t imagectx() const {
+    return m_imagectx;
+  }
+
+  void write_debug(std::ostream& out) const;
+
+private:
+  imagectx_id_t m_imagectx;
+};
+
+class AioOpenImageIO : public IO {
+public:
+  AioOpenImageIO(action_id_t ionum,
+		 uint64_t start_time,
+		 thread_id_t thread_id,
+		 const io_set_t& deps,
+		 imagectx_id_t imagectx,
+		 const std::string& name,
+		 const std::string& snap_name,
+		 bool readonly)
+    : IO(ionum, start_time, thread_id, deps),
+      m_imagectx(imagectx),
+      m_name(name),
+      m_snap_name(snap_name),
+      m_readonly(readonly) {
+  }
+
+  virtual void encode(bufferlist &bl) const;
+
+  imagectx_id_t imagectx() const {
+    return m_imagectx;
+  }
+
+  void write_debug(std::ostream& out) const;
+
+private:
+  imagectx_id_t m_imagectx;
+  std::string m_name;
+  std::string m_snap_name;
+  bool m_readonly;
+};
+
+class AioCloseImageIO : public IO {
+public:
+  AioCloseImageIO(action_id_t ionum,
+		  uint64_t start_time,
+		  thread_id_t thread_id,
+		  const io_set_t& deps,
+		  imagectx_id_t imagectx)
     : IO(ionum, start_time, thread_id, deps),
       m_imagectx(imagectx) {
   }

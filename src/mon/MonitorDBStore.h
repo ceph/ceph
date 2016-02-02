@@ -21,12 +21,13 @@
 #include <boost/scoped_ptr.hpp>
 #include <sstream>
 #include <fstream>
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 
 #include "include/assert.h"
 #include "common/Formatter.h"
 #include "common/Finisher.h"
 #include "common/errno.h"
+#include "common/debug.h"
 
 class MonitorDBStore
 {
@@ -506,16 +507,8 @@ class MonitorDBStore
   }
 
   int get(const string& prefix, const string& key, bufferlist& bl) {
-    set<string> k;
-    k.insert(key);
-    map<string,bufferlist> out;
-
-    db->get(prefix, k, &out);
-    if (out.empty())
-      return -ENOENT;
-    bl.append(out[key]);
-
-    return 0;
+    assert(bl.length() == 0);
+    return db->get(prefix, key, &bl);
   }
 
   int get(const string& prefix, const version_t ver, bufferlist& bl) {
@@ -633,7 +626,7 @@ class MonitorDBStore
       do_dump(false),
       dump_fd_binary(-1),
       dump_fmt(true),
-      io_work(g_ceph_context, "monstore"),
+      io_work(g_ceph_context, "monstore", "fn_monstore"),
       is_open(false) {
     string::const_reverse_iterator rit;
     int pos = 0;

@@ -108,6 +108,26 @@ public:
   }
 };
 
+class InodeTagFilterArgs
+{
+  public:
+    std::string scrub_tag;
+
+  void encode(bufferlist &bl) const
+  {
+    ENCODE_START(1, 1, bl);
+    ::encode(scrub_tag, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator &bl)
+  {
+    DECODE_START(1, bl);
+    ::decode(scrub_tag, bl);
+    DECODE_FINISH(bl);
+  }
+};
+
 class AccumulateResult
 {
 public:

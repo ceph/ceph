@@ -29,6 +29,7 @@
 
 #define dout_subsys ceph_subsys_mds
 
+#define HEADER_LEN 4096
 
 int Dumper::init(int rank_)
 {
@@ -90,9 +91,9 @@ int Dumper::dump(const char *dump_file)
   int fd = ::open(dump_file, O_WRONLY|O_CREAT|O_TRUNC, 0644);
   if (fd >= 0) {
     // include an informative header
-    char buf[200];
+    char buf[HEADER_LEN];
     memset(buf, 0, sizeof(buf));
-    sprintf(buf, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n    write_pos %llu (0x%llx)\n    format %llu\n    trimmed_pos %llu (0x%llx)\n%c",
+    snprintf(buf, HEADER_LEN, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n    write_pos %llu (0x%llx)\n    format %llu\n    trimmed_pos %llu (0x%llx)\n%c",
 	    rank, 
 	    (unsigned long long)start, (unsigned long long)start,
 	    (unsigned long long)len, (unsigned long long)len,
@@ -185,7 +186,7 @@ int Dumper::undump(const char *dump_file)
   //  start offset 232401996 (0xdda2c4c)
   //        length 1097504 (0x10bf20)
 
-  char buf[200];
+  char buf[HEADER_LEN];
   r = safe_read(fd, buf, sizeof(buf));
   if (r < 0) {
     VOID_TEMP_FAILURE_RETRY(::close(fd));
@@ -245,7 +246,8 @@ int Dumper::undump(const char *dump_file)
   cout << "writing header " << oid << std::endl;
   C_SaferCond header_cond;
   lock.Lock();
-  objecter->write_full(oid, oloc, snapc, hbl, ceph_clock_now(g_ceph_context), 0, 
+  objecter->write_full(oid, oloc, snapc, hbl,
+		       ceph::real_clock::now(g_ceph_context), 0,
 		       NULL, &header_cond);
   lock.Unlock();
 
@@ -271,11 +273,12 @@ int Dumper::undump(const char *dump_file)
     C_SaferCond purge_cond;
     cout << "Purging " << purge_count << " objects from " << last_obj << std::endl;
     lock.Lock();
-    filer.purge_range(ino, &h.layout, snapc, last_obj, purge_count, ceph_clock_now(g_ceph_context), 0, &purge_cond);
+    filer.purge_range(ino, &h.layout, snapc, last_obj, purge_count,
+		      ceph::real_clock::now(g_ceph_context), 0, &purge_cond);
     lock.Unlock();
     purge_cond.wait();
   }
-  
+
   // Stream from `fd` to `filer`
   uint64_t pos = start;
   uint64_t left = len;
@@ -290,7 +293,8 @@ int Dumper::undump(const char *dump_file)
     cout << " writing " << pos << "~" << l << std::endl;
     C_SaferCond write_cond;
     lock.Lock();
-    filer.write(ino, &h.layout, snapc, pos, l, j, ceph_clock_now(g_ceph_context), 0, NULL, &write_cond);
+    filer.write(ino, &h.layout, snapc, pos, l, j,
+		ceph::real_clock::now(g_ceph_context), 0, NULL, &write_cond);
     lock.Unlock();
 
     r = write_cond.wait();

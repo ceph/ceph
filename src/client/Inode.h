@@ -23,6 +23,7 @@ struct SnapRealm;
 struct Inode;
 class ceph_lock_state_t;
 class MetaRequest;
+class UserGroups;
 
 struct Cap {
   MetaSession *session;
@@ -234,6 +235,8 @@ struct Inode {
   // per-mds caps
   map<mds_rank_t, Cap*> caps;            // mds -> Cap
   Cap *auth_cap;
+  int64_t cap_dirtier_uid;
+  int64_t cap_dirtier_gid;
   unsigned dirty_caps, flushing_caps;
   std::map<ceph_tid_t, int> flushing_cap_tids;
   int shared_gen, cache_gen;
@@ -293,7 +296,7 @@ struct Inode {
   ceph_lock_state_t *fcntl_locks;
   ceph_lock_state_t *flock_locks;
 
-  xlist<MetaRequest*> unsafe_dir_ops;
+  xlist<MetaRequest*> unsafe_ops;
 
   Inode(Client *c, vinodeno_t vino, ceph_file_layout *newlayout)
     : client(c), ino(vino.ino), snapid(vino.snapid), faked_ino(0),
@@ -304,6 +307,7 @@ struct Inode {
       flags(0),
       qtree(NULL),
       dir_hashed(false), dir_replicated(false), auth_cap(NULL),
+      cap_dirtier_uid(-1), cap_dirtier_gid(-1),
       dirty_caps(0), flushing_caps(0), shared_gen(0), cache_gen(0),
       snap_caps(0), snap_cap_refs(0),
       cap_item(this), flushing_cap_item(this),
@@ -331,7 +335,7 @@ struct Inode {
     }
   };
 
-  bool check_mode(uid_t uid, gid_t gid, gid_t *sgids, int sgid_count, uint32_t flags);
+  bool check_mode(uid_t uid, UserGroups& groups, unsigned want);
 
   // CAPS --------
   void get_open_ref(int mode);

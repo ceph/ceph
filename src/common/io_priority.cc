@@ -14,7 +14,9 @@
 
 #include <sys/types.h>
 #include <unistd.h>
+#ifdef __linux__
 #include <sys/syscall.h>   /* For SYS_xxx definitions */
+#endif
 #include <algorithm>
 #include <errno.h>
 

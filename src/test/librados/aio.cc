@@ -41,7 +41,7 @@ public:
   std::string init()
   {
     int ret;
-    if (SEM_FAILED == (m_sem = sem_open("test_aio_sem", O_CREAT, 0644, 0))) {
+    if (SEM_FAILED == (m_sem = sem_open("/test_aio_sem", O_CREAT, 0644, 0))) {
       int err = errno;
       ostringstream oss;
       oss << "sem_open failed: " << cpp_strerror(err);
@@ -98,7 +98,7 @@ public:
   std::string init()
   {
     int ret;
-    if (SEM_FAILED == (m_sem = sem_open("test_aio_sem", O_CREAT, 0644, 0))) {
+    if (SEM_FAILED == (m_sem = sem_open("/test_aio_sem", O_CREAT, 0644, 0))) {
       int err = errno;
       ostringstream oss;
       oss << "sem_open failed: " << cpp_strerror(err);
@@ -1755,7 +1755,7 @@ public:
   std::string init()
   {
     int ret;
-    if (SEM_FAILED == (m_sem = sem_open("test_aio_sem", O_CREAT, 0644, 0))) {
+    if (SEM_FAILED == (m_sem = sem_open("/test_aio_sem", O_CREAT, 0644, 0))) {
       int err = errno;
       ostringstream oss;
       oss << "sem_open failed: " << cpp_strerror(err);
@@ -1812,7 +1812,7 @@ public:
   std::string init()
   {
     int ret;
-    if (SEM_FAILED == (m_sem = sem_open("test_aio_sem", O_CREAT, 0644, 0))) {
+    if (SEM_FAILED == (m_sem = sem_open("/test_aio_sem", O_CREAT, 0644, 0))) {
       int err = errno;
       ostringstream oss;
       oss << "sem_open failed: " << cpp_strerror(err);
@@ -2208,9 +2208,12 @@ TEST(LibRadosAioEC, RoundTripAppend) {
   ASSERT_EQ("", test_data.init());
   ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
 	      set_completion_completeEC, set_completion_safeEC, &my_completion));
-  ASSERT_TRUE(rados_ioctx_pool_requires_alignment(test_data.m_ioctx));
-  uint64_t alignment = rados_ioctx_pool_required_alignment(test_data.m_ioctx);
-  ASSERT_NE((unsigned)0, alignment);
+  int requires;
+  ASSERT_EQ(0, rados_ioctx_pool_requires_alignment2(test_data.m_ioctx, &requires));
+  ASSERT_NE(0, requires);
+  uint64_t alignment;
+  ASSERT_EQ(0, rados_ioctx_pool_required_alignment2(test_data.m_ioctx, &alignment));
+  ASSERT_NE(0U, alignment);
 
   int bsize = alignment;
   char *buf = (char *)new char[bsize];
@@ -2276,8 +2279,11 @@ TEST(LibRadosAioEC, RoundTripAppendPP) {
 	  (void*)&test_data, set_completion_completeEC, set_completion_safeEC);
   AioCompletion *my_completion_null = NULL;
   ASSERT_NE(my_completion, my_completion_null);
-  ASSERT_TRUE(test_data.m_ioctx.pool_requires_alignment());
-  uint64_t alignment = test_data.m_ioctx.pool_required_alignment();
+  bool requires;
+  ASSERT_EQ(0, test_data.m_ioctx.pool_requires_alignment2(&requires));
+  ASSERT_TRUE(requires);
+  uint64_t alignment;
+  ASSERT_EQ(0, test_data.m_ioctx.pool_required_alignment2(&alignment));
   ASSERT_NE((unsigned)0, alignment);
   int bsize = alignment;
   char *buf = (char *)new char[bsize];

@@ -23,7 +23,6 @@ ceph: ceph.in ./ceph_ver.h Makefile
 	sed -ie "s|@PYTHON_EXECUTABLE@|/usr/bin/env python|" $@.tmp
 	grep CEPH_GIT_NICE_VER ./ceph_ver.h | cut -f 3 -d " " | sed s/\"//g | xargs -I "{}" sed -ie "s/@CEPH_GIT_NICE_VER@/{}/g" $@.tmp
 	grep CEPH_GIT_VER ./ceph_ver.h | cut -f 3 -d " " | sed s/\"//g | xargs -I "{}" sed -ie "s/@CEPH_GIT_VER@/{}/g" $@.tmp
-	cat $(srcdir)/$@.in >>$@.tmp
 	chmod a+x $@.tmp
 	chmod a-w $@.tmp
 	mv $@.tmp $@
@@ -48,20 +47,13 @@ bash_completion_DATA += \
 
 bin_SCRIPTS += \
 	ceph-rbdnamer \
-	rbd-replay-many
-
-python_PYTHON += pybind/rbd.py
+	rbd-replay-many \
+        rbdmap
 
 libkrbd_la_SOURCES = krbd.cc
 libkrbd_la_LIBADD = $(LIBSECRET) $(LIBCOMMON) -lblkid -ludev
 if LINUX
 noinst_LTLIBRARIES += libkrbd.la
-endif # LINUX
-
-rbd_SOURCES = rbd.cc
-rbd_LDADD = $(LIBKRBD) $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
-if LINUX
-bin_PROGRAMS += rbd
 endif # LINUX
 
 endif # WITH_RBD
@@ -88,6 +80,7 @@ cephfs_LDADD = $(LIBCOMMON)
 bin_PROGRAMS += cephfs
 
 python_PYTHON += pybind/cephfs.py
+python_PYTHON += pybind/ceph_volume_client.py
 
 # libcephfs (this should go somewhere else in the future)
 

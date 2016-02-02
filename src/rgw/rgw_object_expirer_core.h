@@ -41,7 +41,8 @@ class RGWObjectExpirer {
 protected:
   RGWRados *store;
 
-  int init_bucket_info(const string& bucket_name,
+  int init_bucket_info(const string& tenant_name,
+                       const string& bucket_name,
                        const string& bucket_id,
                        RGWBucketInfo& bucket_info);
 

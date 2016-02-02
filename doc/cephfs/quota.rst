@@ -32,7 +32,7 @@ Limitations
    directory inode on which quotas are configured in order to enforce
    them.  If the client has restricted access to a specific path
    (e.g., ``/home/user``) based on the MDS capability, and a quota is
-   configured on an ancestor directory they do not have access too
+   configured on an ancestor directory they do not have access to
    (e.g., ``/home``), the client will not enforce it.  When using
    path-based access restrictions be sure to configure the quota on
    the directory the client is restricted too (e.g., ``/home/user``)

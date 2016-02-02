@@ -90,6 +90,9 @@ TestRadosClientPtr get_rados_client() {
     cct->_conf->apply_changes(NULL);
     client->reset(new librados::TestMemRadosClient(cct),
                   &librados::TestRadosClient::Deallocate);
+    if (g_ceph_context == NULL) {
+      g_ceph_context = cct;
+    }
     cct->put();
   }
   (*client)->get();
@@ -351,6 +354,13 @@ int IoCtx::aio_flush() {
 int IoCtx::aio_flush_async(AioCompletion *c) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   ctx->aio_flush_async(c->pc);
+  return 0;
+}
+
+int IoCtx::aio_notify(const std::string& oid, AioCompletion *c, bufferlist& bl,
+                      uint64_t timeout_ms, bufferlist *pbl) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  ctx->aio_notify(oid, c->pc, bl, timeout_ms, pbl);
   return 0;
 }
 
@@ -651,6 +661,19 @@ void ObjectReadOperation::list_snaps(snap_set_t *out_snaps, int *prval) {
   o->ops.push_back(op);
 }
 
+void ObjectReadOperation::list_watchers(std::list<obj_watch_t> *out_watchers,
+                                        int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = boost::bind(&TestIoCtxImpl::list_watchers, _1,
+                                           _2, out_watchers);
+  if (prval != NULL) {
+    op = boost::bind(save_operation_result,
+                     boost::bind(op, _1, _2, _3, _4), prval);
+  }
+  o->ops.push_back(op);
+}
+
 void ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl,
                                int *prval) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
@@ -688,6 +711,24 @@ void ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
   o->ops.push_back(op);
 }
 
+void ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = boost::bind(&TestIoCtxImpl::stat, _1, _2,
+                                           psize, pmtime);
+
+  if (prval != NULL) {
+    op = boost::bind(save_operation_result,
+                     boost::bind(op, _1, _2, _3, _4), prval);
+  }
+  o->ops.push_back(op);
+}
+
+void ObjectWriteOperation::append(const bufferlist &bl) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(boost::bind(&TestIoCtxImpl::append, _1, _2, bl, _4));
+}
+
 void ObjectWriteOperation::create(bool exclusive) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::create, _1, _2, exclusive));
@@ -714,6 +755,13 @@ void ObjectWriteOperation::set_alloc_hint(uint64_t expected_object_size,
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::set_alloc_hint, _1, _2,
 			       expected_object_size, expected_write_size));
+}
+
+
+void ObjectWriteOperation::tmap_update(const bufferlist& cmdbl) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(boost::bind(&TestIoCtxImpl::tmap_update, _1, _2,
+                               cmdbl));
 }
 
 void ObjectWriteOperation::truncate(uint64_t off) {
@@ -772,6 +820,11 @@ int Rados::blacklist_add(const std::string& client_address,
 config_t Rados::cct() {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
   return reinterpret_cast<config_t>(impl->cct());
+}
+
+int Rados::cluster_fsid(std::string* fsid) {
+  *fsid = "00000000-1111-2222-3333-444444444444";
+  return 0;
 }
 
 int Rados::conf_set(const char *option, const char *value) {

@@ -494,7 +494,8 @@ Create Zones
 
 #. Delete the default zone (if it exists). :: 
 
-	rados -p .rgw.root rm zone_info.default
+	rados -p .us-east.rgw.root rm zone_info.default
+	rados -p .us-west.rgw.root rm zone_info.default
 
 
 #. Update the region map. :: 

@@ -18,6 +18,7 @@
 #define CEPH_MSG_ASYNCCONNECTION_H
 
 #include <pthread.h>
+#include <signal.h>
 #include <climits>
 #include <list>
 #include <map>
@@ -44,23 +45,25 @@ class AsyncMessenger;
  */
 class AsyncConnection : public Connection {
 
-  int read_bulk(int fd, char *buf, int len);
-  int do_sendmsg(struct msghdr &msg, int len, bool more);
-  int try_send(bufferlist &bl, bool send=true) {
+  ssize_t read_bulk(int fd, char *buf, unsigned len);
+  void suppress_sigpipe();
+  void restore_sigpipe();
+  ssize_t do_sendmsg(struct msghdr &msg, unsigned len, bool more);
+  ssize_t try_send(bufferlist &bl, bool send=true) {
     Mutex::Locker l(write_lock);
     return _try_send(bl, send);
   }
   // if "send" is false, it will only append bl to send buffer
   // the main usage is avoid error happen outside messenger threads
-  int _try_send(bufferlist &bl, bool send=true);
-  int _send(Message *m);
+  ssize_t _try_send(bufferlist &bl, bool send=true);
+  ssize_t _send(Message *m);
   void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
-  int read_until(uint64_t needed, char *p);
-  int _process_connection();
+  ssize_t read_until(unsigned needed, char *p);
+  ssize_t _process_connection();
   void _connect();
   void _stop();
   int handle_connect_reply(ceph_msg_connect &connect, ceph_msg_connect_reply &r);
-  int handle_connect_msg(ceph_msg_connect &m, bufferlist &aubl, bufferlist &bl);
+  ssize_t handle_connect_msg(ceph_msg_connect &m, bufferlist &aubl, bufferlist &bl);
   void was_session_reset();
   void fault();
   void discard_out_queue();
@@ -69,8 +72,8 @@ class AsyncConnection : public Connection {
   int randomize_out_seq();
   void handle_ack(uint64_t seq);
   void _send_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
-  int write_message(Message *m, bufferlist& bl);
-  int _reply_accept(char tag, ceph_msg_connect &connect, ceph_msg_connect_reply &reply,
+  ssize_t write_message(Message *m, bufferlist& bl);
+  ssize_t _reply_accept(char tag, ceph_msg_connect &connect, ceph_msg_connect_reply &reply,
                     bufferlist authorizer_reply) {
     bufferlist reply_bl;
     reply.tag = tag;
@@ -80,7 +83,7 @@ class AsyncConnection : public Connection {
     if (reply.authorizer_len) {
       reply_bl.append(authorizer_reply.c_str(), authorizer_reply.length());
     }
-    int r = try_send(reply_bl);
+    ssize_t r = try_send(reply_bl);
     if (r < 0)
       return -1;
 
@@ -119,7 +122,7 @@ class AsyncConnection : public Connection {
 
   ostream& _conn_prefix(std::ostream *_dout);
 
-  bool is_connected() {
+  bool is_connected() override {
     Mutex::Locker l(lock);
     return state >= STATE_OPEN && state <= STATE_OPEN_TAG_CLOSE;
   }
@@ -133,11 +136,11 @@ class AsyncConnection : public Connection {
   }
   // Only call when AsyncConnection first construct
   void accept(int sd);
-  int send_message(Message *m);
+  int send_message(Message *m) override;
 
-  void send_keepalive();
-  void mark_down();
-  void mark_disposable() {
+  void send_keepalive() override;
+  void mark_down() override;
+  void mark_disposable() override {
     Mutex::Locker l(lock);
     policy.lossy = true;
   }
@@ -160,6 +163,7 @@ class AsyncConnection : public Connection {
     STATE_OPEN_TAG_CLOSE,
     STATE_WAIT_SEND,
     STATE_CONNECTING,
+    STATE_CONNECTING_RE,
     STATE_CONNECTING_WAIT_BANNER,
     STATE_CONNECTING_WAIT_IDENTIFY_PEER,
     STATE_CONNECTING_SEND_CONNECT_MSG,
@@ -196,6 +200,7 @@ class AsyncConnection : public Connection {
                                         "STATE_OPEN_TAG_CLOSE",
                                         "STATE_WAIT_SEND",
                                         "STATE_CONNECTING",
+                                        "STATE_CONNECTING_RE",
                                         "STATE_CONNECTING_WAIT_BANNER",
                                         "STATE_CONNECTING_WAIT_IDENTIFY_PEER",
                                         "STATE_CONNECTING_SEND_CONNECT_MSG",
@@ -261,7 +266,7 @@ class AsyncConnection : public Connection {
   // Open state
   utime_t recv_stamp;
   utime_t throttle_stamp;
-  uint64_t msg_left;
+  unsigned msg_left;
   ceph_msg_header current_header;
   bufferlist data_buf;
   bufferlist::iterator data_blp;
@@ -291,6 +296,12 @@ class AsyncConnection : public Connection {
   EventCenter *center;
   ceph::shared_ptr<AuthSessionHandler> session_security;
 
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+  sigset_t sigpipe_mask;
+  bool sigpipe_pending;
+  bool sigpipe_unblock;
+#endif
+
  public:
   // used by eventcallback
   void handle_write();
@@ -305,13 +316,13 @@ class AsyncConnection : public Connection {
     mark_down();
   }
   void cleanup_handler() {
-    read_handler.reset();
-    write_handler.reset();
-    reset_handler.reset();
-    remote_reset_handler.reset();
-    connect_handler.reset();
-    local_deliver_handler.reset();
-    wakeup_handler.reset();
+    delete read_handler;
+    delete write_handler;
+    delete reset_handler;
+    delete remote_reset_handler;
+    delete connect_handler;
+    delete local_deliver_handler;
+    delete wakeup_handler;
   }
   PerfCounters *get_perf_counter() {
     return logger;

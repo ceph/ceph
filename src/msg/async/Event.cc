@@ -179,7 +179,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 
 void EventCenter::delete_file_event(int fd, int mask)
 {
-  assert(fd > 0);
+  assert(fd >= 0);
   Mutex::Locker l(file_lock);
   if (fd > nevent) {
     ldout(cct, 1) << __func__ << " delete event fd=" << fd << " exceed nevent=" << nevent
@@ -199,10 +199,10 @@ void EventCenter::delete_file_event(int fd, int mask)
   }
 
   if (mask & EVENT_READABLE && event->read_cb) {
-    event->read_cb.reset();
+    event->read_cb = nullptr;
   }
   if (mask & EVENT_WRITABLE && event->write_cb) {
-    event->write_cb.reset();
+    event->write_cb = nullptr;
   }
 
   event->mask = event->mask & (~mask);
@@ -247,7 +247,6 @@ void EventCenter::delete_time_event(uint64_t id)
   ldout(cct, 10) << __func__ << " id=" << id << dendl;
   if (id >= time_event_next_id)
     return ;
-
 
   for (map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
        it != time_events.end(); ++it) {

@@ -18,7 +18,6 @@
 
 
 using namespace librados;
-using ceph::buffer;
 using std::map;
 using std::ostringstream;
 using std::string;
@@ -77,7 +76,7 @@ TEST_P(WatchStress, Stress1) {
   WatchNotifyTestCtx ctx;
 
   WatcherUnwatcher *thr = new WatcherUnwatcher(pool_name);
-  thr->create();
+  thr->create("watcher_unwatch");
   ASSERT_EQ(0, nioctx.create("foo", false));
 
   for (unsigned i = 0; i < 75; ++i) {

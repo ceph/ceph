@@ -53,9 +53,47 @@ int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out, int max_len,
     return -EINVAL;
   }
 
-  decode_json_obj(out, &parser);
-
   free(data);
+
+  try {
+      decode_json_obj(out, &parser);
+  } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+  }
+
+  return 0;
+}
+
+template <class T>
+int rgw_rest_get_json_input_keep_data(CephContext *cct, req_state *s, T& out, int max_len, char **pdata, int *len)
+{
+  int rv, data_len;
+  char *data;
+
+  if ((rv = rgw_rest_read_all_input(s, &data, &data_len, max_len)) < 0) {
+    return rv;
+  }
+
+  if (!data_len) {
+    return -EINVAL;
+  }
+
+  *len = data_len;
+
+  JSONParser parser;
+
+  if (!parser.parse(data, data_len)) {
+    free(data);
+    return -EINVAL;
+  }
+
+  try {
+      decode_json_obj(out, &parser);
+  } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+  }
+
+  *pdata = data;
   return 0;
 }
 
@@ -270,6 +308,12 @@ public:
   int get_params();
 };
 
+class RGWBulkDelete_ObjStore : public RGWBulkDelete {
+public:
+  RGWBulkDelete_ObjStore() {}
+  ~RGWBulkDelete_ObjStore() {}
+};
+
 class RGWDeleteMultiObj_ObjStore : public RGWDeleteMultiObj {
 public:
   RGWDeleteMultiObj_ObjStore() {}
@@ -304,6 +348,7 @@ protected:
   virtual RGWOp *op_copy() { return NULL; }
   virtual RGWOp *op_options() { return NULL; }
 
+  virtual int validate_tenant_name(const string& bucket);
   virtual int validate_bucket_name(const string& bucket);
   virtual int validate_object_name(const string& object);
 
@@ -311,14 +356,21 @@ protected:
 public:
   RGWHandler_ObjStore() {}
   virtual ~RGWHandler_ObjStore() {}
+  int init_permissions(RGWOp *op);
   int read_permissions(RGWOp *op);
+  virtual int retarget(RGWOp *op, RGWOp **new_op) {
+    *new_op = op;
+    return 0;
+  }
 
   virtual int authorize() = 0;
+  // virtual int postauth_init(struct req_init_state *t) = 0;
 };
 
 class RGWHandler_ObjStore_SWIFT;
 class RGWHandler_SWIFT_Auth;
 class RGWHandler_ObjStore_S3;
+
 
 class RGWRESTMgr {
   bool should_log;
@@ -367,24 +419,28 @@ public:
 
 static const int64_t NO_CONTENT_LENGTH = -1;
 
+extern void set_req_state_err(struct rgw_err &err, int err_no, int prot_flags);
 extern void set_req_state_err(struct req_state *s, int err_no);
+extern void dump_errno(int http_ret, string& out);
+extern void dump_errno(const struct rgw_err &err, string& out);
 extern void dump_errno(struct req_state *s);
-extern void dump_errno(struct req_state *s, int ret);
+extern void dump_errno(struct req_state *s, int http_ret);
 extern void end_header(struct req_state *s,
                        RGWOp *op = NULL,
                        const char *content_type = NULL,
                        const int64_t proposed_content_length = NO_CONTENT_LENGTH,
-		       bool force_content_type = false);
+		       bool force_content_type = false,
+		       bool force_no_error = false);
 extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
-extern void dump_owner(struct req_state *s, string& id, string& name, const char *section = NULL);
+extern void dump_owner(struct req_state *s, rgw_user& id, string& name, const char *section = NULL);
 extern void dump_string_header(struct req_state *s, const char *name, const char *val);
 extern void dump_content_length(struct req_state *s, uint64_t len);
 extern void dump_etag(struct req_state *s, const char *etag);
 extern void dump_epoch_header(struct req_state *s, const char *name, time_t t);
 extern void dump_time_header(struct req_state *s, const char *name, time_t t);
 extern void dump_last_modified(struct req_state *s, time_t t);
-extern void abort_early(struct req_state *s, RGWOp *op, int err);
+extern void abort_early(struct req_state *s, RGWOp *op, int err, RGWHandler* handler);
 extern void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total_size);
 extern void dump_continue(struct req_state *s);
 extern void list_all_buckets_end(struct req_state *s);

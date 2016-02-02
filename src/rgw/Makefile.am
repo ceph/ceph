@@ -4,6 +4,7 @@ if ENABLE_CLIENT
 DENCODER_SOURCES += \
 	rgw/rgw_dencoder.cc \
 	rgw/rgw_acl.cc \
+	rgw/rgw_basic_types.cc \
 	rgw/rgw_common.cc \
 	rgw/rgw_env.cc \
 	rgw/rgw_json_enc.cc
@@ -21,6 +22,7 @@ librgw_la_SOURCES =  \
 	rgw/rgw_xml.cc \
 	rgw/rgw_usage.cc \
 	rgw/rgw_json_enc.cc \
+	rgw/rgw_xml_enc.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_bucket.cc\
 	rgw/rgw_tools.cc \
@@ -29,6 +31,7 @@ librgw_la_SOURCES =  \
 	rgw/rgw_rest_client.cc \
 	rgw/rgw_rest_conn.cc \
 	rgw/rgw_op.cc \
+	rgw/rgw_basic_types.cc \
 	rgw/rgw_common.cc \
 	rgw/rgw_cache.cc \
 	rgw/rgw_formats.cc \
@@ -46,7 +49,8 @@ librgw_la_SOURCES =  \
 	rgw/rgw_keystone.cc \
 	rgw/rgw_quota.cc \
 	rgw/rgw_dencoder.cc \
-	rgw/rgw_object_expirer_core.cc
+	rgw/rgw_object_expirer_core.cc \
+	rgw/rgw_website.cc
 librgw_la_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += librgw.la
 
@@ -122,7 +126,6 @@ ceph_rgw_jsonparser_SOURCES = \
 ceph_rgw_jsonparser_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_rgw_jsonparser
 
-
 noinst_HEADERS += \
 	rgw/rgw_acl.h \
 	rgw/rgw_acl_s3.h \
@@ -130,6 +133,7 @@ noinst_HEADERS += \
 	rgw/rgw_client_io.h \
 	rgw/rgw_fcgi.h \
 	rgw/rgw_xml.h \
+	rgw/rgw_basic_types.h \
 	rgw/rgw_cache.h \
 	rgw/rgw_common.h \
 	rgw/rgw_cors.h \
@@ -177,6 +181,8 @@ noinst_HEADERS += \
 	rgw/rgw_keystone.h \
 	rgw/rgw_civetweb.h \
 	rgw/rgw_civetweb_log.h \
+	rgw/rgw_website.h \
+	rgw/rgw_rest_s3website.h \
 	civetweb/civetweb.h \
 	civetweb/include/civetweb.h \
 	civetweb/include/civetweb_conf.h \

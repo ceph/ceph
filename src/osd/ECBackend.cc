@@ -88,7 +88,7 @@ ostream &operator<<(ostream &lhs, const ECBackend::read_result_t &rhs)
   } else {
     lhs << ", noattrs";
   }
-  return lhs << ", returned=" << rhs.returned;
+  return lhs << ", returned=" << rhs.returned << ")";
 }
 
 ostream &operator<<(ostream &lhs, const ECBackend::ReadOp &rhs)
@@ -150,7 +150,8 @@ ostream &operator<<(ostream &lhs, const ECBackend::RecoveryOp &rhs)
 	     << " obc refcount=" << rhs.obc.use_count()
 	     << " state=" << ECBackend::RecoveryOp::tostr(rhs.state)
 	     << " waiting_on_pushes=" << rhs.waiting_on_pushes
-	     << " extent_requested=" << rhs.extent_requested;
+	     << " extent_requested=" << rhs.extent_requested
+	     << ")";
 }
 
 void ECBackend::RecoveryOp::dump(Formatter *f) const
@@ -170,11 +171,12 @@ void ECBackend::RecoveryOp::dump(Formatter *f) const
 ECBackend::ECBackend(
   PGBackend::Listener *pg,
   coll_t coll,
+  ObjectStore::CollectionHandle &ch,
   ObjectStore *store,
   CephContext *cct,
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
-  : PGBackend(pg, store, coll),
+  : PGBackend(pg, store, coll, ch),
     cct(cct),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
@@ -234,16 +236,15 @@ struct RecoveryMessages {
 
   map<pg_shard_t, vector<PushOp> > pushes;
   map<pg_shard_t, vector<PushReplyOp> > push_replies;
-  ObjectStore::Transaction *t;
-  RecoveryMessages() : t(NULL) {}
-  ~RecoveryMessages() { assert(!t); }
+  ObjectStore::Transaction t;
+  RecoveryMessages() {}
+  ~RecoveryMessages(){}
 };
 
 void ECBackend::handle_recovery_push(
   PushOp &op,
   RecoveryMessages *m)
 {
-  assert(m->t);
 
   bool oneshot = op.before_progress.first && op.after_progress.data_complete;
   ghobject_t tobj;
@@ -263,8 +264,8 @@ void ECBackend::handle_recovery_push(
   }
 
   if (op.before_progress.first) {
-    m->t->remove(coll, tobj);
-    m->t->touch(coll, tobj);
+    m->t.remove(coll, tobj);
+    m->t.touch(coll, tobj);
   }
 
   if (!op.data_included.empty()) {
@@ -272,7 +273,7 @@ void ECBackend::handle_recovery_push(
     uint64_t end = op.data_included.range_end();
     assert(op.data.length() == (end - start));
 
-    m->t->write(
+    m->t.write(
       coll,
       tobj,
       start,
@@ -284,7 +285,7 @@ void ECBackend::handle_recovery_push(
 
   if (op.before_progress.first) {
     assert(op.attrset.count(string("_")));
-    m->t->setattrs(
+    m->t.setattrs(
       coll,
       tobj,
       op.attrset);
@@ -294,9 +295,9 @@ void ECBackend::handle_recovery_push(
     dout(10) << __func__ << ": Removing oid "
 	     << tobj.hobj << " from the temp collection" << dendl;
     clear_temp_obj(tobj.hobj);
-    m->t->remove(coll, ghobject_t(
+    m->t.remove(coll, ghobject_t(
 	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
-    m->t->collection_move_rename(
+    m->t.collection_move_rename(
       coll, tobj,
       coll, ghobject_t(
 	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
@@ -313,14 +314,14 @@ void ECBackend::handle_recovery_push(
 	stats,
 	op.recovery_info,
 	recovery_ops[op.soid].obc,
-	m->t);
+	&m->t);
     } else {
       get_parent()->on_local_recover(
 	op.soid,
 	object_stat_sum_t(),
 	op.recovery_info,
 	ObjectContextRef(),
-	m->t);
+	&m->t);
     }
   }
   m->push_replies[get_parent()->primary_shard()].push_back(PushReplyOp());
@@ -466,19 +467,14 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
   }
 
   if (!replies.empty()) {
-    m.t->register_on_complete(
+    (m.t).register_on_complete(
 	get_parent()->bless_context(
 	  new SendPushReplies(
 	    get_parent(),
 	    get_parent()->get_epoch(),
 	    replies)));
-    m.t->register_on_applied(
-	new ObjectStore::C_DeleteTransaction(m.t));
-    get_parent()->queue_transaction(m.t);
-    m.t = NULL;
-  } else {
-    assert(!m.t);
-  }
+    get_parent()->queue_transaction(std::move(m.t));
+  } 
 
   if (m.reads.empty())
     return;
@@ -716,8 +712,6 @@ bool ECBackend::handle_message(
   case MSG_OSD_PG_PUSH: {
     MOSDPGPush *op = static_cast<MOSDPGPush *>(_op->get_req());
     RecoveryMessages rm;
-    rm.t = new ObjectStore::Transaction;
-    assert(rm.t);
     for (vector<PushOp>::iterator i = op->pushes.begin();
 	 i != op->pushes.end();
 	 ++i) {
@@ -839,8 +833,8 @@ void ECBackend::handle_sub_write(
   assert(!get_parent()->get_log().get_missing().is_missing(op.soid));
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
-  ObjectStore::Transaction *localt = new ObjectStore::Transaction;
-  localt->set_use_tbl(op.t.get_use_tbl());
+  ObjectStore::Transaction localt;
+  localt.set_use_tbl(op.t.get_use_tbl());
   if (!op.temp_added.empty()) {
     add_temp_objs(op.temp_added);
   }
@@ -850,7 +844,7 @@ void ECBackend::handle_sub_write(
 	 ++i) {
       dout(10) << __func__ << ": removing object " << *i
 	       << " since we won't get the transaction" << dendl;
-      localt->remove(
+      localt.remove(
 	coll,
 	ghobject_t(
 	  *i,
@@ -865,7 +859,7 @@ void ECBackend::handle_sub_write(
     op.trim_to,
     op.trim_rollback_to,
     !(op.t.empty()),
-    localt);
+    &localt);
 
   if (!(dynamic_cast<ReplicatedPG *>(get_parent())->is_undersized()) &&
       (unsigned)get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
@@ -873,25 +867,21 @@ void ECBackend::handle_sub_write(
 
   if (on_local_applied_sync) {
     dout(10) << "Queueing onreadable_sync: " << on_local_applied_sync << dendl;
-    localt->register_on_applied_sync(on_local_applied_sync);
+    localt.register_on_applied_sync(on_local_applied_sync);
   }
-  localt->register_on_commit(
+  localt.register_on_commit(
     get_parent()->bless_context(
       new SubWriteCommitted(
 	this, msg, op.tid,
 	op.at_version,
 	get_parent()->get_info().last_complete)));
-  localt->register_on_applied(
+  localt.register_on_applied(
     get_parent()->bless_context(
       new SubWriteApplied(this, msg, op.tid, op.at_version)));
-  localt->register_on_applied(
-    new ObjectStore::C_DeleteTransaction(localt));
-  list<ObjectStore::Transaction*> tls;
-  tls.push_back(localt);
-  tls.push_back(new ObjectStore::Transaction);
-  tls.back()->swap(op.t);
-  tls.back()->register_on_complete(
-    new ObjectStore::C_DeleteTransaction(tls.back()));
+  vector<ObjectStore::Transaction> tls;
+  tls.reserve(2);
+  tls.push_back(std::move(localt));
+  tls.push_back(std::move(op.t));
   get_parent()->queue_transactions(tls, msg);
 }
 
@@ -917,7 +907,7 @@ void ECBackend::handle_sub_read(
 	   i->second.begin(); j != i->second.end(); ++j) {
       bufferlist bl;
       r = store->read(
-	coll,
+	ch,
 	ghobject_t(i->first, ghobject_t::NO_GEN, shard),
 	j->get<0>(),
 	j->get<1>(),
@@ -974,7 +964,7 @@ error:
     if (reply->errors.count(*i))
       continue;
     int r = store->getattrs(
-      coll,
+      ch,
       ghobject_t(
 	*i, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       reply->attrs_read[*i]);
@@ -1121,11 +1111,21 @@ void ECBackend::handle_sub_read_reply(
 	  ++is_complete;
 	}
       } else {
-	if (!rop.complete[iter->first].errors.empty())
-	  dout(10) << __func__ << " Enough copies for " << iter->first << " (ignore errors)" << dendl;
-	++is_complete;
-	rop.complete[iter->first].errors.clear();
         assert(rop.complete[iter->first].r == 0);
+	if (!rop.complete[iter->first].errors.empty()) {
+	  if (cct->_conf->osd_read_ec_check_for_errors) {
+	    dout(10) << __func__ << ": Not ignoring errors, use one shard err=" << err << dendl;
+	    err = rop.complete[iter->first].errors.begin()->second;
+            rop.complete[iter->first].r = err;
+	  } else {
+	    get_parent()->clog_error() << __func__ << ": Error(s) ignored for "
+				       << iter->first << " enough copies available" << "\n";
+	    dout(10) << __func__ << " Error(s) ignored for " << iter->first
+		     << " enough copies available" << dendl;
+	    rop.complete[iter->first].errors.clear();
+	  }
+	}
+	++is_complete;
       }
     }
   }
@@ -1692,7 +1692,7 @@ void ECBackend::start_remaining_read_op(
 }
 
 ECUtil::HashInfoRef ECBackend::get_hash_info(
-  const hobject_t &hoid, bool checks)
+  const hobject_t &hoid, bool checks, const map<string,bufferptr> *attrs)
 {
   dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
   ECUtil::HashInfoRef ref = unstable_hashinfo_registry.lookup(hoid);
@@ -1700,7 +1700,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
     dout(10) << __func__ << ": not in cache " << hoid << dendl;
     struct stat st;
     int r = store->stat(
-      coll,
+      ch,
       ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &st);
     ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
@@ -1708,12 +1708,25 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
     if (r >= 0) {
       dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
       bufferlist bl;
-      r = store->getattr(
-	coll,
-	ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-	ECUtil::get_hinfo_key(),
-	bl);
-      if (r >= 0) {
+      if (attrs) {
+	map<string, bufferptr>::const_iterator k = attrs->find(ECUtil::get_hinfo_key());
+	if (k == attrs->end()) {
+	  dout(5) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
+	} else {
+	  bl.push_back(k->second);
+	}
+      } else {
+	r = store->getattr(
+	  ch,
+	  ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	  ECUtil::get_hinfo_key(),
+	  bl);
+	if (r < 0) {
+	  dout(5) << __func__ << ": getattr failed: " << cpp_strerror(r) << dendl;
+	  bl.clear(); // just in case
+	}
+      }
+      if (bl.length() > 0) {
 	bufferlist::iterator bp = bl.begin();
 	::decode(hinfo, bp);
 	if (checks && hinfo.get_total_chunk_size() != (uint64_t)st.st_size) {
@@ -2008,7 +2021,7 @@ int ECBackend::objects_get_attrs(
   map<string, bufferlist> *out)
 {
   int r = store->getattrs(
-    coll,
+    ch,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     *out);
   if (r < 0)
@@ -2056,7 +2069,7 @@ void ECBackend::be_deep_scrub(
     bufferlist bl;
     handle.reset_tp_timeout();
     r = store->read(
-      coll,
+      ch,
       ghobject_t(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       pos,
@@ -2078,22 +2091,26 @@ void ECBackend::be_deep_scrub(
     dout(0) << "_scan_list  " << poid << " got "
 	    << r << " on read, read_error" << dendl;
     o.read_error = true;
+    return;
   }
 
-  ECUtil::HashInfoRef hinfo = get_hash_info(poid, false);
+  ECUtil::HashInfoRef hinfo = get_hash_info(poid, false, &o.attrs);
   if (!hinfo) {
     dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;
     o.digest_present = false;
+    return;
   } else {
     if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) != h.digest()) {
       dout(0) << "_scan_list  " << poid << " got incorrect hash on read" << dendl;
       o.read_error = true;
+      return;
     }
 
     if (hinfo->get_total_chunk_size() != pos) {
       dout(0) << "_scan_list  " << poid << " got incorrect size on read" << dendl;
       o.read_error = true;
+      return;
     }
 
     /* We checked above that we match our own stored hash.  We cannot

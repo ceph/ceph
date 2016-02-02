@@ -42,8 +42,8 @@ Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m, bool _use_
 
   if (cct->_conf->throttler_perf_counter) {
     PerfCountersBuilder b(cct, string("throttle-") + name, l_throttle_first, l_throttle_last);
-    b.add_u64_counter(l_throttle_val, "val", "Currently available throttle");
-    b.add_u64_counter(l_throttle_max, "max", "Max value for throttle");
+    b.add_u64(l_throttle_val, "val", "Currently available throttle");
+    b.add_u64(l_throttle_max, "max", "Max value for throttle");
     b.add_u64_counter(l_throttle_get, "get", "Gets");
     b.add_u64_counter(l_throttle_get_sum, "get_sum", "Got data");
     b.add_u64_counter(l_throttle_get_or_fail_fail, "get_or_fail_fail", "Get blocked during get_or_fail");

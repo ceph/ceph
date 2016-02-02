@@ -1,6 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include "include/interval_set.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include <map>
 
 #ifndef COMMON_OBJECT_H
@@ -16,13 +16,13 @@ bool test_object_contents();
 
 class ObjectContents {
   uint64_t _size;
-  map<uint64_t, unsigned int> seeds;
+  std::map<uint64_t, unsigned int> seeds;
   interval_set<uint64_t> written;
   bool _exists;
 public:
   class Iterator {
     ObjectContents *parent;
-    map<uint64_t, unsigned int>::iterator iter;
+    std::map<uint64_t, unsigned int>::iterator iter;
     unsigned int current_state;
     int current_val;
     uint64_t pos;
@@ -100,7 +100,7 @@ public:
   void debug(std::ostream &out) {
     out << "_size is " << _size << std::endl;
     out << "seeds is: (";
-    for (map<uint64_t, unsigned int>::iterator i = seeds.begin();
+    for (std::map<uint64_t, unsigned int>::iterator i = seeds.begin();
 	 i != seeds.end();
 	 ++i) {
       out << "[" << i->first << "," << i->second << "], ";

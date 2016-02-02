@@ -456,7 +456,8 @@ public:
   const ECUtil::stripe_info_t sinfo;
   /// If modified, ensure that the ref is held until the update is applied
   SharedPtrRegistry<hobject_t, ECUtil::HashInfo, hobject_t::BitwiseComparator> unstable_hashinfo_registry;
-  ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool checks = true);
+  ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool checks = true,
+				    const map<string,bufferptr> *attr = NULL);
 
   friend struct ReadCB;
   void check_op(Op *op);
@@ -465,6 +466,7 @@ public:
   ECBackend(
     PGBackend::Listener *pg,
     coll_t coll,
+    ObjectStore::CollectionHandle &ch,
     ObjectStore *store,
     CephContext *cct,
     ErasureCodeInterfaceRef ec_impl,
@@ -494,6 +496,7 @@ public:
     ObjectStore::Transaction *t);
 
   bool scrub_supported() { return true; }
+  bool auto_repair_supported() const { return true; }
 
   void be_deep_scrub(
     const hobject_t &obj,

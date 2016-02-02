@@ -23,7 +23,7 @@ export CEPH_CONF=/dev/null
 unset CEPH_ARGS
 MON_ID=a
 MON_DIR=$DIR/$MON_ID
-CEPH_MON=127.0.0.1:7110
+CEPH_MON=127.0.0.1:7110 # git grep '\<7110\>' : there must be only one
 TIMEOUT=360
 
 function setup() {
@@ -43,6 +43,7 @@ function mon_mkfs() {
         --id $MON_ID \
         --fsid $fsid \
         --erasure-code-dir=.libs \
+        --compression-dir=.libs \
         --mkfs \
         --mon-data=$MON_DIR \
         --mon-initial-members=$MON_ID \
@@ -57,6 +58,7 @@ function mon_run() {
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
         --erasure-code-dir=.libs \
+        --compression-dir=.libs \
         --mon-data=$MON_DIR \
         --log-file=$MON_DIR/log \
         --mon-cluster-log-file=$MON_DIR/log \
@@ -84,6 +86,7 @@ function auth_none() {
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
         --erasure-code-dir=.libs \
+        --compression-dir=.libs \
         --mon-data=$MON_DIR \
         --extract-monmap $MON_DIR/monmap
 
@@ -151,6 +154,7 @@ function makedir() {
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
         --erasure-code-dir=.libs \
+        --compression-dir=.libs \
         --mkfs \
         --mon-data=$toodeep 2>&1 | tee $DIR/makedir.log
     grep 'toodeep.*No such file' $DIR/makedir.log > /dev/null

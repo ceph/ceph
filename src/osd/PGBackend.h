@@ -43,6 +43,7 @@
  protected:
    ObjectStore *store;
    const coll_t coll;
+   ObjectStore::CollectionHandle &ch;
  public:	
    /**
     * Provides interfaces for PGBackend callbacks
@@ -102,11 +103,11 @@
 
      virtual void send_message(int to_osd, Message *m) = 0;
      virtual void queue_transaction(
-       ObjectStore::Transaction *t,
+       ObjectStore::Transaction&& t,
        OpRequestRef op = OpRequestRef()
        ) = 0;
      virtual void queue_transactions(
-       list<ObjectStore::Transaction*>& tls,
+       vector<ObjectStore::Transaction>& tls,
        OpRequestRef op = OpRequestRef()
        ) = 0;
      virtual epoch_t get_epoch() const = 0;
@@ -230,9 +231,11 @@
    };
    Listener *parent;
    Listener *get_parent() const { return parent; }
-   PGBackend(Listener *l, ObjectStore *store, coll_t coll) :
+   PGBackend(Listener *l, ObjectStore *store, coll_t coll,
+	     ObjectStore::CollectionHandle &ch) :
      store(store),
      coll(coll),
+     ch(ch),
      parent(l) {}
    bool is_primary() const { return get_parent()->pgb_is_primary(); }
    OSDMapRef get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
@@ -406,9 +409,17 @@
        const hobject_t &hoid,         ///< [in] object to write
        map<string, bufferlist> &keys  ///< [in] omap keys, may be cleared
        ) { assert(0); }
+     virtual void omap_setkeys(
+       const hobject_t &hoid,         ///< [in] object to write
+       bufferlist &keys_bl  ///< [in] omap keys, may be cleared
+       ) { assert(0); }
      virtual void omap_rmkeys(
        const hobject_t &hoid,         ///< [in] object to write
        set<string> &keys              ///< [in] omap keys, may be cleared
+       ) { assert(0); }
+     virtual void omap_rmkeys(
+       const hobject_t &hoid,         ///< [in] object to write
+       bufferlist &keys_bl            ///< [in] omap keys, may be cleared
        ) { assert(0); }
      virtual void omap_clear(
        const hobject_t &hoid          ///< [in] object to clear omap
@@ -548,6 +559,7 @@
      Context *on_complete, bool fast_read = false) = 0;
 
    virtual bool scrub_supported() { return false; }
+   virtual bool auto_repair_supported() const { return false; }
    void be_scan_list(
      ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
      ThreadPool::TPHandle &handle);
@@ -588,6 +600,7 @@
      const OSDMapRef curmap,
      Listener *l,
      coll_t coll,
+     ObjectStore::CollectionHandle &ch,
      ObjectStore *store,
      CephContext *cct);
  };

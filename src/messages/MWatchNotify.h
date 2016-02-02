@@ -29,7 +29,7 @@ class MWatchNotify : public Message {
   uint64_t notify_id;  ///< osd unique id for a notify notification
   uint8_t opcode;      ///< CEPH_WATCH_EVENT_*
   bufferlist bl;       ///< notify payload (osd->client)
-  int32_t return_code; ///< notify result (osd->client)
+  errorcode32_t return_code; ///< notify result (osd->client)
   uint64_t notifier_gid; ///< who sent the notify
 
   MWatchNotify()

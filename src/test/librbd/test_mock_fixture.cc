@@ -9,12 +9,16 @@
 // template definitions
 #include "librbd/AsyncRequest.cc"
 #include "librbd/AsyncObjectThrottle.cc"
+#include "librbd/operation/Request.cc"
 
 template class librbd::AsyncRequest<librbd::MockImageCtx>;
 template class librbd::AsyncObjectThrottle<librbd::MockImageCtx>;
+template class librbd::operation::Request<librbd::MockImageCtx>;
 
 using ::testing::_;
 using ::testing::DoDefault;
+using ::testing::Return;
+using ::testing::WithArg;
 
 TestMockFixture::TestRadosClientPtr TestMockFixture::s_test_rados_client;
 ::testing::NiceMock<librados::MockTestMemRadosClient> *
@@ -66,3 +70,52 @@ librados::MockTestMemIoCtxImpl &TestMockFixture::get_mock_io_ctx(
     reinterpret_cast<librados::MockTestMemIoCtxImpl **>(&ioctx);
   return **mock;
 }
+
+void TestMockFixture::initialize_features(librbd::ImageCtx *ictx,
+                                          librbd::MockImageCtx &mock_image_ctx,
+                                          librbd::MockExclusiveLock &mock_exclusive_lock,
+                                          librbd::MockJournal &mock_journal,
+                                          librbd::MockObjectMap &mock_object_map) {
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  }
+  if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
+    mock_image_ctx.journal = &mock_journal;
+  }
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+    mock_image_ctx.object_map = &mock_object_map;
+  }
+}
+
+void TestMockFixture::expect_is_journal_replaying(librbd::MockJournal &mock_journal) {
+  EXPECT_CALL(mock_journal, is_journal_replaying()).WillOnce(Return(false));
+}
+
+void TestMockFixture::expect_is_journal_ready(librbd::MockJournal &mock_journal) {
+  EXPECT_CALL(mock_journal, is_journal_ready()).WillOnce(Return(true));
+}
+
+void TestMockFixture::expect_allocate_op_tid(librbd::MockImageCtx &mock_image_ctx) {
+  if (mock_image_ctx.journal != nullptr) {
+    EXPECT_CALL(*mock_image_ctx.journal, allocate_op_tid())
+                  .WillOnce(Return(1U));
+  }
+}
+
+void TestMockFixture::expect_append_op_event(librbd::MockImageCtx &mock_image_ctx, int r) {
+  if (mock_image_ctx.journal != nullptr) {
+    expect_is_journal_replaying(*mock_image_ctx.journal);
+    expect_allocate_op_tid(mock_image_ctx);
+    EXPECT_CALL(*mock_image_ctx.journal, append_op_event_mock(_, _, _))
+                  .WillOnce(WithArg<2>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
+  }
+}
+
+void TestMockFixture::expect_commit_op_event(librbd::MockImageCtx &mock_image_ctx, int r) {
+  if (mock_image_ctx.journal != nullptr) {
+    expect_is_journal_replaying(*mock_image_ctx.journal);
+    expect_is_journal_ready(*mock_image_ctx.journal);
+    EXPECT_CALL(*mock_image_ctx.journal, commit_op_event(1U, r));
+  }
+}
+

@@ -21,7 +21,7 @@
 #include <set>
 
 #include "include/assert.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/atomic.h"
 #include "common/cmdparse.h"
 #include "include/Spinlock.h"
@@ -38,6 +38,7 @@ class CephContextObs;
 class CryptoHandler;
 
 namespace ceph {
+  class PluginRegistry;
   class HeartbeatMap;
   namespace log {
     class Log;
@@ -55,7 +56,7 @@ using ceph::bufferlist;
  */
 class CephContext {
 public:
-  CephContext(uint32_t module_type_);
+  CephContext(uint32_t module_type_, int init_flags_ = 0);
 
   // ref count!
 private:
@@ -66,10 +67,7 @@ public:
     nref.inc();
     return this;
   }
-  void put() {
-    if (nref.dec() == 0)
-      delete this;
-  }
+  void put();
 
   md_config_t *_conf;
   ceph::log::Log *_log;
@@ -85,6 +83,8 @@ public:
 
   /* Get the module type (client, mon, osd, mds, etc.) */
   uint32_t get_module_type() const;
+
+  int get_init_flags() const;
 
   /* Get the PerfCountersCollection of this CephContext */
   PerfCountersCollection *get_perfcounters_collection();
@@ -149,6 +149,10 @@ public:
   bool check_experimental_feature_enabled(const std::string& feature,
 					  std::ostream *message);
 
+  PluginRegistry *get_plugin_registry() {
+    return _plugin_registry;
+  }
+
 private:
   struct SingletonWrapper : boost::noncopyable {
     virtual ~SingletonWrapper() {}
@@ -172,6 +176,8 @@ private:
   void join_service_thread();
 
   uint32_t _module_type;
+
+  int _init_flags;
 
   bool _crypto_inited;
 
@@ -208,6 +214,8 @@ private:
   CephContextObs *_cct_obs;
   ceph_spinlock_t _feature_lock;
   std::set<std::string> _experimental_features;
+
+  PluginRegistry *_plugin_registry;
 
   md_config_obs_t *_lockdep_obs;
 

@@ -14,12 +14,8 @@
 #ifndef CEPH_UTIL_H
 #define CEPH_UTIL_H
 
-// is buf~len completely zero (in 8-byte chunks)
-
 #include "common/Formatter.h"
 #include "include/types.h"
-
-bool buf_is_zero(const char *buf, size_t len);
 
 int64_t unit_to_bytesize(string val, ostream *pss);
 

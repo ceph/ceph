@@ -51,6 +51,23 @@ int TestMemIoCtxImpl::aio_remove(const std::string& oid, AioCompletionImpl *c) {
   return 0;
 }
 
+int TestMemIoCtxImpl::append(const std::string& oid, const bufferlist &bl,
+                             const SnapContext &snapc) {
+  if (get_snap_read() != CEPH_NOSNAP) {
+    return -EROFS;
+  }
+
+  TestMemRadosClient::SharedFile file;
+  {
+    RWLock::WLocker l(m_pool->file_lock);
+    file = get_file(oid, true, snapc);
+  }
+
+  RWLock::WLocker l(file->lock);
+  file->data.append(bl);
+  return 0;
+}
+
 int TestMemIoCtxImpl::assert_exists(const std::string &oid) {
   RWLock::RLocker l(m_pool->file_lock);
   TestMemRadosClient::SharedFile file = get_file(oid, false,

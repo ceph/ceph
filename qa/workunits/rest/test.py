@@ -369,8 +369,6 @@ if __name__ == '__main__':
     expect('pg/repair?pgid=0.0', 'PUT', 200, '')
     expect('pg/scrub?pgid=0.0', 'PUT', 200, '')
 
-    expect('pg/send_pg_creates', 'PUT', 200, '')
-
     expect('pg/set_full_ratio?ratio=0.90', 'PUT', 200, '')
     r = expect('pg/dump', 'GET', 200, 'json', JSONHDR)
     assert(float(r.myjson['output']['full_ratio']) == 0.90)

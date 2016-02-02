@@ -195,7 +195,8 @@ void Bencher::run_bench()
       default: {
 	assert(0);
       }
-    }
+    } 
+    ops++;
   }
   drain_ops();
 }

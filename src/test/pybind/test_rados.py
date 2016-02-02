@@ -1,3 +1,4 @@
+from __future__ import print_function
 from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, requires, opt,
@@ -6,22 +7,16 @@ import time
 import threading
 import json
 import errno
+import sys
+
+# Are we running Python 2.x
+_python2 = sys.hexversion < 0x03000000
 
 def test_rados_init_error():
     assert_raises(Error, Rados, conffile='', rados_id='admin',
                   name='client.admin')
     assert_raises(Error, Rados, conffile='', name='invalid')
     assert_raises(Error, Rados, conffile='', name='bad.invalid')
-
-def test_rados_init_type_error():
-    assert_raises(TypeError, Rados, rados_id=u'admin')
-    assert_raises(TypeError, Rados, rados_id=u'')
-    assert_raises(TypeError, Rados, name=u'client.admin')
-    assert_raises(TypeError, Rados, name=u'')
-    assert_raises(TypeError, Rados, conffile=u'blah')
-    assert_raises(TypeError, Rados, conffile=u'')
-    assert_raises(TypeError, Rados, clusternaem=u'blah')
-    assert_raises(TypeError, Rados, clustername=u'')
 
 def test_rados_init():
     with Rados(conffile='', rados_id='admin'):
@@ -37,6 +32,11 @@ def test_ioctx_context_manager():
     with Rados(conffile='', rados_id='admin') as conn:
         with conn.open_ioctx('rbd') as ioctx:
             pass
+
+def test_parse_argv_empty_str():
+    args = ['']
+    r = Rados()
+    eq(args, r.conf_parse_argv(args))
 
 class TestRequires(object):
     @requires(('foo', str), ('bar', int), ('baz', int))
@@ -91,9 +91,9 @@ class TestRadosStateError(object):
         assert_raises(RadosStateError, rados.list_pools)
         assert_raises(RadosStateError, rados.get_fsid)
         assert_raises(RadosStateError, rados.open_ioctx, 'foo')
-        assert_raises(RadosStateError, rados.mon_command, '', '')
-        assert_raises(RadosStateError, rados.osd_command, 0, '', '')
-        assert_raises(RadosStateError, rados.pg_command, '', '', '')
+        assert_raises(RadosStateError, rados.mon_command, '', b'')
+        assert_raises(RadosStateError, rados.osd_command, 0, '', b'')
+        assert_raises(RadosStateError, rados.pg_command, '', '', b'')
         assert_raises(RadosStateError, rados.wait_for_latest_osdmap)
         assert_raises(RadosStateError, rados.blacklist_add, '127.0.0.1/123', 0)
 
@@ -135,6 +135,28 @@ class TestRados(object):
     def test_create(self):
         self.rados.create_pool('foo')
         self.rados.delete_pool('foo')
+
+    def test_create_utf8(self):
+        if _python2:
+            # Use encoded bytestring
+            poolname = b"\351\273\204"
+        else:
+            poolname = "\u9ec4"
+        self.rados.create_pool(poolname)
+        assert self.rados.pool_exists(u"\u9ec4")
+        self.rados.delete_pool(poolname)
+
+    def test_pool_lookup_utf8(self):
+        if _python2:
+            poolname = u'\u9ec4'
+        else:
+            poolname = '\u9ec4'
+        self.rados.create_pool(poolname)
+        try:
+            poolid = self.rados.pool_lookup(poolname)
+            eq(poolname, self.rados.pool_reverse_lookup(poolid))
+        finally:
+            self.rados.delete_pool(poolname)
 
     def test_create_auid(self):
         self.rados.create_pool('foo', 100)
@@ -179,12 +201,12 @@ class TestRados(object):
                 tier_pool_id = self.rados.pool_lookup('foo-cache')
 
                 cmd = {"prefix":"osd tier add", "pool":"foo", "tierpool":"foo-cache", "force_nonempty":""}
-                ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
+                ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
                 eq(ret, 0)
 
                 try:
                     cmd = {"prefix":"osd tier cache-mode", "pool":"foo-cache", "tierpool":"foo-cache", "mode":"readonly"}
-                    ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
+                    ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
                     eq(ret, 0)
 
                     eq(self.rados.wait_for_latest_osdmap(), 0)
@@ -193,7 +215,7 @@ class TestRados(object):
                     eq(pool_id, self.rados.get_pool_base_tier(tier_pool_id))
                 finally:
                     cmd = {"prefix":"osd tier remove", "pool":"foo", "tierpool":"foo-cache"}
-                    ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
+                    ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
                     eq(ret, 0)
             finally:
                 self.rados.delete_pool('foo-cache')
@@ -218,7 +240,7 @@ class TestIoctx(object):
 
     def tearDown(self):
         cmd = {"prefix":"osd unset", "key":"noup"}
-        self.rados.mon_command(json.dumps(cmd), '')
+        self.rados.mon_command(json.dumps(cmd), b'')
         self.ioctx.close()
         self.rados.delete_pool('test_pool')
         self.rados.shutdown()
@@ -228,29 +250,29 @@ class TestIoctx(object):
         self.ioctx.change_auid(ADMIN_AUID)
 
     def test_write(self):
-        self.ioctx.write('abc', 'abc')
-        eq(self.ioctx.read('abc'), 'abc')
+        self.ioctx.write('abc', b'abc')
+        eq(self.ioctx.read('abc'), b'abc')
 
     def test_write_full(self):
-        self.ioctx.write('abc', 'abc')
-        eq(self.ioctx.read('abc'), 'abc')
-        self.ioctx.write_full('abc', 'd')
-        eq(self.ioctx.read('abc'), 'd')
+        self.ioctx.write('abc', b'abc')
+        eq(self.ioctx.read('abc'), b'abc')
+        self.ioctx.write_full('abc', b'd')
+        eq(self.ioctx.read('abc'), b'd')
 
     def test_append(self):
-        self.ioctx.write('abc', 'a')
-        self.ioctx.append('abc', 'b')
-        self.ioctx.append('abc', 'c')
-        eq(self.ioctx.read('abc'), 'abc')
+        self.ioctx.write('abc', b'a')
+        self.ioctx.append('abc', b'b')
+        self.ioctx.append('abc', b'c')
+        eq(self.ioctx.read('abc'), b'abc')
 
     def test_write_zeros(self):
-        self.ioctx.write('abc', 'a\0b\0c')
-        eq(self.ioctx.read('abc'), 'a\0b\0c')
+        self.ioctx.write('abc', b'a\0b\0c')
+        eq(self.ioctx.read('abc'), b'a\0b\0c')
 
     def test_trunc(self):
-        self.ioctx.write('abc', 'abc')
+        self.ioctx.write('abc', b'abc')
         self.ioctx.trunc('abc', 2)
-        eq(self.ioctx.read('abc'), 'ab')
+        eq(self.ioctx.read('abc'), b'ab')
         size = self.ioctx.stat('abc')[0]
         eq(size, 2)
 
@@ -258,24 +280,24 @@ class TestIoctx(object):
         eq(list(self.ioctx.list_objects()), [])
 
     def test_list_objects(self):
-        self.ioctx.write('a', '')
-        self.ioctx.write('b', 'foo')
-        self.ioctx.write_full('c', 'bar')
-        self.ioctx.append('d', 'jazz')
+        self.ioctx.write('a', b'')
+        self.ioctx.write('b', b'foo')
+        self.ioctx.write_full('c', b'bar')
+        self.ioctx.append('d', b'jazz')
         object_names = [obj.key for obj in self.ioctx.list_objects()]
         eq(sorted(object_names), ['a', 'b', 'c', 'd'])
 
     def test_list_ns_objects(self):
-        self.ioctx.write('a', '')
-        self.ioctx.write('b', 'foo')
-        self.ioctx.write_full('c', 'bar')
-        self.ioctx.append('d', 'jazz')
+        self.ioctx.write('a', b'')
+        self.ioctx.write('b', b'foo')
+        self.ioctx.write_full('c', b'bar')
+        self.ioctx.append('d', b'jazz')
         self.ioctx.set_namespace("ns1")
-        self.ioctx.write('ns1-a', '')
-        self.ioctx.write('ns1-b', 'foo')
-        self.ioctx.write_full('ns1-c', 'bar')
-        self.ioctx.append('ns1-d', 'jazz')
-        self.ioctx.append('d', 'jazz')
+        self.ioctx.write('ns1-a', b'')
+        self.ioctx.write('ns1-b', b'foo')
+        self.ioctx.write_full('ns1-c', b'bar')
+        self.ioctx.append('ns1-d', b'jazz')
+        self.ioctx.append('d', b'jazz')
         self.ioctx.set_namespace(LIBRADOS_ALL_NSPACES)
         object_names = [(obj.nspace, obj.key) for obj in self.ioctx.list_objects()]
         eq(sorted(object_names), [('', 'a'), ('','b'), ('','c'), ('','d'),\
@@ -283,9 +305,9 @@ class TestIoctx(object):
                 ('ns1', 'ns1-c'), ('ns1', 'ns1-d')])
 
     def test_xattrs(self):
-        xattrs = dict(a='1', b='2', c='3', d='a\0b', e='\0')
-        self.ioctx.write('abc', '')
-        for key, value in xattrs.iteritems():
+        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0')
+        self.ioctx.write('abc', b'')
+        for key, value in xattrs.items():
             self.ioctx.set_xattr('abc', key, value)
             eq(self.ioctx.get_xattr('abc', key), value)
         stored_xattrs = {}
@@ -294,10 +316,10 @@ class TestIoctx(object):
         eq(stored_xattrs, xattrs)
 
     def test_obj_xattrs(self):
-        xattrs = dict(a='1', b='2', c='3', d='a\0b', e='\0')
-        self.ioctx.write('abc', '')
+        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0')
+        self.ioctx.write('abc', b'')
         obj = list(self.ioctx.list_objects())[0]
-        for key, value in xattrs.iteritems():
+        for key, value in xattrs.items():
             obj.set_xattr(key, value)
             eq(obj.get_xattr(key), value)
         stored_xattrs = {}
@@ -337,9 +359,18 @@ class TestIoctx(object):
         self.ioctx.remove_snap('foo')
         eq(list(self.ioctx.list_snaps()), [])
 
+    def test_snap_rollback(self):
+        self.ioctx.write("insnap", b"contents1")
+        self.ioctx.create_snap("snap1")
+        self.ioctx.remove_object("insnap")
+        self.ioctx.snap_rollback("insnap", "snap1")
+        eq(self.ioctx.read("insnap"), b"contents1")
+        self.ioctx.remove_snap("snap1")
+        self.ioctx.remove_object("insnap")
+
     def test_set_omap(self):
         keys = ("1", "2", "3", "4")
-        values = ("aaa", "bbb", "ccc", "\x04\x04\x04\x04")
+        values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04")
         with WriteOpCtx(self.ioctx) as write_op:
             self.ioctx.set_omap(write_op, keys, values)
             self.ioctx.operate_write_op(write_op, "hw")
@@ -347,22 +378,22 @@ class TestIoctx(object):
             iter, ret = self.ioctx.get_omap_vals(read_op, "", "", 4)
             self.ioctx.operate_read_op(read_op, "hw")
             iter.next()
-            eq(list(iter), [("2", "bbb"), ("3", "ccc"), ("4", "\x04\x04\x04\x04")])
+            eq(list(iter), [("2", b"bbb"), ("3", b"ccc"), ("4", b"\x04\x04\x04\x04")])
 
     def test_get_omap_vals_by_keys(self):
         keys = ("1", "2", "3", "4")
-        values = ("aaa", "bbb", "ccc", "\x04\x04\x04\x04")
+        values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04")
         with WriteOpCtx(self.ioctx) as write_op:
             self.ioctx.set_omap(write_op, keys, values)
             self.ioctx.operate_write_op(write_op, "hw")
         with ReadOpCtx(self.ioctx) as read_op:
             iter, ret = self.ioctx.get_omap_vals_by_keys(read_op,("3","4",))
             self.ioctx.operate_read_op(read_op, "hw")
-            eq(list(iter), [("3", "ccc"), ("4", "\x04\x04\x04\x04")])
+            eq(list(iter), [("3", b"ccc"), ("4", b"\x04\x04\x04\x04")])
 
     def test_get_omap_keys(self):
         keys = ("1", "2", "3")
-        values = ("aaa", "bbb", "ccc")
+        values = (b"aaa", b"bbb", b"ccc")
         with WriteOpCtx(self.ioctx) as write_op:
             self.ioctx.set_omap(write_op, keys, values)
             self.ioctx.operate_write_op(write_op, "hw")
@@ -373,7 +404,7 @@ class TestIoctx(object):
 
     def test_clear_omap(self):
         keys = ("1", "2", "3")
-        values = ("aaa", "bbb", "ccc")
+        values = (b"aaa", b"bbb", b"ccc")
         with WriteOpCtx(self.ioctx) as write_op:
             self.ioctx.set_omap(write_op, keys, values)
             self.ioctx.operate_write_op(write_op, "hw")
@@ -387,17 +418,17 @@ class TestIoctx(object):
 
     def test_locator(self):
         self.ioctx.set_locator_key("bar")
-        self.ioctx.write('foo', 'contents1')
+        self.ioctx.write('foo', b'contents1')
         objects = [i for i in self.ioctx.list_objects()]
         eq(len(objects), 1)
         eq(self.ioctx.get_locator_key(), "bar")
         self.ioctx.set_locator_key("")
         objects[0].seek(0)
-        objects[0].write("contents2")
+        objects[0].write(b"contents2")
         eq(self.ioctx.get_locator_key(), "")
         self.ioctx.set_locator_key("bar")
         contents = self.ioctx.read("foo")
-        eq(contents, "contents2")
+        eq(contents, b"contents2")
         eq(self.ioctx.get_locator_key(), "bar")
         objects[0].remove()
         objects = [i for i in self.ioctx.list_objects()]
@@ -412,7 +443,7 @@ class TestIoctx(object):
                 count[0] += 1
                 lock.notify()
             return 0
-        comp = self.ioctx.aio_write("foo", "bar", 0, cb, cb)
+        comp = self.ioctx.aio_write("foo", b"bar", 0, cb, cb)
         comp.wait_for_complete()
         comp.wait_for_safe()
         with lock:
@@ -420,7 +451,7 @@ class TestIoctx(object):
                 lock.wait()
         eq(comp.get_return_value(), 0)
         contents = self.ioctx.read("foo")
-        eq(contents, "bar")
+        eq(contents, b"bar")
         [i.remove() for i in self.ioctx.list_objects()]
 
     def test_aio_append(self):
@@ -431,11 +462,11 @@ class TestIoctx(object):
                 count[0] += 1
                 lock.notify()
             return 0
-        comp = self.ioctx.aio_write("foo", "bar", 0, cb, cb)
-        comp2 = self.ioctx.aio_append("foo", "baz", cb, cb)
+        comp = self.ioctx.aio_write("foo", b"bar", 0, cb, cb)
+        comp2 = self.ioctx.aio_append("foo", b"baz", cb, cb)
         comp.wait_for_complete()
         contents = self.ioctx.read("foo")
-        eq(contents, "barbaz")
+        eq(contents, b"barbaz")
         with lock:
             while count[0] < 4:
                 lock.wait()
@@ -451,8 +482,8 @@ class TestIoctx(object):
                 count[0] += 1
                 lock.notify()
             return 0
-        self.ioctx.aio_write("foo", "barbaz", 0, cb, cb)
-        comp = self.ioctx.aio_write_full("foo", "bar", cb, cb)
+        self.ioctx.aio_write("foo", b"barbaz", 0, cb, cb)
+        comp = self.ioctx.aio_write_full("foo", b"bar", cb, cb)
         comp.wait_for_complete()
         comp.wait_for_safe()
         with lock:
@@ -460,7 +491,7 @@ class TestIoctx(object):
                 lock.wait()
         eq(comp.get_return_value(), 0)
         contents = self.ioctx.read("foo")
-        eq(contents, "bar")
+        eq(contents, b"bar")
         [i.remove() for i in self.ioctx.list_objects()]
 
     def _take_down_acting_set(self, pool, objectname):
@@ -472,14 +503,14 @@ class TestIoctx(object):
             "object":objectname,
             "format":"json",
         }
-        r, jsonout, _ = self.rados.mon_command(json.dumps(cmd), '')
-        objmap = json.loads(jsonout)
+        r, jsonout, _ = self.rados.mon_command(json.dumps(cmd), b'')
+        objmap = json.loads(jsonout.decode("utf-8"))
         acting_set = objmap['acting']
         cmd = {"prefix":"osd set", "key":"noup"}
-        r, _, _ = self.rados.mon_command(json.dumps(cmd), '')
+        r, _, _ = self.rados.mon_command(json.dumps(cmd), b'')
         eq(r, 0)
         cmd = {"prefix":"osd down", "ids":[str(i) for i in acting_set]}
-        r, _, _ = self.rados.mon_command(json.dumps(cmd), '')
+        r, _, _ = self.rados.mon_command(json.dumps(cmd), b'')
         eq(r, 0)
 
         # wait for OSDs to acknowledge the down
@@ -487,7 +518,7 @@ class TestIoctx(object):
 
     def _let_osds_back_up(self):
         cmd = {"prefix":"osd unset", "key":"noup"}
-        r, _, _ = self.rados.mon_command(json.dumps(cmd), '')
+        r, _, _ = self.rados.mon_command(json.dumps(cmd), b'')
         eq(r, 0)
 
     def test_aio_read(self):
@@ -498,7 +529,7 @@ class TestIoctx(object):
             with lock:
                 retval[0] = buf
                 lock.notify()
-        payload = "bar\000frob"
+        payload = b"bar\000frob"
         self.ioctx.write("foo", payload)
 
         # test1: use wait_for_complete() and wait for cb by
@@ -561,6 +592,14 @@ class TestIoctx(object):
         assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker1")
         assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker2")
 
+    def test_execute(self):
+        self.ioctx.write("foo", "") # ensure object exists
+
+        ret, buf = self.ioctx.execute("foo", "hello", "say_hello", "")
+        eq(buf, "Hello, world!")
+
+        ret, buf = self.ioctx.execute("foo", "hello", "say_hello", "nose")
+        eq(buf, "Hello, nose!")
 
 class TestObject(object):
 
@@ -570,7 +609,7 @@ class TestObject(object):
         self.rados.create_pool('test_pool')
         assert self.rados.pool_exists('test_pool')
         self.ioctx = self.rados.open_ioctx('test_pool')
-        self.ioctx.write('foo', 'bar')
+        self.ioctx.write('foo', b'bar')
         self.object = Object(self.ioctx, 'foo')
 
     def tearDown(self):
@@ -579,21 +618,21 @@ class TestObject(object):
         self.rados.shutdown()
 
     def test_read(self):
-        eq(self.object.read(3), 'bar')
-        eq(self.object.read(100), '')
+        eq(self.object.read(3), b'bar')
+        eq(self.object.read(100), b'')
 
     def test_seek(self):
-        self.object.write('blah')
+        self.object.write(b'blah')
         self.object.seek(0)
-        eq(self.object.read(4), 'blah')
+        eq(self.object.read(4), b'blah')
         self.object.seek(1)
-        eq(self.object.read(3), 'lah')
+        eq(self.object.read(3), b'lah')
 
     def test_write(self):
-        self.object.write('barbaz')
+        self.object.write(b'barbaz')
         self.object.seek(0)
-        eq(self.object.read(3), 'bar')
-        eq(self.object.read(3), 'baz')
+        eq(self.object.read(3), b'bar')
+        eq(self.object.read(3), b'baz')
 
 class TestCommand(object):
 
@@ -608,50 +647,50 @@ class TestCommand(object):
 
         # check for success and some plain output with epoch in it
         cmd = {"prefix":"mon dump"}
-        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
+        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
         eq(ret, 0)
         assert len(buf) > 0
-        assert('epoch' in buf)
+        assert(b'epoch' in buf)
 
         # JSON, and grab current epoch
         cmd['format'] = 'json'
-        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
+        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
         eq(ret, 0)
         assert len(buf) > 0
-        d = json.loads(buf)
+        d = json.loads(buf.decode("utf-8"))
         assert('epoch' in d)
         epoch = d['epoch']
 
         # assume epoch + 1000 does not exist; test for ENOENT
         cmd['epoch'] = epoch + 1000
-        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
+        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
         eq(ret, -errno.ENOENT)
         eq(len(buf), 0)
         del cmd['epoch']
 
         # send to specific target by name
         target = d['mons'][0]['name']
-        print target
-        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30,
+        print(target)
+        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30,
                                                 target=target)
         eq(ret, 0)
         assert len(buf) > 0
-        d = json.loads(buf)
+        d = json.loads(buf.decode("utf-8"))
         assert('epoch' in d)
 
         # and by rank
         target = d['mons'][0]['rank']
-        print target
-        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30,
+        print(target)
+        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30,
                                                 target=target)
         eq(ret, 0)
         assert len(buf) > 0
-        d = json.loads(buf)
+        d = json.loads(buf.decode("utf-8"))
         assert('epoch' in d)
 
     def test_osd_bench(self):
         cmd = dict(prefix='bench', size=4096, count=8192)
-        ret, buf, err = self.rados.osd_command(0, json.dumps(cmd), '',
+        ret, buf, err = self.rados.osd_command(0, json.dumps(cmd), b'',
                                                timeout=30)
         eq(ret, 0)
         assert len(err) > 0

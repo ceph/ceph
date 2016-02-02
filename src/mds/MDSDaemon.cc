@@ -171,28 +171,7 @@ bool MDSDaemon::asok_command(string command, cmdmap_t& cmdmap, string format,
   Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   bool handled = false;
   if (command == "status") {
-    const OSDMap *osdmap = objecter->get_osdmap_read();
-    const epoch_t osd_epoch = osdmap->get_epoch();
-    objecter->put_osdmap_read();
-
-    f->open_object_section("status");
-    f->dump_stream("cluster_fsid") << monc->get_fsid();
-    if (mds_rank) {
-      f->dump_unsigned("whoami", mds_rank->get_nodeid());
-    } else {
-      f->dump_unsigned("whoami", MDS_RANK_NONE);
-    }
-
-    f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
-        monc->get_global_id()))));
-    f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
-    f->dump_unsigned("osdmap_epoch", osd_epoch);
-    if (mds_rank) {
-      f->dump_unsigned("osdmap_epoch_barrier", mds_rank->get_osd_epoch_barrier());
-    } else {
-      f->dump_unsigned("osdmap_epoch_barrier", 0);
-    }
-    f->close_section(); // status
+    dump_status(f);
     handled = true;
   } else {
     if (mds_rank == NULL) {
@@ -211,10 +190,43 @@ bool MDSDaemon::asok_command(string command, cmdmap_t& cmdmap, string format,
   return handled;
 }
 
+void MDSDaemon::dump_status(Formatter *f)
+{
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  const epoch_t osd_epoch = osdmap->get_epoch();
+  objecter->put_osdmap_read();
+
+  f->open_object_section("status");
+  f->dump_stream("cluster_fsid") << monc->get_fsid();
+  if (mds_rank) {
+    f->dump_unsigned("whoami", mds_rank->get_nodeid());
+  } else {
+    f->dump_unsigned("whoami", MDS_RANK_NONE);
+  }
+
+  f->dump_string("want_state", ceph_mds_state_name(beacon.get_want_state()));
+  f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
+	    monc->get_global_id()))));
+  if (mds_rank) {
+    Mutex::Locker l(mds_lock);
+    mds_rank->dump_status(f);
+  }
+
+  f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
+  f->dump_unsigned("osdmap_epoch", osd_epoch);
+  if (mds_rank) {
+    f->dump_unsigned("osdmap_epoch_barrier", mds_rank->get_osd_epoch_barrier());
+  } else {
+    f->dump_unsigned("osdmap_epoch_barrier", 0);
+  }
+  f->close_section(); // status
+}
+
 void MDSDaemon::set_up_admin_socket()
 {
   int r;
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  assert(asok_hook == nullptr);
   asok_hook = new MDSSocketHook(this);
   r = admin_socket->register_command("status", "status", asok_hook,
 				     "high-level status of MDS");
@@ -236,6 +248,12 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "scrub an inode and output results");
   assert(r == 0);
+  r = admin_socket->register_command("tag path",
+                                     "tag path name=path,type=CephString"
+                                     " name=tag,type=CephString",
+                                     asok_hook,
+                                     "Apply scrub tag recursively");
+   assert(r == 0);
   r = admin_socket->register_command("flush_path",
                                      "flush_path name=path,type=CephString",
                                      asok_hook,
@@ -328,11 +346,16 @@ const char** MDSDaemon::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "mds_op_complaint_time", "mds_op_log_threshold",
     "mds_op_history_size", "mds_op_history_duration",
+    "mds_enable_op_tracker",
+    "mds_log_pause",
     // clog & admin clog
     "clog_to_monitors",
     "clog_to_syslog",
     "clog_to_syslog_facility",
     "clog_to_syslog_level",
+    // StrayManager
+    "mds_max_purge_ops",
+    "mds_max_purge_ops_per_pg",
     NULL
   };
   return KEYS;
@@ -341,7 +364,12 @@ const char** MDSDaemon::get_tracked_conf_keys() const
 void MDSDaemon::handle_conf_change(const struct md_config_t *conf,
 			     const std::set <std::string> &changed)
 {
-  Mutex::Locker l(mds_lock);
+  // We may be called within mds_lock (via `tell`) or outwith the
+  // lock (via admin socket `config set`), so handle either case.
+  const bool initially_locked = mds_lock.is_locked_by_me();
+  if (!initially_locked) {
+    mds_lock.Lock();
+  }
 
   if (changed.count("mds_op_complaint_time") ||
       changed.count("mds_op_log_threshold")) {
@@ -357,6 +385,11 @@ void MDSDaemon::handle_conf_change(const struct md_config_t *conf,
                                                conf->mds_op_history_duration);
     }
   }
+  if (changed.count("mds_enable_op_tracker")) {
+    if (mds_rank) {
+      mds_rank->op_tracker.set_tracking(conf->mds_enable_op_tracker);
+    }
+  }
   if (changed.count("clog_to_monitors") ||
       changed.count("clog_to_syslog") ||
       changed.count("clog_to_syslog_level") ||
@@ -364,6 +397,20 @@ void MDSDaemon::handle_conf_change(const struct md_config_t *conf,
     if (mds_rank) {
       mds_rank->update_log_config();
     }
+  }
+
+  if (!g_conf->mds_log_pause && changed.count("mds_log_pause")) {
+    if (mds_rank) {
+      mds_rank->mdlog->kick_submitter();
+    }
+  }
+
+  if (mds_rank) {
+    mds_rank->mdcache->handle_conf_change(conf, changed);
+  }
+
+  if (!initially_locked) {
+    mds_lock.Unlock();
   }
 }
 
@@ -449,6 +496,10 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
     sleep(10);
   }
 
+  // Set up admin socket before taking mds_lock, so that ordering
+  // is consistent (later we take mds_lock within asok callbacks)
+  set_up_admin_socket();
+  g_conf->add_observer(this);
   mds_lock.Lock();
   if (beacon.get_want_state() == MDSMap::STATE_DNE) {
     suicide();  // we could do something more graceful here
@@ -496,10 +547,7 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
   
   // schedule tick
   reset_tick();
-
-  set_up_admin_socket();
   g_conf->add_observer(this);
-
   mds_lock.Unlock();
 
   return 0;
@@ -559,6 +607,21 @@ void MDSDaemon::handle_command(MCommand *m)
     r = _handle_command(cmdmap, m->get_data(), &outbl, &outs, &run_after);
   }
 
+  // If someone is using a closed session for sending commands (e.g.
+  // the ceph CLI) then we should feel free to clean up this connection
+  // as soon as we've sent them a response.
+  const bool live_session = mds_rank &&
+    mds_rank->sessionmap.get_session(session->info.inst.name) != nullptr
+    && session->get_state_seq() > 0;
+
+  if (!live_session) {
+    // This session only existed to issue commands, so terminate it
+    // as soon as we can.
+    assert(session->is_closed());
+    session->connection->mark_disposable();
+    session->put();
+  }
+
   MCommandReply *reply = new MCommandReply(r, outs);
   reply->set_tid(m->get_tid());
   reply->set_data(outbl);
@@ -600,6 +663,12 @@ COMMAND("session kill " \
 COMMAND("cpu_profiler " \
 	"name=arg,type=CephChoices,strings=status|flush",
 	"run cpu profiling on daemon", "mds", "rw", "cli,rest")
+COMMAND("session ls " \
+	"name=filters,type=CephString,n=N,req=false",
+	"List client sessions", "mds", "r", "cli,rest")
+COMMAND("session evict " \
+	"name=filters,type=CephString,n=N,req=false",
+	"Evict client session(s)", "mds", "rw", "cli,rest")
 COMMAND("heap " \
 	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	"show heap usage info (available only if compiled with tcmalloc)", \
@@ -737,6 +806,15 @@ int MDSDaemon::_handle_command(
     get_str_vec(arg, argvec);
     cpu_profiler_handle_command(argvec, ds);
   } else {
+    // Give MDSRank a shot at the command
+    if (mds_rank) {
+      bool handled = mds_rank->handle_command(cmdmap, inbl, &r, &ds, &ss);
+      if (handled) {
+        goto out;
+      }
+    }
+
+    // Neither MDSDaemon nor MDSRank know this command
     std::ostringstream ss;
     ss << "unrecognized command! " << prefix;
     r = -EINVAL;
@@ -966,7 +1044,7 @@ void MDSDaemon::_handle_mds_map(MDSMap *oldmap)
 void MDSDaemon::handle_signal(int signum)
 {
   assert(signum == SIGINT || signum == SIGTERM);
-  derr << "*** got signal " << sys_siglist[signum] << " ***" << dendl;
+  derr << "*** got signal " << sig_str(signum) << " ***" << dendl;
   {
     Mutex::Locker l(mds_lock);
     if (stopping) {
@@ -1260,6 +1338,7 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
     // request to open a session (initial state of Session is `closed`)
     if (!s) {
       s = new Session;
+      s->info.auth_name = name;
       s->info.inst.addr = con->get_peer_addr();
       s->info.inst.name = n;
       dout(10) << " new session " << s << " for " << s->info.inst << " con " << con << dendl;
@@ -1286,8 +1365,8 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
     }
 
     if (caps_info.allow_all) {
-        // Flag for auth providers that don't provide cap strings
-        s->auth_caps.set_allow_all();
+      // Flag for auth providers that don't provide cap strings
+      s->auth_caps.set_allow_all();
     }
 
     bufferlist::iterator p = caps_info.caps.begin();
@@ -1297,9 +1376,11 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
 
       dout(10) << __func__ << ": parsing auth_cap_str='" << auth_cap_str << "'" << dendl;
       std::ostringstream errstr;
-      if (!s->auth_caps.parse(auth_cap_str, &errstr)) {
+      if (!s->auth_caps.parse(g_ceph_context, auth_cap_str, &errstr)) {
         dout(1) << __func__ << ": auth cap parse error: " << errstr.str()
-          << " parsing '" << auth_cap_str << "'" << dendl;
+		<< " parsing '" << auth_cap_str << "'" << dendl;
+	clog->warn() << name << " mds cap '" << auth_cap_str
+		     << "' does not parse: " << errstr.str() << "\n";
       }
     } catch (buffer::error& e) {
       // Assume legacy auth, defaults to:

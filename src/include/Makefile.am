@@ -9,6 +9,7 @@ rados_include_DATA = \
 	$(srcdir)/include/rados/rados_types.hpp \
 	$(srcdir)/include/rados/librados.hpp \
 	$(srcdir)/include/buffer.h \
+	$(srcdir)/include/buffer_fwd.h \
 	$(srcdir)/include/page.h \
 	$(srcdir)/include/crc32c.h \
 	$(srcdir)/include/memory.h
@@ -51,7 +52,9 @@ noinst_HEADERS += \
 	include/atomic.h \
 	include/bitmapper.h \
 	include/blobhash.h \
+	include/btree_interval_set.h \
 	include/buffer.h \
+	include/buffer_fwd.h \
 	include/byteorder.h \
 	include/cephfs/libcephfs.h \
 	include/ceph_features.h \
@@ -61,9 +64,13 @@ noinst_HEADERS += \
 	include/cmp.h \
 	include/color.h \
 	include/compat.h \
+	include/cpp-btree/btree.h \
+	include/cpp-btree/btree_container.h \
+	include/cpp-btree/btree_map.h \
 	include/sock_compat.h \
 	include/crc32c.h \
 	include/encoding.h \
+	include/encoding_btree.h \
 	include/err.h \
 	include/error.h \
 	include/filepath.h \
@@ -102,6 +109,7 @@ noinst_HEADERS += \
 	include/rados/page.h \
 	include/rados/crc32c.h \
 	include/rados/buffer.h \
+	include/rados/buffer_fwd.h \
 	include/radosstriper/libradosstriper.h \
 	include/radosstriper/libradosstriper.hpp \
 	include/rbd/features.h \
@@ -115,4 +123,5 @@ noinst_HEADERS += \
 	include/rados/memory.h \
 	include/unordered_set.h \
 	include/unordered_map.h \
-	include/timegm.h
+	include/timegm.h \
+	include/event_type.h

@@ -46,7 +46,7 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
  * to actually forking (via daemon(3)).  return 0 if we are going to proceed
  * with the fork, or -1 otherwise.
  */
-int global_init_prefork(CephContext *cct, int flags);
+int global_init_prefork(CephContext *cct);
 
 /*
  * perform all the steps that global_init_daemonize performs just after
@@ -57,7 +57,7 @@ void global_init_postfork_start(CephContext *cct);
 /*
  * close stderr, thus completing the postfork.
  */
-void global_init_postfork_finish(CephContext *cct, int flags);
+void global_init_postfork_finish(CephContext *cct);
 
 
 /*
@@ -67,7 +67,7 @@ void global_init_postfork_finish(CephContext *cct, int flags);
  * Note that this is equivalent to calling _prefork(), daemon(), and
  * _postfork.
  */
-void global_init_daemonize(CephContext *cct, int flags);
+void global_init_daemonize(CephContext *cct);
 
 /*
  * global_init_chdir changes the process directory.

@@ -42,7 +42,7 @@
 #define EVENT_NOOP        51
 
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/Context.h"
 #include "include/utime.h"
 

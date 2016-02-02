@@ -176,6 +176,8 @@ public:
   }
 
   static uint32_t _reverse_bits(uint32_t v) {
+    if (v == 0)
+      return v;
     // reverse bits
     // swap odd and even bits
     v = ((v >> 1) & 0x55555555) | ((v & 0x55555555) << 1);
@@ -255,6 +257,8 @@ public:
   const string &get_namespace() const {
     return nspace;
   }
+
+  bool parse(const string& s);
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -412,6 +416,8 @@ public:
   void set_shard(shard_id_t s) {
     shard_id = s;
   }
+
+  bool parse(const string& s);
 
   // maximum sorted value.
   static ghobject_t get_max() {

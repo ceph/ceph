@@ -209,31 +209,46 @@ public:
 
   // mon subscriptions
 private:
-  map<string,ceph_mon_subscribe_item> sub_have;  // my subs, and current versions
+  map<string,ceph_mon_subscribe_item> sub_sent; // my subs, and current versions
+  map<string,ceph_mon_subscribe_item> sub_new;  // unsent new subs
   utime_t sub_renew_sent, sub_renew_after;
 
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
 
   bool _sub_want(string what, version_t start, unsigned flags) {
-    if (sub_have.count(what) &&
-	sub_have[what].start == start &&
-	sub_have[what].flags == flags)
+    if ((sub_new.count(what) == 0 &&
+	 sub_sent.count(what) &&
+	 sub_sent[what].start == start &&
+	 sub_sent[what].flags == flags) ||
+	(sub_new.count(what) &&
+	 sub_new[what].start == start &&
+	 sub_new[what].flags == flags))
       return false;
-    sub_have[what].start = start;
-    sub_have[what].flags = flags;
+    sub_new[what].start = start;
+    sub_new[what].flags = flags;
     return true;
   }
   void _sub_got(string what, version_t got) {
-    if (sub_have.count(what)) {
-      if (sub_have[what].flags & CEPH_SUBSCRIBE_ONETIME)
-	sub_have.erase(what);
-      else
-	sub_have[what].start = got + 1;
+    if (sub_new.count(what)) {
+      if (sub_new[what].start <= got) {
+	if (sub_new[what].flags & CEPH_SUBSCRIBE_ONETIME)
+	  sub_new.erase(what);
+	else
+	  sub_new[what].start = got + 1;
+      }
+    } else if (sub_sent.count(what)) {
+      if (sub_sent[what].start <= got) {
+	if (sub_sent[what].flags & CEPH_SUBSCRIBE_ONETIME)
+	  sub_sent.erase(what);
+	else
+	  sub_sent[what].start = got + 1;
+      }
     }
   }
   void _sub_unwant(string what) {
-    sub_have.erase(what);
+    sub_sent.erase(what);
+    sub_new.erase(what);
   }
 
   // auth tickets
@@ -262,10 +277,18 @@ public:
    */
   bool sub_want_increment(string what, version_t start, unsigned flags) {
     Mutex::Locker l(monc_lock);
-    map<string,ceph_mon_subscribe_item>::iterator i =
-            sub_have.find(what);
-    if (i == sub_have.end() || i->second.start < start) {
-      ceph_mon_subscribe_item& item = sub_have[what];
+    map<string,ceph_mon_subscribe_item>::iterator i = sub_new.find(what);
+    if (i != sub_new.end()) {
+      if (i->second.start >= start)
+	return false;
+      i->second.start = start;
+      i->second.flags = flags;
+      return true;
+    }
+
+    i = sub_sent.find(what);
+    if (i == sub_sent.end() || i->second.start < start) {
+      ceph_mon_subscribe_item& item = sub_new[what];
       item.start = start;
       item.flags = flags;
       return true;

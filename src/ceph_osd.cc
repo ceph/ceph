@@ -71,8 +71,8 @@ void handle_osd_signal(int signum)
 void usage() 
 {
   cout << "usage: ceph-osd -i <osdid>\n"
-       << "  --osd-data=path   data directory\n"
-       << "  --osd-journal=path\n"
+       << "  --osd-data PATH data directory\n"
+       << "  --osd-journal PATH\n"
        << "                    journal file or block device\n"
        << "  --mkfs            create a [new] data directory\n"
        << "  --convert-filestore\n"
@@ -85,10 +85,11 @@ void usage()
        << "                    check whether a journal is allowed\n"
        << "  --check-needs-journal\n"
        << "                    check whether a journal is required\n"
-       << "  --debug_osd N     set debug level (e.g. 10)"
+       << "  --debug_osd <N>   set debug level (e.g. 10)"
+       << "  --get-device-fsid PATH\n"
+       << "                    get OSD fsid for the given block device\n"
        << std::endl;
   generic_server_usage();
-  cout.flush();
 }
 
 int preload_erasure_code()
@@ -130,9 +131,11 @@ int main(int argc, const char **argv)
   bool flushjournal = false;
   bool dump_journal = false;
   bool convertfilestore = false;
-  bool get_journal_fsid = false;
   bool get_osd_fsid = false;
   bool get_cluster_fsid = false;
+  bool get_journal_fsid = false;
+  bool get_device_fsid = false;
+  string device_path;
   std::string dump_pg_log;
 
   std::string val;
@@ -141,7 +144,6 @@ int main(int argc, const char **argv)
       break;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-      exit(0);
     } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
       mkfs = true;
     } else if (ceph_argparse_flag(args, i, "--mkjournal", (char*)NULL)) {
@@ -168,6 +170,9 @@ int main(int argc, const char **argv)
       get_osd_fsid = true;
     } else if (ceph_argparse_flag(args, i, "--get-journal-fsid", "--get-journal-uuid", (char*)NULL)) {
       get_journal_fsid = true;
+    } else if (ceph_argparse_witharg(args, i, &device_path,
+				     "--get-device-fsid", (char*)NULL)) {
+      get_device_fsid = true;
     } else {
       ++i;
     }
@@ -175,6 +180,22 @@ int main(int argc, const char **argv)
   if (!args.empty()) {
     derr << "unrecognized arg " << args[0] << dendl;
     usage();
+  }
+
+  if (get_journal_fsid) {
+    device_path = g_conf->osd_journal;
+    get_device_fsid = true;
+  }
+  if (get_device_fsid) {
+    uuid_d uuid;
+    int r = ObjectStore::probe_block_device_fsid(device_path, &uuid);
+    if (r < 0) {
+      cerr << "failed to get device fsid for " << device_path
+	   << ": " << cpp_strerror(r) << std::endl;
+      exit(1);
+    }
+    cout << uuid << std::endl;
+    return 0;
   }
 
   if (!dump_pg_log.empty()) {
@@ -217,8 +238,23 @@ int main(int argc, const char **argv)
   }
 
   // the store
+  string store_type = g_conf->osd_objectstore;
+  {
+    char fn[PATH_MAX];
+    snprintf(fn, sizeof(fn), "%s/type", g_conf->osd_data.c_str());
+    int fd = ::open(fn, O_RDONLY);
+    if (fd >= 0) {
+      bufferlist bl;
+      bl.read_fd(fd, 64);
+      if (bl.length()) {
+	store_type = string(bl.c_str(), bl.length() - 1);  // drop \n
+	dout(5) << "object store type is " << store_type << dendl;
+      }
+      ::close(fd);
+    }
+  }
   ObjectStore *store = ObjectStore::create(g_ceph_context,
-					   g_conf->osd_objectstore,
+					   store_type,
 					   g_conf->osd_data,
 					   g_conf->osd_journal);
   if (!store) {
@@ -365,14 +401,6 @@ int main(int argc, const char **argv)
     exit(0);
   }
   
-  if (get_journal_fsid) {
-    uuid_d fsid;
-    int r = store->peek_journal_fsid(&fsid);
-    if (r == 0)
-      cout << fsid << std::endl;
-    exit(r);
-  }
-
   string magic;
   uuid_d cluster_fsid, osd_fsid;
   int w;
@@ -535,7 +563,7 @@ int main(int argc, const char **argv)
     exit(1);
 
   // Set up crypto, daemonize, etc.
-  global_init_daemonize(g_ceph_context, 0);
+  global_init_daemonize(g_ceph_context);
   common_init_finish(g_ceph_context);
 
   TracepointProvider::initialize<osd_tracepoint_traits>(g_ceph_context);

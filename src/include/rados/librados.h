@@ -145,7 +145,7 @@ enum {
 typedef void *rados_t;
 
 /**
- * @tyepdef rados_config_t
+ * @typedef rados_config_t
  *
  * A handle for the ceph configuration context for the rados_t cluster
  * instance.  This can be used to share configuration context/state
@@ -188,6 +188,25 @@ typedef void *rados_ioctx_t;
  * rados_nobjects_list_close().
  */
 typedef void *rados_list_ctx_t;
+
+/**
+ * @typedef rados_object_list_cursor
+ *
+ * The cursor used with rados_enumerate_objects
+ * and accompanying methods.
+ */
+typedef void * rados_object_list_cursor;
+
+typedef struct rados_object_list_item {
+  size_t oid_length;
+  char *oid;
+
+  size_t nspace_length;
+  char *nspace;
+
+  size_t locator_length;
+  char *locator;
+} rados_object_list_item;
 
 /**
  * @typedef rados_snap_t
@@ -789,7 +808,7 @@ CEPH_RADOS_API int rados_pool_get_base_tier(rados_t cluster, int64_t pool,
 CEPH_RADOS_API int rados_pool_delete(rados_t cluster, const char *pool_name);
 
 /**
- * Attempt to change an io context's associated auid "owner."
+ * Attempt to change an io context's associated auid "owner"
  *
  * Requires that you have write permission on both the current and new
  * auid.
@@ -809,8 +828,33 @@ CEPH_RADOS_API int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
  */
 CEPH_RADOS_API int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
 
-CEPH_RADOS_API int rados_ioctx_pool_requires_alignment(rados_ioctx_t io);
-CEPH_RADOS_API uint64_t rados_ioctx_pool_required_alignment(rados_ioctx_t io);
+/* deprecated, use rados_ioctx_pool_requires_alignment2 instead */
+CEPH_RADOS_API int rados_ioctx_pool_requires_alignment(rados_ioctx_t io)
+  __attribute__((deprecated));
+
+/**
+ * Test whether the specified pool requires alignment or not.
+ *
+ * @param io pool to query
+ * @param requires 1 if alignment is supported, 0 if not. 
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_ioctx_pool_requires_alignment2(rados_ioctx_t io,
+  int *requires);
+
+/* deprecated, use rados_ioctx_pool_required_alignment2 instead */
+CEPH_RADOS_API uint64_t rados_ioctx_pool_required_alignment(rados_ioctx_t io)
+  __attribute__((deprecated));
+
+/**
+ * Get the alignment flavor of a pool
+ *
+ * @param io pool to query
+ * @param alignment where to store the alignment flavor
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_ioctx_pool_required_alignment2(rados_ioctx_t io,
+  uint64_t *alignment);
 
 /**
  * Get the pool id of the io context
@@ -930,6 +974,54 @@ CEPH_RADOS_API int rados_nobjects_list_next(rados_list_ctx_t ctx,
  * @param ctx the handle to close
  */
 CEPH_RADOS_API void rados_nobjects_list_close(rados_list_ctx_t ctx);
+
+CEPH_RADOS_API rados_object_list_cursor rados_object_list_begin(rados_ioctx_t io);
+CEPH_RADOS_API rados_object_list_cursor rados_object_list_end(rados_ioctx_t io);
+
+CEPH_RADOS_API int rados_object_list_is_end(rados_ioctx_t io,
+    rados_object_list_cursor cur);
+
+CEPH_RADOS_API void rados_object_list_cursor_free(rados_ioctx_t io,
+    rados_object_list_cursor cur);
+
+CEPH_RADOS_API int rados_object_list_cursor_cmp(rados_ioctx_t io,
+    rados_object_list_cursor lhs, rados_object_list_cursor rhs);
+
+/**
+ * @return the number of items set in the result array
+ */
+CEPH_RADOS_API int rados_object_list(rados_ioctx_t io,
+    const rados_object_list_cursor start,
+    const rados_object_list_cursor finish,
+    const size_t result_size,
+    rados_object_list_item *results,
+    rados_object_list_cursor *next);
+
+CEPH_RADOS_API void rados_object_list_free(
+    const size_t result_size,
+    rados_object_list_item *results);
+
+/**
+ * Obtain cursors delineating a subset of a range.  Use this
+ * when you want to split up the work of iterating over the
+ * global namespace.  Expected use case is when you are iterating
+ * in parallel, with `m` workers, and each worker taking an id `n`.
+ *
+ * @param start start of the range to be sliced up (inclusive)
+ * @param finish end of the range to be sliced up (exclusive)
+ * @param m how many chunks to divide start-finish into
+ * @param n which of the m chunks you would like to get cursors for
+ * @param split_start cursor populated with start of the subrange (inclusive)
+ * @param split_finish cursor populated with end of the subrange (exclusive)
+ */
+CEPH_RADOS_API void rados_object_list_slice(rados_ioctx_t io,
+    const rados_object_list_cursor start,
+    const rados_object_list_cursor finish,
+    const size_t n,
+    const size_t m,
+    rados_object_list_cursor *split_start,
+    rados_object_list_cursor *split_finish);
+
 
 /** @} New Listing Objects */
 
@@ -2092,6 +2184,7 @@ CEPH_RADOS_API int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver,
  * -ETIMEDOUT).
  *
  * @param io the pool the object is in
+ * @param completion what to do when operation has been attempted
  * @param o the name of the object
  * @param buf data to send to watchers
  * @param buf_len length of buf in bytes
@@ -2104,6 +2197,11 @@ CEPH_RADOS_API int rados_notify2(rados_ioctx_t io, const char *o,
 				 const char *buf, int buf_len,
 				 uint64_t timeout_ms,
 				 char **reply_buffer, size_t *reply_buffer_len);
+CEPH_RADOS_API int rados_aio_notify(rados_ioctx_t io, const char *o,
+                                    rados_completion_t completion,
+                                    const char *buf, int buf_len,
+                                    uint64_t timeout_ms, char **reply_buffer,
+                                    size_t *reply_buffer_len);
 
 /**
  * Acknolwedge receipt of a notify
@@ -2135,6 +2233,29 @@ CEPH_RADOS_API int rados_notify_ack(rados_ioctx_t io, const char *o,
 CEPH_RADOS_API int rados_watch_flush(rados_t cluster);
 
 /** @} Watch/Notify */
+
+/**
+ * Pin an object in the cache tier
+ *
+ * When an object is pinned in the cache tier, it stays in the cache
+ * tier, and won't be flushed out.
+ *
+ * @param io the pool the object is in
+ * @param o the object id
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_cache_pin(rados_ioctx_t io, const char *o);
+
+/**
+ * Unpin an object in the cache tier
+ *
+ * After an object is unpinned in the cache tier, it can be flushed out
+ *
+ * @param io the pool the object is in
+ * @param o the object id
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_cache_unpin(rados_ioctx_t io, const char *o);
 
 /**
  * @name Hints

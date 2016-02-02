@@ -212,7 +212,10 @@ private:
 
   uint32_t flags;
 
-  int num_osd;         // not saved
+  int num_osd;         // not saved; see calc_num_osds
+  int num_up_osd;      // not saved; see calc_num_osds
+  int num_in_osd;      // not saved; see calc_num_osds
+
   int32_t max_osd;
   vector<uint8_t> osd_state;
 
@@ -265,7 +268,8 @@ private:
   OSDMap() : epoch(0), 
 	     pool_max(-1),
 	     flags(0),
-	     num_osd(0), max_osd(0),
+	     num_osd(0), num_up_osd(0), num_in_osd(0),
+	     max_osd(0),
 	     osd_addrs(new addrs_s),
 	     pg_temp(new map<pg_t,vector<int32_t> >),
 	     primary_temp(new map<pg_t,int32_t>),
@@ -329,12 +333,17 @@ public:
   unsigned get_num_osds() const {
     return num_osd;
   }
+  unsigned get_num_up_osds() const {
+    return num_up_osd;
+  }
+  unsigned get_num_in_osds() const {
+    return num_in_osd;
+  }
+  /// recalculate cached values for get_num{,_up,_in}_osds
   int calc_num_osds();
 
   void get_all_osds(set<int32_t>& ls) const;
   void get_up_osds(set<int32_t>& ls) const;
-  unsigned get_num_up_osds() const;
-  unsigned get_num_in_osds() const;
   unsigned get_num_pg_temp() const {
     return pg_temp->size();
   }
@@ -359,9 +368,6 @@ public:
   void set_state(int o, unsigned s) {
     assert(o < max_osd);
     osd_state[o] = s;
-  }
-  void set_weightf(int o, float w) {
-    set_weight(o, (int)((float)CEPH_OSD_IN * w));
   }
   void set_weight(int o, unsigned w) {
     assert(o < max_osd);
@@ -742,14 +748,16 @@ public:
     return p->second.get_size();
   }
   int get_pg_type(pg_t pg) const {
-    assert(pools.count(pg.pool()));
-    return pools.find(pg.pool())->second.get_type();
+    map<int64_t,pg_pool_t>::const_iterator p = pools.find(pg.pool());
+    assert(p != pools.end());
+    return p->second.get_type();
   }
 
 
   pg_t raw_pg_to_pg(pg_t pg) const {
-    assert(pools.count(pg.pool()));
-    return pools.find(pg.pool())->second.raw_pg_to_pg(pg);
+    map<int64_t,pg_pool_t>::const_iterator p = pools.find(pg.pool());
+    assert(p != pools.end());
+    return p->second.raw_pg_to_pg(pg);
   }
 
   // pg -> acting primary osd

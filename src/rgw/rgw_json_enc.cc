@@ -9,6 +9,8 @@
 #include "rgw_cache.h"
 #include "rgw_bucket.h"
 #include "rgw_keystone.h"
+#include "rgw_basic_types.h"
+#include "rgw_op.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -84,8 +86,8 @@ void RGWObjManifest::dump(Formatter *f) const
 
 void rgw_log_entry::dump(Formatter *f) const
 {
-  f->dump_string("object_owner", object_owner);
-  f->dump_string("bucket_owner", bucket_owner);
+  f->dump_string("object_owner", object_owner.to_str());
+  f->dump_string("bucket_owner", bucket_owner.to_str());
   f->dump_string("bucket", bucket);
   f->dump_stream("time") << time;
   f->dump_string("remote_addr", remote_addr);
@@ -122,7 +124,7 @@ void ACLGrant::dump(Formatter *f) const
   type.dump(f);
   f->close_section();
 
-  f->dump_string("id", id);
+  f->dump_string("id", id.to_str());
   f->dump_string("email", email);
 
   f->open_object_section("permission");
@@ -170,7 +172,7 @@ void RGWAccessControlList::dump(Formatter *f) const
 
 void ACLOwner::dump(Formatter *f) const
 {
-  encode_json("id", id, f);
+  encode_json("id", id.to_str(), f);
   encode_json("display_name", display_name, f);
 }
 
@@ -375,25 +377,25 @@ void RGWSubUser::decode_json(JSONObj *obj)
 static void user_info_dump_subuser(const char *name, const RGWSubUser& subuser, Formatter *f, void *parent)
 {
   RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
-  subuser.dump(f, info->user_id);
+  subuser.dump(f, info->user_id.to_str());
 }
 
 static void user_info_dump_key(const char *name, const RGWAccessKey& key, Formatter *f, void *parent)
 {
   RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
-  key.dump(f, info->user_id, false);
+  key.dump(f, info->user_id.to_str(), false);
 }
 
 static void user_info_dump_swift_key(const char *name, const RGWAccessKey& key, Formatter *f, void *parent)
 {
   RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
-  key.dump(f, info->user_id, true);
+  key.dump(f, info->user_id.to_str(), true);
 }
 
 void RGWUserInfo::dump(Formatter *f) const
 {
 
-  encode_json("user_id", user_id, f);
+  encode_json("user_id", user_id.to_str(), f);
   encode_json("display_name", display_name, f);
   encode_json("email", user_email, f);
   encode_json("suspended", (int)suspended, f);
@@ -445,7 +447,11 @@ static void decode_subusers(map<string, RGWSubUser>& m, JSONObj *o)
 
 void RGWUserInfo::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("user_id", user_id, obj, true);
+  string uid;
+
+  JSONDecoder::decode_json("user_id", uid, obj, true);
+  user_id.from_str(uid);
+
   JSONDecoder::decode_json("display_name", display_name, obj);
   JSONDecoder::decode_json("email", user_email, obj);
   bool susp = false;
@@ -537,11 +543,85 @@ void RGWStorageStats::dump(Formatter *f) const
   encode_json("num_objects", num_objects, f);
 }
 
+void RGWRedirectInfo::dump(Formatter *f) const
+{
+  encode_json("protocol", protocol, f);
+  encode_json("hostname", hostname, f);
+  encode_json("http_redirect_code", (int)http_redirect_code, f);
+}
+
+void RGWRedirectInfo::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("protocol", protocol, obj);
+  JSONDecoder::decode_json("hostname", hostname, obj);
+  int code;
+  JSONDecoder::decode_json("http_redirect_code", code, obj);
+  http_redirect_code = code;
+}
+
+void RGWBWRedirectInfo::dump(Formatter *f) const
+{
+  encode_json("redirect", redirect, f);
+  encode_json("replace_key_prefix_with", replace_key_prefix_with, f);
+  encode_json("replace_key_with", replace_key_with, f);
+}
+
+void RGWBWRedirectInfo::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("redirect", redirect, obj);
+  JSONDecoder::decode_json("replace_key_prefix_with", replace_key_prefix_with, obj);
+  JSONDecoder::decode_json("replace_key_with", replace_key_with, obj);
+}
+
+void RGWBWRoutingRuleCondition::dump(Formatter *f) const
+{
+  encode_json("key_prefix_equals", key_prefix_equals, f);
+  encode_json("http_error_code_returned_equals", (int)http_error_code_returned_equals, f);
+}
+
+void RGWBWRoutingRuleCondition::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("key_prefix_equals", key_prefix_equals, obj);
+  int code;
+  JSONDecoder::decode_json("http_error_code_returned_equals", code, obj);
+  http_error_code_returned_equals = code;
+}
+
+void RGWBWRoutingRule::dump(Formatter *f) const
+{
+  encode_json("condition", condition, f);
+  encode_json("redirect_info", redirect_info, f);
+}
+
+void RGWBWRoutingRule::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("condition", condition, obj);
+  JSONDecoder::decode_json("redirect_info", redirect_info, obj);
+}
+
+void RGWBWRoutingRules::dump(Formatter *f) const
+{
+  encode_json("rules", rules, f);
+}
+
+void RGWBWRoutingRules::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("rules", rules, obj);
+}
+
+void RGWBucketWebsiteConf::dump(Formatter *f) const
+{
+  encode_json("index_doc_suffix", index_doc_suffix, f);
+  encode_json("error_doc", error_doc, f);
+  encode_json("routing_rules", routing_rules, f);
+}
+
+void RGWBucketWebsiteConf::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("index_doc_suffix", index_doc_suffix, obj);
+  JSONDecoder::decode_json("error_doc", error_doc, obj);
+  JSONDecoder::decode_json("routing_rules", routing_rules, obj);
+}
+
 void RGWBucketInfo::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
   encode_json("creation_time", creation_time, f);
-  encode_json("owner", owner, f);
+  encode_json("owner", owner.to_str(), f);
   encode_json("flags", flags, f);
   encode_json("region", region, f);
   encode_json("placement_rule", placement_rule, f);
@@ -549,6 +629,11 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("quota", quota, f);
   encode_json("num_shards", num_shards, f);
   encode_json("bi_shard_hash_type", (uint32_t)bucket_index_shard_hash_type, f);
+  encode_json("requester_pays", requester_pays, f);
+  encode_json("has_website", has_website, f);
+  if (has_website) {
+    encode_json("website_conf", website_conf, f);
+  }
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -564,6 +649,11 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   uint32_t hash_type;
   JSONDecoder::decode_json("bi_shard_hash_type", hash_type, obj);
   bucket_index_shard_hash_type = (uint8_t)hash_type;
+  JSONDecoder::decode_json("requester_pays", requester_pays, obj);
+  JSONDecoder::decode_json("has_website", has_website, obj);
+  if (has_website) {
+    JSONDecoder::decode_json("website_conf", website_conf, obj);
+  }
 }
 
 void RGWObjEnt::dump(Formatter *f) const
@@ -571,7 +661,7 @@ void RGWObjEnt::dump(Formatter *f) const
   encode_json("name", key.name, f);
   encode_json("instance", key.instance, f);
   encode_json("namespace", ns, f);
-  encode_json("owner", owner, f);
+  encode_json("owner", owner.to_str(), f);
   encode_json("owner_display_name", owner_display_name, f);
   encode_json("size", size, f);
   encode_json("mtime", mtime, f);
@@ -701,6 +791,7 @@ void RGWRegion::dump(Formatter *f) const
   encode_json("is_master", is_master, f);
   encode_json("endpoints", endpoints, f);
   encode_json("hostnames", hostnames, f);
+  encode_json("hostnames_s3website", hostnames_s3website, f);
   encode_json("master_zone", master_zone, f);
   encode_json_map("zones", zones, f); /* more friendly representation */
   encode_json_map("placement_targets", placement_targets, f); /* more friendly representation */
@@ -729,6 +820,7 @@ void RGWRegion::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("is_master", is_master, obj);
   JSONDecoder::decode_json("endpoints", endpoints, obj);
   JSONDecoder::decode_json("hostnames", hostnames, obj);
+  JSONDecoder::decode_json("hostnames_s3website", hostnames_s3website, obj);
   JSONDecoder::decode_json("master_zone", master_zone, obj);
   JSONDecoder::decode_json("zones", zones, decode_zones, obj);
   JSONDecoder::decode_json("placement_targets", placement_targets, decode_placement_targets, obj);
@@ -842,3 +934,10 @@ void KeystoneToken::decode_json(JSONObj *access_obj)
   JSONDecoder::decode_json("user", user, access_obj, true);
   JSONDecoder::decode_json("serviceCatalog", service_catalog, access_obj);
 }
+
+void rgw_slo_entry::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("path", path, obj);
+  JSONDecoder::decode_json("etag", etag, obj);
+  JSONDecoder::decode_json("size_bytes", size_bytes, obj);
+};

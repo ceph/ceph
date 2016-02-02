@@ -21,6 +21,7 @@
 #include <boost/tuple/tuple.hpp>
 
 #include "include/assert.h" 
+#include "include/unordered_map.h"
 #include "common/cmdparse.h"
 
 #include "HitSet.h"
@@ -74,7 +75,7 @@ public:
    * CopyResults stores the object metadata of interest to a copy initiator.
    */
   struct CopyResults {
-    utime_t mtime; ///< the copy source's mtime
+    ceph::real_time mtime; ///< the copy source's mtime
     uint64_t object_size; ///< the copied object's size
     bool started_temp_obj; ///< true if the callback needs to delete temp object
     hobject_t temp_oid;    ///< temp object (if any)
@@ -326,11 +327,11 @@ public:
   void send_message(int to_osd, Message *m) {
     osd->send_message_osd_cluster(to_osd, m, get_osdmap()->get_epoch());
   }
-  void queue_transaction(ObjectStore::Transaction *t, OpRequestRef op) {
-    osd->store->queue_transaction(osr.get(), t, 0, 0, 0, op);
+  void queue_transaction(ObjectStore::Transaction&& t, OpRequestRef op) {
+    osd->store->queue_transaction(osr.get(), std::move(t), 0, 0, 0, op);
   }
-  void queue_transactions(list<ObjectStore::Transaction*>& tls, OpRequestRef op) {
-    osd->store->queue_transactions(osr.get(), tls, 0, 0, 0, op);
+  void queue_transactions(vector<ObjectStore::Transaction>& tls, OpRequestRef op) {
+    osd->store->queue_transactions(osr.get(), tls, 0, 0, 0, op, NULL);
   }
   epoch_t get_epoch() const {
     return get_osdmap()->get_epoch();
@@ -515,7 +516,7 @@ public:
       }
     };
     list<NotifyAck> notify_acks;
-    
+
     uint64_t bytes_written, bytes_read;
 
     utime_t mtime;
@@ -886,7 +887,6 @@ protected:
   // replica ops
   // [primary|tail]
   xlist<RepGather*> repop_queue;
-  map<ceph_tid_t, RepGather*> repop_map;
 
   friend class C_OSD_RepopApplied;
   friend class C_OSD_RepopCommit;
@@ -934,17 +934,15 @@ protected:
   }
   bool agent_work(int max, int agent_flush_quota);
   bool agent_maybe_flush(ObjectContextRef& obc);  ///< maybe flush
-  bool agent_maybe_evict(ObjectContextRef& obc);  ///< maybe evict
+  bool agent_maybe_evict(ObjectContextRef& obc, bool after_flush);  ///< maybe evict
 
   void agent_load_hit_sets();  ///< load HitSets, if needed
 
   /// estimate object atime and temperature
   ///
   /// @param oid [in] object name
-  /// @param atime [out] seconds since last access (lower bound)
-  /// @param temperature [out] relative temperature (# hitset bins we appear in)
-  void agent_estimate_atime_temp(const hobject_t& oid,
-				 int *atime, int *temperature);
+  /// @param temperature [out] relative temperature (# consider both access time and frequency)
+  void agent_estimate_temp(const hobject_t& oid, int *temperature);
 
   /// stop the agent
   void agent_stop();
@@ -1039,7 +1037,8 @@ protected:
   SnapSetContext *get_snapset_context(
     const hobject_t& oid,
     bool can_create,
-    map<string, bufferlist> *attrs = 0
+    map<string, bufferlist> *attrs = 0,
+    bool oid_existed = true //indicate this oid whether exsited in backend
     );
   void register_snapset_context(SnapSetContext *ssc) {
     Mutex::Locker l(snapset_contexts_lock);
@@ -1243,7 +1242,6 @@ protected:
 
   void _clear_recovery_state();
 
-  void queue_for_recovery();
   bool start_recovery_ops(
     int max, ThreadPool::TPHandle &handle, int *started);
 
@@ -1492,6 +1490,27 @@ private:
   hobject_t generate_temp_object();  ///< generate a new temp object name
   /// generate a new temp object name (for recovery)
   hobject_t get_temp_recovery_object(eversion_t version, snapid_t snap);
+  int get_recovery_op_priority() const {
+      int pri = 0;
+      pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
+      return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
+  }
+  void log_missing(unsigned missing,
+			const boost::optional<hobject_t> &head,
+			LogChannelRef clog,
+			const spg_t &pgid,
+			const char *func,
+			const char *mode,
+			bool allow_incomplete_clones);
+  unsigned process_clones_to(const boost::optional<hobject_t> &head,
+    const boost::optional<SnapSet> &snapset,
+    LogChannelRef clog,
+    const spg_t &pgid,
+    const char *mode,
+    bool allow_incomplete_clones,
+    boost::optional<snapid_t> target,
+    vector<snapid_t>::reverse_iterator *curclone);
+
 public:
   coll_t get_coll() {
     return coll;

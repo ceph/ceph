@@ -243,8 +243,22 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
     need_align = true;
     alignment = align;
   } else {
-    if ((need_align = ioctx.pool_requires_alignment()))
-      alignment = ioctx.pool_required_alignment();
+    int ret = ioctx.pool_requires_alignment2(&need_align);
+    if (ret < 0) {
+      cerr << "pool_requires_alignment2 failed: " << cpp_strerror(ret)
+        << std::endl;
+      return ret;
+    }
+
+    if (need_align) {
+      ret = ioctx.pool_required_alignment2(&alignment);
+      if (ret < 0) {
+        cerr << "pool_required_alignment2 failed: " << cpp_strerror(ret)
+	  << std::endl;
+	return ret;
+      }
+      assert(alignment != 0);
+    }
   }
 
   if (need_align) {
@@ -317,7 +331,9 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
         break;
       for (std::map<string,bufferlist>::iterator i = as.data.begin();
           i != as.data.end(); ++i) {
-        if (i->first == "_" || i->first == "snapset")
+	// The user xattrs that we want all begin with "_" with length > 1.
+        // Drop key "_" and all attributes that do not start with '_'
+        if (i->first == "_" || i->first[0] != '_')
           continue;
         ret = ioctx.setxattr(ob.hoid.hobj.oid.name, i->first.substr(1).c_str(), i->second);
         if (ret) {

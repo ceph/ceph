@@ -49,7 +49,6 @@ class DispatchQueue;
       Reader(Pipe *p) : pipe(p) {}
       void *entry() { pipe->reader(); return 0; }
     } reader_thread;
-    friend class Reader;
 
     /**
      * The Writer thread handles all writes to the socket (after startup).
@@ -61,7 +60,6 @@ class DispatchQueue;
       Writer(Pipe *p) : pipe(p) {}
       void *entry() { pipe->writer(); return 0; }
     } writer_thread;
-    friend class Writer;
 
     /**
      * The DelayedDelivery is for injecting delays into Message delivery off
@@ -126,7 +124,6 @@ class DispatchQueue;
        */
       void stop_fast_dispatching();
     } *delay_thread;
-    friend class DelayedDelivery;
 
   public:
     Pipe(SimpleMessenger *r, int st, PipeConnection *con);
@@ -146,9 +143,9 @@ class DispatchQueue;
     }
 
     char *recv_buf;
-    int recv_max_prefetch;
-    int recv_ofs;
-    int recv_len;
+    size_t recv_max_prefetch;
+    size_t recv_ofs;
+    size_t recv_len;
 
     enum {
       STATE_ACCEPTING,
@@ -179,6 +176,11 @@ class DispatchQueue;
   private:
     int sd;
     struct iovec msgvec[IOV_MAX];
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+    sigset_t sigpipe_mask;
+    bool sigpipe_pending;
+    bool sigpipe_unblock;
+#endif
 
   public:
     int port;
@@ -242,10 +244,14 @@ class DispatchQueue;
      * @param more Should be set true if this is one part of a larger message
      * @return 0, or -1 on failure (unrecoverable -- close the socket).
      */
-    int do_sendmsg(struct msghdr *msg, int len, bool more=false);
+    int do_sendmsg(struct msghdr *msg, unsigned len, bool more=false);
     int write_ack(uint64_t s);
     int write_keepalive();
     int write_keepalive2(char tag, const utime_t &t);
+
+    void suppress_sigpipe();
+    void restore_sigpipe();
+
 
     void fault(bool reader=false);
 
@@ -333,8 +339,8 @@ class DispatchQueue;
       recv_len = 0;
       recv_ofs = 0;
     }
-    int do_recv(char *buf, size_t len, int flags);
-    int buffered_recv(char *buf, size_t len, int flags);
+    ssize_t do_recv(char *buf, size_t len, int flags);
+    ssize_t buffered_recv(char *buf, size_t len, int flags);
     bool has_pending_data() { return recv_len > recv_ofs; }
 
     /**
@@ -344,7 +350,7 @@ class DispatchQueue;
      * @param len exact number of bytes to read
      * @return 0 for success, or -1 on error
      */
-    int tcp_read(char *buf, int len);
+    int tcp_read(char *buf, unsigned len);
 
     /**
      * wait for bytes to become available on the socket
@@ -363,7 +369,7 @@ class DispatchQueue;
      * @param len maximum number of bytes to read
      * @return bytes read, or -1 on error or when there is no data
      */
-    int tcp_read_nonblocking(char *buf, int len);
+    ssize_t tcp_read_nonblocking(char *buf, unsigned len);
 
     /**
      * blocking write of bytes to socket
@@ -372,7 +378,7 @@ class DispatchQueue;
      * @param len number of bytes to write
      * @return 0 for success, or -1 on error
      */
-    int tcp_write(const char *buf, int len);
+    int tcp_write(const char *buf, unsigned len);
 
   };
 

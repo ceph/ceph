@@ -1,11 +1,16 @@
 unitfiles = \
 	ceph.target \
+        ceph-osd.target \
+        ceph-mon.target \
+        ceph-mds.target \
+        ceph-radosgw.target \
 	ceph-mds@.service \
 	ceph-mon@.service \
 	ceph-create-keys@.service \
 	ceph-osd@.service \
 	ceph-radosgw@.service \
-	ceph-disk@.service
+	ceph-disk@.service \
+	rbdmap.service
 
 unitdir = $(systemd_unit_dir)
 

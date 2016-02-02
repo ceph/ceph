@@ -9,6 +9,7 @@
 #include "include/stringify.h"
 #include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "cls/rbd/cls_rbd_types.h"
 
 #include "gtest/gtest.h"
 #include "test/librados/test.h"
@@ -18,51 +19,37 @@
 #include <vector>
 
 using namespace std;
-using ::librbd::cls_client::create_image;
-using ::librbd::cls_client::get_features;
-using ::librbd::cls_client::set_features;
-using ::librbd::cls_client::get_size;
-using ::librbd::cls_client::get_object_prefix;
-using ::librbd::cls_client::set_size;
-using ::librbd::cls_client::get_parent;
-using ::librbd::cls_client::set_parent;
-using ::librbd::cls_client::remove_parent;
-using ::librbd::cls_client::snapshot_add;
-using ::librbd::cls_client::snapshot_remove;
-using ::librbd::cls_client::add_child;
-using ::librbd::cls_client::remove_child;
-using ::librbd::cls_client::get_children;
-using ::librbd::cls_client::get_snapcontext;
-using ::librbd::cls_client::snapshot_list;
-using ::librbd::cls_client::copyup;
-using ::librbd::cls_client::get_id;
-using ::librbd::cls_client::set_id;
-using ::librbd::cls_client::dir_get_id;
-using ::librbd::cls_client::dir_get_name;
-using ::librbd::cls_client::dir_list;
-using ::librbd::cls_client::dir_add_image;
-using ::librbd::cls_client::dir_remove_image;
-using ::librbd::cls_client::dir_rename_image;
+using namespace librbd::cls_client;
 using ::librbd::parent_info;
 using ::librbd::parent_spec;
-using ::librbd::cls_client::get_protection_status;
-using ::librbd::cls_client::set_protection_status;
-using ::librbd::cls_client::get_stripe_unit_count;
-using ::librbd::cls_client::set_stripe_unit_count;
-using ::librbd::cls_client::old_snapshot_add;
-using ::librbd::cls_client::get_mutable_metadata;
-using ::librbd::cls_client::object_map_load;
-using ::librbd::cls_client::object_map_save;
-using ::librbd::cls_client::object_map_resize;
-using ::librbd::cls_client::object_map_update;
-using ::librbd::cls_client::object_map_snap_add;
-using ::librbd::cls_client::object_map_snap_remove;
-using ::librbd::cls_client::get_flags;
-using ::librbd::cls_client::set_flags;
-using ::librbd::cls_client::metadata_set;
-using ::librbd::cls_client::metadata_remove;
-using ::librbd::cls_client::metadata_list;
-using ::librbd::cls_client::metadata_get;
+
+static int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
+                        uint64_t snap_id, const std::string &snap_name) {
+  librados::ObjectWriteOperation op;
+  ::librbd::cls_client::snapshot_add(&op, snap_id, snap_name);
+  return ioctx->operate(oid, &op);
+}
+
+static int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
+                           uint64_t snap_id) {
+  librados::ObjectWriteOperation op;
+  ::librbd::cls_client::snapshot_remove(&op, snap_id);
+  return ioctx->operate(oid, &op);
+}
+
+static int snapshot_rename(librados::IoCtx *ioctx, const std::string &oid,
+                           uint64_t snap_id, const std::string &snap_name) {
+  librados::ObjectWriteOperation op;
+  ::librbd::cls_client::snapshot_rename(&op, snap_id, snap_name);
+  return ioctx->operate(oid, &op);
+}
+
+static int old_snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
+                            uint64_t snap_id, const std::string &snap_name) {
+  librados::ObjectWriteOperation op;
+  ::librbd::cls_client::old_snapshot_add(&op, snap_id, snap_name);
+  return ioctx->operate(oid, &op);
+}
 
 static char *random_buf(size_t len)
 {
@@ -280,20 +267,28 @@ TEST_F(TestClsRbd, directory_methods)
   ASSERT_EQ(0, dir_get_id(&ioctx, oid, imgname2, &id));
   ASSERT_EQ(valid_id2, id);
 
-  ASSERT_EQ(-ESTALE, dir_rename_image(&ioctx, oid, imgname, imgname2, valid_id2));
+  librados::ObjectWriteOperation op1;
+  dir_rename_image(&op1, imgname, imgname2, valid_id2);
+  ASSERT_EQ(-ESTALE, ioctx.operate(oid, &op1));
   ASSERT_EQ(-ESTALE, dir_remove_image(&ioctx, oid, imgname, valid_id2));
-  ASSERT_EQ(-EEXIST, dir_rename_image(&ioctx, oid, imgname, imgname2, valid_id));
+  librados::ObjectWriteOperation op2;
+  dir_rename_image(&op2, imgname, imgname2, valid_id);
+  ASSERT_EQ(-EEXIST, ioctx.operate(oid, &op2));
   ASSERT_EQ(0, dir_get_id(&ioctx, oid, imgname, &id));
   ASSERT_EQ(valid_id, id);
   ASSERT_EQ(0, dir_get_name(&ioctx, oid, valid_id2, &name));
   ASSERT_EQ(imgname2, name);
 
-  ASSERT_EQ(0, dir_rename_image(&ioctx, oid, imgname, imgname3, valid_id));
+  librados::ObjectWriteOperation op3;
+  dir_rename_image(&op3, imgname, imgname3, valid_id);
+  ASSERT_EQ(0, ioctx.operate(oid, &op3));
   ASSERT_EQ(0, dir_get_id(&ioctx, oid, imgname3, &id));
   ASSERT_EQ(valid_id, id);
   ASSERT_EQ(0, dir_get_name(&ioctx, oid, valid_id, &name));
   ASSERT_EQ(imgname3, name);
-  ASSERT_EQ(0, dir_rename_image(&ioctx, oid, imgname3, imgname, valid_id));
+  librados::ObjectWriteOperation op4;
+  dir_rename_image(&op4, imgname3, imgname, valid_id);
+  ASSERT_EQ(0, ioctx.operate(oid, &op4));
 
   ASSERT_EQ(0, dir_remove_image(&ioctx, oid, imgname, valid_id));
   ASSERT_EQ(0, dir_list(&ioctx, oid, "", 30, &images));
@@ -781,6 +776,14 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ("snap1", snap_names[1]);
   ASSERT_EQ(10u, snap_sizes[1]);
 
+  ASSERT_EQ(0, snapshot_rename(&ioctx, oid, 0, "snap1-rename"));
+  ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
+			     &snap_sizes, &parents, &protection_status));
+  ASSERT_EQ(2u, snap_names.size());
+  ASSERT_EQ("snap2", snap_names[0]);
+  ASSERT_EQ(10u, snap_sizes[0]);
+  ASSERT_EQ("snap1-rename", snap_names[1]);
+  ASSERT_EQ(10u, snap_sizes[1]);
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 0));
   ASSERT_EQ(0, get_snapcontext(&ioctx, oid, &snapc));
   ASSERT_EQ(1u, snapc.snaps.size());
@@ -1279,4 +1282,60 @@ TEST_F(TestClsRbd, set_features)
 
   mask = RBD_FEATURE_LAYERING;
   ASSERT_EQ(-EINVAL, set_features(&ioctx, oid, features, mask));
+}
+
+TEST_F(TestClsRbd, mirror) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  std::vector<cls::rbd::MirrorPeer> peers;
+  ASSERT_EQ(-ENOENT, mirror_peer_list(&ioctx, &peers));
+
+  ASSERT_EQ(-EINVAL, mirror_peer_add(&ioctx, "uuid1", "cluster1", "client"));
+
+  bool enabled;
+  ASSERT_EQ(0, mirror_is_enabled(&ioctx, &enabled));
+  ASSERT_FALSE(enabled);
+  ASSERT_EQ(0, mirror_set_enabled(&ioctx, true));
+  ASSERT_EQ(0, mirror_is_enabled(&ioctx, &enabled));
+  ASSERT_TRUE(enabled);
+
+  ASSERT_EQ(0, mirror_peer_add(&ioctx, "uuid1", "cluster1", "client"));
+  ASSERT_EQ(0, mirror_peer_add(&ioctx, "uuid2", "cluster2", "admin"));
+  ASSERT_EQ(-EEXIST, mirror_peer_add(&ioctx, "uuid2", "cluster3", "foo"));
+  ASSERT_EQ(-EEXIST, mirror_peer_add(&ioctx, "uuid3", "cluster1", "foo"));
+  ASSERT_EQ(0, mirror_peer_add(&ioctx, "uuid3", "cluster3", "admin"));
+
+  ASSERT_EQ(0, mirror_peer_list(&ioctx, &peers));
+  std::vector<cls::rbd::MirrorPeer> expected_peers = {
+    {"uuid1", "cluster1", "client"},
+    {"uuid2", "cluster2", "admin"},
+    {"uuid3", "cluster3", "admin"}};
+  ASSERT_EQ(expected_peers, peers);
+
+  ASSERT_EQ(0, mirror_peer_remove(&ioctx, "uuid4"));
+  ASSERT_EQ(0, mirror_peer_remove(&ioctx, "uuid2"));
+
+  ASSERT_EQ(-ENOENT, mirror_peer_set_client(&ioctx, "uuid4", "new client"));
+  ASSERT_EQ(0, mirror_peer_set_client(&ioctx, "uuid1", "new client"));
+
+  ASSERT_EQ(-ENOENT, mirror_peer_set_cluster(&ioctx, "uuid4", "new cluster"));
+  ASSERT_EQ(0, mirror_peer_set_cluster(&ioctx, "uuid3", "new cluster"));
+
+  ASSERT_EQ(0, mirror_peer_list(&ioctx, &peers));
+  expected_peers = {
+    {"uuid1", "cluster1", "new client"},
+    {"uuid3", "new cluster", "admin"}};
+  ASSERT_EQ(expected_peers, peers);
+  ASSERT_EQ(-EBUSY, mirror_set_enabled(&ioctx, false));
+
+  ASSERT_EQ(0, mirror_peer_remove(&ioctx, "uuid3"));
+  ASSERT_EQ(0, mirror_peer_remove(&ioctx, "uuid1"));
+  ASSERT_EQ(0, mirror_peer_list(&ioctx, &peers));
+  expected_peers = {};
+  ASSERT_EQ(expected_peers, peers);
+
+  ASSERT_EQ(0, mirror_set_enabled(&ioctx, false));
+  ASSERT_EQ(0, mirror_is_enabled(&ioctx, &enabled));
+  ASSERT_FALSE(enabled);
 }

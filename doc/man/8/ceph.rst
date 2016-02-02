@@ -47,7 +47,7 @@ Synopsis
 
 | **ceph** **osd** **tier** [ *add* \| *add-cache* \| *cache-mode* \| *remove* \| *remove-overlay* \| *set-overlay* ] ...
 
-| **ceph** **pg** [ *debug* \| *deep-scrub* \| *dump* \| *dump_json* \| *dump_pools_json* \| *dump_stuck* \| *force_create_pg* \| *getmap* \| *ls* \| *ls-by-osd* \| *ls-by-pool* \| *ls-by-primary* \| *map* \| *repair* \| *scrub* \| *send_pg_creates* \| *set_full_ratio* \| *set_nearfull_ratio* \| *stat* ] ...
+| **ceph** **pg** [ *debug* \| *deep-scrub* \| *dump* \| *dump_json* \| *dump_pools_json* \| *dump_stuck* \| *force_create_pg* \| *getmap* \| *ls* \| *ls-by-osd* \| *ls-by-pool* \| *ls-by-primary* \| *map* \| *repair* \| *scrub* \| *set_full_ratio* \| *set_nearfull_ratio* \| *stat* ] ...
 
 | **ceph** **quorum** [ *enter* \| *exit* ]
 
@@ -884,7 +884,7 @@ Only for tiered pools::
 	ceph osd pool get <poolname> hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|
 	target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_dirty_high_ratio|
 	cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|
-	min_read_recency_for_promote
+	min_read_recency_for_promote|hit_set_grade_decay_rate|hit_set_search_last_n
 
 Only for erasure coded pools::
 
@@ -934,7 +934,8 @@ Usage::
 	target_max_bytes|target_max_objects|cache_target_dirty_ratio|
 	cache_target_dirty_high_ratio|
 	cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|
-	min_read_recency_for_promote|write_fadvise_dontneed
+	min_read_recency_for_promote|write_fadvise_dontneed|hit_set_grade_decay_rate|
+	hit_set_search_last_n
 	<val> {--yes-i-really-mean-it}
 
 Subcommand ``set-quota`` sets object or byte limit on pool.
@@ -1228,12 +1229,6 @@ Subcommand ``scrub`` starts scrub on <pgid>.
 Usage::
 
 	ceph pg scrub <pgid>
-
-Subcommand ``send_pg_creates`` triggers pg creates to be issued.
-
-Usage::
-
-	ceph pg send_pg_creates
 
 Subcommand ``set_full_ratio`` sets ratio at which pgs are considered full.
 
