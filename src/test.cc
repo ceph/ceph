@@ -44,6 +44,14 @@ int main(int argc, char* argv[]) {
   const std::map<ServerId,std::pair<int,int>> server_info = {
     {0, { 75, 7 }},
     {1, { 75, 7 }},
+#if 0
+    {2, { 75, 7 }},
+    {3, { 75, 7 }},
+    {4, { 75, 7 }},
+    {5, { 75, 7 }},
+    {6, { 75, 7 }},
+    {7, { 75, 7 }},
+#endif
   };
 
   // client params
@@ -96,12 +104,18 @@ int main(int argc, char* argv[]) {
   };
 
   std::default_random_engine
-    rand(std::chrono::system_clock::now().time_since_epoch().count());
+    srv_rand(std::chrono::system_clock::now().time_since_epoch().count());
 
-  // lambda to choose a server randomly (seed is ignored); called by client
-  auto server_random_f = [&server_ids,&rand](uint64_t seed) -> const ServerId& {
-    int index = rand() % server_ids.size();
+  // lambda to choose a server randomly
+  auto server_random_f =
+    [&server_ids, &srv_rand] (uint64_t seed) -> const ServerId& {
+    int index = srv_rand() % server_ids.size();
     return server_ids[index];
+  };
+
+  // lambda to always choose the first server
+  auto server_0_f = [server_ids] (uint64_t seed) -> const ServerId& {
+    return server_ids[0];
   };
 
   // lambda to post a request to the identified server; called by client
@@ -118,7 +132,7 @@ int main(int argc, char* argv[]) {
     int goal = i.second.second;
     clients[name] = new TestClient(name,
 				   server_post_f,
-				   server_random_f,
+				   server_rotate_f,
 				   goal * goal_secs_to_run,
 				   goal,
 				   client_outstanding_ops);

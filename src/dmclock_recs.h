@@ -33,8 +33,7 @@ namespace crimson {
 	delta(_delta),
 	rho(_rho)
       {
-	assert(0 !=_delta);
-	assert(0 != rho);
+	assert(0 != delta && 0 != rho && rho <= delta);
       }
 
       ReqParams(const ReqParams& other) :
