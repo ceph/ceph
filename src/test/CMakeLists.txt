@@ -3,6 +3,10 @@ include(AddCephTest)
 set(UNITTEST_LIBS gmock_main gmock gtest ${PTHREAD_LIBS} ${CMAKE_DL_LIBS})
 set(UNITTEST_CXX_FLAGS "-I${CMAKE_SOURCE_DIR}/src/gmock/include -I${CMAKE_BINARY_DIR}/src/gmock/include -I${CMAKE_SOURCE_DIR}/src/gmock/gtest/include -I${CMAKE_BINARY_DIR}/src/gmock/gtest/include -fno-strict-aliasing")
 
+add_subdirectory(cls_hello)
+add_subdirectory(cls_lock)
+add_subdirectory(cls_log)
+
 # test_timers
 add_executable(ceph_test_timers
   TestTimers.cc
@@ -444,23 +448,6 @@ target_link_libraries(ceph_test_cls_version
   radostest
   )
 
-add_executable(ceph_test_cls_log
-  cls_log/test_cls_log.cc
-  )
-set_target_properties(ceph_test_cls_log PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_cls_log
-  librados
-  cls_log_client
-  global
-  radostest
-  ${UNITTEST_LIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  ${CRYPTO_LIBS}
-  ${EXTRALIBS}
-  )
-
 add_executable(ceph_test_cls_statelog
   cls_statelog/test_cls_statelog.cc
   )
@@ -494,9 +481,6 @@ target_link_libraries(ceph_test_cls_replica_log
   ${EXTRALIBS}
   radostest
   )
-
-add_subdirectory(cls_lock)
-add_subdirectory(cls_hello)
 
 add_executable(ceph_test_cls_numops cls_numops/test_cls_numops.cc)
 set_target_properties(ceph_test_cls_numops PROPERTIES COMPILE_FLAGS
