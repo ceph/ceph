@@ -52,6 +52,14 @@ There are serious known bugs.
 Multi-MDS filesystems have always required explicitly increasing the "max_mds"
 value and have been further protected with the "allow_multimds" flag for Jewel.
 
+Mantle: Programmable Metadata Load Balancer
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Mantle is a programmable metadata balancer built into the MDS. The idea is to
+protect the mechanisms for balancing load (migration, replication,
+fragmentation) but stub out the balancing policies using Lua. For details, see
+:doc:`/cephfs/mantle`.
+
 Snapshots
 ---------
 Like multiple active MDSes, CephFS is designed from the ground up to support
