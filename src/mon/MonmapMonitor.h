@@ -55,6 +55,7 @@ class MonmapMonitor : public PaxosService {
   virtual void encode_full(MonitorDBStore::TransactionRef t) { }
 
   void on_active();
+  void apply_mon_features(const mon_feature_t& features);
 
   void dump_info(Formatter *f);
 
