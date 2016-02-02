@@ -15,6 +15,8 @@
 #ifndef CEPH_OS_BLUESTORE_KERNELDEVICE_H
 #define CEPH_OS_BLUESTORE_KERNELDEVICE_H
 
+#include <atomic>
+
 #include "os/fs/FS.h"
 #include "include/interval_set.h"
 
@@ -48,6 +50,8 @@ class KernelDevice : public BlockDevice {
       return NULL;
     }
   } aio_thread;
+
+  std::atomic_int injecting_crash;
 
   void _aio_thread();
   int _aio_start();

@@ -41,7 +41,8 @@ KernelDevice::KernelDevice(aio_callback_t cb, void *cbpriv)
     aio_callback(cb),
     aio_callback_priv(cbpriv),
     aio_stop(false),
-    aio_thread(this)
+    aio_thread(this),
+    injecting_crash(0)
 {
   zeros = buffer::create_page_aligned(1048576);
   zeros.zero();
@@ -175,6 +176,7 @@ int KernelDevice::flush()
   dout(10) << __func__ << " start" << dendl;
   io_since_flush.set(0);
   if (g_conf->bdev_inject_crash) {
+    ++injecting_crash;
     // sleep for a moment to give other threads a chance to submit or
     // wait on io that races with a flush.
     derr << __func__ << " injecting crash. first we sleep..." << dendl;
@@ -222,6 +224,7 @@ void KernelDevice::_aio_stop()
 void KernelDevice::_aio_thread()
 {
   dout(10) << __func__ << " start" << dendl;
+  int inject_crash_count = 0;
   while (!aio_stop) {
     dout(40) << __func__ << " polling" << dendl;
     int max = 16;
@@ -257,6 +260,12 @@ void KernelDevice::_aio_thread()
       }
     }
     reap_ioc();
+    if (g_conf->bdev_inject_crash) {
+      ++inject_crash_count;
+      if (inject_crash_count * g_conf->bdev_aio_poll_ms / 1000 >
+	  g_conf->bdev_inject_crash + g_conf->bdev_inject_crash_flush_delay)
+	assert(0 == "bdev_inject_crash trigger from aio thread");
+    }
   }
   dout(10) << __func__ << " end" << dendl;
 }
@@ -376,6 +385,7 @@ int KernelDevice::aio_write(
       // generate a real io so that aio_wait behaves properly, but make it
       // a read instead of write, and toss the result.
       aio.pread(off, len);
+      ++injecting_crash;
     } else {
       bl.prepare_iov(&aio.iov);
       for (unsigned i=0; i<aio.iov.size(); ++i) {
@@ -394,6 +404,7 @@ int KernelDevice::aio_write(
 	rand() % g_conf->bdev_inject_crash == 0) {
       derr << __func__ << " bdev_inject_crash: dropping io " << off << "~" << len
 	   << dendl;
+      ++injecting_crash;
       return 0;
     }
     vector<iovec> iov;
