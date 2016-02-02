@@ -840,11 +840,7 @@ target_link_libraries(cephfstool common ${EXTRALIBS})
 set_target_properties(cephfstool PROPERTIES OUTPUT_NAME cephfs)
 install(TARGETS cephfstool DESTINATION bin)
 
-set(compressor_srcs
-  compressor/Compressor.cc
-  compressor/AsyncCompressor.cc)
-add_library(compressor STATIC ${compressor_srcs})
-target_link_libraries(compressor common snappy)
+add_subdirectory(compressor)
 
 add_executable(ceph-client-debug tools/ceph-client-debug.cc)
 target_link_libraries(ceph-client-debug cephfs librados global common)

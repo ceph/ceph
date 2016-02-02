@@ -13,6 +13,7 @@ add_subdirectory(cls_replica_log)
 add_subdirectory(cls_rgw)
 add_subdirectory(cls_statelog)
 add_subdirectory(cls_version)
+add_subdirectory(compressor)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -680,7 +681,9 @@ add_dependencies(check
   ceph-monstore-tool
   osdmaptool
   rbd
-  radosgw-admin)
+  radosgw-admin
+  ceph_example
+  ceph_snappy)
 
 add_ceph_test(test-ceph-helpers.sh ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-helpers.sh)
 add_ceph_test(erasure-decode-non-regression.sh ${CMAKE_SOURCE_DIR}/qa/workunits/erasure-code/encode-decode-non-regression.sh)

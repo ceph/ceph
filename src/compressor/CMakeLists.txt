@@ -1,3 +1,10 @@
+
+set(compressor_srcs 
+  Compressor.cc
+  AsyncCompressor.cc)
+add_library(compressor STATIC ${compressor_srcs})
+target_link_libraries(compressor common snappy ${CMAKE_DL_LIBS})
+
 ## compressor plugins
 
 set(compressorlibdir ${LIBRARY_OUTPUT_PATH}/compressor)
