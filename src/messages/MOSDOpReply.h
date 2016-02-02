@@ -32,7 +32,7 @@
 
 class MOSDOpReply : public Message {
 
-  static const int HEAD_VERSION = 6;
+  static const int HEAD_VERSION = 7;
   static const int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -45,6 +45,7 @@ class MOSDOpReply : public Message {
   version_t user_version;
   epoch_t osdmap_epoch;
   int32_t retry_attempt;
+  bool do_redirect;
   request_redirect_t redirect;
 
 public:
@@ -91,7 +92,7 @@ public:
 
   void set_redirect(const request_redirect_t& redir) { redirect = redir; }
   const request_redirect_t& get_redirect() const { return redirect; }
-  bool is_redirect_reply() const { return !redirect.empty(); }
+  bool is_redirect_reply() const { return do_redirect; }
 
   void add_flags(int f) { flags |= f; }
 
@@ -136,6 +137,7 @@ public:
     osdmap_epoch = e;
     user_version = 0;
     retry_attempt = req->get_retry_attempt();
+    do_redirect = false;
 
     // zero out ops payload_len and possibly out data
     for (unsigned i = 0; i < ops.size(); i++) {
@@ -189,7 +191,16 @@ public:
 
       ::encode(replay_version, payload);
       ::encode(user_version, payload);
-      ::encode(redirect, payload);
+      if ((features & CEPH_FEATURE_NEW_OSDOPREPLY_ENCODING) == 0) {
+        header.version = 6;
+        ::encode(redirect, payload);
+      } else {
+        do_redirect = !redirect.empty();
+        ::encode(do_redirect, payload);
+        if (do_redirect) {
+          ::encode(redirect, payload);
+        }
+      }
     }
   }
   virtual void decode_payload() {
@@ -268,8 +279,16 @@ public:
 	user_version = replay_version.version;
       }
 
-      if (header.version >= 6)
+      if (header.version == 6) {
 	::decode(redirect, p);
+        do_redirect = !redirect.empty();
+      }
+      else if (header.version >= 7) {
+        ::decode(do_redirect, p);
+        if (do_redirect) {
+	  ::decode(redirect, p);
+        }
+      }
     }
   }
 
