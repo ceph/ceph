@@ -386,6 +386,8 @@ namespace ceph {
             FEATURE_NONE
             );
       }
+
+      constexpr mon_feature_t FLAG_NONE(          (0ULL));
     }
   }
 }

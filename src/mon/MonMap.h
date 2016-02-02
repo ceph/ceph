@@ -19,6 +19,7 @@
 
 #include "msg/Message.h"
 #include "include/types.h"
+#include "mon/mon_types.h"
 //#include "common/config.h"
 
 namespace ceph {
@@ -36,6 +37,13 @@ class MonMap {
   map<entity_addr_t,string> addr_name;
   vector<string> rank_name;
   vector<entity_addr_t> rank_addr;
+
+  mon_feature_t persistent_features;
+  mon_feature_t optional_features;
+
+  mon_feature_t get_required_features() {
+    return (persistent_features | optional_features);
+  }
 
   void calc_ranks() {
     rank_name.resize(mon_addr.size());
@@ -56,7 +64,7 @@ class MonMap {
     }
   }
 
-  MonMap() 
+  MonMap()
     : epoch(0) {
     memset(&fsid, 0, sizeof(fsid));
   }
@@ -83,7 +91,7 @@ class MonMap {
     mon_addr[name] = addr;
     calc_ranks();
   }
-  
+
   void remove(const string &name) {
     assert(mon_addr.count(name));
     mon_addr.erase(name);
@@ -173,7 +181,7 @@ class MonMap {
     return i;
   }
 
-  void encode(bufferlist& blist, uint64_t features) const;
+  void encode(bufferlist& blist, uint64_t con_features) const;
   void decode(bufferlist& blist) {
     bufferlist::iterator p = blist.begin();
     decode(p);
