@@ -529,7 +529,7 @@ add_subdirectory(pybind)
 ## dencoder
 set(dencoder_srcs
   test/encoding/ceph_dencoder.cc
-  krbd.cc
+  $<TARGET_OBJECTS:krbd_objs>
   common/secret.c
   common/TextTable.cc
   )
@@ -992,81 +992,11 @@ set(journal_srcs
   journal/Utils.cc)
 add_library(journal ${journal_srcs})
 
+add_library(krbd_objs OBJECT krbd.cc)
+
 if(${WITH_RBD})
-  set(librbd_srcs
-    krbd.cc
-    common/ContextCompletion.cc
-    librbd/AioCompletion.cc
-    librbd/AioImageRequest.cc
-    librbd/AioImageRequestWQ.cc
-    librbd/AioObjectRequest.cc
-    librbd/AsyncObjectThrottle.cc
-    librbd/AsyncOperation.cc
-    librbd/AsyncRequest.cc
-    librbd/CopyupRequest.cc
-    librbd/DiffIterate.cc
-    librbd/ExclusiveLock.cc
-    librbd/ImageCtx.cc
-    librbd/ImageState.cc
-    librbd/ImageWatcher.cc
-    librbd/internal.cc
-    librbd/Journal.cc
-    librbd/librbd.cc
-    librbd/LibrbdAdminSocketHook.cc
-    librbd/LibrbdWriteback.cc
-    librbd/MirroringWatcher.cc
-    librbd/ObjectMap.cc
-    librbd/ObjectWatcher.cc
-    librbd/Operations.cc
-    librbd/Utils.cc
-    librbd/exclusive_lock/AcquireRequest.cc
-    librbd/exclusive_lock/ReleaseRequest.cc
-    librbd/exclusive_lock/StandardPolicy.cc
-    librbd/image/CloseRequest.cc
-    librbd/image/OpenRequest.cc
-    librbd/image/RefreshParentRequest.cc
-    librbd/image/RefreshRequest.cc
-    librbd/image/SetSnapRequest.cc
-    librbd/image_watcher/Notifier.cc
-    librbd/image_watcher/NotifyLockOwner.cc
-    librbd/journal/Replay.cc
-    librbd/journal/StandardPolicy.cc
-    librbd/journal/Types.cc
-    librbd/mirroring_watcher/Types.cc
-    librbd/object_map/InvalidateRequest.cc
-    librbd/object_map/LockRequest.cc
-    librbd/object_map/Request.cc
-    librbd/object_map/RefreshRequest.cc
-    librbd/object_map/ResizeRequest.cc
-    librbd/object_map/SnapshotCreateRequest.cc
-    librbd/object_map/SnapshotRemoveRequest.cc
-    librbd/object_map/SnapshotRollbackRequest.cc
-    librbd/object_map/UnlockRequest.cc
-    librbd/object_map/UpdateRequest.cc
-    librbd/operation/FlattenRequest.cc
-    librbd/operation/RebuildObjectMapRequest.cc
-    librbd/operation/RenameRequest.cc
-    librbd/operation/Request.cc
-    librbd/operation/ResizeRequest.cc
-    librbd/operation/SnapshotCreateRequest.cc
-    librbd/operation/SnapshotProtectRequest.cc
-    librbd/operation/SnapshotRemoveRequest.cc
-    librbd/operation/SnapshotRenameRequest.cc
-    librbd/operation/SnapshotRollbackRequest.cc
-    librbd/operation/SnapshotUnprotectRequest.cc
-    librbd/operation/TrimRequest.cc
-    librbd/WatchNotifyTypes.cc)
-  add_library(librbd ${CEPH_SHARED} ${librbd_srcs}
-    $<TARGET_OBJECTS:osdc_rbd_objs>
-    $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(librbd LINK_PRIVATE librados common journal
-    cls_lock_client cls_rbd_client cls_journal_client udev
-    ${CMAKE_DL_LIBS})
-  if(${ENABLE_SHARED})
-    set_target_properties(librbd PROPERTIES VERSION "1.0.0" SOVERSION "1"
-      OUTPUT_NAME rbd)
-  endif(${ENABLE_SHARED})
-  install(TARGETS librados librbd DESTINATION lib)
+  add_subdirectory(librbd)
+
   set(rbd_srcs
     tools/rbd/rbd.cc
     tools/rbd/ArgumentTypes.cc

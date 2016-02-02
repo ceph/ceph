@@ -18,6 +18,7 @@ add_subdirectory(filestore)
 add_subdirectory(journal)
 add_subdirectory(libcephfs)
 add_subdirectory(librados_test_stub)
+add_subdirectory(librbd)
 add_subdirectory(messenger)
 add_subdirectory(msgr)
 add_subdirectory(ObjectMap)
@@ -232,59 +233,6 @@ add_executable(ceph_multi_stress_watch
   )
 target_link_libraries(ceph_multi_stress_watch librados global radostest
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-
-# unittest_librbd
-add_executable(unittest_librbd EXCLUDE_FROM_ALL
-  librbd/test_librbd.cc
-  librbd/test_fixture.cc
-  librbd/test_ImageWatcher.cc
-  librbd/test_internal.cc
-  librbd/test_support.cc
-  librbd/test_main.cc
-  ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
-  ${CMAKE_SOURCE_DIR}/src/common/secret.c
-  )
-add_dependencies(check unittest_librbd)
-set_target_properties(unittest_librbd PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-if(${WITH_LTTNG})
-  target_link_libraries(unittest_librbd librbd_tp)
-endif(${WITH_LTTNG})
-target_link_libraries(unittest_librbd
-  librbd
-  librados
-  journal
-  cls_journal_client
-  librados_api
-  rados_test_stub
-  ${UNITTEST_LIBS}
-  global
-  ${CMAKE_DL_LIBS}
-  ${CRYPTO_LIBS}
-  ${EXTRALIBS}
-  blkid
-  udev
-  keyutils
-  radostest
-  )
-
-add_executable(test_librbd_fsx
-  librbd/fsx.cc
-  ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
-  ${CMAKE_SOURCE_DIR}/src/common/secret.c
-  )
-target_link_libraries(test_librbd_fsx
-  librbd
-  librados
-  global
-  m
-  ${CMAKE_DL_LIBS}
-  ${CRYPTO_LIBS}
-  ${EXTRALIBS}
-  blkid
-  udev
-  keyutils
-  )
 
 #ceph_perf_local
 add_executable(ceph_perf_local 
