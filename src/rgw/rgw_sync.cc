@@ -346,34 +346,6 @@ string RGWMetaSyncEnv::shard_obj_name(int shard_id)
   return string(buf);
 }
 
-class RGWReadMDLogShardInfo : public RGWSimpleCoroutine {
-  RGWRados *store;
-  RGWMetadataLog *mdlog;
-  int req_ret;
-
-  int shard_id;
-  RGWMetadataLogInfo *shard_info;
-public:
-  RGWReadMDLogShardInfo(RGWRados *_store, int _shard_id, RGWMetadataLogInfo *_shard_info) : RGWSimpleCoroutine(_store->ctx()),
-                                                store(_store), mdlog(store->meta_mgr->get_log()),
-                                                req_ret(0), shard_id(_shard_id), shard_info(_shard_info) {
-  }
-
-  int send_request() {
-    int ret = mdlog->get_info_async(shard_id, shard_info, stack->get_completion_mgr(), (void *)stack, &req_ret);
-    if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: mdlog->get_info_async() returned ret=" << ret << dendl;
-      return set_cr_error(ret);
-    }
-
-    return 0;
-  }
-
-  int request_complete() {
-    return req_ret;
-  }
-};
-
 class RGWAsyncReadMDLogEntries : public RGWAsyncRadosRequest {
   RGWRados *store;
   RGWMetadataLog *mdlog;
