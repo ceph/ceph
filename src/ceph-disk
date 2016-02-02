@@ -87,7 +87,7 @@ links.
 udev triggers 'ceph-disk activate <dev>' or 'ceph-disk
 activate-journal <dev>' based on the partition type.
 
-On old distros (e.g., RHEL6), the blkid installed does not recognized
+On old distros (e.g., RHEL6), the blkid installed does not recognize
 GPT partition metadata and the /dev/disk/by-partuuid etc. links aren't
 present.  We have a horrible hack in the form of ceph-disk-udev that
 parses gparted output to create the symlinks above and triggers the
