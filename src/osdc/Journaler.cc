@@ -103,7 +103,7 @@ class Journaler::C_ReadHead : public Context {
   Journaler *ls;
 public:
   bufferlist bl;
-  C_ReadHead(Journaler *l) : ls(l) {}
+  explicit C_ReadHead(Journaler *l) : ls(l) {}
   void finish(int r) {
     ls->_finish_read_head(r, bl);
   }
@@ -125,7 +125,7 @@ class Journaler::C_ProbeEnd : public Context {
   Journaler *ls;
 public:
   uint64_t end;
-  C_ProbeEnd(Journaler *l) : ls(l), end(-1) {}
+  explicit C_ProbeEnd(Journaler *l) : ls(l), end(-1) {}
   void finish(int r) {
     ls->_finish_probe_end(r, end);
   }
@@ -849,7 +849,8 @@ public:
 class Journaler::C_RetryRead : public Context {
   Journaler *ls;
 public:
-  C_RetryRead(Journaler *l) : ls(l) {}
+  explicit C_RetryRead(Journaler *l) : ls(l) {}
+
   void finish(int r) {
     // Should only be called from waitfor_safe i.e. already inside lock
     assert(ls->lock.is_locked_by_me());

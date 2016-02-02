@@ -24,7 +24,7 @@ private:
   Messenger *messenger;
   uint64_t dcount;
 public:
-  XioDispatcher(Messenger *msgr);
+  explicit XioDispatcher(Messenger *msgr);
   virtual ~XioDispatcher();
 
   uint64_t get_dcount() { return dcount; }

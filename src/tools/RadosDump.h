@@ -161,7 +161,7 @@ struct object_begin {
   // of object processing.
   object_info_t oi;
 
-  object_begin(const ghobject_t &hoid): hoid(hoid) { }
+  explicit object_begin(const ghobject_t &hoid): hoid(hoid) { }
   object_begin() { }
 
   // If superblock doesn't include CEPH_FS_FEATURE_INCOMPAT_SHARDS then
@@ -218,8 +218,8 @@ struct data_section {
 
 struct attr_section {
   map<string,bufferlist> data;
-  attr_section(const map<string,bufferlist> &data) : data(data) { }
-  attr_section(map<string, bufferptr> &data_)
+  explicit attr_section(const map<string,bufferlist> &data) : data(data) { }
+  explicit attr_section(map<string, bufferptr> &data_)
   {
     for (std::map<std::string, bufferptr>::iterator i = data_.begin();
          i != data_.end(); ++i) {
@@ -245,7 +245,7 @@ struct attr_section {
 
 struct omap_hdr_section {
   bufferlist hdr;
-  omap_hdr_section(bufferlist hdr) : hdr(hdr) { }
+  explicit omap_hdr_section(bufferlist hdr) : hdr(hdr) { }
   omap_hdr_section() { }
 
   void encode(bufferlist& bl) const {
@@ -262,7 +262,7 @@ struct omap_hdr_section {
 
 struct omap_section {
   map<string, bufferlist> omap;
-  omap_section(const map<string, bufferlist> &omap) :
+  explicit omap_section(const map<string, bufferlist> &omap) :
     omap(omap) { }
   omap_section() { }
 

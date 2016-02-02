@@ -94,7 +94,7 @@ public:
 	old_inodes = *oi;
       snapbl = sbl;
     }
-    fullbit(bufferlist::iterator &p) {
+    explicit fullbit(bufferlist::iterator &p) {
       decode(p);
     }
     fullbit() {}
@@ -144,7 +144,7 @@ public:
 
     remotebit(const string& d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
       dn(d), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
-    remotebit(bufferlist::iterator &p) { decode(p); }
+    explicit remotebit(bufferlist::iterator &p) { decode(p); }
     remotebit(): dnfirst(0), dnlast(0), dnv(0), ino(0),
 	d_type('\0'), dirty(false) {}
 
@@ -171,7 +171,7 @@ public:
 
     nullbit(const string& d, snapid_t df, snapid_t dl, version_t v, bool dr) : 
       dn(d), dnfirst(df), dnlast(dl), dnv(v), dirty(dr) { }
-    nullbit(bufferlist::iterator &p) { decode(p); }
+    explicit nullbit(bufferlist::iterator &p) { decode(p); }
     nullbit(): dnfirst(0), dnlast(0), dnv(0), dirty(false) {}
 
     void encode(bufferlist& bl) const;
@@ -333,7 +333,7 @@ private:
   // for replay, in certain cases
   //LogSegment *_segment;
 
-  EMetaBlob(MDLog *mdl = 0);  // defined in journal.cc
+  explicit EMetaBlob(MDLog *mdl = 0);  // defined in journal.cc
   ~EMetaBlob() { }
 
   void print(ostream& out) {

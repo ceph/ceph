@@ -74,7 +74,7 @@ struct MDSCapMatch {
 
   MDSCapMatch() : uid(MDS_AUTH_UID_ANY) {}
   MDSCapMatch(int64_t uid_, std::vector<gid_t>& gids_) : uid(uid_), gids(gids_) {}
-  MDSCapMatch(std::string path_)
+  explicit MDSCapMatch(std::string path_)
     : uid(MDS_AUTH_UID_ANY), path(path_) {
     normalize_path();
   }
@@ -119,11 +119,11 @@ class MDSAuthCaps
   std::vector<MDSCapGrant> grants;
 
 public:
-  MDSAuthCaps(CephContext *cct_=NULL)
+  explicit MDSAuthCaps(CephContext *cct_=NULL)
     : cct(cct_) { }
 
   // this ctor is used by spirit/phoenix; doesn't need cct.
-  MDSAuthCaps(const std::vector<MDSCapGrant> &grants_)
+  explicit MDSAuthCaps(const std::vector<MDSCapGrant> &grants_)
     : cct(NULL), grants(grants_) { }
 
   void set_allow_all();

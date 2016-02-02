@@ -290,7 +290,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
 class BlueRocksDirectory : public rocksdb::Directory {
   BlueFS *fs;
  public:
-  BlueRocksDirectory(BlueFS *f) : fs(f) {}
+  explicit BlueRocksDirectory(BlueFS *f) : fs(f) {}
 
   // Fsync directory. Can be called concurrently from multiple threads.
   rocksdb::Status Fsync() {

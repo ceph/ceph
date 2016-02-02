@@ -73,7 +73,7 @@ class LevelDBStore : public KeyValueDB {
   class CompactThread : public Thread {
     LevelDBStore *db;
   public:
-    CompactThread(LevelDBStore *d) : db(d) {}
+    explicit CompactThread(LevelDBStore *d) : db(d) {}
     void *entry() {
       db->compact_thread_entry();
       return NULL;
@@ -185,7 +185,7 @@ public:
   public:
     leveldb::WriteBatch bat;
     LevelDBStore *db;
-    LevelDBTransactionImpl(LevelDBStore *db) : db(db) {}
+    explicit LevelDBTransactionImpl(LevelDBStore *db) : db(db) {}
     void set(
       const string &prefix,
       const string &k,
@@ -220,7 +220,7 @@ public:
   protected:
     boost::scoped_ptr<leveldb::Iterator> dbiter;
   public:
-    LevelDBWholeSpaceIteratorImpl(leveldb::Iterator *iter) :
+    explicit LevelDBWholeSpaceIteratorImpl(leveldb::Iterator *iter) :
       dbiter(iter) { }
     virtual ~LevelDBWholeSpaceIteratorImpl() { }
 

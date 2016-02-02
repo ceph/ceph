@@ -392,7 +392,7 @@ int main(int argc, const char **argv)
 	  string name;
 	  monmap.get_addr_name(local, name);
 
-	  if (name.find("noname-") == 0) {
+	  if (name.compare(0, 7, "noname-") == 0) {
 	    cout << argv[0] << ": mon." << name << " " << local
 		 << " is local, renaming to mon." << g_conf->name.get_id() << std::endl;
 	    monmap.rename(name, g_conf->name.get_id());

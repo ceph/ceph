@@ -272,7 +272,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
 class RGWRESTStreamOutCB : public RGWGetDataCB {
   RGWRESTStreamWriteRequest *req;
 public:
-  RGWRESTStreamOutCB(RGWRESTStreamWriteRequest *_req) : req(_req) {}
+  explicit RGWRESTStreamOutCB(RGWRESTStreamWriteRequest *_req) : req(_req) {}
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len); /* callback for object iteration when sending data */
 };
 

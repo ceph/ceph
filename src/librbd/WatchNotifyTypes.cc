@@ -13,7 +13,7 @@ namespace {
 
 class EncodePayloadVisitor : public boost::static_visitor<void> {
 public:
-  EncodePayloadVisitor(bufferlist &bl) : m_bl(bl) {}
+  explicit EncodePayloadVisitor(bufferlist &bl) : m_bl(bl) {}
 
   template <typename Payload>
   inline void operator()(const Payload &payload) const {
@@ -42,7 +42,7 @@ private:
 
 class DumpPayloadVisitor : public boost::static_visitor<void> {
 public:
-  DumpPayloadVisitor(Formatter *formatter) : m_formatter(formatter) {}
+  explicit DumpPayloadVisitor(Formatter *formatter) : m_formatter(formatter) {}
 
   template <typename Payload>
   inline void operator()(const Payload &payload) const {

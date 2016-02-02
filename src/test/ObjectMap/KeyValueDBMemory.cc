@@ -26,7 +26,7 @@ protected:
   map<pair<string,string>, bufferlist>::iterator it;
 
 public:
-  WholeSpaceMemIterator(KeyValueDBMemory *db) : db(db), ready(false) { }
+  explicit WholeSpaceMemIterator(KeyValueDBMemory *db) : db(db), ready(false) { }
   virtual ~WholeSpaceMemIterator() { }
 
   int seek_to_first() {
@@ -238,7 +238,7 @@ public:
    * keep it in mind.
    */
 
-  WholeSpaceSnapshotMemIterator(KeyValueDBMemory *db) :
+  explicit WholeSpaceSnapshotMemIterator(KeyValueDBMemory *db) :
     WholeSpaceMemIterator(db) { }
   ~WholeSpaceSnapshotMemIterator() {
     delete db;

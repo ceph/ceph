@@ -28,7 +28,7 @@ private:
   bool m_filestore_fsync_flushes_journal_data;
   bool m_filestore_splice;
 public:
-  GenericFileStoreBackend(FileStore *fs);
+  explicit GenericFileStoreBackend(FileStore *fs);
   virtual ~GenericFileStoreBackend() {}
 
   virtual const char *get_name() {

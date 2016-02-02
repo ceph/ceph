@@ -161,7 +161,7 @@ struct librados::IoCtxImpl {
 
   struct C_aio_Ack : public Context {
     librados::AioCompletionImpl *c;
-    C_aio_Ack(AioCompletionImpl *_c);
+    explicit C_aio_Ack(AioCompletionImpl *_c);
     void finish(int r);
   };
 
@@ -175,7 +175,7 @@ struct librados::IoCtxImpl {
 
   struct C_aio_Safe : public Context {
     AioCompletionImpl *c;
-    C_aio_Safe(AioCompletionImpl *_c);
+    explicit C_aio_Safe(AioCompletionImpl *_c);
     void finish(int r);
   };
 

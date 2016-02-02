@@ -16,7 +16,7 @@ using namespace std;
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 {
 public:
-  RGWAccessControlPolicy_SWIFT(CephContext *_cct) : RGWAccessControlPolicy(_cct) {}
+  explicit RGWAccessControlPolicy_SWIFT(CephContext *_cct) : RGWAccessControlPolicy(_cct) {}
   ~RGWAccessControlPolicy_SWIFT() {}
 
   void add_grants(RGWRados *store, list<string>& uids, int perm);

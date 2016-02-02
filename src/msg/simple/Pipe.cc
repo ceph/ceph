@@ -1717,9 +1717,8 @@ void Pipe::writer()
       state_closed.set(1);
       pipe_lock.Unlock();
       if (sd) {
-	int r = ::write(sd, &tag, 1);
-	// we can ignore r, actually; we don't care if this succeeds.
-	r++; r = 0; // placate gcc
+	// we can ignore return value, actually; we don't care if this succeeds.
+	if(::write(sd, &tag, 1));
       }
       pipe_lock.Lock();
       continue;
