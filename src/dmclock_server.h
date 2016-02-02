@@ -18,6 +18,7 @@
 #include <map>
 #include <deque>
 #include <queue>
+#include <atomic>
 #include <mutex>
 #include <thread>
 #include <iostream>
@@ -344,6 +345,14 @@ namespace crimson {
       void addRequest(RequestRef&& request,
 		      const ReqParams<C>& req_params,
 		      const Time& time) {
+#if 1
+	static std::atomic_ulong counter(0);
+	++counter;
+	ulong counter2 = counter.load();
+	if (counter2 >= 200 && counter2 < 220) {
+	  std::cout << req_params << std::endl;
+	}
+#endif
 	const C& client_id = req_params.client;
 	DataGuard g(data_mutex);
 
