@@ -416,7 +416,7 @@ public:
   RGWHandler_REST_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_S3() {}
 
-  int validate_bucket_name(const string& bucket, bool relaxed_names);
+  int validate_bucket_name(const string& bucket, bool relaxed_names) = delete;
   using RGWHandler_REST::validate_bucket_name;
   
   virtual int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
@@ -526,6 +526,55 @@ static inline bool looks_like_ip_address(const char *bucket)
     }
   }
   return (num_periods == 3);
+}
+
+static inline bool valid_s3_object_name(const string& name) {
+  if (name.size() > 1024) {
+    return false;
+  }
+  if (check_utf8(name.c_str(), name.size())) {
+    return false;
+  }
+  return true;
+}
+
+static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
+{
+  // This function enforces Amazon's spec for bucket names.
+  // (The requirements, not the recommendations.)
+  int len = name.size();
+  if (len < 3) {
+    // Name too short
+    return -ERR_INVALID_BUCKET_NAME;
+  } else if (len > 255) {
+    // Name too long
+    return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  // bucket names must start with a number, letter, or underscore
+  if (!(isalpha(name[0]) || isdigit(name[0]))) {
+    if (!relaxed)
+      return -ERR_INVALID_BUCKET_NAME;
+    else if (!(name[0] == '_' || name[0] == '.' || name[0] == '-'))
+      return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  for (const char *s = name.c_str(); *s; ++s) {
+    char c = *s;
+    if (isdigit(c) || (c == '.'))
+      continue;
+    if (isalpha(c))
+      continue;
+    if ((c == '-') || (c == '_'))
+      continue;
+    // Invalid character
+    return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  if (looks_like_ip_address(name.c_str()))
+    return -ERR_INVALID_BUCKET_NAME;
+
+  return 0;
 }
 
 #endif /* CEPH_RGW_REST_S3_H */

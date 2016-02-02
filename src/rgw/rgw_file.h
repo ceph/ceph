@@ -1219,18 +1219,6 @@ public:
 
 }; /* RGWDeleteBucketRequest */
 
-static inline bool valid_s3_object_name(const string& name) {
-  if (name.size() > 1024) {
-    // Name too long
-    return false;
-  }
-  if (check_utf8(name.c_str(), name.size())) {
-    // Object names must be valid UTF-8.
-    return false;
-  }
-  return true;
-}
-
 /*
   put object
 */
