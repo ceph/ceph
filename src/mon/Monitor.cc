@@ -1911,6 +1911,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   finish_election();
   if (monmap->size() > 1 &&
       monmap->get_epoch() > 0) {
+    monmon()->apply_mon_features(quorum_mon_features);
     timecheck_start();
     health_tick_start();
     do_health_to_clog_interval();
