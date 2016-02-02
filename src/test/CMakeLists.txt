@@ -19,6 +19,7 @@ add_subdirectory(journal)
 add_subdirectory(libcephfs)
 add_subdirectory(librados_test_stub)
 add_subdirectory(messenger)
+add_subdirectory(msgr)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -395,22 +396,6 @@ target_link_libraries(test_librbd_fsx
   keyutils
   )
 
-# ceph_test_async_driver
-add_executable(ceph_test_async_driver
-  msgr/test_async_driver.cc
-  )
-set_target_properties(ceph_test_async_driver PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_async_driver os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
-
-# ceph_test_msgr
-add_executable(ceph_test_msgr
-  msgr/test_msgr.cc
-  )
-set_target_properties(ceph_test_msgr PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_msgr os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
-
 #ceph_perf_local
 add_executable(ceph_perf_local 
   perf_local.cc
@@ -420,18 +405,6 @@ set(PERF_LOCAL_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2")
 set_target_properties(ceph_perf_local PROPERTIES COMPILE_FLAGS
   ${PERF_LOCAL_FLAGS})
 target_link_libraries(ceph_perf_local os global ${UNITTEST_LIBS})
-
-#ceph_perf_msgr_server
-add_executable(ceph_perf_msgr_server msgr/perf_msgr_server.cc)
-set_target_properties(ceph_perf_msgr_server PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_perf_msgr_server os global ${UNITTEST_LIBS})
-
-#ceph_perf_msgr_client
-add_executable(ceph_perf_msgr_client msgr/perf_msgr_client.cc)
-set_target_properties(ceph_perf_msgr_client PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_perf_msgr_client os global ${UNITTEST_LIBS})
 
 # ceph_test_xattr_bench
 add_executable(ceph_test_xattr_bench
