@@ -282,8 +282,9 @@ public:
   void dump_pg_stats_plain(ostream& ss,
 			   const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats,
 			   bool brief) const;
-  void get_stuck_stats(int types, utime_t cutoff,
+  void get_stuck_stats(int types, const utime_t cutoff,
 		       ceph::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const;
+  bool get_stuck_counts(const utime_t cutoff, map<string, int>& note) const;
   void dump_stuck(Formatter *f, int types, utime_t cutoff) const;
   void dump_stuck_plain(ostream& ss, int types, utime_t cutoff) const;
 

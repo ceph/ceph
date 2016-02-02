@@ -914,7 +914,7 @@ void PGMap::dump_osd_sum_stats(ostream& ss) const
      << std::endl;
 }
 
-void PGMap::get_stuck_stats(int types, utime_t cutoff,
+void PGMap::get_stuck_stats(int types, const utime_t cutoff,
                             ceph::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const
 {
   assert(types != 0);
@@ -953,6 +953,54 @@ void PGMap::get_stuck_stats(int types, utime_t cutoff,
       stuck_pgs[i->first] = i->second;
     }
   }
+}
+
+bool PGMap::get_stuck_counts(const utime_t cutoff, map<string, int>& note) const
+{
+  int inactive = 0;
+  int unclean = 0;
+  int degraded = 0;
+  int undersized = 0;
+  int stale = 0;
+
+  for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator i = pg_stat.begin();
+       i != pg_stat.end();
+       ++i) {
+
+    if (! (i->second.state & PG_STATE_ACTIVE)) {
+      if (i->second.last_active < cutoff)
+        ++inactive;
+    } else if (! (i->second.state & PG_STATE_CLEAN)) {
+      if (i->second.last_clean < cutoff)
+        ++unclean;
+    } else if (i->second.state & PG_STATE_DEGRADED) {
+      if (i->second.last_undegraded < cutoff)
+        ++degraded;
+    } else if (i->second.state & PG_STATE_UNDERSIZED) {
+      if (i->second.last_fullsized < cutoff)
+        ++undersized;
+    } else if (i->second.state & PG_STATE_STALE) {
+      if (i->second.last_unstale < cutoff)
+        ++stale;
+    }
+  }
+  
+  if (inactive)
+    note["stuck inactive"] = inactive;
+  
+  if (unclean)
+    note["stuck unclean"] = unclean;
+  
+  if (undersized)
+    note["stuck undersized"] = undersized;
+  
+  if (degraded)
+    note["stuck degraded"] = degraded;
+  
+  if (stale)
+    note["stuck stale"] = stale; 
+  
+  return inactive || unclean || undersized || degraded || stale;
 }
 
 void PGMap::dump_stuck(Formatter *f, int types, utime_t cutoff) const
