@@ -37,39 +37,38 @@
 #include <algorithm>
 #include <cctype>
 
+#include "capture.h"
 #include "Packet.h"
 
 constexpr size_t Packet::internal_data_size;
 constexpr size_t Packet::default_nr_frags;
 
 void Packet::linearize(size_t at_frag, size_t desired_size) {
-  impl->unuse_internal_data();
+  _impl->unuse_internal_data();
   size_t nr_frags = 0;
   size_t accum_size = 0;
   while (accum_size < desired_size) {
-    accum_size += impl->_frags[at_frag + nr_frags].size;
+    accum_size += _impl->frags[at_frag + nr_frags].size;
     ++nr_frags;
   }
-  std::unique_ptr<char[]> new_frag{new char[accum_size]};
-  auto p = new_frag.get();
+  char *new_frag = new char[accum_size];
+  auto p = new_frag;
   for (size_t i = 0; i < nr_frags; ++i) {
-    auto& f = impl->_frags[at_frag + i];
+    auto& f = _impl->frags[at_frag + i];
     p = std::copy(f.base, f.base + f.size, p);
   }
   // collapse nr_frags into one fragment
-  std::copy(impl->_frags + at_frag + nr_frags, impl->_frags + impl->_nr_frags,
-            impl->_frags + at_frag + 1);
-  impl->_nr_frags -= nr_frags - 1;
-  impl->_frags[at_frag] = fragment{new_frag.get(), accum_size};
+  std::copy(_impl->frags + at_frag + nr_frags, _impl->frags + _impl->_nr_frags,
+            _impl->frags + at_frag + 1);
+  _impl->_nr_frags -= nr_frags - 1;
+  _impl->frags[at_frag] = fragment{new_frag, accum_size};
   if (at_frag == 0 && desired_size == len()) {
     // We can drop the old buffer safely
-    auto x = std::move(impl->_deleter);
-    auto buf = std::move(new_frag);
-    impl->_deleter = make_deleter([buf] {});
+    auto x = std::move(_impl->_deleter);
+    _impl->_deleter = make_deleter([new_frag] { delete new_frag; });
   } else {
-    auto del = std::move(impl->_deleter);
-    auto buf = buf = std::move(new_frag);
-    impl->_deleter = make_deleter([del, buf] {});
+    auto del = std::bind([new_frag](deleter &d) { delete new_frag; }, std::move(_impl->_deleter));
+    _impl->_deleter = make_deleter(std::move(del));
   }
 }
 
@@ -91,12 +90,12 @@ class C_free_on_cpu : public EventCallback {
 
 Packet Packet::free_on_cpu(EventCenter *center, std::function<void()> cb)
 {
-  auto d = std::move(_impl->_deleter);
-  auto cb = std::move(cb);
+  auto del = std::bind(
+      [center, cb] (deleter &del) mutable {
+        center->dispatch_event_external(new C_free_on_cpu(std::move(del), std::move(cb)));
+      }, std::move(_impl->_deleter));
   // make new deleter that runs old deleter on an origin cpu
-  _impl->_deleter = make_deleter(deleter(), [d, cpu, cb] () mutable {
-    center->create_external_event(new C_free_on_cpu(std::move(d), std::move(cb)));
-  });
+  _impl->_deleter = make_deleter(deleter(), std::move(del));
 
   return Packet(impl::copy(_impl.get()));
 }
@@ -136,7 +135,7 @@ std::ostream& operator<<(std::ostream& os, const Packet& p) {
         }
         nfirst = false;
         uint8_t b = *p;
-        os << sprint("%02x", unsigned(b));
+        os << b;
       }
       os << "}";
     }

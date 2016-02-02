@@ -16,9 +16,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-/*
- * Copyright (C) 2014 Cloudius Systems, Ltd.
- */
 
 #ifndef CEPH_GENERICSOCKET_H
 #define CEPH_GENERICSOCKET_H
@@ -41,7 +38,7 @@ class ConnectedSocket;
 class ServerSocketImpl {
  public:
   virtual ~ServerSocketImpl() {}
-  virtual int accept(ConnectedSocket *sock, entity_addr_t *out);
+  virtual int accept(ConnectedSocket *sock, entity_addr_t *out) = 0;
   virtual void abort_accept() = 0;
 };
 /// \endcond
@@ -148,14 +145,16 @@ struct SocketOptions {
   int rcbuf_size = 0;
 };
 
+class EventCenter;
+
 class NetworkStack {
+ protected:
+  NetworkStack(CephContext *c): cct(c) {}
  public:
   CephContext *cct;
-
-  NetworkStack(CephContext *c): cct(c) {}
+  static std::unique_ptr<NetworkStack> create(CephContext *c, const string &type, EventCenter *center, unsigned i);
   virtual ~NetworkStack() {}
-  virtual int listen(const entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) = 0;
-  // FIXME: local parameter assumes ipv4 for now, fix when adding other AF
+  virtual int listen(entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) = 0;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) = 0;
   virtual void initialize() {}
 };

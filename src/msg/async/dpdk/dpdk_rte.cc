@@ -29,14 +29,19 @@ namespace dpdk {
 
   bool eal::initialized = false;
 
-  void eal::init(cpuset cpus, CephContext *c)
+  static int bitcount(unsigned n)
+  {
+    unsigned int c =0 ;
+    for (c = 0; n; ++c)
+      n &= (n -1);
+    return c;
+  }
+
+  void eal::init(CephContext *c)
   {
     if (initialized) {
       return;
     }
-
-    std::stringstream mask;
-    mask << std::hex << cpus.to_ulong();
 
     // TODO: Inherit these from the app parameters - "opts"
     std::vector<std::vector<char>> args {
@@ -61,7 +66,11 @@ namespace dpdk {
       // assume there is going to be a queue per-CPU. Plus we'll give a DPDK
       // 64MB for "other stuff".
       //
-      size_t size_MB = mem_size(cpus.count()) >> 20;
+      unsigned int x;
+      std::stringstream ss;
+      ss << std::hex << "fffefffe";
+      ss >> x;
+      size_t size_MB = mem_size(bitcount(x)) >> 20;
       std::stringstream size_MB_str;
       size_MB_str << size_MB;
 
@@ -85,7 +94,7 @@ namespace dpdk {
     initialized = true;
   }
 
-  size_t eal::mem_size(int num_cpus, bool hugetlbfs_membackend)
+  size_t eal::mem_size(int num_cpus)
   {
     size_t memsize = 0;
     //
@@ -94,7 +103,7 @@ namespace dpdk {
     // We don't know what is going to be our networking configuration so we
     // assume there is going to be a queue per-CPU.
     //
-    memsize += num_cpus * qp_mempool_obj_size(hugetlbfs_membackend);
+    memsize += num_cpus * qp_mempool_obj_size();
 
     // Plus we'll give a DPDK 64MB for "other stuff".
     memsize += (64UL << 20);

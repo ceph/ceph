@@ -15,7 +15,11 @@
  */
 
 #include "common/errno.h"
+#include "DPDKStack.h"
 #include "EventDPDK.h"
+
+#include "common/dout.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_ms
 
@@ -24,16 +28,16 @@
 
 int DPDKDriver::init(EventCenter *c, int nevent)
 {
-	stack = DPDKStack::create(cct, c->cpu_id());
+	stack = DPDKStack::create(cct, c, c->cpu_id());
 	return 0;
 }
 
 int DPDKDriver::add_event(int fd, int cur_mask, int add_mask)
 {
 	ldout(cct, 20) << __func__ << " add event fd=" << fd << " cur_mask=" << cur_mask
-								 << " add_mask=" << add_mask << " to " << epfd << dendl;
+								 << " add_mask=" << add_mask << dendl;
 
-	int r = manager.listen(fd);
+	int r = manager.listen(fd, add_mask);
 	if (r < 0) {
 		lderr(cct) << __func__ << " add fd=" << fd << " failed. "
 		           << cpp_strerror(-r) << dendl;
@@ -46,12 +50,12 @@ int DPDKDriver::add_event(int fd, int cur_mask, int add_mask)
 int DPDKDriver::del_event(int fd, int cur_mask, int delmask)
 {
 	ldout(cct, 20) << __func__ << " del event fd=" << fd << " cur_mask=" << cur_mask
-								 << " delmask=" << delmask << " to " << epfd << dendl;
+								 << " delmask=" << delmask << dendl;
 	int r = 0;
 
-	if (mask != EVENT_NONE) {
-		if ((r = unlisten(fd)) < 0) {
-			lderr(cct) << __func__ << " delete fd=" << fd << " mask=" << mask
+	if (delmask != EVENT_NONE) {
+		if ((r = manager.unlisten(fd, delmask)) < 0) {
+			lderr(cct) << __func__ << " delete fd=" << fd << " delmask=" << delmask
 								 << " failed." << cpp_strerror(-r) << dendl;
 			return r;
 		}

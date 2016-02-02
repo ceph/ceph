@@ -96,9 +96,10 @@ class UserspaceEventManager {
 			waiting_fds[fd] = -1;
 			--waiting_size;
 		}
+		return 0;
 	}
 
-	int notify(int fd, int mask = EVENT_READABLE, int errno = 0) {
+	int notify(int fd, int mask = EVENT_READABLE) {
 		if ((size_t)fd > fds.size())
 			return -ENOENT;
 

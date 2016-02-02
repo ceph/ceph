@@ -106,151 +106,6 @@ enum {
 };
 
 
-class DPDKQueuePair;
-
-class DPDKDevice {
- public:
-  CephContext *cct;
-  PerfCounters *perf_logger;
-  std::vector<std::unique_ptr<DPDKQueuePair>> _queues;
-  size_t _rss_table_bits = 0;
-  uint8_t _port_idx;
-  uint16_t _num_queues;
-  unsigned  cores;
-  hw_features _hw_features;
-  uint8_t _queues_ready = 0;
-  unsigned _home_cpu;
-  bool _use_lro;
-  bool _enable_fc;
-  std::vector<uint8_t> _redir_table;
-  rss_key_type _rss_key;
-  port_stats _stats;
-  bool _is_i40e_device = false;
-
- public:
-  rte_eth_dev_info _dev_info = {};
-
- private:
-  /**
-   * Port initialization consists of 3 main stages:
-   * 1) General port initialization which ends with a call to
-   *    rte_eth_dev_configure() where we request the needed number of Rx and
-   *    Tx queues.
-   * 2) Individual queues initialization. This is done in the constructor of
-   *    DPDKQueuePair class. In particular the memory pools for queues are allocated
-   *    in this stage.
-   * 3) The final stage of the initialization which starts with the call of
-   *    rte_eth_dev_start() after which the port becomes fully functional. We
-   *    will also wait for a link to get up in this stage.
-   */
-
-
-  /**
-   * First stage of the port initialization.
-   *
-   * @return 0 in case of success and an appropriate error code in case of an
-   *         error.
-   */
-  int init_port_start();
-
-  /**
-   * The final stage of a port initialization.
-   * @note Must be called *after* all queues from stage (2) have been
-   *       initialized.
-   */
-  int init_port_fini();
-
-  /**
-   * Check the link status of out port in up to 9s, and print them finally.
-   */
-  int check_port_link_status();
-
-  /**
-   * Configures the HW Flow Control
-   */
-  void set_hw_flow_control();
-
- public:
-  DPDKDevice(CephContext *c, uint8_t port_idx, uint16_t num_queues,
-             unsigned cores, bool use_lro, bool enable_fc):
-      cct(c), _port_idx(port_idx), _num_queues(num_queues), cores(cores),
-      _home_cpu(0), _use_lro(use_lro),
-      _enable_fc(enable_fc) {
-    _queues = std::vector<std::unique_ptr<DPDKQueuePair>>(cores);
-    /* now initialise the port we will use */
-    int ret = init_port_start();
-    if (ret != 0) {
-      rte_exit(EXIT_FAILURE, "Cannot initialise port %u\n", _port_idx);
-    }
-    string name(std::string("port") + std::to_string(port_idx));
-    PerfCountersBuilder plb(cct, name, l_dpdk_dev_first, l_dpdk_dev_last);
-
-    plb.add_u64_counter(l_dpdk_dev_rx_mcast, "dpdk_device_receive_multicast_packets", "DPDK received multicast packets");
-    plb.add_u64_counter(l_dpdk_dev_rx_total_errors, "dpdk_device_receive_total_errors", "DPDK received total_errors");
-    plb.add_u64_counter(l_dpdk_dev_tx_total_errors, "dpdk_device_send_total_errors", "DPDK sendd total_errors");
-    plb.add_u64_counter(l_dpdk_dev_rx_badcrc_errors, "dpdk_device_receive_badcrc_errors", "DPDK received bad crc errors");
-    plb.add_u64_counter(l_dpdk_dev_rx_dropped_errors, "dpdk_device_receive_dropped_errors", "DPDK received dropped errors");
-    plb.add_u64_counter(l_dpdk_dev_rx_badlength_errors, "dpdk_device_receive_badlength_errors", "DPDK received bad length errors");
-    plb.add_u64_counter(l_dpdk_dev_rx_pause_xon, "dpdk_device_receive_pause_xon", "DPDK received received PAUSE XON frames");
-    plb.add_u64_counter(l_dpdk_dev_tx_pause_xon, "dpdk_device_send_pause_xon", "DPDK received sendd PAUSE XON frames");
-    plb.add_u64_counter(l_dpdk_dev_rx_pause_xoff, "dpdk_device_receive_pause_xoff", "DPDK received received PAUSE XOFF frames");
-    plb.add_u64_counter(l_dpdk_dev_tx_pause_xoff, "dpdk_device_send_pause_xoff", "DPDK received sendd PAUSE XOFF frames");
-
-    perf_logger = plb.create_perf_counters();
-    cct->get_perfcounters_collection()->add(perf_logger);
-  }
-
-  ~DPDKDevice() {}
-
-  DPDKQueuePair& queue_for_cpu(unsigned cpu) { return *_queues[cpu]; }
-  void l2receive(int qid, Packet p);
-  subscription<Packet> receive(unsigned cpuid, std::function<int (Packet)> next_packet);
-  ethernet_address hw_address() {
-    struct ether_addr mac;
-    rte_eth_macaddr_get(_port_idx, &mac);
-
-    return mac.addr_bytes;
-  }
-  hw_features get_hw_features() {
-    return _hw_features;
-  }
-  const rss_key_type& rss_key() const { return _rss_key; }
-  uint16_t hw_queues_count() { return _num_queues; }
-  std::unique_ptr<DPDKQueuePair> init_local_queue(EventCenter *center, string hugepages, uint16_t qid);
-  unsigned hash2qid(uint32_t hash) {
-    assert(_redir_table.size());
-    return _redir_table[hash & (_redir_table.size() - 1)];
-  }
-  void set_local_queue(unsigned i, std::unique_ptr<DPDKQueuePair> qp);
-  template <typename Func>
-  unsigned forward_dst(unsigned src_cpuid, Func&& hashfn);
-
-  hw_features& hw_features_ref() { return _hw_features; }
-
-  const rte_eth_rxconf* def_rx_conf() const {
-    return &_dev_info.default_rxconf;
-  }
-
-  const rte_eth_txconf* def_tx_conf() const {
-    return &_dev_info.default_txconf;
-  }
-
-  /**
-   *  Set the RSS table in the device and store it in the internal vector.
-   */
-  void set_rss_table();
-
-  uint8_t port_idx() { return _port_idx; }
-  bool is_i40e_device() const {
-    return _is_i40e_device;
-  }
-};
-
-
-std::unique_ptr<DPDKDevice> create_dpdk_net_device(
-        uint8_t port_idx = 0, uint8_t num_queues = 1,
-        bool use_lro = true, bool enable_fc = true);
-
 struct qp_stats_good {
   /**
    * Update the packets bunch related statistics.
@@ -324,28 +179,8 @@ struct qp_stats {
   } tx;
 };
 
-enum {
-  l_dpdk_qp_first,
-  l_dpdk_qp_rx_packets,
-  l_dpdk_qp_tx_packets,
-  l_dpdk_qp_rx_total_errors,
-  l_dpdk_qp_rx_bad_checksum_errors,
-  l_dpdk_qp_rx_no_memory_errors,
-  l_dpdk_qp_rx_bytes,
-  l_dpdk_qp_tx_bytes,
-  l_dpdk_qp_rx_last_bunch,
-  l_dpdk_qp_tx_last_bunch,
-  l_dpdk_qp_rx_fragments,
-  l_dpdk_qp_tx_fragments,
-  l_dpdk_qp_rx_copy_ops,
-  l_dpdk_qp_tx_copy_ops,
-  l_dpdk_qp_rx_copy_bytes,
-  l_dpdk_qp_tx_copy_bytes,
-  l_dpdk_qp_rx_linearize_ops,
-  l_dpdk_qp_tx_linearize_ops,
-  l_dpdk_qp_tx_queue_length,
-  l_dpdk_qp_last
-};
+class DPDKDevice;
+class DPDKStack;
 
 class DPDKQueuePair {
   using packet_provider_type = std::function<Tub<Packet> ()>;
@@ -389,33 +224,7 @@ class DPDKQueuePair {
      * @param qp QP handle
      * @param head a head of an rte_mbufs cluster
      */
-    static void set_cluster_offload_info(const Packet& p, const DPDKQueuePair& qp, rte_mbuf* head) {
-      // Handle TCP checksum offload
-      auto oi = p.offload_info();
-      if (oi.needs_ip_csum) {
-        head->ol_flags |= PKT_TX_IP_CKSUM;
-        // TODO: Take a VLAN header into an account here
-        head->l2_len = sizeof(struct ether_hdr);
-        head->l3_len = oi.ip_hdr_len;
-      }
-      if (qp.port().get_hw_features().tx_csum_l4_offload) {
-        if (oi.protocol == ip_protocol_num::tcp) {
-          head->ol_flags |= PKT_TX_TCP_CKSUM;
-          // TODO: Take a VLAN header into an account here
-          head->l2_len = sizeof(struct ether_hdr);
-          head->l3_len = oi.ip_hdr_len;
-
-          if (oi.tso_seg_size) {
-            assert(oi.needs_ip_csum);
-            head->ol_flags |= PKT_TX_TCP_SEG;
-            head->l4_len = oi.tcp_hdr_len;
-            head->tso_segsz = oi.tso_seg_size;
-          }
-        } else {
-          assert(0);
-        }
-      }
-    }
+    static void set_cluster_offload_info(const Packet& p, const DPDKQueuePair& qp, rte_mbuf* head);
 
     /**
      * Creates a tx_buf cluster representing a given packet in a "zero-copy"
@@ -696,7 +505,7 @@ class DPDKQueuePair {
     }
 
     void set_packet(Packet&& p) {
-      _p = p;
+      _p = std::move(p);
     }
 
    private:
@@ -806,10 +615,12 @@ class DPDKQueuePair {
   };
 
  public:
-  explicit DPDKQueuePair(EventCenter *c, DPDKDevice* dev, uint8_t qid);
-
-  void rx_start();
+  explicit DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, uint8_t qid);
   ~DPDKQueuePair() {}
+
+  void rx_start() {
+    _rx_poller.construct(this);
+  }
 
   uint32_t send(circular_buffer<Packet>& pb) {
     // Zero-copy send
@@ -822,7 +633,7 @@ class DPDKQueuePair {
   tx_buf* get_tx_buf() { return _tx_buf_factory.get(); }
  private:
   template <class Func>
-  uint32_t _send(circular_buffer<Packet>& pb, Func packet_to_tx_buf_p) {
+  uint32_t _send(circular_buffer<Packet>& pb, Func &&packet_to_tx_buf_p) {
     if (_tx_burst.size() == 0) {
       for (auto&& p : pb) {
         // TODO: assert() in a fast path! Remove me ASAP!
@@ -837,7 +648,7 @@ class DPDKQueuePair {
       }
     }
 
-    uint16_t sent = rte_eth_tx_burst(_dev->port_idx(), _qid,
+    uint16_t sent = rte_eth_tx_burst(_dev_port_idx, _qid,
                                      _tx_burst.data() + _tx_burst_idx,
                                      _tx_burst.size() - _tx_burst_idx);
 
@@ -965,6 +776,7 @@ class DPDKQueuePair {
   Tub<Packet> from_mbuf_lro(rte_mbuf* m);
 
  private:
+  CephContext *cct;
   std::vector<packet_provider_type> _pkt_providers;
   Tub<std::array<uint8_t, 128>> _sw_reta;
   circular_buffer<Packet> _proxy_packetq;
@@ -985,6 +797,7 @@ class DPDKQueuePair {
   qp_stats _stats;
   PerfCounters *perf_logger;
   DPDKDevice* _dev;
+  uint8_t _dev_port_idx;
   EventCenter *center;
   uint8_t _qid;
   rte_mempool *_pktmbuf_pool_rx;
@@ -1033,43 +846,204 @@ class DPDKQueuePair {
   uint16_t _tx_burst_idx = 0;
 };
 
-void DPDKDevice::l2receive(int qid, Packet p)
-{
-  _queues[qid]->_rx_stream.produce(std::move(p));
-}
+class DPDKDevice {
+ public:
+  CephContext *cct;
+  PerfCounters *perf_logger;
+  std::vector<std::unique_ptr<DPDKQueuePair>> _queues;
+  std::vector<DPDKStack*> stacks;
+  size_t _rss_table_bits = 0;
+  uint8_t _port_idx;
+  uint16_t _num_queues;
+  unsigned  cores;
+  hw_features _hw_features;
+  uint8_t _queues_ready = 0;
+  unsigned _home_cpu;
+  bool _use_lro;
+  bool _enable_fc;
+  std::vector<uint8_t> _redir_table;
+  rss_key_type _rss_key;
+  port_stats _stats;
+  bool _is_i40e_device = false;
 
-subscription<Packet> DPDKDevice::receive(unsigned cpuid,
-    std::function<int (Packet)> next_packet) {
-  auto sub = _queues[cpuid]->_rx_stream.listen(std::move(next_packet));
-  _queues[cpuid]->rx_start();
-  return std::move(sub);
-}
+ public:
+  rte_eth_dev_info _dev_info = {};
 
-void DPDKDevice::set_local_queue(unsigned i, std::unique_ptr<DPDKQueuePair> qp) {
-  assert(!_queues[i]);
-  _queues[i] = std::move(qp);
-}
+  /**
+   * The final stage of a port initialization.
+   * @note Must be called *after* all queues from stage (2) have been
+   *       initialized.
+   */
+  int init_port_fini();
 
-template <typename Func>
-unsigned DPDKDevice::forward_dst(unsigned src_cpuid, Func&& hashfn){
-  auto& qp = queue_for_cpu(src_cpuid);
-  if (!qp._sw_reta) {
-    return src_cpuid;
+ private:
+  /**
+   * Port initialization consists of 3 main stages:
+   * 1) General port initialization which ends with a call to
+   *    rte_eth_dev_configure() where we request the needed number of Rx and
+   *    Tx queues.
+   * 2) Individual queues initialization. This is done in the constructor of
+   *    DPDKQueuePair class. In particular the memory pools for queues are allocated
+   *    in this stage.
+   * 3) The final stage of the initialization which starts with the call of
+   *    rte_eth_dev_start() after which the port becomes fully functional. We
+   *    will also wait for a link to get up in this stage.
+   */
+
+
+  /**
+   * First stage of the port initialization.
+   *
+   * @return 0 in case of success and an appropriate error code in case of an
+   *         error.
+   */
+  int init_port_start();
+
+  /**
+   * Check the link status of out port in up to 9s, and print them finally.
+   */
+  int check_port_link_status();
+
+  /**
+   * Configures the HW Flow Control
+   */
+  void set_hw_flow_control();
+
+ public:
+  DPDKDevice(CephContext *c, uint8_t port_idx, uint16_t num_queues,
+             unsigned cores, bool use_lro, bool enable_fc):
+      cct(c), _port_idx(port_idx), _num_queues(num_queues), cores(cores),
+      _home_cpu(0), _use_lro(use_lro),
+      _enable_fc(enable_fc) {
+    _queues = std::vector<std::unique_ptr<DPDKQueuePair>>(cores);
+    /* now initialise the port we will use */
+    int ret = init_port_start();
+    if (ret != 0) {
+      rte_exit(EXIT_FAILURE, "Cannot initialise port %u\n", _port_idx);
+    }
+    string name(std::string("port") + std::to_string(port_idx));
+    PerfCountersBuilder plb(cct, name, l_dpdk_dev_first, l_dpdk_dev_last);
+
+    plb.add_u64_counter(l_dpdk_dev_rx_mcast, "dpdk_device_receive_multicast_packets", "DPDK received multicast packets");
+    plb.add_u64_counter(l_dpdk_dev_rx_total_errors, "dpdk_device_receive_total_errors", "DPDK received total_errors");
+    plb.add_u64_counter(l_dpdk_dev_tx_total_errors, "dpdk_device_send_total_errors", "DPDK sendd total_errors");
+    plb.add_u64_counter(l_dpdk_dev_rx_badcrc_errors, "dpdk_device_receive_badcrc_errors", "DPDK received bad crc errors");
+    plb.add_u64_counter(l_dpdk_dev_rx_dropped_errors, "dpdk_device_receive_dropped_errors", "DPDK received dropped errors");
+    plb.add_u64_counter(l_dpdk_dev_rx_badlength_errors, "dpdk_device_receive_badlength_errors", "DPDK received bad length errors");
+    plb.add_u64_counter(l_dpdk_dev_rx_pause_xon, "dpdk_device_receive_pause_xon", "DPDK received received PAUSE XON frames");
+    plb.add_u64_counter(l_dpdk_dev_tx_pause_xon, "dpdk_device_send_pause_xon", "DPDK received sendd PAUSE XON frames");
+    plb.add_u64_counter(l_dpdk_dev_rx_pause_xoff, "dpdk_device_receive_pause_xoff", "DPDK received received PAUSE XOFF frames");
+    plb.add_u64_counter(l_dpdk_dev_tx_pause_xoff, "dpdk_device_send_pause_xoff", "DPDK received sendd PAUSE XOFF frames");
+
+    perf_logger = plb.create_perf_counters();
+    cct->get_perfcounters_collection()->add(perf_logger);
   }
-  auto hash = hashfn() >> _rss_table_bits;
-  auto& reta = *qp._sw_reta;
-  return reta[hash % reta.size()];
-}
 
-std::unique_ptr<DPDKQueuePair> DPDKDevice::init_local_queue(EventCenter *center, string hugepages, uint16_t qid) {
-  std::unique_ptr<DPDKQueuePair> qp;
-  qp = std::unique_ptr<DPDKQueuePair>(new DPDKQueuePair(center, this, qid));
-  return std::move(qp);
-}
+  ~DPDKDevice() {}
+
+  DPDKQueuePair& queue_for_cpu(unsigned cpu) { return *_queues[cpu]; }
+  void l2receive(int qid, Packet p) {
+    _queues[qid]->_rx_stream.produce(std::move(p));
+  }
+  subscription<Packet> receive(unsigned cpuid, std::function<int (Packet)> next_packet) {
+    auto sub = _queues[cpuid]->_rx_stream.listen(std::move(next_packet));
+    _queues[cpuid]->rx_start();
+    return std::move(sub);
+  }
+  ethernet_address hw_address() {
+    struct ether_addr mac;
+    rte_eth_macaddr_get(_port_idx, &mac);
+
+    return mac.addr_bytes;
+  }
+  hw_features get_hw_features() {
+    return _hw_features;
+  }
+  const rss_key_type& rss_key() const { return _rss_key; }
+  uint16_t hw_queues_count() { return _num_queues; }
+  std::unique_ptr<DPDKQueuePair> init_local_queue(CephContext *c, EventCenter *center, string hugepages, uint16_t qid) {
+    std::unique_ptr<DPDKQueuePair> qp;
+    qp = std::unique_ptr<DPDKQueuePair>(new DPDKQueuePair(c, center, this, qid));
+    return std::move(qp);
+  }
+  unsigned hash2qid(uint32_t hash) {
+    assert(_redir_table.size());
+    return _redir_table[hash & (_redir_table.size() - 1)];
+  }
+  void set_local_queue(unsigned i, std::unique_ptr<DPDKQueuePair> qp) {
+    assert(!_queues[i]);
+    _queues[i] = std::move(qp);
+  }
+  template <typename Func>
+  unsigned forward_dst(unsigned src_cpuid, Func&& hashfn) {
+    auto& qp = queue_for_cpu(src_cpuid);
+    if (!qp._sw_reta) {
+      return src_cpuid;
+    }
+    auto hash = hashfn() >> _rss_table_bits;
+    auto& reta = *qp._sw_reta;
+    return reta[hash % reta.size()];
+  }
+  unsigned hash2cpu(uint32_t hash) {
+    // there is an assumption here that qid == cpu_id which will
+    // not necessary be true in the future
+    return forward_dst(hash2qid(hash), [hash] { return hash; });
+  }
+
+  hw_features& hw_features_ref() { return _hw_features; }
+
+  const rte_eth_rxconf* def_rx_conf() const {
+    return &_dev_info.default_rxconf;
+  }
+
+  const rte_eth_txconf* def_tx_conf() const {
+    return &_dev_info.default_txconf;
+  }
+
+  /**
+   *  Set the RSS table in the device and store it in the internal vector.
+   */
+  void set_rss_table();
+
+  uint8_t port_idx() { return _port_idx; }
+  bool is_i40e_device() const {
+    return _is_i40e_device;
+  }
+};
+
+
+std::unique_ptr<DPDKDevice> create_dpdk_net_device(
+    CephContext *c, int cores, uint8_t port_idx = 0, uint8_t num_queues = 1,
+    bool use_lro = true, bool enable_fc = true);
+
+enum {
+  l_dpdk_qp_first,
+  l_dpdk_qp_rx_packets,
+  l_dpdk_qp_tx_packets,
+  l_dpdk_qp_rx_total_errors,
+  l_dpdk_qp_rx_bad_checksum_errors,
+  l_dpdk_qp_rx_no_memory_errors,
+  l_dpdk_qp_rx_bytes,
+  l_dpdk_qp_tx_bytes,
+  l_dpdk_qp_rx_last_bunch,
+  l_dpdk_qp_tx_last_bunch,
+  l_dpdk_qp_rx_fragments,
+  l_dpdk_qp_tx_fragments,
+  l_dpdk_qp_rx_copy_ops,
+  l_dpdk_qp_tx_copy_ops,
+  l_dpdk_qp_rx_copy_bytes,
+  l_dpdk_qp_tx_copy_bytes,
+  l_dpdk_qp_rx_linearize_ops,
+  l_dpdk_qp_tx_linearize_ops,
+  l_dpdk_qp_tx_queue_length,
+  l_dpdk_qp_last
+};
+
+
 
 /**
  * @return Number of bytes needed for mempool objects of each QP.
  */
-uint32_t qp_mempool_obj_size(bool hugetlbfs_membackend);
+uint32_t qp_mempool_obj_size();
 
 #endif // CEPH_DPDK_DEV_H

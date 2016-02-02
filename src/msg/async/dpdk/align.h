@@ -1,4 +1,3 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 /*
  * This file is open source software, licensed to you under the terms
  * of the Apache License, Version 2.0 (the "License").  See the NOTICE file
@@ -19,22 +18,33 @@
 /*
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  */
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2015 XSky <haomai@xsky.com>
- *
- * Author: Haomai Wang <haomaiwang@gmail.com>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
- */
 
-#include "memory.h"
+#ifndef CEPH_MSG_DPDK_ALIGN_HH_
+#define CEPH_MSG_DPDK_ALIGN_HH_
 
-translation translate(const void* addr, size_t size) {
-  return {};
+#include <cstdint>
+#include <cstdlib>
+
+template <typename T>
+inline constexpr T align_up(T v, T align) {
+  return (v + align - 1) & ~(align - 1);
 }
+
+template <typename T>
+inline constexpr T* align_up(T* v, size_t align) {
+  static_assert(sizeof(T) == 1, "align byte pointers only");
+  return reinterpret_cast<T*>(align_up(reinterpret_cast<uintptr_t>(v), align));
+}
+
+template <typename T>
+inline constexpr T align_down(T v, T align) {
+  return v & ~(align - 1);
+}
+
+template <typename T>
+inline constexpr T* align_down(T* v, size_t align) {
+  static_assert(sizeof(T) == 1, "align byte pointers only");
+  return reinterpret_cast<T*>(align_down(reinterpret_cast<uintptr_t>(v), align));
+}
+
+#endif /* CEPH_MSG_DPDK_ALIGN_HH_ */

@@ -26,3 +26,17 @@ set_target_properties(ceph_perf_msgr_client PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_perf_msgr_client os global ${UNITTEST_LIBS})
 
+# test_async_transport
+add_executable(test_async_transport
+  test_async_transport.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_async_transport PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_async_transport
+    os
+    global
+    ${DPDK_LIBRARIES}
+    ${CMAKE_DL_LIBS}
+    ${ALLOC_LIBS}
+    ${UNITTEST_LIBS})

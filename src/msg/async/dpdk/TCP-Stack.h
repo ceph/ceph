@@ -1,4 +1,3 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 /*
  * This file is open source software, licensed to you under the terms
  * of the Apache License, Version 2.0 (the "License").  See the NOTICE file
@@ -19,22 +18,22 @@
 /*
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  */
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2015 XSky <haomai@xsky.com>
- *
- * Author: Haomai Wang <haomaiwang@gmail.com>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
- */
 
-#include "memory.h"
+// tcp/network-stack integration
 
-translation translate(const void* addr, size_t size) {
-  return {};
-}
+#ifndef CEPH_MSG_DPDK_TCP_STACK_H
+#define CEPH_MSG_DPDK_TCP_STACK_H
+
+class socket_options;
+class ServerSocket;
+class ConnectedSocket;
+
+class ipv4_traits;
+template <typename InetTraits>
+class tcp;
+
+ServerSocket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, const SocketOptions &opts);
+
+ConnectedSocket tcpv4_connect(tcp<ipv4_traits>& tcpv4, const entity_addr_t &addr);
+
+#endif

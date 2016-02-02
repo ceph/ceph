@@ -33,8 +33,6 @@
  *
  */
 
-#include <cstddef>
-
 #include <atomic>
 #include <vector>
 #include <queue>
@@ -47,13 +45,20 @@
 #include <rte_cycles.h>
 #include <rte_memzone.h>
 
+#include "align.h"
 #include "IP.h"
 #include "const.h"
 #include "dpdk_rte.h"
 #include "DPDK.h"
 #include "toeplitz.h"
 
+#include "common/dout.h"
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_dpdk
+#undef dout_prefix
+#define dout_prefix *_dout << "dpdk "
+
 
 #if RTE_VERSION <= RTE_VERSION_NUM(2,0,0,16)
 
@@ -126,7 +131,7 @@ static constexpr uint8_t i40e_max_xmit_segment_frags = 8;
 
 static constexpr uint16_t inline_mbuf_size = inline_mbuf_data_size + mbuf_overhead;
 
-uint32_t qp_mempool_obj_size(bool hugetlbfs_membackend)
+uint32_t qp_mempool_obj_size()
 {
   uint32_t mp_size = 0;
   struct rte_mempool_objsz mp_obj_sz = {};
@@ -137,23 +142,16 @@ uint32_t qp_mempool_obj_size(bool hugetlbfs_membackend)
   //
 
   // Rx
-  if (hugetlbfs_membackend) {
-    mp_size +=
-        align_up(rte_mempool_calc_obj_size(mbuf_overhead, 0, &mp_obj_sz)+
-                 sizeof(struct rte_pktmbuf_pool_private),
-                 memory::huge_page_size);
-  } else {
-    mp_size +=
-        align_up(rte_mempool_calc_obj_size(inline_mbuf_size, 0, &mp_obj_sz)+
-                 sizeof(struct rte_pktmbuf_pool_private),
-                 memory::huge_page_size);
-  }
+  mp_size += align_up(rte_mempool_calc_obj_size(mbuf_overhead, 0, &mp_obj_sz)+
+                      sizeof(struct rte_pktmbuf_pool_private),
+                      huge_page_size);
+
   //Tx
   std::memset(&mp_obj_sz, 0, sizeof(mp_obj_sz));
   mp_size += align_up(rte_mempool_calc_obj_size(inline_mbuf_size, 0,
                                                 &mp_obj_sz)+
                       sizeof(struct rte_pktmbuf_pool_private),
-                      memory::huge_page_size);
+                      huge_page_size);
   return mp_size;
 }
 
@@ -414,13 +412,14 @@ not_supported:
   printf("Port %u: Changing HW FC settings is not supported\n", _port_idx);
 }
 
-void DPDKDevice::init_port_fini()
+int DPDKDevice::init_port_fini()
 {
   // Changing FC requires HW reset, so set it before the port is initialized.
   set_hw_flow_control();
 
   if (rte_eth_dev_start(_port_idx) < 0) {
-    rte_exit(EXIT_FAILURE, "Cannot start port %d\n", _port_idx);
+    lderr(cct) << __func__ << " can't start port " << _port_idx << dendl;
+    return -1;
   }
 
   if (_num_queues > 1) {
@@ -435,7 +434,8 @@ void DPDKDevice::init_port_fini()
 
       if (rte_eth_dev_filter_ctrl(_port_idx, RTE_ETH_FILTER_HASH,
                                   RTE_ETH_FILTER_SET, &info) < 0) {
-        rte_exit(EXIT_FAILURE, "Cannot set hash function on a port %d\n", _port_idx);
+        lderr(cct) << __func__ << " cannot set hash function on a port " << _port_idx << dendl;
+        return -1;
       }
     }
 
@@ -443,9 +443,13 @@ void DPDKDevice::init_port_fini()
   }
 
   // Wait for a link
-  check_port_link_status();
+  if (check_port_link_status() < 0) {
+    lderr(cct) << __func__ << " port link up failed " << _port_idx << dendl;
+    return -1;
+  }
 
-  ldout(cct, 5) << __func__ << "Created DPDK device" << dendl;
+  ldout(cct, 5) << __func__ << " created DPDK device" << dendl;
+  return 0;
 }
 
 void DPDKQueuePair::configure_proxies(const std::map<unsigned, float>& cpu_weights) {
@@ -457,7 +461,7 @@ void DPDKQueuePair::configure_proxies(const std::map<unsigned, float>& cpu_weigh
   register_packet_provider([this] {
     Tub<Packet> p;
     if (!_proxy_packetq.empty()) {
-      p.construct(_proxy_packetq.front());
+      p = std::move(_proxy_packetq.front());
       _proxy_packetq.pop_front();
     }
     return p;
@@ -488,7 +492,6 @@ void DPDKQueuePair::build_sw_reta(const std::map<unsigned, float>& cpu_weights) 
 void* DPDKQueuePair::alloc_mempool_xmem(
     uint16_t num_bufs, uint16_t buf_sz, std::vector<phys_addr_t>& mappings)
 {
-  using namespace memory;
   char* xmem;
   struct rte_mempool_objsz mp_obj_sz = {};
 
@@ -498,18 +501,18 @@ void* DPDKQueuePair::alloc_mempool_xmem(
       rte_mempool_xmem_size(num_bufs,
                             mp_obj_sz.elt_size + mp_obj_sz.header_size +
                             mp_obj_sz.trailer_size,
-                            page_bits);
+                            CEPH_PAGE_SHIFT);
 
   // Aligning to 2M causes the further failure in small allocations.
   // TODO: Check why - and fix.
-  if (posix_memalign((void**)&xmem, page_size, xmem_size)) {
-    printf("Can't allocate %ld bytes aligned to %ld\n",
-           xmem_size, page_size);
+  if (posix_memalign((void**)&xmem, CEPH_PAGE_SIZE, xmem_size)) {
+    printf("Can't allocate %ld bytes aligned to %u\n",
+           xmem_size, CEPH_PAGE_SIZE);
     return nullptr;
   }
 
-  for (size_t i = 0; i < xmem_size / page_size; ++i) {
-    translation tr = translate(xmem + i * page_size, page_size);
+  for (size_t i = 0; i < xmem_size / CEPH_PAGE_SIZE; ++i) {
+    translation tr = translate(xmem + i * CEPH_PAGE_SIZE, CEPH_PAGE_SIZE);
     assert(tr.size);
     mappings.push_back(tr.addr);
   }
@@ -555,7 +558,7 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
                               rte_socket_id(), 0,
                               _rx_xmem.get(), mappings.data(),
                               mappings.size(),
-                              page_bits);
+                              CEPH_PAGE_SHIFT);
 
   // reserve the memory for Rx buffers containers
   _rx_free_pkts.reserve(mbufs_per_queue_rx);
@@ -588,36 +591,40 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
   return _pktmbuf_pool_rx != nullptr;
 }
 
-void DPDKDevice::check_port_link_status()
+int DPDKDevice::check_port_link_status()
 {
   int count = 0;
-  constexpr auto check_interval = 100ms;
 
   ldout(cct, 20) << __func__ << "Checking link status " << dendl;
+  const int sleep_time = 100 * 1000;
   const int max_check_time = 90;  /* 9s (90 * 100ms) in total */
-  struct rte_eth_link link;
-  memset(&link, 0, sizeof(link));
-  rte_eth_link_get_nowait(_port_idx, &link);
-
   while (true) {
-    if (link.link_status) {
-      ldout(cct, 5) << __func__ << " done Port "
-                    << static_cast<unsigned>(_port_idx)
-                    << " Link Up - speed " << link.link_speed
-                    << " Mbps - "
-                    << ((link.link_duplex == ETH_LINK_FULL_DUPLEX) ? ("full-duplex") : ("half-duplex\n"))
-                    << dendl;
-    } else if (count++ < max_check_time) {
-      ldout(cct, 20) << __func__ << " not ready, continue to wait." << dendl;
-    } else {
-      lderr(cct) << __func__ << "done Port " << _port_idx << " Link Down" << dendl;
-      assert(0);
+    struct rte_eth_link link;
+    memset(&link, 0, sizeof(link));
+    rte_eth_link_get_nowait(_port_idx, &link);
+
+    while (true) {
+      if (link.link_status) {
+        ldout(cct, 5) << __func__ << " done Port "
+                      << static_cast<unsigned>(_port_idx)
+                      << " Link Up - speed " << link.link_speed
+                      << " Mbps - "
+                      << ((link.link_duplex == ETH_LINK_FULL_DUPLEX) ? ("full-duplex") : ("half-duplex\n"))
+                      << dendl;
+        usleep(sleep_time);
+      } else if (count++ < max_check_time) {
+        ldout(cct, 20) << __func__ << " not ready, continue to wait." << dendl;
+      } else {
+        lderr(cct) << __func__ << "done Port " << _port_idx << " Link Down" << dendl;
+        return -1;
+      }
     }
   }
+  return 0;
 }
 
-DPDKQueuePair::DPDKQueuePair(EventCenter *c, DPDKDevice* dev, uint8_t qid)
-  : _tx_poller(this), _dev(dev), center(c), _qid(qid),
+DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, uint8_t qid)
+  : cct(c), _tx_poller(this), _dev(dev), _dev_port_idx(dev->port_idx()), center(cen), _qid(qid),
     _rx_gc_poller(this), _tx_buf_factory(qid),
     _tx_gc_poller(this)
 {
@@ -635,14 +642,15 @@ DPDKQueuePair::DPDKQueuePair(EventCenter *c, DPDKDevice* dev, uint8_t qid)
   static_assert((inline_mbuf_data_size & (inline_mbuf_data_size - 1)) == 0,
                 "inline_mbuf_data_size has to be a power of two!");
 
-  if (rte_eth_rx_queue_setup(_dev->port_idx(), _qid, default_ring_size,
-                             rte_eth_dev_socket_id(_dev->port_idx()),
+  if (rte_eth_rx_queue_setup(_dev_port_idx, _qid, default_ring_size,
+                             rte_eth_dev_socket_id(_dev_port_idx),
                              _dev->def_rx_conf(), _pktmbuf_pool_rx) < 0) {
+    lderr(cct) << __func__ << " cannot initialize rx queue" << dendl;
     rte_exit(EXIT_FAILURE, "Cannot initialize rx queue\n");
   }
 
-  if (rte_eth_tx_queue_setup(_dev->port_idx(), _qid, default_ring_size,
-                             rte_eth_dev_socket_id(_dev->port_idx()), _dev->def_tx_conf()) < 0) {
+  if (rte_eth_tx_queue_setup(_dev_port_idx, _qid, default_ring_size,
+                             rte_eth_dev_socket_id(_dev_port_idx), _dev->def_tx_conf()) < 0) {
     rte_exit(EXIT_FAILURE, "Cannot initialize tx queue\n");
   }
 
@@ -682,7 +690,7 @@ inline bool DPDKQueuePair::poll_tx() {
         auto p = pr();
         if (p) {
           work++;
-          _tx_packetq.push_back(std::move(p.value()));
+          _tx_packetq.push_back(std::move(*p));
           if (_tx_packetq.size() == 128) {
             break;
           }
@@ -698,78 +706,7 @@ inline bool DPDKQueuePair::poll_tx() {
   return false;
 }
 
-
-void DPDKQueuePair::rx_start() {
-  _rx_poller.construct(this);
-}
-
-template<>
-inline Tub<Packet> DPDKQueuePair<false>::from_mbuf_lro(rte_mbuf* m)
-{
-  //
-  // Try to allocate a buffer for the whole packet's data.
-  // If we fail - construct the packet from mbufs.
-  // If we succeed - copy the data into this buffer, create a packet based on
-  // this buffer and return the mbuf to its pool.
-  //
-  Tub<Packet> p;
-  auto pkt_len = rte_pktmbuf_pkt_len(m);
-  char* buf = (char*)malloc(pkt_len);
-  if (buf) {
-    // Copy the contents of the packet into the buffer we've just allocated
-    size_t offset = 0;
-    for (rte_mbuf* m1 = m; m1 != nullptr; m1 = m1->next) {
-      char* data = rte_pktmbuf_mtod(m1, char*);
-      auto len = rte_pktmbuf_data_len(m1);
-
-      rte_memcpy(buf + offset, data, len);
-      offset += len;
-    }
-
-    rte_pktmbuf_free(m);
-
-    p.construct((fragment{buf, pkt_len}, make_free_deleter(buf)));
-  }
-
-  // Drop if allocation failed
-  rte_pktmbuf_free(m);
-
-  return p;
-}
-
-template<>
-inline Tub<Packet> DPDKQueuePair<false>::from_mbuf(rte_mbuf* m)
-{
-  if (!_dev->hw_features_ref().rx_lro || rte_pktmbuf_is_contiguous(m)) {
-    //
-    // Try to allocate a buffer for packet's data. If we fail - give the
-    // application an mbuf itself. If we succeed - copy the data into this
-    // buffer, create a packet based on this buffer and return the mbuf to
-    // its pool.
-    //
-    auto len = rte_pktmbuf_data_len(m);
-    char* buf = (char*)malloc(len);
-    Tub<Packet> p;
-
-    if (!buf) {
-      // Drop if allocation failed
-      rte_pktmbuf_free(m);
-
-      return p;
-    } else {
-      rte_memcpy(buf, rte_pktmbuf_mtod(m, char*), len);
-      rte_pktmbuf_free(m);
-
-      p.construct((fragment{buf, len}, make_free_deleter(buf)));
-      return p;
-    }
-  } else {
-    return from_mbuf_lro(m);
-  }
-}
-
-template<>
-inline Tub<Packet> DPDKQueuePair<true>::from_mbuf_lro(rte_mbuf* m)
+inline Tub<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
 {
   _frags.clear();
   _bufs.clear();
@@ -784,12 +721,11 @@ inline Tub<Packet> DPDKQueuePair<true>::from_mbuf_lro(rte_mbuf* m)
   Tub<Packet> p;
   p.construct(
       _frags.begin(), _frags.end(),
-      make_deleter(deleter(), [_bufs] { for (auto&& b : bufs_vec) { free(b); } }));
+      make_deleter(deleter(), [this] { for (auto&& b : _bufs) { free(b); } }));
   return p;
 }
 
-template<>
-inline Tub<Packet> DPDKQueuePair<true>::from_mbuf(rte_mbuf* m)
+inline Tub<Packet> DPDKQueuePair::from_mbuf(rte_mbuf* m)
 {
   _rx_free_pkts.push_back(m);
   _num_rx_free_segs += m->nb_segs;
@@ -886,7 +822,7 @@ void DPDKQueuePair::process_packets(
       oi.vlan_tci = m->vlan_tci;
     }
 
-    if (_dev->hw_features().rx_csum_offload) {
+    if (_dev->get_hw_features().rx_csum_offload) {
       if (m->ol_flags & (PKT_RX_IP_CKSUM_BAD | PKT_RX_L4_CKSUM_BAD)) {
         // Packet with bad checksum, just drop it.
         _stats.rx.bad.inc_csum_err();
@@ -914,7 +850,7 @@ bool DPDKQueuePair::poll_rx_once()
   struct rte_mbuf *buf[packet_read_size];
 
   /* read a port */
-  uint16_t rx_count = rte_eth_rx_burst(_dev->port_idx(), _qid,
+  uint16_t rx_count = rte_eth_rx_burst(_dev_port_idx, _qid,
                                        buf, packet_read_size);
 
   /* Now process the NIC packets read */
@@ -955,7 +891,7 @@ DPDKQueuePair::tx_buf_factory::tx_buf_factory(uint8_t qid)
                               rte_pktmbuf_init, nullptr,
                               rte_socket_id(), 0,
                               _xmem.get(), mappings.data(),
-                              mappings.size(), page_bits);
+                              mappings.size(), CEPH_PAGE_SHIFT);
 
   if (!_pool) {
     printf("Failed to create mempool for Tx\n");
@@ -969,7 +905,7 @@ DPDKQueuePair::tx_buf_factory::tx_buf_factory(uint8_t qid)
   init_factory();
 }
 
-static bool DPDKQueuePair::tx_buf::i40e_should_linearize(rte_mbuf *head)
+bool DPDKQueuePair::tx_buf::i40e_should_linearize(rte_mbuf *head)
 {
   bool is_tso = head->ol_flags & PKT_TX_TCP_SEG;
 
@@ -1048,7 +984,36 @@ static bool DPDKQueuePair::tx_buf::i40e_should_linearize(rte_mbuf *head)
   return false;
 }
 
-static tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(Packet&& p, DPDKQueuePair& qp)
+void DPDKQueuePair::tx_buf::set_cluster_offload_info(const Packet& p, const DPDKQueuePair& qp, rte_mbuf* head)
+{
+  // Handle TCP checksum offload
+  auto oi = p.offload_info();
+  if (oi.needs_ip_csum) {
+    head->ol_flags |= PKT_TX_IP_CKSUM;
+    // TODO: Take a VLAN header into an account here
+    head->l2_len = sizeof(struct ether_hdr);
+    head->l3_len = oi.ip_hdr_len;
+  }
+  if (qp.port().get_hw_features().tx_csum_l4_offload) {
+    if (oi.protocol == ip_protocol_num::tcp) {
+      head->ol_flags |= PKT_TX_TCP_CKSUM;
+      // TODO: Take a VLAN header into an account here
+      head->l2_len = sizeof(struct ether_hdr);
+      head->l3_len = oi.ip_hdr_len;
+
+      if (oi.tso_seg_size) {
+        assert(oi.needs_ip_csum);
+        head->ol_flags |= PKT_TX_TCP_SEG;
+        head->l4_len = oi.tcp_hdr_len;
+        head->tso_segsz = oi.tso_seg_size;
+      }
+    } else {
+      assert(0);
+    }
+  }
+}
+
+DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(Packet&& p, DPDKQueuePair& qp)
 {
   // Too fragmented - linearize
   if (p.nr_frags() > max_frags) {
@@ -1116,7 +1081,7 @@ static tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(Packet&& p, DPDKQueuePair& 
   return me(head);
 }
 
-static void DPDKQueuePair::tx_buf::copy_packet_to_cluster(const Packet& p, rte_mbuf* head)
+void DPDKQueuePair::tx_buf::copy_packet_to_cluster(const Packet& p, rte_mbuf* head)
 {
   rte_mbuf* cur_seg = head;
   size_t cur_seg_offset = 0;
@@ -1158,7 +1123,7 @@ static void DPDKQueuePair::tx_buf::copy_packet_to_cluster(const Packet& p, rte_m
   }
 }
 
-static tx_buf* DPDKQueuePair::tx_buf::from_packet_copy(Packet&& p, DPDKQueuePair& qp)
+DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_copy(Packet&& p, DPDKQueuePair& qp)
 {
   // sanity
   if (!p.len()) {
@@ -1208,7 +1173,7 @@ static tx_buf* DPDKQueuePair::tx_buf::from_packet_copy(Packet&& p, DPDKQueuePair
   return me(head);
 }
 
-static size_t DPDKQueuePair::tx_buf::copy_one_data_buf(
+size_t DPDKQueuePair::tx_buf::copy_one_data_buf(
     DPDKQueuePair& qp, rte_mbuf*& m, char* data, size_t buf_len)
 {
   tx_buf* buf = qp.get_tx_buf();
@@ -1263,6 +1228,7 @@ void DPDKDevice::set_rss_table()
 
 std::unique_ptr<DPDKDevice> create_dpdk_net_device(
     CephContext *cct,
+    int cores,
     uint8_t port_idx,
     uint8_t num_queues,
     bool use_lro,
@@ -1282,6 +1248,6 @@ std::unique_ptr<DPDKDevice> create_dpdk_net_device(
     ldout(cct, 10) << __func__ << "ports number: " << rte_eth_dev_count() << dendl;
   }
 
-  return std::make_unique<DPDKDevice>(cct, port_idx, num_queues, use_lro,
-                                      enable_fc);
+  return std::unique_ptr<DPDKDevice>(
+      new DPDKDevice(cct, port_idx, num_queues, cores, use_lro, enable_fc));
 }

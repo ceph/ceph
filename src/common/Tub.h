@@ -75,6 +75,19 @@ class Tub {
   }
 
   /**
+	 * Construct an occupied Tub, whose contained object is initialized
+	 * with a move of the given object.
+	 * \pre
+	 *      ElementType is MoveConstructible.
+	 * \param other
+	 *      Source of the move.
+	 */
+  Tub(ElementType&& other) // NOLINT
+          : occupied(false) {
+    construct(std::move(other));
+  }
+
+  /**
 	 * Copy constructor.
 	 * The object will be initialized if and only if the source of the copy is
 	 * initialized.
@@ -157,6 +170,21 @@ class Tub {
         destroy();
 
       }
+    }
+    return *this;
+  }
+
+  /**
+	 * Assignment: destroy current object if initialized, replace with
+	 * source.  Result will be uninitialized if source is uninitialized.
+	 * \pre
+	 *      ElementType is Assignable.
+	 */
+  Tub<ElementType>& operator=(ElementType &&elt) {
+    if (occupied) {
+      *object = std::move(elt);
+    } else {
+      construct(std::move(elt));
     }
     return *this;
   }

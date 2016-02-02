@@ -16,6 +16,7 @@
 #define CEPH_MSG_DPDK_NET_H
 
 #include "const.h"
+#include "ethernet.h"
 #include "Packet.h"
 #include "stream.h"
 #include "toeplitz.h"
@@ -106,34 +107,22 @@ class interface {
   std::vector<l3_protocol::packet_provider_type> _pkt_providers;
 
  private:
-  int dispatch_packet(Packet p);
+  int dispatch_packet(EventCenter *c, Packet p);
  public:
-  explicit interface(CephContext *cct, std::shared_ptr<DPDKDevice> dev, unsigned cpuid);
+  explicit interface(CephContext *cct, std::shared_ptr<DPDKDevice> dev, EventCenter *c);
   ethernet_address hw_address() { return _hw_address; }
   const struct hw_features& get_hw_features() const { return _hw_features; }
   subscription<Packet, ethernet_address> register_l3(
       eth_protocol_num proto_num,
       std::function<int (Packet, ethernet_address)> next,
       std::function<bool (forward_hash&, Packet&, size_t)> forward);
-  void forward(unsigned cpuid, Packet p);
+  void forward(EventCenter *source, unsigned target, Packet p);
   unsigned hash2cpu(uint32_t hash);
   void register_packet_provider(l3_protocol::packet_provider_type func) {
     _pkt_providers.push_back(std::move(func));
   }
   const rss_key_type& rss_key() const;
   friend class l3_protocol;
-};
-
-
-l3_protocol::l3_protocol(interface* netif, eth_protocol_num proto_num, packet_provider_type func)
-    : _netif(netif), _proto_num(proto_num)  {
-  _netif->register_packet_provider(std::move(func));
-}
-
-subscription<Packet, ethernet_address> l3_protocol::receive(
-    std::function<int (Packet, ethernet_address)> rx_fn,
-    std::function<bool (forward_hash &h, Packet &p, size_t s)> forward) {
-  return _netif->register_l3(_proto_num, std::move(rx_fn), std::move(forward));
 };
 
 #endif //CEPH_MSG_DPDK_NET_H

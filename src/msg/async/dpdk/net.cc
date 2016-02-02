@@ -34,19 +34,21 @@
  */
 
 #include "net.h"
+#include "DPDK.h"
+#include "DPDKStack.h"
 
-interface::interface(CephContext *c, std::shared_ptr<device> dev, unsigned cpuid)
+interface::interface(CephContext *c, std::shared_ptr<DPDKDevice> dev, EventCenter *center)
     : cct(c), _dev(dev),
       _rx(_dev->receive(
-          cpuid,
-          [cpuid, this] (Packet p) {
-            return dispatch_packet(cpuid, std::move(p));
+          center->cpu_id(),
+          [center, this] (Packet p) {
+            return dispatch_packet(center, std::move(p));
           }
       )),
       _hw_address(_dev->hw_address()),
-      _hw_features(_dev->hw_features()) {
+      _hw_features(_dev->get_hw_features()) {
   auto idx = 0u;
-  dev->queue_for_cpu(cpuid).register_packet_provider([this, idx] () mutable {
+  dev->queue_for_cpu(center->cpu_id()).register_packet_provider([this, idx] () mutable {
     Tub<Packet> p;
     for (size_t i = 0; i < _pkt_providers.size(); i++) {
       auto l3p = _pkt_providers[idx++]();
@@ -59,7 +61,7 @@ interface::interface(CephContext *c, std::shared_ptr<device> dev, unsigned cpuid
         eh->src_mac = _hw_address;
         eh->eth_proto = uint16_t(l3pv.proto_num);
         *eh = eh->hton();
-        p.construct(l3pv.p);
+        p = std::move(l3pv.p);
         return p;
       }
     }
@@ -89,36 +91,39 @@ const rss_key_type& interface::rss_key() const {
 class C_handle_l2forward : public EventCallback {
   std::shared_ptr<DPDKDevice> sdev;
   unsigned &queue_depth;
+  Packet p;
+  unsigned dst;
 
  public:
-  C_handle_l2forward(std::shared_ptr<DPDKDevice> &p, unsigned &qd)
-      : sdev(p), queue_depth(qd) {}
+  C_handle_l2forward(std::shared_ptr<DPDKDevice> &p, unsigned &qd, Packet pkt, unsigned target)
+      : sdev(p), queue_depth(qd), p(std::move(pkt)), dst(target) {}
   void do_request(int fd) {
-    _dev->l2receive(p.free_on_cpu(src_cpu));
+    sdev->l2receive(dst, std::move(p));
     queue_depth--;
     delete this;
   }
 };
 
-void interface::forward(unsigned cpuid, Packet p) {
+void interface::forward(EventCenter *source, unsigned target, Packet p) {
   static __thread unsigned queue_depth;
 
   if (queue_depth < 1000) {
     queue_depth++;
-    stacks[cpudid]->center->create_external_event(new C_handle_l2forward(_dev));
+    _dev->stacks[target]->center->dispatch_event_external(
+        new C_handle_l2forward(_dev, queue_depth, std::move(p.free_on_cpu(source)), target));
   }
 }
 
-int interface::dispatch_packet(unsigned cpuid, Packet p) {
+int interface::dispatch_packet(EventCenter *center, Packet p) {
   auto eh = p.get_header<eth_hdr>();
   if (eh) {
     auto i = _proto_map.find(ntoh(eh->eth_proto));
     if (i != _proto_map.end()) {
       l3_rx_stream& l3 = i->second;
-      auto fw = _dev->forward_dst(cpuid, [&p, &l3, this] () {
+      auto fw = _dev->forward_dst(center->cpu_id(), [&p, &l3, this] () {
         auto hwrss = p.rss_hash();
         if (hwrss) {
-          return hwrss.value();
+          return *hwrss;
         } else {
           forward_hash data;
           if (l3.forward(data, p, sizeof(eth_hdr))) {
@@ -127,18 +132,30 @@ int interface::dispatch_packet(unsigned cpuid, Packet p) {
           return 0u;
         }
       });
-      if (fw != cpuid) {
-        forward(fw, std::move(p));
+      if (fw != center->cpu_id()) {
+        forward(center, fw, std::move(p));
       } else {
-        auto h = ntoh(*eh);
+        auto h = eh->ntoh();
         auto from = h.src_mac;
         p.trim_front(sizeof(*eh));
         // avoid chaining, since queue length is unlimited
         // drop instead.
         if (l3.ready()) {
-          l3.ready = l3.packet_stream.produce(std::move(p), from);
+          return l3.packet_stream.produce(std::move(p), from);
         }
       }
     }
   }
+  return 0;
 }
+
+l3_protocol::l3_protocol(interface* netif, eth_protocol_num proto_num, packet_provider_type func)
+    : _netif(netif), _proto_num(proto_num)  {
+  _netif->register_packet_provider(std::move(func));
+}
+
+subscription<Packet, ethernet_address> l3_protocol::receive(
+    std::function<int (Packet, ethernet_address)> rx_fn,
+    std::function<bool (forward_hash &h, Packet &p, size_t s)> forward) {
+  return _netif->register_l3(_proto_num, std::move(rx_fn), std::move(forward));
+};

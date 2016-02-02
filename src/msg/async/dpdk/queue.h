@@ -19,11 +19,12 @@
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  */
 
-#ifndef CEPH_QUEUE_H_
-#define CEPH_QUEUE_H_
+#ifndef CEPH_MSG_DPDK_QUEUE_H_
+#define CEPH_MSG_DPDK_QUEUE_H_
 
-#include "circular_buffer.hh"
 #include <queue>
+
+#include "circular_buffer.h"
 
 template <typename T>
 class queue {
@@ -31,7 +32,7 @@ class queue {
   size_t _max;
 
  public:
-  explicit queue(size_t size);
+  explicit queue(size_t size): _max(size) {}
 
   // Push an item.
   //
@@ -65,10 +66,6 @@ class queue {
 };
 
 template <typename T>
-inline
-queue<T>::queue(size_t size) : _max(size) {}
-
-template <typename T>
 inline bool queue<T>::push(T&& data) {
   if (_q.size() < _max) {
     _q.push(std::move(data));
@@ -86,22 +83,6 @@ inline T queue<T>::pop() {
   return data;
 }
 
-
-template <typename T>
-template <typename Func>
-inline
-bool queue<T>::consume(Func&& func) {
-  if (_q.size() == _max) {
-    notify_not_full();
-  }
-  bool running = true;
-  while (!_q.empty() && running) {
-    running = func(std::move(_q.front()));
-    _q.pop();
-  }
-  return running;
-}
-
 template <typename T>
 inline bool queue<T>::empty() const {
   return _q.empty();
@@ -112,4 +93,4 @@ inline bool queue<T>::full() const {
   return _q.size() == _max;
 }
 
-#endif /* CEPH_QUEUE_H_ */
+#endif /* CEPH_MSG_DPDK_QUEUE_H_ */

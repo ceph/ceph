@@ -29,8 +29,6 @@
 
 class interface;
 
-
-
 template <typename Protocol>
 class NativeConnectedSocketImpl;
 
@@ -50,11 +48,14 @@ template <typename Protocol>
 class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   typename Protocol::connection _conn;
   size_t _cur_frag = 0;
-  Packet _buf;
+  Tub<Packet> _buf;
 
  public:
   explicit NativeConnectedSocketImpl(typename Protocol::connection conn)
           : _conn(std::move(conn)) {}
+  NativeConnectedSocketImpl(NativeConnectedSocketImpl &&rhs)
+      : _conn(std::move(rhs._conn)), _cur_frag(rhs._cur_frag),
+        _buf(std::move(rhs.buf))  {}
   virtual int is_connected() override {
     return 1;
   }
@@ -62,14 +63,14 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     if (_conn.get_errno() <= 0)
       return _conn.get_errno();
 
-    if (_cur_frag == _buf.nr_frags()) {
-      _buf = _conn.read();
+    if (!_buf || _cur_frag == _buf->nr_frags()) {
+      _buf = std::move(_conn.read());
       if (_buf) {
         _cur_frag = 0;
       }
     }
-    auto& f = _buf.fragments()[_cur_frag++];
-    auto p = _buf.share();
+    auto& f = _buf->fragments()[_cur_frag++];
+    auto p = _buf->share();
     assert(f.size <= len);
     memcpy(buf, f.base, f.size);
     return f.size;
@@ -81,14 +82,14 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
       if (msg.msg_iov[0].iov_len <= len) {
         assert(msg.msg_iov[0].iov_len);
         p = Packet(std::move(p),
-                   fragment{msg.msg_iov[0].iov_base, msg.msg_iov[0].iov_len},
+                   fragment{(char*)msg.msg_iov[0].iov_base, msg.msg_iov[0].iov_len},
                    deleter());
         len -= msg.msg_iov[0].iov_len;
         msg.msg_iov++;
         msg.msg_iovlen--;
       } else {
         p = Packet(std::move(p),
-                   fragment{msg.msg_iov[0].iov_base, len},
+                   fragment{(char*)msg.msg_iov[0].iov_base, len},
                    deleter());
         msg.msg_iov[0].iov_base = (char *)msg.msg_iov[0].iov_base + len;
         msg.msg_iov[0].iov_len -= len;
@@ -103,8 +104,6 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   }
   // FIXME need to impl close
   virtual void close() override { return ; }
-  virtual int set_nodelay() override { return 0; }
-  virtual int set_rcvbuf(size_t s) override { return 0; }
 };
 
 template <typename Protocol>
@@ -120,7 +119,7 @@ int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, entity_addr_t *ou
   if (!c)
     return -EAGAIN;
 
-  std::unique_ptr<NativeConnectedSocketImpl<Protocol>> csi(new NativeConnectedSocketImpl<Protocol>(*c));
+  std::unique_ptr<NativeConnectedSocketImpl<Protocol>> csi(new NativeConnectedSocketImpl<Protocol>(std::move(*c)));
   *s = ConnectedSocket(std::move(csi));
   if (out)
     *out = c->remote_addr();
@@ -135,9 +134,8 @@ void DPDKServerSocketImpl<Protocol>::abort_accept() {
 class DPDKStack : public NetworkStack {
   interface _netif;
   ipv4 _inet;
-  EventCenter *center;
   unsigned cores;
-  unsigned cpu_id;
+  EventCallbackRef arp_learn_handler;
 
   void set_ipv4_packet_filter(ip_packet_filter* filter) {
     _inet.set_packet_filter(filter);
@@ -145,10 +143,13 @@ class DPDKStack : public NetworkStack {
   using tcp4 = tcp<ipv4_traits>;
 
  public:
-  explicit DPDKStack(CephContext *cct, std::shared_ptr<DPDKDevice> dev, unsigned cores, unsigned i);
-  virtual int listen(const entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) override;
+  EventCenter *center;
+
+  explicit DPDKStack(CephContext *cct, EventCenter *c,
+                     std::shared_ptr<DPDKDevice> dev, unsigned cores);
+  virtual int listen(entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) override;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
-  static std::unique_ptr<NetworkStack> create(CephContext *cct, unsigned i);
+  static std::unique_ptr<NetworkStack> create(CephContext *cct, EventCenter *center, unsigned i);
   void arp_learn(ethernet_address l2, ipv4_address l3) {
     _inet.learn(l2, l3);
   }

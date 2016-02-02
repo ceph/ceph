@@ -26,23 +26,30 @@
 #include <errno.h>
 
 #include "PosixStack.h"
-#include "Packet.h"
+
+#include "common/errno.h"
+#include "common/dout.h"
+#include "include/assert.h"
+
+#define dout_subsys ceph_subsys_dpdk
+#undef dout_prefix
+#define dout_prefix *_dout << "dpdk "
 
 class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
+  NetHandler &handler;
   int fd;
   entity_addr_t sa;
   bool connected;
 
- private:
-  explicit PosixConnectedSocketImpl(const entity_addr_t &sa, int f, bool connected)
-      : sa(sa), fd(f), connected(connected) {}
  public:
+  explicit PosixConnectedSocketImpl(NetHandler &h, const entity_addr_t &sa, int f, bool connected)
+      : handler(h), fd(f), sa(sa), connected(connected) {}
 
   virtual int is_connected() override {
     if (connected)
       return connected;
 
-    int r = net.reconnect(sa, fd);
+    int r = handler.reconnect(sa, fd);
     if (r > 0)
       connected = true;
     return r;
@@ -65,11 +72,12 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 };
 
 class PosixServerSocketImpl : public ServerSocketImpl {
+  NetHandler &handler;
   entity_addr_t sa;
   int fd;
 
  public:
-  explicit PosixServerSocketImpl(const entity_addr_t &sa, int fd) : sa(sa), fd(fd) {}
+  explicit PosixServerSocketImpl(NetHandler &h, const entity_addr_t &sa, int fd): handler(h), sa(sa), fd(fd) {}
   virtual int accept(ConnectedSocket *sock, entity_addr_t *out) override;
   virtual void abort_accept() override {
     ::close(fd);
@@ -78,20 +86,19 @@ class PosixServerSocketImpl : public ServerSocketImpl {
 
 int PosixServerSocketImpl::accept(ConnectedSocket *sock, entity_addr_t *out) {
   assert(sock);
-  socklen_t slen = sizeof(sa->ss_addr());
-  int sd = ::accept(fd, (sockaddr*)&sa.ss_addr(), &slen);
+  socklen_t slen = sizeof(out->ss_addr());
+  int sd = ::accept(fd, (sockaddr*)&out->ss_addr(), &slen);
   if (sd >= 0) {
-    ldout(cct, 10) << __func__ << " accepted incoming on sd " << sd << dendl;
-    return r;
+    return sd;
   }
-  std::unique_ptr<PosixServerSocketImpl> csi(new PosixServerSocketImpl(sa, fd));
+  std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, sa, fd, false));
   *sock = ConnectedSocket(std::move(csi));
   if (out)
     *out = sa;
   return 0;
 }
 
-int PosixNetworkStack::listen(const entity_addr_t &sa, const listen_options &opt, ServerSocket *sock) {
+int PosixNetworkStack::listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket *sock) {
   assert(sock);
   int listen_sd = ::socket(sa.get_family(), SOCK_STREAM, 0);
   if (listen_sd < 0) {
@@ -105,14 +112,14 @@ int PosixNetworkStack::listen(const entity_addr_t &sa, const listen_options &opt
     return -errno;
   }
 
-  r = net.set_socket_options(listen_sd, opt.nodelay, opt.rcvbuf_size);
+  r = net.set_socket_options(listen_sd, opt.nodelay, opt.rcbuf_size);
   if (r < 0) {
     ::close(listen_sd);
     return -errno;
   }
 
   r = ::bind(listen_sd, (struct sockaddr *)&sa.ss_addr(), sa.addr_size());
-  if (rc < 0) {
+  if (r < 0) {
     r = -errno;
     lderr(cct) << __func__ << " unable to bind to " << sa.ss_addr()
                << ": " << cpp_strerror(r) << dendl;
@@ -123,19 +130,17 @@ int PosixNetworkStack::listen(const entity_addr_t &sa, const listen_options &opt
   r = ::listen(listen_sd, 128);
   if (r < 0) {
     r = -errno;
-    lderr(cct) << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(rc) << dendl;
+    lderr(cct) << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(r) << dendl;
     ::close(listen_sd);
     return r;
   }
 
-  *sock = ServerSocket(std::make_unique<PosixServerSocketImpl>(sa, listen_sd));
+  *sock = ServerSocket(std::unique_ptr<PosixServerSocketImpl>(new PosixServerSocketImpl(net, sa, listen_sd)));
   return 0;
 }
 
 int PosixNetworkStack::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) {
-  int sd = net.create_socket(addr.get_family());
-  if (sd < 0)
-    return -errno;
+  int sd;
 
   if (opts.nonblock) {
     sd = net.nonblock_connect(addr);
@@ -148,6 +153,7 @@ int PosixNetworkStack::connect(const entity_addr_t &addr, const SocketOptions &o
     return -errno;
   }
 
-  *sock = ConnectedSocketstd::make_unique<PosixConnectedSocketImpl>(sa, sd, !opts.nonblock));
+  *socket = ConnectedSocket(
+      std::unique_ptr<PosixConnectedSocketImpl>(new PosixConnectedSocketImpl(net, addr, sd, !opts.nonblock)));
   return 0;
 }

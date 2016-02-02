@@ -23,10 +23,11 @@
 #include "GenericSocket.h"
 
 class PosixNetworkStack : public NetworkStack {
-  NetHandler handler;
+  NetHandler net;
+
  public:
-  explicit PosixNetworkStack(CephContext *c): NetworkStack(c), _reuseport(false) {}
-  virtual int listen(const entity_addr_t &sa, const listen_options &opt, ServerSocket *sock) override;
+  explicit PosixNetworkStack(CephContext *c): NetworkStack(c), net(c) {}
+  virtual int listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket *sock) override;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
   static std::unique_ptr<NetworkStack> create(CephContext *cct, unsigned i) {
     return std::unique_ptr<NetworkStack>(std::unique_ptr<NetworkStack>(new PosixNetworkStack(cct)));

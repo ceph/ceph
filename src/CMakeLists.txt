@@ -149,6 +149,7 @@ if(Tcmalloc_FOUND)
   set(ALLOC_LIBS tcmalloc)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   set(TCMALLOC_srcs perfglue/heap_profiler.cc)
+  set(ALLOC_LIBS tcmalloc)
 elseif(NOT Tcmalloc_FOUND AND JEMALLOC_FOUND)
   set(ALLOC_LIBS jemalloc)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
@@ -230,10 +231,14 @@ if(HAVE_DPDK)
 	msg/async/dpdk/DPDKStack.cc
 	msg/async/dpdk/EventDPDK.cc
 	msg/async/dpdk/IP.cc
+    msg/async/dpdk/IPChecksum.cc
     msg/async/dpdk/memory.cc
     msg/async/dpdk/net.cc
 	msg/async/dpdk/Packet.cc
 	msg/async/dpdk/TCP.cc)
+
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${DPDK_INCLUDE_DIR}")
+  list(APPEND EXTRALIBS ${DPDK_LIBRARIES})
 endif(HAVE_DPDK)
 
 if(HAVE_GOOD_YASM_ELF64)
@@ -313,6 +318,8 @@ set(libcommon_files
   msg/async/EventEpoll.cc
   msg/async/EventSelect.cc
   msg/async/net_handler.cc
+  msg/async/GenericSocket.cc
+  msg/async/PosixStack.cc
   ${xio_common_srcs}
   ${dpdk_common_srcs}
   msg/msg_types.cc

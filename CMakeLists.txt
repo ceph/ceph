@@ -294,10 +294,10 @@ if(WITH_XIO)
 set(HAVE_XIO ${XIO_FOUND})
 endif(WITH_XIO)
 
-option(WITH_DPDK "Enable DPDK messaging" ON)
+option(WITH_DPDK "Enable DPDK messaging" OFF)
 if(WITH_DPDK)
-find_package(dpdk)
-set(HAVE_DPDK ${DPDK_FOUND})
+  find_package(dpdk REQUIRED)
+  set(HAVE_DPDK 1)
 endif(WITH_DPDK)
 
 #option for RGW

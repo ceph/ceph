@@ -206,6 +206,7 @@ OPTION(ms_async_set_affinity, OPT_BOOL, true)
 // core
 OPTION(ms_async_affinity_cores, OPT_STR, "")
 OPTION(ms_async_send_inline, OPT_BOOL, true)
+OPTION(ms_async_transport_type, OPT_STR, "posix")
 
 // path to accessible hugetlbfs mount (typically /dev/hugepages/something)")
 OPTION(ms_dpdk_enable, OPT_BOOL, false)

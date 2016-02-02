@@ -43,14 +43,14 @@ class eal {
 public:
     using cpuset = std::bitset<RTE_MAX_LCORE>;
 
-    static void init(cpuset cpus, CephContext *c);
+    static void init(CephContext *c);
     /**
      * Returns the amount of memory needed for DPDK
      * @param num_cpus Number of CPUs the application is going to use
      *
      * @return
      */
-    static size_t mem_size(int num_cpus, bool hugetlbfs_membackend = true);
+    static size_t mem_size(int num_cpus);
     static bool initialized;
 };
 

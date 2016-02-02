@@ -46,6 +46,7 @@
 
 #include "ethernet.h"
 #include "circular_buffer.h"
+#include "ip_types.h"
 #include "net.h"
 #include "Packet.h"
 
@@ -79,8 +80,14 @@ class arp {
     uint16_t ptype;
     arp_hdr ntoh() {
       arp_hdr hdr = *this;
-      hdr.htype = htype;
-      hdr.ptype = ptype;
+      hdr.htype = ::ntoh(htype);
+      hdr.ptype = ::ntoh(ptype);
+      return hdr;
+    }
+    arp_hdr hton() {
+      arp_hdr hdr = *this;
+      hdr.htype = ::hton(htype);
+      hdr.ptype = ::hton(ptype);
       return hdr;
     }
   };
@@ -96,8 +103,6 @@ class arp {
   template <class l3_proto>
   friend class arp_for;
 };
-
-using resolution_cb = std::function<void (const ethernet_address&, int)>;
 
 template <typename L3>
 class arp_for : public arp_for_protocol {
@@ -123,17 +128,30 @@ class arp_for : public arp_for_protocol {
 
     arp_hdr ntoh() {
       arp_hdr hdr = *this;
-      hdr.htype = htype;
-      hdr.ptype = ptype;
-      hdr.oper = oper;
-      hdr.sender_hwaddr = sender_hwaddr;
-      hdr.sender_paddr = sender_paddr;
-      hdr.target_hwaddr = target_hwaddr;
-      hdr.target_paddr = target_paddr;
+      hdr.htype = ::ntoh(htype);
+      hdr.ptype = ::ntoh(ptype);
+      hdr.oper = ::ntoh(oper);
+      hdr.sender_hwaddr = sender_hwaddr.ntoh();
+      hdr.sender_paddr = sender_paddr.ntoh();
+      hdr.target_hwaddr = target_hwaddr.ntoh();
+      hdr.target_paddr = target_paddr.ntoh();
+      return hdr;
+    }
+
+    arp_hdr hton() {
+      arp_hdr hdr = *this;
+      hdr.htype = ::hton(htype);
+      hdr.ptype = ::hton(ptype);
+      hdr.oper = ::hton(oper);
+      hdr.sender_hwaddr = sender_hwaddr.hton();
+      hdr.sender_paddr = sender_paddr.hton();
+      hdr.target_hwaddr = target_hwaddr.hton();
+      hdr.target_paddr = target_paddr.hton();
+      return hdr;
     }
   };
   struct resolution {
-    std::vector<resolution_cb> _waiters;
+    std::vector<std::pair<resolution_cb, Packet>> _waiters;
     uint64_t timeout_fd;
   };
   class C_handle_arp_timeout : public EventCallback {
@@ -148,8 +166,8 @@ class arp_for : public arp_for_protocol {
       arp->send_query(paddr);
       auto &res = arp->_in_progress[paddr];
 
-      for (auto& w : res._waiters) {
-        w(ethernet_address(), -ETIMEDOUT);
+      for (auto& p : res._waiters) {
+        p.first(ethernet_address(), std::move(p.second), -ETIMEDOUT);
       }
       res._waiters.clear();
       delete this;
@@ -174,7 +192,7 @@ class arp_for : public arp_for_protocol {
       : arp_for_protocol(a, L3::arp_protocol_type()), center(c) {
     _table[L3::broadcast_address()] = ethernet::broadcast_address();
   }
-  void wait(const l3addr& addr, resolution_cb &&cb);
+  void wait(const l3addr& addr, Packet p, resolution_cb cb);
   void learn(l2addr l2, l3addr l3);
   void run();
   void set_self_addr(l3addr addr) { _l3self = addr; }
@@ -206,7 +224,6 @@ void arp_for<L3>::send(l2addr to, Packet p) {
 template <typename L3>
 void arp_for<L3>::send_query(const l3addr& paddr) {
   send(ethernet::broadcast_address(), make_query_packet(paddr));
-  return 0;
 }
 
 class arp_error : public std::runtime_error {
@@ -225,10 +242,10 @@ class arp_queue_full_error : public arp_error {
 };
 
 template <typename L3>
-void arp_for<L3>::wait(const l3addr& paddr, resolution_cb &&cb) {
+void arp_for<L3>::wait(const l3addr& paddr, Packet p, resolution_cb cb) {
   auto i = _table.find(paddr);
   if (i != _table.end()) {
-    cb(i->second, 0);
+    cb(i->second, std::move(p), 0);
     return ;
   }
   auto j = _in_progress.find(paddr);
@@ -242,11 +259,11 @@ void arp_for<L3>::wait(const l3addr& paddr, resolution_cb &&cb) {
   }
 
   if (res._waiters.size() >= max_waiters) {
-    cb(ethernet_address(), -EBUSY);
+    cb(ethernet_address(), std::move(p), -EBUSY);
     return ;
   }
 
-  res._waiters.emplace_back(cb);
+  res._waiters.emplace_back(cb, std::move(p));
   return ;
 }
 
@@ -257,8 +274,8 @@ void arp_for<L3>::learn(l2addr hwaddr, l3addr paddr) {
   if (i != _in_progress.end()) {
     auto& res = i->second;
     center->delete_time_event(res.timeout_fd);
-    for (auto &&pr : res._waiters) {
-      pr(hwaddr, 0);
+    for (auto &&p : res._waiters) {
+      p.first(hwaddr, std::move(p.second), 0);
     }
     _in_progress.erase(i);
   }

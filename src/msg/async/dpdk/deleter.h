@@ -24,7 +24,6 @@
 
 #include <memory>
 #include <cstdlib>
-#include <assert.h>
 #include <type_traits>
 
 /// \addtogroup memory-module

@@ -37,7 +37,6 @@
 #ifndef CEPH_MSG_IP_H_
 #define CEPH_MSG_IP_H_
 
-#include <boost/asio/ip/address_v4.hpp>
 #include <arpa/inet.h>
 #include <unordered_map>
 #include <cstdint>
@@ -52,6 +51,7 @@
 #include "array_map.h"
 #include "ARP.h"
 #include "IPChecksum.h"
+#include "ip_types.h"
 #include "const.h"
 #include "net.h"
 #include "PacketUtil.h"
@@ -63,68 +63,6 @@ class ipv4_l4;
 
 template <typename InetTraits>
 class tcp;
-
-struct ipv4_addr {
-  uint32_t ip;
-  uint16_t port;
-
-  ipv4_addr() : ip(0), port(0) {}
-  ipv4_addr(uint32_t ip, uint16_t port) : ip(ip), port(port) {}
-  ipv4_addr(uint16_t port) : ip(0), port(port) {}
-  ipv4_addr(const std::string &addr);
-  ipv4_addr(const std::string &addr, uint16_t port);
-
-  ipv4_addr(entity_addr_t &addr) {
-    ip = ntoh(addr.in4_addr().sin_addr.s_addr);
-    port = addr.get_port();
-  }
-
-  ipv4_addr(entity_addr_t &&addr) : ipv4_addr(addr) {}
-};
-
-struct ipv4_address {
-  ipv4_address() : ip(0) {}
-  explicit ipv4_address(uint32_t ip) : ip(ip) {}
-  explicit ipv4_address(const std::string& addr) {
-    ip = static_cast<uint32_t>(boost::asio::ip::address_v4::from_string(addr).to_ulong());
-  }
-  ipv4_address(ipv4_addr addr) {
-    ip = addr.ip;
-  }
-
-  uint32_t ip;
-
-  ipv4_address hton() {
-    ipv4_address addr;
-    addr.ip = ::hton(ip);
-    return addr;
-  }
-  ipv4_address ntoh() {
-    ipv4_address addr;
-    addr.ip = ::ntoh(ip);
-    return addr;
-  }
-
-  friend bool operator==(ipv4_address x, ipv4_address y) {
-    return x.ip == y.ip;
-  }
-  friend bool operator!=(ipv4_address x, ipv4_address y) {
-    return x.ip != y.ip;
-  }
-} __attribute__((packed));
-
-static inline bool is_unspecified(ipv4_address addr) { return addr.ip == 0; }
-
-std::ostream& operator<<(std::ostream& os, ipv4_address a);
-
-namespace std {
-
-  template <>
-  struct hash<ipv4_address> {
-    size_t operator()(ipv4_address a) const { return a.ip; }
-  };
-
-}
 
 struct ipv4_traits {
   using address_type = ipv4_address;
@@ -142,8 +80,6 @@ struct ipv4_traits {
   static constexpr uint8_t ip_hdr_len_min = ipv4_hdr_len_min;
 };
 
-using resolution_cb = std::function<void (const ethernet_address&, int)>;
-
 template <ip_protocol_num ProtoNum>
 class ipv4_l4 {
  public:
@@ -151,7 +87,7 @@ class ipv4_l4 {
  public:
   ipv4_l4(ipv4& inet) : _inet(inet) {}
   void register_packet_provider(ipv4_traits::packet_provider_type func);
-  void wait_l2_dst_address(ipv4_address to, resolution_cb &&cb);
+  void wait_l2_dst_address(ipv4_address to, Packet p, resolution_cb cb);
 };
 
 class ip_protocol {
@@ -193,7 +129,7 @@ class ipv4_tcp final : public ip_protocol {
   ipv4_l4<ip_protocol_num::tcp> _inet_l4;
   std::unique_ptr<tcp<ipv4_traits>> _tcp;
  public:
-  ipv4_tcp(ipv4& inet);
+  ipv4_tcp(ipv4& inet, EventCenter *c);
   ~ipv4_tcp();
   virtual void received(Packet p, ipv4_address from, ipv4_address to);
   virtual bool forward(forward_hash& out_hash_data, Packet& p, size_t off) override;
@@ -231,6 +167,7 @@ class icmp {
   void received(Packet p, ipaddr from, ipaddr to);
 
  private:
+  // ipv4_l4<ip_protocol_num::icmp>
   inet_type& _inet;
   circular_buffer<ipv4_traits::l4packet> _packetq;
   Throttle _queue_space;
@@ -241,7 +178,7 @@ class ipv4_icmp final : public ip_protocol {
   ipv4_l4<ip_protocol_num::icmp> _inet_l4;
   icmp _icmp;
  public:
-  ipv4_icmp(CephContext *c, ipv4& inet) : cct(c), _inet_l4(inet), _icmp(c,_inet_l4) {}
+  ipv4_icmp(CephContext *c, ipv4& inet) : cct(c), _inet_l4(inet), _icmp(c, _inet_l4) {}
   virtual void received(Packet p, ipv4_address from, ipv4_address to) {
     _icmp.received(std::move(p), from, to);
   }
@@ -354,10 +291,12 @@ class ipv4 {
     auto now = ceph_clock_now(cct);
     frag_timefd.construct(center->create_time_event(now.to_nsec() / 1000, frag_handler));
   }
+
+ public:
   void frag_timeout();
 
  public:
-  explicit ipv4(interface* netif);
+  explicit ipv4(CephContext *c, EventCenter *cen, interface* netif);
   ~ipv4() {
     delete frag_handler;
   }
@@ -411,7 +350,7 @@ class ipv4 {
   void register_packet_provider(ipv4_traits::packet_provider_type&& func) {
     _pkt_providers.push_back(std::move(func));
   }
-  void wait_l2_dst_address(ipv4_address to, resolution_cb &&cb);
+  void wait_l2_dst_address(ipv4_address to, Packet p, resolution_cb cb);
 };
 
 template <ip_protocol_num ProtoNum>
@@ -427,8 +366,8 @@ inline void ipv4_l4<ProtoNum>::register_packet_provider(
 }
 
 template <ip_protocol_num ProtoNum>
-inline void ipv4_l4<ProtoNum>::wait_l2_dst_address(ipv4_address to, resolution_cb &&cb) {
-  _inet.wait_l2_dst_address(to, std::move(cb));
+inline void ipv4_l4<ProtoNum>::wait_l2_dst_address(ipv4_address to, Packet p, resolution_cb cb) {
+  _inet.wait_l2_dst_address(to, std::move(p), std::move(cb));
 }
 
 struct ip_hdr {

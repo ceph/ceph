@@ -27,7 +27,6 @@
 #include <type_traits>
 #include <functional>
 #include <iostream>
-#include "util/is_smart_ptr.hh"
 
 // This header defines two shared pointer facilities, lw_shared_ptr<>
 // modeled after std::shared_ptr<>.
@@ -65,6 +64,7 @@ lw_shared_ptr<T> make_lw_shared(T& a);
 // CRTP from this to enable shared_from_this:
 template <typename T>
 class enable_lw_shared_from_this {
+  long _count = 0;
   using ctor = T;
   T* to_value() { return static_cast<T*>(this); }
   T* to_internal_object() { return static_cast<T*>(this); }
@@ -98,10 +98,10 @@ struct shared_ptr_no_esft {
 };
 
 template <typename T>
-using shared_ptr_impl = std::conditional_t<
+using shared_ptr_impl = typename std::conditional<
         std::is_base_of<enable_lw_shared_from_this<remove_const_t<T>>, T>::value,
         enable_lw_shared_from_this<remove_const_t<T>>,
-        shared_ptr_no_esft<remove_const_t<T>> >;
+        shared_ptr_no_esft<remove_const_t<T>> >::type;
 
 template <typename T>
 class lw_shared_ptr {
@@ -265,8 +265,5 @@ namespace std {
   };
 
 }
-
-template<typename T>
-struct is_smart_ptr<::lw_shared_ptr<T>> : std::true_type {};
 
 #endif /* CEPH_LW_SHARED_PTR_H_ */

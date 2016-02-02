@@ -373,8 +373,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     unsigned align;
     char *realdata;
   public:
-    raw_hack_aligned(unsigned l, unsigned _align) : raw(l) {
-      align = _align;
+    raw_hack_aligned(unsigned l, unsigned _align) : raw(l) { align = _align;
       realdata = new char[len+align-1];
       unsigned off = ((unsigned)realdata) & (align-1);
       if (off)

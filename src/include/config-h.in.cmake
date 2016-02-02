@@ -253,6 +253,9 @@
 /* Defined if XIO */
 #cmakedefine HAVE_XIO
 
+/* Defined if DPDK */
+#cmakedefine HAVE_DPDK
+
 /* Defined if LTTNG */
 #cmakedefine WITH_LTTNG 1
 

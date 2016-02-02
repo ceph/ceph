@@ -26,7 +26,6 @@
 #include <array>
 
 #include "include/assert.h"
-
 #include "byteorder.h"
 
 struct ethernet_address {
@@ -41,6 +40,12 @@ struct ethernet_address {
     std::copy(eaddr.begin(), eaddr.end(), mac.begin());
   }
 
+  ethernet_address ntoh() {
+    return *this;
+  }
+  ethernet_address hton() {
+    return *this;
+  }
   std::array<uint8_t, 6> mac;
 } __attribute__((packed));
 
@@ -61,6 +66,11 @@ struct eth_hdr {
   eth_hdr hton() {
     eth_hdr hdr = *this;
     hdr.eth_proto = ::hton(eth_proto);
+    return hdr;
+  }
+  eth_hdr ntoh() {
+    eth_hdr hdr = *this;
+    hdr.eth_proto = ::ntoh(eth_proto);
     return hdr;
   }
 } __attribute__((packed));
