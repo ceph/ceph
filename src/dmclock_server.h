@@ -93,13 +93,27 @@ namespace crimson {
       double reservation;
       double limit;
 
+      template<typename I>
       RequestTag(const RequestTag& prev_tag,
 		 const ClientInfo& client,
-		 Time time) :
+		 const ReqParams<I>& req_params,
+		 const Time& time) :
+	proportion(tagCalc(time,
+			   prev_tag.proportion,
+			   client.weight_inv,
+			   req_params.delta)),
+	reservation(tagCalc(time,
+			    prev_tag.reservation,
+			    client.reservation_inv,
+			    req_params.rho)),
+	limit(tagCalc(time,
+		      prev_tag.limit,
+		      client.limit_inv,
+		      req_params.delta))
+      {
+	// empty
+      }
 
-	proportion(tagCalc(time, prev_tag.proportion, client.weight_inv)),
-	reservation(tagCalc(time, prev_tag.reservation, client.reservation_inv)),
-	limit(tagCalc(time, prev_tag.limit, client.limit_inv))
       RequestTag(double _prop, double _res, double _lim) :
 	proportion(_prop),
 	reservation(_res),
@@ -107,11 +121,7 @@ namespace crimson {
       {
 	// empty
       }
-      {
-	// empty
-      }
 
-      // copy constructor
       RequestTag(const RequestTag& other) :
 	proportion(other.proportion),
 	reservation(other.reservation),
@@ -122,7 +132,13 @@ namespace crimson {
 
     private:
 
-      static double tagCalc(Time time, double prev, double increment) {
+      static double tagCalc(Time time,
+			    double prev,
+			    double increment,
+			    uint32_t dist_req_val) {
+	if (0 != dist_req_val) {
+	  increment *= dist_req_val;
+	}
 	if (0.0 == increment) {
 	  return 0.0;
 	} else {
@@ -217,8 +233,8 @@ namespace crimson {
 
       // a function to submit a request to the server; the second
       // parameter is a callback when it's completed
-      typedef
-      typename std::function<void(const C&,RequestRef,PhaseType)> HandleRequestFunc;
+      typedef typename std::function<void(const C&,RequestRef,PhaseType)>
+      HandleRequestFunc;
 
 
     protected:
@@ -356,6 +372,7 @@ namespace crimson {
 	  std::make_shared<Entry>(client_id,
 				  RequestTag(client_it->second.prev_tag,
 					     client_it->second.info,
+					     req_params,
 					     time),
 				  std::move(request));
 

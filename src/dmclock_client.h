@@ -67,12 +67,12 @@ namespace crimson {
 	DataGuard g(data_mtx);
 	auto it = service_map.find(server);
 	if (service_map.end() == it) {
-	  return ReqParams<C>(client, 0, 0);
+	  return ReqParams<C>(client, 1, 1);
 	} else {
 	  return ReqParams<C>(
 	    client,
-	    uint32_t(delta_counter - it->second.delta_last),
-	    uint32_t(rho_counter - it->second.rho_last));
+	    uint32_t(1 + delta_counter - it->second.delta_last),
+	    uint32_t(1 + rho_counter - it->second.rho_last));
 	}
       }
     }; // class ServiceTracker

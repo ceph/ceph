@@ -9,6 +9,7 @@
 
 
 #include <ostream>
+#include <assert.h>
 
 
 namespace crimson {
@@ -20,15 +21,20 @@ namespace crimson {
     template<typename C>
     struct ReqParams {
       C        client;
-      uint32_t delta; // count of all replies since last request
-      uint32_t rho;   // count of reservation replies since last request
+
+      // count of all replies since last request; MUSTN'T BE 0
+      uint32_t delta;
+
+      // count of reservation replies since last request; MUSTN'T BE 0
+      uint32_t rho;
 
       ReqParams(const C& _client, uint32_t _delta, uint32_t _rho) :
 	client(_client),
 	delta(_delta),
 	rho(_rho)
       {
-	// empty
+	assert(0 !=_delta);
+	assert(0 != rho);
       }
 
       ReqParams(const ReqParams& other) :
