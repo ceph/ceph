@@ -2591,6 +2591,7 @@ void Objecter::update_pool_full_map(map<int64_t, bool>& pool_full_map)
 int64_t Objecter::get_object_hash_position(int64_t pool, const string& key,
 					   const string& ns)
 {
+  RWLock::RLocker rl(rwlock);
   const pg_pool_t *p = osdmap->get_pg_pool(pool);
   if (!p)
     return -ENOENT;
@@ -2600,6 +2601,7 @@ int64_t Objecter::get_object_hash_position(int64_t pool, const string& key,
 int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
 					      const string& ns)
 {
+  RWLock::RLocker rl(rwlock);
   const pg_pool_t *p = osdmap->get_pg_pool(pool);
   if (!p)
     return -ENOENT;
