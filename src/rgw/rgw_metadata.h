@@ -226,7 +226,11 @@ class RGWMetadataManager {
   map<string, RGWMetadataHandler *> handlers;
   CephContext *cct;
   RGWRados *store;
-  RGWMetadataLog *md_log;
+
+  // maintain a separate metadata log for each period
+  std::map<std::string, RGWMetadataLog> md_logs;
+  // use the current period's log for mutating operations
+  RGWMetadataLog* current_log = nullptr;
 
   void parse_metadata_key(const string& metadata_key, string& type, string& entry);
 
@@ -248,11 +252,15 @@ public:
 
   int init(const std::string& current_period);
 
+  /// find or create the metadata log for the given period
+  RGWMetadataLog* get_log(const std::string& period);
+
   int register_handler(RGWMetadataHandler *handler);
 
   RGWMetadataHandler *get_handler(const string& type);
 
-  int store_md_log_entries(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
+  int store_md_log_entries(list<cls_log_entry>& entries, const std::string& period,
+                           int shard_id, librados::AioCompletion *completion);
 
   int put_entry(RGWMetadataHandler *handler, const string& key, bufferlist& bl, bool exclusive,
                 RGWObjVersionTracker *objv_tracker, time_t mtime, map<string, bufferlist> *pattrs = NULL);
@@ -273,16 +281,14 @@ public:
   int lock_exclusive(string& metadata_key, utime_t duration, string& owner_id);
   int unlock(string& metadata_key, string& owner_id);
 
-  RGWMetadataLog *get_log() { return md_log; }
-
-  int get_log_shard_id(const string& section, const string& key, int *shard_id) {
+  int get_log_shard_id(const string& section, const std::string& period,
+                       const string& key, int *shard_id) {
     RGWMetadataHandler *handler = get_handler(section);
     if (!handler) {
       return -EINVAL;
     }
-
+    auto md_log = get_log(period);
     *shard_id = md_log->get_log_shard_id(handler, section, key);
-
     return 0;
   }
 };
