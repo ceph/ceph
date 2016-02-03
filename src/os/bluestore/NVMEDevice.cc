@@ -511,7 +511,7 @@ void io_complete(void *t, const struct nvme_completion *completion)
   Task *task = static_cast<Task*>(t);
   IOContext *ctx = task->ctx;
   SharedDriverData *driver = task->device->get_driver();
-  driver->inflight_ops.dec();
+  int left = driver->inflight_ops.dec();
   utime_t lat = ceph_clock_now(g_ceph_context);
   lat -= task->start;
   if (task->command == IOCommand::WRITE_COMMAND) {
