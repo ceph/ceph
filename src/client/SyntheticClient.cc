@@ -2467,12 +2467,11 @@ int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is 
     if (read) {
       int bad = 0;
       int64_t *p = (int64_t*)buf;
-      int64_t readoff, readclient;
       while ((char*)p + 32 < buf + rdsize) {
-	readoff = *p;
+	int64_t readoff = *p;
 	int64_t wantoff = offset*rdsize + (int64_t)((char*)p - buf);
 	p++;
-	readclient = *p;
+	int64_t readclient = *p;
 	p++;
 	if (readoff != wantoff || readclient != client->get_nodeid()) {
 	  if (!bad)
@@ -2599,12 +2598,11 @@ int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size 
     if (read) {
       int bad = 0;
       int64_t *p = (int64_t*)buf;
-      int64_t readoff, readclient;
       while ((char*)p + 32 < buf + rdsize) {
-	readoff = *p;
+	int64_t readoff = *p;
 	int64_t wantoff = offset*rdsize + (int64_t)((char*)p - buf);
 	p++;
-	readclient = *p;
+	int64_t readclient = *p;
 	p++;
 	if (readoff != wantoff || readclient != client->get_nodeid()) { 
 	  if (!bad)
