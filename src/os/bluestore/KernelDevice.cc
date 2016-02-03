@@ -401,6 +401,7 @@ int KernelDevice::aio_write(
     int r = ::pwritev(buffered ? fd_buffered : fd_direct,
 		      &iov[0], iov.size(), off);
     if (r < 0) {
+      r = -errno;
       derr << __func__ << " pwritev error: " << cpp_strerror(r) << dendl;
       return r;
     }
