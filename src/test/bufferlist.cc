@@ -448,6 +448,42 @@ TEST(BufferPtr, constructors) {
     EXPECT_DEATH(bufferptr(original, 0, original.length() + 1), "");
     EXPECT_DEATH(bufferptr(bufferptr(), 0, 0), "");
   }
+  //
+  // ptr(ptr&& p)
+  //
+  {
+    const std::string str(len, 'X');
+    bufferptr original(str.c_str(), len);
+    bufferptr ptr(std::move(original));
+    EXPECT_TRUE(ptr.have_raw());
+    EXPECT_FALSE(original.have_raw());
+    EXPECT_EQ(str.compare(0, str.size(), ptr.c_str()), 0);
+    EXPECT_EQ(1, ptr.raw_nref());
+  }
+}
+
+TEST(BufferPtr, operator_assign) {
+  //
+  // ptr& operator= (const ptr& p)
+  //
+  bufferptr ptr(10);
+  ptr.copy_in(0, 3, "ABC");
+  char dest[1];
+  {
+    bufferptr copy = ptr;
+    copy.copy_out(1, 1, dest);
+    ASSERT_EQ('B', dest[0]);
+  }
+
+  //
+  // ptr& operator= (ptr&& p)
+  //
+  bufferptr move = std::move(ptr);
+  {
+    move.copy_out(1, 1, dest);
+    ASSERT_EQ('B', dest[0]);
+  }
+  EXPECT_FALSE(ptr.have_raw());
 }
 
 TEST(BufferPtr, assignment) {
@@ -1201,6 +1237,9 @@ TEST(BufferList, constructors) {
 }
 
 TEST(BufferList, operator_equal) {
+  //
+  // list& operator= (const list& other)
+  //
   bufferlist bl;
   bl.append("ABC", 3);
   {
@@ -1208,13 +1247,24 @@ TEST(BufferList, operator_equal) {
     bl.copy(1, 1, dest);
     ASSERT_EQ('B', dest[0]);
   }
-  bufferlist copy;
-  copy = bl;
   {
+    bufferlist copy = bl;
     std::string dest;
     copy.copy(1, 1, dest);
     ASSERT_EQ('B', dest[0]);
   }
+
+  //
+  // list& operator= (list&& other)
+  //
+  bufferlist move = std::move(bl);
+  {
+    std::string dest;
+    move.copy(1, 1, dest);
+    ASSERT_EQ('B', dest[0]);
+  }
+  EXPECT_TRUE(move.length());
+  EXPECT_TRUE(!bl.length());
 }
 
 TEST(BufferList, buffers) {
@@ -1518,6 +1568,27 @@ TEST(BufferList, push_front) {
     EXPECT_EQ('B', bl.buffers().front()[0]);
     EXPECT_EQ(ptr.get_raw(), bl.buffers().front().get_raw());
   }
+  //
+  // void push_front(ptr&& bp)
+  //
+  {
+    bufferlist bl;
+    bufferptr ptr;
+    bl.push_front(std::move(ptr));
+    EXPECT_EQ((unsigned)0, bl.length());
+    EXPECT_EQ((unsigned)0, bl.buffers().size());
+  }
+  {
+    bufferlist bl;
+    bl.append('A');
+    bufferptr ptr(len);
+    ptr.c_str()[0] = 'B';
+    bl.push_front(std::move(ptr));
+    EXPECT_EQ((unsigned)(1 + len), bl.length());
+    EXPECT_EQ((unsigned)2, bl.buffers().size());
+    EXPECT_EQ('B', bl.buffers().front()[0]);
+    EXPECT_FALSE(ptr.get_raw());
+  }
 }
 
 TEST(BufferList, push_back) {
@@ -1556,6 +1627,27 @@ TEST(BufferList, push_back) {
     EXPECT_EQ((unsigned)2, bl.buffers().size());
     EXPECT_EQ('B', bl.buffers().back()[0]);
     EXPECT_EQ(ptr.get_raw(), bl.buffers().back().get_raw());
+  }
+  //
+  // void push_back(ptr&& bp)
+  //
+  {
+    bufferlist bl;
+    bufferptr ptr;
+    bl.push_back(std::move(ptr));
+    EXPECT_EQ((unsigned)0, bl.length());
+    EXPECT_EQ((unsigned)0, bl.buffers().size());
+  }
+  {
+    bufferlist bl;
+    bl.append('A');
+    bufferptr ptr(len);
+    ptr.c_str()[0] = 'B';
+    bl.push_back(std::move(ptr));
+    EXPECT_EQ((unsigned)(1 + len), bl.length());
+    EXPECT_EQ((unsigned)2, bl.buffers().size());
+    EXPECT_EQ('B', bl.buffers().back()[0]);
+    EXPECT_FALSE(ptr.get_raw());
   }
 }
 
@@ -1934,6 +2026,27 @@ TEST(BufferList, append) {
     bl.append(is);
     EXPECT_EQ(0, ::memcmp(expected.c_str(), bl.c_str(), expected.size()));
     EXPECT_EQ(expected.size(), bl.length());
+  }
+  //
+  // void append(ptr&& bp);
+  //
+  {
+    bufferlist bl;
+    EXPECT_EQ((unsigned)0, bl.buffers().size());
+    EXPECT_EQ((unsigned)0, bl.length());
+    {
+      bufferptr ptr;
+      bl.append(std::move(ptr));
+      EXPECT_EQ((unsigned)0, bl.buffers().size());
+      EXPECT_EQ((unsigned)0, bl.length());
+    }
+    {
+      bufferptr ptr(3);
+      bl.append(std::move(ptr));
+      EXPECT_EQ((unsigned)1, bl.buffers().size());
+      EXPECT_EQ((unsigned)3, bl.length());
+      EXPECT_FALSE(ptr.get_raw());
+    }
   }
 }
 
