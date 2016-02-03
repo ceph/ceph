@@ -1067,7 +1067,7 @@ void KeystoneToken::Token::decode_json(JSONObj *obj)
 
 void KeystoneToken::Role::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("id", id, obj, true);
+  JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("name", name, obj, true);
 }
 
