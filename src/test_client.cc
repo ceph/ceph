@@ -41,11 +41,11 @@ TestClient::TestClient(ClientId _id,
 
 
 TestClient::~TestClient() {
-  waitUntilDone();
+  wait_until_done();
 }
 
 
-void TestClient::waitUntilDone() {
+void TestClient::wait_until_done() {
   if (thd_req.joinable()) thd_req.join();
   if (thd_resp.joinable()) thd_resp.join();
 }
@@ -103,15 +103,26 @@ void TestClient::run_resp() {
   // repetition and define it once.
   const auto proc_resp = [this, &delay, &op, &l](const bool notify_req_cv) {
     if (!resp_queue.empty()) {
-      op_times[op++] = now();
-
       RespQueueItem item = resp_queue.front();
       resp_queue.pop_front();
 
       l.unlock();
 
+      // data collection
+
+      op_times[op++] = now();
+      if (dmc::PhaseType::reservation == item.resp_params.phase) {
+	++reservation_counter;
+      } else {
+	++proportion_counter;
+      }
+
+      // processing
+
       TestResponse& resp = item.response;
+
       service_tracker.trackResponse(item.resp_params);
+
       if (info >= 3) {
 	std::cout << resp << std::endl;
       }
@@ -151,8 +162,8 @@ void TestClient::run_resp() {
 }
 
 
-void TestClient::receiveResponse(const TestResponse& resp,
-				 const dmc::RespParams<ServerId>& resp_params) {
+void TestClient::receive_response(const TestResponse& resp,
+				  const dmc::RespParams<ServerId>& resp_params) {
   RespGuard g(mtx_resp);
   resp_queue.push_back(RespQueueItem{resp, resp_params});
   cv_resp.notify_one();

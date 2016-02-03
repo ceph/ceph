@@ -52,8 +52,6 @@ protected:
 
   crimson::dmclock::ServiceTracker<ServerId> service_tracker;
 
-  std::vector<TimePoint>   op_times;
-
   std::atomic_ulong        outstanding_ops;
   std::atomic_bool         requests_complete;
 
@@ -69,6 +67,12 @@ protected:
 
   using RespGuard = std::lock_guard<decltype(mtx_resp)>;
   using Lock = std::unique_lock<std::mutex>;
+
+  // data collection
+
+  std::vector<TimePoint>   op_times;
+  uint32_t                 reservation_counter = 0;
+  uint32_t                 proportion_counter = 0;
 
 public:
 
@@ -86,12 +90,14 @@ public:
 
   virtual ~TestClient();
 
-  void receiveResponse(const TestResponse&,
+  void receive_response(const TestResponse&,
 		       const crimson::dmclock::RespParams<ServerId>&);
 
-  const std::vector<TimePoint>& getOpTimes() const { return op_times; }
+  const std::vector<TimePoint>& get_op_times() const { return op_times; }
+  uint32_t get_res_count() const { return reservation_counter; }
+  uint32_t get_lim_count() const { return proportion_counter; }
 
-  void waitUntilDone();
+  void wait_until_done();
 
 protected:
 

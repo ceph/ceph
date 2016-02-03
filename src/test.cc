@@ -79,7 +79,7 @@ int main(int argc, char* argv[]) {
     [&clients](ClientId client_id,
 	       const TestResponse& resp,
 	       const dmc::RespParams<ServerId>& resp_params) {
-    clients[client_id]->receiveResponse(resp, resp_params);
+    clients[client_id]->receive_response(resp, resp_params);
   };
 
   std::vector<ServerId> server_ids;
@@ -141,7 +141,7 @@ int main(int argc, char* argv[]) {
   // clients are now running; wait for all to finish
 
   for (auto const &i : clients) {
-    i.second->waitUntilDone();
+    i.second->wait_until_done();
   }
 
   // compute and display stats
@@ -152,8 +152,8 @@ int main(int argc, char* argv[]) {
   TestClient::TimePoint latest_finish = early_time;
 
   for (auto const &i : clients) {
-    auto start = i.second->getOpTimes().front();
-    auto end = i.second->getOpTimes().back();
+    auto start = i.second->get_op_times().front();
+    auto end = i.second->get_op_times().back();
 
     if (start > latest_start) { latest_start = start; }
     if (end < earliest_finish) { earliest_finish = end; }
@@ -163,8 +163,8 @@ int main(int argc, char* argv[]) {
   const auto start_edge = latest_start + skip_amount;
 
   for (auto const &i : clients) {
-    auto it = i.second->getOpTimes().begin();
-    const auto end = i.second->getOpTimes().end();
+    auto it = i.second->get_op_times().begin();
+    const auto end = i.second->get_op_times().end();
     while (it != end && *it < start_edge) { ++it; }
 
     for (auto time_edge = start_edge + measure_unit;
