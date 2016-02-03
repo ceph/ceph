@@ -347,12 +347,14 @@ namespace crimson {
       void addRequest(RequestRef&& request,
 		      const ReqParams<C>& req_params,
 		      const Time& time) {
-#if 1
-	static std::atomic_ulong counter(0);
-	++counter;
-	uint32_t counter2 = counter.load();
-	if (counter2 >= 200 && counter2 < 220) {
-	  std::cout << req_params << std::endl;
+#if 0
+	{
+	  static std::atomic_ulong counter(0);
+	  ++counter;
+	  uint32_t counter2 = counter.load();
+	  if (counter2 >= 200 && counter2 < 220) {
+	    std::cout << req_params << std::endl;
+	  }
 	}
 #endif
 	const C& client_id = req_params.client;
@@ -492,7 +494,7 @@ namespace crimson {
 
 	// try constraint (reservation) based scheduling
 
-#if 0
+#if 1
 	{
 	  static uint count = 0;
 	  ++count;

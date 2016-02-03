@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 
   // name -> (server iops, server threads)
   const std::map<ServerId,std::pair<int,int>> server_info = {
-    {0, { 140, 7 }},
+    {0, { 75, 7 }},
     {1, { 75, 7 }},
 #if 0
     {2, { 75, 7 }},
