@@ -407,7 +407,12 @@ int KernelDevice::aio_write(
     }
     if (buffered) {
       // initiate IO (but do not wait)
-      ::sync_file_range(fd_buffered, off, len, SYNC_FILE_RANGE_WRITE);
+      r = ::sync_file_range(fd_buffered, off, len, SYNC_FILE_RANGE_WRITE);
+      if (r < 0) {
+        r = -errno;
+        derr << __func__ << " sync_file_range error: " << cpp_strerror(r) << dendl;
+        return r;
+      }
     }
   }
 
