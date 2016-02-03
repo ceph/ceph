@@ -38,6 +38,7 @@ static int parse_date_str(string& in, utime_t& out) {
 }
 
 void RGWOp_MDLog_List::execute() {
+  string   period = s->info.args.get("period");
   string   shard = s->info.args.get("id");
   string   max_entries_str = s->info.args.get("max-entries");
   string   st = s->info.args.get("start-time"),
@@ -74,8 +75,13 @@ void RGWOp_MDLog_List::execute() {
       return;
     }
   } 
-  
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+
+  if (period.empty()) {
+    ldout(s->cct, 5) << "Missing period id" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
 
   meta_log->init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
 
@@ -119,6 +125,7 @@ void RGWOp_MDLog_List::send_response() {
 
 void RGWOp_MDLog_Info::execute() {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
+  // TODO: return the period id of our oldest metadata log
   http_ret = 0;
 }
 
@@ -134,6 +141,7 @@ void RGWOp_MDLog_Info::send_response() {
 }
 
 void RGWOp_MDLog_ShardInfo::execute() {
+  string period = s->info.args.get("period");
   string shard = s->info.args.get("id");
   string err;
 
@@ -144,7 +152,12 @@ void RGWOp_MDLog_ShardInfo::execute() {
     return;
   }
 
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+  if (period.empty()) {
+    ldout(s->cct, 5) << "Missing period id" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
 
   http_ret = meta_log->get_info(shard_id, &info);
 }
@@ -163,6 +176,7 @@ void RGWOp_MDLog_Delete::execute() {
            et = s->info.args.get("end-time"),
            start_marker = s->info.args.get("start-marker"),
            end_marker = s->info.args.get("end-marker"),
+           period = s->info.args.get("period"),
            shard = s->info.args.get("id"),
            err;
   utime_t  ut_st, 
@@ -191,23 +205,31 @@ void RGWOp_MDLog_Delete::execute() {
     http_ret = -EINVAL;
     return;
   }
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+
+  if (period.empty()) {
+    ldout(s->cct, 5) << "Missing period id" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
 
   http_ret = meta_log->trim(shard_id, ut_st, ut_et, start_marker, end_marker);
 }
 
 void RGWOp_MDLog_Lock::execute() {
-  string shard_id_str, duration_str, locker_id, zone_id;
+  string period, shard_id_str, duration_str, locker_id, zone_id;
   unsigned shard_id;
 
   http_ret = 0;
 
+  period       = s->info.args.get("period");
   shard_id_str = s->info.args.get("id");
   duration_str = s->info.args.get("length");
   locker_id    = s->info.args.get("locker-id");
   zone_id      = s->info.args.get("zone-id");
 
-  if (shard_id_str.empty() ||
+  if (period.empty() ||
+      shard_id_str.empty() ||
       (duration_str.empty()) ||
       locker_id.empty() ||
       zone_id.empty()) {
@@ -224,7 +246,7 @@ void RGWOp_MDLog_Lock::execute() {
     return;
   }
 
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
   unsigned dur;
   dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
   if (!err.empty() || dur <= 0) {
@@ -239,16 +261,18 @@ void RGWOp_MDLog_Lock::execute() {
 }
 
 void RGWOp_MDLog_Unlock::execute() {
-  string shard_id_str, locker_id, zone_id;
+  string period, shard_id_str, locker_id, zone_id;
   unsigned shard_id;
 
   http_ret = 0;
 
+  period       = s->info.args.get("period");
   shard_id_str = s->info.args.get("id");
   locker_id    = s->info.args.get("locker-id");
   zone_id      = s->info.args.get("zone-id");
 
-  if (shard_id_str.empty() ||
+  if (period.empty() ||
+      shard_id_str.empty() ||
       locker_id.empty() ||
       zone_id.empty()) {
     dout(5) << "Error invalid parameter list" << dendl;
@@ -264,7 +288,7 @@ void RGWOp_MDLog_Unlock::execute() {
     return;
   }
 
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
   http_ret = meta_log->unlock(shard_id, zone_id, locker_id);
 }
 
