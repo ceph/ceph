@@ -153,16 +153,18 @@ public:
         char *l = line;
         char *tok = strsep(&l, " \t:");
         if (tok) {
-          while (l && *l == ' ')
+          while (l && *l == ' ') {
             l++;
+          }
 
           if (strcasecmp(tok, "X-Subject-Token") == 0) {
             subject_token = l;
           }
         }
       }
-      if (s != end)
+      if (s != end) {
         *p++ = *s++;
+      }
     }
     return 0;
   }
@@ -333,10 +335,12 @@ int RGWSwift::check_revoked()
   bufferlist bl;
   RGWGetRevokedTokens req(cct, &bl);
 
-  if (get_keystone_admin_token(token) < 0)
+  if (get_keystone_admin_token(token) < 0) {
     return -EINVAL;
-  if (get_keystone_url(url) < 0)
+  }
+  if (get_keystone_url(url) < 0) {
     return -EINVAL;
+  }
   req.append_header("X-Auth-Token", token);
 
   const auto keystone_version = KeystoneService::get_api_version();
@@ -345,10 +349,12 @@ int RGWSwift::check_revoked()
   } else if (keystone_version == KeystoneApiVersion::VER_3) {
     url.append("v3/auth/tokens/OS-PKI/revoked");
   }
+
   req.set_send_length(0);
   int ret = req.process(url.c_str());
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   bl.append((char)0); // NULL terminate for debug output
 
@@ -441,11 +447,14 @@ int RGWSwift::parse_keystone_token_response(const string& token, bufferlist& bl,
   }
 
   if (!found) {
-    ldout(cct, 0) << "user does not hold a matching role; required roles: " << g_conf->rgw_keystone_accepted_roles << dendl;
+    ldout(cct, 0) << "user does not hold a matching role; required roles: "
+                  << g_conf->rgw_keystone_accepted_roles << dendl;
     return -EPERM;
   }
 
-  ldout(cct, 0) << "validated token: " << t.get_project_name() << ":" << t.get_user_name() << " expires: " << t.get_expires() << dendl;
+  ldout(cct, 0) << "validated token: " << t.get_project_name()
+                << ":" << t.get_user_name()
+                << " expires: " << t.get_expires() << dendl;
 
   rgw_set_keystone_token_auth_info(t, info);
 
@@ -581,7 +590,9 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
     return ret;
 
   if (t.expired()) {
-    ldout(cct, 0) << "got expired token: " << t.get_project_name() << ":" << t.get_user_name() << " expired: " << t.get_expires() << dendl;
+    ldout(cct, 0) << "got expired token: " << t.get_project_name()
+                  << ":" << t.get_user_name()
+                  << " expired: " << t.get_expires() << dendl;
     return -EPERM;
   }
 
