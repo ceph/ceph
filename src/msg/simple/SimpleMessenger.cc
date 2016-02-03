@@ -314,6 +314,14 @@ int SimpleMessenger::rebind(const set<int>& avoid_ports)
   return accepter.rebind(avoid_ports);
 }
 
+int SimpleMessenger::is_linked()
+{
+  ldout(cct,5) << "checking ethernet" << dendl;
+  assert(did_bind);
+
+  return accepter.is_linked();
+}
+
 int SimpleMessenger::start()
 {
   lock.Lock();

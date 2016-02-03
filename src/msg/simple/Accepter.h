@@ -38,6 +38,7 @@ public:
   int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
   int rebind(const set<int>& avoid_port);
   int start();
+  int is_linked();
 };
 
 

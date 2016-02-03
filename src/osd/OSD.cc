@@ -1560,6 +1560,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
   state(STATE_INITIALIZING),
+  network_state(0),
   osd_tp(cct, "OSD::osd_tp", "tp_osd", cct->_conf->osd_op_threads, "osd_op_threads"),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
     cct->_conf->osd_op_num_threads_per_shard * cct->_conf->osd_op_num_shards),
@@ -3998,7 +3999,34 @@ bool OSD::heartbeat_reset(Connection *con)
   return true;
 }
 
+bool OSD::network_rebind_and_check()
+{
+  network_state = 0;
+  set<int> avoid_ports;
+  avoid_ports.insert(cluster_messenger->get_myaddr().get_port());
+  avoid_ports.insert(hb_back_server_messenger->get_myaddr().get_port());
+  avoid_ports.insert(hb_front_server_messenger->get_myaddr().get_port()); 
 
+  bool rebind_ok = false;
+  if (!cluster_messenger->rebind(avoid_ports))
+    if (!cluster_messenger->rebind(avoid_ports))
+      if (!cluster_messenger->rebind(avoid_ports))
+	rebind_ok = true;
+  if (!rebind_ok)
+    network_state |= NETWORK_NEED_REBIND;
+
+  if (cct->_conf->osd_support_ethtool_link_check){
+    bool is_linked;
+    if (cluster_messenger->is_linked())
+      if (!cluster_messenger->is_linked())
+	if (!cluster_messenger->is_linked())
+	  is_linked = true;
+    if (!is_linked)
+      network_state |= NETWORK_IS_UNLINKED;
+  }
+
+  return (network_state == 0);
+}
 
 // =========================================
 
@@ -4026,7 +4054,10 @@ void OSD::tick()
   }
 
   if (is_waiting_for_healthy()) {
-    start_boot();
+    if (network_state)
+      network_rebind_and_check();
+    else
+      start_boot();
   }
 
   if (is_active()) {
@@ -6556,7 +6587,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   bool do_shutdown = false;
   bool do_restart = false;
-  bool network_error = false;
   if (osdmap->get_epoch() > 0 &&
       is_active()) {
     if (!osdmap->exists(whoami)) {
@@ -6614,28 +6644,15 @@ void OSD::handle_osd_map(MOSDMap *m)
 
 	start_waiting_for_healthy();
 
-	set<int> avoid_ports;
-	avoid_ports.insert(cluster_messenger->get_myaddr().get_port());
-	avoid_ports.insert(hb_back_server_messenger->get_myaddr().get_port());
-	avoid_ports.insert(hb_front_server_messenger->get_myaddr().get_port());
-
-	int r = cluster_messenger->rebind(avoid_ports);
-	if (r != 0) {
-	  do_shutdown = true;  // FIXME: do_restart?
-          network_error = true;
-        }
-
-	r = hb_back_server_messenger->rebind(avoid_ports);
-	if (r != 0) {
-	  do_shutdown = true;  // FIXME: do_restart?
-          network_error = true;
-        }
-
-	r = hb_front_server_messenger->rebind(avoid_ports);
-	if (r != 0) {
-	  do_shutdown = true;  // FIXME: do_restart?
-          network_error = true;
-        }
+	if (!network_rebind_and_check()) {
+	  Mutex::Locker l(heartbeat_lock);
+	  map<int,pair<utime_t,entity_inst_t>>::iterator it = failure_pending.begin();
+	  while (it != failure_pending.end()) {
+	    dout(10) << "handle_osd_ping canceling in-flight failure report for osd." << it->first << dendl;
+	    send_still_alive(osdmap->get_epoch(), it->second.second);
+	    failure_pending.erase(it++);
+	  }
+	}
 
 	hbclient_messenger->mark_down_all();
 
@@ -6683,15 +6700,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     osdmap_subscribe(osdmap->get_epoch()+1, false);
   }
   else if (do_shutdown) {
-    if (network_error) {
-      Mutex::Locker l(heartbeat_lock);	
-      map<int,pair<utime_t,entity_inst_t>>::iterator it = failure_pending.begin();
-      while (it != failure_pending.end()) {
-        dout(10) << "handle_osd_ping canceling in-flight failure report for osd." << it->first << dendl;
-        send_still_alive(osdmap->get_epoch(), it->second.second);
-        failure_pending.erase(it++);
-      }
-    }	
     osd_lock.Unlock();
     shutdown();
     osd_lock.Lock();
