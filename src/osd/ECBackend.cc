@@ -776,6 +776,7 @@ void ECBackend::sub_write_committed(
     r->op.last_complete = last_complete;
     r->op.committed = true;
     r->op.from = get_parent()->whoami_shard();
+    r->set_priority(CEPH_MSG_PRIO_HIGH);
     get_parent()->send_message_osd_cluster(
       get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
   }
@@ -816,6 +817,7 @@ void ECBackend::sub_write_applied(
     r->op.from = get_parent()->whoami_shard();
     r->op.tid = tid;
     r->op.applied = true;
+    r->set_priority(CEPH_MSG_PRIO_HIGH);
     get_parent()->send_message_osd_cluster(
       get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
   }
