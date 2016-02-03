@@ -388,7 +388,7 @@ OPTION(client_inject_fixed_oldest_tid, OPT_BOOL, false)  // synthetic client bug
 OPTION(client_metadata, OPT_STR, "")
 OPTION(client_acl_type, OPT_STR, "")
 OPTION(client_permissions, OPT_BOOL, true)
-OPTION(client_dirsize_rbytes, OPT_BOOL, false)
+OPTION(client_dirsize_rbytes, OPT_BOOL, true)
 
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
