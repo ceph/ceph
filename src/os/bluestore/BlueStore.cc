@@ -1608,29 +1608,36 @@ int BlueStore::_setup_block_symlink_or_file(
         return r;
       }
     }
-  } else if (size) {
-    struct stat st;
-    r = ::fstatat(path_fd, name.c_str(), &st, 0);
-    if (r < 0)
-      r = -errno;
-    if (r == -ENOENT) {
-      int fd = ::openat(path_fd, name.c_str(), O_CREAT|O_RDWR, 0644);
-      if (fd < 0) {
-	int r = -errno;
-	derr << __func__ << " failed to create " << name << " file: "
+  }
+  if (size) {
+    int fd = ::openat(path_fd, name.c_str(), O_RDWR, 0644);
+    if (fd >= 0) {
+      // block file is present
+      struct stat st;
+      int r = ::fstat(fd, &st);
+      if (r == 0 &&
+	  S_ISREG(st.st_mode) &&   // if it is a regular file
+	  st.st_size == 0) {       // and is 0 bytes
+	r = ::ftruncate(fd, size);
+	if (r < 0) {
+	  r = -errno;
+	  derr << __func__ << " failed to resize " << name << " file to "
+	       << size << ": " << cpp_strerror(r) << dendl;
+	  VOID_TEMP_FAILURE_RETRY(::close(fd));
+	  return r;
+	}
+	dout(1) << __func__ << " resized " << name << " file to "
+		<< pretty_si_t(size) << "B" << dendl;
+      }
+      VOID_TEMP_FAILURE_RETRY(::close(fd));
+    } else {
+      int r = -errno;
+      if (r != -ENOENT) {
+	derr << __func__ << " failed to open " << name << " file: "
 	     << cpp_strerror(r) << dendl;
 	return r;
       }
-      r = ::ftruncate(fd, size);
-      assert(r == 0);
-      dout(1) << __func__ << " created " << name << " file with size "
-	      << pretty_si_t(size) << "B" << dendl;
-      VOID_TEMP_FAILURE_RETRY(::close(fd));
-    } else if (r < 0) {
-      derr << __func__ << " failed to stat " << name << " file: "
-           << cpp_strerror(r) << dendl;
-      return r;
-    } 
+    }
   }
   return 0;
 }
