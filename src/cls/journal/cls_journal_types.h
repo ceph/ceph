@@ -9,6 +9,7 @@
 #include "include/encoding.h"
 #include <iosfwd>
 #include <list>
+#include <set>
 #include <string>
 
 namespace ceph {
@@ -78,7 +79,8 @@ struct Client {
     : id(_id), description(_description), commit_position(_commit_position) {}
 
   inline bool operator==(const Client &rhs) const {
-    return (id == rhs.id && description == rhs.description &&
+    return (id == rhs.id &&
+            description == rhs.description &&
             commit_position == rhs.commit_position);
   }
   inline bool operator<(const Client &rhs) const {
@@ -92,9 +94,37 @@ struct Client {
   static void generate_test_instances(std::list<Client *> &o);
 };
 
+struct Tag {
+  static const uint64_t TAG_CLASS_NEW = static_cast<uint64_t>(-1);
+
+  uint64_t tid;
+  uint64_t tag_class;
+  bufferlist data;
+
+  Tag() : tid(0), tag_class(0) {}
+  Tag(uint64_t tid, uint64_t tag_class, const bufferlist &data)
+    : tid(tid), tag_class(tag_class), data(data) {}
+
+  inline bool operator==(const Tag &rhs) const {
+    return (tid == rhs.tid &&
+            tag_class == rhs.tag_class &&
+            data.contents_equal(rhs.data));
+  }
+  inline bool operator<(const Tag &rhs) const {
+    return (tid < rhs.tid);
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& iter);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<Tag *> &o);
+};
+
 WRITE_CLASS_ENCODER(EntryPosition);
 WRITE_CLASS_ENCODER(ObjectSetPosition);
 WRITE_CLASS_ENCODER(Client);
+WRITE_CLASS_ENCODER(Tag);
 
 std::ostream &operator<<(std::ostream &os,
                          const EntryPosition &entry_position);
@@ -102,6 +132,7 @@ std::ostream &operator<<(std::ostream &os,
                          const ObjectSetPosition &object_set_position);
 std::ostream &operator<<(std::ostream &os,
 			 const Client &client);
+std::ostream &operator<<(std::ostream &os, const Tag &tag);
 
 } // namespace journal
 } // namespace cls
