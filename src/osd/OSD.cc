@@ -1580,6 +1580,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   op_tracker(cct, cct->_conf->osd_enable_op_tracker,
                   cct->_conf->osd_num_op_tracker_shard),
   test_ops_hook(NULL),
+  op_queue(get_io_queue()),
+  op_prio_cutoff(get_io_prio_cut()),
   op_shardedwq(
     cct->_conf->osd_op_num_shards,
     this,
@@ -1979,6 +1981,8 @@ int OSD::init()
   load_pgs();
 
   dout(2) << "superblock: i am osd." << superblock.whoami << dendl;
+  dout(0) << "using " << op_queue << " op queue with priority op cut off at " <<
+    op_prio_cutoff << "." << dendl;
 
   create_logger();
 
@@ -8349,19 +8353,19 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
   ShardData* sdata = shard_list[shard_index];
   assert(NULL != sdata);
   sdata->sdata_op_ordering_lock.Lock();
-  if (sdata->pqueue.empty()) {
+  if (sdata->pqueue->empty()) {
     sdata->sdata_op_ordering_lock.Unlock();
     osd->cct->get_heartbeat_map()->reset_timeout(hb, 4, 0);
     sdata->sdata_lock.Lock();
     sdata->sdata_cond.WaitInterval(osd->cct, sdata->sdata_lock, utime_t(2, 0));
     sdata->sdata_lock.Unlock();
     sdata->sdata_op_ordering_lock.Lock();
-    if(sdata->pqueue.empty()) {
+    if(sdata->pqueue->empty()) {
       sdata->sdata_op_ordering_lock.Unlock();
       return;
     }
   }
-  pair<PGRef, PGQueueable> item = sdata->pqueue.dequeue();
+  pair<PGRef, PGQueueable> item = sdata->pqueue->dequeue();
   sdata->pg_for_processing[&*(item.first)].push_back(item.second);
   sdata->sdata_op_ordering_lock.Unlock();
   ThreadPool::TPHandle tp_handle(osd->cct, hb, timeout_interval,
@@ -8430,12 +8434,12 @@ void OSD::ShardedOpWQ::_enqueue(pair<PGRef, PGQueueable> item) {
   unsigned priority = item.second.get_priority();
   unsigned cost = item.second.get_cost();
   sdata->sdata_op_ordering_lock.Lock();
-
-  if (priority >= CEPH_MSG_PRIO_LOW)
-    sdata->pqueue.enqueue_strict(
+ 
+  if (priority >= osd->op_prio_cutoff)
+    sdata->pqueue->enqueue_strict(
       item.second.get_owner(), priority, item);
   else
-    sdata->pqueue.enqueue(
+    sdata->pqueue->enqueue(
       item.second.get_owner(),
       priority, cost, item);
   sdata->sdata_op_ordering_lock.Unlock();
@@ -8460,12 +8464,12 @@ void OSD::ShardedOpWQ::_enqueue_front(pair<PGRef, PGQueueable> item) {
   }
   unsigned priority = item.second.get_priority();
   unsigned cost = item.second.get_cost();
-  if (priority >= CEPH_MSG_PRIO_LOW)
-    sdata->pqueue.enqueue_strict_front(
+  if (priority >= osd->op_prio_cutoff)
+    sdata->pqueue->enqueue_strict_front(
       item.second.get_owner(),
       priority, item);
   else
-    sdata->pqueue.enqueue_front(
+    sdata->pqueue->enqueue_front(
       item.second.get_owner(),
       priority, cost, item);
 
