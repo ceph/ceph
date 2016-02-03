@@ -466,6 +466,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     r = -errno;
     goto out;
   }
+  assert((uint64_t)r == len);
   pbl->clear();
   pbl->push_back(p);
 
