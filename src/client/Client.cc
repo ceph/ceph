@@ -4816,6 +4816,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 
 int Client::_getgrouplist(gid_t** sgids, int uid, int gid)
 {
+  // cppcheck-suppress variableScope
   int sgid_count;
   gid_t *sgid_buf;
 
@@ -4875,9 +4876,8 @@ int Client::inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned 
   if (uid == 0)
     return 0;
 
-  int ret;
   if (uid != in->uid && (in->mode & S_IRWXG)) {
-    ret = _posix_acl_permission(in, uid, groups, want);
+    int ret = _posix_acl_permission(in, uid, groups, want);
     if (ret != -EAGAIN)
       return ret;
   }
