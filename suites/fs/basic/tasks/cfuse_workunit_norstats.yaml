@@ -1,0 +1,13 @@
+tasks:
+- ceph-fuse:
+- workunit:
+    timeout: 6h
+    clients:
+      all:
+        - fs/norstats
+
+overrides:
+  ceph:
+    conf:
+      client:
+        client dirsize rbytes: false
