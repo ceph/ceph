@@ -316,16 +316,7 @@ namespace crimson {
 
 
       ~PriorityQueue() {
-	if (info) {
-	  std::cout << "Ops scheduled via reservation: " <<
-	    res_sched_count << std::endl;
-	  std::cout << "Ops scheduled via proportion: " <<
-	    prop_sched_count << std::endl;
-	  if (limit_break_sched_count > 0) {
-	    std::cout << "Ops scheduled via limit break: " <<
-	      limit_break_sched_count << std::endl;
-	  }
-	}
+	// empty
       }
 
 
@@ -494,7 +485,7 @@ namespace crimson {
 
 	// try constraint (reservation) based scheduling
 
-#if 1
+#if 0
 	{
 	  static uint count = 0;
 	  ++count;
