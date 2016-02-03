@@ -350,7 +350,7 @@ namespace crimson {
 #if 1
 	static std::atomic_ulong counter(0);
 	++counter;
-	ulong counter2 = counter.load();
+	uint32_t counter2 = counter.load();
 	if (counter2 >= 200 && counter2 < 220) {
 	  std::cout << req_params << std::endl;
 	}

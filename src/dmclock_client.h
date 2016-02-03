@@ -19,11 +19,35 @@ namespace crimson {
     struct ServerInfo {
       Counter delta_prev_req;
       Counter rho_prev_req;
+      uint32_t my_delta;
+      uint32_t my_rho;
 
 #if 0
       // track last update to allow clean-up
       decltype(std::chrono::steady_clock::now()) last_update;
 #endif
+
+      ServerInfo(Counter _delta_prev_req,
+		 Counter _rho_prev_req) :
+	delta_prev_req(_delta_prev_req),
+	rho_prev_req(_rho_prev_req),
+	my_delta(0),
+	my_rho(0)
+      {
+	// empty
+      }
+
+      inline void req_update(Counter delta, Counter rho) {
+	delta_prev_req = delta;
+	rho_prev_req = rho;
+	my_delta = 0;
+	my_rho = 0;
+      }
+
+      inline void resp_update(bool is_reservation) {
+	++my_delta;
+	if (is_reservation) ++my_rho;
+      }
     };
 
     // S is server identifier type
@@ -51,6 +75,18 @@ namespace crimson {
 	if (PhaseType::reservation == resp_params.phase) {
 	  ++rho_counter;
 	}
+
+	auto it = service_map.find(resp_params.server);
+	if (service_map.end() == it) {
+	  // this code can only run if a request did not precede the
+	  // response or if the record was destroyed before now and
+	  // after the request was made
+	  ServerInfo si(delta_counter, rho_counter);
+	  si.resp_update(PhaseType::reservation == resp_params.phase);
+	  service_map.emplace(resp_params.server, si);
+	} else {
+	  it->second.resp_update(PhaseType::reservation == resp_params.phase);
+	}
       }
 
       template<typename C>
@@ -58,16 +94,17 @@ namespace crimson {
 	DataGuard g(data_mtx);
 	auto it = service_map.find(server);
 	if (service_map.end() == it) {
-	  service_map[server] = ServerInfo{delta_counter, rho_counter};
+	  service_map.emplace(server, ServerInfo(delta_counter, rho_counter));
 	  return ReqParams<C>(client, 1, 1);
 	} else {
-	  ReqParams<C> result(
-	    client,
-	    uint32_t(1 + delta_counter - it->second.delta_prev_req),
-	    uint32_t(1 + rho_counter - it->second.rho_prev_req));
+	  int delta = 1 + delta_counter - it->second.delta_prev_req -
+	    it->second.my_delta;
+	  int rho = 1 + rho_counter - it->second.rho_prev_req -
+	    it->second.my_rho;
+	  assert(delta >= 1 && rho >= 1);
+	  ReqParams<C> result(client, uint32_t(delta), uint32_t(rho));
 
-	  it->second.delta_prev_req = delta_counter;
-	  it->second.rho_prev_req = rho_counter;
+	  it->second.req_update(delta_counter, rho_counter);
 
 	  return result;
 	}

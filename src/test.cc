@@ -182,7 +182,7 @@ int main(int argc, char* argv[]) {
 
   for (auto i = clients.begin(); i != clients.end(); ++i) {
     delete i->second;
-    clients.erase(i);
+    i->second = nullptr;
   }
 
   std::cout << "simulation complete" << std::endl;
