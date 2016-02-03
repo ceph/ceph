@@ -3386,8 +3386,6 @@ done_err:
  */
 int RGWRados::fix_tail_obj_locator(rgw_bucket& bucket, rgw_obj_key& key, bool fix, bool *need_fix)
 {
-  string locator;
-
   rgw_obj obj(bucket, key);
 
   if (need_fix) {
