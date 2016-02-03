@@ -416,6 +416,7 @@ int KernelDevice::aio_write(
     }
   }
 
+  _aio_log_finish(ioc, off, bl.length());
   io_since_flush.set(1);
   return 0;
 }
