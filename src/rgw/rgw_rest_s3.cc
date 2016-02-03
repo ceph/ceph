@@ -2913,7 +2913,7 @@ RGWOp *RGWHandler_ObjStore_S3Website::op_head()
   return get_obj_op(false);
 }
 
-int RGWHandler_ObjStore_S3Website::get_errordoc(const string errordoc_key, string *error_content) {
+int RGWHandler_ObjStore_S3Website::get_errordoc(const string& errordoc_key, string *error_content) {
     ldout(s->cct, 20) << "TODO Serve Custom error page here if bucket has <Error>" << dendl;
     *error_content = errordoc_key;
     // 1. Check if errordoc exists
