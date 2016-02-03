@@ -171,8 +171,8 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 // -------------
 
 dir_result_t::dir_result_t(Inode *in)
-  : inode(in), offset(0), this_offset(2), next_offset(2),
-    release_count(0), ordered_count(0), start_shared_gen(0),
+  : inode(in), owner_uid(-1), owner_gid(-1), offset(0), this_offset(2),
+    next_offset(2), release_count(0), ordered_count(0), start_shared_gen(0),
     buffer(0) {
 }
 
