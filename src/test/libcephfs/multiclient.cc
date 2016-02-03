@@ -20,7 +20,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
+
+#if defined(__FreeBSD__)
+#include <sys/extattr.h>
+#define XATTR_CREATE    0x1
+#define XATTR_REPLACE   0x2
+#else
 #include <sys/xattr.h>
+#endif
 
 TEST(LibCephFS, MulticlientSimple) {
   struct ceph_mount_info *ca, *cb;
