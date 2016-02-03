@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string.h>
 #include <errno.h>
+#include <stdlib.h>
 
 #include "include/types.h"
 #include "common/blkdev.h"
@@ -19,13 +20,15 @@ TEST(blkdev, get_block_device_base) {
   ASSERT_EQ(-EINVAL, get_block_device_base("/etc/notindev", buf, 100));
 
   for (int i=0; i<2; ++i) {
-    const char *root = "";
-    if (i == 0)
-      root = "test/common/test_blkdev_sys_block";
-    set_block_device_sandbox_dir(root);
+    string root;
+    if (i == 0) {
+      string CEPH_ROOT = getenv("CEPH_ROOT");
+      root = CEPH_ROOT + "/src/test/common/test_blkdev_sys_block";
+    }
+    set_block_device_sandbox_dir(root.c_str());
 
     // work backwards
-    sprintf(buf, "%s/sys/block", root);
+    sprintf(buf, "%s/sys/block", root.c_str());
     DIR *dir = opendir(buf);
     ASSERT_TRUE(dir);
     while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
@@ -50,7 +53,7 @@ TEST(blkdev, get_block_device_base) {
 	     (int)block_device_support_discard(base));
 
       char subdirfn[PATH_MAX];
-      sprintf(subdirfn, "%s/sys/block/%s", root, de->d_name);
+      sprintf(subdirfn, "%s/sys/block/%s", root.c_str(), de->d_name);
       DIR *subdir = opendir(subdirfn);
       ASSERT_TRUE(subdir);
       while (!::readdir_r(subdir, reinterpret_cast<struct dirent*>(buf2), &de2)) {
