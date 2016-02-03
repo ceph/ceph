@@ -238,6 +238,35 @@ TEST_F(TestClsJournal, ClientUnregisterDNE) {
   ASSERT_EQ(-ENOENT, client::client_unregister(ioctx, oid, "id1"));
 }
 
+TEST_F(TestClsJournal, ClientUnregisterPruneTags) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  std::string oid = get_temp_image_name();
+
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id2", "desc2"));
+
+  ASSERT_EQ(0, client::tag_create(ioctx, oid, 0, Tag::TAG_CLASS_NEW,
+                                  bufferlist()));
+  ASSERT_EQ(0, client::tag_create(ioctx, oid, 1, Tag::TAG_CLASS_NEW,
+                                  bufferlist()));
+  ASSERT_EQ(0, client::tag_create(ioctx, oid, 2, 1, bufferlist()));
+
+  librados::ObjectWriteOperation op1;
+  client::client_commit(&op1, "id1", {1, {{2, 120}}});
+  ASSERT_EQ(0, ioctx.operate(oid, &op1));
+
+  ASSERT_EQ(0, client::client_unregister(ioctx, oid, "id2"));
+
+  std::set<Tag> expected_tags = {{0, 0, {}}, {2, 1, {}}};
+  std::set<Tag> tags;
+  ASSERT_EQ(0, client::tag_list(ioctx, oid, "id1",
+                                boost::optional<uint64_t>(), &tags));
+  ASSERT_EQ(expected_tags, tags);
+}
+
 TEST_F(TestClsJournal, ClientCommit) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
@@ -330,6 +359,124 @@ TEST_F(TestClsJournal, ClientList) {
                                &read_clients, &cond);
   ASSERT_EQ(0, cond.wait());
   ASSERT_EQ(expected_clients, read_clients);
+}
+
+TEST_F(TestClsJournal, GetNextTagTid) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  std::string oid = get_temp_image_name();
+
+  uint64_t tag_tid;
+  ASSERT_EQ(-ENOENT, client::get_next_tag_tid(ioctx, oid, &tag_tid));
+
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+
+  ASSERT_EQ(0, client::get_next_tag_tid(ioctx, oid, &tag_tid));
+  ASSERT_EQ(0U, tag_tid);
+
+  ASSERT_EQ(0, client::tag_create(ioctx, oid, 0, Tag::TAG_CLASS_NEW,
+                                  bufferlist()));
+  ASSERT_EQ(0, client::get_next_tag_tid(ioctx, oid, &tag_tid));
+  ASSERT_EQ(1U, tag_tid);
+}
+
+TEST_F(TestClsJournal, TagCreate) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  std::string oid = get_temp_image_name();
+
+  ASSERT_EQ(-ENOENT, client::tag_create(ioctx, oid, 0, Tag::TAG_CLASS_NEW,
+                                        bufferlist()));
+
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+
+  ASSERT_EQ(-ESTALE, client::tag_create(ioctx, oid, 1, Tag::TAG_CLASS_NEW,
+                                        bufferlist()));
+  ASSERT_EQ(-EINVAL, client::tag_create(ioctx, oid, 0, 1, bufferlist()));
+
+  ASSERT_EQ(0, client::tag_create(ioctx, oid, 0, Tag::TAG_CLASS_NEW,
+                                  bufferlist()));
+  ASSERT_EQ(-EEXIST, client::tag_create(ioctx, oid, 0, Tag::TAG_CLASS_NEW,
+                                        bufferlist()));
+  ASSERT_EQ(0, client::tag_create(ioctx, oid, 1, Tag::TAG_CLASS_NEW,
+                                  bufferlist()));
+  ASSERT_EQ(0, client::tag_create(ioctx, oid, 2, 1, bufferlist()));
+
+  std::set<Tag> expected_tags = {
+    {0, 0, {}}, {1, 1, {}}, {2, 1, {}}};
+  std::set<Tag> tags;
+  ASSERT_EQ(0, client::tag_list(ioctx, oid, "id1",
+                                boost::optional<uint64_t>(), &tags));
+  ASSERT_EQ(expected_tags, tags);
+}
+
+TEST_F(TestClsJournal, TagCreatePrunesTags) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  std::string oid = get_temp_image_name();
+
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+
+  ASSERT_EQ(0, client::tag_create(ioctx, oid, 0, Tag::TAG_CLASS_NEW,
+                                  bufferlist()));
+  ASSERT_EQ(0, client::tag_create(ioctx, oid, 1, Tag::TAG_CLASS_NEW,
+                                  bufferlist()));
+  ASSERT_EQ(0, client::tag_create(ioctx, oid, 2, 1, bufferlist()));
+
+  librados::ObjectWriteOperation op1;
+  client::client_commit(&op1, "id1", {1, {{2, 120}}});
+  ASSERT_EQ(0, ioctx.operate(oid, &op1));
+
+  ASSERT_EQ(0, client::tag_create(ioctx, oid, 3, 0, bufferlist()));
+
+  std::set<Tag> expected_tags = {
+    {0, 0, {}}, {2, 1, {}}, {3, 0, {}}};
+  std::set<Tag> tags;
+  ASSERT_EQ(0, client::tag_list(ioctx, oid, "id1",
+                                boost::optional<uint64_t>(), &tags));
+  ASSERT_EQ(expected_tags, tags);
+}
+
+TEST_F(TestClsJournal, TagList) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  std::string oid = get_temp_image_name();
+
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+
+  std::set<Tag> expected_all_tags;
+  std::set<Tag> expected_filtered_tags;
+  for (uint32_t i = 0; i < 96; ++i) {
+    uint64_t tag_class = Tag::TAG_CLASS_NEW;
+    if (i > 1) {
+      tag_class = i % 2 == 0 ? 0 : 1;
+    }
+
+    Tag tag(i, i % 2 == 0 ? 0 : 1, bufferlist());
+    expected_all_tags.insert(tag);
+    if (i % 2 == 0) {
+      expected_filtered_tags.insert(tag);
+    }
+    ASSERT_EQ(0, client::tag_create(ioctx, oid, i, tag_class,
+                                    bufferlist()));
+  }
+
+  std::set<Tag> tags;
+  ASSERT_EQ(0, client::tag_list(ioctx, oid, "id1", boost::optional<uint64_t>(),
+                                &tags));
+  ASSERT_EQ(expected_all_tags, tags);
+
+  ASSERT_EQ(0, client::tag_list(ioctx, oid, "id1", boost::optional<uint64_t>(0),
+                                &tags));
+  ASSERT_EQ(expected_filtered_tags, tags);
 }
 
 TEST_F(TestClsJournal, GuardAppend) {

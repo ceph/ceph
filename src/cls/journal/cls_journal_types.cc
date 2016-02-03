@@ -60,11 +60,7 @@ void ObjectSetPosition::dump(Formatter *f) const {
 void ObjectSetPosition::generate_test_instances(
     std::list<ObjectSetPosition *> &o) {
   o.push_back(new ObjectSetPosition());
-
-  EntryPositions entry_positions;
-  entry_positions.push_back(EntryPosition(1, 120));
-  entry_positions.push_back(EntryPosition(2, 121));
-  o.push_back(new ObjectSetPosition(1, entry_positions));
+  o.push_back(new ObjectSetPosition(1, {{1, 120}, {2, 121}}));
 }
 
 void Client::encode(bufferlist& bl) const {
@@ -86,6 +82,7 @@ void Client::decode(bufferlist::iterator& iter) {
 void Client::dump(Formatter *f) const {
   f->dump_string("id", id);
   f->dump_string("description", description);
+
   f->open_object_section("commit_position");
   commit_position.dump(f);
   f->close_section();
@@ -94,11 +91,40 @@ void Client::dump(Formatter *f) const {
 void Client::generate_test_instances(std::list<Client *> &o) {
   o.push_back(new Client());
   o.push_back(new Client("id", "desc"));
+  o.push_back(new Client("id", "desc", {1, {{1, 120}, {2, 121}}}));
+}
 
-  EntryPositions entry_positions;
-  entry_positions.push_back(EntryPosition(1, 120));
-  entry_positions.push_back(EntryPosition(2, 121));
-  o.push_back(new Client("id", "desc", ObjectSetPosition(1, entry_positions)));
+void Tag::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(tid, bl);
+  ::encode(tag_class, bl);
+  ::encode(data, bl);
+  ENCODE_FINISH(bl);
+}
+
+void Tag::decode(bufferlist::iterator& iter) {
+  DECODE_START(1, iter);
+  ::decode(tid, iter);
+  ::decode(tag_class, iter);
+  ::decode(data, iter);
+  DECODE_FINISH(iter);
+}
+
+void Tag::dump(Formatter *f) const {
+  f->dump_unsigned("tid", tid);
+  f->dump_unsigned("tag_class", tag_class);
+
+  std::stringstream data_ss;
+  data.hexdump(data_ss);
+  f->dump_string("data", data_ss.str());
+}
+
+void Tag::generate_test_instances(std::list<Tag *> &o) {
+  o.push_back(new Tag());
+
+  bufferlist data;
+  data.append(std::string('1', 128));
+  o.push_back(new Tag(123, 234, data));
 }
 
 std::ostream &operator<<(std::ostream &os,
@@ -112,18 +138,28 @@ std::ostream &operator<<(std::ostream &os,
                          const ObjectSetPosition &object_set_position) {
   os << "[object_number=" << object_set_position.object_number << ", "
      << "positions=[";
-  for (EntryPositions::const_iterator it =
-         object_set_position.entry_positions.begin();
-       it != object_set_position.entry_positions.end(); ++it) {
-    os << *it;
+  std::string delim;
+  for (auto &entry_position : object_set_position.entry_positions) {
+    os << entry_position << delim;
+    delim = ", ";
   }
   os << "]]";
   return os;
 }
 
 std::ostream &operator<<(std::ostream &os, const Client &client) {
-  os << "[id=" << client.id << ", description=" << client.description
-     << ", commit_position=" << client.commit_position << "]";
+  os << "[id=" << client.id << ", "
+     << "description=" << client.description << ", "
+     << "commit_position=" << client.commit_position << "]";
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const Tag &tag) {
+  os << "[tid=" << tag.tid << ", "
+     << "tag_class=" << tag.tag_class << ", "
+     << "data=";
+  tag.data.hexdump(os);
+  os << "]";
   return os;
 }
 
