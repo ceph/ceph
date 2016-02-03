@@ -22,8 +22,15 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
-#include <sys/xattr.h>
 #include <signal.h>
+
+#if defined(__FreeBSD__)
+#include <sys/extattr.h>
+#define XATTR_CREATE    0x1
+#define XATTR_REPLACE   0x2
+#else
+#include <sys/xattr.h>
+#endif
 
 TEST(Caps, ReadZero) {
 
