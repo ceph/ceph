@@ -2293,10 +2293,8 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     return;
   }
 
-  // check for full
-  if (ctx->delta_stats.num_bytes > 0 &&
-      pool.info.has_flag(pg_pool_t::FLAG_FULL)) {
-    reply_ctx(ctx, -ENOSPC);
+  if (result == -ENOSPC) {
+    reply_ctx(ctx, result);
     return;
   }
 
@@ -5677,6 +5675,15 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   if (ctx->op_t->empty() && !ctx->modify) {
     unstable_stats.add(ctx->delta_stats);
     return result;
+  }
+
+  // check for full
+  if ((ctx->delta_stats.num_bytes > 0 ||
+       ctx->delta_stats.num_objects > 0) &&
+      (pool.info.has_flag(pg_pool_t::FLAG_FULL) ||
+       get_osdmap()->test_flag(CEPH_OSDMAP_FULL))) {
+    dout(20) << __func__ << ": full, returning -ENOSPC" << dendl;
+    return -ENOSPC;
   }
 
   // clone, if necessary
