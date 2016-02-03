@@ -533,8 +533,8 @@ public:
     const char_type& operator[](size_type pos) const {
         return str()[pos];
     }
-    operator boost::basic_string_ref<char_type>() const {
-	return boost::basic_string_ref<char_type>(str(), size());
+    operator boost::basic_string_ref<char_type, traits_type>() const {
+		return boost::basic_string_ref<char_type, traits_type>(str(), size());
     }
     template <typename string_type, typename T>
     friend inline string_type to_sstring(T value);
@@ -616,7 +616,8 @@ namespace std {
 template <typename char_type, typename size_type, size_type max_size>
 struct hash<basic_sstring<char_type, size_type, max_size>> {
     size_t operator()(const basic_sstring<char_type, size_type, max_size>& s) const {
-	return std::hash<boost::basic_string_ref<char_type>>()(s);
+		using traits_type = std::char_traits<char_type>;
+		return std::hash<boost::basic_string_ref<char_type,traits_type>>()(s);
     }
 };
 
