@@ -9,13 +9,20 @@
 #include <iostream>
 #include <sstream>
 
+#include <boost/asio.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
+#include <boost/iostreams/filter/zlib.hpp>
+#include <boost/shared_ptr.hpp>
+
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/Clock.h"
 #include "common/valgrind.h"
+#include "common/Formatter.h"
 #include "include/assert.h"
 #include "include/compat.h"
 #include "include/on_exit.h"
+#include "include/uuid.h"
 
 #define DEFAULT_MAX_NEW    100
 #define DEFAULT_MAX_RECENT 10000
@@ -45,6 +52,7 @@ Log::Log(SubsystemMap *s)
     m_fd(-1),
     m_syslog_log(-2), m_syslog_crash(-2),
     m_stderr_log(1), m_stderr_crash(-1),
+    m_graylog_log(-3), m_graylog_crash(-3),
     m_stop(false),
     m_max_new(DEFAULT_MAX_NEW),
     m_max_recent(DEFAULT_MAX_RECENT),
@@ -151,6 +159,30 @@ void Log::set_stderr_level(int log, int crash)
   pthread_mutex_unlock(&m_flush_mutex);
 }
 
+void Log::set_graylog_level(int log, int crash)
+{
+  pthread_mutex_lock(&m_flush_mutex);
+  m_graylog_log = log;
+  m_graylog_crash = crash;
+  pthread_mutex_unlock(&m_flush_mutex);
+}
+
+void Log::start_graylog()
+{
+  pthread_mutex_lock(&m_flush_mutex);
+  if (! m_graylog.get())
+    m_graylog = Graylog::Ref(new Graylog(m_subs, "dlog"));
+  pthread_mutex_unlock(&m_flush_mutex);
+}
+
+
+void Log::stop_graylog()
+{
+  pthread_mutex_lock(&m_flush_mutex);
+  m_graylog.reset();
+  pthread_mutex_unlock(&m_flush_mutex);
+}
+
 void Log::submit_entry(Entry *e)
 {
   pthread_mutex_lock(&m_queue_mutex);
@@ -240,6 +272,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
     bool do_fd = m_fd >= 0 && should_log;
     bool do_syslog = m_syslog_crash >= e->m_prio && should_log;
     bool do_stderr = m_stderr_crash >= e->m_prio && should_log;
+    bool do_graylog2 = m_graylog_crash >= e->m_prio && should_log;
 
     e->hint_size();
     if (do_fd || do_syslog || do_stderr) {
@@ -271,6 +304,10 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
         if (r < 0)
           cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
       }
+
+    }
+    if (do_graylog2 && m_graylog) {
+      m_graylog->log_entry(e);
     }
 
     requeue->enqueue(e);
@@ -289,7 +326,7 @@ void Log::_log_message(const char *s, bool crash)
   if ((crash ? m_syslog_crash : m_syslog_log) >= 0) {
     syslog(LOG_USER|LOG_DEBUG, "%s", s);
   }
-  
+
   if ((crash ? m_stderr_crash : m_stderr_log) >= 0) {
     cerr << s << std::endl;
   }
