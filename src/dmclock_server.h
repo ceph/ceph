@@ -137,9 +137,11 @@ namespace crimson {
 			    double prev,
 			    double increment,
 			    uint32_t dist_req_val) {
+#ifndef IGNORE_DISTRIBUTED_PRIORITIES
 	if (0 != dist_req_val) {
 	  increment *= dist_req_val;
 	}
+#endif
 	if (0.0 == increment) {
 	  return 0.0;
 	} else {

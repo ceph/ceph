@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 
   // name -> (server iops, server threads)
   const std::map<ServerId,std::pair<int,int>> server_info = {
-    {0, { 75, 7 }},
+    {0, { 140, 7 }},
     {1, { 75, 7 }},
 #if 0
     {2, { 75, 7 }},
@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
     int goal = i.second.second;
     clients[name] = new TestClient(name,
 				   server_post_f,
-				   server_rotate_f,
+				   server_0_f,
 				   goal * goal_secs_to_run,
 				   goal,
 				   client_outstanding_ops);
