@@ -413,7 +413,15 @@ class TestMDS(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['mds', 'rm', '1', 'mds.42']))
 
     def test_rmfailed(self):
-        self.check_1_natural_arg('mds', 'rmfailed')
+        self.assert_valid_command(['mds', 'rmfailed', '0'])
+        self.assert_valid_command(['mds', 'rmfailed', '0', '--yes-i-really-mean-it'])
+        assert_equal({}, validate_command(sigdict, ['mds', 'rmfailed',
+                                                    '--yes-i-really-mean-it']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'rmfailed', '-1',
+                                                    '--yes-i-really-mean-it']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'rmfailed', '0',
+                                                    '--yes-i-really-mean-it',
+                                                    'toomany']))
 
     def test_cluster_down(self):
         self.check_no_arg('mds', 'cluster_down')
