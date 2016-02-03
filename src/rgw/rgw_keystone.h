@@ -6,9 +6,19 @@
 
 #include "rgw_common.h"
 
+enum class KeystoneApiVersion {
+  VER_2,
+  VER_3
+};
+
+class KeystoneService {
+public:
+  static KeystoneApiVersion get_api_version();
+};
+
 class KeystoneToken {
 protected:
-  string version;
+  KeystoneApiVersion version;
 
 public:
   class Domain {
@@ -56,8 +66,9 @@ public:
   list<Role> roles;
 
 public:
-  KeystoneToken() : version("") {};
-  KeystoneToken(string _version) : version(_version) {};
+  // FIXME: default ctor needs to be eradicated here
+  KeystoneToken() : version(KeystoneApiVersion::VER_2) {};
+  KeystoneToken(KeystoneApiVersion _version) : version(_version) {};
   time_t get_expires() { return token.expires; }
   string get_domain_id() {return project.domain.id;};
   string get_domain_name()  {return project.domain.name;};
