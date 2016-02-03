@@ -592,6 +592,8 @@ int NVMEDevice::open(string p)
   }
   char buf[100];
   r = ::read(fd, buf, sizeof(buf));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));                                                                           
+  fd = -1; // defensive
   if (r <= 0) {
     r = -errno;
     derr << __func__ << " unable to read " << p << ": " << cpp_strerror(r) << dendl;
