@@ -1094,10 +1094,14 @@ void KeystoneToken::User::decode_json(JSONObj *obj)
 
 void KeystoneToken::decode_json(JSONObj *root_obj)
 {
-  if (version == "2.0") {
+  JSONDecoder::decode_json("user", user, root_obj, true);
+
+  if (version == KeystoneApiVersion::VER_2) {
     JSONDecoder::decode_json("token", token, root_obj, true);
-  }
-  if (version == "3") {
+
+    roles = user.roles_v2;
+    project = token.tenant_v2;
+  } else if (version == KeystoneApiVersion::VER_3) {
     string expires_iso8601;
     struct tm t;
 
@@ -1111,12 +1115,6 @@ void KeystoneToken::decode_json(JSONObj *root_obj)
     }
     JSONDecoder::decode_json("roles", roles, root_obj, true);
     JSONDecoder::decode_json("project", project, root_obj, true);
-  }
-
-  JSONDecoder::decode_json("user", user, root_obj, true);
-  if (version == "2.0") {
-    roles = user.roles_v2;
-    project = token.tenant_v2;
   }
 }
 

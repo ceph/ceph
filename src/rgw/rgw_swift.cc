@@ -287,8 +287,9 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
   RGWGetKeystoneAdminToken token_req(cct, &token_bl);
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
-  std::string keystone_version = cct->_conf->rgw_keystone_api_version;
-  if (keystone_version == "2.0") {
+
+  const auto keystone_version = KeystoneService::get_api_version();
+  if (keystone_version == KeystoneApiVersion::VER_2) {
     KeystoneAdminTokenRequestVer2 req_serializer(cct);
     req_serializer.dump(&jf);
 
@@ -305,7 +306,7 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
       return -EINVAL;
     token = t.token.id;
     return 0;
-  } else if (keystone_version == "3") {
+  } else if (keystone_version == KeystoneApiVersion::VER_3) {
     KeystoneAdminTokenRequestVer3 req_serializer(cct);
     req_serializer.dump(&jf);
 
@@ -337,11 +338,11 @@ int RGWSwift::check_revoked()
   if (get_keystone_url(url) < 0)
     return -EINVAL;
   req.append_header("X-Auth-Token", token);
-  std::string keystone_version = cct->_conf->rgw_keystone_api_version;
-  if (keystone_version == "2.0") {
+
+  const auto keystone_version = KeystoneService::get_api_version();
+  if (keystone_version == KeystoneApiVersion::VER_2) {
     url.append("v2.0/tokens/revoked");
-  }
-  if (keystone_version == "3") {
+  } else if (keystone_version == KeystoneApiVersion::VER_3) {
     url.append("v3/auth/tokens/OS-PKI/revoked");
   }
   req.set_send_length(0);
@@ -510,7 +511,7 @@ static bool decode_pki_token(CephContext *cct, const string& token, bufferlist& 
 int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, struct rgw_swift_auth_info *info,
 				      RGWUserInfo& rgw_user)
 {
-  KeystoneToken t(g_conf->rgw_keystone_api_version);
+  KeystoneToken t(KeystoneService::get_api_version());
 
   string token_id;
   get_token_id(token, token_id);
@@ -554,12 +555,12 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
     validate.append_header("X-Auth-Token", admin_token);
 
-    std::string keystone_version = cct->_conf->rgw_keystone_api_version;
-    if (keystone_version == "2.0") {
+    const auto keystone_version = KeystoneService::get_api_version();
+    if (keystone_version == KeystoneApiVersion::VER_2) {
       url.append("v2.0/tokens/");
       url.append(token);
     }
-    if (keystone_version == "3") {
+    if (keystone_version == KeystoneApiVersion::VER_3) {
       url.append("v3/auth/tokens");
       validate.append_header("X-Subject-Token", token);
     }
