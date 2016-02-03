@@ -164,7 +164,7 @@ class SharedDriverData {
     _aio_stop();
     std::vector<NVMEDevice*> new_devices;
     for (auto &&it : registered_devices) {
-      if (it == device)
+      if (it != device)
         new_devices.push_back(it);
     }
     registered_devices.swap(new_devices);
