@@ -652,6 +652,7 @@ set(libos_srcs
   os/bluestore/BlueStore.cc
   os/bluestore/bluestore_types.cc
   os/bluestore/FreelistManager.cc
+  os/bluestore/KernelDevice.cc
   os/bluestore/StupidAllocator.cc
   os/fs/FS.cc
   ${libos_xfs_srcs})
