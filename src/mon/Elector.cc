@@ -253,15 +253,27 @@ void Elector::handle_propose(MonOpRequestRef op)
 
   assert(m->epoch % 2 == 1); // election
   uint64_t required_features = mon->get_required_features();
+  mon_feature_t required_mon_features = mon->get_required_mon_features();
+
   dout(10) << __func__ << " required features " << required_features
+           << " " << required_mon_features
            << ", peer features " << m->get_connection()->get_features()
+           << " " << m->mon_features
            << dendl;
+
   if ((required_features ^ m->get_connection()->get_features()) &
       required_features) {
     dout(5) << " ignoring propose from mon" << from
 	    << " without required features" << dendl;
     nak_old_peer(op);
     return;
+  } else if (!m->mon_features.contains_all(required_mon_features)) {
+    // all the features in 'required_mon_features' not in 'm->mon_features'
+    mon_feature_t missing = required_mon_features.diff(m->mon_features);
+    dout(5) << " ignoring propose from mon." << from
+            << " without required mon_features " << missing
+            << dendl;
+    nak_old_peer(op);
   } else if (m->epoch > epoch) {
     bump_epoch(m->epoch);
   } else if (m->epoch < epoch) {
@@ -302,7 +314,7 @@ void Elector::handle_propose(MonOpRequestRef op)
     }
   }
 }
- 
+
 void Elector::handle_ack(MonOpRequestRef op)
 {
   op->mark_event("elector:handle_ack");
@@ -326,6 +338,15 @@ void Elector::handle_ack(MonOpRequestRef op)
     return;
   }
 
+  mon_feature_t required_mon_features = mon->get_required_mon_features();
+  if (!m->mon_features.contains_all(required_mon_features)) {
+    mon_feature_t missing = required_mon_features.diff(m->mon_features);
+    dout(5) << " ignoring ack from mon." << from
+            << " without required mon_features " << missing
+            << dendl;
+    return;
+  }
+
   if (electing_me) {
     // thanks
     acked_me[from].cluster_features = m->get_connection()->get_features();
@@ -343,7 +364,7 @@ void Elector::handle_ack(MonOpRequestRef op)
              << " " << p->second.mon_features;
     }
     *_dout << " }" << dendl;
-    
+
     // is that _everyone_?
     if (acked_me.size() == mon->monmap->size()) {
       // if yes, shortcut to election finish
@@ -408,19 +429,21 @@ void Elector::nak_old_peer(MonOpRequestRef op)
   op->mark_event("elector:nak_old_peer");
   MMonElection *m = static_cast<MMonElection*>(op->get_req());
   uint64_t supported_features = m->get_connection()->get_features();
+  uint64_t required_features = mon->get_required_features();
+  mon_feature_t required_mon_features = mon->get_required_mon_features();
+  dout(10) << "sending nak to peer " << m->get_source()
+    << " that only supports " << supported_features
+    << " " << m->mon_features
+    << " of the required " << required_features
+    << " " << required_mon_features
+    << dendl;
 
-  if (supported_features & CEPH_FEATURE_OSDMAP_ENC) {
-    uint64_t required_features = mon->get_required_features();
-    dout(10) << "sending nak to peer " << m->get_source()
-	     << " that only supports " << supported_features
-	     << " of the required " << required_features << dendl;
-    
-    MMonElection *reply = new MMonElection(MMonElection::OP_NAK, m->epoch,
-					   mon->monmap);
-    reply->quorum_features = required_features;
-    mon->features.encode(reply->sharing_bl);
-    m->get_connection()->send_message(reply);
-  }
+  MMonElection *reply = new MMonElection(MMonElection::OP_NAK, m->epoch,
+                                         mon->monmap);
+  reply->quorum_features = required_features;
+  reply->mon_features = required_mon_features;
+  mon->features.encode(reply->sharing_bl);
+  m->get_connection()->send_message(reply);
 }
 
 void Elector::handle_nak(MonOpRequestRef op)
@@ -428,16 +451,22 @@ void Elector::handle_nak(MonOpRequestRef op)
   op->mark_event("elector:handle_nak");
   MMonElection *m = static_cast<MMonElection*>(op->get_req());
   dout(1) << "handle_nak from " << m->get_source()
-	  << " quorum_features " << m->quorum_features << dendl;
+	  << " quorum_features " << m->quorum_features
+          << " " << m->mon_features
+          << dendl;
 
   CompatSet other;
   bufferlist::iterator bi = m->sharing_bl.begin();
   other.decode(bi);
   CompatSet diff = Monitor::get_supported_features().unsupported(other);
-  
+
+  mon_feature_t mon_supported = ceph::features::mon::get_supported();
+  // all features in 'm->mon_features' not in 'mon_supported'
+  mon_feature_t mon_diff = m->mon_features.diff(mon_supported);
+
   derr << "Shutting down because I do not support required monitor features: { "
-       << diff << " }" << dendl;
-  
+       << diff << " } " << mon_diff << dendl;
+
   exit(0);
   // the end!
 }
