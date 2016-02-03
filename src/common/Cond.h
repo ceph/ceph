@@ -18,6 +18,10 @@
 
 #include <time.h>
 #include <pthread.h>
+#if defined(__FreeBSD__)
+#include <pthread_np.h>
+#define pthread_setname_np pthread_set_name_np
+#endif
 
 #include "include/Context.h"
 
