@@ -1367,8 +1367,13 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
                          const string& remote, const string& url,
                          const string& access, const string& secret)
 {
+  const string& master_zone = period.get_master_zone();
+  if (master_zone.empty()) {
+    cerr << "cannot commit period: period does not have a master zone of a master zonegroup" << std::endl;
+    return -EINVAL;
+  }
   // are we the period's master zone?
-  if (store->get_zone_params().get_id() == period.get_master_zone()) {
+  if (store->get_zone_params().get_id() == master_zone) {
     // read the current period
     RGWPeriod current_period;
     int ret = current_period.init(g_ceph_context, store, realm.get_id());
