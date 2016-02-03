@@ -258,7 +258,10 @@ TEST_F(TestInternal, AioWriteRequestsLock) {
   Context *ctx = new DummyContext();
   librbd::AioCompletion *c = librbd::AioCompletion::create(ctx);
   c->get();
-  ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0);
+
+  bufferlist bl;
+  bl.append(buffer);
+  ictx->aio_work_queue->aio_write(c, 0, buffer.size(), bl, 0);
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -408,7 +411,7 @@ TEST_F(TestInternal, Metadata) {
   map<string, bufferlist> pairs;
   r = librbd::metadata_list(ictx, "", 0, &pairs);
   ASSERT_EQ(0, r);
-  ASSERT_EQ(5u, pairs.size());
+  ASSERT_EQ(5U, pairs.size());
   r = librbd::metadata_remove(ictx, "abcd");
   ASSERT_EQ(0, r);
   r = librbd::metadata_remove(ictx, "xyz");
@@ -416,7 +419,7 @@ TEST_F(TestInternal, Metadata) {
   pairs.clear();
   r = librbd::metadata_list(ictx, "", 0, &pairs);
   ASSERT_EQ(0, r);
-  ASSERT_EQ(3u, pairs.size());
+  ASSERT_EQ(3U, pairs.size());
   string val;
   r = librbd::metadata_get(ictx, it->first, &val);
   ASSERT_EQ(0, r);
@@ -477,7 +480,7 @@ TEST_F(TestInternal, SnapshotCopyup)
 
   bufferlist bl;
   bl.append(std::string(256, '1'));
-  ASSERT_EQ(256, ictx->aio_work_queue->write(0, bl.length(), bl.c_str(), 0));
+  ASSERT_EQ(256, ictx->aio_work_queue->write(0, bl.length(), bl, 0));
 
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
   ASSERT_EQ(0, ictx->operations->snap_protect("snap1"));
@@ -496,7 +499,7 @@ TEST_F(TestInternal, SnapshotCopyup)
   ASSERT_EQ(0, snap_create(*ictx2, "snap1"));
   ASSERT_EQ(0, snap_create(*ictx2, "snap2"));
 
-  ASSERT_EQ(256, ictx2->aio_work_queue->write(256, bl.length(), bl.c_str(), 0));
+  ASSERT_EQ(256, ictx2->aio_work_queue->write(256, bl.length(), bl, 0));
 
   librados::IoCtx snap_ctx;
   snap_ctx.dup(m_ioctx);
@@ -520,15 +523,16 @@ TEST_F(TestInternal, SnapshotCopyup)
   read_bl.push_back(read_ptr);
 
   std::list<std::string> snaps = {"snap1", "snap2", ""};
+  librbd::ReadResult read_result{librbd::read_result::Bufferlist{&read_bl}};
   for (std::list<std::string>::iterator it = snaps.begin();
        it != snaps.end(); ++it) {
     const char *snap_name = it->empty() ? NULL : it->c_str();
     ASSERT_EQ(0, librbd::snap_set(ictx2, snap_name));
 
-    ASSERT_EQ(256, ictx2->aio_work_queue->read(0, 256, read_bl.c_str(), 0));
+    ASSERT_EQ(256, ictx2->aio_work_queue->read(0, 256, read_result, 0));
     ASSERT_TRUE(bl.contents_equal(read_bl));
 
-    ASSERT_EQ(256, ictx2->aio_work_queue->read(256, 256, read_bl.c_str(), 0));
+    ASSERT_EQ(256, ictx2->aio_work_queue->read(256, 256, read_result, 0));
     if (snap_name == NULL) {
       ASSERT_TRUE(bl.contents_equal(read_bl));
     } else {
@@ -574,7 +578,7 @@ TEST_F(TestInternal, ResizeCopyup)
   bl.append(std::string(4096, '1'));
   for (size_t i = 0; i < m_image_size; i += bl.length()) {
     ASSERT_EQ(bl.length(), ictx->aio_work_queue->write(i, bl.length(),
-                                                       bl.c_str(), 0));
+                                                       bl, 0));
   }
 
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
@@ -605,9 +609,10 @@ TEST_F(TestInternal, ResizeCopyup)
     ictx2->snap_info.begin()->second.parent = librbd::parent_info();
   }
 
+  librbd::ReadResult read_result{librbd::read_result::Bufferlist{&read_bl}};
   for (size_t i = 2 << order; i < m_image_size; i += bl.length()) {
     ASSERT_EQ(bl.length(), ictx2->aio_work_queue->read(i, bl.length(),
-                                                       read_bl.c_str(), 0));
+                                                       read_result, 0));
     ASSERT_TRUE(bl.contents_equal(read_bl));
   }
 }
@@ -632,7 +637,7 @@ TEST_F(TestInternal, DiscardCopyup)
   bl.append(std::string(4096, '1'));
   for (size_t i = 0; i < m_image_size; i += bl.length()) {
     ASSERT_EQ(bl.length(), ictx->aio_work_queue->write(i, bl.length(),
-                                                       bl.c_str(), 0));
+                                                       bl, 0));
   }
 
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
@@ -661,9 +666,10 @@ TEST_F(TestInternal, DiscardCopyup)
     ictx2->snap_info.begin()->second.parent = librbd::parent_info();
   }
 
+  librbd::ReadResult read_result{librbd::read_result::Bufferlist{&read_bl}};
   for (size_t i = 0; i < m_image_size; i += bl.length()) {
     ASSERT_EQ(bl.length(), ictx2->aio_work_queue->read(i, bl.length(),
-                                                       read_bl.c_str(), 0));
+                                                       read_result, 0));
     ASSERT_TRUE(bl.contents_equal(read_bl));
   }
 }
@@ -675,12 +681,17 @@ TEST_F(TestInternal, ShrinkFlushesCache) {
   std::string buffer(4096, '1');
 
   // ensure write-path is initialized
-  ictx->aio_work_queue->write(0, buffer.size(), buffer.c_str(), 0);
+  bufferlist write_bl;
+  write_bl.append(buffer);
+  ictx->aio_work_queue->write(0, buffer.size(), write_bl, 0);
 
   C_SaferCond cond_ctx;
   librbd::AioCompletion *c = librbd::AioCompletion::create(&cond_ctx);
   c->get();
-  ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0);
+
+  bufferlist bl;
+  bl.append(buffer);
+  ictx->aio_work_queue->aio_write(c, 0, buffer.size(), bl, 0);
 
   librbd::NoOpProgressContext no_op;
   ASSERT_EQ(0, ictx->operations->resize(m_image_size >> 1, no_op));
@@ -770,7 +781,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
   bufferlist bl;
   bl.append(std::string(1 << ictx->order, '1'));
   ASSERT_EQ(bl.length(),
-            ictx->aio_work_queue->write(0, bl.length(), bl.c_str(), 0));
+            ictx->aio_work_queue->write(0, bl.length(), bl, 0));
   ASSERT_EQ(0, librbd::flush(ictx));
 
   ASSERT_EQ(0, create_snapshot("snap1", true));
@@ -799,20 +810,21 @@ TEST_F(TestInternal, WriteFullCopyup) {
   write_full_bl.append(std::string(1 << ictx2->order, '2'));
   ASSERT_EQ(write_full_bl.length(),
             ictx2->aio_work_queue->write(0, write_full_bl.length(),
-            write_full_bl.c_str(), 0));
+            write_full_bl, 0));
 
   ASSERT_EQ(0, ictx2->operations->flatten(no_op));
 
   bufferptr read_ptr(bl.length());
   bufferlist read_bl;
   read_bl.push_back(read_ptr);
+  librbd::ReadResult read_result{librbd::read_result::Bufferlist{&read_bl}};
 
   ASSERT_EQ(read_bl.length(), ictx2->aio_work_queue->read(0, read_bl.length(),
-                                                          read_bl.c_str(), 0));
+                                                          read_result, 0));
   ASSERT_TRUE(write_full_bl.contents_equal(read_bl));
 
   ASSERT_EQ(0, librbd::snap_set(ictx2, "snap1"));
   ASSERT_EQ(read_bl.length(), ictx2->aio_work_queue->read(0, read_bl.length(),
-                                                          read_bl.c_str(), 0));
+                                                          read_result, 0));
   ASSERT_TRUE(bl.contents_equal(read_bl));
 }

@@ -37,8 +37,10 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
   ictx->features &= ~RBD_FEATURE_JOURNALING;
 
   std::string payload(4096, '1');
+  bufferlist payload_bl;
+  payload_bl.append(payload);
   librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
-  ictx->aio_work_queue->aio_write(aio_comp, 0, payload.size(), payload.c_str(),
+  ictx->aio_work_queue->aio_write(aio_comp, 0, payload.size(), payload_bl,
                                   0);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
@@ -49,9 +51,11 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
   aio_comp->release();
 
   std::string read_payload(4096, '\0');
+  librbd::ReadResult read_result(librbd::read_result::Linear(
+    &read_payload[0], read_payload.size()));
   aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_read(aio_comp, 0, read_payload.size(),
-                                 &read_payload[0], NULL, 0);
+                                 read_result, 0);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
   ASSERT_EQ(payload, read_payload);
@@ -76,7 +80,7 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
 
   aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_read(aio_comp, 0, read_payload.size(),
-                                 &read_payload[0], NULL, 0);
+                                 read_result, 0);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
   ASSERT_EQ(std::string(read_payload.size(), '\0'), read_payload);
@@ -107,9 +111,11 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
   std::string read_payload(4096, '\0');
+  librbd::ReadResult read_result(librbd::read_result::Linear(
+    &read_payload[0], read_payload.size()));
   librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_read(aio_comp, 0, read_payload.size(),
-                                 &read_payload[0], NULL, 0);
+                                 read_result, 0);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
   ASSERT_EQ(payload, read_payload);
@@ -138,11 +144,13 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
   ictx->journal = NULL;
 
   std::string payload(m_image_size, '1');
+  bufferlist payload_bl;
+  payload_bl.append(payload);
   librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
   {
     RWLock::RLocker owner_lock(ictx->owner_lock);
     librbd::AioImageRequest<>::aio_write(ictx, aio_comp, 0, payload.size(),
-                                         payload.c_str(), 0);
+                                         payload_bl, 0);
   }
   ictx->journal = journal;
 
@@ -155,9 +163,11 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
   aio_comp->release();
 
   std::string read_payload(m_image_size, '\0');
+  librbd::ReadResult read_result(librbd::read_result::Linear(
+    &read_payload[0], read_payload.size()));
   aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_read(aio_comp, 0, read_payload.size(),
-                                 &read_payload[0], NULL, 0);
+                                 read_result, 0);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
   ASSERT_EQ(payload, read_payload);

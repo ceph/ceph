@@ -18,11 +18,11 @@ struct AioImageRequest<MockImageCtx> {
   static AioImageRequest *s_instance;
 
   MOCK_METHOD5(aio_write, void(AioCompletion *c, uint64_t off, size_t len,
-                               const char *buf, int op_flags));
+                               const bufferlist &bl, int op_flags));
   static void aio_write(MockImageCtx *ictx, AioCompletion *c, uint64_t off,
-                        size_t len, const char *buf, int op_flags) {
+                        size_t len, const bufferlist &bl, int op_flags) {
     assert(s_instance != nullptr);
-    s_instance->aio_write(c, off, len, buf, op_flags);
+    s_instance->aio_write(c, off, len, bl, op_flags);
   }
 
   MOCK_METHOD3(aio_discard, void(AioCompletion *c, uint64_t off, uint64_t len));
@@ -57,6 +57,11 @@ using ::testing::InSequence;
 using ::testing::Return;
 using ::testing::SaveArg;
 using ::testing::WithArgs;
+
+MATCHER_P(BufferlistEqual, str, "") {
+  bufferlist bl(arg);
+  return (strncmp(bl.c_str(), str, strlen(str)) == 0);
+}
 
 MATCHER_P(CStrEq, str, "") {
   return (strncmp(arg, str, strlen(str)) == 0);
@@ -102,7 +107,7 @@ public:
                         AioCompletion **aio_comp, uint64_t off,
                         uint64_t len, const char *data) {
     EXPECT_CALL(mock_aio_image_request,
-                aio_write(_, off, len, CStrEq(data), _))
+                aio_write(_, off, len, BufferlistEqual(data), _))
                   .WillOnce(SaveArg<0>(aio_comp));
   }
 

@@ -81,24 +81,25 @@ template <typename I>
 void AioImageRequest<I>::aio_read(
     I *ictx, AioCompletion *c,
     const std::vector<std::pair<uint64_t,uint64_t> > &extents,
-    char *buf, bufferlist *pbl, int op_flags) {
-  AioImageRead req(*ictx, c, extents, buf, pbl, op_flags);
+    const ReadResult &read_result, int op_flags) {
+  AioImageRead req(*ictx, c, extents, read_result, op_flags);
   req.send();
 }
 
 template <typename I>
 void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
-                                  uint64_t off, size_t len, char *buf,
-                                  bufferlist *pbl, int op_flags) {
-  AioImageRead req(*ictx, c, off, len, buf, pbl, op_flags);
+                                  uint64_t off, size_t len,
+                                  const ReadResult &read_result, int op_flags) {
+  AioImageRead req(*ictx, c, off, len, read_result, op_flags);
   req.send();
 }
 
 template <typename I>
 void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
-                                   uint64_t off, size_t len, const char *buf,
+                                   uint64_t off, size_t len,
+                                   const bufferlist &bl,
                                    int op_flags) {
-  AioImageWrite req(*ictx, c, off, len, buf, op_flags);
+  AioImageWrite req(*ictx, c, off, len, bl, op_flags);
   req.send();
 }
 
@@ -172,10 +173,6 @@ void AioImageRead::send_request() {
 
     m_aio_comp->start_op(&m_image_ctx, AIO_TYPE_READ);
   }
-
-  m_aio_comp->read_buf = m_buf;
-  m_aio_comp->read_buf_len = buffer_ofs;
-  m_aio_comp->read_bl = m_pbl;
 
   // pre-calculate the expected number of read requests
   uint32_t request_count = 0;
@@ -309,16 +306,15 @@ void AioImageWrite::assemble_extent(const ObjectExtent &object_extent,
                                     bufferlist *bl) {
   for (Extents::const_iterator q = object_extent.buffer_extents.begin();
        q != object_extent.buffer_extents.end(); ++q) {
-    bl->append(m_buf + q->first, q->second);;
+    bufferlist bit_bl;
+    bit_bl.substr_of(m_bl, q->first, q->second);
+    bl->append(bit_bl);
   }
 }
 
 uint64_t AioImageWrite::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
-  bufferlist bl;
-  bl.append(m_buf, m_len);
-
-  journal::EventEntry event_entry(journal::AioWriteEvent(m_off, m_len, bl));
+  journal::EventEntry event_entry(journal::AioWriteEvent(m_off, m_len, m_bl));
   uint64_t tid = m_image_ctx.journal->append_io_event(m_aio_comp,
                                                       std::move(event_entry),
                                                       requests, m_off, m_len,

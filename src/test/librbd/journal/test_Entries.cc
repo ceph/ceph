@@ -124,10 +124,12 @@ TEST_F(TestJournalEntries, AioWrite) {
   ASSERT_TRUE(journaler != NULL);
 
   std::string buffer(512, '1');
+  bufferlist write_bl;
+  write_bl.append(buffer);
   C_SaferCond cond_ctx;
   librbd::AioCompletion *c = librbd::AioCompletion::create(&cond_ctx);
   c->get();
-  ictx->aio_work_queue->aio_write(c, 123, buffer.size(), buffer.c_str(), 0);
+  ictx->aio_work_queue->aio_write(c, 123, buffer.size(), write_bl, 0);
   ASSERT_EQ(0, c->wait_for_complete());
   c->put();
 

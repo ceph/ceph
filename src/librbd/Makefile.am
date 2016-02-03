@@ -103,6 +103,7 @@ noinst_HEADERS += \
 	librbd/ObjectMap.h \
 	librbd/Operations.h \
 	librbd/parent_types.h \
+	librbd/ReadResult.h \
 	librbd/SnapInfo.h \
 	librbd/TaskFinisher.h \
 	librbd/Utils.h \

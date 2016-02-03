@@ -1838,8 +1838,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       AioCompletion *comp = AioCompletion::create(ctx);
 
       // coordinate through AIO WQ to ensure lock is acquired if needed
-      m_dest->aio_work_queue->aio_write(comp, m_offset, m_bl->length(),
-                                        m_bl->c_str(),
+      m_dest->aio_work_queue->aio_write(comp, m_offset, m_bl->length(), *m_bl,
                                         LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     }
 
@@ -1894,7 +1893,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       bufferlist *bl = new bufferlist();
       Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
       AioCompletion *comp = AioCompletion::create(ctx);
-      AioImageRequest<>::aio_read(src, comp, offset, len, NULL, bl,
+      ReadResult read_result{read_result::Bufferlist{bl}};
+      AioImageRequest<>::aio_read(src, comp, offset, len, read_result,
                                   fadvise_flags);
       prog_ctx.update_progress(offset, src_size);
     }
@@ -2119,7 +2119,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
       C_SaferCond ctx;
       AioCompletion *c = AioCompletion::create(&ctx);
-      AioImageRequest<>::aio_read(ictx, c, off, read_len, NULL, &bl, 0);
+      ReadResult read_result{read_result::Bufferlist{&bl}};
+      AioImageRequest<>::aio_read(ictx, c, off, read_len, read_result, 0);
 
       int ret = ctx.wait();
       if (ret < 0) {
