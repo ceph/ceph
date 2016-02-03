@@ -97,5 +97,30 @@ public:
   void invalidate(const string& token_id);
 };
 
+class KeystoneAdminTokenRequest {
+public:
+  virtual ~KeystoneAdminTokenRequest() = default;
+  virtual void dump(Formatter *f) const = 0;
+};
+
+class KeystoneAdminTokenRequestVer2 : public KeystoneAdminTokenRequest {
+  CephContext *cct;
+
+public:
+  KeystoneAdminTokenRequestVer2(CephContext * const _cct)
+    : cct(_cct) {
+  }
+  void dump(Formatter *f) const;
+};
+
+class KeystoneAdminTokenRequestVer3 : public KeystoneAdminTokenRequest {
+  CephContext *cct;
+
+public:
+  KeystoneAdminTokenRequestVer3(CephContext * const _cct)
+    : cct(_cct) {
+  }
+  void dump(Formatter *f) const;
+};
 
 #endif
