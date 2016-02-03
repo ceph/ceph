@@ -341,7 +341,7 @@ private:
 
   atomic_t next_osr_id;
   deque<OpSequencer*> op_queue;
-  Throttle throttle_ops, throttle_bytes;
+  BackoffThrottle throttle_ops, throttle_bytes;
   const int m_ondisk_finisher_num;
   const int m_apply_finisher_num;
   vector<Finisher*> ondisk_finishers;
@@ -387,7 +387,7 @@ private:
 	       Context *onreadable, Context *onreadable_sync,
 	       TrackedOpRef osd_op);
   void queue_op(OpSequencer *osr, Op *o);
-  void op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle = NULL);
+  void op_queue_reserve_throttle(Op *o);
   void op_queue_release_throttle(Op *o);
   void _journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk);
   friend struct C_JournaledAhead;
@@ -710,6 +710,7 @@ private:
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,
 			  const std::set <std::string> &changed);
+  int set_throttle_params();
   float m_filestore_commit_timeout;
   bool m_filestore_journal_parallel;
   bool m_filestore_journal_trailing;
@@ -723,10 +724,6 @@ private:
   bool m_journal_dio, m_journal_aio, m_journal_force_aio;
   std::string m_osd_rollback_to_cluster_snap;
   bool m_osd_use_stale_snap;
-  int m_filestore_queue_max_ops;
-  int m_filestore_queue_max_bytes;
-  int m_filestore_queue_committing_max_ops;
-  int m_filestore_queue_committing_max_bytes;
   bool m_filestore_do_dump;
   std::ofstream m_filestore_dump;
   JSONFormatter m_filestore_dump_fmt;
