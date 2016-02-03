@@ -21,7 +21,14 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+
+#if defined(__FreeBSD__)
+#include <sys/extattr.h>
+#define XATTR_CREATE    0x1
+#define XATTR_REPLACE   0x2
+#else
 #include <sys/xattr.h>
+#endif
 
 static size_t acl_ea_size(int count)
 {
