@@ -777,7 +777,6 @@ int NVMEDevice::aio_zero(
     len -= t.length();
     bl.claim_append(t);
   }
-  bufferlist foo;
   // note: this works with aio only becaues the actual buffer is
   // this->zeros, which is page-aligned and never freed.
   return aio_write(off, bl, ioc, false);
