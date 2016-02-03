@@ -1549,10 +1549,15 @@ int BlueStore::_open_collections(int *errors)
     coll_t cid;
     if (cid.parse(it->key())) {
       CollectionRef c(new Collection(this, cid));
-      bufferlist bl;
-      db->get(PREFIX_COLL, it->key(), &bl);
+      bufferlist bl = it->value();
       bufferlist::iterator p = bl.begin();
-      ::decode(c->cnode, p);
+      try {
+        ::decode(c->cnode, p);
+      } catch (buffer::error& e) {
+        derr << __func__ << " failed to decode cnode, key:"
+             << pretty_binary_string(it->key()) << dendl;
+        return -EIO;
+      }   
       dout(20) << __func__ << " opened " << cid << dendl;
       coll_map[cid] = c;
     } else {
@@ -1933,7 +1938,6 @@ int BlueStore::fsck()
   set<uint64_t> used_omap_head;
   interval_set<uint64_t> used_blocks;
   KeyValueDB::Iterator it;
-  EnodeRef enode;
   vector<bluestore_extent_t> hash_shared;
 
   int r = _open_path();
@@ -1985,13 +1989,14 @@ int BlueStore::fsck()
 
   // walk collections, objects
   for (ceph::unordered_map<coll_t, CollectionRef>::iterator p = coll_map.begin();
-       p != coll_map.end() && !errors;
+       p != coll_map.end();
        ++p) {
     dout(1) << __func__ << " collection " << p->first << dendl;
     CollectionRef c = _get_collection(p->first);
     RWLock::RLocker l(c->lock);
     ghobject_t pos;
-    while (!errors) {
+    EnodeRef enode;
+    while (true) {
       vector<ghobject_t> ols;
       int r = collection_list(p->first, pos, ghobject_t::get_max(), true,
 			      100, &ols, &pos);
@@ -2007,9 +2012,9 @@ int BlueStore::fsck()
 	OnodeRef o = c->get_onode(oid, false);
 	if (!o || !o->exists) {
 	  ++errors;
-	  break;
+	  continue; // go for next object
 	}
-	if (enode && enode->hash != o->oid.hobj.get_hash()) {
+	if (!enode || enode->hash != o->oid.hobj.get_hash()) {
 	  if (enode)
 	    errors += _verify_enode_shared(enode, hash_shared);
 	  enode = c->get_enode(o->oid.hobj.get_hash());
@@ -2020,7 +2025,7 @@ int BlueStore::fsck()
 	    derr << " " << oid << " nid " << o->onode.nid << " already in use"
 		 << dendl;
 	    ++errors;
-	    break;
+	    continue; // go for next object
 	  }
 	  used_nids.insert(o->onode.nid);
 	}
@@ -2049,12 +2054,14 @@ int BlueStore::fsck()
 	    derr << " " << oid << " overlay " << v.first << " " << v.second
 		 << " extends past end of object" << dendl;
 	    ++errors;
+            continue; // go for next overlay
 	  }
 	  if (v.second.key > o->onode.last_overlay_key) {
 	    derr << " " << oid << " overlay " << v.first << " " << v.second
 		 << " is > last_overlay_key " << o->onode.last_overlay_key
 		 << dendl;
 	    ++errors;
+            continue; // go for next overlay
 	  }
 	  ++refs[v.second.key];
 	  string key;
@@ -2066,6 +2073,7 @@ int BlueStore::fsck()
 	    derr << " " << oid << " overlay " << v.first << " " << v.second
 		 << " failed to fetch: " << cpp_strerror(r) << dendl;
 	    ++errors;
+            continue;
 	  }
 	  if (val.length() < v.second.value_offset + v.second.length) {
 	    derr << " " << oid << " overlay " << v.first << " " << v.second
@@ -2166,7 +2174,7 @@ int BlueStore::fsck()
 	c = NULL;
 	for (ceph::unordered_map<coll_t, CollectionRef>::iterator p =
 	       coll_map.begin();
-	     p != coll_map.end() && !errors;
+	     p != coll_map.end();
 	     ++p) {
 	  if (p->second->contains(oid)) {
 	    c = p->second;
@@ -2555,7 +2563,13 @@ int BlueStore::_do_read(
       bufferlist v;
       string key;
       get_overlay_key(o->onode.nid, op->second.key, &key);
-      db->get(PREFIX_OVERLAY, key, &v);
+      r = db->get(PREFIX_OVERLAY, key, &v);
+      if (r < 0) {
+        derr << " failed to fetch overlay(nid = " << o->onode.nid
+             << ", key = " << key 
+             << "): " << cpp_strerror(r) << dendl;
+        goto out;
+      }
       bufferlist frag;
       frag.substr_of(v, x_off, x_len);
       bl.claim_append(frag);
@@ -3407,8 +3421,9 @@ int BlueStore::_open_super_meta()
     nid_max = 0;
     bufferlist bl;
     db->get(PREFIX_SUPER, "nid_max", &bl);
+    bufferlist::iterator p = bl.begin();
     try {
-      ::decode(nid_max, bl);
+      ::decode(nid_max, p);
     } catch (buffer::error& e) {
     }
     dout(10) << __func__ << " old nid_max " << nid_max << dendl;
@@ -3957,6 +3972,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
 {
   const uint64_t block_size = bdev->get_block_size();
   const uint64_t block_mask = ~(block_size - 1);
+  int r = 0;
 
   // read all the overlay data first for apply
   _do_read_all_overlays(wo);
@@ -3983,7 +3999,8 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       offset = offset & block_mask;
       dout(20) << __func__ << "  reading initial partial block "
 	       << src_offset << "~" << block_size << dendl;
-      bdev->read(src_offset, block_size, &first, ioc, true);
+      r = bdev->read(src_offset, block_size, &first, ioc, true);
+      assert(r == 0);
       bufferlist t;
       t.substr_of(first, 0, first_len);
       t.claim_append(bl);
@@ -4001,7 +4018,8 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       } else {
 	dout(20) << __func__ << "  reading trailing partial block "
 		 << last_offset << "~" << block_size << dendl;
-	bdev->read(last_offset, block_size, &last, ioc, true);
+	r = bdev->read(last_offset, block_size, &last, ioc, true);
+        assert(r == 0);
       }
       bufferlist t;
       uint64_t endoff = wo.extent.end() & ~block_mask;
@@ -4009,7 +4027,8 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       bl.claim_append(t);
     }
     assert((bl.length() & ~block_mask) == 0);
-    bdev->aio_write(offset, bl, ioc, true);
+    r = bdev->aio_write(offset, bl, ioc, true);
+    assert(r == 0);
   }
   break;
 
@@ -4022,11 +4041,12 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
     assert(wo.extent.length == wo.src_extent.length);
     assert((wo.src_extent.offset & ~block_mask) == 0);
     bufferlist bl;
-    int r = bdev->read(wo.src_extent.offset, wo.src_extent.length, &bl, ioc,
+    r = bdev->read(wo.src_extent.offset, wo.src_extent.length, &bl, ioc,
 		       true);
-    assert(r >= 0);
+    assert(r == 0);
     assert(bl.length() == wo.extent.length);
-    bdev->aio_write(wo.extent.offset, bl, ioc, true);
+    r = bdev->aio_write(wo.extent.offset, bl, ioc, true);
+    assert(r == 0);
   }
   break;
 
@@ -4041,10 +4061,12 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       uint64_t first_offset = offset & block_mask;
       dout(20) << __func__ << "  reading initial partial block "
 	       << first_offset << "~" << block_size << dendl;
-      bdev->read(first_offset, block_size, &first, ioc, true);
+      r = bdev->read(first_offset, block_size, &first, ioc, true);
+      assert(r == 0);
       size_t z_len = MIN(block_size - first_len, length);
       memset(first.c_str() + first_len, 0, z_len);
-      bdev->aio_write(first_offset, first, ioc, true);
+      r = bdev->aio_write(first_offset, first, ioc, true);
+      assert(r == 0);
       offset += block_size - first_len;
       length -= z_len;
     }
@@ -4052,7 +4074,8 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
     if (length >= block_size) {
       uint64_t middle_len = length & block_mask;
       dout(20) << __func__ << "  zero " << offset << "~" << length << dendl;
-      bdev->aio_zero(offset, middle_len, ioc);
+      r = bdev->aio_zero(offset, middle_len, ioc);
+      assert(r == 0);
       offset += middle_len;
       length -= middle_len;
     }
@@ -4062,9 +4085,11 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       bufferlist last;
       dout(20) << __func__ << "  reading trailing partial block "
 	       << offset << "~" << block_size << dendl;
-      bdev->read(offset, block_size, &last, ioc, true);
+      r = bdev->read(offset, block_size, &last, ioc, true);
+      assert(r == 0);
       memset(last.c_str(), 0, length);
-      bdev->aio_write(offset, last, ioc, true);
+      r = bdev->aio_write(offset, last, ioc, true);
+      assert(r == 0);
     }
   }
   break;
@@ -4709,7 +4734,8 @@ void BlueStore::_do_read_all_overlays(bluestore_wal_op_t& wo)
     string key;
     get_overlay_key(wo.nid, q->key, &key);
     bufferlist bl, bl_data;
-    db->get(PREFIX_OVERLAY, key, &bl);
+    int r = db->get(PREFIX_OVERLAY, key, &bl);
+    assert(r >= 0); 
     bl_data.substr_of(bl, q->value_offset, q->length);
     wo.data.claim_append(bl_data);
   }
@@ -6227,6 +6253,8 @@ int BlueStore::_clone(TransContext *txc,
       goto out;
 
     r = _do_write(txc, c, newo, 0, oldo->onode.size, bl, 0);
+    if (r < 0)
+      goto out;
   }
 
   // attrs
@@ -6301,6 +6329,8 @@ int BlueStore::_clone_range(TransContext *txc,
     goto out;
 
   r = _do_write(txc, c, newo, dstoff, bl.length(), bl, 0);
+  if (r < 0)
+    goto out;
 
   txc->write_onode(newo);
 
