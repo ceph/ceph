@@ -6,6 +6,8 @@
 #include <iostream>
 #include <map>
 
+#include <expat.h>
+
 #include "include/types.h"
 
 #include "rgw_common.h"
