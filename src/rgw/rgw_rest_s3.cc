@@ -2673,7 +2673,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
   string keystone_version = cct->_conf->rgw_keystone_api_version;
   if (keystone_url[keystone_url.size() - 1] != '/')
     keystone_url.append("/");
-  if (keystone_version == "3") {
+  if (KeystoneService::get_api_version() == KeystoneApiVersion::VER_3) {
     keystone_url.append("v3/s3tokens");
   }
   else {
