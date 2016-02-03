@@ -309,7 +309,8 @@ void AioImageWrite::assemble_extent(const ObjectExtent &object_extent,
                                     bufferlist *bl) {
   for (Extents::const_iterator q = object_extent.buffer_extents.begin();
        q != object_extent.buffer_extents.end(); ++q) {
-    bl->append(m_buf + q->first, q->second);;
+    auto p = buffer::create_static(q->second, m_buf + q->first);
+    bl->append(std::move(p));;
   }
 }
 
@@ -366,7 +367,7 @@ AioObjectRequest *AioImageWrite::create_object_request(
   AioObjectWrite *req = new AioObjectWrite(&m_image_ctx,
                                            object_extent.oid.name,
                                            object_extent.objectno,
-                                           object_extent.offset, bl,
+                                           object_extent.offset, std::move(bl),
                                            snapc, on_finish);
   req->set_op_flags(m_op_flags);
   return req;

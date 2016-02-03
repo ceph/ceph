@@ -74,7 +74,7 @@ class AsyncConnection : public Connection {
   void _send_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
   ssize_t write_message(Message *m, bufferlist& bl);
   ssize_t _reply_accept(char tag, ceph_msg_connect &connect, ceph_msg_connect_reply &reply,
-                    bufferlist authorizer_reply) {
+                    bufferlist &authorizer_reply) {
     bufferlist reply_bl;
     reply.tag = tag;
     reply.features = ((uint64_t)connect.features & policy.features_supported) | policy.features_required;

@@ -174,6 +174,7 @@ namespace buffer CEPH_BUFFER_API {
     ptr(unsigned l);
     ptr(const char *d, unsigned l);
     ptr(const ptr& p);
+    ptr(ptr&& p);
     ptr(const ptr& p, unsigned o, unsigned l);
     ptr& operator= (const ptr& p);
     ~ptr() {

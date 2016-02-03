@@ -199,11 +199,11 @@ namespace librbd {
   class AioObjectWrite : public AbstractAioObjectWrite {
   public:
     AioObjectWrite(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
-                   uint64_t object_off, const ceph::bufferlist &data,
+                   uint64_t object_off, ceph::bufferlist &&data,
                    const ::SnapContext &snapc, Context *completion)
       : AbstractAioObjectWrite(ictx, oid, object_no, object_off, data.length(),
                                snapc, completion, false),
-	m_write_data(data), m_op_flags(0) {
+	m_write_data(std::move(data)), m_op_flags(0) {
     }
 
     void set_op_flags(int op_flags) {
