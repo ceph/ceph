@@ -625,7 +625,7 @@ struct fnode_t {
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<fnode_t*>& ls);
-  fnode_t() : version(0),
+  fnode_t() : version(0), damage_flags(0),
 	      recursive_scrub_version(0), localized_scrub_version(0) {}
 };
 WRITE_CLASS_ENCODER(fnode_t)
