@@ -27,8 +27,8 @@ TestServer::TestServer(ServerId _id,
 		       const ClientRespFunc& _client_resp_f) :
   id(_id),
   priority_queue(_client_info_f,
-		 std::bind(&TestServer::hasAvailThread, this),
-		 std::bind(&TestServer::innerPost, this, _1, _2, _3)),
+		 std::bind(&TestServer::has_avail_thread, this),
+		 std::bind(&TestServer::inner_post, this, _1, _2, _3)),
   client_resp_f(_client_resp_f),
   iops(_iops),
   thread_pool_size(_thread_pool_size),
@@ -107,15 +107,15 @@ void TestServer::post(const TestRequest& request,
 }
 
 
-bool TestServer::hasAvailThread() {
+bool TestServer::has_avail_thread() {
   InnerQGuard g(inner_queue_mtx);
   return inner_queue.size() <= thread_pool_size;
 }
 
 
-void TestServer::innerPost(const ClientId& client,
-			   std::unique_ptr<TestRequest> request,
-			   dmc::PhaseType phase) {
+void TestServer::inner_post(const ClientId& client,
+			    std::unique_ptr<TestRequest> request,
+			    dmc::PhaseType phase) {
   Lock l(inner_queue_mtx);
   assert(!finishing);
   inner_queue.emplace_back(QueueItem(client, std::move(request), phase));

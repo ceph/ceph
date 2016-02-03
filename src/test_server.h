@@ -78,13 +78,16 @@ public:
   void post(const TestRequest& request,
 	    const crimson::dmclock::ReqParams<ClientId>& req_params);
 
-  bool hasAvailThread();
+  bool has_avail_thread();
+
+  uint32_t get_res_count() const { return reservation_counter; }
+  uint32_t get_prop_count() const { return proportion_counter; }
 
 protected:
 
-  void innerPost(const ClientId& client,
-		 std::unique_ptr<TestRequest> request,
-		 crimson::dmclock::PhaseType phase);
+  void inner_post(const ClientId& client,
+		  std::unique_ptr<TestRequest> request,
+		  crimson::dmclock::PhaseType phase);
 
   void run(std::chrono::milliseconds wait_delay);
 

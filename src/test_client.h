@@ -95,7 +95,7 @@ public:
 
   const std::vector<TimePoint>& get_op_times() const { return op_times; }
   uint32_t get_res_count() const { return reservation_counter; }
-  uint32_t get_lim_count() const { return proportion_counter; }
+  uint32_t get_prop_count() const { return proportion_counter; }
 
   void wait_until_done();
 
