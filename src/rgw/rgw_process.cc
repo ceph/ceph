@@ -181,7 +181,6 @@ done:
   }
 
   int http_ret = s->err.http_ret;
-
   int op_ret = 0;
   if (op) {
     op_ret = op->get_ret();
