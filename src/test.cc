@@ -178,7 +178,23 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  // clean up
+  // report how many ops were done by reservation and proportion for
+  // each client
+  
+  for (auto const &i : clients) {
+    std::cout << "client:" << i.first <<
+      ", res_ops:" << i.second->get_res_count() <<
+      ", prop_ops:" << i.second->get_prop_count() << std::endl;
+  }
+
+  for (auto const &i : servers) {
+    std::cout << "server:" << i.first <<
+      ", res_ops:" << i.second->get_res_count() <<
+      ", prop_ops:" << i.second->get_prop_count() << std::endl;
+  }
+
+
+  // clean up clients then servers
 
   for (auto i = clients.begin(); i != clients.end(); ++i) {
     delete i->second;

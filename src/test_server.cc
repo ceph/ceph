@@ -118,6 +118,11 @@ void TestServer::inner_post(const ClientId& client,
 			    dmc::PhaseType phase) {
   Lock l(inner_queue_mtx);
   assert(!finishing);
+  if (dmc::PhaseType::reservation == phase) {
+    ++reservation_counter;
+  } else {
+    ++proportion_counter;
+  }
   inner_queue.emplace_back(QueueItem(client, std::move(request), phase));
   inner_queue_cv.notify_one();
 }

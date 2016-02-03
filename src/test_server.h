@@ -65,6 +65,11 @@ protected:
   using InnerQGuard = std::lock_guard<decltype(inner_queue_mtx)>;
   using Lock = std::unique_lock<std::mutex>;
 
+  // data collection
+
+  uint32_t reservation_counter = 0;
+  uint32_t proportion_counter = 0;
+
 public:
 
   TestServer(ServerId _id,
