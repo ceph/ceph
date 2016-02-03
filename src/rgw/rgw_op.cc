@@ -802,13 +802,10 @@ static int iterate_slo_parts(CephContext *cct,
                              void *cb_param)
 {
   bool found_start = false, found_end = false;
-  string delim;
-  vector<RGWObjEnt> objs;
 
   if (slo_parts.empty()) {
     return 0;
   }
-
 
   utime_t start_time = ceph_clock_now(cct);
 
