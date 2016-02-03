@@ -289,15 +289,9 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
   JSONFormatter jf;
   std::string keystone_version = cct->_conf->rgw_keystone_api_version;
   if (keystone_version == "2.0") {
-    jf.open_object_section("token_request");
-      jf.open_object_section("auth");
-        jf.open_object_section("passwordCredentials");
-          encode_json("username", cct->_conf->rgw_keystone_admin_user, &jf);
-          encode_json("password", cct->_conf->rgw_keystone_admin_password, &jf);
-        jf.close_section();
-        encode_json("tenantName", cct->_conf->rgw_keystone_admin_tenant, &jf);
-      jf.close_section();
-    jf.close_section();
+    KeystoneAdminTokenRequestVer2 req_serializer(cct);
+    req_serializer.dump(&jf);
+
     std::stringstream ss;
     jf.flush(ss);
     token_req.set_post_data(ss.str());
@@ -311,37 +305,10 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
       return -EINVAL;
     token = t.token.id;
     return 0;
-  }
-  else if (keystone_version == "3") {
-    jf.open_object_section("auth");
-      jf.open_object_section("identity");
-        jf.open_array_section("methods");
-          jf.dump_string("", "password");
-        jf.close_section();
-        jf.open_object_section("password");
-          jf.open_object_section("user");
-            jf.open_object_section("domain");
-              encode_json("name", cct->_conf->rgw_keystone_admin_domain, &jf);
-            jf.close_section();
-            encode_json("name", cct->_conf->rgw_keystone_admin_user, &jf);
-            encode_json("password", cct->_conf->rgw_keystone_admin_password, &jf);
-          jf.close_section();
-        jf.close_section();
-      jf.close_section();
-      jf.open_object_section("scope");
-        jf.open_object_section("project");
-          if (!cct->_conf->rgw_keystone_admin_project.empty()) {
-            encode_json("name", cct->_conf->rgw_keystone_admin_project, &jf);
-          }
-          else {
-            encode_json("name", cct->_conf->rgw_keystone_admin_tenant, &jf);
-          }
-          jf.open_object_section("domain");
-            encode_json("name", cct->_conf->rgw_keystone_admin_domain, &jf);
-          jf.close_section();
-        jf.close_section();
-      jf.close_section();
-    jf.close_section();
+  } else if (keystone_version == "3") {
+    KeystoneAdminTokenRequestVer3 req_serializer(cct);
+    req_serializer.dump(&jf);
+
     std::stringstream ss;
     jf.flush(ss);
     token_req.set_post_data(ss.str());
