@@ -4011,9 +4011,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  scrubber.reserved_peers.clear();
 	}
 
-        scrubber.start = hobject_t();
         // Don't include temporary objects when scrubbing
-        scrubber.start.pool = info.pgid.pool();
+        scrubber.start = info.pgid.pgid.get_hobj_start();
         scrubber.state = PG::Scrubber::NEW_CHUNK;
 
 	{

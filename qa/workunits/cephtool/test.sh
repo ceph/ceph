@@ -844,6 +844,12 @@ function test_mon_mds()
 
   fail_all_mds
 
+  set +e
+  # Check that rmfailed requires confirmation
+  expect_false ceph mds rmfailed 0
+  ceph mds rmfailed 0 --yes-i-really-mean-it
+  set -e
+
   # Check that 'fs reset' runs
   ceph fs reset cephfs --yes-i-really-mean-it
 
