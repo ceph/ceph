@@ -3462,9 +3462,10 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_POLICY) {
-    int ret = RGWBucketAdminOp::get_policy(store, bucket_op, cout);
-    if (ret >= 0) {
-      cout << std::endl;
+    int ret = RGWBucketAdminOp::get_policy(store, bucket_op, f);
+    if (ret < 0) {
+      cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
     }
   }
 
