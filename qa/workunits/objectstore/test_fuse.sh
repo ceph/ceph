@@ -1,6 +1,6 @@
 #!/bin/sh -ex
 
-if [ $EUID -ne 0 ]; then
+if ! id -u | grep -q '^0$'; then
     echo "not root, re-running self via sudo"
     sudo PATH=$PATH $0 || echo FAIL
     exit 0
