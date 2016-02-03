@@ -1,4 +1,6 @@
 overrides:
+  thrashosds:
+    bdev_inject_crash: 2
   ceph:
     conf:
       osd:

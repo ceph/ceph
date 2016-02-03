@@ -1930,7 +1930,7 @@ class CephManager:
             self.raw_cluster_cmd(
                 '--', 'tell', 'osd.%d' % osd,
                 'injectargs',
-                '--bdev-inject-crash ' + self.config.get('bdev_inject_crash'),
+                '--bdev-inject-crash %d' % self.config.get('bdev_inject_crash'),
             )
             try:
                 self.ctx.daemons.get_daemon('osd', osd, self.cluster).wait()
