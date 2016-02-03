@@ -196,7 +196,7 @@ int KernelDevice::flush()
 
 int KernelDevice::_aio_start()
 {
-  if (g_conf->bdev_aio) {
+  if (aio) {
     dout(10) << __func__ << dendl;
     int r = aio_queue.init();
     if (r < 0) {
@@ -210,7 +210,7 @@ int KernelDevice::_aio_start()
 
 void KernelDevice::_aio_stop()
 {
-  if (g_conf->bdev_aio) {
+  if (aio) {
     dout(10) << __func__ << dendl;
     aio_stop = true;
     aio_thread.join();
