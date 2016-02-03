@@ -11,7 +11,7 @@ then
     cd /tmp/fsstress/ltp-full-20091231/testcases/kernel/fs/fsstress
     make
     sudo mkdir -p /usr/lib/ltp/testcases/bin
-    sudo cp -avf /tmp/fsstress/ltp-full-20091231/testcases/kernel/fs/fsstress/fsstress /usr/lib/ltp/testcases/bin/fsstress
+    sudo cp -av --remove-destination /tmp/fsstress/ltp-full-20091231/testcases/kernel/fs/fsstress/fsstress /usr/lib/ltp/testcases/bin/fsstress
     sudo chmod 755 /usr/lib/ltp/testcases/bin/fsstress
     rm -Rf /tmp/fsstress
     cd $path
