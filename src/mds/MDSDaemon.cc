@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include <unistd.h>
@@ -99,7 +99,7 @@ class C_VoidFn : public Context
 };
 
 // cons/des
-MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) : 
+MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
   mds_lock("MDSDaemon::mds_lock"),
   stopping(false),
@@ -139,9 +139,9 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
 MDSDaemon::~MDSDaemon() {
   Mutex::Locker lock(mds_lock);
 
-  delete mds_rank; 
-  mds_rank = NULL; 
-  delete objecter; 
+  delete mds_rank;
+  mds_rank = NULL;
+  delete objecter;
   objecter = NULL;
   delete mdsmap;
   mdsmap = NULL;
@@ -183,9 +183,9 @@ bool MDSDaemon::asok_command(string command, cmdmap_t& cmdmap, string format,
   }
   f->flush(ss);
   delete f;
-  
+
   dout(1) << "asok_command: " << command << " (complete)" << dendl;
-  
+
   return handled;
 }
 
@@ -355,6 +355,11 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     // StrayManager
     "mds_max_purge_ops",
     "mds_max_purge_ops_per_pg",
+    "clog_to_graylog",
+    "clog_to_graylog_host",
+    "clog_to_graylog_port",
+    "host",
+    "fsid",
     NULL
   };
   return KEYS;
@@ -392,7 +397,12 @@ void MDSDaemon::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("clog_to_monitors") ||
       changed.count("clog_to_syslog") ||
       changed.count("clog_to_syslog_level") ||
-      changed.count("clog_to_syslog_facility")) {
+      changed.count("clog_to_syslog_facility") ||
+      changed.count("clog_to_graylog") ||
+      changed.count("clog_to_graylog_host") ||
+      changed.count("clog_to_graylog_port") ||
+      changed.count("host") ||
+      changed.count("fsid")) {
     if (mds_rank) {
       mds_rank->update_log_config();
     }
@@ -449,7 +459,7 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&log_client);
-  
+
   int r = monc->authenticate();
   if (r < 0) {
     derr << "ERROR: failed to authenticate: " << cpp_strerror(-r) << dendl;
@@ -543,7 +553,7 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
   }
   beacon.init(mdsmap, wanted_state, standby_for_rank, standby_for_name);
   messenger->set_myname(entity_name_t::MDS(MDS_RANK_NONE));
-  
+
   // schedule tick
   reset_tick();
   g_conf->add_observer(this);
@@ -883,7 +893,7 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
 
   // is it new?
   if (epoch <= mdsmap->get_epoch()) {
-    dout(5) << " old map epoch " << epoch << " <= " << mdsmap->get_epoch() 
+    dout(5) << " old map epoch " << epoch << " <= " << mdsmap->get_epoch()
 	    << ", discarding" << dendl;
     m->put();
     return;
@@ -999,7 +1009,7 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
     }
 
     // MDSRank is active: let him process the map, we have no say.
-    dout(10) <<  __func__ << ": handling map as rank " 
+    dout(10) <<  __func__ << ": handling map as rank "
              << mds_rank->get_nodeid() << dendl;
     mds_rank->handle_mds_map(m, oldmap);
   }
@@ -1033,7 +1043,7 @@ void MDSDaemon::_handle_mds_map(MDSMap *oldmap)
     beacon.set_want_state(mdsmap, new_state);
     return;
   }
-  
+
   // Case where we have sent a boot beacon that isn't reflected yet
   if (beacon.get_want_state() == MDSMap::STATE_BOOT) {
     dout(10) << "not in map yet" << dendl;
@@ -1067,7 +1077,7 @@ void MDSDaemon::suicide()
 
   //because add_observer is called after set_up_admin_socket
   //so we can use asok_hook to avoid assert in the remove_observer
-  if (asok_hook != NULL) 
+  if (asok_hook != NULL)
     g_conf->remove_observer(this);
 
   clean_up_admin_socket();
@@ -1157,7 +1167,7 @@ bool MDSDaemon::ms_dispatch(Message *m)
   }
 
   // First see if it's a daemon message
-  const bool handled_core = handle_core_message(m); 
+  const bool handled_core = handle_core_message(m);
   if (handled_core) {
     return true;
   }
@@ -1209,7 +1219,7 @@ bool MDSDaemon::handle_core_message(Message *m)
   case MSG_MON_COMMAND:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
     handle_command(static_cast<MMonCommand*>(m));
-    break;    
+    break;
 
     // OSD
   case MSG_COMMAND:
@@ -1229,11 +1239,11 @@ bool MDSDaemon::handle_core_message(Message *m)
   return true;
 }
 
-void MDSDaemon::ms_handle_connect(Connection *con) 
+void MDSDaemon::ms_handle_connect(Connection *con)
 {
 }
 
-bool MDSDaemon::ms_handle_reset(Connection *con) 
+bool MDSDaemon::ms_handle_reset(Connection *con)
 {
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT)
     return false;
@@ -1261,7 +1271,7 @@ bool MDSDaemon::ms_handle_reset(Connection *con)
 }
 
 
-void MDSDaemon::ms_handle_remote_reset(Connection *con) 
+void MDSDaemon::ms_handle_remote_reset(Connection *con)
 {
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT)
     return;
@@ -1331,7 +1341,7 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
       // a new connection, rather than a new client
       s = mds_rank->sessionmap.get_session(n);
     }
-    
+
     // Wire up a Session* to this connection
     // It doesn't go into a SessionMap instance until it sends an explicit
     // request to open a session (initial state of Session is `closed`)
@@ -1425,4 +1435,3 @@ bool MDSDaemon::is_clean_shutdown()
     return true;
   }
 }
-

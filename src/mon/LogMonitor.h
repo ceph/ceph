@@ -25,6 +25,7 @@ using namespace std;
 
 #include "common/LogEntry.h"
 #include "messages/MLog.h"
+#include "common/Graylog.h"
 
 class MMonCommand;
 
@@ -44,6 +45,13 @@ private:
     map<string,string> log_file;
     map<string,string> expanded_log_file;
     map<string,string> log_file_level;
+    map<string,string> log_to_graylog;
+    map<string,string> log_to_graylog_host;
+    map<string,string> log_to_graylog_port;
+
+    map<string, ceph::log::Graylog::Ref> graylogs;
+    uuid_d fsid;
+    string host;
 
     void clear() {
       log_to_syslog.clear();
@@ -52,6 +60,10 @@ private:
       log_file.clear();
       expanded_log_file.clear();
       log_file_level.clear();
+      log_to_graylog.clear();
+      log_to_graylog_host.clear();
+      log_to_graylog_port.clear();
+      graylogs.clear();
     }
 
     /** expands $channel meta variable on all maps *EXCEPT* log_file
@@ -101,6 +113,35 @@ private:
     string get_log_file_level(const string &channel) {
       return get_str_map_key(log_file_level, channel,
                              &CLOG_CONFIG_DEFAULT_KEY);
+    }
+
+    bool do_log_to_graylog(const string &channel) {
+      return (get_str_map_key(log_to_graylog, channel,
+			      &CLOG_CONFIG_DEFAULT_KEY) == "true");
+    }
+
+    ceph::log::Graylog::Ref get_graylog(const string &channel) {
+      generic_dout(25) << __func__ << " for channel '"
+                       << channel << "'" << dendl;
+
+      if (graylogs.count(channel) == 0) {
+	ceph::log::Graylog::Ref graylog = ceph::log::Graylog::Ref(new ceph::log::Graylog("mon"));
+
+	graylog->set_fsid(g_conf->fsid);
+	graylog->set_hostname(g_conf->host);
+	graylog->set_destination(get_str_map_key(log_to_graylog_host, channel,
+						 &CLOG_CONFIG_DEFAULT_KEY),
+				 atoi(get_str_map_key(log_to_graylog_port, channel,
+						      &CLOG_CONFIG_DEFAULT_KEY).c_str()));
+
+	graylogs[channel] = graylog;
+        generic_dout(20) << __func__ << " for channel '"
+                         << channel << "' to graylog host '"
+			 << log_to_graylog_host[channel] << ":"
+			 << log_to_graylog_port[channel]
+			 << "'" << dendl;
+      }
+      return graylogs[channel];
     }
   } channels;
 
@@ -182,6 +223,9 @@ private:
       "mon_cluster_log_to_syslog_facility",
       "mon_cluster_log_file",
       "mon_cluster_log_file_level",
+      "mon_cluster_log_to_graylog",
+      "mon_cluster_log_to_graylog_host",
+      "mon_cluster_log_to_graylog_port",
       NULL
     };
     return KEYS;

@@ -16,8 +16,8 @@ sbin_SCRIPTS =
 su_sbin_PROGRAMS =
 su_sbin_SCRIPTS =
 dist_bin_SCRIPTS =
-lib_LTLIBRARIES = 
-noinst_LTLIBRARIES = 
+lib_LTLIBRARIES =
+noinst_LTLIBRARIES =
 noinst_LIBRARIES =
 radoslib_LTLIBRARIES =
 
@@ -256,6 +256,8 @@ if ENABLE_COVERAGE
 EXTRALIBS += -lgcov
 endif # ENABLE_COVERAGE
 
+LIBCOMMON += -luuid
+
 # Libosd always needs osdc and os
 LIBOSD += $(LIBOSDC) $(LIBOS)
 
@@ -296,4 +298,3 @@ DENCODER_DEPS =
 
 
 radoslibdir = $(libdir)/rados-classes
-

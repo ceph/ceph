@@ -3,6 +3,7 @@ libcommon_internal_la_SOURCES = \
 	common/DecayCounter.cc \
 	common/LogClient.cc \
 	common/LogEntry.cc \
+	common/Graylog.cc \
 	common/PrebufferedStreambuf.cc \
 	common/SloppyCRCMap.cc \
 	common/BackTrace.cc \
@@ -86,7 +87,7 @@ endif
 
 if LINUX
 libcommon_internal_la_SOURCES += \
-	common/linux_version.c 
+	common/linux_version.c
 endif
 
 if SOLARIS
@@ -161,7 +162,8 @@ LIBCOMMON_DEPS += \
 	$(LIBCOMPRESSOR) \
 	$(LIBMSG) $(LIBAUTH) \
 	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH) \
-	$(BOOST_RANDOM_LIBS)
+	$(BOOST_RANDOM_LIBS) \
+	-luuid
 
 if LINUX
 LIBCOMMON_DEPS += -lrt -lblkid
@@ -177,6 +179,7 @@ noinst_HEADERS += \
 	common/HeartbeatMap.h \
 	common/LogClient.h \
 	common/LogEntry.h \
+	common/Graylog.h \
 	common/Preforker.h \
 	common/SloppyCRCMap.h \
 	common/WorkQueue.h \

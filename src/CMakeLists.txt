@@ -317,6 +317,7 @@ set(libcommon_files
   common/Cycles.cc
   osdc/Striper.cc
   osdc/Objecter.cc
+  common/Graylog.cc
   ${arch_files}
   ${auth_files}
   ${mds_files})
@@ -369,7 +370,7 @@ endif(${WITH_LTTNG})
 
 set(libglobal_srcs
   global/global_init.cc
-  global/pidfile.cc 
+  global/pidfile.cc
   global/signal_handler.cc)
 set(global_common_files
   global/global_context.cc)
@@ -379,7 +380,7 @@ add_library(global STATIC ${libglobal_srcs}
 target_link_libraries(global common ${CMAKE_THREAD_LIBS_INIT} ${CRYPTO_LIBS}
   ${EXTRALIBS})
 if(${WITH_LTTNG})
-  target_link_libraries(global lttng-ust dl) 
+  target_link_libraries(global lttng-ust dl)
 endif(${WITH_LTTNG})
 if(${ENABLE_SHARED})
   set_target_properties(global PROPERTIES
@@ -457,7 +458,7 @@ add_executable(ceph-monstore-tool tools/ceph_monstore_tool.cc)
 target_link_libraries(ceph-monstore-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY})
 install(TARGETS ceph-monstore-tool DESTINATION bin)
 
-add_executable(ceph-objectstore-tool 
+add_executable(ceph-objectstore-tool
   tools/ceph_objectstore_tool.cc
   tools/RadosDump.cc
   $<TARGET_OBJECTS:common_util_obj>
@@ -588,11 +589,11 @@ set(lib_mon_srcs
   auth/cephx/CephxKeyServer.cc
   auth/cephx/CephxServiceHandler.cc
   auth/AuthServiceHandler.cc
-  ${osd_mon_files} mon/Paxos.cc 
+  ${osd_mon_files} mon/Paxos.cc
   mon/PaxosService.cc
   mon/OSDMonitor.cc
   mon/MDSMonitor.cc
-  mon/MonmapMonitor.cc 
+  mon/MonmapMonitor.cc
   mon/LogMonitor.cc
   mon/AuthMonitor.cc
   mon/Elector.cc
@@ -662,14 +663,14 @@ endif(${HAVE_LIBFUSE})
 
 # make rocksdb statically
 add_custom_target(build_rocksdb
-    COMMAND 
+    COMMAND
     PORTABLE=1 $(MAKE) static_lib EXTRA_CXXFLAGS='-fPIC -Wno-unused-variable'
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/rocksdb
     COMMENT "rocksdb building")
 
-# add a imported library for librocksdb.a 
+# add a imported library for librocksdb.a
 add_library(rocksdb STATIC IMPORTED)
-set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a") 
+set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a")
 add_dependencies(rocksdb build_rocksdb)
 set(ROCKSDB_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
 
@@ -724,7 +725,7 @@ add_library(osd STATIC ${osd_srcs} $<TARGET_OBJECTS:osd_mon_objs>
   $<TARGET_OBJECTS:cls_references_objs>)
 target_link_libraries(osd dl leveldb)
 if(${WITH_LTTNG})
-  target_link_libraries(osd libosd_tp) 
+  target_link_libraries(osd libosd_tp)
 endif(${WITH_LTTNG})
 
 set(ceph_osd_srcs
@@ -742,7 +743,7 @@ install(TARGETS ceph-osd DESTINATION bin)
 
 # MDS
 if(${WITH_MDS})
-  set(mds_srcs 
+  set(mds_srcs
     mds/Capability.cc
     mds/MDSDaemon.cc
     mds/MDSRank.cc
@@ -806,7 +807,7 @@ target_link_libraries(cephfstool common ${EXTRALIBS})
 set_target_properties(cephfstool PROPERTIES OUTPUT_NAME cephfs)
 install(TARGETS cephfstool DESTINATION bin)
 
-set(compressor_srcs 
+set(compressor_srcs
   compressor/Compressor.cc
   compressor/AsyncCompressor.cc)
 add_library(compressor STATIC ${compressor_srcs})
@@ -1076,7 +1077,7 @@ if(${WITH_RBD})
     $<TARGET_OBJECTS:heap_profiler_objs>)
   set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
   target_link_libraries(rbd librbd librados global common keyutils udev
-    ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY} 
+    ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY}
     ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   install(TARGETS rbd DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
@@ -1213,4 +1214,3 @@ add_custom_target(cephfs_testing DEPENDS
     cephfs-journal-tool
     cephfs-data-scan
     cephfs-table-tool)
-

@@ -6,11 +6,14 @@
 
 #include "common/Thread.h"
 
+#include <assert.h>
 #include <pthread.h>
+#include <boost/asio.hpp>
 
 #include "Entry.h"
 #include "EntryQueue.h"
 #include "SubsystemMap.h"
+#include "common/Graylog.h"
 
 namespace ceph {
 namespace log {
@@ -20,7 +23,7 @@ class Log : private Thread
   Log **m_indirect_this;
 
   SubsystemMap *m_subs;
-  
+
   pthread_mutex_t m_queue_mutex;
   pthread_mutex_t m_flush_mutex;
   pthread_cond_t m_cond_loggers;
@@ -37,6 +40,9 @@ class Log : private Thread
 
   int m_syslog_log, m_syslog_crash;
   int m_stderr_log, m_stderr_crash;
+  int m_graylog_log, m_graylog_crash;
+
+  Graylog::Ref m_graylog;
 
   bool m_stop;
 
@@ -61,12 +67,18 @@ public:
   void set_log_file(std::string fn);
   void reopen_log_file();
 
-  void flush(); 
+  void flush();
 
   void dump_recent();
 
   void set_syslog_level(int log, int crash);
   void set_stderr_level(int log, int crash);
+  void set_graylog_level(int log, int crash);
+
+  void start_graylog();
+  void stop_graylog();
+
+  Graylog::Ref graylog() { return m_graylog; }
 
   Entry *create_entry(int level, int subsys);
   Entry *create_entry(int level, int subsys, size_t* expected_size);
