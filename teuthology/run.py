@@ -312,6 +312,9 @@ def main(args):
 
     config = setup_config(config)
 
+    if archive is not None and 'archive_path' not in config:
+        config['archive_path'] = archive
+
     write_initial_metadata(archive, config, name, description, owner)
     report.try_push_job_info(config, dict(status='running'))
 
