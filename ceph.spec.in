@@ -90,6 +90,7 @@ Patch0:		init-ceph.in-fedora.patch
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
+Requires:	librgw2 = %{epoch}:%{version}-%{release}
 Requires:	ceph-common = %{epoch}:%{version}-%{release}
 %if 0%{with selinux}
 Requires:	ceph-selinux = %{epoch}:%{version}-%{release}
@@ -303,6 +304,7 @@ Requires:	ceph-common = %{epoch}:%{version}-%{release}
 Requires:	ceph-selinux = %{epoch}:%{version}-%{release}
 %endif
 Requires:	librados2 = %{epoch}:%{version}-%{release}
+Requires:	librgw2 = %{epoch}:%{version}-%{release}
 %if 0%{?rhel} || 0%{?fedora}
 Requires:	mailcap
 %endif
@@ -346,6 +348,24 @@ Obsoletes:	ceph-devel < %{epoch}:%{version}-%{release}
 %description -n librados2-devel
 This package contains libraries and headers needed to develop programs
 that use RADOS object store.
+
+%package -n librgw2
+Summary:	RADOS gateway client library
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+%description -n librgw2
+This package provides a library implementation of the RADOS gateway
+(distributed object store with S3 and Swift personalities).
+
+%package -n librgw2-devel
+Summary:	RADOS gateway client library
+Group:		Development/Libraries
+License:	LGPL-2.0
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+%description -n librgw2-devel
+This package contains libraries and headers needed to develop programs
+that use RADOS gateway client library.
 
 %package -n python-rados
 Summary:	Python libraries for the RADOS object store
@@ -1185,6 +1205,25 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %if 0%{?_with_lttng}
 %{_libdir}/librbd_tp.so
 %endif
+
+#################################################################################
+%files -n librgw2
+%defattr(-,root,root,-)
+%{_libdir}/librgw.so.*
+
+%post -n librgw2
+/sbin/ldconfig
+
+%postun -n librgw2
+/sbin/ldconfig
+
+#################################################################################
+%files -n librgw2-devel
+%defattr(-,root,root,-)
+%dir %{_includedir}/rados
+%{_includedir}/rados/librgw.h
+%{_includedir}/rados/rgw_file.h
+%{_libdir}/librgw.so
 
 #################################################################################
 %files -n python-rbd
