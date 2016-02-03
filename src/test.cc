@@ -8,9 +8,10 @@
 
 #include <memory>
 #include <chrono>
-#include <iostream>
 #include <map>
 #include <random>
+#include <iostream>
+#include <iomanip>
 
 #include "test_recs.h"
 #include "test_server.h"
@@ -162,6 +163,8 @@ int main(int argc, char* argv[]) {
 
   const auto start_edge = latest_start + skip_amount;
 
+  std::map<ClientId,std::vector<double>> ops_data;
+
   for (auto const &i : clients) {
     auto it = i.second->get_op_times().begin();
     const auto end = i.second->get_op_times().end();
@@ -173,24 +176,64 @@ int main(int argc, char* argv[]) {
       int count = 0;
       for (; it != end && *it < time_edge; ++count, ++it) { /* empty */ }
       double ops_per_second = double(count) / (measure_unit / report_unit);
-      std::cout << "client " << i.first << ": " << ops_per_second <<
-	" ops per second." << std::endl;
+      ops_data[i.first].push_back(ops_per_second);
     }
   }
 
+  const int head_w = 12;
+  const int data_w = 8;
+  const int data_prec = 2;
+
+  std::cout << std::setw(head_w) << "client:";
+  for (auto const &i : clients) {
+    std::cout << std::setw(data_w) << i.first;
+  }
+  std::cout << std::setw(data_w) << "total" << std::endl;
+
+  {
+    bool has_data;
+    int i = 0;
+    do {
+      std::string line_header = "t_" + std::to_string(i) + ":";
+      std::cout << std::setw(head_w) << line_header;
+      has_data = false;
+      double total = 0.0;
+      for (auto const &c : clients) {
+	double data = 0.0;
+	if (i < ops_data[c.first].size()) {
+	  data = ops_data[c.first][i];
+	  has_data = true;
+	}
+	total += data;
+	std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
+	  std::fixed << data;
+      }
+      std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
+	std::fixed << total << std::endl;
+      ++i;
+    } while(has_data);
+  }
+  
   // report how many ops were done by reservation and proportion for
   // each client
-  
-  for (auto const &i : clients) {
-    std::cout << "client:" << i.first <<
-      ", res_ops:" << i.second->get_res_count() <<
-      ", prop_ops:" << i.second->get_prop_count() << std::endl;
-  }
 
-  for (auto const &i : servers) {
-    std::cout << "server:" << i.first <<
-      ", res_ops:" << i.second->get_res_count() <<
-      ", prop_ops:" << i.second->get_prop_count() << std::endl;
+  std::cout << std::setw(head_w) << "res_ops:";
+  for (auto const &c : clients) {
+    std::cout << std::setw(data_w) << c.second->get_res_count();
+  }
+  std::cout << std::endl;
+
+  std::cout << std::setw(head_w) << "prop_ops:";
+  for (auto const &c : clients) {
+    std::cout << std::setw(data_w) << c.second->get_prop_count();
+  }
+  std::cout << std::endl;
+
+
+  for (auto const &s : servers) {
+    std::cout << "server:" << s.first <<
+      ", res_ops:" << s.second->get_res_count() <<
+      ", prop_ops:" << s.second->get_prop_count() << std::endl;
   }
 
 
