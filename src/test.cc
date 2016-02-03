@@ -185,5 +185,10 @@ int main(int argc, char* argv[]) {
     i->second = nullptr;
   }
 
+  for (auto i = servers.begin(); i != servers.end(); ++i) {
+    delete i->second;
+    i->second = nullptr;
+  }
+
   std::cout << "simulation complete" << std::endl;
 }
