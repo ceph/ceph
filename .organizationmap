@@ -81,6 +81,7 @@ DreamHost <contact@dreamhost.com> Wesley Spikes <wesley.spikes@dreamhost.com>
 Dtdream <contact@dtdream.com> Li Peng <lip@dtdream.com>
 Dtdream <contact@dtdream.com> weiqian <weiq@dtdream.com>
 Dtdream <contact@dtdream.com> Wei Qian <weiq@dtdream.com>
+Eayun <contact@eayun.com> Dunrong Huang <dunrong.huang@eayun.com>
 Ebay <contact@ebay.com> Chengyuan Li <chengyli@ebay.com>
 Ebay <contact@ebay.com> You Ji <youji@ebay.com>
 École polytechnique fédérale de Lausanne <contact@epfl.ch> Stefan Eilemann <Stefan.Eilemann@epfl.ch>
@@ -115,6 +116,7 @@ H3C <contact@h3c.com> Fei Wang <wang.fei@h3c.com>
 H3C <contact@h3c.com> Jie Chen <chen.jie@h3c.com>
 H3C <contact@h3c.com> Jie Li <li.jieA@h3c.com>
 H3C <contact@h3c.com> Kongming Wu <wu.kongming@h3c.com>
+H3C <contact@h3c.com> Liu Peiyan <liu.peiyang@h3c.com>
 H3C <contact@h3c.com> Lu Shi <shi.lu@h3c.com>
 H3C <contact@h3c.com> Mingyue Zhao <zhao.mingyue@h3c.com>
 H3C <contact@h3c.com> Ming Zou <zou.ming@h3c.com>
@@ -239,6 +241,7 @@ Pacific Northwest National Laboratory <contact@pnl.gov> Evan Felix <evan.felix@p
 Pacific Northwest National Laboratory <contact@pnl.gov> Scott Devoid <devoid@anl.gov>
 Piston Cloud Computing <info@pistoncloud.com> Mike Lundy <mike@fluffypenguin.org>
 Pogoapp <contact@pogoapp.com> Paul Meserve <paul@pogodan.com>
+Red Hat <contact@redhat.com> Adam C. Emerson <aemerson@redhat.com>
 Red Hat <contact@redhat.com> Alexander Chuzhoy <achuzhoy@redhat.com>
 Red Hat <contact@redhat.com> Alexandre Marangone <amarango@redhat.com>
 Red Hat <contact@redhat.com> Alex Elder <aelder@redhat.com>
@@ -345,7 +348,7 @@ Telecom Bretagne <contact@telecom-bretagne.eu> Hazem Amara <hazem.amara@telecom-
 Telecom Bretagne <contact@telecom-bretagne.eu> Thomas Cantin <thomas.cantin@telecom-bretagne.eu>
 Tencent <contact@tencent.com> Wei Luo <weilluo@tencent.com>
 Tencent <contact@tencent.com> Wenjun Huang <wenjunhuang@tencent.com>
-Tencent <contact@tencent.com> Zhi Zhang <zhangz.david@outlook.com>
+Tencent <contact@tencent.com> Zhi Zhang <willzzhang@tencent.com>
 The Linux Box <contact@linuxbox.com> Adam C. Emerson <aemerson@linuxbox.com>
 The Linux Box <contact@linuxbox.com> Ali Maredia <ali@linuxbox.com>
 The Linux Box <contact@linuxbox.com> Casey Bodley <casey@linuxbox.com>
@@ -445,6 +448,7 @@ Unaffiliated <no@organization.net> Robin Tang <robintang974@gmail.com>
 Unaffiliated <no@organization.net> Rohan Mars <code@rohanmars.com>
 Unaffiliated <no@organization.net> Roman Haritonov <reclosedev@gmail.com>
 Unaffiliated <no@organization.net> Ruben Kerkhof <ruben@rubenkerkhof.com>
+Unaffiliated <no@organization.net> scienceluo <scienceluo@qq.com>
 Unaffiliated <no@organization.net> Sergey Arkhipov <nineseconds@yandex.ru>
 Unaffiliated <no@organization.net> Shang Ding <dingshang2013@163.com>
 Unaffiliated <no@organization.net> Shanggao Qiu <qiushanggao@qq.com>
@@ -473,6 +477,7 @@ Unaffiliated <no@organization.net> Xiong Yiliang <xiongyiliang@xunlei.com>
 Unaffiliated <no@organization.net> YankunLi <YankunLi@users.noreply.github.com>
 Unaffiliated <no@organization.net> Yann Dupont <yann@objoo.org>
 Unaffiliated <no@organization.net> Yannick Atchy Dalama <yannick.atchy.dalama@gmail.com>
+Unaffiliated <no@organization.net> YiQiang Chen <cyqsign@163.com>
 Unaffiliated <no@organization.net> Yongyue Sun <abioy.sun@gmail.com>
 Unaffiliated <no@organization.net> Zhe Zhang <zzxuanyuan@gmail.com>
 Unaffiliated <no@organization.net> Zhicheng Wei <zhicheng@opensourceforge.net>
@@ -506,6 +511,7 @@ XSky <contact@xsky.com> Haomai Wang <haomai@xsky.com>
 XSky <contact@xsky.com> Min Chen <chenmin@xsky.com>
 XSky <contact@xsky.com> Tianshan Qu <tianshan@xsky.com>
 XSky <contact@xsky.com> Xinze Chi <xinze@xsky.com>
+XSky <contact@xsky.com> Zhiqiang Wang <zhiqiang@xsky.com>
 Yahoo! <contact@yahoo-inc.com> Guang Yang <yguang@yahoo-inc.com>
 Yahoo! <contact@yahoo-inc.com> Haifeng Liu <haifeng@yahoo-inc.com>
 Yahoo! <contact@yahoo-inc.com> Lei Dong <leidong@yahoo-inc.com>
@@ -516,7 +522,8 @@ Yahoo! <contact@yahoo-inc.com> Zhi (David) Zhang <zhangz@yahoo-inc.com>
 YouScribe <contact@youscribe.fr> Guilhem Lettron <guilhem@lettron.fr>
 ZTE <contact@zte.com.cn> Chuanhong Wang <wang.chuanhong@zte.com.cn>
 ZTE <contact@zte.com.cn> Ren Huanwen <ren.huanwen@zte.com.cn>
-ZTE <contact@zte.com.cn> <xie.xingguo@zte.com.cn>
+ZTE <contact@zte.com.cn> Xie Xingguo <xie.xingguo@zte.com.cn>
+ZTE <contact@zte.com.cn> Song Baisen <song.baisen@zte.com.cn>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \
