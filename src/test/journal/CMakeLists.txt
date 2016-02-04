@@ -18,10 +18,11 @@ add_executable(unittest_journal EXCLUDE_FROM_ALL
   )
 add_ceph_unittest(unittest_journal ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_journal)
 target_link_libraries(unittest_journal 
+  journal
+  cls_journal
+  cls_journal_client
   rados_test_stub
   librados
   radostest
-  journal
-  cls_journal_client
   global 
   )
