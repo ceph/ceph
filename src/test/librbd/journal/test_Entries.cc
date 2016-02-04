@@ -67,7 +67,7 @@ public:
     journal::Journaler *journaler = new journal::Journaler(
       ictx->md_ctx, ictx->id, "dummy client", 1);
 
-    int r = journaler->register_client("unit test client");
+    int r = journaler->register_client(bufferlist());
     if (r < 0) {
       ADD_FAILURE() << "failed to register journal client";
       delete journaler;

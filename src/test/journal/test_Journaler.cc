@@ -40,7 +40,9 @@ public:
 
   int register_client(const std::string &client_id, const std::string &desc) {
     journal::Journaler journaler(m_ioctx, m_journal_id, client_id, 5);
-    return journaler.register_client(desc);
+    bufferlist data;
+    data.append(desc);
+    return journaler.register_client(data);
   }
 
   static uint64_t _journal_id;

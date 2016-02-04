@@ -164,10 +164,8 @@ static int do_reset_journal(librados::IoCtx& io_ctx,
     return r;
   }
 
-  // XXXMG
-  const std::string CLIENT_DESCRIPTION = "master image";
-
-  r = journaler.register_client(CLIENT_DESCRIPTION);
+  // TODO register with librbd payload
+  r = journaler.register_client(bufferlist());
   if (r < 0) {
     std::cerr << "failed to register client: " << cpp_strerror(r) << std::endl;
     return r;
@@ -185,7 +183,8 @@ public:
   int init() {
     int r;
 
-    r = register_client("rbd journal");
+    // TODO register with librbd payload
+    r = register_client(bufferlist());
     if (r < 0) {
       std::cerr << "failed to register client: " << cpp_strerror(r)
 		<< std::endl;

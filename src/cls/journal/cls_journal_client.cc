@@ -224,17 +224,17 @@ void set_active_set(librados::ObjectWriteOperation *op, uint64_t object_set) {
 }
 
 void client_register(librados::ObjectWriteOperation *op,
-                     const std::string &id, const std::string &description) {
+                     const std::string &id, const bufferlist &data) {
   bufferlist bl;
   ::encode(id, bl);
-  ::encode(description, bl);
+  ::encode(data, bl);
   op->exec("journal", "client_register", bl);
 }
 
 int client_register(librados::IoCtx &ioctx, const std::string &oid,
-                    const std::string &id, const std::string &description) {
+                    const std::string &id, const bufferlist &data) {
   librados::ObjectWriteOperation op;
-  client_register(&op, id, description);
+  client_register(&op, id, data);
   return ioctx.operate(oid, &op);
 }
 

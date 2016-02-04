@@ -198,12 +198,12 @@ TEST_F(TestClsJournal, ClientRegister) {
 
   std::string oid = get_temp_image_name();
 
-  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
   std::set<Client> clients;
   ASSERT_EQ(0, client::client_list(ioctx, oid, &clients));
 
-  std::set<Client> expected_clients = {Client("id1", "desc1")};
+  std::set<Client> expected_clients = {Client("id1", bufferlist())};
   ASSERT_EQ(expected_clients, clients);
 }
 
@@ -213,8 +213,8 @@ TEST_F(TestClsJournal, ClientRegisterDuplicate) {
 
   std::string oid = get_temp_image_name();
 
-  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
-  ASSERT_EQ(-EEXIST, client::client_register(ioctx, oid, "id1", "desc2"));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
+  ASSERT_EQ(-EEXIST, client::client_register(ioctx, oid, "id1", bufferlist()));
 }
 
 TEST_F(TestClsJournal, ClientUnregister) {
@@ -223,7 +223,7 @@ TEST_F(TestClsJournal, ClientUnregister) {
 
   std::string oid = get_temp_image_name();
 
-  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
   ASSERT_EQ(0, client::client_unregister(ioctx, oid, "id1"));
 }
 
@@ -233,7 +233,7 @@ TEST_F(TestClsJournal, ClientUnregisterDNE) {
 
   std::string oid = get_temp_image_name();
 
-  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
   ASSERT_EQ(0, client::client_unregister(ioctx, oid, "id1"));
   ASSERT_EQ(-ENOENT, client::client_unregister(ioctx, oid, "id1"));
 }
@@ -245,8 +245,8 @@ TEST_F(TestClsJournal, ClientUnregisterPruneTags) {
   std::string oid = get_temp_image_name();
 
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
-  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
-  ASSERT_EQ(0, client::client_register(ioctx, oid, "id2", "desc2"));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id2", bufferlist()));
 
   ASSERT_EQ(0, client::tag_create(ioctx, oid, 0, Tag::TAG_CLASS_NEW,
                                   bufferlist()));
@@ -274,7 +274,7 @@ TEST_F(TestClsJournal, ClientCommit) {
   std::string oid = get_temp_image_name();
 
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
-  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
   cls::journal::EntryPositions entry_positions;
   entry_positions = {
@@ -291,7 +291,7 @@ TEST_F(TestClsJournal, ClientCommit) {
   ASSERT_EQ(0, client::client_list(ioctx, oid, &clients));
 
   std::set<Client> expected_clients = {
-    Client("id1", "desc1", object_set_position)};
+    Client("id1", bufferlist(), object_set_position)};
   ASSERT_EQ(expected_clients, clients);
 }
 
@@ -302,7 +302,7 @@ TEST_F(TestClsJournal, ClientCommitInvalid) {
   std::string oid = get_temp_image_name();
 
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
-  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
   cls::journal::EntryPositions entry_positions;
   entry_positions = {
@@ -342,8 +342,8 @@ TEST_F(TestClsJournal, ClientList) {
   librados::ObjectWriteOperation op1;
   for (uint32_t i = 0; i < 512; ++i) {
     std::string id =  "id" + stringify(i + 1);
-    expected_clients.insert(Client(id, ""));
-    client::client_register(&op1, id, "");
+    expected_clients.insert(Client(id, bufferlist()));
+    client::client_register(&op1, id, bufferlist());
   }
   ASSERT_EQ(0, ioctx.operate(oid, &op1));
 
@@ -371,7 +371,7 @@ TEST_F(TestClsJournal, GetNextTagTid) {
   ASSERT_EQ(-ENOENT, client::get_next_tag_tid(ioctx, oid, &tag_tid));
 
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
-  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
   ASSERT_EQ(0, client::get_next_tag_tid(ioctx, oid, &tag_tid));
   ASSERT_EQ(0U, tag_tid);
@@ -392,7 +392,7 @@ TEST_F(TestClsJournal, TagCreate) {
                                         bufferlist()));
 
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
-  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
   ASSERT_EQ(-ESTALE, client::tag_create(ioctx, oid, 1, Tag::TAG_CLASS_NEW,
                                         bufferlist()));
@@ -421,7 +421,7 @@ TEST_F(TestClsJournal, TagCreatePrunesTags) {
   std::string oid = get_temp_image_name();
 
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
-  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
   ASSERT_EQ(0, client::tag_create(ioctx, oid, 0, Tag::TAG_CLASS_NEW,
                                   bufferlist()));
@@ -450,7 +450,7 @@ TEST_F(TestClsJournal, TagList) {
   std::string oid = get_temp_image_name();
 
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
-  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
   std::set<Tag> expected_all_tags;
   std::set<Tag> expected_filtered_tags;

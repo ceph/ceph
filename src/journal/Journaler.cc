@@ -159,8 +159,8 @@ int Journaler::remove(bool force) {
   return 0;
 }
 
-int Journaler::register_client(const std::string &description) {
-  return m_metadata->register_client(description);
+int Journaler::register_client(const bufferlist &data) {
+  return m_metadata->register_client(data);
 }
 
 int Journaler::unregister_client() {
