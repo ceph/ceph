@@ -3367,7 +3367,10 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
       ctx->log.back().mod_desc.mark_unrollbackable();
     }
     
-    ::encode(coi.snaps, ctx->log.back().snaps);
+    if (!ctx->log.back().snaps) {
+      ctx->log.back().snaps = new bufferlist();
+    }
+    ::encode(coi.snaps, *(ctx->log.back().snaps));
     ctx->at_version.version++;
   }
 
@@ -6202,7 +6205,10 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 				      ctx->obs->oi.version,
 				      ctx->obs->oi.user_version,
 				      osd_reqid_t(), ctx->new_obs.oi.mtime));
-    ::encode(snaps, ctx->log.back().snaps);
+    if (!ctx->log.back().snaps) {
+      ctx->log.back().snaps = new bufferlist();
+    }
+    ::encode(snaps, *(ctx->log.back().snaps));
     ctx->log.back().mod_desc.create();
 
     ctx->at_version.version++;
@@ -6596,7 +6602,10 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     case pg_log_entry_t::CLEAN:
       dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.snaps
 	       << dendl;
-      ::encode(ctx->new_obs.oi.snaps, ctx->log.back().snaps);
+      if (!ctx->log.back().snaps) {
+        ctx->log.back().snaps = new bufferlist();
+      }
+      ::encode(ctx->new_obs.oi.snaps, *(ctx->log.back().snaps));
       break;
     default:
       break;
