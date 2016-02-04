@@ -1592,7 +1592,6 @@ void Monitor::handle_probe(MonOpRequestRef op)
 void Monitor::handle_probe_probe(MonOpRequestRef op)
 {
   MMonProbe *m = static_cast<MMonProbe*>(op->get_req());
-  MMonProbe *r;
 
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
 	   << " features " << m->get_connection()->get_features() << dendl;
@@ -1624,7 +1623,8 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
 
     }
   }
-
+  
+  MMonProbe *r;
   r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name, has_ever_joined);
   r->name = name;
   r->quorum = quorum;
