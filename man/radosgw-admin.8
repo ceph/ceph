@@ -131,6 +131,12 @@ Show the usage information (with optional user and date range)
 .TP
 .B \fBusage trim\fP
 Trim usage information (with optional user and date range)
+.TP
+.B \fBorphans find\fP
+Init and run search for leaked rados objects
+.TP
+.B \fBorphans finish\fP
+Clean up search for leaked rados objects
 .UNINDENT
 .SH OPTIONS
 .INDENT 0.0
@@ -209,6 +215,17 @@ Remove all objects before bucket removal
 .TP
 .B \-\-lazy\-remove
 Defer removal of object tail
+.UNINDENT
+.SH ORPHANS SEARCH OPTIONS
+.INDENT 0.0
+.TP
+.B \-\-pool
+Data pool to scan for leaked rados objects
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-num\-shards
+Number of shards to use for keeping the temporary scan info
 .UNINDENT
 .SH EXAMPLES
 .sp
