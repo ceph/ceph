@@ -286,7 +286,7 @@ void *Worker::entry()
     }
   }
 
-  center.set_owner(pthread_self());
+  center.set_owner();
   while (!done) {
     ldout(cct, 20) << __func__ << " calling event process" << dendl;
 
@@ -741,6 +741,7 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 
 int AsyncMessenger::reap_dead()
 {
+  ldout(cct, 1) << __func__ << " start" << dendl;
   int num = 0;
 
   Mutex::Locker l1(lock);

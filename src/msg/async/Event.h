@@ -103,6 +103,7 @@ class EventCenter {
   int nevent;
   // Used only to external event
   Mutex external_lock, file_lock, time_lock;
+  atomic_t external_num_events;
   deque<EventCallbackRef> external_events;
   FileEvent *file_events;
   EventDriver *driver;
@@ -132,6 +133,7 @@ class EventCenter {
     external_lock("AsyncMessenger::external_lock"),
     file_lock("AsyncMessenger::file_lock"),
     time_lock("AsyncMessenger::time_lock"),
+    external_num_events(0),
     file_events(NULL),
     driver(NULL), time_event_next_id(1),
     notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0), already_wakeup(0) {
@@ -141,7 +143,7 @@ class EventCenter {
   ostream& _event_prefix(std::ostream *_dout);
 
   int init(int nevent);
-  void set_owner(pthread_t p) { owner = p; }
+  void set_owner();
   pthread_t get_owner() { return owner; }
 
   // Used by internal thread

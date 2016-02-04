@@ -2002,6 +2002,7 @@ void AsyncConnection::accept(int incoming)
   ldout(async_msgr->cct, 10) << __func__ << " sd=" << incoming << dendl;
   assert(sd < 0);
 
+  Mutex::Locker l(lock);
   sd = incoming;
   state = STATE_ACCEPTING;
   center->create_file_event(sd, EVENT_READABLE, read_handler);
@@ -2565,4 +2566,17 @@ void AsyncConnection::local_deliver()
     }
     write_lock.Lock();
   }
+}
+
+void AsyncConnection::cleanup_handler()
+{
+  ldout(async_msgr->cct, 1) << __func__ << dendl;
+
+  delete read_handler;
+  delete write_handler;
+  delete reset_handler;
+  delete remote_reset_handler;
+  delete connect_handler;
+  delete local_deliver_handler;
+  delete wakeup_handler;
 }
