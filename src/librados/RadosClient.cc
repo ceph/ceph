@@ -333,6 +333,7 @@ void librados::RadosClient::shutdown()
     return;
   }
   if (state == CONNECTED) {
+    finisher.wait_for_empty();
     finisher.stop();
   }
   bool need_objecter = false;
