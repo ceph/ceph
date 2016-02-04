@@ -17,7 +17,7 @@
 #include "XioConnection.h"
 #include "XioMessenger.h"
 #include "messages/MDataPing.h"
-
+#include "msg/msg_types.h"
 #include "auth/none/AuthNoneProtocol.h" // XXX
 
 #include "include/assert.h"
@@ -398,7 +398,7 @@ int XioConnection::on_msg_req(struct xio_session *session,
       peer_type = hdr.peer_type;
       peer_addr = hdr.addr;
       peer.addr = peer_addr;
-      peer.name = hdr.hdr->src;
+      peer.name = entity_name_t(hdr.hdr->src);
       if (xio_conn_type == XioConnection::PASSIVE) {
 	/* XXX kick off feature/authn/authz negotiation
 	 * nb:  very possibly the active side should initiate this, but
