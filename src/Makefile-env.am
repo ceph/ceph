@@ -234,7 +234,7 @@ LIBOS += libos_zfs.a -lzfs
 endif # WITH_LIBZFS
 
 if WITH_SPDK
-LIBOS += -lpciaccess -lspdk_nvme -lspdk_util -lspdk_memory -lrte_eal -lrte_mempool -lrte_ring
+LIBOS += ${LIBSPDK_LIBS} ${LIBDPDK_LIBS} ${LIBPCIACCESS_LIBS}
 endif # WITH_SPDK
 
 if WITH_TCMALLOC_MINIMAL
