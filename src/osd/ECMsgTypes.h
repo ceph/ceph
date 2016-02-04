@@ -102,6 +102,8 @@ struct ECSubRead {
   ceph_tid_t tid;
   map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >, hobject_t::BitwiseComparator> to_read;
   set<hobject_t, hobject_t::BitwiseComparator> attrs_to_read;
+  map<hobject_t, list<version_t>, hobject_t::BitwiseComparator> recovery_read;
+  bool for_recovery;
   void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
@@ -115,12 +117,53 @@ struct ECSubReadReply {
   map<hobject_t, list<pair<uint64_t, bufferlist> >, hobject_t::BitwiseComparator> buffers_read;
   map<hobject_t, map<string, bufferlist>, hobject_t::BitwiseComparator> attrs_read;
   map<hobject_t, int, hobject_t::BitwiseComparator> errors;
+  map<hobject_t, list<pair<version_t, bufferlist> >, hobject_t::BitwiseComparator> recovery_buffers_read;
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ECSubReadReply*>& o);
 };
 WRITE_CLASS_ENCODER(ECSubReadReply)
+
+struct ECSubApply {
+  pg_shard_t from;
+  ceph_tid_t tid;
+  hobject_t hoid;
+  ObjectStore::Transaction t;
+  vector<pg_log_entry_t> log_entries;
+  ECSubApply() :tid(0) {};
+  ECSubApply(
+    pg_shard_t from,
+    ceph_tid_t tid,
+    hobject_t hoid,
+    const ObjectStore::Transaction &t,
+    vector<pg_log_entry_t> log_entries)
+    : from(from), tid(tid),
+      hoid(hoid), t(t),
+      log_entries(log_entries) {}
+  void claim(ECSubApply &other) {
+    from = other.from;
+    tid = other.tid;
+    hoid = other.hoid;
+    t.swap(other.t);
+    log_entries.swap(other.log_entries);
+  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ECSubApply*>& o);
+};
+WRITE_CLASS_ENCODER(ECSubApply)
+
+struct ECSubApplyReply {
+  pg_shard_t from;
+  ceph_tid_t tid;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ECSubApplyReply*>& o);
+};
+WRITE_CLASS_ENCODER(ECSubApplyReply)
 
 std::ostream &operator<<(
   std::ostream &lhs, const ECSubWrite &rhs);
@@ -130,5 +173,9 @@ std::ostream &operator<<(
   std::ostream &lhs, const ECSubRead &rhs);
 std::ostream &operator<<(
   std::ostream &lhs, const ECSubReadReply &rhs);
+std::ostream &operator<<(
+  std::ostream &lhs, const ECSubApply &rhs);
+std::ostream &operator<<(
+  std::ostream &lhs, const ECSubApplyReply &rhs);
 
 #endif

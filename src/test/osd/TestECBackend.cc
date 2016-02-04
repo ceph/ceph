@@ -18,6 +18,7 @@
 #include <signal.h>
 #include "osd/ECBackend.h"
 #include "gtest/gtest.h"
+#include "gmock/gmock.h"
 
 TEST(ECUtil, stripe_info_t)
 {
@@ -58,3 +59,48 @@ TEST(ECUtil, stripe_info_t)
             make_pair((uint64_t)0, 2*swidth));
 }
 
+TEST(ECUtil, stripe_info_t2)
+{
+  const uint64_t swidth = 8192;
+  const uint64_t ssize = 2;
+  const uint64_t chunk_count = 3;
+
+  ECUtil::stripe_info_t s(ssize, swidth);
+  map<int, pair<uint64_t, uint64_t>> shards_to_write;
+
+  shards_to_write = s.offset_len_to_chunk_offset(make_pair(10, 64), chunk_count);
+  ASSERT_THAT(shards_to_write[0], make_pair(0, 4096));
+  ASSERT_THAT(shards_to_write[1], make_pair(0, 0));
+  ASSERT_THAT(shards_to_write[2], make_pair(0, 4096));
+
+  shards_to_write = s.offset_len_to_chunk_offset(make_pair(4096, 4096), chunk_count);
+  ASSERT_THAT(shards_to_write[0], make_pair(0, 0));
+  ASSERT_THAT(shards_to_write[1], make_pair(0, 4096));
+  ASSERT_THAT(shards_to_write[2], make_pair(0, 4096));
+
+  shards_to_write = s.offset_len_to_chunk_offset(make_pair(4090, 10), chunk_count);
+  ASSERT_THAT(shards_to_write[0], make_pair(0, 4096));
+  ASSERT_THAT(shards_to_write[1], make_pair(0, 4096));
+  ASSERT_THAT(shards_to_write[2], make_pair(0, 4096));
+
+  shards_to_write = s.offset_len_to_chunk_offset(make_pair(8192, 4096), chunk_count);
+  ASSERT_THAT(shards_to_write[0], make_pair(4096, 4096));
+  ASSERT_THAT(shards_to_write[1], make_pair(0, 0));
+  ASSERT_THAT(shards_to_write[2], make_pair(4096, 4096));
+
+  shards_to_write = s.offset_len_to_chunk_offset(make_pair(8190, 10), chunk_count);
+  ASSERT_THAT(shards_to_write[0], make_pair(4096, 4096));
+  ASSERT_THAT(shards_to_write[1], make_pair(0, 4096));
+  ASSERT_THAT(shards_to_write[2], make_pair(0, 8192));
+
+  shards_to_write = s.offset_len_to_chunk_offset(make_pair(8190, 4100), chunk_count);
+  ASSERT_THAT(shards_to_write[0], make_pair(4096, 4096));
+  ASSERT_THAT(shards_to_write[1], make_pair(0, 8192));
+  ASSERT_THAT(shards_to_write[2], make_pair(0, 8192));
+
+  shards_to_write = s.offset_len_to_chunk_offset(make_pair(4090, 8200), chunk_count);
+  ASSERT_THAT(shards_to_write[0], make_pair(0, 8192));
+  ASSERT_THAT(shards_to_write[1], make_pair(0, 8192));
+  ASSERT_THAT(shards_to_write[2], make_pair(0, 8192));
+
+}

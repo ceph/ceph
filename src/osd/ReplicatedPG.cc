@@ -108,6 +108,9 @@ struct OnReadComplete : public Context {
 // OpContext
 void ReplicatedPG::OpContext::start_async_reads(ReplicatedPG *pg)
 {
+  if (pg->pgbackend->is_objects_read_async_block(obc->obs.oi.soid)) {
+    return;
+  }
   inflightreads = 1;
   pg->pgbackend->objects_read_async(
     obc->obs.oi.soid,
@@ -125,6 +128,24 @@ void ReplicatedPG::OpContext::finish_read(ReplicatedPG *pg)
     pg->in_progress_async_reads.pop_front();
     pg->complete_read_ctx(async_read_result, this);
   }
+}
+int ReplicatedPG::continue_blocked_async_read()
+{
+  int continue_num = 0;
+  for (list<pair<OpRequestRef, OpContext*> >::iterator i =
+         in_progress_async_reads.begin();
+       i != in_progress_async_reads.end();
+       ++i) {
+    if (i->second->inflightreads == 0) {
+      i->second->start_async_reads(this);
+      if (i->second->inflightreads) {
+        continue_num++;
+      } else {
+        return continue_num;
+      }
+    }
+  }
+  return continue_num;
 }
 
 class CopyFromCallback: public ReplicatedPG::CopyCallback {
@@ -3851,16 +3872,17 @@ struct FillInVerifyExtent : public Context {
       return;
     // whole object?  can we verify the checksum?
     if (maybe_crc && *r == size) {
-      uint32_t crc = outdatap->crc32c(-1);
-      if (maybe_crc != crc) {
-        osd->clog->error() << std::hex << " full-object read crc 0x" << crc
-			   << " != expected 0x" << *maybe_crc
-			   << std::dec << " on " << soid << "\n";
-        if (!(flags & CEPH_OSD_OP_FLAG_FAILOK)) {
-	  *rval = -EIO;
-	  *r = 0;
-	}
-      }
+      // FIXME: temp disable crc
+      // uint32_t crc = outdatap->crc32c(-1);
+      // if (maybe_crc != crc) {
+      //   osd->clog->error() << std::hex << " full-object read crc 0x" << crc
+      //   		   << " != expected 0x" << *maybe_crc
+      //   		   << std::dec << " on " << soid << "\n";
+      //   if (!(flags & CEPH_OSD_OP_FLAG_FAILOK)) {
+      //     *rval = -EIO;
+      //     *r = 0;
+      //   }
+      // }
     }
   }
 };
@@ -4792,8 +4814,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	if (pool.info.requires_aligned_append() &&
 	    (op.extent.offset % pool.info.required_alignment() != 0)) {
-	  result = -EOPNOTSUPP;
-	  break;
+	  // result = -EOPNOTSUPP;
+	  // break;
 	}
 
 	if (!obs.exists) {
@@ -4803,13 +4825,21 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	  ctx->mod_desc.create();
 	} else if (op.extent.offset == oi.size) {
-	  ctx->mod_desc.append(oi.size);
+          if (pool.info.require_rollback() &&
+              op.extent.offset % pool.info.required_alignment() == 0) {
+	    ctx->mod_desc.append(oi.size);
+          } else {
+            ctx->ec_overwrite = true;
+          }
 	} else {
-	  ctx->mod_desc.mark_unrollbackable();
+	  // ctx->mod_desc.mark_unrollbackable();
 	  if (pool.info.require_rollback()) {
-	    result = -EOPNOTSUPP;
-	    break;
-	  }
+            ctx->ec_overwrite = true;
+            // result = -EOPNOTSUPP;
+	    // break;
+	  } else {
+	    ctx->mod_desc.mark_unrollbackable();
+          }
 	}
 
         if (seq && (seq > op.extent.truncate_seq) &&
@@ -4846,7 +4876,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (result < 0)
 	  break;
 	if (pool.info.require_rollback()) {
-	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
+          if (ctx->ec_overwrite)
+	    t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
+          else
+	    t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	} else {
 	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	}
@@ -6426,9 +6459,11 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   if (soid.snap == CEPH_NOSNAP)
     make_writeable(ctx);
 
-  finish_ctx(ctx,
-	     ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
-	     pg_log_entry_t::DELETE);
+  int log_op_type = ctx->new_obs.exists ? pg_log_entry_t::MODIFY : 
+                    pg_log_entry_t::DELETE;
+  if (ctx->ec_overwrite)
+    log_op_type = pg_log_entry_t::EC_OVERWRITE;
+  finish_ctx(ctx, log_op_type);
 
   return result;
 }

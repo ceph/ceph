@@ -32,6 +32,15 @@ public:
     AppendOp(const hobject_t &oid, uint64_t off, bufferlist &bl, uint32_t flags)
       : oid(oid), off(off), bl(bl), fadvise_flags(flags) {}
   };
+  struct WriteOp {
+    hobject_t oid;
+    uint64_t off;
+    uint64_t len;
+    bufferlist bl;
+    uint32_t fadvise_flags;
+    WriteOp(const hobject_t &oid, uint64_t off, uint64_t len, bufferlist &bl, uint32_t flags)
+      : oid(oid), off(off), len(len), bl(bl), fadvise_flags(flags) {}
+  };
   struct CloneOp {
     hobject_t source;
     hobject_t target;
@@ -88,6 +97,7 @@ public:
   struct NoOp {};
   typedef boost::variant<
     AppendOp,
+    // WriteOp,
     CloneOp,
     RenameOp,
     StashOp,
@@ -98,9 +108,11 @@ public:
     AllocHintOp,
     NoOp> Op;
   list<Op> ops;
+  list<WriteOp> writeops;
   uint64_t written;
+  bool offset_write;
 
-  ECTransaction() : written(0) {}
+  ECTransaction() : written(0), offset_write(false) {}
   /// Write
   void touch(
     const hobject_t &hoid) {
@@ -119,6 +131,28 @@ public:
     written += len;
     assert(len == bl.length());
     ops.push_back(AppendOp(hoid, off, bl, fadvise_flags));
+  }
+  void write(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    bufferlist &bl,
+    uint32_t fadvise_flags) {
+    if (len == 0) {
+        touch(hoid);
+        return;
+    }
+    offset_write = true;
+
+    written += off + len > written ? (off + len - written) : 0;
+    assert(len == bl.length());
+    writeops.push_back(WriteOp(hoid, off, len, bl, fadvise_flags));
+  }
+  WriteOp* get_writeop() {
+    assert(!writeops.empty());
+    WriteOp* op = &(writeops.front());
+    // writeops.pop_front();
+    return op;
   }
   void stash(
     const hobject_t &hoid,
@@ -173,7 +207,7 @@ public:
     ops.push_back(NoOp());
   }
   bool empty() const {
-    return ops.empty();
+    return ops.empty() && writeops.empty();
   }
   uint64_t get_bytes_written() const {
     return written;

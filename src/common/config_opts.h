@@ -831,6 +831,12 @@ OPTION(osd_scrub_priority, OPT_U32, 5)
 OPTION(osd_scrub_cost, OPT_U32, 50<<20) 
 
 /**
+ * ec overwrite count and size limit
+ */
+OPTION(osd_ec_overwrite_max_count, OPT_U32, 10)
+OPTION(osd_ec_overwrite_max_size, OPT_U64, 100*1024L*1024L)
+
+/**
  * osd_recovery_op_warn_multiple scales the normal warning threshhold,
  * osd_op_complaint_time, so that slow recovery ops won't cause noise
  */

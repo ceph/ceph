@@ -145,6 +145,12 @@
        assert(m);
        return *m;
      }
+     virtual const eversion_t &get_shard_missing_object_have(pg_shard_t peer, hobject_t hoid) const {
+       const pg_missing_t &m = get_shard_missing(peer);
+       map<hobject_t, pg_missing_t::item>::const_iterator it = m.missing.find(hoid);
+       assert(it != m.missing.end());
+       return it->second.have;
+     }
 
      virtual const map<pg_shard_t, pg_info_t> &get_shard_info() const = 0;
      virtual const pg_info_t &get_shard_info(pg_shard_t peer) const {
@@ -167,6 +173,8 @@
      virtual ObjectContextRef get_obc(
        const hobject_t &hoid,
        map<string, bufferlist> &attrs) = 0;
+
+     virtual eversion_t get_version() = 0;
 
      virtual void op_applied(
        const eversion_t &applied_version) = 0;
@@ -228,6 +236,8 @@
      virtual ceph_tid_t get_tid() = 0;
 
      virtual LogClientTemp clog_error() = 0;
+
+     virtual int continue_blocked_async_read() = 0;
 
      virtual ~Listener() {}
    };
@@ -517,8 +527,13 @@
      const hobject_t &hoid,
      ObjectStore::Transaction *t);
 
+   virtual void rollback_ec_overwrite(
+     const hobject_t &hoid,
+     version_t write_version,
+     ObjectStore::Transaction *t);
+
    /// Trim object stashed at stashed_version
-   void trim_stashed_object(
+   virtual void trim_stashed_object(
      const hobject_t &hoid,
      version_t stashed_version,
      ObjectStore::Transaction *t);
@@ -559,6 +574,10 @@
      const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete, bool fast_read = false) = 0;
+   virtual bool is_objects_read_async_block(
+     const hobject_t &hoid) {
+     return false;
+   }
 
    virtual bool scrub_supported() = 0;
    virtual bool auto_repair_supported() const = 0;

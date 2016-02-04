@@ -66,6 +66,12 @@ struct RollbackVisitor : public ObjectModDesc::Visitor {
   void update_snaps(set<snapid_t> &snaps) {
     // pass
   }
+  void ec_overwrite(version_t write_version) {
+    ObjectStore::Transaction temp;
+    pg->rollback_ec_overwrite(hoid, write_version, &temp);
+    temp.append(t);
+    temp.swap(t);
+  }
 };
 
 void PGBackend::rollback(
@@ -258,6 +264,13 @@ void PGBackend::rollback_create(
   t->remove(
     coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
+}
+
+void PGBackend::rollback_ec_overwrite(
+  const hobject_t &hoid,
+  version_t write_version,
+  ObjectStore::Transaction *t) {
+  assert(0);
 }
 
 void PGBackend::trim_stashed_object(

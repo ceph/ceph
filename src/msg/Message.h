@@ -117,6 +117,8 @@
 #define MSG_OSD_REPOP         112
 #define MSG_OSD_REPOPREPLY    113
 
+#define MSG_OSD_EC_APPLY       114
+#define MSG_OSD_EC_APPLY_REPLY 115
 
 // *** MDS ***
 

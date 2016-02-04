@@ -27,6 +27,10 @@
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "messages/MOSDECSubOpApply.h"
+#include "messages/MOSDECSubOpApplyReply.h"
+
+const string OW_KEY = "ow_key";
 
 struct RecoveryMessages;
 class ECBackend : public PGBackend {
@@ -54,10 +58,14 @@ public:
     );
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
+  friend struct SubApplyApplied;
   void sub_write_applied(
     ceph_tid_t tid, eversion_t version);
   void sub_write_committed(
     ceph_tid_t tid, eversion_t version, eversion_t last_complete);
+  void sub_apply_applied(
+    ceph_tid_t tid, eversion_t version);
+
   void handle_sub_write(
     pg_shard_t from,
     OpRequestRef msg,
@@ -77,6 +85,15 @@ public:
     pg_shard_t from,
     ECSubReadReply &op,
     RecoveryMessages *m
+    );
+  void handle_sub_apply(
+    pg_shard_t from,
+    OpRequestRef msg,
+    ECSubApply &op
+    );
+  void handle_sub_apply_reply(
+    pg_shard_t from,
+    ECSubApplyReply &op
     );
 
   /// @see ReadOp below
@@ -148,6 +165,11 @@ public:
     Context *on_complete,
     bool fast_read = false);
 
+  // indicate blocked read number by apply
+  uint64_t blocked_read_total;
+  bool blocked_read_redo;
+  bool is_objects_read_async_block(const hobject_t &hoid);
+
 private:
   friend struct ECRecoveryHandle;
   uint64_t get_recovery_chunk_size() const {
@@ -198,6 +220,7 @@ private:
     eversion_t v;
     set<pg_shard_t> missing_on;
     set<shard_id_t> missing_on_shards;
+    list<version_t> missing_on_overwrite_version;
 
     ObjectRecoveryInfo recovery_info;
     ObjectRecoveryProgress recovery_progress;
@@ -227,6 +250,7 @@ private:
 
     // must be filled if state == WRITING
     map<shard_id_t, bufferlist> returned_data;
+    map<version_t, map<shard_id_t, bufferlist> > recovery_returned_data;
     map<string, bufferlist> xattrs;
     ECUtil::HashInfoRef hinfo;
     ObjectContextRef obc;
@@ -271,10 +295,12 @@ public:
     list<
       boost::tuple<
 	uint64_t, uint64_t, map<pg_shard_t, bufferlist> > > returned;
+    list<boost::tuple<version_t, map<pg_shard_t, bufferlist> > > recovery_returned;
     read_result_t() : r(0) {}
   };
   struct read_request_t {
     const list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
+    const list<version_t> recovery_read;
     const set<pg_shard_t> need;
     const bool want_attrs;
     GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb;
@@ -285,6 +311,16 @@ public:
       bool want_attrs,
       GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb)
       : to_read(to_read), need(need), want_attrs(want_attrs),
+        cb(cb) {}
+    read_request_t(
+      const hobject_t &hoid,
+      const list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read,
+      const list<version_t> &recovery_read,
+      const set<pg_shard_t> &need,
+      bool want_attrs,
+      GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb)
+      : to_read(to_read), recovery_read(recovery_read), 
+        need(need), want_attrs(want_attrs),
 	cb(cb) {}
   };
   friend ostream &operator<<(ostream &lhs, const read_request_t &rhs);
@@ -377,6 +413,126 @@ public:
   };
   friend ostream &operator<<(ostream &lhs, const Op &rhs);
 
+  struct OverwriteInfo {
+    map<version_t, pair<uint64_t, uint64_t> > overwrite_history;
+  public:
+    // limit on unapplied overwrite max count
+    int max_count;
+    // limit on unapplied overwrite max size
+    uint64_t max_size;
+    
+    int cur_count;
+    uint64_t cur_size;
+  public:
+    OverwriteInfo(int max_count, int max_size) :
+      max_count(max_count),
+      max_size(max_size) {
+      cur_count = 0;
+      cur_size = 0U;
+    }
+
+    void init() {
+      if (cur_count == 0) {
+        for (map<version_t, pair<uint64_t, uint64_t> >::iterator i = 
+               overwrite_history.begin();
+             i != overwrite_history.end();
+             ++i) {
+          cur_count += 1;
+          cur_size += i->second.second;
+        }
+      }
+    }
+
+    void overwrite(version_t version, pair<uint64_t, uint64_t> to_write) {
+      cur_count += 1;
+      cur_size += to_write.second;
+      
+      overwrite_history.insert(
+        make_pair(
+          version, to_write));
+    }
+    bool need_apply() {
+      if (cur_count >= max_count ||
+            cur_size >= max_size) {
+        return true;
+      }
+      return false;
+    }
+    void encode(bufferlist &bl) const;
+    void decode(bufferlist::iterator &bl);
+    map<version_t, pair<uint64_t, uint64_t> >::iterator begin() {
+      return overwrite_history.begin();
+    }
+    map<version_t, pair<uint64_t, uint64_t> >::iterator end() {
+      return overwrite_history.end();
+    }
+    map<version_t, pair<uint64_t, uint64_t> >::size_type size() {
+      return overwrite_history.size();
+    }
+    void clear() {
+      overwrite_history.clear();
+      cur_count = 0;
+      cur_size = 0U;
+    }
+  };
+  typedef ceph::shared_ptr<OverwriteInfo> OverwriteInfoRef;
+
+  struct WriteOp : public Op {
+    uint64_t off;
+    uint64_t len;
+    uint32_t fadvise_flags;
+    bufferlist bl;
+    uint64_t append_off;
+
+    set<pg_shard_t> missing_on;
+    set<shard_id_t> missing_on_shards;
+
+    ObjectRecoveryInfo recovery_info;
+    ObjectRecoveryProgress recovery_progress;
+
+    bool pending_read;
+    enum state_t { IDLE, READING, WRITING, COMPLETE } state;
+
+    static const char* tostr(state_t state) {
+      switch (state) {
+      case ECBackend::WriteOp::IDLE:
+        return "IDLE";
+        break;
+      case ECBackend::WriteOp::READING:
+        return "READING";
+        break;
+      case ECBackend::WriteOp::WRITING:
+        return "WRITING";
+        break;
+      case ECBackend::WriteOp::COMPLETE:
+        return "COMPLETE";
+        break;
+      default:
+        assert(0);
+        return "";
+      }
+    }
+
+    // must be filled if state == WRITING
+    // map<shard_id_t, bufferlist> returned_data;
+    bufferlist returned_data;
+    map<string, bufferlist> xattrs;
+    ECUtil::HashInfoRef hinfo;
+    ObjectContextRef obc;
+    set<pg_shard_t> waiting_on_pushes;
+
+    // valid in state READING
+    pair<uint64_t, uint64_t> extent_requested;
+
+    // overwrite info
+    OverwriteInfoRef overwrite_info;
+
+    void dump(Formatter *f) const;
+
+    WriteOp() : pending_read(false), state(IDLE) {}
+  };
+  friend ostream &operator<<(ostream &lhs, const WriteOp &rhs);
+
   void continue_recovery_op(
     RecoveryOp &op,
     RecoveryMessages *m);
@@ -387,6 +543,7 @@ public:
     const hobject_t &hoid,
     boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
     boost::optional<map<string, bufferlist> > attrs,
+    list<boost::tuple<version_t, map<pg_shard_t, bufferlist> > > &recovery_read,
     RecoveryMessages *m);
   void handle_recovery_push(
     PushOp &op,
@@ -462,6 +619,54 @@ public:
   friend struct ReadCB;
   void check_op(Op *op);
   void start_write(Op *op);
+
+  friend struct OnOverwriteReadComplete;
+  void continue_write_op(Op *op);
+  void handle_write_read_complete(
+    const hobject_t &hoid,
+    boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
+    boost::optional<map<string, bufferlist> > attrs,
+    RecoveryMessages *m);
+
+  map<ceph_tid_t, WriteOp> tid_to_overwrite_map;
+  // keep the tid util write apply
+  map<hobject_t, ceph_tid_t, hobject_t::BitwiseComparator> in_progress_write_tid;
+  // keep the op util write submit
+  list<Op*> pending_op;
+  void write_submit_done(Op *op);
+  void continue_next_op(const hobject_t last_hoid);
+  void continue_next_op() {
+    continue_next_op(hobject_t());
+  }
+  void update_op_version(Op *op) {
+    // update the write version
+    eversion_t now_e = get_parent()->get_version();
+    // update op version, used for ECSubWrite apply
+    op->version = now_e;
+    // update pg log version
+    for (vector<pg_log_entry_t>::iterator i = op->log_entries.begin();
+         i != op->log_entries.end(); ++i) {
+      i->version = now_e;
+    }
+  }
+
+  // history overwrite
+  SharedPtrRegistry<hobject_t, OverwriteInfo, hobject_t::BitwiseComparator> overwrite_info_registry;
+  OverwriteInfoRef get_overwrite_info(const hobject_t &hoid,
+                                      const version_t version = ghobject_t::NO_GEN);
+  
+  struct ObjectApplyProgress {
+    hobject_t hoid;
+    set<pg_shard_t> pending_apply;
+  };
+  
+  // apply
+  void start_apply_op(const hobject_t &hoid, eversion_t prev_version);
+  map<ceph_tid_t, ObjectApplyProgress> tid_to_apply_map;
+  map<hobject_t, ceph_tid_t, hobject_t::BitwiseComparator> in_progress_apply_tid;
+  map<hobject_t, eversion_t, hobject_t::BitwiseComparator> to_apply;
+  map<hobject_t, int, hobject_t::BitwiseComparator> blocked_read_num;
+
 public:
   ECBackend(
     PGBackend::Listener *pg,
@@ -495,6 +700,16 @@ public:
     uint64_t old_size,
     ObjectStore::Transaction *t);
 
+  void rollback_ec_overwrite(
+    const hobject_t &hoid,
+    version_t write_version,
+    ObjectStore::Transaction *t);
+
+  void trim_stashed_object(
+    const hobject_t &hoid,
+    version_t old_version,
+    ObjectStore::Transaction *t);
+
   bool scrub_supported() { return true; }
   bool auto_repair_supported() const { return true; }
 
@@ -507,5 +722,6 @@ public:
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
 };
+WRITE_CLASS_ENCODER(ECBackend::OverwriteInfo);
 
 #endif

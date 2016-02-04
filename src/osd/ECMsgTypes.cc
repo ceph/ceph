@@ -175,11 +175,13 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   ::encode(from, bl);
   ::encode(tid, bl);
   ::encode(to_read, bl);
   ::encode(attrs_to_read, bl);
+  ::encode(recovery_read, bl);
+  ::encode(for_recovery, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -204,6 +206,10 @@ void ECSubRead::decode(bufferlist::iterator &bl)
     ::decode(to_read, bl);
   }
   ::decode(attrs_to_read, bl);
+  if (struct_v >= 3) {
+    ::decode(recovery_read, bl);
+    ::decode(for_recovery, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -276,23 +282,26 @@ void ECSubRead::generate_test_instances(list<ECSubRead*>& o)
 
 void ECSubReadReply::encode(bufferlist &bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(from, bl);
   ::encode(tid, bl);
   ::encode(buffers_read, bl);
   ::encode(attrs_read, bl);
   ::encode(errors, bl);
+  ::encode(recovery_buffers_read, bl);
   ENCODE_FINISH(bl);
 }
 
 void ECSubReadReply::decode(bufferlist::iterator &bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   ::decode(from, bl);
   ::decode(tid, bl);
   ::decode(buffers_read, bl);
   ::decode(attrs_read, bl);
   ::decode(errors, bl);
+  if (struct_v >= 2)
+    ::decode(recovery_buffers_read, bl);
   DECODE_FINISH(bl);
 }
 
@@ -387,4 +396,79 @@ void ECSubReadReply::generate_test_instances(list<ECSubReadReply*>& o)
   o.back()->attrs_read[hoid2]["foo"] = bl;
   o.back()->attrs_read[hoid2]["_"] = bl2;
   o.back()->errors[hoid1] = -2;
+}
+
+void ECSubApply::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(from, bl);
+  ::encode(tid, bl);
+  ::encode(hoid, bl);
+  ::encode(t, bl);
+  ::encode(log_entries, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ECSubApply::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(from, bl);
+  ::decode(tid, bl);
+  ::decode(hoid, bl);
+  ::decode(t, bl);
+  ::decode(log_entries, bl);
+  DECODE_FINISH(bl);
+}
+
+std::ostream &operator<<(
+  std::ostream &lhs, const ECSubApply &rhs)
+{
+  return lhs
+    << "ECSubApply(tid=" << rhs.tid
+    << ")";
+}
+
+void ECSubApply::dump(Formatter *f) const
+{
+
+}
+
+void ECSubApply::generate_test_instances(list<ECSubApply*>& o)
+{
+
+}
+
+
+void ECSubApplyReply::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(from, bl);
+  ::encode(tid, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ECSubApplyReply::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(from, bl);
+  ::decode(tid, bl);
+  DECODE_FINISH(bl);
+}
+
+std::ostream &operator<<(
+  std::ostream &lhs, const ECSubApplyReply &rhs)
+{
+  return lhs
+    << "ECSubApplyReply(tid=" << rhs.tid
+    << " from=" << rhs.from << ")";
+}
+
+void ECSubApplyReply::dump(Formatter *f) const
+{
+
+}
+
+void ECSubApplyReply::generate_test_instances(list<ECSubApplyReply*>& o)
+{
+
 }
