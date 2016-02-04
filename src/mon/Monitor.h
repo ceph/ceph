@@ -964,7 +964,6 @@ public:
 					  bufferlist *rdata);
   void get_locally_supported_monitor_commands(const MonCommand **cmds, int *count);
   void get_classic_monitor_commands(const MonCommand **cmds, int *count);
-  void get_leader_supported_commands(const MonCommand **cmds, int *count);
   /// the Monitor owns this pointer once you pass it in
   void set_leader_supported_commands(const MonCommand *cmds, int size);
   static bool is_keyring_required();
