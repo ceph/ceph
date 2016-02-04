@@ -3472,19 +3472,19 @@ BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
 }
 
 void BlueStore::_txc_release(
-  TransContext *txc, CollectionRef& c, EnodeRef& e, uint32_t hash,
+  TransContext *txc, CollectionRef& c, OnodeRef& o,
   uint64_t offset, uint64_t length,
   bool shared)
 {
   if (shared) {
     vector<bluestore_extent_t> release;
-    if (!e)
-      e = c->get_enode(hash);
-    e->ref_map.put(offset, length, &release);
+    if (!o->enode)
+      o->enode = c->get_enode(o->oid.hobj.get_hash());
+    o->enode->ref_map.put(offset, length, &release);
     dout(10) << __func__ << " " << offset << "~" << length
-	     << " shared: ref_map now " << e->ref_map
+	     << " shared: ref_map now " << o->enode->ref_map
 	     << " releasing " << release << dendl;
-    txc->write_enode(e);
+    txc->write_enode(o->enode);
     for (auto& p : release) {
       txc->released.insert(p.offset, p.length);
     }
@@ -5143,7 +5143,6 @@ int BlueStore::_do_allocate(
     }
 
     // deallocate existing extents
-    EnodeRef enode;
     bp = o->onode.seek_extent(offset);
     while (bp != o->onode.block_map.end() &&
 	   bp->first < offset + length &&
@@ -5154,7 +5153,7 @@ int BlueStore::_do_allocate(
 	if (bp->first + bp->second.length <= offset + length) {
 	  dout(20) << "  trim tail " << bp->first << ": " << bp->second << dendl;
 	  _txc_release(
-	    txc, c, enode, o->oid.hobj.get_hash(),
+	    txc, c, o,
 	    bp->second.offset + left,
 	    bp->second.length - left,
 	    bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
@@ -5165,7 +5164,7 @@ int BlueStore::_do_allocate(
 	} else {
 	  dout(20) << "      split " << bp->first << ": " << bp->second << dendl;
 	  _txc_release(
-	    txc, c, enode, o->oid.hobj.get_hash(),
+	    txc, c, o,
 	    bp->second.offset + left, length,
 	    bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
 	  o->onode.block_map[offset + length] =
@@ -5187,7 +5186,7 @@ int BlueStore::_do_allocate(
 	  dout(20) << "  trim head " << bp->first << ": " << bp->second
 		   << " (overlap " << overlap << ")" << dendl;
 	  _txc_release(
-	    txc, c, enode, o->oid.hobj.get_hash(),
+	    txc, c, o,
 	    bp->second.offset, overlap,
 	    bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
 	  o->onode.block_map[bp->first + overlap] =
@@ -5202,7 +5201,7 @@ int BlueStore::_do_allocate(
 	} else {
 	  dout(20) << "    dealloc " << bp->first << ": " << bp->second << dendl;
 	  _txc_release(
-	    txc, c, enode, o->oid.hobj.get_hash(),
+	    txc, c, o,
 	    bp->second.offset, bp->second.length,
 	    bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
 	  hint = bp->first + bp->second.length;
@@ -5617,7 +5616,6 @@ int BlueStore::_zero(TransContext *txc,
   int r = 0;
   o->exists = true;
 
-  EnodeRef enode;
   _dump_onode(o);
   _assign_nid(txc, o);
 
@@ -5655,7 +5653,7 @@ int BlueStore::_zero(TransContext *txc,
       dout(20) << __func__ << " dealloc " << bp->first << ": "
 	       << bp->second << dendl;
       _txc_release(
-	txc, c, enode, o->oid.hobj.get_hash(),
+	txc, c, o,
 	bp->second.offset, bp->second.length,
 	bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
       o->onode.block_map.erase(bp++);
@@ -5711,7 +5709,6 @@ int BlueStore::_do_truncate(
   uint64_t block_size = bdev->get_block_size();
   uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
   uint64_t alloc_end = ROUND_UP_TO(offset, min_alloc_size);
-  EnodeRef enode;
 
   // ensure any wal IO has completed before we truncate off any extents
   // they may touch.
@@ -5737,7 +5734,7 @@ int BlueStore::_do_truncate(
       dout(20) << __func__ << " dealloc " << bp->first << ": "
 	       << bp->second << dendl;
       _txc_release(
-	txc, c, enode, o->oid.hobj.get_hash(),
+	txc, c, o,
 	bp->second.offset, bp->second.length,
 	bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
       if (bp != o->onode.block_map.begin()) {
@@ -5755,7 +5752,7 @@ int BlueStore::_do_truncate(
       dout(20) << __func__ << " trunc " << bp->first << ": " << bp->second
 	       << " to " << newlen << dendl;
       _txc_release(
-	txc, c, enode, o->oid.hobj.get_hash(),
+	txc, c, o,
 	bp->second.offset + newlen, bp->second.length - newlen,
 	bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
       bp->second.length = newlen;
@@ -6170,6 +6167,7 @@ int BlueStore::_clone(TransContext *txc,
 	     << e->ref_map << dendl;
     newo->onode.block_map = oldo->onode.block_map;
     newo->onode.size = oldo->onode.size;
+    newo->enode = e;
     dout(20) << __func__ << " block_map " << newo->onode.block_map << dendl;
     txc->write_enode(e);
     if (marked)
