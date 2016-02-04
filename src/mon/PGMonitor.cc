@@ -2136,7 +2136,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
     if (p->first & PG_STATE_INCOMPLETE)
       note["incomplete"] += p->second;
     if (p->first & PG_STATE_BACKFILL_WAIT)
-      note["backfill"] += p->second;
+      note["backfill_wait"] += p->second;
     if (p->first & PG_STATE_BACKFILL)
       note["backfilling"] += p->second;
     if (p->first & PG_STATE_BACKFILL_TOOFULL)
