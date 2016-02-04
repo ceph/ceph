@@ -157,7 +157,7 @@ int MemStore::_load()
     int r = cbl.read_file(fn.c_str(), &err);
     if (r < 0)
       return r;
-    CollectionRef c(new Collection(cct));
+    CollectionRef c(new Collection(cct, *q));
     bufferlist::iterator p = cbl.begin();
     c->decode(p);
     coll_map[*q] = c;
@@ -466,6 +466,8 @@ int MemStore::collection_list(const coll_t& cid, ghobject_t start, ghobject_t en
     return -ENOENT;
   RWLock::RLocker l(c->lock);
 
+  dout(10) << __func__ << " cid " << cid << " start " << start
+	   << " end " << end << dendl;
   map<ghobject_t,ObjectRef,ghobject_t::BitwiseComparator>::iterator p = c->object_map.lower_bound(start);
   while (p != c->object_map.end() &&
 	 ls->size() < (unsigned)max &&
@@ -479,6 +481,7 @@ int MemStore::collection_list(const coll_t& cid, ghobject_t start, ghobject_t en
     else
       *next = p->first;
   }
+  dout(10) << __func__ << " cid " << cid << " got " << ls->size() << dendl;
   return 0;
 }
 
@@ -1281,7 +1284,7 @@ int MemStore::_create_collection(const coll_t& cid)
   auto result = coll_map.insert(std::make_pair(cid, CollectionRef()));
   if (!result.second)
     return -EEXIST;
-  result.first->second.reset(new Collection(cct));
+  result.first->second.reset(new Collection(cct, cid));
   return 0;
 }
 
