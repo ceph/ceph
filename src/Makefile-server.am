@@ -1,4 +1,4 @@
-ceph_sbin_SCRIPTS = ceph-create-keys
+ceph_sbin_SCRIPTS = ceph-create-keys ceph-custom-daemon
 
 bin_SCRIPTS += \
 	ceph-run \

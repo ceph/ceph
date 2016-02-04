@@ -1,0 +1,43 @@
+#!/bin/bash
+#
+# Wrapping script to call CEPH daemons with %clustername.%daemonid
+# i.e. mycluster.mon1, joecluster.2 or maryclustername.mds3
+#
+# If cluster name is omitted "ceph" suggested
+#
+usage() {
+	echo "Usage: ceph-custom-daemon <daemon> [<cluster>.]<id> [ <daemon-options> ]"
+	echo "	<daemon> ::= mon | mds | osd | create-keys | radosgw"
+	exit 1
+}
+
+if [ "$1" != "mon" -a "$1" != "osd" -a "$1" != "mds" -a "$1" != "create-keys" -a "$1" != "radosgw" -o -z "$2" ] ; then
+	usage
+	exit 1
+fi
+
+case "$1" in
+	mon) binary=ceph-mon ;;
+	mds) binary=ceph-mds ;;
+	osd) binary=ceph-osd ;;
+	create-keys) binary=ceph-create-keys ;;
+	radosgw) binary=radosgw ;;
+esac
+
+if echo "$2" | grep -q "\." ; then
+	cluster=`echo $2 | cut -f 1 -d .`
+	objid=`echo $2 | cut -f 2 -d .`
+else
+	cluster=ceph
+	objid="$2"
+fi
+shift 2
+
+if [ "$binary" = "ceph-create-keys" ] ; then
+	if [ -f /var/lib/ceph/bootstrap-mds/$cluster.keyring ] ; then
+		echo "Keys for cluster $cluster already exists, won't rewrite"
+		exit 0
+	fi
+fi
+
+exec $binary --cluster ${cluster} --id $objid $@

@@ -120,6 +120,8 @@ EXTRA_DIST += \
 EXTRA_DIST += \
 	unittest_bufferlist.sh
 
+EXTRA_DIST += \
+	ceph-custom-daemon
 
 # work around old versions of automake that don't define $docdir
 # NOTE: this won't work on suse, where docdir is /usr/share/doc/packages/$package.

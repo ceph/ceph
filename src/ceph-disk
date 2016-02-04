@@ -2132,18 +2132,22 @@ def start_daemon(
                     ],
                 )
         elif os.path.exists(os.path.join(path, 'systemd')):
-            command_check_call(
-                [
-                    'systemctl',
-                    'enable',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
-                    ],
-                )
+#
+#            We don't need to enable because systemd will use ceph-osd@.service file
+#
+#            command_check_call(
+#                [
+#                    'systemctl',
+#                    'enable',
+#                    'ceph-osd@{cluster}.{osd_id}'.format(cluster=cluster,osd_id=osd_id),
+#                    ],
+#                )
+#
             command_check_call(
                 [
                     'systemctl',
                     'start',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+                    'ceph-osd@{cluster}.{osd_id}'.format(cluster=cluster,osd_id=osd_id),
                     ],
                 )
         else:

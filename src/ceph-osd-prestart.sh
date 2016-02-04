@@ -1,14 +1,25 @@
 #!/bin/sh
 
-eval set -- "$(getopt -o i: --long id:,cluster: -- $@)"
+eval set -- "$(getopt -o i: --long id:,cluster:,node:,setuser:,setgroup: -- $@)"
 
-while true ; do
+while [ "$1" != "" ] ; do
 	case "$1" in
-		-i|--id) id=$2; shift 2 ;;
-		--cluster) cluster=$2; shift 2 ;;
-		--) shift ; break ;;
+		-i|--id) id=$2; shift ;;
+		--cluster) cluster=$2; shift ;;
+		--node) node=$2 ; shift ;;
 	esac
+	shift
 done
+
+if [ "$id" = "" ] ; then
+	if echo "$node" | grep -q "\." ; then
+		cluster=`echo "$node" | cut -f 1 -d "."`
+		id=`echo "$node" | cut -f 2 -d "."`
+	else
+		id="$node"
+		cluster="ceph"
+	fi
+fi
 
 if [ -z "$id"  ]; then
     echo "Usage: $0 [OPTIONS]"
