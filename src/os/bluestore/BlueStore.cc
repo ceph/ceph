@@ -495,7 +495,7 @@ void BlueStore::OnodeHashLRU::add(const ghobject_t& oid, OnodeRef o)
   dout(30) << __func__ << " " << oid << " " << o << dendl;
   assert(onode_map.count(oid) == 0);
   onode_map[oid] = o;
-  lru.push_back(*o);
+  lru.push_front(*o);
 }
 
 BlueStore::OnodeRef BlueStore::OnodeHashLRU::lookup(const ghobject_t& oid)
