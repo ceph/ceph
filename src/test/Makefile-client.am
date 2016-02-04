@@ -29,6 +29,8 @@ endif
 
 bin_PROGRAMS += ceph-dencoder
 
+noinst_HEADERS += \
+	test/encoding/test_ceph_time.h
 
 if WITH_RADOS
 
