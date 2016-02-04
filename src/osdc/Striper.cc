@@ -369,9 +369,7 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct,
     size_t len = p->second.first.length();
     if (len < p->second.second) {
       if (zero_tail || bl.length()) {
-	bufferptr bp(p->second.second - len);
-	bp.zero();
-	bl.push_front(bp);
+	bl.append_zero(p->second.second - len);
 	bl.claim_prepend(p->second.first);
       } else {
 	bl.claim_prepend(p->second.first);

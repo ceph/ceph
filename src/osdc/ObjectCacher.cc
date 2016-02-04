@@ -724,12 +724,10 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 		<< dendl;
 
   if (r >= 0 && bl.length() < length) {
-    bufferptr bp(length - bl.length());
-    bp.zero();
     ldout(cct, 7) << "bh_read_finish " << oid << " padding " << start << "~"
-		  << length << " with " << bp.length() << " bytes of zeroes"
+		  << length << " with " << length - bl.length() << " bytes of zeroes"
 		  << dendl;
-    bl.push_back(bp);
+    bl.append_zero(length - bl.length());
   }
 
   list<Context*> ls;
@@ -1459,9 +1457,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  // put substr here first, since substr_of clobbers, and we
 	  // may get multiple bh's at this stripe_map position
 	  if (bh->is_zero()) {
-	    bufferptr bp(len);
-	    bp.zero();
-	    stripe_map[f_it->first].push_back(bp);
+	    stripe_map[f_it->first].append_zero(len);
 	  } else {
 	    bit.substr_of(bh->bl,
 		opos - bh->start(),

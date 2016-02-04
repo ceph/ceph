@@ -1164,7 +1164,7 @@ int FileStore::read_superblock()
   }
 
   bufferlist bl;
-  bl.push_back(bp);
+  bl.push_back(std::move(bp));
   bufferlist::iterator i = bl.begin();
   ::decode(superblock, i);
   return 0;
@@ -1186,7 +1186,7 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
     return ret;
   }
   bufferlist bl;
-  bl.push_back(bp);
+  bl.push_back(std::move(bp));
   bufferlist::iterator i = bl.begin();
   ::decode(*version, i);
   dout(10) << __func__ << " was " << *version << " vs target "
@@ -2969,7 +2969,7 @@ int FileStore::read(
     return got;
   }
   bptr.set_length(got);   // properly size the buffer
-  bl.push_back(bptr);   // put it in the target bufferlist
+  bl.push_back(std::move(bptr));   // put it in the target bufferlist
 
 #ifdef HAVE_POSIX_FADVISE
   if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED)
@@ -3278,10 +3278,8 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
   // write zeros.. yuck!
   dout(20) << "zero FALLOC_FL_PUNCH_HOLE not supported, falling back to writing zeros" << dendl;
   {
-    bufferptr bp(len);
-    bp.zero();
     bufferlist bl;
-    bl.push_back(bp);
+    bl.append_zero(len);
     ret = _write(cid, oid, offset, len, bl);
   }
 
@@ -4421,7 +4419,7 @@ int FileStore::collection_getattr(const coll_t& c, const char *name, bufferlist&
     goto out;
   }
   r = _fgetattr(fd, n, bp);
-  bl.push_back(bp);
+  bl.push_back(std::move(bp));
   VOID_TEMP_FAILURE_RETRY(::close(fd));
  out:
   dout(10) << "collection_getattr " << fn << " '" << name << "' = " << r << dendl;
