@@ -218,6 +218,12 @@ which are as follows:
 :command:`replicalog delete`
   Delete replica metadata log entry.
 
+:command:`orphans find`
+  Init and run search for leaked rados objects
+
+:command:`orphans finish`
+  Clean up search for leaked rados objects
+
 
 Options
 =======
@@ -399,6 +405,18 @@ Quota Options
 .. option:: --quota-scope
 
 	Scope of quota (bucket, user).
+
+
+Orphans Search Options
+======================
+
+.. option:: --pool
+
+	Data pool to scan for leaked rados objects
+
+.. option:: --num-shards
+
+	Number of shards to use for keeping the temporary scan info
 
 
 Examples
