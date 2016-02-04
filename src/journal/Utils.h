@@ -11,6 +11,13 @@
 namespace journal {
 namespace utils {
 
+template <typename T, void(T::*MF)(int)>
+void rados_state_callback(rados_completion_t c, void *arg) {
+  T *obj = reinterpret_cast<T*>(arg);
+  int r = rados_aio_get_return_value(c);
+  (obj->*MF)(r);
+}
+
 std::string get_object_name(const std::string &prefix, uint64_t number);
 
 std::string unique_lock_name(const std::string &name, void *address);

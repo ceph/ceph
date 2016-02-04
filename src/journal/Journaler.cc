@@ -167,6 +167,21 @@ int Journaler::unregister_client() {
   return m_metadata->unregister_client();
 }
 
+void Journaler::allocate_tag(const bufferlist &data, cls::journal::Tag *tag,
+                             Context *on_finish) {
+  m_metadata->allocate_tag(cls::journal::Tag::TAG_CLASS_NEW, data, tag,
+                           on_finish);
+}
+
+void Journaler::allocate_tag(uint64_t tag_class, const bufferlist &data,
+                             cls::journal::Tag *tag, Context *on_finish) {
+  m_metadata->allocate_tag(tag_class, data, tag, on_finish);
+}
+
+void Journaler::get_tags(uint64_t tag_class, Tags *tags, Context *on_finish) {
+  m_metadata->get_tags(tag_class, tags, on_finish);
+}
+
 void Journaler::start_replay(ReplayHandler *replay_handler) {
   create_player(replay_handler);
   m_player->prefetch();
