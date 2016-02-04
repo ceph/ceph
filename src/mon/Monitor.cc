@@ -2536,11 +2536,6 @@ void Monitor::get_locally_supported_monitor_commands(const MonCommand **cmds,
   *cmds = mon_commands;
   *count = ARRAY_SIZE(mon_commands);
 }
-void Monitor::get_leader_supported_commands(const MonCommand **cmds, int *count)
-{
-  *cmds = leader_supported_mon_commands;
-  *count = leader_supported_mon_commands_size;
-}
 void Monitor::get_classic_monitor_commands(const MonCommand **cmds, int *count)
 {
   *cmds = classic_mon_commands;
