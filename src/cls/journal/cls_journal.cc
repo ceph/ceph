@@ -496,7 +496,7 @@ int journal_set_active_set(cls_method_context_t hctx, bufferlist *in,
 /**
  * Input:
  * @param id (string) - unique client id
- * @param description (string) - human-readable description of the client
+ * @param data (bufferlist) - opaque data associated to client
  *
  * Output:
  * @returns 0 on success, negative error code on failure
@@ -504,11 +504,11 @@ int journal_set_active_set(cls_method_context_t hctx, bufferlist *in,
 int journal_client_register(cls_method_context_t hctx, bufferlist *in,
                             bufferlist *out) {
   std::string id;
-  std::string description;
+  bufferlist data;
   try {
     bufferlist::iterator iter = in->begin();
     ::decode(id, iter);
-    ::decode(description, iter);
+    ::decode(data, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -522,7 +522,7 @@ int journal_client_register(cls_method_context_t hctx, bufferlist *in,
     return -EEXIST;
   }
 
-  cls::journal::Client client(id, description);
+  cls::journal::Client client(id, data);
   key = key_from_client_id(id);
   r = write_key(hctx, key, client);
   if (r < 0) {

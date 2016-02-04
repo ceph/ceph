@@ -116,7 +116,7 @@ struct MockJournalerProxy {
   int remove(bool force) {
     return -EINVAL;
   }
-  int register_client(const std::string &description) {
+  int register_client(const bufferlist &data) {
     return -EINVAL;
   }
 

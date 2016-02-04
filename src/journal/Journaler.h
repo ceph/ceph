@@ -42,7 +42,7 @@ public:
   void init(Context *on_init);
   void shutdown();
 
-  int register_client(const std::string &description);
+  int register_client(const bufferlist &data);
   int unregister_client();
 
   void start_replay(ReplayHandler *replay_handler);

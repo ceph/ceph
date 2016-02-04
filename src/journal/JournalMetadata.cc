@@ -133,9 +133,9 @@ void JournalMetadata::shutdown() {
   m_ioctx.aio_flush();
 }
 
-int JournalMetadata::register_client(const std::string &description) {
+int JournalMetadata::register_client(const bufferlist &data) {
   ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
-  int r = client::client_register(m_ioctx, m_oid, m_client_id, description);
+  int r = client::client_register(m_ioctx, m_oid, m_client_id, data);
   if (r < 0) {
     lderr(m_cct) << "failed to register journal client '" << m_client_id
                  << "': " << cpp_strerror(r) << dendl;
@@ -315,7 +315,7 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
   if (r == 0) {
     Mutex::Locker locker(m_lock);
 
-    Client client(m_client_id, "");
+    Client client(m_client_id, bufferlist());
     RegisteredClients::iterator it = refresh->registered_clients.find(client);
     if (it != refresh->registered_clients.end()) {
       m_minimum_set = refresh->minimum_set;

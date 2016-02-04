@@ -23,12 +23,6 @@ namespace librbd {
 using util::create_async_context_callback;
 using util::create_context_callback;
 
-namespace {
-
-const std::string CLIENT_DESCRIPTION = "master image";
-
-} // anonymous namespace
-
 template <typename I>
 std::ostream &operator<<(std::ostream &os,
                          const typename Journal<I>::State &state) {
@@ -125,7 +119,8 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
     return r;
   }
 
-  r = journaler.register_client(CLIENT_DESCRIPTION);
+  // TODO register with librbd payload
+  r = journaler.register_client(bufferlist());
   if (r < 0) {
     lderr(cct) << "failed to register client: " << cpp_strerror(r) << dendl;
     return r;
@@ -200,7 +195,7 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
     lderr(cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
     return r;
   }
-  r = journaler.register_client(CLIENT_DESCRIPTION);
+  r = journaler.register_client(bufferlist());
   if (r < 0) {
     lderr(cct) << "failed to register client: " << cpp_strerror(r) << dendl;
     return r;

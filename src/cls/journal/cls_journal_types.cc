@@ -66,7 +66,7 @@ void ObjectSetPosition::generate_test_instances(
 void Client::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
   ::encode(id, bl);
-  ::encode(description, bl);
+  ::encode(data, bl);
   ::encode(commit_position, bl);
   ENCODE_FINISH(bl);
 }
@@ -74,14 +74,17 @@ void Client::encode(bufferlist& bl) const {
 void Client::decode(bufferlist::iterator& iter) {
   DECODE_START(1, iter);
   ::decode(id, iter);
-  ::decode(description, iter);
+  ::decode(data, iter);
   ::decode(commit_position, iter);
   DECODE_FINISH(iter);
 }
 
 void Client::dump(Formatter *f) const {
   f->dump_string("id", id);
-  f->dump_string("description", description);
+
+  std::stringstream data_ss;
+  data.hexdump(data_ss);
+  f->dump_string("data", data_ss.str());
 
   f->open_object_section("commit_position");
   commit_position.dump(f);
@@ -89,9 +92,12 @@ void Client::dump(Formatter *f) const {
 }
 
 void Client::generate_test_instances(std::list<Client *> &o) {
+  bufferlist data;
+  data.append(std::string('1', 128));
+
   o.push_back(new Client());
-  o.push_back(new Client("id", "desc"));
-  o.push_back(new Client("id", "desc", {1, {{1, 120}, {2, 121}}}));
+  o.push_back(new Client("id", data));
+  o.push_back(new Client("id", data, {1, {{1, 120}, {2, 121}}}));
 }
 
 void Tag::encode(bufferlist& bl) const {
@@ -149,7 +155,9 @@ std::ostream &operator<<(std::ostream &os,
 
 std::ostream &operator<<(std::ostream &os, const Client &client) {
   os << "[id=" << client.id << ", "
-     << "description=" << client.description << ", "
+     << "data=";
+  client.data.hexdump(os);
+  os << ", "
      << "commit_position=" << client.commit_position << "]";
   return os;
 }

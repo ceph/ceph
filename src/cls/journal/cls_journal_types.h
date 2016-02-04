@@ -70,17 +70,17 @@ struct ObjectSetPosition {
 
 struct Client {
   std::string id;
-  std::string description;
+  bufferlist data;
   ObjectSetPosition commit_position;
 
   Client() {}
-  Client(const std::string& _id, const std::string& _description,
+  Client(const std::string& _id, const bufferlist &_data,
          const ObjectSetPosition &_commit_position = ObjectSetPosition())
-    : id(_id), description(_description), commit_position(_commit_position) {}
+    : id(_id), data(_data), commit_position(_commit_position) {}
 
   inline bool operator==(const Client &rhs) const {
     return (id == rhs.id &&
-            description == rhs.description &&
+            data.contents_equal(rhs.data) &&
             commit_position == rhs.commit_position);
   }
   inline bool operator<(const Client &rhs) const {

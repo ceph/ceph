@@ -52,7 +52,9 @@ int RadosTestFixture::append(const std::string &oid, const bufferlist &bl) {
 int RadosTestFixture::client_register(const std::string &oid,
                                       const std::string &id,
                                       const std::string &description) {
-  return cls::journal::client::client_register(m_ioctx, oid, id, description);
+  bufferlist data;
+  data.append(description);
+  return cls::journal::client::client_register(m_ioctx, oid, id, data);
 }
 
 int RadosTestFixture::client_commit(const std::string &oid,

@@ -51,7 +51,7 @@ public:
   void add_listener(Listener *listener);
   void remove_listener(Listener *listener);
 
-  int register_client(const std::string &description);
+  int register_client(const bufferlist &data);
   int unregister_client();
 
   inline const std::string &get_client_id() const {
