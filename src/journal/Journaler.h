@@ -9,8 +9,10 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "journal/Future.h"
-#include <string>
+#include "cls/journal/cls_journal_types.h"
+#include <list>
 #include <map>
+#include <string>
 #include "include/assert.h"
 
 class SafeTimer;
@@ -26,6 +28,7 @@ class ReplayHandler;
 
 class Journaler {
 public:
+  typedef std::list<cls::journal::Tag> Tags;
 
   static std::string header_oid(const std::string &journal_id);
   static std::string object_oid_prefix(int pool_id,
@@ -44,6 +47,12 @@ public:
 
   int register_client(const bufferlist &data);
   int unregister_client();
+
+  void allocate_tag(const bufferlist &data, cls::journal::Tag *tag,
+                    Context *on_finish);
+  void allocate_tag(uint64_t tag_class, const bufferlist &data,
+                    cls::journal::Tag *tag, Context *on_finish);
+  void get_tags(uint64_t tag_class, Tags *tags, Context *on_finish);
 
   void start_replay(ReplayHandler *replay_handler);
   void start_live_replay(ReplayHandler *replay_handler, double interval);

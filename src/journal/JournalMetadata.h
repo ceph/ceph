@@ -14,6 +14,7 @@
 #include "journal/AsyncOpTracker.h"
 #include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
+#include <boost/optional.hpp>
 #include <list>
 #include <map>
 #include <string>
@@ -33,8 +34,10 @@ public:
   typedef cls::journal::EntryPositions EntryPositions;
   typedef cls::journal::ObjectSetPosition ObjectSetPosition;
   typedef cls::journal::Client Client;
+  typedef cls::journal::Tag Tag;
 
   typedef std::set<Client> RegisteredClients;
+  typedef std::list<Tag> Tags;
 
   struct Listener {
     virtual ~Listener() {};
@@ -53,6 +56,11 @@ public:
 
   int register_client(const bufferlist &data);
   int unregister_client();
+
+  void allocate_tag(uint64_t tag_class, const bufferlist &data,
+                    Tag *tag, Context *on_finish);
+  void get_tags(const boost::optional<uint64_t> &tag_class, Tags *tags,
+                Context *on_finish);
 
   inline const std::string &get_client_id() const {
     return m_client_id;
