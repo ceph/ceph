@@ -59,6 +59,22 @@ void ceph_heap_release_free_memory()
   MallocExtension::instance()->ReleaseFreeMemory();
 }
 
+bool ceph_heap_get_numeric_property(
+  const char *property, size_t *value)
+{
+  return MallocExtension::instance()->GetNumericProperty(
+    property,
+    value);
+}
+
+bool ceph_heap_set_numeric_property(
+  const char *property, size_t value)
+{
+  return MallocExtension::instance()->SetNumericProperty(
+    property,
+    value);
+}
+
 bool ceph_heap_profiler_running()
 {
 #ifdef HAVE_LIBTCMALLOC
