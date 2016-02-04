@@ -139,7 +139,7 @@ public:
 
     char *s = (char *)ptr, *end = (char *)ptr + len;
     char *p = line;
-    ldout(cct, 10) << "read_http_header" << dendl;
+    ldout(cct, 20) << "RGWPostHTTPData::receive_header parsing HTTP headers" << dendl;
 
     while (s != end) {
       if (*s == '\r') {
@@ -148,7 +148,8 @@ public:
       }
       if (*s == '\n') {
         *p = '\0';
-        ldout(cct, 10) << "os_auth:" << line << dendl;
+        ldout(cct, 20) << "RGWPostHTTPData::receive_header: line="
+                       << line << dendl;
         // TODO: fill whatever data required here
         char *l = line;
         char *tok = strsep(&l, " \t:");
