@@ -586,8 +586,7 @@ private:
   void _dump_onode(OnodeRef o);
 
   TransContext *_txc_create(OpSequencer *osr);
-  void _txc_release(TransContext *txc, CollectionRef& c,
-		    EnodeRef& enode, uint32_t hash,
+  void _txc_release(TransContext *txc, CollectionRef& c, OnodeRef& onode,
 		    uint64_t offset, uint64_t length,
 		    bool shared);
   int _txc_add_transaction(TransContext *txc, Transaction *t);
