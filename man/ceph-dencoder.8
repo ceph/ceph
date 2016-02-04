@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "CEPH-DENCODER" "8" "January 12, 2014" "dev" "Ceph"
+.TH "CEPH-DENCODER" "8" "February 04, 2016" "dev" "Ceph"
 .SH NAME
 ceph-dencoder \- ceph encoder/decoder utility
 .
@@ -100,6 +100,12 @@ Select the given type for future \fBencode\fP or \fBdecode\fP operations.
 .UNINDENT
 .INDENT 0.0
 .TP
+.B skip <bytes>
+Seek <bytes> into the imported file before reading data structure, use
+this with objects that have a preamble/header before the object of interest.
+.UNINDENT
+.INDENT 0.0
+.TP
 .B decode
 Decode the contents of the in\-memory buffer into an instance of the
 previously selected type.  If there is an error, report it.
@@ -143,7 +149,7 @@ versions of the software (for those types that support it).
 .UNINDENT
 .SH EXAMPLE
 .sp
-Say you want to examine an attribute on an object stored by \fBceph\-osd\fP\&.  You can do:
+Say you want to examine an attribute on an object stored by \fBceph\-osd\fP\&.  You can do this:
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -179,9 +185,29 @@ $ ceph\-dencoder type object_info_t import /tmp/a decode dump_json
 .fi
 .UNINDENT
 .UNINDENT
+.sp
+Alternatively, perhaps you wish to dump an internal CephFS metadata object, you might
+do that like this:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+$ rados \-p metadata get mds_snaptable mds_snaptable.bin
+$ ceph\-dencoder type SnapServer skip 8 import mds_snaptable.bin decode dump_json
+{ "snapserver": { "last_snap": 1,
+   "pending_noop": [],
+   "snaps": [],
+   "need_to_purge": {},
+   "pending_create": [],
+   "pending_destroy": []}}
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
 .SH AVAILABILITY
 .sp
-\fBceph\-dencoder\fP is part of Ceph, a massively scalable, open-source, distributed storage system. Please
+\fBceph\-dencoder\fP is part of Ceph, a massively scalable, open\-source, distributed storage system. Please
 refer to the Ceph documentation at \fI\%http://ceph.com/docs\fP for more
 information.
 .SH SEE ALSO
