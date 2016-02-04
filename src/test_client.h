@@ -22,6 +22,8 @@
 
 
 class TestClient {
+public:
+
   using SubmitFunc =
     std::function<void(const ServerId&,
 		       const TestRequest&,
@@ -29,18 +31,16 @@ class TestClient {
 
   using ServerSelectFunc = std::function<const ServerId&(uint64_t seed)>;
 
-  struct RespQueueItem {
-    TestResponse response;
-    crimson::dmclock::RespParams<ServerId> resp_params;
-  };
-
-public:
-
   typedef std::chrono::time_point<std::chrono::system_clock> TimePoint;
 
   static TimePoint now() { return std::chrono::system_clock::now(); }
 
 protected:
+
+  struct RespQueueItem {
+    TestResponse response;
+    crimson::dmclock::RespParams<ServerId> resp_params;
+  };
 
   const ClientId id;
   const SubmitFunc submit_f;
