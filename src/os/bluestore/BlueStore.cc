@@ -541,7 +541,6 @@ void BlueStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
 
   // install a non-existent onode at old location
   po->second.reset(new Onode(old_oid, o->key));
-  po->second->exists = false;
   lru.push_back(*po->second);
 
   // add at new position and fix oid, key
@@ -711,11 +710,12 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     on = new Onode(oid, key);
     on->dirty = true;
     if (g_conf->bluestore_debug_misc && !create)
-      on->exists = on->dirty = false;
+      on->dirty = false;
   } else {
     // loaded
     assert(r >=0);
     on = new Onode(oid, key);
+    on->exists = true;
     bufferlist::iterator p = v.begin();
     ::decode(on->onode, p);
   }
@@ -5615,6 +5615,7 @@ int BlueStore::_zero(TransContext *txc,
 	   << " " << offset << "~" << length
 	   << dendl;
   int r = 0;
+  o->exists = true;
 
   EnodeRef enode;
   _dump_onode(o);
