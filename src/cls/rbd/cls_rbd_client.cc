@@ -972,7 +972,7 @@ namespace librbd {
                         cls::rbd::MirrorMode *mirror_mode) {
       bufferlist in_bl;
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_mode_get", in_bl,
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_mode_get", in_bl,
                           out_bl);
       if (r == -ENOENT) {
         *mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
@@ -998,7 +998,7 @@ namespace librbd {
       ::encode(static_cast<uint32_t>(mirror_mode), in_bl);
 
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_mode_set", in_bl,
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_mode_set", in_bl,
                           out_bl);
       if (r < 0) {
         return r;
@@ -1010,7 +1010,7 @@ namespace librbd {
                          std::vector<cls::rbd::MirrorPeer> *peers) {
       bufferlist in_bl;
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_list", in_bl,
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_list", in_bl,
                           out_bl);
       if (r < 0) {
         return r;
@@ -1034,7 +1034,7 @@ namespace librbd {
       ::encode(peer, in_bl);
 
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_add", in_bl,
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_add", in_bl,
                           out_bl);
       if (r < 0) {
         return r;
@@ -1048,7 +1048,7 @@ namespace librbd {
       ::encode(uuid, in_bl);
 
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_remove", in_bl,
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_remove", in_bl,
                           out_bl);
       if (r < 0) {
         return r;
@@ -1064,7 +1064,7 @@ namespace librbd {
       ::encode(client_name, in_bl);
 
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_set_client",
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_set_client",
                           in_bl, out_bl);
       if (r < 0) {
         return r;
@@ -1080,7 +1080,7 @@ namespace librbd {
       ::encode(cluster_name, in_bl);
 
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_set_cluster",
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_set_cluster",
                           in_bl, out_bl);
       if (r < 0) {
         return r;
