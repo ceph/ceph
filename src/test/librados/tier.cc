@@ -2158,7 +2158,8 @@ TEST_F(LibRadosTwoPoolsPP, HitSetRead) {
     ASSERT_TRUE(now < hard_stop);
 
     string name = "foo";
-    uint32_t hash = cache_ioctx.get_object_hash_position(name);
+    uint32_t hash; 
+    ASSERT_EQ(0, cache_ioctx.get_object_hash_position2(name, &hash));
     hobject_t oid(sobject_t(name, CEPH_NOSNAP), "", hash,
 		  cluster.pool_lookup(cache_pool_name.c_str()), "");
 
@@ -2284,7 +2285,8 @@ TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
 
   for (int i=0; i<num; ++i) {
     string n = stringify(i);
-    uint32_t hash = cache_ioctx.get_object_hash_position(n);
+    uint32_t hash;
+    ASSERT_EQ(0, cache_ioctx.get_object_hash_position2(n, &hash));
     hobject_t oid(sobject_t(n, CEPH_NOSNAP), "", hash,
 		  cluster.pool_lookup(cache_pool_name.c_str()), "");
     std::cout << "checking for " << oid << std::endl;
@@ -2333,7 +2335,8 @@ TEST_F(LibRadosTwoPoolsPP, HitSetTrim) {
   time_t first = 0;
   while (true) {
     string name = "foo";
-    uint32_t hash = cache_ioctx.get_object_hash_position(name);
+    uint32_t hash; 
+    ASSERT_EQ(0, cache_ioctx.get_object_hash_position2(name, &hash));
     hobject_t oid(sobject_t(name, CEPH_NOSNAP), "", hash, -1, "");
 
     bufferlist bl;
@@ -3025,10 +3028,12 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteSnap) {
     for (int tries = 0; tries < 5; ++tries) {
       IoCtx cache_ioctx;
       ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
+      uint32_t hash;
+      ASSERT_EQ(0, ioctx.get_object_pg_hash_position2("foo", &hash));
       ostringstream ss;
       ss << "{\"prefix\": \"pg scrub\", \"pgid\": \""
 	 << cache_ioctx.get_id() << "."
-	 << ioctx.get_object_pg_hash_position("foo")
+	 << hash
 	 << "\"}";
       int r = cluster.mon_command(ss.str(), inbl, NULL, NULL);
       if (r == -EAGAIN)
@@ -4547,7 +4552,8 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetRead) {
     ASSERT_TRUE(now < hard_stop);
 
     string name = "foo";
-    uint32_t hash = cache_ioctx.get_object_hash_position(name);
+    uint32_t hash;
+    ASSERT_EQ(0, cache_ioctx.get_object_hash_position2(name, &hash));
     hobject_t oid(sobject_t(name, CEPH_NOSNAP), "", hash,
 		  cluster.pool_lookup(cache_pool_name.c_str()), "");
 
@@ -4691,7 +4697,8 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetTrim) {
 
   while (true) {
     string name = "foo";
-    uint32_t hash = cache_ioctx.get_object_hash_position(name);
+    uint32_t hash;
+    ASSERT_EQ(0, cache_ioctx.get_object_hash_position2(name, &hash));
     hobject_t oid(sobject_t(name, CEPH_NOSNAP), "", hash, -1, "");
 
     bufferlist bl;

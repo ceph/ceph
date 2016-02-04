@@ -181,14 +181,24 @@ int librados::IoCtxImpl::set_snap_write_context(snapid_t seq, vector<snapid_t>& 
   return 0;
 }
 
-uint32_t librados::IoCtxImpl::get_object_hash_position(const std::string& oid)
+int librados::IoCtxImpl::get_object_hash_position(
+    const std::string& oid, uint32_t *hash_position)
 {
-  return objecter->get_object_hash_position(poolid, oid, oloc.nspace);
+  int64_t r = objecter->get_object_hash_position(poolid, oid, oloc.nspace);
+  if (r < 0)
+    return r;
+  *hash_position = (uint32_t)r;
+  return 0;
 }
 
-uint32_t librados::IoCtxImpl::get_object_pg_hash_position(const std::string& oid)
+int librados::IoCtxImpl::get_object_pg_hash_position(
+    const std::string& oid, uint32_t *pg_hash_position)
 {
-  return objecter->get_object_pg_hash_position(poolid, oid, oloc.nspace);
+  int64_t r = objecter->get_object_pg_hash_position(poolid, oid, oloc.nspace);
+  if (r < 0)
+    return r;
+  *pg_hash_position = (uint32_t)r;
+  return 0;
 }
 
 void librados::IoCtxImpl::queue_aio_write(AioCompletionImpl *c)
