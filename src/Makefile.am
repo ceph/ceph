@@ -47,6 +47,7 @@ include rbd_replay/Makefile.am
 include test/Makefile.am
 include tools/Makefile.am
 include Makefile-rocksdb.am
+include Makefile-spdk.am
 include tracing/Makefile.am
 include pybind/Makefile.am
 
