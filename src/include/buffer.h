@@ -174,8 +174,10 @@ namespace buffer CEPH_BUFFER_API {
     ptr(unsigned l);
     ptr(const char *d, unsigned l);
     ptr(const ptr& p);
+    ptr(ptr&& p);
     ptr(const ptr& p, unsigned o, unsigned l);
     ptr& operator= (const ptr& p);
+    ptr& operator= (ptr&& p);
     ~ptr() {
       release();
     }
@@ -376,6 +378,16 @@ namespace buffer CEPH_BUFFER_API {
       return *this;
     }
 
+    list& operator= (list&& other) {
+      _buffers = std::move(other._buffers);
+      _len = other._len;
+      _memcopy_count = other._memcopy_count;
+      last_p = begin();
+      append_buffer.swap(other.append_buffer);
+      other.clear();
+      return *this;
+    }
+
     unsigned get_memcopy_count() const {return _memcopy_count; }
     const std::list<ptr>& buffers() const { return _buffers; }
     void swap(list& other);
@@ -417,9 +429,14 @@ namespace buffer CEPH_BUFFER_API {
       _buffers.push_front(bp);
       _len += bp.length();
     }
+    void push_front(ptr&& bp) {
+      if (bp.length() == 0)
+	return;
+      _len += bp.length();
+      _buffers.push_front(std::move(bp));
+    }
     void push_front(raw *r) {
-      ptr bp(r);
-      push_front(bp);
+      push_front(ptr(r));
     }
     void push_back(const ptr& bp) {
       if (bp.length() == 0)
@@ -427,9 +444,14 @@ namespace buffer CEPH_BUFFER_API {
       _buffers.push_back(bp);
       _len += bp.length();
     }
+    void push_back(ptr&& bp) {
+      if (bp.length() == 0)
+	return;
+      _len += bp.length();
+      _buffers.push_back(std::move(bp));
+    }
     void push_back(raw *r) {
-      ptr bp(r);
-      push_back(bp);
+      push_back(ptr(r));
     }
 
     void zero();
@@ -500,6 +522,7 @@ namespace buffer CEPH_BUFFER_API {
       append(s.data(), s.length());
     }
     void append(const ptr& bp);
+    void append(ptr&& bp);
     void append(const ptr& bp, unsigned off, unsigned len);
     void append(const list& bl);
     void append(std::istream& in);

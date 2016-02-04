@@ -809,9 +809,7 @@ static int os_write(const char *path, const char *buf, size_t size,
     } else {
       final.claim_append(*pbl);
       size_t zlen = offset - final.length();
-      bufferptr z(zlen);
-      z.zero();
-      final.append(z);
+      final.append_zero(zlen);
     }
   }
   final.append(buf, size);

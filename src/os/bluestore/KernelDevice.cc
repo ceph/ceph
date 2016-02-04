@@ -461,7 +461,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     goto out;
   }
   pbl->clear();
-  pbl->push_back(p);
+  pbl->push_back(std::move(p));
 
   dout(40) << "data: ";
   pbl->hexdump(*_dout);

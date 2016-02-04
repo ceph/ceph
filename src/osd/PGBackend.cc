@@ -186,7 +186,7 @@ int PGBackend::objects_get_attr(
     bp);
   if (r >= 0 && out) {
     out->clear();
-    out->push_back(bp);
+    out->push_back(std::move(bp));
   }
   return r;
 }
