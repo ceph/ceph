@@ -11772,6 +11772,19 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
   }
 
   if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL) {
+    // is this object old than cache_min_evict_age?
+    utime_t now = ceph_clock_now(NULL);
+    utime_t ob_local_mtime;
+    if (obc->obs.oi.local_mtime != utime_t()) {
+      ob_local_mtime = obc->obs.oi.local_mtime;
+    } else {
+      ob_local_mtime = obc->obs.oi.mtime;
+    }
+    if (ob_local_mtime + utime_t(pool.info.cache_min_evict_age, 0) > now) {
+      dout(20) << __func__ << " skip (too young) " << obc->obs.oi << dendl;
+      osd->logger->inc(l_osd_agent_skip);
+      return false;
+    }
     // is this object old and/or cold enough?
     int temp = 0;
     uint64_t temp_upper = 0, temp_lower = 0;
