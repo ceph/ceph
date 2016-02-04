@@ -179,14 +179,16 @@ void Objecter::handle_conf_change(const struct md_config_t *conf,
 void Objecter::update_crush_location()
 {
   RWLock::WLocker rwlocker(rwlock);
-  crush_location.clear();
+  std::multimap<string,string> new_crush_location;
   vector<string> lvec;
   get_str_vec(cct->_conf->crush_location, ";, \t", lvec);
-  int r = CrushWrapper::parse_loc_multimap(lvec, &crush_location);
+  int r = CrushWrapper::parse_loc_multimap(lvec, &new_crush_location);
   if (r < 0) {
     lderr(cct) << "warning: crush_location '" << cct->_conf->crush_location
-	       << "' does not parse" << dendl;
+	       << "' does not parse, leave origin crush_location untouched." << dendl;
+    return;
   }
+  crush_location = new_crush_location;
 }
 
 // messages ------------------------------
@@ -2591,6 +2593,7 @@ void Objecter::update_pool_full_map(map<int64_t, bool>& pool_full_map)
 int64_t Objecter::get_object_hash_position(int64_t pool, const string& key,
 					   const string& ns)
 {
+  RWLock::RLocker rl(rwlock);
   const pg_pool_t *p = osdmap->get_pg_pool(pool);
   if (!p)
     return -ENOENT;
@@ -2600,6 +2603,7 @@ int64_t Objecter::get_object_hash_position(int64_t pool, const string& key,
 int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
 					      const string& ns)
 {
+  RWLock::RLocker rl(rwlock);
   const pg_pool_t *p = osdmap->get_pg_pool(pool);
   if (!p)
     return -ENOENT;
