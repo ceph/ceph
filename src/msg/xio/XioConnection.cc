@@ -605,8 +605,7 @@ int XioConnection::_mark_down(uint32_t flags)
   if (cstate.policy.resetcheck)
     cstate.flags |= CState::FLAG_RESET;
 
-  // Accelio disconnect
-  xio_disconnect(conn);
+  disconnect();
 
   /* XXX this will almost certainly be called again from
    * on_disconnect_event() */
@@ -685,8 +684,7 @@ int XioConnection::CState::state_fail(Message* m, uint32_t flags)
   xcon->discard_input_queue(flags|OP_FLAG_LOCKED);
   xcon->adjust_clru(flags|OP_FLAG_LOCKED|OP_FLAG_LRU);
 
-  // Accelio disconnect
-  xio_disconnect(xcon->conn);
+  xcon->disconnect();
 
   if (! (flags & OP_FLAG_LOCKED))
     pthread_spin_unlock(&xcon->sp);
