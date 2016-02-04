@@ -243,8 +243,10 @@ public:
       return result;
     }
 
-    explicit Collection(CephContext *cct)
-      : cct(cct), use_page_set(cct->_conf->memstore_page_set),
+    explicit Collection(CephContext *cct, coll_t c)
+      : cid(c),
+	cct(cct),
+	use_page_set(cct->_conf->memstore_page_set),
         lock("MemStore::Collection::lock", true, false),
 	exists(true) {}
   };
