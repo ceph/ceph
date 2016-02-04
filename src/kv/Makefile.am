@@ -18,9 +18,9 @@ if WITH_SLIBROCKSDB
 # PORTABLE=1 fixes the aarch64 build (-march=native doesn't work there)
 
 if FREEBSD
-	NPROC = sysctl -n hw.ncpu
+NPROC = sysctl -n hw.ncpu
 else
-	NPROC = nproc
+NPROC = nproc
 endif
 
 rocksdb/librocksdb.a:
