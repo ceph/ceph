@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 #
+# Copyright (C) 2015 Red Hat <contact@redhat.com>
 # Copyright (C) 2014 Inktank <info@inktank.com>
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
 # Copyright (C) 2014 Catalyst.net Ltd
@@ -23,7 +24,6 @@ import fcntl
 import json
 import logging
 import os
-import os.path
 import platform
 import re
 import subprocess
@@ -529,21 +529,17 @@ def get_partition_dev(dev, pnum):
         raise Error('partition %d for %s does not appear to exist' % (pnum, dev))
 
 
-def list_all_partitions(names):
+def list_all_partitions():
     """
     Return a list of devices and partitions
     """
-    if names:
-        names = map(lambda x: re.sub('^/dev/', '', x), names)
-    else:
-        names = os.listdir('/sys/block')
+    names = os.listdir('/sys/block')
     dev_part_list = {}
     for name in names:
-        LOG.debug("list_all_partitions: " + name)
         # /dev/fd0 may hang http://tracker.ceph.com/issues/6827
         if re.match(r'^fd\d$', name):
             continue
-        dev_part_list[name] = list_partitions(os.path.join('/dev', name))
+        dev_part_list[name] = list_partitions(get_dev_path(name))
     return dev_part_list
 
 def list_partitions(dev):
@@ -571,7 +567,7 @@ def list_partitions_device(dev):
     Return a list of partitions on the given device name
     """
     partitions = []
-    basename = os.path.basename(dev)
+    basename = get_dev_name(dev)
     for name in os.listdir(block_path(dev)):
         if name.startswith(basename):
             partitions.append(name)
@@ -592,7 +588,7 @@ def get_partition_base(dev):
     # find the base
     for basename in os.listdir('/sys/block'):
         if os.path.exists(os.path.join('/sys/block', basename, name)):
-            return '/dev/' + basename
+            return get_dev_path(basename)
     raise Error('no parent device for partition', dev)
 
 def is_partition_mpath(dev):
@@ -1003,7 +999,7 @@ def get_or_create_dmcrypt_key(
         raise Error('unable to read or create dm-crypt key', path)
 
 
-def dmcrypt_map(
+def _dmcrypt_map(
     rawdev,
     keypath,
     _uuid,
@@ -1615,7 +1611,7 @@ def prepare_dev(
 
     dev = None
     if osd_dm_keypath:
-        dev = dmcrypt_map(
+        dev = _dmcrypt_map(
                 rawdev=rawdev,
                 keypath=osd_dm_keypath,
                 _uuid=osd_uuid,
@@ -2143,6 +2139,27 @@ def detect_fstype(
     fstype = must_be_one_line(fstype)
     return fstype
 
+def dmcrypt_map(dev, dmcrypt_key_dir):
+    ptype = get_partition_type(dev)
+    if ptype in [DMCRYPT_OSD_UUID, DMCRYPT_JOURNAL_UUID]:
+        luks = False
+        cryptsetup_parameters = ['--key-size', '256']
+    elif ptype in [DMCRYPT_LUKS_OSD_UUID, DMCRYPT_LUKS_JOURNAL_UUID]:
+        luks = True
+        cryptsetup_parameters = []
+    else:
+        raise Error('--dmcrypt called for dev %s with invalid ptype %s'
+                    % (dev, ptype))
+    part_uuid = get_partition_uuid(dev)
+    dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, dmcrypt_key_dir, luks)
+    return _dmcrypt_map(
+        rawdev=dev,
+        keypath=dmcrypt_key_path,
+        _uuid=part_uuid,
+        cryptsetup_parameters=cryptsetup_parameters,
+        luks=luks,
+        format_dev=False,
+    )
 
 def mount_activate(
     dev,
@@ -2153,29 +2170,8 @@ def mount_activate(
     ):
 
     if dmcrypt:
-            # dev corresponds to a dmcrypt cyphertext device - map it before
-            # proceeding.
-            rawdev = dev
-            ptype = get_partition_type(rawdev)
-            if ptype in [DMCRYPT_OSD_UUID]:
-                luks = False
-                cryptsetup_parameters = ['--key-size', '256']
-            elif ptype in [DMCRYPT_LUKS_OSD_UUID]:
-                luks = True
-                cryptsetup_parameters = []
-            else:
-                raise Error('activate --dmcrypt called for invalid dev %s' % (dev))
-            part_uuid = get_partition_uuid(rawdev)
-            dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, dmcrypt_key_dir, luks)
-            dev = dmcrypt_map(
-                    rawdev=rawdev,
-                    keypath=dmcrypt_key_path,
-                    _uuid=part_uuid,
-                    cryptsetup_parameters=cryptsetup_parameters,
-                    luks=luks,
-                    format_dev=False,
-                    )
-
+        part_uuid = get_partition_uuid(dev)
+        dev = dmcrypt_map(dev, dmcrypt_key_dir)
     try:
         fstype = detect_fstype(dev=dev)
     except (subprocess.CalledProcessError,
@@ -2525,28 +2521,7 @@ def main_activate_journal(args):
     activate_lock.acquire()  # noqa
     try:
         if args.dmcrypt:
-            # journal dev corresponds to a dmcrypt cyphertext device - map
-            # it before proceeding.
-            rawdev = args.dev
-            ptype = get_partition_type(rawdev)
-            if ptype in [DMCRYPT_JOURNAL_UUID]:
-                luks = False
-                cryptsetup_parameters = ['--key-size', '256']
-            elif ptype in [DMCRYPT_LUKS_JOURNAL_UUID]:
-                luks = True
-                cryptsetup_parameters = []
-            else:
-                raise Error('activate-journal --dmcrypt called for invalid dev %s' % (rawdev))
-            part_uuid = get_partition_uuid(rawdev)
-            dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, args.dmcrypt_key_dir, luks)
-            dev = dmcrypt_map(
-                    rawdev=rawdev,
-                    keypath=dmcrypt_key_path,
-                    _uuid=part_uuid,
-                    cryptsetup_parameters=cryptsetup_parameters,
-                    luks=luks,
-                    format_dev=False,
-                    )
+            dev = dmcrypt_map(args.dev, args.dmcrypt_key_dir)
         else:
             dev = args.dev
 
@@ -2765,13 +2740,8 @@ def list_format_dev_plain(dev, devices=[], prefix=''):
         if not dmcrypt['holders']:
             desc = ['ceph data (dmcrypt %s)' % dmcrypt['type'], 'not currently mapped']
         elif len(dmcrypt['holders']) == 1:
-            holder = '/dev/' + dmcrypt['holders'][0]
-            def lookup_dev(devices, path):
-                for device in devices:
-                    if device['path'] == path:
-                        return device
-            holder_dev = lookup_dev(devices, holder)
-            desc = ['ceph data (dmcrypt %s %s)' % (dmcrypt['type'], holder)] + list_format_more_osd_info_plain(holder_dev)
+            holder = get_dev_path(dmcrypt['holders'][0])
+            desc = ['ceph data (dmcrypt %s %s)' % (dmcrypt['type'], holder)] + list_format_more_osd_info_plain(dev)
         else:
             desc = ['ceph data (dmcrypt %s)' % dmcrypt['type'], 'holders: ' + ','.join(dmcrypt['holders'])]
     elif dev['ptype'] == JOURNAL_UUID:
@@ -2782,7 +2752,8 @@ def list_format_dev_plain(dev, devices=[], prefix=''):
                           DMCRYPT_LUKS_JOURNAL_UUID):
         dmcrypt = dev['dmcrypt']
         if dmcrypt['holders'] and len(dmcrypt['holders']) == 1:
-            desc = ['ceph journal (dmcrypt %s /dev/%s)' % (dmcrypt['type'], dmcrypt['holders'][0])]
+            holder = get_dev_path(dmcrypt['holders'][0])
+            desc = ['ceph journal (dmcrypt %s %s)' % (dmcrypt['type'], holder)]
         else:
             desc = ['ceph journal (dmcrypt %s)' % dmcrypt['type']]
         if dev.get('journal_for'):
@@ -2797,9 +2768,9 @@ def list_format_dev_plain(dev, devices=[], prefix=''):
             desc.append('mounted on %s' % dev['mount'])
     return '%s%s %s' % (prefix, dev['path'], ', '.join(desc))
 
-def list_format_plain(devices):
+def list_format_plain(devices, selected_devices):
     lines = []
-    for device in devices:
+    for device in selected_devices:
         if device.get('partitions'):
             lines.append('%s :' % device['path'])
             for p in sorted(device['partitions']):
@@ -2837,14 +2808,14 @@ def list_dev(dev, uuid_map, journal_map):
         info['dmcrypt']['holders'] = holders
         info['dmcrypt']['type'] = 'plain'
         if len(holders) == 1:
-            list_dev_osd('/dev/' + holders[0], uuid_map, info)
+            list_dev_osd(get_dev_path(holders[0]), uuid_map, info)
     elif ptype == DMCRYPT_LUKS_OSD_UUID:
         holders = is_held(dev)
         info['type'] = 'data'
         info['dmcrypt']['holders'] = holders
         info['dmcrypt']['type'] = 'LUKS'
         if len(holders) == 1:
-            list_dev_osd('/dev/' + holders[0], uuid_map, info)
+            list_dev_osd(get_dev_path(holders[0]), uuid_map, info)
     elif ptype in (JOURNAL_UUID, MPATH_JOURNAL_UUID):
         info['type'] = 'journal'
         if ptype == MPATH_JOURNAL_UUID:
@@ -2879,8 +2850,8 @@ def list_dev(dev, uuid_map, journal_map):
 
     return info
 
-def list_devices(args):
-    partmap = list_all_partitions(args.path)
+def list_devices():
+    partmap = list_all_partitions()
 
     uuid_map = {}
     journal_map = {}
@@ -2902,7 +2873,7 @@ def list_devices(args):
                     holders = is_held(dev)
                     if len(holders) != 1:
                         continue
-                    dev_to_mount = '/dev/' + holders[0]
+                    dev_to_mount = get_dev_path(holders[0])
                 else:
                     dev_to_mount = dev
 
@@ -2940,11 +2911,25 @@ def list_devices(args):
     return devices
 
 def main_list(args):
-    devices = list_devices(args)
-    if args.format == 'json':
-        print json.dumps(devices)
+    devices = list_devices()
+    if args.path:
+        paths = []
+        for path in args.path:
+            if os.path.exists(path):
+                paths.append(os.path.realpath(path))
+            else:
+                paths.append(path)
+        selected_devices = []
+        for device in devices:
+            for path in paths:
+                if re.search(path + '$', device['path']):
+                    selected_devices.append(device)
     else:
-        output = list_format_plain(devices)
+        selected_devices = devices
+    if args.format == 'json':
+        print json.dumps(selected_devices)
+    else:
+        output = list_format_plain(devices, selected_devices)
         if output:
             print output
 

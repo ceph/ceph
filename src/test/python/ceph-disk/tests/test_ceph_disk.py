@@ -235,6 +235,38 @@ class TestCephDisk(object):
                     'magic': ceph_disk.CEPH_OSD_ONDISK_MAGIC,
                     'state': 'prepared'} == desc
 
+    @patch('os.path.exists')
+    def test_list_paths_to_names(self, m_exists):
+
+        def exists(path):
+            return path in (
+                '/sys/block/sda',
+                '/sys/block/sdb',
+                '/sys/block/cciss!c0d0',
+                '/sys/block/cciss!c0d1',
+                '/sys/block/cciss!c0d2',
+            )
+
+        m_exists.side_effect = exists
+        paths = [
+            '/dev/sda',
+            '/dev/cciss/c0d0',
+            'cciss!c0d1',
+            'cciss/c0d2',
+            'sdb',
+        ]
+        expected = [
+            'sda',
+            'cciss!c0d0',
+            'cciss!c0d1',
+            'cciss!c0d2',
+            'sdb',
+        ]
+        assert expected == ceph_disk.list_paths_to_names(paths)
+        with pytest.raises(ceph_disk.Error) as excinfo:
+            ceph_disk.list_paths_to_names(['unknown'])
+        assert 'unknown' in excinfo.value.message
+
     def test_list_all_partitions(self):
         partition_uuid = "56244cf5-83ef-4984-888a-2d8b8e0e04b2"
         disk = "Xda"
