@@ -1113,6 +1113,9 @@ void PGMap::recovery_rate_summary(Formatter *f, ostream *out,
       f->dump_int("recovering_objects_per_sec", objps);
       f->dump_int("recovering_bytes_per_sec", bps);
       f->dump_int("recovering_keys_per_sec", kps);
+      f->dump_int("num_objects_recovered", pos_delta.stats.sum.num_objects_recovered);
+      f->dump_int("num_bytes_recovered", pos_delta.stats.sum.num_bytes_recovered);
+      f->dump_int("num_keys_recovered", pos_delta.stats.sum.num_keys_recovered);
     } else {
       *out << pretty_si_t(bps) << "B/s";
       if (pos_delta.stats.sum.num_keys_recovered)
