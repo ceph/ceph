@@ -2147,46 +2147,60 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   utime_t now(ceph_clock_now(g_ceph_context));
   utime_t cutoff = now - utime_t(g_conf->mon_pg_stuck_threshold, 0);
   uint64_t num_inactive_pgs = 0;
+  
+  if (detail) {
+    
+    // we need to collect details of stuck pgs, first do a quick check
+    // whether this will yield any results
+    if (pg_map.get_stuck_counts(cutoff, note)) {
+      
+      // there are stuck pgs. gather details for specified statuses
+      // only if we know that there are pgs stuck in that status
+      
+      if (note.find("stuck inactive") != note.end()) {
+        pg_map.get_stuck_stats(PGMap::STUCK_INACTIVE, cutoff, stuck_pgs);
+        note["stuck inactive"] = stuck_pgs.size();
+        num_inactive_pgs += stuck_pgs.size();
+        note_stuck_detail(PGMap::STUCK_INACTIVE, stuck_pgs, detail);
+        stuck_pgs.clear();
+      }
 
-  pg_map.get_stuck_stats(PGMap::STUCK_INACTIVE, cutoff, stuck_pgs);
-  if (!stuck_pgs.empty()) {
-    note["stuck inactive"] = stuck_pgs.size();
-    num_inactive_pgs += stuck_pgs.size();
-    if (detail)
-      note_stuck_detail(PGMap::STUCK_INACTIVE, stuck_pgs, detail);
-  }
-  stuck_pgs.clear();
+      if (note.find("stuck unclean") != note.end()) {
+        pg_map.get_stuck_stats(PGMap::STUCK_UNCLEAN, cutoff, stuck_pgs);
+        note["stuck unclean"] = stuck_pgs.size();
+        note_stuck_detail(PGMap::STUCK_UNCLEAN, stuck_pgs, detail);
+        stuck_pgs.clear();
+      }
 
-  pg_map.get_stuck_stats(PGMap::STUCK_UNCLEAN, cutoff, stuck_pgs);
-  if (!stuck_pgs.empty()) {
-    note["stuck unclean"] = stuck_pgs.size();
-    if (detail)
-      note_stuck_detail(PGMap::STUCK_UNCLEAN, stuck_pgs, detail);
-  }
-  stuck_pgs.clear();
+      if (note.find("stuck undersized") != note.end()) {
+        pg_map.get_stuck_stats(PGMap::STUCK_UNDERSIZED, cutoff, stuck_pgs);
+        note["stuck undersized"] = stuck_pgs.size();
+        note_stuck_detail(PGMap::STUCK_UNDERSIZED, stuck_pgs, detail);
+        stuck_pgs.clear();
+      }
 
-  pg_map.get_stuck_stats(PGMap::STUCK_UNDERSIZED, cutoff, stuck_pgs);
-  if (!stuck_pgs.empty()) {
-    note["stuck undersized"] = stuck_pgs.size();
-    if (detail)
-      note_stuck_detail(PGMap::STUCK_UNDERSIZED, stuck_pgs, detail);
-  }
-  stuck_pgs.clear();
+      if (note.find("stuck degraded") != note.end()) {
+        pg_map.get_stuck_stats(PGMap::STUCK_DEGRADED, cutoff, stuck_pgs);
+        note["stuck degraded"] = stuck_pgs.size();
+        note_stuck_detail(PGMap::STUCK_DEGRADED, stuck_pgs, detail);
+        stuck_pgs.clear();
+      }
 
-  pg_map.get_stuck_stats(PGMap::STUCK_DEGRADED, cutoff, stuck_pgs);
-  if (!stuck_pgs.empty()) {
-    note["stuck degraded"] = stuck_pgs.size();
-    if (detail)
-      note_stuck_detail(PGMap::STUCK_DEGRADED, stuck_pgs, detail);
-  }
-  stuck_pgs.clear();
-
-  pg_map.get_stuck_stats(PGMap::STUCK_STALE, cutoff, stuck_pgs);
-  if (!stuck_pgs.empty()) {
-    note["stuck stale"] = stuck_pgs.size();
-    num_inactive_pgs += stuck_pgs.size();
-    if (detail)
-      note_stuck_detail(PGMap::STUCK_STALE, stuck_pgs, detail);
+      if (note.find("stuck stale") != note.end()) {
+        pg_map.get_stuck_stats(PGMap::STUCK_STALE, cutoff, stuck_pgs);
+        note["stuck stale"] = stuck_pgs.size();
+        num_inactive_pgs += stuck_pgs.size();
+        note_stuck_detail(PGMap::STUCK_STALE, stuck_pgs, detail);
+      }
+    }
+  } else {
+    pg_map.get_stuck_counts(cutoff, note);
+    map<string,int>::const_iterator p = note.find("stuck inactive");
+    if (p != note.end()) 
+      num_inactive_pgs += p->second;
+    p = note.find("stuck stale");
+    if (p != note.end()) 
+      num_inactive_pgs += p->second;
   }
 
   if (g_conf->mon_pg_min_inactive > 0 && num_inactive_pgs >= g_conf->mon_pg_min_inactive) {
