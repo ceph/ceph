@@ -3,6 +3,8 @@ overrides:
     log-whitelist:
     - Missing health data for MDS
     - failed to encode map
+    - soft lockup
+    - detected stalls on CPUs
     conf:
       mon:
         mon warn on legacy crush tunables: false
