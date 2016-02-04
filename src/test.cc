@@ -184,6 +184,8 @@ int main(int argc, char* argv[]) {
   const int data_w = 8;
   const int data_prec = 2;
 
+  std::cout << "==== Client Data ====" << std::endl;
+
   std::cout << std::setw(head_w) << "client:";
   for (auto const &i : clients) {
     std::cout << std::setw(data_w) << i.first;
@@ -217,25 +219,57 @@ int main(int argc, char* argv[]) {
   // report how many ops were done by reservation and proportion for
   // each client
 
-  std::cout << std::setw(head_w) << "res_ops:";
-  for (auto const &c : clients) {
-    std::cout << std::setw(data_w) << c.second->get_res_count();
-  }
-  std::cout << std::endl;
-
-  std::cout << std::setw(head_w) << "prop_ops:";
-  for (auto const &c : clients) {
-    std::cout << std::setw(data_w) << c.second->get_prop_count();
-  }
-  std::cout << std::endl;
-
-
-  for (auto const &s : servers) {
-    std::cout << "server:" << s.first <<
-      ", res_ops:" << s.second->get_res_count() <<
-      ", prop_ops:" << s.second->get_prop_count() << std::endl;
+  {
+    std::cout << std::setw(head_w) << "res_ops:";
+    int total = 0;
+    for (auto const &c : clients) {
+      total += c.second->get_res_count();
+      std::cout << std::setw(data_w) << c.second->get_res_count();
+    }
+    std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
+      std::fixed << total << std::endl;
   }
 
+  {
+    std::cout << std::setw(head_w) << "prop_ops:";
+    int total = 0;
+    for (auto const &c : clients) {
+      total += c.second->get_prop_count();
+      std::cout << std::setw(data_w) << c.second->get_prop_count();
+    }
+    std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
+      std::fixed << total << std::endl;
+  }
+
+  std::cout << std::endl << "==== Server Data ====" << std::endl;
+
+  std::cout << std::setw(head_w) << "server:";
+  for (auto const &i : servers) {
+    std::cout << std::setw(data_w) << i.first;
+  }
+  std::cout << std::setw(data_w) << "total" << std::endl;
+
+  {
+    std::cout << std::setw(head_w) << "res_ops:";
+    int total = 0;
+    for (auto const &s : servers) {
+      total += s.second->get_res_count();
+      std::cout << std::setw(data_w) << s.second->get_res_count();
+    }
+    std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
+      std::fixed << total << std::endl;
+  }
+
+  {
+    std::cout << std::setw(head_w) << "prop_ops:";
+    int total = 0;
+    for (auto const &s : servers) {
+      total += s.second->get_prop_count();
+      std::cout << std::setw(data_w) << s.second->get_prop_count();
+    }
+    std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
+      std::fixed << total << std::endl;
+  }
 
   // clean up clients then servers
 
