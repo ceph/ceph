@@ -35,6 +35,7 @@ if [ x`uname`x = x"FreeBSD"x ]; then
       --without-fuse
       --without-lttng
       --with-libzfs=no
+      --without-rocksdb
         "
 #      --with-cephfs
 #      --without-radosgw
