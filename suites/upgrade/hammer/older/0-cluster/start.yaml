@@ -5,6 +5,8 @@ overrides:
     - scrub mismatch
     - ScrubResult
     - failed to encode
+    - soft lockup
+    - detected stalls on CPUs
     fs: xfs
 roles:
 - - mon.a
