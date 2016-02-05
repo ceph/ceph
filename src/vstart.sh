@@ -348,10 +348,7 @@ if [ "$memstore" -eq 1 ]; then
 fi
 if [ "$bluestore" -eq 1 ]; then
     COSDMEMSTORE='
-	osd objectstore = bluestore
-	bluestore fsck on mount = true
-	bluestore block db size = 67108864
-	bluestore block wal size = 134217728'
+	osd objectstore = bluestore'
 fi
 
 # lockdep everywhere?
@@ -497,6 +494,9 @@ $DAEMONOPTS
         filestore wbthrottle btrfs ios start flusher = 10
         filestore wbthrottle btrfs ios hard limit = 20
         filestore wbthrottle btrfs inodes hard limit = 30
+	bluestore fsck on mount = true
+	bluestore block db size = 67108864
+	bluestore block wal size = 134217728
 $COSDDEBUG
 $COSDMEMSTORE
 $extra_conf
@@ -592,6 +592,11 @@ EOF
 	    rm -rf $CEPH_DEV_DIR/osd$osd || true
 	    for f in $CEPH_DEV_DIR/osd$osd/* ; do btrfs sub delete $f || true ; done || true
 	    mkdir -p $CEPH_DEV_DIR/osd$osd
+
+	    # for bluestore
+	    touch $CEPH_DEV_DIR/osd$osd/block
+	    touch $CEPH_DEV_DIR/osd$osd/block.db
+	    touch $CEPH_DEV_DIR/osd$osd/block.wal
 
 	    uuid=`uuidgen`
 	    echo "add osd$osd $uuid"
