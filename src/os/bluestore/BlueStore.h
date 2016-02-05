@@ -81,8 +81,6 @@ public:
 
     bluestore_extent_ref_map_t ref_map;
 
-    boost::intrusive::unordered_set_member_hook<> map_item;
-
     Enode(uint32_t h, const string& k, EnodeSet *s)
       : nref(0),
 	hash(h),
