@@ -152,7 +152,7 @@ void TestWatchNotify::execute_notify(const std::string &oid,
       // client disconnected before notification processed
       notify_handle->pending_watcher_ids.erase(watcher_id);
     } else {
-      WatchHandle &watch_handle = w_it->second;
+      WatchHandle watch_handle = w_it->second;
       assert(watch_handle.gid == watcher_id.first);
       assert(watch_handle.handle == watcher_id.second);
 
