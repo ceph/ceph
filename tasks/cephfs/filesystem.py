@@ -205,6 +205,20 @@ class Filesystem(object):
 
         return active_count >= status['max_mds']
 
+    def get_daemon_names(self, state):
+        """
+        Return MDS daemon names of those daemons in the given state
+        :param state:
+        :return:
+        """
+        status = self.mon_manager.get_mds_status_all()
+        result = []
+        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
+            if mds_status['state'] == state:
+                result.append(mds_status['name'])
+
+        return result
+
     def get_active_names(self):
         """
         Return MDS daemon names of those daemons holding ranks
@@ -212,13 +226,7 @@ class Filesystem(object):
 
         :return: list of strings like ['a', 'b'], sorted by rank
         """
-        status = self.mon_manager.get_mds_status_all()
-        result = []
-        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
-            if mds_status['state'] == 'up:active':
-                result.append(mds_status['name'])
-
-        return result
+        return self.get_daemon_names("up:active")
 
     def get_rank_names(self):
         """
@@ -467,9 +475,8 @@ class Filesystem(object):
         :return: number of seconds waited, rounded down to integer
         """
 
-        elapsed = 0
+        started_at = time.time()
         while True:
-
             if mds_id is not None:
                 # mds_info is None if no daemon with this ID exists in the map
                 mds_info = self.mon_manager.get_mds_status(mds_id)
@@ -487,6 +494,7 @@ class Filesystem(object):
                     current_state = None
                 log.info("mapped states {0} to {1}".format(states, current_state))
 
+            elapsed = time.time() - started_at
             if current_state == goal_state:
                 log.info("reached state '{0}' in {1}s".format(current_state, elapsed))
                 return elapsed
@@ -500,7 +508,6 @@ class Filesystem(object):
                     ))
             else:
                 time.sleep(1)
-                elapsed += 1
 
     def _read_data_xattr(self, ino_no, xattr_name, type, pool):
         mds_id = self.mds_ids[0]

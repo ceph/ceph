@@ -10,6 +10,14 @@ overrides:
         osd mon report interval max: 5
         osd objectstore: memstore
         memstore device bytes: 100000000
+      client.0:
+        debug client: 20
+        debug objecter: 20
+        debug objectcacher: 20
+      client.1:
+        debug client: 20
+        debug objecter: 20
+        debug objectcacher: 20
 
 tasks:
   - cephfs_test_runner:

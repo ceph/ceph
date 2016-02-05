@@ -13,3 +13,6 @@ tasks:
     timeout: 1200
     chance_pgnum_grow: 3
     chance_pgpnum_fix: 1
+openstack:
+- volumes:
+    size: 50

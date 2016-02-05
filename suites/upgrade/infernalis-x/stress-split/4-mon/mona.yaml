@@ -1,0 +1,9 @@
+meta:
+- desc: |
+   restart mon.a so it is upgraded to -x
+tasks:
+- ceph.restart:
+    daemons: [mon.a]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- print: "**** done ceph.restart mon.a"

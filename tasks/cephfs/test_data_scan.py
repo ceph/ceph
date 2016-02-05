@@ -271,7 +271,7 @@ class NonDefaultLayout(Workload):
         self._initial_state = self._mount.stat("datafile")
 
     def validate(self):
-        p = self._mount.run_shell(["sudo", "getfattr", "--only-values", "-n", "ceph.file.layout.object_size", "./datafile"])
+        p = self._mount.run_shell(["getfattr", "--only-values", "-n", "ceph.file.layout.object_size", "./datafile"])
 
         # Check we got the layout reconstructed properly
         object_size = int(p.stdout.getvalue().strip())
@@ -344,6 +344,7 @@ class TestDataScan(CephFSTestCase):
 
         # Start the MDS
         self.fs.mds_restart()
+        self.fs.wait_for_daemons()
 
         # Mount a client
         self.mount_a.mount()
@@ -435,6 +436,7 @@ class TestDataScan(CephFSTestCase):
 
         # Start filesystem back up, observe that the file appears to be gone in an `ls`
         self.fs.mds_restart()
+        self.fs.wait_for_daemons()
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
         files = self.mount_a.run_shell(["ls", "subdir/"]).stdout.getvalue().strip().split("\n")
@@ -454,9 +456,10 @@ class TestDataScan(CephFSTestCase):
         # Start the filesystem and check that the dentry we deleted is now once again visible
         # and points to the correct file data.
         self.fs.mds_restart()
+        self.fs.wait_for_daemons()
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
-        out = self.mount_a.run_shell(["sudo", "cat", "subdir/{0}".format(victim_dentry)]).stdout.getvalue().strip()
+        out = self.mount_a.run_shell(["cat", "subdir/{0}".format(victim_dentry)]).stdout.getvalue().strip()
         self.assertEqual(out, victim_dentry)
 
         # Finally, close the loop by checking our injected dentry survives a merge

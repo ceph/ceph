@@ -1,4 +1,9 @@
 
+overrides:
+  ceph:
+    log-whitelist:
+      - client session with invalid root
+
 tasks:
   - cephfs_test_runner:
       modules:

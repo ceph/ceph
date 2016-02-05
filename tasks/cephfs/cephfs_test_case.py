@@ -132,12 +132,26 @@ class CephFSTestCase(unittest.TestCase):
             self.fs.mon_manager.raw_cluster_cmd("osd", "blacklist", "rm", addr)
 
         # In case some test messed with auth caps, reset them
-        for mount in self.mounts:
+        client_mount_ids = [m.client_id for m in self.mounts]
+        for client_id in client_mount_ids:
             self.fs.mon_manager.raw_cluster_cmd_result(
-                'auth', 'caps', "client.{0}".format(mount.client_id),
+                'auth', 'caps', "client.{0}".format(client_id),
                 'mds', 'allow',
                 'mon', 'allow r',
                 'osd', 'allow rw pool={0}'.format(self.fs.get_data_pool_name()))
+
+        log.info(client_mount_ids)
+
+        # In case the test changes the IDs of clients, stash them so that we can
+        # reset in tearDown
+        self._original_client_ids = client_mount_ids
+
+        # In case there were any extra auth identities around from a previous
+        # test, delete them
+        for entry in self.auth_list():
+            ent_type, ent_id = entry['entity'].split(".")
+            if ent_type == "client" and ent_id not in client_mount_ids and ent_id != "admin":
+                self.fs.mon_manager.raw_cluster_cmd("auth", "del", entry['entity'])
 
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
@@ -160,9 +174,11 @@ class CephFSTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.fs.clear_firewall()
-        self.mount_a.teardown()
-        if self.mount_b:
-            self.mount_b.teardown()
+        for m in self.mounts:
+            m.teardown()
+
+        for i, m in enumerate(self.mounts):
+            m.client_id = self._original_client_ids[i]
 
         for subsys, key in self.configs_set:
             self.fs.clear_ceph_conf(subsys, key)
@@ -170,6 +186,14 @@ class CephFSTestCase(unittest.TestCase):
     def set_conf(self, subsys, key, value):
         self.configs_set.add((subsys, key))
         self.fs.set_ceph_conf(subsys, key, value)
+
+    def auth_list(self):
+        """
+        Convenience wrapper on "ceph auth list"
+        """
+        return json.loads(self.fs.mon_manager.raw_cluster_cmd(
+            "auth", "list", "--format=json-pretty"
+        ))['auth_dump']
 
     def assert_session_count(self, expected, ls_data=None, mds_id=None):
         if ls_data is None:
@@ -288,3 +312,43 @@ class CephFSTestCase(unittest.TestCase):
 
         else:
             raise AssertionError("MDS daemon '{0}' did not crash as expected".format(daemon_id))
+
+    def assert_cluster_log(self, expected_pattern):
+        """
+        Context manager.  Assert that during execution, or up to 5 seconds later,
+        the Ceph cluster log emits a message matching the expected pattern.
+
+        :param expected_pattern: a string that you expect to see in the log output
+        """
+
+        ceph_manager = self.fs.mon_manager
+
+        class ContextManager(object):
+            def match(self):
+                return expected_pattern in self.watcher_process.stdout.getvalue()
+
+            def __enter__(self):
+                self.watcher_process = ceph_manager.run_ceph_w()
+
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                if not self.watcher_process.finished:
+                    # Check if we got an early match, wait a bit if we didn't
+                    if self.match():
+                        return
+                    else:
+                        log.debug("No log hits yet, waiting...")
+                        # Default monc tick interval is 10s, so wait that long and
+                        # then some grace
+                        time.sleep(15)
+
+                self.watcher_process.stdin.close()
+                try:
+                    self.watcher_process.wait()
+                except CommandFailedError:
+                    pass
+
+                if not self.match():
+                    log.error("Log output: \n{0}\n".format(self.watcher_process.stdout.getvalue()))
+                    raise AssertionError("Expected log message not found: '{0}'".format(expected_pattern))
+
+        return ContextManager()

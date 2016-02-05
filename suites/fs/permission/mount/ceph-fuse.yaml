@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        fuse default permissions: false
+        client posix acl: true
+tasks:
+- install:
+- ceph:
+- ceph-fuse:

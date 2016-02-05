@@ -203,9 +203,14 @@ class TestDamage(CephFSTestCase):
             self.fs.mds_restart()
 
             if mutation.expectation not in (DAMAGED_ON_LS, NO_DAMAGE):
+                # MDS may go to damaged state after coming up. Wait for damaged state first
+                try:
+                    self.wait_until_true(lambda: self.is_marked_damaged(0), 60)
+                except RuntimeError:
+                    pass
                 # Wait for MDS to either come up or go into damaged state
                 try:
-                    self.wait_until_true(lambda: self.is_marked_damaged(0) or self.fs.are_daemons_healthy(), 60)
+                    self.wait_until_true(lambda: self.is_marked_damaged(0) or self.fs.are_daemons_healthy(), 10)
                 except RuntimeError:
                     crashed = False
                     # Didn't make it to healthy or damaged, did it crash?
