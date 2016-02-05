@@ -23,7 +23,7 @@ static const bool info = false;
 TestServer::TestServer(ServerId _id,
 		       int _iops,
 		       int _thread_pool_size,
-		       const std::function<dmc::ClientInfo(ClientId)>& _client_info_f,
+		       const ClientInfoFunc& _client_info_f,
 		       const ClientRespFunc& _client_resp_f) :
   id(_id),
   priority_queue(_client_info_f,
@@ -86,7 +86,7 @@ void TestServer::run(std::chrono::milliseconds wait_delay) {
       TestResponse resp(req->epoch);
       sendResponse(client, resp, dmc::RespParams<ServerId>(id, phase));
 
-      priority_queue.requestCompleted();
+      priority_queue.request_completed();
 
       if (info > 3) {
 	std::cout << "end req " << client << std::endl;
@@ -102,8 +102,8 @@ void TestServer::run(std::chrono::milliseconds wait_delay) {
 
 void TestServer::post(const TestRequest& request,
 		      const dmc::ReqParams<ClientId>& req_params) {
-  auto now = dmc::getTime();
-  priority_queue.addRequest(request, req_params, now);
+  auto now = dmc::get_time();
+  priority_queue.add_request(request, req_params, now);
 }
 
 

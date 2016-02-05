@@ -28,8 +28,8 @@ std::ostream& dmc::operator<<(std::ostream& out,
 std::ostream& dmc::operator<<(std::ostream& out,
 			      const dmc::RequestTag& tag) {
   out <<
-    "{ r:" << formatTime(tag.reservation) <<
-    " p:" << formatTime(tag.proportion) <<
-    " l:" << formatTime(tag.limit) << " }";
+    "{ r:" << format_time(tag.reservation) <<
+    " p:" << format_time(tag.proportion) <<
+    " l:" << format_time(tag.limit) << " }";
   return out;
 }

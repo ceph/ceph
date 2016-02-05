@@ -44,14 +44,14 @@ namespace crimson {
     static const double TimeMax = std::numeric_limits<Time>::max();
 
 
-    inline Time getTime() {
+    inline Time get_time() {
       struct timeval now;
       assert(0 == gettimeofday(&now, NULL));
       return now.tv_sec + (now.tv_usec / 1000000.0);
     }
 
 
-    inline std::string formatTime(const Time& time, uint modulo = 10000) {
+    inline std::string format_time(const Time& time, uint modulo = 1000) {
       long subtract = long(time / modulo) * modulo;
       std::stringstream ss;
       ss << std::fixed << time - subtract;
@@ -261,27 +261,27 @@ namespace crimson {
       };
 
 
-      ClientInfoFunc       clientInfoF;
-      CanHandleRequestFunc canHandleF;
-      HandleRequestFunc    handleF;
+      ClientInfoFunc       client_info_f;
+      CanHandleRequestFunc can_handle_f;
+      HandleRequestFunc    handle_f;
 
       mutable std::mutex data_mutex;
       using DataGuard = std::lock_guard<decltype(data_mutex)>;
 
       // stable mappiing between client ids and client queues
-      std::map<C,ClientRec> clientMap;
+      std::map<C,ClientRec> client_map;
 
       // four heaps that maintain the earliest request by each of the
       // tag components
-      c::Heap<EntryRef, ReservationCompare> resQ;
-      c::Heap<EntryRef, ProportionCompare> propQ;
+      c::Heap<EntryRef, ReservationCompare> res_q;
+      c::Heap<EntryRef, ProportionCompare> prop_q;
 
       // AKA not-ready queue
-      c::Heap<EntryRef, LimitCompare> limQ;
+      c::Heap<EntryRef, LimitCompare> lim_q;
 
       // for entries whose limit is passed and that'll be sorted by
       // their proportion tag
-      c::Heap<EntryRef, ProportionCompare> readyQ;
+      c::Heap<EntryRef, ProportionCompare> ready_q;
 
       // if all reservations are met and all other requestes are under
       // limit, this will allow the request next in terms of
@@ -296,13 +296,13 @@ namespace crimson {
 
     public:
 
-      PriorityQueue(ClientInfoFunc _clientInfoF,
-		    CanHandleRequestFunc _canHandleF,
-		    HandleRequestFunc _handleF,
+      PriorityQueue(ClientInfoFunc _client_info_f,
+		    CanHandleRequestFunc _can_handle_f,
+		    HandleRequestFunc _handle_f,
 		    bool _allowLimitBreak = false) :
-	clientInfoF(_clientInfoF),
-	canHandleF(_canHandleF),
-	handleF(_handleF),
+	client_info_f(_client_info_f),
+	can_handle_f(_can_handle_f),
+	handle_f(_handle_f),
 	allowLimitBreak(_allowLimitBreak),
 	res_sched_count(0),
 	prop_sched_count(0),
@@ -317,22 +317,22 @@ namespace crimson {
       }
 
 
-      void markAsIdle(const C& client_id) {
-	auto client_it = clientMap.find(client_id);
-	if (clientMap.end() != client_it) {
+      void mark_as_idle(const C& client_id) {
+	auto client_it = client_map.find(client_id);
+	if (client_map.end() != client_it) {
 	  client_it->second.idle = true;
 	}
       }
 
 
-      void addRequest(const R& request,
+      void add_request(const R& request,
 		      const ReqParams<C>& req_params,
 		      const Time& time) {
-	addRequest(RequestRef(new R(request)), req_params, time);
+	add_request(RequestRef(new R(request)), req_params, time);
       }
 
 
-      void addRequest(RequestRef&& request,
+      void add_request(RequestRef&& request,
 		      const ReqParams<C>& req_params,
 		      const Time& time) {
 #if 0
@@ -348,21 +348,21 @@ namespace crimson {
 	const C& client_id = req_params.client;
 	DataGuard g(data_mutex);
 
-	auto client_it = clientMap.find(client_id);
-	if (clientMap.end() == client_it) {
-	  ClientInfo ci = clientInfoF(client_id);
-	  clientMap.emplace(client_id, ClientRec(ci));
-	  client_it = clientMap.find(client_id);
+	auto client_it = client_map.find(client_id);
+	if (client_map.end() == client_it) {
+	  ClientInfo ci = client_info_f(client_id);
+	  client_map.emplace(client_id, ClientRec(ci));
+	  client_it = client_map.find(client_id);
 	}
 
 	if (client_it->second.idle) {
-	  while (!propQ.empty() && propQ.top()->handled) {
-	    propQ.pop();
+	  while (!prop_q.empty() && prop_q.top()->handled) {
+	    prop_q.pop();
 	  }
-	  if (!propQ.empty()) {
-	    double min_prop_tag = propQ.top()->tag.proportion;
+	  if (!prop_q.empty()) {
+	    double min_prop_tag = prop_q.top()->tag.proportion;
 	    double reduction = min_prop_tag - time;
-	    for (auto i = propQ.begin(); i != propQ.end(); ++i) {
+	    for (auto i = prop_q.begin(); i != prop_q.end(); ++i) {
 	      (*i)->tag.proportion -= reduction;
 	    }
 	  }
@@ -381,16 +381,16 @@ namespace crimson {
 	client_it->second.prev_tag = entry->tag;
 
 	if (0.0 != entry->tag.reservation) {
-	  resQ.push(entry);
+	  res_q.push(entry);
 	}
 
 	if (0.0 != entry->tag.proportion) {
-	  propQ.push(entry);
+	  prop_q.push(entry);
 
 	  if (0.0 == entry->tag.limit) {
-	    readyQ.push(entry);
+	    ready_q.push(entry);
 	  } else {
-	    limQ.push(entry);
+	    lim_q.push(entry);
 	  }
 	}
 
@@ -399,8 +399,8 @@ namespace crimson {
 	  static uint count = 0;
 	  ++count;
 	  if (50 <= count && count < 55) {
-	    std::cout << "addRequest:" << std::endl;
-	    std::cout << "time:" << formatTime(time) << std::endl;
+	    std::cout << "add_request:" << std::endl;
+	    std::cout << "time:" << format_time(time) << std::endl;
 	    displayQueues();
 	    std::cout << std::endl;
 	    debugger();
@@ -408,32 +408,32 @@ namespace crimson {
 	}
 #endif
 
-	scheduleRequest();
+	schedule_request();
       }
 
 
-      void requestCompleted() {
+      void request_completed() {
 	DataGuard g(data_mutex);
-	scheduleRequest();
+	schedule_request();
       }
 
     protected:
 
       // for debugging
-      void displayQueues() {
+      void display_queues() {
 	auto filter = [](const EntryRef& e)->bool { return !e->handled; };
-	resQ.displaySorted(std::cout << "RESER:", filter) << std::endl;
-	limQ.displaySorted(std::cout << "LIMIT:", filter) << std::endl;
-	readyQ.displaySorted(std::cout << "READY:", filter) << std::endl;
-	propQ.displaySorted(std::cout << "PROPO:", filter) << std::endl;
+	res_q.displaySorted(std::cout << "RESER:", filter) << std::endl;
+	lim_q.displaySorted(std::cout << "LIMIT:", filter) << std::endl;
+	ready_q.displaySorted(std::cout << "READY:", filter) << std::endl;
+	prop_q.displaySorted(std::cout << "PROPO:", filter) << std::endl;
       }
 
 
-      void reduceReservationTags(C client_id) {
-	auto client_it = clientMap.find(client_id);
-	assert(clientMap.end() != client_it);
+      void reduce_reservation_tags(C client_id) {
+	auto client_it = client_map.find(client_id);
+	assert(client_map.end() != client_it);
 	double reduction = client_it->second.info.reservation_inv;
-	for (auto i = resQ.begin(); i != resQ.end(); ++i) {
+	for (auto i = res_q.begin(); i != res_q.end(); ++i) {
 	  if ((*i)->client == client_id) {
 	    (*i)->tag.reservation -= reduction;
 	    i.increase(); // since tag goes down, priority increases
@@ -446,10 +446,10 @@ namespace crimson {
       // should not be empty and the top element of the heap should
       // not be already handled
       template<typename K>
-      C submitTopRequest(Heap<EntryRef, K>& heap, PhaseType phase) {
+      C submit_top_request(Heap<EntryRef, K>& heap, PhaseType phase) {
 	EntryRef& top = heap.top();
 	top->handled = true;
-	handleF(top->client, std::move(top->request), phase);
+	handle_f(top->client, std::move(top->request), phase);
 	C client_result = top->client;
 	heap.pop();
 	return client_result;
@@ -458,7 +458,7 @@ namespace crimson {
 
       // data_mutex should be held when called
       template<typename K>
-      void prepareQueue(Heap<EntryRef, K>& heap) {
+      void prepare_queue(Heap<EntryRef, K>& heap) {
 	while (!heap.empty() && heap.top()->handled) {
 	  heap.pop();
 	}
@@ -466,19 +466,19 @@ namespace crimson {
 
 
       // data_mutex should be held when called
-      void scheduleRequest() {
-	if (!canHandleF()) {
+      void schedule_request() {
+	if (!can_handle_f()) {
 	  return;
 	}
 
-	Time now = getTime();
+	Time now = get_time();
 
 	// so queue management is handled incrementally, remove
 	// handled items from each of the queues
-	prepareQueue(resQ);
-	prepareQueue(readyQ);
-	prepareQueue(limQ);
-	prepareQueue(propQ);
+	prepare_queue(res_q);
+	prepare_queue(ready_q);
+	prepare_queue(lim_q);
+	prepare_queue(prop_q);
 
 	// try constraint (reservation) based scheduling
 
@@ -487,17 +487,17 @@ namespace crimson {
 	  static uint count = 0;
 	  ++count;
 	  if (50 <= count && count <= 55) {
-	    std::cout << "scheduleRequest A:" << std::endl;
-	    std::cout << "now:" << formatTime(now) << std::endl;
-	    displayQueues();
+	    std::cout << "schedule_request A:" << std::endl;
+	    std::cout << "now:" << format_time(now) << std::endl;
+	    display_queues();
 	    std::cout << std::endl;
 	    debugger();
 	  }
 	}
 #endif
 
-	if (!resQ.empty() && resQ.top()->tag.reservation <= now) {
-	  (void) submitTopRequest(resQ, PhaseType::reservation);
+	if (!res_q.empty() && res_q.top()->tag.reservation <= now) {
+	  (void) submit_top_request(res_q, PhaseType::reservation);
 	  ++res_sched_count;
 	  return;
 	}
@@ -507,13 +507,13 @@ namespace crimson {
 
 	// all items that are within limit are eligible based on
 	// priority
-	while (!limQ.empty()) {
-	  auto top = limQ.top();
+	while (!lim_q.empty()) {
+	  auto top = lim_q.top();
 	  if (top->handled) {
-	    limQ.pop();
+	    lim_q.pop();
 	  } else if (top->tag.limit <= now) {
-	    readyQ.push(top);
-	    limQ.pop();
+	    ready_q.push(top);
+	    lim_q.pop();
 	  } else {
 	    break;
 	  }
@@ -524,26 +524,26 @@ namespace crimson {
 	  static uint count = 0;
 	  ++count;
 	  if (2000 <= count && count < 2002) {
-	    std::cout << "scheduleRequest B:" << std::endl;
-	    std::cout << "now:" << formatTime(now) << std::endl;
-	    displayQueues();
+	    std::cout << "schedule_request B:" << std::endl;
+	    std::cout << "now:" << format_time(now) << std::endl;
+	    display_queues();
 	    std::cout << std::endl;
 	    debugger();
 	  }
 	}
 #endif
 
-	if (!readyQ.empty()) {
-	  C client = submitTopRequest(readyQ, PhaseType::priority);
-	  reduceReservationTags(client);
+	if (!ready_q.empty()) {
+	  C client = submit_top_request(ready_q, PhaseType::priority);
+	  reduce_reservation_tags(client);
 	  ++prop_sched_count;
 	  return;
 	}
 
 	if (allowLimitBreak) {
-	  if (!propQ.empty()) {
-	    C client = submitTopRequest(propQ, PhaseType::priority);
-	    reduceReservationTags(client);
+	  if (!prop_q.empty()) {
+	    C client = submit_top_request(prop_q, PhaseType::priority);
+	    reduce_reservation_tags(client);
 	    ++limit_break_sched_count;
 	    return;
 	  }
@@ -552,38 +552,42 @@ namespace crimson {
 	// nothing scheduled; make sure we re-run when next queued
 	// item is ready
 
-	Time nextCall = TimeMax;
-	if (!resQ.empty()) {
-	  nextCall = minNotZeroTime(nextCall, resQ.top()->tag.reservation);
+	Time next_call = TimeMax;
+	if (!res_q.empty()) {
+	  next_call = min_not_0_time(next_call, res_q.top()->tag.reservation);
 	}
-	if (!limQ.empty()) {
-	  nextCall = minNotZeroTime(nextCall, limQ.top()->tag.limit);
+	if (!lim_q.empty()) {
+	  next_call = min_not_0_time(next_call, lim_q.top()->tag.limit);
 	}
-	if (!readyQ.empty()) {
-	  nextCall = minNotZeroTime(nextCall, readyQ.top()->tag.proportion);
+	if (!ready_q.empty()) {
+	  next_call = min_not_0_time(next_call, ready_q.top()->tag.proportion);
 	}
-	if (!propQ.empty()) {
-	  nextCall = minNotZeroTime(nextCall, propQ.top()->tag.proportion);
+	if (!prop_q.empty()) {
+	  next_call = min_not_0_time(next_call, prop_q.top()->tag.proportion);
 	}
-	if (nextCall < TimeMax) {
-	  now = getTime();
+	if (next_call < TimeMax) {
+	  now = get_time();
 	  // TODO rather than starting a thread, consider having a
-	  // service thread that just calls into scheduleRequest based
+	  // service thread that just calls into schedule_request based
 	  // on the nearest interesting time; communicate to it w a
 	  // mutex/cv.
 	  std::thread t(
-	    [this, nextCall, now]() {
-	      long microseconds_l = long(1 + 1000000 * (nextCall - now));
+	    [this, next_call, now]() {
+	      long microseconds_l = long(1 + 1000000 * (next_call - now));
 	      auto microseconds = std::chrono::microseconds(microseconds_l);
 	      std::this_thread::sleep_for(microseconds);
 	      DataGuard g(data_mutex);
-	      scheduleRequest();
+	      schedule_request();
 	    });
 	  t.detach();
 	}
-      } // scheduleRequest
+      } // schedule_request
 
-      static inline const Time& minNotZeroTime(const Time& current,
+
+      // if possible is not zero and less than current then return it;
+      // otherwise return current; the idea is we're trying to find
+      // the minimal time but ignoring zero
+      static inline const Time& min_not_0_time(const Time& current,
 					       const Time& possible) {
 	return TimeZero == possible ? current : std::min(current, possible);
       }

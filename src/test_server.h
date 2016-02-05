@@ -40,6 +40,8 @@ class TestServer {
 
 public:
 
+  using ClientInfoFunc = std::function<crimson::dmclock::ClientInfo(ClientId)>;
+
   using ClientRespFunc =
     std::function<void(ClientId,
 		       const TestResponse&,
@@ -75,7 +77,7 @@ public:
   TestServer(ServerId _id,
 	     int _iops,
 	     int _thread_pool_size,
-	     const std::function<crimson::dmclock::ClientInfo(ClientId)>& _client_info_f,
+	     const ClientInfoFunc& _client_info_f,
 	     const ClientRespFunc& _client_resp_f);
 
   virtual ~TestServer();
