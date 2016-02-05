@@ -31,6 +31,7 @@ TestClient::TestClient(ClientId _id,
   ops_to_run(_ops_to_run),
   iops_goal(_iops_goal),
   outstanding_ops_allowed(_outstanding_ops_allowed),
+  service_tracker(),
   op_times(ops_to_run),
   outstanding_ops(0),
   requests_complete(false)
@@ -73,7 +74,7 @@ void TestClient::run_req() {
 
       l.unlock();
       const ServerId& server = server_select_f(i);
-      dmc::ReqParams<ClientId> rp = service_tracker.getRequestParams(id, server);
+      dmc::ReqParams<ClientId> rp = service_tracker.get_req_params(id, server);
       TestRequest req(i, 12);
       submit_f(server, req, rp);
       ++outstanding_ops;
@@ -121,7 +122,7 @@ void TestClient::run_resp() {
 
       TestResponse& resp = item.response;
 
-      service_tracker.trackResponse(item.resp_params);
+      service_tracker.track_resp(item.resp_params);
 
       if (info >= 3) {
 	std::cout << resp << std::endl;
