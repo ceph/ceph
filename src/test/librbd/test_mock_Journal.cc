@@ -6,6 +6,7 @@
 #include "test/librbd/mock/MockImageCtx.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
+#include "cls/journal/cls_journal_types.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Replay.h"
@@ -118,6 +119,10 @@ struct MockJournalerProxy {
   }
   int register_client(const bufferlist &data) {
     return -EINVAL;
+  }
+  void allocate_tag(uint64_t, const bufferlist &,
+                    cls::journal::Tag*, Context *on_finish) {
+    on_finish->complete(-EINVAL);
   }
 
   void get_metadata(uint8_t *order, uint8_t *splay_width, int64_t *pool_id) {

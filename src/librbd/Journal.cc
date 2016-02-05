@@ -97,9 +97,9 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
+  librados::Rados rados(io_ctx);
   int64_t pool_id = -1;
   if (!object_pool.empty()) {
-    librados::Rados rados(io_ctx);
     IoCtx data_io_ctx;
     int r = rados.ioctx_create(object_pool.c_str(), data_io_ctx);
     if (r != 0) {
@@ -119,8 +119,32 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
     return r;
   }
 
-  // TODO register with librbd payload
-  r = journaler.register_client(bufferlist());
+  std::string cluster_id;
+  r = rados.cluster_fsid(&cluster_id);
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve cluster id: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // create tag class for this image's journal events
+  bufferlist tag_data;
+  ::encode(journal::TagData{cluster_id, pool_id, image_id}, tag_data);
+
+  C_SaferCond tag_ctx;
+  cls::journal::Tag tag;
+  journaler.allocate_tag(cls::journal::Tag::TAG_CLASS_NEW, tag_data,
+                         &tag, &tag_ctx);
+  r = tag_ctx.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to allocate journal tag: " << cpp_strerror(r)
+               << dendl;
+  }
+
+  bufferlist client_data;
+  ::encode(journal::ClientData{journal::ImageClientMeta{tag.tag_class}},
+           client_data);
+
+  r = journaler.register_client(client_data);
   if (r < 0) {
     lderr(cct) << "failed to register client: " << cpp_strerror(r) << dendl;
     return r;
