@@ -15,24 +15,31 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source test/test_btrfs_common.sh
+
+#
+# Removes btrfs subvolumes under the given directory param
+#
+function teardown_btrfs() {
+    local btrfs_base_dir=$1
+
+    btrfs_dirs=`ls -l $btrfs_base_dir | egrep '^d' | awk '{print $9}'`
+    for btrfs_dir in $btrfs_dirs
+    do
+        btrfs_subdirs=`ls -l $btrfs_base_dir/$btrfs_dir | egrep '^d' | awk '{print $9}'` 
+        for btrfs_subdir in $btrfs_subdirs
+        do
+	    btrfs subvolume delete $btrfs_base_dir/$btrfs_dir/$btrfs_subdir
+        done
+    done
+}
 
 PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
-export PATH=.:$PATH # make sure program from sources are prefered
+export PATH=..:.:$PATH # make sure program from sources are prefered
+export PATH=../ceph-detect-init/virtualenv/bin:$PATH
+export PATH=virtualenv/bin:$PATH
 DIR=test-ceph-disk
-if virtualenv virtualenv-$DIR && test -d ceph-detect-init ; then
-    . virtualenv-$DIR/bin/activate
-    (
-	# older versions of pip will not install wrap_console scripts
-	# when using wheel packages
-	pip install --upgrade 'pip >= 6.1'
-	if test -d ceph-detect-init/wheelhouse ; then
-            wheelhouse="--no-index --use-wheel --find-links=ceph-detect-init/wheelhouse"
-	fi
-	pip --log virtualenv-$DIR/log.txt install $wheelhouse --editable ceph-detect-init
-    )
-fi
+: ${CEPH_DISK:=ceph-disk}
 OSD_DATA=$DIR/osd
 MON_ID=a
 MONA=127.0.0.1:7451
@@ -47,12 +54,16 @@ CEPH_ARGS+=" --osd-failsafe-full-ratio=.99"
 CEPH_ARGS+=" --mon-host=$MONA"
 CEPH_ARGS+=" --log-file=$DIR/\$name.log"
 CEPH_ARGS+=" --pid-file=$DIR/\$name.pidfile"
-if test -d .libs ; then
-    CEPH_ARGS+=" --erasure-code-dir=.libs"
-    CEPH_ARGS+=" --compression-dir=.libs"
+if test -d ../.libs ; then
+    CEPH_ARGS+=" --erasure-code-dir=../.libs"
+    CEPH_ARGS+=" --compression-dir=../.libs"
 fi
 CEPH_ARGS+=" --auth-supported=none"
 CEPH_ARGS+=" --osd-journal-size=100"
+CEPH_ARGS+=" --debug-mon=20"
+CEPH_ARGS+=" --debug-osd=20"
+CEPH_ARGS+=" --debug-bdev=20"
+CEPH_ARGS+=" --debug-bluestore=20"
 CEPH_DISK_ARGS=
 CEPH_DISK_ARGS+=" --statedir=$DIR"
 CEPH_DISK_ARGS+=" --sysconfdir=$DIR"
@@ -122,12 +133,12 @@ function kill_daemons() {
 function command_fixture() {
     local command=$1
 
-    [ $(which $command) = ./$command ] || [ $(which $command) = `readlink -f $(pwd)/$command` ] || return 1
+    [ $(which $command) = ../$command ] || [ $(which $command) = `readlink -f $(pwd)/$command` ] || return 1
 
     cat > $DIR/$command <<EOF
 #!/bin/bash
 touch $DIR/used-$command
-exec ./$command "\$@"
+exec ../$command "\$@"
 EOF
     chmod +x $DIR/$command
 }
@@ -154,7 +165,6 @@ function tweak_path() {
 
     $tweaker test_activate_dir || return 1
 
-    [ -f $DIR/used-ceph-conf ] || return 1
     [ -f $DIR/used-ceph-osd ] || return 1
 
     teardown
@@ -184,7 +194,7 @@ function test_path() {
 }
 
 function test_no_path() {
-    ( unset PATH ; test_activate_dir ) || return 1
+    ( export PATH=../ceph-detect-init/virtualenv/bin:virtualenv/bin:..:/usr/bin:/bin ; test_activate_dir ) || return 1
 }
 
 function test_mark_init() {
@@ -197,10 +207,10 @@ function test_mark_init() {
 
     $mkdir -p $OSD_DATA
 
-    ceph-disk $CEPH_DISK_ARGS \
+    ${CEPH_DISK} $CEPH_DISK_ARGS \
         prepare --osd-uuid $osd_uuid $osd_data || return 1
 
-    $timeout $TIMEOUT ceph-disk $CEPH_DISK_ARGS \
+    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
         --verbose \
         activate \
         --mark-init=auto \
@@ -214,7 +224,7 @@ function test_mark_init() {
     else
         expected=systemd
     fi
-    $timeout $TIMEOUT ceph-disk $CEPH_DISK_ARGS \
+    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
         --verbose \
         activate \
         --mark-init=$expected \
@@ -231,7 +241,7 @@ function test_zap() {
     local osd_data=$DIR/dir
     $mkdir -p $osd_data
 
-    ceph-disk $CEPH_DISK_ARGS zap $osd_data 2>&1 | grep -q 'not full block device' || return 1
+    ${CEPH_DISK} $CEPH_DISK_ARGS zap $osd_data 2>&1 | grep -q 'not full block device' || return 1
 
     $rm -fr $osd_data
 }
@@ -246,7 +256,7 @@ function test_activate_dir_magic() {
 
     mkdir -p $osd_data/fsid
     CEPH_ARGS="--fsid $uuid" \
-     ceph-disk $CEPH_DISK_ARGS prepare $osd_data > $DIR/out 2>&1
+     ${CEPH_DISK} $CEPH_DISK_ARGS prepare $osd_data > $DIR/out 2>&1
     grep --quiet 'Is a directory' $DIR/out || return 1
     ! [ -f $osd_data/magic ] || return 1
     rmdir $osd_data/fsid
@@ -254,7 +264,7 @@ function test_activate_dir_magic() {
     echo successfully prepare the OSD
 
     CEPH_ARGS="--fsid $uuid" \
-     ceph-disk $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $DIR/out
+     ${CEPH_DISK} $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $DIR/out
     grep --quiet 'Preparing osd data dir' $DIR/out || return 1
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
     [ -f $osd_data/magic ] || return 1
@@ -262,8 +272,8 @@ function test_activate_dir_magic() {
     echo will not override an existing OSD
 
     CEPH_ARGS="--fsid $($uuidgen)" \
-     ceph-disk $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $DIR/out
-    grep --quiet 'ceph-disk:Data dir .* already exists' $DIR/out || return 1
+     ${CEPH_DISK} $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $DIR/out
+    grep --quiet 'Data dir .* already exists' $DIR/out || return 1
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
 }
 
@@ -284,15 +294,14 @@ function test_pool_read_write() {
 function test_activate() {
     local to_prepare=$1
     local to_activate=$2
-    local journal=$3
     local osd_uuid=$($uuidgen)
 
     $mkdir -p $OSD_DATA
 
-    ceph-disk $CEPH_DISK_ARGS \
-        prepare --osd-uuid $osd_uuid $to_prepare $journal || return 1
+    ${CEPH_DISK} $CEPH_DISK_ARGS \
+        prepare --osd-uuid $osd_uuid $to_prepare || return 1
 
-    $timeout $TIMEOUT ceph-disk $CEPH_DISK_ARGS \
+    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
         $to_activate || return 1
@@ -307,6 +316,27 @@ function test_activate_dir() {
     $mkdir -p $osd_data
     test_activate $osd_data $osd_data || return 1
     $rm -fr $osd_data
+}
+
+function test_activate_dir_bluestore() {
+    run_mon
+
+    local osd_data=$DIR/dir
+    $mkdir -p $osd_data
+    local to_prepare=$osd_data
+    local to_activate=$osd_data
+    local osd_uuid=$($uuidgen)
+
+    CEPH_ARGS=" --bluestore-block-size=10737418240 $CEPH_ARGS" \
+      ${CEPH_DISK} $CEPH_DISK_ARGS \
+        prepare --bluestore --block-file --osd-uuid $osd_uuid $to_prepare || return 1
+
+    CEPH_ARGS=" --osd-objectstore=bluestore --bluestore-fsck-on-mount=true --enable_experimental_unrecoverable_data_corrupting_features=* --bluestore-block-db-size=67108864 --bluestore-block-wal-size=134217728 --bluestore-block-size=10737418240 $CEPH_ARGS" \
+      $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+        activate \
+        --mark-init=none \
+        $to_activate || return 1
+    test_pool_read_write $osd_uuid || return 1
 }
 
 function test_find_cluster_by_uuid() {
@@ -339,6 +369,7 @@ function run() {
     default_actions+="test_keyring_path "
     default_actions+="test_mark_init "
     default_actions+="test_zap "
+    default_actions+="test_activate_dir_bluestore "
     local actions=${@:-$default_actions}
     local status
     for action in $actions  ; do

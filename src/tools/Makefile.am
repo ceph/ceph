@@ -45,3 +45,5 @@ noinst_HEADERS += \
 	tools/rados/PoolDump.h \
 	tools/cephfs/DataScan.h
 
+EXTRA_DIST += \
+	tools/setup-virtualenv.sh

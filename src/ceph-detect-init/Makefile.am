@@ -53,11 +53,13 @@ EXTRA_DIST += \
 	ceph-detect-init/tests/test_all.py \
 	ceph-detect-init/tox.ini
 
-ceph-detect-init-all:
-	cd $(srcdir)/ceph-detect-init ; python setup.py build
+ceph-detect-init-all: ceph-detect-init/virtualenv
+
+ceph-detect-init/virtualenv:
+	cd $(srcdir)/ceph-detect-init ; ../tools/setup-virtualenv.sh ; virtualenv/bin/python setup.py develop
 
 ceph-detect-init-clean:
-	cd $(srcdir)/ceph-detect-init ; python setup.py clean ; rm -fr wheelhouse .tox build .coverage *.egg-info
+	cd $(srcdir)/ceph-detect-init ; python setup.py clean ; rm -fr wheelhouse .tox virtualenv .coverage *.egg-info
 
 ceph-detect-init-install-data:
 	cd $(srcdir)/ceph-detect-init ; \
