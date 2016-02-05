@@ -69,6 +69,8 @@
     replicalog get             get replica metadata log entry
     replicalog update          update replica metadata log entry
     replicalog delete          delete replica metadata log entry
+    orphans find               init and run search for leaked rados objects
+    orphans finish             clean up search for leaked rados objects
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name
@@ -131,6 +133,10 @@
      --max-objects             specify max objects (negative value to disable)
      --max-size                specify max size (in bytes, negative value to disable)
      --quota-scope             scope of quota (bucket, user)
+  
+  Orphans search options:
+     --pool                    data pool to scan for leaked rados objects in
+     --num-shards              num of shards to use for keeping the temporary scan info
   
     --conf/-c FILE    read configuration from the given configuration file
     --id/-i ID        set ID portion of my name
