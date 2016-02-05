@@ -260,6 +260,16 @@ Requires:	librbd1 = %{epoch}:%{version}-%{release}
 %description -n rbd-fuse
 FUSE based client to map Ceph rbd images to files
 
+%package -n rbd-mirror
+Summary:	Ceph daemon for mirroring RBD images
+Group:		System Environment/Base
+Requires:	%{name}
+Requires:	ceph-common = %{epoch}:%{version}-%{release}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+%description -n rbd-mirror
+Daemon for mirroring RBD images between Ceph clusters, streaming
+changes asynchronously.
+
 %package -n rbd-nbd
 Summary:	Ceph RBD client base on NBD
 Group:		System Environment/Base
@@ -993,6 +1003,12 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/rbd-fuse
 %{_mandir}/man8/rbd-fuse.8*
+
+#################################################################################
+%files -n rbd-mirror
+%defattr(-,root,root,-)
+%{_bindir}/rbd-mirror
+%{_mandir}/man8/rbd-mirror.8*
 
 #################################################################################
 %files -n rbd-nbd
