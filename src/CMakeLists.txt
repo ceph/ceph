@@ -8,7 +8,6 @@ set(test_srcs test_server.cc test_client.cc test.cc)
 set_source_files_properties(${core_srcs} ${test_srcs}
   PROPERTIES
   COMPILE_FLAGS "${my_compile_flags} -std=gnu++11 -pthread"
-  # COMPILE_FLAGS "${my_compile_flags} -std=gnu++11 -pthread -DIGNORE_DISTRIBUTED_PRIORITIES"
   )
 
 add_executable(sim ${core_srcs} ${test_srcs})

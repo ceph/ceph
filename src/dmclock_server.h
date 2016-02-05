@@ -137,11 +137,9 @@ namespace crimson {
 			    double prev,
 			    double increment,
 			    uint32_t dist_req_val) {
-#ifndef IGNORE_DISTRIBUTED_PRIORITIES
 	if (0 != dist_req_val) {
 	  increment *= dist_req_val;
 	}
-#endif
 	if (0.0 == increment) {
 	  return 0.0;
 	} else {
@@ -485,7 +483,7 @@ namespace crimson {
 
 	// try constraint (reservation) based scheduling
 
-#if 0
+#if 1
 	{
 	  static uint count = 0;
 	  ++count;
@@ -526,7 +524,7 @@ namespace crimson {
 	{
 	  static uint count = 0;
 	  ++count;
-	  if (50 <= count && count <= 55) {
+	  if (2000 <= count && count < 2002) {
 	    std::cout << "scheduleRequest B:" << std::endl;
 	    std::cout << "now:" << formatTime(now) << std::endl;
 	    displayQueues();
