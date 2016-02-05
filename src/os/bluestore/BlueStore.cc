@@ -3396,7 +3396,7 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
   }
   RWLock::RLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
-  if (!o) {
+  if (!o || !o->exists) {
     dout(10) << __func__ << " " << oid << "doesn't exist" <<dendl;
     return ObjectMap::ObjectMapIterator();
   }
