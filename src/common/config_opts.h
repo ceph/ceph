@@ -932,6 +932,7 @@ OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
 
 OPTION(rgw_max_chunk_size, OPT_INT, 512 * 1024)
+OPTION(rgw_max_put_size, OPT_U64, 5ULL*1024*1024*1024)
 
 /**
  * override max bucket index shards in zone configuration (if not zero)
