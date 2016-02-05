@@ -56,7 +56,8 @@ static constexpr double bd = bs + ((double)bns / 1000000000.);
 
 template<typename Clock>
 static void system_clock_sanity() {
-  static const typename Clock::time_point brt(seconds(bs) + nanoseconds(bns));
+  static typename Clock::time_point brt(seconds(bs)
+						  + nanoseconds(bns));
   const typename Clock::time_point now(Clock::now());
 
   ASSERT_GT(now, brt);
