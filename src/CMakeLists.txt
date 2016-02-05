@@ -920,7 +920,7 @@ install(PROGRAMS
 
 install(PROGRAMS
   ${CMAKE_SOURCE_DIR}/src/ceph-create-keys
-  ${CMAKE_SOURCE_DIR}/src/ceph-disk
+#  ${CMAKE_SOURCE_DIR}/src/ceph-disk
   ${CMAKE_SOURCE_DIR}/src/ceph-disk-udev
   DESTINATION sbin)
 
