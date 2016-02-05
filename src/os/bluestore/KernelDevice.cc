@@ -240,7 +240,7 @@ void KernelDevice::_aio_thread()
       for (int i = 0; i < r; ++i) {
 	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
 	_aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
-	int left = ioc->num_running.dec();
+	int left = --ioc->num_running;
 	int r = aio[i]->get_return_value();
 	dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
 		 << " ioc " << ioc
@@ -304,8 +304,8 @@ void KernelDevice::_aio_log_finish(
 void KernelDevice::aio_submit(IOContext *ioc)
 {
   dout(20) << __func__ << " ioc " << ioc
-	   << " pending " << ioc->num_pending.read()
-	   << " running " << ioc->num_running.read()
+	   << " pending " << ioc->num_pending.load()
+	   << " running " << ioc->num_running.load()
 	   << dendl;
   // move these aside, and get our end iterator position now, as the
   // aios might complete as soon as they are submitted and queue more
@@ -314,10 +314,10 @@ void KernelDevice::aio_submit(IOContext *ioc)
   ioc->running_aios.splice(e, ioc->pending_aios);
   list<FS::aio_t>::iterator p = ioc->running_aios.begin();
 
-  int pending = ioc->num_pending.read();
-  ioc->num_running.add(pending);
-  ioc->num_pending.sub(pending);
-  assert(ioc->num_pending.read() == 0);  // we should be only thread doing this
+  int pending = ioc->num_pending.load();
+  ioc->num_running += pending;
+  ioc->num_pending -= pending;
+  assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
 
   bool done = false;
   while (!done) {
@@ -377,7 +377,7 @@ int KernelDevice::aio_write(
 #ifdef HAVE_LIBAIO
   if (aio && dio && !buffered) {
     ioc->pending_aios.push_back(FS::aio_t(ioc, fd_direct));
-    ioc->num_pending.inc();
+    ++ioc->num_pending;
     FS::aio_t& aio = ioc->pending_aios.back();
     if (g_conf->bdev_inject_crash &&
 	rand() % g_conf->bdev_inject_crash == 0) {
@@ -469,7 +469,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   assert(off + len <= size);
 
   _aio_log_start(ioc, off, len);
-  ioc->num_reading.inc();;
+  ++ioc->num_reading;
 
   bufferptr p = buffer::create_page_aligned(len);
   int r = ::pread(buffered ? fd_buffered : fd_direct,
@@ -488,7 +488,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 
  out:
   _aio_log_finish(ioc, off, len);
-  ioc->num_reading.dec();
+  --ioc->num_reading;
   ioc->aio_wake();
   return r < 0 ? r : 0;
 }

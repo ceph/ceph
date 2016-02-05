@@ -17,8 +17,9 @@
 #ifndef CEPH_OS_BLUESTORE_BLOCKDEVICE_H
 #define CEPH_OS_BLUESTORE_BLOCKDEVICE_H
 
-#include <mutex>
+#include <atomic>
 #include <condition_variable>
+#include <mutex>
 
 #include "acconfig.h"
 #include "os/fs/FS.h"
@@ -38,10 +39,10 @@ struct IOContext {
 
   list<FS::aio_t> pending_aios;    ///< not yet submitted
   list<FS::aio_t> running_aios;    ///< submitting or submitted
-  atomic_t num_pending;
-  atomic_t num_running;
-  atomic_t num_reading;
-  atomic_t num_waiting;
+  std::atomic_int num_pending = {0};
+  std::atomic_int num_running = {0};
+  std::atomic_int num_reading = {0};
+  std::atomic_int num_waiting = {0};
 
   explicit IOContext(void *p)
     : priv(p)
@@ -53,13 +54,13 @@ struct IOContext {
 
   bool has_aios() {
     std::lock_guard<std::mutex> l(lock);
-    return num_pending.read() || num_running.read();
+    return num_pending.load() || num_running.load();
   }
 
   void aio_wait();
 
   void aio_wake() {
-    if (num_waiting.read()) {
+    if (num_waiting.load()) {
       std::lock_guard<std::mutex> l(lock);
       cond.notify_all();
     }
@@ -70,7 +71,7 @@ struct IOContext {
 class BlockDevice {
   std::mutex ioc_reap_lock;
   vector<IOContext*> ioc_reap_queue;
-  atomic_t ioc_reap_count;
+  std::atomic_int ioc_reap_count = {0};
 
 public:
   BlockDevice() = default;
