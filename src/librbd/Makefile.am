@@ -1,5 +1,5 @@
 librbd_types_la_SOURCES = \
-	librbd/journal/Entries.cc \
+	librbd/journal/Types.cc \
 	librbd/WatchNotifyTypes.cc
 noinst_LTLIBRARIES += librbd_types.la
 
@@ -115,7 +115,7 @@ noinst_HEADERS += \
 	librbd/image/RefreshRequest.h \
 	librbd/image/SetSnapRequest.h \
 	librbd/journal/Replay.h \
-	librbd/journal/Entries.h \
+	librbd/journal/Types.h \
 	librbd/object_map/InvalidateRequest.h \
 	librbd/object_map/LockRequest.h \
 	librbd/object_map/Request.h \

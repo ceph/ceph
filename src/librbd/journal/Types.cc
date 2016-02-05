@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/journal/Entries.h"
+#include "librbd/journal/Types.h"
 #include "include/assert.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
@@ -11,55 +11,58 @@ namespace journal {
 
 namespace {
 
-class GetEventTypeVistor : public boost::static_visitor<EventType> {
+template <typename E>
+class GetTypeVisitor : public boost::static_visitor<E> {
 public:
-  template <typename Event>
-  inline EventType operator()(const Event &event) const {
-    return Event::EVENT_TYPE;
+  template <typename T>
+  inline E operator()(const T&) const {
+    return T::TYPE;
   }
 };
 
-class EncodeEventVisitor : public boost::static_visitor<void> {
+class EncodeVisitor : public boost::static_visitor<void> {
 public:
-  explicit EncodeEventVisitor(bufferlist &bl) : m_bl(bl) {
+  explicit EncodeVisitor(bufferlist &bl) : m_bl(bl) {
   }
 
-  template <typename Event>
-  inline void operator()(const Event &event) const {
-    ::encode(static_cast<uint32_t>(Event::EVENT_TYPE), m_bl);
-    event.encode(m_bl);
+  template <typename T>
+  inline void operator()(const T& t) const {
+    ::encode(static_cast<uint32_t>(T::TYPE), m_bl);
+    t.encode(m_bl);
   }
 private:
   bufferlist &m_bl;
 };
 
-class DecodeEventVisitor : public boost::static_visitor<void> {
+class DecodeVisitor : public boost::static_visitor<void> {
 public:
-  DecodeEventVisitor(__u8 version, bufferlist::iterator &iter)
+  DecodeVisitor(__u8 version, bufferlist::iterator &iter)
     : m_version(version), m_iter(iter) {
   }
 
-  template <typename Event>
-  inline void operator()(Event &event) const {
-    event.decode(m_version, m_iter);
+  template <typename T>
+  inline void operator()(T& t) const {
+    t.decode(m_version, m_iter);
   }
 private:
   __u8 m_version;
   bufferlist::iterator &m_iter;
 };
 
-class DumpEventVisitor : public boost::static_visitor<void> {
+class DumpVisitor : public boost::static_visitor<void> {
 public:
-  explicit DumpEventVisitor(Formatter *formatter) : m_formatter(formatter) {}
+  explicit DumpVisitor(Formatter *formatter, const std::string &key)
+    : m_formatter(formatter), m_key(key) {}
 
-  template <typename Event>
-  inline void operator()(const Event &event) const {
-    EventType event_type = Event::EVENT_TYPE;
-    m_formatter->dump_string("event_type", stringify(event_type));
-    event.dump(m_formatter);
+  template <typename T>
+  inline void operator()(const T& t) const {
+    auto type = T::TYPE;
+    m_formatter->dump_string(m_key.c_str(), stringify(type));
+    t.dump(m_formatter);
   }
 private:
   ceph::Formatter *m_formatter;
+  std::string m_key;
 };
 
 } // anonymous namespace
@@ -207,12 +210,12 @@ void UnknownEvent::dump(Formatter *f) const {
 }
 
 EventType EventEntry::get_event_type() const {
-  return boost::apply_visitor(GetEventTypeVistor(), event);
+  return boost::apply_visitor(GetTypeVisitor<EventType>(), event);
 }
 
 void EventEntry::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  boost::apply_visitor(EncodeEventVisitor(bl), event);
+  boost::apply_visitor(EncodeVisitor(bl), event);
   ENCODE_FINISH(bl);
 }
 
@@ -268,12 +271,12 @@ void EventEntry::decode(bufferlist::iterator& it) {
     break;
   }
 
-  boost::apply_visitor(DecodeEventVisitor(struct_v, it), event);
+  boost::apply_visitor(DecodeVisitor(struct_v, it), event);
   DECODE_FINISH(it);
 }
 
 void EventEntry::dump(Formatter *f) const {
-  boost::apply_visitor(DumpEventVisitor(f), event);
+  boost::apply_visitor(DumpVisitor(f, "event_type"), event);
 }
 
 void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
@@ -314,6 +317,136 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(ResizeEvent(901, 1234)));
 
   o.push_back(new EventEntry(FlattenEvent(123)));
+}
+
+// Journal Client
+
+void ImageClientMeta::encode(bufferlist& bl) const {
+  ::encode(tag_class, bl);
+}
+
+void ImageClientMeta::decode(__u8 version, bufferlist::iterator& it) {
+  ::decode(tag_class, it);
+}
+
+void ImageClientMeta::dump(Formatter *f) const {
+  f->dump_unsigned("tag_class", tag_class);
+}
+
+void MirrorPeerClientMeta::encode(bufferlist& bl) const {
+  ::encode(cluster_id, bl);
+  ::encode(pool_id, bl);
+  ::encode(image_id, bl);
+}
+
+void MirrorPeerClientMeta::decode(__u8 version, bufferlist::iterator& it) {
+  ::decode(cluster_id, it);
+  ::decode(pool_id, it);
+  ::decode(image_id, it);
+}
+
+void MirrorPeerClientMeta::dump(Formatter *f) const {
+  f->dump_string("cluster_id", cluster_id.c_str());
+  f->dump_int("pool_id", pool_id);
+  f->dump_string("image_id", image_id.c_str());
+}
+
+void CliClientMeta::encode(bufferlist& bl) const {
+}
+
+void CliClientMeta::decode(__u8 version, bufferlist::iterator& it) {
+}
+
+void CliClientMeta::dump(Formatter *f) const {
+}
+
+void UnknownClientMeta::encode(bufferlist& bl) const {
+  assert(false);
+}
+
+void UnknownClientMeta::decode(__u8 version, bufferlist::iterator& it) {
+}
+
+void UnknownClientMeta::dump(Formatter *f) const {
+}
+
+ClientMetaType ClientData::get_client_meta_type() const {
+  return boost::apply_visitor(GetTypeVisitor<ClientMetaType>(), client_meta);
+}
+
+void ClientData::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  boost::apply_visitor(EncodeVisitor(bl), client_meta);
+  ENCODE_FINISH(bl);
+}
+
+void ClientData::decode(bufferlist::iterator& it) {
+  DECODE_START(1, it);
+
+  uint32_t client_meta_type;
+  ::decode(client_meta_type, it);
+
+  // select the correct payload variant based upon the encoded op
+  switch (client_meta_type) {
+  case IMAGE_CLIENT_META_TYPE:
+    client_meta = ImageClientMeta();
+    break;
+  case MIRROR_PEER_CLIENT_META_TYPE:
+    client_meta = MirrorPeerClientMeta();
+    break;
+  case CLI_CLIENT_META_TYPE:
+    client_meta = CliClientMeta();
+    break;
+  default:
+    client_meta = UnknownClientMeta();
+    break;
+  }
+
+  boost::apply_visitor(DecodeVisitor(struct_v, it), client_meta);
+  DECODE_FINISH(it);
+}
+
+void ClientData::dump(Formatter *f) const {
+  boost::apply_visitor(DumpVisitor(f, "client_meta_type"), client_meta);
+}
+
+void ClientData::generate_test_instances(std::list<ClientData *> &o) {
+  o.push_back(new ClientData(ImageClientMeta()));
+  o.push_back(new ClientData(ImageClientMeta(123)));
+  o.push_back(new ClientData(MirrorPeerClientMeta()));
+  o.push_back(new ClientData(MirrorPeerClientMeta("cluster_id", 123, "image_id")));
+  o.push_back(new ClientData(CliClientMeta()));
+}
+
+// Journal Tag
+
+void TagData::encode(bufferlist& bl) const {
+  ::encode(cluster_id, bl);
+  ::encode(pool_id, bl);
+  ::encode(image_id, bl);
+  ::encode(predecessor_tag_tid, bl);
+  ::encode(predecessor_entry_tid, bl);
+}
+
+void TagData::decode(bufferlist::iterator& it) {
+  ::decode(cluster_id, it);
+  ::decode(pool_id, it);
+  ::decode(image_id, it);
+  ::decode(predecessor_tag_tid, it);
+  ::decode(predecessor_entry_tid, it);
+}
+
+void TagData::dump(Formatter *f) const {
+  f->dump_string("cluster_id", cluster_id.c_str());
+  f->dump_int("pool_id", pool_id);
+  f->dump_string("image_id", image_id.c_str());
+  f->dump_unsigned("predecessor_tag_tid", predecessor_tag_tid);
+  f->dump_unsigned("predecessor_entry_tid", predecessor_entry_tid);
+}
+
+void TagData::generate_test_instances(std::list<TagData *> &o) {
+  o.push_back(new TagData());
+  o.push_back(new TagData("cluster_id", 123, "image_id"));
 }
 
 } // namespace journal
@@ -368,4 +501,26 @@ std::ostream &operator<<(std::ostream &out,
     break;
   }
   return out;
+}
+
+std::ostream &operator<<(std::ostream &out,
+                         const librbd::journal::ClientMetaType &type) {
+  using namespace librbd::journal;
+
+  switch (type) {
+  case IMAGE_CLIENT_META_TYPE:
+    out << "Master Image";
+    break;
+  case MIRROR_PEER_CLIENT_META_TYPE:
+    out << "Mirror Peer";
+    break;
+  case CLI_CLIENT_META_TYPE:
+    out << "CLI Tool";
+    break;
+  default:
+    out << "Unknown (" << static_cast<uint32_t>(type) << ")";
+    break;
+  }
+  return out;
+
 }
