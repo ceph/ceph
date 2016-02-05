@@ -20,6 +20,7 @@ void JournalingObjectStore::journal_start()
 void JournalingObjectStore::journal_stop()
 {
   dout(10) << "journal_stop" << dendl;
+  finisher.wait_for_empty();
   finisher.stop();
 }
 
