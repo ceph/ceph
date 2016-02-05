@@ -46,8 +46,8 @@ int main(int argc, char* argv[]) {
 
   // name -> (server iops, server threads)
   const std::map<ServerId,std::pair<int,int>> server_info = {
-    {0, { 70, 1 }},
-    {1, { 70, 1 }},
+    {0, { 60, 1 }},
+    {1, { 60, 1 }},
 #if 0
     {2, { 75, 7 }},
     {3, { 75, 7 }},
@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
   // id -> (client_info, goal iops)
   const std::map<ClientId,std::pair<dmc::ClientInfo,int>> client_info = {
     {"c1", {{ 1.0, 50.0, 200.0 }, 100 }},
-    {"c2", {{ 2.0, 50.0, 200.0 }, 100 }},
+    {"c2", {{ 3.0, 50.0, 200.0 }, 100 }},
   };
 
   // construct servers
