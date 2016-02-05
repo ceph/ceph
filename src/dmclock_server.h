@@ -36,14 +36,13 @@ namespace crimson {
 
   namespace dmclock {
 
-    static bool info = true;
-
     // we're using double to represent time, but we could change it by
     // changing the following declarations (and by making sure a min
     // function existed)
     typedef double Time;
     static const double TimeZero = 0.0;
     static const double TimeMax = std::numeric_limits<Time>::max();
+
 
     inline Time getTime() {
       struct timeval now;
