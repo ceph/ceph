@@ -68,7 +68,7 @@ def task(ctx, config):
     manager.raw_cluster_cmd('osd', 'unset', 'nodown')
 
     # write some new data
-    p = rados_start(testdir, mon, ['-p', 'rbd', 'bench', '60', 'write', '-b', '4096',
+    p = rados_start(testdir, mon, ['-p', 'rbd', 'bench', '20', 'write', '-b', '4096',
                           '--no-cleanup'])
 
     time.sleep(15)
@@ -157,7 +157,7 @@ def test_incomplete_pgs(ctx, config):
 
     # lots of objects in rbd (no pg log, will backfill)
     p = rados_start(testdir, mon,
-                    ['-p', 'rbd', 'bench', '60', 'write', '-b', '1',
+                    ['-p', 'rbd', 'bench', '20', 'write', '-b', '1',
                      '--no-cleanup'])
     p.wait()
 

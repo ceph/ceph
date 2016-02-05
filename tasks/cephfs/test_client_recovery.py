@@ -304,10 +304,10 @@ class TestClientRecovery(CephFSTestCase):
         count = 500
         # Create lots of files
         for i in range(count):
-            self.mount_a.run_shell(["sudo", "touch", "f{0}".format(i)])
+            self.mount_a.run_shell(["touch", "f{0}".format(i)])
 
         # Populate mount_b's cache
-        self.mount_b.run_shell(["sudo", "ls"])
+        self.mount_b.run_shell(["ls"])
 
         client_id = self.mount_b.get_global_id()
         num_caps = self._session_num_caps(client_id)
@@ -366,7 +366,13 @@ class TestClientRecovery(CephFSTestCase):
             # We killed it, so it raises an error
             pass
 
-    def test_fsync(self):
+    def test_dir_fsync(self):
+	self._test_fsync(True);
+
+    def test_create_fsync(self):
+	self._test_fsync(False);
+
+    def _test_fsync(self, dirfsync):
         """
         That calls to fsync guarantee visibility of metadata to another
         client immediately after the fsyncing client dies.
@@ -382,23 +388,25 @@ class TestClientRecovery(CephFSTestCase):
                 import os
                 import time
 
-                path = "{0}"
+                path = "{path}"
 
                 print "Starting creation..."
                 start = time.time()
 
                 os.mkdir(path)
-                f = open(os.path.join(path, "childfile"), "w")
-                f.close()
-                print "Finished creation in {0}s".format(time.time() - start)
+                dfd = os.open(path, os.O_DIRECTORY)
 
-                fd = os.open(path, os.O_DIRECTORY)
+                fd = open(os.path.join(path, "childfile"), "w")
+                print "Finished creation in {{0}}s".format(time.time() - start)
 
                 print "Starting fsync..."
                 start = time.time()
-                os.fsync(fd)
-                print "Finished fsync in {0}s".format(time.time() - start)
-            """.format(path))
+                if {dirfsync}:
+                    os.fsync(dfd)
+                else:
+                    os.fsync(fd)
+                print "Finished fsync in {{0}}s".format(time.time() - start)
+            """.format(path=path,dirfsync=str(dirfsync)))
         )
 
         # Immediately kill the MDS and then client A

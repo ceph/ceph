@@ -1,6 +1,8 @@
-
+from StringIO import StringIO
 import json
 import logging
+from tasks.cephfs.fuse_mount import FuseMount
+from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 log = logging.getLogger(__name__)
@@ -9,6 +11,74 @@ log = logging.getLogger(__name__)
 class TestSessionMap(CephFSTestCase):
     CLIENTS_REQUIRED = 2
     MDSS_REQUIRED = 2
+
+    def test_tell_session_drop(self):
+        """
+        That when a `tell` command is sent using the python CLI,
+        its MDS session is gone after it terminates
+        """
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
+        mds_id = self.fs.get_lone_mds_id()
+        self.fs.mon_manager.raw_cluster_cmd("tell", "mds.{0}".format(mds_id), "session", "ls")
+
+        ls_data = self.fs.mds_asok(['session', 'ls'])
+        self.assertEqual(len(ls_data), 0)
+
+    def _get_thread_count(self, mds_id):
+        remote = self.fs.mds_daemons[mds_id].remote
+
+        ps_txt = remote.run(
+            args=["ps", "axo", "cmd,nlwp"],
+            stdout=StringIO()
+        ).stdout.getvalue().strip()
+        lines = ps_txt.split("\n")[1:]
+
+        for line in lines:
+            if line.find("ceph-mds") != -1:
+                if line.find("-i {0}".format(mds_id)) != -1:
+                    log.info("Found ps line for daemon: {0}".format(line))
+                    return int(line.split()[-1])
+
+        raise RuntimeError("No process found in ps output for MDS {0}: {1}".format(
+            mds_id, ps_txt
+        ))
+
+    def test_tell_conn_close(self):
+        """
+        That when a `tell` command is sent using the python CLI,
+        the thread count goes back to where it started (i.e. we aren't
+        leaving connections open)
+        """
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
+        mds_id = self.fs.get_lone_mds_id()
+
+        initial_thread_count = self._get_thread_count(mds_id)
+        self.fs.mon_manager.raw_cluster_cmd("tell", "mds.{0}".format(mds_id), "session", "ls")
+        final_thread_count = self._get_thread_count(mds_id)
+
+        self.assertEqual(initial_thread_count, final_thread_count)
+
+    def test_mount_conn_close(self):
+        """
+        That when a client unmounts, the thread count on the MDS goes back
+        to what it was before the client mounted
+        """
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
+        mds_id = self.fs.get_lone_mds_id()
+
+        initial_thread_count = self._get_thread_count(mds_id)
+        self.mount_a.mount()
+        self.assertGreater(self._get_thread_count(mds_id), initial_thread_count)
+        self.mount_a.umount_wait()
+        final_thread_count = self._get_thread_count(mds_id)
+
+        self.assertEqual(initial_thread_count, final_thread_count)
 
     def test_version_splitting(self):
         """
@@ -73,7 +143,10 @@ class TestSessionMap(CephFSTestCase):
         # dirty)
         # The number of writes is two per session, because the header (sessionmap version) update and
         # KV write both count.
-        self.assertEqual(get_omap_wrs() - initial_omap_wrs, 2)
+        self.wait_until_true(
+            lambda: get_omap_wrs() - initial_omap_wrs == 2,
+            timeout=10  # Long enough for an export to get acked
+        )
 
         # Now end our sessions and check the backing sessionmap is updated correctly
         self.mount_a.umount_wait()
@@ -88,3 +161,72 @@ class TestSessionMap(CephFSTestCase):
         log.info("SessionMap: {0}".format(json.dumps(table_json, indent=2)))
         self.assertEqual(table_json['0']['result'], 0)
         self.assertEqual(len(table_json['0']['data']['Sessions']), 0)
+
+    def _sudo_write_file(self, remote, path, data):
+        """
+        Write data to a remote file as super user
+
+        :param remote: Remote site.
+        :param path: Path on the remote being written to.
+        :param data: Data to be written.
+
+        Both perms and owner are passed directly to chmod.
+        """
+        remote.run(
+            args=[
+                'sudo',
+                'python',
+                '-c',
+                'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
+                path,
+            ],
+            stdin=data,
+        )
+
+    def _configure_auth(self, mount, id_name, mds_caps, osd_caps=None, mon_caps=None):
+        """
+        Set up auth credentials for a client mount, and write out the keyring
+        for the client to use.
+        """
+
+        # This keyring stuff won't work for kclient
+        assert(isinstance(mount, FuseMount))
+
+        if osd_caps is None:
+            osd_caps = "allow rw"
+
+        if mon_caps is None:
+            mon_caps = "allow r"
+
+        out = self.fs.mon_manager.raw_cluster_cmd(
+            "auth", "get-or-create", "client.{name}".format(name=id_name),
+            "mds", mds_caps,
+            "osd", osd_caps,
+            "mon", mon_caps
+        )
+        mount.client_id = id_name
+        self._sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
+        self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
+
+    def test_session_reject(self):
+        self.mount_a.run_shell(["mkdir", "foo"])
+        self.mount_a.run_shell(["mkdir", "foo/bar"])
+        self.mount_a.umount_wait()
+
+        # Mount B will be my rejected client
+        self.mount_b.umount_wait()
+
+        # Configure a client that is limited to /foo/bar
+        self._configure_auth(self.mount_b, "badguy", "allow rw path=/foo/bar")
+        # Check he can mount that dir and do IO
+        self.mount_b.mount(mount_path="/foo/bar")
+        self.mount_b.wait_until_mounted()
+        self.mount_b.create_destroy()
+        self.mount_b.umount_wait()
+
+        # Configure the client to claim that its mount point metadata is /baz
+        self.set_conf("client.badguy", "client_metadata", "root=/baz")
+        # Try to mount the client, see that it fails
+        with self.assert_cluster_log("client session with invalid root '/baz' denied"):
+            with self.assertRaises(CommandFailedError):
+                self.mount_b.mount(mount_path="/foo/bar")

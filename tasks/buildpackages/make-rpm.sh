@@ -47,7 +47,6 @@ releasedir=$base/$(lsb_release -si)/WORKDIR
 # d) contains the short hash of the commit
 #
 vers=$(git describe --long --match "v*" | sed s/^v//)
-: ${NPROC:=$(nproc)}
 ceph_dir=$(pwd)
 
 #
@@ -105,7 +104,7 @@ function build_package() {
         ccache=$(echo /usr/lib*/ccache)
         # Build RPMs
         buildarea=`readlink -fn ${releasedir}`   ### rpm wants absolute path
-        PATH=$ccache:$PATH rpmbuild -ba --define "_topdir ${buildarea}" ceph.spec
+        PATH=$ccache:$PATH rpmbuild -ba --define "_unpackaged_files_terminate_build 0" --define "_topdir ${buildarea}" ceph.spec
     )
 }
 
@@ -231,12 +230,7 @@ function build_rpm_repo() {
         cp -fla ${dir} $sha1_dir
     done
 
-    ref_dir=${buildarea}/../$codename/$base/ref
-    mkdir -p $ref_dir
-    ( cd ${ceph_dir} ; git for-each-ref refs/tags/** refs/remotes/origin/** ) | grep $sha1 | while read sha1 type ref ; do
-        base_ref=$(basename $ref)
-        ( cd $ref_dir ; ln -sf ../sha1/$sha1 $base_ref )
-    done
+    link_same ${buildarea}/../$codename/$base/ref $ceph_dir $sha1
     if test "$gitbuilder_host" ; then
         (
             cd ${buildarea}/../$codename

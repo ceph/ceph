@@ -4,6 +4,7 @@ overrides:
     - reached quota
     - scrub
     - osd_map_max_advance
+    - failed to encode
     fs: xfs
     conf:
       mon:

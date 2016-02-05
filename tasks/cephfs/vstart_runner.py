@@ -35,6 +35,8 @@ import errno
 from unittest import suite
 import unittest
 from teuthology.orchestra.run import Raw, quote
+from teuthology.orchestra.daemon import DaemonGroup
+from teuthology.config import config as teuth_config
 
 import logging
 
@@ -92,7 +94,10 @@ class LocalRemoteProcess(object):
         if self.finished:
             # Avoid calling communicate() on a dead process because it'll
             # give you stick about std* already being closed
-            return
+            if self.exitstatus != 0:
+                raise CommandFailedError(self.args, self.exitstatus)
+            else:
+                return
 
         out, err = self.subproc.communicate()
         self.stdout.write(out)
@@ -159,6 +164,9 @@ class LocalRemote(object):
         tmpfile = tempfile.NamedTemporaryFile(delete=False).name
         shutil.copy(path, tmpfile)
         return tmpfile
+
+    def put_file(self, src, dst, sudo=False):
+        shutil.copy(src, dst)
 
     def run(self, args, check_status=True, wait=True,
             stdout=None, stderr=None, cwd=None, stdin=None,
@@ -235,6 +243,7 @@ class LocalDaemon(object):
         self.daemon_type = daemon_type
         self.daemon_id = daemon_id
         self.controller = LocalRemote()
+        self.proc = None
 
     @property
     def remote(self):
@@ -281,7 +290,7 @@ class LocalDaemon(object):
         if self._get_pid() is not None:
             self.stop()
 
-        self.controller.run([os.path.join(BIN_PREFIX, "./ceph-{0}".format(self.daemon_type)), "-i", self.daemon_id])
+        self.proc = self.controller.run([os.path.join(BIN_PREFIX, "./ceph-{0}".format(self.daemon_type)), "-i", self.daemon_id])
 
 
 def safe_kill(pid):
@@ -312,7 +321,7 @@ class MountDaemon(object):
         Return PID as an integer or None if not found
         """
         ps_txt = self.controller.run(
-            args=["ps", "ua", "-C", "ceph-fuse"],
+            args=["ps", "uaww", "-C", "ceph-fuse"],
             check_status=False  # ps returns err if nothing running so ignore
         ).stdout.getvalue().strip()
         lines = ps_txt.split("\n")[1:]
@@ -354,10 +363,18 @@ class MountDaemon(object):
 
 
 class LocalFuseMount(FuseMount):
-    def __init__(self, client_id, mount_point):
-        test_dir = "/tmp/not_there"
+    def __init__(self, test_dir, client_id):
         super(LocalFuseMount, self).__init__(None, test_dir, client_id, LocalRemote())
-        self.mountpoint = mount_point
+        self._proc = None
+
+    @property
+    def config_path(self):
+        return "./ceph.conf"
+
+    def get_keyring_path(self):
+        # This is going to end up in a config file, so use an absolute path
+        # to avoid assumptions about daemons' pwd
+        return os.path.abspath("./client.{0}.keyring".format(self.client_id))
 
     def run_shell(self, args, wait=True):
         # FIXME maybe should add a pwd arg to teuthology.orchestra so that
@@ -387,7 +404,7 @@ class LocalFuseMount(FuseMount):
         if self.is_mounted():
             super(LocalFuseMount, self).umount()
 
-    def mount(self):
+    def mount(self, mount_path=None):
         self.client_remote.run(
             args=[
                 'mkdir',
@@ -423,6 +440,9 @@ class LocalFuseMount(FuseMount):
         prefix = [os.path.join(BIN_PREFIX, "ceph-fuse")]
         if os.getuid() != 0:
             prefix += ["--client-die-on-failed-remount=false"]
+
+        if mount_path is not None:
+            prefix += ["--client_mountpoint={0}".format(mount_path)]
 
         self._proc = self.client_remote.run(args=
                                             prefix + [
@@ -486,6 +506,10 @@ class LocalCephManager(CephManager):
         """
         return LocalRemote()
 
+    def run_ceph_w(self):
+        proc = self.controller.run(["./ceph", "-w"], wait=False, stdout=StringIO())
+        return proc
+
     def raw_cluster_cmd(self, *args):
         """
         args like ["osd", "dump"}
@@ -548,23 +572,13 @@ class LocalFilesystem(Filesystem):
 
         self.admin_remote = LocalRemote()
 
-        # Hack: cheeky inspection of ceph.conf to see what MDSs exist
-        self.mds_ids = set()
-        for line in open("ceph.conf").readlines():
-            match = re.match("^\[mds\.(.+)\]$", line)
-            if match:
-                self.mds_ids.add(match.group(1))
-
+        self.mds_ids = ctx.daemons.daemons['mds'].keys()
         if not self.mds_ids:
             raise RuntimeError("No MDSs found in ceph.conf!")
 
-        self.mds_ids = list(self.mds_ids)
-
-        log.info("Discovered MDS IDs: {0}".format(self.mds_ids))
-
         self.mon_manager = LocalCephManager()
 
-        self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
+        self.mds_daemons = ctx.daemons.daemons["mds"]
 
         self.client_remote = LocalRemote()
 
@@ -610,9 +624,23 @@ class LocalFilesystem(Filesystem):
         for subsys, kvs in self._conf.items():
             existing_str += "\n[{0}]\n".format(subsys)
             for key, val in kvs.items():
-                # comment out any existing instances
-                if key in existing_str:
-                    existing_str = existing_str.replace(key, "#{0}".format(key))
+                # Comment out existing instance if it exists
+                log.info("Searching for existing instance {0}/{1}".format(
+                    key, subsys
+                ))
+                existing_section = re.search("^\[{0}\]$([\n]|[^\[])+".format(
+                    subsys
+                ), existing_str, re.MULTILINE)
+
+                if existing_section:
+                    section_str = existing_str[existing_section.start():existing_section.end()]
+                    existing_val = re.search("^\s*[^#]({0}) =".format(key), section_str, re.MULTILINE)
+                    if existing_val:
+                        start = existing_section.start() + existing_val.start(1)
+                        log.info("Found string to replace at {0}".format(
+                            start
+                        ))
+                        existing_str = existing_str[0:start] + "#" + existing_str[start:]
 
                 existing_str += "{0} = {1}\n".format(key, val)
 
@@ -665,8 +693,8 @@ def exec_test():
 
     test_dir = tempfile.mkdtemp()
 
-    # Run with two clients because some tests require the second one
-    clients = ["0", "1"]
+    # Create as many of these as the biggest test requires
+    clients = ["0", "1", "2"]
 
     remote = LocalRemote()
 
@@ -691,13 +719,26 @@ def exec_test():
         def only(self, requested):
             return self.__class__(rolename=requested)
 
+    teuth_config['test_path'] = test_dir
+
     class LocalContext(object):
         def __init__(self):
             self.config = {}
-            self.teuthology_config = {
-                'test_path': test_dir
-            }
+            self.teuthology_config = teuth_config
             self.cluster = LocalCluster()
+            self.daemons = DaemonGroup()
+
+            # Shove some LocalDaemons into the ctx.daemons DaemonGroup instance so that any
+            # tests that want to look these up via ctx can do so.
+            # Inspect ceph.conf to see what roles exist
+            for conf_line in open("ceph.conf").readlines():
+                for svc_type in ["mon", "osd", "mds"]:
+                    if svc_type not in self.daemons.daemons:
+                        self.daemons.daemons[svc_type] = {}
+                    match = re.match("^\[{0}\.(.+)\]$".format(svc_type), conf_line)
+                    if match:
+                        svc_id = match.group(1)
+                        self.daemons.daemons[svc_type][svc_id] = LocalDaemon(svc_type, svc_id)
 
         def __del__(self):
             shutil.rmtree(self.teuthology_config['test_path'])
@@ -718,15 +759,14 @@ def exec_test():
 
             open("./keyring", "a").write(p.stdout.getvalue())
 
-        mount_point = os.path.join(test_dir, "mnt.{0}".format(client_id))
-        mount = LocalFuseMount(client_id, mount_point)
+        mount = LocalFuseMount(test_dir, client_id)
         mounts.append(mount)
         if mount.is_mounted():
-            log.warn("unmounting {0}".format(mount_point))
+            log.warn("unmounting {0}".format(mount.mountpoint))
             mount.umount_wait()
         else:
-            if os.path.exists(mount_point):
-                os.rmdir(mount_point)
+            if os.path.exists(mount.mountpoint):
+                os.rmdir(mount.mountpoint)
     filesystem = LocalFilesystem(ctx)
 
     from tasks.cephfs_test_runner import DecoratingLoader

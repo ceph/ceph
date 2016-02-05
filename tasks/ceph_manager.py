@@ -841,6 +841,14 @@ class CephManager:
             )
         return proc.exitstatus
 
+    def run_ceph_w(self):
+        """
+        Execute "ceph -w" in the background with stdout connected to a StringIO,
+        and return the RemoteProcess.
+        """
+        return self.controller.run(args=["sudo", "daemon-helper", "kill", "ceph", "-w"],
+                                   wait=False, stdout=StringIO(), stdin=run.PIPE)
+
     def do_rados(self, remote, cmd):
         """
         Execute a remote rados command.
@@ -1378,9 +1386,9 @@ class CephManager:
         Scrub pg and wait for scrubbing to finish
         """
         init = self.get_last_scrub_stamp(pool, pgnum)
-        self.raw_cluster_cmd('pg', stype, self.get_pgid(pool, pgnum))
         while init == self.get_last_scrub_stamp(pool, pgnum):
             self.log("waiting for scrub type %s" % (stype,))
+            self.raw_cluster_cmd('pg', stype, self.get_pgid(pool, pgnum))
             time.sleep(10)
 
     def get_single_pg_stats(self, pgid):
