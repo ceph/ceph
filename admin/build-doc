@@ -7,7 +7,7 @@ TOPDIR=`pwd`
 install -d -m0755 build-doc
 
 if command -v dpkg >/dev/null; then
-    for package in python-dev python-pip python-virtualenv doxygen ditaa ant libxml2-dev libxslt1-dev cython; do
+    for package in python-dev python-pip python-virtualenv doxygen ditaa ant libxml2-dev libxslt1-dev zlib1g-dev cython graphviz; do
 	if [ "$(dpkg --status -- $package|sed -n 's/^Status: //p')" != "install ok installed" ]; then
             # add a space after old values
 	    missing="${missing:+$missing }$package"
@@ -19,7 +19,7 @@ if command -v dpkg >/dev/null; then
 	exit 1
     fi
 elif command -v yum >/dev/null; then
-    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml-devel libxslt-devel Cython; do
+    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml-devel libxslt-devel Cython graphviz; do
 	if ! rpm -q $package >/dev/null ; then
 		missing="${missing:+$missing }$package"
 	fi
