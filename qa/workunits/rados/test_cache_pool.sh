@@ -134,4 +134,113 @@ ceph osd tier remove base cache
 ceph osd pool delete cache cache --yes-i-really-really-mean-it
 ceph osd pool delete base base --yes-i-really-really-mean-it
 
+# test multiple_tiering
+ceph osd pool create base 2 2
+ceph osd pool create middle 2 2
+ceph osd pool create top 2 2
+
+ceph osd tier add-cache base middle 2000
+ceph osd tier add-cache middle top 2000
+ceph osd pool set middle min_read_recency_for_promote 0
+ceph osd pool set middle min_write_recency_for_promote 0
+ceph osd pool set top min_read_recency_for_promote 0
+ceph osd pool set top min_write_recency_for_promote 0
+
+### middle writeback, top writeback
+# put new obj
+echo "bar" > /tmp/bar.txt
+rados -p base put bar /tmp/bar.txt
+rados -p top ls | grep bar
+rados -p base get bar /tmp/exbar.txt
+diff /tmp/bar.txt /tmp/exbar.txt
+
+echo "foo" > /tmp/foo.txt
+rados -p base put foo /tmp/foo.txt
+
+# flush_evict
+rados -p top cache-flush-evict-all
+rados -p top ls | wc -l | grep -w 0
+rados -p middle cache-flush-evict-all
+rados -p top ls | wc -l | grep -w 0
+rados -p middle ls | wc -l | grep -w 0
+rados -p base ls | wc -l | grep -w 2
+
+# object was on basepool, get or put
+rados -p base get foo /tmp/exfoo.txt
+diff /tmp/foo.txt /tmp/exfoo.txt
+rados -p top ls | grep foo
+rados -p middle ls | grep foo
+
+echo "newbar" > /tmp/newbar.txt
+rados -p base put bar /tmp/newbar.txt
+rados -p top ls | grep bar
+rados -p middle ls | grep bar
+rados -p base get bar /tmp/exnewbar.txt
+diff /tmp/newbar.txt /tmp/exnewbar.txt
+
+### middle forward, top writeback
+rados -p middle cache-flush-evict-all
+rados -p middle ls | wc -l | grep -w 0
+ceph osd tier cache-mode middle forward
+rados -p top cache-flush-evict-all
+rados -p middle ls | wc -l | grep -w 0
+rados -p top ls | wc -l | grep -w 0
+
+### both forward
+ceph osd tier cache-mode top forward
+rados -p base put bar /tmp/bar.txt
+rados -p middle ls | wc -l | grep -w 0
+rados -p top ls | wc -l | grep -w 0
+rm /tmp/exbar.txt
+rados -p base get bar /tmp/exbar.txt
+git diff /tmp/bar.txt /tmp/exbar.txt
+rados -p middle ls | wc -l | grep -w 0
+rados -p top ls | wc -l | grep -w 0
+
+### middle writeback, top forward
+ceph osd tier cache-mode middle writeback
+rados -p base put bar /tmp/newbar.txt
+rados -p middle ls | grep bar
+rados -p top ls | wc -l | grep -w 0
+rm /tmp/exnewbar.txt
+rados -p base get bar /tmp/exnewbar.txt
+diff /tmp/newbar.txt /tmp/exnewbar.txt
+rados -p top ls | wc -l | grep -w 0
+
+### middle forward, top writeback
+ceph osd tier cache-mode middle forward
+ceph osd tier cache-mode top writeback
+rm /tmp/exfoo.txt
+rados -p base get foo /tmp/exfoo.txt
+diff /tmp/foo.txt /tmp/exfoo.txt
+rados -p top ls | grep foo
+! rados -p middle ls | grep foo
+
+rados -p base put bar /tmp/bar.txt
+rm /tmp/exbar.txt
+rados -p base get bar /tmp/exbar.txt
+git diff /tmp/bar.txt /tmp/exbar.txt
+rados -p top ls | grep bar
+
+### both forward
+ceph osd tier cache-mode top forward
+rados -p top cache-flush-evict-all
+rados -p top ls | wc -l | grep -w 0
+rados -p middle ls | wc -l | grep -w 1
+rados -p middle ls | grep bar
+
+rados -p middle cache-flush-evict-all
+rados -p top ls | wc -l | grep -w 0
+rados -p middle ls | wc -l | grep -w 0
+rados -p base ls | wc -l | grep -w 2
+
+# clean up
+ceph osd tier remove-overlay middle
+ceph osd tier remove middle top
+ceph osd tier remove-overlay base
+ceph osd tier remove base middle
+ceph osd pool delete base base --yes-i-really-really-mean-it
+ceph osd pool delete middle middle --yes-i-really-really-mean-it
+ceph osd pool delete top top --yes-i-really-really-mean-it
+
 echo OK
