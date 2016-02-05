@@ -46,8 +46,8 @@ int main(int argc, char* argv[]) {
 
   // name -> (server iops, server threads)
   const std::map<ServerId,std::pair<int,int>> server_info = {
-    {0, { 75, 7 }},
-    {1, { 75, 7 }},
+    {0, { 70, 1 }},
+    {1, { 70, 1 }},
 #if 0
     {2, { 75, 7 }},
     {3, { 75, 7 }},
@@ -60,7 +60,7 @@ int main(int argc, char* argv[]) {
 
   // client params
 
-  const int client_outstanding_ops = 10;
+  const int client_outstanding_ops = 10000;
 
   // id -> (client_info, goal iops)
   const std::map<ClientId,std::pair<dmc::ClientInfo,int>> client_info = {
@@ -139,7 +139,7 @@ int main(int argc, char* argv[]) {
     int goal = i.second.second;
     clients[name] = new TestClient(name,
 				   server_post_f,
-				   server_alternate_f,
+				   server_random_f,
 				   goal * goal_secs_to_run,
 				   goal,
 				   client_outstanding_ops);
