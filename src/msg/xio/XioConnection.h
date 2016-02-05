@@ -63,12 +63,8 @@ public:
   };
 
 private:
-#ifdef OPT_ATOMIC
   atomic_t connected __attribute__((align(64)));
   char pad_after[56]; 	//Padding to isolate the frequently accessed atomic variable 'connected' on a separate cache line
-#else
-  atomic_t connected;
-#endif
   XioConnection::type xio_conn_type;
   XioPortal *portal;
   entity_inst_t peer;
