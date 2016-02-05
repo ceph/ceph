@@ -52,6 +52,9 @@ extern "C" {
 #define CEPH_INO_ROOT  1
 #define CEPH_NOSNAP  ((uint64_t)(-2))
 
+/* Indicate ceph_p{read,write}v are supported */
+#define CEPH_PREADV_PWRITEV
+
 struct ceph_file_layout {
 	/* file -> object mapping */
 	uint32_t fl_stripe_unit;     /* stripe unit, in bytes.  must be multiple
