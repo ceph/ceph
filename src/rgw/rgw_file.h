@@ -1033,10 +1033,8 @@ public:
       if (last_del != string::npos)
 	sref.remove_prefix(last_del+1);
 
-
-      /* if we find a trailing slash in a -listing- the parent is an
-       * empty directory */
-      if (sref=="")
+      /* leaf directory? */
+      if (sref.empty())
 	continue;
 
       lsubdout(cct, rgw, 15) << "RGWReaddirRequest "
