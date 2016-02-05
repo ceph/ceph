@@ -13,11 +13,12 @@ namespace dmc = crimson::dmclock;
 
 std::ostream& dmc::operator<<(std::ostream& out,
 			      const dmc::ClientInfo& client) {
-  out << "{ w:" << client.weight <<
-    " r:" << client.reservation <<
+  out <<
+    "{ r:" << client.reservation <<
+    " w:" << client.weight <<
     " l:" << client.limit <<
-    " 1/w:" << client.weight_inv <<
     " 1/r:" << client.reservation_inv <<
+    " 1/w:" << client.weight_inv <<
     " 1/l:" << client.limit_inv <<
     " }";
   return out;
@@ -26,8 +27,9 @@ std::ostream& dmc::operator<<(std::ostream& out,
 
 std::ostream& dmc::operator<<(std::ostream& out,
 			      const dmc::RequestTag& tag) {
-  out << "{ p:" << formatTime(tag.proportion) <<
-    " r:" << formatTime(tag.reservation) <<
+  out <<
+    "{ r:" << formatTime(tag.reservation) <<
+    " p:" << formatTime(tag.proportion) <<
     " l:" << formatTime(tag.limit) << " }";
   return out;
 }

@@ -61,22 +61,22 @@ namespace crimson {
 
 
     struct ClientInfo {
-      const double weight;       // proportional
       const double reservation;  // minimum
+      const double weight;       // proportional
       const double limit;        // maximum
 
       // multiplicative inverses of above, which we use in calculations
       // and don't want to recalculate repeatedlu
-      const double weight_inv;
       const double reservation_inv;
+      const double weight_inv;
       const double limit_inv;
 
       ClientInfo(double _weight, double _reservation, double _limit) :
-	weight(_weight),
 	reservation(_reservation),
+	weight(_weight),
 	limit(_limit),
-	weight_inv(     0.0 == weight      ? 0.0 : 1.0 / weight),
 	reservation_inv(0.0 == reservation ? 0.0 : 1.0 / reservation),
+	weight_inv(     0.0 == weight      ? 0.0 : 1.0 / weight),
 	limit_inv(      0.0 == limit       ? 0.0 : 1.0 / limit)
       {
 	// empty
@@ -90,8 +90,8 @@ namespace crimson {
 			     const crimson::dmclock::ClientInfo& client);
 
     struct RequestTag {
-      double proportion;
       double reservation;
+      double proportion;
       double limit;
 
       template<typename I>
@@ -99,33 +99,33 @@ namespace crimson {
 		 const ClientInfo& client,
 		 const ReqParams<I>& req_params,
 		 const Time& time) :
-	proportion(tagCalc(time,
-			   prev_tag.proportion,
-			   client.weight_inv,
-			   req_params.delta)),
-	reservation(tagCalc(time,
-			    prev_tag.reservation,
-			    client.reservation_inv,
-			    req_params.rho)),
-	limit(tagCalc(time,
-		      prev_tag.limit,
-		      client.limit_inv,
-		      req_params.delta))
+	reservation(tag_calc(time,
+			     prev_tag.reservation,
+			     client.reservation_inv,
+			     req_params.rho)),
+	proportion(tag_calc(time,
+			    prev_tag.proportion,
+			    client.weight_inv,
+			    req_params.delta)),
+	limit(tag_calc(time,
+		       prev_tag.limit,
+		       client.limit_inv,
+		       req_params.delta))
       {
 	// empty
       }
 
-      RequestTag(double _prop, double _res, double _lim) :
-	proportion(_prop),
+      RequestTag(double _res, double _prop, double _lim) :
 	reservation(_res),
+	proportion(_prop),
 	limit(_lim)
       {
 	// empty
       }
 
       RequestTag(const RequestTag& other) :
-	proportion(other.proportion),
 	reservation(other.reservation),
+	proportion(other.proportion),
 	limit(other.limit)
       {
 	// empty
@@ -133,10 +133,10 @@ namespace crimson {
 
     private:
 
-      static double tagCalc(Time time,
-			    double prev,
-			    double increment,
-			    uint32_t dist_req_val) {
+      static double tag_calc(Time time,
+			     double prev,
+			     double increment,
+			     uint32_t dist_req_val) {
 	if (0 != dist_req_val) {
 	  increment *= dist_req_val;
 	}

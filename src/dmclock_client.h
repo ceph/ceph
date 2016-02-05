@@ -49,9 +49,9 @@ namespace crimson {
 	last_update = std::chrono::steady_clock::now();
       }
 
-      inline void resp_update(bool is_reservation) {
+      inline void resp_update(PhaseType phase) {
 	++my_delta;
-	if (is_reservation) ++my_rho;
+	if (phase == PhaseType::reservation) ++my_rho;
 	last_update = std::chrono::steady_clock::now();
       }
 
@@ -111,10 +111,10 @@ namespace crimson {
 	  // response or if the record was cleaned up b/w when
 	  // the request was made and now
 	  ServerInfo si(delta_counter, rho_counter);
-	  si.resp_update(PhaseType::reservation == resp_params.phase);
+	  si.resp_update(resp_params.phase);
 	  service_map.emplace(resp_params.server, si);
 	} else {
-	  it->second.resp_update(PhaseType::reservation == resp_params.phase);
+	  it->second.resp_update(resp_params.phase);
 	}
       }
 
