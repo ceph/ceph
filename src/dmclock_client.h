@@ -13,6 +13,7 @@
 #include <mutex>
 #include <condition_variable>
 
+#include "crimson/run_every.h"
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
 
@@ -71,42 +72,30 @@ namespace crimson {
 
       // clean config
 
-      Duration               clean_every;   // milliseconds b/w cleanings
+      RunEvery               cleaning_job;
+
       Duration               clean_age;     // age at which ServerInfo cleaned
-
-      // for handling clean-up
-
-      std::atomic_bool       finishing;
-      std::thread            clean_thd;
-      mutable std::mutex     clean_mtx;      // protects Counters and map
-      mutable std::condition_variable clean_cv;
 
       // types
 
       using DataGuard = std::lock_guard<decltype(data_mtx)>;
-      using Lock = std::unique_lock<decltype(clean_mtx)>;
-
       using TimePoint = decltype(std::chrono::steady_clock::now());
 
     public:
 
-      ServiceTracker(Duration _clean_every = std::chrono::minutes(5),
-		     Duration _clean_age = std::chrono::minutes(10)) :
+      ServiceTracker(Duration _clean_every, Duration _clean_age) :
 	delta_counter(0),
 	rho_counter(0),
-	finishing(false),
-	clean_every(_clean_every),
 	clean_age(_clean_age),
-	clean_thd(&ServiceTracker::run_clean, this)
+	cleaning_job(_clean_every, std::bind(&ServiceTracker::do_clean, this))
       {
-	
 	// empty
       }
 
-      ~ServiceTracker() {
-	finishing = true;
-	clean_cv.notify_all();
-	clean_thd.join();
+      ServiceTracker() :
+	ServiceTracker(std::chrono::minutes(5), std::chrono::minutes(10))
+      {
+	// empty
       }
 
       void track_resp(const RespParams<S>& resp_params) {
@@ -119,8 +108,8 @@ namespace crimson {
 	auto it = service_map.find(resp_params.server);
 	if (service_map.end() == it) {
 	  // this code can only run if a request did not precede the
-	  // response or if the record was destroyed before now and
-	  // after the request was made
+	  // response or if the record was cleaned up b/w when
+	  // the request was made and now
 	  ServerInfo si(delta_counter, rho_counter);
 	  si.resp_update(PhaseType::reservation == resp_params.phase);
 	  service_map.emplace(resp_params.server, si);
@@ -152,25 +141,11 @@ namespace crimson {
 
     private:
 
-      // every so often clean up old ServerInfo records; when exiting
-      // finishing will be true and we'll get a notification through
-      // clean_cv, which will allow this thread to exit
-      void run_clean() {
-	Lock l(clean_mtx);
-	while (true) {
-	  clean_cv.wait_for(l, clean_every);
-	  if (finishing.load()) {
-	    return; // if finishing end thread
-	  }
-
-	  do_clean(std::chrono::steady_clock::now() - clean_age);
-	}
-      }
-
-      void do_clean(TimePoint moment) {
+      void do_clean() {
+	TimePoint when = std::chrono::steady_clock::now() - clean_age;
 	DataGuard g(data_mtx);
 	for (auto it = service_map.begin(); it != service_map.end(); ++it) {
-	  if (it->second.last_update_before(moment)) {
+	  if (it->second.last_update_before(when)) {
 	    service_map.erase(it);
 	  }
 	}
