@@ -24,7 +24,9 @@ cls_method_handle_t h_journal_get_minimum_set;
 cls_method_handle_t h_journal_set_minimum_set;
 cls_method_handle_t h_journal_get_active_set;
 cls_method_handle_t h_journal_set_active_set;
+cls_method_handle_t h_journal_get_client;
 cls_method_handle_t h_journal_client_register;
+cls_method_handle_t h_journal_client_update;
 cls_method_handle_t h_journal_client_unregister;
 cls_method_handle_t h_journal_client_commit;
 cls_method_handle_t h_journal_client_list;
@@ -496,6 +498,36 @@ int journal_set_active_set(cls_method_context_t hctx, bufferlist *in,
 /**
  * Input:
  * @param id (string) - unique client id
+ *
+ * Output:
+ * cls::journal::Client
+ * @returns 0 on success, negative error code on failure
+ */
+int journal_get_client(cls_method_context_t hctx, bufferlist *in,
+                       bufferlist *out) {
+  std::string id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    CLS_ERR("failed to decode input parameters: %s", err.what());
+    return -EINVAL;
+  }
+
+  std::string key(key_from_client_id(id));
+  cls::journal::Client client;
+  int r = read_key(hctx, key, &client);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(client, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param id (string) - unique client id
  * @param data (bufferlist) - opaque data associated to client
  *
  * Output:
@@ -524,6 +556,42 @@ int journal_client_register(cls_method_context_t hctx, bufferlist *in,
 
   cls::journal::Client client(id, data);
   key = key_from_client_id(id);
+  r = write_key(hctx, key, client);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param id (string) - unique client id
+ * @param data (bufferlist) - opaque data associated to client
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int journal_client_update(cls_method_context_t hctx, bufferlist *in,
+                          bufferlist *out) {
+  std::string id;
+  bufferlist data;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(id, iter);
+    ::decode(data, iter);
+  } catch (const buffer::error &err) {
+    CLS_ERR("failed to decode input parameters: %s", err.what());
+    return -EINVAL;
+  }
+
+  std::string key(key_from_client_id(id));
+  cls::journal::Client client;
+  int r = read_key(hctx, key, &client);
+  if (r < 0) {
+    return r;
+  }
+
+  client.data = data;
   r = write_key(hctx, key, client);
   if (r < 0) {
     return r;
@@ -994,9 +1062,16 @@ void CEPH_CLS_API __cls_init()
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           journal_set_active_set,
                           &h_journal_set_active_set);
+
+  cls_register_cxx_method(h_class, "get_client",
+                          CLS_METHOD_RD,
+                          journal_get_client, &h_journal_get_client);
   cls_register_cxx_method(h_class, "client_register",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           journal_client_register, &h_journal_client_register);
+  cls_register_cxx_method(h_class, "client_update",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          journal_client_update, &h_journal_client_update);
   cls_register_cxx_method(h_class, "client_unregister",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           journal_client_unregister,
@@ -1007,6 +1082,7 @@ void CEPH_CLS_API __cls_init()
   cls_register_cxx_method(h_class, "client_list",
                           CLS_METHOD_RD,
                           journal_client_list, &h_journal_client_list);
+
   cls_register_cxx_method(h_class, "get_next_tag_tid",
                           CLS_METHOD_RD,
                           journal_get_next_tag_tid,

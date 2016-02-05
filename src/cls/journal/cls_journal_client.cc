@@ -223,6 +223,49 @@ void set_active_set(librados::ObjectWriteOperation *op, uint64_t object_set) {
   op->exec("journal", "set_active_set", bl);
 }
 
+int get_client(librados::IoCtx &ioctx, const std::string &oid,
+               const std::string &id, cls::journal::Client *client) {
+  librados::ObjectReadOperation op;
+  get_client_start(&op, id);
+
+  bufferlist out_bl;
+  int r = ioctx.operate(oid, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  bufferlist::iterator iter = out_bl.begin();
+  r = get_client_finish(&iter, client);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void get_client_start(librados::ObjectReadOperation *op,
+                      const std::string &id) {
+  bufferlist bl;
+  ::encode(id, bl);
+  op->exec("journal", "get_client", bl);
+}
+
+int get_client_finish(bufferlist::iterator *iter,
+                      cls::journal::Client *client) {
+  try {
+    ::decode(*client, *iter);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int client_register(librados::IoCtx &ioctx, const std::string &oid,
+                    const std::string &id, const bufferlist &data) {
+  librados::ObjectWriteOperation op;
+  client_register(&op, id, data);
+  return ioctx.operate(oid, &op);
+}
+
 void client_register(librados::ObjectWriteOperation *op,
                      const std::string &id, const bufferlist &data) {
   bufferlist bl;
@@ -231,11 +274,19 @@ void client_register(librados::ObjectWriteOperation *op,
   op->exec("journal", "client_register", bl);
 }
 
-int client_register(librados::IoCtx &ioctx, const std::string &oid,
-                    const std::string &id, const bufferlist &data) {
+int client_update(librados::IoCtx &ioctx, const std::string &oid,
+                  const std::string &id, const bufferlist &data) {
   librados::ObjectWriteOperation op;
-  client_register(&op, id, data);
+  client_update(&op, id, data);
   return ioctx.operate(oid, &op);
+}
+
+void client_update(librados::ObjectWriteOperation *op,
+                   const std::string &id, const bufferlist &data) {
+  bufferlist bl;
+  ::encode(id, bl);
+  ::encode(data, bl);
+  op->exec("journal", "client_update", bl);
 }
 
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,

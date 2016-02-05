@@ -192,6 +192,24 @@ TEST_F(TestClsJournal, CreateDuplicate) {
   ASSERT_EQ(-EEXIST, client::create(ioctx, oid, 3, 5, ioctx.get_id()));
 }
 
+TEST_F(TestClsJournal, GetClient) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  std::string oid = get_temp_image_name();
+
+  Client client;
+  ASSERT_EQ(-ENOENT, client::get_client(ioctx, oid, "id", &client));
+
+  bufferlist data;
+  data.append(std::string('1', 128));
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", data));
+
+  ASSERT_EQ(0, client::get_client(ioctx, oid, "id1", &client));
+  Client expected_client("id1", data);
+  ASSERT_EQ(expected_client, client);
+}
+
 TEST_F(TestClsJournal, ClientRegister) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
@@ -215,6 +233,26 @@ TEST_F(TestClsJournal, ClientRegisterDuplicate) {
 
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
   ASSERT_EQ(-EEXIST, client::client_register(ioctx, oid, "id1", bufferlist()));
+}
+
+TEST_F(TestClsJournal, ClientUpdate) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  std::string oid = get_temp_image_name();
+
+  ASSERT_EQ(-ENOENT, client::client_update(ioctx, oid, "id1", bufferlist()));
+
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
+
+  bufferlist data;
+  data.append(std::string('1', 128));
+  ASSERT_EQ(0, client::client_update(ioctx, oid, "id1", data));
+
+  Client client;
+  ASSERT_EQ(0, client::get_client(ioctx, oid, "id1", &client));
+  Client expected_client("id1", data);
+  ASSERT_EQ(expected_client, client);
 }
 
 TEST_F(TestClsJournal, ClientUnregister) {
