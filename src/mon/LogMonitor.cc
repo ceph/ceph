@@ -26,6 +26,7 @@
 #include "messages/MLogAck.h"
 
 #include "common/Timer.h"
+#include "common/Graylog.h"
 
 #include "osd/osd_types.h"
 #include "common/errno.h"
@@ -741,6 +742,32 @@ bool LogMonitor::log_channel_info::do_log_to_syslog(const string &channel) {
   }
 
   return ret;
+}
+
+ceph::log::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
+    const string &channel)
+{
+  generic_dout(25) << __func__ << " for channel '"
+		   << channel << "'" << dendl;
+
+  if (graylogs.count(channel) == 0) {
+    ceph::log::Graylog::Ref graylog = ceph::log::Graylog::Ref(new ceph::log::Graylog("mon"));
+
+    graylog->set_fsid(g_conf->fsid);
+    graylog->set_hostname(g_conf->host);
+    graylog->set_destination(get_str_map_key(log_to_graylog_host, channel,
+					     &CLOG_CONFIG_DEFAULT_KEY),
+			     atoi(get_str_map_key(log_to_graylog_port, channel,
+						  &CLOG_CONFIG_DEFAULT_KEY).c_str()));
+
+    graylogs[channel] = graylog;
+    generic_dout(20) << __func__ << " for channel '"
+		     << channel << "' to graylog host '"
+		     << log_to_graylog_host[channel] << ":"
+		     << log_to_graylog_port[channel]
+		     << "'" << dendl;
+  }
+  return graylogs[channel];
 }
 
 void LogMonitor::handle_conf_change(const struct md_config_t *conf,
