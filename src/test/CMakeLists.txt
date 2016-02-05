@@ -377,7 +377,9 @@ add_dependencies(check
   ceph_example
   ceph_snappy
   cls_lock
-  ceph_test_objectstore)
+  ceph_test_objectstore
+  ceph_erasure_code_non_regression
+  ceph_erasure_code)
 
 add_ceph_test(test-ceph-helpers.sh ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-helpers.sh)
 add_ceph_test(erasure-decode-non-regression.sh ${CMAKE_SOURCE_DIR}/qa/workunits/erasure-code/encode-decode-non-regression.sh)
