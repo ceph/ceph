@@ -1,9 +1,7 @@
 #!/bin/bash
 #
-# Copyright (C) 2015 SUSE LINUX GmbH
-# Copyright (C) 2016 <contact@redhat.com>
+# Copyright (C) 2015 <contact@redhat.com>
 #
-# Author: Owen Synge <osynge@suse.com>
 # Author: Loic Dachary <loic@dachary.org>
 #
 # This program is free software; you can redistribute it and/or modify
@@ -17,8 +15,8 @@
 # GNU Library Public License for more details.
 #
 
-# run from the ceph-detect-init directory or from its parent
-test -d ceph-detect-init && cd ceph-detect-init
+# run from the ceph-disk directory or from its parent
+test -d ceph-disk && cd ceph-disk
 source virtualenv/bin/activate
 tox > virtualenv/tox.out 2>&1
 status=$?

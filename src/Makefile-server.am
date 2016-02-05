@@ -36,7 +36,6 @@ endif # WITH_MON
 if WITH_OSD
 
 ceph_sbin_SCRIPTS += \
-	ceph-disk \
 	ceph-disk-udev
 
 bin_SCRIPTS += \
