@@ -50,9 +50,9 @@ int KeystoneToken::parse(CephContext *cct, bufferlist& bl)
 
   try {
     if (version == KeystoneApiVersion::VER_2) {
-      JSONDecoder::decode_json("access", *this, &parser);
+      JSONDecoder::decode_json("access", *this, &parser, true);
     } else if (version == KeystoneApiVersion::VER_3) {
-      JSONDecoder::decode_json("token", *this, &parser);
+      JSONDecoder::decode_json("token", *this, &parser, true);
     }
   } catch (JSONDecoder::err& err) {
     ldout(cct, 0) << "Keystone token parse error: " << err.message << dendl;
