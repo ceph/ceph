@@ -249,11 +249,7 @@ void KernelDevice::_aio_thread()
 	if (left == 0) {
 	  // check waiting count before doing callback (which may
 	  // destroy this ioc).
-	  if (ioc->num_waiting.read()) {
-	    dout(20) << __func__ << " waking waiter" << dendl;
-	    Mutex::Locker l(ioc->lock);
-	    ioc->cond.Signal();
-	  }
+	  ioc->aio_wake();
 	  if (ioc->priv) {
 	    aio_callback(aio_callback_priv, ioc->priv);
 	  }
@@ -493,11 +489,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
  out:
   _aio_log_finish(ioc, off, len);
   ioc->num_reading.dec();
-  if (ioc->num_waiting.read()) {
-    dout(20) << __func__ << " waking waiter" << dendl;
-    Mutex::Locker l(ioc->lock);
-    ioc->cond.Signal();
-  }
+  ioc->aio_wake();
   return r < 0 ? r : 0;
 }
 
