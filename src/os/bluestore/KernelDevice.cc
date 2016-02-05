@@ -182,7 +182,8 @@ int KernelDevice::flush()
     derr << __func__ << " injecting crash. first we sleep..." << dendl;
     sleep(g_conf->bdev_inject_crash_flush_delay);
     derr << __func__ << " and now we die" << dendl;
-    assert(0 == "bdev_inject_crash");
+    g_ceph_context->_log->flush();
+    _exit(1);
   }
   utime_t start = ceph_clock_now(NULL);
   int r = ::fdatasync(fd_direct);
@@ -263,8 +264,12 @@ void KernelDevice::_aio_thread()
     if (g_conf->bdev_inject_crash) {
       ++inject_crash_count;
       if (inject_crash_count * g_conf->bdev_aio_poll_ms / 1000 >
-	  g_conf->bdev_inject_crash + g_conf->bdev_inject_crash_flush_delay)
-	assert(0 == "bdev_inject_crash trigger from aio thread");
+	  g_conf->bdev_inject_crash + g_conf->bdev_inject_crash_flush_delay) {
+	derr << __func__ << " bdev_inject_crash trigger from aio thread"
+	     << dendl;
+	g_ceph_context->_log->flush();
+	_exit(1);
+      }
     }
   }
   dout(10) << __func__ << " end" << dendl;
