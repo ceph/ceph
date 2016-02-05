@@ -25,6 +25,17 @@
 #include <xmmintrin.h>
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <spdk/pci.h>
+#include <spdk/nvme.h>
+
+#ifdef __cplusplus
+}
+#endif
+
 #include <rte_config.h>
 #include <rte_cycles.h>
 #include <rte_mempool.h>
@@ -64,7 +75,7 @@ enum {
 
 static void io_complete(void *t, const struct nvme_completion *completion);
 
-static char *ealargs[] = {
+static const char *ealargs[] = {
     "ceph-osd",
     "-c 0x1", /* This must be the second parameter. It is overwritten by index in main(). */
     "-n 4",
@@ -256,7 +267,7 @@ void SharedDriverData::_aio_thread()
             lba_off = t->offset / block_size;
             lba_count = t->len / block_size;
             dout(20) << __func__ << " write command issued " << lba_off << "~" << lba_count << dendl;
-            r = nvme_ns_cmd_write(ns, t->buf, lba_off, lba_count, io_complete, t);
+            r = nvme_ns_cmd_write(ns, t->buf, lba_off, lba_count, io_complete, t, 0);
             if (r < 0) {
               t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
               rte_free(t->buf);
@@ -276,7 +287,7 @@ void SharedDriverData::_aio_thread()
           dout(20) << __func__ << " read command issueed " << lba_off << "~" << lba_count << dendl;
           lba_off = t->offset / block_size;
           lba_count = t->len / block_size;
-          r = nvme_ns_cmd_read(ns, t->buf, lba_off, lba_count, io_complete, t);
+          r = nvme_ns_cmd_read(ns, t->buf, lba_off, lba_count, io_complete, t, 0);
           if (r < 0) {
             derr << __func__ << " failed to read" << dendl;
             t->ctx->num_reading.dec();
@@ -384,7 +395,7 @@ int NVMEManager::_scan_nvme_device(const string &sn_tag, string &name, nvme_cont
   pci_device_probe(pci_dev);
   name = pci_device_get_device_name(pci_dev) ? pci_device_get_device_name(pci_dev) : "Unknown";
   if (pci_device_has_kernel_driver(pci_dev)) {
-    if (!pci_device_has_uio_driver(pci_dev)) {
+    if (pci_device_has_non_uio_driver(pci_dev)) {
       /*NVMe kernel driver case*/
       if (g_conf->bdev_nvme_unbind_from_kernel) {
         r =  pci_device_switch_to_uio_driver(pci_dev);
@@ -401,7 +412,7 @@ int NVMEManager::_scan_nvme_device(const string &sn_tag, string &name, nvme_cont
       }
     }
   } else {
-    r =  pci_device_bind_uio_driver(pci_dev, PCI_UIO_DRIVER);
+    r =  pci_device_bind_uio_driver(pci_dev, const_cast<char*>(PCI_UIO_DRIVER));
     if (r < 0) {
       derr << __func__ << " device " << name << " " << pci_dev->bus
            << ":" << pci_dev->dev << ":" << pci_dev->func

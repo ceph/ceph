@@ -25,16 +25,6 @@
 // since _Static_assert introduced in c11
 #define _Static_assert static_assert
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#include "spdk/pci.h"
-#include "spdk/nvme.h"
-
-#ifdef __cplusplus
-}
-#endif
 
 #include "include/atomic.h"
 #include "include/interval_set.h"

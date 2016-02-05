@@ -661,6 +661,28 @@ if(${HAVE_LIBFUSE})
   list(APPEND libos_srcs
     os/FuseStore.cc)
 endif(${HAVE_LIBFUSE})
+if(WITH_SPDK)
+  list(APPEND libos_srcs
+    os/bluestore/NVMEDevice.cc)
+endif(WITH_SPDK)
+
+if(WITH_SPDK)
+  add_custom_target(build_spdk
+    COMMAND
+    $(MAKE) DPDK_INC_DIR=${DPDK_INCLUDE_DIR}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/lib
+    COMMENT "spdk building")
+  # TODO: should use add_library(spdk INTERFACE IMPORTED) instead in new cmake,
+  # if INTERFACE is supported.
+  foreach(lib nvme memory util)
+    add_library(spdk_${lib} STATIC IMPORTED)
+    add_dependencies(spdk_${lib} build_spdk)
+    set_target_properties(spdk_${lib} PROPERTIES
+      IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/spdk/lib/${lib}/libspdk_${lib}.a"
+      INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/src/spdk/include")
+    list(APPEND SPDK_LIBRARIES spdk_${lib})
+  endforeach()
+endif(WITH_SPDK)
 
 # make rocksdb statically
 add_custom_target(build_rocksdb
@@ -687,6 +709,16 @@ endif(${WITH_LTTNG})
 if(${HAVE_LIBFUSE})
   target_link_libraries(os ${FUSE_LIBRARIES})
 endif(${HAVE_LIBFUSE})
+if(WITH_SPDK)
+  target_link_libraries(os
+    ${SPDK_LIBRARIES}
+    ${DPDK_LIBRARIES}
+    ${PCIACCESS_LIBRARIES})
+  target_include_directories(os
+    PRIVATE
+    ${DPDK_INCLUDE_DIR}
+    ${PCIACCESS_INCLUDE_DIR})
+endif(WITH_SPDK)
 target_link_libraries(os kv)
 
 set(cls_references_files objclass/class_api.cc)

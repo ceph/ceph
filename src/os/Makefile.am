@@ -121,7 +121,27 @@ noinst_HEADERS += os/fs/ZFS.h
 endif
 
 if WITH_SPDK
-libos_a_CXXFLAGS = ${AM_CXXFLAGS} -I ${with_spdk}/include -fPIC
+
+SPDK_SRCDIR = ${top_srcdir}/src/spdk/lib
+${SPDK_SRCDIR}/nvme/libspdk_nvme.a:
+	$(MAKE) -C ${SPDK_SRCDIR}/nvme DPDK_INC=${LIBDPDK_CFLAGS}
+${SPDK_SRCDIR}/memory/libspdk_memory.a:
+	$(MAKE) -C ${SPDK_SRCDIR}/memory DPDK_INC=${LIBDPDK_CFLAGS}
+${SPDK_SRCDIR}/util/libspdk_util.a:
+	$(MAKE) -C ${SPDK_SRCDIR}/util DPDK_INC=${LIBDPDK_CFLAGS}
+${SPDK_SRCDIR}/ioat/libspdk_ioat.a:
+	$(MAKE) -C ${SPDK_SRCDIR}/ioat DPDK_INC=${LIBDPDK_CFLAGS}
+LIBSPDK_CFLAGS = "-I${top_srcdir}/src/spdk/include"
+LIBSPDK_LIBS = \
+	${top_srcdir}/src/spdk/lib/nvme/libspdk_nvme.a \
+	${top_srcdir}/src/spdk/lib/memory/libspdk_memory.a \
+	${top_srcdir}/src/spdk/lib/util/libspdk_util.a \
+	${top_srcdir}/src/spdk/lib/ioat/libspdk_ioat.a
+
+libos_a_CXXFLAGS += \
+	${LIBSPDK_CFLAGS} \
+	${LIBDPDK_CFLAGS} \
+	${LIBPCIACCESS_CFLAGS}
 libos_a_SOURCES += os/bluestore/NVMEDevice.cc
 noinst_HEADERS += os/bluestore/NVMEDevice.h
 endif
