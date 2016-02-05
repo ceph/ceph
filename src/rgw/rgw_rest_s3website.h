@@ -16,7 +16,7 @@
  
 #include "rgw_rest_s3.h"
 
-class RGWHandler_ObjStore_S3Website : public RGWHandler_ObjStore_S3 {
+class RGWHandler_REST_S3Website : public RGWHandler_REST_S3 {
 protected:
   int retarget(RGWOp *op, RGWOp **new_op);
   // TODO: this should be virtual I think, and ensure that it's always
@@ -34,36 +34,36 @@ protected:
 
   int get_errordoc(const string errordoc_key, string *error_content);
 public:
-  RGWHandler_ObjStore_S3Website() : RGWHandler_ObjStore_S3() {}
-  virtual ~RGWHandler_ObjStore_S3Website() {}
+  RGWHandler_REST_S3Website() : RGWHandler_REST_S3() {}
+  virtual ~RGWHandler_REST_S3Website() {}
   virtual int error_handler(int err_no, string *error_content);
 };
 
-class RGWHandler_ObjStore_Service_S3Website : public RGWHandler_ObjStore_S3Website {
+class RGWHandler_REST_Service_S3Website : public RGWHandler_REST_S3Website {
 protected:
   virtual RGWOp *get_obj_op(bool get_data);
 public:
-  RGWHandler_ObjStore_Service_S3Website() {}
-  virtual ~RGWHandler_ObjStore_Service_S3Website() {}
+  RGWHandler_REST_Service_S3Website() {}
+  virtual ~RGWHandler_REST_Service_S3Website() {}
 };
 
-class RGWHandler_ObjStore_Obj_S3Website : public RGWHandler_ObjStore_S3Website {
+class RGWHandler_REST_Obj_S3Website : public RGWHandler_REST_S3Website {
 protected:
   virtual RGWOp *get_obj_op(bool get_data);
 public:
-  RGWHandler_ObjStore_Obj_S3Website() {}
-  virtual ~RGWHandler_ObjStore_Obj_S3Website() {}
+  RGWHandler_REST_Obj_S3Website() {}
+  virtual ~RGWHandler_REST_Obj_S3Website() {}
 };
 
 /* The cross-inheritance from Obj to Bucket is deliberate!
  * S3Websites do NOT support any bucket operations
  */
-class RGWHandler_ObjStore_Bucket_S3Website : public RGWHandler_ObjStore_S3Website {
+class RGWHandler_REST_Bucket_S3Website : public RGWHandler_REST_S3Website {
 protected:
   RGWOp *get_obj_op(bool get_data);
 public:
-  RGWHandler_ObjStore_Bucket_S3Website() {}
-  virtual ~RGWHandler_ObjStore_Bucket_S3Website() {}
+  RGWHandler_REST_Bucket_S3Website() {}
+  virtual ~RGWHandler_REST_Bucket_S3Website() {}
 };
 
 // TODO: do we actually need this?
