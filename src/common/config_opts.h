@@ -896,10 +896,13 @@ OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at
 // bluestore_block_path = spdk:55cd2e404bd73932
 OPTION(bluestore_block_path, OPT_STR, "")
 OPTION(bluestore_block_size, OPT_U64, 10 * 1024*1024*1024)  // 10gb for testing
+OPTION(bluestore_block_create, OPT_BOOL, true)
 OPTION(bluestore_block_db_path, OPT_STR, "")
 OPTION(bluestore_block_db_size, OPT_U64, 0)   // rocksdb ssts (hot/warm)
+OPTION(bluestore_block_db_create, OPT_BOOL, false)
 OPTION(bluestore_block_wal_path, OPT_STR, "")
 OPTION(bluestore_block_wal_size, OPT_U64, 96 * 1024*1024) // rocksdb wal
+OPTION(bluestore_block_wal_create, OPT_BOOL, false)
 OPTION(bluestore_max_dir_size, OPT_U32, 1000000)
 OPTION(bluestore_min_alloc_size, OPT_U32, 64*1024)
 OPTION(bluestore_onode_map_size, OPT_U32, 1024)   // onodes per collection

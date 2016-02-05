@@ -1572,10 +1572,11 @@ int BlueStore::_open_collections(int *errors)
 int BlueStore::_setup_block_symlink_or_file(
   string name,
   string epath,
-  uint64_t size)
+  uint64_t size,
+  bool create)
 {
   dout(20) << __func__ << " name " << name << " path " << epath
-	   << " size " << size << dendl;
+	   << " size " << size << " create=" << (int)create << dendl;
   int r = 0;
   if (epath.length()) {
     if (!epath.compare(0, sizeof(SPDK_PREFIX-1), SPDK_PREFIX)) {
@@ -1610,7 +1611,10 @@ int BlueStore::_setup_block_symlink_or_file(
     }
   }
   if (size) {
-    int fd = ::openat(path_fd, name.c_str(), O_RDWR, 0644);
+    unsigned flags = O_RDWR;
+    if (create)
+      flags |= O_CREAT;
+    int fd = ::openat(path_fd, name.c_str(), flags, 0644);
     if (fd >= 0) {
       // block file is present
       struct stat st;
@@ -1703,15 +1707,18 @@ int BlueStore::mkfs()
   }
 
   r = _setup_block_symlink_or_file("block", g_conf->bluestore_block_path,
-				   g_conf->bluestore_block_size);
+				   g_conf->bluestore_block_size,
+				   g_conf->bluestore_block_create);
   if (r < 0)
     goto out_close_fsid;
   r = _setup_block_symlink_or_file("block.wal", g_conf->bluestore_block_wal_path,
-				   g_conf->bluestore_block_wal_size);
+				   g_conf->bluestore_block_wal_size,
+				   g_conf->bluestore_block_wal_create);
   if (r < 0)
     goto out_close_fsid;
   r = _setup_block_symlink_or_file("block.db", g_conf->bluestore_block_db_path,
-				   g_conf->bluestore_block_db_size);
+				   g_conf->bluestore_block_db_size,
+				   g_conf->bluestore_block_db_create);
   if (r < 0)
     goto out_close_fsid;
 

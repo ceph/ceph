@@ -563,7 +563,8 @@ private:
   int _open_collections(int *errors=0);
   void _close_collections();
 
-  int _setup_block_symlink_or_file(string name, string path, uint64_t size);
+  int _setup_block_symlink_or_file(string name, string path, uint64_t size,
+				   bool create);
 
   int _write_bdev_label(string path, bluestore_bdev_label_t label);
   static int _read_bdev_label(string path, bluestore_bdev_label_t *label);
