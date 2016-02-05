@@ -33,14 +33,29 @@ void set_minimum_set(librados::ObjectWriteOperation *op, uint64_t object_set);
 void set_active_set(librados::ObjectWriteOperation *op, uint64_t object_set);
 
 // journal client helpers
-void client_register(librados::ObjectWriteOperation *op,
-                     const std::string &id, const bufferlist &data);
+int get_client(librados::IoCtx &ioctx, const std::string &oid,
+               const std::string &id, cls::journal::Client *client);
+void get_client_start(librados::ObjectReadOperation *op,
+                      const std::string &id);
+int get_client_finish(bufferlist::iterator *iter,
+                      cls::journal::Client *client);
+
 int client_register(librados::IoCtx &ioctx, const std::string &oid,
                     const std::string &id, const bufferlist &data);
+void client_register(librados::ObjectWriteOperation *op,
+                     const std::string &id, const bufferlist &data);
+
+int client_update(librados::IoCtx &ioctx, const std::string &oid,
+                  const std::string &id, const bufferlist &data);
+void client_update(librados::ObjectWriteOperation *op,
+                   const std::string &id, const bufferlist &data);
+
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,
                       const std::string &id);
+
 void client_commit(librados::ObjectWriteOperation *op, const std::string &id,
                    const cls::journal::ObjectSetPosition &commit_position);
+
 int client_list(librados::IoCtx &ioctx, const std::string &oid,
                 std::set<cls::journal::Client> *clients);
 
