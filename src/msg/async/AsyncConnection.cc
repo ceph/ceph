@@ -2061,7 +2061,7 @@ int AsyncConnection::send_message(Message *m)
     if (!can_fast_prepare)
       prepare_send_message(get_features(), m, bl);
     logger->inc(l_msgr_send_messages_inline);
-    if (write_message(m, bl) < 0) {
+    if (write_message(m, bl, false) < 0) {
       ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
       // we want to handle fault within internal thread
       center->dispatch_event_external(write_handler);
@@ -2305,7 +2305,7 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
   bl.append(m->get_data());
 }
 
-ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl)
+ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
 {
   assert(can_write == CANWRITE);
   m->set_seq(out_seq.inc());
@@ -2386,7 +2386,7 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl)
   logger->inc(l_msgr_send_bytes, complete_bl.length());
   ldout(async_msgr->cct, 20) << __func__ << " sending " << m->get_seq()
                              << " " << m << dendl;
-  ssize_t rc = _try_send(complete_bl);
+  ssize_t rc = _try_send(complete_bl, true, more);
   if (rc < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " error sending " << m << ", "
                               << cpp_strerror(errno) << dendl;
@@ -2455,7 +2455,7 @@ void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
   }
 
   ldout(async_msgr->cct, 10) << __func__ << " try send keepalive or ack" << dendl;
-  _try_send(bl, false, true);
+  _try_send(bl, false);
 }
 
 void AsyncConnection::handle_write()
@@ -2481,7 +2481,7 @@ void AsyncConnection::handle_write()
       if (!data.length())
         prepare_send_message(get_features(), m, data);
 
-      r = write_message(m, data);
+      r = write_message(m, data, _has_next_outgoing());
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
         write_lock.Unlock();
@@ -2499,7 +2499,8 @@ void AsyncConnection::handle_write()
       bl.append((char*)&s, sizeof(s));
       ldout(async_msgr->cct, 10) << __func__ << " try send msg ack, acked " << left << " messages" << dendl;
       ack_left.sub(left);
-      r = _try_send(bl, true, true);
+      left = ack_left.read();
+      r = _try_send(bl, true, left);
     } else if (is_queued()) {
       r = _try_send(bl);
     }

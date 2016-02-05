@@ -74,7 +74,7 @@ class AsyncConnection : public Connection {
   int randomize_out_seq();
   void handle_ack(uint64_t seq);
   void _send_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
-  ssize_t write_message(Message *m, bufferlist& bl);
+  ssize_t write_message(Message *m, bufferlist& bl, bool more);
   ssize_t _reply_accept(char tag, ceph_msg_connect &connect, ceph_msg_connect_reply &reply,
                     bufferlist &authorizer_reply) {
     bufferlist reply_bl;
@@ -116,6 +116,10 @@ class AsyncConnection : public Connection {
         out_q.erase(it->first);
     }
     return m;
+  }
+  bool _has_next_outgoing() {
+    assert(write_lock.is_locked());
+    return !out_q.empty();
   }
 
  public:
