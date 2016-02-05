@@ -10,7 +10,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
-#include "librbd/journal/Entries.h"
+#include "librbd/journal/Types.h"
 #include "include/rados/librados.hpp"
 #include "osdc/Striper.h"
 

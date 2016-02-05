@@ -8,8 +8,8 @@
 #include "common/Mutex.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
-#include "librbd/journal/Entries.h"
 #include "librbd/journal/Replay.h"
+#include "librbd/journal/Types.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <functional>

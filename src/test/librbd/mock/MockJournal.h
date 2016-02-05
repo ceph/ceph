@@ -6,7 +6,7 @@
 
 #include "gmock/gmock.h"
 #include "librbd/Journal.h"
-#include "librbd/journal/Entries.h"
+#include "librbd/journal/Types.h"
 
 namespace librbd {
 
