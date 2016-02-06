@@ -136,7 +136,6 @@ public:
     EnodeRef enode;  ///< ref to Enode [optional]
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
-    bool dirty;     // ???
     bool exists;
 
     std::mutex flush_lock;  ///< protect flush_txns
@@ -150,7 +149,6 @@ public:
       : nref(0),
 	oid(o),
 	key(k),
-	dirty(false),
 	exists(false) {
     }
 
