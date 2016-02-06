@@ -199,7 +199,7 @@ int KernelDevice::flush()
 
 int KernelDevice::_aio_start()
 {
-  if (g_conf->bdev_aio) {
+  if (aio) {
     dout(10) << __func__ << dendl;
     int r = aio_queue.init();
     if (r < 0) {
@@ -213,7 +213,7 @@ int KernelDevice::_aio_start()
 
 void KernelDevice::_aio_stop()
 {
-  if (g_conf->bdev_aio) {
+  if (aio) {
     dout(10) << __func__ << dendl;
     aio_stop = true;
     aio_thread.join();
@@ -417,15 +417,22 @@ int KernelDevice::aio_write(
     int r = ::pwritev(buffered ? fd_buffered : fd_direct,
 		      &iov[0], iov.size(), off);
     if (r < 0) {
+      r = -errno;
       derr << __func__ << " pwritev error: " << cpp_strerror(r) << dendl;
       return r;
     }
     if (buffered) {
       // initiate IO (but do not wait)
-      ::sync_file_range(fd_buffered, off, len, SYNC_FILE_RANGE_WRITE);
+      r = ::sync_file_range(fd_buffered, off, len, SYNC_FILE_RANGE_WRITE);
+      if (r < 0) {
+        r = -errno;
+        derr << __func__ << " sync_file_range error: " << cpp_strerror(r) << dendl;
+        return r;
+      }
     }
   }
 
+  _aio_log_finish(ioc, off, bl.length());
   io_since_flush.set(1);
   return 0;
 }
@@ -449,7 +456,6 @@ int KernelDevice::aio_zero(
     len -= t.length();
     bl.claim_append(t);
   }
-  bufferlist foo;
   // note: this works with aio only becaues the actual buffer is
   // this->zeros, which is page-aligned and never freed.
   return aio_write(off, bl, ioc, false);
@@ -476,6 +482,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     r = -errno;
     goto out;
   }
+  assert((uint64_t)r == len);
   pbl->clear();
   pbl->push_back(std::move(p));
 
