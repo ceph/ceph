@@ -781,17 +781,6 @@ class DPDKQueuePair {
   Tub<std::array<uint8_t, 128>> _sw_reta;
   circular_buffer<Packet> _proxy_packetq;
   stream<Packet> _rx_stream;
-  class DPDKTXPoller : public EventCenter::Poller {
-    DPDKQueuePair *qp;
-
-   public:
-    explicit DPDKTXPoller(DPDKQueuePair *qp)
-        : EventCenter::Poller(qp->center, "DPDK::DPDKTXPoller"), qp(qp) {}
-
-    virtual int poll() {
-      return qp->poll_tx();
-    }
-  } _tx_poller;
   circular_buffer<Packet> _tx_packetq;
 
   qp_stats _stats;
@@ -806,6 +795,19 @@ class DPDKQueuePair {
   std::vector<fragment> _frags;
   std::vector<char*> _bufs;
   size_t _num_rx_free_segs = 0;
+
+  class DPDKTXPoller : public EventCenter::Poller {
+    DPDKQueuePair *qp;
+
+   public:
+    explicit DPDKTXPoller(DPDKQueuePair *qp)
+        : EventCenter::Poller(qp->center, "DPDK::DPDKTXPoller"), qp(qp) {}
+
+    virtual int poll() {
+      return qp->poll_tx();
+    }
+  } _tx_poller;
+
   class DPDKRXGCPoller : public EventCenter::Poller {
     DPDKQueuePair *qp;
 

@@ -624,8 +624,8 @@ int DPDKDevice::check_port_link_status()
 }
 
 DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, uint8_t qid)
-  : cct(c), _tx_poller(this), _dev(dev), _dev_port_idx(dev->port_idx()), center(cen), _qid(qid),
-    _rx_gc_poller(this), _tx_buf_factory(qid),
+  : cct(c), _dev(dev), _dev_port_idx(dev->port_idx()), center(cen), _qid(qid),
+    _tx_poller(this), _rx_gc_poller(this), _tx_buf_factory(qid),
     _tx_gc_poller(this)
 {
   if (!init_rx_mbuf_pool()) {

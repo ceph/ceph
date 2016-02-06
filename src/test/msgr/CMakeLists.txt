@@ -34,9 +34,7 @@ add_executable(test_async_transport
 set_target_properties(test_async_transport PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_async_transport
-    os
     global
-    ${DPDK_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${ALLOC_LIBS}
     ${UNITTEST_LIBS})
