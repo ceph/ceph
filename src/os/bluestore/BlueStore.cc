@@ -708,9 +708,6 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
 
     // new
     on = new Onode(oid, key);
-    on->dirty = true;
-    if (g_conf->bluestore_debug_misc && !create)
-      on->dirty = false;
   } else {
     // loaded
     assert(r >=0);
