@@ -101,7 +101,6 @@ private:
   SafeTimer &m_timer;
   Mutex &m_timer_lock;
 
-  double m_fetch_interval;
   uint8_t m_order;
 
   double m_watch_interval;
