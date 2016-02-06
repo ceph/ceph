@@ -9,8 +9,10 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "journal/Future.h"
-#include <string>
+#include "cls/journal/cls_journal_types.h"
+#include <list>
 #include <map>
+#include <string>
 #include "include/assert.h"
 
 class SafeTimer;
@@ -26,6 +28,7 @@ class ReplayHandler;
 
 class Journaler {
 public:
+  typedef std::list<cls::journal::Tag> Tags;
 
   static std::string header_oid(const std::string &journal_id);
   static std::string object_oid_prefix(int pool_id,
@@ -42,16 +45,22 @@ public:
   void init(Context *on_init);
   void shutdown();
 
-  int register_client(const std::string &description);
+  int register_client(const bufferlist &data);
   int unregister_client();
+
+  void allocate_tag(const bufferlist &data, cls::journal::Tag *tag,
+                    Context *on_finish);
+  void allocate_tag(uint64_t tag_class, const bufferlist &data,
+                    cls::journal::Tag *tag, Context *on_finish);
+  void get_tags(uint64_t tag_class, Tags *tags, Context *on_finish);
 
   void start_replay(ReplayHandler *replay_handler);
   void start_live_replay(ReplayHandler *replay_handler, double interval);
-  bool try_pop_front(ReplayEntry *replay_entry, std::string* tag = NULL);
+  bool try_pop_front(ReplayEntry *replay_entry, uint64_t *tag_tid = nullptr);
   void stop_replay();
 
   void start_append(int flush_interval, uint64_t flush_bytes, double flush_age);
-  Future append(const std::string &tag, const bufferlist &bl);
+  Future append(uint64_t tag_tid, const bufferlist &bl);
   void flush(Context *on_safe);
   void stop_append(Context *on_safe);
 

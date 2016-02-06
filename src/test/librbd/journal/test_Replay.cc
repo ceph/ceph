@@ -10,7 +10,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
-#include "librbd/journal/Entries.h"
+#include "librbd/journal/Types.h"
 
 void register_test_journal_replay() {
 }

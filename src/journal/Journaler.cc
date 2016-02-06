@@ -159,12 +159,27 @@ int Journaler::remove(bool force) {
   return 0;
 }
 
-int Journaler::register_client(const std::string &description) {
-  return m_metadata->register_client(description);
+int Journaler::register_client(const bufferlist &data) {
+  return m_metadata->register_client(data);
 }
 
 int Journaler::unregister_client() {
   return m_metadata->unregister_client();
+}
+
+void Journaler::allocate_tag(const bufferlist &data, cls::journal::Tag *tag,
+                             Context *on_finish) {
+  m_metadata->allocate_tag(cls::journal::Tag::TAG_CLASS_NEW, data, tag,
+                           on_finish);
+}
+
+void Journaler::allocate_tag(uint64_t tag_class, const bufferlist &data,
+                             cls::journal::Tag *tag, Context *on_finish) {
+  m_metadata->allocate_tag(tag_class, data, tag, on_finish);
+}
+
+void Journaler::get_tags(uint64_t tag_class, Tags *tags, Context *on_finish) {
+  m_metadata->get_tags(tag_class, tags, on_finish);
 }
 
 void Journaler::start_replay(ReplayHandler *replay_handler) {
@@ -179,7 +194,7 @@ void Journaler::start_live_replay(ReplayHandler *replay_handler,
 }
 
 bool Journaler::try_pop_front(ReplayEntry *replay_entry,
-			      std::string* tag) {
+			      uint64_t *tag_tid) {
   assert(m_player != NULL);
 
   Entry entry;
@@ -189,8 +204,8 @@ bool Journaler::try_pop_front(ReplayEntry *replay_entry,
   }
 
   *replay_entry = ReplayEntry(entry.get_data(), commit_tid);
-  if (tag != NULL) {
-    *tag = entry.get_tag();
+  if (tag_tid != nullptr) {
+    *tag_tid = entry.get_tag_tid();
   }
   return true;
 }
@@ -229,8 +244,8 @@ void Journaler::stop_append(Context *on_safe) {
   m_recorder = NULL;
 }
 
-Future Journaler::append(const std::string &tag, const bufferlist &payload_bl) {
-  return m_recorder->append(tag, payload_bl);
+Future Journaler::append(uint64_t tag_tid, const bufferlist &payload_bl) {
+  return m_recorder->append(tag_tid, payload_bl);
 }
 
 void Journaler::flush(Context *on_safe) {
