@@ -1718,7 +1718,8 @@ void Pipe::writer()
       pipe_lock.Unlock();
       if (sd) {
 	// we can ignore return value, actually; we don't care if this succeeds.
-	if(::write(sd, &tag, 1));
+	int r = ::write(sd, &tag, 1);
+	(void)r;
       }
       pipe_lock.Lock();
       continue;

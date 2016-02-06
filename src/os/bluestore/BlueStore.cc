@@ -541,7 +541,6 @@ void BlueStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
 
   // install a non-existent onode at old location
   po->second.reset(new Onode(old_oid, o->key));
-  po->second->exists = false;
   lru.push_back(*po->second);
 
   // add at new position and fix oid, key
@@ -711,11 +710,12 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     on = new Onode(oid, key);
     on->dirty = true;
     if (g_conf->bluestore_debug_misc && !create)
-      on->exists = on->dirty = false;
+      on->dirty = false;
   } else {
     // loaded
     assert(r >=0);
     on = new Onode(oid, key);
+    on->exists = true;
     bufferlist::iterator p = v.begin();
     ::decode(on->onode, p);
   }
@@ -3507,19 +3507,19 @@ BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
 }
 
 void BlueStore::_txc_release(
-  TransContext *txc, CollectionRef& c, EnodeRef& e, uint32_t hash,
+  TransContext *txc, CollectionRef& c, OnodeRef& o,
   uint64_t offset, uint64_t length,
   bool shared)
 {
   if (shared) {
     vector<bluestore_extent_t> release;
-    if (!e)
-      e = c->get_enode(hash);
-    e->ref_map.put(offset, length, &release);
+    if (!o->enode)
+      o->enode = c->get_enode(o->oid.hobj.get_hash());
+    o->enode->ref_map.put(offset, length, &release);
     dout(10) << __func__ << " " << offset << "~" << length
-	     << " shared: ref_map now " << e->ref_map
+	     << " shared: ref_map now " << o->enode->ref_map
 	     << " releasing " << release << dendl;
-    txc->write_enode(e);
+    txc->write_enode(o->enode);
     for (auto& p : release) {
       txc->released.insert(p.offset, p.length);
     }
@@ -3661,7 +3661,7 @@ int BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
        ++p) {
     bufferlist bl;
     ::encode((*p)->onode, bl);
-    dout(20) << " onode " << (*p)->oid << " is " << bl.length() << dendl;
+    dout(20) << "  onode " << (*p)->oid << " is " << bl.length() << dendl;
     txc->t->set(PREFIX_OBJ, (*p)->key, bl);
 
     std::lock_guard<std::mutex> l((*p)->flush_lock);
@@ -4231,7 +4231,14 @@ void BlueStore::_txc_aio_submit(TransContext *txc)
 int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 {
   Transaction::iterator i = t->begin();
-  int pos = 0;
+
+  dout(30) << __func__ << " transaction dump:\n";
+  JSONFormatter f(true);
+  f.open_object_section("transaction");
+  t->dump(&f);
+  f.close_section();
+  f.flush(*_dout);
+  *_dout << dendl;
 
   vector<CollectionRef> cvec(i.colls.size());
   unsigned j = 0;
@@ -4243,128 +4250,49 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     if (!j && !txc->first_collection)
       txc->first_collection = cvec[j];
   }
+  vector<OnodeRef> ovec(i.objects.size());
 
-  while (i.have_op()) {
+  for (int pos = 0; i.have_op(); ++pos) {
     Transaction::Op *op = i.decode_op();
     int r = 0;
+
+    // no coll or obj
+    if (op->op == Transaction::OP_NOP)
+      continue;
+
+    // collection operations
     CollectionRef &c = cvec[op->cid];
-
     switch (op->op) {
-    case Transaction::OP_NOP:
-      break;
-    case Transaction::OP_TOUCH:
+    case Transaction::OP_RMCOLL:
       {
-        const ghobject_t &oid = i.get_oid(op->oid);
-	r = _touch(txc, c, oid);
-      }
-      break;
-
-    case Transaction::OP_WRITE:
-      {
-        const ghobject_t &oid = i.get_oid(op->oid);
-        uint64_t off = op->off;
-        uint64_t len = op->len;
-	uint32_t fadvise_flags = i.get_fadvise_flags();
-        bufferlist bl;
-        i.decode_bl(bl);
-	r = _write(txc, c, oid, off, len, bl, fadvise_flags);
-      }
-      break;
-
-    case Transaction::OP_ZERO:
-      {
-        const ghobject_t &oid = i.get_oid(op->oid);
-        uint64_t off = op->off;
-        uint64_t len = op->len;
-	r = _zero(txc, c, oid, off, len);
-      }
-      break;
-
-    case Transaction::OP_TRIMCACHE:
-      {
-        // deprecated, no-op
-      }
-      break;
-
-    case Transaction::OP_TRUNCATE:
-      {
-        const ghobject_t& oid = i.get_oid(op->oid);
-        uint64_t off = op->off;
-	r = _truncate(txc, c, oid, off);
-      }
-      break;
-
-    case Transaction::OP_REMOVE:
-      {
-        const ghobject_t& oid = i.get_oid(op->oid);
-	r = _remove(txc, c, oid);
-      }
-      break;
-
-    case Transaction::OP_SETATTR:
-      {
-        const ghobject_t &oid = i.get_oid(op->oid);
-        string name = i.decode_string();
-        bufferlist bl;
-        i.decode_bl(bl);
-	map<string, bufferptr> to_set;
-	to_set[name] = bufferptr(bl.c_str(), bl.length());
-	r = _setattrs(txc, c, oid, to_set);
-      }
-      break;
-
-    case Transaction::OP_SETATTRS:
-      {
-        const ghobject_t& oid = i.get_oid(op->oid);
-        map<string, bufferptr> aset;
-        i.decode_attrset(aset);
-	r = _setattrs(txc, c, oid, aset);
-      }
-      break;
-
-    case Transaction::OP_RMATTR:
-      {
-        const ghobject_t &oid = i.get_oid(op->oid);
-	string name = i.decode_string();
-	r = _rmattr(txc, c, oid, name);
-      }
-      break;
-
-    case Transaction::OP_RMATTRS:
-      {
-        const ghobject_t &oid = i.get_oid(op->oid);
-	r = _rmattrs(txc, c, oid);
-      }
-      break;
-
-    case Transaction::OP_CLONE:
-      {
-        const ghobject_t& oid = i.get_oid(op->oid);
-        const ghobject_t& noid = i.get_oid(op->dest_oid);
-	r = _clone(txc, c, oid, noid);
-      }
-      break;
-
-    case Transaction::OP_CLONERANGE:
-      assert(0 == "deprecated");
-      break;
-
-    case Transaction::OP_CLONERANGE2:
-      {
-        const ghobject_t &oid = i.get_oid(op->oid);
-        const ghobject_t &noid = i.get_oid(op->dest_oid);
-        uint64_t srcoff = op->off;
-        uint64_t len = op->len;
-        uint64_t dstoff = op->dest_off;
-	r = _clone_range(txc, c, oid, noid, srcoff, len, dstoff);
+        coll_t cid = i.get_cid(op->cid);
+	r = _remove_collection(txc, cid, &c);
+	if (!r)
+	  continue;
       }
       break;
 
     case Transaction::OP_MKCOLL:
       {
 	assert(!c);
-        coll_t cid = i.get_cid(op->cid);
+	coll_t cid = i.get_cid(op->cid);
 	r = _create_collection(txc, cid, op->split_bits, &c);
+	if (!r)
+	  continue;
+      }
+      break;
+
+    case Transaction::OP_SPLIT_COLLECTION:
+      assert(0 == "deprecated");
+      break;
+
+    case Transaction::OP_SPLIT_COLLECTION2:
+      {
+        uint32_t bits = op->split_bits;
+        uint32_t rem = op->split_rem;
+	r = _split_collection(txc, c, cvec[op->dest_cid], bits, rem);
+	if (!r)
+	  continue;
       }
       break;
 
@@ -4386,13 +4314,154 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
           // Ignore the hint
           dout(10) << __func__ << " unknown collection hint " << type << dendl;
         }
+	continue;
       }
       break;
 
-    case Transaction::OP_RMCOLL:
+    case Transaction::OP_COLL_SETATTR:
+      r = -EOPNOTSUPP;
+      break;
+
+    case Transaction::OP_COLL_RMATTR:
+      r = -EOPNOTSUPP;
+      break;
+
+    case Transaction::OP_COLL_RENAME:
+      assert(0 == "not implemented");
+      break;
+    }
+    if (r < 0) {
+      dout(0) << " error " << cpp_strerror(r)
+	      << " not handled on operation " << op->op
+	      << " (op " << pos << ", counting from 0)" << dendl;
+      dout(0) << " transaction dump:\n";
+      JSONFormatter f(true);
+      f.open_object_section("transaction");
+      t->dump(&f);
+      f.close_section();
+      f.flush(*_dout);
+      *_dout << dendl;
+      assert(0 == "unexpected error");
+    }
+
+    // object operations
+    RWLock::WLocker l(c->lock);
+    OnodeRef &o = ovec[op->oid];
+    if (!o) {
+      // these operations implicity create the object
+      bool create = false;
+      if (op->op == Transaction::OP_TOUCH ||
+	  op->op == Transaction::OP_WRITE ||
+	  op->op == Transaction::OP_ZERO) {
+	create = true;
+      }
+      ghobject_t oid = i.get_oid(op->oid);
+      o = c->get_onode(oid, create);
+      if (!create) {
+	if (!o || !o->exists) {
+	  dout(10) << __func__ << " op " << op->op << " got ENOENT on "
+		   << oid << dendl;
+	  r = -ENOENT;
+	  goto endop;
+	}
+      }
+    }
+
+    switch (op->op) {
+    case Transaction::OP_TOUCH:
+      r = _touch(txc, c, o);
+      break;
+
+    case Transaction::OP_WRITE:
       {
-        coll_t cid = i.get_cid(op->cid);
-	r = _remove_collection(txc, cid, &c);
+        uint64_t off = op->off;
+        uint64_t len = op->len;
+	uint32_t fadvise_flags = i.get_fadvise_flags();
+        bufferlist bl;
+        i.decode_bl(bl);
+	r = _write(txc, c, o, off, len, bl, fadvise_flags);
+      }
+      break;
+
+    case Transaction::OP_ZERO:
+      {
+        uint64_t off = op->off;
+        uint64_t len = op->len;
+	r = _zero(txc, c, o, off, len);
+      }
+      break;
+
+    case Transaction::OP_TRIMCACHE:
+      {
+        // deprecated, no-op
+      }
+      break;
+
+    case Transaction::OP_TRUNCATE:
+      {
+        uint64_t off = op->off;
+	r = _truncate(txc, c, o, off);
+      }
+      break;
+
+    case Transaction::OP_REMOVE:
+      {
+	r = _remove(txc, c, o);
+      }
+      break;
+
+    case Transaction::OP_SETATTR:
+      {
+        string name = i.decode_string();
+        bufferlist bl;
+        i.decode_bl(bl);
+	map<string, bufferptr> to_set;
+	to_set[name] = bufferptr(bl.c_str(), bl.length());
+	r = _setattrs(txc, c, o, to_set);
+      }
+      break;
+
+    case Transaction::OP_SETATTRS:
+      {
+        map<string, bufferptr> aset;
+        i.decode_attrset(aset);
+	r = _setattrs(txc, c, o, aset);
+      }
+      break;
+
+    case Transaction::OP_RMATTR:
+      {
+	string name = i.decode_string();
+	r = _rmattr(txc, c, o, name);
+      }
+      break;
+
+    case Transaction::OP_RMATTRS:
+      {
+	r = _rmattrs(txc, c, o);
+      }
+      break;
+
+    case Transaction::OP_CLONE:
+      {
+        const ghobject_t& noid = i.get_oid(op->dest_oid);
+	OnodeRef no = c->get_onode(noid, true);
+	r = _clone(txc, c, o, no);
+      }
+      break;
+
+    case Transaction::OP_CLONERANGE:
+      assert(0 == "deprecated");
+      break;
+
+    case Transaction::OP_CLONERANGE2:
+      {
+	const ghobject_t& noid = i.get_oid(op->dest_oid);
+	OnodeRef no = c->get_onode(noid, true);
+        uint64_t srcoff = op->off;
+        uint64_t len = op->len;
+        uint64_t dstoff = op->dest_off;
+	r = _clone_range(txc, c, o, no, srcoff, len, dstoff);
       }
       break;
 
@@ -4411,80 +4480,53 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_COLL_MOVE_RENAME:
       {
 	assert(op->cid == op->dest_cid);
-        ghobject_t oldoid = i.get_oid(op->oid);
-        ghobject_t newoid = i.get_oid(op->dest_oid);
-	r = _rename(txc, c, oldoid, newoid);
+	const ghobject_t& noid = i.get_oid(op->dest_oid);
+	OnodeRef no = c->get_onode(noid, true);
+	r = _rename(txc, c, o, no, noid);
+	o.reset();
       }
-      break;
-
-    case Transaction::OP_COLL_SETATTR:
-      r = -EOPNOTSUPP;
-      break;
-
-    case Transaction::OP_COLL_RMATTR:
-      r = -EOPNOTSUPP;
-      break;
-
-    case Transaction::OP_COLL_RENAME:
-      assert(0 == "not implemented");
       break;
 
     case Transaction::OP_OMAP_CLEAR:
       {
-        ghobject_t oid = i.get_oid(op->oid);
-	r = _omap_clear(txc, c, oid);
+	r = _omap_clear(txc, c, o);
       }
       break;
     case Transaction::OP_OMAP_SETKEYS:
       {
-        ghobject_t oid = i.get_oid(op->oid);
 	bufferlist aset_bl;
         i.decode_attrset_bl(&aset_bl);
-	r = _omap_setkeys(txc, c, oid, aset_bl);
+	r = _omap_setkeys(txc, c, o, aset_bl);
       }
       break;
     case Transaction::OP_OMAP_RMKEYS:
       {
-        ghobject_t oid = i.get_oid(op->oid);
 	bufferlist keys_bl;
         i.decode_keyset_bl(&keys_bl);
-	r = _omap_rmkeys(txc, c, oid, keys_bl);
+	r = _omap_rmkeys(txc, c, o, keys_bl);
       }
       break;
     case Transaction::OP_OMAP_RMKEYRANGE:
       {
-        ghobject_t oid = i.get_oid(op->oid);
         string first, last;
         first = i.decode_string();
         last = i.decode_string();
-	r = _omap_rmkey_range(txc, c, oid, first, last);
+	r = _omap_rmkey_range(txc, c, o, first, last);
       }
       break;
     case Transaction::OP_OMAP_SETHEADER:
       {
-        ghobject_t oid = i.get_oid(op->oid);
         bufferlist bl;
         i.decode_bl(bl);
-	r = _omap_setheader(txc, c, oid, bl);
-      }
-      break;
-    case Transaction::OP_SPLIT_COLLECTION:
-      assert(0 == "deprecated");
-      break;
-    case Transaction::OP_SPLIT_COLLECTION2:
-      {
-        uint32_t bits = op->split_bits;
-        uint32_t rem = op->split_rem;
-	r = _split_collection(txc, c, cvec[op->dest_cid], bits, rem);
+	r = _omap_setheader(txc, c, o, bl);
       }
       break;
 
     case Transaction::OP_SETALLOCHINT:
       {
-        ghobject_t oid = i.get_oid(op->oid);
         uint64_t expected_object_size = op->expected_object_size;
         uint64_t expected_write_size = op->expected_write_size;
-	r = _setallochint(txc, c, oid,
+	r = _setallochint(txc, c, o,
 			  expected_object_size,
 			  expected_write_size);
       }
@@ -4495,6 +4537,7 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       assert(0);
     }
 
+  endop:
     if (r < 0) {
       bool ok = false;
 
@@ -4537,8 +4580,6 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	assert(0 == "unexpected error");
       }
     }
-
-    ++pos;
   }
 
   return 0;
@@ -4550,18 +4591,15 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 // write operations
 
 int BlueStore::_touch(TransContext *txc,
-		     CollectionRef& c,
-		     const ghobject_t& oid)
+		      CollectionRef& c,
+		      OnodeRef &o)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, true);
-  assert(o);
   o->exists = true;
   _assign_nid(txc, o);
   txc->write_onode(o);
-  dout(10) << __func__ << " " << c->cid << " " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -4923,9 +4961,17 @@ void BlueStore::_pad_zeros_tail(
   uint64_t end = offset + *length;
   unsigned back_copy = end % block_size;
   assert(back_copy);  // or we wouldn't have been called
-  uint64_t back_pad = block_size - back_copy;
-  assert(back_copy <= *length);
-  bufferptr tail(block_size);
+  uint64_t tail_len;
+  if (back_copy <= *length) {
+    // we start at or before the block boundary
+    tail_len = block_size;
+  } else {
+    // we start partway into the tail block
+    back_copy = *length;
+    tail_len = block_size - (offset % block_size);
+  }
+  uint64_t back_pad = tail_len - back_copy;
+  bufferptr tail(tail_len);
   memcpy(tail.c_str(), bl->get_contiguous(*length - back_copy, back_copy),
 	 back_copy);
   memset(tail.c_str() + back_copy, 0, back_pad);
@@ -5132,7 +5178,6 @@ int BlueStore::_do_allocate(
     }
 
     // deallocate existing extents
-    EnodeRef enode;
     bp = o->onode.seek_extent(offset);
     while (bp != o->onode.block_map.end() &&
 	   bp->first < offset + length &&
@@ -5143,7 +5188,7 @@ int BlueStore::_do_allocate(
 	if (bp->first + bp->second.length <= offset + length) {
 	  dout(20) << "  trim tail " << bp->first << ": " << bp->second << dendl;
 	  _txc_release(
-	    txc, c, enode, o->oid.hobj.get_hash(),
+	    txc, c, o,
 	    bp->second.offset + left,
 	    bp->second.length - left,
 	    bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
@@ -5154,7 +5199,7 @@ int BlueStore::_do_allocate(
 	} else {
 	  dout(20) << "      split " << bp->first << ": " << bp->second << dendl;
 	  _txc_release(
-	    txc, c, enode, o->oid.hobj.get_hash(),
+	    txc, c, o,
 	    bp->second.offset + left, length,
 	    bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
 	  o->onode.block_map[offset + length] =
@@ -5176,7 +5221,7 @@ int BlueStore::_do_allocate(
 	  dout(20) << "  trim head " << bp->first << ": " << bp->second
 		   << " (overlap " << overlap << ")" << dendl;
 	  _txc_release(
-	    txc, c, enode, o->oid.hobj.get_hash(),
+	    txc, c, o,
 	    bp->second.offset, overlap,
 	    bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
 	  o->onode.block_map[bp->first + overlap] =
@@ -5191,7 +5236,7 @@ int BlueStore::_do_allocate(
 	} else {
 	  dout(20) << "    dealloc " << bp->first << ": " << bp->second << dendl;
 	  _txc_release(
-	    txc, c, enode, o->oid.hobj.get_hash(),
+	    txc, c, o,
 	    bp->second.offset, bp->second.length,
 	    bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
 	  hint = bp->first + bp->second.length;
@@ -5562,22 +5607,20 @@ int BlueStore::_do_write(
 }
 
 int BlueStore::_write(TransContext *txc,
-		     CollectionRef& c,
-		     const ghobject_t& oid,
+		      CollectionRef& c,
+		      OnodeRef& o,
 		     uint64_t offset, size_t length,
 		     bufferlist& bl,
 		     uint32_t fadvise_flags)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << offset << "~" << length
 	   << dendl;
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, true);
   _assign_nid(txc, o);
   int r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
   txc->write_onode(o);
 
-  dout(10) << __func__ << " " << c->cid << " " << oid
+  dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << offset << "~" << length
 	   << " = " << r << dendl;
   return r;
@@ -5596,18 +5639,16 @@ int BlueStore::_do_write_zero(
 }
 
 int BlueStore::_zero(TransContext *txc,
-		    CollectionRef& c,
-		    const ghobject_t& oid,
-		    uint64_t offset, size_t length)
+		     CollectionRef& c,
+		     OnodeRef& o,
+		     uint64_t offset, size_t length)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << offset << "~" << length
 	   << dendl;
   int r = 0;
+  o->exists = true;
 
-  RWLock::WLocker l(c->lock);
-  EnodeRef enode;
-  OnodeRef o = c->get_onode(oid, true);
   _dump_onode(o);
   _assign_nid(txc, o);
 
@@ -5645,7 +5686,7 @@ int BlueStore::_zero(TransContext *txc,
       dout(20) << __func__ << " dealloc " << bp->first << ": "
 	       << bp->second << dendl;
       _txc_release(
-	txc, c, enode, oid.hobj.get_hash(),
+	txc, c, o,
 	bp->second.offset, bp->second.length,
 	bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
       o->onode.block_map.erase(bp++);
@@ -5659,7 +5700,6 @@ int BlueStore::_zero(TransContext *txc,
     }
     uint64_t x_len = MIN(offset + length - bp->first,
 			 bp->second.length) - x_off;
-
     if (bp->second.has_flag(bluestore_extent_t::FLAG_SHARED)) {
       uint64_t end = bp->first + x_off + x_len;
       _do_write_zero(txc, c, o, bp->first + x_off, x_len);
@@ -5668,6 +5708,11 @@ int BlueStore::_zero(TransContext *txc,
       bp = o->onode.seek_extent(end - 1);
     } else {
       // WAL
+      uint64_t end = bp->first + x_off + x_len;
+      if (end >= o->onode.size && end % block_size) {
+	dout(20) << __func__ << " past eof, padding out tail block" << dendl;
+	x_len += block_size - (end % block_size);
+      }
       bluestore_wal_op_t *op = _get_wal_op(txc, o);
       op->op = bluestore_wal_op_t::OP_ZERO;
       op->extent.offset = bp->second.offset + x_off;
@@ -5685,7 +5730,7 @@ int BlueStore::_zero(TransContext *txc,
   }
   txc->write_onode(o);
 
-  dout(10) << __func__ << " " << c->cid << " " << oid
+  dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << offset << "~" << length
 	   << " = " << r << dendl;
   return r;
@@ -5697,7 +5742,6 @@ int BlueStore::_do_truncate(
   uint64_t block_size = bdev->get_block_size();
   uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
   uint64_t alloc_end = ROUND_UP_TO(offset, min_alloc_size);
-  EnodeRef enode;
 
   // ensure any wal IO has completed before we truncate off any extents
   // they may touch.
@@ -5723,7 +5767,7 @@ int BlueStore::_do_truncate(
       dout(20) << __func__ << " dealloc " << bp->first << ": "
 	       << bp->second << dendl;
       _txc_release(
-	txc, c, enode, o->oid.hobj.get_hash(),
+	txc, c, o,
 	bp->second.offset, bp->second.length,
 	bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
       if (bp != o->onode.block_map.begin()) {
@@ -5741,7 +5785,7 @@ int BlueStore::_do_truncate(
       dout(20) << __func__ << " trunc " << bp->first << ": " << bp->second
 	       << " to " << newlen << dendl;
       _txc_release(
-	txc, c, enode, o->oid.hobj.get_hash(),
+	txc, c, o,
 	bp->second.offset + newlen, bp->second.length - newlen,
 	bp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
       bp->second.length = newlen;
@@ -5841,25 +5885,15 @@ int BlueStore::_do_truncate(
 }
 
 int BlueStore::_truncate(TransContext *txc,
-			CollectionRef& c,
-			const ghobject_t& oid,
-			uint64_t offset)
+			 CollectionRef& c,
+			 OnodeRef& o,
+			 uint64_t offset)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << offset
 	   << dendl;
-  int r = 0;
-
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
-  r = _do_truncate(txc, c, o, offset);
-
- out:
-  dout(10) << __func__ << " " << c->cid << " " << oid
+  int r = _do_truncate(txc, c, o, offset);
+  dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << offset
 	   << " = " << r << dendl;
   return r;
@@ -5882,68 +5916,42 @@ int BlueStore::_do_remove(
 }
 
 int BlueStore::_remove(TransContext *txc,
-		      CollectionRef& c,
-		      const ghobject_t& oid)
+		       CollectionRef& c,
+		       OnodeRef &o)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
-  int r;
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
-  r = _do_remove(txc, c, o);
-
- out:
-  dout(10) << __func__ << " " << c->cid << " " << oid << " = " << r << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
+  int r = _do_remove(txc, c, o);
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
 int BlueStore::_setattr(TransContext *txc,
-		       CollectionRef& c,
-		       const ghobject_t& oid,
-		       const string& name,
-		       bufferptr& val)
+			CollectionRef& c,
+			OnodeRef& o,
+			const string& name,
+			bufferptr& val)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " (" << val.length() << " bytes)"
 	   << dendl;
   int r = 0;
-
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
   o->onode.attrs[name] = val;
   txc->write_onode(o);
-  r = 0;
-
- out:
-  dout(10) << __func__ << " " << c->cid << " " << oid
+  dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " (" << val.length() << " bytes)"
 	   << " = " << r << dendl;
   return r;
 }
 
 int BlueStore::_setattrs(TransContext *txc,
-			CollectionRef& c,
-			const ghobject_t& oid,
-			const map<string,bufferptr>& aset)
+			 CollectionRef& c,
+			 OnodeRef& o,
+			 const map<string,bufferptr>& aset)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << aset.size() << " keys"
 	   << dendl;
   int r = 0;
-
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
   for (map<string,bufferptr>::const_iterator p = aset.begin();
        p != aset.end(); ++p) {
     if (p->second.is_partial())
@@ -5952,10 +5960,7 @@ int BlueStore::_setattrs(TransContext *txc,
       o->onode.attrs[p->first] = p->second;
   }
   txc->write_onode(o);
-  r = 0;
-
- out:
-  dout(10) << __func__ << " " << c->cid << " " << oid
+  dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << aset.size() << " keys"
 	   << " = " << r << dendl;
   return r;
@@ -5963,49 +5968,29 @@ int BlueStore::_setattrs(TransContext *txc,
 
 
 int BlueStore::_rmattr(TransContext *txc,
-		      CollectionRef& c,
-		      const ghobject_t& oid,
-		      const string& name)
+		       CollectionRef& c,
+		       OnodeRef& o,
+		       const string& name)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << dendl;
   int r = 0;
-
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
   o->onode.attrs.erase(name);
   txc->write_onode(o);
-  r = 0;
-
- out:
-  dout(10) << __func__ << " " << c->cid << " " << oid
+  dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " = " << r << dendl;
   return r;
 }
 
 int BlueStore::_rmattrs(TransContext *txc,
-		       CollectionRef& c,
-		       const ghobject_t& oid)
+			CollectionRef& c,
+			OnodeRef& o)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
-
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
   o->onode.attrs.clear();
   txc->write_onode(o);
-  r = 0;
-
- out:
-  dout(10) << __func__ << " " << c->cid << " " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -6028,44 +6013,27 @@ void BlueStore::_do_omap_clear(TransContext *txc, uint64_t id)
 }
 
 int BlueStore::_omap_clear(TransContext *txc,
-			  CollectionRef& c,
-			  const ghobject_t& oid)
+			   CollectionRef& c,
+			   OnodeRef& o)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
-
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
   if (o->onode.omap_head != 0) {
     _do_omap_clear(txc, o->onode.omap_head);
   }
-  r = 0;
-
- out:
-  dout(10) << __func__ << " " << c->cid << " " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
 int BlueStore::_omap_setkeys(TransContext *txc,
-			    CollectionRef& c,
-			    const ghobject_t& oid,
-			    bufferlist &bl)
+			     CollectionRef& c,
+			     OnodeRef& o,
+			     bufferlist &bl)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
-  int r = 0;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
+  int r;
   bufferlist::iterator p = bl.begin();
   __u32 num;
-
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
   if (!o->onode.omap_head) {
     o->onode.omap_head = o->onode.nid;
     txc->write_onode(o);
@@ -6083,27 +6051,18 @@ int BlueStore::_omap_setkeys(TransContext *txc,
     txc->t->set(PREFIX_OMAP, final_key, value);
   }
   r = 0;
-
- out:
-  dout(10) << __func__ << " " << c->cid << " " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
 int BlueStore::_omap_setheader(TransContext *txc,
-			      CollectionRef& c,
-			      const ghobject_t& oid,
-			      bufferlist& bl)
+			       CollectionRef& c,
+			       OnodeRef &o,
+			       bufferlist& bl)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
-  int r = 0;
-
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
+  int r;
   string key;
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
   if (!o->onode.omap_head) {
     o->onode.omap_head = o->onode.nid;
     txc->write_onode(o);
@@ -6111,28 +6070,20 @@ int BlueStore::_omap_setheader(TransContext *txc,
   get_omap_header(o->onode.omap_head, &key);
   txc->t->set(PREFIX_OMAP, key, bl);
   r = 0;
-
- out:
-  dout(10) << __func__ << " " << c->cid << " " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
 int BlueStore::_omap_rmkeys(TransContext *txc,
-			   CollectionRef& c,
-			   const ghobject_t& oid,
-			   bufferlist& bl)
+			    CollectionRef& c,
+			    OnodeRef& o,
+			    bufferlist& bl)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
   bufferlist::iterator p = bl.begin();
   __u32 num;
 
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
   if (!o->onode.omap_head) {
     r = 0;
     goto out;
@@ -6150,28 +6101,20 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
   r = 0;
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
 int BlueStore::_omap_rmkey_range(TransContext *txc,
-				CollectionRef& c,
-				const ghobject_t& oid,
-				const string& first, const string& last)
+				 CollectionRef& c,
+				 OnodeRef& o,
+				 const string& first, const string& last)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
-  int r = 0;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   KeyValueDB::Iterator it;
   string key_first, key_last;
-
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
+  int r = 0;
   if (!o->onode.omap_head) {
-    r = 0;
     goto out;
   }
   it = db->get_iterator(PREFIX_OMAP);
@@ -6191,34 +6134,25 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
   r = 0;
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
 int BlueStore::_setallochint(TransContext *txc,
-			    CollectionRef& c,
-			    const ghobject_t& oid,
-			    uint64_t expected_object_size,
-			    uint64_t expected_write_size)
+			     CollectionRef& c,
+			     OnodeRef& o,
+			     uint64_t expected_object_size,
+			     uint64_t expected_write_size)
 {
-  dout(15) << __func__ << " " << c->cid << " " << oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
 	   << dendl;
   int r = 0;
-  RWLock::WLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
-
   o->onode.expected_object_size = expected_object_size;
   o->onode.expected_write_size = expected_write_size;
   txc->write_onode(o);
-
- out:
-  dout(10) << __func__ << " " << c->cid << " " << oid
+  dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
 	   << " = " << r << dendl;
@@ -6226,29 +6160,20 @@ int BlueStore::_setallochint(TransContext *txc,
 }
 
 int BlueStore::_clone(TransContext *txc,
-		     CollectionRef& c,
-		     const ghobject_t& old_oid,
-		     const ghobject_t& new_oid)
+		      CollectionRef& c,
+		      OnodeRef& oldo,
+		      OnodeRef& newo)
 {
-  dout(15) << __func__ << " " << c->cid << " " << old_oid << " -> "
-	   << new_oid << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
+	   << newo->oid << dendl;
   int r = 0;
-  if (old_oid.hobj.get_hash() != new_oid.hobj.get_hash()) {
-    derr << __func__ << " mismatched hash on " << old_oid << " and " << new_oid
-	 << dendl;
+  if (oldo->oid.hobj.get_hash() != newo->oid.hobj.get_hash()) {
+    derr << __func__ << " mismatched hash on " << oldo->oid
+	 << " and " << newo->oid << dendl;
     return -EINVAL;
   }
 
-  RWLock::WLocker l(c->lock);
   bufferlist bl;
-  OnodeRef newo;
-  OnodeRef oldo = c->get_onode(old_oid, false);
-  if (!oldo || !oldo->exists) {
-    r = -ENOENT;
-    goto out;
-  }
-  newo = c->get_onode(new_oid, true);
-  assert(newo);
   newo->exists = true;
   _assign_nid(txc, newo);
 
@@ -6275,6 +6200,7 @@ int BlueStore::_clone(TransContext *txc,
 	     << e->ref_map << dendl;
     newo->onode.block_map = oldo->onode.block_map;
     newo->onode.size = oldo->onode.size;
+    newo->enode = e;
     dout(20) << __func__ << " block_map " << newo->onode.block_map << dendl;
     txc->write_enode(e);
     if (marked)
@@ -6325,36 +6251,26 @@ int BlueStore::_clone(TransContext *txc,
   }
 
   txc->write_onode(newo);
-
   r = 0;
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << old_oid << " -> "
-	   << new_oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
+	   << newo->oid << " = " << r << dendl;
   return r;
 }
 
 int BlueStore::_clone_range(TransContext *txc,
-			   CollectionRef& c,
-			   const ghobject_t& old_oid,
-			   const ghobject_t& new_oid,
-			   uint64_t srcoff, uint64_t length, uint64_t dstoff)
+			    CollectionRef& c,
+			    OnodeRef& oldo,
+			    OnodeRef& newo,
+			    uint64_t srcoff, uint64_t length, uint64_t dstoff)
 {
-  dout(15) << __func__ << " " << c->cid << " " << old_oid << " -> "
-	   << new_oid << " from " << srcoff << "~" << length
+  dout(15) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
+	   << newo->oid << " from " << srcoff << "~" << length
 	   << " to offset " << dstoff << dendl;
   int r = 0;
 
-  RWLock::WLocker l(c->lock);
   bufferlist bl;
-  OnodeRef newo;
-  OnodeRef oldo = c->get_onode(old_oid, false);
-  if (!oldo || !oldo->exists) {
-    r = -ENOENT;
-    goto out;
-  }
-  newo = c->get_onode(new_oid, true);
-  assert(newo);
   newo->exists = true;
 
   r = _do_read(oldo, srcoff, length, bl, 0);
@@ -6370,33 +6286,26 @@ int BlueStore::_clone_range(TransContext *txc,
   r = 0;
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << old_oid << " -> "
-	   << new_oid << " from " << srcoff << "~" << length
+  dout(10) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
+	   << newo->oid << " from " << srcoff << "~" << length
 	   << " to offset " << dstoff
 	   << " = " << r << dendl;
   return r;
 }
 
 int BlueStore::_rename(TransContext *txc,
-		      CollectionRef& c,
-		      const ghobject_t& old_oid,
-		      const ghobject_t& new_oid)
+		       CollectionRef& c,
+		       OnodeRef& oldo,
+		       OnodeRef& newo,
+		       const ghobject_t& new_oid)
 {
-  dout(15) << __func__ << " " << c->cid << " " << old_oid << " -> "
+  dout(15) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
 	   << new_oid << dendl;
   int r;
-
-  RWLock::WLocker l(c->lock);
+  ghobject_t old_oid = oldo->oid;
   bufferlist bl;
   string old_key, new_key;
-  OnodeRef newo;
-  OnodeRef oldo = c->get_onode(old_oid, false);
-  if (!oldo || !oldo->exists) {
-    r = -ENOENT;
-    goto out;
-  }
 
-  newo = c->get_onode(new_oid, false);
   if (newo && newo->exists) {
     // destination object already exists, remove it first
     r = _do_remove(txc, c, newo);
