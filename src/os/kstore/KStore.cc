@@ -2134,7 +2134,7 @@ ObjectMap::ObjectMapIterator KStore::get_omap_iterator(
   }
   RWLock::RLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
-  if (!o) {
+  if (!o || !o->exists) {
     dout(10) << __func__ << " " << oid << "doesn't exist" <<dendl;
     return ObjectMap::ObjectMapIterator();
   }
@@ -2795,66 +2795,6 @@ void KStore::_dump_onode(OnodeRef o)
     dout(30) << __func__ << "  attr " << p->first
 	     << " len " << p->second.length() << dendl;
   }
-}
-
-void KStore::_pad_zeros(
-  OnodeRef o,
-  bufferlist *bl, uint64_t *offset, uint64_t *length,
-  uint64_t block_size)
-{
-  dout(40) << "before:\n";
-  bl->hexdump(*_dout);
-  *_dout << dendl;
-  // front
-  size_t front_pad = *offset % block_size;
-  size_t back_pad = 0;
-  if (front_pad) {
-    size_t front_copy = MIN(block_size - front_pad, *length);
-    bufferptr z = buffer::create_page_aligned(block_size);
-    memset(z.c_str(), 0, front_pad);
-    memcpy(z.c_str() + front_pad, bl->get_contiguous(0, front_copy), front_copy);
-    if (front_copy + front_pad < block_size) {
-      back_pad = block_size - (*length + front_pad);
-      memset(z.c_str() + front_pad + *length, 0, back_pad);
-    }
-    bufferlist old, t;
-    old.swap(*bl);
-    t.substr_of(old, front_copy, *length - front_copy);
-    bl->append(z);
-    bl->claim_append(t);
-    *offset -= front_pad;
-    *length += front_pad + back_pad;
-  }
-
-  // back
-  uint64_t end = *offset + *length;
-  unsigned back_copy = end % block_size;
-  if (back_copy) {
-    assert(back_pad == 0);
-    back_pad = block_size - back_copy;
-    assert(back_copy <= *length);
-    bufferptr tail(block_size);
-    memcpy(tail.c_str(), bl->get_contiguous(*length - back_copy, back_copy),
-	   back_copy);
-    memset(tail.c_str() + back_copy, 0, back_pad);
-    bufferlist old;
-    old.swap(*bl);
-    bl->substr_of(old, 0, *length - back_copy);
-    bl->append(tail);
-    *length += back_pad;
-    if (end > o->onode.size && g_conf->kstore_cache_tails) {
-      o->tail_bl.clear();
-      o->tail_bl.append(tail, 0, back_copy);
-      o->tail_offset = end - back_copy;
-      dout(20) << __func__ << " cached "<< back_copy << " of tail block at "
-	       << o->tail_offset << dendl;
-    }
-  }
-  dout(20) << __func__ << " pad " << front_pad << " + " << back_pad
-	   << " on front/back, now " << *offset << "~" << *length << dendl;
-  dout(40) << "after:\n";
-  bl->hexdump(*_dout);
-  *_dout << dendl;
 }
 
 void KStore::_do_read_stripe(OnodeRef o, uint64_t offset, bufferlist *pbl)
@@ -3595,6 +3535,7 @@ int KStore::_clone_range(TransContext *txc,
   newo = c->get_onode(new_oid, true);
   assert(newo);
   newo->exists = true;
+  _assign_nid(txc, newo);
 
   r = _do_read(oldo, srcoff, length, bl, 0);
   if (r < 0)
