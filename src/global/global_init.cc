@@ -62,7 +62,8 @@ static const char* c_str_or_null(const std::string &str)
 void global_pre_init(std::vector < const char * > *alt_def_args,
 		     std::vector < const char* >& args,
 		     uint32_t module_type, code_environment_t code_env,
-		     int flags)
+		     int flags,
+		     const char *data_dir_option)
 {
   // You can only call global_init once.
   assert(!g_ceph_context);
@@ -70,7 +71,7 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
   std::string cluster = "ceph";
   CephInitParameters iparams = ceph_argparse_early_args(args, module_type, flags,
 							&cluster, &conf_file_list);
-  CephContext *cct = common_preinit(iparams, code_env, flags);
+  CephContext *cct = common_preinit(iparams, code_env, flags, data_dir_option);
   cct->_conf->cluster = cluster;
   global_init_set_globals(cct);
   md_config_t *conf = cct->_conf;
@@ -115,9 +116,12 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
 
 void global_init(std::vector < const char * > *alt_def_args,
 		 std::vector < const char* >& args,
-		 uint32_t module_type, code_environment_t code_env, int flags)
+		 uint32_t module_type, code_environment_t code_env,
+		 int flags,
+		 const char *data_dir_option)
 {
-  global_pre_init(alt_def_args, args, module_type, code_env, flags);
+  global_pre_init(alt_def_args, args, module_type, code_env, flags,
+		  data_dir_option);
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
