@@ -578,7 +578,11 @@ int RGWOrphanSearch::build_linked_oids_index()
     return ret;
   }
 
-  save_state();
+  ret = save_state();
+  if (ret < 0) {
+    cerr << __func__ << ": ERROR: failed to write state ret=" << ret << std::endl;
+    return ret;
+  }
 
   return 0;
 }
