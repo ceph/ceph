@@ -40,7 +40,7 @@ public:
 
 private:
   typedef std::set<uint8_t> PrefetchSplayOffsets;
-  typedef std::map<std::string, uint64_t> AllocatedTids;
+  typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;
   typedef std::map<uint64_t, ObjectPlayerPtr> ObjectPlayers;
   typedef std::map<uint8_t, ObjectPlayers> SplayedObjectPlayers;
 
@@ -96,8 +96,8 @@ private:
   PrefetchSplayOffsets m_prefetch_splay_offsets;
   SplayedObjectPlayers m_object_players;
   uint64_t m_commit_object;
-  std::string m_commit_tag;
-  AllocatedTids m_commit_tids;
+  uint64_t m_commit_tag_tid;
+  AllocatedEntryTids m_commit_tids;
 
   void advance_splay_object();
 

@@ -6,10 +6,11 @@
 #include "test/librbd/mock/MockImageCtx.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
+#include "cls/journal/cls_journal_types.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
-#include "librbd/journal/Entries.h"
 #include "librbd/journal/Replay.h"
+#include "librbd/journal/Types.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <functional>
@@ -91,7 +92,7 @@ struct MockJournaler {
 
   MOCK_METHOD3(start_append, void(int flush_interval, uint64_t flush_bytes,
                                   double flush_age));
-  MOCK_METHOD2(append, MockFutureProxy(const std::string &tag,
+  MOCK_METHOD2(append, MockFutureProxy(uint64_t tag_id,
                                        const bufferlist &bl));
   MOCK_METHOD1(flush, void(Context *on_safe));
   MOCK_METHOD1(stop_append, void(Context *on_safe));
@@ -116,8 +117,12 @@ struct MockJournalerProxy {
   int remove(bool force) {
     return -EINVAL;
   }
-  int register_client(const std::string &description) {
+  int register_client(const bufferlist &data) {
     return -EINVAL;
+  }
+  void allocate_tag(uint64_t, const bufferlist &,
+                    cls::journal::Tag*, Context *on_finish) {
+    on_finish->complete(-EINVAL);
   }
 
   void get_metadata(uint8_t *order, uint8_t *splay_width, int64_t *pool_id) {
@@ -145,8 +150,8 @@ struct MockJournalerProxy {
                                                flush_age);
   }
 
-  MockFutureProxy append(const std::string &tag, const bufferlist &bl) {
-    return MockJournaler::get_instance().append(tag, bl);
+  MockFutureProxy append(uint64_t tag_id, const bufferlist &bl) {
+    return MockJournaler::get_instance().append(tag_id, bl);
   }
 
   void flush(Context *on_safe) {

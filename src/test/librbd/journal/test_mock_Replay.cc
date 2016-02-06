@@ -5,8 +5,8 @@
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "librbd/AioImageRequest.h"
-#include "librbd/journal/Entries.h"
 #include "librbd/journal/Replay.h"
+#include "librbd/journal/Types.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <boost/scope_exit.hpp>

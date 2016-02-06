@@ -7,7 +7,7 @@
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
-#include "librbd/journal/Entries.h"
+#include "librbd/journal/Types.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
@@ -67,7 +67,7 @@ public:
     journal::Journaler *journaler = new journal::Journaler(
       ictx->md_ctx, ictx->id, "dummy client", 1);
 
-    int r = journaler->register_client("unit test client");
+    int r = journaler->register_client(bufferlist());
     if (r < 0) {
       ADD_FAILURE() << "failed to register journal client";
       delete journaler;

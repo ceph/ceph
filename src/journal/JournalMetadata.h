@@ -14,6 +14,7 @@
 #include "journal/AsyncOpTracker.h"
 #include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
+#include <boost/optional.hpp>
 #include <list>
 #include <map>
 #include <string>
@@ -33,8 +34,10 @@ public:
   typedef cls::journal::EntryPositions EntryPositions;
   typedef cls::journal::ObjectSetPosition ObjectSetPosition;
   typedef cls::journal::Client Client;
+  typedef cls::journal::Tag Tag;
 
   typedef std::set<Client> RegisteredClients;
+  typedef std::list<Tag> Tags;
 
   struct Listener {
     virtual ~Listener() {};
@@ -51,8 +54,13 @@ public:
   void add_listener(Listener *listener);
   void remove_listener(Listener *listener);
 
-  int register_client(const std::string &description);
+  int register_client(const bufferlist &data);
   int unregister_client();
+
+  void allocate_tag(uint64_t tag_class, const bufferlist &data,
+                    Tag *tag, Context *on_finish);
+  void get_tags(const boost::optional<uint64_t> &tag_class, Tags *tags,
+                Context *on_finish);
 
   inline const std::string &get_client_id() const {
     return m_client_id;
@@ -103,34 +111,35 @@ public:
     *registered_clients = m_registered_clients;
   }
 
-  inline uint64_t allocate_tid(const std::string &tag) {
+  inline uint64_t allocate_entry_tid(uint64_t tag_tid) {
     Mutex::Locker locker(m_lock);
-    return m_allocated_tids[tag]++;
+    return m_allocated_entry_tids[tag_tid]++;
   }
-  void reserve_tid(const std::string &tag, uint64_t tid);
-  bool get_last_allocated_tid(const std::string &tag, uint64_t *tid) const;
+  void reserve_entry_tid(uint64_t tag_tid, uint64_t entry_tid);
+  bool get_last_allocated_entry_tid(uint64_t tag_tid, uint64_t *entry_tid) const;
 
-  uint64_t allocate_commit_tid(uint64_t object_num, const std::string &tag,
-                               uint64_t tid);
+  uint64_t allocate_commit_tid(uint64_t object_num, uint64_t tag_tid,
+                               uint64_t entry_tid);
   bool committed(uint64_t commit_tid, ObjectSetPosition *object_set_position);
 
   void notify_update();
   void async_notify_update();
 
 private:
-  typedef std::map<std::string, uint64_t> AllocatedTids;
+  typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;
   typedef std::list<Listener*> Listeners;
 
   struct CommitEntry {
     uint64_t object_num;
-    std::string tag;
-    uint64_t tid;
+    uint64_t tag_tid;
+    uint64_t entry_tid;
     bool committed;
 
-    CommitEntry() : object_num(0), tid(0), committed(false) {
+    CommitEntry() : object_num(0), tag_tid(0), entry_tid(0), committed(false) {
     }
-    CommitEntry(uint64_t _object_num, const std::string &_tag, uint64_t _tid)
-      : object_num(_object_num), tag(_tag), tid(_tid), committed(false) {
+    CommitEntry(uint64_t _object_num, uint64_t _tag_tid, uint64_t _entry_tid)
+      : object_num(_object_num), tag_tid(_tag_tid), entry_tid(_entry_tid),
+        committed(false) {
     }
   };
   typedef std::map<uint64_t, CommitEntry> CommitTids;
@@ -284,7 +293,7 @@ private:
   RegisteredClients m_registered_clients;
   Client m_client;
 
-  AllocatedTids m_allocated_tids;
+  AllocatedEntryTids m_allocated_entry_tids;
 
   size_t m_update_notifications;
   Cond m_update_cond;

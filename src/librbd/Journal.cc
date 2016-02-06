@@ -7,8 +7,8 @@
 #include "librbd/AioObjectRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/journal/Entries.h"
 #include "librbd/journal/Replay.h"
+#include "librbd/journal/Types.h"
 #include "librbd/Utils.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
@@ -22,12 +22,6 @@ namespace librbd {
 
 using util::create_async_context_callback;
 using util::create_context_callback;
-
-namespace {
-
-const std::string CLIENT_DESCRIPTION = "master image";
-
-} // anonymous namespace
 
 template <typename I>
 std::ostream &operator<<(std::ostream &os,
@@ -103,9 +97,9 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
+  librados::Rados rados(io_ctx);
   int64_t pool_id = -1;
   if (!object_pool.empty()) {
-    librados::Rados rados(io_ctx);
     IoCtx data_io_ctx;
     int r = rados.ioctx_create(object_pool.c_str(), data_io_ctx);
     if (r != 0) {
@@ -125,7 +119,32 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
     return r;
   }
 
-  r = journaler.register_client(CLIENT_DESCRIPTION);
+  std::string cluster_id;
+  r = rados.cluster_fsid(&cluster_id);
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve cluster id: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // create tag class for this image's journal events
+  bufferlist tag_data;
+  ::encode(journal::TagData{cluster_id, pool_id, image_id}, tag_data);
+
+  C_SaferCond tag_ctx;
+  cls::journal::Tag tag;
+  journaler.allocate_tag(cls::journal::Tag::TAG_CLASS_NEW, tag_data,
+                         &tag, &tag_ctx);
+  r = tag_ctx.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to allocate journal tag: " << cpp_strerror(r)
+               << dendl;
+  }
+
+  bufferlist client_data;
+  ::encode(journal::ClientData{journal::ImageClientMeta{tag.tag_class}},
+           client_data);
+
+  r = journaler.register_client(client_data);
   if (r < 0) {
     lderr(cct) << "failed to register client: " << cpp_strerror(r) << dendl;
     return r;
@@ -200,7 +219,7 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
     lderr(cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
     return r;
   }
-  r = journaler.register_client(CLIENT_DESCRIPTION);
+  r = journaler.register_client(bufferlist());
   if (r < 0) {
     lderr(cct) << "failed to register client: " << cpp_strerror(r) << dendl;
     return r;
@@ -290,7 +309,8 @@ uint64_t Journal<I>::append_io_event(AioCompletion *aio_comp,
     tid = ++m_event_tid;
     assert(tid != 0);
 
-    future = m_journaler->append("", bl);
+    // TODO: use allocated tag_id
+    future = m_journaler->append(0, bl);
     m_events[tid] = Event(future, aio_comp, requests, offset, length);
   }
 
@@ -374,7 +394,9 @@ void Journal<I>::append_op_event(uint64_t op_tid,
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_READY);
-    future = m_journaler->append("", bl);
+
+    // TODO: use allocated tag_id
+    future = m_journaler->append(0, bl);
   }
 
   on_safe = create_async_context_callback(m_image_ctx, on_safe);
@@ -401,7 +423,9 @@ void Journal<I>::commit_op_event(uint64_t op_tid, int r) {
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_READY);
-    future = m_journaler->append("", bl);
+
+    // TODO: use allocated tag_id
+    future = m_journaler->append(0, bl);
   }
 
   future.flush(new C_OpEventSafe(this, op_tid, future, nullptr));

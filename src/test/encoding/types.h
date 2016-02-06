@@ -239,8 +239,10 @@ TYPE(ETableServer)
 TYPE(EUpdate)
 
 #ifdef WITH_RBD
-#include "librbd/journal/Entries.h"
+#include "librbd/journal/Types.h"
 TYPE(librbd::journal::EventEntry)
+TYPE(librbd::journal::ClientData)
+TYPE(librbd::journal::TagData)
 #include "librbd/WatchNotifyTypes.h"
 TYPE(librbd::watch_notify::NotifyMessage)
 TYPE(librbd::watch_notify::ResponseMessage)

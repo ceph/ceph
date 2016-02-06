@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_JOURNAL_ENTRIES_H
-#define CEPH_LIBRBD_JOURNAL_ENTRIES_H
+#ifndef CEPH_LIBRBD_JOURNAL_TYPES_H
+#define CEPH_LIBRBD_JOURNAL_TYPES_H
 
 #include "include/int_types.h"
 #include "include/buffer.h"
@@ -35,7 +35,7 @@ enum EventType {
 };
 
 struct AioDiscardEvent {
-  static const EventType EVENT_TYPE = EVENT_TYPE_AIO_DISCARD;
+  static const EventType TYPE = EVENT_TYPE_AIO_DISCARD;
 
   uint64_t offset;
   size_t length;
@@ -52,7 +52,7 @@ struct AioDiscardEvent {
 };
 
 struct AioWriteEvent {
-  static const EventType EVENT_TYPE = EVENT_TYPE_AIO_WRITE;
+  static const EventType TYPE = EVENT_TYPE_AIO_WRITE;
 
   uint64_t offset;
   size_t length;
@@ -70,7 +70,7 @@ struct AioWriteEvent {
 };
 
 struct AioFlushEvent {
-  static const EventType EVENT_TYPE = EVENT_TYPE_AIO_FLUSH;
+  static const EventType TYPE = EVENT_TYPE_AIO_FLUSH;
 
   void encode(bufferlist& bl) const;
   void decode(__u8 version, bufferlist::iterator& it);
@@ -92,7 +92,7 @@ protected:
 };
 
 struct OpFinishEvent : public OpEventBase {
-  static const EventType EVENT_TYPE = EVENT_TYPE_OP_FINISH;
+  static const EventType TYPE = EVENT_TYPE_OP_FINISH;
 
   int r;
 
@@ -122,7 +122,7 @@ protected:
 };
 
 struct SnapCreateEvent : public SnapEventBase {
-  static const EventType EVENT_TYPE = EVENT_TYPE_SNAP_CREATE;
+  static const EventType TYPE = EVENT_TYPE_SNAP_CREATE;
 
   SnapCreateEvent() {
   }
@@ -136,7 +136,7 @@ struct SnapCreateEvent : public SnapEventBase {
 };
 
 struct SnapRemoveEvent : public SnapEventBase {
-  static const EventType EVENT_TYPE = EVENT_TYPE_SNAP_REMOVE;
+  static const EventType TYPE = EVENT_TYPE_SNAP_REMOVE;
 
   SnapRemoveEvent() {
   }
@@ -150,7 +150,7 @@ struct SnapRemoveEvent : public SnapEventBase {
 };
 
 struct SnapRenameEvent : public SnapEventBase {
-  static const EventType EVENT_TYPE = EVENT_TYPE_SNAP_RENAME;
+  static const EventType TYPE = EVENT_TYPE_SNAP_RENAME;
 
   uint64_t snap_id;
 
@@ -167,7 +167,7 @@ struct SnapRenameEvent : public SnapEventBase {
 };
 
 struct SnapProtectEvent : public SnapEventBase {
-  static const EventType EVENT_TYPE = EVENT_TYPE_SNAP_PROTECT;
+  static const EventType TYPE = EVENT_TYPE_SNAP_PROTECT;
 
   SnapProtectEvent() {
   }
@@ -181,7 +181,7 @@ struct SnapProtectEvent : public SnapEventBase {
 };
 
 struct SnapUnprotectEvent : public SnapEventBase {
-  static const EventType EVENT_TYPE = EVENT_TYPE_SNAP_UNPROTECT;
+  static const EventType TYPE = EVENT_TYPE_SNAP_UNPROTECT;
 
   SnapUnprotectEvent() {
   }
@@ -195,7 +195,7 @@ struct SnapUnprotectEvent : public SnapEventBase {
 };
 
 struct SnapRollbackEvent : public SnapEventBase {
-  static const EventType EVENT_TYPE = EVENT_TYPE_SNAP_ROLLBACK;
+  static const EventType TYPE = EVENT_TYPE_SNAP_ROLLBACK;
 
   SnapRollbackEvent() {
   }
@@ -209,7 +209,7 @@ struct SnapRollbackEvent : public SnapEventBase {
 };
 
 struct RenameEvent : public OpEventBase {
-  static const EventType EVENT_TYPE = EVENT_TYPE_RENAME;
+  static const EventType TYPE = EVENT_TYPE_RENAME;
 
   std::string image_name;
 
@@ -225,7 +225,7 @@ struct RenameEvent : public OpEventBase {
 };
 
 struct ResizeEvent : public OpEventBase {
-  static const EventType EVENT_TYPE = EVENT_TYPE_RESIZE;
+  static const EventType TYPE = EVENT_TYPE_RESIZE;
 
   uint64_t size;
 
@@ -241,7 +241,7 @@ struct ResizeEvent : public OpEventBase {
 };
 
 struct FlattenEvent : public OpEventBase {
-  static const EventType EVENT_TYPE = EVENT_TYPE_FLATTEN;
+  static const EventType TYPE = EVENT_TYPE_FLATTEN;
 
   FlattenEvent() {
   }
@@ -254,7 +254,7 @@ struct FlattenEvent : public OpEventBase {
 };
 
 struct UnknownEvent {
-  static const EventType EVENT_TYPE = static_cast<EventType>(-1);
+  static const EventType TYPE = static_cast<EventType>(-1);
 
   void encode(bufferlist& bl) const;
   void decode(__u8 version, bufferlist::iterator& it);
@@ -293,12 +293,122 @@ struct EventEntry {
   static void generate_test_instances(std::list<EventEntry *> &o);
 };
 
+// Journal Client data structures
+
+enum ClientMetaType {
+  IMAGE_CLIENT_META_TYPE       = 0,
+  MIRROR_PEER_CLIENT_META_TYPE = 1,
+  CLI_CLIENT_META_TYPE         = 2
+};
+
+struct ImageClientMeta {
+  static const ClientMetaType TYPE = IMAGE_CLIENT_META_TYPE;
+
+  uint64_t tag_class = 0;
+
+  ImageClientMeta() {
+  }
+  ImageClientMeta(uint64_t tag_class) : tag_class(tag_class) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
+struct MirrorPeerClientMeta {
+  static const ClientMetaType TYPE = MIRROR_PEER_CLIENT_META_TYPE;
+
+  std::string cluster_id;
+  int64_t pool_id = 0;
+  std::string image_id;
+
+  MirrorPeerClientMeta() {
+  }
+  MirrorPeerClientMeta(const std::string &cluster_id, int64_t pool_id,
+                       const std::string &image_id)
+    : cluster_id(cluster_id), pool_id(pool_id), image_id(image_id) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
+struct CliClientMeta {
+  static const ClientMetaType TYPE = CLI_CLIENT_META_TYPE;
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
+struct UnknownClientMeta {
+  static const ClientMetaType TYPE = static_cast<ClientMetaType>(-1);
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
+typedef boost::variant<ImageClientMeta,
+                       MirrorPeerClientMeta,
+                       CliClientMeta,
+                       UnknownClientMeta> ClientMeta;
+
+struct ClientData {
+  ClientData() {
+  }
+  ClientData(const ClientMeta &client_meta) : client_meta(client_meta) {
+  }
+
+  ClientMeta client_meta;
+
+  ClientMetaType get_client_meta_type() const;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<ClientData *> &o);
+};
+
+// Journal Tag data structures
+
+struct TagData {
+  // owner of the tag (exclusive lock epoch)
+  std::string cluster_id;
+  int64_t pool_id = 0;
+  std::string image_id;
+
+  // mapping to last committed record of previous tag
+  uint64_t predecessor_tag_tid = 0;
+  uint64_t predecessor_entry_tid = 0;
+
+  TagData() {
+  }
+  TagData(const std::string &cluster_id, int64_t pool_id,
+          const std::string &image_id)
+    : cluster_id(cluster_id), pool_id(pool_id), image_id(image_id) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<TagData *> &o);
+};
+
 } // namespace journal
 } // namespace librbd
 
 std::ostream &operator<<(std::ostream &out,
                          const librbd::journal::EventType &type);
+std::ostream &operator<<(std::ostream &out,
+                         const librbd::journal::ClientMetaType &type);
 
 WRITE_CLASS_ENCODER(librbd::journal::EventEntry);
+WRITE_CLASS_ENCODER(librbd::journal::ClientData);
+WRITE_CLASS_ENCODER(librbd::journal::TagData);
 
-#endif // CEPH_LIBRBD_JOURNAL_ENTRIES_H
+#endif // CEPH_LIBRBD_JOURNAL_TYPES_H
