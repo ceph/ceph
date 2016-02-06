@@ -330,9 +330,6 @@ add_dependencies(check osd_crush)
 add_test(NAME ceph_disk_tox COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-disk/run-tox.sh)
 add_dependencies(check ceph_disk_tox)
 
-add_test(NAME cephtool_test_osd COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-osd.sh)
-add_dependencies(check cephtool_test_osd)
-
 add_test(NAME rados_striper COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/libradosstriper/rados-striper.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check rados_striper)
 
@@ -1993,7 +1990,7 @@ add_executable(test_rados_api_io
 set_target_properties(test_rados_api_io PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_io
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_c_write_operations
   librados/c_write_operations.cc
@@ -2002,7 +1999,7 @@ add_executable(test_rados_api_c_write_operations
 set_target_properties(test_rados_api_c_write_operations PROPERTIES
   COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_c_write_operations
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_c_read_operations
   librados/c_read_operations.cc
@@ -2011,7 +2008,7 @@ add_executable(test_rados_api_c_read_operations
 set_target_properties(test_rados_api_c_read_operations PROPERTIES COMPILE_FLAGS 
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_c_read_operations
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_aio
   librados/aio.cc
@@ -2020,7 +2017,9 @@ add_executable(test_rados_api_aio
 set_target_properties(test_rados_api_aio PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_aio
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_list
   librados/list.cc
@@ -2029,7 +2028,7 @@ add_executable(test_rados_api_list
 set_target_properties(test_rados_api_list PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_list
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_nlist
   librados/nlist.cc
@@ -2038,7 +2037,7 @@ add_executable(test_rados_api_nlist
 set_target_properties(test_rados_api_nlist PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_nlist
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_pool
   librados/pool.cc
@@ -2048,7 +2047,7 @@ set_target_properties(test_rados_api_pool PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS}
   )
 target_link_libraries(test_rados_api_pool
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_stat
   librados/stat.cc
@@ -2057,7 +2056,7 @@ add_executable(test_rados_api_stat
 set_target_properties(test_rados_api_stat PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_stat
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_watch_notify
   librados/watch_notify.cc
@@ -2066,7 +2065,7 @@ add_executable(test_rados_api_watch_notify
 set_target_properties(test_rados_api_watch_notify PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_watch_notify
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_cls
   librados/cls.cc
@@ -2075,7 +2074,7 @@ add_executable(test_rados_api_cls
 set_target_properties(test_rados_api_cls PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_cls
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_misc
   librados/misc.cc
@@ -2093,7 +2092,7 @@ add_executable(test_rados_api_lock
 set_target_properties(test_rados_api_lock PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_lock
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_tier
   librados/tier.cc
@@ -2111,7 +2110,7 @@ add_executable(test_rados_api_snapshots
 set_target_properties(test_rados_api_snapshots PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_snapshots
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_library(rados_striper_test STATIC libradosstriper/TestCase.cc)
 target_link_libraries(rados_striper_test radostest)
