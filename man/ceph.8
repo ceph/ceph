@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "CEPH" "8" "March 22, 2015" "dev" "Ceph"
+.TH "CEPH" "8" "February 04, 2016" "dev" "Ceph"
 .SH NAME
 ceph \- ceph administration tool
 .
@@ -1390,6 +1390,20 @@ Usage:
 .nf
 .ft C
 ceph osd crush show\-tunables
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBtree\fP shows the crush buckets and items in a tree view.
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd crush tree
 .ft P
 .fi
 .UNINDENT

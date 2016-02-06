@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "RBD-REPLAY-PREP" "8" "August 21, 2014" "dev" "Ceph"
+.TH "RBD-REPLAY-PREP" "8" "February 04, 2016" "dev" "Ceph"
 .SH NAME
 rbd-replay-prep \- prepare captured rados block device (RBD) workloads for replay
 .
@@ -76,6 +76,11 @@ Requests further apart than \(aqseconds\(aq seconds are assumed to be independen
 .B \-\-anonymize
 Anonymizes image and snap names.
 .UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-verbose
+Print all processed events to console
+.UNINDENT
 .SH EXAMPLES
 .sp
 To prepare workload1\-trace for replay:
@@ -91,7 +96,7 @@ rbd\-replay\-prep workload1\-trace/ust/uid/1000/64\-bit workload1
 .UNINDENT
 .SH AVAILABILITY
 .sp
-\fBrbd\-replay\-prep\fP is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
+\fBrbd\-replay\-prep\fP is part of Ceph, a massively scalable, open\-source, distributed storage system. Please refer to
 the Ceph documentation at \fI\%http://ceph.com/docs\fP for more information.
 .SH SEE ALSO
 .sp

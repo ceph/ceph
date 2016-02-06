@@ -83,6 +83,12 @@ Commands
 :command:`usage trim`
   Trim usage information (with optional user and date range)
 
+:command:`orphans find`
+  Init and run search for leaked rados objects
+
+:command:`orphans finish`
+  Clean up search for leaked rados objects
+
 
 Options
 =======
@@ -149,6 +155,18 @@ Options
 
    Defer removal of object tail
    
+
+Orphans Search Options
+======================
+
+.. option:: --pool
+
+	Data pool to scan for leaked rados objects
+
+.. option:: --num-shards
+
+	Number of shards to use for keeping the temporary scan info
+
 
 Examples
 ========

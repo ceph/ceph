@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "CEPH-MDS" "8" "January 12, 2014" "dev" "Ceph"
+.TH "CEPH-MDS" "8" "February 04, 2016" "dev" "Ceph"
 .SH NAME
 ceph-mds \- ceph metadata server daemon
 .
@@ -106,9 +106,19 @@ startup.
 Connect to specified monitor (instead of looking through
 \fBceph.conf\fP).
 .UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-journal\-check <rank>
+Attempt to replay the journal for MDS <rank>, then exit.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-hot\-standby <rank>
+Start as a hot standby for MDS <rank>.
+.UNINDENT
 .SH AVAILABILITY
 .sp
-\fBceph\-mon\fP is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to the Ceph documentation at
+\fBceph\-mds\fP is part of Ceph, a massively scalable, open\-source, distributed storage system. Please refer to the Ceph documentation at
 \fI\%http://ceph.com/docs\fP for more information.
 .SH SEE ALSO
 .sp

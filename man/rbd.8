@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "RBD" "8" "March 12, 2015" "dev" "Ceph"
+.TH "RBD" "8" "February 04, 2016" "dev" "Ceph"
 .SH NAME
 rbd \- manage rados block device (RBD) images
 .
@@ -395,21 +395,28 @@ The striping is controlled by three parameters:
 .INDENT 0.0
 .TP
 .B order
-The size of objects we stripe over is a power of two, specifically 2^[\fIorder\fP] bytes.  The default
-is 22, or 4 MB.
+.TP
+.B The size of objects we stripe over is a power of two, specifically 2^[*order*] bytes.  The default
+.TP
+.B is 22, or 4 MB.
 .UNINDENT
 .INDENT 0.0
 .TP
 .B stripe_unit
-Each [\fIstripe_unit\fP] contiguous bytes are stored adjacently in the same object, before we move on
-to the next object.
+.TP
+.B Each [*stripe_unit*] contiguous bytes are stored adjacently in the same object, before we move on
+.TP
+.B to the next object.
 .UNINDENT
 .INDENT 0.0
 .TP
 .B stripe_count
-After we write [\fIstripe_unit\fP] bytes to [\fIstripe_count\fP] objects, we loop back to the initial object
-and write another stripe, until the object reaches its maximum size (as specified by [\fIorder\fP].  At that
-point, we move on to the next [\fIstripe_count\fP] objects.
+.TP
+.B After we write [*stripe_unit*] bytes to [*stripe_count*] objects, we loop back to the initial object
+.TP
+.B and write another stripe, until the object reaches its maximum size (as specified by [*order*].  At that
+.TP
+.B point, we move on to the next [*stripe_count*] objects.
 .UNINDENT
 .sp
 By default, [\fIstripe_unit\fP] is the same as the object size and [\fIstripe_count\fP] is 1.  Specifying a different

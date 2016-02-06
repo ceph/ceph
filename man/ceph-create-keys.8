@@ -1,8 +1,35 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "CEPH-CREATE-KEYS" "8" "June 02, 2015" "dev" "Ceph"
+.TH "CEPH-CREATE-KEYS" "8" "February 04, 2016" "dev" "Ceph"
 .SH NAME
 ceph-create-keys \- ceph keyring generate tool
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
 .
 .nr rst2man-indent-level 0
 .
@@ -40,7 +67,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 \fBceph\-create\-keys\fP is a utility to generate bootstrap keyrings using
 the given monitor when it is ready.
 .sp
-it creates following auth entities (or users)
+It creates following auth entities (or users)
 .sp
 \fBclient.admin\fP
 .INDENT 0.0
@@ -56,7 +83,7 @@ and their keys for bootstrapping corresponding services
 .UNINDENT
 .UNINDENT
 .sp
-To list all users in cluster:
+To list all users in the cluster:
 .INDENT 0.0
 .INDENT 3.5
 .sp
