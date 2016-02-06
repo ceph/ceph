@@ -533,7 +533,7 @@ class DPDKQueuePair {
     //
     static constexpr int gc_count = 1;
    public:
-    tx_buf_factory(uint8_t qid);
+    tx_buf_factory(CephContext *c, uint8_t qid);
 
     /**
      * @note Should not be called if there are no free tx_buf's
@@ -609,9 +609,9 @@ class DPDKQueuePair {
     }
 
    private:
+    CephContext *cct;
     std::vector<tx_buf*> _ring;
     rte_mempool* _pool = nullptr;
-    std::unique_ptr<void, free_deleter> _xmem;
   };
 
  public:
@@ -683,16 +683,9 @@ class DPDKQueuePair {
    * @param m mbuf to update
    */
   static bool refill_rx_mbuf(rte_mbuf* m, size_t size) {
-    char* data;
-
-    if (posix_memalign((void**)&data, size, size)) {
+    char* data = rte_malloc(NULL, size, size);
+    if (!data)
       return false;
-    }
-
-    translation tr = translate(data, size);
-
-    // TODO: assert() in a fast path! Remove me ASAP!
-    assert(tr.size == size);
 
     //
     // Set the mbuf to point to our data.
@@ -702,7 +695,7 @@ class DPDKQueuePair {
     // actual data buffer.
     //
     m->buf_addr      = data - RTE_PKTMBUF_HEADROOM;
-    m->buf_physaddr  = tr.addr - RTE_PKTMBUF_HEADROOM;
+    m->buf_physaddr  = rte_malloc_virt2phy(data) - RTE_PKTMBUF_HEADROOM;
     return true;
   }
 
@@ -719,28 +712,6 @@ class DPDKQueuePair {
   bool init_rx_mbuf_pool();
   bool rx_gc();
   bool refill_one_cluster(rte_mbuf* head);
-
-  /**
-   * Allocates a memory chunk to accommodate the given number of buffers of
-   * the given size and fills a vector with underlying physical pages.
-   *
-   * The chunk is going to be used as an external memory buffer of the DPDK
-   * memory pool (created using rte_mempool_xmem_create()).
-   *
-   * The chunk size if calculated using rte_mempool_xmem_size() function.
-   *
-   * @param num_bufs Number of buffers (in)
-   * @param buf_sz   Size of each buffer (in)
-   * @param mappings vector of physical pages (out)
-   *
-   * @note this function assumes that "mappings" is properly set and adds the
-   *       mappings to the back of the vector.
-   *
-   * @return a virtual address of the allocated memory chunk or nullptr in
-   *         case of a failure.
-   */
-  static void* alloc_mempool_xmem(uint16_t num_bufs, uint16_t buf_sz,
-                                  std::vector<phys_addr_t>& mappings);
 
   /**
    * Polls for a burst of incoming packets. This function will not block and
@@ -819,7 +790,6 @@ class DPDKQueuePair {
       return qp->rx_gc();
     }
   } _rx_gc_poller;
-  std::unique_ptr<void, free_deleter> _rx_xmem;
   tx_buf_factory _tx_buf_factory;
   class DPDKRXPoller : public EventCenter::Poller {
     DPDKQueuePair *qp;

@@ -60,23 +60,9 @@
 #define dout_prefix *_dout << "dpdk "
 
 
-#if RTE_VERSION <= RTE_VERSION_NUM(2,0,0,16)
-
-static inline char* rte_mbuf_to_baddr(rte_mbuf* mbuf) {
-  return reinterpret_cast<char*>(RTE_MBUF_TO_BADDR(mbuf));
-}
-
-void* as_cookie(struct rte_pktmbuf_pool_private& p) {
-  return reinterpret_cast<void*>(uint64_t(p.mbuf_data_room_size));
-};
-
-#else
-
 void* as_cookie(struct rte_pktmbuf_pool_private& p) {
   return &p;
 };
-
-#endif
 
 #ifndef MARKER
 typedef void    *MARKER[0];   /**< generic marker for a point in a structure */
@@ -176,7 +162,7 @@ int DPDKDevice::init_port_start()
   //
   if (std::string("rte_i40evf_pmd") == _dev_info.driver_name ||
       std::string("rte_i40e_pmd") == _dev_info.driver_name) {
-    printf("Device is an Intel's 40G NIC. Enabling 8 fragments hack!\n");
+    ldout(cct, 1) << __func__ << " Device is an Intel's 40G NIC. Enabling 8 fragments hack!" << dendl;
     _is_i40e_device = true;
   }
 
@@ -233,13 +219,14 @@ int DPDKDevice::init_port_start()
   /* for port configuration all features are off by default */
   rte_eth_conf port_conf = { 0 };
 
-  printf("Port %d: max_rx_queues %d max_tx_queues %d\n",
-         _port_idx, _dev_info.max_rx_queues, _dev_info.max_tx_queues);
+  ldout(cct, 5) << __func__ << " Port " << _port_idx << ": max_rx_queues "
+                << _dev_info.max_rx_queues << "  max_tx_queues "
+                << _dev_info.max_tx_queues << dendl;
 
   _num_queues = std::min({_num_queues, _dev_info.max_rx_queues, _dev_info.max_tx_queues});
 
-  printf("Port %d: using %d %s\n", _port_idx, _num_queues,
-         (_num_queues > 1) ? "queues" : "queue");
+  ldout(cct, 5) << __func__ << " Port " << _port_idx << ": using "
+                << _num_queues << " queues" << dendl;;
 
   // Set RSS mode: enable RSS if seastar is configured with more than 1 CPU.
   // Even if port has a single queue we still want the RSS feature to be
@@ -274,8 +261,8 @@ int DPDKDevice::init_port_start()
       // Set the RSS table to the correct size
       _redir_table.resize(_dev_info.reta_size);
       _rss_table_bits = std::lround(std::log2(_dev_info.reta_size));
-      printf("Port %d: RSS table size is %d\n",
-             _port_idx, _dev_info.reta_size);
+      ldout(cct, 5) << __func__ << " Port " << _port_idx
+                    << ": RSS table size is " << _dev_info.reta_size << dendl;
     } else {
       _rss_table_bits = std::lround(std::log2(_dev_info.max_rx_queues));
     }
@@ -294,12 +281,12 @@ int DPDKDevice::init_port_start()
 #ifdef RTE_ETHDEV_HAS_LRO_SUPPORT
   // Enable LRO
   if (_use_lro && (_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_TCP_LRO)) {
-    printf("LRO is on\n");
+    ldout(cct, 1) << __func__ << " LRO is on" << dendl;
     port_conf.rxmode.enable_lro = 1;
     _hw_features.rx_lro = true;
   } else
 #endif
-    printf("LRO is off\n");
+    ldout(cct, 1) << __func__ << " LRO is off" << dendl;
 
   // Check that all CSUM features are either all set all together or not set
   // all together. If this assumption breaks we need to rework the below logic
@@ -316,26 +303,26 @@ int DPDKDevice::init_port_start()
   if (  (_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) &&
       (_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_UDP_CKSUM) &&
       (_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_TCP_CKSUM)) {
-    printf("RX checksum offload supported\n");
+    ldout(cct, 1) << __func__ << " RX checksum offload supported" << dendl;
     port_conf.rxmode.hw_ip_checksum = 1;
     _hw_features.rx_csum_offload = 1;
   }
 
   if ((_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_IPV4_CKSUM)) {
-    printf("TX ip checksum offload supported\n");
+    ldout(cct, 1) << __func__ << " TX ip checksum offload supported" << dendl;
     _hw_features.tx_csum_ip_offload = 1;
   }
 
   // TSO is supported starting from DPDK v1.8
   if (_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_TSO) {
-    printf("TSO is supported\n");
+    ldout(cct, 1) << __func__ << " TSO is supported" << dendl;
     _hw_features.tx_tso = 1;
   }
 
   // There is no UFO support in the PMDs yet.
 #if 0
   if (_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_UDP_TSO) {
-    printf("UFO is supported\n");
+    ldout(cct, 1) << __func__ << " UFO is supported" << dendl;
     _hw_features.tx_ufo = 1;
   }
 #endif
@@ -351,14 +338,13 @@ int DPDKDevice::init_port_start()
 
   if (  (_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_UDP_CKSUM) &&
       (_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM)) {
-    printf("TX TCP&UDP checksum offload supported\n");
+    ldout(cct, 1) << __func__ << " TX TCP&UDP checksum offload supported" << dendl;
     _hw_features.tx_csum_l4_offload = 1;
   }
 
   int retval;
 
-  printf("Port %u init ... ", _port_idx);
-  fflush(stdout);
+  ldout(cct, 1) << __func__ << " Port " << _port_idx << " init ... " << dendl;
 
   /*
    * Standard DPDK port initialisation - config port, then set up
@@ -370,7 +356,7 @@ int DPDKDevice::init_port_start()
   }
 
   //rte_eth_promiscuous_enable(port_num);
-  printf("done: \n");
+  ldout(cct, 1) << __func__ << " done." << dendl;
 
   return 0;
 }
@@ -404,12 +390,11 @@ void DPDKDevice::set_hw_flow_control()
     rte_exit(EXIT_FAILURE, "Port %u: failed to set hardware flow control (error %d)\n", _port_idx, ret);
   }
 
-  printf("Port %u: %s HW FC\n", _port_idx,
-         (_enable_fc ? "Enabling" : "Disabling"));
+  ldout(cct, 5) << __func__ << " Port " << _port_idx << ":  HW FC " << _enable_fc << dendl;
   return;
 
 not_supported:
-  printf("Port %u: Changing HW FC settings is not supported\n", _port_idx);
+  ldout(cct, 5) << __func__ << " Port " << _port_idx << ": Changing HW FC settings is not supported" << dendl;
 }
 
 int DPDKDevice::init_port_fini()
@@ -424,7 +409,7 @@ int DPDKDevice::init_port_fini()
 
   if (_num_queues > 1) {
     if (!rte_eth_dev_filter_supported(_port_idx, RTE_ETH_FILTER_HASH)) {
-      printf("Port %d: HASH FILTER configuration is supported\n", _port_idx);
+      ldout(cct, 5) << __func__ << " Port " << _port_idx << ": HASH FILTER configuration is supported" << dendl;
 
       // Setup HW touse the TOEPLITZ hash function as an RSS hash function
       struct rte_eth_hash_filter_info info = {};
@@ -489,58 +474,12 @@ void DPDKQueuePair::build_sw_reta(const std::map<unsigned, float>& cpu_weights) 
 }
 
 
-void* DPDKQueuePair::alloc_mempool_xmem(
-    uint16_t num_bufs, uint16_t buf_sz, std::vector<phys_addr_t>& mappings)
-{
-  char* xmem;
-  struct rte_mempool_objsz mp_obj_sz = {};
-
-  rte_mempool_calc_obj_size(buf_sz, 0, &mp_obj_sz);
-
-  size_t xmem_size =
-      rte_mempool_xmem_size(num_bufs,
-                            mp_obj_sz.elt_size + mp_obj_sz.header_size +
-                            mp_obj_sz.trailer_size,
-                            CEPH_PAGE_SHIFT);
-
-  // Aligning to 2M causes the further failure in small allocations.
-  // TODO: Check why - and fix.
-  if (posix_memalign((void**)&xmem, CEPH_PAGE_SIZE, xmem_size)) {
-    printf("Can't allocate %ld bytes aligned to %u\n",
-           xmem_size, CEPH_PAGE_SIZE);
-    return nullptr;
-  }
-
-  for (size_t i = 0; i < xmem_size / CEPH_PAGE_SIZE; ++i) {
-    translation tr = translate(xmem + i * CEPH_PAGE_SIZE, CEPH_PAGE_SIZE);
-    assert(tr.size);
-    mappings.push_back(tr.addr);
-  }
-
-  return xmem;
-}
-
 bool DPDKQueuePair::init_rx_mbuf_pool()
 {
   std::string name = std::string(pktmbuf_pool_name) + std::to_string(_qid) + "_rx";
 
-  printf("Creating Rx mbuf pool '%s' [%u mbufs] ...\n",
-         name.c_str(), mbufs_per_queue_rx);
-
-  //
-  // If we have a hugetlbfs memory backend we may perform a virt2phys
-  // translation and memory is "pinned". Therefore we may provide an external
-  // memory for DPDK pools and this way significantly reduce the memory needed
-  // for the DPDK in this case.
-  //
-  std::vector<phys_addr_t> mappings;
-
-  _rx_xmem.reset(alloc_mempool_xmem(mbufs_per_queue_rx, mbuf_overhead,
-                                    mappings));
-  if (!_rx_xmem.get()) {
-    printf("Can't allocate a memory for Rx buffers\n");
-    return false;
-  }
+  ldout(cct, 1) << __func__ << " Creating Rx mbuf pool '" << name.c_str()
+                << "' [" << mbufs_per_queue_rx << " mbufs] ..."<< dendl;
 
   //
   // Don't pass single-producer/single-consumer flags to mbuf create as it
@@ -548,17 +487,14 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
   //
   struct rte_pktmbuf_pool_private roomsz = {};
   roomsz.mbuf_data_room_size = mbuf_data_size + RTE_PKTMBUF_HEADROOM;
-  _pktmbuf_pool_rx =
-      rte_mempool_xmem_create(name.c_str(),
-                              mbufs_per_queue_rx, mbuf_overhead,
-                              mbuf_cache_size,
-                              sizeof(struct rte_pktmbuf_pool_private),
-                              rte_pktmbuf_pool_init, as_cookie(roomsz),
-                              rte_pktmbuf_init, nullptr,
-                              rte_socket_id(), 0,
-                              _rx_xmem.get(), mappings.data(),
-                              mappings.size(),
-                              CEPH_PAGE_SHIFT);
+  _pktmbuf_pool_rx = rte_mempool_create(
+      name.c_str(),
+      mbufs_per_queue_rx, mbuf_overhead,
+      mbuf_cache_size,
+      sizeof(struct rte_pktmbuf_pool_private),
+      rte_pktmbuf_pool_init, as_cookie(roomsz),
+      rte_pktmbuf_init, nullptr,
+      rte_socket_id(), 0);
 
   // reserve the memory for Rx buffers containers
   _rx_free_pkts.reserve(mbufs_per_queue_rx);
@@ -577,9 +513,9 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
 
   for (auto&& m : _rx_free_bufs) {
     if (!init_noninline_rx_mbuf(m, mbuf_data_size)) {
-      printf("Failed to allocate data buffers for Rx ring. "
-             "Consider increasing the amount of memory.\n");
-      exit(1);
+      lderr(cct) << __func__ << " Failed to allocate data buffers for Rx ring. "
+                 "Consider increasing the amount of memory." << dendl;
+      assert(0);
     }
   }
 
@@ -625,7 +561,7 @@ int DPDKDevice::check_port_link_status()
 
 DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, uint8_t qid)
   : cct(c), _dev(dev), _dev_port_idx(dev->port_idx()), center(cen), _qid(qid),
-    _tx_poller(this), _rx_gc_poller(this), _tx_buf_factory(qid),
+    _tx_poller(this), _rx_gc_poller(this), _tx_buf_factory(c, qid),
     _tx_gc_poller(this)
 {
   if (!init_rx_mbuf_pool()) {
@@ -861,21 +797,12 @@ bool DPDKQueuePair::poll_rx_once()
   return rx_count;
 }
 
-DPDKQueuePair::tx_buf_factory::tx_buf_factory(uint8_t qid)
+DPDKQueuePair::tx_buf_factory::tx_buf_factory(CephContext *c, uint8_t qid)
+  : cct(c)
 {
   std::string name = std::string(pktmbuf_pool_name) + std::to_string(qid) + "_tx";
-  printf("Creating Tx mbuf pool '%s' [%u mbufs] ...\n",
-         name.c_str(), mbufs_per_queue_tx);
-
-  std::vector<phys_addr_t> mappings;
-
-  _xmem.reset(DPDKQueuePair::alloc_mempool_xmem(mbufs_per_queue_tx,
-                                                inline_mbuf_size,
-                                                mappings));
-  if (!_xmem.get()) {
-    printf("Can't allocate a memory for Tx buffers\n");
-    exit(1);
-  }
+  ldout(cct, 0) << __func__ << " Creating Tx mbuf pool '" << name.c_str()
+                << "' [" << mbufs_per_queue_tx << " mbufs] ..." << dendl;
 
   //
   // We are going to push the buffers from the mempool into
@@ -883,19 +810,17 @@ DPDKQueuePair::tx_buf_factory::tx_buf_factory(uint8_t qid)
   // we prefer to make a mempool non-atomic in this case.
   //
   _pool =
-      rte_mempool_xmem_create(name.c_str(),
+      rte_mempool_create(name.c_str(),
                               mbufs_per_queue_tx, inline_mbuf_size,
                               mbuf_cache_size,
                               sizeof(struct rte_pktmbuf_pool_private),
                               rte_pktmbuf_pool_init, nullptr,
                               rte_pktmbuf_init, nullptr,
-                              rte_socket_id(), 0,
-                              _xmem.get(), mappings.data(),
-                              mappings.size(), CEPH_PAGE_SHIFT);
+                              rte_socket_id(), 0);
 
   if (!_pool) {
-    printf("Failed to create mempool for Tx\n");
-    exit(1);
+    lderr(cct) << __func__ << " Failed to create mempool for Tx" << dendl;
+    assert(0);
   }
 
   //
