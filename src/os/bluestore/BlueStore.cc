@@ -3435,7 +3435,7 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
   }
   RWLock::RLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
-  if (!o) {
+  if (!o || !o->exists) {
     dout(10) << __func__ << " " << oid << "doesn't exist" <<dendl;
     return ObjectMap::ObjectMapIterator();
   }
@@ -6272,6 +6272,7 @@ int BlueStore::_clone_range(TransContext *txc,
 
   bufferlist bl;
   newo->exists = true;
+  _assign_nid(txc, newo);
 
   r = _do_read(oldo, srcoff, length, bl, 0);
   if (r < 0)
