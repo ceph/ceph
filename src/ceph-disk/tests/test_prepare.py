@@ -61,9 +61,9 @@ class TestPrepare(Base):
         with mock.patch.multiple(main.PrepareData,
                                  set_type=set_type):
             prepare = main.Prepare.factory(args)
-        assert type(prepare.data) == main.PrepareData
+        assert isinstance(prepare.data, main.PrepareFilestoreData)
         assert prepare.data.is_file()
-        assert type(prepare.journal) == main.PrepareJournal
+        assert isinstance(prepare.journal, main.PrepareJournal)
         assert prepare.journal.is_none()
         prepare.prepare()
         assert os.path.exists(os.path.join(data, 'fsid'))
@@ -86,9 +86,9 @@ class TestPrepare(Base):
             data,
         ])
         prepare = main.Prepare.factory(args)
-        assert type(prepare.data) == main.PrepareData
+        assert isinstance(prepare.data, main.PrepareData)
         assert prepare.data.is_device()
-        assert type(prepare.journal) == main.PrepareJournal
+        assert isinstance(prepare.journal, main.PrepareJournal)
         assert prepare.journal.is_device()
 
     def test_set_subparser(self):
@@ -228,7 +228,7 @@ class TestDevicePartition(Base):
         ])
         partition = main.DevicePartition.factory(
             path=path, dev=None, args=args)
-        assert type(partition) == main.DevicePartition
+        assert isinstance(partition, main.DevicePartition)
 
         #
         # Multipath device partition
@@ -240,7 +240,7 @@ class TestDevicePartition(Base):
         ])
         partition = main.DevicePartition.factory(
             path=path, dev=None, args=args)
-        assert type(partition) == main.DevicePartitionMultipath
+        assert isinstance(partition, main.DevicePartitionMultipath)
         m_is_mpath.return_value = False
 
         #
@@ -253,7 +253,7 @@ class TestDevicePartition(Base):
         ])
         partition = main.DevicePartition.factory(
             path=path, dev=None, args=args)
-        assert type(partition) == main.DevicePartitionCryptLuks
+        assert isinstance(partition, main.DevicePartitionCryptLuks)
 
         #
         # Device partition encrypted via dmcrypt plain
@@ -267,7 +267,7 @@ class TestDevicePartition(Base):
         ])
         partition = main.DevicePartition.factory(
             path=path, dev=None, args=args)
-        assert type(partition) == main.DevicePartitionCryptPlain
+        assert isinstance(partition, main.DevicePartitionCryptPlain)
 
 
 class TestDevicePartitionMultipath(Base):
