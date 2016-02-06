@@ -4477,7 +4477,7 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
 	assert(op->cid == op->dest_cid);
 	const ghobject_t& noid = i.get_oid(op->dest_oid);
-	OnodeRef no = c->get_onode(noid, true);
+	OnodeRef no = c->get_onode(noid, false);
 	r = _rename(txc, c, o, no, noid);
 	o.reset();
       }
