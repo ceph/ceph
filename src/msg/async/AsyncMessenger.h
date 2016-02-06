@@ -358,7 +358,6 @@ private:
    *  the only writers.
    */
 
-  int listen_sd;
   /**
    *  false; set to true if the AsyncMessenger bound to a specific address;
    *  and set false again by Accepter::stop().
