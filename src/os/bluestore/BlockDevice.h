@@ -52,7 +52,7 @@ struct IOContext {
 
   bool has_aios() {
     Mutex::Locker l(lock);
-    return num_pending.read() + num_running.read();
+    return num_pending.read() || num_running.read();
   }
 
   void aio_wait();
