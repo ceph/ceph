@@ -166,6 +166,8 @@ int BlueFS::mkfs(uuid_d osd_uuid)
 
   _init_alloc();
 
+  super.version = 1;
+  super.block_size = bdev[0]->get_block_size();
   super.osd_uuid = osd_uuid;
   super.uuid.generate_random();
   dout(1) << __func__ << " uuid " << super.uuid << dendl;
@@ -193,8 +195,6 @@ int BlueFS::mkfs(uuid_d osd_uuid)
   _flush_log();
 
   // write supers
-  super.version = 1;
-  super.block_size = bdev[0]->get_block_size();
   super.log_fnode = log_file->fnode;
   _write_super();
   _flush_bdev();
