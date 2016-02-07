@@ -357,12 +357,29 @@ class NVMEManager {
   bool init = false;
   std::vector<SharedDriverData*> shared_driver_datas;
 
-  static int _scan_nvme_device(const string &sn_tag, string &name, nvme_controller **c, nvme_namespace **ns);
-
  public:
   NVMEManager()
       : lock("NVMEDevice::NVMEManager::lock") {}
   int try_get(const string &sn_tag, SharedDriverData **driver);
+  void register_ctrlr(nvme_controller *c, struct pci_device *pci_dev) {
+    nvme_namespace *ns;
+    int num_ns = nvme_ctrlr_get_num_ns(c);
+    string name = pci_device_get_device_name(pci_dev) ? pci_device_get_device_name(pci_dev) : "Unknown";
+    assert(num_ns >= 1);
+    if (num_ns > 1) {
+      dout(0) << __func__ << " namespace count larger than 1, currently only use the first namespace" << dendl;
+    }
+    ns = nvme_ctrlr_get_ns(ctrlr, 1);
+    if (!ns) {
+      derr << __func__ << " failed to get namespace at 1" << dendl;
+      assert(0);
+    }
+    dout(1) << __func__ << " successfully attach nvme device at" << name
+            << " " << pci_dev->bus << ":" << pci_dev->dev << ":" << pci_dev->func << dendl;
+
+    shared_driver_datas.push_back(new SharedDriverData(sn_tag, name, c, ns));
+    *driver = shared_driver_datas.back();
+  }
 };
 
 static NVMEManager manager;
@@ -371,49 +388,25 @@ static NVMEManager manager;
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev "
 
-int NVMEManager::_scan_nvme_device(const string &sn_tag, string &name, nvme_controller **c, nvme_namespace **ns)
+static bool probe_cb(void *cb_ctx, void *dev)
 {
-  int r = 0;
-  dout(1) << __func__ << " serial number " << sn_tag << dendl;
-
-  pci_device *pci_dev;
-
-  // Search for matching devices
-  pci_id_match match;
-  match.vendor_id = PCI_MATCH_ANY;
-  match.subvendor_id = PCI_MATCH_ANY;
-  match.subdevice_id = PCI_MATCH_ANY;
-  match.device_id = PCI_MATCH_ANY;
-  match.device_class = NVME_CLASS_CODE;
-  match.device_class_mask = 0xFFFFFF;
-
-  pci_device_iterator *iter = pci_id_match_iterator_create(&match);
-
-  char serial_number[128];
-  while ((pci_dev = pci_device_next(iter)) != NULL) {
-    dout(0) << __func__ << " found device at name: " << pci_device_get_device_name(pci_dev)
-            << " bus: " << pci_dev->bus << ":" << pci_dev->dev << ":"
-            << pci_dev->func << " vendor:0x" << pci_dev->vendor_id << " device:0x" << pci_dev->device_id
-            << dendl;
-    r = pci_device_get_serial_number(pci_dev, serial_number, 128);
-    if (r < 0) {
-      dout(10) << __func__ << " failed to get serial number from " << pci_device_get_device_name(pci_dev) << dendl;
-      continue;
-    }
-
-    if (sn_tag.compare(string(serial_number, 16))) {
-      dout(0) << __func__ << " device serial number not match " << serial_number << dendl;
-      continue;
-    }
-    break;
-  }
-  if (pci_dev == NULL) {
-    derr << __func__ << " failed to found nvme serial number " << sn_tag << dendl;
-    return -ENOENT;
+  struct pci_device *pci_dev = dev;
+  string name = pci_device_get_device_name(pci_dev) ? pci_device_get_device_name(pci_dev) : "Unknown";
+  dout(0) << __func__ << " found device at name: " << pci_device_get_device_name(pci_dev)
+          << " bus: " << pci_dev->bus << ":" << pci_dev->dev << ":"
+          << pci_dev->func << " vendor:0x" << pci_dev->vendor_id << " device:0x" << pci_dev->device_id
+          << dendl;
+  int r = pci_device_get_serial_number(pci_dev, serial_number, 128);
+  if (r < 0) {
+    dout(10) << __func__ << " failed to get serial number from " << pci_device_get_device_name(pci_dev) << dendl;
+    return false;
   }
 
-  pci_device_probe(pci_dev);
-  name = pci_device_get_device_name(pci_dev) ? pci_device_get_device_name(pci_dev) : "Unknown";
+  if (sn_tag.compare(string(serial_number, 16))) {
+    dout(0) << __func__ << " device serial number not match " << serial_number << dendl;
+    return false;
+  }
+
   if (pci_device_has_kernel_driver(pci_dev)) {
     if (pci_device_has_non_uio_driver(pci_dev)) {
       /*NVMe kernel driver case*/
@@ -423,12 +416,11 @@ int NVMEManager::_scan_nvme_device(const string &sn_tag, string &name, nvme_cont
           derr << __func__ << " device " << name << " " << pci_dev->bus
                << ":" << pci_dev->dev << ":" << pci_dev->func
                << " switch to uio driver failed" << dendl;
-          return r;
+          return false;
         }
       } else {
-        derr << __func__ << " device has kernel nvme driver attached, exiting..." << dendl;
-        r = -EBUSY;
-        return r;
+        derr << __func__ << " device has kernel nvme driver attached" << dendl;
+        return false;
       }
     }
   } else {
@@ -437,42 +429,17 @@ int NVMEManager::_scan_nvme_device(const string &sn_tag, string &name, nvme_cont
       derr << __func__ << " device " << name << " " << pci_dev->bus
            << ":" << pci_dev->dev << ":" << pci_dev->func
            << " bind to uio driver failed, may lack of uio_pci_generic kernel module" << dendl;
-      return r;
+      return false;
     }
   }
 
-  /* Claim the device in case conflict with other ids process */
-  r =  pci_device_claim(pci_dev);
-  if (r < 0) {
-    derr << __func__ << " device " << name << " " << pci_dev->bus
-         << ":" << pci_dev->dev << ":" << pci_dev->func
-         << " claim failed" << dendl;
-    return r;
-  }
+  return true;
+}
 
-  *c = nvme_attach(pci_dev);
-  if (!*c) {
-    derr << __func__ << " device attach nvme failed" << dendl;
-    r = -1;
-    return r;
-  }
-
-  pci_iterator_destroy(iter);
-
-  int num_ns = nvme_ctrlr_get_num_ns(*c);
-  assert(num_ns >= 1);
-  if (num_ns > 1) {
-    dout(0) << __func__ << " namespace count larger than 1, currently only use the first namespace" << dendl;
-  }
-  *ns = nvme_ctrlr_get_ns(*c, 1);
-  if (!*ns) {
-    derr << __func__ << " failed to get namespace at 1" << dendl;
-    return -1;
-  }
-  dout(1) << __func__ << " successfully attach nvme device at" << name
-          << " " << pci_dev->bus << ":" << pci_dev->dev << ":" << pci_dev->func << dendl;
-
-  return 0;
+static void attach_cb(void *cb_ctx, void *dev, struct nvme_controller *ctrlr)
+{
+  NVMEManager *manager = cb_ctx;
+  manager->register_ctrlr(ctrlr, dev);
 }
 
 int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
@@ -525,14 +492,11 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
     }
   }
 
-  nvme_controller *c;
-  nvme_namespace *ns;
-  std::string name;
-  if (_scan_nvme_device(sn_tag, name, &c, &ns) < 0)
-    return -1;
-
-  shared_driver_datas.push_back(new SharedDriverData(sn_tag, name, c, ns));
-  *driver = shared_driver_datas.back();
+  r = nvme_probe(this, probe_cb, attach_cb);
+  if (r) {
+    derr << __func__ << " device probe nvme failed" << dendl;
+    return r;
+  }
 
   return 0;
 }
