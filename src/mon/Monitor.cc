@@ -379,6 +379,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KRAKEN);
   return compat;
 }
 
@@ -1964,6 +1965,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
 void Monitor::finish_election()
 {
   apply_quorum_to_compatset_features();
+  apply_monmap_to_compatset_features();
   timecheck_finish();
   exited_quorum = utime_t();
   finish_contexts(g_ceph_context, waitfor_quorum);
@@ -1978,6 +1980,21 @@ void Monitor::finish_election()
     dout(10) << " renaming myself from " << cur_name << " -> " << name << dendl;
     messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
 			    monmap->get_inst(*quorum.begin()));
+  }
+}
+
+void Monitor::_apply_compatset_features(CompatSet &new_features)
+{
+  if (new_features.compare(features) != 0) {
+    CompatSet diff = features.unsupported(new_features);
+    dout(1) << __func__ << " enabling new quorum features: " << diff << dendl;
+    features = new_features;
+
+    auto t = std::make_shared<MonitorDBStore::Transaction>();
+    write_features(t);
+    store->apply_transaction(t);
+
+    apply_compatset_features_to_quorum_requirements();
   }
 }
 
@@ -1996,17 +2013,34 @@ void Monitor::apply_quorum_to_compatset_features()
   if (quorum_con_features & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3) {
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3);
   }
-  if (new_features.compare(features) != 0) {
-    CompatSet diff = features.unsupported(new_features);
-    dout(1) << __func__ << " enabling new quorum features: " << diff << dendl;
-    features = new_features;
+  dout(5) << __func__ << dendl;
+  _apply_compatset_features(new_features);
+}
 
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-    write_features(t);
-    store->apply_transaction(t);
+void Monitor::apply_monmap_to_compatset_features()
+{
+  CompatSet new_features(features);
+  mon_feature_t monmap_features = monmap->get_required_features();
 
-    apply_compatset_features_to_quorum_requirements();
+  /* persistent monmap features may go into the compatset.
+   * optional monmap features may not - why?
+   *   because optional monmap features may be set/unset by the admin,
+   *   and possibly by other means that haven't yet been thought out,
+   *   so we can't make the monitor enforce them on start - because they
+   *   may go away.
+   *   this, of course, does not invalidate setting a compatset feature
+   *   for an optional feature - as long as you make sure to clean it up
+   *   once you unset it.
+   */
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_KRAKEN)) {
+    assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_KRAKEN));
+    // this feature should only ever be set if the quorum supports it.
+    assert(quorum_con_features & CEPH_FEATURE_SERVER_KRAKEN);
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KRAKEN);
   }
+  dout(5) << __func__ << dendl;
+  _apply_compatset_features(new_features);
 }
 
 void Monitor::apply_compatset_features_to_quorum_requirements()
@@ -2023,6 +2057,9 @@ void Monitor::apply_compatset_features_to_quorum_requirements()
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3)) {
     required_features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_KRAKEN)) {
+    required_features |= CEPH_FEATURE_SERVER_KRAKEN;
   }
   dout(10) << __func__ << " required_features " << required_features << dendl;
 }

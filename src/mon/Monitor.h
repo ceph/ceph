@@ -577,6 +577,8 @@ private:
   void cancel_probe_timeout();
   void probe_timeout(int r);
 
+  void _apply_compatset_features(CompatSet &new_features);
+
 public:
   epoch_t get_epoch();
   int get_leader() { return leader; }
@@ -600,6 +602,7 @@ public:
     return monmap->get_required_features();
   }
   void apply_quorum_to_compatset_features();
+  void apply_monmap_to_compatset_features();
   void apply_compatset_features_to_quorum_requirements();
 
 private:
@@ -992,6 +995,7 @@ public:
 #define CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC CompatSet::Feature(5, "new-style osdmap encoding")
 #define CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2 CompatSet::Feature(6, "support isa/lrc erasure code")
 #define CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3 CompatSet::Feature(7, "support shec erasure code")
+#define CEPH_MON_FEATURE_INCOMPAT_KRAKEN CompatSet::Feature(8, "support monmap features")
 // make sure you add your feature to Monitor::get_supported_features
 
 long parse_pos_long(const char *s, ostream *pss = NULL);
