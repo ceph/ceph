@@ -35,6 +35,7 @@
 enum class IOCommand {
   READ_COMMAND,
   WRITE_COMMAND,
+  ZERO_COMMAND,
   FLUSH_COMMAND
 };
 
@@ -67,7 +68,6 @@ class NVMEDevice : public BlockDevice {
   uint64_t block_size;
 
   bool aio_stop;
-  bufferptr zeros;
 
   struct BufferedExtents {
     struct Extent {
