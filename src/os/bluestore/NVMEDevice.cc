@@ -259,27 +259,24 @@ void SharedDriverData::_aio_thread()
       }
     }
 
-    if (t) {
+    for (; t; t = t->next) {
       switch (t->command) {
         case IOCommand::WRITE_COMMAND:
         {
-          while (t) {
-            lba_off = t->offset / block_size;
-            lba_count = t->len / block_size;
-            dout(20) << __func__ << " write command issued " << lba_off << "~" << lba_count << dendl;
-            r = nvme_ns_cmd_write(ns, t->buf, lba_off, lba_count, io_complete, t, 0);
-            if (r < 0) {
-              t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
-              rte_free(t->buf);
-              rte_mempool_put(task_pool, t);
-              derr << __func__ << " failed to do write command" << dendl;
-              assert(0);
-            }
-            lat = ceph_clock_now(g_ceph_context);
-            lat -= t->start;
-            logger->tinc(l_bluestore_nvmedevice_aio_write_queue_lat, lat);
-            t = t->next;
+          lba_off = t->offset / block_size;
+          lba_count = t->len / block_size;
+          dout(20) << __func__ << " write command issued " << lba_off << "~" << lba_count << dendl;
+          r = nvme_ns_cmd_write(ns, t->buf, lba_off, lba_count, io_complete, t, 0);
+          if (r < 0) {
+            t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
+            rte_free(t->buf);
+            rte_mempool_put(task_pool, t);
+            derr << __func__ << " failed to do write command" << dendl;
+            assert(0);
           }
+          lat = ceph_clock_now(g_ceph_context);
+          lat -= t->start;
+          logger->tinc(l_bluestore_nvmedevice_aio_write_queue_lat, lat);
           break;
         }
         case IOCommand::READ_COMMAND:
@@ -318,7 +315,8 @@ void SharedDriverData::_aio_thread()
           break;
         }
       }
-    } else if (inflight_ops.read()) {
+    }
+    if (inflight_ops.read()) {
       nvme_ctrlr_process_io_completions(ctrlr, max);
       dout(30) << __func__ << " idle, have a pause" << dendl;
 #ifdef HAVE_SSE
