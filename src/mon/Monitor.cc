@@ -379,6 +379,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_JEWEL);
   return compat;
 }
 
@@ -1988,6 +1989,9 @@ void Monitor::apply_quorum_to_compatset_features()
   if (quorum_con_features & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3) {
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3);
   }
+  if (quorum_con_features & CEPH_FEATURE_SERVER_JEWEL) {
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_JEWEL);
+  }
   if (new_features.compare(features) != 0) {
     CompatSet diff = features.unsupported(new_features);
     dout(1) << __func__ << " enabling new quorum features: " << diff << dendl;
@@ -2015,6 +2019,9 @@ void Monitor::apply_compatset_features_to_quorum_requirements()
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3)) {
     required_features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_JEWEL)) {
+    required_features |= CEPH_FEATURE_SERVER_JEWEL;
   }
   dout(10) << __func__ << " required_features " << required_features << dendl;
 }
