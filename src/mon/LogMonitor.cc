@@ -615,6 +615,8 @@ void LogMonitor::update_log_channels()
 {
   ostringstream oss;
 
+  Mutex::Locker l(conf_lock);
+
   channels.clear();
 
   int r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_syslog,
