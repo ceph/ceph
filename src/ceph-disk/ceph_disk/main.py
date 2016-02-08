@@ -2470,7 +2470,7 @@ def auth_key(
             ],
         )
     except subprocess.CalledProcessError as err:
-        if err.returncode == errno.EACCES:
+        if err.returncode == errno.EINVAL:
             # try old cap scheme
             command_check_call(
                 [
