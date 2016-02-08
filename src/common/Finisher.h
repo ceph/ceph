@@ -21,7 +21,10 @@
 
 #include "include/Context.h"
 
+#include "common/cxx_function.hpp"
 #include "common/perf_counters.h"
+
+#include "include/assert.h"
 
 class CephContext;
 
@@ -54,21 +57,17 @@ class Finisher {
   bool finisher_stop = false; ///< Set when the finisher should stop.
   bool finisher_running = false; ///< True when the finisher is currently
 				 ///< executing tasks.
-  /// Queue for contexts for which complete(0) will be called.
-  /// NULLs in this queue indicate that an item from finisher_queue_rval
-  /// should be completed in that place instead.
-  vector<Context*> finisher_queue;
+  /// Queue of thunks
+  using thunk = cxx_function::unique_function<void() && noexcept>;
+  std::vector<thunk> finisher_queue;
 
-  /// Queue for contexts for which the complete function will be called
-  /// with a parameter other than 0.
-  list<pair<Context*,int> > finisher_queue_rval;
 
   class PerfCountersDeleter {
     CephContext* cct;
 
   public:
-    PerfCountersDeleter(CephContext* cct = nullptr) : cct(cct) {}
-    void operator()(PerfCounters* p) {
+    PerfCountersDeleter(CephContext* cct = nullptr) noexcept : cct(cct) {}
+    void operator()(PerfCounters* p) noexcept {
       if (cct)
 	cct->get_perfcounters_collection()->remove(p);
       delete p;
@@ -86,52 +85,47 @@ class Finisher {
   /// the complete function.
   void queue(Context *c, int r = 0) {
     lock_guard l(finisher_lock);
-    if (finisher_queue.empty()) {
+    if (finisher_queue.empty())
       finisher_cond.notify_one();
-    }
-    if (r) {
-      finisher_queue_rval.push_back(pair<Context*, int>(c, r));
-      finisher_queue.push_back(NULL);
-    } else
-      finisher_queue.push_back(c);
+
+    finisher_queue.emplace_back([c, r]() noexcept {c->complete(r); });
+
     if (logger)
       logger->inc(l_finisher_queue_len);
   }
-  void queue(vector<Context*>& ls) {
-    {
-      lock_guard l(finisher_lock);
-      if (finisher_queue.empty()) {
-	finisher_cond.notify_one();
-      }
-      finisher_queue.insert(finisher_queue.end(), ls.begin(), ls.end());
-      if (logger)
-	logger->inc(l_finisher_queue_len, ls.size());
-    }
-    ls.clear();
+
+  /// Add a container full of contexts to complete
+  template<typename Container>
+  auto queue(Container c) ->
+    typename std::enable_if<
+      std::is_same<typename std::remove_cv<
+		     typename Container::iterator::value_type>::type,
+		   Context*>::value, void>::type {
+    lock_guard l(finisher_lock);
+    if (finisher_queue.empty())
+      finisher_cond.notify_one();
+
+    for (Context* x: c)
+      finisher_queue.emplace_back([x]() noexcept {x->complete(0); });
+
+    c.clear();
+
+    if (logger)
+      logger->inc(l_finisher_queue_len);
   }
-  void queue(deque<Context*>& ls) {
-    {
-      lock_guard l(finisher_lock);
-      if (finisher_queue.empty()) {
-	finisher_cond.notify_one();
-      }
-      finisher_queue.insert(finisher_queue.end(), ls.begin(), ls.end());
-      if (logger)
-	logger->inc(l_finisher_queue_len, ls.size());
-    }
-    ls.clear();
-  }
-  void queue(list<Context*>& ls) {
-    {
-      lock_guard l(finisher_lock);
-      if (finisher_queue.empty()) {
-	finisher_cond.notify_one();
-      }
-      finisher_queue.insert(finisher_queue.end(), ls.begin(), ls.end());
-      if (logger)
-	logger->inc(l_finisher_queue_len, ls.size());
-    }
-    ls.clear();
+
+  /// Construct a function in place. Different name so we don't have
+  /// to play enable games.
+  template<typename... Args>
+  void enqueue(Args&&... args) {
+    lock_guard l(finisher_lock);
+    if (finisher_queue.empty())
+      finisher_cond.notify_one();
+
+    finisher_queue.emplace_back(std::forward<Args>(args)...);
+
+    if (logger)
+      logger->inc(l_finisher_queue_len);
   }
 
   /// Start the worker thread.
@@ -149,14 +143,14 @@ class Finisher {
    *
    * This function will also return when a concurrent call to stop()
    * finishes, but this class should never be used in this way. */
-  void wait_for_empty();
+  void wait_for_empty() noexcept;
 
   /// The worker function of the Finisher
-  void finisher_thread_entry();
+  void finisher_thread_entry() noexcept;
 
   /// Construct an anonymous Finisher.
   /// Anonymous finishers do not log their queue length.
-  explicit Finisher(CephContext *cct) : cct(cct) {}
+  explicit Finisher(CephContext *cct) noexcept : cct(cct) {}
 
   /// Construct a named Finisher that logs its queue length.
   Finisher(CephContext *cct, string name, string tn) :
