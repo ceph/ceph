@@ -348,13 +348,13 @@ for name in $what; do
 	    if [ -n "$SYSTEMD_RUN" ]; then
                 detectDocker
                 if [ -z "$DOCKER_RUN" ]; then
-		    cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
+                    cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
                 else
                     time=`date +%s.%N` 
 		    cmd="$SYSTEMD_RUN --unit=ceph-$name.$time -r bash -c '$files $tcmalloc $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
                 fi
 	    else
-		cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
+                cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
 	    fi
 
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
