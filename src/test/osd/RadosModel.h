@@ -791,11 +791,8 @@ public:
     for (map<uint64_t, uint64_t>::iterator i = ranges.begin(); 
 	 i != ranges.end();
 	 ++i, ++tid) {
-      bufferlist to_write;
       gen_pos.seek(i->first);
-      for (uint64_t k = 0; k != i->second; ++k, ++gen_pos) {
-	to_write.append(*gen_pos);
-      }
+      bufferlist to_write = gen_pos.gen_bl_advance(i->second);
       assert(to_write.length() == i->second);
       assert(to_write.length() > 0);
       std::cout << num << ":  writing " << context->prefix+oid
