@@ -8,6 +8,7 @@ libcommon_internal_la_SOURCES = \
 	common/SloppyCRCMap.cc \
 	common/BackTrace.cc \
 	common/perf_counters.cc \
+	common/mutex_debug.cc \
 	common/Mutex.cc \
 	common/OutputDataSocket.cc \
 	common/admin_socket.cc \
@@ -275,7 +276,9 @@ noinst_HEADERS += \
 	common/PluginRegistry.h \
 	common/ceph_time.h \
 	common/ceph_timer.h \
-	common/align.h
+	common/align.h \
+	common/mutex_debug.h \
+	common/shunique_lock.h
 
 if ENABLE_XIO
 noinst_HEADERS += \

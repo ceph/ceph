@@ -15,19 +15,25 @@
 #ifndef CEPH_OBJECTER_H
 #define CEPH_OBJECTER_H
 
+#include <condition_variable>
 #include <list>
 #include <map>
+#include <mutex>
 #include <memory>
 #include <sstream>
+#include <type_traits>
 
-#include "include/types.h"
+#include <boost/thread/shared_mutex.hpp>
+
+#include "include/assert.h"
 #include "include/buffer.h"
+#include "include/types.h"
 #include "include/rados/rados_types.hpp"
 
 #include "common/admin_socket.h"
 #include "common/ceph_time.h"
 #include "common/ceph_timer.h"
-#include "common/RWLock.h"
+#include "common/shunique_lock.h"
 
 #include "messages/MOSDOp.h"
 #include "osd/OSDMap.h"
@@ -1128,7 +1134,11 @@ private:
   version_t last_seen_osdmap_version;
   version_t last_seen_pgmap_version;
 
-  RWLock rwlock;
+  mutable boost::shared_mutex rwlock;
+  using lock_guard = std::unique_lock<decltype(rwlock)>;
+  using unique_lock = std::unique_lock<decltype(rwlock)>;
+  using shared_lock = boost::shared_lock<decltype(rwlock)>;
+  using shunique_lock = ceph::shunique_lock<decltype(rwlock)>;
   ceph::timer<ceph::mono_clock> timer;
 
   PerfCounters *logger;
@@ -1566,8 +1576,8 @@ public:
   };
 
   int submit_command(CommandOp *c, ceph_tid_t *ptid);
-  int _calc_command_target(CommandOp *c);
-  void _assign_command_session(CommandOp *c);
+  int _calc_command_target(CommandOp *c, shunique_lock &sul);
+  void _assign_command_session(CommandOp *c, shunique_lock &sul);
   void _send_command(CommandOp *c);
   int command_op_cancel(OSDSession *s, ceph_tid_t tid, int r);
   void _finish_command(CommandOp *c, int r, string rs);
@@ -1603,7 +1613,11 @@ public:
     bool is_watch;
     ceph::mono_time watch_valid_thru; ///< send time for last acked ping
     int last_error;  ///< error from last failed ping|reconnect, if any
-    RWLock watch_lock;
+    boost::shared_mutex watch_lock;
+    using lock_guard = std::unique_lock<decltype(watch_lock)>;
+    using unique_lock = std::unique_lock<decltype(watch_lock)>;
+    using shared_lock = boost::shared_lock<decltype(watch_lock)>;
+    using shunique_lock = ceph::shunique_lock<decltype(watch_lock)>;
 
     // queue of pending async operations, with the timestamp of
     // when they were queued.
@@ -1630,11 +1644,11 @@ public:
     epoch_t last_force_resend;
 
     void _queued_async() {
-      assert(watch_lock.is_locked());
+      // watch_lock ust be locked unique
       watch_pending_async.push_back(ceph::mono_clock::now());
     }
     void finished_async() {
-      RWLock::WLocker l(watch_lock);
+      unique_lock l(watch_lock);
       assert(!watch_pending_async.empty());
       watch_pending_async.pop_front();
     }
@@ -1643,7 +1657,6 @@ public:
 		 target(object_t(), object_locator_t(), 0),
 		 snap(CEPH_NOSNAP), poutbl(NULL), pobjver(NULL),
 		 is_watch(false), last_error(0),
-		 watch_lock("Objecter::LingerOp::watch_lock"),
 		 register_gen(0),
 		 registered(false),
 		 canceled(false),
@@ -1729,8 +1742,11 @@ public:
 
   // -- osd sessions --
   struct OSDSession : public RefCountedObject {
-    RWLock lock;
-    Mutex **completion_locks;
+    boost::shared_mutex lock;
+    using lock_guard = std::lock_guard<decltype(lock)>;
+    using unique_lock = std::unique_lock<decltype(lock)>;
+    using shared_lock = boost::shared_lock<decltype(lock)>;
+    using shunique_lcok = ceph::shunique_lock<decltype(lock)>;
 
     // pending ops
     map<ceph_tid_t,Op*> ops;
@@ -1739,26 +1755,23 @@ public:
 
     int osd;
     int incarnation;
-    int num_locks;
     ConnectionRef con;
+    int num_locks;
+    std::unique_ptr<std::mutex[]> completion_locks;
+    using unique_completion_lock = std::unique_lock<
+      decltype(completion_locks)::element_type>;
+
 
     OSDSession(CephContext *cct, int o) :
-      lock("OSDSession"),
-      osd(o),
-      incarnation(0),
-      con(NULL) {
-      num_locks = cct->_conf->objecter_completion_locks_per_session;
-      completion_locks = new Mutex *[num_locks];
-      for (int i = 0; i < num_locks; i++) {
-	completion_locks[i] = new Mutex("OSDSession::completion_lock");
-      }
-    }
+      osd(o), incarnation(0), con(NULL),
+      num_locks(cct->_conf->objecter_completion_locks_per_session),
+      completion_locks(new std::mutex[num_locks]) {}
 
     ~OSDSession();
 
     bool is_homeless() { return (osd == -1); }
 
-    Mutex *get_lock(object_t& oid);
+    unique_completion_lock get_lock(object_t& oid);
   };
   map<int,OSDSession*> osd_sessions;
 
@@ -1781,8 +1794,10 @@ public:
   // we use this just to confirm a cookie is valid before dereferencing the ptr
   set<LingerOp*> linger_ops_set;
   int num_linger_callbacks;
-  Mutex linger_callback_lock;
-  Cond linger_callback_cond;
+  std::mutex linger_callback_lock;
+  typedef std::unique_lock<std::mutex> unique_linger_cb_lock;
+  typedef std::lock_guard<std::mutex> linger_cb_lock_guard;
+  std::condition_variable linger_callback_cond;
 
   map<ceph_tid_t,PoolStatOp*> poolstat_ops;
   map<ceph_tid_t,StatfsOp*> statfs_ops;
@@ -1828,7 +1843,7 @@ public:
   int _calc_target(op_target_t *t, epoch_t *last_force_resend = 0,
 		   bool any_change = false);
   int _map_session(op_target_t *op, OSDSession **s,
-		   RWLock::Context& lc);
+		   shunique_lock& lc);
 
   void _session_op_assign(OSDSession *s, Op *op);
   void _session_op_remove(OSDSession *s, Op *op);
@@ -1837,13 +1852,13 @@ public:
   void _session_command_op_assign(OSDSession *to, CommandOp *op);
   void _session_command_op_remove(OSDSession *from, CommandOp *op);
 
-  int _assign_op_target_session(Op *op, RWLock::Context& lc,
+  int _assign_op_target_session(Op *op, shunique_lock& lc,
 				bool src_session_locked,
 				bool dst_session_locked);
-  int _recalc_linger_op_target(LingerOp *op, RWLock::Context& lc);
+  int _recalc_linger_op_target(LingerOp *op, shunique_lock& lc);
 
-  void _linger_submit(LingerOp *info);
-  void _send_linger(LingerOp *info);
+  void _linger_submit(LingerOp *info, shunique_lock& sul);
+  void _send_linger(LingerOp *info, shunique_lock& sul);
   void _linger_commit(LingerOp *info, int r, bufferlist& outbl);
   void _linger_reconnect(LingerOp *info, int r);
   void _send_linger_ping(LingerOp *info);
@@ -1852,25 +1867,26 @@ public:
   int _normalize_watch_error(int r);
 
   void _linger_callback_queue() {
-    Mutex::Locker l(linger_callback_lock);
+    linger_cb_lock_guard l(linger_callback_lock);
     ++num_linger_callbacks;
   }
   void _linger_callback_finish() {
-    Mutex::Locker l(linger_callback_lock);
+    linger_cb_lock_guard l(linger_callback_lock);
     if (--num_linger_callbacks == 0)
-      linger_callback_cond.SignalAll();
+      linger_callback_cond.notify_all();
     assert(num_linger_callbacks >= 0);
   }
   friend class C_DoWatchError;
 public:
   void linger_callback_flush() {
-    Mutex::Locker l(linger_callback_lock);
-    while (num_linger_callbacks > 0)
-      linger_callback_cond.Wait(linger_callback_lock);
+    unique_linger_cb_lock l(linger_callback_lock);
+    linger_callback_cond.wait(l, [this]() {
+	return num_linger_callbacks <= 0;
+      });
   }
 
 private:
-  void _check_op_pool_dne(Op *op, bool session_locked);
+  void _check_op_pool_dne(Op *op, unique_lock& sl);
   void _send_op_map_check(Op *op);
   void _op_cancel_map_check(Op *op);
   void _check_linger_pool_dne(LingerOp *op, bool *need_unregister);
@@ -1882,9 +1898,9 @@ private:
 
   void kick_requests(OSDSession *session);
   void _kick_requests(OSDSession *session, map<uint64_t, LingerOp *>& lresend);
-  void _linger_ops_resend(map<uint64_t, LingerOp *>& lresend);
+  void _linger_ops_resend(map<uint64_t, LingerOp *>& lresend, unique_lock& ul);
 
-  int _get_session(int osd, OSDSession **session, RWLock::Context& lc);
+  int _get_session(int osd, OSDSession **session, shunique_lock& sul);
   void put_session(OSDSession *s);
   void get_session(OSDSession *s);
   void _reopen_session(OSDSession *session);
@@ -1904,12 +1920,12 @@ private:
    * If throttle_op needs to throttle it will unlock client_lock.
    */
   int calc_op_budget(Op *op);
-  void _throttle_op(Op *op, int op_size=0);
-  int _take_op_budget(Op *op) {
-    assert(rwlock.is_locked());
+  void _throttle_op(Op *op, shunique_lock& sul, int op_size = 0);
+  int _take_op_budget(Op *op, shunique_lock& sul) {
+    assert(sul && sul.mutex() == &rwlock);
     int op_budget = calc_op_budget(op);
     if (keep_balanced_budget) {
-      _throttle_op(op, op_budget);
+      _throttle_op(op, sul, op_budget);
     } else {
       op_throttle_bytes.take(op_budget);
       op_throttle_ops.take(1);
@@ -1941,10 +1957,9 @@ private:
     max_linger_id(0), num_unacked(0), num_uncommitted(0), global_op_flags(0),
     keep_balanced_budget(false), honor_osdmap_full(true),
     last_seen_osdmap_version(0), last_seen_pgmap_version(0),
-    rwlock("Objecter::rwlock"), logger(NULL), tick_event(0),
-    m_request_state_hook(NULL), num_linger_callbacks(0),
-    linger_callback_lock("Objecter::linger_callback_lock"),
-    num_homeless_ops(0), homeless_session(new OSDSession(cct, -1)),
+    logger(NULL), tick_event(0), m_request_state_hook(NULL),
+    num_linger_callbacks(0), num_homeless_ops(0),
+    homeless_session(new OSDSession(cct, -1)),
     mon_timeout(ceph::make_timespan(mon_timeout)),
     osd_timeout(ceph::make_timespan(osd_timeout)),
     op_throttle_bytes(cct, "objecter_bytes",
@@ -1958,13 +1973,43 @@ private:
   void start();
   void shutdown();
 
-  const OSDMap *get_osdmap_read() {
-    rwlock.get_read();
-    return osdmap;
+  // These two templates replace osdmap_(get)|(put)_read. Simply wrap
+  // whatever functionality you want to use the OSDMap in a lambda like:
+  //
+  // with_osdmap([](const OSDMap& o) { o.do_stuff(); });
+  //
+  // or
+  //
+  // auto t = with_osdmap([&](const OSDMap& o) { return o.lookup_stuff(x); });
+  //
+  // Do not call into something that will try to lock the OSDMap from
+  // here or you will have great woe and misery.
+
+  template<typename Callback, typename...Args>
+  auto with_osdmap(Callback&& cb, Args&&...args) ->
+    typename std::enable_if<
+      std::is_void<
+    decltype(cb(const_cast<const OSDMap&>(*osdmap),
+		std::forward<Args>(args)...))>::value,
+      void>::type {
+    shared_lock l(rwlock);
+    std::forward<Callback>(cb)(const_cast<const OSDMap&>(*osdmap),
+			       std::forward<Args>(args)...);
   }
-  void put_osdmap_read() {
-    rwlock.put_read();
+
+  template<typename Callback, typename...Args>
+  auto with_osdmap(Callback&& cb, Args&&... args) ->
+    typename std::enable_if<
+      !std::is_void<
+	decltype(cb(const_cast<const OSDMap&>(*osdmap),
+		    std::forward<Args>(args)...))>::value,
+      decltype(cb(const_cast<const OSDMap&>(*osdmap),
+		  std::forward<Args>(args)...))>::type {
+    shared_lock l(rwlock);
+    return std::forward<Callback>(cb)(const_cast<const OSDMap&>(*osdmap),
+				      std::forward<Args>(args)...);
   }
+
 
   /**
    * Tell the objecter to throttle outgoing ops according to its
@@ -1985,7 +2030,8 @@ private:
 		      map<int64_t, bool> *pool_full_map,
 		      map<ceph_tid_t, Op*>& need_resend,
 		      list<LingerOp*>& need_resend_linger,
-		      map<ceph_tid_t, CommandOp*>& need_resend_command);
+		      map<ceph_tid_t, CommandOp*>& need_resend_command,
+		      shunique_lock& sul);
 
   int64_t get_object_hash_position(int64_t pool, const string& key,
 				   const string& ns);
@@ -2023,8 +2069,8 @@ private:
 private:
 
   // low-level
-  ceph_tid_t _op_submit(Op *op, RWLock::Context& lc);
-  ceph_tid_t _op_submit_with_budget(Op *op, RWLock::Context& lc,
+  ceph_tid_t _op_submit(Op *op, shunique_lock& lc);
+  ceph_tid_t _op_submit_with_budget(Op *op, shunique_lock& lc,
 				    int *ctx_budget = NULL);
   inline void unregister_op(Op *op);
 
@@ -2032,7 +2078,7 @@ private:
 public:
   ceph_tid_t op_submit(Op *op, int *ctx_budget = NULL);
   bool is_active() {
-    RWLock::RLocker l(rwlock);
+    shared_lock l(rwlock);
     return !((!inflight_ops.read()) && linger_ops.empty() &&
 	     poolstat_ops.empty() && statfs_ops.empty());
   }
