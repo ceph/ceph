@@ -907,8 +907,6 @@ bool CrushWrapper::check_item_present(int id) const
 
 pair<string,string> CrushWrapper::get_immediate_parent(int id, int *_ret)
 {
-  pair <string, string> loc;
-  int ret = -ENOENT;
 
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     crush_bucket *b = crush->buckets[bidx];
@@ -918,15 +916,16 @@ pair<string,string> CrushWrapper::get_immediate_parent(int id, int *_ret)
       if (b->items[i] == id) {
         string parent_id = name_map[b->id];
         string parent_bucket_type = type_map[b->type];
-        loc = make_pair(parent_bucket_type, parent_id);
-        ret = 0;
+        if (_ret)
+          *_ret = 0;
+        return make_pair(parent_bucket_type, parent_id);
       }
   }
 
   if (_ret)
-    *_ret = ret;
+    *_ret = -ENOENT;
 
-  return loc;
+  return pair<string, string>();
 }
 
 int CrushWrapper::get_immediate_parent_id(int id, int *parent)
