@@ -85,9 +85,6 @@ Group:         System/Filesystems
 %endif
 URL:		http://ceph.com/
 Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
-%if 0%{?fedora} || 0%{?rhel}
-Patch0:		init-ceph.in-fedora.patch
-%endif
 #################################################################################
 # dependencies that apply across all distro families
 #################################################################################
