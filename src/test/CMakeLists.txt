@@ -545,12 +545,14 @@ set_target_properties(unittest_str_map
 set(unittest_mutex_debug_srcs
   common/test_mutex_debug.cc
   )
-add_executable(unittest_mutex_debug
+add_executable(unittest_mutex_debug EXCLUDE_FROM_ALL
   ${unittest_mutex_debug_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
+add_test(unittest_mutex_debug unittest_mutex_debug)
+add_dependencies(check unittest_mutex_debug)
 target_link_libraries(unittest_mutex_debug global
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS} ${EXTRALIBS})
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS} ${UNITTEST_LIBS} ${EXTRALIBS})
 set_target_properties(unittest_mutex_debug
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
@@ -558,12 +560,14 @@ set_target_properties(unittest_mutex_debug
 set(unittest_shunique_lock_srcs
   common/test_shunique_lock.cc
   )
-add_executable(unittest_shunique_lock
+add_executable(unittest_shunique_lock EXCLUDE_FROM_ALL
   ${unittest_shunique_lock_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
+add_test(unittest_shunique_lock unittest_shunique_lock)
+add_dependencies(check unittest_shunique_lock)
 target_link_libraries(unittest_shunique_lock global
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS} ${EXTRALIBS})
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS} ${UNITTEST_LIBS} ${EXTRALIBS})
 set_target_properties(unittest_shunique_lock
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
