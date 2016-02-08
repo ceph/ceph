@@ -113,6 +113,8 @@ void _usage()
   cout << "  replicalog get             get replica metadata log entry\n";
   cout << "  replicalog update          update replica metadata log entry\n";
   cout << "  replicalog delete          delete replica metadata log entry\n";
+  cout << "  orphans find               init and run search for leaked rados objects\n";
+  cout << "  orphans finish             clean up search for leaked rados objects\n";
   cout << "options:\n";
   cout << "   --uid=<id>                user id\n";
   cout << "   --subuser=<name>          subuser name\n";
@@ -175,6 +177,9 @@ void _usage()
   cout << "   --max-objects             specify max objects (negative value to disable)\n";
   cout << "   --max-size                specify max size (in bytes, negative value to disable)\n";
   cout << "   --quota-scope             scope of quota (bucket, user)\n";
+  cout << "\nOrphans search options:\n";
+  cout << "   --pool                    data pool to scan for leaked rados objects in\n";
+  cout << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
   cout << "\n";
   generic_client_usage();
 }
