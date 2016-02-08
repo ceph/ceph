@@ -5,6 +5,10 @@
 #include <sys/types.h>
 #include <ifaddrs.h>
 
+#if defined(__FreeBSD__)
+#include <sys/socket.h>
+#endif
+
 /*
   Find an IP address that is in the wanted subnet.
 
