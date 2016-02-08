@@ -1312,6 +1312,8 @@ int Objecter::pool_snap_list(int64_t poolid, vector<uint64_t> *snaps)
   RWLock::RLocker rl(rwlock);
 
   const pg_pool_t *pi = osdmap->get_pg_pool(poolid);
+  if (!pi)
+    return -ENOENT;
   for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.begin();
        p != pi->snaps.end();
        ++p) {
@@ -2662,10 +2664,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
 int Objecter::_map_session(op_target_t *target, OSDSession **s,
 			   RWLock::Context& lc)
 {
-  int r = _calc_target(target);
-  if (r < 0) {
-    return r;
-  }
+  _calc_target(target);
   return _get_session(target->osd, s, lc);
 }
 
