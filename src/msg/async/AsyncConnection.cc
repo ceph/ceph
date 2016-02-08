@@ -2567,16 +2567,3 @@ void AsyncConnection::local_deliver()
     write_lock.Lock();
   }
 }
-
-void AsyncConnection::cleanup_handler()
-{
-  ldout(async_msgr->cct, 1) << __func__ << dendl;
-
-  delete read_handler;
-  delete write_handler;
-  delete reset_handler;
-  delete remote_reset_handler;
-  delete connect_handler;
-  delete local_deliver_handler;
-  delete wakeup_handler;
-}
