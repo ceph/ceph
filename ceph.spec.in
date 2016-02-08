@@ -10,6 +10,8 @@
 # remain the property of their copyright owners, unless otherwise agreed
 # upon.
 #
+# This file is under the GNU Lesser General Public License, version 2.1
+#
 # Please submit bugfixes or comments via http://tracker.ceph.com/
 # 
 %bcond_with ocf
