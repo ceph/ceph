@@ -49,10 +49,21 @@ int KeystoneToken::parse(CephContext *cct, bufferlist& bl)
   }
 
   try {
-    if (version == KeystoneApiVersion::VER_2) {
-      JSONDecoder::decode_json("access", *this, &parser, true);
-    } else if (version == KeystoneApiVersion::VER_3) {
-      JSONDecoder::decode_json("token", *this, &parser, true);
+    const auto version = KeystoneService::get_api_version();
+
+    if (version == KeystoneApiVersion::VER_3) {
+      if (!JSONDecoder::decode_json("access", *this, &parser)) {
+        /* Token structure doesn't follow Identity API v2, so the token
+         * must be in v3. Otherwise we can assume it's wrongly formatted. */
+        JSONDecoder::decode_json("token", *this, &parser, true);
+      }
+    } else if (version == KeystoneApiVersion::VER_2) {
+      if (!JSONDecoder::decode_json("token", *this, &parser)) {
+        /* If the token cannot be parsed according to V2, try V3. */
+        JSONDecoder::decode_json("access", *this, &parser, true);
+      }
+    } else {
+      return -ENOTSUP;
     }
   } catch (JSONDecoder::err& err) {
     ldout(cct, 0) << "Keystone token parse error: " << err.message << dendl;
