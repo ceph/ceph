@@ -202,6 +202,7 @@ void global_init(std::vector < const char * > *alt_def_args,
 		<< st.st_uid << ":" << st.st_gid << ". ";
       }
     }
+    g_ceph_context->set_uid_gid(uid, gid);
     if (setgid(gid) != 0) {
       int r = errno;
       cerr << "unable to setgid " << gid << ": " << cpp_strerror(r)
