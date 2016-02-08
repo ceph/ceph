@@ -203,19 +203,23 @@ void global_init(std::vector < const char * > *alt_def_args,
       }
     }
     g_ceph_context->set_uid_gid(uid, gid);
-    if (setgid(gid) != 0) {
-      int r = errno;
-      cerr << "unable to setgid " << gid << ": " << cpp_strerror(r)
-	   << std::endl;
-      exit(1);
+    if ((flags & CINIT_FLAG_DEFER_DROP_PRIVILEGES) == 0) {
+      if (setgid(gid) != 0) {
+	int r = errno;
+	cerr << "unable to setgid " << gid << ": " << cpp_strerror(r)
+	     << std::endl;
+	exit(1);
+      }
+      if (setuid(uid) != 0) {
+	int r = errno;
+	cerr << "unable to setuid " << uid << ": " << cpp_strerror(r)
+	     << std::endl;
+	exit(1);
+      }
+      priv_ss << "set uid:gid to " << uid << ":" << gid;
+    } else {
+      priv_ss << "deferred set uid:gid to " << uid << ":" << gid;
     }
-    if (setuid(uid) != 0) {
-      int r = errno;
-      cerr << "unable to setuid " << uid << ": " << cpp_strerror(r)
-	   << std::endl;
-      exit(1);
-    }
-    priv_ss << "set uid:gid to " << uid << ":" << gid;
   }
 
   // Expand metavariables. Invoke configuration observers. Open log file.
