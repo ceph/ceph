@@ -439,6 +439,42 @@ function test_run_osd() {
 #######################################################################
 
 ##
+# Shutdown and remove all traces of the osd by the name osd.**id**.
+#
+# The OSD is shutdown with the TERM signal. It is then removed from
+# the auth list, crush map, osd map etc and the files associated with
+# it are also removed.
+#
+# @param dir path name of the environment
+# @param id osd identifier
+# @return 0 on success, 1 on error
+#
+function destroy_osd() {
+    local dir=$1
+    local id=$2
+
+    kill_daemons $dir TERM osd.$id || return 1
+    ceph osd out osd.$id || return 1
+    ceph auth del osd.$id || return 1
+    ceph osd crush remove osd.$id || return 1
+    ceph osd rm $id || return 1
+    rm -fr $dir/$id
+}
+
+function test_destroy_osd() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_osd $dir 0 || return 1
+    destroy_osd $dir 0 || return 1
+    ! ceph osd dump | grep "osd.$id " || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
 # Run (activate) an osd by the name osd.**id** with data in
 # **dir**/**id**.  The logs can be found in **dir**/osd.**id**.log,
 # the pid file is **dir**/osd.**id**.pid and the admin socket is
@@ -1136,8 +1172,40 @@ function test_erasure_code_plugin_exists() {
 #######################################################################
 
 ##
+# Display all log files from **dir** on stdout.
+#
+# @param dir directory in which all data is stored
+#
+
+function display_logs() {
+    local dir=$1
+
+    find $dir -maxdepth 1 -name '*.log' | \
+        while read file ; do
+            echo "======================= $file"
+            cat $file
+        done
+}
+
+function test_display_logs() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    kill_daemons $dir || return 1
+    display_logs $dir > $dir/log.out
+    grep --quiet mon.a.log $dir/log.out || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
 # Call the **run** function (which must be defined by the caller) with
 # the **dir** argument followed by the caller argument list.
+#
+# If the **run** function returns on error, all logs found in **dir**
+# are displayed for diagnostic purposes.
 #
 # **teardown** function is called when the **run** function returns
 # (on success or on error), to cleanup leftovers. The CEPH_CONF is set
@@ -1171,6 +1239,7 @@ function main() {
     if run $dir "$@" ; then
         code=0
     else
+        display_logs $dir
         code=1
     fi
     teardown $dir || return 1
