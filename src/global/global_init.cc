@@ -141,6 +141,7 @@ void global_init(std::vector < const char * > *alt_def_args,
   }
 
   // drop privileges?
+  ostringstream priv_ss;
   if (g_conf->setgroup.length() ||
       g_conf->setuser.length()) {
     uid_t uid = 0;  // zero means no change; we can only drop privs here.
@@ -196,10 +197,9 @@ void global_init(std::vector < const char * > *alt_def_args,
 	uid = 0;
 	gid = 0;
       } else {
-	dout(10) << "setuser_match_path "
-		 << g_conf->setuser_match_path << " owned by "
-		 << st.st_uid << ":" << st.st_gid << ", doing setuid/gid"
-		 << dendl;
+	priv_ss << "setuser_match_path "
+		<< g_conf->setuser_match_path << " owned by "
+		<< st.st_uid << ":" << st.st_gid << ". ";
       }
     }
     if (setgid(gid) != 0) {
@@ -214,7 +214,7 @@ void global_init(std::vector < const char * > *alt_def_args,
 	   << std::endl;
       exit(1);
     }
-    dout(0) << "set uid:gid to " << uid << ":" << gid << dendl;
+    priv_ss << "set uid:gid to " << uid << ":" << gid;
   }
 
   // Expand metavariables. Invoke configuration observers. Open log file.
@@ -235,6 +235,10 @@ void global_init(std::vector < const char * > *alt_def_args,
   // call all observers now.  this has the side-effect of configuring
   // and opening the log file immediately.
   g_conf->call_all_observers();
+
+  if (priv_ss.str().length()) {
+    dout(0) << priv_ss.str() << dendl;
+  }
 
   // test leak checking
   if (g_conf->debug_deliberately_leak_memory) {
