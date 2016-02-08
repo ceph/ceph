@@ -2372,7 +2372,7 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
 	     << " writing " << donow 
 	     << dendl;
     
-    if (msg.msg_iovlen >= IOV_MAX-2) {
+    if (msg.msg_iovlen >= SM_IOV_MAX-2) {
       if (do_sendmsg(&msg, msglen, true))
 	goto fail;
       
