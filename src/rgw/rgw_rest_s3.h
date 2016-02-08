@@ -356,11 +356,7 @@ private:
 
 public:
   explicit RGW_Auth_S3_Keystone_ValidateToken(CephContext *_cct)
-      : RGWHTTPClient(_cct),
-        /* This is really crazy but S3Extension in Keystone always
-         * returns token conforming to v2 - regardless whether you
-         * have requested v3 or not. */
-        response(KeystoneToken(KeystoneApiVersion::VER_2)) {
+      : RGWHTTPClient(_cct) {
     get_str_list(cct->_conf->rgw_keystone_accepted_roles, roles_list);
   }
 
