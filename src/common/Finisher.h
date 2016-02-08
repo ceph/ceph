@@ -15,12 +15,16 @@
 #ifndef CEPH_FINISHER_H
 #define CEPH_FINISHER_H
 
+#include <condition_variable>
+#include <functional>
 #include <list>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "include/Context.h"
+#include "include/ceph_assert.h"
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
 #include "common/perf_counters.h"
@@ -50,12 +54,11 @@ class Finisher {
   ceph::condition_variable finisher_empty_cond; ///< Signaled when the finisher has nothing more to process.
   bool finisher_stop = false; ///< Set when the finisher should stop.
   bool finisher_running = false; ///< True when the finisher is currently
-                                 ///  executing contexts.
+				 ///< executing tasks.
   bool finisher_empty_wait = false; ///< True mean someone wait finisher empty.
   const std::string thread_name{"fn_anonymous"};
 
-  /// Queue for contexts for which complete(0) will be called.
-  std::vector<std::pair<Context*, int>> finisher_queue;
+  std::vector<std::function<void()>> finisher_queue;
 
   /// Performance counter for the finisher's queue length.
   /// Only active for named finishers.
@@ -67,58 +70,59 @@ class Finisher {
   /// Add a context to complete, optionally specifying a parameter for
   /// the complete function.
   void queue(Context *c, int r = 0) {
-    std::unique_lock ul(finisher_lock);
+    std::scoped_lock l(finisher_lock);
     if (finisher_queue.empty()) {
       finisher_cond.notify_all();
     }
-    finisher_queue.push_back(make_pair(c, r));
+
+    finisher_queue.emplace_back([c, r]() noexcept {c->complete(r); });
+
     if (logger)
       logger->inc(l_finisher_queue_len);
   }
 
-  void queue(std::list<Context*>& ls) {
+  /// Add a container full of contexts to complete
+  template<typename Container>
+  auto queue(Container& c) ->
+    std::enable_if_t<std::is_same_v<
+		       std::decay_t<
+			 typename Container::iterator::value_type>,
+		       Context*>, void> {
+    const auto s = c.size();
     {
       std::scoped_lock l(finisher_lock);
-      if (finisher_queue.empty()) {
+      if (finisher_queue.empty())
 	finisher_cond.notify_all();
-      }
-      for (auto i : ls) {
-	finisher_queue.push_back(make_pair(i, 0));
-      }
-      if (logger)
-	logger->inc(l_finisher_queue_len, ls.size());
+
+      for (auto* x : c)
+	finisher_queue.emplace_back([x]() noexcept {x->complete(0); });
     }
-    ls.clear();
+
+    if (logger)
+      logger->inc(l_finisher_queue_len, s);
+    c.clear();
   }
 
-  void queue(std::deque<Context*>& ls) {
-    {
-      std::scoped_lock l(finisher_lock);
-      if (finisher_queue.empty()) {
-	finisher_cond.notify_all();
-      }
-      for (auto i : ls) {
-	finisher_queue.push_back(make_pair(i, 0));
-      }
-      if (logger)
-	logger->inc(l_finisher_queue_len, ls.size());
-    }
-    ls.clear();
+  void queue(std::function<void()>&& f) {
+    std::scoped_lock l(finisher_lock);
+    if (finisher_queue.empty())
+      finisher_cond.notify_all();
+
+    finisher_queue.emplace_back(std::move(f));
+
+    if (logger)
+      logger->inc(l_finisher_queue_len);
   }
 
-  void queue(std::vector<Context*>& ls) {
-    {
-      std::scoped_lock l(finisher_lock);
-      if (finisher_queue.empty()) {
-	finisher_cond.notify_all();
-      }
-      for (auto i : ls) {
-	finisher_queue.push_back(make_pair(i, 0));
-      }
-      if (logger)
-	logger->inc(l_finisher_queue_len, ls.size());
-    }
-    ls.clear();
+  void queue(const std::function<void()>& f) {
+    std::scoped_lock l(finisher_lock);
+    if (finisher_queue.empty())
+      finisher_cond.notify_all();
+
+    finisher_queue.emplace_back(f);
+
+    if (logger)
+      logger->inc(l_finisher_queue_len);
   }
 
   /// Start the worker thread.
@@ -136,14 +140,14 @@ class Finisher {
    *
    * This function will also return when a concurrent call to stop()
    * finishes, but this class should never be used in this way. */
-  void wait_for_empty();
+  void wait_for_empty() noexcept;
 
   /// The worker function of the Finisher
   void finisher_thread_entry() noexcept;
 
   /// Construct an anonymous Finisher.
   /// Anonymous finishers do not log their queue length.
-  explicit Finisher(CephContext *cct) : cct(cct) {}
+  explicit Finisher(CephContext *cct) noexcept : cct(cct) {}
 
   /// Construct a named Finisher that logs its queue length.
   Finisher(CephContext *cct, std::string name, std::string tn)

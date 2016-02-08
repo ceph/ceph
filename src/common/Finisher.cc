@@ -30,7 +30,7 @@ void Finisher::stop()
   ldout(cct, 10) << __func__ << " finish" << dendl;
 }
 
-void Finisher::wait_for_empty()
+void Finisher::wait_for_empty() noexcept
 {
   std::unique_lock ul(finisher_lock);
   while (!finisher_queue.empty() || finisher_running) {
@@ -57,11 +57,13 @@ void Finisher::finisher_thread_entry() noexcept
       // To reduce lock contention, we swap out the queue to process.
       // This way other threads can submit new contexts to complete
       // while we are working.
-      std::vector<pair<Context*,int>> ls;
+      decltype(finisher_queue) ls;
       ls.swap(finisher_queue);
       finisher_running = true;
       ul.unlock();
-      ldout(cct, 10) << "finisher_thread doing " << ls << dendl;
+      // We don't have jobs identified by addresses any more and
+      // there's no really good way of printing a function, generally.
+      ldout(cct, 10) << "finisher_thread executing job" << dendl;
 
       if (logger) {
 	start = ceph::coarse_mono_clock::now();
@@ -69,10 +71,11 @@ void Finisher::finisher_thread_entry() noexcept
       }
 
       // Now actually process the contexts.
-      for (auto p : ls) {
-	p.first->complete(p.second);
+      for (auto& p : ls) {
+	p();
+	p = nullptr;
       }
-      ldout(cct, 10) << "finisher_thread done with " << ls << dendl;
+      ldout(cct, 10) << "finisher_thread done with stuff" << dendl;
       ls.clear();
       if (logger) {
 	logger->dec(l_finisher_queue_len, count);
