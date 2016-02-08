@@ -153,6 +153,7 @@ int main(int argc, const char **argv)
 
   global_pre_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
 		  CINIT_FLAG_NO_DAEMON_ACTIONS);
+  g_conf->apply_changes(NULL);
 
   // do not common_init_finish(); do not start threads; do not do any of thing
   // wonky things the daemon whose conf we are examining would do (like initialize

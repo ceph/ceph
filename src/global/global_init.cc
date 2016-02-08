@@ -106,9 +106,6 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
 
   conf->parse_argv(args); // argv override
 
-  // Expand metavariables. Invoke configuration observers.
-  conf->apply_changes(NULL);
-
   // Now we're ready to complain about config file parse errors
   complain_about_parse_errors(cct, &parse_errors);
 }
@@ -219,6 +216,9 @@ void global_init(std::vector < const char * > *alt_def_args,
     }
     dout(0) << "set uid:gid to " << uid << ":" << gid << dendl;
   }
+
+  // Expand metavariables. Invoke configuration observers. Open log file.
+  g_conf->apply_changes(NULL);
 
   if (g_conf->run_dir.length() &&
       code_env == CODE_ENVIRONMENT_DAEMON &&
