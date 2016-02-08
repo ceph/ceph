@@ -7,7 +7,8 @@ DENCODER_SOURCES += \
 	rgw/rgw_basic_types.cc \
 	rgw/rgw_common.cc \
 	rgw/rgw_env.cc \
-	rgw/rgw_json_enc.cc
+	rgw/rgw_json_enc.cc \
+	rgw/rgw_keystone.cc
 
 DENCODER_DEPS += -lcurl -lexpat \
 	libcls_version_client.la \

@@ -304,7 +304,7 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
     int ret = token_req.process("POST", token_url.c_str());
     if (ret < 0)
       return ret;
-    KeystoneToken t = KeystoneToken(keystone_version);
+    KeystoneToken t;
     if (t.parse(cct, token_bl) != 0)
       return -EINVAL;
     token = t.token.id;
@@ -521,7 +521,7 @@ static bool decode_pki_token(CephContext *cct, const string& token, bufferlist& 
 int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, struct rgw_swift_auth_info *info,
 				      RGWUserInfo& rgw_user)
 {
-  KeystoneToken t(KeystoneService::get_api_version());
+  KeystoneToken t;
 
   string token_id;
   get_token_id(token, token_id);

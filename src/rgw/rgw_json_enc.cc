@@ -1096,25 +1096,52 @@ void KeystoneToken::decode_json(JSONObj *root_obj)
 {
   JSONDecoder::decode_json("user", user, root_obj, true);
 
-  if (version == KeystoneApiVersion::VER_2) {
-    JSONDecoder::decode_json("token", token, root_obj, true);
+  const auto version = KeystoneService::get_api_version();
 
-    roles = user.roles_v2;
-    project = token.tenant_v2;
-  } else if (version == KeystoneApiVersion::VER_3) {
+  if (version == KeystoneApiVersion::VER_3) {
     string expires_iso8601;
-    struct tm t;
+    if (JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj)) {
+      /* VER_3 */
+      /* Presence of "expires_at" suggests we are dealing with OpenStack
+       * Identity API v3 (aka Keystone API v3) token. */
+      struct tm t;
 
-    JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj, true);
-
-    if (parse_iso8601(expires_iso8601.c_str(), &t)) {
-      token.expires = timegm(&t);
+      if (parse_iso8601(expires_iso8601.c_str(), &t)) {
+        token.expires = timegm(&t);
+      } else {
+        token.expires = 0;
+        throw JSONDecoder::err("Failed to parse ISO8601 expiration date"
+                               "from Keystone response.");
+      }
+      JSONDecoder::decode_json("roles", roles, root_obj, true);
+      JSONDecoder::decode_json("project", project, root_obj, true);
     } else {
-      token.expires = 0;
-      throw JSONDecoder::err("Failed to parse ISO8601 expiration date from Keystone response.");
+      /* fallback: VER_2 */
+      JSONDecoder::decode_json("token", token, root_obj, true);
+      roles = user.roles_v2;
+      project = token.tenant_v2;
     }
-    JSONDecoder::decode_json("roles", roles, root_obj, true);
-    JSONDecoder::decode_json("project", project, root_obj, true);
+  } else if (version == KeystoneApiVersion::VER_2) {
+    if (JSONDecoder::decode_json("token", token, root_obj)) {
+      /* VER_2 */
+      roles = user.roles_v2;
+      project = token.tenant_v2;
+    } else {
+      /* fallback: VER_3 */
+      string expires_iso8601;
+      JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj, true);
+
+      struct tm t;
+      if (parse_iso8601(expires_iso8601.c_str(), &t)) {
+        token.expires = timegm(&t);
+      } else {
+        token.expires = 0;
+        throw JSONDecoder::err("Failed to parse ISO8601 expiration date"
+                               "from Keystone response.");
+      }
+      JSONDecoder::decode_json("roles", roles, root_obj, true);
+      JSONDecoder::decode_json("project", project, root_obj, true);
+    }
   }
 }
 
