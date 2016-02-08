@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e
+set -evx
 
 if ! command -v virtualenv >/dev/null; then
     echo "$0: virtualenv not installed, skipping python-using tests." 1>&2
