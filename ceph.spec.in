@@ -1,4 +1,17 @@
 # vim: set noexpandtab ts=8 sw=8 :
+#
+# spec file for package ceph
+#
+# Copyright (C) 2004-2016 The Ceph Project Developers. See COPYING file
+# at the top-level directory of this distribution and at
+# https://github.com/ceph/ceph/blob/master/COPYING
+#
+# All modifications and additions to the file contributed by third parties
+# remain the property of their copyright owners, unless otherwise agreed
+# upon.
+#
+# Please submit bugfixes or comments via http://tracker.ceph.com/
+# 
 %bcond_with ocf
 %bcond_without cephfs_java
 %bcond_with tests
