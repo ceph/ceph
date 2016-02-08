@@ -2160,11 +2160,12 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       }
 
       // Promote too?
-      if (!op->need_skip_promote()) {
-        maybe_promote(obc, missing_oid, oloc, in_hit_set,
+      if (!op->need_skip_promote() && 
+          maybe_promote(obc, missing_oid, oloc, in_hit_set,
 	              pool.info.min_write_recency_for_promote,
 		      OpRequestRef(),
-		      promote_obc);
+		      promote_obc)) {
+	return cache_result_t::BLOCKED_PROMOTE;
       }
       return cache_result_t::HANDLED_PROXY;
     } else {
