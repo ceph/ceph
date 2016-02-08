@@ -3923,6 +3923,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	}
 
         scrubber.start = hobject_t();
+        // Don't include temporary objects when scrubbing
+        scrubber.start.pool = info.pgid.pool();
         scrubber.state = PG::Scrubber::NEW_CHUNK;
 
 	{
