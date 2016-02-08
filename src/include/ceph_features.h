@@ -72,6 +72,7 @@
 #define CEPH_FEATURE_NEW_OSDOP_ENCODING   (1ULL<<56) /* New, v7 encoding */
 #define CEPH_FEATURE_MON_STATEFUL_SUB (1ULL<<57) /* stateful mon subscription */
 #define CEPH_FEATURE_MON_ROUTE_OSDMAP (1ULL<<57) /* peon sends osdmaps */
+#define CEPH_FEATURE_OSDSUBOP_NO_SNAPCONTEXT (1ULL<<57) /* overlap, drop unused SnapContext in v12 */
 #define CEPH_FEATURE_CRUSH_TUNABLES5	(1ULL<<58) /* chooseleaf stable mode */
 // duplicated since it was introduced at the same time as CEPH_FEATURE_CRUSH_TUNABLES5
 #define CEPH_FEATURE_NEW_OSDOPREPLY_ENCODING   (1ULL<<58) /* New, v7 encoding */
