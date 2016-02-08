@@ -11788,8 +11788,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
     // is this object old and/or cold enough?
     int temp = 0;
     uint64_t temp_upper = 0, temp_lower = 0;
-    if (hit_set)
-      agent_estimate_temp(soid, &temp);
+    agent_estimate_temp(soid, &temp);
     agent_state->temp_hist.add(temp);
     agent_state->temp_hist.get_position_micro(temp, &temp_lower, &temp_upper);
 
@@ -12095,7 +12094,8 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
 
 void ReplicatedPG::agent_estimate_temp(const hobject_t& oid, int *temp)
 {
-  assert(hit_set);
+  if (!hit_set)
+    return;
   assert(temp);
   *temp = 0;
   if (hit_set->contains(oid))
