@@ -22,6 +22,7 @@
 #include "common/safe_io.h"
 #include "common/signal.h"
 #include "common/version.h"
+#include "common/admin_socket.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "global/pidfile.h"
@@ -243,6 +244,16 @@ void global_init(std::vector < const char * > *alt_def_args,
 
   if (priv_ss.str().length()) {
     dout(0) << priv_ss.str() << dendl;
+
+    if (g_ceph_context->get_set_uid() || g_ceph_context->get_set_gid()) {
+      // fix ownership on log, asok files.  this is sadly a bit of a hack :(
+      g_ceph_context->_log->chown_log_file(
+	g_ceph_context->get_set_uid(),
+	g_ceph_context->get_set_gid());
+      g_ceph_context->get_admin_socket()->chown(
+	g_ceph_context->get_set_uid(),
+	g_ceph_context->get_set_gid());
+    }
   }
 
   // test leak checking
