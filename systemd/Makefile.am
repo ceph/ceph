@@ -19,5 +19,4 @@ unit_DATA = $(unitfiles)
 EXTRA_DIST = \
 	$(unitfiles) \
 	ceph \
-	ceph.tmpfiles.d \
-	ceph-radosgw-prestart.sh
+	ceph.tmpfiles.d
