@@ -93,7 +93,7 @@ void OpTracker::dump_historic_ops(Formatter *f)
   history.dump_ops(now, f);
 }
 
-void OpTracker::dump_ops_in_flight(Formatter *f)
+void OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
 {
   f->open_object_section("ops_in_flight"); // overall dump
   uint64_t total_ops_in_flight = 0;
@@ -102,8 +102,10 @@ void OpTracker::dump_ops_in_flight(Formatter *f)
   for (uint32_t i = 0; i < num_optracker_shards; i++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[i];
     assert(NULL != sdata); 
-    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);    
+    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
     for (xlist<TrackedOp*>::iterator p = sdata->ops_in_flight_sharded.begin(); !p.end(); ++p) {
+      if (print_only_blocked && (now - (*p)->get_initiated() <= complaint_time))
+	break;
       f->open_object_section("op");
       (*p)->dump(now, f);
       f->close_section(); // this TrackedOp
@@ -111,7 +113,11 @@ void OpTracker::dump_ops_in_flight(Formatter *f)
     }
   }
   f->close_section(); // list of TrackedOps
-  f->dump_int("num_ops", total_ops_in_flight);
+  if (print_only_blocked) {
+    f->dump_float("complaint_time", complaint_time);
+    f->dump_int("num_blocked_ops", total_ops_in_flight);
+  } else
+    f->dump_int("num_ops", total_ops_in_flight);
   f->close_section(); // overall dump
 }
 
