@@ -191,9 +191,8 @@ bool MDSDaemon::asok_command(string command, cmdmap_t& cmdmap, string format,
 
 void MDSDaemon::dump_status(Formatter *f)
 {
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  const epoch_t osd_epoch = osdmap->get_epoch();
-  objecter->put_osdmap_read();
+  const epoch_t osd_epoch = objecter->with_osdmap(
+    std::mem_fn(&OSDMap::get_epoch));
 
   f->open_object_section("status");
   f->dump_stream("cluster_fsid") << monc->get_fsid();
@@ -495,18 +494,20 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
   while (true) {
     objecter->maybe_request_map();
     objecter->wait_for_osd_map();
-    const OSDMap *osdmap = objecter->get_osdmap_read();
-    uint64_t osd_features = osdmap->get_up_osd_features();
-    if (osd_features & CEPH_FEATURE_OSD_TMAP2OMAP) {
-      objecter->put_osdmap_read();
+    if (objecter->with_osdmap([&](const OSDMap& o) {
+	  uint64_t osd_features = o.get_up_osd_features();
+	  if (osd_features & CEPH_FEATURE_OSD_TMAP2OMAP)
+	    return true;
+	  if (o.get_num_up_osds() > 0) {
+	    derr << "*** one or more OSDs do not support TMAP2OMAP; upgrade "
+		 << "OSDs before starting MDS (or downgrade MDS) ***" << dendl;
+	  } else {
+	    derr << "*** no OSDs are up as of epoch " << o.get_epoch()
+		 << ", waiting" << dendl;
+	  }
+	  return false;
+	}))
       break;
-    }
-    if (osdmap->get_num_up_osds() > 0) {
-        derr << "*** one or more OSDs do not support TMAP2OMAP; upgrade OSDs before starting MDS (or downgrade MDS) ***" << dendl;
-    } else {
-        derr << "*** no OSDs are up as of epoch " << osdmap->get_epoch() << ", waiting" << dendl;
-    }
-    objecter->put_osdmap_read();
     sleep(10);
   }
 

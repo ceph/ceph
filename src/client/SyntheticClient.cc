@@ -1714,19 +1714,15 @@ int SyntheticClient::dump_placement(string& fn) {
   // run through all the object extents
   dout(0) << "file size is " << filesize << dendl;
   dout(0) << "(osd, start, length) tuples for file " << fn << dendl;
-  for (vector<ObjectExtent>::iterator i = extents.begin(); 
-       i != extents.end(); ++i) {
-    
-    const OSDMap *osdmap = client->objecter->get_osdmap_read();
-    int osd = osdmap->get_pg_acting_primary(osdmap->object_locator_to_pg(i->oid, i->oloc));
-    client->objecter->put_osdmap_read();
+  for (const auto& x : extents) {
+    int osd = client->objecter->with_osdmap([&](const OSDMap& o) {
+	return o.get_pg_acting_primary(o.object_locator_to_pg(x.oid, x.oloc));
+      });
 
     // run through all the buffer extents
-    for (vector<pair<uint64_t, uint64_t> >::iterator j = i->buffer_extents.begin();
-	 j != i->buffer_extents.end(); ++j) {
-      dout(0) << "OSD " << osd << ", offset " << (*j).first
-	      << ", length " << (*j).second << dendl;    
-    }
+    for (const auto& be : x.buffer_extents)
+      dout(0) << "OSD " << osd << ", offset " << be.first
+	      << ", length " << be.second << dendl;
   }
   return 0;
 }
@@ -1999,12 +1995,11 @@ int SyntheticClient::overload_osd_0(int n, int size, int wrsize) {
 int SyntheticClient::check_first_primary(int fh)
 {
   vector<ObjectExtent> extents;
-  client->enumerate_layout(fh, extents, 1, 0);  
-  const OSDMap *osdmap = client->objecter->get_osdmap_read();
-  int primary = osdmap->get_pg_acting_primary(osdmap->object_locator_to_pg(extents.begin()->oid,
-									   extents.begin()->oloc));
-  client->objecter->put_osdmap_read();
-  return primary;
+  client->enumerate_layout(fh, extents, 1, 0);
+  return client->objecter->with_osdmap([&](const OSDMap& o) {
+      return o.get_pg_acting_primary(
+	o.object_locator_to_pg(extents.begin()->oid, extents.begin()->oloc));
+    });
 }
 
 int SyntheticClient::rm_file(string& fn)

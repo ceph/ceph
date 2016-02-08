@@ -215,7 +215,9 @@ public:
 private:
   // me
   CephContext *cct;
-  Mutex lock;
+  std::mutex lock;
+  typedef std::lock_guard<std::mutex> lock_guard;
+  typedef std::unique_lock<std::mutex> unique_lock;
   Finisher *finisher;
   Header last_written;
   inodeno_t ino;
@@ -252,7 +254,7 @@ private:
   void _do_delayed_flush()
   {
     assert(delay_flush_event != NULL);
-    Mutex::Locker l(lock);
+    lock_guard l(lock);
     delay_flush_event = NULL;
     _do_flush();
   }
@@ -399,8 +401,7 @@ public:
   Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj,
 	    PerfCounters *l, int lkey, SafeTimer *tim, Finisher *f) :
     last_committed(mag),
-    cct(obj->cct), lock("Journaler"), finisher(f),
-    last_written(mag),
+    cct(obj->cct), finisher(f), last_written(mag),
     ino(ino_), pg_pool(pool), readonly(true),
     stream_format(-1), journal_stream(-1),
     magic(mag),
@@ -425,7 +426,7 @@ public:
    * "erase" method.
    */
   void reset() {
-    Mutex::Locker l(lock);
+    lock_guard l(lock);
     assert(state == STATE_ACTIVE);
 
     readonly = true;
@@ -466,11 +467,11 @@ public:
   void set_readonly();
   void set_writeable();
   void set_write_pos(int64_t p) {
-    Mutex::Locker l(lock);
+    lock_guard l(lock);
     prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = p;
   }
   void set_read_pos(int64_t p) {
-    Mutex::Locker l(lock);
+    lock_guard l(lock);
     // we can't cope w/ in-progress read right now.
     assert(requested_pos == received_pos);
     read_pos = requested_pos = received_pos = p;
@@ -478,17 +479,17 @@ public:
   }
   uint64_t append_entry(bufferlist& bl);
   void set_expire_pos(int64_t ep) {
-      Mutex::Locker l(lock);
+      lock_guard l(lock);
       expire_pos = ep;
   }
   void set_trimmed_pos(int64_t p) {
-      Mutex::Locker l(lock);
+      lock_guard l(lock);
       trimming_pos = trimmed_pos = p;
   }
 
   void trim();
   void trim_tail() {
-    Mutex::Locker l(lock);
+    lock_guard l(lock);
 
     assert(!readonly);
     _issue_prezero();

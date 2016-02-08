@@ -1450,10 +1450,11 @@ void Server::handle_osd_map()
   /* Note that we check the OSDMAP_FULL flag directly rather than
    * using osdmap_full_flag(), because we want to know "is the flag set"
    * rather than "does the flag apply to us?" */
-  const OSDMap *osdmap = mds->objecter->get_osdmap_read();
-  is_full = osdmap->test_flag(CEPH_OSDMAP_FULL);
-  dout(7) << __func__ << ": full = " << is_full << " epoch = " << osdmap->get_epoch() << dendl;
-  mds->objecter->put_osdmap_read();
+  mds->objecter->with_osdmap([this](const OSDMap& o) {
+      is_full = o.test_flag(CEPH_OSDMAP_FULL);
+      dout(7) << __func__ << ": full = " << is_full << " epoch = "
+	      << o.get_epoch() << dendl;
+    });
 }
 
 void Server::dispatch_client_request(MDRequestRef& mdr)
@@ -3965,7 +3966,7 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
 
 // XATTRS
 
-int Server::parse_layout_vxattr(string name, string value, const OSDMap *osdmap,
+int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
 				ceph_file_layout *layout, bool validate)
 {
   dout(20) << "parse_layout_vxattr name " << name << " value '" << value << "'" << dendl;
@@ -4000,7 +4001,7 @@ int Server::parse_layout_vxattr(string name, string value, const OSDMap *osdmap,
       try {
 	layout->fl_pg_pool = boost::lexical_cast<unsigned>(value);
       } catch (boost::bad_lexical_cast const&) {
-	int64_t pool = osdmap->lookup_pg_pool_name(value);
+	int64_t pool = osdmap.lookup_pg_pool_name(value);
 	if (pool < 0) {
 	  dout(10) << " unknown pool " << value << dendl;
 	  return -ENOENT;
@@ -4104,10 +4105,12 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
       layout = mdcache->default_file_layout;
 
     rest = name.substr(name.find("layout"));
-    const OSDMap *osdmap = mds->objecter->get_osdmap_read();
-    int r = parse_layout_vxattr(rest, value, osdmap, &layout);
-    epoch_t epoch = osdmap->get_epoch();
-    mds->objecter->put_osdmap_read();
+    epoch_t epoch;
+    int r;
+    mds->objecter->with_osdmap([&](const OSDMap& osdmap) {
+	r = parse_layout_vxattr(rest, value, osdmap, &layout);
+	epoch = osdmap.get_epoch();
+      });
     if (r < 0) {
       if (r == -ENOENT) {
         epoch_t req_epoch = req->get_osdmap_epoch();
@@ -4153,10 +4156,12 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     }
     ceph_file_layout layout = cur->get_projected_inode()->layout;
     rest = name.substr(name.find("layout"));
-    const OSDMap *osdmap = mds->objecter->get_osdmap_read();
-    int r = parse_layout_vxattr(rest, value, osdmap, &layout);
-    epoch_t epoch = osdmap->get_epoch();
-    mds->objecter->put_osdmap_read();
+    int r;
+    epoch_t epoch;
+    mds->objecter->with_osdmap([&](const OSDMap& osdmap) {
+	r = parse_layout_vxattr(rest, value, osdmap, &layout);
+	epoch = osdmap.get_epoch();
+      });
     if (r < 0) {
       if (r == -ENOENT) {
         epoch_t req_epoch = req->get_osdmap_epoch();
