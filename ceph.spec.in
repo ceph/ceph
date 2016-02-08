@@ -59,7 +59,8 @@ License:	LGPL-2.1 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and GPL-2.0-with-auto
 Group:         System/Filesystems
 %endif
 URL:		http://ceph.com/
-Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
+Source0:	%{name}-%{version}.tar.bz2
+Source99:       ceph-rpmlintrc
 #################################################################################
 # dependencies that apply across all distro families
 #################################################################################
