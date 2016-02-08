@@ -4709,21 +4709,17 @@ void OSD::got_full_map(epoch_t e)
 void OSD::send_failures()
 {
   assert(osd_lock.is_locked());
-  bool locked = false;
-  if (!failure_queue.empty()) {
-    heartbeat_lock.Lock();
-    locked = true;
-  }
+  Mutex::Locker l(heartbeat_lock);
   utime_t now = ceph_clock_now(cct);
   while (!failure_queue.empty()) {
     int osd = failure_queue.begin()->first;
     int failed_for = (int)(double)(now - failure_queue.begin()->second);
     entity_inst_t i = osdmap->get_inst(osd);
-    monc->send_mon_message(new MOSDFailure(monc->get_fsid(), i, failed_for, osdmap->get_epoch()));
+    monc->send_mon_message(new MOSDFailure(monc->get_fsid(), i, failed_for,
+					   osdmap->get_epoch()));
     failure_pending[osd] = i;
     failure_queue.erase(osd);
   }
-  if (locked) heartbeat_lock.Unlock();
 }
 
 void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
