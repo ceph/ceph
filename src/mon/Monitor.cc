@@ -2100,6 +2100,18 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
 
   f->close_section(); // quorum
 
+  f->open_object_section("features");
+  f->dump_stream("required_con") << required_features;
+  f->open_array_section("required_mon");
+  mon_feature_t req_mon_features = get_required_mon_features();
+  req_mon_features.dump(f);
+  f->close_section(); // required_mon
+  f->dump_stream("quorum_con") << quorum_con_features;
+  f->open_array_section("quorum_mon");
+  quorum_mon_features.dump(f);
+  f->close_section(); // quorum_mon
+  f->close_section(); // features
+
   f->open_array_section("outside_quorum");
   for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
     f->dump_string("mon", *p);
