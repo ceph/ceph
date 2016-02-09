@@ -33,6 +33,7 @@
 #include "auth/RotatingKeyRing.h"
 
 #include "messages/MMonSubscribe.h"
+#include "messages/MMonGetVersion.h"
 
 #include "common/SimpleRNG.h"
 #include "osd/osd_types.h"
@@ -40,7 +41,6 @@
 
 class MonMap;
 class MMonMap;
-class MMonGetVersion;
 class MMonGetVersionReply;
 struct MMonSubscribeAck;
 class MMonCommandAck;
@@ -434,25 +434,34 @@ public:
 
   // version requests
 public:
+
+  // Response code, newest, oldest
+  using Version_cb = cxx_function::unique_function<
+    void(int, version_t, version_t) &&>;
+
   /**
    * get latest known version(s) of cluster map
    *
    * @param map string name of map (e.g., 'osdmap')
-   * @param newest pointer where newest map version will be stored
-   * @param oldest pointer where oldest map version will be stored
-   * @param onfinish context that will be triggered on completion
-   * @return (via context) 0 on success, -EAGAIN if we need to resubmit our request
+   * @param onfinish Callback to be triggered on success
+   *
+   * \note Versions are invalid unless response code is 0
+   *       -EAGAIN means we need to resubmit.
    */
-  void get_version(string map, version_t *newest, version_t *oldest, Context *onfinish);
+  template<typename... Args>
+  void get_version(string map, Version_cb&& onfinish) {
+    lock_guard l(monc_lock);
+    boost::intrusive_ptr<MMonGetVersion> m(new MMonGetVersion, false);
+    m->what = map;
+    m->handle = ++version_req_id;
+    version_requests.emplace(m->handle,
+			     std::move(onfinish));
+    _send_mon_message(std::move(m));
+  }
 
 private:
-  struct version_req_d {
-    Context *context;
-    version_t *newest, *oldest;
-    version_req_d(Context *con, version_t *n, version_t *o) : context(con),newest(n), oldest(o) {}
-  };
 
-  map<ceph_tid_t, version_req_d*> version_requests;
+  std::map<ceph_tid_t, Version_cb> version_requests;
   ceph_tid_t version_req_id;
   void handle_get_version_reply(MMonGetVersionReply* m);
 

@@ -83,6 +83,7 @@ using namespace std;
 #include "common/perf_counters.h"
 #include "common/admin_socket.h"
 #include "common/errno.h"
+#include "common/waiter.h"
 #include "include/str_list.h"
 
 #define dout_subsys ceph_subsys_client
@@ -5293,10 +5294,10 @@ int Client::mds_command(
   // a `tell` can address any daemon.
   version_t fsmap_latest;
   do {
-    C_SaferCond cond;
-    monclient->get_version("fsmap", &fsmap_latest, NULL, &cond);
+    ceph::waiter<int, version_t, version_t> w;
+    monclient->get_version("fsmap", w.ref());
     client_lock.Unlock();
-    r = cond.wait();
+    std::tie(r, fsmap_latest, std::ignore) = w.wait();
     client_lock.Lock();
   } while (r == -EAGAIN);
   ldout(cct, 20) << "Learned FSMap version " << fsmap_latest << dendl;

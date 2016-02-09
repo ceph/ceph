@@ -4688,16 +4688,6 @@ bool OSD::ms_handle_reset(Connection *con)
   return true;
 }
 
-struct C_OSD_GetVersion : public Context {
-  OSD *osd;
-  uint64_t oldest, newest;
-  explicit C_OSD_GetVersion(OSD *o) : osd(o), oldest(0), newest(0) {}
-  void finish(int r) {
-    if (r >= 0)
-      osd->_got_mon_epochs(oldest, newest);
-  }
-};
-
 void OSD::start_boot()
 {
   if (!_is_healthy()) {
@@ -4713,8 +4703,12 @@ void OSD::start_boot()
   set_state(STATE_PREBOOT);
   dout(10) << "start_boot - have maps " << superblock.oldest_map
 	   << ".." << superblock.newest_map << dendl;
-  C_OSD_GetVersion *c = new C_OSD_GetVersion(this);
-  monc->get_version("osdmap", &c->newest, &c->oldest, c);
+  monc->get_version(
+    "osdmap",
+    [this](int r, version_t newest, version_t oldest) {
+      if (r >= 0)
+	_got_mon_epochs(oldest, newest);
+    });
 }
 
 void OSD::_got_mon_epochs(epoch_t oldest, epoch_t newest)

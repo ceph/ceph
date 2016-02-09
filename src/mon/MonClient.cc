@@ -408,10 +408,10 @@ void MonClient::shutdown()
   ldout(cct, 10) << __func__ << dendl;
   unique_lock l(monc_lock);
   while (!version_requests.empty()) {
-    version_requests.begin()->second->context->complete(-ECANCELED);
+    std::move(version_requests.begin()->second)(-ECANCELED, version_t(),
+						version_t());
     ldout(cct, 20) << __func__ << " canceling and discarding version request "
-		   << version_requests.begin()->second << dendl;
-    delete version_requests.begin()->second;
+		   << version_requests.begin()->first << dendl;
     version_requests.erase(version_requests.begin());
   }
 
@@ -603,6 +603,24 @@ string MonClient::_pick_random_mon()
   }
 }
 
+/// Since we don't have generalized lambdas, we need a helper to
+/// handle move capture
+struct Version_CB_Helper {
+  MonClient::Version_cb f;
+  int r;
+  version_t newest;
+  version_t oldest;
+
+  Version_CB_Helper(MonClient::Version_cb&& f, int r, version_t newest,
+		     version_t oldest)
+    : f(std::move(f)), r(r), newest(newest), oldest(oldest) {}
+
+  void operator()() noexcept {
+    std::move(f)(r, newest, oldest);
+  }
+};
+
+
 void MonClient::_reopen_session(int rank, string name)
 {
   // monc_lock must be locked
@@ -630,8 +648,9 @@ void MonClient::_reopen_session(int rank, string name)
 
   // throw out version check requests
   while (!version_requests.empty()) {
-    finisher.queue(version_requests.begin()->second->context, -EAGAIN);
-    delete version_requests.begin()->second;
+    finisher.enqueue(cxx_function::in_place_t<Version_CB_Helper>{},
+		     std::move(version_requests.begin()->second),
+		     -EAGAIN, version_t(), version_t());
     version_requests.erase(version_requests.begin());
   }
 
@@ -639,9 +658,9 @@ void MonClient::_reopen_session(int rank, string name)
   if (had_a_connection) {
     reopen_interval_multiplier *= cct->_conf->mon_client_hunt_interval_backoff;
     if (reopen_interval_multiplier >
-          cct->_conf->mon_client_hunt_interval_max_multiple)
+	cct->_conf->mon_client_hunt_interval_max_multiple)
       reopen_interval_multiplier =
-          cct->_conf->mon_client_hunt_interval_max_multiple;
+	cct->_conf->mon_client_hunt_interval_max_multiple;
   }
 
   // restart authentication handshake
@@ -998,7 +1017,8 @@ void MonClient::_finish_command(MonCommand *r, int ret, string&& rs,
 		 << rs << dendl;
   if (r->onfinish)
     finisher.enqueue(cxx_function::in_place_t<MonCmd_CB_Helper>{},
-		     std::move(r->onfinish), ret, std::move(rs), std::move(bl));
+		     std::move(r->onfinish), ret, std::move(rs),
+		     std::move(bl));
   mon_commands.erase(r->tid);
   delete r;
 }
@@ -1062,35 +1082,20 @@ int MonClient::start_mon_command(int rank,
 
 // ---------
 
-void MonClient::get_version(string map, version_t *newest, version_t *oldest, Context *onfinish)
-{
-  version_req_d *req = new version_req_d(onfinish, newest, oldest);
-  ldout(cct, 10) << "get_version " << map << " req " << req << dendl;
-  lock_guard l(monc_lock);
-  boost::intrusive_ptr<MMonGetVersion> m(new MMonGetVersion, false);
-  m->what = map;
-  m->handle = ++version_req_id;
-  version_requests[m->handle] = req;
-  _send_mon_message(std::move(m));
-}
-
 void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
 {
   // monc_lock must be locked
-  map<ceph_tid_t, version_req_d*>::iterator iter = version_requests.find(m->handle);
+  auto iter = version_requests.find(m->handle);
   if (iter == version_requests.end()) {
     ldout(cct, 0) << __func__ << " version request with handle " << m->handle
 		  << " not found" << dendl;
   } else {
-    version_req_d *req = iter->second;
-    ldout(cct, 10) << __func__ << " finishing " << req << " version " << m->version << dendl;
+    ldout(cct, 10) << __func__ << " finishing " << iter->first << " version "
+		   << m->version << dendl;
+    finisher.enqueue(cxx_function::in_place_t<Version_CB_Helper>{},
+		     std::move(iter->second), 0, m->version,
+		     m->oldest_version);
     version_requests.erase(iter);
-    if (req->newest)
-      *req->newest = m->version;
-    if (req->oldest)
-      *req->oldest = m->oldest_version;
-    finisher.queue(req->context, 0);
-    delete req;
   }
   m->put();
 }
