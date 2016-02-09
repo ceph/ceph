@@ -112,12 +112,12 @@ class MonClient : public Dispatcher {
 public:
   MonMap monmap;
 private:
-  MonClientState state;
+  MonClientState state = MC_STATE_NONE;
 
-  Messenger *messenger;
+  Messenger *messenger = nullptr;
 
   string cur_mon;
-  ConnectionRef cur_con;
+  ConnectionRef cur_con = nullptr;
 
   SimpleRNG rng;
 
@@ -133,17 +133,17 @@ private:
 
   // Added to support session signatures.  PLR
 
-  AuthAuthorizeHandlerRegistry *authorize_handler_registry;
+  AuthAuthorizeHandlerRegistry *authorize_handler_registry = nullptr;
 
-  bool initialized;
-  bool no_keyring_disabled_cephx;
+  bool initialized = false;
+  bool no_keyring_disabled_cephx = false;
 
-  LogClient *log_client;
-  bool more_log_pending;
+  LogClient *log_client = nullptr;
+  bool more_log_pending = false;
 
   void send_log();
 
-  AuthMethodList *auth_supported;
+  std::unique_ptr<AuthMethodList> auth_supported;
 
   bool ms_dispatch(Message *m);
   bool ms_handle_reset(Connection *con);
@@ -154,7 +154,7 @@ private:
   void handle_auth(unique_lock& l, MAuthReply *m);
 
   // monitor session
-  bool hunting;
+  bool hunting = true;
 
   void tick();
   ceph::timespan tick_time();
@@ -163,22 +163,22 @@ private:
 
   void handle_auth_rotating_response(MAuthRotating *m);
   // monclient
-  bool want_monmap;
+  bool want_monmap = true;
 
-  uint32_t want_keys;
+  uint32_t want_keys = 0;
 
-  uint64_t global_id;
+  uint64_t global_id = 0;
 
   // authenticate
 private:
   std::condition_variable map_cond;
-  int authenticate_err;
+  int authenticate_err = 0;
 
   std::vector<MessageRef> waiting_for_session;
   using thunk = cxx_function::unique_function<void()&& noexcept>;
   std::unique_ptr<thunk> session_established;
-  bool had_a_connection;
-  double reopen_interval_multiplier;
+  bool had_a_connection = false;
+  double reopen_interval_multiplier = 1.0;
 
   string _pick_random_mon();
   void _finish_hunting();
@@ -252,7 +252,7 @@ private:
 
   // auth tickets
 public:
-  AuthClientHandler *auth;
+  std::unique_ptr<AuthClientHandler> auth;
 public:
   void renew_subs() {
     lock_guard l(monc_lock);
@@ -294,9 +294,9 @@ public:
     }
     return false;
   }
-  
-  KeyRing *keyring;
-  RotatingKeyRing *rotating_secrets;
+
+  std::unique_ptr<KeyRing> keyring;
+  std::unique_ptr<RotatingKeyRing> rotating_secrets;
 
  public:
   explicit MonClient(CephContext *cct_);
@@ -401,7 +401,7 @@ public:
 
   // admin commands
 private:
-  uint64_t last_mon_command_tid;
+  uint64_t last_mon_command_tid = 0;
 
   struct MonCommand : public boost::intrusive::set_base_hook<> {
     struct compare {
@@ -491,7 +491,7 @@ public:
 private:
 
   std::map<ceph_tid_t, Version_cb> version_requests;
-  ceph_tid_t version_req_id;
+  ceph_tid_t version_req_id = 0;
   void handle_get_version_reply(MMonGetVersionReply* m);
 
 
