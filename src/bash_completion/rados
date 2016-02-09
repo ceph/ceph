@@ -32,9 +32,13 @@ _rados()
                 return 0
                 ;;
             rados)
-                COMPREPLY=( $(compgen -W "lspools mkpool rmpool df ls chown get put create rm listxattr getxattr setxattr rmxattr stat mapext lssnap mksnap rmsnap rollback bench" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "lspools mkpool rmpool df ls chown get put create rm listxattr getxattr setxattr rmxattr stat mapext lssnap mksnap rmsnap rollback bench cleanup load-gen listomapkeys listomapvals getomapval setomapval rmomapkey getomapheader setomapheader tmap-to-omap watch notify listwatchers set-alloc-hint export import cache-flush cache-try-flush cache-evict cache-flush-evict-all cache-try-flush-evict-all lock" -- ${cur}) )
                 return 0
-            ;;
+                ;;
+            lock)
+                COMPREPLY=( $(compgen -W "list get break info" -- ${cur}) )
+                return 0
+                ;;
         esac
 }
 complete -F _rados rados
