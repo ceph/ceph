@@ -17,6 +17,10 @@
 #ifndef CEPH_OS_BLUESTORE_BLOCKDEVICE_H
 #define CEPH_OS_BLUESTORE_BLOCKDEVICE_H
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+
 #include "acconfig.h"
 #include "os/fs/FS.h"
 
@@ -30,20 +34,18 @@ struct IOContext {
   void *nvme_task_last = nullptr;
 #endif
 
-  Mutex lock;
-  Cond cond;
-  //interval_set<uint64_t> blocks;  ///< blocks with aio in flight
+  std::mutex lock;
+  std::condition_variable cond;
 
   list<FS::aio_t> pending_aios;    ///< not yet submitted
   list<FS::aio_t> running_aios;    ///< submitting or submitted
-  atomic_t num_pending;
-  atomic_t num_running;
-  atomic_t num_reading;
-  atomic_t num_waiting;
+  std::atomic_int num_pending = {0};
+  std::atomic_int num_running = {0};
+  std::atomic_int num_reading = {0};
+  std::atomic_int num_waiting = {0};
 
   explicit IOContext(void *p)
-    : priv(p),
-      lock("IOContext::lock")
+    : priv(p)
     {}
 
   // no copying
@@ -51,22 +53,29 @@ struct IOContext {
   IOContext &operator=(const IOContext& other);
 
   bool has_aios() {
-    Mutex::Locker l(lock);
-    return num_pending.read() || num_running.read();
+    std::lock_guard<std::mutex> l(lock);
+    return num_pending.load() || num_running.load();
   }
 
   void aio_wait();
+
+  void aio_wake() {
+    if (num_waiting.load()) {
+      std::lock_guard<std::mutex> l(lock);
+      cond.notify_all();
+    }
+  }
 };
 
 
 class BlockDevice {
-  Mutex ioc_reap_lock;
+  std::mutex ioc_reap_lock;
   vector<IOContext*> ioc_reap_queue;
-  atomic_t ioc_reap_count;
+  std::atomic_int ioc_reap_count = {0};
 
 public:
-  BlockDevice(): ioc_reap_lock("BlockDevice::ioc_reap_lock") {}
-  virtual ~BlockDevice() {}
+  BlockDevice() = default;
+  virtual ~BlockDevice() = default;
   typedef void (*aio_callback_t)(void *handle, void *aio);
 
   static BlockDevice *create(
