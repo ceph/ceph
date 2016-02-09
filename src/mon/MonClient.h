@@ -403,7 +403,20 @@ public:
 private:
   uint64_t last_mon_command_tid;
 
-  struct MonCommand {
+  struct MonCommand : public boost::intrusive::set_base_hook<> {
+    struct compare {
+      bool operator()(const MonCommand& l, const MonCommand& r) const {
+	return l.tid < r.tid;
+      }
+
+      bool operator()(const MonCommand& l, const uint64_t& r) const {
+	return l.tid < r;
+      }
+
+      bool operator()(const uint64_t& l, const MonCommand& r) const {
+	return l < r.tid;
+      }
+    };
     std::string target_name;
     int target_rank = -1;
     uint64_t tid;
@@ -414,12 +427,28 @@ private:
 
     explicit MonCommand(uint64_t t) : tid(t) { }
   };
-  map<uint64_t,MonCommand*> mon_commands;
+  // For our purposes, we treat this as owning its contents
+  boost::intrusive::set<
+    MonCommand,
+    boost::intrusive::compare<MonCommand::compare> > mon_commands;
 
-  void _send_command(MonCommand *r);
+  std::unique_ptr<MonCommand> _reclaim_mon_command(
+    decltype(mon_commands)::iterator i) {
+    std::unique_ptr<MonCommand> m(&(*i));
+    mon_commands.erase(i);
+    return m;
+  }
+  void _send_and_record(std::unique_ptr<MonCommand> m) {
+    MonCommand& q = *m; // Non-owning reference we pass to send
+    mon_commands.insert(*(m.release()));
+    _send_command(q);
+  }
+  void _send_command(MonCommand& r);
   void _resend_mon_commands();
   int _cancel_mon_command(uint64_t tid, int r);
-  void _finish_command(MonCommand *r, int ret, string&& rs, bufferlist&& rbl);
+  void cancel_mon_commands();
+  void _finish_command(std::unique_ptr<MonCommand> r, int ret, string&& rs,
+		       bufferlist&& rbl);
   void handle_mon_command_ack(MMonCommandAck *ack);
 
 public:
