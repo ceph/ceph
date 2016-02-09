@@ -154,13 +154,6 @@ private:
   // monitor session
   bool hunting;
 
-  struct C_Tick : public Context {
-    MonClient *monc;
-    explicit C_Tick(MonClient *m) : monc(m) {}
-    void finish(int r) {
-      monc->tick();
-    }
-  };
   void tick();
   ceph::timespan tick_time();
 
@@ -180,7 +173,8 @@ private:
   int authenticate_err;
 
   std::vector<MessageRef> waiting_for_session;
-  Context *session_established_context;
+  using thunk = cxx_function::unique_function<void()&& noexcept>;
+  std::unique_ptr<thunk> session_established;
   bool had_a_connection;
   double reopen_interval_multiplier;
 
@@ -339,12 +333,17 @@ public:
    * the session has been killed and the MonClient has started trying
    * to reconnect to another monitor.
    */
-  void reopen_session(Context *cb=NULL) {
+  void reopen_session() {
     lock_guard l(monc_lock);
-    if (cb) {
-      delete session_established_context;
-      session_established_context = cb;
-    }
+    session_established.reset();
+    _reopen_session();
+  }
+
+  template<typename... Args>
+  void reopen_session(Args&&... args) {
+    lock_guard l(monc_lock);
+    session_established = std::unique_ptr<thunk>(
+      new thunk(std::forward<Args>(args)...));
     _reopen_session();
   }
 

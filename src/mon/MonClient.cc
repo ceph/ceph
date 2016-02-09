@@ -65,7 +65,6 @@ MonClient::MonClient(CephContext *cct_) :
   want_monmap(true),
   want_keys(0), global_id(0),
   authenticate_err(0),
-  session_established_context(NULL),
   had_a_connection(false),
   reopen_interval_multiplier(1.0),
   auth(NULL),
@@ -79,7 +78,6 @@ MonClient::MonClient(CephContext *cct_) :
 MonClient::~MonClient()
 {
   delete auth_supported;
-  delete session_established_context;
   delete auth;
   delete keyring;
   delete rotating_secrets;
@@ -479,7 +477,7 @@ int MonClient::authenticate(double timeout)
 void MonClient::handle_auth(unique_lock& l, MAuthReply *m)
 {
   ldout(cct, 10) << "handle_auth " << *m << dendl;
-  Context *cb = NULL;
+  std::unique_ptr<thunk> cb;
   bufferlist::iterator p = m->result_bl.begin();
   if (state == MC_STATE_NEGOTIATING) {
     ldout(cct, 20) << "MC_STATE_NEGOTIATING" << dendl;
@@ -544,9 +542,8 @@ void MonClient::handle_auth(unique_lock& l, MAuthReply *m)
 	log_client->reset_session();
 	send_log();
       }
-      if (session_established_context) {
-	cb = session_established_context;
-	session_established_context = NULL;
+      if (session_established) {
+	cb = std::move(session_established);
       }
     }
 
@@ -556,7 +553,7 @@ void MonClient::handle_auth(unique_lock& l, MAuthReply *m)
   auth_cond.notify_all();
   if (cb) {
     l.unlock();
-    cb->complete(0);
+    std::move(*cb)();
     l.lock();
   }
 }
