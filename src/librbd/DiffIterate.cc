@@ -113,7 +113,6 @@ private:
   ImageCtx &m_image_ctx;
   librados::IoCtx &m_head_ctx;
   DiffContext &m_diff_context;
-  uint64_t m_request_num;
   std::string m_oid;
   uint64_t m_offset;
   std::vector<ObjectExtent> m_object_extents;
