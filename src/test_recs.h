@@ -13,8 +13,8 @@
 #include "dmclock_recs.h"
 
 
-using ClientId = std::string;
-using ServerId = int;
+using ClientId = int;
+using ServerId = char;
 
 
 struct TestRequest {
