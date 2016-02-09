@@ -186,7 +186,8 @@ private:
 
     if (ret < 0) {
       ctx->reply.error = htonl(-ret);
-    } else if (ret != static_cast<int>(ctx->request.len)) {
+    } else if ((ctx->command == NBD_CMD_WRITE || ctx->command == NBD_CMD_READ)
+	       && ret != static_cast<int>(ctx->request.len)) {
       derr << __func__ << ": " << *ctx << ": unexpected return value: " << ret
 	   << " (" << ctx->request.len << " expected)" << dendl;
       ctx->reply.error = htonl(EIO);
@@ -485,15 +486,15 @@ static int do_map()
 
   if (global_init_prefork(g_ceph_context) >= 0) {
     std::string err;
-    if (forker.prefork(err) < 0) {
+    r = forker.prefork(err);
+    if (r < 0) {
       cerr << err << std::endl;
-      return EXIT_FAILURE;
+      return r;
     }
 
     if (forker.is_parent()) {
-      if (forker.parent_wait(err) < 0) {
-	cerr << err << std::endl;
-	return EXIT_FAILURE;
+      if (forker.parent_wait(err) != 0) {
+	return -ENXIO;
       }
       return 0;
     }
@@ -750,13 +751,22 @@ static int rbd_nbd(int argc, const char *argv[])
               CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
   std::vector<const char*>::iterator i;
+  std::ostringstream err;
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
       return 0;
     } else if (ceph_argparse_witharg(args, i, &devpath, "--device", (char *)NULL)) {
-    } else if (ceph_argparse_witharg(args, i, &nbds_max, cerr, "--nbds_max", (char *)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &nbds_max, err, "--nbds_max", (char *)NULL)) {
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        return EXIT_FAILURE;
+      }
+      if (nbds_max < 0) {
+        cerr << "rbd-nbd: Invalid argument for nbds_max!" << std::endl;
+        return EXIT_FAILURE;
+      }
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
       readonly = true;
     } else {

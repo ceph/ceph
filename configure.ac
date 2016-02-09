@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [10.0.1], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [10.0.3], [ceph-devel@vger.kernel.org])
 
 AX_CXX_COMPILE_STDCXX_11(, mandatory)
 
@@ -454,11 +454,6 @@ AC_ARG_WITH([profiler],
 AS_IF([test "x$with_profiler" = xyes],
 	    [AC_CHECK_LIB([profiler], [ProfilerFlush], [],
 	        	  [AC_MSG_FAILURE([--with-profiler was given but libprofiler (libgoogle-perftools-dev on debian) not found])])
-             AC_LANG_PUSH([C++])
-             AC_CHECK_HEADERS([gperftools/heap-profiler.h \
-               gperftools/malloc_extension.h \
-               gperftools/profiler.h])
-             AC_LANG_POP([C++])
             ],
 	    [])
 AM_CONDITIONAL(WITH_PROFILER, test "$with_profiler" = "yes")
@@ -528,7 +523,8 @@ AC_ARG_WITH([fuse],
 LIBFUSE=
 AS_IF([test "x$with_fuse" != xno], [
   PKG_CHECK_MODULES([LIBFUSE], [fuse],
-    [HAVE_LIBFUSE=1],
+    [HAVE_LIBFUSE=1
+     AC_DEFINE([HAVE_LIBFUSE], [1], [Define if you have fuse])],
     [AC_MSG_FAILURE([no FUSE found (use --without-fuse to disable)])])
 ])
 AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
@@ -590,6 +586,15 @@ AS_IF([test "x$with_tcmalloc" != xno],
 	    [AC_MSG_FAILURE(
 		  [no tcmalloc found (use --without-tcmalloc to disable)])])])
 AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
+
+AS_IF([test "$with_profiler" = yes -o \
+            "$HAVE_LIBTCMALLOC" = "1" -o \
+            "$HAVE_LIBTCMALLOC_MINIMAL" = "1"],
+      [AC_LANG_PUSH([C++])
+       AC_CHECK_HEADERS([gperftools/heap-profiler.h \
+                         gperftools/malloc_extension.h \
+                         gperftools/profiler.h])
+       AC_LANG_POP([C++])])
 
 # error out if --with-jemalloc and ! --without-tcmalloc
 if test "x$with_jemalloc" = "xyes"; then
@@ -717,13 +722,24 @@ if test "x$enable_xio" = x"yes"; then
 fi
 
 #
-# FreeBSD has it in base.
+# SPDK
 #
-if test x"$freebsd" != x"yes" -a x"$with_radosgw" = x"yes"; then
-PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
-                [], AC_MSG_FAILURE([No usable version of libedit found.]))
-else
-	LIBEDIT_LIBS="-ledit"
+AC_ARG_WITH(spdk,
+    [AC_HELP_STRING([--with-spdk], [build Ceph SPDK Support])], [], [with_spdk=no])
+
+AM_CONDITIONAL(WITH_SPDK, [test "x$with_spdk" != "xno"])
+
+if test "x$with_spdk" != x"no"; then
+   PKG_CHECK_MODULES([LIBPCIACCESS], [pciaccess])
+   AC_CHECK_HEADER([dpdk/rte_config.h], [],
+     AC_MSG_ERROR([dpdk/rte_config.h not found (libdpdk-dev, libdpdk-devel)]))
+   AC_CHECK_LIB([rte_eal], [rte_eal_init], [true],
+     AC_MSG_FAILURE([DPDK rte_eal_init not found]),
+                [-lrte_mempool -lrte_ring -lpthread -ldl])
+   AC_SUBST([LIBDPDK_CFLAGS], [-I/usr/include/dpdk])
+   AC_SUBST([LIBDPDK_LIBS], ['-lrte_eal -lrte_mempool -lrte_ring -lpthread'])
+   AC_SUBST([LIBPCIACCESS_LIBS])
+   AC_DEFINE([HAVE_SPDK], [1], [SPDK conditional compilation])
 fi
 
 #libatomic-ops? You want it!
@@ -811,7 +827,7 @@ AM_CONDITIONAL(WITH_DLIBROCKSDB, [ test "$with_librocksdb" = "yes" ])
 AC_ARG_WITH([librocksdb-static],
             [AS_HELP_STRING([--with-librocksdb-static], [build rocksdb support])],
             [],
-            [with_librocksdb_static=no])
+            [with_librocksdb_static=check])
 AS_IF([test "x$with_librocksdb_static" = "xcheck" -a "x$HAVE_CXX11" = "x1" ],
             [with_librocksdb_static="yes"])
 AS_IF([test "x$with_librocksdb_static" = "xyes"],
@@ -825,14 +841,6 @@ AS_IF([test "x$with_librocksdb_static" = "xyes"], [
   AC_CHECK_HEADER([lz4.h], [have_lz4=yes])])
 AM_CONDITIONAL(HAVE_BZLIB, [test "x$have_bzlib" = "xyes"])
 AM_CONDITIONAL(HAVE_LZ4, [test "x$have_lz4" = "xyes"])
-
-# error out if --with-jemalloc and --with-librocksdb_static as rocksdb uses tcmalloc
-if test "x$with_jemalloc" = "xyes"; then
-	if test "x$with_librocksdb_static" != "xno"; then
-		AC_MSG_FAILURE([--with-jemalloc called with --with-librocksdb_static, turn off
-			        --with-librocksdb-static or --with-jemalloc])
-	fi
-fi
 
 # needs libcurl and libxml2
 if test "x$with_rest_bench" = xyes && test "x$with_system_libs3" = xno; then
@@ -922,6 +930,10 @@ AC_CHECK_HEADER([boost/program_options/option.hpp], [],
 AC_CHECK_LIB(boost_system-mt, main, [],
     [AC_CHECK_LIB(boost_system, main, [],
         AC_MSG_NOTICE(["Boost system library not found."]))])
+
+AC_CHECK_LIB(boost_iostreams-mt, main, [],
+    [AC_CHECK_LIB(boost_iostreams, main, [],
+        AC_MSG_NOTICE(["Boost iostreams library not found."]))])
 
 # Find the right boost_thread library.
 BOOST_THREAD_LIBS=""

@@ -17,12 +17,14 @@ namespace exclusive_lock {
 template<typename T>
 struct BaseRequest {
   static std::list<T *> s_requests;
+  Context *on_lock_unlock;
   Context *on_finish;
 
   static T* create(MockImageCtx &image_ctx, const std::string &cookie,
-                   Context *on_finish) {
+                   Context *on_lock_unlock, Context *on_finish) {
     assert(!s_requests.empty());
     T* req = s_requests.front();
+    req->on_lock_unlock = on_lock_unlock;
     req->on_finish = on_finish;
     s_requests.pop_front();
     return req;
@@ -94,15 +96,12 @@ public:
   void expect_release_lock(MockImageCtx &mock_image_ctx,
                            MockReleaseRequest &release_request, int r,
                            bool shutting_down = false) {
-    if (!shutting_down) {
-      expect_block_writes(mock_image_ctx);
-    }
     EXPECT_CALL(release_request, send())
                   .WillOnce(FinishRequest(&release_request, r, &mock_image_ctx));
-    if (!shutting_down && r < 0) {
-      expect_unblock_writes(mock_image_ctx);
-    }
     if (r == 0) {
+      if (shutting_down) {
+        expect_unblock_writes(mock_image_ctx);
+      }
       expect_notify_released_lock(mock_image_ctx);
       expect_writes_empty(mock_image_ctx);
     }
@@ -214,7 +213,6 @@ TEST_F(TestMockExclusiveLock, StateTransitions) {
   ASSERT_TRUE(is_lock_owner(mock_image_ctx, exclusive_lock));
 
   MockReleaseRequest shutdown_release;
-  expect_op_work_queue(mock_image_ctx);
   expect_release_lock(mock_image_ctx, shutdown_release, 0, true);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
   ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
@@ -240,7 +238,6 @@ TEST_F(TestMockExclusiveLock, TryLockLockedState) {
   ASSERT_EQ(0, when_try_lock(mock_image_ctx, exclusive_lock));
 
   MockReleaseRequest shutdown_release;
-  expect_op_work_queue(mock_image_ctx);
   expect_release_lock(mock_image_ctx, shutdown_release, 0, true);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
@@ -288,7 +285,6 @@ TEST_F(TestMockExclusiveLock, TryLockBusy) {
   ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
 
   expect_unblock_writes(mock_image_ctx);
-  expect_op_work_queue(mock_image_ctx);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -313,7 +309,6 @@ TEST_F(TestMockExclusiveLock, TryLockError) {
   ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
 
   expect_unblock_writes(mock_image_ctx);
-  expect_op_work_queue(mock_image_ctx);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -336,7 +331,6 @@ TEST_F(TestMockExclusiveLock, RequestLockLockedState) {
   ASSERT_EQ(0, when_try_lock(mock_image_ctx, exclusive_lock));
 
   MockReleaseRequest shutdown_release;
-  expect_op_work_queue(mock_image_ctx);
   expect_release_lock(mock_image_ctx, shutdown_release, 0, true);
   ASSERT_EQ(0, when_request_lock(mock_image_ctx, exclusive_lock));
 
@@ -365,7 +359,6 @@ TEST_F(TestMockExclusiveLock, RequestLockBlacklist) {
   ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
 
   expect_unblock_writes(mock_image_ctx);
-  expect_op_work_queue(mock_image_ctx);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -394,7 +387,6 @@ TEST_F(TestMockExclusiveLock, RequestLockBusy) {
   ASSERT_TRUE(is_lock_owner(mock_image_ctx, exclusive_lock));
 
   MockReleaseRequest shutdown_release;
-  expect_op_work_queue(mock_image_ctx);
   expect_release_lock(mock_image_ctx, shutdown_release, 0, true);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
@@ -424,7 +416,6 @@ TEST_F(TestMockExclusiveLock, RequestLockError) {
   ASSERT_TRUE(is_lock_owner(mock_image_ctx, exclusive_lock));
 
   MockReleaseRequest shutdown_release;
-  expect_op_work_queue(mock_image_ctx);
   expect_release_lock(mock_image_ctx, shutdown_release, 0, true);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
@@ -446,7 +437,6 @@ TEST_F(TestMockExclusiveLock, ReleaseLockUnlockedState) {
   ASSERT_EQ(0, when_release_lock(mock_image_ctx, exclusive_lock));
 
   expect_unblock_writes(mock_image_ctx);
-  expect_op_work_queue(mock_image_ctx);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -475,7 +465,6 @@ TEST_F(TestMockExclusiveLock, ReleaseLockError) {
   ASSERT_TRUE(is_lock_owner(mock_image_ctx, exclusive_lock));
 
   MockReleaseRequest shutdown_release;
-  expect_op_work_queue(mock_image_ctx);
   expect_release_lock(mock_image_ctx, shutdown_release, 0, true);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
   ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
@@ -506,7 +495,6 @@ TEST_F(TestMockExclusiveLock, ConcurrentRequests) {
 
   MockReleaseRequest release;
   C_SaferCond wait_for_send_ctx2;
-  expect_block_writes(mock_image_ctx);
   EXPECT_CALL(release, send())
                 .WillOnce(Notify(&wait_for_send_ctx2));
   expect_notify_released_lock(mock_image_ctx);

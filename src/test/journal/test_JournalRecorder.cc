@@ -50,7 +50,7 @@ TEST_F(TestJournalRecorder, Append) {
 
   journal::JournalRecorder *recorder = create_recorder(oid, metadata);
 
-  journal::Future future1 = recorder->append("tag1", create_payload("payload"));
+  journal::Future future1 = recorder->append(123, create_payload("payload"));
 
   C_SaferCond cond;
   future1.flush(&cond);
@@ -68,8 +68,8 @@ TEST_F(TestJournalRecorder, AppendKnownOverflow) {
 
   journal::JournalRecorder *recorder = create_recorder(oid, metadata);
 
-  recorder->append("tag1", create_payload(std::string(1 << 12, '1')));
-  journal::Future future2 = recorder->append("tag1", create_payload(std::string(1, '2')));
+  recorder->append(123, create_payload(std::string(1 << 12, '1')));
+  journal::Future future2 = recorder->append(123, create_payload(std::string(1, '2')));
 
   C_SaferCond cond;
   future2.flush(&cond);
@@ -90,10 +90,10 @@ TEST_F(TestJournalRecorder, AppendDelayedOverflow) {
   journal::JournalRecorder *recorder1 = create_recorder(oid, metadata);
   journal::JournalRecorder *recorder2 = create_recorder(oid, metadata);
 
-  recorder1->append("tag1", create_payload(std::string(1, '1')));
-  recorder2->append("tag2", create_payload(std::string(1 << 12, '2')));
+  recorder1->append(123, create_payload(std::string(1, '1')));
+  recorder2->append(234, create_payload(std::string(1 << 12, '2')));
 
-  journal::Future future = recorder2->append("tag1", create_payload(std::string(1, '3')));
+  journal::Future future = recorder2->append(123, create_payload(std::string(1, '3')));
 
   C_SaferCond cond;
   future.flush(&cond);
@@ -112,8 +112,8 @@ TEST_F(TestJournalRecorder, FutureFlush) {
 
   journal::JournalRecorder *recorder = create_recorder(oid, metadata);
 
-  journal::Future future1 = recorder->append("tag1", create_payload("payload1"));
-  journal::Future future2 = recorder->append("tag1", create_payload("payload2"));
+  journal::Future future1 = recorder->append(123, create_payload("payload1"));
+  journal::Future future2 = recorder->append(123, create_payload("payload2"));
 
   C_SaferCond cond;
   future2.flush(&cond);
@@ -132,8 +132,8 @@ TEST_F(TestJournalRecorder, Flush) {
 
   journal::JournalRecorder *recorder = create_recorder(oid, metadata);
 
-  journal::Future future1 = recorder->append("tag1", create_payload("payload1"));
-  journal::Future future2 = recorder->append("tag1", create_payload("payload2"));
+  journal::Future future1 = recorder->append(123, create_payload("payload1"));
+  journal::Future future2 = recorder->append(123, create_payload("payload2"));
 
   C_SaferCond cond1;
   recorder->flush(&cond1);

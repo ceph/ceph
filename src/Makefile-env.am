@@ -16,8 +16,8 @@ sbin_SCRIPTS =
 su_sbin_PROGRAMS =
 su_sbin_SCRIPTS =
 dist_bin_SCRIPTS =
-lib_LTLIBRARIES = 
-noinst_LTLIBRARIES = 
+lib_LTLIBRARIES =
+noinst_LTLIBRARIES =
 noinst_LIBRARIES =
 radoslib_LTLIBRARIES =
 
@@ -201,7 +201,7 @@ LIBPERFGLUE = libperfglue.la
 LIBAUTH = libauth.la
 LIBMSG = libmsg.la
 LIBCRUSH = libcrush.la
-LIBCOMPRESSOR = libcompressor.la -lsnappy
+LIBCOMPRESSOR = libcompressor.la
 LIBJSON_SPIRIT = libjson_spirit.la
 LIBKV = libkv.a
 LIBLOG = liblog.la
@@ -233,6 +233,10 @@ if WITH_LIBZFS
 LIBOS += libos_zfs.a -lzfs
 endif # WITH_LIBZFS
 
+if WITH_SPDK
+LIBOS += ${LIBSPDK_LIBS} ${LIBDPDK_LIBS} ${LIBPCIACCESS_LIBS}
+endif # WITH_SPDK
+
 if WITH_TCMALLOC_MINIMAL
 LIBPERFGLUE += -ltcmalloc_minimal
 endif # WITH_TCMALLOC_MINIMAL
@@ -251,6 +255,8 @@ endif # WITH_JEMALLOC
 if ENABLE_COVERAGE
 EXTRALIBS += -lgcov
 endif # ENABLE_COVERAGE
+
+LIBCOMMON += -luuid
 
 # Libosd always needs osdc and os
 LIBOSD += $(LIBOSDC) $(LIBOS)
@@ -274,7 +280,7 @@ LIBKV += -llz4
 endif
 endif # WITH_SLIBROCKSDB
 LIBKV += -lz -lleveldb -lsnappy
-LIBOS += $(LIBOS_TYPES) $(LIBKV)
+LIBOS += $(LIBOS_TYPES) $(LIBKV) $(LIBFUSE_LIBS)
 
 LIBMON += $(LIBMON_TYPES)
 
@@ -292,4 +298,3 @@ DENCODER_DEPS =
 
 
 radoslibdir = $(libdir)/rados-classes
-

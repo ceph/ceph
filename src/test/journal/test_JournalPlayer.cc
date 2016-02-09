@@ -31,10 +31,6 @@ public:
     virtual void get() {}
     virtual void put() {}
 
-    virtual bool filter_entry(const std::string &tag) {
-      return false;
-    }
-
     virtual void handle_entries_available() {
       Mutex::Locker locker(lock);
       entries_available = true;
@@ -70,10 +66,10 @@ public:
     return RadosTestFixture::client_commit(oid, "client", position);
   }
 
-  journal::Entry create_entry(const std::string &tag, uint64_t tid) {
+  journal::Entry create_entry(uint64_t tag_tid, uint64_t entry_tid) {
     bufferlist payload_bl;
     payload_bl.append("playload");
-    return journal::Entry(tag, tid, payload_bl);
+    return journal::Entry(tag_tid, entry_tid, payload_bl);
   }
 
   journal::JournalMetadataPtr create_metadata(const std::string &oid) {
@@ -134,9 +130,9 @@ public:
   }
 
   int write_entry(const std::string &oid, uint64_t object_num,
-                  const std::string &tag, uint64_t tid) {
+                  uint64_t tag_tid, uint64_t entry_tid) {
     bufferlist bl;
-    ::encode(create_entry(tag, tid), bl);
+    ::encode(create_entry(tag_tid, entry_tid), bl);
     return append(oid + "." + stringify(object_num), bl);
   }
 
@@ -149,7 +145,7 @@ TEST_F(TestJournalPlayer, Prefetch) {
 
   journal::JournalPlayer::EntryPositions positions;
   positions = {
-    cls::journal::EntryPosition("tag1", 122) };
+    cls::journal::EntryPosition(234, 122) };
   cls::journal::ObjectSetPosition commit_position(0, positions);
 
   ASSERT_EQ(0, create(oid));
@@ -161,10 +157,10 @@ TEST_F(TestJournalPlayer, Prefetch) {
 
   journal::JournalPlayer *player = create_player(oid, metadata);
 
-  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 122));
-  ASSERT_EQ(0, write_entry(oid, 1, "tag1", 123));
-  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 124));
-  ASSERT_EQ(0, write_entry(oid, 1, "tag1", 125));
+  ASSERT_EQ(0, write_entry(oid, 0, 234, 122));
+  ASSERT_EQ(0, write_entry(oid, 1, 234, 123));
+  ASSERT_EQ(0, write_entry(oid, 0, 234, 124));
+  ASSERT_EQ(0, write_entry(oid, 1, 234, 125));
 
   player->prefetch();
 
@@ -174,13 +170,13 @@ TEST_F(TestJournalPlayer, Prefetch) {
 
   Entries expected_entries;
   expected_entries = {
-    create_entry("tag1", 123),
-    create_entry("tag1", 124),
-    create_entry("tag1", 125)};
+    create_entry(234, 123),
+    create_entry(234, 124),
+    create_entry(234, 125)};
   ASSERT_EQ(expected_entries, entries);
 
   uint64_t last_tid;
-  ASSERT_TRUE(metadata->get_last_allocated_tid("tag1", &last_tid));
+  ASSERT_TRUE(metadata->get_last_allocated_entry_tid(234, &last_tid));
   ASSERT_EQ(125U, last_tid);
 }
 
@@ -189,7 +185,7 @@ TEST_F(TestJournalPlayer, PrefetchSkip) {
 
   journal::JournalPlayer::EntryPositions positions;
   positions = {
-    cls::journal::EntryPosition("tag1", 125) };
+    cls::journal::EntryPosition(234, 125) };
   cls::journal::ObjectSetPosition commit_position(0, positions);
 
   ASSERT_EQ(0, create(oid));
@@ -201,10 +197,10 @@ TEST_F(TestJournalPlayer, PrefetchSkip) {
 
   journal::JournalPlayer *player = create_player(oid, metadata);
 
-  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 122));
-  ASSERT_EQ(0, write_entry(oid, 1, "tag1", 123));
-  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 124));
-  ASSERT_EQ(0, write_entry(oid, 1, "tag1", 125));
+  ASSERT_EQ(0, write_entry(oid, 0, 234, 122));
+  ASSERT_EQ(0, write_entry(oid, 1, 234, 123));
+  ASSERT_EQ(0, write_entry(oid, 0, 234, 124));
+  ASSERT_EQ(0, write_entry(oid, 1, 234, 125));
 
   player->prefetch();
 
@@ -213,7 +209,7 @@ TEST_F(TestJournalPlayer, PrefetchSkip) {
   ASSERT_TRUE(wait_for_complete(player));
 
   uint64_t last_tid;
-  ASSERT_TRUE(metadata->get_last_allocated_tid("tag1", &last_tid));
+  ASSERT_TRUE(metadata->get_last_allocated_entry_tid(234, &last_tid));
   ASSERT_EQ(125U, last_tid);
 }
 
@@ -231,8 +227,8 @@ TEST_F(TestJournalPlayer, PrefetchWithoutCommit) {
 
   journal::JournalPlayer *player = create_player(oid, metadata);
 
-  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 122));
-  ASSERT_EQ(0, write_entry(oid, 1, "tag1", 123));
+  ASSERT_EQ(0, write_entry(oid, 0, 234, 122));
+  ASSERT_EQ(0, write_entry(oid, 1, 234, 123));
 
   player->prefetch();
 
@@ -242,8 +238,8 @@ TEST_F(TestJournalPlayer, PrefetchWithoutCommit) {
 
   Entries expected_entries;
   expected_entries = {
-    create_entry("tag1", 122),
-    create_entry("tag1", 123)};
+    create_entry(234, 122),
+    create_entry(234, 123)};
   ASSERT_EQ(expected_entries, entries);
 }
 
@@ -252,8 +248,8 @@ TEST_F(TestJournalPlayer, PrefetchMultipleTags) {
 
   journal::JournalPlayer::EntryPositions positions;
   positions = {
-    cls::journal::EntryPosition("tag1", 122),
-    cls::journal::EntryPosition("tag2", 1)};
+    cls::journal::EntryPosition(234, 122),
+    cls::journal::EntryPosition(345, 1)};
   cls::journal::ObjectSetPosition commit_position(0, positions);
 
   ASSERT_EQ(0, create(oid));
@@ -265,14 +261,14 @@ TEST_F(TestJournalPlayer, PrefetchMultipleTags) {
 
   journal::JournalPlayer *player = create_player(oid, metadata);
 
-  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 120));
-  ASSERT_EQ(0, write_entry(oid, 0, "tag2", 0));
-  ASSERT_EQ(0, write_entry(oid, 1, "tag1", 121));
-  ASSERT_EQ(0, write_entry(oid, 1, "tag2", 1));
-  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 122));
-  ASSERT_EQ(0, write_entry(oid, 1, "tag1", 123));
-  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 124));
-  ASSERT_EQ(0, write_entry(oid, 0, "tag2", 2));
+  ASSERT_EQ(0, write_entry(oid, 0, 234, 120));
+  ASSERT_EQ(0, write_entry(oid, 0, 345, 0));
+  ASSERT_EQ(0, write_entry(oid, 1, 234, 121));
+  ASSERT_EQ(0, write_entry(oid, 1, 345, 1));
+  ASSERT_EQ(0, write_entry(oid, 0, 234, 122));
+  ASSERT_EQ(0, write_entry(oid, 1, 234, 123));
+  ASSERT_EQ(0, write_entry(oid, 0, 234, 124));
+  ASSERT_EQ(0, write_entry(oid, 0, 345, 2));
 
   player->prefetch();
 
@@ -281,9 +277,9 @@ TEST_F(TestJournalPlayer, PrefetchMultipleTags) {
   ASSERT_TRUE(wait_for_complete(player));
 
   uint64_t last_tid;
-  ASSERT_TRUE(metadata->get_last_allocated_tid("tag1", &last_tid));
+  ASSERT_TRUE(metadata->get_last_allocated_entry_tid(234, &last_tid));
   ASSERT_EQ(124U, last_tid);
-  ASSERT_TRUE(metadata->get_last_allocated_tid("tag2", &last_tid));
+  ASSERT_TRUE(metadata->get_last_allocated_entry_tid(345, &last_tid));
   ASSERT_EQ(2U, last_tid);
 }
 
@@ -301,10 +297,10 @@ TEST_F(TestJournalPlayer, PrefetchCorruptSequence) {
 
   journal::JournalPlayer *player = create_player(oid, metadata);
 
-  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 120));
-  ASSERT_EQ(0, write_entry(oid, 0, "tag2", 0));
-  ASSERT_EQ(0, write_entry(oid, 1, "tag1", 121));
-  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 124));
+  ASSERT_EQ(0, write_entry(oid, 0, 234, 120));
+  ASSERT_EQ(0, write_entry(oid, 0, 345, 0));
+  ASSERT_EQ(0, write_entry(oid, 1, 234, 121));
+  ASSERT_EQ(0, write_entry(oid, 0, 234, 124));
 
   player->prefetch();
   Entries entries;
@@ -322,7 +318,7 @@ TEST_F(TestJournalPlayer, PrefetchAndWatch) {
 
   journal::JournalPlayer::EntryPositions positions;
   positions = {
-    cls::journal::EntryPosition("tag1", 122)};
+    cls::journal::EntryPosition(234, 122)};
   cls::journal::ObjectSetPosition commit_position(0, positions);
 
   ASSERT_EQ(0, create(oid));
@@ -334,22 +330,22 @@ TEST_F(TestJournalPlayer, PrefetchAndWatch) {
 
   journal::JournalPlayer *player = create_player(oid, metadata);
 
-  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 122));
+  ASSERT_EQ(0, write_entry(oid, 0, 234, 122));
 
   player->prefetch_and_watch(0.25);
 
   Entries entries;
-  ASSERT_EQ(0, write_entry(oid, 1, "tag1", 123));
+  ASSERT_EQ(0, write_entry(oid, 1, 234, 123));
   ASSERT_TRUE(wait_for_entries(player, 1, &entries));
 
   Entries expected_entries;
-  expected_entries = {create_entry("tag1", 123)};
+  expected_entries = {create_entry(234, 123)};
   ASSERT_EQ(expected_entries, entries);
 
-  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 124));
+  ASSERT_EQ(0, write_entry(oid, 0, 234, 124));
   ASSERT_TRUE(wait_for_entries(player, 1, &entries));
 
-  expected_entries = {create_entry("tag1", 124)};
+  expected_entries = {create_entry(234, 124)};
   ASSERT_EQ(expected_entries, entries);
 }
 
@@ -368,11 +364,11 @@ TEST_F(TestJournalPlayer, PrefetchSkippedObject) {
 
   journal::JournalPlayer *player = create_player(oid, metadata);
 
-  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 122));
-  ASSERT_EQ(0, write_entry(oid, 1, "tag1", 123));
-  ASSERT_EQ(0, write_entry(oid, 5, "tag1", 124));
-  ASSERT_EQ(0, write_entry(oid, 6, "tag1", 125));
-  ASSERT_EQ(0, write_entry(oid, 7, "tag1", 126));
+  ASSERT_EQ(0, write_entry(oid, 0, 234, 122));
+  ASSERT_EQ(0, write_entry(oid, 1, 234, 123));
+  ASSERT_EQ(0, write_entry(oid, 5, 234, 124));
+  ASSERT_EQ(0, write_entry(oid, 6, 234, 125));
+  ASSERT_EQ(0, write_entry(oid, 7, 234, 126));
 
   player->prefetch();
 
@@ -382,14 +378,14 @@ TEST_F(TestJournalPlayer, PrefetchSkippedObject) {
 
   Entries expected_entries;
   expected_entries = {
-    create_entry("tag1", 122),
-    create_entry("tag1", 123),
-    create_entry("tag1", 124),
-    create_entry("tag1", 125),
-    create_entry("tag1", 126)};
+    create_entry(234, 122),
+    create_entry(234, 123),
+    create_entry(234, 124),
+    create_entry(234, 125),
+    create_entry(234, 126)};
   ASSERT_EQ(expected_entries, entries);
 
   uint64_t last_tid;
-  ASSERT_TRUE(metadata->get_last_allocated_tid("tag1", &last_tid));
+  ASSERT_TRUE(metadata->get_last_allocated_entry_tid(234, &last_tid));
   ASSERT_EQ(126U, last_tid);
 }

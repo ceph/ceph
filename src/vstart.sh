@@ -33,17 +33,31 @@ if [ -e CMakeCache.txt ]; then
     ln -sf ../${file} ec_plugins/`basename $file`
   done
   [ -z "$EC_PATH" ] && EC_PATH=./ec_plugins
+  # check for compression plugins
+  mkdir -p .libs/compressor
+  for file in ./src/compressor/*/libcs_*.so*;
+  do
+    ln -sf ../${file} .libs/compressor/`basename $file`
+  done
+else
+    mkdir -p .libs/compressor
+    for f in `ls -d compressor/*/`; 
+    do 
+        cp .libs/libceph_`basename $f`.so* .libs/compressor/;
+    done
 fi
 
 if [ -z "$CEPH_BUILD_ROOT" ]; then
         [ -z "$CEPH_BIN" ] && CEPH_BIN=.
         [ -z "$CEPH_LIB" ] && CEPH_LIB=.libs
         [ -z $EC_PATH ] && EC_PATH=$CEPH_LIB
+        [ -z $CS_PATH ] && CS_PATH=$CEPH_LIB
         [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB
 else
         [ -z $CEPH_BIN ] && CEPH_BIN=$CEPH_BUILD_ROOT/bin
         [ -z $CEPH_LIB ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
         [ -z $EC_PATH ] && EC_PATH=$CEPH_LIB/erasure-code
+        [ -z $CS_PATH ] && CS_PATH=$CEPH_LIB/compressor
         [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
 fi
 
@@ -92,7 +106,6 @@ cephx=1 #turn cephx on by default
 cache=""
 memstore=0
 bluestore=0
-journal=1
 
 MON_ADDR=""
 
@@ -119,11 +132,13 @@ usage=$usage"\t-X disable cephx\n"
 usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-e : create an erasure pool\n";
 usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
-usage=$usage"\t-J no journal\t\tdisable filestore journal\n"
 usage=$usage"\t--mon_num specify ceph monitor count\n"
 usage=$usage"\t--osd_num specify ceph osd count\n"
 usage=$usage"\t--mds_num specify ceph mds count\n"
 usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
+usage=$usage"\t--bluestore use bluestore as the osd objectstore backend\n"
+usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
+usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 
 usage_exit() {
 	printf "$usage"
@@ -220,9 +235,6 @@ case $1 in
 	    ;;
     -X )
 	    cephx=0
-	    ;;
-    -J )
-	    journal=0
 	    ;;
     -k )
 	    overwrite_conf=0
@@ -336,10 +348,7 @@ if [ "$memstore" -eq 1 ]; then
 fi
 if [ "$bluestore" -eq 1 ]; then
     COSDMEMSTORE='
-	osd objectstore = bluestore
-	bluestore fsck on mount = true
-	bluestore block db size = 67108864
-	bluestore block wal size = 134217728'
+	osd objectstore = bluestore'
 fi
 
 # lockdep everywhere?
@@ -433,12 +442,14 @@ if [ "$start_mon" -eq 1 ]; then
         mon data avail warn = 10
         mon data avail crit = 1
         erasure code dir = $EC_PATH
+        plugin dir = $CS_PATH
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         rgw frontends = fastcgi, civetweb port=$CEPH_RGW_PORT
         rgw dns name = localhost
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
+        lockdep = true
 EOF
 if [ "$cephx" -eq 1 ] ; then
 cat <<EOF >> $conf_fn
@@ -451,11 +462,6 @@ cat <<EOF >> $conf_fn
 	auth client required = none
 EOF
 fi
-                        if [ $journal -eq 1 ]; then
-			    journal_path="$CEPH_DEV_DIR/osd\$id.journal"
-			else
-			    journal_path=""
-			fi
 			cat <<EOF >> $conf_fn
 
 [client]
@@ -476,7 +482,7 @@ $extra_conf
 [osd]
 $DAEMONOPTS
         osd data = $CEPH_DEV_DIR/osd\$id
-        osd journal = $journal_path
+        osd journal = $CEPH_DEV_DIR/osd\$id/journal
         osd journal size = 100
         osd class tmp = out
         osd class dir = $OBJCLASS_PATH
@@ -488,6 +494,12 @@ $DAEMONOPTS
         filestore wbthrottle btrfs ios start flusher = 10
         filestore wbthrottle btrfs ios hard limit = 20
         filestore wbthrottle btrfs inodes hard limit = 30
+	bluestore fsck on mount = true
+	bluestore block create = true
+	bluestore block db size = 67108864
+	bluestore block db create = true
+	bluestore block wal size = 134217728
+	bluestore block wal create = true
 $COSDDEBUG
 $COSDMEMSTORE
 $extra_conf
@@ -578,11 +590,11 @@ if [ "$start_osd" -eq 1 ]; then
 [osd.$osd]
         host = $HOSTNAME
 EOF
-		    rm -rf $CEPH_DEV_DIR/osd$osd || true
-		    for f in $CEPH_DEV_DIR/osd$osd/* ; do btrfs sub delete $f || true ; done || true
-		    mkdir -p $CEPH_DEV_DIR/osd$osd
-
 	    fi
+
+	    rm -rf $CEPH_DEV_DIR/osd$osd || true
+	    for f in $CEPH_DEV_DIR/osd$osd/* ; do btrfs sub delete $f || true ; done || true
+	    mkdir -p $CEPH_DEV_DIR/osd$osd
 
 	    uuid=`uuidgen`
 	    echo "add osd$osd $uuid"

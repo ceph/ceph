@@ -39,7 +39,7 @@ void bluefs_extent_t::generate_test_instances(list<bluefs_extent_t*>& ls)
   ls.push_back(new bluefs_extent_t);
   ls.back()->offset = 1;
   ls.back()->length = 2;
-  ls.back()->bdev = 3;
+  ls.back()->bdev = 1;
 }
 
 ostream& operator<<(ostream& out, bluefs_extent_t e)
@@ -90,7 +90,7 @@ void bluefs_super_t::generate_test_instances(list<bluefs_super_t*>& ls)
 
 ostream& operator<<(ostream& out, const bluefs_super_t& s)
 {
-  return out << "super(" << s.uuid
+  return out << "super(uuid " << s.uuid
 	     << " osd " << s.osd_uuid
 	     << " v " << s.version
 	     << " block_size " << s.block_size
@@ -163,7 +163,7 @@ void bluefs_fnode_t::generate_test_instances(list<bluefs_fnode_t*>& ls)
 
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 {
-  return out << "file(" << file.ino
+  return out << "file(ino " << file.ino
 	     << " size " << file.size
 	     << " mtime " << file.mtime
 	     << " bdev " << (int)file.prefer_bdev
@@ -218,16 +218,18 @@ void bluefs_transaction_t::generate_test_instance(
   ls.back()->op_alloc_rm(1, 0, 123);
   ls.back()->op_dir_create("dir");
   ls.back()->op_dir_create("dir2");
-  ls.back()->op_dir_link("dir", "file1", 1);
-  ls.back()->op_dir_unlink("dir", "oldfile");
-  ls.back()->op_file_update(bluefs_fnode_t());
-  ls.back()->op_dir_remove("dir3");
+  bluefs_fnode_t fnode;
+  fnode.ino = 2;
+  ls.back()->op_file_update(fnode);
+  ls.back()->op_dir_link("dir", "file1", 2);
+  ls.back()->op_dir_unlink("dir", "file1");
   ls.back()->op_file_remove(2);
+  ls.back()->op_dir_remove("dir2");
 }
 
 ostream& operator<<(ostream& out, const bluefs_transaction_t& t)
 {
-  return out << "txn(" << t.seq
+  return out << "txn(seq " << t.seq
 	     << " len " << t.op_bl.length()
 	     << " crc " << t.op_bl.crc32c(-1)
 	     << ")";

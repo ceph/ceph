@@ -34,8 +34,7 @@ protected:
   int init_request(const char *method, const char *url, rgw_http_req_data *req_data);
 public:
   virtual ~RGWHTTPClient();
-  RGWHTTPClient(CephContext *_cct): send_len (0), has_send_len(false), req_data(NULL), user_info(NULL), cct(_cct) {}
-
+  explicit RGWHTTPClient(CephContext *_cct): send_len (0), has_send_len(false), cct(_cct) {}
   void set_user_info(void *info) {
     user_info = info;
   }

@@ -289,10 +289,12 @@ Monitor Settings
 :Default: ``300``
 
 
-``mon osd downout subtree limit``
+``mon osd down out subtree limit``
 
-:Description: The largest :term:`CRUSH` unit type that Ceph will 
-              automatically mark ``out``. 
+:Description: The smallest :term:`CRUSH` unit type that Ceph will **not**
+              automatically mark out. For instance, if set to ``host`` and if
+              all OSDs of a host are down, Ceph will not automatically mark out
+              these OSDs.
 
 :Type: String
 :Default: ``rack``

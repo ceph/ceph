@@ -191,8 +191,8 @@ private:
                            << ", extents " << m_image_extents
                            << dendl;
     RWLock::RLocker owner_locker(m_ictx->parent->owner_lock);
-    AioImageRequest::aio_read(m_ictx->parent, comp, m_image_extents, NULL,
-                              &m_copyup_data, 0);
+    AioImageRequest<>::aio_read(m_ictx->parent, comp, m_image_extents, NULL,
+                                &m_copyup_data, 0);
   }
 
   void CopyupRequest::complete(int r)

@@ -188,7 +188,7 @@ class ObjectOpCompletionCtx : public Context {
   librados::ObjectOperationCompletion *completion;
   bufferlist bl;
 public:
-  ObjectOpCompletionCtx(librados::ObjectOperationCompletion *c) : completion(c) {}
+  explicit ObjectOpCompletionCtx(librados::ObjectOperationCompletion *c) : completion(c) {}
   void finish(int r) {
     completion->handle_completion(r, bl);
     delete completion;
@@ -1927,12 +1927,32 @@ int64_t librados::IoCtx::get_id()
 
 uint32_t librados::IoCtx::get_object_hash_position(const std::string& oid)
 {
-  return io_ctx_impl->get_object_hash_position(oid);
+  uint32_t hash;
+  int r = io_ctx_impl->get_object_hash_position(oid, &hash);
+  if (r < 0)
+    hash = 0;
+  return hash;
 }
 
 uint32_t librados::IoCtx::get_object_pg_hash_position(const std::string& oid)
 {
-  return io_ctx_impl->get_object_pg_hash_position(oid);
+  uint32_t hash;
+  int r = io_ctx_impl->get_object_pg_hash_position(oid, &hash);
+  if (r < 0)
+    hash = 0;
+  return hash;
+}
+
+int librados::IoCtx::get_object_hash_position2(
+    const std::string& oid, uint32_t *hash_position)
+{
+  return io_ctx_impl->get_object_hash_position(oid, hash_position);
+}
+
+int librados::IoCtx::get_object_pg_hash_position2(
+    const std::string& oid, uint32_t *pg_hash_position)
+{
+  return io_ctx_impl->get_object_pg_hash_position(oid, pg_hash_position);
 }
 
 librados::config_t librados::IoCtx::cct()
@@ -3186,10 +3206,13 @@ extern "C" int rados_ioctx_pool_requires_alignment2(rados_ioctx_t io,
 {
   tracepoint(librados, rados_ioctx_pool_requires_alignment_enter2, io);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  bool requires_alignment;
   int retval = ctx->client->pool_requires_alignment2(ctx->get_id(), 
-  	(bool *)requires);
+  	&requires_alignment);
   tracepoint(librados, rados_ioctx_pool_requires_alignment_exit2, retval, 
-  	*requires);
+  	requires_alignment);
+  if (requires)
+    *requires = requires_alignment;
   return retval;
 }
 
@@ -4870,7 +4893,7 @@ struct RadosOmapIter {
 class C_OmapIter : public Context {
   RadosOmapIter *iter;
 public:
-  C_OmapIter(RadosOmapIter *iter) : iter(iter) {}
+  explicit C_OmapIter(RadosOmapIter *iter) : iter(iter) {}
   void finish(int r) {
     iter->i = iter->values.begin();
   }
@@ -4879,7 +4902,7 @@ public:
 class C_XattrsIter : public Context {
   librados::RadosXattrsIter *iter;
 public:
-  C_XattrsIter(librados::RadosXattrsIter *iter) : iter(iter) {}
+  explicit C_XattrsIter(librados::RadosXattrsIter *iter) : iter(iter) {}
   void finish(int r) {
     iter->i = iter->attrset.begin();
   }
@@ -4921,7 +4944,7 @@ extern "C" void rados_read_op_omap_get_vals(rados_read_op_t read_op,
 struct C_OmapKeysIter : public Context {
   RadosOmapIter *iter;
   std::set<std::string> keys;
-  C_OmapKeysIter(RadosOmapIter *iter) : iter(iter) {}
+  explicit C_OmapKeysIter(RadosOmapIter *iter) : iter(iter) {}
   void finish(int r) {
     // map each key to an empty bl
     for (std::set<std::string>::const_iterator i = keys.begin();

@@ -20,6 +20,8 @@ fi
 sudo ceph osd crush rm osd.0 || true
 sudo ceph osd crush rm osd.1 || true
 
+perl -pi -e 's|pid file.*|pid file = /var/run/ceph/\$cluster-\$name.pid|' /etc/ceph/ceph.conf
+
 PATH=$(dirname $0)/..:$PATH
 
 if ! which py.test > /dev/null; then

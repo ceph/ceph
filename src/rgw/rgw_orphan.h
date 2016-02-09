@@ -43,7 +43,7 @@ struct RGWOrphanSearchStage {
   string marker;
 
   RGWOrphanSearchStage() : stage(ORPHAN_SEARCH_STAGE_UNKNOWN), shard(0) {}
-  RGWOrphanSearchStage(RGWOrphanSearchStageId _stage) : stage(_stage), shard(0) {}
+  explicit RGWOrphanSearchStage(RGWOrphanSearchStageId _stage) : stage(_stage), shard(0) {}
   RGWOrphanSearchStage(RGWOrphanSearchStageId _stage, int _shard, const string& _marker) : stage(_stage), shard(_shard), marker(_marker) {}
 
   void encode(bufferlist& bl) const {
@@ -127,9 +127,7 @@ class RGWOrphanStore {
   string oid;
 
 public:
-  RGWOrphanStore(RGWRados *_store) : store(_store) {
-    oid = RGW_ORPHAN_INDEX_OID;
-  }
+  explicit RGWOrphanStore(RGWRados *_store) : store(_store), oid(RGW_ORPHAN_INDEX_OID) {}
 
   librados::IoCtx& get_ioctx() { return ioctx; }
 

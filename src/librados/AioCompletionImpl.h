@@ -170,7 +170,7 @@ namespace librados {
 struct C_AioComplete : public Context {
   AioCompletionImpl *c;
 
-  C_AioComplete(AioCompletionImpl *cc) : c(cc) {
+  explicit C_AioComplete(AioCompletionImpl *cc) : c(cc) {
     c->_get();
   }
 
@@ -189,7 +189,7 @@ struct C_AioComplete : public Context {
 struct C_AioSafe : public Context {
   AioCompletionImpl *c;
 
-  C_AioSafe(AioCompletionImpl *cc) : c(cc) {
+  explicit C_AioSafe(AioCompletionImpl *cc) : c(cc) {
     c->_get();
   }
 
@@ -216,7 +216,7 @@ struct C_AioSafe : public Context {
 struct C_AioCompleteAndSafe : public Context {
   AioCompletionImpl *c;
 
-  C_AioCompleteAndSafe(AioCompletionImpl *cc) : c(cc) {
+  explicit C_AioCompleteAndSafe(AioCompletionImpl *cc) : c(cc) {
     c->get();
   }
 

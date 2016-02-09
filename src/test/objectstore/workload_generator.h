@@ -120,7 +120,7 @@ class WorkloadGenerator : public TestObjectStoreState {
   void do_stats();
 
 public:
-  WorkloadGenerator(vector<const char*> args);
+  explicit WorkloadGenerator(vector<const char*> args);
   ~WorkloadGenerator() {
     m_store->umount();
   }
@@ -129,9 +129,8 @@ public:
     WorkloadGenerator *wrkldgen_state;
 
   public:
-    C_OnReadable(WorkloadGenerator *state,
-                                  ObjectStore::Transaction *t)
-     :TestObjectStoreState::C_OnFinished(state, t), wrkldgen_state(state) { }
+    explicit C_OnReadable(WorkloadGenerator *state)
+     :TestObjectStoreState::C_OnFinished(state), wrkldgen_state(state) { }
 
     void finish(int r)
     {
@@ -144,9 +143,8 @@ public:
     coll_entry_t *m_entry;
 
   public:
-    C_OnDestroyed(WorkloadGenerator *state,
-        ObjectStore::Transaction *t, coll_entry_t *entry) :
-          C_OnReadable(state, t), m_entry(entry) {}
+    C_OnDestroyed(WorkloadGenerator *state, coll_entry_t *entry) :
+          C_OnReadable(state), m_entry(entry) {}
 
     void finish(int r) {
       C_OnReadable::finish(r);

@@ -56,7 +56,7 @@ using std::pair;
 using std::set;
 using std::string;
 
-const char *CEPH_CONF_FILE_DEFAULT = "/etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf";
+const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf";
 
 // file layouts
 struct ceph_file_layout g_default_file_layout = {
@@ -217,8 +217,25 @@ int md_config_t::parse_config_files(const char *conf_files,
       conf_files = CEPH_CONF_FILE_DEFAULT;
     }
   }
+
   std::list<std::string> cfl;
   get_str_list(conf_files, cfl);
+  auto p = cfl.begin();
+  while (p != cfl.end()) {
+    // expand $data_dir?
+    string &s = *p;
+    if (s.find("$data_dir") != string::npos) {
+      if (data_dir_option.length()) {
+	list<config_option*> stack;
+	expand_meta(s, NULL, stack, warnings);
+	p++;
+      } else {
+	cfl.erase(p++);  // ignore this item
+      }
+    } else {
+      ++p;
+    }
+  }
   return parse_config_files_impl(cfl, parse_errors, warnings);
 }
 
@@ -590,13 +607,16 @@ void md_config_t::_apply_changes(std::ostream *oss)
   for (changed_set_t::const_iterator c = changed.begin();
        c != changed.end(); ++c) {
     const std::string &key(*c);
+    pair < obs_map_t::iterator, obs_map_t::iterator >
+      range(observers.equal_range(key));
     if ((oss) &&
 	(!_get_val(key.c_str(), &bufptr, sizeof(buf))) &&
 	!_internal_field(key)) {
       (*oss) << key << " = '" << buf << "' ";
+      if (range.first == range.second) {
+	(*oss) << "(unchangeable) ";
+      }
     }
-    pair < obs_map_t::iterator, obs_map_t::iterator >
-      range(observers.equal_range(key));
     for (obs_map_t::iterator r = range.first; r != range.second; ++r) {
       rev_obs_map_t::value_type robs_val(r->second, empty_set);
       pair < rev_obs_map_t::iterator, bool > robs_ret(robs.insert(robs_val));
@@ -616,17 +636,21 @@ void md_config_t::_apply_changes(std::ostream *oss)
 
 void md_config_t::call_all_observers()
 {
-  Mutex::Locker l(lock);
-
-  expand_all_meta();
-
   std::map<md_config_obs_t*,std::set<std::string> > obs;
-  for (obs_map_t::iterator r = observers.begin(); r != observers.end(); ++r)
-    obs[r->second].insert(r->first);
+  {
+    Mutex::Locker l(lock);
+
+    expand_all_meta();
+
+    for (obs_map_t::iterator r = observers.begin(); r != observers.end(); ++r) {
+      obs[r->second].insert(r->first);
+    }
+  }
   for (std::map<md_config_obs_t*,std::set<std::string> >::iterator p = obs.begin();
        p != obs.end();
-       ++p)
+       ++p) {
     p->first->handle_conf_change(this, p->second);
+  }
 }
 
 int md_config_t::injectargs(const std::string& s, std::ostream *oss)
@@ -980,8 +1004,10 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
   return -ENOSYS;
 }
 
-static const char *CONF_METAVARIABLES[] =
-  { "cluster", "type", "name", "host", "num", "id", "pid", "cctid" };
+static const char *CONF_METAVARIABLES[] = {
+  "data_dir", // put this first: it may contain some of the others
+  "cluster", "type", "name", "host", "num", "id", "pid", "cctid"
+};
 static const int NUM_CONF_METAVARIABLES =
       (sizeof(CONF_METAVARIABLES) / sizeof(CONF_METAVARIABLES[0]));
 
@@ -1095,7 +1121,20 @@ bool md_config_t::expand_meta(std::string &origval,
 	  out += stringify(getpid());
 	else if (var == "cctid")
 	  out += stringify((unsigned long long)this);
-	else
+	else if (var == "data_dir") {
+	  if (data_dir_option.length()) {
+	    char *vv = NULL;
+	    _get_val(data_dir_option.c_str(), &vv, -1);
+	    string tmp = vv;
+	    free(vv);
+	    expand_meta(tmp, NULL, stack, oss);
+	    out += tmp;
+	  } else {
+	    // this isn't really right, but it'll result in a mangled
+	    // non-existent path that will fail any search list
+	    out += "$data_dir";
+	  }
+	} else
 	  assert(0); // unreachable
 	expanded = true;
       }

@@ -260,14 +260,14 @@ private:
 
   struct C_Scrub : public Context {
     Monitor *mon;
-    C_Scrub(Monitor *m) : mon(m) { }
+    explicit C_Scrub(Monitor *m) : mon(m) { }
     void finish(int r) {
       mon->scrub_start();
     }
   };
   struct C_ScrubTimeout : public Context {
     Monitor *mon;
-    C_ScrubTimeout(Monitor *m) : mon(m) { }
+    explicit C_ScrubTimeout(Monitor *m) : mon(m) { }
     void finish(int r) {
       mon->scrub_timeout();
     }
@@ -351,7 +351,7 @@ private:
 
   struct C_SyncTimeout : public Context {
     Monitor *mon;
-    C_SyncTimeout(Monitor *m) : mon(m) {}
+    explicit C_SyncTimeout(Monitor *m) : mon(m) {}
     void finish(int r) {
       mon->sync_timeout();
     }
@@ -509,7 +509,7 @@ private:
 
   struct C_TimeCheck : public Context {
     Monitor *mon;
-    C_TimeCheck(Monitor *m) : mon(m) { }
+    explicit C_TimeCheck(Monitor *m) : mon(m) { }
     void finish(int r) {
       mon->timecheck_start_round();
     }
@@ -565,7 +565,7 @@ private:
 
   struct C_ProbeTimeout : public Context {
     Monitor *mon;
-    C_ProbeTimeout(Monitor *m) : mon(m) {}
+    explicit C_ProbeTimeout(Monitor *m) : mon(m) {}
     void finish(int r) {
       mon->probe_timeout(r);
     }
@@ -714,7 +714,7 @@ public:
 
   struct C_HealthToClogTick : public Context {
     Monitor *mon;
-    C_HealthToClogTick(Monitor *m) : mon(m) { }
+    explicit C_HealthToClogTick(Monitor *m) : mon(m) { }
     void finish(int r) {
       if (r < 0)
         return;
@@ -725,7 +725,7 @@ public:
 
   struct C_HealthToClogInterval : public Context {
     Monitor *mon;
-    C_HealthToClogInterval(Monitor *m) : mon(m) { }
+    explicit C_HealthToClogInterval(Monitor *m) : mon(m) { }
     void finish(int r) {
       if (r < 0)
         return;

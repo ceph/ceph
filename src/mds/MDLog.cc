@@ -104,7 +104,7 @@ class C_MDL_WriteError : public MDSIOContextBase {
   }
 
   public:
-  C_MDL_WriteError(MDLog *m) : mdlog(m) {}
+  explicit C_MDL_WriteError(MDLog *m) : mdlog(m) {}
 };
 
 
@@ -356,6 +356,11 @@ void MDLog::_submit_thread()
   submit_mutex.Lock();
 
   while (!mds->is_daemon_stopping()) {
+    if (g_conf->mds_log_pause) {
+      submit_cond.Wait(submit_mutex);
+      continue;
+    }
+
     map<uint64_t,list<PendingEvent> >::iterator it = pending_events.begin();
     if (it == pending_events.end()) {
       submit_cond.Wait(submit_mutex);
@@ -458,6 +463,12 @@ void MDLog::flush()
 
   if (do_flush)
     journaler->flush();
+}
+
+void MDLog::kick_submitter()
+{
+  Mutex::Locker l(submit_mutex);
+  submit_cond.Signal();
 }
 
 void MDLog::cap()
@@ -1396,4 +1407,15 @@ void MDLog::standby_trim_segments()
     mds->mdcache->trim(-1);
   } else
     dout(20) << " removed no segments!" << dendl;
+}
+
+void MDLog::dump_replay_status(Formatter *f) const
+{
+  f->open_object_section("replay_status");
+  f->dump_unsigned("journal_read_pos", journaler ? journaler->get_read_pos() : 0);
+  f->dump_unsigned("journal_write_pos", journaler ? journaler->get_write_pos() : 0);
+  f->dump_unsigned("journal_expire_pos", journaler ? journaler->get_expire_pos() : 0);
+  f->dump_unsigned("num_events", get_num_events());
+  f->dump_unsigned("num_segments", get_num_segments());
+  f->close_section();
 }

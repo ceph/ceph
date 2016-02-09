@@ -62,7 +62,8 @@ static const char* c_str_or_null(const std::string &str)
 void global_pre_init(std::vector < const char * > *alt_def_args,
 		     std::vector < const char* >& args,
 		     uint32_t module_type, code_environment_t code_env,
-		     int flags)
+		     int flags,
+		     const char *data_dir_option)
 {
   // You can only call global_init once.
   assert(!g_ceph_context);
@@ -70,7 +71,7 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
   std::string cluster = "ceph";
   CephInitParameters iparams = ceph_argparse_early_args(args, module_type, flags,
 							&cluster, &conf_file_list);
-  CephContext *cct = common_preinit(iparams, code_env, flags);
+  CephContext *cct = common_preinit(iparams, code_env, flags, data_dir_option);
   cct->_conf->cluster = cluster;
   global_init_set_globals(cct);
   md_config_t *conf = cct->_conf;
@@ -115,9 +116,12 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
 
 void global_init(std::vector < const char * > *alt_def_args,
 		 std::vector < const char* >& args,
-		 uint32_t module_type, code_environment_t code_env, int flags)
+		 uint32_t module_type, code_environment_t code_env,
+		 int flags,
+		 const char *data_dir_option)
 {
-  global_pre_init(alt_def_args, args, module_type, code_env, flags);
+  global_pre_init(alt_def_args, args, module_type, code_env, flags,
+		  data_dir_option);
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
@@ -241,6 +245,7 @@ void global_init(std::vector < const char * > *alt_def_args,
     derr << "deliberately leaking some memory" << dendl;
     char *s = new char[1234567];
     (void)s;
+    // cppcheck-suppress memleak
   }
 
   if (code_env == CODE_ENVIRONMENT_DAEMON && !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
@@ -252,23 +257,16 @@ void global_print_banner(void)
   output_ceph_version();
 }
 
-static void pidfile_remove_void(void)
-{
-  pidfile_remove();
-}
-
 int global_init_prefork(CephContext *cct)
 {
   if (g_code_env != CODE_ENVIRONMENT_DAEMON)
     return -1;
+
   const md_config_t *conf = cct->_conf;
   if (!conf->daemonize) {
-    if (atexit(pidfile_remove_void)) {
-      derr << "global_init_daemonize: failed to set pidfile_remove function "
-	   << "to run at exit." << dendl;
-    }
 
-    pidfile_write(g_conf);
+    if (pidfile_write(g_conf) < 0)
+      exit(1);
 
     return -1;
   }
@@ -292,7 +290,7 @@ void global_init_daemonize(CephContext *cct)
 	 << cpp_strerror(ret) << dendl;
     exit(1);
   }
-
+ 
   global_init_postfork_start(cct);
   global_init_postfork_finish(cct);
 #else
@@ -304,11 +302,6 @@ void global_init_postfork_start(CephContext *cct)
 {
   // restart log thread
   g_ceph_context->_log->start();
-
-  if (atexit(pidfile_remove_void)) {
-    derr << "global_init_daemonize: failed to set pidfile_remove function "
-	 << "to run at exit." << dendl;
-  }
 
   /* This is the old trick where we make file descriptors 0, 1, and possibly 2
    * point to /dev/null.
@@ -333,7 +326,8 @@ void global_init_postfork_start(CephContext *cct)
     exit(1);
   }
 
-  pidfile_write(g_conf);
+  if (pidfile_write(g_conf) < 0)
+    exit(1);
 }
 
 void global_init_postfork_finish(CephContext *cct)

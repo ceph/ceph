@@ -612,6 +612,7 @@ int RGWHTTPArgs::parse()
           (name.compare("versionId") == 0) ||
           (name.compare("versions") == 0) ||
           (name.compare("versioning") == 0) ||
+          (name.compare("website") == 0) ||
           (name.compare("requestPayment") == 0) ||
           (name.compare("torrent") == 0)) {
         sub_resources[name] = val;

@@ -36,7 +36,7 @@ target_link_libraries(test_build_librgw rgw_a global pthread ${CRYPTO_LIBS} ${EX
 
 # From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
 add_executable(test_build_libcephfs buildtest_skeleton.cc)
-target_link_libraries(test_build_libcephfs cephfs expat pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+target_link_libraries(test_build_libcephfs cephfs expat pthread ${CRYPTO_LIBS} ${EXTRALIBS} ${ALLOC_LIBS})
 
 add_executable(test_build_librados buildtest_skeleton.cc)
 target_link_libraries(test_build_librados librados pthread ${CRYPTO_LIBS} ${EXTRALIBS} osdc osd os common cls_lock_client ${BLKID_LIBRARIES} ${ALLOC_LIBS})
@@ -327,6 +327,9 @@ add_dependencies(check osd_copy_from)
 add_test(NAME osd_crush COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/osd-crush.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check osd_crush)
 
+add_test(NAME ceph_disk_tox COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-disk/run-tox.sh)
+add_dependencies(check ceph_disk_tox)
+
 add_test(NAME rados_striper COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/libradosstriper/rados-striper.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check rados_striper)
 
@@ -408,6 +411,9 @@ add_dependencies(check mkfs)
 
 add_test(NAME misc COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/misc.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check misc)
+
+add_test(NAME mon_created_time COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-created-time.sh)
+add_dependencies(check mon_created_time)
 
 add_test(NAME test_ceph_daemon COMMAND python ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_daemon.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/test/pybind)
 add_dependencies(check test_ceph_daemon)
@@ -511,6 +517,18 @@ target_link_libraries(unittest_prioritized_queue global
 set_target_properties(unittest_prioritized_queue
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
+# unittest_weighted_priority_queue
+add_executable(unittest_weighted_priority_queue EXCLUDE_FROM_ALL
+  common/test_weighted_priority_queue.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+add_test(unittest_weighted_priority_queue unittest_weighted_priority_queue)
+add_dependencies(check unittest_weighted_priority_queue)
+target_link_libraries(unittest_weighted_priority_queue global
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
+set_target_properties(unittest_weighted_priority_queue
+  PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
 # unittest_str_map
 add_executable(unittest_str_map EXCLUDE_FROM_ALL
   common/test_str_map.cc
@@ -521,6 +539,36 @@ add_dependencies(check unittest_str_map)
 target_link_libraries(unittest_str_map common global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS} ${UNITTEST_LIBS} common)
 set_target_properties(unittest_str_map
+  PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
+# unittest_shared_mutex
+set(unittest_mutex_debug_srcs
+  common/test_mutex_debug.cc
+  )
+add_executable(unittest_mutex_debug EXCLUDE_FROM_ALL
+  ${unittest_mutex_debug_srcs}
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+add_test(unittest_mutex_debug unittest_mutex_debug)
+add_dependencies(check unittest_mutex_debug)
+target_link_libraries(unittest_mutex_debug global
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS} ${UNITTEST_LIBS} ${EXTRALIBS})
+set_target_properties(unittest_mutex_debug
+  PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
+# unittest_shared_mutex
+set(unittest_shunique_lock_srcs
+  common/test_shunique_lock.cc
+  )
+add_executable(unittest_shunique_lock EXCLUDE_FROM_ALL
+  ${unittest_shunique_lock_srcs}
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+add_test(unittest_shunique_lock unittest_shunique_lock)
+add_dependencies(check unittest_shunique_lock)
+target_link_libraries(unittest_shunique_lock global
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS} ${UNITTEST_LIBS} ${EXTRALIBS})
+set_target_properties(unittest_shunique_lock
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unittest_sharedptr_registry
@@ -1370,6 +1418,23 @@ add_dependencies(check unittest_bit_vector)
 set_target_properties(unittest_bit_vector PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
+# unittest_interval_set
+add_executable(unittest_interval_set EXCLUDE_FROM_ALL
+  common/test_interval_set.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+add_test(unittest_interval_set unittest_interval_set)
+add_dependencies(check unittest_interval_set)
+target_link_libraries(unittest_interval_set
+  global
+  ${CMAKE_DL_LIBS}
+  ${ALLOC_LIBS}
+  ${UNITTEST_LIBS})
+add_test(unittest_interval_set unittest_interval_set)
+add_dependencies(check unittest_interval_set)
+set_target_properties(unittest_interval_set PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
 # unittest_subprocess
 add_executable(unittest_subprocess EXCLUDE_FROM_ALL
   test_subprocess.cc
@@ -1929,7 +1994,7 @@ add_executable(test_rados_api_io
 set_target_properties(test_rados_api_io PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_io
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_c_write_operations
   librados/c_write_operations.cc
@@ -1938,7 +2003,7 @@ add_executable(test_rados_api_c_write_operations
 set_target_properties(test_rados_api_c_write_operations PROPERTIES
   COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_c_write_operations
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_c_read_operations
   librados/c_read_operations.cc
@@ -1947,7 +2012,7 @@ add_executable(test_rados_api_c_read_operations
 set_target_properties(test_rados_api_c_read_operations PROPERTIES COMPILE_FLAGS 
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_c_read_operations
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_aio
   librados/aio.cc
@@ -1956,7 +2021,9 @@ add_executable(test_rados_api_aio
 set_target_properties(test_rados_api_aio PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_aio
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_list
   librados/list.cc
@@ -1965,7 +2032,7 @@ add_executable(test_rados_api_list
 set_target_properties(test_rados_api_list PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_list
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_nlist
   librados/nlist.cc
@@ -1974,7 +2041,7 @@ add_executable(test_rados_api_nlist
 set_target_properties(test_rados_api_nlist PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_nlist
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_pool
   librados/pool.cc
@@ -1984,7 +2051,7 @@ set_target_properties(test_rados_api_pool PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS}
   )
 target_link_libraries(test_rados_api_pool
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_stat
   librados/stat.cc
@@ -1993,7 +2060,7 @@ add_executable(test_rados_api_stat
 set_target_properties(test_rados_api_stat PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_stat
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_watch_notify
   librados/watch_notify.cc
@@ -2002,7 +2069,7 @@ add_executable(test_rados_api_watch_notify
 set_target_properties(test_rados_api_watch_notify PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_watch_notify
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_cls
   librados/cls.cc
@@ -2011,7 +2078,7 @@ add_executable(test_rados_api_cls
 set_target_properties(test_rados_api_cls PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_cls
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_misc
   librados/misc.cc
@@ -2029,7 +2096,7 @@ add_executable(test_rados_api_lock
 set_target_properties(test_rados_api_lock PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_lock
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_tier
   librados/tier.cc
@@ -2047,7 +2114,7 @@ add_executable(test_rados_api_snapshots
 set_target_properties(test_rados_api_snapshots PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_snapshots
-  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
 
 add_library(rados_striper_test STATIC libradosstriper/TestCase.cc)
 target_link_libraries(rados_striper_test radostest)
@@ -2070,12 +2137,15 @@ if(${WITH_CEPHFS})
     libcephfs/caps.cc
     libcephfs/multiclient.cc
     libcephfs/flock.cc
+    libcephfs/acl.cc
+    libcephfs/access.cc
     $<TARGET_OBJECTS:heap_profiler_objs>
   )
   set_target_properties(test_libcephfs PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
   target_link_libraries(test_libcephfs
     cephfs
+    librados
     ${UNITTEST_LIBS}
     ${EXTRALIBS}
     ${ALLOC_LIBS}
@@ -2130,6 +2200,12 @@ target_link_libraries(test_objectstore_workloadgen
   ${ALLOC_LIBS}
   ${CMAKE_DL_LIBS}
   )
+
+# test_transaction
+add_executable(unittest_transaction objectstore/test_transaction.cc)
+add_test(unittest_transaction unittest_transaction)
+set_target_properties(unittest_transaction PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+target_link_libraries(unittest_transaction os common ${UNITTEST_LIBS})
 
 #test_filestore
 add_executable(test_filestore filestore/TestFileStore.cc)
@@ -2283,7 +2359,7 @@ target_link_libraries(test_keyvaluedb_iterators
   ${CMAKE_DL_LIBS}
   )
 
-if(${HAVE_FUSE})
+if(${HAVE_LIBFUSE})
   add_executable(test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
     )
@@ -2294,7 +2370,7 @@ if(${HAVE_FUSE})
     ${ALLOC_LIBS}
     ${CMAKE_DL_LIBS}
     )
-endif(${HAVE_FUSE})
+endif(${HAVE_LIBFUSE})
 
 if(${WITH_CEPHFS})
   add_executable(test_c_headers

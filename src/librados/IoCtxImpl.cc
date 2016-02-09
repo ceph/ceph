@@ -20,6 +20,7 @@
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
 #include "include/assert.h"
+#include "common/valgrind.h"
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
@@ -180,14 +181,24 @@ int librados::IoCtxImpl::set_snap_write_context(snapid_t seq, vector<snapid_t>& 
   return 0;
 }
 
-uint32_t librados::IoCtxImpl::get_object_hash_position(const std::string& oid)
+int librados::IoCtxImpl::get_object_hash_position(
+    const std::string& oid, uint32_t *hash_position)
 {
-  return objecter->get_object_hash_position(poolid, oid, oloc.nspace);
+  int64_t r = objecter->get_object_hash_position(poolid, oid, oloc.nspace);
+  if (r < 0)
+    return r;
+  *hash_position = (uint32_t)r;
+  return 0;
 }
 
-uint32_t librados::IoCtxImpl::get_object_pg_hash_position(const std::string& oid)
+int librados::IoCtxImpl::get_object_pg_hash_position(
+    const std::string& oid, uint32_t *pg_hash_position)
 {
-  return objecter->get_object_pg_hash_position(poolid, oid, oloc.nspace);
+  int64_t r = objecter->get_object_pg_hash_position(poolid, oid, oloc.nspace);
+  if (r < 0)
+    return r;
+  *pg_hash_position = (uint32_t)r;
+  return 0;
 }
 
 void librados::IoCtxImpl::queue_aio_write(AioCompletionImpl *c)
@@ -761,7 +772,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 class C_ObjectOperation : public Context {
 public:
   ::ObjectOperation m_ops;
-  C_ObjectOperation(Context *c) : m_ctx(c) {}
+  explicit C_ObjectOperation(Context *c) : m_ctx(c) {}
   virtual void finish(int r) {
     m_ctx->complete(r);
   }
@@ -1164,6 +1175,8 @@ int librados::IoCtxImpl::getxattrs(const object_t& oid,
 
 void librados::IoCtxImpl::set_sync_op_version(version_t ver)
 {
+  ANNOTATE_BENIGN_RACE_SIZED(&last_objver, sizeof(last_objver),
+                             "IoCtxImpl last_objver");
   last_objver = ver;
 }
 

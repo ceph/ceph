@@ -13,7 +13,7 @@ class Context;
 namespace librbd {
 
 class ImageCtx;
-class Journal;
+template <typename> class Journal;
 
 namespace exclusive_lock {
 
@@ -21,8 +21,9 @@ template <typename ImageCtxT = ImageCtx>
 class ReleaseRequest {
 public:
   static ReleaseRequest* create(ImageCtxT &image_ctx, const std::string &cookie,
-                                Context *on_finish);
+                                Context *on_releasing, Context *on_finish);
 
+  ~ReleaseRequest();
   void send();
 
 private:
@@ -32,13 +33,16 @@ private:
    * <start>
    *    |
    *    v
+   * BLOCK_WRITES
+   *    |
+   *    v
    * CANCEL_OP_REQUESTS . . . . . . . . . . . .
    *    |                                     .
    *    v                                     .
    * CLOSE_JOURNAL                            .
    *    |                (journal disabled,   .
    *    v                 object map enabled) .
-   * UNLOCK_OBJECT_MAP  < . . . . . . . . . . .
+   * CLOSE_OBJECT_MAP < . . . . . . . . . . . .
    *    |                                     .
    *    v               (object map disabled) .
    * UNLOCK < . . . . . . . . . . . . . . . . .
@@ -50,14 +54,18 @@ private:
    */
 
   ReleaseRequest(ImageCtxT &image_ctx, const std::string &cookie,
-                 Context *on_finish);
+                 Context *on_releasing, Context *on_finish);
 
   ImageCtxT &m_image_ctx;
   std::string m_cookie;
+  Context *m_on_releasing;
   Context *m_on_finish;
 
   decltype(m_image_ctx.object_map) m_object_map;
   decltype(m_image_ctx.journal) m_journal;
+
+  void send_block_writes();
+  Context *handle_block_writes(int *ret_val);
 
   void send_cancel_op_requests();
   Context *handle_cancel_op_requests(int *ret_val);
@@ -65,8 +73,8 @@ private:
   void send_close_journal();
   Context *handle_close_journal(int *ret_val);
 
-  void send_unlock_object_map();
-  Context *handle_unlock_object_map(int *ret_val);
+  void send_close_object_map();
+  Context *handle_close_object_map(int *ret_val);
 
   void send_unlock();
   Context *handle_unlock(int *ret_val);

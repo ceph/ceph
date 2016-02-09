@@ -132,7 +132,7 @@ public:
   ReplicatedPG::CopyResults *results;
   int retval;
   ReplicatedPG::OpContext *ctx;
-  CopyFromCallback(ReplicatedPG::OpContext *ctx_)
+  explicit CopyFromCallback(ReplicatedPG::OpContext *ctx_)
     : results(NULL),
       retval(0),
       ctx(ctx_) {}
@@ -178,7 +178,6 @@ public:
 
 void ReplicatedPG::on_local_recover(
   const hobject_t &hoid,
-  const object_stat_sum_t &stat_diff,
   const ObjectRecoveryInfo &_recovery_info,
   ObjectContextRef obc,
   ObjectStore::Transaction *t
@@ -227,8 +226,6 @@ void ReplicatedPG::on_local_recover(
   recover_got(recovery_info.soid, recovery_info.version);
 
   if (is_primary()) {
-    info.stats.stats.sum.add(stat_diff);
-
     assert(obc);
     obc->obs.exists = true;
     obc->ondisk_write_lock();
@@ -276,8 +273,10 @@ void ReplicatedPG::on_local_recover(
 }
 
 void ReplicatedPG::on_global_recover(
-  const hobject_t &soid)
+  const hobject_t &soid,
+  const object_stat_sum_t &stat_diff)
 {
+  info.stats.stats.sum.add(stat_diff);
   missing_loc.recovered(soid);
   publish_stats_to_osd();
   dout(10) << "pushed " << soid << " to all replicas" << dendl;
@@ -1287,7 +1286,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	    wait_for_unreadable_object(oid, op);
 	    return;
 	  }
-	  result = osd->store->read(coll, ghobject_t(oid), 0, 0, osd_op.outdata);
+	  result = osd->store->read(ch, ghobject_t(oid), 0, 0, osd_op.outdata);
 	}
       }
       break;
@@ -1352,7 +1351,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
   PG(o, curmap, _pool, p),
   pgbackend(
     PGBackend::build_pg_backend(
-      _pool.info, curmap, this, coll_t(p), o->store, cct)),
+      _pool.info, curmap, this, coll_t(p), ch, o->store, cct)),
   object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
   backfills_in_flight(hobject_t::Comparator(true)),
@@ -3171,10 +3170,10 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
 	info.stats = m->stats;
       }
 
-      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+      ObjectStore::Transaction t;
       dirty_info = true;
-      write_if_dirty(*t);
-      int tr = osd->store->queue_transaction_and_cleanup(osr.get(), t);
+      write_if_dirty(t);
+      int tr = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
       assert(tr == 0);
     }
     break;
@@ -3238,14 +3237,6 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
     return NULL;
   }
 
-  RepGather *repop = simple_repop_create(obc);
-  OpContext *ctx = repop->ctx;
-  ctx->snapset_obc = snapset_obc;
-  ctx->lock_to_release = OpContext::W_LOCK;
-  ctx->release_snapset_obc = true;
-  ctx->at_version = get_next_version();
-
-  PGBackend::PGTransaction *t = ctx->op_t;
   set<snapid_t> new_snaps;
   for (set<snapid_t>::iterator i = old_snaps.begin();
        i != old_snaps.end();
@@ -3254,22 +3245,33 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
       new_snaps.insert(*i);
   }
 
+  vector<snapid_t>::iterator p = snapset.clones.end();
+
+  if (new_snaps.empty()) {
+    p = std::find(snapset.clones.begin(), snapset.clones.end(), coid.snap);
+    if (p == snapset.clones.end()) {
+      osd->clog->error() << __func__ << " Snap " << coid.snap << " not in clones" << "\n";
+      return NULL;
+    }
+  }
+
+  RepGather *repop = simple_repop_create(obc);
+  OpContext *ctx = repop->ctx;
+  ctx->snapset_obc = snapset_obc;
+  ctx->lock_to_release = OpContext::W_LOCK;
+  ctx->release_snapset_obc = true;
+  ctx->at_version = get_next_version();
+  PGBackend::PGTransaction *t = ctx->op_t;
+ 
   if (new_snaps.empty()) {
     // remove clone
     dout(10) << coid << " snaps " << old_snaps << " -> "
 	     << new_snaps << " ... deleting" << dendl;
 
     // ...from snapset
+    assert(p != snapset.clones.end());
+  
     snapid_t last = coid.snap;
-    vector<snapid_t>::iterator p;
-    for (p = snapset.clones.begin(); p != snapset.clones.end(); ++p)
-      if (*p == last)
-	break;
-    if (p == snapset.clones.end()) {
-      osd->clog->error() << __func__ << " Snap " << coid.snap << " not in clones" << "\n";
-      return NULL;
-    }
-
     ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(last);
 
     if (p != snapset.clones.begin()) {
@@ -4110,8 +4112,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	// read into a buffer
 	bufferlist bl;
-	int r = osd->store->fiemap(coll, ghobject_t(soid, ghobject_t::NO_GEN,
-						    info.pgid.shard),
+	int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
+						  info.pgid.shard),
 				   op.extent.offset, op.extent.length, bl);
 	osd_op.outdata.claim(bl);
 	if (r < 0)
@@ -4144,8 +4146,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	// read into a buffer
 	bufferlist bl;
         uint32_t total_read = 0;
-	int r = osd->store->fiemap(coll, ghobject_t(soid, ghobject_t::NO_GEN,
-						    info.pgid.shard),
+	int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
+						  info.pgid.shard),
 				   op.extent.offset, op.extent.length, bl);
 	if (r < 0)  {
 	  result = r;
@@ -5480,7 +5482,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_read;
       {
-	osd->store->omap_get_header(coll, ghobject_t(soid), &osd_op.outdata);
+	osd->store->omap_get_header(ch, ghobject_t(soid), &osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
@@ -5501,7 +5503,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, list_entries(keys_to_get).c_str());
 	map<string, bufferlist> out;
 	if (pool.info.supports_omap()) {
-	  osd->store->omap_get_values(coll, ghobject_t(soid), keys_to_get, &out);
+	  osd->store->omap_get_values(ch, ghobject_t(soid), keys_to_get, &out);
 	} // else return empty omap entries
 	::encode(out, osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
@@ -5536,7 +5538,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	       i != assertions.end();
 	       ++i)
 	    to_get.insert(i->first);
-	  int r = osd->store->omap_get_values(coll, ghobject_t(soid),
+	  int r = osd->store->omap_get_values(ch, ghobject_t(soid),
 					      to_get, &out);
 	  if (r < 0) {
 	    result = r;
@@ -5696,16 +5698,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_read;
       tracepoint(osd, do_osd_op_pre_copy_get_classic, soid.oid.name.c_str(), soid.snap.val);
       result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc, true);
-      if (result == -EINVAL)
-	goto fail;
       break;
 
     case CEPH_OSD_OP_COPY_GET:
       ++ctx->num_read;
       tracepoint(osd, do_osd_op_pre_copy_get, soid.oid.name.c_str(), soid.snap.val);
       result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc, false);
-      if (result == -EINVAL)
-	goto fail;
       break;
 
     case CEPH_OSD_OP_COPY_FROM:
@@ -6850,7 +6848,7 @@ int ReplicatedPG::fill_in_copy_get(
     if (left > 0 && !cursor.omap_complete) {
       assert(cursor.data_complete);
       if (cursor.omap_offset.empty()) {
-	osd->store->omap_get_header(coll, ghobject_t(oi.soid),
+	osd->store->omap_get_header(ch, ghobject_t(oi.soid),
 				    &reply_obj.omap_header);
       }
       bufferlist omap_data;
@@ -7173,15 +7171,19 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
   // cancel and requeue proxy ops on this object
   if (!r) {
     for (map<ceph_tid_t, ProxyReadOpRef>::iterator it = proxyread_ops.begin();
-	it != proxyread_ops.end(); ++it) {
+	it != proxyread_ops.end();) {
       if (it->second->soid == cobc->obs.oi.soid) {
-	cancel_proxy_read(it->second);
+	cancel_proxy_read((it++)->second);
+      } else {
+	++it;
       }
     }
     for (map<ceph_tid_t, ProxyWriteOpRef>::iterator it = proxywrite_ops.begin();
-	 it != proxywrite_ops.end(); ++it) {
+	 it != proxywrite_ops.end();) {
       if (it->second->soid == cobc->obs.oi.soid) {
-	cancel_proxy_write(it->second);
+	cancel_proxy_write((it++)->second);
+      } else {
+	++it;
       }
     }
     kick_proxy_ops_blocked(cobc->obs.oi.soid);
@@ -9295,9 +9297,9 @@ void ReplicatedPG::sub_op_remove(OpRequestRef op)
 
   op->mark_started();
 
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  remove_snap_mapped_object(*t, m->poid);
-  int r = osd->store->queue_transaction_and_cleanup(osr.get(), t);
+  ObjectStore::Transaction t;
+  remove_snap_mapped_object(t, m->poid);
+  int r = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
   assert(r == 0);
 }
 
@@ -9368,7 +9370,7 @@ ObjectContextRef ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
 struct C_PG_MarkUnfoundLost : public Context {
   ReplicatedPGRef pg;
   list<ObjectContextRef> obcs;
-  C_PG_MarkUnfoundLost(ReplicatedPG *p) : pg(p) {}
+  explicit C_PG_MarkUnfoundLost(ReplicatedPG *p) : pg(p) {}
   void finish(int r) {
     pg->_finish_mark_all_unfound_lost(obcs);
   }
@@ -9384,7 +9386,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   pg_log.get_log().print(*_dout);
   *_dout << dendl;
 
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  ObjectStore::Transaction t;
   C_PG_MarkUnfoundLost *c = new C_PG_MarkUnfoundLost(this);
 
   utime_t mtime = ceph_clock_now(cct);
@@ -9407,7 +9409,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 
     switch (what) {
     case pg_log_entry_t::LOST_MARK:
-      obc = mark_object_lost(t, oid, m->second.need, mtime, pg_log_entry_t::LOST_MARK);
+      obc = mark_object_lost(&t, oid, m->second.need, mtime, pg_log_entry_t::LOST_MARK);
       pg_log.missing_got(m++);
       assert(0 == "actually, not implemented yet!");
       // we need to be careful about how this is handled on the replica!
@@ -9442,7 +9444,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 	pg_log.add(e);
 	dout(10) << e << dendl;
 
-	t->remove(
+	t.remove(
 	  coll,
 	  ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard));
 	pg_log.missing_add_event(e);
@@ -9471,11 +9473,11 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   }
 
   dirty_info = true;
-  write_if_dirty(*t);
+  write_if_dirty(t);
 
-  t->register_on_complete(new ObjectStore::C_DeleteTransaction(t));
-
-  osd->store->queue_transaction(osr.get(), t, c, NULL, new C_OSD_OndiskWriteUnlockList(&c->obcs));
+  
+  osd->store->queue_transaction(osr.get(), std::move(t), c, NULL, 
+                            new C_OSD_OndiskWriteUnlockList(&c->obcs));
 	      
   // Send out the PG log to all replicas
   // So that they know what is lost
@@ -10172,19 +10174,18 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 	      obc->ondisk_write_lock();
 	      obc->obs.oi.version = latest->version;
 
-	      ObjectStore::Transaction *t = new ObjectStore::Transaction;
-	      t->register_on_applied(new ObjectStore::C_DeleteTransaction(t));
+	      ObjectStore::Transaction t;
 	      bufferlist b2;
 	      obc->obs.oi.encode(b2);
 	      assert(!pool.info.require_rollback());
-	      t->setattr(coll, ghobject_t(soid), OI_ATTR, b2);
+	      t.setattr(coll, ghobject_t(soid), OI_ATTR, b2);
 
 	      recover_got(soid, latest->version);
 	      missing_loc.add_location(soid, pg_whoami);
 
 	      ++active_pushes;
 
-	      osd->store->queue_transaction(osr.get(), t,
+	      osd->store->queue_transaction(osr.get(), std::move(t),
 					    new C_OSD_AppliedRecoveredObject(this, obc),
 					    new C_OSD_CommittedPushedObject(
 					      this,
@@ -11004,7 +11005,7 @@ void ReplicatedPG::check_local()
 	       << " at " << p->version << dendl;
       struct stat st;
       int r = osd->store->stat(
-	coll,
+	ch,
 	ghobject_t(p->soid, ghobject_t::NO_GEN, pg_whoami.shard),
 	&st);
       if (r != -ENOENT) {
@@ -11651,7 +11652,7 @@ void ReplicatedPG::agent_load_hit_sets()
 	bufferlist bl;
 	{
 	  obc->ondisk_read_lock();
-	  int r = osd->store->read(coll, ghobject_t(oid), 0, 0, bl);
+	  int r = osd->store->read(ch, ghobject_t(oid), 0, 0, bl);
 	  assert(r >= 0);
 	  obc->ondisk_read_unlock();
 	}
@@ -11734,7 +11735,7 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
 
 struct C_AgentEvictStartStop : public Context {
   ReplicatedPGRef pg;
-  C_AgentEvictStartStop(ReplicatedPG *p) : pg(p) {
+  explicit C_AgentEvictStartStop(ReplicatedPG *p) : pg(p) {
     pg->osd->agent_start_evict_op();
   }
   void finish(int r) {
@@ -11771,6 +11772,19 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
   }
 
   if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL) {
+    // is this object old than cache_min_evict_age?
+    utime_t now = ceph_clock_now(NULL);
+    utime_t ob_local_mtime;
+    if (obc->obs.oi.local_mtime != utime_t()) {
+      ob_local_mtime = obc->obs.oi.local_mtime;
+    } else {
+      ob_local_mtime = obc->obs.oi.mtime;
+    }
+    if (ob_local_mtime + utime_t(pool.info.cache_min_evict_age, 0) > now) {
+      dout(20) << __func__ << " skip (too young) " << obc->obs.oi << dendl;
+      osd->logger->inc(l_osd_agent_skip);
+      return false;
+    }
     // is this object old and/or cold enough?
     int temp = 0;
     uint64_t temp_upper = 0, temp_lower = 0;
@@ -12125,7 +12139,7 @@ bool ReplicatedPG::_range_available_for_scrub(
 
 struct C_ScrubDigestUpdated : public Context {
   ReplicatedPGRef pg;
-  C_ScrubDigestUpdated(ReplicatedPG *pg) : pg(pg) {}
+  explicit C_ScrubDigestUpdated(ReplicatedPG *pg) : pg(pg) {}
   void finish(int r) {
     pg->_scrub_digest_updated();
   }
@@ -12766,10 +12780,10 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   dout(10) << "purged_snaps now " << pg->info.purged_snaps << ", snap_trimq now " 
 	   << pg->snap_trimq << dendl;
   
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  ObjectStore::Transaction t;
   pg->dirty_big_info = true;
-  pg->write_if_dirty(*t);
-  int tr = pg->osd->store->queue_transaction_and_cleanup(pg->osr.get(), t);
+  pg->write_if_dirty(t);
+  int tr = pg->osd->store->queue_transaction(pg->osr.get(), std::move(t), NULL);
   assert(tr == 0);
 
   context<SnapTrimmer>().need_share_pg_info = true;

@@ -7,6 +7,7 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/Operations.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
 #include "librbd/internal.h"
@@ -60,6 +61,21 @@ int TestFixture::open_image(const std::string &image_name,
   m_ictxs.insert(*ictx);
 
   return (*ictx)->state->open();
+}
+
+int TestFixture::snap_create(librbd::ImageCtx &ictx,
+                             const std::string &snap_name) {
+  return ictx.operations->snap_create(snap_name.c_str());
+}
+
+int TestFixture::snap_protect(librbd::ImageCtx &ictx,
+                              const std::string &snap_name) {
+  return ictx.operations->snap_protect(snap_name.c_str());
+}
+
+int TestFixture::flatten(librbd::ImageCtx &ictx,
+                         librbd::ProgressContext &prog_ctx) {
+  return ictx.operations->flatten(prog_ctx);
 }
 
 void TestFixture::close_image(librbd::ImageCtx *ictx) {

@@ -781,7 +781,7 @@ public:
 protected:
   struct lowprecision_t {
     float v;
-    lowprecision_t(float _v) : v(_v) {}
+    explicit lowprecision_t(float _v) : v(_v) {}
   };
   friend std::ostream &operator<<(ostream& out, const lowprecision_t& v);
 
@@ -2067,8 +2067,11 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
       dout(10) << " not laggy, new xi " << xi << dendl;
     } else {
       if (xi.down_stamp.sec()) {
-	int interval = ceph_clock_now(g_ceph_context).sec() - xi.down_stamp.sec();
-	xi.laggy_interval =
+        int interval = ceph_clock_now(g_ceph_context).sec() - xi.down_stamp.sec();
+        if (g_conf->mon_osd_laggy_max_interval && (interval > g_conf->mon_osd_laggy_max_interval)) {
+          interval =  g_conf->mon_osd_laggy_max_interval;
+        }
+        xi.laggy_interval =
 	  interval * g_conf->mon_osd_laggy_weight +
 	  xi.laggy_interval * (1.0 - g_conf->mon_osd_laggy_weight);
       }
@@ -2766,7 +2769,8 @@ void OSDMonitor::mark_all_down()
 }
 
 void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
-			    list<pair<health_status_t,string> > *detail) const
+			    list<pair<health_status_t,string> > *detail,
+			    CephContext *cct) const
 {
   int num_osds = osdmap.get_num_osds();
 
@@ -4969,6 +4973,19 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (!osdmap.crush->ruleset_exists(n)) {
       ss << "crush ruleset " << n << " does not exist";
       return -ENOENT;
+    }
+    const int64_t poolsize = p.get_size();
+    const int64_t minsize = osdmap.crush->get_rule_mask_min_size(n);
+    if (poolsize < minsize) {
+      ss << "pool size " << poolsize << " is smaller than crush ruleset " 
+         << n << " min size " << minsize;
+      return -EINVAL;
+    }
+    const int64_t maxsize = osdmap.crush->get_rule_mask_max_size(n);
+    if (poolsize > maxsize) {
+      ss << "pool size " << poolsize << " is bigger than crush ruleset " 
+         << n << " max size " << maxsize;
+      return -EINVAL;
     }
     p.crush_ruleset = n;
   } else if (var == "hashpspool" || var == "nodelete" || var == "nopgchange" ||

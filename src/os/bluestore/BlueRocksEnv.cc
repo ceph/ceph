@@ -255,6 +255,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
     return rocksdb::Status::OK();
   }
 
+  using rocksdb::WritableFile::RangeSync;
   // Sync a file range with disk.
   // offset is the starting byte of the file range to be synchronized.
   // nbytes specifies the length of the range to be synchronized.
@@ -273,6 +274,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   }
 
  protected:
+  using rocksdb::WritableFile::Allocate;
   /*
    * Pre-allocate space for a file.
    */
@@ -288,7 +290,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
 class BlueRocksDirectory : public rocksdb::Directory {
   BlueFS *fs;
  public:
-  BlueRocksDirectory(BlueFS *f) : fs(f) {}
+  explicit BlueRocksDirectory(BlueFS *f) : fs(f) {}
 
   // Fsync directory. Can be called concurrently from multiple threads.
   rocksdb::Status Fsync() {

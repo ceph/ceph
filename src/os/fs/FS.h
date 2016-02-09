@@ -76,8 +76,8 @@ public:
       offset = _offset;
       length = len;
       bufferptr p = buffer::create_page_aligned(length);
-      bl.append(p);
       io_prep_pread(&iocb, fd, p.c_str(), length, offset);
+      bl.append(std::move(p));
     }
 
     int get_return_value() {
@@ -89,7 +89,7 @@ public:
     int max_iodepth;
     io_context_t ctx;
 
-    aio_queue_t(unsigned max_iodepth)
+    explicit aio_queue_t(unsigned max_iodepth)
       : max_iodepth(max_iodepth),
 	ctx(0) {
     }
@@ -137,7 +137,7 @@ public:
 	timeout_ms / 1000,
 	(timeout_ms % 1000) * 1000 * 1000
       };
-      int r = io_getevents(ctx, 1, 1, event, &t);
+      int r = io_getevents(ctx, 1, max, event, &t);
       if (r <= 0) {
 	return r;
       }

@@ -42,6 +42,11 @@ int ConfigKeyService::store_get(string key, bufferlist &bl)
   return mon->store->get(STORE_PREFIX, key, bl);
 }
 
+void ConfigKeyService::get_store_prefixes(set<string>& s)
+{
+  s.insert(STORE_PREFIX);
+}
+
 void ConfigKeyService::store_put(string key, bufferlist &bl, Context *cb)
 {
   bufferlist proposal_bl;
@@ -110,7 +115,6 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
   map<string, cmd_vartype> cmdmap;
 
   if (!cmdmap_from_json(cmd->cmd, &cmdmap, ss)) {
-    ret = -EINVAL;
     return false;
   }
 

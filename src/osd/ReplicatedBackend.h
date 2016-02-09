@@ -33,6 +33,7 @@ public:
   ReplicatedBackend(
     PGBackend::Listener *pg,
     coll_t coll,
+    ObjectStore::CollectionHandle &ch,
     ObjectStore *store,
     CephContext *cct);
 
@@ -85,7 +86,7 @@ public:
   class RPCReadPred : public IsPGReadablePredicate {
     pg_shard_t whoami;
   public:
-    RPCReadPred(pg_shard_t whoami) : whoami(whoami) {}
+    explicit RPCReadPred(pg_shard_t whoami) : whoami(whoami) {}
     bool operator()(const set<pg_shard_t> &have) const {
       return have.count(whoami);
     }
@@ -298,7 +299,8 @@ private:
     PushOp *pop, bool cache_dont_need = true);
   void prep_push(ObjectContextRef obc,
 		 const hobject_t& oid, pg_shard_t dest,
-		 PushOp *op);
+		 PushOp *op,
+		 bool cache_dont_need);
   void prep_push(ObjectContextRef obc,
 		 const hobject_t& soid, pg_shard_t peer,
 		 eversion_t version,
@@ -403,12 +405,10 @@ private:
     eversion_t last_complete;
     epoch_t epoch_started;
 
-    uint64_t bytes_written;
-
     ObjectStore::Transaction opt, localt;
     
     RepModify() : applied(false), committed(false), ackerosd(-1),
-		  epoch_started(0), bytes_written(0) {}
+		  epoch_started(0) {}
   };
   typedef ceph::shared_ptr<RepModify> RepModifyRef;
 
@@ -433,6 +433,8 @@ private:
   void sub_op_modify_applied(RepModifyRef rm);
   void sub_op_modify_commit(RepModifyRef rm);
   bool scrub_supported() { return true; }
+  bool auto_repair_supported() const { return false; }
+
 
   void be_deep_scrub(
     const hobject_t &obj,

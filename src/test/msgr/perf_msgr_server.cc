@@ -58,7 +58,7 @@ class ServerDispatcher : public Dispatcher {
       messages.pop_front();
       return m;
     }
-    void _process(Message *m, ThreadPool::TPHandle &handle) {
+    void _process(Message *m, ThreadPool::TPHandle &handle) override {
       MOSDOp *osd_op = static_cast<MOSDOp*>(m);
       MOSDOpReply *reply = new MOSDOpReply(osd_op, 0, 0, 0, false);
       m->get_connection()->send_message(reply);

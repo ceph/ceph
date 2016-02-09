@@ -56,7 +56,7 @@ class OpTracker {
   class RemoveOnDelete {
     OpTracker *tracker;
   public:
-    RemoveOnDelete(OpTracker *tracker) : tracker(tracker) {}
+    explicit RemoveOnDelete(OpTracker *tracker) : tracker(tracker) {}
     void operator()(TrackedOp *op);
   };
   friend class RemoveOnDelete;
@@ -65,7 +65,7 @@ class OpTracker {
   struct ShardedTrackingData {
     Mutex ops_in_flight_lock_sharded;
     xlist<TrackedOp *> ops_in_flight_sharded;
-    ShardedTrackingData(string lock_name):
+    explicit ShardedTrackingData(string lock_name):
         ops_in_flight_lock_sharded(lock_name.c_str()) {}
   };
   vector<ShardedTrackingData*> sharded_in_flight_list;
@@ -104,7 +104,7 @@ public:
     RWLock::WLocker l(lock);
     tracking_enabled = enable;
   }
-  void dump_ops_in_flight(Formatter *f);
+  void dump_ops_in_flight(Formatter *f, bool print_only_blocked=false);
   void dump_historic_ops(Formatter *f);
   void register_inflight_op(xlist<TrackedOp*>::item *i);
   void unregister_inflight_op(TrackedOp *i);

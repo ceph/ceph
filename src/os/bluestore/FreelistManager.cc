@@ -77,10 +77,15 @@ void FreelistManager::shutdown()
 
 void FreelistManager::dump()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
+  _dump();
+}
+
+void FreelistManager::_dump()
+{
   dout(30) << __func__ << " " << total_free
 	   << " in " << kv_free.size() << " extents" << dendl;
-  for (std::map<uint64_t,uint64_t>::iterator p = kv_free.begin();
+  for (auto p = kv_free.begin();
        p != kv_free.end();
        ++p) {
     dout(30) << __func__ << "  " << p->first << "~" << p->second << dendl;
@@ -89,7 +94,6 @@ void FreelistManager::dump()
 
 void FreelistManager::_audit()
 {
-  assert(lock.is_locked());
   uint64_t sum = 0;
   for (auto& p : kv_free) {
     sum += p.second;
@@ -106,10 +110,10 @@ int FreelistManager::allocate(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << offset << "~" << length << dendl;
   total_free -= length;
-  map<uint64_t,uint64_t>::iterator p = kv_free.lower_bound(offset);
+  auto p = kv_free.lower_bound(offset);
   if ((p == kv_free.end() || p->first > offset) &&
       p != kv_free.begin()) {
     --p;
@@ -121,7 +125,7 @@ int FreelistManager::allocate(
     if (p != kv_free.end()) {
       derr << " existing extent " << p->first << "~" << p->second << dendl;
     }
-    dump();
+    _dump();
     assert(0 == "bad allocate");
   }
 
@@ -140,9 +144,11 @@ int FreelistManager::allocate(
       txn->set(prefix, newkey, newvalue);
       dout(20) << __func__ << "  set " << newoff << "~" << newlen
 	       << " (remaining tail)" << dendl;
+      kv_free.erase(p);
       kv_free[newoff] = newlen;
+    } else {
+      kv_free.erase(p);
     }
-    kv_free.erase(p);
   } else {
     assert(p->first < offset);
     // shorten
@@ -166,9 +172,11 @@ int FreelistManager::allocate(
       dout(20) << __func__ << "  set " << tailoff << "~" << taillen
 	       << " (remaining tail from " << p->first << "~" << p->second << ")"
 	       << dendl;
+      p->second = newlen;
       kv_free[tailoff] = taillen;
+    } else {
+      p->second = newlen;
     }
-    p->second = newlen;
   }
   if (g_conf->bluestore_debug_freelist)
     _audit();
@@ -179,10 +187,10 @@ int FreelistManager::release(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << offset << "~" << length << dendl;
   total_free += length;
-  map<uint64_t,uint64_t>::iterator p = kv_free.lower_bound(offset);
+  auto p = kv_free.lower_bound(offset);
 
   // contiguous with previous extent?
   if (p != kv_free.begin()) {
@@ -195,11 +203,15 @@ int FreelistManager::release(
 	       << " (merge with previous)" << dendl;
       length += p->second;
       offset = p->first;
-      kv_free.erase(p++);
+      if (map_t_has_stable_iterators) {
+	kv_free.erase(p++);
+      } else {
+	p = kv_free.erase(p);
+      }
     } else if (p->first + p->second > offset) {
       derr << __func__ << " bad release " << offset << "~" << length
 	   << " overlaps with " << p->first << "~" << p->second << dendl;
-      dump();
+      _dump();
       assert(0 == "bad release overlap");
     } else {
       dout(30) << __func__ << " previous extent " << p->first << "~" << p->second
@@ -221,7 +233,7 @@ int FreelistManager::release(
     } else if (p->first < offset + length) {
       derr << __func__ << " bad release " << offset << "~" << length
 	   << " overlaps with " << p->first << "~" << p->second << dendl;
-      dump();
+      _dump();
       assert(0 == "bad release overlap");
     } else {
       dout(30) << __func__ << " next extent " << p->first << "~" << p->second

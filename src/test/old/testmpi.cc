@@ -12,7 +12,7 @@ using namespace std;
 class Pinger : public Dispatcher {
 public:
   Messenger *messenger;
-  Pinger(Messenger *m) : messenger(m) {
+  explicit Pinger(Messenger *m) : messenger(m) {
     m->set_dispatcher(this);
   }
   void dispatch(Message *m) {

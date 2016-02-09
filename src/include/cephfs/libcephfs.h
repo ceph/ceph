@@ -28,9 +28,9 @@
 extern "C" {
 #endif
 
-#define LIBCEPHFS_VER_MAJOR 0
-#define LIBCEPHFS_VER_MINOR 94
-#define LIBCEPHFS_VER_EXTRA 0
+#define LIBCEPHFS_VER_MAJOR 10
+#define LIBCEPHFS_VER_MINOR 0
+#define LIBCEPHFS_VER_EXTRA 2
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
@@ -157,6 +157,19 @@ int ceph_create(struct ceph_mount_info **cmount, const char * const id);
  * @returns 0 on success, negative error code on failure
  */
 int ceph_create_with_context(struct ceph_mount_info **cmount, struct CephContext *conf);
+
+
+typedef void *rados_t;
+
+/**
+ * Create a mount handle from a rados_t, for using libcephfs in the
+ * same process as librados.
+ *
+ * @param cmount the mount info handle to initialize
+ * @param cluster reference to already-initialized librados handle
+ * @returns 0 on success, negative error code on failure
+ */
+int ceph_create_from_rados(struct ceph_mount_info **cmount, rados_t cluster);
 
 /**
  * Initialize the filesystem client (but do not mount the filesystem yet)

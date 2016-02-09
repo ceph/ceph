@@ -30,8 +30,8 @@ Build-Depends: autoconf,
                libboost-thread-dev (>= 1.42),
 	       libboost-regex-dev,
 	       libboost-random-dev,
+               libboost-iostreams-dev (>= 1.42),
                libcurl4-gnutls-dev,
-               libedit-dev,
                libexpat1-dev,
                libfcgi-dev,
                libfuse-dev,
@@ -49,12 +49,14 @@ Build-Depends: autoconf,
                pkg-config,
                python (>= 2.6.6-3~),
                python-argparse,
+               python-dev,
                python-nose,
 	       python-setuptools,
                python-sphinx,
                python-virtualenv,
                sdparm | hdparm,
                uuid-runtime,
+               valgrind,
                xfslibs-dev,
                xfsprogs,
                xmlstarlet,
@@ -189,6 +191,32 @@ Description: debugging symbols for rbd-fuse
  FUSE-based client that allows one to map Ceph rbd images as files.
  .
  This package contains the debugging symbols for rbd-fuse.
+
+Package: rbd-mirror
+Architecture: linux-any
+Depends: ceph-common (= ${binary:Version}),
+         librados2 (= ${binary:Version}),
+         ${misc:Depends}, ${shlibs:Depends}
+Description: Ceph daemon for mirroring RBD images
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a
+ daemon for mirroring RBD images between Ceph clusters, streaming
+ changes asynchronously.
+
+Package: rbd-mirror-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: rbd-mirror (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for rbd-mirror
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a
+ daemon for mirroring RBD images between Ceph clusters, streaming
+ changes asynchronously.
+ .
+ This package contains the debugging symbols for rbd-mirror.
 
 Package: rbd-nbd
 Architecture: linux-any

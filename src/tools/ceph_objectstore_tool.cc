@@ -26,6 +26,9 @@
 
 #include "os/ObjectStore.h"
 #include "os/filestore/FileJournal.h"
+#ifdef HAVE_LIBFUSE
+#include "os/FuseStore.h"
+#endif
 
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
@@ -340,12 +343,6 @@ void myexit(int ret)
   exit(ret);
 }
 
-static void invalid_filestore_path(string &path)
-{
-  cerr << "Invalid filestore path specified: " << path << "\n";
-  myexit(1);
-}
-
 int get_log(ObjectStore *fs, __u8 struct_ver,
    coll_t coll, spg_t pgid, const pg_info_t &info,
    PGLog::IndexedLog &log, pg_missing_t &missing,
@@ -484,7 +481,7 @@ int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid,
   if (r < 0) {
     return r;
   }
-  store->apply_transaction(&osr, rmt);
+  store->apply_transaction(&osr, std::move(rmt));
   finish_remove_pgs(store);
   return r;
 }
@@ -703,7 +700,7 @@ int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force,
   ObjectStore::Transaction t;
   t.write(coll_t::meta(), inc_oid, 0, bl.length(), bl);
   t.truncate(coll_t::meta(), inc_oid, bl.length());
-  int ret = store->apply_transaction(&osr, t);
+  int ret = store->apply_transaction(&osr, std::move(t));
   if (ret) {
     cerr << "Failed to set inc-osdmap (" << inc_oid << "): " << ret << std::endl;
   } else {
@@ -750,7 +747,7 @@ int set_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force,
   ObjectStore::Transaction t;
   t.write(coll_t::meta(), full_oid, 0, bl.length(), bl);
   t.truncate(coll_t::meta(), full_oid, bl.length());
-  int ret = store->apply_transaction(&osr, t);
+  int ret = store->apply_transaction(&osr, std::move(t));
   if (ret) {
     cerr << "Failed to set osdmap (" << full_oid << "): " << ret << std::endl;
   } else {
@@ -1002,7 +999,7 @@ int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
     }
   }
   if (!dry_run)
-    store->apply_transaction(&osr, *t);
+    store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
@@ -1308,7 +1305,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     ::encode((char)1, values["_remove"]);
     t.omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
 
-    store->apply_transaction(&osr, t);
+    store->apply_transaction(&osr, std::move(t));
   }
 
   cout << "Importing pgid " << pgid;
@@ -1404,7 +1401,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     set<string> remove;
     remove.insert("_remove");
     t.omap_rmkeys(coll, pgid.make_pgmeta_oid(), remove);
-    store->apply_transaction(&osr, t);
+    store->apply_transaction(&osr, std::move(t));
   }
 
   return 0;
@@ -1471,7 +1468,7 @@ int do_remove_object(ObjectStore *store, coll_t coll,
 
   t.remove(coll, ghobj);
 
-  store->apply_transaction(&osr, t);
+  store->apply_transaction(&osr, std::move(t));
   return 0;
 }
 
@@ -1598,7 +1595,7 @@ int do_set_bytes(ObjectStore *store, coll_t coll,
   } while(true);
 
   if (!dry_run)
-    store->apply_transaction(&osr, *t);
+    store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
@@ -1644,7 +1641,7 @@ int do_set_attr(ObjectStore *store, coll_t coll,
 
   t->setattr(coll, ghobj, key,  bl);
 
-  store->apply_transaction(&osr, *t);
+  store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
@@ -1663,7 +1660,7 @@ int do_rm_attr(ObjectStore *store, coll_t coll,
 
   t->rmattr(coll, ghobj, key);
 
-  store->apply_transaction(&osr, *t);
+  store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
@@ -1723,7 +1720,7 @@ int do_set_omap(ObjectStore *store, coll_t coll,
 
   t->omap_setkeys(coll, ghobj, attrset);
 
-  store->apply_transaction(&osr, *t);
+  store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
@@ -1745,7 +1742,7 @@ int do_rm_omap(ObjectStore *store, coll_t coll,
 
   t->omap_rmkeys(coll, ghobj, keys);
 
-  store->apply_transaction(&osr, *t);
+  store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
@@ -1791,14 +1788,14 @@ int do_set_omaphdr(ObjectStore *store, coll_t coll,
 
   t->omap_setheader(coll, ghobj, hdrbl);
 
-  store->apply_transaction(&osr, *t);
+  store->apply_transaction(&osr, std::move(*t));
   return 0;
 }
 
 struct do_fix_lost : public action_on_object_t {
   ObjectStore::Sequencer *osr;
 
-  do_fix_lost(ObjectStore::Sequencer *_osr) : osr(_osr) {}
+  explicit do_fix_lost(ObjectStore::Sequencer *_osr) : osr(_osr) {}
 
   virtual int call(ObjectStore *store, coll_t coll,
 		   ghobject_t &ghobj, object_info_t &oi) {
@@ -1814,7 +1811,7 @@ struct do_fix_lost : public action_on_object_t {
       ::encode(oi, bl);
       ObjectStore::Transaction t;
       t.setattr(coll, ghobj, OI_ATTR, bl);
-      int r = store->apply_transaction(osr, t);
+      int r = store->apply_transaction(osr, std::move(t));
       if (r < 0) {
 	cerr << "Error getting fixing attr on : " << make_pair(coll, ghobj)
 	     << ", "
@@ -1993,7 +1990,7 @@ int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsiz
       ::encode(ss, snapattr);
       t.setattr(coll, head, SS_ATTR, snapattr);
     }
-    r = store->apply_transaction(&osr, t);
+    r = store->apply_transaction(&osr, std::move(t));
     if (r < 0) {
       cerr << "Error writing object info: " << make_pair(coll, ghobj) << ", "
          << cpp_strerror(r) << std::endl;
@@ -2047,7 +2044,7 @@ int clear_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj,
     ::encode(ss, bl);
     ObjectStore::Transaction t;
     t.setattr(coll, ghobj, SS_ATTR, bl);
-    int r = store->apply_transaction(&osr, t);
+    int r = store->apply_transaction(&osr, std::move(t));
     if (r < 0) {
       cerr << "Error setting snapset on : " << make_pair(coll, ghobj) << ", "
 	   << cpp_strerror(r) << std::endl;
@@ -2145,7 +2142,7 @@ int remove_clone(ObjectStore *store, coll_t coll, ghobject_t &ghobj, snapid_t cl
   ::encode(snapset, bl);
   ObjectStore::Transaction t;
   t.setattr(coll, ghobj, SS_ATTR, bl);
-  int r = store->apply_transaction(&osr, t);
+  int r = store->apply_transaction(&osr, std::move(t));
   if (r < 0) {
     cerr << "Error setting snapset on : " << make_pair(coll, ghobj) << ", "
 	 << cpp_strerror(r) << std::endl;
@@ -2207,7 +2204,7 @@ int mydump_journal(Formatter *f, string journalpath, bool m_journal_dio)
 
 int main(int argc, char **argv)
 {
-  string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type, format;
+  string dpath, jpath, pgidstr, op, file, mountpoint, object, objcmd, arg1, arg2, type, format;
   spg_t pgid;
   unsigned epoch = 0;
   ghobject_t ghobj;
@@ -2220,7 +2217,7 @@ int main(int argc, char **argv)
   desc.add_options()
     ("help", "produce help message")
     ("type", po::value<string>(&type),
-     "Arg is one of [filestore (default), memstore, keyvaluestore]")
+     "Arg is one of [filestore (default), memstore]")
     ("data-path", po::value<string>(&dpath),
      "path to object store, mandatory")
     ("journal-path", po::value<string>(&jpath),
@@ -2228,12 +2225,14 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory for info, log, remove, export, rm-past-intervals, mark-complete")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
+     "Arg is one of [info, log, remove, mkfs, fsck, fuse, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
 	 "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
      "path of file to export, import, get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap")
+    ("mountpoint", po::value<string>(&mountpoint),
+     "fuse mountpoint")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
      "Output format which may be json, json-pretty, xml, xml-pretty")
     ("debug", "Enable diagnostic output to stderr")
@@ -2342,13 +2341,19 @@ int main(int argc, char **argv)
     usage(desc);
     myexit(1);
   }
-  if (op != "list" && op != "fsck" && vm.count("op") && vm.count("object")) {
+  if (op != "list" &&
+      vm.count("op") && vm.count("object")) {
     cerr << "Can't specify both --op and object command syntax" << std::endl;
     usage(desc);
     myexit(1);
   }
   if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
     cerr << "Invalid syntax, missing command" << std::endl;
+    usage(desc);
+    myexit(1);
+  }
+  if (op == "fuse" && mountpoint.length() == 0) {
+    cerr << "Missing fuse mountpoint" << std::endl;
     usage(desc);
     myexit(1);
   }
@@ -2436,28 +2441,6 @@ int main(int argc, char **argv)
     perror(err.c_str());
     myexit(1);
   }
-  //Verify data data-path really is a filestore
-  if (type == "filestore") {
-    if (!S_ISDIR(st.st_mode)) {
-      invalid_filestore_path(dpath);
-    }
-    string check = dpath + "/whoami";
-    if (::stat(check.c_str(), &st) == -1) {
-       perror("whoami");
-       invalid_filestore_path(dpath);
-    }
-    if (!S_ISREG(st.st_mode)) {
-      invalid_filestore_path(dpath);
-    }
-    check = dpath + "/current";
-    if (::stat(check.c_str(), &st) == -1) {
-       perror("current");
-       invalid_filestore_path(dpath);
-    }
-    if (!S_ISDIR(st.st_mode)) {
-      invalid_filestore_path(dpath);
-    }
-  }
 
   if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
     cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
@@ -2466,12 +2449,7 @@ int main(int argc, char **argv)
 
   ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
-    cerr << "Need a valid --type e.g. filestore, memstore, keyvaluestore" << std::endl;
-    if (type == "keyvaluestore") {
-      cerr << "Add \"keyvaluestore\" to "
-           << "enable_experimental_unrecoverable_data_corrupting_features"
-           << std::endl;
-    }
+    cerr << "Unable to create store of type " << type << std::endl;
     myexit(1);
   }
 
@@ -2479,14 +2457,22 @@ int main(int argc, char **argv)
     int r = fs->fsck();
     if (r < 0) {
       cerr << "fsck failed: " << cpp_strerror(r) << std::endl;
-      exit(1);
+      myexit(1);
     }
     if (r > 0) {
       cerr << "fsck found " << r << " errors" << std::endl;
-      exit(1);
+      myexit(1);
     }
     cout << "fsck found no errors" << std::endl;
     exit(0);
+  }
+  if (op == "mkfs") {
+    int r = fs->mkfs();
+    if (r < 0) {
+      cerr << "fsck failed: " << cpp_strerror(r) << std::endl;
+      myexit(1);
+    }
+    myexit(0);
   }
 
   ObjectStore::Sequencer *osr = new ObjectStore::Sequencer(__func__);
@@ -2498,6 +2484,21 @@ int main(int argc, char **argv)
       cerr << "Mount failed with '" << cpp_strerror(ret) << "'" << std::endl;
     }
     myexit(1);
+  }
+
+  if (op == "fuse") {
+#ifdef HAVE_LIBFUSE
+    FuseStore fuse(fs, mountpoint);
+    cout << "mounting fuse at " << mountpoint << " ..." << std::endl;
+    int r = fuse.main();
+    if (r < 0) {
+      cerr << "failed to mount fuse: " << cpp_strerror(r) << std::endl;
+      myexit(1);
+    }
+#else
+    cerr << "fuse support not enabled" << std::endl;
+#endif
+    myexit(0);
   }
 
   vector<coll_t> ls;
@@ -2823,7 +2824,7 @@ int main(int argc, char **argv)
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete") {
-    cerr << "Must provide --op (info, log, remove, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
+    cerr << "Must provide --op (info, log, remove, mkfs, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
       "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)"
 	 << std::endl;
     usage(desc);
@@ -3136,7 +3137,7 @@ int main(int argc, char **argv)
       ret = write_info(*t, map_epoch, info, past_intervals);
 
       if (ret == 0) {
-        fs->apply_transaction(osr, *t);
+        fs->apply_transaction(osr, std::move(*t));
         cout << "Removal succeeded" << std::endl;
       }
     } else if (op == "mark-complete") {
@@ -3164,7 +3165,7 @@ int main(int argc, char **argv)
 	ret = write_info(*t, map_epoch, info, past_intervals);
 	if (ret != 0)
 	  goto out;
-	fs->apply_transaction(osr, *t);
+	fs->apply_transaction(osr, std::move(*t));
       }
       cout << "Marking complete succeeded" << std::endl;
     } else {

@@ -107,7 +107,7 @@ private:
   int _load_class(ClassData *cls);
 
 public:
-  ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}
+  explicit ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}
   
   int open_all_classes();
 

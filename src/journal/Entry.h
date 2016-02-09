@@ -18,17 +18,17 @@ namespace journal {
 
 class Entry {
 public:
-  Entry() : m_tid() {}
-  Entry(const std::string &tag, uint64_t tid, const bufferlist &data)
-    : m_tag(tag), m_tid(tid), m_data(data)
+  Entry() : m_tag_tid(0), m_entry_tid() {}
+  Entry(uint64_t tag_tid, uint64_t entry_tid, const bufferlist &data)
+    : m_tag_tid(tag_tid), m_entry_tid(entry_tid), m_data(data)
   {
   }
 
-  inline const std::string &get_tag() const {
-    return m_tag;
+  inline uint64_t get_tag_tid() const {
+    return m_tag_tid;
   }
-  inline uint64_t get_tid() const {
-    return m_tid;
+  inline uint64_t get_entry_tid() const {
+    return m_entry_tid;
   }
   inline const bufferlist &get_data() const {
     return m_data;
@@ -46,8 +46,8 @@ public:
 private:
   static const uint64_t preamble = 0x3141592653589793;
 
-  std::string m_tag;
-  uint64_t m_tid;
+  uint64_t m_tag_tid;
+  uint64_t m_entry_tid;
   bufferlist m_data;
 };
 

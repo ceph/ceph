@@ -326,7 +326,8 @@ COMMAND("mds set " \
 	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
 COMMAND("mds setmap " \
-	"name=epoch,type=CephInt,range=0", \
+	"name=epoch,type=CephInt,range=0 " \
+	"name=confirm,type=CephString,req=false",
 	"set mds map; must supply correct epoch number", "mds", "rw", "cli,rest")
 // arbitrary limit 0-20 below; worth standing on head to make it
 // relate to actual state definitions?
@@ -342,8 +343,8 @@ COMMAND("mds repaired name=rank,type=CephInt", \
 COMMAND("mds rm " \
 	"name=gid,type=CephInt,range=0", \
 	"remove nonactive mds", "mds", "rw", "cli,rest")
-COMMAND("mds rmfailed name=who,type=CephInt,range=0", "remove failed mds", \
-	"mds", "rw", "cli,rest")
+COMMAND("mds rmfailed name=who,type=CephInt,range=0 name=confirm,type=CephString,req=false", \
+	"remove failed mds", "mds", "rw", "cli,rest")
 COMMAND("mds cluster_down", "take MDS cluster down", "mds", "rw", "cli,rest")
 COMMAND("mds cluster_up", "bring MDS cluster up", "mds", "rw", "cli,rest")
 COMMAND("mds compat rm_compat " \

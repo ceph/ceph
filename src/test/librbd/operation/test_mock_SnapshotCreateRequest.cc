@@ -31,7 +31,7 @@ public:
 
   void expect_block_writes(MockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.aio_work_queue, block_writes(_))
-                  .WillRepeatedly(CompleteContext(0, NULL));
+                  .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_verify_lock_ownership(MockImageCtx &mock_image_ctx) {
@@ -105,6 +105,8 @@ public:
 };
 
 TEST_F(TestMockOperationSnapshotCreateRequest, Success) {
+  REQUIRE_FORMAT_V2();
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -127,13 +129,15 @@ TEST_F(TestMockOperationSnapshotCreateRequest, Success) {
   expect_block_writes(mock_image_ctx);
   expect_allocate_snap_id(mock_image_ctx, 0);
   expect_snap_create(mock_image_ctx, 0);
-  expect_update_snap_context(mock_image_ctx);
-  expect_object_map_snap_create(mock_image_ctx);
+  if (!mock_image_ctx.old_format) {
+    expect_update_snap_context(mock_image_ctx);
+    expect_object_map_snap_create(mock_image_ctx);
+  }
   expect_unblock_writes(mock_image_ctx);
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -162,7 +166,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, AllocateSnapIdError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -192,13 +196,15 @@ TEST_F(TestMockOperationSnapshotCreateRequest, CreateSnapStale) {
   expect_block_writes(mock_image_ctx);
   expect_allocate_snap_id(mock_image_ctx, -ESTALE);
   expect_snap_create(mock_image_ctx, -ESTALE);
-  expect_update_snap_context(mock_image_ctx);
-  expect_object_map_snap_create(mock_image_ctx);
+  if (!mock_image_ctx.old_format) {
+    expect_update_snap_context(mock_image_ctx);
+    expect_object_map_snap_create(mock_image_ctx);
+  }
   expect_unblock_writes(mock_image_ctx);
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -228,7 +234,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, CreateSnapError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -258,7 +264,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, ReleaseSnapIdError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();

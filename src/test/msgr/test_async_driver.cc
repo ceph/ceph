@@ -144,7 +144,7 @@ void* echoclient(void *arg)
   sa.sin_family = AF_INET;
   sa.sin_port = htons(port);
   char addr[] = "127.0.0.1";
-  int r = inet_aton(addr, &sa.sin_addr);
+  int r = inet_pton(AF_INET, addr, &sa.sin_addr);
 
   int connect_sd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (connect_sd >= 0) {
@@ -272,7 +272,7 @@ class Worker : public Thread {
 
  public:
   EventCenter center;
-  Worker(CephContext *c): cct(c), done(false), center(c) {
+  explicit Worker(CephContext *c): cct(c), done(false), center(c) {
     center.init(100);
   }
   void stop() {
@@ -280,7 +280,7 @@ class Worker : public Thread {
     center.wakeup();
   }
   void* entry() {
-    center.set_owner(pthread_self());
+    center.set_owner();
     while (!done)
       center.process_events(1000000);
     return 0;

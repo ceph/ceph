@@ -21,7 +21,7 @@
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
 //#include "librbd/Journal.h" // XXXMG: for librbd::Journal::reset()
-#include "librbd/JournalTypes.h"
+#include "librbd/journal/Types.h"
 
 namespace rbd {
 namespace action {
@@ -113,7 +113,7 @@ static int do_show_journal_status(librados::IoCtx& io_ctx,
     f->dump_unsigned("active_set", active_set);
     f->open_object_section("registered_clients");
     for (std::set<cls::journal::Client>::iterator c =
-          registered_clients.begin(); c != registered_clients.end(); c++) {
+          registered_clients.begin(); c != registered_clients.end(); ++c) {
       c->dump(f);
     }
     f->close_section();
@@ -124,7 +124,7 @@ static int do_show_journal_status(librados::IoCtx& io_ctx,
     std::cout << "active_set: " << active_set << std::endl;
     std::cout << "registered clients: " << std::endl;
     for (std::set<cls::journal::Client>::iterator c =
-          registered_clients.begin(); c != registered_clients.end(); c++) {
+          registered_clients.begin(); c != registered_clients.end(); ++c) {
       std::cout << "\t" << *c << std::endl;
     }
   }
@@ -164,10 +164,8 @@ static int do_reset_journal(librados::IoCtx& io_ctx,
     return r;
   }
 
-  // XXXMG
-  const std::string CLIENT_DESCRIPTION = "master image";
-
-  r = journaler.register_client(CLIENT_DESCRIPTION);
+  // TODO register with librbd payload
+  r = journaler.register_client(bufferlist());
   if (r < 0) {
     std::cerr << "failed to register client: " << cpp_strerror(r) << std::endl;
     return r;
@@ -185,7 +183,8 @@ public:
   int init() {
     int r;
 
-    r = register_client("rbd journal");
+    // TODO register with librbd payload
+    r = register_client(bufferlist());
     if (r < 0) {
       std::cerr << "failed to register client: " << cpp_strerror(r)
 		<< std::endl;
@@ -262,7 +261,7 @@ public:
 protected:
   struct ReplayHandler : public ::journal::ReplayHandler {
     JournalPlayer *journal;
-    ReplayHandler(JournalPlayer *_journal) : journal(_journal) {}
+    explicit ReplayHandler(JournalPlayer *_journal) : journal(_journal) {}
 
     virtual void get() {}
     virtual void put() {}
@@ -279,12 +278,12 @@ protected:
     int r = 0;
     while (true) {
       ::journal::ReplayEntry replay_entry;
-      std::string tag;
-      if (!m_journaler.try_pop_front(&replay_entry, &tag)) {
+      uint64_t tag_id;
+      if (!m_journaler.try_pop_front(&replay_entry, &tag_id)) {
 	break;
       }
 
-      r = process_entry(replay_entry, tag);
+      r = process_entry(replay_entry, tag_id);
       if (r < 0) {
 	break;
       }
@@ -292,7 +291,7 @@ protected:
   }
 
   virtual int process_entry(::journal::ReplayEntry replay_entry,
-			    std::string& tag) = 0;
+			    uint64_t tag_id) = 0;
 
   void handle_replay_complete(int r) {
     m_journaler.stop_replay();
@@ -354,10 +353,10 @@ private:
   };
 
   int process_entry(::journal::ReplayEntry replay_entry,
-		    std::string& tag) {
+		    uint64_t tag_id) {
     m_s.total++;
     if (m_verbose) {
-      std::cout << "Entry: tag=" << tag << ", commit_tid="
+      std::cout << "Entry: tag_id=" << tag_id << ", commit_tid="
 		<< replay_entry.get_commit_tid() << std::endl;
     }
     bufferlist data = replay_entry.get_data();
@@ -381,27 +380,27 @@ static int do_inspect_journal(librados::IoCtx& io_ctx,
 }
 
 struct ExportEntry {
-  std::string tag;
+  uint64_t tag_id;
   uint64_t commit_tid;
   int type;
   bufferlist entry;
 
-  ExportEntry() : tag(), commit_tid(0), type(0), entry() {}
+  ExportEntry() : tag_id(0), commit_tid(0), type(0), entry() {}
 
-  ExportEntry(const std::string& tag, uint64_t commit_tid, int type,
+  ExportEntry(uint64_t tag_id, uint64_t commit_tid, int type,
 	      const bufferlist& entry)
-    : tag(tag), commit_tid(commit_tid), type(type), entry(entry) {
+    : tag_id(tag_id), commit_tid(commit_tid), type(type), entry(entry) {
   }
 
   void dump(Formatter *f) const {
-    ::encode_json("tag", tag, f);
+    ::encode_json("tag_id", tag_id, f);
     ::encode_json("commit_tid", commit_tid, f);
     ::encode_json("type", type, f);
     ::encode_json("entry", entry, f);
   }
 
   void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("tag", tag, obj);
+    JSONDecoder::decode_json("tag_id", tag_id, obj);
     JSONDecoder::decode_json("commit_tid", commit_tid, obj);
     JSONDecoder::decode_json("type", type, obj);
     JSONDecoder::decode_json("entry", entry, obj);
@@ -448,7 +447,7 @@ private:
   };
 
   int process_entry(::journal::ReplayEntry replay_entry,
-		    std::string& tag) {
+		    uint64_t tag_id) {
     m_s.total++;
     int type = -1;
     bufferlist entry = replay_entry.get_data();
@@ -461,7 +460,8 @@ private:
     } else {
       type = event_entry.get_event_type();
     }
-    ExportEntry export_entry(tag, replay_entry.get_commit_tid(), type, entry);
+    ExportEntry export_entry(tag_id, replay_entry.get_commit_tid(), type,
+                             entry);
     JSONFormatter f;
     ::encode_json("event_entry", export_entry, &f);
     std::ostringstream oss;
@@ -651,7 +651,7 @@ public:
       librbd::journal::EventEntry event_entry;
       r = inspect_entry(e.entry, event_entry, m_verbose);
       if (r < 0) {
-	std::cerr << "rbd: corrupted entry " << n << ": tag=" << e.tag
+	std::cerr << "rbd: corrupted entry " << n << ": tag_tid=" << e.tag_id
 		  << ", commit_tid=" << e.commit_tid << std::endl;
 	if (m_no_error) {
 	  r1 = r;
@@ -660,7 +660,7 @@ public:
 	  break;
 	}
       }
-      m_journaler.append(e.tag, e.entry);
+      m_journaler.append(e.tag_id, e.entry);
       error_count--;
     }
 

@@ -42,7 +42,7 @@ class DumbBackend : public Backend {
   class SyncThread : public Thread {
     DumbBackend *backend;
   public:
-    SyncThread(DumbBackend *backend) : backend(backend) {}
+    explicit SyncThread(DumbBackend *backend) : backend(backend) {}
     void *entry() {
       backend->sync_loop();
       return 0;
@@ -84,8 +84,7 @@ class DumbBackend : public Backend {
     bool _empty() {
       return item_queue.empty();
     }
-    using ThreadPool::WorkQueue<write_item>::_process;
-    void _process(write_item *item) {
+    void _process(write_item *item, ThreadPool::TPHandle &) override {
       return backend->_write(
 	item->oid,
 	item->offset,

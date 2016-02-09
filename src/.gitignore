@@ -75,6 +75,7 @@ Makefile
 /radosgw-admin
 /radosgw-object-expirer
 /rbd
+/rbd-mirror
 /rbd-nbd
 /rbd-fuse
 /rbd-replay

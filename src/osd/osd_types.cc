@@ -121,6 +121,22 @@ string ceph_osd_op_flag_string(unsigned flags)
   return string("-");
 }
 
+const char *num_char_map = "0123456789abcdef";
+template<typename T, const int base>
+static inline
+char* ritoa(T u, char *buf) {
+  if (u < base) {
+    *--buf = num_char_map[u];
+    return buf;
+  }
+ 
+  while (u) {
+    *--buf = num_char_map[u % base]; 
+    u /= base;
+  }
+  return buf;
+}
+
 void pg_shard_t::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
@@ -441,11 +457,24 @@ bool spg_t::parse(const char *s)
   return true;
 }
 
+char *spg_t::calc_name(char *buf, const char *suffix_backwords) const
+{
+  while (*suffix_backwords)
+    *--buf = *suffix_backwords++;
+
+  if (!is_no_shard()) {
+    buf = ritoa<int8_t, 10>(shard.id, buf);
+    *--buf = 's';
+  }
+
+  return pgid.calc_name(buf, "");
+}
+
 ostream& operator<<(ostream& out, const spg_t &pg)
 {
-  out << pg.pgid;
-  if (!pg.is_no_shard())
-    out << "s" << (unsigned)pg.shard;
+  char buf[spg_t::calc_name_buf_size];
+  buf[spg_t::calc_name_buf_size - 1] = '\0';
+  out << pg.calc_name(buf + spg_t::calc_name_buf_size - 1, "");
   return out;
 }
 
@@ -561,15 +590,26 @@ void pg_t::generate_test_instances(list<pg_t*>& o)
   o.push_back(new pg_t(131223, 4, 23));
 }
 
+char *pg_t::calc_name(char *buf, const char *suffix_backwords) const
+{
+  while (*suffix_backwords)
+    *--buf = *suffix_backwords++;
+
+  if (m_preferred >= 0)
+    *--buf ='p';
+
+  buf = ritoa<uint32_t, 16>(m_seed, buf);
+
+  *--buf = '.';
+
+  return  ritoa<uint64_t, 10>(m_pool, buf);
+}
+
 ostream& operator<<(ostream& out, const pg_t &pg)
 {
-  out << pg.pool() << '.';
-  out << hex << pg.ps() << dec;
-
-  if (pg.preferred() >= 0)
-    out << 'p' << pg.preferred();
-
-  //out << "=" << hex << (__uint64_t)pg << dec;
+  char buf[pg_t::calc_name_buf_size];
+  buf[pg_t::calc_name_buf_size - 1] = '\0';
+  out << pg.calc_name(buf + pg_t::calc_name_buf_size - 1, "");
   return out;
 }
 
@@ -580,13 +620,16 @@ void coll_t::calc_str()
 {
   switch (type) {
   case TYPE_META:
-    _str = "meta";
+    strcpy(_str_buff, "meta");
+    _str = _str_buff;
     break;
   case TYPE_PG:
-    _str = stringify(pgid) + "_head";
+    _str_buff[spg_t::calc_name_buf_size - 1] = '\0';
+    _str = pgid.calc_name(_str_buff + spg_t::calc_name_buf_size - 1, "daeh_");
     break;
   case TYPE_PG_TEMP:
-    _str = stringify(pgid) + "_TEMP";
+    _str_buff[spg_t::calc_name_buf_size - 1] = '\0';
+    _str = pgid.calc_name(_str_buff + spg_t::calc_name_buf_size - 1, "PMET_");
     break;
   default:
     assert(0 == "unknown collection type");
@@ -964,7 +1007,7 @@ void pool_opts_t::dump(const std::string& name, Formatter* f) const
 void pool_opts_t::dump(Formatter* f) const
 {
   for (opt_mapping_t::iterator i = opt_mapping.begin(); i != opt_mapping.end();
-       i++) {
+       ++i) {
     const std::string& name = i->first;
     const opt_desc_t& desc = i->second;
     opts_t::const_iterator j = opts.find(desc.key);
@@ -978,7 +1021,7 @@ void pool_opts_t::dump(Formatter* f) const
 class pool_opts_encoder_t : public boost::static_visitor<>
 {
 public:
-  pool_opts_encoder_t(bufferlist& bl_) : bl(bl_) {}
+  explicit pool_opts_encoder_t(bufferlist& bl_) : bl(bl_) {}
 
   void operator()(std::string s) const {
     ::encode(static_cast<int32_t>(pool_opts_t::STR), bl);
@@ -1039,7 +1082,7 @@ void pool_opts_t::decode(bufferlist::iterator& bl) {
 ostream& operator<<(ostream& out, const pool_opts_t& opts)
 {
   for (opt_mapping_t::iterator i = opt_mapping.begin(); i != opt_mapping.end();
-       i++) {
+       ++i) {
     const std::string& name = i->first;
     const pool_opts_t::opt_desc_t& desc = i->second;
     pool_opts_t::opts_t::const_iterator j = opts.opts.find(desc.key);
@@ -3241,7 +3284,7 @@ void ObjectModDesc::visit(Visitor *visitor) const
 
 struct DumpVisitor : public ObjectModDesc::Visitor {
   Formatter *f;
-  DumpVisitor(Formatter *f) : f(f) {}
+  explicit DumpVisitor(Formatter *f) : f(f) {}
   void append(uint64_t old_size) {
     f->open_object_section("op");
     f->dump_string("code", "APPEND");

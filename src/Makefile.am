@@ -18,6 +18,7 @@ include arch/Makefile.am
 include auth/Makefile.am
 include brag/Makefile.am
 include ceph-detect-init/Makefile.am
+include ceph-disk/Makefile.am
 include crush/Makefile.am
 include kv/Makefile.am
 include mon/Makefile.am
@@ -25,6 +26,7 @@ include mds/Makefile.am
 include os/Makefile.am
 include osd/Makefile.am
 include erasure-code/Makefile.am
+include compressor/Makefile.am
 include osdc/Makefile.am
 include client/Makefile.am
 include global/Makefile.am
@@ -46,7 +48,7 @@ include rbd_replay/Makefile.am
 include test/Makefile.am
 include tools/Makefile.am
 include Makefile-rocksdb.am
-include compressor/Makefile.am
+include Makefile-spdk.am
 include tracing/Makefile.am
 include pybind/Makefile.am
 
@@ -106,7 +108,6 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/radosgw-all-starter.conf \
 	$(srcdir)/upstart/rbdmap.conf \
 	ceph.in \
-	ceph-disk \
 	ceph-disk-udev \
 	ceph-create-keys \
 	ceph-rest-api \
