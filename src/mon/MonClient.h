@@ -179,7 +179,7 @@ private:
   std::condition_variable map_cond;
   int authenticate_err;
 
-  list<Message*> waiting_for_session;
+  std::vector<MessageRef> waiting_for_session;
   Context *session_established_context;
   bool had_a_connection;
   double reopen_interval_multiplier;
@@ -190,7 +190,7 @@ private:
   void _reopen_session() {
     _reopen_session(-1, string());
   }
-  void _send_mon_message(Message *m, bool force=false);
+  void _send_mon_message(MessageRef&& m, bool force=false);
 
 public:
   void set_entity_name(EntityName name) { entity_name = name; }
@@ -328,9 +328,9 @@ public:
    */
   int ping_monitor(const string &mon_id, string *result_reply);
 
-  void send_mon_message(Message *m) {
+  void send_mon_message(MessageRef&& m) {
     lock_guard l(monc_lock);
-    _send_mon_message(m);
+    _send_mon_message(std::move(m));
   }
   /**
    * If you specify a callback, you should not call
@@ -379,8 +379,8 @@ public:
 
   void set_messenger(Messenger *m) { messenger = m; }
 
-  void send_auth_message(Message *m) {
-    _send_mon_message(m, true);
+  void send_auth_message(MessageRef&& m) {
+    _send_mon_message(std::move(m), true);
   }
 
   void set_want_keys(uint32_t want) {
