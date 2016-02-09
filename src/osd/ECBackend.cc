@@ -171,11 +171,12 @@ void ECBackend::RecoveryOp::dump(Formatter *f) const
 ECBackend::ECBackend(
   PGBackend::Listener *pg,
   coll_t coll,
+  ObjectStore::CollectionHandle &ch,
   ObjectStore *store,
   CephContext *cct,
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
-  : PGBackend(pg, store, coll),
+  : PGBackend(pg, store, coll, ch),
     cct(cct),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
@@ -235,16 +236,15 @@ struct RecoveryMessages {
 
   map<pg_shard_t, vector<PushOp> > pushes;
   map<pg_shard_t, vector<PushReplyOp> > push_replies;
-  ObjectStore::Transaction *t;
-  RecoveryMessages() : t(NULL) {}
-  ~RecoveryMessages() { assert(!t); }
+  ObjectStore::Transaction t;
+  RecoveryMessages() {}
+  ~RecoveryMessages(){}
 };
 
 void ECBackend::handle_recovery_push(
   PushOp &op,
   RecoveryMessages *m)
 {
-  assert(m->t);
 
   bool oneshot = op.before_progress.first && op.after_progress.data_complete;
   ghobject_t tobj;
@@ -264,8 +264,8 @@ void ECBackend::handle_recovery_push(
   }
 
   if (op.before_progress.first) {
-    m->t->remove(coll, tobj);
-    m->t->touch(coll, tobj);
+    m->t.remove(coll, tobj);
+    m->t.touch(coll, tobj);
   }
 
   if (!op.data_included.empty()) {
@@ -273,7 +273,7 @@ void ECBackend::handle_recovery_push(
     uint64_t end = op.data_included.range_end();
     assert(op.data.length() == (end - start));
 
-    m->t->write(
+    m->t.write(
       coll,
       tobj,
       start,
@@ -285,7 +285,7 @@ void ECBackend::handle_recovery_push(
 
   if (op.before_progress.first) {
     assert(op.attrset.count(string("_")));
-    m->t->setattrs(
+    m->t.setattrs(
       coll,
       tobj,
       op.attrset);
@@ -295,9 +295,9 @@ void ECBackend::handle_recovery_push(
     dout(10) << __func__ << ": Removing oid "
 	     << tobj.hobj << " from the temp collection" << dendl;
     clear_temp_obj(tobj.hobj);
-    m->t->remove(coll, ghobject_t(
+    m->t.remove(coll, ghobject_t(
 	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
-    m->t->collection_move_rename(
+    m->t.collection_move_rename(
       coll, tobj,
       coll, ghobject_t(
 	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
@@ -306,22 +306,17 @@ void ECBackend::handle_recovery_push(
     if ((get_parent()->pgb_is_primary())) {
       assert(recovery_ops.count(op.soid));
       assert(recovery_ops[op.soid].obc);
-      object_stat_sum_t stats;
-      stats.num_objects_recovered = 1;
-      stats.num_bytes_recovered = recovery_ops[op.soid].obc->obs.oi.size;
       get_parent()->on_local_recover(
 	op.soid,
-	stats,
 	op.recovery_info,
 	recovery_ops[op.soid].obc,
-	m->t);
+	&m->t);
     } else {
       get_parent()->on_local_recover(
 	op.soid,
-	object_stat_sum_t(),
 	op.recovery_info,
 	ObjectContextRef(),
-	m->t);
+	&m->t);
     }
   }
   m->push_replies[get_parent()->primary_shard()].push_back(PushReplyOp());
@@ -467,19 +462,14 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
   }
 
   if (!replies.empty()) {
-    m.t->register_on_complete(
+    (m.t).register_on_complete(
 	get_parent()->bless_context(
 	  new SendPushReplies(
 	    get_parent(),
 	    get_parent()->get_epoch(),
 	    replies)));
-    m.t->register_on_applied(
-	new ObjectStore::C_DeleteTransaction(m.t));
-    get_parent()->queue_transaction(m.t);
-    m.t = NULL;
-  } else {
-    assert(!m.t);
-  }
+    get_parent()->queue_transaction(std::move(m.t));
+  } 
 
   if (m.reads.empty())
     return;
@@ -600,7 +590,11 @@ void ECBackend::continue_recovery_op(
 		object_stat_sum_t());
 	    }
 	  }
-	  get_parent()->on_global_recover(op.hoid);
+	  object_stat_sum_t stat;
+	  stat.num_bytes_recovered = op.recovery_info.size;
+	  stat.num_keys_recovered = 0; // ??? op ... omap_entries.size(); ?
+	  stat.num_objects_recovered = 1;
+	  get_parent()->on_global_recover(op.hoid, stat);
 	  dout(10) << __func__ << ": WRITING return " << op << dendl;
 	  recovery_ops.erase(op.hoid);
 	  return;
@@ -717,8 +711,6 @@ bool ECBackend::handle_message(
   case MSG_OSD_PG_PUSH: {
     MOSDPGPush *op = static_cast<MOSDPGPush *>(_op->get_req());
     RecoveryMessages rm;
-    rm.t = new ObjectStore::Transaction;
-    assert(rm.t);
     for (vector<PushOp>::iterator i = op->pushes.begin();
 	 i != op->pushes.end();
 	 ++i) {
@@ -840,8 +832,8 @@ void ECBackend::handle_sub_write(
   assert(!get_parent()->get_log().get_missing().is_missing(op.soid));
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
-  ObjectStore::Transaction *localt = new ObjectStore::Transaction;
-  localt->set_use_tbl(op.t.get_use_tbl());
+  ObjectStore::Transaction localt;
+  localt.set_use_tbl(op.t.get_use_tbl());
   if (!op.temp_added.empty()) {
     add_temp_objs(op.temp_added);
   }
@@ -851,7 +843,7 @@ void ECBackend::handle_sub_write(
 	 ++i) {
       dout(10) << __func__ << ": removing object " << *i
 	       << " since we won't get the transaction" << dendl;
-      localt->remove(
+      localt.remove(
 	coll,
 	ghobject_t(
 	  *i,
@@ -866,33 +858,30 @@ void ECBackend::handle_sub_write(
     op.trim_to,
     op.trim_rollback_to,
     !(op.t.empty()),
-    localt);
+    &localt);
 
-  if (!(dynamic_cast<ReplicatedPG *>(get_parent())->is_undersized()) &&
+  ReplicatedPG *_rPG = dynamic_cast<ReplicatedPG *>(get_parent());
+  if (_rPG && !_rPG->is_undersized() &&
       (unsigned)get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   if (on_local_applied_sync) {
     dout(10) << "Queueing onreadable_sync: " << on_local_applied_sync << dendl;
-    localt->register_on_applied_sync(on_local_applied_sync);
+    localt.register_on_applied_sync(on_local_applied_sync);
   }
-  localt->register_on_commit(
+  localt.register_on_commit(
     get_parent()->bless_context(
       new SubWriteCommitted(
 	this, msg, op.tid,
 	op.at_version,
 	get_parent()->get_info().last_complete)));
-  localt->register_on_applied(
+  localt.register_on_applied(
     get_parent()->bless_context(
       new SubWriteApplied(this, msg, op.tid, op.at_version)));
-  localt->register_on_applied(
-    new ObjectStore::C_DeleteTransaction(localt));
-  list<ObjectStore::Transaction*> tls;
-  tls.push_back(localt);
-  tls.push_back(new ObjectStore::Transaction);
-  tls.back()->swap(op.t);
-  tls.back()->register_on_complete(
-    new ObjectStore::C_DeleteTransaction(tls.back()));
+  vector<ObjectStore::Transaction> tls;
+  tls.reserve(2);
+  tls.push_back(std::move(localt));
+  tls.push_back(std::move(op.t));
   get_parent()->queue_transactions(tls, msg);
 }
 
@@ -918,7 +907,7 @@ void ECBackend::handle_sub_read(
 	   i->second.begin(); j != i->second.end(); ++j) {
       bufferlist bl;
       r = store->read(
-	coll,
+	ch,
 	ghobject_t(i->first, ghobject_t::NO_GEN, shard),
 	j->get<0>(),
 	j->get<1>(),
@@ -975,7 +964,7 @@ error:
     if (reply->errors.count(*i))
       continue;
     int r = store->getattrs(
-      coll,
+      ch,
       ghobject_t(
 	*i, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       reply->attrs_read[*i]);
@@ -1711,7 +1700,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
     dout(10) << __func__ << ": not in cache " << hoid << dendl;
     struct stat st;
     int r = store->stat(
-      coll,
+      ch,
       ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &st);
     ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
@@ -1728,7 +1717,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
 	}
       } else {
 	r = store->getattr(
-	  coll,
+	  ch,
 	  ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
 	  ECUtil::get_hinfo_key(),
 	  bl);
@@ -2032,7 +2021,7 @@ int ECBackend::objects_get_attrs(
   map<string, bufferlist> *out)
 {
   int r = store->getattrs(
-    coll,
+    ch,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     *out);
   if (r < 0)
@@ -2080,7 +2069,7 @@ void ECBackend::be_deep_scrub(
     bufferlist bl;
     handle.reset_tp_timeout();
     r = store->read(
-      coll,
+      ch,
       ghobject_t(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       pos,

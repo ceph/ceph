@@ -20,7 +20,6 @@
 
 #include "filestore/FileStore.h"
 #include "memstore/MemStore.h"
-#include "keyvaluestore/KeyValueStore.h"
 #if defined(HAVE_LIBAIO)
 #include "bluestore/BlueStore.h"
 #endif
@@ -73,10 +72,6 @@ ObjectStore *ObjectStore::create(CephContext *cct,
   if (type == "memstore") {
     return new MemStore(cct, data);
   }
-  if (type == "keyvaluestore" &&
-      cct->check_experimental_feature_enabled("keyvaluestore")) {
-    return new KeyValueStore(data);
-  }
 #if defined(HAVE_LIBAIO)
   if (type == "bluestore" &&
       cct->check_experimental_feature_enabled("bluestore")) {
@@ -96,11 +91,13 @@ int ObjectStore::probe_block_device_fsid(
 {
   int r;
 
+#if defined(HAVE_LIBAIO)
   // first try bluestore -- it has a crc on its header and will fail
   // reliably.
   r = BlueStore::get_block_device_fsid(path, fsid);
   if (r == 0)
     return r;
+#endif
 
   // okay, try FileStore (journal).
   r = FileStore::get_block_device_fsid(path, fsid);
@@ -146,8 +143,13 @@ ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
   return out << "osr(" << s.get_name() << " " << &s << ")";
 }
 
+ostream& operator<<(ostream& out, const ObjectStore::Transaction& tx) {
+
+  return out << "Transaction(" << &tx << ")"; 
+}
+
 unsigned ObjectStore::apply_transactions(Sequencer *osr,
-					 list<Transaction*> &tls,
+					 vector<Transaction>& tls,
 					 Context *ondisk)
 {
   // use op pool
@@ -168,7 +170,7 @@ unsigned ObjectStore::apply_transactions(Sequencer *osr,
 
 int ObjectStore::queue_transactions(
   Sequencer *osr,
-  list<Transaction*>& tls,
+  vector<Transaction>& tls,
   Context *onreadable,
   Context *oncommit,
   Context *onreadable_sync,

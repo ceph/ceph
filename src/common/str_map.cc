@@ -51,7 +51,7 @@ int get_json_str_map(
   } catch (json_spirit::Error_position &e) {
     if (fallback_to_plain) {
       // fallback to key=value format
-      get_str_map(str, "\t\n ", str_map);
+      get_str_map(str, str_map, "\t\n ");
     } else {
       return -EINVAL;
     }
@@ -75,8 +75,8 @@ string trim(const string& str) {
 
 int get_str_map(
     const string &str,
-    const char *delims,
-    map<string,string> *str_map)
+    map<string,string> *str_map,
+    const char *delims)
 {
   list<string> pairs;
   get_str_list(str, delims, pairs);
@@ -92,14 +92,6 @@ int get_str_map(
     }
   }
   return 0;
-}
-
-int get_str_map(
-    const string &str,
-    map<string,string> *str_map)
-{
-  const char *delims = ",;\t\n ";
-  return get_str_map(str, delims, str_map);
 }
 
 string get_str_map_value(

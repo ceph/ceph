@@ -43,6 +43,7 @@
  protected:
    ObjectStore *store;
    const coll_t coll;
+   ObjectStore::CollectionHandle &ch;
  public:	
    /**
     * Provides interfaces for PGBackend callbacks
@@ -60,7 +61,6 @@
       */
      virtual void on_local_recover(
        const hobject_t &oid,
-       const object_stat_sum_t &stat_diff,
        const ObjectRecoveryInfo &recovery_info,
        ObjectContextRef obc,
        ObjectStore::Transaction *t
@@ -70,7 +70,10 @@
       * Called when transaction recovering oid is durable and
       * applied on all replicas
       */
-     virtual void on_global_recover(const hobject_t &oid) = 0;
+     virtual void on_global_recover(
+       const hobject_t &oid,
+       const object_stat_sum_t &stat_diff
+       ) = 0;
 
      /**
       * Called when peer is recovered
@@ -102,11 +105,11 @@
 
      virtual void send_message(int to_osd, Message *m) = 0;
      virtual void queue_transaction(
-       ObjectStore::Transaction *t,
+       ObjectStore::Transaction&& t,
        OpRequestRef op = OpRequestRef()
        ) = 0;
      virtual void queue_transactions(
-       list<ObjectStore::Transaction*>& tls,
+       vector<ObjectStore::Transaction>& tls,
        OpRequestRef op = OpRequestRef()
        ) = 0;
      virtual epoch_t get_epoch() const = 0;
@@ -230,9 +233,11 @@
    };
    Listener *parent;
    Listener *get_parent() const { return parent; }
-   PGBackend(Listener *l, ObjectStore *store, coll_t coll) :
+   PGBackend(Listener *l, ObjectStore *store, coll_t coll,
+	     ObjectStore::CollectionHandle &ch) :
      store(store),
      coll(coll),
+     ch(ch),
      parent(l) {}
    bool is_primary() const { return get_parent()->pgb_is_primary(); }
    OSDMapRef get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
@@ -555,8 +560,8 @@
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete, bool fast_read = false) = 0;
 
-   virtual bool scrub_supported() { return false; }
-   virtual bool auto_repair_supported() const { return false; }
+   virtual bool scrub_supported() = 0;
+   virtual bool auto_repair_supported() const = 0;
    void be_scan_list(
      ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
      ThreadPool::TPHandle &handle);
@@ -585,18 +590,19 @@
      const vector<int> &acting,
      ostream &errorstream);
    virtual uint64_t be_get_ondisk_size(
-     uint64_t logical_size) { assert(0); return 0; }
+     uint64_t logical_size) = 0;
    virtual void be_deep_scrub(
      const hobject_t &poid,
      uint32_t seed,
      ScrubMap::object &o,
-     ThreadPool::TPHandle &handle) { assert(0); }
+     ThreadPool::TPHandle &handle) = 0;
 
    static PGBackend *build_pg_backend(
      const pg_pool_t &pool,
      const OSDMapRef curmap,
      Listener *l,
      coll_t coll,
+     ObjectStore::CollectionHandle &ch,
      ObjectStore *store,
      CephContext *cct);
  };

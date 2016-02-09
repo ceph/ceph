@@ -61,8 +61,7 @@ protected:
     }
     bool _empty();
     RGWAsyncRadosRequest *_dequeue();
-    using ThreadPool::WorkQueue<RGWAsyncRadosRequest>::_process;
-    void _process(RGWAsyncRadosRequest *req);
+    void _process(RGWAsyncRadosRequest *req, ThreadPool::TPHandle &);
     void _dump_queue();
     void _clear() {
       assert(processor->m_req_queue.empty());

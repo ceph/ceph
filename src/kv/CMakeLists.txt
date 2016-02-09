@@ -6,7 +6,7 @@ add_library(kv_objs OBJECT ${kv_srcs})
 add_library(kv STATIC $<TARGET_OBJECTS:kv_objs>)
 target_include_directories(kv_objs PUBLIC ${ROCKSDB_INCLUDE_DIR})
 target_include_directories(kv PUBLIC ${ROCKSDB_INCLUDE_DIR})
-target_link_libraries(kv z leveldb snappy rocksdb)
+target_link_libraries(kv leveldb rocksdb snappy z)
 
 # rocksdb detects bzlib and lz4 in its Makefile, which forces us to do the same.
 find_package(BZip2 QUIET)

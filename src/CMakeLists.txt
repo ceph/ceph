@@ -76,7 +76,8 @@ else()
 endif()
 
 
-set(EXTRALIBS uuid rt dl ${Boost_LIBS} ${ATOMIC_OPS_LIBRARIES})
+set(EXTRALIBS uuid rt dl
+  ${Boost_LIBRARIES} ${Boost_SYSTEM_LIBRARY} ${ATOMIC_OPS_LIBRARIES})
 
 if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
@@ -143,8 +144,6 @@ endif()
 # tcmalloc heap profiler
 set(heap_profiler_files ${TCMALLOC_srcs})
 add_library(heap_profiler_objs OBJECT ${heap_profiler_files})
-
-set(LIBEDIT_LIBS edit)
 
 # Common infrastructure
 configure_file(
@@ -217,6 +216,7 @@ set(libcommon_files
   common/PrebufferedStreambuf.cc
   common/BackTrace.cc
   common/perf_counters.cc
+  common/mutex_debug.cc
   common/Mutex.cc
   common/OutputDataSocket.cc
   common/admin_socket.cc
@@ -292,6 +292,7 @@ set(libcommon_files
   common/simple_spin.cc
   common/Thread.cc
   common/Formatter.cc
+  common/HTMLFormatter.cc
   common/HeartbeatMap.cc
   common/PluginRegistry.cc
   common/ceph_fs.cc
@@ -318,6 +319,7 @@ set(libcommon_files
   common/Cycles.cc
   osdc/Striper.cc
   osdc/Objecter.cc
+  common/Graylog.cc
   ${arch_files}
   ${auth_files}
   ${mds_files})
@@ -362,7 +364,7 @@ endif(${HAVE_GPERFTOOLS})
 
 add_library(common_utf8 STATIC common/utf8.c)
 
-target_link_libraries(common json_spirit common_utf8 erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES})
+target_link_libraries(common json_spirit common_utf8 erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${EXECINFO_LIBRARIES})
 
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
@@ -370,7 +372,7 @@ endif(${WITH_LTTNG})
 
 set(libglobal_srcs
   global/global_init.cc
-  global/pidfile.cc 
+  global/pidfile.cc
   global/signal_handler.cc)
 set(global_common_files
   global/global_context.cc)
@@ -380,7 +382,7 @@ add_library(global STATIC ${libglobal_srcs}
 target_link_libraries(global common ${CMAKE_THREAD_LIBS_INIT} ${CRYPTO_LIBS}
   ${EXTRALIBS})
 if(${WITH_LTTNG})
-  target_link_libraries(global lttng-ust dl) 
+  target_link_libraries(global lttng-ust dl)
 endif(${WITH_LTTNG})
 if(${ENABLE_SHARED})
   set_target_properties(global PROPERTIES
@@ -412,11 +414,12 @@ add_library(librados ${CEPH_SHARED} ${librados_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(librados osdc)
-target_link_libraries(librados PRIVATE osdc osd os global common cls_lock_client
+# LINK_PRIVATE instead of PRIVATE is used to backward compatibility with cmake 2.8.11
+target_link_libraries(librados LINK_PRIVATE osdc osd os global common cls_lock_client
   ${BLKID_LIBRARIES}
   ${CRYPTO_LIBS} ${EXTRALIBS} ${ALLOC_LIBS})
 if(${WITH_LTTNG})
-  target_link_libraries(librados PUBLIC librados_tp)
+  target_link_libraries(librados librados_tp)
 endif(${WITH_LTTNG})
 if(${ENABLE_SHARED})
   set_target_properties(librados PROPERTIES OUTPUT_NAME rados VERSION 2.0.0
@@ -458,12 +461,12 @@ add_executable(ceph-monstore-tool tools/ceph_monstore_tool.cc)
 target_link_libraries(ceph-monstore-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY})
 install(TARGETS ceph-monstore-tool DESTINATION bin)
 
-add_executable(ceph-objectstore-tool 
+add_executable(ceph-objectstore-tool
   tools/ceph_objectstore_tool.cc
   tools/RadosDump.cc
   $<TARGET_OBJECTS:common_util_obj>
   $<TARGET_OBJECTS:heap_profiler_objs>)
-target_link_libraries(ceph-objectstore-tool tcmalloc osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} dl)
+target_link_libraries(ceph-objectstore-tool tcmalloc osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse dl)
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
 
@@ -590,11 +593,11 @@ set(lib_mon_srcs
   auth/cephx/CephxKeyServer.cc
   auth/cephx/CephxServiceHandler.cc
   auth/AuthServiceHandler.cc
-  ${osd_mon_files} mon/Paxos.cc 
+  ${osd_mon_files} mon/Paxos.cc
   mon/PaxosService.cc
   mon/OSDMonitor.cc
   mon/MDSMonitor.cc
-  mon/MonmapMonitor.cc 
+  mon/MonmapMonitor.cc
   mon/LogMonitor.cc
   mon/AuthMonitor.cc
   mon/Elector.cc
@@ -617,7 +620,7 @@ set(ceph_mon_srcs
   common/TextTable.cc)
 add_executable(ceph-mon ${ceph_mon_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
 add_dependencies(ceph-mon erasure_code_plugins)
-      target_link_libraries(ceph-mon mon ${Boost_THREAD_LIBRARY} common os global ${EXTRALIBS}
+      target_link_libraries(ceph-mon mon common os global ${EXTRALIBS}
   ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 install(TARGETS ceph-mon DESTINATION bin)
 
@@ -642,8 +645,6 @@ set(libos_srcs
   os/filestore/LFNIndex.cc
   os/filestore/WBThrottle.cc
   os/filestore/ZFSFileStoreBackend.cc
-  os/keyvaluestore/GenericObjectMap.cc
-  os/keyvaluestore/KeyValueStore.cc
   os/memstore/MemStore.cc
   os/kstore/KStore.cc
   os/kstore/kstore_types.cc
@@ -656,20 +657,47 @@ set(libos_srcs
   os/bluestore/BlueStore.cc
   os/bluestore/bluestore_types.cc
   os/bluestore/FreelistManager.cc
+  os/bluestore/KernelDevice.cc
   os/bluestore/StupidAllocator.cc
   os/fs/FS.cc
   ${libos_xfs_srcs})
+if(${HAVE_LIBFUSE})
+  list(APPEND libos_srcs
+    os/FuseStore.cc)
+endif(${HAVE_LIBFUSE})
+if(WITH_SPDK)
+  list(APPEND libos_srcs
+    os/bluestore/NVMEDevice.cc)
+endif(WITH_SPDK)
+
+if(WITH_SPDK)
+  add_custom_target(build_spdk
+    COMMAND
+    $(MAKE) DPDK_INC_DIR=${DPDK_INCLUDE_DIR}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/lib
+    COMMENT "spdk building")
+  # TODO: should use add_library(spdk INTERFACE IMPORTED) instead in new cmake,
+  # if INTERFACE is supported.
+  foreach(lib nvme memory util)
+    add_library(spdk_${lib} STATIC IMPORTED)
+    add_dependencies(spdk_${lib} build_spdk)
+    set_target_properties(spdk_${lib} PROPERTIES
+      IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/spdk/lib/${lib}/libspdk_${lib}.a"
+      INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/src/spdk/include")
+    list(APPEND SPDK_LIBRARIES spdk_${lib})
+  endforeach()
+endif(WITH_SPDK)
 
 # make rocksdb statically
 add_custom_target(build_rocksdb
-    COMMAND 
-    EXTRA_CXXFLAGS=-fPIC PORTABLE=1 make static_lib
+    COMMAND
+    PORTABLE=1 $(MAKE) static_lib EXTRA_CXXFLAGS='-fPIC -Wno-unused-variable'
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/rocksdb
     COMMENT "rocksdb building")
 
-# add a imported library for librocksdb.a 
+# add a imported library for librocksdb.a
 add_library(rocksdb STATIC IMPORTED)
-set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a") 
+set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a")
 add_dependencies(rocksdb build_rocksdb)
 set(ROCKSDB_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
 
@@ -682,7 +710,20 @@ endif(${HAVE_LIBAIO})
 if(${WITH_LTTNG})
   target_link_libraries(os libos_tp)
 endif(${WITH_LTTNG})
-target_link_libraries(os kv leveldb snappy rocksdb)
+if(${HAVE_LIBFUSE})
+  target_link_libraries(os ${FUSE_LIBRARIES})
+endif(${HAVE_LIBFUSE})
+if(WITH_SPDK)
+  target_link_libraries(os
+    ${SPDK_LIBRARIES}
+    ${DPDK_LIBRARIES}
+    ${PCIACCESS_LIBRARIES})
+  target_include_directories(os
+    PRIVATE
+    ${DPDK_INCLUDE_DIR}
+    ${PCIACCESS_INCLUDE_DIR})
+endif(WITH_SPDK)
+target_link_libraries(os kv)
 
 set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})
@@ -721,7 +762,7 @@ add_library(osd STATIC ${osd_srcs} $<TARGET_OBJECTS:osd_mon_objs>
   $<TARGET_OBJECTS:cls_references_objs>)
 target_link_libraries(osd dl leveldb)
 if(${WITH_LTTNG})
-  target_link_libraries(osd libosd_tp) 
+  target_link_libraries(osd libosd_tp)
 endif(${WITH_LTTNG})
 
 set(ceph_osd_srcs
@@ -732,11 +773,14 @@ add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES} ${ALLOC_LIBS})
+if(${HAVE_LIBFUSE})
+  target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
+endif(${HAVE_LIBFUSE})
 install(TARGETS ceph-osd DESTINATION bin)
 
 # MDS
 if(${WITH_MDS})
-  set(mds_srcs 
+  set(mds_srcs
     mds/Capability.cc
     mds/MDSDaemon.cc
     mds/MDSRank.cc
@@ -800,23 +844,19 @@ target_link_libraries(cephfstool common ${EXTRALIBS})
 set_target_properties(cephfstool PROPERTIES OUTPUT_NAME cephfs)
 install(TARGETS cephfstool DESTINATION bin)
 
-set(compressor_srcs 
+set(compressor_srcs
   compressor/Compressor.cc
   compressor/AsyncCompressor.cc)
 add_library(compressor STATIC ${compressor_srcs})
 target_link_libraries(compressor common snappy)
 
 add_executable(ceph-client-debug tools/ceph-client-debug.cc)
-target_link_libraries(ceph-client-debug cephfs librados global common)
+target_link_libraries(ceph-client-debug cephfs librados global common ${ALLOC_LIBS})
 install(TARGETS ceph-client-debug DESTINATION bin/debug)
 
 add_executable(ceph-kvstore-tool tools/ceph_kvstore_tool.cc)
 target_link_libraries(ceph-kvstore-tool os global ${UNITTEST_CXX_FLAGS})
 install(TARGETS ceph-kvstore-tool DESTINATION bin)
-
-#set(ceph_srcs tools/ceph.cc tools/common.cc)
-#add_executable(ceph ${ceph_srcs})
-#target_link_libraries(ceph global ${LIBEDIT_LIBS})
 
 set(ceph_conf_srcs
   tools/ceph_conf.cc)
@@ -883,7 +923,7 @@ install(PROGRAMS
 
 install(PROGRAMS
   ${CMAKE_SOURCE_DIR}/src/ceph-create-keys
-  ${CMAKE_SOURCE_DIR}/src/ceph-disk
+#  ${CMAKE_SOURCE_DIR}/src/ceph-disk
   ${CMAKE_SOURCE_DIR}/src/ceph-disk-udev
   DESTINATION sbin)
 
@@ -899,16 +939,22 @@ if(WITH_LIBCEPHFS)
     client/MetaRequest.cc
     client/ClientSnapRealm.cc
     client/MetaSession.cc
-    client/Trace.cc)
+    client/Trace.cc
+    client/posix_acl.cc)
   add_library(client ${libclient_srcs})
-  target_link_libraries(client osdc mds ${LIBEDIT_LIBS})
+  target_link_libraries(client osdc mds)
   set(libcephfs_srcs libcephfs.cc)
-  add_library(cephfs SHARED ${libcephfs_srcs})
+  add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs}
+    $<TARGET_OBJECTS:cls_references_objs>
+    $<TARGET_OBJECTS:heap_profiler_objs>
+    $<TARGET_OBJECTS:common_util_obj>)
+  target_link_libraries(cephfs LINK_PRIVATE client osdc osd os global common cls_lock_client
+    ${BLKID_LIBRARIES}
+    ${CRYPTO_LIBS} ${EXTRALIBS} ${ALLOC_LIBS})
 if(${ENABLE_SHARED})
   set_target_properties(cephfs PROPERTIES OUTPUT_NAME cephfs VERSION 1.0.0
     SOVERSION 1)
 endif(${ENABLE_SHARED})
-  target_link_libraries(cephfs client global)
   install(TARGETS cephfs DESTINATION lib)
   install(DIRECTORY
     "${CMAKE_SOURCE_DIR}/src/include/cephfs"
@@ -929,15 +975,15 @@ endif(${ENABLE_SHARED})
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION sbin)
 
-  if(HAVE_FUSE)
+  if(HAVE_LIBFUSE)
     set(ceph_fuse_srcs
       ceph_fuse.cc
       client/fuse_ll.cc)
     add_executable(ceph-fuse ${ceph_fuse_srcs})
-    target_link_libraries(ceph-fuse fuse client global)
+    target_link_libraries(ceph-fuse ${FUSE_LIBRARIES} client global)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
-  endif(HAVE_FUSE)
+  endif(HAVE_LIBFUSE)
 endif(WITH_LIBCEPHFS)
 
 set(journal_srcs
@@ -974,12 +1020,11 @@ if(${WITH_RBD})
     librbd/ImageWatcher.cc
     librbd/internal.cc
     librbd/Journal.cc
-    librbd/JournalReplay.cc
-    librbd/JournalTypes.cc
     librbd/librbd.cc
     librbd/LibrbdAdminSocketHook.cc
     librbd/LibrbdWriteback.cc
     librbd/ObjectMap.cc
+    librbd/Operations.cc
     librbd/Utils.cc
     librbd/exclusive_lock/AcquireRequest.cc
     librbd/exclusive_lock/ReleaseRequest.cc
@@ -988,6 +1033,8 @@ if(${WITH_RBD})
     librbd/image/RefreshParentRequest.cc
     librbd/image/RefreshRequest.cc
     librbd/image/SetSnapRequest.cc
+    librbd/journal/Replay.cc
+    librbd/journal/Types.cc
     librbd/object_map/InvalidateRequest.cc
     librbd/object_map/LockRequest.cc
     librbd/object_map/Request.cc
@@ -1014,11 +1061,11 @@ if(${WITH_RBD})
   add_library(librbd ${CEPH_SHARED} ${librbd_srcs}
     $<TARGET_OBJECTS:osdc_rbd_objs>
     $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(librbd PRIVATE librados common journal
+  target_link_libraries(librbd LINK_PRIVATE librados common journal
     cls_lock_client cls_rbd_client cls_journal_client udev
     ${CMAKE_DL_LIBS})
   if(${WITH_LTTNG})
-    target_link_libraries(librbd PUBLIC librbd_tp)
+    target_link_libraries(librbd librbd_tp)
   endif(${WITH_LTTNG})
   if(${ENABLE_SHARED})
     set_target_properties(librbd PROPERTIES VERSION "1.0.0" SOVERSION "1"
@@ -1067,7 +1114,7 @@ if(${WITH_RBD})
     $<TARGET_OBJECTS:heap_profiler_objs>)
   set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
   target_link_libraries(rbd librbd librados global common keyutils udev
-    ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY} 
+    ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY}
     ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   install(TARGETS rbd DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
@@ -1130,7 +1177,9 @@ if(${WITH_RADOSGW})
     rgw/rgw_realm_watcher.cc
     rgw/rgw_coroutine.cc
     rgw/rgw_cr_rados.cc
-    rgw/rgw_object_expirer_core.cc)
+    rgw/rgw_object_expirer_core.cc
+    rgw/rgw_website.cc
+    rgw/rgw_xml_enc.cc)
 
   add_library(rgw_a STATIC ${rgw_a_srcs})
   target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/civetweb/include")
@@ -1216,9 +1265,9 @@ add_custom_target(vstart DEPENDS
 add_custom_target(cephfs_testing DEPENDS
     vstart
     rados
+    cephfs
     ceph-fuse
     ceph-dencoder
     cephfs-journal-tool
     cephfs-data-scan
     cephfs-table-tool)
-

@@ -96,7 +96,7 @@ int init_and_open_image(const std::string &pool_name,
                         librados::Rados *rados, librados::IoCtx *io_ctx,
                         librbd::Image *image);
 
-int snap_set(librbd::Image &image, const std::string snap_name);
+int snap_set(librbd::Image &image, const std::string &snap_name);
 
 std::string image_id(librbd::Image& image);
 

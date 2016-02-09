@@ -68,10 +68,10 @@ class MonmapMonitor : public PaxosService {
   bool prepare_command(MonOpRequestRef op);
 
   void get_health(list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail) const;
+		  list<pair<health_status_t,string> > *detail,
+		  CephContext *cct) const override;
 
   int get_monmap(bufferlist &bl);
-  int get_monmap(MonMap &m);
 
   /*
    * Since monitors are pretty

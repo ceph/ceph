@@ -2317,6 +2317,11 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   bufferlist footer_bl;
   r = cls_cxx_read(hctx, object_map.get_footer_offset(),
 		   size - object_map.get_footer_offset(), &footer_bl);
+  if (r < 0) {
+    CLS_ERR("object map footer read failed");
+    return r;
+  }
+ 
   try {
     bufferlist::iterator it = footer_bl.begin();
     object_map.decode_footer(it);
@@ -2372,17 +2377,21 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     object_map.encode_data(data_bl, byte_offset, byte_length);
     r = cls_cxx_write(hctx, object_map.get_header_length() + byte_offset,
 		      data_bl.length(), &data_bl);
-
+    if (r < 0) {
+      CLS_ERR("failed to write object map header: %s", cpp_strerror(r).c_str());  
+      return r;         
+    }
+   
     footer_bl.clear();
     object_map.encode_footer(footer_bl);
     r = cls_cxx_write(hctx, object_map.get_footer_offset(), footer_bl.length(),
 		      &footer_bl);
+    if (r < 0) {
+      CLS_ERR("failed to write object map footer: %s", cpp_strerror(r).c_str());  
+      return r;
+    } 
   } else {
     CLS_LOG(20, "object_map_update: no update necessary");
-  }
-
-  if (r < 0) {
-    return r;
   }
 
   return 0;
@@ -2792,7 +2801,7 @@ int old_snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   if (header->snap_count) {
     int snaps_len = 0;
     int names_len = 0;
-    CLS_LOG(20, "i=%d\n", i);
+    CLS_LOG(20, "i=%u\n", i);
     if (i > 0) {
       snaps_len = sizeof(header->snaps[0]) * i;
       names_len =  snap_names - orig_names;
@@ -2889,7 +2898,7 @@ int old_snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
   if (header->snap_count) {
     int names_len = 0;
-    CLS_LOG(20, "i=%d\n", i);
+    CLS_LOG(20, "i=%u\n", i);
     if (i > 0) {
       names_len =  snap_names - orig_names;
       memcpy(new_names_bp.c_str(), orig_names, names_len);
@@ -2974,7 +2983,7 @@ int read_peers(cls_method_context_t hctx,
   return 0;
 }
 
-int read_peer(cls_method_context_t hctx, const std::string uuid,
+int read_peer(cls_method_context_t hctx, const std::string &uuid,
               cls::rbd::MirrorPeer *peer) {
   bufferlist bl;
   int r = cls_cxx_map_get_val(hctx, peer_key(uuid), &bl);
@@ -2994,7 +3003,7 @@ int read_peer(cls_method_context_t hctx, const std::string uuid,
   return 0;
 }
 
-int write_peer(cls_method_context_t hctx, const std::string uuid,
+int write_peer(cls_method_context_t hctx, const std::string &uuid,
                const cls::rbd::MirrorPeer &peer) {
   bufferlist bl;
   ::encode(peer, bl);

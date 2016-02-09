@@ -13,6 +13,8 @@
  */
 
 
+#include <mutex>
+
 #include "Filer.h"
 #include "osd/OSDMap.h"
 #include "Striper.h"
@@ -49,13 +51,13 @@ public:
 
     bool probe_complete;
     {
-      probe->lock.Lock();
+      Probe::unique_lock pl(probe->lock);
       if (r != 0) {
 	probe->err = r;
       }
 
-      probe_complete = filer->_probed(probe, oid, size, mtime);
-      assert(!probe->lock.is_locked_by_me());
+      probe_complete = filer->_probed(probe, oid, size, mtime, pl);
+      assert(!pl.owns_lock());
     }
     if (probe_complete) {
       probe->onfinish->complete(probe->err);
@@ -128,9 +130,9 @@ int Filer::probe_impl(Probe* probe, ceph_file_layout *layout,
     probe->probing_off -= probe->probing_len;
   }
 
-  probe->lock.Lock();
-  _probe(probe);
-  assert(!probe->lock.is_locked_by_me());
+  Probe::unique_lock pl(probe->lock);
+  _probe(probe, pl);
+  assert(!pl.owns_lock());
 
   return 0;
 }
@@ -140,9 +142,9 @@ int Filer::probe_impl(Probe* probe, ceph_file_layout *layout,
 /**
  * probe->lock must be initially locked, this function will release it
  */
-void Filer::_probe(Probe *probe)
+void Filer::_probe(Probe *probe, Probe::unique_lock& pl)
 {
-  assert(probe->lock.is_locked_by_me());
+  assert(pl.owns_lock() && pl.mutex() == &probe->lock);
 
   ldout(cct, 10) << "_probe " << hex << probe->ino << dec
 		 << " " << probe->probing_off << "~" << probe->probing_len
@@ -163,7 +165,7 @@ void Filer::_probe(Probe *probe)
     stat_extents.push_back(*p);
   }
 
-  probe->lock.Unlock();
+  pl.unlock();
   for (std::vector<ObjectExtent>::iterator i = stat_extents.begin();
        i != stat_extents.end(); ++i) {
     C_Probe *c = new C_Probe(this, probe, i->oid);
@@ -179,9 +181,9 @@ void Filer::_probe(Probe *probe)
  * @return true if probe is complete and Probe object may be freed.
  */
 bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
-		    ceph::real_time mtime)
+		    ceph::real_time mtime, Probe::unique_lock& pl)
 {
-  assert(probe->lock.is_locked_by_me());
+  assert(pl.owns_lock() && pl.mutex() == &probe->lock);
 
   ldout(cct, 10) << "_probed " << probe->ino << " object " << oid
 	   << " has size " << size << " mtime " << mtime << dendl;
@@ -194,12 +196,12 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
   probe->ops.erase(oid);
 
   if (!probe->ops.empty()) {
-    probe->lock.Unlock();
+    pl.unlock();
     return false;  // waiting for more!
   }
 
   if (probe->err) { // we hit an error, propagate back up
-    probe->lock.Unlock();
+    pl.unlock();
     return true;
   }
 
@@ -278,8 +280,8 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
       probe->probing_len = period;
       probe->probing_off -= period;
     }
-    _probe(probe);
-    assert(!probe->lock.is_locked_by_me());
+    _probe(probe, pl);
+    assert(!pl.owns_lock());
     return false;
   } else if (probe->pmtime) {
     ldout(cct, 10) << "_probed found mtime " << probe->max_mtime << dendl;
@@ -289,7 +291,7 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
     *probe->pumtime = ceph::real_clock::to_ceph_timespec(probe->max_mtime);
   }
   // done!
-  probe->lock.Unlock();
+  pl.unlock();
   return true;
 }
 
@@ -297,7 +299,9 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
 // -----------------------
 
 struct PurgeRange {
-  Mutex lock;
+  std::mutex lock;
+  typedef std::lock_guard<std::mutex> lock_guard;
+  typedef std::unique_lock<std::mutex> unique_lock;
   inodeno_t ino;
   ceph_file_layout layout;
   SnapContext snapc;
@@ -309,9 +313,8 @@ struct PurgeRange {
   PurgeRange(inodeno_t i, ceph_file_layout& l, const SnapContext& sc,
 	     uint64_t fo, uint64_t no, ceph::real_time t, int fl,
 	     Context *fin)
-    : lock("Filer::PurgeRange"), ino(i), layout(l), snapc(sc),
-      first(fo), num(no), mtime(t), flags(fl), oncommit(fin),
-      uncommitted(0) {}
+    : ino(i), layout(l), snapc(sc), first(fo), num(no), mtime(t), flags(fl),
+      oncommit(fin), uncommitted(0) {}
 };
 
 int Filer::purge_range(inodeno_t ino,
@@ -327,9 +330,7 @@ int Filer::purge_range(inodeno_t ino,
   // single object?  easy!
   if (num_obj == 1) {
     object_t oid = file_object_t(ino, first_obj);
-    const OSDMap *osdmap = objecter->get_osdmap_read();
-    object_locator_t oloc = osdmap->file_to_object_locator(*layout);
-    objecter->put_osdmap_read();
+    object_locator_t oloc = OSDMap::file_to_object_locator(*layout);
     objecter->remove(oid, oloc, snapc, mtime, flags, NULL, oncommit);
     return 0;
   }
@@ -352,7 +353,7 @@ struct C_PurgeRange : public Context {
 
 void Filer::_do_purge_range(PurgeRange *pr, int fin)
 {
-  pr->lock.Lock();
+  PurgeRange::unique_lock prl(pr->lock);
   pr->uncommitted -= fin;
   ldout(cct, 10) << "_do_purge_range " << pr->ino << " objects " << pr->first
 		 << "~" << pr->num << " uncommitted " << pr->uncommitted
@@ -360,7 +361,7 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
 
   if (pr->num == 0 && pr->uncommitted == 0) {
     pr->oncommit->complete(0);
-    pr->lock.Unlock();
+    prl.unlock();
     delete pr;
     return;
   }
@@ -375,15 +376,11 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
     pr->num--;
     max--;
   }
-  pr->lock.Unlock();
+  prl.unlock();
 
   // Issue objecter ops outside pr->lock to avoid lock dependency loop
-  for (std::vector<object_t>::iterator i = remove_oids.begin();
-      i != remove_oids.end(); ++i) {
-    const object_t oid = *i;
-    const OSDMap *osdmap = objecter->get_osdmap_read();
-    const object_locator_t oloc = osdmap->file_to_object_locator(pr->layout);
-    objecter->put_osdmap_read();
+  for (const auto& oid : remove_oids) {
+    object_locator_t oloc = OSDMap::file_to_object_locator(pr->layout);
     objecter->remove(oid, oloc, pr->snapc, pr->mtime, pr->flags, NULL,
 		     new C_OnFinisher(new C_PurgeRange(this, pr), finisher));
   }

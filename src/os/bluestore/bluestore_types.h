@@ -45,7 +45,7 @@ ostream& operator<<(ostream& out, const bluestore_bdev_label_t& l);
 struct bluestore_cnode_t {
   uint32_t bits;   ///< how many bits of coll pgid are significant
 
-  bluestore_cnode_t(int b=0) : bits(b) {}
+  explicit bluestore_cnode_t(int b=0) : bits(b) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -258,7 +258,7 @@ struct bluestore_wal_op_t {
     OP_COPY = 2,
     OP_ZERO = 4,
   } type_t;
-  __u8 op;
+  __u8 op = 0;
   bluestore_extent_t extent;
   bluestore_extent_t src_extent;
   uint64_t src_rmw_head, src_rmw_tail;
@@ -285,7 +285,7 @@ struct bluestore_wal_transaction_t {
 
   int64_t _bytes;  ///< cached byte count
 
-  bluestore_wal_transaction_t() : _bytes(-1) {}
+  bluestore_wal_transaction_t() : seq(0), _bytes(-1) {}
 
 #if 0
   no users for htis

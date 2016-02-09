@@ -137,9 +137,15 @@ private:
 
   // Indexed Collections
   IndexManager index_manager;
-  int get_index(coll_t c, Index *index);
-  int init_index(coll_t c);
+  int get_index(const coll_t& c, Index *index);
+  int init_index(const coll_t& c);
 
+  bool _need_temp_object_collection(const coll_t& cid, const ghobject_t& oid) {
+    // - normal temp case: cid is pg, object is temp (pool < -1)
+    // - hammer temp case: cid is pg (or already temp), object pool is -1
+    return (cid.is_pg() && (oid.hobj.pool < -1 ||
+			oid.hobj.pool == -1));
+  }
   void _kludge_temp_object_collection(coll_t& cid, const ghobject_t& oid) {
     // - normal temp case: cid is pg, object is temp (pool < -1)
     // - hammer temp case: cid is pg (or already temp), object pool is -1
@@ -153,7 +159,7 @@ private:
   boost::scoped_ptr<ObjectMap> object_map;
 
   // helper fns
-  int get_cdir(coll_t cid, char *s, int len);
+  int get_cdir(const coll_t& cid, char *s, int len);
 
   /// read a uuid from fd
   int read_fsid(int fd, uuid_d *uuid);
@@ -174,7 +180,7 @@ private:
   void sync_entry();
   struct SyncThread : public Thread {
     FileStore *fs;
-    SyncThread(FileStore *f) : fs(f) {}
+    explicit SyncThread(FileStore *f) : fs(f) {}
     void *entry() {
       fs->sync_entry();
       return 0;
@@ -185,7 +191,7 @@ private:
   struct Op {
     utime_t start;
     uint64_t op;
-    list<Transaction*> tls;
+    vector<Transaction> tls;
     Context *onreadable, *onreadable_sync;
     uint64_t ops, bytes;
     TrackedOpRef osd_op;
@@ -314,7 +320,7 @@ private:
       }
     }
 
-    OpSequencer(int i)
+    explicit OpSequencer(int i)
       : qlock("FileStore::OpSequencer::qlock", false, false),
 	parent(0),
 	apply_lock("FileStore::OpSequencer::apply_lock", false, false),
@@ -364,10 +370,9 @@ private:
       store->op_queue.pop_front();
       return osr;
     }
-    void _process(OpSequencer *osr, ThreadPool::TPHandle &handle) {
+    void _process(OpSequencer *osr, ThreadPool::TPHandle &handle) override {
       store->_do_op(osr, handle);
     }
-    using ThreadPool::WorkQueue<OpSequencer>::_process;
     void _process_finish(OpSequencer *osr) {
       store->_finish_op(osr);
     }
@@ -378,7 +383,7 @@ private:
 
   void _do_op(OpSequencer *o, ThreadPool::TPHandle &handle);
   void _finish_op(OpSequencer *o);
-  Op *build_op(list<Transaction*>& tls,
+  Op *build_op(vector<Transaction>& tls,
 	       Context *onreadable, Context *onreadable_sync,
 	       TrackedOpRef osd_op);
   void queue_op(OpSequencer *osr, Op *o);
@@ -394,18 +399,18 @@ private:
 public:
   int lfn_find(const ghobject_t& oid, const Index& index,
                                   IndexedPath *path = NULL);
-  int lfn_truncate(coll_t cid, const ghobject_t& oid, off_t length);
-  int lfn_stat(coll_t cid, const ghobject_t& oid, struct stat *buf);
+  int lfn_truncate(const coll_t& cid, const ghobject_t& oid, off_t length);
+  int lfn_stat(const coll_t& cid, const ghobject_t& oid, struct stat *buf);
   int lfn_open(
-    coll_t cid,
+    const coll_t& cid,
     const ghobject_t& oid,
     bool create,
     FDRef *outfd,
     Index *index = 0);
 
   void lfn_close(FDRef fd);
-  int lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghobject_t& newoid) ;
-  int lfn_unlink(coll_t cid, const ghobject_t& o, const SequencerPosition &spos,
+  int lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t& o, const ghobject_t& newoid) ;
+  int lfn_unlink(const coll_t& cid, const ghobject_t& o, const SequencerPosition &spos,
 		 bool force_clear_omap=false);
 
 public:
@@ -413,6 +418,10 @@ public:
     osflagbits_t flags = 0,
     const char *internal_name = "filestore", bool update_to=false);
   ~FileStore();
+
+  string get_type() {
+    return "filestore";
+  }
 
   int _detect_fs();
   int _sanity_check_fs();
@@ -457,16 +466,16 @@ public:
   int statfs(struct statfs *buf);
 
   int _do_transactions(
-    list<Transaction*> &tls, uint64_t op_seq,
+    vector<Transaction> &tls, uint64_t op_seq,
     ThreadPool::TPHandle *handle);
-  int do_transactions(list<Transaction*> &tls, uint64_t op_seq) {
+  int do_transactions(vector<Transaction> &tls, uint64_t op_seq) {
     return _do_transactions(tls, op_seq, 0);
   }
   void _do_transaction(
     Transaction& t, uint64_t op_seq, int trans_num,
     ThreadPool::TPHandle *handle);
 
-  int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
+  int queue_transactions(Sequencer *osr, vector<Transaction>& tls,
 			 TrackedOpRef op = TrackedOpRef(),
 			 ThreadPool::TPHandle *handle = NULL);
 
@@ -483,15 +492,15 @@ public:
 			 const SequencerPosition& spos,
 			 const ghobject_t *oid=0,
 			 bool in_progress=false);
-  void _set_replay_guard(coll_t cid,
+  void _set_replay_guard(const coll_t& cid,
                          const SequencerPosition& spos,
                          bool in_progress);
-  void _set_global_replay_guard(coll_t cid,
+  void _set_global_replay_guard(const coll_t& cid,
 				const SequencerPosition &spos);
 
   /// close a replay guard opened with in_progress=true
   void _close_replay_guard(int fd, const SequencerPosition& spos);
-  void _close_replay_guard(coll_t cid, const SequencerPosition& spos);
+  void _close_replay_guard(const coll_t& cid, const SequencerPosition& spos);
 
   /**
    * check replay guard xattr on given file
@@ -510,23 +519,26 @@ public:
    * @return 1 if we can apply (maybe replay) this operation, -1 if spos has already been applied, 0 if it was in progress
    */
   int _check_replay_guard(int fd, const SequencerPosition& spos);
-  int _check_replay_guard(coll_t cid, const SequencerPosition& spos);
-  int _check_replay_guard(coll_t cid, ghobject_t oid, const SequencerPosition& pos);
-  int _check_global_replay_guard(coll_t cid, const SequencerPosition& spos);
+  int _check_replay_guard(const coll_t& cid, const SequencerPosition& spos);
+  int _check_replay_guard(const coll_t& cid, ghobject_t oid, const SequencerPosition& pos);
+  int _check_global_replay_guard(const coll_t& cid, const SequencerPosition& spos);
 
   // ------------------
   // objects
   int pick_object_revision_lt(ghobject_t& oid) {
     return 0;
   }
-  bool exists(coll_t cid, const ghobject_t& oid);
+  using ObjectStore::exists;
+  bool exists(const coll_t& cid, const ghobject_t& oid);
+  using ObjectStore::stat;
   int stat(
-    coll_t cid,
+    const coll_t& cid,
     const ghobject_t& oid,
     struct stat *st,
     bool allow_eio = false);
+  using ObjectStore::read;
   int read(
-    coll_t cid,
+    const coll_t& cid,
     const ghobject_t& oid,
     uint64_t offset,
     size_t len,
@@ -537,22 +549,23 @@ public:
                  map<uint64_t, uint64_t> *m);
   int _do_seek_hole_data(int fd, uint64_t offset, size_t len,
                          map<uint64_t, uint64_t> *m);
-  int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
+  using ObjectStore::fiemap;
+  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
 
-  int _touch(coll_t cid, const ghobject_t& oid);
-  int _write(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len,
+  int _touch(const coll_t& cid, const ghobject_t& oid);
+  int _write(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len,
 	      const bufferlist& bl, uint32_t fadvise_flags = 0);
-  int _zero(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len);
-  int _truncate(coll_t cid, const ghobject_t& oid, uint64_t size);
-  int _clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& newoid,
+  int _zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len);
+  int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
+  int _clone(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
 	     const SequencerPosition& spos);
-  int _clone_range(coll_t cid, const ghobject_t& oldoid, const ghobject_t& newoid,
+  int _clone_range(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
 		   uint64_t srcoff, uint64_t len, uint64_t dstoff,
 		   const SequencerPosition& spos);
   int _do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff, bool skip_sloppycrc=false);
-  int _remove(coll_t cid, const ghobject_t& oid, const SequencerPosition &spos);
+  int _remove(const coll_t& cid, const ghobject_t& oid, const SequencerPosition &spos);
 
   int _fgetattr(int fd, const char *name, bufferptr& bp);
   int _fgetattrs(int fd, map<string,bufferptr>& aset);
@@ -588,54 +601,63 @@ public:
   int snapshot(const string& name);
 
   // attrs
-  int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr &bp);
-  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset);
+  using ObjectStore::getattr;
+  using ObjectStore::getattrs;
+  int getattr(const coll_t& cid, const ghobject_t& oid, const char *name, bufferptr &bp);
+  int getattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& aset);
 
-  int _setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset,
+  int _setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& aset,
 		const SequencerPosition &spos);
-  int _rmattr(coll_t cid, const ghobject_t& oid, const char *name,
+  int _rmattr(const coll_t& cid, const ghobject_t& oid, const char *name,
 	      const SequencerPosition &spos);
-  int _rmattrs(coll_t cid, const ghobject_t& oid,
+  int _rmattrs(const coll_t& cid, const ghobject_t& oid,
 	       const SequencerPosition &spos);
 
-  int collection_getattr(coll_t c, const char *name, void *value, size_t size);
-  int collection_getattr(coll_t c, const char *name, bufferlist& bl);
-  int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
+  int collection_getattr(const coll_t& c, const char *name, void *value, size_t size);
+  int collection_getattr(const coll_t& c, const char *name, bufferlist& bl);
+  int collection_getattrs(const coll_t& cid, map<string,bufferptr> &aset);
 
-  int _collection_setattr(coll_t c, const char *name, const void *value, size_t size);
-  int _collection_rmattr(coll_t c, const char *name);
-  int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
+  int _collection_setattr(const coll_t& c, const char *name, const void *value, size_t size);
+  int _collection_rmattr(const coll_t& c, const char *name);
+  int _collection_setattrs(const coll_t& cid, map<string,bufferptr> &aset);
   int _collection_remove_recursive(const coll_t &cid,
 				   const SequencerPosition &spos);
 
   // collections
-  int collection_list(coll_t c, ghobject_t start, ghobject_t end,
+  using ObjectStore::collection_list;
+  int collection_list(const coll_t& c, ghobject_t start, ghobject_t end,
 		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next);
   int list_collections(vector<coll_t>& ls);
   int list_collections(vector<coll_t>& ls, bool include_temp);
-  int collection_version_current(coll_t c, uint32_t *version);
-  int collection_stat(coll_t c, struct stat *st);
-  bool collection_exists(coll_t c);
-  bool collection_empty(coll_t c);
+  int collection_version_current(const coll_t& c, uint32_t *version);
+  int collection_stat(const coll_t& c, struct stat *st);
+  bool collection_exists(const coll_t& c);
+  bool collection_empty(const coll_t& c);
 
   // omap (see ObjectStore.h for documentation)
-  int omap_get(coll_t c, const ghobject_t &oid, bufferlist *header,
+  using ObjectStore::omap_get;
+  int omap_get(const coll_t& c, const ghobject_t &oid, bufferlist *header,
 	       map<string, bufferlist> *out);
+  using ObjectStore::omap_get_header;
   int omap_get_header(
-    coll_t c,
+    const coll_t& c,
     const ghobject_t &oid,
     bufferlist *out,
     bool allow_eio = false);
-  int omap_get_keys(coll_t c, const ghobject_t &oid, set<string> *keys);
-  int omap_get_values(coll_t c, const ghobject_t &oid, const set<string> &keys,
+  using ObjectStore::omap_get_keys;
+  int omap_get_keys(const coll_t& c, const ghobject_t &oid, set<string> *keys);
+  using ObjectStore::omap_get_values;
+  int omap_get_values(const coll_t& c, const ghobject_t &oid, const set<string> &keys,
 		      map<string, bufferlist> *out);
-  int omap_check_keys(coll_t c, const ghobject_t &oid, const set<string> &keys,
+  using ObjectStore::omap_check_keys;
+  int omap_check_keys(const coll_t& c, const ghobject_t &oid, const set<string> &keys,
 		      set<string> *out);
-  ObjectMap::ObjectMapIterator get_omap_iterator(coll_t c, const ghobject_t &oid);
+  using ObjectStore::get_omap_iterator;
+  ObjectMap::ObjectMapIterator get_omap_iterator(const coll_t& c, const ghobject_t &oid);
 
-  int _create_collection(coll_t c, const SequencerPosition &spos);
-  int _destroy_collection(coll_t c);
+  int _create_collection(const coll_t& c, const SequencerPosition &spos);
+  int _destroy_collection(const coll_t& c);
   /**
    * Give an expected number of objects hint to the collection.
    *
@@ -646,42 +668,42 @@ public:
    *
    * @return 0 on success, an error code otherwise
    */
-  int _collection_hint_expected_num_objs(coll_t c, uint32_t pg_num,
+  int _collection_hint_expected_num_objs(const coll_t& c, uint32_t pg_num,
       uint64_t expected_num_objs,
       const SequencerPosition &spos);
-  int _collection_add(coll_t c, coll_t ocid, const ghobject_t& oid,
+  int _collection_add(const coll_t& c, const coll_t& ocid, const ghobject_t& oid,
 		      const SequencerPosition& spos);
-  int _collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
+  int _collection_move_rename(const coll_t& oldcid, const ghobject_t& oldoid,
 			      coll_t c, const ghobject_t& o,
 			      const SequencerPosition& spos);
 
-  int _set_alloc_hint(coll_t cid, const ghobject_t& oid,
+  int _set_alloc_hint(const coll_t& cid, const ghobject_t& oid,
                       uint64_t expected_object_size,
                       uint64_t expected_write_size);
 
   void dump_start(const std::string& file);
   void dump_stop();
-  void dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr);
+  void dump_transactions(vector<Transaction>& ls, uint64_t seq, OpSequencer *osr);
 
 private:
   void _inject_failure();
 
   // omap
-  int _omap_clear(coll_t cid, const ghobject_t &oid,
+  int _omap_clear(const coll_t& cid, const ghobject_t &oid,
 		  const SequencerPosition &spos);
-  int _omap_setkeys(coll_t cid, const ghobject_t &oid,
+  int _omap_setkeys(const coll_t& cid, const ghobject_t &oid,
 		    const map<string, bufferlist> &aset,
 		    const SequencerPosition &spos);
-  int _omap_rmkeys(coll_t cid, const ghobject_t &oid, const set<string> &keys,
+  int _omap_rmkeys(const coll_t& cid, const ghobject_t &oid, const set<string> &keys,
 		   const SequencerPosition &spos);
-  int _omap_rmkeyrange(coll_t cid, const ghobject_t &oid,
+  int _omap_rmkeyrange(const coll_t& cid, const ghobject_t &oid,
 		       const string& first, const string& last,
 		       const SequencerPosition &spos);
-  int _omap_setheader(coll_t cid, const ghobject_t &oid, const bufferlist &bl,
+  int _omap_setheader(const coll_t& cid, const ghobject_t &oid, const bufferlist &bl,
 		      const SequencerPosition &spos);
-  int _split_collection(coll_t cid, uint32_t bits, uint32_t rem, coll_t dest,
+  int _split_collection(const coll_t& cid, uint32_t bits, uint32_t rem, coll_t dest,
                         const SequencerPosition &spos);
-  int _split_collection_create(coll_t cid, uint32_t bits, uint32_t rem,
+  int _split_collection_create(const coll_t& cid, uint32_t bits, uint32_t rem,
 			       coll_t dest,
 			       const SequencerPosition &spos);
 
@@ -781,7 +803,7 @@ protected:
   }
 
 public:
-  FileStoreBackend(FileStore *fs) : filestore(fs) {}
+  explicit FileStoreBackend(FileStore *fs) : filestore(fs) {}
   virtual ~FileStoreBackend() {}
 
   static FileStoreBackend *create(long f_type, FileStore *fs);

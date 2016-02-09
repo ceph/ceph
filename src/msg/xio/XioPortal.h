@@ -129,7 +129,7 @@ private:
   friend class XioMessenger;
 
 public:
-  XioPortal(Messenger *_msgr) :
+  explicit XioPortal(Messenger *_msgr) :
   msgr(_msgr), ctx(NULL), server(NULL), submit_q(), xio_uri(""),
   portal_id(NULL), _shutdown(false), drained(false),
   magic(0),
@@ -424,11 +424,11 @@ public:
       /* shift left */
       p_vec[(p_ix-1)] = (char*) /* portal->xio_uri.c_str() */
 			portal->portal_id;
-      }
+    }
 
     for (p_ix = 0; p_ix < nportals; ++p_ix) {
       portal = portals[p_ix];
-      portal->create();
+      portal->create(portal->portal_id);
     }
   }
 

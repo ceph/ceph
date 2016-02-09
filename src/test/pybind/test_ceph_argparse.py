@@ -381,7 +381,15 @@ class TestMDS(TestArgparse):
         self.check_1_natural_arg('mds', 'set_max_mds')
 
     def test_setmap(self):
-        self.check_1_natural_arg('mds', 'setmap')
+        self.assert_valid_command(['mds', 'setmap', '1'])
+        self.assert_valid_command(['mds', 'setmap', '1', '--yes-i-really-mean-it'])
+        assert_equal({}, validate_command(sigdict, ['mds', 'setmap',
+                                                    '--yes-i-really-mean-it']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'setmap', '-1',
+                                                    '--yes-i-really-mean-it']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'setmap', '1',
+                                                    '--yes-i-really-mean-it',
+                                                    'toomany']))
 
     def test_set_state(self):
         self.assert_valid_command(['mds', 'set_state', '1', '2'])
@@ -405,7 +413,15 @@ class TestMDS(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['mds', 'rm', '1', 'mds.42']))
 
     def test_rmfailed(self):
-        self.check_1_natural_arg('mds', 'rmfailed')
+        self.assert_valid_command(['mds', 'rmfailed', '0'])
+        self.assert_valid_command(['mds', 'rmfailed', '0', '--yes-i-really-mean-it'])
+        assert_equal({}, validate_command(sigdict, ['mds', 'rmfailed',
+                                                    '--yes-i-really-mean-it']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'rmfailed', '-1',
+                                                    '--yes-i-really-mean-it']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'rmfailed', '0',
+                                                    '--yes-i-really-mean-it',
+                                                    'toomany']))
 
     def test_cluster_down(self):
         self.check_no_arg('mds', 'cluster_down')

@@ -130,7 +130,7 @@ void Elector::reset_timer(double plus)
   // set the timer
   cancel_timer();
   expire_event = new C_ElectionExpire(this);
-  mon->timer.add_event_after(g_conf->mon_lease + plus,
+  mon->timer.add_event_after(g_conf->mon_election_timeout + plus,
 			     expire_event);
 }
 

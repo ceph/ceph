@@ -285,6 +285,134 @@ TEST_F(TestLibRBD, CreateAndStatPP)
   ioctx.close();
 }
 
+TEST_F(TestLibRBD, OpenAio)
+{
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+
+  rbd_image_info_t info;
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+
+  rbd_completion_t open_comp;
+  ASSERT_EQ(0, rbd_aio_create_completion(NULL, NULL, &open_comp));
+  ASSERT_EQ(0, rbd_aio_open(ioctx, name.c_str(), &image, NULL, open_comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(open_comp));
+  ASSERT_EQ(1, rbd_aio_is_complete(open_comp));
+  ASSERT_EQ(0, rbd_aio_get_return_value(open_comp));
+  rbd_aio_release(open_comp);
+
+  ASSERT_EQ(0, rbd_stat(image, &info, sizeof(info)));
+  printf("image has size %llu and order %d\n", (unsigned long long) info.size, info.order);
+  ASSERT_EQ(info.size, size);
+  ASSERT_EQ(info.order, order);
+
+  rbd_completion_t close_comp;
+  ASSERT_EQ(0, rbd_aio_create_completion(NULL, NULL, &close_comp));
+  ASSERT_EQ(0, rbd_aio_close(image, close_comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(close_comp));
+  ASSERT_EQ(1, rbd_aio_is_complete(close_comp));
+  ASSERT_EQ(0, rbd_aio_get_return_value(close_comp));
+  rbd_aio_release(close_comp);
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, OpenAioFail)
+{
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+
+  std::string name = get_temp_image_name();
+  rbd_image_t image;
+  rbd_completion_t open_comp;
+  ASSERT_EQ(0, rbd_aio_create_completion(NULL, NULL, &open_comp));
+  ASSERT_EQ(0, rbd_aio_open(ioctx, name.c_str(), &image, NULL, open_comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(open_comp));
+  ASSERT_EQ(1, rbd_aio_is_complete(open_comp));
+  ASSERT_EQ(-ENOENT, rbd_aio_get_return_value(open_comp));
+  rbd_aio_release(open_comp);
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, OpenAioPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::image_info_t info;
+  librbd::Image image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::RBD::AioCompletion *open_comp =
+      new librbd::RBD::AioCompletion(NULL, NULL);
+  ASSERT_EQ(0, rbd.aio_open(ioctx, image, name.c_str(), NULL, open_comp));
+  ASSERT_EQ(0, open_comp->wait_for_complete());
+  ASSERT_EQ(1, open_comp->is_complete());
+  ASSERT_EQ(0, open_comp->get_return_value());
+  open_comp->release();
+
+  ASSERT_EQ(0, image.stat(info, sizeof(info)));
+  ASSERT_EQ(info.size, size);
+  ASSERT_EQ(info.order, order);
+
+  // reopen
+  open_comp = new librbd::RBD::AioCompletion(NULL, NULL);
+  ASSERT_EQ(0, rbd.aio_open(ioctx, image, name.c_str(), NULL, open_comp));
+  ASSERT_EQ(0, open_comp->wait_for_complete());
+  ASSERT_EQ(1, open_comp->is_complete());
+  ASSERT_EQ(0, open_comp->get_return_value());
+  open_comp->release();
+
+  // close
+  librbd::RBD::AioCompletion *close_comp =
+      new librbd::RBD::AioCompletion(NULL, NULL);
+  ASSERT_EQ(0, image.aio_close(close_comp));
+  ASSERT_EQ(0, close_comp->wait_for_complete());
+  ASSERT_EQ(1, close_comp->is_complete());
+  ASSERT_EQ(0, close_comp->get_return_value());
+  close_comp->release();
+
+  // close closed image
+  close_comp = new librbd::RBD::AioCompletion(NULL, NULL);
+  ASSERT_EQ(-EINVAL, image.aio_close(close_comp));
+  close_comp->release();
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, OpenAioFailPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    std::string name = get_temp_image_name();
+
+    librbd::RBD::AioCompletion *open_comp =
+      new librbd::RBD::AioCompletion(NULL, NULL);
+    ASSERT_EQ(0, rbd.aio_open(ioctx, image, name.c_str(), NULL, open_comp));
+    ASSERT_EQ(0, open_comp->wait_for_complete());
+    ASSERT_EQ(1, open_comp->is_complete());
+    ASSERT_EQ(-ENOENT, open_comp->get_return_value());
+    open_comp->release();
+  }
+
+  ioctx.close();
+}
+
 TEST_F(TestLibRBD, ResizeAndStat)
 {
   rados_ioctx_t ioctx;
@@ -2911,8 +3039,12 @@ TEST_F(TestLibRBD, SnapCreateViaLockOwner)
   librbd::Image image1;
   ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
 
+  // switch to writeback cache
+  ASSERT_EQ(0, image1.flush());
+
   bufferlist bl;
-  ASSERT_EQ(0, image1.write(0, 0, bl));
+  bl.append(std::string(4096, '1'));
+  ASSERT_EQ(bl.length(), image1.write(0, bl.length(), bl));
 
   bool lock_owner;
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
@@ -3188,7 +3320,7 @@ TEST_F(TestLibRBD, ResizeViaLockOwner)
 
 class RBDWriter : public Thread {
  public:
-   RBDWriter(librbd::Image &image) : m_image(image) {};
+   explicit RBDWriter(librbd::Image &image) : m_image(image) {};
  protected:
   void *entry() {
     librbd::image_info_t info;

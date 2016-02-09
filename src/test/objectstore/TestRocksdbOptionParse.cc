@@ -30,14 +30,14 @@ TEST(RocksDBOption, simple) {
 			  "disable_data_sync = false;";
   int r = db->ParseOptionsFromString(options_string, options);
   ASSERT_EQ(0, r);
-  ASSERT_EQ(536870912, options.write_buffer_size);
+  ASSERT_EQ(536870912u, options.write_buffer_size);
   ASSERT_EQ(4, options.max_write_buffer_number);
   ASSERT_EQ(4, options.max_background_compactions);
-  ASSERT_EQ(5, options.stats_dump_period_sec);
+  ASSERT_EQ(5u, options.stats_dump_period_sec);
   ASSERT_EQ(2, options.min_write_buffer_number_to_merge);
   ASSERT_EQ(4, options.level0_file_num_compaction_trigger);
-  ASSERT_EQ(104857600, options.max_bytes_for_level_base);
-  ASSERT_EQ(10485760, options.target_file_size_base);
+  ASSERT_EQ(104857600u, options.max_bytes_for_level_base);
+  ASSERT_EQ(10485760u, options.target_file_size_base);
   ASSERT_EQ(3, options.num_levels);
   ASSERT_FALSE(options.disableDataSync);
  // ASSERT_EQ("none", options.compression);
@@ -67,7 +67,7 @@ TEST(RocksDBOption, interpret) {
     if (it->thread_type == rocksdb::ThreadStatus::LOW_PRIORITY)
       num_low_pri_threads++;
   }
-  ASSERT_EQ(15, thread_list.size());
+  ASSERT_EQ(15u, thread_list.size());
   //low pri threads is compaction_threads
   ASSERT_EQ(10, num_low_pri_threads);
   //high pri threads is flusher_threads

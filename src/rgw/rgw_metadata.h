@@ -192,13 +192,6 @@ public:
   void read_clear_modified(set<int> &modified);
 };
 
-struct LogStatusDump {
-  RGWMDLogStatus status;
-
-  LogStatusDump(RGWMDLogStatus _status) : status(_status) {}
-  void dump(Formatter *f) const;
-};
-
 struct RGWMetadataLogData {
   obj_version read_version;
   obj_version write_version;

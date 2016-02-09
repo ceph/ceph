@@ -263,7 +263,6 @@ public:
   /// Listener methods
   void on_local_recover(
     const hobject_t &oid,
-    const object_stat_sum_t &stat_diff,
     const ObjectRecoveryInfo &recovery_info,
     ObjectContextRef obc,
     ObjectStore::Transaction *t
@@ -278,7 +277,8 @@ public:
     pg_shard_t peer,
     const hobject_t oid);
   void on_global_recover(
-    const hobject_t &oid);
+    const hobject_t &oid,
+    const object_stat_sum_t &stat_diff);
   void failed_push(pg_shard_t from, const hobject_t &soid);
   void cancel_pull(const hobject_t &soid);
 
@@ -327,11 +327,11 @@ public:
   void send_message(int to_osd, Message *m) {
     osd->send_message_osd_cluster(to_osd, m, get_osdmap()->get_epoch());
   }
-  void queue_transaction(ObjectStore::Transaction *t, OpRequestRef op) {
-    osd->store->queue_transaction(osr.get(), t, 0, 0, 0, op);
+  void queue_transaction(ObjectStore::Transaction&& t, OpRequestRef op) {
+    osd->store->queue_transaction(osr.get(), std::move(t), 0, 0, 0, op);
   }
-  void queue_transactions(list<ObjectStore::Transaction*>& tls, OpRequestRef op) {
-    osd->store->queue_transactions(osr.get(), tls, 0, 0, 0, op);
+  void queue_transactions(vector<ObjectStore::Transaction>& tls, OpRequestRef op) {
+    osd->store->queue_transactions(osr.get(), tls, 0, 0, 0, op, NULL);
   }
   epoch_t get_epoch() const {
     return get_osdmap()->get_epoch();
@@ -509,7 +509,7 @@ public:
       boost::optional<uint64_t> watch_cookie;
       uint64_t notify_id;
       bufferlist reply_bl;
-      NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
+      explicit NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
       NotifyAck(uint64_t notify_id, uint64_t cookie, bufferlist& rbl)
 	: watch_cookie(cookie), notify_id(notify_id) {
 	reply_bl.claim(rbl);
@@ -1242,7 +1242,6 @@ protected:
 
   void _clear_recovery_state();
 
-  void queue_for_recovery();
   bool start_recovery_ops(
     int max, ThreadPool::TPHandle &handle, int *started);
 
@@ -1299,7 +1298,7 @@ protected:
   };
   struct C_OSD_OndiskWriteUnlockList : public Context {
     list<ObjectContextRef> *pls;
-    C_OSD_OndiskWriteUnlockList(list<ObjectContextRef> *l) : pls(l) {}
+    explicit C_OSD_OndiskWriteUnlockList(list<ObjectContextRef> *l) : pls(l) {}
     void finish(int r) {
       for (list<ObjectContextRef>::iterator p = pls->begin(); p != pls->end(); ++p)
 	(*p)->ondisk_write_unlock();
@@ -1328,7 +1327,7 @@ protected:
   };
   struct C_OSD_AppliedRecoveredObjectReplica : public Context {
     ReplicatedPGRef pg;
-    C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p) :
+    explicit C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p) :
       pg(p) {}
     void finish(int r) {
       pg->_applied_recovered_object_replica();
@@ -1544,7 +1543,7 @@ private:
     set<RepGather *> repops;
     snapid_t snap_to_trim;
     bool need_share_pg_info;
-    SnapTrimmer(ReplicatedPG *pg) : pg(pg), need_share_pg_info(false) {}
+    explicit SnapTrimmer(ReplicatedPG *pg) : pg(pg), need_share_pg_info(false) {}
     ~SnapTrimmer();
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
@@ -1557,7 +1556,7 @@ private:
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
     hobject_t pos;
-    TrimmingObjects(my_context ctx);
+    explicit TrimmingObjects(my_context ctx);
     void exit();
     boost::statechart::result react(const SnapTrim&);
   };
@@ -1567,7 +1566,7 @@ private:
       boost::statechart::custom_reaction< SnapTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    WaitingOnReplicas(my_context ctx);
+    explicit WaitingOnReplicas(my_context ctx);
     void exit();
     boost::statechart::result react(const SnapTrim&);
   };
@@ -1577,7 +1576,7 @@ private:
       boost::statechart::custom_reaction< SnapTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    NotTrimming(my_context ctx);
+    explicit NotTrimming(my_context ctx);
     void exit();
     boost::statechart::result react(const SnapTrim&);
   };

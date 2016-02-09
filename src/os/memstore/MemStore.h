@@ -130,7 +130,7 @@ public:
     static thread_local PageSet::page_vector tls_pages;
 #endif
 
-    PageSetObject(size_t page_size) : data(page_size), data_len(0) {}
+    explicit PageSetObject(size_t page_size) : data(page_size), data_len(0) {}
 
     size_t get_size() const override { return data_len; }
 
@@ -156,17 +156,23 @@ public:
     }
   };
 
-  struct Collection : public RefCountedObject {
+  struct Collection : public CollectionImpl {
+    coll_t cid;
     CephContext *cct;
     bool use_page_set;
     ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
     map<ghobject_t, ObjectRef,ghobject_t::BitwiseComparator> object_map;        ///< for iteration
     map<string,bufferptr> xattr;
     RWLock lock;   ///< for object_{map,hash}
+    bool exists;
 
     typedef boost::intrusive_ptr<Collection> Ref;
     friend void intrusive_ptr_add_ref(Collection *c) { c->get(); }
     friend void intrusive_ptr_release(Collection *c) { c->put(); }
+
+    const coll_t &get_cid() override {
+      return cid;
+    }
 
     ObjectRef create_object() const {
       if (use_page_set)
@@ -237,9 +243,12 @@ public:
       return result;
     }
 
-    Collection(CephContext *cct)
-      : cct(cct), use_page_set(cct->_conf->memstore_page_set),
-        lock("MemStore::Collection::lock") {}
+    explicit Collection(CephContext *cct, coll_t c)
+      : cid(c),
+	cct(cct),
+	use_page_set(cct->_conf->memstore_page_set),
+        lock("MemStore::Collection::lock", true, false),
+	exists(true) {}
   };
   typedef Collection::Ref CollectionRef;
 
@@ -292,9 +301,8 @@ private:
 
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
   RWLock coll_lock;    ///< rwlock to protect coll_map
-  Mutex apply_lock;    ///< serialize all updates
 
-  CollectionRef get_collection(coll_t cid);
+  CollectionRef get_collection(const coll_t& cid);
 
   Finisher finisher;
 
@@ -302,34 +310,34 @@ private:
 
   void _do_transaction(Transaction& t);
 
-  int _touch(coll_t cid, const ghobject_t& oid);
-  int _write(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len,
+  int _touch(const coll_t& cid, const ghobject_t& oid);
+  int _write(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len,
 	      const bufferlist& bl, uint32_t fadvsie_flags = 0);
-  int _zero(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len);
-  int _truncate(coll_t cid, const ghobject_t& oid, uint64_t size);
-  int _remove(coll_t cid, const ghobject_t& oid);
-  int _setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset);
-  int _rmattr(coll_t cid, const ghobject_t& oid, const char *name);
-  int _rmattrs(coll_t cid, const ghobject_t& oid);
-  int _clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& newoid);
-  int _clone_range(coll_t cid, const ghobject_t& oldoid,
+  int _zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len);
+  int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
+  int _remove(const coll_t& cid, const ghobject_t& oid);
+  int _setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& aset);
+  int _rmattr(const coll_t& cid, const ghobject_t& oid, const char *name);
+  int _rmattrs(const coll_t& cid, const ghobject_t& oid);
+  int _clone(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid);
+  int _clone_range(const coll_t& cid, const ghobject_t& oldoid,
 		   const ghobject_t& newoid,
 		   uint64_t srcoff, uint64_t len, uint64_t dstoff);
-  int _omap_clear(coll_t cid, const ghobject_t &oid);
-  int _omap_setkeys(coll_t cid, const ghobject_t &oid, bufferlist& aset_bl);
-  int _omap_rmkeys(coll_t cid, const ghobject_t &oid, bufferlist& keys_bl);
-  int _omap_rmkeyrange(coll_t cid, const ghobject_t &oid,
+  int _omap_clear(const coll_t& cid, const ghobject_t &oid);
+  int _omap_setkeys(const coll_t& cid, const ghobject_t &oid, bufferlist& aset_bl);
+  int _omap_rmkeys(const coll_t& cid, const ghobject_t &oid, bufferlist& keys_bl);
+  int _omap_rmkeyrange(const coll_t& cid, const ghobject_t &oid,
 		       const string& first, const string& last);
-  int _omap_setheader(coll_t cid, const ghobject_t &oid, const bufferlist &bl);
+  int _omap_setheader(const coll_t& cid, const ghobject_t &oid, const bufferlist &bl);
 
-  int _collection_hint_expected_num_objs(coll_t cid, uint32_t pg_num,
+  int _collection_hint_expected_num_objs(const coll_t& cid, uint32_t pg_num,
       uint64_t num_objs) const { return 0; }
-  int _create_collection(coll_t c);
-  int _destroy_collection(coll_t c);
-  int _collection_add(coll_t cid, coll_t ocid, const ghobject_t& oid);
-  int _collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
+  int _create_collection(const coll_t& c);
+  int _destroy_collection(const coll_t& c);
+  int _collection_add(const coll_t& cid, const coll_t& ocid, const ghobject_t& oid);
+  int _collection_move_rename(const coll_t& oldcid, const ghobject_t& oldoid,
 			      coll_t cid, const ghobject_t& o);
-  int _split_collection(coll_t cid, uint32_t bits, uint32_t rem, coll_t dest);
+  int _split_collection(const coll_t& cid, uint32_t bits, uint32_t rem, coll_t dest);
 
   int _save();
   int _load();
@@ -342,10 +350,13 @@ public:
     : ObjectStore(path),
       cct(cct),
       coll_lock("MemStore::coll_lock"),
-      apply_lock("MemStore::apply_lock"),
       finisher(cct),
       used_bytes(0) {}
   ~MemStore() { }
+
+  string get_type() {
+    return "memstore";
+  }
 
   bool test_mount_in_use() {
     return false;
@@ -377,71 +388,97 @@ public:
 
   int statfs(struct statfs *buf);
 
-  bool exists(coll_t cid, const ghobject_t& oid);
-  int stat(
-    coll_t cid,
-    const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio = false); // struct stat?
+  bool exists(const coll_t& cid, const ghobject_t& oid) override;
+  bool exists(CollectionHandle &c, const ghobject_t& oid) override;
+  int stat(const coll_t& cid, const ghobject_t& oid,
+	   struct stat *st, bool allow_eio = false) override;
+  int stat(CollectionHandle &c, const ghobject_t& oid,
+	   struct stat *st, bool allow_eio = false) override;
   int read(
-    coll_t cid,
+    const coll_t& cid,
     const ghobject_t& oid,
     uint64_t offset,
     size_t len,
     bufferlist& bl,
     uint32_t op_flags = 0,
-    bool allow_eio = false);
-  int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
-  int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr& value);
-  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset);
+    bool allow_eio = false) override;
+  int read(
+    CollectionHandle &c,
+    const ghobject_t& oid,
+    uint64_t offset,
+    size_t len,
+    bufferlist& bl,
+    uint32_t op_flags = 0,
+    bool allow_eio = false) override;
+  using ObjectStore::fiemap;
+  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
+  int getattr(const coll_t& cid, const ghobject_t& oid, const char *name,
+	      bufferptr& value) override;
+  int getattr(CollectionHandle &c, const ghobject_t& oid, const char *name,
+	      bufferptr& value) override;
+  int getattrs(const coll_t& cid, const ghobject_t& oid,
+	       map<string,bufferptr>& aset) override;
+  int getattrs(CollectionHandle &c, const ghobject_t& oid,
+	       map<string,bufferptr>& aset) override;
 
   int list_collections(vector<coll_t>& ls);
-  bool collection_exists(coll_t c);
-  bool collection_empty(coll_t c);
-  int collection_list(coll_t cid, ghobject_t start, ghobject_t end,
+
+  CollectionHandle open_collection(const coll_t& c) {
+    return get_collection(c);
+  }
+  bool collection_exists(const coll_t& c);
+  bool collection_empty(const coll_t& c);
+  using ObjectStore::collection_list;
+  int collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
 		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next);
 
+  using ObjectStore::omap_get;
   int omap_get(
-    coll_t cid,                ///< [in] Collection containing oid
+    const coll_t& cid,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
     map<string, bufferlist> *out /// < [out] Key to value map
     );
 
+  using ObjectStore::omap_get_header;
   /// Get omap header
   int omap_get_header(
-    coll_t cid,                ///< [in] Collection containing oid
+    const coll_t& cid,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
     bool allow_eio = false ///< [in] don't assert on eio
     );
 
+  using ObjectStore::omap_get_keys;
   /// Get keys defined on oid
   int omap_get_keys(
-    coll_t cid,              ///< [in] Collection containing oid
+    const coll_t& cid,              ///< [in] Collection containing oid
     const ghobject_t &oid, ///< [in] Object containing omap
     set<string> *keys      ///< [out] Keys defined on oid
     );
 
+  using ObjectStore::omap_get_values;
   /// Get key values
   int omap_get_values(
-    coll_t cid,                    ///< [in] Collection containing oid
+    const coll_t& cid,                    ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
     const set<string> &keys,     ///< [in] Keys to get
     map<string, bufferlist> *out ///< [out] Returned keys and values
     );
 
+  using ObjectStore::omap_check_keys;
   /// Filters keys into out which are defined on oid
   int omap_check_keys(
-    coll_t cid,                ///< [in] Collection containing oid
+    const coll_t& cid,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     const set<string> &keys, ///< [in] Keys to check
     set<string> *out         ///< [out] Subset of keys defined on oid
     );
 
+  using ObjectStore::get_omap_iterator;
   ObjectMap::ObjectMapIterator get_omap_iterator(
-    coll_t cid,              ///< [in] collection
+    const coll_t& cid,              ///< [in] collection
     const ghobject_t &oid  ///< [in] object
     );
 
@@ -451,7 +488,7 @@ public:
   objectstore_perf_stat_t get_cur_stats();
 
   int queue_transactions(
-    Sequencer *osr, list<Transaction*>& tls,
+    Sequencer *osr, vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL);
 };

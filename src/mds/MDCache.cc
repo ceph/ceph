@@ -143,7 +143,7 @@ protected:
     return mdcache->mds;
   }
 public:
-  MDCacheContext(MDCache *mdc_) : mdcache(mdc_) {}
+  explicit MDCacheContext(MDCache *mdc_) : mdcache(mdc_) {}
 };
 
 
@@ -163,7 +163,7 @@ protected:
     return mdcache->mds;
   }
 public:
-  MDCacheIOContext(MDCache *mdc_) : mdcache(mdc_) {}
+  explicit MDCacheIOContext(MDCache *mdc_) : mdcache(mdc_) {}
 };
 
 
@@ -574,7 +574,7 @@ void MDCache::_create_system_file_finish(MutationRef& mut, CDentry *dn, version_
 
 struct C_MDS_RetryOpenRoot : public MDSInternalContext {
   MDCache *cache;
-  C_MDS_RetryOpenRoot(MDCache *c) : MDSInternalContext(c->mds), cache(c) {}
+  explicit C_MDS_RetryOpenRoot(MDCache *c) : MDSInternalContext(c->mds), cache(c) {}
   void finish(int r) {
     if (r < 0)
       cache->mds->suicide();
@@ -2652,6 +2652,13 @@ ESubtreeMap *MDCache::create_subtree_map()
   return le;
 }
 
+void MDCache::dump_resolve_status(Formatter *f) const
+{
+  f->open_object_section("resolve_status");
+  f->dump_stream("resolve_gather") << resolve_gather;
+  f->dump_stream("resolve_ack_gather") << resolve_gather;
+  f->close_section();
+}
 
 void MDCache::resolve_start(MDSInternalContext *resolve_done_)
 {
@@ -3849,6 +3856,15 @@ void MDCache::recalc_auth_bits(bool replay)
  *   after recovery.
  */
 
+void MDCache::dump_rejoin_status(Formatter *f) const
+{
+  f->open_object_section("rejoin_status");
+  f->dump_stream("rejoin_gather") << rejoin_gather;
+  f->dump_stream("rejoin_ack_gather") << rejoin_ack_gather;
+  f->dump_unsigned("num_opening_inodes", cap_imports_num_opening);
+  f->close_section();
+}
+
 void MDCache::rejoin_start(MDSInternalContext *rejoin_done_)
 {
   dout(10) << "rejoin_start" << dendl;
@@ -4459,7 +4475,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
 class C_MDC_RejoinGatherFinish : public MDCacheContext {
 public:
-  C_MDC_RejoinGatherFinish(MDCache *c) : MDCacheContext(c) {}
+  explicit C_MDC_RejoinGatherFinish(MDCache *c) : MDCacheContext(c) {}
   void finish(int r) {
     mdcache->rejoin_gather_finish();
   }
@@ -5524,8 +5540,14 @@ void MDCache::export_remaining_imported_caps()
     }
   }
 
+  for (map<inodeno_t, list<MDSInternalContextBase*> >::iterator p = cap_reconnect_waiters.begin();
+       p != cap_reconnect_waiters.end();
+       ++p)
+    mds->queue_waiters(p->second);
+
   cap_imports.clear();
   cap_imports_dirty.clear();
+  cap_reconnect_waiters.clear();
 
   if (warn_str.peek() != EOF) {
     mds->clog->warn() << "failed to reconnect caps for missing inodes:" << "\n";
@@ -5554,6 +5576,13 @@ void MDCache::try_reconnect_cap(CInode *in, Session *session)
 	dirty_caps = it->second;
       in->choose_lock_states(dirty_caps);
       dout(15) << " chose lock states on " << *in << dendl;
+    }
+
+    map<inodeno_t, list<MDSInternalContextBase*> >::iterator it =
+      cap_reconnect_waiters.find(in->ino());
+    if (it != cap_reconnect_waiters.end()) {
+      mds->queue_waiters(it->second);
+      cap_reconnect_waiters.erase(it);
     }
   }
 }
@@ -5604,7 +5633,7 @@ void MDCache::do_delayed_cap_imports()
 }
 
 struct C_MDC_OpenSnapParents : public MDCacheContext {
-  C_MDC_OpenSnapParents(MDCache *c) : MDCacheContext(c) {}
+  explicit C_MDC_OpenSnapParents(MDCache *c) : MDCacheContext(c) {}
   void finish(int r) {
     mdcache->open_snap_parents();
   }
@@ -7222,7 +7251,7 @@ void MDCache::check_memory_usage()
 
 class C_MDC_ShutdownCheck : public MDCacheContext {
 public:
-  C_MDC_ShutdownCheck(MDCache *m) : MDCacheContext(m) {}
+  explicit C_MDC_ShutdownCheck(MDCache *m) : MDCacheContext(m) {}
   void finish(int) {
     mdcache->shutdown_check();
   }
@@ -7377,7 +7406,7 @@ bool MDCache::shutdown_pass()
   assert(subtrees.empty());
 
   // Still replicas of mydir?
-  if (mydir->inode->is_replicated()) {
+  if ((mydir != NULL) && mydir->inode->is_replicated()) {
     // We do this because otherwise acks to locks could come in after
     // we cap the log.
     dout(7) << "waiting for mydir replicas to release: " << *mydir << dendl;
@@ -11928,3 +11957,13 @@ void MDCache::notify_osdmap_changed()
   stray_manager.update_op_limit();
 }
 
+void MDCache::handle_conf_change(const struct md_config_t *conf,
+			     const std::set <std::string> &changed)
+{
+  assert(mds->mds_lock.is_locked_by_me());
+
+  if (changed.count("mds_max_purge_ops")
+      || changed.count("mds_max_purge_ops_per_pg")) {
+    stray_manager.update_op_limit();
+  }
+}

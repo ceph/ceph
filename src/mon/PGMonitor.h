@@ -154,8 +154,9 @@ private:
 			  vector<string>& args) const;
 
   void dump_object_stat_sum(TextTable &tbl, Formatter *f,
-                            object_stat_sum_t &sum,
+			    object_stat_sum_t &sum,
 			    uint64_t avail,
+			    float raw_used_rate,
 			    bool verbose) const;
 
   int64_t get_rule_avail(OSDMap& osdmap, int ruleno) const;
@@ -206,7 +207,8 @@ public:
 				   list<pair<health_status_t,string> > *detail) const;
 
   void get_health(list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail) const;
+		  list<pair<health_status_t,string> > *detail,
+		  CephContext *cct) const override;
   void check_full_osd_health(list<pair<health_status_t,string> >& summary,
 			     list<pair<health_status_t,string> > *detail,
 			     const set<int>& s, const char *desc, health_status_t sev) const;

@@ -2539,7 +2539,7 @@ class RGWWatcher : public librados::WatchCtx2 {
   class C_ReinitWatch : public Context {
     RGWWatcher *watcher;
     public:
-      C_ReinitWatch(RGWWatcher *_watcher) : watcher(_watcher) {}
+      explicit C_ReinitWatch(RGWWatcher *_watcher) : watcher(_watcher) {}
       void finish(int r) {
         watcher->reinit();
       }
@@ -6433,8 +6433,10 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
   RGWRESTStreamWriteRequest *out_stream_req;
 
   int ret = rest_master_conn->put_obj_init(user_id, dest_obj, astate->size, src_attrs, &out_stream_req);
-  if (ret < 0)
+  if (ret < 0) {
+    delete out_stream_req;
     return ret;
+  }
 
   ret = read_op.iterate(0, astate->size - 1, out_stream_req->get_out_cb());
   if (ret < 0)
@@ -8599,7 +8601,7 @@ struct get_obj_data : public RefCountedObject {
   Throttle throttle;
   list<bufferlist> read_list;
 
-  get_obj_data(CephContext *_cct)
+  explicit get_obj_data(CephContext *_cct)
     : cct(_cct),
       rados(NULL), ctx(NULL),
       total_read(0), lock("get_obj_data"), data_lock("get_obj_data::data_lock"),
@@ -9908,7 +9910,7 @@ class RGWGetUserStatsContext : public RGWGetUserHeader_CB {
   RGWGetUserStats_CB *cb;
 
 public:
-  RGWGetUserStatsContext(RGWGetUserStats_CB *_cb) : cb(_cb) {}
+  explicit RGWGetUserStatsContext(RGWGetUserStats_CB *_cb) : cb(_cb) {}
   void handle_response(int r, cls_user_header& header) {
     cls_user_stats& hs = header.stats;
     if (r >= 0) {
@@ -10429,7 +10431,7 @@ int RGWRados::pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>&
 struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
   string prefix;
 
-  RGWAccessListFilterPrefix(const string& _prefix) : prefix(_prefix) {}
+  explicit RGWAccessListFilterPrefix(const string& _prefix) : prefix(_prefix) {}
   virtual bool filter(string& name, string& key) {
     return (prefix.compare(key.substr(0, prefix.size())) == 0);
   }

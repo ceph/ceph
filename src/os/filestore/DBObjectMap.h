@@ -83,7 +83,7 @@ public:
     MapHeaderLock(const MapHeaderLock &);
     MapHeaderLock &operator=(const MapHeaderLock &);
   public:
-    MapHeaderLock(DBObjectMap *db) : db(db) {}
+    explicit MapHeaderLock(DBObjectMap *db) : db(db) {}
     MapHeaderLock(DBObjectMap *db, const ghobject_t &oid) : db(db), locked(oid) {
       Mutex::Locker l(db->header_lock);
       while (db->map_header_in_use.count(*locked))
@@ -115,9 +115,9 @@ public:
     }
   };
 
-  DBObjectMap(KeyValueDB *db) : db(db), header_lock("DBOBjectMap"),
-                                cache_lock("DBObjectMap::CacheLock"),
-                                caches(g_conf->filestore_omap_header_cache_size)
+  explicit DBObjectMap(KeyValueDB *db) : db(db), header_lock("DBOBjectMap"),
+           	                         cache_lock("DBObjectMap::CacheLock"),
+      	                                 caches(g_conf->filestore_omap_header_cache_size)
     {}
 
   int set_keys(
@@ -241,7 +241,7 @@ public:
     __u8 v;
     uint64_t seq;
     State() : v(0), seq(1) {}
-    State(uint64_t seq) : v(0), seq(seq) {}
+    explicit State(uint64_t seq) : v(0), seq(seq) {}
 
     void encode(bufferlist &bl) const {
       ENCODE_START(2, 1, bl);
@@ -516,7 +516,7 @@ private:
   class RemoveOnDelete {
   public:
     DBObjectMap *db;
-    RemoveOnDelete(DBObjectMap *db) :
+    explicit RemoveOnDelete(DBObjectMap *db) :
       db(db) {}
     void operator() (_Header *header) {
       Mutex::Locker l(db->header_lock);

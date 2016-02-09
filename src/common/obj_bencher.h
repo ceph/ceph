@@ -37,6 +37,7 @@ struct bench_history {
 struct bench_data {
   bool done; //is the benchmark is done
   size_t object_size; //the size of the objects
+  size_t op_size;     // the size of the read/write ops
   // same as object_size for write tests
   int in_flight; //number of reads/writes being waited on
   int started;
@@ -71,9 +72,10 @@ protected:
 
   struct bench_data data;
 
-  int fetch_bench_metadata(const std::string& metadata_file, size_t* object_size, int* num_objects, int* prevPid);
+  int fetch_bench_metadata(const std::string& metadata_file, size_t* op_size,
+			   size_t* object_size, int* num_objects, int* prevPid);
 
-  int write_bench(int secondsToRun, int concurrentios, const string& run_name_meta);
+  int write_bench(int secondsToRun, int concurrentios, const string& run_name_meta, unsigned max_objects);
   int seq_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid, bool no_verify=false);
   int rand_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid, bool no_verify=false);
 
@@ -90,8 +92,8 @@ protected:
   virtual int completion_wait(int slot) = 0;
   virtual int completion_ret(int slot) = 0;
 
-  virtual int aio_read(const std::string& oid, int slot, bufferlist *pbl, size_t len) = 0;
-  virtual int aio_write(const std::string& oid, int slot, bufferlist& bl, size_t len) = 0;
+  virtual int aio_read(const std::string& oid, int slot, bufferlist *pbl, size_t len, size_t offset) = 0;
+  virtual int aio_write(const std::string& oid, int slot, bufferlist& bl, size_t len, size_t offset) = 0;
   virtual int aio_remove(const std::string& oid, int slot) = 0;
   virtual int sync_read(const std::string& oid, bufferlist& bl, size_t len) = 0;
   virtual int sync_write(const std::string& oid, bufferlist& bl, size_t len) = 0;
@@ -103,11 +105,12 @@ protected:
   ostream& out(ostream& os);
   ostream& out(ostream& os, utime_t& t);
 public:
-  ObjBencher(CephContext *cct_) : show_time(false), cct(cct_), lock("ObjBencher::lock") {}
+  explicit ObjBencher(CephContext *cct_) : show_time(false), cct(cct_), lock("ObjBencher::lock") {}
   virtual ~ObjBencher() {}
   int aio_bench(
     int operation, int secondsToRun,
-    int concurrentios, size_t op_size, bool cleanup, const std::string& run_name, bool no_verify=false);
+    int concurrentios, size_t op_size, size_t object_size, unsigned max_objects,
+    bool cleanup, const std::string& run_name, bool no_verify=false);
   int clean_up(const std::string& prefix, int concurrentios, const std::string& run_name);
 
   void set_show_time(bool dt) {

@@ -62,12 +62,12 @@ static std::string map_option_int_cb(const char *value_char)
   return stringify(d);
 }
 
-static void put_map_option(const std::string key, std::string val)
+static void put_map_option(const std::string &key, std::string val)
 {
   map_options[key] = val;
 }
 
-static int put_map_option_value(const std::string opt, const char *value_char,
+static int put_map_option_value(const std::string &opt, const char *value_char,
                                 std::string (*parse_cb)(const char *))
 {
   if (!value_char || *value_char == '\0') {

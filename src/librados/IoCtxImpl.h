@@ -92,8 +92,8 @@ struct librados::IoCtxImpl {
 
   const string& get_cached_pool_name();
 
-  uint32_t get_object_hash_position(const std::string& oid);
-  uint32_t get_object_pg_hash_position(const std::string& oid);
+  int get_object_hash_position(const std::string& oid, uint32_t *hash_postion);
+  int get_object_pg_hash_position(const std::string& oid, uint32_t *pg_hash_position);
 
   ::ObjectOperation *prepare_assert_ops(::ObjectOperation *op);
 
@@ -161,7 +161,7 @@ struct librados::IoCtxImpl {
 
   struct C_aio_Ack : public Context {
     librados::AioCompletionImpl *c;
-    C_aio_Ack(AioCompletionImpl *_c);
+    explicit C_aio_Ack(AioCompletionImpl *_c);
     void finish(int r);
   };
 
@@ -175,7 +175,7 @@ struct librados::IoCtxImpl {
 
   struct C_aio_Safe : public Context {
     AioCompletionImpl *c;
-    C_aio_Safe(AioCompletionImpl *_c);
+    explicit C_aio_Safe(AioCompletionImpl *_c);
     void finish(int r);
   };
 

@@ -16,6 +16,7 @@
 #ifndef CEPH_DISPATCHER_H
 #define CEPH_DISPATCHER_H
 
+#include "include/assert.h"
 #include "include/buffer_fwd.h"
 #include "include/assert.h"
 
@@ -28,7 +29,7 @@ class CephContext;
 
 class Dispatcher {
 public:
-  Dispatcher(CephContext *cct_)
+  explicit Dispatcher(CephContext *cct_)
     : cct(cct_)
   {
   }

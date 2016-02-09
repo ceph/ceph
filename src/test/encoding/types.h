@@ -14,6 +14,9 @@ TYPE(BitVector<2>)
 TYPE(bloom_filter)
 TYPE(compressible_bloom_filter)
 
+#include "test_ceph_time.h"
+TYPE(real_time_wrapper)
+
 #include "common/snap_types.h"
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)
@@ -236,8 +239,10 @@ TYPE(ETableServer)
 TYPE(EUpdate)
 
 #ifdef WITH_RBD
-#include "librbd/JournalTypes.h"
+#include "librbd/journal/Types.h"
 TYPE(librbd::journal::EventEntry)
+TYPE(librbd::journal::ClientData)
+TYPE(librbd::journal::TagData)
 #include "librbd/WatchNotifyTypes.h"
 TYPE(librbd::watch_notify::NotifyMessage)
 TYPE(librbd::watch_notify::ResponseMessage)

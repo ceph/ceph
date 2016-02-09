@@ -10,7 +10,19 @@ endif(NOT (CMAKE_MAJOR_VERSION LESS 3))
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
-include_directories(  
+option(WITH_CCACHE "Build with ccache.")
+if(WITH_CCACHE)
+  find_program(CCACHE_FOUND ccache)
+  if(CCACHE_FOUND)
+    message(STATUS "Building with ccache: ${CCACHE_FOUND}, CCACHE_DIR=$ENV{CCACHE_DIR}")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
+  else(CCACHE_FOUND)
+    message(FATAL_ERROR "Can't find ccache. Is it installed?")
+  endif(CCACHE_FOUND)
+endif(WITH_CCACHE)
+
+include_directories(
   ${PROJECT_BINARY_DIR}/src/include
   ${OFED_PREFIX}/include
   ${LEVELDB_PREFIX}/include
@@ -30,7 +42,7 @@ include(CheckFunctionExists)
 CHECK_FUNCTION_EXISTS(fallocate CEPH_HAVE_FALLOCATE)
 CHECK_FUNCTION_EXISTS(posix_fadvise HAVE_POSIX_FADVISE)
 CHECK_FUNCTION_EXISTS(posix_fallocate HAVE_POSIX_FALLOCATE)
-CHECK_FUNCTION_EXISTS(syncfs HAVE_SYS_SYNCFS) 
+CHECK_FUNCTION_EXISTS(syncfs HAVE_SYS_SYNCFS)
 CHECK_FUNCTION_EXISTS(sync_file_range HAVE_SYNC_FILE_RANGE)
 CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
 CHECK_INCLUDE_FILES("arpa/inet.h" HAVE_ARPA_INET_H)
@@ -78,6 +90,7 @@ CHECK_INCLUDE_FILES("fcgios.h" FASTCGI_FASTCGIOS_DIR)
 CHECK_INCLUDE_FILES("fcgi_stdio.h" HAVE_FASTCGI_STDIO_H)
 CHECK_INCLUDE_FILES("openssl/ssl.h" HAVE_SSL_H)
 CHECK_INCLUDE_FILES("keyutils.h" HAVE_KEYUTILS_H)
+CHECK_INCLUDE_FILES("execinfo.h" HAVE_EXECINFO_H)
 
 include(CheckSymbolExists)
 CHECK_SYMBOL_EXISTS(__u8 "sys/types.h;linux/types.h" HAVE___U8)
@@ -101,6 +114,8 @@ else(${ENABLE_SHARED})
  set(CEPH_SHARED STATIC)
 endif(${ENABLE_SHARED})
 
+find_package(execinfo)
+
 find_package(udev REQUIRED)
 set(HAVE_UDEV ${UDEV_FOUND})
 
@@ -114,7 +129,7 @@ endif(${WITH_AIO})
 option(WITH_FUSE "Fuse is here" ON)
 if(${WITH_FUSE})
 find_package(fuse)
-set(HAVE_FUSE ${FUSE_FOUND})
+set(HAVE_LIBFUSE ${FUSE_FOUND})
 CHECK_FUNCTION_EXISTS(fuse_getgroups HAVE_FUSE_GETGROUPS)
 endif(${WITH_FUSE})
 
@@ -123,6 +138,13 @@ if(${WITH_XFS})
 find_package(xfs)
 set(HAVE_XFS ${XFS_FOUND})
 endif(${WITH_XFS})
+
+option(WITH_SPDK "Enable SPDK" OFF)
+if(WITH_SPDK)
+  find_package(pciaccess REQUIRED)
+  find_package(dpdk REQUIRED)
+  set(HAVE_SPDK TRUE)
+endif(WITH_SPDK)
 
 find_package(blkid REQUIRED)
 set(HAVE_LIBBLKID ${BLKID_FOUND})
@@ -196,8 +218,6 @@ find_package(keyutils REQUIRED)
 find_package(libuuid REQUIRED)
 
 find_package(libcurl REQUIRED)
-
-find_package(libedit REQUIRED)
 
 option(USE_CRYPTOPP "Cryptopp is ON" ON)
 find_package(cryptopp)
@@ -279,7 +299,7 @@ else(${ENABLE_SHARED})
 endif(${ENABLE_SHARED})
 
 set(Boost_USE_MULTITHREADED ON)
-find_package(Boost COMPONENTS thread system regex random program_options date_time REQUIRED)
+find_package(Boost COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 
 find_package(Threads REQUIRED)
@@ -293,7 +313,7 @@ endif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 
 # find out which platform we are building on
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-set(OperatingSystem "Mac OS X")  
+set(OperatingSystem "Mac OS X")
 endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
 # enables testing and creates Make check command

@@ -14,6 +14,7 @@ usr/bin/ceph-run
 usr/bin/ceph-rest-api
 usr/lib/python*/dist-packages/ceph_rest_api.py
 usr/lib/python*/dist-packages/ceph_detect_init*
+usr/lib/python*/dist-packages/ceph_disk*
 usr/bin/crushtool
 usr/bin/monmaptool
 usr/bin/osdmaptool

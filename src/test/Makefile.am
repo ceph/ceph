@@ -1,5 +1,6 @@
 include test/erasure-code/Makefile.am
 include test/messenger/Makefile.am
+include test/compressor/Makefile.am
 
 if ENABLE_CLIENT
 include test/Makefile-client.am
@@ -75,6 +76,7 @@ check_SCRIPTS += \
 	test/mon/misc.sh \
 	test/mon/osd-crush.sh \
 	test/mon/mon-ping.sh \
+	test/mon/mon-created-time.sh \
 	test/mon/osd-erasure-code-profile.sh \
 	test/mon/mkfs.sh \
 	test/mon/mon-scrub.sh \
@@ -88,14 +90,10 @@ check_SCRIPTS += \
 	test/osd/osd-markdown.sh \
 	test/mon/mon-handle-forward.sh \
 	test/libradosstriper/rados-striper.sh \
-	test/test_objectstore_memstore.sh
-
-check_SCRIPTS += test/ceph-disk.sh
+	test/test_objectstore_memstore.sh \
+        test/test_pidfile.sh
 
 EXTRA_DIST += \
-	$(srcdir)/test/python/ceph-disk/setup.py \
-	$(srcdir)/test/python/ceph-disk/tox.ini \
-	$(srcdir)/test/python/ceph-disk/tests/test_ceph_disk.py \
 	$(srcdir)/test/python/brag-client/setup.py \
 	$(srcdir)/test/python/brag-client/tox.ini \
 	$(srcdir)/test/python/brag-client/tests/test_ceph_brag.py \
@@ -170,11 +168,25 @@ unittest_prioritized_queue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_prioritized_queue_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_prioritized_queue
 
+unittest_weighted_priority_queue_SOURCES = test/common/test_weighted_priority_queue.cc
+unittest_weighted_priority_queue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_weighted_priority_queue_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_TESTPROGRAMS += unittest_weighted_priority_queue
 
 unittest_str_map_SOURCES = test/common/test_str_map.cc
 unittest_str_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_str_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_str_map
+
+unittest_mutex_debug_SOURCES = test/common/test_mutex_debug.cc
+unittest_mutex_debug_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_mutex_debug_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) ${EXTRALIBS}
+check_TESTPROGRAMS += unittest_mutex_debug
+
+unittest_shunique_lock_SOURCES = test/common/test_shunique_lock.cc
+unittest_shunique_lock_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_shunique_lock_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) ${EXTRALIBS}
+check_TESTPROGRAMS += unittest_shunique_lock
 
 unittest_sharedptr_registry_SOURCES = test/common/test_sharedptr_registry.cc
 unittest_sharedptr_registry_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -418,6 +430,11 @@ unittest_bit_vector_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_bit_vector_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_bit_vector
 
+unittest_interval_set_SOURCES = test/common/test_interval_set.cc
+unittest_interval_set_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_interval_set_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_TESTPROGRAMS += unittest_interval_set
+
 unittest_subprocess_SOURCES = test/test_subprocess.cc
 unittest_subprocess_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
 unittest_subprocess_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -425,7 +442,7 @@ check_PROGRAMS += unittest_subprocess
 
 unittest_async_compressor_SOURCES = test/common/test_async_compressor.cc
 unittest_async_compressor_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR)
+unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR) $(LIBCOMMON)
 check_PROGRAMS += unittest_async_compressor
 
 check_SCRIPTS += test/pybind/test_ceph_argparse.py

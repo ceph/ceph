@@ -43,6 +43,10 @@ void ceph_heap_profiler_stop();
 
 void ceph_heap_profiler_dump(const char *reason);
 
+bool ceph_heap_get_numeric_property(const char *property, size_t *value);
+
+bool ceph_heap_set_numeric_property(const char *property, size_t value);
+
 void ceph_heap_profiler_handle_command(const std::vector<std::string> &cmd,
                                        ostream& out);
 

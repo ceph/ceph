@@ -14,6 +14,7 @@
 #include "librbd/AioCompletion.h"
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -21,6 +22,7 @@
 #include "librbd/Journal.h"
 #include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Operations.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/Utils.h"
 
@@ -46,7 +48,7 @@ namespace {
 
 class ThreadPoolSingleton : public ThreadPool {
 public:
-  ThreadPoolSingleton(CephContext *cct)
+  explicit ThreadPoolSingleton(CephContext *cct)
     : ThreadPool(cct, "librbd::thread_pool", "tp_librbd", cct->_conf->rbd_op_threads,
                  "rbd_op_threads") {
     start();
@@ -162,8 +164,11 @@ struct C_InvalidateCache : public Context {
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0),
-      state(new ImageState<>(this)), exclusive_lock(nullptr),
-      object_map(nullptr), aio_work_queue(NULL), op_work_queue(NULL)
+      state(new ImageState<>(this)),
+      operations(new Operations<>(*this)),
+      exclusive_lock(nullptr), object_map(nullptr),
+      aio_work_queue(nullptr), op_work_queue(nullptr),
+      asok_hook(nullptr)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -217,6 +222,7 @@ struct C_InvalidateCache : public Context {
     delete op_work_queue;
     delete aio_work_queue;
     delete asok_hook;
+    delete operations;
     delete state;
   }
 
@@ -1000,11 +1006,15 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_pool);
   }
 
+  ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {
+    return new ExclusiveLock<ImageCtx>(*this);
+  }
+
   ObjectMap *ImageCtx::create_object_map(uint64_t snap_id) {
     return new ObjectMap(*this, snap_id);
   }
 
-  Journal *ImageCtx::create_journal() {
-    return new Journal(*this);
+  Journal<ImageCtx> *ImageCtx::create_journal() {
+    return new Journal<ImageCtx>(*this);
   }
 }

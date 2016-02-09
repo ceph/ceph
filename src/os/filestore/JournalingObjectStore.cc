@@ -20,6 +20,7 @@ void JournalingObjectStore::journal_start()
 void JournalingObjectStore::journal_stop()
 {
   dout(10) << "journal_stop" << dendl;
+  finisher.wait_for_empty();
   finisher.stop();
 }
 
@@ -81,10 +82,9 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
 
     dout(3) << "journal_replay: applying op seq " << seq << dendl;
     bufferlist::iterator p = bl.begin();
-    list<Transaction*> tls;
+    vector<ObjectStore::Transaction> tls;
     while (!p.end()) {
-      Transaction *t = new Transaction(p);
-      tls.push_back(t);
+      tls.emplace_back(Transaction(p));
     }
 
     apply_manager.op_apply_start(seq);
@@ -92,11 +92,6 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
     apply_manager.op_apply_finish(seq);
 
     op_seq = seq;
-
-    while (!tls.empty()) {
-      delete tls.front();
-      tls.pop_front();
-    }
 
     dout(3) << "journal_replay: r = " << r << ", op_seq now " << op_seq << dendl;
   }

@@ -142,7 +142,7 @@ private:
 
     uint32_t flags;
 
-    CState(XioConnection* _xcon)
+    explicit CState(XioConnection* _xcon)
       : xcon(_xcon),
 	protocol_version(0),
 	session_state(INIT),
@@ -265,8 +265,8 @@ public:
   void send_keepalive() override {}
   void mark_down() override;
   int _mark_down(uint32_t flags);
-  virtual void mark_disposable() override;
-  int _mark_disposable(uint32_t flags) override;
+  void mark_disposable() override;
+  int _mark_disposable(uint32_t flags);
 
   const entity_inst_t& get_peer() const { return peer; }
 
@@ -322,7 +322,7 @@ class XioLoopbackConnection : public Connection
 private:
   atomic_t seq;
 public:
-  XioLoopbackConnection(Messenger *m) : Connection(m->cct, m), seq(0)
+  explicit XioLoopbackConnection(Messenger *m) : Connection(m->cct, m), seq(0)
     {
       const entity_inst_t& m_inst = m->get_myinst();
       peer_addr = m_inst.addr;
@@ -337,7 +337,7 @@ public:
   bool is_connected() override { return true; }
 
   int send_message(Message *m) override;
-  void send_keepalive()i override {}
+  void send_keepalive() override {}
   void mark_down() override {}
   void mark_disposable() override {}
 

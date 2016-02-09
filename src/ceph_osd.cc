@@ -90,7 +90,6 @@ void usage()
        << "                    get OSD fsid for the given block device\n"
        << std::endl;
   generic_server_usage();
-  cout.flush();
 }
 
 int preload_erasure_code()
@@ -119,7 +118,8 @@ int main(int argc, const char **argv)
   // option, therefore we will pass it as a default argument to global_init().
   def_args.push_back("--leveldb-log=");
 
-  global_init(&def_args, args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON, 0);
+  global_init(&def_args, args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON,
+	      0, "osd_data");
   ceph_heap_profiler_init();
 
   // osd specific args
@@ -145,7 +145,6 @@ int main(int argc, const char **argv)
       break;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-      exit(0);
     } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
       mkfs = true;
     } else if (ceph_argparse_flag(args, i, "--mkjournal", (char*)NULL)) {
@@ -279,10 +278,8 @@ int main(int argc, const char **argv)
 	   << g_conf->osd_data << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
-    derr << "created object store " << g_conf->osd_data;
-    if (!g_conf->osd_journal.empty())
-      *_dout << " journal " << g_conf->osd_journal;
-    *_dout << " for osd." << whoami << " fsid " << mc.monmap.fsid << dendl;
+    derr << "created object store " << g_conf->osd_data
+	 << " for osd." << whoami << " fsid " << mc.monmap.fsid << dendl;
   }
   if (mkkey) {
     common_init_finish(g_ceph_context);

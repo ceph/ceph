@@ -124,7 +124,7 @@ public:
 template <typename ActionType>
 class TypedAction : public Action {
 public:
-  TypedAction(const ActionType &action) : m_action(action) {
+  explicit TypedAction(const ActionType &action) : m_action(action) {
   }
 
   virtual action_id_t id() const {
@@ -193,7 +193,7 @@ protected:
 
 class AioReadAction : public TypedAction<action::AioReadAction> {
 public:
-  AioReadAction(const action::AioReadAction &action)
+  explicit AioReadAction(const action::AioReadAction &action)
     : TypedAction<action::AioReadAction>(action) {
   }
 
@@ -208,7 +208,7 @@ protected:
 
 class ReadAction : public TypedAction<action::ReadAction> {
 public:
-  ReadAction(const action::ReadAction &action)
+  explicit ReadAction(const action::ReadAction &action)
     : TypedAction<action::ReadAction>(action) {
   }
 
@@ -223,7 +223,7 @@ protected:
 
 class AioWriteAction : public TypedAction<action::AioWriteAction> {
 public:
-  AioWriteAction(const action::AioWriteAction &action)
+  explicit AioWriteAction(const action::AioWriteAction &action)
     : TypedAction<action::AioWriteAction>(action) {
   }
 
@@ -238,7 +238,7 @@ protected:
 
 class WriteAction : public TypedAction<action::WriteAction> {
 public:
-  WriteAction(const action::WriteAction &action)
+  explicit WriteAction(const action::WriteAction &action)
     : TypedAction<action::WriteAction>(action) {
   }
 
@@ -253,7 +253,7 @@ protected:
 
 class OpenImageAction : public TypedAction<action::OpenImageAction> {
 public:
-  OpenImageAction(const action::OpenImageAction &action)
+  explicit OpenImageAction(const action::OpenImageAction &action)
     : TypedAction<action::OpenImageAction>(action) {
   }
 
@@ -268,7 +268,7 @@ protected:
 
 class CloseImageAction : public TypedAction<action::CloseImageAction> {
 public:
-  CloseImageAction(const action::CloseImageAction &action)
+  explicit CloseImageAction(const action::CloseImageAction &action)
     : TypedAction<action::CloseImageAction>(action) {
   }
 
@@ -277,6 +277,35 @@ public:
 protected:
   virtual const char *get_action_name() const {
     return "CloseImageAction";
+  }
+};
+
+class AioOpenImageAction : public TypedAction<action::AioOpenImageAction> {
+public:
+  explicit AioOpenImageAction(const action::AioOpenImageAction &action)
+    : TypedAction<action::AioOpenImageAction>(action) {
+  }
+
+  virtual void perform(ActionCtx &ctx);
+
+protected:
+  virtual const char *get_action_name() const {
+    return "AioOpenImageAction";
+  }
+};
+
+
+class AioCloseImageAction : public TypedAction<action::AioCloseImageAction> {
+public:
+  explicit AioCloseImageAction(const action::AioCloseImageAction &action)
+    : TypedAction<action::AioCloseImageAction>(action) {
+  }
+
+  virtual void perform(ActionCtx &ctx);
+
+protected:
+  virtual const char *get_action_name() const {
+    return "AioCloseImageAction";
   }
 };
 

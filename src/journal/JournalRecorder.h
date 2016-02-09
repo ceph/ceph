@@ -28,7 +28,7 @@ public:
                   double flush_age);
   ~JournalRecorder();
 
-  Future append(const std::string &tag, const bufferlist &bl);
+  Future append(uint64_t tag_tid, const bufferlist &bl);
   void flush(Context *on_safe);
 
   ObjectRecorderPtr get_object(uint8_t splay_offset);
@@ -55,32 +55,6 @@ private:
 
     virtual void overflow(ObjectRecorder *object_recorder) {
       journal_recorder->handle_overflow(object_recorder);
-    }
-  };
-
-  struct C_Flush : public Context {
-    Context *on_finish;
-    atomic_t pending_flushes;
-    int ret_val;
-
-    C_Flush(Context *_on_finish, size_t _pending_flushes)
-      : on_finish(_on_finish), pending_flushes(_pending_flushes + 1),
-        ret_val(0) {
-    }
-
-    void unblock() {
-      complete(0);
-    }
-    virtual void complete(int r) {
-      if (r < 0 && ret_val == 0) {
-        ret_val = r;
-      }
-      if (pending_flushes.dec() == 0) {
-        on_finish->complete(ret_val);
-        delete this;
-      }
-    }
-    virtual void finish(int r) {
     }
   };
 

@@ -11,30 +11,35 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-void LogStatusDump::dump(Formatter *f) const {
-  string s;
-  switch (status) {
-    case MDLOG_STATUS_WRITE:
-      s = "write";
-      break;
-    case MDLOG_STATUS_SETATTRS:
-      s = "set_attrs";
-      break;
-    case MDLOG_STATUS_REMOVE:
-      s = "remove";
-      break;
-    case MDLOG_STATUS_COMPLETE:
-      s = "complete";
-      break;
-    case MDLOG_STATUS_ABORT:
-      s = "abort";
-      break;
-    default:
-      s = "unknown";
-      break;
+struct LogStatusDump {
+  RGWMDLogStatus status;
+
+  explicit LogStatusDump(RGWMDLogStatus _status) : status(_status) {}
+  void dump(Formatter *f) const {
+    string s;
+    switch (status) {
+      case MDLOG_STATUS_WRITE:
+        s = "write";
+        break;
+      case MDLOG_STATUS_SETATTRS:
+        s = "set_attrs";
+        break;
+      case MDLOG_STATUS_REMOVE:
+        s = "remove";
+        break;
+      case MDLOG_STATUS_COMPLETE:
+        s = "complete";
+        break;
+      case MDLOG_STATUS_ABORT:
+        s = "abort";
+        break;
+      default:
+        s = "unknown";
+        break;
+    }
+    encode_json("status", s, f);
   }
-  encode_json("status", s, f);
-}
+};
 
 void RGWMetadataLogData::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);

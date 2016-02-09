@@ -68,7 +68,7 @@ protected:
 public:
   LogSegment *_segment;
 
-  LogEvent(int t)
+  explicit LogEvent(int t)
     : _type(t), _start_off(0), _segment(0) { }
   virtual ~LogEvent() { }
 

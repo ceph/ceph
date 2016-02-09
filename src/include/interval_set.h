@@ -19,7 +19,6 @@
 #include <iterator>
 #include <map>
 #include <ostream>
-using namespace std;
 
 #include "encoding.h"
 
@@ -56,7 +55,7 @@ class interval_set {
         }
 
         // Dereference this iterator to get a pair.
-        pair < T, T > &operator*() {
+        std::pair < T, T > &operator*() {
                 return *_iter;
         }
 
@@ -93,7 +92,7 @@ class interval_set {
     friend class interval_set<T>::const_iterator;
 
     protected:
-        typename map<T,T>::iterator _iter;
+        typename std::map<T,T>::iterator _iter;
     friend class interval_set<T>;
   };
 
@@ -120,7 +119,7 @@ class interval_set {
         }
 
         // Dereference this iterator to get a pair.
-        pair < T, T > operator*() const {
+        std::pair < T, T > operator*() const {
                 return *_iter;
         }
 
@@ -150,7 +149,7 @@ class interval_set {
         }
 
     protected:
-        typename map<T,T>::const_iterator _iter;
+        typename std::map<T,T>::const_iterator _iter;
   };
 
   interval_set() : _size(0) {}
@@ -186,8 +185,8 @@ class interval_set {
 
   // helpers
  private:
-  typename map<T,T>::const_iterator find_inc(T start) const {
-    typename map<T,T>::const_iterator p = m.lower_bound(start);  // p->first >= start
+  typename std::map<T,T>::const_iterator find_inc(T start) const {
+    typename std::map<T,T>::const_iterator p = m.lower_bound(start);  // p->first >= start
     if (p != m.begin() &&
         (p == m.end() || p->first > start)) {
       p--;   // might overlap?
@@ -197,8 +196,8 @@ class interval_set {
     return p;
   }
   
-  typename map<T,T>::iterator find_inc_m(T start) {
-    typename map<T,T>::iterator p = m.lower_bound(start);
+  typename std::map<T,T>::iterator find_inc_m(T start) {
+    typename std::map<T,T>::iterator p = m.lower_bound(start);
     if (p != m.begin() &&
         (p == m.end() || p->first > start)) {
       p--;   // might overlap?
@@ -208,8 +207,8 @@ class interval_set {
     return p;
   }
   
-  typename map<T,T>::const_iterator find_adj(T start) const {
-    typename map<T,T>::const_iterator p = m.lower_bound(start);
+  typename std::map<T,T>::const_iterator find_adj(T start) const {
+    typename std::map<T,T>::const_iterator p = m.lower_bound(start);
     if (p != m.begin() &&
         (p == m.end() || p->first > start)) {
       p--;   // might touch?
@@ -219,8 +218,8 @@ class interval_set {
     return p;
   }
   
-  typename map<T,T>::iterator find_adj_m(T start) {
-    typename map<T,T>::iterator p = m.lower_bound(start);
+  typename std::map<T,T>::iterator find_adj_m(T start) {
+    typename std::map<T,T>::iterator p = m.lower_bound(start);
     if (p != m.begin() &&
         (p == m.end() || p->first > start)) {
       p--;   // might touch?
@@ -248,7 +247,7 @@ class interval_set {
   void decode(bufferlist::iterator& bl) {
     ::decode(m, bl);
     _size = 0;
-    for (typename map<T,T>::const_iterator p = m.begin();
+    for (typename std::map<T,T>::const_iterator p = m.begin();
          p != m.end();
          p++)
       _size += p->second;
@@ -256,7 +255,7 @@ class interval_set {
   void decode_nohead(int n, bufferlist::iterator& bl) {
     ::decode_nohead(n, m, bl);
     _size = 0;
-    for (typename map<T,T>::const_iterator p = m.begin();
+    for (typename std::map<T,T>::const_iterator p = m.begin();
          p != m.end();
          p++)
       _size += p->second;
@@ -268,7 +267,7 @@ class interval_set {
   }
 
   bool contains(T i, T *pstart=0, T *plen=0) const {
-    typename map<T,T>::const_iterator p = find_inc(i);
+    typename std::map<T,T>::const_iterator p = find_inc(i);
     if (p == m.end()) return false;
     if (p->first > i) return false;
     if (p->first+p->second <= i) return false;
@@ -280,7 +279,7 @@ class interval_set {
     return true;
   }
   bool contains(T start, T len) const {
-    typename map<T,T>::const_iterator p = find_inc(start);
+    typename std::map<T,T>::const_iterator p = find_inc(start);
     if (p == m.end()) return false;
     if (p->first > start) return false;
     if (p->first+p->second <= start) return false;
@@ -303,12 +302,12 @@ class interval_set {
   }
   T range_start() const {
     assert(!empty());
-    typename map<T,T>::const_iterator p = m.begin();
+    typename std::map<T,T>::const_iterator p = m.begin();
     return p->first;
   }
   T range_end() const {
     assert(!empty());
-    typename map<T,T>::const_iterator p = m.end();
+    typename std::map<T,T>::const_iterator p = m.end();
     p--;
     return p->first+p->second;
   }
@@ -316,20 +315,20 @@ class interval_set {
   // interval start after p (where p not in set)
   bool starts_after(T i) const {
     assert(!contains(i));
-    typename map<T,T>::const_iterator p = find_inc(i);
+    typename std::map<T,T>::const_iterator p = find_inc(i);
     if (p == m.end()) return false;
     return true;
   }
   T start_after(T i) const {
     assert(!contains(i));
-    typename map<T,T>::const_iterator p = find_inc(i);
+    typename std::map<T,T>::const_iterator p = find_inc(i);
     return p->first;
   }
 
   // interval end that contains start
   T end_after(T start) const {
     assert(contains(start));
-    typename map<T,T>::const_iterator p = find_inc(start);
+    typename std::map<T,T>::const_iterator p = find_inc(start);
     return p->first+p->second;
   }
   
@@ -341,7 +340,7 @@ class interval_set {
     //cout << "insert " << start << "~" << len << endl;
     assert(len > 0);
     _size += len;
-    typename map<T,T>::iterator p = find_adj_m(start);
+    typename std::map<T,T>::iterator p = find_adj_m(start);
     if (p == m.end()) {
       m[start] = len;                  // new interval
       if (pstart)
@@ -356,10 +355,9 @@ class interval_set {
           assert(0);
         }
         
-        assert(p->first + p->second == start);
         p->second += len;               // append to end
         
-        typename map<T,T>::iterator n = p;
+        typename std::map<T,T>::iterator n = p;
         n++;
         if (n != m.end() && 
             start+len == n->first) {   // combine with next, too!
@@ -392,9 +390,7 @@ class interval_set {
 
   void swap(interval_set<T>& other) {
     m.swap(other.m);
-    int64_t t = _size;
-    _size = other._size;
-    other._size = t;
+    std::swap(_size, other._size);
   }    
   
   void erase(iterator &i) {
@@ -408,7 +404,7 @@ class interval_set {
   }
 
   void erase(T start, T len) {
-    typename map<T,T>::iterator p = find_inc_m(start);
+    typename std::map<T,T>::iterator p = find_inc_m(start);
 
     _size -= len;
     assert(_size >= 0);
@@ -430,14 +426,14 @@ class interval_set {
 
 
   void subtract(const interval_set &a) {
-    for (typename map<T,T>::const_iterator p = a.m.begin();
+    for (typename std::map<T,T>::const_iterator p = a.m.begin();
          p != a.m.end();
          p++)
       erase(p->first, p->second);
   }
 
   void insert(const interval_set &a) {
-    for (typename map<T,T>::const_iterator p = a.m.begin();
+    for (typename std::map<T,T>::const_iterator p = a.m.begin();
          p != a.m.end();
          p++)
       insert(p->first, p->second);
@@ -449,8 +445,8 @@ class interval_set {
     assert(&b != this);
     clear();
 
-    typename map<T,T>::const_iterator pa = a.m.begin();
-    typename map<T,T>::const_iterator pb = b.m.begin();
+    typename std::map<T,T>::const_iterator pa = a.m.begin();
+    typename std::map<T,T>::const_iterator pb = b.m.begin();
     
     while (pa != a.m.end() && pb != b.m.end()) {
       // passing?
@@ -501,7 +497,7 @@ class interval_set {
   }
 
   bool subset_of(const interval_set &big) const {
-    for (typename map<T,T>::const_iterator i = m.begin();
+    for (typename std::map<T,T>::const_iterator i = m.begin();
          i != m.end();
          i++) 
       if (!big.contains(i->first, i->second)) return false;
@@ -515,7 +511,7 @@ class interval_set {
    */
   void span_of(const interval_set &other, T start, T len) {
     clear();
-    typename map<T,T>::const_iterator p = other.find_inc(start);
+    typename std::map<T,T>::const_iterator p = other.find_inc(start);
     if (p == other.m.end())
       return;
     if (p->first < start) {
@@ -546,12 +542,12 @@ class interval_set {
 private:
   // data
   int64_t _size;
-  map<T,T> m;   // map start -> len
+  std::map<T,T> m;   // map start -> len
 };
 
 
 template<class T>
-inline ostream& operator<<(ostream& out, const interval_set<T> &s) {
+inline std::ostream& operator<<(std::ostream& out, const interval_set<T> &s) {
   out << "[";
   const char *prequel = "";
   for (typename interval_set<T>::const_iterator i = s.begin();

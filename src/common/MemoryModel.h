@@ -43,7 +43,7 @@ private:
   void _sample(snap *p);
 
 public:
-  MemoryModel(CephContext *cct);
+  explicit MemoryModel(CephContext *cct);
   void sample(snap *p = 0) {
     _sample(&last);
     if (p)

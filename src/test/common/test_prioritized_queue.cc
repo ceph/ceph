@@ -6,7 +6,7 @@
 
 #include <numeric>
 #include <vector>
-
+#include <algorithm>
 
 using std::vector;
 
@@ -23,7 +23,7 @@ protected:
     for (int i = 0; i < item_size; i++) {
       items.push_back(Item(i));
     }
-    random_shuffle(items.begin(), items.end());
+    std::random_shuffle(items.begin(), items.end());
   }
   virtual void TearDown() {
     items.clear();
@@ -164,7 +164,7 @@ TEST_F(PrioritizedQueueTest, fairness_by_class) {
 template <typename T>
 struct Greater {
   const T rhs;
-  Greater(const T& v) : rhs(v)
+  explicit Greater(const T& v) : rhs(v)
   {}
   bool operator()(const T& lhs) const {
     return lhs > rhs;

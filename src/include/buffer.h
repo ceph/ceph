@@ -168,12 +168,16 @@ namespace buffer CEPH_BUFFER_API {
 
   public:
     ptr() : _raw(0), _off(0), _len(0) {}
+    // cppcheck-suppress noExplicitConstructor
     ptr(raw *r);
+    // cppcheck-suppress noExplicitConstructor
     ptr(unsigned l);
     ptr(const char *d, unsigned l);
     ptr(const ptr& p);
+    ptr(ptr&& p);
     ptr(const ptr& p, unsigned o, unsigned l);
     ptr& operator= (const ptr& p);
+    ptr& operator= (ptr&& p);
     ~ptr() {
       release();
     }
@@ -354,6 +358,7 @@ namespace buffer CEPH_BUFFER_API {
   public:
     // cons/des
     list() : _len(0), _memcopy_count(0), last_p(this) {}
+    // cppcheck-suppress noExplicitConstructor
     list(unsigned prealloc) : _len(0), _memcopy_count(0), last_p(this) {
       append_buffer = buffer::create(prealloc);
       append_buffer.set_length(0);   // unused, so far.
@@ -370,6 +375,16 @@ namespace buffer CEPH_BUFFER_API {
         _len = other._len;
 	make_shareable();
       }
+      return *this;
+    }
+
+    list& operator= (list&& other) {
+      _buffers = std::move(other._buffers);
+      _len = other._len;
+      _memcopy_count = other._memcopy_count;
+      last_p = begin();
+      append_buffer.swap(other.append_buffer);
+      other.clear();
       return *this;
     }
 
@@ -414,9 +429,14 @@ namespace buffer CEPH_BUFFER_API {
       _buffers.push_front(bp);
       _len += bp.length();
     }
+    void push_front(ptr&& bp) {
+      if (bp.length() == 0)
+	return;
+      _len += bp.length();
+      _buffers.push_front(std::move(bp));
+    }
     void push_front(raw *r) {
-      ptr bp(r);
-      push_front(bp);
+      push_front(ptr(r));
     }
     void push_back(const ptr& bp) {
       if (bp.length() == 0)
@@ -424,9 +444,14 @@ namespace buffer CEPH_BUFFER_API {
       _buffers.push_back(bp);
       _len += bp.length();
     }
+    void push_back(ptr&& bp) {
+      if (bp.length() == 0)
+	return;
+      _len += bp.length();
+      _buffers.push_back(std::move(bp));
+    }
     void push_back(raw *r) {
-      ptr bp(r);
-      push_back(bp);
+      push_back(ptr(r));
     }
 
     void zero();
@@ -497,6 +522,7 @@ namespace buffer CEPH_BUFFER_API {
       append(s.data(), s.length());
     }
     void append(const ptr& bp);
+    void append(ptr&& bp);
     void append(const ptr& bp, unsigned off, unsigned len);
     void append(const list& bl);
     void append(std::istream& in);
@@ -543,6 +569,7 @@ namespace buffer CEPH_BUFFER_API {
 
   public:
     hash() : crc(0) { }
+    // cppcheck-suppress noExplicitConstructor
     hash(uint32_t init) : crc(init) { }
 
     void update(buffer::list& bl) {

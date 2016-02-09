@@ -3,10 +3,12 @@ libcommon_internal_la_SOURCES = \
 	common/DecayCounter.cc \
 	common/LogClient.cc \
 	common/LogEntry.cc \
+	common/Graylog.cc \
 	common/PrebufferedStreambuf.cc \
 	common/SloppyCRCMap.cc \
 	common/BackTrace.cc \
 	common/perf_counters.cc \
+	common/mutex_debug.cc \
 	common/Mutex.cc \
 	common/OutputDataSocket.cc \
 	common/admin_socket.cc \
@@ -45,6 +47,7 @@ libcommon_internal_la_SOURCES = \
 	common/simple_spin.cc \
 	common/Thread.cc \
 	common/Formatter.cc \
+	common/HTMLFormatter.cc \
 	common/HeartbeatMap.cc \
 	common/config.cc \
 	common/utf8.c \
@@ -85,7 +88,7 @@ endif
 
 if LINUX
 libcommon_internal_la_SOURCES += \
-	common/linux_version.c 
+	common/linux_version.c
 endif
 
 if SOLARIS
@@ -157,9 +160,11 @@ noinst_HEADERS += \
 # important; libmsg before libauth!
 LIBCOMMON_DEPS += \
 	$(LIBERASURE_CODE) \
+	$(LIBCOMPRESSOR) \
 	$(LIBMSG) $(LIBAUTH) \
 	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH) \
-	$(BOOST_RANDOM_LIBS)
+	$(BOOST_RANDOM_LIBS) \
+	-luuid
 
 if LINUX
 LIBCOMMON_DEPS += -lrt -lblkid
@@ -175,10 +180,13 @@ noinst_HEADERS += \
 	common/HeartbeatMap.h \
 	common/LogClient.h \
 	common/LogEntry.h \
+	common/Graylog.h \
 	common/Preforker.h \
 	common/SloppyCRCMap.h \
 	common/WorkQueue.h \
+	common/OpQueue.h \
 	common/PrioritizedQueue.h \
+	common/WeightedPriorityQueue.h \
 	common/ceph_argparse.h \
 	common/ceph_context.h \
 	common/xattr.h \
@@ -204,6 +212,7 @@ noinst_HEADERS += \
 	common/DecayCounter.h \
 	common/Finisher.h \
 	common/Formatter.h \
+	common/HTMLFormatter.h \
 	common/perf_counters.h \
 	common/OutputDataSocket.h \
 	common/admin_socket.h \
@@ -266,7 +275,10 @@ noinst_HEADERS += \
 	common/event_socket.h \
 	common/PluginRegistry.h \
 	common/ceph_time.h \
-	common/ceph_timer.h
+	common/ceph_timer.h \
+	common/align.h \
+	common/mutex_debug.h \
+	common/shunique_lock.h
 
 if ENABLE_XIO
 noinst_HEADERS += \

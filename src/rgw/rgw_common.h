@@ -4,6 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2004-2009 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2015 Yehuda Sadeh <yehuda@redhat.com>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -32,6 +33,7 @@
 #include "rgw_cors.h"
 #include "rgw_quota.h"
 #include "rgw_string.h"
+#include "rgw_website.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
@@ -51,7 +53,9 @@ using ceph::crypto::MD5;
 #define RGW_HTTP_RGWX_ATTR_PREFIX "RGWX_ATTR_"
 #define RGW_HTTP_RGWX_ATTR_PREFIX_OUT "Rgwx-Attr-"
 
-#define RGW_AMZ_META_PREFIX "x-amz-meta-"
+#define RGW_AMZ_PREFIX "x-amz-"
+#define RGW_AMZ_META_PREFIX RGW_AMZ_PREFIX "meta-"
+#define RGW_AMZ_WEBSITE_REDIRECT_LOCATION RGW_AMZ_PREFIX "website-redirect-location"
 
 #define RGW_SYS_PARAM_PREFIX "rgwx-"
 
@@ -73,6 +77,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_USER_MANIFEST  RGW_ATTR_PREFIX "user_manifest"
 #define RGW_ATTR_PG_VER 	RGW_ATTR_PREFIX "pg_ver"
 #define RGW_ATTR_SOURCE_ZONE    RGW_ATTR_PREFIX "source_zone"
+#define RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION	RGW_ATTR_PREFIX RGW_AMZ_WEBSITE_REDIRECT_LOCATION
 #define RGW_ATTR_SLO_MANIFEST   RGW_ATTR_PREFIX "slo_manifest"
 /* Information whether an object is SLO or not must be exposed to
  * user through custom HTTP header named X-Static-Large-Object. */
@@ -96,6 +101,7 @@ using ceph::crypto::MD5;
 #define RGW_FORMAT_PLAIN        0
 #define RGW_FORMAT_XML          1
 #define RGW_FORMAT_JSON         2
+#define RGW_FORMAT_HTML         3
 
 #define RGW_CAP_READ            0x1
 #define RGW_CAP_WRITE           0x2
@@ -103,6 +109,8 @@ using ceph::crypto::MD5;
 
 #define RGW_REST_SWIFT          0x1
 #define RGW_REST_SWIFT_AUTH     0x2
+#define RGW_REST_S3             0x4
+#define RGW_REST_WEBSITE     0x8
 
 #define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 
@@ -163,6 +171,9 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_SECRET_KEY   2034
 #define ERR_INVALID_KEY_TYPE     2035
 #define ERR_INVALID_CAP          2036
+#define ERR_INVALID_TENANT_NAME  2037
+#define ERR_WEBSITE_REDIRECT     2038
+#define ERR_NO_SUCH_WEBSITE_CONFIGURATION 2039
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
@@ -251,7 +262,7 @@ class NameVal
    string name;
    string val;
  public:
-    NameVal(string nv) : str(nv) {}
+    explicit NameVal(string nv) : str(nv) {}
 
     int parse();
 
@@ -613,14 +624,12 @@ struct rgw_bucket {
                     */
 
   rgw_bucket() { }
-  rgw_bucket(const cls_user_bucket& b) {
-    name = b.name;
-    data_pool = b.data_pool;
-    data_extra_pool = b.data_extra_pool;
-    index_pool = b.index_pool;
-    marker = b.marker;
-    bucket_id = b.bucket_id;
-  }
+  // cppcheck-suppress noExplicitConstructor
+  rgw_bucket(const cls_user_bucket& b) : name(b.name), data_pool(b.data_pool),
+					 data_extra_pool(b.data_extra_pool),
+					 index_pool(b.index_pool), marker(b.marker),
+					 bucket_id(b.bucket_id) {}
+  // cppcheck-suppress noExplicitConstructor
   rgw_bucket(const string& s) : name(s) {
     data_pool = index_pool = s;
     marker = "";
@@ -815,8 +824,11 @@ struct RGWBucketInfo
 
   bool requester_pays;
 
+  bool has_website;
+  RGWBucketWebsiteConf website_conf;
+
   void encode(bufferlist& bl) const {
-     ENCODE_START(13, 4, bl);
+     ENCODE_START(14, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner.id, bl);
      ::encode(flags, bl);
@@ -830,10 +842,14 @@ struct RGWBucketInfo
      ::encode(bucket_index_shard_hash_type, bl);
      ::encode(requester_pays, bl);
      ::encode(owner.tenant, bl);
+     ::encode(has_website, bl);
+     if (has_website) {
+       ::encode(website_conf, bl);
+     }
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(13, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(14, 4, 4, bl);
      ::decode(bucket, bl);
      if (struct_v >= 2) {
        string s;
@@ -863,6 +879,14 @@ struct RGWBucketInfo
        ::decode(requester_pays, bl);
      if (struct_v >= 13)
        ::decode(owner.tenant, bl);
+     if (struct_v >= 14) {
+       ::decode(has_website, bl);
+       if (has_website) {
+         ::decode(website_conf, bl);
+       } else {
+         website_conf = RGWBucketWebsiteConf();
+       }
+     }
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -874,7 +898,8 @@ struct RGWBucketInfo
   int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
   bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
 
-  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD), requester_pays(false) {}
+  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD), requester_pays(false),
+                    has_website(false) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 
@@ -968,6 +993,7 @@ struct rgw_obj_key {
   string instance;
 
   rgw_obj_key() {}
+  // cppcheck-suppress noExplicitConstructor
   rgw_obj_key(const string& n) {
     set(n);
   }
@@ -975,6 +1001,7 @@ struct rgw_obj_key {
     set(n, i);
   }
 
+  // cppcheck-suppress noExplicitConstructor
   rgw_obj_key(const cls_rgw_obj_key& k) {
     set(k);
   }
@@ -1040,6 +1067,12 @@ inline ostream& operator<<(ostream& out, const rgw_obj_key &o) {
   }
 }
 
+struct req_init_state {
+  /* Keeps [[tenant]:]bucket until we parse the token. */
+  string url_bucket;
+  string src_bucket;
+};
+
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
    CephContext *cct;
@@ -1063,7 +1096,7 @@ struct req_state {
    uint32_t perm_mask;
    utime_t header_time;
 
-   /* Set once when req_state is initialized and not violated thereafter */
+   /* Set once when url_bucket is parsed and not violated thereafter. */
    string bucket_tenant;
    string bucket_name;
 
@@ -1079,6 +1112,8 @@ struct req_state {
    string zonegroup_endpoint;
    string bucket_instance_id;
    int bucket_instance_shard_id;
+
+   string redirect;
 
    RGWBucketInfo bucket_info;
    map<string, bufferlist> bucket_attrs;
@@ -1113,7 +1148,10 @@ struct req_state {
 
    string trans_id;
 
+   string host_id;
+
    req_info info;
+   req_init_state init_state;
 
    req_state(CephContext *_cct, class RGWEnv *e);
    ~req_state();
@@ -1158,13 +1196,11 @@ struct RGWBucketEnt {
 
   RGWBucketEnt() : size(0), size_rounded(0), creation_time(0), count(0) {}
 
-  RGWBucketEnt(const cls_user_bucket_entry& e) {
-    bucket = e.bucket;
-    size = e.size;
-    size_rounded = e.size_rounded;
-    creation_time = e.creation_time;
-    count = e.count;
-  }
+  explicit RGWBucketEnt(const cls_user_bucket_entry& e) : bucket(e.bucket),
+		  					  size(e.size), 
+			  				  size_rounded(e.size_rounded),
+							  creation_time(e.creation_time),
+							  count(e.count) {}
 
   void convert(cls_user_bucket_entry *b) {
     bucket.convert(&b->bucket);

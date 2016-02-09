@@ -142,7 +142,8 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl) {
     ::decode(entry, iter);
     ldout(m_cct, 20) << ": " << entry << " decoded" << dendl;
 
-    EntryKey entry_key(std::make_pair(entry.get_tag(), entry.get_tid()));
+    EntryKey entry_key(std::make_pair(entry.get_tag_tid(),
+                                      entry.get_entry_tid()));
     if (m_entry_keys.find(entry_key) == m_entry_keys.end()) {
       m_entry_keys[entry_key] = m_entries.insert(m_entries.end(), entry);
     } else {

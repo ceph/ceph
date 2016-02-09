@@ -42,7 +42,7 @@ protected:
     return sm->mds;
   }
 public:
-  StrayManagerIOContext(StrayManager *sm_) : sm(sm_) {}
+  explicit StrayManagerIOContext(StrayManager *sm_) : sm(sm_) {}
 };
 
 
@@ -54,7 +54,7 @@ protected:
     return sm->mds;
   }
 public:
-  StrayManagerContext(StrayManager *sm_) : sm(sm_) {}
+  explicit StrayManagerContext(StrayManager *sm_) : sm(sm_) {}
 };
 
 
@@ -847,54 +847,31 @@ void StrayManager::_truncate_stray_logged(CDentry *dn, LogSegment *ls)
 }
 
 
-const char** StrayManager::get_tracked_conf_keys() const
-{
-  static const char* KEYS[] = {
-    "mds_max_purge_ops",
-    "mds_max_purge_ops_per_pg",
-    NULL
-  };
-  return KEYS;
-}
-
-void StrayManager::handle_conf_change(const struct md_config_t *conf,
-			  const std::set <std::string> &changed)
-{
-  if (changed.count("mds_max_purge_ops")
-      || changed.count("mds_max_purge_ops_per_pg")) {
-    update_op_limit();
-  }
-}
-
-
 void StrayManager::update_op_limit()
 {
-  const OSDMap *osdmap = mds->objecter->get_osdmap_read();
-  assert(osdmap != NULL);
-
-  // Number of PGs across all data pools
   uint64_t pg_count = 0;
-  const std::set<int64_t> &data_pools = mds->mdsmap->get_data_pools();
-  for (std::set<int64_t>::iterator i = data_pools.begin();
-       i != data_pools.end(); ++i) {
-    if (osdmap->get_pg_pool(*i) == NULL) {
-      // It is possible that we have an older OSDMap than MDSMap, because
-      // we don't start watching every OSDMap until after MDSRank is
-      // initialized
-      dout(4) << __func__ << " data pool " << *i
-              << " not found in OSDMap" << dendl;
-      continue;
-    }
-    pg_count += osdmap->get_pg_num(*i);
-  }
-
-  mds->objecter->put_osdmap_read();
+  mds->objecter->with_osdmap([&](const OSDMap& o) {
+      // Number of PGs across all data pools
+      const std::set<int64_t> &data_pools = mds->mdsmap->get_data_pools();
+      for (const auto dp : data_pools) {
+	if (o.get_pg_pool(dp) == NULL) {
+	  // It is possible that we have an older OSDMap than MDSMap,
+	  // because we don't start watching every OSDMap until after
+	  // MDSRank is initialized
+	  dout(4) << __func__ << " data pool " << dp
+		  << " not found in OSDMap" << dendl;
+	  continue;
+	}
+	pg_count += o.get_pg_num(dp);
+      }
+    });
 
   uint64_t mds_count = mds->mdsmap->get_max_mds();
 
   // Work out a limit based on n_pgs / n_mdss, multiplied by the user's
   // preference for how many ops per PG
-  max_purge_ops = uint64_t(((double)pg_count / (double)mds_count) * g_conf->mds_max_purge_ops_per_pg);
+  max_purge_ops = uint64_t(((double)pg_count / (double)mds_count) *
+			   g_conf->mds_max_purge_ops_per_pg);
 
   // User may also specify a hard limit, apply this if so.
   if (g_conf->mds_max_purge_ops) {

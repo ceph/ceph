@@ -35,7 +35,7 @@ using std::string;
 class CephRocksdbLogger : public rocksdb::Logger {
   CephContext *cct;
 public:
-  CephRocksdbLogger(CephContext *c) : cct(c) {
+  explicit CephRocksdbLogger(CephContext *c) : cct(c) {
     cct->get();
   }
   ~CephRocksdbLogger() {
@@ -118,7 +118,7 @@ int RocksDBStore::tryInterpret(const string key, const string val, rocksdb::Opti
 int RocksDBStore::ParseOptionsFromString(const string opt_str, rocksdb::Options &opt)
 {
   map<string, string> str_map;
-  int r = get_str_map(opt_str, ",\n;", &str_map);
+  int r = get_str_map(opt_str, &str_map, ",\n;");
   if (r < 0)
     return r;
   map<string, string>::iterator it;
@@ -217,6 +217,14 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
     dout(10) << __func__ << " using custom Env " << priv << dendl;
     opt.env = static_cast<rocksdb::Env*>(priv);
   }
+
+  auto cache = rocksdb::NewLRUCache(g_conf->rocksdb_cache_size);
+  rocksdb::BlockBasedTableOptions bbt_opts;
+  bbt_opts.block_size = g_conf->rocksdb_block_size;
+  bbt_opts.block_cache = cache;
+  opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
+  dout(10) << __func__ << " set block size to " << g_conf->rocksdb_block_size
+           << " cache size to " << g_conf->rocksdb_cache_size << dendl;
 
   status = rocksdb::DB::Open(opt, path, &db);
   if (!status.ok()) {
@@ -456,7 +464,8 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
 void RocksDBStore::compact()
 {
   logger->inc(l_rocksdb_compact);
-  db->CompactRange(NULL, NULL);
+  rocksdb::CompactRangeOptions options;
+  db->CompactRange(options, nullptr, nullptr);
 }
 
 
@@ -529,9 +538,10 @@ bool RocksDBStore::check_omap_dir(string &omap_dir)
 }
 void RocksDBStore::compact_range(const string& start, const string& end)
 {
-    rocksdb::Slice cstart(start);
-    rocksdb::Slice cend(end);
-    db->CompactRange(&cstart, &cend);
+  rocksdb::CompactRangeOptions options;
+  rocksdb::Slice cstart(start);
+  rocksdb::Slice cend(end);
+  db->CompactRange(options, &cstart, &cend);
 }
 RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()
 {

@@ -18,6 +18,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
+#include "common/valgrind.h"
 
 #include <errno.h>
 #include <map>
@@ -180,6 +181,9 @@ void PerfCounters::set(int idx, uint64_t amt)
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_U64))
     return;
+
+  ANNOTATE_BENIGN_RACE_SIZED(&data.u64, sizeof(data.u64),
+                             "perf counter atomic");
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
     data.avgcount.inc();
     data.u64.set(amt);

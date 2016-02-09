@@ -29,7 +29,7 @@ RGWAsyncRadosRequest *RGWAsyncRadosProcessor::RGWWQ::_dequeue() {
   return req;
 }
 
-void RGWAsyncRadosProcessor::RGWWQ::_process(RGWAsyncRadosRequest *req) {
+void RGWAsyncRadosProcessor::RGWWQ::_process(RGWAsyncRadosRequest *req, ThreadPool::TPHandle &) {
   processor->handle_request(req);
   processor->req_throttle.put(1);
 }

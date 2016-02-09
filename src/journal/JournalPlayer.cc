@@ -18,7 +18,7 @@ namespace {
 struct C_HandleComplete : public Context {
   ReplayHandler *replay_handler;
 
-  C_HandleComplete(ReplayHandler *_replay_handler)
+  explicit C_HandleComplete(ReplayHandler *_replay_handler)
     : replay_handler(_replay_handler) {
     replay_handler->get();
   }
@@ -33,7 +33,7 @@ struct C_HandleComplete : public Context {
 struct C_HandleEntriesAvailable : public Context {
   ReplayHandler *replay_handler;
 
-  C_HandleEntriesAvailable(ReplayHandler *_replay_handler)
+  explicit C_HandleEntriesAvailable(ReplayHandler *_replay_handler)
       : replay_handler(_replay_handler) {
     replay_handler->get();
   }
@@ -55,7 +55,7 @@ JournalPlayer::JournalPlayer(librados::IoCtx &ioctx,
     m_journal_metadata(journal_metadata), m_replay_handler(replay_handler),
     m_lock("JournalPlayer::m_lock"), m_state(STATE_INIT), m_splay_offset(0),
     m_watch_enabled(false), m_watch_scheduled(false), m_watch_interval(0),
-    m_commit_object(0) {
+    m_commit_object(0), m_commit_tag_tid(0) {
   m_replay_handler->get();
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
@@ -66,13 +66,13 @@ JournalPlayer::JournalPlayer(librados::IoCtx &ioctx,
     uint8_t splay_width = m_journal_metadata->get_splay_width();
     m_splay_offset = commit_position.object_number % splay_width;
     m_commit_object = commit_position.object_number;
-    m_commit_tag = commit_position.entry_positions.front().tag;
+    m_commit_tag_tid = commit_position.entry_positions.front().tag_tid;
 
     for (EntryPositions::const_iterator it =
            commit_position.entry_positions.begin();
          it != commit_position.entry_positions.end(); ++it) {
       const EntryPosition &entry_position = *it;
-      m_commit_tids[entry_position.tag] = entry_position.tid;
+      m_commit_tids[entry_position.tag_tid] = entry_position.entry_tid;
     }
   }
 }
@@ -156,9 +156,10 @@ bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
   object_player->front(entry);
   object_player->pop_front();
 
-  uint64_t last_tid;
-  if (m_journal_metadata->get_last_allocated_tid(entry->get_tag(), &last_tid) &&
-      entry->get_tid() != last_tid + 1) {
+  uint64_t last_entry_tid;
+  if (m_journal_metadata->get_last_allocated_entry_tid(
+        entry->get_tag_tid(), &last_entry_tid) &&
+      entry->get_entry_tid() != last_entry_tid + 1) {
     lderr(m_cct) << "missing prior journal entry: " << *entry << dendl;
 
     m_state = STATE_ERROR;
@@ -171,10 +172,10 @@ bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
   if (!object_player->empty()) {
     Entry peek_entry;
     object_player->front(&peek_entry);
-    if (peek_entry.get_tag() == entry->get_tag() ||
-        (m_journal_metadata->get_last_allocated_tid(peek_entry.get_tag(),
-                                                    &last_tid) &&
-         last_tid + 1 != peek_entry.get_tid())) {
+    if (peek_entry.get_tag_tid() == entry->get_tag_tid() ||
+        (m_journal_metadata->get_last_allocated_entry_tid(
+           peek_entry.get_tag_tid(), &last_entry_tid) &&
+         last_entry_tid + 1 != peek_entry.get_entry_tid())) {
       advance_splay_object();
     }
   } else {
@@ -182,9 +183,11 @@ bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
     remove_empty_object_player(object_player);
   }
 
-  m_journal_metadata->reserve_tid(entry->get_tag(), entry->get_tid());
+  m_journal_metadata->reserve_entry_tid(entry->get_tag_tid(),
+                                        entry->get_entry_tid());
   *commit_tid = m_journal_metadata->allocate_commit_tid(
-    object_player->get_object_number(), entry->get_tag(), entry->get_tid());
+    object_player->get_object_number(), entry->get_tag_tid(),
+    entry->get_entry_tid());
   return true;
 }
 
@@ -249,14 +252,15 @@ int JournalPlayer::process_prefetch(uint64_t object_number) {
       Entry entry;
       while (!m_commit_tids.empty() && !object_player->empty()) {
         object_player->front(&entry);
-        if (entry.get_tid() > m_commit_tids[entry.get_tag()]) {
+        if (entry.get_entry_tid() > m_commit_tids[entry.get_tag_tid()]) {
           ldout(m_cct, 10) << "located next uncommitted entry: " << entry
                            << dendl;
           break;
         }
 
         ldout(m_cct, 20) << "skipping committed entry: " << entry << dendl;
-        m_journal_metadata->reserve_tid(entry.get_tag(), entry.get_tid());
+        m_journal_metadata->reserve_entry_tid(entry.get_tag_tid(),
+                                              entry.get_entry_tid());
         object_player->pop_front();
       }
 
@@ -269,7 +273,7 @@ int JournalPlayer::process_prefetch(uint64_t object_number) {
         } else {
           Entry entry;
           object_player->front(&entry);
-          if (entry.get_tag() == m_commit_tag) {
+          if (entry.get_tag_tid() == m_commit_tag_tid) {
             advance_splay_object();
           }
         }

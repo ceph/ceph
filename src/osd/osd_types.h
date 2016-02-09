@@ -33,6 +33,7 @@
 #include "include/CompatSet.h"
 #include "common/histogram.h"
 #include "include/interval_set.h"
+#include "include/inline_memory.h"
 #include "common/Formatter.h"
 #include "common/bloom_filter.hpp"
 #include "common/hobject.h"
@@ -302,9 +303,11 @@ struct pg_t {
   pg_t() : m_pool(0), m_seed(0), m_preferred(-1) {}
   pg_t(ps_t seed, uint64_t pool, int pref=-1) :
     m_pool(pool), m_seed(seed), m_preferred(pref) {}
+  // cppcheck-suppress noExplicitConstructor
   pg_t(const ceph_pg& cpg) :
     m_pool(cpg.pool), m_seed(cpg.ps), m_preferred((__s16)cpg.preferred) {}
 
+  // cppcheck-suppress noExplicitConstructor
   pg_t(const old_pg_t& opg) {
     *this = opg.v;
   }
@@ -327,6 +330,9 @@ struct pg_t {
   int32_t preferred() const {
     return m_preferred;
   }
+
+  static const uint8_t calc_name_buf_size = 36;  // max length for max values len("18446744073709551615.ffffffff") + future suffix len("_head") + '\0'
+  char *calc_name(char *buf, const char *suffix_backwords) const;
 
   void set_ps(ps_t p) {
     m_seed = p;
@@ -448,6 +454,10 @@ struct spg_t {
   int32_t preferred() const {
     return pgid.preferred();
   }
+
+  static const uint8_t calc_name_buf_size = pg_t::calc_name_buf_size + 4; // 36 + len('s') + len("255");
+  char *calc_name(char *buf, const char *suffix_backwords) const;
+ 
   bool parse(const char *s);
   bool parse(const std::string& s) {
     return parse(s.c_str());
@@ -523,7 +533,8 @@ class coll_t {
   spg_t pgid;
   uint64_t removal_seq;  // note: deprecated, not encoded
 
-  string _str;  // cached string
+  char _str_buff[spg_t::calc_name_buf_size];
+  char *_str;
 
   void calc_str();
 
@@ -549,6 +560,15 @@ public:
     calc_str();
   }
 
+  coll_t& operator=(const coll_t& rhs)
+  {
+    this->type = rhs.type;
+    this->pgid = rhs.pgid;
+    this->removal_seq = rhs.removal_seq;
+    this->calc_str();
+    return *this;
+  }
+
   // named constructors
   static coll_t meta() {
     return coll_t();
@@ -557,12 +577,13 @@ public:
     return coll_t(p);
   }
 
-  const std::string& to_str() const {
-    return _str;
+  const std::string to_str() const {
+    return string(_str);
   }
   const char *c_str() const {
-    return _str.c_str();
+    return _str;
   }
+
   bool parse(const std::string& s);
 
   int operator<(const coll_t &rhs) const {
@@ -693,12 +714,13 @@ public:
   eversion_t() : version(0), epoch(0), __pad(0) {}
   eversion_t(epoch_t e, version_t v) : version(v), epoch(e), __pad(0) {}
 
+  // cppcheck-suppress noExplicitConstructor
   eversion_t(const ceph_eversion& ce) : 
     version(ce.version),
     epoch(ce.epoch),
     __pad(0) { }
 
-  eversion_t(bufferlist& bl) : __pad(0) { decode(bl); }
+  explicit eversion_t(bufferlist& bl) : __pad(0) { decode(bl); }
 
   static eversion_t max() {
     eversion_t max;
@@ -1624,8 +1646,7 @@ struct object_stat_sum_t {
   }
 
   bool is_zero() const {
-    object_stat_sum_t zero;
-    return memcmp(this, &zero, sizeof(zero)) == 0;
+    return mem_is_zero((char*)this, sizeof(*this));
   }
 
   void add(const object_stat_sum_t& o);
@@ -1921,7 +1942,7 @@ struct pg_hit_set_info_t {
   utime_t begin, end;   ///< time interval
   eversion_t version;   ///< version this HitSet object was written
   bool using_gmt;	///< use gmt for creating the hit_set archive object name
-  pg_hit_set_info_t(bool using_gmt = true)
+  explicit pg_hit_set_info_t(bool using_gmt = true)
     : using_gmt(using_gmt) {}
 
   void encode(bufferlist &bl) const;
@@ -2082,6 +2103,7 @@ struct pg_info_t {
       last_backfill(hobject_t::get_max()),
       last_backfill_bitwise(false)
   { }
+  // cppcheck-suppress noExplicitConstructor
   pg_info_t(spg_t p)
     : pgid(p),
       last_epoch_started(0), last_user_version(0),
@@ -2698,7 +2720,7 @@ struct pg_missing_t {
   struct item {
     eversion_t need, have;
     item() {}
-    item(eversion_t n) : need(n) {}  // have no old version
+    explicit item(eversion_t n) : need(n) {}  // have no old version
     item(eversion_t n, eversion_t h) : need(n), have(h) {}
 
     void encode(bufferlist& bl) const {
@@ -3090,7 +3112,7 @@ struct SnapSet {
   map<snapid_t, uint64_t> clone_size;
 
   SnapSet() : seq(0), head_exists(false) {}
-  SnapSet(bufferlist& bl) {
+  explicit SnapSet(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
     decode(p);
   }
@@ -3314,14 +3336,14 @@ struct object_info_t {
       data_digest(-1), omap_digest(-1)
   {}
 
-  object_info_t(const hobject_t& s)
+  explicit object_info_t(const hobject_t& s)
     : soid(s),
       user_version(0), size(0), flags((flag_t)0),
       truncate_seq(0), truncate_size(0),
       data_digest(-1), omap_digest(-1)
   {}
 
-  object_info_t(bufferlist& bl) {
+  explicit object_info_t(bufferlist& bl) {
     decode(bl);
   }
   object_info_t operator=(bufferlist& bl) {
@@ -3348,7 +3370,7 @@ struct SnapSetContext {
   bool registered : 1;
   bool exists : 1;
 
-  SnapSetContext(const hobject_t& o) :
+  explicit SnapSetContext(const hobject_t& o) :
     oid(o), ref(0), registered(false), exists(true) { }
 };
 

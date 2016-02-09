@@ -124,7 +124,7 @@ void PGLog::IndexedLog::trim(
     tail = s;
 }
 
-ostream& PGLog::IndexedLog::print(ostream& out) const 
+ostream& PGLog::IndexedLog::print(ostream& out) const
 {
   out << *this << std::endl;
   for (list<pg_log_entry_t>::const_iterator p = log.begin();
@@ -524,6 +524,9 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
   if (info.last_complete > newhead)
     info.last_complete = newhead;
 
+  if (log.rollback_info_trimmed_to > newhead)
+    log.rollback_info_trimmed_to = newhead;
+
   log.index();
 
   map<eversion_t, hobject_t> new_priors;
@@ -861,8 +864,8 @@ void PGLog::_write_log(
     ::encode(divergent_priors, (*km)["divergent_priors"]);
   }
   if (require_rollback) {
-    ::encode(log.can_rollback_to, (*km)["can_rollback_to"]);
-    ::encode(log.rollback_info_trimmed_to, (*km)["rollback_info_trimmed_to"]);
+  ::encode(log.can_rollback_to, (*km)["can_rollback_to"]);
+  ::encode(log.rollback_info_trimmed_to, (*km)["rollback_info_trimmed_to"]);
   }
 
   if (!to_remove.empty())
@@ -896,34 +899,34 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
     for (p->seek_to_first(); p->valid() ; p->next(false)) {
       // non-log pgmeta_oid keys are prefixed with _; skip those
       if (p->key()[0] == '_')
-	continue;
+        continue;
       bufferlist bl = p->value();//Copy bufferlist before creating iterator
       bufferlist::iterator bp = bl.begin();
       if (p->key() == "divergent_priors") {
-	::decode(divergent_priors, bp);
-	dout(20) << "read_log " << divergent_priors.size() << " divergent_priors" << dendl;
+        ::decode(divergent_priors, bp);
+        dout(20) << "read_log " << divergent_priors.size() << " divergent_priors" << dendl;
       } else if (p->key() == "can_rollback_to") {
-	::decode(log.can_rollback_to, bp);
+        ::decode(log.can_rollback_to, bp);
       } else if (p->key() == "rollback_info_trimmed_to") {
-	::decode(log.rollback_info_trimmed_to, bp);
+        ::decode(log.rollback_info_trimmed_to, bp);
       } else {
-	pg_log_entry_t e;
-	e.decode_with_checksum(bp);
-	dout(20) << "read_log " << e << dendl;
-	if (!log.log.empty()) {
-	  pg_log_entry_t last_e(log.log.back());
-	  assert(last_e.version.version < e.version.version);
-	  assert(last_e.version.epoch <= e.version.epoch);
-	}
-	log.log.push_back(e);
-	log.head = e.version;
-	if (log_keys_debug)
-	  log_keys_debug->insert(e.get_key_name());
+        pg_log_entry_t e;
+        e.decode_with_checksum(bp);
+        dout(20) << "read_log " << e << dendl;
+        if (!log.log.empty()) {
+          pg_log_entry_t last_e(log.log.back());
+          assert(last_e.version.version < e.version.version);
+          assert(last_e.version.epoch <= e.version.epoch);
+        }
+        log.log.push_back(e);
+        log.head = e.version;
+        if (log_keys_debug)
+          log_keys_debug->insert(e.get_key_name());
       }
     }
   }
   log.head = info.last_update;
-  log.index();
+  log.reset_riter();
 
   // build missing
   if (info.last_complete < info.last_update) {

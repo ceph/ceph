@@ -194,13 +194,36 @@ class LibCephFS(object):
         raise LibCephFSStateError("You cannot perform that operation on a "
                                   "CephFS object in state %s." % (self.state))
 
-    def __init__(self, conf=None, conffile=None):
+    def __init__(self, conf=None, conffile=None, auth_id=None, rados_inst=None):
         self.libcephfs = load_libcephfs()
         self.cluster = c_void_p()
 
+        self.state = "uninitialized"
+        if rados_inst is not None:
+            if auth_id is not None or conffile is not None or conf is not None:
+                raise InvalidValue("May not pass RADOS instance as well as other configuration")
+
+            return self.create_with_rados(rados_inst)
+        else:
+            return self.create(conf, conffile, auth_id)
+
+    def create_with_rados(self, rados_inst):
+        ret = self.libcephfs.ceph_create_from_rados(
+                byref(self.cluster),
+                rados_inst.cluster)
+        if ret != 0:
+            raise Error("libcephfs_initialize failed with error code: %d" % ret)
+        self.state = "configuring"
+
+    def create(self, conf=None, conffile=None, auth_id=None, rados_inst=None):
         if conffile is not None and not isinstance(conffile, basestring):
             raise TypeError('conffile must be a string or None')
-        ret = self.libcephfs.ceph_create(byref(self.cluster), c_char_p(0))
+
+        if auth_id is not None and not isinstance(auth_id, basestring):
+            raise TypeError('auth_id must be a string or None')
+
+        ret = self.libcephfs.ceph_create(byref(self.cluster),
+                c_char_p(auth_id) if auth_id else c_char_p(0))
         if ret != 0:
             raise Error("libcephfs_initialize failed with error code: %d" % ret)
         self.state = "configuring"

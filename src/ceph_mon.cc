@@ -258,7 +258,7 @@ int main(int argc, const char **argv)
   }
 
   global_init(&def_args, args,
-              CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, flags);
+              CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, flags, "mon_data");
   ceph_heap_profiler_init();
 
   uuid_d fsid;
@@ -268,7 +268,6 @@ int main(int argc, const char **argv)
       break;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-      exit(0);
     } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
       mkfs = true;
     } else if (ceph_argparse_flag(args, i, "--compact", (char*)NULL)) {
@@ -393,7 +392,7 @@ int main(int argc, const char **argv)
 	  string name;
 	  monmap.get_addr_name(local, name);
 
-	  if (name.find("noname-") == 0) {
+	  if (name.compare(0, 7, "noname-") == 0) {
 	    cout << argv[0] << ": mon." << name << " " << local
 		 << " is local, renaming to mon." << g_conf->name.get_id() << std::endl;
 	    monmap.rename(name, g_conf->name.get_id());

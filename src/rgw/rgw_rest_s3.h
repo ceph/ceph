@@ -86,6 +86,31 @@ public:
   void send_response();
 };
 
+class RGWGetBucketWebsite_ObjStore_S3 : public RGWGetBucketWebsite {
+public:
+  RGWGetBucketWebsite_ObjStore_S3() {}
+  ~RGWGetBucketWebsite_ObjStore_S3() {}
+
+  void send_response();
+};
+
+class RGWSetBucketWebsite_ObjStore_S3 : public RGWSetBucketWebsite {
+public:
+  RGWSetBucketWebsite_ObjStore_S3() {}
+  ~RGWSetBucketWebsite_ObjStore_S3() {}
+
+  int get_params();
+  void send_response();
+};
+
+class RGWDeleteBucketWebsite_ObjStore_S3 : public RGWDeleteBucketWebsite {
+public:
+  RGWDeleteBucketWebsite_ObjStore_S3() {}
+  ~RGWDeleteBucketWebsite_ObjStore_S3() {}
+
+  void send_response();
+};
+
 class RGWStatBucket_ObjStore_S3 : public RGWStatBucket_ObjStore {
 public:
   RGWStatBucket_ObjStore_S3() {}
@@ -329,7 +354,7 @@ private:
   }
 
 public:
-  RGW_Auth_S3_Keystone_ValidateToken(CephContext *_cct)
+  explicit RGW_Auth_S3_Keystone_ValidateToken(CephContext *_cct)
       : RGWHTTPClient(_cct) {
     get_str_list(cct->_conf->rgw_keystone_accepted_roles, roles_list);
   }
@@ -378,10 +403,11 @@ public:
 
   virtual int validate_object_name(const string& bucket) { return 0; }
 
-  virtual int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
+  virtual int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
+  int postauth_init() { return 0; }
 };
 
 class RGWHandler_ObjStore_S3 : public RGWHandler_ObjStore {
@@ -395,9 +421,14 @@ public:
   int validate_bucket_name(const string& bucket, bool relaxed_names);
   using RGWHandler_ObjStore::validate_bucket_name;
   
-  virtual int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
+  virtual int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
+  }
+  int postauth_init();
+  virtual int retarget(RGWOp *op, RGWOp **new_op) {
+    *new_op = op;
+    return 0;
   }
 };
 
@@ -462,12 +493,15 @@ public:
 };
 
 class RGWRESTMgr_S3 : public RGWRESTMgr {
+private:
+  bool enable_s3website;
 public:
-  RGWRESTMgr_S3() {}
+  explicit RGWRESTMgr_S3(bool enable_s3website) : enable_s3website(false) { this->enable_s3website = enable_s3website; }
   virtual ~RGWRESTMgr_S3() {}
 
   virtual RGWHandler *get_handler(struct req_state *s);
 };
 
+class RGWHandler_ObjStore_Obj_S3Website;
 
 #endif

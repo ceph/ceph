@@ -171,17 +171,17 @@ public:
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Incremental*>& o);
 
-    Incremental(epoch_t e=0) :
+    explicit Incremental(epoch_t e=0) :
       encode_features(0),
       epoch(e), new_pool_max(-1), new_flags(-1), new_max_osd(-1),
       have_crc(false), full_crc(0), inc_crc(0) {
       memset(&fsid, 0, sizeof(fsid));
     }
-    Incremental(bufferlist &bl) {
+    explicit Incremental(bufferlist &bl) {
       bufferlist::iterator p = bl.begin();
       decode(p);
     }
-    Incremental(bufferlist::iterator &p) {
+    explicit Incremental(bufferlist::iterator &p) {
       decode(p);
     }
 
@@ -368,9 +368,6 @@ public:
   void set_state(int o, unsigned s) {
     assert(o < max_osd);
     osd_state[o] = s;
-  }
-  void set_weightf(int o, float w) {
-    set_weight(o, (int)((float)CEPH_OSD_IN * w));
   }
   void set_weight(int o, unsigned w) {
     assert(o < max_osd);
@@ -777,6 +774,15 @@ public:
     if (nrep > 0)
       return group[group.size()-1];
     return -1;  // we fail!
+  }
+  bool is_acting_osd_shard(pg_t pg, int osd, shard_id_t shard) const {
+    vector<int> acting;
+    int nrep = pg_to_acting_osds(pg, acting);
+    if (shard == shard_id_t::NO_SHARD)
+      return calc_pg_role(osd, acting, nrep) >= 0;
+    if (shard >= (int)acting.size())
+      return false;
+    return acting[shard] == osd;
   }
 
 
