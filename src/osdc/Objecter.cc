@@ -466,13 +466,6 @@ void Objecter::shutdown()
     tick_event = 0;
   }
 
-  if (m_request_state_hook) {
-    AdminSocket* admin_socket = cct->get_admin_socket();
-    admin_socket->unregister_command("objecter_requests");
-    delete m_request_state_hook;
-    m_request_state_hook = NULL;
-  }
-
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
     delete logger;
@@ -481,6 +474,16 @@ void Objecter::shutdown()
 
   // Let go of Objecter write lock so timer thread can shutdown
   wl.unlock();
+
+  // Outside of lock to avoid cycle WRT calls to RequestStateHook
+  // This is safe because we guarantee no concurrent calls to
+  // shutdown() with the ::initialized check at start.
+  if (m_request_state_hook) {
+    AdminSocket* admin_socket = cct->get_admin_socket();
+    admin_socket->unregister_command("objecter_requests");
+    delete m_request_state_hook;
+    m_request_state_hook = NULL;
+  }
 }
 
 void Objecter::_send_linger(LingerOp *info,
