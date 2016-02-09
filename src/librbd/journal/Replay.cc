@@ -45,7 +45,8 @@ template <typename I>
 void Replay<I>::process(bufferlist::iterator *it, Context *on_ready,
                         Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << dendl;
+  ldout(cct, 20) << this << " " << __func__ << ": "
+                 << "on_ready=" << on_ready << ", on_safe=" << on_safe << dendl;
 
   on_ready = util::create_async_context_callback(m_image_ctx, on_ready);
 
@@ -113,6 +114,7 @@ void Replay<I>::replay_op_ready(uint64_t op_tid, Context *on_resume) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": op_tid=" << op_tid << dendl;
 
+  Mutex::Locker locker(m_lock);
   auto op_it = m_op_events.find(op_tid);
   assert(op_it != m_op_events.end());
 
@@ -477,13 +479,17 @@ void Replay<I>::handle_aio_flush_complete(Context *on_flush_safe,
     ldout(cct, 10) << "resuming paused AIO" << dendl;
     on_aio_ready->complete(0);
   }
+
+  if (on_flush_safe != nullptr) {
+    on_safe_ctxs.push_back(on_flush_safe);
+  }
   for (auto ctx : on_safe_ctxs) {
+    ldout(cct, 20) << "completing safe context: " << ctx << dendl;
     ctx->complete(r);
   }
-  if (on_flush_safe != nullptr) {
-    on_flush_safe->complete(r);
-  }
+
   if (on_flush != nullptr) {
+    ldout(cct, 20) << "completing flush context: " << on_flush << dendl;
     on_flush->complete(r);
   }
 }
