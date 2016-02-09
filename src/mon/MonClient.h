@@ -91,7 +91,7 @@ struct MonClientPinger : public Dispatcher {
 
     bufferlist &payload = m->get_payload();
     if (result && payload.length() > 0) {
-      bufferlist::iterator p = payload.begin();
+      auto p = payload.begin();
       ::decode(*result, p);
     }
     done = true;
@@ -276,7 +276,7 @@ public:
    */
   bool sub_want_increment(string what, version_t start, unsigned flags) {
     lock_guard l(monc_lock);
-    map<string,ceph_mon_subscribe_item>::iterator i = sub_new.find(what);
+    auto i = sub_new.find(what);
     if (i != sub_new.end()) {
       if (i->second.start >= start)
 	return false;
