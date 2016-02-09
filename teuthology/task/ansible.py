@@ -199,12 +199,18 @@ class Ansible(Task):
             inventory.append('[{0}]'.format(self.inventory_group))
         inventory.extend(hostnames + [''])
         hosts_str = '\n'.join(inventory)
+        self.inventory = self._write_hosts_file(hosts_str)
+        self.generated_inventory = True
+
+    def _write_hosts_file(self, content):
+        """
+        Actually write the hosts file
+        """
         hosts_file = NamedTemporaryFile(prefix="teuth_ansible_hosts_",
                                         delete=False)
-        hosts_file.write(hosts_str)
+        hosts_file.write(content)
         hosts_file.flush()
-        self.generated_inventory = True
-        self.inventory = hosts_file.name
+        return hosts_file.name
 
     def generate_playbook(self):
         """
