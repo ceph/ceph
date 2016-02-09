@@ -81,16 +81,31 @@ int MonClient::get_monmap_privately()
   ldout(cct, 10) << "get_monmap_privately" << dendl;
   unique_lock l(monc_lock);
 
-  bool temp_msgr = false;
-  Messenger* smessenger = NULL;
-  if (!messenger) {
-    messenger = smessenger = Messenger::create_client_messenger(cct, "temp_mon_client");
-    if (NULL == messenger) {
-      return -1;
+  auto dm = [this, &l](Messenger* m) {
+    if (cur_con) {
+      cur_con->mark_down();
+      cur_con.reset(nullptr);
+      cur_mon.clear();
     }
+    l.unlock();
+    m->shutdown();
+    if (m)
+      m->wait();
+    messenger = nullptr;
+    delete m;
+    l.lock();
+  };
+  std::unique_ptr<Messenger, decltype(dm)> smessenger(
+    nullptr, dm);
+  if (!messenger) {
+    smessenger.reset(Messenger::create_client_messenger(
+		       cct, "temp_mon_client"));
+
+    if (!smessenger)
+      return -1;
+    messenger = smessenger.get();
     messenger->add_dispatcher_head(this);
     smessenger->start();
-    temp_msgr = true;
   }
 
   int attempt = 10;
@@ -117,24 +132,9 @@ int MonClient::get_monmap_privately()
     }
   }
 
-  if (temp_msgr) {
-    if (cur_con) {
-      cur_con->mark_down();
-      cur_con.reset(NULL);
-      cur_mon.clear();
-    }
-    l.unlock();
-    messenger->shutdown();
-    if (smessenger)
-      smessenger->wait();
-    delete messenger;
-    messenger = 0;
-    l.lock();
-  }
-
   hunting = true;  // reset this to true!
   cur_mon.clear();
-  cur_con.reset(NULL);
+  cur_con.reset(nullptr);
 
   if (!monmap.fsid.is_zero())
     return 0;
