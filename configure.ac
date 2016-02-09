@@ -1275,50 +1275,6 @@ AC_ARG_WITH(
     ]
 )
 
-
-dnl rgw-user
-AC_SUBST(user_rgw)
-AC_ARG_WITH(
-    rgw-user,
-    AS_HELP_STRING(
-        [--with-rgw-user=USER],
-        [systemd unit directory @<:@USER_RGW@:>@
-        Defaults to "www-data"]
-    ),
-    [
-        user_rgw="$withval"
-    ],
-    [
-        if test "x$USER_RGW" = "x"; then
-            user_rgw=www-data
-        else
-            user_rgw="$USER_RGW"
-        fi
-    ]
-)
-
-dnl rgw-group
-AC_SUBST(group_rgw)
-AC_ARG_WITH(
-    rgw-group,
-    AS_HELP_STRING(
-        [--with-rgw-group=GROUP],
-        [systemd unit directory @<:@GROUP_RGW@:>@
-        Defaults to "www-data"]
-    ),
-    [
-        group_rgw="$withval"
-    ],
-    [
-        if test "x$GROUP_RGW" = "x"; then
-            group_rgw=www-data
-        else
-            group_rgw="$GROUP_RGW"
-        fi
-    ]
-)
-
-
 AC_SUBST(systemd_unit_dir)
 AC_ARG_WITH(
     systemd-unit-dir,
