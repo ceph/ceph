@@ -21,6 +21,16 @@ run_cli_tests() {
     $CEPH_SRC/../qa/workunits/rbd/copy.sh
 }
 
+# tests that do not depend on image format / features
+run_generic_tests() {
+    $CEPH_SRC/../qa/workunits/rbd/verify_pool.sh
+
+    recreate_pool rbd
+    $CEPH_SRC/../qa/workunits/rbd/journal.sh
+    recreate_pool rbd
+    $CEPH_SRC/../qa/workunits/rbd/test_admin_socket.sh
+}
+
 run_api_tests() {
     # skip many_snaps since it takes several minutes
     nosetests -v test_rbd -e '.*many_snaps'
@@ -29,6 +39,7 @@ run_api_tests() {
 }
 
 ceph_test_cls_rbd
+run_generic_tests
 run_api_tests
 run_cli_tests
 
