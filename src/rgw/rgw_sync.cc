@@ -4,6 +4,7 @@
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
 #include "common/admin_socket.h"
+#include "common/errno.h"
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -1077,9 +1078,9 @@ int RGWMetaSyncSingleEntryCR::operate() {
       }
 
       if (sync_status < 0) {
-#warning need to store entry for non-transient errors
         ldout(sync_env->cct, 10) << *this << ": failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << dendl;
         log_error() << "failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << std::endl;
+        yield call(sync_env->error_logger->log_error_cr(section, key, -sync_status, string("failed to read remote metadata entry: ") + cpp_strerror(-sync_status)));
         return set_cr_error(sync_status);
       }
 

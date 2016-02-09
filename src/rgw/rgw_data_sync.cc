@@ -3,6 +3,7 @@
 #include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
+#include "common/errno.h"
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -679,6 +680,10 @@ public:
       } while (marker_tracker->need_retry(raw_key));
 
       sync_status = retcode;
+
+      if (sync_status < 0) {
+        yield call(sync_env->error_logger->log_error_cr("data", bucket_name + ":" + bucket_instance, -sync_status, string("failed to sync bucket instance: ") + cpp_strerror(-sync_status)));
+      }
 #warning what do do in case of error
       if (!entry_marker.empty()) {
         /* update marker */
@@ -688,7 +693,7 @@ public:
         sync_status = retcode;
       }
       if (sync_status < 0) {
-        return set_cr_error(retcode);
+        return set_cr_error(sync_status);
       }
       return set_cr_done();
     }
