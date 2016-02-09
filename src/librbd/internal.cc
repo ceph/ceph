@@ -754,7 +754,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
                                            snap_name),
                                boost::bind(&ImageWatcher::notify_snap_remove,
                                            ictx->image_watcher, snap_name));
-      if (r < 0 && r != -EEXIST) {
+      if (r < 0 && r != -ENOENT) {
         return r;
       }
     } else {
