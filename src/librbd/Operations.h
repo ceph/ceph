@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_OPERATIONS_H
 
 #include "include/int_types.h"
-#include "include/atomic.h"
+#include <atomic>
 #include <string>
 #include <boost/function.hpp>
 
@@ -59,7 +59,7 @@ public:
 
 private:
   ImageCtxT &m_image_ctx;
-  atomic_t m_async_request_seq;
+  std::atomic<int> m_async_request_seq;
 
   int invoke_async_request(const std::string& request_type,
                            bool permit_snapshot,

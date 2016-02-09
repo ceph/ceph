@@ -61,10 +61,9 @@ namespace ceph {
     class Digest {
     private:
       PK11Context *ctx;
-      SECOidTag sec_type;
       size_t digest_size;
     public:
-      Digest (SECOidTag _type, size_t _digest_size) : sec_type(_type), digest_size(_digest_size) {
+      Digest (SECOidTag _type, size_t _digest_size) : digest_size(_digest_size) {
 	ctx = PK11_CreateDigestContext(_type);
 	assert(ctx);
 	Restart();
