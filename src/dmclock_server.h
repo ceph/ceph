@@ -22,6 +22,7 @@
 #include <mutex>
 #include <thread>
 #include <iostream>
+#include <iomanip>
 #include <sstream>
 
 #include "crimson/heap.h"
@@ -39,9 +40,9 @@ namespace crimson {
     // we're using double to represent time, but we could change it by
     // changing the following declarations (and by making sure a min
     // function existed)
-    typedef double Time;
-    static const double TimeZero = 0.0;
-    static const double TimeMax = std::numeric_limits<Time>::max();
+    using Time = double;
+    static const Time TimeZero = 0.0;
+    static const Time TimeMax = std::numeric_limits<Time>::max();
 
 
     inline Time get_time() {
@@ -54,7 +55,7 @@ namespace crimson {
     inline std::string format_time(const Time& time, uint modulo = 1000) {
       long subtract = long(time / modulo) * modulo;
       std::stringstream ss;
-      ss << std::fixed << time - subtract;
+      ss << std::fixed << std::setprecision(4) << time - subtract;
       return ss.str();
     }
 
@@ -160,7 +161,7 @@ namespace crimson {
 
     public:
 
-      typedef typename std::unique_ptr<R> RequestRef;
+      using RequestRef = std::unique_ptr<R>;
 
     protected:
 
@@ -211,7 +212,7 @@ namespace crimson {
       }; // struct Entry
 
 
-      typedef std::shared_ptr<Entry> EntryRef;
+      using EntryRef = std::shared_ptr<Entry>;
 
       // if you try to display an EntryRef (shared pointer to an
       // Entry), dereference the shared pointer so we get data, not
@@ -226,16 +227,15 @@ namespace crimson {
     public:
 
       // a function that can be called to look up client information
-      typedef typename std::function<ClientInfo(C)>     ClientInfoFunc;
+      using ClientInfoFunc = std::function<ClientInfo(C)>;
 
       // a function to see whether the server can handle another request
-      typedef typename std::function<bool(void)>        CanHandleRequestFunc;
+      using CanHandleRequestFunc = std::function<bool(void)>;
 
       // a function to submit a request to the server; the second
       // parameter is a callback when it's completed
-      typedef typename std::function<void(const C&,RequestRef,PhaseType)>
-      HandleRequestFunc;
-
+      using HandleRequestFunc =
+	       std::function<void(const C&,RequestRef,PhaseType)>;
 
     protected:
 
