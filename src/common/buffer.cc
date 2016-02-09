@@ -1974,6 +1974,46 @@ int buffer::list::write_file(const char *fn, int mode)
   return 0;
 }
 
+static int do_writev(int fd, struct iovec *vec, uint64_t offset, unsigned veclen, unsigned bytes)
+{
+  ssize_t r = 0;
+  while (bytes > 0) {
+#ifdef HAVE_PWRITEV
+    r = ::pwritev(fd, vec, veclen, offset);
+#else
+    r = ::lseek64(fd, offset, SEEK_SET);
+    if (r != offset) {
+      r = -errno;
+      return r;
+    }
+    r = ::writev(fd, vec, veclen);
+#endif
+    if (r < 0) {
+      if (errno == EINTR)
+        continue;
+      return -errno;
+    }
+
+    bytes -= r;
+    offset += r;
+    if (bytes == 0) break;
+
+    while (r > 0) {
+      if (vec[0].iov_len <= (size_t)r) {
+        // drain this whole item
+        r -= vec[0].iov_len;
+        ++vec;
+        --veclen;
+      } else {
+        vec[0].iov_base = (char *)vec[0].iov_base + r;
+        vec[0].iov_len -= r;
+        break;
+      }
+    }
+  }
+  return 0;
+}
+
 int buffer::list::write_fd(int fd) const
 {
   if (can_zero_copy())
@@ -2025,6 +2065,34 @@ int buffer::list::write_fd(int fd) const
       iovlen = 0;
       bytes = 0;
     }
+  }
+  return 0;
+}
+
+int buffer::list::write_fd(int fd, uint64_t offset) const
+{
+  iovec iov[IOV_MAX];
+
+  std::list<ptr>::const_iterator p = _buffers.begin();
+  uint64_t left_pbrs = _buffers.size();
+  while (left_pbrs) {
+    ssize_t bytes = 0;
+    unsigned iovlen = 0;
+    uint64_t size = MIN(left_pbrs, IOV_MAX);
+    left_pbrs -= size;
+    while (size > 0) {
+      iov[iovlen].iov_base = (void *)p->c_str();
+      iov[iovlen].iov_len = p->length();
+      iovlen++;
+      bytes += p->length();
+      ++p;
+      size--;
+    }
+
+    int r = do_writev(fd, iov, offset, iovlen, bytes);
+    if (r < 0)
+      return r;
+    offset += bytes;
   }
   return 0;
 }
