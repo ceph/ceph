@@ -20,6 +20,7 @@
 #include <queue>
 #include <atomic>
 #include <mutex>
+#include <condition_variable>
 #include <thread>
 #include <iostream>
 #include <iomanip>
@@ -288,6 +289,13 @@ namespace crimson {
       // proportion to still get issued
       bool allowLimitBreak;
 
+      std::atomic_bool finishing;
+
+      // for handling timed scheduling
+      std::mutex  sched_ahead_mtx;
+      std::condition_variable sched_ahead_cv;
+      std::thread sched_ahead_thd;
+      Time sched_ahead_when = TimeZero;
 
       // performance data collection
       size_t res_sched_count;
@@ -306,14 +314,17 @@ namespace crimson {
 	allowLimitBreak(_allowLimitBreak),
 	res_sched_count(0),
 	prop_sched_count(0),
-	limit_break_sched_count(0)
+	limit_break_sched_count(0),
+	finishing(false)
       {
-	// empty
+	sched_ahead_thd = std::thread(&PriorityQueue::run_sched_ahead, this);
       }
 
 
       ~PriorityQueue() {
-	// empty
+	finishing = true;
+	sched_ahead_cv.notify_one();
+	sched_ahead_thd.join();
       }
 
 
@@ -549,8 +560,8 @@ namespace crimson {
 	  }
 	}
 
-	// nothing scheduled; make sure we re-run when next queued
-	// item is ready
+	// nothing scheduled; make sure we re-run when next
+	// reservation item or next limited item comes up
 
 	Time next_call = TimeMax;
 	if (!res_q.empty()) {
@@ -559,27 +570,8 @@ namespace crimson {
 	if (!lim_q.empty()) {
 	  next_call = min_not_0_time(next_call, lim_q.top()->tag.limit);
 	}
-	if (!ready_q.empty()) {
-	  next_call = min_not_0_time(next_call, ready_q.top()->tag.proportion);
-	}
-	if (!prop_q.empty()) {
-	  next_call = min_not_0_time(next_call, prop_q.top()->tag.proportion);
-	}
 	if (next_call < TimeMax) {
-	  now = get_time();
-	  // TODO rather than starting a thread, consider having a
-	  // service thread that just calls into schedule_request based
-	  // on the nearest interesting time; communicate to it w a
-	  // mutex/cv.
-	  std::thread t(
-	    [this, next_call, now]() {
-	      long microseconds_l = long(1 + 1000000 * (next_call - now));
-	      auto microseconds = std::chrono::microseconds(microseconds_l);
-	      std::this_thread::sleep_for(microseconds);
-	      DataGuard g(data_mutex);
-	      schedule_request();
-	    });
-	  t.detach();
+	  sched_at(next_call);
 	}
       } // schedule_request
 
@@ -590,6 +582,42 @@ namespace crimson {
       static inline const Time& min_not_0_time(const Time& current,
 					       const Time& possible) {
 	return TimeZero == possible ? current : std::min(current, possible);
+      }
+
+
+      // this is the thread that handles running schedule_request at
+      // future times when nothing can be scheduled immediately
+      void run_sched_ahead() {
+	std::unique_lock<std::mutex> l(sched_ahead_mtx);
+
+	while (!finishing) {
+	  if (TimeZero == sched_ahead_when) {
+	    sched_ahead_cv.wait(l);
+	  } else {
+	    Time now;
+	    while (!finishing.load() && (now = get_time()) < sched_ahead_when) {
+	      long microseconds_l = long(1 + 1000000 * (sched_ahead_when - now));
+	      auto microseconds = std::chrono::microseconds(microseconds_l);
+	      sched_ahead_cv.wait_for(l, microseconds);
+	    }
+	    sched_ahead_when = TimeZero;
+	    l.unlock();
+	    if (!finishing) {
+	      DataGuard g(data_mutex);
+	      schedule_request();
+	    }
+	    l.lock();
+	  }
+	}
+      }
+
+
+      void sched_at(Time when) {
+	std::lock_guard<std::mutex> l(sched_ahead_mtx);
+	if (TimeZero == sched_ahead_when || when < sched_ahead_when) {
+	  sched_ahead_when = when;
+	  sched_ahead_cv.notify_one();
+	}
       }
     }; // class PriorityQueue
   } // namespace dmclock
