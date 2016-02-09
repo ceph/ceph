@@ -576,7 +576,8 @@ string MonClient::_pick_random_mon()
 	max--;
     }
 
-    int32_t n = rng() % max;
+    std::uniform_int_distribution<int32_t> d(0, max - 1);
+    int32_t n = d(rng);
     if (o >= 0 && n >= o)
       n++;
     return monmap.get_name(n);

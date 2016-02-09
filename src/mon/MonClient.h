@@ -18,6 +18,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <random>
 
 #include <boost/intrusive/set.hpp>
 
@@ -35,7 +36,6 @@
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonGetVersion.h"
 
-#include "common/SimpleRNG.h"
 #include "osd/osd_types.h"
 
 
@@ -119,7 +119,7 @@ private:
   string cur_mon;
   ConnectionRef cur_con = nullptr;
 
-  SimpleRNG rng;
+  std::minstd_rand rng;
 
   EntityName entity_name;
 
