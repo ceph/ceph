@@ -43,7 +43,6 @@
 
 #include "common/config.h"
 
-
 #define dout_subsys ceph_subsys_monc
 #undef dout_prefix
 #define dout_prefix *_dout << "monclient" << (hunting ? "(hunting)":"") << ": "
@@ -893,7 +892,7 @@ void MonClient::_send_command(MonCommand *r)
     if (r->target_rank >= (int)monmap.size()) {
       ldout(cct, 10) << " target " << r->target_rank << " >= max mon "
 		     << monmap.size() << dendl;
-      _finish_command(r, -ENOENT, "mon rank dne");
+      _finish_command(r, -ENOENT, string("mon rank dne"), bufferlist());
       return;
     }
     _reopen_session(r->target_rank, string());
@@ -908,7 +907,7 @@ void MonClient::_send_command(MonCommand *r)
 		   << dendl;
     if (!monmap.contains(r->target_name)) {
       ldout(cct, 10) << " target " << r->target_name << " not present in monmap" << dendl;
-      _finish_command(r, -ENOENT, "mon dne");
+      _finish_command(r, -ENOENT, string("mon dne"), bufferlist());
       return;
     }
     _reopen_session(-1, r->target_name);
@@ -952,10 +951,9 @@ void MonClient::handle_mon_command_ack(MMonCommandAck *ack)
     r = p->second;
   }
 
-  ldout(cct, 10) << "handle_mon_command_ack " << r->tid << " " << r->cmd << dendl;
-  if (r->poutbl)
-    r->poutbl->claim(ack->get_data());
-  _finish_command(r, ack->r, ack->rs);
+  ldout(cct, 10) << "handle_mon_command_ack " << r->tid << " " << r->cmd
+		 << dendl;
+  _finish_command(r, ack->r, std::move(ack->rs), std::move(ack->get_data()));
   ack->put();
 }
 
@@ -972,36 +970,48 @@ int MonClient::_cancel_mon_command(uint64_t tid, int r)
   ldout(cct, 10) << __func__ << " tid " << tid << dendl;
 
   MonCommand *cmd = it->second;
-  _finish_command(cmd, -ETIMEDOUT, "");
+  _finish_command(cmd, -ETIMEDOUT, "", bufferlist());
   return 0;
 }
 
-void MonClient::_finish_command(MonCommand *r, int ret, string rs)
+/// Since we don't have generalized lambdas, we need a helper to
+/// handle move capture
+struct MonCmd_CB_Helper {
+  MonClient::MonCommand_cb f;
+  int r;
+  string s;
+  bufferlist bl;
+
+  MonCmd_CB_Helper(MonClient::MonCommand_cb&& f, int r, string&& s,
+		   bufferlist&& bl)
+    : f(std::move(f)), r(r), s(std::move(s)), bl(std::move(bl)) {}
+
+  void operator()() noexcept {
+    std::move(f)(r, s, bl);
+  }
+};
+
+void MonClient::_finish_command(MonCommand *r, int ret, string&& rs,
+				bufferlist&& bl)
 {
   ldout(cct, 10) << "_finish_command " << r->tid << " = " << ret << " "
 		 << rs << dendl;
-  if (r->prval)
-    *(r->prval) = ret;
-  if (r->prs)
-    *(r->prs) = rs;
   if (r->onfinish)
-    finisher.queue(r->onfinish, ret);
+    finisher.enqueue(cxx_function::in_place_t<MonCmd_CB_Helper>{},
+		     std::move(r->onfinish), ret, std::move(rs), std::move(bl));
   mon_commands.erase(r->tid);
   delete r;
 }
 
 int MonClient::start_mon_command(const vector<string>& cmd,
 				 const bufferlist& inbl,
-				 bufferlist *outbl, string *outs,
-				 Context *onfinish)
+				 MonCommand_cb&& onfinish)
 {
   lock_guard l(monc_lock);
   MonCommand *r = new MonCommand(++last_mon_command_tid);
   r->cmd = cmd;
   r->inbl = inbl;
-  r->poutbl = outbl;
-  r->prs = outs;
-  r->onfinish = onfinish;
+  r->onfinish = std::move(onfinish);
   if (cct->_conf->rados_mon_op_timeout > 0) {
     auto tid = r->tid;
     r->ontimeout = timer.add_event(
@@ -1020,17 +1030,14 @@ int MonClient::start_mon_command(const vector<string>& cmd,
 int MonClient::start_mon_command(const string &mon_name,
 				 const vector<string>& cmd,
 				 const bufferlist& inbl,
-				 bufferlist *outbl, string *outs,
-				 Context *onfinish)
+				 MonCommand_cb&& onfinish)
 {
   lock_guard l(monc_lock);
   MonCommand *r = new MonCommand(++last_mon_command_tid);
   r->target_name = mon_name;
   r->cmd = cmd;
   r->inbl = inbl;
-  r->poutbl = outbl;
-  r->prs = outs;
-  r->onfinish = onfinish;
+  r->onfinish = std::move(onfinish);
   mon_commands[r->tid] = r;
   _send_command(r);
   // can't fail
@@ -1040,17 +1047,14 @@ int MonClient::start_mon_command(const string &mon_name,
 int MonClient::start_mon_command(int rank,
 				 const vector<string>& cmd,
 				 const bufferlist& inbl,
-				 bufferlist *outbl, string *outs,
-				 Context *onfinish)
+				 MonCommand_cb&& onfinish)
 {
   lock_guard l(monc_lock);
   MonCommand *r = new MonCommand(++last_mon_command_tid);
   r->target_rank = rank;
   r->cmd = cmd;
   r->inbl = inbl;
-  r->poutbl = outbl;
-  r->prs = outs;
-  r->onfinish = onfinish;
+  r->onfinish = std::move(onfinish);
   mon_commands[r->tid] = r;
   _send_command(r);
   return 0;

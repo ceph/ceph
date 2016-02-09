@@ -19,6 +19,8 @@
 #include <memory>
 #include <mutex>
 
+#include <boost/intrusive/set.hpp>
+
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 
@@ -394,58 +396,41 @@ public:
       auth->add_want_keys(want);
   }
 
+  using MonCommand_cb = cxx_function::unique_function<
+    void(int&, string&, bufferlist&)&& noexcept>;
+
   // admin commands
 private:
   uint64_t last_mon_command_tid;
-  struct MonCommand {
-    string target_name;
-    int target_rank;
-    uint64_t tid;
-    vector<string> cmd;
-    bufferlist inbl;
-    bufferlist *poutbl;
-    string *prs;
-    int *prval;
-    Context *onfinish;
-    uint64_t ontimeout;
 
-    explicit MonCommand(uint64_t t)
-      : target_rank(-1),
-	tid(t),
-	poutbl(NULL), prs(NULL), prval(NULL), onfinish(NULL), ontimeout(0)
-    {}
+  struct MonCommand {
+    std::string target_name;
+    int target_rank = -1;
+    uint64_t tid;
+    std::vector<std::string> cmd;
+    bufferlist inbl;
+    MonCommand_cb onfinish;
+    uint64_t ontimeout = 0;
+
+    explicit MonCommand(uint64_t t) : tid(t) { }
   };
   map<uint64_t,MonCommand*> mon_commands;
-
-  class C_CancelMonCommand : public Context
-  {
-    uint64_t tid;
-    MonClient *monc;
-  public:
-    C_CancelMonCommand(uint64_t tid, MonClient *monc) : tid(tid), monc(monc) {}
-    void finish(int r) {
-      monc->_cancel_mon_command(tid, -ETIMEDOUT);
-    }
-  };
 
   void _send_command(MonCommand *r);
   void _resend_mon_commands();
   int _cancel_mon_command(uint64_t tid, int r);
-  void _finish_command(MonCommand *r, int ret, string rs);
+  void _finish_command(MonCommand *r, int ret, string&& rs, bufferlist&& rbl);
   void handle_mon_command_ack(MMonCommandAck *ack);
 
 public:
   int start_mon_command(const vector<string>& cmd, const bufferlist& inbl,
-			bufferlist *outbl, string *outs,
-			Context *onfinish);
+			MonCommand_cb&& onfinish);
   int start_mon_command(int mon_rank,
 			const vector<string>& cmd, const bufferlist& inbl,
-			bufferlist *outbl, string *outs,
-			Context *onfinish);
-  int start_mon_command(const string &mon_name,  ///< mon name, with mon. prefix
+			MonCommand_cb&& onfinish);
+  int start_mon_command(const string &mon_name, ///< mon name, with mon. prefix
 			const vector<string>& cmd, const bufferlist& inbl,
-			bufferlist *outbl, string *outs,
-			Context *onfinish);
+			MonCommand_cb&& onfinish);
 
   // version requests
 public:
