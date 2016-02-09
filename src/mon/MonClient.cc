@@ -191,10 +191,19 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
     return -ENOENT;
   }
 
-  MonClientPinger *pinger = new MonClientPinger(cct, result_reply);
+  std::unique_ptr<MonClientPinger> pinger(
+    new MonClientPinger(cct, result_reply));
 
-  Messenger *smsgr = Messenger::create_client_messenger(cct, "temp_ping_client");
-  smsgr->add_dispatcher_head(pinger);
+
+  auto dm = [this](Messenger* m) {
+    m->shutdown();
+    m->wait();
+    delete m;
+  };
+  std::unique_ptr<Messenger, decltype(dm)> smsgr(
+    Messenger::create_client_messenger(cct, "temp_ping_client"),
+    dm);
+  smsgr->add_dispatcher_head(pinger.get());
   smsgr->start();
 
   ConnectionRef con = smsgr->get_connection(monmap.get_inst(new_mon_id));
@@ -212,10 +221,6 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
   pl.unlock();
 
   con->mark_down();
-  smsgr->shutdown();
-  smsgr->wait();
-  delete smsgr;
-  delete pinger;
   return ret;
 }
 
