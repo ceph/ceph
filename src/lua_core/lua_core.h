@@ -47,6 +47,7 @@ int eval_generic(cls_method_context_t hctx, bufferlist *in, bufferlist *out,
 /*
  * Entrypoint into Lua VM base class
  */
-void cls_init(string cls_name, list<luaL_Reg> clslua_lib_add);
+void cls_init(string cls_name, string cls_class, list<luaL_Reg> functions,
+    list<string> env);
 
 #endif

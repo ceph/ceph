@@ -14,6 +14,7 @@
 cls_handle_t h_class;
 cls_method_handle_t h_eval_json;
 cls_method_handle_t h_eval_bufferlist;
+string lua_clslibname;
 
 /*
  * Jump point for recovering from Lua panic.
@@ -258,6 +259,11 @@ int clslua_opresult(lua_State *L, int ok, int ret, int nargs,
 vector<luaL_Reg> clslua_lib;
 
 /*
+ * Lua files to add to the environment
+ */
+vector<string> clslua_env;
+
+/*
  * Set int const in table at top of stack
  */
 #define SET_INT_CONST(var) do { \
@@ -367,7 +373,7 @@ static void clslua_setup_env(lua_State *L)
   luaL_requiref(L, LUA_MATHLIBNAME, luaopen_math, 1);
   lua_pop(L, 1);
 
-  luaL_requiref(L, "objclass", luaopen_objclass, 1);
+  luaL_requiref(L, lua_clslibname.c_str(), luaopen_objclass, 1);
   lua_pop(L, 1);
 
   luaL_requiref(L, "bufferlist", luaopen_bufferlist, 1);
@@ -376,6 +382,23 @@ static void clslua_setup_env(lua_State *L)
   // built into liblua convenience library (see: src/lua)
   luaL_requiref(L, "cmsgpack", luaopen_cmsgpack, 1);
   lua_pop(L, 1);
+  
+  // load the environment helper Lua files
+  for(vector<string>::iterator it = clslua_env.begin();
+      it != clslua_env.end();
+      it++) {
+    string fname = "/usr/local/share/ceph/rados-classes/";
+    fname.append(*it);
+    CLS_LOG(20, "Add to env, fname=%s", fname.c_str());
+    int status = luaL_loadfile(L, fname.c_str());
+    if (status) {
+      CLS_ERR("error: couldn't load the file file: %s", lua_tostring(L, -1));
+    } else {
+      status = lua_pcall(L, 0, 0, 0);
+      if (status)
+        CLS_ERR("error: couldn't prime function in loaded file: %s", lua_tostring(L, -1));
+    }
+  }
 }
 
 /*
@@ -660,11 +683,15 @@ static int eval_bufferlist(cls_method_context_t hctx, bufferlist *in, bufferlist
   return eval_generic(hctx, in, out, BUFFERLIST_ENC);
 }
 
-void cls_init(string cls_name, list<luaL_Reg> add)
+void cls_init(string cls_name, string cls_class, list<luaL_Reg> functions, list<string> env)
 {
   CLS_LOG(20, "Loaded lua class!");
+  lua_clslibname = cls_class;
 
-  clslua_lib.insert(clslua_lib.end(), add.begin(), add.end());
+  clslua_lib.clear();
+  clslua_env.clear();
+  clslua_lib.insert(clslua_lib.end(), functions.begin(), functions.end());
+  clslua_env.insert(clslua_env.end(), env.begin(), env.end());
 
   cls_register(cls_name.c_str(), &h_class);
 

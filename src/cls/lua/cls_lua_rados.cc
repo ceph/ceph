@@ -360,38 +360,43 @@ void __cls_init()
   /* 
    * Functions to add to clslua_lib
    */
-  list<luaL_Reg> add;
+  list<luaL_Reg> functions;
 
   // data
-  add.push_back({"create", clslua_create});
-  add.push_back({"remove", clslua_remove});
-  add.push_back({"stat", clslua_stat});
-  add.push_back({"read", clslua_read});
-  add.push_back({"write", clslua_write});
-  add.push_back({"write_full", clslua_write_full});
+  functions.push_back({"create", clslua_create});
+  functions.push_back({"remove", clslua_remove});
+  functions.push_back({"stat", clslua_stat});
+  functions.push_back({"read", clslua_read});
+  functions.push_back({"write", clslua_write});
+  functions.push_back({"write_full", clslua_write_full});
   
   // xattr
-  add.push_back({"getxattr", clslua_getxattr});
-  add.push_back({"getxattrs", clslua_getxattrs});
-  add.push_back({"setxattr", clslua_setxattr});
+  functions.push_back({"getxattr", clslua_getxattr});
+  functions.push_back({"getxattrs", clslua_getxattrs});
+  functions.push_back({"setxattr", clslua_setxattr});
   
   // omap
-  add.push_back({"map_clear", clslua_map_clear});
-  add.push_back({"map_get_keys", clslua_map_get_keys});
-  add.push_back({"map_get_vals", clslua_map_get_vals});
-  add.push_back({"map_read_header", clslua_map_read_header});
-  add.push_back({"map_write_header", clslua_map_write_header});
-  add.push_back({"map_get_val", clslua_map_get_val});
-  add.push_back({"map_set_val", clslua_map_set_val});
-  add.push_back({"map_set_vals", clslua_map_set_vals});
-  add.push_back({"map_remove_key", clslua_map_remove_key});
+  functions.push_back({"map_clear", clslua_map_clear});
+  functions.push_back({"map_get_keys", clslua_map_get_keys});
+  functions.push_back({"map_get_vals", clslua_map_get_vals});
+  functions.push_back({"map_read_header", clslua_map_read_header});
+  functions.push_back({"map_write_header", clslua_map_write_header});
+  functions.push_back({"map_get_val", clslua_map_get_val});
+  functions.push_back({"map_set_val", clslua_map_set_val});
+  functions.push_back({"map_set_vals", clslua_map_set_vals});
+  functions.push_back({"map_remove_key", clslua_map_remove_key});
 
   // env
-  add.push_back({"current_version", clslua_current_version});
-  add.push_back({"current_subop_num", clslua_current_subop_num});
-  add.push_back({"current_subop_version", clslua_current_subop_version});
+  functions.push_back({"current_version", clslua_current_version});
+  functions.push_back({"current_subop_num", clslua_current_subop_num});
+  functions.push_back({"current_subop_version", clslua_current_subop_version});
 
-  cls_init("lua", add);
+  /* 
+   * Lua files with helper functions to add to the environment
+   */
+  list<string> env;
+
+  cls_init("lua", "objclass", functions, env);
 }  
 
 
