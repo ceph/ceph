@@ -195,7 +195,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     _pool.id,
     p.shard),
   map_lock("PG::map_lock"),
-  osdmap_ref(curmap), pool(_pool),
+  osdmap_ref(curmap), last_persisted_osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
   ref(0),
   #ifdef PG_DEBUG_REFS
@@ -233,8 +233,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   acting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   upacting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   do_sort_bitwise(false),
-  last_epoch(0),
-  last_persisted_epoch(curmap->get_epoch())
+  last_epoch(0)
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
@@ -2806,7 +2805,7 @@ void PG::prepare_write_info(map<string,bufferlist> *km)
   assert(ret == 0);
   if (need_update_epoch)
     last_epoch = get_osdmap()->get_epoch();
-  last_persisted_epoch = last_epoch;
+  last_persisted_osdmap_ref = osdmap_ref;
 
   dirty_info = false;
   dirty_big_info = false;
@@ -5440,15 +5439,15 @@ void PG::handle_activate_map(RecoveryCtx *rctx)
   dout(10) << "handle_activate_map " << dendl;
   ActMap evt;
   recovery_state.handle_event(evt, rctx);
-  if (osdmap_ref->get_epoch() - last_persisted_epoch >
+  if (osdmap_ref->get_epoch() - last_persisted_osdmap_ref->get_epoch() >
     cct->_conf->osd_pg_epoch_persisted_max_stale) {
     dout(20) << __func__ << ": Dirtying info: last_persisted is "
-	     << last_persisted_epoch
+	     << last_persisted_osdmap_ref->get_epoch()
 	     << " while current is " << osdmap_ref->get_epoch() << dendl;
     dirty_info = true;
   } else {
     dout(20) << __func__ << ": Not dirtying info: last_persisted is "
-	     << last_persisted_epoch
+	     << last_persisted_osdmap_ref->get_epoch()
 	     << " while current is " << osdmap_ref->get_epoch() << dendl;
   }
   if (osdmap_ref->check_new_blacklist_entries()) check_blacklisted_watchers();
