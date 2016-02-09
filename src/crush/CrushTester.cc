@@ -8,6 +8,13 @@
 #include <algorithm>
 #include <stdlib.h>
 #include <boost/lexical_cast.hpp>
+// to workaround https://svn.boost.org/trac/boost/ticket/9501
+#ifdef _LIBCPP_VERSION
+#include <boost/version.hpp>
+#if BOOST_VERSION < 105600
+#define ICL_USE_BOOST_MOVE_IMPLEMENTATION
+#endif
+#endif
 #include <boost/icl/interval_map.hpp>
 #include <boost/algorithm/string/join.hpp>
 #include <common/SubProcess.h>
