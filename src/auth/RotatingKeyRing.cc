@@ -26,6 +26,12 @@ bool RotatingKeyRing::need_new_secrets(utime_t now) const
   return secrets.need_new_secrets(now);
 }
 
+bool RotatingKeyRing::need_new_secrets(ceph::real_time now) const
+{
+  Mutex::Locker l(lock);
+  return secrets.need_new_secrets(ceph::real_clock::to_ceph_timespec(now));
+}
+
 void RotatingKeyRing::set_secrets(RotatingSecrets& s)
 {
   Mutex::Locker l(lock);

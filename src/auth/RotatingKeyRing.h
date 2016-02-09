@@ -15,6 +15,7 @@
 #ifndef CEPH_ROTATINGKEYRING_H
 #define CEPH_ROTATINGKEYRING_H
 
+#include "common/ceph_time.h"
 #include "common/config.h"
 #include "common/Mutex.h"
 
@@ -43,6 +44,7 @@ public:
 
   bool need_new_secrets() const;
   bool need_new_secrets(utime_t now) const;
+  bool need_new_secrets(ceph::real_time now) const;
   void set_secrets(RotatingSecrets& s);
   void dump_rotating() const;
   bool get_secret(const EntityName& name, CryptoKey& secret) const;

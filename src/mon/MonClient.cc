@@ -725,7 +725,7 @@ void MonClient::tick()
     _reopen_session();
   } else if (!cur_mon.empty()) {
     // just renew as needed
-    utime_t now = ceph_clock_now(cct);
+    auto now = ceph::real_clock::now(cct);
     if (!cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
       ldout(cct, 10) << "renew subs? (now: " << now
 		     << "; renew after: " << sub_renew_after << ") -- "
@@ -740,9 +740,11 @@ void MonClient::tick()
     if (state == MC_STATE_HAVE_SESSION) {
       if (cct->_conf->mon_client_ping_timeout > 0 &&
 	  cur_con->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
-	utime_t lk = cur_con->get_last_keepalive_ack();
-	utime_t interval = now - lk;
-	if (interval > cct->_conf->mon_client_ping_timeout) {
+	auto lk = ceph::real_clock::from_ceph_timespec(
+	  cur_con->get_last_keepalive_ack());
+	auto interval = now - lk;
+	if (interval > ceph::make_timespan(
+	      cct->_conf->mon_client_ping_timeout)) {
 	  ldout(cct, 1) << "no keepalive since " << lk << " (" << interval
 			<< " seconds), reconnecting" << dendl;
 	  _reopen_session();
@@ -778,8 +780,8 @@ void MonClient::_renew_subs()
   if (cur_mon.empty())
     _reopen_session();
   else {
-    if (sub_renew_sent == utime_t())
-      sub_renew_sent = ceph_clock_now(cct);
+    if (sub_renew_sent == ceph::real_time::min())
+      sub_renew_sent = ceph::real_clock::now(cct);
 
     MMonSubscribe *m = new MMonSubscribe;
     m->what = sub_new;
@@ -792,13 +794,13 @@ void MonClient::_renew_subs()
 
 void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 {
-  if (sub_renew_sent != utime_t()) {
+  if (sub_renew_sent != ceph::real_time::min()) {
     // NOTE: this is only needed for legacy (infernalis or older)
     // mons; see tick().
     sub_renew_after = sub_renew_sent;
-    sub_renew_after += m->interval / 2.0;
+    sub_renew_after += ceph::make_timespan(m->interval / 2.0);
     ldout(cct, 10) << "handle_subscribe_ack sent " << sub_renew_sent << " renew after " << sub_renew_after << dendl;
-    sub_renew_sent = utime_t();
+    sub_renew_sent = ceph::real_time::min();
   } else {
     ldout(cct, 10) << "handle_subscribe_ack sent " << sub_renew_sent << ", ignoring" << dendl;
   }
@@ -839,15 +841,18 @@ int MonClient::_check_auth_rotating()
     return 0;
   }
 
-  utime_t cutoff = ceph_clock_now(cct);
-  cutoff -= MIN(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
+  ceph::real_time cutoff = ceph::real_clock::now();
+  cutoff -= ceph::make_timespan(
+    std::min(30.0, cct->_conf->auth_service_ticket_ttl / 4.0));
   if (!rotating_secrets->need_new_secrets(cutoff)) {
-    ldout(cct, 10) << "_check_auth_rotating have uptodate secrets (they expire after " << cutoff << ")" << dendl;
+    ldout(cct, 10) << "_check_auth_rotating have uptodate secrets "
+      "(they expire after " << cutoff << ")" << dendl;
     rotating_secrets->dump_rotating();
     return 0;
   }
 
-  ldout(cct, 10) << "_check_auth_rotating renewing rotating keys (they expired before " << cutoff << ")" << dendl;
+  ldout(cct, 10) << "_check_auth_rotating renewing rotating keys (they "
+    "expired before " << cutoff << ")" << dendl;
   MAuth *m = new MAuth;
   m->protocol = auth->get_protocol();
   if (auth->build_rotating_request(m->auth_payload)) {

@@ -210,9 +210,11 @@ public:
 
   // mon subscriptions
 private:
-  map<string,ceph_mon_subscribe_item> sub_sent; // my subs, and current versions
+  map<string,ceph_mon_subscribe_item> sub_sent; // my subs, and
+						// current versions
   map<string,ceph_mon_subscribe_item> sub_new;  // unsent new subs
-  utime_t sub_renew_sent, sub_renew_after;
+  ceph::real_time sub_renew_sent = ceph::real_time::min();
+  ceph::real_time sub_renew_after = ceph::real_time::min();
 
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
