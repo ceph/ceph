@@ -38,7 +38,6 @@
 #include <errno.h>
 #include <math.h>
 #include <fcntl.h>
-#include <random>
 
 #include "include/intarith.h"
 #include "include/krbd.h"
@@ -235,12 +234,22 @@ simple_err(const char *msg, int err)
 /*
  * random
  */
-std::mt19937 random_generator;
 
-uint_fast32_t
+#define RND_STATE_LEN	256
+char	rnd_state[RND_STATE_LEN];
+struct random_data rnd_data;
+
+int32_t
 get_random(void)
 {
-	return random_generator();
+	int32_t val;
+
+	if (random_r(&rnd_data, &val) < 0) {
+		prterr("random_r");
+		exit(1);
+	}
+
+	return val;
 }
 
 /*
@@ -2327,7 +2336,14 @@ main(int argc, char **argv)
 	signal(SIGUSR1,	cleanup);
 	signal(SIGUSR2,	cleanup);
 
-	random_generator.seed(seed);
+	if (initstate_r(seed, rnd_state, RND_STATE_LEN, &rnd_data) < 0) {
+		prterr("initstate_r");
+		exit(1);
+	}
+	if (setstate_r(rnd_state, &rnd_data) < 0) {
+		prterr("setstate_r");
+		exit(1);
+	}
 
 	ret = create_image();
 	if (ret < 0) {
