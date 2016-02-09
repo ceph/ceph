@@ -66,8 +66,6 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
 		     int flags,
 		     const char *data_dir_option)
 {
-  // You can only call global_init once.
-  assert(!g_ceph_context);
   std::string conf_file_list;
   std::string cluster = "";
   CephInitParameters iparams = ceph_argparse_early_args(args, module_type, flags,
@@ -116,10 +114,19 @@ void global_init(std::vector < const char * > *alt_def_args,
 		 std::vector < const char* >& args,
 		 uint32_t module_type, code_environment_t code_env,
 		 int flags,
-		 const char *data_dir_option)
+		 const char *data_dir_option, bool run_pre_init)
 {
-  global_pre_init(alt_def_args, args, module_type, code_env, flags,
-		  data_dir_option);
+  // Ensure we're not calling the global init functions multiple times.
+  static bool first_run = true;
+  if (run_pre_init) {
+    // We will run pre_init from here (default).
+    assert(!g_ceph_context && first_run);
+    global_pre_init(alt_def_args, args, module_type, code_env, flags);
+  } else {
+    // Caller should have invoked pre_init manually.
+    assert(g_ceph_context && first_run);
+  }
+  first_run = false;
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
