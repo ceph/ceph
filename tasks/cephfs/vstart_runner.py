@@ -307,65 +307,9 @@ def safe_kill(pid):
             raise
 
 
-class MountDaemon(object):
-    """
-    Impersonate the fuse_daemon member of FuseMount
-    """
-
-    def __init__(self, client_id):
-        self.controller = LocalRemote()
-        self.client_id = client_id
-
-    def _get_pid(self):
-        """
-        Return PID as an integer or None if not found
-        """
-        ps_txt = self.controller.run(
-            args=["ps", "uaww", "-C", "ceph-fuse"],
-            check_status=False  # ps returns err if nothing running so ignore
-        ).stdout.getvalue().strip()
-        lines = ps_txt.split("\n")[1:]
-
-        for line in lines:
-            if line.find("--name client.{0} ".format(self.client_id)) != -1:
-                return int(line.split()[1])
-
-        return None
-
-    def poll(self):
-        return self._get_pid() is None
-
-    @property
-    def finished(self):
-        return self._get_pid() is None
-
-    def wait(self):
-        while self._get_pid() is not None:
-            time.sleep(1)
-
-    def kill(self):
-        pid = self._get_pid()
-        if pid is None:
-            return
-        else:
-            safe_kill(pid)
-
-    @property
-    def stdin(self):
-        class FakeStdIn(object):
-            def __init__(self, mount_daemon):
-                self.mount_daemon = mount_daemon
-
-            def close(self):
-                self.mount_daemon.kill()
-
-        return FakeStdIn(self)
-
-
 class LocalFuseMount(FuseMount):
     def __init__(self, test_dir, client_id):
         super(LocalFuseMount, self).__init__(None, test_dir, client_id, LocalRemote())
-        self._proc = None
 
     @property
     def config_path(self):
@@ -396,8 +340,8 @@ class LocalFuseMount(FuseMount):
         # the PID of the launching process, not the long running ceph-fuse process.  Therefore
         # we need to give an exact path here as the logic for checking /proc/ for which
         # asok is alive does not work.
-        path = "./out/client.{0}.{1}.asok".format(self.client_id, self._proc.subproc.pid)
-        log.info("I think my launching pid was {0}".format(self._proc.subproc.pid))
+        path = "./out/client.{0}.{1}.asok".format(self.client_id, self.fuse_daemon.subproc.pid)
+        log.info("I think my launching pid was {0}".format(self.fuse_daemon.subproc.pid))
         return path
 
     def umount(self):
@@ -444,16 +388,15 @@ class LocalFuseMount(FuseMount):
         if mount_path is not None:
             prefix += ["--client_mountpoint={0}".format(mount_path)]
 
-        self._proc = self.client_remote.run(args=
+        self.fuse_daemon = self.client_remote.run(args=
                                             prefix + [
+                                                "-f",
                                                 "--name",
                                                 "client.{0}".format(self.client_id),
                                                 self.mountpoint
-                                            ])
+                                            ], wait=False)
 
-        log.info("Mounted client.{0} with pid {1}".format(self.client_id, self._proc.subproc.pid))
-
-        self.fuse_daemon = MountDaemon(self.client_id)
+        log.info("Mounted client.{0} with pid {1}".format(self.client_id, self.fuse_daemon.subproc.pid))
 
         # Wait for the connection reference to appear in /sys
         waited = 0
