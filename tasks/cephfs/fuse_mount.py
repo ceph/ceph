@@ -236,11 +236,13 @@ class FuseMount(CephFSMount):
         assert not self.is_mounted()
         self._fuse_conn = None
 
-    def umount_wait(self, force=False):
+    def umount_wait(self, force=False, require_clean=False):
         """
         :param force: Complete cleanly even if the MDS is offline
         """
         if force:
+            assert not require_clean  # mutually exclusive
+
             # When we expect to be forcing, kill the ceph-fuse process directly.
             # This should avoid hitting the more aggressive fallback killing
             # in umount() which can affect other mounts too.
@@ -261,7 +263,8 @@ class FuseMount(CephFSMount):
                       "indicates a bug within ceph-fuse.")
             raise
         except CommandFailedError:
-            pass
+            if require_clean:
+                raise
 
         self.cleanup()
 
