@@ -1665,8 +1665,10 @@ public:
    */
   void init_host_id() {
     /* uint64_t needs 16, two '-' separators and a trailing null */
-    char charbuf[16 + zone.name.size() + zonegroup.name.size() + 2 + 1];
-    snprintf(charbuf, sizeof(charbuf), "%llx-%s-%s", (unsigned long long)instance_id(), zone.name.c_str(), zonegroup.name.c_str());
+    const string& zone_name = zone.get_name();
+    const string& zonegroup_name = zonegroup.get_name();
+    char charbuf[16 + zone_name.size() + zonegroup_name.size() + 2 + 1];
+    snprintf(charbuf, sizeof(charbuf), "%llx-%s-%s", (unsigned long long)instance_id(), zone_name.c_str(), zonegroup_name.c_str());
     string s(charbuf);
     host_id = s;
   }
@@ -2163,6 +2165,7 @@ public:
                        const char *if_match,
                        const char *if_nomatch,
                        AttrsMod attrs_mod,
+                       bool copy_if_newer,
                        map<string, bufferlist>& attrs,
                        RGWObjCategory category,
                        uint64_t olh_epoch,
@@ -2211,6 +2214,7 @@ public:
                const char *if_match,
                const char *if_nomatch,
                AttrsMod attrs_mod,
+               bool copy_if_newer,
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
