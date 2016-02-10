@@ -2080,7 +2080,7 @@ public:
 void RGWRadosThread::start()
 {
   worker = new Worker(cct, this);
-  worker->create();
+  worker->create("radosgw");
 }
 
 void RGWRadosThread::stop()
@@ -6088,6 +6088,14 @@ int RGWRados::Object::Delete::delete_obj()
   if (r < 0)
     return r;
 
+  if (params.unmod_since > 0) {
+    time_t ctime = state->mtime;
+
+    ldout(store->ctx(), 10) << "If-UnModified-Since: " << params.unmod_since << " Last-Modified: " << ctime << dendl;
+    if (ctime > params.unmod_since) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
   uint64_t obj_size = state->size;
 
   if (!params.expiration_time.is_zero()) {

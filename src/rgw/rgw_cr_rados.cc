@@ -31,7 +31,7 @@ RGWAsyncRadosRequest *RGWAsyncRadosProcessor::RGWWQ::_dequeue() {
   return req;
 }
 
-void RGWAsyncRadosProcessor::RGWWQ::_process(RGWAsyncRadosRequest *req) {
+void RGWAsyncRadosProcessor::RGWWQ::_process(RGWAsyncRadosRequest *req, ThreadPool::TPHandle& handle) {
   processor->handle_request(req);
   processor->req_throttle.put(1);
 }
@@ -52,7 +52,7 @@ void RGWAsyncRadosProcessor::RGWWQ::_dump_queue() {
 }
 
 RGWAsyncRadosProcessor::RGWAsyncRadosProcessor(RGWRados *_store, int num_threads)
-  : store(_store), m_tp(store->ctx(), "RGWAsyncRadosProcessor::m_tp", num_threads),
+  : store(_store), m_tp(store->ctx(), "RGWAsyncRadosProcessor::m_tp", "rados_async", num_threads),
   req_throttle(store->ctx(), "rgw_async_rados_ops", num_threads * 2),
   req_wq(this, g_conf->rgw_op_thread_timeout,
          g_conf->rgw_op_thread_suicide_timeout, &m_tp) {
