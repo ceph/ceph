@@ -22,6 +22,7 @@ namespace exclusive_lock {
 using ::testing::_;
 using ::testing::InSequence;
 using ::testing::Return;
+using ::testing::StrEq;
 
 static const std::string TEST_COOKIE("auto 123");
 
@@ -60,7 +61,7 @@ public:
 
   void expect_unlock(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(mock_image_ctx.header_oid, _, "lock", "unlock", _, _, _))
+                exec(mock_image_ctx.header_oid, _, StrEq("lock"), StrEq("unlock"), _, _, _))
                   .WillOnce(Return(r));
   }
 

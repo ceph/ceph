@@ -65,6 +65,7 @@ using ::testing::DoAll;
 using ::testing::DoDefault;
 using ::testing::InSequence;
 using ::testing::Return;
+using ::testing::StrEq;
 using ::testing::WithArg;
 
 class TestMockObjectMapRefreshRequest : public TestMockFixture {
@@ -87,7 +88,7 @@ public:
                               int r) {
     std::string oid(ObjectMap::object_map_name(mock_image_ctx.id, snap_id));
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(oid, _, "rbd", "object_map_load", _, _, _));
+                               exec(oid, _, StrEq("rbd"), StrEq("object_map_load"), _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -125,7 +126,7 @@ public:
                                 uint64_t num_objects, int r) {
     std::string oid(ObjectMap::object_map_name(mock_image_ctx.id, TEST_SNAP_ID));
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(oid, _, "rbd", "object_map_resize", _, _, _));
+                               exec(oid, _, StrEq("rbd"), StrEq("object_map_resize"), _, _, _));
     expect.WillOnce(Return(r));
   }
 

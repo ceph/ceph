@@ -23,6 +23,7 @@ using ::testing::DoAll;
 using ::testing::DoDefault;
 using ::testing::Return;
 using ::testing::SetArgPointee;
+using ::testing::StrEq;
 using ::testing::WithArg;
 
 class TestMockOperationSnapshotRemoveRequest : public TestMockFixture {
@@ -71,7 +72,7 @@ public:
   void expect_remove_child(MockImageCtx &mock_image_ctx, int r) {
     bool deep_flatten = mock_image_ctx.image_ctx->test_features(RBD_FEATURE_DEEP_FLATTEN);
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(RBD_CHILDREN, _, "rbd", "remove_child",_,
+                               exec(RBD_CHILDREN, _, StrEq("rbd"), StrEq("remove_child"), _,
                                     _, _));
     if (deep_flatten) {
       expect.Times(0);
@@ -93,9 +94,9 @@ public:
 
   void expect_snap_remove(MockImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, "rbd",
-                               mock_image_ctx.old_format ? "snap_remove" :
-                                                           "snapshot_remove",
+                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                               StrEq(mock_image_ctx.old_format ? "snap_remove" :
+                                                                  "snapshot_remove"),
                                 _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
