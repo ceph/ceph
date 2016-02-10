@@ -25,30 +25,33 @@ PACKAGES = {}
 PACKAGES['ceph'] = {}
 PACKAGES['ceph']['deb'] = [
     'ceph',
-    'ceph-dbg',
     'ceph-mds',
-    'ceph-mds-dbg',
     'ceph-common',
-    'ceph-common-dbg',
     'ceph-fuse',
-    'ceph-fuse-dbg',
     'ceph-test',
-    'ceph-test-dbg',
     'radosgw',
-    'radosgw-dbg',
     'python-ceph',
     'libcephfs1',
-    'libcephfs1-dbg',
     'libcephfs-java',
     'libcephfs-jni',
     'librados2',
-    'librados2-dbg',
     'librbd1',
-    'librbd1-dbg',
     'rbd-fuse',
 ]
+# These packages are only installed if 'debuginfo: true' is in the config.
+DEBUG_PACKAGES = {}
+DEBUG_PACKAGES['ceph'] = {}
+DEBUG_PACKAGES['ceph']['deb'] = [
+    'ceph-dbg',
+    'ceph-mds-dbg',
+    'ceph-common-dbg',
+    'ceph-fuse-dbg',
+    'radosgw-dbg',
+    'libcephfs1-dbg',
+    'librados2-dbg',
+    'librbd1-dbg',
+]
 PACKAGES['ceph']['rpm'] = [
-    'ceph-debuginfo',
     'ceph-radosgw',
     'ceph-test',
     'ceph-devel',
@@ -62,7 +65,9 @@ PACKAGES['ceph']['rpm'] = [
     'python-ceph',
     'rbd-fuse',
 ]
-
+DEBUG_PACKAGES['ceph']['rpm'] = [
+    'ceph-debuginfo',
+]
 
 def _get_gitbuilder_project(ctx, remote, config):
     return packaging.GitbuilderProject(
@@ -587,6 +592,10 @@ def install(ctx, config):
     debs = PACKAGES.get(project, {}).get('deb', [])
     rpm = PACKAGES.get(project, {}).get('rpm', [])
 
+    if config.get('debuginfo'):
+        debs += DEBUG_PACKAGES.get(project, {}).get('deb', [])
+        rpm += DEBUG_PACKAGES.get(project, {}).get('rpm', [])
+
     # pull any additional packages out of config
     extra_pkgs = config.get('extra_packages')
     log.info('extra packages: {packages}'.format(packages=extra_pkgs))
@@ -600,8 +609,8 @@ def install(ctx, config):
     # install these. 'extras' might not be the best name for this.
     extras = config.get('extras')
     if extras is not None:
-        debs = ['ceph-test', 'ceph-test-dbg', 'ceph-fuse', 'ceph-fuse-dbg',
-                'librados2', 'librados2-dbg', 'librbd1', 'librbd1-dbg',
+        debs = ['ceph-test', 'ceph-fuse',
+                'librados2', 'librbd1',
                 'python-ceph']
         rpm = ['ceph-fuse', 'librbd1', 'librados2', 'ceph-test', 'python-ceph']
 
@@ -613,9 +622,7 @@ def install(ctx, config):
     # they were included in PACKAGES to ensure that nuke cleans them up.
     proj_install_debs = {'ceph': [
         'librados2',
-        'librados2-dbg',
         'librbd1',
-        'librbd1-dbg',
     ]}
 
     proj_install_rpm = {'ceph': [
@@ -975,6 +982,8 @@ def upgrade_common(ctx, config, deploy_style):
         system_type = teuthology.get_system_type(remote)
         assert system_type in ('deb', 'rpm')
         pkgs = PACKAGES[project][system_type]
+        if config.get('debuginfo'):
+            pkgs += DEBUG_PACKAGES[project][system_type]
         excluded_packages = config.get('exclude_packages', list())
         pkgs = list(set(pkgs).difference(set(excluded_packages)))
         log.info("Upgrading {proj} {system_type} packages: {pkgs}".format(
@@ -1260,6 +1269,7 @@ def task(ctx, config):
                 branch=config.get('branch'),
                 tag=config.get('tag'),
                 sha1=config.get('sha1'),
+                debuginfo=config.get('debuginfo'),
                 flavor=flavor,
                 extra_packages=config.get('extra_packages', []),
                 extras=config.get('extras', None),
