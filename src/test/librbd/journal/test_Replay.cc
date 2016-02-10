@@ -125,12 +125,13 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
   librbd::journal::AioFlushEvent aio_flush_event;
-  librbd::journal::EventEntry event_entry(aio_flush_event);
   librbd::Journal<>::AioObjectRequests requests;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->journal->append_io_event(NULL, std::move(event_entry), requests, 0, 0,
-                                   true);
+    ictx->journal->append_io_event(NULL, std::move(librbd::journal::EventEntry(aio_flush_event)),
+                                   requests, 0, 0, true);
+    ictx->journal->append_io_event(NULL, std::move(librbd::journal::EventEntry(aio_flush_event)),
+                                   requests, 0, 0, true);
   }
 
   // start an AIO write op
