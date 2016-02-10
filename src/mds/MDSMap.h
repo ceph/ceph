@@ -70,6 +70,7 @@ extern CompatSet get_mdsmap_compat_set_base(); // pre v0.20
 #define MDS_FEATURE_INCOMPAT_OMAPDIRFRAG CompatSet::Feature(6, "dirfrag is stored in omap")
 #define MDS_FEATURE_INCOMPAT_INLINE CompatSet::Feature(7, "mds uses inline data")
 #define MDS_FEATURE_INCOMPAT_NOANCHOR CompatSet::Feature(8, "no anchor table")
+#define MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2 CompatSet::Feature(8, "file layout v2")
 
 #define MDS_FS_NAME_DEFAULT "cephfs"
 
