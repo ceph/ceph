@@ -887,6 +887,8 @@ void Monitor::shutdown()
     admin_socket->unregister_command("quorum_status");
     admin_socket->unregister_command("sync_force");
     admin_socket->unregister_command("add_bootstrap_peer_hint");
+    admin_socket->unregister_command("quorum enter");
+    admin_socket->unregister_command("quorum exit");
     admin_socket->unregister_command("ops");
     delete admin_hook;
     admin_hook = NULL;

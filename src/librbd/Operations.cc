@@ -52,7 +52,7 @@ int Operations<I>::flatten(ProgressContext &prog_ctx) {
     }
   }
 
-  uint64_t request_id = m_async_request_seq.inc();
+  uint64_t request_id = ++m_async_request_seq;
   r = invoke_async_request("flatten", false,
                            boost::bind(&Operations<I>::flatten, this,
                                        boost::ref(prog_ctx), _1),
@@ -129,7 +129,7 @@ int Operations<I>::rebuild_object_map(ProgressContext &prog_ctx) {
     return r;
   }
 
-  uint64_t request_id = m_async_request_seq.inc();
+  uint64_t request_id = ++m_async_request_seq;
   r = invoke_async_request("rebuild object map", true,
                            boost::bind(&Operations<I>::rebuild_object_map, this,
                                        boost::ref(prog_ctx), _1),
@@ -245,7 +245,7 @@ int Operations<I>::resize(uint64_t size, ProgressContext& prog_ctx) {
     return r;
   }
 
-  uint64_t request_id = m_async_request_seq.inc();
+  uint64_t request_id = ++m_async_request_seq;
   r = invoke_async_request("resize", false,
                            boost::bind(&Operations<I>::resize, this,
                                        size, boost::ref(prog_ctx), _1, 0),

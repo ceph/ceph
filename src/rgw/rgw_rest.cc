@@ -174,6 +174,8 @@ static set<string> hostnames_s3website_set;
 
 void rgw_rest_init(CephContext *cct, RGWRegion& region)
 {
+  region.store->init_host_id();
+
   for (const auto& rgw2http : base_rgw_to_http_attrs)  {
     rgw_to_http_attrs[rgw2http.rgw_attr] = rgw2http.http_attr;
   }
@@ -624,7 +626,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
       s->formatter->dump_string("BucketName", s->bucket_name);
     if (!s->trans_id.empty()) // TODO: connect to expose_bucket or another toggle
       s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->dump_string("HostId", "FIXME-TODO-How-does-amazon-generate-HostId"); // TODO, FIXME
+    s->formatter->dump_string("HostId", s->host_id);
     if (s->format != RGW_FORMAT_HTML) {
       s->formatter->close_section();
     }

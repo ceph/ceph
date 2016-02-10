@@ -1141,6 +1141,8 @@ struct req_state {
 
    string trans_id;
 
+   string host_id;
+
    req_info info;
    req_init_state init_state;
 

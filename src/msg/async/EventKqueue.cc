@@ -69,7 +69,6 @@ int KqueueDriver::del_event(int fd, int cur_mask, int delmask)
 {
   ldout(cct, 20) << __func__ << " del event fd=" << fd << " cur mask=" << cur_mask
                  << " delmask=" << delmask << dendl;
-  struct kevent ee;
   struct kevent ke;
   int filter = 0;
   int r = 0;

@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [10.0.2], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [10.0.3], [ceph-devel@vger.kernel.org])
 
 AX_CXX_COMPILE_STDCXX_11(, mandatory)
 
@@ -1073,6 +1073,7 @@ AC_CHECK_HEADERS([sys/prctl.h])
 AC_CHECK_FUNCS([prctl])
 AC_CHECK_FUNCS([pipe2])
 AC_CHECK_FUNCS([posix_fadvise])
+AC_CHECK_FUNCS([pwritev], AC_DEFINE([HAVE_PWRITEV], [1], [we have pwritev]))
 
 AC_MSG_CHECKING([for fdatasync])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[

@@ -175,7 +175,7 @@ class SharedDriverData {
     _aio_stop();
     std::vector<NVMEDevice*> new_devices;
     for (auto &&it : registered_devices) {
-      if (it == device)
+      if (it != device)
         new_devices.push_back(it);
     }
     registered_devices.swap(new_devices);
@@ -522,7 +522,7 @@ void io_complete(void *t, const struct nvme_completion *completion)
   Task *task = static_cast<Task*>(t);
   IOContext *ctx = task->ctx;
   SharedDriverData *driver = task->device->get_driver();
-  driver->inflight_ops.dec();
+  int left = driver->inflight_ops.dec();
   utime_t lat = ceph_clock_now(g_ceph_context);
   lat -= task->start;
   if (task->command == IOCommand::WRITE_COMMAND) {
@@ -603,6 +603,8 @@ int NVMEDevice::open(string p)
   }
   char buf[100];
   r = ::read(fd, buf, sizeof(buf));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));                                                                           
+  fd = -1; // defensive
   if (r <= 0) {
     r = -errno;
     derr << __func__ << " unable to read " << p << ": " << cpp_strerror(r) << dendl;
@@ -786,7 +788,6 @@ int NVMEDevice::aio_zero(
     len -= t.length();
     bl.claim_append(t);
   }
-  bufferlist foo;
   // note: this works with aio only becaues the actual buffer is
   // this->zeros, which is page-aligned and never freed.
   return aio_write(off, bl, ioc, false);

@@ -1606,10 +1606,8 @@ void MDSRankDispatcher::handle_mds_map(
     // Before going active, set OSD epoch barrier to latest (so that
     // we don't risk handing out caps to clients with old OSD maps that
     // might not include barriers from the previous incarnation of this MDS)
-    const OSDMap *osdmap = objecter->get_osdmap_read();
-    const epoch_t osd_epoch = osdmap->get_epoch();
-    objecter->put_osdmap_read();
-    set_osd_epoch_barrier(osd_epoch);
+    set_osd_epoch_barrier(objecter->with_osdmap(
+			    std::mem_fn(&OSDMap::get_epoch)));
   }
 
   if (is_active()) {
@@ -1669,14 +1667,23 @@ bool MDSRankDispatcher::handle_asok_command(
              command == "ops") {
     RWLock::RLocker l(op_tracker.lock);
     if (!op_tracker.tracking_enabled) {
-      ss << "op_tracker tracking is not enabled";
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     } else {
       op_tracker.dump_ops_in_flight(f);
+    }
+  } else if (command == "dump_blocked_ops") {
+    if (!op_tracker.tracking_enabled) {
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    } else {
+      op_tracker.dump_ops_in_flight(f, true);
     }
   } else if (command == "dump_historic_ops") {
     RWLock::RLocker l(op_tracker.lock);
     if (!op_tracker.tracking_enabled) {
-      ss << "op_tracker tracking is not enabled";
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     } else {
       op_tracker.dump_historic_ops(f);
     }
