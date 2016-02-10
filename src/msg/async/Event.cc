@@ -133,6 +133,12 @@ int EventCenter::init(int n, unsigned i)
     return r;
   }
 
+  file_events.resize(n);
+  nevent = n;
+
+  if (!driver->need_wakeup())
+    return 0;
+
   int fds[2];
   if (pipe(fds) < 0) {
     lderr(cct) << __func__ << " can't create notify pipe" << dendl;
@@ -150,9 +156,7 @@ int EventCenter::init(int n, unsigned i)
     return r;
   }
 
-  file_events.resize(n);
-  nevent = n;
-  return 0;
+  return r;
 }
 
 EventCenter::~EventCenter()
@@ -188,9 +192,11 @@ void EventCenter::set_owner()
         global_centers, "AsyncMessenger::EventCenter::global_center");
     assert(global_centers);
     global_centers->centers[idx] = this;
-    notify_handler = new C_handle_notify(this, cct);
-    int r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
-    assert(r == 0);
+    if (driver->need_wakeup()) {
+      notify_handler = new C_handle_notify(this, cct);
+      int r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
+      assert(r == 0);
+    }
   }
 }
 
@@ -308,7 +314,7 @@ void EventCenter::delete_time_event(uint64_t id)
 void EventCenter::wakeup()
 {
   // No need to wake up since we never sleep
-  if (!pollers.empty())
+  if (!pollers.empty() || !driver->need_wakeup())
     return ;
 
   ldout(cct, 2) << __func__ << dendl;
@@ -353,16 +359,18 @@ int EventCenter::process_events(int timeout_microseconds)
   bool trigger_time = false;
   auto now = clock_type::now();
 
+  auto it = time_events.begin();
   bool blocking = pollers.empty() && !external_num_events.load();
   // If exists external events or poller, don't block
   if (!blocking) {
+    if (it != time_events.end() && now >= it->first)
+      trigger_time = true;
     tv.tv_sec = 0;
     tv.tv_usec = 0;
   } else {
     clock_type::time_point shortest;
     shortest = now + std::chrono::microseconds(timeout_microseconds); 
 
-    auto it = time_events.begin();
     if (it != time_events.end() && shortest >= it->first) {
       ldout(cct, 10) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
       shortest = it->first;
