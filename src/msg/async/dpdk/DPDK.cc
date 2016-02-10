@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 /*
  * This file is open source software, licensed to you under the terms
  * of the Apache License, Version 2.0 (the "License").  See the NOTICE file
@@ -71,8 +71,8 @@ typedef void    *MARKER[0];   /**< generic marker for a point in a structure */
 /******************* Net device related constatns *****************************/
 static constexpr uint16_t default_ring_size      = 512;
 
-// 
-// We need 2 times the ring size of buffers because of the way PMDs 
+//
+// We need 2 times the ring size of buffers because of the way PMDs
 // refill the ring.
 //
 static constexpr uint16_t mbufs_per_queue_rx     = 2 * default_ring_size;
@@ -231,7 +231,7 @@ int DPDKDevice::init_port_start()
   // Set RSS mode: enable RSS if seastar is configured with more than 1 CPU.
   // Even if port has a single queue we still want the RSS feature to be
   // available in order to make HW calculate RSS hash for us.
-  if (cores > 1) {
+  if (_num_queues > 1) {
     if (_dev_info.hash_key_size == 40) {
       _rss_key = default_rsskey_40bytes;
     } else if (_dev_info.hash_key_size == 52) {
@@ -539,7 +539,7 @@ int DPDKDevice::check_port_link_status()
     memset(&link, 0, sizeof(link));
     rte_eth_link_get_nowait(_port_idx, &link);
 
-    while (true) {
+    if (true) {
       if (link.link_status) {
         ldout(cct, 5) << __func__ << " done Port "
                       << static_cast<unsigned>(_port_idx)
@@ -547,9 +547,10 @@ int DPDKDevice::check_port_link_status()
                       << " Mbps - "
                       << ((link.link_duplex == ETH_LINK_FULL_DUPLEX) ? ("full-duplex") : ("half-duplex\n"))
                       << dendl;
-        usleep(sleep_time);
+        break;
       } else if (count++ < max_check_time) {
         ldout(cct, 20) << __func__ << " not ready, continue to wait." << dendl;
+        usleep(sleep_time);
       } else {
         lderr(cct) << __func__ << "done Port " << _port_idx << " Link Down" << dendl;
         return -1;
@@ -1153,7 +1154,6 @@ void DPDKDevice::set_rss_table()
 
 std::unique_ptr<DPDKDevice> create_dpdk_net_device(
     CephContext *cct,
-    int cores,
     uint8_t port_idx,
     uint8_t num_queues,
     bool use_lro,
@@ -1174,5 +1174,5 @@ std::unique_ptr<DPDKDevice> create_dpdk_net_device(
   }
 
   return std::unique_ptr<DPDKDevice>(
-      new DPDKDevice(cct, port_idx, num_queues, cores, use_lro, enable_fc));
+      new DPDKDevice(cct, port_idx, num_queues, use_lro, enable_fc));
 }

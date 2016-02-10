@@ -41,6 +41,7 @@
 #include <rte_config.h>
 #include <rte_common.h>
 #include <rte_ethdev.h>
+#include <rte_malloc.h>
 
 #include "include/page.h"
 #include "common/Tub.h"
@@ -683,7 +684,7 @@ class DPDKQueuePair {
    * @param m mbuf to update
    */
   static bool refill_rx_mbuf(rte_mbuf* m, size_t size) {
-    char* data = rte_malloc(NULL, size, size);
+    void* data = rte_malloc(NULL, size, size);
     if (!data)
       return false;
 
@@ -694,7 +695,7 @@ class DPDKQueuePair {
     // points to the private data of RTE_PKTMBUF_HEADROOM before the
     // actual data buffer.
     //
-    m->buf_addr      = data - RTE_PKTMBUF_HEADROOM;
+    m->buf_addr      = (char*)data - RTE_PKTMBUF_HEADROOM;
     m->buf_physaddr  = rte_malloc_virt2phy(data) - RTE_PKTMBUF_HEADROOM;
     return true;
   }
@@ -882,12 +883,11 @@ class DPDKDevice {
   void set_hw_flow_control();
 
  public:
-  DPDKDevice(CephContext *c, uint8_t port_idx, uint16_t num_queues,
-             unsigned cores, bool use_lro, bool enable_fc):
-      cct(c), _port_idx(port_idx), _num_queues(num_queues), cores(cores),
+  DPDKDevice(CephContext *c, uint8_t port_idx, uint16_t num_queues, bool use_lro, bool enable_fc):
+      cct(c), _port_idx(port_idx), _num_queues(num_queues),
       _home_cpu(0), _use_lro(use_lro),
       _enable_fc(enable_fc) {
-    _queues = std::vector<std::unique_ptr<DPDKQueuePair>>(cores);
+    _queues = std::vector<std::unique_ptr<DPDKQueuePair>>(_num_queues);
     /* now initialise the port we will use */
     int ret = init_port_start();
     if (ret != 0) {
@@ -985,7 +985,7 @@ class DPDKDevice {
 
 
 std::unique_ptr<DPDKDevice> create_dpdk_net_device(
-    CephContext *c, int cores, uint8_t port_idx = 0, uint8_t num_queues = 1,
+    CephContext *c, uint8_t port_idx = 0, uint8_t num_queues = 1,
     bool use_lro = true, bool enable_fc = true);
 
 enum {

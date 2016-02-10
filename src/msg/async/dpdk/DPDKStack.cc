@@ -62,8 +62,7 @@ std::unique_ptr<NetworkStack> DPDKStack::create(CephContext *cct, EventCenter *c
     // Hardcoded port index 0.
     // TODO: Inherit it from the opts
     std::unique_ptr<DPDKDevice> dev = create_dpdk_net_device(
-        cct, cores,
-        0, cct->_conf->ms_dpdk_num_queues,
+        cct, 0, cores,
         cct->_conf->ms_dpdk_lro,
         cct->_conf->ms_dpdk_hw_flow_control);
     sdev = std::shared_ptr<DPDKDevice>(dev.release());

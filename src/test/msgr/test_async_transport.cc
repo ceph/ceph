@@ -28,21 +28,38 @@
 
 class TransportTest : public ::testing::TestWithParam<const char*> {
  public:
-  EventCenter center;
+  EventCenter *center;
   std::unique_ptr<NetworkStack> transport;
 
-  TransportTest(): center(g_ceph_context) {}
+  TransportTest() {}
   virtual void SetUp() {
     cerr << __func__ << " start set up " << GetParam() << std::endl;
-    transport = NetworkStack::create(g_ceph_context, GetParam(), &center, 0);
+    if (strncmp(GetParam(), "dpdk", 4))
+      g_ceph_context->_conf->set_val("ms_dpdk_enable", "false");
+    else
+      g_ceph_context->_conf->set_val("ms_dpdk_enable", "true");
+    g_ceph_context->_conf->apply_changes(nullptr);
+    center = new EventCenter(g_ceph_context);
+    center->init(1000);
+    transport = NetworkStack::create(g_ceph_context, GetParam(), center, 0);
     transport->initialize();
   }
   virtual void TearDown() {
+    delete center;
     transport.reset();
   }
 };
 
-TEST_P(TransportTest, CreateDelete) {
+TEST_P(TransportTest, SimpleTest) {
+    entity_addr_t bind_addr;
+    bind_addr.parse("127.0.0.1:80");
+    SocketOptions options;
+    ServerSocket srv_socket;
+    int r = transport->listen(bind_addr, options, &srv_socket);
+    ASSERT_EQ(r, 0);
+    ConnectedSocket cli_socket;
+    r = transport->connect(bind_addr, options, &cli_socket);
+    ASSERT_EQ(r, 0);
 }
 
 INSTANTIATE_TEST_CASE_P(

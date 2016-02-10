@@ -36,6 +36,7 @@ set(check_LIBRARIES
   ${DPDK_rte_pmd_vmxnet3_uio_LIBRARY}
   ${DPDK_rte_pmd_ixgbe_LIBRARY}
   ${DPDK_rte_pmd_e1000_LIBRARY}
+  ${DPDK_rte_pmd_ring_LIBRARY}
   ${DPDK_rte_pmd_af_packet_LIBRARY})
 
 mark_as_advanced(DPDK_INCLUDE_DIR
@@ -48,9 +49,10 @@ mark_as_advanced(DPDK_INCLUDE_DIR
   DPDK_rte_eal_LIBRARY
   DPDK_rte_cmdline_LIBRARY
   DPDK_rte_pmd_bond_LIBRARY
+  DPDK_rte_pmd_vmxnet3_uio_LIBRARY
   DPDK_rte_pmd_ixgbe_LIBRARY
   DPDK_rte_pmd_e1000_LIBRARY
-  DPDK_rte_pmd_vmxnet3_uio_LIBRARY
+  DPDK_rte_pmd_ring_LIBRARY
   DPDK_rte_pmd_af_packet_LIBRARY)
 
 include(FindPackageHandleStandardArgs)

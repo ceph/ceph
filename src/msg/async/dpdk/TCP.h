@@ -748,8 +748,9 @@ typename tcp<InetTraits>::connection tcp<InetTraits>::connect(const entity_addr_
   do {
     src_port = _port_dist(_e);
     id = connid{src_ip, dst_ip, src_port, (uint16_t)dst_port};
-  } while (_inet._inet.netif()->hash2cpu(id.hash(_inet._inet.netif()->rss_key())) != center->cpu_id()
-           || _tcbs.find(id) != _tcbs.end());
+  } while (_inet._inet.netif()->hw_queues_count() > 1 &&
+           (_inet._inet.netif()->hash2cpu(id.hash(_inet._inet.netif()->rss_key())) != center->cpu_id()
+           || _tcbs.find(id) != _tcbs.end()));
 
   auto tcbp = make_lw_shared<tcb>(*this, id);
   _tcbs.insert({id, tcbp});

@@ -122,6 +122,7 @@ class interface {
     _pkt_providers.push_back(std::move(func));
   }
   const rss_key_type& rss_key() const;
+  uint16_t hw_queues_count() const;
   friend class l3_protocol;
 };
 

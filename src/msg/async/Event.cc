@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -81,7 +81,7 @@ EventCenter::Poller::Poller(EventCenter* center, const string& name)
  */
 EventCenter::Poller::~Poller()
 {
-  if (slot < 0) {
+  if (slot < 0 || owner->pollers.empty()) {
     return;
   }
 

@@ -88,6 +88,10 @@ const rss_key_type& interface::rss_key() const {
   return _dev->rss_key();
 }
 
+uint16_t interface::hw_queues_count() const {
+  return _dev->hw_queues_count();
+}
+
 class C_handle_l2forward : public EventCallback {
   std::shared_ptr<DPDKDevice> sdev;
   unsigned &queue_depth;

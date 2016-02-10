@@ -214,13 +214,12 @@ OPTION(ms_dpdk_coremask, OPT_STR, "1")
 OPTION(ms_dpdk_memory_channel, OPT_STR, "1")
 OPTION(ms_dpdk_hugepages, OPT_STR, "")
 OPTION(ms_dpdk_pmd, OPT_STR, "")
-OPTION(ms_dpdk_host_ipv4_addr, OPT_STR, "")
-OPTION(ms_dpdk_gateway_ipv4_addr, OPT_STR, "")
-OPTION(ms_dpdk_netmask_ipv4_addr, OPT_STR, "")
+OPTION(ms_dpdk_host_ipv4_addr, OPT_STR, "127.0.0.1")
+OPTION(ms_dpdk_gateway_ipv4_addr, OPT_STR, "127.0.0.1")
+OPTION(ms_dpdk_netmask_ipv4_addr, OPT_STR, "255.255.255.0")
 OPTION(ms_dpdk_lro, OPT_BOOL, true)
 OPTION(ms_dpdk_hw_flow_control, OPT_BOOL, true)
-OPTION(ms_dpdk_num_cores, OPT_INT, 2)
-OPTION(ms_dpdk_num_queues, OPT_INT, 2)
+OPTION(ms_dpdk_num_cores, OPT_INT, 1)
 // Weighing of a hardware network queue relative to a software queue (0=no work, 1=equal share)")
 OPTION(ms_dpdk_hw_queue_weight, OPT_FLOAT, 1)
 
@@ -882,7 +881,7 @@ OPTION(osd_snap_trim_cost, OPT_U32, 1<<20) // set default cost equal to 1MB io
 
 OPTION(osd_scrub_priority, OPT_U32, 5)
 // set default cost equal to 50MB io
-OPTION(osd_scrub_cost, OPT_U32, 50<<20) 
+OPTION(osd_scrub_cost, OPT_U32, 50<<20)
 
 /**
  * osd_recovery_op_warn_multiple scales the normal warning threshhold,
