@@ -34,7 +34,7 @@ class DPDKDriver : public EventDriver {
   int del_event(int fd, int cur_mask, int del_mask) override;
   int resize_events(int newsize) override;
   int event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tp) override;
-  bool wakeup_support() { return false; }
+  bool need_wakeup() { return false; }
 };
 
 #endif //CEPH_EVENTDPDK_H
