@@ -47,10 +47,13 @@ def run_one_task(taskname, **kwargs):
 
 def run_tasks(tasks, ctx):
     archive_path = ctx.config.get('archive_path')
-    timer = Timer(
-        path=os.path.join(archive_path, 'timing.yaml'),
-        sync=True,
-    )
+    if archive_path:
+        timer = Timer(
+            path=os.path.join(archive_path, 'timing.yaml'),
+            sync=True,
+        )
+    else:
+        timer = Timer()
     stack = []
     try:
         for taskdict in tasks:
