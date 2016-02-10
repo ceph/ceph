@@ -1085,7 +1085,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   template<bool is_const>
   bool buffer::list::iterator_impl<is_const>::operator!=(const buffer::list::iterator_impl<is_const>& rhs) const
   {
-    return bl == rhs.bl && off == rhs.off;
+    return bl != rhs.bl || off != rhs.off;
   }
 
   template<bool is_const>
