@@ -32,7 +32,7 @@ protected:
   RGWOp *op_copy() { return NULL; }
   RGWOp *op_options() { return NULL; }
 
-  int get_errordoc(const string errordoc_key, string *error_content);
+  int get_errordoc(const string &errordoc_key, string *error_content);
 public:
   RGWHandler_ObjStore_S3Website() : RGWHandler_ObjStore_S3() {}
   virtual ~RGWHandler_ObjStore_S3Website() {}
