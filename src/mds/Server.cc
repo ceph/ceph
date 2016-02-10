@@ -2132,14 +2132,17 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack)
  */
 bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
 {
- if (mdr->session && !mdr->session->check_access(
-       in, mask,
-       mdr->client_request->get_caller_uid(),
-       mdr->client_request->get_caller_gid(),
-       mdr->client_request->head.args.setattr.uid,
-       mdr->client_request->head.args.setattr.gid)) {
-    respond_to_request(mdr, -EACCES);
-    return false;
+  if (mdr->session) {
+    int r = mdr->session->check_access(
+      in, mask,
+      mdr->client_request->get_caller_uid(),
+      mdr->client_request->get_caller_gid(),
+      mdr->client_request->head.args.setattr.uid,
+      mdr->client_request->head.args.setattr.gid);
+    if (r < 0) {
+      respond_to_request(mdr, r);
+      return false;
+    }
   }
   return true;
 }

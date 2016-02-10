@@ -3149,7 +3149,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     return false;
 
   Session *session = static_cast<Session *>(m->get_connection()->get_priv());
-  if (!session->check_access(in, MAY_WRITE, m->caller_uid, m->caller_gid, 0, 0)) {
+  if (session->check_access(in, MAY_WRITE,
+			    m->caller_uid, m->caller_gid, 0, 0) < 0) {
     dout(10) << "check_access failed, dropping cap update on " << *in << dendl;
     return false;
   }
