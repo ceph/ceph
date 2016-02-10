@@ -53,6 +53,7 @@ using ::testing::_;
 using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::Return;
+using ::testing::StrEq;
 using ::testing::WithArg;
 
 class TestMockOperationResizeRequest : public TestMockFixture {
@@ -104,7 +105,7 @@ public:
         EXPECT_CALL(*mock_image_ctx.exclusive_lock, assert_header_locked(_));
       }
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, "rbd", "set_size", _, _, _))
+                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("set_size"), _, _, _))
                     .WillOnce(Return(r));
     }
   }

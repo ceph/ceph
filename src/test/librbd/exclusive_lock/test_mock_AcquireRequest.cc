@@ -28,6 +28,7 @@ using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::Return;
 using ::testing::SetArgPointee;
+using ::testing::StrEq;
 using ::testing::WithArg;
 
 static const std::string TEST_COOKIE("auto 123");
@@ -45,7 +46,7 @@ public:
 
   void expect_lock(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(mock_image_ctx.header_oid, _, "lock", "lock", _, _, _))
+                exec(mock_image_ctx.header_oid, _, StrEq("lock"), StrEq("lock"), _, _, _))
                   .WillOnce(Return(r));
   }
 
@@ -86,8 +87,8 @@ public:
                             const std::string &lock_tag,
                             ClsLockType lock_type) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, "lock",
-                               "get_info", _, _, _));
+                               exec(mock_image_ctx.header_oid, _, StrEq("lock"),
+                               StrEq("get_info"), _, _, _));
     if (r < 0 && r != -ENOENT) {
       expect.WillOnce(Return(r));
     } else {
@@ -138,7 +139,7 @@ public:
 
   void expect_break_lock(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(mock_image_ctx.header_oid, _, "lock", "break_lock", _, _, _))
+                exec(mock_image_ctx.header_oid, _, StrEq("lock"), StrEq("break_lock"), _, _, _))
                   .WillOnce(Return(r));
   }
 
