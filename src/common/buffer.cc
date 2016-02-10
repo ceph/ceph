@@ -2012,8 +2012,7 @@ ssize_t buffer::list::read_fd(int fd, size_t len)
     // available for raw_pipe until we actually inspect the data
     return 0;
   }
-  int s = ROUND_UP_TO(len, CEPH_BUFFER_APPEND_SIZE);
-  bufferptr bp = buffer::create_aligned(s, CEPH_BUFFER_APPEND_SIZE);
+  bufferptr bp = buffer::create(len);
   ssize_t ret = safe_read(fd, (void*)bp.c_str(), len);
   if (ret >= 0) {
     bp.set_length(ret);
