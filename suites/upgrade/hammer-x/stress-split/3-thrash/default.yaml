@@ -5,6 +5,8 @@ overrides:
     - objects unfound and apparently lost
     - log bound mismatch
     - failed to encode map e
+    - soft lockup
+    - detected stalls on CPUs
 tasks:
 - thrashosds:
     timeout: 1200
