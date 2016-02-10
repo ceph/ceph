@@ -225,8 +225,11 @@ class Ansible(Task):
         pb_buffer.write('---\n')
         yaml.safe_dump(self.playbook, pb_buffer)
         pb_buffer.seek(0)
-        playbook_file = NamedTemporaryFile(prefix="teuth_ansible_playbook_",
-                                           delete=False)
+        playbook_file = NamedTemporaryFile(
+            prefix="teuth_ansible_playbook_",
+            dir=self.repo_path,
+            delete=False,
+        )
         playbook_file.write(pb_buffer.read())
         playbook_file.flush()
         self.playbook_file = playbook_file

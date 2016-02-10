@@ -228,9 +228,11 @@ class TestAnsibleTask(TestTask):
         playbook_file_obj.name = playbook_file_path
         with patch.object(ansible, 'NamedTemporaryFile') as m_NTF:
             m_NTF.return_value = playbook_file_obj
+            task.find_repo()
             task.get_playbook()
             task.generate_playbook()
             m_NTF.assert_called_once_with(prefix="teuth_ansible_playbook_",
+                                          dir=task.repo_path,
                                           delete=False)
         assert task.generated_playbook is True
         assert task.playbook_file == playbook_file_obj
