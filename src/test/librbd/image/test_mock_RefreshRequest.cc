@@ -20,19 +20,29 @@
 #include <boost/scope_exit.hpp>
 
 namespace librbd {
+
+namespace {
+
+struct MockRefreshImageCtx : public MockImageCtx {
+  MockRefreshImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
+  }
+};
+
+} // anonymous namespace
+
 namespace image {
 
 template <>
-struct RefreshParentRequest<MockImageCtx> {
+struct RefreshParentRequest<MockRefreshImageCtx> {
   static RefreshParentRequest* s_instance;
-  static RefreshParentRequest* create(MockImageCtx &mock_image_ctx,
+  static RefreshParentRequest* create(MockRefreshImageCtx &mock_image_ctx,
                                       const parent_info& parent_md,
                                       Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
-  static bool is_refresh_required(MockImageCtx &mock_image_ctx,
+  static bool is_refresh_required(MockRefreshImageCtx &mock_image_ctx,
                                   const parent_info& parent_md) {
     assert(s_instance != nullptr);
     return s_instance->is_refresh_required();
@@ -50,14 +60,14 @@ struct RefreshParentRequest<MockImageCtx> {
   MOCK_METHOD1(finalize, void(Context *));
 };
 
-RefreshParentRequest<MockImageCtx>* RefreshParentRequest<MockImageCtx>::s_instance = nullptr;
+RefreshParentRequest<MockRefreshImageCtx>* RefreshParentRequest<MockRefreshImageCtx>::s_instance = nullptr;
 
 } // namespace image
 } // namespace librbd
 
 // template definitions
 #include "librbd/image/RefreshRequest.cc"
-template class librbd::image::RefreshRequest<librbd::MockImageCtx>;
+template class librbd::image::RefreshRequest<librbd::MockRefreshImageCtx>;
 
 ACTION_P(TestFeatures, image_ctx) {
   return ((image_ctx->features & arg0) != 0);
@@ -81,8 +91,8 @@ using ::testing::WithArg;
 
 class TestMockImageRefreshRequest : public TestMockFixture {
 public:
-  typedef RefreshRequest<MockImageCtx> MockRefreshRequest;
-  typedef RefreshParentRequest<MockImageCtx> MockRefreshParentRequest;
+  typedef RefreshRequest<MockRefreshImageCtx> MockRefreshRequest;
+  typedef RefreshParentRequest<MockRefreshImageCtx> MockRefreshParentRequest;
 
   void expect_set_require_lock_on_read(MockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.aio_work_queue, set_require_lock_on_read());
@@ -102,7 +112,7 @@ public:
     }
   }
 
-  void expect_v1_get_snapshots(MockImageCtx &mock_image_ctx, int r) {
+  void expect_v1_get_snapshots(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, "rbd", "snap_list", _, _, _));
     if (r < 0) {
@@ -112,7 +122,7 @@ public:
     }
   }
 
-  void expect_v1_get_locks(MockImageCtx &mock_image_ctx, int r) {
+  void expect_v1_get_locks(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, "lock", "get_info", _, _, _));
     if (r < 0) {
@@ -122,7 +132,7 @@ public:
     }
   }
 
-  void expect_get_mutable_metadata(MockImageCtx &mock_image_ctx, int r) {
+  void expect_get_mutable_metadata(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, "rbd", "get_size", _, _, _));
     if (r < 0) {
@@ -144,7 +154,7 @@ public:
     }
   }
 
-  void expect_get_flags(MockImageCtx &mock_image_ctx, int r) {
+  void expect_get_flags(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, "rbd", "get_flags", _, _, _));
     if (r < 0) {
@@ -154,7 +164,7 @@ public:
     }
   }
 
-  void expect_get_snapshots(MockImageCtx &mock_image_ctx, int r) {
+  void expect_get_snapshots(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, "rbd", "get_snapshot_name", _, _, _));
     if (r < 0) {
@@ -173,12 +183,12 @@ public:
     }
   }
 
-  void expect_add_snap(MockImageCtx &mock_image_ctx,
+  void expect_add_snap(MockRefreshImageCtx &mock_image_ctx,
                        const std::string &snap_name, uint64_t snap_id) {
     EXPECT_CALL(mock_image_ctx, add_snap(snap_name, snap_id, _, _, _, _));
   }
 
-  void expect_init_exclusive_lock(MockImageCtx &mock_image_ctx,
+  void expect_init_exclusive_lock(MockRefreshImageCtx &mock_image_ctx,
                                   MockExclusiveLock &mock_exclusive_lock,
                                   int r) {
     EXPECT_CALL(mock_image_ctx, create_exclusive_lock())
@@ -187,7 +197,7 @@ public:
                   .WillOnce(WithArg<1>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 
-  void expect_shut_down_exclusive_lock(MockImageCtx &mock_image_ctx,
+  void expect_shut_down_exclusive_lock(MockRefreshImageCtx &mock_image_ctx,
                                        MockExclusiveLock &mock_exclusive_lock,
                                        int r) {
     EXPECT_CALL(mock_exclusive_lock, shut_down(_))
@@ -195,11 +205,11 @@ public:
                                   CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 
-  void expect_init_layout(MockImageCtx &mock_image_ctx) {
+  void expect_init_layout(MockRefreshImageCtx &mock_image_ctx) {
     EXPECT_CALL(mock_image_ctx, init_layout());
   }
 
-  void expect_test_features(MockImageCtx &mock_image_ctx) {
+  void expect_test_features(MockRefreshImageCtx &mock_image_ctx) {
     EXPECT_CALL(mock_image_ctx, test_features(_, _))
                   .WillRepeatedly(TestFeatures(&mock_image_ctx));
   }
@@ -210,7 +220,7 @@ public:
                   .WillRepeatedly(Return(required));
   }
 
-  void expect_refresh_parent_send(MockImageCtx &mock_image_ctx,
+  void expect_refresh_parent_send(MockRefreshImageCtx &mock_image_ctx,
                                   MockRefreshParentRequest &mock_refresh_parent_request,
                                   int r) {
     EXPECT_CALL(mock_refresh_parent_request, send())
@@ -222,7 +232,7 @@ public:
     EXPECT_CALL(mock_refresh_parent_request, apply());
   }
 
-  void expect_refresh_parent_finalize(MockImageCtx &mock_image_ctx,
+  void expect_refresh_parent_finalize(MockRefreshImageCtx &mock_image_ctx,
                                       MockRefreshParentRequest &mock_refresh_parent_request,
                                       int r) {
     EXPECT_CALL(mock_refresh_parent_request, finalize(_))
@@ -234,7 +244,7 @@ public:
     EXPECT_CALL(mock_exclusive_lock, is_lock_owner()).WillOnce(Return(is_owner));
   }
 
-  void expect_open_journal(MockImageCtx &mock_image_ctx,
+  void expect_open_journal(MockRefreshImageCtx &mock_image_ctx,
                            MockJournal &mock_journal, int r) {
     EXPECT_CALL(mock_image_ctx, create_journal())
                   .WillOnce(Return(&mock_journal));
@@ -242,13 +252,13 @@ public:
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
-  void expect_close_journal(MockImageCtx &mock_image_ctx,
+  void expect_close_journal(MockRefreshImageCtx &mock_image_ctx,
                             MockJournal &mock_journal, int r) {
     EXPECT_CALL(mock_journal, close(_))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
-  void expect_open_object_map(MockImageCtx &mock_image_ctx,
+  void expect_open_object_map(MockRefreshImageCtx &mock_image_ctx,
                               MockObjectMap &mock_object_map, int r) {
     EXPECT_CALL(mock_image_ctx, create_object_map(_))
                   .WillOnce(Return(&mock_object_map));
@@ -256,13 +266,13 @@ public:
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
-  void expect_close_object_map(MockImageCtx &mock_image_ctx,
+  void expect_close_object_map(MockRefreshImageCtx &mock_image_ctx,
                                MockObjectMap &mock_object_map, int r) {
     EXPECT_CALL(mock_object_map, close(_))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
-  void expect_get_snap_id(MockImageCtx &mock_image_ctx,
+  void expect_get_snap_id(MockRefreshImageCtx &mock_image_ctx,
                           const std::string &snap_name, uint64_t snap_id) {
     EXPECT_CALL(mock_image_ctx, get_snap_id(snap_name)).WillOnce(Return(snap_id));
   }
@@ -274,7 +284,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessV1) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockRefreshImageCtx mock_image_ctx(*ictx);
   expect_op_work_queue(mock_image_ctx);
   expect_test_features(mock_image_ctx);
 
@@ -299,7 +309,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessSnapshotV1) {
   ASSERT_EQ(0, snap_create(*ictx, "snap"));
   ASSERT_EQ(0, ictx->state->refresh());
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockRefreshImageCtx mock_image_ctx(*ictx);
   expect_op_work_queue(mock_image_ctx);
   expect_test_features(mock_image_ctx);
 
@@ -323,7 +333,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessV2) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
   MockExclusiveLock mock_exclusive_lock;
   expect_op_work_queue(mock_image_ctx);
@@ -351,7 +361,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessSnapshotV2) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, snap_create(*ictx, "snap"));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
   MockExclusiveLock mock_exclusive_lock;
   expect_op_work_queue(mock_image_ctx);
@@ -383,7 +393,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessSetSnapshotV2) {
   ASSERT_EQ(0, snap_create(*ictx, "snap"));
   ASSERT_EQ(0, librbd::snap_set(ictx, "snap"));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
   MockObjectMap mock_object_map;
   expect_op_work_queue(mock_image_ctx);
@@ -434,7 +444,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessChild) {
 
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
 
-  MockImageCtx mock_image_ctx(*ictx2);
+  MockRefreshImageCtx mock_image_ctx(*ictx2);
   MockRefreshParentRequest *mock_refresh_parent_request = new MockRefreshParentRequest();
   MockExclusiveLock mock_exclusive_lock;
   expect_op_work_queue(mock_image_ctx);
@@ -464,7 +474,7 @@ TEST_F(TestMockImageRefreshRequest, DisableExclusiveLock) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
 
   MockExclusiveLock *mock_exclusive_lock = new MockExclusiveLock();
@@ -514,7 +524,7 @@ TEST_F(TestMockImageRefreshRequest, EnableJournalWithExclusiveLock) {
                                RBD_FEATURE_OBJECT_MAP |
                                RBD_FEATURE_FAST_DIFF, false));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
 
   MockExclusiveLock mock_exclusive_lock;
@@ -550,7 +560,7 @@ TEST_F(TestMockImageRefreshRequest, EnableJournalWithoutExclusiveLock) {
                                RBD_FEATURE_OBJECT_MAP |
                                RBD_FEATURE_FAST_DIFF, false));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
 
   MockExclusiveLock mock_exclusive_lock;
@@ -580,7 +590,7 @@ TEST_F(TestMockImageRefreshRequest, DisableJournal) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
 
   MockExclusiveLock mock_exclusive_lock;
@@ -622,7 +632,7 @@ TEST_F(TestMockImageRefreshRequest, EnableObjectMapWithExclusiveLock) {
 
   ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_JOURNALING, false));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
 
   MockExclusiveLock mock_exclusive_lock;
@@ -656,7 +666,7 @@ TEST_F(TestMockImageRefreshRequest, EnableObjectMapWithoutExclusiveLock) {
 
   ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_JOURNALING, false));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
 
   MockExclusiveLock mock_exclusive_lock;
@@ -685,7 +695,7 @@ TEST_F(TestMockImageRefreshRequest, DisableObjectMap) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
 
   MockExclusiveLock mock_exclusive_lock;

@@ -12,13 +12,24 @@
 #include "librbd/object_map/LockRequest.h"
 
 namespace librbd {
+
+namespace {
+
+struct MockObjectMapImageCtx : public MockImageCtx {
+  MockObjectMapImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
+  }
+};
+
+} // anonymous namespace
+
 namespace object_map {
 
 template <>
-class LockRequest<MockImageCtx> {
+class LockRequest<MockObjectMapImageCtx> {
 public:
   static LockRequest *s_instance;
-  static LockRequest *create(MockImageCtx &image_ctx, Context *on_finish) {
+  static LockRequest *create(MockObjectMapImageCtx &image_ctx,
+                             Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -33,7 +44,12 @@ public:
   MOCK_METHOD0(send, void());
 };
 
-LockRequest<MockImageCtx> *LockRequest<MockImageCtx>::s_instance = nullptr;
+template<>
+struct InvalidateRequest<MockObjectMapImageCtx> :
+    public MockInvalidateRequestBase<MockObjectMapImageCtx> {
+};
+
+LockRequest<MockObjectMapImageCtx> *LockRequest<MockObjectMapImageCtx>::s_instance = nullptr;
 
 } // namespace object_map
 } // namespace librbd
@@ -56,17 +72,18 @@ class TestMockObjectMapRefreshRequest : public TestMockFixture {
 public:
   static const uint64_t TEST_SNAP_ID = 123;
 
-  typedef RefreshRequest<MockImageCtx> MockRefreshRequest;
-  typedef LockRequest<MockImageCtx> MockLockRequest;
+  typedef RefreshRequest<MockObjectMapImageCtx> MockRefreshRequest;
+  typedef LockRequest<MockObjectMapImageCtx> MockLockRequest;
+  typedef InvalidateRequest<MockObjectMapImageCtx> MockInvalidateRequest;
 
-  void expect_object_map_lock(MockImageCtx &mock_image_ctx,
+  void expect_object_map_lock(MockObjectMapImageCtx &mock_image_ctx,
                               MockLockRequest &mock_lock_request) {
     EXPECT_CALL(mock_lock_request, send())
                   .WillOnce(FinishRequest(&mock_lock_request, 0,
                                           &mock_image_ctx));
   }
 
-  void expect_object_map_load(MockImageCtx &mock_image_ctx,
+  void expect_object_map_load(MockObjectMapImageCtx &mock_image_ctx,
                               ceph::BitVector<2> *object_map, uint64_t snap_id,
                               int r) {
     std::string oid(ObjectMap::object_map_name(mock_image_ctx.id, snap_id));
@@ -86,26 +103,26 @@ public:
     }
   }
 
-  void expect_get_image_size(MockImageCtx &mock_image_ctx, uint64_t snap_id,
+  void expect_get_image_size(MockObjectMapImageCtx &mock_image_ctx, uint64_t snap_id,
                              uint64_t size) {
     EXPECT_CALL(mock_image_ctx, get_image_size(snap_id))
                   .WillOnce(Return(size));
   }
 
-  void expect_invalidate_request(MockImageCtx &mock_image_ctx,
+  void expect_invalidate_request(MockObjectMapImageCtx &mock_image_ctx,
                                  MockInvalidateRequest &invalidate_request) {
     EXPECT_CALL(invalidate_request, send())
                   .WillOnce(FinishRequest(&invalidate_request, 0,
                                           &mock_image_ctx));
   }
 
-  void expect_truncate_request(MockImageCtx &mock_image_ctx) {
+  void expect_truncate_request(MockObjectMapImageCtx &mock_image_ctx) {
     std::string oid(ObjectMap::object_map_name(mock_image_ctx.id, TEST_SNAP_ID));
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx), truncate(oid, 0, _))
                   .WillOnce(Return(0));
   }
 
-  void expect_object_map_resize(MockImageCtx &mock_image_ctx,
+  void expect_object_map_resize(MockObjectMapImageCtx &mock_image_ctx,
                                 uint64_t num_objects, int r) {
     std::string oid(ObjectMap::object_map_name(mock_image_ctx.id, TEST_SNAP_ID));
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
@@ -113,7 +130,7 @@ public:
     expect.WillOnce(Return(r));
   }
 
-  void init_object_map(MockImageCtx &mock_image_ctx,
+  void init_object_map(MockObjectMapImageCtx &mock_image_ctx,
                        ceph::BitVector<2> *object_map) {
     uint64_t num_objs = Striper::get_num_objects(
       mock_image_ctx.layout, mock_image_ctx.image_ctx->size);
@@ -128,7 +145,7 @@ TEST_F(TestMockObjectMapRefreshRequest, SuccessHead) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockObjectMapImageCtx mock_image_ctx(*ictx);
 
   ceph::BitVector<2> on_disk_object_map;
   init_object_map(mock_image_ctx, &on_disk_object_map);
@@ -156,7 +173,7 @@ TEST_F(TestMockObjectMapRefreshRequest, SuccessSnapshot) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockObjectMapImageCtx mock_image_ctx(*ictx);
 
   ceph::BitVector<2> on_disk_object_map;
   init_object_map(mock_image_ctx, &on_disk_object_map);
@@ -182,7 +199,7 @@ TEST_F(TestMockObjectMapRefreshRequest, LoadError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockObjectMapImageCtx mock_image_ctx(*ictx);
 
   ceph::BitVector<2> on_disk_object_map;
   init_object_map(mock_image_ctx, &on_disk_object_map);
@@ -210,7 +227,7 @@ TEST_F(TestMockObjectMapRefreshRequest, LoadCorrupt) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockObjectMapImageCtx mock_image_ctx(*ictx);
 
   ceph::BitVector<2> on_disk_object_map;
   init_object_map(mock_image_ctx, &on_disk_object_map);
@@ -240,7 +257,7 @@ TEST_F(TestMockObjectMapRefreshRequest, TooSmall) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockObjectMapImageCtx mock_image_ctx(*ictx);
 
   ceph::BitVector<2> on_disk_object_map;
   init_object_map(mock_image_ctx, &on_disk_object_map);
@@ -271,7 +288,7 @@ TEST_F(TestMockObjectMapRefreshRequest, TooLarge) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockObjectMapImageCtx mock_image_ctx(*ictx);
 
   ceph::BitVector<2> on_disk_object_map;
   init_object_map(mock_image_ctx, &on_disk_object_map);
@@ -298,7 +315,7 @@ TEST_F(TestMockObjectMapRefreshRequest, ResizeError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockObjectMapImageCtx mock_image_ctx(*ictx);
 
   ceph::BitVector<2> on_disk_object_map;
   init_object_map(mock_image_ctx, &on_disk_object_map);

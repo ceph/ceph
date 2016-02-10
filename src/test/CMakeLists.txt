@@ -414,7 +414,6 @@ add_ceph_test(cephtool-test-mds.sh ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-md
 add_ceph_test(cephtool-test-mon.sh ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-mon.sh)
 add_ceph_test(cephtool-test-osd.sh ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-osd.sh)
 add_ceph_test(cephtool-test-rados.sh ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-rados.sh)
-add_ceph_test(run-rbd-unit-tests.sh ${CMAKE_SOURCE_DIR}/src/test/run-rbd-unit-tests.sh)
 add_ceph_test(run-cli-tests ${CMAKE_SOURCE_DIR}/src/test/run-cli-tests)
 add_ceph_test(test_objectstore_memstore.sh ${CMAKE_SOURCE_DIR}/src/test/test_objectstore_memstore.sh)
 add_ceph_test(test_pidfile.sh ${CMAKE_SOURCE_DIR}/src/test/test_pidfile.sh)
