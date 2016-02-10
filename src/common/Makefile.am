@@ -232,7 +232,6 @@ noinst_HEADERS += \
 	common/PrebufferedStreambuf.h \
 	common/RWLock.h \
 	common/Semaphore.h \
-	common/SimpleRNG.h \
 	common/TextTable.h \
 	common/Thread.h \
 	common/Throttle.h \
