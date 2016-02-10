@@ -277,6 +277,14 @@ Options
 
    Directory in which ceph configuration files are found (default ``/etc/ceph``).
 
+.. option:: --setuser USER
+
+   Specify a user for ceph-disk to use when dropping privileges (default ``ceph``, or ``root`` if ``ceph`` does not exist)
+
+.. option:: --setgroup GROUP
+
+   Specify a group for ceph-disk to use when dropping privileges (default ``ceph``, or ``root`` if ``ceph`` does not exist)
+
 .. option:: --cluster
 
    Provide name of the ceph cluster in which the OSD is being prepared.
