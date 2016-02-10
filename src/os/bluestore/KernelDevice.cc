@@ -119,7 +119,17 @@ int KernelDevice::open(string p)
   } else {
     size = st.st_size;
   }
-  block_size = st.st_blksize;
+
+  // Operate as though the block size is 4 KB.  The backing file
+  // blksize doesn't strictly matter except that some file systems may
+  // require a read/modify/write if we write something smaller than
+  // it.
+  block_size = g_conf->bdev_block_size;
+  if (block_size != st.st_blksize) {
+    dout(1) << __func__ << " backing device/file reports st_blksize "
+	    << st.st_blksize << ", using bdev_block_size "
+	    << block_size << " anyway" << dendl;
+  }
 
   fs = FS::create_by_fd(fd_direct);
   assert(fs);
