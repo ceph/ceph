@@ -108,7 +108,8 @@ private:
 
   Mutex m_lock;
 
-  uint64_t m_in_flight_aio = 0;
+  uint64_t m_in_flight_aio_flush = 0;
+  uint64_t m_in_flight_aio_modify = 0;
   Contexts m_aio_modify_unsafe_contexts;
   ContextSet m_aio_modify_safe_contexts;
 

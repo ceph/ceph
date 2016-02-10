@@ -35,7 +35,8 @@ Replay<I>::Replay(I &image_ctx)
 
 template <typename I>
 Replay<I>::~Replay() {
-  assert(m_in_flight_aio == 0);
+  assert(m_in_flight_aio_flush == 0);
+  assert(m_in_flight_aio_modify == 0);
   assert(m_aio_modify_unsafe_contexts.empty());
   assert(m_aio_modify_safe_contexts.empty());
   assert(m_op_events.empty());
@@ -78,7 +79,7 @@ void Replay<I>::flush(Context *on_finish) {
     Mutex::Locker locker(m_lock);
 
     // safely commit any remaining AIO modify operations
-    if (m_in_flight_aio != 0) {
+    if ((m_in_flight_aio_flush + m_in_flight_aio_modify) != 0) {
       flush_comp = create_aio_flush_completion(nullptr, nullptr);;
     }
 
@@ -91,7 +92,7 @@ void Replay<I>::flush(Context *on_finish) {
     }
 
     assert(m_flush_ctx == nullptr);
-    if (!m_op_events.empty() || m_in_flight_aio != 0) {
+    if (!m_op_events.empty() || flush_comp != nullptr) {
       std::swap(m_flush_ctx, on_finish);
     }
   }
@@ -457,11 +458,14 @@ void Replay<I>::handle_aio_flush_complete(Context *on_flush_safe,
   Context *on_flush = nullptr;
   {
     Mutex::Locker locker(m_lock);
-    assert(m_in_flight_aio >= on_safe_ctxs.size());
-    m_in_flight_aio -= on_safe_ctxs.size();
+    assert(m_in_flight_aio_flush > 0);
+    assert(m_in_flight_aio_modify >= on_safe_ctxs.size());
+    --m_in_flight_aio_flush;
+    m_in_flight_aio_modify -= on_safe_ctxs.size();
 
     std::swap(on_aio_ready, m_on_aio_ready);
-    if (m_op_events.empty() && m_in_flight_aio == 0) {
+    if (m_op_events.empty() &&
+        (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
       on_flush = m_flush_ctx;
     }
 
@@ -521,7 +525,8 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
     op_event = std::move(op_it->second);
     m_op_events.erase(op_it);
 
-    if (m_op_events.empty() && m_in_flight_aio == 0) {
+    if (m_op_events.empty() &&
+        (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
       on_flush = m_flush_ctx;
     }
   }
@@ -554,7 +559,7 @@ AioCompletion *Replay<I>::create_aio_modify_completion(Context *on_ready,
   CephContext *cct = m_image_ctx.cct;
   assert(m_on_aio_ready == nullptr);
 
-  ++m_in_flight_aio;
+  ++m_in_flight_aio_modify;
   m_aio_modify_unsafe_contexts.push_back(on_safe);
 
   // FLUSH if we hit the low-water mark -- on_safe contexts are
@@ -578,7 +583,7 @@ AioCompletion *Replay<I>::create_aio_modify_completion(Context *on_ready,
   // * in-flight ops are at a consistent point (snap create has IO flushed,
   //   shrink has adjusted clip boundary, etc) -- should have already been
   //   flagged not-ready
-  if (m_in_flight_aio == IN_FLIGHT_IO_HIGH_WATER_MARK) {
+  if (m_in_flight_aio_modify == IN_FLIGHT_IO_HIGH_WATER_MARK) {
     ldout(cct, 10) << "hit AIO replay high-water mark: pausing replay"
                    << dendl;
     m_on_aio_ready = on_ready;
@@ -593,6 +598,8 @@ template <typename I>
 AioCompletion *Replay<I>::create_aio_flush_completion(Context *on_ready,
                                                       Context *on_safe) {
   assert(m_lock.is_locked());
+
+  ++m_in_flight_aio_flush;
 
   // associate all prior write/discard ops to this flush request
   AioCompletion *aio_comp = AioCompletion::create<Context>(
