@@ -140,6 +140,12 @@ int EventCenter::init(int n)
     return r;
   }
 
+  file_events.resize(n);
+  nevent = n;
+
+  if (!driver->wakeup_support())
+    return 0;
+
   int fds[2];
   if (pipe(fds) < 0) {
     lderr(cct) << __func__ << " can't create notify pipe" << dendl;
@@ -156,14 +162,9 @@ int EventCenter::init(int n)
   if (r < 0) {
     return r;
   }
-
-  file_events.resize(n);
-  nevent = n;
   notify_handler = new C_handle_notify(this, cct),
   r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
-  if (r < 0)
-    return r;
-  return 0;
+  return r;
 }
 
 EventCenter::~EventCenter()
@@ -313,7 +314,7 @@ void EventCenter::delete_time_event(uint64_t id)
 void EventCenter::wakeup()
 {
   // No need to wake up since we never sleep
-  if (!pollers.empty())
+  if (!pollers.empty() || !driver->wakeup_support())
     return ;
 
   if (already_wakeup.compare_and_swap(0, 1)) {

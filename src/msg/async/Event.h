@@ -82,6 +82,7 @@ class EventDriver {
   virtual int del_event(int fd, int cur_mask, int del_mask) = 0;
   virtual int event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tp) = 0;
   virtual int resize_events(int newsize) = 0;
+  virtual bool wakeup_support() { return true; }
 };
 
 
