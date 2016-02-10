@@ -21,11 +21,6 @@ fi
 SYSTEMD_RUN=$(which systemd-run 2>/dev/null)
 grep -qs systemd /proc/1/comm || SYSTEMD_RUN=""
 
-# Detect if this is inside docker, systemd-run fails inside containers.
-function detectDocker {
-readonly DOCKER_RUN=$(grep -q docker /proc/1/cgroup)
-}
-
 # if we start up as ./init-ceph, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
@@ -346,13 +341,8 @@ for name in $what; do
 	    [ -n "$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES" ] && tcmalloc="TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES"
 
 	    if [ -n "$SYSTEMD_RUN" ]; then
-                detectDocker
-                if [ -z "$DOCKER_RUN" ]; then
-		    cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
-                else
-                    time=`date +%s.%N` 
-		    cmd="$SYSTEMD_RUN --unit=ceph-$name.$time -r bash -c '$files $tcmalloc $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
-                fi
+                time=`date +%s.%N` 
+		cmd="$SYSTEMD_RUN --unit=ceph-$name.$time -r bash -c '$files $tcmalloc $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
 	    else
 		cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
 	    fi
