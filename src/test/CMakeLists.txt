@@ -2129,7 +2129,7 @@ add_executable(test_rados_api_tier
 set_target_properties(test_rados_api_tier PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_tier
-  global librados ${UNITTEST_LIBS} ${ALLOC_LIBS} ${Boost_SYSTEM_LIBRARY} radostest)
+  global librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_snapshots
   librados/snapshots.cc
