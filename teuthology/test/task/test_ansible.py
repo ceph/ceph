@@ -264,6 +264,7 @@ class TestAnsibleTask(TestTask):
                 task.execute_playbook(_logfile=logger)
             m_run.assert_called_once_with(
                 ' '.join(args),
+                cwd=task.repo_path,
                 logfile=logger,
                 withexitstatus=True,
                 timeout=None,

@@ -257,6 +257,7 @@ class Ansible(Task):
         out_log = self.log.getChild('out')
         out, status = pexpect.run(
             command,
+            cwd=self.repo_path,
             logfile=_logfile or LoggerFile(out_log, logging.INFO),
             withexitstatus=True,
             timeout=None,
