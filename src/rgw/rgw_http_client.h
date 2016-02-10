@@ -19,6 +19,7 @@ class RGWHTTPClient
   bufferlist::iterator send_iter;
   size_t send_len;
   bool has_send_len;
+  long http_status;
 
   rgw_http_req_data *req_data;
 
@@ -33,8 +34,18 @@ protected:
   list<pair<string, string> > headers;
   int init_request(const char *method, const char *url, rgw_http_req_data *req_data);
 public:
-  explicit RGWHTTPClient(CephContext *_cct): send_len (0), has_send_len(false), req_data(NULL), user_info(NULL), cct(_cct) {}
+  static const long HTTP_STATUS_NOSTATUS     = 0;
+  static const long HTTP_STATUS_UNAUTHORIZED = 401;
+
   virtual ~RGWHTTPClient();
+  explicit RGWHTTPClient(CephContext *_cct)
+    : send_len(0),
+      has_send_len(false),
+      http_status(HTTP_STATUS_NOSTATUS),
+      req_data(nullptr),
+      user_info(nullptr),
+      cct(_cct) {
+  }
 
   void set_user_info(void *info) {
     user_info = info;
@@ -55,6 +66,10 @@ public:
   void set_send_length(size_t len) {
     send_len = len;
     has_send_len = true;
+  }
+
+  long get_http_status() const {
+    return http_status;
   }
 
   int process(const char *method, const char *url);
