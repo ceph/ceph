@@ -2,10 +2,18 @@
  Release Notes
 ===============
 
-v10.0.3 (draft)
-===============
+v10.0.3
+=======
 
-This development release...
+This is the fourth development release for Jewel.  Several big pieces
+have been added this release, including BlueStore (a new backend for
+OSD to replace FileStore), many ceph-disk fixes, a new CRUSH tunable
+that improves mapping stability, a new librados object enumeration API,
+and a whole slew of OSD and RADOS optimizations.
+
+Note that, due to general developer busyness, we aren't building official
+release packages for this dev release.  You can fetch autobuilt gitbuilder
+packages from the usual location (gitbuilder.ceph.com).
 
 Notable Changes
 ---------------
@@ -59,8 +67,7 @@ Notable Changes
 * crush/CrushTester: check for overlapped rules (`pr#7139 <http://github.com/ceph/ceph/pull/7139>`_, Kefu Chai)
 * crushtool: improve usage/tip messages (`pr#7142 <http://github.com/ceph/ceph/pull/7142>`_, xie xingguo)
 * crushtool: set type 0 name "device" for --build option (`pr#6824 <http://github.com/ceph/ceph/pull/6824>`_, Sangdi Xu)
-* delete default zone (`pr#7005 <http://github.com/ceph/ceph/pull/7005>`_, YankunLi)
-* doc:adding "--allow-shrink" in decreasing the size of the rbd block to distinguish from the increasing option (`pr#7020 <http://github.com/ceph/ceph/pull/7020>`_, Yehua)
+* doc: adding "--allow-shrink" in decreasing the size of the rbd block to distinguish from the increasing option (`pr#7020 <http://github.com/ceph/ceph/pull/7020>`_, Yehua)
 * doc: admin/build-doc: make paths absolute (`pr#7119 <http://github.com/ceph/ceph/pull/7119>`_, Dan Mick)
 * doc: dev: document ceph-qa-suite (`pr#6955 <http://github.com/ceph/ceph/pull/6955>`_, Loic Dachary)
 * doc: document "readforward" and "readproxy" cache mode (`pr#7023 <http://github.com/ceph/ceph/pull/7023>`_, Kefu Chai)
@@ -186,7 +193,7 @@ Notable Changes
 * rbd: add pool name to disambiguate rbd admin socket commands (`pr#6904 <http://github.com/ceph/ceph/pull/6904>`_, wuxiangwei)
 * rbd: correct an output string for merge-diff (`pr#7046 <http://github.com/ceph/ceph/pull/7046>`_, Kongming Wu)
 * rbd: fix static initialization ordering issues (`pr#6978 <http://github.com/ceph/ceph/pull/6978>`_, Mykola Golub)
-* rbd-fuse:image name can not include snap name (`pr#7044 <http://github.com/ceph/ceph/pull/7044>`_, Yongqiang He)
+* rbd-fuse: image name can not include snap name (`pr#7044 <http://github.com/ceph/ceph/pull/7044>`_, Yongqiang He)
 * rbd-fuse: implement mv operation (`pr#6938 <http://github.com/ceph/ceph/pull/6938>`_, wuxiangwei)
 * rbd: must specify both of stripe-unit and stripe-count when specifying stripingv2 feature (`pr#7026 <http://github.com/ceph/ceph/pull/7026>`_, Donghai Xu)
 * rbd-nbd: add copyright (`pr#7166 <http://github.com/ceph/ceph/pull/7166>`_, Li Wang)
@@ -200,13 +207,14 @@ Notable Changes
 * rgw: add support for "end_marker" parameter for GET on Swift account. (`issue#10682 <http://tracker.ceph.com/issues/10682>`_, `pr#4216 <http://github.com/ceph/ceph/pull/4216>`_, Radoslaw Zarzynski)
 * rgw_admin: orphans finish segfaults (`pr#6652 <http://github.com/ceph/ceph/pull/6652>`_, Igor Fedotov)
 * rgw: content length (`issue#13582 <http://tracker.ceph.com/issues/13582>`_, `pr#6975 <http://github.com/ceph/ceph/pull/6975>`_, Yehuda Sadeh)
+* rgw: delete default zone (`pr#7005 <http://github.com/ceph/ceph/pull/7005>`_, YankunLi)
 * rgw: do not abort radowgw server when using admin op API with bad parameters  (`issue#14190 <http://tracker.ceph.com/issues/14190>`_, `issue#14191 <http://tracker.ceph.com/issues/14191>`_, `pr#7063 <http://github.com/ceph/ceph/pull/7063>`_, Dunrong Huang)
 * rgw: Drop a debugging message (`pr#7280 <http://github.com/ceph/ceph/pull/7280>`_, Pete Zaitcev)
 * rgw: fix a typo in init-radosgw (`pr#6817 <http://github.com/ceph/ceph/pull/6817>`_, Zhi Zhang)
 * rgw: fix compilation warning (`pr#7160 <http://github.com/ceph/ceph/pull/7160>`_, Yehuda Sadeh)
 * rgw: fix wrong check for parse() return (`pr#6797 <http://github.com/ceph/ceph/pull/6797>`_, Dunrong Huang)
 * rgw: let radosgw-admin bucket stats return a standard josn (`pr#7029 <http://github.com/ceph/ceph/pull/7029>`_, Ruifeng Yang)
-* rgw:modify command stucking when operating radosgw-admin metadata list user (`pr#7032 <http://github.com/ceph/ceph/pull/7032>`_, Peiyang Liu)
+* rgw: modify command stucking when operating radosgw-admin metadata list user (`pr#7032 <http://github.com/ceph/ceph/pull/7032>`_, Peiyang Liu)
 * rgw: modify documents and help infos' descriptions to the usage of option date when executing command "log show" (`pr#6080 <http://github.com/ceph/ceph/pull/6080>`_, Kongming Wu)
 * rgw: Parse --subuser better (`pr#7279 <http://github.com/ceph/ceph/pull/7279>`_, Pete Zaitcev)
 * rgw: radosgw-admin bucket check --fix not work (`pr#7093 <http://github.com/ceph/ceph/pull/7093>`_, Weijun Duan)
@@ -220,10 +228,10 @@ Notable Changes
 * tests: Fix for make check. (`pr#7102 <http://github.com/ceph/ceph/pull/7102>`_, David Zafman)
 * tests: notification slave needs to wait for master (`issue#13810 <http://tracker.ceph.com/issues/13810>`_, `pr#7220 <http://github.com/ceph/ceph/pull/7220>`_, Jason Dillaman)
 * tests: snap rename and rebuild object map in client update test (`pr#7224 <http://github.com/ceph/ceph/pull/7224>`_, Jason Dillaman)
+* tests: unittest_bufferlist: fix hexdump test (`pr#7152 <http://github.com/ceph/ceph/pull/7152>`_, Sage Weil)
+* tests: unittest_ipaddr: fix segv (`pr#7154 <http://github.com/ceph/ceph/pull/7154>`_, Sage Weil)
 * tools: ceph_monstore_tool: add inflate-pgmap command (`issue#14217 <http://tracker.ceph.com/issues/14217>`_, `pr#7097 <http://github.com/ceph/ceph/pull/7097>`_, Kefu Chai)
 * tools: monstore: add 'show-versions' command. (`pr#7073 <http://github.com/ceph/ceph/pull/7073>`_, Cilang Zhao)
-* unittest_bufferlist: fix hexdump test (`pr#7152 <http://github.com/ceph/ceph/pull/7152>`_, Sage Weil)
-* unittest_ipaddr: fix segv (`pr#7154 <http://github.com/ceph/ceph/pull/7154>`_, Sage Weil)
 
 v10.0.2
 =======
