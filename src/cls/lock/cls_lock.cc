@@ -33,7 +33,7 @@
 
 
 using namespace rados::cls::lock;
-
+using ceph::mono_clock;
 
 CLS_VER(1,0)
 CLS_NAME(lock)
@@ -105,7 +105,7 @@ static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t 
 
   /* now trim expired locks */
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = mono_clock::now();
 
   map<locker_id_t, locker_info_t>::iterator iter = lock->lockers.begin();
 
