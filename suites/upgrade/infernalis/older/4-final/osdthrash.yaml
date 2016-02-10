@@ -1,0 +1,18 @@
+meta:
+- desc: |
+   randomly kill and revive osds
+   increasing the number of pgs at random times
+   run cephfs stress test
+tasks:
+- sequential:
+  - thrashosds:
+      timeout: 1200
+      chance_pgnum_grow: 1
+      chance_pgpnum_fix: 1
+  - print: "**** done thrashosds 4-workload"
+  - workunit:
+      clients:
+        client.0:
+           - suites/iogen.sh
+  - print: "**** done suites/iogen.sh 4-workload"
+
