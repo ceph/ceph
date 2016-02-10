@@ -13,8 +13,6 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 
-#include "rgw_acl_s3.h" // required for backward compatibility
-
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -117,4 +115,92 @@ bool RGWAccessControlPolicy::verify_permission(rgw_user& uid, int user_perm_mask
   return (perm == acl_perm);
 }
 
+void RGWAccessControlPolicy::dump(Formatter *f) const
+{
+  f->open_object_section("policy");
+  acl.dump(f);
+  owner.dump(f);
+  f->close_section();
+}
+
+void RGWAccessControlList::dump(Formatter *f) const
+{
+  map<string, int>::const_iterator acl_user_iter = acl_user_map.begin();
+  f->open_array_section("acl_user_map");
+  for (; acl_user_iter != acl_user_map.end(); ++acl_user_iter) {
+    f->open_object_section("entry");
+    f->dump_string("user", acl_user_iter->first);
+    f->dump_int("acl", acl_user_iter->second);
+    f->close_section();
+  }
+  f->close_section();
+
+  map<uint32_t, int>::const_iterator acl_group_iter = acl_group_map.begin();
+  f->open_array_section("acl_group_map");
+  for (; acl_group_iter != acl_group_map.end(); ++acl_group_iter) {
+    f->open_object_section("entry");
+    f->dump_unsigned("group", acl_group_iter->first);
+    f->dump_int("acl", acl_group_iter->second);
+    f->close_section();
+  }
+  f->close_section();
+
+  multimap<string, ACLGrant>::const_iterator giter = grant_map.begin();
+  f->open_array_section("grant_map");
+  for (; giter != grant_map.end(); ++giter) {
+    f->open_object_section("entry");
+    f->dump_string("id", giter->first);
+    f->open_object_section("grant");
+    giter->second.dump(f);
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void ACLOwner::dump(Formatter *f) const
+{
+  f->open_object_section("owner");
+  f->dump_string("id", id.to_str());
+  f->dump_string("display_name", display_name);
+  f->close_section();
+}
+
+void ACLPermission::dump(Formatter *f) const
+{
+  if ((flags & RGW_PERM_FULL_CONTROL) == RGW_PERM_FULL_CONTROL) {
+    f->dump_string("permission", "full_control");
+  } else {
+    if (flags & RGW_PERM_READ)
+      f->dump_string("permission", "read");
+    if (flags & RGW_PERM_WRITE)
+      f->dump_string("permission", "write");
+    if (flags & RGW_PERM_READ_ACP)
+      f->dump_string("permission", "read_acp");
+    if (flags & RGW_PERM_WRITE_ACP)
+      f->dump_string("permission", "write_acp");
+  }
+}
+
+void ACLGranteeType::dump(Formatter *f) const
+{
+  f->dump_unsigned("type", type);
+}
+
+void ACLGrant::dump(Formatter *f) const
+{
+  f->open_object_section("type");
+  type.dump(f);
+  f->close_section();
+
+  f->dump_string("id", id.to_str());
+  f->dump_string("email", email);
+
+  f->open_object_section("permission");
+  permission.dump(f);
+  f->close_section();
+
+  f->dump_string("display_name", name);
+  f->dump_int("group", (int)group);
+}
 
