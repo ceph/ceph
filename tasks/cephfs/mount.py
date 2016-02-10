@@ -41,7 +41,16 @@ class CephFSMount(object):
     def umount(self):
         raise NotImplementedError()
 
-    def umount_wait(self, force=False):
+    def umount_wait(self, force=False, require_clean=False):
+        """
+
+        :param force: Expect that the mount will not shutdown cleanly: kill
+                      it hard.
+        :param require_clean: Wait for the Ceph client associated with the
+                              mount (e.g. ceph-fuse) to terminate, and
+                              raise if it doesn't do so cleanly.
+        :return:
+        """
         raise NotImplementedError()
 
     def kill_cleanup(self):
