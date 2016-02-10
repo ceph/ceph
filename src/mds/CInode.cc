@@ -2675,7 +2675,7 @@ void CInode::choose_lock_state(SimpleLock *lock, int allissued)
     if (lock->is_xlocked()) {
       // do nothing here
     } else if (lock->get_state() != LOCK_MIX) {
-      if (issued & CEPH_CAP_GEXCL)
+      if (issued & (CEPH_CAP_GEXCL | CEPH_CAP_GBUFFER))
 	lock->set_state(LOCK_EXCL);
       else if (issued & CEPH_CAP_GWR)
 	lock->set_state(LOCK_MIX);
@@ -2694,9 +2694,9 @@ void CInode::choose_lock_state(SimpleLock *lock, int allissued)
   }
 }
  
-void CInode::choose_lock_states()
+void CInode::choose_lock_states(int dirty_caps)
 {
-  int issued = get_caps_issued();
+  int issued = get_caps_issued() | dirty_caps;
   if (is_auth() && (issued & (CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_WR)) &&
       choose_ideal_loner() >= 0)
     try_set_loner();
