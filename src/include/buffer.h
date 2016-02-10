@@ -70,8 +70,6 @@ class XioDispatchHook;
 
 namespace ceph {
 
-const static int CEPH_BUFFER_APPEND_SIZE(4096);
-
 namespace buffer CEPH_BUFFER_API {
   /*
    * exceptions
