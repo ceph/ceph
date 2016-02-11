@@ -261,8 +261,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     static raw_combined *create(unsigned len, unsigned align=0) {
       if (!align)
 	align = sizeof(size_t);
-      size_t rawlen = ROUND_UP_TO(sizeof(buffer::raw_combined), sizeof(size_t));
-      size_t datalen = ROUND_UP_TO(len, sizeof(size_t));
+      size_t rawlen = ROUND_UP_TO(sizeof(buffer::raw_combined),
+				  alignof(buffer::raw_combined));
+      size_t datalen = ROUND_UP_TO(len, alignof(buffer::raw_combined));
 
 #ifdef DARWIN
       char *ptr = (char *) valloc(rawlen + datalen);
