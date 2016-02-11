@@ -7,6 +7,7 @@
 *.egg
 dist
 virtualenv
+build
 wheelhouse*
 *.log
 *.trs
