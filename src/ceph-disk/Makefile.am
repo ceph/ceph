@@ -35,7 +35,7 @@ ceph-disk/virtualenv:
 	cd $(srcdir)/ceph-disk ; ../tools/setup-virtualenv.sh ; virtualenv/bin/python setup.py develop
 
 ceph-disk-clean:
-	cd $(srcdir)/ceph-disk ; python setup.py clean ; rm -fr wheelhouse .tox virtualenv .coverage *.egg-info
+	cd $(srcdir)/ceph-disk ; virtualenv/bin/python setup.py clean ; rm -fr wheelhouse .tox virtualenv .coverage *.egg-info
 
 ceph-disk-install-data:
 	cd $(srcdir)/ceph-disk ; \
@@ -47,7 +47,7 @@ ceph-disk-install-data:
 		fi ; \
 		root="--root=$(DESTDIR) --install-script=/usr/sbin" ; \
 	fi ; \
-	python setup.py install $$root $$options
+	virtualenv/bin/python setup.py install $$root $$options
 
 LOCAL_ALL += ceph-disk-all
 LOCAL_CLEAN += ceph-disk-clean
