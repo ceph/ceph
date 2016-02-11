@@ -709,13 +709,26 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
 
   buffer::raw* buffer::create_aligned(unsigned len, unsigned align) {
+    // If alignment is a page multiple, use a separate buffer::raw to
+    // avoid fragmenting the heap.
+    //
+    // Somewhat unexpectedly, I see consistently better performance
+    // from raw_combined than from raw even when the allocation size is
+    // a page multiple (but alignment is not).
+    //
+    // I also see better performance from a separate buffer::raw once the
+    // size passes 8KB.
+    if ((align & ~CEPH_PAGE_MASK) == 0 ||
+	len >= CEPH_PAGE_SIZE * 2) {
 #ifndef __CYGWIN__
-    //return new raw_mmap_pages(len);
-    return new raw_posix_aligned(len, align);
+      return new raw_posix_aligned(len, align);
 #else
-    return new raw_hack_aligned(len, align);
+      return new raw_hack_aligned(len, align);
 #endif
+    }
+    return create_combined(len, align);
   }
+
   buffer::raw* buffer::create_page_aligned(unsigned len) {
     return create_aligned(len, CEPH_PAGE_SIZE);
   }
