@@ -8,6 +8,7 @@
 
 #include "include/types.h"
 #include "rgw_common.h"
+#include "rgw_period_history.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/log/cls_log_types.h"
 #include "common/RWLock.h"
@@ -230,6 +231,8 @@ class RGWMetadataManager {
   std::map<std::string, RGWMetadataLog> md_logs;
   // use the current period's log for mutating operations
   RGWMetadataLog* current_log = nullptr;
+  // oldest log's position in the period history
+  RGWPeriodHistory::Cursor oldest_log_period;
 
   void parse_metadata_key(const string& metadata_key, string& type, string& entry);
 
@@ -250,6 +253,10 @@ public:
   ~RGWMetadataManager();
 
   int init(const std::string& current_period);
+
+  RGWPeriodHistory::Cursor get_oldest_log_period() const {
+    return oldest_log_period;
+  }
 
   /// find or create the metadata log for the given period
   RGWMetadataLog* get_log(const std::string& period);

@@ -357,8 +357,20 @@ RGWMetadataManager::~RGWMetadataManager()
   handlers.clear();
 }
 
+static RGWPeriodHistory::Cursor find_oldest_log_period(RGWRados* store)
+{
+  // TODO: search backwards through the period history for the first period with
+  // no log shard objects, and return its successor (some shards may be missing
+  // if they contain no metadata yet, so we need to check all shards)
+  return store->period_history->get_current();
+}
+
 int RGWMetadataManager::init(const std::string& current_period)
 {
+  // find our oldest log so we can tell other zones where to start their sync
+  oldest_log_period = find_oldest_log_period(store);
+
+  // open a log for the current period
   current_log = get_log(current_period);
   return 0;
 }
