@@ -241,7 +241,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   /*
    * raw_combined is always placed within a single allocation along
    * with the data buffer.  the data goes at the beginning, and
-   * raw_combined at the end.  see create_combined.
+   * raw_combined at the end.
    */
   class buffer::raw_combined : public buffer::raw {
     size_t alignment;
@@ -255,9 +255,29 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       dec_total_alloc(len);
     }
     raw* clone_empty() {
-      if (alignment)
-	return create_aligned(len, alignment);
-      return create(len);
+      return create(len, alignment);
+    }
+
+    static raw_combined *create(unsigned len, unsigned align=0) {
+      if (!align)
+	align = sizeof(size_t);
+      size_t rawlen = ROUND_UP_TO(sizeof(buffer::raw_combined), sizeof(size_t));
+      size_t datalen = ROUND_UP_TO(len, sizeof(size_t));
+
+#ifdef DARWIN
+      char *ptr = (char *) valloc(rawlen + datalen);
+#else
+      char *ptr = 0;
+      int r = ::posix_memalign((void**)(void*)&ptr, align, rawlen + datalen);
+      if (r)
+	throw bad_alloc();
+#endif /* DARWIN */
+      if (!ptr)
+	throw bad_alloc();
+
+      // actual data first, since it has presumably larger alignment restriction
+      // then put the raw_combined at the end
+      return new (ptr + datalen) raw_combined(ptr, len, align);
     }
 
     static void operator delete(void *ptr) {
@@ -687,30 +707,6 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return new raw_static(buf, len);
   }
 
-  buffer::raw* buffer::create_combined(unsigned len, unsigned align) {
-    if (!align)
-      align = sizeof(size_t);
-    size_t rawlen = ROUND_UP_TO(sizeof(buffer::raw_combined), sizeof(size_t));
-    size_t datalen = ROUND_UP_TO(len, sizeof(size_t));
-
-#ifdef DARWIN
-    char *ptr = (char *) valloc(rawlen + datalen);
-#else
-    char *ptr = 0;
-    int r = ::posix_memalign((void**)(void*)&ptr, align, rawlen + datalen);
-    if (r)
-      throw bad_alloc();
-#endif /* DARWIN */
-    if (!ptr)
-      throw bad_alloc();
-
-    // actual data first, since it has presumably larger alignment restriction
-    // then put the raw_combined at the end
-    raw *ret = new (ptr + datalen) raw_combined(ptr, len, align);
-    assert((char *)ret == ptr + datalen);
-    return ret;
-  }
-
   buffer::raw* buffer::create_aligned(unsigned len, unsigned align) {
     // If alignment is a page multiple, use a separate buffer::raw to
     // avoid fragmenting the heap.
@@ -729,7 +725,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       return new raw_hack_aligned(len, align);
 #endif
     }
-    return create_combined(len, align);
+    return raw_combined::create(len, align);
   }
 
   buffer::raw* buffer::create_page_aligned(unsigned len) {
@@ -1660,7 +1656,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     unsigned gap = append_buffer.unused_tail_length();
     if (!gap) {
       // make a new append_buffer!
-      append_buffer = create_combined(CEPH_BUFFER_APPEND_SIZE);
+      append_buffer = raw_combined::create(CEPH_BUFFER_APPEND_SIZE);
       append_buffer.set_length(0);   // unused, so far.
     }
     append(append_buffer, append_buffer.append(c) - 1, 1);	// add segment to the list
@@ -1687,7 +1683,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       size_t need = ROUND_UP_TO(len, sizeof(size_t)) + sizeof(raw_combined);
       size_t alen = ROUND_UP_TO(need, CEPH_BUFFER_ALLOC_UNIT) -
 	sizeof(raw_combined);
-      append_buffer = create_combined(alen);
+      append_buffer = raw_combined::create(alen);
       append_buffer.set_length(0);   // unused, so far.
     }
   }
