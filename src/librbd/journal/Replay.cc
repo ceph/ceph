@@ -428,12 +428,16 @@ void Replay<I>::handle_event(const journal::UnknownEvent &event,
 }
 
 template <typename I>
-void Replay<I>::handle_aio_modify_complete(Context *on_safe, int r) {
+void Replay<I>::handle_aio_modify_complete(Context *on_ready, Context *on_safe,
+                                           int r) {
   Mutex::Locker locker(m_lock);
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": on_safe=" << on_safe << ", "
-                 << "r=" << r << dendl;
+  ldout(cct, 20) << this << " " << __func__ << ": on_ready=" << on_ready << ", "
+                 << "on_safe=" << on_safe << ", r=" << r << dendl;
 
+  if (on_ready != nullptr) {
+    on_ready->complete(0);
+  }
   if (r < 0) {
     lderr(cct) << "AIO modify op failed: " << cpp_strerror(r) << dendl;
     on_safe->complete(r);
@@ -566,11 +570,6 @@ AioCompletion *Replay<I>::create_aio_modify_completion(Context *on_ready,
   // completed by flushes-only so that we don't move the journal
   // commit position until safely on-disk
 
-  // when safe, the completion of the next flush will fire the on_safe
-  // callback
-  AioCompletion *aio_comp = AioCompletion::create<Context>(
-    new C_AioModifyComplete(this, on_safe));
-
   *flush_required = (m_aio_modify_unsafe_contexts.size() ==
                        IN_FLIGHT_IO_LOW_WATER_MARK);
   if (*flush_required) {
@@ -586,11 +585,15 @@ AioCompletion *Replay<I>::create_aio_modify_completion(Context *on_ready,
   if (m_in_flight_aio_modify == IN_FLIGHT_IO_HIGH_WATER_MARK) {
     ldout(cct, 10) << "hit AIO replay high-water mark: pausing replay"
                    << dendl;
-    m_on_aio_ready = on_ready;
-  } else {
-    on_ready->complete(0);
+    assert(m_on_aio_ready == nullptr);
+    std::swap(m_on_aio_ready, on_ready);
   }
 
+  // when the modification is ACKed by librbd, we can process the next
+  // event. when flushed, the completion of the next flush will fire the
+  // on_safe callback
+  AioCompletion *aio_comp = AioCompletion::create<Context>(
+    new C_AioModifyComplete(this, on_ready, on_safe));
   return aio_comp;
 }
 

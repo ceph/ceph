@@ -66,12 +66,13 @@ private:
 
   struct C_AioModifyComplete : public Context {
     Replay *replay;
+    Context *on_ready;
     Context *on_safe;
-    C_AioModifyComplete(Replay *replay, Context *on_safe)
-      : replay(replay), on_safe(on_safe) {
+    C_AioModifyComplete(Replay *replay, Context *on_ready, Context *on_safe)
+      : replay(replay), on_ready(on_ready), on_safe(on_safe) {
     }
     virtual void finish(int r) {
-      replay->handle_aio_modify_complete(on_safe, r);
+      replay->handle_aio_modify_complete(on_ready, on_safe, r);
     }
   };
 
@@ -147,7 +148,7 @@ private:
   void handle_event(const UnknownEvent &event, Context *on_ready,
                     Context *on_safe);
 
-  void handle_aio_modify_complete(Context *on_safe, int r);
+  void handle_aio_modify_complete(Context *on_ready, Context *on_safe, int r);
   void handle_aio_flush_complete(Context *on_flush_safe, Contexts &on_safe_ctxs,
                                  int r);
 
