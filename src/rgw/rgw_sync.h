@@ -9,8 +9,10 @@
 
 struct rgw_mdlog_info {
   uint32_t num_shards;
+  std::string period; //< period id of the master's oldest metadata log
+  epoch_t realm_epoch; //< realm epoch of oldest metadata log
 
-  rgw_mdlog_info() : num_shards(0) {}
+  rgw_mdlog_info() : num_shards(0), realm_epoch(0) {}
 
   void decode_json(JSONObj *obj);
 };
