@@ -81,20 +81,20 @@ TEST(LibCephFS, OpenReadWrite) {
   const char *out_buf = "hello world";
   size_t size = strlen(out_buf);
   char in_buf[100];
-  ASSERT_EQ(ceph_write(cmount, fd, out_buf, size, 0), size);
+  ASSERT_EQ(ceph_write(cmount, fd, out_buf, size, 0), (int)size);
   ASSERT_EQ(ceph_read(cmount, fd, in_buf, sizeof(in_buf), 0), -EBADF);
   ASSERT_EQ(0, ceph_close(cmount, fd));
 
   fd = ceph_open(cmount, c_path, O_RDONLY, 0);
   ASSERT_LT(0, fd);
   ASSERT_EQ(ceph_write(cmount, fd, out_buf, size, 0), -EBADF);
-  ASSERT_EQ(ceph_read(cmount, fd, in_buf, sizeof(in_buf), 0), size);
+  ASSERT_EQ(ceph_read(cmount, fd, in_buf, sizeof(in_buf), 0), (int)size);
   ASSERT_EQ(0, ceph_close(cmount, fd));
 
   fd = ceph_open(cmount, c_path, O_RDWR, 0);
   ASSERT_LT(0, fd);
-  ASSERT_EQ(ceph_write(cmount, fd, out_buf, size, 0), size);
-  ASSERT_EQ(ceph_read(cmount, fd, in_buf, sizeof(in_buf), 0), size);
+  ASSERT_EQ(ceph_write(cmount, fd, out_buf, size, 0), (int)size);
+  ASSERT_EQ(ceph_read(cmount, fd, in_buf, sizeof(in_buf), 0), (int)size);
   ASSERT_EQ(0, ceph_close(cmount, fd));
 
   ceph_shutdown(cmount);
@@ -356,7 +356,7 @@ TEST(LibCephFS, DirLs) {
       found.insert(name);
     }
   }
-  ASSERT_EQ(found.size(), r);
+  ASSERT_EQ(found.size(), (unsigned)r);
   free(getdents_entries);
 
   // test readdir_r
@@ -378,7 +378,7 @@ TEST(LibCephFS, DirLs) {
     ASSERT_EQ(len, 1);
     found.insert(rdent.d_name);
   }
-  ASSERT_EQ(found.size(), r);
+  ASSERT_EQ(found.size(), (unsigned)r);
 
   // test readdirplus
   ceph_rewinddir(cmount, ls_dir);
@@ -407,7 +407,7 @@ TEST(LibCephFS, DirLs) {
     ASSERT_EQ(st.st_ino, rdent.d_ino);
     //ASSERT_EQ(st.st_mode, (mode_t)0666);
   }
-  ASSERT_EQ(found.size(), r);
+  ASSERT_EQ(found.size(), (unsigned)r);
 
   ASSERT_EQ(ceph_closedir(cmount, ls_dir), 0);
 
