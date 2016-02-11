@@ -11,7 +11,6 @@
 #pragma once
 
 
-#include <sys/time.h>
 #include <assert.h>
 
 #include <memory>
@@ -23,8 +22,6 @@
 #include <condition_variable>
 #include <thread>
 #include <iostream>
-#include <iomanip>
-#include <sstream>
 
 #include "crimson/heap.h"
 #include "dmclock_util.h"
@@ -37,29 +34,6 @@ namespace c = crimson;
 namespace crimson {
 
   namespace dmclock {
-
-    // we're using double to represent time, but we could change it by
-    // changing the following declarations (and by making sure a min
-    // function existed)
-    using Time = double;
-    static const Time TimeZero = 0.0;
-    static const Time TimeMax = std::numeric_limits<Time>::max();
-
-
-    inline Time get_time() {
-      struct timeval now;
-      assert(0 == gettimeofday(&now, NULL));
-      return now.tv_sec + (now.tv_usec / 1000000.0);
-    }
-
-
-    inline std::string format_time(const Time& time, uint modulo = 1000) {
-      long subtract = long(time / modulo) * modulo;
-      std::stringstream ss;
-      ss << std::fixed << std::setprecision(4) << time - subtract;
-      return ss.str();
-    }
-
 
     struct ClientInfo {
       const double reservation;  // minimum

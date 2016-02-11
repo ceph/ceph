@@ -53,7 +53,6 @@ namespace crimson {
       inline void resp_update(PhaseType phase) {
 	++my_delta;
 	if (phase == PhaseType::reservation) ++my_rho;
-	last_update = std::chrono::steady_clock::now();
       }
 
       inline bool last_update_before(TimePoint moment) {
