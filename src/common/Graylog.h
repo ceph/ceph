@@ -12,6 +12,7 @@
 #include <boost/iostreams/filter/zlib.hpp>
 
 #include "include/memory.h"
+#include "include/assert.h"  // boost clobbers this
 
 struct uuid_d;
 class LogEntry;
