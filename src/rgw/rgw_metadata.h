@@ -166,7 +166,6 @@ public:
       lock("RGWMetaLog::lock") {}
 
   int add_entry(RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl);
-  int get_log_shard_id(RGWMetadataHandler *handler, const string& section, const string& key);
   int store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
 
   struct LogListCtx {
@@ -281,16 +280,7 @@ public:
   int lock_exclusive(string& metadata_key, utime_t duration, string& owner_id);
   int unlock(string& metadata_key, string& owner_id);
 
-  int get_log_shard_id(const string& section, const std::string& period,
-                       const string& key, int *shard_id) {
-    RGWMetadataHandler *handler = get_handler(section);
-    if (!handler) {
-      return -EINVAL;
-    }
-    auto md_log = get_log(period);
-    *shard_id = md_log->get_log_shard_id(handler, section, key);
-    return 0;
-  }
+  int get_log_shard_id(const string& section, const string& key, int *shard_id);
 };
 
 #endif

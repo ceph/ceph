@@ -102,19 +102,6 @@ int RGWMetadataLog::add_entry(RGWMetadataHandler *handler, const string& section
   return store->time_log_add(oid, now, section, key, bl);
 }
 
-int RGWMetadataLog::get_log_shard_id(RGWMetadataHandler *handler, const string& section, const string& key)
-{
-  string oid;
-
-  string hash_key;
-  handler->get_hash_key(section, key, hash_key);
-
-  int shard_id;
-  store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
-
-  return shard_id;
-}
-
 int RGWMetadataLog::store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
 {
   string oid;
@@ -824,3 +811,15 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, R
   return 0;
 }
 
+int RGWMetadataManager::get_log_shard_id(const string& section,
+                                         const string& key, int *shard_id)
+{
+  RGWMetadataHandler *handler = get_handler(section);
+  if (!handler) {
+    return -EINVAL;
+  }
+  string hash_key;
+  handler->get_hash_key(section, key, hash_key);
+  *shard_id = store->key_to_shard_id(hash_key, cct->_conf->rgw_md_log_max_shards);
+  return 0;
+}
