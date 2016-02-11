@@ -210,3 +210,21 @@ TEST(Log, InternalSegv)
 {
   ASSERT_DEATH(do_segv(), ".*");
 }
+
+TEST(Log, LargeLog)
+{
+  SubsystemMap subs;
+  subs.add(1, "foo", 20, 10);
+  Log log(&subs);
+  log.start();
+  log.set_log_file("/tmp/big");
+  log.reopen_log_file();
+  int l = 10;
+  Entry *e = new Entry(ceph_clock_now(NULL), pthread_self(), l, 1);
+
+  std::string msg(10000000, 0);
+  e->set_str(msg);
+  log.submit_entry(e);
+  log.flush();
+  log.stop();
+}
