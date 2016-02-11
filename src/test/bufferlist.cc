@@ -791,15 +791,17 @@ TEST(BufferPtr, append) {
 }
 
 TEST(BufferPtr, append_bench) {
-  for (int s=1; s<=8; s*=2) {
+  char src[1048576];
+  memset(src, 0, sizeof(src));
+  for (int s=4; s<=16384; s*=4) {
     utime_t start = ceph_clock_now(NULL);
     int buflen = 1048576;
-    int count = 1000;
+    int count = 4000;
     for (int i=0; i<count; ++i) {
       bufferptr bp(buflen);
       bp.set_length(0);
       for (int64_t j=0; j<buflen; j += s) {
-	bp.append((char *)&j, s);
+	bp.append(src, s);
       }
     }
     utime_t end = ceph_clock_now(NULL);
