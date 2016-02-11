@@ -53,11 +53,12 @@ class AsyncConnection : public Connection {
   ssize_t do_sendmsg(struct msghdr &msg, unsigned len, bool more);
   ssize_t try_send(bufferlist &bl, bool send=true, bool more=false) {
     Mutex::Locker l(write_lock);
-    return _try_send(bl, send, more);
+    outcoming_bl.claim_append(bl);
+    return _try_send(send, more);
   }
   // if "send" is false, it will only append bl to send buffer
   // the main usage is avoid error happen outside messenger threads
-  ssize_t _try_send(bufferlist &bl, bool send=true, bool more=false);
+  ssize_t _try_send(bool send=true, bool more=false);
   ssize_t _send(Message *m);
   void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
   ssize_t read_until(unsigned needed, char *p);
