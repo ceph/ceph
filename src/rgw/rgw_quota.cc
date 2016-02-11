@@ -732,7 +732,7 @@ public:
     if (ret < 0)
       return ret;
 
-    if (bucket_quota.enabled) {
+    if (bucket_quota.enabled && num_objs) {
       ret = check_quota("bucket", bucket_quota, bucket_stats, num_objs, size_kb);
       if (ret < 0)
         return ret;
