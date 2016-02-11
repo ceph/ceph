@@ -1092,8 +1092,6 @@ void MDSDaemon::suicide()
   }
   beacon.shutdown();
 
-  timer.shutdown();
-
   if (mds_rank) {
     mds_rank->shutdown();
   } else {
@@ -1101,6 +1099,7 @@ void MDSDaemon::suicide()
     if (objecter->initialized.read()) {
       objecter->shutdown();
     }
+    timer.shutdown();
 
     monc->shutdown();
     messenger->shutdown();
