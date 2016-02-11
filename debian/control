@@ -66,8 +66,20 @@ Standards-Version: 3.9.3
 
 Package: ceph
 Architecture: linux-any
+Depends: ceph-mon,
+         ceph-osd
+Recommends: ceph-mds
+Description: distributed storage and file system
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+
+Package: ceph-base
+Architecture: linux-any
 Depends: binutils,
          ceph-common (>= 9.0.0-943),
+         ceph-osd,
+         ceph-mon,
          cryptsetup-bin | cryptsetup,
          debianutils,
          findutils,
@@ -87,21 +99,20 @@ Replaces: ceph-common (<< 0.78-500), python-ceph (<< 0.92-1223),
 	  ceph-test (<< 0.94-1322)
 Breaks: python-ceph (<< 0.92-1223), ceph-test (<< 0.94-1322)
 X-Python-Version: >= 2.6
-Description: distributed storage and file system
+Description: common ceph daemon libraries and management tools
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package contains all server daemons and management tools for creating,
- running, and administering a Ceph storage cluster, with the exception of the
- metadata server, which is necessary for using the distributed file system and is
- provided by the ceph-mds package.
+ This package contains the libraries and management tools that are common among
+ the three Ceph server daemons (ceph-mon, ceph-osd, ceph-mds). These tools are
+ necessary for creating, running, and administering a Ceph storage cluster.
 
 Package: ceph-dbg
 Architecture: linux-any
 Section: debug
 Priority: extra
-Depends: ceph (= ${binary:Version}), ${misc:Depends}
+Depends: ceph-base, ${misc:Depends}
 Replaces: ceph-test-dbg (<< 0.94-1322)
 Breaks: ceph-test-dbg (<< 0.94-1322)
 Description: debugging symbols for ceph
@@ -112,7 +123,7 @@ Description: debugging symbols for ceph
 
 Package: ceph-mds
 Architecture: linux-any
-Depends: ceph, ${misc:Depends}, ${shlibs:Depends}
+Depends: ceph-base (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Recommends: ceph-fs-common, ceph-fuse, libcephfs1
 Replaces: ceph (<< 0.93-417)
 Breaks: ceph (<< 0.93-417)
@@ -135,6 +146,65 @@ Description: debugging symbols for ceph-mds
  block and file system storage.
  .
  This package contains the debugging symbols for ceph-mds.
+
+Package: ceph-mon
+Architecture: linux-any
+Depends: ceph-base (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Recommends: ceph-common
+Replaces: ceph (<< 9.0.1-1294)
+Breaks: ceph (<< 9.0.1-1294)
+Description: monitor server for the ceph storage system
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the cluster monitor daemon for the Ceph storage
+ system. One or more instances of ceph-mon form a Paxos part-time parliament
+ cluster that provides extremely reliable and durable storage of cluster
+ membership, configuration, and state.
+
+Package: ceph-mon-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-mon (= ${binary:Version}), ${misc:Depends}
+Replaces: ceph-dbg (<< 9.0.1-1294)
+Breaks: ceph-dbg (<< 9.0.1-1294)
+Description: debugging symbols for ceph-mon
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the debugging symbols for ceph-mon.
+
+Package: ceph-osd
+Architecture: linux-any
+Depends: ceph-base (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Recommends: ceph-common
+Replaces: ceph (<< 9.0.1-1294)
+Breaks: ceph (<< 9.0.1-1294)
+Description: OSD server for the ceph storage system
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the Object Storage Daemon for the Ceph storage system.
+ It is responsible for storing objects on a local file system
+ and providing access to them over the network.
+
+Package: ceph-osd-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-osd (= ${binary:Version}), ${misc:Depends}
+Replaces: ceph-dbg (<< 9.0.1-1294)
+Breaks: ceph-dbg (<< 9.0.1-1294)
+Description: debugging symbols for ceph-osd
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the debugging symbols for ceph-osd.
 
 Package: ceph-fuse
 Architecture: linux-any
@@ -262,7 +332,7 @@ Breaks: ceph (<< 9.0.0-943),
 	ceph-test (<< 9.0.3-1646),
 	python-ceph (<< 0.92-1223),
 	librbd1 (<< 0.92-1238)
-Suggests: ceph, ceph-mds
+Suggests: ceph-base, ceph-mds
 Description: common utilities to mount and interact with a ceph storage cluster
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
