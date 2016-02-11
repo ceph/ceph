@@ -27,7 +27,7 @@ TEST(CompressionZlib, compress_decompress)
 {
   CompressionZlib sp;
   EXPECT_EQ(sp.get_method_name(), "zlib");
-  char* test = "This is test text";
+  const char* test = "This is test text";
   int len = strlen(test);
   bufferlist in, out;
   in.append(test, len);
@@ -43,7 +43,7 @@ TEST(CompressionZlib, compress_decompress_chunk)
 {
   CompressionZlib sp;
   EXPECT_EQ(sp.get_method_name(), "zlib");
-  char* test = "This is test text";
+  const char* test = "This is test text";
   buffer::ptr test2 ("1234567890", 10);
   int len = strlen(test);
   bufferlist in, out;
