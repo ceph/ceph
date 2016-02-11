@@ -25,11 +25,16 @@ using namespace std;
 
 #include "common/LogEntry.h"
 #include "messages/MLog.h"
-#include "common/Graylog.h"
 
 class MMonCommand;
 
 static const string LOG_META_CHANNEL = "$channel";
+
+namespace ceph {
+namespace log {
+  class Graylog;
+}
+}
 
 class LogMonitor : public PaxosService,
                    public md_config_obs_t {
@@ -49,7 +54,7 @@ private:
     map<string,string> log_to_graylog_host;
     map<string,string> log_to_graylog_port;
 
-    map<string, ceph::log::Graylog::Ref> graylogs;
+    map<string, shared_ptr<ceph::log::Graylog>> graylogs;
     uuid_d fsid;
     string host;
 
@@ -120,29 +125,7 @@ private:
 			      &CLOG_CONFIG_DEFAULT_KEY) == "true");
     }
 
-    ceph::log::Graylog::Ref get_graylog(const string &channel) {
-      generic_dout(25) << __func__ << " for channel '"
-                       << channel << "'" << dendl;
-
-      if (graylogs.count(channel) == 0) {
-	ceph::log::Graylog::Ref graylog = ceph::log::Graylog::Ref(new ceph::log::Graylog("mon"));
-
-	graylog->set_fsid(g_conf->fsid);
-	graylog->set_hostname(g_conf->host);
-	graylog->set_destination(get_str_map_key(log_to_graylog_host, channel,
-						 &CLOG_CONFIG_DEFAULT_KEY),
-				 atoi(get_str_map_key(log_to_graylog_port, channel,
-						      &CLOG_CONFIG_DEFAULT_KEY).c_str()));
-
-	graylogs[channel] = graylog;
-        generic_dout(20) << __func__ << " for channel '"
-                         << channel << "' to graylog host '"
-			 << log_to_graylog_host[channel] << ":"
-			 << log_to_graylog_port[channel]
-			 << "'" << dendl;
-      }
-      return graylogs[channel];
-    }
+    shared_ptr<ceph::log::Graylog> get_graylog(const string &channel);
   } channels;
 
   void update_log_channels();

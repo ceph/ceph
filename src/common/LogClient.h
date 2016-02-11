@@ -17,8 +17,6 @@
 
 #include "common/LogEntry.h"
 #include "common/Mutex.h"
-#include "include/uuid.h"
-#include "common/Graylog.h"
 
 #include <iosfwd>
 #include <sstream>
@@ -29,9 +27,16 @@ class MLogAck;
 class Messenger;
 class MonMap;
 class Message;
+struct uuid_d;
 struct Connection;
 
 class LogChannel;
+
+namespace ceph {
+namespace log {
+  class Graylog;
+}
+}
 
 int parse_log_client_options(CephContext *cct,
 			     map<string,string> &log_to_monitors,
@@ -177,7 +182,7 @@ private:
   std::string syslog_facility;
   bool log_to_syslog;
   bool log_to_monitors;
-  ceph::log::Graylog::Ref graylog;
+  shared_ptr<ceph::log::Graylog> graylog;
 
 
   friend class LogClientTemp;
