@@ -170,11 +170,7 @@ int FileJournal::_open_block_device()
 
 void FileJournal::_check_disk_write_cache() const
 {
-#if !defined(__linux__)
-    dout(10) << "_check_disk_write_cache: not linux, NOT checking disk write "
-      << "cache on raw block device " << fn << dendl;
-    return;
-#else
+#if defined(__linux__)
   ostringstream hdparm_cmd;
   FILE *fp = NULL;
 
