@@ -32,7 +32,7 @@ using std::deque;
 /**
  * Implements journaling on top of block device or file.
  *
- * Lock ordering is write_lock > aio_lock > finisher_lock
+ * Lock ordering is write_lock > aio_lock > (completions_lock | finisher_lock)
  */
 class FileJournal : public Journal {
 public:
@@ -265,6 +265,8 @@ private:
   io_context_t aio_ctx;
   list<aio_info> aio_queue;
   int aio_num, aio_bytes;
+  uint64_t aio_write_queue_ops;
+  uint64_t aio_write_queue_bytes;
   /// End protected by aio_lock
 #endif
 
@@ -388,6 +390,8 @@ private:
     aio_lock("FileJournal::aio_lock"),
     aio_ctx(0),
     aio_num(0), aio_bytes(0),
+    aio_write_queue_ops(0),
+    aio_write_queue_bytes(0),
 #endif
     last_committed_seq(0),
     journaled_since_start(0),
