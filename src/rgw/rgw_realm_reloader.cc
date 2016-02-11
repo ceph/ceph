@@ -138,7 +138,7 @@ void RGWRealmReloader::reload()
   ldout(cct, 1) << "Finishing initialization of new store" << dendl;
   // finish initializing the new store
   ldout(cct, 1) << " - REST subsystem init" << dendl;
-  rgw_rest_init(cct, store->get_zonegroup());
+  rgw_rest_init(cct, store, store->get_zonegroup());
   ldout(cct, 1) << " - user subsystem init" << dendl;
   rgw_user_init(store);
   ldout(cct, 1) << " - user subsystem init" << dendl;
