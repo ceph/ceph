@@ -69,7 +69,7 @@ CEPH_DISK_ARGS+=" --statedir=$DIR"
 CEPH_DISK_ARGS+=" --sysconfdir=$DIR"
 CEPH_DISK_ARGS+=" --prepend-to-path="
 CEPH_DISK_ARGS+=" --verbose"
-TIMEOUT=300
+TIMEOUT=600
 
 cat=$(which cat)
 timeout=$(which timeout)

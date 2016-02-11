@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -xv
 #
 # Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
 # Copyright (C) 2014,2015 Red Hat <contact@redhat.com>
@@ -17,6 +17,15 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+if [ x"$SRC_PATH"x = xx ]; then
+  SRC_PATH=`dirname $0`
+  SRC_PATH=`(cd $SRC_PATH/../../src; pwd)`
+fi
+
+CEPH_DIR=$SRC_PATH
+CEPH_BIN=$SRC_PATH
+CEPH_LIB=$SRC_PATH/.libs
+
 TIMEOUT=300
 PG_NUM=4
 : ${CEPH_BUILD_VIRTUALENV:=/tmp}
@@ -124,6 +133,16 @@ function teardown() {
     rm -fr $dir
 }
 
+function teardown_error() {
+    local dir=$1
+    kill_daemons $dir KILL
+    if [ x`uname`x != xFreeBSDx ] \
+        && [ $(stat -f -c '%T' .) == "btrfs" ]; then
+        __teardown_btrfs $dir
+    fi
+    echo Keeping $dir for post-mortum analysis
+}
+
 function __teardown_btrfs() {
     local btrfs_base_dir=$1
     local btrfs_root=$(df -P . | tail -1 | awk '{print $NF}')
@@ -180,7 +199,7 @@ function kill_daemon() {
             exit_code=0
             break
          fi
-         send_signal=0
+         [ x`uname`x = xFreeBSDx ] || send_signal=0
          sleep $try
     done;
     return $exit_code
@@ -514,6 +533,9 @@ function destroy_osd() {
     local dir=$1
     local id=$2
 
+    # First mask osd down, otherwise it cannot be deleted later on
+    # is status has not propagated to monitor.
+    ceph osd down osd.$id || return 1
     kill_daemons $dir TERM osd.$id || return 1
     ceph osd out osd.$id || return 1
     ceph auth del osd.$id || return 1
@@ -608,7 +630,7 @@ function activate_osd() {
         --mark-init=none \
         $osd_data || return 1
 
-    [ "$id" = "$(cat $osd_data/whoami)" ] || return 1
+    [ "$id" -eq "$(cat $osd_data/whoami)" ] || return 1
 
     ceph osd crush create-or-move "$id" 1 root=default host=localhost
 
@@ -1287,8 +1309,14 @@ function erasure_code_plugin_exists() {
     local plugin=$1
 
     local status
+    local grepstr
+    case x`uname`x in
+        xLinuxx) grepstr="$plugin.*No such file" ;;
+        xFreeBSDx) grepstr="Cannot open.*$plugin" ;;
+    esac
+
     if ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin 2>&1 |
-        grep "$plugin.*No such file" ; then
+        grep "$grepstr" ; then
         status=1
     else
         status=0
@@ -1453,13 +1481,13 @@ function main() {
 
     local code
     if run $dir "$@" ; then
-        code=0
+        teardown $dir || return 1
+        return 0
     else
         display_logs $dir
-        code=1
+        teardown_error $dir
+        return 1
     fi
-    teardown $dir || return 1
-    return $code
 }
 
 #######################################################################
