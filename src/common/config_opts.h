@@ -1066,8 +1066,16 @@ OPTION(journal_block_align, OPT_BOOL, true)
 OPTION(journal_write_header_frequency, OPT_U64, 0)
 OPTION(journal_max_write_bytes, OPT_INT, 10 << 20)
 OPTION(journal_max_write_entries, OPT_INT, 100)
-OPTION(journal_queue_max_ops, OPT_INT, 300)
-OPTION(journal_queue_max_bytes, OPT_INT, 32 << 20)
+
+/// Target range for journal fullness
+OPTION(journal_throttle_low_threshhold, OPT_DOUBLE, 0.5)
+OPTION(journal_throttle_high_threshhold, OPT_DOUBLE, 0.8)
+
+/// Multiple over expected at high_threshhold (probably don't need to change)
+OPTION(journal_throttle_high_multiple, OPT_DOUBLE, 2)
+/// Multiple over expected at max (probably don't need to change)
+OPTION(journal_throttle_max_multiple, OPT_DOUBLE, 10)
+
 OPTION(journal_align_min_size, OPT_INT, 64 << 10)  // align data payloads >= this.
 OPTION(journal_replay_from, OPT_INT, 0)
 OPTION(journal_zero_on_create, OPT_BOOL, false)

@@ -17,6 +17,7 @@ libos_a_SOURCES = \
 	os/filestore/DBObjectMap.cc \
 	os/filestore/FileJournal.cc \
 	os/filestore/FileStore.cc \
+	os/filestore/JournalThrottle.cc \
 	os/filestore/GenericFileStoreBackend.cc \
 	os/filestore/HashIndex.cc \
 	os/filestore/IndexManager.cc \
@@ -75,6 +76,7 @@ noinst_HEADERS += \
 	os/filestore/DBObjectMap.h \
 	os/filestore/FileJournal.h \
 	os/filestore/FileStore.h \
+	os/filestore/JournalThrottle.h \
 	os/filestore/FDCache.h \
 	os/filestore/GenericFileStoreBackend.h \
 	os/filestore/HashIndex.h \

@@ -581,10 +581,8 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   // initialize logger
   PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_first, l_os_last);
 
-  plb.add_u64(l_os_jq_max_ops, "journal_queue_max_ops", "Max operations in journal queue");
   plb.add_u64(l_os_jq_ops, "journal_queue_ops", "Operations in journal queue");
   plb.add_u64_counter(l_os_j_ops, "journal_ops", "Total journal entries written");
-  plb.add_u64(l_os_jq_max_bytes, "journal_queue_max_bytes", "Max data in journal queue");
   plb.add_u64(l_os_jq_bytes, "journal_queue_bytes", "Size of journal queue");
   plb.add_u64_counter(l_os_j_bytes, "journal_bytes", "Total operations size in journal");
   plb.add_time_avg(l_os_j_lat, "journal_latency", "Average journal queue completing latency");
@@ -1943,18 +1941,20 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
+
+    //prepare and encode transactions data out of lock
+    bufferlist tbl;
+    int orig_len = journal->prepare_entry(o->tls, &tbl);
+
     if (handle)
       handle->suspend_tp_timeout();
 
     op_queue_reserve_throttle(o);
+    journal->reserve_throttle_and_backoff(tbl.length());
 
     if (handle)
       handle->reset_tp_timeout();
 
-    journal->throttle();
-    //prepare and encode transactions data out of lock
-    bufferlist tbl;
-    int orig_len = journal->prepare_entry(o->tls, &tbl);
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
 
