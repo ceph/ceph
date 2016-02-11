@@ -4,6 +4,10 @@ set -e
 
 script_root=`dirname $0`
 
+if [ -e CMakeCache.txt ]; then
+    script_root=$PWD
+fi
+
 [ "$#" -lt 1 ] && echo "usage: $0 <name> [entity [id]]" && exit 1
 
 name=$1
