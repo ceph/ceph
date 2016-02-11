@@ -1579,7 +1579,7 @@ int BlueStore::_setup_block_symlink_or_file(
 	   << " size " << size << " create=" << (int)create << dendl;
   int r = 0;
   if (epath.length()) {
-    if (!epath.compare(0, sizeof(SPDK_PREFIX-1), SPDK_PREFIX)) {
+    if (!epath.compare(0, sizeof(SPDK_PREFIX)-1, SPDK_PREFIX)) {
       string symbol_spdk_file = path + "/" + epath;
       r = ::symlinkat(symbol_spdk_file.c_str(), path_fd, name.c_str());
       if (r < 0) {
