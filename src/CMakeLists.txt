@@ -1204,6 +1204,11 @@ if(${WITH_RADOSGW})
     cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
     cls_replica_log_client cls_user_client curl global expat)
 
+  set(civetweb_common_files civetweb/src/civetweb.c)
+  add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
+  set_property(TARGET civetweb_common_objs
+	       APPEND PROPERTY COMPILE_DEFINITIONS NO_SSL_DL=1)
+
   if(HAVE_BOOST_ASIO_COROUTINE)
     target_compile_definitions(rgw_a PUBLIC "HAVE_BOOST_ASIO_COROUTINE")
   endif()
@@ -1252,12 +1257,13 @@ if(${WITH_RADOSGW})
     include/rados/rgw_file.h
   DESTINATION include/rados)
 
-  add_executable(radosgw ${radosgw_srcs}  $<TARGET_OBJECTS:civetweb_common_objs>)
+  add_executable(radosgw ${radosgw_srcs} $<TARGET_OBJECTS:civetweb_common_objs>
+		 $<TARGET_OBJECTS:heap_profiler_objs>)
   target_link_libraries(radosgw rgw_a librados
     cls_rgw_client cls_lock_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client
     cls_version_client cls_replica_log_client cls_user_client
-    curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES})
+    curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES} ${ALLOC_LIBS})
   install(TARGETS radosgw DESTINATION bin)
 
   add_executable(radosgw-admin ${radosgw_admin_srcs})
@@ -1265,7 +1271,7 @@ if(${WITH_RADOSGW})
     cls_rgw_client cls_lock_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client
     cls_version_client cls_replica_log_client cls_user_client
-    curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES})
+    curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES} ${ALLOC_LIBS})
 
   install(TARGETS radosgw-admin DESTINATION bin)
 
