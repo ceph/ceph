@@ -2270,7 +2270,7 @@ TEST(BufferList, write_fd_offset) {
   struct stat st;
   memset(&st, 0, sizeof(st));
   ::stat(FILENAME, &st);
-  EXPECT_EQ(IOV_MAX * 2 + offset, st.st_size);
+  EXPECT_EQ(IOV_MAX * 2 + offset, (unsigned)st.st_size);
   ::unlink(FILENAME);
 }
 
