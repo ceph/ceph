@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 2.8)
 
-# include_directories($ENV{NATIVE_CLIENT_ROOT} ${COCL2_DIR})
+set(local_flags)
 
 set(core_srcs dmclock_server.cc dmclock_util.cc crimson/run_every.cc)
 set(test_srcs test_server.cc test_client.cc test.cc)
 
 set_source_files_properties(${core_srcs} ${test_srcs}
   PROPERTIES
-  COMPILE_FLAGS "${my_compile_flags} -std=gnu++11 -pthread"
+  COMPILE_FLAGS "${my_compile_flags} -std=gnu++11 -pthread ${local_flags}"
   )
 
 add_executable(sim ${core_srcs} ${test_srcs})
