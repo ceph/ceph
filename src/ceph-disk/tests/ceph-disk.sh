@@ -132,8 +132,8 @@ function kill_daemons() {
 
 function command_fixture() {
     local command=$1
-
-    [ $(which $command) = `readlink -f ../$command` ] || [ $(which $command) = `readlink -f $(pwd)/$command` ] || return 1
+    local fpath=`readlink -f $(which $command)`
+    [ "$fpath" = `readlink -f ../$command` ] || [ "$fpath" = `readlink -f $(pwd)/$command` ] || return 1
 
     cat > $DIR/$command <<EOF
 #!/bin/bash
