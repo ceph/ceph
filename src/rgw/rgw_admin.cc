@@ -4474,23 +4474,6 @@ next:
       return -ret;
     }
   }
-  
-  if (opt_cmd == OPT_MDLOG_FETCH) {
-    RGWMetaSyncStatusManager sync(store, store->get_async_rados());
-
-    int ret = sync.init();
-    if (ret < 0) {
-      cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
-      return -ret;
-    }
-
-    ret = sync.fetch();
-    if (ret < 0) {
-      cerr << "ERROR: sync.fetch() returned ret=" << ret << std::endl;
-      return -ret;
-    }
-
-  }
 
   if (opt_cmd == OPT_METADATA_SYNC_STATUS) {
     RGWMetaSyncStatusManager sync(store, store->get_async_rados());

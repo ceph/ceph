@@ -172,7 +172,6 @@ public:
   void finish();
 
   int read_log_info(rgw_mdlog_info *log_info);
-  int fetch(int num_shards, vector<string>& clone_markers);
   int read_sync_status(rgw_meta_sync_status *sync_status);
   int init_sync_status(int num_shards);
   int set_sync_info(const rgw_meta_sync_info& sync_info);
@@ -225,7 +224,6 @@ public:
 
   int read_sync_status() { return master_log.read_sync_status(&sync_status); }
   int init_sync_status() { return master_log.init_sync_status(num_shards); }
-  int fetch() { return master_log.fetch(num_shards, clone_markers); }
 
   int run() { return master_log.run_sync(num_shards, sync_status); }
 
