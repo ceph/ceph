@@ -9,8 +9,6 @@ public:
   }
 };
 
-::testing::Environment* const crypto_env = ::testing::AddGlobalTestEnvironment(new CryptoEnvironment);
-
 TEST(MD5, Simple) {
   ceph::crypto::MD5 h;
   h.Update((const byte*)"foo", 3);
