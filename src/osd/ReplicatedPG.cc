@@ -2147,7 +2147,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       return cache_result_t::BLOCKED_FULL;
     }
 
-    if (!hit_set) {
+    if (!hit_set && (must_promote || !op->need_skip_promote()) ) {
       promote_object(obc, missing_oid, oloc, op, promote_obc);
       return cache_result_t::BLOCKED_PROMOTE;
     } else if (op->may_write() || op->may_cache()) {
