@@ -1488,19 +1488,6 @@ void RGWRemoteMetaLog::init_sync_env(RGWMetaSyncEnv *env) {
   env->http_manager = &http_manager;
 }
 
-int RGWRemoteMetaLog::fetch(int num_shards, vector<string>& clone_markers)
-{
-  list<RGWCoroutinesStack *> stacks;
-  for (int i = 0; i < (int)num_shards; i++) {
-    RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
-    stack->call(new RGWCloneMetaLogCoroutine(&sync_env, i, clone_markers[i], NULL));
-
-    stacks.push_back(stack);
-  }
-
-  return run(stacks);
-}
-
 int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
 {
   if (store->is_meta_master()) {
