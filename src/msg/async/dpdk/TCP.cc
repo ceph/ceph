@@ -593,7 +593,7 @@ template <typename InetTraits>
 void tcp<InetTraits>::tcb::close_final_cleanup()
 {
   if (_snd._all_data_acked_fd >= 0) {
-    manager.close(_snd._all_data_acked_fd);
+    _tcp.manager.close(_snd._all_data_acked_fd);
     _snd._all_data_acked_fd = -1;
   }
 

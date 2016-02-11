@@ -40,6 +40,9 @@ class DPDKServerSocketImpl : public ServerSocketImpl {
   DPDKServerSocketImpl(Protocol& proto, uint16_t port, const SocketOptions &opt);
   virtual int accept(ConnectedSocket *s, entity_addr_t *out) override;
   virtual void abort_accept() override;
+  virtual int fd() const override {
+    return _listener.fd();
+  }
 };
 
 
@@ -104,6 +107,9 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   }
   // FIXME need to impl close
   virtual void close() override { return ; }
+  virtual int fd() const override {
+    return _conn.fd();
+  }
 };
 
 template <typename Protocol>

@@ -337,7 +337,6 @@ class tcp {
       tcp_packet_merger out_of_order;
     } _rcv;
     EventCenter *center;
-    UserspaceEventManager &manager;
     int fd;
     int16_t _errno = 0;
     tcp_option _option;
@@ -500,11 +499,11 @@ class tcp {
           typename InetTraits::l4packet{_foreign_ip, std::move(p)});
     }
     void signal_data_received() {
-      manager.notify(fd);
+      _tcp.manager.notify(fd);
     }
     void signal_all_data_acked() {
       if (_snd._all_data_acked_fd >= 0 && _snd.unsent_len == 0 && _snd.queued_len == 0)
-        manager.notify(_snd._all_data_acked_fd);
+        _tcp.manager.notify(_snd._all_data_acked_fd);
     }
     void do_syn_sent() {
       _state = SYN_SENT;
@@ -529,10 +528,10 @@ class tcp {
       _tcp.user_queue_space.reset();
       cleanup();
       _errno = -ECONNRESET;
-      manager.notify(fd, EVENT_READABLE);
+      _tcp.manager.notify(fd, EVENT_READABLE);
 
       if (_snd._all_data_acked_fd >= 0)
-        manager.notify(_snd._all_data_acked_fd, EVENT_READABLE);
+        _tcp.manager.notify(_snd._all_data_acked_fd, EVENT_READABLE);
     }
     void do_time_wait() {
       // FIXME: Implement TIME_WAIT state timer
@@ -589,6 +588,7 @@ class tcp {
   // ipv4_l4<ip_protocol_num::tcp>
   inet_type& _inet;
   EventCenter *center;
+  UserspaceEventManager &manager;
   std::unordered_map<connid, lw_shared_ptr<tcb>, connid_hash> _tcbs;
   std::unordered_map<uint16_t, listener*> _listening;
   std::random_device _rd;
@@ -644,12 +644,14 @@ class tcp {
   class listener {
     tcp& _tcp;
     uint16_t _port;
+    int _fd;
     int16_t _errno;
     queue<connection> _q;
     size_t _q_max_length;
    private:
     listener(tcp& t, uint16_t port, size_t queue_length)
-        : _tcp(t), _port(port), _errno(0), _q(), _q_max_length(queue_length) {
+        : _tcp(t), _port(port), _fd(t.manager.get_eventfd()), _errno(0),
+          _q(), _q_max_length(queue_length) {
       _tcp._listening.emplace(port, this);
     }
    public:
@@ -662,6 +664,7 @@ class tcp {
       if (_port) {
         _tcp._listening.erase(_port);
       }
+      _tcp.manager.close(_fd);
     }
     Tub<connection> accept() {
       Tub<connection> c;
@@ -681,6 +684,9 @@ class tcp {
     }
     bool full() const {
       return _q.size() == _q_max_length;
+    }
+    int fd() const {
+      return _fd;
     }
     friend class tcp;
   };
@@ -702,9 +708,10 @@ class tcp {
 };
 
 template <typename InetTraits>
-tcp<InetTraits>::tcp(CephContext *cct, inet_type& inet, EventCenter *cen)
-    : _inet(inet), center(cen), _e(_rd()),
-      _queue_space(cct, "DPDK::tcp::queue_space", 212992),
+tcp<InetTraits>::tcp(CephContext *c, inet_type& inet, EventCenter *cen)
+    : cct(c), _inet(inet), center(cen),
+      manager(static_cast<DPDKDriver*>(cen->get_driver())->manager),
+      _e(_rd()), _queue_space(cct, "DPDK::tcp::queue_space", 212992),
       user_queue_space(cct, "DPDK::tcp::user_queue_space", 212992) {
   int tcb_polled = 0u;
   _inet.register_packet_provider([this, tcb_polled] () mutable {
@@ -822,6 +829,7 @@ void tcp<InetTraits>::received(Packet p, ipaddr from, ipaddr to) {
         // NOTE: Ignored for now
         tcbp = make_lw_shared<tcb>(*this, id);
         listener->second->_q.push(connection(tcbp));
+        manager.notify(listener->second->_fd);
         _tcbs.insert({id, tcbp});
         return tcbp->input_handle_listen_state(&h, std::move(p));
       }
@@ -869,8 +877,7 @@ tcp<InetTraits>::tcb::tcb(tcp& t, connid id)
     : _tcp(t), _local_ip(id.local_ip) , _foreign_ip(id.foreign_ip),
       _local_port(id.local_port), _foreign_port(id.foreign_port),
       center(t.center),
-      manager(static_cast<DPDKDriver*>(t.center->get_driver())->manager),
-      fd(manager.get_eventfd()),
+      fd(t.manager.get_eventfd()),
       delayed_ack_event(new tcp<InetTraits>::C_handle_delayed_ack(this)),
       retransmit_event(new tcp<InetTraits>::C_handle_retransmit(this)),
       persist_event(new tcp<InetTraits>::C_handle_persist(this)),
@@ -889,7 +896,7 @@ tcp<InetTraits>::tcb::~tcb()
   delete retransmit_event;
   delete persist_event;
   delete all_data_ack_event;
-  manager.close(fd);
+  _tcp.manager.close(fd);
 }
 
 template <typename InetTraits>
@@ -1240,7 +1247,7 @@ int tcp<InetTraits>::tcb::send(Packet p) {
   if (can_send() > 0) {
     output();
   }
-  return 0;
+  return len;
 }
 
 template <typename InetTraits>
@@ -1252,7 +1259,7 @@ void tcp<InetTraits>::tcb::close() {
 
   bool acked = is_all_data_acked();
   if (!acked) {
-    _snd._all_data_acked_fd = manager.get_eventfd();
+    _snd._all_data_acked_fd = _tcp.manager.get_eventfd();
     center->create_file_event(_snd._all_data_acked_fd, EVENT_READABLE, all_data_ack_event);
   } else {
     close_final_cleanup();
@@ -1519,7 +1526,7 @@ Tub<typename InetTraits::l4packet> tcp<InetTraits>::tcb::get_packet() {
 
 template <typename InetTraits>
 void tcp<InetTraits>::connection::close_read() {
-  _tcb->manager.notify(_tcb->fd);
+  _tcb->_tcp.manager.notify(_tcb->fd);
 }
 
 template <typename InetTraits>

@@ -51,15 +51,30 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
 };
 
 TEST_P(TransportTest, SimpleTest) {
-    entity_addr_t bind_addr;
-    bind_addr.parse("127.0.0.1:80");
-    SocketOptions options;
-    ServerSocket srv_socket;
-    int r = transport->listen(bind_addr, options, &srv_socket);
-    ASSERT_EQ(r, 0);
-    ConnectedSocket cli_socket;
-    r = transport->connect(bind_addr, options, &cli_socket);
-    ASSERT_EQ(r, 0);
+  entity_addr_t bind_addr, cli_addr;
+  bind_addr.parse("127.0.0.1:80");
+  SocketOptions options;
+  ServerSocket bind_socket;
+  int r = transport->listen(bind_addr, options, &bind_socket);
+  ASSERT_EQ(r, 0);
+  ConnectedSocket cli_socket, srv_socket;
+  r = transport->connect(bind_addr, options, &cli_socket);
+  ASSERT_EQ(r, 0);
+
+  r = bind_socket.accept(&srv_socket, &cli_addr);
+  ASSERT_EQ(r, 0);
+
+  struct msghdr msg;
+  struct iovec msgvec[2];
+  const char *message = "this is a new message";
+  int len = strlen(message);
+  memset(&msg, 0, sizeof(msg));
+  msg.msg_iovlen = 1;
+  msg.msg_iov = msgvec;
+  msgvec[0].iov_base = (char*)message;
+  msgvec[0].iov_len = len;
+  r = cli_socket.sendmsg(msg, len, false);
+  ASSERT_EQ(r, len);
 }
 
 INSTANTIATE_TEST_CASE_P(

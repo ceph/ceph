@@ -37,35 +37,38 @@
 
 class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   NetHandler &handler;
-  int fd;
+  int _fd;
   entity_addr_t sa;
   bool connected;
 
  public:
   explicit PosixConnectedSocketImpl(NetHandler &h, const entity_addr_t &sa, int f, bool connected)
-      : handler(h), fd(f), sa(sa), connected(connected) {}
+      : handler(h), _fd(f), sa(sa), connected(connected) {}
 
   virtual int is_connected() override {
     if (connected)
       return connected;
 
-    int r = handler.reconnect(sa, fd);
+    int r = handler.reconnect(sa, _fd);
     if (r > 0)
       connected = true;
     return r;
   }
 
   virtual int read(char *buf, size_t len) {
-    return ::read(fd, buf, len);
+    return ::read(_fd, buf, len);
   }
   virtual int sendmsg(struct msghdr &msg, size_t len, bool more) {
-    return ::sendmsg(fd, &msg, more);
+    return ::sendmsg(_fd, &msg, more);
   }
   virtual void shutdown() {
-    ::shutdown(fd, SHUT_RDWR);
+    ::shutdown(_fd, SHUT_RDWR);
   }
   virtual void close() {
-    ::close(fd);
+    ::close(_fd);
+  }
+  virtual int fd() const override {
+    return _fd;
   }
   friend class PosixServerSocketImpl;
   friend class PosixNetworkStack;
@@ -74,24 +77,27 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 class PosixServerSocketImpl : public ServerSocketImpl {
   NetHandler &handler;
   entity_addr_t sa;
-  int fd;
+  int _fd;
 
  public:
-  explicit PosixServerSocketImpl(NetHandler &h, const entity_addr_t &sa, int fd): handler(h), sa(sa), fd(fd) {}
+  explicit PosixServerSocketImpl(NetHandler &h, const entity_addr_t &sa, int f): handler(h), sa(sa), _fd(f) {}
   virtual int accept(ConnectedSocket *sock, entity_addr_t *out) override;
   virtual void abort_accept() override {
-    ::close(fd);
+    ::close(_fd);
+  }
+  virtual int fd() const override {
+    return _fd;
   }
 };
 
 int PosixServerSocketImpl::accept(ConnectedSocket *sock, entity_addr_t *out) {
   assert(sock);
   socklen_t slen = sizeof(out->ss_addr());
-  int sd = ::accept(fd, (sockaddr*)&out->ss_addr(), &slen);
+  int sd = ::accept(_fd, (sockaddr*)&out->ss_addr(), &slen);
   if (sd >= 0) {
     return sd;
   }
-  std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, sa, fd, false));
+  std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, sa, _fd, false));
   *sock = ConnectedSocket(std::move(csi));
   if (out)
     *out = sa;

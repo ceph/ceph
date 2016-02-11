@@ -30,6 +30,7 @@ class ConnectedSocketImpl {
   virtual int sendmsg(struct msghdr &msg, size_t len, bool more) = 0;
   virtual void shutdown() = 0;
   virtual void close() = 0;
+  virtual int fd() const = 0;
 };
 
 class ConnectedSocket;
@@ -40,6 +41,8 @@ class ServerSocketImpl {
   virtual ~ServerSocketImpl() {}
   virtual int accept(ConnectedSocket *sock, entity_addr_t *out) = 0;
   virtual void abort_accept() = 0;
+  /// Get file descriptor
+  virtual int fd() const = 0;
 };
 /// \endcond
 
@@ -97,9 +100,11 @@ class ConnectedSocket {
   void close() {
     return _csi->close();
   }
-  /// Disables socket input and output.
-  ///
-  /// Equivalent to \ref shutdown_input() and \ref shutdown_output().
+
+  /// Get file descriptor
+  int fd() const {
+    return _csi->fd();
+  }
 };
 /// @}
 
@@ -135,6 +140,11 @@ class ServerSocket {
   /// with an error.
   void abort_accept() {
     return _ssi->abort_accept();
+  }
+
+  /// Get file descriptor
+  int fd() const {
+    return _ssi->fd();
   }
 };
 /// @}
