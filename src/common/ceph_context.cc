@@ -27,6 +27,7 @@
 #include "common/errno.h"
 #include "common/lockdep.h"
 #include "common/Formatter.h"
+#include "common/Graylog.h"
 #include "log/Log.h"
 #include "auth/Crypto.h"
 #include "include/str_list.h"

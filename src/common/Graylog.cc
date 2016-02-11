@@ -5,16 +5,15 @@
 
 #include <iostream>
 #include <sstream>
-#include <memory>
 
 #include <arpa/inet.h>
 
-#include <boost/asio.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
-#include <boost/iostreams/filter/zlib.hpp>
 #include <boost/lexical_cast.hpp>
 
 #include "common/Formatter.h"
+#include "common/LogEntry.h"
+#include "log/Entry.h"
+#include "log/SubsystemMap.h"
 #include "include/uuid.h"
 
 namespace ceph {
@@ -71,7 +70,7 @@ void Graylog::set_hostname(const std::string& host)
   m_hostname = host;
 }
 
-void Graylog::set_fsid(uuid_d fsid)
+void Graylog::set_fsid(const uuid_d& fsid)
 {
   std::vector<char> buf(40);
   fsid.print(&buf[0]);
