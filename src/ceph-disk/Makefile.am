@@ -32,7 +32,7 @@ EXTRA_DIST += \
 ceph-disk-all: ceph-disk/virtualenv
 
 ceph-disk/virtualenv:
-	cd $(srcdir)/ceph-disk ; ../tools/setup-virtualenv.sh ; virtualenv/bin/python setup.py develop
+	cd $(srcdir)/ceph-disk ; ../tools/setup-virtualenv.sh ; test -d wheelhouse && export NO_INDEX=--no-index ; virtualenv/bin/pip install $$NO_INDEX --use-wheel --find-links=file://$$(pwd)/wheelhouse -e .
 
 ceph-disk-clean:
 	cd $(srcdir)/ceph-disk ; python setup.py clean ; rm -fr wheelhouse .tox virtualenv .coverage *.egg-info
