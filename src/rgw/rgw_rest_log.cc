@@ -125,8 +125,8 @@ void RGWOp_MDLog_List::send_response() {
 
 void RGWOp_MDLog_Info::execute() {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
-  // TODO: return the period id of our oldest metadata log
-  http_ret = 0;
+  period = store->meta_mgr->get_oldest_log_period();
+  http_ret = period.get_error();
 }
 
 void RGWOp_MDLog_Info::send_response() {
@@ -134,8 +134,12 @@ void RGWOp_MDLog_Info::send_response() {
   dump_errno(s);
   end_header(s);
 
-  s->formatter->open_object_section("num_objects");
+  s->formatter->open_object_section("mdlog");
   s->formatter->dump_unsigned("num_objects", num_objects);
+  if (period) {
+    s->formatter->dump_string("period", period.get_period().get_id());
+    s->formatter->dump_unsigned("realm_epoch", period.get_epoch());
+  }
   s->formatter->close_section();
   flusher.flush();
 }

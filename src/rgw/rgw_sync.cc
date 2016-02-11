@@ -112,6 +112,8 @@ int RGWBackoffControlCR::operate() {
 
 void rgw_mdlog_info::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("num_objects", num_shards, obj);
+  JSONDecoder::decode_json("period", period, obj);
+  JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
 }
 
 struct rgw_mdlog_entry {
@@ -1538,20 +1540,21 @@ int RGWRemoteMetaLog::init_sync_status()
     return 0;
   }
 
-  auto num_shards = sync_status.sync_info.num_shards;
-  if (!num_shards) {
+  auto& sync_info = sync_status.sync_info;
+  if (!sync_info.num_shards) {
     rgw_mdlog_info mdlog_info;
     int r = read_log_info(&mdlog_info);
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: fail to fetch master log info (r=" << r << ")" << dendl;
       return r;
     }
-    num_shards = mdlog_info.num_shards;
+    sync_info.num_shards = mdlog_info.num_shards;
+    sync_info.period = mdlog_info.period;
+    sync_info.realm_epoch = mdlog_info.realm_epoch;
   }
 
   RGWObjectCtx obj_ctx(store, NULL);
-  return run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx,
-                                            sync_status.sync_info));
+  return run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx, sync_info));
 }
 
 int RGWRemoteMetaLog::store_sync_info()
@@ -1568,6 +1571,7 @@ int RGWRemoteMetaLog::run_sync()
 
   RGWObjectCtx obj_ctx(store, NULL);
 
+  // get shard count and oldest log period from master
   rgw_mdlog_info mdlog_info;
   int r = read_log_info(&mdlog_info);
   if (r < 0) {
@@ -1582,8 +1586,17 @@ int RGWRemoteMetaLog::run_sync()
       return r;
     }
 
+    if (!mdlog_info.period.empty() && sync_status.sync_info.period.empty()) {
+      // restart sync if the remote has a period but our status does not
+      sync_status.sync_info.state = rgw_meta_sync_info::StateInit;
+    }
+
     if (sync_status.sync_info.state == rgw_meta_sync_info::StateInit) {
       ldout(store->ctx(), 20) << __func__ << "(): init" << dendl;
+      sync_status.sync_info.num_shards = mdlog_info.num_shards;
+      // use the period/epoch from the master's oldest log
+      sync_status.sync_info.period = mdlog_info.period;
+      sync_status.sync_info.realm_epoch = mdlog_info.realm_epoch;
       r = run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx,
                                              sync_status.sync_info));
       if (r == -EBUSY) {
