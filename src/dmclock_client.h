@@ -36,7 +36,8 @@ namespace crimson {
 	delta_prev_req(_delta_prev_req),
 	rho_prev_req(_rho_prev_req),
 	my_delta(0),
-	my_rho(0)
+	my_rho(0),
+	last_update(std::chrono::steady_clock::now())
       {
 	// empty
       }
@@ -60,6 +61,7 @@ namespace crimson {
       }
     };
 
+    
     // S is server identifier type
     template<typename S>
     class ServiceTracker {
@@ -100,10 +102,6 @@ namespace crimson {
 
       void track_resp(const RespParams<S>& resp_params) {
 	DataGuard g(data_mtx);
-	++delta_counter;
-	if (PhaseType::reservation == resp_params.phase) {
-	  ++rho_counter;
-	}
 
 	auto it = service_map.find(resp_params.server);
 	if (service_map.end() == it) {
@@ -116,6 +114,11 @@ namespace crimson {
 	} else {
 	  it->second.resp_update(resp_params.phase);
 	}
+
+	++delta_counter;
+	if (PhaseType::reservation == resp_params.phase) {
+	  ++rho_counter;
+	}
       }
 
       template<typename C>
@@ -126,10 +129,10 @@ namespace crimson {
 	  service_map.emplace(server, ServerInfo(delta_counter, rho_counter));
 	  return ReqParams<C>(client, 1, 1);
 	} else {
-	  int delta = 1 + delta_counter - it->second.delta_prev_req -
-	    it->second.my_delta;
-	  int rho = 1 + rho_counter - it->second.rho_prev_req -
-	    it->second.my_rho;
+	  Counter delta =
+	    1 + delta_counter - it->second.delta_prev_req - it->second.my_delta;
+	  Counter rho =
+	    1 + rho_counter - it->second.rho_prev_req - it->second.my_rho;
 	  assert(delta >= 1 && rho >= 1);
 	  ReqParams<C> result(client, uint32_t(delta), uint32_t(rho));
 

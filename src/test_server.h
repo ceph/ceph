@@ -90,6 +90,9 @@ public:
   uint32_t get_res_count() const { return reservation_counter; }
   uint32_t get_prop_count() const { return proportion_counter; }
 
+  const crimson::dmclock::PriorityQueue<ClientId,TestRequest>&
+  get_priority_queue() const { return priority_queue; }
+
 protected:
 
   void inner_post(const ClientId& client,
