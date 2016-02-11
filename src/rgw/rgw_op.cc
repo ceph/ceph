@@ -1696,10 +1696,19 @@ void RGWCreateBucket::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
+static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
+                                  map<string, bufferlist>& out_attrs,
+                                  map<string, bufferlist>& out_rmattrs);
+static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
+                                  const set<string>& rmattr_names,
+                                  map<string, bufferlist>& out_attrs,
+                                  map<string, bufferlist>& out_rmattrs);
+static void populate_with_generic_attrs(const req_state * const s,
+                                        map<string, bufferlist>& out_attrs);
 void RGWCreateBucket::execute()
 {
   RGWAccessControlPolicy old_policy(s->cct);
-  map<string, bufferlist> attrs;
+  map<string, bufferlist> attrs, rmattrs;
   bufferlist aclbl;
   bufferlist corsbl;
   bool existed;
@@ -1738,6 +1747,12 @@ void RGWCreateBucket::execute()
         return;
       }
     }
+  }
+
+  if (need_metadata_upload()) {
+    rgw_get_request_metadata(s->cct, s->info, attrs, false);
+    prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs, rmattrs);
+    populate_with_generic_attrs(s, attrs);
   }
 
   RGWBucketInfo master_info;
@@ -1835,6 +1850,13 @@ void RGWCreateBucket::execute()
     }
   } else if (op_ret == -EEXIST || (op_ret == 0 && existed)) {
     op_ret = -ERR_BUCKET_EXISTS;
+  }
+
+  if (need_metadata_upload() && existed) {
+    do {
+      ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs,
+              &s->bucket_info.objv_tracker);
+    } while (ret == -EAGAIN);
   }
 }
 
