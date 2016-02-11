@@ -204,7 +204,6 @@ namespace librbd {
 	        char *buf, bufferlist *pbl, AioCompletion *c, int op_flags);
   void aio_flush(ImageCtx *ictx, AioCompletion *c);
   int flush(ImageCtx *ictx);
-  int _flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);
   int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
   int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);

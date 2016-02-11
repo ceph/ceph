@@ -218,12 +218,11 @@ namespace librbd {
     void write_to_cache(object_t o, const bufferlist& bl, size_t len,
 			uint64_t off, Context *onfinish, int fadvise_flags);
     void user_flushed();
-    void flush_cache_aio(Context *onfinish);
     int flush_cache();
+    void flush_cache(Context *onfinish);
     int shutdown_cache();
     int invalidate_cache(bool purge_on_error=false);
     void invalidate_cache(Context *on_finish);
-    void invalidate_cache_completion(int r, Context *on_finish);
     void clear_nonexistence_cache();
     int register_watch();
     void unregister_watch();
@@ -232,6 +231,9 @@ namespace librbd {
 
     void flush_async_operations();
     void flush_async_operations(Context *on_finish);
+
+    int flush();
+    void flush(Context *on_safe);
 
     void cancel_async_requests();
     void apply_metadata_confs();
