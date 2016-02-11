@@ -5071,22 +5071,6 @@ bool PG::can_discard_op(OpRequestRef& op)
     return true;
   }
 
-  if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
-      op->may_read() &&
-      !(op->may_write() || op->may_cache())) {
-    // balanced reads; any replica will do
-    if (!(is_primary() || is_replica())) {
-      osd->handle_misdirected_op(this, op);
-      return true;
-    }
-  } else {
-    // normal case; must be primary
-    if (!is_primary()) {
-      osd->handle_misdirected_op(this, op);
-      return true;
-    }
-  }
   if (is_replay()) {
     if (m->get_version().version > 0) {
       dout(7) << " queueing replay at " << m->get_version()
