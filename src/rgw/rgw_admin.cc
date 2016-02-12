@@ -120,6 +120,7 @@ void _usage()
   cout << "  orphans find               init and run search for leaked rados objects\n";
   cout << "  orphans finish             clean up search for leaked rados objects\n";
   cout << "options:\n";
+  cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
   cout << "   --subuser=<name>          subuser name\n";
   cout << "   --access-key=<key>        S3 access key\n";
@@ -167,7 +168,7 @@ void _usage()
   cout << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   cout << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
   cout << "                             in one of the numeric field\n";
-  cout << "   --infile                  specify a file to read in when setting data\n";
+  cout << "   --infile=<file>           specify a file to read in when setting data\n";
   cout << "   --state=<state string>    specify a state for the opstate set command\n";
   cout << "   --replica-log-type        replica log type (metadata, data, bucket), required for\n";
   cout << "                             replica log operations\n";
@@ -1866,7 +1867,7 @@ int main(int argc, char **argv)
   case OPT_CAPS_RM:
     ret = user.caps.remove(user_op, &err_msg);
     if (ret < 0) {
-      cerr << "could not add remove caps: " << err_msg << std::endl;
+      cerr << "could not remove caps: " << err_msg << std::endl;
       return -ret;
     }
 
