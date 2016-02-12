@@ -13,6 +13,8 @@
 #include "rgw_cr_rados.h"
 #include "rgw_boost_asio_yield.h"
 
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 void LogStatusDump::dump(Formatter *f) const {

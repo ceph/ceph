@@ -7,6 +7,8 @@
 #include <string>
 #include <map>
 
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 RGWEnv::RGWEnv()

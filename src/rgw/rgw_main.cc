@@ -356,6 +356,9 @@ int main(int argc, const char **argv)
     rest.register_resource(g_conf->rgw_admin_entry, admin_resource);
   }
 
+  /* Header custom behavior */
+  rest.register_x_headers(g_conf->rgw_log_http_headers);
+
   OpsLogSocket *olog = NULL;
 
   if (!g_conf->rgw_ops_log_socket_path.empty()) {
