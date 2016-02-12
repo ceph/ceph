@@ -12,6 +12,7 @@ PY_DISTUTILS = \
 	${PYTHON} ./setup.py
 
 include pybind/rbd/Makefile.am
+include pybind/rados/Makefile.am
 
 endif
 endif
