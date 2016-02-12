@@ -426,6 +426,7 @@ set(libcommon_files
   osdc/Objecter.cc
   common/Graylog.cc
   common/fs_types.cc
+  common/dns_resolve.cc
   ${arch_files}
   ${auth_files}
   $<TARGET_OBJECTS:compressor_objs>
@@ -478,7 +479,7 @@ endif(${HAVE_ARMV8_CRC})
 
 add_library(common_utf8 STATIC common/utf8.c)
 
-target_link_libraries(common json_spirit common_utf8 erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${EXECINFO_LIBRARIES})
+target_link_libraries(common json_spirit common_utf8 erasure_code rt uuid resolv ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${EXECINFO_LIBRARIES})
 
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
@@ -673,7 +674,6 @@ if(${WITH_RADOSGW})
     curl
     expat
     fcgi
-    resolv
   )
 endif(${WITH_RADOSGW})
 if(${WITH_RBD})
