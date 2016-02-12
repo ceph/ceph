@@ -64,6 +64,9 @@ void ReleaseRequest<I>::send_block_writes() {
 
   {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
+      m_image_ctx.aio_work_queue->set_require_lock_on_read();
+    }
     m_image_ctx.aio_work_queue->block_writes(ctx);
   }
 }

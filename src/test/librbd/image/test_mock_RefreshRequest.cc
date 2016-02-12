@@ -77,11 +77,20 @@ using ::testing::DoAll;
 using ::testing::DoDefault;
 using ::testing::InSequence;
 using ::testing::Return;
+using ::testing::WithArg;
 
 class TestMockImageRefreshRequest : public TestMockFixture {
 public:
   typedef RefreshRequest<MockImageCtx> MockRefreshRequest;
   typedef RefreshParentRequest<MockImageCtx> MockRefreshParentRequest;
+
+  void expect_set_require_lock_on_read(MockImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.aio_work_queue, set_require_lock_on_read());
+  }
+
+  void expect_clear_require_lock_on_read(MockImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.aio_work_queue, clear_require_lock_on_read());
+  }
 
   void expect_v1_read_header(MockImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
@@ -174,8 +183,8 @@ public:
                                   int r) {
     EXPECT_CALL(mock_image_ctx, create_exclusive_lock())
                   .WillOnce(Return(&mock_exclusive_lock));
-    EXPECT_CALL(mock_exclusive_lock, init(_))
-                  .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
+    EXPECT_CALL(mock_exclusive_lock, init(mock_image_ctx.features, _))
+                  .WillOnce(WithArg<1>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 
   void expect_shut_down_exclusive_lock(MockImageCtx &mock_image_ctx,
@@ -556,6 +565,7 @@ TEST_F(TestMockImageRefreshRequest, EnableJournalWithoutExclusiveLock) {
   expect_get_mutable_metadata(mock_image_ctx, 0);
   expect_get_flags(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
+  expect_set_require_lock_on_read(mock_image_ctx);
 
   C_SaferCond ctx;
   MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &ctx);
@@ -594,6 +604,7 @@ TEST_F(TestMockImageRefreshRequest, DisableJournal) {
   expect_get_mutable_metadata(mock_image_ctx, 0);
   expect_get_flags(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
+  expect_clear_require_lock_on_read(mock_image_ctx);
   expect_close_journal(mock_image_ctx, *mock_journal, 0);
 
   C_SaferCond ctx;
