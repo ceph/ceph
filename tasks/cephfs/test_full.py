@@ -245,10 +245,12 @@ class FullnessTestCase(CephFSTestCase):
             import os
 
             # Write some buffered data through before going full, all should be well
+            print "writing some data through which we expect to succeed"
             bytes = 0
             f = os.open("{file_path}", os.O_WRONLY | os.O_CREAT)
             bytes += os.write(f, 'a' * 4096)
             os.fsync(f)
+            print "fsync'ed data successfully, will now attempt to fill fs"
 
             # Okay, now we're going to fill up the filesystem, and then keep
             # writing until we see an error from fsync.  As long as we're doing
@@ -258,18 +260,23 @@ class FullnessTestCase(CephFSTestCase):
 
             for n in range(0, {fill_mb}):
                 bytes += os.write(f, 'x' * 1024 * 1024)
+                print "wrote bytes via buffered write, may repeat"
+            print "done writing bytes"
 
             # OK, now we should sneak in under the full condition
             # due to the time it takes the OSDs to report to the
             # mons, and get a successful fsync on our full-making data
             os.fsync(f)
+            print "successfully fsync'ed prior to getting full state reported"
 
             # Now wait for the full flag to get set so that our
             # next flush IO will fail
             time.sleep(30)
 
             # A buffered IO, should succeed
+            print "starting buffered write we expect to succeed"
             os.write(f, 'x' * 4096)
+            print "wrote, now waiting 30s and then doing a close we expect to fail"
 
             # Wait long enough for a background flush that should fail
             time.sleep(30)
@@ -302,10 +309,12 @@ class FullnessTestCase(CephFSTestCase):
             import os
 
             # Write some buffered data through before going full, all should be well
+            print "writing some data through which we expect to succeed"
             bytes = 0
             f = os.open("{file_path}", os.O_WRONLY | os.O_CREAT)
             bytes += os.write(f, 'a' * 4096)
             os.fsync(f)
+            print "fsync'ed data successfully, will now attempt to fill fs"
 
             # Okay, now we're going to fill up the filesystem, and then keep
             # writing until we see an error from fsync.  As long as we're doing
@@ -316,12 +325,14 @@ class FullnessTestCase(CephFSTestCase):
             for n in range(0, {fill_mb} + 1):
                 try:
                     bytes += os.write(f, 'x' * 1024 * 1024)
+                    print "wrote bytes via buffered write, moving on to fsync"
                 except OSError as e:
                     print "Unexpected error %s from write() instead of fsync()" % e
                     raise
 
                 try:
                     os.fsync(f)
+                    print "fsync'ed successfully"
                 except OSError as e:
                     print "Reached fullness after %.2f MB" % (bytes / (1024.0 * 1024.0))
                     full = True
@@ -332,6 +343,7 @@ class FullnessTestCase(CephFSTestCase):
                 if n > {fill_mb} * 0.8:
                     # Be cautious in the last region where we expect to hit
                     # the full condition, so that we don't overshoot too dramatically
+                    print "sleeping a bit as we've exceeded 80% of our expected full ratio"
                     time.sleep({full_wait})
 
             if not full:
