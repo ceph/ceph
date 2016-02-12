@@ -1583,12 +1583,11 @@ int BlueStore::_setup_block_symlink_or_file(
     flags |= O_CREAT;
   if (epath.length()) {
     if (!epath.compare(0, sizeof(SPDK_PREFIX)-1, SPDK_PREFIX)) {
-      string symbol_spdk_file = path + "/" + epath;
-      r = ::symlinkat(symbol_spdk_file.c_str(), path_fd, name.c_str());
+      r = ::symlinkat(epath.c_str(), path_fd, name.c_str());
       if (r < 0) {
         r = -errno;
         derr << __func__ << " failed to create " << name << " symlink to "
-    	     << symbol_spdk_file << ": " << cpp_strerror(r) << dendl;
+    	     << epath << ": " << cpp_strerror(r) << dendl;
         return r;
       }
       int fd = ::openat(path_fd, epath.c_str(), flags, 0644);
