@@ -1578,6 +1578,9 @@ int BlueStore::_setup_block_symlink_or_file(
   dout(20) << __func__ << " name " << name << " path " << epath
 	   << " size " << size << " create=" << (int)create << dendl;
   int r = 0;
+  unsigned flags = O_RDWR;
+  if (create)
+    flags |= O_CREAT;
   if (epath.length()) {
     if (!epath.compare(0, sizeof(SPDK_PREFIX)-1, SPDK_PREFIX)) {
       string symbol_spdk_file = path + "/" + epath;
@@ -1588,7 +1591,7 @@ int BlueStore::_setup_block_symlink_or_file(
     	     << symbol_spdk_file << ": " << cpp_strerror(r) << dendl;
         return r;
       }
-      int fd = ::openat(path_fd, epath.c_str(), O_RDWR, 0644);
+      int fd = ::openat(path_fd, epath.c_str(), flags, 0644);
       if (fd < 0) {
 	r = -errno;
 	derr << __func__ << " failed to open " << epath << " file: "
@@ -1611,9 +1614,6 @@ int BlueStore::_setup_block_symlink_or_file(
     }
   }
   if (size) {
-    unsigned flags = O_RDWR;
-    if (create)
-      flags |= O_CREAT;
     int fd = ::openat(path_fd, name.c_str(), flags, 0644);
     if (fd >= 0) {
       // block file is present
