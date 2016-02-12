@@ -59,6 +59,12 @@ struct RollbackVisitor : public ObjectModDesc::Visitor {
     temp.append(t);
     temp.swap(t);
   }
+  void try_rmobject(version_t old_version) {
+    ObjectStore::Transaction temp;
+    pg->rollback_try_stash(hoid, old_version, &temp);
+    temp.append(t);
+    temp.swap(t);
+  }
   void create() {
     ObjectStore::Transaction temp;
     pg->rollback_create(hoid, &temp);
@@ -81,6 +87,17 @@ void PGBackend::rollback(
   t->append(vis.t);
 }
 
+
+void PGBackend::try_stash(
+  const hobject_t &hoid,
+  version_t v,
+  ObjectStore::Transaction *t)
+{
+  t->try_rename(
+    coll,
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    ghobject_t(hoid, v, get_parent()->whoami_shard().shard));
+}
 
 void PGBackend::on_change_cleanup(ObjectStore::Transaction *t)
 {
@@ -250,6 +267,20 @@ void PGBackend::rollback_stash(
     coll,
     ghobject_t(hoid, old_version, get_parent()->whoami_shard().shard),
     coll,
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
+}
+
+void PGBackend::rollback_try_stash(
+  const hobject_t &hoid,
+  version_t old_version,
+  ObjectStore::Transaction *t) {
+  assert(!hoid.is_temp());
+  t->remove(
+    coll,
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
+  t->try_rename(
+    coll,
+    ghobject_t(hoid, old_version, get_parent()->whoami_shard().shard),
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
 }
 

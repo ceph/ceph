@@ -49,6 +49,7 @@
 #include "messages/MOSDPGPushReply.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
+#include "messages/MCommandReply.h"
 
 #include "Watch.h"
 
@@ -685,8 +686,13 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
 
 // ==========================================================
 
-int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
-			     bufferlist& idata, bufferlist& odata)
+int ReplicatedPG::do_command(
+  cmdmap_t cmdmap,
+  ostream& ss,
+  bufferlist& idata,
+  bufferlist& odata,
+  ConnectionRef con,
+  ceph_tid_t tid)
 {
   const pg_missing_t &missing = pg_log.get_missing();
   string prefix;
@@ -791,10 +797,8 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
       return -EINVAL;
     }
 
-    ss << "pg has " << unfound
-       << " objects unfound and apparently lost, marking";
-    mark_all_unfound_lost(mode);
-    return 0;
+    mark_all_unfound_lost(mode, con, tid);
+    return -EAGAIN;
   }
   else if (command == "list_missing") {
     hobject_t offset;
@@ -8461,6 +8465,26 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(
 
   return repop;
 }
+
+ReplicatedPG::RepGather *ReplicatedPG::new_repop(
+  ObcLockManager &&manager,
+  boost::optional<std::function<void(void)> > &&on_complete)
+{
+  RepGather *repop = new RepGather(
+    std::move(manager),
+    std::move(on_complete),
+    osd->get_tid(),
+    info.last_complete);
+
+  repop->start = ceph_clock_now(cct);
+
+  repop_queue.push_back(&repop->queue_item);
+  repop->get();
+
+  osd->logger->inc(l_osd_op_wip);
+
+  return repop;
+}
  
 void ReplicatedPG::remove_repop(RepGather *repop)
 {
@@ -8498,6 +8522,123 @@ void ReplicatedPG::simple_opc_submit(OpContextUPtr ctx)
   issue_repop(repop, ctx.get());
   eval_repop(repop);
   repop->put();
+}
+
+
+void ReplicatedPG::submit_log_entries(
+  const list<pg_log_entry_t> &entries,
+  ObcLockManager &&manager,
+  boost::optional<std::function<void(void)> > &&on_complete)
+{
+  dout(10) << __func__ << entries << dendl;
+  assert(is_primary());
+
+  ObjectStore::Transaction t;
+
+  eversion_t old_last_update = info.last_update;
+  merge_new_log_entries(entries, t);
+
+  boost::intrusive_ptr<RepGather> repop;
+  set<pg_shard_t> waiting_on;
+  if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+    repop = new_repop(
+      std::move(manager),
+      std::move(on_complete));
+  }
+  for (set<pg_shard_t>::const_iterator i = actingbackfill.begin();
+       i != actingbackfill.end();
+       ++i) {
+    pg_shard_t peer(*i);
+    if (peer == pg_whoami) continue;
+    assert(peer_missing.count(peer));
+    assert(peer_info.count(peer));
+    if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+      assert(repop);
+      MOSDPGUpdateLogMissing *m = new MOSDPGUpdateLogMissing(
+	entries,
+	spg_t(info.pgid.pgid, i->shard),
+	pg_whoami.shard,
+	get_osdmap()->get_epoch(),
+	repop->rep_tid);
+      osd->send_message_osd_cluster(
+	peer.osd, m, get_osdmap()->get_epoch());
+      waiting_on.insert(peer);
+    } else {
+      MOSDPGLog *m = new MOSDPGLog(
+	peer.shard, pg_whoami.shard,
+	info.last_update.epoch,
+	info);
+      m->log.log = entries;
+      m->log.tail = old_last_update;
+      m->log.head = info.last_update;
+      osd->send_message_osd_cluster(
+	peer.osd, m, get_osdmap()->get_epoch());
+    }
+  }
+  if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+    ceph_tid_t rep_tid = repop->rep_tid;
+    waiting_on.insert(pg_whoami);
+    log_entry_update_waiting_on.insert(
+      make_pair(
+	rep_tid,
+	LogUpdateCtx{std::move(repop), std::move(waiting_on)}
+	));
+    struct OnComplete : public Context {
+      ReplicatedPGRef pg;
+      ceph_tid_t rep_tid;
+      epoch_t epoch;
+      OnComplete(
+	ReplicatedPGRef pg,
+	ceph_tid_t rep_tid,
+	epoch_t epoch)
+	: pg(pg), rep_tid(rep_tid), epoch(epoch) {}
+      void finish(int) override {
+	pg->lock();
+	if (!pg->pg_has_reset_since(epoch)) {
+	  auto it = pg->log_entry_update_waiting_on.find(rep_tid);
+	  assert(it != pg->log_entry_update_waiting_on.end());
+	  auto it2 = it->second.waiting_on.find(pg->pg_whoami);
+	  assert(it2 != it->second.waiting_on.end());
+	  it->second.waiting_on.erase(it2);
+	  if (it->second.waiting_on.empty()) {
+	    pg->repop_all_applied(it->second.repop.get());
+	    pg->repop_all_committed(it->second.repop.get());
+	    pg->log_entry_update_waiting_on.erase(it);
+	  }
+	}
+	pg->unlock();
+      }
+    };
+    t.register_on_complete(
+      new OnComplete{this, rep_tid, get_osdmap()->get_epoch()});
+  } else {
+    if (on_complete) {
+      struct OnComplete : public Context {
+	ReplicatedPGRef pg;
+	std::function<void(void)> on_complete;
+	epoch_t epoch;
+	OnComplete(
+	  ReplicatedPGRef pg,
+	  std::function<void(void)> &&on_complete,
+	  epoch_t epoch)
+	  : pg(pg),
+	    on_complete(std::move(on_complete)),
+	    epoch(epoch) {}
+	void finish(int) override {
+	  pg->lock();
+	  if (!pg->pg_has_reset_since(epoch))
+	    on_complete();
+	  pg->unlock();
+	}
+      };
+      t.register_on_complete(
+	new OnComplete{
+	  this, std::move(*on_complete), get_osdmap()->get_epoch()
+	  });
+    }
+  }
+  int r = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+  assert(r == 0);
 }
 
 // -------------------------------------------------------
@@ -8658,11 +8799,12 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
     ctx->log.back().mod_desc.mark_unrollbackable();
   }
 
-  // no ctx->delta_stats
-  simple_opc_submit(std::move(ctx));
 
   // apply new object state.
   ctx->obc->obs = ctx->new_obs;
+
+  // no ctx->delta_stats
+  simple_opc_submit(std::move(ctx));
 }
 
 ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
@@ -9465,26 +9607,81 @@ ObjectContextRef ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
   return obc;
 }
 
-struct C_PG_MarkUnfoundLost : public Context {
-  ReplicatedPGRef pg;
-  list<ObjectContextRef> obcs;
-  explicit C_PG_MarkUnfoundLost(ReplicatedPG *p) : pg(p) {}
-  void finish(int r) {
-    pg->_finish_mark_all_unfound_lost(obcs);
-  }
-};
-
 void ReplicatedPG::do_update_log_missing(OpRequestRef &op)
 {
+  MOSDPGUpdateLogMissing *m = static_cast<MOSDPGUpdateLogMissing*>(
+    op->get_req());
+  assert(m->get_type() == MSG_OSD_PG_UPDATE_LOG_MISSING);
+  ObjectStore::Transaction t;
+  append_log_entries_update_missing(m->entries, t);
+  // TODO FIX
+
+  Context *c = new FunctionContext(
+      [=](int) {
+	MOSDPGUpdateLogMissing *msg =
+	  static_cast<MOSDPGUpdateLogMissing*>(
+	    op->get_req());
+	MOSDPGUpdateLogMissingReply *reply =
+	  new MOSDPGUpdateLogMissingReply(
+	    spg_t(info.pgid.pgid, primary_shard().shard),
+	    pg_whoami.shard,
+	    msg->get_epoch(),
+	    msg->get_tid());
+	reply->set_priority(CEPH_MSG_PRIO_HIGH);
+	msg->get_connection()->send_message(reply);
+      });
+
+  /* Hack to work around the fact that ReplicatedBackend sends
+   * ack+commit if commit happens first */
+  if (pool.info.ec_pool()) {
+    t.register_on_complete(c);
+  } else {
+    t.register_on_commit(c);
+  }
+  int tr = osd->store->queue_transaction(
+    osr.get(),
+    std::move(t),
+    nullptr);
+  assert(tr == 0);
 }
 
 void ReplicatedPG::do_update_log_missing_reply(OpRequestRef &op)
 {
+  MOSDPGUpdateLogMissingReply *m =
+    static_cast<MOSDPGUpdateLogMissingReply*>(
+    op->get_req());
+  dout(20) << __func__ << " got reply from "
+	   << m->get_from() << dendl;
+
+  auto it = log_entry_update_waiting_on.find(m->get_tid());
+  if (it != log_entry_update_waiting_on.end()) {
+    if (it->second.waiting_on.count(m->get_from())) {
+      it->second.waiting_on.erase(m->get_from());
+    } else {
+      osd->clog->error()
+	<< info.pgid << " got reply "
+	<< *m << " from shard we are not waiting for "
+	<< m->get_from();
+    }
+
+    if (it->second.waiting_on.empty()) {
+      repop_all_applied(it->second.repop.get());
+      repop_all_committed(it->second.repop.get());
+      log_entry_update_waiting_on.erase(it);
+    }
+  } else {
+    osd->clog->error()
+      << info.pgid << " got reply "
+      << *m << " on unknown tid " << m->get_tid();
+  }
 }
 
 /* Mark all unfound objects as lost.
  */
-void ReplicatedPG::mark_all_unfound_lost(int what)
+void ReplicatedPG::mark_all_unfound_lost(
+  int what,
+  ConnectionRef con,
+  ceph_tid_t tid)
 {
   dout(3) << __func__ << " " << pg_log_entry_t::get_op_name(what) << dendl;
 
@@ -9492,16 +9689,18 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   pg_log.get_log().print(*_dout);
   *_dout << dendl;
 
-  ObjectStore::Transaction t;
-  C_PG_MarkUnfoundLost *c = new C_PG_MarkUnfoundLost(this);
+  list<pg_log_entry_t> log_entries;
 
   utime_t mtime = ceph_clock_now(cct);
-  info.last_update.epoch = get_osdmap()->get_epoch();
-  const pg_missing_t &missing = pg_log.get_missing();
   map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator m =
     missing_loc.get_needs_recovery().begin();
   map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator mend =
     missing_loc.get_needs_recovery().end();
+
+  ObcLockManager manager;
+  eversion_t v = info.last_update;
+  v.epoch = get_osdmap()->get_epoch();
+  unsigned num_unfound = missing_loc.num_unfound();
   while (m != mend) {
     const hobject_t &oid(m->first);
     if (!missing_loc.is_unfound(oid)) {
@@ -9515,47 +9714,43 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 
     switch (what) {
     case pg_log_entry_t::LOST_MARK:
-      obc = mark_object_lost(&t, oid, m->second.need, mtime, pg_log_entry_t::LOST_MARK);
-      pg_log.missing_got(m++);
       assert(0 == "actually, not implemented yet!");
-      // we need to be careful about how this is handled on the replica!
       break;
 
     case pg_log_entry_t::LOST_REVERT:
       prev = pick_newest_available(oid);
       if (prev > eversion_t()) {
 	// log it
-	++info.last_update.version;
+	++v.version;
 	pg_log_entry_t e(
-	  pg_log_entry_t::LOST_REVERT, oid, info.last_update,
+	  pg_log_entry_t::LOST_REVERT, oid, v,
 	  m->second.need, 0, osd_reqid_t(), mtime);
 	e.reverting_to = prev;
-	pg_log.add(e);
+	e.mod_desc.mark_unrollbackable();
+	log_entries.push_back(e);
 	dout(10) << e << dendl;
 
 	// we are now missing the new version; recovery code will sort it out.
 	++m;
-	pg_log.revise_need(oid, info.last_update);
-	missing_loc.revise_need(oid, info.last_update);
 	break;
       }
-      /** fall-thru **/
 
     case pg_log_entry_t::LOST_DELETE:
       {
-	// log it
-      	++info.last_update.version;
-	pg_log_entry_t e(pg_log_entry_t::LOST_DELETE, oid, info.last_update, m->second.need,
+	++v.version;
+	pg_log_entry_t e(pg_log_entry_t::LOST_DELETE, oid, v, m->second.need,
 		     0, osd_reqid_t(), mtime);
-	pg_log.add(e);
+	if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+	  if (pool.info.require_rollback()) {
+	    e.mod_desc.try_rmobject(v.version);
+	  } else {
+	    e.mod_desc.mark_unrollbackable();
+	  }
+	} // otherwise, just do what we used to do
 	dout(10) << e << dendl;
+	log_entries.push_back(e);
 
-	t.remove(
-	  coll,
-	  ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard));
-	pg_log.missing_add_event(e);
 	++m;
-	missing_loc.recovered(oid);
       }
       break;
 
@@ -9563,47 +9758,51 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
       assert(0);
     }
 
-    if (obc)
-      c->obcs.push_back(obc);
+    if (obc) {
+      bool got = manager.get_lock_type(
+	ObjectContext::RWState::RWEXCL,
+	oid,
+	obc,
+	OpRequestRef());
+      if (!got) {
+	assert(0 == "Couldn't lock unfound object?");
+      }
+    }
   }
-
-  dout(30) << __func__ << ": log after:\n";
-  pg_log.get_log().print(*_dout);
-  *_dout << dendl;
 
   info.stats.stats_invalid = true;
 
-  if (missing.num_missing() == 0) {
-    // advance last_complete since nothing else is missing!
-    info.last_complete = info.last_update;
-  }
+  struct OnComplete {
+    ReplicatedPG *pg;
+    std::function<void(void)> on_complete;
+    void operator()() {
+      pg->requeue_ops(pg->waiting_for_all_missing);
+      pg->waiting_for_all_missing.clear();
+      pg->osd->queue_for_recovery(pg);
+    }
+  };
+  submit_log_entries(
+    log_entries,
+    std::move(manager),
+    boost::optional<std::function<void(void)> >(
+      [=]() {
+	requeue_ops(waiting_for_all_missing);
+	waiting_for_all_missing.clear();
+	osd->queue_for_recovery(this);
 
-  dirty_info = true;
-  write_if_dirty(t);
-
-  
-  osd->store->queue_transaction(osr.get(), std::move(t), c, NULL, 
-                            new C_OSD_OndiskWriteUnlockList(&c->obcs));
-	      
-  // Send out the PG log to all replicas
-  // So that they know what is lost
-  share_pg_log();
-
-  // queue ourselves so that we push the (now-lost) object_infos to replicas.
-  osd->queue_for_recovery(this);
-}
-
-void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContextRef>& obcs)
-{
-  lock();
-  dout(10) << "_finish_mark_all_unfound_lost " << dendl;
-
-  if (!deleting)
-    requeue_ops(waiting_for_all_missing);
-  waiting_for_all_missing.clear();
-
-  obcs.clear();
-  unlock();
+	stringstream ss;
+	ss << "pg has " << num_unfound
+	   << " objects unfound and apparently lost marking";
+	string rs = ss.str();
+	dout(0) << "do_command r=" << 0 << " " << rs << dendl;
+	osd->clog->info() << rs << "\n";
+	if (con) {
+	  MCommandReply *reply = new MCommandReply(0, rs);
+	  reply->set_tid(tid);
+	  con->send_message(reply);
+	}
+      }
+      ));
 }
 
 void ReplicatedPG::_split_into(pg_t child_pgid, PG *child, unsigned split_bits)

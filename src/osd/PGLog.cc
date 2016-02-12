@@ -570,6 +570,7 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
 
 void PGLog::append_log_entries_update_missing(
   const hobject_t &last_backfill,
+  bool last_backfill_bitwise,
   const list<pg_log_entry_t> &entries,
   IndexedLog *log,
   pg_missing_t &missing,
@@ -589,12 +590,20 @@ void PGLog::append_log_entries_update_missing(
       ldpp_dout(dpp, 20) << "update missing, append " << ne << dendl;
       log->index(ne);
     }
-    if (p->soid <= last_backfill) {
+    if (cmp(p->soid, last_backfill, last_backfill_bitwise) <= 0) {
       missing.add_next_event(*p);
-      if (p->is_delete() && rollbacker)
-	rollbacker->remove(p->soid);
+      if (rollbacker) {
+	// hack to match PG::mark_all_unfound_lost
+	if (p->is_lost_delete() && p->mod_desc.can_rollback()) {
+	  rollbacker->try_stash(p->soid, p->version.version);
+	} else if (p->is_delete()) {
+	  rollbacker->remove(p->soid);
+	}
+      }
     }
   }
+  if (log)
+    log->reset_rollback_info_trimmed_to_riter();
 }
 
 void PGLog::merge_log(ObjectStore::Transaction& t,
@@ -708,6 +717,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
     entries.splice(entries.end(), olog.log, from, to);
     append_log_entries_update_missing(
       info.last_backfill,
+      info.last_backfill_bitwise,
       entries,
       &log,
       missing,

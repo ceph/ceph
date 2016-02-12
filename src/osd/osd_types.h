@@ -2360,6 +2360,15 @@ public:
     virtual void append(uint64_t old_offset) {}
     virtual void setattrs(map<string, boost::optional<bufferlist> > &attrs) {}
     virtual void rmobject(version_t old_version) {}
+    /**
+     * Used to support the unfound_lost_delete log event: if the stashed
+     * version exists, we unstash it, otherwise, we do nothing.  This way
+     * each replica rolls back to whatever state it had prior to the attempt
+     * at mark unfound lost delete
+     */
+    virtual void try_rmobject(version_t old_version) {
+      rmobject(old_version);
+    }
     virtual void create() {}
     virtual void update_snaps(set<snapid_t> &old_snaps) {}
     virtual ~Visitor() {}
@@ -2371,7 +2380,8 @@ public:
     SETATTRS = 2,
     DELETE = 3,
     CREATE = 4,
-    UPDATE_SNAPS = 5
+    UPDATE_SNAPS = 5,
+    TRY_DELETE = 6
   };
   ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {}
   void claim(ObjectModDesc &other) {
@@ -2426,6 +2436,16 @@ public:
       return false;
     ENCODE_START(1, 1, bl);
     append_id(DELETE);
+    ::encode(deletion_version, bl);
+    ENCODE_FINISH(bl);
+    rollback_info_completed = true;
+    return true;
+  }
+  bool try_rmobject(version_t deletion_version) {
+    if (!can_local_rollback || rollback_info_completed)
+      return false;
+    ENCODE_START(1, 1, bl);
+    append_id(TRY_DELETE);
     ::encode(deletion_version, bl);
     ENCODE_FINISH(bl);
     rollback_info_completed = true;

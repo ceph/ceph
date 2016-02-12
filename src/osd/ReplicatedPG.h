@@ -737,6 +737,23 @@ public:
       on_success(std::move(c->on_success)),
       on_finish(std::move(c->on_finish)) {}
 
+    RepGather(
+      ObcLockManager &&manager,
+      boost::optional<std::function<void(void)> > &&on_complete,
+      ceph_tid_t rt,
+      eversion_t lc) :
+      queue_item(this),
+      nref(1),
+      rep_tid(rt),
+      rep_aborted(false), rep_done(false),
+      all_applied(false), all_committed(false),
+      pg_local_last_complete(lc),
+      lock_manager(std::move(manager)) {
+      if (on_complete) {
+	on_success.push_back(std::move(*on_complete));
+      }
+    }
+
     RepGather *get() {
       nref++;
       return this;
@@ -866,10 +883,28 @@ protected:
     OpContext *ctx,
     ObjectContextRef obc,
     ceph_tid_t rep_tid);
+  RepGather *new_repop(
+    ObcLockManager &&manager,
+    boost::optional<std::function<void(void)> > &&on_complete);
   void remove_repop(RepGather *repop);
 
   OpContextUPtr simple_opc_create(ObjectContextRef obc);
   void simple_opc_submit(OpContextUPtr ctx);
+
+  /**
+   * Merge entries atomically into all actingbackfill osds
+   * adjusting missing and recovery state as necessary
+   */
+  void submit_log_entries(
+    const list<pg_log_entry_t> &entries,
+    ObcLockManager &&manager,
+    boost::optional<std::function<void(void)> > &&on_complete);
+  struct LogUpdateCtx {
+    boost::intrusive_ptr<RepGather> repop;
+    set<pg_shard_t> waiting_on;
+  };
+  map<ceph_tid_t, LogUpdateCtx> log_entry_update_waiting_on;
+
 
   // hot/cold tracking
   HitSetRef hit_set;        ///< currently accumulating HitSet
@@ -1426,8 +1461,13 @@ public:
 	       const PGPool &_pool, spg_t p);
   ~ReplicatedPG() {}
 
-  int do_command(cmdmap_t cmdmap, ostream& ss, bufferlist& idata,
-		 bufferlist& odata);
+  int do_command(
+    cmdmap_t cmdmap,
+    ostream& ss,
+    bufferlist& idata,
+    bufferlist& odata,
+    ConnectionRef conn,
+    ceph_tid_t tid) override;
 
   void do_request(
     OpRequestRef& op,
@@ -1583,7 +1623,10 @@ public:
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
   void kick_object_context_blocked(ObjectContextRef obc);
 
-  void mark_all_unfound_lost(int what);
+  void mark_all_unfound_lost(
+    int what,
+    ConnectionRef con,
+    ceph_tid_t tid);
   eversion_t pick_newest_available(const hobject_t& oid);
   ObjectContextRef mark_object_lost(ObjectStore::Transaction *t,
 				  const hobject_t& oid, eversion_t version,
@@ -1594,7 +1637,6 @@ public:
 
   void do_update_log_missing_reply(
     OpRequestRef &op);
-  void _finish_mark_all_unfound_lost(list<ObjectContextRef>& obcs);
 
   void on_role_change();
   void on_pool_change();
