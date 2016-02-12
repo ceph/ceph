@@ -209,12 +209,24 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
 {
   std::string token_url;
 
-  if (get_keystone_url(cct, token_url) < 0)
+  if (get_keystone_url(cct, token_url) < 0) {
     return -EINVAL;
+  }
+
   if (!cct->_conf->rgw_keystone_admin_token.empty()) {
     token = cct->_conf->rgw_keystone_admin_token;
     return 0;
   }
+
+  KeystoneToken t;
+
+  /* Try cache first. */
+  if (keystone_token_cache->find_admin(t)) {
+    ldout(cct, 20) << "found cached admin token" << dendl;
+    token = t.token.id;
+    return 0;
+  }
+
   bufferlist token_bl;
   RGWGetKeystoneAdminToken token_req(cct, &token_bl);
   token_req.append_header("Content-Type", "application/json");
@@ -230,14 +242,7 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
     token_req.set_post_data(ss.str());
     token_req.set_send_length(ss.str().length());
     token_url.append("v2.0/tokens");
-    int ret = token_req.process("POST", token_url.c_str());
-    if (ret < 0)
-      return ret;
-    KeystoneToken t;
-    if (t.parse(cct, token_bl) != 0)
-      return -EINVAL;
-    token = t.token.id;
-    return 0;
+
   } else if (keystone_version == KeystoneApiVersion::VER_3) {
     KeystoneAdminTokenRequestVer3 req_serializer(cct);
     req_serializer.dump(&jf);
@@ -247,13 +252,21 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
     token_req.set_post_data(ss.str());
     token_req.set_send_length(ss.str().length());
     token_url.append("v3/auth/tokens");
-    int ret = token_req.process("POST", token_url.c_str());
-    if (ret < 0)
-      return ret;
-    token = token_req.get_subject_token();
-    return 0;
+  } else {
+    return -ENOTSUP;
   }
-  return -EINVAL;
+
+  const int ret = token_req.process("POST", token_url.c_str());
+  if (ret < 0) {
+    return ret;
+  }
+  if (t.parse(cct, token_req.get_subject_token(), token_bl) != 0) {
+    return -EINVAL;
+  }
+
+  keystone_token_cache->add_admin(t);
+  token = t.token.id;
+  return 0;
 }
 
 
@@ -362,11 +375,15 @@ static void rgw_set_keystone_token_auth_info(KeystoneToken& token, struct rgw_sw
   info->status = 200;
 }
 
-int RGWSwift::parse_keystone_token_response(const string& token, bufferlist& bl, struct rgw_swift_auth_info *info, KeystoneToken& t)
+int RGWSwift::parse_keystone_token_response(const string& token,
+                                            bufferlist& bl,
+                                            struct rgw_swift_auth_info *info,
+                                            KeystoneToken& t)
 {
-  int ret = t.parse(cct, bl);
-  if (ret < 0)
+  int ret = t.parse(cct, token, bl);
+  if (ret < 0) {
     return ret;
+  }
 
   bool found = false;
   list<string>::iterator iter;

@@ -83,18 +83,21 @@ public:
     uint64_t now = ceph_clock_now(NULL).sec();
     return (now >= (uint64_t)get_expires());
   }
-  int parse(CephContext *cct, bufferlist& bl);
+  int parse(CephContext *cct,
+            const string& token_str,
+            bufferlist& bl /* in */);
   void decode_json(JSONObj *access_obj);
 };
 
-struct token_entry {
-  KeystoneToken token;
-  list<string>::iterator lru_iter;
-};
-
 class RGWKeystoneTokenCache {
+  struct token_entry {
+    KeystoneToken token;
+    list<string>::iterator lru_iter;
+  };
+
   CephContext *cct;
 
+  string admin_token_id;
   map<string, token_entry> tokens;
   list<string> tokens_lru;
 
@@ -103,10 +106,16 @@ class RGWKeystoneTokenCache {
   size_t max;
 
 public:
-  RGWKeystoneTokenCache(CephContext *_cct, int _max) : cct(_cct), lock("RGWKeystoneTokenCache"), max(_max) {}
+  RGWKeystoneTokenCache(CephContext *_cct, int _max)
+    : cct(_cct),
+      lock("RGWKeystoneTokenCache", true /* recursive */),
+      max(_max) {
+  }
 
   bool find(const string& token_id, KeystoneToken& token);
-  void add(const string& token_id, KeystoneToken& token);
+  bool find_admin(KeystoneToken& token);
+  void add(const string& token_id, const KeystoneToken& token);
+  void add_admin(const KeystoneToken& token);
   void invalidate(const string& token_id);
 };
 
