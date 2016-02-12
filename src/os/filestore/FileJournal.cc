@@ -44,7 +44,8 @@
 #define dout_prefix *_dout << "journal "
 
 const static int64_t ONE_MEG(1 << 20);
-const static int CEPH_MINIMUM_BLOCK_SIZE(4096);
+const static int CEPH_DIRECTIO_ALIGNMENT(4096);
+
 
 int FileJournal::_open(bool forwrite, bool create)
 {
@@ -148,7 +149,7 @@ int FileJournal::_open_block_device()
 	   << dendl;
   max_size = bdev_sz;
 
-  block_size = CEPH_MINIMUM_BLOCK_SIZE;
+  block_size = g_conf->journal_block_size;
 
   if (g_conf->journal_discard) {
     discard = block_device_support_discard(fn.c_str());
@@ -288,7 +289,7 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
   else {
     max_size = oldsize;
   }
-  block_size = MAX(blksize, (blksize_t)CEPH_MINIMUM_BLOCK_SIZE);
+  block_size = g_conf->journal_block_size;
 
   if (create && g_conf->journal_zero_on_create) {
     derr << "FileJournal::_open_file : zeroing journal" << dendl;
@@ -503,9 +504,11 @@ int FileJournal::open(uint64_t fs_op_seq)
 	    << block_size << " (required for direct_io journal mode)" << dendl;
     return -EINVAL;
   }
-  if ((header.alignment % CEPH_MINIMUM_BLOCK_SIZE) && directio) {
-    dout(0) << "open journal alignment " << header.alignment << " is not multiple of minimum block size "
-           << CEPH_MINIMUM_BLOCK_SIZE << " (required for direct_io journal mode)" << dendl;
+  if ((header.alignment % CEPH_DIRECTIO_ALIGNMENT) && directio) {
+    dout(0) << "open journal alignment " << header.alignment
+	    << " is not multiple of minimum directio alignment "
+	    << CEPH_DIRECTIO_ALIGNMENT << " (required for direct_io journal mode)"
+	    << dendl;
     return -EINVAL;
   }
 
@@ -1038,13 +1041,13 @@ void FileJournal::align_bl(off64_t pos, bufferlist& bl)
 {
   // make sure list segments are page aligned
   if (directio && (!bl.is_aligned(block_size) ||
-		   !bl.is_n_align_sized(CEPH_MINIMUM_BLOCK_SIZE))) {
+		   !bl.is_n_align_sized(CEPH_DIRECTIO_ALIGNMENT))) {
     assert(0 == "bl should be align");
-    if ((bl.length() & (CEPH_MINIMUM_BLOCK_SIZE - 1)) != 0 ||
-	(pos & (CEPH_MINIMUM_BLOCK_SIZE - 1)) != 0)
+    if ((bl.length() & (CEPH_DIRECTIO_ALIGNMENT - 1)) != 0 ||
+	(pos & (CEPH_DIRECTIO_ALIGNMENT - 1)) != 0)
       dout(0) << "rebuild_page_aligned failed, " << bl << dendl;
-    assert((bl.length() & (CEPH_MINIMUM_BLOCK_SIZE - 1)) == 0);
-    assert((pos & (CEPH_MINIMUM_BLOCK_SIZE - 1)) == 0);
+    assert((bl.length() & (CEPH_DIRECTIO_ALIGNMENT - 1)) == 0);
+    assert((pos & (CEPH_DIRECTIO_ALIGNMENT - 1)) == 0);
   }
 }
 
@@ -1631,7 +1634,7 @@ int FileJournal::prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist
   }
   // footer
   ebl.append((const char*)&h, sizeof(h));
-  ebl.rebuild_aligned(CEPH_MINIMUM_BLOCK_SIZE);
+  ebl.rebuild_aligned(CEPH_DIRECTIO_ALIGNMENT);
   tbl->claim(ebl);
   return h.len;
 }
