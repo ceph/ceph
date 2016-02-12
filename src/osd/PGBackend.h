@@ -496,6 +496,11 @@ struct shard_info_wrapper;
      ) = 0;
 
 
+   void try_stash(
+     const hobject_t &hoid,
+     version_t v,
+     ObjectStore::Transaction *t);
+
    void rollback(
      const hobject_t &hoid,
      const ObjectModDesc &desc,
@@ -515,6 +520,12 @@ struct shard_info_wrapper;
 
    /// Unstash object to rollback stash
    void rollback_stash(
+     const hobject_t &hoid,
+     version_t old_version,
+     ObjectStore::Transaction *t);
+
+   /// Unstash object to rollback stash
+   void rollback_try_stash(
      const hobject_t &hoid,
      version_t old_version,
      ObjectStore::Transaction *t);

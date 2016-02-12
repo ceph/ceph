@@ -3272,6 +3272,12 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	visitor->update_snaps(snaps);
 	break;
       }
+      case TRY_DELETE: {
+	version_t old_version;
+	::decode(old_version, bp);
+	visitor->try_rmobject(old_version);
+	break;
+      }
       default:
 	assert(0 == "Invalid rollback code");
       }
