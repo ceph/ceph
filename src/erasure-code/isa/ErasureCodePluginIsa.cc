@@ -30,8 +30,14 @@
 #include "ErasureCodeIsa.h"
 // -----------------------------------------------------------------------------
 
-int ErasureCodePluginIsa::factory(const std::string &directory,
-		      ErasureCodeProfile &profile,
+class ErasureCodePluginIsa : public ErasureCodePlugin {
+public:
+  ErasureCodeIsaTableCache tcache;
+
+  ErasureCodePluginIsa(CephContext* cct) : ErasureCodePlugin(cct)
+  {}
+
+  virtual int factory(ErasureCodeProfile &profile,
                       ErasureCodeInterfaceRef *erasure_code,
                       ostream *ss)
 {
@@ -67,16 +73,18 @@ int ErasureCodePluginIsa::factory(const std::string &directory,
 
 // -----------------------------------------------------------------------------
 
-const char *__erasure_code_version()
+const char *__ceph_plugin_version()
 {
   return CEPH_GIT_NICE_VER;
 }
 
 // -----------------------------------------------------------------------------
 
-int __erasure_code_init(char *plugin_name, char *directory)
+int __ceph_plugin_init(CephContext *cct,
+                       const std::string& type,
+                       const std::string& name)
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = cct->get_plugin_registry();
 
-  return instance.add(plugin_name, new ErasureCodePluginIsa());
+  return instance->add(type, name, new ErasureCodePluginIsa(cct));
 }

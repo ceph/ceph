@@ -327,12 +327,11 @@ PGBackend *PGBackend::build_pg_backend(
     ErasureCodeProfile profile = curmap->get_erasure_code_profile(pool.erasure_code_profile);
     assert(profile.count("plugin"));
     stringstream ss;
-    ceph::ErasureCodePluginRegistry::instance().factory(
-      profile.find("plugin")->second,
-      g_conf->erasure_code_dir,
-      profile,
-      &ec_impl,
-      &ss);
+    ceph::PluginRegistry *reg = g_ceph_context->get_plugin_registry();
+    ceph::ErasureCodePlugin* ecp = dynamic_cast<ceph::ErasureCodePlugin*>(reg->get_with_load("erasure-code",
+                                                                                             profile.find("plugin")->second));
+    assert(ecp);
+    ecp->factory(profile, &ec_impl, &ss);
     assert(ec_impl);
     return new ECBackend(
       l,
