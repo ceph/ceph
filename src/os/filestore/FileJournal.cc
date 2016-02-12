@@ -1037,7 +1037,7 @@ int FileJournal::prepare_single_write(write_item &next_write, bufferlist& bl, of
 void FileJournal::align_bl(off64_t pos, bufferlist& bl)
 {
   // make sure list segments are page aligned
-  if (directio && (!bl.is_aligned(block_size) ||
+  if (directio && (!bl.is_aligned(CEPH_PAGE_SIZE) ||
 		   !bl.is_n_align_sized(CEPH_MINIMUM_BLOCK_SIZE))) {
     assert(0 == "bl should be align");
     if ((bl.length() & (CEPH_MINIMUM_BLOCK_SIZE - 1)) != 0 ||
