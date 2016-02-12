@@ -916,6 +916,7 @@ OPTION(filestore_debug_verify_split, OPT_BOOL, false)
 OPTION(journal_dio, OPT_BOOL, true)
 OPTION(journal_aio, OPT_BOOL, true)
 OPTION(journal_force_aio, OPT_BOOL, false)
+OPTION(journal_block_size, OPT_INT, 4096)
 
 OPTION(keyvaluestore_queue_max_ops, OPT_INT, 50)
 OPTION(keyvaluestore_queue_max_bytes, OPT_INT, 100 << 20)
