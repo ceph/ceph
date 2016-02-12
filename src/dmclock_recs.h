@@ -18,6 +18,8 @@ namespace crimson {
 
     enum class PhaseType { reservation, priority };
 
+    std::ostream& operator<<(std::ostream& out, PhaseType phase);
+
     template<typename C>
     struct ReqParams {
       C        client;

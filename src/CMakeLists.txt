@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 2.8)
 
 set(local_flags)
 
-set(core_srcs dmclock_server.cc dmclock_util.cc crimson/run_every.cc)
+set(core_srcs
+  dmclock_server.cc dmclock_util.cc dmclock_recs.cc crimson/run_every.cc)
 set(test_srcs test_server.cc test_client.cc test.cc)
 
 set_source_files_properties(${core_srcs} ${test_srcs}
