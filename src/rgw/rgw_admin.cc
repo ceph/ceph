@@ -195,12 +195,6 @@ int usage()
   return 1;
 }
 
-void usage_exit()
-{
-  _usage();
-  exit(1);
-}
-
 enum {
   OPT_NO_CMD = 0,
   OPT_USER_CREATE,
