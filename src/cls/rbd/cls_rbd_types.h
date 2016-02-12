@@ -49,6 +49,33 @@ std::ostream& operator<<(std::ostream& os, const MirrorPeer& peer);
 
 WRITE_CLASS_ENCODER(MirrorPeer);
 
+enum MirrorImageState {
+  MIRROR_IMAGE_STATE_DISABLING = 0,
+  MIRROR_IMAGE_STATE_ENABLED   = 1
+};
+
+struct MirrorImage {
+  MirrorImage() {}
+  MirrorImage(const std::string &global_image_id, MirrorImageState state)
+    : global_image_id(global_image_id), state(state) {}
+
+  std::string global_image_id;
+  MirrorImageState state;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<MirrorImage*> &o);
+
+  bool operator==(const MirrorImage &rhs) const;
+};
+
+std::ostream& operator<<(std::ostream& os, const MirrorImageState& mirror_state);
+std::ostream& operator<<(std::ostream& os, const MirrorImage& mirror_image);
+
+WRITE_CLASS_ENCODER(MirrorImage);
+
 } // namespace rbd
 } // namespace cls
 

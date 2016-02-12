@@ -203,7 +203,7 @@ namespace librbd {
 			  std::vector<uint64_t> *sizes,
 			  ::SnapContext *snapc);
 
-    // operations on the rbd_pool_settings object
+    // operations on the rbd_mirroring object
     int mirror_mode_get(librados::IoCtx *ioctx,
                         cls::rbd::MirrorMode *mirror_mode);
     int mirror_mode_set(librados::IoCtx *ioctx,
@@ -222,6 +222,14 @@ namespace librbd {
     int mirror_peer_set_cluster(librados::IoCtx *ioctx,
                                 const std::string &uuid,
                                 const std::string &cluster_name);
+    int mirror_image_list(librados::IoCtx *ioctx,
+			  std::vector<std::string> *image_ids);
+    int mirror_image_get(librados::IoCtx *ioctx, const std::string &image_id,
+			 cls::rbd::MirrorImage *mirror_image);
+    int mirror_image_set(librados::IoCtx *ioctx, const std::string &image_id,
+			 const cls::rbd::MirrorImage &mirror_image);
+    int mirror_image_remove(librados::IoCtx *ioctx,
+			    const std::string &image_id);
 
   } // namespace cls_client
 } // namespace librbd
