@@ -33,116 +33,116 @@ ceph_erasure_code_LDADD += -ldl
 endif
 bin_DEBUGPROGRAMS += ceph_erasure_code
 
-libec_example_la_SOURCES = \
+libceph_erasurecode_example_la_SOURCES = \
 	erasure-code/ErasureCode.cc \
 	test/erasure-code/ErasureCodePluginExample.cc
 test/erasure-code/ErasureCodePluginExample.cc: ./ceph_ver.h
-libec_example_la_CFLAGS = ${AM_CFLAGS}
-libec_example_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_example_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_example_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_erasurecode_example_la_CFLAGS = ${AM_CFLAGS}
+libceph_erasurecode_example_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_erasurecode_example_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_erasurecode_example_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_example_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_erasurecode_example_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_example.la
+check_LTLIBRARIES += libceph_erasurecode_example.la
 
-libec_missing_entry_point_la_SOURCES = test/erasure-code/ErasureCodePluginMissingEntryPoint.cc
+libceph_missing_entry_point_la_SOURCES = test/erasure-code/ErasureCodePluginMissingEntryPoint.cc
 test/erasure-code/ErasureCodePluginMissingEntryPoint.cc: ./ceph_ver.h
-libec_missing_entry_point_la_CFLAGS = ${AM_CFLAGS}
-libec_missing_entry_point_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_missing_entry_point_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_missing_entry_point_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_missing_entry_point_la_CFLAGS = ${AM_CFLAGS}
+libceph_missing_entry_point_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_missing_entry_point_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_missing_entry_point_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_missing_entry_point_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_missing_entry_point_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_missing_entry_point.la
+check_LTLIBRARIES += libceph_missing_entry_point.la
 
-libec_missing_version_la_SOURCES = test/erasure-code/ErasureCodePluginMissingVersion.cc
-libec_missing_version_la_CFLAGS = ${AM_CFLAGS}
-libec_missing_version_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_missing_version_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_missing_version_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_missing_version_la_SOURCES = test/erasure-code/ErasureCodePluginMissingVersion.cc
+libceph_missing_version_la_CFLAGS = ${AM_CFLAGS}
+libceph_missing_version_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_missing_version_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_missing_version_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_missing_version_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_missing_version_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_missing_version.la
+check_LTLIBRARIES += libceph_missing_version.la
 
-libec_hangs_la_SOURCES = test/erasure-code/ErasureCodePluginHangs.cc
+libceph_hangs_la_SOURCES = test/erasure-code/ErasureCodePluginHangs.cc
 test/erasure-code/ErasureCodePluginHangs.cc: ./ceph_ver.h
-libec_hangs_la_CFLAGS = ${AM_CFLAGS}
-libec_hangs_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_hangs_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_hangs_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_hangs_la_CFLAGS = ${AM_CFLAGS}
+libceph_hangs_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_hangs_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_hangs_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_hangs_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_hangs_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_hangs.la
+check_LTLIBRARIES += libceph_hangs.la
 
-libec_fail_to_initialize_la_SOURCES = test/erasure-code/ErasureCodePluginFailToInitialize.cc
+libceph_fail_to_initialize_la_SOURCES = test/erasure-code/ErasureCodePluginFailToInitialize.cc
 test/erasure-code/ErasureCodePluginFailToInitialize.cc: ./ceph_ver.h
-libec_fail_to_initialize_la_CFLAGS = ${AM_CFLAGS}
-libec_fail_to_initialize_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_fail_to_initialize_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_fail_to_initialize_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_fail_to_initialize_la_CFLAGS = ${AM_CFLAGS}
+libceph_fail_to_initialize_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_fail_to_initialize_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_fail_to_initialize_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_fail_to_initialize_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_fail_to_initialize_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_fail_to_initialize.la
+check_LTLIBRARIES += libceph_fail_to_initialize.la
 
-libec_fail_to_register_la_SOURCES = test/erasure-code/ErasureCodePluginFailToRegister.cc
+libceph_fail_to_register_la_SOURCES = test/erasure-code/ErasureCodePluginFailToRegister.cc
 test/erasure-code/ErasureCodePluginFailToRegister.cc: ./ceph_ver.h
-libec_fail_to_register_la_CFLAGS = ${AM_CFLAGS}
-libec_fail_to_register_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_fail_to_register_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_fail_to_register_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_fail_to_register_la_CFLAGS = ${AM_CFLAGS}
+libceph_fail_to_register_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_fail_to_register_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_fail_to_register_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_fail_to_register_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_fail_to_register_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_fail_to_register.la
+check_LTLIBRARIES += libceph_fail_to_register.la
 
-libec_test_jerasure_neon_la_SOURCES = test/erasure-code/TestJerasurePluginNEON.cc
+libceph_test_jerasure_neon_la_SOURCES = test/erasure-code/TestJerasurePluginNEON.cc
 test/erasure-code/TestJerasurePluginNEON.cc: ./ceph_ver.h
-libec_test_jerasure_neon_la_CFLAGS = ${AM_CFLAGS}
-libec_test_jerasure_neon_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_test_jerasure_neon_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_test_jerasure_neon_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_test_jerasure_neon_la_CFLAGS = ${AM_CFLAGS}
+libceph_test_jerasure_neon_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_test_jerasure_neon_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_test_jerasure_neon_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_test_jerasure_neon_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_jerasure_neon_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_test_jerasure_neon.la
+check_LTLIBRARIES += libceph_test_jerasure_neon.la
 
-libec_test_jerasure_sse4_la_SOURCES = test/erasure-code/TestJerasurePluginSSE4.cc
+libceph_test_jerasure_sse4_la_SOURCES = test/erasure-code/TestJerasurePluginSSE4.cc
 test/erasure-code/TestJerasurePluginSSE4.cc: ./ceph_ver.h
-libec_test_jerasure_sse4_la_CFLAGS = ${AM_CFLAGS}
-libec_test_jerasure_sse4_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_test_jerasure_sse4_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_test_jerasure_sse4_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_test_jerasure_sse4_la_CFLAGS = ${AM_CFLAGS}
+libceph_test_jerasure_sse4_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_test_jerasure_sse4_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_test_jerasure_sse4_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_test_jerasure_sse4_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_jerasure_sse4_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_test_jerasure_sse4.la
+check_LTLIBRARIES += libceph_test_jerasure_sse4.la
 
-libec_test_jerasure_sse3_la_SOURCES = test/erasure-code/TestJerasurePluginSSE3.cc
+libceph_test_jerasure_sse3_la_SOURCES = test/erasure-code/TestJerasurePluginSSE3.cc
 test/erasure-code/TestJerasurePluginSSE3.cc: ./ceph_ver.h
-libec_test_jerasure_sse3_la_CFLAGS = ${AM_CFLAGS}
-libec_test_jerasure_sse3_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_test_jerasure_sse3_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_test_jerasure_sse3_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_test_jerasure_sse3_la_CFLAGS = ${AM_CFLAGS}
+libceph_test_jerasure_sse3_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_test_jerasure_sse3_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_test_jerasure_sse3_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_test_jerasure_sse3_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_jerasure_sse3_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_test_jerasure_sse3.la
+check_LTLIBRARIES += libceph_test_jerasure_sse3.la
 
-libec_test_jerasure_generic_la_SOURCES = test/erasure-code/TestJerasurePluginGeneric.cc
+libceph_test_jerasure_generic_la_SOURCES = test/erasure-code/TestJerasurePluginGeneric.cc
 test/erasure-code/TestJerasurePluginGeneric.cc: ./ceph_ver.h
-libec_test_jerasure_generic_la_CFLAGS = ${AM_CFLAGS}
-libec_test_jerasure_generic_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_test_jerasure_generic_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_test_jerasure_generic_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_test_jerasure_generic_la_CFLAGS = ${AM_CFLAGS}
+libceph_test_jerasure_generic_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_test_jerasure_generic_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_test_jerasure_generic_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_test_jerasure_generic_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_jerasure_generic_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_test_jerasure_generic.la
+check_LTLIBRARIES += libceph_test_jerasure_generic.la
 
 unittest_erasure_code_plugin_SOURCES = \
 	erasure-code/ErasureCode.cc \
@@ -229,12 +229,12 @@ check_TESTPROGRAMS += unittest_erasure_code_plugin_lrc
 unittest_erasure_code_shec_SOURCES = \
 	test/erasure-code/TestErasureCodeShec.cc \
 	${shec_sources}
-unittest_erasure_code_shec_CFLAGS = ${libec_shec_la_CFLAGS} \
+unittest_erasure_code_shec_CFLAGS = ${libceph_shec_la_CFLAGS} \
 	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
 	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
 	-I$(srcdir)/erasure-code/jerasure \
 	-I$(srcdir)/erasure-code/shec
-unittest_erasure_code_shec_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS) \
+unittest_erasure_code_shec_CXXFLAGS = ${libceph_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS) \
 	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
 	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
 	-I$(srcdir)/erasure-code/jerasure \
@@ -248,12 +248,12 @@ check_TESTPROGRAMS += unittest_erasure_code_shec
 unittest_erasure_code_shec_all_SOURCES = \
 	test/erasure-code/TestErasureCodeShec_all.cc \
 	${shec_sources}
-unittest_erasure_code_shec_all_CFLAGS = ${libec_shec_la_CFLAGS} \
+unittest_erasure_code_shec_all_CFLAGS = ${libceph_shec_la_CFLAGS} \
 	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
 	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
 	-I$(srcdir)/erasure-code/jerasure \
 	-I$(srcdir)/erasure-code/shec
-unittest_erasure_code_shec_all_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS) \
+unittest_erasure_code_shec_all_CXXFLAGS = ${libceph_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS) \
 	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
 	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
 	-I$(srcdir)/erasure-code/jerasure \
@@ -267,12 +267,12 @@ check_TESTPROGRAMS += unittest_erasure_code_shec_all
 unittest_erasure_code_shec_thread_SOURCES = \
 	test/erasure-code/TestErasureCodeShec_thread.cc \
 	${shec_sources}
-unittest_erasure_code_shec_thread_CFLAGS = ${libec_shec_la_CFLAGS} \
+unittest_erasure_code_shec_thread_CFLAGS = ${libceph_shec_la_CFLAGS} \
 	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
 	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
 	-I$(srcdir)/erasure-code/jerasure \
 	-I$(srcdir)/erasure-code/shec
-unittest_erasure_code_shec_thread_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS) \
+unittest_erasure_code_shec_thread_CXXFLAGS = ${libceph_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS) \
 	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
 	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
 	-I$(srcdir)/erasure-code/jerasure \
@@ -286,12 +286,12 @@ check_TESTPROGRAMS += unittest_erasure_code_shec_thread
 unittest_erasure_code_shec_arguments_SOURCES = \
 	test/erasure-code/TestErasureCodeShec_arguments.cc \
 	${shec_sources}
-unittest_erasure_code_shec_arguments_CFLAGS = ${libec_shec_la_CFLAGS} \
+unittest_erasure_code_shec_arguments_CFLAGS = ${libceph_shec_la_CFLAGS} \
 	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
 	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
 	-I$(srcdir)/erasure-code/jerasure \
 	-I$(srcdir)/erasure-code/shec
-unittest_erasure_code_shec_arguments_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS) \
+unittest_erasure_code_shec_arguments_CXXFLAGS = ${libceph_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS) \
 	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
 	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
 	-I$(srcdir)/erasure-code/jerasure \
@@ -311,49 +311,49 @@ unittest_erasure_code_plugin_shec_LDADD += -ldl
 endif
 check_TESTPROGRAMS += unittest_erasure_code_plugin_shec
 
-libec_test_shec_neon_la_SOURCES = test/erasure-code/TestShecPluginNEON.cc
+libceph_test_shec_neon_la_SOURCES = test/erasure-code/TestShecPluginNEON.cc
 test/erasure-code/TestShecPluginNEON.cc: ./ceph_ver.h
-libec_test_shec_neon_la_CFLAGS = ${AM_CFLAGS}
-libec_test_shec_neon_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_test_shec_neon_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_test_shec_neon_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_test_shec_neon_la_CFLAGS = ${AM_CFLAGS}
+libceph_test_shec_neon_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_test_shec_neon_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_test_shec_neon_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_test_shec_neon_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_shec_neon_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_test_shec_neon.la
+check_LTLIBRARIES += libceph_test_shec_neon.la
 
-libec_test_shec_sse4_la_SOURCES = test/erasure-code/TestShecPluginSSE4.cc
+libceph_test_shec_sse4_la_SOURCES = test/erasure-code/TestShecPluginSSE4.cc
 test/erasure-code/TestShecPluginSSE4.cc: ./ceph_ver.h
-libec_test_shec_sse4_la_CFLAGS = ${AM_CFLAGS}
-libec_test_shec_sse4_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_test_shec_sse4_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_test_shec_sse4_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_test_shec_sse4_la_CFLAGS = ${AM_CFLAGS}
+libceph_test_shec_sse4_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_test_shec_sse4_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_test_shec_sse4_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_test_shec_sse4_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_shec_sse4_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_test_shec_sse4.la
+check_LTLIBRARIES += libceph_test_shec_sse4.la
 
-libec_test_shec_sse3_la_SOURCES = test/erasure-code/TestShecPluginSSE3.cc
+libceph_test_shec_sse3_la_SOURCES = test/erasure-code/TestShecPluginSSE3.cc
 test/erasure-code/TestShecPluginSSE3.cc: ./ceph_ver.h
-libec_test_shec_sse3_la_CFLAGS = ${AM_CFLAGS}
-libec_test_shec_sse3_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_test_shec_sse3_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_test_shec_sse3_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_test_shec_sse3_la_CFLAGS = ${AM_CFLAGS}
+libceph_test_shec_sse3_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_test_shec_sse3_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_test_shec_sse3_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_test_shec_sse3_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_shec_sse3_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_test_shec_sse3.la
+check_LTLIBRARIES += libceph_test_shec_sse3.la
 
-libec_test_shec_generic_la_SOURCES = test/erasure-code/TestShecPluginGeneric.cc
+libceph_test_shec_generic_la_SOURCES = test/erasure-code/TestShecPluginGeneric.cc
 test/erasure-code/TestShecPluginGeneric.cc: ./ceph_ver.h
-libec_test_shec_generic_la_CFLAGS = ${AM_CFLAGS}
-libec_test_shec_generic_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_test_shec_generic_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_test_shec_generic_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
+libceph_test_shec_generic_la_CFLAGS = ${AM_CFLAGS}
+libceph_test_shec_generic_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_test_shec_generic_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_test_shec_generic_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libec_test_shec_generic_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_shec_generic_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
-check_LTLIBRARIES += libec_test_shec_generic.la
+check_LTLIBRARIES += libceph_test_shec_generic.la
 
 unittest_erasure_code_example_SOURCES = \
 	erasure-code/ErasureCode.cc \

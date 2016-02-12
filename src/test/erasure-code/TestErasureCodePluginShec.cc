@@ -30,15 +30,14 @@
 
 TEST(ErasureCodePlugin, factory)
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = g_ceph_context->get_plugin_registry();
+  ErasureCodePlugin* ecp = dynamic_cast<ErasureCodePlugin*>(instance->get_with_load("erasure-code", "shec"));
+  EXPECT_TRUE(ecp);
   map<std::string,std::string> profile;
   {
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(0, instance.factory("shec",
-				  g_conf->erasure_code_dir,
-				  profile,
-				  &erasure_code, &cerr));
+    EXPECT_EQ(0, ecp->factory(profile, &erasure_code, &cerr));
     EXPECT_TRUE(erasure_code.get());
   }
   const char *techniques[] = {
@@ -50,10 +49,7 @@ TEST(ErasureCodePlugin, factory)
     ErasureCodeInterfaceRef erasure_code;
     profile["technique"] = *technique;
     EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(0, instance.factory("shec",
-				  g_conf->erasure_code_dir,
-				  profile,
-                                  &erasure_code, &cerr));
+    EXPECT_EQ(0, ecp->factory(profile, &erasure_code, &cerr));
     EXPECT_TRUE(erasure_code.get());
   }
 }
@@ -70,7 +66,9 @@ TEST(ErasureCodePlugin, select)
   int arch_intel_sse2   = ceph_arch_intel_sse2;
   int arch_neon		= ceph_arch_neon;
 
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = g_ceph_context->get_plugin_registry();
+  ErasureCodePlugin* ecp = dynamic_cast<ErasureCodePlugin*>(instance->get_with_load("erasure-code", "shec"));
+  EXPECT_TRUE(ecp);
   map<std::string,std::string> profile;
   // load test plugins instead of actual plugins to assert the desired side effect
   // happens
@@ -89,10 +87,7 @@ TEST(ErasureCodePlugin, select)
 
     ErasureCodeInterfaceRef erasure_code;
     int sse4_side_effect = -444;
-    EXPECT_EQ(sse4_side_effect, instance.factory("shec",
-						 g_conf->erasure_code_dir,
-						 profile,
-                                                 &erasure_code, &cerr));
+    EXPECT_EQ(sse4_side_effect, ecp->factory(profile, &erasure_code, &cerr));
   }
   // pclmul is missing, load the SSE3 plugin
   {
@@ -106,10 +101,7 @@ TEST(ErasureCodePlugin, select)
 
     ErasureCodeInterfaceRef erasure_code;
     int sse3_side_effect = -333;
-    EXPECT_EQ(sse3_side_effect, instance.factory("shec",
-						 g_conf->erasure_code_dir,
-						 profile,
-                                                 &erasure_code, &cerr));
+    EXPECT_EQ(sse3_side_effect, ecp->factory(profile, &erasure_code, &cerr));
   }
   // pclmul and sse3 are missing, load the generic plugin
   {
@@ -123,10 +115,7 @@ TEST(ErasureCodePlugin, select)
 
     ErasureCodeInterfaceRef erasure_code;
     int generic_side_effect = -111;
-    EXPECT_EQ(generic_side_effect, instance.factory("shec",
-						    g_conf->erasure_code_dir,
-						    profile,
-						    &erasure_code, &cerr));
+    EXPECT_EQ(generic_side_effect, ecp->factory(profile, &erasure_code, &cerr));
   }
   // neon is set, load the neon plugin
   {
@@ -140,10 +129,7 @@ TEST(ErasureCodePlugin, select)
 
     ErasureCodeInterfaceRef erasure_code;
     int generic_side_effect = -555;
-    EXPECT_EQ(generic_side_effect, instance.factory("shec",
-						    g_conf->erasure_code_dir,
-						    profile,
-						    &erasure_code, &cerr));
+    EXPECT_EQ(generic_side_effect, ecp->factory(profile, &erasure_code, &cerr));
   }
 
 
@@ -191,7 +177,7 @@ TEST(ErasureCodePlugin, sse)
   bufferlist in;
   in.push_front(in_ptr);
 
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = g_ceph_context->get_plugin_registry();
   map<std::string,std::string> profile;
   profile["technique"] = "multiple";
   profile["k"] = "2";
@@ -205,10 +191,9 @@ TEST(ErasureCodePlugin, sse)
     //
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(0, instance.factory("shec_" + *sse_variant,
-				  g_conf->erasure_code_dir,
-				  profile,
-                                  &erasure_code, &cerr));
+    ErasureCodePlugin* ecp = dynamic_cast<ErasureCodePlugin*>(instance->get_with_load("erasure-code", "shec_" + *sse_variant));
+    EXPECT_TRUE(ecp);
+    EXPECT_EQ(0, ecp->factory(profile, &erasure_code, &cerr));
     EXPECT_TRUE(erasure_code.get());
 
     //
@@ -255,7 +240,8 @@ int main(int argc, char **argv)
 
   const char* env = getenv("CEPH_LIB");
   string directory(env ? env : ".libs");
-  g_conf->set_val("erasure_code_dir", directory, false, false);
+
+  g_conf->set_val("plugin_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

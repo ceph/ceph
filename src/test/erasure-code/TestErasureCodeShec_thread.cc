@@ -96,7 +96,7 @@ int main(int argc, char **argv)
 
   const char* env = getenv("CEPH_LIB");
   std::string directory(env ? env : ".libs");
-  g_conf->set_val("erasure_code_dir", directory, false, false);
+  g_conf->set_val("plugin_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
@@ -108,12 +108,12 @@ void* thread1(void* pParam)
 
   time_t start, end;
 
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = g_ceph_context->get_plugin_registry();
 
-  instance.disable_dlclose = true;
+  instance->disable_dlclose = true;
   {
-    Mutex::Locker l(instance.lock);
-    __erasure_code_init((char*) "shec", (char*) "");
+    Mutex::Locker l(instance->lock);
+    __ceph_plugin_init(g_ceph_context, "erasure-code", "shec");
   }
   std::cout << "__erasure_code_init finish " << std::endl;
 

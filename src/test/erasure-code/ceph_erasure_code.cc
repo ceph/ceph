@@ -90,7 +90,7 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
   g_ceph_context->_conf->apply_changes(NULL);
   const char* env = getenv("CEPH_LIB");
   string directory(env ? env : ".libs");
-  g_conf->set_val("erasure_code_dir", directory, false, false);
+  g_conf->set_val("plugin_dir", directory, false, false);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -124,19 +124,17 @@ int ErasureCodeCommand::run() {
 }
 
 int ErasureCodeCommand::plugin_exists() {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  ErasureCodePlugin *plugin = 0;
-  Mutex::Locker l(instance.lock);
+  PluginRegistry *instance = g_ceph_context->get_plugin_registry();
+  Mutex::Locker l(instance->lock);
   stringstream ss;
-  int code = instance.load(vm["plugin_exists"].as<string>(),
-			   g_conf->erasure_code_dir, &plugin, &ss);
+  int code = instance->load("erasure-code", vm["plugin_exists"].as<string>());
   if (code)
     cerr << ss.str() << endl;
   return code;
 }
 
 int ErasureCodeCommand::display_information() {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = g_ceph_context->get_plugin_registry();
   ErasureCodeInterfaceRef erasure_code;
 
   if (profile.count("plugin") == 0) {
@@ -144,10 +142,8 @@ int ErasureCodeCommand::display_information() {
     return 1;
   }
 
-  int code = instance.factory(profile["plugin"],
-			      g_conf->erasure_code_dir,
-			      profile,
-			      &erasure_code, &cerr);
+  ErasureCodePlugin* ecp = dynamic_cast<ErasureCodePlugin*>(instance->get_with_load("erasure-code", profile["plugin"]));
+  int code = ecp->factory(profile, &erasure_code, &cerr);
   if (code)
     return code;
 

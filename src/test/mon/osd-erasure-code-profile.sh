@@ -53,9 +53,9 @@ function TEST_set() {
     # key=value pairs override the default
     #
     ceph osd erasure-code-profile set $profile \
-        key=value plugin=example || return 1
+        key=value plugin=erasurecode_example || return 1
     ceph osd erasure-code-profile get $profile | \
-        grep -e key=value -e plugin=example || return 1
+        grep -e key=value -e plugin=erasurecode_example || return 1
     #
     # --force is required to override an existing profile
     #
@@ -175,7 +175,7 @@ function TEST_format_json() {
     local dir=$1
 
     # osd_pool_default_erasure-code-profile is JSON
-    expected='"plugin":"example"'
+    expected='"plugin":"erasurecode_example"'
     run_mon $dir a \
         --osd_pool_default_erasure-code-profile "{$expected}" || return 1
     ceph --format json osd erasure-code-profile get default | \
@@ -186,9 +186,9 @@ function TEST_format_plain() {
     local dir=$1
 
     # osd_pool_default_erasure-code-profile is plain text
-    expected='"plugin":"example"'
+    expected='"plugin":"erasurecode_example"'
     run_mon $dir a \
-        --osd_pool_default_erasure-code-profile "plugin=example" || return 1
+        --osd_pool_default_erasure-code-profile "plugin=erasurecode_example" || return 1
     ceph --format json osd erasure-code-profile get default | \
         grep "$expected" || return 1
 }
