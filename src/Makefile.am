@@ -1,5 +1,20 @@
 include Makefile-env.am
 
+# a workaround for http://debbugs.gnu.org/cgi/bugreport.cgi?bug=18744, this
+# bug was fixed in automake 1.15, but automake 1.13 is supported by us.  so
+# we can not just require 1.15 using `AM_INIT_AUTOMAKE`
+am__is_gnu_make = { \
+  if test -z '$(MAKELEVEL)'; then \
+    false; \
+  elif test -n '$(MAKE_HOST)'; then \
+    true; \
+  elif test -n '$(MAKE_VERSION)' && test -n '$(CURDIR)'; then \
+    true; \
+  else \
+    false; \
+  fi; \
+}
+
 SUBDIRS += ocf java
 DIST_SUBDIRS += gmock ocf java
 
