@@ -749,10 +749,14 @@ Swift Settings
 
 ``rgw swift url prefix``
 
-:Description: The URL prefix for the Swift API. 
+:Description: The URL prefix for the Swift StorageURL that goes in front of
+              the "/v1" part. This allows to run several Gateway instances
+              on the same host. For compatibility, setting this configuration
+              variable to empty causes the default "/swift" to be used.
+              Use explicit prefix "/" to start StorageURL at the root.
 :Default: ``swift``
-:Example: http://fqdn.com/swift
-	
+:Example: "/swift-testing"
+
 
 ``rgw swift auth url``
 

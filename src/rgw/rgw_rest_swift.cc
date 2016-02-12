@@ -1360,6 +1360,14 @@ static void next_tok(string& str, string& tok, char delim)
   }
 }
 
+bool is_account_in_url(const char *token)
+{
+  if (strncmp(token, "AUTH_rgwts", 10) == 0) {
+    return true;
+  }
+  return false;
+}
+
 int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
 {
   string req;
@@ -1403,7 +1411,7 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
       s->formatter = new RGWFormatter_Plain;
       return -ERR_BAD_URL;
     }
-    first = req;
+    first = req; // XXX first is unused
   }
 
   string tenant_path;
@@ -1424,16 +1432,38 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
   if (ret < 0)
     return ret;
 
+  s->os_auth_token = s->info.env->get("HTTP_X_AUTH_TOKEN");
+
   string ver;
 
   next_tok(req, ver, '/');
 
-  string tenant;
-  if (!tenant_path.empty()) {
+  if (is_account_in_url(s->os_auth_token)) {
+    string account_name;
+    next_tok(req, account_name, '/');
+
+    /* Erase all pre-defined prefixes like "AUTH_" or "KEY_". */
+    list<string> skipped_prefixes;
+    get_str_list("AUTH_,KEY_", skipped_prefixes);
+
+    for (const auto pfx : skipped_prefixes) {
+      const size_t comp_len = min(account_name.length(), pfx.length());
+      if (account_name.compare(0, comp_len, pfx) == 0) {
+        /* Prefix is present. Drop it. */
+        account_name = account_name.substr(comp_len);
+        break;
+      }
+    }
+
+    if (account_name.empty()) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+    s->account_name = account_name;
+  } else if (!tenant_path.empty()) {
+    string tenant;
     next_tok(req, tenant, '/');
   }
 
-  s->os_auth_token = s->info.env->get("HTTP_X_AUTH_TOKEN");
   next_tok(req, first, '/');
 
   dout(10) << "ver=" << ver << " first=" << first << " req=" << req << dendl;

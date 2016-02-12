@@ -1797,6 +1797,7 @@ public:
 
     if (!exists || old_bci.info.bucket.bucket_id != bci.info.bucket.bucket_id) {
       /* a new bucket, we need to select a new bucket placement for it */
+      // XXX not sure if this is correct -- stolen from Radoslaw; what about get()?
       string tenant_name;
       string bucket_name;
       parse_bucket(entry, tenant_name, bucket_name);
