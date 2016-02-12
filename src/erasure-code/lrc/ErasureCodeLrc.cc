@@ -199,7 +199,7 @@ int ErasureCodeLrc::layers_parse(string description_string,
 
 int ErasureCodeLrc::layers_init(ostream *ss)
 {
-  ErasureCodePluginRegistry &registry = ErasureCodePluginRegistry::instance();
+  PluginRegistry *reg = g_ceph_context->get_plugin_registry();
   for (unsigned int i = 0; i < layers.size(); i++) {
     Layer &layer = layers[i];
     int position = 0;
@@ -225,11 +225,18 @@ int ErasureCodeLrc::layers_init(ostream *ss)
       layer.profile["plugin"] = "jerasure";
     if (layer.profile.find("technique") == layer.profile.end())
       layer.profile["technique"] = "reed_sol_van";
-    int err = registry.factory(layer.profile["plugin"],
-			       directory,
-			       layer.profile,
-			       &layer.erasure_code,
-			       ss);
+
+    ErasureCodePlugin* ecp = dynamic_cast<ErasureCodePlugin*>(reg->get_with_load("erasure-code", layer.profile["plugin"]));
+    if (!ecp) {
+      *ss << "Failed to load plugin " << layer.profile["plugin"];
+      return -EIO;
+    }
+    int err = ecp->factory(layer.profile, &layer.erasure_code, ss);
+    // int err = registry.factory(layer.profile["plugin"],
+			 //       directory,
+			 //       layer.profile,
+			 //       &layer.erasure_code,
+			 //       ss);
     if (err)
       return err;
   }

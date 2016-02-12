@@ -58,45 +58,56 @@ static string get_variant() {
 
 class ErasureCodePluginSelectShec : public ErasureCodePlugin {
 public:
-  virtual int factory(const std::string &directory,
-		      ErasureCodeProfile &profile,
+
+  ErasureCodePluginSelectShec(CephContext* cct) : ErasureCodePlugin(cct)
+  {}
+  
+  virtual int factory(ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
 		      ostream *ss) {
-    ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+    PluginRegistry *reg = cct->get_plugin_registry();
     int ret;
     string name = "shec";
+    string variant;
     if (profile.count("shec-name"))
       name = profile.find("shec-name")->second;
     if (profile.count("shec-variant")) {
       dout(10) << "shec-variant "
 	       << profile.find("shec-variant")->second << dendl;
-      ret = instance.factory(name + "_" + profile.find("shec-variant")->second,
-			     directory,
-			     profile, erasure_code, ss);
+    variant = name + "_" + profile.find("shec-variant")->second;
+      // ret = instance.factory(name + "_" + profile.find("shec-variant")->second,
+			   //   directory,
+			   //   profile, erasure_code, ss);
     } else {
-      string variant = get_variant();
+      variant = name + "_" + get_variant();
       dout(10) << variant << " plugin" << dendl;
-      ret = instance.factory(name + "_" + variant, directory,
-			     profile, erasure_code, ss);
+      // ret = instance.factory(name + "_" + variant, directory,
+			   //   profile, erasure_code, ss);
     }
+    ErasureCodePlugin* ecp = dynamic_cast<ErasureCodePlugin*>(reg->get_with_load("erasure-code", variant));
+    if (!ecp) {
+      *ss << "Failed to load plugin " << variant;
+      return -EIO;
+    }
+    ret = ecp->factory(profile, erasure_code, ss);
     return ret;
   }
 };
 
-const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+const char *__ceph_plugin_version() { return CEPH_GIT_NICE_VER; }
 
-int __erasure_code_init(char *plugin_name, char *directory)
+int __ceph_plugin_init(CephContext *cct,
+                       const std::string& type,
+                       const std::string& name)
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = cct->get_plugin_registry();
   string variant = get_variant();
-  ErasureCodePlugin *plugin;
   stringstream ss;
-  int r = instance.load(plugin_name + string("_") + variant,
-			directory, &plugin, &ss);
+  int r = instance->load("erasure-code", name + string("_") + variant);
   if (r) {
     derr << ss.str() << dendl;
     return r;
   }
   dout(10) << ss.str() << dendl;
-  return instance.add(plugin_name, new ErasureCodePluginSelectShec());
+  return instance->add(type, name, new ErasureCodePluginSelectShec(cct));
 }

@@ -189,15 +189,8 @@ void usage()
 int preload_erasure_code()
 {
   string plugins = g_conf->osd_erasure_code_plugins;
-  stringstream ss;
-  int r = ErasureCodePluginRegistry::instance().preload(
-    plugins,
-    g_conf->erasure_code_dir,
-    &ss);
-  if (r)
-    derr << ss.str() << dendl;
-  else
-    dout(10) << ss.str() << dendl;
+  ceph::PluginRegistry *reg = g_ceph_context->get_plugin_registry();
+  int r = reg->preload(plugins, "erasure-code");
   return r;
 }
 

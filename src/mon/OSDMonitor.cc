@@ -4391,11 +4391,14 @@ int OSDMonitor::crush_rename_bucket(const string& srcname,
 int OSDMonitor::normalize_profile(ErasureCodeProfile &profile, ostream *ss)
 {
   ErasureCodeInterfaceRef erasure_code;
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *reg = g_ceph_context->get_plugin_registry();
   ErasureCodeProfile::const_iterator plugin = profile.find("plugin");
-  int err = instance.factory(plugin->second,
-			     g_conf->erasure_code_dir,
-			     profile, &erasure_code, ss);
+  ErasureCodePlugin* ecp = dynamic_cast<ErasureCodePlugin*>(reg->get_with_load("erasure-code", plugin->second));
+  if (!ecp) {
+    *ss << "Failed to load plugin " << plugin->second;
+    return -EIO;
+  }
+  int err = ecp->factory(profile, &erasure_code, ss);
   if (err)
     return err;
   return erasure_code->init(profile, ss);
@@ -4454,10 +4457,13 @@ int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
 	<< profile << std::endl;
     return -EINVAL;
   }
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  return instance.factory(plugin->second,
-			  g_conf->erasure_code_dir,
-			  profile, erasure_code, ss);
+  PluginRegistry *reg = g_ceph_context->get_plugin_registry();
+  ErasureCodePlugin* ecp = dynamic_cast<ErasureCodePlugin*>(reg->get_with_load("erasure-code", plugin->second));
+  if (!ecp) {
+    *ss << "Failed to load plugin " << plugin->second;
+    return -EIO;
+  }
+  return  ecp->factory(profile, erasure_code, ss);
 }
 
 int OSDMonitor::check_cluster_features(uint64_t features,

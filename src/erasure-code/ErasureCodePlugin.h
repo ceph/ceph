@@ -20,63 +20,22 @@
 
 #include "common/Mutex.h"
 #include "ErasureCodeInterface.h"
-
-extern "C" {
-  const char *__erasure_code_version();
-  int __erasure_code_init(char *plugin_name, char *directory);
-}
+#include "common/PluginRegistry.h"
 
 namespace ceph {
 
-  class ErasureCodePlugin {
+  class ErasureCodePlugin :  public Plugin {
   public:
-    void *library;
 
-    ErasureCodePlugin() :
-      library(0) {}
+    ErasureCodePlugin(CephContext *cct) :
+      Plugin(cct) {}
     virtual ~ErasureCodePlugin() {}
 
-    virtual int factory(const std::string &directory,
-			ErasureCodeProfile &profile,
+    virtual int factory(ErasureCodeProfile &profile,
                         ErasureCodeInterfaceRef *erasure_code,
-			ostream *ss) = 0;
+			                  ostream *ss) = 0;
   };
 
-  class ErasureCodePluginRegistry {
-  public:
-    Mutex lock;
-    bool loading;
-    bool disable_dlclose;
-    std::map<std::string,ErasureCodePlugin*> plugins;
-
-    static ErasureCodePluginRegistry singleton;
-
-    ErasureCodePluginRegistry();
-    ~ErasureCodePluginRegistry();
-
-    static ErasureCodePluginRegistry &instance() {
-      return singleton;
-    }
-
-    int factory(const std::string &plugin,
-		const std::string &directory,
-		ErasureCodeProfile &profile,
-		ErasureCodeInterfaceRef *erasure_code,
-		ostream *ss);
-
-    int add(const std::string &name, ErasureCodePlugin *plugin);
-    int remove(const std::string &name);
-    ErasureCodePlugin *get(const std::string &name);
-
-    int load(const std::string &plugin_name,
-	     const std::string &directory,
-	     ErasureCodePlugin **plugin,
-	     ostream *ss);
-
-    int preload(const std::string &plugins,
-		const std::string &directory,
-		ostream *ss);
-  };
 }
 
 #endif

@@ -31,8 +31,11 @@ static ostream& _prefix(std::ostream* _dout)
 
 class ErasureCodePluginJerasure : public ErasureCodePlugin {
 public:
-  virtual int factory(const std::string& directory,
-		      ErasureCodeProfile &profile,
+
+  ErasureCodePluginJerasure(CephContext* cct) : ErasureCodePlugin(cct)
+  {}
+  
+  virtual int factory(ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
 		      ostream *ss) {
     ErasureCodeJerasure *interface;
@@ -79,11 +82,13 @@ extern gf_t *gfp_array[];
 extern int  gfp_is_composite[];
 }
 
-const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+const char *__ceph_plugin_version() { return CEPH_GIT_NICE_VER; }
 
-int __erasure_code_init(char *plugin_name, char *directory)
+int __ceph_plugin_init(CephContext *cct,
+                       const std::string& type,
+                       const std::string& name)
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = cct->get_plugin_registry();
   int w[] = { 4, 8, 16, 32 };
   for(int i = 0; i < 4; i++) {
     int r = galois_init_default_field(w[i]);
@@ -92,5 +97,5 @@ int __erasure_code_init(char *plugin_name, char *directory)
       return -r;
     }
   }
-  return instance.add(plugin_name, new ErasureCodePluginJerasure());
+  return instance->add(type, name, new ErasureCodePluginJerasure(cct));
 }
