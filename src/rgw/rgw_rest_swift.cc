@@ -55,7 +55,8 @@ static void dump_account_metadata(struct req_state * const s,
                                   const uint64_t buckets_object_count,
                                   const uint64_t buckets_size,
                                   const uint64_t buckets_size_rounded,
-                                  map<string, bufferlist>& attrs)
+                                  map<string, bufferlist>& attrs,
+                                  const RGWAccessControlPolicy_SWIFTAcct &policy)
 {
   char buf[32];
   utime_t now = ceph_clock_now(g_ceph_context);
@@ -98,6 +99,13 @@ static void dump_account_metadata(struct req_state * const s,
       s->cio->print("X-Account-Meta-%s: %s\r\n", name + PREFIX_LEN, iter->second.c_str());
     }
   }
+
+  /* Dump account ACLs */
+  string acct_acl;
+  policy.to_str(acct_acl);
+  if (acct_acl.size()) {
+    s->cio->print("X-Account-Access-Control: %s\r\n", acct_acl.c_str());
+  }
 }
 
 void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
@@ -116,7 +124,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             buckets_objcount,
             buckets_size,
             buckets_size_rounded,
-            attrs);
+            attrs,
+            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     end_header(s, NULL, NULL, NO_CONTENT_LENGTH, true);
   }
@@ -166,7 +175,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             buckets_objcount,
             buckets_size,
             buckets_size_rounded,
-            attrs);
+            attrs,
+            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     end_header(s, NULL, NULL, s->formatter->get_len(), true);
   }
@@ -371,7 +381,13 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded, attrs);
+    dump_account_metadata(s,
+            buckets_count,
+            buckets_objcount,
+            buckets_size,
+            buckets_size_rounded,
+            attrs,
+            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
   }
 
   set_req_state_err(s, op_ret);
@@ -651,10 +667,45 @@ static void get_rmattrs_from_headers(const req_state * const s,
   }
 }
 
+static int get_swift_account_settings(req_state * const s,
+                                      RGWRados * const store,
+                                      RGWAccessControlPolicy_SWIFTAcct * const policy,
+                                      bool * const has_policy)
+{
+  *has_policy = false;
+
+  const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
+  if (acl_attr) {
+    RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
+    int r = swift_acct_policy.create(store,
+                                     s->user.user_id,
+                                     s->user.display_name,
+                                     string(acl_attr));
+    if (r < 0) {
+      return r;
+    }
+
+    *policy = swift_acct_policy;
+    *has_policy = true;
+  }
+
+  return 0;
+}
+
 int RGWPutMetadataAccount_ObjStore_SWIFT::get_params()
 {
   if (s->has_bad_meta) {
     return -EINVAL;
+  }
+
+  int ret = get_swift_account_settings(s,
+                                       store,
+                                       // FIXME: we need to carry unique_ptr in generic class
+                                       // and allocate appropriate ACL class in the ctor
+                                       static_cast<RGWAccessControlPolicy_SWIFTAcct *>(&policy),
+                                       &has_policy);
+  if (ret < 0) {
+    return ret;
   }
 
   get_rmattrs_from_headers(s, ACCT_PUT_ATTR_PREFIX, ACCT_REMOVE_ATTR_PREFIX, rmattr_names);
@@ -1262,14 +1313,19 @@ int RGWHandler_ObjStore_SWIFT::authorize()
   if ((!s->os_auth_token && s->info.args.get("temp_url_sig").empty()) ||
       (s->op == OP_OPTIONS)) {
     /* anonymous access */
-    rgw_get_anon_user(s->user);
+    rgw_get_anon_user(s->user, s->auth_user, store, s->account_name);
     s->perm_mask = RGW_PERM_FULL_CONTROL;
     return 0;
   }
 
-  bool authorized = rgw_swift->verify_swift_token(store, s);
-  if (!authorized)
+  const bool authorized = rgw_swift->verify_swift_token(store, s);
+  if (!authorized) {
     return -EPERM;
+  }
+
+  if (s->auth_user.empty()) {
+    s->auth_user = s->user.user_id;
+  }
 
   return 0;
 }
@@ -1428,9 +1484,28 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
 
   next_tok(req, ver, '/');
 
-  string tenant;
-  if (!tenant_path.empty()) {
-    next_tok(req, tenant, '/');
+  if (!tenant_path.empty() || g_conf->rgw_swift_account_in_url) {
+    string account_name;
+    next_tok(req, account_name, '/');
+
+    /* Erase all pre-defined prefixes like "AUTH_" or "KEY_". */
+    list<string> skipped_prefixes;
+    get_str_list("AUTH_,KEY_", skipped_prefixes);
+
+    for (const auto pfx : skipped_prefixes) {
+      const size_t comp_len = min(account_name.length(), pfx.length());
+      if (account_name.compare(0, comp_len, pfx) == 0) {
+        /* Prefix is present. Drop it. */
+        account_name = account_name.substr(comp_len);
+        break;
+      }
+    }
+
+    if (account_name.empty()) {
+      return -ERR_PRECONDITION_FAILED;
+    } else {
+      s->account_name = account_name;
+    }
   }
 
   s->os_auth_token = s->info.env->get("HTTP_X_AUTH_TOKEN");

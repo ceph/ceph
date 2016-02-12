@@ -33,16 +33,32 @@ static RGWMetadataHandler *user_meta_handler = NULL;
 /**
  * Get the anonymous (ie, unauthenticated) user info.
  */
-void rgw_get_anon_user(RGWUserInfo& info)
+void rgw_get_anon_user(RGWUserInfo& info,
+                       rgw_user& auth_user,
+                       RGWRados * const store,
+                       const string& account_name)
 {
-  info.user_id = RGW_USER_ANON_ID;
-  info.display_name.clear();
-  info.access_keys.clear();
+  int ret = 0;
+  if (!account_name.empty()) {
+    const rgw_user ui_owner(account_name);
+    ret = rgw_get_user_info_by_uid(store, ui_owner, info);
+    if (ret < 0) {
+      dout(0) << "NOTICE: couldn't map swift user" << dendl;
+    }
+  }
+
+  if (account_name.empty() || ret < 0) {
+    info.user_id = RGW_USER_ANON_ID;
+    info.display_name.clear();
+    info.access_keys.clear();
+  }
+
+  auth_user = RGW_USER_ANON_ID;
 }
 
-bool rgw_user_is_authenticated(RGWUserInfo& info)
+bool rgw_user_is_authenticated(const rgw_user& auth_user)
 {
-  return (info.user_id.id != RGW_USER_ANON_ID);
+  return (auth_user.id != RGW_USER_ANON_ID);
 }
 
 int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
@@ -279,12 +295,12 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 int rgw_get_user_info_by_uid(RGWRados *store,
-                             rgw_user& uid,
+                             const rgw_user& uid,
                              RGWUserInfo& info,
-                             RGWObjVersionTracker *objv_tracker,
-                             time_t *pmtime,
-                             rgw_cache_entry_info *cache_info,
-                             map<string, bufferlist> *pattrs)
+                             RGWObjVersionTracker * const objv_tracker,
+                             time_t * const pmtime,
+                             rgw_cache_entry_info * const cache_info,
+                             map<string, bufferlist> * const pattrs)
 {
   bufferlist bl;
   RGWUID user_id;
@@ -1694,8 +1710,7 @@ RGWUser::~RGWUser()
 void RGWUser::init_default()
 {
   // use anonymous user info as a placeholder
-  rgw_get_anon_user(old_info);
-  user_id = RGW_USER_ANON_ID;
+  rgw_get_anon_user(old_info, user_id);
 
   clear_populated();
 }

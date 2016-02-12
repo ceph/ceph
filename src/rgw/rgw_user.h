@@ -49,12 +49,15 @@ extern int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id);
 /**
  * Get the anonymous (ie, unauthenticated) user info.
  */
-extern void rgw_get_anon_user(RGWUserInfo& info);
+extern void rgw_get_anon_user(RGWUserInfo& info,
+                              rgw_user& auth_user,
+                              RGWRados * store = NULL,
+                              const std::string& account_name = std::string());
 
 /**
  * verify that user is an actual user, and not the anonymous user
  */
-extern bool rgw_user_is_authenticated(RGWUserInfo& info);
+extern bool rgw_user_is_authenticated(const rgw_user& auth_user);
 /**
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
@@ -82,7 +85,7 @@ extern int rgw_store_user_attrs(RGWRados *store,
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_uid(RGWRados *store,
-                                    rgw_user& user_id,
+                                    const rgw_user& user_id,
                                     RGWUserInfo& info,
                                     RGWObjVersionTracker *objv_tracker = NULL,
                                     time_t *pmtime                     = NULL,

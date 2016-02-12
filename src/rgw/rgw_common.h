@@ -1092,6 +1092,8 @@ struct req_state {
    utime_t header_time;
 
    /* Set once when url_bucket is parsed and not violated thereafter. */
+   string account_name;
+
    string bucket_tenant;
    string bucket_name;
 
@@ -1114,7 +1116,15 @@ struct req_state {
 
    bool has_bad_meta;
 
+   /* Identity used to authorize given RGWOp (used in verify_permission()
+    * method). It might be different than owner of the account (represented
+    * in radosgw by RGWUserInfo structure) we are operating on. */
+   rgw_user auth_user;
+
+   /* Account we are performing operations on. */
    RGWUserInfo user; 
+
+   std::unique_ptr<RGWAccessControlPolicy> user_acl;
    RGWAccessControlPolicy *bucket_acl;
    RGWAccessControlPolicy *object_acl;
 
@@ -1698,13 +1708,20 @@ extern string rgw_trim_quotes(const string& val);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
+bool verify_user_permission(struct req_state * const s,
+                            RGWAccessControlPolicy * const user_acl,
+                            const int perm);
+bool verify_user_permission(struct req_state * const s,
+                            const int perm);
 extern bool verify_bucket_permission(struct req_state * s,
+                                     RGWAccessControlPolicy * user_acl,
                                      RGWAccessControlPolicy * bucket_acl,
                                      int perm);
 extern bool verify_bucket_permission(struct req_state *s, int perm);
 extern bool verify_object_permission(struct req_state *s,
-                                     RGWAccessControlPolicy *bucket_acl,
-                                     RGWAccessControlPolicy *object_acl,
+                                     RGWAccessControlPolicy * user_acl,
+                                     RGWAccessControlPolicy * bucket_acl,
+                                     RGWAccessControlPolicy * object_acl,
                                      int perm);
 extern bool verify_object_permission(struct req_state *s, int perm);
 /** Convert an input URL into a sane object name

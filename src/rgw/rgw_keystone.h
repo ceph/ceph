@@ -63,7 +63,7 @@ public:
     string user_name;
     list<Role> roles;
     void decode_json(JSONObj *obj);
-    bool has_role(const string& r);
+    bool has_role(const string& r) const;
   };
 
   Metadata metadata;
