@@ -26,7 +26,7 @@
 // -----------------------------------------------------------------------------
 #include "ceph_ver.h"
 #include "common/debug.h"
-#include "ErasureCodePluginIsa.h"
+#include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeIsa.h"
 // -----------------------------------------------------------------------------
 
@@ -40,7 +40,7 @@ public:
   virtual int factory(ErasureCodeProfile &profile,
                       ErasureCodeInterfaceRef *erasure_code,
                       ostream *ss)
-{
+  {
     ErasureCodeIsa *interface;
     std::string t;
     if (profile.find("technique") == profile.end())
@@ -69,7 +69,8 @@ public:
     }
     *erasure_code = ErasureCodeInterfaceRef(interface);
     return 0;
-}
+  }
+};
 
 // -----------------------------------------------------------------------------
 

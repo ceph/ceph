@@ -15,52 +15,51 @@ target_link_libraries(ceph_erasure_code osd common ${Boost_PROGRAM_OPTIONS_LIBRA
 install(TARGETS ceph_erasure_code
   DESTINATION bin)
 
-add_library(ec_example SHARED 
+add_library(ceph_ec_example SHARED 
   ErasureCodePluginExample.cc
   $<TARGET_OBJECTS:erasure_code_objs>)
-add_dependencies(ec_example ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-target_link_libraries(ec_example pthread ${EXTRALIBS})
+add_dependencies(ceph_ec_example ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
+target_link_libraries(ceph_ec_example pthread ${EXTRALIBS})
 
-add_library(ec_missing_entry_point SHARED ErasureCodePluginMissingEntryPoint.cc)
-add_dependencies(ec_missing_entry_point ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-target_link_libraries(ec_missing_entry_point pthread ${EXTRALIBS})
+add_library(ceph_missing_entry_point SHARED ErasureCodePluginMissingEntryPoint.cc)
+add_dependencies(ceph_missing_entry_point ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
+target_link_libraries(ceph_missing_entry_point pthread ${EXTRALIBS})
 
-add_library(ec_missing_version SHARED ErasureCodePluginMissingVersion.cc)
-add_dependencies(ec_missing_version ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-target_link_libraries(ec_missing_version pthread ${EXTRALIBS})
+add_library(ceph_missing_version SHARED ErasureCodePluginMissingVersion.cc)
+add_dependencies(ceph_missing_version ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
+target_link_libraries(ceph_missing_version pthread ${EXTRALIBS})
 
-add_library(ec_hangs SHARED ErasureCodePluginHangs.cc)
-add_dependencies(ec_hangs ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-target_link_libraries(ec_hangs pthread ${EXTRALIBS})
+add_library(ceph_hangs SHARED ErasureCodePluginHangs.cc)
+add_dependencies(ceph_hangs ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
+target_link_libraries(ceph_hangs pthread ${EXTRALIBS})
 
-add_library(ec_fail_to_initialize SHARED ErasureCodePluginFailToInitialize.cc)
-add_dependencies(ec_fail_to_initialize ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-target_link_libraries(ec_fail_to_initialize pthread ${EXTRALIBS})
+add_library(ceph_fail_to_initialize SHARED ErasureCodePluginFailToInitialize.cc)
+add_dependencies(ceph_fail_to_initialize ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
+target_link_libraries(ceph_fail_to_initialize pthread ${EXTRALIBS})
 
-add_library(ec_fail_to_register SHARED ErasureCodePluginFailToRegister.cc)
-add_dependencies(ec_fail_to_register ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-target_link_libraries(ec_fail_to_register pthread ${EXTRALIBS})
+add_library(ceph_fail_to_register SHARED ErasureCodePluginFailToRegister.cc)
+add_dependencies(ceph_fail_to_register ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
+target_link_libraries(ceph_fail_to_register pthread ${EXTRALIBS})
 
 # unittest_erasure_code_plugin
 add_executable(unittest_erasure_code_plugin
   ${CMAKE_SOURCE_DIR}/src/erasure-code/ErasureCode.cc
-  TestErasureCodePlugin.cc
   )
 add_ceph_unittest(unittest_erasure_code_plugin ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_erasure_code_plugin)
 target_link_libraries(unittest_erasure_code_plugin
   global
   osd
   ${CMAKE_DL_LIBS}
-  ec_example
+  ceph_ec_example
   common
   )
 add_dependencies(unittest_erasure_code_plugin
-  ec_example
-  ec_missing_entry_point
-  ec_missing_version
-  ec_hangs
-  ec_fail_to_initialize
-  ec_fail_to_register)
+  ceph_ec_example
+  ceph_missing_entry_point
+  ceph_missing_version
+  ceph_hangs
+  ceph_fail_to_initialize
+  ceph_fail_to_register)
 
 # unittest_erasure_code
 add_executable(unittest_erasure_code
@@ -82,10 +81,10 @@ add_ceph_unittest(unittest_erasure_code_plugin_jerasure ${CMAKE_RUNTIME_OUTPUT_D
 target_link_libraries(unittest_erasure_code_plugin_jerasure
   global
   osd
-  ec_jerasure
+  ceph_jerasure
   common)
 add_dependencies(unittest_erasure_code_plugin_jerasure
-  ec_jerasure)
+  ceph_jerasure)
 
 if(HAVE_BETTER_YASM_ELF64)
 
@@ -99,8 +98,7 @@ target_link_libraries(unittest_erasure_code_isa
   global
   osd
   common
-  ec_isa
-  erasure_code
+  ceph_isa
   )
 
 #unittest_erasure_code_plugin_isa
@@ -113,10 +111,9 @@ target_link_libraries(unittest_erasure_code_plugin_isa
   global
   osd
   common
-  ec_isa
+  ceph_isa
   crush
   ${CMAKE_DL_LIBS}
-  erasure_code
   )
 endif(HAVE_BETTER_YASM_ELF64)
 
@@ -128,7 +125,7 @@ target_link_libraries(unittest_erasure_code_lrc
   global
   osd
   ${CMAKE_DL_LIBS}
-  ec_lrc
+  ceph_lrc
   common
   )
 
@@ -138,14 +135,14 @@ add_executable(unittest_erasure_code_plugin_lrc
   )
 add_ceph_unittest(unittest_erasure_code_plugin_lrc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_erasure_code_plugin_lrc)
 add_dependencies(unittest_erasure_code_plugin_lrc 
-  ec_lrc
-  ec_jerasure)
+  ceph_lrc
+  ceph_jerasure)
 target_link_libraries(unittest_erasure_code_plugin_lrc
   global
   osd
   ${CMAKE_DL_LIBS}
-  ec_lrc
-  ec_jerasure
+  ceph_lrc
+  ceph_jerasure
   common)
 
 # unittest_erasure_code_plugin_shec
@@ -158,9 +155,9 @@ target_link_libraries(unittest_erasure_code_plugin_shec
   osd
   ${CMAKE_DL_LIBS}
   common
-  ec_shec)
+  ceph_shec)
 add_dependencies(unittest_erasure_code_plugin_shec 
-  ec_shec)
+  ceph_shec)
 
 # unittest_erasure_code_example
 add_executable(unittest_erasure_code_example
@@ -173,7 +170,6 @@ target_link_libraries(unittest_erasure_code_example
   osd
   ${CMAKE_DL_LIBS}
   common
-  erasure_code
   ${UNITTEST_LIBS}
   )
 set_target_properties(unittest_erasure_code_example PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
@@ -190,7 +186,7 @@ target_link_libraries(unittest_erasure_code_jerasure
   global
   osd
   common
-  ec_jerasure
+  ceph_jerasure
   )
 
 include_directories(${CMAKE_SOURCE_DIR}/src/erasure-code/jerasure)
@@ -206,7 +202,7 @@ target_link_libraries(unittest_erasure_code_shec
   osd
   ${CMAKE_DL_LIBS}
   common
-  ec_shec
+  ceph_shec
   )
 
 # unittest_erasure_code_shec_all
@@ -219,7 +215,7 @@ target_link_libraries(unittest_erasure_code_shec_all
   osd
   ${CMAKE_DL_LIBS}
   common
-  ec_shec
+  ceph_shec
   )
 
 # unittest_erasure_code_shec_thread
@@ -232,7 +228,7 @@ target_link_libraries(unittest_erasure_code_shec_thread
   osd
   ${CMAKE_DL_LIBS}
   common
-  ec_shec
+  ceph_shec
   )
 
 
@@ -246,5 +242,5 @@ target_link_libraries(unittest_erasure_code_shec_arguments
   osd
   ${CMAKE_DL_LIBS}
   common
-  ec_shec
+  ceph_shec
   )

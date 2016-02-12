@@ -21,4 +21,3 @@
 extern "C" int jerasure_init(int count, int *words);
 
 #endif
-

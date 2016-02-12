@@ -20,8 +20,8 @@
 
 #include "ceph_ver.h"
 #include "common/debug.h"
-#include "ErasureCodePluginShec.h"
 #include "ErasureCodeShecTableCache.h"
+#include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeShec.h"
 #include "jerasure_init.h"
 
@@ -70,7 +70,8 @@ public:
     dout(10) << "ErasureCodePluginShec: factory() completed" << dendl;
 
     return 0;
-}
+  }
+};
 
 const char *__ceph_plugin_version() { return CEPH_GIT_NICE_VER; }
 

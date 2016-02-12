@@ -44,6 +44,7 @@ endif()
 
 set(gf-complete_srcs
   gf-complete/src/gf_cpu.c
+  gf-complete/src/gf_method.c
   gf-complete/src/gf_wgen.c
   gf-complete/src/gf_w16.c
   gf-complete/src/gf.c
@@ -85,15 +86,15 @@ set(ec_jerasure_objs
   $<TARGET_OBJECTS:jerasure_utils>
   $<TARGET_OBJECTS:erasure_code_objs>)
 
-add_library(ec_jerasure SHARED ${ec_jerasure_objs})
-target_link_libraries(ec_jerasure ${EXTRALIBS})
-install(TARGETS ec_jerasure DESTINATION ${erasure_plugin_dir})
+add_library(ceph_jerasure SHARED ${ec_jerasure_objs})
+target_link_libraries(ceph_jerasure ${EXTRALIBS})
+install(TARGETS ceph_jerasure DESTINATION ${erasure_plugin_dir})
 
 # legacy libraries
 foreach(flavor ${jerasure_legacy_flavors})
-  set(plugin_name "ec_jerasure_${flavor}")
+  set(plugin_name "ceph_jerasure_${flavor}")
   add_library(${plugin_name} SHARED ${ec_jerasure_objs})
   install(TARGETS ${plugin_name} DESTINATION ${erasure_plugin_dir})
-  add_dependencies(ec_jerasure ${plugin_name})
+  add_dependencies(ceph_jerasure ${plugin_name})
 endforeach()
 

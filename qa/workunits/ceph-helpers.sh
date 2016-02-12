@@ -1287,7 +1287,7 @@ function erasure_code_plugin_exists() {
 
     local status
     if ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin 2>&1 |
-        grep "$plugin.*No such file" ; then
+        grep "Failed to load plugin $plugin" ; then
         status=1
     else
         status=0

@@ -17,7 +17,7 @@
 
 #include "ceph_ver.h"
 #include "common/debug.h"
-#include "ErasureCodePluginLrc.h"
+#include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeLrc.h"
 
 // re-include our assert
@@ -45,6 +45,7 @@ public:
     }
     *erasure_code = ErasureCodeInterfaceRef(interface);
     return 0;
+  }
 };
 
 const char *__ceph_plugin_version() { return CEPH_GIT_NICE_VER; }
