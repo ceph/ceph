@@ -74,5 +74,58 @@ std::ostream& operator<<(std::ostream& os, const MirrorPeer& peer) {
   return os;
 }
 
+void MirrorImage::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(global_image_id, bl);
+  ::encode(static_cast<uint8_t>(state), bl);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorImage::decode(bufferlist::iterator &it) {
+  uint8_t int_state;
+  DECODE_START(1, it);
+  ::decode(global_image_id, it);
+  ::decode(int_state, it);
+  state = static_cast<MirrorImageState>(int_state);
+  DECODE_FINISH(it);
+}
+
+void MirrorImage::dump(Formatter *f) const {
+  f->dump_string("global_image_id", global_image_id);
+  f->dump_int("state", state);
+}
+
+void MirrorImage::generate_test_instances(std::list<MirrorImage*> &o) {
+  o.push_back(new MirrorImage());
+  o.push_back(new MirrorImage("uuid-123", MIRROR_IMAGE_STATE_ENABLED));
+  o.push_back(new MirrorImage("uuid-abc", MIRROR_IMAGE_STATE_DISABLING));
+}
+
+bool MirrorImage::operator==(const MirrorImage &rhs) const {
+  return global_image_id == rhs.global_image_id && state == rhs.state;
+}
+
+std::ostream& operator<<(std::ostream& os, const MirrorImageState& mirror_state) {
+  switch (mirror_state) {
+  case MIRROR_IMAGE_STATE_DISABLING:
+    os << "disabling";
+    break;
+  case MIRROR_IMAGE_STATE_ENABLED:
+    os << "enabled";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(mirror_state) << ")";
+    break;
+  }
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const MirrorImage& mirror_image) {
+  os << "["
+     << "global_image_id=" << mirror_image.global_image_id << ", "
+     << "state=" << mirror_image.state << "]";
+  return os;
+}
+
 } // namespace rbd
 } // namespace cls
