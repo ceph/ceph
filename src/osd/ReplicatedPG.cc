@@ -2227,7 +2227,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
 
   case pg_pool_t::CACHEMODE_READFORWARD:
     // Do writeback to the cache tier for writes
-    if (op->may_write() || write_ordered) {
+    if (op->may_write() || write_ordered || must_promote) {
       if (agent_state &&
 	  agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
 	dout(20) << __func__ << " cache pool full, waiting" << dendl;
@@ -2244,7 +2244,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
 
   case pg_pool_t::CACHEMODE_READPROXY:
     // Do writeback to the cache tier for writes
-    if (op->may_write() || write_ordered) {
+    if (op->may_write() || write_ordered || must_promote) {
       if (agent_state &&
 	  agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
 	dout(20) << __func__ << " cache pool full, waiting" << dendl;
