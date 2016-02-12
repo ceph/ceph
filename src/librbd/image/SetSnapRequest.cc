@@ -76,7 +76,7 @@ void SetSnapRequest<I>::send_init_exclusive_lock() {
     klass, &klass::handle_init_exclusive_lock>(this);
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  m_exclusive_lock->init(ctx);
+  m_exclusive_lock->init(m_image_ctx.features, ctx);
 }
 
 template <typename I>

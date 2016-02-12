@@ -3778,6 +3778,59 @@ TEST_F(TestLibRBD, ExclusiveLockTransition)
   ASSERT_PASSED(validate_object_map, image3);
 }
 
+TEST_F(TestLibRBD, ExclusiveLockReadTransition)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+
+  uint64_t size = 1 << 18;
+  int order = 12;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  // journaling should force read ops to acquire the lock
+  bufferlist read_bl;
+  ASSERT_EQ(0, image1.read(0, 0, read_bl));
+
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+  std::list<librbd::RBD::AioCompletion *> comps;
+  std::list<bufferlist> read_bls;
+  for (size_t object_no = 0; object_no < (size >> 12); ++object_no) {
+    librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(NULL,
+                                                                      NULL);
+    comps.push_back(comp);
+    read_bls.emplace_back();
+    if (object_no % 2 == 0) {
+      ASSERT_EQ(0, image1.aio_read(object_no << order, 1 << order, read_bls.back(), comp));
+    } else {
+      ASSERT_EQ(0, image2.aio_read(object_no << order, 1 << order, read_bls.back(), comp));
+    }
+  }
+
+  while (!comps.empty()) {
+    librbd::RBD::AioCompletion *comp = comps.front();
+    comps.pop_front();
+    ASSERT_EQ(0, comp->wait_for_complete());
+    ASSERT_EQ(1, comp->is_complete());
+  }
+}
+
 TEST_F(TestLibRBD, CacheMayCopyOnWrite) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 

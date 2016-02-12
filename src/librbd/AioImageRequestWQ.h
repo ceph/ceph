@@ -37,21 +37,21 @@ public:
   using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtx> >::drain;
   using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtx> >::empty;
 
-  inline bool writes_empty() const {
-    RWLock::RLocker locker(m_lock);
-    return (m_queued_writes.read() == 0);
-  }
+  void shut_down(Context *on_shutdown);
+
+  bool is_lock_request_needed() const;
 
   inline bool writes_blocked() const {
     RWLock::RLocker locker(m_lock);
     return (m_write_blockers > 0);
   }
 
-  void shut_down(Context *on_shutdown);
-
   void block_writes();
   void block_writes(Context *on_blocked);
   void unblock_writes();
+
+  void set_require_lock_on_read();
+  void clear_require_lock_on_read();
 
 protected:
   virtual void *_void_dequeue();
@@ -88,7 +88,9 @@ private:
   mutable RWLock m_lock;
   Contexts m_write_blocker_contexts;
   uint32_t m_write_blockers;
+  bool m_require_lock_on_read = false;
   atomic_t m_in_progress_writes;
+  atomic_t m_queued_reads;
   atomic_t m_queued_writes;
   atomic_t m_in_flight_ops;
 
@@ -97,10 +99,14 @@ private:
   bool m_shutdown;
   Context *m_on_shutdown;
 
+  inline bool writes_empty() const {
+    RWLock::RLocker locker(m_lock);
+    return (m_queued_writes.read() == 0);
+  }
+
   int start_in_flight_op(AioCompletion *c);
   void finish_in_flight_op();
 
-  bool is_journal_required() const;
   bool is_lock_required() const;
   void queue(AioImageRequest<ImageCtx> *req);
 
