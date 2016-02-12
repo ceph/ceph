@@ -823,6 +823,10 @@ int librados::RadosClient::monitor_log(const string& level, rados_log_callback_t
 {
   Mutex::Locker l(lock);
 
+  if (state != CONNECTED) {
+    return -ENOTCONN;
+  }
+
   if (cb == NULL) {
     // stop watch
     ldout(cct, 10) << __func__ << " removing cb " << (void*)log_cb << dendl;
