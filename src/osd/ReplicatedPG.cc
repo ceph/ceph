@@ -7873,6 +7873,11 @@ void ReplicatedPG::finish_flush(hobject_t oid, ceph_tid_t tid, int r)
   if (r < 0 && !(r == -ENOENT && fop->removal)) {
     if (fop->op)
       osd->reply_op_error(fop->op, -EBUSY);
+    if (fop->blocking) {
+      obc->stop_block();
+      kick_object_context_blocked(obc);
+    }
+
     if (!fop->dup_ops.empty()) {
       dout(20) << __func__ << " requeueing dups" << dendl;
       requeue_ops(fop->dup_ops);
