@@ -579,6 +579,8 @@ public:
       on_committed.emplace_back(std::move(f));
     }
 
+    bool sent_ack;
+    bool sent_disk;
 
     void apply_pending_attrs() {
       for (map<ObjectContextRef,
@@ -643,6 +645,7 @@ public:
       num_read(0),
       num_write(0),
       copy_cb(NULL),
+      sent_ack(false), sent_disk(false),
       async_read_result(0),
       inflightreads(0),
       lock_to_release(NONE),
@@ -721,9 +724,6 @@ public:
 
     bool all_applied;
     bool all_committed;
-    bool sent_ack;
-    //bool sent_nvram;
-    bool sent_disk;
     
     utime_t   start;
     
@@ -733,7 +733,6 @@ public:
     list<std::function<void()>> on_committed;
     list<std::function<void()>> on_success;
     list<std::function<void()>> on_finish;
-    bool log_op_stat;
     
     RepGather(OpContext *c, ObjectContextRef pi, ceph_tid_t rt,
 	      eversion_t lc) :
@@ -742,15 +741,12 @@ public:
       ctx(c), obc(pi),
       rep_tid(rt), 
       rep_aborted(false), rep_done(false),
-      all_applied(false), all_committed(false), sent_ack(false),
-      //sent_nvram(false),
-      sent_disk(false),
+      all_applied(false), all_committed(false),
       pg_local_last_complete(lc),
       on_applied(std::move(c->on_applied)),
       on_committed(std::move(c->on_committed)),
       on_success(std::move(c->on_success)),
-      on_finish(std::move(c->on_finish)),
-      log_op_stat(false) { }
+      on_finish(std::move(c->on_finish)) {}
 
     RepGather *get() {
       nref++;
