@@ -42,7 +42,7 @@ libceph_erasurecode_example_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_erasurecode_example_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_erasurecode_example_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_erasurecode_example_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_erasurecode_example_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_erasurecode_example.la
 
@@ -53,7 +53,7 @@ libceph_missing_entry_point_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_missing_entry_point_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_missing_entry_point_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_missing_entry_point_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_missing_entry_point_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_missing_entry_point.la
 
@@ -63,7 +63,7 @@ libceph_missing_version_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_missing_version_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_missing_version_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_missing_version_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_missing_version_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_missing_version.la
 
@@ -74,7 +74,7 @@ libceph_hangs_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_hangs_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_hangs_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_hangs_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_hangs_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_hangs.la
 
@@ -85,7 +85,7 @@ libceph_fail_to_initialize_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_fail_to_initialize_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_fail_to_initialize_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_fail_to_initialize_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_fail_to_initialize_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_fail_to_initialize.la
 
@@ -96,7 +96,7 @@ libceph_fail_to_register_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_fail_to_register_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_fail_to_register_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_fail_to_register_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_fail_to_register_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_fail_to_register.la
 
@@ -107,7 +107,7 @@ libceph_test_jerasure_neon_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_test_jerasure_neon_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_test_jerasure_neon_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_test_jerasure_neon_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_jerasure_neon_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_test_jerasure_neon.la
 
@@ -118,7 +118,7 @@ libceph_test_jerasure_sse4_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_test_jerasure_sse4_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_test_jerasure_sse4_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_test_jerasure_sse4_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_jerasure_sse4_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_test_jerasure_sse4.la
 
@@ -129,7 +129,7 @@ libceph_test_jerasure_sse3_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_test_jerasure_sse3_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_test_jerasure_sse3_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_test_jerasure_sse3_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_jerasure_sse3_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_test_jerasure_sse3.la
 
@@ -140,7 +140,7 @@ libceph_test_jerasure_generic_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_test_jerasure_generic_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_test_jerasure_generic_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_test_jerasure_generic_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_jerasure_generic_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_test_jerasure_generic.la
 
@@ -318,7 +318,7 @@ libceph_test_shec_neon_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_test_shec_neon_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_test_shec_neon_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_test_shec_neon_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_shec_neon_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_test_shec_neon.la
 
@@ -329,7 +329,7 @@ libceph_test_shec_sse4_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_test_shec_sse4_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_test_shec_sse4_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_test_shec_sse4_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_shec_sse4_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_test_shec_sse4.la
 
@@ -340,7 +340,7 @@ libceph_test_shec_sse3_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_test_shec_sse3_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_test_shec_sse3_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_test_shec_sse3_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_shec_sse3_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_test_shec_sse3.la
 
@@ -351,7 +351,7 @@ libceph_test_shec_generic_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_test_shec_generic_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libceph_test_shec_generic_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -rpath /nowhere
 if LINUX
-libceph_test_shec_generic_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_test_shec_generic_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 check_LTLIBRARIES += libceph_test_shec_generic.la
 

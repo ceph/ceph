@@ -77,6 +77,19 @@ export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 [ -z "$CEPH_RGW_PORT" ] && CEPH_RGW_PORT=8000
 [ -z "$CEPH_CONF_PATH" ] && CEPH_CONF_PATH=$CEPH_DIR
 
+
+mkdir -p .libs/erasure-code
+for f in `ls -d erasure-code/*/`; 
+do 
+    cp .libs/libceph_`basename $f`*.so* .libs/erasure-code/;
+done
+cp .libs/libceph_erasurecode_example.so* .libs/erasure-code/
+mkdir -p .libs/compressor
+for f in `ls -d compressor/*/`; 
+do
+    cp .libs/libceph_`basename $f`.so* .libs/compressor/;
+done
+
 extra_conf=""
 new=0
 standby=0

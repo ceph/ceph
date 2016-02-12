@@ -32,9 +32,9 @@ protected:
   class Thread_factory : public Thread {
   public:
     static void cleanup(void *arg) {
-      ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-      if (instance.lock.is_locked())
-        instance.lock.Unlock();
+      PluginRegistry *instance = g_ceph_context->get_plugin_registry();
+      if (instance->lock.is_locked())
+        instance->lock.Unlock();
     }
 
     virtual void *entry() {
