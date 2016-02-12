@@ -93,6 +93,13 @@ function setup() {
     local dir=$1
     teardown $dir || return 1
     mkdir -p $dir
+
+    mkdir -p .libs/erasure-code
+    for f in `ls -d erasure-code/*/`; 
+    do 
+        cp .libs/libceph_`basename $f`*.so* .libs/erasure-code/;
+    done
+    cp .libs/libceph_erasurecode_example.so* .libs/erasure-code/
 }
 
 function test_setup() {

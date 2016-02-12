@@ -103,7 +103,9 @@ Plugin *PluginRegistry::get_with_load(const std::string& type,
   Mutex::Locker l(lock);
   Plugin* ret = get(type, name);
   if (!ret) {
+    loading = true;
     int err = load(type, name);
+    loading = false;
     if (err == 0)
       ret = get(type, name);
   } 
