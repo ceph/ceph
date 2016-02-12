@@ -467,7 +467,7 @@ namespace crimson {
 
 	// try constraint (reservation) based scheduling
 
-#if 1
+#if 0
 	{
 	  static uint count = 0;
 	  ++count;
