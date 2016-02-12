@@ -2383,6 +2383,86 @@ target_link_libraries(test_keyvaluedb_iterators
   ${CMAKE_DL_LIBS}
   )
 
+# librgw_file (nfs-like RGW interface)
+add_executable(test_librgw_file
+  librgw_file.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_librgw_file PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_librgw_file
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
+# librgw_file_cd (just the rgw_file create-delete bucket ops)
+add_executable(test_librgw_file_cd
+  librgw_file_cd.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_librgw_file_cd PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_librgw_file_cd
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
+# librgw_file_gp (just the rgw_file get-put bucket ops)
+add_executable(test_librgw_file_gp
+  librgw_file_gp.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_librgw_file_gp PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_librgw_file_gp
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
+# librgw_file_nfsns (nfs namespace tests)
+add_executable(test_librgw_file_nfsns
+  librgw_file_nfsns.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_librgw_file_nfsns PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_librgw_file_nfsns
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
+# librgw_file_aw (nfs write transaction [atomic write] tests)
+add_executable(test_librgw_file_aw
+  librgw_file_aw.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_librgw_file_aw PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_librgw_file_aw
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
 if(${HAVE_LIBFUSE})
   add_executable(test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
@@ -2475,3 +2555,4 @@ if(HAVE_XIO)
     ${CMAKE_DL_LIBS}
     )
 endif(HAVE_XIO)
+

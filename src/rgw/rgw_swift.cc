@@ -578,11 +578,11 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
     return -EPERM;
 
   dout(20) << "temp url user (bucket owner): " << bucket_info.owner << dendl;
-  if (rgw_get_user_info_by_uid(store, bucket_info.owner, s->user) < 0) {
+  if (rgw_get_user_info_by_uid(store, bucket_info.owner, *(s->user)) < 0) {
     return -EPERM;
   }
 
-  if (s->user.temp_url_keys.empty()) {
+  if (s->user->temp_url_keys.empty()) {
     dout(5) << "user does not have temp url key set, aborting" << dendl;
     return -EPERM;
   }
@@ -611,7 +611,7 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   dout(20) << "temp url signature (plain text): " << str << dendl;
 
   map<int, string>::iterator iter;
-  for (iter = s->user.temp_url_keys.begin(); iter != s->user.temp_url_keys.end(); ++iter) {
+  for (iter = s->user->temp_url_keys.begin(); iter != s->user->temp_url_keys.end(); ++iter) {
     string& temp_url_key = iter->second;
 
     if (temp_url_key.empty())
@@ -650,8 +650,8 @@ bool RGWSwift::verify_swift_token(RGWRados *store, req_state *s)
       subuser = s->swift_user.substr(pos + 1);
     }
     s->perm_mask = 0;
-    map<string, RGWSubUser>::iterator iter = s->user.subusers.find(subuser);
-    if (iter != s->user.subusers.end()) {
+    map<string, RGWSubUser>::iterator iter = s->user->subusers.find(subuser);
+    if (iter != s->user->subusers.end()) {
       RGWSubUser& subuser_ = iter->second;
       s->perm_mask = subuser_.perm_mask;
     }
@@ -671,7 +671,8 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
   }
 
   if (strncmp(s->os_auth_token, "AUTH_rgwtk", 10) == 0) {
-    int ret = rgw_swift_verify_signed_token(s->cct, store, s->os_auth_token, s->user, &s->swift_user);
+    int ret = rgw_swift_verify_signed_token(s->cct, store, s->os_auth_token,
+					    *(s->user), &s->swift_user);
     if (ret < 0)
       return false;
 
@@ -685,7 +686,7 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
   int ret;
 
   if (supports_keystone()) {
-    ret = validate_keystone_token(store, s->os_auth_token, &info, s->user);
+    ret = validate_keystone_token(store, s->os_auth_token, &info, *(s->user));
     return (ret >= 0);
   }
 
@@ -705,12 +706,12 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
 
   ldout(cct, 10) << "swift user=" << s->swift_user << dendl;
 
-  if (rgw_get_user_info_by_swift(store, swift_user, s->user) < 0) {
+  if (rgw_get_user_info_by_swift(store, swift_user, *(s->user)) < 0) {
     ldout(cct, 0) << "NOTICE: couldn't map swift user" << dendl;
     return false;
   }
 
-  ldout(cct, 10) << "user_id=" << s->user.user_id << dendl;
+  ldout(cct, 10) << "user_id=" << s->user->user_id << dendl;
 
   return true;
 }

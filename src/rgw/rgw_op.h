@@ -18,6 +18,12 @@
 #include <set>
 #include <map>
 
+#include "common/armor.h"
+#include "common/mime.h"
+#include "common/utf8.h"
+#include "common/ceph_json.h"
+#include "common/utf8.h"
+
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_user.h"
@@ -25,6 +31,8 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
+
+#include "include/assert.h"
 
 using namespace std;
 
@@ -45,6 +53,7 @@ enum RGWOpType {
   RGW_OP_STAT_BUCKET,
   RGW_OP_CREATE_BUCKET,
   RGW_OP_DELETE_BUCKET,
+  RGW_OP_STAT_OBJ,
   RGW_OP_PUT_OBJ,
   RGW_OP_POST_OBJ,
   RGW_OP_PUT_METADATA_ACCOUNT,
@@ -86,8 +95,9 @@ protected:
 
   virtual int init_quota();
 public:
-RGWOp() : s(NULL), dialect_handler(NULL), store(NULL), cors_exist(false),
-    op_ret(0) {}
+RGWOp() : s(nullptr), dialect_handler(nullptr), store(nullptr),
+    cors_exist(false), op_ret(0) {}
+
   virtual ~RGWOp() {}
 
   int get_ret() const { return op_ret; }
@@ -308,6 +318,7 @@ protected:
   uint64_t buckets_size;
   uint64_t buckets_size_rounded;
   map<string, bufferlist> attrs;
+  bool is_truncated;
 
 public:
   RGWListBuckets() : sent_data(false) {
@@ -663,7 +674,7 @@ public:
     policy.set_ctx(s->cct);
   }
 
-  RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
+  virtual RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
   void dispose_processor(RGWPutObjProcessor *processor);
 
   int verify_permission();
@@ -1297,7 +1308,6 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
-
 class RGWHandler {
 protected:
   RGWRados *store;
@@ -1306,31 +1316,171 @@ protected:
   int do_init_permissions();
   int do_read_permissions(RGWOp *op, bool only_bucket);
 
-  virtual RGWOp *op_get() { return NULL; }
-  virtual RGWOp *op_put() { return NULL; }
-  virtual RGWOp *op_delete() { return NULL; }
-  virtual RGWOp *op_head() { return NULL; }
-  virtual RGWOp *op_post() { return NULL; }
-  virtual RGWOp *op_copy() { return NULL; }
-  virtual RGWOp *op_options() { return NULL; }
 public:
   RGWHandler() : store(NULL), s(NULL) {}
   virtual ~RGWHandler();
-  virtual int init(RGWRados *store, struct req_state *_s, RGWClientIO *cio);
 
-  virtual RGWOp *get_op(RGWRados *store);
-  virtual void put_op(RGWOp *op);
+  virtual int init(RGWRados* store, struct req_state* _s, RGWClientIO* cio);
+
   virtual int init_permissions(RGWOp *op) {
     return 0;
   }
+
   virtual int retarget(RGWOp *op, RGWOp **new_op) {
     *new_op = op;
     return 0;
   }
+
   virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
   virtual int postauth_init() = 0;
   virtual int error_handler(int err_no, string *error_content);
 };
 
-#endif
+extern int rgw_build_bucket_policies(RGWRados* store, struct req_state* s);
+
+static inline int put_data_and_throttle(RGWPutObjProcessor *processor,
+					bufferlist& data, off_t ofs,
+					MD5 *hash, bool need_to_wait)
+{
+  bool again;
+
+  do {
+    void *handle;
+
+    int ret = processor->handle_data(data, ofs, hash, &handle, &again);
+    if (ret < 0)
+      return ret;
+
+    ret = processor->throttle_data(handle, need_to_wait);
+    if (ret < 0)
+      return ret;
+
+    need_to_wait = false; /* the need to wait only applies to the first
+			   * iteration */
+  } while (again);
+
+  return 0;
+} /* put_data_and_throttle */
+
+static inline int get_system_versioning_params(req_state *s,
+					      uint64_t *olh_epoch,
+					      string *version_id)
+{
+  if (!s->system_request) {
+    return 0;
+  }
+
+  if (olh_epoch) {
+    string epoch_str = s->info.args.get(RGW_SYS_PARAM_PREFIX "versioned-epoch");
+    if (!epoch_str.empty()) {
+      string err;
+      *olh_epoch = strict_strtol(epoch_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        lsubdout(s->cct, rgw, 0) << "failed to parse versioned-epoch param"
+				 << dendl;
+        return -EINVAL;
+      }
+    }
+  }
+
+  if (version_id) {
+    *version_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "version-id");
+  }
+
+  return 0;
+} /* get_system_versioning_params */
+
+static inline void format_xattr(std::string &xattr)
+{
+  /* If the extended attribute is not valid UTF-8, we encode it using
+   * quoted-printable encoding.
+   */
+  if ((check_utf8(xattr.c_str(), xattr.length()) != 0) ||
+      (check_for_control_characters(xattr.c_str(), xattr.length()) != 0)) {
+    static const char MIME_PREFIX_STR[] = "=?UTF-8?Q?";
+    static const int MIME_PREFIX_LEN = sizeof(MIME_PREFIX_STR) - 1;
+    static const char MIME_SUFFIX_STR[] = "?=";
+    static const int MIME_SUFFIX_LEN = sizeof(MIME_SUFFIX_STR) - 1;
+    int mlen = mime_encode_as_qp(xattr.c_str(), NULL, 0);
+    char *mime = new char[MIME_PREFIX_LEN + mlen + MIME_SUFFIX_LEN + 1];
+    strcpy(mime, MIME_PREFIX_STR);
+    mime_encode_as_qp(xattr.c_str(), mime + MIME_PREFIX_LEN, mlen);
+    strcpy(mime + MIME_PREFIX_LEN + (mlen - 1), MIME_SUFFIX_STR);
+    xattr.assign(mime);
+    delete [] mime;
+  }
+} /* format_xattr */
+
+/**
+ * Get the HTTP request metadata out of the req_state as a
+ * map(<attr_name, attr_contents>, where attr_name is RGW_ATTR_PREFIX.HTTP_NAME)
+ * s: The request state
+ * attrs: will be filled up with attrs mapped as <attr_name, attr_contents>
+ *
+ */
+static inline void rgw_get_request_metadata(CephContext *cct,
+					    struct req_info& info,
+					    map<string, bufferlist>& attrs,
+					    const bool allow_empty_attrs = true)
+{
+  map<string, string>::iterator iter;
+  for (iter = info.x_meta_map.begin(); iter != info.x_meta_map.end(); ++iter) {
+    const string &name(iter->first);
+    string &xattr(iter->second);
+
+    if (allow_empty_attrs || !xattr.empty()) {
+      lsubdout(cct, rgw, 10) << "x>> " << name << ":" << xattr << dendl;
+      format_xattr(xattr);
+      string attr_name(RGW_ATTR_PREFIX);
+      attr_name.append(name);
+      map<string, bufferlist>::value_type v(attr_name, bufferlist());
+      std::pair < map<string, bufferlist>::iterator, bool >
+	rval(attrs.insert(v));
+      bufferlist& bl(rval.first->second);
+      bl.append(xattr.c_str(), xattr.size() + 1);
+    }
+  }
+} /* rgw_get_request_metadata */
+
+static inline void encode_delete_at_attr(time_t delete_at,
+					map<string, bufferlist>& attrs)
+{
+  if (delete_at == 0) {
+    return;
+  }
+
+  bufferlist delatbl;
+  ::encode(utime_t(delete_at, 0), delatbl);
+  attrs[RGW_ATTR_DELETE_AT] = delatbl;
+} /* encode_delete_at_attr */
+
+static inline int encode_dlo_manifest_attr(const char * const dlo_manifest,
+					  map<string, bufferlist>& attrs)
+{
+  string dm = dlo_manifest;
+
+  if (dm.find('/') == string::npos) {
+    return -EINVAL;
+  }
+
+  bufferlist manifest_bl;
+  manifest_bl.append(dlo_manifest, strlen(dlo_manifest) + 1);
+  attrs[RGW_ATTR_USER_MANIFEST] = manifest_bl;
+
+  return 0;
+} /* encode_dlo_manifest_attr */
+
+static inline void complete_etag(MD5& hash, string *etag)
+{
+  char etag_buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  char etag_buf_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
+
+  hash.Final((byte *)etag_buf);
+  buf_to_hex((const unsigned char *)etag_buf, CEPH_CRYPTO_MD5_DIGESTSIZE,
+	    etag_buf_str);
+
+  *etag = etag_buf_str;
+} /* complete_etag */
+
+#endif /* CEPH_RGW_OP_H */

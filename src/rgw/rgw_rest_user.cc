@@ -92,7 +92,7 @@ void RGWOp_User_Create::execute()
   RESTArgs::get_bool(s, "system", false, &system);
   RESTArgs::get_bool(s, "exclusive", false, &exclusive);
 
-  if (!s->user.system && system) {
+  if (!s->user->system && system) {
     ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
     http_ret = -EINVAL;
     return;
@@ -192,7 +192,7 @@ void RGWOp_User_Modify::execute()
 
   RESTArgs::get_bool(s, "system", false, &system);
 
-  if (!s->user.system && system) {
+  if (!s->user->system && system) {
     ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
     http_ret = -EINVAL;
     return;
