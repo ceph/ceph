@@ -3762,6 +3762,143 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlush) {
   }
 }
 
+TEST_F(LibRadosTwoPoolsECPP, FailedFlush) {
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("hi there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  // verify the object is present in the cache tier
+  {
+    NObjectIterator it = cache_ioctx.nobjects_begin();
+    ASSERT_TRUE(it != cache_ioctx.nobjects_end());
+    ASSERT_TRUE(it->get_oid() == string("foo"));
+    ++it;
+    ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+  }
+
+  // verify the object is NOT present in the base tier
+  {
+    NObjectIterator it = ioctx.nobjects_begin();
+    ASSERT_TRUE(it == ioctx.nobjects_end());
+  }
+
+  // set omap
+  {
+    ObjectWriteOperation op;
+    std::map<std::string, bufferlist> omap;
+    omap["somekey"] = bufferlist();
+    op.omap_set(omap);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush
+  {
+    ObjectReadOperation op;
+    op.cache_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_safe();
+    ASSERT_NE(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // get omap
+  {
+    ObjectReadOperation op;
+    bufferlist bl;
+    int prval = 0;
+    std::set<std::string> keys;
+    keys.insert("somekey");
+    std::map<std::string, bufferlist> map;
+
+    op.omap_get_vals_by_keys(keys, &map, &prval);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op, &bl));
+    sleep(5);
+    bool completed = completion->is_complete();
+    if( !completed ) {
+      cache_ioctx.aio_cancel(completion); 
+      std::cerr << "Most probably test case will hang here, please reset manually" << std::endl;
+      ASSERT_TRUE(completed); //in fact we are locked forever at test case shutdown unless fix for http://tracker.ceph.com/issues/14511 is applied. Seems there is no workaround for that
+    }
+    completion->release();
+  }
+  // verify still not in base tier
+  {
+    ASSERT_TRUE(ioctx.nobjects_begin() == ioctx.nobjects_end());
+  }
+  // erase it
+  {
+    ObjectWriteOperation op;
+    op.remove();
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  // flush whiteout
+  {
+    ObjectReadOperation op;
+    op.cache_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // evict
+  {
+    ObjectReadOperation op;
+    op.cache_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op, librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // verify no longer in cache tier
+  {
+    NObjectIterator it = cache_ioctx.nobjects_begin();
+    ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+  }
+  // or base tier
+  {
+    NObjectIterator it = ioctx.nobjects_begin();
+    ASSERT_TRUE(it == ioctx.nobjects_end());
+  }
+}
+
 TEST_F(LibRadosTwoPoolsECPP, Flush) {
   // configure cache
   bufferlist inbl;
