@@ -38,7 +38,8 @@ int main(int argc, char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  string directory = getenv("CEPH_LIB");
+  const char* env = getenv("CEPH_LIB");
+  std::string directory(env ? env : "lib");
   string mkdir_compressor = "mkdir -p " + directory + "/compressor";
   int r = system(mkdir_compressor.c_str());
   (void)r;

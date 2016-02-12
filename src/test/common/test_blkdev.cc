@@ -22,15 +22,16 @@ TEST(blkdev, get_block_device_base) {
   for (int i=0; i<2; ++i) {
     string root;
     if (i == 0) {
-      string CEPH_ROOT = getenv("CEPH_ROOT");
-      root = CEPH_ROOT + "/src/test/common/test_blkdev_sys_block";
+      const char* env = getenv("CEPH_ROOT");
+      ASSERT_NE(env, nullptr) << "Environment Variable CEPH_ROOT not found!";
+      root = string(env) + "/src/test/common/test_blkdev_sys_block";
     }
     set_block_device_sandbox_dir(root.c_str());
 
     // work backwards
     sprintf(buf, "%s/sys/block", root.c_str());
     DIR *dir = opendir(buf);
-    ASSERT_TRUE(dir);
+    ASSERT_NE(dir, nullptr);
     while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
       if (!de)
 	break;
