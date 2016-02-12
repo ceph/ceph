@@ -238,8 +238,6 @@ class TestAnsibleTask(TestTask):
         assert task.playbook_file == playbook_file_obj
         playbook_file_obj.seek(0)
         playbook_result = yaml.safe_load(playbook_file_obj)
-        for play in playbook:
-            play['hosts'] = 'all'
         assert playbook_result == playbook
 
     def test_execute_playbook(self):

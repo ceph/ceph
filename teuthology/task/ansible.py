@@ -217,10 +217,6 @@ class Ansible(Task):
         Generate a playbook file to use. This should not be called if we're
         using an existing file.
         """
-        for play in self.playbook:
-            # Ensure each play is applied to all hosts mentioned in the --limit
-            # flag we specify later
-            play['hosts'] = 'all'
         pb_buffer = StringIO()
         pb_buffer.write('---\n')
         yaml.safe_dump(self.playbook, pb_buffer)
