@@ -151,7 +151,9 @@ bool KeystoneToken::has_role(const string& r)
   return false;
 }
 
-int KeystoneToken::parse(CephContext *cct, bufferlist& bl)
+int KeystoneToken::parse(CephContext * const cct,
+                         const string& token_str,
+                         bufferlist& bl)
 {
   JSONParser parser;
   if (!parser.parse(bl.c_str(), bl.length())) {
@@ -167,11 +169,17 @@ int KeystoneToken::parse(CephContext *cct, bufferlist& bl)
         /* Token structure doesn't follow Identity API v2, so the token
          * must be in v3. Otherwise we can assume it's wrongly formatted. */
         JSONDecoder::decode_json("token", *this, &parser, true);
+        token.id = token_str;
       }
     } else if (version == KeystoneApiVersion::VER_2) {
       if (!JSONDecoder::decode_json("token", *this, &parser)) {
         /* If the token cannot be parsed according to V2, try V3. */
         JSONDecoder::decode_json("access", *this, &parser, true);
+      } else {
+        /* v3 suceeded. We have to fill token.id from external input as it
+         * isn't a part of the JSON response anymore. It has been moved
+         * to X-Subject-Token HTTP header instead. */
+        token.id = token_str;
       }
     } else {
       return -ENOTSUP;
@@ -214,7 +222,15 @@ bool RGWKeystoneTokenCache::find(const string& token_id, KeystoneToken& token)
   return true;
 }
 
-void RGWKeystoneTokenCache::add(const string& token_id, KeystoneToken& token)
+bool RGWKeystoneTokenCache::find_admin(KeystoneToken& token)
+{
+  Mutex::Locker l(lock);
+
+  return find(admin_token_id, token);
+}
+
+void RGWKeystoneTokenCache::add(const string& token_id,
+                                const KeystoneToken& token)
 {
   lock.Lock();
   map<string, token_entry>::iterator iter = tokens.find(token_id);
@@ -237,6 +253,14 @@ void RGWKeystoneTokenCache::add(const string& token_id, KeystoneToken& token)
   }
 
   lock.Unlock();
+}
+
+void RGWKeystoneTokenCache::add_admin(const KeystoneToken& token)
+{
+  Mutex::Locker l(lock);
+
+  get_token_id(token.token.id, admin_token_id);
+  add(admin_token_id, token);
 }
 
 void RGWKeystoneTokenCache::invalidate(const string& token_id)
