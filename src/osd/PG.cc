@@ -1431,7 +1431,6 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
   want_acting.clear();
   actingbackfill = want_acting_backfill;
   dout(10) << "actingbackfill is " << actingbackfill << dendl;
-  assert(backfill_targets.empty() || backfill_targets == want_backfill);
   if (backfill_targets.empty()) {
     // Caller is GetInfo
     backfill_targets = want_backfill;
@@ -1442,7 +1441,6 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
     }
   } else {
     // Will not change if already set because up would have had to change
-    assert(backfill_targets == want_backfill);
     // Verify that nothing in backfill is in stray_set
     for (set<pg_shard_t>::iterator i = want_backfill.begin();
 	 i != want_backfill.end();
@@ -1695,6 +1693,7 @@ void PG::activate(ObjectStore::Transaction& t,
 			  << "] " << pi.last_backfill
 			 << " to " << info.last_update;
 
+	backfill_targets.insert(peer);
 	pi.last_update = info.last_update;
 	pi.last_complete = info.last_update;
 	pi.set_last_backfill(hobject_t(), get_sort_bitwise());
