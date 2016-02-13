@@ -434,7 +434,8 @@ noinst_HEADERS += \
 
 librbd_mirror_test_la_SOURCES = \
 	test/rbd_mirror/test_ClusterWatcher.cc \
-	test/rbd_mirror/test_PoolWatcher.cc
+	test/rbd_mirror/test_PoolWatcher.cc \
+	test/rbd_mirror/test_ImageReplayer.cc
 librbd_mirror_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 noinst_LTLIBRARIES += librbd_mirror_test.la
 
