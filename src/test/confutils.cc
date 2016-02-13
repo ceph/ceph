@@ -60,6 +60,8 @@ static std::string get_temp_dir()
 
 static void unlink_all(void)
 {
+  cerr << "Running unlink_all from atexit" << std::endl;
+
   for (size_t i = 0; i < unlink_idx; ++i) {
     unlink(to_unlink[i]);
   }
