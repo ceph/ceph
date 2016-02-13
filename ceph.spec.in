@@ -486,6 +486,7 @@ Requires:	libradosstriper1 = %{_epoch_prefix}%{version}-%{release}
 %endif
 %{?systemd_requires}
 %if 0%{?suse_version}
+PreReq:         permissions
 Requires(pre):	pwdutils
 %endif
 %description -n ceph-common
