@@ -503,6 +503,42 @@ typename Journal<I>::Future Journal<I>::wait_event(Mutex &lock, uint64_t tid,
 }
 
 template <typename I>
+int Journal<I>::start_external_replay(journal::Replay<I> **journal_replay) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
+  C_SaferCond cond;
+  wait_for_journal_ready(&cond);
+  int r = cond.wait();
+  if (r < 0) {
+    lderr(cct) << "failed waiting for ready state: " << cpp_strerror(r)
+	       << dendl;
+    return r;
+  }
+
+  Mutex::Locker locker(m_lock);
+  assert(m_state == STATE_READY);
+  assert(m_journal_replay == nullptr);
+
+  transition_state(STATE_REPLAYING, 0);
+  m_journal_replay = journal::Replay<I>::create(m_image_ctx);
+
+  *journal_replay = m_journal_replay;
+  return 0;
+}
+
+template <typename I>
+void Journal<I>::stop_external_replay() {
+  Mutex::Locker locker(m_lock);
+  assert(m_journal_replay != nullptr);
+  assert(m_state == STATE_REPLAYING);
+
+  delete m_journal_replay;
+  m_journal_replay = nullptr;
+  transition_state(STATE_READY, 0);
+}
+
+template <typename I>
 void Journal<I>::create_journaler() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
