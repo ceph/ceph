@@ -269,6 +269,7 @@ Requires:	python-requests
 %{?systemd_requires}
 %endif
 %if 0%{?suse_version}
+PreReq:         permissions
 Requires(pre):	pwdutils
 %endif
 # python-argparse is only needed in distros with Python 2.6 or lower
