@@ -301,8 +301,7 @@ void JournalMetadata::init(Context *on_init) {
   }
 
   C_ImmutableMetadata *ctx = new C_ImmutableMetadata(this, on_init);
-  client::get_immutable_metadata(m_ioctx, m_oid, &m_order, &m_splay_width,
-                                 &m_pool_id, ctx);
+  get_immutable_metadata(&m_order, &m_splay_width, &m_pool_id, ctx);
 }
 
 void JournalMetadata::shutdown() {
@@ -340,6 +339,22 @@ void JournalMetadata::shutdown() {
 
   m_async_op_tracker.wait_for_ops();
   m_ioctx.aio_flush();
+}
+
+void JournalMetadata::get_immutable_metadata(uint8_t *order,
+					     uint8_t *splay_width,
+					     int64_t *pool_id,
+					     Context *on_finish) {
+  client::get_immutable_metadata(m_ioctx, m_oid, order, splay_width, pool_id,
+				 on_finish);
+}
+
+void JournalMetadata::get_mutable_metadata(uint64_t *minimum_set,
+					   uint64_t *active_set,
+					   RegisteredClients *clients,
+					   Context *on_finish) {
+  client::get_mutable_metadata(m_ioctx, m_oid, minimum_set, active_set, clients,
+			       on_finish);
 }
 
 int JournalMetadata::register_client(const bufferlist &data) {
@@ -543,9 +558,8 @@ void JournalMetadata::handle_immutable_metadata(int r, Context *on_init) {
 void JournalMetadata::refresh(Context *on_complete) {
   ldout(m_cct, 10) << "refreshing mutable metadata" << dendl;
   C_Refresh *refresh = new C_Refresh(this, on_complete);
-  client::get_mutable_metadata(m_ioctx, m_oid, &refresh->minimum_set,
-                               &refresh->active_set,
-                               &refresh->registered_clients, refresh);
+  get_mutable_metadata(&refresh->minimum_set, &refresh->active_set,
+		       &refresh->registered_clients, refresh);
 }
 
 void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
