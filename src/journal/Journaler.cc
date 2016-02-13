@@ -120,6 +120,18 @@ void Journaler::shutdown() {
   m_metadata->shutdown();
 }
 
+void Journaler::get_immutable_metadata(uint8_t *order, uint8_t *splay_width,
+				       int64_t *pool_id, Context *on_finish) {
+  m_metadata->get_immutable_metadata(order, splay_width, pool_id, on_finish);
+}
+
+void Journaler::get_mutable_metadata(uint64_t *minimum_set,
+				     uint64_t *active_set,
+				     RegisteredClients *clients,
+				     Context *on_finish) {
+  m_metadata->get_mutable_metadata(minimum_set, active_set, clients, on_finish);
+}
+
 int Journaler::create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
   if (order > 64 || order < 12) {
     lderr(m_cct) << "order must be in the range [12, 64]" << dendl;
