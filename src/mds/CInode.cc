@@ -2902,8 +2902,9 @@ int CInode::get_xlocker_mask(client_t client) const
     (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift());
 }
 
-int CInode::get_caps_allowed_for_client(client_t client) const
+int CInode::get_caps_allowed_for_client(Session *session, inode_t *file_i) const
 {
+  client_t client = session->info.inst.name.num();
   int allowed;
   if (client == get_loner()) {
     // as the loner, we get the loner_caps AND any xlocker_caps for things we have xlocked
@@ -2913,9 +2914,14 @@ int CInode::get_caps_allowed_for_client(client_t client) const
   } else {
     allowed = get_caps_allowed_by_type(CAP_ANY);
   }
-  if (inode.inline_data.version != CEPH_INLINE_NONE &&
-      !mdcache->mds->get_session(client)->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA))
-    allowed &= ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR);
+
+  if (!is_dir()) {
+    if ((file_i->inline_data.version != CEPH_INLINE_NONE &&
+	 !session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) ||
+	(!file_i->layout.pool_ns.empty() &&
+	 !session->connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)))
+      allowed &= ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR);
+  }
   return allowed;
 }
 
@@ -3198,7 +3204,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
      */
     ecap.caps = valid ? get_caps_allowed_by_type(CAP_ANY) : CEPH_STAT_CAP_INODE;
     if (last == CEPH_NOSNAP || is_any_caps())
-      ecap.caps = ecap.caps & get_caps_allowed_for_client(client);
+      ecap.caps = ecap.caps & get_caps_allowed_for_client(session, file_i);
     ecap.seq = 0;
     ecap.mseq = 0;
     ecap.realm = 0;
@@ -3216,7 +3222,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
     if (!no_caps && valid && cap) {
       int likes = get_caps_liked();
-      int allowed = get_caps_allowed_for_client(client);
+      int allowed = get_caps_allowed_for_client(session, file_i);
       int issue = (cap->wanted() | likes) & allowed;
       cap->issue_norevoke(issue);
       issue = cap->pending();
