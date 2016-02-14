@@ -143,15 +143,13 @@ int Mantle::balance(const string &script,
 
   /* fill in return value */
   mds_rank_t it = mds_rank_t(0);
-  lua_pushnil(L);
-  while (lua_next(L, -2) != 0) {
+  for (lua_pushnil(L); lua_next(L, -2); lua_pop(L, 1)) {
     if (!lua_isnumber(L, -1)) {
       dout(0) << "WARNING: mantle script returned a malformed response" << dendl;
       lua_close(L);
       return -EINVAL;
     }
     my_targets[it] = (lua_tonumber(L, -1));
-    lua_pop(L, 1);
     it++;
   }
 
