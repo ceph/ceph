@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
 # Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
@@ -69,7 +69,7 @@ CEPH_DISK_ARGS+=" --statedir=$DIR"
 CEPH_DISK_ARGS+=" --sysconfdir=$DIR"
 CEPH_DISK_ARGS+=" --prepend-to-path="
 CEPH_DISK_ARGS+=" --verbose"
-TIMEOUT=360
+TIMEOUT=60
 
 cat=$(which cat)
 timeout=$(which timeout)
@@ -135,6 +135,32 @@ function kill_daemons() {
             sleep $try
         done
     done
+}
+
+function run_timeout() {
+    local status
+
+    $timeout $TIMEOUT "$@"
+    status=$?
+    case $status in
+      0)
+	return 0
+	;;
+      124)
+	echo Command has timed out.
+	;;
+      126)
+	echo Command was invalid
+	;;
+      127)
+	echo Command does not exist
+	;;
+      *)
+	echo Timeout returned status $? 
+	;;
+    esac
+    return 1
+
 }
 
 function command_fixture() {
@@ -217,7 +243,7 @@ function test_mark_init() {
     ${CEPH_DISK} $CEPH_DISK_ARGS \
         prepare --osd-uuid $osd_uuid $osd_data || return 1
 
-    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+    run_timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         --verbose \
         activate \
         --mark-init=auto \
@@ -231,7 +257,7 @@ function test_mark_init() {
     else
         expected=systemd
     fi
-    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+    run_timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         --verbose \
         activate \
         --mark-init=$expected \
@@ -302,13 +328,14 @@ function test_activate() {
     local to_prepare=$1
     local to_activate=$2
     local osd_uuid=$($uuidgen)
+    local status
 
     $mkdir -p $OSD_DATA
 
     ${CEPH_DISK} $CEPH_DISK_ARGS \
         prepare --osd-uuid $osd_uuid $to_prepare || return 1
 
-    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+    run_timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
         $to_activate || return 1
@@ -374,19 +401,19 @@ function run() {
     default_actions+="test_activate_dir_magic "
     default_actions+="test_activate_dir "
     default_actions+="test_keyring_path "
-    default_actions+="test_mark_init "
+    [ x`uname`x != xFreeBSDx ] || default_actions+="test_mark_init "
     default_actions+="test_zap "
-    default_actions+="test_activate_dir_bluestore "
+    [ x`uname`x != xFreeBSDx ] || default_actions+="test_activate_dir_bluestore "
     local actions=${@:-$default_actions}
     local status
     for action in $actions  ; do
         setup
-        set -x
+        #set -x
         $action
         status=$?
-        set +x
+        #set +x
         teardown
-        if test $status != 0 ; then
+        if [ $status -ne 0 ] ; then
             break
         fi
     done
