@@ -120,7 +120,7 @@ keyring_fn="$CEPH_CONF_PATH/keyring"
 osdmap_fn="/tmp/ceph_osdmap.$$"
 monmap_fn="/tmp/ceph_monmap.$$"
 
-usage="usage: $0 [option]... [mon] [mds] [osd]\n"
+usage="usage: $0 [option]... [\"mon\"] [\"mds\"] [\"osd\"]\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
