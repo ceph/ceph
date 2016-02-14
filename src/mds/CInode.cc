@@ -3164,7 +3164,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   // do we have room?
   if (max_bytes) {
     unsigned bytes = 8 + 8 + 4 + 8 + 8 + sizeof(ceph_mds_reply_cap) +
-      sizeof(struct ceph_file_layout) +
+      sizeof(struct ceph_file_layout) + 4 + layout.pool_ns.size() +
       sizeof(struct ceph_timespec) * 3 +
       4 + 8 + 8 + 8 + 4 + 4 + 4 + 4 + 4 +
       8 + 8 + 8 + 8 + 8 + sizeof(struct ceph_timespec) +
