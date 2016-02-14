@@ -2361,7 +2361,7 @@ void RGWPutObj::execute()
 
     /* verify signature */
 
-    if (s->aws4_auth_signature != s->aws4_auth_new_signature) {
+    if (s->aws4_auth->signature != s->aws4_auth->new_signature) {
       op_ret = -ERR_SIGNATURE_NO_MATCH;
       ldout(s->cct, 20) << "delayed aws4 auth failed" << dendl;
       goto done;
