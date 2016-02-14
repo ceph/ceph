@@ -1,0 +1,16 @@
+*~
+*.pyc
+*.pyo
+.coverage
+.tox
+*.egg-info
+*.egg
+dist
+virtualenv
+build
+wheelhouse*
+*.log
+*.trs
+.cache
+prs.json
+merges.js
