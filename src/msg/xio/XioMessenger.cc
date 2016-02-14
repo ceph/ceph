@@ -965,15 +965,11 @@ ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
       << xio_uri << dendl;
 
     /* XXX client session creation parameters */
-    struct xio_session_params params = {
-      .type		= XIO_SESSION_CLIENT,
-      .initial_sn	= 0,
-      .ses_ops		= &xio_msgr_ops,
-      .user_context	= this,
-      .private_data	= NULL,
-      .private_data_len = 0,
-      .uri		= (char *)xio_uri.c_str()
-    };
+    struct xio_session_params params = {};
+    params.type         = XIO_SESSION_CLIENT;
+    params.ses_ops      = &xio_msgr_ops;
+    params.user_context = this;
+    params.uri          = xio_uri.c_str();
 
     XioConnection *xcon = new XioConnection(this, XioConnection::ACTIVE,
 					    dest);
@@ -986,16 +982,10 @@ ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
 
     /* this should cause callbacks with user context of conn, but
      * we can always set it explicitly */
-    struct xio_connection_params xcp = {
-      .session           = xcon->session,
-      .ctx               = this->portals.get_portal0()->ctx,
-      .conn_idx          = 0, /* XXX auto_count */
-      .enable_tos        = 0,
-      .tos               = 0,
-      .pad               = 0,
-      .out_addr          = NULL,
-      .conn_user_context = xcon
-    };
+    struct xio_connection_params xcp = {};
+    xcp.session           = xcon->session;
+    xcp.ctx               = this->portals.get_portal0()->ctx;
+    xcp.conn_user_context = xcon;
 
     xcon->conn = xio_connect(&xcp);
     if (!xcon->conn) {
