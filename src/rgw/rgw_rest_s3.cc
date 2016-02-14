@@ -3291,7 +3291,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     s->system_request = true;
     dout(20) << "system request" << dendl;
     s->info.args.set_system();
-    string effective_uid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
+    string euid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
+    rgw_user effective_uid(euid);
     RGWUserInfo effective_user;
     if (!effective_uid.empty()) {
       int ret = rgw_get_user_info_by_uid(store, effective_uid, effective_user);
