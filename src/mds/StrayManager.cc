@@ -148,8 +148,8 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
   inode_t *pi = in->get_projected_inode();
   object_t oid = CInode::get_object_name(pi->ino, frag_t(), "");
   // remove the backtrace object if it was not purged
-  if (!gather.has_subs()) {
-    object_locator_t oloc(pi->layout.pool_id, pi->layout.pool_ns);
+  if (!gather.has_subs() || !pi->layout.pool_ns.empty()) {
+    object_locator_t oloc(pi->layout.pool_id);
     dout(10) << __func__ << " remove backtrace object " << oid
 	     << " pool " << oloc.pool << " snapc " << snapc << dendl;
     mds->objecter->remove(oid, oloc, *snapc,
