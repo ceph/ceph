@@ -5798,7 +5798,9 @@ int BlueStore::_do_truncate(
       uint64_t x_off = old_size - bp->first;
       uint64_t x_len = MIN(ROUND_UP_TO(offset, block_size), x_end) - old_size;
       if (bp->second.has_flag(bluestore_extent_t::FLAG_SHARED)) {
-	_do_write_zero(txc, c, o, old_size, x_len);
+        int r = _do_write_zero(txc, c, o, old_size, x_len);
+        if (r < 0)
+          return r;
 	o->onode.size = offset; // we (maybe) just wrote past eof; reset size
       } else {
 	bluestore_wal_op_t *op = _get_wal_op(txc, o);
@@ -5816,7 +5818,9 @@ int BlueStore::_do_truncate(
     if (bp != o->onode.block_map.end()) {
       uint64_t z_len = block_size - offset % block_size;
       if (bp->second.has_flag(bluestore_extent_t::FLAG_SHARED)) {
-	_do_write_zero(txc, c, o, offset, z_len);
+        int r = _do_write_zero(txc, c, o, offset, z_len);
+        if (r < 0)
+          return r;
 	o->onode.size = offset; // we just wrote past eof; reset size
       } else {
 	bluestore_wal_op_t *op = _get_wal_op(txc, o);
