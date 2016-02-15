@@ -146,11 +146,13 @@ namespace crimson {
 	ClientInfo         info;
 	RequestTag         prev_tag;
 	bool               idle;
+	Counter            last_tick;
 
-	ClientRec(const ClientInfo& _info) :
+	ClientRec(const ClientInfo& _info, Counter current_tick) :
 	  info(_info),
 	  prev_tag(0.0, 0.0, 0.0),
-	  idle(true)
+	  idle(true),
+	  last_tick(current_tick)
 	{
 	  // empty
 	}
@@ -263,7 +265,7 @@ namespace crimson {
       // proportion to still get issued
       bool allowLimitBreak;
 
-      std::atomic_bool finishing;
+      std::atomic_bool finishing = false;
 
       // for handling timed scheduling
       std::mutex  sched_ahead_mtx;
@@ -271,10 +273,13 @@ namespace crimson {
       std::thread sched_ahead_thd;
       Time sched_ahead_when = TimeZero;
 
+      // every request creates a tick
+      Counter tick = 0;
+
       // performance data collection
-      size_t res_sched_count;
-      size_t prop_sched_count;
-      size_t limit_break_sched_count;
+      size_t res_sched_count = 0;
+      size_t prop_sched_count = 0;
+      size_t limit_break_sched_count = 0;
 
     public:
 
@@ -285,11 +290,7 @@ namespace crimson {
 	client_info_f(_client_info_f),
 	can_handle_f(_can_handle_f),
 	handle_f(_handle_f),
-	allowLimitBreak(_allowLimitBreak),
-	res_sched_count(0),
-	prop_sched_count(0),
-	limit_break_sched_count(0),
-	finishing(false)
+	allowLimitBreak(_allowLimitBreak)
       {
 	sched_ahead_thd = std::thread(&PriorityQueue::run_sched_ahead, this);
       }
@@ -332,6 +333,7 @@ namespace crimson {
 #endif
 	const C& client_id = req_params.client;
 	DataGuard g(data_mutex);
+	++tick;
 
 	auto client_it = client_map.find(client_id);
 	if (client_map.end() == client_it) {
@@ -402,6 +404,7 @@ namespace crimson {
 	schedule_request();
       }
 
+
     protected:
 
       // for debugging
@@ -414,6 +417,7 @@ namespace crimson {
       }
 
 
+      // data_mutex should be held when called
       void reduce_reservation_tags(C client_id) {
 	auto client_it = client_map.find(client_id);
 	assert(client_map.end() != client_it);
