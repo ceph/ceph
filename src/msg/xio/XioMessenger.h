@@ -69,8 +69,6 @@ public:
   int _send_message(Message *m, Connection *con);
   int _send_message_impl(Message *m, XioConnection *xcon);
 
-  uint32_t get_magic() { return magic; }
-  void set_magic(int _magic) { magic = _magic; }
   uint32_t get_special_handling() { return special_handling; }
   void set_special_handling(int n) { special_handling = n; }
   int pool_hint(uint32_t size);
