@@ -191,7 +191,7 @@ public:
 
     out << " size " << size << "/" << max_size;
     if (truncate_seq)
-      out << " ts " << truncate_seq;
+      out << " ts " << truncate_seq << "/" << truncate_size;
     out << " mtime " << mtime;
     if (time_warp_seq)
       out << " tws " << time_warp_seq;
@@ -213,6 +213,7 @@ public:
       size = body.size;
       max_size = body.max_size;
       truncate_size = body.truncate_size;
+      truncate_seq = body.truncate_seq;
       mtime = utime_t(body.mtime);
       atime = utime_t(body.atime);
       ctime = utime_t(body.ctime);
