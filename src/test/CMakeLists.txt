@@ -474,7 +474,8 @@ add_dependencies(check
   ceph_test_objectstore
   ceph_erasure_code_non_regression
   ceph_erasure_code
-  ceph-disk)
+  ceph-disk
+  ceph-detect-init)
 
 add_ceph_test(test-ceph-helpers.sh ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-helpers.sh)
 add_ceph_test(erasure-decode-non-regression.sh ${CMAKE_SOURCE_DIR}/qa/workunits/erasure-code/encode-decode-non-regression.sh)
@@ -494,10 +495,11 @@ add_test(NAME run-tox-ceph-disk COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-disk/r
 add_dependencies(check run-tox-ceph-disk)
 
 add_test(NAME run-tox-ceph-detect-init COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-detect-init/run-tox.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
-add_dependencies(check run-tox-ceph-disk)
+add_dependencies(check run-tox-ceph-detect-init)
 
 set_property(TEST 
   run-tox-ceph-disk
+  run-tox-ceph-detect-init
   PROPERTY ENVIRONMENT 
   CEPH_ROOT=${CMAKE_SOURCE_DIR}
   CEPH_BIN=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
