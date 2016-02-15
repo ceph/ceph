@@ -937,7 +937,7 @@ def get_osd_id(path):
 def get_ceph_user():
     global CEPH_PREF_USER
 
-    if CEPH_PREF_USER != None:
+    if CEPH_PREF_USER is not None:
         try:
             pwd.getpwnam(CEPH_PREF_USER)
             return CEPH_PREF_USER
@@ -951,10 +951,11 @@ def get_ceph_user():
         except KeyError:
             return 'root'
 
+
 def get_ceph_group():
     global CEPH_PREF_GROUP
 
-    if CEPH_PREF_GROUP != None:
+    if CEPH_PREF_GROUP is not None:
         try:
             grp.getgrnam(CEPH_PREF_GROUP)
             return CEPH_PREF_GROUP
@@ -4194,13 +4195,13 @@ def parse_args(argv):
         default='/etc/ceph',
         help=('directory in which ceph configuration files are found '
               '(default /etc/ceph)'),
-        )
+    )
     parser.add_argument(
         '--setuser',
         metavar='USER',
         default=None,
         help='use the given user for subprocesses, rather than ceph or root'
-        )
+    )
     parser.add_argument(
         '--setgroup',
         metavar='GROUP',
