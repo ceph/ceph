@@ -1327,6 +1327,22 @@ int librados::IoCtxImpl::unwatch(uint64_t cookie)
   return r;
 }
 
+int librados::IoCtxImpl::aio_unwatch(uint64_t cookie, AioCompletionImpl *c)
+{
+  c->io = this;
+  Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
+  Context *oncomplete = new C_aio_linger_Complete(c, linger_op, true);
+  version_t ver = 0;
+
+  ::ObjectOperation wr;
+  prepare_assert_ops(&wr);
+  wr.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
+  objecter->mutate(linger_op->target.base_oid, oloc, wr,
+		   snapc, ceph::real_clock::now(client->cct), 0, NULL,
+		   oncomplete, &ver);
+  return 0;
+}
+
 int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
 				uint64_t timeout_ms,
 				bufferlist *preply_bl,

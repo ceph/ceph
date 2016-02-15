@@ -2156,6 +2156,20 @@ CEPH_RADOS_API int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t cooki
 CEPH_RADOS_API int rados_unwatch2(rados_ioctx_t io, uint64_t cookie);
 
 /**
+ * Asynchronous unregister an interest in an object
+ *
+ * Once this completes, no more notifies will be sent to us for this
+ * watch. This should be called to clean up unneeded watchers.
+ *
+ * @param io the pool the object is in
+ * @param completion what to do when operation has been attempted
+ * @param cookie which watch to unregister
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_unwatch(rados_ioctx_t io, uint64_t cookie,
+                                     rados_completion_t completion);
+
+/**
  * Sychronously notify watchers of an object
  *
  * This blocks until all watchers of the object have received and
