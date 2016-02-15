@@ -5083,21 +5083,23 @@ int BlueStore::_do_allocate(
     }
 
     // include head?
-    bp = o->onode.find_extent(orig_offset);
     if (head) {
       if (allow_overlay && _can_overlay_write(o, head)) {
 	dout(20) << "  head " << head << " will be captured by overlay" << dendl;
-      } else if (bp == o->onode.block_map.end()) {
-	dout(20) << "  head " << head << " not yet allocated" << dendl;
-	offset -= min_alloc_size;
-	length += min_alloc_size;
-      } else if (bp->second.has_flag(bluestore_extent_t::FLAG_SHARED)) {
-	dout(20) << "  head " << head << " shared" << dendl;
-	offset -= min_alloc_size;
-	length += min_alloc_size;
-	shared_head = true;
       } else {
-	dout(20) << "  head " << head << " will presumably WAL" << dendl;
+        bp = o->onode.find_extent(orig_offset);
+        if (bp == o->onode.block_map.end()) {
+          dout(20) << "  head " << head << " not yet allocated" << dendl;
+          offset -= min_alloc_size;
+          length += min_alloc_size;
+        } else if (bp->second.has_flag(bluestore_extent_t::FLAG_SHARED)) {
+          dout(20) << "  head " << head << " shared" << dendl;
+          offset -= min_alloc_size;
+          length += min_alloc_size;
+          shared_head = true;
+        } else {
+          dout(20) << "  head " << head << " will presumably WAL" << dendl;
+        }
       }
     }
   }
