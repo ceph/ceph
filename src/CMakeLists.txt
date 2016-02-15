@@ -525,6 +525,7 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/
   DESTINATION ${PYTHON_INSTDIR})
 
 add_subdirectory(pybind)
+add_subdirectory(ceph-disk)
 
 ## dencoder
 set(dencoder_srcs
