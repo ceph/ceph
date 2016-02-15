@@ -21,9 +21,9 @@ usr/bin/osdmaptool
 usr/lib/libos_tp.so.*
 usr/lib/libosd_tp.so.*
 usr/lib/ceph/ceph_common.sh
+usr/lib/ceph/ceph-osd-prestart.sh
 usr/lib/ceph/erasure-code/*
 usr/lib/rados-classes/*
-usr/libexec/ceph/ceph-osd-prestart.sh
 usr/share/doc/ceph/sample.ceph.conf
 usr/share/doc/ceph/sample.fetch_config
 usr/share/man/man8/ceph-clsinfo.8

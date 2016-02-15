@@ -66,6 +66,10 @@ restorecon -R /var/log/ceph > /dev/null 2>&1;
 %global _with_lttng 1
 %endif
 
+# unify libexec for all targets
+%global _libexecdir %{_exec_prefix}/lib
+
+
 #################################################################################
 # common
 #################################################################################
@@ -597,6 +601,7 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 
 %{configure}	CPPFLAGS="$java_inc" \
 		--prefix=/usr \
+                --libexecdir=%{_libexecdir} \
 		--localstatedir=/var \
 		--sysconfdir=/etc \
 %if 0%{?_with_systemd}
@@ -838,8 +843,8 @@ rm -rf $RPM_BUILD_ROOT
 %else
 /sbin/mount.ceph
 %endif
-%dir %{_libdir}/ceph
-%{_libdir}/ceph/ceph_common.sh
+%dir %{_libexecdir}/ceph
+%{_libexecdir}/ceph/ceph_common.sh
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
 %dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/libcls_cephfs.so*
@@ -857,6 +862,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/rados-classes/libcls_user.so*
 %{_libdir}/rados-classes/libcls_version.so*
 %{_libdir}/rados-classes/libcls_journal.so*
+%dir %{_libdir}/ceph
 %dir %{_libdir}/ceph/erasure-code
 %{_libdir}/ceph/erasure-code/libec_*.so*
 %dir %{_libdir}/ceph/compressor
@@ -948,7 +954,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_datadir}/ceph/id_dsa_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com.pub
 %dir %{_sysconfdir}/ceph/
-%dir %{_libexecdir}/ceph/
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
