@@ -5,6 +5,7 @@
 #include "include/stringify.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/WorkQueue.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ExclusiveLock.h"
@@ -22,13 +23,15 @@ namespace librbd {
 namespace image {
 
 using util::create_rados_ack_callback;
+using util::create_async_context_callback;
 using util::create_context_callback;
 
 template <typename I>
 RefreshRequest<I>::RefreshRequest(I &image_ctx, Context *on_finish)
-  : m_image_ctx(image_ctx), m_on_finish(on_finish), m_error_result(0),
-    m_flush_aio(false), m_exclusive_lock(nullptr), m_object_map(nullptr),
-    m_journal(nullptr), m_refresh_parent(nullptr) {
+  : m_image_ctx(image_ctx),
+    m_on_finish(create_async_context_callback(m_image_ctx, on_finish)),
+    m_error_result(0), m_flush_aio(false), m_exclusive_lock(nullptr),
+    m_object_map(nullptr), m_journal(nullptr), m_refresh_parent(nullptr) {
 }
 
 template <typename I>
