@@ -2444,7 +2444,7 @@ int KStore::queue_transactions(
   return 0;
 }
 
-int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
+void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 {
   Transaction::iterator i = t->begin();
   int pos = 0;
@@ -2756,8 +2756,6 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     ++pos;
   }
-
-  return 0;
 }
 
 
