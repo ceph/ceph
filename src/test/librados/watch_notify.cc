@@ -257,6 +257,7 @@ TEST_F(LibRadosWatchNotify, AioWatchDelete) {
 
 
   rados_completion_t comp;
+  uint64_t handle;
   ASSERT_EQ(0, rados_aio_create_completion(NULL, NULL, NULL, &comp));
   rados_aio_watch(ioctx, notify_oid, comp, &handle,
                   watch_notify2_test_cb, watch_notify2_test_errcb, NULL);
@@ -273,7 +274,11 @@ TEST_F(LibRadosWatchNotify, AioWatchDelete) {
   ASSERT_TRUE(left > 0);
   ASSERT_EQ(-ENOTCONN, notify_err);
   ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
-  rados_unwatch2(ioctx, handle);
+  ASSERT_EQ(0, rados_aio_create_completion(NULL, NULL, NULL, &comp));
+  rados_aio_unwatch(ioctx, handle, comp);
+  ASSERT_EQ(0, rados_aio_wait_for_complete(comp));
+  ASSERT_EQ(-ENOENT, rados_aio_get_return_value(comp));
+  rados_aio_release(comp);
 }
 
 TEST_F(LibRadosWatchNotify, Watch2Timeout) {
@@ -416,6 +421,7 @@ TEST_F(LibRadosWatchNotify, AioWatchNotify2) {
   ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
 
   rados_completion_t comp;
+  uint64_t handle;
   ASSERT_EQ(0, rados_aio_create_completion(NULL, NULL, NULL, &comp));
   rados_aio_watch(ioctx, notify_oid, comp, &handle,
                   watch_notify2_test_cb, watch_notify2_test_errcb, NULL);
@@ -453,7 +459,11 @@ TEST_F(LibRadosWatchNotify, AioWatchNotify2) {
   ASSERT_EQ((char*)0, reply_buf);
   ASSERT_EQ(0u, reply_buf_len);
 
-  rados_unwatch2(ioctx, handle);
+  ASSERT_EQ(0, rados_aio_create_completion(NULL, NULL, NULL, &comp));
+  rados_aio_unwatch(ioctx, handle, comp);
+  ASSERT_EQ(0, rados_aio_wait_for_complete(comp));
+  ASSERT_EQ(0, rados_aio_get_return_value(comp));
+  rados_aio_release(comp);
 }
 
 TEST_F(LibRadosWatchNotify, AioNotify) {
@@ -579,6 +589,11 @@ TEST_P(LibRadosWatchNotifyPP, AioWatchNotify2) {
   ASSERT_EQ(0u, missed_map.size());
   ASSERT_GT(ioctx.watch_check(handle), 0);
   ioctx.unwatch2(handle);
+
+  comp = cluster.aio_create_completion();
+  ioctx.aio_unwatch(handle, comp);
+  ASSERT_EQ(0, comp->wait_for_complete());
+  comp->release();
 }
 
 
