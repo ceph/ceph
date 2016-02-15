@@ -5306,7 +5306,6 @@ int BlueStore::_do_write(
 	   << " bytes in " << o->onode.block_map.size()
 	   << " extents" << dendl;
   _dump_onode(o);
-  o->exists = true;
 
   if (orig_length == 0) {
     return 0;
@@ -5603,6 +5602,7 @@ int BlueStore::_write(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << offset << "~" << length
 	   << dendl;
+  o->exists = true;
   _assign_nid(txc, o);
   int r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
   txc->write_onode(o);
