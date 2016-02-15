@@ -328,11 +328,33 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *i2, *i1 = cfuse->iget(parent);
+  Inode *i2, *i1;
   struct fuse_entry_param fe;
 
   memset(&fe, 0, sizeof(fe));
 
+#ifdef HAVE_SYS_SYNCFS
+  if (cfuse->fino_snap(parent) == CEPH_SNAPDIR &&
+      cfuse->client->cct->_conf->fuse_multithreaded &&
+      cfuse->client->cct->_conf->fuse_syncfs_on_mksnap) {
+    int err = 0;
+    int fd = ::open(cfuse->mountpoint, O_RDONLY | O_DIRECTORY);
+    if (fd < 0) {
+      err = -errno;
+    } else {
+      int r = ::syncfs(fd);
+      if (r < 0)
+	err = -errno;
+      ::close(fd);
+    }
+    if (err) {
+      fuse_reply_err(req, err);
+      return;
+    }
+  }
+#endif
+
+  i1 = cfuse->iget(parent);
   int r = cfuse->client->ll_mkdir(i1, name, mode, &fe.attr, &i2, ctx->uid,
 				  ctx->gid);
   if (r == 0) {
