@@ -200,6 +200,7 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   obj_size = 0;
   prot_flags = 0;
 
+  admin_request = false;
   system_request = false;
 
   os_auth_token = NULL;

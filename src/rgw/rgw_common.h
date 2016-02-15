@@ -1257,6 +1257,10 @@ struct req_state {
   RGWAccessControlPolicy *bucket_acl;
   RGWAccessControlPolicy *object_acl;
 
+  /* Should we overrite any security check? */
+  bool admin_request;
+  /* Is the request made by an user marked as a system one?
+   * Being system user means we also have admin_request status. */
   bool system_request;
 
   /* aws4 auth support */
