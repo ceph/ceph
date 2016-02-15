@@ -1718,7 +1718,7 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
     return ret;
 
   ldout(s->cct, 20) << "response: " << response.c_str() << dendl;
-  if (!jp->parse(response.c_str(), response.length())) {
+  if (jp && !jp->parse(response.c_str(), response.length())) {
     ldout(s->cct, 0) << "failed parsing response from master zonegroup" << dendl;
     return -EINVAL;
   }
@@ -1934,9 +1934,8 @@ void RGWDeleteBucket::execute()
 
   if (!store->is_meta_master()) {
     bufferlist in_data;
-    JSONParser jp;
     op_ret = forward_request_to_master(s, &ot.read_version, store, in_data,
-				       &jp);
+				       NULL);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         /* adjust error, we want to return with NoSuchBucket and not
@@ -4350,9 +4349,8 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
 
     if (!store->get_zonegroup().is_master) {
       bufferlist in_data;
-      JSONParser jp;
       ret = forward_request_to_master(s, &ot.read_version, store, in_data,
-				      &jp);
+				      NULL);
       if (ret < 0) {
         if (ret == -ENOENT) {
           /* adjust error, we want to return with NoSuchBucket and not
