@@ -158,6 +158,7 @@ struct RGWUserAdminOpState {
   std::string display_name;
   uint32_t max_buckets;
   __u8 suspended;
+  __u8 admin;
   __u8 system;
   __u8 exclusive;
   __u8 fetch_stats;
@@ -197,6 +198,7 @@ struct RGWUserAdminOpState {
   bool op_mask_specified;
   bool caps_specified;
   bool suspension_op;
+  bool admin_specified;
   bool system_specified;
   bool key_op;
   bool temp_url_key_specified;
@@ -301,6 +303,10 @@ struct RGWUserAdminOpState {
   void set_suspension(__u8 is_suspended) {
     suspended = is_suspended;
     suspension_op = true;
+  }
+  void set_admin(__u8 is_admin) {
+    admin = is_admin;
+    admin_specified = true;
   }
   void set_system(__u8 is_system) {
     system = is_system;
@@ -450,6 +456,7 @@ struct RGWUserAdminOpState {
     key_type = -1;
     perm_mask = RGW_PERM_NONE;
     suspended = 0;
+    admin = 0;
     system = 0;
     exclusive = 0;
     fetch_stats = 0;

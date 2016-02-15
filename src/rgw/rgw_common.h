@@ -534,6 +534,7 @@ struct RGWUserInfo
   uint32_t max_buckets;
   uint32_t op_mask;
   RGWUserCaps caps;
+  __u8 admin;
   __u8 system;
   string default_placement;
   list<string> placement_tags;
@@ -541,7 +542,14 @@ struct RGWUserInfo
   map<int, string> temp_url_keys;
   RGWQuotaInfo user_quota;
 
-  RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), op_mask(RGW_OP_TYPE_ALL), system(0) {}
+  RGWUserInfo()
+    : auid(0),
+      suspended(0),
+      max_buckets(RGW_DEFAULT_MAX_BUCKETS),
+      op_mask(RGW_OP_TYPE_ALL),
+      admin(0),
+      system(0) {
+  }
 
   RGWAccessKey* get_key0() {
     if (access_keys.empty())
@@ -551,7 +559,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(17, 9, bl);
+     ENCODE_START(18, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -590,10 +598,11 @@ struct RGWUserInfo
      ::encode(temp_url_keys, bl);
      ::encode(user_quota, bl);
      ::encode(user_id.tenant, bl);
+     ::encode(admin, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(17, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(18, 9, 9, bl);
      if (struct_v >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -659,6 +668,9 @@ struct RGWUserInfo
       ::decode(user_id.tenant, bl);
     } else {
       user_id.tenant.clear();
+    }
+    if (struct_v >= 18) {
+      ::decode(admin, bl);
     }
     DECODE_FINISH(bl);
   }
