@@ -3253,7 +3253,8 @@ int RGWRados::convert_regionmap()
     }
   }
 
-  #warning need to update quota
+  current_period.set_user_quota(zonegroupmap.user_quota);
+  current_period.set_bucket_quota(zonegroupmap.bucket_quota);
 
   return 0;
 }
