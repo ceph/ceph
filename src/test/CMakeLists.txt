@@ -38,6 +38,7 @@ add_subdirectory(osd)
 add_subdirectory(osdc)
 add_subdirectory(pybind)
 add_subdirectory(rgw)
+add_subdirectory(rbd_mirror)
 add_subdirectory(system)
 
 # test_timers
