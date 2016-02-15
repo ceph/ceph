@@ -253,7 +253,7 @@ int RGWRadosSetOmapKeysCR::request_complete()
 }
 
 RGWRadosGetOmapKeysCR::RGWRadosGetOmapKeysCR(RGWRados *_store,
-                      rgw_bucket& _pool, const string& _oid,
+                      const rgw_bucket& _pool, const string& _oid,
                       const string& _marker,
                       map<string, bufferlist> *_entries, int _max_entries) : RGWSimpleCoroutine(_store->ctx()),
                                                 store(_store),
@@ -286,7 +286,7 @@ int RGWRadosGetOmapKeysCR::send_request() {
 }
 
 RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-                      rgw_bucket& _pool, const string& _oid, const string& _lock_name,
+                      const rgw_bucket& _pool, const string& _oid, const string& _lock_name,
                       const string& _cookie,
                       uint32_t _duration) : RGWSimpleCoroutine(_store->ctx()),
                                                 async_rados(_async_rados),
@@ -325,7 +325,7 @@ int RGWSimpleRadosLockCR::request_complete()
 }
 
 RGWSimpleRadosUnlockCR::RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-                      rgw_bucket& _pool, const string& _oid, const string& _lock_name,
+                      const rgw_bucket& _pool, const string& _oid, const string& _lock_name,
                       const string& _cookie) : RGWSimpleCoroutine(_store->ctx()),
                                                 async_rados(_async_rados),
                                                 store(_store),
