@@ -1310,7 +1310,6 @@ int librados::IoCtxImpl::watch_check(uint64_t cookie)
 int librados::IoCtxImpl::unwatch(uint64_t cookie)
 {
   Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
-  bufferlist inbl, outbl;
   C_SaferCond onfinish;
   version_t ver = 0;
 
