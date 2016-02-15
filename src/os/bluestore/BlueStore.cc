@@ -455,8 +455,7 @@ static void get_wal_key(uint64_t seq, string *out)
 
 void BlueStore::Enode::put()
 {
-  int final = --nref;
-  if (final == 0) {
+  if (--nref == 0) {
     dout(20) << __func__ << " removing self from set " << enode_set << dendl;
     enode_set->uset.erase(*this);
     delete this;
