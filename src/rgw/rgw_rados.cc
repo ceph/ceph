@@ -3083,7 +3083,6 @@ read_omap:
   bucket.index_pool = pool_name;
 
   return 0;
-
 }
 
 int RGWRados::update_placement_map()
@@ -4549,7 +4548,7 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
   if (r < 0)
     return r;
 
-  /* if the bucked is not synced we can remove the meta file */
+  /* if the bucket is not synced we can remove the meta file */
   if (!is_syncing_bucket_meta(bucket)) {
     RGWObjVersionTracker objv_tracker;
     string entry;
