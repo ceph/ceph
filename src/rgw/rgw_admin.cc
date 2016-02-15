@@ -4427,7 +4427,6 @@ next:
     RGWMetadataLog *meta_log = store->meta_mgr->get_log();
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
-      void *handle;
       list<cls_log_entry> entries;
 
       RGWMetadataLogInfo info;
