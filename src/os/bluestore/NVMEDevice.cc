@@ -129,6 +129,7 @@ class SharedDriverData {
   std::atomic_int flush_waiters;
 
  public:
+  bool zero_command_support;
   std::atomic_int inflight_ops;
   PerfCounters *logger = nullptr;
 
@@ -145,6 +146,7 @@ class SharedDriverData {
         inflight_ops(0) {
     block_size = nvme_ns_get_sector_size(ns);
     size = block_size * nvme_ns_get_num_sectors(ns);
+    zero_command_support = nvme_ns_get_flags(ns) & NVME_NS_WRITE_ZEROES_SUPPORTED;
 
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
                           l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
@@ -264,11 +266,11 @@ void SharedDriverData::_aio_thread()
     }
 
     for (; t; t = t->next) {
+      lba_off = t->offset / block_size;
+      lba_count = t->len / block_size;
       switch (t->command) {
         case IOCommand::WRITE_COMMAND:
         {
-          lba_off = t->offset / block_size;
-          lba_count = t->len / block_size;
           dout(20) << __func__ << " write command issued " << lba_off << "~" << lba_count << dendl;
           r = nvme_ns_cmd_write(ns, t->buf, lba_off, lba_count, io_complete, t, 0);
           if (r < 0) {
@@ -285,13 +287,11 @@ void SharedDriverData::_aio_thread()
         }
         case IOCommand::ZERO_COMMAND:
         {
-          lba_off = t->offset / block_size;
-          lba_count = t->len / block_size;
           dout(20) << __func__ << " zero command issued " << lba_off << "~" << lba_count << dendl;
+          assert(zero_command_support);
           r = nvme_ns_cmd_write_zeroes(ns, lba_off, lba_count, io_complete, t, 0);
           if (r < 0) {
             t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
-            rte_free(t->buf);
             rte_mempool_put(task_pool, t);
             derr << __func__ << " failed to do zero command" << dendl;
             assert(0);
@@ -304,8 +304,6 @@ void SharedDriverData::_aio_thread()
         case IOCommand::READ_COMMAND:
         {
           dout(20) << __func__ << " read command issueed " << lba_off << "~" << lba_count << dendl;
-          lba_off = t->offset / block_size;
-          lba_count = t->len / block_size;
           r = nvme_ns_cmd_read(ns, t->buf, lba_off, lba_count, io_complete, t, 0);
           if (r < 0) {
             derr << __func__ << " failed to read" << dendl;
@@ -505,7 +503,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
 
   ProbeContext ctx = {sn_tag, this, nullptr};
   r = nvme_probe(&ctx, probe_cb, attach_cb);
-  if (r || ctx.driver) {
+  if (r || !ctx.driver) {
     derr << __func__ << " device probe nvme failed" << dendl;
     return r;
   }
@@ -620,6 +618,10 @@ int NVMEDevice::open(string p)
   driver->register_device(this);
   block_size = driver->get_block_size();
   size = driver->get_size();
+  if (!driver->zero_command_support) {
+    zeros = buffer::create_page_aligned(1048576);
+    zeros.zero();
+  }
 
   dout(1) << __func__ << " size " << size << " (" << pretty_si_t(size) << "B)"
           << " block_size " << block_size << " (" << pretty_si_t(block_size)
@@ -731,6 +733,8 @@ int NVMEDevice::aio_write(
   }
   t->start = ceph_clock_now(g_ceph_context);
 
+  // TODO: if upper layer alloc memory with known physical address,
+  // we can reduce this copy
   t->buf = rte_malloc(NULL, len, block_size);
   if (t->buf == NULL) {
     derr << __func__ << " task->buf rte_malloc failed" << dendl;
@@ -781,30 +785,44 @@ int NVMEDevice::aio_zero(
   assert(off < size);
   assert(off + len <= size);
 
-  Task *t;
-  int r = rte_mempool_get(task_pool, (void **)&t);
-  if (r < 0) {
-    derr << __func__ << " failed to get task from mempool: " << r << dendl;
-    return r;
+  if (driver->zero_command_support) {
+    Task *t;
+    int r = rte_mempool_get(task_pool, (void **)&t);
+    if (r < 0) {
+      derr << __func__ << " failed to get task from mempool: " << r << dendl;
+      return r;
+    }
+    t->start = ceph_clock_now(g_ceph_context);
+
+    t->command = IOCommand::ZERO_COMMAND;
+    t->offset = off;
+    t->len = len;
+    t->device = this;
+    t->return_code = 0;
+    t->next = nullptr;
+
+    t->ctx = ioc;
+    Task *first = static_cast<Task*>(ioc->nvme_task_first);
+    Task *last = static_cast<Task*>(ioc->nvme_task_last);
+    if (last)
+      last->next = t;
+    if (!first)
+      ioc->nvme_task_first = t;
+    ioc->nvme_task_last = t;
+    ++ioc->num_pending;
+  } else {
+    assert(zeros.length());
+    bufferlist bl;
+    while (len > 0) {
+      bufferlist t;
+      t.append(zeros, 0, MIN(zeros.length(), len));
+      len -= t.length();
+      bl.claim_append(t);
+    }
+    // note: this works with aio only becaues the actual buffer is
+    // this->zeros, which is page-aligned and never freed.
+    return aio_write(off, bl, ioc, false);
   }
-  t->start = ceph_clock_now(g_ceph_context);
-
-  t->command = IOCommand::ZERO_COMMAND;
-  t->offset = off;
-  t->len = len;
-  t->device = this;
-  t->return_code = 0;
-  t->next = nullptr;
-
-  t->ctx = ioc;
-  Task *first = static_cast<Task*>(ioc->nvme_task_first);
-  Task *last = static_cast<Task*>(ioc->nvme_task_last);
-  if (last)
-    last->next = t;
-  if (!first)
-    ioc->nvme_task_first = t;
-  ioc->nvme_task_last = t;
-  ++ioc->num_pending;
 
   return 0;
 }
