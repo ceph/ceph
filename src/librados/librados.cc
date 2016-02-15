@@ -1799,6 +1799,15 @@ int librados::IoCtx::watch2(const string& oid, uint64_t *cookie,
   return io_ctx_impl->watch(obj, cookie, NULL, ctx2);
 }
 
+int librados::IoCtx::aio_watch(const string& oid, AioCompletion *c,
+                               uint64_t *cookie,
+                               librados::WatchCtx2 *ctx2)
+{
+  object_t obj(oid);
+  return io_ctx_impl->aio_watch(obj, c->pc, cookie, NULL, ctx2);
+}
+
+
 int librados::IoCtx::unwatch(const string& oid, uint64_t handle)
 {
   return io_ctx_impl->unwatch(handle);
