@@ -8,6 +8,7 @@
 #pragma once
 
 #include <map>
+#include <deque>
 #include <chrono>
 #include <thread>
 #include <mutex>
@@ -21,23 +22,17 @@
 namespace crimson {
   namespace dmclock {
     struct ServerInfo {
-      Counter delta_prev_req;
-      Counter rho_prev_req;
-      uint32_t my_delta;
-      uint32_t my_rho;
-
-      using TimePoint = decltype(std::chrono::steady_clock::now());
-
-      // track last update to allow clean-up
-      TimePoint last_update;
+      Counter   delta_prev_req;
+      Counter   rho_prev_req;
+      uint32_t  my_delta;
+      uint32_t  my_rho;
 
       ServerInfo(Counter _delta_prev_req,
 		 Counter _rho_prev_req) :
 	delta_prev_req(_delta_prev_req),
 	rho_prev_req(_rho_prev_req),
 	my_delta(0),
-	my_rho(0),
-	last_update(std::chrono::steady_clock::now())
+	my_rho(0)
       {
 	// empty
       }
@@ -47,40 +42,34 @@ namespace crimson {
 	rho_prev_req = rho;
 	my_delta = 0;
 	my_rho = 0;
-	last_update = std::chrono::steady_clock::now();
       }
 
       inline void resp_update(PhaseType phase) {
 	++my_delta;
 	if (phase == PhaseType::reservation) ++my_rho;
       }
-
-      inline bool last_update_before(TimePoint moment) {
-	return last_update < moment;
-      }
     };
 
-    
+
     // S is server identifier type
     template<typename S>
     class ServiceTracker {
+      using TimePoint = decltype(std::chrono::steady_clock::now());
       using Duration = std::chrono::milliseconds;
+      using MarkPoint = std::pair<TimePoint,Counter>;
 
-      Counter                delta_counter; // # reqs completed
-      Counter                rho_counter;   // # reqs completed via reservation
-      std::map<S,ServerInfo> service_map;
-      mutable std::mutex     data_mtx;      // protects Counters and map
+      Counter                 delta_counter; // # reqs completed
+      Counter                 rho_counter;   // # reqs completed via reservation
+      std::map<S,ServerInfo>  service_map;
+      mutable std::mutex      data_mtx;      // protects Counters and map
 
       // clean config
 
-      RunEvery               cleaning_job;
-
-      Duration               clean_age;     // age at which ServerInfo cleaned
-
-      // types
+      RunEvery                cleaning_job;
+      std::deque<MarkPoint>   clean_mark_points;
+      Duration                clean_age;     // age at which ServerInfo cleaned
 
       using DataGuard = std::lock_guard<decltype(data_mtx)>;
-      using TimePoint = decltype(std::chrono::steady_clock::now());
 
     public:
 
@@ -93,12 +82,17 @@ namespace crimson {
 	// empty
       }
 
+
       ServiceTracker() :
 	ServiceTracker(std::chrono::minutes(5), std::chrono::minutes(10))
       {
 	// empty
       }
 
+
+      /*
+       * Incorporates the RespParams received into the various counter.
+       */
       void track_resp(const RespParams<S>& resp_params) {
 	DataGuard g(data_mtx);
 
@@ -120,6 +114,10 @@ namespace crimson {
 	}
       }
 
+
+      /*
+       * Returns the ReqParams for the given server.
+       */
       template<typename C>
       ReqParams<C> get_req_params(const C& client, const S& server) {
 	DataGuard g(data_mtx);
@@ -132,7 +130,6 @@ namespace crimson {
 	    1 + delta_counter - it->second.delta_prev_req - it->second.my_delta;
 	  Counter rho =
 	    1 + rho_counter - it->second.rho_prev_req - it->second.my_rho;
-	  assert(delta >= 1 && rho >= 1);
 	  ReqParams<C> result(client, uint32_t(delta), uint32_t(rho));
 
 	  it->second.req_update(delta_counter, rho_counter);
@@ -143,12 +140,35 @@ namespace crimson {
 
     private:
 
+      /*
+       * This is being called regularly by RunEvery. Every time it's
+       * called it notes the time and delta counter (mark point) in a
+       * deque. It also looks at the deque to find the most recent
+       * mark point that is older than clean_age. It then walks the
+       * map and delete all server entries that were last used before
+       * that mark point.
+       */
       void do_clean() {
-	TimePoint when = std::chrono::steady_clock::now() - clean_age;
+	TimePoint now = std::chrono::steady_clock::now();
 	DataGuard g(data_mtx);
-	for (auto it = service_map.begin(); it != service_map.end(); ++it) {
-	  if (it->second.last_update_before(when)) {
-	    service_map.erase(it);
+	clean_mark_points.emplace_back(MarkPoint(now, delta_counter));
+
+	Counter earliest = 0;
+	auto point = clean_mark_points.front();
+	while (point.first <= now - clean_age) {
+	  earliest = point.second;
+	  clean_mark_points.pop_front();
+	  point = clean_mark_points.front();
+	}
+
+	if (earliest > 0) {
+	  for (auto i = service_map.begin();
+	       i != service_map.end();
+	       /* empty */) {
+	    auto i2 = i++;
+	    if (i2->second.delta_prev_req <= earliest) {
+	      service_map.erase(i2);
+	    }
 	  }
 	}
       }
