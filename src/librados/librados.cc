@@ -1818,6 +1818,11 @@ int librados::IoCtx::unwatch2(uint64_t handle)
   return io_ctx_impl->unwatch(handle);
 }
 
+int librados::IoCtx::aio_unwatch(uint64_t handle, AioCompletion *c)
+{
+  return io_ctx_impl->aio_unwatch(handle, c->pc);
+}
+
 int librados::IoCtx::watch_check(uint64_t handle)
 {
   return io_ctx_impl->watch_check(handle);

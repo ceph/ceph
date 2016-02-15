@@ -213,6 +213,7 @@ struct librados::IoCtxImpl {
                 librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2);
   int watch_check(uint64_t cookie);
   int unwatch(uint64_t cookie);
+  int aio_unwatch(uint64_t cookie, AioCompletionImpl *c);
   int notify(const object_t& oid, bufferlist& bl, uint64_t timeout_ms,
 	     bufferlist *preplybl, char **preply_buf, size_t *preply_buf_len);
   int notify_ack(const object_t& oid, uint64_t notify_id, uint64_t cookie,
