@@ -586,7 +586,7 @@ private:
   void _txc_release(TransContext *txc, CollectionRef& c, OnodeRef& onode,
 		    uint64_t offset, uint64_t length,
 		    bool shared);
-  int _txc_add_transaction(TransContext *txc, Transaction *t);
+  void _txc_add_transaction(TransContext *txc, Transaction *t);
   int _txc_finalize(OpSequencer *osr, TransContext *txc);
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);

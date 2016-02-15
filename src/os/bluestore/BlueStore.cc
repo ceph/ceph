@@ -4224,7 +4224,7 @@ void BlueStore::_txc_aio_submit(TransContext *txc)
   bdev->aio_submit(&txc->ioc);
 }
 
-int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
+void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 {
   Transaction::iterator i = t->begin();
 
@@ -4577,8 +4577,6 @@ int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       }
     }
   }
-
-  return 0;
 }
 
 
