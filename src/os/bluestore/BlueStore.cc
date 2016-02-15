@@ -5251,32 +5251,24 @@ int BlueStore::_do_allocate(
 			      &e.offset, &e.length);
       assert(r == 0);
       assert(e.length <= length);  // bc length is a multiple of min_alloc_size
-      if (offset == alloc_start) {
-	if (cow_head_op) {
-	  // we set the COW flag to indicate that all or part of this new extent
-	  // will be copied from the previous allocation.
-	  e.flags |= bluestore_extent_t::FLAG_COW_HEAD;
-	}
-	if (cow_head_op) {
-	  cow_head_op->extent.offset = e.offset;
-	  dout(10) << __func__ << "  final head cow op extent "
-		   << cow_head_op->extent << dendl;
-	}
+      if (offset == alloc_start && cow_head_op) {
+        // we set the COW flag to indicate that all or part of this new extent
+        // will be copied from the previous allocation.
+        e.flags |= bluestore_extent_t::FLAG_COW_HEAD;
+        cow_head_op->extent.offset = e.offset;
+        dout(10) << __func__ << "  final head cow op extent "
+                 << cow_head_op->extent << dendl;
       }
-      if (e.length == length) {
-	if (cow_tail_op) {
-	  // we set the COW flag to indicate that all or part of this new extent
-	  // will be copied from the previous allocation.
-	  e.flags |= bluestore_extent_t::FLAG_COW_TAIL;
-	}
-	if (cow_tail_op) {
-	  // extent.offset is the logical object offset
-	  assert(cow_tail_op->extent.offset >= offset);
-	  assert(cow_tail_op->extent.end() <= offset + length);
-	  cow_tail_op->extent.offset += e.offset - offset;
-	  dout(10) << __func__ << "  final tail cow op extent "
-		   << cow_tail_op->extent << dendl;
-	}
+      if (e.length == length && cow_tail_op) {
+        // we set the COW flag to indicate that all or part of this new extent
+        // will be copied from the previous allocation.
+        e.flags |= bluestore_extent_t::FLAG_COW_TAIL;
+        // extent.offset is the logical object offset
+        assert(cow_tail_op->extent.offset >= offset);
+        assert(cow_tail_op->extent.end() <= offset + length);
+        cow_tail_op->extent.offset += e.offset - offset;
+        dout(10) << __func__ << "  final tail cow op extent "
+                 << cow_tail_op->extent << dendl;
       }
       txc->allocated.insert(e.offset, e.length);
       o->onode.block_map[offset] = e;
