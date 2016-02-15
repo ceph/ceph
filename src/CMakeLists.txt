@@ -989,6 +989,31 @@ add_library(krbd_objs OBJECT krbd.cc)
 if(${WITH_RBD})
   add_subdirectory(librbd)
 
+  set(rbd_mirror_internal
+    tools/rbd_mirror/ClusterWatcher.cc 
+    tools/rbd_mirror/ImageReplayer.cc 
+    tools/rbd_mirror/Mirror.cc 
+    tools/rbd_mirror/PoolWatcher.cc 
+    tools/rbd_mirror/Replayer.cc 
+    tools/rbd_mirror/types.cc)
+  add_library(rbd_mirror_internal STATIC ${rbd_mirror_internal})
+  
+  add_executable(rbd-mirror
+    tools/rbd_mirror/main.cc
+    common/ContextCompletion.cc)
+  target_link_libraries(rbd-mirror
+    rbd_mirror_internal
+    rbd_internal
+    rbd_api
+    rbd_types
+    journal
+    librados
+    osdc
+    cls_rbd_client
+    cls_lock_client
+    cls_journal_client
+    global)
+
   set(rbd_srcs
     tools/rbd/rbd.cc
     tools/rbd/ArgumentTypes.cc
