@@ -1409,6 +1409,14 @@ public:
   const string& get_latest_epoch_oid();
   const string& get_info_oid_prefix();
 
+  void set_user_quota(RGWQuotaInfo& user_quota) {
+    period_config.user_quota = user_quota;
+  }
+
+  void set_bucket_quota(RGWQuotaInfo& bucket_quota) {
+    period_config.bucket_quota = bucket_quota;
+  }
+
   void set_id(const string& id) {
     this->id = id;
     period_map.id = id;
