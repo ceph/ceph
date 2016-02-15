@@ -519,6 +519,8 @@ install(TARGETS rados librados-config DESTINATION bin)
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/
   DESTINATION ${PYTHON_INSTDIR})
 
+add_subdirectory(ceph-disk)
+
 ## dencoder
 set(dencoder_srcs
   test/encoding/ceph_dencoder.cc

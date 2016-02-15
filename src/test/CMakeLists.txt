@@ -485,7 +485,8 @@ add_dependencies(check
   cls_lock
   ceph_test_objectstore
   ceph_erasure_code_non_regression
-  ceph_erasure_code)
+  ceph_erasure_code
+  ceph-disk)
 
 add_ceph_test(test-ceph-helpers.sh ${CMAKE_SOURCE_DIR}/src/test/test-ceph-helpers.sh)
 add_ceph_test(erasure-decode-non-regression.sh ${CMAKE_SOURCE_DIR}/qa/workunits/erasure-code/encode-decode-non-regression.sh)
@@ -505,6 +506,17 @@ add_dependencies(check run-tox)
 
 add_test(NAME run-tox-ceph-detect-init COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-detect-init/run-tox.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check run-tox)
+
+set_property(TEST 
+  run-tox-ceph-disk
+  PROPERTY ENVIRONMENT 
+  CEPH_ROOT=${CMAKE_SOURCE_DIR}
+  CEPH_BIN=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+  CEPH_LIB=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+  LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib
+  PATH=$ENV{PATH}:${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src
+  PYTHONPATH=${CMAKE_SOURCE_DIR}/src/pybind
+  )
 
 # unittest_admin_socket
 add_executable(unittest_admin_socket EXCLUDE_FROM_ALL
