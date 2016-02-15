@@ -1138,12 +1138,23 @@ public:
   }
 
   void wakeup(int shard_id, set<string>& keys) {
-    Mutex::Locker l(cr_lock());
+    Mutex& m = cr_lock();
 
+    m.Lock();
     RGWDataSyncCR *cr = static_cast<RGWDataSyncCR *>(get_cr());
+    if (!cr) {
+      m.Unlock();
+      return;
+    }
+
+    cr->get();
+    m.Unlock();
+
     if (cr) {
       cr->wakeup(shard_id, keys);
     }
+
+    cr->put();
   }
 };
 
