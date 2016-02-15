@@ -103,7 +103,7 @@ class KernelMount(CephFSMount):
     def cleanup(self):
         pass
 
-    def umount_wait(self, force=False):
+    def umount_wait(self, force=False, require_clean=False):
         """
         Unlike the fuse client, the kernel client's umount is immediate
         """
