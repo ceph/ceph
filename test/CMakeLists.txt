@@ -2,7 +2,10 @@ cmake_minimum_required(VERSION 2.8)
 
 include_directories(${GTEST_INCLUDE_DIR})
 
-add_executable(client_tests EXCLUDE_FROM_ALL ../src/test_client.cc test_test_client.cc)
+add_executable(client_tests EXCLUDE_FROM_ALL
+			    ../src/test_client.cc
+			    test_test_client.cc
+			    test_server_client_map.cc)
 
 target_link_libraries(client_tests
   PUBLIC pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})
