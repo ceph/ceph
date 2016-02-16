@@ -151,6 +151,7 @@ binary-arch: build install
 	install -m0644 systemd/ceph-create-keys@.service debian/ceph-base/lib/systemd/system
 	install -m0644 systemd/ceph-osd@.service debian/ceph-osd/lib/systemd/system
 	install -m0644 systemd/ceph-disk@.service debian/ceph-osd/lib/systemd/system
+	install -m0644 systemd/rbdmap.service debian/ceph-common/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mon/lib/systemd/system/ceph-mon@.service
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-base/lib/systemd/system/ceph-create-keys@.service
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-osd@.service
