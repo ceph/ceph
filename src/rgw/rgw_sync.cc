@@ -25,42 +25,21 @@ static string mdlog_sync_status_oid = "mdlog.sync-status";
 static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
 static string mdlog_sync_full_sync_index_prefix = "meta.full-sync.index";
 
-struct rgw_sync_error_info {
-  uint32_t error_code;
-  string message;
-
-  rgw_sync_error_info() : error_code(0) {}
-  rgw_sync_error_info(uint32_t _error_code, const string& _message) : error_code(_error_code), message(_message) {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(error_code, bl);
-    ::encode(message, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    ::decode(error_code, bl);
-    ::decode(message, bl);
-    DECODE_FINISH(bl);
-  } 
-};
-WRITE_CLASS_ENCODER(rgw_sync_error_info)
-
 RGWSyncErrorLogger::RGWSyncErrorLogger(RGWRados *_store, const string oid_prefix, int _num_shards) : store(_store), num_shards(_num_shards) {
-  char buf[oid_prefix.size() + 16];
-
   for (int i = 0; i < num_shards; i++) {
-    snprintf(buf, sizeof(buf), "%s.%d", oid_prefix.c_str(), i);
-    oids.push_back(buf);
+    oids.push_back(get_shard_oid(oid_prefix, i));
   }
 }
+string RGWSyncErrorLogger::get_shard_oid(const string& oid_prefix, int shard_id) {
+  char buf[oid_prefix.size() + 16];
+  snprintf(buf, sizeof(buf), "%s.%d", oid_prefix.c_str(), shard_id);
+  return string(buf);
+}
 
-RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const string& section, const string& name, uint32_t error_code, const string& message) {
+RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message) {
   cls_log_entry entry;
 
-  rgw_sync_error_info info(error_code, message);
+  rgw_sync_error_info info(source_zone, error_code, message);
   bufferlist bl;
   ::encode(info, bl);
   store->time_log_prepare_entry(entry, ceph_clock_now(store->ctx()), section, name, bl);
@@ -1082,7 +1061,8 @@ int RGWMetaSyncSingleEntryCR::operate() {
       if (sync_status < 0) {
         ldout(sync_env->cct, 10) << *this << ": failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << dendl;
         log_error() << "failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << std::endl;
-        yield call(sync_env->error_logger->log_error_cr(section, key, -sync_status, string("failed to read remote metadata entry: ") + cpp_strerror(-sync_status)));
+        yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), section, key, -sync_status,
+                                                        string("failed to read remote metadata entry: ") + cpp_strerror(-sync_status)));
         return set_cr_error(sync_status);
       }
 

@@ -26,7 +26,7 @@
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
-#include "rgw_log.h"
+
 #include "rgw_formats.h"
 #include "rgw_usage.h"
 #include "rgw_replica_log.h"
@@ -333,6 +333,7 @@ enum {
   OPT_MDLOG_TRIM,
   OPT_MDLOG_FETCH,
   OPT_MDLOG_STATUS,
+  OPT_SYNC_ERROR_LIST,
   OPT_BILOG_LIST,
   OPT_BILOG_TRIM,
   OPT_DATA_SYNC_STATUS,
@@ -381,6 +382,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "caps") == 0 ||
       strcmp(cmd, "data") == 0 ||
       strcmp(cmd, "datalog") == 0 ||
+      strcmp(cmd, "error") == 0 ||
       strcmp(cmd, "gc") == 0 || 
       strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "log") == 0 ||
@@ -401,6 +403,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "regionmap") == 0 ||
       strcmp(cmd, "replicalog") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
+      strcmp(cmd, "sync") == 0 ||
       strcmp(cmd, "temp") == 0 ||
       strcmp(cmd, "usage") == 0 ||
       strcmp(cmd, "user") == 0 ||
@@ -664,6 +667,10 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_METADATA_SYNC_INIT;
     if (strcmp(cmd, "run") == 0)
       return OPT_METADATA_SYNC_RUN;
+  } else if ((prev_prev_cmd && strcmp(prev_prev_cmd, "sync") == 0) &&
+	     (strcmp(prev_cmd, "error") == 0)) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_SYNC_ERROR_LIST;
   } else if (strcmp(prev_cmd, "mdlog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_MDLOG_LIST;
@@ -4731,41 +4738,78 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_BILOG_LIST) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return -EINVAL;
-    }
-    RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
-    if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    formatter->open_array_section("entries");
-    bool truncated;
-    int count = 0;
-    if (max_entries < 0)
+  if (opt_cmd == OPT_SYNC_ERROR_LIST) {
+    if (max_entries < 0) {
       max_entries = 1000;
+    }
 
-    do {
-      list<rgw_bi_log_entry> entries;
-      ret = store->list_bi_log_entries(bucket, shard_id, marker, max_entries - count, entries, &truncated);
-      if (ret < 0) {
-        cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
-        return -ret;
+    bool truncated;
+    utime_t start_time, end_time;
+
+    int ret = parse_date_str(start_date, start_time);
+    if (ret < 0)
+      return -ret;
+
+    ret = parse_date_str(end_date, end_time);
+    if (ret < 0)
+      return -ret;
+
+    if (shard_id < 0) {
+      shard_id = 0;
+    }
+
+    formatter->open_array_section("entries");
+
+    for (; shard_id < ERROR_LOGGER_SHARDS; ++shard_id) {
+      formatter->open_object_section("shard");
+      encode_json("shard_id", shard_id, formatter);
+      formatter->open_array_section("entries");
+
+      int count = 0;
+      string oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX, shard_id);
+
+      do {
+        list<cls_log_entry> entries;
+        ret = store->time_log_list(oid, start_time, end_time, max_entries - count, entries,
+                                   marker, &marker, &truncated);
+        if (ret == -ENOENT) {
+          break;
+        }
+        if (ret < 0) {
+          cerr << "ERROR: store->time_log_list(): " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+
+        count += entries.size();
+
+        for (auto& cls_entry : entries) {
+          rgw_sync_error_info log_entry;
+
+          auto iter = cls_entry.data.begin();
+          try {
+            ::decode(log_entry, iter);
+          } catch (buffer::error& err) {
+            cerr << "ERROR: failed to decode log entry" << std::endl;
+            continue;
+          }
+          formatter->open_object_section("entry");
+          encode_json("id", cls_entry.id, formatter);
+          encode_json("section", cls_entry.section, formatter);
+          encode_json("name", cls_entry.name, formatter);
+          encode_json("timestamp", cls_entry.timestamp, formatter);
+          encode_json("info", log_entry, formatter);
+          formatter->close_section();
+          formatter->flush(cout);
+        }
+      } while (truncated && count < max_entries);
+
+      formatter->close_section();
+      formatter->close_section();
+
+      if (specified_shard_id) {
+        break;
       }
-
-      count += entries.size();
-
-      for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-        rgw_bi_log_entry& entry = *iter;
-        encode_json("entry", entry, formatter);
-
-        marker = entry.id;
-      }
-      formatter->flush(cout);
-    } while (truncated && count < max_entries);
+    }
 
     formatter->close_section();
     formatter->flush(cout);
