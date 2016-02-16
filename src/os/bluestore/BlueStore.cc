@@ -2324,7 +2324,7 @@ void BlueStore::_sync()
 {
   dout(10) << __func__ << dendl;
 
-  // flush aios in flght
+  // flush aios in flight
   bdev->flush();
 
   std::unique_lock<std::mutex> l(kv_lock);
