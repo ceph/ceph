@@ -33,8 +33,38 @@ class RGWSyncErrorLogger {
   atomic_t counter;
 public:
   RGWSyncErrorLogger(RGWRados *_store, const string oid_prefix, int _num_shards);
-  RGWCoroutine *log_error_cr(const string& section, const string& name, uint32_t error_code, const string& message);
+  RGWCoroutine *log_error_cr(const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message);
+
+  static string get_shard_oid(const string& oid_prefix, int shard_id);
 };
+
+struct rgw_sync_error_info {
+  string source_zone;
+  uint32_t error_code;
+  string message;
+
+  rgw_sync_error_info() : error_code(0) {}
+  rgw_sync_error_info(const string& _source_zone, uint32_t _error_code, const string& _message) : source_zone(_source_zone), error_code(_error_code), message(_message) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(source_zone, bl);
+    ::encode(error_code, bl);
+    ::encode(message, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(source_zone, bl);
+    ::decode(error_code, bl);
+    ::decode(message, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_sync_error_info)
 
 #define DEFAULT_BACKOFF_MAX 30
 
