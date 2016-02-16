@@ -740,7 +740,6 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     bluefs(NULL),
     bluefs_shared_bdev(0),
     db(NULL),
-    fs(NULL),
     bdev(NULL),
     fm(NULL),
     alloc(NULL),
@@ -832,9 +831,6 @@ int BlueStore::_open_path()
 	 << dendl;
     return r;
   }
-  assert(fs == NULL);
-  fs = FS::create_by_fd(path_fd);
-  dout(1) << __func__ << " using fs driver '" << fs->get_name() << "'" << dendl;
   return 0;
 }
 
@@ -842,8 +838,6 @@ void BlueStore::_close_path()
 {
   VOID_TEMP_FAILURE_RETRY(::close(path_fd));
   path_fd = -1;
-  delete fs;
-  fs = NULL;
 }
 
 int BlueStore::_write_bdev_label(string path, bluestore_bdev_label_t label)
