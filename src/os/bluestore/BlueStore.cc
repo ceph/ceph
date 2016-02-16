@@ -2659,7 +2659,6 @@ int BlueStore::_do_read(
     bl.append_zero(x_len);
     offset += x_len;
     length -= x_len;
-    continue;
   }
   r = bl.length();
 
@@ -2771,7 +2770,6 @@ int BlueStore::fiemap(
     }
     offset += x_len;
     len -= x_len;
-    continue;
   }
 
  out:
