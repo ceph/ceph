@@ -715,7 +715,6 @@ int XioMessenger::bind(const entity_addr_t& addr)
     shift_addr.set_port(port0);
     shift_addr.nonce = nonce;
     set_myaddr(shift_addr);
-    need_addr = false;
     did_bind = true;
   }
   return r;
