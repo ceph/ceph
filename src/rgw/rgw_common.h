@@ -297,6 +297,10 @@ class RGWHTTPArgs
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
 
+  /** Get the value for specific system argument parameter */
+  string sys_get(const string& name, bool *exists = nullptr);
+  string sys_get(const char *name, bool *exists = nullptr);
+
   /** see if a parameter is contained in this RGWHTTPArgs */
   bool exists(const char *name) {
     map<string, string>::iterator iter = val_map.find(name);
