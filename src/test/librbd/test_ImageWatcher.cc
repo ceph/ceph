@@ -352,7 +352,7 @@ TEST_F(TestImageWatcher, NotifyHeaderUpdate) {
   ASSERT_EQ(0, register_image_watch(*ictx));
 
   m_notify_acks = {{NOTIFY_OP_HEADER_UPDATE, {}}};
-  librbd::ImageWatcher::notify_header_update(m_ioctx, ictx->header_oid);
+  ictx->notify_update();
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
 

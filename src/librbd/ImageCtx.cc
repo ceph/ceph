@@ -1017,4 +1017,17 @@ struct C_InvalidateCache : public Context {
   Journal<ImageCtx> *ImageCtx::create_journal() {
     return new Journal<ImageCtx>(*this);
   }
+
+  void ImageCtx::notify_update() {
+    state->handle_update_notification();
+
+    C_SaferCond ctx;
+    image_watcher->notify_header_update(&ctx);
+    ctx.wait();
+  }
+
+  void ImageCtx::notify_update(Context *on_finish) {
+    state->handle_update_notification();
+    image_watcher->notify_header_update(on_finish);
+  }
 }

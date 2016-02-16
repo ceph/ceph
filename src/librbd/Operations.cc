@@ -26,6 +26,33 @@
 
 namespace librbd {
 
+namespace {
+
+template <typename I>
+struct C_NotifyUpdate : public Context {
+  I &image_ctx;
+  Context *on_finish;
+  bool notified = false;
+
+  C_NotifyUpdate(I &image_ctx, Context *on_finish)
+    : image_ctx(image_ctx), on_finish(on_finish) {
+  }
+
+  virtual void complete(int r) override {
+    if (r < 0 || notified) {
+      Context::complete(r);
+    } else {
+      notified = true;
+      image_ctx.notify_update(this);
+    }
+  }
+  virtual void finish(int r) override {
+    on_finish->complete(r);
+  }
+};
+
+} // anonymous namespace
+
 template <typename I>
 Operations<I>::Operations(I &image_ctx) : m_image_ctx(image_ctx) {
 }
@@ -63,8 +90,6 @@ int Operations<I>::flatten(ProgressContext &prog_ctx) {
   if (r < 0 && r != -EINVAL) {
     return r;
   }
-
-  notify_change();
   ldout(cct, 20) << "flatten finished" << dendl;
   return 0;
 }
@@ -115,7 +140,8 @@ void Operations<I>::flatten(ProgressContext &prog_ctx, Context *on_finish) {
   }
 
   operation::FlattenRequest<I> *req = new operation::FlattenRequest<I>(
-    m_image_ctx, on_finish, object_size, overlap_objects, snapc, prog_ctx);
+    m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), object_size,
+    overlap_objects, snapc, prog_ctx);
   req->send();
 }
 
@@ -141,8 +167,6 @@ int Operations<I>::rebuild_object_map(ProgressContext &prog_ctx) {
   if (r < 0) {
     return r;
   }
-
-  notify_change();
   return 0;
 }
 
@@ -166,7 +190,8 @@ void Operations<I>::rebuild_object_map(ProgressContext &prog_ctx,
   }
 
   operation::RebuildObjectMapRequest<I> *req =
-    new operation::RebuildObjectMapRequest<I>(m_image_ctx, on_finish, prog_ctx);
+    new operation::RebuildObjectMapRequest<I>(
+      m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), prog_ctx);
   req->send();
 }
 
@@ -206,10 +231,6 @@ int Operations<I>::rename(const char *dstname) {
       return r;
     }
   }
-
-  if (m_image_ctx.old_format) {
-    notify_change();
-  }
   return 0;
 }
 
@@ -225,8 +246,11 @@ void Operations<I>::rename(const char *dstname, Context *on_finish) {
   ldout(cct, 5) << this << " " << __func__ << ": dest_name=" << dstname
                 << dendl;
 
-  operation::RenameRequest<I> *req =
-    new operation::RenameRequest<I>(m_image_ctx, on_finish, dstname);
+  if (m_image_ctx.old_format) {
+    on_finish = new C_NotifyUpdate<I>(m_image_ctx, on_finish);
+  }
+  operation::RenameRequest<I> *req = new operation::RenameRequest<I>(
+    m_image_ctx, on_finish, dstname);
   req->send();
 }
 
@@ -254,7 +278,6 @@ int Operations<I>::resize(uint64_t size, ProgressContext& prog_ctx) {
                                        size, boost::ref(prog_ctx)));
 
   m_image_ctx.perfcounter->inc(l_librbd_resize);
-  notify_change();
   ldout(cct, 2) << "resize finished" << dendl;
   return r;
 }
@@ -282,7 +305,8 @@ void Operations<I>::resize(uint64_t size, ProgressContext &prog_ctx,
   }
 
   operation::ResizeRequest<I> *req = new operation::ResizeRequest<I>(
-    m_image_ctx, on_finish, size, prog_ctx, journal_op_tid, false);
+    m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), size, prog_ctx,
+    journal_op_tid, false);
   req->send();
 }
 
@@ -317,7 +341,6 @@ int Operations<I>::snap_create(const char *snap_name) {
   }
 
   m_image_ctx.perfcounter->inc(l_librbd_snap_create);
-  notify_change();
   return 0;
 }
 
@@ -333,8 +356,9 @@ void Operations<I>::snap_create(const char *snap_name, Context *on_finish,
                 << dendl;
 
   operation::SnapshotCreateRequest<I> *req =
-    new operation::SnapshotCreateRequest<I>(m_image_ctx, on_finish, snap_name,
-                                            journal_op_tid);
+    new operation::SnapshotCreateRequest<I>(
+      m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), snap_name,
+      journal_op_tid);
   req->send();
 }
 
@@ -385,7 +409,6 @@ int Operations<I>::snap_rollback(const char *snap_name,
   }
 
   m_image_ctx.perfcounter->inc(l_librbd_snap_rollback);
-  notify_change();
   return r;
 }
 
@@ -414,8 +437,9 @@ void Operations<I>::snap_rollback(const char *snap_name,
 
   // async mode used for journal replay
   operation::SnapshotRollbackRequest<I> *request =
-    new operation::SnapshotRollbackRequest<I>(m_image_ctx, on_finish, snap_name,
-                                              snap_id, new_size, prog_ctx);
+    new operation::SnapshotRollbackRequest<I>(
+      m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), snap_name,
+      snap_id, new_size, prog_ctx);
   request->send();
 }
 
@@ -463,7 +487,6 @@ int Operations<I>::snap_remove(const char *snap_name) {
   }
 
   m_image_ctx.perfcounter->inc(l_librbd_snap_remove);
-  notify_change();
   return 0;
 }
 
@@ -504,8 +527,9 @@ void Operations<I>::snap_remove(const char *snap_name, Context *on_finish) {
   }
 
   operation::SnapshotRemoveRequest<I> *req =
-    new operation::SnapshotRemoveRequest<I>(m_image_ctx, on_finish, snap_name,
-                                            snap_id);
+    new operation::SnapshotRemoveRequest<I>(
+      m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), snap_name,
+      snap_id);
   req->send();
 }
 
@@ -558,7 +582,6 @@ int Operations<I>::snap_rename(const char *srcname, const char *dstname) {
   }
 
   m_image_ctx.perfcounter->inc(l_librbd_snap_rename);
-  notify_change();
   return 0;
 }
 
@@ -577,8 +600,9 @@ void Operations<I>::snap_rename(const uint64_t src_snap_id,
                 << "new_snap_name=" << dst_name << dendl;
 
   operation::SnapshotRenameRequest<I> *req =
-    new operation::SnapshotRenameRequest<I>(m_image_ctx, on_finish, src_snap_id,
-                                            dst_name);
+    new operation::SnapshotRenameRequest<I>(
+      m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), src_snap_id,
+      dst_name);
   req->send();
 }
 
@@ -630,8 +654,6 @@ int Operations<I>::snap_protect(const char *snap_name) {
       return r;
     }
   }
-
-  notify_change();
   return 0;
 }
 
@@ -648,7 +670,8 @@ void Operations<I>::snap_protect(const char *snap_name, Context *on_finish) {
                 << dendl;
 
   operation::SnapshotProtectRequest<I> *request =
-    new operation::SnapshotProtectRequest<I>(m_image_ctx, on_finish, snap_name);
+    new operation::SnapshotProtectRequest<I>(
+      m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), snap_name);
   request->send();
 }
 
@@ -700,8 +723,6 @@ int Operations<I>::snap_unprotect(const char *snap_name) {
       return r;
     }
   }
-
-  notify_change();
   return 0;
 }
 
@@ -718,8 +739,8 @@ void Operations<I>::snap_unprotect(const char *snap_name, Context *on_finish) {
                 << dendl;
 
   operation::SnapshotUnprotectRequest<I> *request =
-    new operation::SnapshotUnprotectRequest<I>(m_image_ctx, on_finish,
-                                               snap_name);
+    new operation::SnapshotUnprotectRequest<I>(
+      m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), snap_name);
   request->send();
 }
 
@@ -798,13 +819,6 @@ int Operations<I>::invoke_async_request(const std::string& request_type,
     }
   } while (r == -ERESTART);
   return r;
-}
-
-template <typename I>
-void Operations<I>::notify_change() {
-  m_image_ctx.state->handle_update_notification();
-  ImageWatcher::notify_header_update(m_image_ctx.md_ctx,
-                                     m_image_ctx.header_oid);
 }
 
 } // namespace librbd

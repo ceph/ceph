@@ -65,7 +65,6 @@ private:
                            bool permit_snapshot,
                            const boost::function<void(Context*)>& local_request,
                            const boost::function<int()>& remote_request);
-  void notify_change();
 };
 
 } // namespace librbd

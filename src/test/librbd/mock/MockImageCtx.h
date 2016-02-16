@@ -141,6 +141,9 @@ struct MockImageCtx {
   MOCK_METHOD1(create_object_map, MockObjectMap*(uint64_t));
   MOCK_METHOD0(create_journal, MockJournal*());
 
+  MOCK_METHOD0(notify_update, void());
+  MOCK_METHOD1(notify_update, void(Context *));
+
   ImageCtx *image_ctx;
   CephContext *cct;
 
