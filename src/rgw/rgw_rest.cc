@@ -23,6 +23,8 @@
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
 
+#include "compressor/Compressor.h"
+
 #include <numeric>
 
 #define dout_subsys ceph_subsys_rgw

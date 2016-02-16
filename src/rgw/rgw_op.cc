@@ -2881,6 +2881,10 @@ void RGWPutObj::execute()
       len = data.length();
     }
 
+    if (need_calc_md5) {
+      hash.Update((const byte *)data.c_str(), data.length());
+    }
+
     /* save data for producing torrent data */
     torrent.save_data(data_in);
 
@@ -2977,9 +2981,6 @@ void RGWPutObj::execute()
     goto done;
   }
 
-  if (need_calc_md5) {
-    processor->complete_hash(&hash);
-  }
   hash.Final(m);
 
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
