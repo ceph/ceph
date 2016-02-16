@@ -150,7 +150,7 @@ namespace ceph {
       typedef duration::period period;
       // The second template parameter defaults to the clock's duration
       // type.
-      typedef std::chrono::time_point<real_clock> time_point;
+      typedef std::chrono::time_point<coarse_real_clock> time_point;
       static constexpr const bool is_steady = false;
 
       static time_point now() noexcept {
@@ -243,7 +243,7 @@ namespace ceph {
       typedef timespan duration;
       typedef duration::rep rep;
       typedef duration::period period;
-      typedef std::chrono::time_point<mono_clock> time_point;
+      typedef std::chrono::time_point<coarse_mono_clock> time_point;
       static constexpr const bool is_steady = true;
 
       static time_point now() noexcept {
@@ -312,6 +312,11 @@ namespace ceph {
   // make any provision for converting between
   // std::chrono::steady_clock time and ceph::mono_clock time.
   typedef mono_clock::time_point mono_time;
+
+  // Coarse wall-clock times
+  typedef coarse_real_clock::time_point coarse_real_time;
+  // Coarse monotonic times
+  typedef coarse_mono_clock::time_point coarse_mono_time;
 
   template<typename Rep1, typename Ratio1, typename Rep2, typename Ratio2>
   auto floor(const std::chrono::duration<Rep1, Ratio1>& duration,
