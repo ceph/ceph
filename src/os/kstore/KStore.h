@@ -196,9 +196,6 @@ public:
     list<Context*> oncommits;  ///< more commit completions
     list<CollectionRef> removed_collections; ///< colls we removed
 
-    Mutex lock;
-    Cond cond;
-
     CollectionRef first_collection;  ///< first referenced collection
 
     explicit TransContext(OpSequencer *o)
@@ -208,8 +205,7 @@ public:
 	bytes(0),
 	oncommit(NULL),
 	onreadable(NULL),
-	onreadable_sync(NULL),
-	lock("KStore::TransContext::lock") {
+	onreadable_sync(NULL) {
       //cout << "txc new " << this << std::endl;
     }
     ~TransContext() {
