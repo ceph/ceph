@@ -49,13 +49,16 @@ private:
    * SHUTDOWN_CACHE
    *    |
    *    v
-   * FLUSH_OP_WORK_QUEUE  . . . . .
-   *    |                         .
-   *    v                         .
-   * CLOSE_PARENT                 . (no parent)
-   *    |                         .
-   *    v                         .
-   * <finish> < . . . . . . . . . .
+   * FLUSH_OP_WORK_QUEUE . . . . .
+   *    |                        .
+   *    v                        .
+   * CLOSE_PARENT                . (no parent)
+   *    |                        .
+   *    v                        .
+   * FLUSH_IMAGE_WATCHER < . . . .
+   *    |
+   *    v
+   * <finish>
    *
    * @endverbatim
    */
@@ -92,6 +95,9 @@ private:
 
   void send_close_parent();
   void handle_close_parent(int r);
+
+  void send_flush_image_watcher();
+  void handle_flush_image_watcher(int r);
 
   void finish();
 

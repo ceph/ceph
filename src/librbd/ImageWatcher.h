@@ -3,12 +3,12 @@
 #ifndef CEPH_LIBRBD_IMAGE_WATCHER_H
 #define CEPH_LIBRBD_IMAGE_WATCHER_H
 
-#include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
+#include "librbd/image_watcher/Notifier.h"
 #include "librbd/WatchNotifyTypes.h"
 #include <set>
 #include <string>
@@ -31,6 +31,7 @@ public:
 
   int register_watch();
   int unregister_watch();
+  void flush(Context *on_finish);
 
   int notify_flatten(uint64_t request_id, ProgressContext &prog_ctx);
   int notify_resize(uint64_t request_id, uint64_t size,
@@ -65,9 +66,7 @@ private:
   };
 
   enum TaskCode {
-    TASK_CODE_ACQUIRED_LOCK,
     TASK_CODE_REQUEST_LOCK,
-    TASK_CODE_RELEASED_LOCK,
     TASK_CODE_CANCEL_ASYNC_REQUESTS,
     TASK_CODE_REREGISTER_WATCH,
     TASK_CODE_ASYNC_REQUEST,
@@ -222,6 +221,8 @@ private:
 
   Mutex m_owner_client_id_lock;
   watch_notify::ClientId m_owner_client_id;
+
+  image_watcher::Notifier m_notifier;
 
   void schedule_cancel_async_requests();
   void cancel_async_requests();
