@@ -230,9 +230,6 @@ private:
   void set_owner_client_id(const watch_notify::ClientId &client_id);
   watch_notify::ClientId get_client_id();
 
-  void execute_acquired_lock();
-  void execute_released_lock();
-  void execute_request_lock();
   void schedule_request_lock(bool use_timer, int timer_delay = -1);
 
   int notify_lock_owner(bufferlist &bl);

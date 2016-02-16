@@ -290,13 +290,6 @@ ClientId ImageWatcher::get_client_id() {
 }
 
 void ImageWatcher::notify_acquired_lock() {
-  // might be invoked from librados AIO thread
-  FunctionContext *ctx = new FunctionContext(
-      boost::bind(&ImageWatcher::execute_acquired_lock, this));
-  m_task_finisher->queue(TASK_CODE_ACQUIRED_LOCK, ctx);
-}
-
-void ImageWatcher::execute_acquired_lock() {
   ldout(m_image_ctx.cct, 10) << this << " notify acquired lock" << dendl;
 
   ClientId client_id = get_client_id();
@@ -311,13 +304,6 @@ void ImageWatcher::execute_acquired_lock() {
 }
 
 void ImageWatcher::notify_released_lock() {
-  // might be invoked from librados AIO thread
-  FunctionContext *ctx = new FunctionContext(
-      boost::bind(&ImageWatcher::execute_released_lock, this));
-  m_task_finisher->queue(TASK_CODE_RELEASED_LOCK, ctx);
-}
-
-void ImageWatcher::execute_released_lock() {
   ldout(m_image_ctx.cct, 10) << this << " notify released lock" << dendl;
 
   {
@@ -345,7 +331,7 @@ void ImageWatcher::schedule_request_lock(bool use_timer, int timer_delay) {
     ldout(m_image_ctx.cct, 15) << this << " requesting exclusive lock" << dendl;
 
     FunctionContext *ctx = new FunctionContext(
-      boost::bind(&ImageWatcher::execute_request_lock, this));
+      boost::bind(&ImageWatcher::notify_request_lock, this));
     if (use_timer) {
       if (timer_delay < 0) {
         timer_delay = RETRY_DELAY_SECONDS;
@@ -359,13 +345,6 @@ void ImageWatcher::schedule_request_lock(bool use_timer, int timer_delay) {
 }
 
 void ImageWatcher::notify_request_lock() {
-  // might be invoked from librados AIO thread
-  FunctionContext *ctx = new FunctionContext(
-      boost::bind(&ImageWatcher::execute_request_lock, this));
-  m_task_finisher->queue(TASK_CODE_REQUEST_LOCK, ctx);
-}
-
-void ImageWatcher::execute_request_lock() {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   ldout(m_image_ctx.cct, 10) << this << " notify request lock" << dendl;
 
