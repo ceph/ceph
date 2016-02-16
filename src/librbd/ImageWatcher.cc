@@ -12,6 +12,7 @@
 #include "librbd/TaskFinisher.h"
 #include "librbd/Utils.h"
 #include "librbd/image_watcher/Notifier.h"
+#include "librbd/image_watcher/NotifyLockOwner.h"
 #include "include/encoding.h"
 #include "include/stringify.h"
 #include "common/errno.h"
@@ -28,6 +29,7 @@ namespace librbd {
 
 using namespace image_watcher;
 using namespace watch_notify;
+using util::create_context_callback;
 
 static const double	RETRY_DELAY_SECONDS = 1.0;
 
@@ -109,8 +111,7 @@ int ImageWatcher::notify_async_progress(const AsyncRequestId &request,
 
   bufferlist bl;
   ::encode(NotifyMessage(AsyncProgressPayload(request, offset, total)), bl);
-  m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl,
-                             Notifier::NOTIFY_TIMEOUT, NULL);
+  m_notifier.notify(bl, nullptr, nullptr);
   return 0;
 }
 
@@ -121,30 +122,31 @@ void ImageWatcher::schedule_async_complete(const AsyncRequestId &request,
   m_task_finisher->queue(ctx);
 }
 
-int ImageWatcher::notify_async_complete(const AsyncRequestId &request,
-					int r) {
+void ImageWatcher::notify_async_complete(const AsyncRequestId &request, int r) {
   ldout(m_image_ctx.cct, 20) << this << " remote async request finished: "
 			     << request << " = " << r << dendl;
 
   bufferlist bl;
   ::encode(NotifyMessage(AsyncCompletePayload(request, r)), bl);
+  m_notifier.notify(bl, nullptr, new FunctionContext(
+    boost::bind(&ImageWatcher::handle_async_complete, this, request, r, _1)));
+}
 
-  if (r >= 0) {
-    m_image_ctx.notify_update();
-  }
-  int ret = m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl,
-				       Notifier::NOTIFY_TIMEOUT, NULL);
-  if (ret < 0) {
+void ImageWatcher::handle_async_complete(const AsyncRequestId &request, int r,
+                                         int ret_val) {
+  ldout(m_image_ctx.cct, 20) << this << " " << __func__ << ": "
+                             << "request=" << request << ", r=" << ret_val
+                             << dendl;
+  if (ret_val < 0) {
     lderr(m_image_ctx.cct) << this << " failed to notify async complete: "
-			   << cpp_strerror(ret) << dendl;
-    if (ret == -ETIMEDOUT) {
+			   << cpp_strerror(ret_val) << dendl;
+    if (ret_val == -ETIMEDOUT) {
       schedule_async_complete(request, r);
     }
   } else {
-    RWLock::WLocker l(m_async_request_lock);
+    RWLock::WLocker async_request_locker(m_async_request_lock);
     m_async_pending.erase(request);
   }
-  return 0;
 }
 
 int ImageWatcher::notify_flatten(uint64_t request_id, ProgressContext &prog_ctx) {
@@ -156,8 +158,7 @@ int ImageWatcher::notify_flatten(uint64_t request_id, ProgressContext &prog_ctx)
 
   bufferlist bl;
   ::encode(NotifyMessage(FlattenPayload(async_request_id)), bl);
-
-  return notify_async_request(async_request_id, bl, prog_ctx);
+  return notify_async_request(async_request_id, std::move(bl), prog_ctx);
 }
 
 int ImageWatcher::notify_resize(uint64_t request_id, uint64_t size,
@@ -170,8 +171,7 @@ int ImageWatcher::notify_resize(uint64_t request_id, uint64_t size,
 
   bufferlist bl;
   ::encode(NotifyMessage(ResizePayload(size, async_request_id)), bl);
-
-  return notify_async_request(async_request_id, bl, prog_ctx);
+  return notify_async_request(async_request_id, std::move(bl), prog_ctx);
 }
 
 int ImageWatcher::notify_snap_create(const std::string &snap_name) {
@@ -181,8 +181,7 @@ int ImageWatcher::notify_snap_create(const std::string &snap_name) {
 
   bufferlist bl;
   ::encode(NotifyMessage(SnapCreatePayload(snap_name)), bl);
-
-  return notify_lock_owner(bl);
+  return notify_lock_owner(std::move(bl));
 }
 
 int ImageWatcher::notify_snap_rename(const snapid_t &src_snap_id,
@@ -193,8 +192,7 @@ int ImageWatcher::notify_snap_rename(const snapid_t &src_snap_id,
 
   bufferlist bl;
   ::encode(NotifyMessage(SnapRenamePayload(src_snap_id, dst_snap_name)), bl);
-
-  return notify_lock_owner(bl);
+  return notify_lock_owner(std::move(bl));
 }
 int ImageWatcher::notify_snap_remove(const std::string &snap_name) {
   assert(m_image_ctx.owner_lock.is_locked());
@@ -203,8 +201,7 @@ int ImageWatcher::notify_snap_remove(const std::string &snap_name) {
 
   bufferlist bl;
   ::encode(NotifyMessage(SnapRemovePayload(snap_name)), bl);
-
-  return notify_lock_owner(bl);
+  return notify_lock_owner(std::move(bl));
 }
 
 int ImageWatcher::notify_snap_protect(const std::string &snap_name) {
@@ -214,7 +211,7 @@ int ImageWatcher::notify_snap_protect(const std::string &snap_name) {
 
   bufferlist bl;
   ::encode(NotifyMessage(SnapProtectPayload(snap_name)), bl);
-  return notify_lock_owner(bl);
+  return notify_lock_owner(std::move(bl));
 }
 
 int ImageWatcher::notify_snap_unprotect(const std::string &snap_name) {
@@ -224,7 +221,7 @@ int ImageWatcher::notify_snap_unprotect(const std::string &snap_name) {
 
   bufferlist bl;
   ::encode(NotifyMessage(SnapUnprotectPayload(snap_name)), bl);
-  return notify_lock_owner(bl);
+  return notify_lock_owner(std::move(bl));
 }
 
 int ImageWatcher::notify_rebuild_object_map(uint64_t request_id,
@@ -237,8 +234,7 @@ int ImageWatcher::notify_rebuild_object_map(uint64_t request_id,
 
   bufferlist bl;
   ::encode(NotifyMessage(RebuildObjectMapPayload(async_request_id)), bl);
-
-  return notify_async_request(async_request_id, bl, prog_ctx);
+  return notify_async_request(async_request_id, std::move(bl), prog_ctx);
 }
 
 int ImageWatcher::notify_rename(const std::string &image_name) {
@@ -248,7 +244,7 @@ int ImageWatcher::notify_rename(const std::string &image_name) {
 
   bufferlist bl;
   ::encode(NotifyMessage(RenamePayload(image_name)), bl);
-  return notify_lock_owner(bl);
+  return notify_lock_owner(std::move(bl));
 }
 
 void ImageWatcher::notify_header_update(Context *on_finish) {
@@ -297,8 +293,7 @@ void ImageWatcher::notify_acquired_lock() {
 
   bufferlist bl;
   ::encode(NotifyMessage(AcquiredLockPayload(client_id)), bl);
-  m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl,
-                             Notifier::NOTIFY_TIMEOUT, NULL);
+  m_notifier.notify(bl, nullptr, nullptr);
 }
 
 void ImageWatcher::notify_released_lock() {
@@ -311,8 +306,7 @@ void ImageWatcher::notify_released_lock() {
 
   bufferlist bl;
   ::encode(NotifyMessage(ReleasedLockPayload(get_client_id())), bl);
-  m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl,
-                             Notifier::NOTIFY_TIMEOUT, NULL);
+  m_notifier.notify(bl, nullptr, nullptr);
 }
 
 void ImageWatcher::schedule_request_lock(bool use_timer, int timer_delay) {
@@ -349,8 +343,14 @@ void ImageWatcher::notify_request_lock() {
 
   bufferlist bl;
   ::encode(NotifyMessage(RequestLockPayload(get_client_id())), bl);
+  notify_lock_owner(std::move(bl), create_context_callback<
+    ImageWatcher, &ImageWatcher::handle_request_lock>(this));
+}
 
-  int r = notify_lock_owner(bl);
+void ImageWatcher::handle_request_lock(int r) {
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  assert(!m_image_ctx.exclusive_lock->is_lock_owner());
+
   if (r == -ETIMEDOUT) {
     ldout(m_image_ctx.cct, 5) << this << " timed out requesting lock: retrying"
                               << dendl;
@@ -370,65 +370,17 @@ void ImageWatcher::notify_request_lock() {
   }
 }
 
-int ImageWatcher::notify_lock_owner(bufferlist &bl) {
+int ImageWatcher::notify_lock_owner(bufferlist &&bl) {
+  C_SaferCond ctx;
+  notify_lock_owner(std::move(bl), &ctx);
+  return ctx.wait();
+}
+
+void ImageWatcher::notify_lock_owner(bufferlist &&bl, Context *on_finish) {
   assert(m_image_ctx.owner_lock.is_locked());
-
-  // since we need to ack our own notifications, release the owner lock just in
-  // case another notification occurs before this one and it requires the lock
-  bufferlist response_bl;
-  m_image_ctx.owner_lock.put_read();
-  int r = m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl,
-                                     Notifier::NOTIFY_TIMEOUT, &response_bl);
-  m_image_ctx.owner_lock.get_read();
-
-  if (r < 0 && r != -ETIMEDOUT) {
-    lderr(m_image_ctx.cct) << this << " lock owner notification failed: "
-			   << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  typedef std::map<std::pair<uint64_t, uint64_t>, bufferlist> responses_t;
-  responses_t responses;
-  if (response_bl.length() > 0) {
-    try {
-      bufferlist::iterator iter = response_bl.begin();
-      ::decode(responses, iter);
-    } catch (const buffer::error &err) {
-      lderr(m_image_ctx.cct) << this << " failed to decode response" << dendl;
-      return -EINVAL;
-    }
-  }
-
-  bufferlist response;
-  bool lock_owner_responded = false;
-  for (responses_t::iterator i = responses.begin(); i != responses.end(); ++i) {
-    if (i->second.length() > 0) {
-      if (lock_owner_responded) {
-	lderr(m_image_ctx.cct) << this << " duplicate lock owners detected"
-                               << dendl;
-	return -EIO;
-      }
-      lock_owner_responded = true;
-      response.claim(i->second);
-    }
-  }
-
-  if (!lock_owner_responded) {
-    lderr(m_image_ctx.cct) << this << " no lock owners detected" << dendl;
-    return -ETIMEDOUT;
-  }
-
-  try {
-    bufferlist::iterator iter = response.begin();
-
-    ResponseMessage response_message;
-    ::decode(response_message, iter);
-
-    r = response_message.result;
-  } catch (const buffer::error &err) {
-    r = -EINVAL;
-  }
-  return r;
+  NotifyLockOwner *notify_lock_owner = NotifyLockOwner::create(
+    m_image_ctx, m_notifier, std::move(bl), on_finish);
+  notify_lock_owner->send();
 }
 
 void ImageWatcher::schedule_async_request_timed_out(const AsyncRequestId &id) {
@@ -452,7 +404,7 @@ void ImageWatcher::async_request_timed_out(const AsyncRequestId &id) {
 }
 
 int ImageWatcher::notify_async_request(const AsyncRequestId &async_request_id,
-				       bufferlist &in,
+				       bufferlist &&in,
 				       ProgressContext& prog_ctx) {
   assert(m_image_ctx.owner_lock.is_locked());
 
@@ -475,7 +427,7 @@ int ImageWatcher::notify_async_request(const AsyncRequestId &async_request_id,
   } BOOST_SCOPE_EXIT_END
 
   schedule_async_request_timed_out(async_request_id);
-  int r = notify_lock_owner(in);
+  int r = notify_lock_owner(std::move(in));
   if (r < 0) {
     return r;
   }

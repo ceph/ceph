@@ -230,22 +230,25 @@ private:
   void set_owner_client_id(const watch_notify::ClientId &client_id);
   watch_notify::ClientId get_client_id();
 
+  void handle_request_lock(int r);
   void schedule_request_lock(bool use_timer, int timer_delay = -1);
 
-  int notify_lock_owner(bufferlist &bl);
+  int notify_lock_owner(bufferlist &&bl);
+  void notify_lock_owner(bufferlist &&bl, Context *on_finish);
 
   void schedule_async_request_timed_out(const watch_notify::AsyncRequestId &id);
   void async_request_timed_out(const watch_notify::AsyncRequestId &id);
   int notify_async_request(const watch_notify::AsyncRequestId &id,
-                           bufferlist &in, ProgressContext& prog_ctx);
-  void notify_request_leadership();
+                           bufferlist &&in, ProgressContext& prog_ctx);
 
   void schedule_async_progress(const watch_notify::AsyncRequestId &id,
                                uint64_t offset, uint64_t total);
   int notify_async_progress(const watch_notify::AsyncRequestId &id,
                             uint64_t offset, uint64_t total);
   void schedule_async_complete(const watch_notify::AsyncRequestId &id, int r);
-  int notify_async_complete(const watch_notify::AsyncRequestId &id, int r);
+  void notify_async_complete(const watch_notify::AsyncRequestId &id, int r);
+  void handle_async_complete(const watch_notify::AsyncRequestId &request, int r,
+                             int ret_val);
 
   int prepare_async_request(const watch_notify::AsyncRequestId& id,
                             bool* new_request, Context** ctx,
