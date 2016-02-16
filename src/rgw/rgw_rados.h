@@ -758,6 +758,7 @@ public:
 
   void set_name(const string& _name) { name = _name;}
   void set_id(const string& _id) { id = _id;}
+  void clear_id() { id.clear(); }
 
   virtual ~RGWSystemMetaObj() {}
 
