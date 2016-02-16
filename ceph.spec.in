@@ -1157,7 +1157,8 @@ fi
 #################################################################################
 %files -n python-rados
 %defattr(-,root,root,-)
-%{python_sitelib}/rados.py*
+%{python_sitearch}/rados.so
+%{python_sitearch}/rados-*.egg-info
 
 #################################################################################
 %files -n libradosstriper1
