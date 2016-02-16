@@ -704,6 +704,23 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
   }
 }
 
+string RGWHTTPArgs::sys_get(const string& name, bool * const exists)
+{
+  const auto iter = sys_val_map.find(name);
+  const bool e = (iter != val_map.end());
+
+  if (exists) {
+    *exists = e;
+  }
+
+  return e ? iter->second : string();
+}
+
+string RGWHTTPArgs::sys_get(const char * const name, bool * const exists)
+{
+  return sys_get(string(name), exists);
+}
+
 bool verify_requester_payer_permission(struct req_state *s)
 {
   if (!s->bucket_info.requester_pays)
