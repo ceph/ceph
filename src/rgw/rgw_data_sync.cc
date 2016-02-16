@@ -967,8 +967,7 @@ public:
             while (collect(&ret)) {
               if (ret < 0) {
                 ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
-                /* we should have reported this error */
-#warning deal with error
+                /* we have reported this error */
               }
               /* not waiting for child here */
             }
@@ -1801,6 +1800,8 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
 
   int sync_status;
 
+  stringstream error_ss;
+
 
 public:
   RGWBucketSyncSingleEntryCR(RGWDataSyncEnv *_sync_env,
@@ -1862,8 +1863,12 @@ public:
       if (retcode < 0 && retcode != -ENOENT) {
         set_status() << "failed to sync obj; retcode=" << retcode;
         rgw_bucket& bucket = bucket_info->bucket;
-        ldout(sync_env->cct, 0) << "ERROR: failed to sync object: " << bucket.name << ":" << bucket.bucket_id << ":" << shard_id << "/" << key << dendl;
+        ldout(sync_env->cct, 0) << "ERROR: failed to sync object: " << bucket.name << ":" << bucket.bucket_id << ":" << shard_id << "/" << key.name << dendl;
+        error_ss << bucket.name << ":" << bucket.bucket_id << ":" << shard_id << "/" << key.name;
         sync_status = retcode;
+      }
+      if (!error_ss.str().empty()) {
+        yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data", error_ss.str(), retcode, "failed to sync object"));
       }
 done:
       /* update marker */
@@ -1991,8 +1996,7 @@ int RGWBucketShardFullSyncCR::operate()
           while (collect(&ret)) {
             if (ret < 0) {
               ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
-              /* we should have reported this error */
-#warning deal with error
+              /* we have reported this error */
             }
           }
         }
@@ -2179,8 +2183,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
           while (collect(&ret)) {
             if (ret < 0) {
               ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
-              /* we should have reported this error */
-#warning deal with error
+              /* we have reported this error */
             }
             /* not waiting for child here */
           }
