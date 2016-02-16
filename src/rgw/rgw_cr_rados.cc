@@ -388,6 +388,7 @@ int RGWOmapAppend::operate() {
         }
       }
       if (get_ret_status() < 0) {
+        ldout(cct, 0) << "ERROR: failed to store entries in omap" << dendl;
         return set_state(RGWCoroutine_Error);
       }
     }
