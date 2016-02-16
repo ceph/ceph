@@ -307,7 +307,6 @@ namespace crimson {
       Duration              check_time;
       std::deque<MarkPoint> clean_mark_points;
 
-
     public:
 
       PriorityQueue(ClientInfoFunc _client_info_f,
@@ -322,12 +321,13 @@ namespace crimson {
 	handle_f(_handle_f),
 	allowLimitBreak(_allowLimitBreak),
 	finishing(false),
+	sched_ahead_thd(&PriorityQueue::run_sched_ahead, this),
 	idle_age(_idle_age),
 	erase_age(_erase_age),
 	check_time(_check_time),
 	cleaning_job(_check_time, std::bind(&PriorityQueue::do_clean, this))
       {
-	sched_ahead_thd = std::thread(&PriorityQueue::run_sched_ahead, this);
+	// empty
       }
 
 
@@ -678,8 +678,8 @@ namespace crimson {
 	    } else if (idle_point && i2->second.last_tick <= erase_point) {
 	      i2->second.idle = true;
 	    }
-	  }
-	}
+	  } // for
+	} // if
       } // do_clean
     }; // class PriorityQueue
   } // namespace dmclock
