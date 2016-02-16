@@ -35,7 +35,6 @@
 #include "common/WorkQueue.h"
 #include "common/perf_counters.h"
 #include "os/ObjectStore.h"
-#include "os/fs/FS.h"
 #include "kv/KeyValueDB.h"
 
 #include "bluestore_types.h"
@@ -496,7 +495,6 @@ private:
   BlueFS *bluefs;
   unsigned bluefs_shared_bdev;  ///< which bluefs bdev we are sharing
   KeyValueDB *db;
-  FS *fs;
   BlockDevice *bdev;
   FreelistManager *fm;
   Allocator *alloc;
