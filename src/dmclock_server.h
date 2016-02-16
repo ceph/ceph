@@ -28,12 +28,13 @@
 #include "dmclock_recs.h"
 
 
-namespace c = crimson;
 
 
 namespace crimson {
 
   namespace dmclock {
+
+    namespace c = crimson;
 
     struct ClientInfo {
       const double reservation;  // minimum
