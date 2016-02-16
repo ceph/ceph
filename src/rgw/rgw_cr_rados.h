@@ -563,7 +563,7 @@ public:
   bool finish() {
     bool success = true;
     for (vector<RGWOmapAppend *>::iterator iter = shards.begin(); iter != shards.end(); ++iter) {
-      success &= (*iter)->finish();
+      success &= ((*iter)->finish() && (!(*iter)->is_error()));
     }
     return success;
   }

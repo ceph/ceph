@@ -447,6 +447,7 @@ class RGWListBucketIndexesCR : public RGWCoroutine {
   int num_shards;
 
   int req_ret;
+  int ret;
 
   list<string> result;
   list<string>::iterator iter;
@@ -467,7 +468,7 @@ public:
   RGWListBucketIndexesCR(RGWDataSyncEnv *_sync_env,
                          rgw_data_sync_status *_sync_status) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
                                                       store(sync_env->store), sync_status(_sync_status),
-						      req_ret(0), entries_index(NULL), i(0), failed(false) {
+						      req_ret(0), ret(0), entries_index(NULL), i(0), failed(false) {
     oid_prefix = datalog_sync_full_sync_index_prefix + "." + sync_env->source_zone; 
     path = "/admin/metadata/bucket.instance";
     num_shards = sync_status->sync_info.num_shards;
@@ -504,7 +505,6 @@ public:
         }
 
         num_shards = meta_info.data.get_bucket_info().num_shards;
-#warning error handling of shards
         if (num_shards > 0) {
           for (i = 0; i < num_shards; i++) {
             char buf[16];
@@ -529,15 +529,22 @@ public:
           spawn(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->async_rados, store, store->get_zone_params().log_pool,
                                                                 RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, shard_id), marker), true);
         }
+      } else {
+          yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data.init", "",
+                                                          EIO, string("failed to build bucket instances map")));
       }
-      int ret;
       while (collect(&ret)) {
 	if (ret < 0) {
-	  return set_state(RGWCoroutine_Error);
+          yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data.init", "",
+                                                          -ret, string("failed to store sync status: ") + cpp_strerror(-ret)));
+	  req_ret = ret;
 	}
         yield;
       }
       drain_all();
+      if (req_ret < 0) {
+        yield return set_cr_error(req_ret);
+      }
       yield return set_cr_done();
     }
     return 0;
