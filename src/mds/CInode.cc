@@ -3939,8 +3939,14 @@ next:
 	if (dir->scrub_infop &&
 	    dir->scrub_infop->pending_scrub_error) {
 	  dir->scrub_infop->pending_scrub_error = false;
-	  results->raw_stats.error_str
-	    << "dirfrag(" << p->first << ") has bad stats; ";
+	  if (dir->scrub_infop->header &&
+	      dir->scrub_infop->header->repair) {
+	    results->raw_stats.error_str
+	      << "dirfrag(" << p->first << ") has bad stats (will be fixed); ";
+	  } else {
+	    results->raw_stats.error_str
+	      << "dirfrag(" << p->first << ") has bad stats; ";
+	  }
 	  frags_errors++;
 	}
       }
@@ -3948,12 +3954,16 @@ next:
       // ...and that their sum matches our inode settings
       if (!dir_info.same_sums(in->inode.dirstat) ||
 	  !nest_info.same_sums(in->inode.rstat)) {
-        results->raw_stats.error_str
-	  << "freshly-calculated rstats don't match existing ones";
 	if (in->scrub_infop &&
 	    in->scrub_infop->header &&
-	    in->scrub_infop->header->repair)
+	    in->scrub_infop->header->repair) {
+	  results->raw_stats.error_str
+	    << "freshly-calculated rstats don't match existing ones (will be fixed)";
 	  in->mdcache->repair_inode_stats(in);
+	} else {
+	  results->raw_stats.error_str
+	    << "freshly-calculated rstats don't match existing ones";
+	}
 	goto next;
       }
       if (frags_errors > 0)
