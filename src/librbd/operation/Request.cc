@@ -4,6 +4,7 @@
 #include "librbd/operation/Request.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
@@ -81,6 +82,18 @@ void Request<I>::commit_op_event(int r) {
     assert(image_ctx.journal->is_journal_ready());
     image_ctx.journal->commit_op_event(m_op_tid, r);
   }
+}
+
+template <typename I>
+void Request<I>::replay_op_ready(Context *on_safe) {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
+  assert(image_ctx.snap_lock.is_locked());
+  assert(m_op_tid != 0);
+
+  m_appended_op_event = true;
+  image_ctx.journal->replay_op_ready(
+    m_op_tid, util::create_async_context_callback(image_ctx, on_safe));
 }
 
 template <typename I>
