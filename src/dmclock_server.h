@@ -24,6 +24,7 @@
 #include <iostream>
 
 #include "crimson/heap.h"
+#include "crimson/run_every.h"
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
 
@@ -140,11 +141,19 @@ namespace crimson {
 
     protected:
 
+      using TimePoint = decltype(std::chrono::steady_clock::now());
+      using Duration = std::chrono::minutes;
+      using MarkPoint = std::pair<TimePoint,Counter>;
+
+
       class ClientRec {
-	friend PriorityQueue<C,R>;
+	// we're keeping this private to force callers to use
+	// update_req_tag, to make sure the tick gets updated
+	RequestTag         prev_tag;
+
+      public:
 
 	ClientInfo         info;
-	RequestTag         prev_tag;
 	bool               idle;
 	Counter            last_tick;
 
@@ -155,6 +164,16 @@ namespace crimson {
 	  last_tick(current_tick)
 	{
 	  // empty
+	}
+
+	inline const RequestTag& get_req_tag() const {
+	  return prev_tag;
+	}
+
+	inline void update_req_tag(const RequestTag& _prev,
+				   const Counter& _tick) {
+	  prev_tag = _prev;
+	  last_tick = _tick;
 	}
       }; // class ClientRec
 
@@ -265,7 +284,7 @@ namespace crimson {
       // proportion to still get issued
       bool allowLimitBreak;
 
-      std::atomic_bool finishing = false;
+      std::atomic_bool finishing;
 
       // for handling timed scheduling
       std::mutex  sched_ahead_mtx;
@@ -281,16 +300,31 @@ namespace crimson {
       size_t prop_sched_count = 0;
       size_t limit_break_sched_count = 0;
 
+      RunEvery              cleaning_job;
+      Duration              idle_age;
+      Duration              erase_age;
+      Duration              check_time;
+      std::deque<MarkPoint> clean_mark_points;
+
+
     public:
 
       PriorityQueue(ClientInfoFunc _client_info_f,
 		    CanHandleRequestFunc _can_handle_f,
 		    HandleRequestFunc _handle_f,
-		    bool _allowLimitBreak = false) :
+		    bool _allowLimitBreak = false,
+		    Duration _idle_age = Duration(10),
+		    Duration _erase_age = Duration(15),
+		    Duration _check_time = Duration(6)) :
 	client_info_f(_client_info_f),
 	can_handle_f(_can_handle_f),
 	handle_f(_handle_f),
-	allowLimitBreak(_allowLimitBreak)
+	allowLimitBreak(_allowLimitBreak),
+	finishing(false),
+	idle_age(_idle_age),
+	erase_age(_erase_age),
+	check_time(_check_time),
+	cleaning_job(_check_time, std::bind(&PriorityQueue::do_clean, this))
       {
 	sched_ahead_thd = std::thread(&PriorityQueue::run_sched_ahead, this);
       }
@@ -338,7 +372,7 @@ namespace crimson {
 	auto client_it = client_map.find(client_id);
 	if (client_map.end() == client_it) {
 	  ClientInfo ci = client_info_f(client_id);
-	  client_map.emplace(client_id, ClientRec(ci));
+	  client_map.emplace(client_id, ClientRec(ci, tick));
 	  client_it = client_map.find(client_id);
 	}
 
@@ -358,14 +392,14 @@ namespace crimson {
 
 	EntryRef entry =
 	  std::make_shared<Entry>(client_id,
-				  RequestTag(client_it->second.prev_tag,
+				  RequestTag(client_it->second.get_req_tag(),
 					     client_it->second.info,
 					     req_params,
 					     time),
 				  std::move(request));
 
 	// copy tag to previous tag for client
-	client_it->second.prev_tag = entry->tag;
+	client_it->second.update_req_tag(entry->tag, tick);
 
 	if (0.0 != entry->tag.reservation) {
 	  res_q.push(entry);
@@ -597,6 +631,55 @@ namespace crimson {
 	  sched_ahead_cv.notify_one();
 	}
       }
+
+
+    private:
+
+      /*
+       * This is being called regularly by RunEvery. Every time it's
+       * called it notes the time and delta counter (mark point) in a
+       * deque. It also looks at the deque to find the most recent
+       * mark point that is older than clean_age. It then walks the
+       * map and delete all server entries that were last used before
+       * that mark point.
+       */
+      void do_clean() {
+	TimePoint now = std::chrono::steady_clock::now();
+	DataGuard g(data_mutex);
+	clean_mark_points.emplace_back(MarkPoint(now, tick));
+
+	// first erase the super-old client records
+
+	Counter erase_point = 0;
+	auto point = clean_mark_points.front();
+	while (point.first <= now - erase_age) {
+	  erase_point = point.second;
+	  clean_mark_points.pop_front();
+	  point = clean_mark_points.front();
+	}
+
+	Counter idle_point = 0;
+	for (auto i : clean_mark_points) {
+	  if (i.first <= now - idle_age) {
+	    idle_point = i.second;
+	  } else {
+	    break;
+	  }
+	}
+
+	if (erase_point > 0 || idle_point > 0) {
+	  for (auto i = client_map.begin();
+	       i != client_map.end();
+	       /* empty */) {
+	    auto i2 = i++;
+	    if (erase_point && i2->second.last_tick <= erase_point) {
+	      client_map.erase(i2);
+	    } else if (idle_point && i2->second.last_tick <= erase_point) {
+	      i2->second.idle = true;
+	    }
+	  }
+	}
+      } // do_clean
     }; // class PriorityQueue
   } // namespace dmclock
 } // namespace crimson
