@@ -1684,7 +1684,7 @@ int BlueStore::mkfs()
     } else {
       dout(1) << __func__ << " using provided fsid " << fsid << dendl;
     }
-    // we'll write it last.
+    // we'll write it later.
   } else {
     if (!fsid.is_zero() && fsid != old_fsid) {
       derr << __func__ << " on-disk fsid " << old_fsid
