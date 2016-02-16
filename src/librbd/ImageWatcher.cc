@@ -10,6 +10,7 @@
 #include "librbd/Operations.h"
 #include "librbd/TaskFinisher.h"
 #include "librbd/Utils.h"
+#include "librbd/image_watcher/Notifier.h"
 #include "include/encoding.h"
 #include "include/stringify.h"
 #include "common/errno.h"
@@ -24,9 +25,9 @@
 
 namespace librbd {
 
+using namespace image_watcher;
 using namespace watch_notify;
 
-static const uint64_t	NOTIFY_TIMEOUT = 5000;
 static const double	RETRY_DELAY_SECONDS = 1.0;
 
 ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
@@ -35,7 +36,8 @@ ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
     m_watch_ctx(*this), m_watch_handle(0),
     m_watch_state(WATCH_STATE_UNREGISTERED),
     m_async_request_lock(util::unique_lock_name("librbd::ImageWatcher::m_async_request_lock", this)),
-    m_owner_client_id_lock(util::unique_lock_name("librbd::ImageWatcher::m_owner_client_id_lock", this))
+    m_owner_client_id_lock(util::unique_lock_name("librbd::ImageWatcher::m_owner_client_id_lock", this)),
+    m_notifier(image_ctx)
 {
   m_image_ctx.cct->lookup_or_create_singleton_object<TaskFinisher<Task> >(
     m_task_finisher, "librbd::task_finisher");
@@ -86,6 +88,10 @@ int ImageWatcher::unregister_watch() {
   return r;
 }
 
+void ImageWatcher::flush(Context *on_finish) {
+  m_notifier.flush(on_finish);
+}
+
 void ImageWatcher::schedule_async_progress(const AsyncRequestId &request,
 					   uint64_t offset, uint64_t total) {
   FunctionContext *ctx = new FunctionContext(
@@ -127,7 +133,7 @@ int ImageWatcher::notify_async_complete(const AsyncRequestId &request,
 			  &m_image_ctx);
   }
   int ret = m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl,
-				       NOTIFY_TIMEOUT, NULL);
+				       Notifier::NOTIFY_TIMEOUT, NULL);
   if (ret < 0) {
     lderr(m_image_ctx.cct) << this << " failed to notify async complete: "
 			   << cpp_strerror(ret) << dendl;
@@ -393,8 +399,8 @@ int ImageWatcher::notify_lock_owner(bufferlist &bl) {
   // case another notification occurs before this one and it requires the lock
   bufferlist response_bl;
   m_image_ctx.owner_lock.put_read();
-  int r = m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl, NOTIFY_TIMEOUT,
-				     &response_bl);
+  int r = m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl,
+                                     Notifier::NOTIFY_TIMEOUT, &response_bl);
   m_image_ctx.owner_lock.get_read();
 
   if (r < 0 && r != -ETIMEDOUT) {

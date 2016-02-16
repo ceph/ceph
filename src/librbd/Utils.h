@@ -23,6 +23,13 @@ void rados_callback(rados_completion_t c, void *arg) {
   reinterpret_cast<T*>(arg)->complete(rados_aio_get_return_value(c));
 }
 
+template <typename T, void(T::*MF)(int)>
+void rados_callback(rados_completion_t c, void *arg) {
+  T *obj = reinterpret_cast<T*>(arg);
+  int r = rados_aio_get_return_value(c);
+  (obj->*MF)(r);
+}
+
 template <typename T, Context*(T::*MF)(int*), bool destroy>
 void rados_state_callback(rados_completion_t c, void *arg) {
   T *obj = reinterpret_cast<T*>(arg);
@@ -91,10 +98,18 @@ const std::string header_name(const std::string &image_id);
 const std::string old_header_name(const std::string &image_name);
 std::string unique_lock_name(const std::string &name, void *address);
 
+librados::AioCompletion *create_rados_ack_callback(Context *on_finish);
+
 template <typename T>
 librados::AioCompletion *create_rados_ack_callback(T *obj) {
   return librados::Rados::aio_create_completion(
     obj, &detail::rados_callback<T>, nullptr);
+}
+
+template <typename T, void(T::*MF)(int)>
+librados::AioCompletion *create_rados_ack_callback(T *obj) {
+  return librados::Rados::aio_create_completion(
+    obj, &detail::rados_callback<T, MF>, nullptr);
 }
 
 template <typename T, Context*(T::*MF)(int*), bool destroy=true>
