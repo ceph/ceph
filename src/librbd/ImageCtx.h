@@ -276,6 +276,8 @@ namespace librbd {
 
     void clear_pending_completions();
 
+    void set_image_name(const std::string &name);
+
     void notify_update();
     void notify_update(Context *on_finish);
   };

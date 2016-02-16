@@ -231,6 +231,8 @@ int Operations<I>::rename(const char *dstname) {
       return r;
     }
   }
+
+  m_image_ctx.set_image_name(dstname);
   return 0;
 }
 
