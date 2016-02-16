@@ -44,7 +44,9 @@ setup(
             ["rbd.pyx"],
             libraries=["rbd"]
             )
-    ], build_dir=os.environ.get("CYTHON_BUILD_DIR", None)),
+    ], build_dir=os.environ.get("CYTHON_BUILD_DIR", None), include_path=[
+        os.path.join(os.path.dirname(__file__), "..", "rados")]
+    ),
     cmdclass={
         "egg_info": EggInfoCommand,
     },
