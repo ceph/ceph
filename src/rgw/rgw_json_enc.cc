@@ -11,6 +11,7 @@
 #include "rgw_keystone.h"
 #include "rgw_basic_types.h"
 #include "rgw_op.h"
+#include "rgw_sync.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -1188,4 +1189,10 @@ void rgw_meta_sync_status::decode_json(JSONObj *obj)
 void rgw_meta_sync_status::dump(Formatter *f) const {
   encode_json("info", sync_info, f);
   encode_json("markers", sync_markers, f);
+}
+
+void rgw_sync_error_info::dump(Formatter *f) const {
+  encode_json("source_zone", source_zone, f);
+  encode_json("error_code", error_code, f);
+  encode_json("message", message, f);
 }

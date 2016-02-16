@@ -684,7 +684,8 @@ public:
       sync_status = retcode;
 
       if (sync_status < 0) {
-        yield call(sync_env->error_logger->log_error_cr("data", bucket_name + ":" + bucket_instance, -sync_status, string("failed to sync bucket instance: ") + cpp_strerror(-sync_status)));
+        yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data", bucket_name + ":" + bucket_instance,
+                                                        -sync_status, string("failed to sync bucket instance: ") + cpp_strerror(-sync_status)));
       }
 #warning what do do in case of error
       if (!entry_marker.empty()) {
