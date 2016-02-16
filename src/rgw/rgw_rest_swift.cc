@@ -1298,6 +1298,25 @@ int RGWHandler_REST_SWIFT::authorize()
   if (!authorized)
     return -EPERM;
 
+  if (s->user->system) {
+    s->system_request = true;
+    ldout(s->cct, 20) << "system request over Swift API" << dendl;
+
+    rgw_user euid(s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "uid"));
+    if (!euid.empty()) {
+      RGWUserInfo einfo;
+
+      const int ret = rgw_get_user_info_by_uid(store, euid, einfo);
+      if (ret < 0) {
+        ldout(s->cct, 0) << "User lookup failed, euid=" << euid
+                         << " ret=" << ret << dendl;
+        return -ENOENT;
+      }
+
+      *(s->user) = einfo;
+    }
+  }
+
   return 0;
 }
 
