@@ -68,7 +68,7 @@ namespace crimson {
 
       Counter                delta_counter; // # reqs completed
       Counter                rho_counter;   // # reqs completed via reservation
-      std::map<S,ServerInfo> service_map;
+      std::map<S,ServerInfo> server_map;
       mutable std::mutex     data_mtx;      // protects Counters and map
 
       // clean config
@@ -102,14 +102,14 @@ namespace crimson {
       void track_resp(const RespParams<S>& resp_params) {
 	DataGuard g(data_mtx);
 
-	auto it = service_map.find(resp_params.server);
-	if (service_map.end() == it) {
+	auto it = server_map.find(resp_params.server);
+	if (server_map.end() == it) {
 	  // this code can only run if a request did not precede the
 	  // response or if the record was cleaned up b/w when
 	  // the request was made and now
 	  ServerInfo si(delta_counter, rho_counter);
 	  si.resp_update(resp_params.phase);
-	  service_map.emplace(resp_params.server, si);
+	  server_map.emplace(resp_params.server, si);
 	} else {
 	  it->second.resp_update(resp_params.phase);
 	}
@@ -123,9 +123,9 @@ namespace crimson {
       template<typename C>
       ReqParams<C> get_req_params(const C& client, const S& server) {
 	DataGuard g(data_mtx);
-	auto it = service_map.find(server);
-	if (service_map.end() == it) {
-	  service_map.emplace(server, ServerInfo(delta_counter, rho_counter));
+	auto it = server_map.find(server);
+	if (server_map.end() == it) {
+	  server_map.emplace(server, ServerInfo(delta_counter, rho_counter));
 	  return ReqParams<C>(client, 1, 1);
 	} else {
 	  Counter delta =
@@ -146,9 +146,9 @@ namespace crimson {
       void do_clean() {
 	TimePoint when = std::chrono::steady_clock::now() - clean_age;
 	DataGuard g(data_mtx);
-	for (auto it = service_map.begin(); it != service_map.end(); ++it) {
+	for (auto it = server_map.begin(); it != server_map.end(); ++it) {
 	  if (it->second.last_update_before(when)) {
-	    service_map.erase(it);
+	    server_map.erase(it);
 	  }
 	}
       }
