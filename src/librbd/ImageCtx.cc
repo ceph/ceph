@@ -1018,6 +1018,16 @@ struct C_InvalidateCache : public Context {
     return new Journal<ImageCtx>(*this);
   }
 
+  void ImageCtx::set_image_name(const std::string &image_name) {
+    // update the name so rename can be invoked repeatedly
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    name = image_name;
+    if (old_format) {
+      header_oid = util::old_header_name(image_name);
+    }
+  }
+
   void ImageCtx::notify_update() {
     state->handle_update_notification();
 
