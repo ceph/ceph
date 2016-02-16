@@ -279,6 +279,7 @@ Context *SnapshotRollbackRequest<I>::send_invalidate_cache() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
+  RWLock::RLocker owner_lock(image_ctx.owner_lock);
   Context *ctx = create_context_callback<
     SnapshotRollbackRequest<I>,
     &SnapshotRollbackRequest<I>::handle_invalidate_cache>(this);
