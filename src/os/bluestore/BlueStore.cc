@@ -1711,16 +1711,18 @@ int BlueStore::mkfs()
 				   g_conf->bluestore_block_create);
   if (r < 0)
     goto out_close_fsid;
-  r = _setup_block_symlink_or_file("block.wal", g_conf->bluestore_block_wal_path,
-				   g_conf->bluestore_block_wal_size,
-				   g_conf->bluestore_block_wal_create);
-  if (r < 0)
-    goto out_close_fsid;
-  r = _setup_block_symlink_or_file("block.db", g_conf->bluestore_block_db_path,
-				   g_conf->bluestore_block_db_size,
-				   g_conf->bluestore_block_db_create);
-  if (r < 0)
-    goto out_close_fsid;
+  if (g_conf->bluestore_bluefs) {
+    r = _setup_block_symlink_or_file("block.wal", g_conf->bluestore_block_wal_path,
+	g_conf->bluestore_block_wal_size,
+	g_conf->bluestore_block_wal_create);
+    if (r < 0)
+      goto out_close_fsid;
+    r = _setup_block_symlink_or_file("block.db", g_conf->bluestore_block_db_path,
+	g_conf->bluestore_block_db_size,
+	g_conf->bluestore_block_db_create);
+    if (r < 0)
+      goto out_close_fsid;
+  }
 
   r = _open_bdev(true);
   if (r < 0)
