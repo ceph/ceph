@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 #include "librbd/ImageWatcher.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/ExclusiveLock.h"
@@ -108,8 +109,8 @@ int ImageWatcher::notify_async_progress(const AsyncRequestId &request,
 
   bufferlist bl;
   ::encode(NotifyMessage(AsyncProgressPayload(request, offset, total)), bl);
-
-  m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl, NOTIFY_TIMEOUT, NULL);
+  m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl,
+                             Notifier::NOTIFY_TIMEOUT, NULL);
   return 0;
 }
 
@@ -129,8 +130,7 @@ int ImageWatcher::notify_async_complete(const AsyncRequestId &request,
   ::encode(NotifyMessage(AsyncCompletePayload(request, r)), bl);
 
   if (r >= 0) {
-    librbd::notify_change(m_image_ctx.md_ctx, m_image_ctx.header_oid,
-			  &m_image_ctx);
+    m_image_ctx.notify_update();
   }
   int ret = m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl,
 				       Notifier::NOTIFY_TIMEOUT, NULL);
@@ -251,14 +251,11 @@ int ImageWatcher::notify_rename(const std::string &image_name) {
   return notify_lock_owner(bl);
 }
 
-void ImageWatcher::notify_header_update(librados::IoCtx &io_ctx,
-				        const std::string &oid)
-{
+void ImageWatcher::notify_header_update(Context *on_finish) {
   // supports legacy (empty buffer) clients
   bufferlist bl;
   ::encode(NotifyMessage(HeaderUpdatePayload()), bl);
-
-  io_ctx.notify2(oid, bl, NOTIFY_TIMEOUT, NULL);
+  m_notifier.notify(bl, nullptr, on_finish);
 }
 
 void ImageWatcher::schedule_cancel_async_requests() {
@@ -300,7 +297,8 @@ void ImageWatcher::notify_acquired_lock() {
 
   bufferlist bl;
   ::encode(NotifyMessage(AcquiredLockPayload(client_id)), bl);
-  m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl, NOTIFY_TIMEOUT, NULL);
+  m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl,
+                             Notifier::NOTIFY_TIMEOUT, NULL);
 }
 
 void ImageWatcher::notify_released_lock() {
@@ -313,7 +311,8 @@ void ImageWatcher::notify_released_lock() {
 
   bufferlist bl;
   ::encode(NotifyMessage(ReleasedLockPayload(get_client_id())), bl);
-  m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl, NOTIFY_TIMEOUT, NULL);
+  m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl,
+                             Notifier::NOTIFY_TIMEOUT, NULL);
 }
 
 void ImageWatcher::schedule_request_lock(bool use_timer, int timer_delay) {

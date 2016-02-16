@@ -307,16 +307,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
-  int notify_change(IoCtx& io_ctx, const string& oid, ImageCtx *ictx)
-  {
-    if (ictx) {
-      ictx->state->handle_update_notification();
-    }
-
-    ImageWatcher::notify_header_update(io_ctx, oid);
-    return 0;
-  }
-
   int read_header(IoCtx& io_ctx, const string& header_oid,
 		  struct rbd_obj_header_ondisk *header, uint64_t *ver)
   {
@@ -1453,7 +1443,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       }
     }
 
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
+    ictx->notify_update();
     return 0;
   }
 
@@ -1988,7 +1978,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       }
     }
 
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
+    ictx->notify_update();
     return 0;
   }
 
@@ -2010,7 +2000,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       }
     }
 
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
+    ictx->notify_update();
     return 0;
   }
 
@@ -2073,7 +2063,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 				     RBD_LOCK_NAME, cookie, lock_client);
     if (r < 0)
       return r;
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
+    ictx->notify_update();
     return 0;
   }
 

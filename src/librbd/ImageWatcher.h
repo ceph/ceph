@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_LIBRBD_IMAGE_WATCHER_H
 #define CEPH_LIBRBD_IMAGE_WATCHER_H
 
@@ -50,8 +51,7 @@ public:
   void notify_released_lock();
   void notify_request_lock();
 
-  static void notify_header_update(librados::IoCtx &io_ctx,
-                                   const std::string &oid);
+  void notify_header_update(Context *on_finish);
 
   uint64_t get_watch_handle() const {
     RWLock::RLocker watch_locker(m_watch_lock);

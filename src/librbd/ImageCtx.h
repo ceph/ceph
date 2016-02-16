@@ -275,6 +275,9 @@ namespace librbd {
     Journal<ImageCtx> *create_journal();
 
     void clear_pending_completions();
+
+    void notify_update();
+    void notify_update(Context *on_finish);
   };
 }
 
