@@ -542,7 +542,10 @@ Context *Replay<I>::create_op_context_callback(uint64_t op_tid,
 
   *op_event = &m_op_events[op_tid];
   (*op_event)->on_start_safe = on_safe;
-  return new C_OpOnComplete(this, op_tid);
+
+  Context *on_op_complete = new C_OpOnComplete(this, op_tid);
+  (*op_event)->on_op_complete = on_op_complete;
+  return on_op_complete;
 }
 
 template <typename I>
@@ -573,6 +576,9 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
 
   // skipped upon error -- so clean up if non-null
   delete op_event.on_op_finish_event;
+  if (r == -ERESTART) {
+    delete op_event.on_op_complete;
+  }
 
   if (op_event.on_finish_ready != nullptr) {
     op_event.on_finish_ready->complete(0);
