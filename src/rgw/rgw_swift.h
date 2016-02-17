@@ -19,6 +19,7 @@ struct rgw_swift_auth_info {
   string display_name;
   long long ttl;
   bool is_admin;
+  uint32_t perm_mask;
 
   rgw_swift_auth_info()
     : status(0),
@@ -33,19 +34,23 @@ class RGWSwift {
 
   int validate_token(const char *token, struct rgw_swift_auth_info *info);
   int validate_keystone_token(RGWRados *store,
-                              const string& account_name,
                               const string& token,
-                              struct rgw_swift_auth_info *info,
-                              RGWUserInfo& rgw_user);
+                              struct rgw_swift_auth_info *info);
 
   int parse_keystone_token_response(const string& token,
                                     bufferlist& bl,
                                     struct rgw_swift_auth_info *info,
 		                    KeystoneToken& t);
-  int update_user_info(RGWRados *store,
-                       const string& account_name,
-                       const struct rgw_swift_auth_info *info,
-                       RGWUserInfo& user_info);
+  int load_acct_info(RGWRados *store,
+                     const string& account_name,        /* in */
+                     const rgw_swift_auth_info& info,   /* in */
+                     RGWUserInfo& user_info);           /* out */
+  int load_user_info(RGWRados *store,
+                     const rgw_swift_auth_info& info,   /* in */
+                     rgw_user& auth_user,               /* out */
+                     uint32_t& perm_mask,               /* out */
+                     bool& admin_request);              /* out */
+
   int get_keystone_url(std::string& url);
   int get_keystone_admin_token(std::string& token);
 
