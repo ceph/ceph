@@ -33,7 +33,7 @@
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
 %endif
 
-%if %{with selinux}
+%if 0%{with selinux}
 # get selinux policy version
 %{!?_selinux_policy_version: %global _selinux_policy_version %(sed -e 's,.*selinux-policy-\\([^/]*\\)/.*,\\1,' /usr/share/selinux/devel/policyhelp 2>/dev/null || echo 0.0.0)}
 
@@ -346,7 +346,7 @@ This package is an S3 HTTP REST gateway for the RADOS object store. It
 is implemented as a FastCGI module using libfcgi, and can be used in
 conjunction with any FastCGI capable web server.
 
-%if %{with ocf}
+%if 0%{with ocf}
 %package resource-agents
 Summary:	OCF-compliant resource agents for Ceph daemons
 Group:		System Environment/Base
@@ -635,7 +635,7 @@ done
 
 ./autogen.sh
 
-%if %{with lowmem_builder}
+%if 0%{with lowmem_builder}
 RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize=32768"
 %endif
 export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
@@ -669,7 +669,7 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		%{?_with_tcmalloc} \
 		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
-%if %{with lowmem_builder}
+%if 0%{with lowmem_builder}
 %if 0%{?jobs} > 8
 %define _smp_mflags -j8
 %endif
@@ -1176,7 +1176,7 @@ fi
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
 
 #################################################################################
-%if %{with ocf}
+%if 0%{with ocf}
 %files resource-agents
 %defattr(0755,root,root,-)
 %dir /usr/lib/ocf
