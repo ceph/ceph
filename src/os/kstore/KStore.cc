@@ -403,15 +403,6 @@ static void get_omap_tail(uint64_t id, string *out)
 #undef dout_prefix
 #define dout_prefix *_dout << "kstore.onode(" << this << ") "
 
-KStore::Onode::Onode(const ghobject_t& o, const string& k)
-  : nref(0),
-    oid(o),
-    key(k),
-    dirty(false),
-    exists(true),
-    flush_lock("KStore::Onode::flush_lock") {
-}
-
 void KStore::Onode::flush()
 {
   Mutex::Locker l(flush_lock);
@@ -552,7 +543,7 @@ int KStore::OnodeHashLRU::trim(int max)
     --p;
   while (num > 0) {
     Onode *o = &*p;
-    int refs = o->nref.read();
+    int refs = o->nref.load();
     if (refs > 1) {
       dout(20) << __func__ << "  " << o->oid << " has " << refs
 	       << " refs; stopping with " << num << " left to trim" << dendl;
