@@ -248,6 +248,8 @@ int ImageWatcher::notify_rename(const std::string &image_name) {
 }
 
 void ImageWatcher::notify_header_update(Context *on_finish) {
+  ldout(m_image_ctx.cct, 10) << this << ": " << __func__ << dendl;
+
   // supports legacy (empty buffer) clients
   bufferlist bl;
   ::encode(NotifyMessage(HeaderUpdatePayload()), bl);
@@ -339,6 +341,9 @@ void ImageWatcher::schedule_request_lock(bool use_timer, int timer_delay) {
 
 void ImageWatcher::notify_request_lock() {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  assert(!m_image_ctx.exclusive_lock->is_lock_owner());
+
   ldout(m_image_ctx.cct, 10) << this << " notify request lock" << dendl;
 
   bufferlist bl;
@@ -349,6 +354,9 @@ void ImageWatcher::notify_request_lock() {
 
 void ImageWatcher::handle_request_lock(int r) {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+
+  // ExclusiveLock state machine cannot transition
   assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   if (r == -ETIMEDOUT) {
@@ -771,7 +779,8 @@ void ImageWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
   }
 
   // if an image refresh is required, refresh before processing the request
-  if (m_image_ctx.state->is_refresh_required()) {
+  if (notify_message.check_for_refresh() &&
+      m_image_ctx.state->is_refresh_required()) {
     m_image_ctx.state->refresh(new C_ProcessPayload(this, notify_id, handle,
                                                     notify_message.payload));
   } else {
