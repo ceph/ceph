@@ -666,6 +666,8 @@ int main(int argc, const char **argv)
 				      entity_name_t::MON(rank),
 				      "mon",
 				      0);
+  if (!msgr)
+    exit(1);
   msgr->set_cluster_protocol(CEPH_MON_PROTOCOL);
   msgr->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
 
