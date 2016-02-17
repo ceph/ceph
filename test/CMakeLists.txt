@@ -4,6 +4,7 @@ include_directories(${GTEST_INCLUDE_DIR})
 
 add_executable(client_tests EXCLUDE_FROM_ALL
 			    ../src/test_client.cc
+			    ../src/crimson/run_every.cc
 			    test_test_client.cc
 			    test_server_client_map.cc)
 
