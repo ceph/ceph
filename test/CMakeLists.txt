@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 
 include_directories(${GTEST_INCLUDE_DIR})
 
-set(local_flags "-g -O0")
+# set(local_flags "-g -O0")
 
 set(core_srcs ../src/test_client.cc ../src/crimson/run_every.cc)
 set(test_srcs test_test_client.cc test_server_client_map.cc)
