@@ -144,7 +144,7 @@ namespace crimson {
     protected:
 
       using TimePoint = decltype(std::chrono::steady_clock::now());
-      using Duration = std::chrono::minutes;
+      using Duration = std::chrono::milliseconds;
       using MarkPoint = std::pair<TimePoint,Counter>;
 
 
@@ -328,7 +328,7 @@ namespace crimson {
 	check_time(_check_time),
 	cleaning_job(_check_time, std::bind(&PriorityQueue::do_clean, this))
       {
-	// empty
+	assert(_erase_age >= _idle_age);
       }
 
 
@@ -348,15 +348,15 @@ namespace crimson {
 
 
       void add_request(const R& request,
-		      const ReqParams<C>& req_params,
-		      const Time& time) {
+		       const ReqParams<C>& req_params,
+		       const Time& time) {
 	add_request(RequestRef(new R(request)), req_params, time);
       }
 
 
       void add_request(RequestRef&& request,
-		      const ReqParams<C>& req_params,
-		      const Time& time) {
+		       const ReqParams<C>& req_params,
+		       const Time& time) {
 #if 0
 	{
 	  static std::atomic_ulong counter(0);
