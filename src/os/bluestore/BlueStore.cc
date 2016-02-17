@@ -6289,8 +6289,6 @@ int BlueStore::_rename(TransContext *txc,
 	   << new_oid << dendl;
   int r;
   ghobject_t old_oid = oldo->oid;
-  bufferlist bl;
-  string old_key, new_key;
 
   if (newo && newo->exists) {
     // destination object already exists, remove it first
