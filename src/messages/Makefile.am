@@ -48,6 +48,7 @@ noinst_HEADERS += \
 	messages/MMDSFindInoReply.h \
 	messages/MMDSFragmentNotify.h \
 	messages/MMDSMap.h \
+	messages/MFSMap.h \
 	messages/MMDSOpenIno.h \
 	messages/MMDSOpenInoReply.h \
 	messages/MMDSResolve.h \
