@@ -455,20 +455,6 @@ void KStore::OnodeHashLRU::clear()
   onode_map.clear();
 }
 
-void KStore::OnodeHashLRU::remove(const ghobject_t& oid)
-{
-  std::lock_guard<std::mutex> l(lock);
-  ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
-  if (p == onode_map.end()) {
-    dout(30) << __func__ << " " << oid << " miss" << dendl;
-    return;
-  }
-  dout(30) << __func__ << " " << oid << " hit " << p->second << dendl;
-  lru_list_t::iterator pi = lru.iterator_to(*p->second);
-  lru.erase(pi);
-  onode_map.erase(p);
-}
-
 void KStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
 				    const ghobject_t& new_oid)
 {
