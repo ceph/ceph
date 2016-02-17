@@ -61,7 +61,7 @@ headers for C/C++ under ``/usr/include/rados``. ::
 Getting librados for Python
 ---------------------------
 
-The ``rados.py`` modules provides ``librados`` support to Python
+The ``rados`` modules provides ``librados`` support to Python
 applications. The ``librados-dev`` package for Debian/Ubuntu
 and the ``librados2-devel`` package for RHEL/CentOS will install the
 ``python-rados`` package for you. You may install ``python-rados``
