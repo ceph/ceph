@@ -76,7 +76,7 @@ namespace crimson {
       ServiceTracker(Duration _clean_every, Duration _clean_age) :
 	delta_counter(0),
 	rho_counter(0),
-	clean_age(_clean_age),
+	clean_age(std::chrono::duration_cast<Duration>(_clean_age)),
 	cleaning_job(_clean_every, std::bind(&ServiceTracker::do_clean, this))
       {
 	// empty

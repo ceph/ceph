@@ -323,9 +323,9 @@ namespace crimson {
 	allowLimitBreak(_allowLimitBreak),
 	finishing(false),
 	sched_ahead_thd(&PriorityQueue::run_sched_ahead, this),
-	idle_age(_idle_age),
-	erase_age(_erase_age),
-	check_time(_check_time),
+	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
+	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
+	check_time(std::chrono::duration_cast<Duration>(_check_time)),
 	cleaning_job(_check_time, std::bind(&PriorityQueue::do_clean, this))
       {
 	assert(_erase_age >= _idle_age);

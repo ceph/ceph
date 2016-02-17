@@ -10,7 +10,7 @@
 
 crimson::RunEvery::RunEvery(std::chrono::milliseconds _wait_period,
                             std::function<void()>      _body) :
-  wait_period(_wait_period),
+  wait_period(std::chrono::duration_cast<std::chrono::milliseconds>(_wait_period)),
   body(_body),
   finishing(false),
   thd(&RunEvery::run, this)
