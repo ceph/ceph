@@ -3761,6 +3761,7 @@ TEST_F(TestLibRBD, ExclusiveLockTransition)
     comps.pop_front();
     ASSERT_EQ(0, comp->wait_for_complete());
     ASSERT_EQ(1, comp->is_complete());
+    comp->release();
   }
 
   librbd::Image image3;
