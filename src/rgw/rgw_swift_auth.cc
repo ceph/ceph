@@ -139,8 +139,7 @@ int rgw_swift_verify_signed_token(CephContext * const cct,
 
   auth_info.user = info.user_id;
   auth_info.is_admin = info.admin;
-  // FIXME
-  //auth_info.perm_mask = RGWSwift::get_perm_mask(swift_user, info);
+  auth_info.perm_mask = RGWSwift::get_perm_mask(swift_user, info);
   auth_info.status = 200;
 
   return 0;

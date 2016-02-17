@@ -90,6 +90,8 @@ public:
   }
 
   bool verify_swift_token(RGWRados *store, req_state *s);
+  static uint32_t get_perm_mask(const string& swift_user,
+                                const RGWUserInfo &uinfo);
   bool going_down();
 
   /* Static methods shared between Swift API and S3. */

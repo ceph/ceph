@@ -132,7 +132,7 @@ int RGWSwift::validate_token(RGWRados * const store,
     return ret;
   }
 
-  //auth_info.perm_mask = get_perm_mask(swift_user, tmp_uinfo);
+  auth_info.perm_mask = get_perm_mask(swift_user, tmp_uinfo);
   auth_info.is_admin = false;
 
   return 0;
@@ -792,28 +792,36 @@ int authenticate_temp_url(RGWRados * const store, req_state * const s)
   return -EPERM;
 }
 
+uint32_t RGWSwift::get_perm_mask(const string& swift_user,
+                                 const RGWUserInfo &uinfo)
+{
+  uint32_t perm_mask = 0;
+
+  if (!swift_user.empty()) {
+    string subuser;
+    ssize_t pos = swift_user.find(':');
+    if (pos < 0) {
+      subuser = swift_user;
+    } else {
+      subuser = swift_user.substr(pos + 1);
+    }
+
+    auto iter = uinfo.subusers.find(subuser);
+    if (iter != uinfo.subusers.end()) {
+      const RGWSubUser& subuser_ = iter->second;
+      perm_mask = subuser_.perm_mask;
+    }
+  } else {
+    perm_mask = RGW_PERM_FULL_CONTROL;
+  }
+
+  return perm_mask;
+}
+
 bool RGWSwift::verify_swift_token(RGWRados *store, req_state *s)
 {
   if (!do_verify_swift_token(store, s)) {
     return false;
-  }
-
-  if (!s->swift_user.empty()) {
-    string subuser;
-    ssize_t pos = s->swift_user.find(':');
-    if (pos < 0) {
-      subuser = s->swift_user;
-    } else {
-      subuser = s->swift_user.substr(pos + 1);
-    }
-    s->perm_mask = 0;
-    map<string, RGWSubUser>::iterator iter = s->user->subusers.find(subuser);
-    if (iter != s->user->subusers.end()) {
-      RGWSubUser& subuser_ = iter->second;
-      s->perm_mask = subuser_.perm_mask;
-    }
-  } else {
-    s->perm_mask = RGW_PERM_FULL_CONTROL;
   }
 
   return true;
@@ -873,14 +881,11 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
     return false;
   }
 
-  s->swift_user = info.user.to_str();
-  s->swift_groups = info.auth_groups;
   if (load_acct_info(store, s->account_name, auth_info, *(s->user)) < 0) {
     return false;
   }
 
-  uint32_t _junk_perm_mask; // perm mask will be set in verify_swift_token()
-  if (load_user_info(store, auth_info, s->auth_user, _junk_perm_mask,
+  if (load_user_info(store, auth_info, s->auth_user, s->perm_mask,
                      s->admin_request) < 0) {
     return false;
   }
