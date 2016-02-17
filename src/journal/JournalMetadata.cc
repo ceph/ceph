@@ -29,7 +29,7 @@ inline bool entry_positions_less_equal(const ObjectSetPosition &lhs,
 
   if (lhs.entry_positions.size() < rhs.entry_positions.size()) {
     return true;
-  } else if (rhs.entry_positions.size() > rhs.entry_positions.size()) {
+  } else if (lhs.entry_positions.size() > rhs.entry_positions.size()) {
     return false;
   }
 
