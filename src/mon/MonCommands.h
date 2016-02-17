@@ -300,7 +300,11 @@ COMMAND("mon metadata name=id,type=CephString",
 COMMAND("mds stat", "show MDS status", "mds", "r", "cli,rest")
 COMMAND("mds dump " 
 	"name=epoch,type=CephInt,req=false,range=0", \
-	"dump info, optionally from epoch", "mds", "r", "cli,rest")
+	"dump legacy MDS cluster info, optionally from epoch",
+        "mds", "r", "cli,rest")
+COMMAND("fs dump "
+	"name=epoch,type=CephInt,req=false,range=0", \
+	"dump all CephFS status, optionally from epoch", "mds", "r", "cli,rest")
 COMMAND("mds getmap " \
 	"name=epoch,type=CephInt,req=false,range=0", \
 	"get MDS map, optionally from epoch", "mds", "r", "cli,rest")
@@ -338,12 +342,12 @@ COMMAND("mds set_state " \
 	"set mds state of <gid> to <numeric-state>", "mds", "rw", "cli,rest")
 COMMAND("mds fail name=who,type=CephString", \
 	"force mds to status failed", "mds", "rw", "cli,rest")
-COMMAND("mds repaired name=rank,type=CephInt", \
+COMMAND("mds repaired name=rank,type=CephString", \
 	"mark a damaged MDS rank as no longer damaged", "mds", "rw", "cli,rest")
 COMMAND("mds rm " \
 	"name=gid,type=CephInt,range=0", \
 	"remove nonactive mds", "mds", "rw", "cli,rest")
-COMMAND("mds rmfailed name=who,type=CephInt,range=0 name=confirm,type=CephString,req=false", \
+COMMAND("mds rmfailed name=who,type=CephString name=confirm,type=CephString,req=false", \
 	"remove failed mds", "mds", "rw", "cli,rest")
 COMMAND("mds cluster_down", "take MDS cluster down", "mds", "rw", "cli,rest")
 COMMAND("mds cluster_up", "bring MDS cluster up", "mds", "rw", "cli,rest")
@@ -384,6 +388,27 @@ COMMAND("fs reset " \
 COMMAND("fs ls ", \
 	"list filesystems", \
 	"fs", "r", "cli,rest")
+COMMAND("fs get name=fs_name,type=CephString", \
+	"get info about one filesystem", \
+	"fs", "r", "cli,rest")
+COMMAND("fs set " \
+	"name=fs_name,type=CephString " \
+	"name=var,type=CephChoices,strings=max_mds|max_file_size"
+        "|allow_new_snaps|inline_data|cluster_down " \
+	"name=val,type=CephString "					\
+	"name=confirm,type=CephString,req=false",			\
+	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
+COMMAND("fs flag set name=flag_name,type=CephChoices,strings=enable_multiple "
+        "name=val,type=CephString", \
+	"Set a global CephFS flag", \
+	"fs", "rw", "cli,rest")
+COMMAND("fs add_data_pool name=fs_name,type=CephString " \
+	"name=pool,type=CephString", \
+	"add data pool <pool>", "mds", "rw", "cli,rest")
+COMMAND("fs remove_data_pool name=fs_name,type=CephString " \
+	"name=pool,type=CephString", \
+	"remove data pool <pool>", "mds", "rw", "cli,rest")
+
 /*
  * Monmap commands
  */
