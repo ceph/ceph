@@ -34,8 +34,6 @@ bash_completion_DATA += \
 	$(srcdir)/bash_completion/rados \
 	$(srcdir)/bash_completion/radosgw-admin
 
-python_PYTHON += pybind/rados.py
-
 librados_config_SOURCES = librados-config.cc
 librados_config_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_PROGRAMS += librados-config
