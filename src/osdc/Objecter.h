@@ -193,7 +193,7 @@ struct ObjectOperation {
     osd_op.op.pgls.start_epoch = start_epoch;
     ::encode(cookie, osd_op.indata);
   }
-  void add_pgls_filter(int op, uint64_t count, bufferlist& filter,
+  void add_pgls_filter(int op, uint64_t count, const bufferlist& filter,
 		       collection_list_handle_t cookie, epoch_t start_epoch) {
     OSDOp& osd_op = add_op(op);
     osd_op.op.pgls.count = count;
@@ -225,7 +225,7 @@ struct ObjectOperation {
     flags |= CEPH_OSD_FLAG_PGOP;
   }
 
-  void pg_nls(uint64_t count, bufferlist& filter,
+  void pg_nls(uint64_t count, const bufferlist& filter,
 	      collection_list_handle_t cookie, epoch_t start_epoch) {
     if (filter.length() == 0)
       add_pgls(CEPH_OSD_OP_PGNLS, count, cookie, start_epoch);
@@ -2625,6 +2625,7 @@ public:
     const hobject_t &start,
     const hobject_t &end,
     const uint32_t max,
+    const bufferlist &filter_bl,
     std::list<librados::ListObjectImpl> *result, 
     hobject_t *next,
     Context *on_finish);
