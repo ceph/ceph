@@ -125,6 +125,7 @@ libcommon_internal_la_SOURCES += \
 	osd/ECMsgTypes.cc \
 	osd/HitSet.cc \
 	mds/MDSMap.cc \
+	mds/FSMap.cc \
 	mds/inode_backtrace.cc \
 	mds/mdstypes.cc \
 	mds/flock.cc
