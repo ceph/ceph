@@ -1,8 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
 
-include_directories(${GTEST_INCLUDE_DIRS})
-message("gtest include is ${GTEST_INCLUDE_DIRS}")
-
 set(local_flags)
 
 set(core_srcs
