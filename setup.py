@@ -72,7 +72,7 @@ setup(
                       'pytest-capturelog',
                       'mock',
                       'fudge',
-                      'ansible==1.9.2',
+                      'ansible>=2.0',
                       'pyopenssl>=0.13',
                       'ndg-httpsclient',
                       'pyasn1',
