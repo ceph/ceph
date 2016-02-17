@@ -649,37 +649,41 @@ function test_mon_misc()
 
 function check_mds_active()
 {
-    ceph mds dump | grep active
+    fs_name=$1
+    ceph fs get $fs_name | grep active
 }
 
 function wait_mds_active()
 {
+  fs_name=$1
   for i in $(seq 1 300) ; do
-      if ! check_mds_active ; then
+      if ! check_mds_active $fs_name ; then
           echo "waiting for an active MDS daemon"
           sleep 5
       else
           break
       fi
   done
-  check_mds_active
+  check_mds_active $fs_name
 }
 
 function get_mds_gids()
 {
-    ceph mds dump --format=json | python -c "import json; import sys; print ' '.join([m['gid'].__str__() for m in json.load(sys.stdin)['info'].values()])"
+    fs_name=$1
+    ceph fs get $fs_name --format=json | python -c "import json; import sys; print ' '.join([m['gid'].__str__() for m in json.load(sys.stdin)['mdsmap']['info'].values()])"
 }
 
 function fail_all_mds()
 {
-  ceph mds cluster_down
-  mds_gids=$(get_mds_gids)
+  fs_name=$1
+  ceph fs set $fs_name cluster_down true
+  mds_gids=$(get_mds_gids $fs_name)
   for mds_gid in $mds_gids ; do
       ceph mds fail $mds_gid
   done
-  if check_mds_active ; then
+  if check_mds_active $fs_name ; then
       echo "An active MDS remains, something went wrong"
-      ceph mds dump
+      ceph fs get $fs_name
       exit -1
   fi
 
@@ -688,12 +692,13 @@ function fail_all_mds()
 function remove_all_fs()
 {
   existing_fs=$(ceph fs ls --format=json | python -c "import json; import sys; print ' '.join([fs['name'] for fs in json.load(sys.stdin)])")
-  if [ -n "$existing_fs" ] ; then
-      fail_all_mds
-      echo "Removing existing filesystem '${existing_fs}'..."
-      ceph fs rm $existing_fs --yes-i-really-mean-it
-      echo "Removed '${existing_fs}'."
-  fi
+  for fs_name in $existing_fs ; do
+      echo "Removing fs ${fs_name}..."
+      fail_all_mds $fs_name
+      echo "Removing existing filesystem '${fs_name}'..."
+      ceph fs rm $fs_name --yes-i-really-mean-it
+      echo "Removed '${fs_name}'."
+  done
 }
 
 # So that tests requiring MDS can skip if one is not configured
@@ -705,6 +710,7 @@ function mds_exists()
 
 function test_mds_tell()
 {
+  FS_NAME=cephfs
   if ! mds_exists ; then
       echo "Skipping test, no MDS found"
       return
@@ -713,11 +719,11 @@ function test_mds_tell()
   remove_all_fs
   ceph osd pool create fs_data 10
   ceph osd pool create fs_metadata 10
-  ceph fs new cephfs fs_metadata fs_data
-  wait_mds_active
+  ceph fs new $FS_NAME fs_metadata fs_data
+  wait_mds_active $FS_NAME
 
   # Test injectargs by GID
-  old_mds_gids=$(get_mds_gids)
+  old_mds_gids=$(get_mds_gids $FS_NAME)
   echo Old GIDs: $old_mds_gids
 
   for mds_gid in $old_mds_gids ; do
@@ -729,7 +735,7 @@ function test_mds_tell()
   new_mds_gids=$old_mds_gids
   while [ $new_mds_gids -eq $old_mds_gids ] ; do
       sleep 5
-      new_mds_gids=$(get_mds_gids)
+      new_mds_gids=$(get_mds_gids $FS_NAME)
   done
   echo New GIDs: $new_mds_gids
 
@@ -738,7 +744,7 @@ function test_mds_tell()
   new_mds_gids=$old_mds_gids
   while [ $new_mds_gids -eq $old_mds_gids ] ; do
       sleep 5
-      new_mds_gids=$(get_mds_gids)
+      new_mds_gids=$(get_mds_gids $FS_NAME)
   done
   echo New GIDs: $new_mds_gids
 
@@ -749,12 +755,17 @@ function test_mds_tell()
 
 function test_mon_mds()
 {
+  FS_NAME=cephfs
   remove_all_fs
 
   ceph osd pool create fs_data 10
   ceph osd pool create fs_metadata 10
-  ceph fs new cephfs fs_metadata fs_data
+  ceph fs new $FS_NAME fs_metadata fs_data
 
+  ceph fs set $FS_NAME cluster_down true
+  ceph fs set $FS_NAME cluster_down false
+
+  # Legacy commands, act on default fs
   ceph mds cluster_down
   ceph mds cluster_up
 
@@ -763,7 +774,7 @@ function test_mon_mds()
 
   # We don't want any MDSs to be up, their activity can interfere with
   # the "current_epoch + 1" checking below if they're generating updates
-  fail_all_mds
+  fail_all_mds $FS_NAME
 
   # Check for default crash_replay_interval set automatically in 'fs new'
   #This may vary based on ceph.conf (e.g., it's 5 in teuthology runs)
@@ -773,7 +784,9 @@ function test_mon_mds()
   ceph mds compat show
   expect_false ceph mds deactivate 2
   ceph mds dump
-  for mds_gid in $(get_mds_gids) ; do
+  ceph fs dump
+  ceph fs get $FS_NAME
+  for mds_gid in $(get_mds_gids $FS_NAME) ; do
       ceph mds metadata $mds_id
   done
   # XXX mds fail, but how do you undo it?
@@ -798,8 +811,8 @@ function test_mon_mds()
 
   ceph osd pool create data2 10
   ceph osd pool create data3 10
-  data2_pool=$(ceph osd dump | grep 'pool.*data2' | awk '{print $2;}')
-  data3_pool=$(ceph osd dump | grep 'pool.*data3' | awk '{print $2;}')
+  data2_pool=$(ceph osd dump | grep "pool.*'data2'" | awk '{print $2;}')
+  data3_pool=$(ceph osd dump | grep "pool.*'data3'" | awk '{print $2;}')
   ceph mds add_data_pool $data2_pool
   ceph mds add_data_pool $data3_pool
   ceph mds add_data_pool 100 >& $TMPFILE || true
@@ -849,7 +862,7 @@ function test_mon_mds()
   data_poolnum=$(ceph osd dump | grep "pool.* 'fs_data" | awk '{print $2;}')
   metadata_poolnum=$(ceph osd dump | grep "pool.* 'fs_metadata" | awk '{print $2;}')
 
-  fail_all_mds
+  fail_all_mds $FS_NAME
 
   set +e
   # Check that rmfailed requires confirmation
@@ -857,26 +870,40 @@ function test_mon_mds()
   ceph mds rmfailed 0 --yes-i-really-mean-it
   set -e
 
+  # Check that `newfs` is no longer permitted
+  expect_false ceph mds newfs $metadata_poolnum $data_poolnum --yes-i-really-mean-it 2>$TMPFILE
+
   # Check that 'fs reset' runs
-  ceph fs reset cephfs --yes-i-really-mean-it
+  ceph fs reset $FS_NAME --yes-i-really-mean-it
 
-  fail_all_mds
+  # Check that creating a second FS fails by default
+  ceph osd pool create fs_metadata2 10
+  ceph osd pool create fs_data2 10
+  set +e
+  expect_false ceph fs new cephfs2 fs_metadata2 fs_data2
+  set -e
 
-  # Clean up to enable subsequent newfs tests
-  ceph fs rm cephfs --yes-i-really-mean-it
+  # Check that setting enable_multiple enables creation of second fs
+  ceph fs flag set enable_multiple true
+  ceph fs new cephfs2 fs_metadata2 fs_data2
+
+  # Clean up multi-fs stuff
+  fail_all_mds cephfs2
+  ceph fs rm cephfs2 --yes-i-really-mean-it
+  ceph osd pool delete fs_metadata2 fs_metadata2 --yes-i-really-really-mean-it
+  ceph osd pool delete fs_data2 fs_data2 --yes-i-really-really-mean-it
+
+  fail_all_mds $FS_NAME
+
+  # Clean up to enable subsequent fs new tests
+  ceph fs rm $FS_NAME --yes-i-really-mean-it
 
   set +e
-  ceph mds newfs $metadata_poolnum $ec_poolnum --yes-i-really-mean-it 2>$TMPFILE
+  ceph fs new $FS_NAME fs_metadata mds-ec-pool 2>$TMPFILE
   check_response 'erasure-code' $? 22
-  ceph mds newfs $ec_poolnum $data_poolnum --yes-i-really-mean-it 2>$TMPFILE
+  ceph fs new $FS_NAME mds-ec-pool fs_data 2>$TMPFILE
   check_response 'erasure-code' $? 22
-  ceph mds newfs $ec_poolnum $ec_poolnum --yes-i-really-mean-it 2>$TMPFILE
-  check_response 'erasure-code' $? 22
-  ceph fs new cephfs fs_metadata mds-ec-pool 2>$TMPFILE
-  check_response 'erasure-code' $? 22
-  ceph fs new cephfs mds-ec-pool fs_data 2>$TMPFILE
-  check_response 'erasure-code' $? 22
-  ceph fs new cephfs mds-ec-pool mds-ec-pool 2>$TMPFILE
+  ceph fs new $FS_NAME mds-ec-pool mds-ec-pool 2>$TMPFILE
   check_response 'erasure-code' $? 22
   set -e
 
@@ -889,13 +916,13 @@ function test_mon_mds()
   # Use of a readonly tier should be forbidden
   ceph osd tier cache-mode mds-tier readonly
   set +e
-  ceph fs new cephfs fs_metadata mds-ec-pool 2>$TMPFILE
+  ceph fs new $FS_NAME fs_metadata mds-ec-pool 2>$TMPFILE
   check_response 'has a write tier (mds-tier) that is configured to forward' $? 22
   set -e
 
   # Use of a writeback tier should enable FS creation
   ceph osd tier cache-mode mds-tier writeback
-  ceph fs new cephfs fs_metadata mds-ec-pool
+  ceph fs new $FS_NAME fs_metadata mds-ec-pool
 
   # While a FS exists using the tiered pools, I should not be allowed
   # to remove the tier
@@ -906,22 +933,16 @@ function test_mon_mds()
   check_response 'in use by CephFS' $? 16
   set -e
 
-  fail_all_mds
-  ceph fs rm cephfs --yes-i-really-mean-it
+  fail_all_mds $FS_NAME
+  ceph fs rm $FS_NAME --yes-i-really-mean-it
 
   # ... but we should be forbidden from using the cache pool in the FS directly.
   set +e
-  ceph mds newfs $metadata_poolnum $tier_poolnum --yes-i-really-mean-it 2>$TMPFILE
+  ceph fs new $FS_NAME fs_metadata mds-tier 2>$TMPFILE
   check_response 'in use as a cache tier' $? 22
-  ceph mds newfs $tier_poolnum $data_poolnum --yes-i-really-mean-it 2>$TMPFILE
+  ceph fs new $FS_NAME mds-tier fs_data 2>$TMPFILE
   check_response 'in use as a cache tier' $? 22
-  ceph mds newfs $tier_poolnum $tier_poolnum --yes-i-really-mean-it 2>$TMPFILE
-  check_response 'in use as a cache tier' $? 22
-  ceph fs new cephfs fs_metadata mds-tier 2>$TMPFILE
-  check_response 'in use as a cache tier' $? 22
-  ceph fs new cephfs mds-tier fs_data 2>$TMPFILE
-  check_response 'in use as a cache tier' $? 22
-  ceph fs new cephfs mds-tier mds-tier 2>$TMPFILE
+  ceph fs new $FS_NAME mds-tier mds-tier 2>$TMPFILE
   check_response 'in use as a cache tier' $? 22
   set -e
 
@@ -930,7 +951,7 @@ function test_mon_mds()
   ceph osd tier remove mds-ec-pool mds-tier
 
   # Create a FS using the 'cache' pool now that it's no longer a tier
-  ceph fs new cephfs fs_metadata mds-tier
+  ceph fs new $FS_NAME fs_metadata mds-tier
 
   # We should be forbidden from using this pool as a tier now that
   # it's in use for CephFS
@@ -939,12 +960,12 @@ function test_mon_mds()
   check_response 'in use by CephFS' $? 16
   set -e
 
-  fail_all_mds
-  ceph fs rm cephfs --yes-i-really-mean-it
+  fail_all_mds $FS_NAME
+  ceph fs rm $FS_NAME --yes-i-really-mean-it
   ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
 
   # Create a FS and check that we can subsequently add a cache tier to it
-  ceph fs new cephfs fs_metadata fs_data
+  ceph fs new $FS_NAME fs_metadata fs_data
 
   # Adding overlay to FS pool should be permitted, RADOS clients handle this.
   ceph osd tier add fs_metadata mds-tier
@@ -959,8 +980,8 @@ function test_mon_mds()
   ceph osd pool delete mds-tier mds-tier --yes-i-really-really-mean-it
 
   # Clean up FS
-  fail_all_mds
-  ceph fs rm cephfs --yes-i-really-mean-it
+  fail_all_mds $FS_NAME
+  ceph fs rm $FS_NAME --yes-i-really-mean-it
 
   ceph mds stat
   # ceph mds tell mds.a getmap
