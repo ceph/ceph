@@ -19,6 +19,8 @@
 
 #include <unistd.h>
 
+#include <atomic>
+
 #include "include/assert.h"
 #include "include/unordered_map.h"
 #include "include/memory.h"
@@ -42,7 +44,7 @@ public:
 
   /// an in-memory object
   struct Onode {
-    atomic_t nref;  ///< reference count
+    std::atomic_int nref;  ///< reference count
 
     ghobject_t oid;
     string key;     ///< key under PREFIX_OBJ where we are stored
@@ -61,14 +63,21 @@ public:
 
     map<uint64_t,bufferlist> pending_stripes;  ///< unwritten stripes
 
-    Onode(const ghobject_t& o, const string& k);
+    Onode(const ghobject_t& o, const string& k)
+      : nref(0),
+	oid(o),
+	key(k),
+	dirty(false),
+	exists(true),
+	flush_lock("KStore::Onode::flush_lock") {
+    }
 
     void flush();
     void get() {
-      nref.inc();
+      ++nref;
     }
     void put() {
-      if (nref.dec() == 0)
+      if (--nref == 0)
 	delete this;
     }
 
