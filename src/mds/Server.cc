@@ -4316,7 +4316,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   CInode *cur;
 
   ceph_file_layout *dir_layout = NULL;
-  if (name.find("ceph.dir.layout") == 0)
+  if (name.compare(0, 15, "ceph.dir.layout") == 0)
     cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true, false, &dir_layout);
   else
     cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
@@ -4331,7 +4331,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   int flags = req->head.args.setxattr.flags;
 
   // magic ceph.* namespace?
-  if (name.find("ceph.") == 0) {
+  if (name.compare(0, 5, "ceph.") == 0) {
     handle_set_vxattr(mdr, cur, dir_layout, rdlocks, wrlocks, xlocks);
     return;
   }
@@ -4401,7 +4401,7 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
     return;
   }
 
-  if (name.find("ceph.") == 0) {
+  if (name.compare(0, 5, "ceph.") == 0) {
     handle_remove_vxattr(mdr, cur, rdlocks, wrlocks, xlocks);
     return;
   }
