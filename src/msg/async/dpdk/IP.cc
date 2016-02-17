@@ -41,6 +41,13 @@
 #include "shared_ptr.h"
 #include "toeplitz.h"
 
+#include "common/dout.h"
+#include "include/assert.h"
+
+#define dout_subsys ceph_subsys_dpdk
+#undef dout_prefix
+#define dout_prefix *_dout << "dpdk "
+
 std::ostream& operator<<(std::ostream& os, ipv4_address a) {
   auto ip = a.ip;
   return os << ((ip >> 24) & 0xff) << "." << ((ip >> 16) & 0xff)
@@ -68,7 +75,8 @@ enum {
 };
 
 ipv4::ipv4(CephContext *c, EventCenter *cen, interface* netif)
-  : cct(c), center(cen), _netif(netif), _global_arp(netif), _arp(_global_arp, cen),
+  : cct(c), center(cen), _netif(netif), _global_arp(netif),
+    _arp(c, _global_arp, cen),
     _host_address(0), _gw_address(0), _netmask(0),
     _l3(netif, eth_protocol_num::ipv4, [this] { return get_packet(); }),
     _rx_packets(
@@ -133,6 +141,12 @@ int ipv4::handle_received_packet(Packet p, ethernet_address from)
   unsigned ip_hdr_len = h.ihl * 4;
   unsigned pkt_len = p.len();
   auto offset = h.offset();
+
+  ldout(cct, 10) << __func__ << " get " << uint8_t(h.ip_proto) << " packet from "
+                 << h.src_ip << " -> " << h.dst_ip << " ip_len=" << ip_len
+                 << " ip_hdr_len=" << ip_hdr_len << " pkt_len=" << pkt_len
+                 << " offset=" << offset << dendl;
+
   if (pkt_len > ip_len) {
     // Trim extra data in the packet beyond IP total length
     p.trim_back(pkt_len - ip_len);
@@ -235,7 +249,7 @@ void ipv4::wait_l2_dst_address(ipv4_address to, Packet p, resolution_cb cb) {
     dst = _gw_address;
   }
 
-  _arp.wait(std::move(dst), Packet(), std::move(cb));
+  _arp.wait(std::move(dst), std::move(p), std::move(cb));
 }
 
 const hw_features& ipv4::get_hw_features() const
@@ -243,7 +257,8 @@ const hw_features& ipv4::get_hw_features() const
   return _netif->get_hw_features();
 }
 
-void ipv4::send(ipv4_address to, ip_protocol_num proto_num, Packet p, ethernet_address e_dst) {
+void ipv4::send(ipv4_address to, ip_protocol_num proto_num,
+        Packet p, ethernet_address e_dst) {
   auto needs_frag = this->needs_frag(p, proto_num, hw_features());
 
   auto send_pkt = [this, to, proto_num, needs_frag, e_dst] (Packet& pkt, uint16_t remaining, uint16_t offset) mutable  {
@@ -279,7 +294,8 @@ void ipv4::send(ipv4_address to, ip_protocol_num proto_num, Packet p, ethernet_a
       iph->csum = csum.get();
     }
 
-    _packetq.push_back(l3_protocol::l3packet{eth_protocol_num::ipv4, e_dst, std::move(pkt)});
+    _packetq.push_back(
+            l3_protocol::l3packet{eth_protocol_num::ipv4, e_dst, std::move(pkt)});
   };
 
   if (needs_frag) {
@@ -310,8 +326,7 @@ Tub<l3_protocol::l3packet> ipv4::get_packet() {
         _pkt_provider_idx = 0;
       }
       if (l4p) {
-        auto l4pv = std::move(*l4p);
-        send(l4pv.to, l4pv.proto_num, std::move(l4pv.p), l4pv.e_dst);
+        send(l4p->to, l4p->proto_num, std::move(l4p->p), l4p->e_dst);
         break;
       }
     }
@@ -439,8 +454,9 @@ void icmp::received(Packet p, ipaddr from, ipaddr to) {
 
   if (_queue_space.get_or_fail(p.len())) { // drop packets that do not fit the queue
     auto cb = [this, from] (const ethernet_address e_dst, Packet p, int r) mutable {
-      if (r == 0)
-        _packetq.emplace_back(ipv4_traits::l4packet{from, std::move(p), e_dst, ip_protocol_num::icmp});
+        if (r == 0) {
+          _packetq.emplace_back(ipv4_traits::l4packet{from, std::move(p), e_dst, ip_protocol_num::icmp});
+        }
     };
     _inet.wait_l2_dst_address(from, std::move(p), cb);
   }

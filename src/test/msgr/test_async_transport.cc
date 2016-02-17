@@ -30,17 +30,25 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
  public:
   EventCenter *center;
   std::unique_ptr<NetworkStack> transport;
+  string addr;
 
   TransportTest() {}
   virtual void SetUp() {
     cerr << __func__ << " start set up " << GetParam() << std::endl;
-    if (strncmp(GetParam(), "dpdk", 4))
+    if (strncmp(GetParam(), "dpdk", 4)) {
       g_ceph_context->_conf->set_val("ms_dpdk_enable", "false");
-    else
+      addr = "127.0.0.1:15000";
+    } else {
       g_ceph_context->_conf->set_val("ms_dpdk_enable", "true");
+      g_ceph_context->_conf->set_val("ms_dpdk_host_ipv4_addr", "172.16.218.199", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_gateway_ipv4_addr", "172.16.218.2", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_netmask_ipv4_addr", "255.255.255.0", false, false);
+      addr = "172.16.218.199:15000";
+    }
     g_ceph_context->_conf->apply_changes(nullptr);
     center = new EventCenter(g_ceph_context);
     center->init(1000);
+    center->set_owner();
     transport = NetworkStack::create(g_ceph_context, GetParam(), center, 0);
     transport->initialize();
   }
@@ -48,11 +56,30 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
     delete center;
     transport.reset();
   }
+  string get_addr() const {
+    return addr;
+  }
+};
+
+class C_poll : public EventCallback {
+  EventCenter *center;
+  std::atomic<bool> wakeuped;
+  static const int sleepus = 500;
+
+ public:
+  C_poll(EventCenter *c): center(c), wakeuped(false) {}
+  void do_request(int r) {
+    wakeuped = true;
+  }
+  void poll(int seconds) {
+    while (!wakeuped)
+      center->process_events(sleepus);
+  }
 };
 
 TEST_P(TransportTest, SimpleTest) {
   entity_addr_t bind_addr, cli_addr;
-  bind_addr.parse("127.0.0.1:80");
+  bind_addr.parse(get_addr().c_str());
   SocketOptions options;
   ServerSocket bind_socket;
   int r = transport->listen(bind_addr, options, &bind_socket);
@@ -61,8 +88,26 @@ TEST_P(TransportTest, SimpleTest) {
   r = transport->connect(bind_addr, options, &cli_socket);
   ASSERT_EQ(r, 0);
 
+  {
+    C_poll cb(center);
+    center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
+    cb.poll(5);
+  }
+
   r = bind_socket.accept(&srv_socket, &cli_addr);
   ASSERT_EQ(r, 0);
+  ASSERT_TRUE(srv_socket.fd() > 0);
+
+  {
+    C_poll cb(center);
+    center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
+    r = cli_socket.is_connected();
+    if (r == 0) {
+      cb.poll(5);
+      r = cli_socket.is_connected();
+    }
+    ASSERT_EQ(r, 1);
+  }
 
   struct msghdr msg;
   struct iovec msgvec[2];
@@ -75,6 +120,19 @@ TEST_P(TransportTest, SimpleTest) {
   msgvec[0].iov_len = len;
   r = cli_socket.sendmsg(msg, len, false);
   ASSERT_EQ(r, len);
+
+  char buf[1024];
+  {
+    C_poll cb(center);
+    center->create_file_event(srv_socket.fd(), EVENT_READABLE, &cb);
+    r = srv_socket.read(buf, sizeof(buf));
+    if (r == -EAGAIN) {
+      cb.poll(5);
+      r = srv_socket.read(buf, sizeof(buf));
+    }
+    ASSERT_EQ(r, len);
+    ASSERT_EQ(0, memcmp(buf, message, len));
+  }
 }
 
 INSTANTIATE_TEST_CASE_P(

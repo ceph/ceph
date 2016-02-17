@@ -38,13 +38,21 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <tuple>
+
+#include "common/ceph_argparse.h"
 #include "DPDKStack.h"
 #include "DPDK.h"
 #include "dpdk_rte.h"
 #include "IP.h"
 #include "TCP-Stack.h"
 
+#include "common/dout.h"
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_dpdk
+#undef dout_prefix
+#define dout_prefix *_dout << "dpdkstack "
 
 static std::shared_ptr<DPDKDevice> sdev;
 
@@ -81,7 +89,7 @@ std::unique_ptr<NetworkStack> DPDKStack::create(CephContext *cct, EventCenter *c
     auto qp = sdev->init_local_queue(cct, center, cct->_conf->ms_dpdk_hugepages, i);
     std::map<unsigned, float> cpu_weights;
     for (unsigned j = sdev->hw_queues_count() + i % sdev->hw_queues_count();
-         j < cct->_conf->ms_dpdk_num_cores; j+= sdev->hw_queues_count())
+         j < (unsigned)cct->_conf->ms_dpdk_num_cores; j+= sdev->hw_queues_count())
       cpu_weights[i] = 1;
     cpu_weights[i] = cct->_conf->ms_dpdk_hw_queue_weight;
     qp->configure_proxies(cpu_weights);
@@ -107,19 +115,71 @@ std::unique_ptr<NetworkStack> DPDKStack::create(CephContext *cct, EventCenter *c
   return std::unique_ptr<DPDKStack>(sdev->stacks[i]);
 }
 
+using AvailableIPAddress = std::tuple<string, string, string>;
+static bool parse_available_address(
+        const string &ips, const string &gates, const string &masks, vector<AvailableIPAddress> &res)
+{
+  vector<string> ip_vec, gate_vec, mask_vec;
+  string_to_vec(ip_vec, ips);
+  string_to_vec(gate_vec, ips);
+  string_to_vec(mask_vec, ips);
+  if (ip_vec.empty() || ip_vec.size() != gate_vec.size() || ip_vec.size() != mask_vec.size())
+    return false;
+
+  for (size_t i = 0; i < ip_vec.size(); ++i) {
+    res.push_back(AvailableIPAddress{ip_vec[i], gate_vec[i], mask_vec[i]});
+  }
+  return true;
+}
+
+static bool match_available_address(const vector<AvailableIPAddress> &avails,
+                                    const entity_addr_t &ip, int &res)
+{
+  for (size_t i = 0; i < avails.size(); ++i) {
+    entity_addr_t addr;
+    auto a = std::get<0>(avails[i]).c_str();
+    if (!addr.parse(a))
+      continue;
+    if (addr.is_same_host(ip)) {
+      res = i;
+      return true;
+    }
+  }
+  return false;
+}
+
 DPDKStack::DPDKStack(CephContext *cct, EventCenter *c,
                      std::shared_ptr<DPDKDevice> dev, unsigned cores)
     : NetworkStack(cct), _netif(cct, std::move(dev), c), _inet(cct, c, &_netif),
       cores(cores), center(c)
 {
-  _inet.set_host_address(ipv4_address(cct->_conf->ms_dpdk_host_ipv4_addr));
-  _inet.set_gw_address(ipv4_address(cct->_conf->ms_dpdk_gateway_ipv4_addr));
-  _inet.set_netmask_address(ipv4_address(cct->_conf->ms_dpdk_netmask_ipv4_addr));
 }
 
 int DPDKStack::listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket *sock) {
   assert(sa.get_family() == AF_INET);
   assert(sock);
+
+  vector<AvailableIPAddress> tuples;
+  bool parsed = parse_available_address(cct->_conf->ms_dpdk_host_ipv4_addr,
+                                        cct->_conf->ms_dpdk_gateway_ipv4_addr,
+                                        cct->_conf->ms_dpdk_netmask_ipv4_addr, tuples);
+  if (!parsed) {
+    lderr(cct) << __func__ << " no available address "
+               << cct->_conf->ms_dpdk_host_ipv4_addr << ", "
+               << cct->_conf->ms_dpdk_gateway_ipv4_addr << ", "
+               << cct->_conf->ms_dpdk_netmask_ipv4_addr << ", "
+               << dendl;
+    return -EINVAL;
+  }
+  int idx;
+  parsed = match_available_address(tuples, sa, idx);
+  if (!parsed) {
+    lderr(cct) << __func__ << " no matched address for " << sa << dendl;
+    return -EINVAL;
+  }
+  _inet.set_host_address(ipv4_address(std::get<0>(tuples[idx])));
+  _inet.set_gw_address(ipv4_address(std::get<1>(tuples[idx])));
+  _inet.set_netmask_address(ipv4_address(std::get<2>(tuples[idx])));
   *sock = tcpv4_listen(_inet.get_tcp(), sa.get_port(), opt);
   return 0;
 }

@@ -184,7 +184,7 @@ class Tub {
     if (occupied) {
       *object = std::move(elt);
     } else {
-      construct(std::move(elt));
+      construct(std::forward<ElementType>(elt));
     }
     return *this;
   }

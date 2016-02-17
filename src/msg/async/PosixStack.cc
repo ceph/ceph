@@ -45,21 +45,27 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   explicit PosixConnectedSocketImpl(NetHandler &h, const entity_addr_t &sa, int f, bool connected)
       : handler(h), _fd(f), sa(sa), connected(connected) {}
 
-  virtual int is_connected() override {
+  virtual bool is_connected() override {
     if (connected)
       return connected;
 
     int r = handler.reconnect(sa, _fd);
-    if (r > 0)
+    if (r == 0)
       connected = true;
-    return r;
+    return connected;
   }
 
   virtual int read(char *buf, size_t len) {
-    return ::read(_fd, buf, len);
+    int r = ::read(_fd, buf, len);
+    if (r < 0)
+      r = -errno;
+    return r;
   }
   virtual int sendmsg(struct msghdr &msg, size_t len, bool more) {
-    return ::sendmsg(_fd, &msg, more);
+    int r = ::sendmsg(_fd, &msg, more);
+    if (r < 0)
+      r = -errno;
+    return r;
   }
   virtual void shutdown() {
     ::shutdown(_fd, SHUT_RDWR);
@@ -94,21 +100,21 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, entity_addr_t *out) {
   assert(sock);
   socklen_t slen = sizeof(out->ss_addr());
   int sd = ::accept(_fd, (sockaddr*)&out->ss_addr(), &slen);
-  if (sd >= 0) {
-    return sd;
+  if (sd < 0) {
+    return -errno;
   }
-  std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, sa, _fd, false));
+  std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, sa, sd, false));
   *sock = ConnectedSocket(std::move(csi));
   if (out)
     *out = sa;
   return 0;
 }
 
-int PosixNetworkStack::listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket *sock) {
+int PosixNetworkStack::listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket *sock)
+{
   assert(sock);
-  int listen_sd = ::socket(sa.get_family(), SOCK_STREAM, 0);
+  int listen_sd = net.create_socket(sa.get_family(), true);
   if (listen_sd < 0) {
-    lderr(cct) << __func__ << " unable to create socket: " << cpp_strerror(errno) << dendl;
     return -errno;
   }
 

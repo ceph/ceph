@@ -59,22 +59,24 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   NativeConnectedSocketImpl(NativeConnectedSocketImpl &&rhs)
       : _conn(std::move(rhs._conn)), _cur_frag(rhs._cur_frag),
         _buf(std::move(rhs.buf))  {}
-  virtual int is_connected() override {
-    return 1;
+  virtual bool is_connected() override {
+    return true;
   }
   virtual int read(char *buf, size_t len) override {
-    if (_conn.get_errno() <= 0)
+    if (_conn.get_errno() < 0)
       return _conn.get_errno();
 
     if (!_buf || _cur_frag == _buf->nr_frags()) {
       _buf = std::move(_conn.read());
       if (_buf) {
         _cur_frag = 0;
+      } else {
+        return -EAGAIN;
       }
     }
     auto& f = _buf->fragments()[_cur_frag++];
     auto p = _buf->share();
-    assert(f.size <= len);
+    assert(f.size && f.size <= len);
     memcpy(buf, f.base, f.size);
     return f.size;
   }
@@ -125,10 +127,11 @@ int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, entity_addr_t *ou
   if (!c)
     return -EAGAIN;
 
-  std::unique_ptr<NativeConnectedSocketImpl<Protocol>> csi(new NativeConnectedSocketImpl<Protocol>(std::move(*c)));
-  *s = ConnectedSocket(std::move(csi));
   if (out)
     *out = c->remote_addr();
+  std::unique_ptr<NativeConnectedSocketImpl<Protocol>> csi(
+          new NativeConnectedSocketImpl<Protocol>(std::move(*c)));
+  *s = ConnectedSocket(std::move(csi));
   return 0;
 }
 
@@ -141,7 +144,6 @@ class DPDKStack : public NetworkStack {
   interface _netif;
   ipv4 _inet;
   unsigned cores;
-  EventCallbackRef arp_learn_handler;
 
   void set_ipv4_packet_filter(ip_packet_filter* filter) {
     _inet.set_packet_filter(filter);

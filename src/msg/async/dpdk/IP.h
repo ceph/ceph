@@ -152,8 +152,8 @@ class icmp {
  public:
   using ipaddr = ipv4_address;
   using inet_type = ipv4_l4<ip_protocol_num::icmp>;
-  explicit icmp(CephContext *cct, inet_type& inet)
-      : _inet(inet), _queue_space(cct, "DPDK::icmp::_queue_space", 212992) {
+  explicit icmp(CephContext *c, inet_type& inet)
+      : cct(c), _inet(inet), _queue_space(c, "DPDK::icmp::_queue_space", 212992) {
     _inet.register_packet_provider([this] {
       Tub<ipv4_traits::l4packet> l4p;
       if (!_packetq.empty()) {
@@ -167,6 +167,7 @@ class icmp {
   void received(Packet p, ipaddr from, ipaddr to);
 
  private:
+  CephContext *cct;
   // ipv4_l4<ip_protocol_num::icmp>
   inet_type& _inet;
   circular_buffer<ipv4_traits::l4packet> _packetq;

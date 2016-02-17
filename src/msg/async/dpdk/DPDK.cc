@@ -627,6 +627,7 @@ inline bool DPDKQueuePair::poll_tx() {
         auto p = pr();
         if (p) {
           work++;
+          ldout(cct, 20) << __func__ << " p len " << p->len() << dendl;
           _tx_packetq.push_back(std::move(*p));
           if (_tx_packetq.size() == 128) {
             break;
@@ -635,6 +636,8 @@ inline bool DPDKQueuePair::poll_tx() {
       }
     } while (work && _tx_packetq.size() < 128);
   }
+  for (auto&& p : _tx_packetq)
+    ldout(cct, 20) << __func__ << " p len " << p.len() << dendl;
   if (!_tx_packetq.empty()) {
     _stats.tx.good.update_pkts_bunch(send(_tx_packetq));
     return true;
@@ -658,7 +661,7 @@ inline Tub<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
   Tub<Packet> p;
   p.construct(
       _frags.begin(), _frags.end(),
-      make_deleter(deleter(), [this] { for (auto&& b : _bufs) { free(b); } }));
+      make_deleter(deleter(), [this] { for (auto&& b : _bufs) { rte_free(b); } }));
   return p;
 }
 
@@ -671,8 +674,9 @@ inline Tub<Packet> DPDKQueuePair::from_mbuf(rte_mbuf* m)
     char* data = rte_pktmbuf_mtod(m, char*);
 
     Tub<Packet> p;
-    p.construct(fragment{data, rte_pktmbuf_data_len(m)}, make_free_deleter(data));
-    return p;
+    p.construct(fragment{data, rte_pktmbuf_data_len(m)},
+                make_deleter([data] { rte_free(data); }));
+    return std::move(p);
   } else {
     return from_mbuf_lro(m);
   }

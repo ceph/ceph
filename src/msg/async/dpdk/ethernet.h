@@ -24,6 +24,7 @@
 #define CEPH_MSG_ETHERNET_H_
 
 #include <array>
+#include <sstream>
 
 #include "include/assert.h"
 #include "byteorder.h"
@@ -49,6 +50,9 @@ struct ethernet_address {
   std::array<uint8_t, 6> mac;
 } __attribute__((packed));
 
+inline bool operator==(const ethernet_address& a, const ethernet_address& b) {
+  return a.mac == b.mac;
+}
 std::ostream& operator<<(std::ostream& os, ethernet_address ea);
 
 struct ethernet {

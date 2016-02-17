@@ -161,7 +161,7 @@ class arp_for : public arp_for_protocol {
 
    public:
     C_handle_arp_timeout(arp_for *a, l3addr addr, bool first):
-        arp(), paddr(addr), first_request(first) {}
+        arp(a), paddr(addr), first_request(first) {}
     void do_request(int r) {
       arp->send_query(paddr);
       auto &res = arp->_in_progress[paddr];
@@ -170,12 +170,15 @@ class arp_for : public arp_for_protocol {
         p.first(ethernet_address(), std::move(p.second), -ETIMEDOUT);
       }
       res._waiters.clear();
+      res.timeout_fd = arp->center->create_time_event(
+          1*1000*1000, new C_handle_arp_timeout(arp, paddr, first_request));
       delete this;
     }
   };
   friend class C_handle_arp_timeout;
 
  private:
+  CephContext *cct;
   EventCenter *center;
   l3addr _l3self = L3::broadcast_address();
   std::unordered_map<l3addr, l2addr> _table;
@@ -185,23 +188,31 @@ class arp_for : public arp_for_protocol {
   virtual int received(Packet p) override;
   int handle_request(arp_hdr* ah);
   l2addr l2self() { return _arp.l2self(); }
-  void send(l2addr to, Packet p);
+  void send(l2addr to, Packet &&p);
  public:
   void send_query(const l3addr& paddr);
-  explicit arp_for(arp& a, EventCenter *c)
-      : arp_for_protocol(a, L3::arp_protocol_type()), center(c) {
+  explicit arp_for(CephContext *c, arp& a, EventCenter *cen)
+      : arp_for_protocol(a, L3::arp_protocol_type()), cct(c), center(cen) {
     _table[L3::broadcast_address()] = ethernet::broadcast_address();
   }
   void wait(const l3addr& addr, Packet p, resolution_cb cb);
   void learn(l2addr l2, l3addr l3);
   void run();
-  void set_self_addr(l3addr addr) { _l3self = addr; }
+  void set_self_addr(l3addr addr) {
+    _table.erase(_l3self);
+    _table[addr] = l2self();
+    _l3self = addr;
+  }
   friend class arp;
 };
 
 template <typename L3>
-Packet
-arp_for<L3>::make_query_packet(l3addr paddr) {
+void arp_for<L3>::send(l2addr to, Packet &&p) {
+  _arp._packetq.push_back(l3_protocol::l3packet{eth_protocol_num::arp, to, std::move(p)});
+}
+
+template <typename L3>
+Packet arp_for<L3>::make_query_packet(l3addr paddr) {
   arp_hdr hdr;
   hdr.htype = ethernet::arp_hardware_type();
   hdr.ptype = L3::arp_protocol_type();
@@ -217,29 +228,23 @@ arp_for<L3>::make_query_packet(l3addr paddr) {
 }
 
 template <typename L3>
-void arp_for<L3>::send(l2addr to, Packet p) {
-  _arp._packetq.push_back(l3_protocol::l3packet{eth_protocol_num::arp, to, std::move(p)});
-}
-
-template <typename L3>
 void arp_for<L3>::send_query(const l3addr& paddr) {
   send(ethernet::broadcast_address(), make_query_packet(paddr));
 }
 
-class arp_error : public std::runtime_error {
- public:
-  arp_error(const std::string& msg) : std::runtime_error(msg) {}
-};
-
-class arp_timeout_error : public arp_error {
- public:
-  arp_timeout_error() : arp_error("ARP timeout") {}
-};
-
-class arp_queue_full_error : public arp_error {
- public:
-  arp_queue_full_error() : arp_error("ARP waiter's queue is full") {}
-};
+template <typename L3>
+void arp_for<L3>::learn(l2addr hwaddr, l3addr paddr) {
+  _table[paddr] = hwaddr;
+  auto i = _in_progress.find(paddr);
+  if (i != _in_progress.end()) {
+    auto& res = i->second;
+    center->delete_time_event(res.timeout_fd);
+    for (auto &&p : res._waiters) {
+      p.first(hwaddr, std::move(p.second), 0);
+    }
+    _in_progress.erase(i);
+  }
+}
 
 template <typename L3>
 void arp_for<L3>::wait(const l3addr& paddr, Packet p, resolution_cb cb) {
@@ -248,6 +253,7 @@ void arp_for<L3>::wait(const l3addr& paddr, Packet p, resolution_cb cb) {
     cb(i->second, std::move(p), 0);
     return ;
   }
+
   auto j = _in_progress.find(paddr);
   auto first_request = j == _in_progress.end();
   auto& res = first_request ? _in_progress[paddr] : j->second;
@@ -265,20 +271,6 @@ void arp_for<L3>::wait(const l3addr& paddr, Packet p, resolution_cb cb) {
 
   res._waiters.emplace_back(cb, std::move(p));
   return ;
-}
-
-template <typename L3>
-void arp_for<L3>::learn(l2addr hwaddr, l3addr paddr) {
-  _table[paddr] = hwaddr;
-  auto i = _in_progress.find(paddr);
-  if (i != _in_progress.end()) {
-    auto& res = i->second;
-    center->delete_time_event(res.timeout_fd);
-    for (auto &&p : res._waiters) {
-      p.first(hwaddr, std::move(p.second), 0);
-    }
-    _in_progress.erase(i);
-  }
 }
 
 template <typename L3>

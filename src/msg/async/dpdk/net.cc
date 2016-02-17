@@ -37,6 +37,13 @@
 #include "DPDK.h"
 #include "DPDKStack.h"
 
+#include "common/dout.h"
+#include "include/assert.h"
+
+#define dout_subsys ceph_subsys_dpdk
+#undef dout_prefix
+#define dout_prefix *_dout << "net "
+
 interface::interface(CephContext *c, std::shared_ptr<DPDKDevice> dev, EventCenter *center)
     : cct(c), _dev(dev),
       _rx(_dev->receive(
@@ -48,7 +55,8 @@ interface::interface(CephContext *c, std::shared_ptr<DPDKDevice> dev, EventCente
       _hw_address(_dev->hw_address()),
       _hw_features(_dev->get_hw_features()) {
   auto idx = 0u;
-  dev->queue_for_cpu(center->cpu_id()).register_packet_provider([this, idx] () mutable {
+  unsigned qid = center->cpu_id();
+  dev->queue_for_cpu(center->cpu_id()).register_packet_provider([this, idx, qid] () mutable {
     Tub<Packet> p;
     for (size_t i = 0; i < _pkt_providers.size(); i++) {
       auto l3p = _pkt_providers[idx++]();
@@ -61,8 +69,15 @@ interface::interface(CephContext *c, std::shared_ptr<DPDKDevice> dev, EventCente
         eh->src_mac = _hw_address;
         eh->eth_proto = uint16_t(l3pv.proto_num);
         *eh = eh->hton();
-        p = std::move(l3pv.p);
-        return p;
+        ldout(cct, 10) << "=== tx === proto " << std::hex << uint16_t(l3pv.proto_num)
+                       << " " << _hw_address << " -> " << l3pv.to
+                       << " length " << std::dec << l3pv.p.len() << dendl;
+        if (eh->dst_mac == eh->src_mac) {
+          _dev->l2receive(qid, std::move(l3pv.p));
+        } else {
+          p = std::move(l3pv.p);
+          return p;
+        }
       }
     }
     return p;
@@ -122,6 +137,9 @@ int interface::dispatch_packet(EventCenter *center, Packet p) {
   auto eh = p.get_header<eth_hdr>();
   if (eh) {
     auto i = _proto_map.find(ntoh(eh->eth_proto));
+    ldout(cct, 1) << __func__ << " === rx === proto " << std::hex << ::ntoh(eh->eth_proto)
+                  << " "<< eh->src_mac.ntoh() << " -> " << eh->dst_mac.ntoh()
+                  << " length " << std::dec << p.len() << dendl;
     if (i != _proto_map.end()) {
       l3_rx_stream& l3 = i->second;
       auto fw = _dev->forward_dst(center->cpu_id(), [&p, &l3, this] () {
@@ -137,6 +155,7 @@ int interface::dispatch_packet(EventCenter *center, Packet p) {
         }
       });
       if (fw != center->cpu_id()) {
+        ldout(cct, 1) << __func__ << " forward to " << fw << dendl;
         forward(center, fw, std::move(p));
       } else {
         auto h = eh->ntoh();

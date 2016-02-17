@@ -30,7 +30,7 @@ class UserspaceEventManager {
     int8_t activating_mask = 0;
   };
   int max_fd = 0;
-  uint32_t max_wait_idx = 1;
+  uint32_t max_wait_idx = 0;
   uint32_t waiting_size = 0;
   std::vector<Tub<UserspaceFDImpl> > fds;
   std::vector<int> waiting_fds;
@@ -48,10 +48,10 @@ class UserspaceEventManager {
       unused_fds.pop_front();
     } else {
       fd = ++max_fd;
-      fds.resize(fd);
+      fds.resize(fd + 1);
     }
 
-    Tub<UserspaceFDImpl> impl = fds[fd];
+    Tub<UserspaceFDImpl> &impl = fds[fd];
     assert(!impl);
     impl.construct();
     return fd;
@@ -61,7 +61,7 @@ class UserspaceEventManager {
     if ((size_t)fd > fds.size())
       return -ENOENT;
 
-    Tub<UserspaceFDImpl> impl = fds[fd];
+    Tub<UserspaceFDImpl> &impl = fds[fd];
     if (!impl)
       return -ENOENT;
 
@@ -81,7 +81,7 @@ class UserspaceEventManager {
     if ((size_t)fd > fds.size())
       return -ENOENT;
 
-    Tub<UserspaceFDImpl> impl = fds[fd];
+    Tub<UserspaceFDImpl> &impl = fds[fd];
     if (!impl)
       return -ENOENT;
 
@@ -92,7 +92,7 @@ class UserspaceEventManager {
       return 0;
     }
     if (impl->waiting_idx) {
-      if (max_wait_idx == (uint32_t)fd)
+      if (waiting_fds[max_wait_idx] == fd)
         --max_wait_idx;
       waiting_fds[fd] = -1;
       --waiting_size;
@@ -104,7 +104,7 @@ class UserspaceEventManager {
     if ((size_t)fd > fds.size())
       return -ENOENT;
 
-    Tub<UserspaceFDImpl> impl = fds[fd];
+    Tub<UserspaceFDImpl> &impl = fds[fd];
     if (!impl)
       return -ENOENT;
 
@@ -114,8 +114,8 @@ class UserspaceEventManager {
     }
 
     if (impl->listening_mask & mask) {
+      impl->waiting_idx = ++max_wait_idx;
       waiting_fds[max_wait_idx] = fd;
-      impl->waiting_idx = max_wait_idx++;
       ++waiting_size;
     }
     impl->activating_mask |= mask;
@@ -126,7 +126,7 @@ class UserspaceEventManager {
     if ((size_t)fd > fds.size())
       return ;
 
-    Tub<UserspaceFDImpl> impl = fds[fd];
+    Tub<UserspaceFDImpl> &impl = fds[fd];
     if (!impl)
       return ;
 
@@ -137,7 +137,7 @@ class UserspaceEventManager {
 
     if (impl->activating_mask) {
       assert(impl->waiting_idx);
-    if (max_wait_idx == (uint32_t)fd)
+    if (waiting_fds[max_wait_idx] == fd)
       --max_wait_idx;
       waiting_fds[fd] = -1;
       --waiting_size;
@@ -148,8 +148,9 @@ class UserspaceEventManager {
   int poll(int *events, int *masks, int num_events, struct timeval *tp) {
     int fd;
     uint32_t i, min_events = MIN(num_events, waiting_size);
+    // leave zero slot for waiting_fds
     for (i = 0; i < min_events; ++i) {
-      fd = waiting_fds[i];
+      fd = waiting_fds[i+1];
       if (fd == -1)
         continue;
 
@@ -157,10 +158,9 @@ class UserspaceEventManager {
       assert(fds[fd]);
       masks[i] = fds[fd]->listening_mask & fds[fd]->activating_mask;
       assert(masks[i]);
-      ++i;
     }
     if (i < waiting_size)
-      memcpy(&waiting_fds[0], &waiting_fds[i], sizeof(int)*(waiting_size-i));
+      memcpy(&waiting_fds[1], &waiting_fds[i+1], sizeof(int)*(waiting_size-i));
     max_wait_idx -= i;
     waiting_size -= i;
     return i;

@@ -229,6 +229,7 @@ if(HAVE_DPDK)
 	msg/async/dpdk/dpdk_rte.cc
 	msg/async/dpdk/DPDKStack.cc
 	msg/async/dpdk/EventDPDK.cc
+    msg/async/dpdk/ethernet.cc
 	msg/async/dpdk/IP.cc
     msg/async/dpdk/IPChecksum.cc
     msg/async/dpdk/memory.cc

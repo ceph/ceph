@@ -69,6 +69,23 @@ inline tcp_state operator|(tcp_state s1, tcp_state s2) {
   return tcp_state(uint16_t(s1) | uint16_t(s2));
 }
 
+inline std::ostream & operator<<(std::ostream & str, tcp_state s) {
+  switch (s) {
+    case tcp_state::CLOSED: return str << "CLOSED";
+    case tcp_state::LISTEN: return str << "LISTEN";
+    case tcp_state::SYN_SENT: return str << "SYN_SENT";
+    case tcp_state::SYN_RECEIVED: return str << "SYN_RECEIVED";
+    case tcp_state::ESTABLISHED: return str << "ESTABLISHED";
+    case tcp_state::FIN_WAIT_1: return str << "FIN_WAIT_1";
+    case tcp_state::FIN_WAIT_2: return str << "FIN_WAIT_2";
+    case tcp_state::CLOSE_WAIT: return str << "CLOSE_WAIT";
+    case tcp_state::CLOSING: return str << "CLOSING";
+    case tcp_state::LAST_ACK: return str << "LAST_ACK";
+    case tcp_state::TIME_WAIT: return str << "TIME_WAIT";
+    default: return str << "UNKNOWN";
+  }
+}
+
 struct tcp_option {
   // The kind and len field are fixed and defined in TCP protocol
   enum class option_kind: uint8_t { mss = 2, win_scale = 3, sack = 4, timestamps = 8,  nop = 1, eol = 0 };
@@ -375,6 +392,7 @@ class tcp {
    public:
     // callback
     void close_final_cleanup();
+    ostream& _prefix(std::ostream *_dout);
 
    public:
     tcb(tcp& t, connid id);
@@ -398,7 +416,7 @@ class tcp {
         _poll_active = true;
 
         auto tcb = this->shared_from_this();
-        _tcp._inet.wait_l2_dst_address(_foreign_ip, std::move(Packet()), [tcb] (const ethernet_address &dst, Packet p, int r) {
+        _tcp._inet.wait_l2_dst_address(_foreign_ip, Packet(), [tcb] (const ethernet_address &dst, Packet p, int r) {
           if (r == 0) {
             tcb->_tcp.poll_tcb(dst, tcb);
           } else if (r == -ETIMEDOUT) {

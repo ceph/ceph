@@ -32,105 +32,145 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "dpdk "
 
-void tcp_option::parse(uint8_t* beg, uint8_t* end) {
-	while (beg < end) {
-		auto kind = option_kind(*beg);
-		if (kind != option_kind::nop && kind != option_kind::eol) {
-			// Make sure there is enough room for this option
-			auto len = *(beg + 1);
-			if (beg + len > end) {
-				return;
-			}
-		}
-		switch (kind) {
-			case option_kind::mss:
-				_mss_received = true;
-				_remote_mss = ntoh(reinterpret_cast<mss*>(beg)->mss);
-				beg += option_len::mss;
-				break;
-			case option_kind::win_scale:
-				_win_scale_received = true;
-				_remote_win_scale = reinterpret_cast<win_scale*>(beg)->shift;
-				// We can turn on win_scale option, 7 is Linux's default win scale size
-				_local_win_scale = 7;
-				beg += option_len::win_scale;
-				break;
-			case option_kind::sack:
-				_sack_received = true;
-				beg += option_len::sack;
-				break;
-			case option_kind::nop:
-				beg += option_len::nop;
-				break;
-			case option_kind::eol:
-				return;
-			default:
-				// Ignore options we do not understand
-				auto len = *(beg + 1);
-				beg += len;
-				// Prevent infinite loop
-				if (len == 0) {
-					return;
-				}
-				break;
-		}
-	}
+void tcp_option::parse(uint8_t* beg, uint8_t* end)
+{
+  while (beg < end) {
+    auto kind = option_kind(*beg);
+    if (kind != option_kind::nop && kind != option_kind::eol) {
+      // Make sure there is enough room for this option
+      auto len = *(beg + 1);
+      if (beg + len > end) {
+        return;
+      }
+    }
+    switch (kind) {
+      case option_kind::mss:
+        _mss_received = true;
+        _remote_mss = ntoh(reinterpret_cast<mss*>(beg)->mss);
+        beg += option_len::mss;
+        break;
+      case option_kind::win_scale:
+        _win_scale_received = true;
+        _remote_win_scale = reinterpret_cast<win_scale*>(beg)->shift;
+        // We can turn on win_scale option, 7 is Linux's default win scale size
+        _local_win_scale = 7;
+        beg += option_len::win_scale;
+        break;
+      case option_kind::sack:
+        _sack_received = true;
+        beg += option_len::sack;
+        break;
+      case option_kind::nop:
+        beg += option_len::nop;
+        break;
+      case option_kind::eol:
+        return;
+      default:
+        // Ignore options we do not understand
+        auto len = *(beg + 1);
+        beg += len;
+        // Prevent infinite loop
+        if (len == 0) {
+            return;
+        }
+        break;
+    }
+  }
 }
 
-uint8_t tcp_option::fill(tcp_hdr* th, uint8_t options_size) {
-	auto hdr = reinterpret_cast<uint8_t*>(th);
-	auto off = hdr + sizeof(tcp_hdr);
-	uint8_t size = 0;
-	bool syn_on = th->f_syn;
-	bool ack_on = th->f_ack;
+uint8_t tcp_option::fill(tcp_hdr* th, uint8_t options_size)
+{
+  auto hdr = reinterpret_cast<uint8_t*>(th);
+  auto off = hdr + sizeof(tcp_hdr);
+  uint8_t size = 0;
+  bool syn_on = th->f_syn;
+  bool ack_on = th->f_ack;
 
-	if (syn_on) {
-		if (_mss_received || !ack_on) {
-			auto mss = new (off) tcp_option::mss;
-			mss->mss = _local_mss;
-			off += mss->len;
-			size += mss->len;
-			*mss = mss->hton();
-		}
-		if (_win_scale_received || !ack_on) {
-			auto win_scale = new (off) tcp_option::win_scale;
-			win_scale->shift = _local_win_scale;
-			off += win_scale->len;
-			size += win_scale->len;
-		}
-	}
-	if (size > 0) {
-		// Insert NOP option
-		auto size_max = align_up(uint8_t(size + 1), tcp_option::align);
-		while (size < size_max - uint8_t(option_len::eol)) {
-			new (off) tcp_option::nop;
-			off += option_len::nop;
-			size += option_len::nop;
-		}
-		new (off) tcp_option::eol;
-		size += option_len::eol;
-	}
-	assert(size == options_size);
+  if (syn_on) {
+    if (_mss_received || !ack_on) {
+      auto mss = new (off) tcp_option::mss;
+      mss->mss = _local_mss;
+      off += mss->len;
+      size += mss->len;
+      *mss = mss->hton();
+    }
+    if (_win_scale_received || !ack_on) {
+      auto win_scale = new (off) tcp_option::win_scale;
+      win_scale->shift = _local_win_scale;
+      off += win_scale->len;
+      size += win_scale->len;
+    }
+  }
+  if (size > 0) {
+    // Insert NOP option
+    auto size_max = align_up(uint8_t(size + 1), tcp_option::align);
+    while (size < size_max - uint8_t(option_len::eol)) {
+      new (off) tcp_option::nop;
+      off += option_len::nop;
+      size += option_len::nop;
+    }
+    new (off) tcp_option::eol;
+    size += option_len::eol;
+  }
+  assert(size == options_size);
 
-	return size;
+  return size;
 }
 
-uint8_t tcp_option::get_size(bool syn_on, bool ack_on) {
-	uint8_t size = 0;
-	if (syn_on) {
-		if (_mss_received || !ack_on) {
-			size += option_len::mss;
-		}
-		if (_win_scale_received || !ack_on) {
-			size += option_len::win_scale;
-		}
-	}
-	if (size > 0) {
-		size += option_len::eol;
-		// Insert NOP option to align on 32-bit
-		size = align_up(size, tcp_option::align);
-	}
-	return size;
+uint8_t tcp_option::get_size(bool syn_on, bool ack_on)
+{
+  uint8_t size = 0;
+  if (syn_on) {
+    if (_mss_received || !ack_on) {
+      size += option_len::mss;
+    }
+    if (_win_scale_received || !ack_on) {
+      size += option_len::win_scale;
+    }
+  }
+  if (size > 0) {
+    size += option_len::eol;
+    // Insert NOP option to align on 32-bit
+    size = align_up(size, tcp_option::align);
+  }
+  return size;
+}
+
+ipv4_tcp::ipv4_tcp(ipv4& inet, EventCenter *c)
+    : _inet_l4(inet), _tcp(std::unique_ptr<tcp<ipv4_traits>>(new tcp<ipv4_traits>(inet.cct, _inet_l4, c)))
+{ }
+
+ipv4_tcp::~ipv4_tcp() { }
+
+void ipv4_tcp::received(Packet p, ipv4_address from, ipv4_address to)
+{
+  _tcp->received(std::move(p), from, to);
+}
+
+bool ipv4_tcp::forward(forward_hash& out_hash_data, Packet& p, size_t off)
+{
+  return _tcp->forward(out_hash_data, p, off);
+}
+
+ServerSocket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, const SocketOptions &opts)
+{
+  std::unique_ptr<ServerSocketImpl> lsi(new DPDKServerSocketImpl<tcp<ipv4_traits>>(tcpv4, port, opts));
+  return ServerSocket(std::move(lsi));
+}
+
+ConnectedSocket tcpv4_connect(tcp<ipv4_traits>& tcpv4, const entity_addr_t &addr)
+{
+  auto conn = tcpv4.connect(addr);
+  std::unique_ptr<ConnectedSocketImpl> csi(new NativeConnectedSocketImpl<tcp<ipv4_traits>>(std::move(conn)));
+  return ConnectedSocket(std::move(csi));
+}
+
+#undef dout_prefix
+#define dout_prefix _prefix(_dout)
+template<typename InetTraits>
+ostream& tcp<InetTraits>::tcb::_prefix(std::ostream *_dout) {
+  return *_dout << "tcp " << _local_ip << ":" << _local_port << " -> " << _foreign_ip << ":" << _foreign_port
+                << " tcb(" << this << " s=" << _state << ").";
 }
 
 template<typename InetTraits>
@@ -217,14 +257,14 @@ void tcp<InetTraits>::tcb::input_handle_syn_sent_state(tcp_hdr* th, Packet p)
       // If SND.UNA > ISS (our SYN has been ACKed), change the connection
       // state to ESTABLISHED, form an ACK segment
       // <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>
-      ldout(_tcp.cct, 20) << __func__ << "syn: SYN_SENT -> ESTABLISHED" << dendl;
+      ldout(_tcp.cct, 20) << __func__ << " syn: SYN_SENT -> ESTABLISHED" << dendl;
       init_from_options(th, opt_start, opt_end);
       do_established();
       output();
     } else {
       // Otherwise enter SYN_RECEIVED, form a SYN,ACK segment
       // <SEQ=ISS><ACK=RCV.NXT><CTL=SYN,ACK>
-      ldout(_tcp.cct, 20) << __func__ << "syn: SYN_SENT -> SYN_RECEIVED" << dendl;
+      ldout(_tcp.cct, 20) << __func__ << " syn: SYN_SENT -> SYN_RECEIVED" << dendl;
       do_syn_received();
     }
   }
@@ -243,6 +283,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
   tcp_sequence seg_seq = th->seq;
   auto seg_ack = th->ack;
   auto seg_len = p.len();
+  ldout(_tcp.cct, 20) << __func__ << " seq " << seg_seq.raw << " len " << seg_len << dendl;
 
   // 4.1 first check sequence number
   if (!segment_acceptable(seg_seq, seg_len)) {
@@ -329,7 +370,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
       // If SND.UNA =< SEG.ACK =< SND.NXT then enter ESTABLISHED state
       // and continue processing.
       if (_snd.unacknowledged <= seg_ack && seg_ack <= _snd.next) {
-        ldout(_tcp.cct, 20) << __func__ << "SYN_RECEIVED -> ESTABLISHED" << dendl;
+        ldout(_tcp.cct, 20) << __func__ << " SYN_RECEIVED -> ESTABLISHED" << dendl;
         do_established();
       } else {
         // <SEQ=SEG.ACK><CTL=RST>
@@ -337,7 +378,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
       }
     }
     auto update_window = [this, th, seg_seq, seg_ack] {
-      ldout(_tcp.cct, 20) << __func__ << "window update seg_seq=" << seg_seq
+      ldout(_tcp.cct, 20) << __func__ << " window update seg_seq=" << seg_seq
       << " seg_ack=" << seg_ack << " old window=" << th->window
       << " new window=" << _snd.window_scale << dendl;
       _snd.window = th->window << _snd.window_scale;
@@ -352,7 +393,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
     };
     // ESTABLISHED STATE or
     // CLOSE_WAIT STATE: Do the same processing as for the ESTABLISHED state.
-    if (in_state(ESTABLISHED | CLOSE_WAIT)){
+    if (in_state(ESTABLISHED | CLOSE_WAIT)) {
       // If SND.UNA < SEG.ACK =< SND.NXT then, set SND.UNA <- SEG.ACK.
       if (_snd.unacknowledged < seg_ack && seg_ack <= _snd.next) {
         // Remote ACKed data we sent
@@ -598,12 +639,12 @@ void tcp<InetTraits>::tcb::close_final_cleanup()
   }
 
   _snd.closed = true;
-  ldout(_tcp.cct, 20) << __func__ << "close: unsent_len=" << _snd.unsent_len << dendl;
+  ldout(_tcp.cct, 20) << __func__ << " unsent_len=" << _snd.unsent_len << dendl;
   if (in_state(CLOSE_WAIT)) {
-    ldout(_tcp.cct, 20) << __func__ << "close: CLOSE_WAIT -> LAST_ACK" << dendl;
+    ldout(_tcp.cct, 20) << __func__ << " CLOSE_WAIT -> LAST_ACK" << dendl;
     _state = LAST_ACK;
   } else if (in_state(ESTABLISHED)) {
-    ldout(_tcp.cct, 20) << __func__ << "close: ESTABLISHED -> FIN_WAIT_1" << dendl;
+    ldout(_tcp.cct, 20) << __func__ << " ESTABLISHED -> FIN_WAIT_1" << dendl;
     _state = FIN_WAIT_1;
   }
   // Send <FIN> to remote
@@ -626,30 +667,4 @@ void tcp<InetTraits>::tcb::persist() {
   // Perform binary exponential back-off per RFC1122
   _persist_time_out = std::min(_persist_time_out * 2, _rto_max);
   start_persist_timer();
-}
-
-ipv4_tcp::ipv4_tcp(ipv4& inet, EventCenter *c)
-		: _inet_l4(inet), _tcp(std::unique_ptr<tcp<ipv4_traits>>(new tcp<ipv4_traits>(inet.cct, _inet_l4, c))) {
-}
-
-ipv4_tcp::~ipv4_tcp() {
-}
-
-void ipv4_tcp::received(Packet p, ipv4_address from, ipv4_address to) {
-	_tcp->received(std::move(p), from, to);
-}
-
-bool ipv4_tcp::forward(forward_hash& out_hash_data, Packet& p, size_t off) {
-	return _tcp->forward(out_hash_data, p, off);
-}
-
-ServerSocket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, const SocketOptions &opts) {
-  std::unique_ptr<ServerSocketImpl> lsi(new DPDKServerSocketImpl<tcp<ipv4_traits>>(tcpv4, port, opts));
-	return ServerSocket(std::move(lsi));
-}
-
-ConnectedSocket tcpv4_connect(tcp<ipv4_traits>& tcpv4, const entity_addr_t &addr) {
-	auto conn = tcpv4.connect(addr);
-	std::unique_ptr<ConnectedSocketImpl> csi(new NativeConnectedSocketImpl<tcp<ipv4_traits>>(std::move(conn)));
-	return ConnectedSocket(std::move(csi));
 }
