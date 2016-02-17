@@ -676,7 +676,7 @@ namespace crimson {
 	    auto i2 = i++;
 	    if (erase_point && i2->second.last_tick <= erase_point) {
 	      client_map.erase(i2);
-	    } else if (idle_point && i2->second.last_tick <= erase_point) {
+	    } else if (idle_point && i2->second.last_tick <= idle_point) {
 	      i2->second.idle = true;
 	    }
 	  } // for
