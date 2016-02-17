@@ -1885,6 +1885,7 @@ int OSD::enable_disable_fuse(bool stop)
       derr << __func__ << " failed to rmdir " << mntpath << dendl;
       return r;
     }
+    return 0;
   }
   if (!fuse_store && g_conf->osd_objectstore_fuse) {
     dout(1) << __func__ << " enabling" << dendl;
