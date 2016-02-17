@@ -10,6 +10,7 @@
 #include "auth/Crypto.h"
 
 #include "rgw_client_io.h"
+#include "rgw_swift.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -61,9 +62,10 @@ static int encode_token(CephContext *cct, string& swift_user, string& key,
   return ret;
 }
 
-int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store,
-				  const char *token, RGWUserInfo& info,
-				  string *pswift_user)
+int rgw_swift_verify_signed_token(CephContext * const cct,
+                                  RGWRados * const store,
+                                  const char *token,
+                                  rgw_swift_auth_info& auth_info)
 {
   if (strncmp(token, "AUTH_rgwtk", 10) != 0)
     return -EINVAL;
@@ -106,6 +108,7 @@ int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store,
     return -EPERM;
   }
 
+  RGWUserInfo info;
   if ((ret = rgw_get_user_info_by_swift(store, swift_user, info)) < 0)
     return ret;
 
@@ -133,7 +136,12 @@ int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store,
     dout(0) << "NOTICE: tokens mismatch tok=" << buf << dendl;
     return -EPERM;
   }
-  *pswift_user = swift_user;
+
+  auth_info.user = info.user_id;
+  auth_info.is_admin = info.admin;
+  // FIXME
+  //auth_info.perm_mask = RGWSwift::get_perm_mask(swift_user, info);
+  auth_info.status = 200;
 
   return 0;
 }
