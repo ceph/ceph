@@ -5960,8 +5960,14 @@ int BlueStore::_rmattr(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << dendl;
   int r = 0;
+  map<string, bufferptr>::iterator it = o->onode.attrs.find(name);
+  if (it == o->onode.attrs.end())
+    goto out;
+
   o->onode.attrs.erase(name);
   txc->write_onode(o);
+
+ out:
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " = " << r << dendl;
   return r;
@@ -5973,8 +5979,14 @@ int BlueStore::_rmattrs(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
+
+  if (o->onode.attrs.empty())
+    goto out;
+
   o->onode.attrs.clear();
   txc->write_onode(o);
+
+ out:
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
