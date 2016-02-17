@@ -25,14 +25,18 @@
 
 #define dout_subsys ceph_subsys_mds
 
-int Resetter::reset(int rank)
+int Resetter::reset(mds_role_t role)
 {
   Mutex mylock("Resetter::reset::lock");
   Cond cond;
   bool done;
   int r;
 
-  JournalPointer jp(rank, mdsmap->get_metadata_pool());
+  auto fs =  fsmap->get_filesystem(role.fscid);
+  assert(fs != nullptr);
+  int const pool_id = fs->mds_map.get_metadata_pool();
+
+  JournalPointer jp(role.rank, pool_id);
   int jp_load_result = jp.load(objecter);
   if (jp_load_result != 0) {
     std::cerr << "Error loading journal: " << cpp_strerror(jp_load_result) <<
@@ -41,7 +45,7 @@ int Resetter::reset(int rank)
   }
 
   Journaler journaler(jp.front,
-      mdsmap->get_metadata_pool(),
+      pool_id,
       CEPH_FS_ONDISK_MAGIC,
       objecter, 0, 0, &timer, &finisher);
 
@@ -109,10 +113,14 @@ int Resetter::reset(int rank)
   return 0;
 }
 
-int Resetter::reset_hard(int rank)
+int Resetter::reset_hard(mds_role_t role)
 {
-  JournalPointer jp(rank, mdsmap->get_metadata_pool());
-  jp.front = rank + MDS_INO_LOG_OFFSET;
+  auto fs =  fsmap->get_filesystem(role.fscid);
+  assert(fs != nullptr);
+  int const pool_id = fs->mds_map.get_metadata_pool();
+
+  JournalPointer jp(role.rank, pool_id);
+  jp.front = role.rank + MDS_INO_LOG_OFFSET;
   jp.back = 0;
   int r = jp.save(objecter);
   if (r != 0) {
@@ -121,12 +129,13 @@ int Resetter::reset_hard(int rank)
   }
 
   Journaler journaler(jp.front,
-    mdsmap->get_metadata_pool(),
+    pool_id,
     CEPH_FS_ONDISK_MAGIC,
     objecter, 0, 0, &timer, &finisher);
   journaler.set_writeable();
 
-  file_layout_t default_log_layout = MDCache::gen_default_log_layout(*mdsmap);
+  file_layout_t default_log_layout = MDCache::gen_default_log_layout(
+      fsmap->get_filesystem(role.fscid)->mds_map);
   journaler.create(&default_log_layout, g_conf->mds_journal_format);
 
   C_SaferCond cond;
@@ -150,7 +159,7 @@ int Resetter::reset_hard(int rank)
   }
 
   dout(4) << "Successfully wrote new journal pointer and header for rank "
-    << rank << dendl;
+    << role << dendl;
   return 0;
 }
 

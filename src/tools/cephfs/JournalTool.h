@@ -12,6 +12,7 @@
  */
 
 #include "MDSUtility.h"
+#include "RoleSelector.h"
 #include <vector>
 
 #include "mds/mdstypes.h"
@@ -32,7 +33,10 @@ class JournalScanner;
 class JournalTool : public MDSUtility
 {
   private:
-    int rank;
+    MDSRoleSelector role_selector;
+    // Bit hacky, use this `rank` member to control behaviour of the
+    // various main_ functions.
+    mds_rank_t rank;
 
     // Entry points
     int main_journal(std::vector<const char*> &argv);
