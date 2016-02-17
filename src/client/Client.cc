@@ -67,6 +67,7 @@ using namespace std;
 #include "messages/MGenericMessage.h"
 
 #include "messages/MMDSMap.h"
+#include "messages/MFSMap.h"
 
 #include "mon/MonClient.h"
 
@@ -253,7 +254,7 @@ Client::Client(Messenger *m, MonClient *mc)
     objecter_finisher(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
-    cap_epoch_barrier(0),
+    cap_epoch_barrier(0), fsmap(nullptr),
     last_tid(0), oldest_tid(0), last_flush_tid(1),
     initialized(false), authenticated(false),
     mounted(false), unmounting(false),
@@ -321,6 +322,7 @@ Client::~Client()
   delete filer;
   delete objecter;
   delete mdsmap;
+  delete fsmap;
 
   delete logger;
 }
@@ -493,7 +495,17 @@ int Client::init()
   objecter->start();
 
   monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
-  monclient->sub_want("mdsmap", 0, 0);
+
+  std::string want = "mdsmap";
+  const auto &want_ns = cct->_conf->client_mds_namespace;
+  if (want_ns != FS_CLUSTER_ID_NONE) {
+    std::ostringstream oss;
+    oss << want << "." << want_ns;
+    want = oss.str();
+  }
+  ldout(cct, 10) << "Subscribing to map '" << want << "'" << dendl;
+
+  monclient->sub_want(want, 0, 0);
   monclient->renew_subs();
 
   // logger
@@ -1395,7 +1407,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req)
 
 random_mds:
   if (mds < 0) {
-    mds = mdsmap->get_random_up_mds();
+    mds = _get_random_up_mds();
     ldout(cct, 10) << "did not get mds through better means, so chose random mds " << mds << dendl;
   }
 
@@ -1602,7 +1614,7 @@ int Client::make_request(MetaRequest *request,
 
 	if (!mdsmap->is_active_or_stopping(mds)) {
 	  ldout(cct, 10) << "hmm, still have no address for mds." << mds << ", trying a random mds" << dendl;
-	  request->resend_mds = mdsmap->get_random_up_mds();
+	  request->resend_mds = _get_random_up_mds();
 	  continue;
 	}
       }
@@ -2358,6 +2370,9 @@ bool Client::ms_dispatch(Message *m)
   case CEPH_MSG_MDS_MAP:
     handle_mds_map(static_cast<MMDSMap*>(m));
     break;
+  case CEPH_MSG_FS_MAP:
+    handle_fs_map(static_cast<MFSMap*>(m));
+    break;
   case CEPH_MSG_CLIENT_SESSION:
     handle_client_session(static_cast<MClientSession*>(m));
     break;
@@ -2416,6 +2431,17 @@ bool Client::ms_dispatch(Message *m)
   return true;
 }
 
+void Client::handle_fs_map(MFSMap *m)
+{
+  delete fsmap;
+  fsmap = new FSMap;
+  fsmap->decode(m->get_encoded());
+  m->put();
+
+  signal_cond_list(waiting_for_fsmap);
+
+  monclient->sub_got("fsmap", fsmap->get_epoch());
+}
 
 void Client::handle_mds_map(MMDSMap* m)
 {
@@ -5143,8 +5169,8 @@ inodeno_t Client::_get_inodeno(Inode *in)
 /**
  * Resolve an MDS spec to a list of MDS daemon GIDs.
  *
- * The spec is a string representing a GID, rank or name/id.  It may
- * be * in which case it matches all GIDs.
+ * The spec is a string representing a GID, rank, filesystem:rank, or name/id.
+ * It may be '*' in which case it matches all GIDs.
  *
  * If no error is returned, the `targets` vector will be populated with at least
  * one MDS.
@@ -5153,57 +5179,58 @@ int Client::resolve_mds(
     const std::string &mds_spec,
     std::vector<mds_gid_t> *targets)
 {
+  assert(fsmap != nullptr);
+  assert(targets != nullptr);
+
+  mds_role_t role;
+  std::stringstream ss;
+  int role_r = fsmap->parse_role(mds_spec, &role, ss);
+  if (role_r == 0) {
+    // We got a role, resolve it to a GID
+    ldout(cct, 10) << __func__ << ": resolved '" << mds_spec << "' to role '"
+      << role << "'" << dendl;
+    targets->push_back(
+        fsmap->get_filesystem(role.fscid)->mds_map.get_info(role.rank).global_id);
+    return 0;
+  }
+
   std::string strtol_err;
   long long rank_or_gid = strict_strtoll(mds_spec.c_str(), 10, &strtol_err);
   if (strtol_err.empty()) {
-    // If it parses as an integer, it's GID or a rank
-    if (rank_or_gid >= 0 && rank_or_gid < MAX_MDS) {
-      const mds_rank_t mds_rank = mds_rank_t(rank_or_gid);
-
-      if (mdsmap->is_dne(mds_rank)) {
-        lderr(cct) << __func__ << ": MDS rank " << mds_rank << " does not exist" << dendl;
-        return -ENOENT;
-      }
-
-      if (!mdsmap->is_up(mds_rank)) {
-        lderr(cct) << __func__ << ": MDS rank " << mds_rank << " is not up" << dendl;
-        return -EAGAIN;
-      }
-
-      const mds_gid_t mds_gid = mdsmap->get_info(mds_rank).global_id;
-      ldout(cct, 10) << __func__ << ": resolved rank " << mds_rank << " to GID " << mds_gid << dendl;
+    // It is a possible GID
+    const mds_gid_t mds_gid = mds_gid_t(rank_or_gid);
+    if (fsmap->gid_exists(mds_gid)) {
+      ldout(cct, 10) << __func__ << ": validated GID " << mds_gid << dendl;
       targets->push_back(mds_gid);
     } else {
-      const mds_gid_t mds_gid = mds_gid_t(rank_or_gid);
-      if (mdsmap->is_dne_gid(mds_gid)) {
-        lderr(cct) << __func__ << ": GID " << mds_gid << " not in MDS map" << dendl;
-        return -ENOENT;
-      } else {
-        ldout(cct, 10) << __func__ << ": validated GID " << mds_gid << dendl;
-        targets->push_back(mds_gid);
-      }
+      lderr(cct) << __func__ << ": GID " << mds_gid << " not in MDS map"
+                 << dendl;
+      return -ENOENT;
     }
   } else if (mds_spec == "*") {
     // It is a wildcard: use all MDSs
-    const std::map<mds_gid_t, MDSMap::mds_info_t> &mds_info = mdsmap->get_mds_info();
+    const auto mds_info = fsmap->get_mds_info();
 
     if (mds_info.empty()) {
       lderr(cct) << __func__ << ": * passed but no MDS daemons found" << dendl;
       return -ENOENT;
     }
 
-    for (std::map<mds_gid_t, MDSMap::mds_info_t>::const_iterator i = mds_info.begin();
-        i != mds_info.end(); ++i) {
-      targets->push_back(i->first);
+    for (const auto i : mds_info) {
+      targets->push_back(i.first);
     }
   } else {
     // It did not parse as an integer, it is not a wildcard, it must be a name
-    const mds_gid_t mds_gid = mdsmap->find_mds_gid_by_name(mds_spec);
+    const mds_gid_t mds_gid = fsmap->find_mds_gid_by_name(mds_spec);
     if (mds_gid == 0) {
       lderr(cct) << "MDS ID '" << mds_spec << "' not found" << dendl;
+
+      lderr(cct) << "FSMap: " << *fsmap << dendl;
+
       return -ENOENT;
     } else {
-      ldout(cct, 10) << __func__ << ": resolved ID '" << mds_spec << "' to GID " << mds_gid << dendl;
+      ldout(cct, 10) << __func__ << ": resolved ID '" << mds_spec
+                     << "' to GID " << mds_gid << dendl;
       targets->push_back(mds_gid);
     }
   }
@@ -5261,10 +5288,33 @@ int Client::mds_command(
     return r;
   }
 
-  // Block until we have an MDSMap to resolve IDs
-  if (mdsmap->get_epoch() == 0) {
-    wait_on_list(waiting_for_mdsmap);
+  // Retrieve FSMap to enable looking up daemon addresses.  We need FSMap
+  // rather than MDSMap because no one MDSMap contains all the daemons, and
+  // a `tell` can address any daemon.
+  version_t fsmap_latest;
+  do {
+    C_SaferCond cond;
+    monclient->get_version("fsmap", &fsmap_latest, NULL, &cond);
+    client_lock.Unlock();
+    r = cond.wait();
+    client_lock.Lock();
+  } while (r == -EAGAIN);
+  ldout(cct, 20) << "Learned FSMap version " << fsmap_latest << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "Failed to learn FSMap version: " << cpp_strerror(r) << dendl;
+    return r;
   }
+
+  if (fsmap == nullptr || fsmap->get_epoch() < fsmap_latest) {
+    monclient->sub_want("fsmap", fsmap_latest, CEPH_SUBSCRIBE_ONETIME);
+    monclient->renew_subs();
+    wait_on_list(waiting_for_fsmap);
+  }
+  assert(fsmap != nullptr);
+  assert(fsmap->get_epoch() >= fsmap_latest);
+  ldout(cct, 20) << "Finished waiting for FSMap version " << fsmap_latest
+    << dendl;
 
   // Look up MDS target(s) of the command
   std::vector<mds_gid_t> targets;
@@ -5276,10 +5326,10 @@ int Client::mds_command(
   // If daemons are laggy, we won't send them commands.  If all
   // are laggy then we fail.
   std::vector<mds_gid_t> non_laggy;
-  for (std::vector<mds_gid_t>::iterator target = targets.begin();
-      target != targets.end(); ++target) {
-    if (!mdsmap->is_laggy_gid(*target)) {
-      non_laggy.push_back(*target);
+  for (const auto gid : targets) {
+    const auto info = fsmap->get_info_gid(gid);
+    if (!info.laggy()) {
+      non_laggy.push_back(gid);
     }
   }
   if (non_laggy.size() == 0) {
@@ -5289,12 +5339,12 @@ int Client::mds_command(
 
   // Send commands to targets
   C_GatherBuilder gather(cct, onfinish);
-  for (std::vector<mds_gid_t>::iterator target = non_laggy.begin();
-      target != non_laggy.end(); ++target) {
+  for (const auto target_gid : non_laggy) {
     ceph_tid_t tid = ++last_tid;
+    const auto info = fsmap->get_info_gid(target_gid);
 
     // Open a connection to the target MDS
-    entity_inst_t inst = mdsmap->get_info_gid(*target).get_inst();
+    entity_inst_t inst = info.get_inst();
     ConnectionRef conn = messenger->get_connection(inst);
 
     // Generate CommandOp state
@@ -5303,11 +5353,11 @@ int Client::mds_command(
     op.on_finish = gather.new_sub();
     op.outbl = outbl;
     op.outs = outs;
-    op.mds_gid = *target;
+    op.mds_gid = target_gid;
     op.con = conn;
     commands[op.tid] = op;
 
-    ldout(cct, 4) << __func__ << ": new command op to " << *target
+    ldout(cct, 4) << __func__ << ": new command op to " << target_gid
       << " tid=" << op.tid << cmd << dendl;
 
     // Construct and send MCommand
@@ -5584,7 +5634,8 @@ void Client::flush_cap_releases()
   for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        ++p) {
-    if (p->second->release && mdsmap->is_clientreplay_or_active_or_stopping(p->first)) {
+    if (p->second->release && mdsmap->is_clientreplay_or_active_or_stopping(
+          p->first)) {
       if (cct->_conf->client_inject_release_failure) {
         ldout(cct, 20) << __func__ << " injecting failure to send cap release message" << dendl;
         p->second->release->put();
@@ -12281,3 +12332,19 @@ void intrusive_ptr_release(Inode *in)
 {
   in->client->put_inode(in);
 }
+
+mds_rank_t Client::_get_random_up_mds() const
+{
+  assert(client_lock.is_locked_by_me());
+
+  std::set<mds_rank_t> up;
+  mdsmap->get_up_mds_set(up);
+
+  if (up.empty())
+    return -1;
+  std::set<mds_rank_t>::const_iterator p = up.begin();
+  for (int n = rand() % up.size(); n; n--)
+    ++p;
+  return *p;
+}
+
