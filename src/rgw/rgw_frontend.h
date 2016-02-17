@@ -102,10 +102,7 @@ public:
     return 0;
   }
 
-  void stop() {
-    pprocess->close_fd();
-    thread->kill(SIGUSR1);
-  }
+  void stop();
 
   void join() {
     thread->join();
