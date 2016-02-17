@@ -54,13 +54,14 @@
  * keeping the values in Java and making a cross-JNI up-call to retrieve them,
  * and makes it easy to keep any platform specific value changes in this file.
  */
-#define JAVA_O_RDONLY 1
-#define JAVA_O_RDWR   2
-#define JAVA_O_APPEND 4
-#define JAVA_O_CREAT  8
-#define JAVA_O_TRUNC  16
-#define JAVA_O_EXCL   32
-#define JAVA_O_WRONLY 64
+#define JAVA_O_RDONLY    1
+#define JAVA_O_RDWR      2
+#define JAVA_O_APPEND    4
+#define JAVA_O_CREAT     8
+#define JAVA_O_TRUNC     16
+#define JAVA_O_EXCL      32
+#define JAVA_O_WRONLY    64
+#define JAVA_O_DIRECTORY 128
 
 /*
  * Whence flags for seek(). sync with CephMount.java if changed.
@@ -111,6 +112,7 @@ static inline int fixup_open_flags(jint jflags)
 	FIXUP_OPEN_FLAG(O_TRUNC)
 	FIXUP_OPEN_FLAG(O_EXCL)
 	FIXUP_OPEN_FLAG(O_WRONLY)
+	FIXUP_OPEN_FLAG(O_DIRECTORY)
 
 #undef FIXUP_OPEN_FLAG
 
