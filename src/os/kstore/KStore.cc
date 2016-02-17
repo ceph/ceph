@@ -2467,6 +2467,8 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
         coll_t cid = i.get_cid(op->cid);
 	r = _remove_collection(txc, cid, &c);
+	if (!r)
+	  continue;
       }
       break;
 
@@ -2475,6 +2477,8 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	assert(!c);
         coll_t cid = i.get_cid(op->cid);
 	r = _create_collection(txc, cid, op->split_bits, &c);
+	if (!r)
+	  continue;
       }
       break;
 
@@ -2487,6 +2491,8 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         uint32_t bits = op->split_bits;
         uint32_t rem = op->split_rem;
 	r = _split_collection(txc, c, cvec[op->dest_cid], bits, rem);
+	if (!r)
+	  continue;
       }
       break;
 
@@ -2525,6 +2531,16 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
     }
     if (r < 0) {
+      dout(0) << " error " << cpp_strerror(r)
+	      << " not handled on operation " << op->op
+	      << " (op " << pos << ", counting from 0)" << dendl;
+      dout(0) << " transaction dump:\n";
+      JSONFormatter f(true);
+      f.open_object_section("transaction");
+      t->dump(&f);
+      f.close_section();
+      f.flush(*_dout);
+      *_dout << dendl;
       assert(0 == "unexpected error");
     }
 
@@ -2778,7 +2794,6 @@ int KStore::_touch(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
-  RWLock::WLocker l(c->lock);
   o->exists = true;
   _assign_nid(txc, o);
   txc->write_onode(o);
@@ -2932,7 +2947,6 @@ int KStore::_write(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << offset << "~" << length
 	   << dendl;
-  RWLock::WLocker l(c->lock);
   _assign_nid(txc, o);
   int r = _do_write(txc, o, offset, length, bl, fadvise_flags);
   txc->write_onode(o);
@@ -2952,8 +2966,6 @@ int KStore::_zero(TransContext *txc,
 	   << " " << offset << "~" << length
 	   << dendl;
   int r = 0;
-
-  RWLock::WLocker l(c->lock);
   _dump_onode(o);
   _assign_nid(txc, o);
 
@@ -3063,7 +3075,6 @@ int KStore::_truncate(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << offset
 	   << dendl;
-  RWLock::WLocker l(c->lock);
   int r = _do_truncate(txc, o, offset);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << offset
@@ -3095,7 +3106,6 @@ int KStore::_remove(TransContext *txc,
 		    OnodeRef &o)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
-  RWLock::WLocker l(c->lock);
   int r = _do_remove(txc, o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
@@ -3111,7 +3121,6 @@ int KStore::_setattr(TransContext *txc,
 	   << " " << name << " (" << val.length() << " bytes)"
 	   << dendl;
   int r = 0;
-  RWLock::WLocker l(c->lock);
   o->onode.attrs[name] = val;
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
@@ -3129,7 +3138,6 @@ int KStore::_setattrs(TransContext *txc,
 	   << " " << aset.size() << " keys"
 	   << dendl;
   int r = 0;
-  RWLock::WLocker l(c->lock);
   for (map<string,bufferptr>::const_iterator p = aset.begin();
        p != aset.end(); ++p)
     o->onode.attrs[p->first] = p->second;
@@ -3149,7 +3157,6 @@ int KStore::_rmattr(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << dendl;
   int r = 0;
-  RWLock::WLocker l(c->lock);
   o->onode.attrs.erase(name);
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
@@ -3163,7 +3170,6 @@ int KStore::_rmattrs(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
-  RWLock::WLocker l(c->lock);
   o->onode.attrs.clear();
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
@@ -3194,7 +3200,6 @@ int KStore::_omap_clear(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
-  RWLock::WLocker l(c->lock);
   if (o->onode.omap_head != 0) {
     _do_omap_clear(txc, o->onode.omap_head);
   }
@@ -3211,7 +3216,6 @@ int KStore::_omap_setkeys(TransContext *txc,
   int r;
   bufferlist::iterator p = bl.begin();
   __u32 num;
-  RWLock::WLocker l(c->lock);
   if (!o->onode.omap_head) {
     o->onode.omap_head = o->onode.nid;
     txc->write_onode(o);
@@ -3240,7 +3244,6 @@ int KStore::_omap_setheader(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r;
-  RWLock::WLocker l(c->lock);
   string key;
   if (!o->onode.omap_head) {
     o->onode.omap_head = o->onode.nid;
@@ -3263,7 +3266,6 @@ int KStore::_omap_rmkeys(TransContext *txc,
   bufferlist::iterator p = bl.begin();
   __u32 num;
 
-  RWLock::WLocker l(c->lock);
   if (!o->onode.omap_head) {
     r = 0;
     goto out;
@@ -3295,7 +3297,6 @@ int KStore::_omap_rmkey_range(TransContext *txc,
   string key_first, key_last;
   int r = 0;
 
-  RWLock::WLocker l(c->lock);
   if (!o->onode.omap_head) {
     goto out;
   }
@@ -3331,7 +3332,6 @@ int KStore::_setallochint(TransContext *txc,
 	   << " write_size " << expected_write_size
 	   << dendl;
   int r = 0;
-  RWLock::WLocker l(c->lock);
   o->onode.expected_object_size = expected_object_size;
   o->onode.expected_write_size = expected_write_size;
   txc->write_onode(o);
@@ -3356,7 +3356,6 @@ int KStore::_clone(TransContext *txc,
     return -EINVAL;
   }
 
-  RWLock::WLocker l(c->lock);
   bufferlist bl;
   newo->exists = true;
   _assign_nid(txc, newo);
@@ -3430,7 +3429,6 @@ int KStore::_clone_range(TransContext *txc,
 	   << " to offset " << dstoff << dendl;
   int r = 0;
 
-  RWLock::WLocker l(c->lock);
   bufferlist bl;
   newo->exists = true;
   _assign_nid(txc, newo);
@@ -3463,7 +3461,6 @@ int KStore::_rename(TransContext *txc,
 	   << new_oid << dendl;
   int r;
   ghobject_t old_oid = oldo->oid;
-  RWLock::WLocker l(c->lock);
   bufferlist bl;
   string old_key, new_key;
 
