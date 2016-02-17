@@ -318,6 +318,99 @@ target_link_libraries(ceph_test_stress_watch
   ${CMAKE_DL_LIBS}
   )
 
+# ceph_test_librgw_file (nfs-like RGW interface)
+add_executable(ceph_test_librgw_file
+  librgw_file.cc
+  )
+set_target_properties(ceph_test_librgw_file PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_librgw_file
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+
+# ceph_test_librgw_file_cd (just the rgw_file create-delete bucket ops)
+add_executable(ceph_test_librgw_file_cd
+  librgw_file_cd.cc
+  )
+set_target_properties(ceph_test_librgw_file_cd PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_librgw_file_cd
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+
+# ceph_test_librgw_file_gp (just the rgw_file get-put bucket ops)
+add_executable(ceph_test_librgw_file_gp
+  librgw_file_gp.cc
+  )
+set_target_properties(ceph_test_librgw_file_gp PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_librgw_file_gp
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+
+# ceph_test_librgw_file_nfsns (nfs namespace tests)
+add_executable(ceph_test_librgw_file_nfsns
+  librgw_file_nfsns.cc
+  )
+set_target_properties(ceph_test_librgw_file_nfsns PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_librgw_file_nfsns
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+
+# ceph_test_librgw_file_aw (nfs write transaction [atomic write] tests)
+add_executable(ceph_test_librgw_file_aw
+  librgw_file_aw.cc
+  )
+set_target_properties(ceph_test_librgw_file_aw PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_librgw_file_aw
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+
+# ceph_test_rgw_token
+add_executable(ceph_test_rgw_token
+  test_rgw_token.cc
+  )
+set_target_properties(ceph_test_rgw_token PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_rgw_token
+  rgw
+  os
+  global
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+
+# librgw_file_gp (just the rgw_file get-put bucket ops)
+add_executable(test_rgw_ldap
+  ${CMAKE_SOURCE_DIR}/src/rgw/rgw_ldap.cc
+  test_rgw_ldap.cc
+  )
+set_target_properties(test_rgw_ldap PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_rgw_ldap
+  librados
+  ${OPENLDAP_LIBS}
+  ${Boost_LIBRARIES}
+  ${UNITTEST_LIBS}
+  )
+
 if(${HAVE_FUSE})
   add_executable(ceph_test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
