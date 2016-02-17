@@ -32,7 +32,9 @@ class RGWSwift {
   CephContext *cct;
   atomic_t down_flag;
 
-  int validate_token(const char *token, struct rgw_swift_auth_info *info);
+  int validate_token(RGWRados * store,
+                     const char *token,
+                     rgw_swift_auth_info& info);
   int validate_keystone_token(RGWRados *store,
                               const string& token,
                               struct rgw_swift_auth_info *info);
