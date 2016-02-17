@@ -474,7 +474,6 @@ void KStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
 
   // install a non-existent onode it its place
   po->second.reset(new Onode(old_oid, o->key));
-  po->second->exists = false;
   lru.push_back(*po->second);
 
   // fix oid, key
@@ -607,6 +606,7 @@ KStore::OnodeRef KStore::Collection::get_onode(
     // loaded
     assert(r >=0);
     on = new Onode(oid, key);
+    on->exists = true;
     bufferlist::iterator p = v.begin();
     ::decode(on->onode, p);
   }
@@ -2952,6 +2952,8 @@ int KStore::_zero(TransContext *txc,
 	   << " " << offset << "~" << length
 	   << dendl;
   int r = 0;
+  o->exists = true;
+
   _dump_onode(o);
   _assign_nid(txc, o);
 

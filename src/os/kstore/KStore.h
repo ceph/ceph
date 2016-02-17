@@ -70,7 +70,7 @@ public:
 	oid(o),
 	key(k),
 	dirty(false),
-	exists(true) {
+	exists(false) {
     }
 
     void flush();
