@@ -36,7 +36,7 @@ MYPATH = os.path.abspath(__file__)
 MYDIR = os.path.dirname(MYPATH)
 DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***'
 
-def respawn_in_path(lib_path, pybind_path):
+def respawn_in_path(lib_path, pybind_path, pythonlib_path):
     execv_cmd = ['python']
     if 'CEPH_DBG' in os.environ:
         execv_cmd += ['-mpdb']
@@ -58,12 +58,23 @@ def respawn_in_path(lib_path, pybind_path):
         print >> sys.stderr, DEVMODEMSG
         os.execvp(py_binary, execv_cmd + sys.argv)
     sys.path.insert(0, os.path.join(MYDIR, pybind_path))
+    sys.path.insert(0, os.path.join(MYDIR, pythonlib_path))
+
+def get_pythonlib_dir():
+    """Returns the name of a distutils build directory"""
+    import sysconfig
+    f = "lib.{platform}-{version[0]}.{version[1]}"
+    name = f.format(platform=sysconfig.get_platform(),
+                    version=sys.version_info)
+    return os.path.join('build', name)
 
 if MYDIR.endswith('src') and \
    os.path.exists(os.path.join(MYDIR, '.libs')) and \
-   os.path.exists(os.path.join(MYDIR, 'pybind')):
+   os.path.exists(os.path.join(MYDIR, 'pybind')) and \
+   os.path.exists(os.path.join(MYDIR, 'build')):
 
-    respawn_in_path(os.path.join(MYDIR, '.libs'), "pybind")
+    pythonlib_path = get_pythonlib_dir()
+    respawn_in_path(os.path.join(MYDIR, '.libs'), "pybind", pythonlib_path)
     if os.environ.has_key('PATH') and MYDIR not in os.environ['PATH']:
         os.environ['PATH'] += ':' + MYDIR
 
@@ -81,9 +92,11 @@ elif os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
         # Developer mode, but in a cmake build dir instead of the src dir
         lib_path = os.path.join(os.getcwd(), "src")
         pybind_path = os.path.join(src_path, "src", "pybind")
-        respawn_in_path(lib_path, pybind_path)
+        pythonlib_path = os.path.join(src_path, "src", get_pythonlib_dir())
+        respawn_in_path(lib_path, pybind_path, pythonlib_path)
 
-    sys.path.insert(0, os.path.join(MYDIR, pybind_path))
+        sys.path.insert(0, os.path.join(MYDIR, pybind_path))
+        sys.path.insert(0, os.path.join(MYDIR, pythonlib_path))
 
     # Add src/ to path for e.g. ceph-conf
     if os.environ.has_key('PATH') and lib_path not in os.environ['PATH']:
@@ -101,7 +114,7 @@ import subprocess
 from ceph_argparse import \
     concise_sig, descsort, parse_json_funcsigs, \
     matchnum, validate_command, find_cmd_target, \
-    send_command, json_command
+    send_command, json_command, run_in_thread
 
 from ceph_daemon import DaemonWatcher, admin_socket
 
@@ -525,12 +538,12 @@ def ping_monitor(cluster_handle, name, timeout):
 
     mon_id = name[len('mon.'):]
     if (mon_id == '*') :
-        cluster_handle.connect(timeout=timeout)
+        run_in_thread(cluster_handle.connect, timeout=timeout)
         for m in monids() :
-            s = cluster_handle.ping_monitor(m)
+            s = run_in_thread(cluster_handle.ping_monitor, m)
             print "mon.{0}".format(m) + '\n' + s
     else :
-            s = cluster_handle.ping_monitor(mon_id)
+            s = run_in_thread(cluster_handle.ping_monitor, mon_id)
             print s
     return 0
 
@@ -668,10 +681,11 @@ def main():
         clustername = parsed_args.cluster
 
     try:
-        cluster_handle = rados.Rados(name=name, clustername=clustername,
-                                     conf_defaults=conf_defaults,
-                                     conffile=conffile)
-        retargs = cluster_handle.conf_parse_argv(childargs)
+        cluster_handle = run_in_thread(rados.Rados,
+                                       name=name, clustername=clustername,
+                                       conf_defaults=conf_defaults,
+                                       conffile=conffile)
+        retargs = run_in_thread(cluster_handle.conf_parse_argv, childargs)
     except rados.Error as e:
         print >> sys.stderr, 'Error initializing cluster client: {0}'.\
             format(repr(e))
@@ -714,7 +728,7 @@ def main():
     try:
         if childargs and childargs[0] == 'ping':
             return ping_monitor(cluster_handle, childargs[1], timeout)
-        cluster_handle.connect(timeout=timeout)
+        run_in_thread(cluster_handle.connect, timeout=timeout)
     except KeyboardInterrupt:
         print >> sys.stderr, 'Cluster connection aborted'
         return 1
@@ -761,7 +775,7 @@ def main():
 
         # this instance keeps the watch connection alive, but is
         # otherwise unused
-        rados.MonitorLog(cluster_handle, level, watch_cb, 0)
+        run_in_thread(cluster_handle.monitor_log, level, watch_cb, 0)
 
         # loop forever letting watch_cb print lines
         try:
@@ -939,5 +953,5 @@ if __name__ == '__main__':
     retval = main()
     # shutdown explicitly; Rados() does not
     if cluster_handle:
-        cluster_handle.shutdown()
+        run_in_thread(cluster_handle.shutdown)
     sys.exit(retval)

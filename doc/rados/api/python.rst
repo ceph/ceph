@@ -2,8 +2,7 @@
  Librados (Python)
 ===================
 
-The ``rados`` module is a thin Python wrapper for ``librados``. The source is
-available in ``/src/pybind/rados.py``. You may also install it as a package.
+The ``rados`` module is a thin Python wrapper for ``librados``.
 
 Installation
 ============
@@ -30,7 +29,7 @@ First, create a Python source file for your Ceph client. ::
 Import the Module
 -----------------
 
-To use the ``rados.py`` module, import it into your source file.
+To use the ``rados`` module, import it into your source file.
 
 .. code-block:: python
    :linenos:

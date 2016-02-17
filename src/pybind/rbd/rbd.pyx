@@ -21,6 +21,9 @@ from libc.stdlib cimport realloc, free
 
 from collections import Iterable
 
+cimport rados
+
+
 cdef extern from "Python.h":
     # These are in cpython/string.pxd, but use "object" types instead of
     # PyObject*, which invokes assumptions in cpython that we need to
@@ -296,8 +299,9 @@ cdef make_ex(ret, msg):
     else:
         return Error(msg + (": error code %d" % ret))
 
-cdef rados_ioctx_t convert_ioctx(ioctx) except? NULL:
-    return <rados_ioctx_t><uintptr_t>ioctx.io.value
+
+cdef rados_ioctx_t convert_ioctx(rados.Ioctx ioctx) except? NULL:
+    return <rados_ioctx_t>ioctx.io
 
 cdef int no_op_progress_callback(uint64_t offset, uint64_t total, void* ptr):
     return 0
