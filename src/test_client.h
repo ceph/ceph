@@ -91,7 +91,7 @@ public:
   virtual ~TestClient();
 
   void receive_response(const TestResponse&,
-		       const crimson::dmclock::RespParams<ServerId>&);
+			const crimson::dmclock::RespParams<ServerId>&);
 
   const std::vector<TimePoint>& get_op_times() const { return op_times; }
   uint32_t get_res_count() const { return reservation_counter; }
