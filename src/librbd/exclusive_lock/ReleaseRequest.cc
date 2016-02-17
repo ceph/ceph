@@ -11,6 +11,7 @@
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
@@ -105,6 +106,27 @@ Context *ReleaseRequest<I>::handle_cancel_op_requests(int *ret_val) {
     m_on_releasing = nullptr;
   }
 
+  send_flush_notifies();
+  return nullptr;
+}
+
+template <typename I>
+void ReleaseRequest<I>::send_flush_notifies() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  using klass = ReleaseRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_flush_notifies>(this);
+  m_image_ctx.image_watcher->flush(ctx);
+}
+
+template <typename I>
+Context *ReleaseRequest<I>::handle_flush_notifies(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  assert(*ret_val == 0);
   send_close_journal();
   return nullptr;
 }

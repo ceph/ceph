@@ -141,6 +141,11 @@ public:
                 exec(mock_image_ctx.header_oid, _, "lock", "break_lock", _, _, _))
                   .WillOnce(Return(r));
   }
+
+  void expect_flush_notifies(MockImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.image_watcher, flush(_))
+                  .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
+  }
 };
 
 TEST_F(TestMockExclusiveLockAcquireRequest, Success) {
@@ -153,6 +158,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, Success) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, 0);
 
   MockObjectMap mock_object_map;
@@ -185,6 +191,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessJournalDisabled) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, 0);
 
   MockObjectMap mock_object_map;
@@ -214,6 +221,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessObjectMapDisabled) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, 0);
 
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
@@ -243,6 +251,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, JournalError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, 0);
 
   MockObjectMap *mock_object_map = new MockObjectMap();
@@ -275,6 +284,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, LockBusy) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
@@ -302,6 +312,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, -EINVAL, entity_name_t::CLIENT(1), "",
                        "", "", LOCK_EXCLUSIVE);
@@ -324,6 +335,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoEmpty) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, -ENOENT, entity_name_t::CLIENT(1), "",
                        "", "", LOCK_EXCLUSIVE);
@@ -347,6 +359,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoExternalTag) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", "external tag", LOCK_EXCLUSIVE);
@@ -369,6 +382,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoShared) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
@@ -392,6 +406,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoExternalCookie) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "external cookie", MockExclusiveLock::WATCHER_LOCK_TAG,
@@ -415,6 +430,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetWatchersError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
@@ -439,6 +455,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetWatchersAlive) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
@@ -464,6 +481,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BlacklistDisabled) {
   mock_image_ctx.blacklist_on_break_lock = false;
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
@@ -490,6 +508,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BlacklistError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
@@ -515,6 +534,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BreakLockMissing) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
@@ -542,6 +562,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BreakLockError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,

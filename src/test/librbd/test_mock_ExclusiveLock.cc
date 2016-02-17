@@ -129,6 +129,11 @@ public:
                   .WillRepeatedly(Return(true));
   }
 
+  void expect_flush_notifies(MockImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.image_watcher, flush(_))
+                  .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
+  }
+
   int when_init(MockImageCtx &mock_image_ctx,
                 MockExclusiveLock &exclusive_lock) {
     C_SaferCond ctx;
@@ -262,6 +267,7 @@ TEST_F(TestMockExclusiveLock, TryLockAlreadyLocked) {
   ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
 
   expect_unblock_writes(mock_image_ctx);
+  expect_flush_notifies(mock_image_ctx);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -285,6 +291,7 @@ TEST_F(TestMockExclusiveLock, TryLockBusy) {
   ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
 
   expect_unblock_writes(mock_image_ctx);
+  expect_flush_notifies(mock_image_ctx);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -309,6 +316,7 @@ TEST_F(TestMockExclusiveLock, TryLockError) {
   ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
 
   expect_unblock_writes(mock_image_ctx);
+  expect_flush_notifies(mock_image_ctx);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -359,6 +367,7 @@ TEST_F(TestMockExclusiveLock, RequestLockBlacklist) {
   ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
 
   expect_unblock_writes(mock_image_ctx);
+  expect_flush_notifies(mock_image_ctx);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -437,6 +446,7 @@ TEST_F(TestMockExclusiveLock, ReleaseLockUnlockedState) {
   ASSERT_EQ(0, when_release_lock(mock_image_ctx, exclusive_lock));
 
   expect_unblock_writes(mock_image_ctx);
+  expect_flush_notifies(mock_image_ctx);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -542,7 +552,7 @@ TEST_F(TestMockExclusiveLock, ConcurrentRequests) {
   ASSERT_EQ(0, release_lock_ctx1.wait());
 
   expect_unblock_writes(mock_image_ctx);
-  expect_op_work_queue(mock_image_ctx);
+  expect_flush_notifies(mock_image_ctx);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 

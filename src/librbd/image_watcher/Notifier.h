@@ -8,6 +8,7 @@
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "common/Mutex.h"
+#include <list>
 
 namespace librbd {
 
@@ -26,6 +27,8 @@ public:
   void notify(bufferlist &bl, bufferlist *out_bl, Context *on_finish);
 
 private:
+  typedef std::list<Context*> Contexts;
+
   struct C_AioNotify : public Context {
     Notifier *notifier;
     Context *on_finish;
@@ -42,7 +45,7 @@ private:
 
   Mutex m_aio_notify_lock;
   size_t m_pending_aio_notifies = 0;
-  Context *m_aio_notify_flush = nullptr;
+  Contexts m_aio_notify_flush_ctxs;
 
   void handle_notify(int r, Context *on_finish);
 

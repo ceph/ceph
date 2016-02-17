@@ -8,6 +8,7 @@
 #include "test/librbd/mock/MockObjectMap.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
+#include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
 #include "librbd/image/RefreshRequest.h"
@@ -287,6 +288,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessSnapshotV1) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, snap_create(*ictx, "snap"));
+  ASSERT_EQ(0, ictx->state->refresh());
 
   MockImageCtx mock_image_ctx(*ictx);
   expect_op_work_queue(mock_image_ctx);
