@@ -303,8 +303,10 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
 					    : "false"));
 
   bool encode_key = false;
-  if (strcasecmp(encoding_type.c_str(), "url") == 0)
+  if (strcasecmp(encoding_type.c_str(), "url") == 0) {
+    s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
+  }
 
   if (op_ret >= 0) {
     vector<RGWObjEnt>::iterator iter;
@@ -385,8 +387,10 @@ void RGWListBucket_ObjStore_S3::send_response()
 					    : "false"));
 
   bool encode_key = false;
-  if (strcasecmp(encoding_type.c_str(), "url") == 0)
+  if (strcasecmp(encoding_type.c_str(), "url") == 0) {
+    s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
+  }
 
   if (op_ret >= 0) {
     vector<RGWObjEnt>::iterator iter;
