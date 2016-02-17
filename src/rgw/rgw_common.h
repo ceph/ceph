@@ -292,14 +292,12 @@ class RGWHTTPArgs
   int parse();
   /** Get the value for a specific argument parameter */
   string& get(const string& name, bool *exists = NULL);
-  string& get(const char *name, bool *exists = NULL);
   int get_bool(const string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
 
   /** Get the value for specific system argument parameter */
   string sys_get(const string& name, bool *exists = nullptr);
-  string sys_get(const char *name, bool *exists = nullptr);
 
   /** see if a parameter is contained in this RGWHTTPArgs */
   bool exists(const char *name) {
