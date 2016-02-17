@@ -24,9 +24,16 @@ class RGWValidateSwiftToken : public RGWHTTPClient {
   struct rgw_swift_auth_info *info;
 
 protected:
-  RGWValidateSwiftToken() : RGWHTTPClient(NULL), info(NULL) {}
+  RGWValidateSwiftToken()
+    : RGWHTTPClient(nullptr),
+      info(nullptr) {
+  }
 public:
-  RGWValidateSwiftToken(CephContext *_cct, struct rgw_swift_auth_info *_info) : RGWHTTPClient(_cct), info(_info) {}
+  RGWValidateSwiftToken(CephContext *_cct,
+                        struct rgw_swift_auth_info *_info)
+    : RGWHTTPClient(_cct),
+      info(_info) {
+  }
 
   int receive_header(void *ptr, size_t len);
   int receive_data(void *ptr, size_t len) {
