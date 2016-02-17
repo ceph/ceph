@@ -60,7 +60,7 @@ int main(int argc, char* argv[]) {
 
   // client params
 
-  const int client_outstanding_ops = 10000;
+  const int client_outstanding_ops = 200;
 
   // id -> (client_info, goal iops)
   const std::map<ClientId,std::pair<dmc::ClientInfo,int>> client_info = {

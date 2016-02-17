@@ -12,8 +12,6 @@ else()
   set(my_compile_flags "-g -O0 -Wno-write-strings")
 endif()
 
-add_subdirectory(src)
-
 find_package(gtest REQUIRED)
 if(GTEST_FOUND)
   add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
@@ -24,3 +22,4 @@ else()
   error("Could not find gtest; cannot continue.")
 endif(GTEST_FOUND)
 
+add_subdirectory(src)

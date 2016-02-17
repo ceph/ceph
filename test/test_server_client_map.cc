@@ -11,3 +11,5 @@
 
 #include "gtest/gtest.h"
 
+TEST(client_map, client_idle_erase) {
+}

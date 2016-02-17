@@ -28,7 +28,7 @@
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
 
-
+#include "gtest/gtest_prod.h"
 
 
 namespace crimson {
@@ -135,6 +135,7 @@ namespace crimson {
     // C is client identifier type, R is request type
     template<typename C, typename R>
     class PriorityQueue {
+      FRIEND_TEST(client_map, client_idle_erase);
 
     public:
 
