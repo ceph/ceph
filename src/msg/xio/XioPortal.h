@@ -16,6 +16,8 @@
 #ifndef XIO_PORTAL_H
 #define XIO_PORTAL_H
 
+#include <string>
+
 extern "C" {
 #include "libxio.h"
 }
@@ -427,8 +429,10 @@ public:
     }
 
     for (p_ix = 0; p_ix < nportals; ++p_ix) {
+      string thread_name = "ms_xio_";
+      thread_name.append(std::to_string(p_ix));
       portal = portals[p_ix];
-      portal->create(portal->portal_id);
+      portal->create(thread_name.c_str());
     }
   }
 
