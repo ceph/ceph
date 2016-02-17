@@ -405,10 +405,10 @@ static void get_omap_tail(uint64_t id, string *out)
 
 void KStore::Onode::flush()
 {
-  Mutex::Locker l(flush_lock);
+  std::unique_lock<std::mutex> l(flush_lock);
   dout(20) << __func__ << " " << flush_txns << dendl;
   while (!flush_txns.empty())
-    flush_cond.Wait(flush_lock);
+    flush_cond.wait(l);
   dout(20) << __func__ << " done" << dendl;
 }
 
@@ -426,7 +426,7 @@ void KStore::OnodeHashLRU::_touch(OnodeRef o)
 
 void KStore::OnodeHashLRU::add(const ghobject_t& oid, OnodeRef o)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(30) << __func__ << " " << oid << " " << o << dendl;
   assert(onode_map.count(oid) == 0);
   onode_map[oid] = o;
@@ -435,7 +435,7 @@ void KStore::OnodeHashLRU::add(const ghobject_t& oid, OnodeRef o)
 
 KStore::OnodeRef KStore::OnodeHashLRU::lookup(const ghobject_t& oid)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(30) << __func__ << dendl;
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
   if (p == onode_map.end()) {
@@ -449,7 +449,7 @@ KStore::OnodeRef KStore::OnodeHashLRU::lookup(const ghobject_t& oid)
 
 void KStore::OnodeHashLRU::clear()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << dendl;
   lru.clear();
   onode_map.clear();
@@ -457,7 +457,7 @@ void KStore::OnodeHashLRU::clear()
 
 void KStore::OnodeHashLRU::remove(const ghobject_t& oid)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
   if (p == onode_map.end()) {
     dout(30) << __func__ << " " << oid << " miss" << dendl;
@@ -472,7 +472,7 @@ void KStore::OnodeHashLRU::remove(const ghobject_t& oid)
 void KStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
 				    const ghobject_t& new_oid)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(30) << __func__ << " " << old_oid << " -> " << new_oid << dendl;
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator po, pn;
   po = onode_map.find(old_oid);
@@ -502,7 +502,7 @@ bool KStore::OnodeHashLRU::get_next(
   const ghobject_t& after,
   pair<ghobject_t,OnodeRef> *next)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(20) << __func__ << " after " << after << dendl;
 
   if (after == ghobject_t()) {
@@ -530,7 +530,7 @@ bool KStore::OnodeHashLRU::get_next(
 
 int KStore::OnodeHashLRU::trim(int max)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
   dout(20) << __func__ << " max " << max
 	   << " size " << onode_map.size() << dendl;
   int trimmed = 0;
@@ -644,16 +644,13 @@ KStore::KStore(CephContext *cct, const string& path)
     fsid_fd(-1),
     mounted(false),
     coll_lock("KStore::coll_lock"),
-    nid_lock("KStore::nid_lock"),
     nid_max(0),
     throttle_ops(cct, "kstore_max_ops", cct->_conf->kstore_max_ops),
     throttle_bytes(cct, "kstore_max_bytes", cct->_conf->kstore_max_bytes),
     finisher(cct),
     kv_sync_thread(this),
-    kv_lock("KStore::kv_lock"),
     kv_stop(false),
-    logger(NULL),
-    reap_lock("KStore::reap_lock")
+    logger(NULL)
 {
   _init_logger();
 }
@@ -1370,13 +1367,12 @@ void KStore::_sync()
 {
   dout(10) << __func__ << dendl;
 
-  kv_lock.Lock();
+  std::unique_lock<std::mutex> l(kv_lock);
   while (!kv_committing.empty() ||
 	 !kv_queue.empty()) {
     dout(20) << " waiting for kv to commit" << dendl;
-    kv_sync_cond.Wait(kv_lock);
+    kv_sync_cond.wait(l);
   }
-  kv_lock.Unlock();
 
   dout(10) << __func__ << " done" << dendl;
 }
@@ -1401,17 +1397,15 @@ KStore::CollectionRef KStore::_get_collection(coll_t cid)
 void KStore::_queue_reap_collection(CollectionRef& c)
 {
   dout(10) << __func__ << " " << c->cid << dendl;
-  Mutex::Locker l(reap_lock);
+  std::lock_guard<std::mutex> l(reap_lock);
   removed_collections.push_back(c);
 }
 
 void KStore::_reap_collections()
 {
-  reap_lock.Lock();
-
   list<CollectionRef> removed_colls;
+  std::lock_guard<std::mutex> l(reap_lock);
   removed_colls.swap(removed_collections);
-  reap_lock.Unlock();
 
   for (list<CollectionRef>::iterator p = removed_colls.begin();
        p != removed_colls.end();
@@ -2162,7 +2156,7 @@ void KStore::_assign_nid(TransContext *txc, OnodeRef o)
 {
   if (o->onode.nid)
     return;
-  Mutex::Locker l(nid_lock);
+  std::lock_guard<std::mutex> l(nid_lock);
   o->onode.nid = ++nid_last;
   dout(20) << __func__ << " " << o->oid << " nid " << o->onode.nid << dendl;
   if (nid_last > nid_max) {
@@ -2192,12 +2186,12 @@ void KStore::_txc_state_proc(TransContext *txc)
     case TransContext::STATE_PREPARE:
       txc->state = TransContext::STATE_KV_QUEUED;
       if (!g_conf->kstore_sync_transaction) {
-	Mutex::Locker l(kv_lock);
+	std::lock_guard<std::mutex> l(kv_lock);
 	if (g_conf->kstore_sync_submit_transaction) {
 	  db->submit_transaction(txc->t);
 	}
 	kv_queue.push_back(txc);
-	kv_cond.SignalOne();
+	kv_cond.notify_one();
 	return;
       }
       db->submit_transaction_sync(txc->t);
@@ -2239,7 +2233,7 @@ int KStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
     dout(20) << " onode size is " << bl.length() << dendl;
     txc->t->set(PREFIX_OBJ, (*p)->key, bl);
 
-    Mutex::Locker l((*p)->flush_lock);
+    std::lock_guard<std::mutex> l((*p)->flush_lock);
     (*p)->flush_txns.insert(txc);
   }
 
@@ -2280,13 +2274,13 @@ void KStore::_txc_finish(TransContext *txc)
   for (set<OnodeRef>::iterator p = txc->onodes.begin();
        p != txc->onodes.end();
        ++p) {
-    Mutex::Locker l((*p)->flush_lock);
+    std::lock_guard<std::mutex> l((*p)->flush_lock);
     dout(20) << __func__ << " onode " << *p << " had " << (*p)->flush_txns
 	     << dendl;
     assert((*p)->flush_txns.count(txc));
     (*p)->flush_txns.erase(txc);
     if ((*p)->flush_txns.empty()) {
-      (*p)->flush_cond.Signal();
+      (*p)->flush_cond.notify_all();
       (*p)->clear_pending_stripes();
     }
   }
@@ -2300,16 +2294,15 @@ void KStore::_txc_finish(TransContext *txc)
   }
 
   OpSequencerRef osr = txc->osr;
-  osr->qlock.Lock();
+  std::lock_guard<std::mutex> l(osr->qlock);
   txc->state = TransContext::STATE_DONE;
-  osr->qlock.Unlock();
 
   _osr_reap_done(osr.get());
 }
 
 void KStore::_osr_reap_done(OpSequencer *osr)
 {
-  Mutex::Locker l(osr->qlock);
+  std::lock_guard<std::mutex> l(osr->qlock);
   dout(20) << __func__ << " osr " << osr << dendl;
   while (!osr->q.empty()) {
     TransContext *txc = &osr->q.front();
@@ -2325,7 +2318,7 @@ void KStore::_osr_reap_done(OpSequencer *osr)
 
     osr->q.pop_front();
     delete txc;
-    osr->qcond.Signal();
+    osr->qcond.notify_all();
     if (osr->q.empty())
       dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
   }
@@ -2334,21 +2327,21 @@ void KStore::_osr_reap_done(OpSequencer *osr)
 void KStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
-  kv_lock.Lock();
+  std::unique_lock<std::mutex> l(kv_lock);
   while (true) {
     assert(kv_committing.empty());
     if (kv_queue.empty()) {
       if (kv_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
-      kv_sync_cond.Signal();
-      kv_cond.Wait(kv_lock);
+      kv_sync_cond.notify_all();
+      kv_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
       dout(20) << __func__ << " committing " << kv_queue.size() << dendl;
       kv_committing.swap(kv_queue);
       utime_t start = ceph_clock_now(NULL);
-      kv_lock.Unlock();
+      l.unlock();
 
       dout(30) << __func__ << " committing txc " << kv_committing << dendl;
 
@@ -2375,10 +2368,9 @@ void KStore::_kv_sync_thread()
       // this is as good a place as any ...
       _reap_collections();
 
-      kv_lock.Lock();
+      l.lock();
     }
   }
-  kv_lock.Unlock();
   dout(10) << __func__ << " finish" << dendl;
 }
 
