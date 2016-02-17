@@ -60,7 +60,7 @@ void JournalTool::usage()
     << "    <output>: [summary|binary|json] [--path <path>]\n"
     << "\n"
     << "Options:\n"
-    << "  --rank=<int>  Journal rank (default 0)\n";
+    << "  --rank=<str>  Journal rank (default 0)\n";
 
   generic_client_usage();
 }
@@ -82,14 +82,17 @@ int JournalTool::main(std::vector<const char*> &argv)
   }
 
   std::vector<const char*>::iterator arg = argv.begin();
+
   std::string rank_str;
-  if(ceph_argparse_witharg(argv, arg, &rank_str, "--rank", (char*)NULL)) {
-    std::string rank_err;
-    rank = strict_strtol(rank_str.c_str(), 10, &rank_err);
-    if (!rank_err.empty()) {
-        derr << "Bad rank '" << rank_str << "'" << dendl;
-        usage();
-    }
+  if(!ceph_argparse_witharg(argv, arg, &rank_str, "--rank", (char*)NULL)) {
+    // Default: act on rank 0.  Will give the user an error if they
+    // try invoking this way when they have more than one filesystem.
+    rank_str = "0";
+  }
+
+  r = role_selector.parse(*fsmap, rank_str);
+  if (r != 0) {
+    return r;
   }
 
   std::string mode;
@@ -111,7 +114,9 @@ int JournalTool::main(std::vector<const char*> &argv)
   dout(4) << "JournalTool: connecting to RADOS..." << dendl;
   rados.connect();
  
-  int const pool_id = mdsmap->get_metadata_pool();
+  auto fs = fsmap->get_filesystem(role_selector.get_ns());
+  assert(fs != nullptr);
+  int const pool_id = fs->mds_map.get_metadata_pool();
   dout(4) << "JournalTool: resolving pool " << pool_id << dendl;
   std::string pool_name;
   r = rados.pool_reverse_lookup(pool_id, &pool_name);
@@ -126,18 +131,27 @@ int JournalTool::main(std::vector<const char*> &argv)
 
   // Execution
   // =========
-  dout(4) << "Executing for rank " << rank << dendl;
-  if (mode == std::string("journal")) {
-    return main_journal(argv);
-  } else if (mode == std::string("header")) {
-    return main_header(argv);
-  } else if (mode == std::string("event")) {
-    return main_event(argv);
-  } else {
-    derr << "Bad command '" << mode << "'" << dendl;
-    usage();
-    return -EINVAL;
+  for (auto role : role_selector.get_roles()) {
+    rank = role.rank;
+    dout(4) << "Executing for rank " << rank << dendl;
+    if (mode == std::string("journal")) {
+      r = main_journal(argv);
+    } else if (mode == std::string("header")) {
+      r = main_header(argv);
+    } else if (mode == std::string("event")) {
+      r = main_event(argv);
+    } else {
+      derr << "Bad command '" << mode << "'" << dendl;
+      usage();
+      return -EINVAL;
+    }
+
+    if (r != 0) {
+      return r;
+    }
   }
+
+  return r;
 }
 
 
@@ -528,7 +542,7 @@ int JournalTool::journal_export(std::string const &path, bool import)
    */
   {
     Dumper dumper;
-    r = dumper.init(rank);
+    r = dumper.init(mds_role_t(role_selector.get_ns(), rank));
     if (r < 0) {
       derr << "dumper::init failed: " << cpp_strerror(r) << dendl;
       return r;
@@ -558,15 +572,10 @@ int JournalTool::journal_reset(bool hard)
     return r;
   }
 
-  if (mdsmap->is_dne(mds_rank_t(rank))) {
-    std::cerr << "MDS rank " << rank << " does not exist" << std::endl;
-    return -ENOENT;
-  }
-
   if (hard) {
-    r = resetter.reset_hard(rank);
+    r = resetter.reset_hard(mds_role_t(role_selector.get_ns(), rank));
   } else {
-    r = resetter.reset(rank);
+    r = resetter.reset(mds_role_t(role_selector.get_ns(), rank));
   }
   resetter.shutdown();
 
@@ -1209,8 +1218,9 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
   int r = 0;
 
   // InoTable is a per-MDS structure, so iterate over assigned ranks
+  auto fs = fsmap->get_filesystem(role_selector.get_ns());
   std::set<mds_rank_t> in_ranks;
-  mdsmap->get_mds_set(in_ranks);
+  fs->mds_map.get_mds_set(in_ranks);
 
   for (std::set<mds_rank_t>::iterator rank_i = in_ranks.begin();
       rank_i != in_ranks.end(); ++rank_i)

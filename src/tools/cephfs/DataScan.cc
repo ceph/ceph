@@ -36,7 +36,7 @@ void DataScan::usage()
     << "\n"
     << "    --force-corrupt: overrite apparently corrupt structures\n"
     << "    --force-init: write root inodes even if they exist\n"
-    << "    --force-pool: use data pool even if it is not in MDSMap\n"
+    << "    --force-pool: use data pool even if it is not in FSMap\n"
     << "\n"
     << "  cephfs-data-scan scan_frags [--force-corrupt]\n"
     << "\n"
@@ -88,6 +88,15 @@ bool DataScan::parse_kwarg(
   } else if (arg == std::string("--filter-tag")) {
     filter_tag = val;
     dout(10) << "Applying tag filter: '" << filter_tag << "'" << dendl;
+    return true;
+  } else if (arg == std::string("--filesystem")) {
+    std::shared_ptr<Filesystem> fs;
+    *r = fsmap->parse_filesystem(val, &fs);
+    if (*r != 0) {
+      std::cerr << "Invalid filesystem '" << val << "'" << std::endl;
+      return false;
+    }
+    fscid = fs->fscid;
     return true;
   } else {
     return false;
@@ -168,6 +177,19 @@ int DataScan::main(const std::vector<const char*> &args)
     return -EINVAL;
   }
 
+  // If caller didn't specify a namespace, try to pick
+  // one if only one exists
+  if (fscid == FS_CLUSTER_ID_NONE) {
+    if (fsmap->get_filesystems().size() == 1) {
+      fscid = fsmap->get_filesystems().begin()->first;
+    } else {
+      std::cerr << "Specify a filesystem with --filesystem" << std::endl;
+      return -EINVAL;
+    }
+  }
+  auto fs =  fsmap->get_filesystem(fscid);
+  assert(fs != nullptr);
+
   // Default to output to metadata pool
   if (driver == NULL) {
     driver = new MetadataDriver();
@@ -178,7 +200,7 @@ int DataScan::main(const std::vector<const char*> &args)
 
   dout(4) << "connecting to RADOS..." << dendl;
   rados.connect();
-  r = driver->init(rados, mdsmap);
+  r = driver->init(rados, fsmap, fscid);
   if (r < 0) {
     return r;
   }
@@ -201,7 +223,7 @@ int DataScan::main(const std::vector<const char*> &args)
         << "' has ID " << data_pool_id << dendl;
     }
 
-    if (!mdsmap->is_data_pool(data_pool_id)) {
+    if (!fs->mds_map.is_data_pool(data_pool_id)) {
       std::cerr << "Warning: pool '" << data_pool_name << "' is not a "
         "CephFS data pool!" << std::endl;
       if (!force_pool) {
@@ -219,7 +241,13 @@ int DataScan::main(const std::vector<const char*> &args)
 
   // Initialize metadata_io from MDSMap for scan_frags
   if (command == "scan_frags") {
-    int const metadata_pool_id = mdsmap->get_metadata_pool();
+    const auto fs = fsmap->get_filesystem(fscid);
+    if (fs == nullptr) {
+      std::cerr << "Filesystem id " << fscid << " does not exist" << std::endl;
+      return -ENOENT;
+    }
+    int const metadata_pool_id = fs->mds_map.get_metadata_pool();
+
     dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
     std::string metadata_pool_name;
     int r = rados.pool_reverse_lookup(metadata_pool_id, &metadata_pool_name);
@@ -269,7 +297,7 @@ int DataScan::main(const std::vector<const char*> &args)
   } else if (command == "tmap_upgrade") {
     return tmap_upgrade();
   } else if (command == "init") {
-    return driver->init_roots(mdsmap->get_first_data_pool());
+    return driver->init_roots(fs->mds_map.get_first_data_pool());
   } else {
     std::cerr << "Unknown command '" << command << "'" << std::endl;
     return -EINVAL;
@@ -1533,9 +1561,12 @@ int MetadataDriver::inject_linkage(
 }
 
 
-int MetadataDriver::init(librados::Rados &rados, const MDSMap *mdsmap)
+int MetadataDriver::init(
+    librados::Rados &rados, const FSMap *fsmap, fs_cluster_id_t fscid)
 {
-  int const metadata_pool_id = mdsmap->get_metadata_pool();
+  auto fs =  fsmap->get_filesystem(fscid);
+  assert(fs != nullptr);
+  int const metadata_pool_id = fs->mds_map.get_metadata_pool();
 
   dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
   std::string metadata_pool_name;
@@ -1549,7 +1580,8 @@ int MetadataDriver::init(librados::Rados &rados, const MDSMap *mdsmap)
   return rados.ioctx_create(metadata_pool_name.c_str(), metadata_io);
 }
 
-int LocalFileDriver::init(librados::Rados &rados, const MDSMap *mdsmap)
+int LocalFileDriver::init(
+    librados::Rados &rados, const FSMap *fsmap, fs_cluster_id_t fscid)
 {
   return 0;
 }
