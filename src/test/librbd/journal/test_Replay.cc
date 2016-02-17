@@ -64,7 +64,7 @@ public:
 	&active_set, &registered_clients, &cond);
     ASSERT_EQ(0, cond.wait());
     std::set<cls::journal::Client>::const_iterator c;
-    for (c = registered_clients.begin(); c != registered_clients.end(); c++) {
+    for (c = registered_clients.begin(); c != registered_clients.end(); ++c) {
       if (c->id == client_id) {
 	break;
       }
@@ -76,7 +76,7 @@ public:
     cls::journal::EntryPositions entry_positions =
 	c->commit_position.entry_positions;
     cls::journal::EntryPositions::const_iterator p;
-    for (p = entry_positions.begin(); p != entry_positions.end(); p++) {
+    for (p = entry_positions.begin(); p != entry_positions.end(); ++p) {
       if (p->tag_tid == 0) {
 	break;
       }
