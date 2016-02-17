@@ -37,9 +37,7 @@ namespace ceph {
     /* with attrs */
     void dump_string_with_attrs(const char *name, const std::string& s, const FormatterAttrs& attrs);
   private:
-	template <typename T> void dump_template(const char *name, T arg);
-
-    bool m_header_done;
+    template <typename T> void dump_template(const char *name, T arg);
 
     int m_status;
     const char* m_status_name;
