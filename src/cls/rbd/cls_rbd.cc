@@ -3068,7 +3068,7 @@ int mirror_set_enabled(cls_method_context_t hctx, bufferlist *in,
     }
   } else {
     std::vector<cls::rbd::MirrorPeer> peers;
-    int r = mirror::read_peers(hctx, &peers);
+    r = mirror::read_peers(hctx, &peers);
     if (r < 0 && r != -ENOENT) {
       return r;
     }
