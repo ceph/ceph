@@ -27,11 +27,13 @@ static TimePoint now() { return std::chrono::system_clock::now(); }
 
 TEST(test_client, full_bore_timing) {
   std::atomic_ulong count(0);
+  char server = 'a';
 
   TestResponse resp(0);
   dmc::RespParams<ServerId>
-    resp_params(ServerId(0), dmc::PhaseType::priority);
+    resp_params(server, dmc::PhaseType::priority);
   TestClient* client;
+
 
   auto start = now();
   client = new TestClient(ClientId(0),
@@ -41,8 +43,8 @@ TEST(test_client, full_bore_timing) {
 			    ++count;
 			    client->receive_response(resp, resp_params);
 			  },
-			  [] (const uint64_t seed) -> ServerId {
-			    return ServerId(0);
+			  [&] (const uint64_t seed) -> ServerId& {
+			    return server;
 			  },
 			  1000, // ops to run
 			  100, // iops goal
@@ -62,9 +64,11 @@ TEST(test_client, paused_timing) {
   std::atomic_ulong unresponded_count(0);
   std::atomic_bool auto_respond(false);
 
+  char server = 'a';
+
   TestResponse resp(0);
   dmc::RespParams<ServerId>
-    resp_params(ServerId(0), dmc::PhaseType::priority);
+    resp_params(server, dmc::PhaseType::priority);
   TestClient* client;
 
   auto start = now();
@@ -79,8 +83,8 @@ TEST(test_client, paused_timing) {
 			      ++unresponded_count;
 			    }
 			  },
-			  [] (const uint64_t seed) -> ServerId {
-			    return ServerId(0);
+			  [&] (const uint64_t seed) -> ServerId& {
+			    return server;
 			  },
 			  1000, // ops to run
 			  100, // iops goal
