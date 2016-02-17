@@ -930,13 +930,12 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_pool", false);
 
     string start = METADATA_CONF_PREFIX;
-    int r = 0, j = 0;
     md_config_t local_config_t;
 
     bool retrieve_metadata = !old_format;
     while (retrieve_metadata) {
       map<string, bufferlist> pairs, res;
-      r = cls_client::metadata_list(&md_ctx, header_oid, start, max_conf_items,
+      int r = cls_client::metadata_list(&md_ctx, header_oid, start, max_conf_items,
                                     &pairs);
       if (r == -EOPNOTSUPP || r == -EIO) {
         ldout(cct, 10) << "config metadata not supported by OSD" << dendl;
@@ -955,7 +954,7 @@ struct C_InvalidateCache : public Context {
       for (map<string, bufferlist>::iterator it = res.begin();
            it != res.end(); ++it) {
         string val(it->second.c_str(), it->second.length());
-        j = local_config_t.set_val(it->first.c_str(), val);
+        int j = local_config_t.set_val(it->first.c_str(), val);
         if (j < 0) {
           lderr(cct) << __func__ << " failed to set config " << it->first
                      << " with value " << it->second.c_str() << ": " << j
