@@ -363,9 +363,9 @@ int KernelDevice::aio_write(
   assert(off < size);
   assert(off + len <= size);
 
-  if (!bl.is_n_page_sized() || !bl.is_page_aligned()) {
-    dout(20) << __func__ << " rebuilding buffer to be page-aligned" << dendl;
-    bl.rebuild();
+  if (!bl.is_n_align_sized(block_size) || !bl.is_aligned(block_size)) {
+    dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
+    bl.rebuild_aligned(block_size);
   }
 
   dout(40) << "data: ";
