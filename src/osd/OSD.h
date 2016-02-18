@@ -660,22 +660,10 @@ public:
 
   // -- agent shared state --
   Mutex agent_lock;
-  Cond agent_cond;
-  map<uint64_t, set<PGRef> > agent_queue;
-  set<PGRef>::iterator agent_queue_pos;
-  bool agent_valid_iterator;
   int agent_ops;
   int flush_mode_high_count; //once have one pg with FLUSH_MODE_HIGH then flush objects with high speed
   set<hobject_t, hobject_t::BitwiseComparator> agent_oids;
   bool agent_active;
-  struct AgentThread : public Thread {
-    OSDService *osd;
-    explicit AgentThread(OSDService *o) : osd(o) {}
-    void *entry() {
-      osd->agent_entry();
-      return NULL;
-    }
-  } agent_thread;
   bool agent_stop_flag;
   Mutex agent_timer_lock;
   SafeTimer agent_timer;
