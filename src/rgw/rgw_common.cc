@@ -659,13 +659,6 @@ string& RGWHTTPArgs::get(const string& name, bool *exists)
   return empty_str;
 }
 
-string& RGWHTTPArgs::get(const char *name, bool *exists)
-{
-  string s(name);
-  return get(s, exists);
-}
-
-
 int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists)
 {
   map<string, string>::iterator iter;
@@ -702,6 +695,18 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
       !exists) {
     *val = def_val;
   }
+}
+
+string RGWHTTPArgs::sys_get(const string& name, bool * const exists)
+{
+  const auto iter = sys_val_map.find(name);
+  const bool e = (iter != val_map.end());
+
+  if (exists) {
+    *exists = e;
+  }
+
+  return e ? iter->second : string();
 }
 
 bool verify_requester_payer_permission(struct req_state *s)
