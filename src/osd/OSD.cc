@@ -511,60 +511,41 @@ public:
   }
 };
 
-void OSDService::agent_entry()
+void OSDService::agent_entry(PGRef pg)
 {
   dout(10) << __func__ << " start" << dendl;
-  agent_lock.Lock();
-
-  while (!agent_stop_flag) {
-    if (agent_queue.empty()) {
-      dout(20) << __func__ << " empty queue" << dendl;
-      agent_cond.Wait(agent_lock);
-      continue;
+  int agent_flush_quota;
+  int max;
+  {
+    Mutex::Locker l(agent_lock);
+    if(agent_stop_flag || !agent_active){
+      return ;
     }
-    uint64_t level = agent_queue.rbegin()->first;
-    set<PGRef>& top = agent_queue.rbegin()->second;
-    dout(10) << __func__
-	     << " tiers " << agent_queue.size()
-	     << ", top is " << level
-	     << " with pgs " << top.size()
-	     << ", ops " << agent_ops << "/"
-	     << g_conf->osd_agent_max_ops
-	     << (agent_active ? " active" : " NOT ACTIVE")
-	     << dendl;
-    dout(20) << __func__ << " oids " << agent_oids << dendl;
-    if (agent_ops >= g_conf->osd_agent_max_ops || top.empty() ||
-	!agent_active) {
-      agent_cond.Wait(agent_lock);
-      continue;
-    }
-
-    if (!agent_valid_iterator || agent_queue_pos == top.end()) {
-      agent_queue_pos = top.begin();
-      agent_valid_iterator = true;
-    }
-    PGRef pg = *agent_queue_pos;
-    int max = g_conf->osd_agent_max_ops - agent_ops;
-    int agent_flush_quota = max;
-    if (!flush_mode_high_count)
+    
+    max = g_conf->osd_agent_max_ops - agent_ops;
+    agent_flush_quota = max;
+  
+    if (!flush_mode_high_count){
       agent_flush_quota = g_conf->osd_agent_max_low_ops - agent_ops;
-    dout(10) << "high_count " << flush_mode_high_count << " agent_ops " << agent_ops << " flush_quota " << agent_flush_quota << dendl;
-    agent_lock.Unlock();
-    if (!pg->agent_work(max, agent_flush_quota)) {
-      dout(10) << __func__ << " " << pg->get_pgid()
+    }
+    
+    dout(10) << __func__ << " high_count " << flush_mode_high_count
+    	     << " agent_ops " << agent_ops 
+    	     << " flush_quota " << agent_flush_quota << dendl;
+  }
+
+  if (!pg->agent_work(max, agent_flush_quota)) {
+    dout(10) << __func__ << " " << pg->get_pgid()
 	<< " no agent_work, delay for " << g_conf->osd_agent_delay_time
 	<< " seconds" << dendl;
 
-      osd->logger->inc(l_osd_tier_delay);
-      // Queue a timer to call agent_choose_mode for this pg in 5 seconds
-      agent_timer_lock.Lock();
-      Context *cb = new AgentTimeoutCB(pg);
-      agent_timer.add_event_after(g_conf->osd_agent_delay_time, cb);
-      agent_timer_lock.Unlock();
-    }
-    agent_lock.Lock();
+    osd->logger->inc(l_osd_tier_delay);
+    // Queue a timer to call agent_choose_mode for this pg in 5 seconds
+    agent_timer_lock.Lock();
+    Context *cb = new AgentTimeoutCB(pg);
+    agent_timer.add_event_after(g_conf->osd_agent_delay_time, cb);
+    agent_timer_lock.Unlock();
   }
-  agent_lock.Unlock();
   dout(10) << __func__ << " finish" << dendl;
 }
 

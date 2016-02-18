@@ -735,7 +735,7 @@ public:
     }
   }agent_wq;
 
-  void agent_entry();
+  void agent_entry(PGRef pg);
   void agent_stop();
 
   void _enqueue(PG *pg, uint64_t priority) {
