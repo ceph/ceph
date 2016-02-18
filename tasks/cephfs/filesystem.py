@@ -2,6 +2,7 @@
 from StringIO import StringIO
 import json
 import logging
+from gevent import Greenlet
 import os
 import time
 import datetime
@@ -752,8 +753,32 @@ class Filesystem(object):
         """
         return self._run_tool("cephfs-table-tool", args, None, quiet)
 
-    def data_scan(self, args, quiet=False):
+    def data_scan(self, args, quiet=False, worker_count=1):
         """
         Invoke cephfs-data-scan with the passed arguments, and return its stdout
+
+        :param worker_count: if greater than 1, multiple workers will be run
+                             in parallel and the return value will be None
         """
-        return self._run_tool("cephfs-data-scan", args, None, quiet)
+
+        workers = []
+
+        for n in range(0, worker_count):
+            if worker_count > 1:
+                # data-scan args first token is a command, followed by args to it.
+                # insert worker arguments after the command.
+                cmd = args[0]
+                worker_args = [cmd] + ["--worker_n", n.__str__(), "--worker_m", worker_count.__str__()] + args[1:]
+            else:
+                worker_args = args
+
+            workers.append(Greenlet.spawn(lambda wargs=worker_args:
+                                          self._run_tool("cephfs-data-scan", wargs, None, quiet)))
+
+        for w in workers:
+            w.get()
+
+        if worker_count == 1:
+            return workers[0].value
+        else:
+            return None
