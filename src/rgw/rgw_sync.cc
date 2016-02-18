@@ -1566,6 +1566,7 @@ public:
         // wait for each shard to complete
         collect(&ret);
         if (ret < 0) {
+          drain_all();
           return set_cr_error(ret);
         }
         drain_all();
