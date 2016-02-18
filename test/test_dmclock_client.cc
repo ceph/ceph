@@ -6,6 +6,8 @@
 
 
 #include <chrono>
+#include <mutex>
+#include <functional>
 #include <iostream>
 
 
@@ -20,6 +22,14 @@ namespace dmc = crimson::dmclock;
 namespace crimson {
   namespace dmclock {
 
+    /*
+     * Allows us to test the code provided with the mutex provided locked.
+     */
+    void test_locked(std::mutex& mtx, std::function<void()> code) {
+      std::unique_lock<std::mutex> l(mtx);
+      code();
+    }
+
     using ServerId = int;
     using ClientId = int;
 
@@ -31,6 +41,10 @@ namespace crimson {
 
       dmc::ServiceTracker<ServerId> st(std::chrono::seconds(2),
                                        std::chrono::seconds(3));
+
+      auto lock_st = [&](std::function<void()> code) {
+	test_locked(st.data_mtx, code);
+      };
 
 
       /* The timeline should be as follows:
@@ -52,24 +66,33 @@ namespace crimson {
        *     7 seconds : verified server is gone (map size 0)
        */
 
-      EXPECT_EQ(st.server_map.size(), 0) << "server map initially has size 0";
+      lock_st([&] () {
+	  EXPECT_EQ(st.server_map.size(), 0) << "server map initially has size 0";
+	});
+
 
       std::this_thread::sleep_for(std::chrono::seconds(1));
 
       auto req_params = st.get_req_params(client, server);
 
-      EXPECT_EQ(st.server_map.size(), 1) <<
-	"server map has size 1 after first request";
+      lock_st([&] () {
+	  EXPECT_EQ(st.server_map.size(), 1) <<
+	    "server map has size 1 after first request";
+	});
 
       std::this_thread::sleep_for(std::chrono::seconds(4));
 
-      EXPECT_EQ(st.server_map.size(), 1) <<
-	"server map has size 1 just before erase";
+      lock_st([&] () {
+	  EXPECT_EQ(st.server_map.size(), 1) <<
+	    "server map has size 1 just before erase";
+	});
 
       std::this_thread::sleep_for(std::chrono::seconds(2));
 
-      EXPECT_EQ(st.server_map.size(), 0) <<
-	"server map has size 0 just after erase";
+      lock_st([&] () {
+	  EXPECT_EQ(st.server_map.size(), 0) <<
+	    "server map has size 0 just after erase";
+	});
     } // TEST
   } // namespace dmclock
 } // namespace crimson
