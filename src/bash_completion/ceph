@@ -2,72 +2,85 @@
 # Ceph - scalable distributed file system
 #
 # Copyright (C) 2011 Wido den Hollander <wido@widodh.nl>
+# Copyright (C) 2015 Mirantis Inc. <akupczyk@mirantis.com>
 #
 # This is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License version 2.1, as published by the Free Software
-# Foundation.  See file COPYING.
+# Foundation.
 #
 
 _ceph()
 {
-        local cur prev
+#COMPREPLY=( \  "#comment to option" ); return 0
+    local options_noarg="-h --help -s --status -w --watch --watch-debug --watch-info --watch-sec --watch-warn --watch-error --version -v --verbose --concise"
+    local options_arg="-c --conf -i --in-file -o --out-file --id --user -n --name --cluster --admin-daemon --admin-socket -f --format --connect-timeout"
+    local cnt=${#COMP_WORDS[@]}
+    local cur=${COMP_WORDS[COMP_CWORD]}
+    local prev=${COMP_WORDS[COMP_CWORD-1]}
+    local help=/tmp/ceph-help.tmp
 
-        COMPREPLY=()
-        cur="${COMP_WORDS[COMP_CWORD]}"
-        prev="${COMP_WORDS[COMP_CWORD-1]}"
-        prevprev="${COMP_WORDS[COMP_CWORD-2]}"
+    if [[ " -c --conf -i --in-file -o --out-file " =~ " ${prev} " ]]
+    then
+	#default autocomplete for options (file autocomplete)
+	compopt -o default;COMPREPLY=();return 0
+    fi
+    if [[ "${cur:0:1}" == "-" ]] ;
+    then
+	COMPREPLY=( $(compgen -W "${options_noarg} ${options_arg}" -- $cur) )
+	return 0
+    fi
+    str=
+    for (( i=1 ; i<cnt ; i++ ))
+    do
+	#skip this word if it is option
+	if [[ " ${options_noarg} " =~ " ${COMP_WORDS[i]} " ]] ;	then continue; fi
+	#skip this word and next if it is option with arg
+	if [[ " ${options_arg} " =~ " ${COMP_WORDS[i]} " ]] ;   then ((i++)); continue;	fi
+	#make add " " when concetenating words (used for searching)
+	[[ "$str" != "" ]] && str=$str" "
+	str=$str${COMP_WORDS[i]}
+    done
+    #if we do not have ceph-help.tmp, create it
+    if [ ! -f $help ]
+    then
+	#we create completion words from ceph --help
+	${COMP_WORDS[0]} --help 2>/dev/null |
+	#filter out everything before "Monitor commands:"
+	awk -e ' BEGIN { a=0 } ; /Monitor commands:/ || a>0 {a++} ; a>3 { print } ;' |
+	#merge ceph help 2 columns into lines
+	awk -e '
+        BEGIN { a=""; b=""; }
+        /^ / { #option starts
+            t=substr($0,2,40); #left column
+            gsub(/[ ]+$/,"",t);
+            a=a t;
+            r=substr($0,43); #right column
+            gsub(/[ ]+$/,"",r);
+            b=b r;};
+        !/^ / { #option continues
+            if(a!="") print  a " #" b;
+            a=substr($0,0,40);
+            gsub(/[ ]+$/,"",a);
+            b=substr($0,42);
+            gsub(/[ ]+$/,"",b);}
+        END { print a " #" b}' >$help
+    fi
+    #if still no ceph-help.tmp, exit
+    [ ! -f $help ] && return 0
+    #if $str has improper characters, exit
+    [[ $(echo -n $str | sed "s/[-@+a-zA-Z0-9_ ]//g" |wc -c) != 0 ]] && return 0
+    lstr=${COMP_WORDS[COMP_CWORD]}
 
-        if [[ ${cur} == -* ]] ; then
-            COMPREPLY=( $(compgen -W "--conf -c --name --id -m --version -s --status -w --watch -o --out-file -i --in-file" -- ${cur}) )
-            return 0
-        fi
-
-        case "${prev}" in
-            -o | --out-file | -i | --in-file | --conf | -c)
-                COMPREPLY=( $(compgen -f ${cur}) )
-                return 0
-                ;;
-            -m)
-                COMPREPLY=( $(compgen -A hostname ${cur}) )
-                return 0
-                ;;
-            auth)
-                COMPREPLY=( $(compgen -W "list add del print_key print-key export get get-key import get-or-create get-or-create-key" -- ${cur}) )
-                return 0
-                ;;
-            pg)
-                COMPREPLY=( $(compgen -W "stat dump dump_json dump_stuck force_create_pg getmap map send_pg_creates scrub deep-scrub repair" -- ${cur}) )
-                return 0
-                ;;
-            osd)
-                COMPREPLY=( $(compgen -W "stat pool dump getmaxosd tree getmap getcrushmap lspools reweight-by-utilization trash tier" -- ${cur}) )
-                return 0
-                ;;
-            mon)
-                COMPREPLY=( $(compgen -W "stat getmap add remove dump" -- ${cur}) )
-                return 0
-                ;;
-            mds)
-                COMPREPLY=( $(compgen -W "stat stat getmap dump compat" -- ${cur}) )
-                return 0
-                ;;
-            pool)
-                COMPREPLY=( $(compgen -W "create delete rename stats set set-quota get rmsnap mksnap" -- ${cur}) )
-                return 0
-                ;;
-            health)
-                COMPREPLY=( $(compgen -W "detail" -- ${cur}) )
-                return 0
-                ;;
-            tier)
-                COMPREPLY=( $(compgen -W "remove cache-mode" -- ${cur}) )
-                return 0
-                ;;
-            ceph)
-                COMPREPLY=( $(compgen -W "osd mon mds pg auth health df" -- ${cur}) )
-                return 0
-                ;;
-        esac
+    #find matching sequences eg. "osd crush ru.."
+    if [[ $(grep -c "^${str}" $help) != 1 ]]
+    then
+	#multiple substring matches, supply only short names
+	COMPREPLY=( $(sed "/^${str}/ { s/^${str}/${lstr}/;s/ .*//;p; };d" $help |sort -u ) )
+    else
+	#only one match. in addition to only match, print string with help line
+	local line=$(grep "^${str}" $help |sed "s/^${str}/${lstr}/")
+	COMPREPLY=( "$line" $(echo $line | sed "s/ .*//" ) )
+    fi
 }
 complete -F _ceph ceph
