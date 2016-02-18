@@ -725,7 +725,7 @@ make %{?_smp_mflags}
 %if 0%{with tests}
 %check
 # run in-tree unittests
-make %{?_smp_mflags} check-local
+make CHECK_ULIMIT=false %{?_smp_mflags} check-local
 
 %endif
 
