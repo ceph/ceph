@@ -172,6 +172,7 @@ noinst_HEADERS += \
 	rgw/rgw_acl.h \
 	rgw/rgw_acl_s3.h \
 	rgw/rgw_acl_swift.h \
+	rgw/rgw_b64.h \
 	rgw/rgw_client_io.h \
 	rgw/rgw_coroutine.h \
 	rgw/rgw_cr_rados.h \
