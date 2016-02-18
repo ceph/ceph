@@ -214,6 +214,18 @@ TEST_P(TransportTest, ConnectFailedTest) {
   }
 }
 
+TEST_P(TransportTest, ListenTest) {
+  entity_addr_t bind_addr;
+  ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
+  SocketOptions options;
+  ServerSocket bind_socket1, bind_socket2;
+  int r = transport->listen(bind_addr, options, &bind_socket1);
+  ASSERT_EQ(r, 0);
+
+  r = transport->listen(bind_addr, options, &bind_socket2);
+  ASSERT_EQ(r, -EADDRINUSE);
+}
+
 TEST_P(TransportTest, ComplexTest) {
   entity_addr_t bind_addr, cli_addr;
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);

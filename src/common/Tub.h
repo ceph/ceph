@@ -166,9 +166,9 @@ class Tub {
           *object = std::move(*other.object);
         else
           construct(std::move(*other.object));
+        other.destroy();
       } else {
         destroy();
-
       }
     }
     return *this;

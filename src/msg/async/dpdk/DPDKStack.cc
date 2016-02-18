@@ -178,12 +178,10 @@ int DPDKStack::listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket 
   _inet.set_host_address(ipv4_address(std::get<0>(tuples[idx])));
   _inet.set_gw_address(ipv4_address(std::get<1>(tuples[idx])));
   _inet.set_netmask_address(ipv4_address(std::get<2>(tuples[idx])));
-  *sock = tcpv4_listen(_inet.get_tcp(), sa.get_port(), opt);
-  return 0;
+  return tcpv4_listen(_inet.get_tcp(), sa.get_port(), opt, sock);
 }
 
 int DPDKStack::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) {
   assert(addr.get_family() == AF_INET);
-  *socket = tcpv4_connect(_inet.get_tcp(), addr);
-  return 0;
+  return tcpv4_connect(_inet.get_tcp(), addr, socket);
 }

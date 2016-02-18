@@ -38,6 +38,9 @@ class DPDKServerSocketImpl : public ServerSocketImpl {
   typename Protocol::listener _listener;
  public:
   DPDKServerSocketImpl(Protocol& proto, uint16_t port, const SocketOptions &opt);
+  int listen() {
+    return _listener.listen();
+  }
   virtual int accept(ConnectedSocket *s, entity_addr_t *out) override;
   virtual void abort_accept() override;
   virtual int fd() const override {

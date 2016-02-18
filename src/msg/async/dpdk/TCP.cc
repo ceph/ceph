@@ -152,17 +152,26 @@ bool ipv4_tcp::forward(forward_hash& out_hash_data, Packet& p, size_t off)
   return _tcp->forward(out_hash_data, p, off);
 }
 
-ServerSocket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, const SocketOptions &opts)
+int tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, const SocketOptions &opts,
+                 ServerSocket *sock)
 {
-  std::unique_ptr<ServerSocketImpl> lsi(new DPDKServerSocketImpl<tcp<ipv4_traits>>(tcpv4, port, opts));
-  return ServerSocket(std::move(lsi));
+  auto p = new DPDKServerSocketImpl<tcp<ipv4_traits>>(tcpv4, port, opts);
+  int r = p->listen();
+  if (r < 0) {
+    delete p;
+    return r;
+  }
+  *sock = ServerSocket(std::unique_ptr<ServerSocketImpl>(p));
+  return 0;
 }
 
-ConnectedSocket tcpv4_connect(tcp<ipv4_traits>& tcpv4, const entity_addr_t &addr)
+int tcpv4_connect(tcp<ipv4_traits>& tcpv4, const entity_addr_t &addr,
+                  ConnectedSocket *sock)
 {
   auto conn = tcpv4.connect(addr);
-  std::unique_ptr<ConnectedSocketImpl> csi(new NativeConnectedSocketImpl<tcp<ipv4_traits>>(std::move(conn)));
-  return ConnectedSocket(std::move(csi));
+  *sock = ConnectedSocket(std::unique_ptr<ConnectedSocketImpl>(
+          new NativeConnectedSocketImpl<tcp<ipv4_traits>>(std::move(conn))));
+  return 0;
 }
 
 #undef dout_prefix

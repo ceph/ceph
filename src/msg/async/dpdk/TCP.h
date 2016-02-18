@@ -448,7 +448,7 @@ class tcp {
     }
 
     int is_connected() const {
-      if (_errno != 0)
+      if (_errno <= 0)
         return _errno;
       return _connect_done;
     }
@@ -679,27 +679,33 @@ class tcp {
   class listener {
     tcp& _tcp;
     uint16_t _port;
-    int _fd;
+    Tub<int> _fd;
     int16_t _errno;
     queue<connection> _q;
     size_t _q_max_length;
+
    private:
     listener(tcp& t, uint16_t port, size_t queue_length)
-        : _tcp(t), _port(port), _fd(t.manager.get_eventfd()), _errno(0),
-          _q(), _q_max_length(queue_length) {
-      _tcp._listening.emplace(port, this);
+        : _tcp(t), _port(port), _errno(0), _q(), _q_max_length(queue_length) {
     }
    public:
+    listener(const listener&) = delete;
+    void operator=(const listener&) = delete;
     listener(listener&& x)
-        : _tcp(x._tcp), _port(x._port), _errno(x._errno), _q(std::move(x._q)) {
-      _tcp._listening[_port] = this;
-      x._port = 0;
+        : _tcp(x._tcp), _port(x._port), _fd(std::move(x._fd)), _errno(x._errno),
+          _q(std::move(x._q)) {
+      if (_fd)
+        _tcp._listening[_port] = this;
     }
     ~listener() {
-      if (_port) {
-        _tcp._listening.erase(_port);
-      }
-      _tcp.manager.close(_fd);
+      abort_accept();
+    }
+    int listen() {
+      if (_tcp._listening.find(_port) != _tcp._listening.end())
+        return -EADDRINUSE;
+      _tcp._listening.emplace(_port, this);
+      _fd.construct(_tcp.manager.get_eventfd());
+      return 0;
     }
     Tub<connection> accept() {
       Tub<connection> c;
@@ -709,10 +715,14 @@ class tcp {
       }
       return c;
     }
-
     void abort_accept() {
       while (!_q.empty())
         _q.pop();
+      if (_fd) {
+        _tcp._listening.erase(_port);
+        _tcp.manager.close(*_fd);
+        _fd.destroy();
+      }
     }
     int16_t get_errno() const {
       return _errno;
@@ -721,7 +731,7 @@ class tcp {
       return _q.size() == _q_max_length;
     }
     int fd() const {
-      return _fd;
+      return *_fd;
     }
     friend class tcp;
   };
