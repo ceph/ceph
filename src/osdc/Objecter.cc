@@ -4867,7 +4867,8 @@ void Objecter::enumerate_objects(
     const hobject_t &start,
     const hobject_t &end,
     const uint32_t max,
-    std::list<librados::ListObjectImpl> *result,
+    const bufferlist &filter_bl,
+    std::list<librados::ListObjectImpl> *result, 
     hobject_t *next,
     Context *on_finish)
 {
@@ -4915,11 +4916,8 @@ void Objecter::enumerate_objects(
   C_EnumerateReply *on_ack = new C_EnumerateReply(
       this, next, result, end, pool_id, on_finish);
 
-  // Construct pgls operation
-  bufferlist filter; // FIXME pass in?
-
   ObjectOperation op;
-  op.pg_nls(max, filter, start, 0);
+  op.pg_nls(max, filter_bl, start, 0);
 
   // Issue.  See you later in _enumerate_reply
   object_locator_t oloc(pool_id, ns);
