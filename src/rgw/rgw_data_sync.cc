@@ -484,7 +484,7 @@ public:
                                                   oid_prefix);
       yield {
         string entrypoint = string("/admin/metadata/bucket.instance");
-#warning need a better scaling solution here, requires streaming output
+        /* FIXME: need a better scaling solution here, requires streaming output */
         call(new RGWReadRESTResourceCR<list<string> >(store->ctx(), sync_env->conn, sync_env->http_manager,
                                                       entrypoint, NULL, &result));
       }
@@ -694,7 +694,7 @@ public:
         yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data", bucket_name + ":" + bucket_instance,
                                                         -sync_status, string("failed to sync bucket instance: ") + cpp_strerror(-sync_status)));
       }
-#warning what do do in case of error
+      /* FIXME: what do do in case of error */
       if (!entry_marker.empty()) {
         /* update marker */
         yield call(marker_tracker->finish(entry_marker));

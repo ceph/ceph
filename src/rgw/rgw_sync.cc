@@ -659,7 +659,7 @@ public:
       for (; sections_iter != sections.end(); ++sections_iter) {
         yield {
 	  string entrypoint = string("/admin/metadata/") + *sections_iter;
-#warning need a better scaling solution here, requires streaming output
+          /* FIXME: need a better scaling solution here, requires streaming output */
 	  call(new RGWReadRESTResourceCR<list<string> >(cct, conn, sync_env->http_manager,
 				       entrypoint, NULL, &result));
 	}
@@ -963,7 +963,7 @@ int RGWMetaSyncSingleEntryCR::operate() {
       sync_status = retcode;
 
       if (sync_status == -ENOENT) {
-#warning remove entry from local
+        /* FIXME: do we need to remove the entry from the local zone? */
         break;
       }
 

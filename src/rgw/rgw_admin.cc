@@ -2772,8 +2772,6 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 
-        #warning need to implement for backward compatabilty
-
 	if (reset_regions) {
           zonegroupmap.zonegroups.clear();
         }
