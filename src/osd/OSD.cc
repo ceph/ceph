@@ -231,6 +231,11 @@ OSDService::OSDService(OSD *osd) :
   agent_stop_flag(false),
   agent_timer_lock("OSD::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
+  agent_tp(cct, "OSD::agent_tp", "tp_osd_recov", cct->_conf->osd_agent_threads, "osd_agent_threads"),
+  agent_wq(this,
+           cct->_conf->osd_agent_thread_timeout,
+           cct->_conf->osd_agent_thread_suicide_timeout,
+           &agent_tp),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
   objecter_finisher(osd->client_messenger->cct),
   watch_lock("OSD::watch_lock"),
@@ -482,8 +487,7 @@ void OSDService::init()
   objecter->set_client_incarnation(0);
   watch_timer.init();
   agent_timer.init();
-
-  agent_thread.create("osd_srv_agent");
+  agent_tp.start();
 }
 
 void OSDService::final_init()
@@ -498,7 +502,7 @@ void OSDService::activate_map()
   agent_active =
     !osdmap->test_flag(CEPH_OSDMAP_NOTIERAGENT) &&
     osd->is_active();
-  agent_cond.Signal();
+  agent_wq.wake();
   agent_lock.Unlock();
 }
 
@@ -553,20 +557,10 @@ void OSDService::agent_stop()
 {
   {
     Mutex::Locker l(agent_lock);
-
-    // By this time all ops should be cancelled
-    assert(agent_ops == 0);
-    // By this time all PGs are shutdown and dequeued
-    if (!agent_queue.empty()) {
-      set<PGRef>& top = agent_queue.rbegin()->second;
-      derr << "agent queue not empty, for example " << (*top.begin())->info.pgid << dendl;
-      assert(0 == "agent queue not empty");
-    }
-
     agent_stop_flag = true;
-    agent_cond.Signal();
   }
-  agent_thread.join();
+  agent_tp.drain();
+  agent_tp.stop();
 }
 
 // -------------------------------------

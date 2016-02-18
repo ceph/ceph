@@ -768,7 +768,6 @@ public:
     Mutex::Locker l(agent_lock);
     assert(agent_ops > 0);
     --agent_ops;
-    agent_cond.Signal();
   }
 
   /// note start of an async (flush) op
@@ -786,7 +785,6 @@ public:
     --agent_ops;
     assert(agent_oids.count(oid) == 1);
     agent_oids.erase(oid);
-    agent_cond.Signal();
   }
 
   /// check if we are operating on an object
