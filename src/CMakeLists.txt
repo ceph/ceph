@@ -1215,6 +1215,9 @@ if(${WITH_RADOSGW})
     rgw/rgw_admin.cc
     rgw/rgw_orphan.cc)
 
+  set(radosgw_token_srcs
+    rgw/rgw_token.cc)
+
   set(radosgw_object_expirer_srcs
     rgw/rgw_object_expirer.cc)
 
@@ -1263,6 +1266,11 @@ if(${WITH_RADOSGW})
     curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES})
 
   install(TARGETS radosgw-admin DESTINATION bin)
+
+  add_executable(radosgw-token ${radosgw_token_srcs})
+  target_link_libraries(radosgw-token librados
+    global ${ALLOC_LIBS})
+  install(TARGETS radosgw-token DESTINATION bin)
 
   add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
   target_link_libraries(radosgw-object-expirer rgw_a librados

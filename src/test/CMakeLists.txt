@@ -2210,6 +2210,22 @@ target_link_libraries(test_librgw_file_aw
   ${CMAKE_DL_LIBS}
   )
 
+add_executable(test_rgw_token
+  test_rgw_token.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_rgw_token PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_rgw_token
+  rgw
+  os
+  global
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
 if(${HAVE_LIBFUSE})
   add_executable(test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc

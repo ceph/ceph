@@ -740,6 +740,12 @@ librgw_file_nfsns_LDADD = $(UNITTEST_LDADD) \
 	librgw.la librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += librgw_file_nfsns
 
+test_rgw_token_SOURCES = test/test_rgw_token.cc
+test_rgw_token_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+test_rgw_token_LDADD = $(UNITTEST_LDADD) \
+	librgw.la $(PTHREAD_LIBS) $(LIBOS) $(CEPH_GLOBAL) $(EXTRALIBS)
+bin_DEBUGPROGRAMS += test_rgw_token
+
 endif # WITH_RADOSGW
 
 
