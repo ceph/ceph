@@ -892,8 +892,12 @@ struct RGWBucketInfo
 
   RGWBucketIndexType index_type;
 
+  bool swift_versioning;
+  string swift_ver_location;
+
+
   void encode(bufferlist& bl) const {
-     ENCODE_START(15, 4, bl);
+     ENCODE_START(16, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner.id, bl);
      ::encode(flags, bl);
@@ -912,10 +916,14 @@ struct RGWBucketInfo
        ::encode(website_conf, bl);
      }
      ::encode((uint32_t)index_type, bl);
+     ::encode(swift_versioning, bl);
+     if (swift_versioning) {
+       ::encode(swift_ver_location, bl);
+     }
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(14, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(16, 4, 4, bl);
      ::decode(bucket, bl);
      if (struct_v >= 2) {
        string s;
@@ -960,6 +968,14 @@ struct RGWBucketInfo
      } else {
        index_type = RGWBIType_Normal;
      }
+     swift_versioning = false;
+     swift_ver_location.clear();
+     if (struct_v >= 16) {
+       ::decode(swift_versioning, bl);
+       if (swift_versioning) {
+         ::decode(swift_ver_location, bl);
+       }
+     }
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -971,8 +987,10 @@ struct RGWBucketInfo
   int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
   bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
 
+  bool has_swift_versioning() { return swift_versioning; }
+
   RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD), requester_pays(false),
-                    has_website(false) {}
+                    has_website(false), swift_versioning(false) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 

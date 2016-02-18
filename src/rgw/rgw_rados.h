@@ -2032,6 +2032,7 @@ public:
   virtual int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
                             const string& placement_rule,
+                            const string& swift_ver_location,
                             map<std::string,bufferlist>& attrs,
                             RGWBucketInfo& bucket_info,
                             obj_version *pobjv,
