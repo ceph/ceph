@@ -1,8 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "rgw_frontend.h"
+#include <signal.h>
 
+#include "rgw_frontend.h"
 #include "include/str_list.h"
 
 #include "include/assert.h"
@@ -76,4 +77,10 @@ bool RGWFrontendConfig::get_val(const string& key, int def_val, int *out)
     return -EINVAL;
   }
   return 0;
+}
+
+void RGWProcessFrontend::stop()
+{
+  pprocess->close_fd();
+  thread->kill(SIGUSR1);
 }
