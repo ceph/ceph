@@ -63,6 +63,10 @@ class ConnectedSocket {
   explicit ConnectedSocket(std::unique_ptr<ConnectedSocketImpl> csi)
       : _csi(std::move(csi)) {}
   /// \endcond
+   ~ConnectedSocket() {
+    if (_csi)
+      _csi->close();
+  }
   /// Moves a \c ConnectedSocket object.
   ConnectedSocket(ConnectedSocket&& cs) = default;
   /// Move-assigns a \c ConnectedSocket object.
@@ -120,6 +124,10 @@ class ServerSocket {
   /// \cond internal
   explicit ServerSocket(std::unique_ptr<ServerSocketImpl> ssi)
       : _ssi(std::move(ssi)) {}
+  ~ServerSocket() {
+    if (_ssi)
+      _ssi->abort_accept();
+  }
   /// \endcond
   /// Moves a \c ServerSocket object.
   ServerSocket(ServerSocket&& ss) = default;
