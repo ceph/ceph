@@ -31,7 +31,7 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
  public:
   EventCenter *center;
   std::unique_ptr<NetworkStack> transport;
-  string addr;
+  string addr, port_addr;
 
   TransportTest() {}
   virtual void SetUp() {
@@ -39,12 +39,14 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
     if (strncmp(GetParam(), "dpdk", 4)) {
       g_ceph_context->_conf->set_val("ms_dpdk_enable", "false");
       addr = "127.0.0.1:15000";
+      port_addr = "127.0.0.1:15001";
     } else {
       g_ceph_context->_conf->set_val("ms_dpdk_enable", "true");
       g_ceph_context->_conf->set_val("ms_dpdk_host_ipv4_addr", "172.16.218.199", false, false);
       g_ceph_context->_conf->set_val("ms_dpdk_gateway_ipv4_addr", "172.16.218.2", false, false);
       g_ceph_context->_conf->set_val("ms_dpdk_netmask_ipv4_addr", "255.255.255.0", false, false);
       addr = "172.16.218.199:15000";
+      port_addr = "172.16.218.199:15001";
     }
     g_ceph_context->_conf->apply_changes(nullptr);
     center = new EventCenter(g_ceph_context);
@@ -60,6 +62,12 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
   string get_addr() const {
     return addr;
   }
+  string get_ip_different_port() const {
+    return port_addr;
+  }
+  string get_different_ip() const {
+    return "10.0.123.100:4323";
+  }
 };
 
 class C_poll : public EventCallback {
@@ -73,7 +81,8 @@ class C_poll : public EventCallback {
   void do_request(int r) {
     wakeuped = true;
   }
-  void poll(int seconds) {
+  bool poll(int milliseconds) {
+    auto start = ceph::coarse_real_clock::now(g_ceph_context);
     while (!wakeuped) {
       if (lock)
         lock->Lock();
@@ -81,7 +90,12 @@ class C_poll : public EventCallback {
       if (lock)
         lock->Unlock();
       usleep(sleepus);
+      auto r = std::chrono::duration_cast<std::chrono::milliseconds>(
+              ceph::coarse_real_clock::now(g_ceph_context) - start);
+      if (r >= std::chrono::milliseconds(milliseconds))
+        break;
     }
+    return wakeuped;
   }
   void reset() {
     wakeuped = false;
@@ -90,7 +104,7 @@ class C_poll : public EventCallback {
 
 TEST_P(TransportTest, SimpleTest) {
   entity_addr_t bind_addr, cli_addr;
-  bind_addr.parse(get_addr().c_str());
+  ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
   SocketOptions options;
   ServerSocket bind_socket;
   int r = transport->listen(bind_addr, options, &bind_socket);
@@ -102,7 +116,8 @@ TEST_P(TransportTest, SimpleTest) {
   {
     C_poll cb(center);
     center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
-    cb.poll(5);
+    ASSERT_EQ(cb.poll(500), true);
+    center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
   }
 
   r = bind_socket.accept(&srv_socket, &cli_addr);
@@ -114,10 +129,11 @@ TEST_P(TransportTest, SimpleTest) {
     center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
     r = cli_socket.is_connected();
     if (r == 0) {
-      cb.poll(5);
+      ASSERT_EQ(cb.poll(500), true);
       r = cli_socket.is_connected();
     }
     ASSERT_EQ(r, 1);
+    center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
   }
 
   struct msghdr msg;
@@ -133,26 +149,74 @@ TEST_P(TransportTest, SimpleTest) {
   ASSERT_EQ(r, len);
 
   char buf[1024];
+  C_poll cb(center);
+  center->create_file_event(srv_socket.fd(), EVENT_READABLE, &cb);
   {
-    C_poll cb(center);
-    center->create_file_event(srv_socket.fd(), EVENT_READABLE, &cb);
     r = srv_socket.read(buf, sizeof(buf));
     if (r == -EAGAIN) {
-      cb.poll(5);
+      ASSERT_EQ(cb.poll(500), true);
       r = srv_socket.read(buf, sizeof(buf));
     }
     ASSERT_EQ(r, len);
     ASSERT_EQ(0, memcmp(buf, message, len));
   }
   bind_socket.abort_accept();
-  srv_socket.close();
   cli_socket.close();
+
+  {
+    cb.reset();
+    ASSERT_EQ(cb.poll(500), true);
+    r = srv_socket.read(buf, sizeof(buf));
+    ASSERT_EQ(r, 0);
+  }
+  center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
+
+  srv_socket.close();
 }
 
+TEST_P(TransportTest, ConnectFailedTest) {
+  entity_addr_t bind_addr, cli_addr;
+  ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
+  ASSERT_EQ(cli_addr.parse(get_ip_different_port().c_str()), true);
+  SocketOptions options;
+  ServerSocket bind_socket;
+  int r = transport->listen(bind_addr, options, &bind_socket);
+  ASSERT_EQ(r, 0);
+
+  ConnectedSocket cli_socket1, cli_socket2;
+  r = transport->connect(cli_addr, options, &cli_socket1);
+  ASSERT_EQ(r, 0);
+
+  {
+    C_poll cb(center);
+    center->create_file_event(cli_socket1.fd(), EVENT_READABLE, &cb);
+    r = cli_socket1.is_connected();
+    if (r == 0) {
+      ASSERT_EQ(cb.poll(500), true);
+      r = cli_socket1.is_connected();
+    }
+    ASSERT_TRUE(r == -ECONNREFUSED || r == -ECONNRESET);
+  }
+
+  ASSERT_EQ(cli_addr.parse(get_different_ip().c_str()), true);
+  r = transport->connect(cli_addr, options, &cli_socket2);
+  ASSERT_EQ(r, 0);
+
+  {
+    C_poll cb(center);
+    center->create_file_event(cli_socket2.fd(), EVENT_READABLE, &cb);
+    r = cli_socket2.is_connected();
+    if (r == 0) {
+      ASSERT_EQ(cb.poll(500), false);
+      r = cli_socket2.is_connected();
+    }
+    ASSERT_TRUE(r != 1);
+  }
+}
 
 TEST_P(TransportTest, ComplexTest) {
   entity_addr_t bind_addr, cli_addr;
-  bind_addr.parse(get_addr().c_str());
+  ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
   SocketOptions options;
   ServerSocket bind_socket;
   int r = transport->listen(bind_addr, options, &bind_socket);
@@ -164,7 +228,7 @@ TEST_P(TransportTest, ComplexTest) {
   {
     C_poll cb(center);
     center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
-    cb.poll(5);
+    ASSERT_EQ(cb.poll(500), true);
   }
 
   r = bind_socket.accept(&srv_socket, &cli_addr);
@@ -176,7 +240,7 @@ TEST_P(TransportTest, ComplexTest) {
     center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
     r = cli_socket.is_connected();
     if (r == 0) {
-      cb.poll(5);
+      ASSERT_EQ(cb.poll(500), true);
       r = cli_socket.is_connected();
     }
     ASSERT_EQ(r, 1);
@@ -231,7 +295,7 @@ TEST_P(TransportTest, ComplexTest) {
       if (left == 0)
         break;
       cb.reset();
-      cb.poll(5);
+      ASSERT_EQ(cb.poll(500), true);
     }
     if (first) {
       first = false;
@@ -258,7 +322,7 @@ TEST_P(TransportTest, ComplexTest) {
     }
     if (r == -EAGAIN) {
       cb.reset();
-      cb.poll(5);
+      ASSERT_EQ(cb.poll(500), true);
     }
   }
   center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
@@ -273,7 +337,7 @@ TEST_P(TransportTest, ComplexTest) {
 }
 
 INSTANTIATE_TEST_CASE_P(
-  AsyncMessenger,
+  NetworkStack,
   TransportTest,
   ::testing::Values(
 #ifdef HAVE_DPDK

@@ -60,12 +60,13 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   NativeConnectedSocketImpl(NativeConnectedSocketImpl &&rhs)
       : _conn(std::move(rhs._conn)), _cur_frag(rhs._cur_frag),
         _buf(std::move(rhs.buf))  {}
-  virtual bool is_connected() override {
-    return true;
+  virtual int is_connected() override {
+    return _conn.is_connected();
   }
   virtual int read(char *buf, size_t len) override {
-    if (_conn.get_errno() < 0)
-      return _conn.get_errno();
+    auto err = _conn.get_errno();
+    if (err <= 0)
+      return err;
 
     size_t copied = 0;
     while (copied < len) {
@@ -94,6 +95,10 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     return copied;
   }
   virtual int sendmsg(const struct msghdr &msg, bool more) override {
+    auto err = _conn.get_errno();
+    if (err <= 0)
+      return err;
+
     size_t available = _conn.peek_sent_available();
     if (available == 0)
       return -EAGAIN;
@@ -118,11 +123,12 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     return _conn.send(std::move(p));
   }
   virtual void shutdown() override {
-    _conn.close_read();
     _conn.close_write();
   }
   // FIXME need to impl close
-  virtual void close() override { return ; }
+  virtual void close() override {
+    _conn.close_write();
+  }
   virtual int fd() const override {
     return _conn.fd();
   }

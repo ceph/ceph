@@ -321,7 +321,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
       // on the retransmission queue should be removed.  And in the
       // active OPEN case, enter the CLOSED state and delete the TCB,
       // and return.
-      _connect_done = -ECONNREFUSED;
+      errno = -ECONNREFUSED;
       return do_reset();
     }
     if (in_state(ESTABLISHED | FIN_WAIT_1 | FIN_WAIT_2 | CLOSE_WAIT)) {
@@ -595,7 +595,6 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
     auto fin_seq = seg_seq + seg_len;
     if (fin_seq == _rcv.next) {
       _rcv.next = fin_seq + 1;
-      signal_data_received();
 
       // If this <FIN> packet contains data as well, we can ACK both data
       // and <FIN> in a single packet, so canncel the previous ACK.
@@ -603,10 +602,13 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
       do_output = false;
       // Send ACK for the FIN!
       output();
+      signal_data_received();
+      _errno = 0;
 
       if (in_state(SYN_RECEIVED | ESTABLISHED)) {
         ldout(_tcp.cct, 20) << __func__ << " fin: SYN_RECEIVED or ESTABLISHED -> CLOSE_WAIT" << dendl;
         _state = CLOSE_WAIT;
+        // EOF
       }
       if (in_state(FIN_WAIT_1)) {
         // If our FIN has been ACKed (perhaps in this segment), then

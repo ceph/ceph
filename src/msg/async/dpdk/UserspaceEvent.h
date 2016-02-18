@@ -67,7 +67,7 @@ class UserspaceEventManager {
 
     assert(mask);
     impl->listening_mask |= mask;
-    if (impl->activating_mask & impl->listening_mask) {
+    if (impl->activating_mask & impl->listening_mask && !impl->waiting_idx) {
       if (waiting_fds.size() >= max_wait_idx)
         waiting_fds.resize(waiting_fds.size()*2);
       impl->waiting_idx = ++max_wait_idx;
@@ -92,10 +92,13 @@ class UserspaceEventManager {
       return 0;
     }
     if (impl->waiting_idx) {
-      if (waiting_fds[max_wait_idx] == fd)
+      if (waiting_fds[max_wait_idx] == fd) {
+        assert(impl->waiting_idx == max_wait_idx);
         --max_wait_idx;
-      waiting_fds[fd] = -1;
+      }
+      waiting_fds[impl->waiting_idx] = -1;
       --waiting_size;
+      impl->waiting_idx = 0;
     }
     return 0;
   }
@@ -136,10 +139,11 @@ class UserspaceEventManager {
       unused_fds.push_back(fd);
 
     if (impl->activating_mask) {
-      assert(impl->waiting_idx);
-    if (waiting_fds[max_wait_idx] == fd)
-      --max_wait_idx;
-      waiting_fds[fd] = -1;
+      if (waiting_fds[max_wait_idx] == fd) {
+        assert(impl->waiting_idx == max_wait_idx);
+        --max_wait_idx;
+      }
+      waiting_fds[impl->waiting_idx] = -1;
       --waiting_size;
     }
     impl.destroy();
@@ -155,10 +159,12 @@ class UserspaceEventManager {
         continue;
 
       events[i] = fd;
-      assert(fds[fd]);
-      masks[i] = fds[fd]->listening_mask & fds[fd]->activating_mask;
+     Tub<UserspaceFDImpl> &impl = fds[fd];
+      assert(impl);
+      masks[i] = impl->listening_mask & impl->activating_mask;
       assert(masks[i]);
-      fds[fd]->activating_mask &= (~masks[i]);
+      impl->activating_mask &= (~masks[i]);
+      impl->waiting_idx = 0;
     }
     if (i < waiting_size)
       memcpy(&waiting_fds[1], &waiting_fds[i+1], sizeof(int)*(waiting_size-i));

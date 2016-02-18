@@ -45,14 +45,19 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   explicit PosixConnectedSocketImpl(NetHandler &h, const entity_addr_t &sa, int f, bool connected)
       : handler(h), _fd(f), sa(sa), connected(connected) {}
 
-  virtual bool is_connected() override {
+  virtual int is_connected() override {
     if (connected)
-      return connected;
+      return 1;
 
     int r = handler.reconnect(sa, _fd);
-    if (r == 0)
+    if (r == 0) {
       connected = true;
-    return connected;
+      return 1;
+    } else if (r < 0) {
+      return r;
+    } else {
+      return 0;
+    }
   }
 
   virtual int read(char *buf, size_t len) {

@@ -25,7 +25,7 @@
 class ConnectedSocketImpl {
  public:
   virtual ~ConnectedSocketImpl() {}
-  virtual bool is_connected() = 0;
+  virtual int is_connected() = 0;
   virtual int read(char*, size_t) = 0;
   virtual int sendmsg(const struct msghdr &msg, bool more) = 0;
   virtual void shutdown() = 0;

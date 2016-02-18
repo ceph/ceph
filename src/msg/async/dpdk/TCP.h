@@ -296,7 +296,7 @@ class tcp {
     tcp_state _state = CLOSED;
     tcp& _tcp;
     connection* _conn = nullptr;
-    int _connect_done = 0;
+    bool _connect_done = false;
     ipaddr _local_ip;
     ipaddr _foreign_ip;
     uint16_t _local_port;
@@ -355,7 +355,8 @@ class tcp {
     } _rcv;
     EventCenter *center;
     int fd;
-    int16_t _errno = 0;
+    // positive means no errno, 0 means eof, nagetive means error
+    int16_t _errno = 1;
     tcp_option _option;
     EventCallbackRef delayed_ack_event;
     Tub<uint64_t> _delayed_ack_fd;
@@ -422,7 +423,7 @@ class tcp {
           } else if (r == -ETIMEDOUT) {
             // in other states connection should time out
             if (tcb->in_state(SYN_SENT)) {
-              tcb->_connect_done = -ETIMEDOUT;
+              tcb->_errno = -ETIMEDOUT;
               tcb->cleanup();
             }
           } else if (r == -EBUSY) {
@@ -444,6 +445,12 @@ class tcp {
 
     uint64_t peek_sent_available() {
       return _tcp.user_queue_space.get_max() - _tcp.user_queue_space.get_current();
+    }
+
+    int is_connected() const {
+      if (_errno != 0)
+        return _errno;
+      return _connect_done;
     }
 
    private:
@@ -543,7 +550,8 @@ class tcp {
     void do_established() {
       _state = ESTABLISHED;
       update_rto(_snd.syn_tx_time);
-      _connect_done = 1;
+      _connect_done = true;
+      signal_data_received();
     }
     void do_reset() {
       _state = CLOSED;
@@ -666,6 +674,7 @@ class tcp {
     uint64_t peek_sent_available() {
       return _tcb->peek_sent_available();
     }
+    int is_connected() const { return _tcb->is_connected(); }
   };
   class listener {
     tcp& _tcp;
@@ -1399,7 +1408,7 @@ void tcp<InetTraits>::tcb::retransmit() {
     if (_snd.syn_retransmit++ < _max_nr_retransmit) {
       output_update_rto();
     } else {
-      _connect_done = -ECONNABORTED;
+      _errno = -ECONNABORTED;
       cleanup();
       return;
     }
@@ -1554,7 +1563,8 @@ Tub<typename InetTraits::l4packet> tcp<InetTraits>::tcb::get_packet() {
 
 template <typename InetTraits>
 void tcp<InetTraits>::connection::close_read() {
-  _tcb->_tcp.manager.notify(_tcb->fd, EVENT_READABLE);
+  // do nothing
+  // _tcb->_tcp.manager.notify(_tcb->fd, EVENT_READABLE);
 }
 
 template <typename InetTraits>

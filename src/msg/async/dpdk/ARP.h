@@ -171,8 +171,7 @@ class arp_for : public arp_for_protocol {
       }
       res._waiters.clear();
       res.timeout_fd = arp->center->create_time_event(
-          1*1000*1000, new C_handle_arp_timeout(arp, paddr, first_request));
-      delete this;
+          1*1000*1000, this);
     }
   };
   friend class C_handle_arp_timeout;
