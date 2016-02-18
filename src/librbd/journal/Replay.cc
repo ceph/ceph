@@ -66,7 +66,7 @@ void Replay<I>::process(bufferlist::iterator *it, Context *on_ready,
 }
 
 template <typename I>
-void Replay<I>::flush(Context *on_finish) {
+void Replay<I>::shut_down(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
@@ -108,6 +108,19 @@ void Replay<I>::flush(Context *on_finish) {
   if (on_finish != nullptr) {
     on_finish->complete(0);
   }
+}
+
+template <typename I>
+void Replay<I>::flush(Context *on_finish) {
+  AioCompletion *aio_comp;
+  {
+    Mutex::Locker locker(m_lock);
+    aio_comp = create_aio_flush_completion(
+      nullptr, util::create_async_context_callback(m_image_ctx, on_finish));
+  }
+
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  AioImageRequest<I>::aio_flush(&m_image_ctx, aio_comp);
 }
 
 template <typename I>
