@@ -51,7 +51,7 @@ public:
     if (enable_mirroring) {
       librados::IoCtx ioctx;
       ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
-      ASSERT_EQ(0, librbd::mirror_set_enabled(ioctx, true));
+      ASSERT_EQ(0, librbd::mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL));
       ASSERT_EQ(0, librbd::mirror_peer_add(ioctx, peer.cluster_uuid,
 					   peer.cluster_name,
 					   peer.client_name));

@@ -111,8 +111,8 @@ cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
 cls_method_handle_t h_old_snapshot_rename;
-cls_method_handle_t h_mirror_is_enabled;
-cls_method_handle_t h_mirror_set_enabled;
+cls_method_handle_t h_mirror_mode_get;
+cls_method_handle_t h_mirror_mode_set;
 cls_method_handle_t h_mirror_peer_list;
 cls_method_handle_t h_mirror_peer_add;
 cls_method_handle_t h_mirror_peer_remove;
@@ -2925,33 +2925,11 @@ int old_snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
 namespace mirror {
 
+static const std::string MODE("mirror_mode");
 static const std::string PEER_KEY_PREFIX("mirror_peer_");
 
 std::string peer_key(const std::string &uuid) {
   return PEER_KEY_PREFIX + uuid;
-}
-
-int is_enabled(cls_method_context_t hctx, bool *enabled) {
-  bufferlist bl;
-  int r = cls_cxx_map_get_val(hctx, "mirror_enabled", &bl);
-  if (r < 0 && r != -ENOENT) {
-    CLS_ERR("error reading mirror enabled flag: %s",
-            cpp_strerror(r).c_str());
-    return r;
-  }
-
-  if (r == 0) {
-    try {
-      bufferlist::iterator bl_it = bl.begin();
-      ::decode(*enabled, bl_it);
-    } catch (const buffer::error &err) {
-      CLS_ERR("could not decode flag");
-      return -EIO;
-    }
-  } else {
-    *enabled = false;
-  }
-  return 0;
 }
 
 int read_peers(cls_method_context_t hctx,
@@ -3024,44 +3002,58 @@ int write_peer(cls_method_context_t hctx, const std::string &uuid,
  * none
  *
  * Output:
- * @param bool: true if enabled
+ * @param cls::rbd::MirrorMode (uint32_t)
  * @returns 0 on success, negative error code on failure
  */
-int mirror_is_enabled(cls_method_context_t hctx, bufferlist *in,
-                      bufferlist *out) {
-  bool enabled;
-  int r = mirror::is_enabled(hctx, &enabled);
+int mirror_mode_get(cls_method_context_t hctx, bufferlist *in,
+                    bufferlist *out) {
+  uint32_t mirror_mode_decode;
+  int r = read_key(hctx, mirror::MODE, &mirror_mode_decode);
   if (r < 0) {
     return r;
   }
 
-  ::encode(enabled, *out);
+  ::encode(mirror_mode_decode, *out);
   return 0;
 }
 
 /**
  * Input:
- * @param enabled (bool)
+ * @param mirror_mode (cls::rbd::MirrorMode) (uint32_t)
  *
  * Output:
  * @returns 0 on success, negative error code on failure
  */
-int mirror_set_enabled(cls_method_context_t hctx, bufferlist *in,
-                       bufferlist *out) {
-  bool enabled;
+int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
+                    bufferlist *out) {
+  uint32_t mirror_mode_decode;
   try {
     bufferlist::iterator bl_it = in->begin();
-    ::decode(enabled, bl_it);
+    ::decode(mirror_mode_decode, bl_it);
   } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  bool enabled;
+  switch (static_cast<cls::rbd::MirrorMode>(mirror_mode_decode)) {
+  case cls::rbd::MIRROR_MODE_DISABLED:
+    enabled = false;
+    break;
+  case cls::rbd::MIRROR_MODE_IMAGE:
+  case cls::rbd::MIRROR_MODE_POOL:
+    enabled = true;
+    break;
+  default:
+    CLS_ERR("invalid mirror mode: %d", mirror_mode_decode);
     return -EINVAL;
   }
 
   int r;
   if (enabled) {
     bufferlist bl;
-    ::encode(enabled, bl);
+    ::encode(mirror_mode_decode, bl);
 
-    r = cls_cxx_map_set_val(hctx, "mirror_enabled", &bl);
+    r = cls_cxx_map_set_val(hctx, mirror::MODE, &bl);
     if (r < 0) {
       CLS_ERR("error enabling mirroring: %s", cpp_strerror(r).c_str());
       return r;
@@ -3078,7 +3070,7 @@ int mirror_set_enabled(cls_method_context_t hctx, bufferlist *in,
       return -EBUSY;
     }
 
-    r = cls_cxx_map_remove_key(hctx, "mirror_enabled");
+    r = cls_cxx_map_remove_key(hctx, mirror::MODE);
     if (r < 0 && r != -ENOENT) {
       CLS_ERR("error disabling mirroring: %s", cpp_strerror(r).c_str());
       return r;
@@ -3124,12 +3116,12 @@ int mirror_peer_add(cls_method_context_t hctx, bufferlist *in,
     return -EINVAL;
   }
 
-  bool enabled;
-  int r = mirror::is_enabled(hctx, &enabled);
-  if (r < 0) {
+  uint32_t mirror_mode_decode;
+  int r = read_key(hctx, mirror::MODE, &mirror_mode_decode);
+  if (r < 0 && r != -ENOENT) {
     return r;
-  }
-  if (!enabled) {
+  } else if (r == -ENOENT ||
+             mirror_mode_decode == cls::rbd::MIRROR_MODE_DISABLED) {
     CLS_ERR("mirroring must be enabled on the pool");
     return -EINVAL;
   }
@@ -3414,11 +3406,11 @@ void __cls_init()
 			  old_snapshot_rename, &h_old_snapshot_rename);
 
   /* methods for the rbd_pool_settings object */
-  cls_register_cxx_method(h_class, "mirror_is_enabled", CLS_METHOD_RD,
-                          mirror_is_enabled, &h_mirror_is_enabled);
-  cls_register_cxx_method(h_class, "mirror_set_enabled",
+  cls_register_cxx_method(h_class, "mirror_mode_get", CLS_METHOD_RD,
+                          mirror_mode_get, &h_mirror_mode_get);
+  cls_register_cxx_method(h_class, "mirror_mode_set",
                           CLS_METHOD_RD | CLS_METHOD_WR,
-                          mirror_set_enabled, &h_mirror_set_enabled);
+                          mirror_mode_set, &h_mirror_mode_set);
   cls_register_cxx_method(h_class, "mirror_peer_list", CLS_METHOD_RD,
                           mirror_peer_list, &h_mirror_peer_list);
   cls_register_cxx_method(h_class, "mirror_peer_add",

@@ -4048,12 +4048,17 @@ TEST_F(TestLibRBD, Mirror) {
 
   ASSERT_EQ(-EINVAL, rbd.mirror_peer_add(ioctx, "uuid1", "cluster1", "client"));
 
-  bool enabled;
-  ASSERT_EQ(0, rbd.mirror_is_enabled(ioctx, &enabled));
-  ASSERT_FALSE(enabled);
-  ASSERT_EQ(0, rbd.mirror_set_enabled(ioctx, true));
-  ASSERT_EQ(0, rbd.mirror_is_enabled(ioctx, &enabled));
-  ASSERT_TRUE(enabled);
+  rbd_mirror_mode_t mirror_mode;
+  ASSERT_EQ(0, rbd.mirror_mode_get(ioctx, &mirror_mode));
+  ASSERT_EQ(RBD_MIRROR_MODE_DISABLED, mirror_mode);
+
+  ASSERT_EQ(0, rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE));
+  ASSERT_EQ(0, rbd.mirror_mode_get(ioctx, &mirror_mode));
+  ASSERT_EQ(RBD_MIRROR_MODE_IMAGE, mirror_mode);
+
+  ASSERT_EQ(0, rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL));
+  ASSERT_EQ(0, rbd.mirror_mode_get(ioctx, &mirror_mode));
+  ASSERT_EQ(RBD_MIRROR_MODE_POOL, mirror_mode);
 
   ASSERT_EQ(0, rbd.mirror_peer_add(ioctx, "uuid1", "cluster1", "client"));
   ASSERT_EQ(0, rbd.mirror_peer_add(ioctx, "uuid2", "cluster2", "admin"));
@@ -4084,5 +4089,5 @@ TEST_F(TestLibRBD, Mirror) {
     {"uuid3", "new cluster", "admin"}};
   ASSERT_EQ(expected_peers, peers);
 
-  ASSERT_EQ(-EBUSY, rbd.mirror_set_enabled(ioctx, false));
+  ASSERT_EQ(-EBUSY, rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED));
 }
