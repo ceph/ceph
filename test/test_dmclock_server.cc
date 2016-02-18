@@ -16,6 +16,8 @@
 
 namespace dmc = crimson::dmclock;
 
+
+// we need a request object; an empty one will do
 struct Request {
 };
 
@@ -23,7 +25,15 @@ struct Request {
 namespace crimson {
   namespace dmclock {
 
-    TEST(client_map, client_idle_erase) {
+    /*
+     * Allows us to test the code provided with the mutex provided locked.
+     */
+    static void test_locked(std::mutex& mtx, std::function<void()> code) {
+      std::unique_lock<std::mutex> l(mtx);
+      code();
+    }
+
+    TEST(dmclock_server, client_idle_erase) {
       using ClientId = int;
       int client = 17;
 
@@ -42,6 +52,11 @@ namespace crimson {
 					      std::chrono::seconds(3),
 					      std::chrono::seconds(5),
 					      std::chrono::seconds(2));
+
+      auto lock_pq = [&](std::function<void()> code) {
+	test_locked(pq.data_mtx, code);
+      };
+
 
       /* The timeline should be as follows:
        *
@@ -66,7 +81,9 @@ namespace crimson {
        *     9 seconds : verified client is erased
        */
 
-      EXPECT_EQ(pq.client_map.size(), 0) << "client map initially has size 0";
+      lock_pq([&] () {
+	  EXPECT_EQ(pq.client_map.size(), 0) << "client map initially has size 0";
+	});
 
       Request req;
       dmc::ReqParams<ClientId> req_params(client, 1, 1);
@@ -74,19 +91,25 @@ namespace crimson {
 
       std::this_thread::sleep_for(std::chrono::seconds(1));
 
-      EXPECT_EQ(pq.client_map.size(), 1) << "client map has 1 after 1 client";
-      EXPECT_EQ(pq.client_map.at(client).idle, false) <<
-	"initially client map entry shows not idle.";
+      lock_pq([&] () {
+	  EXPECT_EQ(pq.client_map.size(), 1) << "client map has 1 after 1 client";
+	  EXPECT_EQ(pq.client_map.at(client).idle, false) <<
+	    "initially client map entry shows not idle.";
+	});
 
       std::this_thread::sleep_for(std::chrono::seconds(6));
 
-      EXPECT_EQ(pq.client_map.at(client).idle, true) <<
-	"after idle age client map entry shows idle.";
+      lock_pq([&] () {
+	  EXPECT_EQ(pq.client_map.at(client).idle, true) <<
+	    "after idle age client map entry shows idle.";
+	});
 
       std::this_thread::sleep_for(std::chrono::seconds(2));
 
-      EXPECT_EQ(pq.client_map.size(), 0) <<
-	"client map loses its entry after erase age";
+      lock_pq([&] () {
+	  EXPECT_EQ(pq.client_map.size(), 0) <<
+	    "client map loses its entry after erase age";
+	});
     }
   } // namespace dmclock
 } // namespace crimson

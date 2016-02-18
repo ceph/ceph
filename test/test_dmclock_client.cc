@@ -25,7 +25,7 @@ namespace crimson {
     /*
      * Allows us to test the code provided with the mutex provided locked.
      */
-    void test_locked(std::mutex& mtx, std::function<void()> code) {
+    static void test_locked(std::mutex& mtx, std::function<void()> code) {
       std::unique_lock<std::mutex> l(mtx);
       code();
     }

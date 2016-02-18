@@ -135,7 +135,7 @@ namespace crimson {
     // C is client identifier type, R is request type
     template<typename C, typename R>
     class PriorityQueue {
-      FRIEND_TEST(client_map, client_idle_erase);
+      FRIEND_TEST(dmclock_server, client_idle_erase);
 
     public:
 
@@ -263,8 +263,8 @@ namespace crimson {
       CanHandleRequestFunc can_handle_f;
       HandleRequestFunc    handle_f;
 
-      mutable std::mutex data_mutex;
-      using DataGuard = std::lock_guard<decltype(data_mutex)>;
+      mutable std::mutex data_mtx;
+      using DataGuard = std::lock_guard<decltype(data_mtx)>;
 
       // stable mappiing between client ids and client queues
       std::map<C,ClientRec> client_map;
@@ -368,7 +368,7 @@ namespace crimson {
 	}
 #endif
 	const C& client_id = req_params.client;
-	DataGuard g(data_mutex);
+	DataGuard g(data_mtx);
 	++tick;
 
 	auto client_it = client_map.find(client_id);
@@ -436,7 +436,7 @@ namespace crimson {
 
 
       void request_completed() {
-	DataGuard g(data_mutex);
+	DataGuard g(data_mtx);
 	schedule_request();
       }
 
@@ -453,7 +453,7 @@ namespace crimson {
       }
 
 
-      // data_mutex should be held when called
+      // data_mtx should be held when called
       void reduce_reservation_tags(C client_id) {
 	auto client_it = client_map.find(client_id);
 	assert(client_map.end() != client_it);
@@ -467,7 +467,7 @@ namespace crimson {
       }
 
 
-      // data_mutex should be held when called; furthermore, the heap
+      // data_mtx should be held when called; furthermore, the heap
       // should not be empty and the top element of the heap should
       // not be already handled
       template<typename K>
@@ -481,7 +481,7 @@ namespace crimson {
       }
 
 
-      // data_mutex should be held when called
+      // data_mtx should be held when called
       template<typename K>
       void prepare_queue(Heap<EntryRef, K>& heap) {
 	while (!heap.empty() && heap.top()->handled) {
@@ -490,7 +490,7 @@ namespace crimson {
       }
 
 
-      // data_mutex should be held when called
+      // data_mtx should be held when called
       void schedule_request() {
 	if (!can_handle_f()) {
 	  return;
@@ -617,7 +617,7 @@ namespace crimson {
 	    sched_ahead_when = TimeZero;
 	    l.unlock();
 	    if (!finishing) {
-	      DataGuard g(data_mutex);
+	      DataGuard g(data_mtx);
 	      schedule_request();
 	    }
 	    l.lock();
@@ -647,7 +647,7 @@ namespace crimson {
        */
       void do_clean() {
 	TimePoint now = std::chrono::steady_clock::now();
-	DataGuard g(data_mutex);
+	DataGuard g(data_mtx);
 	clean_mark_points.emplace_back(MarkPoint(now, tick));
 
 	// first erase the super-old client records
