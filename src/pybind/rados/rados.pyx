@@ -1280,7 +1280,7 @@ cdef class OmapIterator(object):
     cdef public Ioctx ioctx
     cdef rados_omap_iter_t ctx
 
-    def __init__(self, Ioctx ioctx):
+    def __cinit__(self, Ioctx ioctx):
         self.ioctx = ioctx
 
     def __iter__(self):
@@ -1312,7 +1312,7 @@ cdef class OmapIterator(object):
             val = val_[:len_]
         return (key, val)
 
-    def __del__(self):
+    def __dealloc__(self):
         with nogil:
             rados_omap_get_end(self.ctx)
 
@@ -1362,7 +1362,7 @@ cdef class ObjectIterator(object):
         nspace = decode_cstr(nspace_) if nspace_ != NULL else None
         return Object(self.ioctx, key, locator, nspace)
 
-    def __del__(self):
+    def __dealloc__(self):
         with nogil:
             rados_nobjects_list_close(self.ctx)
 
@@ -1415,7 +1415,7 @@ in '%s'" % self.oid)
         val = val_[:len_]
         return (name, val)
 
-    def __del__(self):
+    def __dealloc__(self):
         with nogil:
             rados_getxattrs_end(self.it)
 
@@ -1616,7 +1616,7 @@ cdef class Completion(object):
             ret = rados_aio_get_return_value(self.rados_comp)
         return ret
 
-    def __del__(self):
+    def __dealloc__(self):
         """
         Release a completion
 
@@ -2120,7 +2120,7 @@ cdef class Ioctx(object):
         requests on it, but you should not use an io context again after
         calling this function on it.
         """
-        if self.state == b"open":
+        if self.state == "open":
             self.require_ioctx_open()
             with nogil:
                 rados_ioctx_destroy(self.io)
