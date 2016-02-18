@@ -21,7 +21,7 @@ rados-pybind-install-exec: ${srcdir}/ceph_ver.h
 	else \
 		options=--prefix=$(prefix) ; \
 	fi ; \
-	cd $(srcdir)/pybind; $(PY_DISTUTILS) build \
+	cd $(srcdir)/pybind/rados; $(PY_DISTUTILS) build \
 	--build-base $(shell readlink -f $(builddir))/build \
 	install \
 	$$options $$root \
