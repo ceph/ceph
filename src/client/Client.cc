@@ -5490,6 +5490,13 @@ void Client::unmount()
     ldout(cct, 0) << " destroyed lost open file " << fh << " on " << *fh->inode << dendl;
     _release_fh(fh);
   }
+  
+  while (!ll_unclosed_fh.empty()) {
+    set<Fh*>::iterator it = ll_unclosed_fh.begin();
+    ll_unclosed_fh.erase(*it);
+    ldout(cct, 0) << " destroyed lost open file " << *it << " on " << *((*it)->inode) << dendl;
+    _release_fh(*it);
+  }
 
   _ll_drop_pins();
 
@@ -11036,6 +11043,9 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, int uid, int gid)
 
  out:
   Fh *fhptr = fhp ? *fhp : NULL;
+  if (fhptr) {
+    ll_unclosed_fh.insert(fhptr);
+  }
   tout(cct) << (unsigned long)fhptr << std::endl;
   ldout(cct, 3) << "ll_open " << vino << " " << flags << " = " << r << " (" <<
     fhptr << ")" << dendl;
@@ -11107,6 +11117,9 @@ out:
     attr->st_ino = 0;
 
   Fh *fhptr = fhp ? *fhp : NULL;
+  if (fhptr) {
+    ll_unclosed_fh.insert(fhptr);
+  }
   tout(cct) << (unsigned long)fhptr << std::endl;
   tout(cct) << attr->st_ino << std::endl;
   ldout(cct, 3) << "ll_create " << parent << " " << name << " 0" << oct <<
@@ -11502,6 +11515,8 @@ int Client::ll_release(Fh *fh)
   tout(cct) << "ll_release (fh)" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
+  if (ll_unclosed_fh.count(fh))
+    ll_unclosed_fh.erase(fh);
   return _release_fh(fh);
 }
 
