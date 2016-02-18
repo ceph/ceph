@@ -384,14 +384,6 @@ RGWMetadataLog* RGWMetadataManager::get_log(const std::string& period)
   return &insert.first->second;
 }
 
-int RGWMetadataManager::store_md_log_entries(list<cls_log_entry>& entries,
-                                             const std::string& period, int shard_id,
-                                             librados::AioCompletion *completion)
-{
-  auto md_log = get_log(period);
-  return md_log->store_entries_in_shard(entries, shard_id, completion);
-}
-
 int RGWMetadataManager::register_handler(RGWMetadataHandler *handler)
 {
   string type = handler->get_type();

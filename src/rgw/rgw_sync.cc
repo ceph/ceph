@@ -1827,8 +1827,7 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
 
   RGWAioCompletionNotifier *cn = stack->create_completion_notifier();
 
-  RGWRados *store = sync_env->store;
-  int ret = store->meta_mgr->store_md_log_entries(dest_entries, shard_id, cn->completion());
+  int ret = mdlog->store_entries_in_shard(dest_entries, shard_id, cn->completion());
   if (ret < 0) {
     cn->put();
     ldout(cct, 10) << "failed to store md log entries shard_id=" << shard_id << " ret=" << ret << dendl;
