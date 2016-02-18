@@ -4284,7 +4284,7 @@ def make_activate_parser(subparsers):
     activate_parser.add_argument(
         'path',
         metavar='PATH',
-        nargs='?',
+        nargs=1,
         help='path to block device or directory',
     )
     activate_parser.add_argument(
@@ -4417,7 +4417,7 @@ def make_suppress_parser(subparsers):
     suppress_parser.add_argument(
         'path',
         metavar='PATH',
-        nargs='?',
+        nargs=1,
         help='path to block device or directory',
     )
     suppress_parser.set_defaults(
@@ -4430,7 +4430,7 @@ def make_suppress_parser(subparsers):
     unsuppress_parser.add_argument(
         'path',
         metavar='PATH',
-        nargs='?',
+        nargs=1,
         help='path to block device or directory',
     )
     unsuppress_parser.set_defaults(
@@ -4452,7 +4452,7 @@ def make_deactivate_parser(subparsers):
     deactivate_parser.add_argument(
         'path',
         metavar='PATH',
-        nargs='?',
+        nargs=1,
         help='path to block device or directory',
     )
     deactivate_parser.add_argument(
@@ -4483,7 +4483,7 @@ def make_destroy_parser(subparsers):
     destroy_parser.add_argument(
         'path',
         metavar='PATH',
-        nargs='?',
+        nargs=1,
         help='path to block device or directory',
     )
     destroy_parser.add_argument(
