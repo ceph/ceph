@@ -157,6 +157,11 @@ class TestMultiFilesystems(CephFSTestCase):
     # We'll create our own filesystems and start our own daemons
     REQUIRE_FILESYSTEM = False
 
+    def setUp(self):
+        super(TestMultiFilesystems, self).setUp()
+        self.fs.mon_manager.raw_cluster_cmd("fs", "flag", "set",
+                                            "enable_multiple", "true")
+
     def _setup_two(self):
         fs_a = self.mds_cluster.get_filesystem("alpha")
         fs_b = self.mds_cluster.get_filesystem("bravo")
