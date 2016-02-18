@@ -868,7 +868,15 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/rados-classes/libcls_version.so*
 %{_libdir}/rados-classes/libcls_journal.so*
 %dir %{_libdir}/ceph/erasure-code
-%{_libdir}/ceph/erasure-code/libec_*.so*
+%{_libdir}/ceph/erasure-code/libec_jerasure.so
+%{_libdir}/ceph/erasure-code/libec_jerasure_generic.so
+%{_libdir}/ceph/erasure-code/libec_jerasure_sse3.so
+%{_libdir}/ceph/erasure-code/libec_jerasure_sse4.so
+%{_libdir}/ceph/erasure-code/libec_lrc.so
+%{_libdir}/ceph/erasure-code/libec_shec.so
+%{_libdir}/ceph/erasure-code/libec_shec_generic.so
+%{_libdir}/ceph/erasure-code/libec_shec_sse3.so
+%{_libdir}/ceph/erasure-code/libec_shec_sse4.so
 %dir %{_libdir}/ceph/compressor
 %{_libdir}/ceph/compressor/libceph_*.so*
 %if 0%{?_with_lttng}
