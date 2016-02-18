@@ -26,14 +26,15 @@ namespace crimson {
      * Allows us to test the code provided with the mutex provided locked.
      */
     static void test_locked(std::mutex& mtx, std::function<void()> code) {
-      std::unique_lock<std::mutex> l(mtx);
+      std::lock_guard<std::mutex> l(mtx);
       code();
     }
 
-    using ServerId = int;
-    using ClientId = int;
 
     TEST(dmclock_client, server_erase) {
+      using ServerId = int;
+      using ClientId = int;
+
       ServerId server = 101;
       ClientId client = 3;
 
@@ -45,7 +46,6 @@ namespace crimson {
       auto lock_st = [&](std::function<void()> code) {
 	test_locked(st.data_mtx, code);
       };
-
 
       /* The timeline should be as follows:
        *
@@ -70,7 +70,6 @@ namespace crimson {
 	  EXPECT_EQ(st.server_map.size(), 0) << "server map initially has size 0";
 	});
 
-
       std::this_thread::sleep_for(std::chrono::seconds(1));
 
       auto req_params = st.get_req_params(client, server);
@@ -93,6 +92,51 @@ namespace crimson {
 	  EXPECT_EQ(st.server_map.size(), 0) <<
 	    "server map has size 0 just after erase";
 	});
+    } // TEST
+
+
+    TEST(dmclock_client, delta_rho_values) {
+      using ServerId = int;
+      using ClientId = int;
+
+      ServerId server = 101;
+      ClientId client = 3;
+
+      RespParams<ServerId> resp_params(server, dmc::PhaseType::reservation);
+
+      dmc::ServiceTracker<ServerId> st(std::chrono::seconds(2),
+                                       std::chrono::seconds(3));
+
+      auto rp1 = st.get_req_params(client, server);
+      auto rp2 = st.get_req_params(client, server);
+
+      EXPECT_EQ(rp1.delta, rp2.delta) <<
+	"delta does not change with no intervening responses";
+
+      EXPECT_EQ(rp1.rho, rp2.rho) <<
+	"rho does not change with no intervening responses";
+
+      st.track_resp(dmc::RespParams<ServerId>(server,
+					      dmc::PhaseType::priority));
+
+      auto rp3 = st.get_req_params(client, server);
+
+      EXPECT_EQ(1 + rp2.delta, rp3.delta) <<
+	"delta should go up by 1 with an intervening priority response";
+
+      EXPECT_EQ(rp2.rho, rp3.rho) <<
+	"rho does not change with no an intervening priority response";
+
+      st.track_resp(dmc::RespParams<ServerId>(server,
+					      dmc::PhaseType::reservation));
+
+      auto rp4 = st.get_req_params(client, server);
+
+      EXPECT_EQ(1 + rp3.delta, rp4.delta) <<
+	"delta should go up by 1 with an intervening priority response";
+
+      EXPECT_EQ(1 + rp3.rho, rp4.rho) <<
+	"rho should go up by 1 with an intervening reservation response";
     } // TEST
   } // namespace dmclock
 } // namespace crimson
