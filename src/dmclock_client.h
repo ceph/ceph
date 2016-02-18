@@ -18,6 +18,8 @@
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
 
+#include "gtest/gtest_prod.h"
+
 
 namespace crimson {
   namespace dmclock {
@@ -54,6 +56,8 @@ namespace crimson {
     // S is server identifier type
     template<typename S>
     class ServiceTracker {
+      FRIEND_TEST(dmclock_client, server_erase);
+
       using TimePoint = decltype(std::chrono::steady_clock::now());
       using Duration = std::chrono::milliseconds;
       using MarkPoint = std::pair<TimePoint,Counter>;
@@ -73,9 +77,10 @@ namespace crimson {
 
     public:
 
+      // we have to start the counters at 1, as 0 is used in the cleaning process
       ServiceTracker(Duration _clean_every, Duration _clean_age) :
-	delta_counter(0),
-	rho_counter(0),
+	delta_counter(1),
+	rho_counter(1),
 	clean_age(std::chrono::duration_cast<Duration>(_clean_age)),
 	cleaning_job(_clean_every, std::bind(&ServiceTracker::do_clean, this))
       {
