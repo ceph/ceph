@@ -756,12 +756,13 @@
   
   rbd help mirror pool enable
   usage: rbd mirror pool enable [--pool <pool>] 
-                                <pool-name> 
+                                <pool-name> <mode> 
   
   Enable RBD mirroring by default within a pool.
   
   Positional arguments
     <pool-name>          pool name
+    <mode>               mirror mode [image or pool]
   
   Optional arguments
     -p [ --pool ] arg    pool name

@@ -171,8 +171,8 @@ namespace librbd {
   int metadata_set(ImageCtx *ictx, const std::string &key, const std::string &value);
   int metadata_remove(ImageCtx *ictx, const std::string &key);
 
-  int mirror_is_enabled(IoCtx& io_ctx, bool *enabled);
-  int mirror_set_enabled(IoCtx& io_ctx, bool enabled);
+  int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
+  int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
   int mirror_peer_add(IoCtx& io_ctx, const std::string &cluster_uuid,
                       const std::string &cluster_name,
                       const std::string &client_name);

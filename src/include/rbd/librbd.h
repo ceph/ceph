@@ -89,6 +89,12 @@ typedef struct {
   char parent_name[RBD_MAX_IMAGE_NAME_SIZE];  /* deprecated */
 } rbd_image_info_t;
 
+typedef enum {
+  RBD_MIRROR_MODE_DISABLED, /* mirroring is disabled */
+  RBD_MIRROR_MODE_IMAGE,    /* mirroring enabled on a per-image basis */
+  RBD_MIRROR_MODE_POOL      /* mirroring enabled on all journaled images */
+} rbd_mirror_mode_t;
+
 typedef struct {
   char *cluster_uuid;
   char *cluster_name;
@@ -170,8 +176,10 @@ CEPH_RBD_API int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname,
                             const char *destname);
 
 /* pool mirroring */
-CEPH_RBD_API int rbd_mirror_is_enabled(rados_ioctx_t io_ctx, bool *enabled);
-CEPH_RBD_API int rbd_mirror_set_enabled(rados_ioctx_t io_ctx, bool enabled);
+CEPH_RBD_API int rbd_mirror_mode_get(rados_ioctx_t io_ctx,
+                                     rbd_mirror_mode_t *mirror_mode);
+CEPH_RBD_API int rbd_mirror_mode_set(rados_ioctx_t io_ctx,
+                                     rbd_mirror_mode_t mirror_mode);
 CEPH_RBD_API int rbd_mirror_peer_add(rados_ioctx_t io_ctx,
                                      const char *cluster_uuid,
                                      const char *cluster_name,

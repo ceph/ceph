@@ -190,3 +190,13 @@
   $ rbd bench-write
   rbd: image name was not specified
   [22]
+  $ rbd mirror pool enable rbd
+  rbd: must specify 'image' or 'pool' mode.
+  [22]
+  $ rbd mirror pool peer add rbd
+  rbd: remote cluster was not specified
+  [22]
+  $ rbd mirror pool peer remove rbd
+  rbd: must specify cluster uuid
+  [22]
+

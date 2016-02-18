@@ -2296,26 +2296,54 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return cls_client::metadata_list(&ictx->md_ctx, ictx->header_oid, start, max, pairs);
   }
 
-  int mirror_is_enabled(IoCtx& io_ctx, bool *enabled) {
+  int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode) {
     CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
     ldout(cct, 20) << __func__ << dendl;
 
-    int r = cls_client::mirror_is_enabled(&io_ctx, enabled);
+    cls::rbd::MirrorMode mirror_mode_internal;
+    int r = cls_client::mirror_mode_get(&io_ctx, &mirror_mode_internal);
     if (r < 0) {
-      lderr(cct) << "Failed to retrieve mirror flag: " << cpp_strerror(r)
+      lderr(cct) << "Failed to retrieve mirror mode: " << cpp_strerror(r)
                  << dendl;
       return r;
+    }
+
+    switch (mirror_mode_internal) {
+    case cls::rbd::MIRROR_MODE_DISABLED:
+    case cls::rbd::MIRROR_MODE_IMAGE:
+    case cls::rbd::MIRROR_MODE_POOL:
+      *mirror_mode = static_cast<rbd_mirror_mode_t>(mirror_mode_internal);
+      break;
+    default:
+      lderr(cct) << "Unknown mirror mode ("
+                 << static_cast<uint32_t>(mirror_mode_internal) << ")"
+                 << dendl;
+      return -EINVAL;
     }
     return 0;
   }
 
-  int mirror_set_enabled(IoCtx& io_ctx, bool enabled) {
+  int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode) {
     CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
-    ldout(cct, 20) << __func__ << ": enabled=" << enabled << dendl;
+    ldout(cct, 20) << __func__ << dendl;
 
-    int r = cls_client::mirror_set_enabled(&io_ctx, enabled);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "Failed to set mirror flag: " << cpp_strerror(r) << dendl;
+    cls::rbd::MirrorMode mirror_mode_internal;
+    switch (mirror_mode) {
+    case RBD_MIRROR_MODE_DISABLED:
+    case RBD_MIRROR_MODE_IMAGE:
+    case RBD_MIRROR_MODE_POOL:
+      mirror_mode_internal = static_cast<cls::rbd::MirrorMode>(
+        mirror_mode);
+      break;
+    default:
+      lderr(cct) << "Unknown mirror mode ("
+                 << static_cast<uint32_t>(mirror_mode) << ")" << dendl;
+      return -EINVAL;
+    }
+
+    int r = cls_client::mirror_mode_set(&io_ctx, mirror_mode_internal);
+    if (r < 0) {
+      lderr(cct) << "Failed to set mirror mode: " << cpp_strerror(r) << dendl;
       return r;
     }
     return 0;

@@ -204,8 +204,10 @@ namespace librbd {
 			  ::SnapContext *snapc);
 
     // operations on the rbd_pool_settings object
-    int mirror_is_enabled(librados::IoCtx *ioctx, bool *enabled);
-    int mirror_set_enabled(librados::IoCtx *ioctx, bool enabled);
+    int mirror_mode_get(librados::IoCtx *ioctx,
+                        cls::rbd::MirrorMode *mirror_mode);
+    int mirror_mode_set(librados::IoCtx *ioctx,
+                        cls::rbd::MirrorMode mirror_mode);
     int mirror_peer_list(librados::IoCtx *ioctx,
                          std::vector<cls::rbd::MirrorPeer> *peers);
     int mirror_peer_add(librados::IoCtx *ioctx, const std::string &cluster_uuid,

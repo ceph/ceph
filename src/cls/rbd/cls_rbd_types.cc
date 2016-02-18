@@ -40,6 +40,24 @@ bool MirrorPeer::operator==(const MirrorPeer &rhs) const {
           client_name == rhs.client_name);
 }
 
+std::ostream& operator<<(std::ostream& os, const MirrorMode& mirror_mode) {
+  switch (mirror_mode) {
+  case MIRROR_MODE_DISABLED:
+    os << "disabled";
+    break;
+  case MIRROR_MODE_IMAGE:
+    os << "image";
+    break;
+  case MIRROR_MODE_POOL:
+    os << "pool";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(mirror_mode) << ")";
+    break;
+  }
+  return os;
+}
+
 std::ostream& operator<<(std::ostream& os, const MirrorPeer& peer) {
   os << "["
      << "cluster_uuid=" << peer.cluster_uuid << ", "

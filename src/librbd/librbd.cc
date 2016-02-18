@@ -379,12 +379,12 @@ namespace librbd {
     return r;
   }
 
-  int RBD::mirror_is_enabled(IoCtx& io_ctx, bool *enabled) {
-    return librbd::mirror_is_enabled(io_ctx, enabled);
+  int RBD::mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode) {
+    return librbd::mirror_mode_get(io_ctx, mirror_mode);
   }
 
-  int RBD::mirror_set_enabled(IoCtx& io_ctx, bool enabled) {
-    return librbd::mirror_set_enabled(io_ctx, enabled);
+  int RBD::mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode) {
+    return librbd::mirror_mode_set(io_ctx, mirror_mode);
   }
 
   int RBD::mirror_peer_add(IoCtx& io_ctx, const std::string &cluster_uuid,
@@ -1305,20 +1305,18 @@ extern "C" int rbd_image_options_is_empty(rbd_image_options_t opts)
 }
 
 /* pool mirroring */
-extern "C" int rbd_mirror_is_enabled(rados_ioctx_t p, bool *enabled) {
+extern "C" int rbd_mirror_mode_get(rados_ioctx_t p,
+                                   rbd_mirror_mode_t *mirror_mode) {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  int r = librbd::mirror_is_enabled(io_ctx, enabled);
-  if (r < 0) {
-    return r;
-  }
-  return 0;
+  return librbd::mirror_mode_get(io_ctx, mirror_mode);
 }
 
-extern "C" int rbd_mirror_set_enabled(rados_ioctx_t p, bool enabled) {
+extern "C" int rbd_mirror_mode_set(rados_ioctx_t p,
+                                   rbd_mirror_mode_t mirror_mode) {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::mirror_set_enabled(io_ctx, enabled);
+  return librbd::mirror_mode_set(io_ctx, mirror_mode);
 }
 
 extern "C" int rbd_mirror_peer_add(rados_ioctx_t p,

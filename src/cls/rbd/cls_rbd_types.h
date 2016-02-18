@@ -15,6 +15,12 @@ namespace ceph { class Formatter; }
 namespace cls {
 namespace rbd {
 
+enum MirrorMode {
+  MIRROR_MODE_DISABLED = 0,
+  MIRROR_MODE_IMAGE    = 1,
+  MIRROR_MODE_POOL     = 2
+};
+
 struct MirrorPeer {
   MirrorPeer() {
   }
@@ -37,6 +43,7 @@ struct MirrorPeer {
   bool operator==(const MirrorPeer &rhs) const;
 };
 
+std::ostream& operator<<(std::ostream& os, const MirrorMode& mirror_mode);
 std::ostream& operator<<(std::ostream& os, const MirrorPeer& peer);
 
 WRITE_CLASS_ENCODER(MirrorPeer);

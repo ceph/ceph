@@ -302,15 +302,20 @@ int execute_peer_set(const po::variables_map &vm) {
   return 0;
 }
 
-void get_enable_disable_arguments(po::options_description *positional,
-                                  po::options_description *options) {
+void get_disable_arguments(po::options_description *positional,
+                           po::options_description *options) {
   at::add_pool_options(positional, options);
 }
 
-int execute_enable_disable(const po::variables_map &vm, bool enabled) {
-  size_t arg_index = 0;
-  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+void get_enable_arguments(po::options_description *positional,
+                          po::options_description *options) {
+  at::add_pool_options(positional, options);
+  positional->add_options()
+    ("mode", "mirror mode [image or pool]");
+}
 
+int execute_enable_disable(const std::string &pool_name,
+                           rbd_mirror_mode_t mirror_mode) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   int r = utils::init(pool_name, &rados, &io_ctx);
@@ -319,7 +324,7 @@ int execute_enable_disable(const po::variables_map &vm, bool enabled) {
   }
 
   librbd::RBD rbd;
-  r = rbd.mirror_set_enabled(io_ctx, enabled);
+  r = rbd.mirror_mode_set(io_ctx, mirror_mode);
   if (r < 0) {
     return r;
   }
@@ -327,11 +332,28 @@ int execute_enable_disable(const po::variables_map &vm, bool enabled) {
 }
 
 int execute_disable(const po::variables_map &vm) {
-  return execute_enable_disable(vm, false);
+  size_t arg_index = 0;
+  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+
+  return execute_enable_disable(pool_name, RBD_MIRROR_MODE_DISABLED);
 }
 
 int execute_enable(const po::variables_map &vm) {
-  return execute_enable_disable(vm, true);
+  size_t arg_index = 0;
+  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+
+  rbd_mirror_mode_t mirror_mode;
+  std::string mode = utils::get_positional_argument(vm, arg_index++);
+  if (mode == "image") {
+    mirror_mode = RBD_MIRROR_MODE_IMAGE;
+  } else if (mode == "pool") {
+    mirror_mode = RBD_MIRROR_MODE_POOL;
+  } else {
+    std::cerr << "rbd: must specify 'image' or 'pool' mode." << std::endl;
+    return -EINVAL;
+  }
+
+  return execute_enable_disable(pool_name, mirror_mode);
 }
 
 void get_info_arguments(po::options_description *positional,
@@ -363,8 +385,8 @@ int execute_info(const po::variables_map &vm) {
   }
 
   librbd::RBD rbd;
-  bool enabled;
-  r = rbd.mirror_is_enabled(io_ctx, &enabled);
+  rbd_mirror_mode_t mirror_mode;
+  r = rbd.mirror_mode_get(io_ctx, &mirror_mode);
   if (r < 0) {
     return r;
   }
@@ -375,11 +397,27 @@ int execute_info(const po::variables_map &vm) {
     return r;
   }
 
+  std::string mirror_mode_desc;
+  switch (mirror_mode) {
+  case RBD_MIRROR_MODE_DISABLED:
+    mirror_mode_desc = "disabled";
+    break;
+  case RBD_MIRROR_MODE_IMAGE:
+    mirror_mode_desc = "image";
+    break;
+  case RBD_MIRROR_MODE_POOL:
+    mirror_mode_desc = "pool";
+    break;
+  default:
+    mirror_mode_desc = "unknown";
+    break;
+  }
+
   if (formatter != nullptr) {
     formatter->open_object_section("mirror");
-    formatter->dump_bool("enabled", enabled);
+    formatter->dump_string("mode", mirror_mode_desc);
   } else {
-    std::cout << "Enabled: " << (enabled ? "true" : "false") << std::endl;
+    std::cout << "Mode: " << mirror_mode_desc << std::endl;
   }
 
   format_mirror_peers(config_path, formatter, mirror_peers);
@@ -406,11 +444,11 @@ Shell::Action action_set(
 Shell::Action action_disable(
   {"mirror", "pool", "disable"}, {},
   "Disable RBD mirroring by default within a pool.", "",
-  &get_enable_disable_arguments, &execute_disable);
+  &get_disable_arguments, &execute_disable);
 Shell::Action action_enable(
   {"mirror", "pool", "enable"}, {},
   "Enable RBD mirroring by default within a pool.", "",
-  &get_enable_disable_arguments, &execute_enable);
+  &get_enable_arguments, &execute_enable);
 Shell::Action action_info(
   {"mirror", "pool", "info"}, {},
   "Show information about the pool mirroring configuration.", {},
