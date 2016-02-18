@@ -1043,6 +1043,8 @@ void rgw_meta_sync_info::decode_json(JSONObj *obj)
     state = StateSync;
   }    
   JSONDecoder::decode_json("num_shards", num_shards, obj);
+  JSONDecoder::decode_json("period", period, obj);
+  JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
 }
 
 void rgw_meta_sync_info::dump(Formatter *f) const
@@ -1064,6 +1066,8 @@ void rgw_meta_sync_info::dump(Formatter *f) const
   }
   encode_json("status", s, f);
   encode_json("num_shards", num_shards, f);
+  encode_json("period", period, f);
+  encode_json("realm_epoch", realm_epoch, f);
 }
 
 void rgw_meta_sync_marker::decode_json(JSONObj *obj)

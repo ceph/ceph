@@ -4373,9 +4373,22 @@ next:
 
     int i = (specified_shard_id ? shard_id : 0);
 
+    if (period_id.empty()) {
+      // read current_period from the realm
+      RGWRealm realm(realm_id, realm_name);
+      ret = realm.init(g_ceph_context, store);
+      if (ret < 0) {
+        std::cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+      period_id = realm.get_current_period();
+      std::cerr << "No --period given, using current period="
+          << period_id << std::endl;
+    }
+    RGWMetadataLog *meta_log = store->meta_mgr->get_log(period_id);
+
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
-      RGWMetadataLog *meta_log = store->meta_mgr->get_log();
       void *handle;
       list<cls_log_entry> entries;
 
@@ -4411,12 +4424,23 @@ next:
   if (opt_cmd == OPT_MDLOG_STATUS) {
     int i = (specified_shard_id ? shard_id : 0);
 
-    RGWMetadataLog *meta_log = store->meta_mgr->get_log();
-    formatter->open_array_section("entries");
-    for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
-      void *handle;
-      list<cls_log_entry> entries;
+    if (period_id.empty()) {
+      // read current_period from the realm
+      RGWRealm realm(realm_id, realm_name);
+      int ret = realm.init(g_ceph_context, store);
+      if (ret < 0) {
+        std::cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+      period_id = realm.get_current_period();
+      std::cerr << "No --period given, using current period="
+          << period_id << std::endl;
+    }
+    RGWMetadataLog *meta_log = store->meta_mgr->get_log(period_id);
 
+    formatter->open_array_section("entries");
+
+    for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
       RGWMetadataLogInfo info;
       meta_log->get_info(i, &info);
 
@@ -4447,30 +4471,17 @@ next:
     if (ret < 0)
       return -ret;
 
-    RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+    if (period_id.empty()) {
+      std::cerr << "missing --period argument" << std::endl;
+      return EINVAL;
+    }
+    RGWMetadataLog *meta_log = store->meta_mgr->get_log(period_id);
 
     ret = meta_log->trim(shard_id, start_time, end_time, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-  }
-  
-  if (opt_cmd == OPT_MDLOG_FETCH) {
-    RGWMetaSyncStatusManager sync(store, store->get_async_rados());
-
-    int ret = sync.init();
-    if (ret < 0) {
-      cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
-      return -ret;
-    }
-
-    ret = sync.fetch();
-    if (ret < 0) {
-      cerr << "ERROR: sync.fetch() returned ret=" << ret << std::endl;
-      return -ret;
-    }
-
   }
 
   if (opt_cmd == OPT_METADATA_SYNC_STATUS) {
@@ -4488,7 +4499,7 @@ next:
       return -ret;
     }
 
-    rgw_meta_sync_status& sync_status = sync.get_sync_status();
+    const rgw_meta_sync_status& sync_status = sync.get_sync_status();
 
     formatter->open_object_section("summary");
     encode_json("sync_status", sync_status, formatter);

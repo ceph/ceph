@@ -175,7 +175,7 @@ class RGWSimpleRadosReadCR : public RGWSimpleCoroutine {
 public:
   RGWSimpleRadosReadCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      RGWObjectCtx& _obj_ctx,
-		      rgw_bucket& _pool, const string& _oid,
+		      const rgw_bucket& _pool, const string& _oid,
 		      T *_result) : RGWSimpleCoroutine(_store->ctx()),
                                                 async_rados(_async_rados), store(_store),
                                                 obj_ctx(_obj_ctx),
@@ -282,7 +282,7 @@ class RGWSimpleRadosWriteCR : public RGWSimpleCoroutine {
 
 public:
   RGWSimpleRadosWriteCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-		      rgw_bucket& _pool, const string& _oid,
+		      const rgw_bucket& _pool, const string& _oid,
 		      const T& _data) : RGWSimpleCoroutine(_store->ctx()),
                                                 async_rados(_async_rados),
 						store(_store),
@@ -386,7 +386,7 @@ class RGWRadosGetOmapKeysCR : public RGWSimpleCoroutine {
 
 public:
   RGWRadosGetOmapKeysCR(RGWRados *_store,
-		      rgw_bucket& _pool, const string& _oid,
+		      const rgw_bucket& _pool, const string& _oid,
 		      const string& _marker,
 		      map<string, bufferlist> *_entries, int _max_entries);
   ~RGWRadosGetOmapKeysCR();
@@ -412,7 +412,7 @@ class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
 
 public:
   RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-		      rgw_bucket& _pool, const string& _oid, const string& _lock_name,
+		      const rgw_bucket& _pool, const string& _oid, const string& _lock_name,
 		      const string& _cookie,
 		      uint32_t _duration);
   ~RGWSimpleRadosLockCR();
@@ -434,7 +434,7 @@ class RGWSimpleRadosUnlockCR : public RGWSimpleCoroutine {
 
 public:
   RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-		      rgw_bucket& _pool, const string& _oid, const string& _lock_name,
+		      const rgw_bucket& _pool, const string& _oid, const string& _lock_name,
 		      const string& _cookie);
   ~RGWSimpleRadosUnlockCR();
 
@@ -819,7 +819,7 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
 
-  rgw_bucket pool;
+  const rgw_bucket& pool;
   string oid;
 
   string lock_name;
@@ -836,7 +836,8 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   bool aborted;
 
 public:
-  RGWContinuousLeaseCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid,
+  RGWContinuousLeaseCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+                       const rgw_bucket& _pool, const string& _oid,
                        const string& _lock_name, int _interval, RGWCoroutine *_caller) : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
                                         pool(_pool), oid(_oid), lock_name(_lock_name), interval(_interval),
                                         lock("RGWContimuousLeaseCR"), locked(false), caller(_caller), aborted(false) {

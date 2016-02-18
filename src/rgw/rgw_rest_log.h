@@ -95,6 +95,7 @@ public:
 
 class RGWOp_MDLog_Info : public RGWRESTOp {
   unsigned num_objects;
+  RGWPeriodHistory::Cursor period;
 public:
   RGWOp_MDLog_Info() : num_objects(0) {}
   ~RGWOp_MDLog_Info() {}

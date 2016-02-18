@@ -1246,7 +1246,7 @@ int RGWPeriod::update_sync_status()
     return -EINVAL;
   }
 
-  auto mdlog = store->meta_mgr->get_log();
+  auto mdlog = store->meta_mgr->get_log(get_id());
   const auto num_shards = cct->_conf->rgw_md_log_max_shards;
 
   std::vector<std::string> markers;
@@ -2815,12 +2815,14 @@ void *RGWRadosThread::Worker::entry() {
 
 class RGWMetaNotifier : public RGWRadosThread {
   RGWMetaNotifierManager notify_mgr;
+  RGWMetadataLog *const log;
 
   uint64_t interval_msec() {
     return cct->_conf->rgw_md_notify_interval_msec;
   }
 public:
-  RGWMetaNotifier(RGWRados *_store) : RGWRadosThread(_store), notify_mgr(_store) {}
+  RGWMetaNotifier(RGWRados *_store, RGWMetadataLog* log)
+    : RGWRadosThread(_store), notify_mgr(_store), log(log) {}
 
   int process();
 };
@@ -2828,8 +2830,6 @@ public:
 int RGWMetaNotifier::process()
 {
   set<int> shards;
-
-  RGWMetadataLog *log = store->meta_mgr->get_log();
 
   log->read_clear_modified(shards);
 
@@ -3660,7 +3660,15 @@ int RGWRados::init_complete()
     obj_expirer->start_processor();
   }
 
-  meta_notifier = new RGWMetaNotifier(this);
+  ret = meta_mgr->init(current_period.get_id());
+  if (ret < 0) {
+    lderr(cct) << "ERROR: failed to initialize metadata log: "
+        << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  auto md_log = meta_mgr->get_log(current_period.get_id());
+
+  meta_notifier = new RGWMetaNotifier(this, md_log);
   if (is_meta_master()) {
     meta_notifier->start();
   }

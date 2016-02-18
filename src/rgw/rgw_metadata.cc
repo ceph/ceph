@@ -86,7 +86,7 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
 }
 
 
-int RGWMetadataLog::add_entry(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl) {
+int RGWMetadataLog::add_entry(RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl) {
   if (!store->need_to_log_metadata())
     return 0;
 
@@ -102,20 +102,7 @@ int RGWMetadataLog::add_entry(RGWRados *store, RGWMetadataHandler *handler, cons
   return store->time_log_add(oid, now, section, key, bl);
 }
 
-int RGWMetadataLog::get_log_shard_id(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key)
-{
-  string oid;
-
-  string hash_key;
-  handler->get_hash_key(section, key, hash_key);
-
-  int shard_id;
-  store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
-
-  return shard_id;
-}
-
-int RGWMetadataLog::store_entries_in_shard(RGWRados *store, list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
+int RGWMetadataLog::store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
 {
   string oid;
 
@@ -354,9 +341,9 @@ public:
 
 static RGWMetadataTopHandler md_top_handler;
 
-RGWMetadataManager::RGWMetadataManager(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store)
+RGWMetadataManager::RGWMetadataManager(CephContext *_cct, RGWRados *_store)
+  : cct(_cct), store(_store)
 {
-  md_log = new RGWMetadataLog(_cct, _store);
 }
 
 RGWMetadataManager::~RGWMetadataManager()
@@ -368,12 +355,33 @@ RGWMetadataManager::~RGWMetadataManager()
   }
 
   handlers.clear();
-  delete md_log;
 }
 
-int RGWMetadataManager::store_md_log_entries(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
+static RGWPeriodHistory::Cursor find_oldest_log_period(RGWRados* store)
 {
-  return md_log->store_entries_in_shard(store, entries, shard_id, completion);
+  // TODO: search backwards through the period history for the first period with
+  // no log shard objects, and return its successor (some shards may be missing
+  // if they contain no metadata yet, so we need to check all shards)
+  return store->period_history->get_current();
+}
+
+int RGWMetadataManager::init(const std::string& current_period)
+{
+  // find our oldest log so we can tell other zones where to start their sync
+  oldest_log_period = find_oldest_log_period(store);
+
+  // open a log for the current period
+  current_log = get_log(current_period);
+  return 0;
+}
+
+RGWMetadataLog* RGWMetadataManager::get_log(const std::string& period)
+{
+  // construct the period's log in place if it doesn't exist
+  auto insert = md_logs.emplace(std::piecewise_construct,
+                                std::forward_as_tuple(period),
+                                std::forward_as_tuple(cct, store, period));
+  return &insert.first->second;
 }
 
 int RGWMetadataManager::register_handler(RGWMetadataHandler *handler)
@@ -663,7 +671,8 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
   bufferlist logbl;
   ::encode(log_data, logbl);
 
-  int ret = md_log->add_entry(store, handler, section, key, logbl);
+  assert(current_log); // must have called init()
+  int ret = current_log->add_entry(handler, section, key, logbl);
   if (ret < 0)
     return ret;
 
@@ -681,7 +690,8 @@ int RGWMetadataManager::post_modify(RGWMetadataHandler *handler, const string& s
   bufferlist logbl;
   ::encode(log_data, logbl);
 
-  int r = md_log->add_entry(store, handler, section, key, logbl);
+  assert(current_log); // must have called init()
+  int r = current_log->add_entry(handler, section, key, logbl);
   if (ret < 0)
     return ret;
 
@@ -805,3 +815,15 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, R
   return 0;
 }
 
+int RGWMetadataManager::get_log_shard_id(const string& section,
+                                         const string& key, int *shard_id)
+{
+  RGWMetadataHandler *handler = get_handler(section);
+  if (!handler) {
+    return -EINVAL;
+  }
+  string hash_key;
+  handler->get_hash_key(section, key, hash_key);
+  *shard_id = store->key_to_shard_id(hash_key, cct->_conf->rgw_md_log_max_shards);
+  return 0;
+}
