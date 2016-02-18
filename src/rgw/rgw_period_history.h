@@ -69,6 +69,7 @@ class RGWPeriodHistory final {
   class Cursor final {
    public:
     Cursor() = default;
+    explicit Cursor(int error) : error(error) {}
 
     int get_error() const { return error; }
 
@@ -88,7 +89,6 @@ class RGWPeriodHistory final {
     // private constructors for RGWPeriodHistory
     friend class RGWPeriodHistory;
 
-    explicit Cursor(int error) : error(error) {}
     Cursor(Set::const_iterator history, std::mutex* mutex, epoch_t epoch)
       : history(history), mutex(mutex), epoch(epoch) {}
 
