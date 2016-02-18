@@ -668,6 +668,73 @@ public:
   Mutex agent_timer_lock;
   SafeTimer agent_timer;
 
+  struct agent_item{
+    PGRef m_pg;
+    uint64_t m_priority;
+    agent_item() {}
+    agent_item(PG* pg, uint64_t priority):m_pg(pg),m_priority(priority) {
+    }
+  };
+  
+  struct item_compare{
+    bool operator ()(agent_item* item1,agent_item* item2) {
+      if (item1->m_pg == item2->m_pg)
+      	return false;
+      return item1->m_priority > item2->m_priority;
+    }
+  };
+
+  ThreadPool agent_tp;
+  set<agent_item*, item_compare> agent_queue;
+  
+  struct AgentWQ : public ThreadPool::WorkQueue<agent_item> {
+    OSDService *osd;
+    AgentWQ(OSDService *o, time_t ti, time_t si, ThreadPool *tp)
+      : ThreadPool::WorkQueue<agent_item>("OSD::AgentWQ", ti, si, tp), osd(o) {}
+    bool _empty() {
+      return osd->agent_queue.empty();
+    }
+    bool _enqueue(agent_item *item) {
+      set<agent_item*, item_compare>::iterator it = osd->agent_queue.find(item);
+      if (it != osd->agent_queue.end()) {
+      	agent_item* orig_item = *it;
+      	osd->agent_queue.erase(it);
+	delete orig_item;
+      }
+      osd->agent_queue.insert(item);
+      return true;
+    }
+    void _dequeue(agent_item *item) {
+      set<agent_item*, item_compare>::iterator it = osd->agent_queue.find(item);
+      if (it != osd->agent_queue.end()){
+      	agent_item* orig_item = *it;
+      	osd->agent_queue.erase(it);
+	delete orig_item;
+      }
+    }
+    agent_item *_dequeue() {
+      if (osd->agent_queue.empty()){
+       	return NULL;
+      }
+      set<agent_item*, item_compare>::iterator it = osd->agent_queue.begin();
+      agent_item *item = *it;
+      osd->agent_queue.erase(it);
+      return item;
+    }
+    void _process(agent_item *item, ThreadPool::TPHandle &handle) {
+      osd->agent_entry(item->m_pg);
+      delete item;
+    }
+    void _clear() {   
+      while (!osd->agent_queue.empty()) {
+	set<agent_item*, item_compare>::iterator it = osd->agent_queue.begin();
+	agent_item* item = *it;
+	osd->agent_queue.erase(it);
+	delete item;
+      }
+    }
+  }agent_wq;
+
   void agent_entry();
   void agent_stop();
 
