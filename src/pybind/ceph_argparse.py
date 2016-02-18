@@ -120,6 +120,8 @@ class CephArgtype(object):
         """
         return '<{0}>'.format(self.__class__.__name__)
 
+    def complete(self, s):
+        return []
 
 class CephInt(CephArgtype):
     """
@@ -219,6 +221,11 @@ class CephString(CephArgtype):
             b += '(goodchars {0})'.format(self.goodchars)
         return '<string{0}>'.format(b)
 
+    def complete(self, s):
+        if s=='':
+            return []
+        else:
+            return [s]
 
 class CephSocketpath(CephArgtype):
     """
@@ -450,6 +457,10 @@ class CephChoices(CephArgtype):
         else:
             return '{0}'.format('|'.join(self.strings))
 
+    def complete(self, s):
+        all_elems = [token for token in self.strings if token.startswith(s)]
+        return all_elems
+
 
 class CephFilepath(CephArgtype):
     """
@@ -536,6 +547,13 @@ class CephPrefix(CephArgtype):
     def __str__(self):
         return self.prefix
 
+    def complete(self, s):
+        if self.prefix.startswith(s):
+            return [self.prefix.rstrip(' ')]
+        else:
+            return []
+
+
 
 class argdesc(object):
     """
@@ -617,6 +635,9 @@ class argdesc(object):
         if not self.req:
             s = '{' + s + '}'
         return s
+
+    def complete(self, s):
+        return self.instance.complete(s)
 
 
 def concise_sig(sig):
