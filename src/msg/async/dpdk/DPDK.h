@@ -535,6 +535,14 @@ class DPDKQueuePair {
     static constexpr int gc_count = 1;
    public:
     tx_buf_factory(CephContext *c, uint8_t qid);
+    ~tx_buf_factory() {
+      // put all mbuf back into mempool in order to make the next factory work
+      gc();
+      rte_mempool_put_bulk(_pool, (void**)_ring.data(),
+                           _ring.size());
+      assert(rte_mempool_free_count(_pool) == 0);
+    }
+
 
     /**
      * @note Should not be called if there are no free tx_buf's
@@ -617,7 +625,10 @@ class DPDKQueuePair {
 
  public:
   explicit DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, uint8_t qid);
-  ~DPDKQueuePair() {}
+  ~DPDKQueuePair() {
+    rx_gc(true);
+    assert(rte_mempool_free_count(_pktmbuf_pool_rx) == 0);
+  }
 
   void rx_start() {
     _rx_poller.construct(this);
@@ -711,7 +722,7 @@ class DPDKQueuePair {
   }
 
   bool init_rx_mbuf_pool();
-  bool rx_gc();
+  bool rx_gc(bool force=false);
   bool refill_one_cluster(rte_mbuf* head);
 
   /**
@@ -911,7 +922,9 @@ class DPDKDevice {
     cct->get_perfcounters_collection()->add(perf_logger);
   }
 
-  ~DPDKDevice() {}
+  ~DPDKDevice() {
+    rte_eth_dev_stop(_port_idx);
+  }
 
   DPDKQueuePair& queue_for_cpu(unsigned cpu) { return *_queues[cpu]; }
   void l2receive(int qid, Packet p) {

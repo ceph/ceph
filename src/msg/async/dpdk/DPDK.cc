@@ -53,6 +53,7 @@
 #include "toeplitz.h"
 
 #include "common/dout.h"
+#include "common/errno.h"
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_dpdk
@@ -352,6 +353,8 @@ int DPDKDevice::init_port_start()
    */
   if ((retval = rte_eth_dev_configure(_port_idx, _num_queues, _num_queues,
                                       &port_conf)) != 0) {
+    lderr(cct) << __func__ << " failed to configure port " << (int)_port_idx
+               << " rx/tx queues " << _num_queues << " error " << cpp_strerror(retval) << dendl;
     return retval;
   }
 
@@ -481,48 +484,55 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
   ldout(cct, 1) << __func__ << " Creating Rx mbuf pool '" << name.c_str()
                 << "' [" << mbufs_per_queue_rx << " mbufs] ..."<< dendl;
 
-  //
-  // Don't pass single-producer/single-consumer flags to mbuf create as it
-  // seems faster to use a cache instead.
-  //
-  struct rte_pktmbuf_pool_private roomsz = {};
-  roomsz.mbuf_data_room_size = mbuf_data_size + RTE_PKTMBUF_HEADROOM;
-  _pktmbuf_pool_rx = rte_mempool_create(
-      name.c_str(),
-      mbufs_per_queue_rx, mbuf_overhead,
-      mbuf_cache_size,
-      sizeof(struct rte_pktmbuf_pool_private),
-      rte_pktmbuf_pool_init, as_cookie(roomsz),
-      rte_pktmbuf_init, nullptr,
-      rte_socket_id(), 0);
-
   // reserve the memory for Rx buffers containers
   _rx_free_pkts.reserve(mbufs_per_queue_rx);
   _rx_free_bufs.reserve(mbufs_per_queue_rx);
 
-  //
-  // 1) Pull all entries from the pool.
-  // 2) Bind data buffers to each of them.
-  // 3) Return them back to the pool.
-  //
-  for (int i = 0; i < mbufs_per_queue_rx; i++) {
-    rte_mbuf* m = rte_pktmbuf_alloc(_pktmbuf_pool_rx);
-    assert(m);
-    _rx_free_bufs.push_back(m);
-  }
-
-  for (auto&& m : _rx_free_bufs) {
-    if (!init_noninline_rx_mbuf(m, mbuf_data_size)) {
-      lderr(cct) << __func__ << " Failed to allocate data buffers for Rx ring. "
-                 "Consider increasing the amount of memory." << dendl;
+  _pktmbuf_pool_rx = rte_mempool_lookup(name.c_str());
+  if (!_pktmbuf_pool_rx) {
+    //
+    // Don't pass single-producer/single-consumer flags to mbuf create as it
+    // seems faster to use a cache instead.
+    //
+    struct rte_pktmbuf_pool_private roomsz = {};
+    roomsz.mbuf_data_room_size = mbuf_data_size + RTE_PKTMBUF_HEADROOM;
+    _pktmbuf_pool_rx = rte_mempool_create(
+        name.c_str(),
+        mbufs_per_queue_rx, mbuf_overhead,
+        mbuf_cache_size,
+        sizeof(struct rte_pktmbuf_pool_private),
+        rte_pktmbuf_pool_init, as_cookie(roomsz),
+        rte_pktmbuf_init, nullptr,
+        rte_socket_id(), 0);
+    if (!_pktmbuf_pool_rx) {
+      lderr(cct) << __func__ << " Failed to create mempool for rx" << dendl;
       assert(0);
     }
+
+    //
+    // 1) Pull all entries from the pool.
+    // 2) Bind data buffers to each of them.
+    // 3) Return them back to the pool.
+    //
+    for (int i = 0; i < mbufs_per_queue_rx; i++) {
+      rte_mbuf* m = rte_pktmbuf_alloc(_pktmbuf_pool_rx);
+      assert(m);
+      _rx_free_bufs.push_back(m);
+    }
+
+    for (auto&& m : _rx_free_bufs) {
+      if (!init_noninline_rx_mbuf(m, mbuf_data_size)) {
+        lderr(cct) << __func__ << " Failed to allocate data buffers for Rx ring. "
+                   "Consider increasing the amount of memory." << dendl;
+        assert(0);
+      }
+    }
+
+    rte_mempool_put_bulk(_pktmbuf_pool_rx, (void**)_rx_free_bufs.data(),
+                         _rx_free_bufs.size());
+
+    _rx_free_bufs.clear();
   }
-
-  rte_mempool_put_bulk(_pktmbuf_pool_rx, (void**)_rx_free_bufs.data(),
-                       _rx_free_bufs.size());
-
-  _rx_free_bufs.clear();
 
   return _pktmbuf_pool_rx != nullptr;
 }
@@ -699,9 +709,9 @@ inline bool DPDKQueuePair::refill_one_cluster(rte_mbuf* head)
   return true;
 }
 
-bool DPDKQueuePair::rx_gc()
+bool DPDKQueuePair::rx_gc(bool force)
 {
-  if (_num_rx_free_segs >= rx_gc_thresh) {
+  if (_num_rx_free_segs >= rx_gc_thresh || force) {
     while (!_rx_free_pkts.empty()) {
       //
       // Use back() + pop_back() semantics to avoid an extra
@@ -809,23 +819,25 @@ DPDKQueuePair::tx_buf_factory::tx_buf_factory(CephContext *c, uint8_t qid)
   ldout(cct, 0) << __func__ << " Creating Tx mbuf pool '" << name.c_str()
                 << "' [" << mbufs_per_queue_tx << " mbufs] ..." << dendl;
 
-  //
-  // We are going to push the buffers from the mempool into
-  // the circular_buffer and then poll them from there anyway, so
-  // we prefer to make a mempool non-atomic in this case.
-  //
-  _pool =
-      rte_mempool_create(name.c_str(),
-                              mbufs_per_queue_tx, inline_mbuf_size,
-                              mbuf_cache_size,
-                              sizeof(struct rte_pktmbuf_pool_private),
-                              rte_pktmbuf_pool_init, nullptr,
-                              rte_pktmbuf_init, nullptr,
-                              rte_socket_id(), 0);
-
+  _pool = rte_mempool_lookup(name.c_str());
   if (!_pool) {
-    lderr(cct) << __func__ << " Failed to create mempool for Tx" << dendl;
-    assert(0);
+    //
+    // We are going to push the buffers from the mempool into
+    // the circular_buffer and then poll them from there anyway, so
+    // we prefer to make a mempool non-atomic in this case.
+    //
+    _pool = rte_mempool_create(name.c_str(),
+                               mbufs_per_queue_tx, inline_mbuf_size,
+                               mbuf_cache_size,
+                               sizeof(struct rte_pktmbuf_pool_private),
+                               rte_pktmbuf_pool_init, nullptr,
+                               rte_pktmbuf_init, nullptr,
+                               rte_socket_id(), 0);
+
+    if (!_pool) {
+      lderr(cct) << __func__ << " Failed to create mempool for Tx" << dendl;
+      assert(0);
+    }
   }
 
   //
@@ -1165,16 +1177,16 @@ std::unique_ptr<DPDKDevice> create_dpdk_net_device(
 {
   static bool called = false;
 
-  assert(!called);
-  assert(dpdk::eal::initialized);
-
-  called = true;
+  if (!called) {
+    dpdk::eal::init(cct);
+    called = true;
+  }
 
   // Check that we have at least one DPDK-able port
   if (rte_eth_dev_count() == 0) {
     rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
   } else {
-    ldout(cct, 10) << __func__ << "ports number: " << rte_eth_dev_count() << dendl;
+    ldout(cct, 10) << __func__ << " ports number: " << rte_eth_dev_count() << dendl;
   }
 
   return std::unique_ptr<DPDKDevice>(
