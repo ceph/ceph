@@ -244,7 +244,7 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
     warning_vector[0] = ss.str();
   }
 
-  return warned;
+  return warned > 0;
 }
 
 void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
