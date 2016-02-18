@@ -738,48 +738,23 @@ public:
   void agent_entry(PGRef pg);
   void agent_stop();
 
-  void _enqueue(PG *pg, uint64_t priority) {
-    if (!agent_queue.empty() &&
-	agent_queue.rbegin()->first < priority)
-      agent_valid_iterator = false;  // inserting higher-priority queue
-    set<PGRef>& nq = agent_queue[priority];
-    if (nq.empty())
-      agent_cond.Signal();
-    nq.insert(pg);
-  }
-
-  void _dequeue(PG *pg, uint64_t old_priority) {
-    set<PGRef>& oq = agent_queue[old_priority];
-    set<PGRef>::iterator p = oq.find(pg);
-    assert(p != oq.end());
-    if (p == agent_queue_pos)
-      ++agent_queue_pos;
-    oq.erase(p);
-    if (oq.empty()) {
-      if (agent_queue.rbegin()->first == old_priority)
-	agent_valid_iterator = false;
-      agent_queue.erase(old_priority);
-    }
-  }
-
   /// enable agent for a pg
   void agent_enable_pg(PG *pg, uint64_t priority) {
-    Mutex::Locker l(agent_lock);
-    _enqueue(pg, priority);
+    agent_wq.queue(new agent_item(pg, priority));
   }
 
   /// adjust priority for an enagled pg
   void agent_adjust_pg(PG *pg, uint64_t old_priority, uint64_t new_priority) {
-    Mutex::Locker l(agent_lock);
     assert(new_priority != old_priority);
-    _enqueue(pg, new_priority);
-    _dequeue(pg, old_priority);
+    agent_item old_item(pg,old_priority);
+    agent_wq.dequeue(&old_item);
+    agent_wq.queue(new agent_item(pg, new_priority));
   }
 
   /// disable agent for a pg
   void agent_disable_pg(PG *pg, uint64_t old_priority) {
-    Mutex::Locker l(agent_lock);
-    _dequeue(pg, old_priority);
+    agent_item old_item(pg,old_priority);
+    agent_wq.dequeue(&old_item);
   }
 
   /// note start of an async (evict) op
