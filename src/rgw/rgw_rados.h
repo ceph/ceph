@@ -1358,6 +1358,19 @@ public:
     zone_name = name;
   }
 
+  /**
+   * AmazonS3 errors contain a HostId string, but is an opaque base64 blob; we
+   * try to be more transparent. This has a wrapper so we can update it when region/zone are changed.
+   */
+  void init_host_id() {
+    /* uint64_t needs 16, two '-' separators and a trailing null */
+    char charbuf[16 + zone.name.size() + region.name.size() + 2 + 1];
+    snprintf(charbuf, sizeof(charbuf), "%llx-%s-%s", (unsigned long long)instance_id(), zone.name.c_str(), region.name.c_str());
+    string s(charbuf);
+    host_id = s;
+  }
+
+  string host_id;
   RGWRegion region;
   RGWZoneParams zone; /* internal zone params, e.g., rados pools */
   RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */
@@ -2405,7 +2418,7 @@ public:
     RWLock::WLocker wl(lock);
     entries.clear();
   }
-};
+}; /* RGWChainedCacheImpl */
 
 class RGWPutObjProcessor
 {
@@ -2436,7 +2449,7 @@ public:
                        const char *if_match = NULL, const char *if_nomatch = NULL);
 
   CephContext *ctx();
-};
+}; /* RGWPutObjProcessor */
 
 struct put_obj_aio_info {
   void *handle;
@@ -2470,7 +2483,7 @@ public:
 
   RGWPutObjProcessor_Aio(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info) : RGWPutObjProcessor(obj_ctx, bucket_info), max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
   virtual ~RGWPutObjProcessor_Aio();
-};
+}; /* RGWPutObjProcessor_Aio */
 
 class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
 {
@@ -2545,6 +2558,6 @@ public:
   void set_version_id(const string& vid) {
     version_id = vid;
   }
-};
+}; /* RGWPutObjProcessor_Atomic */
 
 #endif

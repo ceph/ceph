@@ -237,7 +237,6 @@ void ImageState<I>::complete_action(State next_state, int r) {
 
   ActionContexts action_contexts(std::move(m_actions_contexts.front()));
   m_actions_contexts.pop_front();
-  m_state = next_state;
 
   m_lock.Unlock();
   for (auto ctx : action_contexts.second) {
@@ -245,6 +244,7 @@ void ImageState<I>::complete_action(State next_state, int r) {
   }
   m_lock.Lock();
 
+  m_state = next_state;
   if (!is_transition_state() && !m_actions_contexts.empty()) {
     execute_next_action();
   }

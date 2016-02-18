@@ -466,13 +466,6 @@ void Objecter::shutdown()
     tick_event = 0;
   }
 
-  if (m_request_state_hook) {
-    AdminSocket* admin_socket = cct->get_admin_socket();
-    admin_socket->unregister_command("objecter_requests");
-    delete m_request_state_hook;
-    m_request_state_hook = NULL;
-  }
-
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
     delete logger;
@@ -481,6 +474,16 @@ void Objecter::shutdown()
 
   // Let go of Objecter write lock so timer thread can shutdown
   wl.unlock();
+
+  // Outside of lock to avoid cycle WRT calls to RequestStateHook
+  // This is safe because we guarantee no concurrent calls to
+  // shutdown() with the ::initialized check at start.
+  if (m_request_state_hook) {
+    AdminSocket* admin_socket = cct->get_admin_socket();
+    admin_socket->unregister_command("objecter_requests");
+    delete m_request_state_hook;
+    m_request_state_hook = NULL;
+  }
 }
 
 void Objecter::_send_linger(LingerOp *info,
@@ -2006,7 +2009,7 @@ void Objecter::tick()
 
   // look for laggy requests
   auto cutoff = ceph::mono_clock::now();
-  cutoff -= osd_timeout;  // timeout
+  cutoff -= ceph::make_timespan(cct->_conf->objecter_timeout);  // timeout
 
   unsigned laggy_ops = 0;
 
@@ -4864,7 +4867,8 @@ void Objecter::enumerate_objects(
     const hobject_t &start,
     const hobject_t &end,
     const uint32_t max,
-    std::list<librados::ListObjectImpl> *result,
+    const bufferlist &filter_bl,
+    std::list<librados::ListObjectImpl> *result, 
     hobject_t *next,
     Context *on_finish)
 {
@@ -4912,11 +4916,8 @@ void Objecter::enumerate_objects(
   C_EnumerateReply *on_ack = new C_EnumerateReply(
       this, next, result, end, pool_id, on_finish);
 
-  // Construct pgls operation
-  bufferlist filter; // FIXME pass in?
-
   ObjectOperation op;
-  op.pg_nls(max, filter, start, 0);
+  op.pg_nls(max, filter_bl, start, 0);
 
   // Issue.  See you later in _enumerate_reply
   object_locator_t oloc(pool_id, ns);

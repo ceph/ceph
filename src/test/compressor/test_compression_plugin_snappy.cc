@@ -38,8 +38,10 @@ int main(int argc, char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  system("mkdir -p .libs/compressor");
-  system("cp .libs/libceph_snappy.so* .libs/compressor/");
+  int r = system("mkdir -p .libs/compressor");
+  (void)r;
+  r = system("cp .libs/libceph_snappy.so* .libs/compressor/");
+  (void)r;
 
   g_conf->set_val("plugin_dir", ".libs", false, false);
 

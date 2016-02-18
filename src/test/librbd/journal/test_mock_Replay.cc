@@ -338,9 +338,9 @@ TEST_F(TestMockJournalReplay, SoftFlushIO) {
     when_process(mock_journal_replay,
                  EventEntry{AioDiscardEvent(123, 456)},
                  &on_ready, &on_safes[i]);
+    when_complete(mock_image_ctx, aio_comp, 0);
     ASSERT_EQ(0, on_ready.wait());
 
-    when_complete(mock_image_ctx, aio_comp, 0);
     if (flush_comp != nullptr) {
       when_complete(mock_image_ctx, flush_comp, 0);
     }
@@ -378,16 +378,14 @@ TEST_F(TestMockJournalReplay, PauseIO) {
     when_process(mock_journal_replay,
                  EventEntry{AioWriteEvent(123, 456, to_bl("test"))},
                  &on_ready, &on_safes[i]);
+    when_complete(mock_image_ctx, aio_comp, 0);
     if (i < io_count - 1) {
       ASSERT_EQ(0, on_ready.wait());
-    }
-
-    when_complete(mock_image_ctx, aio_comp, 0);
-    if (i == io_count - 1) {
+    } else {
       for (auto flush_comp : flush_comps) {
         when_complete(mock_image_ctx, flush_comp, 0);
-        ASSERT_EQ(0, on_ready.wait());
       }
+      ASSERT_EQ(0, on_ready.wait());
     }
   }
   for (auto &on_safe : on_safes) {

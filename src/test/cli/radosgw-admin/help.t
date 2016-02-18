@@ -76,6 +76,7 @@
     orphans find               init and run search for leaked rados objects
     orphans finish             clean up search for leaked rados objects
   options:
+     --tenant=<tenant>         tenant name
      --uid=<id>                user id
      --subuser=<name>          subuser name
      --access-key=<key>        S3 access key
@@ -123,7 +124,7 @@
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
-     --infile                  specify a file to read in when setting data
+     --infile=<file>           specify a file to read in when setting data
      --state=<state string>    specify a state for the opstate set command
      --replica-log-type        replica log type (metadata, data, bucket), required for
                                replica log operations
