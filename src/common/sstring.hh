@@ -580,7 +580,7 @@ size_type str_len(const basic_sstring<char_type, size_type, max_size>& s) { retu
 
 template <typename First, typename Second, typename... Tail>
 static inline
-const size_t str_len(const First& first, const Second& second, const Tail&... tail) {
+size_t str_len(const First& first, const Second& second, const Tail&... tail) {
     return str_len(first) + str_len(second, tail...);
 }
 
