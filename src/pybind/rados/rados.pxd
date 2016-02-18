@@ -26,7 +26,7 @@ cdef class Ioctx(object):
     cdef:
         rados_ioctx_t io
         public char *name
-        public char *state
+        public object state
         public object locator_key
         public object nspace
 
