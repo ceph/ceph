@@ -1526,6 +1526,47 @@ int RGWRemoteMetaLog::store_sync_info()
 				 sync_env.status_oid(), sync_status.sync_info));
 }
 
+// return a cursor to the period at our sync position
+static RGWPeriodHistory::Cursor get_period_at(RGWRados* store,
+                                              const rgw_meta_sync_info& info)
+{
+  if (info.period.empty()) {
+    // return an empty cursor with error=0
+    return RGWPeriodHistory::Cursor{};
+  }
+
+  // look for an existing period in our history
+  auto cursor = store->period_history->lookup(info.realm_epoch);
+  if (cursor) {
+    // verify that the period ids match
+    auto& existing = cursor.get_period().get_id();
+    if (existing != info.period) {
+      lderr(store->ctx()) << "ERROR: sync status period=" << info.period
+          << " does not match period=" << existing
+          << " in history at realm epoch=" << info.realm_epoch << dendl;
+      return RGWPeriodHistory::Cursor{-EEXIST};
+    }
+    return cursor;
+  }
+
+  // read the period from rados
+  RGWPeriod period(info.period);
+  int r = period.init(store->ctx(), store, store->realm.get_id());
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed to read period id "
+        << info.period << ": " << cpp_strerror(r) << dendl;
+    return RGWPeriodHistory::Cursor{r};
+  }
+  // attach the period to our history
+  cursor = store->period_history->attach(std::move(period));
+  if (!cursor) {
+    r = cursor.get_error();
+    lderr(store->ctx()) << "ERROR: failed to read period history back to "
+        << info.period << ": " << cpp_strerror(r) << dendl;
+  }
+  return cursor;
+}
+
 int RGWRemoteMetaLog::run_sync()
 {
   if (store->is_meta_master()) {
@@ -1580,6 +1621,7 @@ int RGWRemoteMetaLog::run_sync()
     return r;
   }
 
+  RGWPeriodHistory::Cursor cursor;
   do {
     r = run(new RGWReadSyncStatusCoroutine(&sync_env, obj_ctx, &sync_status));
     if (r < 0 && r != -ENOENT) {
@@ -1610,7 +1652,13 @@ int RGWRemoteMetaLog::run_sync()
         /* fall through */
       case rgw_meta_sync_info::StateSync:
         ldout(store->ctx(), 20) << __func__ << "(): sync" << dendl;
-        meta_sync_cr = new RGWMetaSyncCR(&sync_env, sync_status);
+        // find our position in the period history (if any)
+        cursor = get_period_at(store, sync_status.sync_info);
+        r = cursor.get_error();
+        if (r < 0) {
+          return r;
+        }
+        meta_sync_cr = new RGWMetaSyncCR(&sync_env, cursor, sync_status);
         r = run(meta_sync_cr);
         if (r < 0) {
           ldout(store->ctx(), 0) << "ERROR: failed to fetch all metadata keys" << dendl;
