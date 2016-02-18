@@ -14,6 +14,7 @@
  *
  */
 
+#include <thread>
 #include <gtest/gtest.h>
 
 #include "acconfig.h"
@@ -65,15 +66,24 @@ class C_poll : public EventCallback {
   EventCenter *center;
   std::atomic<bool> wakeuped;
   static const int sleepus = 500;
+  Mutex *lock;
 
  public:
-  C_poll(EventCenter *c): center(c), wakeuped(false) {}
+  C_poll(EventCenter *c, Mutex *l=nullptr): center(c), wakeuped(false), lock(l) {}
   void do_request(int r) {
     wakeuped = true;
   }
   void poll(int seconds) {
-    while (!wakeuped)
+    while (!wakeuped) {
+      if (lock)
+        lock->Lock();
       center->process_events(sleepus);
+      if (lock)
+        lock->Unlock();
+    }
+  }
+  void reset() {
+    wakeuped = false;
   }
 };
 
@@ -133,6 +143,125 @@ TEST_P(TransportTest, SimpleTest) {
     ASSERT_EQ(r, len);
     ASSERT_EQ(0, memcmp(buf, message, len));
   }
+  bind_socket.abort_accept();
+  srv_socket.close();
+  cli_socket.close();
+}
+
+
+TEST_P(TransportTest, ComplexTest) {
+  entity_addr_t bind_addr, cli_addr;
+  bind_addr.parse(get_addr().c_str());
+  SocketOptions options;
+  ServerSocket bind_socket;
+  int r = transport->listen(bind_addr, options, &bind_socket);
+  ASSERT_EQ(r, 0);
+  ConnectedSocket cli_socket, srv_socket;
+  r = transport->connect(bind_addr, options, &cli_socket);
+  ASSERT_EQ(r, 0);
+
+  {
+    C_poll cb(center);
+    center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
+    cb.poll(5);
+  }
+
+  r = bind_socket.accept(&srv_socket, &cli_addr);
+  ASSERT_EQ(r, 0);
+  ASSERT_TRUE(srv_socket.fd() > 0);
+
+  {
+    C_poll cb(center);
+    center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
+    r = cli_socket.is_connected();
+    if (r == 0) {
+      cb.poll(5);
+      r = cli_socket.is_connected();
+    }
+    ASSERT_EQ(r, 1);
+  }
+
+  const size_t message_size = 10240;
+  string message(message_size, '!');
+  for (size_t i = 0; i < message_size; i += 100)
+    message[i] = ',';
+  auto cli_fd = cli_socket.fd();
+  bool done = false;
+  size_t len = message_size * 100;
+  Mutex lock("test_async_transport::lock");
+  std::thread t([len, cli_fd](EventCenter *center, ConnectedSocket &cli_socket, const string &message, Mutex &lock, bool &done) {
+    struct msghdr msg;
+    struct iovec msgvec[100];
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_iovlen = 100;
+    msg.msg_iov = msgvec;
+    for (size_t i = 0; i < msg.msg_iovlen; ++i) {
+      msgvec[i].iov_base = (void*)message.data();
+      msgvec[i].iov_len = message_size;
+    }
+
+    ASSERT_TRUE(center->get_owner());
+    C_poll cb(center, &lock);
+    center->create_file_event(cli_fd, EVENT_WRITABLE, &cb);
+    int r = 0;
+    size_t left = len;
+    usleep(100);
+    while (left > 0) {
+      lock.Lock();
+      r = cli_socket.sendmsg(msg, left, false);
+      lock.Unlock();
+      ASSERT_TRUE(r > 0 || r == -EAGAIN);
+      if (r > 0)
+        left -= r;
+      while (r > 0) {
+        if (msg.msg_iov[0].iov_len <= (size_t)r) {
+          // drain this whole item
+          r -= msg.msg_iov[0].iov_len;
+          msg.msg_iov++;
+          msg.msg_iovlen--;
+        } else {
+          msg.msg_iov[0].iov_base = (char *)msg.msg_iov[0].iov_base + r;
+          msg.msg_iov[0].iov_len -= r;
+          break;
+        }
+      }
+      if (left == 0)
+        break;
+      cb.reset();
+      cb.poll(5);
+    }
+    while (!done)
+      usleep(100);
+    center->delete_file_event(cli_fd, EVENT_WRITABLE);
+  }, center, std::ref(cli_socket), std::ref(message), std::ref(lock), std::ref(done));
+
+  char buf[1024];
+  C_poll cb(center, &lock);
+  center->create_file_event(srv_socket.fd(), EVENT_READABLE, &cb);
+  string read_string;
+  while (len > 0) {
+    lock.Lock();
+    r = srv_socket.read(buf, sizeof(buf));
+    lock.Unlock();
+    ASSERT_TRUE(r > 0 || r == -EAGAIN);
+    if (r > 0) {
+      read_string.append(buf, r);
+      len -= r;
+    }
+    if (r == -EAGAIN) {
+      cb.reset();
+      cb.poll(5);
+    }
+  }
+  center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
+  done = true;
+  t.join();
+  for (size_t i = 0; i < read_string.size(); i += message_size)
+    ASSERT_EQ(memcmp(read_string.c_str()+i, message.c_str(), message_size), 0);
+
+  bind_socket.abort_accept();
+  srv_socket.close();
+  cli_socket.close();
 }
 
 INSTANTIATE_TEST_CASE_P(
