@@ -93,24 +93,25 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     }
     return copied;
   }
-  virtual int sendmsg(struct msghdr &msg, size_t len, bool more) override {
-    Packet p;
+  virtual int sendmsg(const struct msghdr &msg, bool more) override {
+    size_t available = _conn.peek_sent_available();
+    if (available == 0)
+      return -EAGAIN;
 
-    while (len > 0) {
-      if (msg.msg_iov[0].iov_len <= len) {
-        assert(msg.msg_iov[0].iov_len);
+    Packet p;
+    size_t idx = 0;
+    while (idx < msg.msg_iovlen && available > 0) {
+      if (msg.msg_iov[idx].iov_len <= available) {
+        assert(msg.msg_iov[idx].iov_len);
         p = Packet(std::move(p),
-                   fragment{(char*)msg.msg_iov[0].iov_base, msg.msg_iov[0].iov_len},
+                   fragment{(char*)msg.msg_iov[idx].iov_base, msg.msg_iov[idx].iov_len},
                    deleter());
-        len -= msg.msg_iov[0].iov_len;
-        msg.msg_iov++;
-        msg.msg_iovlen--;
+        available -= msg.msg_iov[idx].iov_len;
+        ++idx;
       } else {
         p = Packet(std::move(p),
-                   fragment{(char*)msg.msg_iov[0].iov_base, len},
+                   fragment{(char*)msg.msg_iov[idx].iov_base, available},
                    deleter());
-        msg.msg_iov[0].iov_base = (char *)msg.msg_iov[0].iov_base + len;
-        msg.msg_iov[0].iov_len -= len;
         break;
       }
     }

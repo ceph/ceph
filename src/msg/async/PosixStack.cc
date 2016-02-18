@@ -61,7 +61,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
       r = -errno;
     return r;
   }
-  virtual int sendmsg(struct msghdr &msg, size_t len, bool more) {
+  virtual int sendmsg(const struct msghdr &msg, bool more) {
     int r = ::sendmsg(_fd, &msg, more);
     if (r < 0)
       r = -errno;

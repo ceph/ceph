@@ -287,7 +287,7 @@ int arp_for<L3>::received(Packet p) {
     case op_request:
       return handle_request(&h);
     case op_reply:
-      arp_learn(h.sender_hwaddr, h.sender_paddr);
+      _arp._netif->arp_learn(h.sender_hwaddr, h.sender_paddr);
       return 0;
     default:
       return 0;

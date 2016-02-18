@@ -43,7 +43,6 @@
 #include "common/ceph_argparse.h"
 #include "DPDKStack.h"
 #include "DPDK.h"
-#include "dpdk_rte.h"
 #include "IP.h"
 #include "TCP-Stack.h"
 
@@ -54,7 +53,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "dpdkstack "
 
-static std::shared_ptr<DPDKDevice> sdev;
 
 std::unique_ptr<NetworkStack> DPDKStack::create(CephContext *cct, EventCenter *center, unsigned i) {
   static enum {
@@ -65,8 +63,8 @@ std::unique_ptr<NetworkStack> DPDKStack::create(CephContext *cct, EventCenter *c
   static Mutex lock("DPDKStack::lock");
   static Cond cond;
   int cores = cct->_conf->ms_dpdk_num_cores;
+  std::shared_ptr<DPDKDevice> sdev;
   if (i == 0) {
-    dpdk::eal::init(cct);
     // Hardcoded port index 0.
     // TODO: Inherit it from the opts
     std::unique_ptr<DPDKDevice> dev = create_dpdk_net_device(
@@ -188,27 +186,4 @@ int DPDKStack::connect(const entity_addr_t &addr, const SocketOptions &opts, Con
   assert(addr.get_family() == AF_INET);
   *socket = tcpv4_connect(_inet.get_tcp(), addr);
   return 0;
-}
-
-class C_arp_learn : public EventCallback {
-  DPDKStack *stack;
-  ethernet_address l2_addr;
-  ipv4_address l3_addr;
-
- public:
-  C_arp_learn(DPDKStack *s, ethernet_address l2, ipv4_address l3)
-      : stack(s), l2_addr(l2), l3_addr(l3) {}
-  void do_request(int id) {
-    stack->arp_learn(l2_addr, l3_addr);
-    delete this;
-  }
-};
-
-void arp_learn(ethernet_address l2, ipv4_address l3)
-{
-  assert(sdev);
-  for (auto &&s: sdev->stacks) {
-    s->center->dispatch_event_external(
-        new C_arp_learn(s, l2, l3));
-  }
 }

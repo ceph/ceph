@@ -90,6 +90,7 @@ class l3_protocol {
 };
 
 class DPDKDevice;
+struct ipv4_address;
 
 class interface {
   CephContext *cct;
@@ -123,6 +124,7 @@ class interface {
   }
   const rss_key_type& rss_key() const;
   uint16_t hw_queues_count() const;
+  void arp_learn(ethernet_address l2, ipv4_address l3);
   friend class l3_protocol;
 };
 

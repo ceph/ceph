@@ -441,6 +441,11 @@ class tcp {
     tcp_state& state() {
       return _state;
     }
+
+    uint64_t peek_sent_available() {
+      return _tcp.user_queue_space.get_max() - _tcp.user_queue_space.get_current();
+    }
+
    private:
     void respond_with_reset(tcp_hdr* th);
     bool merge_out_of_order();
@@ -517,7 +522,7 @@ class tcp {
           typename InetTraits::l4packet{_foreign_ip, std::move(p)});
     }
     void signal_data_received() {
-      _tcp.manager.notify(fd);
+      _tcp.manager.notify(fd, EVENT_READABLE);
     }
     void signal_all_data_acked() {
       if (_snd._all_data_acked_fd >= 0 && _snd.unsent_len == 0 && _snd.queued_len == 0)
@@ -657,6 +662,9 @@ class tcp {
              &net_ip, sizeof(addr.in4_addr().sin_addr.s_addr));
       addr.ss_addr().ss_family = AF_INET;
       return addr;
+    }
+    uint64_t peek_sent_available() {
+      return _tcb->peek_sent_available();
     }
   };
   class listener {
@@ -847,7 +855,7 @@ void tcp<InetTraits>::received(Packet p, ipaddr from, ipaddr to) {
         // NOTE: Ignored for now
         tcbp = make_lw_shared<tcb>(*this, id);
         listener->second->_q.push(connection(tcbp));
-        manager.notify(listener->second->_fd);
+        manager.notify(listener->second->_fd, EVENT_READABLE);
         _tcbs.insert({id, tcbp});
         return tcbp->input_handle_listen_state(&h, std::move(p));
       }
@@ -980,6 +988,7 @@ uint32_t tcp<InetTraits>::tcb::data_segment_acked(tcp_sequence seg_ack) {
     update_cwnd(acked_bytes);
     total_acked_bytes += acked_bytes;
     _tcp.user_queue_space.put(_snd.data.front().data_len);
+    _tcp.manager.notify(fd, EVENT_WRITABLE);
     _snd.data.pop_front();
   }
   // Partial ACK of segment
@@ -1254,13 +1263,14 @@ int tcp<InetTraits>::tcb::send(Packet p) {
   if (in_state(CLOSED))
     return -ECONNRESET;
 
-  // TODO: Handle p.len() > max user_queue_space case
   auto len = p.len();
+  if (!_tcp.user_queue_space.get_or_fail(len)) {
+    return -EAGAIN;
+  }
+  // TODO: Handle p.len() > max user_queue_space case
   _snd.queued_len += len;
-  // TODO: Fix blocking there
-  _tcp.user_queue_space.get(len);
-  _snd.unsent_len += p.len();
-  _snd.queued_len -= p.len();
+  _snd.unsent_len += len;
+  _snd.queued_len -= len;
   _snd.unsent.push_back(std::move(p));
   if (can_send() > 0) {
     output();
@@ -1544,7 +1554,7 @@ Tub<typename InetTraits::l4packet> tcp<InetTraits>::tcb::get_packet() {
 
 template <typename InetTraits>
 void tcp<InetTraits>::connection::close_read() {
-  _tcb->_tcp.manager.notify(_tcb->fd);
+  _tcb->_tcp.manager.notify(_tcb->fd, EVENT_READABLE);
 }
 
 template <typename InetTraits>

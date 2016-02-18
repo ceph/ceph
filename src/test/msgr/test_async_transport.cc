@@ -80,6 +80,7 @@ class C_poll : public EventCallback {
       center->process_events(sleepus);
       if (lock)
         lock->Unlock();
+      usleep(sleepus);
     }
   }
   void reset() {
@@ -128,7 +129,7 @@ TEST_P(TransportTest, SimpleTest) {
   msg.msg_iov = msgvec;
   msgvec[0].iov_base = (char*)message;
   msgvec[0].iov_len = len;
-  r = cli_socket.sendmsg(msg, len, false);
+  r = cli_socket.sendmsg(msg, false);
   ASSERT_EQ(r, len);
 
   char buf[1024];
@@ -190,6 +191,8 @@ TEST_P(TransportTest, ComplexTest) {
   size_t len = message_size * 100;
   Mutex lock("test_async_transport::lock");
   std::thread t([len, cli_fd](EventCenter *center, ConnectedSocket &cli_socket, const string &message, Mutex &lock, bool &done) {
+    bool first = true;
+   again:
     struct msghdr msg;
     struct iovec msgvec[100];
     memset(&msg, 0, sizeof(msg));
@@ -208,7 +211,7 @@ TEST_P(TransportTest, ComplexTest) {
     usleep(100);
     while (left > 0) {
       lock.Lock();
-      r = cli_socket.sendmsg(msg, left, false);
+      r = cli_socket.sendmsg(msg, false);
       lock.Unlock();
       ASSERT_TRUE(r > 0 || r == -EAGAIN);
       if (r > 0)
@@ -230,15 +233,20 @@ TEST_P(TransportTest, ComplexTest) {
       cb.reset();
       cb.poll(5);
     }
+    if (first) {
+      first = false;
+      goto again;
+    }
     while (!done)
       usleep(100);
     center->delete_file_event(cli_fd, EVENT_WRITABLE);
   }, center, std::ref(cli_socket), std::ref(message), std::ref(lock), std::ref(done));
 
-  char buf[1024];
+  char buf[1000];
   C_poll cb(center, &lock);
   center->create_file_event(srv_socket.fd(), EVENT_READABLE, &cb);
   string read_string;
+  len *= 2;
   while (len > 0) {
     lock.Lock();
     r = srv_socket.read(buf, sizeof(buf));

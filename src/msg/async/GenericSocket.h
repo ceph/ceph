@@ -27,7 +27,7 @@ class ConnectedSocketImpl {
   virtual ~ConnectedSocketImpl() {}
   virtual bool is_connected() = 0;
   virtual int read(char*, size_t) = 0;
-  virtual int sendmsg(struct msghdr &msg, size_t len, bool more) = 0;
+  virtual int sendmsg(const struct msghdr &msg, bool more) = 0;
   virtual void shutdown() = 0;
   virtual void close() = 0;
   virtual int fd() const = 0;
@@ -84,8 +84,8 @@ class ConnectedSocket {
   /// Gets the output stream.
   ///
   /// Gets an object that sends data to the remote endpoint.
-  int sendmsg(struct msghdr &msg, size_t len, bool more) {
-    return _csi->sendmsg(msg, len, more);
+  int sendmsg(const struct msghdr &msg, bool more) {
+    return _csi->sendmsg(msg, more);
   }
   /// Disables output to the socket.
   ///

@@ -128,6 +128,7 @@ void interface::forward(EventCenter *source, unsigned target, Packet p) {
 
   if (queue_depth < 1000) {
     queue_depth++;
+    // FIXME: need ensure this event not be called after EventCenter destruct
     _dev->stacks[target]->center->dispatch_event_external(
         new C_handle_l2forward(_dev, queue_depth, std::move(p.free_on_cpu(source)), target));
   }
@@ -170,6 +171,28 @@ int interface::dispatch_packet(EventCenter *center, Packet p) {
     }
   }
   return 0;
+}
+
+class C_arp_learn : public EventCallback {
+  DPDKStack *stack;
+  ethernet_address l2_addr;
+  ipv4_address l3_addr;
+
+ public:
+  C_arp_learn(DPDKStack *s, ethernet_address l2, ipv4_address l3)
+      : stack(s), l2_addr(l2), l3_addr(l3) {}
+  void do_request(int id) {
+    stack->arp_learn(l2_addr, l3_addr);
+    delete this;
+  }
+};
+
+void interface::arp_learn(ethernet_address l2, ipv4_address l3)
+{
+  for (auto &&s: _dev->stacks) {
+    s->center->dispatch_event_external(
+        new C_arp_learn(s, l2, l3));
+  }
 }
 
 l3_protocol::l3_protocol(interface* netif, eth_protocol_num proto_num, packet_provider_type func)

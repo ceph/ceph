@@ -424,6 +424,4 @@ struct l4connid<InetTraits>::connid_hash : private std::hash<ipaddr>, private st
   }
 };
 
-void arp_learn(ethernet_address l2, ipv4_address l3);
-
 #endif /* CEPH_MSG_IP_H */
