@@ -4944,6 +4944,7 @@ int RGWRados::init_bucket_index(rgw_bucket& bucket, int num_shards)
 int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
                             const string& placement_rule,
+                            const string& swift_ver_location,
 			    map<std::string, bufferlist>& attrs,
                             RGWBucketInfo& info,
                             obj_version *pobjv,
@@ -5004,6 +5005,8 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.zonegroup = zonegroup_id;
     info.placement_rule = selected_placement_rule_name;
     info.index_type = rule_info.index_type;
+    info.swift_ver_location = swift_ver_location;
+    info.swift_versioning = (!swift_ver_location.empty());
     info.num_shards = bucket_index_max_shards;
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
     info.requester_pays = false;
