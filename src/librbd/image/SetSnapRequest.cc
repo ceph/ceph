@@ -309,9 +309,9 @@ int SetSnapRequest<I>::apply() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << dendl;
 
+  RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
   RWLock::WLocker parent_locker(m_image_ctx.parent_lock);
-
   if (m_snap_id != CEPH_NOSNAP) {
     int r = m_image_ctx.snap_set(m_snap_name);
     if (r < 0) {
