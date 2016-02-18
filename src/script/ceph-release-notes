@@ -124,7 +124,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
                 title_re = '^(?:hammer|infernalis|jewel|kraken): (cli|common|mon|osd|fs|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|cmake|doc|crush|librados)(:.*)'
                 match = re.match(title_re, title)
                 if not match:
-                    print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " title " + title + " does not match " + title_re)
+                    print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " title " + title.encode("utf-8") + " does not match " + title_re)
                 else:
                     title = match.group(1) + match.group(2)
 
@@ -153,9 +153,9 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
         else:
             issues = ''
         if plaintext:
-            print (u"* {title} ({issues}{author})".format(title=title, issues=issues, author=author))
+            print ("* {title} ({issues}{author})".format(title=title.encode("utf-8"), issues=issues, author=author.encode("utf-8")))
         else:
-            print (u"* {title} ({issues}`pr#{pr} <http://github.com/ceph/ceph/pull/{pr}>`_, {author})".format(title=title, issues=issues, author=author, pr=pr))
+            print ("* {title} ({issues}`pr#{pr} <http://github.com/ceph/ceph/pull/{pr}>`_, {author})".format(title=title.encode("utf-8"), issues=issues, author=author.encode("utf-8"), pr=pr))
         if message:
             print (message)
 
