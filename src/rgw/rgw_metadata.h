@@ -265,9 +265,6 @@ public:
 
   RGWMetadataHandler *get_handler(const string& type);
 
-  int store_md_log_entries(list<cls_log_entry>& entries, const std::string& period,
-                           int shard_id, librados::AioCompletion *completion);
-
   int put_entry(RGWMetadataHandler *handler, const string& key, bufferlist& bl, bool exclusive,
                 RGWObjVersionTracker *objv_tracker, time_t mtime, map<string, bufferlist> *pattrs = NULL);
   int remove_entry(RGWMetadataHandler *handler, string& key, RGWObjVersionTracker *objv_tracker);
