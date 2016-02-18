@@ -103,6 +103,13 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, entity_addr_t *out) {
   if (sd < 0) {
     return -errno;
   }
+
+  int r = handler.set_nonblock(sd);
+  if (r < 0) {
+    ::close(sd);
+    return -errno;
+  }
+
   std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, sa, sd, false));
   *sock = ConnectedSocket(std::move(csi));
   if (out)
