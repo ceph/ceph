@@ -6470,8 +6470,10 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   stat_set_mtime_sec(st, in->mtime.sec());
   stat_set_mtime_nsec(st, in->mtime.nsec());
   if (in->is_dir()) {
-    //st->st_size = in->dirstat.size();
-    st->st_size = in->rstat.rbytes;
+    if (cct->_conf->client_dirsize_rbytes)
+      st->st_size = in->rstat.rbytes;
+    else
+      st->st_size = in->dirstat.size();
     st->st_blocks = 1;
   } else {
     st->st_size = in->size;
