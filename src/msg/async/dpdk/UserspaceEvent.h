@@ -158,6 +158,7 @@ class UserspaceEventManager {
       assert(fds[fd]);
       masks[i] = fds[fd]->listening_mask & fds[fd]->activating_mask;
       assert(masks[i]);
+      fds[fd]->activating_mask &= (~masks[i]);
     }
     if (i < waiting_size)
       memcpy(&waiting_fds[1], &waiting_fds[i+1], sizeof(int)*(waiting_size-i));
