@@ -51,6 +51,7 @@ template <typename Protocol>
 class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   typename Protocol::connection _conn;
   size_t _cur_frag = 0;
+  size_t _cur_frag_off = 0;
   Tub<Packet> _buf;
 
  public:
@@ -66,19 +67,31 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     if (_conn.get_errno() < 0)
       return _conn.get_errno();
 
-    if (!_buf || _cur_frag == _buf->nr_frags()) {
-      _buf = std::move(_conn.read());
-      if (_buf) {
-        _cur_frag = 0;
+    size_t copied = 0;
+    while (copied < len) {
+      if (!_buf || _cur_frag == _buf->nr_frags()) {
+        _buf = std::move(_conn.read());
+        if (_buf) {
+          _cur_frag = 0;
+        } else {
+          return copied == 0 ? -EAGAIN : copied;
+        }
+      }
+
+      auto& f = _buf->fragments()[_cur_frag];
+      size_t buf_left = len - copied;
+      if (f.size - _cur_frag_off <= buf_left) {
+        memcpy(buf+copied, f.base+_cur_frag_off, f.size-_cur_frag_off);
+        ++_cur_frag;
+        copied += f.size-_cur_frag_off;
+        _cur_frag_off = 0;
       } else {
-        return -EAGAIN;
+        memcpy(buf+copied, f.base+_cur_frag_off, buf_left);
+        copied += buf_left;
+        _cur_frag_off += buf_left;
       }
     }
-    auto& f = _buf->fragments()[_cur_frag++];
-    auto p = _buf->share();
-    assert(f.size && f.size <= len);
-    memcpy(buf, f.base, f.size);
-    return f.size;
+    return copied;
   }
   virtual int sendmsg(struct msghdr &msg, size_t len, bool more) override {
     Packet p;
