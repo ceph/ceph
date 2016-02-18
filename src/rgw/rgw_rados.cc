@@ -4339,10 +4339,11 @@ next:
   return 0;
 }
 
+#define MAX_SHARDS_PRIME 7877
+
 int RGWRados::key_to_shard_id(const string& key, int max_shards)
 {
-  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
-#warning a bad hash, need to use prime
+  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size()) % MAX_SHARDS_PRIME;
   return val % max_shards;
 }
 
@@ -4528,7 +4529,7 @@ string RGWRados::objexp_hint_get_shardname(int shard_num)
   return objname + buf;
 }
 
-#define MAX_PBJEXP_SHARDS_PRIME 7877
+#define MAX_OBJEXP_SHARDS_PRIME 7877
 
 int RGWRados::objexp_key_shard(const rgw_obj_key& key)
 {
@@ -4536,7 +4537,7 @@ int RGWRados::objexp_key_shard(const rgw_obj_key& key)
   int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
   uint32_t sid = ceph_str_hash_linux(obj_key.c_str(), obj_key.size());
   uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
-  sid = sid2 % MAX_BUCKET_INDEX_SHARDS_PRIME % num_shards;
+  sid = sid2 % MAX_OBJEXP_SHARDS_PRIME % num_shards;
   return sid % num_shards;
 }
 
