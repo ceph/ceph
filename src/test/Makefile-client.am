@@ -79,7 +79,7 @@ ceph_omapbench_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_omapbench
 
 ceph_objectstore_bench_SOURCES = test/objectstore_bench.cc
-ceph_objectstore_bench_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+ceph_objectstore_bench_LDADD = $(LIBOS) $(CEPH_GLOBAL) -lbz2
 bin_DEBUGPROGRAMS += ceph_objectstore_bench
 
 if LINUX
