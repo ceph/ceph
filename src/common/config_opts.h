@@ -22,6 +22,7 @@ OPTION(cluster_network, OPT_STR, "")
 OPTION(num_client, OPT_INT, 1)
 OPTION(monmap, OPT_STR, "")
 OPTION(mon_host, OPT_STR, "")
+OPTION(mon_dns_srv_name, OPT_STR, "ceph-mon")
 OPTION(lockdep, OPT_BOOL, false)
 OPTION(lockdep_force_backtrace, OPT_BOOL, false) // always gather current backtrace at every lock
 OPTION(run_dir, OPT_STR, "/var/run/ceph")       // the "/var/run/ceph" dir, created on daemon startup
