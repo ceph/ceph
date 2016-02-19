@@ -1304,6 +1304,7 @@ void tcp<InetTraits>::tcb::close() {
   }
   // TODO: We should make this asynchronous
 
+  _errno = -EPIPE;
   bool acked = is_all_data_acked();
   if (!acked) {
     _snd._all_data_acked_fd = _tcp.manager.get_eventfd();

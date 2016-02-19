@@ -161,13 +161,17 @@ TEST_P(TransportTest, SimpleTest) {
     ASSERT_EQ(0, memcmp(buf, message, len));
   }
   bind_socket.abort_accept();
-  cli_socket.close();
+  cli_socket.shutdown();
 
+  r = cli_socket.sendmsg(msg, false);
+  ASSERT_EQ(r, -EPIPE);
   {
     cb.reset();
     ASSERT_EQ(cb.poll(500), true);
     r = srv_socket.read(buf, sizeof(buf));
     ASSERT_EQ(r, 0);
+    r = srv_socket.sendmsg(msg, false);
+    ASSERT_EQ(r, len);
   }
   center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
 
@@ -211,6 +215,7 @@ TEST_P(TransportTest, ConnectFailedTest) {
       r = cli_socket2.is_connected();
     }
     ASSERT_TRUE(r != 1);
+    center->delete_file_event(cli_socket2.fd(), EVENT_READABLE);
   }
 }
 
@@ -224,6 +229,78 @@ TEST_P(TransportTest, ListenTest) {
 
   r = transport->listen(bind_addr, options, &bind_socket2);
   ASSERT_EQ(r, -EADDRINUSE);
+}
+
+TEST_P(TransportTest, AcceptAndCloseTest) {
+  entity_addr_t bind_addr, cli_addr;
+  ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
+  SocketOptions options;
+  int r = 0;
+  {
+    ServerSocket bind_socket;
+    r = transport->listen(bind_addr, options, &bind_socket);
+    ASSERT_EQ(r, 0);
+
+    ConnectedSocket srv_socket, cli_socket;
+    r = bind_socket.accept(&srv_socket, &cli_addr);
+    ASSERT_EQ(r, -EAGAIN);
+
+    C_poll cb(center);
+    center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
+    r = transport->connect(bind_addr, options, &cli_socket);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(cb.poll(500), true);
+
+    {
+      ConnectedSocket srv_socket2;
+      r = bind_socket.accept(&srv_socket2, &cli_addr);
+      ASSERT_EQ(r, 0);
+      ASSERT_TRUE(srv_socket2.fd() > 0);
+
+      // srv_socket2 closed
+    }
+    center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
+
+    char buf[100];
+    cb.reset();
+    center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
+    int i = 3;
+    while (!i--) {
+      ASSERT_EQ(cb.poll(500), true);
+      r = cli_socket.read(buf, sizeof(buf));
+      if (r == 0)
+        break;
+    }
+    ASSERT_EQ(r, 0);
+    center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
+
+    cb.reset();
+    center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
+    r = transport->connect(bind_addr, options, &cli_socket);
+    ASSERT_EQ(r, 0);
+
+    ASSERT_EQ(cb.poll(500), true);
+    center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
+    cli_socket.close();
+    r = bind_socket.accept(&srv_socket, &cli_addr);
+    ASSERT_EQ(r, 0);
+    center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
+    // unbind
+  }
+
+  ConnectedSocket cli_socket;
+  r = transport->connect(bind_addr, options, &cli_socket);
+  ASSERT_EQ(r, 0);
+  {
+    C_poll cb(center);
+    center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
+    r = cli_socket.is_connected();
+    if (r == 0) {
+      ASSERT_EQ(cb.poll(500), true);
+      r = cli_socket.is_connected();
+    }
+    ASSERT_TRUE(r == -ECONNREFUSED || r == -ECONNRESET);
+  }
 }
 
 TEST_P(TransportTest, ComplexTest) {

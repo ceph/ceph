@@ -650,6 +650,7 @@ void tcp<InetTraits>::tcb::close_final_cleanup()
   }
 
   _snd.closed = true;
+  signal_data_received();
   ldout(_tcp.cct, 20) << __func__ << " unsent_len=" << _snd.unsent_len << dendl;
   if (in_state(CLOSE_WAIT)) {
     ldout(_tcp.cct, 20) << __func__ << " CLOSE_WAIT -> LAST_ACK" << dendl;

@@ -99,7 +99,7 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   }
   virtual int sendmsg(const struct msghdr &msg, bool more) override {
     auto err = _conn.get_errno();
-    if (err <= 0)
+    if (err < 0)
       return err;
 
     size_t available = _conn.peek_sent_available();

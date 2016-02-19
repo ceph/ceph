@@ -87,17 +87,16 @@ class UserspaceEventManager {
 
     assert(mask);
     impl->listening_mask = impl->listening_mask & (~mask);
-    if (impl->activating_mask & impl->listening_mask) {
-      assert(impl->waiting_idx);
+    if ((impl->activating_mask & impl->listening_mask) && !impl->waiting_idx) {
       return 0;
     }
     if (impl->waiting_idx) {
       if (waiting_fds[max_wait_idx] == fd) {
         assert(impl->waiting_idx == max_wait_idx);
         --max_wait_idx;
+        --waiting_size;
       }
       waiting_fds[impl->waiting_idx] = -1;
-      --waiting_size;
       impl->waiting_idx = 0;
     }
     return 0;
@@ -111,12 +110,10 @@ class UserspaceEventManager {
     if (!impl)
       return -ENOENT;
 
-    if (mask & impl->activating_mask) {
-      assert(impl->waiting_idx);
+    if ((mask & impl->activating_mask) && impl->waiting_idx)
       return 0;
-    }
 
-    if (impl->listening_mask & mask) {
+    if ((impl->listening_mask & mask) && !impl->waiting_idx) {
       impl->waiting_idx = ++max_wait_idx;
       waiting_fds[max_wait_idx] = fd;
       ++waiting_size;
@@ -142,9 +139,9 @@ class UserspaceEventManager {
       if (waiting_fds[max_wait_idx] == fd) {
         assert(impl->waiting_idx == max_wait_idx);
         --max_wait_idx;
+        --waiting_size;
       }
       waiting_fds[impl->waiting_idx] = -1;
-      --waiting_size;
     }
     impl.destroy();
   }
@@ -159,7 +156,7 @@ class UserspaceEventManager {
         continue;
 
       events[i] = fd;
-     Tub<UserspaceFDImpl> &impl = fds[fd];
+      Tub<UserspaceFDImpl> &impl = fds[fd];
       assert(impl);
       masks[i] = impl->listening_mask & impl->activating_mask;
       assert(masks[i]);

@@ -81,10 +81,6 @@ EventCenter::Poller::Poller(EventCenter* center, const string& name)
  */
 EventCenter::Poller::~Poller()
 {
-  if (slot < 0 || owner->pollers.empty()) {
-    return;
-  }
-
   // Erase this Poller from the vector by overwriting it with the
   // poller that used to be the last one in the vector.
   //
