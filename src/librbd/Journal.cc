@@ -289,6 +289,16 @@ void Journal<I>::close(Context *on_finish) {
 }
 
 template <typename I>
+void Journal<I>::flush_commit_position(Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
+  Mutex::Locker locker(m_lock);
+  assert(m_journaler != nullptr);
+  m_journaler->flush_commit_position(on_finish);
+}
+
+template <typename I>
 uint64_t Journal<I>::append_io_event(AioCompletion *aio_comp,
                                      journal::EventEntry &&event_entry,
                                      const AioObjectRequests &requests,
