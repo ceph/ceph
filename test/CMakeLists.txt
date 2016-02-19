@@ -17,8 +17,13 @@ add_executable(tests EXCLUDE_FROM_ALL ${core_srcs} ${test_srcs})
 target_link_libraries(tests
   PUBLIC pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})
 
-add_test(
-  NAME unit_tests
-  COMMAND tests)
+# for every argument, adds a test with that name, using it as a gtest filter
+function(make_tests)
+  foreach(targ ${ARGN})
+    add_test(NAME ${targ} COMMAND tests --gtest_filter=${targ}.*)
+  endforeach()
+endfunction()
+
+make_tests(dmclock_server dmclock_client test_client)
 
 add_dependencies(check tests)

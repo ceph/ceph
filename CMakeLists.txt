@@ -14,6 +14,7 @@ endif()
 
 find_package(gtest REQUIRED)
 if(GTEST_FOUND)
+  set(CMAKE_CTEST_COMMAND ctest -V)
   add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
   enable_testing()
   include_directories(${GTEST_INCLUDES})
