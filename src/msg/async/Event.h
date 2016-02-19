@@ -115,6 +115,7 @@ class EventCenter {
   int notify_send_fd;
   NetHandler net;
   pthread_t owner;
+  EventCallbackRef notify_handler;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
@@ -136,7 +137,9 @@ class EventCenter {
     external_num_events(0),
     file_events(NULL),
     driver(NULL), time_event_next_id(1),
-    notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0), already_wakeup(0) {
+    notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0),
+    notify_handler(NULL),
+    already_wakeup(0) {
     last_time = time(NULL);
   }
   ~EventCenter();
