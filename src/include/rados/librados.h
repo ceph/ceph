@@ -2273,6 +2273,21 @@ CEPH_RADOS_API int rados_notify_ack(rados_ioctx_t io, const char *o,
  * @param cluster the cluster handle
  */
 CEPH_RADOS_API int rados_watch_flush(rados_t cluster);
+/**
+ * Flush watch/notify callbacks
+ *
+ * This call will be nonblock, and the completion will be called
+ * until all pending watch/notify callbacks have been executed and
+ * the queue is empty.  It should usually be called after shutting
+ * down any watches before shutting down the ioctx or
+ * librados to ensure that any callbacks do not misuse the ioctx (for
+ * example by calling rados_notify_ack after the ioctx has been
+ * destroyed).
+ *
+ * @param cluster the cluster handle
+ * @param completion what to do when operation has been attempted
+ */
+CEPH_RADOS_API int rados_aio_watch_flush(rados_t cluster, rados_completion_t completion);
 
 /** @} Watch/Notify */
 

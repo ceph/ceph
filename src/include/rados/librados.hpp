@@ -1133,6 +1133,7 @@ namespace librados
     int connect();
     void shutdown();
     int watch_flush();
+    int aio_watch_flush(AioCompletion*);
     int conf_read_file(const char * const path) const;
     int conf_parse_argv(int argc, const char ** argv) const;
     int conf_parse_argv_remainder(int argc, const char ** argv,
