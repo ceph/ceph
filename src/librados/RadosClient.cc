@@ -357,7 +357,51 @@ void librados::RadosClient::shutdown()
 int librados::RadosClient::watch_flush()
 {
   ldout(cct, 10) << __func__ << " enter" << dendl;
-  objecter->linger_callback_flush();
+  Mutex mylock("RadosClient::watch_flush::mylock");
+  Cond cond;
+  bool done;
+  objecter->linger_callback_flush(new C_SafeCond(&mylock, &cond, &done));
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  ldout(cct, 10) << __func__ << " exit" << dendl;
+  return 0;
+}
+
+struct C_aio_watch_flush_Complete : public Context {
+  librados::RadosClient *client;
+  librados::AioCompletionImpl *c;
+
+  C_aio_watch_flush_Complete(librados::RadosClient *_client, librados::AioCompletionImpl *_c)
+    : client(_client), c(_c) {
+    c->get();
+  }
+
+  virtual void finish(int r) {
+    c->lock.Lock();
+    c->rval = r;
+    c->ack = true;
+    c->safe = true;
+    c->cond.Signal();
+
+    if (c->callback_complete) {
+      client->finisher.queue(new librados::C_AioComplete(c));
+    }
+    if (c->callback_safe) {
+      client->finisher.queue(new librados::C_AioSafe(c));
+    }
+    c->put_unlock();
+  }
+};
+
+int librados::RadosClient::async_watch_flush(AioCompletionImpl *c)
+{
+  ldout(cct, 10) << __func__ << " enter" << dendl;
+  Context *oncomplete = new C_aio_watch_flush_Complete(this, c);
+  objecter->linger_callback_flush(oncomplete);
   ldout(cct, 10) << __func__ << " exit" << dendl;
   return 0;
 }
