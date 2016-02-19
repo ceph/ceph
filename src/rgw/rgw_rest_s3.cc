@@ -2600,12 +2600,14 @@ int RGWHandler_REST_S3::postauth_init()
   ret = validate_tenant_name(s->bucket_tenant);
   if (ret)
     return ret;
-  ret = valid_s3_bucket_name(s->bucket_name, relaxed_names);
-  if (ret)
-    return ret;
-  ret = validate_object_name(s->object.name);
-  if (ret)
-    return ret;
+  if (!s->bucket_name.empty()) {
+    ret = valid_s3_bucket_name(s->bucket_name, relaxed_names);
+    if (ret)
+      return ret;
+    ret = validate_object_name(s->object.name);
+    if (ret)
+      return ret;
+  }
 
   if (!t->src_bucket.empty()) {
     rgw_parse_url_bucket(t->src_bucket, s->user->user_id.tenant,
@@ -2631,12 +2633,14 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
   if (ret)
     return ret;
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
-  ret = valid_s3_bucket_name(s->bucket_name, relaxed_names);
-  if (ret)
-    return ret;
-  ret = validate_object_name(s->object.name);
-  if (ret)
-    return ret;
+  if (!s->bucket_name.empty()) {
+    ret = valid_s3_bucket_name(s->bucket_name, relaxed_names);
+    if (ret)
+      return ret;
+    ret = validate_object_name(s->object.name);
+    if (ret)
+      return ret;
+  }
 
   const char *cacl = s->info.env->get("HTTP_X_AMZ_ACL");
   if (cacl)
