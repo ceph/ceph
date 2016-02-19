@@ -658,7 +658,9 @@ static string temp_url_gen_sig(const string& key,
   return dest_str;
 }
 
-int authenticate_temp_url(RGWRados * const store, req_state * const s)
+int authenticate_temp_url(RGWRados * const store,
+                          /* const */ req_state * const s,
+                          rgw_swift_auth_info& auth_info)
 {
   /* We cannot use req_state::bucket_name because it isn't available
    * now. It will be initialized in RGWHandler_REST_SWIFT::postauth_init(). */
@@ -709,11 +711,12 @@ int authenticate_temp_url(RGWRados * const store, req_state * const s)
 
   ldout(s->cct, 20) << "temp url user (bucket owner): " << bucket_info.owner
                     << dendl;
-  if (rgw_get_user_info_by_uid(store, bucket_info.owner, *(s->user)) < 0) {
+  RGWUserInfo owner_info;
+  if (rgw_get_user_info_by_uid(store, bucket_info.owner, owner_info) < 0) {
     return -EPERM;
   }
 
-  if (s->user->temp_url_keys.empty()) {
+  if (owner_info.temp_url_keys.empty()) {
     dout(5) << "user does not have temp url key set, aborting" << dendl;
     return -EPERM;
   }
@@ -725,8 +728,8 @@ int authenticate_temp_url(RGWRados * const store, req_state * const s)
   const utime_t now = ceph_clock_now(g_ceph_context);
 
   string err;
-  uint64_t expiration = (uint64_t)strict_strtoll(temp_url_expires.c_str(),
-                                                 10, &err);
+  const uint64_t expiration = (uint64_t)strict_strtoll(temp_url_expires.c_str(),
+                                                       10, &err);
   if (!err.empty()) {
     dout(5) << "failed to parse temp_url_expires: " << err << dendl;
     return -EPERM;
@@ -754,7 +757,7 @@ int authenticate_temp_url(RGWRados * const store, req_state * const s)
   }
 
   /* Need to try each combination of keys, allowed path and methods. */
-  for (const auto kv : s->user->temp_url_keys) {
+  for (const auto kv : owner_info.temp_url_keys) {
     const int temp_url_key_num = kv.first;
     const string& temp_url_key = kv.second;
 
@@ -783,6 +786,12 @@ int authenticate_temp_url(RGWRados * const store, req_state * const s)
                             << " content_disp override " << s->content_disp.override
                             << " content_disp fallback " << s->content_disp.fallback
                             << dendl;
+
+          auth_info.is_admin = false;
+          auth_info.user = owner_info.user_id;
+          auth_info.perm_mask = RGW_PERM_FULL_CONTROL;
+          auth_info.status = 200;
+
           return 0;
         }
       }
@@ -834,11 +843,21 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
 
   if (s->info.args.exists("temp_url_sig") ||
       s->info.args.exists("temp_url_expires")) {
-    int ret = authenticate_temp_url(store, s);
-    return (ret >= 0);
-  }
+    if (authenticate_temp_url(store, s /* const! */, auth_info) < 0) {
+      return false;
+    }
 
-  struct rgw_swift_auth_info auth_info;
+    if (load_acct_info(store, s->account_name, auth_info, *(s->user)) < 0) {
+      return false;
+    }
+
+    if (load_user_info(store, auth_info, s->auth_user, s->perm_mask,
+                       s->admin_request) < 0) {
+      return false;
+    }
+
+    return  true;
+  }
 
   if (strncmp(s->os_auth_token, "AUTH_rgwtk", 10) == 0) {
     if (rgw_swift_verify_signed_token(s->cct, store, s->os_auth_token,
