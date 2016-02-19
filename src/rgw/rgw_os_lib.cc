@@ -59,4 +59,9 @@ namespace rgw {
     return 0;
   } /* init_from_header */
 
+  int RGWLibRequest::init(RGWRados*, struct req_state*, RGWClientIO*)
+  {
+    assert(false);
+  }
+
 } /* namespace rgw */

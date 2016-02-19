@@ -1366,7 +1366,8 @@ int RGWHandler_REST_SWIFT::postauth_init()
   return 0;
 }
 
-int RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket)
+int RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket,
+						bool relaxed)
 {
   int ret = RGWHandler_REST::validate_bucket_name(bucket);
   if (ret < 0)

@@ -395,7 +395,7 @@ public:
   RGWHandler_Auth_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_Auth_S3() {}
 
-  virtual int validate_bucket_name(const string& bucket) {
+  virtual int validate_bucket_name(const string& bucket, bool relaxed=false) {
     return 0;
   }
 
@@ -416,7 +416,6 @@ public:
   RGWHandler_REST_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_S3() {}
 
-  int validate_bucket_name(const string& bucket, bool relaxed_names) = delete;
   int get_errordoc(const string& errordoc_key, string* error_content);  
 
   virtual int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
