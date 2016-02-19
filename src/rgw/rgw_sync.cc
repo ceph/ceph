@@ -1286,18 +1286,18 @@ public:
       }
 
       if (!lost_lock) {
-        yield {
-          /* update marker to reflect we're done with full sync */
-          if (can_adjust_marker) {
-            sync_marker.state = rgw_meta_sync_marker::IncrementalSync;
-            sync_marker.marker = sync_marker.next_step_marker;
-            sync_marker.next_step_marker.clear();
-          }
-          // XXX: why write the marker if !can_adjust_marker?
+        /* update marker to reflect we're done with full sync */
+        if (can_adjust_marker) yield {
+          sync_marker.state = rgw_meta_sync_marker::IncrementalSync;
+          sync_marker.marker = sync_marker.next_step_marker;
+          sync_marker.next_step_marker.clear();
+
           RGWRados *store = sync_env->store;
           ldout(sync_env->cct, 0) << *this << ": saving marker pos=" << sync_marker.marker << dendl;
-          call(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, store, pool,
-                                                               sync_env->shard_obj_name(shard_id), sync_marker));
+          using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_meta_sync_marker>;
+          call(new WriteMarkerCR(sync_env->async_rados, store, pool,
+                                 sync_env->shard_obj_name(shard_id),
+                                 sync_marker));
         }
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to set sync marker: retcode=" << retcode << dendl;
