@@ -83,13 +83,21 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
             number = merge.group(1)
             pr = gh.repos("ceph")("ceph").pulls(number).get()
             message_lines = commit.message.split('\n')
-            if len(message_lines) > 2 and message_lines[2].strip() != pr['title'].strip():
+            if len(message_lines) > 1:
                 lines = []
-                for line in message_lines[2:]:
+                for line in message_lines[1:]:
                     if 'Reviewed-by' in line:
                         continue
-                    lines.append(line.strip())
-                message = "\n".join(lines)
+                    line = line.strip()
+                    if line:
+                        lines.append(line)
+                duplicates_pr_title = lines[0] == pr['title'].strip()
+                if duplicates_pr_title:
+                    lines.pop(0)
+                if len(lines) == 0 and duplicates_pr_title:
+                    message = None
+                else:
+                    message = "    " + "\n    ".join(lines)
             else:
                 message = None
             issues = []
@@ -113,7 +121,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
             title = pr['title']
 
             if strict:
-                title_re = '^(cli|common|mon|osd|fs|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|doc|crush|librados):'
+                title_re = '^(cli|common|mon|osd|fs|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|cmake|doc|crush|librados):'
                 if not re.match(title_re, title):
                     print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " title " + title + " does not match " + title_re)
 
@@ -132,7 +140,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
             if len(prs) > 1:
                 print (">>>>>>> " + str(len(prs)) + " pr for issue " + issue)
 
-    for (pr, (author, title, message)) in sorted(pr2info.iteritems(), key=lambda (k,v): v[1]):
+    for (pr, (author, title, message)) in sorted(pr2info.iteritems(), key=lambda (k,v): (v[2], v[1])):
         if pr in pr2issues:
             if plaintext:
                 issues = map(lambda issue: '#' + str(issue), pr2issues[pr])

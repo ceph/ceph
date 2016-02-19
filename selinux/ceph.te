@@ -1,4 +1,4 @@
-policy_module(ceph, 1.1.0)
+policy_module(ceph, 1.1.1)
 
 require {
 	type sysfs_t;

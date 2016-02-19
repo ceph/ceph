@@ -11,8 +11,9 @@
  * Foundation. See file COPYING.
  *
  */
-#ifndef CEPH_RGW_REST_CONFIG_H
-#define CEPH_RGW_REST_CONFIG_H
+
+#ifndef RGW_REST_CONFIG_H
+#define RGW_REST_CONFIG_H
 
 class RGWOp_ZoneGroupMap_Get : public RGWRESTOp {
   RGWZoneGroupMap zonegroup_map;
@@ -53,9 +54,9 @@ public:
   RGWRESTMgr_Config() {}
   virtual ~RGWRESTMgr_Config() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s){
+  virtual RGWHandler_REST* get_handler(struct req_state *s){
     return new RGWHandler_Config;
   }
 };
 
-#endif
+#endif /* RGW_REST_CONFIG_H */

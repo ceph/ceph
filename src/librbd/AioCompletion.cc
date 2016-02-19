@@ -91,12 +91,7 @@ namespace librbd {
       ictx->journal->commit_io_event(journal_tid, rval);
     }
 
-    // note: possible for image to be closed after op marked finished
     done = true;
-    if (async_op.started()) {
-      async_op.finish_op();
-    }
-
     if (complete_cb) {
       lock.Unlock();
       complete_cb(rbd_comp, complete_arg);
@@ -110,6 +105,11 @@ namespace librbd {
       ictx->event_socket.notify();
     }
     cond.Signal();
+
+    // note: possible for image to be closed after op marked finished
+    if (async_op.started()) {
+      async_op.finish_op();
+    }
     tracepoint(librbd, aio_complete_exit);
   }
 

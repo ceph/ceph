@@ -22,8 +22,7 @@ void RGWClientIO::init(CephContext *cct) {
   }
 }
 
-
-int RGWClientIO::print(const char *format, ...)
+int RGWStreamIO::print(const char *format, ...)
 {
 #define LARGE_ENOUGH 128
   int size = LARGE_ENOUGH;
@@ -49,7 +48,7 @@ int RGWClientIO::print(const char *format, ...)
   /* not reachable */
 }
 
-int RGWClientIO::write(const char *buf, int len)
+int RGWStreamIO::write(const char *buf, int len)
 {
   if (len == 0) {
     return 0;
@@ -59,7 +58,7 @@ int RGWClientIO::write(const char *buf, int len)
   if (ret < 0)
     return ret;
 
-  if (account)
+  if (account())
     bytes_sent += ret;
 
   if (ret < len) {
@@ -70,8 +69,7 @@ int RGWClientIO::write(const char *buf, int len)
   return 0;
 }
 
-
-int RGWClientIO::read(char *buf, int max, int *actual)
+int RGWStreamIO::read(char *buf, int max, int *actual)
 {
   int ret = read_data(buf, max);
   if (ret < 0)
@@ -83,4 +81,3 @@ int RGWClientIO::read(char *buf, int max, int *actual)
 
   return 0;
 }
-

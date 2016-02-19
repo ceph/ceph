@@ -217,7 +217,7 @@ class RGWHandler_Period : public RGWHandler_Auth_S3 {
 
 class RGWRESTMgr_Period : public RGWRESTMgr {
  public:
-  RGWHandler* get_handler(struct req_state*) override {
+  RGWHandler_REST* get_handler(struct req_state*) override {
     return new RGWHandler_Period;
   }
 };
@@ -272,7 +272,7 @@ RGWRESTMgr_Realm::RGWRESTMgr_Realm()
   register_resource("period", new RGWRESTMgr_Period);
 }
 
-RGWHandler* RGWRESTMgr_Realm::get_handler(struct req_state*)
+RGWHandler_REST* RGWRESTMgr_Realm::get_handler(struct req_state*)
 {
   return new RGWHandler_Realm;
 }
