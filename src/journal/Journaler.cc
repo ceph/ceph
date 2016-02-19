@@ -159,6 +159,10 @@ int Journaler::remove(bool force) {
   return 0;
 }
 
+void Journaler::flush_commit_position(Context *on_safe) {
+  m_metadata->flush_commit_position(on_safe);
+}
+
 int Journaler::register_client(const bufferlist &data) {
   return m_metadata->register_client(data);
 }
@@ -240,7 +244,7 @@ void Journaler::start_append(int flush_interval, uint64_t flush_bytes,
 void Journaler::stop_append(Context *on_safe) {
   assert(m_recorder != NULL);
 
-  flush(new C_DeleteRecorder(m_recorder, on_safe));
+  flush_append(new C_DeleteRecorder(m_recorder, on_safe));
   m_recorder = NULL;
 }
 
@@ -248,7 +252,7 @@ Future Journaler::append(uint64_t tag_tid, const bufferlist &payload_bl) {
   return m_recorder->append(tag_tid, payload_bl);
 }
 
-void Journaler::flush(Context *on_safe) {
+void Journaler::flush_append(Context *on_safe) {
   m_recorder->flush(on_safe);
 }
 

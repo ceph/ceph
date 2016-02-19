@@ -99,6 +99,7 @@ public:
   }
 
   void flush_commit_position();
+  void flush_commit_position(Context *on_safe);
   void set_commit_position(const ObjectSetPosition &commit_position,
                            Context *on_safe);
   void get_commit_position(ObjectSetPosition *commit_position) const {
@@ -185,6 +186,7 @@ private:
       journal_metadata->m_async_op_tracker.finish_op();
     }
     virtual void finish(int r) {
+      Mutex::Locker locker(journal_metadata->m_lock);
       journal_metadata->handle_commit_position_task();
     };
   };
@@ -309,6 +311,7 @@ private:
   void refresh(Context *on_finish);
   void handle_refresh_complete(C_Refresh *refresh, int r);
 
+  void cancel_commit_task();
   void schedule_commit_task();
   void handle_commit_position_task();
 

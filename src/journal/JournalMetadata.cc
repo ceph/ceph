@@ -243,6 +243,21 @@ struct C_GetTags : public Context {
   }
 };
 
+struct C_FlushCommitPosition : public Context {
+  Context *commit_position_ctx;
+  Context *on_finish;
+
+  C_FlushCommitPosition(Context *commit_position_ctx, Context *on_finish)
+    : commit_position_ctx(commit_position_ctx), on_finish(on_finish) {
+  }
+  virtual void finish(int r) override {
+    if (commit_position_ctx != nullptr) {
+      commit_position_ctx->complete(r);
+    }
+    on_finish->complete(r);
+  }
+};
+
 } // anonymous namespace
 
 JournalMetadata::JournalMetadata(librados::IoCtx &ioctx,
@@ -434,19 +449,32 @@ void JournalMetadata::set_active_set(uint64_t object_set) {
 }
 
 void JournalMetadata::flush_commit_position() {
-
   ldout(m_cct, 20) << __func__ << dendl;
 
-  {
-    Mutex::Locker timer_locker(m_timer_lock);
-    Mutex::Locker locker(m_lock);
-    if (m_commit_position_task_ctx == NULL) {
-      return;
-    }
-
-    m_timer->cancel_event(m_commit_position_task_ctx);
-    m_commit_position_task_ctx = NULL;
+  Mutex::Locker timer_locker(m_timer_lock);
+  Mutex::Locker locker(m_lock);
+  if (m_commit_position_ctx == nullptr) {
+    return;
   }
+
+  cancel_commit_task();
+  handle_commit_position_task();
+}
+
+void JournalMetadata::flush_commit_position(Context *on_safe) {
+  ldout(m_cct, 20) << __func__ << dendl;
+
+  Mutex::Locker timer_locker(m_timer_lock);
+  Mutex::Locker locker(m_lock);
+  if (m_commit_position_ctx == nullptr) {
+    // nothing to flush
+    m_finisher->queue(on_safe, 0);
+    return;
+  }
+
+  m_commit_position_ctx = new C_FlushCommitPosition(
+    m_commit_position_ctx, on_safe);
+  cancel_commit_task();
   handle_commit_position_task();
 }
 
@@ -554,13 +582,24 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
   }
 }
 
-void JournalMetadata::schedule_commit_task() {
-
+void JournalMetadata::cancel_commit_task() {
   ldout(m_cct, 20) << __func__ << dendl;
 
   assert(m_timer_lock.is_locked());
   assert(m_lock.is_locked());
+  assert(m_commit_position_ctx != nullptr);
+  assert(m_commit_position_task_ctx != nullptr);
 
+  m_timer->cancel_event(m_commit_position_task_ctx);
+  m_commit_position_task_ctx = NULL;
+}
+
+void JournalMetadata::schedule_commit_task() {
+  ldout(m_cct, 20) << __func__ << dendl;
+
+  assert(m_timer_lock.is_locked());
+  assert(m_lock.is_locked());
+  assert(m_commit_position_ctx != nullptr);
   if (m_commit_position_task_ctx == NULL) {
     m_commit_position_task_ctx = new C_CommitPositionTask(this);
     m_timer->add_event_after(m_commit_interval, m_commit_position_task_ctx);
@@ -568,10 +607,9 @@ void JournalMetadata::schedule_commit_task() {
 }
 
 void JournalMetadata::handle_commit_position_task() {
-
+  assert(m_timer_lock.is_locked());
+  assert(m_lock.is_locked());
   ldout(m_cct, 20) << __func__ << dendl;
-
-  Mutex::Locker locker(m_lock);
 
   librados::ObjectWriteOperation op;
   client::client_commit(&op, m_client_id, m_commit_position);
