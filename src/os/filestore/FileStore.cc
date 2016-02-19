@@ -3296,13 +3296,18 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
     }
     r = ::ftruncate(**n, 0);
     if (r < 0) {
+      r = -errno;
       goto out3;
     }
     struct stat st;
-    ::fstat(**o, &st);
-    r = _do_clone_range(**o, **n, 0, st.st_size, 0);
+    r = ::fstat(**o, &st);
     if (r < 0) {
       r = -errno;
+      goto out3;
+    }
+
+    r = _do_clone_range(**o, **n, 0, st.st_size, 0);
+    if (r < 0) {
       goto out3;
     }
 
