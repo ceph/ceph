@@ -62,7 +62,8 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
       librados::IoCtx ioctx;
       ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
       ASSERT_EQ(0, librbd::mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL));
-      ASSERT_EQ(0, librbd::mirror_peer_add(ioctx, peer.cluster_uuid,
+      std::string uuid;
+      ASSERT_EQ(0, librbd::mirror_peer_add(ioctx, &uuid,
 					   peer.cluster_name,
 					   peer.client_name));
     }

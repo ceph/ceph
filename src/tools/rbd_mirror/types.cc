@@ -5,7 +5,7 @@
 
 std::ostream& operator<<(std::ostream& lhs, const rbd::mirror::peer_t &peer)
 {
-  return lhs << "name: " << peer.cluster_name
-	     << " uuid: " << peer.cluster_uuid
+  return lhs << "uuid: " << peer.uuid
+	     << " cluster: " << peer.cluster_name
 	     << " client: " << peer.client_name;
 }

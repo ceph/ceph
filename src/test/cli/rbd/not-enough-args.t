@@ -197,6 +197,6 @@
   rbd: remote cluster was not specified
   [22]
   $ rbd mirror pool peer remove rbd
-  rbd: must specify cluster uuid
+  rbd: must specify peer uuid
   [22]
 

@@ -42,7 +42,8 @@ public:
     }
   }
 
-  void create_pool(bool enable_mirroring, const peer_t &peer, string *name=nullptr) {
+  void create_pool(bool enable_mirroring, const peer_t &peer,
+                   string *uuid = nullptr, string *name=nullptr) {
     string pool_name = get_temp_pool_name();
     ASSERT_EQ("", create_one_pool_pp(pool_name, *m_cluster));
     int64_t pool_id = m_cluster->pool_lookup(pool_name.c_str());
@@ -52,7 +53,10 @@ public:
       librados::IoCtx ioctx;
       ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
       ASSERT_EQ(0, librbd::mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL));
-      ASSERT_EQ(0, librbd::mirror_peer_add(ioctx, peer.cluster_uuid,
+
+      std::string gen_uuid;
+      ASSERT_EQ(0, librbd::mirror_peer_add(ioctx,
+                                           uuid != nullptr ? uuid : &gen_uuid,
 					   peer.cluster_name,
 					   peer.client_name));
       m_peer_configs[peer].insert(pool_id);
@@ -143,13 +147,11 @@ TEST_F(TestClusterWatcher, NoMirroredPools) {
 }
 
 TEST_F(TestClusterWatcher, ReplicatedPools) {
-  string uuid1 = "00000000-0000-0000-0000-000000000001";
-  string uuid2 = "20000000-2222-2222-2222-000000000002";
-  peer_t site1(uuid1, "site1", "mirror1");
-  peer_t site2(uuid2, "site2", "mirror2");
+  peer_t site1("", "site1", "mirror1");
+  peer_t site2("", "site2", "mirror2");
   string first_pool, last_pool;
   check_peers();
-  create_pool(true, site1, &first_pool);
+  create_pool(true, site1, &site1.uuid, &first_pool);
   check_peers();
   create_pool(false, peer_t());
   check_peers();
@@ -157,11 +159,11 @@ TEST_F(TestClusterWatcher, ReplicatedPools) {
   check_peers();
   create_pool(false, peer_t());
   check_peers();
-  create_pool(true, site2);
+  create_pool(true, site2, &site2.uuid);
   check_peers();
-  create_pool(true, site2);
+  create_pool(true, site2, &site2.uuid);
   check_peers();
-  create_pool(true, site2, &last_pool);
+  create_pool(true, site2, &site2.uuid, &last_pool);
   check_peers();
   delete_pool(first_pool, site1);
   check_peers();
@@ -170,9 +172,9 @@ TEST_F(TestClusterWatcher, ReplicatedPools) {
 }
 
 TEST_F(TestClusterWatcher, CachePools) {
-  peer_t site1("11111111-1111-1111-1111-111111111111", "site1", "mirror1");
+  peer_t site1("", "site1", "mirror1");
   string base1, base2, cache1, cache2;
-  create_pool(true, site1, &base1);
+  create_pool(true, site1, &site1.uuid, &base1);
   check_peers();
 
   create_cache_pool(base1, &cache1);
@@ -181,7 +183,7 @@ TEST_F(TestClusterWatcher, CachePools) {
   } BOOST_SCOPE_EXIT_END;
   check_peers();
 
-  create_pool(false, peer_t(), &base2);
+  create_pool(false, peer_t(), nullptr, &base2);
   create_cache_pool(base2, &cache2);
   BOOST_SCOPE_EXIT( base2, cache2, this_ ) {
     this_->remove_cache_pool(base2, cache2);

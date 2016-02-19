@@ -24,15 +24,16 @@ enum MirrorMode {
 struct MirrorPeer {
   MirrorPeer() {
   }
-  MirrorPeer(const std::string &cluster_uuid, const std::string &cluster_name,
-             const std::string &client_name)
-    : cluster_uuid(cluster_uuid), cluster_name(cluster_name),
-      client_name(client_name) {
+  MirrorPeer(const std::string &uuid, const std::string &cluster_name,
+             const std::string &client_name, int64_t pool_id)
+    : uuid(uuid), cluster_name(cluster_name), client_name(client_name),
+      pool_id(pool_id) {
   }
 
-  std::string cluster_uuid;
+  std::string uuid;
   std::string cluster_name;
   std::string client_name;
+  int64_t pool_id = -1;
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &it);

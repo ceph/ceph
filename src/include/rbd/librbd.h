@@ -96,7 +96,7 @@ typedef enum {
 } rbd_mirror_mode_t;
 
 typedef struct {
-  char *cluster_uuid;
+  char *uuid;
   char *cluster_name;
   char *client_name;
 } rbd_mirror_peer_t;
@@ -181,20 +181,20 @@ CEPH_RBD_API int rbd_mirror_mode_get(rados_ioctx_t io_ctx,
 CEPH_RBD_API int rbd_mirror_mode_set(rados_ioctx_t io_ctx,
                                      rbd_mirror_mode_t mirror_mode);
 CEPH_RBD_API int rbd_mirror_peer_add(rados_ioctx_t io_ctx,
-                                     const char *cluster_uuid,
+                                     char *uuid, size_t uuid_max_length,
                                      const char *cluster_name,
                                      const char *client_name);
 CEPH_RBD_API int rbd_mirror_peer_remove(rados_ioctx_t io_ctx,
-                                        const char *cluster_name);
+                                        const char *uuid);
 CEPH_RBD_API int rbd_mirror_peer_list(rados_ioctx_t io_ctx,
                                       rbd_mirror_peer_t *peers, int *max_peers);
 CEPH_RBD_API void rbd_mirror_peer_list_cleanup(rbd_mirror_peer_t *peers,
                                                int max_peers);
 CEPH_RBD_API int rbd_mirror_peer_set_client(rados_ioctx_t io_ctx,
-                                            const char *cluster_uuid,
+                                            const char *uuid,
                                             const char *client_name);
 CEPH_RBD_API int rbd_mirror_peer_set_cluster(rados_ioctx_t io_ctx,
-                                             const char *cluster_uuid,
+                                             const char *uuid,
                                              const char *cluster_name);
 
 CEPH_RBD_API int rbd_open(rados_ioctx_t io, const char *name,
