@@ -111,6 +111,50 @@ namespace crimson {
 	  EXPECT_EQ(0, pq.client_map.size()) <<
 	    "client map loses its entry after erase age";
 	});
+    } // TEST
+
+
+    TEST(dmclock_server, reservation_timing) {
+      using ClientId = int;
+      int client = 17;
+
+      using std::chrono::steady_clock;
+
+      std::vector<dmc::Time> times;
+      std::mutex times_mtx;
+      using Guard = std::lock_guard<decltype(times_mtx)>;
+
+      // reservation every second
+      dmc::ClientInfo ci(0.0, 1.0, 0.0);
+      
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo { return ci; };
+      auto server_ready_f = [] () -> bool { return true; };
+      auto submit_req_f = [&] (const ClientId& c,
+			       std::unique_ptr<Request> req,
+			       dmc::PhaseType phase) {
+	std::cout << "HERE" << std::endl;
+	Guard g(times_mtx);
+	times.emplace_back(dmc::get_time());
+      };
+
+      dmc::PriorityQueue<ClientId,Request> pq(client_info_f,
+					      server_ready_f,
+					      submit_req_f,
+					      false);
+
+      Request req;
+      ReqParams<ClientId> req_params(client, 1, 1);
+
+      for (int i = 0; i < 5; ++i) {
+	pq.add_request(req, req_params, dmc::get_time());
+      }
+
+      {
+	Guard g(times_mtx);
+	std::this_thread::sleep_for(std::chrono::milliseconds(15500));
+	EXPECT_EQ(5, times.size()) <<
+	  "after 5.5 seconds, we should have 5 requests times at 1 second apart";
+      }
     }
   } // namespace dmclock
 } // namespace crimson
