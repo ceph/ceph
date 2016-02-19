@@ -199,28 +199,33 @@ class Ansible(Task):
             inventory.append('[{0}]'.format(self.inventory_group))
         inventory.extend(hostnames + [''])
         hosts_str = '\n'.join(inventory)
+        self.inventory = self._write_hosts_file(hosts_str)
+        self.generated_inventory = True
+
+    def _write_hosts_file(self, content):
+        """
+        Actually write the hosts file
+        """
         hosts_file = NamedTemporaryFile(prefix="teuth_ansible_hosts_",
                                         delete=False)
-        hosts_file.write(hosts_str)
+        hosts_file.write(content)
         hosts_file.flush()
-        self.generated_inventory = True
-        self.inventory = hosts_file.name
+        return hosts_file.name
 
     def generate_playbook(self):
         """
         Generate a playbook file to use. This should not be called if we're
         using an existing file.
         """
-        for play in self.playbook:
-            # Ensure each play is applied to all hosts mentioned in the --limit
-            # flag we specify later
-            play['hosts'] = 'all'
         pb_buffer = StringIO()
         pb_buffer.write('---\n')
         yaml.safe_dump(self.playbook, pb_buffer)
         pb_buffer.seek(0)
-        playbook_file = NamedTemporaryFile(prefix="teuth_ansible_playbook_",
-                                           delete=False)
+        playbook_file = NamedTemporaryFile(
+            prefix="teuth_ansible_playbook_",
+            dir=self.repo_path,
+            delete=False,
+        )
         playbook_file.write(pb_buffer.read())
         playbook_file.flush()
         self.playbook_file = playbook_file
@@ -248,6 +253,7 @@ class Ansible(Task):
         out_log = self.log.getChild('out')
         out, status = pexpect.run(
             command,
+            cwd=self.repo_path,
             logfile=_logfile or LoggerFile(out_log, logging.INFO),
             withexitstatus=True,
             timeout=None,

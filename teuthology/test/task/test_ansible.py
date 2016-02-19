@@ -27,6 +27,29 @@ class TestAnsibleTask(TestTask):
         self.ctx.cluster.add(Remote('user@remote2'), ['role2'])
         self.ctx.config = dict()
         self.task_config = dict(playbook=[])
+        self.start_patchers()
+
+    def start_patchers(self):
+        m_NTF = Mock()
+        m_file = Mock()
+        m_file.name = 'file_name'
+        m_NTF.return_value = m_file
+        self.patcher_NTF = patch(
+            'teuthology.task.ceph_ansible.ansible.NamedTemporaryFile',
+            m_NTF,
+        )
+        self.patcher_NTF.start()
+        self.patcher_os_remove = patch(
+            'teuthology.task.ceph_ansible.ansible.os.remove',
+        )
+        self.patcher_os_remove.start()
+
+    def teardown(self):
+        self.stop_patchers()
+
+    def stop_patchers(self):
+        self.patcher_NTF.stop()
+        self.patcher_os_remove.stop()
 
     def test_setup(self):
         self.task_config.update(dict(
@@ -228,16 +251,16 @@ class TestAnsibleTask(TestTask):
         playbook_file_obj.name = playbook_file_path
         with patch.object(ansible, 'NamedTemporaryFile') as m_NTF:
             m_NTF.return_value = playbook_file_obj
+            task.find_repo()
             task.get_playbook()
             task.generate_playbook()
             m_NTF.assert_called_once_with(prefix="teuth_ansible_playbook_",
+                                          dir=task.repo_path,
                                           delete=False)
         assert task.generated_playbook is True
         assert task.playbook_file == playbook_file_obj
         playbook_file_obj.seek(0)
         playbook_result = yaml.safe_load(playbook_file_obj)
-        for play in playbook:
-            play['hosts'] = 'all'
         assert playbook_result == playbook
 
     def test_execute_playbook(self):
@@ -262,6 +285,7 @@ class TestAnsibleTask(TestTask):
                 task.execute_playbook(_logfile=logger)
             m_run.assert_called_once_with(
                 ' '.join(args),
+                cwd=task.repo_path,
                 logfile=logger,
                 withexitstatus=True,
                 timeout=None,
@@ -274,9 +298,14 @@ class TestAnsibleTask(TestTask):
         task = self.klass(self.ctx, self.task_config)
         task.setup()
         with patch.object(ansible.pexpect, 'run') as m_run:
-            m_run.return_value = ('', 1)
-            with raises(CommandFailedError):
-                task.execute_playbook()
+            with patch('teuthology.task.ansible.open') as m_open:
+                fake_failure_log = Mock()
+                fake_failure_log.__enter__ = Mock()
+                fake_failure_log.__exit__ = Mock()
+                m_open.return_value = fake_failure_log
+                m_run.return_value = ('', 1)
+                with raises(CommandFailedError):
+                    task.execute_playbook()
 
     def test_build_args_no_tags(self):
         self.task_config.update(dict(
@@ -440,7 +469,6 @@ class TestCephLabTask(TestTask):
             m_file.return_value = fake_playbook_obj
             task.get_playbook()
         assert task.playbook_file.name == playbook
-
 
     def test_generate_hosts_file(self):
         self.task_config.update(dict(
