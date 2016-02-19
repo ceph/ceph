@@ -762,7 +762,11 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
 #define dout_prefix *_dout << "bdev(" << name << ") "
 
 NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
-    : buffer_lock("NVMEDevice::buffer_lock"),
+    : driver(NULL),
+      size(0),
+      block_size(0),
+      aio_stop(false),
+      buffer_lock("NVMEDevice::buffer_lock"),
       aio_callback(cb),
       aio_callback_priv(cbpriv)
 {
