@@ -2,6 +2,7 @@
 
 erasure_codelibdir = $(pkglibdir)/erasure-code
 erasure_codelib_LTLIBRARIES =  
+check_LTLIBRARIES =
 
 include erasure-code/jerasure/Makefile.am
 include erasure-code/lrc/Makefile.am
