@@ -2034,6 +2034,13 @@ int librados::Rados::watch_flush()
   return client->watch_flush();
 }
 
+int librados::Rados::aio_watch_flush(AioCompletion *c)
+{
+  if (!client)
+    return -EINVAL;
+  return client->async_watch_flush(c->pc);
+}
+
 void librados::Rados::shutdown()
 {
   if (!client)
@@ -4373,6 +4380,16 @@ extern "C" int rados_watch_flush(rados_t cluster)
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   int retval = client->watch_flush();
   tracepoint(librados, rados_watch_flush_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_aio_watch_flush(rados_t cluster, rados_completion_t completion)
+{
+  tracepoint(librados, rados_aio_watch_flush_enter, cluster, completion);
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
+  int retval = client->async_watch_flush(c);
+  tracepoint(librados, rados_aio_watch_flush_exit, retval);
   return retval;
 }
 
