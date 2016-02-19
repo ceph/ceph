@@ -188,7 +188,7 @@ function test_teardown() {
 # @param dir path name of the environment
 # @param signal name of the first signal (defaults to TERM)
 # @param name_prefix only kill match daemons (defaults to all)
-# @params delays sequence of sleep times before failure
+# @param delays sequence of sleep times before failure
 # @return 0 on success, 1 on error
 #
 function kill_daemons() {
@@ -729,7 +729,7 @@ function test_get_config() {
 # of the admin socket of **daemon**.**id**
 #
 # @param daemon mon or osd
-# @parma id mon or osd ID
+# @param id mon or osd ID
 # @param config the configuration variable name as found in config_opts.h
 # @param value the config value
 # @return 0 on success, 1 on error
