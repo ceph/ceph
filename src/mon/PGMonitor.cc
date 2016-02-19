@@ -1394,8 +1394,8 @@ int64_t PGMonitor::get_rule_avail(OSDMap& osdmap, int ruleno) const
 	// calculate proj below.
 	continue;
       }
-      int64_t proj = (float)((osd_info->second).kb_avail * 1024ull) /
-                     (double)p->second;
+      int64_t proj = (int64_t)((double)((osd_info->second).kb_avail * 1024ull) /
+                     (double)p->second);
       if (min < 0 || proj < min)
 	min = proj;
     } else {
