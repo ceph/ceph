@@ -85,6 +85,7 @@ struct MockJournaler {
   MOCK_METHOD3(get_metadata, void(uint8_t *order, uint8_t *splay_width,
                                   int64_t *pool_id));
   MOCK_METHOD1(init, void(Context*));
+  MOCK_METHOD1(flush_commit_position, void(Context*));
 
   MOCK_METHOD1(start_replay, void(::journal::ReplayHandler *replay_handler));
   MOCK_METHOD1(try_pop_front, bool(MockReplayEntryProxy *replay_entry));
@@ -131,6 +132,10 @@ struct MockJournalerProxy {
 
   void init(Context *on_finish) {
     MockJournaler::get_instance().init(on_finish);
+  }
+
+  void flush_commit_position(Context *on_finish) {
+    MockJournaler::get_instance().flush_commit_position(on_finish);
   }
 
   void start_replay(::journal::ReplayHandler *replay_handler) {
@@ -369,6 +374,11 @@ public:
 
   void expect_future_is_valid(::journal::MockFuture &mock_future) {
     EXPECT_CALL(mock_future, is_valid()).WillOnce(Return(false));
+  }
+
+  void expect_flush_commit_position(::journal::MockJournaler &mock_journaler) {
+    EXPECT_CALL(mock_journaler, flush_commit_position(_))
+                  .WillOnce(CompleteContext(0, NULL));
   }
 
   int when_open(MockJournal &mock_journal) {
@@ -912,6 +922,26 @@ TEST_F(TestMockJournal, IOCommitError) {
   // failed IO remains uncommitted in journal
   on_journal_safe->complete(0);
   mock_journal.commit_io_event(1U, -EINVAL);
+}
+
+TEST_F(TestMockJournal, FlushCommitPosition) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  BOOST_SCOPE_EXIT_ALL(&) {
+    close_journal(mock_journal, mock_journaler);
+  };
+
+  expect_flush_commit_position(mock_journaler);
+  C_SaferCond ctx;
+  mock_journal.flush_commit_position(&ctx);
+  ASSERT_EQ(0, ctx.wait());
 }
 
 } // namespace librbd
