@@ -17,7 +17,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static list<string> roles_list;
+static vector<string> accepted_roles;
+static vector<string> accepted_admin_roles;
 
 class RGWValidateSwiftToken : public RGWHTTPClient {
   struct rgw_swift_auth_info *info;
@@ -335,10 +336,9 @@ int RGWSwift::parse_keystone_token_response(const string& token,
   }
 
   bool found = false;
-  list<string>::iterator iter;
-  for (iter = roles_list.begin(); iter != roles_list.end(); ++iter) {
-    const string& role = *iter;
-    if ((found=t.has_role(role))==true)
+  for (const auto role : accepted_roles) {
+    if (t.has_role(role) == true) {
+      found = true;
       break;
   }
 
@@ -746,9 +746,16 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
 
 void RGWSwift::init()
 {
-  get_str_list(cct->_conf->rgw_keystone_accepted_roles, roles_list);
-  if (supports_keystone())
-      init_keystone();
+  get_str_vec(cct->_conf->rgw_keystone_accepted_roles, accepted_roles);
+  get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles,
+              accepted_admin_roles);
+
+  accepted_roles.insert(accepted_roles.end(), accepted_admin_roles.begin(),
+                        accepted_admin_roles.end());
+
+  if (supports_keystone()) {
+    init_keystone();
+  }
 }
 
 
