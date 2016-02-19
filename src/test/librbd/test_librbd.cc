@@ -4028,9 +4028,16 @@ TEST_F(TestLibRBD, ImagePollIO)
 namespace librbd {
 
 static bool operator==(const mirror_peer_t &lhs, const mirror_peer_t &rhs) {
-  return (lhs.cluster_uuid == rhs.cluster_uuid &&
+  return (lhs.uuid == rhs.uuid &&
           lhs.cluster_name == rhs.cluster_name &&
           lhs.client_name == rhs.client_name);
+}
+
+static std::ostream& operator<<(std::ostream &os, const mirror_peer_t &peer) {
+  os << "uuid=" << peer.uuid << ", "
+     << "cluster=" << peer.cluster_name << ", "
+     << "client=" << peer.client_name;
+  return os;
 }
 
 } // namespace librbd
@@ -4046,7 +4053,8 @@ TEST_F(TestLibRBD, Mirror) {
   ASSERT_EQ(0, rbd.mirror_peer_list(ioctx, &peers));
   ASSERT_EQ(expected_peers, peers);
 
-  ASSERT_EQ(-EINVAL, rbd.mirror_peer_add(ioctx, "uuid1", "cluster1", "client"));
+  std::string uuid1;
+  ASSERT_EQ(-EINVAL, rbd.mirror_peer_add(ioctx, &uuid1, "cluster1", "client"));
 
   rbd_mirror_mode_t mirror_mode;
   ASSERT_EQ(0, rbd.mirror_mode_get(ioctx, &mirror_mode));
@@ -4060,33 +4068,40 @@ TEST_F(TestLibRBD, Mirror) {
   ASSERT_EQ(0, rbd.mirror_mode_get(ioctx, &mirror_mode));
   ASSERT_EQ(RBD_MIRROR_MODE_POOL, mirror_mode);
 
-  ASSERT_EQ(0, rbd.mirror_peer_add(ioctx, "uuid1", "cluster1", "client"));
-  ASSERT_EQ(0, rbd.mirror_peer_add(ioctx, "uuid2", "cluster2", "admin"));
-  ASSERT_EQ(-EEXIST, rbd.mirror_peer_add(ioctx, "uuid2", "cluster3", "foo"));
-  ASSERT_EQ(-EEXIST, rbd.mirror_peer_add(ioctx, "uuid3", "cluster1", "foo"));
-  ASSERT_EQ(0, rbd.mirror_peer_add(ioctx, "uuid3", "cluster3", "admin"));
+  std::string uuid2;
+  std::string uuid3;
+  ASSERT_EQ(0, rbd.mirror_peer_add(ioctx, &uuid1, "cluster1", "client"));
+  ASSERT_EQ(0, rbd.mirror_peer_add(ioctx, &uuid2, "cluster2", "admin"));
+  ASSERT_EQ(-EEXIST, rbd.mirror_peer_add(ioctx, &uuid3, "cluster1", "foo"));
+  ASSERT_EQ(0, rbd.mirror_peer_add(ioctx, &uuid3, "cluster3", "admin"));
 
   ASSERT_EQ(0, rbd.mirror_peer_list(ioctx, &peers));
+  auto sort_peers = [](const librbd::mirror_peer_t &lhs,
+                         const librbd::mirror_peer_t &rhs) {
+      return lhs.uuid < rhs.uuid;
+    };
   expected_peers = {
-    {"uuid1", "cluster1", "client"},
-    {"uuid2", "cluster2", "admin"},
-    {"uuid3", "cluster3", "admin"}};
+    {uuid1, "cluster1", "client"},
+    {uuid2, "cluster2", "admin"},
+    {uuid3, "cluster3", "admin"}};
+  std::sort(expected_peers.begin(), expected_peers.end(), sort_peers);
   ASSERT_EQ(expected_peers, peers);
 
   ASSERT_EQ(0, rbd.mirror_peer_remove(ioctx, "uuid4"));
-  ASSERT_EQ(0, rbd.mirror_peer_remove(ioctx, "uuid2"));
+  ASSERT_EQ(0, rbd.mirror_peer_remove(ioctx, uuid2));
 
   ASSERT_EQ(-ENOENT, rbd.mirror_peer_set_client(ioctx, "uuid4", "new client"));
-  ASSERT_EQ(0, rbd.mirror_peer_set_client(ioctx, "uuid1", "new client"));
+  ASSERT_EQ(0, rbd.mirror_peer_set_client(ioctx, uuid1, "new client"));
 
   ASSERT_EQ(-ENOENT, rbd.mirror_peer_set_cluster(ioctx, "uuid4",
                                                  "new cluster"));
-  ASSERT_EQ(0, rbd.mirror_peer_set_cluster(ioctx, "uuid3", "new cluster"));
+  ASSERT_EQ(0, rbd.mirror_peer_set_cluster(ioctx, uuid3, "new cluster"));
 
   ASSERT_EQ(0, rbd.mirror_peer_list(ioctx, &peers));
   expected_peers = {
-    {"uuid1", "cluster1", "new client"},
-    {"uuid3", "new cluster", "admin"}};
+    {uuid1, "cluster1", "new client"},
+    {uuid3, "new cluster", "admin"}};
+  std::sort(expected_peers.begin(), expected_peers.end(), sort_peers);
   ASSERT_EQ(expected_peers, peers);
 
   ASSERT_EQ(-EBUSY, rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED));

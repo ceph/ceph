@@ -1026,10 +1026,10 @@ namespace librbd {
       return 0;
     }
 
-    int mirror_peer_add(librados::IoCtx *ioctx, const std::string &cluster_uuid,
+    int mirror_peer_add(librados::IoCtx *ioctx, const std::string &uuid,
                         const std::string &cluster_name,
-                        const std::string &client_name) {
-      cls::rbd::MirrorPeer peer(cluster_uuid, cluster_name, client_name);
+                        const std::string &client_name, int64_t pool_id) {
+      cls::rbd::MirrorPeer peer(uuid, cluster_name, client_name, pool_id);
       bufferlist in_bl;
       ::encode(peer, in_bl);
 
@@ -1043,9 +1043,9 @@ namespace librbd {
     }
 
     int mirror_peer_remove(librados::IoCtx *ioctx,
-                           const std::string &cluster_uuid) {
+                           const std::string &uuid) {
       bufferlist in_bl;
-      ::encode(cluster_uuid, in_bl);
+      ::encode(uuid, in_bl);
 
       bufferlist out_bl;
       int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_remove", in_bl,
@@ -1057,10 +1057,10 @@ namespace librbd {
     }
 
     int mirror_peer_set_client(librados::IoCtx *ioctx,
-                               const std::string &cluster_uuid,
+                               const std::string &uuid,
                                const std::string &client_name) {
       bufferlist in_bl;
-      ::encode(cluster_uuid, in_bl);
+      ::encode(uuid, in_bl);
       ::encode(client_name, in_bl);
 
       bufferlist out_bl;
@@ -1073,10 +1073,10 @@ namespace librbd {
     }
 
     int mirror_peer_set_cluster(librados::IoCtx *ioctx,
-                                const std::string &cluster_uuid,
+                                const std::string &uuid,
                                 const std::string &cluster_name) {
       bufferlist in_bl;
-      ::encode(cluster_uuid, in_bl);
+      ::encode(uuid, in_bl);
       ::encode(cluster_name, in_bl);
 
       bufferlist out_bl;

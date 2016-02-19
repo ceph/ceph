@@ -47,7 +47,7 @@ namespace librbd {
   } locker_t;
 
   typedef struct {
-    std::string cluster_uuid;
+    std::string uuid;
     std::string cluster_name;
     std::string client_name;
   } mirror_peer_t;
@@ -115,14 +115,14 @@ public:
   // RBD pool mirroring support functions
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
-  int mirror_peer_add(IoCtx& io_ctx, const std::string &cluster_uuid,
+  int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
                       const std::string &cluster_name,
                       const std::string &client_name);
-  int mirror_peer_remove(IoCtx& io_ctx, const std::string &cluster_uuid);
+  int mirror_peer_remove(IoCtx& io_ctx, const std::string &uuid);
   int mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers);
-  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &cluster_uuid,
+  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &uuid,
                              const std::string &client_name);
-  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &cluster_uuid,
+  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
                               const std::string &cluster_name);
 
 private:

@@ -66,21 +66,6 @@ int Replayer::init()
     return r;
   }
 
-  string cluster_uuid;
-  r = m_remote->cluster_fsid(&cluster_uuid);
-  if (r < 0) {
-    derr << "error reading cluster uuid from remote cluster " << m_peer
-	 << " : " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  if (cluster_uuid != m_peer.cluster_uuid) {
-    derr << "configured cluster uuid does not match actual cluster uuid. "
-	 << "expected: " << m_peer.cluster_uuid
-	 << " observed: " << cluster_uuid << dendl;
-    return -EINVAL;
-  }
-
   dout(20) << __func__ << "connected to " << m_peer << dendl;
 
   // TODO: make interval configurable
