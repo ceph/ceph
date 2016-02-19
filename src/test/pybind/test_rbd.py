@@ -327,6 +327,9 @@ class TestImage(object):
         flags = self.image.flags()
         eq(0, flags)
 
+    def test_image_auto_close(self):
+        image = Image(ioctx, image_name)
+
     def test_write(self):
         data = rand_data(256)
         self.image.write(data, 0)
@@ -465,6 +468,11 @@ class TestImage(object):
         eq(['snap1', 'snap2'], [snap['name'] for snap in self.image.list_snaps()])
         self.image.remove_snap('snap1')
         self.image.remove_snap('snap2')
+
+    def test_list_snaps_iterator_auto_close(self):
+        self.image.create_snap('snap1')
+        self.image.list_snaps()
+        self.image.remove_snap('snap1')
 
     def test_remove_snap(self):
         eq([], list(self.image.list_snaps()))
