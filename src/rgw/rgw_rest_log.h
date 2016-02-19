@@ -11,8 +11,9 @@
  * Foundation. See file COPYING.
  *
  */
-#ifndef CEPH_RGW_REST_LOG_H
-#define CEPH_RGW_REST_LOG_H
+
+#ifndef RGW_REST_LOG_H
+#define RGW_REST_LOG_H
 
 #include "rgw_metadata.h"
 
@@ -26,7 +27,7 @@ public:
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   virtual void send_response();
   virtual void send_response(list<rgw_bi_log_entry>& entries, string& marker);
@@ -49,7 +50,7 @@ public:
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   virtual void send_response();
   void execute();
@@ -84,7 +85,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -104,7 +105,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -123,7 +124,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -201,7 +202,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -220,7 +221,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -239,7 +240,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -323,10 +324,9 @@ public:
   RGWRESTMgr_Log() {}
   virtual ~RGWRESTMgr_Log() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s){
+  virtual RGWHandler_REST* get_handler(struct req_state *s){
     return new RGWHandler_Log;
   }
 };
 
-#endif
-
+#endif /* RGW_REST_LOG_H */

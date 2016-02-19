@@ -274,7 +274,17 @@ class DataScan : public MDSUtility, public MetadataTool
       const std::vector<const char*> &arg,
       std::vector<const char *>::const_iterator &i);
 
+    int probe_filter(librados::IoCtx &ioctx);
 
+    /**
+     * Apply a function to all objects in an ioctx's pool, optionally
+     * restricted to only those objects with a 00000000 offset and
+     * no tag matching DataScan::scrub_tag.
+     */
+    int forall_objects(
+        librados::IoCtx &ioctx,
+        bool untagged_only,
+        std::function<int(std::string, uint64_t, uint64_t)> handler);
 
   public:
     void usage();

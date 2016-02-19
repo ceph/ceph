@@ -941,7 +941,7 @@ struct dirfrag_t {
 WRITE_CLASS_ENCODER(dirfrag_t)
 
 
-inline std::ostream& operator<<(std::ostream& out, const dirfrag_t df) {
+inline std::ostream& operator<<(std::ostream& out, const dirfrag_t &df) {
   out << df.ino;
   if (!df.frag.is_root()) out << "." << df.frag;
   return out;

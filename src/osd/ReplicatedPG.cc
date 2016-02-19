@@ -2147,7 +2147,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       return cache_result_t::BLOCKED_FULL;
     }
 
-    if (!hit_set) {
+    if (!hit_set && (must_promote || !op->need_skip_promote()) ) {
       promote_object(obc, missing_oid, oloc, op, promote_obc);
       return cache_result_t::BLOCKED_PROMOTE;
     } else if (op->may_write() || op->may_cache()) {
@@ -2160,11 +2160,12 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       }
 
       // Promote too?
-      if (!op->need_skip_promote()) {
-        maybe_promote(obc, missing_oid, oloc, in_hit_set,
+      if (!op->need_skip_promote() && 
+          maybe_promote(obc, missing_oid, oloc, in_hit_set,
 	              pool.info.min_write_recency_for_promote,
 		      OpRequestRef(),
-		      promote_obc);
+		      promote_obc)) {
+	return cache_result_t::BLOCKED_PROMOTE;
       }
       return cache_result_t::HANDLED_PROXY;
     } else {
@@ -4497,21 +4498,23 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	name[op.xattr.name_len + 1] = 0;
 	
 	bufferlist xattr;
-	if (op.op == CEPH_OSD_OP_CMPXATTR)
-	  result = getattr_maybe_cache(
-	    ctx->obc,
-	    name,
-	    &xattr);
-	else
-	  result = getattr_maybe_cache(
-	    src_obc,
-	    name,
-	    &xattr);
-	if (result < 0 && result != -EEXIST && result != -ENODATA)
-	  break;
-	
-	ctx->delta_stats.num_rd++;
-	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(xattr.length(), 10);
+	if (obs.exists) {
+	  if (op.op == CEPH_OSD_OP_CMPXATTR)
+	    result = getattr_maybe_cache(
+		ctx->obc,
+		name,
+		&xattr);
+	  else
+	    result = getattr_maybe_cache(
+		src_obc,
+		name,
+		&xattr);
+	  if (result < 0 && result != -ENODATA)
+	    break;
+
+	  ctx->delta_stats.num_rd++;
+	  ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(xattr.length(), 10);
+	}
 
 	switch (op.xattr.cmp_mode) {
 	case CEPH_OSD_CMPXATTR_MODE_STRING:
@@ -7870,6 +7873,11 @@ void ReplicatedPG::finish_flush(hobject_t oid, ceph_tid_t tid, int r)
   if (r < 0 && !(r == -ENOENT && fop->removal)) {
     if (fop->op)
       osd->reply_op_error(fop->op, -EBUSY);
+    if (fop->blocking) {
+      obc->stop_block();
+      kick_object_context_blocked(obc);
+    }
+
     if (!fop->dup_ops.empty()) {
       dout(20) << __func__ << " requeueing dups" << dendl;
       requeue_ops(fop->dup_ops);

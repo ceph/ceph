@@ -17,6 +17,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/Clock.h"
+#include "common/Graylog.h"
 #include "common/valgrind.h"
 #include "common/Formatter.h"
 #include "include/assert.h"

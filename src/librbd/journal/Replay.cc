@@ -35,7 +35,8 @@ Replay<I>::Replay(I &image_ctx)
 
 template <typename I>
 Replay<I>::~Replay() {
-  assert(m_in_flight_aio == 0);
+  assert(m_in_flight_aio_flush == 0);
+  assert(m_in_flight_aio_modify == 0);
   assert(m_aio_modify_unsafe_contexts.empty());
   assert(m_aio_modify_safe_contexts.empty());
   assert(m_op_events.empty());
@@ -45,7 +46,8 @@ template <typename I>
 void Replay<I>::process(bufferlist::iterator *it, Context *on_ready,
                         Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << dendl;
+  ldout(cct, 20) << this << " " << __func__ << ": "
+                 << "on_ready=" << on_ready << ", on_safe=" << on_safe << dendl;
 
   on_ready = util::create_async_context_callback(m_image_ctx, on_ready);
 
@@ -77,7 +79,7 @@ void Replay<I>::flush(Context *on_finish) {
     Mutex::Locker locker(m_lock);
 
     // safely commit any remaining AIO modify operations
-    if (m_in_flight_aio != 0) {
+    if ((m_in_flight_aio_flush + m_in_flight_aio_modify) != 0) {
       flush_comp = create_aio_flush_completion(nullptr, nullptr);;
     }
 
@@ -90,7 +92,7 @@ void Replay<I>::flush(Context *on_finish) {
     }
 
     assert(m_flush_ctx == nullptr);
-    if (!m_op_events.empty() || m_in_flight_aio != 0) {
+    if (!m_op_events.empty() || flush_comp != nullptr) {
       std::swap(m_flush_ctx, on_finish);
     }
   }
@@ -113,6 +115,7 @@ void Replay<I>::replay_op_ready(uint64_t op_tid, Context *on_resume) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": op_tid=" << op_tid << dendl;
 
+  Mutex::Locker locker(m_lock);
   auto op_it = m_op_events.find(op_tid);
   assert(op_it != m_op_events.end());
 
@@ -425,12 +428,16 @@ void Replay<I>::handle_event(const journal::UnknownEvent &event,
 }
 
 template <typename I>
-void Replay<I>::handle_aio_modify_complete(Context *on_safe, int r) {
+void Replay<I>::handle_aio_modify_complete(Context *on_ready, Context *on_safe,
+                                           int r) {
   Mutex::Locker locker(m_lock);
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": on_safe=" << on_safe << ", "
-                 << "r=" << r << dendl;
+  ldout(cct, 20) << this << " " << __func__ << ": on_ready=" << on_ready << ", "
+                 << "on_safe=" << on_safe << ", r=" << r << dendl;
 
+  if (on_ready != nullptr) {
+    on_ready->complete(0);
+  }
   if (r < 0) {
     lderr(cct) << "AIO modify op failed: " << cpp_strerror(r) << dendl;
     on_safe->complete(r);
@@ -455,11 +462,14 @@ void Replay<I>::handle_aio_flush_complete(Context *on_flush_safe,
   Context *on_flush = nullptr;
   {
     Mutex::Locker locker(m_lock);
-    assert(m_in_flight_aio >= on_safe_ctxs.size());
-    m_in_flight_aio -= on_safe_ctxs.size();
+    assert(m_in_flight_aio_flush > 0);
+    assert(m_in_flight_aio_modify >= on_safe_ctxs.size());
+    --m_in_flight_aio_flush;
+    m_in_flight_aio_modify -= on_safe_ctxs.size();
 
     std::swap(on_aio_ready, m_on_aio_ready);
-    if (m_op_events.empty() && m_in_flight_aio == 0) {
+    if (m_op_events.empty() &&
+        (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
       on_flush = m_flush_ctx;
     }
 
@@ -477,13 +487,17 @@ void Replay<I>::handle_aio_flush_complete(Context *on_flush_safe,
     ldout(cct, 10) << "resuming paused AIO" << dendl;
     on_aio_ready->complete(0);
   }
+
+  if (on_flush_safe != nullptr) {
+    on_safe_ctxs.push_back(on_flush_safe);
+  }
   for (auto ctx : on_safe_ctxs) {
+    ldout(cct, 20) << "completing safe context: " << ctx << dendl;
     ctx->complete(r);
   }
-  if (on_flush_safe != nullptr) {
-    on_flush_safe->complete(r);
-  }
+
   if (on_flush != nullptr) {
+    ldout(cct, 20) << "completing flush context: " << on_flush << dendl;
     on_flush->complete(r);
   }
 }
@@ -515,7 +529,8 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
     op_event = std::move(op_it->second);
     m_op_events.erase(op_it);
 
-    if (m_op_events.empty() && m_in_flight_aio == 0) {
+    if (m_op_events.empty() &&
+        (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
       on_flush = m_flush_ctx;
     }
   }
@@ -548,17 +563,12 @@ AioCompletion *Replay<I>::create_aio_modify_completion(Context *on_ready,
   CephContext *cct = m_image_ctx.cct;
   assert(m_on_aio_ready == nullptr);
 
-  ++m_in_flight_aio;
+  ++m_in_flight_aio_modify;
   m_aio_modify_unsafe_contexts.push_back(on_safe);
 
   // FLUSH if we hit the low-water mark -- on_safe contexts are
   // completed by flushes-only so that we don't move the journal
   // commit position until safely on-disk
-
-  // when safe, the completion of the next flush will fire the on_safe
-  // callback
-  AioCompletion *aio_comp = AioCompletion::create<Context>(
-    new C_AioModifyComplete(this, on_safe));
 
   *flush_required = (m_aio_modify_unsafe_contexts.size() ==
                        IN_FLIGHT_IO_LOW_WATER_MARK);
@@ -572,14 +582,18 @@ AioCompletion *Replay<I>::create_aio_modify_completion(Context *on_ready,
   // * in-flight ops are at a consistent point (snap create has IO flushed,
   //   shrink has adjusted clip boundary, etc) -- should have already been
   //   flagged not-ready
-  if (m_in_flight_aio == IN_FLIGHT_IO_HIGH_WATER_MARK) {
+  if (m_in_flight_aio_modify == IN_FLIGHT_IO_HIGH_WATER_MARK) {
     ldout(cct, 10) << "hit AIO replay high-water mark: pausing replay"
                    << dendl;
-    m_on_aio_ready = on_ready;
-  } else {
-    on_ready->complete(0);
+    assert(m_on_aio_ready == nullptr);
+    std::swap(m_on_aio_ready, on_ready);
   }
 
+  // when the modification is ACKed by librbd, we can process the next
+  // event. when flushed, the completion of the next flush will fire the
+  // on_safe callback
+  AioCompletion *aio_comp = AioCompletion::create<Context>(
+    new C_AioModifyComplete(this, on_ready, on_safe));
   return aio_comp;
 }
 
@@ -587,6 +601,8 @@ template <typename I>
 AioCompletion *Replay<I>::create_aio_flush_completion(Context *on_ready,
                                                       Context *on_safe) {
   assert(m_lock.is_locked());
+
+  ++m_in_flight_aio_flush;
 
   // associate all prior write/discard ops to this flush request
   AioCompletion *aio_comp = AioCompletion::create<Context>(

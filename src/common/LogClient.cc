@@ -16,6 +16,7 @@
 
 #include "include/types.h"
 #include "include/str_map.h"
+#include "include/uuid.h"
 
 #include "msg/Messenger.h"
 #include "msg/Message.h"
@@ -34,6 +35,9 @@
 #include <sys/mount.h>
 #endif // DARWIN
 
+#include "common/Graylog.h"
+// wipe the assert() introduced by boost headers included by Graylog.h
+#include "include/assert.h"
 #include "common/LogClient.h"
 
 #include "common/config.h"

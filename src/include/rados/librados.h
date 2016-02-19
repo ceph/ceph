@@ -994,6 +994,8 @@ CEPH_RADOS_API int rados_object_list(rados_ioctx_t io,
     const rados_object_list_cursor start,
     const rados_object_list_cursor finish,
     const size_t result_size,
+    const char *filter_buf,
+    const size_t filter_buf_len,
     rados_object_list_item *results,
     rados_object_list_cursor *next);
 

@@ -22,6 +22,7 @@
 #include <map>
 #include "include/buffer_fwd.h"
 #include "common/cmdparse.h"
+#include "common/Cond.h"
 
 class AdminSocket;
 class CephContext;
@@ -63,7 +64,11 @@ public:
   int register_command(std::string command, std::string cmddesc, AdminSocketHook *hook, std::string help);
 
   /**
-   * unregister an admin socket command
+   * unregister an admin socket command.
+   *
+   * If a command is currently in progress, this will block until it
+   * is done.  For that reason, you must not hold any locks required
+   * by your hook while you call this.
    *
    * @param command command string
    * @return 0 on succest, -ENOENT if command dne.
@@ -91,6 +96,8 @@ private:
   int m_shutdown_rd_fd;
   int m_shutdown_wr_fd;
 
+  bool in_hook;
+  Cond in_hook_cond;
   Mutex m_lock;    // protects m_hooks, m_descs, m_help
   AdminSocketHook *m_version_hook, *m_help_hook, *m_getdescs_hook;
 

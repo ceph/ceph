@@ -4701,7 +4701,7 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
   }
   if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
     RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
-    ldout(cct, 15) << "Read AccessControlPolicy";
+    ldout(cct, 15) << __func__ << " Read AccessControlPolicy";
     s3policy->to_xml(*_dout);
     *_dout << dendl;
   }
@@ -5229,7 +5229,6 @@ read_omap:
   bucket.index_pool = pool_name;
 
   return 0;
-
 }
 
 int RGWRados::update_placement_map()
@@ -6885,7 +6884,7 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
   if (r < 0)
     return r;
 
-  /* if the bucked is not synced we can remove the meta file */
+  /* if the bucket is not synced we can remove the meta file */
   if (!is_syncing_bucket_meta(bucket)) {
     RGWObjVersionTracker objv_tracker;
     string entry;
@@ -10165,8 +10164,6 @@ int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx,
 
   ldout(cct, 20) << "rgw_get_bucket_info: bucket instance: " << entry_point.bucket << dendl;
 
-  if (pattrs)
-    pattrs->clear();
 
   /* read bucket instance info */
 

@@ -88,21 +88,22 @@ TYPED_TEST(BitVectorTest, get_set) {
 TYPED_TEST(BitVectorTest, get_buffer_extents) {
   typename TestFixture::bit_vector_t bit_vector;
 
-  uint64_t element_count = 2 * CEPH_PAGE_SIZE + 51;
+  uint64_t element_count = 2 * bit_vector.BLOCK_SIZE + 51;
   uint64_t elements_per_byte = 8 / bit_vector.BIT_COUNT;
   bit_vector.resize(element_count * elements_per_byte);
 
-  uint64_t offset = (CEPH_PAGE_SIZE + 11) * elements_per_byte;
-  uint64_t length = (CEPH_PAGE_SIZE + 31) * elements_per_byte;
+  uint64_t offset = (bit_vector.BLOCK_SIZE + 11) * elements_per_byte;
+  uint64_t length = (bit_vector.BLOCK_SIZE + 31) * elements_per_byte;
   uint64_t byte_offset;
   uint64_t byte_length;
   bit_vector.get_data_extents(offset, length, &byte_offset, &byte_length);
-  ASSERT_EQ(CEPH_PAGE_SIZE, byte_offset);
-  ASSERT_EQ(CEPH_PAGE_SIZE + (element_count % CEPH_PAGE_SIZE), byte_length);
+  ASSERT_EQ(bit_vector.BLOCK_SIZE, byte_offset);
+  ASSERT_EQ(bit_vector.BLOCK_SIZE + (element_count % bit_vector.BLOCK_SIZE),
+            byte_length);
 
   bit_vector.get_data_extents(1, 1, &byte_offset, &byte_length);
   ASSERT_EQ(0U, byte_offset);
-  ASSERT_EQ(CEPH_PAGE_SIZE, byte_length);
+  ASSERT_EQ(bit_vector.BLOCK_SIZE, byte_length);
 }
 
 TYPED_TEST(BitVectorTest, get_header_length) {
@@ -155,11 +156,11 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
 
   Extents extents = boost::assign::list_of(
     std::make_pair(0, 1))(
-    std::make_pair((CEPH_PAGE_SIZE * elements_per_byte) - 2, 4))(
-    std::make_pair((CEPH_PAGE_SIZE * elements_per_byte) + 2, 2))(
-    std::make_pair((2 * CEPH_PAGE_SIZE * elements_per_byte) - 2, 4))(
-    std::make_pair((2 * CEPH_PAGE_SIZE * elements_per_byte) + 2, 2))(
-    std::make_pair(2, 2 * CEPH_PAGE_SIZE));
+    std::make_pair((bit_vector.BLOCK_SIZE * elements_per_byte) - 2, 4))(
+    std::make_pair((bit_vector.BLOCK_SIZE * elements_per_byte) + 2, 2))(
+    std::make_pair((2 * bit_vector.BLOCK_SIZE * elements_per_byte) - 2, 4))(
+    std::make_pair((2 * bit_vector.BLOCK_SIZE * elements_per_byte) + 2, 2))(
+    std::make_pair(2, 2 * bit_vector.BLOCK_SIZE));
   for (Extents::iterator it = extents.begin(); it != extents.end(); ++it) {
     uint64_t element_offset = it->first;
     uint64_t element_length = it->second;
@@ -224,8 +225,8 @@ TYPED_TEST(BitVectorTest, data_crc) {
   typename TestFixture::bit_vector_t bit_vector2;
 
   uint64_t elements_per_byte = 8 / bit_vector1.BIT_COUNT;
-  bit_vector1.resize((CEPH_PAGE_SIZE + 1) * elements_per_byte);
-  bit_vector2.resize((CEPH_PAGE_SIZE + 1) * elements_per_byte);
+  bit_vector1.resize((bit_vector1.BLOCK_SIZE + 1) * elements_per_byte);
+  bit_vector2.resize((bit_vector2.BLOCK_SIZE + 1) * elements_per_byte);
 
   uint64_t byte_offset;
   uint64_t byte_length;
@@ -236,7 +237,7 @@ TYPED_TEST(BitVectorTest, data_crc) {
   bit_vector1.encode_data(data, byte_offset, byte_length);
 
   bufferlist::iterator data_it = data.begin();
-  bit_vector1.decode_data(data_it, byte_offset); 
+  bit_vector1.decode_data(data_it, byte_offset);
 
   bit_vector2[bit_vector2.size() - 1] = 1;
 

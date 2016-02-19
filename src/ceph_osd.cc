@@ -85,7 +85,7 @@ void usage()
        << "                    check whether a journal is allowed\n"
        << "  --check-needs-journal\n"
        << "                    check whether a journal is required\n"
-       << "  --debug_osd <N>   set debug level (e.g. 10)"
+       << "  --debug_osd <N>   set debug level (e.g. 10)\n"
        << "  --get-device-fsid PATH\n"
        << "                    get OSD fsid for the given block device\n"
        << std::endl;

@@ -21,6 +21,7 @@ TestWatchNotify::~TestWatchNotify() {
 }
 
 void TestWatchNotify::flush() {
+  // block until we know no additional async notify callbacks will occur
   Mutex::Locker locker(m_lock);
   while (m_pending_notifies > 0) {
     m_file_watcher_cond.Wait(m_lock);
@@ -176,6 +177,10 @@ void TestWatchNotify::execute_notify(const std::string &oid,
   }
 
   finish_notify(oid, notify_id);
+
+  if (--m_pending_notifies == 0) {
+    m_file_watcher_cond.Signal();
+  }
 }
 
 void TestWatchNotify::ack_notify(const std::string &oid,
@@ -225,10 +230,6 @@ void TestWatchNotify::finish_notify(const std::string &oid,
   watcher->notify_handles.erase(notify_id);
   if (watcher->watch_handles.empty() && watcher->notify_handles.empty()) {
     m_file_watchers.erase(oid);
-  }
-
-  if (--m_pending_notifies == 0) {
-    m_file_watcher_cond.Signal();
   }
 }
 

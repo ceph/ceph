@@ -38,6 +38,16 @@ TEST(LibRadosMiscVersion, VersionPP) {
   Rados::version(&major, &minor, &extra);
 }
 
+static void test_rados_log_cb(void *arg,
+                              const char *line,
+                              const char *who,
+                              uint64_t sec, uint64_t nsec,
+                              uint64_t seq, const char *level,
+                              const char *msg)
+{
+    std::cerr << "monitor log callback invoked" << std::endl;
+}
+
 TEST(LibRadosMiscConnectFailure, ConnectFailure) {
   rados_t cluster;
 
@@ -50,6 +60,9 @@ TEST(LibRadosMiscConnectFailure, ConnectFailure) {
   ASSERT_EQ(0, rados_conf_parse_env(cluster, NULL));
 
   ASSERT_EQ(0, rados_conf_set(cluster, "client_mount_timeout", "0.000001"));
+
+  ASSERT_EQ(-ENOTCONN, rados_monitor_log(cluster, "error",
+                                         test_rados_log_cb, NULL));
 
   ASSERT_NE(0, rados_connect(cluster));
   ASSERT_NE(0, rados_connect(cluster));

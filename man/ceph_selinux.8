@@ -1,4 +1,4 @@
-.TH  "ceph_selinux"  "8"  "15-08-10" "ceph" "SELinux Policy ceph"
+.TH  "ceph_selinux"  "8"  "16-02-11" "ceph" "SELinux Policy ceph"
 .SH "NAME"
 ceph_selinux \- Security Enhanced Linux Policy for the ceph processes
 .SH "DESCRIPTION"
@@ -170,6 +170,8 @@ The SELinux process type ceph_t can manage files labeled with the following file
 
 	/var/log/ceph(/.*)?
 .br
+	/var/log/radosgw(/.*)?
+.br
 
 .br
 .B ceph_var_lib_t
@@ -238,11 +240,59 @@ The SELinux process type ceph_t can manage files labeled with the following file
 .br
 
 .br
+.B initrc_tmp_t
+
+
+.br
+.B mnt_t
+
+	/mnt(/[^/]*)?
+.br
+	/mnt(/[^/]*)?
+.br
+	/rhev(/[^/]*)?
+.br
+	/media(/[^/]*)?
+.br
+	/media(/[^/]*)?
+.br
+	/media/\.hal-.*
+.br
+	/var/run/media(/[^/]*)?
+.br
+	/net
+.br
+	/afs
+.br
+	/rhev
+.br
+	/misc
+.br
+
+.br
 .B root_t
 
 	/
 .br
 	/initrd
+.br
+
+.br
+.B tmp_t
+
+	/sandbox(/.*)?
+.br
+	/tmp
+.br
+	/usr/tmp
+.br
+	/var/tmp
+.br
+	/tmp-inst
+.br
+	/var/tmp-inst
+.br
+	/var/tmp/vi\.recover
 .br
 
 .br
@@ -319,7 +369,7 @@ Paths:
 .br
 .TP 5
 Paths:
-/var/log/ceph(/.*)?
+/var/log/ceph(/.*)?, /var/log/radosgw(/.*)?
 
 .EX
 .PP

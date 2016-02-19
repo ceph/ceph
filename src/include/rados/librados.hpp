@@ -818,6 +818,7 @@ namespace librados
     bool object_list_is_end(const ObjectCursor &oc);
     int object_list(const ObjectCursor &start, const ObjectCursor &finish,
                     const size_t result_count,
+                    const bufferlist &filter,
                     std::vector<ObjectItem> *result,
                     ObjectCursor *next);
     void object_list_slice(

@@ -388,6 +388,7 @@ OPTION(client_inject_fixed_oldest_tid, OPT_BOOL, false)  // synthetic client bug
 OPTION(client_metadata, OPT_STR, "")
 OPTION(client_acl_type, OPT_STR, "")
 OPTION(client_permissions, OPT_BOOL, true)
+OPTION(client_dirsize_rbytes, OPT_BOOL, true)
 
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
@@ -1200,6 +1201,20 @@ OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 0)
 OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_num_control_oids, OPT_INT, 8)
 OPTION(rgw_num_rados_handles, OPT_U32, 1)
+
+/* The following are tunables for caches of RGW NFS (and other file
+ * client) objects.
+ *
+ * The file handle cache is a partitioned hash table
+ * (fhcache_partitions), each with a closed hash part and backing
+ * b-tree mapping.  The number of partions is expected to be a small
+ * prime, the cache size something larger but less than 5K, the total
+ * size of the cache is n_part * cache_size.
+ */
+OPTION(rgw_nfs_lru_lanes, OPT_INT, 5)
+OPTION(rgw_nfs_lru_lane_hiwat, OPT_INT, 911)
+OPTION(rgw_nfs_fhcache_partitions, OPT_INT, 3)
+OPTION(rgw_nfs_fhcache_size, OPT_INT, 2017) /* 3*2017=6051 */
 
 OPTION(rgw_zone, OPT_STR, "") // zone name
 OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored
