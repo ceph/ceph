@@ -1115,6 +1115,8 @@ struct req_state {
   utime_t header_time;
 
   /* Set once when url_bucket is parsed and not violated thereafter. */
+  string account_name;
+
   string bucket_tenant;
   string bucket_name;
 
@@ -1139,6 +1141,12 @@ struct req_state {
 
   bool has_bad_meta;
 
+  /* Identity used to authorize given RGWOp (used in verify_permission()
+   * method). It might be different than owner of the account (represented
+   * in radosgw by RGWUserInfo structure) we are operating on. */
+  rgw_user auth_user;
+
+  /* Account we are performing operations on. */
   RGWUserInfo *user;
 
   RGWAccessControlPolicy *bucket_acl;
