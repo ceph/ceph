@@ -726,7 +726,14 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
   ASSERT_GT(rados_watch_check(ioctx, handle), 0);
 
   rados_unwatch2(ioctx, handle);
-  rados_watch_flush(cluster);
+
+  rados_completion_t comp;
+  ASSERT_EQ(0, rados_aio_create_completion(NULL, NULL, NULL, &comp));
+  rados_aio_watch_flush(cluster, comp);
+  ASSERT_EQ(0, rados_aio_wait_for_complete(comp));
+  ASSERT_EQ(0, rados_aio_get_return_value(comp));
+  rados_aio_release(comp);
+
 }
 
 TEST_P(LibRadosWatchNotifyPP, WatchNotify2Timeout) {
@@ -754,9 +761,14 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2Timeout) {
   std::cout << " timed out" << std::endl;
   ASSERT_GT(ioctx.watch_check(handle), 0);
   ioctx.unwatch2(handle);
+
   std::cout << " flushing" << std::endl;
-  cluster.watch_flush();
+  librados::AioCompletion *comp = cluster.aio_create_completion();
+  cluster.aio_watch_flush(comp);
+  ASSERT_EQ(0, comp->wait_for_complete());
+  ASSERT_EQ(0, comp->get_return_value());
   std::cout << " flushed" << std::endl;
+  comp->release();
 }
 
 // --
