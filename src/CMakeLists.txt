@@ -539,16 +539,14 @@ set(dencoder_srcs
 if(${WITH_RADOSGW})
   list(APPEND dencoder_srcs
     rgw/rgw_dencoder.cc
-    rgw/rgw_acl.cc
-    rgw/rgw_common.cc
-    rgw/rgw_env.cc
-    rgw/rgw_json_enc.cc
   )
-endif(${WITH_RADOSGW})
-add_executable(ceph-dencoder ${dencoder_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
-if(${WITH_RADOSGW})
   set(DENCODER_EXTRALIBS
     rgw_a
+    cls_version_client
+    cls_log_client
+    cls_refcount_client
+    cls_user_client
+    cls_statelog_client
     cls_rgw_client
     curl
     expat
@@ -561,6 +559,8 @@ if(${WITH_RBD})
       ${DENCODER_EXTRALIBS}
       rbd_replay_types)
 endif(${WITH_RBD})
+
+add_executable(ceph-dencoder ${dencoder_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
 target_link_libraries(ceph-dencoder
   librados
   librbd
@@ -570,6 +570,7 @@ target_link_libraries(ceph-dencoder
   mon
   osdc
   journal
+  ${DENCODER_EXTRALIBS}
   cls_lock_client
   cls_refcount_client
   cls_log_client
@@ -579,7 +580,7 @@ target_link_libraries(ceph-dencoder
   cls_kvs
   cls_user_client
   cls_journal_client
-  ${DENCODER_EXTRALIBS}
+  cls_timeindex_client
   blkid
   udev
   keyutils
@@ -1159,6 +1160,15 @@ if(${WITH_RADOSGW})
     rgw/rgw_metadata.cc
     rgw/rgw_multi.cc
     rgw/rgw_multi_del.cc
+    rgw/rgw_sync.cc
+    rgw/rgw_data_sync.cc
+    rgw/rgw_period_history.cc
+    rgw/rgw_period_puller.cc
+    rgw/rgw_period_pusher.cc
+    rgw/rgw_realm_reloader.cc
+    rgw/rgw_realm_watcher.cc
+    rgw/rgw_coroutine.cc
+    rgw/rgw_cr_rados.cc
     rgw/rgw_object_expirer_core.cc
     rgw/rgw_op.cc
     rgw/rgw_os_lib.cc
@@ -1177,6 +1187,7 @@ if(${WITH_RADOSGW})
     rgw/rgw_rest_log.cc
     rgw/rgw_rest_metadata.cc
     rgw/rgw_rest_opstate.cc
+    rgw/rgw_rest_realm.cc
     rgw/rgw_rest_replica_log.cc
     rgw/rgw_rest_s3.cc
     rgw/rgw_rest_swift.cc
@@ -1193,8 +1204,14 @@ if(${WITH_RADOSGW})
     )
 
   add_library(rgw_a STATIC ${rgw_a_srcs})
+  target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/civetweb/include")
+  target_link_libraries(rgw_a librados cls_rgw_client cls_refcount_client
+    cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
+    cls_replica_log_client cls_user_client curl global expat)
 
-  include_directories("${CMAKE_SOURCE_DIR}/src/civetweb/include")
+  if(HAVE_BOOST_ASIO_COROUTINE)
+    target_compile_definitions(rgw_a PUBLIC "HAVE_BOOST_ASIO_COROUTINE")
+  endif()
 
   set(radosgw_srcs
     rgw/rgw_fcgi_process.cc
@@ -1256,6 +1273,7 @@ if(${WITH_RADOSGW})
     cls_log_client cls_statelog_client cls_timeindex_client
     cls_version_client cls_replica_log_client cls_user_client
     curl expat global fcgi resolv ${BLKID_LIBRARIES} ${ALLOC_LIBS})
+
   install(TARGETS radosgw-admin DESTINATION bin)
 
   add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)

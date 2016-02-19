@@ -123,6 +123,8 @@ namespace rgw {
      * descendants are required to inherit */
     virtual int op_init() = 0;
 
+    using RGWHandler::init;
+
     int init(const RGWEnv& rgw_env, RGWObjectCtx* rados_ctx,
 	     RGWLibIO* io, struct req_state* _s) {
 

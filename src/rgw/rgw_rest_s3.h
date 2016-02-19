@@ -11,6 +11,7 @@
 #include "rgw_acl_s3.h"
 #include "rgw_policy_s3.h"
 #include "rgw_keystone.h"
+#include "rgw_rest_conn.h"
 
 #define RGW_AUTH_GRACE_MINS 15
 
@@ -41,8 +42,9 @@ public:
 };
 
 class RGWListBucket_ObjStore_S3 : public RGWListBucket_ObjStore {
+  bool objs_container;
 public:
-  RGWListBucket_ObjStore_S3() {
+  RGWListBucket_ObjStore_S3() : objs_container(false) {
     default_max = 1000;
   }
   ~RGWListBucket_ObjStore_S3() {}
@@ -196,6 +198,7 @@ public:
   RGWDeleteObj_ObjStore_S3() {}
   ~RGWDeleteObj_ObjStore_S3() {}
 
+  int get_params();
   void send_response();
 };
 
@@ -416,7 +419,6 @@ public:
   RGWHandler_REST_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_S3() {}
 
-  int validate_bucket_name(const string& bucket, bool relaxed_names) = delete;
   int get_errordoc(const string& errordoc_key, string* error_content);  
 
   virtual int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);

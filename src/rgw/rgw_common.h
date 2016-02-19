@@ -82,6 +82,9 @@ using ceph::crypto::MD5;
  * user through custom HTTP header named X-Static-Large-Object. */
 #define RGW_ATTR_SLO_UINDICATOR RGW_ATTR_META_PREFIX "static-large-object"
 
+#define RGW_ATTR_PG_VER 	RGW_ATTR_PREFIX "pg_ver"
+#define RGW_ATTR_SOURCE_ZONE    RGW_ATTR_PREFIX "source_zone"
+
 #define RGW_ATTR_TEMPURL_KEY1   RGW_ATTR_META_PREFIX "temp-url-key"
 #define RGW_ATTR_TEMPURL_KEY2   RGW_ATTR_META_PREFIX "temp-url-key-2"
 
@@ -276,10 +279,10 @@ class RGWHTTPArgs
   map<string, string> val_map;
   map<string, string> sys_val_map;
   map<string, string> sub_resources;
-
   bool has_resp_modifier;
+  bool admin_subresource_added;
  public:
-  RGWHTTPArgs() : has_resp_modifier(false) {}
+  RGWHTTPArgs() : has_resp_modifier(false), admin_subresource_added(false) {}
 
   /** Set the arguments; as received */
   void set(string s) {
@@ -290,6 +293,7 @@ class RGWHTTPArgs
   }
   /** parse the received arguments */
   int parse();
+  void append(const string& name, const string& val);
   /** Get the value for a specific argument parameter */
   string& get(const string& name, bool *exists = NULL);
   int get_bool(const string& name, bool *val, bool *exists);
@@ -640,9 +644,11 @@ struct rgw_bucket {
 					 data_extra_pool(b.data_extra_pool),
 					 index_pool(b.index_pool), marker(b.marker),
 					 bucket_id(b.bucket_id) {}
-  // cppcheck-suppress noExplicitConstructor
+  rgw_bucket(const string& s) : name(s) {
+    data_pool = index_pool = s;
+    marker = "";
+  }
   rgw_bucket(const char *n) : name(n) {
-    assert(*n == '.'); // only rgw private buckets should be initialized without pool
     data_pool = index_pool = n;
     marker = "";
   }
@@ -810,7 +816,7 @@ struct RGWBucketInfo
   rgw_bucket bucket;
   rgw_user owner;
   uint32_t flags;
-  string region;
+  string zonegroup;
   time_t creation_time;
   string placement_rule;
   bool has_instance_obj;
@@ -840,7 +846,7 @@ struct RGWBucketInfo
      ::encode(bucket, bl);
      ::encode(owner.id, bl);
      ::encode(flags, bl);
-     ::encode(region, bl);
+     ::encode(zonegroup, bl);
      uint64_t ct = (uint64_t)creation_time;
      ::encode(ct, bl);
      ::encode(placement_rule, bl);
@@ -867,7 +873,7 @@ struct RGWBucketInfo
      if (struct_v >= 3)
        ::decode(flags, bl);
      if (struct_v >= 5)
-       ::decode(region, bl);
+       ::decode(zonegroup, bl);
      if (struct_v >= 6) {
        uint64_t ct;
        ::decode(ct, bl);
@@ -1120,8 +1126,10 @@ struct req_state {
   ACLOwner bucket_owner;
   ACLOwner owner;
 
-  string region_endpoint;
+  string zonegroup_name;
+  string zonegroup_endpoint;
   string bucket_instance_id;
+  int bucket_instance_shard_id;
 
   string redirect;
 

@@ -9,6 +9,14 @@ DENCODER_SOURCES += \
 	rgw/rgw_env.cc \
 	rgw/rgw_json_enc.cc
 
+DENCODER_DEPS += -lcurl -lexpat \
+	libcls_version_client.la \
+	libcls_log_client.la \
+	libcls_refcount_client.la \
+	libcls_user_client.la \
+	libcls_timeindex_client.la \
+	libcls_statelog_client.la
+
 if WITH_RADOS
 if WITH_RADOSGW
 
@@ -16,7 +24,9 @@ librgw_la_SOURCES = \
 	rgw/rgw_acl.cc \
 	rgw/rgw_acl_s3.cc \
 	rgw/rgw_acl_swift.cc \
-	rgw/rgw_auth_s3.cc \
+	rgw/rgw_coroutine.cc \
+	rgw/rgw_cr_rados.cc \
+	rgw/rgw_tools.cc \
 	rgw/rgw_basic_types.cc \
 	rgw/rgw_bucket.cc \
 	rgw/rgw_cache.cc \
@@ -38,6 +48,14 @@ librgw_la_SOURCES = \
 	rgw/rgw_metadata.cc \
 	rgw/rgw_multi.cc \
 	rgw/rgw_multi_del.cc \
+	rgw/rgw_auth_s3.cc \
+	rgw/rgw_period_history.cc \
+	rgw/rgw_period_puller.cc \
+	rgw/rgw_period_pusher.cc \
+	rgw/rgw_realm_reloader.cc \
+	rgw/rgw_realm_watcher.cc \
+	rgw/rgw_sync.cc \
+	rgw/rgw_data_sync.cc \
 	rgw/rgw_object_expirer_core.cc \
 	rgw/rgw_op.cc \
 	rgw/rgw_os_lib.cc \
@@ -56,6 +74,7 @@ librgw_la_SOURCES = \
 	rgw/rgw_rest_log.cc \
 	rgw/rgw_rest_metadata.cc \
 	rgw/rgw_rest_opstate.cc \
+	rgw/rgw_rest_realm.cc \
 	rgw/rgw_rest_replica_log.cc \
 	rgw/rgw_rest_s3.cc \
 	rgw/rgw_rest_swift.cc \
@@ -63,7 +82,6 @@ librgw_la_SOURCES = \
 	rgw/rgw_rest_user.cc \
 	rgw/rgw_swift_auth.cc \
 	rgw/rgw_swift.cc \
-	rgw/rgw_tools.cc \
 	rgw/rgw_usage.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_file.cc \
@@ -74,6 +92,7 @@ librgw_la_SOURCES = \
 
 librgw_la_CXXFLAGS = -Woverloaded-virtual -fPIC -I$(srcdir)/xxHash \
 	${AM_CXXFLAGS}
+# noinst_LTLIBRARIES += librgw.la
 
 LIBRGW_DEPS += \
 	$(LIBRADOS) \
@@ -152,6 +171,9 @@ noinst_HEADERS += \
 	rgw/rgw_acl_s3.h \
 	rgw/rgw_acl_swift.h \
 	rgw/rgw_client_io.h \
+	rgw/rgw_coroutine.h \
+	rgw/rgw_cr_rados.h \
+	rgw/rgw_cr_rest.h \
 	rgw/rgw_fcgi.h \
 	rgw/rgw_xml.h \
 	rgw/rgw_basic_types.h \
@@ -175,6 +197,7 @@ noinst_HEADERS += \
 	rgw/rgw_policy_s3.h \
 	rgw/rgw_gc.h \
 	rgw/rgw_metadata.h \
+	rgw/rgw_meta_sync_status.h \
 	rgw/rgw_multi_del.h \
 	rgw/rgw_object_expirer_core.h \
 	rgw/rgw_op.h \
@@ -203,11 +226,21 @@ noinst_HEADERS += \
 	rgw/rgw_rest_opstate.h \
 	rgw/rgw_rest_replica_log.h \
 	rgw/rgw_rest_config.h \
+	rgw/rgw_rest_realm.h \
+	rgw/rgw_sync.h \
+	rgw/rgw_data_sync.h \
 	rgw/rgw_usage.h \
 	rgw/rgw_user.h \
 	rgw/rgw_bucket.h \
 	rgw/rgw_keystone.h \
+	rgw/rgw_period_history.h \
+	rgw/rgw_period_pusher.h \
+	rgw/rgw_period_puller.h \
+	rgw/rgw_realm_reloader.h \
+	rgw/rgw_realm_watcher.h \
 	rgw/rgw_civetweb.h \
+	rgw/rgw_boost_asio_coroutine.h \
+	rgw/rgw_boost_asio_yield.h \
 	rgw/rgw_civetweb_log.h \
 	rgw/rgw_website.h \
 	rgw/rgw_rest_s3website.h \

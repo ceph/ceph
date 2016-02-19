@@ -143,6 +143,8 @@ protected:
   const char *if_unmod;
   const char *if_match;
   const char *if_nomatch;
+  uint32_t mod_zone_id;
+  uint64_t mod_pg_ver;
   off_t ofs;
   uint64_t total_len;
   off_t start;
@@ -169,6 +171,8 @@ public:
     if_unmod = NULL;
     if_match = NULL;
     if_nomatch = NULL;
+    mod_zone_id = 0;
+    mod_pg_ver = 0;
     start = 0;
     ofs = 0;
     total_len = 0;
@@ -388,11 +392,13 @@ protected:
   int default_max;
   bool is_truncated;
 
+  int shard_id;
+
   int parse_max_keys();
 
 public:
   RGWListBucket() : list_versions(false), max(0),
-                    default_max(0), is_truncated(false) {}
+                    default_max(0), is_truncated(false), shard_id(-1) {}
   int verify_permission();
   void pre_exec();
   void execute();
@@ -822,12 +828,16 @@ protected:
   bool delete_marker;
   bool multipart_delete;
   string version_id;
+  time_t unmod_since; /* if unmodified since */
+  bool no_precondition_error;
   std::unique_ptr<RGWBulkDelete::Deleter> deleter;
 
 public:
   RGWDeleteObj()
     : delete_marker(false),
       multipart_delete(false),
+      unmod_since(0),
+      no_precondition_error(false),
       deleter(nullptr) {
   }
 
@@ -836,7 +846,7 @@ public:
   void execute();
   int handle_slo_manifest(bufferlist& bl);
 
-  virtual int get_params() { return 0; };
+  virtual int get_params() { return 0; }
   virtual void send_response() = 0;
   virtual const string name() { return "delete_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_DELETE_OBJ; }
@@ -881,6 +891,7 @@ protected:
   uint64_t olh_epoch;
 
   time_t delete_at;
+  bool copy_if_newer;
 
   int init_common();
 
@@ -903,6 +914,7 @@ public:
     last_ofs = 0;
     olh_epoch = 0;
     delete_at = 0;
+    copy_if_newer = false;
   }
 
   static bool parse_copy_location(const string& src,

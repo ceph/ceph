@@ -20,6 +20,7 @@ namespace ceph {
 enum RGWPendingState {
   CLS_RGW_STATE_PENDING_MODIFY = 0,
   CLS_RGW_STATE_COMPLETE       = 1,
+  CLS_RGW_STATE_UNKNOWN        = 2,
 };
 
 enum RGWModifyOp {
@@ -34,6 +35,14 @@ enum RGWModifyOp {
 
 enum RGWBILogFlags {
   RGW_BILOG_FLAG_VERSIONED_OP = 0x1,
+};
+
+enum RGWCheckMTimeType {
+  CLS_RGW_CHECK_TIME_MTIME_EQ = 0,
+  CLS_RGW_CHECK_TIME_MTIME_LT = 1,
+  CLS_RGW_CHECK_TIME_MTIME_LE = 2,
+  CLS_RGW_CHECK_TIME_MTIME_GT = 3,
+  CLS_RGW_CHECK_TIME_MTIME_GE = 4,
 };
 
 struct rgw_bucket_pending_info {
@@ -470,11 +479,13 @@ struct rgw_bi_log_entry {
   uint64_t index_ver;
   string tag;
   uint16_t bilog_flags;
+  string owner; /* only being set if it's a delete marker */
+  string owner_display_name; /* only being set if it's a delete marker */
 
   rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0), bilog_flags(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     ::encode(id, bl);
     ::encode(object, bl);
     ::encode(timestamp, bl);
@@ -487,6 +498,8 @@ struct rgw_bi_log_entry {
     encode_packed_val(index_ver, bl);
     ::encode(instance, bl);
     ::encode(bilog_flags, bl);
+    ::encode(owner, bl);
+    ::encode(owner_display_name, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -506,10 +519,19 @@ struct rgw_bi_log_entry {
       ::decode(instance, bl);
       ::decode(bilog_flags, bl);
     }
+    if (struct_v >= 3) {
+      ::decode(owner, bl);
+      ::decode(owner_display_name, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bi_log_entry*>& o);
+  
+  bool is_versioned() {
+    return ((bilog_flags & RGW_BILOG_FLAG_VERSIONED_OP) != 0);
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bi_log_entry)
 

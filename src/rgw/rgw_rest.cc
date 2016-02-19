@@ -173,9 +173,9 @@ string camelcase_dash_http_attr(const string& orig)
 static set<string> hostnames_set;
 static set<string> hostnames_s3website_set;
 
-void rgw_rest_init(CephContext *cct, RGWRegion& region)
+void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
 {
-  region.store->init_host_id();
+  store->init_host_id();
 
   for (const auto& rgw2http : base_rgw_to_http_attrs)  {
     rgw_to_http_attrs[rgw2http.rgw_attr] = rgw2http.http_attr;
@@ -208,7 +208,7 @@ void rgw_rest_init(CephContext *cct, RGWRegion& region)
   if (!cct->_conf->rgw_dns_name.empty()) {
     hostnames_set.insert(cct->_conf->rgw_dns_name);
   }
-  hostnames_set.insert(region.hostnames.begin(),  region.hostnames.end());
+  hostnames_set.insert(zone_group.hostnames.begin(),  zone_group.hostnames.end());
   string s;
   ldout(cct, 20) << "RGW hostnames: " << std::accumulate(hostnames_set.begin(), hostnames_set.end(), s) << dendl;
   /* TODO: We should have a sanity check that no hostname matches the end of
@@ -224,7 +224,7 @@ void rgw_rest_init(CephContext *cct, RGWRegion& region)
   if (!cct->_conf->rgw_dns_s3website_name.empty()) {
     hostnames_s3website_set.insert(cct->_conf->rgw_dns_s3website_name);
   }
-  hostnames_s3website_set.insert(region.hostnames_s3website.begin(), region.hostnames_s3website.end());
+  hostnames_s3website_set.insert(zone_group.hostnames_s3website.begin(), zone_group.hostnames_s3website.end());
   s.clear();
   ldout(cct, 20) << "RGW S3website hostnames: " << std::accumulate(hostnames_s3website_set.begin(), hostnames_s3website_set.end(), s) << dendl;
   /* TODO: we should repeat the hostnames_set sanity check here
@@ -696,8 +696,8 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no,
     string dest_uri;
     if (!s->redirect.empty()) {
       dest_uri = s->redirect;
-    } else if (!s->region_endpoint.empty()) {
-      string dest_uri = s->region_endpoint;
+    } else if (!s->zonegroup_endpoint.empty()) {
+      string dest_uri = s->zonegroup_endpoint;
       /*
        * reqest_uri is always start with slash, so we need to remove
        * the unnecessary slash at the end of dest_uri.
@@ -763,6 +763,11 @@ int RGWGetObj_ObjStore::get_params()
   if_unmod = s->info.env->get("HTTP_IF_UNMODIFIED_SINCE");
   if_match = s->info.env->get("HTTP_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
+
+  if (s->system_request) {
+    mod_zone_id = s->info.env->get_int("HTTP_DEST_ZONE_SHORT_ID", 0);
+    mod_pg_ver = s->info.env->get_int("HTTP_DEST_PG_VER", 0);
+  }
 
   return 0;
 }

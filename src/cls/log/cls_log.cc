@@ -120,16 +120,20 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
     string index;
 
     utime_t timestamp = entry.timestamp;
-    if (timestamp < header.max_time)
+    if (op.monotonic_inc && timestamp < header.max_time)
       timestamp = header.max_time;
     else if (timestamp > header.max_time)
       header.max_time = timestamp;
 
-    get_index(hctx, timestamp, index);
+    if (entry.id.empty()) {
+      get_index(hctx, timestamp, index);
+      entry.id = index;
+    } else {
+      index = entry.id;
+    }
 
     CLS_LOG(0, "storing entry at %s", index.c_str());
 
-    entry.id = index;
 
     if (index > header.max_marker)
       header.max_marker = index;

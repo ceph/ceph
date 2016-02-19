@@ -108,6 +108,15 @@ public:
   virtual void run() = 0;
   virtual void handle_request(RGWRequest *req) = 0;
 
+  void pause() {
+    m_tp.pause();
+  }
+
+  void unpause_with_new_config(RGWRados *store) {
+    this->store = store;
+    m_tp.unpause();
+  }
+
   void close_fd() {
     if (sock_fd >= 0) {
       ::close(sock_fd);

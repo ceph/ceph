@@ -6,6 +6,7 @@
 
 #include "rgw_request.h"
 #include "rgw_process.h"
+#include "rgw_realm_reloader.h"
 
 #include "rgw_civetweb.h"
 #include "rgw_civetweb_log.h"
@@ -43,12 +44,25 @@ public:
   virtual int run() = 0;
   virtual void stop() = 0;
   virtual void join() = 0;
+
+  virtual void pause_for_new_config() = 0;
+  virtual void unpause_with_new_config(RGWRados *store) = 0;
+};
+
+struct RGWMongooseEnv : public RGWProcessEnv {
+  // every request holds a read lock, so we need to prioritize write locks to
+  // avoid starving pause_for_new_config()
+  static constexpr bool prioritize_write = true;
+  RWLock mutex;
+  RGWMongooseEnv(const RGWProcessEnv &env)
+    : RGWProcessEnv(env),
+      mutex("RGWMongooseFrontend", false, true, prioritize_write) {}
 };
 
 class RGWMongooseFrontend : public RGWFrontend {
   RGWFrontendConfig* conf;
   struct mg_context* ctx;
-  RGWProcessEnv env;
+  RGWMongooseEnv env;
 
   void set_conf_default(map<string, string>& m, const string& key,
 			const string& def_val) {
@@ -75,6 +89,17 @@ public:
   }
 
   void join() {
+  }
+
+  void pause_for_new_config() override {
+    // block callbacks until unpause
+    env.mutex.get_write();
+  }
+
+  void unpause_with_new_config(RGWRados *store) override {
+    env.store = store;
+    // unpause callbacks
+    env.mutex.put_write();
   }
 }; /* RGWMongooseFrontend */
 
@@ -106,6 +131,15 @@ public:
 
   void join() {
     thread->join();
+  }
+
+  void pause_for_new_config() override {
+    pprocess->pause();
+  }
+
+  void unpause_with_new_config(RGWRados *store) override {
+    env.store = store;
+    pprocess->unpause_with_new_config(store);
   }
 }; /* RGWProcessFrontend */
 
@@ -163,5 +197,28 @@ public:
     return 0;
   }
 }; /* RGWLoadGenFrontend */
+
+// FrontendPauser implementation for RGWRealmReloader
+class RGWFrontendPauser : public RGWRealmReloader::Pauser {
+  std::list<RGWFrontend*> &frontends;
+  RGWRealmReloader::Pauser* pauser;
+ public:
+  RGWFrontendPauser(std::list<RGWFrontend*> &frontends,
+                    RGWRealmReloader::Pauser* pauser = nullptr)
+    : frontends(frontends), pauser(pauser) {}
+
+  void pause() override {
+    for (auto frontend : frontends)
+      frontend->pause_for_new_config();
+    if (pauser)
+      pauser->pause();
+  }
+  void resume(RGWRados *store) {
+    for (auto frontend : frontends)
+      frontend->unpause_with_new_config(store);
+    if (pauser)
+      pauser->resume(store);
+  }
+};
 
 #endif /* RGW_FRONTEND_H */

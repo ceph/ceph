@@ -38,6 +38,7 @@ static int parse_date_str(string& in, utime_t& out) {
 }
 
 void RGWOp_MDLog_List::execute() {
+  string   period = s->info.args.get("period");
   string   shard = s->info.args.get("id");
   string   max_entries_str = s->info.args.get("max-entries");
   string   st = s->info.args.get("start-time"),
@@ -74,8 +75,13 @@ void RGWOp_MDLog_List::execute() {
       return;
     }
   } 
-  
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+
+  if (period.empty()) {
+    ldout(s->cct, 5) << "Missing period id" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
 
   meta_log->init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
 
@@ -119,7 +125,8 @@ void RGWOp_MDLog_List::send_response() {
 
 void RGWOp_MDLog_Info::execute() {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
-  http_ret = 0;
+  period = store->meta_mgr->get_oldest_log_period();
+  http_ret = period.get_error();
 }
 
 void RGWOp_MDLog_Info::send_response() {
@@ -127,13 +134,18 @@ void RGWOp_MDLog_Info::send_response() {
   dump_errno(s);
   end_header(s);
 
-  s->formatter->open_object_section("num_objects");
+  s->formatter->open_object_section("mdlog");
   s->formatter->dump_unsigned("num_objects", num_objects);
+  if (period) {
+    s->formatter->dump_string("period", period.get_period().get_id());
+    s->formatter->dump_unsigned("realm_epoch", period.get_epoch());
+  }
   s->formatter->close_section();
   flusher.flush();
 }
 
 void RGWOp_MDLog_ShardInfo::execute() {
+  string period = s->info.args.get("period");
   string shard = s->info.args.get("id");
   string err;
 
@@ -144,7 +156,12 @@ void RGWOp_MDLog_ShardInfo::execute() {
     return;
   }
 
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+  if (period.empty()) {
+    ldout(s->cct, 5) << "Missing period id" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
 
   http_ret = meta_log->get_info(shard_id, &info);
 }
@@ -163,6 +180,7 @@ void RGWOp_MDLog_Delete::execute() {
            et = s->info.args.get("end-time"),
            start_marker = s->info.args.get("start-marker"),
            end_marker = s->info.args.get("end-marker"),
+           period = s->info.args.get("period"),
            shard = s->info.args.get("id"),
            err;
   utime_t  ut_st, 
@@ -191,23 +209,31 @@ void RGWOp_MDLog_Delete::execute() {
     http_ret = -EINVAL;
     return;
   }
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+
+  if (period.empty()) {
+    ldout(s->cct, 5) << "Missing period id" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
 
   http_ret = meta_log->trim(shard_id, ut_st, ut_et, start_marker, end_marker);
 }
 
 void RGWOp_MDLog_Lock::execute() {
-  string shard_id_str, duration_str, locker_id, zone_id;
+  string period, shard_id_str, duration_str, locker_id, zone_id;
   unsigned shard_id;
 
   http_ret = 0;
 
+  period       = s->info.args.get("period");
   shard_id_str = s->info.args.get("id");
   duration_str = s->info.args.get("length");
   locker_id    = s->info.args.get("locker-id");
   zone_id      = s->info.args.get("zone-id");
 
-  if (shard_id_str.empty() ||
+  if (period.empty() ||
+      shard_id_str.empty() ||
       (duration_str.empty()) ||
       locker_id.empty() ||
       zone_id.empty()) {
@@ -224,7 +250,7 @@ void RGWOp_MDLog_Lock::execute() {
     return;
   }
 
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
   unsigned dur;
   dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
   if (!err.empty() || dur <= 0) {
@@ -239,16 +265,18 @@ void RGWOp_MDLog_Lock::execute() {
 }
 
 void RGWOp_MDLog_Unlock::execute() {
-  string shard_id_str, locker_id, zone_id;
+  string period, shard_id_str, locker_id, zone_id;
   unsigned shard_id;
 
   http_ret = 0;
 
+  period       = s->info.args.get("period");
   shard_id_str = s->info.args.get("id");
   locker_id    = s->info.args.get("locker-id");
   zone_id      = s->info.args.get("zone-id");
 
-  if (shard_id_str.empty() ||
+  if (period.empty() ||
+      shard_id_str.empty() ||
       locker_id.empty() ||
       zone_id.empty()) {
     dout(5) << "Error invalid parameter list" << dendl;
@@ -264,8 +292,49 @@ void RGWOp_MDLog_Unlock::execute() {
     return;
   }
 
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
   http_ret = meta_log->unlock(shard_id, zone_id, locker_id);
+}
+
+void RGWOp_MDLog_Notify::execute() {
+  char *data;
+  int len = 0;
+#define LARGE_ENOUGH_BUF (128 * 1024)
+  int r = rgw_rest_read_all_input(s, &data, &len, LARGE_ENOUGH_BUF);
+  if (r < 0) {
+    http_ret = r;
+    return;
+  }
+
+  ldout(s->cct, 20) << __func__ << "(): read data: " << string(data, len) << dendl;
+
+  JSONParser p;
+  r = p.parse(data, len);
+  free(data);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: failed to parse JSON" << dendl;
+    http_ret = r;
+    return;
+  }
+
+  set<int> updated_shards;
+  try {
+    decode_json_obj(updated_shards, &p);
+  } catch (JSONDecoder::err& err) {
+    ldout(s->cct, 0) << "ERROR: failed to decode JSON" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  if (store->ctx()->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    for (set<int>::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
+      ldout(s->cct, 20) << __func__ << "(): updated shard=" << *iter << dendl;
+    }
+  }
+
+  store->wakeup_meta_sync_shards(updated_shards);
+
+  http_ret = 0;
 }
 
 void RGWOp_BILog_List::execute() {
@@ -378,6 +447,12 @@ void RGWOp_BILog_Info::execute() {
     return;
   }
 
+  int shard_id;
+  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bucket_instance, &shard_id);
+  if (http_ret < 0) {
+    return;
+  }
+
   if (!bucket_instance.empty()) {
     http_ret = store->get_bucket_instance_info(obj_ctx, bucket_instance, bucket_info, NULL, NULL);
     if (http_ret < 0) {
@@ -392,7 +467,7 @@ void RGWOp_BILog_Info::execute() {
     }
   }
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  store->get_bucket_stats(bucket_info.bucket, &bucket_ver, &master_ver, stats, &max_marker);
+  int ret =  store->get_bucket_stats(bucket_info.bucket, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0 && ret != -ENOENT) {
     http_ret = ret;
     return;
@@ -473,6 +548,8 @@ void RGWOp_DATALog_List::execute() {
            ut_et;
   unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
+  s->info.args.get_bool("extra-info", &extra_info, false);
+
   shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
     dout(5) << "Error parsing shard_id " << shard << dendl;
@@ -526,10 +603,14 @@ void RGWOp_DATALog_List::send_response() {
   s->formatter->dump_bool("truncated", truncated);
   {
     s->formatter->open_array_section("entries");
-    for (list<rgw_data_change>::iterator iter = entries.begin();
+    for (list<rgw_data_change_log_entry>::iterator iter = entries.begin();
 	 iter != entries.end(); ++iter) {
-      rgw_data_change& entry = *iter;
-      encode_json("entry", entry, s->formatter);
+      rgw_data_change_log_entry& entry = *iter;
+      if (!extra_info) {
+        encode_json("entry", entry.entry, s->formatter);
+      } else {
+        encode_json("entry", entry, s->formatter);
+      }
       flusher.flush();
     }
     s->formatter->close_section();
@@ -648,6 +729,52 @@ void RGWOp_DATALog_Unlock::execute() {
   http_ret = store->data_log->unlock(shard_id, zone_id, locker_id);
 }
 
+void RGWOp_DATALog_Notify::execute() {
+  string  source_zone = s->info.args.get("source-zone");
+  char *data;
+  int len = 0;
+#define LARGE_ENOUGH_BUF (128 * 1024)
+  int r = rgw_rest_read_all_input(s, &data, &len, LARGE_ENOUGH_BUF);
+  if (r < 0) {
+    http_ret = r;
+    return;
+  }
+
+  ldout(s->cct, 20) << __func__ << "(): read data: " << string(data, len) << dendl;
+
+  JSONParser p;
+  r = p.parse(data, len);
+  free(data);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: failed to parse JSON" << dendl;
+    http_ret = r;
+    return;
+  }
+
+  map<int, set<string> > updated_shards;
+  try {
+    decode_json_obj(updated_shards, &p);
+  } catch (JSONDecoder::err& err) {
+    ldout(s->cct, 0) << "ERROR: failed to decode JSON" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  if (store->ctx()->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    for (map<int, set<string> >::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
+      ldout(s->cct, 20) << __func__ << "(): updated shard=" << iter->first << dendl;
+      set<string>& keys = iter->second;
+      for (set<string>::iterator kiter = keys.begin(); kiter != keys.end(); ++kiter) {
+      ldout(s->cct, 20) << __func__ << "(): modified key=" << *kiter << dendl;
+      }
+    }
+  }
+
+  store->wakeup_data_sync_shards(source_zone, updated_shards);
+
+  http_ret = 0;
+}
+
 void RGWOp_DATALog_Delete::execute() {
   string   st = s->info.args.get("start-time"),
            et = s->info.args.get("end-time"),
@@ -753,11 +880,15 @@ RGWOp *RGWHandler_Log::op_post() {
       return new RGWOp_MDLog_Lock;
     else if (s->info.args.exists("unlock"))
       return new RGWOp_MDLog_Unlock;
+    else if (s->info.args.exists("notify"))
+      return new RGWOp_MDLog_Notify;	    
   } else if (type.compare("data") == 0) {
     if (s->info.args.exists("lock"))
       return new RGWOp_DATALog_Lock;
     else if (s->info.args.exists("unlock"))
       return new RGWOp_DATALog_Unlock;
+    else if (s->info.args.exists("notify"))
+      return new RGWOp_DATALog_Notify;	    
   }
   return NULL;
 }
