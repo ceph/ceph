@@ -654,7 +654,7 @@ ceph_test_cls_rgw_meta_LDADD = \
 	$(LIBRGW) $(LIBRADOS) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
 	-lcurl -lexpat \
-	libcls_timeindex_client.a \
+	libcls_timeindex_client.la \
 	libcls_version_client.la libcls_log_client.la \
 	libcls_statelog_client.la libcls_refcount_client.la \
 	libcls_rgw_client.la libcls_user_client.la libcls_lock_client.la

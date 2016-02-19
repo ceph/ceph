@@ -10,12 +10,12 @@ DENCODER_SOURCES += \
 	rgw/rgw_json_enc.cc
 
 DENCODER_DEPS += -lcurl -lexpat \
-	libcls_version_client.a \
-	libcls_log_client.a \
+	libcls_version_client.la \
+	libcls_log_client.la \
 	libcls_refcount_client.la \
-	libcls_user_client.a \
-	libcls_timeindex_client.a \
-	libcls_statelog_client.a
+	libcls_user_client.la \
+	libcls_timeindex_client.la \
+	libcls_statelog_client.la
 
 if WITH_RADOS
 if WITH_RADOSGW
