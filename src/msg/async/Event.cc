@@ -92,25 +92,28 @@ int EventCenter::init(int n)
   int fds[2];
   if (pipe(fds) < 0) {
     lderr(cct) << __func__ << " can't create notify pipe" << dendl;
-    return -1;
+    return -errno;
   }
 
   notify_receive_fd = fds[0];
   notify_send_fd = fds[1];
   r = net.set_nonblock(notify_receive_fd);
   if (r < 0) {
-    return -1;
+    return r;
   }
   r = net.set_nonblock(notify_send_fd);
   if (r < 0) {
-    return -1;
+    return r;
   }
 
   file_events = static_cast<FileEvent *>(malloc(sizeof(FileEvent)*n));
   memset(file_events, 0, sizeof(FileEvent)*n);
 
   nevent = n;
-  create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify(this, cct)));
+  notify_handler = new C_handle_notify(this, cct),
+  r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
+  if (r < 0)
+    return r;
   return 0;
 }
 
@@ -122,8 +125,9 @@ EventCenter::~EventCenter()
   }
   if (notify_send_fd >= 0)
     ::close(notify_send_fd);
-    
+
   delete driver;
+  delete notify_handler;
   if (file_events)
     free(file_events);
 }
