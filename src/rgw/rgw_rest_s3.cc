@@ -367,7 +367,7 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       time_t mtime = iter->mtime.sec();
       const char *section_name = (iter->is_delete_marker() ? "DeleteMarker"
 				  : "Version");
-      s->formatter->open_array_section(section_name);
+      s->formatter->open_object_section(section_name);
       if (objs_container) {
         s->formatter->dump_bool("IsDeleteMarker", iter->is_delete_marker());
       }
