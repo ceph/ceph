@@ -7,6 +7,8 @@
 #include <boost/bind.hpp>
 #include <boost/function.hpp>
 
+#define dout_subsys ceph_subsys_rados
+
 namespace librados {
 
 TestWatchNotify::TestWatchNotify(CephContext *cct, Finisher *finisher)
@@ -81,6 +83,9 @@ int TestWatchNotify::notify(const std::string& oid, bufferlist& bl,
 void TestWatchNotify::notify_ack(const std::string& o, uint64_t notify_id,
                                  uint64_t handle, uint64_t gid,
                                  bufferlist& bl) {
+  ldout(m_cct, 20) << __func__ << ": notify_id=" << notify_id << ", "
+                   << "handle=" << handle << ", "
+                   << "gid=" << gid << dendl;
   Mutex::Locker lock(m_lock);
   WatcherID watcher_id = std::make_pair(gid, handle);
   ack_notify(o, notify_id, watcher_id, bl);

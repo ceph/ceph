@@ -1,14 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_LIBRBD_IMAGE_WATCHER_H
 #define CEPH_LIBRBD_IMAGE_WATCHER_H
 
-#include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
+#include "librbd/image_watcher/Notifier.h"
 #include "librbd/WatchNotifyTypes.h"
 #include <set>
 #include <string>
@@ -31,6 +32,7 @@ public:
 
   int register_watch();
   int unregister_watch();
+  void flush(Context *on_finish);
 
   int notify_flatten(uint64_t request_id, ProgressContext &prog_ctx);
   int notify_resize(uint64_t request_id, uint64_t size,
@@ -49,8 +51,7 @@ public:
   void notify_released_lock();
   void notify_request_lock();
 
-  static void notify_header_update(librados::IoCtx &io_ctx,
-                                   const std::string &oid);
+  void notify_header_update(Context *on_finish);
 
   uint64_t get_watch_handle() const {
     RWLock::RLocker watch_locker(m_watch_lock);
@@ -65,9 +66,7 @@ private:
   };
 
   enum TaskCode {
-    TASK_CODE_ACQUIRED_LOCK,
     TASK_CODE_REQUEST_LOCK,
-    TASK_CODE_RELEASED_LOCK,
     TASK_CODE_CANCEL_ASYNC_REQUESTS,
     TASK_CODE_REREGISTER_WATCH,
     TASK_CODE_ASYNC_REQUEST,
@@ -223,31 +222,33 @@ private:
   Mutex m_owner_client_id_lock;
   watch_notify::ClientId m_owner_client_id;
 
+  image_watcher::Notifier m_notifier;
+
   void schedule_cancel_async_requests();
   void cancel_async_requests();
 
   void set_owner_client_id(const watch_notify::ClientId &client_id);
   watch_notify::ClientId get_client_id();
 
-  void execute_acquired_lock();
-  void execute_released_lock();
-  void execute_request_lock();
+  void handle_request_lock(int r);
   void schedule_request_lock(bool use_timer, int timer_delay = -1);
 
-  int notify_lock_owner(bufferlist &bl);
+  int notify_lock_owner(bufferlist &&bl);
+  void notify_lock_owner(bufferlist &&bl, Context *on_finish);
 
   void schedule_async_request_timed_out(const watch_notify::AsyncRequestId &id);
   void async_request_timed_out(const watch_notify::AsyncRequestId &id);
   int notify_async_request(const watch_notify::AsyncRequestId &id,
-                           bufferlist &in, ProgressContext& prog_ctx);
-  void notify_request_leadership();
+                           bufferlist &&in, ProgressContext& prog_ctx);
 
   void schedule_async_progress(const watch_notify::AsyncRequestId &id,
                                uint64_t offset, uint64_t total);
   int notify_async_progress(const watch_notify::AsyncRequestId &id,
                             uint64_t offset, uint64_t total);
   void schedule_async_complete(const watch_notify::AsyncRequestId &id, int r);
-  int notify_async_complete(const watch_notify::AsyncRequestId &id, int r);
+  void notify_async_complete(const watch_notify::AsyncRequestId &id, int r);
+  void handle_async_complete(const watch_notify::AsyncRequestId &request, int r,
+                             int ret_val);
 
   int prepare_async_request(const watch_notify::AsyncRequestId& id,
                             bool* new_request, Context** ctx,

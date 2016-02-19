@@ -60,6 +60,11 @@ public:
     EXPECT_CALL(mock_object_map, close(_))
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
+
+  void expect_flush_notifies(MockImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.image_watcher, flush(_))
+                  .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
+  }
 };
 
 TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
@@ -74,6 +79,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
   InSequence seq;
   expect_block_writes(mock_image_ctx, 0);
   expect_cancel_op_requests(mock_image_ctx, 0);
+  expect_flush_notifies(mock_image_ctx);
 
   MockJournal *mock_journal = new MockJournal();
   mock_image_ctx.journal = mock_journal;
@@ -107,6 +113,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessJournalDisabled) {
 
   InSequence seq;
   expect_cancel_op_requests(mock_image_ctx, 0);
+  expect_flush_notifies(mock_image_ctx);
 
   MockObjectMap *mock_object_map = new MockObjectMap();
   mock_image_ctx.object_map = mock_object_map;
@@ -136,6 +143,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessObjectMapDisabled) {
 
   InSequence seq;
   expect_cancel_op_requests(mock_image_ctx, 0);
+  expect_flush_notifies(mock_image_ctx);
 
   expect_unlock(mock_image_ctx, 0);
 
@@ -182,6 +190,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, UnlockError) {
   InSequence seq;
   expect_block_writes(mock_image_ctx, 0);
   expect_cancel_op_requests(mock_image_ctx, 0);
+  expect_flush_notifies(mock_image_ctx);
 
   expect_unlock(mock_image_ctx, -EINVAL);
 

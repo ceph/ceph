@@ -80,6 +80,7 @@ private:
   void send_update_directory();
   void send_remove_source_header();
 
+  void apply();
 };
 
 } // namespace operation
