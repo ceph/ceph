@@ -17,8 +17,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static list<string> roles_list;
-static list<string> admin_roles_list;
+static vector<string> accepted_roles;
+static vector<string> accepted_admin_roles;
 
 class RGWValidateSwiftToken : public RGWHTTPClient {
   struct rgw_swift_auth_info *info;
@@ -414,7 +414,7 @@ static void rgw_set_keystone_token_auth_info(const KeystoneToken& token,
 
   /* Check whether the user has an admin status. */
   bool is_admin = false;
-  for (const auto admin_role : admin_roles_list) {
+  for (const auto admin_role : accepted_admin_roles) {
     if (token.user.has_role(admin_role)) {
       is_admin = true;
       break;
@@ -435,9 +435,7 @@ int RGWSwift::parse_keystone_token_response(const string& token,
   }
 
   bool found = false;
-  list<string>::iterator iter;
-  for (iter = roles_list.begin(); iter != roles_list.end(); ++iter) {
-    const string& role = *iter;
+  for (const auto role : accepted_roles) {
     if (t.has_role(role) == true) {
       found = true;
       break;
@@ -916,11 +914,12 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
 
 void RGWSwift::init()
 {
-  get_str_list(cct->_conf->rgw_keystone_accepted_roles, roles_list);
-  get_str_list(cct->_conf->rgw_keystone_accepted_admin_roles, admin_roles_list);
+  get_str_vec(cct->_conf->rgw_keystone_accepted_roles, accepted_roles);
+  get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles,
+              accepted_admin_roles);
 
-  roles_list.insert(roles_list.end(), admin_roles_list.begin(),
-          admin_roles_list.end());
+  accepted_roles.insert(accepted_roles.end(), accepted_admin_roles.begin(),
+                        accepted_admin_roles.end());
 
   if (supports_keystone()) {
     init_keystone();
