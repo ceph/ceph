@@ -33,6 +33,7 @@
 #include "common/admin_socket.h"
 #include "common/ceph_time.h"
 #include "common/ceph_timer.h"
+#include "common/Finisher.h"
 #include "common/shunique_lock.h"
 
 #include "messages/MOSDOp.h"
@@ -1793,11 +1794,6 @@ public:
   map<uint64_t, LingerOp*> linger_ops;
   // we use this just to confirm a cookie is valid before dereferencing the ptr
   set<LingerOp*> linger_ops_set;
-  int num_linger_callbacks;
-  std::mutex linger_callback_lock;
-  typedef std::unique_lock<std::mutex> unique_linger_cb_lock;
-  typedef std::lock_guard<std::mutex> linger_cb_lock_guard;
-  std::condition_variable linger_callback_cond;
 
   map<ceph_tid_t,PoolStatOp*> poolstat_ops;
   map<ceph_tid_t,StatfsOp*> statfs_ops;
@@ -1866,23 +1862,10 @@ public:
 		    uint32_t register_gen);
   int _normalize_watch_error(int r);
 
-  void _linger_callback_queue() {
-    linger_cb_lock_guard l(linger_callback_lock);
-    ++num_linger_callbacks;
-  }
-  void _linger_callback_finish() {
-    linger_cb_lock_guard l(linger_callback_lock);
-    if (--num_linger_callbacks == 0)
-      linger_callback_cond.notify_all();
-    assert(num_linger_callbacks >= 0);
-  }
   friend class C_DoWatchError;
 public:
-  void linger_callback_flush() {
-    unique_linger_cb_lock l(linger_callback_lock);
-    linger_callback_cond.wait(l, [this]() {
-	return num_linger_callbacks <= 0;
-      });
+  void linger_callback_flush(Context *ctx) {
+    finisher->queue(ctx);
   }
 
 private:
@@ -1958,7 +1941,7 @@ private:
     keep_balanced_budget(false), honor_osdmap_full(true),
     last_seen_osdmap_version(0), last_seen_pgmap_version(0),
     logger(NULL), tick_event(0), m_request_state_hook(NULL),
-    num_linger_callbacks(0), num_homeless_ops(0),
+    num_homeless_ops(0),
     homeless_session(new OSDSession(cct, -1)),
     mon_timeout(ceph::make_timespan(mon_timeout)),
     osd_timeout(ceph::make_timespan(osd_timeout)),
