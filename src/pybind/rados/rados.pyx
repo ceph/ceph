@@ -1286,9 +1286,6 @@ cdef class OmapIterator(object):
     def __iter__(self):
         return self
 
-    def next(self):
-        return self.__next__()
-
     def __next__(self):
         """
         Get the next key-value pair in the object
@@ -1335,9 +1332,6 @@ cdef class ObjectIterator(object):
 
     def __iter__(self):
         return self
-
-    def next(self):
-        return self.__next__()
 
     def __next__(self):
         """
@@ -1388,9 +1382,6 @@ cdef class XattrIterator(object):
 
     def __iter__(self):
         return self
-
-    def next(self):
-        return self.__next__()
 
     def __next__(self):
         """
@@ -1452,9 +1443,6 @@ ioctx '%s'" % self.ioctx.name)
 
     def __iter__(self):
         return self
-
-    def next(self):
-        return self.__next__()
 
     def __next__(self):
         """
