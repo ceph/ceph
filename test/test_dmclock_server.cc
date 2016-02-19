@@ -33,6 +33,7 @@ namespace crimson {
       code();
     }
 
+    
     TEST(dmclock_server, client_idle_erase) {
       using ClientId = int;
       int client = 17;
@@ -92,22 +93,22 @@ namespace crimson {
       std::this_thread::sleep_for(std::chrono::seconds(1));
 
       lock_pq([&] () {
-	  EXPECT_EQ(pq.client_map.size(), 1) << "client map has 1 after 1 client";
-	  EXPECT_EQ(pq.client_map.at(client).idle, false) <<
+	  EXPECT_EQ(1, pq.client_map.size()) << "client map has 1 after 1 client";
+	  EXPECT_FALSE(pq.client_map.at(client).idle) <<
 	    "initially client map entry shows not idle.";
 	});
 
       std::this_thread::sleep_for(std::chrono::seconds(6));
 
       lock_pq([&] () {
-	  EXPECT_EQ(pq.client_map.at(client).idle, true) <<
+	  EXPECT_TRUE(pq.client_map.at(client).idle) <<
 	    "after idle age client map entry shows idle.";
 	});
 
       std::this_thread::sleep_for(std::chrono::seconds(2));
 
       lock_pq([&] () {
-	  EXPECT_EQ(pq.client_map.size(), 0) <<
+	  EXPECT_EQ(0, pq.client_map.size()) <<
 	    "client map loses its entry after erase age";
 	});
     }

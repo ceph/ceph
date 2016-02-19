@@ -51,11 +51,11 @@ TEST(test_client, full_bore_timing) {
 			  5); // outstanding ops allowed
   client->wait_until_done();
   auto end = now();
-  EXPECT_EQ(count, 1000) << "didn't get right number of ops";
+  EXPECT_EQ(1000, count) << "didn't get right number of ops";
 
   int milliseconds = (end - start) / std::chrono::milliseconds(1);
-  EXPECT_GT(milliseconds, 10000) << "timing too fast to be correct";
-  EXPECT_LT(milliseconds, 12000) << "timing suspiciously slow";
+  EXPECT_LT(10000, milliseconds) << "timing too fast to be correct";
+  EXPECT_GT(12000, milliseconds) << "timing suspiciously slow";
 }
 
 
@@ -91,7 +91,7 @@ TEST(test_client, paused_timing) {
 			  50); // outstanding ops allowed
   std::thread t([&]() {
       std::this_thread::sleep_for(std::chrono::seconds(5));
-      EXPECT_EQ(unresponded_count.load(), 50) <<
+      EXPECT_EQ(50, unresponded_count.load()) <<
 	"should have 50 unresponded calls";
       auto_respond = true;
       // respond to those 50 calls
@@ -108,7 +108,7 @@ TEST(test_client, paused_timing) {
   // the 50 outstanding ops allowed means the first half-second of
   // requests get responded to during the 5 second pause. So we have
   // to adjust our expectations by a half-second.
-  EXPECT_GT(milliseconds, 15000 - 500) << "timing too fast to be correct";
-  EXPECT_LT(milliseconds, 17000 - 500) << "timing suspiciously slow";
+  EXPECT_LT(15000 - 500, milliseconds) << "timing too fast to be correct";
+  EXPECT_GT(17000 - 500, milliseconds) << "timing suspiciously slow";
   t.join();
 }
