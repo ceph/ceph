@@ -5659,6 +5659,12 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
     return r;
 
   rgw_obj& obj = target->get_obj();
+
+  if (obj.get_object().empty()) {
+    ldout(store->ctx(), 0) << "ERROR: " << __func__ << "(): cannot write object with empty name" << dendl;
+    return -EIO;
+  }
+
   r = store->get_obj_ref(obj, &ref, &bucket);
   if (r < 0)
     return r;

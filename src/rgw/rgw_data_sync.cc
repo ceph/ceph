@@ -1834,6 +1834,12 @@ public:
       do {
         yield {
           marker_tracker->reset_need_retry(key);
+          if (key.name.empty()) {
+            /* shouldn't happen */
+            set_status("skipping empty entry");
+            ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): entry with empty obj name, skipping" << dendl;
+            goto done;
+          }
           if (op == CLS_RGW_OP_ADD ||
               op == CLS_RGW_OP_LINK_OLH) {
             if (op == CLS_RGW_OP_ADD && !key.instance.empty() && key.instance != "null") {
