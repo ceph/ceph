@@ -36,7 +36,6 @@ public:
   int refresh();
   void refresh(Context *on_finish);
   int refresh_if_required();
-  int refresh_if_required(const RWLock &owner_lock);
 
   void snap_set(const std::string &snap_name, Context *on_finish);
 

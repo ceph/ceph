@@ -118,14 +118,6 @@ void ImageState<I>::refresh(Context *on_finish) {
 
 template <typename I>
 int ImageState<I>::refresh_if_required() {
-  RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
-  return refresh_if_required(m_image_ctx->owner_lock);
-}
-
-template <typename I>
-int ImageState<I>::refresh_if_required(const RWLock &) {
-  assert(m_image_ctx->owner_lock.is_locked());
-
   C_SaferCond ctx;
   {
     Mutex::Locker locker(m_lock);

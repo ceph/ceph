@@ -701,7 +701,7 @@ void RefreshRequest<I>::apply() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::WLocker md_locker(m_image_ctx.md_lock);
 
   {

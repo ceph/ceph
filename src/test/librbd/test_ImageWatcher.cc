@@ -300,6 +300,10 @@ TEST_F(TestImageWatcher, NotifyRequestLock) {
   m_notify_acks = {{NOTIFY_OP_REQUEST_LOCK, {}}};
   ictx->image_watcher->notify_request_lock();
 
+  C_SaferCond ctx;
+  ictx->image_watcher->flush(&ctx);
+  ctx.wait();
+
   ASSERT_TRUE(wait_for_notifies(*ictx));
 
   NotifyOps expected_notify_ops;
@@ -352,7 +356,7 @@ TEST_F(TestImageWatcher, NotifyHeaderUpdate) {
   ASSERT_EQ(0, register_image_watch(*ictx));
 
   m_notify_acks = {{NOTIFY_OP_HEADER_UPDATE, {}}};
-  librbd::ImageWatcher::notify_header_update(m_ioctx, ictx->header_oid);
+  ictx->notify_update();
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
 

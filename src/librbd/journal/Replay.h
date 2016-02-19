@@ -46,6 +46,7 @@ private:
     Context *on_start_safe = nullptr;
     Context *on_finish_ready = nullptr;
     Context *on_finish_safe = nullptr;
+    Context *on_op_complete = nullptr;
   };
 
   typedef std::list<uint64_t> OpTids;

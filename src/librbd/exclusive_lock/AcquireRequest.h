@@ -35,6 +35,10 @@ private:
    * @verbatim
    *
    * <start>
+   *    |
+   *    v
+   * FLUSH_NOTIFIES
+   *    |
    *    |     /---------------------------------------------------------\
    *    |     |                                                         |
    *    |     |             (no lockers)                                |
@@ -80,6 +84,9 @@ private:
   uint64_t m_locker_handle;
 
   int m_error_result;
+
+  void send_flush_notifies();
+  Context *handle_flush_notifies(int *ret_val);
 
   void send_lock();
   Context *handle_lock(int *ret_val);
