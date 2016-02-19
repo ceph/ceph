@@ -542,7 +542,7 @@ protected:
 
   ceph_lock_state_t *get_fcntl_lock_state() {
     if (!fcntl_locks)
-      fcntl_locks = new ceph_lock_state_t(g_ceph_context);
+      fcntl_locks = new ceph_lock_state_t(g_ceph_context, CEPH_LOCK_FCNTL);
     return fcntl_locks;
   }
   void clear_fcntl_lock_state() {
@@ -551,7 +551,7 @@ protected:
   }
   ceph_lock_state_t *get_flock_lock_state() {
     if (!flock_locks)
-      flock_locks = new ceph_lock_state_t(g_ceph_context);
+      flock_locks = new ceph_lock_state_t(g_ceph_context, CEPH_LOCK_FLOCK);
     return flock_locks;
   }
   void clear_flock_lock_state() {
