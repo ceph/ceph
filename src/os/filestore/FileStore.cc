@@ -692,6 +692,7 @@ int FileStore::statfs(struct statfs *buf)
   if (::statfs(basedir.c_str(), buf) < 0) {
     int r = -errno;
     assert(!m_filestore_fail_eio || r != -EIO);
+    assert(r != -ENOENT);
     return r;
   }
   return 0;
