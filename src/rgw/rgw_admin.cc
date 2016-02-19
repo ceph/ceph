@@ -4749,6 +4749,46 @@ next:
     }
   }
 
+  if (opt_cmd == OPT_BILOG_LIST) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return -EINVAL;
+    }
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    formatter->open_array_section("entries");
+    bool truncated;
+    int count = 0;
+    if (max_entries < 0)
+      max_entries = 1000;
+
+    do {
+      list<rgw_bi_log_entry> entries;
+      ret = store->list_bi_log_entries(bucket, shard_id, marker, max_entries - count, entries, &truncated);
+      if (ret < 0) {
+        cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      count += entries.size();
+
+      for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+        rgw_bi_log_entry& entry = *iter;
+        encode_json("entry", entry, formatter);
+
+        marker = entry.id;
+      }
+      formatter->flush(cout);
+    } while (truncated && count < max_entries);
+
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+
   if (opt_cmd == OPT_SYNC_ERROR_LIST) {
     if (max_entries < 0) {
       max_entries = 1000;
