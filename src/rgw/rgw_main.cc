@@ -13,6 +13,8 @@
 
 #include <curl/curl.h>
 
+#include <boost/intrusive_ptr.hpp>
+
 #include "acconfig.h"
 
 #include "common/ceph_argparse.h"
@@ -27,6 +29,8 @@
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_user.h"
+#include "rgw_period_pusher.h"
+#include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_swift.h"
@@ -40,6 +44,7 @@
 #include "rgw_replica_log.h"
 #include "rgw_rest_replica_log.h"
 #include "rgw_rest_config.h"
+#include "rgw_rest_realm.h"
 #include "rgw_swift_auth.h"
 #include "rgw_swift.h"
 #include "rgw_log.h"
@@ -169,6 +174,9 @@ static RGWRESTMgr *set_logging(RGWRESTMgr *mgr)
   return mgr;
 }
 
+void intrusive_ptr_add_ref(CephContext* cct) { cct->get(); }
+void intrusive_ptr_release(CephContext* cct) { cct->put(); }
+
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
@@ -219,6 +227,9 @@ int main(int argc, const char **argv)
 
   common_init_finish(g_ceph_context);
 
+  // claim the reference and release it after subsequent destructors have fired
+  boost::intrusive_ptr<CephContext> cct(g_ceph_context, false);
+
   rgw_tools_init(g_ceph_context);
 
   rgw_init_resolver();
@@ -229,7 +240,8 @@ int main(int argc, const char **argv)
 
   int r = 0;
   RGWRados *store = RGWStoreManager::get_storage(g_ceph_context,
-      g_conf->rgw_enable_gc_threads, g_conf->rgw_enable_quota_threads);
+      g_conf->rgw_enable_gc_threads, g_conf->rgw_enable_quota_threads,
+      g_conf->rgw_run_sync_thread);
   if (!store) {
     mutex.Lock();
     init_timer.cancel_all_events();
@@ -241,7 +253,7 @@ int main(int argc, const char **argv)
   }
   r = rgw_perf_start(g_ceph_context);
 
-  rgw_rest_init(g_ceph_context, store->region);
+  rgw_rest_init(g_ceph_context, store, store->get_zonegroup());
 
   mutex.Lock();
   init_timer.cancel_all_events();
@@ -295,6 +307,7 @@ int main(int argc, const char **argv)
     admin_resource->register_resource("opstate", new RGWRESTMgr_Opstate);
     admin_resource->register_resource("replica_log", new RGWRESTMgr_ReplicaLog);
     admin_resource->register_resource("config", new RGWRESTMgr_Config);
+    admin_resource->register_resource("realm", new RGWRESTMgr_Realm);
     rest.register_resource(g_conf->rgw_admin_entry, admin_resource);
   }
 
@@ -397,6 +410,15 @@ int main(int argc, const char **argv)
     fes.push_back(fe);
   }
 
+  // add a watcher to respond to realm configuration changes
+  RGWPeriodPusher pusher(store);
+  RGWFrontendPauser pauser(fes, &pusher);
+  RGWRealmReloader reloader(store, &pauser);
+
+  RGWRealmWatcher realm_watcher(g_ceph_context, store->realm);
+  realm_watcher.add_watcher(RGWRealmNotify::Reload, reloader);
+  realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
+
   wait_shutdown();
 
   derr << "shutting down" << dendl;
@@ -443,7 +465,6 @@ int main(int argc, const char **argv)
   rgw_perf_stop(g_ceph_context);
 
   dout(1) << "final shutdown" << dendl;
-  g_ceph_context->put();
 
   signal_fd_finalize();
 

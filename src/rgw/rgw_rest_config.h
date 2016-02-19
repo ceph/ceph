@@ -15,11 +15,12 @@
 #ifndef RGW_REST_CONFIG_H
 #define RGW_REST_CONFIG_H
 
-class RGWOp_RegionMap_Get : public RGWRESTOp {
-  RGWRegionMap regionmap;
+class RGWOp_ZoneGroupMap_Get : public RGWRESTOp {
+  RGWZoneGroupMap zonegroup_map;
+  bool old_format;
 public:
-  RGWOp_RegionMap_Get() {}
-  ~RGWOp_RegionMap_Get() {}
+  RGWOp_ZoneGroupMap_Get(bool _old_format):old_format(_old_format) {}
+  ~RGWOp_ZoneGroupMap_Get() {}
 
   int verify_permission() {
     return 0; 
@@ -27,7 +28,11 @@ public:
   void execute();
   virtual void send_response();
   virtual const string name() {
-    return "get_region_map";
+    if (old_format) {
+      return "get_region_map";
+    } else {
+      return "get_zonegroup_map";
+    }
   }
 };
 
@@ -42,6 +47,7 @@ public:
   RGWHandler_Config() : RGWHandler_Auth_S3() {}
   virtual ~RGWHandler_Config() {}
 };
+
 
 class RGWRESTMgr_Config : public RGWRESTMgr {
 public:

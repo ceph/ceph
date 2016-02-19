@@ -7,21 +7,24 @@
 
 static int civetweb_callback(struct mg_connection* conn) {
   struct mg_request_info* req_info = mg_get_request_info(conn);
-  RGWProcessEnv* pe = static_cast<RGWProcessEnv *>(req_info->user_data);
+  RGWMongooseEnv* pe = static_cast<RGWMongooseEnv *>(req_info->user_data);
   RGWRados* store = pe->store;
   RGWREST* rest = pe->rest;
   OpsLogSocket* olog = pe->olog;
 
-  RGWRequest* req = new RGWRequest(store->get_new_req_id());
+  RGWRequest req(store->get_new_req_id());
   RGWMongoose client_io(conn, pe->port);
 
-  int ret = process_request(store, rest, req, &client_io, olog);
-  if (ret < 0) {
-    /* we don't really care about return code */
-    dout(20) << "process_request() returned " << ret << dendl;
-  }
+  {
+    // hold a read lock over access to pe->store for reconfiguration
+    RWLock::RLocker lock(pe->mutex);
 
-  delete req;
+    int ret = process_request(pe->store, rest, &req, &client_io, olog);
+    if (ret < 0) {
+      /* we don't really care about return code */
+      dout(20) << "process_request() returned " << ret << dendl;
+    }
+  }
 
 // Mark as processed
   return 1;

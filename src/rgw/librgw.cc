@@ -439,7 +439,8 @@ namespace rgw {
 
     store = RGWStoreManager::get_storage(g_ceph_context,
 					 g_conf->rgw_enable_gc_threads,
-					 g_conf->rgw_enable_quota_threads);
+					 g_conf->rgw_enable_quota_threads,
+					 g_conf->rgw_run_sync_thread);
 
     if (!store) {
       mutex.Lock();
@@ -453,7 +454,7 @@ namespace rgw {
 
     r = rgw_perf_start(g_ceph_context);
 
-    rgw_rest_init(g_ceph_context, store->region);
+    rgw_rest_init(g_ceph_context, store, store->get_zonegroup());
 
     mutex.Lock();
     init_timer.cancel_all_events();

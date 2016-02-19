@@ -105,6 +105,28 @@ int RGWGetObj_ObjStore_S3::send_response_data_error()
   return send_response_data(bl, 0 , 0);
 }
 
+template <class T>
+int decode_attr_bl_single_value(map<string, bufferlist>& attrs, const char *attr_name, T *result, T def_val)
+{
+  map<string, bufferlist>::iterator iter = attrs.find(attr_name);
+  if (iter == attrs.end()) {
+    *result = def_val;
+    return 0;
+  }
+  bufferlist& bl = iter->second;
+  if (bl.length() == 0) {
+    *result = def_val;
+    return 0;
+  }
+  bufferlist::iterator bliter = bl.begin();
+  try {
+    ::decode(*result, bliter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  return 0;
+}
+
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 					      off_t bl_len)
 {
@@ -143,6 +165,21 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   if (s->system_request && lastmod) {
     /* we end up dumping mtime in two different methods, a bit redundant */
     dump_epoch_header(s, "Rgwx-Mtime", lastmod);
+    uint64_t pg_ver;
+    int r = decode_attr_bl_single_value(attrs, RGW_ATTR_PG_VER, &pg_ver, (uint64_t)0);
+    if (r < 0) {
+      ldout(s->cct, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
+    }
+    STREAM_IO(s)->print("Rgwx-Obj-PG-Ver: %lld\r\n", (long long)pg_ver);
+
+    uint32_t source_zone_short_id;
+    r = decode_attr_bl_single_value(attrs, RGW_ATTR_SOURCE_ZONE, &source_zone_short_id, (uint32_t)0);
+    if (r < 0) {
+      ldout(s->cct, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
+    }
+    if (source_zone_short_id != 0) {
+      STREAM_IO(s)->print("Rgwx-Source-Zone-Short-Id: %lld\r\n", (long long)source_zone_short_id);
+    }
   }
 
   dump_content_length(s, total_len);
@@ -281,6 +318,20 @@ int RGWListBucket_ObjStore_S3::get_params()
   }
   delimiter = s->info.args.get("delimiter");
   encoding_type = s->info.args.get("encoding-type");
+  if (s->system_request) {
+    s->info.args.get_bool("objs-container", &objs_container, false);
+    const char *shard_id_str = s->info.env->get("HTTP_RGWX_SHARD_ID");
+    if (shard_id_str) {
+      string err;
+      shard_id = strict_strtol(shard_id_str, 10, &err);
+      if (!err.empty()) {
+        ldout(s->cct, 5) << "bad shard id specified: " << shard_id_str << dendl;
+        return -EINVAL;
+      }
+    } else {
+      shard_id = s->bucket_instance_shard_id;
+    }
+  }
   return 0;
 }
 
@@ -307,12 +358,19 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
     encode_key = true;
 
   if (op_ret >= 0) {
+    if (objs_container) {
+      s->formatter->open_array_section("Entries");
+    }
+
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       time_t mtime = iter->mtime.sec();
       const char *section_name = (iter->is_delete_marker() ? "DeleteMarker"
 				  : "Version");
-      s->formatter->open_array_section(section_name);
+      s->formatter->open_object_section(section_name);
+      if (objs_container) {
+        s->formatter->dump_bool("IsDeleteMarker", iter->is_delete_marker());
+      }
       if (encode_key) {
 	string key_name;
 	url_encode(iter->key.name, key_name);
@@ -324,8 +382,11 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       if (version_id.empty()) {
 	version_id = "null";
       }
-      if (s->system_request && iter->versioned_epoch > 0) {
-	s->formatter->dump_int("VersionedEpoch", iter->versioned_epoch);
+      if (s->system_request) {
+        if (iter->versioned_epoch > 0) {
+          s->formatter->dump_int("VersionedEpoch", iter->versioned_epoch);
+        }
+        s->formatter->dump_string("RgwxTag", iter->tag);
       }
       s->formatter->dump_string("VersionId", version_id);
       s->formatter->dump_bool("IsLatest", iter->is_current());
@@ -338,6 +399,10 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       dump_owner(s, iter->owner, iter->owner_display_name);
       s->formatter->close_section();
     }
+    if (objs_container) {
+      s->formatter->close_section();
+    }
+
     if (!common_prefixes.empty()) {
       map<string, bool>::iterator pref_iter;
       for (pref_iter = common_prefixes.begin();
@@ -405,6 +470,9 @@ void RGWListBucket_ObjStore_S3::send_response()
       s->formatter->dump_int("Size", iter->size);
       s->formatter->dump_string("StorageClass", "STANDARD");
       dump_owner(s, iter->owner, iter->owner_display_name);
+      if (s->system_request) {
+        s->formatter->dump_string("RgwxTag", iter->tag);
+      }
       s->formatter->close_section();
     }
     if (!common_prefixes.empty()) {
@@ -439,15 +507,15 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   end_header(s, this);
   dump_start(s);
 
-  string region = s->bucket_info.region;
+  RGWZoneGroup zonegroup;
   string api_name;
 
-  map<string, RGWRegion>::iterator iter = store->region_map.regions.find(region);
-  if (iter != store->region_map.regions.end()) {
-    api_name = iter->second.api_name;
+  int ret = store->get_zonegroup(s->bucket_info.zonegroup, zonegroup);
+  if (ret >= 0) {
+    api_name = zonegroup.api_name;
   } else  {
-    if (region != "default") {
-      api_name = region;
+    if (s->bucket_info.zonegroup != "default") {
+      api_name = s->bucket_info.zonegroup;
     }
   }
 
@@ -691,7 +759,7 @@ public:
   RGWCreateBucketParser() {}
   ~RGWCreateBucketParser() {}
 
-  bool get_location_constraint(string& region) {
+  bool get_location_constraint(string& zone_group) {
     XMLObj *config = find_first("CreateBucketConfiguration");
     if (!config)
       return false;
@@ -700,7 +768,7 @@ public:
     if (!constraint)
       return false;
 
-    region = constraint->get_data();
+    zone_group = constraint->get_data();
 
     return true;
   }
@@ -1603,6 +1671,29 @@ done:
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+int RGWDeleteObj_ObjStore_S3::get_params()
+{
+  const char *if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
+
+  if (s->system_request) {
+    s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "no-precondition-error", &no_precondition_error, false);
+  }
+
+  if (if_unmod) {
+    string if_unmod_str(if_unmod);
+    string if_unmod_decoded;
+    url_decode(if_unmod_str, if_unmod_decoded);
+    uint64_t epoch;
+    if (utime_t::parse_date(if_unmod_decoded, &epoch, NULL) < 0) {
+      ldout(s->cct, 10) << "failed to parse time: " << if_unmod_decoded << dendl;
+      return -EINVAL;
+    }
+    unmod_since = epoch;
+  }
+
+  return 0;
+}
+
 void RGWDeleteObj_ObjStore_S3::send_response()
 {
   int r = op_ret;
@@ -1656,6 +1747,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
 
   if (s->system_request) {
     source_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "source-zone");
+    s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "copy-if-newer", &copy_if_newer, false);
     if (!source_zone.empty()) {
       client_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "client-id");
       op_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "op-id");
@@ -1678,7 +1770,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
     } else if (strcasecmp(md_directive, "REPLACE") == 0) {
       attrs_mod = RGWRados::ATTRSMOD_REPLACE;
     } else if (!source_zone.empty()) {
-      attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-region copy
+      attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-zone_group copy
     } else {
       ldout(s->cct, 0) << "invalid metadata directive" << dendl;
       return -EINVAL;
@@ -2508,12 +2600,14 @@ int RGWHandler_REST_S3::postauth_init()
   ret = validate_tenant_name(s->bucket_tenant);
   if (ret)
     return ret;
-  ret = valid_s3_bucket_name(s->bucket_name, relaxed_names);
-  if (ret)
-    return ret;
-  ret = validate_object_name(s->object.name);
-  if (ret)
-    return ret;
+  if (!s->bucket_name.empty()) {
+    ret = valid_s3_bucket_name(s->bucket_name, relaxed_names);
+    if (ret)
+      return ret;
+    ret = validate_object_name(s->object.name);
+    if (ret)
+      return ret;
+  }
 
   if (!t->src_bucket.empty()) {
     rgw_parse_url_bucket(t->src_bucket, s->user->user_id.tenant,
@@ -2539,12 +2633,14 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
   if (ret)
     return ret;
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
-  ret = valid_s3_bucket_name(s->bucket_name, relaxed_names);
-  if (ret)
-    return ret;
-  ret = validate_object_name(s->object.name);
-  if (ret)
-    return ret;
+  if (!s->bucket_name.empty()) {
+    ret = valid_s3_bucket_name(s->bucket_name, relaxed_names);
+    if (ret)
+      return ret;
+    ret = validate_object_name(s->object.name);
+    if (ret)
+      return ret;
+  }
 
   const char *cacl = s->info.env->get("HTTP_X_AMZ_ACL");
   if (cacl)
@@ -2867,7 +2963,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state *s)
   int ret =
     RGWHandler_REST_S3::init_from_header(s,
 					is_s3website ? RGW_FORMAT_HTML :
-					RGW_FORMAT_XML, false);
+					RGW_FORMAT_XML, true);
   if (ret < 0)
     return NULL;
 

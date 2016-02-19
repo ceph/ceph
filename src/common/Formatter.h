@@ -97,6 +97,7 @@ namespace ceph {
     virtual void output_header() {};
     virtual void output_footer() {};
     void flush(std::ostream& os);
+    using Formatter::flush; // don't hide Formatter::flush(bufferlist &bl)
     void reset();
     virtual void open_array_section(const char *name);
     void open_array_section_in_ns(const char *name, const char *ns);
@@ -142,6 +143,7 @@ namespace ceph {
     virtual void output_footer();
 
     void flush(std::ostream& os);
+    using Formatter::flush; // don't hide Formatter::flush(bufferlist &bl)
     void reset();
     void open_array_section(const char *name);
     void open_array_section_in_ns(const char *name, const char *ns);
@@ -184,6 +186,7 @@ namespace ceph {
     virtual void output_header() {};
     virtual void output_footer() {};
     void flush(std::ostream& os);
+    using Formatter::flush; // don't hide Formatter::flush(bufferlist &bl)
     void reset();
     virtual void open_array_section(const char *name);
     void open_array_section_in_ns(const char *name, const char *ns);
