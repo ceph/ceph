@@ -1,0 +1,11 @@
+# The number of accounts required can be estimated as CONCURRENCY x 2
+# Valid fields for credentials are defined in the descendants of
+# auth.Credentials - see KeystoneV[2|3]Credentials.CONF_ATTRIBUTES
+
+- username: 'tempest_u1'
+  tenant_name: 'tempest'
+  password: 'tempest'
+
+- username: 'tempest_u2'
+  tenant_name: 'tempest'
+  password: 'tempest'
