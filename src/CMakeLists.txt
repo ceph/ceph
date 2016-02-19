@@ -1035,6 +1035,8 @@ if(${WITH_RBD})
     librbd/image/RefreshParentRequest.cc
     librbd/image/RefreshRequest.cc
     librbd/image/SetSnapRequest.cc
+    librbd/image_watcher/Notifier.cc
+    librbd/image_watcher/NotifyLockOwner.cc
     librbd/journal/Replay.cc
     librbd/journal/Types.cc
     librbd/object_map/InvalidateRequest.cc
