@@ -4340,8 +4340,10 @@ int FileStore::_rmattrs(const coll_t& cid, const ghobject_t& oid,
       char n[CHAIN_XATTR_MAX_NAME_LEN];
       get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
       r = chain_fremovexattr(**fd, n);
-      if (r < 0)
-	break;
+      if (r < 0) {
+        dout(10) << __func__ << " could not remove xattr r = " << r << dendl;
+	goto out_close;
+      }
     }
   }
 
