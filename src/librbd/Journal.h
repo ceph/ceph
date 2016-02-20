@@ -112,6 +112,8 @@ public:
   void open(Context *on_finish);
   void close(Context *on_finish);
 
+  void flush_commit_position(Context *on_finish);
+
   uint64_t append_io_event(AioCompletion *aio_comp,
                            journal::EventEntry &&event_entry,
                            const AioObjectRequests &requests,

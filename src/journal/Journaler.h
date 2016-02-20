@@ -48,6 +48,8 @@ public:
   int register_client(const bufferlist &data);
   int unregister_client();
 
+  void flush_commit_position(Context *on_safe);
+
   void allocate_tag(const bufferlist &data, cls::journal::Tag *tag,
                     Context *on_finish);
   void allocate_tag(uint64_t tag_class, const bufferlist &data,
@@ -61,7 +63,7 @@ public:
 
   void start_append(int flush_interval, uint64_t flush_bytes, double flush_age);
   Future append(uint64_t tag_tid, const bufferlist &bl);
-  void flush(Context *on_safe);
+  void flush_append(Context *on_safe);
   void stop_append(Context *on_safe);
 
   void committed(const ReplayEntry &replay_entry);
