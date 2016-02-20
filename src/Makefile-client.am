@@ -19,7 +19,7 @@ bin_PROGRAMS += ceph-syn
 
 ceph: ceph.in ./ceph_ver.h Makefile
 	rm -f $@ $@.tmp
-	cp $@.in $@.tmp
+	cp $< $@.tmp
 	sed -ie "s|@PYTHON_EXECUTABLE@|/usr/bin/env python|" $@.tmp
 	grep CEPH_GIT_NICE_VER ./ceph_ver.h | cut -f 3 -d " " | sed s/\"//g | xargs -I "{}" sed -ie "s/@CEPH_GIT_NICE_VER@/{}/g" $@.tmp
 	grep CEPH_GIT_VER ./ceph_ver.h | cut -f 3 -d " " | sed s/\"//g | xargs -I "{}" sed -ie "s/@CEPH_GIT_VER@/{}/g" $@.tmp
