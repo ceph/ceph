@@ -33,7 +33,9 @@
 #include <sys/mount.h>
 
 #include "common/blkdev.h"
+#if defined(__linux__)
 #include "common/linux_version.h"
+#endif
 
 #if defined(__FreeBSD__)
 #define O_DSYNC O_SYNC
@@ -161,6 +163,11 @@ int FileJournal::_open_block_device()
 
 void FileJournal::_check_disk_write_cache() const
 {
+#if !defined(__linux__)
+    dout(10) << "_check_disk_write_cache: not linux, NOT checking disk write "
+      << "cache on raw block device " << fn << dendl;
+    return;
+#else
   ostringstream hdparm_cmd;
   FILE *fp = NULL;
 
@@ -232,6 +239,7 @@ close_f:
   }
 done:
   ;
+#endif // __linux__
 }
 
 int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
