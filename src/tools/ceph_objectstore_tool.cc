@@ -1102,7 +1102,6 @@ int export_files(ObjectStore *store, coll_t coll)
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      assert(!i->hobj.is_meta());
       if (i->is_pgmeta() || i->hobj.is_temp()) {
 	continue;
       }
@@ -1130,7 +1129,7 @@ int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
     }
   }
   const ghobject_t inc_oid = OSD::get_inc_osdmap_pobject_name(e);
-  if (!store->exists(coll_t::meta(), inc_oid)) {
+  if (!store->exists(META_COLL, inc_oid)) {
     cerr << "inc-osdmap (" << inc_oid << ") does not exist." << std::endl;
     if (!force) {
       return -ENOENT;
@@ -1140,8 +1139,8 @@ int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
   if (dry_run)
     return 0;
   ObjectStore::Transaction t;
-  t.write(coll_t::meta(), inc_oid, 0, bl.length(), bl);
-  t.truncate(coll_t::meta(), inc_oid, bl.length());
+  t.write(META_COLL, inc_oid, 0, bl.length(), bl);
+  t.truncate(META_COLL, inc_oid, bl.length());
   int ret = store->apply_transaction(t);
   if (ret) {
     cerr << "Failed to set inc-osdmap (" << inc_oid << "): " << ret << std::endl;
@@ -1153,7 +1152,7 @@ int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
 
 int get_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl)
 {
-  if (store->read(coll_t::meta(),
+  if (store->read(META_COLL,
 		  OSD::get_inc_osdmap_pobject_name(e),
 		  0, 0, bl) < 0) {
     return -ENOENT;
@@ -1176,7 +1175,7 @@ int set_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
     }
   }
   const ghobject_t full_oid = OSD::get_osdmap_pobject_name(e);
-  if (!store->exists(coll_t::meta(), full_oid)) {
+  if (!store->exists(META_COLL, full_oid)) {
     cerr << "osdmap (" << full_oid << ") does not exist." << std::endl;
     if (!force) {
       return -ENOENT;
@@ -1186,8 +1185,8 @@ int set_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
   if (dry_run)
     return 0;
   ObjectStore::Transaction t;
-  t.write(coll_t::meta(), full_oid, 0, bl.length(), bl);
-  t.truncate(coll_t::meta(), full_oid, bl.length());
+  t.write(META_COLL, full_oid, 0, bl.length(), bl);
+  t.truncate(META_COLL, full_oid, bl.length());
   int ret = store->apply_transaction(t);
   if (ret) {
     cerr << "Failed to set osdmap (" << full_oid << "): " << ret << std::endl;
@@ -2748,8 +2747,7 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
   return r;
 }
 
-int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsize, Formatter* formatter,
-	     ObjectStore::Sequencer &osr)
+int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsize, Formatter* formatter)
 {
   if (ghobj.hobj.is_snapdir()) {
     cerr << "Can't set the size of a snapdir" << std::endl;
@@ -2833,7 +2831,7 @@ int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsiz
       ::encode(ss, snapattr);
       t.setattr(coll, head, SS_ATTR, snapattr);
     }
-    r = store->apply_transaction(&osr, t);
+    r = store->apply_transaction(t);
     if (r < 0) {
       cerr << "Error writing object info: " << make_pair(coll, ghobj) << ", "
          << cpp_strerror(r) << std::endl;
@@ -2844,7 +2842,7 @@ int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsiz
 }
 
 int clear_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj,
-                  string arg, ObjectStore::Sequencer &osr)
+                  string arg)
 {
   SnapSet ss;
   int ret = get_snapset(store, coll, ghobj, ss);
@@ -2887,7 +2885,7 @@ int clear_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj,
     ::encode(ss, bl);
     ObjectStore::Transaction t;
     t.setattr(coll, ghobj, SS_ATTR, bl);
-    int r = store->apply_transaction(&osr, t);
+    int r = store->apply_transaction(t);
     if (r < 0) {
       cerr << "Error setting snapset on : " << make_pair(coll, ghobj) << ", "
 	   << cpp_strerror(r) << std::endl;
@@ -2932,8 +2930,7 @@ int remove_from(T &mv, string name, snapid_t cloneid, bool force)
   return 0;
 }
 
-int remove_clone(ObjectStore *store, coll_t coll, ghobject_t &ghobj, snapid_t cloneid, bool force,
-		     ObjectStore::Sequencer &osr)
+int remove_clone(ObjectStore *store, coll_t coll, ghobject_t &ghobj, snapid_t cloneid, bool force)
 {
   // XXX: Don't allow this if in a cache tier or former cache tier
   // bool allow_incomplete_clones() const {
@@ -2985,7 +2982,7 @@ int remove_clone(ObjectStore *store, coll_t coll, ghobject_t &ghobj, snapid_t cl
   ::encode(snapset, bl);
   ObjectStore::Transaction t;
   t.setattr(coll, ghobj, SS_ATTR, bl);
-  int r = store->apply_transaction(&osr, t);
+  int r = store->apply_transaction(t);
   if (r < 0) {
     cerr << "Error setting snapset on : " << make_pair(coll, ghobj) << ", "
 	 << cpp_strerror(r) << std::endl;
@@ -3764,7 +3761,7 @@ int main(int argc, char **argv)
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete") {
-    cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, "
+    cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, "
       "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)"
 	 << std::endl;
     usage(desc);
@@ -3971,7 +3968,7 @@ int main(int argc, char **argv)
 	  goto out;
 	}
 	uint64_t size = atoll(arg1.c_str());
-	ret = set_size(fs, coll, ghobj, size, formatter, *osr);
+	ret = set_size(fs, coll, ghobj, size, formatter);
 	goto out;
       } else if (objcmd == "clear-snapset") {
         // UNDOCUMENTED: For testing zap SnapSet
@@ -3981,7 +3978,7 @@ int main(int argc, char **argv)
 	  ret = 1;
 	  goto out;
 	}
-        ret = clear_snapset(fs, coll, ghobj, arg1, *osr);
+        ret = clear_snapset(fs, coll, ghobj, arg1);
         goto out;
       } else if (objcmd == "remove-clone-metadata") {
         // Extra arg
@@ -4001,7 +3998,7 @@ int main(int argc, char **argv)
 	  goto out;
 	}
         snapid_t cloneid = atoi(arg1.c_str());
-	ret = remove_clone(fs, coll, ghobj, cloneid, force, *osr);
+	ret = remove_clone(fs, coll, ghobj, cloneid, force);
 	goto out;
       }
       cerr << "Unknown object command '" << objcmd << "'" << std::endl;
@@ -4012,8 +4009,8 @@ int main(int argc, char **argv)
 
     bufferlist bl;
     map_epoch = 0;
-    r = PG::peek_map_epoch(fs, pgid, &map_epoch, &bl);
-    if (r < 0)
+    ret = PG::peek_map_epoch(fs, pgid, &map_epoch, &bl);
+    if (ret < 0)
       cerr << "peek_map_epoch returns an error" << std::endl;
 
     if (debug)
