@@ -195,11 +195,13 @@ ostream& operator<<(ostream& out, const hobject_t& o)
 {
   if (o.is_max())
     return out << "MAX";
+  out << o.pool << '/';
   out << std::hex << o.get_hash() << std::dec;
+  if (o.nspace.length())
+    out << ":" << o.nspace;
   if (o.get_key().length())
     out << "." << o.get_key();
   out << "/" << o.oid << "/" << o.snap;
-  out << "/" << o.nspace << "/" << o.pool;
   return out;
 }
 
