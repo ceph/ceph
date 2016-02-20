@@ -22,8 +22,8 @@ AioImageRequestWQ::AioImageRequestWQ(ImageCtx *image_ctx, const string &name,
   : ThreadPool::PointerWQ<AioImageRequest<> >(name, ti, 0, tp),
     m_image_ctx(*image_ctx),
     m_lock(util::unique_lock_name("AioImageRequestWQ::m_lock", this)),
-    m_write_blockers(0), m_in_progress_writes(0), m_queued_writes(0),
-    m_in_flight_ops(0), m_refresh_in_progress(false),
+    m_write_blockers(0), m_in_progress_writes(0), m_queued_reads(0),
+    m_queued_writes(0), m_in_flight_ops(0), m_refresh_in_progress(false),
     m_shutdown(false), m_on_shutdown(nullptr) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << ": ictx=" << image_ctx << dendl;
@@ -112,7 +112,17 @@ void AioImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
   }
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty()) {
+
+  // if journaling is enabled -- we need to replay the journal because
+  // it might contain an uncommitted write
+  bool lock_required;
+  {
+    RWLock::RLocker locker(m_lock);
+    lock_required = m_require_lock_on_read;
+  }
+
+  if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty() ||
+      lock_required) {
     queue(new AioImageRead(m_image_ctx, c, off, len, buf, pbl, op_flags));
   } else {
     AioImageRequest<>::aio_read(&m_image_ctx, c, off, len, buf, pbl, op_flags);
@@ -138,8 +148,7 @@ void AioImageRequestWQ::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
   }
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  if (m_image_ctx.non_blocking_aio || is_journal_required() ||
-      writes_blocked()) {
+  if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(new AioImageWrite(m_image_ctx, c, off, len, buf, op_flags));
   } else {
     AioImageRequest<>::aio_write(&m_image_ctx, c, off, len, buf, op_flags);
@@ -164,8 +173,7 @@ void AioImageRequestWQ::aio_discard(AioCompletion *c, uint64_t off,
   }
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  if (m_image_ctx.non_blocking_aio || is_journal_required() ||
-      writes_blocked()) {
+  if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(new AioImageDiscard(m_image_ctx, c, off, len));
   } else {
     AioImageRequest<>::aio_discard(&m_image_ctx, c, off, len);
@@ -188,8 +196,7 @@ void AioImageRequestWQ::aio_flush(AioCompletion *c, bool native_async) {
   }
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  if (m_image_ctx.non_blocking_aio || is_journal_required() ||
-      writes_blocked() || !writes_empty()) {
+  if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty()) {
     queue(new AioImageFlush(m_image_ctx, c));
   } else {
     AioImageRequest<>::aio_flush(&m_image_ctx, c);
@@ -216,6 +223,12 @@ void AioImageRequestWQ::shut_down(Context *on_shutdown) {
 
   // ensure that all in-flight IO is flushed
   m_image_ctx.flush(on_shutdown);
+}
+
+bool AioImageRequestWQ::is_lock_request_needed() const {
+  RWLock::RLocker locker(m_lock);
+  return (m_queued_writes.read() > 0 ||
+          (m_require_lock_on_read && m_queued_reads.read() > 0));
 }
 
 void AioImageRequestWQ::block_writes() {
@@ -264,18 +277,45 @@ void AioImageRequestWQ::unblock_writes() {
   }
 }
 
+void AioImageRequestWQ::set_require_lock_on_read() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << __func__ << dendl;
+
+  RWLock::WLocker locker(m_lock);
+  m_require_lock_on_read = true;
+}
+
+void AioImageRequestWQ::clear_require_lock_on_read() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << __func__ << dendl;
+
+  {
+    RWLock::WLocker locker(m_lock);
+    if (!m_require_lock_on_read) {
+      return;
+    }
+
+    m_require_lock_on_read = false;
+  }
+  signal();
+}
+
 void *AioImageRequestWQ::_void_dequeue() {
   AioImageRequest<> *peek_item = front();
   if (peek_item == NULL || m_refresh_in_progress) {
     return NULL;
   }
 
-  if (peek_item->is_write_op()) {
+  {
     RWLock::RLocker locker(m_lock);
-    if (m_write_blockers > 0) {
-      return NULL;
+    if (peek_item->is_write_op()) {
+      if (m_write_blockers > 0) {
+        return NULL;
+      }
+      m_in_progress_writes.inc();
+    } else if (m_require_lock_on_read) {
+      return nullptr;
     }
-    m_in_progress_writes.inc();
   }
 
   AioImageRequest<> *item = reinterpret_cast<AioImageRequest<> *>(
@@ -317,6 +357,9 @@ void AioImageRequestWQ::process(AioImageRequest<> *req) {
           !m_write_blocker_contexts.empty()) {
         writes_blocked = true;
       }
+    } else {
+      assert(m_queued_reads.read() > 0);
+      m_queued_reads.dec();
     }
   }
 
@@ -361,12 +404,6 @@ void AioImageRequestWQ::finish_in_flight_op() {
   m_image_ctx.flush(m_on_shutdown);
 }
 
-bool AioImageRequestWQ::is_journal_required() const {
-  // TODO eliminate once journal startup state is integrated
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-  return (m_image_ctx.journal != NULL);
-}
-
 bool AioImageRequestWQ::is_lock_required() const {
   assert(m_image_ctx.owner_lock.is_locked());
   if (m_image_ctx.exclusive_lock == NULL) {
@@ -385,11 +422,14 @@ void AioImageRequestWQ::queue(AioImageRequest<> *req) {
   bool write_op = req->is_write_op();
   if (write_op) {
     m_queued_writes.inc();
+  } else {
+    m_queued_reads.inc();
   }
 
   ThreadPool::PointerWQ<AioImageRequest<> >::queue(req);
 
-  if (write_op && is_lock_required()) {
+  if ((write_op && is_lock_required()) ||
+      (!write_op && m_require_lock_on_read)) {
     m_image_ctx.exclusive_lock->request_lock(nullptr);
   }
 }

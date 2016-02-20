@@ -80,12 +80,24 @@ public:
                   .WillRepeatedly(Return(1234567890));
   }
 
+  void expect_set_require_lock_on_read(MockImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.aio_work_queue, set_require_lock_on_read());
+  }
+
+  void expect_clear_require_lock_on_read(MockImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.aio_work_queue, clear_require_lock_on_read());
+  }
+
   void expect_block_writes(MockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.aio_work_queue, block_writes(_))
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
+    if ((mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
+      expect_set_require_lock_on_read(mock_image_ctx);
+    }
   }
 
   void expect_unblock_writes(MockImageCtx &mock_image_ctx) {
+    expect_clear_require_lock_on_read(mock_image_ctx);
     EXPECT_CALL(*mock_image_ctx.aio_work_queue, unblock_writes());
   }
 
@@ -112,7 +124,7 @@ public:
         expect_unblock_writes(mock_image_ctx);
       }
       expect_notify_released_lock(mock_image_ctx);
-      expect_writes_empty(mock_image_ctx);
+      expect_is_lock_request_needed(mock_image_ctx, false);
     }
   }
 
@@ -133,9 +145,9 @@ public:
                   .Times(1);
   }
 
-  void expect_writes_empty(MockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.aio_work_queue, writes_empty())
-                  .WillRepeatedly(Return(true));
+  void expect_is_lock_request_needed(MockImageCtx &mock_image_ctx, bool ret) {
+    EXPECT_CALL(*mock_image_ctx.aio_work_queue, is_lock_request_needed())
+                  .WillRepeatedly(Return(ret));
   }
 
   void expect_flush_notifies(MockImageCtx &mock_image_ctx) {
@@ -148,7 +160,7 @@ public:
     C_SaferCond ctx;
     {
       RWLock::WLocker owner_locker(mock_image_ctx.owner_lock);
-      exclusive_lock.init(&ctx);
+      exclusive_lock.init(mock_image_ctx.features, &ctx);
     }
     return ctx.wait();
   }
@@ -517,7 +529,7 @@ TEST_F(TestMockExclusiveLock, ConcurrentRequests) {
   EXPECT_CALL(release, send())
                 .WillOnce(Notify(&wait_for_send_ctx2));
   expect_notify_released_lock(mock_image_ctx);
-  expect_writes_empty(mock_image_ctx);
+  expect_is_lock_request_needed(mock_image_ctx, false);
 
   C_SaferCond try_request_ctx1;
   {
