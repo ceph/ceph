@@ -3381,7 +3381,6 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
     uint64_t it_off = miter->first - srcoff + dstoff;
     r = _do_copy_range(from, to, miter->first, miter->second, it_off, true);
     if (r < 0) {
-      r = -errno;
       derr << "FileStore::_do_copy_range: copy error at " << miter->first << "~" << miter->second
              << " to " << it_off << ", " << cpp_strerror(r) << dendl;
       break;
@@ -3470,13 +3469,19 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 
     actual = ::lseek64(from, srcoff, SEEK_SET);
     if (actual != (int64_t)srcoff) {
-      r = -errno;
+      if (actual < 0)
+        r = -errno;
+      else
+        r = -EINVAL;
       derr << "lseek64 to " << srcoff << " got " << cpp_strerror(r) << dendl;
       return r;
     }
     actual = ::lseek64(to, dstoff, SEEK_SET);
     if (actual != (int64_t)dstoff) {
-      r = -errno;
+      if (actual < 0)
+        r = -errno;
+      else
+        r = -EINVAL;
       derr << "lseek64 to " << dstoff << " got " << cpp_strerror(r) << dendl;
       return r;
     }
