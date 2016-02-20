@@ -209,7 +209,7 @@ public:
 
   virtual int verify_params();
   virtual int get_params();
-  int get_data(bufferlist& bl);
+  virtual int get_data(bufferlist& bl);
 };
 
 class RGWPostObj_ObjStore : public RGWPostObj
@@ -265,7 +265,7 @@ public:
   RGWPutACLs_ObjStore() {}
   ~RGWPutACLs_ObjStore() {}
 
-  int get_params();
+  virtual int get_params();
 };
 
 class RGWGetCORS_ObjStore : public RGWGetCORS {
@@ -303,7 +303,7 @@ public:
   RGWCompleteMultipart_ObjStore() {}
   ~RGWCompleteMultipart_ObjStore() {}
 
-  int get_params();
+  virtual int get_params();
 };
 
 class RGWAbortMultipart_ObjStore : public RGWAbortMultipart {
@@ -339,7 +339,7 @@ public:
   RGWDeleteMultiObj_ObjStore() {}
   ~RGWDeleteMultiObj_ObjStore() {}
 
-  int get_params();
+  virtual int get_params();
 };
 
 class RGWRESTOp : public RGWOp {

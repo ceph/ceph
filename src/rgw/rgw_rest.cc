@@ -1001,7 +1001,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
     bufferptr bp(cl);
 
     int read_len; /* cio->read() expects int * */
-    int r = STREAM_IO(s)->read(bp.c_str(), cl, &read_len);
+    int r = STREAM_IO(s)->read(bp.c_str(), cl, &read_len, true);
     len = read_len;
     if (r < 0)
       return r;
@@ -1046,7 +1046,7 @@ int RGWPutACLs_ObjStore::get_params()
        return op_ret;
     }
     int read_len;
-    int r = STREAM_IO(s)->read(data, cl, &read_len);
+    int r = STREAM_IO(s)->read(data, cl, &read_len, s->aws4_auth_needs_complete);
     len = read_len;
     if (r < 0)
       return r;
@@ -1071,7 +1071,7 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen,
 
   int read_len = 0, len = 0;
   do {
-    int r = STREAM_IO(s)->read(data + len, need_to_read, &read_len);
+    int r = STREAM_IO(s)->read(data + len, need_to_read, &read_len, s->aws4_auth_needs_complete);
     if (r < 0) {
       free(data);
       return r;
@@ -1125,7 +1125,7 @@ int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen,
     if (!data) {
        return -ENOMEM;
     }
-    int ret = STREAM_IO(s)->read(data, cl, &len);
+    int ret = STREAM_IO(s)->read(data, cl, &len, s->aws4_auth_needs_complete);
     if (ret < 0) {
       free(data);
       return ret;
@@ -1230,7 +1230,7 @@ int RGWDeleteMultiObj_ObjStore::get_params()
       return op_ret;
     }
     int read_len;
-    op_ret = STREAM_IO(s)->read(data, cl, &read_len);
+    op_ret = STREAM_IO(s)->read(data, cl, &read_len, s->aws4_auth_needs_complete);
     len = read_len;
     if (op_ret < 0)
       return op_ret;

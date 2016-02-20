@@ -44,18 +44,22 @@ class RGWStreamIO : public RGWClientIO {
   size_t bytes_sent;
   size_t bytes_received;
 
+  SHA256 *sha256_hash;
+
 protected:
   virtual int write_data(const char *buf, int len) = 0;
   virtual int read_data(char *buf, int max) = 0;
 
 public:
   virtual ~RGWStreamIO() {}
-  RGWStreamIO() : bytes_sent(0), bytes_received(0) {}
+  RGWStreamIO() : bytes_sent(0), bytes_received(0), sha256_hash(nullptr) {}
 
   int print(const char *format, ...);
   int write(const char *buf, int len);
   virtual void flush() = 0;
-  int read(char *buf, int max, int *actual);
+  int read(char *buf, int max, int *actual, bool hash = false);
+
+  string grab_aws4_sha256_hash();
 
   virtual int send_status(int status, const char *status_name) = 0;
   virtual int send_100_continue() = 0;
