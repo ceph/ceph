@@ -20,6 +20,22 @@ class SELinux(Task):
     must first be enabled and the filesystem must have been labeled.
 
     On teardown, also checks the audit log for any denials.
+    By default selinux will ignore few known denials(listed below). The test
+    will fail for any other denials seen in audit.log. For the test not to
+    fail for other denials one can add the overrides with appropriate escapes
+    overrides:
+       selinux:
+         whitelist:
+         - 'name="cephtest"'
+         - 'dmidecode'
+         - 'comm="logrotate"'
+         - 'comm="idontcare"'
+
+    Known denials which are ignored:
+       comm="dmidecode"
+       chronyd.service
+       name="cephtest"
+
 
     Automatically skips hosts running non-RPM-based OSes.
     """
@@ -89,10 +105,15 @@ class SELinux(Task):
         Look for denials in the audit log
         """
         all_denials = dict()
-        ignore_known_denials = '\'\(' + 'comm="dmidecode"'
         # dmidecode issue https://bugzilla.redhat.com/show_bug.cgi?id=1289274
-        ignore_known_denials = ignore_known_denials + '\|' + 'chronyd.service' + '\)\''
-        # tracker for chronyd issue http://tracker.ceph.com/issues/14244
+        # tracker for chronyd/cephtest issue http://tracker.ceph.com/issues/14244
+        known_denials = ['comm="dmidecode"',
+			 'chronyd.service',
+			 'name="cephtest"',]
+        se_whitelist = self.config.get('whitelist', [])
+        if se_whitelist:
+            known_denials.extend(se_whitelist)
+        ignore_known_denials = '\'\(' + str.join('\|', known_denials) + '\)\''
         for remote in self.cluster.remotes.iterkeys():
             proc = remote.run(
                 args=['sudo', 'grep', 'avc: .*denied',
