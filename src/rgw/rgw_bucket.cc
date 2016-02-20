@@ -402,7 +402,7 @@ int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& b
     return ret;
 
 
-  RGWRados::Bucket target(store, bucket);
+  RGWRados::Bucket target(store, info);
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.list_versions = true;
@@ -493,7 +493,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
     return ret;
 
 
-  RGWRados::Bucket target(store, info.bucket);
+  RGWRados::Bucket target(store, info);
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.list_versions = true;
@@ -868,7 +868,15 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   map<string, bool> meta_objs;
   map<rgw_obj_key, string> all_objs;
 
-  RGWRados::Bucket target(store, bucket);
+  RGWBucketInfo bucket_info;
+  RGWObjectCtx obj_ctx(store);
+  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: " << __func__ << "(): get_bucket_instance_info(bucket=" << bucket << ") returned r=" << r << dendl;
+    return r;
+  }
+
+  RGWRados::Bucket target(store, bucket_info);
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.list_versions = true;

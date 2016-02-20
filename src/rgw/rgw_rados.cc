@@ -2421,6 +2421,7 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
   return 0;
 }
 
+
 /** 
  * get listing of the objects in a bucket.
  * bucket: bucket to list contents of
@@ -3471,7 +3472,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
 
   bool versioned_op = (target->versioning_enabled() || is_olh || versioned_target);
 
-  RGWRados::Bucket bop(store, bucket);
+  RGWRados::Bucket bop(store, target->get_bucket_info());
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
 
   if (versioned_op) {
@@ -4894,7 +4895,7 @@ int RGWRados::Object::Delete::delete_obj()
 
   bool ret_not_existed = (!state->exists);
 
-  RGWRados::Bucket bop(store, bucket);
+  RGWRados::Bucket bop(store, target->get_bucket_info());
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
 
   index_op.set_bilog_flags(params.bilog_flags);
@@ -4990,7 +4991,16 @@ int RGWRados::delete_obj_index(rgw_obj& obj)
   get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
 
   string tag;
-  RGWRados::Bucket bop(this, bucket);
+  RGWObjectCtx obj_ctx(this);
+
+  RGWBucketInfo bucket_info;
+  int ret = get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: " << __func__ << "() get_bucket_instance_info(bucket=" << bucket << ") returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  RGWRados::Bucket bop(this, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, NULL);
 
   int r = index_op.complete_del(-1 /* pool */, 0, NULL);
@@ -5472,8 +5482,17 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
   if (!op.size())
     return 0;
 
+  RGWObjectCtx obj_ctx(this);
+
+  RGWBucketInfo bucket_info;
+  int ret = get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: " << __func__ << "() get_bucket_instance_info(bucket=" << bucket << ") returned ret=" << ret << dendl;
+    return ret;
+  }
+
   bufferlist bl;
-  RGWRados::Bucket bop(this, bucket);
+  RGWRados::Bucket bop(this, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
 
   string tag;
@@ -5722,6 +5741,9 @@ int RGWRados::SystemObject::Read::stat(RGWObjVersionTracker *objv_tracker)
 
 int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op)
 {
+  if (blind) {
+    return 0;
+  }
   RGWRados *store = target->get_store();
   BucketShard *bs;
   int ret = get_bucket_shard(&bs);
@@ -5752,6 +5774,9 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint
                                     utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
                                     list<rgw_obj_key> *remove_objs)
 {
+  if (blind) {
+    return 0;
+  }
   RGWRados *store = target->get_store();
   BucketShard *bs;
   int ret = get_bucket_shard(&bs);
@@ -5784,6 +5809,9 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint
 int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
                                                 list<rgw_obj_key> *remove_objs)
 {
+  if (blind) {
+    return 0;
+  }
   RGWRados *store = target->get_store();
   BucketShard *bs;
   int ret = get_bucket_shard(&bs);
@@ -5797,6 +5825,9 @@ int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
 
 int RGWRados::Bucket::UpdateIndex::cancel()
 {
+  if (blind) {
+    return 0;
+  }
   RGWRados *store = target->get_store();
   BucketShard *bs;
   int ret = get_bucket_shard(&bs);
@@ -9288,7 +9319,7 @@ int RGWRados::delete_obj_aio(rgw_obj& obj, rgw_bucket& bucket,
   }
 
   if (keep_index_consistent) {
-    RGWRados::Bucket bop(this, bucket_info.bucket);
+    RGWRados::Bucket bop(this, bucket_info);
     RGWRados::Bucket::UpdateIndex index_op(&bop, obj, astate);
 
     ret = index_op.prepare(CLS_RGW_OP_DEL);
