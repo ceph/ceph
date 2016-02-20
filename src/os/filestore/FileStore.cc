@@ -4119,7 +4119,6 @@ int FileStore::getattrs(const coll_t& _cid, const ghobject_t& oid, map<string,bu
   if (r < 0) {
     goto out;
   }
-  lfn_close(fd);
 
   if (!spill_out) {
     dout(10) << __func__ << " no xattr exists in object_map r = " << r << dendl;
