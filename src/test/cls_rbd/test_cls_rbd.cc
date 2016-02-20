@@ -1293,26 +1293,36 @@ TEST_F(TestClsRbd, mirror) {
 
   ASSERT_EQ(-EINVAL, mirror_peer_add(&ioctx, "uuid1", "cluster1", "client"));
 
-  bool enabled;
-  ASSERT_EQ(0, mirror_is_enabled(&ioctx, &enabled));
-  ASSERT_FALSE(enabled);
-  ASSERT_EQ(0, mirror_set_enabled(&ioctx, true));
-  ASSERT_EQ(0, mirror_is_enabled(&ioctx, &enabled));
-  ASSERT_TRUE(enabled);
+  cls::rbd::MirrorMode mirror_mode;
+  ASSERT_EQ(0, mirror_mode_get(&ioctx, &mirror_mode));
+  ASSERT_EQ(cls::rbd::MIRROR_MODE_DISABLED, mirror_mode);
+
+  ASSERT_EQ(0, mirror_mode_set(&ioctx, cls::rbd::MIRROR_MODE_IMAGE));
+  ASSERT_EQ(0, mirror_mode_get(&ioctx, &mirror_mode));
+  ASSERT_EQ(cls::rbd::MIRROR_MODE_IMAGE, mirror_mode);
+
+  ASSERT_EQ(0, mirror_mode_set(&ioctx, cls::rbd::MIRROR_MODE_POOL));
+  ASSERT_EQ(0, mirror_mode_get(&ioctx, &mirror_mode));
+  ASSERT_EQ(cls::rbd::MIRROR_MODE_POOL, mirror_mode);
 
   ASSERT_EQ(0, mirror_peer_add(&ioctx, "uuid1", "cluster1", "client"));
   ASSERT_EQ(0, mirror_peer_add(&ioctx, "uuid2", "cluster2", "admin"));
-  ASSERT_EQ(-EEXIST, mirror_peer_add(&ioctx, "uuid2", "cluster3", "foo"));
+  ASSERT_EQ(-ESTALE, mirror_peer_add(&ioctx, "uuid2", "cluster3", "foo"));
   ASSERT_EQ(-EEXIST, mirror_peer_add(&ioctx, "uuid3", "cluster1", "foo"));
-  ASSERT_EQ(0, mirror_peer_add(&ioctx, "uuid3", "cluster3", "admin"));
+  ASSERT_EQ(0, mirror_peer_add(&ioctx, "uuid3", "cluster3", "admin", 123));
+  ASSERT_EQ(-EEXIST, mirror_peer_add(&ioctx, "uuid4", "cluster3", "admin"));
+  ASSERT_EQ(-EEXIST, mirror_peer_add(&ioctx, "uuid4", "cluster3", "admin", 123));
+  ASSERT_EQ(0, mirror_peer_add(&ioctx, "uuid4", "cluster3", "admin", 234));
 
   ASSERT_EQ(0, mirror_peer_list(&ioctx, &peers));
   std::vector<cls::rbd::MirrorPeer> expected_peers = {
-    {"uuid1", "cluster1", "client"},
-    {"uuid2", "cluster2", "admin"},
-    {"uuid3", "cluster3", "admin"}};
+    {"uuid1", "cluster1", "client", -1},
+    {"uuid2", "cluster2", "admin", -1},
+    {"uuid3", "cluster3", "admin", 123},
+    {"uuid4", "cluster3", "admin", 234}};
   ASSERT_EQ(expected_peers, peers);
 
+  ASSERT_EQ(0, mirror_peer_remove(&ioctx, "uuid5"));
   ASSERT_EQ(0, mirror_peer_remove(&ioctx, "uuid4"));
   ASSERT_EQ(0, mirror_peer_remove(&ioctx, "uuid2"));
 
@@ -1324,10 +1334,10 @@ TEST_F(TestClsRbd, mirror) {
 
   ASSERT_EQ(0, mirror_peer_list(&ioctx, &peers));
   expected_peers = {
-    {"uuid1", "cluster1", "new client"},
-    {"uuid3", "new cluster", "admin"}};
+    {"uuid1", "cluster1", "new client", -1},
+    {"uuid3", "new cluster", "admin", 123}};
   ASSERT_EQ(expected_peers, peers);
-  ASSERT_EQ(-EBUSY, mirror_set_enabled(&ioctx, false));
+  ASSERT_EQ(-EBUSY, mirror_mode_set(&ioctx, cls::rbd::MIRROR_MODE_DISABLED));
 
   ASSERT_EQ(0, mirror_peer_remove(&ioctx, "uuid3"));
   ASSERT_EQ(0, mirror_peer_remove(&ioctx, "uuid1"));
@@ -1335,7 +1345,7 @@ TEST_F(TestClsRbd, mirror) {
   expected_peers = {};
   ASSERT_EQ(expected_peers, peers);
 
-  ASSERT_EQ(0, mirror_set_enabled(&ioctx, false));
-  ASSERT_EQ(0, mirror_is_enabled(&ioctx, &enabled));
-  ASSERT_FALSE(enabled);
+  ASSERT_EQ(0, mirror_mode_set(&ioctx, cls::rbd::MIRROR_MODE_DISABLED));
+  ASSERT_EQ(0, mirror_mode_get(&ioctx, &mirror_mode));
+  ASSERT_EQ(cls::rbd::MIRROR_MODE_DISABLED, mirror_mode);
 }

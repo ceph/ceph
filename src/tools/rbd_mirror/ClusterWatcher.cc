@@ -94,14 +94,14 @@ void ClusterWatcher::read_configs(map<peer_t, set<int64_t> > *peer_configs,
       continue;
     }
 
-    bool enabled;
-    r = librbd::mirror_is_enabled(ioctx, &enabled);
+    rbd_mirror_mode_t mirror_mode;
+    r = librbd::mirror_mode_get(ioctx, &mirror_mode);
     if (r < 0) {
       derr << "could not tell whether mirroring was enabled for " << pool_name
 	   << " : " << cpp_strerror(r) << dendl;
       continue;
     }
-    if (!enabled) {
+    if (mirror_mode == RBD_MIRROR_MODE_DISABLED) {
       dout(10) << "mirroring is disabled for pool " << pool_name << dendl;
       continue;
     }

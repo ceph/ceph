@@ -15,18 +15,25 @@ namespace ceph { class Formatter; }
 namespace cls {
 namespace rbd {
 
+enum MirrorMode {
+  MIRROR_MODE_DISABLED = 0,
+  MIRROR_MODE_IMAGE    = 1,
+  MIRROR_MODE_POOL     = 2
+};
+
 struct MirrorPeer {
   MirrorPeer() {
   }
-  MirrorPeer(const std::string &cluster_uuid, const std::string &cluster_name,
-             const std::string &client_name)
-    : cluster_uuid(cluster_uuid), cluster_name(cluster_name),
-      client_name(client_name) {
+  MirrorPeer(const std::string &uuid, const std::string &cluster_name,
+             const std::string &client_name, int64_t pool_id)
+    : uuid(uuid), cluster_name(cluster_name), client_name(client_name),
+      pool_id(pool_id) {
   }
 
-  std::string cluster_uuid;
+  std::string uuid;
   std::string cluster_name;
   std::string client_name;
+  int64_t pool_id = -1;
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &it);
@@ -37,6 +44,7 @@ struct MirrorPeer {
   bool operator==(const MirrorPeer &rhs) const;
 };
 
+std::ostream& operator<<(std::ostream& os, const MirrorMode& mirror_mode);
 std::ostream& operator<<(std::ostream& os, const MirrorPeer& peer);
 
 WRITE_CLASS_ENCODER(MirrorPeer);

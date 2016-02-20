@@ -756,12 +756,13 @@
   
   rbd help mirror pool enable
   usage: rbd mirror pool enable [--pool <pool>] 
-                                <pool-name> 
+                                <pool-name> <mode> 
   
   Enable RBD mirroring by default within a pool.
   
   Positional arguments
     <pool-name>          pool name
+    <mode>               mirror mode [image or pool]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -785,44 +786,42 @@
   usage: rbd mirror pool peer add [--pool <pool>] 
                                   [--remote-client-name <remote-client-name>] 
                                   [--remote-cluster <remote-cluster>] 
-                                  [--remote-cluster-uuid <remote-cluster-uuid>] 
                                   <pool-name> <remote-cluster-spec> 
   
   Add a mirroring peer to a pool.
   
   Positional arguments
-    <pool-name>               pool name
-    <remote-cluster-spec>     remote cluster spec
-                              (example: [<client name>@]<cluster name>
+    <pool-name>              pool name
+    <remote-cluster-spec>    remote cluster spec
+                             (example: [<client name>@]<cluster name>
   
   Optional arguments
-    -p [ --pool ] arg         pool name
-    --remote-client-name arg  remote client name
-    --remote-cluster arg      remote cluster name
-    --remote-cluster-uuid arg remote cluster uuid
+    -p [ --pool ] arg        pool name
+    --remote-client-name arg remote client name
+    --remote-cluster arg     remote cluster name
   
   rbd help mirror pool peer remove
   usage: rbd mirror pool peer remove [--pool <pool>] 
-                                     <pool-name> <cluster-uuid> 
+                                     <pool-name> <uuid> 
   
   Remove a mirroring peer from a pool.
   
   Positional arguments
     <pool-name>          pool name
-    <cluster-uuid>       cluster UUID
+    <uuid>               peer uuid
   
   Optional arguments
     -p [ --pool ] arg    pool name
   
   rbd help mirror pool peer set
   usage: rbd mirror pool peer set [--pool <pool>] 
-                                  <pool-name> <cluster-uuid> <key> <value> 
+                                  <pool-name> <uuid> <key> <value> 
   
   Update mirroring peer settings.
   
   Positional arguments
     <pool-name>          pool name
-    <cluster-uuid>       cluster UUID
+    <uuid>               peer uuid
     <key>                peer parameter [client or cluster]
     <value>              new client or cluster name
   
