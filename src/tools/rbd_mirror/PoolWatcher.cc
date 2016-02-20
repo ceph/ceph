@@ -95,14 +95,14 @@ void PoolWatcher::refresh_images(bool reschedule)
 
     // TODO: read mirrored images from mirroring settings object. For
     // now just treat all images in a pool with mirroring enabled as mirrored
-    bool enabled;
-    r = librbd::mirror_is_enabled(ioctx, &enabled);
+    rbd_mirror_mode_t mirror_mode;
+    r = librbd::mirror_mode_get(ioctx, &mirror_mode);
     if (r < 0) {
       derr << "could not tell whether mirroring was enabled for " << pool_name
 	   << " : " << cpp_strerror(r) << dendl;
       continue;
     }
-    if (!enabled) {
+    if (mirror_mode == RBD_MIRROR_MODE_DISABLED) {
       dout(20) << "pool " << pool_name << " has mirroring disabled" << dendl;
       continue;
     }
