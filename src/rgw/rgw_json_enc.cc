@@ -808,6 +808,7 @@ void RGWZonePlacementInfo::dump(Formatter *f) const
   encode_json("index_pool", index_pool, f);
   encode_json("data_pool", data_pool, f);
   encode_json("data_extra_pool", data_extra_pool, f);
+  encode_json("index_type", (uint32_t)index_type, f);
 }
 
 void RGWZonePlacementInfo::decode_json(JSONObj *obj)
@@ -815,6 +816,9 @@ void RGWZonePlacementInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("index_pool", index_pool, obj);
   JSONDecoder::decode_json("data_pool", data_pool, obj);
   JSONDecoder::decode_json("data_extra_pool", data_extra_pool, obj);
+  uint32_t it;
+  JSONDecoder::decode_json("index_type", it, obj);
+  index_type = (RGWBucketIndexType)it;
 }
 
 void RGWZoneParams::decode_json(JSONObj *obj)

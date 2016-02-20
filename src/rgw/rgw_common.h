@@ -851,6 +851,11 @@ enum RGWBucketFlags {
   BUCKET_VERSIONS_SUSPENDED = 0x4,
 };
 
+enum RGWBucketIndexType {
+  RGWBIType_Normal = 0,
+  RGWBIType_Indexless = 1,
+};
+
 struct RGWBucketInfo
 {
   enum BIShardsHashType {
@@ -885,8 +890,10 @@ struct RGWBucketInfo
   bool has_website;
   RGWBucketWebsiteConf website_conf;
 
+  RGWBucketIndexType index_type;
+
   void encode(bufferlist& bl) const {
-     ENCODE_START(14, 4, bl);
+     ENCODE_START(15, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner.id, bl);
      ::encode(flags, bl);
@@ -904,6 +911,7 @@ struct RGWBucketInfo
      if (has_website) {
        ::encode(website_conf, bl);
      }
+     ::encode((uint32_t)index_type, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -944,6 +952,13 @@ struct RGWBucketInfo
        } else {
          website_conf = RGWBucketWebsiteConf();
        }
+     }
+     if (struct_v >= 15) {
+       uint32_t it;
+       ::decode(it, bl);
+       index_type = (RGWBucketIndexType)it;
+     } else {
+       index_type = RGWBIType_Normal;
      }
      DECODE_FINISH(bl);
   }
