@@ -2660,10 +2660,12 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 			    bool exclusive)
 {
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
-  string selected_placement_rule;
+  string selected_placement_rule_name;
+  RGWZonePlacementInfo rule_info;
+
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
-    ret = select_bucket_placement(owner, region_name, placement_rule, bucket.name, bucket, &selected_placement_rule);
+    ret = select_bucket_placement(owner, region_name, placement_rule, bucket.name, bucket, &selected_placement_rule_name, &rule_info);
     if (ret < 0)
       return ret;
     bufferlist bl;
@@ -2704,7 +2706,8 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.bucket = bucket;
     info.owner = owner.user_id;
     info.region = region_name;
-    info.placement_rule = selected_placement_rule;
+    info.placement_rule = selected_placement_rule_name;
+    info.index_type = rule_info.index_type;
     info.num_shards = bucket_index_max_shards;
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
     if (!creation_time)
@@ -2759,7 +2762,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 }
 
 int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& region_name, const string& request_rule,
-                                         const string& bucket_name, rgw_bucket& bucket, string *pselected_rule)
+                                         const string& bucket_name, rgw_bucket& bucket, string *pselected_rule, RGWZonePlacementInfo *rule_info)
 {
   /* first check that rule exists within the specific region */
   map<string, RGWRegion>::iterator riter = region_map.regions.find(region_name);
@@ -2801,10 +2804,11 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& r
   if (pselected_rule)
     *pselected_rule = rule;
   
-  return set_bucket_location_by_rule(rule, bucket_name, bucket);
+  return set_bucket_location_by_rule(rule, bucket_name, bucket, rule_info);
 }
 
-int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std::string& bucket_name, rgw_bucket& bucket)
+int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std::string& bucket_name, rgw_bucket& bucket,
+					  RGWZonePlacementInfo *rule_info)
 {
   bucket.name = bucket_name;
 
@@ -2812,7 +2816,7 @@ int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std
     /* we can only reach here if we're trying to set a bucket location from a bucket
      * created on a different zone, using a legacy / default pool configuration
      */
-    return select_legacy_bucket_placement(bucket_name, bucket);
+      return select_legacy_bucket_placement(bucket_name, bucket, rule_info);
   }
 
   /*
@@ -2839,24 +2843,31 @@ int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std
   bucket.data_extra_pool = placement_info.data_extra_pool;
   bucket.index_pool = placement_info.index_pool;
 
+  if (rule_info) {
+    *rule_info = placement_info;
+  }
+
   return 0;
 
 }
 
 int RGWRados::select_bucket_placement(RGWUserInfo& user_info, const string& region_name, const string& placement_rule,
-                                      const string& bucket_name, rgw_bucket& bucket, string *pselected_rule)
+                                      const string& bucket_name, rgw_bucket& bucket, string *pselected_rule_name,
+				      RGWZonePlacementInfo *rule_info)
 {
   if (!zone.placement_pools.empty()) {
-    return select_new_bucket_location(user_info, region_name, placement_rule, bucket_name, bucket, pselected_rule);
+    return select_new_bucket_location(user_info, region_name, placement_rule, bucket_name, bucket, pselected_rule_name, rule_info);
   }
 
-  if (pselected_rule)
-    pselected_rule->clear();
+  if (pselected_rule_name) {
+    pselected_rule_name->clear();
+  }
 
-  return select_legacy_bucket_placement(bucket_name, bucket);
+	  return select_legacy_bucket_placement(bucket_name, bucket, rule_info);
 }
 
-int RGWRados::select_legacy_bucket_placement(const string& bucket_name, rgw_bucket& bucket)
+int RGWRados::select_legacy_bucket_placement(const string& bucket_name, rgw_bucket& bucket,
+                                             RGWZonePlacementInfo *rule_info)
 {
   bufferlist map_bl;
   map<string, bufferlist> m;
@@ -2930,6 +2941,11 @@ read_omap:
   bucket.data_pool = pool_name;
   bucket.index_pool = pool_name;
   bucket.name = bucket_name;
+
+  rule_info->data_pool = pool_name;
+  rule_info->data_extra_pool = pool_name;
+  rule_info->index_pool = pool_name;
+  rule_info->index_type = RGWBIType_Normal;
 
   return 0;
 
