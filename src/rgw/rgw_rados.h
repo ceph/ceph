@@ -2298,14 +2298,16 @@ public:
 
   class Bucket {
     RGWRados *store;
+    RGWBucketInfo bucket_info;
     rgw_bucket& bucket;
     int shard_id;
 
   public:
-    Bucket(RGWRados *_store, rgw_bucket& _bucket) : store(_store), bucket(_bucket), shard_id(RGW_NO_SHARD) {}
-
+    Bucket(RGWRados *_store, RGWBucketInfo& _bucket_info) : store(_store), bucket_info(_bucket_info), bucket(bucket_info.bucket),
+                                                            shard_id(RGW_NO_SHARD) {}
     RGWRados *get_store() { return store; }
     rgw_bucket& get_bucket() { return bucket; }
+    RGWBucketInfo& get_bucket_info() { return bucket_info; }
 
     int get_shard_id() { return shard_id; }
     void set_shard_id(int id) {
@@ -2320,10 +2322,13 @@ public:
       uint16_t bilog_flags;
       BucketShard bs;
       bool bs_initialized;
+      bool blind;
     public:
 
       UpdateIndex(RGWRados::Bucket *_target, rgw_obj& _obj, RGWObjState *_state) : target(_target), obj(_obj), obj_state(_state), bilog_flags(0),
-                                                                                   bs(target->get_store()), bs_initialized(false) {}
+                                                                                   bs(target->get_store()), bs_initialized(false) {
+                                                                                     blind = (target->get_bucket_info().index_type == RGWBIType_Indexless);
+                                                                                   }
 
       int get_bucket_shard(BucketShard **pbs) {
         if (!bs_initialized) {
