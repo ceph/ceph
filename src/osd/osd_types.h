@@ -2987,6 +2987,10 @@ struct object_info_t {
   object_info_t(bufferlist& bl) {
     decode(bl);
   }
+  object_info_t operator=(bufferlist& bl) {
+    decode(bl);
+    return *this;
+  }
 };
 WRITE_CLASS_ENCODER(object_info_t)
 
