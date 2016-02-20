@@ -1829,7 +1829,7 @@ void RGWCreateBucket::execute()
     op_ret = store->select_bucket_placement(*(s->user), zonegroup_id,
 					    placement_rule,
 					    s->bucket_tenant, s->bucket_name,
-					    bucket, &selected_placement_rule);
+					    bucket, &selected_placement_rule, nullptr);
     if (selected_placement_rule != s->bucket_info.placement_rule) {
       op_ret = -EEXIST;
       return;

@@ -1843,18 +1843,21 @@ public:
       parse_bucket(entry, tenant_name, bucket_name);
 
       rgw_bucket bucket;
+      RGWZonePlacementInfo rule_info;
       ret = store->set_bucket_location_by_rule(bci.info.placement_rule,
-                                           tenant_name, bucket_name, bucket);
+                                           tenant_name, bucket_name, bucket, &rule_info);
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
         return ret;
       }
       bci.info.bucket.data_pool = bucket.data_pool;
       bci.info.bucket.index_pool = bucket.index_pool;
+      bci.info.index_type = rule_info.index_type;
     } else {
       /* existing bucket, keep its placement pools */
       bci.info.bucket.data_pool = old_bci.info.bucket.data_pool;
       bci.info.bucket.index_pool = old_bci.info.bucket.index_pool;
+      bci.info.index_type = old_bci.info.index_type;
     }
 
     // are we actually going to perform this put, or is it too old?
