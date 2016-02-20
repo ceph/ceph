@@ -730,7 +730,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                                        RGWRados * const store,
                                        const off_t ofs,
                                        const off_t end,
-                                       rgw_bucket& bucket,
+                                       RGWBucketInfo *pbucket_info,
                                        const string& obj_prefix,
                                        RGWAccessControlPolicy * const bucket_policy,
                                        uint64_t * const ptotal_len,
@@ -744,6 +744,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                                                  void *param),
                                        void * const cb_param)
 {
+  rgw_bucket& bucket = pbucket_info->bucket;
   uint64_t obj_ofs = 0, len_count = 0;
   bool found_start = false, found_end = false, handled_end = false;
   string delim;
@@ -752,7 +753,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
 
   utime_t start_time = ceph_clock_now(cct);
 
-  RGWRados::Bucket target(store, bucket);
+  RGWRados::Bucket target(store, *pbucket_info);
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.prefix = obj_prefix;
@@ -928,9 +929,10 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 
   RGWAccessControlPolicy _bucket_policy(s->cct);
   RGWAccessControlPolicy *bucket_policy;
+  RGWBucketInfo bucket_info;
+  RGWBucketInfo *pbucket_info;
 
   if (bucket_name.compare(s->bucket.name) != 0) {
-    RGWBucketInfo bucket_info;
     map<string, bufferlist> bucket_attrs;
     RGWObjectCtx obj_ctx(store);
     int r = store->get_bucket_info(obj_ctx, s->user->user_id.tenant,
@@ -942,6 +944,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
       return r;
     }
     bucket = bucket_info.bucket;
+    pbucket_info = &bucket_info;
     rgw_obj_key no_obj;
     bucket_policy = &_bucket_policy;
     r = read_policy(store, s, bucket_info, bucket_attrs, bucket_policy, bucket, no_obj);
@@ -951,6 +954,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
     }
   } else {
     bucket = s->bucket;
+    pbucket_info = &s->bucket_info;
     bucket_policy = s->bucket_acl;
   }
 
@@ -959,7 +963,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
    * - overall DLO's content size,
    * - md5 sum of overall DLO's content (for etag of Swift API). */
   int r = iterate_user_manifest_parts(s->cct, store, ofs, end,
-        bucket, obj_prefix, bucket_policy,
+        pbucket_info, obj_prefix, bucket_policy,
         &total_len, &s->obj_size, &lo_etag,
         nullptr /* cb */, nullptr /* cb arg */);
   if (r < 0) {
@@ -973,7 +977,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   }
 
   r = iterate_user_manifest_parts(s->cct, store, ofs, end,
-        bucket, obj_prefix, bucket_policy,
+        pbucket_info, obj_prefix, bucket_policy,
         nullptr, nullptr, nullptr,
         get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0) {
@@ -1646,7 +1650,7 @@ void RGWListBucket::execute()
     }
   }
 
-  RGWRados::Bucket target(store, s->bucket);
+  RGWRados::Bucket target(store, s->bucket_info);
   if (shard_id >= 0) {
     target.set_shard_id(shard_id);
   }
@@ -4097,7 +4101,7 @@ void RGWListBucketMultiparts::execute()
   }
   marker_meta = marker.get_meta();
 
-  RGWRados::Bucket target(store, s->bucket);
+  RGWRados::Bucket target(store, s->bucket_info);
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.prefix = prefix;
