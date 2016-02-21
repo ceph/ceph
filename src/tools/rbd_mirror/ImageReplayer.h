@@ -36,6 +36,8 @@ template <typename> class Replay;
 namespace rbd {
 namespace mirror {
 
+class ImageReplayerAdminSocketHook;
+
 /**
  * Replays changes from a remote cluster for a single image.
  */
@@ -67,6 +69,8 @@ public:
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
+
+  State get_state() { return m_state; }
 
   int start(const BootstrapParams *bootstrap_params = nullptr);
   void stop();
@@ -107,6 +111,7 @@ private:
   librbd::journal::Replay<librbd::ImageCtx> *m_local_replay;
   ::journal::Journaler *m_remote_journaler;
   ::journal::ReplayHandler *m_replay_handler;
+  ImageReplayerAdminSocketHook *m_asok_hook;
 };
 
 } // namespace mirror
