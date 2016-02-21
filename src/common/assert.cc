@@ -18,12 +18,15 @@
 #include "common/debug.h"
 #include "common/Clock.h"
 #include "include/assert.h"
+#include "global/signal_handler.h"
+#include "common/Cond.h"
 
 #include <errno.h>
 #include <iostream>
 #include <pthread.h>
 #include <sstream>
 #include <time.h>
+#include <signal.h>
 
 namespace ceph {
   static CephContext *g_assert_context = NULL;
@@ -43,9 +46,46 @@ namespace ceph {
     g_assert_context = cct;
   }
 
+  static Mutex lock("Assert::wait_lock");
+  static Cond assert_cond;
+
+  void assert_release_lock() {
+    lock.Lock();
+    assert_cond.Signal();
+    lock.Unlock();
+    return;
+  }
+
+  void assert_wait_lock() {
+    struct timespec ts;
+    lock.Lock();
+    clock_gettime(CLOCK_REALTIME, &ts);
+
+    // TODO should also look on nanoseconds
+    // and round them eventually
+    ts.tv_sec+=1;
+    assert_cond.WaitUntil(lock, utime_t(ts) );
+    lock.Unlock();
+    return;
+  }
+
   void __ceph_assert_fail(const char *assertion, const char *file, int line,
 			  const char *func)
   {
+    sig_pthread_info p;
+
+    // This looks potentially unsafe. When handler in signal_thread will be
+    // late, "p" could not extist anymore, but abort() at the end of this
+    // function will kill the process. So when we leave from this function
+    // we have no "p" and hopefully process is killed already.
+    const sigval sv = { .sival_ptr = (void *) &p };
+
+    p.p_id = pthread_self();
+    pthread_getname_np(p.p_id, p.name, sizeof(p.name));
+    
+    if (sigqueue(getpid(), SIGUSR1, sv) == 0)
+      assert_wait_lock();
+
     ostringstream tss;
     tss << ceph_clock_now(g_assert_context);
 
@@ -81,6 +121,20 @@ namespace ceph {
   void __ceph_assertf_fail(const char *assertion, const char *file, int line,
 			   const char *func, const char* msg, ...)
   {
+    sig_pthread_info p;
+
+    // This looks potentially unsafe. When handler in signal_thread will be
+    // late, "p" could not extist anymore, but abort() at the end of this
+    // function will kill the process. So when we leave from this function
+    // we have no "p" and hopefully process is killed already.
+    const sigval sv = { .sival_ptr = (void *) &p };
+
+    p.p_id = pthread_self();
+    pthread_getname_np(p.p_id, p.name, sizeof(p.name));
+    
+    if (sigqueue(getpid(), SIGUSR1, sv) == 0)
+      assert_wait_lock();
+    
     ostringstream tss;
     tss << ceph_clock_now(g_assert_context);
 

@@ -42,6 +42,7 @@
 
 #include <map>
 #include <memory>
+#include <signal.h>
 #include "include/memory.h"
 using namespace std;
 
@@ -2358,6 +2359,7 @@ public:
   int shutdown();
 
   void handle_signal(int signum);
+  void handle_signal(int signum, siginfo_t *info);
 
   /// check if we can throw out op from a disconnected client
   static bool op_is_discardable(MOSDOp *m);
