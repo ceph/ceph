@@ -534,10 +534,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
       // check waiting count before doing callback (which may
       // destroy this ioc).
       if (!--ctx->num_running) {
-        if (ctx->num_waiting.load()) {
-          std::unique_lock<std::mutex> l(ctx->lock);
-          ctx->cond.notify_all();
-        }
+        ctx->aio_wake();
         if (task->device->aio_callback && ctx->priv) {
           task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
         }
@@ -795,6 +792,7 @@ int NVMEDevice::aio_zero(
     t->offset = off;
     t->len = len;
     t->device = this;
+    t->buf = nullptr;
 
     t->ctx = ioc;
     Task *first = static_cast<Task*>(ioc->nvme_task_first);
