@@ -35,19 +35,21 @@
 enum class IOCommand {
   READ_COMMAND,
   WRITE_COMMAND,
+  ZERO_COMMAND,
   FLUSH_COMMAND
 };
 
 class NVMEDevice;
 
 struct Task {
-  NVMEDevice *device;
-  IOContext *ctx;
+  NVMEDevice *device = nullptr;
+  IOContext *ctx = nullptr;
   IOCommand command;
-  uint64_t offset, len;
-  void *buf;
-  Task *next;
-  int64_t return_code;
+  uint64_t offset = 0;
+  uint64_t len = 0;
+  void *buf = nullptr;
+  Task *next = nullptr;
+  int64_t return_code = 0;
   utime_t start;
 };
 
