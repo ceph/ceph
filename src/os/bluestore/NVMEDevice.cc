@@ -75,7 +75,7 @@ enum {
   l_bluestore_nvmedevice_last
 };
 
-static void io_complete(void *t, const struct nvme_completion *completion);
+static void io_complete(void *t, const struct spdk_nvme_completion *completion);
 
 static const char *ealargs[] = {
     "ceph-osd",
@@ -87,8 +87,8 @@ static const char *ealargs[] = {
 class SharedDriverData {
   std::string sn;
   std::string name;
-  nvme_controller *ctrlr;
-  nvme_namespace *ns;
+  spdk_nvme_controller *ctrlr;
+  spdk_nvme_namespace *ns;
 
   uint64_t block_size = 0;
   uint64_t size = 0;
@@ -133,7 +133,7 @@ class SharedDriverData {
   std::atomic_int inflight_ops;
   PerfCounters *logger = nullptr;
 
-  SharedDriverData(const std::string &sn_tag, const std::string &n, nvme_controller *c, nvme_namespace *ns)
+  SharedDriverData(const std::string &sn_tag, const std::string &n, spdk_nvme_controller *c, spdk_nvme_namespace *ns)
       : sn(sn_tag),
         name(n),
         ctrlr(c),
@@ -144,9 +144,9 @@ class SharedDriverData {
         flush_lock("NVMEDevice::flush_lock"),
         flush_waiters(0),
         inflight_ops(0) {
-    block_size = nvme_ns_get_sector_size(ns);
-    size = block_size * nvme_ns_get_num_sectors(ns);
-    zero_command_support = nvme_ns_get_flags(ns) & NVME_NS_WRITE_ZEROES_SUPPORTED;
+    block_size = spdk_nvme_ns_get_sector_size(ns);
+    size = block_size * spdk_nvme_ns_get_num_sectors(ns);
+    zero_command_support = spdk_nvme_ns_get_flags(ns) & NVME_NS_WRITE_ZEROES_SUPPORTED;
 
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
                           l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
@@ -221,7 +221,7 @@ class SharedDriverData {
 void SharedDriverData::_aio_thread()
 {
   dout(1) << __func__ << " start" << dendl;
-  if (nvme_register_io_thread() != 0) {
+  if (spdk_nvme_register_io_thread() != 0) {
     assert(0);
   }
 
@@ -272,7 +272,7 @@ void SharedDriverData::_aio_thread()
         case IOCommand::WRITE_COMMAND:
         {
           dout(20) << __func__ << " write command issued " << lba_off << "~" << lba_count << dendl;
-          r = nvme_ns_cmd_write(ns, t->buf, lba_off, lba_count, io_complete, t, 0);
+          r = spdk_nvme_ns_cmd_write(ns, t->buf, lba_off, lba_count, io_complete, t, 0);
           if (r < 0) {
             t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
             rte_free(t->buf);
@@ -289,7 +289,7 @@ void SharedDriverData::_aio_thread()
         {
           dout(20) << __func__ << " zero command issued " << lba_off << "~" << lba_count << dendl;
           assert(zero_command_support);
-          r = nvme_ns_cmd_write_zeroes(ns, lba_off, lba_count, io_complete, t, 0);
+          r = spdk_nvme_ns_cmd_write_zeroes(ns, lba_off, lba_count, io_complete, t, 0);
           if (r < 0) {
             t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
             rte_mempool_put(task_pool, t);
@@ -304,7 +304,7 @@ void SharedDriverData::_aio_thread()
         case IOCommand::READ_COMMAND:
         {
           dout(20) << __func__ << " read command issueed " << lba_off << "~" << lba_count << dendl;
-          r = nvme_ns_cmd_read(ns, t->buf, lba_off, lba_count, io_complete, t, 0);
+          r = spdk_nvme_ns_cmd_read(ns, t->buf, lba_off, lba_count, io_complete, t, 0);
           if (r < 0) {
             derr << __func__ << " failed to read" << dendl;
             --t->ctx->num_reading;
@@ -321,7 +321,7 @@ void SharedDriverData::_aio_thread()
         case IOCommand::FLUSH_COMMAND:
         {
           dout(20) << __func__ << " flush command issueed " << dendl;
-          r = nvme_ns_cmd_flush(ns, io_complete, t);
+          r = spdk_nvme_ns_cmd_flush(ns, io_complete, t);
           if (r < 0) {
             derr << __func__ << " failed to flush" << dendl;
             t->return_code = r;
@@ -337,7 +337,7 @@ void SharedDriverData::_aio_thread()
       }
     }
     if (inflight_ops.load()) {
-      nvme_ctrlr_process_io_completions(ctrlr, max);
+      spdk_nvme_ctrlr_process_io_completions(ctrlr, max);
       dout(30) << __func__ << " idle, have a pause" << dendl;
 #ifdef HAVE_SSE
       _mm_pause();
@@ -346,7 +346,7 @@ void SharedDriverData::_aio_thread()
 #endif
     }
   }
-  nvme_unregister_io_thread();
+  spdk_nvme_unregister_io_thread();
   dout(1) << __func__ << " end" << dendl;
 }
 
@@ -369,17 +369,17 @@ class NVMEManager {
   NVMEManager()
       : lock("NVMEDevice::NVMEManager::lock") {}
   int try_get(const string &sn_tag, SharedDriverData **driver);
-  void register_ctrlr(const string &sn_tag, nvme_controller *c, struct spdk_pci_device *pci_dev,
+  void register_ctrlr(const string &sn_tag, spdk_nvme_controller *c, struct spdk_pci_device *pci_dev,
                       SharedDriverData **driver) {
     assert(lock.is_locked());
-    nvme_namespace *ns;
-    int num_ns = nvme_ctrlr_get_num_ns(c);
+    spdk_nvme_namespace *ns;
+    int num_ns = spdk_nvme_ctrlr_get_num_ns(c);
     string name = spdk_pci_device_get_device_name(pci_dev) ? spdk_pci_device_get_device_name(pci_dev) : "Unknown";
     assert(num_ns >= 1);
     if (num_ns > 1) {
       dout(0) << __func__ << " namespace count larger than 1, currently only use the first namespace" << dendl;
     }
-    ns = nvme_ctrlr_get_ns(c, 1);
+    ns = spdk_nvme_ctrlr_get_ns(c, 1);
     if (!ns) {
       derr << __func__ << " failed to get namespace at 1" << dendl;
       assert(0);
@@ -445,7 +445,7 @@ static bool probe_cb(void *cb_ctx, struct spdk_pci_device *pci_dev)
   return true;
 }
 
-static void attach_cb(void *cb_ctx, struct spdk_pci_device *dev, struct nvme_controller *ctrlr)
+static void attach_cb(void *cb_ctx, struct spdk_pci_device *dev, struct spdk_nvme_controller *ctrlr)
 {
   NVMEManager::ProbeContext *ctx = static_cast<NVMEManager::ProbeContext*>(cb_ctx);
   ctx->manager->register_ctrlr(ctx->sn_tag, ctrlr, dev, &ctx->driver);
@@ -463,7 +463,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
     }
 
     request_mempool = rte_mempool_create("nvme_request", 512,
-                                         nvme_request_size(), 128, 0,
+                                         spdk_nvme_request_size(), 128, 0,
                                          NULL, NULL, NULL, NULL,
                                          SOCKET_ID_ANY, 0);
     if (request_mempool == NULL) {
@@ -502,7 +502,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
   }
 
   ProbeContext ctx = {sn_tag, this, nullptr};
-  r = nvme_probe(&ctx, probe_cb, attach_cb);
+  r = spdk_nvme_probe(&ctx, probe_cb, attach_cb);
   if (r || !ctx.driver) {
     derr << __func__ << " device probe nvme failed" << dendl;
     return r;
@@ -513,7 +513,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
   return 0;
 }
 
-void io_complete(void *t, const struct nvme_completion *completion)
+void io_complete(void *t, const struct spdk_nvme_completion *completion)
 {
   Task *task = static_cast<Task*>(t);
   IOContext *ctx = task->ctx;
@@ -527,7 +527,7 @@ void io_complete(void *t, const struct nvme_completion *completion)
       driver->logger->tinc(l_bluestore_nvmedevice_aio_write_lat, lat);
     else
       driver->logger->tinc(l_bluestore_nvmedevice_aio_zero_lat, lat);
-    assert(!nvme_completion_is_error(completion));
+    assert(!spdk_nvme_cpl_is_error(completion));
     dout(20) << __func__ << " write/zero op successfully, left " << left << dendl;
     // buffer write/zero won't have ctx, and we will free request later, see `flush`
     if (ctx) {
@@ -551,7 +551,7 @@ void io_complete(void *t, const struct nvme_completion *completion)
     driver->logger->tinc(l_bluestore_nvmedevice_read_lat, lat);
     --ctx->num_reading;
     dout(20) << __func__ << " read op successfully" << dendl;
-    if (nvme_completion_is_error(completion))
+    if (spdk_nvme_cpl_is_error(completion))
       task->return_code = -1; // FIXME
     else
       task->return_code = 0;
@@ -563,7 +563,7 @@ void io_complete(void *t, const struct nvme_completion *completion)
     assert(task->command == IOCommand::FLUSH_COMMAND);
     driver->logger->tinc(l_bluestore_nvmedevice_flush_lat, lat);
     dout(20) << __func__ << " flush op successfully" << dendl;
-    if (nvme_completion_is_error(completion))
+    if (spdk_nvme_cpl_is_error(completion))
       task->return_code = -1; // FIXME
     else
       task->return_code = 0;
