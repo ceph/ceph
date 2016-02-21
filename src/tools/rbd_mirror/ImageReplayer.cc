@@ -64,10 +64,12 @@ struct C_ReplayCommitted : public Context {
 } // anonymous namespace
 
 ImageReplayer::ImageReplayer(RadosRef local, RadosRef remote,
+			     const std::string &client_id,
 			     int64_t remote_pool_id,
 			     const std::string &remote_image_id) :
   m_local(local),
   m_remote(remote),
+  m_client_id(client_id),
   m_remote_pool_id(remote_pool_id),
   m_local_pool_id(-1),
   m_remote_image_id(remote_image_id),
@@ -108,15 +110,6 @@ int ImageReplayer::start(const BootstrapParams *bootstrap_params)
   double commit_interval;
   bool registered;
   int r = 0;
-
-  r = m_local->cluster_fsid(&m_local_cluster_id);
-  if (r < 0) {
-    derr << "error retrieving local cluster id: " << cpp_strerror(r)
-	 << dendl;
-    return r;
-  }
-
-  m_client_id = m_local_cluster_id;
 
   r = m_remote->ioctx_create2(m_remote_pool_id, m_remote_ioctx);
   if (r < 0) {
@@ -448,12 +441,20 @@ int ImageReplayer::register_client()
 {
   int r;
 
-  dout(20) << "m_cluster_id=" << m_local_cluster_id << ", pool_id="
+  std::string local_cluster_id;
+  r = m_local->cluster_fsid(&local_cluster_id);
+  if (r < 0) {
+    derr << "error retrieving local cluster id: " << cpp_strerror(r)
+	 << dendl;
+    return r;
+  }
+
+  dout(20) << "m_cluster_id=" << local_cluster_id << ", pool_id="
 	   << m_local_pool_id << ", image_id=" << m_local_image_id << dendl;
 
   bufferlist client_data;
   ::encode(librbd::journal::ClientData{librbd::journal::MirrorPeerClientMeta{
-	m_local_cluster_id, m_local_pool_id, m_local_image_id}}, client_data);
+	local_cluster_id, m_local_pool_id, m_local_image_id}}, client_data);
 
   r = m_remote_journaler->register_client(client_data);
   if (r < 0) {
@@ -611,7 +612,7 @@ int ImageReplayer::copy()
 	   << m_local_pool_id << "/" << m_local_image_id << dendl;
 
   // TODO: use internal snapshots
-  std::string snap_name = ".rbd-mirror." + m_local_cluster_id;
+  std::string snap_name = ".rbd-mirror." + m_client_id;
   librados::IoCtx local_ioctx;
   librbd::ImageCtx *remote_image_ctx, *local_image_ctx;
   librbd::NoOpProgressContext prog_ctx;

@@ -68,6 +68,15 @@ int Replayer::init()
 
   dout(20) << __func__ << "connected to " << m_peer << dendl;
 
+  std::string uuid;
+  r = m_local->cluster_fsid(&uuid);
+  if (r < 0) {
+    derr << "error retrieving local cluster uuid: " << cpp_strerror(r)
+	 << dendl;
+    return r;
+  }
+  m_client_id = uuid;
+
   // TODO: make interval configurable
   m_pool_watcher.reset(new PoolWatcher(m_remote, 30, m_lock, m_cond));
   m_pool_watcher->refresh_images();
@@ -115,6 +124,7 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
       if (pool_replayers.find(image_id) == pool_replayers.end()) {
 	unique_ptr<ImageReplayer> image_replayer(new ImageReplayer(m_local,
 								   m_remote,
+								   m_client_id,
 								   pool_id,
 								   image_id));
 	int r = image_replayer->start();
