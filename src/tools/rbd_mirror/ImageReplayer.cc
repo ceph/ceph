@@ -423,10 +423,10 @@ int ImageReplayer::get_registered_client_status(bool *registered)
 	boost::get<librbd::journal::MirrorPeerClientMeta>(client_data.client_meta);
       m_local_pool_id = cm.pool_id;
       m_local_image_id = cm.image_id;
+      m_snap_name = cm.snap_name;
 
       dout(20) << "client found, pool_id=" << m_local_pool_id << ", image_id="
-	       << m_local_image_id << dendl;
-
+	       << m_local_image_id << ", snap_name=" << m_snap_name << dendl;
       return 0;
     }
   }
@@ -448,13 +448,16 @@ int ImageReplayer::register_client()
 	 << dendl;
     return r;
   }
+  std::string m_snap_name = ".rbd-mirror." + m_client_id;
 
   dout(20) << "m_cluster_id=" << local_cluster_id << ", pool_id="
-	   << m_local_pool_id << ", image_id=" << m_local_image_id << dendl;
+	   << m_local_pool_id << ", image_id=" << m_local_image_id
+	   << ", snap_name=" << m_snap_name << dendl;
 
   bufferlist client_data;
   ::encode(librbd::journal::ClientData{librbd::journal::MirrorPeerClientMeta{
-	local_cluster_id, m_local_pool_id, m_local_image_id}}, client_data);
+	local_cluster_id, m_local_pool_id, m_local_image_id, m_snap_name}},
+    client_data);
 
   r = m_remote_journaler->register_client(client_data);
   if (r < 0) {
@@ -611,8 +614,6 @@ int ImageReplayer::copy()
   dout(20) << m_remote_pool_id << "/" << m_remote_image_id << "->"
 	   << m_local_pool_id << "/" << m_local_image_id << dendl;
 
-  // TODO: use internal snapshots
-  std::string snap_name = ".rbd-mirror." + m_client_id;
   librados::IoCtx local_ioctx;
   librbd::ImageCtx *remote_image_ctx, *local_image_ctx;
   librbd::NoOpProgressContext prog_ctx;
@@ -628,29 +629,30 @@ int ImageReplayer::copy()
     return r;
   }
 
-  dout(20) << "creating temporary snapshot " << snap_name << dendl;
+  dout(20) << "creating temporary snapshot " << m_snap_name << dendl;
 
-  r = remote_image_ctx->operations->snap_create(snap_name.c_str());
+  // TODO: use internal snapshots
+  r = remote_image_ctx->operations->snap_create(m_snap_name.c_str());
   if (r == -EEXIST) {
     // Probably left after a previous unsuccessful bootsrapt.
-    dout(0) << "removing stale snapshot " << snap_name << " of remote image "
+    dout(0) << "removing stale snapshot " << m_snap_name << " of remote image "
 	    << m_remote_image_id << dendl;
-    (void)remote_image_ctx->operations->snap_remove(snap_name.c_str());
-    r = remote_image_ctx->operations->snap_create(snap_name.c_str());
+    (void)remote_image_ctx->operations->snap_remove(m_snap_name.c_str());
+    r = remote_image_ctx->operations->snap_create(m_snap_name.c_str());
   }
   if (r < 0) {
-    derr << "error creating snapshot " << snap_name << " of remote image "
+    derr << "error creating snapshot " << m_snap_name << " of remote image "
 	 << m_remote_image_id << ": " << cpp_strerror(r) << dendl;
     goto cleanup;
   }
 
   remote_image_ctx->state->close();
   remote_image_ctx = new librbd::ImageCtx("", m_remote_image_id,
-					  snap_name.c_str(), m_remote_ioctx,
+					  m_snap_name.c_str(), m_remote_ioctx,
 					  true);
   r = remote_image_ctx->state->open();
   if (r < 0) {
-    derr << "error opening snapshot " << snap_name << " of remote image "
+    derr << "error opening snapshot " << m_snap_name << " of remote image "
 	 << m_remote_image_id << ": " << cpp_strerror(r) << dendl;
     delete remote_image_ctx;
     remote_image_ctx = nullptr;
@@ -680,7 +682,7 @@ int ImageReplayer::copy()
   // TODO: show copy progress in image replay status
   r = librbd::copy(remote_image_ctx, local_image_ctx, prog_ctx);
   if (r < 0) {
-    derr << "error copying snapshot " << snap_name << " of remote image "
+    derr << "error copying snapshot " << m_snap_name << " of remote image "
 	 << m_remote_image_id << " to local image " << m_local_image_id
 	 << ": " << cpp_strerror(r) << dendl;
   }
@@ -708,10 +710,10 @@ cleanup:
 	 << ": " << cpp_strerror(r1) << dendl;
     delete remote_image_ctx;
   } else {
-    dout(20) << "removing temporary snapshot " << snap_name << dendl;
-    r1 = remote_image_ctx->operations->snap_remove(snap_name.c_str());
+    dout(20) << "removing temporary snapshot " << m_snap_name << dendl;
+    r1 = remote_image_ctx->operations->snap_remove(m_snap_name.c_str());
     if (r1 < 0) {
-      derr << "error removing snapshot " << snap_name << " of remote image "
+      derr << "error removing snapshot " << m_snap_name << " of remote image "
 	   << m_remote_image_id << ": " << cpp_strerror(r1) << dendl;
     }
     remote_image_ctx->state->close();
