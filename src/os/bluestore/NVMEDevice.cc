@@ -75,7 +75,7 @@ enum {
   l_bluestore_nvmedevice_last
 };
 
-static void io_complete(void *t, const struct spdk_nvme_completion *completion);
+static void io_complete(void *t, const struct spdk_nvme_cpl *completion);
 
 static const char *ealargs[] = {
     "ceph-osd",
@@ -87,8 +87,8 @@ static const char *ealargs[] = {
 class SharedDriverData {
   std::string sn;
   std::string name;
-  spdk_nvme_controller *ctrlr;
-  spdk_nvme_namespace *ns;
+  spdk_nvme_ctrlr *ctrlr;
+  spdk_nvme_ns *ns;
 
   uint64_t block_size = 0;
   uint64_t size = 0;
@@ -133,7 +133,7 @@ class SharedDriverData {
   std::atomic_int inflight_ops;
   PerfCounters *logger = nullptr;
 
-  SharedDriverData(const std::string &sn_tag, const std::string &n, spdk_nvme_controller *c, spdk_nvme_namespace *ns)
+  SharedDriverData(const std::string &sn_tag, const std::string &n, spdk_nvme_ctrlr *c, spdk_nvme_ns *ns)
       : sn(sn_tag),
         name(n),
         ctrlr(c),
@@ -146,7 +146,7 @@ class SharedDriverData {
         inflight_ops(0) {
     block_size = spdk_nvme_ns_get_sector_size(ns);
     size = block_size * spdk_nvme_ns_get_num_sectors(ns);
-    zero_command_support = spdk_nvme_ns_get_flags(ns) & NVME_NS_WRITE_ZEROES_SUPPORTED;
+    zero_command_support = spdk_nvme_ns_get_flags(ns) & SPDK_NVME_NS_WRITE_ZEROES_SUPPORTED;
 
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
                           l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
@@ -369,10 +369,10 @@ class NVMEManager {
   NVMEManager()
       : lock("NVMEDevice::NVMEManager::lock") {}
   int try_get(const string &sn_tag, SharedDriverData **driver);
-  void register_ctrlr(const string &sn_tag, spdk_nvme_controller *c, struct spdk_pci_device *pci_dev,
+  void register_ctrlr(const string &sn_tag, spdk_nvme_ctrlr *c, struct spdk_pci_device *pci_dev,
                       SharedDriverData **driver) {
     assert(lock.is_locked());
-    spdk_nvme_namespace *ns;
+    spdk_nvme_ns *ns;
     int num_ns = spdk_nvme_ctrlr_get_num_ns(c);
     string name = spdk_pci_device_get_device_name(pci_dev) ? spdk_pci_device_get_device_name(pci_dev) : "Unknown";
     assert(num_ns >= 1);
@@ -445,7 +445,7 @@ static bool probe_cb(void *cb_ctx, struct spdk_pci_device *pci_dev)
   return true;
 }
 
-static void attach_cb(void *cb_ctx, struct spdk_pci_device *dev, struct spdk_nvme_controller *ctrlr)
+static void attach_cb(void *cb_ctx, struct spdk_pci_device *dev, struct spdk_nvme_ctrlr *ctrlr)
 {
   NVMEManager::ProbeContext *ctx = static_cast<NVMEManager::ProbeContext*>(cb_ctx);
   ctx->manager->register_ctrlr(ctx->sn_tag, ctrlr, dev, &ctx->driver);
@@ -481,9 +481,9 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
     }
 
     pci_system_init();
-    nvme_retry_count = g_conf->bdev_nvme_retry_count;
-    if (nvme_retry_count < 0)
-      nvme_retry_count = NVME_DEFAULT_RETRY_COUNT;
+    spdk_nvme_retry_count = g_conf->bdev_nvme_retry_count;
+    if (spdk_nvme_retry_count < 0)
+      spdk_nvme_retry_count = SPDK_NVME_DEFAULT_RETRY_COUNT;
 
     init = true;
   }
@@ -513,7 +513,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
   return 0;
 }
 
-void io_complete(void *t, const struct spdk_nvme_completion *completion)
+void io_complete(void *t, const struct spdk_nvme_cpl *completion)
 {
   Task *task = static_cast<Task*>(t);
   IOContext *ctx = task->ctx;
