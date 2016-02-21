@@ -372,7 +372,7 @@ int EventCenter::process_events(int timeout_microseconds)
   bool trigger_time = false;
   auto now = clock_type::now();
 
-  bool blocking = pollers.empty() && !external_num_events.load() ? &tv : nullptr;
+  bool blocking = pollers.empty() && !external_num_events.load();
   // If exists external events or exists poller, don't block
   if (blocking) {
     clock_type::time_point shortest;
@@ -404,6 +404,8 @@ int EventCenter::process_events(int timeout_microseconds)
     tv.tv_sec = 0;
     tv.tv_usec = 0;
     next_time = now;
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
   }
 
   vector<FiredFileEvent> fired_events;

@@ -115,7 +115,7 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, entity_addr_t *out) {
     return -errno;
   }
 
-  std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, sa, sd, false));
+  std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, *out, sd, true));
   *sock = ConnectedSocket(std::move(csi));
   if (out)
     *out = sa;
