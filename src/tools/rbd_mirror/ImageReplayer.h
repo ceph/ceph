@@ -62,8 +62,8 @@ public:
   };
 
 public:
-  ImageReplayer(RadosRef local, RadosRef remote, int64_t remote_pool_id,
-		const std::string &remote_image_id);
+  ImageReplayer(RadosRef local, RadosRef remote, const std::string &client_id,
+		int64_t remote_pool_id, const std::string &remote_image_id);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
@@ -95,10 +95,9 @@ private:
 				  const ImageReplayer &replayer);
 private:
   RadosRef m_local, m_remote;
-  int64_t m_remote_pool_id, m_local_pool_id;
-  std::string m_local_cluster_id;
-  std::string m_remote_image_id, m_local_image_id;
   std::string m_client_id;
+  int64_t m_remote_pool_id, m_local_pool_id;
+  std::string m_remote_image_id, m_local_image_id;
   Mutex m_lock;
   State m_state;
   std::string m_local_pool_name, m_remote_pool_name;
