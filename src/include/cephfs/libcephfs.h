@@ -15,7 +15,9 @@
 #ifndef CEPH_LIB_H
 #define CEPH_LIB_H
 
+#if defined(__linux__)
 #include <features.h>
+#endif
 #include <utime.h>
 #include <sys/stat.h>
 #include <sys/types.h>

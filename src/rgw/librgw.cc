@@ -14,6 +14,11 @@
 #include <sys/types.h>
 #include <string.h>
 
+#include "rgw_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
+
 #include "include/types.h"
 #include "include/rados/librgw.h"
 #include "rgw/rgw_acl_s3.h"
@@ -31,7 +36,6 @@
 #include "common/common_init.h"
 #include "common/dout.h"
 
-#include "rgw_rados.h"
 #include "rgw_resolve.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"

@@ -32,9 +32,14 @@ extern "C"{
 #include "common/ceph_argparse.h"
 #include "common/Finisher.h"
 #include "global/global_init.h"
+#include "rgw/rgw_rados.h"
+#include "rgw/rgw_period_puller.h"
+#include "rgw/rgw_period_history.h"
+#include "rgw/rgw_metadata.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_bucket.h"
-#include "rgw/rgw_rados.h"
+
+
 #include "include/utime.h"
 #include "include/object.h"
 #define GTEST

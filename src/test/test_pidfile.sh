@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/bin/bash -xv
 
 #
 # test pidfile here 
@@ -54,7 +54,8 @@ function teardown_unexist_pidfile() {
             status=1
        fi   
     done
-    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
+    if [ x`uname`x != xFreeBSDx ] \
+        && [ $(stat -f -c '%T' .) == "btrfs" ]; then
          __teardown_btrfs $dir
     fi
     rm -fr $dir

@@ -20,6 +20,10 @@
 
 #include "include/rados/librgw.h"
 #include "include/rados/rgw_file.h"
+#include "rgw/rgw_rados.h"
+#include "rgw/rgw_period_puller.h"
+#include "rgw/rgw_period_history.h"
+#include "rgw/rgw_metadata.h"
 #include "rgw/rgw_file.h"
 #include "rgw/rgw_lib_frontend.h" // direct requests
 

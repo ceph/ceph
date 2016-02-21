@@ -17,10 +17,18 @@
 # GNU Library Public License for more details.
 #
 
-# run from the ceph-detect-init directory or from its parent
-test -d ceph-detect-init && cd ceph-detect-init
-source virtualenv/bin/activate
-tox > virtualenv/tox.out 2>&1
-status=$?
-grep -v InterpreterNotFound < virtualenv/tox.out
-exit $status
+case `uname` in 
+ FreeBSD)
+    echo FreeBSD init system has not been integrated.
+    exit 0
+    ;;
+ *)
+    # run from the ceph-detect-init directory or from its parent
+    test -d ceph-detect-init && cd ceph-detect-init
+    source virtualenv/bin/activate
+    tox > virtualenv/tox.out 2>&1
+    status=$?
+    grep -v InterpreterNotFound < virtualenv/tox.out
+    exit $status
+    ;;
+esac

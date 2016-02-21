@@ -1,13 +1,16 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "include/rados/rgw_file.h"
+// #include "include/rados/rgw_file.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include "rgw_lib.h"
 #include "rgw_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
+#include "rgw_lib.h"
 #include "rgw_resolve.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
@@ -118,11 +121,11 @@ namespace rgw {
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
 	  if (req.matched) {
-	    fhr = lookup_fh(parent, path,
-			    RGWFileHandle::FLAG_CREATE|
-			    ((req.is_dir) ?
-			      RGWFileHandle::FLAG_DIRECTORY :
-			      RGWFileHandle::FLAG_NONE));
+//	    fhr = lookup_fh(parent, path,
+//			    RGWFileHandle::FLAG_CREATE|
+//			    ((req.is_dir) ?
+//			      RGWFileHandle::FLAG_DIRECTORY :
+//			      RGWFileHandle::FLAG_NONE));
 	    /* XXX we don't have an object--in general, there need not
 	     * be one (just a path segment in some other object).  In
 	     * actual leaf an object exists, but we'd need another round
@@ -304,7 +307,18 @@ namespace rgw {
     event_vector ve;
     bool stop = false;
     std::deque<event> &events = state.events;
-    (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now);
+#if defined(CLOCK_REALTIME_COARSE)
+        // Linux systems have _COARSE clocks.
+        clock_gettime(CLOCK_REALTIME_COARSE, &now);
+#elif defined(CLOCK_REALTIME_FAST)
+        // BSD systems have _FAST clocks.
+        clock_gettime(CLOCK_REALTIME_FAST, &now);
+#else
+        // And if we find neither, you may wish to consult your system's
+        // documentation.
+#warning Falling back to CLOCK_REALTIME, may be slow.
+        clock_gettime(CLOCK_REALTIME, &now);
+#endif
 
     do {
       {
@@ -364,7 +378,19 @@ namespace rgw {
     CephContext* cct = fs->get_context();
     directory* d = get_directory(); /* already type-checked */
 
-    (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
+#if defined(CLOCK_REALTIME_COARSE)
+        // Linux systems have _COARSE clocks.
+        clock_gettime(CLOCK_REALTIME_COARSE, &now);
+#elif defined(CLOCK_REALTIME_FAST)
+        // BSD systems have _FAST clocks.
+        clock_gettime(CLOCK_REALTIME_FAST, &now);
+#else
+        // And if we find neither, you may wish to consult your system's
+        // documentation.
+#warning Falling back to CLOCK_REALTIME, may be slow.
+        clock_gettime(CLOCK_REALTIME, &now);
+#endif
+
 
     if (flags & RGW_READDIR_FLAG_DOTDOT) {
       /* send '.' and '..' with their NFS-defined offsets */
@@ -897,7 +923,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
     if (strcmp(path, "/") == 0) {
       rgw_fh = fs->ref(parent);
     } else {
-      fhr = fs->stat_bucket(parent, path, RGWFileHandle::FLAG_NONE);
+//      fhr = fs->stat_bucket(parent, path, RGWFileHandle::FLAG_NONE);
       rgw_fh = get<0>(fhr);
       if (! rgw_fh)
 	return -ENOENT;

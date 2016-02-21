@@ -109,8 +109,12 @@ LIBRGW_DEPS += \
 	-lcurl \
 	-lexpat \
 	-lm \
-	-lfcgi \
+	-lfcgi 
+
+if LINUX
+LIBRGW_DEPS += \
 	-ldl
+endif
 
 librgw_la_LIBADD = $(LIBRGW_DEPS) \
 	$(PTHREAD_LIBS) $(RESOLV_LIBS) libglobal.la \

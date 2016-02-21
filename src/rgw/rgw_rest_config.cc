@@ -13,9 +13,13 @@
  */
 #include "common/ceph_json.h"
 #include "common/strtol.h"
+
+#include "rgw_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
 #include "rgw_rest.h"
 #include "rgw_op.h"
-#include "rgw_rados.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_config.h"
 #include "rgw_client_io.h"

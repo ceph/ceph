@@ -22,6 +22,13 @@
 #include <errno.h>
 #include <iostream>
 #include <pthread.h>
+#if defined(__FreeBSD__)
+// pthread non-POSIX stuff is in a separate include file
+#include <pthread_np.h>
+// and fix a name problem
+#define pthread_setname_np pthread_set_name_np
+#endif
+
 #include <signal.h>
 #include <sstream>
 #include <stdlib.h>

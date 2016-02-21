@@ -15,9 +15,7 @@
 #include "cls/statelog/cls_statelog_types.h"
 #include "cls/timeindex/cls_timeindex_types.h"
 #include "rgw_log.h"
-#include "rgw_metadata.h"
 #include "rgw_meta_sync_status.h"
-#include "rgw_period_puller.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -29,6 +27,9 @@ class RGWObjectExpirer;
 class RGWMetaSyncProcessorThread;
 class RGWDataSyncProcessorThread;
 class RGWRESTConn;
+class RGWPeriodHistory;
+class RGWPeriodPuller;
+class RGWMetadataManager;
 
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01

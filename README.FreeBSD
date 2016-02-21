@@ -1,0 +1,23 @@
+
+The FreeBSD build will build most of the tools in Ceph.
+Note that the RBD dependant items will not work since FreeBSD does not have RBS
+
+Build Prerequisites
+===================
+
+Compiling and building Ceph is tested on 11-CURRENT 
+It uses the CLANG toolset taht is available, which needs to be atleast 3.7
+Clang 3.4 (on 10.2-STABLE) does not have all required capabilites to compile everything
+
+The following setup will get things running for FreeBSD:
+
+ - Install bash and link it in /bin
+	# requires root privileges
+	sudo pkg install bash
+	sudo ln -s /usr/local/bin/bash /bin/bash
+
+Building Ceph
+=============
+ - Go and start building
+	./do_freebsd.sh
+
