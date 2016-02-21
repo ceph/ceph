@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/Formatter.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "include/stringify.h"
@@ -61,7 +62,101 @@ struct C_ReplayCommitted : public Context {
   }
 };
 
+class ImageReplayerAdminSocketCommand {
+public:
+  virtual ~ImageReplayerAdminSocketCommand() {}
+  virtual bool call(Formatter *f, stringstream *ss) = 0;
+};
+
+class StatusCommand : public ImageReplayerAdminSocketCommand {
+public:
+  explicit StatusCommand(ImageReplayer *replayer) : replayer(replayer) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    if (f) {
+      f->open_object_section("status");
+      f->dump_stream("state") << replayer->get_state();
+      f->close_section();
+      f->flush(*ss);
+    } else {
+      *ss << "state: " << replayer->get_state();
+    }
+    return true;
+  }
+
+private:
+  ImageReplayer *replayer;
+};
+
+class FlushCommand : public ImageReplayerAdminSocketCommand {
+public:
+  explicit FlushCommand(ImageReplayer *replayer) : replayer(replayer) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    int r = replayer->flush();
+    if (r < 0) {
+      *ss << "flush: " << cpp_strerror(r);
+      return false;
+    }
+    return true;
+  }
+
+private:
+  ImageReplayer *replayer;
+};
+
 } // anonymous namespace
+
+class ImageReplayerAdminSocketHook : public AdminSocketHook {
+public:
+  ImageReplayerAdminSocketHook(CephContext *cct, ImageReplayer *replayer) :
+    admin_socket(cct->get_admin_socket()) {
+    std::string command;
+    int r;
+
+    command = "rbd mirror status " + stringify(*replayer);
+    r = admin_socket->register_command(command, command, this,
+				       "get status for rbd mirror " +
+				       stringify(*replayer));
+    if (r == 0) {
+      commands[command] = new StatusCommand(replayer);
+    }
+
+    command = "rbd mirror flush " + stringify(*replayer);
+    r = admin_socket->register_command(command, command, this,
+				       "flush rbd mirror " +
+				       stringify(*replayer));
+    if (r == 0) {
+      commands[command] = new FlushCommand(replayer);
+    }
+  }
+
+  ~ImageReplayerAdminSocketHook() {
+    for (Commands::const_iterator i = commands.begin(); i != commands.end();
+	 ++i) {
+      (void)admin_socket->unregister_command(i->first);
+      delete i->second;
+    }
+  }
+
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+	    bufferlist& out) {
+    Commands::const_iterator i = commands.find(command);
+    assert(i != commands.end());
+    Formatter *f = Formatter::create(format);
+    stringstream ss;
+    bool r = i->second->call(f, &ss);
+    delete f;
+    out.append(ss);
+    return r;
+  }
+
+private:
+  typedef std::map<std::string, ImageReplayerAdminSocketCommand*> Commands;
+
+  AdminSocket *admin_socket;
+  Commands commands;
+};
 
 ImageReplayer::ImageReplayer(RadosRef local, RadosRef remote,
 			     const std::string &client_id,
@@ -81,6 +176,9 @@ ImageReplayer::ImageReplayer(RadosRef local, RadosRef remote,
   m_remote_journaler(nullptr),
   m_replay_handler(nullptr)
 {
+  CephContext *cct = static_cast<CephContext *>(m_local->cct());
+
+  m_asok_hook = new ImageReplayerAdminSocketHook(cct, this);
 }
 
 ImageReplayer::~ImageReplayer()
@@ -89,6 +187,8 @@ ImageReplayer::~ImageReplayer()
   assert(m_local_replay == nullptr);
   assert(m_remote_journaler == nullptr);
   assert(m_replay_handler == nullptr);
+
+  delete m_asok_hook;
 }
 
 int ImageReplayer::start(const BootstrapParams *bootstrap_params)
@@ -730,6 +830,34 @@ void ImageReplayer::shut_down_journal_replay()
   if (r < 0) {
     derr << "error flushing journal replay: " << cpp_strerror(r) << dendl;
   }
+}
+
+std::ostream &operator<<(std::ostream &os, const ImageReplayer::State &state)
+{
+  switch (state) {
+  case ImageReplayer::STATE_UNINITIALIZED:
+    os << "Uninitialized";
+    break;
+  case ImageReplayer::STATE_STARTING:
+    os << "Starting";
+    break;
+  case ImageReplayer::STATE_REPLAYING:
+    os << "Replaying";
+    break;
+  case ImageReplayer::STATE_FLUSHING_REPLAY:
+    os << "FlushingReplay";
+    break;
+  case ImageReplayer::STATE_STOPPING:
+    os << "Stopping";
+    break;
+  case ImageReplayer::STATE_STOPPED:
+    os << "Stopped";
+    break;
+  default:
+    os << "Unknown(" << state << ")";
+    break;
+  }
+  return os;
 }
 
 std::ostream &operator<<(std::ostream &os, const ImageReplayer &replayer)
