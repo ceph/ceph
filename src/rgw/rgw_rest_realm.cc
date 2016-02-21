@@ -2,6 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/errno.h"
+#include "rgw_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_config.h"

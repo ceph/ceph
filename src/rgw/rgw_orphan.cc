@@ -9,6 +9,9 @@ using namespace std;
 #include "common/errno.h"
 
 #include "rgw_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
 #include "rgw_orphan.h"
 
 #define dout_subsys ceph_subsys_rgw

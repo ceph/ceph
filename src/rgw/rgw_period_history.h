@@ -13,8 +13,6 @@
 
 namespace bi = boost::intrusive;
 
-class RGWPeriod;
-
 /**
  * RGWPeriodHistory tracks the relative history of all inserted periods,
  * coordinates the pulling of missing intermediate periods, and provides a

@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "rgw_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
 #include "rgw_gc.h"
 #include "include/rados/librados.hpp"
 #include "cls/rgw/cls_rgw_client.h"
