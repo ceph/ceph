@@ -96,10 +96,21 @@ stop_replay()
     RBD_IMAGE_REPLAY_PID_FILE=
 }
 
+flush()
+{
+    local cmd
+
+    cmd=$(ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok help |
+		 sed -nEe 's/^.*"(rbd mirror flush [^"]*)":.*$/\1/p')
+    test -n "${cmd}"
+    ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok ${cmd}
+}
+
 wait_for_replay_complete()
 {
     for s in 0.2 0.4 0.8 1.6 2 2 4 4 8; do
 	sleep ${s}
+	flush
 	local status_log=${TEMPDIR}/${RMT_POOL}-${IMAGE}.status
 	rbd -p ${RMT_POOL} journal status --image ${IMAGE} | tee ${status_log}
 	local master_pos=`sed -nEe 's/^.*id=,.*entry_tid=([0-9]+).*$/\1/p' ${status_log}`
@@ -131,7 +142,7 @@ wait_for_replay_complete
 stop_replay
 compare_images
 
-count=32
+count=10
 rbd -p ${RMT_POOL} bench-write ${IMAGE} --io-size 4096 --io-threads 1 \
     --io-total $((4096 * count)) --io-pattern seq
 start_replay
