@@ -98,6 +98,7 @@ private:
   std::string m_client_id;
   int64_t m_remote_pool_id, m_local_pool_id;
   std::string m_remote_image_id, m_local_image_id;
+  std::string m_snap_name;
   Mutex m_lock;
   State m_state;
   std::string m_local_pool_name, m_remote_pool_name;
