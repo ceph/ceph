@@ -19,6 +19,9 @@
 
 #include "include/types.h"
 
+#include "rgw_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
 #include "rgw_cors_s3.h"
 #include "rgw_user.h"
 

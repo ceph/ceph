@@ -6,9 +6,6 @@
 
 #include "rgw_period_history.h"
 
-class RGWRados;
-class RGWPeriod;
-
 class RGWPeriodPuller : public RGWPeriodHistory::Puller {
   RGWRados *const store;
  public:

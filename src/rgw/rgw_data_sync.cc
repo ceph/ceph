@@ -7,6 +7,10 @@
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
+#include "rgw_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
@@ -14,7 +18,6 @@
 #include "rgw_cr_rest.h"
 #include "rgw_http_client.h"
 #include "rgw_bucket.h"
-#include "rgw_metadata.h"
 #include "rgw_boost_asio_yield.h"
 
 #include "cls/lock/cls_lock_client.h"

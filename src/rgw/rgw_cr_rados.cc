@@ -2,6 +2,8 @@
 #include "rgw_coroutine.h"
 #include "rgw_boost_asio_yield.h"
 #include "rgw_cr_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
 
 #include "cls/lock/cls_lock_client.h"
 

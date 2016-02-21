@@ -678,7 +678,8 @@ namespace rgw {
 			     const uint32_t cflags = RGWFileHandle::FLAG_NONE) {
       using std::get;
 
-      LookupFHResult fhr { nullptr, RGWFileHandle::FLAG_NONE };
+//      LookupFHResult fhr { nullptr, rgw::RGWFileHandle::FLAG_NONE };
+      LookupFHResult fhr { nullptr, 0x0 };
 
       /* mount is stale? */
       if (state.flags & FLAG_CLOSED)
@@ -742,7 +743,7 @@ namespace rgw {
     }
 
     inline void unref(RGWFileHandle* fh) {
-      (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+     (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
     }
 
     inline RGWFileHandle* ref(RGWFileHandle* fh) {
@@ -1464,7 +1465,7 @@ public:
   uint64_t _size;
   uint32_t flags;
 
-  static constexpr uint32_t FLAG_NONE = 0x000;
+  static constexpr uint32_t FLAG_NONE = 0x0000;
 
   RGWStatObjRequest(CephContext* _cct, RGWUserInfo *_user,
 		    const std::string& _bname, const std::string& _oname,

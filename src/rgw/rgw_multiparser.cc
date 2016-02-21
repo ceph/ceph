@@ -8,6 +8,7 @@
 
 #include "include/types.h"
 
+#include "include/rados/rgw_file.h"
 #include "rgw_multi.h"
 
 #define dout_subsys ceph_subsys_rgw
