@@ -42,14 +42,13 @@ enum class IOCommand {
 class NVMEDevice;
 
 struct Task {
-  NVMEDevice *device = nullptr;
-  IOContext *ctx = nullptr;
+  NVMEDevice *device;
+  IOContext *ctx;
   IOCommand command;
-  uint64_t offset = 0;
-  uint64_t len = 0;
-  void *buf = nullptr;
-  Task *next = nullptr;
-  int64_t return_code = 0;
+  uint64_t offset, len;
+  void *buf;
+  Task *next;
+  int64_t return_code;
   utime_t start;
 };
 

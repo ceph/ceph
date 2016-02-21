@@ -744,8 +744,11 @@ int NVMEDevice::aio_write(
   t->offset = off;
   t->len = len;
   t->device = this;
+  t->return_code = 0;
+  t->next = nullptr;
 
   if (buffered) {
+    t->ctx = nullptr;
     // Only need to push the first entry
     driver->queue_task(t);
     Mutex::Locker l(buffer_lock);
@@ -793,7 +796,8 @@ int NVMEDevice::aio_zero(
     t->len = len;
     t->device = this;
     t->buf = nullptr;
-
+    t->return_code = 0;
+    t->next = nullptr;
     t->ctx = ioc;
     Task *first = static_cast<Task*>(ioc->nvme_task_first);
     Task *last = static_cast<Task*>(ioc->nvme_task_last);
@@ -852,6 +856,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   t->len = len;
   t->device = this;
   t->return_code = 1;
+  t->next = nullptr;
   ++ioc->num_reading;
   driver->queue_task(t);
 
@@ -912,6 +917,7 @@ int NVMEDevice::read_buffered(uint64_t off, uint64_t len, char *buf)
   t->len = aligned_len;
   t->device = this;
   t->return_code = 1;
+  t->next = nullptr;
   ++ioc.num_reading;
   driver->queue_task(t);
 
