@@ -3698,7 +3698,7 @@ void OSD::maybe_update_heartbeat_peers()
   if (next >= 0)
     want.insert(next);
   int prev = osdmap->get_previous_up_osd_before(whoami);
-  if (prev >= 0)
+  if (prev >= 0 && prev != next)
     want.insert(prev);
 
   for (set<int>::iterator p = want.begin(); p != want.end(); ++p) {
