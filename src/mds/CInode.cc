@@ -3895,10 +3895,12 @@ next:
           p != frags.end();
           ++p) {
         CDir *dir = in->get_or_open_dirfrag(in->mdcache, *p);
+	dir->scrub_info();
+	if (!dir->scrub_infop->header && in->scrub_infop)
+	  dir->scrub_infop->header = in->scrub_infop->header;
         if (dir->is_complete()) {
 	  dir->scrub_local();
 	} else {
-	  dir->scrub_info();
 	  dir->scrub_infop->need_scrub_local = true;
 	  dir->fetch(gather.new_sub(), false);
 	}
