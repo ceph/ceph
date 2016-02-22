@@ -40,6 +40,7 @@
 #include <vector>
 #include <list>
 #include <stdexcept>
+#include <sstream>
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -2487,6 +2488,12 @@ int librados::Rados::blacklist_add(const std::string& client_address,
   return client->blacklist_add(client_address, expire_seconds);
 }
 
+int librados::Rados::map_object(const char *obj_name, vector<int> &up,
+                   vector<int> &acting, int64_t pool_id)
+{
+  return client->map_object(obj_name, up, acting, pool_id);
+}
+
 librados::PoolAsyncCompletion *librados::Rados::pool_async_create_completion()
 {
   PoolAsyncCompletionImpl *c = new PoolAsyncCompletionImpl;
@@ -2951,6 +2958,32 @@ static void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen)
   }
   if (outbuflen)
     *outbuflen = outbl.length();
+}
+
+extern "C" int rados_map_object(rados_t cluster, const char *obj_name,
+                                int *up, size_t *up_size,
+                                int *acting, size_t *acting_size,
+                                int64_t pool_id)
+{
+  librados::RadosClient *radosp = (librados::RadosClient *)cluster;
+  vector<int> up_set, acting_set;
+  int ret = radosp->map_object(obj_name, up_set, acting_set, pool_id);
+  if (ret == 0 && !up_set.empty() && up && !acting_set.empty() && acting_size)
+  {
+    for (size_t i = 0; i < up_set.size(); i ++)
+    {
+      up[i] = up_set[i];
+    }
+    *up_size = up_set.size();
+
+    for (size_t i = 0; i < acting_set.size(); i ++)
+    {
+      acting[i] = acting_set[i];
+    }
+    *acting_size = acting_set.size();
+
+  }
+  return ret;
 }
 
 extern "C" int rados_ping_monitor(rados_t cluster, const char *mon_id,

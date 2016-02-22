@@ -121,6 +121,8 @@ public:
 
   int blacklist_add(const string& client_address, uint32_t expire_seconds);
 
+  int map_object(const char *obj_name, vector<int>& up, vector<int>& acting, int64_t pool_id=-1);
+
   int mon_command(const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
   int mon_command(int rank,

@@ -626,6 +626,41 @@ bool librados::RadosClient::put() {
   return (refcnt == 0);
 }
  
+int librados::RadosClient::map_object(const char *obj_name, vector<int>& up,
+                           vector<int>& acting, int64_t pool_id)
+{
+  int r = wait_for_osdmap();
+  if (r < 0) {
+    return r;
+  }
+
+  object_t oid(obj_name);
+  if (pool_id == -1) {
+    ldout(cct, 10) << "Assuming pool 0" << dendl;
+    pool_id = 0;
+  }
+
+  objecter->with_osdmap([&](const OSDMap& o) {
+      const pg_pool_t* pool = o.get_pg_pool(pool_id);
+      if (!pool) {
+        lderr(cct) << "There is no pool " << pool_id << dendl;
+        r =  -ENOENT;
+	  } else {
+	    r = 0;
+      }
+
+      object_locator_t loc(pool_id);
+      pg_t raw_pgid = o.object_locator_to_pg(oid, loc);
+      pg_t pgid = o.raw_pg_to_pg(raw_pgid);
+
+      int up_primary, acting_primary;
+      o.pg_to_up_acting_osds(pgid, &up, &up_primary, &acting, &acting_primary);
+
+    });
+
+  return r;
+}
+
 int librados::RadosClient::pool_create(string& name, unsigned long long auid,
 				       int16_t crush_rule)
 {
