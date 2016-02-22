@@ -23,6 +23,10 @@
 
 namespace ceph {
 
+#ifdef BITS_PER_BYTE
+#undef BITS_PER_BYTE
+#endif
+
 template <uint8_t _bit_count>
 class BitVector
 {
