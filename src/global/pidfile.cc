@@ -37,6 +37,7 @@
 // when the caller is daemonized but it will show if not (-f)
 //
 #define dout_prefix *_dout
+#define dout_subsys ceph_subsys_
 
 struct pidfh {
   int pf_fd;
@@ -204,8 +205,10 @@ void pidfile_remove()
 
 int pidfile_write(const md_config_t *conf)
 {
-  if (conf->pid_file.empty())
+  if (conf->pid_file.empty()) {
+    dout(0) << __func__ << ": ignore empty --pid-file" << dendl;
     return 0;
+  }
 
   assert(pfh == nullptr);
 
