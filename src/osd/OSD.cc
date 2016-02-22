@@ -1790,7 +1790,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
       f->close_section(); //watch
     }
 
-    f->close_section(); //watches
+    f->close_section(); //watchers
   } else if (command == "dump_reservations") {
     f->open_object_section("reservations");
     f->open_object_section("local_reservations");
@@ -2496,7 +2496,7 @@ int OSD::shutdown()
   clear_pg_stat_queue();
 
   // finish ops
-  op_shardedwq.drain(); // should already be empty except for lagard PGs
+  op_shardedwq.drain(); // should already be empty except for laggard PGs
   {
     Mutex::Locker l(finished_lock);
     finished.clear(); // zap waiters (bleh, this is messy)
