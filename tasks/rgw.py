@@ -910,10 +910,11 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
                       '--rgw-zone', zone],
                  stdin=StringIO(zone_json),
                  check_status=True)
-            if zone == master_zone:
-                rgwadmin(ctx, client,
-                         cmd=['zone', 'default', master_zone],
-                         check_status=True)
+
+        (zonegroup, zone, zone_info, user_info) = role_zones[client]
+        rgwadmin(ctx, client,
+                 cmd=['zone', 'default', zone],
+                 check_status=True)
 
         for region, info in region_info.iteritems():
             region_json = json.dumps(info)
