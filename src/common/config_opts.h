@@ -1019,8 +1019,8 @@ OPTION(filestore_xfs_extsize, OPT_BOOL, false)
 OPTION(filestore_journal_parallel, OPT_BOOL, false)
 OPTION(filestore_journal_writeahead, OPT_BOOL, false)
 OPTION(filestore_journal_trailing, OPT_BOOL, false)
-OPTION(filestore_queue_max_ops, OPT_INT, 50)
-OPTION(filestore_queue_max_bytes, OPT_INT, 100 << 20)
+OPTION(filestore_queue_max_ops, OPT_U64, 50)
+OPTION(filestore_queue_max_bytes, OPT_U64, 100 << 20)
 
 OPTION(filestore_caller_concurrency, OPT_INT, 10)
 
