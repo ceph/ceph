@@ -137,6 +137,9 @@ public:
     return op_tid;
   }
 
+  int start_external_replay(journal::Replay<ImageCtxT> **journal_replay);
+  void stop_external_replay();
+
 private:
   ImageCtxT &m_image_ctx;
 
