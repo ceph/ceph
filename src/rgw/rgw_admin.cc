@@ -178,9 +178,9 @@ void _usage()
   cout << "   --bucket-id=<bucket-id>\n";
   cout << "   --shard-id=<shard-id>     optional for mdlog list\n";
   cout << "                             required for: \n";
-  cout << "                               mdlog trim\n";
-  cout << "                               replica mdlog get/delete\n";
-  cout << "                               replica datalog get/delete\n";
+  cout << "                             mdlog trim\n";
+  cout << "                             replica mdlog get/delete\n";
+  cout << "                             replica datalog get/delete\n";
   cout << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
   cout << "   --remote=<remote>         remote to pull period\n";
   cout << "   --parent=<id>             parent period id\n";
@@ -223,7 +223,7 @@ void _usage()
   cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
   cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
   cout << "   --yes-i-really-mean-it    required for certain operations\n";
-  cout << "   --reset-regions           reset regionmap when regionmap update";
+  cout << "   --reset-regions           reset regionmap when regionmap update\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cout << "\nQuota options:\n";
