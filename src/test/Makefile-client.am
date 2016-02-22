@@ -434,7 +434,8 @@ noinst_HEADERS += \
 
 librbd_mirror_test_la_SOURCES = \
 	test/rbd_mirror/test_ClusterWatcher.cc \
-	test/rbd_mirror/test_PoolWatcher.cc
+	test/rbd_mirror/test_PoolWatcher.cc \
+	test/rbd_mirror/test_ImageReplayer.cc
 librbd_mirror_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 noinst_LTLIBRARIES += librbd_mirror_test.la
 
@@ -475,6 +476,22 @@ ceph_test_rbd_mirror_LDADD = \
 	$(LIBOSDC) $(UNITTEST_LDADD) \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_test_rbd_mirror
+
+ceph_test_rbd_mirror_image_replay_SOURCES = \
+	test/rbd_mirror/image_replay.cc
+ceph_test_rbd_mirror_image_replay_LDADD = \
+	librbd_mirror_internal.la \
+	librbd_internal.la \
+	librbd_api.la \
+	$(LIBRBD_TYPES) \
+	libjournal.la \
+	$(LIBRADOS) $(LIBOSDC) \
+	librados_internal.la \
+	libcls_rbd_client.la \
+	libcls_lock_client.la \
+	libcls_journal_client.la \
+	$(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_test_rbd_mirror_image_replay
 
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc
