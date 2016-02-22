@@ -113,11 +113,7 @@ def test_repair_corrupted_obj(ctx, manager, pg, osd_remote, obj_path):
 
 
 def test_repair_bad_omap(ctx, manager, pg, osd, objname):
-    mon = manager.controller
     # Test deep-scrub with various omap modifications
-    manager.do_rados(mon, ['-p', 'rbd', 'setomapval', objname, 'key', 'val'])
-    manager.do_rados(mon, ['-p', 'rbd', 'setomapheader', objname, 'hdr'])
-
     # Modify omap on specific osd
     log.info('fuzzing omap of %s' % objname)
     manager.osd_admin_socket(osd, ['rmomapkey', 'rbd', objname, 'key'])
@@ -126,6 +122,18 @@ def test_repair_bad_omap(ctx, manager, pg, osd, objname):
     manager.osd_admin_socket(osd, ['setomapheader', 'rbd', objname, 'badhdr'])
 
     deep_scrub(manager, pg)
+    # please note, the repair here is errnomous, it rewrites the correct omap
+    # digest and data digest on the replicas with the corresponding digests
+    # from the primary osd which is hosting the victim object, see
+    # find_victim_object().
+    # so we need to either put this test and the end of this task or
+    # undo the mess-up manually before the "repair()" that just ensures
+    # the cleanup is sane, otherwise the succeeding tests will fail. if they
+    # try set "badkey" in hope to get an "inconsistent" pg with a deep-scrub.
+    manager.osd_admin_socket(osd, ['setomapheader', 'rbd', objname, 'hdr'])
+    manager.osd_admin_socket(osd, ['rmomapkey', 'rbd', objname, 'badkey'])
+    manager.osd_admin_socket(osd, ['setomapval', 'rbd', objname,
+                                   'key', 'val'])
     repair(manager, pg)
 
 
@@ -172,16 +180,19 @@ def task(ctx, config):
     # write some data
     p = manager.do_rados(mon, ['-p', 'rbd', 'bench', '--no-cleanup', '1',
                                'write', '-b', '4096'])
-    err = p.exitstatus
-    log.info('err is %d' % err)
+    log.info('err is %d' % p.exitstatus)
 
     # wait for some PG to have data that we can mess with
     pg, acting = wait_for_victim_pg(manager)
     osd = acting[0]
 
-    log.info('messing with PG %s on osd %d' % (pg, osd))
     osd_remote, obj_path, obj_name = find_victim_object(ctx, pg, osd)
+    manager.do_rados(mon, ['-p', 'rbd', 'setomapval', obj_name, 'key', 'val'])
+    log.info('err is %d' % p.exitstatus)
+    manager.do_rados(mon, ['-p', 'rbd', 'setomapheader', obj_name, 'hdr'])
+    log.info('err is %d' % p.exitstatus)
 
+    log.info('messing with PG %s on osd %d' % (pg, osd))
     test_repair_corrupted_obj(ctx, manager, pg, osd_remote, obj_path)
     test_repair_bad_omap(ctx, manager, pg, osd, obj_name)
 
