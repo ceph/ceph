@@ -1541,6 +1541,10 @@ private:
     Mutex::Locker l(heartbeat_update_lock);
     heartbeat_need_update = true;
   }
+  void heartbeat_clear_peers_need_update() {
+    Mutex::Locker l(heartbeat_update_lock);
+    heartbeat_need_update = false;
+  }
   void heartbeat();
   void heartbeat_check();
   void heartbeat_entry();
