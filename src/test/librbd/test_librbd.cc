@@ -209,13 +209,13 @@ public:
     librados::Rados rados;
     std::string pool_name;
     if (unique) {
-      pool_name = get_temp_pool_name();
+      pool_name = get_temp_pool_name("test-librbd-");
       EXPECT_EQ("", create_one_pool_pp(pool_name, rados));
       _unique_pool_names.push_back(pool_name);
     } else if (m_pool_number < _pool_names.size()) {
       pool_name = _pool_names[m_pool_number];
     } else {
-      pool_name = get_temp_pool_name();
+      pool_name = get_temp_pool_name("test-librbd-");
       EXPECT_EQ("", create_one_pool_pp(pool_name, rados));
       _pool_names.push_back(pool_name);
     }

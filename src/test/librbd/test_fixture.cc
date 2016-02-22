@@ -24,7 +24,7 @@ TestFixture::TestFixture() : m_image_size(0) {
 }
 
 void TestFixture::SetUpTestCase() {
-  _pool_name = get_temp_pool_name();
+  _pool_name = get_temp_pool_name("test-librbd-");
   ASSERT_EQ("", create_one_pool_pp(_pool_name, _rados));
 }
 
