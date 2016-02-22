@@ -20,7 +20,7 @@
 
 using namespace librados;
 
-std::string get_temp_pool_name()
+std::string get_temp_pool_name(const std::string &prefix)
 {
   char hostname[80];
   char out[80];
@@ -30,9 +30,7 @@ std::string get_temp_pool_name()
   static int num = 1;
   sprintf(out, "%s-%d-%d", hostname, getpid(), num);
   num++;
-  std::string prefix("test-rados-api-");
-  prefix += out;
-  return prefix;
+  return prefix + out;
 }
 
 int wait_for_healthy(rados_t *cluster)
