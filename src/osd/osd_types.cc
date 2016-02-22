@@ -667,6 +667,7 @@ bool coll_t::parse(const std::string& s)
 
 void coll_t::encode(bufferlist& bl) const
 {
+  // when changing this, remember to update encoded_size() too.
   if (is_temp()) {
     // can't express this as v2...
     __u8 struct_v = 3;
@@ -680,6 +681,33 @@ void coll_t::encode(bufferlist& bl) const
     snapid_t snap = CEPH_NOSNAP;
     ::encode(snap, bl);
   }
+}
+
+size_t coll_t::encoded_size() const
+{
+  size_t r = sizeof(__u8);
+  if (is_temp()) {
+    // v3
+    r += sizeof(__u32);
+    if (_str) {
+      r += strlen(_str);
+    }
+  } else {
+      // v2
+      // 1. type
+      r += sizeof(__u8);
+      // 2. pgid
+      //  - encoding header
+      r += sizeof(ceph_le32) + 2 * sizeof(__u8);
+      // - pg_t
+      r += sizeof(__u8) + sizeof(uint64_t) + 2 * sizeof(uint32_t);
+      // - shard_id_t
+      r += sizeof(int8_t);
+      // 3. snapid_t
+      r += sizeof(uint64_t);
+  }
+
+  return r;
 }
 
 void coll_t::decode(bufferlist::iterator& bl)
