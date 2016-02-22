@@ -356,8 +356,8 @@ int get_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  * set the image features
  *
  * Input:
- * @params features image features
- * @params mask image feature mask
+ * @param features image features
+ * @param mask image feature mask
  *
  * Output:
  * none
@@ -845,9 +845,9 @@ int get_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  * set the image flags
  *
  * Input:
- * @params flags image flags
- * @params mask image flag mask
- * @params snap_id which snapshot to update, or CEPH_NOSNAP (uint64_t)
+ * @param flags image flags
+ * @param mask image flag mask
+ * @param snap_id which snapshot to update, or CEPH_NOSNAP (uint64_t)
  *
  * Output:
  * none
