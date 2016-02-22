@@ -887,5 +887,42 @@ public:
   int request_complete();
 };
 
+class RGWAsyncStatObj : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  rgw_obj obj;
+  uint64_t *psize;
+  time_t *pmtime;
+  uint64_t *pepoch;
+  RGWObjVersionTracker *objv_tracker;
+protected:
+  int _send_request() override;
+public:
+  RGWAsyncStatObj(RGWAioCompletionNotifier *cn, RGWRados *store,
+                  const rgw_obj& obj, uint64_t *psize = nullptr,
+                  time_t *pmtime = nullptr, uint64_t *pepoch = nullptr,
+                  RGWObjVersionTracker *objv_tracker = nullptr)
+    : RGWAsyncRadosRequest(cn), store(store), obj(obj), psize(psize),
+      pmtime(pmtime), pepoch(pepoch), objv_tracker(objv_tracker) {}
+};
+
+class RGWStatObjCR : public RGWSimpleCoroutine {
+  RGWRados *store;
+  RGWAsyncRadosProcessor *async_rados;
+  rgw_obj obj;
+  uint64_t *psize;
+  time_t *pmtime;
+  uint64_t *pepoch;
+  RGWObjVersionTracker *objv_tracker;
+  RGWAsyncStatObj *req = nullptr;
+ public:
+  RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
+               const rgw_obj& obj, uint64_t *psize = nullptr,
+               time_t *pmtime = nullptr, uint64_t *pepoch = nullptr,
+               RGWObjVersionTracker *objv_tracker = nullptr);
+  ~RGWStatObjCR();
+
+  int send_request() override;
+  int request_complete() override;
+};
 
 #endif

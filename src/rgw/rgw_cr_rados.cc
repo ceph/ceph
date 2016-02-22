@@ -611,3 +611,39 @@ int RGWRadosTimelogAddCR::request_complete()
 
   return r;
 }
+
+int RGWAsyncStatObj::_send_request()
+{
+  return store->raw_obj_stat(obj, psize, pmtime, pepoch,
+                             nullptr, nullptr, objv_tracker);
+}
+
+RGWStatObjCR::RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
+                           const rgw_obj& obj, uint64_t *psize,
+                           time_t *pmtime, uint64_t *pepoch,
+                           RGWObjVersionTracker *objv_tracker)
+  : RGWSimpleCoroutine(store->ctx()), store(store), async_rados(async_rados),
+    obj(obj), psize(psize), pmtime(pmtime), pepoch(pepoch),
+    objv_tracker(objv_tracker)
+{
+}
+
+RGWStatObjCR::~RGWStatObjCR()
+{
+  if (req) {
+    req->finish();
+  }
+}
+
+int RGWStatObjCR::send_request()
+{
+  req = new RGWAsyncStatObj(stack->create_completion_notifier(),
+                            store, obj, psize, pmtime, pepoch, objv_tracker);
+  async_rados->queue(req);
+  return 0;
+}
+
+int RGWStatObjCR::request_complete()
+{
+  return req->get_ret_status();
+}
