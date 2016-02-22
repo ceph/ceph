@@ -134,6 +134,7 @@
                                replica mdlog get/delete
                                replica datalog get/delete
      --metadata-key=<key>      key to retrieve metadata from with metadata get
+     --remote=<remote>         remote to pull period
      --parent=<id>             parent period id
      --period=<id>             period id
      --epoch=<number>          period epoch
@@ -174,8 +175,8 @@
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read"
      --yes-i-really-mean-it    required for certain operations
-     --reset-zonegroups        reset zonegroupmap when zonegroupmap update
- 
+     --reset-regions           reset regionmap when regionmap update
+  
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
   Quota options:
@@ -197,4 +198,5 @@
     --version         show version and quit
   
   [1]
+ 
  
