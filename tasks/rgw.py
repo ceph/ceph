@@ -905,6 +905,7 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
                         remote, pool_info['val']['data_pool'],
                         64)
             zone_json = json.dumps(dict(zone_info.items() + user_info.items()))
+            log.debug('zone info is: %s', zone_json)
             rgwadmin(ctx, client,
                  cmd=['zone', 'set', '--rgw-zonegroup', zonegroup,
                       '--rgw-zone', zone],
