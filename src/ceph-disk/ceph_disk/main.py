@@ -3422,7 +3422,7 @@ def main_activate_all(args):
 
         if tag in Ptype.get_ready_by_name('osd'):
 
-            if Ptype.is_dmcrpyt(tag, 'osd'):
+            if Ptype.is_dmcrypt(tag, 'osd'):
                 path = os.path.join('/dev/mapper', uuid)
             else:
                 path = os.path.join(dir, name)
