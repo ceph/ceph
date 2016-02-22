@@ -417,7 +417,7 @@ Context *AcquireRequest<I>::handle_get_lockers(int *ret_val) {
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t> lockers;
-  ClsLockType lock_type;
+  ClsLockType lock_type = LOCK_NONE;
   std::string lock_tag;
   if (*ret_val == 0) {
     bufferlist::iterator it = m_out_bl.begin();
