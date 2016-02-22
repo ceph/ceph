@@ -962,6 +962,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }*/
 
   template<bool is_const>
+  buffer::list::iterator_impl<is_const>::iterator_impl(bl_t *l, unsigned o)
+    : bl(l), ls(&bl->_buffers), off(0), p(ls->begin()), p_off(0)
+  {
+    advance(o);
+  }
+
+  template<bool is_const>
   void buffer::list::iterator_impl<is_const>::advance(int o)
   {
     //cout << this << " advance " << o << " from " << off << " (p_off " << p_off << " in " << p->length() << ")" << std::endl;
@@ -1130,6 +1137,14 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   // dependencies.
   template class buffer::list::iterator_impl<true>;
   template class buffer::list::iterator_impl<false>;
+
+  buffer::list::iterator::iterator(bl_t *l, unsigned o)
+    : iterator_impl(l, o)
+  {}
+
+  buffer::list::iterator::iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
+    : iterator_impl(l, o, ip, po)
+  {}
 
   void buffer::list::iterator::advance(int o)
   {
