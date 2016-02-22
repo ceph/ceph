@@ -1568,7 +1568,7 @@ int BlueStore::_setup_block_symlink_or_file(
   dout(20) << __func__ << " name " << name << " path " << epath
 	   << " size " << size << " create=" << (int)create << dendl;
   int r = 0;
-  unsigned flags = O_RDWR;
+  int flags = O_RDWR;
   if (create)
     flags |= O_CREAT;
   if (epath.length()) {
