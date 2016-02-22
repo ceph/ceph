@@ -727,17 +727,6 @@ do_hitsets $hitset
 
 do_rgw()
 {
-    # Start server
-    echo start rgw on http://localhost:$CEPH_RGW_PORT
-    RGWDEBUG=""
-    if [ "$debug" -ne 0 ]; then
-        RGWDEBUG="--debug-rgw=20"
-    fi
-
-    RGWSUDO=
-    [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
-    $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
-
     # Create S3 user
     local akey='0555b35654ad1656d804'
     local skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
@@ -774,6 +763,17 @@ do_rgw()
     echo "  user      : tester"
     echo "  password  : testing"
     echo ""
+
+    # Start server
+    echo start rgw on http://localhost:$CEPH_RGW_PORT
+    RGWDEBUG=""
+    if [ "$debug" -ne 0 ]; then
+        RGWDEBUG="--debug-rgw=20"
+    fi
+
+    RGWSUDO=
+    [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
+    $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
 }
 if [ "$start_rgw" -eq 1 ]; then
     do_rgw
