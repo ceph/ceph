@@ -216,6 +216,10 @@ BuildRequires:	python-sphinx10
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 7
 BuildRequires:	python-sphinx
 %endif
+#hardened-cc1
+%if 0%{?fedora} || 0%{?rhel}
+BuildRequires:  redhat-rpm-config
+%endif
 
 %description
 Ceph is a massively scalable, open-source, distributed storage system that runs
