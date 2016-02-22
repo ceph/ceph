@@ -924,7 +924,7 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
                      stdin=StringIO(region_json),
                      check_status=True)
             if info['is_master']:
-                rgwadmin(ctx, master_client,
+                rgwadmin(ctx, client,
                          cmd=['zonegroup', 'default', '--rgw-zonegroup', master_zonegroup],
                          check_status=True)
 
@@ -946,19 +946,19 @@ def pull_configuration(ctx, config, regions, role_endpoints, realm, master_clien
     """
     if not regions:
         log.debug(
-            'In rgw.configure_regions_and_zones() and regions is None. '
+            'In rgw.pull_confguration() and regions is None. '
             'Bailing')
         yield
         return
 
     if not realm:
         log.debug(
-            'In rgw.configure_regions_and_zones() and realm is None. '
+            'In rgw.pull_configuration() and realm is None. '
             'Bailing')
         yield
         return
 
-    log.info('Configuring regions and zones...')
+    log.info('Pulling configuration...')
 
     log.debug('config is %r', config)
     log.debug('regions are %r', regions)
