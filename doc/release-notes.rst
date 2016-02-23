@@ -2132,10 +2132,17 @@ Notable Changes
 * rocksdb: update to latest (Xiaoxi Chen)
 * rpm: loosen ceph-test dependencies (Ken Dreyer)
 
-v0.94.6 Hammer (draft)
+v0.94.6 Hammer
 ======================
 
-This Hammer point release fixes ...
+This Hammer point release fixes a range of bugs, most notably a fix
+for unbounded growth of the monitor's leveldb store, and a workaround
+in the OSD to keep most xattrs small enough to be stored inline in XFS
+inodes.
+
+We recommend that all hammer v0.94.x users upgrade.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.94.6.txt>`.
 
 Notable Changes
 ---------------
