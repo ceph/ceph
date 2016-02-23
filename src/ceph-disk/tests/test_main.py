@@ -315,7 +315,7 @@ class TestCephDisk(object):
             partition_uuid = "56244cf5-83ef-4984-888a-2d8b8e0e04b2"
             disk = "Xda"
             partition = "Xda1"
-            holders = ["dm-0"]
+            holders = ["dm-dummy"]
             with patch.multiple(
                     main,
                     is_held=lambda dev: holders,
@@ -346,7 +346,7 @@ class TestCephDisk(object):
             partition_uuid = "56244cf5-83ef-4984-888a-2d8b8e0e04b2"
             disk = "Xda"
             partition = "Xda1"
-            holders = ["dm-0", "dm-1"]
+            holders = ["dm-dummy", "dm-dummy1"]
             with patch.multiple(
                     main,
                     is_held=lambda dev: holders,
@@ -451,9 +451,9 @@ class TestCephDisk(object):
         data_uuid = "56244cf5-83ef-4984-888a-2d8b8e0e04b2"
         disk = "Xda"
         data = "Xda1"
-        data_holder = "dm-0"
+        data_holder = "dm-dummy"
         space = "Xda2"
-        space_holder = "dm-0"
+        space_holder = "dm-dummy"
         mount_path = '/mount/path'
         fs_type = 'ext4'
         space_uuid = "7ad5e65a-0ca5-40e4-a896-62a74ca61c55"
