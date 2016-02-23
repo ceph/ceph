@@ -871,9 +871,9 @@ protected:
   int use_default(bool old_format = false);
 
 public:
-  RGWSystemMetaObj() {}
-  RGWSystemMetaObj(const string& _name): name(_name)  {}
-  RGWSystemMetaObj(const string& _id, const string& _name) : id(_id), name(_name) {}
+  RGWSystemMetaObj() : cct(NULL), store(NULL) {}
+  RGWSystemMetaObj(const string& _name): name(_name), cct(NULL), store(NULL)  {}
+  RGWSystemMetaObj(const string& _id, const string& _name) : id(_id), name(_name), cct(NULL), store(NULL) {}
   RGWSystemMetaObj(CephContext *_cct, RGWRados *_store): cct(_cct), store(_store){}
   RGWSystemMetaObj(const string& _name, CephContext *_cct, RGWRados *_store): name(_name), cct(_cct), store(_store){}
   const string& get_name() const { return name; }
