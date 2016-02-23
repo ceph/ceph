@@ -3273,15 +3273,17 @@ def destroy_lookup_device(args, predicate, description):
                                            args.dmcrypt_key_dir)
                 list_dev_osd(dmcrypt_path, {}, partition)
                 dmcrypt_unmap(partition['uuid'])
+                dmcrypt = True
+            else:
+                dmcrypt = False
             if predicate(partition):
-                return partition
+                return (dmcrypt, partition)
     raise Error('found no device matching ', description)
 
 
 def main_destroy(args):
     osd_id = args.destroy_by_id
     path = args.path
-    dmcrypt = False
     target_dev = None
 
     if path:
@@ -3290,11 +3292,11 @@ def main_destroy(args):
         path = os.path.realpath(path)
 
     if path:
-        target_dev = destroy_lookup_device(
+        (dmcrypt, target_dev) = destroy_lookup_device(
             args, lambda x: x.get('path') == path,
             path)
     elif osd_id:
-        target_dev = destroy_lookup_device(
+        (dmcrypt, target_dev) = destroy_lookup_device(
             args, lambda x: x.get('whoami') == osd_id,
             'osd id ' + str(osd_id))
 
