@@ -556,7 +556,7 @@ AS_IF([test "x$with_jemalloc" = "xyes"],[with_tcmalloc_minimal=no],[])
 
 TCMALLOC_MINIMAL=
 AS_IF([test "x$with_tcmalloc_minimal" != xno],
-        [AC_CHECK_LIB([tcmalloc_minimal], [malloc],
+        [AC_CHECK_LIB([tcmalloc_minimal -lpthread], [malloc],
          [AC_SUBST([LIBTCMALLOC], ["-ltcmalloc_minimal"])
 	       AC_DEFINE([HAVE_LIBTCMALLOC_MINIMAL], [1],
 	       		 [Define if you have tcmalloc])
@@ -577,7 +577,7 @@ AS_IF([test "x$with_tcmalloc_minimal" = "xyes"],[with_tcmalloc=no],[])
 
 TCMALLOC=
 AS_IF([test "x$with_tcmalloc" != xno],
-	    [AC_CHECK_LIB([tcmalloc], [malloc],
+	    [AC_CHECK_LIB([tcmalloc -lpthread], [malloc],
 	     [AC_SUBST([LIBTCMALLOC], ["-ltcmalloc"])
 	       AC_DEFINE([HAVE_LIBTCMALLOC], [1],
 	       		 [Define if you have tcmalloc])
