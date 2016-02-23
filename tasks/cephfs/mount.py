@@ -503,6 +503,29 @@ class CephFSMount(object):
         else:
             return proc
 
+    def touch(self, fs_path):
+        """
+        Create a dentry if it doesn't already exist.  This python
+        implementation exists because the usual command line tool doesn't
+        pass through error codes like EIO.
+
+        :param fs_path:
+        :return:
+        """
+        abs_path = os.path.join(self.mountpoint, fs_path)
+        pyscript = dedent("""
+            import sys
+            import errno
+
+            try:
+                f = open("{path}", "w")
+                f.close()
+            except IOError as e:
+                sys.exit(errno.EIO)
+            """).format(path=abs_path)
+        proc = self._run_python(pyscript)
+        proc.wait()
+
     def path_to_ino(self, fs_path):
         abs_path = os.path.join(self.mountpoint, fs_path)
 
@@ -524,3 +547,12 @@ class CephFSMount(object):
         if path:
             cmd.append(path)
         return self.run_shell(cmd).stdout.getvalue().strip().split("\n")
+
+    def getfattr(self, path, attr):
+        """
+        Wrap getfattr: return the values of a named xattr on one file.
+
+        :return: a string
+        """
+        p = self.run_shell(["getfattr", "--only-values", "-n", attr, path])
+        return p.stdout.getvalue()
