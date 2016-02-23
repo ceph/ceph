@@ -116,15 +116,17 @@ RGWPeriodHistory::Impl::Impl(CephContext* cct, Puller* puller,
                              const RGWPeriod& current_period)
   : cct(cct), puller(puller)
 {
-  // copy the current period into a new history
-  auto history = new History;
-  history->periods.push_back(current_period);
+  if (!current_period.get_id().empty()) {
+    // copy the current period into a new history
+    auto history = new History;
+    history->periods.push_back(current_period);
 
-  // insert as our current history
-  current_history = histories.insert(*history).first;
+    // insert as our current history
+    current_history = histories.insert(*history).first;
 
-  // get a cursor to the current period
-  current_cursor = make_cursor(current_history, current_period.get_realm_epoch());
+    // get a cursor to the current period
+    current_cursor = make_cursor(current_history, current_period.get_realm_epoch());
+  }
 }
 
 RGWPeriodHistory::Impl::~Impl()
@@ -135,6 +137,10 @@ RGWPeriodHistory::Impl::~Impl()
 
 Cursor RGWPeriodHistory::Impl::attach(RGWPeriod&& period)
 {
+  if (current_history == histories.end()) {
+    return Cursor{-EINVAL};
+  }
+
   const auto epoch = period.get_realm_epoch();
 
   std::string predecessor_id;
@@ -177,6 +183,10 @@ Cursor RGWPeriodHistory::Impl::attach(RGWPeriod&& period)
 
 Cursor RGWPeriodHistory::Impl::insert(RGWPeriod&& period)
 {
+  if (current_history == histories.end()) {
+    return Cursor{-EINVAL};
+  }
+
   std::lock_guard<std::mutex> lock(mutex);
 
   auto cursor = insert_locked(std::move(period));
@@ -195,7 +205,8 @@ Cursor RGWPeriodHistory::Impl::insert(RGWPeriod&& period)
 
 Cursor RGWPeriodHistory::Impl::lookup(epoch_t realm_epoch)
 {
-  if (current_history->contains(realm_epoch)) {
+  if (current_history != histories.end() &&
+      current_history->contains(realm_epoch)) {
     return make_cursor(current_history, realm_epoch);
   }
   return Cursor{};
