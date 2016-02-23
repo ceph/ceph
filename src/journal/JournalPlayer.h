@@ -23,8 +23,8 @@ class ReplayHandler;
 
 class JournalPlayer {
 public:
-  typedef cls::journal::EntryPosition EntryPosition;
-  typedef cls::journal::EntryPositions EntryPositions;
+  typedef cls::journal::ObjectPosition ObjectPosition;
+  typedef cls::journal::ObjectPositions ObjectPositions;
   typedef cls::journal::ObjectSetPosition ObjectSetPosition;
 
   JournalPlayer(librados::IoCtx &ioctx, const std::string &object_oid_prefix,

@@ -30,8 +30,8 @@ typedef boost::intrusive_ptr<JournalMetadata> JournalMetadataPtr;
 
 class JournalMetadata : public RefCountedObject, boost::noncopyable {
 public:
-  typedef cls::journal::EntryPosition EntryPosition;
-  typedef cls::journal::EntryPositions EntryPositions;
+  typedef cls::journal::ObjectPosition ObjectPosition;
+  typedef cls::journal::ObjectPositions ObjectPositions;
   typedef cls::journal::ObjectSetPosition ObjectSetPosition;
   typedef cls::journal::Client Client;
   typedef cls::journal::Tag Tag;

@@ -151,19 +151,19 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
         return -EIO;
       }
 
-      // cannot expire tags if a client hasn't committed yet
-      if (client.commit_position.entry_positions.empty()) {
-        return 0;
-      }
-
-      for (auto entry_position : client.commit_position.entry_positions) {
-        minimum_tag_tid = MIN(minimum_tag_tid, entry_position.tag_tid);
+      for (auto object_position : client.commit_position.object_positions) {
+        minimum_tag_tid = MIN(minimum_tag_tid, object_position.tag_tid);
       }
     }
     if (!vals.empty()) {
       last_read = vals.rbegin()->first;
     }
   } while (r == MAX_KEYS_READ);
+
+  // cannot expire tags if a client hasn't committed yet
+  if (minimum_tag_tid == std::numeric_limits<uint64_t>::max()) {
+    return 0;
+  }
 
   // compute the minimum in-use tag for each class
   std::map<uint64_t, uint64_t> minimum_tag_class_to_tids;
@@ -665,8 +665,8 @@ int journal_client_commit(cls_method_context_t hctx, bufferlist *in,
   if (r < 0) {
     return r;
   }
-  if (commit_position.entry_positions.size() > splay_width) {
-    CLS_ERR("too many entry positions");
+  if (commit_position.object_positions.size() > splay_width) {
+    CLS_ERR("too many object positions");
     return -EINVAL;
   }
 
@@ -918,8 +918,8 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  for (auto entry_position : client.commit_position.entry_positions) {
-    minimum_tag_tid = MIN(minimum_tag_tid, entry_position.tag_tid);
+  for (auto object_position : client.commit_position.object_positions) {
+    minimum_tag_tid = MIN(minimum_tag_tid, object_position.tag_tid);
   }
 
   // compute minimum tags in use per-class
@@ -928,7 +928,7 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
   typedef enum { TAG_PASS_CALCULATE_MINIMUMS,
                  TAG_PASS_LIST,
                  TAG_PASS_DONE } TagPass;
-  int tag_pass = (client.commit_position.entry_positions.empty() ?
+  int tag_pass = (minimum_tag_tid == std::numeric_limits<uint64_t>::max() ?
     TAG_PASS_LIST : TAG_PASS_CALCULATE_MINIMUMS);
   std::string last_read = HEADER_KEY_TAG_PREFIX;
   do {

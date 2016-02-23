@@ -293,7 +293,7 @@ TEST_F(TestClsJournal, ClientUnregisterPruneTags) {
   ASSERT_EQ(0, client::tag_create(ioctx, oid, 2, 1, bufferlist()));
 
   librados::ObjectWriteOperation op1;
-  client::client_commit(&op1, "id1", {1, {{2, 120}}});
+  client::client_commit(&op1, "id1", {{{1, 2, 120}}});
   ASSERT_EQ(0, ioctx.operate(oid, &op1));
 
   ASSERT_EQ(0, client::client_unregister(ioctx, oid, "id2"));
@@ -314,12 +314,12 @@ TEST_F(TestClsJournal, ClientCommit) {
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
-  cls::journal::EntryPositions entry_positions;
-  entry_positions = {
-    cls::journal::EntryPosition(234, 120),
-    cls::journal::EntryPosition(235, 121)};
+  cls::journal::ObjectPositions object_positions;
+  object_positions = {
+    cls::journal::ObjectPosition(0, 234, 120),
+    cls::journal::ObjectPosition(3, 235, 121)};
   cls::journal::ObjectSetPosition object_set_position(
-    1, entry_positions);
+    object_positions);
 
   librados::ObjectWriteOperation op2;
   client::client_commit(&op2, "id1", object_set_position);
@@ -342,13 +342,13 @@ TEST_F(TestClsJournal, ClientCommitInvalid) {
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
-  cls::journal::EntryPositions entry_positions;
-  entry_positions = {
-    cls::journal::EntryPosition(234, 120),
-    cls::journal::EntryPosition(234, 121),
-    cls::journal::EntryPosition(235, 121)};
+  cls::journal::ObjectPositions object_positions;
+  object_positions = {
+    cls::journal::ObjectPosition(0, 234, 120),
+    cls::journal::ObjectPosition(4, 234, 121),
+    cls::journal::ObjectPosition(5, 235, 121)};
   cls::journal::ObjectSetPosition object_set_position(
-    1, entry_positions);
+    object_positions);
 
   librados::ObjectWriteOperation op2;
   client::client_commit(&op2, "id1", object_set_position);
@@ -468,7 +468,7 @@ TEST_F(TestClsJournal, TagCreatePrunesTags) {
   ASSERT_EQ(0, client::tag_create(ioctx, oid, 2, 1, bufferlist()));
 
   librados::ObjectWriteOperation op1;
-  client::client_commit(&op1, "id1", {1, {{2, 120}}});
+  client::client_commit(&op1, "id1", {{{1, 2, 120}}});
   ASSERT_EQ(0, ioctx.operate(oid, &op1));
 
   ASSERT_EQ(0, client::tag_create(ioctx, oid, 3, 0, bufferlist()));
