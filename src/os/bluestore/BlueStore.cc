@@ -3559,17 +3559,17 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
       if (!g_conf->bluestore_sync_transaction) {
-	std::lock_guard<std::mutex> l(kv_lock);
 	if (g_conf->bluestore_sync_submit_transaction) {
 	  db->submit_transaction(txc->t);
 	}
+      } else
+	db->submit_transaction_sync(txc->t);
+      {
+	std::lock_guard<std::mutex> l(kv_lock);
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
-	return;
       }
-      db->submit_transaction_sync(txc->t);
-      break;
-
+      return;
     case TransContext::STATE_KV_QUEUED:
       txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
       txc->state = TransContext::STATE_KV_DONE;
