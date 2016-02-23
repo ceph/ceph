@@ -132,6 +132,8 @@ int main(int argc, const char **argv)
   rbd::mirror::RadosRef remote(new librados::Rados());
   rbd::mirror::Threads *threads = nullptr;
 
+  C_SaferCond start_cond, stop_cond;
+
   int r = local->init_with_context(g_ceph_context);
   if (r < 0) {
     derr << "could not initialize rados handle" << dendl;
@@ -187,7 +189,8 @@ int main(int argc, const char **argv)
 					    local_pool_id, remote_pool_id,
 					    remote_image_id);
 
-  r = replayer->start(&bootstap_params);
+  replayer->start(&start_cond, &bootstap_params);
+  r = start_cond.wait();
   if (r < 0) {
     derr << "failed to start: " << cpp_strerror(r) << dendl;
     goto cleanup;
@@ -201,7 +204,9 @@ int main(int argc, const char **argv)
 
   dout(1) << "termination signal received, stopping replay" << dendl;
 
-  replayer->stop();
+  replayer->stop(&stop_cond);
+  r = stop_cond.wait();
+  assert(r == 0);
 
   dout(1) << "shutdown" << dendl;
 
