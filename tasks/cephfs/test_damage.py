@@ -340,3 +340,105 @@ class TestDamage(CephFSTestCase):
             raise RuntimeError("{0} mutations had unexpected outcomes".format(len(failures)))
         else:
             log.info("All {0} mutations had expected outcomes".format(len(mutations)))
+
+    def test_damaged_dentry(self):
+        # Damage to dentrys is interesting because it leaves the
+        # directory's `complete` flag in a subtle state where
+        # we have marked the dir complete in order that folks
+        # can access it, but in actual fact there is a dentry
+        # missing
+        self.mount_a.run_shell(["mkdir", "subdir/"])
+
+        self.mount_a.run_shell(["touch", "subdir/file_undamaged"])
+        self.mount_a.run_shell(["touch", "subdir/file_to_be_damaged"])
+
+        subdir_ino = self.mount_a.path_to_ino("subdir")
+
+        self.mount_a.umount_wait()
+        for mds_name in self.fs.get_active_names():
+            self.fs.mds_asok(["flush", "journal"], mds_name)
+
+        self.fs.mds_stop()
+        self.fs.mds_fail()
+
+        # Corrupt a dentry
+        junk = "deadbeef" * 10
+        dirfrag_obj = "{0:x}.00000000".format(subdir_ino)
+        self.fs.rados(["setomapval", dirfrag_obj, "file_to_be_damaged_head", junk])
+
+        # Start up and try to list it
+        self.fs.mds_restart()
+        self.fs.wait_for_daemons()
+
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
+        dentries = self.mount_a.ls("subdir/")
+
+        # The damaged guy should have disappeared
+        self.assertEqual(dentries, ["file_undamaged"])
+
+        # I should get ENOENT if I try and read it normally, because
+        # the dir is considered complete
+        try:
+            self.mount_a.stat("subdir/file_to_be_damaged", wait=True)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            raise AssertionError("Expected ENOENT")
+
+        # The fact that there is damaged should have bee recorded
+        damage = json.loads(
+            self.fs.mon_manager.raw_cluster_cmd(
+                'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+                "damage", "ls", '--format=json-pretty'))
+        self.assertEqual(len(damage), 1)
+        damage_id = damage[0]['id']
+
+        # If I try to create a dentry with the same name as the damaged guy
+        # then that should be forbidden
+        try:
+            self.mount_a.touch("subdir/file_to_be_damaged")
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EIO)
+        else:
+            raise AssertionError("Expected EIO")
+
+        # Attempting that touch will clear the client's complete flag, now
+        # when I stat it I'll get EIO instead of ENOENT
+        try:
+            self.mount_a.stat("subdir/file_to_be_damaged", wait=True)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EIO)
+        else:
+            raise AssertionError("Expected EIO")
+
+        nfiles = self.mount_a.getfattr("./subdir", "ceph.dir.files")
+        self.assertEqual(nfiles, "2")
+
+        self.mount_a.umount_wait()
+
+        # Now repair the stats
+        scrub_json = self.fs.mds_asok(["scrub_path", "/subdir", "repair"])
+        log.info(json.dumps(scrub_json, indent=2))
+
+        self.assertEqual(scrub_json["passed_validation"], False)
+        self.assertEqual(scrub_json["raw_stats"]["checked"], True)
+        self.assertEqual(scrub_json["raw_stats"]["passed"], False)
+
+        # Check that the file count is now correct
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
+        nfiles = self.mount_a.getfattr("./subdir", "ceph.dir.files")
+        self.assertEqual(nfiles, "1")
+
+        # Clean up the omap object
+        self.fs.rados(["setomapval", dirfrag_obj, "file_to_be_damaged_head", junk])
+
+        # Clean up the damagetable entry
+        self.fs.mon_manager.raw_cluster_cmd(
+            'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+            "damage", "rm", "{did}".format(did=damage_id))
+
+        # Now I should be able to create a file with the same name as the
+        # damaged guy if I want.
+        self.mount_a.touch("subdir/file_to_be_damaged")
