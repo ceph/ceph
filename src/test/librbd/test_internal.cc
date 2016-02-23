@@ -6,6 +6,7 @@
 #include "librbd/AioImageRequest.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
+#include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
@@ -70,6 +71,20 @@ public:
   virtual void finish(int r) {
   }
 };
+
+TEST_F(TestInternal, OpenByID) {
+   REQUIRE_FORMAT_V2();
+
+   librbd::ImageCtx *ictx;
+   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+   std::string id = ictx->id;
+   close_image(ictx);
+
+   ictx = new librbd::ImageCtx("", id, nullptr, m_ioctx, true);
+   ASSERT_EQ(0, ictx->state->open());
+   ASSERT_EQ(ictx->name, m_image_name);
+   close_image(ictx);
+}
 
 TEST_F(TestInternal, IsExclusiveLockOwner) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
