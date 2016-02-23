@@ -1559,10 +1559,11 @@ class RGWPeriod
   int update_sync_status();
 
 public:
-  RGWPeriod() : epoch(0) {}
+  RGWPeriod() : epoch(0), cct(NULL), store(NULL) {}
 
   RGWPeriod(const string& period_id, epoch_t _epoch = 0)
-    : id(period_id), epoch(_epoch) {}
+    : id(period_id), epoch(_epoch),
+      cct(NULL), store(NULL) {}
 
   const string& get_id() const { return id; }
   epoch_t get_epoch() const { return epoch; }
