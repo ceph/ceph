@@ -4,6 +4,7 @@
 #ifndef CEPH_RGW_FCGI_H
 #define CEPH_RGW_FCGI_H
 
+#include "acconfig.h"
 #ifdef FASTCGI_INCLUDE_DIR
 # include "fastcgi/fcgiapp.h"
 #else
