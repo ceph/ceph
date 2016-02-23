@@ -137,3 +137,30 @@ void DamageTable::dump(Formatter *f) const
   f->close_section();
 }
 
+void DamageTable::erase(damage_entry_id_t damage_id)
+{
+  if (by_id.count(damage_id) == 0) {
+    return;
+  }
+
+  DamageEntryRef entry = by_id.at(damage_id);
+  assert(entry->id == damage_id);  // Sanity
+
+  const auto type = entry->get_type();
+  if (type == DAMAGE_ENTRY_DIRFRAG) {
+    auto dirfrag_entry = std::static_pointer_cast<DirFragDamage>(entry);
+    dirfrags.erase(DirFragIdent(dirfrag_entry->ino, dirfrag_entry->frag));
+  } else if (type == DAMAGE_ENTRY_DENTRY) {
+    auto dentry_entry = std::static_pointer_cast<DentryDamage>(entry);
+    dentries.erase(DirFragIdent(dentry_entry->ino, dentry_entry->frag));
+  } else if (type == DAMAGE_ENTRY_BACKTRACE) {
+    auto backtrace_entry = std::static_pointer_cast<BacktraceDamage>(entry);
+    remotes.erase(backtrace_entry->ino);
+  } else {
+    derr << "Invalid type " << type << dendl;
+    assert(0);
+  }
+
+  by_id.erase(damage_id);
+}
+

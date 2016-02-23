@@ -2590,6 +2590,16 @@ bool MDSRankDispatcher::handle_command(
     f->flush(*ds);
     delete f;
     return true;
+  } else if (prefix == "damage rm") {
+    damage_entry_id_t id = 0;
+    bool got = cmd_getval(g_ceph_context, cmdmap, "damage_id", (int64_t&)id);
+    if (!got) {
+      *r = -EINVAL;
+      return true;
+    }
+
+    damage_table.erase(id);
+    return true;
   } else {
     return false;
   }
