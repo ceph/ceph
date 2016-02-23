@@ -667,7 +667,7 @@ struct RGWSLOInfo {
   char *raw_data;
   int raw_data_len;
 
-  RGWSLOInfo() : raw_data(NULL), raw_data_len(0) {}
+  RGWSLOInfo() : total_size(0), raw_data(NULL), raw_data_len(0) {}
   ~RGWSLOInfo() {
     free(raw_data);
   }
