@@ -1804,6 +1804,20 @@ int BlueStore::mount()
 {
   dout(1) << __func__ << " path " << path << dendl;
 
+  {
+    string type;
+    int r = read_meta("type", &type);
+    if (r < 0) {
+      derr << __func__ << " failed to load os-type: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if (type != "bluestore") {
+      derr << __func__ << " expected bluestore, but type is " << type << dendl;
+      return -EIO;
+    }
+  }
+
   if (g_conf->bluestore_fsck_on_mount) {
     int rc = fsck();
     if (rc < 0)
