@@ -258,7 +258,13 @@ struct RGWUserAdminOpState {
 
     size_t pos = _subuser.find(":");
     if (pos != string::npos) {
-      user_id.from_str(_subuser.substr(0, pos));
+      rgw_user tmp_id;
+      tmp_id.from_str(_subuser.substr(0, pos));
+      if (tmp_id.tenant.empty()) {
+        user_id.id = tmp_id.id;
+      } else {
+        user_id = tmp_id;
+      }
       subuser = _subuser.substr(pos+1);
     } else {
       subuser = _subuser;
