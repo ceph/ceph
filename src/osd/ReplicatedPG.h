@@ -1474,7 +1474,7 @@ public:
 
   RepGather *trim_object(const hobject_t &coid);
   void snap_trimmer(epoch_t e);
-  int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
+  int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops, osd_op_callback_t callback_in=0);
 
   int _get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals);
   int do_tmap2omap(OpContext *ctx, unsigned flags);

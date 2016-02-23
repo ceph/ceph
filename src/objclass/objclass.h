@@ -9,6 +9,7 @@
 #include "../include/types.h"
 #include "msg/msg_types.h"
 #include "common/hobject.h"
+#include "osd/osd_types.h"
 
 extern "C" {
 #endif
@@ -26,6 +27,7 @@ const char *__cls_name = #name;
 #define CLS_METHOD_WR       0x2 /// method executes write operations
 #define CLS_METHOD_PUBLIC   0x4 /// unused
 #define CLS_METHOD_PROMOTE  0x8 /// method cannot be proxied to base tier
+#define CLS_METHOD_ASYNC    0x10 /// allows async callbacks
 
 
 #define CLS_LOG(level, fmt, ...)					\
@@ -97,6 +99,9 @@ extern void class_fini(void);
 
 typedef int (*cls_method_cxx_call_t)(cls_method_context_t ctx,
 				     class buffer::list *inbl, class buffer::list *outbl);
+typedef void (*cls_method_cxx_cb_t)(cls_method_context_t ctx, OSDOp *osd_op, bool async_mode, int result);
+typedef int (*cls_method_cxx_async_call_t)(cls_method_context_t ctx,
+                                           OSDOp& osd_op, cls_method_cxx_cb_t callback);
 
 class PGLSFilter {
 protected:
@@ -132,7 +137,8 @@ typedef PGLSFilter* (*cls_cxx_filter_factory_t)();
 
 
 extern int cls_register_cxx_method(cls_handle_t hclass, const char *method, int flags,
-				   cls_method_cxx_call_t class_call, cls_method_handle_t *handle);
+                                   cls_method_cxx_call_t class_call, cls_method_handle_t *handle,
+                                   cls_method_cxx_async_call_t async_class_call=NULL);
 
 extern int cls_register_cxx_filter(cls_handle_t hclass,
                                    const std::string &filter_name,
@@ -143,6 +149,8 @@ extern int cls_cxx_create(cls_method_context_t hctx, bool exclusive);
 extern int cls_cxx_remove(cls_method_context_t hctx);
 extern int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime);
 extern int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
+extern int cls_cxx_read_async(cls_method_context_t hctx, int ofs, int len, bufferlist *bl,
+                              OSDOp& osd_op, cls_method_cxx_cb_t callback);
 extern int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *bl);
 extern int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,

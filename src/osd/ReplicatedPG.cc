@@ -3922,7 +3922,9 @@ bool ReplicatedPG::maybe_create_new_object(OpContext *ctx)
   return false;
 }
 
-int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
+// @param callback_in for async operation: if non-null *and* if desired operations
+// can be executed asynchronously, then callback_in is invoked on completion.
+int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,  osd_op_callback_t callback_in)
 {
   int result = 0;
   SnapSetContext *ssc = ctx->obc->ssc;
