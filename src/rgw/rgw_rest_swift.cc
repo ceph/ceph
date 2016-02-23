@@ -1012,8 +1012,9 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data_error()
   return send_response_data(bl, 0, 0);
 }
 
-int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs,
-						 off_t bl_len)
+int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
+                                                 const off_t bl_ofs,
+                                                 const off_t bl_len)
 {
   string content_type;
 
@@ -1041,12 +1042,16 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs,
   }
 
   if (! op_ret) {
-    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
-    if (iter != attrs.end()) {
-      bufferlist& bl = iter->second;
-      if (bl.length()) {
-	char *etag = bl.c_str();
-	dump_etag(s, etag);
+    if (!lo_etag.empty()) {
+      dump_etag(s, ("\"" + lo_etag + "\"").c_str());
+    } else {
+      auto iter = attrs.find(RGW_ATTR_ETAG);
+      if (iter != attrs.end()) {
+        bufferlist& bl = iter->second;
+        if (bl.length()) {
+          char *etag = bl.c_str();
+          dump_etag(s, etag);
+        }
       }
     }
 
