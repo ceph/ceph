@@ -99,7 +99,7 @@ public:
     int64_t cap_id;
     ceph_seq_t issue_seq;
     ceph_seq_t mseq;
-    Import() {}
+    Import() : cap_id(0), issue_seq(0), mseq(0) {}
     Import(int64_t i, ceph_seq_t s, ceph_seq_t m) : cap_id(i), issue_seq(s), mseq(m) {}
     void encode(bufferlist &bl) const;
     void decode(bufferlist::iterator &p);
