@@ -3665,6 +3665,15 @@ int RGWRados::init_complete()
     obj_expirer->start_processor();
   }
 
+  /* not point of running sync thread if there is a single zone or
+     we don't have a master zone configured or there is no rest_master_conn */
+  if (get_zonegroup().zones.size() < 2 || get_zonegroup().master_zone.empty() || !rest_master_conn) {
+    run_sync_thread = false;
+  }
+
+  async_rados = new RGWAsyncRadosProcessor(this, cct->_conf->rgw_num_async_rados_threads);
+  async_rados->start();
+
   ret = meta_mgr->init(current_period.get_id());
   if (ret < 0) {
     lderr(cct) << "ERROR: failed to initialize metadata log: "
@@ -3677,15 +3686,6 @@ int RGWRados::init_complete()
   if (is_meta_master()) {
     meta_notifier->start();
   }
-
-  /* not point of running sync thread if there is a single zone or
-     we don't have a master zone configured or there is no rest_master_conn */
-  if (get_zonegroup().zones.size() < 2 || get_zonegroup().master_zone.empty() || !rest_master_conn) {
-    run_sync_thread = false;
-  }
-
-  async_rados = new RGWAsyncRadosProcessor(this, cct->_conf->rgw_num_async_rados_threads);
-  async_rados->start();
 
   if (run_sync_thread) {
     Mutex::Locker l(meta_sync_thread_lock);
