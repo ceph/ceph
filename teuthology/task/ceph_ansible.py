@@ -79,16 +79,27 @@ class CephAnsible(ansible.Ansible):
             for (remote, roles) in self.cluster.only(want).remotes.iteritems():
                 hostname = remote.hostname
                 if group not in hosts_dict:
-                    hosts_dict[group] = [hostname]
+                    hosts_dict[group] = {hostname: None}
                 elif hostname not in hosts_dict[group]:
-                    hosts_dict[group].append(hostname)
+                    hosts_dict[group][hostname] = None
 
+        print hosts_dict
         hosts_stringio = StringIO()
         for group in sorted(hosts_dict.keys()):
-            hosts = hosts_dict[group]
             hosts_stringio.write('[%s]\n' % group)
-            hosts_stringio.write('\n'.join(hosts))
-            hosts_stringio.write('\n\n')
+            for hostname in sorted(hosts_dict[group].keys()):
+                vars = hosts_dict[group][hostname]
+                if vars:
+                    vars_list = ['%s=%s' % (k, v)
+                                 for k, v in vars.iteritems()]
+                    host_line = "{hostname} {vars}".format(
+                        hostname=hostname,
+                        vars=' '.join(vars_list),
+                    )
+                else:
+                    host_line = hostname
+                hosts_stringio.write('%s\n' % host_line)
+            hosts_stringio.write('\n')
         hosts_stringio.seek(0)
         self.inventory = self._write_hosts_file(hosts_stringio.read().strip())
         self.generated_inventory = True
