@@ -1211,10 +1211,16 @@ def mount(
     if options is None:
         options = MOUNT_OPTIONS.get(fstype, '')
 
+    myTemp = STATEDIR + '/tmp'
+    # mkdtemp expect 'dir' to be existing on the system
+    # Let's be sure it's always the case
+    if not os.path.exists(myTemp):
+        os.makedirs(myTemp)
+
     # mount
     path = tempfile.mkdtemp(
         prefix='mnt.',
-        dir=STATEDIR + '/tmp',
+        dir=myTemp,
     )
     try:
         LOG.debug('Mounting %s on %s with options %s', dev, path, options)
