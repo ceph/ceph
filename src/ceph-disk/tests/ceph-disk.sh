@@ -233,8 +233,6 @@ function test_mark_init() {
 
     ! test -f $osd_data/$(ceph-detect-init) || return 1
     test -f $osd_data/$expected || return 1
-
-    $rm -fr $osd_data
 }
 
 function test_zap() {
@@ -315,7 +313,6 @@ function test_activate_dir() {
     local osd_data=$DIR/dir
     $mkdir -p $osd_data
     test_activate $osd_data $osd_data || return 1
-    $rm -fr $osd_data
 }
 
 function test_activate_dir_bluestore() {
