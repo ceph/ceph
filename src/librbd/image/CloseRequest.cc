@@ -248,10 +248,7 @@ void CloseRequest<I>::handle_flush_image_watcher(int r) {
 
 template <typename I>
 void CloseRequest<I>::finish() {
-  if (m_image_ctx->image_watcher != nullptr) {
-    m_image_ctx->unregister_watch();
-  }
-
+  m_image_ctx->shutdown();
   m_on_finish->complete(m_error_result);
   delete this;
 }
