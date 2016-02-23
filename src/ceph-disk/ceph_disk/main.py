@@ -1867,7 +1867,7 @@ class PrepareSpace(object):
             name,
             metavar=name.upper(),
             nargs='?',
-            help=('path to OSD %s disk block device;' % name,
+            help=('path to OSD %s disk block device;' % name +
                   ' leave out to store %s in file' % name),
         )
         return parser
