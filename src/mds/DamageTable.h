@@ -23,6 +23,14 @@ class CDir;
 
 typedef uint64_t damage_entry_id_t;
 
+typedef enum
+{
+  DAMAGE_ENTRY_DIRFRAG,
+  DAMAGE_ENTRY_DENTRY,
+  DAMAGE_ENTRY_BACKTRACE
+
+} damage_entry_type_t;
+
 class DamageEntry
 {
   public:
@@ -34,6 +42,8 @@ class DamageEntry
     id = get_random(0, 0xffffffff);
     reported_at = ceph_clock_now(g_ceph_context);
   }
+
+  virtual damage_entry_type_t get_type() const = 0;
 
   virtual ~DamageEntry();
 
@@ -56,6 +66,11 @@ class DirFragDamage : public DamageEntry
   DirFragDamage(inodeno_t ino_, frag_t frag_)
     : ino(ino_), frag(frag_)
   {}
+
+  virtual damage_entry_type_t get_type() const
+  {
+    return DAMAGE_ENTRY_DIRFRAG;
+  }
 
   void dump(Formatter *f) const
   {
@@ -88,6 +103,11 @@ class DentryDamage : public DamageEntry
     : ino(ino_), frag(frag_), dname(dname_), snap_id(snap_id_)
   {}
 
+  virtual damage_entry_type_t get_type() const
+  {
+    return DAMAGE_ENTRY_DENTRY;
+  }
+
   void dump(Formatter *f) const
   {
     f->open_object_section("dentry_damage");
@@ -113,6 +133,11 @@ class BacktraceDamage : public DamageEntry
   BacktraceDamage(inodeno_t ino_)
     : ino(ino_)
   {}
+
+  virtual damage_entry_type_t get_type() const
+  {
+    return DAMAGE_ENTRY_BACKTRACE;
+  }
 
   void dump(Formatter *f) const
   {
@@ -263,6 +288,8 @@ public:
   }
 
   void dump(Formatter *f) const;
+
+  void erase(damage_entry_id_t damage_id);
 };
 
 #endif // DAMAGE_TABLE_H_
