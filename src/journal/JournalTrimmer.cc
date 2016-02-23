@@ -63,19 +63,8 @@ int JournalTrimmer::remove_objects(bool force) {
 
 void JournalTrimmer::committed(uint64_t commit_tid) {
   ldout(m_cct, 20) << __func__ << ": commit_tid=" << commit_tid << dendl;
-
-  ObjectSetPosition object_set_position;
-  if (!m_journal_metadata->committed(commit_tid, &object_set_position)) {
-    return;
-  }
-
-  {
-    Mutex::Locker locker(m_lock);
-    m_async_op_tracker.start_op();
-  }
-
-  Context *ctx = new C_CommitPositionSafe(this, object_set_position);
-  m_journal_metadata->set_commit_position(object_set_position, ctx);
+  m_journal_metadata->committed(commit_tid,
+                                m_create_commit_position_safe_context);
 }
 
 void JournalTrimmer::trim_objects(uint64_t minimum_set) {
@@ -121,10 +110,8 @@ void JournalTrimmer::remove_set(uint64_t object_set) {
   }
 }
 
-void JournalTrimmer::handle_commit_position_safe(
-    int r, const ObjectSetPosition &object_set_position) {
-  ldout(m_cct, 20) << __func__ << ": r=" << r << ", pos="
-                   << object_set_position << dendl;
+void JournalTrimmer::handle_commit_position_safe(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
   Mutex::Locker locker(m_lock);
   if (r == 0) {
