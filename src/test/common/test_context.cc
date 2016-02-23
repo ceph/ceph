@@ -30,6 +30,8 @@ TEST(CephContext, do_command)
 {
   CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
 
+  cct->_conf->cluster = "ceph";
+
   string key("key");
   string value("value");
   cct->_conf->set_val(key.c_str(), value.c_str(), false);
@@ -56,6 +58,8 @@ TEST(CephContext, do_command)
 TEST(CephContext, experimental_features)
 {
   CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+
+  cct->_conf->cluster = "ceph";
 
   ASSERT_FALSE(cct->check_experimental_feature_enabled("foo"));
   ASSERT_FALSE(cct->check_experimental_feature_enabled("bar"));
