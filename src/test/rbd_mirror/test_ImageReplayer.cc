@@ -42,6 +42,18 @@ void register_test_rbd_mirror() {
 #define TEST_IO_SIZE 512
 #define TEST_IO_COUNT 10
 
+class ThreadPoolSingleton : public ThreadPool {
+public:
+  explicit ThreadPoolSingleton(CephContext *cct)
+    : ThreadPool(cct, "rbd::mirror::thread_pool", "tp_rbd_mirror", 1,
+                 "rbd_mirror_op_threads") {
+    start();
+  }
+  virtual ~ThreadPoolSingleton() {
+    stop();
+  }
+};
+
 class TestImageReplayer : public ::testing::Test {
 public:
   struct C_WatchCtx : public librados::WatchCtx2 {
@@ -98,10 +110,15 @@ public:
 				false, features, &order, 0, 0));
     m_remote_image_id = get_image_id(m_remote_ioctx, m_image_name);
 
+    ThreadPoolSingleton *thread_pool_singleton;
+    g_ceph_context->lookup_or_create_singleton_object<ThreadPoolSingleton>(
+      thread_pool_singleton, "rbd::mirror::thread_pool");
+    m_op_work_queue = new ContextWQ("rbd::mirror::op_work_queue", 60,
+				    thread_pool_singleton);
     m_replayer = new rbd::mirror::ImageReplayer(
       rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
       rbd::mirror::RadosRef(new librados::Rados(m_remote_ioctx)),
-      m_client_id, remote_pool_id, m_remote_image_id);
+      m_client_id, remote_pool_id, m_remote_image_id, m_op_work_queue);
 
     bootstrap();
   }
@@ -112,12 +129,17 @@ public:
 
     EXPECT_EQ(0, m_remote_cluster.pool_delete(m_remote_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster.pool_delete(m_local_pool_name.c_str()));
+
+    m_op_work_queue->drain();
+    delete m_op_work_queue;
   }
 
   void start(rbd::mirror::ImageReplayer::BootstrapParams *bootstap_params =
 	     nullptr)
   {
-    ASSERT_EQ(0, m_replayer->start(bootstap_params));
+    C_SaferCond cond;
+    m_replayer->start(&cond, bootstap_params);
+    ASSERT_EQ(0, cond.wait());
 
     ASSERT_EQ(0U, m_watch_handle);
     std::string oid = ::journal::Journaler::header_oid(m_remote_image_id);
@@ -134,7 +156,9 @@ public:
       m_watch_handle = 0;
     }
 
-    m_replayer->stop();
+    C_SaferCond cond;
+    m_replayer->stop(&cond);
+    ASSERT_EQ(0, cond.wait());
   }
 
   void bootstrap()
@@ -320,6 +344,7 @@ public:
   rbd::mirror::ImageReplayer *m_replayer;
   C_WatchCtx *m_watch_ctx;
   uint64_t m_watch_handle;
+  ContextWQ *m_op_work_queue;
   char m_test_data[TEST_IO_SIZE + 1];
 };
 

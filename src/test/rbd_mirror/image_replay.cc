@@ -44,6 +44,18 @@ static void handle_signal(int signum)
   g_stopping.set(1);
 }
 
+class ThreadPoolSingleton : public ThreadPool {
+public:
+  explicit ThreadPoolSingleton(CephContext *cct)
+    : ThreadPool(cct, "rbd::mirror::thread_pool", "tp_rbd_mirror", 1,
+                 "rbd_mirror_op_threads") {
+    start();
+  }
+  virtual ~ThreadPoolSingleton() {
+    stop();
+  }
+};
+
 int get_image_id(rbd::mirror::RadosRef cluster, int64_t pool_id,
 		 const std::string &image_name, std::string *image_id)
 {
@@ -129,6 +141,13 @@ int main(int argc, const char **argv)
   rbd::mirror::RadosRef local(new librados::Rados());
   rbd::mirror::RadosRef remote(new librados::Rados());
 
+  C_SaferCond start_cond, stop_cond;
+  ThreadPoolSingleton *thread_pool_singleton;
+  g_ceph_context->lookup_or_create_singleton_object<ThreadPoolSingleton>(
+    thread_pool_singleton, "rbd::mirror::thread_pool");
+  ContextWQ op_work_queue("rbd::mirror::op_work_queue", 60,
+			  thread_pool_singleton);
+
   int r = local->init_with_context(g_ceph_context);
   if (r < 0) {
     derr << "could not initialize rados handle" << dendl;
@@ -171,9 +190,11 @@ int main(int argc, const char **argv)
   dout(5) << "starting replay" << dendl;
 
   replayer = new rbd::mirror::ImageReplayer(local, remote, client_id,
-					    remote_pool_id, remote_image_id);
+					    remote_pool_id, remote_image_id,
+					    &op_work_queue);
 
-  r = replayer->start(&bootstap_params);
+  replayer->start(&start_cond, &bootstap_params);
+  r = start_cond.wait();
   if (r < 0) {
     derr << "failed to start: " << cpp_strerror(r) << dendl;
     goto cleanup;
@@ -187,7 +208,9 @@ int main(int argc, const char **argv)
 
   dout(1) << "termination signal received, stopping replay" << dendl;
 
-  replayer->stop();
+  replayer->stop(&stop_cond);
+  r = stop_cond.wait();
+  assert(r == 0);
 
   dout(1) << "shutdown" << dendl;
 
@@ -198,6 +221,7 @@ int main(int argc, const char **argv)
   shutdown_async_signal_handler();
 
   delete replayer;
+  op_work_queue.drain();
   g_ceph_context->put();
 
   return r < 0 ? EXIT_SUCCESS : EXIT_FAILURE;
