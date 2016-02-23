@@ -86,7 +86,7 @@ public:
     ceph_seq_t seq;
     ceph_seq_t mseq;
     utime_t last_issue_stamp;
-    Export() {}
+    Export() : cap_id(0), wanted(0), issued(0), pending(0), seq(0), mseq(0) {}
     Export(int64_t id, int w, int i, int p, snapid_t cf, ceph_seq_t s, ceph_seq_t m, utime_t lis) :
       cap_id(id), wanted(w), issued(i), pending(p), client_follows(cf),
       seq(s), mseq(m), last_issue_stamp(lis) {}
