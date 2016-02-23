@@ -161,7 +161,7 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl) {
   }
 
   if (!m_invalid_ranges.empty()) {
-    r = -EINVAL;
+    r = -EBADMSG;
   }
   return r;
 }

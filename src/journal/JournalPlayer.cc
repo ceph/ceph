@@ -164,7 +164,7 @@ bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
 
     m_state = STATE_ERROR;
     m_journal_metadata->get_finisher().queue(new C_HandleComplete(
-      m_replay_handler), -EINVAL);
+      m_replay_handler), -ENOMSG);
     return false;
   }
 

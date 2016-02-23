@@ -310,7 +310,7 @@ TEST_F(TestJournalPlayer, PrefetchCorruptSequence) {
   uint64_t commit_tid;
   ASSERT_FALSE(player->try_pop_front(&entry, &commit_tid));
   ASSERT_TRUE(wait_for_complete(player));
-  ASSERT_NE(0, m_replay_hander.complete_result);
+  ASSERT_EQ(-ENOMSG, m_replay_hander.complete_result);
 }
 
 TEST_F(TestJournalPlayer, PrefetchAndWatch) {
