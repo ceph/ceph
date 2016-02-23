@@ -516,6 +516,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   sync_entry_timeo_lock("sync_entry_timeo_lock"),
   timer(g_ceph_context, sync_entry_timeo_lock),
   stop(false), sync_thread(this),
+  async_read_avail(g_conf->filestore_async_threads > 0),
   fdcache(g_ceph_context),
   wbthrottle(g_ceph_context),
   next_osr_id(0),
@@ -553,6 +554,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   m_filestore_sloppy_crc_block_size(g_conf->filestore_sloppy_crc_block_size),
   m_filestore_max_alloc_hint_size(g_conf->filestore_max_alloc_hint_size),
   m_fs_type(0),
+  m_filestore_async_threads(g_conf->filestore_async_threads),
   m_filestore_max_inline_xattr_size(0),
   m_filestore_max_inline_xattrs(0)
 {
@@ -1644,6 +1646,16 @@ int FileStore::mount()
     }
   }
 
+#ifdef HAVE_LIBAIO
+  // enable asynchronous reads in FileStore
+  ret = create_read_completion_threads();
+  if (ret < 0) {
+    derr << "error creating async threads" << dendl;
+    umount();
+    return ret;
+  }
+#endif
+
   // all okay.
   return 0;
 
@@ -1765,11 +1777,215 @@ int FileStore::umount()
     timer.shutdown();
   }
 
+#ifdef HAVE_LIBAIO
+  destroy_read_completion_threads();
+#endif
+
   // nothing
   return 0;
 }
 
+#ifdef HAVE_LIBAIO
+int FileStore::create_read_completion_threads()
+{
+  // NB: m_filestore_async_threads may be 0.
+  for (int i = 0; i < m_filestore_async_threads; ++i) {
+    ReadCompletionThread *thr = new ReadCompletionThread(this);
+    /*
+     * FIXME: do we need to set priority?
+     * int r = thr->set_ioprio(thr->ioprio_class, thr->ioprio_priority);
+     */
+    read_completion_threads.push_back(thr);
+    thr->create("fs async read");
+  }
+  return 0;
+}
 
+void FileStore::destroy_read_completion_threads()
+{
+  for (auto rct : read_completion_threads) {
+    io_context_t ctx = rct->read_aio_ctx;
+    rct->is_active.set(0);
+
+    // Linux kernel 2.6.25 patch: Destroying the IO context will
+    // cause io_getevents() to return with -EINVAL
+    io_destroy(ctx);
+    rct->join();
+  }
+  read_completion_threads.clear();
+}
+
+int FileStore::async_read_dispatch(
+  Context *ctx,
+  const coll_t& cid,
+  const ghobject_t& oid,
+  uint64_t off,
+  size_t len,
+  bufferlist *bl,
+  uint32_t op_flags,
+  bool allow_eio,
+  bool directio)
+{
+  FDRef fd;
+  off64_t offset = (off64_t) off;
+  int r = lfn_open(cid, oid, false, &fd, 0);
+  if (r < 0) {
+    dout(10) << "FileStore::read(" << cid << "/" << oid << ") open error: "
+	     << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (len == 0) {
+    struct stat st;
+    memset(&st, 0, sizeof(struct stat));
+    int r = ::fstat(**fd, &st);
+    assert(r == 0);
+    len = st.st_size;
+  }
+
+#ifdef HAVE_POSIX_FADVISE
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_RANDOM)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_RANDOM);
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_SEQUENTIAL);
+#endif
+
+  // PGID-to-completion thread mapping:
+  int thread_index = 0;
+  spg_t spgid;
+  if (cid.is_pg(&spgid))
+    thread_index = spgid.pgid.ps() % read_completion_threads.size();
+
+  // Extend to 512 bytes if direct IO is being used
+  unsigned alignment = 0;
+  if (directio) {
+    alignment = len % 512;
+    if (alignment)
+      alignment = 512 - alignment;
+  }
+
+  read_aio_bl(fd, bl, offset, len, alignment, ctx, op_flags, oid, thread_index);
+  return r;
+}
+
+void FileStore::read_aio_bl(FDRef fdref, bufferlist *bl, off64_t& pos,
+                            size_t len, unsigned alignment, Context *ctx, uint32_t op_flags,
+                            const ghobject_t& oid, int thread_index)
+{
+  int fd = **fdref;
+  read_aio *rio = new read_aio(fdref, bl, pos, len, alignment, op_flags, oid, ctx);
+  io_context_t *iocontext = &read_completion_threads[thread_index]->read_aio_ctx;
+
+  len += alignment;
+  io_prep_pread(&rio->iocb, fd, rio->bptr->c_str(), len, pos);
+  dout(20) << "read_aio_bl .. " << len << dendl;
+
+  rio_num++;
+  rio_bytes += len;
+
+  iocb *piocb = &rio->iocb;
+  int attempts = 10;
+  do {
+    int r = io_submit(*iocontext, (long) 1, &piocb);
+    if (r < 0) {
+      derr << "io_submit len " << "~" << rio->len
+	   << " got " << cpp_strerror(r) << dendl;
+      if (r == -EAGAIN && attempts-- > 0) {
+	usleep(500);
+	continue;
+      }
+      assert(0 == "io_submit got unexpected error");
+    }
+  } while (false);
+}
+
+void FileStore::async_read_finish(read_aio *rio)
+{
+  FDRef fd = rio->fd;
+  const ghobject_t& oid = rio->oid;
+  uint64_t offset = rio->off;
+  uint32_t op_flags = rio->op_flags;
+  uint64_t len = rio->len + rio->alignment;
+
+  int got = rio->len;
+  if (got < 0) {
+    dout(10) << "FileStore::read(" << oid << ") pread error: " << cpp_strerror(got) << dendl;
+    lfn_close(fd);
+    goto done;
+  }
+
+  rio->bptr->set_length(got);
+  rio->bl->push_back(*rio->bptr);
+
+#ifdef HAVE_POSIX_FADVISE
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_DONTNEED);
+  if (op_flags & (CEPH_OSD_OP_FLAG_FADVISE_RANDOM | CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL))
+    posix_fadvise(**fd, offset, len, POSIX_FADV_NORMAL);
+#endif
+
+  if (m_filestore_sloppy_crc && (!replaying || backend->can_checkpoint())) {
+    ostringstream ss;
+    int errors = backend->_crc_verify_read(**fd, offset, got, *rio->bl, &ss);
+    if (errors > 0) {
+      dout(0) << "FileStore::read " << oid << " " << offset << "~"
+	      << got << " ... BAD CRC:\n" << ss.str() << dendl;
+      assert(0 == "bad crc on read");
+    }
+  }
+
+  lfn_close(fd);
+
+  dout(10) << "FileStore::read " << oid << " " << offset << "~"
+	   << got << "/" << len << dendl;
+  if (g_conf->filestore_debug_inject_read_err &&
+      debug_data_eio(oid)) {
+    got = -EIO;
+  } else {
+    tracepoint(objectstore, read_exit, got);
+  }
+
+done:
+  rio->status = (got < 0) ? -EIO :got;
+  rio->context->complete(rio->status);
+  delete rio;
+}
+
+void FileStore::read_finish_thread_entry(ReadCompletionThread *rct)
+{
+  io_context_t *iocontext = &rct->read_aio_ctx;
+  int max_nr = std::min(64, MAX_READ_EVENTS);
+  io_event event_array[max_nr];
+
+  while (true) {
+    int rcvd = io_getevents(*iocontext, 1, max_nr, event_array, NULL);
+    if (rcvd < 0) {
+      if (rcvd == -EINTR) {
+        dout(0) << "io_getevents got " << cpp_strerror(rcvd) << dendl;
+        continue;
+      }
+      if (rct->is_active.read() == 0)
+        break;
+      derr << "io_getevents got " << cpp_strerror(rcvd) << dendl;
+      assert(0 == "got unexpected error from io_getevents");
+    }
+
+    for (int i = 0; i < rcvd; i++) {
+      read_aio *rio = (read_aio *) event_array[i].obj;
+      if (event_array[i].res != rio->len) {
+        dout(10) << "aio to " << rio->off << "~" << rio->len
+             << " read " << event_array[i].res << dendl;
+      }
+
+      // For Sparse Read, length read is not always equal to length requested
+      // This probably needs to be validated with a flag?
+      //rio->len = event_array[i].res;
+      rio->done = true;
+      async_read_finish(rio);
+    }
+  }
+}
+#endif
 
 
 /// -----------------------------
