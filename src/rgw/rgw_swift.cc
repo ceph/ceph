@@ -608,12 +608,21 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
 int authenticate_temp_url(RGWRados *store, req_state *s)
 {
+  const string& bucket_name = s->init_state.url_bucket;
+  int ret;
+
   /* temp url requires bucket and object specified in the requets */
-  if (s->bucket_name.empty())
+  if (bucket_name.empty() || s->object.empty())
     return -EPERM;
 
-  if (s->object.empty())
-    return -EPERM;
+  /* technically we might want to validate, but we only do get_bucket_info */
+  // ret = validate_bucket_name(bucket_name);
+  // if (ret < 0)
+  //   return -EPERM;
+
+  /* XXX currently tempurl only works within the default tenant; fix as part of taking account (and its tenant) from the URL. */
+  string bucket_tenant;
+  bucket_tenant.clear();
 
   string temp_url_sig = s->info.args.get("temp_url_sig");
   if (temp_url_sig.empty())
@@ -626,8 +635,8 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   /* need to get user info of bucket owner */
   RGWBucketInfo bucket_info;
 
-  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-                                   s->bucket_tenant, s->bucket_name,
+  ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+                                   bucket_tenant, bucket_name,
                                    bucket_info, NULL);
   if (ret < 0)
     return -EPERM;
