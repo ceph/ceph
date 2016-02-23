@@ -3166,8 +3166,8 @@ TEST_F(TestLibRBD, ZeroLengthDiscard)
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
 
-  const char *data = "blah";
-  char read_data[strlen(data)];
+  const char data[] = "blah";
+  char read_data[sizeof(data)];
   ASSERT_EQ((int)strlen(data), rbd_write(image, 0, strlen(data), data));
   ASSERT_EQ(0, rbd_discard(image, 0, 0));
   ASSERT_EQ((int)strlen(data), rbd_read(image, 0, strlen(data), read_data));
