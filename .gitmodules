@@ -3,7 +3,8 @@
 	url = https://github.com/ceph/ceph-object-corpus.git
 [submodule "src/civetweb"]
 	path = src/civetweb
-	url = https://github.com/ceph/civetweb
+	url = https://github.com/mdw-at-linuxbox/civetweb
+	branch = wip-openssl-fix1
 [submodule "src/erasure-code/jerasure/jerasure"]
 	path = src/erasure-code/jerasure/jerasure
 	url = https://github.com/ceph/jerasure.git
