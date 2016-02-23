@@ -30,12 +30,10 @@ SetSnapRequest<I>::SetSnapRequest(I &image_ctx, const std::string &snap_name,
 
 template <typename I>
 SetSnapRequest<I>::~SetSnapRequest() {
+  assert(!m_writes_blocked);
   delete m_refresh_parent;
   delete m_object_map;
   delete m_exclusive_lock;
-  if (m_writes_blocked) {
-    m_image_ctx.aio_work_queue->unblock_writes();
-  }
 }
 
 template <typename I>
@@ -87,6 +85,7 @@ Context *SetSnapRequest<I>::handle_init_exclusive_lock(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to initialize exclusive lock: "
                << cpp_strerror(*result) << dendl;
+    finalize();
     return m_on_finish;
   }
   return send_refresh_parent(result);
@@ -115,6 +114,7 @@ Context *SetSnapRequest<I>::handle_block_writes(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to block writes: " << cpp_strerror(*result)
                << dendl;
+    finalize();
     return m_on_finish;
   }
 
@@ -126,6 +126,7 @@ Context *SetSnapRequest<I>::handle_block_writes(int *result) {
                     << dendl;
 
       *result = -ENOENT;
+      finalize();
       return m_on_finish;
     }
   }
@@ -163,6 +164,7 @@ Context *SetSnapRequest<I>::handle_shut_down_exclusive_lock(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to shut down exclusive lock: "
                << cpp_strerror(*result) << dendl;
+    finalize();
     return m_on_finish;
   }
 
@@ -183,6 +185,7 @@ Context *SetSnapRequest<I>::send_refresh_parent(int *result) {
     if (parent_info == nullptr) {
       *result = -ENOENT;
       lderr(cct) << "failed to retrieve snapshot parent info" << dendl;
+      finalize();
       return m_on_finish;
     }
 
@@ -195,6 +198,7 @@ Context *SetSnapRequest<I>::send_refresh_parent(int *result) {
     if (m_snap_id == CEPH_NOSNAP) {
       // object map is loaded when exclusive lock is acquired
       *result = apply();
+      finalize();
       return m_on_finish;
     } else {
       // load snapshot object map
@@ -221,6 +225,7 @@ Context *SetSnapRequest<I>::handle_refresh_parent(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to refresh snapshot parent: " << cpp_strerror(*result)
                << dendl;
+    finalize();
     return m_on_finish;
   }
 
@@ -228,6 +233,7 @@ Context *SetSnapRequest<I>::handle_refresh_parent(int *result) {
     // object map is loaded when exclusive lock is acquired
     *result = apply();
     if (*result < 0) {
+      finalize();
       return m_on_finish;
     }
 
@@ -243,6 +249,7 @@ Context *SetSnapRequest<I>::send_open_object_map(int *result) {
   if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
     *result = apply();
     if (*result < 0) {
+      finalize();
       return m_on_finish;
     }
 
@@ -270,6 +277,7 @@ Context *SetSnapRequest<I>::handle_open_object_map(int *result) {
 
   *result = apply();
   if (*result < 0) {
+    finalize();
     return m_on_finish;
   }
 
@@ -279,6 +287,7 @@ Context *SetSnapRequest<I>::handle_open_object_map(int *result) {
 template <typename I>
 Context *SetSnapRequest<I>::send_finalize_refresh_parent(int *result) {
   if (m_refresh_parent == nullptr) {
+    finalize();
     return m_on_finish;
   }
 
@@ -301,6 +310,7 @@ Context *SetSnapRequest<I>::handle_finalize_refresh_parent(int *result) {
     lderr(cct) << "failed to close parent image: " << cpp_strerror(*result)
                << dendl;
   }
+  finalize();
   return m_on_finish;
 }
 
@@ -331,7 +341,16 @@ int SetSnapRequest<I>::apply() {
 }
 
 template <typename I>
+void SetSnapRequest<I>::finalize() {
+  if (m_writes_blocked) {
+    m_image_ctx.aio_work_queue->unblock_writes();
+    m_writes_blocked = false;
+  }
+}
+
+template <typename I>
 void SetSnapRequest<I>::send_complete() {
+  finalize();
   m_on_finish->complete(0);
   delete this;
 }
