@@ -62,19 +62,23 @@ JournalPlayer::JournalPlayer(librados::IoCtx &ioctx,
 
   ObjectSetPosition commit_position;
   m_journal_metadata->get_commit_position(&commit_position);
-  if (!commit_position.entry_positions.empty()) {
+
+  // TODO
+  /*
+  if (!commit_position.object_positions.empty()) {
     uint8_t splay_width = m_journal_metadata->get_splay_width();
     m_splay_offset = commit_position.object_number % splay_width;
     m_commit_object = commit_position.object_number;
-    m_commit_tag_tid = commit_position.entry_positions.front().tag_tid;
+    m_commit_tag_tid = commit_position.object_positions.front().tag_tid;
 
-    for (EntryPositions::const_iterator it =
-           commit_position.entry_positions.begin();
-         it != commit_position.entry_positions.end(); ++it) {
-      const EntryPosition &entry_position = *it;
-      m_commit_tids[entry_position.tag_tid] = entry_position.entry_tid;
+    for (ObjectPositions::const_iterator it =
+           commit_position.object_positions.begin();
+         it != commit_position.object_positions.end(); ++it) {
+      const ObjectPosition &object_position = *it;
+      m_commit_tids[object_position.tag_tid] = object_position.entry_tid;
     }
   }
+  */
 }
 
 JournalPlayer::~JournalPlayer() {

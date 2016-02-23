@@ -143,10 +143,10 @@ public:
 TEST_F(TestJournalPlayer, Prefetch) {
   std::string oid = get_temp_oid();
 
-  journal::JournalPlayer::EntryPositions positions;
+  journal::JournalPlayer::ObjectPositions positions;
   positions = {
-    cls::journal::EntryPosition(234, 122) };
-  cls::journal::ObjectSetPosition commit_position(0, positions);
+    cls::journal::ObjectPosition(0, 234, 122) };
+  cls::journal::ObjectSetPosition commit_position(positions);
 
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
@@ -183,10 +183,10 @@ TEST_F(TestJournalPlayer, Prefetch) {
 TEST_F(TestJournalPlayer, PrefetchSkip) {
   std::string oid = get_temp_oid();
 
-  journal::JournalPlayer::EntryPositions positions;
+  journal::JournalPlayer::ObjectPositions positions;
   positions = {
-    cls::journal::EntryPosition(234, 125) };
-  cls::journal::ObjectSetPosition commit_position(0, positions);
+    cls::journal::ObjectPosition(0, 234, 125) };
+  cls::journal::ObjectSetPosition commit_position(positions);
 
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
@@ -246,11 +246,11 @@ TEST_F(TestJournalPlayer, PrefetchWithoutCommit) {
 TEST_F(TestJournalPlayer, PrefetchMultipleTags) {
   std::string oid = get_temp_oid();
 
-  journal::JournalPlayer::EntryPositions positions;
+  journal::JournalPlayer::ObjectPositions positions;
   positions = {
-    cls::journal::EntryPosition(234, 122),
-    cls::journal::EntryPosition(345, 1)};
-  cls::journal::ObjectSetPosition commit_position(0, positions);
+    cls::journal::ObjectPosition(0, 234, 122),
+    cls::journal::ObjectPosition(1, 345, 1)};
+  cls::journal::ObjectSetPosition commit_position(positions);
 
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
@@ -316,10 +316,10 @@ TEST_F(TestJournalPlayer, PrefetchCorruptSequence) {
 TEST_F(TestJournalPlayer, PrefetchAndWatch) {
   std::string oid = get_temp_oid();
 
-  journal::JournalPlayer::EntryPositions positions;
+  journal::JournalPlayer::ObjectPositions positions;
   positions = {
-    cls::journal::EntryPosition(234, 122)};
-  cls::journal::ObjectSetPosition commit_position(0, positions);
+    cls::journal::ObjectPosition(0, 234, 122)};
+  cls::journal::ObjectSetPosition commit_position(positions);
 
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));

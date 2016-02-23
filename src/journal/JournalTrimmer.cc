@@ -128,6 +128,8 @@ void JournalTrimmer::handle_commit_position_safe(
 
   Mutex::Locker locker(m_lock);
   if (r == 0) {
+    // TODO
+    /*
     uint8_t splay_width = m_journal_metadata->get_splay_width();
     uint64_t object_set = object_set_position.object_number / splay_width;
 
@@ -153,6 +155,7 @@ void JournalTrimmer::handle_commit_position_safe(
     if (trim_permitted) {
       trim_objects(object_set_position.object_number / splay_width);
     }
+    */
   }
 }
 

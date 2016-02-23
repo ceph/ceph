@@ -21,28 +21,26 @@ using namespace cls::journal;
 namespace {
 
 // does not compare object number
-inline bool entry_positions_less_equal(const ObjectSetPosition &lhs,
+inline bool object_positions_less_equal(const ObjectSetPosition &lhs,
                                        const ObjectSetPosition &rhs) {
-  if (lhs.entry_positions == rhs.entry_positions) {
+  if (lhs.object_positions == rhs.object_positions) {
     return true;
   }
 
-  if (lhs.entry_positions.size() < rhs.entry_positions.size()) {
-    return true;
-  } else if (lhs.entry_positions.size() > rhs.entry_positions.size()) {
-    return false;
+  if (lhs.object_positions.size() != rhs.object_positions.size()) {
+    return lhs.object_positions.size() < rhs.object_positions.size();
   }
 
   std::map<uint64_t, uint64_t> rhs_tids;
-  for (EntryPositions::const_iterator it = rhs.entry_positions.begin();
-       it != rhs.entry_positions.end(); ++it) {
+  for (ObjectPositions::const_iterator it = rhs.object_positions.begin();
+       it != rhs.object_positions.end(); ++it) {
     rhs_tids[it->tag_tid] = it->entry_tid;
   }
 
-  for (EntryPositions::const_iterator it = lhs.entry_positions.begin();
-       it != lhs.entry_positions.end(); ++it) {
-    const EntryPosition &entry_position = *it;
-    if (entry_position.entry_tid < rhs_tids[entry_position.tag_tid]) {
+  for (ObjectPositions::const_iterator it = lhs.object_positions.begin();
+       it != lhs.object_positions.end(); ++it) {
+    const ObjectPosition &object_position = *it;
+    if (object_position.entry_tid < rhs_tids[object_position.tag_tid]) {
       return true;
     }
   }
@@ -503,8 +501,8 @@ void JournalMetadata::set_commit_position(
     Mutex::Locker locker(m_lock);
     ldout(m_cct, 20) << __func__ << ": current=" << m_client.commit_position
                      << ", new=" << commit_position << dendl;
-    if (entry_positions_less_equal(commit_position, m_client.commit_position) ||
-        entry_positions_less_equal(commit_position, m_commit_position)) {
+    if (object_positions_less_equal(commit_position, m_client.commit_position) ||
+        object_positions_less_equal(commit_position, m_commit_position)) {
       stale_ctx = on_safe;
     } else {
       stale_ctx = m_commit_position_ctx;
@@ -716,7 +714,7 @@ bool JournalMetadata::committed(uint64_t commit_tid,
     commit_entry.committed = true;
   }
 
-  if (!m_commit_position.entry_positions.empty()) {
+  if (!m_commit_position.object_positions.empty()) {
     *object_set_position = m_commit_position;
   } else {
     *object_set_position = m_client.commit_position;
@@ -730,27 +728,17 @@ bool JournalMetadata::committed(uint64_t commit_tid,
       break;
     }
 
-    object_set_position->object_number = commit_entry.object_num;
-    if (!object_set_position->entry_positions.empty() &&
-        object_set_position->entry_positions.front().tag_tid ==
-          commit_entry.tag_tid) {
-      object_set_position->entry_positions.front() = EntryPosition(
-        commit_entry.tag_tid, commit_entry.entry_tid);
-    } else {
-      object_set_position->entry_positions.push_front(EntryPosition(
-        commit_entry.tag_tid, commit_entry.entry_tid));
-    }
-    m_pending_commit_tids.erase(it);
+    // TODO
     update_commit_position = true;
   }
 
   if (update_commit_position) {
     // prune the position to have unique tags in commit-order
     std::set<uint64_t> in_use_tag_tids;
-    EntryPositions::iterator it = object_set_position->entry_positions.begin();
-    while (it != object_set_position->entry_positions.end()) {
+    ObjectPositions::iterator it = object_set_position->object_positions.begin();
+    while (it != object_set_position->object_positions.end()) {
       if (!in_use_tag_tids.insert(it->tag_tid).second) {
-        it = object_set_position->entry_positions.erase(it);
+        it = object_set_position->object_positions.erase(it);
       } else {
         ++it;
       }

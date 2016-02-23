@@ -68,10 +68,10 @@ TEST_F(TestJournalMetadata, SetCommitPositions) {
   metadata1->get_commit_position(&read_commit_position);
   ASSERT_EQ(commit_position, read_commit_position);
 
-  journal::JournalMetadata::EntryPositions entry_positions;
-  entry_positions = {
-    cls::journal::EntryPosition(123, 122)};
-  commit_position = journal::JournalMetadata::ObjectSetPosition(1, entry_positions);
+  journal::JournalMetadata::ObjectPositions object_positions;
+  object_positions = {
+    cls::journal::ObjectPosition(1, 123, 122)};
+  commit_position = journal::JournalMetadata::ObjectSetPosition(object_positions);
 
   C_SaferCond cond;
   metadata1->set_commit_position(commit_position, &cond);
