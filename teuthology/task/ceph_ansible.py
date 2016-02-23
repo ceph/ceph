@@ -1,3 +1,4 @@
+import json
 import os
 
 from cStringIO import StringIO
@@ -5,6 +6,7 @@ from cStringIO import StringIO
 from . import ansible
 
 from ..config import config as teuth_config
+from ..misc import get_scratch_devices
 
 
 class CephAnsible(ansible.Ansible):
@@ -46,6 +48,10 @@ class CephAnsible(ansible.Ansible):
         playbook: {playbook}
 
     It always uses a dynamic inventory.
+
+    It will optionally do the following automatically based on ``vars`` that
+    are passed in:
+        * Set ``devices`` for each host if ``osd_auto_discovery`` is not True
     """.format(
         git_base=teuth_config.ceph_git_base_url,
         playbook=_default_playbook,
@@ -78,20 +84,23 @@ class CephAnsible(ansible.Ansible):
             want = lambda role: role.startswith(role_prefix)
             for (remote, roles) in self.cluster.only(want).remotes.iteritems():
                 hostname = remote.hostname
+                host_vars = self.get_host_vars(remote)
                 if group not in hosts_dict:
-                    hosts_dict[group] = {hostname: None}
+                    hosts_dict[group] = {hostname: host_vars}
                 elif hostname not in hosts_dict[group]:
-                    hosts_dict[group][hostname] = None
+                    hosts_dict[group][hostname] = host_vars
 
-        print hosts_dict
         hosts_stringio = StringIO()
         for group in sorted(hosts_dict.keys()):
             hosts_stringio.write('[%s]\n' % group)
             for hostname in sorted(hosts_dict[group].keys()):
                 vars = hosts_dict[group][hostname]
                 if vars:
-                    vars_list = ['%s=%s' % (k, v)
-                                 for k, v in vars.iteritems()]
+                    vars_list = []
+                    for key in sorted(vars.keys()):
+                        vars_list.append(
+                            "%s='%s'" % (key, json.dumps(vars[key]).strip('"'))
+                        )
                     host_line = "{hostname} {vars}".format(
                         hostname=hostname,
                         vars=' '.join(vars_list),
@@ -103,5 +112,12 @@ class CephAnsible(ansible.Ansible):
         hosts_stringio.seek(0)
         self.inventory = self._write_hosts_file(hosts_stringio.read().strip())
         self.generated_inventory = True
+
+    def get_host_vars(self, remote):
+        extra_vars = self.config.get('vars', dict())
+        host_vars = dict()
+        if not extra_vars.get('osd_auto_discovery', False):
+            host_vars['devices'] = get_scratch_devices(remote)
+        return host_vars
 
 task = CephAnsible
