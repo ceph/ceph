@@ -92,40 +92,41 @@ int EventCenter::init(int n)
   int fds[2];
   if (pipe(fds) < 0) {
     lderr(cct) << __func__ << " can't create notify pipe" << dendl;
-    return -1;
+    return -errno;
   }
 
   notify_receive_fd = fds[0];
   notify_send_fd = fds[1];
   r = net.set_nonblock(notify_receive_fd);
   if (r < 0) {
-    return -1;
+    return r;
   }
   r = net.set_nonblock(notify_send_fd);
   if (r < 0) {
-    return -1;
+    return r;
   }
 
-  file_events = static_cast<FileEvent *>(malloc(sizeof(FileEvent)*n));
-  memset(file_events, 0, sizeof(FileEvent)*n);
-
+  file_events.resize(n);
   nevent = n;
-  create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify(this, cct)));
+  notify_handler = new C_handle_notify(this, cct),
+  r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
+  if (r < 0)
+    return r;
   return 0;
 }
 
 EventCenter::~EventCenter()
 {
+  assert(external_events.empty() && time_events.empty());
   if (notify_receive_fd >= 0) {
     delete_file_event(notify_receive_fd, EVENT_READABLE);
     ::close(notify_receive_fd);
   }
   if (notify_send_fd >= 0)
     ::close(notify_send_fd);
-    
+
   delete driver;
-  if (file_events)
-    free(file_events);
+  delete notify_handler;
 }
 
 
@@ -148,13 +149,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
       lderr(cct) << __func__ << " event count is exceed." << dendl;
       return -ERANGE;
     }
-    FileEvent *new_events = static_cast<FileEvent *>(realloc(file_events, sizeof(FileEvent)*new_size));
-    if (!new_events) {
-      lderr(cct) << __func__ << " failed to realloc file_events" << cpp_strerror(errno) << dendl;
-      return -errno;
-    }
-    file_events = new_events;
-    memset(file_events+nevent, 0, sizeof(FileEvent)*(new_size-nevent));
+    file_events.resize(new_size);
     nevent = new_size;
   }
 
