@@ -758,23 +758,35 @@ namespace librbd {
       return 0;
     }
 
-    int dir_get_name(librados::IoCtx *ioctx, const std::string &oid,
-		     const std::string &id, std::string *name)
-    {
-      bufferlist in, out;
-      ::encode(id, in);
-      int r = ioctx->exec(oid, "rbd", "dir_get_name", in, out);
-      if (r < 0)
-	return r;
+    void dir_get_name_start(librados::ObjectReadOperation *op,
+			    const std::string &id) {
+      bufferlist in_bl;
+      ::encode(id, in_bl);
+      op->exec("rbd", "dir_get_name", in_bl);
+    }
 
-      bufferlist::iterator iter = out.begin();
+    int dir_get_name_finish(bufferlist::iterator *it, std::string *name) {
       try {
-	::decode(*name, iter);
+	::decode(*name, *it);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
-
       return 0;
+    }
+
+    int dir_get_name(librados::IoCtx *ioctx, const std::string &oid,
+		     const std::string &id, std::string *name) {
+      librados::ObjectReadOperation op;
+      dir_get_name_start(&op, id);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator it = out_bl.begin();
+      return dir_get_name_finish(&it, name);
     }
 
     int dir_list(librados::IoCtx *ioctx, const std::string &oid,
