@@ -460,7 +460,7 @@ __s32  ceph_to_host_errno(__s32 e);
 struct errorcode32_t {
   int32_t code;
 
-  errorcode32_t() {}
+  errorcode32_t() : code(0) {}
   // cppcheck-suppress noExplicitConstructor
   errorcode32_t(int32_t i) : code(i) {}
 
