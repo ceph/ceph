@@ -3769,6 +3769,21 @@ int PG::build_scrub_map_chunk(
   return 0;
 }
 
+void PG::Scrubber::cleanup_store(ObjectStore::Transaction *t) {
+  if (!store)
+    return;
+  struct OnComplete : Context {
+    std::unique_ptr<Scrub::Store> store;
+    OnComplete(
+      std::unique_ptr<Scrub::Store> &&store)
+      : store(std::move(store)) {}
+    void finish(int) override {}
+  };
+  store->cleanup(t);
+  t->register_on_complete(new OnComplete(std::move(store)));
+  assert(!store);
+}
+
 void PG::repair_object(
   const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
   pg_shard_t bad_peer)
@@ -4029,6 +4044,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
 	{
 	  ObjectStore::Transaction t;
+	  scrubber.cleanup_store(&t);
 	  scrubber.store.reset(Scrub::Store::create(osd->store, &t,
 						    info.pgid, coll));
 	  osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
