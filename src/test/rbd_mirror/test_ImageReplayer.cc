@@ -101,7 +101,6 @@ public:
 
     m_threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
       m_local_ioctx.cct()));
-
     m_replayer = new rbd::mirror::ImageReplayer(
       m_threads,
       rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
@@ -123,7 +122,9 @@ public:
   void start(rbd::mirror::ImageReplayer::BootstrapParams *bootstap_params =
 	     nullptr)
   {
-    ASSERT_EQ(0, m_replayer->start(bootstap_params));
+    C_SaferCond cond;
+    m_replayer->start(&cond, bootstap_params);
+    ASSERT_EQ(0, cond.wait());
 
     ASSERT_EQ(0U, m_watch_handle);
     std::string oid = ::journal::Journaler::header_oid(m_remote_image_id);
@@ -140,7 +141,9 @@ public:
       m_watch_handle = 0;
     }
 
-    m_replayer->stop();
+    C_SaferCond cond;
+    m_replayer->stop(&cond);
+    ASSERT_EQ(0, cond.wait());
   }
 
   void bootstrap()
