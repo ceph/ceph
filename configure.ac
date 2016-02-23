@@ -968,6 +968,17 @@ BOOST_REGEX_LIBS="${LIBS}"
 LIBS="${saved_LIBS}"
 AC_SUBST(BOOST_REGEX_LIBS)
 
+# boost-uuid
+BOOST_UUID_LIBS=""
+saved_LIBS="${LIBS}"
+LIBS=""
+AC_CHECK_LIB(boost_uuid-mt, main, [],
+    [AC_CHECK_LIB(boost_uuid, main, [],
+        AC_MSG_FAILURE(["Boost uuid library not found."]))])
+BOOST_UUID_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_UUID_LIBS)
+
 #
 # Check for boost_program_options library (defines BOOST_PROGRAM_OPTIONS_LIBS).
 #
