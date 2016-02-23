@@ -125,7 +125,7 @@ public:
   struct revoke_info {
     __u32 before;
     ceph_seq_t seq, last_issue;
-    revoke_info() {}
+    revoke_info() : before(0), seq(0), last_issue(0) {}
     revoke_info(__u32 b, ceph_seq_t s, ceph_seq_t li) : before(b), seq(s), last_issue(li) {}
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);
