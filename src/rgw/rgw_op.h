@@ -160,6 +160,7 @@ protected:
   rgw_obj obj;
   utime_t gc_invalidate_time;
   bool is_slo;
+  string lo_etag;
 
   int init_common();
 public:

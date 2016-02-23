@@ -702,6 +702,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                                        RGWAccessControlPolicy * const bucket_policy,
                                        uint64_t * const ptotal_len,
                                        uint64_t * const pobj_size,
+                                       string * const pobj_sum,
                                        int (*cb)(rgw_bucket& bucket,
                                                  const RGWObjEnt& ent,
                                                  RGWAccessControlPolicy * const bucket_policy,
@@ -724,16 +725,15 @@ static int iterate_user_manifest_parts(CephContext * const cct,
   list_op.params.prefix = obj_prefix;
   list_op.params.delim = delim;
 
+  MD5 etag_sum;
   do {
 #define MAX_LIST_OBJS 100
     int r = list_op.list_objects(MAX_LIST_OBJS, &objs, NULL, &is_truncated);
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
 
-    vector<RGWObjEnt>::iterator viter;
-
-    for (viter = objs.begin(); viter != objs.end(); ++viter) {
-      RGWObjEnt& ent = *viter;
+    for (RGWObjEnt& ent : objs) {
       uint64_t cur_total_len = obj_ofs;
       uint64_t start_ofs = 0, end_ofs = ent.size;
 
@@ -743,6 +743,8 @@ static int iterate_user_manifest_parts(CephContext * const cct,
       }
 
       obj_ofs += ent.size;
+      etag_sum.Update((const byte *)ent.etag.c_str(),
+                      ent.etag.length());
 
       if (!found_end && obj_ofs > (uint64_t)end) {
 	end_ofs = end - cur_total_len + 1;
@@ -773,6 +775,9 @@ static int iterate_user_manifest_parts(CephContext * const cct,
   }
   if (pobj_size) {
     *pobj_size = obj_ofs;
+  }
+  if (pobj_sum) {
+    complete_etag(etag_sum, pobj_sum);
   }
 
   return 0;
@@ -917,10 +922,14 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
     bucket_policy = s->bucket_acl;
   }
 
-  /* dry run to find out total length */
+  /* dry run to find out:
+   * - total length (of the parts we are going to send to client),
+   * - overall DLO's content size,
+   * - md5 sum of overall DLO's content (for etag of Swift API). */
   int r = iterate_user_manifest_parts(s->cct, store, ofs, end,
-        bucket, obj_prefix, bucket_policy, &total_len, &s->obj_size,
-        NULL, NULL);
+        bucket, obj_prefix, bucket_policy,
+        &total_len, &s->obj_size, &lo_etag,
+        nullptr /* cb */, nullptr /* cb arg */);
   if (r < 0) {
     return r;
   }
@@ -932,7 +941,8 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   }
 
   r = iterate_user_manifest_parts(s->cct, store, ofs, end,
-        bucket, obj_prefix, bucket_policy, NULL, NULL,
+        bucket, obj_prefix, bucket_policy,
+        nullptr, nullptr, nullptr,
         get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0) {
     return r;
