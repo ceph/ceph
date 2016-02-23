@@ -3095,7 +3095,7 @@ extern "C" int rados_read(rados_ioctx_t io, const char *o, char *buf, size_t len
       tracepoint(librados, rados_read_exit, -ERANGE, NULL);
       return -ERANGE;
     }
-    if (bl.c_str() != buf)
+    if (!bl.is_provided_buffer(buf))
       bl.copy(0, bl.length(), buf);
     ret = bl.length();    // hrm :/
   }
@@ -3445,7 +3445,7 @@ extern "C" int rados_getxattr(rados_ioctx_t io, const char *o, const char *name,
       tracepoint(librados, rados_getxattr_exit, -ERANGE, buf, 0);
       return -ERANGE;
     }
-    if (bl.c_str() !=  buf)
+    if (!bl.is_provided_buffer(buf))
       bl.copy(0, bl.length(), buf);
     ret = bl.length();
   }
@@ -4823,7 +4823,7 @@ public:
     }
     if (bytes_read)
       *bytes_read = out_bl.length();
-    if (out_buf && out_bl.c_str() != out_buf)
+    if (out_buf && !out_bl.is_provided_buffer(out_buf))
       out_bl.copy(0, out_bl.length(), out_buf);
   }
 };
