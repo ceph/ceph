@@ -110,6 +110,7 @@ private:
   Context *handle_finalize_refresh_parent(int *result);
 
   int apply();
+  void finalize();
   void send_complete();
 };
 
