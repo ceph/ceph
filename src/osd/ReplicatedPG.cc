@@ -4333,7 +4333,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,  osd_op_callbac
 	  pgbackend->objects_read_async_use_aio(
 	    ctx->obc->obs.oi.soid,
 	    async_read,
-	    to_sparse_read);
+	    to_sparse_read, true);
 	} else { 
 	  // translate sparse read to a normal one if not supported
 	  ctx->pending_async_reads.push_back(
