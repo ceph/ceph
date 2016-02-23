@@ -4559,13 +4559,14 @@ def setup_logging(verbose, log_stdout):
     if log_stdout:
         ch = logging.StreamHandler(stream=sys.stdout)
         ch.setLevel(loglevel)
-        formatter = logging.Formatter('%(filename)s: %(message)s')
+        formatter = logging.Formatter('%(funcName)s: %(message)s')
         ch.setFormatter(formatter)
         LOG.addHandler(ch)
         LOG.setLevel(loglevel)
     else:
         logging.basicConfig(
             level=loglevel,
+            format='%(funcName)s: %(message)s',
         )
 
 
