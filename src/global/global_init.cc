@@ -68,7 +68,7 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
   // You can only call global_init once.
   assert(!g_ceph_context);
   std::string conf_file_list;
-  std::string cluster = "ceph";
+  std::string cluster = "";
   CephInitParameters iparams = ceph_argparse_early_args(args, module_type, flags,
 							&cluster, &conf_file_list);
   CephContext *cct = common_preinit(iparams, code_env, flags, data_dir_option);

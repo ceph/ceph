@@ -542,7 +542,7 @@ cdef class Rados(object):
         elif name is None:
             name = 'client.admin'
         if clustername is None:
-            clustername = 'ceph'
+            clustername = ''
 
         name = cstr(name, 'name')
         clustername = cstr(clustername, 'clustername')
