@@ -146,6 +146,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_cluster_stat(rados_t cluster, rados_cluster_stat_t *result)
     int rados_cluster_fsid(rados_t cluster, char *buf, size_t len)
     int rados_blacklist_add(rados_t cluster, char *client_address, uint32_t expire_seconds)
+    int rados_map_object(rados_t cluster, const char *obj_name, int *up, size_t *up_size, int *acting, size_t *acting_size, int64_t pool_id)
 
     int rados_ping_monitor(rados_t cluster, const char *mon_id, char **outstr, size_t *outstrlen)
     int rados_mon_command(rados_t cluster, const char **cmd, size_t cmdlen,
@@ -1276,6 +1277,42 @@ Rados object in state %s." % self.state)
             ret = rados_blacklist_add(self.cluster, _client_address, _expire_seconds)
         if ret < 0:
             raise make_ex(ret, "error blacklisting client '%s'" % client_address)
+
+    def map_object(self, obj_name, pool_id=-1):
+        """
+        Map an object
+
+        :param obj_name: the name of the object to find
+        :type obj_name: str
+        :param pool_id: id of the pool to look up
+        :type pool_id: int
+
+        :raises: :class:`Error`
+        :returns: tuple of up/acting set mapped to lists of ints
+                  e.g, ([0, 1, 2], [0, 1, 2])
+        """
+        self.require_state("connected")
+        obj_name =  cstr(obj_name, 'obj_name')
+        cdef:
+            uint32_t _pool_id = pool_id
+            char *_obj_name = obj_name
+            int *up_set = NULL
+            int *acting_set = NULL
+            size_t up_size, acting_size
+
+        try:
+            up_set = <int *>realloc_chk(up_set, 512)
+            acting_set = <int *>realloc_chk(acting_set, 512)
+            with nogil:
+                ret = rados_map_object(self.cluster, _obj_name, up_set, &up_size,
+                                       acting_set, &acting_size, _pool_id)
+
+            if ret < 0:
+                raise make_ex(ret, "error map object '%s'" % obj_name)
+            return ([up_set[i] for i in xrange(up_size)], [acting_set[i] for i in xrange(acting_size)])
+        finally:
+            free(up_set)
+            free(acting_set)
 
     def monitor_log(self, level, callback, arg):
         if level not in MONITOR_LEVELS:
