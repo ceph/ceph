@@ -4484,6 +4484,9 @@ bool remove_dir(
     store->get_ideal_list_max(),
     &olist,
     &next);
+  // default cont to true, this is safe because caller(OSD::RemoveWQ::_process()) 
+  // will recheck the answer before it really goes on.
+  bool cont = true;
   for (vector<ghobject_t>::iterator i = olist.begin();
        i != olist.end();
        ++i) {
@@ -4498,7 +4501,7 @@ bool remove_dir(
     if (++num >= cct->_conf->osd_target_transaction_size) {
       C_SaferCond waiter;
       store->queue_transaction(osr, std::move(t), &waiter);
-      bool cont = dstate->pause_clearing();
+      cont = dstate->pause_clearing();
       handle.suspend_tp_timeout();
       waiter.wait();
       handle.reset_tp_timeout();
@@ -4510,14 +4513,16 @@ bool remove_dir(
       num = 0;
     }
   }
-  C_SaferCond waiter;
-  store->queue_transaction(osr, std::move(t), &waiter);
-  bool cont = dstate->pause_clearing();
-  handle.suspend_tp_timeout();
-  waiter.wait();
-  handle.reset_tp_timeout();
-  if (cont)
-    cont = dstate->resume_clearing();
+  if (num) {
+    C_SaferCond waiter;
+    store->queue_transaction(osr, std::move(t), &waiter);
+    cont = dstate->pause_clearing();
+    handle.suspend_tp_timeout();
+    waiter.wait();
+    handle.reset_tp_timeout();
+    if (cont)
+      cont = dstate->resume_clearing();
+  }
   // whether there are more objects to remove in the collection
   *finished = next.is_max();
   return cont;
