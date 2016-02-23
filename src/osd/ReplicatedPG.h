@@ -471,6 +471,10 @@ public:
 
   LogClientTemp clog_error() { return osd->clog->error(); }
 
+  int sparse_read_finish(OpContext* ctx, OSDOp& osd_op, bufferlist& bl,
+			 uint64_t last, uint32_t total_read,
+			 map<uint64_t, uint64_t>& extentmap);
+
   /*
    * Capture all object state associated with an in-progress read or write.
    */
@@ -478,6 +482,7 @@ public:
     OpRequestRef op;
     osd_reqid_t reqid;
     vector<OSDOp> &ops;
+    list<async_ops_control_s *> ctx_ops_controls;
 
     const ObjectState *obs; // Old objectstate
     const SnapSet *snapset; // Old snapset
@@ -665,7 +670,15 @@ public:
 	delete i->second.second;
       }
       assert(on_finish == NULL);
+
+      // delete the async_ops_controls
+      while (!ctx_ops_controls.empty()) {
+	async_ops_control_s *opsctl = ctx_ops_controls.back();
+	ctx_ops_controls.pop_back();
+	delete opsctl;
+      }
     }
+
     void finish(int r) {
       if (on_finish) {
 	on_finish->complete(r);
@@ -674,6 +687,7 @@ public:
     }
   };
   friend struct OpContext;
+  void execute_ctx_continue(OpContext *ctx, int result);
 
   /*
    * State on the PG primary associated with the replicated mutation
@@ -1475,6 +1489,8 @@ public:
   RepGather *trim_object(const hobject_t &coid);
   void snap_trimmer(epoch_t e);
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops, osd_op_callback_t callback_in=0);
+  void osd_op_call_completion(OpContext *ctx, OSDOp *osd_op, bool asyncmode, int result);
+  int prepare_transaction_continue(OpContext *ctx, int result, bool async_call);
 
   int _get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals);
   int do_tmap2omap(OpContext *ctx, unsigned flags);

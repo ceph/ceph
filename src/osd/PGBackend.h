@@ -560,6 +560,12 @@
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete, bool fast_read = false) = 0;
 
+   virtual bool async_read_capable() { return false; }
+   virtual void objects_read_async_use_aio(
+     const hobject_t &hoid,
+     const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>, bufferlist* > > &to_read,
+     Context *on_complete, bool directio = false) { assert(0); }
+
    virtual bool scrub_supported() = 0;
    virtual bool auto_repair_supported() const = 0;
    void be_scan_list(
