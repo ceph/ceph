@@ -4486,7 +4486,7 @@ bool remove_dir(
     &next);
   for (vector<ghobject_t>::iterator i = olist.begin();
        i != olist.end();
-       ++i, ++num) {
+       ++i) {
     if (i->is_pgmeta())
       continue;
     OSDriver::OSTransaction _t(osdriver->get_transaction(&t));
@@ -4495,7 +4495,7 @@ bool remove_dir(
       assert(0);
     }
     t.remove(coll, *i);
-    if (num >= cct->_conf->osd_target_transaction_size) {
+    if (++num >= cct->_conf->osd_target_transaction_size) {
       C_SaferCond waiter;
       store->queue_transaction(osr, std::move(t), &waiter);
       bool cont = dstate->pause_clearing();
