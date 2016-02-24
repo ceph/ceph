@@ -52,6 +52,9 @@ class CephAnsible(ansible.Ansible):
     It will optionally do the following automatically based on ``vars`` that
     are passed in:
         * Set ``devices`` for each host if ``osd_auto_discovery`` is not True
+        * Set ``monitor_interface`` for each host if ``monitor_interface`` is
+          unset
+        * Set ``public_network`` for each host if ``public_network`` is unset
     """.format(
         git_base=teuth_config.ceph_git_base_url,
         playbook=_default_playbook,
@@ -118,6 +121,10 @@ class CephAnsible(ansible.Ansible):
         host_vars = dict()
         if not extra_vars.get('osd_auto_discovery', False):
             host_vars['devices'] = get_scratch_devices(remote)
+        if 'monitor_interface' not in extra_vars:
+            host_vars['monitor_interface'] = remote.interface
+        if 'public_network' not in extra_vars:
+            host_vars['public_network'] = remote.cidr
         return host_vars
 
 task = CephAnsible

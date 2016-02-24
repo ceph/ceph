@@ -46,10 +46,21 @@ class TestCephAnsibleTask(TestAnsibleTask):
         )
         self.patcher_get_scratch_devices.start()
 
+        def fake_set_iface_and_cidr(self):
+            self._interface = 'eth0'
+            self._cidr = '172.21.0.0/20'
+
+        self.patcher_remote = patch.multiple(
+            Remote,
+            _set_iface_and_cidr=fake_set_iface_and_cidr,
+        )
+        self.patcher_remote.start()
+
     def stop_patchers(self):
         super(TestCephAnsibleTask, self).stop_patchers()
         self.patcher_fetch_repo.stop()
         self.patcher_get_scratch_devices.stop()
+        self.patcher_remote.stop()
 
     def test_playbook_none(self):
         skip(SKIP_IRRELEVANT)
@@ -66,7 +77,11 @@ class TestCephAnsibleTask(TestAnsibleTask):
     def test_generate_hosts_file(self):
         self.task_config.update(dict(
             playbook=[],
-            vars=dict(osd_auto_discovery=True),
+            vars=dict(
+                osd_auto_discovery=True,
+                monitor_interface='eth0',
+                public_network='172.21.0.0/20',
+            ),
         ))
         task = self.klass(self.ctx, self.task_config)
         hosts_file_path = '/my/hosts/file'
@@ -93,7 +108,11 @@ class TestCephAnsibleTask(TestAnsibleTask):
 
     def test_generate_hosts_file_with_devices(self):
         self.task_config.update(dict(
-            playbook=[]
+            playbook=[],
+            vars=dict(
+                monitor_interface='eth0',
+                public_network='172.21.0.0/20',
+            ),
         ))
         task = self.klass(self.ctx, self.task_config)
         hosts_file_path = '/my/hosts/file'
@@ -103,7 +122,7 @@ class TestCephAnsibleTask(TestAnsibleTask):
             m_NTF.return_value = hosts_file_obj
             task.generate_hosts_file()
             m_NTF.assert_called_once_with(prefix="teuth_ansible_hosts_",
-                                            delete=False)
+                                          delete=False)
         assert task.generated_inventory is True
         assert task.inventory == hosts_file_path
         hosts_file_obj.seek(0)
@@ -116,4 +135,34 @@ class TestCephAnsibleTask(TestAnsibleTask):
             '',
             '[osds]',
             'remote3 devices=\'["/dev/remote3"]\'',
+        ])
+
+    def test_generate_hosts_file_with_network(self):
+        self.task_config.update(dict(
+            playbook=[],
+            vars=dict(
+                osd_auto_discovery=True,
+            ),
+        ))
+        task = self.klass(self.ctx, self.task_config)
+        hosts_file_path = '/my/hosts/file'
+        hosts_file_obj = StringIO()
+        hosts_file_obj.name = hosts_file_path
+        with patch.object(ansible, 'NamedTemporaryFile') as m_NTF:
+            m_NTF.return_value = hosts_file_obj
+            task.generate_hosts_file()
+            m_NTF.assert_called_once_with(prefix="teuth_ansible_hosts_",
+                                          delete=False)
+        assert task.generated_inventory is True
+        assert task.inventory == hosts_file_path
+        hosts_file_obj.seek(0)
+        assert hosts_file_obj.read() == '\n'.join([
+            '[mdss]',
+            "remote2 monitor_interface='eth0' public_network='172.21.0.0/20'",
+            '',
+            '[mons]',
+            "remote1 monitor_interface='eth0' public_network='172.21.0.0/20'",
+            '',
+            '[osds]',
+            "remote3 monitor_interface='eth0' public_network='172.21.0.0/20'",
         ])
