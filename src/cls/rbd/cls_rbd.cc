@@ -118,6 +118,10 @@ cls_method_handle_t h_mirror_peer_add;
 cls_method_handle_t h_mirror_peer_remove;
 cls_method_handle_t h_mirror_peer_set_client;
 cls_method_handle_t h_mirror_peer_set_cluster;
+cls_method_handle_t h_mirror_image_list;
+cls_method_handle_t h_mirror_image_get;
+cls_method_handle_t h_mirror_image_set;
+cls_method_handle_t h_mirror_image_remove;
 
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
@@ -2927,9 +2931,14 @@ namespace mirror {
 
 static const std::string MODE("mirror_mode");
 static const std::string PEER_KEY_PREFIX("mirror_peer_");
+static const std::string IMAGE_KEY_PREFIX("image_");
 
 std::string peer_key(const std::string &uuid) {
   return PEER_KEY_PREFIX + uuid;
+}
+
+std::string image_key(const string &image_id) {
+  return IMAGE_KEY_PREFIX + image_id;
 }
 
 int read_peers(cls_method_context_t hctx,
@@ -2989,6 +2998,105 @@ int write_peer(cls_method_context_t hctx, const std::string &id,
   int r = cls_cxx_map_set_val(hctx, peer_key(id), &bl);
   if (r < 0) {
     CLS_ERR("error writing peer '%s': %s", id.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
+int image_list_ids(cls_method_context_t hctx, vector<string> *image_ids) {
+  string last_read = IMAGE_KEY_PREFIX;
+  int max_read = RBD_MAX_KEYS_READ;
+  int r = max_read;
+  while (r == max_read) {
+    set<string> keys;
+    r = cls_cxx_map_get_keys(hctx, last_read, max_read, &keys);
+    if (r < 0) {
+      CLS_ERR("error reading mirrored images: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (auto &image_key : keys) {
+      if (0 != image_key.compare(0, IMAGE_KEY_PREFIX.size(), IMAGE_KEY_PREFIX)) {
+	return 0;
+      }
+      image_ids->push_back(image_key.substr(IMAGE_KEY_PREFIX.size()));
+    }
+  }
+  return 0;
+}
+
+int image_get(cls_method_context_t hctx, const string &image_id,
+	      cls::rbd::MirrorImage *mirror_image) {
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(hctx, image_key(image_id), &bl);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error reading mirrored image '%s': '%s'", image_id.c_str(),
+	      cpp_strerror(r).c_str());
+    }
+    return r;
+  }
+
+  try {
+    bufferlist::iterator it = bl.begin();
+    ::decode(*mirror_image, it);
+  } catch (const buffer::error &err) {
+    CLS_ERR("could not decode mirrored image '%s'", image_id.c_str());
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int image_set(cls_method_context_t hctx, const string &image_id,
+	      const cls::rbd::MirrorImage &mirror_image) {
+  bufferlist bl;
+  ::encode(mirror_image, bl);
+
+  // don't overwrite the key if it already exists with a different
+  // global_image_id
+  cls::rbd::MirrorImage existing_mirror_image;
+  int r = image_get(hctx, image_id, &existing_mirror_image);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("error reading mirrored image '%s': '%s'", image_id.c_str(),
+	    cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (r != -ENOENT &&
+      existing_mirror_image.global_image_id != mirror_image.global_image_id) {
+    return -EEXIST;
+  }
+
+  r = cls_cxx_map_set_val(hctx, image_key(image_id), &bl);
+  if (r < 0) {
+    CLS_ERR("error adding mirrored image '%s': %s", image_id.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
+int image_remove(cls_method_context_t hctx, const string &image_id) {
+  bufferlist bl;
+  cls::rbd::MirrorImage mirror_image;
+  int r = image_get(hctx, image_id, &mirror_image);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error reading mirrored image '%s': '%s'", image_id.c_str(),
+	      cpp_strerror(r).c_str());
+    }
+    return r;
+  }
+
+  if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
+    return -EBUSY;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, image_key(image_id));
+  if (r < 0) {
+    CLS_ERR("error removing mirrored image '%s': %s", image_id.c_str(),
             cpp_strerror(r).c_str());
     return r;
   }
@@ -3250,6 +3358,106 @@ int mirror_peer_set_cluster(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
+/**
+ * Input:
+ * none
+ *
+ * Output:
+ * @param std::vector<std::string>: collection of image_ids
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_image_list(cls_method_context_t hctx, bufferlist *in,
+		     bufferlist *out) {
+  vector<string> image_ids;
+  int r = mirror::image_list_ids(hctx, &image_ids);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(image_ids, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param image_id (std::string)
+ *
+ * Output:
+ * @param cls::rbd::MirrorImage - metadata associated with the image_id
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_image_get(cls_method_context_t hctx, bufferlist *in,
+		     bufferlist *out) {
+  string image_id;
+  try {
+    bufferlist::iterator it = in->begin();
+    ::decode(image_id, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  cls::rbd::MirrorImage mirror_image;
+  int r = mirror::image_get(hctx, image_id, &mirror_image);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(mirror_image, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param image_id (std::string)
+ * @param mirror_image (cls::rbd::MirrorImage)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ * @returns -EEXIST if there's an existing image_id with a different global_image_id
+ */
+int mirror_image_set(cls_method_context_t hctx, bufferlist *in,
+		     bufferlist *out) {
+  string image_id;
+  cls::rbd::MirrorImage mirror_image;
+  try {
+    bufferlist::iterator it = in->begin();
+    ::decode(image_id, it);
+    ::decode(mirror_image, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = mirror::image_set(hctx, image_id, mirror_image);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param image_id (std::string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_image_remove(cls_method_context_t hctx, bufferlist *in,
+			bufferlist *out) {
+  string image_id;
+  try {
+    bufferlist::iterator it = in->begin();
+    ::decode(image_id, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = mirror::image_remove(hctx, image_id);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
 void __cls_init()
 {
   CLS_LOG(20, "Loaded rbd class!");
@@ -3407,7 +3615,7 @@ void __cls_init()
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  old_snapshot_rename, &h_old_snapshot_rename);
 
-  /* methods for the rbd_pool_settings object */
+  /* methods for the rbd_mirroring object */
   cls_register_cxx_method(h_class, "mirror_mode_get", CLS_METHOD_RD,
                           mirror_mode_get, &h_mirror_mode_get);
   cls_register_cxx_method(h_class, "mirror_mode_set",
@@ -3427,5 +3635,15 @@ void __cls_init()
   cls_register_cxx_method(h_class, "mirror_peer_set_cluster",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           mirror_peer_set_cluster, &h_mirror_peer_set_cluster);
+  cls_register_cxx_method(h_class, "mirror_image_list", CLS_METHOD_RD,
+                          mirror_image_list, &h_mirror_image_list);
+  cls_register_cxx_method(h_class, "mirror_image_get", CLS_METHOD_RD,
+                          mirror_image_get, &h_mirror_image_get);
+  cls_register_cxx_method(h_class, "mirror_image_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_image_set, &h_mirror_image_set);
+  cls_register_cxx_method(h_class, "mirror_image_remove",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_image_remove, &h_mirror_image_remove);
   return;
 }
