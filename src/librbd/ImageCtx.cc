@@ -175,8 +175,6 @@ struct C_InvalidateCache : public Context {
     if (snap)
       snap_name = snap;
 
-    asok_hook = new LibrbdAdminSocketHook(this);
-
     memset(&header, 0, sizeof(header));
     memset(&layout, 0, sizeof(layout));
 
@@ -196,6 +194,7 @@ struct C_InvalidateCache : public Context {
     assert(exclusive_lock == NULL);
     assert(object_map == NULL);
     assert(journal == NULL);
+    assert(asok_hook == NULL);
 
     if (perfcounter) {
       perf_stop();
@@ -221,7 +220,6 @@ struct C_InvalidateCache : public Context {
 
     delete op_work_queue;
     delete aio_work_queue;
-    delete asok_hook;
     delete operations;
     delete state;
   }
@@ -233,6 +231,8 @@ struct C_InvalidateCache : public Context {
       init_layout();
     }
     apply_metadata_confs();
+
+    asok_hook = new LibrbdAdminSocketHook(this);
 
     string pname = string("librbd-") + id + string("-") +
       data_ctx.get_pool_name() + string("-") + name;
@@ -284,6 +284,15 @@ struct C_InvalidateCache : public Context {
 
     readahead.set_trigger_requests(readahead_trigger_requests);
     readahead.set_max_readahead_size(readahead_max_bytes);
+  }
+
+  void ImageCtx::shutdown() {
+    if (image_watcher != nullptr) {
+      unregister_watch();
+    }
+
+    delete asok_hook;
+    asok_hook = nullptr;
   }
 
   void ImageCtx::init_layout()
