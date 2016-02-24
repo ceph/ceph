@@ -1278,7 +1278,6 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
 
   prepare_assert_ops(&wr);
   wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH);
-  *handle = 0;
   bufferlist bl;
   objecter->linger_watch(linger_op, wr,
                          snapc, ceph::real_clock::now(), bl,
