@@ -293,6 +293,9 @@ public:
     pg_temp.reset(new map<pg_t,vector<int32_t> >(*o.pg_temp));
     osd_uuid.reset(new vector<uuid_d>(*o.osd_uuid));
 
+    if (o.osd_primary_affinity)
+      osd_primary_affinity.reset(new vector<__u32>(*o.osd_primary_affinity));
+
     // NOTE: this still references shared entity_addr_t's.
     osd_addrs.reset(new addrs_s(*o.osd_addrs));
 
