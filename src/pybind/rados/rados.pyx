@@ -1802,13 +1802,13 @@ cdef class Ioctx(object):
             uint64_t _offset = offset
 
         completion = self.__get_completion(oncomplete, onsafe)
-
+        self.__track_completion(completion)
         with nogil:
             ret = rados_aio_write(self.io, _object_name, completion.rados_comp,
                                 _to_write, size, _offset)
         if ret < 0:
+            completion._cleanup()
             raise make_ex(ret, "error writing object %s" % object_name)
-        self.__track_completion(completion)
         return completion
 
     def aio_write_full(self, object_name, to_write,
@@ -1844,13 +1844,14 @@ cdef class Ioctx(object):
             size_t size = len(to_write)
 
         completion = self.__get_completion(oncomplete, onsafe)
+        self.__track_completion(completion)
         with nogil:
             ret = rados_aio_write_full(self.io, _object_name,
                                     completion.rados_comp,
                                     _to_write, size)
         if ret < 0:
+            completion._cleanup()
             raise make_ex(ret, "error writing object %s" % object_name)
-        self.__track_completion(completion)
         return completion
 
     def aio_append(self, object_name, to_append, oncomplete=None, onsafe=None):
@@ -1884,13 +1885,14 @@ cdef class Ioctx(object):
             size_t size = len(to_append)
 
         completion = self.__get_completion(oncomplete, onsafe)
+        self.__track_completion(completion)
         with nogil:
             ret = rados_aio_append(self.io, _object_name,
                                 completion.rados_comp,
                                 _to_append, size)
         if ret < 0:
+            completion._cleanup()
             raise make_ex(ret, "error appending object %s" % object_name)
-        self.__track_completion(completion)
         return completion
 
     def aio_flush(self):
@@ -1946,12 +1948,13 @@ cdef class Ioctx(object):
         completion = self.__get_completion(oncomplete_, None)
         completion.buf = PyBytes_FromStringAndSize(NULL, length)
         ret_buf = PyBytes_AsString(completion.buf)
+        self.__track_completion(completion)
         with nogil:
             ret = rados_aio_read(self.io, _object_name, completion.rados_comp,
                                 ret_buf, _length, _offset)
         if ret < 0:
+            completion._cleanup()
             raise make_ex(ret, "error reading %s" % object_name)
-        self.__track_completion(completion)
         return completion
 
     def aio_remove(self, object_name, oncomplete=None, onsafe=None):
@@ -1977,12 +1980,13 @@ cdef class Ioctx(object):
             char* _object_name = object_name
 
         completion = self.__get_completion(oncomplete, onsafe)
+        self.__track_completion(completion)
         with nogil:
             ret = rados_aio_remove(self.io, _object_name,
                                 completion.rados_comp)
         if ret < 0:
+            completion._cleanup()
             raise make_ex(ret, "error removing %s" % object_name)
-        self.__track_completion(completion)
         return completion
 
     def require_ioctx_open(self):
