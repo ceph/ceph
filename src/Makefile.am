@@ -1,5 +1,20 @@
 include Makefile-env.am
 
+# a workaround for http://debbugs.gnu.org/cgi/bugreport.cgi?bug=18744, this
+# bug was fixed in automake 1.15, but automake 1.13 is supported by us.  so
+# we can not just require 1.15 using `AM_INIT_AUTOMAKE`
+am__is_gnu_make = { \
+  if test -z '$(MAKELEVEL)'; then \
+    false; \
+  elif test -n '$(MAKE_HOST)'; then \
+    true; \
+  elif test -n '$(MAKE_VERSION)' && test -n '$(CURDIR)'; then \
+    true; \
+  else \
+    false; \
+  fi; \
+}
+
 SUBDIRS += ocf java
 DIST_SUBDIRS += gmock ocf java
 
@@ -62,6 +77,7 @@ editpaths = sed \
 	-e 's|@sysconfdir[@]|$(sysconfdir)|g' \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
 	-e 's|@prefix[@]|$(prefix)|g' \
+	-e 's|@libexecdir[@]|$(libexecdir)|g' \
 	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
 shell_scripts = ceph-debugpack ceph-post-file ceph-crush-location
 $(shell_scripts): Makefile
@@ -128,13 +144,10 @@ docdir ?= ${datadir}/doc/ceph
 doc_DATA = $(srcdir)/sample.ceph.conf sample.fetch_config
 
 
-# various scripts
-
-shell_commondir = $(libdir)/ceph
-shell_common_SCRIPTS = ceph_common.sh
+# various scripts in $(libexecdir)
 
 ceph_libexecdir = $(libexecdir)/ceph
-ceph_libexec_SCRIPTS = ceph-osd-prestart.sh
+ceph_libexec_SCRIPTS = ceph_common.sh ceph-osd-prestart.sh
 
 
 # tests to actually run on "make check"; if you need extra, non-test,
