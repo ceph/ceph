@@ -19,6 +19,10 @@
 
 #include <unistd.h>
 
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
+
 #include "include/assert.h"
 #include "include/unordered_map.h"
 #include "include/memory.h"
@@ -42,7 +46,7 @@ public:
 
   /// an in-memory object
   struct Onode {
-    atomic_t nref;  ///< reference count
+    std::atomic_int nref;  ///< reference count
 
     ghobject_t oid;
     string key;     ///< key under PREFIX_OBJ where we are stored
@@ -52,8 +56,8 @@ public:
     bool dirty;     // ???
     bool exists;
 
-    Mutex flush_lock;  ///< protect flush_txns
-    Cond flush_cond;   ///< wait here for unapplied txns
+    std::mutex flush_lock;  ///< protect flush_txns
+    std::condition_variable flush_cond;   ///< wait here for unapplied txns
     set<TransContext*> flush_txns;   ///< committing txns
 
     uint64_t tail_offset;
@@ -61,14 +65,20 @@ public:
 
     map<uint64_t,bufferlist> pending_stripes;  ///< unwritten stripes
 
-    Onode(const ghobject_t& o, const string& k);
+    Onode(const ghobject_t& o, const string& k)
+      : nref(0),
+	oid(o),
+	key(k),
+	dirty(false),
+	exists(false) {
+    }
 
     void flush();
     void get() {
-      nref.inc();
+      ++nref;
     }
     void put() {
-      if (nref.dec() == 0)
+      if (--nref == 0)
 	delete this;
     }
 
@@ -90,16 +100,15 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&Onode::lru_item> > lru_list_t;
 
-    Mutex lock;
+    std::mutex lock;
     ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
     lru_list_t lru;                                      ///< lru
 
-    OnodeHashLRU() : lock("KStore::OnodeHashLRU::lock") {}
+    OnodeHashLRU() {}
 
     void add(const ghobject_t& oid, OnodeRef o);
     void _touch(OnodeRef o);
     OnodeRef lookup(const ghobject_t& o);
-    void remove(const ghobject_t& o);
     void rename(const ghobject_t& old_oid, const ghobject_t& new_oid);
     void clear();
     bool get_next(const ghobject_t& after, pair<ghobject_t,OnodeRef> *next);
@@ -196,9 +205,6 @@ public:
     list<Context*> oncommits;  ///< more commit completions
     list<CollectionRef> removed_collections; ///< colls we removed
 
-    Mutex lock;
-    Cond cond;
-
     CollectionRef first_collection;  ///< first referenced collection
 
     explicit TransContext(OpSequencer *o)
@@ -208,8 +214,7 @@ public:
 	bytes(0),
 	oncommit(NULL),
 	onreadable(NULL),
-	onreadable_sync(NULL),
-	lock("KStore::TransContext::lock") {
+	onreadable_sync(NULL) {
       //cout << "txc new " << this << std::endl;
     }
     ~TransContext() {
@@ -223,8 +228,8 @@ public:
 
   class OpSequencer : public Sequencer_impl {
   public:
-    Mutex qlock;
-    Cond qcond;
+    std::mutex qlock;
+    std::condition_variable qcond;
     typedef boost::intrusive::list<
       TransContext,
       boost::intrusive::member_hook<
@@ -237,26 +242,25 @@ public:
 
     OpSequencer()
 	//set the qlock to to PTHREAD_MUTEX_RECURSIVE mode
-      : qlock("KStore::OpSequencer::qlock", true, false),
-	parent(NULL) {
+      : parent(NULL) {
     }
     ~OpSequencer() {
       assert(q.empty());
     }
 
     void queue_new(TransContext *txc) {
-      Mutex::Locker l(qlock);
+      std::lock_guard<std::mutex> l(qlock);
       q.push_back(*txc);
     }
 
     void flush() {
-      Mutex::Locker l(qlock);
+      std::unique_lock<std::mutex> l(qlock);
       while (!q.empty())
-	qcond.Wait(qlock);
+	qcond.wait(l);
     }
 
     bool flush_commit(Context *c) {
-      Mutex::Locker l(qlock);
+      std::lock_guard<std::mutex> l(qlock);
       if (q.empty()) {
 	return true;
       }
@@ -292,7 +296,7 @@ private:
   RWLock coll_lock;    ///< rwlock to protect coll_map
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
 
-  Mutex nid_lock;
+  std::mutex nid_lock;
   uint64_t nid_last;
   uint64_t nid_max;
 
@@ -301,14 +305,14 @@ private:
   Finisher finisher;
 
   KVSyncThread kv_sync_thread;
-  Mutex kv_lock;
-  Cond kv_cond, kv_sync_cond;
+  std::mutex kv_lock;
+  std::condition_variable kv_cond, kv_sync_cond;
   bool kv_stop;
   deque<TransContext*> kv_queue, kv_committing;
 
   Logger *logger;
 
-  Mutex reap_lock;
+  std::mutex reap_lock;
   list<CollectionRef> removed_collections;
 
 
@@ -353,9 +357,9 @@ private:
   void _kv_sync_thread();
   void _kv_stop() {
     {
-      Mutex::Locker l(kv_lock);
+      std::lock_guard<std::mutex> l(kv_lock);
       kv_stop = true;
-      kv_cond.Signal();
+      kv_cond.notify_all();
     }
     kv_sync_thread.join();
     kv_stop = false;
@@ -518,7 +522,7 @@ private:
 
   int _write(TransContext *txc,
 	     CollectionRef& c,
-	     const ghobject_t& oid,
+	     OnodeRef& o,
 	     uint64_t offset, size_t len,
 	     bufferlist& bl,
 	     uint32_t fadvise_flags);
@@ -529,76 +533,77 @@ private:
 		uint32_t fadvise_flags);
   int _touch(TransContext *txc,
 	     CollectionRef& c,
-	     const ghobject_t& oid);
+	     OnodeRef& o);
   int _zero(TransContext *txc,
 	    CollectionRef& c,
-	    const ghobject_t& oid,
+	    OnodeRef& o,
 	    uint64_t offset, size_t len);
   int _do_truncate(TransContext *txc,
 		   OnodeRef o,
 		   uint64_t offset);
   int _truncate(TransContext *txc,
 		CollectionRef& c,
-		const ghobject_t& oid,
+		OnodeRef& o,
 		uint64_t offset);
   int _remove(TransContext *txc,
 	      CollectionRef& c,
-	      const ghobject_t& oid);
+	      OnodeRef& o);
   int _do_remove(TransContext *txc,
 		 OnodeRef o);
   int _setattr(TransContext *txc,
 	       CollectionRef& c,
-	       const ghobject_t& oid,
+	       OnodeRef& o,
 	       const string& name,
 	       bufferptr& val);
   int _setattrs(TransContext *txc,
 		CollectionRef& c,
-		const ghobject_t& oid,
+		OnodeRef& o,
 		const map<string,bufferptr>& aset);
   int _rmattr(TransContext *txc,
 	      CollectionRef& c,
-	      const ghobject_t& oid,
+	      OnodeRef& o,
 	      const string& name);
   int _rmattrs(TransContext *txc,
 	       CollectionRef& c,
-	       const ghobject_t& oid);
+	       OnodeRef& o);
   void _do_omap_clear(TransContext *txc, uint64_t id);
   int _omap_clear(TransContext *txc,
 		  CollectionRef& c,
-		  const ghobject_t& oid);
+		  OnodeRef& o);
   int _omap_setkeys(TransContext *txc,
 		    CollectionRef& c,
-		    const ghobject_t& oid,
+		    OnodeRef& o,
 		    bufferlist& bl);
   int _omap_setheader(TransContext *txc,
 		      CollectionRef& c,
-		      const ghobject_t& oid,
+		      OnodeRef& o,
 		      bufferlist& header);
   int _omap_rmkeys(TransContext *txc,
 		   CollectionRef& c,
-		   const ghobject_t& oid,
+		   OnodeRef& o,
 		   bufferlist& bl);
   int _omap_rmkey_range(TransContext *txc,
 			CollectionRef& c,
-			const ghobject_t& oid,
+			OnodeRef& o,
 			const string& first, const string& last);
   int _setallochint(TransContext *txc,
 		    CollectionRef& c,
-		    const ghobject_t& oid,
+		    OnodeRef& o,
 		    uint64_t expected_object_size,
 		    uint64_t expected_write_size);
   int _clone(TransContext *txc,
 	     CollectionRef& c,
-	     const ghobject_t& old_oid,
-	     const ghobject_t& new_oid);
+	     OnodeRef& oldo,
+	     OnodeRef& newo);
   int _clone_range(TransContext *txc,
 		   CollectionRef& c,
-		   const ghobject_t& old_oid,
-		   const ghobject_t& new_oid,
+		   OnodeRef& oldo,
+		   OnodeRef& newo,
 		   uint64_t srcoff, uint64_t length, uint64_t dstoff);
   int _rename(TransContext *txc,
 	      CollectionRef& c,
-	      const ghobject_t& old_oid,
+	      OnodeRef& oldo,
+	      OnodeRef& newo,
 	      const ghobject_t& new_oid);
   int _create_collection(TransContext *txc, coll_t cid, unsigned bits,
 			 CollectionRef *c);
