@@ -222,7 +222,6 @@ void AbstractAioImageWrite::send_request() {
   RWLock::RLocker md_locker(m_image_ctx.md_lock);
 
   bool journaling = false;
-  uint64_t journal_tid = 0;
 
   uint64_t clip_len = m_len;
   ObjectExtents object_extents;
@@ -257,6 +256,7 @@ void AbstractAioImageWrite::send_request() {
   }
 
   if (!object_extents.empty()) {
+    uint64_t journal_tid = 0;
     m_aio_comp->set_request_count(
       cct, object_extents.size() + get_cache_request_count(journaling));
 

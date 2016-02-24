@@ -349,7 +349,6 @@ int DiffIterate::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
   }
 
   object_diff_state->clear();
-  int r;
   uint64_t current_snap_id = from_snap_id;
   uint64_t next_snap_id = to_snap_id;
   BitVector<2> prev_object_map;
@@ -371,7 +370,7 @@ int DiffIterate::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
     }
 
     uint64_t flags;
-    r = m_image_ctx.get_flags(from_snap_id, &flags);
+    int r = m_image_ctx.get_flags(from_snap_id, &flags);
     if (r < 0) {
       lderr(cct) << "diff_object_map: failed to retrieve image flags" << dendl;
       return r;
