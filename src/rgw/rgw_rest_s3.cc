@@ -2798,8 +2798,13 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
   int ret = process("POST", keystone_url.c_str());
   if (ret < 0) {
     dout(2) << "s3 keystone: token validation ERROR: " << rx_buffer.c_str()
-	    << dendl;
+            << dendl;
     return -EPERM;
+  }
+
+  /* if the supplied signature is wrong, we will get 401 from Keystone */
+  if (get_http_status() == HTTP_STATUS_UNAUTHORIZED) {
+    return -ERR_SIGNATURE_NO_MATCH;
   }
 
   /* now parse response */
@@ -2817,9 +2822,10 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
   }
 
   if (!found) {
-    ldout(cct, 5) << "s3 keystone: user does not hold a matching role; required roles: "
-		  << cct->_conf->rgw_keystone_accepted_roles << dendl;
-    return -EPERM;
+    ldout(cct, 5) << "s3 keystone: user does not hold a matching role;"
+                     " required roles: "
+                  << cct->_conf->rgw_keystone_accepted_roles << dendl;
+    return -ERR_INVALID_ACCESS_KEY;
   }
 
   /* everything seems fine, continue with this user */
@@ -3461,7 +3467,7 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
   }
 
   /* try keystone auth first */
-  int keystone_result = -EINVAL;
+  int keystone_result = -ERR_INVALID_ACCESS_KEY;;
   if (store->ctx()->_conf->rgw_s3_auth_use_keystone
       && !store->ctx()->_conf->rgw_keystone_url.empty()) {
     dout(20) << "s3 keystone: trying keystone auth" << dendl;
@@ -3470,8 +3476,9 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
     string token;
 
     if (!rgw_create_s3_canonical_header(s->info,
-					&s->header_time, token, qsr)) {
+                                        &s->header_time, token, qsr)) {
       dout(10) << "failed to create auth header\n" << token << dendl;
+      keystone_result = -EPERM;
     } else {
       keystone_result = keystone_validator.validate_s3token(auth_id, token,
 							    auth_sign);
@@ -3481,14 +3488,17 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
 
 	if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
 	     req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
-	  dout(10) << "req_sec=" << req_sec << " now=" << now
-		   << "; now - RGW_AUTH_GRACE_MINS="
-		   << now - RGW_AUTH_GRACE_MINS * 60
-		   << "; now + RGW_AUTH_GRACE_MINS="
-		   << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
-	  dout(0) << "NOTICE: request time skew too big now="
-		  << utime_t(now, 0) << " req_time="
-		  << s->header_time << dendl;
+	  ldout(s->cct, 10) << "req_sec=" << req_sec << " now=" << now
+                            << "; now - RGW_AUTH_GRACE_MINS="
+                            << now - RGW_AUTH_GRACE_MINS * 60
+                            << "; now + RGW_AUTH_GRACE_MINS="
+                            << now + RGW_AUTH_GRACE_MINS * 60
+                            << dendl;
+
+	  ldout(s->cct, 0)  << "NOTICE: request time skew too big now="
+                            << utime_t(now, 0)
+                            << " req_time=" << s->header_time
+                            << dendl;
 	  return -ERR_REQUEST_TIME_SKEWED;
 	}
 
@@ -3510,18 +3520,17 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
     }
   }
 
-  /* keystone failed (or not enabled); check if we want to use rados backend */
-  if (!store->ctx()->_conf->rgw_s3_auth_use_rados
-      && keystone_result < 0)
-    return keystone_result;
-
-  /* now try rados backend, but only if keystone did not succeed */
   if (keystone_result < 0) {
+    if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {
+      /* No other auth option possible. Terminate request. */
+      return keystone_result;
+    }
+
     /* get the user info */
     if (rgw_get_user_info_by_access_key(store, auth_id, *(s->user)) < 0) {
       dout(5) << "error reading user info, uid=" << auth_id
-	      << " can't authenticate" << dendl;
-      return -ERR_INVALID_ACCESS_KEY;
+              << " can't authenticate" << dendl;
+      return keystone_result;
     }
 
     /* now verify signature */
@@ -3535,14 +3544,14 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
 
     time_t req_sec = s->header_time.sec();
     if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-	 req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
+        req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
       dout(10) << "req_sec=" << req_sec << " now=" << now
-	       << "; now - RGW_AUTH_GRACE_MINS="
-	       << now - RGW_AUTH_GRACE_MINS * 60
-	       << "; now + RGW_AUTH_GRACE_MINS="
-	       << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
-      dout(0) << "NOTICE: request time skew too big now=" << utime_t(now, 0)
-	      << " req_time=" << s->header_time << dendl;
+               << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60
+               << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60
+               << dendl;
+      dout(0)  << "NOTICE: request time skew too big now=" << utime_t(now, 0)
+               << " req_time=" << s->header_time
+               << dendl;
       return -ERR_REQUEST_TIME_SKEWED;
     }
 
