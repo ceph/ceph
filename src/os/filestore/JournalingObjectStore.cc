@@ -92,9 +92,13 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
     apply_manager.op_apply_finish(seq);
 
     op_seq = seq;
+    count++;
 
     dout(3) << "journal_replay: r = " << r << ", op_seq now " << op_seq << dendl;
   }
+
+  if (count)
+    dout(3) << "journal_replay: total = " << count << dendl;
 
   replaying = false;
 
