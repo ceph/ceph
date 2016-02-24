@@ -368,3 +368,35 @@ void OrderedThrottle::complete_pending_ops() {
     ++m_complete_tid;
   }
 }
+
+uint32_t DynamicThrottle::calc_wait_time_in_sec(int percentage_empty 
+  , double &wait_time) {
+
+  wait_time = 0;
+  double readjust_delay = 0;
+  if ((percentage_empty > 100) || (percentage_empty < 0)) {
+    return 1;
+  }  
+  uint32_t delay_multiplier = 0;
+  if (percentage_empty <= low_delay_threshold ) {
+    if ((unsigned)(percentage_empty - medium_delay_threshold) <= 
+       low_delay_threshold_range) {
+
+      delay_multiplier = low_delay_multiplier;
+    } else if ((unsigned)(percentage_empty - high_delay_threshold) <= 
+              medium_delay_threshold_range) {
+
+      delay_multiplier = medium_delay_multiplier;
+    } else {
+
+      delay_multiplier = high_delay_multiplier;
+    }
+    readjust_delay = (double)(100 - percentage_empty)/1000000 ;
+    wait_time = delay_start + (readjust_delay * delay_multiplier);
+    ldout(cct, 10) << "wait_time = " << wait_time << " percentage_empty = "
+                   << percentage_empty << " delay_multiplier = "
+		   << delay_multiplier
+                   << dendl;
+  }
+  return 0;
+}

@@ -240,6 +240,9 @@ int FileStore::lfn_open(const coll_t& cid,
 
   if (create)
     flags |= O_CREAT;
+  if (g_conf->filestore_odsync_write) {
+    flags |= O_DSYNC;
+  }
 
   Index index2;
   if (!index) {
@@ -464,7 +467,9 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
 
     if (!force_clear_omap) {
       if (hardlink == 0) {
-	  wbthrottle.clear_object(o); // should be only non-cache ref
+          if (!m_disable_wbthrottle) {
+	    wbthrottle.clear_object(o); // should be only non-cache ref
+          }
 	  fdcache.clear(o);
 	  return 0;
       } else if (hardlink == 1) {
@@ -483,7 +488,9 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
       if (g_conf->filestore_debug_inject_read_err) {
 	debug_obj_on_delete(o);
       }
-      wbthrottle.clear_object(o); // should be only non-cache ref
+      if (!m_disable_wbthrottle) {
+        wbthrottle.clear_object(o); // should be only non-cache ref
+      }
       fdcache.clear(o);
     } else {
       /* Ensure that replay of this op doesn't result in the object_map
@@ -519,8 +526,15 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   fdcache(g_ceph_context),
   wbthrottle(g_ceph_context),
   next_osr_id(0),
-  throttle_ops(g_ceph_context, "filestore_ops", g_conf->filestore_queue_max_ops),
-  throttle_bytes(g_ceph_context, "filestore_bytes", g_conf->filestore_queue_max_bytes),
+  dyn_throttle_filestore(g_conf->filestore_dynamic_throttle_start_delay
+                        , g_conf->dynamic_throttle_low_delay_multiplier
+                        , g_conf->dynamic_throttle_medium_delay_multiplier
+                        , g_conf->dynamic_throttle_high_delay_multiplier
+                        , g_conf->dynamic_throttle_low_threshold
+                        , g_conf->dynamic_throttle_medium_threshold
+		        , g_conf->dynamic_throttle_high_threshold
+			, "filestore_dyn_throttle"
+                        , g_ceph_context),
   m_ondisk_finisher_num(g_conf->filestore_ondisk_finisher_threads),
   m_apply_finisher_num(g_conf->filestore_apply_finisher_threads),
   op_tp(g_ceph_context, "FileStore::op_tp", "tp_fstore_op", g_conf->filestore_op_threads, "filestore_op_threads"),
@@ -615,6 +629,11 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   g_ceph_context->_conf->add_observer(this);
 
   superblock.compat_features = get_fs_initial_compat_set();
+  if (g_conf->filestore_odsync_write || !g_conf->filestore_wbthrottle_enable) {
+    m_disable_wbthrottle = true;
+  } else {
+    m_disable_wbthrottle = false;
+  }
 }
 
 FileStore::~FileStore()
@@ -757,7 +776,9 @@ void FileStore::create_backend(long f_type)
   switch (f_type) {
 #if defined(__linux__)
   case BTRFS_SUPER_MAGIC:
-    wbthrottle.set_fs(WBThrottle::BTRFS);
+    if (!m_disable_wbthrottle){
+      wbthrottle.set_fs(WBThrottle::BTRFS);
+    }
     break;
 
   case XFS_SUPER_MAGIC:
@@ -1138,7 +1159,6 @@ int FileStore::_sanity_check_fs()
 	 << "             throughput, especially with spinning disks.\n"
 	 << TEXT_NORMAL;
   }
-
   return 0;
 }
 
@@ -1594,8 +1614,9 @@ int FileStore::mount()
       index->cleanup();
     }
   }
-
-  wbthrottle.start();
+  if (!m_disable_wbthrottle) {
+    wbthrottle.start();
+  }
   sync_thread.create("filestore_sync");
 
   if (!(generic_flags & SKIP_JOURNAL_REPLAY)) {
@@ -1654,8 +1675,9 @@ stop_sync:
   sync_cond.Signal();
   lock.Unlock();
   sync_thread.join();
-
-  wbthrottle.stop();
+  if (!m_disable_wbthrottle) {
+    wbthrottle.stop();
+  }
 close_current_fd:
   VOID_TEMP_FAILURE_RETRY(::close(current_fd));
   current_fd = -1;
@@ -1722,7 +1744,9 @@ int FileStore::umount()
   sync_cond.Signal();
   lock.Unlock();
   sync_thread.join();
-  wbthrottle.stop();
+  if (!m_disable_wbthrottle){
+    wbthrottle.stop();
+  }
   op_tp.stop();
 
   journal_stop();
@@ -1814,53 +1838,78 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
   dout(5) << "queue_op " << o << " seq " << o->op
 	  << " " << *osr
 	  << " " << o->bytes << " bytes"
-	  << "   (queue has " << throttle_ops.get_current() << " ops and " << throttle_bytes.get_current() << " bytes)"
+	  << "   (queue has "  
+          << m_filestore_current_queue_bytes.read() << " bytes)"
 	  << dendl;
   op_wq.queue(osr);
+
 }
 
 void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
 {
-  // Do not call while holding the journal lock!
-  uint64_t max_ops = m_filestore_queue_max_ops;
-  uint64_t max_bytes = m_filestore_queue_max_bytes;
+  if (0 != m_filestore_queue_max_bytes) {
 
-  if (backend->can_checkpoint() && is_committing()) {
-    max_ops += m_filestore_queue_committing_max_ops;
-    max_bytes += m_filestore_queue_committing_max_bytes;
+    uint64_t max_bytes = m_filestore_queue_max_bytes;
+
+    if (backend->can_checkpoint() && is_committing()) {
+      max_bytes += m_filestore_queue_committing_max_bytes;
+    }
+    logger->set(l_os_oq_max_bytes, max_bytes);
+    if (handle)
+      handle->suspend_tp_timeout();
+
+    m_filestore_current_queue_bytes.add(o->bytes);
+    bool need_hard_backoff;
+    do {
+      uint64_t outstanding_bytes = m_filestore_current_queue_bytes.read();
+      int percentage_empty_bytes = 100;
+      need_hard_backoff = false;
+      if (outstanding_bytes > max_bytes) {
+        percentage_empty_bytes = 0;
+        need_hard_backoff = true;
+      } else {
+        percentage_empty_bytes = (uint32_t)((100*(max_bytes -
+                               outstanding_bytes))/max_bytes);
+      }
+      double delay_time;
+      uint32_t failed = dyn_throttle_filestore.calc_wait_time_in_sec(
+                        percentage_empty_bytes, delay_time);
+
+      if ((0 != delay_time) && (!failed)) {
+        struct timespec waittime;
+        waittime.tv_sec = 0;
+        waittime.tv_nsec = delay_time * 1000 * 1000 * 1000 ;
+        nanosleep(&waittime, NULL);
+        dout(10) << " Filestore on BaseDir = " << basedir << " and in journal on "
+                 << journalpath << " is slow on applying transaction."
+                 << " Throttling journal commits. Filestore op_wq depth = "
+                 << op_queue.size() << " Outstanding bytes to be applied = "
+                 << outstanding_bytes << " seq = " << o->op
+                 << " Max byte threshold = " << max_bytes
+                 << " Transaction size = " << o->bytes
+                 << " Transaction ops = " << o->ops
+                 << " Percentage empty = " << percentage_empty_bytes
+                 << " Applying delay = " << delay_time << " in the journal commit path."
+                 << " Need Hard back off = " << need_hard_backoff
+                 << dendl;
+
+      }
+      logger->set(l_os_oq_bytes, outstanding_bytes);
+    } while (need_hard_backoff);
   }
-
-  logger->set(l_os_oq_max_ops, max_ops);
-  logger->set(l_os_oq_max_bytes, max_bytes);
-
-  if (handle)
-    handle->suspend_tp_timeout();
-  if (throttle_ops.should_wait(1) ||
-    (throttle_bytes.get_current()      // let single large ops through!
-    && throttle_bytes.should_wait(o->bytes))) {
-    dout(2) << "waiting " << throttle_ops.get_current() + 1 << " > " << max_ops << " ops || "
-      << throttle_bytes.get_current() + o->bytes << " > " << max_bytes << dendl;
-  }
-  throttle_ops.get();
-  throttle_bytes.get(o->bytes);
-  if (handle)
-    handle->reset_tp_timeout();
-
-  logger->set(l_os_oq_ops, throttle_ops.get_current());
-  logger->set(l_os_oq_bytes, throttle_bytes.get_current());
 }
 
 void FileStore::op_queue_release_throttle(Op *o)
 {
-  throttle_ops.put();
-  throttle_bytes.put(o->bytes);
-  logger->set(l_os_oq_ops, throttle_ops.get_current());
-  logger->set(l_os_oq_bytes, throttle_bytes.get_current());
+  m_filestore_current_queue_bytes.sub(o->bytes);
+  logger->set(l_os_oq_bytes, m_filestore_current_queue_bytes.read());
 }
 
 void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 {
-  wbthrottle.throttle();
+  if (!m_disable_wbthrottle) {
+    wbthrottle.throttle();
+  }
   // inject a stall?
   if (g_conf->filestore_inject_stall) {
     int orig = g_conf->filestore_inject_stall;
@@ -1966,7 +2015,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
     op_queue_reserve_throttle(o, handle);
-    journal->throttle();
+    journal->throttle_journal_based_on_usage();
     //prepare and encode transactions data out of lock
     bufferlist tbl;
     int orig_len = journal->prepare_entry(o->tls, &tbl);
@@ -3212,12 +3261,19 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
     int rc = backend->_crc_update_write(**fd, offset, len, bl);
     assert(rc >= 0);
   }
+  
+  if (g_conf->filestore_odsync_write) {
+    if (g_conf->filestore_fadvise && 
+         (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED)) {
 
-  // flush?
-  if (!replaying &&
-      g_conf->filestore_wbthrottle_enable)
-    wbthrottle.queue_wb(fd, oid, offset, len,
+      posix_fadvise(**fd, 0, 0, POSIX_FADV_DONTNEED);
+    }
+  } else {
+    // flush?
+    if (!replaying && !m_disable_wbthrottle)
+      wbthrottle.queue_wb(fd, oid, offset, len,
 			  fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+  }
   lfn_close(fd);
 
  out:
@@ -3713,7 +3769,9 @@ void FileStore::sync_entry()
       logger->tinc(l_os_commit_len, dur);
 
       apply_manager.commit_finish();
-      wbthrottle.clear();
+      if (!m_disable_wbthrottle) {
+        wbthrottle.clear();
+      }
 
       logger->set(l_os_committing, 0);
 
@@ -5472,8 +5530,6 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     m_filestore_sloppy_crc = conf->filestore_sloppy_crc;
     m_filestore_sloppy_crc_block_size = conf->filestore_sloppy_crc_block_size;
     m_filestore_max_alloc_hint_size = conf->filestore_max_alloc_hint_size;
-    throttle_ops.reset_max(conf->filestore_queue_max_ops);
-    throttle_bytes.reset_max(conf->filestore_queue_max_bytes);
   }
   if (changed.count("filestore_commit_timeout")) {
     Mutex::Locker l(sync_entry_timeo_lock);

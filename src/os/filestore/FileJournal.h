@@ -293,9 +293,7 @@ private:
 
 
   // throttle
-  Throttle throttle_ops, throttle_bytes;
 
-  void put_throttle(uint64_t ops, uint64_t bytes);
 
   // write thread
   Mutex write_lock;
@@ -367,7 +365,9 @@ private:
   off64_t get_top() const {
     return ROUND_UP_TO(sizeof(header), block_size);
   }
-
+  atomic_t percentage_empty_atomic;
+  DynamicThrottle dyn_throttle; 
+  atomic_t m_journal_current_queue_bytes;
  public:
   FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true, bool faio=false) :
     Journal(fsid, fin, sync_cond),
@@ -394,13 +394,20 @@ private:
     full_state(FULL_NOTFULL),
     fd(-1),
     writing_seq(0),
-    throttle_ops(g_ceph_context, "journal_ops", g_conf->journal_queue_max_ops),
-    throttle_bytes(g_ceph_context, "journal_bytes", g_conf->journal_queue_max_bytes),
     write_lock("FileJournal::write_lock", false, true, false, g_ceph_context),
     write_stop(true),
     aio_stop(true),
     write_thread(this),
-    write_finish_thread(this) {
+    write_finish_thread(this),
+    dyn_throttle(g_conf->journal_dynamic_throttle_start_delay
+                , g_conf->dynamic_throttle_low_delay_multiplier
+                , g_conf->dynamic_throttle_medium_delay_multiplier
+                , g_conf->dynamic_throttle_high_delay_multiplier
+                , g_conf->dynamic_throttle_low_threshold
+                , g_conf->dynamic_throttle_medium_threshold
+                , g_conf->dynamic_throttle_high_threshold
+                , "journal_dyn_throttle"
+                , g_ceph_context) {
 
       if (aio && !directio) {
         derr << "FileJournal::_open_any: aio not supported without directio; disabling aio" << dendl;
@@ -412,6 +419,7 @@ private:
         aio = false;
       }
 #endif
+      percentage_empty_atomic.set(100);
   }
   ~FileJournal() {
     assert(fd == -1);
@@ -429,8 +437,7 @@ private:
   int _fdump(Formatter &f, bool simple);
 
   void flush();
-
-  void throttle();
+  void throttle_journal_based_on_usage();
 
   bool is_writeable() {
     return read_pos == 0;

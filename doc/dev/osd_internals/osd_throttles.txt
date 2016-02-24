@@ -19,3 +19,38 @@ SubOp:                                        --Messenger--> ReadHeader --Dispat
                                                                                                                                                                                         WBThrottle
                                                                                                                          |-----------------------------------------------------|
                                                                                                                             FileStore op_queue throttle (number and size)
+															    Journal throttle based on usage
+
+
+FileStore Throttle:
+------------------
+
+FileStore throttle is now incrementa delay based in stead of not doing anything till a threshold is been breached and then shutting off everything to throttle the ingest.
+This new scheme is described below.
+
+1. A new class called DynamicThrottle is been introduced and the member function calc_wait_time_in_sec() is responsible for giving the amount of delay to the caller. This function is taking
+   percentage_empty as a parameter. May be percentage_empty is a misnomer , basically if we consider a threshold value 100% , we can feed the %remaining to this function.
+
+2. This throttle class is been instantiated with the following config options.
+      a. An initial start delay (journal_dynamic_throttle_start_delay or filestore_dynamic_throttle_start_delay)
+      b. A low delay threshold as percentage (dynamic_throttle_low_threshold, default is 90)
+      c. A medium delay threshold as percentage (dynamic_throttle_medium_threshold, default 60)
+      d. A high delay threshold as percentage (dynamic_throttle_high_threshold, default 30)
+      e. A low delay multipler for readjusting the threshold if the percentage_empty is <= low threshold >= medium threshold (dynamic_throttle_low_delay_multiplier, default 5)
+      f. A medium delay multipler for readjusting the threshold if the percentage_empty is < med threshold >= high threshold (dynamic_throttle_medium_delay_multiplier, default 10)
+      g. A high delay multipler for readjusting the threshold if the percentage_empty is < high threshold >= 0 (dynamic_throttle_high_delay_multiplier, default 15)
+
+3. The formula for readjusting delay is the following.
+      new_delay = delay_start + ((100 - percentage_empty)/1000000) * delay_multiplier) ;
+
+4. If the percentage falls above the low threshold , the function will not return any delay.
+
+5. Now, this delay function is introduced in the queue_transactions() based on the following for each op.
+
+      a. Calculating the percentage remaining to breach the filestore_queue_max_bytes and filestore_queue_max_ops. Taking the percentage which is more close of breaching the threshold and 
+         get the amount of delay needed to induce in this path.
+
+      b. Calculate the percentage emptiness of the journal and decide a delay based on that.
+
+
+

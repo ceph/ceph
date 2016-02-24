@@ -846,7 +846,11 @@ int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
   }
 
   if (room >= size) {
-    dout(10) << "check_for_full at " << pos << " : " << size << " < " << room << dendl;
+    /*Calculate percentage empty*/
+    uint32_t percentage_empty = (100 * (room - size))/(header.max_size - get_top());
+    percentage_empty_atomic.set(percentage_empty);
+    dout(10) << "check_for_full at " << pos << " : " << size << " < " << room 
+             << " seq = " << seq << " percentage_empty = " << percentage_empty << dendl;
     if (pos + size > header.max_size)
       must_write_header = true;
     return 0;
@@ -902,7 +906,9 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
           // throw out what we have so far
           full_state = FULL_FULL;
           while (!writeq_empty()) {
-            put_throttle(1, peek_write().orig_len);
+            if (g_conf->journal_aio_throttle) {
+              m_journal_current_queue_bytes.sub(peek_write().orig_len);
+            }
             pop_write();
           }
           print_header(header);
@@ -1236,6 +1242,23 @@ void FileJournal::flush()
   dout(10) << "flush done" << dendl;
 }
 
+void FileJournal::throttle_journal_based_on_usage() {
+  double delay_time;
+  uint32_t percentage_empty = percentage_empty_atomic.read();
+  uint32_t failed = dyn_throttle.calc_wait_time_in_sec(percentage_empty
+                                                          , delay_time);
+  if ((0 != delay_time) && (!failed)) {
+    struct timespec waittime;
+    waittime.tv_sec = 0;
+    waittime.tv_nsec = delay_time * 1000 * 1000 * 1000 ;
+    nanosleep(&waittime, NULL);
+    dout(10) << "Journal is filling up fast, percentage_empty = "
+	     << percentage_empty
+             << " ,applying delay = " << delay_time 
+             << " before putting op in journal queue"
+             << dendl;
+  }
+}
 
 void FileJournal::write_thread_entry()
 {
@@ -1254,7 +1277,7 @@ void FileJournal::write_thread_entry()
     }
 
 #ifdef HAVE_LIBAIO
-    if (aio) {
+    if (aio && g_conf->journal_aio_throttle) {
       Mutex::Locker locker(aio_lock);
       // should we back off to limit aios in flight?  try to do this
       // adaptively so that we submit larger aios once we have lots of
@@ -1267,17 +1290,16 @@ void FileJournal::write_thread_entry()
       // but should be fine given that we will have plenty of aios in
       // flight if we hit this limit to ensure we keep the device
       // saturated.
-      while (aio_num > 0) {
-	int exp = MIN(aio_num * 2, 24);
-	long unsigned min_new = 1ull << exp;
-	long unsigned cur = throttle_bytes.get_current();
+      while (aio_num > g_conf->journal_aio_limit) {
+	long unsigned min_aio_bytes = g_conf->journal_minimum_aio_size;
+	long unsigned cur = m_journal_current_queue_bytes.read();
 	dout(20) << "write_thread_entry aio throttle: aio num " << aio_num << " bytes " << aio_bytes
-		 << " ... exp " << exp << " min_new " << min_new
+		 << " min_aio_bytes " << min_aio_bytes
 		 << " ... pending " << cur << dendl;
-	if (cur >= min_new)
+	if (cur >= min_aio_bytes)
 	  break;
 	dout(20) << "write_thread_entry deferring until more aios complete: "
-		 << aio_num << " aios with " << aio_bytes << " bytes needs " << min_new
+		 << aio_num << " aios with " << aio_bytes << " bytes needs " << min_aio_bytes
 		 << " bytes to start a new aio (currently " << cur << " pending)" << dendl;
 	aio_cond.Wait(aio_lock);
 	dout(20) << "write_thread_entry woke up" << dendl;
@@ -1297,7 +1319,9 @@ void FileJournal::write_thread_entry()
       if (write_stop) {
 	dout(20) << "write_thread_entry full and stopping, throw out queue and finish up" << dendl;
 	while (!writeq_empty()) {
-	  put_throttle(1, peek_write().orig_len);
+          if (g_conf->journal_aio_throttle) {
+            m_journal_current_queue_bytes.sub(peek_write().orig_len);
+          }
 	  pop_write();
 	}
 	print_header(header);
@@ -1324,7 +1348,9 @@ void FileJournal::write_thread_entry()
 #else
     do_write(bl);
 #endif
-    put_throttle(orig_ops, orig_bytes);
+    if (g_conf->journal_aio_throttle) {
+      m_journal_current_queue_bytes.sub(orig_bytes);
+    }
   }
 
   dout(10) << "write_thread_entry finish" << dendl;
@@ -1644,17 +1670,12 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
 	  << " len " << e.length()
 	  << " (" << oncommit << ")" << dendl;
   assert(e.length() > 0);
+  if (g_conf->journal_aio_throttle) {
+    m_journal_current_queue_bytes.add(orig_len);
+  }
 
-  throttle_ops.take(1);
-  throttle_bytes.take(orig_len);
   if (osd_op)
     osd_op->mark_event("commit_queued_for_journal_write");
-  if (logger) {
-    logger->set(l_os_jq_max_ops, throttle_ops.get_max());
-    logger->set(l_os_jq_max_bytes, throttle_bytes.get_max());
-    logger->set(l_os_jq_ops, throttle_ops.get_current());
-    logger->set(l_os_jq_bytes, throttle_bytes.get_current());
-  }
 
   {
     Mutex::Locker l1(writeq_lock);  // ** lock **
@@ -1811,33 +1832,15 @@ void FileJournal::committed_thru(uint64_t seq)
     dout(15) << " dropping committed but unwritten seq " << peek_write().seq
 	     << " len " << peek_write().bl.length()
 	     << dendl;
-    put_throttle(1, peek_write().orig_len);
+    if (g_conf->journal_aio_throttle) {
+      m_journal_current_queue_bytes.sub(peek_write().orig_len);
+    }
     pop_write();
   }
 
   commit_cond.Signal();
 
   dout(10) << "committed_thru done" << dendl;
-}
-
-
-void FileJournal::put_throttle(uint64_t ops, uint64_t bytes)
-{
-  uint64_t new_ops = throttle_ops.put(ops);
-  uint64_t new_bytes = throttle_bytes.put(bytes);
-  dout(5) << "put_throttle finished " << ops << " ops and "
-	   << bytes << " bytes, now "
-	   << new_ops << " ops and " << new_bytes << " bytes"
-	   << dendl;
-
-  if (logger) {
-    logger->inc(l_os_j_ops, ops);
-    logger->inc(l_os_j_bytes, bytes);
-    logger->set(l_os_jq_ops, new_ops);
-    logger->set(l_os_jq_bytes, new_bytes);
-    logger->set(l_os_jq_max_ops, throttle_ops.get_max());
-    logger->set(l_os_jq_max_bytes, throttle_bytes.get_max());
-  }
 }
 
 int FileJournal::make_writeable()
@@ -2035,14 +2038,6 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
 
   assert(cur_pos % header.alignment == 0);
   return SUCCESS;
-}
-
-void FileJournal::throttle()
-{
-  if (throttle_ops.wait(g_conf->journal_queue_max_ops))
-    dout(2) << "throttle: waited for ops" << dendl;
-  if (throttle_bytes.wait(g_conf->journal_queue_max_bytes))
-    dout(2) << "throttle: waited for bytes" << dendl;
 }
 
 void FileJournal::get_header(

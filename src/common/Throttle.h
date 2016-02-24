@@ -218,4 +218,47 @@ private:
   void complete_pending_ops();
 };
 
+/* The purpose of this class is to calculate the wait time
+   based on the emptiness of a data structure.
+*/
+
+class DynamicThrottle {
+  /* This class is not thread safe */
+  double delay_start ;
+  int low_delay_multiplier;
+  int medium_delay_multiplier;
+  int high_delay_multiplier;
+  int low_delay_threshold_range;
+  int medium_delay_threshold_range;
+  int high_delay_threshold_range;
+  int low_delay_threshold;
+  int medium_delay_threshold;
+  int high_delay_threshold;
+  const std::string name;
+  CephContext *cct;
+
+  public:
+  DynamicThrottle (double starting_delay, int low_multiplier
+                  , int med_multiplier, int high_multiplier
+                  , int low_threshold, int medium_threshold
+                  , int high_threshold, std::string name, CephContext *cct):
+
+                  delay_start (starting_delay)
+                  , low_delay_multiplier (low_multiplier)
+                  , medium_delay_multiplier (med_multiplier)
+                  , high_delay_multiplier (high_multiplier)
+                  , low_delay_threshold_range (low_threshold - medium_threshold) 
+                  , medium_delay_threshold_range (medium_threshold - high_threshold)
+                  , high_delay_threshold_range (high_threshold - 0)
+                  , low_delay_threshold (low_threshold)
+                  , medium_delay_threshold (medium_threshold)
+	          , high_delay_threshold (high_threshold)
+                  , name(name)
+                  , cct(cct) {}
+    
+  
+  uint32_t calc_wait_time_in_sec (int percentage_empty, double &wait_time);
+};
+
+
 #endif
