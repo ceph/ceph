@@ -603,11 +603,19 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
       return -EINVAL;
     }
 
+    MD5 etag_sum;
     uint64_t total_size = 0;
-    for (vector<rgw_slo_entry>::iterator iter = slo_info->entries.begin(); iter != slo_info->entries.end(); ++iter) {
-      total_size += iter->size_bytes;
-      ldout(s->cct, 20) << "slo_part: " << iter->path << " size=" << iter->size_bytes << dendl;
+    for (const auto& entry : slo_info->entries) {
+      etag_sum.Update((const byte *)entry.etag.c_str(),
+                      entry.etag.length());
+      total_size += entry.size_bytes;
+
+      ldout(s->cct, 20) << "slo_part: " << entry.path
+                        << " size=" << entry.size_bytes
+                        << " etag=" << entry.etag
+                        << dendl;
     }
+    complete_etag(etag_sum, &lo_etag);
     slo_info->total_size = total_size;
 
     ofs = slo_info->raw_data_len;
@@ -618,9 +626,24 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
 void RGWPutObj_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret)
+  if (! op_ret) {
     op_ret = STATUS_CREATED;
-  dump_etag(s, etag.c_str());
+  }
+
+  if (!lo_etag.empty()) {
+    /* Static Large Object of Swift API has two etags represented by
+     * following members:
+     *  - etag - for the manifest itself (it will be stored in xattrs),
+     *  - lo_etag - for the content composited from SLO's segments.
+     *    The value is calculated basing on segments' etags.
+     * In response for PUT request we have to expose the second one.
+     * The first one may be obtained by GET with "multipart-manifest=get"
+     * in query string on a given SLO. */
+    dump_etag(s, ("\"" + lo_etag + "\"").c_str());
+  } else {
+    dump_etag(s, etag.c_str());
+  }
+
   dump_last_modified(s, mtime);
   set_req_state_err(s, op_ret);
   dump_errno(s);
