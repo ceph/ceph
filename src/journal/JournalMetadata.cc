@@ -513,8 +513,8 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
     Client client(m_client_id, bufferlist());
     RegisteredClients::iterator it = refresh->registered_clients.find(client);
     if (it != refresh->registered_clients.end()) {
-      m_minimum_set = refresh->minimum_set;
-      m_active_set = refresh->active_set;
+      m_minimum_set = MAX(m_minimum_set, refresh->minimum_set);
+      m_active_set = MAX(m_active_set, refresh->active_set);
       m_registered_clients = refresh->registered_clients;
       m_client = *it;
 
