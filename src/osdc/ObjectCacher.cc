@@ -1571,10 +1571,10 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace)
     BufferHead *bh = o->map_write(*ex_it, wr->journal_tid);
     bool missing = bh->is_missing();
     bh->snapc = wr->snapc;
-
-    bytes_written += bh->length();
+    
+    bytes_written += ex_it->length;
     if (bh->is_tx()) {
-      bytes_written_in_flush += bh->length();
+      bytes_written_in_flush += ex_it->length;
     }
 
     // adjust buffer pointers (ie "copy" data into my cache)
