@@ -28,10 +28,10 @@ class UserspaceEventManager {
     int16_t write_errno = 0;
     int8_t listening_mask = 0;
     int8_t activating_mask = 0;
+    uint32_t magic = 4921;
   };
   int max_fd = 0;
   uint32_t max_wait_idx = 0;
-  uint32_t waiting_size = 0;
   std::vector<Tub<UserspaceFDImpl> > fds;
   std::vector<int> waiting_fds;
   std::list<uint32_t> unused_fds;
@@ -58,43 +58,36 @@ class UserspaceEventManager {
   }
 
   int listen(int fd, int mask) {
-    if ((size_t)fd > fds.size())
+    if ((size_t)fd >= fds.size())
       return -ENOENT;
 
     Tub<UserspaceFDImpl> &impl = fds[fd];
     if (!impl)
       return -ENOENT;
 
-    assert(mask);
     impl->listening_mask |= mask;
     if (impl->activating_mask & impl->listening_mask && !impl->waiting_idx) {
-      if (waiting_fds.size() >= max_wait_idx)
+      if (waiting_fds.size() <= max_wait_idx)
         waiting_fds.resize(waiting_fds.size()*2);
       impl->waiting_idx = ++max_wait_idx;
       waiting_fds[max_wait_idx] = fd;
-      ++waiting_size;
     }
     return 0;
   }
 
   int unlisten(int fd, int mask) {
-    if ((size_t)fd > fds.size())
+    if ((size_t)fd >= fds.size())
       return -ENOENT;
 
     Tub<UserspaceFDImpl> &impl = fds[fd];
     if (!impl)
       return -ENOENT;
 
-    assert(mask);
-    impl->listening_mask = impl->listening_mask & (~mask);
-    if ((impl->activating_mask & impl->listening_mask) && !impl->waiting_idx) {
-      return 0;
-    }
-    if (impl->waiting_idx) {
+    impl->listening_mask &= (~mask);
+    if (!(impl->activating_mask & impl->listening_mask) && impl->waiting_idx) {
       if (waiting_fds[max_wait_idx] == fd) {
         assert(impl->waiting_idx == max_wait_idx);
         --max_wait_idx;
-        --waiting_size;
       }
       waiting_fds[impl->waiting_idx] = -1;
       impl->waiting_idx = 0;
@@ -102,28 +95,29 @@ class UserspaceEventManager {
     return 0;
   }
 
-  int notify(int fd, int mask = EVENT_READABLE) {
-    if ((size_t)fd > fds.size())
+  int notify(int fd, int mask) {
+    if ((size_t)fd >= fds.size())
       return -ENOENT;
 
     Tub<UserspaceFDImpl> &impl = fds[fd];
     if (!impl)
       return -ENOENT;
 
-    if ((mask & impl->activating_mask) && impl->waiting_idx)
+    impl->activating_mask |= mask;
+    if (impl->waiting_idx)
       return 0;
 
-    if ((impl->listening_mask & mask) && !impl->waiting_idx) {
+    if (impl->listening_mask & mask) {
+      if (waiting_fds.size() <= max_wait_idx)
+        waiting_fds.resize(waiting_fds.size()*2);
       impl->waiting_idx = ++max_wait_idx;
       waiting_fds[max_wait_idx] = fd;
-      ++waiting_size;
     }
-    impl->activating_mask |= mask;
     return 0;
   }
 
   void close(int fd) {
-    if ((size_t)fd > fds.size())
+    if ((size_t)fd >= fds.size())
       return ;
 
     Tub<UserspaceFDImpl> &impl = fds[fd];
@@ -139,7 +133,6 @@ class UserspaceEventManager {
       if (waiting_fds[max_wait_idx] == fd) {
         assert(impl->waiting_idx == max_wait_idx);
         --max_wait_idx;
-        --waiting_size;
       }
       waiting_fds[impl->waiting_idx] = -1;
     }
@@ -148,26 +141,38 @@ class UserspaceEventManager {
 
   int poll(int *events, int *masks, int num_events, struct timeval *tp) {
     int fd;
-    uint32_t i, min_events = MIN(num_events, waiting_size);
+    uint32_t i = 0;
+    int count = 0;
+    assert(num_events);
     // leave zero slot for waiting_fds
-    for (i = 0; i < min_events; ++i) {
-      fd = waiting_fds[i+1];
+    while (i < max_wait_idx) {
+      fd = waiting_fds[++i];
       if (fd == -1)
         continue;
 
-      events[i] = fd;
+      events[count] = fd;
       Tub<UserspaceFDImpl> &impl = fds[fd];
       assert(impl);
-      masks[i] = impl->listening_mask & impl->activating_mask;
-      assert(masks[i]);
-      impl->activating_mask &= (~masks[i]);
+      masks[count] = impl->listening_mask & impl->activating_mask;
+      assert(masks[count]);
+      impl->activating_mask &= (~masks[count]);
       impl->waiting_idx = 0;
+      if (++count >= num_events)
+        break;
     }
-    if (i < waiting_size)
-      memcpy(&waiting_fds[1], &waiting_fds[i+1], sizeof(int)*(waiting_size-i));
+    if (i < max_wait_idx) {
+      memmove(&waiting_fds[1], &waiting_fds[i+1], sizeof(int)*(max_wait_idx-i));
+    }
     max_wait_idx -= i;
-    waiting_size -= i;
-    return i;
+    return count;
+  }
+
+  bool check() {
+    for (auto &&m : fds) {
+      if (m && m->magic != 4921)
+        return false;
+    }
+    return true;
   }
 };
 
