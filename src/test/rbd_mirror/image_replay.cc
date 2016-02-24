@@ -22,8 +22,9 @@ rbd::mirror::ImageReplayer *replayer = nullptr;
 
 void usage() {
   std::cout << "usage: ceph_test_rbd_mirror_image_replay [options...] \\" << std::endl;
-  std::cout << "           <local-pool> <remote-pool> <image>" << std::endl;
+  std::cout << "           <client-id> <local-pool> <remote-pool> <image>" << std::endl;
   std::cout << std::endl;
+  std::cout << "  client-id     client ID to register in remote journal" << std::endl;
   std::cout << "  local-pool    local (secondary, destination) pool" << std::endl;
   std::cout << "  remote-pool   remote (primary, source) pool" << std::endl;
   std::cout << "  image         image to replay (mirror)" << std::endl;
@@ -87,17 +88,19 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (args.size() < 3) {
+  if (args.size() < 4) {
     usage();
     return EXIT_FAILURE;
   }
 
-  std::string local_pool_name = args[0];
-  std::string remote_pool_name = args[1];
-  std::string image_name = args[2];
+  std::string client_id = args[0];
+  std::string local_pool_name = args[1];
+  std::string remote_pool_name = args[2];
+  std::string image_name = args[3];
 
-  dout(1) << "local_pool_name=" << local_pool_name << ", remote_pool_name="
-	  << remote_pool_name << ", image_name=" << image_name << dendl;
+  dout(1) << "client_id=" << client_id << ", local_pool_name="
+	  << local_pool_name << ", remote_pool_name=" << remote_pool_name
+	  << ", image_name=" << image_name << dendl;
 
   rbd::mirror::ImageReplayer::BootstrapParams bootstap_params(local_pool_name,
 							      image_name);
@@ -167,8 +170,8 @@ int main(int argc, const char **argv)
 
   dout(5) << "starting replay" << dendl;
 
-  replayer = new rbd::mirror::ImageReplayer(local, remote, remote_pool_id,
-					    remote_image_id);
+  replayer = new rbd::mirror::ImageReplayer(local, remote, client_id,
+					    remote_pool_id, remote_image_id);
 
   r = replayer->start(&bootstap_params);
   if (r < 0) {

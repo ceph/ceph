@@ -70,10 +70,9 @@ public:
     }
   };
 
-  TestImageReplayer() : m_watch_handle(0)
+  TestImageReplayer() : m_client_id("TestImageReplayer"), m_watch_handle(0)
   {
     EXPECT_EQ("", connect_cluster_pp(m_local_cluster));
-    EXPECT_EQ(0, m_local_cluster.cluster_fsid(&m_local_cluster_id));
 
     m_local_pool_name = get_temp_pool_name();
     EXPECT_EQ("", create_one_pool_pp(m_local_pool_name, m_local_cluster));
@@ -102,7 +101,7 @@ public:
     m_replayer = new rbd::mirror::ImageReplayer(
       rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
       rbd::mirror::RadosRef(new librados::Rados(m_remote_ioctx)),
-      remote_pool_id, m_remote_image_id);
+      m_client_id, remote_pool_id, m_remote_image_id);
 
     bootstrap();
   }
@@ -187,7 +186,7 @@ public:
   void get_commit_positions(int64_t *master_tid_p, int64_t *mirror_tid_p)
   {
     std::string master_client_id = "";
-    std::string mirror_client_id = m_local_cluster_id;
+    std::string mirror_client_id = m_client_id;
 
     C_SaferCond cond;
     uint64_t minimum_set;
@@ -311,7 +310,7 @@ public:
   static int _image_number;
 
   librados::Rados m_local_cluster, m_remote_cluster;
-  std::string m_local_cluster_id;
+  std::string m_client_id;
   std::string m_local_pool_name, m_remote_pool_name;
   librados::IoCtx m_local_ioctx, m_remote_ioctx;
   std::string m_image_name;

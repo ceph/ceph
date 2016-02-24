@@ -36,6 +36,8 @@ template <typename> class Replay;
 namespace rbd {
 namespace mirror {
 
+class ImageReplayerAdminSocketHook;
+
 /**
  * Replays changes from a remote cluster for a single image.
  */
@@ -62,11 +64,13 @@ public:
   };
 
 public:
-  ImageReplayer(RadosRef local, RadosRef remote, int64_t remote_pool_id,
-		const std::string &remote_image_id);
+  ImageReplayer(RadosRef local, RadosRef remote, const std::string &client_id,
+		int64_t remote_pool_id, const std::string &remote_image_id);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
+
+  State get_state() { return m_state; }
 
   int start(const BootstrapParams *bootstrap_params = nullptr);
   void stop();
@@ -95,10 +99,10 @@ private:
 				  const ImageReplayer &replayer);
 private:
   RadosRef m_local, m_remote;
-  int64_t m_remote_pool_id, m_local_pool_id;
-  std::string m_local_cluster_id;
-  std::string m_remote_image_id, m_local_image_id;
   std::string m_client_id;
+  int64_t m_remote_pool_id, m_local_pool_id;
+  std::string m_remote_image_id, m_local_image_id;
+  std::string m_snap_name;
   Mutex m_lock;
   State m_state;
   std::string m_local_pool_name, m_remote_pool_name;
@@ -107,6 +111,7 @@ private:
   librbd::journal::Replay<librbd::ImageCtx> *m_local_replay;
   ::journal::Journaler *m_remote_journaler;
   ::journal::ReplayHandler *m_replay_handler;
+  ImageReplayerAdminSocketHook *m_asok_hook;
 };
 
 } // namespace mirror
