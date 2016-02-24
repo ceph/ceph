@@ -292,7 +292,9 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
   tcp_sequence seg_seq = th->seq;
   auto seg_ack = th->ack;
   auto seg_len = p.len();
-  ldout(_tcp.cct, 20) << __func__ << " seq " << seg_seq.raw << " len " << seg_len << dendl;
+  ldout(_tcp.cct, 20) << __func__ << " tcp header seq " << seg_seq.raw << " ack " << seg_ack.raw
+                      << " snd next " << _snd.next.raw << " unack " << _snd.unacknowledged.raw
+                      << " rcv next " << _rcv.next.raw << " len " << seg_len << dendl;
 
   // 4.1 first check sequence number
   if (!segment_acceptable(seg_seq, seg_len)) {
@@ -388,8 +390,8 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
     }
     auto update_window = [this, th, seg_seq, seg_ack] {
       ldout(_tcp.cct, 20) << __func__ << " window update seg_seq=" << seg_seq
-      << " seg_ack=" << seg_ack << " old window=" << th->window
-      << " new window=" << _snd.window_scale << dendl;
+                          << " seg_ack=" << seg_ack << " old window=" << th->window
+                          << " new window=" << int(_snd.window_scale) << dendl;
       _snd.window = th->window << _snd.window_scale;
       _snd.wl1 = seg_seq;
       _snd.wl2 = seg_ack;
@@ -665,6 +667,7 @@ void tcp<InetTraits>::tcb::close_final_cleanup()
   // tcp::tcb::get_packet(), packet with FIN will not be generated.
   output_one();
   output();
+  center->delete_file_event(fd, EVENT_READABLE|EVENT_WRITABLE);
 }
 
 template <typename InetTraits>

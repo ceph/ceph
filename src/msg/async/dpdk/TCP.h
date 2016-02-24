@@ -444,7 +444,12 @@ class tcp {
     }
 
     uint64_t peek_sent_available() {
-      return _tcp.user_queue_space.get_max() - _tcp.user_queue_space.get_current();
+      uint64_t left =  _tcp.user_queue_space.get_max() - _tcp.user_queue_space.get_current();
+      return left;
+    }
+
+    void register_write_waiter() {
+      _tcp.user_queue_waiters.push_back(this->shared_from_this());
     }
 
     int is_connected() const {
@@ -533,7 +538,7 @@ class tcp {
     }
     void signal_all_data_acked() {
       if (_snd._all_data_acked_fd >= 0 && _snd.unsent_len == 0 && _snd.queued_len == 0)
-        _tcp.manager.notify(_snd._all_data_acked_fd);
+        _tcp.manager.notify(_snd._all_data_acked_fd, EVENT_READABLE);
     }
     void do_syn_sent() {
       _state = SYN_SENT;
@@ -551,11 +556,11 @@ class tcp {
       _state = ESTABLISHED;
       update_rto(_snd.syn_tx_time);
       _connect_done = true;
-      signal_data_received();
+      _tcp.manager.notify(fd, EVENT_READABLE|EVENT_WRITABLE);
     }
     void do_reset() {
       _state = CLOSED;
-      // Free packets to be sent which are waiting for _snd.user_queue_space
+      // Free packets to be sent which are waiting for user_queue_space
       _tcp.user_queue_space.reset();
       cleanup();
       _errno = -ECONNRESET;
@@ -631,6 +636,7 @@ class tcp {
   Throttle _queue_space;
   // Limit number of data queued into send queue
   Throttle user_queue_space;
+  std::deque<lw_shared_ptr<tcb>> user_queue_waiters;
  public:
   class connection {
     lw_shared_ptr<tcb> _tcb;
@@ -673,6 +679,9 @@ class tcp {
     }
     uint64_t peek_sent_available() {
       return _tcb->peek_sent_available();
+    }
+    void register_write_waiter() {
+      _tcb->register_write_waiter();
     }
     int is_connected() const { return _tcb->is_connected(); }
   };
@@ -756,8 +765,8 @@ template <typename InetTraits>
 tcp<InetTraits>::tcp(CephContext *c, inet_type& inet, EventCenter *cen)
     : cct(c), _inet(inet), center(cen),
       manager(static_cast<DPDKDriver*>(cen->get_driver())->manager),
-      _e(_rd()), _queue_space(cct, "DPDK::tcp::queue_space", 212992),
-      user_queue_space(cct, "DPDK::tcp::user_queue_space", 212992) {
+      _e(_rd()), _queue_space(cct, "DPDK::tcp::queue_space", 81920),
+      user_queue_space(cct, "DPDK::tcp::user_queue_space", 81920) {
   int tcb_polled = 0u;
   _inet.register_packet_provider([this, tcb_polled] () mutable {
     Tub<typename InetTraits::l4packet> l4p;
@@ -1007,7 +1016,11 @@ uint32_t tcp<InetTraits>::tcb::data_segment_acked(tcp_sequence seg_ack) {
     update_cwnd(acked_bytes);
     total_acked_bytes += acked_bytes;
     _tcp.user_queue_space.put(_snd.data.front().data_len);
-    _tcp.manager.notify(fd, EVENT_WRITABLE);
+    if (!_tcp.user_queue_waiters.empty()) {
+      for (auto && t : _tcp.user_queue_waiters)
+        _tcp.manager.notify(t->fd, EVENT_WRITABLE);
+      _tcp.user_queue_waiters.clear();
+    }
     _snd.data.pop_front();
   }
   // Partial ACK of segment
@@ -1284,7 +1297,8 @@ int tcp<InetTraits>::tcb::send(Packet p) {
 
   auto len = p.len();
   if (!_tcp.user_queue_space.get_or_fail(len)) {
-    return -EAGAIN;
+    // note: caller must ensure enough queue space to send
+    assert(0);
   }
   // TODO: Handle p.len() > max user_queue_space case
   _snd.queued_len += len;

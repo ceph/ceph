@@ -142,7 +142,8 @@ int ipv4::handle_received_packet(Packet p, ethernet_address from)
   unsigned pkt_len = p.len();
   auto offset = h.offset();
 
-  ldout(cct, 10) << __func__ << " get " << int(h.ip_proto) << " packet from "
+  ldout(cct, 10) << __func__ << " get " << std::hex << int(h.ip_proto)
+                 << std::dec << " packet from "
                  << h.src_ip << " -> " << h.dst_ip << " ip_len=" << ip_len
                  << " ip_hdr_len=" << ip_hdr_len << " pkt_len=" << pkt_len
                  << " offset=" << offset << dendl;

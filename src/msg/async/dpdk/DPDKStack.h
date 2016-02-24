@@ -75,6 +75,7 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     while (copied < len) {
       if (!_buf || _cur_frag == _buf->nr_frags()) {
         _buf = std::move(_conn.read());
+        assert(_cur_frag_off == 0);
         if (_buf) {
           _cur_frag = 0;
         } else {
@@ -97,33 +98,50 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     }
     return copied;
   }
-  virtual int sendmsg(const struct msghdr &msg, bool more) override {
+  virtual ssize_t send(bufferlist &bl, bool more) override {
     auto err = _conn.get_errno();
     if (err < 0)
-      return err;
+      return (ssize_t)err;
 
     size_t available = _conn.peek_sent_available();
-    if (available == 0)
+    if (available == 0) {
+      _conn.register_write_waiter();
       return -EAGAIN;
+    }
+
+    std::vector<fragment> frags;
+    std::list<bufferptr>::const_iterator pb = bl.buffers().begin();
+    uint64_t left_pbrs = bl.buffers().size();
+    uint64_t len = 0;
+    uint64_t seglen = 0;
+    while (len < available && left_pbrs--) {
+      seglen = pb->length();
+      if (len + seglen > available) {
+        // don't continue if we enough at least 1 fragment since no available
+        // space for next ptr.
+        if (len > 0)
+          break;
+        seglen = MIN(seglen, available);
+      }
+      len += seglen;
+      frags.push_back(fragment{(char*)pb->c_str(), seglen});
+      ++pb;
+    }
 
     Packet p;
-    size_t idx = 0;
-    while (idx < msg.msg_iovlen && available > 0) {
-      if (msg.msg_iov[idx].iov_len <= available) {
-        assert(msg.msg_iov[idx].iov_len);
-        p = Packet(std::move(p),
-                   fragment{(char*)msg.msg_iov[idx].iov_base, msg.msg_iov[idx].iov_len},
-                   deleter());
-        available -= msg.msg_iov[idx].iov_len;
-        ++idx;
-      } else {
-        p = Packet(std::move(p),
-                   fragment{(char*)msg.msg_iov[idx].iov_base, available},
-                   deleter());
-        break;
-      }
+    if (len != bl.length()) {
+      _conn.register_write_waiter();
+      bufferlist swapped;
+      bl.splice(0, len, &swapped);
+      auto del = std::bind(
+              [](bufferlist &bl) { bl.clear(); }, std::move(swapped));
+      return _conn.send(Packet(std::move(frags), make_deleter(std::move(del))));
+    } else {
+      auto del = std::bind(
+              [](bufferlist &bl) { bl.clear(); }, std::move(bl));
+
+      return _conn.send(Packet(std::move(frags), make_deleter(std::move(del))));
     }
-    return _conn.send(std::move(p));
   }
   virtual void shutdown() override {
     _conn.close_write();

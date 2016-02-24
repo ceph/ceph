@@ -25,9 +25,15 @@
 #include <arpa/inet.h>
 #include <errno.h>
 
+#include <algorithm>
+
 #include "PosixStack.h"
 
+#include "msg/async/dpdk/Packet.h"
+
+#include "include/buffer.h"
 #include "common/errno.h"
+#include "common/Tub.h"
 #include "common/dout.h"
 #include "include/assert.h"
 
@@ -66,11 +72,92 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
       r = -errno;
     return r;
   }
-  virtual int sendmsg(const struct msghdr &msg, bool more) {
-    int r = ::sendmsg(_fd, &msg, more);
-    if (r < 0)
-      r = -errno;
-    return r;
+
+  // return the sent length
+  // < 0 means error occured
+  static ssize_t do_sendmsg(int fd, struct msghdr &msg, unsigned len, bool more)
+  {
+    ssize_t sent = 0;
+    while (sent < len) {
+      ssize_t r;
+  #if defined(MSG_NOSIGNAL)
+      r = ::sendmsg(fd, &msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
+  #else
+      r = ::sendmsg(fd, &msg, (more ? MSG_MORE : 0));
+  #endif /* defined(MSG_NOSIGNAL) */
+
+      if (r < 0) {
+        if (errno == EINTR) {
+          continue;
+        } else if (errno == EAGAIN) {
+          break;
+        }
+        return -errno;
+      }
+
+      sent += r;
+      if (len == sent) break;
+
+      while (r > 0) {
+        if (msg.msg_iov[0].iov_len <= (size_t)r) {
+          // drain this whole item
+          r -= msg.msg_iov[0].iov_len;
+          msg.msg_iov++;
+          msg.msg_iovlen--;
+        } else {
+          msg.msg_iov[0].iov_base = (char *)msg.msg_iov[0].iov_base + r;
+          msg.msg_iov[0].iov_len -= r;
+          break;
+        }
+      }
+    }
+    return (ssize_t)sent;
+  }
+
+  virtual ssize_t send(bufferlist &bl, bool more) {
+    ssize_t sent_bytes = 0;
+    std::list<bufferptr>::const_iterator pb = bl.buffers().begin();
+    uint64_t left_pbrs = bl.buffers().size();
+    while (left_pbrs) {
+      struct msghdr msg;
+      struct iovec msgvec[IOV_MAX];
+      uint64_t size = MIN(left_pbrs, IOV_MAX);
+      left_pbrs -= size;
+      memset(&msg, 0, sizeof(msg));
+      msg.msg_iovlen = 0;
+      msg.msg_iov = msgvec;
+      unsigned msglen = 0;
+      while (size > 0) {
+        msgvec[msg.msg_iovlen].iov_base = (void*)(pb->c_str());
+        msgvec[msg.msg_iovlen].iov_len = pb->length();
+        msg.msg_iovlen++;
+        msglen += pb->length();
+        ++pb;
+        size--;
+      }
+
+      ssize_t r = do_sendmsg(_fd, msg, msglen, left_pbrs || more);
+      if (r < 0)
+        return r;
+
+      // "r" is the remaining length
+      sent_bytes += r;
+      if (r < msglen)
+        break;
+      // only "r" == 0 continue
+    }
+
+    if (sent_bytes) {
+      bufferlist swapped;
+      if (sent_bytes < bl.length()) {
+        bl.splice(sent_bytes, bl.length()-sent_bytes, &swapped);
+        bl.swap(swapped);
+      } else {
+        bl.clear();
+      }
+    }
+
+    return sent_bytes;
   }
   virtual void shutdown() {
     ::shutdown(_fd, SHUT_RDWR);

@@ -29,6 +29,7 @@
 
 #include "msg/async/Event.h"
 #include "msg/async/GenericSocket.h"
+#include "msg/async/dpdk/Packet.h"
 
 #if GTEST_HAS_PARAM_TEST
 
@@ -61,8 +62,8 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
     transport->initialize();
   }
   virtual void TearDown() {
-    delete center;
     transport.reset();
+    delete center;
   }
   string get_addr() const {
     return addr;
@@ -112,7 +113,7 @@ TEST_P(TransportTest, SimpleTest) {
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
   SocketOptions options;
   ServerSocket bind_socket;
-  int r = transport->listen(bind_addr, options, &bind_socket);
+  ssize_t r = transport->listen(bind_addr, options, &bind_socket);
   ASSERT_EQ(r, 0);
   ConnectedSocket cli_socket, srv_socket;
   r = transport->connect(bind_addr, options, &cli_socket);
@@ -141,16 +142,11 @@ TEST_P(TransportTest, SimpleTest) {
     center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
   }
 
-  struct msghdr msg;
-  struct iovec msgvec[2];
   const char *message = "this is a new message";
   int len = strlen(message);
-  memset(&msg, 0, sizeof(msg));
-  msg.msg_iovlen = 1;
-  msg.msg_iov = msgvec;
-  msgvec[0].iov_base = (char*)message;
-  msgvec[0].iov_len = len;
-  r = cli_socket.sendmsg(msg, false);
+  bufferlist bl;
+  bl.append(message, len);
+  r = cli_socket.send(bl, false);
   ASSERT_EQ(r, len);
 
   char buf[1024];
@@ -168,14 +164,18 @@ TEST_P(TransportTest, SimpleTest) {
   bind_socket.abort_accept();
   cli_socket.shutdown();
 
-  r = cli_socket.sendmsg(msg, false);
+  bl.clear();
+  bl.append(message, len);
+  r = cli_socket.send(bl, false);
   ASSERT_EQ(r, -EPIPE);
   {
     cb.reset();
     ASSERT_EQ(cb.poll(500), true);
     r = srv_socket.read(buf, sizeof(buf));
     ASSERT_EQ(r, 0);
-    r = srv_socket.sendmsg(msg, false);
+    bl.clear();
+    bl.append(message, len);
+    r = srv_socket.send(bl, false);
     ASSERT_EQ(r, len);
   }
   center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
@@ -338,54 +338,38 @@ TEST_P(TransportTest, ComplexTest) {
       r = cli_socket.is_connected();
     }
     ASSERT_EQ(r, 1);
+    center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
   }
 
   const size_t message_size = 10240;
+  size_t count = 100;
   string message(message_size, '!');
   for (size_t i = 0; i < message_size; i += 100)
     message[i] = ',';
   auto cli_fd = cli_socket.fd();
   bool done = false;
-  size_t len = message_size * 100;
+  size_t len = message_size * count;
   Mutex lock("test_async_transport::lock");
-  std::thread t([len, cli_fd](EventCenter *center, ConnectedSocket &cli_socket, const string &message, Mutex &lock, bool &done) {
+  std::thread t([len, cli_fd, count](EventCenter *center, ConnectedSocket &cli_socket, const string &message, Mutex &lock, bool &done) {
     bool first = true;
    again:
-    struct msghdr msg;
-    struct iovec msgvec[100];
-    memset(&msg, 0, sizeof(msg));
-    msg.msg_iovlen = 100;
-    msg.msg_iov = msgvec;
-    for (size_t i = 0; i < msg.msg_iovlen; ++i) {
-      msgvec[i].iov_base = (void*)message.data();
-      msgvec[i].iov_len = message_size;
-    }
+    bufferlist bl;
+    for (size_t i = 0; i < count; ++i)
+      bl.push_back(bufferptr((char*)message.data(), message_size));
 
     ASSERT_TRUE(center->get_owner());
     C_poll cb(center, &lock);
     center->create_file_event(cli_fd, EVENT_WRITABLE, &cb);
-    int r = 0;
+    ssize_t r = 0;
     size_t left = len;
     usleep(100);
     while (left > 0) {
       lock.Lock();
-      r = cli_socket.sendmsg(msg, false);
+      r = cli_socket.send(bl, false);
       lock.Unlock();
       ASSERT_TRUE(r > 0 || r == -EAGAIN);
       if (r > 0)
         left -= r;
-      while (r > 0) {
-        if (msg.msg_iov[0].iov_len <= (size_t)r) {
-          // drain this whole item
-          r -= msg.msg_iov[0].iov_len;
-          msg.msg_iov++;
-          msg.msg_iovlen--;
-        } else {
-          msg.msg_iov[0].iov_base = (char *)msg.msg_iov[0].iov_base + r;
-          msg.msg_iov[0].iov_len -= r;
-          break;
-        }
-      }
       if (left == 0)
         break;
       cb.reset();
@@ -415,8 +399,8 @@ TEST_P(TransportTest, ComplexTest) {
       len -= r;
     }
     if (r == -EAGAIN) {
-      cb.reset();
       ASSERT_EQ(cb.poll(500), true);
+      cb.reset();
     }
   }
   center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
@@ -425,6 +409,7 @@ TEST_P(TransportTest, ComplexTest) {
   for (size_t i = 0; i < read_string.size(); i += message_size)
     ASSERT_EQ(memcmp(read_string.c_str()+i, message.c_str(), message_size), 0);
 
+  center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
   bind_socket.abort_accept();
   srv_socket.close();
   cli_socket.close();
@@ -486,8 +471,8 @@ class StressFactory {
       for (auto &&s : strs)
         content.append(s);
     }
-    bool verify(const string &b) const {
-      return content.compare(b) == 0;
+    bool verify(const string &b, size_t len = 0) const {
+      return content.compare(0, len, b, 0, len) == 0;
     }
   };
 
@@ -514,6 +499,7 @@ class StressFactory {
     size_t read_offset = 0, write_offset = 0;
     bool first = true;
     bool dead = false;
+    StressFactory::Message homeless_message;
 
     class Client_read_handle : public EventCallback {
       Client *c;
@@ -535,13 +521,14 @@ class StressFactory {
 
    public:
     Client(StressFactory *f, ConnectedSocket s, size_t c)
-        : factory(f), socket(std::move(s)), left(c),
+        : factory(f), socket(std::move(s)), left(c), homeless_message(factory->rs, -1, 1024),
           read_ctxt(this), write_ctxt(this) {
       factory->center->create_file_event(
               socket.fd(), EVENT_READABLE, &read_ctxt);
       factory->center->dispatch_event_external(&read_ctxt);
     }
     void close() {
+      ASSERT_FALSE(write_enabled);
       dead = true;
       socket.shutdown();
       factory->center->delete_file_event(socket.fd(), EVENT_READABLE);
@@ -572,21 +559,23 @@ class StressFactory {
         ASSERT_TRUE(r == -EAGAIN || r > 0);
         if (r == -EAGAIN)
           break;
-        // std::cerr << " client " << this << " receive " << m->idx << " len " << r << std::endl;
+        std::cerr << " client " << this << " receive " << m->idx << " len " << r << " content: "  << std::endl;
         ASSERT_FALSE(must_no);
         read_offset += r;
+        std::cerr << " compare " << read_offset << " content: " << std::endl;
+        ASSERT_TRUE(m->verify(buffer, read_offset));
         if ((m->len - read_offset) == 0) {
-          ASSERT_TRUE(m->verify(buffer));
           delete m;
           acking.pop_front();
           read_offset = 0;
           buffer.clear();
           if (acking.empty()) {
+            m = &homeless_message;
             must_no = true;
-            break;
+          } else {
+            m = acking.front();
+            buffer.resize(m->len);
           }
-          m = acking.front();
-          buffer.resize(m->len);
         }
       }
       if (acking.empty()) {
@@ -599,19 +588,26 @@ class StressFactory {
       if (dead)
         return ;
       ASSERT_TRUE(socket.is_connected() > 0);
+
+      while (left > 0 && factory->queue_depth > writings.size() + acking.size()) {
+        StressFactory::Message *m = new StressFactory::Message(
+                factory->rs, ++index,
+                factory->rd() % factory->max_message_length);
+        std::cerr << " client " << this << " generate message " << m->idx << " length " << m->len << std::endl;
+        ASSERT_EQ(m->len, m->content.size());
+        writings.push_back(m);
+        --left;
+        --factory->message_left;
+      }
+
       while (!writings.empty()) {
         StressFactory::Message *m = writings.front();
-        struct msghdr msg;
-        struct iovec msgvec[1];
-        memset(&msg, 0, sizeof(msg));
-        msg.msg_iovlen = 1;
-        msg.msg_iov = msgvec;
-        msgvec[0].iov_base = (char*)m->content.data() + write_offset;
-        msgvec[0].iov_len = m->content.size() - write_offset;
-        int r = socket.sendmsg(msg, false);
+        bufferlist bl;
+        bl.append(m->content.data() + write_offset, m->content.size() - write_offset);
+        ssize_t r = socket.send(bl, false);
         if (r == -EAGAIN)
           break;
-        // std::cerr << " client " << this << " send " << m->idx << " len " << r << std::endl;
+        std::cerr << " client " << this << " send " << m->idx << " len " << r << " content: " << std::endl;
         ASSERT_TRUE(r >= 0);
         write_offset += r;
         if (write_offset == m->content.size()) {
@@ -619,16 +615,6 @@ class StressFactory {
           writings.pop_front();
           acking.push_back(m);
         }
-      }
-      while (left > 0 && factory->queue_depth > writings.size() + acking.size()) {
-        StressFactory::Message *m = new StressFactory::Message(
-                factory->rs, ++index,
-                factory->rd() % factory->max_message_length);
-        // std::cerr << " client " << this << " generate message " << m->idx << " length " << m->len << std::endl;
-        ASSERT_EQ(m->len, m->content.size());
-        writings.push_back(m);
-        --left;
-        --factory->message_left;
       }
       if (writings.empty() && write_enabled) {
         factory->center->delete_file_event(socket.fd(), EVENT_WRITABLE);
@@ -678,6 +664,7 @@ class StressFactory {
       factory->center->dispatch_event_external(&read_ctxt);
     }
     void close() {
+      ASSERT_FALSE(write_enabled);
       socket.shutdown();
       factory->center->delete_file_event(socket.fd(), EVENT_READABLE);
       factory->center->dispatch_event_external(new C_delete<Server>(this));
@@ -696,8 +683,8 @@ class StressFactory {
           return ;
         } else if (r == -EAGAIN)
           break;
-        // std::cerr << " server " << this << " receive " << r << std::endl;
         buffers.emplace_back(buf, 0, r);
+        std::cerr << " server " << this << " receive " << r << " content: " << std::endl;
       }
       if (!buffers.empty() && !write_enabled)
         factory->center->dispatch_event_external(&write_ctxt);
@@ -709,21 +696,17 @@ class StressFactory {
 
       ASSERT_TRUE(!buffers.empty());
       while (!buffers.empty()) {
-        struct msghdr msg;
-        memset(&msg, 0, sizeof(msg));
-        msg.msg_iovlen = std::min(buffers.size(), (size_t)64);
-        struct iovec msgvec[msg.msg_iovlen];
-        msg.msg_iov = msgvec;
+        bufferlist bl;
         auto it = buffers.begin();
-        for (size_t i = 0; i < msg.msg_iovlen; ++i) {
-          msgvec[i].iov_base = (void*)it->data();
-          msgvec[i].iov_len = it->size();
+        for (size_t i = 0; i < buffers.size(); ++i) {
+          bl.push_back(bufferptr((char*)it->data(), it->size()));
           ++it;
         }
-        int r = socket.sendmsg(msg, false);
+
+        ssize_t r = socket.send(bl, false);
+        std::cerr << " server " << this << " send " << r << std::endl;
         if (r == -EAGAIN)
           break;
-        // std::cerr << " server " << this << " send " << r << std::endl;
         ASSERT_TRUE(r >= 0);
         while (r > 0) {
           ASSERT_TRUE(!buffers.empty());
@@ -732,6 +715,7 @@ class StressFactory {
             r -= (int)buffer.size();
             buffers.pop_front();
           } else {
+           std::cerr << " server " << this << " sent " << r << std::endl;
             buffer = buffer.substr(r, buffer.size());
             break;
           }
@@ -867,12 +851,15 @@ class StressFactory {
     }
     center->delete_file_event(bind_fd, EVENT_READABLE);
     ASSERT_EQ(message_left, 0U);
+    // process leaked external events;
+    center->process_events(1);
+    center->process_events(1);
   }
 };
 
 TEST_P(TransportTest, StressTest) {
   StressFactory factory(transport.get(), center, get_addr(),
-                        16, 16, 10000, 1024*1024);
+                        16, 16, 10000, 1024);
   factory.start();
 }
 
