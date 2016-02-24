@@ -349,8 +349,8 @@ class ObjectCacher {
 		 map<loff_t, BufferHead*>& missing,
 		 map<loff_t, BufferHead*>& rx,
 		 map<loff_t, BufferHead*>& errors);
-    BufferHead *map_write(OSDWrite *wr);
-
+    BufferHead *map_write(ObjectExtent &ex, ceph_tid_t tid);
+    
     void replace_journal_tid(BufferHead *bh, ceph_tid_t tid);
     void truncate(loff_t s);
     void discard(loff_t off, loff_t len);
