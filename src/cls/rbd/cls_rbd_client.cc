@@ -972,7 +972,7 @@ namespace librbd {
                         cls::rbd::MirrorMode *mirror_mode) {
       bufferlist in_bl;
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_mode_get", in_bl,
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_mode_get", in_bl,
                           out_bl);
       if (r == -ENOENT) {
         *mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
@@ -998,7 +998,7 @@ namespace librbd {
       ::encode(static_cast<uint32_t>(mirror_mode), in_bl);
 
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_mode_set", in_bl,
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_mode_set", in_bl,
                           out_bl);
       if (r < 0) {
         return r;
@@ -1010,7 +1010,7 @@ namespace librbd {
                          std::vector<cls::rbd::MirrorPeer> *peers) {
       bufferlist in_bl;
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_list", in_bl,
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_list", in_bl,
                           out_bl);
       if (r < 0) {
         return r;
@@ -1034,7 +1034,7 @@ namespace librbd {
       ::encode(peer, in_bl);
 
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_add", in_bl,
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_add", in_bl,
                           out_bl);
       if (r < 0) {
         return r;
@@ -1048,7 +1048,7 @@ namespace librbd {
       ::encode(uuid, in_bl);
 
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_remove", in_bl,
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_remove", in_bl,
                           out_bl);
       if (r < 0) {
         return r;
@@ -1064,7 +1064,7 @@ namespace librbd {
       ::encode(client_name, in_bl);
 
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_set_client",
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_set_client",
                           in_bl, out_bl);
       if (r < 0) {
         return r;
@@ -1080,8 +1080,77 @@ namespace librbd {
       ::encode(cluster_name, in_bl);
 
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_set_cluster",
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_set_cluster",
                           in_bl, out_bl);
+      if (r < 0) {
+        return r;
+      }
+      return 0;
+    }
+
+    int mirror_image_list(librados::IoCtx *ioctx,
+			  std::vector<std::string> *image_ids) {
+      bufferlist in_bl;
+      bufferlist out_bl;
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_image_list", in_bl,
+			  out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      image_ids->clear();
+      try {
+        bufferlist::iterator bl_it = out_bl.begin();
+        ::decode(*image_ids, bl_it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int mirror_image_get(librados::IoCtx *ioctx, const std::string &image_id,
+			 cls::rbd::MirrorImage *mirror_image) {
+      bufferlist in_bl;
+      bufferlist out_bl;
+      ::encode(image_id, in_bl);
+
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_image_get", in_bl,
+			  out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      try {
+        bufferlist::iterator bl_it = out_bl.begin();
+        ::decode(*mirror_image, bl_it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int mirror_image_set(librados::IoCtx *ioctx, const std::string &image_id,
+			 const cls::rbd::MirrorImage &mirror_image) {
+      bufferlist in_bl;
+      ::encode(image_id, in_bl);
+      ::encode(mirror_image, in_bl);
+
+      bufferlist out_bl;
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_image_set", in_bl,
+			  out_bl);
+      if (r < 0) {
+        return r;
+      }
+      return 0;
+    }
+
+    int mirror_image_remove(librados::IoCtx *ioctx, const std::string &image_id) {
+      bufferlist in_bl;
+      ::encode(image_id, in_bl);
+
+      bufferlist out_bl;
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_image_remove", in_bl,
+			  out_bl);
       if (r < 0) {
         return r;
       }
