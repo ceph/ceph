@@ -213,99 +213,89 @@ bool ObjectCacher::Object::include_all_cached_data(loff_t off, loff_t len)
  * map a range of bytes into buffer_heads.
  * - create missing buffer_heads as necessary.
  */
-int ObjectCacher::Object::map_read(OSDRead *rd,
-				   map<loff_t, BufferHead*>& hits,
-				   map<loff_t, BufferHead*>& missing,
-				   map<loff_t, BufferHead*>& rx,
+int ObjectCacher::Object::map_read(ObjectExtent &ex,
+                                   map<loff_t, BufferHead*>& hits,
+                                   map<loff_t, BufferHead*>& missing,
+                                   map<loff_t, BufferHead*>& rx,
 				   map<loff_t, BufferHead*>& errors)
 {
   assert(oc->lock.is_locked());
-  for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
-       ex_it != rd->extents.end();
-       ++ex_it) {
+  ldout(oc->cct, 10) << "map_read " << ex.oid 
+      	       << " " << ex.offset << "~" << ex.length
+      	       << dendl;
+  
+  loff_t cur = ex.offset;
+  loff_t left = ex.length;
 
-    if (ex_it->oid != oid.oid)
-      continue;
-
-    ldout(oc->cct, 10) << "map_read " << ex_it->oid
-		       << " " << ex_it->offset << "~" << ex_it->length
-		       << dendl;
-
-    loff_t cur = ex_it->offset;
-    loff_t left = ex_it->length;
-
-    map<loff_t, BufferHead*>::iterator p = data_lower_bound(ex_it->offset);
-    while (left > 0) {
-      // at end?
-      if (p == data.end()) {
-	// rest is a miss.
-	BufferHead *n = new BufferHead(this);
-	n->set_start(cur);
-	n->set_length(left);
-	oc->bh_add(this, n);
-	if (complete) {
-	  oc->mark_zero(n);
-	  hits[cur] = n;
-	  ldout(oc->cct, 20) << "map_read miss+complete+zero " << left
-			     << " left, " << *n << dendl;
-	} else {
-	  missing[cur] = n;
-	  ldout(oc->cct, 20) << "map_read miss " << left << " left, " << *n
-			     << dendl;
-	}
-	cur += left;
-	assert(cur == (loff_t)ex_it->offset + (loff_t)ex_it->length);
-	break;  // no more.
-      }
-
-      if (p->first <= cur) {
-	// have it (or part of it)
-	BufferHead *e = p->second;
-
-	if (e->is_clean() ||
-	    e->is_dirty() ||
-	    e->is_tx() ||
-	    e->is_zero()) {
-	  hits[cur] = e;     // readable!
-	  ldout(oc->cct, 20) << "map_read hit " << *e << dendl;
-	} else if (e->is_rx()) {
-	  rx[cur] = e;       // missing, not readable.
-	  ldout(oc->cct, 20) << "map_read rx " << *e << dendl;
-	} else if (e->is_error()) {
-	  errors[cur] = e;
-	  ldout(oc->cct, 20) << "map_read error " << *e << dendl;
-	} else {
-	  assert(0);
-	}
-
-	loff_t lenfromcur = MIN(e->end() - cur, left);
-	cur += lenfromcur;
-	left -= lenfromcur;
-	++p;
-	continue;  // more?
-
-      } else if (p->first > cur) {
-	// gap.. miss
-	loff_t next = p->first;
-	BufferHead *n = new BufferHead(this);
-	loff_t len = MIN(next - cur, left);
-	n->set_start(cur);
-	n->set_length(len);
-	oc->bh_add(this,n);
-	if (complete) {
-	  oc->mark_zero(n);
-	  hits[cur] = n;
-	  ldout(oc->cct, 20) << "map_read gap+complete+zero " << *n << dendl;
-	} else {
-	  missing[cur] = n;
-	  ldout(oc->cct, 20) << "map_read gap " << *n << dendl;
-	}
-	cur += MIN(left, n->length());
-	left -= MIN(left, n->length());
-	continue;    // more?
+  map<loff_t, BufferHead*>::iterator p = data_lower_bound(ex.offset);
+  while (left > 0) {
+    // at end?
+    if (p == data.end()) {
+      // rest is a miss.
+      BufferHead *n = new BufferHead(this);
+      n->set_start(cur);
+      n->set_length(left);
+      oc->bh_add(this, n);
+      if (complete) {
+        oc->mark_zero(n);
+        hits[cur] = n;
+        ldout(oc->cct, 20) << "map_read miss+complete+zero " << left << " left, " << *n << dendl;
       } else {
-	assert(0);
+        missing[cur] = n;
+        ldout(oc->cct, 20) << "map_read miss " << left << " left, " << *n << dendl;
       }
+      cur += left;
+      assert(cur == (loff_t)ex.offset + (loff_t)ex.length);
+      break;  // no more.
+    }
+    
+    if (p->first <= cur) {
+      // have it (or part of it)
+      BufferHead *e = p->second;
+
+      if (e->is_clean() ||
+          e->is_dirty() ||
+          e->is_tx() ||
+          e->is_zero()) {
+        hits[cur] = e;     // readable!
+        ldout(oc->cct, 20) << "map_read hit " << *e << dendl;
+      } else if (e->is_rx()) {
+        rx[cur] = e;       // missing, not readable.
+        ldout(oc->cct, 20) << "map_read rx " << *e << dendl;
+      } else if (e->is_error()) {
+        errors[cur] = e;
+        ldout(oc->cct, 20) << "map_read error " << *e << dendl;
+      } else {
+        assert(0);
+      }
+      
+      loff_t lenfromcur = MIN(e->end() - cur, left);
+      cur += lenfromcur;
+      left -= lenfromcur;
+      ++p;
+      continue;  // more?
+      
+    } else if (p->first > cur) {
+      // gap.. miss
+      loff_t next = p->first;
+      BufferHead *n = new BufferHead(this);
+      loff_t len = MIN(next - cur, left);
+      n->set_start(cur);
+      n->set_length(len);
+      oc->bh_add(this,n);
+      if (complete) {
+        oc->mark_zero(n);
+        hits[cur] = n;
+        ldout(oc->cct, 20) << "map_read gap+complete+zero " << *n << dendl;
+      } else {
+        missing[cur] = n;
+        ldout(oc->cct, 20) << "map_read gap " << *n << dendl;
+      }
+      cur += MIN(left, n->length());
+      left -= MIN(left, n->length());
+      continue;    // more?
+    } else {
+      assert(0);
     }
   }
   return 0;
@@ -1323,7 +1313,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 
     // map extent into bufferheads
     map<loff_t, BufferHead*> hits, missing, rx, errors;
-    o->map_read(rd, hits, missing, rx, errors);
+    o->map_read(*ex_it, hits, missing, rx, errors);
     if (external_call) {
       // retry reading error buffers
       missing.insert(errors.begin(), errors.end());
