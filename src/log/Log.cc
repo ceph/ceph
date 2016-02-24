@@ -278,17 +278,26 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
     e->hint_size();
     if (do_fd || do_syslog || do_stderr) {
       size_t buflen = 0;
-      char buf[80 + e->size()];
+
+      char *buf;
+      size_t buf_size = 80 + e->size();
+      bool need_dynamic = buf_size >= 0x10000; //avoids >64K buffers allocation at stack
+      char buf0[need_dynamic ? 1 : buf_size];
+      if(need_dynamic) {
+        buf = new char[buf_size];
+      } else {
+        buf = buf0;
+      }
 
       if (crash)
-	buflen += snprintf(buf, sizeof(buf), "%6d> ", -t->m_len);
-      buflen += e->m_stamp.sprintf(buf + buflen, sizeof(buf)-buflen);
-      buflen += snprintf(buf + buflen, sizeof(buf)-buflen, " %lx %2d ",
+	buflen += snprintf(buf, buf_size, "%6d> ", -t->m_len);
+      buflen += e->m_stamp.sprintf(buf + buflen, buf_size-buflen);
+      buflen += snprintf(buf + buflen, buf_size-buflen, " %lx %2d ",
 			(unsigned long)e->m_thread, e->m_prio);
 
-      buflen += e->snprintf(buf + buflen, sizeof(buf) - buflen - 1);
-      if (buflen > sizeof(buf) - 1) { //paranoid check, buf was declared to hold everything
-        buflen = sizeof(buf) - 1;
+      buflen += e->snprintf(buf + buflen, buf_size - buflen - 1);
+      if (buflen > buf_size - 1) { //paranoid check, buf was declared to hold everything
+        buflen = buf_size - 1;
         buf[buflen] = 0;
       }
 
@@ -305,7 +314,8 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
         if (r < 0)
           cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
       }
-
+      if(need_dynamic)
+        delete buf;
     }
     if (do_graylog2 && m_graylog) {
       m_graylog->log_entry(e);
