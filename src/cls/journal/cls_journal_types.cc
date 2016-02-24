@@ -146,7 +146,7 @@ std::ostream &operator<<(std::ostream &os,
   os << "[positions=[";
   std::string delim;
   for (auto &object_position : object_set_position.object_positions) {
-    os << object_position << delim;
+    os << delim << object_position;
     delim = ", ";
   }
   os << "]]";
