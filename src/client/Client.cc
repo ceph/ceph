@@ -171,8 +171,8 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 // -------------
 
 dir_result_t::dir_result_t(Inode *in)
-  : inode(in), offset(0), this_offset(2), next_offset(2),
-    release_count(0), ordered_count(0), start_shared_gen(0),
+  : inode(in), owner_uid(-1), owner_gid(-1), offset(0), this_offset(2),
+    next_offset(2), release_count(0), ordered_count(0), start_shared_gen(0),
     buffer(0) {
 }
 
@@ -4816,6 +4816,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 
 int Client::_getgrouplist(gid_t** sgids, int uid, int gid)
 {
+  // cppcheck-suppress variableScope
   int sgid_count;
   gid_t *sgid_buf;
 
@@ -4875,9 +4876,8 @@ int Client::inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned 
   if (uid == 0)
     return 0;
 
-  int ret;
   if (uid != in->uid && (in->mode & S_IRWXG)) {
-    ret = _posix_acl_permission(in, uid, groups, want);
+    int ret = _posix_acl_permission(in, uid, groups, want);
     if (ret != -EAGAIN)
       return ret;
   }

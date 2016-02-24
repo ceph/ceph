@@ -1197,9 +1197,6 @@ int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, 
   f->dump_string("instance", key.instance);
   f->close_section();
 
-  string oid;
-  string locator;
-
   bool needs_fixing;
   string status;
 
@@ -1271,7 +1268,6 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
     count += result.size();
 
-    list<rgw_obj> objs;
     for (vector<RGWObjEnt>::iterator iter = result.begin(); iter != result.end(); ++iter) {
       rgw_obj_key key = iter->key;
       rgw_obj obj(bucket, key);

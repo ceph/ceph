@@ -32,7 +32,8 @@ public:
                  uint64_t snap_id, uint64_t object_no)
     : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_snap_id(snap_id),
       m_object_no(object_no),
-      m_oid(image_ctx->get_object_name(m_object_no))
+      m_oid(image_ctx->get_object_name(m_object_no)),
+      m_snap_list_ret(0)
   {
     m_io_ctx.dup(image_ctx->md_ctx);
     m_io_ctx.snap_set_read(CEPH_SNAPDIR);

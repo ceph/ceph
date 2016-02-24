@@ -22,7 +22,7 @@ class Graylog
 {
  public:
 
-  Graylog(const SubsystemMap * const s);
+  explicit Graylog(const SubsystemMap * const s);
   virtual ~Graylog();
 
   void set_hostname(const std::string& host);
