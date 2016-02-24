@@ -96,20 +96,20 @@ private:
   bool is_closed() const;
 
   void append_context(const Action &action, Context *context);
-  void execute_next_action();
-  void execute_action(const Action &action, Context *context);
-  void complete_action(State next_state, int r);
+  void execute_next_action_unlock();
+  void execute_action_unlock(const Action &action, Context *context);
+  void complete_action_unlock(State next_state, int r);
 
-  void send_open();
+  void send_open_unlock();
   void handle_open(int r);
 
-  void send_close();
+  void send_close_unlock();
   void handle_close(int r);
 
-  void send_refresh();
+  void send_refresh_unlock();
   void handle_refresh(int r);
 
-  void send_set_snap();
+  void send_set_snap_unlock();
   void handle_set_snap(int r);
 
 };
