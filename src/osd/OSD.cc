@@ -460,6 +460,7 @@ void OSDService::start_shutdown()
 
 void OSDService::shutdown()
 {
+  reserver_finisher.wait_for_empty();
   reserver_finisher.stop();
   {
     Mutex::Locker l(watch_lock);
@@ -467,6 +468,7 @@ void OSDService::shutdown()
   }
 
   objecter->shutdown();
+  objecter_finisher.wait_for_empty();
   objecter_finisher.stop();
 
   {
@@ -1788,7 +1790,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
       f->close_section(); //watch
     }
 
-    f->close_section(); //watches
+    f->close_section(); //watchers
   } else if (command == "dump_reservations") {
     f->open_object_section("reservations");
     f->open_object_section("local_reservations");
@@ -1885,6 +1887,7 @@ int OSD::enable_disable_fuse(bool stop)
       derr << __func__ << " failed to rmdir " << mntpath << dendl;
       return r;
     }
+    return 0;
   }
   if (!fuse_store && g_conf->osd_objectstore_fuse) {
     dout(1) << __func__ << " enabling" << dendl;
@@ -2493,7 +2496,7 @@ int OSD::shutdown()
   clear_pg_stat_queue();
 
   // finish ops
-  op_shardedwq.drain(); // should already be empty except for lagard PGs
+  op_shardedwq.drain(); // should already be empty except for laggard PGs
   {
     Mutex::Locker l(finished_lock);
     finished.clear(); // zap waiters (bleh, this is messy)
@@ -3695,7 +3698,7 @@ void OSD::maybe_update_heartbeat_peers()
   if (next >= 0)
     want.insert(next);
   int prev = osdmap->get_previous_up_osd_before(whoami);
-  if (prev >= 0)
+  if (prev >= 0 && prev != next)
     want.insert(prev);
 
   for (set<int>::iterator p = want.begin(); p != want.end(); ++p) {
