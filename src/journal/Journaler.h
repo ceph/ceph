@@ -46,6 +46,8 @@ public:
   void init(Context *on_init);
   void shutdown();
 
+  bool is_initialized() const;
+
   void get_immutable_metadata(uint8_t *order, uint8_t *splay_width,
 			      int64_t *pool_id, Context *on_finish);
   void get_mutable_metadata(uint64_t *minimum_set, uint64_t *active_set,
