@@ -209,8 +209,11 @@ struct librados::IoCtxImpl {
   void set_sync_op_version(version_t ver);
   int watch(const object_t& oid, uint64_t *cookie, librados::WatchCtx *ctx,
 	    librados::WatchCtx2 *ctx2);
+  int aio_watch(const object_t& oid, AioCompletionImpl *c, uint64_t *cookie,
+                librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2);
   int watch_check(uint64_t cookie);
   int unwatch(uint64_t cookie);
+  int aio_unwatch(uint64_t cookie, AioCompletionImpl *c);
   int notify(const object_t& oid, bufferlist& bl, uint64_t timeout_ms,
 	     bufferlist *preplybl, char **preply_buf, size_t *preply_buf_len);
   int notify_ack(const object_t& oid, uint64_t notify_id, uint64_t cookie,
