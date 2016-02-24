@@ -41,6 +41,8 @@ public:
   void replay_op_ready(uint64_t op_tid, Context *on_resume);
 
 private:
+  typedef std::unordered_set<int> ReturnValues;
+
   struct OpEvent {
     bool op_in_progress = false;
     Context *on_op_finish_event = nullptr;
@@ -49,6 +51,7 @@ private:
     Context *on_finish_ready = nullptr;
     Context *on_finish_safe = nullptr;
     Context *on_op_complete = nullptr;
+    ReturnValues ignore_error_codes;
   };
 
   typedef std::list<uint64_t> OpTids;
