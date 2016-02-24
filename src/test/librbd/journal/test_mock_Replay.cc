@@ -529,15 +529,70 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  C_SaferCond on_ready;
-  C_SaferCond on_safe;
-  when_process(mock_journal_replay, EventEntry{SnapRemoveEvent(123, "snap")},
-               &on_ready, &on_safe);
+  Context *on_snap_create_finish = nullptr;
+  expect_snap_create(mock_image_ctx, &on_snap_create_finish, "snap", 123);
 
-  ASSERT_EQ(0, on_ready.wait());
+  Context *on_snap_remove_finish = nullptr;
+  expect_snap_remove(mock_image_ctx, &on_snap_remove_finish, "snap");
+
+  C_SaferCond on_snap_remove_ready;
+  C_SaferCond on_snap_remove_safe;
+  when_process(mock_journal_replay, EventEntry{SnapRemoveEvent(122, "snap")},
+               &on_snap_remove_ready, &on_snap_remove_safe);
+  ASSERT_EQ(0, on_snap_remove_ready.wait());
+
+  C_SaferCond on_snap_create_ready;
+  C_SaferCond on_snap_create_safe;
+  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap")},
+               &on_snap_create_ready, &on_snap_create_safe);
+
+  C_SaferCond on_shut_down;
+  mock_journal_replay.shut_down(false, &on_shut_down);
+
+  wait_for_op_invoked(&on_snap_remove_finish, 0);
+  ASSERT_EQ(0, on_snap_remove_safe.wait());
+
+  C_SaferCond on_snap_create_resume;
+  when_replay_op_ready(mock_journal_replay, 123, &on_snap_create_resume);
+  ASSERT_EQ(0, on_snap_create_resume.wait());
+
+  on_snap_create_finish->complete(0);
+  ASSERT_EQ(0, on_snap_create_ready.wait());
+  ASSERT_EQ(0, on_snap_create_safe.wait());
+
+  ASSERT_EQ(0, on_shut_down.wait());
+}
+
+TEST_F(TestMockJournalReplay, MissingOpFinishEventCancelOps) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  Context *on_snap_create_finish = nullptr;
+  expect_snap_create(mock_image_ctx, &on_snap_create_finish, "snap", 123);
+
+  C_SaferCond on_snap_remove_ready;
+  C_SaferCond on_snap_remove_safe;
+  when_process(mock_journal_replay, EventEntry{SnapRemoveEvent(122, "snap")},
+               &on_snap_remove_ready, &on_snap_remove_safe);
+  ASSERT_EQ(0, on_snap_remove_ready.wait());
+
+  C_SaferCond on_snap_create_ready;
+  C_SaferCond on_snap_create_safe;
+  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap")},
+               &on_snap_create_ready, &on_snap_create_safe);
+
+  C_SaferCond on_resume;
+  when_replay_op_ready(mock_journal_replay, 123, &on_resume);
+  ASSERT_EQ(0, on_snap_create_ready.wait());
 
   ASSERT_EQ(0, when_shut_down(mock_journal_replay, true));
-  ASSERT_EQ(-ERESTART, on_safe.wait());
+  ASSERT_EQ(-ERESTART, on_snap_remove_safe.wait());
+  ASSERT_EQ(-ERESTART, on_snap_create_safe.wait());
 }
 
 TEST_F(TestMockJournalReplay, UnknownOpFinishEvent) {
