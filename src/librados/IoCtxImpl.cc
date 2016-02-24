@@ -475,7 +475,6 @@ int librados::IoCtxImpl::nlist(Objecter::NListContext *context, int max_entries)
   Cond cond;
   bool done;
   int r = 0;
-  object_t oid;
   Mutex mylock("IoCtxImpl::nlist::mylock");
 
   if (context->at_end())
@@ -506,7 +505,6 @@ int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
   Cond cond;
   bool done;
   int r = 0;
-  object_t oid;
   Mutex mylock("IoCtxImpl::list::mylock");
 
   if (context->at_end())
