@@ -31,6 +31,7 @@ using namespace std;
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
+#include "global/signal_handler.h"
 #include "common/safe_io.h"
        
 #ifndef DARWIN
@@ -211,6 +212,9 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_client_unmount;
     }
 
+    init_async_signal_handler();
+    register_async_signal_handler(SIGHUP, sighup_handler);
+
     cerr << "ceph-fuse[" << getpid() << "]: starting fuse" << std::endl;
     tester.init(cfuse, client);
     tester.create();
@@ -249,6 +253,9 @@ int main(int argc, const char **argv, const char *envp[]) {
     free(newargv);
     
     delete mc;
+  
+    unregister_async_signal_handler(SIGHUP, sighup_handler);
+    shutdown_async_signal_handler();
     
     //cout << "child done" << std::endl;
     return r;
