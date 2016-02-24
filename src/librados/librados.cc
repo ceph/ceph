@@ -1799,6 +1799,15 @@ int librados::IoCtx::watch2(const string& oid, uint64_t *cookie,
   return io_ctx_impl->watch(obj, cookie, NULL, ctx2);
 }
 
+int librados::IoCtx::aio_watch(const string& oid, AioCompletion *c,
+                               uint64_t *cookie,
+                               librados::WatchCtx2 *ctx2)
+{
+  object_t obj(oid);
+  return io_ctx_impl->aio_watch(obj, c->pc, cookie, NULL, ctx2);
+}
+
+
 int librados::IoCtx::unwatch(const string& oid, uint64_t handle)
 {
   return io_ctx_impl->unwatch(handle);
@@ -1807,6 +1816,11 @@ int librados::IoCtx::unwatch(const string& oid, uint64_t handle)
 int librados::IoCtx::unwatch2(uint64_t handle)
 {
   return io_ctx_impl->unwatch(handle);
+}
+
+int librados::IoCtx::aio_unwatch(uint64_t handle, AioCompletion *c)
+{
+  return io_ctx_impl->aio_unwatch(handle, c->pc);
 }
 
 int librados::IoCtx::watch_check(uint64_t handle)
@@ -2018,6 +2032,13 @@ int librados::Rados::watch_flush()
   if (!client)
     return -EINVAL;
   return client->watch_flush();
+}
+
+int librados::Rados::aio_watch_flush(AioCompletion *c)
+{
+  if (!client)
+    return -EINVAL;
+  return client->async_watch_flush(c->pc);
 }
 
 void librados::Rados::shutdown()
@@ -4217,6 +4238,30 @@ extern "C" int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handle,
   return ret;
 }
 
+extern "C" int rados_aio_watch(rados_ioctx_t io, const char *o,
+                               rados_completion_t completion,
+                               uint64_t *handle,
+                               rados_watchcb2_t watchcb,
+                               rados_watcherrcb_t watcherrcb, void *arg)
+{
+  tracepoint(librados, rados_aio_watch_enter, io, o, completion, handle, watchcb, arg);
+  int ret;
+  if (!completion || !watchcb || !o || !handle) {
+    ret = -EINVAL;
+  } else {
+    uint64_t *cookie = handle;
+    librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+    object_t oid(o);
+    librados::AioCompletionImpl *c =
+      reinterpret_cast<librados::AioCompletionImpl*>(completion);
+    C_WatchCB2 *wc = new C_WatchCB2(watchcb, watcherrcb, arg);
+    ret = ctx->aio_watch(oid, c, cookie, NULL, wc);
+  }
+  tracepoint(librados, rados_watch_exit, ret, handle ? *handle : 0);
+  return ret;
+}
+
+
 extern "C" int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle)
 {
   tracepoint(librados, rados_unwatch_enter, io, o, handle);
@@ -4234,6 +4279,19 @@ extern "C" int rados_unwatch2(rados_ioctx_t io, uint64_t handle)
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   int retval = ctx->unwatch(cookie);
   tracepoint(librados, rados_unwatch2_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_aio_unwatch(rados_ioctx_t io, uint64_t handle,
+                                 rados_completion_t completion)
+{
+  tracepoint(librados, rados_aio_unwatch_enter, io, handle, completion);
+  uint64_t cookie = handle;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  librados::AioCompletionImpl *c =
+    reinterpret_cast<librados::AioCompletionImpl*>(completion);
+  int retval = ctx->aio_unwatch(cookie, c);
+  tracepoint(librados, rados_aio_unwatch_exit, retval);
   return retval;
 }
 
@@ -4330,6 +4388,16 @@ extern "C" int rados_watch_flush(rados_t cluster)
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   int retval = client->watch_flush();
   tracepoint(librados, rados_watch_flush_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_aio_watch_flush(rados_t cluster, rados_completion_t completion)
+{
+  tracepoint(librados, rados_aio_watch_flush_enter, cluster, completion);
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
+  int retval = client->async_watch_flush(c);
+  tracepoint(librados, rados_aio_watch_flush_exit, retval);
   return retval;
 }
 

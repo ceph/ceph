@@ -2273,6 +2273,34 @@ TRACEPOINT_EVENT(librados, rados_watch2_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_aio_watch_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion,
+        uint64_t*, phandle,
+        rados_watchcb2_t, callback,
+        void*, arg),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+        ctf_integer_hex(uint64_t, phandle, phandle)
+        ctf_integer_hex(rados_watchcb2_t, callback, callback)
+        ctf_integer_hex(void*, arg, arg)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_watch_exit,
+    TP_ARGS(
+        int, retval,
+        uint64_t, handle),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, handle, handle)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_unwatch_enter,
     TP_ARGS(
         rados_ioctx_t, ioctx,
@@ -2304,6 +2332,26 @@ TRACEPOINT_EVENT(librados, rados_unwatch2_enter,
 )
 
 TRACEPOINT_EVENT(librados, rados_unwatch2_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_unwatch_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        uint64_t, handle,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(uint64_t, handle, handle)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_unwatch_exit,
     TP_ARGS(
         int, retval),
     TP_FIELDS(
@@ -2434,6 +2482,24 @@ TRACEPOINT_EVENT(librados, rados_watch_flush_enter,
 )
 
 TRACEPOINT_EVENT(librados, rados_watch_flush_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_watch_flush_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_watch_flush_exit,
     TP_ARGS(
         int, retval),
     TP_FIELDS(

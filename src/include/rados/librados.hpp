@@ -990,7 +990,10 @@ namespace librados
     // watch/notify
     int watch2(const std::string& o, uint64_t *handle,
 	       librados::WatchCtx2 *ctx);
+    int aio_watch(const std::string& o, AioCompletion *c, uint64_t *handle,
+	       librados::WatchCtx2 *ctx);
     int unwatch2(uint64_t handle);
+    int aio_unwatch(uint64_t handle, AioCompletion *c);
     /**
      * Send a notify event ot watchers
      *
@@ -1131,6 +1134,7 @@ namespace librados
     int connect();
     void shutdown();
     int watch_flush();
+    int aio_watch_flush(AioCompletion*);
     int conf_read_file(const char * const path) const;
     int conf_parse_argv(int argc, const char ** argv) const;
     int conf_parse_argv_remainder(int argc, const char ** argv,
