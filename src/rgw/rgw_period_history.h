@@ -11,6 +11,8 @@
 #include "include/assert.h"
 #include "include/types.h"
 
+#include "rgw_rados.h"
+
 namespace bi = boost::intrusive;
 
 /**
