@@ -4,7 +4,6 @@
 #include "common/errno.h"
 
 #include "rgw_realm_watcher.h"
-#include "rgw_rados.h"
 #include "rgw_period_puller.h"
 #include "rgw_period_history.h"
 

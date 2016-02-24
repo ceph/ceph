@@ -2,8 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_realm_reloader.h"
-#include "rgw_rados.h"
-#include "rgw_rados.h"
 #include "rgw_period_puller.h"
 #include "rgw_period_history.h"
 #include "rgw_metadata.h"

@@ -7,7 +7,6 @@
 #include "common/OutputDataSocket.h"
 #include "common/Formatter.h"
 
-#include "rgw_rados.h"
 #include "rgw_period_puller.h"
 #include "rgw_period_history.h"
 #include "rgw_metadata.h"

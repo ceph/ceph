@@ -6,7 +6,6 @@
 #include <list>
 
 #include "rgw_common.h"
-#include "rgw_rados.h"
 #include "rgw_period_puller.h"
 #include "rgw_period_history.h"
 #include "rgw_user.h"
