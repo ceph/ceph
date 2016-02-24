@@ -185,7 +185,8 @@ TEST_F(TestJournalPlayer, PrefetchSkip) {
 
   journal::JournalPlayer::ObjectPositions positions;
   positions = {
-    cls::journal::ObjectPosition(0, 234, 125) };
+    cls::journal::ObjectPosition(0, 234, 125),
+    cls::journal::ObjectPosition(1, 234, 124) };
   cls::journal::ObjectSetPosition commit_position(positions);
 
   ASSERT_EQ(0, create(oid));
