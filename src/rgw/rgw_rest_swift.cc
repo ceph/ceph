@@ -839,9 +839,11 @@ void RGWDeleteObj_ObjStore_SWIFT::send_response()
 
   set_req_state_err(s, r);
   dump_errno(s);
-  end_header(s, this);
 
   if (multipart_delete) {
+    end_header(s, this /* RGWOp */, nullptr /* contype */,
+               NO_CONTENT_LENGTH);
+
     if (deleter) {
       bulkdelete_respond(deleter->get_num_deleted(),
                          deleter->get_num_unfound(),
@@ -861,6 +863,8 @@ void RGWDeleteObj_ObjStore_SWIFT::send_response()
 
       bulkdelete_respond(0, 0, { fail_desc }, s->prot_flags, *s->formatter);
     }
+  } else {
+    end_header(s, this);
   }
 
   rgw_flush_formatter_and_reset(s, s->formatter);
