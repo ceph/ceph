@@ -971,6 +971,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 
   map<uint64_t, rgw_slo_part> slo_parts;
 
+  MD5 etag_sum;
   total_len = 0;
 
   for (vector<rgw_slo_entry>::iterator iter = slo_info.entries.begin(); iter != slo_info.entries.end(); ++iter) {
@@ -1033,9 +1034,14 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
                       << " etag=" << part.etag
                       << dendl;
 
+    etag_sum.Update((const byte *)iter->etag.c_str(),
+                    iter->etag.length());
+
     slo_parts[total_len] = part;
     total_len += part.size;
   }
+
+  complete_etag(etag_sum, &lo_etag);
 
   s->obj_size = slo_info.total_size;
   ldout(s->cct, 20) << "s->obj_size=" << s->obj_size << dendl;
