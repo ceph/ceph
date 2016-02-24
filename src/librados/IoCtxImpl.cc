@@ -475,7 +475,6 @@ int librados::IoCtxImpl::nlist(Objecter::NListContext *context, int max_entries)
   Cond cond;
   bool done;
   int r = 0;
-  object_t oid;
   Mutex mylock("IoCtxImpl::nlist::mylock");
 
   if (context->at_end())
@@ -506,7 +505,6 @@ int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
   Cond cond;
   bool done;
   int r = 0;
-  object_t oid;
   Mutex mylock("IoCtxImpl::list::mylock");
 
   if (context->at_end())
@@ -1278,7 +1276,6 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
 
   prepare_assert_ops(&wr);
   wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH);
-  *handle = 0;
   bufferlist bl;
   objecter->linger_watch(linger_op, wr,
                          snapc, ceph::real_clock::now(), bl,
