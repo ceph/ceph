@@ -832,6 +832,24 @@ public:
       }
     }
 
+    /// Retain old version for regression testing purposes
+    uint64_t get_encoded_bytes_test() {
+      if (use_tbl)
+        return 1 + 8 + 8 + 4 + 4 + 4 + 4 + 4 + tbl.length();
+      else {
+        //layout: data_bl + op_bl + coll_index + object_index + data
+
+        bufferlist bl;
+        ::encode(coll_index, bl);
+        ::encode(object_index, bl);
+
+        return data_bl.length() +
+          op_bl.length() +
+          bl.length() +
+          sizeof(data);
+      }
+    }
+
     uint64_t get_num_bytes() {
       return get_encoded_bytes();
     }
