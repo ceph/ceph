@@ -45,6 +45,7 @@ private:
   atomic_t m_stopping;
 
   peer_t m_peer;
+  std::string m_client_id;
   RadosRef m_local, m_remote;
   std::unique_ptr<PoolWatcher> m_pool_watcher;
   // index by pool so it's easy to tell what is affected

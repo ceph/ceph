@@ -3,7 +3,7 @@
 LOC_POOL=rbd_mirror_local$$
 RMT_POOL=rbd_mirror_remote$$
 IMAGE=rbdimagereplay$$
-CLUSTER_ID=
+CLIENT_ID=rbd_mirror_image_replay
 RBD_IMAGE_REPLAY_PID_FILE=
 TEMPDIR=
 
@@ -16,8 +16,6 @@ setup()
     trap cleanup INT TERM EXIT
 
     TEMPDIR=`mktemp -d`
-
-    CLUSTER_ID=`ceph-conf fsid`
 
     ceph osd pool create ${LOC_POOL} 128 128 || :
     ceph osd pool create ${RMT_POOL} 128 128 || :
@@ -72,7 +70,7 @@ start_replay()
 	--debug-rbd=30 --debug-journaler=30 \
 	--debug-rbd_mirror=30 \
 	--daemonize=true \
-	${LOC_POOL} ${RMT_POOL} ${IMAGE}
+	${CLIENT_ID} ${LOC_POOL} ${RMT_POOL} ${IMAGE}
 }
 
 stop_replay()
@@ -98,14 +96,25 @@ stop_replay()
     RBD_IMAGE_REPLAY_PID_FILE=
 }
 
+flush()
+{
+    local cmd
+
+    cmd=$(ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok help |
+		 sed -nEe 's/^.*"(rbd mirror flush [^"]*)":.*$/\1/p')
+    test -n "${cmd}"
+    ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok ${cmd}
+}
+
 wait_for_replay_complete()
 {
     for s in 0.2 0.4 0.8 1.6 2 2 4 4 8; do
 	sleep ${s}
+	flush
 	local status_log=${TEMPDIR}/${RMT_POOL}-${IMAGE}.status
 	rbd -p ${RMT_POOL} journal status --image ${IMAGE} | tee ${status_log}
 	local master_pos=`sed -nEe 's/^.*id=,.*entry_tid=([0-9]+).*$/\1/p' ${status_log}`
-	local mirror_pos=`sed -nEe 's/^.*id='${CLUSTER_ID}',.*entry_tid=([0-9]+).*$/\1/p' ${status_log}`
+	local mirror_pos=`sed -nEe 's/^.*id='${CLIENT_ID}',.*entry_tid=([0-9]+).*$/\1/p' ${status_log}`
 	test -n "${master_pos}" -a "${master_pos}" = "${mirror_pos}" && return 0
     done
     return 1
@@ -133,7 +142,7 @@ wait_for_replay_complete
 stop_replay
 compare_images
 
-count=32
+count=10
 rbd -p ${RMT_POOL} bench-write ${IMAGE} --io-size 4096 --io-threads 1 \
     --io-total $((4096 * count)) --io-pattern seq
 start_replay

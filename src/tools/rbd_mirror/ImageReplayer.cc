@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/Formatter.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "include/stringify.h"
@@ -61,13 +62,109 @@ struct C_ReplayCommitted : public Context {
   }
 };
 
+class ImageReplayerAdminSocketCommand {
+public:
+  virtual ~ImageReplayerAdminSocketCommand() {}
+  virtual bool call(Formatter *f, stringstream *ss) = 0;
+};
+
+class StatusCommand : public ImageReplayerAdminSocketCommand {
+public:
+  explicit StatusCommand(ImageReplayer *replayer) : replayer(replayer) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    if (f) {
+      f->open_object_section("status");
+      f->dump_stream("state") << replayer->get_state();
+      f->close_section();
+      f->flush(*ss);
+    } else {
+      *ss << "state: " << replayer->get_state();
+    }
+    return true;
+  }
+
+private:
+  ImageReplayer *replayer;
+};
+
+class FlushCommand : public ImageReplayerAdminSocketCommand {
+public:
+  explicit FlushCommand(ImageReplayer *replayer) : replayer(replayer) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    int r = replayer->flush();
+    if (r < 0) {
+      *ss << "flush: " << cpp_strerror(r);
+      return false;
+    }
+    return true;
+  }
+
+private:
+  ImageReplayer *replayer;
+};
+
 } // anonymous namespace
 
+class ImageReplayerAdminSocketHook : public AdminSocketHook {
+public:
+  ImageReplayerAdminSocketHook(CephContext *cct, ImageReplayer *replayer) :
+    admin_socket(cct->get_admin_socket()) {
+    std::string command;
+    int r;
+
+    command = "rbd mirror status " + stringify(*replayer);
+    r = admin_socket->register_command(command, command, this,
+				       "get status for rbd mirror " +
+				       stringify(*replayer));
+    if (r == 0) {
+      commands[command] = new StatusCommand(replayer);
+    }
+
+    command = "rbd mirror flush " + stringify(*replayer);
+    r = admin_socket->register_command(command, command, this,
+				       "flush rbd mirror " +
+				       stringify(*replayer));
+    if (r == 0) {
+      commands[command] = new FlushCommand(replayer);
+    }
+  }
+
+  ~ImageReplayerAdminSocketHook() {
+    for (Commands::const_iterator i = commands.begin(); i != commands.end();
+	 ++i) {
+      (void)admin_socket->unregister_command(i->first);
+      delete i->second;
+    }
+  }
+
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+	    bufferlist& out) {
+    Commands::const_iterator i = commands.find(command);
+    assert(i != commands.end());
+    Formatter *f = Formatter::create(format);
+    stringstream ss;
+    bool r = i->second->call(f, &ss);
+    delete f;
+    out.append(ss);
+    return r;
+  }
+
+private:
+  typedef std::map<std::string, ImageReplayerAdminSocketCommand*> Commands;
+
+  AdminSocket *admin_socket;
+  Commands commands;
+};
+
 ImageReplayer::ImageReplayer(RadosRef local, RadosRef remote,
+			     const std::string &client_id,
 			     int64_t remote_pool_id,
 			     const std::string &remote_image_id) :
   m_local(local),
   m_remote(remote),
+  m_client_id(client_id),
   m_remote_pool_id(remote_pool_id),
   m_local_pool_id(-1),
   m_remote_image_id(remote_image_id),
@@ -79,6 +176,9 @@ ImageReplayer::ImageReplayer(RadosRef local, RadosRef remote,
   m_remote_journaler(nullptr),
   m_replay_handler(nullptr)
 {
+  CephContext *cct = static_cast<CephContext *>(m_local->cct());
+
+  m_asok_hook = new ImageReplayerAdminSocketHook(cct, this);
 }
 
 ImageReplayer::~ImageReplayer()
@@ -87,6 +187,8 @@ ImageReplayer::~ImageReplayer()
   assert(m_local_replay == nullptr);
   assert(m_remote_journaler == nullptr);
   assert(m_replay_handler == nullptr);
+
+  delete m_asok_hook;
 }
 
 int ImageReplayer::start(const BootstrapParams *bootstrap_params)
@@ -108,15 +210,6 @@ int ImageReplayer::start(const BootstrapParams *bootstrap_params)
   double commit_interval;
   bool registered;
   int r = 0;
-
-  r = m_local->cluster_fsid(&m_local_cluster_id);
-  if (r < 0) {
-    derr << "error retrieving local cluster id: " << cpp_strerror(r)
-	 << dendl;
-    return r;
-  }
-
-  m_client_id = m_local_cluster_id;
 
   r = m_remote->ioctx_create2(m_remote_pool_id, m_remote_ioctx);
   if (r < 0) {
@@ -430,10 +523,10 @@ int ImageReplayer::get_registered_client_status(bool *registered)
 	boost::get<librbd::journal::MirrorPeerClientMeta>(client_data.client_meta);
       m_local_pool_id = cm.pool_id;
       m_local_image_id = cm.image_id;
+      m_snap_name = cm.snap_name;
 
       dout(20) << "client found, pool_id=" << m_local_pool_id << ", image_id="
-	       << m_local_image_id << dendl;
-
+	       << m_local_image_id << ", snap_name=" << m_snap_name << dendl;
       return 0;
     }
   }
@@ -448,12 +541,23 @@ int ImageReplayer::register_client()
 {
   int r;
 
-  dout(20) << "m_cluster_id=" << m_local_cluster_id << ", pool_id="
-	   << m_local_pool_id << ", image_id=" << m_local_image_id << dendl;
+  std::string local_cluster_id;
+  r = m_local->cluster_fsid(&local_cluster_id);
+  if (r < 0) {
+    derr << "error retrieving local cluster id: " << cpp_strerror(r)
+	 << dendl;
+    return r;
+  }
+  std::string m_snap_name = ".rbd-mirror." + m_client_id;
+
+  dout(20) << "m_cluster_id=" << local_cluster_id << ", pool_id="
+	   << m_local_pool_id << ", image_id=" << m_local_image_id
+	   << ", snap_name=" << m_snap_name << dendl;
 
   bufferlist client_data;
   ::encode(librbd::journal::ClientData{librbd::journal::MirrorPeerClientMeta{
-	m_local_cluster_id, m_local_pool_id, m_local_image_id}}, client_data);
+	local_cluster_id, m_local_pool_id, m_local_image_id, m_snap_name}},
+    client_data);
 
   r = m_remote_journaler->register_client(client_data);
   if (r < 0) {
@@ -610,8 +714,6 @@ int ImageReplayer::copy()
   dout(20) << m_remote_pool_id << "/" << m_remote_image_id << "->"
 	   << m_local_pool_id << "/" << m_local_image_id << dendl;
 
-  // TODO: use internal snapshots
-  std::string snap_name = ".rbd-mirror." + m_local_cluster_id;
   librados::IoCtx local_ioctx;
   librbd::ImageCtx *remote_image_ctx, *local_image_ctx;
   librbd::NoOpProgressContext prog_ctx;
@@ -627,29 +729,30 @@ int ImageReplayer::copy()
     return r;
   }
 
-  dout(20) << "creating temporary snapshot " << snap_name << dendl;
+  dout(20) << "creating temporary snapshot " << m_snap_name << dendl;
 
-  r = remote_image_ctx->operations->snap_create(snap_name.c_str());
+  // TODO: use internal snapshots
+  r = remote_image_ctx->operations->snap_create(m_snap_name.c_str());
   if (r == -EEXIST) {
     // Probably left after a previous unsuccessful bootsrapt.
-    dout(0) << "removing stale snapshot " << snap_name << " of remote image "
+    dout(0) << "removing stale snapshot " << m_snap_name << " of remote image "
 	    << m_remote_image_id << dendl;
-    (void)remote_image_ctx->operations->snap_remove(snap_name.c_str());
-    r = remote_image_ctx->operations->snap_create(snap_name.c_str());
+    (void)remote_image_ctx->operations->snap_remove(m_snap_name.c_str());
+    r = remote_image_ctx->operations->snap_create(m_snap_name.c_str());
   }
   if (r < 0) {
-    derr << "error creating snapshot " << snap_name << " of remote image "
+    derr << "error creating snapshot " << m_snap_name << " of remote image "
 	 << m_remote_image_id << ": " << cpp_strerror(r) << dendl;
     goto cleanup;
   }
 
   remote_image_ctx->state->close();
   remote_image_ctx = new librbd::ImageCtx("", m_remote_image_id,
-					  snap_name.c_str(), m_remote_ioctx,
+					  m_snap_name.c_str(), m_remote_ioctx,
 					  true);
   r = remote_image_ctx->state->open();
   if (r < 0) {
-    derr << "error opening snapshot " << snap_name << " of remote image "
+    derr << "error opening snapshot " << m_snap_name << " of remote image "
 	 << m_remote_image_id << ": " << cpp_strerror(r) << dendl;
     delete remote_image_ctx;
     remote_image_ctx = nullptr;
@@ -679,7 +782,7 @@ int ImageReplayer::copy()
   // TODO: show copy progress in image replay status
   r = librbd::copy(remote_image_ctx, local_image_ctx, prog_ctx);
   if (r < 0) {
-    derr << "error copying snapshot " << snap_name << " of remote image "
+    derr << "error copying snapshot " << m_snap_name << " of remote image "
 	 << m_remote_image_id << " to local image " << m_local_image_id
 	 << ": " << cpp_strerror(r) << dendl;
   }
@@ -707,10 +810,10 @@ cleanup:
 	 << ": " << cpp_strerror(r1) << dendl;
     delete remote_image_ctx;
   } else {
-    dout(20) << "removing temporary snapshot " << snap_name << dendl;
-    r1 = remote_image_ctx->operations->snap_remove(snap_name.c_str());
+    dout(20) << "removing temporary snapshot " << m_snap_name << dendl;
+    r1 = remote_image_ctx->operations->snap_remove(m_snap_name.c_str());
     if (r1 < 0) {
-      derr << "error removing snapshot " << snap_name << " of remote image "
+      derr << "error removing snapshot " << m_snap_name << " of remote image "
 	   << m_remote_image_id << ": " << cpp_strerror(r1) << dendl;
     }
     remote_image_ctx->state->close();
@@ -727,6 +830,34 @@ void ImageReplayer::shut_down_journal_replay()
   if (r < 0) {
     derr << "error flushing journal replay: " << cpp_strerror(r) << dendl;
   }
+}
+
+std::ostream &operator<<(std::ostream &os, const ImageReplayer::State &state)
+{
+  switch (state) {
+  case ImageReplayer::STATE_UNINITIALIZED:
+    os << "Uninitialized";
+    break;
+  case ImageReplayer::STATE_STARTING:
+    os << "Starting";
+    break;
+  case ImageReplayer::STATE_REPLAYING:
+    os << "Replaying";
+    break;
+  case ImageReplayer::STATE_FLUSHING_REPLAY:
+    os << "FlushingReplay";
+    break;
+  case ImageReplayer::STATE_STOPPING:
+    os << "Stopping";
+    break;
+  case ImageReplayer::STATE_STOPPED:
+    os << "Stopped";
+    break;
+  default:
+    os << "Unknown(" << state << ")";
+    break;
+  }
+  return os;
 }
 
 std::ostream &operator<<(std::ostream &os, const ImageReplayer &replayer)
