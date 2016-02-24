@@ -344,10 +344,10 @@ class ObjectCacher {
 
     bool is_cached(loff_t off, loff_t len);
     bool include_all_cached_data(loff_t off, loff_t len);
-    int map_read(OSDRead *rd,
-		 map<loff_t, BufferHead*>& hits,
-		 map<loff_t, BufferHead*>& missing,
-		 map<loff_t, BufferHead*>& rx,
+    int map_read(ObjectExtent &ex,
+                 map<loff_t, BufferHead*>& hits,
+                 map<loff_t, BufferHead*>& missing,
+                 map<loff_t, BufferHead*>& rx,
 		 map<loff_t, BufferHead*>& errors);
     BufferHead *map_write(ObjectExtent &ex, ceph_tid_t tid);
     
