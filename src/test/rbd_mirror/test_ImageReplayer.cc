@@ -211,9 +211,11 @@ public:
 	if (c->id == master_client_id) {
 	  ASSERT_EQ(-1, master_tid);
 	  master_tid = p->entry_tid;
+          break;
 	} else if (c->id == mirror_client_id) {
 	  ASSERT_EQ(-1, mirror_tid);
 	  mirror_tid = p->entry_tid;
+          break;
 	}
       }
     }
