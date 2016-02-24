@@ -974,11 +974,12 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
   MD5 etag_sum;
   total_len = 0;
 
-  for (vector<rgw_slo_entry>::iterator iter = slo_info.entries.begin(); iter != slo_info.entries.end(); ++iter) {
-    string& path = iter->path;
-    int pos = path.find('/', 1); /* skip first / */
-    if (pos < 0)
+  for (const auto& entry : slo_info.entries) {
+    const string& path = entry.path;
+    const size_t pos = path.find('/', 1); /* skip first / */
+    if (pos == string::npos) {
       return -EINVAL;
+    }
 
     string bucket_name = path.substr(1, pos - 1);
     string obj_name = path.substr(pos + 1);
@@ -987,7 +988,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
     RGWAccessControlPolicy *bucket_policy;
 
     if (bucket_name.compare(s->bucket.name) != 0) {
-      map<string, RGWAccessControlPolicy *>::iterator piter = policies.find(bucket_name);
+      const auto& piter = policies.find(bucket_name);
       if (piter != policies.end()) {
         bucket_policy = piter->second;
         bucket = buckets[bucket_name];
@@ -999,7 +1000,8 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
         map<string, bufferlist> bucket_attrs;
         RGWObjectCtx obj_ctx(store);
         int r = store->get_bucket_info(obj_ctx, s->user->user_id.tenant,
-              bucket_name, bucket_info, NULL, &bucket_attrs);
+                                       bucket_name, bucket_info, nullptr,
+                                       &bucket_attrs);
         if (r < 0) {
           ldout(s->cct, 0) << "could not get bucket info for bucket="
 			   << bucket_name << dendl;
@@ -1008,9 +1010,11 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
         bucket = bucket_info.bucket;
         rgw_obj_key no_obj;
         bucket_policy = &_bucket_policy;
-        r = read_policy(store, s, bucket_info, bucket_attrs, bucket_policy, bucket, no_obj);
+        r = read_policy(store, s, bucket_info, bucket_attrs, bucket_policy,
+                        bucket, no_obj);
         if (r < 0) {
-          ldout(s->cct, 0) << "failed to read bucket policy for bucket " << bucket << dendl;
+          ldout(s->cct, 0) << "failed to read bucket policy for bucket "
+                           << bucket << dendl;
           return r;
         }
         buckets[bucket_name] = bucket;
@@ -1025,8 +1029,8 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
     part.bucket_policy = bucket_policy;
     part.bucket = bucket;
     part.obj_name = obj_name;
-    part.size = iter->size_bytes;
-    part.etag = iter->etag;
+    part.size = entry.size_bytes;
+    part.etag = entry.etag;
     ldout(s->cct, 20) << "slo_part: ofs=" << ofs
                       << " bucket=" << part.bucket
                       << " obj=" << part.obj_name
@@ -1034,8 +1038,8 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
                       << " etag=" << part.etag
                       << dendl;
 
-    etag_sum.Update((const byte *)iter->etag.c_str(),
-                    iter->etag.length());
+    etag_sum.Update((const byte *)entry.etag.c_str(),
+                    entry.etag.length());
 
     slo_parts[total_len] = part;
     total_len += part.size;
