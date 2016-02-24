@@ -700,8 +700,10 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                                        rgw_bucket& bucket,
                                        const string& obj_prefix,
                                        RGWAccessControlPolicy * const bucket_policy,
+                                       const string * const ref_guard_sum,
                                        uint64_t * const ptotal_len,
                                        uint64_t * const pobj_size,
+                                       string * const pguard_sum,
                                        string * const pobj_sum,
                                        int (*cb)(rgw_bucket& bucket,
                                                  const RGWObjEnt& ent,
@@ -726,6 +728,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
   list_op.params.delim = delim;
 
   MD5 etag_sum;
+  MD5 guard_sum;
   do {
 #define MAX_LIST_OBJS 100
     int r = list_op.list_objects(MAX_LIST_OBJS, &objs, NULL, &is_truncated);
@@ -753,6 +756,23 @@ static int iterate_user_manifest_parts(CephContext * const cct,
 
       perfcounter->tinc(l_rgw_get_lat,
                        (ceph_clock_now(cct) - start_time));
+
+      if (!handled_end) {
+        guard_sum.Update((const byte *)ent.etag.c_str(),
+                         ent.etag.length());
+        if (found_end) {
+          /* This should be called exactly once. */
+          string guard_str;
+          complete_etag(guard_sum, &guard_str);
+
+          if (pguard_sum) {
+            *pguard_sum = guard_str;
+          }
+          if (ref_guard_sum && *ref_guard_sum != guard_str) {
+            return -EIO;
+          }
+        }
+      }
 
       if (found_start && !handled_end) {
         len_count += end_ofs - start_ofs;
@@ -925,10 +945,12 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   /* dry run to find out:
    * - total length (of the parts we are going to send to client),
    * - overall DLO's content size,
+   * - md5 sum of parts affecting what the client will get,
    * - md5 sum of overall DLO's content (for etag of Swift API). */
+  string guard;
   int r = iterate_user_manifest_parts(s->cct, store, ofs, end,
-        bucket, obj_prefix, bucket_policy,
-        &total_len, &s->obj_size, &lo_etag,
+        bucket, obj_prefix, bucket_policy, nullptr /* guard */,
+        &total_len, &s->obj_size, &guard, &lo_etag,
         nullptr /* cb */, nullptr /* cb arg */);
   if (r < 0) {
     return r;
@@ -941,8 +963,8 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   }
 
   r = iterate_user_manifest_parts(s->cct, store, ofs, end,
-        bucket, obj_prefix, bucket_policy,
-        nullptr, nullptr, nullptr,
+        bucket, obj_prefix, bucket_policy, &guard,
+        nullptr, nullptr, nullptr, nullptr,
         get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0) {
     return r;
