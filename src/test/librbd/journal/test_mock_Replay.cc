@@ -208,9 +208,9 @@ public:
     return ctx.wait();
   }
 
-  int when_shut_down(MockJournalReplay &mock_journal_replay) {
+  int when_shut_down(MockJournalReplay &mock_journal_replay, bool cancel_ops) {
     C_SaferCond ctx;
-    mock_journal_replay.shut_down(&ctx);
+    mock_journal_replay.shut_down(cancel_ops, &ctx);
     return ctx.wait();
   }
 
@@ -263,7 +263,7 @@ TEST_F(TestMockJournalReplay, AioDiscard) {
   ASSERT_EQ(0, on_ready.wait());
 
   expect_aio_flush(mock_image_ctx, mock_aio_image_request, 0);
-  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay, false));
   ASSERT_EQ(0, on_safe.wait());
 }
 
@@ -291,7 +291,7 @@ TEST_F(TestMockJournalReplay, AioWrite) {
   ASSERT_EQ(0, on_ready.wait());
 
   expect_aio_flush(mock_image_ctx, mock_aio_image_request, 0);
-  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay, false));
   ASSERT_EQ(0, on_safe.wait());
 }
 
@@ -317,7 +317,7 @@ TEST_F(TestMockJournalReplay, AioFlush) {
   when_complete(mock_image_ctx, aio_comp, 0);
   ASSERT_EQ(0, on_safe.wait());
 
-  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay, false));
   ASSERT_EQ(0, on_ready.wait());
 }
 
@@ -345,7 +345,7 @@ TEST_F(TestMockJournalReplay, IOError) {
   ASSERT_EQ(-EINVAL, on_safe.wait());
 
   expect_aio_flush(mock_image_ctx, mock_aio_image_request, 0);
-  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay, false));
   ASSERT_EQ(0, on_ready.wait());
 }
 
@@ -385,7 +385,7 @@ TEST_F(TestMockJournalReplay, SoftFlushIO) {
     ASSERT_EQ(0, on_safe.wait());
   }
 
-  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay, false));
 }
 
 TEST_F(TestMockJournalReplay, PauseIO) {
@@ -428,7 +428,7 @@ TEST_F(TestMockJournalReplay, PauseIO) {
     ASSERT_EQ(0, on_safe.wait());
   }
 
-  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay, false));
 }
 
 TEST_F(TestMockJournalReplay, Flush) {
@@ -536,7 +536,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
 
   ASSERT_EQ(0, on_ready.wait());
 
-  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay, true));
   ASSERT_EQ(-ERESTART, on_safe.wait());
 }
 

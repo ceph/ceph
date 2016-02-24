@@ -35,7 +35,7 @@ public:
 
   void process(bufferlist::iterator *it, Context *on_ready, Context *on_safe);
 
-  void shut_down(Context *on_finish);
+  void shut_down(bool cancel_ops, Context *on_finish);
   void flush(Context *on_finish);
 
   void replay_op_ready(uint64_t op_tid, Context *on_resume);
