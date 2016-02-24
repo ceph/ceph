@@ -100,6 +100,7 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
 
   AioCompletion *flush_comp = nullptr;
   OpTids cancel_op_tids;
+  Contexts op_finish_events;
   on_finish = util::create_async_context_callback(
     m_image_ctx, on_finish);
 
@@ -111,13 +112,23 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
       flush_comp = create_aio_flush_completion(nullptr, nullptr);;
     }
 
-    // cancel ops that are waiting to start
-    if (cancel_ops) {
-      for (auto &op_event_pair : m_op_events) {
-        const OpEvent &op_event = op_event_pair.second;
+    for (auto &op_event_pair : m_op_events) {
+      OpEvent &op_event = op_event_pair.second;
+      if (cancel_ops) {
+        // cancel ops that are waiting to start (waiting for
+        // OpFinishEvent or waiting for ready)
         if (op_event.on_start_ready == nullptr) {
           cancel_op_tids.push_back(op_event_pair.first);
         }
+      } else if (op_event.on_op_finish_event != nullptr) {
+        // start ops waiting for OpFinishEvent
+        Context *on_op_finish_event = nullptr;
+        std::swap(on_op_finish_event, op_event.on_op_finish_event);
+        m_image_ctx.op_work_queue->queue(on_op_finish_event, 0);
+      } else {
+        // waiting for op ready
+        assert(op_event.on_start_ready != nullptr);
+        op_event_pair.second.finish_on_ready = true;
       }
     }
 
@@ -174,7 +185,7 @@ void Replay<I>::replay_op_ready(uint64_t op_tid, Context *on_resume) {
   on_start_ready->complete(0);
 
   // cancel has been requested -- send error to paused state machine
-  if (m_flush_ctx != nullptr) {
+  if (!op_event.finish_on_ready && m_flush_ctx != nullptr) {
     m_image_ctx.op_work_queue->queue(on_resume, -ERESTART);
     return;
   }
@@ -185,6 +196,11 @@ void Replay<I>::replay_op_ready(uint64_t op_tid, Context *on_resume) {
     [on_resume](int r) {
       on_resume->complete(r);
     });
+
+  // shut down request -- don't expect OpFinishEvent
+  if (op_event.finish_on_ready) {
+    m_image_ctx.op_work_queue->queue(on_resume, 0);
+  }
 }
 
 template <typename I>
@@ -598,6 +614,7 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
 
   OpEvent op_event;
   Context *on_flush = nullptr;
+  bool shutting_down = false;
   {
     Mutex::Locker locker(m_lock);
     auto op_it = m_op_events.find(op_tid);
@@ -606,6 +623,7 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
     op_event = std::move(op_it->second);
     m_op_events.erase(op_it);
 
+    shutting_down = (m_flush_ctx != nullptr);
     if (m_op_events.empty() &&
         (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
       on_flush = m_flush_ctx;
@@ -622,7 +640,7 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
   } else {
     // event kicked off by OpFinishEvent
     assert((op_event.on_finish_ready != nullptr &&
-            op_event.on_finish_safe != nullptr) || r == -ERESTART);
+            op_event.on_finish_safe != nullptr) || shutting_down);
   }
 
   // skipped upon error -- so clean up if non-null

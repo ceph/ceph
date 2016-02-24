@@ -45,6 +45,7 @@ private:
 
   struct OpEvent {
     bool op_in_progress = false;
+    bool finish_on_ready = false;
     Context *on_op_finish_event = nullptr;
     Context *on_start_ready = nullptr;
     Context *on_start_safe = nullptr;
