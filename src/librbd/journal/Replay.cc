@@ -94,7 +94,7 @@ void Replay<I>::process(bufferlist::iterator *it, Context *on_ready,
 }
 
 template <typename I>
-void Replay<I>::shut_down(Context *on_finish) {
+void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
@@ -112,10 +112,12 @@ void Replay<I>::shut_down(Context *on_finish) {
     }
 
     // cancel ops that are waiting to start
-    for (auto &op_event_pair : m_op_events) {
-      const OpEvent &op_event = op_event_pair.second;
-      if (op_event.on_start_ready == nullptr) {
-        cancel_op_tids.push_back(op_event_pair.first);
+    if (cancel_ops) {
+      for (auto &op_event_pair : m_op_events) {
+        const OpEvent &op_event = op_event_pair.second;
+        if (op_event.on_start_ready == nullptr) {
+          cancel_op_tids.push_back(op_event_pair.first);
+        }
       }
     }
 

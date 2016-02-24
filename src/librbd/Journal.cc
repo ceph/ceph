@@ -687,13 +687,13 @@ void Journal<I>::handle_replay_complete(int r) {
     transition_state(STATE_FLUSHING_RESTART, r);
     m_lock.Unlock();
 
-    m_journal_replay->shut_down(create_context_callback<
+    m_journal_replay->shut_down(true, create_context_callback<
       Journal<I>, &Journal<I>::handle_flushing_restart>(this));
   } else {
     transition_state(STATE_FLUSHING_REPLAY, 0);
     m_lock.Unlock();
 
-    m_journal_replay->shut_down(create_context_callback<
+    m_journal_replay->shut_down(false, create_context_callback<
       Journal<I>, &Journal<I>::handle_flushing_replay>(this));
   }
 }
@@ -723,7 +723,7 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
       m_journaler->stop_replay();
       transition_state(STATE_FLUSHING_RESTART, r);
 
-      m_journal_replay->shut_down(create_context_callback<
+      m_journal_replay->shut_down(true, create_context_callback<
         Journal<I>, &Journal<I>::handle_flushing_restart>(this));
       return;
     } else if (m_state == STATE_FLUSHING_REPLAY) {

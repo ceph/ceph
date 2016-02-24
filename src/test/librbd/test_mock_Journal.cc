@@ -203,7 +203,7 @@ struct MockReplay {
     s_instance = this;
   }
 
-  MOCK_METHOD1(shut_down, void(Context *));
+  MOCK_METHOD2(shut_down, void(bool cancel_ops, Context *));
   MOCK_METHOD3(process, void(bufferlist::iterator*, Context *, Context *));
   MOCK_METHOD2(replay_op_ready, void(uint64_t, Context *));
 };
@@ -215,8 +215,8 @@ public:
     return new Replay();
   }
 
-  void shut_down(Context *on_finish) {
-    MockReplay::get_instance().shut_down(on_finish);
+  void shut_down(bool cancel_ops, Context *on_finish) {
+    MockReplay::get_instance().shut_down(cancel_ops, on_finish);
   }
 
   void process(bufferlist::iterator *it, Context *on_ready,
@@ -314,10 +314,11 @@ public:
   }
 
   void expect_shut_down_replay(MockImageCtx &mock_image_ctx,
-                               MockJournalReplay &mock_journal_replay, int r) {
-    EXPECT_CALL(mock_journal_replay, shut_down(_))
-                  .WillOnce(Invoke([this, &mock_image_ctx, r](Context *on_flush) {
-                    this->commit_replay(mock_image_ctx, on_flush, r);}));
+                               MockJournalReplay &mock_journal_replay, int r,
+                               bool cancel_ops = false) {
+    EXPECT_CALL(mock_journal_replay, shut_down(cancel_ops, _))
+                  .WillOnce(WithArg<1>(Invoke([this, &mock_image_ctx, r](Context *on_flush) {
+                    this->commit_replay(mock_image_ctx, on_flush, r);})));
   }
 
   void expect_get_data(::journal::MockReplayEntry &mock_replay_entry) {
@@ -542,7 +543,7 @@ TEST_F(TestMockJournal, ReplayCompleteError) {
 
   MockJournalReplay mock_journal_replay;
   expect_stop_replay(mock_journaler);
-  expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0);
+  expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0, true);
 
   // replay failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
@@ -670,7 +671,7 @@ TEST_F(TestMockJournal, ReplayOnDiskPreFlushError) {
 
   expect_try_pop_front(mock_journaler, false, mock_replay_entry);
   expect_stop_replay(mock_journaler);
-  expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0);
+  expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0, true);
 
   // replay write-to-disk failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
@@ -739,8 +740,8 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
   expect_stop_replay(mock_journaler);
 
   Context *on_flush = nullptr;
-  EXPECT_CALL(mock_journal_replay, shut_down(_))
-    .WillOnce(DoAll(SaveArg<0>(&on_flush),
+  EXPECT_CALL(mock_journal_replay, shut_down(false, _))
+    .WillOnce(DoAll(SaveArg<1>(&on_flush),
                     InvokeWithoutArgs(this, &TestMockJournal::wake_up)));
 
   // replay write-to-disk failure should result in replay-restart
