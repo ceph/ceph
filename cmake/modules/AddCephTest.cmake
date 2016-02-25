@@ -12,7 +12,7 @@ function(add_ceph_test test_name test_path)
     CEPH_LIB=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib
     PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
-    PYTHONPATH=${CMAKE_SOURCE_DIR}/src/pybind)
+    PYTHONPATH=${CMAKE_SOURCE_DIR}/src/pybind:${CMAKE_SOURCE_DIR}/src/pybind/rados)
 endfunction()
 
 #sets uniform compiler flags and link libraries

@@ -8,6 +8,7 @@ set_target_properties(rbd_mirror PROPERTIES COMPILE_FLAGS
 
 add_executable(unittest_rbd_mirror EXCLUDE_FROM_ALL
   test_main.cc
+  test_ImageReplayer.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   )
 add_ceph_unittest(unittest_rbd_mirror ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rbd_mirror)
@@ -32,6 +33,7 @@ target_link_libraries(unittest_rbd_mirror
 
 add_executable(ceph_test_rbd_mirror
   test_main.cc
+  test_ImageReplayer.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   )
 set_target_properties(ceph_test_rbd_mirror PROPERTIES COMPILE_FLAGS

@@ -36,14 +36,14 @@ set(unittest_librbd_srcs
   operation/test_mock_SnapshotRollbackRequest.cc 
   operation/test_mock_SnapshotUnprotectRequest.cc
   )
-add_executable(unittest_librbd 
+add_executable(unittest_librbd EXCLUDE_FROM_ALL
   ${unittest_librbd_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   $<TARGET_OBJECTS:parse_secret_objs>
   )
-add_ceph_unittest(unittest_librbd ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_librbd)
+#add_ceph_unittest(unittest_librbd ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_librbd)
 target_compile_definitions(unittest_librbd PUBLIC "-DTEST_LIBRBD_INTERNALS")
 set_target_properties(unittest_librbd PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
