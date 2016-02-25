@@ -17,6 +17,7 @@
 #include "common/config.h"
 #include "OSD.h"
 #include "OpRequest.h"
+#include "ScrubStore.h"
 
 #include "common/Timer.h"
 
@@ -943,6 +944,21 @@ void PG::clear_primary_state()
 
   agent_clear();
 }
+
+PG::Scrubber::Scrubber()
+ : reserved(false), reserve_failed(false),
+   epoch_start(0),
+   active(false), queue_snap_trim(false),
+   waiting_on(0), shallow_errors(0), deep_errors(0), fixed(0),
+   must_scrub(false), must_deep_scrub(false), must_repair(false),
+   auto_repair(false),
+   num_digest_updates_pending(0),
+   state(INACTIVE),
+   deep(false),
+   seed(0)
+{}
+
+PG::Scrubber::~Scrubber() {}
 
 /**
  * find_best_info
@@ -3753,6 +3769,21 @@ int PG::build_scrub_map_chunk(
   return 0;
 }
 
+void PG::Scrubber::cleanup_store(ObjectStore::Transaction *t) {
+  if (!store)
+    return;
+  struct OnComplete : Context {
+    std::unique_ptr<Scrub::Store> store;
+    OnComplete(
+      std::unique_ptr<Scrub::Store> &&store)
+      : store(std::move(store)) {}
+    void finish(int) override {}
+  };
+  store->cleanup(t);
+  t->register_on_complete(new OnComplete(std::move(store)));
+  assert(!store);
+}
+
 void PG::repair_object(
   const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
   pg_shard_t bad_peer)
@@ -4009,6 +4040,14 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	if (scrubber.reserved) {
 	  scrubber.reserved = false;
 	  scrubber.reserved_peers.clear();
+	}
+
+	{
+	  ObjectStore::Transaction t;
+	  scrubber.cleanup_store(&t);
+	  scrubber.store.reset(Scrub::Store::create(osd->store, &t,
+						    info.pgid, coll));
+	  osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
 	}
 
         // Don't include temporary objects when scrubbing
@@ -4288,6 +4327,7 @@ void PG::scrub_compare_maps()
       missing_digest,
       scrubber.shallow_errors,
       scrubber.deep_errors,
+      scrubber.store.get(),
       info.pgid, acting,
       ss);
     dout(2) << ss.str() << dendl;
@@ -4321,6 +4361,12 @@ void PG::scrub_compare_maps()
 
   // ok, do the pg-type specific scrubbing
   _scrub(authmap, missing_digest);
+  if (!state_test(PG_STATE_REPAIR) && !scrubber.store->empty()) {
+    dout(10) << __func__ << ": updating scrub object" << dendl;
+    ObjectStore::Transaction t;
+    scrubber.store->flush(&t);
+    osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
+  }
 }
 
 bool PG::scrub_process_inconsistent()

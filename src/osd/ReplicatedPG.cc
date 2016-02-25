@@ -20,9 +20,11 @@
 #include "ReplicatedPG.h"
 #include "OSD.h"
 #include "OpRequest.h"
+#include "ScrubStore.h"
 #include "objclass/objclass.h"
 
 #include "common/errno.h"
+#include "common/scrub_types.h"
 #include "common/perf_counters.h"
 
 #include "messages/MOSDOp.h"
@@ -1291,6 +1293,9 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
       }
       break;
 
+   case CEPH_OSD_OP_SCRUBLS:
+      result = do_scrub_ls(m, &osd_op);
+      break;
 
     default:
       result = -EINVAL;
@@ -1307,6 +1312,41 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
   reply->set_reply_versions(info.last_update, info.last_user_version);
   osd->send_message_osd_client(reply, m->get_connection());
   delete filter;
+}
+
+int ReplicatedPG::do_scrub_ls(MOSDOp *m, OSDOp *osd_op)
+{
+  if (m->get_pg() != info.pgid.pgid) {
+    dout(10) << " scrubls pg=" << m->get_pg() << " != " << info.pgid << dendl;
+    return -EINVAL; // hmm?
+  }
+  auto bp = osd_op->indata.begin();
+  scrub_ls_arg_t arg;
+  try {
+    arg.decode(bp);
+  } catch (buffer::error&) {
+    dout(10) << " corrupted scrub_ls_arg_t" << dendl;
+    return -EINVAL;
+  }
+  int r = 0;
+  scrub_ls_result_t result = {.interval = info.history.same_interval_since};
+  if (arg.interval != 0 && arg.interval != info.history.same_interval_since) {
+    r = -EAGAIN;
+  } else if (!scrubber.store) {
+    r = -ENOENT;
+  } else if (arg.get_snapsets) {
+    result.vals = scrubber.store->get_snap_errors(osd->store,
+						  get_pgid().pool(),
+						  arg.start_after,
+						  arg.max_return);
+  } else {
+    result.vals = scrubber.store->get_object_errors(osd->store,
+						    get_pgid().pool(),
+						    arg.start_after,
+						    arg.max_return);
+  }
+  ::encode(result, osd_op->outdata);
+  return r;
 }
 
 void ReplicatedPG::calc_trim_to()
@@ -9793,6 +9833,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   apply_and_flush_repops(is_primary());
 
   pgbackend->on_change_cleanup(t);
+  scrubber.cleanup_store(t);
   pgbackend->on_change();
 
   // clear snap_trimmer state
@@ -12193,7 +12234,8 @@ unsigned ReplicatedPG::process_clones_to(const boost::optional<hobject_t> &head,
   const char *mode,
   bool allow_incomplete_clones,
   boost::optional<snapid_t> target,
-  vector<snapid_t>::reverse_iterator *curclone)
+  vector<snapid_t>::reverse_iterator *curclone,
+  inconsistent_snapset_wrapper &e)
 {
   assert(head);
   assert(snapset);
@@ -12210,6 +12252,7 @@ unsigned ReplicatedPG::process_clones_to(const boost::optional<hobject_t> &head,
       clog->error() << mode << " " << pgid << " " << head.get()
 			 << " expected clone " << next_clone;
       ++scrubber.shallow_errors;
+      e.set_clone_missing(next_clone.snap);
     }
     // Clones are descending
     ++(*curclone);
@@ -12259,12 +12302,14 @@ void ReplicatedPG::_scrub(
   boost::optional<SnapSet> snapset; // If initialized so will head (above)
   vector<snapid_t>::reverse_iterator curclone; // Defined only if snapset initialized
   unsigned missing = 0;
+  inconsistent_snapset_wrapper snap_error;
 
   bufferlist last_data;
 
   for (map<hobject_t,ScrubMap::object, hobject_t::BitwiseComparator>::reverse_iterator
        p = scrubmap.objects.rbegin(); p != scrubmap.objects.rend(); ++p) {
     const hobject_t& soid = p->first;
+    snap_error = inconsistent_snapset_wrapper{soid};
     object_stat_sum_t stat;
     boost::optional<object_info_t> oi;
 
@@ -12285,6 +12330,7 @@ void ReplicatedPG::_scrub(
       osd->clog->error() << mode << " " << info.pgid << " " << soid
 			<< " no '" << OI_ATTR << "' attr";
       ++scrubber.shallow_errors;
+      snap_error.set_ss_attr_missing();
     } else {
       bufferlist bv;
       bv.push_back(p->second.attrs[OI_ATTR]);
@@ -12296,6 +12342,7 @@ void ReplicatedPG::_scrub(
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
 		<< " can't decode '" << OI_ATTR << "' attr " << e.what();
 	++scrubber.shallow_errors;
+	snap_error.set_ss_attr_corrupted();
       }
     }
 
@@ -12307,6 +12354,7 @@ void ReplicatedPG::_scrub(
 			   << oi->size << ") adjusted for ondisk to ("
 			   << pgbackend->be_get_ondisk_size(oi->size)
 			   << ")";
+	snap_error.set_size_mismatch();
 	++scrubber.shallow_errors;
       }
 
@@ -12349,7 +12397,8 @@ void ReplicatedPG::_scrub(
       // Log any clones we were expecting to be there up to target
       // This will set missing, but will be a no-op if snap.soid == *curclone.
       missing += process_clones_to(head, snapset, osd->clog, info.pgid, mode,
-		        pool.info.allow_incomplete_clones(), target, &curclone);
+		        pool.info.allow_incomplete_clones(), target, &curclone,
+			snap_error);
     }
     bool expected;
     // Check doing_clones() again in case we ran process_clones_to()
@@ -12370,11 +12419,14 @@ void ReplicatedPG::_scrub(
       if (head && !snapset) {
 	osd->clog->info() << mode << " " << info.pgid << " " << soid
 			  << " clone ignored due to missing snapset";
+	scrubber.store->add_snap_error(pool.id, snap_error);
 	continue;
       }
       osd->clog->error() << mode << " " << info.pgid << " " << soid
 			   << " is an unexpected clone";
       ++scrubber.shallow_errors;
+      snap_error.set_headless();
+      scrubber.store->add_snap_error(pool.id, snap_error);
       continue;
     }
 
@@ -12384,11 +12436,13 @@ void ReplicatedPG::_scrub(
       if (missing) {
 	log_missing(missing, head, osd->clog, info.pgid, __func__, mode,
 		    pool.info.allow_incomplete_clones());
+	scrubber.store->add_snap_error(pool.id, snap_error);
       }
 
       // Set this as a new head object
       head = soid;
       missing = 0;
+      snap_error = inconsistent_snapset_wrapper{head.get()};
 
       dout(20) << __func__ << " " << mode << " new head " << head << dendl;
 
@@ -12397,6 +12451,7 @@ void ReplicatedPG::_scrub(
 			  << " no '" << SS_ATTR << "' attr";
         ++scrubber.shallow_errors;
 	snapset = boost::none;
+	snap_error.set_ss_attr_missing();
       } else {
 	bufferlist bl;
 	bl.push_back(p->second.attrs[SS_ATTR]);
@@ -12409,6 +12464,7 @@ void ReplicatedPG::_scrub(
           osd->clog->error() << mode << " " << info.pgid << " " << soid
 		<< " can't decode '" << SS_ATTR << "' attr " << e.what();
 	  ++scrubber.shallow_errors;
+	  snap_error.set_ss_attr_corrupted();
         }
       }
 
@@ -12422,6 +12478,7 @@ void ReplicatedPG::_scrub(
 	    osd->clog->error() << mode << " " << info.pgid << " " << soid
 			       << " snaps.seq not set";
 	    ++scrubber.shallow_errors;
+	    snap_error.set_snapset_mismatch();
           }
 	}
 
@@ -12429,11 +12486,13 @@ void ReplicatedPG::_scrub(
 	  osd->clog->error() << mode << " " << info.pgid << " " << soid
 			  << " snapset.head_exists=false, but head exists";
 	  ++scrubber.shallow_errors;
+	  snap_error.set_head_mismatch();
 	}
 	if (soid.is_snapdir() && snapset->head_exists) {
 	  osd->clog->error() << mode << " " << info.pgid << " " << soid
 			  << " snapset.head_exists=true, but snapdir exists";
 	  ++scrubber.shallow_errors;
+	  snap_error.set_head_mismatch();
 	}
       }
     } else {
@@ -12448,19 +12507,22 @@ void ReplicatedPG::_scrub(
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
 			   << " is missing in clone_size";
 	++scrubber.shallow_errors;
+	snap_error.set_size_mismatch();
       } else {
         if (oi && oi->size != snapset->clone_size[soid.snap]) {
 	  osd->clog->error() << mode << " " << info.pgid << " " << soid
 			     << " size " << oi->size << " != clone_size "
 			     << snapset->clone_size[*curclone];
 	  ++scrubber.shallow_errors;
+	  snap_error.set_size_mismatch();
         }
 
         if (snapset->clone_overlap.count(soid.snap) == 0) {
 	  osd->clog->error() << mode << " " << info.pgid << " " << soid
 			     << " is missing in clone_overlap";
 	  ++scrubber.shallow_errors;
-        } else {
+	  snap_error.set_size_mismatch();
+	} else {
 	  // This checking is based on get_clone_bytes().  The first 2 asserts
 	  // can't happen because we know we have a clone_size and
 	  // a clone_overlap.  Now we check that the interval_set won't
@@ -12482,6 +12544,7 @@ void ReplicatedPG::_scrub(
 	    osd->clog->error() << mode << " " << info.pgid << " " << soid
 			       << " bad interval_set in clone_overlap";
 	    ++scrubber.shallow_errors;
+	    snap_error.set_size_mismatch();
 	  } else {
             stat.num_bytes += snapset->get_clone_bytes(soid.snap);
 	  }
@@ -12500,14 +12563,15 @@ void ReplicatedPG::_scrub(
 	     << " No more objects while processing " << head.get() << dendl;
 
     missing += process_clones_to(head, snapset, osd->clog, info.pgid, mode,
-		      pool.info.allow_incomplete_clones(), all_clones, &curclone);
-
+		      pool.info.allow_incomplete_clones(), all_clones, &curclone,
+		      snap_error);
   }
   // There could be missing found by the test above or even
   // before dropping out of the loop for the last head.
   if (missing) {
     log_missing(missing, head, osd->clog, info.pgid, __func__,
 		mode, pool.info.allow_incomplete_clones());
+    scrubber.store->add_snap_error(pool.id, snap_error);
   }
 
   for (map<hobject_t,pair<uint32_t,uint32_t>, hobject_t::BitwiseComparator>::const_iterator p =

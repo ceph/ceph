@@ -1117,6 +1117,17 @@ namespace librados
     IoCtxImpl *io_ctx_impl;
   };
 
+  struct PlacementGroupImpl;
+  struct CEPH_RADOS_API PlacementGroup {
+    PlacementGroup();
+    PlacementGroup(const PlacementGroup&);
+    ~PlacementGroup();
+    bool parse(const char*);
+    std::unique_ptr<PlacementGroupImpl> impl;
+  };
+
+  CEPH_RADOS_API std::ostream& operator<<(std::ostream&, const PlacementGroup&);
+
   class CEPH_RADOS_API Rados
   {
   public:
@@ -1184,6 +1195,51 @@ namespace librados
 		       std::map<std::string, stats_map>& stats);
     int cluster_stat(cluster_stat_t& result);
     int cluster_fsid(std::string *fsid);
+
+    /**
+     * List inconsistent placement groups in the given pool
+     *
+     * @param pool_id the pool id
+     * @param pgs [out] the inconsistent PGs
+     */
+    int get_inconsistent_pgs(int64_t pool_id,
+                             std::vector<PlacementGroup>* pgs);
+    /**
+     * List the inconsistent objects found in a given PG by last scrub
+     *
+     * @param pg the placement group returned by @c pg_list()
+     * @param start_after the first returned @c objects
+     * @param max_return the max number of the returned @c objects
+     * @param c what to do when the operation is complete and safe
+     * @param objects [out] the objects where inconsistencies are found
+     * @param interval [in,out] an epoch indicating current interval
+     * @returns if a non-zero @c interval is specified, will return -EAGAIN i
+     *          the current interval begin epoch is different.
+     */
+    int get_inconsistent_objects(const PlacementGroup& pg,
+                                 const object_id_t &start_after,
+                                 unsigned max_return,
+                                 AioCompletion *c,
+                                 std::vector<inconsistent_obj_t>* objects,
+                                 uint32_t* interval);
+    /**
+     * List the inconsistent snapsets found in a given PG by last scrub
+     *
+     * @param pg the placement group returned by @c pg_list()
+     * @param start_after the first returned @c objects
+     * @param max_return the max number of the returned @c objects
+     * @param c what to do when the operation is complete and safe
+     * @param snapsets [out] the objects where inconsistencies are found
+     * @param interval [in,out] an epoch indicating current interval
+     * @returns if a non-zero @c interval is specified, will return -EAGAIN i
+     *          the current interval begin epoch is different.
+     */
+    int get_inconsistent_snapsets(const PlacementGroup& pg,
+                                  const object_id_t &start_after,
+                                  unsigned max_return,
+                                  AioCompletion *c,
+                                  std::vector<inconsistent_snapset_t>* snapset,
+                                  uint32_t* interval);
 
     /// get/wait for the most recent osdmap
     int wait_for_latest_osdmap();
