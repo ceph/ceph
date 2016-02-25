@@ -5,18 +5,61 @@
  */
 
 
+#include <iostream>
+
 #include "run_every.h"
 
 
-crimson::RunEvery::RunEvery(std::chrono::milliseconds _wait_period,
-                            std::function<void()>      _body) :
-  wait_period(std::chrono::duration_cast<std::chrono::milliseconds>(_wait_period)),
+// can define ADD_MOVE_SEMANTICS, although not fully debugged and tested
+
+
+namespace chrono = std::chrono;
+
+
+crimson::RunEvery::RunEvery(chrono::milliseconds _wait_period,
+                            std::function<void()> _body) :
+  wait_period(chrono::duration_cast<chrono::milliseconds>(_wait_period)),
   body(_body),
-  finishing(false),
-  thd(&RunEvery::run, this)
+  finishing(false)
+{
+  thd = std::thread(&RunEvery::run, this);
+}
+
+
+#ifdef ADD_MOVE_SEMANTICS
+crimson::RunEvery::RunEvery()
 {
   // empty
 }
+
+
+crimson::RunEvery& crimson::RunEvery::operator=(crimson::RunEvery&& other)
+{
+  // finish run every thread
+  {
+    Guard g(mtx);
+    finishing = true;
+    cv.notify_one();
+  }
+  if (thd.joinable()) {
+    thd.join();
+  }
+
+  // transfer info over from previous thread
+  finishing.store(other.finishing);
+  wait_period = other.wait_period;
+  body = other.body;
+
+  // finish other thread
+  other.finishing.store(true);
+  other.cv.notify_one();
+
+  // start this thread
+  thd = std::thread(&RunEvery::run, this);
+
+  return *this;
+}
+#endif
 
 
 crimson::RunEvery::~RunEvery() {
@@ -29,11 +72,12 @@ crimson::RunEvery::~RunEvery() {
 void crimson::RunEvery::run() {
   Lock l(mtx);
   while(!finishing) {
-    TimePoint until = std::chrono::steady_clock::now() + wait_period;
-    while (std::chrono::steady_clock::now() < until) {
+    TimePoint until = chrono::steady_clock::now() + wait_period;
+    while (!finishing && chrono::steady_clock::now() < until) {
       cv.wait_until(l, until);
-      if (finishing) return;
     }
-    body();
+    if (!finishing) {
+      body();
+    }
   }
 }

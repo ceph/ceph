@@ -7,11 +7,10 @@
 
 #pragma once
 
-#include <atomic>
 #include <chrono>
-#include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <thread>
 
 
 namespace crimson {
@@ -21,20 +20,36 @@ namespace crimson {
   // immediately
   class RunEvery {
     using Lock      = std::unique_lock<std::mutex>;
+    using Guard     = std::lock_guard<std::mutex>;
     using TimePoint = std::chrono::steady_clock::time_point;
         
-    std::atomic_bool          finishing;
+    bool                      finishing;
     std::chrono::milliseconds wait_period;
-    std::thread               thd;
     std::function<void()>     body;
     std::mutex                mtx;
     std::condition_variable   cv;
 
+    // put threads last so all other variables are initialized first
+
+    std::thread               thd;
+
   public:
 
+#ifdef ADD_MOVE_SEMANTICS
+    RunEvery();
+#endif
     RunEvery(std::chrono::milliseconds _wait_period,
 	     std::function<void()>     _body);
     ~RunEvery();
+
+    RunEvery(const RunEvery& other) = delete;
+    RunEvery& operator=(const RunEvery& other) = delete;
+    RunEvery(RunEvery&& other) = delete;
+#ifdef ADD_MOVE_SEMANTICS
+    RunEvery& operator=(RunEvery&& other);
+#else
+    RunEvery& operator=(RunEvery&& other) = delete;
+#endif
 
   protected:
 
