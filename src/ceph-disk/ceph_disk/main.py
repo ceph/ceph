@@ -3936,6 +3936,18 @@ def main_trigger(args):
                 args.dev,
             ]
         )
+
+    elif parttype in (PTYPE['plain']['osd']['ready'],
+                      PTYPE['luks']['osd']['ready']):
+        command(
+            [
+                '/usr/sbin/ceph-disk',
+                'activate',
+                '--dmcrypt',
+                args.dev,
+            ]
+        )
+
     elif parttype in (PTYPE['regular']['journal']['ready'],
                       PTYPE['mpath']['journal']['ready']):
         command(
@@ -3946,68 +3958,14 @@ def main_trigger(args):
             ]
         )
 
-        # journals are easy: map, chown, activate-journal
-    elif parttype == PTYPE['plain']['journal']['ready']:
-        command(
-            [
-                '/sbin/cryptsetup',
-                '--key-file',
-                '/etc/ceph/dmcrypt-keys/{partid}'.format(partid=partid),
-                '--key-size',
-                '256',
-                'create',
-                partid,
-                args.dev,
-            ]
-        )
-        newdev = '/dev/mapper/' + partid
-        count = 0
-        while not os.path.exists(newdev) and count <= 10:
-            time.sleep(1)
-            count += 1
-        command(
-            [
-                '/bin/chown',
-                'ceph:ceph',
-                newdev,
-            ]
-        )
+    elif parttype in (PTYPE['plain']['journal']['ready'],
+                      PTYPE['luks']['journal']['ready']):
         command(
             [
                 '/usr/sbin/ceph-disk',
                 'activate-journal',
-                newdev,
-            ]
-        )
-    elif parttype == PTYPE['luks']['journal']['ready']:
-        command(
-            [
-                '/sbin/cryptsetup',
-                '--key-file',
-                '/etc/ceph/dmcrypt-keys/{partid}.luks.key'.format(
-                    partid=partid),
-                'luksOpen',
+                '--dmcrypt',
                 args.dev,
-                partid,
-            ]
-        )
-        newdev = '/dev/mapper/' + partid
-        count = 0
-        while not os.path.exists(newdev) and count <= 10:
-            time.sleep(1)
-            count += 1
-        command(
-            [
-                '/bin/chown',
-                'ceph:ceph',
-                newdev,
-            ]
-        )
-        command(
-            [
-                '/usr/sbin/ceph-disk',
-                'activate-journal',
-                newdev,
             ]
         )
 
@@ -4250,6 +4208,23 @@ def make_trigger_parser(subparsers):
     trigger_parser.add_argument(
         'dev',
         help=('device'),
+    )
+    trigger_parser.add_argument(
+        '--cluster',
+        metavar='NAME',
+        default='ceph',
+        help='cluster name to assign this disk to',
+    )
+    trigger_parser.add_argument(
+        '--dmcrypt',
+        action='store_true', default=None,
+        help='map DATA and/or JOURNAL devices with dm-crypt',
+    )
+    trigger_parser.add_argument(
+        '--dmcrypt-key-dir',
+        metavar='KEYDIR',
+        default='/etc/ceph/dmcrypt-keys',
+        help='directory where dm-crypt keys are stored',
     )
     trigger_parser.add_argument(
         '--sync',
