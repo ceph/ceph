@@ -330,6 +330,11 @@ namespace crimson {
 	check_time(std::chrono::duration_cast<Duration>(_check_time))
       {
 	assert(_erase_age >= _idle_age);
+	sched_ahead_thd = std::thread(&PriorityQueue::run_sched_ahead, this);
+	cleaning_job =
+	  std::unique_ptr<RunEvery>(
+	    new RunEvery(check_time,
+			 std::bind(&PriorityQueue::do_clean, this)));
       }
 
 
@@ -337,16 +342,6 @@ namespace crimson {
 	finishing = true;
 	sched_ahead_cv.notify_one();
 	sched_ahead_thd.join();
-      }
-
-
-      void start() {
-	sched_ahead_thd = std::thread(&PriorityQueue::run_sched_ahead, this);
-	cleaning_job =
-	  std::unique_ptr<RunEvery>(
-	    new RunEvery(check_time,
-			 std::bind(&PriorityQueue::do_clean, this)));
-	started = true;
       }
 
 
