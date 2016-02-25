@@ -604,7 +604,11 @@ int NVMEDevice::open(string p)
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   fd = -1; // defensive
   if (r <= 0) {
-    r = -errno;
+    if (r == 0) {
+      r = -EINVAL;
+    } else {
+      r = -errno;
+    }
     derr << __func__ << " unable to read " << p << ": " << cpp_strerror(r) << dendl;
     return r;
   }
