@@ -37,6 +37,7 @@ import shlex
 import pwd
 import grp
 import types
+import textwrap
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 CEPH_LOCKBOX_ONDISK_MAGIC = 'ceph lockbox volume v001'
@@ -4386,7 +4387,15 @@ def parse_args(argv):
 def make_trigger_parser(subparsers):
     trigger_parser = subparsers.add_parser(
         'trigger',
-        help='Trigger an event (caled by udev)')
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        The partition given in argument is activated. The type of the
+        partition (data, lockbox, journal etc.) is detected by its
+        type. If the init system is upstart or systemd, the activation is
+        delegated to it and runs asynchronously, which
+        helps reduce the execution time of udev actions.
+        """)),
+        help='activate any device (called by udev)')
     trigger_parser.add_argument(
         'dev',
         help=('device'),
@@ -4400,7 +4409,7 @@ def make_trigger_parser(subparsers):
     trigger_parser.add_argument(
         '--dmcrypt',
         action='store_true', default=None,
-        help='map DATA and/or JOURNAL devices with dm-crypt',
+        help='map devices with dm-crypt',
     )
     trigger_parser.add_argument(
         '--dmcrypt-key-dir',
@@ -4422,6 +4431,21 @@ def make_trigger_parser(subparsers):
 def make_activate_parser(subparsers):
     activate_parser = subparsers.add_parser(
         'activate',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Activate the OSD found at PATH (can be a directory
+        or a device partition, possibly encrypted). When
+        activated for the first time, a unique OSD id is obtained
+        from the cluster. If PATH is a directory, a symbolic
+        link is added in {statedir}/osd/ceph-$id. If PATH is
+        a partition, it is mounted on {statedir}/osd/ceph-$id.
+        Finally, the OSD daemon is run.
+
+        If the OSD depends on auxiliary partitions (journal, block, ...)
+        they need to be available otherwise activation will fail. It
+        may happen if a journal is encrypted and cryptsetup was not
+        run yet.
+        """.format(statedir=STATEDIR))),
         help='Activate a Ceph OSD')
     activate_parser.add_argument(
         '--mount',
@@ -4477,6 +4501,20 @@ def make_activate_parser(subparsers):
 def make_activate_lockbox_parser(subparsers):
     parser = subparsers.add_parser(
         'activate-lockbox',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Mount the partition found at PATH on {statedir}/osd-lockbox/$uuid
+        where $uuid uniquely identifies the OSD that needs this lockbox
+        to retrieve keys from the monitor and unlock its partitions.
+
+        If the OSD has one or more auxiliary devices (journal, block, ...)
+        symbolic links are created at {statedir}/osd-lockbox/$other_uuid
+        and point to {statedir}/osd-lockbox/$uuid. This will, for instance,
+        allow a journal encrypted in a partition identified by $other_uuid to
+        fetch the keys it needs from the monitor.
+
+        Finally the OSD is activated, as it would be with ceph-disk activate.
+        """.format(statedir=STATEDIR))),
         help='Activate a Ceph lockbox')
     parser.add_argument(
         '--activate-key',
@@ -4512,6 +4550,15 @@ def make_activate_journal_parser(subparsers):
 def make_activate_space_parser(name, subparsers):
     activate_space_parser = subparsers.add_parser(
         'activate-%s' % name,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Activating a {name} partition is only meaningfull
+        if it is encrypted and it will map it using
+        cryptsetup.
+
+        Finally the corresponding OSD is activated,
+        as it would be with ceph-disk activate.
+        """.format(name=name))),
         help='Activate an OSD via its %s device' % name)
     activate_space_parser.add_argument(
         'dev',
@@ -4558,6 +4605,12 @@ def make_activate_space_parser(name, subparsers):
 def make_activate_all_parser(subparsers):
     activate_all_parser = subparsers.add_parser(
         'activate-all',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Activate all OSD partitions found in /dev/disk/by-parttypeuuid.
+        The partitions containing auxiliary devices (journal, block, ...)
+        are not activated.
+        """)),
         help='Activate all tagged OSD partitions')
     activate_all_parser.add_argument(
         '--activate-key',
@@ -4582,6 +4635,11 @@ def make_activate_all_parser(subparsers):
 def make_list_parser(subparsers):
     list_parser = subparsers.add_parser(
         'list',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Display all partitions on the system and their
+        associated Ceph information, if any.
+        """)),
         help='List disks, partitions, and Ceph OSDs')
     list_parser.add_argument(
         '--format',
@@ -4604,6 +4662,11 @@ def make_list_parser(subparsers):
 def make_suppress_parser(subparsers):
     suppress_parser = subparsers.add_parser(
         'suppress-activate',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Add a prefix to the list of suppressed device names
+        so that they are ignored by all activate* subcommands.
+        """)),
         help='Suppress activate on a device (prefix)')
     suppress_parser.add_argument(
         'path',
@@ -4616,6 +4679,12 @@ def make_suppress_parser(subparsers):
 
     unsuppress_parser = subparsers.add_parser(
         'unsuppress-activate',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Remove a prefix from the list of suppressed device names
+        so that they are no longer ignored by all
+        activate* subcommands.
+        """)),
         help='Stop suppressing activate on a device (prefix)')
     unsuppress_parser.add_argument(
         'path',
@@ -4631,6 +4700,18 @@ def make_suppress_parser(subparsers):
 def make_deactivate_parser(subparsers):
     deactivate_parser = subparsers.add_parser(
         'deactivate',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Deactivate the OSD located at PATH. It stops the OSD daemon
+        and optionally marks it out. The content of the OSD is
+        left untouched but the, ready, active, INIT-specific
+        files are removed (so that it is not automatically
+        re-activated by the udev rules) and the file deactive
+        is created to remember the OSD is deactivated.
+
+        If the OSD is dmcrypt, remove the data dmcrypt map. When
+        deactivate finishes, the OSD is down.
+        """)),
         help='Deactivate a Ceph OSD')
     deactivate_parser.add_argument(
         '--cluster',
@@ -4662,6 +4743,13 @@ def make_deactivate_parser(subparsers):
 def make_destroy_parser(subparsers):
     destroy_parser = subparsers.add_parser(
         'destroy',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Destroy the OSD located at PATH.
+        It removes the OSD from the cluster, the crushmap and
+        deallocates the OSD id. An OSD must be down before it
+        can be destroyed.
+        """)),
         help='Destroy a Ceph OSD')
     destroy_parser.add_argument(
         '--cluster',
@@ -4701,6 +4789,13 @@ def make_destroy_parser(subparsers):
 def make_zap_parser(subparsers):
     zap_parser = subparsers.add_parser(
         'zap',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Zap/erase/destroy a device's partition table and contents. It
+        actually uses sgdisk and it's option --zap-all to
+        destroy both GPT and MBR data structures so that the disk
+        becomes suitable for repartitioning.
+        """)),
         help='Zap/erase/destroy a device\'s partition table (and contents)')
     zap_parser.add_argument(
         'dev',
