@@ -103,7 +103,7 @@ struct CompatSet {
       for (map<uint64_t,string>::const_iterator p = names.begin();
 	   p != names.end();
 	   ++p) {
-	char s[10];
+	char s[18];
 	snprintf(s, sizeof(s), "feature_%lld", (unsigned long long)p->first);
 	f->dump_string(s, p->second);
       }
