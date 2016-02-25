@@ -104,7 +104,6 @@ class SharedDriverData {
   friend class AioCompletionThread;
 
   bool aio_stop = false;
-  int ref = 1;
   void _aio_thread();
   void _aio_start() {
     aio_thread.create("nvme_aio_thread");
