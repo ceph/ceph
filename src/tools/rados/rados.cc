@@ -143,6 +143,11 @@ void usage(ostream& out)
 "       --lock-duration              Lock duration (in seconds)\n"
 "       --lock-type                  Lock type (shared, exclusive)\n"
 "\n"
+"SCRUB AND REPAIR:\n"
+"   list-inconsistent-pg <pool>      list inconsistent PGs in given pool\n"
+"   list-inconsistent-obj <pgid>     list inconsistent objects in given pg\n"
+"   list-inconsistent-snapset <pgid> list inconsistent snapsets in the given pg\n"
+"\n"
 "CACHE POOLS: (for testing/development only)\n"
 "   cache-flush <obj-name>           flush cache pool object (blocking)\n"
 "   cache-try-flush <obj-name>       flush cache pool object (non-blocking)\n"
@@ -1210,6 +1215,218 @@ static int do_cache_flush_evict_all(IoCtx& io_ctx, bool blocking)
   return errors ? -1 : 0;
 }
 
+static int do_get_inconsistent_pg_cmd(const std::vector<const char*> &nargs,
+				      Rados& rados,
+				      Formatter& formatter)
+{
+  if (nargs.size() < 2) {
+    usage_exit();
+  }
+  int64_t pool_id = rados.pool_lookup(nargs[1]);
+  if (pool_id < 0) {
+    cerr << "pool \"" << nargs[1] << "\" not found" << std::endl;
+    return (int)pool_id;
+  }
+  std::vector<PlacementGroup> pgs;
+  int ret = rados.get_inconsistent_pgs(pool_id, &pgs);
+  if (ret) {
+    return ret;
+  }
+  formatter.open_array_section("pgs");
+  for (auto& pg : pgs) {
+    formatter.dump_stream("pg") << pg;
+  }
+  formatter.close_section();
+  formatter.flush(cout);
+  cout << std::endl;
+  return 0;
+}
+
+static void dump_shard(const shard_info_t& shard,
+		       const inconsistent_obj_t& inc,
+		       Formatter &f)
+{
+  f.dump_bool("missing", shard.has_shard_missing());
+  if (shard.has_shard_missing()) {
+    return;
+  }
+  f.dump_bool("read_error", shard.has_read_error());
+  f.dump_bool("data_digest_mismatch", shard.has_data_digest_mismatch());
+  f.dump_bool("omap_digest_mismatch", shard.has_omap_digest_mismatch());
+  f.dump_bool("size_mismatch", shard.has_size_mismatch());
+  if (!shard.has_read_error()) {
+    f.dump_bool("data_digest_mismatch_oi", shard.has_data_digest_mismatch_oi());
+    f.dump_bool("omap_digest_mismatch_oi", shard.has_omap_digest_mismatch_oi());
+    f.dump_bool("size_mismatch_oi", shard.has_size_mismatch_oi());
+  }
+  f.dump_unsigned("size", shard.size);
+  if (shard.omap_digest_present) {
+    f.dump_format("omap_digest", "0x%08x", shard.omap_digest);
+  }
+  if (shard.data_digest_present) {
+    f.dump_format("data_digest", "0x%08x", shard.data_digest);
+  }
+  if (inc.has_attr_mismatch()) {
+    f.open_object_section("attrs");
+    for (auto kv : shard.attrs) {
+      f.open_object_section("attr");
+      f.dump_string("name", kv.first);
+      bufferlist b64;
+      kv.second.encode_base64(b64);
+      string v(b64.c_str(), b64.length());
+      f.dump_string("value", v);
+      f.close_section();
+    }
+    f.close_section();
+  }
+}
+
+static void dump_object_id(const object_id_t& object,
+			Formatter &f)
+{
+  f.dump_string("name", object.name);
+  f.dump_string("nspace", object.nspace);
+  f.dump_string("locator", object.locator);
+  switch (object.snap) {
+  case CEPH_NOSNAP:
+    f.dump_string("snap", "head");
+    break;
+  case CEPH_SNAPDIR:
+    f.dump_string("snap", "snapdir");
+    break;
+  default:
+    f.dump_format("snap", "0x%08x", object.snap);
+    break;
+  }
+}
+
+static void dump_inconsistent(const inconsistent_obj_t& inc,
+			      Formatter &f)
+{
+  f.open_object_section("object");
+  dump_object_id(inc.object, f);
+  f.close_section();
+  f.dump_bool("missing", inc.has_shard_missing());
+  f.dump_bool("stat_err", inc.has_stat_error());
+  f.dump_bool("read_err", inc.has_read_error());
+  f.dump_bool("data_digest_mismatch", inc.has_data_digest_mismatch());
+  f.dump_bool("omap_digest_mismatch", inc.has_omap_digest_mismatch());
+  f.dump_bool("size_mismatch", inc.has_size_mismatch());
+  f.dump_bool("attr_mismatch", inc.has_attr_mismatch());
+  f.open_array_section("shards");
+  for (auto osd_shard : inc.shards) {
+    f.open_object_section("shard");
+    f.dump_int("osd", osd_shard.first);
+    dump_shard(osd_shard.second, inc, f);
+    f.close_section();
+  }
+  f.close_section();
+  f.close_section();
+}
+
+static void dump_inconsistent(const inconsistent_snapset_t& inc,
+			      Formatter &f)
+{
+  dump_object_id(inc.object, f);
+  f.dump_bool("ss_attr_missing", inc.ss_attr_missing());
+  f.dump_bool("ss_attr_corrupted", inc.ss_attr_corrupted());
+  f.dump_bool("clone_missing", inc.clone_missing());
+  f.dump_bool("snapset_mismatch", inc.snapset_mismatch());
+  f.dump_bool("head_mismatch", inc.head_mismatch());
+  f.dump_bool("headless", inc.headless());
+  f.dump_bool("size_mismatch", inc.size_mismatch());
+
+  if (inc.clone_missing()) {
+    f.open_array_section("clones");
+    for (auto snap : inc.clones) {
+      f.dump_unsigned("snap", snap);
+    }
+    f.close_section();
+
+    f.open_array_section("missing");
+    for (auto snap : inc.missing) {
+      f.dump_unsigned("snap", snap);
+    }
+    f.close_section();
+  }
+  f.close_section();
+}
+
+// dispatch the call by type
+static int do_get_inconsistent(Rados& rados,
+			       const PlacementGroup& pg,
+			       const librados::object_id_t &start,
+			       unsigned max_return,
+			       AioCompletion *c,
+			       std::vector<inconsistent_obj_t>* objs,
+			       uint32_t* interval)
+{
+  return rados.get_inconsistent_objects(pg, start, max_return, c,
+					objs, interval);
+}
+
+static int do_get_inconsistent(Rados& rados,
+			       const PlacementGroup& pg,
+			       const librados::object_id_t &start,
+			       unsigned max_return,
+			       AioCompletion *c,
+			       std::vector<inconsistent_snapset_t>* snapsets,
+			       uint32_t* interval)
+{
+  return rados.get_inconsistent_snapsets(pg, start, max_return, c,
+					 snapsets, interval);
+}
+
+template <typename T>
+static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
+				   Rados& rados,
+				   Formatter& formatter)
+{
+  if (nargs.size() < 2) {
+    usage_exit();
+  }
+  PlacementGroup pg;
+  int ret = 0;
+  ret = pg.parse(nargs[1]);
+  if (!ret) {
+    cerr << "bad pg: " << nargs[1] << std::endl;
+    return ret;
+  }
+
+  uint32_t interval = 0;
+  const unsigned max_item_num = 32;
+  for (librados::object_id_t start;;) {
+    std::vector<T> items;
+    auto completion = librados::Rados::aio_create_completion();
+    ret = do_get_inconsistent(rados, pg, start, max_item_num, completion,
+			      &items, &interval);
+    completion->wait_for_safe();
+    ret = completion->get_return_value();
+    completion->release();
+    if (ret == -EAGAIN) {
+      cerr << "interval#" << interval << " expired." << std::endl;
+      break;
+    }
+    if (start.name.empty()) {
+      formatter.open_array_section("inconsistents");
+    }
+    for (auto& inc : items) {
+      formatter.open_object_section("inconsistent");
+      dump_inconsistent(inc, formatter);
+    }
+    if (items.size() < max_item_num) {
+      formatter.close_section();
+      break;
+    }
+    if (!items.empty()) {
+      start = items.back().object;
+    }
+    items.clear();
+  }
+  formatter.flush(cout);
+  return ret;
+}
+
 /**********************************************
 
 **********************************************/
@@ -1407,11 +1624,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("format");
   if (i != opts.end()) {
     const char *format = i->second.c_str();
-    if (strcmp(format, "xml") == 0)
-      formatter = new XMLFormatter(pretty_format);
-    else if (strcmp(format, "json") == 0)
-      formatter = new JSONFormatter(pretty_format);
-    else {
+    formatter = Formatter::create(format);
+    if (!formatter) {
       cerr << "unrecognized format: " << format << std::endl;
       return -EINVAL;
     }
@@ -2833,7 +3047,21 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     } else {
       cout << std::endl;
     }
-
+  } else if (strcmp(nargs[0], "list-inconsistent-pg") == 0) {
+    if (!formatter) {
+      formatter = new JSONFormatter(pretty_format);
+    }
+    ret = do_get_inconsistent_pg_cmd(nargs, rados, *formatter);
+  } else if (strcmp(nargs[0], "list-inconsistent-obj") == 0) {
+    if (!formatter) {
+      formatter = new JSONFormatter(pretty_format);
+    }
+    ret = do_get_inconsistent_cmd<inconsistent_obj_t>(nargs, rados, *formatter);
+  } else if (strcmp(nargs[0], "list-inconsistent-snapset") == 0) {
+    if (!formatter) {
+      formatter = new JSONFormatter(pretty_format);
+    }
+    ret = do_get_inconsistent_cmd<inconsistent_snapset_t>(nargs, rados, *formatter);
   } else if (strcmp(nargs[0], "cache-flush") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
