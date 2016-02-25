@@ -503,7 +503,8 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
 
   ProbeContext ctx = {sn_tag, this, nullptr};
   r = spdk_nvme_probe(&ctx, probe_cb, attach_cb);
-  if (r || !ctx.driver) {
+  if (r < 0) {
+    assert(!ctx.driver);
     derr << __func__ << " device probe nvme failed" << dendl;
     return r;
   }
