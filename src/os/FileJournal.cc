@@ -648,6 +648,9 @@ void FileJournal::stop_writer()
     commit_cond.Signal();
   }
   write_thread.join();
+ 
+  // write journal header now so that we have less to replay on remount
+  write_header_sync();
 
 #ifdef HAVE_LIBAIO
   // stop aio completeion thread *after* writer thread has stopped
@@ -733,7 +736,14 @@ bufferptr FileJournal::prepare_header()
   return bp;
 }
 
-
+void FileJournal::write_header_sync()
+{
+  Mutex::Locker locker(write_lock);
+  must_write_header = true;
+  bufferlist bl;
+  do_write(bl);
+  dout(20) << __func__ << " finish" << dendl;
+}
 
 int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
 {
