@@ -660,71 +660,101 @@ public:
 
   // -- agent shared state --
   Mutex agent_lock;
-  Cond agent_cond;
-  map<uint64_t, set<PGRef> > agent_queue;
-  set<PGRef>::iterator agent_queue_pos;
-  bool agent_valid_iterator;
   int agent_ops;
   int flush_mode_high_count; //once have one pg with FLUSH_MODE_HIGH then flush objects with high speed
   set<hobject_t, hobject_t::BitwiseComparator> agent_oids;
   bool agent_active;
-  struct AgentThread : public Thread {
-    OSDService *osd;
-    explicit AgentThread(OSDService *o) : osd(o) {}
-    void *entry() {
-      osd->agent_entry();
-      return NULL;
-    }
-  } agent_thread;
   bool agent_stop_flag;
   Mutex agent_timer_lock;
   SafeTimer agent_timer;
 
-  void agent_entry();
-  void agent_stop();
-
-  void _enqueue(PG *pg, uint64_t priority) {
-    if (!agent_queue.empty() &&
-	agent_queue.rbegin()->first < priority)
-      agent_valid_iterator = false;  // inserting higher-priority queue
-    set<PGRef>& nq = agent_queue[priority];
-    if (nq.empty())
-      agent_cond.Signal();
-    nq.insert(pg);
-  }
-
-  void _dequeue(PG *pg, uint64_t old_priority) {
-    set<PGRef>& oq = agent_queue[old_priority];
-    set<PGRef>::iterator p = oq.find(pg);
-    assert(p != oq.end());
-    if (p == agent_queue_pos)
-      ++agent_queue_pos;
-    oq.erase(p);
-    if (oq.empty()) {
-      if (agent_queue.rbegin()->first == old_priority)
-	agent_valid_iterator = false;
-      agent_queue.erase(old_priority);
+  struct agent_item{
+    PGRef m_pg;
+    uint64_t m_priority;
+    agent_item() {}
+    agent_item(PG* pg, uint64_t priority):m_pg(pg),m_priority(priority) {
     }
-  }
+  };
+  
+  struct item_compare{
+    bool operator ()(agent_item* item1,agent_item* item2) {
+      if (item1->m_pg == item2->m_pg)
+      	return false;
+      return item1->m_priority > item2->m_priority;
+    }
+  };
+
+  ThreadPool agent_tp;
+  set<agent_item*, item_compare> agent_queue;
+  
+  struct AgentWQ : public ThreadPool::WorkQueue<agent_item> {
+    OSDService *osd;
+    AgentWQ(OSDService *o, time_t ti, time_t si, ThreadPool *tp)
+      : ThreadPool::WorkQueue<agent_item>("OSD::AgentWQ", ti, si, tp), osd(o) {}
+    bool _empty() {
+      return osd->agent_queue.empty();
+    }
+    bool _enqueue(agent_item *item) {
+      set<agent_item*, item_compare>::iterator it = osd->agent_queue.find(item);
+      if (it != osd->agent_queue.end()) {
+      	agent_item* orig_item = *it;
+      	osd->agent_queue.erase(it);
+	delete orig_item;
+      }
+      osd->agent_queue.insert(item);
+      return true;
+    }
+    void _dequeue(agent_item *item) {
+      set<agent_item*, item_compare>::iterator it = osd->agent_queue.find(item);
+      if (it != osd->agent_queue.end()){
+      	agent_item* orig_item = *it;
+      	osd->agent_queue.erase(it);
+	delete orig_item;
+      }
+    }
+    agent_item *_dequeue() {
+      if (osd->agent_queue.empty()){
+       	return NULL;
+      }
+      set<agent_item*, item_compare>::iterator it = osd->agent_queue.begin();
+      agent_item *item = *it;
+      osd->agent_queue.erase(it);
+      return item;
+    }
+    void _process(agent_item *item, ThreadPool::TPHandle &handle) {
+      osd->agent_entry(item->m_pg);
+      delete item;
+    }
+    void _clear() {   
+      while (!osd->agent_queue.empty()) {
+	set<agent_item*, item_compare>::iterator it = osd->agent_queue.begin();
+	agent_item* item = *it;
+	osd->agent_queue.erase(it);
+	delete item;
+      }
+    }
+  }agent_wq;
+
+  void agent_entry(PGRef pg);
+  void agent_stop();
 
   /// enable agent for a pg
   void agent_enable_pg(PG *pg, uint64_t priority) {
-    Mutex::Locker l(agent_lock);
-    _enqueue(pg, priority);
+    agent_wq.queue(new agent_item(pg, priority));
   }
 
   /// adjust priority for an enagled pg
   void agent_adjust_pg(PG *pg, uint64_t old_priority, uint64_t new_priority) {
-    Mutex::Locker l(agent_lock);
     assert(new_priority != old_priority);
-    _enqueue(pg, new_priority);
-    _dequeue(pg, old_priority);
+    agent_item old_item(pg,old_priority);
+    agent_wq.dequeue(&old_item);
+    agent_wq.queue(new agent_item(pg, new_priority));
   }
 
   /// disable agent for a pg
   void agent_disable_pg(PG *pg, uint64_t old_priority) {
-    Mutex::Locker l(agent_lock);
-    _dequeue(pg, old_priority);
+    agent_item old_item(pg,old_priority);
+    agent_wq.dequeue(&old_item);
   }
 
   /// note start of an async (evict) op
@@ -738,7 +768,6 @@ public:
     Mutex::Locker l(agent_lock);
     assert(agent_ops > 0);
     --agent_ops;
-    agent_cond.Signal();
   }
 
   /// note start of an async (flush) op
@@ -756,7 +785,6 @@ public:
     --agent_ops;
     assert(agent_oids.count(oid) == 1);
     agent_oids.erase(oid);
-    agent_cond.Signal();
   }
 
   /// check if we are operating on an object

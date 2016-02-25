@@ -12098,6 +12098,8 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
       osd->agent_enable_pg(this, agent_state->evict_effort);
     } else if (old_effort != agent_state->evict_effort) {
       osd->agent_adjust_pg(this, old_effort, agent_state->evict_effort);
+    }else{ 
+      osd->agent_enable_pg(this, agent_state->evict_effort);
     }
   }
   return requeued;

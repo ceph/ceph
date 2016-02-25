@@ -565,6 +565,10 @@ OPTION(osd_agent_min_evict_effort, OPT_FLOAT, .1)
 OPTION(osd_agent_quantize_effort, OPT_FLOAT, .1)
 OPTION(osd_agent_delay_time, OPT_FLOAT, 5.0)
 
+OPTION(osd_agent_threads, OPT_INT, 4)
+OPTION(osd_agent_thread_timeout, OPT_INT, 30)
+OPTION(osd_agent_thread_suicide_timeout, OPT_INT, 0)
+
 // osd ignore history.last_epoch_started in find_best_info
 OPTION(osd_find_best_info_ignore_history_les, OPT_BOOL, false)
 
