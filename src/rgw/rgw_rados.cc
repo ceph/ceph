@@ -3680,10 +3680,10 @@ int RGWRados::init_complete()
         << cpp_strerror(-ret) << dendl;
     return ret;
   }
-  auto md_log = meta_mgr->get_log(current_period.get_id());
 
-  meta_notifier = new RGWMetaNotifier(this, md_log);
   if (is_meta_master()) {
+    auto md_log = meta_mgr->get_log(current_period.get_id());
+    meta_notifier = new RGWMetaNotifier(this, md_log);
     meta_notifier->start();
   }
 
