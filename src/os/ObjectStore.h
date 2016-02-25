@@ -2074,6 +2074,23 @@ public:
      return read(c->get_cid(), oid, offset, len, bl, op_flags, allow_eio);
    }
 
+   virtual int async_read_dispatch(
+     Sequencer *osr,
+     Context *ctx,
+     const coll_t& cid,
+     const ghobject_t& oid,
+     uint64_t offset,
+     size_t len,
+     bufferlist* bl,
+     uint32_t op_flags,
+     Context *blessed_context) {
+     return -EWOULDBLOCK;
+   }
+
+  virtual bool async_read_capable() {
+    return false;
+  }
+
   /**
    * fiemap -- get extent map of data of an object
    *

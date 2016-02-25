@@ -22,7 +22,11 @@
 #include <deque>
 #include <boost/scoped_ptr.hpp>
 #include <fstream>
+#include <thread>
 using namespace std;
+#ifdef HAVE_LIBAIO
+#include <libaio.h>
+#endif
 
 #include "include/unordered_map.h"
 
@@ -35,6 +39,7 @@ using namespace std;
 #include "common/WorkQueue.h"
 
 #include "common/Mutex.h"
+#include "common/errno.h"
 #include "HashIndex.h"
 #include "IndexManager.h"
 #include "os/ObjectMap.h"
@@ -187,6 +192,11 @@ private:
     }
   } sync_thread;
 
+  // Async read threads
+  bool async_read_avail;
+  int create_read_completion_threads();
+  void destroy_read_completion_threads();
+
   // -- op workqueue --
   struct Op {
     utime_t start;
@@ -334,6 +344,21 @@ private:
     }
   };
 
+  OpSequencer *may_create_op_sequencer(Sequencer *parentp)
+  {
+    assert(parentp);
+    OpSequencer *osr;
+    if (parentp->p) {
+      osr = static_cast<OpSequencer *>(parentp->p.get());
+    } else {
+      osr = new OpSequencer(next_osr_id.inc());
+      osr->set_cct(g_ceph_context);
+      osr->parent = parentp;
+      parentp->p = osr;
+    }
+    return osr;
+  }
+
   friend ostream& operator<<(ostream& out, const OpSequencer& s);
 
   FDCache fdcache;
@@ -381,6 +406,103 @@ private:
       assert(store->op_queue.empty());
     }
   } op_wq;
+
+#ifdef HAVE_LIBAIO
+#define MAX_READ_EVENTS (1024*1024)
+  // See struct aio_info
+  struct read_aio {
+    struct iocb iocb;
+    FDRef fd;
+    bufferlist *bl;
+    bufferptr *bptr;
+    uint32_t op_flags;
+
+    int64_t off, len;
+    unsigned alignment;
+    const ghobject_t& oid;
+    Context *context;
+    Context *parent_context;
+    int status;
+
+    read_aio(FDRef fd_arg, bufferlist *b, uint64_t offset_arg, uint64_t len_arg,
+             unsigned alignment_arg, uint32_t opflags, const ghobject_t& oid_arg,
+             Context *context_arg, Context *pctxt)
+      : fd(fd_arg), bl(b), op_flags(opflags),
+        off(offset_arg), len(len_arg), alignment(alignment_arg), oid(oid_arg),
+        context(context_arg), parent_context(pctxt), status(0)
+    {
+      // prealloc space for entire read
+      bptr = new bufferptr((unsigned) len + alignment);
+      memset((void*)&iocb, 0, sizeof(iocb));
+    }
+    ~read_aio() {
+      delete bptr;
+    }
+  };
+
+  class ReadCompletionThread {
+    std::thread completion_thread;
+    FileStore *fs;
+  public:
+    Mutex io_lock;
+    Cond io_cond;
+    io_context_t read_aio_ctx;
+    bool thrd_active;
+    int thrd_pending;
+
+    void completion_func() {
+      fs->read_finish_thread_entry(this);
+    }
+
+    int inc_thrd_pending() {
+      Mutex::Locker ll(io_lock);
+      if (thrd_active) {
+	++thrd_pending;
+	return 0;
+      }
+      return -EFAULT;
+    }
+
+    bool dec_thrd_pending(int retcode) {
+      Mutex::Locker ll(io_lock);
+      assert(thrd_pending >= 0);
+      if (retcode > 0)
+	thrd_pending -= retcode;
+      return (!thrd_active && thrd_pending == 0);
+    }
+
+    void thrd_err_wait() {
+      Mutex::Locker ll(io_lock);
+      io_cond.Wait(io_lock);
+    }
+
+    int Start() {
+      completion_thread = std::thread(&ReadCompletionThread::completion_func, this);
+      return completion_thread.joinable() ? 0 : -ESHUTDOWN;
+    }
+
+    ReadCompletionThread(FileStore *fs_arg) :
+      completion_thread(), fs(fs_arg), io_lock("ReadCompletionThread:iolock"),
+      thrd_active(true), thrd_pending(0) {
+    }
+
+    ~ReadCompletionThread() {
+      io_lock.Lock();
+      io_cond.Signal();
+      thrd_active = false;
+      io_lock.Unlock();
+      io_destroy(read_aio_ctx);
+      completion_thread.join();
+    }
+  };
+
+  void read_finish_thread_entry(ReadCompletionThread *rct);
+  vector<ReadCompletionThread*> read_completion_threads;
+  void async_read_finish(read_aio *rio);
+  void read_aio_bl(FDRef fdref, bufferlist* bl,
+		   off64_t& pos, size_t len, unsigned alignment, Context *ctx,
+		   Context *pctx, uint32_t op_flags, const ghobject_t &oid, int thread_index);
+#endif
 
   void _do_op(OpSequencer *o, ThreadPool::TPHandle &handle);
   void _finish_op(OpSequencer *o);
@@ -545,6 +667,23 @@ public:
     bufferlist& bl,
     uint32_t op_flags = 0,
     bool allow_eio = false);
+
+  bool async_read_capable() override {
+    return async_read_avail;
+  }
+#ifdef HAVE_LIBAIO
+  int async_read_dispatch(
+    Sequencer *osr,
+    Context *ctx,
+    const coll_t& cid,
+    const ghobject_t& oid,
+    uint64_t offset,
+    size_t len,
+    bufferlist* bl,
+    uint32_t op_flags,
+    Context *blessed_context) override;
+#endif
+
   int _do_fiemap(int fd, uint64_t offset, size_t len,
                  map<uint64_t, uint64_t> *m);
   int _do_seek_hole_data(int fd, uint64_t offset, size_t len,
@@ -733,6 +872,7 @@ private:
   int m_filestore_sloppy_crc_block_size;
   uint64_t m_filestore_max_alloc_hint_size;
   long m_fs_type;
+  int m_filestore_async_threads;
 
   //Determined xattr handling based on fs type
   void set_xattr_limits_via_conf();

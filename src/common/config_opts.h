@@ -1047,6 +1047,7 @@ OPTION(filestore_sloppy_crc, OPT_BOOL, false)         // track sloppy crcs
 OPTION(filestore_sloppy_crc_block_size, OPT_INT, 65536)
 
 OPTION(filestore_max_alloc_hint_size, OPT_U64, 1ULL << 20) // bytes
+OPTION(filestore_async_threads, OPT_INT, 0)
 
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds
