@@ -50,6 +50,7 @@ if(ARM_NEON OR ARM_NEON2)
     $<TARGET_OBJECTS:ec_jerasure_objs>
     $<TARGET_OBJECTS:jerasure_objs>
     $<TARGET_OBJECTS:neon_objs>
+    $<TARGET_OBJECTS:erasure_code_objs>
     )
   add_library(ec_jerasure_neon SHARED ${jerasure_neon_srcs})
   add_dependencies(ec_jerasure_neon ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
@@ -63,7 +64,9 @@ endif(ARM_NEON OR ARM_NEON2)
 if(INTEL_SSE)
   add_library(ec_jerasure_sse3 SHARED 
     $<TARGET_OBJECTS:jerasure_objs>
-    $<TARGET_OBJECTS:ec_jerasure_objs>)
+    $<TARGET_OBJECTS:ec_jerasure_objs>
+    $<TARGET_OBJECTS:erasure_code_objs>
+    )
   add_dependencies(ec_jerasure_sse3 ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
   target_link_libraries(ec_jerasure_sse3 ${EXTRALIBS})
   set_target_properties(ec_jerasure_sse3 PROPERTIES VERSION 2.0.0 SOVERSION 2
@@ -75,7 +78,9 @@ endif(INTEL_SSE)
 if(INTEL_SSE4_1)
   add_library(ec_jerasure_sse4 SHARED 
     $<TARGET_OBJECTS:jerasure_objs>
-    $<TARGET_OBJECTS:ec_jerasure_objs>)
+    $<TARGET_OBJECTS:ec_jerasure_objs>
+    $<TARGET_OBJECTS:erasure_code_objs>
+    )
   add_dependencies(ec_jerasure_sse4 ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
   target_link_libraries(ec_jerasure_sse4 ${EXTRALIBS})
   set_target_properties(ec_jerasure_sse4 PROPERTIES VERSION 2.0.0 SOVERSION 2
