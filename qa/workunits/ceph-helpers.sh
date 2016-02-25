@@ -471,6 +471,7 @@ function destroy_osd() {
     ceph auth del osd.$id || return 1
     ceph osd crush remove osd.$id || return 1
     ceph osd rm $id || return 1
+    teardown $dir/$id || return 1
     rm -fr $dir/$id
 }
 
