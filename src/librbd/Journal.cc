@@ -119,16 +119,9 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
     return r;
   }
 
-  std::string cluster_id;
-  r = rados.cluster_fsid(&cluster_id);
-  if (r < 0) {
-    lderr(cct) << "failed to retrieve cluster id: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
   // create tag class for this image's journal events
   bufferlist tag_data;
-  ::encode(journal::TagData{cluster_id, pool_id, image_id}, tag_data);
+  ::encode(journal::TagData(), tag_data);
 
   C_SaferCond tag_ctx;
   cls::journal::Tag tag;
