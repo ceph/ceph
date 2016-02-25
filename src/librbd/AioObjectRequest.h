@@ -323,6 +323,7 @@ namespace librbd {
       else
 	*new_state = OBJECT_EXISTS;
     }
+    virtual void send_write();
   };
 
   class AioObjectZero : public AbstractAioObjectWrite {
