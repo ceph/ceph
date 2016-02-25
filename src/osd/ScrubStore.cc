@@ -140,8 +140,10 @@ bool Store::empty() const
 
 void Store::flush(ObjectStore::Transaction* t)
 {
-  OSDriver::OSTransaction txn = driver.get_transaction(t);
-  backend.set_keys(results, &txn);
+  if (t) {
+    OSDriver::OSTransaction txn = driver.get_transaction(t);
+    backend.set_keys(results, &txn);
+  }
   results.clear();
 }
 
