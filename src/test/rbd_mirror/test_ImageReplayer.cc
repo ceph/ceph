@@ -101,7 +101,7 @@ public:
     m_replayer = new rbd::mirror::ImageReplayer(
       rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
       rbd::mirror::RadosRef(new librados::Rados(m_remote_ioctx)),
-      m_client_id, remote_pool_id, m_remote_image_id);
+      m_client_id, m_local_ioctx.get_id(), remote_pool_id, m_remote_image_id);
 
     bootstrap();
   }
