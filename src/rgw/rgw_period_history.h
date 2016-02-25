@@ -21,26 +21,16 @@ class RGWPeriod;
  * Cursor object for traversing through the connected history.
  */
 class RGWPeriodHistory final {
+ private:
   /// an ordered history of consecutive periods
-  struct History : public bi::avl_set_base_hook<> {
-    std::deque<RGWPeriod> periods;
-
-    epoch_t get_oldest_epoch() const;
-    epoch_t get_newest_epoch() const;
-    bool contains(epoch_t epoch) const;
-    RGWPeriod& get(epoch_t epoch);
-    const RGWPeriod& get(epoch_t epoch) const;
-    const std::string& get_predecessor_id() const;
-  };
+  class History;
 
   // comparisons for avl_set ordering
   friend bool operator<(const History& lhs, const History& rhs);
   friend struct NewestEpochLess;
 
-  /// an intrusive set of histories, ordered by their newest epoch. although
-  /// the newest epoch of each history is mutable, the ordering cannot change
-  /// because we prevent the histories from overlapping
-  using Set = bi::avl_set<History>;
+  class Impl;
+  std::unique_ptr<Impl> impl;
 
  public:
   /**
@@ -73,8 +63,8 @@ class RGWPeriodHistory final {
 
     int get_error() const { return error; }
 
-    /// return false for a default-constructed Cursor
-    operator bool() const { return history != Set::const_iterator{}; }
+    /// return false for a default-constructed or error Cursor
+    operator bool() const { return history != nullptr; }
 
     epoch_t get_epoch() const { return epoch; }
     const RGWPeriod& get_period() const;
@@ -87,13 +77,13 @@ class RGWPeriodHistory final {
 
    private:
     // private constructors for RGWPeriodHistory
-    friend class RGWPeriodHistory;
+    friend class RGWPeriodHistory::Impl;
 
-    Cursor(Set::const_iterator history, std::mutex* mutex, epoch_t epoch)
+    Cursor(const History* history, std::mutex* mutex, epoch_t epoch)
       : history(history), mutex(mutex), epoch(epoch) {}
 
     int error{0};
-    Set::const_iterator history;
+    const History* history{nullptr};
     std::mutex* mutex{nullptr};
     epoch_t epoch{0}; //< realm epoch of cursor position
   };
@@ -116,45 +106,6 @@ class RGWPeriodHistory final {
   /// search for a period by realm epoch, returning a valid Cursor iff it's in
   /// the current_history
   Cursor lookup(epoch_t realm_epoch);
-
- private:
-  /// insert the given period into the period history, creating new unconnected
-  /// histories or merging existing histories as necessary. expects the caller
-  /// to hold a lock on mutex. returns a valid cursor regardless of whether it
-  /// ends up in current_history, though cursors in other histories are only
-  /// valid within the context of the lock
-  Cursor insert_locked(RGWPeriod&& period);
-
-  /// merge the periods from the src history onto the end of the dst history,
-  /// and return an iterator to the merged history
-  Set::iterator merge(Set::iterator dst, Set::iterator src);
-
-
-  CephContext *const cct;
-  Puller *const puller; //< interface for pulling missing periods
-  const epoch_t current_epoch; //< realm_epoch of realm's current period
-
-  mutable std::mutex mutex; //< protects the histories
-
-  /// set of disjoint histories that are missing intermediate periods needed to
-  /// connect them together
-  Set histories;
-
-  /// iterator to the history that contains the realm's current period
-  Set::const_iterator current_history;
 };
-
-inline const RGWPeriod& RGWPeriodHistory::Cursor::get_period() const {
-  std::lock_guard<std::mutex> lock(*mutex);
-  return history->get(epoch);
-}
-inline bool RGWPeriodHistory::Cursor::has_prev() const {
-  std::lock_guard<std::mutex> lock(*mutex);
-  return epoch > history->get_oldest_epoch();
-}
-inline bool RGWPeriodHistory::Cursor::has_next() const {
-  std::lock_guard<std::mutex> lock(*mutex);
-  return epoch < history->get_newest_epoch();
-}
 
 #endif // RGW_PERIOD_HISTORY_H
