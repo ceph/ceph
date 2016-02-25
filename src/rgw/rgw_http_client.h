@@ -27,6 +27,7 @@ class RGWHTTPClient
 
   string last_method;
   string last_url;
+  bool verify_ssl; // Do not validate self signed certificates, default to false
 
 protected:
   CephContext *cct;
@@ -34,6 +35,7 @@ protected:
   list<pair<string, string> > headers;
   int init_request(const char *method, const char *url, rgw_http_req_data *req_data);
 public:
+
   static const long HTTP_STATUS_NOSTATUS     = 0;
   static const long HTTP_STATUS_UNAUTHORIZED = 401;
 
@@ -44,6 +46,7 @@ public:
       http_status(HTTP_STATUS_NOSTATUS),
       req_data(nullptr),
       user_info(nullptr),
+      verify_ssl(true),
       cct(_cct) {
   }
 
@@ -68,8 +71,13 @@ public:
     has_send_len = true;
   }
 
+
   long get_http_status() const {
     return http_status;
+  }
+
+  void set_verify_ssl(bool flag) {
+    verify_ssl = flag;
   }
 
   int process(const char *method, const char *url);
