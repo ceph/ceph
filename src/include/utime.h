@@ -137,7 +137,7 @@ public:
   utime_t round_to_minute() {
     struct tm bdt;
     time_t tt = sec();
-    gmtime_r(&tt, &bdt);
+    localtime_r(&tt, &bdt);
     bdt.tm_sec = 0;
     tt = mktime(&bdt);
     return utime_t(tt, 0);
@@ -146,7 +146,7 @@ public:
   utime_t round_to_hour() {
     struct tm bdt;
     time_t tt = sec();
-    gmtime_r(&tt, &bdt);
+    localtime_r(&tt, &bdt);
     bdt.tm_sec = 0;
     bdt.tm_min = 0;
     tt = mktime(&bdt);
