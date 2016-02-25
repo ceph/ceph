@@ -1332,7 +1332,6 @@ int FileStore::mount()
 
   ret = read_superblock();
   if (ret < 0) {
-    ret = -EINVAL;
     goto close_fsid_fd;
   }
 
