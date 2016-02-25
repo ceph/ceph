@@ -107,6 +107,79 @@ struct OnReadComplete : public Context {
   ~OnReadComplete() {}
 };
 
+struct OnAsyncReadComplete : public Context {
+  ReplicatedPG::OpContext *opcontext;
+  OSDOp& osd_op;
+
+  OnAsyncReadComplete(
+    ReplicatedPG::OpContext *ctx,
+    OSDOp& osd_op_arg) :
+    opcontext(ctx), osd_op(osd_op_arg) {}
+
+  // If all OSDOp at this level have completed, invoke callback of parent.
+  void finish(int r) {
+    int result = (r > 0) ? 0 : r;
+
+    osd_op_callback_t callback =
+        osd_op.async_ops_control->check_completion(true, &result, &osd_op);
+    if (callback)
+      callback(opcontext, &osd_op, true, result);
+  }
+
+  ~OnAsyncReadComplete() {}
+};
+
+struct OnSparseReadComplete : public Context {
+  ReplicatedPG* pg;
+  ReplicatedPG::OpContext *ctx;
+  OSDOp& osd_op;
+  map<uint64_t, uint64_t> extentmap;
+  list<bufferlist*> data_bl_list;
+  list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>, bufferlist* > > async_reads;
+  uint64_t last;
+  uint32_t total_read;
+  atomic_t readcount;
+
+  OnSparseReadComplete(
+    ReplicatedPG* pg_arg,
+    ReplicatedPG::OpContext *ctx_arg,
+    OSDOp& osd_op_arg) :
+    pg(pg_arg), ctx(ctx_arg), osd_op(osd_op_arg), total_read(0), readcount(0) {}
+
+  void finish(int r) {
+    int result;
+
+    if (r > 0) {
+      result = 0;
+      total_read += r;
+    } else
+      result = r;
+
+    if (readcount.dec() == 0) {
+
+      bufferlist data_bl;
+      list<bufferlist*>::iterator bl_iter;
+
+      for (bl_iter = data_bl_list.begin(); bl_iter != data_bl_list.end(); ++bl_iter) {
+        data_bl.claim_append(**bl_iter);
+      }
+      result = pg->sparse_read_finish(ctx, osd_op, data_bl, last, total_read, extentmap);
+
+      osd_op_callback_t callback =
+          osd_op.async_ops_control->check_completion(true, &result, &osd_op);
+      if (callback)
+        callback(ctx, &osd_op, true, result);
+    }
+  }
+  ~OnSparseReadComplete() {
+    while (!data_bl_list.empty()) {
+      delete data_bl_list.back();
+      data_bl_list.pop_back();
+    }
+    extentmap.clear();
+  }
+};
+
 // OpContext
 void ReplicatedPG::OpContext::start_async_reads(ReplicatedPG *pg)
 {
@@ -127,6 +200,58 @@ void ReplicatedPG::OpContext::finish_read(ReplicatedPG *pg)
     pg->in_progress_async_reads.pop_front();
     pg->complete_read_ctx(async_read_result, this);
   }
+}
+
+int ReplicatedPG::sparse_read_finish(OpContext* ctx, OSDOp& osd_op, bufferlist& data_bl,
+                                     uint64_t last, uint32_t total_read,
+                                     map<uint64_t, uint64_t>& extentmap)
+{
+  int result = 0;
+  ceph_osd_op& op = osd_op.op;
+  ObjectState& obs = ctx->new_obs;
+  object_info_t& oi = obs.oi;
+  const hobject_t& soid = oi.soid;
+
+  // verify trailing hole?
+  if (cct->_conf->osd_verify_sparse_read_holes) {
+    uint64_t end = MIN(op.extent.offset + op.extent.length, oi.size);
+    if (last < end) {
+      bufferlist t;
+      uint64_t len = end - last;
+      result = pgbackend->objects_read_sync(soid, last, len, op.flags, &t);
+      if (!t.is_zero()) {
+        osd->clog->error() << coll << " " << soid << " sparse-read found data in hole "
+                          << last << "~" << len << "\n";
+      }
+    }
+  }
+
+  // Why SPARSE_READ need checksum? In fact, librbd always use sparse-read.
+  // Maybe at first, there is no much whole objects. With continued use, more and more whole object exist.
+  // So from this point, for spare-read add checksum make sense.
+  if (total_read == oi.size && oi.is_data_digest()) {
+    uint32_t crc = data_bl.crc32c(-1);
+    if (oi.data_digest != crc) {
+      osd->clog->error() << info.pgid << std::hex
+        << " full-object read crc 0x" << crc
+        << " != expected 0x" << oi.data_digest
+        << std::dec << " on " << soid;
+      // FIXME fall back to replica or something?
+      result = -EIO;
+    }
+  }
+
+  op.extent.length = total_read;
+
+  ::encode(extentmap, osd_op.outdata); // re-encode since it might be modified
+  ::encode_destructively(data_bl, osd_op.outdata);
+
+  dout(10) << " sparse_read got " << total_read << " bytes from object " << soid << dendl;
+
+  ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(op.extent.length, 10);
+  ctx->delta_stats.num_rd++;
+
+  return result;
 }
 
 class CopyFromCallback: public ReplicatedPG::CopyCallback {
@@ -2869,7 +2994,15 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
         reqid.name._num, reqid.tid, reqid.inc);
   }
 
-  int result = prepare_transaction(ctx);
+  (void) prepare_transaction(ctx);
+}
+
+void ReplicatedPG::execute_ctx_continue(OpContext *ctx, int result)
+{
+  OpRequestRef op = ctx->op;
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  ObjectContextRef obc = ctx->obc;
+  map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator>& src_obc = ctx->src_obc;
 
   {
 #ifdef WITH_LTTNG
@@ -3965,13 +4098,42 @@ bool ReplicatedPG::maybe_create_new_object(OpContext *ctx)
   return false;
 }
 
-int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
+static void osd_op_call_callback(ReplicatedPG::OpContext *ctx, OSDOp *osd_op, bool asyncmode, int result)
+{
+  ctx->pg->osd_op_call_completion(ctx, osd_op, asyncmode, result);
+}
+
+void ReplicatedPG::osd_op_call_completion(OpContext *ctx, OSDOp *osd_op, bool asyncmode, int result)
+{
+  OSDOp* parent = osd_op->parent_op;
+  assert(parent);
+  bufferlist outdata = osd_op->outdata;
+  ceph_osd_op& op = osd_op->op;
+  dout(10) << "method called response length=" << outdata.length() << dendl;
+  op.extent.length = outdata.length();
+  parent->outdata.claim_append(outdata);
+
+  // Invoke the parent osd_op's callback (lone child op has completed).
+  osd_op_callback_t callback =
+        parent->async_ops_control->check_completion(asyncmode, &result, parent);
+
+  if (callback)
+    callback(ctx, parent, asyncmode, result);
+
+  delete osd_op;
+}
+
+// @param callback_in for async operation: if non-null *and* if desired operations
+// can be executed asynchronously, then callback_in is invoked on completion.
+int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,  osd_op_callback_t callback_in)
 {
   int result = 0;
   SnapSetContext *ssc = ctx->obc->ssc;
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
+  async_ops_control_s *async_opctl = nullptr;
+  bool use_lock = (ops.size() > 1);
 
   bool first_read = true;
 
@@ -4103,6 +4265,26 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 				&osd_op.outdata, maybe_crc, oi.size, osd,
 				soid, op.flags))));
 	  dout(10) << " async_read noted for " << soid << dendl;
+	} else if (callback_in && (op.extent.length > 256) &&  pgbackend->async_read_capable()) {
+	  async = true;
+	  list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>, bufferlist* >> async_read;
+
+	  OnAsyncReadComplete *on_async_read_complete = new OnAsyncReadComplete(ctx, osd_op);
+
+	  async_read.push_back(
+	    make_pair(
+	      boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
+	      &osd_op.outdata));
+
+	  if (async_opctl == nullptr)
+	    async_opctl = new async_ops_control_s(use_lock, callback_in);
+	  async_opctl->add_osd_op(&osd_op);
+
+	  pgbackend->objects_read_async_use_aio(
+	    ctx->obc->obs.oi.soid,
+	    async_read,
+	    on_async_read_complete,
+	    true);
 	} else {
 	  int r = pgbackend->objects_read_sync(
 	    soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
@@ -4178,12 +4360,31 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_read;
       if (pool.info.ec_pool()) {
-	// translate sparse read to a normal one if not supported
-	ctx->pending_async_reads.push_back(
-	  make_pair(
-	    boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
-	    make_pair(&osd_op.outdata, new ToSparseReadResult(osd_op.outdata,
+	ToSparseReadResult *to_sparse_read =
+	  new ToSparseReadResult(osd_op.outdata,op.extent.length);
+
+	if (callback_in && pgbackend->async_read_capable()) {
+	  list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>, bufferlist* > > async_read;
+	  async_read.push_back(
+	    make_pair(
+	      boost::make_tuple(op.extent.offset, op.extent.length, op.flags), &osd_op.outdata));
+
+	  if (async_opctl == nullptr)
+	    async_opctl = new async_ops_control_s(use_lock, callback_in);
+	  async_opctl->add_osd_op(&osd_op);
+
+	  pgbackend->objects_read_async_use_aio(
+	    ctx->obc->obs.oi.soid,
+	    async_read,
+	    to_sparse_read, true);
+	} else { 
+	  // translate sparse read to a normal one if not supported
+	  ctx->pending_async_reads.push_back(
+	    make_pair(
+	      boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
+	      make_pair(&osd_op.outdata, new ToSparseReadResult(osd_op.outdata,
 							      op.extent.length))));
+	}
 	dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
       } else {
 	// read into a buffer
@@ -4196,6 +4397,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = r;
           break;
 	}
+
+	OnSparseReadComplete *on_sparse_read = nullptr;
         map<uint64_t, uint64_t> m;
         bufferlist::iterator iter = bl.begin();
         ::decode(m, iter);
@@ -4215,6 +4418,21 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    }
 	  }
 
+	  if (callback_in && pgbackend->async_read_capable()) {
+	    if (on_sparse_read == nullptr)
+	      on_sparse_read = new OnSparseReadComplete(this, ctx, osd_op);
+
+	    // Read data into allocated bufferlist, then combine into osd_op.outdata
+	    // on async completion.
+	    bufferlist *newbl = new bufferlist;
+	    on_sparse_read->data_bl_list.push_back(newbl);
+
+	    on_sparse_read->async_reads.push_back(
+	      make_pair(
+		boost::make_tuple(miter->first, miter->second, op.flags), newbl));
+	    continue;
+	  }
+
           bufferlist tmpbl;
 	  r = pgbackend->objects_read_sync(soid, miter->first, miter->second, op.flags, &tmpbl);
           if (r < 0)
@@ -4228,6 +4446,18 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  last = miter->first + r;
         }
         
+	if (on_sparse_read) {
+	  if (async_opctl == nullptr)
+	    async_opctl = new async_ops_control_s(use_lock, callback_in);
+	  async_opctl->add_osd_op(&osd_op);
+
+	  on_sparse_read->readcount.set(on_sparse_read->async_reads.size());
+	  on_sparse_read->extentmap = m;
+	  pgbackend->objects_read_async_use_aio(soid, on_sparse_read->async_reads,
+						on_sparse_read, true);
+	  break;
+	}
+
         if (r < 0) {
           result = r;
           break;
@@ -4312,6 +4542,20 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	dout(10) << "call method " << cname << "." << mname << dendl;
 	int prev_rd = ctx->num_read;
 	int prev_wr = ctx->num_write;
+
+	// Call the asynchronous version if available.
+	if (callback_in && (flags & CLS_METHOD_ASYNC)) {
+	  OSDOp *child_op = new OSDOp(&osd_op, callback_in);
+	  if (async_opctl == nullptr)
+	    async_opctl = new async_ops_control_s(use_lock, callback_in);
+	  async_opctl->add_osd_op(&osd_op);
+
+	  result = method->exec_async((cls_method_context_t) &ctx, *child_op,
+				      (cls_method_cxx_cb_t) osd_op_call_callback);
+	  break;
+	}
+
+
 	result = method->exec((cls_method_context_t)&ctx, indata, outdata);
 
 	if (ctx->num_read > prev_rd && !(flags & CLS_METHOD_RD)) {
@@ -5834,6 +6078,24 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     if (result < 0)
       break;
   }
+
+  osd_op_callback_t callback = nullptr;
+  // Check for callbacks that may have completed but were blocked.
+  // This includes recursive (this thread) and ObjectStore callbacks.
+  if (async_opctl) {
+    ctx->ctx_ops_controls.push_back(async_opctl);
+    // If async op was not locked then it executes without any supervision
+    // from here.
+    if (use_lock) {
+      async_opctl->process_completions = true;
+      callback = async_opctl->check_completion(false, &result);
+    }
+  } else
+    callback = callback_in;
+
+  if (callback)
+    callback(ctx, &ops[0], false, result);
+
   return result;
 }
 
@@ -6423,12 +6685,16 @@ hobject_t ReplicatedPG::get_temp_recovery_object(eversion_t version, snapid_t sn
   return hoid;
 }
 
+static void prepare_transaction_callback(void *ctx_arg, OSDOp *osd_op, bool asyncmode, int result)
+{
+  ReplicatedPG::OpContext *ctx = (ReplicatedPG::OpContext *) ctx_arg;
+  ctx->pg->prepare_transaction_continue(ctx, result, asyncmode);
+}
+
 int ReplicatedPG::prepare_transaction(OpContext *ctx)
 {
   assert(!ctx->ops.empty());
   
-  const hobject_t& soid = ctx->obs->oi.soid;
-
   // valid snap context?
   if (!ctx->snapc.is_valid()) {
     dout(10) << " invalid snapc " << ctx->snapc << dendl;
@@ -6436,45 +6702,61 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   }
 
   // prepare the actual mutation
-  int result = do_osd_ops(ctx, ctx->ops);
-  if (result < 0)
-    return result;
+  int result = do_osd_ops(ctx, ctx->ops, prepare_transaction_callback);
+  return result;
+}
 
-  // read-op?  done?
-  if (ctx->op_t->empty() && !ctx->modify) {
-    unstable_stats.add(ctx->delta_stats);
-    return result;
-  }
+int ReplicatedPG::prepare_transaction_continue(OpContext *ctx, int result, bool async_call)
+{
+  if (async_call)
+    lock();
 
-  // check for full
-  if ((ctx->delta_stats.num_bytes > 0 ||
-       ctx->delta_stats.num_objects > 0) &&  // FIXME: keys?
-      (pool.info.has_flag(pg_pool_t::FLAG_FULL) ||
-       get_osdmap()->test_flag(CEPH_OSDMAP_FULL))) {
-    MOSDOp *m = static_cast<MOSDOp*>(ctx->op->get_req());
-    if (ctx->reqid.name.is_mds() ||   // FIXME: ignore MDS for now
-	m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {
-      dout(20) << __func__ << " full, but proceeding due to FULL_FORCE or MDS"
-	       << dendl;
-    } else if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
-      // they tried, they failed.
-      dout(20) << __func__ << " full, replying to FULL_TRY op" << dendl;
-      return pool.info.has_flag(pg_pool_t::FLAG_FULL) ? -EDQUOT : -ENOSPC;
-    } else {
-      // drop request
-      dout(20) << __func__ << " full, dropping request (bad client)" << dendl;
-      return -EAGAIN;
+  do {
+    if (result < 0)
+      break;
+
+    // read-op?  done?
+    if (ctx->op_t->empty() && !ctx->modify) {
+      unstable_stats.add(ctx->delta_stats);
+      break;
     }
-  }
 
-  // clone, if necessary
-  if (soid.snap == CEPH_NOSNAP)
-    make_writeable(ctx);
+    // check for full
+    if ((ctx->delta_stats.num_bytes > 0 ||
+	 ctx->delta_stats.num_objects > 0) &&  // FIXME: keys?
+	(pool.info.has_flag(pg_pool_t::FLAG_FULL) ||
+	 get_osdmap()->test_flag(CEPH_OSDMAP_FULL))) {
+      MOSDOp *m = static_cast<MOSDOp*>(ctx->op->get_req());
+      if (ctx->reqid.name.is_mds() ||   // FIXME: ignore MDS for now
+	  m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {
+	dout(20) << __func__ << " full, but proceeding due to FULL_FORCE or MDS"
+		 << dendl;
+      } else if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
+	// they tried, they failed.
+	dout(20) << __func__ << " full, replying to FULL_TRY op" << dendl;
+	result = pool.info.has_flag(pg_pool_t::FLAG_FULL) ? -EDQUOT : -ENOSPC;
+	break;
+      } else {
+        // drop request
+	dout(20) << __func__ << " full, dropping request (bad client)" << dendl;
+	result = -EAGAIN;
+	break;
+      }
+    }
 
-  finish_ctx(ctx,
-	     ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
-	     pg_log_entry_t::DELETE);
+    // clone, if necessary
+    const hobject_t& soid = ctx->obs->oi.soid;
+    if (soid.snap == CEPH_NOSNAP)
+      make_writeable(ctx);
 
+    finish_ctx(ctx,
+	       ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
+	       pg_log_entry_t::DELETE);
+  } while (0);
+
+  execute_ctx_continue(ctx, result);
+  if (async_call)
+    unlock();
   return result;
 }
 

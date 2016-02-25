@@ -3901,6 +3901,10 @@ struct ScrubMap {
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)
 
+struct OSDOp;
+struct async_ops_control_s;
+// Callback function for OSDOp asynchronous completion.
+typedef void (*osd_op_callback_t)(void *ctx, OSDOp *osd_op, bool async_mode, int result);
 
 struct OSDOp {
   ceph_osd_op op;
@@ -3909,7 +3913,20 @@ struct OSDOp {
   bufferlist indata, outdata;
   int32_t rval;
 
-  OSDOp() : rval(0) {
+  bool async_done;
+  int async_result;
+
+  OSDOp *parent_op;
+  osd_op_callback_t parent_op_callback;
+  async_ops_control_s *async_ops_control;
+
+  OSDOp() : rval(0), async_done(false), parent_op(0), async_ops_control(0) {
+    memset(&op, 0, sizeof(ceph_osd_op));
+  }
+
+  OSDOp(OSDOp *parent_op_arg, osd_op_callback_t poc) :
+    rval(0), async_done(false),
+    parent_op(parent_op_arg), parent_op_callback(poc) {
     memset(&op, 0, sizeof(ceph_osd_op));
   }
 
@@ -3950,6 +3967,80 @@ struct OSDOp {
 };
 
 ostream& operator<<(ostream& out, const OSDOp& op);
+
+// Track if all OSDOps have completed.
+struct async_ops_control_s {
+  bool process_completions;
+  osd_op_callback_t callback;
+  list<OSDOp *> peer_ops;
+  bool lock_used;
+  Mutex *async_lock;
+
+  //
+  // Add the OSDOp to the given ops list. Needed for
+  // the OSDOp's async completion handling.
+  //
+  void add_osd_op(OSDOp *osd_op)
+  {
+    peer_ops.push_back(osd_op);
+    osd_op->async_ops_control = this;
+  }
+
+  // Check if all ops in list are complete. If so, return the
+  // callback in the ops_control. Hold a lock over all async
+  // completions of peer_ops.
+  // @param result valid only if non-NULL return value
+  osd_op_callback_t
+  check_completion(bool async_mode, int *result, OSDOp *osd_op = NULL)
+  {
+    osd_op_callback_t retval = NULL;
+    if (lock_used)
+      async_lock->Lock();
+
+    if (osd_op) {
+      osd_op->async_done = true;
+      osd_op->async_result = *result;
+    }
+
+    if (!process_completions)
+      goto out;
+
+    *result = 0;
+    for (auto p : peer_ops) {
+      OSDOp *cur = p;
+      if (!cur->async_done)
+        goto out;
+
+      if (cur->async_result < 0 && *result == 0)
+        *result = cur->async_result;
+    }
+
+    retval = callback;
+    // Ensure callback executed only once for all the ops
+    callback = NULL;
+
+out:
+    if (lock_used)
+      async_lock->Unlock();
+    return retval;
+  }
+
+  async_ops_control_s(bool use_lock, osd_op_callback_t cb): callback(cb),
+    lock_used(use_lock)
+  {
+    if (lock_used) {
+      async_lock = new Mutex("async_lock");
+      process_completions = false;  // ignore callbacks initially on creation
+    } else
+      process_completions = true;
+  }
+
+  ~async_ops_control_s()
+  {
+    if (lock_used)
+      delete async_lock;
+  }
+};
 
 struct watch_item_t {
   entity_name_t name;
