@@ -1109,6 +1109,85 @@ int export_files(ObjectStore *store, coll_t coll)
   return 0;
 }
 
+int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
+  OSDMap::Incremental inc;
+  bufferlist::iterator it = bl.begin();
+  inc.decode(it);
+  if (e == 0) {
+    e = inc.epoch;
+  } else if (e != inc.epoch) {
+    cerr << "incremental.epoch mismatch: "
+	 << inc.epoch << " != " << e << std::endl;
+    if (force) {
+      cerr << "But will continue anyway." << std::endl;
+    } else {
+      return -EINVAL;
+    }
+  }
+  const ghobject_t inc_oid = OSD::get_inc_osdmap_pobject_name(e);
+  if (!store->exists(META_COLL, inc_oid)) {
+    cerr << "inc-osdmap (" << inc_oid << ") does not exist." << std::endl;
+    if (!force) {
+      return -ENOENT;
+    }
+    cout << "Creating a new epoch." << std::endl;
+  }
+  ObjectStore::Transaction t;
+  t.write(META_COLL, inc_oid, 0, bl.length(), bl);
+  t.truncate(META_COLL, inc_oid, bl.length());
+  int ret = store->apply_transaction(t);
+  if (ret) {
+    cerr << "Failed to set inc-osdmap (" << inc_oid << "): " << ret << std::endl;
+  } else {
+    cout << "Wrote inc-osdmap." << inc.epoch << std::endl;
+  }
+  return ret;
+}
+
+int get_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl)
+{
+  if (store->read(META_COLL,
+		  OSD::get_inc_osdmap_pobject_name(e),
+		  0, 0, bl) < 0) {
+    return -ENOENT;
+  }
+  return 0;
+}
+
+int set_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
+  OSDMap osdmap;
+  osdmap.decode(bl);
+  if (e == 0) {
+    e = osdmap.get_epoch();
+  } else if (e != osdmap.get_epoch()) {
+    cerr << "osdmap.epoch mismatch: "
+	 << e << " != " << osdmap.get_epoch() << std::endl;
+    if (force) {
+      cerr << "But will continue anyway." << std::endl;
+    } else {
+      return -EINVAL;
+    }
+  }
+  const ghobject_t full_oid = OSD::get_osdmap_pobject_name(e);
+  if (!store->exists(META_COLL, full_oid)) {
+    cerr << "osdmap (" << full_oid << ") does not exist." << std::endl;
+    if (!force) {
+      return -ENOENT;
+    }
+    cout << "Creating a new epoch." << std::endl;
+  }
+  ObjectStore::Transaction t;
+  t.write(META_COLL, full_oid, 0, bl.length(), bl);
+  t.truncate(META_COLL, full_oid, bl.length());
+  int ret = store->apply_transaction(t);
+  if (ret) {
+    cerr << "Failed to set osdmap (" << full_oid << "): " << ret << std::endl;
+  } else {
+    cout << "Wrote osdmap." << osdmap.get_epoch() << std::endl;
+  }
+  return ret;
+}
+
 int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap, bufferlist& bl)
 {
   bool found = store->read(
@@ -2642,6 +2721,7 @@ int main(int argc, char **argv)
 {
   string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type, format;
   spg_t pgid;
+  unsigned epoch = 0;
   ghobject_t ghobj;
   bool human_readable, no_overwrite;
   bool force;
@@ -2659,9 +2739,12 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory for info, log, remove, export, rm-past-intervals")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super]")
+     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, "
+	 "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap]")
+    ("epoch", po::value<unsigned>(&epoch),
+     "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
-     "path of file to export or import")
+     "path of file to export, import, get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
      "Output format which may be json, json-pretty, xml, xml-pretty")
     ("debug", "Enable diagnostic output to stderr")
@@ -2809,7 +2892,7 @@ int main(int argc, char **argv)
   outistty = isatty(STDOUT_FILENO);
 
   file_fd = fd_none;
-  if (op == "export" && !dry_run) {
+  if ((op == "export" || op == "get-osdmap" || op == "get-inc-osdmap") && !dry_run) {
     if (!vm.count("file") || file == "-") {
       if (outistty) {
         cerr << "stdout is a tty and no --file filename specified" << std::endl;
@@ -2819,7 +2902,7 @@ int main(int argc, char **argv)
     } else {
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
-  } else if (op == "import") {
+  } else if (op == "import" || op == "set-osdmap" || op == "set-inc-osdmap") {
     if (!vm.count("file") || file == "-") {
       if (isatty(STDIN_FILENO)) {
         cerr << "stdin is a tty and no --file filename specified" << std::endl;
@@ -2832,7 +2915,8 @@ int main(int argc, char **argv)
   }
 
   if (vm.count("file") && file_fd == fd_none && !dry_run) {
-    cerr << "--file option only applies to import or export" << std::endl;
+    cerr << "--file option only applies to import, export, "
+	 << "get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap" << std::endl;
     myexit(1);
   }
 
@@ -3185,6 +3269,62 @@ int main(int argc, char **argv)
       }
     }
     goto out;
+  } else if (op == "get-osdmap") {
+    bufferlist bl;
+    OSDMap osdmap;
+    if (epoch == 0) {
+      epoch = superblock.current_epoch;
+    }
+    ret = get_osdmap(fs, epoch, osdmap, bl);
+    if (ret) {
+      cerr << "Failed to get osdmap#" << epoch << ": "
+	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+    ret = bl.write_fd(file_fd);
+    if (ret) {
+      cerr << "Failed to write to " << file << ": " << cpp_strerror(ret) << std::endl;
+    } else {
+      cout << "osdmap#" << epoch << " exported." << std::endl;
+    }
+    goto out;
+  } else if (op == "set-osdmap") {
+    bufferlist bl;
+    ret = get_fd_data(file_fd, bl);
+    if (ret < 0) {
+      cerr << "Failed to read osdmap " << cpp_strerror(ret) << std::endl;
+    } else {
+      ret = set_osdmap(fs, epoch, bl, force);
+    }
+    goto out;
+  } else if (op == "get-inc-osdmap") {
+    bufferlist bl;
+    if (epoch == 0) {
+      epoch = superblock.current_epoch;
+    }
+    ret = get_inc_osdmap(fs, epoch, bl);
+    if (ret < 0) {
+      cerr << "Failed to get incremental osdmap# " << epoch << ": "
+	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+    ret = bl.write_fd(file_fd);
+    if (ret) {
+      cerr << "Failed to write to " << file << ": " << cpp_strerror(ret) << std::endl;
+    } else {
+      cout << "inc-osdmap#" << epoch << " exported." << std::endl;
+    }
+    goto out;
+  } else if (op == "set-inc-osdmap") {
+    bufferlist bl;
+    ret = get_fd_data(file_fd, bl);
+    if (ret < 0) {
+      cerr << "Failed to read incremental osdmap  " << cpp_strerror(ret) << std::endl;
+      goto out;
+    } else {
+      ret = set_inc_osdmap(fs, epoch, bl, force);
+    }
+    goto out;
   }
 
   log_oid = OSD::make_pg_log_oid(pgid);
@@ -3275,7 +3415,8 @@ int main(int argc, char **argv)
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals") {
-    cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super)"
+    cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, "
+      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap)"
 	 << std::endl;
     usage(desc);
     ret = 1;
