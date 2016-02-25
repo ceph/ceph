@@ -3907,7 +3907,6 @@ int FileStore::snapshot(const string& name)
 
   int r = backend->create_checkpoint(s, NULL);
   if (r) {
-    r = -errno;
     derr << "snapshot " << name << " failed: " << cpp_strerror(r) << dendl;
   }
 
