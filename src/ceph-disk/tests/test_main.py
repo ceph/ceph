@@ -1161,6 +1161,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         fake_devices_normal = [{'path': '/dev/sdY',
                                 'partitions': [{
                                     'dmcrypt': {},
+                                    'type': 'osd',
                                     'ptype': OSD_UUID,
                                     'path': '/dev/sdY1',
                                     'whoami': '5566',
@@ -1170,6 +1171,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                                {'path': '/dev/sdX',
                                 'partitions': [{
                                     'dmcrypt': {},
+                                    'type': 'osd',
                                     'ptype': MPATH_OSD_UUID,
                                     'path': '/dev/sdX1',
                                     'whoami': '7788',
