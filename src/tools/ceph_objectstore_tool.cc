@@ -544,10 +544,6 @@ struct pgid_object_list {
     for (list<pair<coll_t, ghobject_t> >::const_iterator i = _objects.begin();
 	 i != _objects.end();
 	 ++i) {
-      if (i != _objects.begin() && human_readable) {
-        f->flush(cout);
-        cout << std::endl;
-      }
       f->open_array_section("pgid_object");
       string pgid = i->first.c_str();
       std::size_t pos = pgid.find("_");
@@ -559,9 +555,16 @@ struct pgid_object_list {
       i->second.dump(f);
       f->close_section();
       f->close_section();
+      if (human_readable) {
+        f->flush(cout);
+        cout << std::endl;
+      }
     }
-    if (!human_readable)
+    if (!human_readable) {
       f->close_section();
+      f->flush(cout);
+      cout << std::endl;
+    }
   }
 };
 
@@ -2202,7 +2205,6 @@ int do_list(ObjectStore *store, string pgidstr, string object, Formatter *format
     return r;
   lookup.dump(formatter, human_readable);
   formatter->flush(cout);
-  cout << std::endl;
   return 0;
 }
 
@@ -2655,7 +2657,7 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, mandatory for filestore type")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory except for import, fix-lost, list-pgs, set-allow-sharded-objects, dump-journal, dump-super")
+     "PG id, mandatory for info, log, remove, export, rm-past-intervals")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super]")
     ("file", po::value<string>(&file),
@@ -2789,18 +2791,18 @@ int main(int argc, char **argv)
     usage(desc);
     myexit(1);
   }
-  if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
-    cerr << "Invalid syntax, missing command" << std::endl;
-    usage(desc);
-    myexit(1);
-  }
-  if (!vm.count("op") && !(vm.count("object") && vm.count("objcmd"))) {
+  if (!vm.count("op") && !vm.count("object")) {
     cerr << "Must provide --op or object command..." << std::endl;
     usage(desc);
     myexit(1);
   }
   if (op != "list" && vm.count("op") && vm.count("object")) {
     cerr << "Can't specify both --op and object command syntax" << std::endl;
+    usage(desc);
+    myexit(1);
+  }
+  if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
+    cerr << "Invalid syntax, missing command" << std::endl;
     usage(desc);
     myexit(1);
   }
@@ -2990,10 +2992,10 @@ int main(int argc, char **argv)
 	  if (lookup.size() != 1) {
 	    stringstream ss;
 	    if (lookup.size() == 0)
-	      ss << objcmd << ": " << cpp_strerror(ENOENT);
+	      ss << "No object id '" << object << "' found";
 	    else
-	      ss << "expected a single object named '" << object
-		 << "' but got " << lookup.size() << " instead";
+	      ss << "Found " << lookup.size() << " objects with id '" << object
+		 << "', please use a JSON spec from --op list instead";
 	    throw std::runtime_error(ss.str());
 	  }
 	  pair<coll_t, ghobject_t> found = lookup.pop();
@@ -3055,14 +3057,10 @@ int main(int argc, char **argv)
     }
   }
 
-  // The ops which don't require --pgid option are checked here and
-  // mentioned in the usage for --pgid with some exceptions.
-  // The dump-journal op isn't here because it is handled earlier.
-  // The dump-journal-mount op is undocumented so not in the usage.
-  if (op != "list" && op != "import" && op != "fix-lost"
-      && op != "list-pgs"  && op != "set-allow-sharded-objects"
-      && op != "dump-journal-mount" && op != "dump-super"
-      && (pgidstr.length() == 0)) {
+  // The ops which require --pgid option are checked here and
+  // mentioned in the usage for --pgid.
+  if ((op == "info" || op == "log" || op == "remove" || op == "export"
+      || op == "rm-past-intervals") && pgidstr.length() == 0) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
     ret = 1;
@@ -3220,6 +3218,15 @@ int main(int argc, char **argv)
     goto out;
   }
 
+  if (op == "dump-super") {
+    formatter->open_object_section("superblock");
+    superblock.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
+    goto out;
+  }
+
   ret = fs->list_collections(ls);
   if (ret < 0) {
     cerr << "failed to list pgs: " << cpp_strerror(ret) << std::endl;
@@ -3265,6 +3272,15 @@ int main(int argc, char **argv)
     goto out;
   }
 
+  // If not an object command nor any of the ops handled below, then output this usage
+  // before complaining about a bad pgid
+  if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals") {
+    cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super)"
+	 << std::endl;
+    usage(desc);
+    ret = 1;
+    goto out;
+  }
   epoch_t map_epoch;
 // The following code for export, info, log require omap or !skip-mount-omap
   if (it != ls.end()) {
@@ -3520,17 +3536,8 @@ int main(int argc, char **argv)
         fs->apply_transaction(*t);
         cout << "Removal succeeded" << std::endl;
       }
-    } else if (op == "dump-super") {
-      formatter->open_object_section("superblock");
-      superblock.dump(formatter);
-      formatter->close_section();
-      formatter->flush(cout);
-      cout << std::endl;
     } else {
-      cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals)"
-	<< std::endl;
-      usage(desc);
-      ret = 1;
+      assert(!"Should have already checked for valid --op");
     }
   } else {
     cerr << "PG '" << pgid << "' not found" << std::endl;
