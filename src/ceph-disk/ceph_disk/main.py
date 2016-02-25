@@ -1176,9 +1176,8 @@ def _dmcrypt_map(
 def dmcrypt_unmap(
     _uuid
 ):
-    """
-    Removes the dmcrypt device with the given UUID.
-    """
+    if not os.path.exists('/dev/mapper/' + _uuid):
+        return
     retries = 0
     while True:
         try:
