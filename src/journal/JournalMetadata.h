@@ -63,6 +63,7 @@ public:
   void remove_listener(Listener *listener);
 
   int register_client(const bufferlist &data);
+  int update_client(const bufferlist &data);
   int unregister_client();
 
   void allocate_tag(uint64_t tag_class, const bufferlist &data,

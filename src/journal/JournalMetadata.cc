@@ -370,6 +370,19 @@ int JournalMetadata::register_client(const bufferlist &data) {
   return 0;
 }
 
+int JournalMetadata::update_client(const bufferlist &data) {
+  ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
+  int r = client::client_update(m_ioctx, m_oid, m_client_id, data);
+  if (r < 0) {
+    lderr(m_cct) << "failed to update journal client '" << m_client_id
+                 << "': " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  notify_update();
+  return 0;
+}
+
 int JournalMetadata::unregister_client() {
   assert(!m_client_id.empty());
 

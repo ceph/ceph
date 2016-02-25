@@ -183,6 +183,10 @@ int Journaler::register_client(const bufferlist &data) {
   return m_metadata->register_client(data);
 }
 
+int Journaler::update_client(const bufferlist &data) {
+  return m_metadata->update_client(data);
+}
+
 int Journaler::unregister_client() {
   return m_metadata->unregister_client();
 }

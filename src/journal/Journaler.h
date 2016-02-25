@@ -54,6 +54,7 @@ public:
 			    RegisteredClients *clients, Context *on_finish);
 
   int register_client(const bufferlist &data);
+  int update_client(const bufferlist &data);
   int unregister_client();
 
   void flush_commit_position(Context *on_safe);
