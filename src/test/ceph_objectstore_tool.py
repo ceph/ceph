@@ -1857,11 +1857,27 @@ def main(argv):
         print "TEST FAILED WITH {errcount} ERRORS".format(errcount=ERRORS)
         return 1
 
+
+def remove_btrfs_subvolumes(path):
+    result = subprocess.Popen("stat -f -c '%%T' %s" % path, shell=True, stdout=subprocess.PIPE)
+    filesystem = result.stdout.readlines()[0]
+    if filesystem.rstrip('\n') == "btrfs":
+        result = subprocess.Popen("btrfs subvolume list %s" % path, shell=True, stdout=subprocess.PIPE)
+        for line in result.stdout.readlines():
+            subvolume=line.split()[8]
+            # extracting the relative volume name
+            m = re.search(".*(%s.*)" % path, subvolume)
+            if m:
+                found = m.group(1)
+                call("btrfs subvolume delete %s" % found, shell=True)
+
+
 if __name__ == "__main__":
     status = 1
     try:
         status = main(sys.argv[1:])
     finally:
         kill_daemons()
+        remove_btrfs_subvolumes(CEPH_DIR)
         call("/bin/rm -fr {dir}".format(dir=CEPH_DIR), shell=True)
     sys.exit(status)
