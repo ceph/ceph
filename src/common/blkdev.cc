@@ -139,7 +139,7 @@ int64_t get_block_device_int_property(const char *devname, const char *property)
     return r;
 
   snprintf(filename, sizeof(filename),
-	   "%s/sys/block/%s/queue/discard_granularity", sandbox_dir, basename);
+	   "%s/sys/block/%s/queue/%s", sandbox_dir, basename, property);
 
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
