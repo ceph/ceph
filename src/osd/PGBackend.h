@@ -572,10 +572,15 @@ struct shard_info_wrapper;
      bufferlist *bl) = 0;
 
    virtual void objects_read_async(
+     ObjectStore::Sequencer *osr,
      const hobject_t &hoid,
      const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete, bool fast_read = false) = 0;
+
+   virtual bool allows_async_read() {
+     return false;
+   }
 
    virtual bool scrub_supported() = 0;
    virtual bool auto_repair_supported() const = 0;

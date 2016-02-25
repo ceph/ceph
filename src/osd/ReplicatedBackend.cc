@@ -272,6 +272,7 @@ struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
   }
 };
 void ReplicatedBackend::objects_read_async(
+  ObjectStore::Sequencer *osr,
   const hobject_t &hoid,
   const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		  pair<bufferlist*, Context*> > > &to_read,
@@ -280,27 +281,55 @@ void ReplicatedBackend::objects_read_async(
 {
   // There is no fast read implementation for replication backend yet
   assert(!fast_read);
-
-  int r = 0;
-  for (list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
-		 pair<bufferlist*, Context*> > >::const_iterator i =
-	   to_read.begin();
-       i != to_read.end() && r >= 0;
-       ++i) {
-    int _r = store->read(ch, ghobject_t(hoid), i->first.get<0>(),
-			 i->first.get<1>(), *(i->second.first),
-			 i->first.get<2>());
-    if (i->second.second) {
-      get_parent()->schedule_recovery_work(
-	get_parent()->bless_gencontext(
-	  new AsyncReadCallback(_r, i->second.second)));
+  if (allows_async_read()) {
+    int r = 0;
+    struct CBOnDelete {
+      list<Context *> per_offset_cbs;
+      Context *cb;
+      CBOnDelete(Context *cb) : cb(cb) {}
+      ~CBOnDelete() {
+	for (auto &&offset_cb : per_offset_cbs) {
+	  offset_cb->complete(0);
+	}
+	cb->complete(0);
+      }
+    };
+    auto cbondelete = std::make_shared<CBOnDelete>(on_complete);
+    for (auto i = to_read.begin();
+	 i != to_read.end() && r >= 0;
+	 ++i) {
+      cbondelete->per_offset_cbs.push_back(i->second.second);
+      int _s = store->async_read_dispatch(osr, i->second.second, coll,
+	ghobject_t(hoid), i->first.get<0>(),
+	i->first.get<1>(), i->second.first,
+	i->first.get<2>(),
+	get_parent()->bless_context(
+	  new ContainerContext<decltype(cbondelete)>(cbondelete)));
+      if (_s < 0)
+	r = _s;
     }
-    if (_r < 0)
-      r = _r;
+  } else {
+    int r = 0;
+    for (list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
+	   pair<bufferlist*, Context*> > >::const_iterator i =
+	   to_read.begin();
+	 i != to_read.end() && r >= 0;
+	 ++i) {
+      int _r = store->read(ch, ghobject_t(hoid), i->first.get<0>(),
+	i->first.get<1>(), *(i->second.first),
+	i->first.get<2>());
+      if (i->second.second) {
+	get_parent()->schedule_recovery_work(
+	  get_parent()->bless_gencontext(
+	    new AsyncReadCallback(_r, i->second.second)));
+      }
+      if (_r < 0)
+	r = _r;
+    }
+    get_parent()->schedule_recovery_work(
+      get_parent()->bless_gencontext(
+	new AsyncReadCallback(r, on_complete)));
   }
-  get_parent()->schedule_recovery_work(
-    get_parent()->bless_gencontext(
-      new AsyncReadCallback(r, on_complete)));
 }
 
 

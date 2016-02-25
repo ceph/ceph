@@ -115,6 +115,7 @@ void ReplicatedPG::OpContext::start_async_reads(ReplicatedPG *pg)
 {
   inflightreads = 1;
   pg->pgbackend->objects_read_async(
+    pg->osr.get(),
     obc->obs.oi.soid,
     pending_async_reads,
     new OnReadComplete(pg, this), pg->get_pool().fast_read);
@@ -126,8 +127,7 @@ void ReplicatedPG::OpContext::finish_read(ReplicatedPG *pg)
   --inflightreads;
   if (async_reads_complete()) {
     assert(pg->in_progress_async_reads.size());
-    assert(pg->in_progress_async_reads.front().second == this);
-    pg->in_progress_async_reads.pop_front();
+    pg->in_progress_async_reads.remove(make_pair(this->op, this));
     pg->complete_read_ctx(async_read_result, this);
   }
 }
@@ -4209,7 +4209,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  // read size was trimmed to zero and it is expected to do nothing
 	  // a read operation of 0 bytes does *not* do nothing, this is why
 	  // the trimmed_read boolean is needed
-	} else if (pool.info.require_rollback()) {
+	} else if (pool.info.ec_pool() ||
+	  ((pgbackend->allows_async_read()) && (op.op == CEPH_OSD_OP_READ) &&
+	   (op.extent.length >= cct->_conf->osd_min_async_read_size))) {
 	  async = true;
 	  boost::optional<uint32_t> maybe_crc;
 	  // If there is a data digest and it is possible we are reading
@@ -4227,6 +4229,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 				soid, op.flags))));
 	  dout(10) << " async_read noted for " << soid << dendl;
 	} else {
+	  assert(!pool.info.ec_pool());
 	  int r = pgbackend->objects_read_sync(
 	    soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
 	  if (r >= 0)
@@ -4325,6 +4328,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         map<uint64_t, uint64_t>::iterator miter;
         bufferlist data_bl;
 	uint64_t last = op.extent.offset;
+	bool async = pgbackend->allows_async_read();
+        for (miter = m.begin(); async && (miter != m.end()); ++miter) {
+	  if (miter->second < cct->_conf->osd_min_async_read_size)
+	    async = false;
+	}
+
         for (miter = m.begin(); miter != m.end(); ++miter) {
 	  // verify hole?
 	  if (cct->_conf->osd_verify_sparse_read_holes &&
@@ -4336,6 +4345,26 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      osd->clog->error() << coll << " " << soid << " sparse-read found data in hole "
 				<< last << "~" << len << "\n";
 	    }
+	  }
+
+	  if (async) {
+	    // Read data into allocated bufferlist, then combine into osd_op.outdata
+	    // on async completion.
+	    struct AddChunk : Context {
+	      bufferlist bl;
+	      bufferlist *op_bl;
+	      AddChunk(bufferlist *op_bl) : op_bl(op_bl) {}
+	      void finish(int) {
+		::encode_destructively(bl, *op_bl);
+	      }
+	    };
+
+	    auto *ac = new AddChunk(&(osd_op.outdata));
+	    ctx->pending_async_reads.push_back(
+	      make_pair(
+		boost::make_tuple(miter->first, miter->second, op.flags),
+		make_pair(&(ac->bl), ac)));
+	    continue;
 	  }
 
           bufferlist tmpbl;
@@ -4350,7 +4379,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  data_bl.claim_append(tmpbl);
 	  last = miter->first + r;
         }
-        
+
+	// For Async Reads, update count of backend reads that will be issued.
+	if (async) {
+	  ::encode(m, osd_op.outdata); // re-encode since it might be modified
+	  break;
+	}
+
         if (r < 0) {
           result = r;
           break;

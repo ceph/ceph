@@ -157,11 +157,16 @@ public:
     bufferlist *bl);
 
   void objects_read_async(
+    ObjectStore::Sequencer *osr,
     const hobject_t &hoid,
     const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 	       pair<bufferlist*, Context*> > > &to_read,
                Context *on_complete,
                bool fast_read = false);
+
+  bool allows_async_read() override {
+    return store->async_read_capable();
+  }
 
 private:
   // push
