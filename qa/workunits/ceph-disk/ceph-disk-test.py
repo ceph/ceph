@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2015 Red Hat <contact@redhat.com>
+# Copyright (C) 2015, 2016 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -15,7 +15,7 @@
 #
 # When debugging these tests (must be root), here are a few useful commands:
 #
-#  export PATH=..:$PATH
+#  export PATH=.:..:$PATH
 #  ceph-disk.sh # run once to prepare the environment as it would be by teuthology
 #  ln -sf /home/ubuntu/ceph/src/ceph-disk/ceph_disk/main.py $(which ceph-disk)
 #  ln -sf /home/ubuntu/ceph/udev/95-ceph-osd.rules /lib/udev/rules.d/95-ceph-osd.rules
@@ -277,26 +277,20 @@ class TestCephDisk(object):
         c = CephDisk()
         c.conf['global']['osd dmcrypt type'] = 'plain'
         c.save_conf()
-        self.activate_reactivate_dmcrypt('plain')
+        osd_uuid = self.activate_dmcrypt('ceph-disk-no-lockbox')
+        data_partition = c.get_osd_partition(osd_uuid)
+        c.sh("ceph-disk --verbose deactivate " + data_partition['path'])
+        c.wait_for_osd_down(osd_uuid)
+        c.sh("ceph-disk --verbose activate-journal " + data_partition['journal_dev'] +
+             " --reactivate" + " --dmcrypt")
+        c.wait_for_osd_up(osd_uuid)
+        c.check_osd_status(osd_uuid, 'journal')
+        c.destroy_osd(osd_uuid)
         c.save_conf()
 
     def test_deactivate_reactivate_dmcrypt_luks(self):
         c = CephDisk()
-        self.activate_reactivate_dmcrypt('luks')
-
-    def activate_reactivate_dmcrypt(self, type):
-        c = CephDisk()
-        disk = c.unused_disks()[0]
-        osd_uuid = str(uuid.uuid1())
-        journal_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk --verbose zap " + disk)
-        c.sh("ceph-disk --verbose prepare " +
-             " --osd-uuid " + osd_uuid +
-             " --journal-uuid " + journal_uuid +
-             " --dmcrypt " +
-             " " + disk)
-        c.wait_for_osd_up(osd_uuid)
-        c.check_osd_status(osd_uuid, 'journal')
+        osd_uuid = self.activate_dmcrypt('ceph-disk')
         data_partition = c.get_osd_partition(osd_uuid)
         c.sh("ceph-disk --verbose deactivate " + data_partition['path'])
         c.wait_for_osd_down(osd_uuid)
@@ -306,24 +300,28 @@ class TestCephDisk(object):
         c.check_osd_status(osd_uuid, 'journal')
         c.destroy_osd(osd_uuid)
 
-    def test_activate_dmcrypt_plain(self):
+    def test_activate_dmcrypt_plain_no_lockbox(self):
         c = CephDisk()
         c.conf['global']['osd dmcrypt type'] = 'plain'
         c.save_conf()
-        self.activate_dmcrypt('plain')
+        self.activate_dmcrypt('ceph-disk-no-lockbox')
         c.save_conf()
 
-    def test_activate_dmcrypt_luks(self):
+    def test_activate_dmcrypt_luks_no_lockbox(self):
         c = CephDisk()
-        self.activate_dmcrypt('luks')
+        self.activate_dmcrypt('ceph-disk-no-lockbox')
 
-    def activate_dmcrypt(self, type):
+    def test_activate_dmcrypt_luks_with_lockbox(self):
+        c = CephDisk()
+        self.activate_dmcrypt('ceph-disk')
+
+    def activate_dmcrypt(self, ceph_disk):
         c = CephDisk()
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
         journal_uuid = str(uuid.uuid1())
         c.sh("ceph-disk --verbose zap " + disk)
-        c.sh("ceph-disk --verbose prepare " +
+        c.sh(ceph_disk + " --verbose prepare " +
              " --osd-uuid " + osd_uuid +
              " --journal-uuid " + journal_uuid +
              " --dmcrypt " +

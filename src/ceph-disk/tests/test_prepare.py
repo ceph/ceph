@@ -307,16 +307,16 @@ class TestDevicePartitionCrypt(Base):
         ])
         partition = main.DevicePartitionCryptLuks(args)
         assert partition.luks()
-        assert partition.osd_dm_keypath is None
+        assert partition.osd_dm_key is None
         uuid = 'UUID'
         with mock.patch.multiple(main,
                                  _dmcrypt_map=mock.DEFAULT,
-                                 get_or_create_dmcrypt_key=mock.DEFAULT,
+                                 get_dmcrypt_key=mock.DEFAULT,
                                  get_partition_uuid=lambda path: uuid) as m:
             partition.map()
             assert m['_dmcrypt_map'].called
-            m['get_or_create_dmcrypt_key'].assert_called_with(
-                uuid, '/etc/ceph/dmcrypt-keys', key_size, True)
+            m['get_dmcrypt_key'].assert_called_with(
+                uuid, '/etc/ceph/dmcrypt-keys', True)
 
 
 class TestCryptHelpers(Base):
