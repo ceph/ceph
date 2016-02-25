@@ -1230,12 +1230,12 @@ def get_distro_version(ctx):
     """
     distro = get_distro(ctx)
     if ctx.os_version is not None:
-        return ctx.os_version
+        return str(ctx.os_version)
     try:
         os_version = ctx.config.get('os_version', DEFAULT_OS_VERSION[distro])
     except AttributeError:
         os_version = DEFAULT_OS_VERSION[distro]
-    return os_version
+    return str(os_version)
 
 
 def get_multi_machine_types(machinetype):
