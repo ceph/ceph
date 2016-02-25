@@ -104,6 +104,7 @@ int main(int argc, const char **argv)
 
   rbd::mirror::ImageReplayer::BootstrapParams bootstap_params(local_pool_name,
 							      image_name);
+  int64_t local_pool_id;
   int64_t remote_pool_id;
   std::string remote_image_id;
 
@@ -141,6 +142,14 @@ int main(int argc, const char **argv)
     goto cleanup;
   }
 
+  r = local->pool_lookup(local_pool_name.c_str());
+  if (r < 0) {
+    derr << "error finding local pool " << local_pool_name
+	 << ": " << cpp_strerror(r) << dendl;
+    goto cleanup;
+  }
+  local_pool_id = r;
+
   r = remote->init_with_context(g_ceph_context);
   if (r < 0) {
     derr << "could not initialize rados handle" << dendl;
@@ -171,7 +180,8 @@ int main(int argc, const char **argv)
   dout(5) << "starting replay" << dendl;
 
   replayer = new rbd::mirror::ImageReplayer(local, remote, client_id,
-					    remote_pool_id, remote_image_id);
+                                            local_pool_id, remote_pool_id,
+                                            remote_image_id);
 
   r = replayer->start(&bootstap_params);
   if (r < 0) {

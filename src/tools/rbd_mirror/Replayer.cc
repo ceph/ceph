@@ -118,6 +118,24 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
 
   for (const auto &kv : images) {
     int64_t pool_id = kv.first;
+
+    // TODO: clean up once remote peer -> image replayer refactored
+    librados::IoCtx remote_ioctx;
+    int r = m_remote->ioctx_create2(pool_id, remote_ioctx);
+    if (r < 0) {
+      derr << "failed to lookup remote pool " << pool_id << ": "
+           << cpp_strerror(r) << dendl;
+      continue;
+    }
+
+    librados::IoCtx local_ioctx;
+    r = m_local->ioctx_create(remote_ioctx.get_pool_name().c_str(), local_ioctx);
+    if (r < 0) {
+      derr << "failed to lookup local pool " << remote_ioctx.get_pool_name()
+           << ": " << cpp_strerror(r) << dendl;
+      continue;
+    }
+
     // create entry for pool if it doesn't exist
     auto &pool_replayers = m_images[pool_id];
     for (const auto &image_id : kv.second) {
@@ -125,6 +143,7 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
 	unique_ptr<ImageReplayer> image_replayer(new ImageReplayer(m_local,
 								   m_remote,
 								   m_client_id,
+                                                                   local_ioctx.get_id(),
 								   pool_id,
 								   image_id));
 	int r = image_replayer->start();
