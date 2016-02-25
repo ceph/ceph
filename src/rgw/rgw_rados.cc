@@ -10859,6 +10859,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, int shard_id, rgw_obj_key& sta
   map<string, bufferlist> updates;
   uint32_t count = 0;
   while (count < num_entries && !candidates.empty()) {
+    r = 0;
     // Select the next one
     int pos = candidates.begin()->second;
     const string& name = vcurrents[pos]->first;
