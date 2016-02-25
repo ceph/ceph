@@ -421,9 +421,6 @@ add_dependencies(librados osdc)
 target_link_libraries(librados LINK_PRIVATE osdc osd os global common cls_lock_client
   ${BLKID_LIBRARIES}
   ${CRYPTO_LIBS} ${EXTRALIBS} ${ALLOC_LIBS})
-if(${WITH_LTTNG})
-  target_link_libraries(librados librados_tp)
-endif(${WITH_LTTNG})
 if(${ENABLE_SHARED})
   set_target_properties(librados PROPERTIES OUTPUT_NAME rados VERSION 2.0.0
     SOVERSION 2)
@@ -710,9 +707,6 @@ add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
 if(${HAVE_LIBAIO})
   target_link_libraries(os aio)
 endif(${HAVE_LIBAIO})
-if(${WITH_LTTNG})
-  target_link_libraries(os libos_tp)
-endif(${WITH_LTTNG})
 if(${HAVE_LIBFUSE})
   target_link_libraries(os ${FUSE_LIBRARIES})
 endif(${HAVE_LIBFUSE})
@@ -765,9 +759,6 @@ add_library(osd_mon_objs OBJECT ${osd_mon_files})
 add_library(osd STATIC ${osd_srcs} $<TARGET_OBJECTS:osd_mon_objs>
   $<TARGET_OBJECTS:cls_references_objs>)
 target_link_libraries(osd dl leveldb)
-if(${WITH_LTTNG})
-  target_link_libraries(osd libosd_tp)
-endif(${WITH_LTTNG})
 
 set(ceph_osd_srcs
   ceph_osd.cc
@@ -1070,9 +1061,6 @@ if(${WITH_RBD})
   target_link_libraries(librbd LINK_PRIVATE librados common journal
     cls_lock_client cls_rbd_client cls_journal_client udev
     ${CMAKE_DL_LIBS})
-  if(${WITH_LTTNG})
-    target_link_libraries(librbd librbd_tp)
-  endif(${WITH_LTTNG})
   if(${ENABLE_SHARED})
     set_target_properties(librbd PROPERTIES VERSION "1.0.0" SOVERSION "1"
       OUTPUT_NAME rbd)
