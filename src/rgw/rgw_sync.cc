@@ -1676,9 +1676,9 @@ static RGWPeriodHistory::Cursor get_period_at(RGWRados* store,
     return cursor;
   }
 
-  // read the period from rados
-  RGWPeriod period(info.period);
-  int r = period.init(store->ctx(), store, store->realm.get_id());
+  // read the period from rados or pull it from the master
+  RGWPeriod period;
+  int r = store->period_puller->pull(info.period, period);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to read period id "
         << info.period << ": " << cpp_strerror(r) << dendl;
