@@ -362,6 +362,7 @@ private:
   friend ostream& operator<<(ostream& out, const OpSequencer& s);
 
   FDCache fdcache;
+  FDCache fdcache_direct;
   WBThrottle wbthrottle;
 
   atomic_t next_osr_id;
@@ -529,7 +530,8 @@ public:
     const ghobject_t& oid,
     bool create,
     FDRef *outfd,
-    Index *index = 0);
+    Index *index = 0,
+    bool directio = false);
 
   void lfn_close(FDRef fd);
   int lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t& o, const ghobject_t& newoid) ;

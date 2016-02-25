@@ -237,18 +237,22 @@ int FileStore::lfn_open(const coll_t& cid,
 			const ghobject_t& oid,
 			bool create,
 			FDRef *outfd,
-                        Index *index)
+			Index *index,
+			bool directio)
 {
   assert(outfd);
   int r = 0;
   bool need_lock = true;
   int flags = O_RDWR;
+  FDCache *cachep = directio ? &fdcache_direct : &fdcache;
 
   if (create)
     flags |= O_CREAT;
   if (g_conf->filestore_odsync_write) {
     flags |= O_DSYNC;
   }
+  if (directio)
+    flags |= O_DIRECT;
 
   Index index2;
   if (!index) {
@@ -270,7 +274,7 @@ int FileStore::lfn_open(const coll_t& cid,
     ((*index).index)->access_lock.get_write();
   }
   if (!replaying) {
-    *outfd = fdcache.lookup(oid);
+    *outfd = cachep->lookup(oid);
     if (*outfd) {
       if (need_lock) {
         ((*index).index)->access_lock.put_write();
@@ -319,7 +323,7 @@ int FileStore::lfn_open(const coll_t& cid,
 
   if (!replaying) {
     bool existed;
-    *outfd = fdcache.add(oid, fd, &existed);
+    *outfd = cachep->add(oid, fd, &existed);
     if (existed) {
       TEMP_FAILURE_RETRY(::close(fd));
     }
@@ -532,6 +536,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   stop(false), sync_thread(this),
   async_read_avail(g_conf->filestore_async_threads > 0),
   fdcache(g_ceph_context),
+  fdcache_direct(g_ceph_context),
   wbthrottle(g_ceph_context),
   next_osr_id(0),
   m_disable_wbthrottle(g_conf->filestore_odsync_write || 
