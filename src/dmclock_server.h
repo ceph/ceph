@@ -291,7 +291,6 @@ namespace crimson {
       // for handling timed scheduling
       std::mutex  sched_ahead_mtx;
       std::condition_variable sched_ahead_cv;
-      std::thread sched_ahead_thd;
       Time sched_ahead_when = TimeZero;
 
       // every request creates a tick
@@ -302,11 +301,15 @@ namespace crimson {
       size_t prop_sched_count = 0;
       size_t limit_break_sched_count = 0;
 
-      RunEvery              cleaning_job;
-      Duration              idle_age;
-      Duration              erase_age;
-      Duration              check_time;
-      std::deque<MarkPoint> clean_mark_points;
+      Duration                  idle_age;
+      Duration                  erase_age;
+      Duration                  check_time;
+      std::deque<MarkPoint>     clean_mark_points;
+
+      // NB: All threads declared at end, so they're destructed firs!
+
+      std::thread sched_ahead_thd;
+      std::unique_ptr<RunEvery> cleaning_job;
 
     public:
 
@@ -322,11 +325,9 @@ namespace crimson {
 	handle_f(_handle_f),
 	allowLimitBreak(_allowLimitBreak),
 	finishing(false),
-	sched_ahead_thd(&PriorityQueue::run_sched_ahead, this),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
 	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
-	check_time(std::chrono::duration_cast<Duration>(_check_time)),
-	cleaning_job(_check_time, std::bind(&PriorityQueue::do_clean, this))
+	check_time(std::chrono::duration_cast<Duration>(_check_time))
       {
 	assert(_erase_age >= _idle_age);
       }
@@ -336,6 +337,16 @@ namespace crimson {
 	finishing = true;
 	sched_ahead_cv.notify_one();
 	sched_ahead_thd.join();
+      }
+
+
+      void start() {
+	sched_ahead_thd = std::thread(&PriorityQueue::run_sched_ahead, this);
+	cleaning_job =
+	  std::unique_ptr<RunEvery>(
+	    new RunEvery(check_time,
+			 std::bind(&PriorityQueue::do_clean, this)));
+	started = true;
       }
 
 
@@ -615,6 +626,8 @@ namespace crimson {
 	      sched_ahead_cv.wait_for(l, microseconds);
 	    }
 	    sched_ahead_when = TimeZero;
+	    if (finishing) return;
+
 	    l.unlock();
 	    if (!finishing) {
 	      DataGuard g(data_mtx);

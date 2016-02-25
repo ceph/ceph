@@ -67,13 +67,17 @@ namespace crimson {
       std::map<S,ServerInfo>  server_map;
       mutable std::mutex      data_mtx;      // protects Counters and map
 
+      using DataGuard = std::lock_guard<decltype(data_mtx)>;
+
       // clean config
 
-      RunEvery                cleaning_job;
-      std::deque<MarkPoint>   clean_mark_points;
-      Duration                clean_age;     // age at which ServerInfo cleaned
+      std::deque<MarkPoint>     clean_mark_points;
+      Duration                  clean_age;     // age at which ServerInfo cleaned
 
-      using DataGuard = std::lock_guard<decltype(data_mtx)>;
+      // NB: All threads declared at end, so they're destructed firs!
+
+      std::unique_ptr<RunEvery> cleaning_job;
+      
 
     public:
 
@@ -81,8 +85,7 @@ namespace crimson {
       ServiceTracker(Duration _clean_every, Duration _clean_age) :
 	delta_counter(1),
 	rho_counter(1),
-	clean_age(std::chrono::duration_cast<Duration>(_clean_age)),
-	cleaning_job(_clean_every, std::bind(&ServiceTracker::do_clean, this))
+	clean_age(std::chrono::duration_cast<Duration>(_clean_age))
       {
 	// empty
       }

@@ -37,7 +37,6 @@ TestServer::TestServer(ServerId _id,
   op_time =
     std::chrono::microseconds((int) (0.5 +
 				     thread_pool_size * 1000000.0 / iops));
-
   std::chrono::milliseconds delay(1000);
   threads = new std::thread[thread_pool_size];
   for (int i = 0; i < thread_pool_size; ++i) {
@@ -60,11 +59,11 @@ TestServer::~TestServer() {
 }
 
 
-void TestServer::run(std::chrono::milliseconds wait_delay) {
+void TestServer::run(std::chrono::milliseconds check_period) {
   Lock l(inner_queue_mtx);
   while(true) {
     while(inner_queue.empty() && !finishing) {
-      inner_queue_cv.wait_for(l, wait_delay);
+      inner_queue_cv.wait_for(l, check_period);
     }
     if (!inner_queue.empty()) {
       auto& front = inner_queue.front();
