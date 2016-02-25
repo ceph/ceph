@@ -53,6 +53,9 @@ public:
 
   int register_client(const bufferlist &data);
   int unregister_client();
+  void register_client(const bufferlist &data, Context *on_finish);
+  void update_client(const bufferlist &data, Context *on_finish);
+  void unregister_client(Context *on_finish);
 
   void flush_commit_position(Context *on_safe);
 
