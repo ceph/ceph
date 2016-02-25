@@ -9,6 +9,10 @@
 /ceph-fs-common
 /ceph-mds-dbg
 /ceph-mds
+/ceph-mon-dbg
+/ceph-mon
+/ceph-osd-dbg
+/ceph-osd
 /ceph-resource-agents
 /ceph.init
 /radosgw.init
