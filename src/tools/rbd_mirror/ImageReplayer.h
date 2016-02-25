@@ -165,6 +165,8 @@ private:
 
   int get_bootrstap_params(BootstrapParams *params);
   int register_client();
+  int update_client();
+  int unregister_client();
   int create_local_image(const BootstrapParams &bootstrap_params);
   int get_image_id(librados::IoCtx &ioctx, const std::string &image_name,
 		   std::string *image_id);
@@ -179,7 +181,7 @@ private:
   std::string m_client_id;
   int64_t m_remote_pool_id, m_local_pool_id;
   std::string m_remote_image_id, m_local_image_id;
-  std::string m_snap_name;
+  std::string m_local_cluster_id, m_snap_name;
   Mutex m_lock;
   State m_state;
   std::string m_local_pool_name, m_remote_pool_name;

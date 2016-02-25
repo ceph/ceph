@@ -296,6 +296,14 @@ void ImageReplayer::start(Context *on_finish,
     return;
   }
 
+  r = m_local->cluster_fsid(&m_local_cluster_id);
+  if (r < 0) {
+    derr << "error retrieving local cluster id: " << cpp_strerror(r)
+	 << dendl;
+    on_start_finish(r);
+    return;
+  }
+
   CephContext *cct = static_cast<CephContext *>(m_local->cct());
   double commit_interval = cct->_conf->rbd_journal_commit_age;
   m_remote_journaler = new ::journal::Journaler(m_remote_ioctx,
@@ -358,12 +366,29 @@ void ImageReplayer::on_start_get_registered_client_status_finish(int r,
       }
       librbd::journal::MirrorPeerClientMeta &cm =
 	boost::get<librbd::journal::MirrorPeerClientMeta>(client_data.client_meta);
-      m_local_pool_id = cm.pool_id;
-      m_local_image_id = cm.image_id;
+
+      dout(20) << "client found, cluster_id=" << cm.cluster_id << ", pool_id="
+	       << cm.pool_id << ", image_id=" << cm.image_id << ", snap_name="
+	       << cm.snap_name << dendl;
+
+      if (cm.cluster_id != m_local_cluster_id) {
+	derr <<
+	  "registered cluster_id does not match us, restarting"
+	     << dendl;
+	goto start_bootstrap;
+      }
+
       m_snap_name = cm.snap_name;
 
-      dout(20) << "client found, pool_id=" << m_local_pool_id << ", image_id="
-	       << m_local_image_id << ", snap_name=" << m_snap_name << dendl;
+      if (!m_snap_name.empty()) {
+	derr <<
+	  "non empty snap name: previos bootstrap likely failed, restarting"
+	     << dendl;
+	goto start_bootstrap;
+      }
+
+      m_local_pool_id = cm.pool_id;
+      m_local_image_id = cm.image_id;
 
       if (!bootstrap_params.empty()) {
 	dout(0) << "ignoring bootsrap params: client already registered" << dendl;
@@ -376,6 +401,7 @@ void ImageReplayer::on_start_get_registered_client_status_finish(int r,
 
   dout(20) << "client not found" << dendl;
 
+start_bootstrap:
   on_start_bootstrap_start(bootstrap_params);
 }
 
@@ -740,29 +766,49 @@ void ImageReplayer::handle_replay_committed(
 
 int ImageReplayer::register_client()
 {
-  int r;
-
-  std::string local_cluster_id;
-  r = m_local->cluster_fsid(&local_cluster_id);
-  if (r < 0) {
-    derr << "error retrieving local cluster id: " << cpp_strerror(r)
-	 << dendl;
-    return r;
-  }
-  std::string m_snap_name = ".rbd-mirror." + m_client_id;
-
-  dout(20) << "m_cluster_id=" << local_cluster_id << ", pool_id="
+  dout(20) << "cluster_id=" << m_local_cluster_id << ", pool_id="
 	   << m_local_pool_id << ", image_id=" << m_local_image_id
 	   << ", snap_name=" << m_snap_name << dendl;
 
   bufferlist client_data;
   ::encode(librbd::journal::ClientData{librbd::journal::MirrorPeerClientMeta{
-	local_cluster_id, m_local_pool_id, m_local_image_id, m_snap_name}},
+	m_local_cluster_id, m_local_pool_id, m_local_image_id, m_snap_name}},
     client_data);
 
-  r = m_remote_journaler->register_client(client_data);
+  int r = m_remote_journaler->register_client(client_data);
   if (r < 0) {
     derr << "error registering client: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int ImageReplayer::update_client()
+{
+  dout(20) << "cluster_id=" << m_local_cluster_id << ", pool_id="
+	   << m_local_pool_id << ", image_id=" << m_local_image_id
+	   << ", snap_name=" << m_snap_name << dendl;
+
+  bufferlist client_data;
+  ::encode(librbd::journal::ClientData{librbd::journal::MirrorPeerClientMeta{
+	m_local_cluster_id, m_local_pool_id, m_local_image_id, m_snap_name}},
+    client_data);
+
+  int r = m_remote_journaler->update_client(client_data);
+  if (r < 0) {
+    derr << "error updating client: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int ImageReplayer::unregister_client()
+{
+  int r = m_remote_journaler->unregister_client();
+  if (r < 0) {
+    derr << "error unregistering client: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -809,6 +855,14 @@ int ImageReplayer::bootstrap(const BootstrapParams &bootstrap_params)
   dout(20) << "bootstrap params: local_pool_name=" << params.local_pool_name
 	   << ", local_image_name=" << params.local_image_name << dendl;
 
+  if (!m_snap_name.empty()) {
+    dout(0) << "bootstrap has been restarted, "
+	    << "it might fail due to remnants from previous bootstrap"
+	    << dendl;
+    // TODO: Try to cleanup possible remnants from previous bootstrap
+    // (remove remote image snapshot and local image)?
+  }
+
   r = create_local_image(params);
   if (r < 0) {
     derr << "error creating local image " << params.local_image_name
@@ -817,6 +871,7 @@ int ImageReplayer::bootstrap(const BootstrapParams &bootstrap_params)
     return r;
   }
 
+  m_snap_name = ".rbd-mirror." + m_client_id;
   r = register_client();
   if (r < 0) {
     derr << "error registering journal client: " << cpp_strerror(r) << dendl;
@@ -826,6 +881,13 @@ int ImageReplayer::bootstrap(const BootstrapParams &bootstrap_params)
   r = copy();
   if (r < 0) {
     derr << "error copying data to local image: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  m_snap_name = "";
+  r = update_client();
+  if (r < 0) {
+    derr << "error updating journal client: " << cpp_strerror(r) << dendl;
     return r;
   }
 
