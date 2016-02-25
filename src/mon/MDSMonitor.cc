@@ -162,7 +162,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // apply to paxos
   assert(get_last_committed() + 1 == pending_mdsmap.epoch);
   bufferlist mdsmap_bl;
-  pending_mdsmap.encode(mdsmap_bl, mon->get_quorum_features());
+  pending_mdsmap.encode(mdsmap_bl, mon->get_quorum_con_features());
 
   /* put everything in the transaction */
   put_version(t, pending_mdsmap.epoch, mdsmap_bl);

@@ -18,10 +18,11 @@
 
 #include "msg/Message.h"
 #include "mon/MonMap.h"
+#include "mon/mon_types.h"
 
 class MMonElection : public Message {
 
-  static const int HEAD_VERSION = 5;
+  static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 2;
 
 public:
@@ -45,6 +46,7 @@ public:
   bufferlist monmap_bl;
   set<int32_t> quorum;
   uint64_t quorum_features;
+  mon_feature_t mon_features;
   bufferlist sharing_bl;
   /* the following were both used in the next branch for a while
    * on user cluster, so we've left them in for compatibility. */
@@ -52,13 +54,18 @@ public:
   version_t defunct_two;
   
   MMonElection() : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
-    op(0), epoch(0), quorum_features(0), defunct_one(0),
+    op(0), epoch(0),
+    quorum_features(0),
+    mon_features(0),
+    defunct_one(0),
     defunct_two(0)
   { }
 
   MMonElection(int o, epoch_t e, MonMap *m)
     : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
-      fsid(m->fsid), op(o), epoch(e), quorum_features(0),
+      fsid(m->fsid), op(o), epoch(e),
+      quorum_features(0),
+      mon_features(0),
       defunct_one(0), defunct_two(0)
   {
     // encode using full feature set; we will reencode for dest later,
@@ -92,6 +99,7 @@ public:
     ::encode(defunct_one, payload);
     ::encode(defunct_two, payload);
     ::encode(sharing_bl, payload);
+    ::encode(mon_features, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -113,6 +121,8 @@ public:
     }
     if (header.version >= 5)
       ::decode(sharing_bl, p);
+    if (header.version >= 6)
+      ::decode(mon_features, p);
   }
   
 };

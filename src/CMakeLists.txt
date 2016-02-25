@@ -319,6 +319,7 @@ set(libcommon_files
   common/linux_version.c
   common/TracepointProvider.cc
   common/Cycles.cc
+  common/bit_str.cc
   osdc/Striper.cc
   osdc/Objecter.cc
   common/Graylog.cc
