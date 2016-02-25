@@ -4361,11 +4361,16 @@ void PG::scrub_compare_maps()
 
   // ok, do the pg-type specific scrubbing
   _scrub(authmap, missing_digest);
-  if (!state_test(PG_STATE_REPAIR) && !scrubber.store->empty()) {
-    dout(10) << __func__ << ": updating scrub object" << dendl;
-    ObjectStore::Transaction t;
-    scrubber.store->flush(&t);
-    osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
+  if (!scrubber.store->empty()) {
+    if (state_test(PG_STATE_REPAIR)) {
+      dout(10) << __func__ << ": discarding scrub results" << dendl;
+      scrubber.store->flush(nullptr);
+    } else {
+      dout(10) << __func__ << ": updating scrub object" << dendl;
+      ObjectStore::Transaction t;
+      scrubber.store->flush(&t);
+      osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
+    }
   }
 }
 

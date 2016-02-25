@@ -3500,3 +3500,31 @@ TRACEPOINT_EVENT(librados, rados_cache_unpin_exit,
         ctf_integer(int, retval, retval)
     )
 )
+
+TRACEPOINT_EVENT(librados, rados_inconsistent_pg_list_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        int64_t, id,
+        size_t, maxlen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer(int64_t, id, id)
+        ctf_integer(size_t, maxlen, maxlen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_inconsistent_pg_list_pg,
+    TP_ARGS(
+        const char*, buf),
+    TP_FIELDS(
+        ctf_string(buf, buf)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_inconsistent_pg_list_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)

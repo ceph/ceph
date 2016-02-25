@@ -994,7 +994,7 @@ Rados object in state %s." % self.state)
         if ret < 0:
             raise make_ex(ret, "error deleting pool '%s'" % pool_name)
 
-    @require(('pool_id', int))
+    @requires(('pool_id', int))
     def get_inconsistent_pgs(self, pool_id):
         """
         List inconsistent placement groups in the given pool
@@ -1005,7 +1005,7 @@ Rados object in state %s." % self.state)
         """
         self.require_state("connected")
         cdef:
-            int64_t _pool_id = pool_id
+            int64_t pool = pool_id
             size_t size = 512
             char *pgs = NULL
 
@@ -1013,15 +1013,15 @@ Rados object in state %s." % self.state)
             while True:
                 pgs = <char *>realloc_chk(pgs, size);
                 with nogil:
-                    ret = rados_inconsistent_pg_list(self.cluster,
-                                                     c_names, size)
+                    ret = rados_inconsistent_pg_list(self.cluster, pool,
+                                                     pgs, size)
                 if ret > size:
                     size *= 2
                 elif ret >= 0:
                     break
                 else:
                     raise make_ex(ret, "error calling inconsistent_pg_list")
-            return [pg for pg in decode_cstr(pgs[:ret]).split('\0') if name]
+            return [pg for pg in decode_cstr(pgs[:ret]).split('\0') if pg]
         finally:
             free(pgs)
 
