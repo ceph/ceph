@@ -980,6 +980,37 @@ namespace librbd {
       return 0;
     }
 
+    int mirror_uuid_get(librados::IoCtx *ioctx, std::string *uuid) {
+      bufferlist in_bl;
+      bufferlist out_bl;
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_uuid_get", in_bl,
+                          out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      try {
+        bufferlist::iterator bl_it = out_bl.begin();
+        ::decode(*uuid, bl_it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int mirror_uuid_set(librados::IoCtx *ioctx, const std::string &uuid) {
+      bufferlist in_bl;
+      ::encode(uuid, in_bl);
+
+      bufferlist out_bl;
+      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_uuid_set", in_bl,
+                          out_bl);
+      if (r < 0) {
+        return r;
+      }
+      return 0;
+    }
+
     int mirror_mode_get(librados::IoCtx *ioctx,
                         cls::rbd::MirrorMode *mirror_mode) {
       bufferlist in_bl;
