@@ -60,7 +60,7 @@ struct MirrorImage {
     : global_image_id(global_image_id), state(state) {}
 
   std::string global_image_id;
-  MirrorImageState state;
+  MirrorImageState state = MIRROR_IMAGE_STATE_DISABLING;
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &it);
