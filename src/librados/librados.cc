@@ -2853,7 +2853,7 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
 CEPH_RADOS_API int rados_inconsistent_pg_list(rados_t cluster, int64_t pool_id,
 					      char *buf, size_t len)
 {
-  tracepoint(librados, rados_inconsistent_pg_list_enter, cluster, len);
+  tracepoint(librados, rados_inconsistent_pg_list_enter, cluster, pool_id, len);
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   std::vector<librados::PlacementGroup> pgs;
   int r = ::get_inconsistent_pgs(*client, pool_id, &pgs);
@@ -2877,7 +2877,7 @@ CEPH_RADOS_API int rados_inconsistent_pg_list(rados_t cluster, int64_t pool_id,
     auto s = ss.str();
     unsigned rl = s.length() + 1;
     if (len >= rl) {
-      tracepoint(librados, rados_inconsistent_pg_list_pg, p);
+      tracepoint(librados, rados_inconsistent_pg_list_pg, s.c_str());
       strncat(b, s.c_str(), rl);
       b += rl;
       len -= rl;
