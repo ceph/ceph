@@ -87,7 +87,10 @@ namespace crimson {
 	rho_counter(1),
 	clean_age(std::chrono::duration_cast<Duration>(_clean_age))
       {
-	// empty
+	cleaning_job =
+	  std::unique_ptr<RunEvery>(
+	    new RunEvery(_clean_every,
+			 std::bind(&ServiceTracker::do_clean, this)));
       }
 
 
