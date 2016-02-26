@@ -24,6 +24,9 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+#undef dout_prefix
+#define dout_prefix (*_dout << "rgw meta sync: ")
+
 static string mdlog_sync_status_oid = "mdlog.sync-status";
 static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
 static string mdlog_sync_full_sync_index_prefix = "meta.full-sync.index";
@@ -1639,8 +1642,11 @@ int RGWRemoteMetaLog::init_sync_status()
       return r;
     }
     sync_info.num_shards = mdlog_info.num_shards;
-    sync_info.period = mdlog_info.period;
-    sync_info.realm_epoch = mdlog_info.realm_epoch;
+    auto cursor = store->period_history->get_current();
+    if (cursor) {
+      sync_info.period = cursor.get_period().get_id();
+      sync_info.realm_epoch = cursor.get_epoch();
+    }
   }
 
   RGWObjectCtx obj_ctx(store, NULL);
@@ -1717,17 +1723,25 @@ int RGWRemoteMetaLog::run_sync()
       return r;
     }
 
-    if (!mdlog_info.period.empty() && sync_status.sync_info.period.empty()) {
-      // restart sync if the remote has a period but our status does not
-      sync_status.sync_info.state = rgw_meta_sync_info::StateInit;
+    if (!mdlog_info.period.empty()) {
+      // restart sync if the remote has a period, but:
+      // a) our status does not, or
+      // b) our sync period comes before the remote's oldest log period
+      if (sync_status.sync_info.period.empty() ||
+          sync_status.sync_info.realm_epoch < mdlog_info.realm_epoch) {
+        sync_status.sync_info.state = rgw_meta_sync_info::StateInit;
+      }
     }
 
     if (sync_status.sync_info.state == rgw_meta_sync_info::StateInit) {
       ldout(store->ctx(), 20) << __func__ << "(): init" << dendl;
       sync_status.sync_info.num_shards = mdlog_info.num_shards;
-      // use the period/epoch from the master's oldest log
-      sync_status.sync_info.period = mdlog_info.period;
-      sync_status.sync_info.realm_epoch = mdlog_info.realm_epoch;
+      auto cursor = store->period_history->get_current();
+      if (cursor) {
+        // run full sync, then start incremental from the current period/epoch
+        sync_status.sync_info.period = cursor.get_period().get_id();
+        sync_status.sync_info.realm_epoch = cursor.get_epoch();
+      }
       r = run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx,
                                              sync_status.sync_info));
       if (r == -EBUSY) {
