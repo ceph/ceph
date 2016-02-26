@@ -162,7 +162,7 @@ int OSDMap::Incremental::get_net_marked_out(const OSDMap *previous) const
        ++p) {
     if (p->second == CEPH_OSD_OUT && !previous->is_out(p->first))
       n++;  // marked out
-    if (p->second != CEPH_OSD_OUT && previous->is_out(p->first))
+    else if (p->second != CEPH_OSD_OUT && previous->is_out(p->first))
       n--;  // marked in
   }
   return n;
