@@ -574,6 +574,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
       // to represent e.g. differing storage capacities
       unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
+      new_weight = MAX(new_weight, weight - g_conf->mon_reweight_max_change);
       if (sure) {
 	pending_inc.new_weight[p->first] = new_weight;
 	changed = true;
@@ -588,8 +589,9 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
       // assign a higher weight.. if we can.
       unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
+      new_weight = MIN(new_weight, weight + g_conf->mon_reweight_max_change);
       if (new_weight > 0x10000)
-	new_weight = 0x10000;
+          new_weight = 0x10000;
       if (new_weight > weight) {
 	sep = ", ";
 	if (sure) {
