@@ -16,7 +16,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int open_cms_envelope(CephContext *cct, string& src, string& dst)
+int rgw_open_cms_envelope(CephContext * const cct, string& src, string& dst)
 {
 #define BEGIN_CMS "-----BEGIN CMS-----"
 #define END_CMS "-----END CMS-----"
@@ -52,7 +52,9 @@ int open_cms_envelope(CephContext *cct, string& src, string& dst)
   return 0;
 }
 
-int decode_b64_cms(CephContext *cct, const string& signed_b64, bufferlist& bl)
+int rgw_decode_b64_cms(CephContext * const cct,
+                       const string& signed_b64,
+                       bufferlist& bl)
 {
   bufferptr signed_ber(signed_b64.size() * 2);
   char *dest = signed_ber.c_str();
@@ -60,13 +62,17 @@ int decode_b64_cms(CephContext *cct, const string& signed_b64, bufferlist& bl)
   size_t len = signed_b64.size();
   char buf[len + 1];
   buf[len] = '\0';
+
   for (size_t i = 0; i < len; i++, src++) {
-    if (*src != '-')
+    if (*src != '-') {
       buf[i] = *src;
-    else
+    } else {
       buf[i] = '/';
+    }
   }
-  int ret = ceph_unarmor(dest, dest + signed_ber.length(), buf, buf + signed_b64.size());
+
+  int ret = ceph_unarmor(dest, dest + signed_ber.length(), buf,
+                         buf + signed_b64.size());
   if (ret < 0) {
     ldout(cct, 0) << "ceph_unarmor() failed, ret=" << ret << dendl;
     return ret;
@@ -86,14 +92,14 @@ int decode_b64_cms(CephContext *cct, const string& signed_b64, bufferlist& bl)
 
 #define PKI_ANS1_PREFIX "MII"
 
-bool is_pki_token(const string& token)
+bool rgw_is_pki_token(const string& token)
 {
   return token.compare(0, sizeof(PKI_ANS1_PREFIX) - 1, PKI_ANS1_PREFIX) == 0;
 }
 
-void get_token_id(const string& token, string& token_id)
+void rgw_get_token_id(const string& token, string& token_id)
 {
-  if (!is_pki_token(token)) {
+  if (!rgw_is_pki_token(token)) {
     token_id = token;
     return;
   }
@@ -104,20 +110,23 @@ void get_token_id(const string& token, string& token_id)
   hash.Update((const byte *)token.c_str(), token.size());
   hash.Final(m);
 
-
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
   token_id = calc_md5;
 }
 
-bool decode_pki_token(CephContext *cct, const string& token, bufferlist& bl)
+bool rgw_decode_pki_token(CephContext * const cct,
+                          const string& token,
+                          bufferlist& bl)
 {
-  if (!is_pki_token(token))
+  if (!rgw_is_pki_token(token)) {
     return false;
+  }
 
-  int ret = decode_b64_cms(cct, token, bl);
-  if (ret < 0)
+  int ret = rgw_decode_b64_cms(cct, token, bl);
+  if (ret < 0) {
     return false;
+  }
 
   ldout(cct, 20) << "successfully decoded pki token" << dendl;
 
@@ -259,7 +268,7 @@ void RGWKeystoneTokenCache::add_admin(const KeystoneToken& token)
 {
   Mutex::Locker l(lock);
 
-  get_token_id(token.token.id, admin_token_id);
+  rgw_get_token_id(token.token.id, admin_token_id);
   add(admin_token_id, token);
 }
 

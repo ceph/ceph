@@ -6,11 +6,15 @@
 
 #include "rgw_common.h"
 
-int open_cms_envelope(CephContext *cct, string& src, string& dst);
-int decode_b64_cms(CephContext *cct, const string& signed_b64, bufferlist& bl);
-bool is_pki_token(const string& token);
-void get_token_id(const string& token, string& token_id);
-bool decode_pki_token(CephContext *cct, const string& token, bufferlist& bl);
+int rgw_open_cms_envelope(CephContext *cct, string& src, string& dst);
+int rgw_decode_b64_cms(CephContext *cct,
+                       const string& signed_b64,
+                       bufferlist& bl);
+bool rgw_is_pki_token(const string& token);
+void rgw_get_token_id(const string& token, string& token_id);
+bool rgw_decode_pki_token(CephContext *cct,
+                          const string& token,
+                          bufferlist& bl);
 
 enum class KeystoneApiVersion {
   VER_2,

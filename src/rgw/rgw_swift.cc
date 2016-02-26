@@ -323,14 +323,14 @@ int RGWSwift::check_revoked()
   ldout(cct, 10) << "signed=" << signed_str << dendl;
 
   string signed_b64;
-  ret = open_cms_envelope(cct, signed_str, signed_b64);
+  ret = rgw_open_cms_envelope(cct, signed_str, signed_b64);
   if (ret < 0)
     return ret;
 
   ldout(cct, 10) << "content=" << signed_b64 << dendl;
   
   bufferlist json;
-  ret = decode_b64_cms(cct, signed_b64, json);
+  ret = rgw_decode_b64_cms(cct, signed_b64, json);
   if (ret < 0) {
     return ret;
   }
@@ -430,7 +430,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
   KeystoneToken t;
 
   string token_id;
-  get_token_id(token, token_id);
+  rgw_get_token_id(token, token_id);
 
   ldout(cct, 20) << "token_id=" << token_id << dendl;
 
@@ -450,7 +450,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
   bufferlist bl;
 
   /* check if that's a self signed token that we can decode */
-  if (!decode_pki_token(cct, token, bl)) {
+  if (!rgw_decode_pki_token(cct, token, bl)) {
 
     /* can't decode, just go to the keystone server for validation */
 
