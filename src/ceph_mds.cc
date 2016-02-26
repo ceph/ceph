@@ -160,6 +160,8 @@ int main(int argc, const char **argv)
   Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
 				      entity_name_t::MDS(-1), "mds",
 				      getpid());
+  if (!msgr)
+    exit(1);
   msgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);
 
   cout << "starting " << g_conf->name << " at " << msgr->get_myaddr()
