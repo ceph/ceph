@@ -1,4 +1,7 @@
 overrides:
+  install:
+    ceph:
+      debuginfo: true
   rbd_fsx:
     valgrind: ["--tool=helgrind"]
   workunit:
