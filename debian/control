@@ -78,8 +78,6 @@ Package: ceph-base
 Architecture: linux-any
 Depends: binutils,
          ceph-common (>= 9.0.0-943),
-         ceph-osd,
-         ceph-mon,
          cryptsetup-bin | cryptsetup,
          debianutils,
          findutils,
