@@ -103,7 +103,10 @@ BuildRequires:	%insserv_prereq
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
-%else
+Requires:       lsb-release
+BuildRequires:  lsb-release
+%endif
+%if 0%{?fedora} || 0%{?rhel} 
 Requires:	gdisk
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
@@ -114,6 +117,8 @@ Requires(preun):chkconfig
 Requires(preun):initscripts
 BuildRequires:	gperftools-devel
 Requires:	python-flask
+Requires:       redhat-lsb-core
+BuildRequires:  redhat-lsb-core
 %endif
 # lttng and babeltrace for rbd-replay-prep
 %if 0%{?_with_lttng}
