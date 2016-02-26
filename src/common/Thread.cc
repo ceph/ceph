@@ -85,7 +85,9 @@ void *Thread::entry_wrapper()
   if (pid && cpuid >= 0)
     _set_affinity(cpuid);
 
+#ifdef HAVE_PTHREAD_SETNAME_NP
   pthread_setname_np(pthread_self(), thread_name);
+#endif
   return entry();
 }
 

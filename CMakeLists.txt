@@ -364,6 +364,12 @@ include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)
+# Check for non portable pthread extensions
+set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
+set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
+check_symbol_exists(pthread_setname_np "pthread.h" HAVE_PTHREAD_SETNAME_NP)
+set(CMAKE_REQUIRED_LIBRARIES "")
+set(CMAKE_REQUIRED_DEFINITIONS "")
 
 option(WITH_SELINUX "build SELinux policy" OFF)
 if(WITH_SELINUX)
