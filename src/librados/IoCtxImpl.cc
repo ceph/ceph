@@ -1307,8 +1307,6 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
   Context *oncomplete = new C_aio_linger_Complete(c, linger_op, false);
 
   ::ObjectOperation wr;
-  version_t objver;
-
   *handle = linger_op->get_cookie();
   linger_op->watch_context = new WatchInfo(this, oid, ctx, ctx2);
 
@@ -1317,7 +1315,7 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
   bufferlist bl;
   objecter->linger_watch(linger_op, wr,
                          snapc, ceph::real_clock::now(), bl,
-                         oncomplete, &objver);
+                         oncomplete, &c->objver);
 
   return 0;
 }
@@ -1366,14 +1364,13 @@ int librados::IoCtxImpl::aio_unwatch(uint64_t cookie, AioCompletionImpl *c)
   c->io = this;
   Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
   Context *oncomplete = new C_aio_linger_Complete(c, linger_op, true);
-  version_t ver = 0;
 
   ::ObjectOperation wr;
   prepare_assert_ops(&wr);
   wr.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   objecter->mutate(linger_op->target.base_oid, oloc, wr,
 		   snapc, ceph::real_clock::now(client->cct), 0, NULL,
-		   oncomplete, &ver);
+		   oncomplete, &c->objver);
   return 0;
 }
 
@@ -1457,7 +1454,7 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
   // Issue RADOS op
   objecter->linger_notify(linger_op,
 			  rd, snap_seq, inbl, NULL,
-			  onack, NULL);
+			  onack, &c->objver);
   return 0;
 }
 
