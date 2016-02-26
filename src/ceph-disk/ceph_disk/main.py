@@ -4115,6 +4115,14 @@ def list_devices():
 
 
 def main_list(args):
+    activate_lock.acquire()  # noqa
+    try:
+        main_list_protected(args)
+    finally:
+        activate_lock.release()  # noqa
+
+
+def main_list_protected(args):
     devices = list_devices()
     if args.path:
         paths = []

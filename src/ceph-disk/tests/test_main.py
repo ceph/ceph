@@ -32,6 +32,8 @@ class TestCephDisk(object):
         main.setup_logging(verbose=True, log_stdout=False)
 
     def test_main_list_json(self, capsys):
+        data = tempfile.mkdtemp()
+        main.setup_statedir(data)
         args = main.parse_args(['list', '--format', 'json'])
         with patch.multiple(
                 main,
@@ -39,8 +41,11 @@ class TestCephDisk(object):
             main.main_list(args)
             out, err = capsys.readouterr()
             assert '{}\n' == out
+        shutil.rmtree(data)
 
     def test_main_list_plain(self, capsys):
+        data = tempfile.mkdtemp()
+        main.setup_statedir(data)
         args = main.parse_args(['list'])
         with patch.multiple(
                 main,
@@ -48,6 +53,7 @@ class TestCephDisk(object):
             main.main_list(args)
             out, err = capsys.readouterr()
             assert '' == out
+        shutil.rmtree(data)
 
     def test_list_format_more_osd_info_plain(self):
         dev = {
