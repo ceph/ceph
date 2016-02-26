@@ -588,7 +588,6 @@ TEST_P(LibRadosWatchNotifyPP, AioWatchNotify2) {
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
   ASSERT_EQ(0u, missed_map.size());
   ASSERT_GT(ioctx.watch_check(handle), 0);
-  ioctx.unwatch2(handle);
 
   comp = cluster.aio_create_completion();
   ioctx.aio_unwatch(handle, comp);
