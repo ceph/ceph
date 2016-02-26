@@ -44,7 +44,7 @@ def setup_module():
 
 def teardown_module():
     global ioctx
-    ioctx.__del__()
+    ioctx.close()
     global rados
     rados.delete_pool(pool_name)
     rados.shutdown()
@@ -1026,7 +1026,7 @@ class TestExclusiveLock(object):
     def tearDown(self):
         remove_image()
         global ioctx2
-        ioctx2.__del__()
+        ioctx2.close()
         global rados2
         rados2.shutdown()
 
