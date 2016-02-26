@@ -14,6 +14,7 @@ from teuthology import lockstatus as ls
 import os
 import pwd
 import tempfile
+import netaddr
 
 try:
     import libvirt
@@ -91,6 +92,45 @@ class Remote(object):
         except Exception as e:
             log.debug(e)
             return False
+
+    @property
+    def ip_address(self):
+        return self.ssh.get_transport().getpeername()[0]
+
+    @property
+    def interface(self):
+        """
+        The interface used by the current SSH connection
+        """
+        if not hasattr(self, '_interface'):
+            self._set_iface_and_cidr()
+        return self._interface
+
+    @property
+    def cidr(self):
+        """
+        The network (in CIDR notation) used by the remote's SSH connection
+        """
+        if not hasattr(self, '_cidr'):
+            self._set_iface_and_cidr()
+        return self._cidr
+
+    def _set_iface_and_cidr(self):
+        proc = self.run(
+            args=['PATH=/sbin:/usr/sbin', 'ip', 'addr', 'show'],
+            stdout=StringIO(),
+        )
+        proc.wait()
+        regexp = 'inet.? %s' % self.ip_address
+        proc.stdout.seek(0)
+        for line in proc.stdout.readlines():
+            line = line.strip()
+            if re.match(regexp, line):
+                items = line.split()
+                self._interface = items[-1]
+                self._cidr = str(netaddr.IPNetwork(items[1]).cidr)
+                return
+        raise RuntimeError("Could not determine interface/CIDR!")
 
     @property
     def hostname(self):
