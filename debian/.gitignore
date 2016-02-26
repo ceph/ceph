@@ -2,7 +2,6 @@
 /*.debhelper.log
 /ceph-common-dbg
 /ceph-common
-/ceph-dbg
 /ceph-fuse-dbg
 /ceph-fuse
 /ceph-fs-common-dbg
