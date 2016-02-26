@@ -102,9 +102,8 @@ Store::create(ObjectStore* store,
   assert(store);
   assert(t);
   hobject_t oid = make_scrub_object(pgid);
-  coll_t temp_coll = coll.get_temp();
-  t->touch(temp_coll, ghobject_t{oid});
-  return new Store{temp_coll, oid, store};
+  t->touch(coll, ghobject_t{oid});
+  return new Store{coll, oid, store};
 }
 
 Store::Store(const coll_t& coll, const hobject_t& oid, ObjectStore* store)
