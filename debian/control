@@ -78,8 +78,6 @@ Package: ceph-base
 Architecture: linux-any
 Depends: binutils,
          ceph-common (>= 9.0.0-943),
-         ceph-osd,
-         ceph-mon,
          cryptsetup-bin | cryptsetup,
          debianutils,
          findutils,
@@ -107,19 +105,6 @@ Description: common ceph daemon libraries and management tools
  This package contains the libraries and management tools that are common among
  the three Ceph server daemons (ceph-mon, ceph-osd, ceph-mds). These tools are
  necessary for creating, running, and administering a Ceph storage cluster.
-
-Package: ceph-dbg
-Architecture: linux-any
-Section: debug
-Priority: extra
-Depends: ceph-base, ${misc:Depends}
-Replaces: ceph-test-dbg (<< 0.94-1322)
-Breaks: ceph-test-dbg (<< 0.94-1322)
-Description: debugging symbols for ceph
- Ceph is a distributed storage system designed to provide excellent
- performance, reliability, and scalability.
- .
- This package contains the debugging symbols for ceph.
 
 Package: ceph-mds
 Architecture: linux-any
@@ -168,8 +153,6 @@ Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: ceph-mon (= ${binary:Version}), ${misc:Depends}
-Replaces: ceph-dbg (<< 9.0.1-1294)
-Breaks: ceph-dbg (<< 9.0.1-1294)
 Description: debugging symbols for ceph-mon
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -197,8 +180,6 @@ Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: ceph-osd (= ${binary:Version}), ${misc:Depends}
-Replaces: ceph-dbg (<< 9.0.1-1294)
-Breaks: ceph-dbg (<< 9.0.1-1294)
 Description: debugging symbols for ceph-osd
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
