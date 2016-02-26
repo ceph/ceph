@@ -123,6 +123,15 @@ class CephDisk:
     def unload_scsi_debug(self):
         self.sh("rmmod scsi_debug || true")
 
+    def get_lockbox(self):
+        disks = json.loads(self.sh("ceph-disk list --format json"))
+        for disk in disks:
+            if 'partitions' in disk:
+                for partition in disk['partitions']:
+                    if partition.get('type') == 'lockbox':
+                        return partition
+        raise Exception("no lockbox found " + str(disks))
+
     def get_osd_partition(self, uuid):
         disks = json.loads(self.sh("ceph-disk list --format json"))
         for disk in disks:
@@ -292,8 +301,10 @@ class TestCephDisk(object):
         c = CephDisk()
         osd_uuid = self.activate_dmcrypt('ceph-disk')
         data_partition = c.get_osd_partition(osd_uuid)
+        lockbox_partition = c.get_lockbox()
         c.sh("ceph-disk --verbose deactivate " + data_partition['path'])
         c.wait_for_osd_down(osd_uuid)
+        c.sh("ceph-disk --verbose trigger --sync " + lockbox_partition['path'])
         c.sh("ceph-disk --verbose activate-journal " + data_partition['journal_dev'] +
              " --reactivate" + " --dmcrypt")
         c.wait_for_osd_up(osd_uuid)
@@ -304,16 +315,39 @@ class TestCephDisk(object):
         c = CephDisk()
         c.conf['global']['osd dmcrypt type'] = 'plain'
         c.save_conf()
-        self.activate_dmcrypt('ceph-disk-no-lockbox')
+        osd_uuid = self.activate_dmcrypt('ceph-disk-no-lockbox')
+        c.destroy_osd(osd_uuid)
         c.save_conf()
 
     def test_activate_dmcrypt_luks_no_lockbox(self):
         c = CephDisk()
-        self.activate_dmcrypt('ceph-disk-no-lockbox')
+        osd_uuid = self.activate_dmcrypt('ceph-disk-no-lockbox')
+        c.destroy_osd(osd_uuid)
 
     def test_activate_dmcrypt_luks_with_lockbox(self):
         c = CephDisk()
-        self.activate_dmcrypt('ceph-disk')
+        osd_uuid = self.activate_dmcrypt('ceph-disk')
+        c.destroy_osd(osd_uuid)
+
+    def test_activate_lockbox(self):
+        c = CephDisk()
+        osd_uuid = self.activate_dmcrypt('ceph-disk')
+        lockbox = c.get_lockbox()
+        assert lockbox['state'] == 'active'
+        c.sh("umount " + lockbox['path'])
+        lockbox = c.get_lockbox()
+        assert lockbox['state'] == 'prepared'
+        c.sh("ceph-disk --verbose trigger " + lockbox['path'])
+        success = False
+        for delay in (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024):
+            lockbox = c.get_lockbox()
+            if lockbox['state'] == 'active':
+                success = True
+                break
+            time.sleep(delay)
+        if not success:
+            raise Exception('timeout waiting for lockbox ' + lockbox['path'])
+        c.destroy_osd(osd_uuid)
 
     def activate_dmcrypt(self, ceph_disk):
         c = CephDisk()
@@ -328,7 +362,7 @@ class TestCephDisk(object):
              " " + disk)
         c.wait_for_osd_up(osd_uuid)
         c.check_osd_status(osd_uuid, 'journal')
-        c.destroy_osd(osd_uuid)
+        return osd_uuid
 
     def test_activate_no_journal(self):
         c = CephDisk()
