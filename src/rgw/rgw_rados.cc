@@ -2379,20 +2379,20 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash,
       ldout(store->ctx(), 5) << "Cannot load compressor of type " << store->ctx()->_conf->rgw_compression_type 
                        << "for rgw, check rgw_compression_type config option" << dendl;
       compressed = false;
+      in_bl.claim(bl);
     } else {
-      bufferlist out;
-      int cr = compressor->compress(bl, out);
+      int cr = compressor->compress(bl, in_bl);
       if (cr != 0) {
         ldout(store->ctx(), 5) << "Compression failed with exit code " << cr << dendl;
         compressed = false;
+        in_bl.claim(bl);
       } else {
         compressed = true;
-        in_bl = out;
       }
     }
   } else {
     compressed = false;
-    in_bl = bl;
+    in_bl.claim(bl);
   }
   // end of compression stuff
 
@@ -2441,6 +2441,7 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash,
   int ret = write_data(in_bl, write_ofs, phandle, pobj, exclusive);
   if (ret >= 0) { /* we might return, need to clear bl as it was already sent */
     in_bl.clear();
+    bl.clear();
   }
   return ret;
 }
@@ -6465,7 +6466,6 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
 
   /* update quota cache */
   store->quota_handler->update_stats(meta.owner, bucket, (orig_exists ? 0 : 1), size, orig_size);
-
   return 0;
 
 done_cancel:
@@ -9052,12 +9052,16 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
     return r;
   }
 
+  int dec_size = 0;
   if (params.attrs) {
     *params.attrs = astate->attrset;
     if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
       for (iter = params.attrs->begin(); iter != params.attrs->end(); ++iter) {
-        ldout(cct, 20) << "Read xattr: " << iter->first << dendl;
+        ldout(cct, 20) << "Read xattr: " << iter->first << "=" << iter->second << dendl;
       }
+    }
+    if (params.attrs->find(RGW_ATTR_COMPRESSION) != params.attrs->end()) {
+      dec_size = atoi(params.attrs->at(RGW_ATTR_COMPRESSION_ORIG_SIZE).c_str());
     }
   }
 
@@ -9135,8 +9139,12 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
     *pofs = ofs;
   if (pend)
     *pend = end;
-  if (params.read_size)
-    *params.read_size = (ofs <= end ? end + 1 - ofs : 0);
+  if (params.read_size) {
+    if (dec_size)
+      *params.read_size = dec_size;
+    else
+      *params.read_size = (ofs <= end ? end + 1 - ofs : 0);
+  }
   if (params.obj_size)
     *params.obj_size = astate->size;
   if (params.lastmod)
