@@ -108,6 +108,9 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OLH_ID_TAG     RGW_ATTR_OLH_PREFIX "idtag"
 #define RGW_ATTR_OLH_PENDING_PREFIX RGW_ATTR_OLH_PREFIX "pending."
 
+#define RGW_ATTR_COMPRESSION    RGW_ATTR_PREFIX "compression"
+#define RGW_ATTR_COMPRESSION_ORIG_SIZE    RGW_ATTR_PREFIX "orig_size"
+
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
 #define RGW_ATTR_UNIX1          RGW_ATTR_PREFIX "unix1"

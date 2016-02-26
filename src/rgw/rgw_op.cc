@@ -39,6 +39,9 @@
 
 #include "include/assert.h"
 
+#include "compressor/Compressor.h"
+
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -1262,7 +1265,28 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
     gc_invalidate_time = start_time;
     gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
   }
-
+  // compression stuff
+  bool need_decompress = (attrs.find(RGW_ATTR_COMPRESSION) != attrs.end());
+  if (need_decompress) {   // or it's the first part and flag is set
+    ldout(s->cct, 10) << "Compression for rgw is enabled, decompress part" << dendl;
+    string compression_type = attrs[RGW_ATTR_COMPRESSION].c_str();
+    CompressorRef compressor = Compressor::create(s->cct, compression_type);
+    if (!compressor.get()) {
+      // if compressor isn't available - error, because cannot return decompressed data?
+      lderr(s->cct) << "Cannot load compressor of type " << compression_type 
+                       << "for rgw, check rgw_compression_type config option" << dendl;
+      return -1;
+    } else {
+      bufferlist out_bl;
+      int cr = compressor->decompress(bl, out_bl);
+      if (cr != 0) {
+        lderr(s->cct) << "Compression failed with exit code " << cr << dendl;
+        return -1;
+      }
+      return send_response_data(out_bl, bl_ofs, out_bl.length());
+    }
+  }
+  // end of compression stuff
   return send_response_data(bl, bl_ofs, bl_len);
 }
 
@@ -2983,6 +3007,18 @@ void RGWPutObj::execute()
 
   hash.Final(m);
 
+  if (processor->is_compressed()) {
+    bufferlist tmp;
+    tmp.append(s->cct->_conf->rgw_compression_type.c_str(), s->cct->_conf->rgw_compression_type.length()+1);
+    attrs[RGW_ATTR_COMPRESSION] = tmp;
+    tmp.clear();
+    char sz [20];
+    snprintf(sz, sizeof(sz), "%lu", s->obj_size);
+    tmp.append(sz, strlen(sz)+1);
+    attrs[RGW_ATTR_COMPRESSION_ORIG_SIZE] = tmp;
+  }
+
+
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
   etag = calc_md5;
@@ -3863,6 +3899,8 @@ void RGWGetACLs::execute()
   s3policy->to_xml(ss);
   acls = ss.str();
 }
+
+
 
 int RGWPutACLs::verify_permission()
 {
