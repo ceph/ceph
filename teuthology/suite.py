@@ -446,6 +446,16 @@ def get_hash(project='ceph', branch='master', flavor='basic',
     log.debug("Gitbuilder URL: %s", url)
     resp = requests.get(url)
     if not resp.ok:
+        msg = "Got a {0} trying to get hash for project '{1}' " + \
+            "and branch '{2}' from URL: {3}"
+        log.warn(
+            msg.format(
+                resp.status_code,
+                project,
+                branch,
+                url
+            )
+        )
         return None
     return str(resp.text.strip())
 
