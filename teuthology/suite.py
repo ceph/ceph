@@ -991,10 +991,12 @@ def generate_combinations(path, mat, generate_from, generate_to):
             matrix.generate_paths(path, output, combine_path)))
     return ret
 
-def build_matrix(path, _isfile=os.path.isfile,
-                _isdir=os.path.isdir,
-                _listdir=os.listdir,
-                subset=None):
+def build_matrix(path,
+                 _exists=os.path.exists,
+                 _isfile=os.path.isfile,
+                 _isdir=os.path.isdir,
+                 _listdir=os.listdir,
+                 subset=None):
     """
     Return a list of items descibed by path such that if the list of
     items is chunked into mincyclicity pieces, each piece is still a
@@ -1028,16 +1030,17 @@ def build_matrix(path, _isfile=os.path.isfile,
     of chosen subitems.
 
     :param path:        The path to search for yaml fragments
+    :param _exists:     Custom os.path.exists(); for testing only
     :param _isfile:     Custom os.path.isfile(); for testing only
     :param _isdir:      Custom os.path.isdir(); for testing only
     :param _listdir:	Custom os.listdir(); for testing only
     :param subset:	(index, outof)
     """
     mat, first, matlimit = _get_matrix(
-        path, _isfile, _isdir, _listdir, subset)
+        path, _exists, _isfile, _isdir, _listdir, subset)
     return generate_combinations(path, mat, first, matlimit)
 
-def _get_matrix(path, _isfile=os.path.isfile,
+def _get_matrix(path, _exists=os.path.exists, _isfile=os.path.isfile,
                  _isdir=os.path.isdir,
                  _listdir=os.listdir,
                  subset=None):
@@ -1046,7 +1049,7 @@ def _get_matrix(path, _isfile=os.path.isfile,
     matlimit = None
     if subset:
         (index, outof) = subset
-        mat = _build_matrix(path, _isfile, _isdir, _listdir, mincyclicity=outof)
+        mat = _build_matrix(path, _exists, _isfile, _isdir, _listdir, mincyclicity=outof)
         first = (mat.size() / outof) * index
         if index == outof or index == outof - 1:
             matlimit = mat.size()
@@ -1054,13 +1057,13 @@ def _get_matrix(path, _isfile=os.path.isfile,
             matlimit = (mat.size() / outof) * (index + 1)
     else:
         first = 0
-        mat = _build_matrix(path, _isfile, _isdir, _listdir)
+        mat = _build_matrix(path, _exists, _isfile, _isdir, _listdir)
         matlimit = mat.size()
     return mat, first, matlimit
 
-def _build_matrix(path, _isfile=os.path.isfile,
+def _build_matrix(path, _exists=os.path.exists, _isfile=os.path.isfile,
                   _isdir=os.path.isdir, _listdir=os.listdir, mincyclicity=0, item=''):
-    if not os.path.exists(path):
+    if not _exists(path):
         raise IOError('%s does not exist' % path)
     if _isfile(path):
         if path.endswith('.yaml'):
@@ -1079,6 +1082,7 @@ def _build_matrix(path, _isfile=os.path.isfile,
             for fn in sorted(files):
                 submat = _build_matrix(
                     os.path.join(path, fn),
+                    _exists,
                     _isfile,
                     _isdir,
                     _listdir,
@@ -1094,6 +1098,7 @@ def _build_matrix(path, _isfile=os.path.isfile,
             for fn in sorted(files):
                 submat = _build_matrix(
                     os.path.join(path, fn),
+                    _exists,
                     _isfile,
                     _isdir,
                     _listdir,
@@ -1113,6 +1118,7 @@ def _build_matrix(path, _isfile=os.path.isfile,
             for fn in sorted(files):
                 submat = _build_matrix(
                     os.path.join(path, fn),
+                    _exists,
                     _isfile,
                     _isdir,
                     _listdir,

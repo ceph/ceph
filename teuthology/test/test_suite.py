@@ -463,8 +463,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
+        fake_exists, fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
+        result = suite.build_matrix('d0_0', fake_exists, fake_isfile, fake_isdir,
                                     fake_listdir)
         assert len(result) == 1
 
@@ -482,8 +482,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
+        fake_exists, fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
+        result = suite.build_matrix('d0_0', fake_exists, fake_isfile, fake_isdir,
                                     fake_listdir)
         assert len(result) == 4
         assert self.fragment_occurences(result, 'd1_1_1.yaml') == 0.5
@@ -506,8 +506,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
+        fake_exists, fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
+        result = suite.build_matrix('d0_0', fake_exists, fake_isfile, fake_isdir,
                                     fake_listdir)
         assert len(result) == 8
         assert self.fragment_occurences(result, 'd1_2_0.yaml') == 0.5
@@ -531,8 +531,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
+        fake_exists, fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
+        result = suite.build_matrix('d0_0', fake_exists, fake_isfile, fake_isdir,
                                     fake_listdir)
         assert len(result) == 8
         assert self.fragment_occurences(result, 'd1_2_2.yaml') == 0.25
@@ -557,8 +557,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
+        fake_exists, fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
+        result = suite.build_matrix('d0_0', fake_exists, fake_isfile, fake_isdir,
                                     fake_listdir)
         assert len(result) == 2
         for i in result:
@@ -594,8 +594,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('teuthology/no-ceph', fake_isfile,
+        fake_exists, fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
+        result = suite.build_matrix('teuthology/no-ceph', fake_exists, fake_isfile,
                                     fake_isdir, fake_listdir)
         assert len(result) == 11
         assert self.fragment_occurences(result, 'vps.yaml') == 1 / 11.0
@@ -627,8 +627,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('teuthology/no-ceph', fake_isfile,
+        fake_exists, fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
+        result = suite.build_matrix('teuthology/no-ceph', fake_exists, fake_isfile,
                                     fake_isdir, fake_listdir)
         fake_fs2 = {
             'teuthology': {
@@ -658,8 +658,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir2, fake_isfile2, fake_isdir2, _ = make_fake_fstools(fake_fs2)
-        result2 = suite.build_matrix('teuthology/no-ceph', fake_isfile2,
+        fake_exists2, fake_listdir2, fake_isfile2, fake_isdir2, _ = make_fake_fstools(fake_fs2)
+        result2 = suite.build_matrix('teuthology/no-ceph', fake_exists2, fake_isfile2,
                                      fake_isdir2, fake_listdir2)
         assert len(result) == 11
         assert len(result2) == len(result)
@@ -691,8 +691,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('teuthology/no-ceph', fake_isfile,
+        fake_exists, fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
+        result = suite.build_matrix('teuthology/no-ceph', fake_exists, fake_isfile,
                                     fake_isdir, fake_listdir)
         fake_fs2 = {
             'teuthology': {
@@ -728,8 +728,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir2, fake_isfile2, fake_isdir2, _ = make_fake_fstools(fake_fs2)
-        result2 = suite.build_matrix('teuthology/no-ceph', fake_isfile2,
+        fake_exists2, fake_listdir2, fake_isfile2, fake_isdir2, _ = make_fake_fstools(fake_fs2)
+        result2 = suite.build_matrix('teuthology/no-ceph', fake_exists2, fake_isfile2,
                                      fake_isdir2, fake_listdir2)
         assert len(result) == 11
         assert len(result2) == len(result)
@@ -750,8 +750,8 @@ class TestBuildMatrix(object):
                 'tasks': {'cfuse_workunit_suites_fsstress.yaml': None},
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('thrash', fake_isfile,
+        fake_exists, fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
+        result = suite.build_matrix('thrash', fake_exists, fake_isfile,
                                     fake_isdir, fake_listdir)
         assert len(result) == 1
         assert self.fragment_occurences(result, 'base.yaml') == 1
@@ -810,9 +810,9 @@ class TestSubset(object):
 
     @staticmethod
     def generate_description_list(tree, subset):
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(tree)
+        fake_exists, fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(tree)
         mat, first, matlimit = suite._get_matrix(
-            'root', _isfile=fake_isfile, _isdir=fake_isdir,
+            'root', _exists=fake_exists, _isfile=fake_isfile, _isdir=fake_isdir,
             _listdir=fake_listdir, subset=subset)
         return [i[0] for i in suite.generate_combinations(
             'root', mat, first, matlimit)], mat, first, matlimit

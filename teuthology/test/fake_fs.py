@@ -66,6 +66,9 @@ def make_fake_fstools(fake_filesystem):
     def fake_isdir(path, fsdict=False):
         return not fake_isfile(path)
 
+    def fake_exists(path, fsdict=False):
+        return fake_isfile(path, fsdict) or fake_isdir(path, fsdict)
+
     def fake_open(path, mode=None, buffering=None):
         components = path.strip('/').split('/')
         subdict = fake_filesystem
@@ -80,4 +83,4 @@ def make_fake_fstools(fake_filesystem):
             return closing(StringIO(''))
         return closing(StringIO(subdict))
 
-    return fake_listdir, fake_isfile, fake_isdir, fake_open
+    return fake_exists, fake_listdir, fake_isfile, fake_isdir, fake_open

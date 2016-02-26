@@ -106,8 +106,8 @@ expected_rbd_features = [
 class TestDescribeTests(object):
 
     def setup(self):
-        self.fake_listdir, self.fake_isfile, self.fake_isdir, self.fake_open = \
-            make_fake_fstools(realistic_fs)
+        self.fake_exists, self.fake_listdir, self.fake_isfile,
+            self.fake_isdir, self.fake_open = make_fake_fstools(realistic_fs)
 
     @staticmethod
     def assert_expected_combo_headers(headers):
@@ -231,7 +231,7 @@ class TestDescribeTests(object):
 
 def test_extract_info_dir():
     simple_fs = {'a': {'b.yaml': 'meta: [{foo: c}]'}}
-    _, _, fake_isdir, fake_open = make_fake_fstools(simple_fs)
+    _, _, _, fake_isdir, fake_open = make_fake_fstools(simple_fs)
     info = extract_info('a', [], fake_isdir, fake_open)
     assert info == {}
 
@@ -243,7 +243,7 @@ def test_extract_info_dir():
 
 
 def check_parse_error(fs):
-    _, _, fake_isdir, fake_open = make_fake_fstools(fs)
+    _, _, _, fake_isdir, fake_open = make_fake_fstools(fs)
     with pytest.raises(ParseError):
         a = extract_info('a.yaml', ['a'], fake_isdir, fake_open)
         raise Exception(str(a))
@@ -263,6 +263,6 @@ def test_extract_info_not_a_dict():
 
 def test_extract_info_empty_file():
     simple_fs = {'a.yaml': ''}
-    _, _, fake_isdir, fake_open = make_fake_fstools(simple_fs)
+    _, _, _, fake_isdir, fake_open = make_fake_fstools(simple_fs)
     info = extract_info('a.yaml', [], fake_isdir, fake_open)
     assert info == {}
