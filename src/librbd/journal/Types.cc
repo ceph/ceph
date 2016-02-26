@@ -478,11 +478,7 @@ void TagData::generate_test_instances(std::list<TagData *> &o) {
   o.push_back(new TagData("mirror-uuid", "remote-mirror-uuid", true, 123, 234));
 }
 
-} // namespace journal
-} // namespace librbd
-
-std::ostream &operator<<(std::ostream &out,
-                         const librbd::journal::EventType &type) {
+std::ostream &operator<<(std::ostream &out, const EventType &type) {
   using namespace librbd::journal;
 
   switch (type) {
@@ -532,8 +528,7 @@ std::ostream &operator<<(std::ostream &out,
   return out;
 }
 
-std::ostream &operator<<(std::ostream &out,
-                         const librbd::journal::ClientMetaType &type) {
+std::ostream &operator<<(std::ostream &out, const ClientMetaType &type) {
   using namespace librbd::journal;
 
   switch (type) {
@@ -551,5 +546,26 @@ std::ostream &operator<<(std::ostream &out,
     break;
   }
   return out;
-
 }
+
+std::ostream &operator<<(std::ostream &out, const ImageClientMeta &meta) {
+  out << "[tag_class=" << meta.tag_class << "]";
+  return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const TagData &tag_data) {
+  out << "["
+      << "mirror_uuid=" << tag_data.mirror_uuid << ", "
+      << "predecessor_mirror_uuid=" << tag_data.predecessor_mirror_uuid;
+  if (tag_data.predecessor_commit_valid) {
+    out << ", "
+        << "predecessor_tag_tid=" << tag_data.predecessor_tag_tid << ", "
+        << "predecessor_entry_tid=" << tag_data.predecessor_entry_tid;
+  }
+  out << "]";
+  return out;
+}
+
+} // namespace journal
+} // namespace librbd
+

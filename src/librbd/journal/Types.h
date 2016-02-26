@@ -429,13 +429,13 @@ struct TagData {
   static void generate_test_instances(std::list<TagData *> &o);
 };
 
+std::ostream &operator<<(std::ostream &out, const EventType &type);
+std::ostream &operator<<(std::ostream &out, const ClientMetaType &type);
+std::ostream &operator<<(std::ostream &out, const ImageClientMeta &meta);
+std::ostream &operator<<(std::ostream &out, const TagData &tag_data);
+
 } // namespace journal
 } // namespace librbd
-
-std::ostream &operator<<(std::ostream &out,
-                         const librbd::journal::EventType &type);
-std::ostream &operator<<(std::ostream &out,
-                         const librbd::journal::ClientMetaType &type);
 
 WRITE_CLASS_ENCODER(librbd::journal::EventEntry);
 WRITE_CLASS_ENCODER(librbd::journal::ClientData);

@@ -59,6 +59,10 @@ struct C_DecodeTag : public Context {
       lderr(cct) << "failed to decode allocated tag" << dendl;
       return r;
     }
+
+    ldout(cct, 20) << "allocated journal tag: "
+                   << "tid=" << tag.tid << ", "
+                   << "data=" << *tag_data << dendl;
     return 0;
   }
 
@@ -117,6 +121,10 @@ struct C_DecodeTags : public Context {
       lderr(cct) << "failed to decode journal tag" << dendl;
       return r;
     }
+
+    ldout(cct, 20) << "most recent journal tag: "
+                   << "tid=" << *tag_tid << ", "
+                   << "data=" << *tag_data << dendl;
     return 0;
   }
 };
@@ -771,7 +779,7 @@ void Journal<I>::handle_initialized(int r) {
   assert(m_state == STATE_INITIALIZING);
 
   if (r < 0) {
-    lderr(cct) << this << " " << __func__
+    lderr(cct) << this << " " << __func__ << ": "
                << "failed to initialize journal: " << cpp_strerror(r)
                << dendl;
     destroy_journaler(r);
@@ -808,6 +816,9 @@ void Journal<I>::handle_initialized(int r) {
   }
 
   m_tag_class = image_client_meta->tag_class;
+  ldout(cct, 20) << "client: " << client << ", "
+                 << "image meta: " << *image_client_meta << dendl;
+
   C_DecodeTags *tags_ctx = new C_DecodeTags(
     cct, &m_lock, &m_tag_tid, &m_tag_data, create_async_context_callback(
       m_image_ctx, create_context_callback<
