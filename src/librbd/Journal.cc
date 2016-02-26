@@ -289,6 +289,16 @@ void Journal<I>::close(Context *on_finish) {
 }
 
 template <typename I>
+void Journal<I>::flush_commit_position(Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
+  Mutex::Locker locker(m_lock);
+  assert(m_journaler != nullptr);
+  m_journaler->flush_commit_position(on_finish);
+}
+
+template <typename I>
 uint64_t Journal<I>::append_io_event(AioCompletion *aio_comp,
                                      journal::EventEntry &&event_entry,
                                      const AioObjectRequests &requests,
@@ -493,6 +503,42 @@ typename Journal<I>::Future Journal<I>::wait_event(Mutex &lock, uint64_t tid,
 }
 
 template <typename I>
+int Journal<I>::start_external_replay(journal::Replay<I> **journal_replay) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
+  C_SaferCond cond;
+  wait_for_journal_ready(&cond);
+  int r = cond.wait();
+  if (r < 0) {
+    lderr(cct) << "failed waiting for ready state: " << cpp_strerror(r)
+	       << dendl;
+    return r;
+  }
+
+  Mutex::Locker locker(m_lock);
+  assert(m_state == STATE_READY);
+  assert(m_journal_replay == nullptr);
+
+  transition_state(STATE_REPLAYING, 0);
+  m_journal_replay = journal::Replay<I>::create(m_image_ctx);
+
+  *journal_replay = m_journal_replay;
+  return 0;
+}
+
+template <typename I>
+void Journal<I>::stop_external_replay() {
+  Mutex::Locker locker(m_lock);
+  assert(m_journal_replay != nullptr);
+  assert(m_state == STATE_REPLAYING);
+
+  delete m_journal_replay;
+  m_journal_replay = nullptr;
+  transition_state(STATE_READY, 0);
+}
+
+template <typename I>
 void Journal<I>::create_journaler() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
@@ -629,13 +675,13 @@ void Journal<I>::handle_replay_complete(int r) {
     transition_state(STATE_FLUSHING_RESTART, r);
     m_lock.Unlock();
 
-    m_journal_replay->flush(create_context_callback<
+    m_journal_replay->shut_down(create_context_callback<
       Journal<I>, &Journal<I>::handle_flushing_restart>(this));
   } else {
     transition_state(STATE_FLUSHING_REPLAY, 0);
     m_lock.Unlock();
 
-    m_journal_replay->flush(create_context_callback<
+    m_journal_replay->shut_down(create_context_callback<
       Journal<I>, &Journal<I>::handle_flushing_replay>(this));
   }
 }
@@ -665,7 +711,7 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
       m_journaler->stop_replay();
       transition_state(STATE_FLUSHING_RESTART, r);
 
-      m_journal_replay->flush(create_context_callback<
+      m_journal_replay->shut_down(create_context_callback<
         Journal<I>, &Journal<I>::handle_flushing_restart>(this));
       return;
     } else if (m_state == STATE_FLUSHING_REPLAY) {

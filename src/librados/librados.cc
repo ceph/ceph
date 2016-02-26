@@ -17,6 +17,7 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
+#include "common/ceph_json.h"
 #include "common/common_init.h"
 #include "common/TracepointProvider.h"
 #include "common/hobject.h"
@@ -1799,6 +1800,15 @@ int librados::IoCtx::watch2(const string& oid, uint64_t *cookie,
   return io_ctx_impl->watch(obj, cookie, NULL, ctx2);
 }
 
+int librados::IoCtx::aio_watch(const string& oid, AioCompletion *c,
+                               uint64_t *cookie,
+                               librados::WatchCtx2 *ctx2)
+{
+  object_t obj(oid);
+  return io_ctx_impl->aio_watch(obj, c->pc, cookie, NULL, ctx2);
+}
+
+
 int librados::IoCtx::unwatch(const string& oid, uint64_t handle)
 {
   return io_ctx_impl->unwatch(handle);
@@ -1807,6 +1817,11 @@ int librados::IoCtx::unwatch(const string& oid, uint64_t handle)
 int librados::IoCtx::unwatch2(uint64_t handle)
 {
   return io_ctx_impl->unwatch(handle);
+}
+
+int librados::IoCtx::aio_unwatch(uint64_t handle, AioCompletion *c)
+{
+  return io_ctx_impl->aio_unwatch(handle, c->pc);
 }
 
 int librados::IoCtx::watch_check(uint64_t handle)
@@ -2018,6 +2033,13 @@ int librados::Rados::watch_flush()
   if (!client)
     return -EINVAL;
   return client->watch_flush();
+}
+
+int librados::Rados::aio_watch_flush(AioCompletion *c)
+{
+  if (!client)
+    return -EINVAL;
+  return client->async_watch_flush(c->pc);
 }
 
 void librados::Rados::shutdown()
@@ -2280,6 +2302,141 @@ int librados::Rados::cluster_fsid(string *fsid)
   return client->get_fsid(fsid);
 }
 
+namespace librados {
+  struct PlacementGroupImpl {
+    pg_t pgid;
+  };
+
+  PlacementGroup::PlacementGroup()
+    : impl{new PlacementGroupImpl}
+  {}
+
+  PlacementGroup::PlacementGroup(const PlacementGroup& pg)
+    : impl{new PlacementGroupImpl}
+  {
+    impl->pgid = pg.impl->pgid;
+  }
+
+  PlacementGroup::~PlacementGroup()
+  {}
+
+  bool PlacementGroup::parse(const char* s)
+  {
+    return impl->pgid.parse(s);
+  }
+}
+
+std::ostream& librados::operator<<(std::ostream& out,
+				   const librados::PlacementGroup& pg)
+{
+  return out << pg.impl->pgid;
+}
+
+namespace {
+  int decode_json(JSONObj *obj, pg_t& pg)
+  {
+    string pg_str;
+    JSONDecoder::decode_json("pgid", pg_str, obj);
+    if (pg.parse(pg_str.c_str())) {
+      return 0;
+    } else {
+      return -EINVAL;
+    }
+  }
+
+  int get_inconsistent_pgs(librados::RadosClient& client,
+			   int64_t pool_id,
+			   std::vector<librados::PlacementGroup>* pgs)
+  {
+    vector<string> cmd = {
+      "{\"prefix\": \"pg ls\","
+      "\"pool\": " + std::to_string(pool_id) + ","
+      "\"states\": [\"inconsistent\"],"
+      "\"format\": \"json\"}"
+    };
+    bufferlist inbl, outbl;
+    string outstring;
+    int ret = client.mon_command(cmd, inbl, &outbl, &outstring);
+    if (ret) {
+      return ret;
+    }
+    if (!outbl.length()) {
+      // no pg returned
+      return ret;
+    }
+    JSONParser parser;
+    if (!parser.parse(outbl.c_str(), outbl.length())) {
+      return -EINVAL;
+    }
+    if (!parser.is_array()) {
+      return -EINVAL;
+    }
+    vector<string> v = parser.get_array_elements();
+    for (auto i : v) {
+      JSONParser pg_json;
+      if (!pg_json.parse(i.c_str(), i.length())) {
+	return -EINVAL;
+      }
+      librados::PlacementGroup pg;
+      if (decode_json(&pg_json, pg.impl->pgid)) {
+	return -EINVAL;
+      }
+      pgs->emplace_back(pg);
+    }
+    return 0;
+  }
+}
+
+int librados::Rados::get_inconsistent_pgs(int64_t pool_id,
+					  std::vector<PlacementGroup>* pgs)
+{
+  return ::get_inconsistent_pgs(*client, pool_id, pgs);
+}
+
+int librados::Rados::get_inconsistent_objects(const PlacementGroup& pg,
+					      const object_id_t &start_after,
+					      unsigned max_return,
+					      AioCompletion *c,
+					      std::vector<inconsistent_obj_t>* objects,
+					      uint32_t* interval)
+{
+  IoCtx ioctx;
+  const pg_t pgid = pg.impl->pgid;
+  int r = ioctx_create2(pgid.pool(), ioctx);
+  if (r < 0) {
+    return r;
+  }
+
+  return ioctx.io_ctx_impl->get_inconsistent_objects(pgid,
+						     start_after,
+						     max_return,
+						     c->pc,
+						     objects,
+						     interval);
+}
+
+int librados::Rados::get_inconsistent_snapsets(const PlacementGroup& pg,
+					       const object_id_t &start_after,
+					       unsigned max_return,
+					       AioCompletion *c,
+					       std::vector<inconsistent_snapset_t>* snapsets,
+					       uint32_t* interval)
+{
+  IoCtx ioctx;
+  const pg_t pgid = pg.impl->pgid;
+  int r = ioctx_create2(pgid.pool(), ioctx);
+  if (r < 0) {
+    return r;
+  }
+
+  return ioctx.io_ctx_impl->get_inconsistent_snapsets(pgid,
+						      start_after,
+						      max_return,
+						      c->pc,
+						      snapsets,
+						      interval);
+}
+
 int librados::Rados::wait_for_latest_osdmap()
 {
   return client->wait_for_latest_osdmap();
@@ -2348,7 +2505,7 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
   if (id) {
     iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
   }
-  CephContext *cct = rados_create_cct("ceph", &iparams);
+  CephContext *cct = rados_create_cct("", &iparams);
 
   tracepoint(librados, rados_create_enter, id);
   *pcluster = reinterpret_cast<rados_t>(new librados::RadosClient(cct));
@@ -2690,6 +2847,45 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
   }
   int retval = needed + 1;
   tracepoint(librados, rados_pool_list_exit, retval);
+  return retval;
+}
+
+CEPH_RADOS_API int rados_inconsistent_pg_list(rados_t cluster, int64_t pool_id,
+					      char *buf, size_t len)
+{
+  tracepoint(librados, rados_inconsistent_pg_list_enter, cluster, pool_id, len);
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  std::vector<librados::PlacementGroup> pgs;
+  int r = ::get_inconsistent_pgs(*client, pool_id, &pgs);
+  if (r < 0) {
+    tracepoint(librados, rados_inconsistent_pg_list_exit, r);
+    return r;
+  }
+
+  if (len > 0 && !buf) {
+    tracepoint(librados, rados_inconsistent_pg_list_exit, -EINVAL);
+    return -EINVAL;
+  }
+
+  char *b = buf;
+  if (b)
+    memset(b, 0, len);
+  int needed = 0;
+  for (const auto pg : pgs) {
+    std::ostringstream ss;
+    ss << pg;
+    auto s = ss.str();
+    unsigned rl = s.length() + 1;
+    if (len >= rl) {
+      tracepoint(librados, rados_inconsistent_pg_list_pg, s.c_str());
+      strncat(b, s.c_str(), rl);
+      b += rl;
+      len -= rl;
+    }
+    needed += rl;
+  }
+  int retval = needed + 1;
+  tracepoint(librados, rados_inconsistent_pg_list_exit, retval);
   return retval;
 }
 
@@ -3095,7 +3291,7 @@ extern "C" int rados_read(rados_ioctx_t io, const char *o, char *buf, size_t len
       tracepoint(librados, rados_read_exit, -ERANGE, NULL);
       return -ERANGE;
     }
-    if (bl.c_str() != buf)
+    if (!bl.is_provided_buffer(buf))
       bl.copy(0, bl.length(), buf);
     ret = bl.length();    // hrm :/
   }
@@ -3445,7 +3641,7 @@ extern "C" int rados_getxattr(rados_ioctx_t io, const char *o, const char *name,
       tracepoint(librados, rados_getxattr_exit, -ERANGE, buf, 0);
       return -ERANGE;
     }
-    if (bl.c_str() !=  buf)
+    if (!bl.is_provided_buffer(buf))
       bl.copy(0, bl.length(), buf);
     ret = bl.length();
   }
@@ -4217,6 +4413,30 @@ extern "C" int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handle,
   return ret;
 }
 
+extern "C" int rados_aio_watch(rados_ioctx_t io, const char *o,
+                               rados_completion_t completion,
+                               uint64_t *handle,
+                               rados_watchcb2_t watchcb,
+                               rados_watcherrcb_t watcherrcb, void *arg)
+{
+  tracepoint(librados, rados_aio_watch_enter, io, o, completion, handle, watchcb, arg);
+  int ret;
+  if (!completion || !watchcb || !o || !handle) {
+    ret = -EINVAL;
+  } else {
+    uint64_t *cookie = handle;
+    librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+    object_t oid(o);
+    librados::AioCompletionImpl *c =
+      reinterpret_cast<librados::AioCompletionImpl*>(completion);
+    C_WatchCB2 *wc = new C_WatchCB2(watchcb, watcherrcb, arg);
+    ret = ctx->aio_watch(oid, c, cookie, NULL, wc);
+  }
+  tracepoint(librados, rados_watch_exit, ret, handle ? *handle : 0);
+  return ret;
+}
+
+
 extern "C" int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle)
 {
   tracepoint(librados, rados_unwatch_enter, io, o, handle);
@@ -4234,6 +4454,19 @@ extern "C" int rados_unwatch2(rados_ioctx_t io, uint64_t handle)
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   int retval = ctx->unwatch(cookie);
   tracepoint(librados, rados_unwatch2_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_aio_unwatch(rados_ioctx_t io, uint64_t handle,
+                                 rados_completion_t completion)
+{
+  tracepoint(librados, rados_aio_unwatch_enter, io, handle, completion);
+  uint64_t cookie = handle;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  librados::AioCompletionImpl *c =
+    reinterpret_cast<librados::AioCompletionImpl*>(completion);
+  int retval = ctx->aio_unwatch(cookie, c);
+  tracepoint(librados, rados_aio_unwatch_exit, retval);
   return retval;
 }
 
@@ -4330,6 +4563,16 @@ extern "C" int rados_watch_flush(rados_t cluster)
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   int retval = client->watch_flush();
   tracepoint(librados, rados_watch_flush_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_aio_watch_flush(rados_t cluster, rados_completion_t completion)
+{
+  tracepoint(librados, rados_aio_watch_flush_enter, cluster, completion);
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
+  int retval = client->async_watch_flush(c);
+  tracepoint(librados, rados_aio_watch_flush_exit, retval);
   return retval;
 }
 
@@ -4823,7 +5066,7 @@ public:
     }
     if (bytes_read)
       *bytes_read = out_bl.length();
-    if (out_buf && out_bl.c_str() != out_buf)
+    if (out_buf && !out_bl.is_provided_buffer(out_buf))
       out_bl.copy(0, out_bl.length(), out_buf);
   }
 };

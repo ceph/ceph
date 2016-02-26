@@ -615,6 +615,25 @@ CEPH_RADOS_API int rados_wait_for_latest_osdmap(rados_t cluster);
 CEPH_RADOS_API int rados_pool_list(rados_t cluster, char *buf, size_t len);
 
 /**
+ * List inconsistent placement groups of the given pool
+ *
+ * Gets a list of inconsistent placement groups as NULL-terminated strings.
+ * The placement group names will be placed in the supplied buffer one after
+ * another. After the last name, there will be two 0 types in a row.
+ *
+ * If len is too short to fit all the placement group entries we need, we  will
+ * fill as much as we can.
+ *
+ * @param cluster cluster handle
+ * @param pool pool ID
+ * @param buf output buffer
+ * @param len output buffer length
+ * @returns length of the buffer we would need to list all pools
+ */
+CEPH_RADOS_API int rados_inconsistent_pg_list(rados_t cluster, int64_t pool,
+					      char *buf, size_t len);
+
+/**
  * Get a configuration handle for a rados cluster handle
  *
  * This handle is valid only as long as the cluster handle is valid.
@@ -2088,6 +2107,34 @@ CEPH_RADOS_API int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *cooki
 				void *arg);
 
 /**
+ * Asynchronous register an interest in an object
+ *
+ * A watch operation registers the client as being interested in
+ * notifications on an object. OSDs keep track of watches on
+ * persistent storage, so they are preserved across cluster changes by
+ * the normal recovery process. If the client loses its connection to
+ * the primary OSD for a watched object, the watch will be removed
+ * after 30 seconds. Watches are automatically reestablished when a new
+ * connection is made, or a placement group switches OSDs.
+ *
+ * @note BUG: watch timeout should be configurable
+ *
+ * @param io the pool the object is in
+ * @param o the object to watch
+ * @param completion what to do when operation has been attempted
+ * @param handle where to store the internal id assigned to this watch
+ * @param watchcb what to do when a notify is received on this object
+ * @param watcherrcb what to do when the watch session encounters an error
+ * @param arg opaque value to pass to the callback
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_watch(rados_ioctx_t io, const char *o,
+				   rados_completion_t completion, uint64_t *handle,
+				   rados_watchcb2_t watchcb,
+				   rados_watcherrcb_t watcherrcb,
+				   void *arg);
+
+/**
  * Check on the status of a watch
  *
  * Return the number of milliseconds since the watch was last confirmed.
@@ -2128,6 +2175,20 @@ CEPH_RADOS_API int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t cooki
  * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_unwatch2(rados_ioctx_t io, uint64_t cookie);
+
+/**
+ * Asynchronous unregister an interest in an object
+ *
+ * Once this completes, no more notifies will be sent to us for this
+ * watch. This should be called to clean up unneeded watchers.
+ *
+ * @param io the pool the object is in
+ * @param completion what to do when operation has been attempted
+ * @param cookie which watch to unregister
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_unwatch(rados_ioctx_t io, uint64_t cookie,
+                                     rados_completion_t completion);
 
 /**
  * Sychronously notify watchers of an object
@@ -2233,6 +2294,21 @@ CEPH_RADOS_API int rados_notify_ack(rados_ioctx_t io, const char *o,
  * @param cluster the cluster handle
  */
 CEPH_RADOS_API int rados_watch_flush(rados_t cluster);
+/**
+ * Flush watch/notify callbacks
+ *
+ * This call will be nonblock, and the completion will be called
+ * until all pending watch/notify callbacks have been executed and
+ * the queue is empty.  It should usually be called after shutting
+ * down any watches before shutting down the ioctx or
+ * librados to ensure that any callbacks do not misuse the ioctx (for
+ * example by calling rados_notify_ack after the ioctx has been
+ * destroyed).
+ *
+ * @param cluster the cluster handle
+ * @param completion what to do when operation has been attempted
+ */
+CEPH_RADOS_API int rados_aio_watch_flush(rados_t cluster, rados_completion_t completion);
 
 /** @} Watch/Notify */
 

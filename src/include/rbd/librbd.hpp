@@ -47,7 +47,7 @@ namespace librbd {
   } locker_t;
 
   typedef struct {
-    std::string cluster_uuid;
+    std::string uuid;
     std::string cluster_name;
     std::string client_name;
   } mirror_peer_t;
@@ -113,16 +113,16 @@ public:
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
 
   // RBD pool mirroring support functions
-  int mirror_is_enabled(IoCtx& io_ctx, bool *enabled);
-  int mirror_set_enabled(IoCtx& io_ctx, bool enabled);
-  int mirror_peer_add(IoCtx& io_ctx, const std::string &cluster_uuid,
+  int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
+  int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
+  int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
                       const std::string &cluster_name,
                       const std::string &client_name);
-  int mirror_peer_remove(IoCtx& io_ctx, const std::string &cluster_uuid);
+  int mirror_peer_remove(IoCtx& io_ctx, const std::string &uuid);
   int mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers);
-  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &cluster_uuid,
+  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &uuid,
                              const std::string &client_name);
-  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &cluster_uuid,
+  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
                               const std::string &cluster_name);
 
 private:
@@ -226,7 +226,7 @@ public:
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);
-  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   ssize_t read2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);
   int64_t read_iterate(uint64_t ofs, size_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
@@ -262,12 +262,12 @@ public:
 		    int (*cb)(uint64_t, size_t, int, void *), void *arg);
 
   ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
-  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   ssize_t write2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);
   int discard(uint64_t ofs, uint64_t len);
 
   int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
-  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   int aio_write2(uint64_t off, size_t len, ceph::bufferlist& bl,
 		  RBD::AioCompletion *c, int op_flags);
   /**
@@ -288,7 +288,7 @@ public:
    * @param c aio completion to notify when read is complete
    */
   int aio_read(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
-  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   int aio_read2(uint64_t off, size_t len, ceph::bufferlist& bl,
 		  RBD::AioCompletion *c, int op_flags);
   int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);

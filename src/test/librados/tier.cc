@@ -4637,6 +4637,122 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlushReadRace) {
   test_lock.Unlock();
 }
 
+TEST_F(LibRadosTierECPP, CallForcesPromote) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  std::string cache_pool_name = pool_name + "-cache";
+  ASSERT_EQ("", create_one_ec_pool_pp(pool_name, cluster));
+  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
+  IoCtx cache_ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
+  IoCtx ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
+
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+  // set things up such that the op would normally be proxied
+  ASSERT_EQ(0, cluster.mon_command(
+	      set_pool_str(cache_pool_name, "hit_set_count", 2),
+	      inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	      set_pool_str(cache_pool_name, "hit_set_period", 600),
+	      inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	      set_pool_str(cache_pool_name, "hit_set_type",
+			   "explicit_object"),
+	      inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	      set_pool_str(cache_pool_name, "min_read_recency_for_promote",
+			   "4"),
+	      inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create/dirty object
+  bufferlist bl;
+  bl.append("hi there");
+  {
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  // flush
+  {
+    ObjectReadOperation op;
+    op.cache_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // evict
+  {
+    ObjectReadOperation op;
+    op.cache_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op,
+					 librados::OPERATION_IGNORE_CACHE,
+					 NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // call
+  {
+    ObjectReadOperation op;
+    bufferlist bl;
+    op.exec("rbd", "get_id", bl);
+    bufferlist out;
+    // should get EIO (not an rbd object), not -EOPNOTSUPP (we didn't promote)
+    ASSERT_EQ(-5, ioctx.operate("foo", &op, &out));
+  }
+
+  // make sure foo is back in the cache tier
+  {
+    NObjectIterator it = cache_ioctx.nobjects_begin();
+    ASSERT_TRUE(it != cache_ioctx.nobjects_end());
+    ASSERT_TRUE(it->get_oid() == string("foo"));
+    ++it;
+    ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+  }
+
+  // tear down tiers
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
+    "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
+
+  ASSERT_EQ(0, cluster.pool_delete(cache_pool_name.c_str()));
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 TEST_F(LibRadosTierECPP, HitSetNone) {
   {
     list< pair<time_t,time_t> > ls;

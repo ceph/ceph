@@ -14,6 +14,7 @@
  *
  */
 
+#include <libgen.h>
 #include <unistd.h>
 
 #include "KernelDevice.h"
@@ -45,10 +46,12 @@ void IOContext::aio_wait()
 BlockDevice *BlockDevice::create(const string& path, aio_callback_t cb, void *cbpriv)
 {
   string type = "kernel";
-  char buf[10];
+  char buf[PATH_MAX];
   int r = ::readlink(path.c_str(), buf, sizeof(buf));
-  if (r >= 0 && strncmp(buf, SPDK_PREFIX, sizeof(SPDK_PREFIX)-1) == 0) {
-    type = "ust-nvme";
+  if (r >= 0) {
+    char *bname = ::basename(buf);
+    if (strncmp(bname, SPDK_PREFIX, sizeof(SPDK_PREFIX)-1) == 0)
+      type = "ust-nvme";
   }
   dout(1) << __func__ << " path " << path << " type " << type << dendl;
 

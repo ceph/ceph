@@ -661,7 +661,7 @@ cdef class Image(object):
                               self.name,))
             self.closed = True
 
-    def __del__(self):
+    def __dealloc__(self):
         self.close()
 
     def __repr__(self):
@@ -1440,7 +1440,7 @@ cdef class SnapIterator(object):
                 'name' : decode_cstr(self.snaps[i].name),
                 }
 
-    def __del__(self):
+    def __dealloc__(self):
         if self.snaps:
             rbd_snap_list_end(self.snaps)
             free(self.snaps)

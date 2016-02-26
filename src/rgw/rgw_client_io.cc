@@ -69,7 +69,7 @@ int RGWStreamIO::write(const char *buf, int len)
   return 0;
 }
 
-int RGWStreamIO::read(char *buf, int max, int *actual)
+int RGWStreamIO::read(char *buf, int max, int *actual, bool hash /* = false */)
 {
   int ret = read_data(buf, max);
   if (ret < 0)
@@ -79,5 +79,17 @@ int RGWStreamIO::read(char *buf, int max, int *actual)
 
   bytes_received += *actual;
 
+  if (hash) {
+    if (!sha256_hash) {
+      sha256_hash = calc_hash_sha256_open_stream();
+    }
+    calc_hash_sha256_update_stream(sha256_hash, buf, *actual);
+  }
+
   return 0;
+}
+
+string RGWStreamIO::grab_aws4_sha256_hash()
+{
+  return calc_hash_sha256_close_stream(&sha256_hash);
 }

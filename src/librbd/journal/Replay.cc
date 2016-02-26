@@ -8,6 +8,8 @@
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequest.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
+#include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
@@ -25,6 +27,32 @@ static const uint64_t IN_FLIGHT_IO_LOW_WATER_MARK(32);
 static const uint64_t IN_FLIGHT_IO_HIGH_WATER_MARK(64);
 
 static NoOpProgressContext no_op_progress_callback;
+
+template <typename I, typename E>
+struct ExecuteOp : public Context {
+  I &image_ctx;
+  E event;
+  Context *on_op_complete;
+
+  ExecuteOp(I &image_ctx, const E &event, Context *on_op_complete)
+    : image_ctx(image_ctx), event(event), on_op_complete(on_op_complete) {
+  }
+
+  void execute(const journal::SnapCreateEvent &_) {
+    image_ctx.operations->snap_create(event.snap_name.c_str(), on_op_complete,
+                                      event.op_tid);
+  }
+
+  void execute(const journal::ResizeEvent &_) {
+    image_ctx.operations->resize(event.size, no_op_progress_callback,
+                                 on_op_complete, event.op_tid);
+  }
+
+  virtual void finish(int r) override {
+    RWLock::RLocker owner_locker(image_ctx.owner_lock);
+    execute(event);
+  }
+};
 
 } // anonymous namespace
 
@@ -66,7 +94,7 @@ void Replay<I>::process(bufferlist::iterator *it, Context *on_ready,
 }
 
 template <typename I>
-void Replay<I>::flush(Context *on_finish) {
+void Replay<I>::shut_down(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
@@ -108,6 +136,19 @@ void Replay<I>::flush(Context *on_finish) {
   if (on_finish != nullptr) {
     on_finish->complete(0);
   }
+}
+
+template <typename I>
+void Replay<I>::flush(Context *on_finish) {
+  AioCompletion *aio_comp;
+  {
+    Mutex::Locker locker(m_lock);
+    aio_comp = create_aio_flush_completion(
+      nullptr, util::create_async_context_callback(m_image_ctx, on_finish));
+  }
+
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  AioImageRequest<I>::aio_flush(&m_image_ctx, aio_comp);
 }
 
 template <typename I>
@@ -254,8 +295,10 @@ void Replay<I>::handle_event(const journal::SnapCreateEvent &event,
   Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
                                                        &op_event);
 
-  m_image_ctx.operations->snap_create(event.snap_name.c_str(), on_op_complete,
-                                      event.op_tid);
+  // avoid lock cycles
+  m_image_ctx.op_work_queue->queue(
+    new ExecuteOp<I, journal::SnapCreateEvent>(m_image_ctx, event,
+                                               on_op_complete), 0);
 
   // do not process more events until the state machine is ready
   // since it will affect IO
@@ -391,8 +434,10 @@ void Replay<I>::handle_event(const journal::ResizeEvent &event,
   Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
                                                        &op_event);
 
-  m_image_ctx.operations->resize(event.size, no_op_progress_callback,
-                                 on_op_complete, event.op_tid);
+  // avoid lock cycles
+  m_image_ctx.op_work_queue->queue(
+    new ExecuteOp<I, journal::ResizeEvent>(m_image_ctx, event,
+                                               on_op_complete), 0);
 
   // do not process more events until the state machine is ready
   // since it will affect IO
@@ -510,7 +555,10 @@ Context *Replay<I>::create_op_context_callback(uint64_t op_tid,
 
   *op_event = &m_op_events[op_tid];
   (*op_event)->on_start_safe = on_safe;
-  return new C_OpOnComplete(this, op_tid);
+
+  Context *on_op_complete = new C_OpOnComplete(this, op_tid);
+  (*op_event)->on_op_complete = on_op_complete;
+  return on_op_complete;
 }
 
 template <typename I>
@@ -541,6 +589,9 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
 
   // skipped upon error -- so clean up if non-null
   delete op_event.on_op_finish_event;
+  if (r == -ERESTART) {
+    delete op_event.on_op_complete;
+  }
 
   if (op_event.on_finish_ready != nullptr) {
     op_event.on_finish_ready->complete(0);

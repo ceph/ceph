@@ -157,6 +157,7 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   bucket_acl = NULL;
   object_acl = NULL;
   expect_cont = false;
+  aws4_auth_needs_complete = false;
 
   header_ended = false;
   obj_size = 0;
@@ -167,12 +168,15 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   os_auth_token = NULL;
   time = ceph_clock_now(cct);
   perm_mask = 0;
+  bucket_instance_shard_id = -1;
   content_length = 0;
   bucket_exists = false;
   has_bad_meta = false;
   length = NULL;
   http_auth = NULL;
   local_source = false;
+
+  aws4_auth = NULL;
 
   obj_ctx = NULL;
 }
@@ -181,6 +185,7 @@ req_state::~req_state() {
   delete formatter;
   delete bucket_acl;
   delete object_acl;
+  delete aws4_auth;
 }
 
 struct str_len {
@@ -346,10 +351,18 @@ bool parse_rfc2616(const char *s, struct tm *t)
   return parse_rfc850(s, t) || parse_asctime(s, t) || parse_rfc1123(s, t) || parse_rfc1123_alt(s,t);
 }
 
-bool parse_iso8601(const char *s, struct tm *t)
+bool parse_iso8601(const char *s, struct tm *t, bool extended_format)
 {
   memset(t, 0, sizeof(*t));
-  const char *p = strptime(s, "%Y-%m-%dT%T", t);
+  const char *p;
+
+  if (!s)
+    s = "";
+
+  if (extended_format)
+    p = strptime(s, "%Y-%m-%dT%T", t);
+  else
+    p = strptime(s, "%Y%m%dT%H%M%S", t);
   if (!p) {
     dout(0) << "parse_iso8601 failed" << dendl;
     return false;
@@ -417,6 +430,69 @@ void calc_hmac_sha1(const char *key, int key_len,
   HMACSHA1 hmac((const unsigned char *)key, key_len);
   hmac.Update((const unsigned char *)msg, msg_len);
   hmac.Final((unsigned char *)dest);
+}
+
+/*
+ * calculate the sha256 value of a given msg and key
+ */
+void calc_hmac_sha256(const char *key, int key_len,
+                      const char *msg, int msg_len, char *dest)
+{
+  char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+
+  HMACSHA256 hmac((const unsigned char *)key, key_len);
+  hmac.Update((const unsigned char *)msg, msg_len);
+  hmac.Final((unsigned char *)hash_sha256);
+
+  memcpy(dest, hash_sha256, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE);
+}
+
+/*
+ * calculate the sha256 hash value of a given msg
+ */
+void calc_hash_sha256(const char *msg, int len, string& dest)
+{
+  char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+
+  SHA256 hash;
+  hash.Update((const unsigned char *)msg, len);
+  hash.Final((unsigned char *)hash_sha256);
+
+  char hex_str[(CEPH_CRYPTO_SHA256_DIGESTSIZE * 2) + 1];
+  buf_to_hex((unsigned char *)hash_sha256, CEPH_CRYPTO_SHA256_DIGESTSIZE, hex_str);
+
+  dest = std::string(hex_str);
+}
+
+using ceph::crypto::SHA256;
+
+SHA256* calc_hash_sha256_open_stream()
+{
+  return new SHA256;
+}
+
+void calc_hash_sha256_update_stream(SHA256 *hash, const char *msg, int len)
+{
+  hash->Update((const unsigned char *)msg, len);
+}
+
+string calc_hash_sha256_close_stream(SHA256 **phash)
+{
+  SHA256 *hash = *phash;
+  if (!hash) {
+    hash = calc_hash_sha256_open_stream();
+  }
+  char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+
+  hash->Final((unsigned char *)hash_sha256);
+
+  char hex_str[(CEPH_CRYPTO_SHA256_DIGESTSIZE * 2) + 1];
+  buf_to_hex((unsigned char *)hash_sha256, CEPH_CRYPTO_SHA256_DIGESTSIZE, hex_str);
+
+  delete hash;
+  *phash = NULL;
+  
+  return std::string(hex_str);
 }
 
 int gen_rand_base64(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
@@ -577,7 +653,6 @@ int RGWHTTPArgs::parse()
 {
   int pos = 0;
   bool end = false;
-  bool admin_subresource_added = false; 
   if (str[pos] == '?') pos++;
 
   while (!end) {
@@ -595,56 +670,61 @@ int RGWHTTPArgs::parse()
       string& name = nv.get_name();
       string& val = nv.get_val();
 
-      if (name.compare(0, sizeof(RGW_SYS_PARAM_PREFIX) - 1, RGW_SYS_PARAM_PREFIX) == 0) {
-        sys_val_map[name] = val;
-      } else {
-        val_map[name] = val;
-      }
-
-      if ((name.compare("acl") == 0) ||
-          (name.compare("cors") == 0) ||
-          (name.compare("location") == 0) ||
-          (name.compare("logging") == 0) ||
-          (name.compare("delete") == 0) ||
-          (name.compare("uploads") == 0) ||
-          (name.compare("partNumber") == 0) ||
-          (name.compare("uploadId") == 0) ||
-          (name.compare("versionId") == 0) ||
-          (name.compare("versions") == 0) ||
-          (name.compare("versioning") == 0) ||
-          (name.compare("website") == 0) ||
-          (name.compare("requestPayment") == 0) ||
-          (name.compare("torrent") == 0)) {
-        sub_resources[name] = val;
-      } else if (name[0] == 'r') { // root of all evil
-        if ((name.compare("response-content-type") == 0) ||
-           (name.compare("response-content-language") == 0) ||
-           (name.compare("response-expires") == 0) ||
-           (name.compare("response-cache-control") == 0) ||
-           (name.compare("response-content-disposition") == 0) ||
-           (name.compare("response-content-encoding") == 0)) {
-          sub_resources[name] = val;
-          has_resp_modifier = true;
-        }
-      } else if  ((name.compare("subuser") == 0) ||
-          (name.compare("key") == 0) ||
-          (name.compare("caps") == 0) ||
-          (name.compare("index") == 0) ||
-          (name.compare("policy") == 0) ||
-          (name.compare("quota") == 0) ||
-          (name.compare("object") == 0)) {
-
-        if (!admin_subresource_added) {
-          sub_resources[name] = "";
-          admin_subresource_added = true;
-        }
-      }
+      append(name, val);
     }
 
     pos = fpos + 1;  
   }
 
   return 0;
+}
+
+void RGWHTTPArgs::append(const string& name, const string& val)
+{
+  if (name.compare(0, sizeof(RGW_SYS_PARAM_PREFIX) - 1, RGW_SYS_PARAM_PREFIX) == 0) {
+    sys_val_map[name] = val;
+  } else {
+    val_map[name] = val;
+  }
+
+  if ((name.compare("acl") == 0) ||
+      (name.compare("cors") == 0) ||
+      (name.compare("location") == 0) ||
+      (name.compare("logging") == 0) ||
+      (name.compare("delete") == 0) ||
+      (name.compare("uploads") == 0) ||
+      (name.compare("partNumber") == 0) ||
+      (name.compare("uploadId") == 0) ||
+      (name.compare("versionId") == 0) ||
+      (name.compare("versions") == 0) ||
+      (name.compare("versioning") == 0) ||
+      (name.compare("website") == 0) ||
+      (name.compare("requestPayment") == 0) ||
+      (name.compare("torrent") == 0)) {
+    sub_resources[name] = val;
+  } else if (name[0] == 'r') { // root of all evil
+    if ((name.compare("response-content-type") == 0) ||
+        (name.compare("response-content-language") == 0) ||
+        (name.compare("response-expires") == 0) ||
+        (name.compare("response-cache-control") == 0) ||
+        (name.compare("response-content-disposition") == 0) ||
+        (name.compare("response-content-encoding") == 0)) {
+      sub_resources[name] = val;
+      has_resp_modifier = true;
+    }
+  } else if  ((name.compare("subuser") == 0) ||
+              (name.compare("key") == 0) ||
+              (name.compare("caps") == 0) ||
+              (name.compare("index") == 0) ||
+              (name.compare("policy") == 0) ||
+              (name.compare("quota") == 0) ||
+              (name.compare("object") == 0)) {
+
+    if (!admin_subresource_added) {
+      sub_resources[name] = "";
+      admin_subresource_added = true;
+    }
+  }
 }
 
 string& RGWHTTPArgs::get(const string& name, bool *exists)
@@ -875,7 +955,7 @@ bool url_decode(const string& src_str, string& dest_str, bool in_query)
   return true;
 }
 
-static void escape_char(char c, string& dst)
+void rgw_uri_escape_char(char c, string& dst)
 {
   char buf[16];
   snprintf(buf, sizeof(buf), "%%%.2X", (int)(unsigned char)c);
@@ -919,7 +999,7 @@ void url_encode(const string& src, string& dst)
   const char *p = src.c_str();
   for (unsigned i = 0; i < src.size(); i++, p++) {
     if (char_needs_url_encoding(*p)) {
-      escape_char(*p, dst);
+      rgw_uri_escape_char(*p, dst);
       continue;
     }
 

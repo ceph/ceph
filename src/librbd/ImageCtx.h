@@ -197,6 +197,7 @@ namespace librbd {
 	     const char *snap, IoCtx& p, bool read_only);
     ~ImageCtx();
     void init();
+    void shutdown();
     void init_layout();
     void perf_start(std::string name);
     void perf_stop();
@@ -275,6 +276,11 @@ namespace librbd {
     Journal<ImageCtx> *create_journal();
 
     void clear_pending_completions();
+
+    void set_image_name(const std::string &name);
+
+    void notify_update();
+    void notify_update(Context *on_finish);
   };
 }
 

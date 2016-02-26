@@ -143,6 +143,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_pool_get_base_tier(rados_t cluster, int64_t pool, int64_t *base_tier)
     int rados_pool_list(rados_t cluster, char *buf, size_t len)
     int rados_pool_delete(rados_t cluster, const char *pool_name)
+    int rados_inconsistent_pg_list(rados_t cluster, int64_t pool, char *buf, size_t len)
 
     int rados_cluster_stat(rados_t cluster, rados_cluster_stat_t *result)
     int rados_cluster_fsid(rados_t cluster, char *buf, size_t len)
@@ -542,7 +543,7 @@ cdef class Rados(object):
         elif name is None:
             name = 'client.admin'
         if clustername is None:
-            clustername = 'ceph'
+            clustername = ''
 
         name = cstr(name, 'name')
         clustername = cstr(clustername, 'clustername')
@@ -993,6 +994,37 @@ Rados object in state %s." % self.state)
         if ret < 0:
             raise make_ex(ret, "error deleting pool '%s'" % pool_name)
 
+    @requires(('pool_id', int))
+    def get_inconsistent_pgs(self, pool_id):
+        """
+        List inconsistent placement groups in the given pool
+
+        :param pool_id: ID of the pool in which PGs are listed
+        :type pool_id: int
+        :returns: list - inconsistent placement groups
+        """
+        self.require_state("connected")
+        cdef:
+            int64_t pool = pool_id
+            size_t size = 512
+            char *pgs = NULL
+
+        try:
+            while True:
+                pgs = <char *>realloc_chk(pgs, size);
+                with nogil:
+                    ret = rados_inconsistent_pg_list(self.cluster, pool,
+                                                     pgs, size)
+                if ret > size:
+                    size *= 2
+                elif ret >= 0:
+                    break
+                else:
+                    raise make_ex(ret, "error calling inconsistent_pg_list")
+            return [pg for pg in decode_cstr(pgs[:ret]).split('\0') if pg]
+        finally:
+            free(pgs)
+
     def list_pools(self):
         """
         Gets a list of pool names.
@@ -1280,14 +1312,11 @@ cdef class OmapIterator(object):
     cdef public Ioctx ioctx
     cdef rados_omap_iter_t ctx
 
-    def __init__(self, Ioctx ioctx):
+    def __cinit__(self, Ioctx ioctx):
         self.ioctx = ioctx
 
     def __iter__(self):
         return self
-
-    def next(self):
-        return self.__next__()
 
     def __next__(self):
         """
@@ -1312,7 +1341,7 @@ cdef class OmapIterator(object):
             val = val_[:len_]
         return (key, val)
 
-    def __del__(self):
+    def __dealloc__(self):
         with nogil:
             rados_omap_get_end(self.ctx)
 
@@ -1335,9 +1364,6 @@ cdef class ObjectIterator(object):
 
     def __iter__(self):
         return self
-
-    def next(self):
-        return self.__next__()
 
     def __next__(self):
         """
@@ -1362,7 +1388,7 @@ cdef class ObjectIterator(object):
         nspace = decode_cstr(nspace_) if nspace_ != NULL else None
         return Object(self.ioctx, key, locator, nspace)
 
-    def __del__(self):
+    def __dealloc__(self):
         with nogil:
             rados_nobjects_list_close(self.ctx)
 
@@ -1389,9 +1415,6 @@ cdef class XattrIterator(object):
     def __iter__(self):
         return self
 
-    def next(self):
-        return self.__next__()
-
     def __next__(self):
         """
         Get the next xattr on the object
@@ -1415,7 +1438,7 @@ in '%s'" % self.oid)
         val = val_[:len_]
         return (name, val)
 
-    def __del__(self):
+    def __dealloc__(self):
         with nogil:
             rados_getxattrs_end(self.it)
 
@@ -1452,9 +1475,6 @@ ioctx '%s'" % self.ioctx.name)
 
     def __iter__(self):
         return self
-
-    def next(self):
-        return self.__next__()
 
     def __next__(self):
         """
@@ -1616,7 +1636,7 @@ cdef class Completion(object):
             ret = rados_aio_get_return_value(self.rados_comp)
         return ret
 
-    def __del__(self):
+    def __dealloc__(self):
         """
         Release a completion
 
@@ -2120,7 +2140,7 @@ cdef class Ioctx(object):
         requests on it, but you should not use an io context again after
         calling this function on it.
         """
-        if self.state == b"open":
+        if self.state == "open":
             self.require_ioctx_open()
             with nogil:
                 rados_ioctx_destroy(self.io)

@@ -112,6 +112,8 @@ public:
   void open(Context *on_finish);
   void close(Context *on_finish);
 
+  void flush_commit_position(Context *on_finish);
+
   uint64_t append_io_event(AioCompletion *aio_comp,
                            journal::EventEntry &&event_entry,
                            const AioObjectRequests &requests,
@@ -134,6 +136,9 @@ public:
     assert(op_tid != 0);
     return op_tid;
   }
+
+  int start_external_replay(journal::Replay<ImageCtxT> **journal_replay);
+  void stop_external_replay();
 
 private:
   ImageCtxT &m_image_ctx;

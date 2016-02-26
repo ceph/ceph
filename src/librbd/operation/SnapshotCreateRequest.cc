@@ -170,7 +170,8 @@ template <typename I>
 Context *SnapshotCreateRequest<I>::handle_allocate_snap_id(int *result) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << ", "
+                << "snap_id=" << m_snap_id << dendl;
 
   if (*result < 0) {
     save_result(result);

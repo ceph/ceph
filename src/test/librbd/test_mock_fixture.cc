@@ -37,6 +37,8 @@ void TestMockFixture::SetUpTestCase() {
 void TestMockFixture::TearDownTestCase() {
   TestFixture::TearDownTestCase();
   librados_test_stub::set_rados_client(s_test_rados_client);
+  s_test_rados_client->put();
+  s_test_rados_client.reset();
 }
 
 void TestMockFixture::SetUp() {

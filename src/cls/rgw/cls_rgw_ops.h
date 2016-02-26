@@ -164,11 +164,12 @@ struct rgw_cls_link_olh_op {
   uint64_t olh_epoch;
   bool log_op;
   uint16_t bilog_flags;
+  time_t unmod_since; /* only create delete marker if newer then this */
 
   rgw_cls_link_olh_op() : delete_marker(false), olh_epoch(0), log_op(false), bilog_flags(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(key, bl);
     ::encode(olh_tag, bl);
     ::encode(delete_marker, bl);
@@ -177,11 +178,12 @@ struct rgw_cls_link_olh_op {
     ::encode(olh_epoch, bl);
     ::encode(log_op, bl);
     ::encode(bilog_flags, bl);
+    ::encode(unmod_since, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(key, bl);
     ::decode(olh_tag, bl);
     ::decode(delete_marker, bl);
@@ -190,6 +192,9 @@ struct rgw_cls_link_olh_op {
     ::decode(olh_epoch, bl);
     ::decode(log_op, bl);
     ::decode(bilog_flags, bl);
+    if (struct_v >= 2) {
+      ::decode(unmod_since, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -437,6 +442,23 @@ struct rgw_cls_obj_remove_op {
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_remove_op)
 
+struct rgw_cls_obj_store_pg_ver_op {
+  string attr;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(attr, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(attr, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_obj_store_pg_ver_op)
+
 struct rgw_cls_obj_check_attrs_prefix {
   string check_prefix;
   bool fail_if_exist;
@@ -458,6 +480,30 @@ struct rgw_cls_obj_check_attrs_prefix {
   }
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_check_attrs_prefix)
+
+struct rgw_cls_obj_check_mtime {
+  utime_t mtime;
+  RGWCheckMTimeType type;
+
+  rgw_cls_obj_check_mtime() : type(CLS_RGW_CHECK_TIME_MTIME_EQ) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(mtime, bl);
+    ::encode((uint8_t)type, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(mtime, bl);
+    uint8_t c;
+    ::decode(c, bl);
+    type = (RGWCheckMTimeType)c;
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_obj_check_mtime)
 
 struct rgw_cls_usage_log_add_op {
   rgw_usage_log_info info;

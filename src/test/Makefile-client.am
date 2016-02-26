@@ -3,6 +3,8 @@ ceph_dencoder_SOURCES = \
 	test/encoding/ceph_dencoder.cc \
 	$(DENCODER_SOURCES)
 ceph_dencoder_LDADD = \
+	$(LIBRGW) \
+	$(LIBRADOS) \
 	$(LIBRBD_TYPES) \
 	$(LIBOSD_TYPES) \
 	$(LIBOS_TYPES) \
@@ -432,7 +434,8 @@ noinst_HEADERS += \
 
 librbd_mirror_test_la_SOURCES = \
 	test/rbd_mirror/test_ClusterWatcher.cc \
-	test/rbd_mirror/test_PoolWatcher.cc
+	test/rbd_mirror/test_PoolWatcher.cc \
+	test/rbd_mirror/test_ImageReplayer.cc
 librbd_mirror_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 noinst_LTLIBRARIES += librbd_mirror_test.la
 
@@ -473,6 +476,22 @@ ceph_test_rbd_mirror_LDADD = \
 	$(LIBOSDC) $(UNITTEST_LDADD) \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_test_rbd_mirror
+
+ceph_test_rbd_mirror_image_replay_SOURCES = \
+	test/rbd_mirror/image_replay.cc
+ceph_test_rbd_mirror_image_replay_LDADD = \
+	librbd_mirror_internal.la \
+	librbd_internal.la \
+	librbd_api.la \
+	$(LIBRBD_TYPES) \
+	libjournal.la \
+	$(LIBRADOS) $(LIBOSDC) \
+	librados_internal.la \
+	libcls_rbd_client.la \
+	libcls_lock_client.la \
+	libcls_journal_client.la \
+	$(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_test_rbd_mirror_image_replay
 
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc
@@ -631,6 +650,13 @@ ceph_test_rgw_manifest_LDADD = \
 ceph_test_rgw_manifest_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rgw_manifest
 
+ceph_test_rgw_period_history_SOURCES = test/rgw/test_rgw_period_history.cc
+ceph_test_rgw_period_history_LDADD = \
+	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
+	$(UNITTEST_LDADD) $(CRYPTO_LIBS) -lcurl -lexpat
+ceph_test_rgw_period_history_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rgw_period_history
+
 ceph_test_rgw_obj_SOURCES = test/rgw/test_rgw_obj.cc
 ceph_test_rgw_obj_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
@@ -642,9 +668,10 @@ bin_DEBUGPROGRAMS += ceph_test_rgw_obj
 
 ceph_test_cls_rgw_meta_SOURCES = test/test_rgw_admin_meta.cc
 ceph_test_cls_rgw_meta_LDADD = \
-	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
+	$(LIBRGW) $(LIBRADOS) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
 	-lcurl -lexpat \
+	libcls_timeindex_client.la \
 	libcls_version_client.la libcls_log_client.la \
 	libcls_statelog_client.la libcls_refcount_client.la \
 	libcls_rgw_client.la libcls_user_client.la libcls_lock_client.la
@@ -653,7 +680,7 @@ bin_DEBUGPROGRAMS += ceph_test_cls_rgw_meta
 
 ceph_test_cls_rgw_log_SOURCES = test/test_rgw_admin_log.cc
 ceph_test_cls_rgw_log_LDADD = \
-	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
+	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
 	-lcurl -lexpat \
 	libcls_version_client.la libcls_log_client.la \

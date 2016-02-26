@@ -1211,10 +1211,16 @@ def mount(
     if options is None:
         options = MOUNT_OPTIONS.get(fstype, '')
 
+    myTemp = STATEDIR + '/tmp'
+    # mkdtemp expect 'dir' to be existing on the system
+    # Let's be sure it's always the case
+    if not os.path.exists(myTemp):
+        os.makedirs(myTemp)
+
     # mount
     path = tempfile.mkdtemp(
         prefix='mnt.',
-        dir=STATEDIR + '/tmp',
+        dir=myTemp,
     )
     try:
         LOG.debug('Mounting %s on %s with options %s', dev, path, options)
@@ -1867,7 +1873,7 @@ class PrepareSpace(object):
             name,
             metavar=name.upper(),
             nargs='?',
-            help=('path to OSD %s disk block device;' % name,
+            help=('path to OSD %s disk block device;' % name +
                   ' leave out to store %s in file' % name),
         )
         return parser
@@ -3422,7 +3428,7 @@ def main_activate_all(args):
 
         if tag in Ptype.get_ready_by_name('osd'):
 
-            if Ptype.is_dmcrpyt(tag, 'osd'):
+            if Ptype.is_dmcrypt(tag, 'osd'):
                 path = os.path.join('/dev/mapper', uuid)
             else:
                 path = os.path.join(dir, name)
@@ -4284,7 +4290,6 @@ def make_activate_parser(subparsers):
     activate_parser.add_argument(
         'path',
         metavar='PATH',
-        nargs='?',
         help='path to block device or directory',
     )
     activate_parser.add_argument(
@@ -4417,7 +4422,6 @@ def make_suppress_parser(subparsers):
     suppress_parser.add_argument(
         'path',
         metavar='PATH',
-        nargs='?',
         help='path to block device or directory',
     )
     suppress_parser.set_defaults(
@@ -4430,7 +4434,6 @@ def make_suppress_parser(subparsers):
     unsuppress_parser.add_argument(
         'path',
         metavar='PATH',
-        nargs='?',
         help='path to block device or directory',
     )
     unsuppress_parser.set_defaults(

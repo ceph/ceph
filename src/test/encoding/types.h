@@ -258,7 +258,7 @@ TYPE(rbd_replay::action::ActionEntry);
 TYPE(RGWObjManifestPart)
 TYPE(RGWObjManifest)
 TYPE(RGWOLHInfo)
-TYPE(RGWRegion)
+TYPE(RGWZoneGroup)
 TYPE(RGWZone)
 TYPE(RGWZoneParams)     
    
@@ -354,6 +354,7 @@ TYPE(cls_rbd_snap)
 
 #include "cls/rbd/cls_rbd_types.h"
 TYPE(cls::rbd::MirrorPeer)
+TYPE(cls::rbd::MirrorImage)
 #endif
 
 #endif

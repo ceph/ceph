@@ -47,7 +47,7 @@ class Graylog
    * until set_destination is called
    * @param logger Value for key "_logger" in GELF
    */
-  Graylog(std::string logger);
+  explicit Graylog(std::string logger);
   virtual ~Graylog();
 
   void set_hostname(const std::string& host);

@@ -36,7 +36,10 @@ private:
    * BLOCK_WRITES
    *    |
    *    v
-   * CANCEL_OP_REQUESTS . . . . . . . . . . . .
+   * CANCEL_OP_REQUESTS
+   *    |
+   *    v
+   * FLUSH_NOTIFIES . . . . . . . . . . . . . .
    *    |                                     .
    *    v                                     .
    * CLOSE_JOURNAL                            .
@@ -69,6 +72,9 @@ private:
 
   void send_cancel_op_requests();
   Context *handle_cancel_op_requests(int *ret_val);
+
+  void send_flush_notifies();
+  Context *handle_flush_notifies(int *ret_val);
 
   void send_close_journal();
   Context *handle_close_journal(int *ret_val);

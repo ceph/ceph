@@ -32,7 +32,7 @@ public:
   bool is_lock_owner() const;
   bool accept_requests() const;
 
-  void init(Context *on_init);
+  void init(uint64_t features, Context *on_init);
   void shut_down(Context *on_shutdown);
 
   void try_lock(Context *on_tried_lock);

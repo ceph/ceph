@@ -270,6 +270,7 @@ void Striper::StripedReadResult::add_partial_result(
     size_t actual = MIN(bl.length(), p->second);
     bl.splice(0, actual, &r.first);
     r.second = p->second;
+    total_intended_len += r.second;
   }
 }
 
@@ -297,6 +298,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
 	ldout(cct, 20) << "  s at end" << dendl;
 	pair<bufferlist, uint64_t>& r = partial[tofs];
 	r.second = tlen;
+	total_intended_len += r.second;
 	break;
       }
 
@@ -315,6 +317,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
 	size_t gap = MIN(s->first - bl_off, tlen);
 	ldout(cct, 20) << "  s gap " << gap << ", skipping" << dendl;
 	r.second = gap;
+	total_intended_len += r.second;
 	bl_off += gap;
 	tofs += gap;
 	tlen -= gap;
@@ -332,6 +335,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
 	pair<bufferlist, uint64_t>& r = partial[tofs];
 	bl.splice(0, actual, &r.first);
 	r.second = actual;
+	total_intended_len += r.second;
 	bl_off += actual;
 	tofs += actual;
 	tlen -= actual;
@@ -382,5 +386,40 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct,
     ++p;
   }
   partial.clear();
+}
+
+void Striper::StripedReadResult::assemble_result(CephContext *cct, char *buffer, size_t length)
+{
+
+  assert(buffer && length == total_intended_len);
+
+  map<uint64_t,pair<bufferlist,uint64_t> >::reverse_iterator p = partial.rbegin();
+  if (p == partial.rend())
+    return;
+
+  uint64_t curr = length;
+  uint64_t end = p->first + p->second.second;
+  while (p != partial.rend()) {
+    // sanity check
+    ldout(cct, 0) << "assemble_result(" << this << ") " << p->first << "~" << p->second.second
+		   << " " << p->second.first.length() << " bytes"
+		   << dendl;
+    assert(p->first == end - p->second.second);
+    end = p->first;
+
+    size_t len = p->second.first.length();
+    assert(curr >= p->second.second);
+    curr -= p->second.second;
+    if (len < p->second.second) {
+      if (len)
+	p->second.first.copy(0, len, buffer + curr);
+      memset(buffer + curr + len, 0, p->second.second - len);
+    } else {
+      p->second.first.copy(0, len, buffer + curr);
+    }
+    ++p;
+  }
+  partial.clear();
+  assert(curr == 0);
 }
 

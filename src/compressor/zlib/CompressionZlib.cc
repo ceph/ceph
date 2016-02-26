@@ -44,7 +44,7 @@ const char* CompressionZlib::get_method_name()
 
 int CompressionZlib::compress(const bufferlist &in, bufferlist &out)
 {
-  int ret, flush;
+  int ret;
   unsigned have;
   z_stream strm;
   unsigned char* c_in;
@@ -71,7 +71,7 @@ int CompressionZlib::compress(const bufferlist &in, bufferlist &out)
     ++i;
 
     strm.avail_in = len;
-    flush = i != in.buffers().end() ? Z_NO_FLUSH : Z_FINISH;
+    int flush = i != in.buffers().end() ? Z_NO_FLUSH : Z_FINISH;
 
     strm.next_in = c_in;
 

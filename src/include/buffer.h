@@ -57,8 +57,10 @@
 
 #if __GNUC__ >= 4
   #define CEPH_BUFFER_API  __attribute__ ((visibility ("default")))
+  #define CEPH_BUFFER_DETAILS __attribute__ ((visibility ("hidden")))
 #else
   #define CEPH_BUFFER_API
+  #define CEPH_BUFFER_DETAILS
 #endif
 
 #if defined(HAVE_XIO)
@@ -263,7 +265,8 @@ namespace buffer CEPH_BUFFER_API {
     ptr append_buffer;  // where i put small appends.
 
     template <bool is_const>
-    class iterator_impl: public std::iterator<std::forward_iterator_tag, char> {
+    class CEPH_BUFFER_DETAILS iterator_impl
+      : public std::iterator<std::forward_iterator_tag, char> {
     protected:
       typedef typename std::conditional<is_const,
 					const list,
@@ -284,10 +287,7 @@ namespace buffer CEPH_BUFFER_API {
       // constructor.  position.
       iterator_impl()
 	: bl(0), ls(0), off(0), p_off(0) {}
-      iterator_impl(bl_t *l, unsigned o=0)
-	: bl(l), ls(&bl->_buffers), off(0), p(ls->begin()), p_off(0) {
-	advance(o);
-      }
+      iterator_impl(bl_t *l, unsigned o=0);
       iterator_impl(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
 	: bl(l), ls(&bl->_buffers), off(o), p(ip), p_off(po) {}
 
@@ -326,11 +326,9 @@ namespace buffer CEPH_BUFFER_API {
 
     class CEPH_BUFFER_API iterator : public iterator_impl<false> {
     public:
-      iterator(): iterator_impl() {}
-      iterator(bl_t *l, unsigned o=0) :
-	iterator_impl(l, o) {}
-      iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po) :
-	iterator_impl(l, o, ip, po) {}
+      iterator() = default;
+      iterator(bl_t *l, unsigned o=0);
+      iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
 
       void advance(int o);
       void seek(unsigned o);
@@ -409,6 +407,7 @@ namespace buffer CEPH_BUFFER_API {
     bool contents_equal(const buffer::list& other) const;
 
     bool can_zero_copy() const;
+    bool is_provided_buffer(const char *dst) const;
     bool is_aligned(unsigned align) const;
     bool is_page_aligned() const;
     bool is_n_align_sized(unsigned align) const;

@@ -39,7 +39,7 @@ namespace ceph {
     void *library;
     CephContext *cct;
 
-    explicit Plugin(CephContext *cct) : cct(cct) {}
+    explicit Plugin(CephContext *cct) : library(NULL), cct(cct) {}
     virtual ~Plugin() {}
   };
 

@@ -152,6 +152,9 @@ namespace librbd {
     // operations on rbd_directory objects
     int dir_get_id(librados::IoCtx *ioctx, const std::string &oid,
 		   const std::string &name, std::string *id);
+    void dir_get_name_start(librados::ObjectReadOperation *op,
+			    const std::string &id);
+    int dir_get_name_finish(bufferlist::iterator *it, std::string *name);
     int dir_get_name(librados::IoCtx *ioctx, const std::string &oid,
 		     const std::string &id, std::string *name);
     int dir_list(librados::IoCtx *ioctx, const std::string &oid,
@@ -203,22 +206,33 @@ namespace librbd {
 			  std::vector<uint64_t> *sizes,
 			  ::SnapContext *snapc);
 
-    // operations on the rbd_pool_settings object
-    int mirror_is_enabled(librados::IoCtx *ioctx, bool *enabled);
-    int mirror_set_enabled(librados::IoCtx *ioctx, bool enabled);
+    // operations on the rbd_mirroring object
+    int mirror_mode_get(librados::IoCtx *ioctx,
+                        cls::rbd::MirrorMode *mirror_mode);
+    int mirror_mode_set(librados::IoCtx *ioctx,
+                        cls::rbd::MirrorMode mirror_mode);
     int mirror_peer_list(librados::IoCtx *ioctx,
                          std::vector<cls::rbd::MirrorPeer> *peers);
-    int mirror_peer_add(librados::IoCtx *ioctx, const std::string &cluster_uuid,
+    int mirror_peer_add(librados::IoCtx *ioctx, const std::string &uuid,
                         const std::string &cluster_name,
-                        const std::string &client_name);
+                        const std::string &client_name,
+                        int64_t pool_id = -1);
     int mirror_peer_remove(librados::IoCtx *ioctx,
-                           const std::string &cluster_uuid);
+                           const std::string &uuid);
     int mirror_peer_set_client(librados::IoCtx *ioctx,
-                               const std::string &cluster_uuid,
+                               const std::string &uuid,
                                const std::string &client_name);
     int mirror_peer_set_cluster(librados::IoCtx *ioctx,
-                                const std::string &cluster_uuid,
+                                const std::string &uuid,
                                 const std::string &cluster_name);
+    int mirror_image_list(librados::IoCtx *ioctx,
+			  std::vector<std::string> *image_ids);
+    int mirror_image_get(librados::IoCtx *ioctx, const std::string &image_id,
+			 cls::rbd::MirrorImage *mirror_image);
+    int mirror_image_set(librados::IoCtx *ioctx, const std::string &image_id,
+			 const cls::rbd::MirrorImage &mirror_image);
+    int mirror_image_remove(librados::IoCtx *ioctx,
+			    const std::string &image_id);
 
   } // namespace cls_client
 } // namespace librbd
