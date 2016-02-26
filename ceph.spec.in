@@ -152,11 +152,8 @@ BuildRequires:	systemd
 PreReq:		%fillup_prereq
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
-%if 0%{?suse_version}
-Requires:	gptfdisk
 %if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel
-%endif
 %endif
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
@@ -168,7 +165,6 @@ Requires:	systemd
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
-Requires:	gdisk
 Requires(post):	chkconfig
 Requires(preun):	chkconfig
 Requires(preun):	initscripts
@@ -365,6 +361,13 @@ managers such as Pacemaker.
 Summary:	Ceph Object Storage Daemon
 Group:		System Environment/Base
 Requires:	ceph-base = %{epoch}:%{version}-%{release}
+# for sgdisk, used by ceph-disk
+%if 0%{?fedora} || 0%{?rhel}
+Requires:	gdisk
+%endif
+%if 0%{?suse_version}
+Requires:	gptfdisk
+%endif
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
