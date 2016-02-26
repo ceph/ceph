@@ -47,7 +47,9 @@ restorecon -R /etc/rc\.d/init\.d/radosgw > /dev/null 2>&1; \
 restorecon -R /var/run/ceph > /dev/null 2>&1; \
 restorecon -R /var/lib/ceph > /dev/null 2>&1; \
 restorecon -R /var/log/ceph > /dev/null 2>&1; \
-restorecon -R /var/log/radosgw > /dev/null 2>&1;
+restorecon -R /var/log/radosgw > /dev/null 2>&1; \
+restorecon -R /var/lock/ceph > /dev/null 2>&1; \
+restorecon /var/lock/ceph-disk > /dev/null 2>&1;
 %endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}

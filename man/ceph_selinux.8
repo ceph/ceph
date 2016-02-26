@@ -1,4 +1,4 @@
-.TH  "ceph_selinux"  "8"  "16-02-11" "ceph" "SELinux Policy ceph"
+.TH  "ceph_selinux"  "8"  "16-02-26" "ceph" "SELinux Policy ceph"
 .SH "NAME"
 ceph_selinux \- Security Enhanced Linux Policy for the ceph processes
 .SH "DESCRIPTION"
@@ -166,6 +166,14 @@ If you want to allow confined applications to run with kerberos for the ceph_t, 
 The SELinux process type ceph_t can manage files labeled with the following file types.  The paths listed are the default paths for these file types.  Note the processes UID still need to have DAC permissions.
 
 .br
+.B ceph_lock_t
+
+	/var/lock/ceph(/.*)?
+.br
+	/var/lock/ceph-disk
+.br
+
+.br
 .B ceph_log_t
 
 	/var/log/ceph(/.*)?
@@ -288,6 +296,8 @@ The SELinux process type ceph_t can manage files labeled with the following file
 .br
 	/var/tmp
 .br
+	/var/tmp
+.br
 	/tmp-inst
 .br
 	/var/tmp-inst
@@ -318,6 +328,17 @@ You can see the context of a file using the \fB\-Z\fP option to \fBls\bP
 .PP
 Policy governs the access confined processes have to these files.
 SELinux ceph policy is very flexible allowing users to setup their ceph processes in as secure a method as possible.
+.PP
+
+.PP
+.B EQUIVALENCE DIRECTORIES
+
+.PP
+ceph policy stores data with multiple different file context types under the /var/lock/ceph directory.  If you would like to store the data in a different directory you can use the semanage command to create an equivalence mapping.  If you wanted to store this data under the /srv dirctory you would execute the following command:
+.PP
+.B semanage fcontext -a -e /var/lock/ceph /srv/ceph
+.br
+.B restorecon -R -v /srv/ceph
 .PP
 
 .PP
@@ -358,6 +379,18 @@ Paths:
 .TP 5
 Paths:
 /etc/rc\.d/init\.d/ceph, /etc/rc\.d/init\.d/radosgw
+
+.EX
+.PP
+.B ceph_lock_t
+.EE
+
+- Set files with the ceph_lock_t type, if you want to treat the files as ceph lock data, stored under the /var/lock directory
+
+.br
+.TP 5
+Paths:
+/var/lock/ceph(/.*)?, /var/lock/ceph-disk
 
 .EX
 .PP
