@@ -498,6 +498,16 @@ void BlueStore::OnodeHashLRU::add(const ghobject_t& oid, OnodeRef o)
   lru.push_front(*o);
 }
 
+void BlueStore::OnodeHashLRU::remove(OnodeRef o)
+{
+  std::lock_guard<std::mutex> l(lock);
+  dout(30) << __func__ << " " << o->oid << " " << o << dendl;
+  lru_list_t::iterator p = lru.iterator_to(*o);
+  lru.erase(p);
+  assert(onode_map.count(o->oid));
+  onode_map.erase(o->oid);
+}
+
 BlueStore::OnodeRef BlueStore::OnodeHashLRU::lookup(const ghobject_t& oid)
 {
   std::lock_guard<std::mutex> l(lock);
@@ -5913,6 +5923,7 @@ int BlueStore::_do_remove(
   }
   o->exists = false;
   o->onode = bluestore_onode_t();
+  c->onode_map.remove(o);
   txc->onodes.erase(o);
   txc->t->rmkey(PREFIX_OBJ, o->key);
   return 0;
