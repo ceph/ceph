@@ -140,7 +140,8 @@ namespace crimson {
 	  Guard g(times_mtx);
 	  times.emplace_back(dmc::get_time());
 	}
-	pq->request_completed();
+	std::thread complete([&](){ pq->request_completed(); });
+	complete.detach();
       };
 
       pq = Queue(new dmc::PriorityQueue<ClientId,Request>(client_info_f,
