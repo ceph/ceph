@@ -1942,8 +1942,10 @@ cdef class SnapIterator(object):
 
     cdef rbd_snap_info_t *snaps
     cdef int num_snaps
+    cdef object image
 
     def __init__(self, Image image):
+        self.image = image
         self.snaps = NULL
         self.num_snaps = 10
         while True:
