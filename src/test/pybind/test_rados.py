@@ -748,8 +748,10 @@ class TestObject(object):
 
     def tearDown(self):
         self.ioctx.close()
+        self.ioctx = None
         self.rados.delete_pool('test_pool')
         self.rados.shutdown()
+        self.rados = None
 
     def test_read(self):
         eq(self.object.read(3), b'bar')
