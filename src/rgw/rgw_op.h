@@ -286,6 +286,10 @@ protected:
   map<string, bufferlist> attrs;
   bool is_truncated;
 
+  virtual uint64_t get_default_max() const {
+    return 1000;
+  }
+
 public:
   RGWListBuckets() : sent_data(false) {
     limit = limit_max = RGW_LIST_BUCKETS_LIMIT_MAX;
