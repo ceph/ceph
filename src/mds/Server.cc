@@ -2918,7 +2918,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
       return;
 
     if (!check_access(mdr, cur, MAY_WRITE))
-    return;
+      return;
 
     // wait for pending truncate?
     const inode_t *pi = cur->get_projected_inode();
