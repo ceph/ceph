@@ -52,10 +52,15 @@ public:
 			    RegisteredClients *clients, Context *on_finish);
 
   int register_client(const bufferlist &data);
-  int unregister_client();
   void register_client(const bufferlist &data, Context *on_finish);
-  void update_client(const bufferlist &data, Context *on_finish);
+
+  int unregister_client();
   void unregister_client(Context *on_finish);
+
+  void update_client(const bufferlist &data, Context *on_finish);
+
+  int get_cached_client(const std::string &client_id,
+                        cls::journal::Client *client);
 
   void flush_commit_position(Context *on_safe);
 
