@@ -933,7 +933,7 @@ AC_CHECK_LIB(boost_system-mt, main, [],
 
 AC_CHECK_LIB(boost_iostreams-mt, main, [],
     [AC_CHECK_LIB(boost_iostreams, main, [],
-        AC_MSG_NOTICE(["Boost iostreams library not found."]))])
+        AC_MSG_FAILURE(["Boost iostreams library not found."]))])
 
 # Find the right boost_thread library.
 BOOST_THREAD_LIBS=""
