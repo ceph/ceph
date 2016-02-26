@@ -94,6 +94,10 @@ namespace crimson {
       }
 
 
+      // the reason we're overloading the constructor rather than
+      // using default values for the arguments is so that callers
+      // have to either use all defaults or specify all timings; with
+      // default arguments they could specify some without others
       ServiceTracker() :
 	ServiceTracker(std::chrono::minutes(5), std::chrono::minutes(10))
       {

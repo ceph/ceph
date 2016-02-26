@@ -50,10 +50,10 @@ namespace crimson {
       dmc::PriorityQueue<ClientId,Request> pq(client_info_f,
 					      server_ready_f,
 					      submit_req_f,
-					      false,
 					      std::chrono::seconds(3),
 					      std::chrono::seconds(5),
-					      std::chrono::seconds(2));
+					      std::chrono::seconds(2),
+					      false);
 
       auto lock_pq = [&](std::function<void()> code) {
 	test_locked(pq.data_mtx, code);

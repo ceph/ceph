@@ -62,10 +62,10 @@ void TestClient::run_req() {
 
   {
     Lock l(mtx_req);
-    auto now = std::chrono::high_resolution_clock::now();
+    auto now = std::chrono::steady_clock::now();
     for (uint64_t i = 0; i < ops_to_run; ++i) {
       auto when = now + delay;
-      while ((now = std::chrono::high_resolution_clock::now()) < when) {
+      while ((now = std::chrono::steady_clock::now()) < when) {
 	cv_req.wait_until(l, when);
       }
       while (outstanding_ops >= outstanding_ops_allowed) {

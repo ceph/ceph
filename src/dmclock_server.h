@@ -316,10 +316,10 @@ namespace crimson {
       PriorityQueue(ClientInfoFunc _client_info_f,
 		    CanHandleRequestFunc _can_handle_f,
 		    HandleRequestFunc _handle_f,
-		    bool _allowLimitBreak = false,
-		    Duration _idle_age = Duration(10),
-		    Duration _erase_age = Duration(15),
-		    Duration _check_time = Duration(6)) :
+		    Duration _idle_age,
+		    Duration _erase_age,
+		    Duration _check_time,
+		    bool _allowLimitBreak = false) :
 	client_info_f(_client_info_f),
 	can_handle_f(_can_handle_f),
 	handle_f(_handle_f),
@@ -338,6 +338,26 @@ namespace crimson {
       }
 
 
+      // the reason we're overloading the constructor rather than
+      // using default values for the arguments is so that callers
+      // have to either use all defaults or specify all timings; with
+      // default arguments they could specify some without others
+      PriorityQueue(ClientInfoFunc _client_info_f,
+		    CanHandleRequestFunc _can_handle_f,
+		    HandleRequestFunc _handle_f,
+		    bool _allowLimitBreak = false) :
+	PriorityQueue(_client_info_f,
+		      _can_handle_f,
+		      _handle_f,
+		      std::chrono::minutes(10),
+		      std::chrono::minutes(15),
+		      std::chrono::minutes(6),
+		      _allowLimitBreak)
+      {
+	// empty
+      }
+
+      
       ~PriorityQueue() {
 	finishing = true;
 	sched_ahead_cv.notify_one();
@@ -462,7 +482,11 @@ namespace crimson {
       // data_mtx should be held when called
       void reduce_reservation_tags(C client_id) {
 	auto client_it = client_map.find(client_id);
-	assert(client_map.end() != client_it);
+
+	// means the client was cleaned from map; should never happen
+	// as long as cleaning times are long enough
+	if (client_map.end() == client_it) return;
+
 	double reduction = client_it->second.info.reservation_inv;
 	for (auto i = res_q.begin(); i != res_q.end(); ++i) {
 	  if ((*i)->client == client_id) {

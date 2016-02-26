@@ -31,9 +31,9 @@ public:
 
   using ServerSelectFunc = std::function<const ServerId&(uint64_t seed)>;
 
-  typedef std::chrono::time_point<std::chrono::system_clock> TimePoint;
+  typedef std::chrono::time_point<std::chrono::steady_clock> TimePoint;
 
-  static TimePoint now() { return std::chrono::system_clock::now(); }
+  static TimePoint now() { return std::chrono::steady_clock::now(); }
 
 protected:
 
