@@ -684,6 +684,62 @@ Notable Changes
 * vstart: set cephfs root uid/gid to caller (`pr#6255 <http://github.com/ceph/ceph/pull/6255>`_, John Spray)
 
 
+v9.2.1 Infernalis (draft)
+=========================
+
+This Infernalis point release fixes ...
+
+Notable Changes
+---------------
+* build/ops: Ceph daemon failed to start, because the service name was already used. (`issue#13474 <http://tracker.ceph.com/issues/13474>`_, `pr#6833 <http://github.com/ceph/ceph/pull/6833>`_, Chuanhong Wang)
+* build/ops: ceph upstart script rbdmap.conf incorrectly processes parameters (`issue#13214 <http://tracker.ceph.com/issues/13214>`_, `pr#6396 <http://github.com/ceph/ceph/pull/6396>`_, Sage Weil)
+* build/ops: libunwind package missing on CentOS 7 (`issue#13997 <http://tracker.ceph.com/issues/13997>`_, `pr#6845 <http://github.com/ceph/ceph/pull/6845>`_, Loic Dachary)
+* build/ops: rbd-replay-* moved from ceph-test-dbg to ceph-common-dbg as well (`issue#13785 <http://tracker.ceph.com/issues/13785>`_, `pr#6628 <http://github.com/ceph/ceph/pull/6628>`_, Loic Dachary)
+* build/ops: systemd/ceph-disk@.service assumes /bin/flock (`issue#13975 <http://tracker.ceph.com/issues/13975>`_, `pr#6852 <http://github.com/ceph/ceph/pull/6852>`_, Loic Dachary)
+* build/ops: systemd: no rbdmap systemd unit file (`issue#13374 <http://tracker.ceph.com/issues/13374>`_, `pr#6500 <http://github.com/ceph/ceph/pull/6500>`_, Boris Ranto)
+* common: auth/cephx: large amounts of log are produced by osd (`issue#13610 <http://tracker.ceph.com/issues/13610>`_, `pr#6836 <http://github.com/ceph/ceph/pull/6836>`_, Qiankun Zheng)
+* common: log: Log.cc: Assign LOG_DEBUG priority to syslog calls (`issue#13993 <http://tracker.ceph.com/issues/13993>`_, `pr#6993 <http://github.com/ceph/ceph/pull/6993>`_, Brad Hubbard)
+* crush: crash if we see CRUSH_ITEM_NONE in early rule step (`issue#13477 <http://tracker.ceph.com/issues/13477>`_, `pr#6626 <http://github.com/ceph/ceph/pull/6626>`_, Sage Weil)
+* fs: Ceph file system is not freeing space (`issue#13777 <http://tracker.ceph.com/issues/13777>`_, `pr#7431 <http://github.com/ceph/ceph/pull/7431>`_, Yan, Zheng, John Spray)
+* fs: Ceph-fuse won't start correctly when the option log_max_new in ceph.conf set to zero (`issue#13443 <http://tracker.ceph.com/issues/13443>`_, `pr#6395 <http://github.com/ceph/ceph/pull/6395>`_, Wenjun Huang)
+* fs: Segmentation fault accessing file using fuse mount (`issue#13714 <http://tracker.ceph.com/issues/13714>`_, `pr#6853 <http://github.com/ceph/ceph/pull/6853>`_, Yan, Zheng)
+* librbd: Avoid re-writing old-format image header on resize (`issue#13674 <http://tracker.ceph.com/issues/13674>`_, `pr#6630 <http://github.com/ceph/ceph/pull/6630>`_, Jason Dillaman)
+* librbd: ImageWatcher shouldn't block the notification thread (`issue#14373 <http://tracker.ceph.com/issues/14373>`_, `pr#7406 <http://github.com/ceph/ceph/pull/7406>`_, Jason Dillaman)
+* librbd: QEMU hangs after creating snapshot and stopping VM (`issue#13726 <http://tracker.ceph.com/issues/13726>`_, `pr#6632 <http://github.com/ceph/ceph/pull/6632>`_, Jason Dillaman)
+* librbd: Verify self-managed snapshot functionality on image create (`issue#13633 <http://tracker.ceph.com/issues/13633>`_, `pr#7080 <http://github.com/ceph/ceph/pull/7080>`_, Jason Dillaman)
+* librbd: [ FAILED ] TestLibRBD.SnapRemoveViaLockOwner (`issue#14164 <http://tracker.ceph.com/issues/14164>`_, `pr#7079 <http://github.com/ceph/ceph/pull/7079>`_, Jason Dillaman)
+* librbd: enable feature objectmap (`issue#13558 <http://tracker.ceph.com/issues/13558>`_, `pr#6477 <http://github.com/ceph/ceph/pull/6477>`_, xinxin shu)
+* librbd: fix merge-diff for >2GB diff-files (`issue#14030 <http://tracker.ceph.com/issues/14030>`_, `pr#6981 <http://github.com/ceph/ceph/pull/6981>`_, Jason Dillaman)
+* librbd: flattening an rbd image with active IO can lead to hang (`issue#14092 <http://tracker.ceph.com/issues/14092>`_, `issue#14483 <http://tracker.ceph.com/issues/14483>`_, `pr#7484 <http://github.com/ceph/ceph/pull/7484>`_, Jason Dillaman)
+* mds: fix client capabilities during reconnect (client.XXXX isn't responding to mclientcaps warning) (`issue#11482 <http://tracker.ceph.com/issues/11482>`_, `pr#6752 <http://github.com/ceph/ceph/pull/6752>`_, Yan, Zheng)
+* mon: Ceph Pools' MAX AVAIL is 0 if some OSDs' weight is 0 (`issue#13840 <http://tracker.ceph.com/issues/13840>`_, `pr#6907 <http://github.com/ceph/ceph/pull/6907>`_, Chengyuan Li)
+* mon: should not set isvalid = true when cephx_verify_authorizer retur... (`issue#13525 <http://tracker.ceph.com/issues/13525>`_, `pr#6392 <http://github.com/ceph/ceph/pull/6392>`_, Ruifeng Yang)
+* objecter: pool op callback may hang forever. (`issue#13642 <http://tracker.ceph.com/issues/13642>`_, `pr#6627 <http://github.com/ceph/ceph/pull/6627>`_, xie xingguo)
+* objecter: potential null pointer access when do pool_snap_list. (`issue#13639 <http://tracker.ceph.com/issues/13639>`_, `pr#6840 <http://github.com/ceph/ceph/pull/6840>`_, xie xingguo)
+* osd: FileStore: potential memory leak if getattrs fails. (`issue#13597 <http://tracker.ceph.com/issues/13597>`_, `pr#6846 <http://github.com/ceph/ceph/pull/6846>`_, xie xingguo)
+* osd: OSD::build_past_intervals_parallel() shall reset primary and up_primary when begin a new past_interval. (`issue#13471 <http://tracker.ceph.com/issues/13471>`_, `pr#6397 <http://github.com/ceph/ceph/pull/6397>`_, xiexingguo)
+* osd: call on_new_interval on newly split child PG (`issue#13962 <http://tracker.ceph.com/issues/13962>`_, `pr#6849 <http://github.com/ceph/ceph/pull/6849>`_, Sage Weil)
+* osd: ceph-disk list fails on /dev/cciss!c0d0 (`issue#13970 <http://tracker.ceph.com/issues/13970>`_, `issue#14230 <http://tracker.ceph.com/issues/14230>`_, `pr#6880 <http://github.com/ceph/ceph/pull/6880>`_, Loic Dachary)
+* osd: ceph-disk: use blkid instead of sgdisk -i (`issue#14080 <http://tracker.ceph.com/issues/14080>`_, `pr#7001 <http://github.com/ceph/ceph/pull/7001>`_, Loic Dachary, Ilya Dryomov)
+* osd: fix race condition during send_failures (`issue#13821 <http://tracker.ceph.com/issues/13821>`_, `pr#6694 <http://github.com/ceph/ceph/pull/6694>`_, Sage Weil)
+* osd: osd/PG.cc: 288: FAILED assert(info.last_epoch_started >= info.history.last_epoch_started) (`issue#14015 <http://tracker.ceph.com/issues/14015>`_, `pr#6851 <http://github.com/ceph/ceph/pull/6851>`_, David Zafman)
+* osd: pgs stuck inconsistent after infernalis upgrade (`issue#13862 <http://tracker.ceph.com/issues/13862>`_, `pr#7421 <http://github.com/ceph/ceph/pull/7421>`_, David Zafman)
+* rbd: TaskFinisher::cancel should remove event from SafeTimer (`issue#14476 <http://tracker.ceph.com/issues/14476>`_, `pr#7426 <http://github.com/ceph/ceph/pull/7426>`_, Douglas Fuller)
+* rbd: cls_rbd: object_map_save should enable checksums (`issue#14280 <http://tracker.ceph.com/issues/14280>`_, `pr#7428 <http://github.com/ceph/ceph/pull/7428>`_, Douglas Fuller)
+* rbd: misdirected op in rbd balance-reads test (`issue#13491 <http://tracker.ceph.com/issues/13491>`_, `pr#6629 <http://github.com/ceph/ceph/pull/6629>`_, Jason Dillaman)
+* rbd: pure virtual method called (`issue#13636 <http://tracker.ceph.com/issues/13636>`_, `pr#6633 <http://github.com/ceph/ceph/pull/6633>`_, Jason Dillaman)
+* rbd: rbd clone issue (`issue#13553 <http://tracker.ceph.com/issues/13553>`_, `pr#6474 <http://github.com/ceph/ceph/pull/6474>`_, xinxin shu)
+* rbd: rbd-replay does not check for EOF and goes to endless loop (`issue#14452 <http://tracker.ceph.com/issues/14452>`_, `pr#7427 <http://github.com/ceph/ceph/pull/7427>`_, Mykola Golub)
+* rbd: unknown argument --quiet in udevadm settle (`issue#13560 <http://tracker.ceph.com/issues/13560>`_, `pr#6634 <http://github.com/ceph/ceph/pull/6634>`_, Jason Dillaman)
+* rgw: init script reload doesn't work on EL7 (`issue#13709 <http://tracker.ceph.com/issues/13709>`_, `pr#6650 <http://github.com/ceph/ceph/pull/6650>`_, Hervé Rousseau)
+* rgw: radosgw-admin --help doesn't show the orphans find command (`issue#14516 <http://tracker.ceph.com/issues/14516>`_, `pr#7543 <http://github.com/ceph/ceph/pull/7543>`_, Yehuda Sadeh)
+* tests: ceph-disk workunit uses configobj (`issue#14004 <http://tracker.ceph.com/issues/14004>`_, `pr#6828 <http://github.com/ceph/ceph/pull/6828>`_, Loic Dachary)
+* tests: fsx failed to compile (`issue#14384 <http://tracker.ceph.com/issues/14384>`_, `pr#7429 <http://github.com/ceph/ceph/pull/7429>`_, Greg Farnum)
+* tests: notification slave needs to wait for master (`issue#13810 <http://tracker.ceph.com/issues/13810>`_, `pr#7225 <http://github.com/ceph/ceph/pull/7225>`_, Jason Dillaman)
+* tests: rebuild exclusive lock test should acquire exclusive lock (`issue#14121 <http://tracker.ceph.com/issues/14121>`_, `pr#7038 <http://github.com/ceph/ceph/pull/7038>`_, Jason Dillaman)
+* tests: testprofile must be removed before it is re-created (`issue#13664 <http://tracker.ceph.com/issues/13664>`_, `pr#6449 <http://github.com/ceph/ceph/pull/6449>`_, Loic Dachary)
+* tests: verify it is possible to reuse an OSD id (`issue#13988 <http://tracker.ceph.com/issues/13988>`_, `pr#6882 <http://github.com/ceph/ceph/pull/6882>`_, Loic Dachary)
+
 v9.2.0 Infernalis
 =================
 
