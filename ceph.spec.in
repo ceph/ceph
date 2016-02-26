@@ -109,11 +109,6 @@ BuildRequires:	boost-devel
 BuildRequires:  cmake
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
-%if 0%{?suse_version}
-BuildRequires:	python-Cython
-%else
-BuildRequires:	Cython
-%endif
 BuildRequires:	gdbm
 BuildRequires:	hdparm
 BuildRequires:	leveldb-devel > 1.2
@@ -164,6 +159,7 @@ BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
 BuildRequires:  lsb-release
+BuildRequires:	python-Cython
 %endif
 %if 0%{?fedora} || 0%{?rhel} 
 %if 0%{?_with_systemd}
@@ -180,6 +176,7 @@ Requires(preun):	chkconfig
 Requires(preun):	initscripts
 BuildRequires:	gperftools-devel
 BuildRequires:  redhat-lsb-core
+BuildRequires:	Cython
 %endif
 # boost
 %if 0%{?fedora} || 0%{?rhel} 
