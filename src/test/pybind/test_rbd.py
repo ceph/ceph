@@ -289,6 +289,7 @@ class TestImage(object):
     def tearDown(self):
         self.image.close()
         remove_image()
+        self.image = None
 
     @require_new_format()
     @blacklist_features([RBD_FEATURE_EXCLUSIVE_LOCK])
