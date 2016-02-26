@@ -887,6 +887,8 @@ void Monitor::shutdown()
     admin_socket->unregister_command("quorum_status");
     admin_socket->unregister_command("sync_force");
     admin_socket->unregister_command("add_bootstrap_peer_hint");
+    admin_socket->unregister_command("quorum enter");
+    admin_socket->unregister_command("quorum exit");
     admin_socket->unregister_command("ops");
     delete admin_hook;
     admin_hook = NULL;
@@ -1613,7 +1615,6 @@ void Monitor::handle_probe(MonOpRequestRef op)
 void Monitor::handle_probe_probe(MonOpRequestRef op)
 {
   MMonProbe *m = static_cast<MMonProbe*>(op->get_req());
-  MMonProbe *r;
 
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
 	   << " features " << m->get_connection()->get_features() << dendl;
@@ -1645,7 +1646,8 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
 
     }
   }
-
+  
+  MMonProbe *r;
   r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name, has_ever_joined);
   r->name = name;
   r->quorum = quorum;
@@ -2556,11 +2558,6 @@ void Monitor::get_locally_supported_monitor_commands(const MonCommand **cmds,
 {
   *cmds = mon_commands;
   *count = ARRAY_SIZE(mon_commands);
-}
-void Monitor::get_leader_supported_commands(const MonCommand **cmds, int *count)
-{
-  *cmds = leader_supported_mon_commands;
-  *count = leader_supported_mon_commands_size;
 }
 void Monitor::get_classic_monitor_commands(const MonCommand **cmds, int *count)
 {

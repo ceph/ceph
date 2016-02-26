@@ -76,8 +76,7 @@ else()
 endif()
 
 
-set(EXTRALIBS uuid rt dl
-  ${Boost_LIBRARIES} ${Boost_SYSTEM_LIBRARY} ${ATOMIC_OPS_LIBRARIES})
+set(EXTRALIBS uuid rt dl ${ATOMIC_OPS_LIBRARIES})
 
 if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
@@ -190,6 +189,8 @@ add_library(crush STATIC ${crush_srcs})
 
 add_subdirectory(json_spirit)
 
+include_directories("${CMAKE_SOURCE_DIR}/src/xxHash")
+
 set(xio_common_srcs)
 if(HAVE_XIO)
   list(APPEND xio_common_srcs
@@ -238,6 +239,7 @@ set(libcommon_files
   common/crc32c_intel_baseline.c
   common/crc32c_intel_fast.c
   ${yasm_srcs}
+  xxHash/xxhash.c
   common/assert.cc
   common/run_cmd.cc
   common/WorkQueue.cc
@@ -317,6 +319,7 @@ set(libcommon_files
   common/linux_version.c
   common/TracepointProvider.cc
   common/Cycles.cc
+  common/scrub_types.cc
   osdc/Striper.cc
   osdc/Objecter.cc
   common/Graylog.cc
@@ -418,9 +421,6 @@ add_dependencies(librados osdc)
 target_link_libraries(librados LINK_PRIVATE osdc osd os global common cls_lock_client
   ${BLKID_LIBRARIES}
   ${CRYPTO_LIBS} ${EXTRALIBS} ${ALLOC_LIBS})
-if(${WITH_LTTNG})
-  target_link_libraries(librados librados_tp)
-endif(${WITH_LTTNG})
 if(${ENABLE_SHARED})
   set_target_properties(librados PROPERTIES OUTPUT_NAME rados VERSION 2.0.0
     SOVERSION 2)
@@ -537,16 +537,14 @@ set(dencoder_srcs
 if(${WITH_RADOSGW})
   list(APPEND dencoder_srcs
     rgw/rgw_dencoder.cc
-    rgw/rgw_acl.cc
-    rgw/rgw_common.cc
-    rgw/rgw_env.cc
-    rgw/rgw_json_enc.cc
   )
-endif(${WITH_RADOSGW})
-add_executable(ceph-dencoder ${dencoder_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
-if(${WITH_RADOSGW})
   set(DENCODER_EXTRALIBS
     rgw_a
+    cls_version_client
+    cls_log_client
+    cls_refcount_client
+    cls_user_client
+    cls_statelog_client
     cls_rgw_client
     curl
     expat
@@ -559,6 +557,8 @@ if(${WITH_RBD})
       ${DENCODER_EXTRALIBS}
       rbd_replay_types)
 endif(${WITH_RBD})
+
+add_executable(ceph-dencoder ${dencoder_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
 target_link_libraries(ceph-dencoder
   librados
   librbd
@@ -568,6 +568,7 @@ target_link_libraries(ceph-dencoder
   mon
   osdc
   journal
+  ${DENCODER_EXTRALIBS}
   cls_lock_client
   cls_refcount_client
   cls_log_client
@@ -577,7 +578,7 @@ target_link_libraries(ceph-dencoder
   cls_kvs
   cls_user_client
   cls_journal_client
-  ${DENCODER_EXTRALIBS}
+  cls_timeindex_client
   blkid
   udev
   keyutils
@@ -706,9 +707,6 @@ add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
 if(${HAVE_LIBAIO})
   target_link_libraries(os aio)
 endif(${HAVE_LIBAIO})
-if(${WITH_LTTNG})
-  target_link_libraries(os libos_tp)
-endif(${WITH_LTTNG})
 if(${HAVE_LIBFUSE})
   target_link_libraries(os ${FUSE_LIBRARIES})
 endif(${HAVE_LIBFUSE})
@@ -750,6 +748,7 @@ set(osd_srcs
   osd/OpRequest.cc
   common/TrackedOp.cc
   osd/SnapMapper.cc
+  osd/ScrubStore.cc
   osd/osd_types.cc
   osd/ECUtil.cc
   objclass/class_api.cc
@@ -760,9 +759,6 @@ add_library(osd_mon_objs OBJECT ${osd_mon_files})
 add_library(osd STATIC ${osd_srcs} $<TARGET_OBJECTS:osd_mon_objs>
   $<TARGET_OBJECTS:cls_references_objs>)
 target_link_libraries(osd dl leveldb)
-if(${WITH_LTTNG})
-  target_link_libraries(osd libosd_tp)
-endif(${WITH_LTTNG})
 
 set(ceph_osd_srcs
   ceph_osd.cc
@@ -1032,6 +1028,8 @@ if(${WITH_RBD})
     librbd/image/RefreshParentRequest.cc
     librbd/image/RefreshRequest.cc
     librbd/image/SetSnapRequest.cc
+    librbd/image_watcher/Notifier.cc
+    librbd/image_watcher/NotifyLockOwner.cc
     librbd/journal/Replay.cc
     librbd/journal/Types.cc
     librbd/object_map/InvalidateRequest.cc
@@ -1063,9 +1061,6 @@ if(${WITH_RBD})
   target_link_libraries(librbd LINK_PRIVATE librados common journal
     cls_lock_client cls_rbd_client cls_journal_client udev
     ${CMAKE_DL_LIBS})
-  if(${WITH_LTTNG})
-    target_link_libraries(librbd librbd_tp)
-  endif(${WITH_LTTNG})
   if(${ENABLE_SHARED})
     set_target_properties(librbd PROPERTIES VERSION "1.0.0" SOVERSION "1"
       OUTPUT_NAME rbd)
@@ -1132,70 +1127,95 @@ endif(${WITH_KVS})
 
 if(${WITH_RADOSGW})
   set(rgw_a_srcs
-    rgw/librgw.cc
     rgw/rgw_acl.cc
     rgw/rgw_acl_s3.cc
     rgw/rgw_acl_swift.cc
-    rgw/rgw_client_io.cc
-    rgw/rgw_fcgi.cc
-    rgw/rgw_xml.cc
-    rgw/rgw_usage.cc
-    rgw/rgw_json_enc.cc
-    rgw/rgw_user.cc
-    rgw/rgw_bucket.cc
-    rgw/rgw_tools.cc
-    rgw/rgw_rados.cc
-    rgw/rgw_http_client.cc
-    rgw/rgw_rest_client.cc
-    rgw/rgw_rest_conn.cc
-    rgw/rgw_op.cc
+    rgw/rgw_auth_s3.cc
     rgw/rgw_basic_types.cc
-    rgw/rgw_common.cc
+    rgw/rgw_bucket.cc
     rgw/rgw_cache.cc
-    rgw/rgw_formats.cc
-    rgw/rgw_log.cc
-    rgw/rgw_multi.cc
-    rgw/rgw_policy_s3.cc
-    rgw/rgw_gc.cc
-    rgw/rgw_multi_del.cc
-    rgw/rgw_env.cc
+    rgw/rgw_client_io.cc
+    rgw/rgw_common.cc
     rgw/rgw_cors.cc
     rgw/rgw_cors_s3.cc
-    rgw/rgw_auth_s3.cc
-    rgw/rgw_metadata.cc
-    rgw/rgw_replica_log.cc
-    rgw/rgw_keystone.cc
-    rgw/rgw_quota.cc
     rgw/rgw_dencoder.cc
+    rgw/rgw_env.cc
+    rgw/rgw_fcgi.cc
+    rgw/rgw_formats.cc
+    rgw/rgw_frontend.cc
+    rgw/rgw_gc.cc
+    rgw/rgw_http_client.cc
+    rgw/rgw_json_enc.cc
+    rgw/rgw_keystone.cc
+    rgw/rgw_loadgen.cc
+    rgw/rgw_log.cc
+    rgw/rgw_metadata.cc
+    rgw/rgw_multi.cc
+    rgw/rgw_multi_del.cc
+    rgw/rgw_sync.cc
+    rgw/rgw_data_sync.cc
+    rgw/rgw_period_history.cc
+    rgw/rgw_period_puller.cc
+    rgw/rgw_period_pusher.cc
+    rgw/rgw_realm_reloader.cc
+    rgw/rgw_realm_watcher.cc
+    rgw/rgw_coroutine.cc
+    rgw/rgw_cr_rados.cc
     rgw/rgw_object_expirer_core.cc
-    rgw/rgw_website.cc
-    rgw/rgw_xml_enc.cc)
-
-  add_library(rgw_a STATIC ${rgw_a_srcs})
-
-  include_directories("${CMAKE_SOURCE_DIR}/src/civetweb/include")
-
-  set(radosgw_srcs
+    rgw/rgw_op.cc
+    rgw/rgw_os_lib.cc
+    rgw/rgw_policy_s3.cc
+    rgw/rgw_process.cc
+    rgw/rgw_quota.cc
+    rgw/rgw_rados.cc
+    rgw/rgw_replica_log.cc
+    rgw/rgw_request.cc
     rgw/rgw_resolve.cc
+    rgw/rgw_rest_bucket.cc
     rgw/rgw_rest.cc
-    rgw/rgw_rest_swift.cc
+    rgw/rgw_rest_client.cc
+    rgw/rgw_rest_config.cc
+    rgw/rgw_rest_conn.cc
+    rgw/rgw_rest_log.cc
+    rgw/rgw_rest_metadata.cc
+    rgw/rgw_rest_opstate.cc
+    rgw/rgw_rest_realm.cc
+    rgw/rgw_rest_replica_log.cc
     rgw/rgw_rest_s3.cc
+    rgw/rgw_rest_swift.cc
     rgw/rgw_rest_usage.cc
     rgw/rgw_rest_user.cc
-    rgw/rgw_rest_bucket.cc
-    rgw/rgw_rest_metadata.cc
-    rgw/rgw_replica_log.cc
-    rgw/rgw_rest_log.cc
-    rgw/rgw_rest_opstate.cc
-    rgw/rgw_rest_replica_log.cc
-    rgw/rgw_rest_config.cc
-    rgw/rgw_http_client.cc
-    rgw/rgw_swift.cc
     rgw/rgw_swift_auth.cc
-    rgw/rgw_loadgen.cc
+    rgw/rgw_swift.cc
+    rgw/rgw_tools.cc
+    rgw/rgw_usage.cc
+    rgw/rgw_user.cc
+    rgw/rgw_website.cc
+    rgw/rgw_xml.cc
+    rgw/rgw_xml_enc.cc
+    )
+
+  set(civetweb_common_files civetweb/src/civetweb.c)
+  add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
+  set_property(TARGET civetweb_common_objs
+	       APPEND PROPERTY COMPILE_DEFINITIONS NO_SSL_DL=1)
+
+  add_library(rgw_a STATIC ${rgw_a_srcs})
+  target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/civetweb/include")
+  target_link_libraries(rgw_a librados cls_rgw_client cls_refcount_client
+    cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
+    cls_replica_log_client cls_user_client curl global expat)
+
+  if(HAVE_BOOST_ASIO_COROUTINE)
+    target_compile_definitions(rgw_a PUBLIC "HAVE_BOOST_ASIO_COROUTINE")
+  endif()
+
+  set(radosgw_srcs
+    rgw/rgw_fcgi_process.cc
+    rgw/rgw_loadgen_process.cc
     rgw/rgw_civetweb.cc
+    rgw/rgw_civetweb_frontend.cc
     rgw/rgw_civetweb_log.cc
-    civetweb/src/civetweb.c
     rgw/rgw_main.cc)
 
   set(radosgw_admin_srcs
@@ -1205,12 +1225,43 @@ if(${WITH_RADOSGW})
   set(radosgw_object_expirer_srcs
     rgw/rgw_object_expirer.cc)
 
-  add_executable(radosgw ${radosgw_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
+  set(librgw_srcs
+    rgw/librgw.cc
+    rgw/rgw_file.cc
+    )
+
+  add_library(rgw SHARED ${librgw_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
+  target_link_libraries(rgw PRIVATE
+    rgw_a
+    librados
+    cls_rgw_client
+    cls_lock_client
+    cls_refcount_client
+    cls_log_client
+    cls_statelog_client
+    cls_timeindex_client
+    cls_version_client
+    cls_replica_log_client
+    cls_user_client
+    curl expat global
+    resolv
+    ${TCMALLOC_LIBS})
+  set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
+    SOVERSION 1)
+
+  install(TARGETS rgw DESTINATION lib)
+  install(FILES
+    include/rados/librgw.h
+    include/rados/rgw_file.h
+  DESTINATION include/rados)
+
+  add_executable(radosgw ${radosgw_srcs}  $<TARGET_OBJECTS:civetweb_common_objs>
+		 $<TARGET_OBJECTS:heap_profiler_objs>)
   target_link_libraries(radosgw rgw_a librados
     cls_rgw_client cls_lock_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client
     cls_version_client cls_replica_log_client cls_user_client
-    curl expat global fcgi resolv ${BLKID_LIBRARIES} ${ALLOC_LIBS})
+    curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES} ${ALLOC_LIBS})
   install(TARGETS radosgw DESTINATION bin)
 
   add_executable(radosgw-admin ${radosgw_admin_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
@@ -1218,7 +1269,8 @@ if(${WITH_RADOSGW})
     cls_rgw_client cls_lock_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client
     cls_version_client cls_replica_log_client cls_user_client
-    curl expat global fcgi resolv ${BLKID_LIBRARIES} ${ALLOC_LIBS})
+    curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES} ${ALLOC_LIBS})
+
   install(TARGETS radosgw-admin DESTINATION bin)
 
   add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
@@ -1245,6 +1297,7 @@ add_custom_target(cephfs_testing DEPENDS
     vstart
     rados
     cephfs
+    cls_cephfs
     ceph-fuse
     ceph-dencoder
     cephfs-journal-tool

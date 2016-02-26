@@ -34,6 +34,8 @@ public:
   ~Replay();
 
   void process(bufferlist::iterator *it, Context *on_ready, Context *on_safe);
+
+  void shut_down(Context *on_finish);
   void flush(Context *on_finish);
 
   void replay_op_ready(uint64_t op_tid, Context *on_resume);
@@ -46,6 +48,7 @@ private:
     Context *on_start_safe = nullptr;
     Context *on_finish_ready = nullptr;
     Context *on_finish_safe = nullptr;
+    Context *on_op_complete = nullptr;
   };
 
   typedef std::list<uint64_t> OpTids;
@@ -66,12 +69,13 @@ private:
 
   struct C_AioModifyComplete : public Context {
     Replay *replay;
+    Context *on_ready;
     Context *on_safe;
-    C_AioModifyComplete(Replay *replay, Context *on_safe)
-      : replay(replay), on_safe(on_safe) {
+    C_AioModifyComplete(Replay *replay, Context *on_ready, Context *on_safe)
+      : replay(replay), on_ready(on_ready), on_safe(on_safe) {
     }
     virtual void finish(int r) {
-      replay->handle_aio_modify_complete(on_safe, r);
+      replay->handle_aio_modify_complete(on_ready, on_safe, r);
     }
   };
 
@@ -108,7 +112,8 @@ private:
 
   Mutex m_lock;
 
-  uint64_t m_in_flight_aio = 0;
+  uint64_t m_in_flight_aio_flush = 0;
+  uint64_t m_in_flight_aio_modify = 0;
   Contexts m_aio_modify_unsafe_contexts;
   ContextSet m_aio_modify_safe_contexts;
 
@@ -146,7 +151,7 @@ private:
   void handle_event(const UnknownEvent &event, Context *on_ready,
                     Context *on_safe);
 
-  void handle_aio_modify_complete(Context *on_safe, int r);
+  void handle_aio_modify_complete(Context *on_ready, Context *on_safe, int r);
   void handle_aio_flush_complete(Context *on_flush_safe, Contexts &on_safe_ctxs,
                                  int r);
 

@@ -14,7 +14,23 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-bool KeystoneToken::User::has_role(const string& r) {
+KeystoneApiVersion KeystoneService::get_api_version()
+{
+  const int keystone_version = g_ceph_context->_conf->rgw_keystone_api_version;
+
+  if (keystone_version == 3) {
+    return KeystoneApiVersion::VER_3;
+  } else if (keystone_version == 2) {
+    return KeystoneApiVersion::VER_2;
+  } else {
+    dout(0) << "ERROR: wrong Keystone API version: " << keystone_version
+            << "; falling back to v2" <<  dendl;
+    return KeystoneApiVersion::VER_2;
+  }
+}
+
+bool KeystoneToken::has_role(const string& r)
+{
   list<Role>::iterator iter;
   for (iter = roles.begin(); iter != roles.end(); ++iter) {
       if (fnmatch(r.c_str(), ((*iter).name.c_str()), 0) == 0) {
@@ -33,7 +49,22 @@ int KeystoneToken::parse(CephContext *cct, bufferlist& bl)
   }
 
   try {
-    JSONDecoder::decode_json("access", *this, &parser);
+    const auto version = KeystoneService::get_api_version();
+
+    if (version == KeystoneApiVersion::VER_3) {
+      if (!JSONDecoder::decode_json("access", *this, &parser)) {
+        /* Token structure doesn't follow Identity API v2, so the token
+         * must be in v3. Otherwise we can assume it's wrongly formatted. */
+        JSONDecoder::decode_json("token", *this, &parser, true);
+      }
+    } else if (version == KeystoneApiVersion::VER_2) {
+      if (!JSONDecoder::decode_json("token", *this, &parser)) {
+        /* If the token cannot be parsed according to V2, try V3. */
+        JSONDecoder::decode_json("access", *this, &parser, true);
+      }
+    } else {
+      return -ENOTSUP;
+    }
   } catch (JSONDecoder::err& err) {
     ldout(cct, 0) << "Keystone token parse error: " << err.message << dendl;
     return -EINVAL;

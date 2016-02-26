@@ -25,7 +25,7 @@
 class CompressionPluginZlib : public CompressionPlugin {
 public:
 
-  CompressionPluginZlib(CephContext *cct) : CompressionPlugin(cct)
+  explicit CompressionPluginZlib(CephContext *cct) : CompressionPlugin(cct)
   {}
 
   virtual int factory(CompressorRef *cs,

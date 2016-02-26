@@ -7,6 +7,15 @@ if (NOT (CMAKE_MAJOR_VERSION LESS 3))
   # Tweak policies (this one disables "missing" dependency warning)
   cmake_policy(SET CMP0046 OLD)
 endif(NOT (CMAKE_MAJOR_VERSION LESS 3))
+# we use LINK_PRIVATE keyword instead of PRIVATE, but do not specify the LINK_PUBLIC
+# for target_link_libraries() command when PUBLIC should be used instead, it's just
+# for backward compatibility with cmake 2.8.11.
+if (POLICY CMP0022)
+cmake_policy(SET CMP0022 OLD)
+endif (POLICY CMP0022)
+if (POLICY CMP0023)
+cmake_policy(SET CMP0023 OLD)
+endif (POLICY CMP0023)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
@@ -45,8 +54,10 @@ CHECK_FUNCTION_EXISTS(posix_fallocate HAVE_POSIX_FALLOCATE)
 CHECK_FUNCTION_EXISTS(syncfs HAVE_SYS_SYNCFS)
 CHECK_FUNCTION_EXISTS(sync_file_range HAVE_SYNC_FILE_RANGE)
 CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
+CHECK_FUNCTION_EXISTS(pwritev HAVE_PWRITEV)
 CHECK_INCLUDE_FILES("arpa/inet.h" HAVE_ARPA_INET_H)
 CHECK_INCLUDE_FILES("boost/random/discrete_distribution.hpp" HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION)
+CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
 CHECK_INCLUDE_FILES("dirent.h" HAVE_DIRENT_H)
 CHECK_INCLUDE_FILES("dlfcn.h" HAVE_DLFCN_H)
 CHECK_INCLUDE_FILES("inttypes.h" HAVE_INTTYPES_H)
@@ -215,6 +226,8 @@ endif(ALLOCATOR)
 find_package(keyutils REQUIRED)
 
 find_package(libuuid REQUIRED)
+
+find_package(libcurl REQUIRED)
 
 find_package(libcurl REQUIRED)
 

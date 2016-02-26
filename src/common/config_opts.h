@@ -388,6 +388,7 @@ OPTION(client_inject_fixed_oldest_tid, OPT_BOOL, false)  // synthetic client bug
 OPTION(client_metadata, OPT_STR, "")
 OPTION(client_acl_type, OPT_STR, "")
 OPTION(client_permissions, OPT_BOOL, true)
+OPTION(client_dirsize_rbytes, OPT_BOOL, true)
 
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
@@ -910,7 +911,7 @@ OPTION(bluestore_max_dir_size, OPT_U32, 1000000)
 OPTION(bluestore_min_alloc_size, OPT_U32, 64*1024)
 OPTION(bluestore_onode_map_size, OPT_U32, 1024)   // onodes per collection
 OPTION(bluestore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
-OPTION(bluestore_backend, OPT_STR, "rocksdb")
+OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=3,recycle_log_file_num=16")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
@@ -1184,7 +1185,10 @@ OPTION(rgw_keystone_url, OPT_STR, "")  // url for keystone server
 OPTION(rgw_keystone_admin_token, OPT_STR, "")  // keystone admin token (shared secret)
 OPTION(rgw_keystone_admin_user, OPT_STR, "")  // keystone admin user name
 OPTION(rgw_keystone_admin_password, OPT_STR, "")  // keystone admin user password
-OPTION(rgw_keystone_admin_tenant, OPT_STR, "")  // keystone admin user tenant
+OPTION(rgw_keystone_admin_tenant, OPT_STR, "")  // keystone admin user tenant (for keystone v2.0)
+OPTION(rgw_keystone_admin_project, OPT_STR, "")  // keystone admin user project (for keystone v3)
+OPTION(rgw_keystone_admin_domain, OPT_STR, "")  // keystone admin user domain
+OPTION(rgw_keystone_api_version, OPT_INT, 2) // Version of Keystone API to use (2 or 3)
 OPTION(rgw_keystone_accepted_roles, OPT_STR, "Member, admin")  // roles required to serve requests
 OPTION(rgw_keystone_token_cache_size, OPT_INT, 10000)  // max number of entries in keystone token cache
 OPTION(rgw_keystone_revocation_interval, OPT_INT, 15 * 60)  // seconds between tokens revocation check
@@ -1201,11 +1205,33 @@ OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_num_control_oids, OPT_INT, 8)
 OPTION(rgw_num_rados_handles, OPT_U32, 1)
 
+/* The following are tunables for caches of RGW NFS (and other file
+ * client) objects.
+ *
+ * The file handle cache is a partitioned hash table
+ * (fhcache_partitions), each with a closed hash part and backing
+ * b-tree mapping.  The number of partions is expected to be a small
+ * prime, the cache size something larger but less than 5K, the total
+ * size of the cache is n_part * cache_size.
+ */
+OPTION(rgw_nfs_lru_lanes, OPT_INT, 5)
+OPTION(rgw_nfs_lru_lane_hiwat, OPT_INT, 911)
+OPTION(rgw_nfs_fhcache_partitions, OPT_INT, 3)
+OPTION(rgw_nfs_fhcache_size, OPT_INT, 2017) /* 3*2017=6051 */
+
 OPTION(rgw_zone, OPT_STR, "") // zone name
 OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored
+OPTION(rgw_default_zone_info_oid, OPT_STR, "default.zone")  // oid where default zone info is stored
 OPTION(rgw_region, OPT_STR, "") // region name
-OPTION(rgw_region_root_pool, OPT_STR, ".rgw.root")  // pool where all region info is stored
 OPTION(rgw_default_region_info_oid, OPT_STR, "default.region")  // oid where default region info is stored
+OPTION(rgw_zonegroup, OPT_STR, "") // zone group name
+OPTION(rgw_zonegroup_root_pool, OPT_STR, ".rgw.root")  // pool where all zone group info is stored
+OPTION(rgw_default_zonegroup_info_oid, OPT_STR, "default.zonegroup")  // oid where default zone group info is stored
+OPTION(rgw_realm, OPT_STR, "") // realm name
+OPTION(rgw_realm_root_pool, OPT_STR, ".rgw.root")  // pool where all realm info is stored
+OPTION(rgw_default_realm_info_oid, OPT_STR, "default.realm")  // oid where default realm info is stored
+OPTION(rgw_period_root_pool, OPT_STR, ".rgw.root")  // pool where all period info is stored
+OPTION(rgw_period_latest_epoch_info_oid, OPT_STR, ".latest_epoch") // oid where current period info is stored
 OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false)
 OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to see codes (a subset are supported)
 OPTION(rgw_log_object_name_utc, OPT_BOOL, false)
@@ -1280,6 +1306,15 @@ OPTION(rgw_objexp_hints_num_shards, OPT_U32, 127) // maximum number of parts in 
 OPTION(rgw_objexp_chunk_size, OPT_U32, 100) // maximum number of entries in a single operation when processing objexp data
 
 OPTION(rgw_enable_static_website, OPT_BOOL, false) // enable static website feature
+
+OPTION(rgw_num_async_rados_threads, OPT_INT, 32) // num of threads to use for async rados operations
+OPTION(rgw_md_notify_interval_msec, OPT_INT, 200) // metadata changes notification interval to followers
+OPTION(rgw_run_sync_thread, OPT_BOOL, true) // whether radosgw (not radosgw-admin) spawns the sync thread
+OPTION(rgw_sync_lease_period, OPT_INT, 30) // time in second for lease that rgw takes on a specific log (or log shard)
+
+OPTION(rgw_realm_reconfigure_delay, OPT_DOUBLE, 2) // seconds to wait before reloading realm configuration
+OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retrying "period push"
+OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter

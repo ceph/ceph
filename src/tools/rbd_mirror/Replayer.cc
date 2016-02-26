@@ -66,22 +66,16 @@ int Replayer::init()
     return r;
   }
 
-  string cluster_uuid;
-  r = m_remote->cluster_fsid(&cluster_uuid);
+  dout(20) << __func__ << "connected to " << m_peer << dendl;
+
+  std::string uuid;
+  r = m_local->cluster_fsid(&uuid);
   if (r < 0) {
-    derr << "error reading cluster uuid from remote cluster " << m_peer
-	 << " : " << cpp_strerror(r) << dendl;
+    derr << "error retrieving local cluster uuid: " << cpp_strerror(r)
+	 << dendl;
     return r;
   }
-
-  if (cluster_uuid != m_peer.cluster_uuid) {
-    derr << "configured cluster uuid does not match actual cluster uuid. "
-	 << "expected: " << m_peer.cluster_uuid
-	 << " observed: " << cluster_uuid << dendl;
-    return -EINVAL;
-  }
-
-  dout(20) << __func__ << "connected to " << m_peer << dendl;
+  m_client_id = uuid;
 
   // TODO: make interval configurable
   m_pool_watcher.reset(new PoolWatcher(m_remote, 30, m_lock, m_cond));
@@ -130,6 +124,7 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
       if (pool_replayers.find(image_id) == pool_replayers.end()) {
 	unique_ptr<ImageReplayer> image_replayer(new ImageReplayer(m_local,
 								   m_remote,
+								   m_client_id,
 								   pool_id,
 								   image_id));
 	int r = image_replayer->start();

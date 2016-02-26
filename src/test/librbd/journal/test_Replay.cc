@@ -1,15 +1,20 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
+#include "cls/journal/cls_journal_types.h"
+#include "cls/journal/cls_journal_client.h"
+#include "journal/Journaler.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequest.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/internal.h"
 #include "librbd/Journal.h"
+#include "librbd/Operations.h"
 #include "librbd/journal/Types.h"
 
 void register_test_journal_replay() {
@@ -25,6 +30,63 @@ public:
       ictx->exclusive_lock->request_lock(&lock_ctx);
     }
     return lock_ctx.wait();
+  }
+
+  template<typename T>
+  void inject_into_journal(librbd::ImageCtx *ictx, T event) {
+
+    librbd::journal::EventEntry event_entry(event);
+    librbd::Journal<>::AioObjectRequests requests;
+    {
+      RWLock::RLocker owner_locker(ictx->owner_lock);
+      ictx->journal->append_io_event(NULL, std::move(event_entry), requests, 0,
+				     0, true);
+    }
+  }
+
+  void get_journal_commit_position(librbd::ImageCtx *ictx, int64_t *tid)
+  {
+    const std::string client_id = "";
+    std::string journal_id = ictx->id;
+
+    C_SaferCond close_cond;
+    ictx->journal->close(&close_cond);
+    ASSERT_EQ(0, close_cond.wait());
+    delete ictx->journal;
+    ictx->journal = nullptr;
+
+    C_SaferCond cond;
+    uint64_t minimum_set;
+    uint64_t active_set;
+    std::set<cls::journal::Client> registered_clients;
+    std::string oid = ::journal::Journaler::header_oid(journal_id);
+    cls::journal::client::get_mutable_metadata(ictx->md_ctx, oid, &minimum_set,
+	&active_set, &registered_clients, &cond);
+    ASSERT_EQ(0, cond.wait());
+    std::set<cls::journal::Client>::const_iterator c;
+    for (c = registered_clients.begin(); c != registered_clients.end(); ++c) {
+      if (c->id == client_id) {
+	break;
+      }
+    }
+    if (c == registered_clients.end()) {
+      *tid = -1;
+      return;
+    }
+    cls::journal::EntryPositions entry_positions =
+	c->commit_position.entry_positions;
+    cls::journal::EntryPositions::const_iterator p;
+    for (p = entry_positions.begin(); p != entry_positions.end(); ++p) {
+      if (p->tag_tid == 0) {
+	break;
+      }
+    }
+    *tid = p == entry_positions.end() ? -1 : p->entry_tid;
+
+    C_SaferCond open_cond;
+    ictx->journal = new librbd::Journal<>(*ictx);
+    ictx->journal->open(&open_cond);
+    ASSERT_EQ(0, open_cond.wait());
   }
 };
 
@@ -57,18 +119,16 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
   ASSERT_EQ(payload, read_payload);
   close_image(ictx);
 
-  // inject a discard operation into the journal
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
-  librbd::journal::EventEntry event_entry(
-    librbd::journal::AioDiscardEvent(0, payload.size()));
-  librbd::Journal<>::AioObjectRequests requests;
-  {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->journal->append_io_event(NULL, std::move(event_entry), requests, 0, 0,
-                                   true);
-  }
+  // get current commit position
+  int64_t initial;
+  get_journal_commit_position(ictx, &initial);
+
+  // inject a discard operation into the journal
+  inject_into_journal(ictx,
+                      librbd::journal::AioDiscardEvent(0, payload.size()));
 
   // re-open the journal so that it replays the new entry
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
@@ -80,27 +140,46 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
   ASSERT_EQ(std::string(read_payload.size(), '\0'), read_payload);
+
+  // check the commit position is properly updated
+  int64_t current;
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 1);
+
+  // replay several envents and check the commit position
+  inject_into_journal(ictx,
+                      librbd::journal::AioDiscardEvent(0, payload.size()));
+  inject_into_journal(ictx,
+                      librbd::journal::AioDiscardEvent(0, payload.size()));
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 3);
+
+  // verify lock ordering constraints
+  aio_comp = new librbd::AioCompletion();
+  ictx->aio_work_queue->aio_discard(aio_comp, 0, read_payload.size());
+  ASSERT_EQ(0, aio_comp->wait_for_complete());
+  aio_comp->release();
 }
 
 TEST_F(TestJournalReplay, AioWriteEvent) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
-  // inject a write operation into the journal
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
+  // get current commit position
+  int64_t initial;
+  get_journal_commit_position(ictx, &initial);
+
+  // inject a write operation into the journal
   std::string payload(4096, '1');
   bufferlist payload_bl;
   payload_bl.append(payload);
-  librbd::journal::EventEntry event_entry(
-    librbd::journal::AioWriteEvent(0, payload.size(), payload_bl));
-  librbd::Journal<>::AioObjectRequests requests;
-  {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->journal->append_io_event(NULL, std::move(event_entry), requests, 0, 0,
-                                   true);
-  }
+  inject_into_journal(ictx,
+      librbd::journal::AioWriteEvent(0, payload.size(), payload_bl));
 
   // re-open the journal so that it replays the new entry
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
@@ -113,25 +192,44 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
   ASSERT_EQ(payload, read_payload);
+
+  // check the commit position is properly updated
+  int64_t current;
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 1);
+
+  // replay several events and check the commit position
+  inject_into_journal(ictx,
+      librbd::journal::AioWriteEvent(0, payload.size(), payload_bl));
+  inject_into_journal(ictx,
+      librbd::journal::AioWriteEvent(0, payload.size(), payload_bl));
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 3);
+
+  // verify lock ordering constraints
+  aio_comp = new librbd::AioCompletion();
+  ictx->aio_work_queue->aio_write(aio_comp, 0, payload.size(), payload.c_str(),
+                                  0);
+  ASSERT_EQ(0, aio_comp->wait_for_complete());
+  aio_comp->release();
 }
 
 TEST_F(TestJournalReplay, AioFlushEvent) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
-  // inject a flush operation into the journal
   librbd::ImageCtx *ictx;
 
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
-  librbd::journal::AioFlushEvent aio_flush_event;
-  librbd::journal::EventEntry event_entry(aio_flush_event);
-  librbd::Journal<>::AioObjectRequests requests;
-  {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->journal->append_io_event(NULL, std::move(event_entry), requests, 0, 0,
-                                   true);
-  }
+  // get current commit position
+  int64_t initial;
+  get_journal_commit_position(ictx, &initial);
+
+  // inject a flush operation into the journal
+  inject_into_journal(ictx, librbd::journal::AioFlushEvent());
 
   // start an AIO write op
   librbd::Journal<> *journal = ictx->journal;
@@ -161,5 +259,388 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
   ASSERT_EQ(payload, read_payload);
+
+  // check the commit position is properly updated
+  int64_t current;
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 1);
+
+  // replay several events and check the commit position
+  inject_into_journal(ictx, librbd::journal::AioFlushEvent());
+  inject_into_journal(ictx, librbd::journal::AioFlushEvent());
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 3);
+
+  // verify lock ordering constraints
+  aio_comp = new librbd::AioCompletion();
+  ictx->aio_work_queue->aio_flush(aio_comp);
+  ASSERT_EQ(0, aio_comp->wait_for_complete());
+  aio_comp->release();
 }
 
+TEST_F(TestJournalReplay, SnapCreate) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  // get current commit position
+  int64_t initial;
+  get_journal_commit_position(ictx, &initial);
+
+  // inject snapshot ops into journal
+  inject_into_journal(ictx, librbd::journal::SnapCreateEvent(1, "snap"));
+  inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
+
+  // replay journal
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  int64_t current;
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 2);
+
+  {
+    RWLock::RLocker snap_locker(ictx->snap_lock);
+    ASSERT_NE(CEPH_NOSNAP, ictx->get_snap_id("snap"));
+  }
+
+  // verify lock ordering constraints
+  ASSERT_EQ(0, ictx->operations->snap_create("snap2"));
+}
+
+TEST_F(TestJournalReplay, SnapProtect) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  ASSERT_EQ(0, ictx->operations->snap_create("snap"));
+
+  // get current commit position
+  int64_t initial;
+  get_journal_commit_position(ictx, &initial);
+
+  // inject snapshot ops into journal
+  inject_into_journal(ictx, librbd::journal::SnapProtectEvent(1, "snap"));
+  inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
+
+  // replay journal
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  int64_t current;
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 2);
+
+  bool is_protected;
+  ASSERT_EQ(0, librbd::snap_is_protected(ictx, "snap", &is_protected));
+  ASSERT_TRUE(is_protected);
+
+  // verify lock ordering constraints
+  ASSERT_EQ(0, ictx->operations->snap_create("snap2"));
+  ASSERT_EQ(0, ictx->operations->snap_protect("snap2"));
+}
+
+TEST_F(TestJournalReplay, SnapUnprotect) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  ASSERT_EQ(0, ictx->operations->snap_create("snap"));
+  uint64_t snap_id;
+  {
+    RWLock::RLocker snap_locker(ictx->snap_lock);
+    snap_id = ictx->get_snap_id("snap");
+    ASSERT_NE(CEPH_NOSNAP, snap_id);
+  }
+  ASSERT_EQ(0, ictx->operations->snap_protect("snap"));
+
+  // get current commit position
+  int64_t initial;
+  get_journal_commit_position(ictx, &initial);
+
+  // inject snapshot ops into journal
+  inject_into_journal(ictx, librbd::journal::SnapUnprotectEvent(1, "snap"));
+  inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
+
+  // replay journal
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  int64_t current;
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 2);
+
+  bool is_protected;
+  ASSERT_EQ(0, librbd::snap_is_protected(ictx, "snap", &is_protected));
+  ASSERT_FALSE(is_protected);
+
+  // verify lock ordering constraints
+  ASSERT_EQ(0, ictx->operations->snap_create("snap2"));
+  ASSERT_EQ(0, ictx->operations->snap_protect("snap2"));
+  ASSERT_EQ(0, ictx->operations->snap_unprotect("snap2"));
+}
+
+TEST_F(TestJournalReplay, SnapRename) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  ASSERT_EQ(0, ictx->operations->snap_create("snap"));
+  uint64_t snap_id;
+  {
+    RWLock::RLocker snap_locker(ictx->snap_lock);
+    snap_id = ictx->get_snap_id("snap");
+    ASSERT_NE(CEPH_NOSNAP, snap_id);
+  }
+
+  // get current commit position
+  int64_t initial;
+  get_journal_commit_position(ictx, &initial);
+
+  // inject snapshot ops into journal
+  inject_into_journal(ictx, librbd::journal::SnapRenameEvent(1, snap_id, "snap2"));
+  inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
+
+  // replay journal
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  int64_t current;
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 2);
+
+  {
+    RWLock::RLocker snap_locker(ictx->snap_lock);
+    snap_id = ictx->get_snap_id("snap2");
+    ASSERT_NE(CEPH_NOSNAP, snap_id);
+  }
+
+  // verify lock ordering constraints
+  ASSERT_EQ(0, ictx->operations->snap_rename("snap2", "snap3"));
+}
+
+TEST_F(TestJournalReplay, SnapRollback) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  ASSERT_EQ(0, ictx->operations->snap_create("snap"));
+
+  // get current commit position
+  int64_t initial;
+  get_journal_commit_position(ictx, &initial);
+
+  // inject snapshot ops into journal
+  inject_into_journal(ictx, librbd::journal::SnapRollbackEvent(1, "snap"));
+  inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
+
+  // replay journal
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  int64_t current;
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 2);
+
+  // verify lock ordering constraints
+  librbd::NoOpProgressContext no_op_progress;
+  ASSERT_EQ(0, ictx->operations->snap_rollback("snap", no_op_progress));
+}
+
+TEST_F(TestJournalReplay, SnapRemove) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  ASSERT_EQ(0, ictx->operations->snap_create("snap"));
+
+  // get current commit position
+  int64_t initial;
+  get_journal_commit_position(ictx, &initial);
+
+  // inject snapshot ops into journal
+  inject_into_journal(ictx, librbd::journal::SnapRemoveEvent(1, "snap"));
+  inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
+
+  // replay journal
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  int64_t current;
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 2);
+
+  {
+    RWLock::RLocker snap_locker(ictx->snap_lock);
+    uint64_t snap_id = ictx->get_snap_id("snap");
+    ASSERT_EQ(CEPH_NOSNAP, snap_id);
+  }
+
+  // verify lock ordering constraints
+  ASSERT_EQ(0, ictx->operations->snap_create("snap"));
+  ASSERT_EQ(0, ictx->operations->snap_remove("snap"));
+}
+
+TEST_F(TestJournalReplay, Rename) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  // get current commit position
+  int64_t initial;
+  get_journal_commit_position(ictx, &initial);
+
+  // inject snapshot ops into journal
+  std::string new_image_name(get_temp_image_name());
+  inject_into_journal(ictx, librbd::journal::RenameEvent(1, new_image_name));
+  inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
+
+  // replay journal
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  int64_t current;
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 2);
+
+  // verify lock ordering constraints
+  librbd::RBD rbd;
+  ASSERT_EQ(0, rbd.rename(m_ioctx, new_image_name.c_str(), m_image_name.c_str()));
+}
+
+TEST_F(TestJournalReplay, Resize) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  // get current commit position
+  int64_t initial;
+  get_journal_commit_position(ictx, &initial);
+
+  // inject snapshot ops into journal
+  inject_into_journal(ictx, librbd::journal::ResizeEvent(1, 16));
+  inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
+
+  // replay journal
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  int64_t current;
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 2);
+
+  // verify lock ordering constraints
+  librbd::NoOpProgressContext no_op_progress;
+  ASSERT_EQ(0, ictx->operations->resize(0, no_op_progress));
+}
+
+TEST_F(TestJournalReplay, Flatten) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, ictx->operations->snap_create("snap"));
+  ASSERT_EQ(0, ictx->operations->snap_protect("snap"));
+
+  std::string clone_name = get_temp_image_name();
+  int order = ictx->order;
+  ASSERT_EQ(0, librbd::clone(m_ioctx, m_image_name.c_str(), "snap", m_ioctx,
+			     clone_name.c_str(), ictx->features, &order, 0, 0));
+
+  librbd::ImageCtx *ictx2;
+  ASSERT_EQ(0, open_image(clone_name, &ictx2));
+  ASSERT_EQ(0, when_acquired_lock(ictx2));
+
+  // get current commit position
+  int64_t initial;
+  get_journal_commit_position(ictx2, &initial);
+
+  // inject snapshot ops into journal
+  inject_into_journal(ictx2, librbd::journal::FlattenEvent(1));
+  inject_into_journal(ictx2, librbd::journal::OpFinishEvent(1, 0));
+
+  // replay journal
+  ASSERT_EQ(0, open_image(clone_name, &ictx2));
+  ASSERT_EQ(0, when_acquired_lock(ictx2));
+
+  int64_t current;
+  get_journal_commit_position(ictx2, &current);
+  ASSERT_EQ(current, initial + 2);
+  ASSERT_EQ(0, ictx->operations->snap_unprotect("snap"));
+
+  // verify lock ordering constraints
+  librbd::NoOpProgressContext no_op;
+  ASSERT_EQ(-EINVAL, ictx2->operations->flatten(no_op));
+}
+
+TEST_F(TestJournalReplay, EntryPosition) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  // get current commit position
+  int64_t initial;
+  get_journal_commit_position(ictx, &initial);
+
+  std::string payload(4096, '1');
+  librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
+  ictx->aio_work_queue->aio_write(aio_comp, 0, payload.size(), payload.c_str(),
+                                  0);
+  ASSERT_EQ(0, aio_comp->wait_for_complete());
+  aio_comp->release();
+
+  aio_comp = new librbd::AioCompletion();
+  ictx->aio_work_queue->aio_flush(aio_comp);
+  ASSERT_EQ(0, aio_comp->wait_for_complete());
+  aio_comp->release();
+
+  // check the commit position updated
+  int64_t current;
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 2);
+
+  // write again
+
+  aio_comp = new librbd::AioCompletion();
+  ictx->aio_work_queue->aio_write(aio_comp, 0, payload.size(), payload.c_str(),
+                                  0);
+  ASSERT_EQ(0, aio_comp->wait_for_complete());
+  aio_comp->release();
+
+  aio_comp = new librbd::AioCompletion();
+  ictx->aio_work_queue->aio_flush(aio_comp);
+  ASSERT_EQ(0, aio_comp->wait_for_complete());
+  aio_comp->release();
+
+  // check the commit position updated
+  get_journal_commit_position(ictx, &current);
+  ASSERT_EQ(current, initial + 4);
+}

@@ -915,6 +915,9 @@ AC_CHECK_HEADER([boost/random/discrete_distribution.hpp],
 	[AC_DEFINE([HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION], [], [have boost::random::discrete_distribution])],
 	[])
 
+AC_CHECK_HEADER([boost/asio/coroutine.hpp],
+	[AC_DEFINE([HAVE_BOOST_ASIO_COROUTINE], [], [have boost::asio::coroutine])],
+	[])
 AC_CHECK_HEADER([boost/statechart/state.hpp], [],
     AC_MSG_FAILURE(["Can't find boost statechart headers; need 1.34 or later"]))
 AC_CHECK_HEADER([boost/regex.hpp], [],
@@ -1073,6 +1076,7 @@ AC_CHECK_HEADERS([sys/prctl.h])
 AC_CHECK_FUNCS([prctl])
 AC_CHECK_FUNCS([pipe2])
 AC_CHECK_FUNCS([posix_fadvise])
+AC_CHECK_FUNCS([pwritev], AC_DEFINE([HAVE_PWRITEV], [1], [we have pwritev]))
 
 AC_MSG_CHECKING([for fdatasync])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[

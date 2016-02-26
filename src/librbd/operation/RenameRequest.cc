@@ -70,8 +70,12 @@ bool RenameRequest<I>::should_complete(int r) {
     return true;
   }
 
+  if (m_state == STATE_REMOVE_SOURCE_HEADER) {
+    apply();
+    return true;
+  }
+
   RWLock::RLocker owner_lock(image_ctx.owner_lock);
-  bool finished = false;
   switch (m_state) {
   case STATE_READ_SOURCE_HEADER:
     send_write_destination_header();
@@ -82,14 +86,11 @@ bool RenameRequest<I>::should_complete(int r) {
   case STATE_UPDATE_DIRECTORY:
     send_remove_source_header();
     break;
-  case STATE_REMOVE_SOURCE_HEADER:
-    finished = true;
-    break;
   default:
     assert(false);
     break;
   }
-  return finished;
+  return false;
 }
 
 template <typename I>
@@ -185,6 +186,12 @@ void RenameRequest<I>::send_remove_source_header() {
   int r = image_ctx.md_ctx.aio_operate(m_source_oid, rados_completion, &op);
   assert(r == 0);
   rados_completion->release();
+}
+
+template <typename I>
+void RenameRequest<I>::apply() {
+  I &image_ctx = this->m_image_ctx;
+  image_ctx.set_image_name(m_dest_name);
 }
 
 } // namespace operation

@@ -11,6 +11,14 @@ namespace watch_notify {
 
 namespace {
 
+class CheckForRefreshVisitor  : public boost::static_visitor<bool> {
+public:
+  template <typename Payload>
+  inline bool operator()(const Payload &payload) const {
+    return Payload::CHECK_FOR_REFRESH;
+  }
+};
+
 class EncodePayloadVisitor : public boost::static_visitor<void> {
 public:
   explicit EncodePayloadVisitor(bufferlist &bl) : m_bl(bl) {}
@@ -255,6 +263,10 @@ void UnknownPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void UnknownPayload::dump(Formatter *f) const {
+}
+
+bool NotifyMessage::check_for_refresh() const {
+  return boost::apply_visitor(CheckForRefreshVisitor(), payload);
 }
 
 void NotifyMessage::encode(bufferlist& bl) const {

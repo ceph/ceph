@@ -33,16 +33,16 @@ if (len(sys.argv) >= 2 and
         return x
 
 setup(
-    name = 'rbd',
+    name = 'rados',
     version = get_version(),
-    description = "Python libraries for the Ceph librbd library",
+    description = "Python libraries for the Ceph librados library",
     long_description = (
         "This package contains Python libraries for interacting with Ceph's "
-        "RBD block device library."),
+        "rados library."),
     ext_modules = cythonize([
-        Extension("rbd",
-            ["rbd.pyx"],
-            libraries=["rbd"]
+        Extension("rados",
+            ["rados.pyx"],
+            libraries=["rados"]
             )
     ], build_dir=os.environ.get("CYTHON_BUILD_DIR", None)),
     cmdclass={

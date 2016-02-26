@@ -36,7 +36,9 @@ cls_method_handle_t h_rgw_bucket_read_olh_log;
 cls_method_handle_t h_rgw_bucket_trim_olh_log;
 cls_method_handle_t h_rgw_bucket_clear_olh;
 cls_method_handle_t h_rgw_obj_remove;
+cls_method_handle_t h_rgw_obj_store_pg_ver;
 cls_method_handle_t h_rgw_obj_check_attrs_prefix;
+cls_method_handle_t h_rgw_obj_check_mtime;
 cls_method_handle_t h_rgw_bi_get_op;
 cls_method_handle_t h_rgw_bi_put_op;
 cls_method_handle_t h_rgw_bi_list_op;
@@ -140,7 +142,7 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
 static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_key, RGWModifyOp op,
                                string& tag, utime_t& timestamp,
                                rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver,
-                               string& max_marker, uint16_t bilog_flags)
+                               string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name)
 {
   bufferlist bl;
 
@@ -155,6 +157,12 @@ static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_k
   entry.index_ver = index_ver;
   entry.tag = tag;
   entry.bilog_flags = bilog_flags;
+  if (owner) {
+    entry.owner = *owner;
+  }
+  if (owner_display_name) {
+    entry.owner_display_name = *owner_display_name;
+  }
 
   string key;
   bi_log_index_key(hctx, key, entry.id, index_ver);
@@ -684,7 +692,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   if (op.log_op) {
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
-                             entry.ver, info.state, header.ver, header.max_marker, op.bilog_flags);
+                             entry.ver, info.state, header.ver, header.max_marker, op.bilog_flags, NULL, NULL);
     if (rc < 0)
       return rc;
   }
@@ -813,7 +821,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   }
 
   entry.index_ver = header.ver;
-  entry.flags = 0; /* resetting entry flags, entry might have been previously a delete marker */
+  entry.flags = (entry.key.instance.empty() ? 0 : RGW_BUCKET_DIRENT_FLAG_VER); /* resetting entry flags, entry might have been previously a delete marker */
 
   if (op.tag.size()) {
     map<string, struct rgw_bucket_pending_info>::iterator pinter = entry.pending_map.find(op.tag);
@@ -840,7 +848,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   if (cancel) {
     if (op.log_op) {
       rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime, entry.ver,
-                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags);
+                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL);
       if (rc < 0)
         return rc;
     }
@@ -900,7 +908,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   if (op.log_op) {
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime, entry.ver,
-                             CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags);
+                             CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL);
     if (rc < 0)
       return rc;
   }
@@ -925,7 +933,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
     if (op.log_op) {
       rc = log_index_operation(hctx, remove_key, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
-                               remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags);
+                               remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL);
       if (rc < 0)
         continue;
     }
@@ -1175,6 +1183,9 @@ public:
     return 0;
   }
 
+  time_t mtime() {
+    return instance_entry.meta.mtime;
+  }
 };
 
 
@@ -1378,6 +1389,12 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
+  if (existed && op.unmod_since > 0) {
+    if (obj.mtime() >= op.unmod_since) {
+      return 0; /* no need to set error, we just return 0 and avoid writing to the bi log */
+    }
+  }
+
   bool removing;
 
   /*
@@ -1498,10 +1515,19 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     rgw_bucket_entry_ver ver;
     ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
 
+    string *powner = NULL;
+    string *powner_display_name = NULL;
+
+    if (op.delete_marker) {
+      powner = &entry.meta.owner;
+      powner_display_name = &entry.meta.owner_display_name;
+    }
+
     RGWModifyOp operation = (op.delete_marker ? CLS_RGW_OP_LINK_OLH_DM : CLS_RGW_OP_LINK_OLH);
     ret = log_index_operation(hctx, op.key, operation, op.op_tag,
                               entry.meta.mtime, ver,
-                              CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP);
+                              CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
+                              powner, powner_display_name);
     if (ret < 0)
       return ret;
   }
@@ -1632,7 +1658,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     ret = log_index_operation(hctx, op.key, CLS_RGW_OP_UNLINK_INSTANCE, op.op_tag,
                               mtime, ver,
                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker,
-                              op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP);
+                              op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, NULL, NULL);
     if (ret < 0)
       return ret;
   }
@@ -1986,6 +2012,30 @@ static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist 
   return 0;
 }
 
+static int rgw_obj_store_pg_ver(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_obj_store_pg_ver_op op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  uint64_t ver = cls_current_version(hctx);
+  ::encode(ver, bl);
+  int ret = cls_cxx_setxattr(hctx, op.attr.c_str(), &bl);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_setxattr (attr=%s) returned %d", __func__, op.attr.c_str(), ret);
+    return ret;
+  }
+
+  return 0;
+}
+
 static int rgw_obj_check_attrs_prefix(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   // decode request
@@ -2023,6 +2073,63 @@ static int rgw_obj_check_attrs_prefix(cls_method_context_t hctx, bufferlist *in,
   }
 
   if (exist == op.fail_if_exist) {
+    return -ECANCELED;
+  }
+
+  return 0;
+}
+
+static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_obj_check_mtime op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  time_t mtime;
+  int ret = cls_cxx_stat(hctx, NULL, &mtime);
+  if (ret < 0 && ret != -ENOENT) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_stat() returned %d", __func__, ret);
+    return ret;
+  }
+  if (ret == -ENOENT) {
+    CLS_LOG(10, "object does not exist, skipping check");
+  }
+
+  utime_t obj_ut(mtime, 0);
+
+  CLS_LOG(10, "%s: obj_ut=%lld.%06lld op.mtime=%lld.%06lld", __func__,
+          (long long)obj_ut.sec(), (long long)obj_ut.nsec(),
+          (long long)op.mtime.sec(), (long long)op.mtime.nsec());
+
+  bool check;
+
+  switch (op.type) {
+  case CLS_RGW_CHECK_TIME_MTIME_EQ:
+    check = (obj_ut == op.mtime);
+    break;
+  case CLS_RGW_CHECK_TIME_MTIME_LT:
+    check = (obj_ut < op.mtime);
+    break;
+  case CLS_RGW_CHECK_TIME_MTIME_LE:
+    check = (obj_ut <= op.mtime);
+    break;
+  case CLS_RGW_CHECK_TIME_MTIME_GT:
+    check = (obj_ut > op.mtime);
+    break;
+  case CLS_RGW_CHECK_TIME_MTIME_GE:
+    check = (obj_ut >= op.mtime);
+    break;
+  default:
+    return -EINVAL;
+  };
+
+  if (!check) {
     return -ECANCELED;
   }
 
@@ -3075,7 +3182,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_clear_olh", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_clear_olh, &h_rgw_bucket_clear_olh);
 
   cls_register_cxx_method(h_class, "obj_remove", CLS_METHOD_RD | CLS_METHOD_WR, rgw_obj_remove, &h_rgw_obj_remove);
+  cls_register_cxx_method(h_class, "obj_store_pg_ver", CLS_METHOD_WR, rgw_obj_store_pg_ver, &h_rgw_obj_store_pg_ver);
   cls_register_cxx_method(h_class, "obj_check_attrs_prefix", CLS_METHOD_RD, rgw_obj_check_attrs_prefix, &h_rgw_obj_check_attrs_prefix);
+  cls_register_cxx_method(h_class, "obj_check_mtime", CLS_METHOD_RD, rgw_obj_check_mtime, &h_rgw_obj_check_mtime);
 
   cls_register_cxx_method(h_class, "bi_get", CLS_METHOD_RD, rgw_bi_get_op, &h_rgw_bi_get_op);
   cls_register_cxx_method(h_class, "bi_put", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_op, &h_rgw_bi_put_op);

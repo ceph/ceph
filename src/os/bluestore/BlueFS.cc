@@ -1045,7 +1045,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     x_off = 0;
   }
   for (unsigned i = 0; i < bdev.size(); ++i) {
-    if (h->iocv[i]->num_pending.read()) {
+    if (h->iocv[i]->has_aios()) {
       bdev[i]->aio_submit(h->iocv[i]);
     }
   }

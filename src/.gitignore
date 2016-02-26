@@ -64,6 +64,7 @@ Makefile
 /init-ceph
 /keyring
 /librados-config
+/librgw_file*
 /massif.out.*
 /mnt
 /monmaptool

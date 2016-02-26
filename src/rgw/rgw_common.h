@@ -17,6 +17,7 @@
 #define CEPH_RGW_COMMON_H
 
 #include "common/ceph_crypto.h"
+
 #include "common/debug.h"
 #include "common/perf_counters.h"
 
@@ -80,6 +81,9 @@ using ceph::crypto::MD5;
 /* Information whether an object is SLO or not must be exposed to
  * user through custom HTTP header named X-Static-Large-Object. */
 #define RGW_ATTR_SLO_UINDICATOR RGW_ATTR_META_PREFIX "static-large-object"
+
+#define RGW_ATTR_PG_VER 	RGW_ATTR_PREFIX "pg_ver"
+#define RGW_ATTR_SOURCE_ZONE    RGW_ATTR_PREFIX "source_zone"
 
 #define RGW_ATTR_TEMPURL_KEY1   RGW_ATTR_META_PREFIX "temp-url-key"
 #define RGW_ATTR_TEMPURL_KEY2   RGW_ATTR_META_PREFIX "temp-url-key-2"
@@ -172,6 +176,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_TENANT_NAME  2037
 #define ERR_WEBSITE_REDIRECT     2038
 #define ERR_NO_SUCH_WEBSITE_CONFIGURATION 2039
+#define ERR_AMZ_CONTENT_SHA256_MISMATCH 2040
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
@@ -275,10 +280,10 @@ class RGWHTTPArgs
   map<string, string> val_map;
   map<string, string> sys_val_map;
   map<string, string> sub_resources;
-
   bool has_resp_modifier;
+  bool admin_subresource_added;
  public:
-  RGWHTTPArgs() : has_resp_modifier(false) {}
+  RGWHTTPArgs() : has_resp_modifier(false), admin_subresource_added(false) {}
 
   /** Set the arguments; as received */
   void set(string s) {
@@ -289,12 +294,15 @@ class RGWHTTPArgs
   }
   /** parse the received arguments */
   int parse();
+  void append(const string& name, const string& val);
   /** Get the value for a specific argument parameter */
   string& get(const string& name, bool *exists = NULL);
-  string& get(const char *name, bool *exists = NULL);
   int get_bool(const string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
+
+  /** Get the value for specific system argument parameter */
+  string sys_get(const string& name, bool *exists = nullptr);
 
   /** see if a parameter is contained in this RGWHTTPArgs */
   bool exists(const char *name) {
@@ -371,6 +379,49 @@ enum http_op {
   OP_UNKNOWN,
 };
 
+enum RGWOpType {
+  RGW_OP_UNKNOWN = 0,
+  RGW_OP_GET_OBJ,
+  RGW_OP_LIST_BUCKETS,
+  RGW_OP_STAT_ACCOUNT,
+  RGW_OP_LIST_BUCKET,
+  RGW_OP_GET_BUCKET_LOGGING,
+  RGW_OP_GET_BUCKET_VERSIONING,
+  RGW_OP_SET_BUCKET_VERSIONING,
+  RGW_OP_GET_BUCKET_WEBSITE,
+  RGW_OP_SET_BUCKET_WEBSITE,
+  RGW_OP_STAT_BUCKET,
+  RGW_OP_CREATE_BUCKET,
+  RGW_OP_DELETE_BUCKET,
+  RGW_OP_PUT_OBJ,
+  RGW_OP_STAT_OBJ,
+  RGW_OP_POST_OBJ,
+  RGW_OP_PUT_METADATA_ACCOUNT,
+  RGW_OP_PUT_METADATA_BUCKET,
+  RGW_OP_PUT_METADATA_OBJECT,
+  RGW_OP_SET_TEMPURL,
+  RGW_OP_DELETE_OBJ,
+  RGW_OP_COPY_OBJ,
+  RGW_OP_GET_ACLS,
+  RGW_OP_PUT_ACLS,
+  RGW_OP_GET_CORS,
+  RGW_OP_PUT_CORS,
+  RGW_OP_DELETE_CORS,
+  RGW_OP_OPTIONS_CORS,
+  RGW_OP_GET_REQUEST_PAYMENT,
+  RGW_OP_SET_REQUEST_PAYMENT,
+  RGW_OP_INIT_MULTIPART,
+  RGW_OP_COMPLETE_MULTIPART,
+  RGW_OP_ABORT_MULTIPART,
+  RGW_OP_LIST_MULTIPART,
+  RGW_OP_LIST_BUCKET_MULTIPARTS,
+  RGW_OP_DELETE_MULTI_OBJ,
+  RGW_OP_BULK_DELETE,
+
+  /* rgw specific */
+  RGW_OP_ADMIN_SET_METADATA
+};
+
 class RGWAccessControlPolicy;
 class JSONObj;
 
@@ -380,6 +431,9 @@ struct RGWAccessKey {
   string subuser;
 
   RGWAccessKey() {}
+  RGWAccessKey(std::string _id, std::string _key)
+    : id(std::move(_id)), key(std::move(_key)) {}
+
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
     ::encode(id, bl);
@@ -488,6 +542,13 @@ struct RGWUserInfo
   RGWQuotaInfo user_quota;
 
   RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), op_mask(RGW_OP_TYPE_ALL), system(0) {}
+
+  RGWAccessKey* get_key0() {
+    if (access_keys.empty())
+      return nullptr;
+    else
+      return &(access_keys.begin()->second);
+  }
 
   void encode(bufferlist& bl) const {
      ENCODE_START(17, 9, bl);
@@ -627,9 +688,11 @@ struct rgw_bucket {
 					 data_extra_pool(b.data_extra_pool),
 					 index_pool(b.index_pool), marker(b.marker),
 					 bucket_id(b.bucket_id) {}
-  // cppcheck-suppress noExplicitConstructor
+  rgw_bucket(const string& s) : name(s) {
+    data_pool = index_pool = s;
+    marker = "";
+  }
   rgw_bucket(const char *n) : name(n) {
-    assert(*n == '.'); // only rgw private buckets should be initialized without pool
     data_pool = index_pool = n;
     marker = "";
   }
@@ -797,7 +860,7 @@ struct RGWBucketInfo
   rgw_bucket bucket;
   rgw_user owner;
   uint32_t flags;
-  string region;
+  string zonegroup;
   time_t creation_time;
   string placement_rule;
   bool has_instance_obj;
@@ -827,7 +890,7 @@ struct RGWBucketInfo
      ::encode(bucket, bl);
      ::encode(owner.id, bl);
      ::encode(flags, bl);
-     ::encode(region, bl);
+     ::encode(zonegroup, bl);
      uint64_t ct = (uint64_t)creation_time;
      ::encode(ct, bl);
      ::encode(placement_rule, bl);
@@ -854,7 +917,7 @@ struct RGWBucketInfo
      if (struct_v >= 3)
        ::decode(flags, bl);
      if (struct_v >= 5)
-       ::decode(region, bl);
+       ::decode(zonegroup, bl);
      if (struct_v >= 6) {
        uint64_t ct;
        ::decode(ct, bl);
@@ -1062,90 +1125,116 @@ inline ostream& operator<<(ostream& out, const rgw_obj_key &o) {
   }
 }
 
+struct rgw_aws4_auth {
+  string date;
+  string expires;
+  string credential;
+  string signedheaders;
+  string signed_hdrs;
+  string access_key_id;
+  string credential_scope;
+  string canonical_uri;
+  string canonical_qs;
+  string canonical_hdrs;
+  string signature;
+  string new_signature;
+  string payload_hash;
+};
+
 struct req_init_state {
   /* Keeps [[tenant]:]bucket until we parse the token. */
   string url_bucket;
   string src_bucket;
 };
 
+/* XXX why don't RGWRequest (or descendants) hold this state? */
+class RGWRequest;
+
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
-   CephContext *cct;
-   RGWClientIO *cio;
-   http_op op;
-   bool content_started;
-   int format;
-   ceph::Formatter *formatter;
-   string decoded_uri;
-   string relative_uri;
-   const char *length;
-   int64_t content_length;
-   map<string, string> generic_attrs;
-   struct rgw_err err;
-   bool expect_cont;
-   bool header_ended;
-   uint64_t obj_size;
-   bool enable_ops_log;
-   bool enable_usage_log;
-   uint8_t defer_to_bucket_acls;
-   uint32_t perm_mask;
-   utime_t header_time;
+  CephContext *cct;
+  RGWClientIO *cio;
+  RGWRequest *req; /// XXX: re-remove??
+  http_op op;
+  RGWOpType op_type;
+  bool content_started;
+  int format;
+  ceph::Formatter *formatter;
+  string decoded_uri;
+  string relative_uri;
+  const char *length;
+  int64_t content_length;
+  map<string, string> generic_attrs;
+  struct rgw_err err;
+  bool expect_cont;
+  bool header_ended;
+  uint64_t obj_size;
+  bool enable_ops_log;
+  bool enable_usage_log;
+  uint8_t defer_to_bucket_acls;
+  uint32_t perm_mask;
+  utime_t header_time;
 
-   /* Set once when url_bucket is parsed and not violated thereafter. */
-   string bucket_tenant;
-   string bucket_name;
+  /* Set once when url_bucket is parsed and not violated thereafter. */
+  string bucket_tenant;
+  string bucket_name;
 
-   rgw_bucket bucket;
-   rgw_obj_key object;
-   string src_tenant_name;
-   string src_bucket_name;
-   rgw_obj_key src_object;
-   ACLOwner bucket_owner;
-   ACLOwner owner;
+  rgw_bucket bucket;
+  rgw_obj_key object;
+  string src_tenant_name;
+  string src_bucket_name;
+  rgw_obj_key src_object;
+  ACLOwner bucket_owner;
+  ACLOwner owner;
 
-   string region_endpoint;
-   string bucket_instance_id;
+  string zonegroup_name;
+  string zonegroup_endpoint;
+  string bucket_instance_id;
+  int bucket_instance_shard_id;
 
-   string redirect;
+  string redirect;
 
-   RGWBucketInfo bucket_info;
-   map<string, bufferlist> bucket_attrs;
-   bool bucket_exists;
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> bucket_attrs;
+  bool bucket_exists;
 
-   bool has_bad_meta;
+  bool has_bad_meta;
 
-   RGWUserInfo user; 
-   RGWAccessControlPolicy *bucket_acl;
-   RGWAccessControlPolicy *object_acl;
+  RGWUserInfo *user;
 
-   bool system_request;
+  RGWAccessControlPolicy *bucket_acl;
+  RGWAccessControlPolicy *object_acl;
 
-   string canned_acl;
-   bool has_acl_header;
-   const char *http_auth;
-   bool local_source; /* source is local */
+  bool system_request;
 
-   int prot_flags;
+  /* aws4 auth support */
+  bool aws4_auth_needs_complete;
+  rgw_aws4_auth *aws4_auth;
 
-   const char *os_auth_token;
-   string swift_user;
-   string swift_groups;
+  string canned_acl;
+  bool has_acl_header;
+  const char *http_auth;
+  bool local_source; /* source is local */
 
-   utime_t time;
+  int prot_flags;
 
-   void *obj_ctx;
+  const char *os_auth_token;
+  string swift_user;
+  string swift_groups;
 
-   string dialect;
+  string host_id;
 
-   string req_id;
+  req_info info;
+  req_init_state init_state;
 
-   string trans_id;
+  utime_t time;
+  void *obj_ctx;
+  string dialect;
+  string req_id;
+  string trans_id;
 
-   req_info info;
-   req_init_state init_state;
-
-   req_state(CephContext *_cct, class RGWEnv *e);
-   ~req_state();
+  req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u);
+  ~req_state();
 };
 
 /** Store basic data on an object */
@@ -1689,7 +1778,7 @@ extern int parse_key_value(string& in_str, const char *delim, string& key, strin
 /** time parsing */
 extern int parse_time(const char *time_str, time_t *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
-extern bool parse_iso8601(const char *s, struct tm *t);
+extern bool parse_iso8601(const char *s, struct tm *t, bool extended_format = true);
 extern string rgw_trim_whitespace(const string& src);
 extern string rgw_trim_quotes(const string& val);
 
@@ -1707,12 +1796,22 @@ extern bool verify_object_permission(struct req_state *s,
 extern bool verify_object_permission(struct req_state *s, int perm);
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
+extern void rgw_uri_escape_char(char c, string& dst);
 extern bool url_decode(const string& src_str, string& dest_str, bool in_query = false);
 extern void url_encode(const string& src, string& dst);
 
+/* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
-/* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
+/* destination should be CEPH_CRYPTO_HMACSHA256_DIGESTSIZE bytes long */
+extern void calc_hmac_sha256(const char *key, int key_len, const char *msg, int msg_len, char *dest);
+extern void calc_hash_sha256(const char *msg, int len, string& dest);
+extern void calc_hash_sha256(const string& msg, string& dest);
+
+using ceph::crypto::SHA256;
+extern SHA256* calc_hash_sha256_open_stream();
+extern void    calc_hash_sha256_update_stream(SHA256 *hash, const char *msg, int len);
+extern string  calc_hash_sha256_close_stream(SHA256 **hash);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 

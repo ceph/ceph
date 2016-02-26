@@ -191,6 +191,12 @@ public:
     return ctx.wait();
   }
 
+  int when_shut_down(MockJournalReplay &mock_journal_replay) {
+    C_SaferCond ctx;
+    mock_journal_replay.shut_down(&ctx);
+    return ctx.wait();
+  }
+
   void when_replay_op_ready(MockJournalReplay &mock_journal_replay,
                             uint64_t op_tid, Context *on_resume) {
     mock_journal_replay.replay_op_ready(op_tid, on_resume);
@@ -227,7 +233,7 @@ TEST_F(TestMockJournalReplay, AioDiscard) {
   ASSERT_EQ(0, on_ready.wait());
 
   expect_aio_flush(mock_image_ctx, mock_aio_image_request, 0);
-  ASSERT_EQ(0, when_flush(mock_journal_replay));
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
   ASSERT_EQ(0, on_safe.wait());
 }
 
@@ -255,7 +261,7 @@ TEST_F(TestMockJournalReplay, AioWrite) {
   ASSERT_EQ(0, on_ready.wait());
 
   expect_aio_flush(mock_image_ctx, mock_aio_image_request, 0);
-  ASSERT_EQ(0, when_flush(mock_journal_replay));
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
   ASSERT_EQ(0, on_safe.wait());
 }
 
@@ -281,7 +287,7 @@ TEST_F(TestMockJournalReplay, AioFlush) {
   when_complete(mock_image_ctx, aio_comp, 0);
   ASSERT_EQ(0, on_safe.wait());
 
-  ASSERT_EQ(0, when_flush(mock_journal_replay));
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
   ASSERT_EQ(0, on_ready.wait());
 }
 
@@ -309,7 +315,7 @@ TEST_F(TestMockJournalReplay, IOError) {
   ASSERT_EQ(-EINVAL, on_safe.wait());
 
   expect_aio_flush(mock_image_ctx, mock_aio_image_request, 0);
-  ASSERT_EQ(0, when_flush(mock_journal_replay));
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
   ASSERT_EQ(0, on_ready.wait());
 }
 
@@ -338,9 +344,9 @@ TEST_F(TestMockJournalReplay, SoftFlushIO) {
     when_process(mock_journal_replay,
                  EventEntry{AioDiscardEvent(123, 456)},
                  &on_ready, &on_safes[i]);
+    when_complete(mock_image_ctx, aio_comp, 0);
     ASSERT_EQ(0, on_ready.wait());
 
-    when_complete(mock_image_ctx, aio_comp, 0);
     if (flush_comp != nullptr) {
       when_complete(mock_image_ctx, flush_comp, 0);
     }
@@ -349,7 +355,7 @@ TEST_F(TestMockJournalReplay, SoftFlushIO) {
     ASSERT_EQ(0, on_safe.wait());
   }
 
-  ASSERT_EQ(0, when_flush(mock_journal_replay));
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
 }
 
 TEST_F(TestMockJournalReplay, PauseIO) {
@@ -378,23 +384,47 @@ TEST_F(TestMockJournalReplay, PauseIO) {
     when_process(mock_journal_replay,
                  EventEntry{AioWriteEvent(123, 456, to_bl("test"))},
                  &on_ready, &on_safes[i]);
+    when_complete(mock_image_ctx, aio_comp, 0);
     if (i < io_count - 1) {
       ASSERT_EQ(0, on_ready.wait());
-    }
-
-    when_complete(mock_image_ctx, aio_comp, 0);
-    if (i == io_count - 1) {
+    } else {
       for (auto flush_comp : flush_comps) {
         when_complete(mock_image_ctx, flush_comp, 0);
-        ASSERT_EQ(0, on_ready.wait());
       }
+      ASSERT_EQ(0, on_ready.wait());
     }
   }
   for (auto &on_safe : on_safes) {
     ASSERT_EQ(0, on_safe.wait());
   }
 
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
+}
+
+TEST_F(TestMockJournalReplay, Flush) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  MockAioImageRequest mock_aio_image_request;
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  AioCompletion *aio_comp;
+  C_SaferCond on_ready;
+  C_SaferCond on_safe;
+  expect_aio_discard(mock_aio_image_request, &aio_comp, 123, 456);
+  when_process(mock_journal_replay,
+               EventEntry{AioDiscardEvent(123, 456)},
+               &on_ready, &on_safe);
+
+  when_complete(mock_image_ctx, aio_comp, 0);
+  ASSERT_EQ(0, on_ready.wait());
+
+  expect_aio_flush(mock_image_ctx, mock_aio_image_request, 0);
   ASSERT_EQ(0, when_flush(mock_journal_replay));
+  ASSERT_EQ(0, on_safe.wait());
 }
 
 TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
@@ -413,7 +443,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
 
   ASSERT_EQ(0, on_ready.wait());
 
-  ASSERT_EQ(0, when_flush(mock_journal_replay));
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay));
   ASSERT_EQ(-ERESTART, on_safe.wait());
 }
 

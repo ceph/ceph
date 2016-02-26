@@ -1132,7 +1132,7 @@ int BlueStore::_open_db(bool create)
 
   string kv_backend;
   if (create) {
-    kv_backend = g_conf->bluestore_backend;
+    kv_backend = g_conf->bluestore_kvbackend;
   } else {
     r = read_meta("kv_backend", &kv_backend);
     if (r < 0) {
@@ -1306,16 +1306,18 @@ int BlueStore::_open_db(bool create)
     }
 
     // wal_dir, too!
-    char walfn[PATH_MAX];
-    snprintf(walfn, sizeof(walfn), "%s/db.wal", path.c_str());
-    r = ::mkdir(walfn, 0755);
-    if (r < 0)
-      r = -errno;
-    if (r < 0 && r != -EEXIST) {
-      derr << __func__ << " failed to create " << walfn
-	   << ": " << cpp_strerror(r)
-	   << dendl;
-      return r;
+    if (g_conf->rocksdb_separate_wal_dir) {
+      char walfn[PATH_MAX];
+      snprintf(walfn, sizeof(walfn), "%s/db.wal", path.c_str());
+      r = ::mkdir(walfn, 0755);
+      if (r < 0)
+	r = -errno;
+      if (r < 0 && r != -EEXIST) {
+	derr << __func__ << " failed to create " << walfn
+	  << ": " << cpp_strerror(r)
+	  << dendl;
+	return r;
+      }
     }
   }
 
@@ -1578,17 +1580,19 @@ int BlueStore::_setup_block_symlink_or_file(
   dout(20) << __func__ << " name " << name << " path " << epath
 	   << " size " << size << " create=" << (int)create << dendl;
   int r = 0;
+  unsigned flags = O_RDWR;
+  if (create)
+    flags |= O_CREAT;
   if (epath.length()) {
-    if (!epath.compare(0, sizeof(SPDK_PREFIX-1), SPDK_PREFIX)) {
-      string symbol_spdk_file = path + "/" + epath;
-      r = ::symlinkat(symbol_spdk_file.c_str(), path_fd, name.c_str());
+    if (!epath.compare(0, sizeof(SPDK_PREFIX)-1, SPDK_PREFIX)) {
+      r = ::symlinkat(epath.c_str(), path_fd, name.c_str());
       if (r < 0) {
         r = -errno;
         derr << __func__ << " failed to create " << name << " symlink to "
-    	     << symbol_spdk_file << ": " << cpp_strerror(r) << dendl;
+    	     << epath << ": " << cpp_strerror(r) << dendl;
         return r;
       }
-      int fd = ::openat(path_fd, epath.c_str(), O_RDWR, 0644);
+      int fd = ::openat(path_fd, epath.c_str(), flags, 0644);
       if (fd < 0) {
 	r = -errno;
 	derr << __func__ << " failed to open " << epath << " file: "
@@ -1611,9 +1615,6 @@ int BlueStore::_setup_block_symlink_or_file(
     }
   }
   if (size) {
-    unsigned flags = O_RDWR;
-    if (create)
-      flags |= O_CREAT;
     int fd = ::openat(path_fd, name.c_str(), flags, 0644);
     if (fd >= 0) {
       // block file is present
@@ -1711,16 +1712,18 @@ int BlueStore::mkfs()
 				   g_conf->bluestore_block_create);
   if (r < 0)
     goto out_close_fsid;
-  r = _setup_block_symlink_or_file("block.wal", g_conf->bluestore_block_wal_path,
-				   g_conf->bluestore_block_wal_size,
-				   g_conf->bluestore_block_wal_create);
-  if (r < 0)
-    goto out_close_fsid;
-  r = _setup_block_symlink_or_file("block.db", g_conf->bluestore_block_db_path,
-				   g_conf->bluestore_block_db_size,
-				   g_conf->bluestore_block_db_create);
-  if (r < 0)
-    goto out_close_fsid;
+  if (g_conf->bluestore_bluefs) {
+    r = _setup_block_symlink_or_file("block.wal", g_conf->bluestore_block_wal_path,
+	g_conf->bluestore_block_wal_size,
+	g_conf->bluestore_block_wal_create);
+    if (r < 0)
+      goto out_close_fsid;
+    r = _setup_block_symlink_or_file("block.db", g_conf->bluestore_block_db_path,
+	g_conf->bluestore_block_db_size,
+	g_conf->bluestore_block_db_create);
+    if (r < 0)
+      goto out_close_fsid;
+  }
 
   r = _open_bdev(true);
   if (r < 0)
@@ -1777,7 +1780,7 @@ int BlueStore::mkfs()
     db->submit_transaction_sync(t);
   }
 
-  r = write_meta("kv_backend", g_conf->bluestore_backend);
+  r = write_meta("kv_backend", g_conf->bluestore_kvbackend);
   if (r < 0)
     goto out_close_alloc;
   r = write_meta("bluefs", stringify((int)g_conf->bluestore_bluefs));

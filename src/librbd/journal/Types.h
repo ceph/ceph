@@ -322,12 +322,15 @@ struct MirrorPeerClientMeta {
   std::string cluster_id;
   int64_t pool_id = 0;
   std::string image_id;
+  std::string snap_name;
 
   MirrorPeerClientMeta() {
   }
   MirrorPeerClientMeta(const std::string &cluster_id, int64_t pool_id,
-                       const std::string &image_id)
-    : cluster_id(cluster_id), pool_id(pool_id), image_id(image_id) {
+                       const std::string &image_id,
+                       const std::string &snap_name = "")
+    : cluster_id(cluster_id), pool_id(pool_id), image_id(image_id),
+      snap_name(snap_name) {
   }
 
   void encode(bufferlist& bl) const;

@@ -1003,7 +1003,6 @@ ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
       delete xcon;
       return NULL;
     }
-    nsessions.inc();
 
     /* this should cause callbacks with user context of conn, but
      * we can always set it explicitly */
@@ -1017,7 +1016,15 @@ ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
       .out_addr          = NULL,
       .conn_user_context = xcon
     };
+
     xcon->conn = xio_connect(&xcp);
+    if (!xcon->conn) {
+      xio_session_destroy(xcon->session);
+      delete xcon;
+      return NULL;
+    }
+
+    nsessions.inc();
     xcon->connected.set(true);
 
     /* sentinel ref */

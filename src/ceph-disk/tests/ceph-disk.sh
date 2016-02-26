@@ -132,8 +132,8 @@ function kill_daemons() {
 
 function command_fixture() {
     local command=$1
-
-    [ $(which $command) = `realpath ../$command` ] || [ $(which $command) = `realpath $(pwd)/$command` ] || return 1
+    local fpath=`readlink -f $(which $command)`
+    [ "$fpath" = `readlink -f ../$command` ] || [ "$fpath" = `readlink -f $(pwd)/$command` ] || return 1
 
     cat > $DIR/$command <<EOF
 #!/bin/bash
@@ -233,8 +233,6 @@ function test_mark_init() {
 
     ! test -f $osd_data/$(ceph-detect-init) || return 1
     test -f $osd_data/$expected || return 1
-
-    $rm -fr $osd_data
 }
 
 function test_zap() {
@@ -315,7 +313,6 @@ function test_activate_dir() {
     local osd_data=$DIR/dir
     $mkdir -p $osd_data
     test_activate $osd_data $osd_data || return 1
-    $rm -fr $osd_data
 }
 
 function test_activate_dir_bluestore() {

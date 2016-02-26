@@ -158,7 +158,8 @@ public:
   explicit ErasureCodeJerasureCauchy(const char *technique) :
     ErasureCodeJerasure(technique),
     bitmatrix(0),
-    schedule(0)
+    schedule(0),
+    packetsize(0)
   {
     DEFAULT_K = "7";
     DEFAULT_M = "3";
@@ -211,7 +212,8 @@ public:
   explicit ErasureCodeJerasureLiberation(const char *technique = "liberation") :
     ErasureCodeJerasure(technique),
     bitmatrix(0),
-    schedule(0)
+    schedule(0),
+    packetsize(0)
   {
     DEFAULT_K = "2";
     DEFAULT_M = "2";

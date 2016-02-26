@@ -102,7 +102,7 @@ void OpenRequest<I>::send_v2_detect_header() {
                                    comp, &op, &m_out_bl);
     comp->release();
   } else {
-    send_v2_get_immutable_metadata();
+    send_v2_get_name();
   }
 }
 
@@ -141,7 +141,7 @@ void OpenRequest<I>::send_v2_get_id() {
                                     comp, &op, &m_out_bl);
     comp->release();
   } else {
-    send_v2_get_immutable_metadata();
+    send_v2_get_name();
   }
 }
 
@@ -161,6 +161,42 @@ Context *OpenRequest<I>::handle_v2_get_id(int *result) {
   } else {
     send_v2_get_immutable_metadata();
   }
+  return nullptr;
+}
+
+template <typename I>
+void OpenRequest<I>::send_v2_get_name() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::dir_get_name_start(&op, m_image_ctx->id);
+
+  using klass = OpenRequest<I>;
+  librados::AioCompletion *comp = create_rados_ack_callback<
+    klass, &klass::handle_v2_get_name>(this);
+  m_out_bl.clear();
+  m_image_ctx->md_ctx.aio_operate(RBD_DIRECTORY, comp, &op, &m_out_bl);
+  comp->release();
+}
+
+template <typename I>
+Context *OpenRequest<I>::handle_v2_get_name(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
+
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    *result = cls_client::dir_get_name_finish(&it, &m_image_ctx->name);
+  }
+  if (*result < 0) {
+    lderr(cct) << "failed to retreive name: "
+               << cpp_strerror(*result) << dendl;
+    send_close_image(*result);
+  } else {
+    send_v2_get_immutable_metadata();
+  }
+
   return nullptr;
 }
 

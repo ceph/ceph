@@ -1504,6 +1504,7 @@ add_subdirectory(erasure-code EXCLUDE_FROM_ALL)
 #make check ends here
 
 if(${WITH_RADOSGW})
+  add_subdirectory(rgw)
   # test_cors
   set(test_cors_srcs test_cors.cc)
   add_executable(test_cors
@@ -1529,21 +1530,6 @@ if(${WITH_RADOSGW})
     )
   target_link_libraries(test_rgw_manifest
     rgw_a
-    cls_rgw_client
-    cls_lock_client
-    cls_refcount_client
-    cls_log_client
-    cls_statelog_client
-    cls_timeindex_client
-    cls_version_client
-    cls_replica_log_client
-    cls_kvs
-    cls_user_client
-    librados
-    global
-    curl
-    expat
-    ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${ALLOC_LIBS}
     ${UNITTEST_LIBS}
@@ -1589,18 +1575,8 @@ if(${WITH_RADOSGW})
     $<TARGET_OBJECTS:heap_profiler_objs>
     )
   target_link_libraries(test_cls_rgw_meta
-    librados
     rgw_a
-    global
-    curl
-    expat
-    cls_version_client
-    cls_log_client
-    cls_statelog_client
-    cls_refcount_client
-    cls_rgw_client
-    cls_user_client
-    cls_lock_client
+    boost_regex
     ${Boost_REGEX_LIBRARY}
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS} ${ALLOC_LIBS} ${UNITTEST_LIBS} ${CRYPTO_LIBS})
@@ -1616,7 +1592,6 @@ if(${WITH_RADOSGW})
     $<TARGET_OBJECTS:heap_profiler_objs>
     )
   target_link_libraries(test_cls_rgw_log
-    librados
     rgw_a
     global
     curl
@@ -1628,6 +1603,7 @@ if(${WITH_RADOSGW})
     cls_rgw_client
     cls_user_client
     cls_lock_client
+    cls_timeindex_client
     ${Boost_REGEX_LIBRARY}
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
@@ -1647,18 +1623,6 @@ if(${WITH_RADOSGW})
     )
   target_link_libraries(test_cls_rgw_opstate
     rgw_a
-    librados
-    cls_version_client
-    cls_log_client
-    cls_statelog_client
-    cls_timeindex_client
-    cls_refcount_client
-    cls_rgw_client
-    cls_user_client
-    cls_lock_client
-    global
-    curl
-    expat
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${ALLOC_LIBS}
@@ -2020,7 +1984,7 @@ add_executable(test_rados_api_io
 set_target_properties(test_rados_api_io PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_io
-  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_c_write_operations
   librados/c_write_operations.cc
@@ -2029,7 +1993,7 @@ add_executable(test_rados_api_c_write_operations
 set_target_properties(test_rados_api_c_write_operations PROPERTIES
   COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_c_write_operations
-  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_c_read_operations
   librados/c_read_operations.cc
@@ -2038,7 +2002,7 @@ add_executable(test_rados_api_c_read_operations
 set_target_properties(test_rados_api_c_read_operations PROPERTIES COMPILE_FLAGS 
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_c_read_operations
-  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_aio
   librados/aio.cc
@@ -2047,9 +2011,7 @@ add_executable(test_rados_api_aio
 set_target_properties(test_rados_api_aio PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_aio
-  librados ${UNITTEST_LIBS}
-  ${EXTRALIBS}
-  ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_list
   librados/list.cc
@@ -2058,7 +2020,7 @@ add_executable(test_rados_api_list
 set_target_properties(test_rados_api_list PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_list
-  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_nlist
   librados/nlist.cc
@@ -2067,7 +2029,7 @@ add_executable(test_rados_api_nlist
 set_target_properties(test_rados_api_nlist PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_nlist
-  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_pool
   librados/pool.cc
@@ -2077,7 +2039,7 @@ set_target_properties(test_rados_api_pool PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS}
   )
 target_link_libraries(test_rados_api_pool
-  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_stat
   librados/stat.cc
@@ -2086,7 +2048,7 @@ add_executable(test_rados_api_stat
 set_target_properties(test_rados_api_stat PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_stat
-  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_watch_notify
   librados/watch_notify.cc
@@ -2095,7 +2057,7 @@ add_executable(test_rados_api_watch_notify
 set_target_properties(test_rados_api_watch_notify PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_watch_notify
-  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_cls
   librados/cls.cc
@@ -2104,7 +2066,7 @@ add_executable(test_rados_api_cls
 set_target_properties(test_rados_api_cls PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_cls
-  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_misc
   librados/misc.cc
@@ -2122,7 +2084,7 @@ add_executable(test_rados_api_lock
 set_target_properties(test_rados_api_lock PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_lock
-  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_tier
   librados/tier.cc
@@ -2131,7 +2093,7 @@ add_executable(test_rados_api_tier
 set_target_properties(test_rados_api_tier PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_tier
-  global librados ${UNITTEST_LIBS} ${ALLOC_LIBS} ${Boost_SYSTEM_LIBRARY} radostest)
+  global librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_executable(test_rados_api_snapshots
   librados/snapshots.cc
@@ -2140,7 +2102,7 @@ add_executable(test_rados_api_snapshots
 set_target_properties(test_rados_api_snapshots PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rados_api_snapshots
-  librados ${UNITTEST_LIBS} ${EXTRALIBS} ${ALLOC_LIBS} radostest)
+  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
 add_library(rados_striper_test STATIC libradosstriper/TestCase.cc)
 target_link_libraries(rados_striper_test radostest)
@@ -2385,6 +2347,86 @@ target_link_libraries(test_keyvaluedb_iterators
   ${CMAKE_DL_LIBS}
   )
 
+# librgw_file (nfs-like RGW interface)
+add_executable(test_librgw_file
+  librgw_file.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_librgw_file PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_librgw_file
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
+# librgw_file_cd (just the rgw_file create-delete bucket ops)
+add_executable(test_librgw_file_cd
+  librgw_file_cd.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_librgw_file_cd PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_librgw_file_cd
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
+# librgw_file_gp (just the rgw_file get-put bucket ops)
+add_executable(test_librgw_file_gp
+  librgw_file_gp.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_librgw_file_gp PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_librgw_file_gp
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
+# librgw_file_nfsns (nfs namespace tests)
+add_executable(test_librgw_file_nfsns
+  librgw_file_nfsns.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_librgw_file_nfsns PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_librgw_file_nfsns
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
+# librgw_file_aw (nfs write transaction [atomic write] tests)
+add_executable(test_librgw_file_aw
+  librgw_file_aw.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_librgw_file_aw PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_librgw_file_aw
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
 if(${HAVE_LIBFUSE})
   add_executable(test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
@@ -2477,3 +2519,4 @@ if(HAVE_XIO)
     ${CMAKE_DL_LIBS}
     )
 endif(HAVE_XIO)
+

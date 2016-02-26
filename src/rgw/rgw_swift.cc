@@ -111,6 +111,7 @@ class RGWPostHTTPData : public RGWHTTPClient {
   bufferlist *bl;
   std::string post_data;
   size_t post_data_index;
+  std::string subject_token;
 public:
   RGWPostHTTPData(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl), post_data_index(0) {}
 
@@ -134,30 +135,49 @@ public:
   }
 
   int receive_header(void *ptr, size_t len) {
+    char line[len + 1];
+
+    char *s = (char *)ptr, *end = (char *)ptr + len;
+    char *p = line;
+    ldout(cct, 20) << "RGWPostHTTPData::receive_header parsing HTTP headers" << dendl;
+
+    while (s != end) {
+      if (*s == '\r') {
+        s++;
+        continue;
+      }
+      if (*s == '\n') {
+        *p = '\0';
+        ldout(cct, 20) << "RGWPostHTTPData::receive_header: line="
+                       << line << dendl;
+        // TODO: fill whatever data required here
+        char *l = line;
+        char *tok = strsep(&l, " \t:");
+        if (tok) {
+          while (l && *l == ' ') {
+            l++;
+          }
+
+          if (strcasecmp(tok, "X-Subject-Token") == 0) {
+            subject_token = l;
+          }
+        }
+      }
+      if (s != end) {
+        *p++ = *s++;
+      }
+    }
     return 0;
+  }
+
+  std::string get_subject_token() {
+    return subject_token;
   }
 };
 
+typedef RGWPostHTTPData RGWValidateKeystoneToken;
 typedef RGWPostHTTPData RGWGetKeystoneAdminToken;
 typedef RGWPostHTTPData RGWGetRevokedTokens;
-
-class RGWValidateKeystoneToken : public RGWHTTPClient {
-  bufferlist *bl;
-public:
-  RGWValidateKeystoneToken(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl) {}
-
-  int receive_data(void *ptr, size_t len) {
-    bl->append((char *)ptr, len);
-    return 0;
-  }
-  int receive_header(void *ptr, size_t len) {
-    return 0;
-  }
-  int send_data(void *ptr, size_t len) {
-    return 0;
-  }
-
-};
 
 static RGWKeystoneTokenCache *keystone_token_cache = NULL;
 
@@ -262,36 +282,49 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
 
   if (get_keystone_url(cct, token_url) < 0)
     return -EINVAL;
-  if (cct->_conf->rgw_keystone_admin_token.empty()) {
-    token_url.append("v2.0/tokens");
-    KeystoneToken t;
-    bufferlist token_bl;
-    RGWGetKeystoneAdminToken token_req(cct, &token_bl);
-    token_req.append_header("Content-Type", "application/json");
-    JSONFormatter jf;
-    jf.open_object_section("token_request");
-    jf.open_object_section("auth");
-    jf.open_object_section("passwordCredentials");
-    encode_json("username", cct->_conf->rgw_keystone_admin_user, &jf);
-    encode_json("password", cct->_conf->rgw_keystone_admin_password, &jf);
-    jf.close_section();
-    encode_json("tenantName", cct->_conf->rgw_keystone_admin_tenant, &jf);
-    jf.close_section();
-    jf.close_section();
+  if (!cct->_conf->rgw_keystone_admin_token.empty()) {
+    token = cct->_conf->rgw_keystone_admin_token;
+    return 0;
+  }
+  bufferlist token_bl;
+  RGWGetKeystoneAdminToken token_req(cct, &token_bl);
+  token_req.append_header("Content-Type", "application/json");
+  JSONFormatter jf;
+
+  const auto keystone_version = KeystoneService::get_api_version();
+  if (keystone_version == KeystoneApiVersion::VER_2) {
+    KeystoneAdminTokenRequestVer2 req_serializer(cct);
+    req_serializer.dump(&jf);
+
     std::stringstream ss;
     jf.flush(ss);
     token_req.set_post_data(ss.str());
     token_req.set_send_length(ss.str().length());
+    token_url.append("v2.0/tokens");
     int ret = token_req.process("POST", token_url.c_str());
     if (ret < 0)
       return ret;
+    KeystoneToken t;
     if (t.parse(cct, token_bl) != 0)
       return -EINVAL;
     token = t.token.id;
-  } else {
-    token = cct->_conf->rgw_keystone_admin_token;
+    return 0;
+  } else if (keystone_version == KeystoneApiVersion::VER_3) {
+    KeystoneAdminTokenRequestVer3 req_serializer(cct);
+    req_serializer.dump(&jf);
+
+    std::stringstream ss;
+    jf.flush(ss);
+    token_req.set_post_data(ss.str());
+    token_req.set_send_length(ss.str().length());
+    token_url.append("v3/auth/tokens");
+    int ret = token_req.process("POST", token_url.c_str());
+    if (ret < 0)
+      return ret;
+    token = token_req.get_subject_token();
+    return 0;
   }
-  return 0; 
+  return -EINVAL;
 }
 
 
@@ -303,16 +336,26 @@ int RGWSwift::check_revoked()
   bufferlist bl;
   RGWGetRevokedTokens req(cct, &bl);
 
-  if (get_keystone_admin_token(token) < 0)
+  if (get_keystone_admin_token(token) < 0) {
     return -EINVAL;
-  if (get_keystone_url(url) < 0)
+  }
+  if (get_keystone_url(url) < 0) {
     return -EINVAL;
-  url.append("v2.0/tokens/revoked");
+  }
   req.append_header("X-Auth-Token", token);
+
+  const auto keystone_version = KeystoneService::get_api_version();
+  if (keystone_version == KeystoneApiVersion::VER_2) {
+    url.append("v2.0/tokens/revoked");
+  } else if (keystone_version == KeystoneApiVersion::VER_3) {
+    url.append("v3/auth/tokens/OS-PKI/revoked");
+  }
+
   req.set_send_length(0);
   int ret = req.process(url.c_str());
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   bl.append((char)0); // NULL terminate for debug output
 
@@ -385,8 +428,8 @@ int RGWSwift::check_revoked()
 
 static void rgw_set_keystone_token_auth_info(KeystoneToken& token, struct rgw_swift_auth_info *info)
 {
-  info->user = token.token.tenant.id;
-  info->display_name = token.token.tenant.name;
+  info->user = token.get_project_id();
+  info->display_name = token.get_project_name();
   info->status = 200;
 }
 
@@ -400,16 +443,19 @@ int RGWSwift::parse_keystone_token_response(const string& token, bufferlist& bl,
   list<string>::iterator iter;
   for (iter = roles_list.begin(); iter != roles_list.end(); ++iter) {
     const string& role = *iter;
-    if ((found=t.user.has_role(role))==true)
+    if ((found=t.has_role(role))==true)
       break;
   }
 
   if (!found) {
-    ldout(cct, 0) << "user does not hold a matching role; required roles: " << g_conf->rgw_keystone_accepted_roles << dendl;
+    ldout(cct, 0) << "user does not hold a matching role; required roles: "
+                  << g_conf->rgw_keystone_accepted_roles << dendl;
     return -EPERM;
   }
 
-  ldout(cct, 0) << "validated token: " << t.token.tenant.name << ":" << t.user.name << " expires: " << t.token.expires << dendl;
+  ldout(cct, 0) << "validated token: " << t.get_project_name()
+                << ":" << t.get_user_name()
+                << " expires: " << t.get_expires() << dendl;
 
   rgw_set_keystone_token_auth_info(t, info);
 
@@ -486,7 +532,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
   if (keystone_token_cache->find(token_id, t)) {
     rgw_set_keystone_token_auth_info(t, info);
 
-    ldout(cct, 20) << "cached token.tenant.id=" << t.token.tenant.id << dendl;
+    ldout(cct, 20) << "cached token.project.id=" << t.get_project_id() << dendl;
 
     int ret = update_user_info(store, info, rgw_user);
     if (ret < 0)
@@ -517,10 +563,17 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
     if (get_keystone_url(url) < 0)
       return -EINVAL;
 
-    url.append("v2.0/tokens/");
-    url.append(token);
-
     validate.append_header("X-Auth-Token", admin_token);
+
+    const auto keystone_version = KeystoneService::get_api_version();
+    if (keystone_version == KeystoneApiVersion::VER_2) {
+      url.append("v2.0/tokens/");
+      url.append(token);
+    }
+    if (keystone_version == KeystoneApiVersion::VER_3) {
+      url.append("v3/auth/tokens");
+      validate.append_header("X-Subject-Token", token);
+    }
 
     validate.set_send_length(0);
 
@@ -538,7 +591,9 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
     return ret;
 
   if (t.expired()) {
-    ldout(cct, 0) << "got expired token: " << t.token.tenant.name << ":" << t.user.name << " expired: " << t.token.expires << dendl;
+    ldout(cct, 0) << "got expired token: " << t.get_project_name()
+                  << ":" << t.get_user_name()
+                  << " expired: " << t.get_expires() << dendl;
     return -EPERM;
   }
 
@@ -578,11 +633,11 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
     return -EPERM;
 
   dout(20) << "temp url user (bucket owner): " << bucket_info.owner << dendl;
-  if (rgw_get_user_info_by_uid(store, bucket_info.owner, s->user) < 0) {
+  if (rgw_get_user_info_by_uid(store, bucket_info.owner, *(s->user)) < 0) {
     return -EPERM;
   }
 
-  if (s->user.temp_url_keys.empty()) {
+  if (s->user->temp_url_keys.empty()) {
     dout(5) << "user does not have temp url key set, aborting" << dendl;
     return -EPERM;
   }
@@ -611,7 +666,7 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   dout(20) << "temp url signature (plain text): " << str << dendl;
 
   map<int, string>::iterator iter;
-  for (iter = s->user.temp_url_keys.begin(); iter != s->user.temp_url_keys.end(); ++iter) {
+  for (iter = s->user->temp_url_keys.begin(); iter != s->user->temp_url_keys.end(); ++iter) {
     string& temp_url_key = iter->second;
 
     if (temp_url_key.empty())
@@ -650,8 +705,8 @@ bool RGWSwift::verify_swift_token(RGWRados *store, req_state *s)
       subuser = s->swift_user.substr(pos + 1);
     }
     s->perm_mask = 0;
-    map<string, RGWSubUser>::iterator iter = s->user.subusers.find(subuser);
-    if (iter != s->user.subusers.end()) {
+    map<string, RGWSubUser>::iterator iter = s->user->subusers.find(subuser);
+    if (iter != s->user->subusers.end()) {
       RGWSubUser& subuser_ = iter->second;
       s->perm_mask = subuser_.perm_mask;
     }
@@ -671,7 +726,8 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
   }
 
   if (strncmp(s->os_auth_token, "AUTH_rgwtk", 10) == 0) {
-    int ret = rgw_swift_verify_signed_token(s->cct, store, s->os_auth_token, s->user, &s->swift_user);
+    int ret = rgw_swift_verify_signed_token(s->cct, store, s->os_auth_token,
+					    *(s->user), &s->swift_user);
     if (ret < 0)
       return false;
 
@@ -685,7 +741,7 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
   int ret;
 
   if (supports_keystone()) {
-    ret = validate_keystone_token(store, s->os_auth_token, &info, s->user);
+    ret = validate_keystone_token(store, s->os_auth_token, &info, *(s->user));
     return (ret >= 0);
   }
 
@@ -705,12 +761,12 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
 
   ldout(cct, 10) << "swift user=" << s->swift_user << dendl;
 
-  if (rgw_get_user_info_by_swift(store, swift_user, s->user) < 0) {
+  if (rgw_get_user_info_by_swift(store, swift_user, *(s->user)) < 0) {
     ldout(cct, 0) << "NOTICE: couldn't map swift user" << dendl;
     return false;
   }
 
-  ldout(cct, 10) << "user_id=" << s->user.user_id << dendl;
+  ldout(cct, 10) << "user_id=" << s->user->user_id << dendl;
 
   return true;
 }

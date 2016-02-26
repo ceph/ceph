@@ -10,11 +10,13 @@
 
 extern void register_test_cluster_watcher();
 extern void register_test_pool_watcher();
+extern void register_test_rbd_mirror();
 
 int main(int argc, char **argv)
 {
   register_test_cluster_watcher();
   register_test_pool_watcher();
+  register_test_rbd_mirror();
 
   ::testing::InitGoogleTest(&argc, argv);
 

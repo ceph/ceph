@@ -38,7 +38,7 @@ private:
    *    \-----> V2_DETECT_HEADER                    |             .
    *                |                               |             .
    *                v                               |             .
-   *            V2_GET_ID                           |             .
+   *            V2_GET_ID|NAME                      |             .
    *                |                               |             .
    *                v                               |             .
    *            V2_GET_IMMUTABLE_METADATA           |             .
@@ -77,6 +77,9 @@ private:
 
   void send_v2_get_id();
   Context *handle_v2_get_id(int *result);
+
+  void send_v2_get_name();
+  Context *handle_v2_get_name(int *result);
 
   void send_v2_get_immutable_metadata();
   Context *handle_v2_get_immutable_metadata(int *result);

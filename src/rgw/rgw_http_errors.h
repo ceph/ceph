@@ -36,6 +36,7 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { ERR_TOO_SMALL, 400, "EntityTooSmall" },
     { ERR_TOO_MANY_BUCKETS, 400, "TooManyBuckets" },
     { ERR_MALFORMED_XML, 400, "MalformedXML" },
+    { ERR_AMZ_CONTENT_SHA256_MISMATCH, 400, "XAmzContentSHA256Mismatch" },
     { ERR_LENGTH_REQUIRED, 411, "MissingContentLength" },
     { EACCES, 403, "AccessDenied" },
     { EPERM, 403, "AccessDenied" },
@@ -142,6 +143,8 @@ static inline int rgw_http_error_to_errno(int http_err)
   if (http_err >= 200 && http_err <= 299)
     return 0;
   switch (http_err) {
+    case 304:
+      return -ERR_NOT_MODIFIED;
     case 400:
       return -EINVAL;
     case 401:

@@ -96,7 +96,9 @@ private:
     uint32_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
     atomic_t out_seq; // atomic<uint32_t>
 
-    lifecycle() : state(lifecycle::INIT), in_seq(0), out_seq(0) {}
+    lifecycle() : state(lifecycle::INIT), reconnects(0), connect_seq(0),
+		  peer_global_seq(0), in_seq(0), out_seq_acked(0), 
+		  out_seq(0) {}
 
     void set_in_seq(uint32_t seq) {
       in_seq = seq;
@@ -143,11 +145,18 @@ private:
     uint32_t flags;
 
     explicit CState(XioConnection* _xcon)
-      : xcon(_xcon),
+      : features(0),
+	authorizer(NULL),
+	xcon(_xcon),
 	protocol_version(0),
 	session_state(INIT),
 	startup_state(IDLE),
+	reconnects(0),
+	connect_seq(0),
+	global_seq(0),
+	peer_global_seq(0),
 	in_seq(0),
+	out_seq_acked(0),
 	out_seq(0),
 	flags(FLAG_NONE) {}
 

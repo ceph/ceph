@@ -10,6 +10,12 @@ if [ -n "$VSTART_DEST" ]; then
   CEPH_DIR=$SRC_PATH
   CEPH_BIN=$SRC_PATH
   CEPH_LIB=$SRC_PATH/.libs
+
+  if [ -e CMakeCache.txt ]; then
+      CEPH_BIN=$VSTART_DEST/../../src
+      CEPH_LIB=$CEPH_BIN
+  fi
+
   CEPH_CONF_PATH=$VSTART_DEST
   CEPH_DEV_DIR=$VSTART_DEST/dev
   CEPH_OUT_DIR=$VSTART_DEST/out
@@ -114,13 +120,13 @@ keyring_fn="$CEPH_CONF_PATH/keyring"
 osdmap_fn="/tmp/ceph_osdmap.$$"
 monmap_fn="/tmp/ceph_monmap.$$"
 
-usage="usage: $0 [option]... [mon] [mds] [osd]\n"
+usage="usage: $0 [option]... [\"mon\"] [\"mds\"] [\"osd\"]\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
 usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
 usage=$usage"\t-i <ip>: bind to specific ip\n"
-usage=$usage"\t-r start radosgw (needs ceph compiled with --radosgw and apache2 with mod_fastcgi)\n"
+usage=$usage"\t-r start radosgw (needs ceph compiled with --radosgw)\n"
 usage=$usage"\t-n, --new\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon}] 'toolname args...'\n"
 usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
@@ -593,7 +599,7 @@ EOF
 	    fi
 
 	    rm -rf $CEPH_DEV_DIR/osd$osd || true
-	    for f in $CEPH_DEV_DIR/osd$osd/* ; do btrfs sub delete $f || true ; done || true
+	    for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
 	    mkdir -p $CEPH_DEV_DIR/osd$osd
 
 	    uuid=`uuidgen`
@@ -721,17 +727,6 @@ do_hitsets $hitset
 
 do_rgw()
 {
-    # Start server
-    echo start rgw on http://localhost:$CEPH_RGW_PORT
-    RGWDEBUG=""
-    if [ "$debug" -ne 0 ]; then
-        RGWDEBUG="--debug-rgw=20"
-    fi
-
-    RGWSUDO=
-    [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
-    $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
-
     # Create S3 user
     local akey='0555b35654ad1656d804'
     local skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
@@ -768,6 +763,17 @@ do_rgw()
     echo "  user      : tester"
     echo "  password  : testing"
     echo ""
+
+    # Start server
+    echo start rgw on http://localhost:$CEPH_RGW_PORT
+    RGWDEBUG=""
+    if [ "$debug" -ne 0 ]; then
+        RGWDEBUG="--debug-rgw=20"
+    fi
+
+    RGWSUDO=
+    [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
+    $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
 }
 if [ "$start_rgw" -eq 1 ]; then
     do_rgw

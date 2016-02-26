@@ -66,23 +66,13 @@ extern int rgw_store_user_info(RGWRados *store,
                                time_t mtime,
                                bool exclusive,
                                map<string, bufferlist> *pattrs = NULL);
-/**
- * Save the custom user metadata given in @attrs and delete those in @rmattrs
- * for user specified in @user_id.
- * Returns: 0 on success, -ERR# on failure.
- */
-extern int rgw_store_user_attrs(RGWRados *store,
-                                string& user_id,
-                                map<string, bufferlist>& attrs,
-                                map<string, bufferlist>* rmattrs,
-                                RGWObjVersionTracker *objv_tracker);
 
 /**
  * Given an user_id, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_uid(RGWRados *store,
-                                    rgw_user& user_id,
+                                    const rgw_user& user_id,
                                     RGWUserInfo& info,
                                     RGWObjVersionTracker *objv_tracker = NULL,
                                     time_t *pmtime                     = NULL,
@@ -268,7 +258,13 @@ struct RGWUserAdminOpState {
 
     size_t pos = _subuser.find(":");
     if (pos != string::npos) {
-      user_id.from_str(_subuser.substr(0, pos));
+      rgw_user tmp_id;
+      tmp_id.from_str(_subuser.substr(0, pos));
+      if (tmp_id.tenant.empty()) {
+        user_id.id = tmp_id.id;
+      } else {
+        user_id = tmp_id;
+      }
       subuser = _subuser.substr(pos+1);
     } else {
       subuser = _subuser;

@@ -23,6 +23,7 @@ libcommon_internal_la_SOURCES = \
 	common/Finisher.cc \
 	common/environment.cc\
 	common/assert.cc \
+	xxHash/xxhash.c \
 	common/run_cmd.cc \
 	common/WorkQueue.cc \
 	common/ConfUtils.cc \
@@ -73,7 +74,8 @@ libcommon_internal_la_SOURCES = \
 	common/Cycles.cc \
 	common/ContextCompletion.cc \
 	common/TracepointProvider.cc \
-	common/PluginRegistry.cc
+	common/PluginRegistry.cc \
+	common/scrub_types.cc
 
 common/PluginRegistry.cc: ./ceph_ver.h
 
@@ -125,6 +127,7 @@ libcommon_internal_la_SOURCES += \
 	mds/inode_backtrace.cc \
 	mds/mdstypes.cc \
 	mds/flock.cc
+
 LIBCOMMON_DEPS += libcommon_internal.la
 noinst_LTLIBRARIES += libcommon_internal.la
 
@@ -154,7 +157,10 @@ noinst_HEADERS += \
 	common/sctp_crc32.h \
 	common/crc32c_intel_baseline.h \
 	common/crc32c_intel_fast.h \
-	common/crc32c_aarch64.h
+	common/crc32c_aarch64.h \
+	common/cohort_lru.h \
+	common/sstring.hh \
+	xxHash/xxhash.h
 
 
 # important; libmsg before libauth!
@@ -274,6 +280,7 @@ noinst_HEADERS += \
 	common/TracepointProvider.h \
 	common/event_socket.h \
 	common/PluginRegistry.h \
+	common/scrub_types.h \
 	common/ceph_time.h \
 	common/ceph_timer.h \
 	common/align.h \

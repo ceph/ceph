@@ -44,9 +44,7 @@ protected:
     if (image_ctx.journal != NULL) {
       Context *ctx = util::create_context_callback<T, MF>(request);
       if (image_ctx.journal->is_journal_replaying()) {
-        assert(m_op_tid != 0);
-        m_appended_op_event = true;
-        image_ctx.journal->replay_op_ready(m_op_tid, ctx);
+        replay_op_ready(ctx);
       } else {
         append_op_event(ctx);
       }
@@ -83,6 +81,7 @@ private:
   bool m_appended_op_event = false;
   bool m_committed_op_event = false;
 
+  void replay_op_ready(Context *on_safe);
   void append_op_event(Context *on_safe);
   void handle_op_event_safe(int r);
 
