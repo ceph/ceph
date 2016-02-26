@@ -21,6 +21,10 @@ public:
 
 class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
   bool need_stats;
+
+  uint64_t get_default_max() const override {
+    return 0;
+  }
 public:
   RGWListBuckets_ObjStore_SWIFT() : need_stats(true) {}
   ~RGWListBuckets_ObjStore_SWIFT() {}
