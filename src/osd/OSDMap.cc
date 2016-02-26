@@ -2771,8 +2771,8 @@ int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     loc["rack"] = "localrack";
     loc["root"] = "default";
     ldout(cct, 10) << " adding osd." << o << " at " << loc << dendl;
-    char name[8];
-    sprintf(name, "osd.%d", o);
+    char name[32];
+    snprintf(name, sizeof(name), "osd.%d", o);
     crush.insert_item(cct, o, 1.0, name, loc);
   }
 
