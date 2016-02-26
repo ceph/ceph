@@ -114,6 +114,9 @@ class RGWPostHTTPData : public RGWHTTPClient {
   std::string subject_token;
 public:
   RGWPostHTTPData(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl), post_data_index(0) {}
+  RGWPostHTTPData(CephContext *_cct, bufferlist *_bl, bool verify_ssl) : RGWHTTPClient(_cct), bl(_bl), post_data_index(0){
+    set_verify_ssl(verify_ssl);
+  }
 
   void set_post_data(const std::string& _post_data) {
     this->post_data = _post_data;
@@ -253,7 +256,7 @@ int RGWSwift::get_keystone_url(CephContext * const cct,
                                std::string& url)
 {
   bufferlist bl;
-  RGWGetRevokedTokens req(cct, &bl);
+  RGWGetRevokedTokens req(cct, &bl, cct->_conf->rgw_keystone_verify_ssl);
 
   url = cct->_conf->rgw_keystone_url;
   if (url.empty()) {
@@ -287,7 +290,7 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
     return 0;
   }
   bufferlist token_bl;
-  RGWGetKeystoneAdminToken token_req(cct, &token_bl);
+  RGWGetKeystoneAdminToken token_req(cct, &token_bl, cct->_conf->rgw_keystone_verify_ssl);
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
@@ -548,7 +551,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
     /* can't decode, just go to the keystone server for validation */
 
-    RGWValidateKeystoneToken validate(cct, &bl);
+    RGWValidateKeystoneToken validate(cct, &bl, cct->_conf->rgw_keystone_verify_ssl);
 
     string url = g_conf->rgw_keystone_url;
     if (url.empty()) {
