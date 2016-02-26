@@ -56,7 +56,7 @@ restorecon -R /var/log/ceph > /dev/null 2>&1;
 # the _with_systemd variable only implies that we'll install
 # /etc/tmpfiles.d/ceph.conf in order to set up the socket directory in
 # /var/run/ceph.
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1210
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
 %global _with_systemd 1
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
 %endif
@@ -152,14 +152,11 @@ BuildRequires:	systemd
 PreReq:		%fillup_prereq
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
-%if 0%{?suse_version} > 1210
+%if 0%{?suse_version}
 Requires:	gptfdisk
 %if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel
 %endif
-%else
-Requires:	scsirastools
-BuildRequires:	google-perftools-devel
 %endif
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
@@ -182,7 +179,7 @@ BuildRequires:	gperftools-devel
 BuildRequires:  boost-random
 %endif
 # python-argparse for distros with Python 2.6 or lower
-%if (0%{?rhel} && 0%{?rhel} <= 6) || (0%{?suse_version} && 0%{?suse_version} <= 1110)
+%if (0%{?rhel} && 0%{?rhel} <= 6)
 BuildRequires:	python-argparse
 %endif
 # lttng and babeltrace for rbd-replay-prep
@@ -261,7 +258,7 @@ Requires:	python-requests
 Requires(pre):	pwdutils
 %endif
 # python-argparse is only needed in distros with Python 2.6 or lower
-%if (0%{?rhel} && 0%{?rhel} <= 6) || (0%{?suse_version} && 0%{?suse_version} <= 1110)
+%if (0%{?rhel} && 0%{?rhel} <= 6)
 Requires:	python-argparse
 %endif
 %description -n ceph-common
