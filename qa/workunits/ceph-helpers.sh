@@ -126,13 +126,13 @@ function __teardown_btrfs() {
     local btrfs_base_dir=$1
 
     btrfs_dirs=`ls -l $btrfs_base_dir | egrep '^d' | awk '{print $9}'`
-    for btrfs_dir in $btrfs_dirs
-    do
-        btrfs_subdirs=`ls -l $btrfs_base_dir/$btrfs_dir | egrep '^d' | awk '{print $9}'`
-        for btrfs_subdir in $btrfs_subdirs
-        do
-            btrfs subvolume delete $btrfs_base_dir/$btrfs_dir/$btrfs_subdir
-        done
+    current_path=`pwd`
+    # extracting the current existing subvolumes
+    for subvolume in $(cd $btrfs_base_dir; btrfs subvolume list . -t |egrep '^[0-9]' | awk '{print $4}' |grep "$btrfs_base_dir/$btrfs_dir"); do
+       # Compute the relative path by removing the local path
+       # Like "erwan/chroot/ceph/src/testdir/test-7202/dev/osd1/snap_439" while we want "testdir/test-7202/dev/osd1/snap_439"
+       local_subvolume=$(echo $subvolume | sed -e "s|.*$current_path/||"g)
+       btrfs subvolume delete $local_subvolume
     done
 }
 
@@ -471,6 +471,7 @@ function destroy_osd() {
     ceph auth del osd.$id || return 1
     ceph osd crush remove osd.$id || return 1
     ceph osd rm $id || return 1
+    teardown $dir/$id || return 1
     rm -fr $dir/$id
 }
 
