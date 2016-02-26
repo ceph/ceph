@@ -93,27 +93,6 @@ Patch0:		init-ceph.in-fedora.patch
 Requires:       ceph-osd = %{epoch}:%{version}-%{release}
 Requires:       ceph-mds = %{epoch}:%{version}-%{release}
 Requires:       ceph-mon = %{epoch}:%{version}-%{release}
-Requires:	librbd1 = %{epoch}:%{version}-%{release}
-Requires:	librados2 = %{epoch}:%{version}-%{release}
-Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
-Requires:	ceph-common = %{epoch}:%{version}-%{release}
-%if 0%{with selinux}
-Requires:	ceph-selinux = %{epoch}:%{version}-%{release}
-%endif
-Requires:	python-rados = %{epoch}:%{version}-%{release}
-Requires:	python-rbd = %{epoch}:%{version}-%{release}
-Requires:	python-cephfs = %{epoch}:%{version}-%{release}
-Requires:	python
-Requires:	python-requests
-Requires:	grep
-Requires:	xfsprogs
-Requires:	logrotate
-Requires:	parted
-Requires:	util-linux
-Requires:	hdparm
-Requires:	cryptsetup
-Requires:	findutils
-Requires:	which
 Requires(post):	binutils
 %if 0%{with cephfs_java}
 BuildRequires:	java-devel
@@ -248,6 +227,23 @@ on commodity hardware and delivers object, block and file system storage.
 Summary:       Ceph Base Package
 Group:         System Environment/Base
 Requires:      ceph-common = %{epoch}:%{version}-%{release}
+Requires:      librbd1 = %{epoch}:%{version}-%{release}
+Requires:      librados2 = %{epoch}:%{version}-%{release}
+Requires:      libcephfs1 = %{epoch}:%{version}-%{release}
+%if 0%{with selinux}
+Requires:      ceph-selinux = %{epoch}:%{version}-%{release}
+%endif
+Requires:      python
+Requires:      python-requests
+Requires:      grep
+Requires:      xfsprogs
+Requires:      logrotate
+Requires:      parted
+Requires:      util-linux
+Requires:      hdparm
+Requires:      cryptsetup
+Requires:      findutils
+Requires:      which
 %description base
 Base is the package that includes all the files shared amongst ceph servers
 
