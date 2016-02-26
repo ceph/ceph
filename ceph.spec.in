@@ -156,7 +156,10 @@ BuildRequires:	google-perftools-devel
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
-%else
+Requires:       lsb-release
+BuildRequires:  lsb-release
+%endif
+%if 0%{?fedora} || 0%{?rhel} 
 %if 0%{?_with_systemd}
 Requires:	systemd
 %endif
@@ -170,6 +173,8 @@ Requires(preun):	chkconfig
 Requires(preun):	initscripts
 BuildRequires:	gperftools-devel
 Requires:	python-flask
+Requires:       redhat-lsb-core
+BuildRequires:  redhat-lsb-core
 %endif
 # boost
 %if 0%{?fedora} || 0%{?rhel} 
