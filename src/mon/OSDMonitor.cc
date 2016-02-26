@@ -557,16 +557,35 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
   std::string sep;
   oss << "reweighted: ";
   bool changed = false;
+  int num_changed = 0;
+
+  // precompute util for each OSD
+  std::vector<std::pair<int, float> > util_by_osd;
   for (ceph::unordered_map<int,osd_stat_t>::const_iterator p =
-	 pgm.osd_stat.begin();
+       pgm.osd_stat.begin();
        p != pgm.osd_stat.end();
        ++p) {
-    float util;
+    std::pair<int, float> osd_util;
+    osd_util.first = p->first;
     if (by_pg) {
-      util = pgs_by_osd[p->first] / osdmap.crush->get_item_weightf(p->first);
+      osd_util.second = pgs_by_osd[p->first] / osdmap.crush->get_item_weightf(p->first);
     } else {
-      util = (double)p->second.kb_used / (double)p->second.kb;
+      osd_util.second = (double)p->second.kb_used / (double)p->second.kb;
     }
+    util_by_osd.push_back(osd_util);
+  }
+
+  // sort and iterate from most to least utilized
+  std::sort(util_by_osd.begin(), util_by_osd.end(), [](std::pair<int, float> l, std::pair<int, float> r) {
+    return l.second > r.second;
+  });
+
+  for (std::vector<std::pair<int, float> >::const_iterator p =
+	 util_by_osd.begin();
+       p != util_by_osd.end();
+       ++p) {
+    float util = p->second;
+
     if (util >= overload_util) {
       sep = ", ";
       // Assign a lower weight to overloaded OSDs. The current weight
@@ -584,6 +603,8 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
 	       (float)weight / (float)0x10000,
 	       (float)new_weight / (float)0x10000);
       oss << buf << sep;
+      if (++num_changed >= g_conf->mon_reweight_max_osds)
+	break;
     }
     if (!no_increasing && util <= underload_util) {
       // assign a higher weight.. if we can.
@@ -603,6 +624,8 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
 		 (float)weight / (float)0x10000,
 		 (float)new_weight / (float)0x10000);
 	oss << buf << sep;
+	if (++num_changed >= g_conf->mon_reweight_max_osds)
+	  break;
       }
     }
   }
