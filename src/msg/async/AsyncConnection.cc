@@ -2493,6 +2493,12 @@ void AsyncConnection::mark_down()
   _stop();
 }
 
+void AsyncConnection::release_worker()
+{
+  if (msgr)
+    reinterpret_cast<AsyncMessenger*>(msgr)->release_worker(center);
+}
+
 void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
 {
   assert(write_lock.is_locked());
