@@ -466,7 +466,7 @@ public:
   bool have_addr(const entity_addr_t& addr) const {
     return identify_osd(addr) >= 0;
   }
-  bool find_osd_on_ip(const entity_addr_t& ip) const;
+  int find_osd_on_ip(const entity_addr_t& ip) const;
   bool have_inst(int osd) const {
     return exists(osd) && is_up(osd); 
   }
