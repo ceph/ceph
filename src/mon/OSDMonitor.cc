@@ -467,7 +467,8 @@ void OSDMonitor::update_logger()
  * percentage 'oload' percent greater than the average utilization.
  */
 int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
-					bool by_pg, const set<int64_t> *pools)
+					bool by_pg, const set<int64_t> *pools,
+					bool no_increasing, bool sure)
 {
   if (oload <= 100) {
     ostringstream oss;
@@ -573,15 +574,17 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
       // to represent e.g. differing storage capacities
       unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
-      pending_inc.new_weight[p->first] = new_weight;
+      if (sure) {
+	pending_inc.new_weight[p->first] = new_weight;
+	changed = true;
+      }
       char buf[128];
       snprintf(buf, sizeof(buf), "osd.%d [%04f -> %04f]", p->first,
 	       (float)weight / (float)0x10000,
 	       (float)new_weight / (float)0x10000);
       oss << buf << sep;
-      changed = true;
     }
-    if (util <= underload_util) {
+    if (!no_increasing && util <= underload_util) {
       // assign a higher weight.. if we can.
       unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
@@ -589,13 +592,15 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
 	new_weight = 0x10000;
       if (new_weight > weight) {
 	sep = ", ";
-	pending_inc.new_weight[p->first] = new_weight;
+	if (sure) {
+	  pending_inc.new_weight[p->first] = new_weight;
+	  changed = true;
+	}
 	char buf[128];
 	snprintf(buf, sizeof(buf), "osd.%d [%04f -> %04f]", p->first,
 		 (float)weight / (float)0x10000,
 		 (float)new_weight / (float)0x10000);
 	oss << buf << sep;
-	changed = true;
       }
     }
   }
@@ -6566,8 +6571,13 @@ done:
   } else if (prefix == "osd reweight-by-utilization") {
     int64_t oload;
     cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
+    string no_increasing, sure;
+    cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     string out_str;
-    err = reweight_by_utilization(oload, out_str, false, NULL);
+    err = reweight_by_utilization(oload, out_str, false, NULL,
+				  no_increasing == "--no-increasing",
+				  sure == "--yes-i-really-mean-it");
     if (err < 0) {
       ss << "FAILED reweight-by-utilization: " << out_str;
     } else if (err == 0) {
@@ -6594,9 +6604,14 @@ done:
       }
       pools.insert(pool);
     }
+    string no_increasing, sure;
+    cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     string out_str;
     err = reweight_by_utilization(oload, out_str, true,
-				  pools.empty() ? NULL : &pools);
+				  pools.empty() ? NULL : &pools,
+				  no_increasing == "--no-increasing",
+				  sure == "--yes-i-really-mean-it");
     if (err < 0) {
       ss << "FAILED reweight-by-pg: " << out_str;
     } else if (err == 0) {

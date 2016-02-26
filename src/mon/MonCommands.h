@@ -655,12 +655,16 @@ COMMAND("osd pool stats " \
         "obtain stats from all pools, or from specified pool",
         "osd", "r", "cli,rest")
 COMMAND("osd reweight-by-utilization " \
-	"name=oload,type=CephInt,range=100,req=false", \
+	"name=oload,type=CephInt,range=100,req=false " \
+	"name=no_increasing,type=CephChoices,strings=--no-increasing,req=false " \
+	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd reweight-by-pg " \
-	"name=oload,type=CephInt,range=100 " \
-	"name=pools,type=CephPoolname,n=N,req=false", \
+	"name=oload,type=CephInt,range=100,req=false " \
+	"name=no_increasing,type=CephChoices,strings=--no-increasing,req=false " \
+	"name=pools,type=CephPoolname,n=N,req=false " \
+	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd thrash " \
