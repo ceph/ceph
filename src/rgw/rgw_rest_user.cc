@@ -3,6 +3,9 @@
 
 #include "common/ceph_json.h"
 
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
 #include "rgw_op.h"
 #include "rgw_user.h"
 #include "rgw_rest_user.h"

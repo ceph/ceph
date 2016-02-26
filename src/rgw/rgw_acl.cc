@@ -10,6 +10,8 @@
 
 #include "common/Formatter.h"
 
+#include "rgw_period_history.h"
+#include "rgw_period_puller.h"
 #include "rgw_acl.h"
 #include "rgw_user.h"
 

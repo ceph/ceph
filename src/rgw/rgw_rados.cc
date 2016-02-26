@@ -14,7 +14,8 @@
 #include "common/Throttle.h"
 #include "common/Finisher.h"
 
-#include "rgw_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
 #include "rgw_cache.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h" /* for dumping s3policy in debug log */

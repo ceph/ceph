@@ -4,6 +4,8 @@
 #include <map>
 #include <thread>
 
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
 #include "rgw_period_pusher.h"
 #include "rgw_cr_rest.h"
 #include "common/errno.h"

@@ -6,6 +6,9 @@
 #include <unistd.h>
 
 #include "common/ceph_json.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
 #include "rgw_common.h"
 #include "rgw_swift.h"
 #include "rgw_swift_auth.h"

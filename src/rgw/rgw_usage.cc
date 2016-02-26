@@ -4,7 +4,9 @@
 #include <string>
 #include <map>
 
-#include "rgw_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
 #include "rgw_usage.h"
 #include "rgw_formats.h"
 

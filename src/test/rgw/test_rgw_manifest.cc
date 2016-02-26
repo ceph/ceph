@@ -15,6 +15,10 @@
 #include "global/global_init.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_rados.h"
+#include "rgw/rgw_period_puller.h"
+#include "rgw/rgw_period_history.h"
+#include "rgw/rgw_metadata.h"
+
 #define GTEST
 #ifdef GTEST
 #include <gtest/gtest.h>

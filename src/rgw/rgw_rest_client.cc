@@ -1,11 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
 #include "rgw_common.h"
 #include "rgw_rest_client.h"
 #include "rgw_auth_s3.h"
 #include "rgw_http_errors.h"
-#include "rgw_rados.h"
 
 #include "common/ceph_crypto_cms.h"
 #include "common/armor.h"

@@ -3,6 +3,9 @@
 
 #include "common/armor.h"
 #include "common/utf8.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
 #include "rgw_common.h"
 #include "rgw_client_io.h"
 #include "rgw_rest.h"

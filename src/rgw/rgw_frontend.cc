@@ -3,6 +3,9 @@
 
 #include <signal.h>
 
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
 #include "rgw_frontend.h"
 #include "include/str_list.h"
 

@@ -11,9 +11,9 @@
 #include "include/assert.h"
 #include "include/types.h"
 
-namespace bi = boost::intrusive;
+#include "rgw_rados.h"
 
-class RGWPeriod;
+namespace bi = boost::intrusive;
 
 /**
  * RGWPeriodHistory tracks the relative history of all inserted periods,

@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/ceph_json.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
 #include "rgw_metadata.h"
 #include "rgw_coroutine.h"
 #include "cls/version/cls_version_types.h"

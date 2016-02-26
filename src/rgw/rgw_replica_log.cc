@@ -15,7 +15,10 @@
 #include "rgw_replica_log.h"
 #include "cls/replica_log/cls_replica_log_client.h"
 #include "cls/rgw/cls_rgw_client.h"
-#include "rgw_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
+
 
 #define dout_subsys ceph_subsys_rgw
 

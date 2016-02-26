@@ -2,7 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_common.h"
-#include "rgw_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"

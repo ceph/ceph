@@ -8,7 +8,10 @@
 
 #include "common/errno.h"
 #include "common/ceph_json.h"
-#include "rgw_rados.h"
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
+
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 

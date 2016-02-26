@@ -22,9 +22,11 @@ using namespace std;
 #include "include/utime.h"
 #include "include/str_list.h"
 
+#include "rgw_period_puller.h"
+#include "rgw_period_history.h"
+#include "rgw_metadata.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
-#include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_log.h"

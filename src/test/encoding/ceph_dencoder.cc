@@ -24,6 +24,10 @@
 #include "msg/Message.h"
 #include "include/assert.h"
 
+#include "rgw/rgw_rados.h"
+#include "rgw/rgw_period_puller.h"
+#include "rgw/rgw_period_history.h"
+
 #define TYPE(t)
 #define TYPE_STRAYDATA(t)
 #define TYPE_NONDETERMINISTIC(t)
