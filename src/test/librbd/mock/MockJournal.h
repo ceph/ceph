@@ -16,6 +16,9 @@ struct MockJournal {
 
   MOCK_METHOD1(wait_for_journal_ready, void(Context *));
 
+  MOCK_CONST_METHOD0(is_tag_owner, bool());
+  MOCK_METHOD2(allocate_tag, void(const std::string &, Context *));
+
   MOCK_METHOD1(open, void(Context *));
   MOCK_METHOD1(close, void(Context *));
 

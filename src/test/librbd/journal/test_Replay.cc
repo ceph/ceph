@@ -44,7 +44,8 @@ public:
     }
   }
 
-  void get_journal_commit_position(librbd::ImageCtx *ictx, int64_t *tid)
+  void get_journal_commit_position(librbd::ImageCtx *ictx, int64_t *tag,
+                                   int64_t *entry)
   {
     const std::string client_id = "";
     std::string journal_id = ictx->id;
@@ -69,19 +70,16 @@ public:
 	break;
       }
     }
-    if (c == registered_clients.end()) {
-      *tid = -1;
-      return;
+    if (c == registered_clients.end() ||
+        c->commit_position.object_positions.empty()) {
+      *tag = 0;
+      *entry = -1;
+    } else {
+      const cls::journal::ObjectPosition &object_position =
+        *c->commit_position.object_positions.begin();
+      *tag = object_position.tag_tid;
+      *entry = object_position.entry_tid;
     }
-    cls::journal::ObjectPositions object_positions =
-	c->commit_position.object_positions;
-    cls::journal::ObjectPositions::const_iterator p;
-    for (p = object_positions.begin(); p != object_positions.end(); p++) {
-      if (p->tag_tid == 0) {
-	break;
-      }
-    }
-    *tid = p == object_positions.end() ? -1 : p->entry_tid;
 
     C_SaferCond open_cond;
     ictx->journal = new librbd::Journal<>(*ictx);
@@ -123,8 +121,9 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
   // get current commit position
-  int64_t initial;
-  get_journal_commit_position(ictx, &initial);
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject a discard operation into the journal
   inject_into_journal(ictx,
@@ -142,9 +141,11 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
   ASSERT_EQ(std::string(read_payload.size(), '\0'), read_payload);
 
   // check the commit position is properly updated
-  int64_t current;
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 1);
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 1, current_tag);
+  ASSERT_EQ(0, current_entry);
 
   // replay several envents and check the commit position
   inject_into_journal(ictx,
@@ -153,8 +154,9 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
                       librbd::journal::AioDiscardEvent(0, payload.size()));
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 3);
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 2, current_tag);
+  ASSERT_EQ(1, current_entry);
 
   // verify lock ordering constraints
   aio_comp = new librbd::AioCompletion();
@@ -171,8 +173,9 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
   // get current commit position
-  int64_t initial;
-  get_journal_commit_position(ictx, &initial);
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject a write operation into the journal
   std::string payload(4096, '1');
@@ -194,9 +197,11 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
   ASSERT_EQ(payload, read_payload);
 
   // check the commit position is properly updated
-  int64_t current;
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 1);
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 1, current_tag);
+  ASSERT_EQ(0, current_entry);
 
   // replay several events and check the commit position
   inject_into_journal(ictx,
@@ -205,8 +210,9 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
       librbd::journal::AioWriteEvent(0, payload.size(), payload_bl));
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 3);
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 2, current_tag);
+  ASSERT_EQ(1, current_entry);
 
   // verify lock ordering constraints
   aio_comp = new librbd::AioCompletion();
@@ -225,8 +231,9 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
   // get current commit position
-  int64_t initial;
-  get_journal_commit_position(ictx, &initial);
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject a flush operation into the journal
   inject_into_journal(ictx, librbd::journal::AioFlushEvent());
@@ -261,17 +268,20 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
   ASSERT_EQ(payload, read_payload);
 
   // check the commit position is properly updated
-  int64_t current;
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 1);
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 1, current_tag);
+  ASSERT_EQ(0, current_entry);
 
   // replay several events and check the commit position
   inject_into_journal(ictx, librbd::journal::AioFlushEvent());
   inject_into_journal(ictx, librbd::journal::AioFlushEvent());
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 3);
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 2, current_tag);
+  ASSERT_EQ(1, current_entry);
 
   // verify lock ordering constraints
   aio_comp = new librbd::AioCompletion();
@@ -289,8 +299,9 @@ TEST_F(TestJournalReplay, SnapCreate) {
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
   // get current commit position
-  int64_t initial;
-  get_journal_commit_position(ictx, &initial);
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject snapshot ops into journal
   inject_into_journal(ictx, librbd::journal::SnapCreateEvent(1, "snap"));
@@ -300,9 +311,11 @@ TEST_F(TestJournalReplay, SnapCreate) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
-  int64_t current;
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 2);
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 1, current_tag);
+  ASSERT_EQ(1, current_entry);
 
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
@@ -324,8 +337,9 @@ TEST_F(TestJournalReplay, SnapProtect) {
   ASSERT_EQ(0, ictx->operations->snap_create("snap"));
 
   // get current commit position
-  int64_t initial;
-  get_journal_commit_position(ictx, &initial);
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject snapshot ops into journal
   inject_into_journal(ictx, librbd::journal::SnapProtectEvent(1, "snap"));
@@ -335,9 +349,11 @@ TEST_F(TestJournalReplay, SnapProtect) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
-  int64_t current;
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 2);
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag, current_tag);
+  ASSERT_EQ(initial_entry + 2, current_entry);
 
   bool is_protected;
   ASSERT_EQ(0, librbd::snap_is_protected(ictx, "snap", &is_protected));
@@ -366,8 +382,9 @@ TEST_F(TestJournalReplay, SnapUnprotect) {
   ASSERT_EQ(0, ictx->operations->snap_protect("snap"));
 
   // get current commit position
-  int64_t initial;
-  get_journal_commit_position(ictx, &initial);
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject snapshot ops into journal
   inject_into_journal(ictx, librbd::journal::SnapUnprotectEvent(1, "snap"));
@@ -377,9 +394,11 @@ TEST_F(TestJournalReplay, SnapUnprotect) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
-  int64_t current;
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 2);
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag, current_tag);
+  ASSERT_EQ(initial_entry + 2, current_entry);
 
   bool is_protected;
   ASSERT_EQ(0, librbd::snap_is_protected(ictx, "snap", &is_protected));
@@ -408,8 +427,9 @@ TEST_F(TestJournalReplay, SnapRename) {
   }
 
   // get current commit position
-  int64_t initial;
-  get_journal_commit_position(ictx, &initial);
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject snapshot ops into journal
   inject_into_journal(ictx, librbd::journal::SnapRenameEvent(1, snap_id, "snap2"));
@@ -419,9 +439,11 @@ TEST_F(TestJournalReplay, SnapRename) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
-  int64_t current;
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 2);
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag, current_tag);
+  ASSERT_EQ(initial_entry + 2, current_entry);
 
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
@@ -444,8 +466,9 @@ TEST_F(TestJournalReplay, SnapRollback) {
   ASSERT_EQ(0, ictx->operations->snap_create("snap"));
 
   // get current commit position
-  int64_t initial;
-  get_journal_commit_position(ictx, &initial);
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject snapshot ops into journal
   inject_into_journal(ictx, librbd::journal::SnapRollbackEvent(1, "snap"));
@@ -455,9 +478,11 @@ TEST_F(TestJournalReplay, SnapRollback) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
-  int64_t current;
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 2);
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag, current_tag);
+  ASSERT_EQ(initial_entry + 2, current_entry);
 
   // verify lock ordering constraints
   librbd::NoOpProgressContext no_op_progress;
@@ -475,8 +500,9 @@ TEST_F(TestJournalReplay, SnapRemove) {
   ASSERT_EQ(0, ictx->operations->snap_create("snap"));
 
   // get current commit position
-  int64_t initial;
-  get_journal_commit_position(ictx, &initial);
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject snapshot ops into journal
   inject_into_journal(ictx, librbd::journal::SnapRemoveEvent(1, "snap"));
@@ -486,9 +512,11 @@ TEST_F(TestJournalReplay, SnapRemove) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
-  int64_t current;
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 2);
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag, current_tag);
+  ASSERT_EQ(initial_entry + 2, current_entry);
 
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
@@ -510,8 +538,9 @@ TEST_F(TestJournalReplay, Rename) {
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
   // get current commit position
-  int64_t initial;
-  get_journal_commit_position(ictx, &initial);
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject snapshot ops into journal
   std::string new_image_name(get_temp_image_name());
@@ -522,9 +551,11 @@ TEST_F(TestJournalReplay, Rename) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
-  int64_t current;
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 2);
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 1, current_tag);
+  ASSERT_EQ(1, current_entry);
 
   // verify lock ordering constraints
   librbd::RBD rbd;
@@ -540,8 +571,9 @@ TEST_F(TestJournalReplay, Resize) {
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
   // get current commit position
-  int64_t initial;
-  get_journal_commit_position(ictx, &initial);
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject snapshot ops into journal
   inject_into_journal(ictx, librbd::journal::ResizeEvent(1, 16));
@@ -551,9 +583,11 @@ TEST_F(TestJournalReplay, Resize) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
-  int64_t current;
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 2);
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 1, current_tag);
+  ASSERT_EQ(1, current_entry);
 
   // verify lock ordering constraints
   librbd::NoOpProgressContext no_op_progress;
@@ -578,8 +612,9 @@ TEST_F(TestJournalReplay, Flatten) {
   ASSERT_EQ(0, when_acquired_lock(ictx2));
 
   // get current commit position
-  int64_t initial;
-  get_journal_commit_position(ictx2, &initial);
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx2, &initial_tag, &initial_entry);
 
   // inject snapshot ops into journal
   inject_into_journal(ictx2, librbd::journal::FlattenEvent(1));
@@ -589,9 +624,11 @@ TEST_F(TestJournalReplay, Flatten) {
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
   ASSERT_EQ(0, when_acquired_lock(ictx2));
 
-  int64_t current;
-  get_journal_commit_position(ictx2, &current);
-  ASSERT_EQ(current, initial + 2);
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx2, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 1, current_tag);
+  ASSERT_EQ(1, current_entry);
   ASSERT_EQ(0, ictx->operations->snap_unprotect("snap"));
 
   // verify lock ordering constraints
@@ -607,8 +644,9 @@ TEST_F(TestJournalReplay, ObjectPosition) {
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
   // get current commit position
-  int64_t initial;
-  get_journal_commit_position(ictx, &initial);
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   std::string payload(4096, '1');
   librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
@@ -623,9 +661,11 @@ TEST_F(TestJournalReplay, ObjectPosition) {
   aio_comp->release();
 
   // check the commit position updated
-  int64_t current;
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 2);
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 1, current_tag);
+  ASSERT_EQ(1, current_entry);
 
   // write again
 
@@ -641,6 +681,7 @@ TEST_F(TestJournalReplay, ObjectPosition) {
   aio_comp->release();
 
   // check the commit position updated
-  get_journal_commit_position(ictx, &current);
-  ASSERT_EQ(current, initial + 4);
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 1, current_tag);
+  ASSERT_EQ(3, current_entry);
 }
