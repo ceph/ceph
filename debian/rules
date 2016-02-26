@@ -166,7 +166,6 @@ binary-arch: build install
 	dh_lintian -a
 	dh_link -a
 
-	dh_strip -pceph --dbg-package=ceph-dbg
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
 	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
 	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
