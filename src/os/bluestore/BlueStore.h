@@ -35,7 +35,6 @@
 #include "common/WorkQueue.h"
 #include "common/perf_counters.h"
 #include "os/ObjectStore.h"
-#include "os/fs/FS.h"
 #include "kv/KeyValueDB.h"
 
 #include "bluestore_types.h"
@@ -136,7 +135,6 @@ public:
     EnodeRef enode;  ///< ref to Enode [optional]
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
-    bool dirty;     // ???
     bool exists;
 
     std::mutex flush_lock;  ///< protect flush_txns
@@ -150,7 +148,6 @@ public:
       : nref(0),
 	oid(o),
 	key(k),
-	dirty(false),
 	exists(false) {
     }
 
@@ -498,7 +495,6 @@ private:
   BlueFS *bluefs;
   unsigned bluefs_shared_bdev;  ///< which bluefs bdev we are sharing
   KeyValueDB *db;
-  FS *fs;
   BlockDevice *bdev;
   FreelistManager *fm;
   Allocator *alloc;
@@ -588,7 +584,7 @@ private:
   void _txc_release(TransContext *txc, CollectionRef& c, OnodeRef& onode,
 		    uint64_t offset, uint64_t length,
 		    bool shared);
-  int _txc_add_transaction(TransContext *txc, Transaction *t);
+  void _txc_add_transaction(TransContext *txc, Transaction *t);
   int _txc_finalize(OpSequencer *osr, TransContext *txc);
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
