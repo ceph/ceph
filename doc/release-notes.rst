@@ -684,10 +684,17 @@ Notable Changes
 * vstart: set cephfs root uid/gid to caller (`pr#6255 <http://github.com/ceph/ceph/pull/6255>`_, John Spray)
 
 
-v9.2.1 Infernalis (draft)
-=========================
+v9.2.1 Infernalis
+=================
 
-This Infernalis point release fixes ...
+This Infernalis point release fixes several packagins and init script
+issues, enables the librbd objectmap feature by default, a few librbd
+bugs, and a range of miscellaneous bug fixes across the system.
+
+We recommend that all infernalis v9.2.0 users upgrade.
+
+For more detailed information, see :download:`the complete changelog <changelog/v9.2.1.txt>`.
+
 
 Notable Changes
 ---------------
