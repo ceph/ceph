@@ -150,7 +150,6 @@ BuildRequires:	systemd
 %{?systemd_requires}
 %endif
 PreReq:		%fillup_prereq
-Requires:	python-Flask
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
 %if 0%{?suse_version} > 1210
@@ -177,7 +176,6 @@ Requires(post):	chkconfig
 Requires(preun):	chkconfig
 Requires(preun):	initscripts
 BuildRequires:	gperftools-devel
-Requires:	python-flask
 %endif
 # boost
 %if 0%{?fedora} || 0%{?rhel} 
@@ -284,7 +282,12 @@ Summary:	Ceph Monitor Daemon
 Group:		System Environment/Base
 Requires:	ceph-base = %{epoch}:%{version}-%{release}
 # For ceph-rest-api
-Requires:	python-flask
+%if 0%{?fedora} || 0%{?rhel}
+Requires:      python-flask
+%endif
+%if 0%{?suse_version}
+Requires:      python-Flask
+%endif
 %description mon
 ceph-mon is the cluster monitor daemon for the Ceph distributed file
 system. One or more instances of ceph-mon form a Paxos part-time
@@ -336,6 +339,12 @@ Requires:	ceph-selinux = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 %if 0%{?rhel} || 0%{?fedora}
 Requires:	mailcap
+# python-flask for powerdns
+Requires:	python-flask
+%endif
+%if 0%{?suse_version}
+# python-Flask for powerdns
+Requires:      python-Flask
 %endif
 %description radosgw
 This package is an S3 HTTP REST gateway for the RADOS object store. It

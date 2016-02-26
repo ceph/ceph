@@ -89,7 +89,6 @@ Depends: binutils,
          python-argparse,
          sdparm | hdparm,
          xfsprogs,
-	 python-flask,
          ${misc:Depends},
          ${shlibs:Depends}
 Recommends: btrfs-tools, ceph-mds, librados2, libradosstriper1, librbd1
@@ -134,7 +133,10 @@ Description: debugging symbols for ceph-mds
 
 Package: ceph-mon
 Architecture: linux-any
-Depends: ceph-base (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Depends: ceph-base (= ${binary:Version}),
+         python-flask,
+         ${misc:Depends},
+         ${shlibs:Depends}
 Recommends: ceph-common
 Replaces: ceph (<< 9.0.1-1294)
 Breaks: ceph (<< 9.0.1-1294)
@@ -539,8 +541,11 @@ Description: Ceph distributed file system client library (development files)
 
 Package: radosgw
 Architecture: linux-any
-Depends: ceph-common (= ${binary:Version}), mime-support,
-         ${misc:Depends}, ${shlibs:Depends}
+Depends: ceph-common (= ${binary:Version}),
+         mime-support,
+         python-flask,
+         ${misc:Depends},
+         ${shlibs:Depends}
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the
