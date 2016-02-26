@@ -3862,6 +3862,40 @@ def list_dev_osd(dev, uuid_map, desc):
             pass
 
 
+def list_dev_lockbox(dev, uuid_map, desc):
+    desc['mount'] = is_mounted(dev)
+    desc['fs_type'] = get_dev_fs(dev)
+    desc['state'] = 'unprepared'
+    if desc['mount']:
+        desc['state'] = 'active'
+        desc['osd_uuid'] = get_oneliner(desc['mount'], 'osd-uuid')
+    elif desc['fs_type']:
+        try:
+            tpath = tempfile.mkdtemp(prefix='mnt.', dir=STATEDIR + '/tmp')
+            args = ['mount', '-t', 'ext4', dev, tpath]
+            LOG.debug('Mounting lockbox ' + str(" ".join(args)))
+            command_check_call(args)
+            magic = get_oneliner(tpath, 'magic')
+            if magic is not None:
+                desc['magic'] = magic
+                desc['state'] = 'prepared'
+                desc['osd_uuid'] = get_oneliner(tpath, 'osd-uuid')
+            unmount(tpath)
+        except subprocess.CalledProcessError:
+            pass
+    if desc.get('osd_uuid') in uuid_map:
+        desc['lockbox_for'] = uuid_map[desc['osd_uuid']]
+
+
+def list_format_lockbox_plain(dev):
+    desc = []
+    if dev.get('lockbox_for'):
+        desc.append('for ' + dev['lockbox_for'])
+    elif dev.get('osd_uuid'):
+        desc.append('for osd ' + dev['osd_uuid'])
+    return desc
+
+
 def list_format_more_osd_info_plain(dev):
     desc = []
     if dev.get('ceph_fsid'):
@@ -3882,6 +3916,10 @@ def list_format_dev_plain(dev, prefix=''):
     if dev['ptype'] == PTYPE['regular']['osd']['ready']:
         desc = (['ceph data', dev['state']] +
                 list_format_more_osd_info_plain(dev))
+    elif dev['ptype'] in (PTYPE['regular']['lockbox']['ready'],
+                          PTYPE['mpath']['lockbox']['ready']):
+        desc = (['ceph lockbox', dev['state']] +
+                list_format_lockbox_plain(dev))
     elif Ptype.is_dmcrypt(dev['ptype'], 'osd'):
         dmcrypt = dev['dmcrypt']
         if not dmcrypt['holders']:
@@ -3956,6 +3994,12 @@ def list_dev(dev, uuid_map, space_map):
         if ptype == PTYPE['mpath']['osd']['ready']:
             info['multipath'] = True
         list_dev_osd(dev, uuid_map, info)
+    elif ptype in (PTYPE['regular']['lockbox']['ready'],
+                   PTYPE['mpath']['lockbox']['ready']):
+        info['type'] = 'lockbox'
+        if ptype == PTYPE['mpath']['osd']['ready']:
+            info['multipath'] = True
+        list_dev_lockbox(dev, uuid_map, info)
     elif ptype == PTYPE['plain']['osd']['ready']:
         holders = is_held(dev)
         info['type'] = 'data'
