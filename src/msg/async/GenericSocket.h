@@ -27,6 +27,7 @@ class ConnectedSocketImpl {
   virtual ~ConnectedSocketImpl() {}
   virtual int is_connected() = 0;
   virtual int read(char*, size_t) = 0;
+  virtual int zero_copy_read(size_t, bufferptr*) = 0;
   virtual ssize_t send(bufferlist &bl, bool more) = 0;
   virtual void shutdown() = 0;
   virtual void close() = 0;
@@ -75,11 +76,17 @@ class ConnectedSocket {
   int is_connected() {
     return _csi->is_connected();
   }
+  /// Read the input stream with copy.
+  ///
+  /// Copy an object returning data sent from the remote endpoint.
+  int read(char* buf, size_t len) {
+    return _csi->read(buf, len);
+  }
   /// Gets the input stream.
   ///
   /// Gets an object returning data sent from the remote endpoint.
-  int read(char* buf, size_t len) {
-    return _csi->read(buf, len);
+  int zero_copy_read(size_t len, bufferptr *ptr) {
+    return _csi->zero_copy_read(len, ptr);
   }
   /// Gets the output stream.
   ///
@@ -172,6 +179,7 @@ class NetworkStack {
   CephContext *cct;
   static std::unique_ptr<NetworkStack> create(CephContext *c, const string &type, EventCenter *center, unsigned i);
   virtual ~NetworkStack() {}
+  virtual bool support_zero_copy_read() const = 0;
   virtual int listen(entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) = 0;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) = 0;
   virtual void initialize() {}

@@ -32,6 +32,10 @@ class PosixNetworkStack : public NetworkStack {
   static std::unique_ptr<NetworkStack> create(CephContext *cct, unsigned i) {
     return std::unique_ptr<NetworkStack>(std::unique_ptr<NetworkStack>(new PosixNetworkStack(cct)));
   }
+  virtual bool support_zero_copy_read() const override { return false; }
+  virtual int zero_copy_read(size_t, bufferptr*) override {
+    return -EOPNOTSUPP;
+  }
 };
 
 #endif //CEPH_MSG_POSIXSTACK_H_H

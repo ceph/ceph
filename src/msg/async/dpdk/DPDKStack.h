@@ -66,7 +66,12 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   virtual int is_connected() override {
     return _conn.is_connected();
   }
-  virtual int read(char *buf, size_t len) override {
+
+  virtual int read(char *buf, size_t len, size_t align_off) {
+    return -EOPNOTSUPP;
+  }
+
+  virtual int zero_copy_read(size_t len, bufferlist &data) override {
     auto err = _conn.get_errno();
     if (err <= 0)
       return err;
@@ -86,12 +91,20 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
       auto& f = _buf->fragments()[_cur_frag];
       size_t buf_left = len - copied;
       if (f.size - _cur_frag_off <= buf_left) {
-        memcpy(buf+copied, f.base+_cur_frag_off, f.size-_cur_frag_off);
+        Packet p = _buf.share(_cur_frag_off, f.size-_cur_frag_off);
+        auto del = std::bind(
+                [](Packet &p) {}, std::move(p));
+        data.push_back(buffer::claim_buffer(
+                    f.base+_cur_frag_off, f.size-_cur_frag_off, std::move(del)));
         ++_cur_frag;
         copied += f.size-_cur_frag_off;
         _cur_frag_off = 0;
       } else {
-        memcpy(buf+copied, f.base+_cur_frag_off, buf_left);
+        Packet p = _buf.share(_cur_frag_off, buf_left);
+        auto del = std::bind(
+                [](Packet &p) {}, std::move(p));
+        data.push_back(buffer::claim_buffer(
+                    f.base+_cur_frag_off, f.size-_cur_frag_off, std::move(del)));
         copied += buf_left;
         _cur_frag_off += buf_left;
       }
@@ -202,6 +215,7 @@ class DPDKStack : public NetworkStack {
   void arp_learn(ethernet_address l2, ipv4_address l3) {
     _inet.learn(l2, l3);
   }
+  virtual bool support_zero_copy_read() const override { return true; }
   friend class DPDKServerSocketImpl<tcp4>;
 };
 
