@@ -314,7 +314,6 @@ public:
 
 class RGWGetUsage : public RGWOp {
 protected:
-  int ret;
   bool sent_data;
   string start_date;
   string end_date;
@@ -325,7 +324,7 @@ protected:
   map<string, rgw_usage_log_entry> summary_map;
   cls_user_header header;
 public:
-  RGWGetUsage() : ret(0), sent_data(false), show_log_entries(true), show_log_sum(true){
+  RGWGetUsage() : sent_data(false), show_log_entries(true), show_log_sum(true){
   }
 
   int verify_permission();
