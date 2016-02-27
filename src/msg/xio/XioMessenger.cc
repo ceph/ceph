@@ -697,30 +697,9 @@ int XioMessenger::bind(const entity_addr_t& addr)
   struct entity_addr_t _addr = *a;
 
   if (a->is_blank_ip()) {
-    a = &_addr;
-    std::vector <std::string> my_sections;
-    cct->_conf->get_my_sections(my_sections);
-    std::string rdma_local_str;
-    if (cct->_conf->get_val_from_conf_file(my_sections, "rdma local",
-				      rdma_local_str, true) == 0) {
-      struct entity_addr_t local_rdma_addr;
-      local_rdma_addr = *a;
-      const char *ep;
-      if (!local_rdma_addr.parse(rdma_local_str.c_str(), &ep)) {
-	ldout(cct,0) << "ERROR:  Cannot parse rdma local: " << rdma_local_str << dendl;
-	return -EINVAL;
-      }
-      if (*ep) {
-	ldout(cct,0) << "WARNING: 'rdma local trailing garbage ignored: '" << ep << dendl;
-      }
-      ldout(cct, 2) << "Found rdma_local address " << rdma_local_str.c_str() << dendl;
-      int p = _addr.get_port();
-      _addr.set_sockaddr(reinterpret_cast<struct sockaddr *>(
-			  &local_rdma_addr.ss_addr()));
-      _addr.set_port(p);
-    } else {
-      ldout(cct,0) << "WARNING: need 'rdma local' config for remote use!" <<dendl;
-    }
+      lderr(cct) << "ERROR: need rdma ip for remote use! " << dendl;
+      cout << "Error: xio bind failed. public/cluster ip not specified" << std::endl;
+      return -1;
   }
 
   entity_addr_t shift_addr = *a;
@@ -736,6 +715,7 @@ int XioMessenger::bind(const entity_addr_t& addr)
     shift_addr.set_port(port0);
     shift_addr.nonce = nonce;
     set_myaddr(shift_addr);
+    need_addr = false;
     did_bind = true;
   }
   return r;
