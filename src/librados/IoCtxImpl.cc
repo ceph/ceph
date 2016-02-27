@@ -1223,14 +1223,20 @@ struct WatchInfo : public Objecter::WatchContext {
   object_t oid;
   librados::WatchCtx *ctx;
   librados::WatchCtx2 *ctx2;
+  bool internal = false;
 
   WatchInfo(librados::IoCtxImpl *io, object_t o,
-	    librados::WatchCtx *c, librados::WatchCtx2 *c2)
-    : ioctx(io), oid(o), ctx(c), ctx2(c2) {
+	    librados::WatchCtx *c, librados::WatchCtx2 *c2,
+            bool inter)
+    : ioctx(io), oid(o), ctx(c), ctx2(c2), internal(inter) {
     ioctx->get();
   }
   ~WatchInfo() {
     ioctx->put();
+    if (internal) {
+      delete ctx;
+      delete ctx2;
+    }
   }
 
   void handle_notify(uint64_t notify_id,
@@ -1262,10 +1268,10 @@ struct WatchInfo : public Objecter::WatchContext {
   }
 };
 
-int librados::IoCtxImpl::watch(const object_t& oid,
-			       uint64_t *handle,
-			       librados::WatchCtx *ctx,
-			       librados::WatchCtx2 *ctx2)
+int librados::IoCtxImpl::watch(const object_t& oid, uint64_t *handle,
+                               librados::WatchCtx *ctx,
+                               librados::WatchCtx2 *ctx2,
+                               bool internal)
 {
   ::ObjectOperation wr;
   version_t objver;
@@ -1274,7 +1280,7 @@ int librados::IoCtxImpl::watch(const object_t& oid,
   Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc, 0);
   *handle = linger_op->get_cookie();
   linger_op->watch_context = new WatchInfo(this,
-					   oid, ctx, ctx2);
+					   oid, ctx, ctx2, internal);
 
   prepare_assert_ops(&wr);
   wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH);
@@ -1300,7 +1306,8 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
                                    AioCompletionImpl *c,
                                    uint64_t *handle,
                                    librados::WatchCtx *ctx,
-                                   librados::WatchCtx2 *ctx2)
+                                   librados::WatchCtx2 *ctx2,
+                                   bool internal)
 {
   Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc, 0);
   c->io = this;
@@ -1310,7 +1317,7 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
   version_t objver;
 
   *handle = linger_op->get_cookie();
-  linger_op->watch_context = new WatchInfo(this, oid, ctx, ctx2);
+  linger_op->watch_context = new WatchInfo(this, oid, ctx, ctx2, internal);
 
   prepare_assert_ops(&wr);
   wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH);
