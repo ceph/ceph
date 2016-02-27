@@ -2811,7 +2811,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
   }
 
   /* now parse response */
-  if (response.parse(cct, rx_buffer) < 0) {
+  if (response.parse(cct, string(), rx_buffer) < 0) {
     dout(2) << "s3 keystone: token parsing failed" << dendl;
     return -EPERM;
   }
