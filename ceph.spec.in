@@ -226,6 +226,7 @@ Requires:      ceph-selinux = %{epoch}:%{version}-%{release}
 %endif
 Requires:      python
 Requires:      python-requests
+Requires:      python-setuptools
 Requires:      grep
 Requires:      xfsprogs
 Requires:      logrotate
