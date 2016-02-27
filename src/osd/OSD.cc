@@ -4988,6 +4988,8 @@ COMMAND("pg " \
 
 COMMAND("query",
 	"show details of a specific pg", "osd", "r", "cli,rest")
+COMMAND("log",
+	"show log of a specific pg", "osd", "r", "cli,rest")
 COMMAND("mark_unfound_lost " \
 	"name=mulcmd,type=CephChoices,strings=revert|delete", \
 	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
@@ -5141,6 +5143,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   else if (prefix == "pg" ||
 	   (cmd_getval(cct, cmdmap, "pgid", pgidstr) &&
 	     (prefix == "query" ||
+	      prefix == "log" ||
 	      prefix == "mark_unfound_lost" ||
 	      prefix == "list_missing")
 	   )) {
