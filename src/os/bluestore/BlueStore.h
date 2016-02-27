@@ -22,6 +22,7 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <memory>
 
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/unordered_set.hpp>
@@ -542,7 +543,7 @@ private:
   std::mutex wal_lock;
   atomic64_t wal_seq;
   ThreadPool wal_tp;
-  WALWQ wal_wq;
+  std::unique_ptr<WALWQ> wal_wq;
 
   Finisher finisher;
 

@@ -761,10 +761,10 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
            "tp_wal",
 	   cct->_conf->bluestore_wal_threads,
 	   "bluestore_wal_threads"),
-    wal_wq(this,
+    wal_wq(new WALWQ(this,
 	     cct->_conf->bluestore_wal_thread_timeout,
 	     cct->_conf->bluestore_wal_thread_suicide_timeout,
-	     &wal_tp),
+	     &wal_tp)),
     finisher(cct),
     kv_sync_thread(this),
     kv_stop(false),
@@ -1905,7 +1905,7 @@ int BlueStore::mount()
 
  out_stop:
   _kv_stop();
-  wal_wq.drain();
+  wal_wq->drain();
   wal_tp.stop();
   finisher.wait_for_empty();
   finisher.stop();
@@ -1936,7 +1936,7 @@ int BlueStore::umount()
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();
   dout(20) << __func__ << " draining wal_wq" << dendl;
-  wal_wq.drain();
+  wal_wq->drain();
   dout(20) << __func__ << " stopping wal_tp" << dendl;
   wal_tp.stop();
   dout(20) << __func__ << " draining finisher" << dendl;
@@ -3649,7 +3649,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	if (g_conf->bluestore_sync_wal_apply) {
 	  _wal_apply(txc);
 	} else {
-	  wal_wq.queue(txc);
+	  wal_wq->queue(txc);
 	}
 	return;
       }
