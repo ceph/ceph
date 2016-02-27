@@ -1566,6 +1566,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (r < 0) {
       ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
       delete ictx;
+      return r;
     } else {
       string header_oid = ictx->header_oid;
       old_format = ictx->old_format;
