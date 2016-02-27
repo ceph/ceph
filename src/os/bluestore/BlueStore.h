@@ -63,6 +63,7 @@ class BlueStore : public ObjectStore {
   // types
 public:
 
+  class WALWQ;
   class TransContext;
 
   /// an in-memory extent-map, shared by a group of objects (w/ same hash value)
@@ -432,77 +433,6 @@ public:
     }
   };
 
-  class WALWQ : public ThreadPool::WorkQueue<TransContext> {
-    // We need to order WAL items within each Sequencer.  To do that,
-    // queue each txc under osr, and queue the osr's here.  When we
-    // dequeue an txc, requeue the osr if there are more pending, and
-    // do it at the end of the list so that the next thread does not
-    // get a conflicted txc.  Hold an osr mutex while doing the wal to
-    // preserve the ordering.
-  public:
-    typedef boost::intrusive::list<
-      OpSequencer,
-      boost::intrusive::member_hook<
-	OpSequencer,
-	boost::intrusive::list_member_hook<>,
-	&OpSequencer::wal_osr_queue_item> > wal_osr_queue_t;
-
-  private:
-    BlueStore *store;
-    wal_osr_queue_t wal_queue;
-
-  public:
-    WALWQ(BlueStore *s, time_t ti, time_t sti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<TransContext>("BlueStore::WALWQ", ti, sti, tp),
-	store(s) {
-    }
-    bool _empty() {
-      return wal_queue.empty();
-    }
-    bool _enqueue(TransContext *i) {
-      if (i->osr->wal_q.empty()) {
-	wal_queue.push_back(*i->osr);
-      }
-      i->osr->wal_q.push_back(*i);
-      return true;
-    }
-    void _dequeue(TransContext *p) {
-      assert(0 == "not needed, not implemented");
-    }
-    TransContext *_dequeue() {
-      if (wal_queue.empty())
-	return NULL;
-      OpSequencer *osr = &wal_queue.front();
-      TransContext *i = &osr->wal_q.front();
-      osr->wal_q.pop_front();
-      wal_queue.pop_front();
-      if (!osr->wal_q.empty()) {
-	// requeue at the end to minimize contention
-	wal_queue.push_back(*i->osr);
-      }
-
-      // preserve wal ordering for this sequencer by taking the lock
-      // while still holding the queue lock
-      i->osr->wal_apply_lock.lock();
-      return i;
-    }
-    void _process(TransContext *i, ThreadPool::TPHandle &) override {
-      store->_wal_apply(i);
-      i->osr->wal_apply_lock.unlock();
-    }
-    void _clear() {
-      assert(wal_queue.empty());
-    }
-
-    void flush() {
-      lock();
-      while (!wal_queue.empty()) {
-	_wait();
-      }
-      unlock();
-      drain();
-    }
-  };
 
   struct KVSyncThread : public Thread {
     BlueStore *store;
