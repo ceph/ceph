@@ -52,6 +52,8 @@ void client_update(librados::ObjectWriteOperation *op,
 
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,
                       const std::string &id);
+void client_unregister(librados::ObjectWriteOperation *op,
+		       const std::string &id);
 
 void client_commit(librados::ObjectWriteOperation *op, const std::string &id,
                    const cls::journal::ObjectSetPosition &commit_position);
