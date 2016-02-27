@@ -608,7 +608,7 @@ add_executable(ceph-objectstore-tool
   tools/ceph_objectstore_tool.cc
   tools/RadosDump.cc
   $<TARGET_OBJECTS:common_util_obj>)
-target_link_libraries(ceph-objectstore-tool tcmalloc osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse dl)
+target_link_libraries(ceph-objectstore-tool osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse dl)
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
 
