@@ -463,36 +463,6 @@ def build_ceph_cluster(ctx, config):
         execute_ceph_deploy(purgedata_nodes)
 
 
-def execute_cdeploy(admin, cmd, path):
-    """Execute ceph-deploy commands """
-    """Either use git path or repo path """
-    if path is not None:
-        ec = admin.run(
-            args=[
-                'cd',
-                run.Raw('~/cdtest'),
-                run.Raw(';'),
-                '{path}/ceph-deploy/ceph-deploy'.format(path=path),
-                run.Raw(cmd),
-            ],
-            check_status=False,
-        ).exitstatus
-    else:
-        ec = admin.run(
-            args=[
-                'cd',
-                run.Raw('~/cdtest'),
-                run.Raw(';'),
-                'ceph-deploy',
-                run.Raw(cmd),
-            ],
-            check_status=False,
-        ).exitstatus
-    if ec != 0:
-        raise RuntimeError(
-            "failed during ceph-deploy cmd: {cmd} , ec={ec}".format(cmd=cmd, ec=ec))
-
-
 @contextlib.contextmanager
 def cli_test(ctx, config):
     """
@@ -503,8 +473,23 @@ def cli_test(ctx, config):
     log.info('Ceph-deploy Test')
     if config is None:
         config = {}
-
     test_branch = ''
+    conf_dir = teuthology.get_testdir(ctx) + "/cdtest"
+
+    def execute_cdeploy(admin, cmd, path):
+        """Execute ceph-deploy commands """
+        """Either use git path or repo path """
+        args = ['cd', conf_dir, run.Raw(';')]
+        if path:
+            args.append('{path}/ceph-deploy/ceph-deploy'.format(path=path));
+        else:
+            args.append('ceph-deploy')
+        args.append(run.Raw(cmd))
+        ec = admin.run(args=args, check_status=False).exitstatus
+        if ec != 0:
+            raise RuntimeError(
+                "failed during ceph-deploy cmd: {cmd} , ec={ec}".format(cmd=cmd, ec=ec))
+
     if config.get('rhbuild'):
         path = None
     else:
@@ -517,7 +502,7 @@ def cli_test(ctx, config):
     mons = ctx.cluster.only(teuthology.is_type('mon'))
     for node, role in mons.remotes.iteritems():
         admin = node
-        admin.run(args=['mkdir', '~/', 'cdtest'], check_status=False)
+        admin.run(args=['mkdir', conf_dir], check_status=False)
         nodename = admin.shortname
     system_type = teuthology.get_system_type(admin)
     if config.get('rhbuild'):
@@ -534,14 +519,26 @@ def cli_test(ctx, config):
                 str(devs))
             raise RuntimeError("Needs minimum of 3 devices ")
 
+    conf_path = '{conf_dir}/ceph.conf'.format(conf_dir=conf_dir)
     new_cmd = 'new ' + nodename
+    execute_cdeploy(admin, new_cmd, path)
+    if config.get('conf') is not None:
+        confp = config.get('conf')
+        for section, keys in confp.iteritems():
+            lines = '[{section}]\n'.format(section=section)
+            teuthology.append_lines_to_file(admin, conf_path, lines,
+                                            sudo=True)
+            for key, value in keys.iteritems():
+                log.info("[%s] %s = %s" % (section, key, value))
+                lines = '{key} = {value}\n'.format(key=key, value=value)
+                teuthology.append_lines_to_file(admin, conf_path, lines,
+                                                sudo=True)
     new_mon_install = 'install {branch} --mon '.format(
         branch=test_branch) + nodename
     new_osd_install = 'install {branch} --osd '.format(
         branch=test_branch) + nodename
     new_admin = 'install {branch} --cli '.format(branch=test_branch) + nodename
-    create_initial = '--overwrite-conf mon create-initial '
-    execute_cdeploy(admin, new_cmd, path)
+    create_initial = 'mon create-initial '
     execute_cdeploy(admin, new_mon_install, path)
     execute_cdeploy(admin, new_osd_install, path)
     execute_cdeploy(admin, new_admin, path)
@@ -553,17 +550,25 @@ def cli_test(ctx, config):
         execute_cdeploy(admin, zap_disk, path)
         execute_cdeploy(admin, prepare, path)
 
-    admin.run(args=['ls', run.Raw('-lt'), run.Raw('~/cdtest/')])
-    time.sleep(4)
+    log.info("list files for debugging purpose to check file permissions")
+    admin.run(args=['ls', run.Raw('-lt'), conf_dir])
     remote.run(args=['sudo', 'ceph', '-s'], check_status=False)
     r = remote.run(args=['sudo', 'ceph', 'health'], stdout=StringIO())
     out = r.stdout.getvalue()
     log.info('Ceph health: %s', out.rstrip('\n'))
-    if out.split(None, 1)[0] == 'HEALTH_WARN':
-        log.info('All ceph-deploy cli tests passed')
+    log.info("Waiting for cluster to become healthy")
+    retry = 1
+    while (out.split(None, 1)[0] != 'HEALTH_OK') and (retry <= 6):
+        r = remote.run(args=['sudo', 'ceph', 'health'], stdout=StringIO())
+        log.info('Retry: %d Ceph health: %s', retry, out.rstrip('\n'))
+        time.sleep(10)
+        retry += 1
+    if (retry > 6):
+        raise RuntimeError(
+            "Failed to reach HEALTH_OK state after {r} retries".format(
+                r=retry))
     else:
-        raise RuntimeError("Failed to reach HEALTH_WARN State")
-
+        log.info('All ceph-deploy cli tests passed')
     # test rgw cli
     rgw_install = 'install {branch} --rgw {node}'.format(
         branch=test_branch,
@@ -588,8 +593,13 @@ def cli_test(ctx, config):
         execute_cdeploy(admin, cmd, path)
         cmd = 'purgedata ' + nodename
         execute_cdeploy(admin, cmd, path)
-        admin.run(args=['rm', run.Raw('-rf'), run.Raw('~/cdtest/*')])
-        admin.run(args=['rmdir', run.Raw('~/cdtest')])
+        log.info("Removing temporary dir")
+        admin.run(
+            args=[
+                'rm',
+                run.Raw('-rf'),
+                run.Raw(conf_dir)],
+            check_status=False)
         if config.get('rhbuild'):
             admin.run(args=['sudo', 'yum', 'remove', 'ceph-deploy', '-y'])
 
@@ -607,6 +617,8 @@ def single_node_test(ctx, config):
     log.info("Testing ceph-deploy on single node")
     if config is None:
         config = {}
+    overrides = ctx.config.get('overrides', {})
+    teuthology.deep_merge(config, overrides.get('ceph-deploy', {}))
 
     if config.get('rhbuild'):
         log.info("RH Build, Skip Download")
