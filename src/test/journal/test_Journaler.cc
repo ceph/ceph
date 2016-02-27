@@ -42,7 +42,25 @@ public:
     journal::Journaler journaler(m_ioctx, m_journal_id, client_id, 5);
     bufferlist data;
     data.append(desc);
-    return journaler.register_client(data);
+    C_SaferCond cond;
+    journaler.register_client(data, &cond);
+    return cond.wait();
+  }
+
+  int update_client(const std::string &client_id, const std::string &desc) {
+    journal::Journaler journaler(m_ioctx, m_journal_id, client_id, 5);
+    bufferlist data;
+    data.append(desc);
+    C_SaferCond cond;
+    journaler.update_client(data, &cond);
+    return cond.wait();
+  }
+
+  int unregister_client(const std::string &client_id) {
+    journal::Journaler journaler(m_ioctx, m_journal_id, client_id, 5);
+    C_SaferCond cond;
+    journaler.unregister_client(&cond);
+    return cond.wait();
   }
 
   static uint64_t _journal_id;
@@ -80,8 +98,34 @@ TEST_F(TestJournaler, InitDNE) {
 }
 
 TEST_F(TestJournaler, RegisterClientDuplicate) {
+  ASSERT_EQ(0, create_journal(12, 8));
   ASSERT_EQ(0, register_client(CLIENT_ID, "foo"));
   ASSERT_EQ(-EEXIST, register_client(CLIENT_ID, "foo2"));
+}
+
+TEST_F(TestJournaler, UpdateClient) {
+  ASSERT_EQ(0, create_journal(12, 8));
+  ASSERT_EQ(0, register_client(CLIENT_ID, "foo"));
+  ASSERT_EQ(0, update_client(CLIENT_ID, "foo2"));
+}
+
+TEST_F(TestJournaler, UpdateClientDNE) {
+  ASSERT_EQ(0, create_journal(12, 8));
+  ASSERT_EQ(-ENOENT, update_client(CLIENT_ID, "foo"));
+}
+
+TEST_F(TestJournaler, UnregisterClient) {
+  ASSERT_EQ(0, create_journal(12, 8));
+  ASSERT_EQ(0, register_client(CLIENT_ID, "foo"));
+  ASSERT_EQ(0, unregister_client(CLIENT_ID));
+  // Test it does not exist and can be registered again
+  ASSERT_EQ(-ENOENT, update_client(CLIENT_ID, "foo"));
+  ASSERT_EQ(0, register_client(CLIENT_ID, "foo"));
+}
+
+TEST_F(TestJournaler, UnregisterClientDNE) {
+  ASSERT_EQ(0, create_journal(12, 8));
+  ASSERT_EQ(-ENOENT, unregister_client(CLIENT_ID));
 }
 
 TEST_F(TestJournaler, AllocateTag) {
