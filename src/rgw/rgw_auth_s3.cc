@@ -14,7 +14,6 @@ static const char *signed_subresources[] = {
   "cors",
   "delete",
   "lifecycle",
-  "usage",
   "location",
   "logging",
   "notification",
