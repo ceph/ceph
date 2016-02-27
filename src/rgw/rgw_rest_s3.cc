@@ -329,13 +329,13 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
 
 void RGWGetUsage_ObjStore_S3::send_response()
 {
-  if (ret < 0)
-    set_req_state_err(s, ret);
+  if (op_ret < 0)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
 
   end_header(s, this, "application/xml");
   dump_start(s);
-  if (ret < 0)
+  if (op_ret < 0)
     return;
 
   Formatter *formatter = s->formatter;
