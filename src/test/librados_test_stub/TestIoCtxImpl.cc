@@ -125,6 +125,24 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
   return 0;
 }
 
+int TestIoCtxImpl::aio_watch(const std::string& o, AioCompletionImpl *c,
+                             uint64_t *handle, librados::WatchCtx2 *watch_ctx) {
+  m_pending_ops.inc();
+  c->get();
+  C_AioNotify *ctx = new C_AioNotify(this, c);
+  m_client->get_watch_notify().aio_watch(o, get_instance_id(), handle,
+                                         watch_ctx, ctx);
+  return 0;
+}
+
+int TestIoCtxImpl::aio_unwatch(uint64_t handle, AioCompletionImpl *c) {
+  m_pending_ops.inc();
+  c->get();
+  C_AioNotify *ctx = new C_AioNotify(this, c);
+  m_client->get_watch_notify().aio_unwatch(handle, ctx);
+  return 0;
+}
+
 int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
                         const char *cls, const char *method,
                         bufferlist& inbl, bufferlist* outbl,
