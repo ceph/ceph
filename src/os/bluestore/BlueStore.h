@@ -346,92 +346,6 @@ public:
     }
   };
 
-  class OpSequencer : public Sequencer_impl {
-  public:
-    std::mutex qlock;
-    std::condition_variable qcond;
-    typedef boost::intrusive::list<
-      TransContext,
-      boost::intrusive::member_hook<
-        TransContext,
-	boost::intrusive::list_member_hook<>,
-	&TransContext::sequencer_item> > q_list_t;
-    q_list_t q;  ///< transactions
-
-    typedef boost::intrusive::list<
-      TransContext,
-      boost::intrusive::member_hook<
-	TransContext,
-	boost::intrusive::list_member_hook<>,
-	&TransContext::wal_queue_item> > wal_queue_t;
-    wal_queue_t wal_q; ///< transactions
-
-    boost::intrusive::list_member_hook<> wal_osr_queue_item;
-
-    Sequencer *parent;
-
-    std::mutex wal_apply_mutex;
-    std::unique_lock<std::mutex> wal_apply_lock;
-
-    uint64_t last_seq = 0;
-
-    OpSequencer()
-	//set the qlock to to PTHREAD_MUTEX_RECURSIVE mode
-      : parent(NULL),
-	wal_apply_lock(wal_apply_mutex, std::defer_lock) {
-    }
-    ~OpSequencer() {
-      assert(q.empty());
-    }
-
-    void queue_new(TransContext *txc) {
-      std::lock_guard<std::mutex> l(qlock);
-      txc->seq = ++last_seq;
-      q.push_back(*txc);
-    }
-
-    void flush() {
-      std::unique_lock<std::mutex> l(qlock);
-      while (!q.empty())
-	qcond.wait(l);
-    }
-
-    bool flush_commit(Context *c) {
-      std::lock_guard<std::mutex> l(qlock);
-      if (q.empty()) {
-	return true;
-      }
-      TransContext *txc = &q.back();
-      if (txc->state >= TransContext::STATE_KV_DONE) {
-	return true;
-      }
-      assert(txc->state < TransContext::STATE_KV_DONE);
-      txc->oncommits.push_back(c);
-      return false;
-    }
-
-    /// if there is a wal on @seq, wait for it to apply
-    void wait_for_wal_on_seq(uint64_t seq) {
-      std::unique_lock<std::mutex> l(qlock);
-      restart:
-      for (OpSequencer::q_list_t::reverse_iterator p = q.rbegin();
-	   p != q.rend();
-	   ++p) {
-	if (p->seq == seq) {
-	  TransContext *txc = &(*p);
-	  if (txc->wal_txn) {
-	    while (txc->state < TransContext::STATE_WAL_CLEANUP) {
-	      txc->osr->qcond.wait(l);
-	      goto restart;  // txc may have gone away
-	    }
-	  }
-	  break;
-	}
-	if (p->seq < seq)
-	  break;
-      }
-    }
-  };
 
 
   struct KVSyncThread : public Thread {
@@ -921,9 +835,6 @@ private:
 
 };
 
-inline ostream& operator<<(ostream& out, const BlueStore::OpSequencer& s) {
-  return out << *s.parent;
-}
 
 static inline void intrusive_ptr_add_ref(BlueStore::Onode *o) {
   o->get();
@@ -932,11 +843,7 @@ static inline void intrusive_ptr_release(BlueStore::Onode *o) {
   o->put();
 }
 
-static inline void intrusive_ptr_add_ref(BlueStore::OpSequencer *o) {
-  o->get();
-}
-static inline void intrusive_ptr_release(BlueStore::OpSequencer *o) {
-  o->put();
-}
+void intrusive_ptr_add_ref(BlueStore::OpSequencer *o);
+void intrusive_ptr_release(BlueStore::OpSequencer *o);
 
 #endif
