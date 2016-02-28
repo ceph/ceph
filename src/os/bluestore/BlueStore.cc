@@ -33,6 +33,41 @@
 #define dout_subsys ceph_subsys_bluestore
 
 
+struct BlueStore::Collection : public CollectionImpl {
+  BlueStore *store;
+  coll_t cid;
+  bluestore_cnode_t cnode;
+  RWLock lock;
+
+  bool exists;
+
+  EnodeSet enode_set;      ///< open Enodes
+
+  // cache onodes on a per-collection basis to avoid lock
+  // contention.
+  OnodeHashLRU onode_map;
+
+  OnodeRef get_onode(const ghobject_t& oid, bool create);
+  EnodeRef get_enode(uint32_t hash);
+
+  const coll_t &get_cid() override {
+    return cid;
+  }
+
+  bool contains(const ghobject_t& oid) {
+    if (cid.is_meta())
+      return oid.hobj.pool == -1;
+    spg_t spgid;
+    if (cid.is_pg(&spgid))
+      return
+        spgid.pgid.contains(cnode.bits, oid) &&
+        oid.shard_id == spgid.shard;
+    return false;
+  }
+
+  Collection(BlueStore *ns, coll_t c);
+};
+
 class BlueStore::OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
   CollectionRef c;
   OnodeRef o;
