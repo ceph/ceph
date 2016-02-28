@@ -33,6 +33,55 @@
 #define dout_subsys ceph_subsys_bluestore
 
 
+struct BlueStore::Onode {
+  std::atomic_int nref;  ///< reference count
+
+  ghobject_t oid;
+  string key;     ///< key under PREFIX_OBJ where we are stored
+  boost::intrusive::list_member_hook<> lru_item;
+
+  EnodeRef enode;  ///< ref to Enode [optional]
+
+  bluestore_onode_t onode;  ///< metadata stored as value in kv store
+  bool exists;
+
+  std::mutex flush_lock;  ///< protect flush_txns
+  std::condition_variable flush_cond;   ///< wait here for unapplied txns
+  set<TransContext*> flush_txns;   ///< committing or wal txns
+
+  uint64_t tail_offset = 0;
+  uint64_t tail_txc_seq = 0;
+  bufferlist tail_bl;
+
+  Onode(const ghobject_t& o, const string& k)
+    : nref(0),
+      oid(o),
+      key(k),
+      exists(false) {
+  }
+
+  void flush();
+  void get() {
+    ++nref;
+  }
+  void put() {
+    if (--nref == 0)
+      delete this;
+  }
+
+  void clear_tail() {
+    tail_offset = 0;
+    tail_bl.clear();
+  }
+};
+
+void intrusive_ptr_add_ref(BlueStore::Onode *o) {
+  o->get();
+}
+void intrusive_ptr_release(BlueStore::Onode *o) {
+  o->put();
+}
+
 struct BlueStore::OnodeHashLRU {
   typedef boost::intrusive::list<
     Onode,
