@@ -81,7 +81,6 @@ noinst_HEADERS += \
 	msg/async/dpdk/byteorder.h \
 	msg/async/dpdk/circular_buffer.h \
 	msg/async/dpdk/const.h \
-	msg/async/dpdk/deleter.h \
 	msg/async/dpdk/DPDK.h \
 	msg/async/dpdk/dpdk_rte.h \
 	msg/async/dpdk/DPDKStack.h \

@@ -43,10 +43,10 @@
 
 #include "include/types.h"
 #include "common/Tub.h"
+#include "common/deleter.h"
 #include "msg/async/Event.h"
 
 #include "const.h"
-#include "deleter.h"
 
 struct fragment {
     char* base;

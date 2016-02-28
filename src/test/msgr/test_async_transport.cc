@@ -15,6 +15,7 @@
  */
 
 #include <algorithm>
+#include <atomic>
 #include <iostream>
 #include <string>
 #include <set>
@@ -323,6 +324,7 @@ TEST_P(TransportTest, ComplexTest) {
     C_poll cb(center);
     center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
     ASSERT_EQ(cb.poll(500), true);
+    center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
   }
 
   r = bind_socket.accept(&srv_socket, &cli_addr);

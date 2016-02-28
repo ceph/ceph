@@ -39,7 +39,7 @@
 
 #define dout_subsys ceph_subsys_dpdk
 #undef dout_prefix
-#define dout_prefix *_dout << "dpdk "
+#define dout_prefix *_dout << "posix "
 
 class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   NetHandler &handler;
@@ -66,7 +66,11 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     }
   }
 
-  virtual int read(char *buf, size_t len) {
+  virtual int zero_copy_read(size_t, bufferlist&) override {
+    return -EOPNOTSUPP;
+  }
+
+  virtual int read(char *buf, size_t len) override {
     int r = ::read(_fd, buf, len);
     if (r < 0)
       r = -errno;

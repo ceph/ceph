@@ -53,22 +53,25 @@ class DPDKServerSocketImpl : public ServerSocketImpl {
 template <typename Protocol>
 class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   typename Protocol::connection _conn;
-  size_t _cur_frag = 0;
-  size_t _cur_frag_off = 0;
   Tub<Packet> _buf;
 
  public:
   explicit NativeConnectedSocketImpl(typename Protocol::connection conn)
           : _conn(std::move(conn)) {}
   NativeConnectedSocketImpl(NativeConnectedSocketImpl &&rhs)
-      : _conn(std::move(rhs._conn)), _cur_frag(rhs._cur_frag),
-        _buf(std::move(rhs.buf))  {}
+      : _conn(std::move(rhs._conn)), _buf(std::move(rhs.buf))  {}
   virtual int is_connected() override {
     return _conn.is_connected();
   }
 
-  virtual int read(char *buf, size_t len, size_t align_off) {
-    return -EOPNOTSUPP;
+  virtual int read(char *buf, size_t len) override {
+    bufferlist data;
+    int r = zero_copy_read(len, data);
+    if (r < 0)
+      return r;
+    assert(data.length() <= len);
+    data.copy(0, data.length(), buf);
+    return data.length();
   }
 
   virtual int zero_copy_read(size_t len, bufferlist &data) override {
@@ -76,40 +79,44 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     if (err <= 0)
       return err;
 
-    size_t copied = 0;
-    while (copied < len) {
-      if (!_buf || _cur_frag == _buf->nr_frags()) {
+    size_t left = len;
+    while (left > 0) {
+      if (!_buf) {
         _buf = std::move(_conn.read());
-        assert(_cur_frag_off == 0);
-        if (_buf) {
-          _cur_frag = 0;
-        } else {
-          return copied == 0 ? -EAGAIN : copied;
-        }
+        if (!_buf)
+          return left == len ? -EAGAIN : len - left;
       }
 
-      auto& f = _buf->fragments()[_cur_frag];
-      size_t buf_left = len - copied;
-      if (f.size - _cur_frag_off <= buf_left) {
-        Packet p = _buf.share(_cur_frag_off, f.size-_cur_frag_off);
-        auto del = std::bind(
-                [](Packet &p) {}, std::move(p));
-        data.push_back(buffer::claim_buffer(
-                    f.base+_cur_frag_off, f.size-_cur_frag_off, std::move(del)));
-        ++_cur_frag;
-        copied += f.size-_cur_frag_off;
-        _cur_frag_off = 0;
+      size_t off = 0;
+      for (auto&& f : _buf->fragments()) {
+        if (f.size <= left) {
+          Packet p = _buf->share(off, f.size);
+          auto del = std::bind(
+                  [](Packet &p) {}, std::move(p));
+          data.push_back(buffer::claim_buffer(
+                      f.size, f.base,
+                      make_deleter(std::move(del))));
+          off +=  f.size;
+          left -= f.size;
+        } else {
+          Packet p = _buf->share(off, f.size - left);
+          auto del = std::bind(
+                  [](Packet &p) {}, std::move(p));
+          data.push_back(buffer::claim_buffer(
+                      left, f.base,
+                      make_deleter(std::move(del))));
+          off += left;
+          left = 0;
+          break;
+        }
+      }
+      if (left) {
+        _buf.destroy();
       } else {
-        Packet p = _buf.share(_cur_frag_off, buf_left);
-        auto del = std::bind(
-                [](Packet &p) {}, std::move(p));
-        data.push_back(buffer::claim_buffer(
-                    f.base+_cur_frag_off, f.size-_cur_frag_off, std::move(del)));
-        copied += buf_left;
-        _cur_frag_off += buf_left;
+        _buf->trim_front(off);
       }
     }
-    return copied;
+    return len - left;
   }
   virtual ssize_t send(bufferlist &bl, bool more) override {
     auto err = _conn.get_errno();
