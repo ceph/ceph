@@ -404,6 +404,17 @@ int IoCtx::aio_remove(const std::string& oid, AioCompletion *c) {
   return ctx->aio_remove(oid, c->pc);
 }
 
+int IoCtx::aio_watch(const std::string& o, AioCompletion *c, uint64_t *handle,
+                     librados::WatchCtx2 *watch_ctx) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->aio_watch(o, c->pc, handle, watch_ctx);
+}
+
+int IoCtx::aio_unwatch(uint64_t handle, AioCompletion *c) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->aio_unwatch(handle, c->pc);
+}
+
 config_t IoCtx::cct() {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return reinterpret_cast<config_t>(ctx->get_rados_client()->cct());
@@ -809,6 +820,11 @@ AioCompletion *Rados::aio_create_completion(void *cb_arg,
       reinterpret_cast<void**>(&c));
   assert(r == 0);
   return new AioCompletion(c);
+}
+
+int Rados::aio_watch_flush(AioCompletion* c) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->aio_watch_flush(c->pc);
 }
 
 int Rados::blacklist_add(const std::string& client_address,
