@@ -65,6 +65,7 @@ class BlueStore : public ObjectStore {
   class Collection;
   class OmapIteratorImpl;
 public:
+  class Enode;
   struct Onode;
   class WALWQ;
   class TransContext;
@@ -72,35 +73,6 @@ public:
   /// an in-memory extent-map, shared by a group of objects (w/ same hash value)
   struct EnodeSet;
 
-  struct Enode : public boost::intrusive::unordered_set_base_hook<> {
-    std::atomic_int nref;        ///< reference count
-    uint32_t hash;
-    string key;           ///< key under PREFIX_OBJ where we are stored
-    EnodeSet *enode_set;  ///< reference to the containing set
-
-    bluestore_extent_ref_map_t ref_map;
-
-    Enode(uint32_t h, const string& k, EnodeSet *s)
-      : nref(0),
-	hash(h),
-	key(k),
-	enode_set(s) {}
-
-    void get() {
-      ++nref;
-    }
-    void put();
-
-    friend void intrusive_ptr_add_ref(Enode *e) { e->get(); }
-    friend void intrusive_ptr_release(Enode *e) { e->put(); }
-
-    friend bool operator==(const Enode &l, const Enode &r) {
-      return l.hash == r.hash;
-    }
-    friend std::size_t hash_value(const Enode &e) {
-      return e.hash;
-    }
-  };
   typedef boost::intrusive_ptr<Enode> EnodeRef;
 
   /// hash of Enodes, by (object) hash value
@@ -598,7 +570,6 @@ private:
 			unsigned bits, int rem);
 
 };
-
 
 void intrusive_ptr_add_ref(BlueStore::Onode *o);
 void intrusive_ptr_release(BlueStore::Onode *o);

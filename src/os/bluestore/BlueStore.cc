@@ -33,6 +33,36 @@
 #define dout_subsys ceph_subsys_bluestore
 
 
+ struct BlueStore::Enode : public boost::intrusive::unordered_set_base_hook<> {
+   std::atomic_int nref;        ///< reference count
+   uint32_t hash;
+   string key;           ///< key under PREFIX_OBJ where we are stored
+   EnodeSet *enode_set;  ///< reference to the containing set
+
+   bluestore_extent_ref_map_t ref_map;
+
+   Enode(uint32_t h, const string& k, EnodeSet *s)
+     : nref(0),
+       hash(h),
+       key(k),
+       enode_set(s) {}
+
+   void get() {
+     ++nref;
+   }
+   void put();
+
+   friend void intrusive_ptr_add_ref(Enode *e) { e->get(); }
+   friend void intrusive_ptr_release(Enode *e) { e->put(); }
+
+   friend bool operator==(const Enode &l, const Enode &r) {
+     return l.hash == r.hash;
+   }
+   friend std::size_t hash_value(const Enode &e) {
+     return e.hash;
+   }
+ };
+
 struct BlueStore::EnodeSet {
   typedef boost::intrusive::unordered_set<Enode>::bucket_type bucket_type;
   typedef boost::intrusive::unordered_set<Enode>::bucket_traits bucket_traits;
