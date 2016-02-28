@@ -61,6 +61,7 @@ enum {
 class BlueStore : public ObjectStore {
   // -----------------------------------------------------
   // types
+  struct OnodeHashLRU;
   class Collection;
   class OmapIteratorImpl;
 public:
@@ -166,32 +167,6 @@ public:
     }
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
-
-  struct OnodeHashLRU {
-    typedef boost::intrusive::list<
-      Onode,
-      boost::intrusive::member_hook<
-        Onode,
-	boost::intrusive::list_member_hook<>,
-	&Onode::lru_item> > lru_list_t;
-
-    std::mutex lock;
-    ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
-    lru_list_t lru;                                      ///< lru
-    size_t max_size;
-
-    OnodeHashLRU(size_t s) : max_size(s) {}
-
-    void add(const ghobject_t& oid, OnodeRef o);
-    void _touch(OnodeRef o);
-    OnodeRef lookup(const ghobject_t& o);
-    void rename(OnodeRef& o, const ghobject_t& old_oid, const ghobject_t& new_oid);
-    void clear();
-    bool get_next(const ghobject_t& after, pair<ghobject_t,OnodeRef> *next);
-    int trim(int max=-1);
-    int _trim(int max);
-  };
-
   typedef boost::intrusive_ptr<Collection> CollectionRef;
 
   class OpSequencer;
