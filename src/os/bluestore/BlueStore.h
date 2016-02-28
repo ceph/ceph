@@ -61,6 +61,7 @@ enum {
 class BlueStore : public ObjectStore {
   // -----------------------------------------------------
   // types
+  class OmapIteratorImpl;
 public:
 
   class WALWQ;
@@ -226,30 +227,8 @@ public:
   };
   typedef boost::intrusive_ptr<Collection> CollectionRef;
 
-  class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
-    CollectionRef c;
-    OnodeRef o;
-    KeyValueDB::Iterator it;
-    string head, tail;
-  public:
-    OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
-    int seek_to_first();
-    int upper_bound(const string &after);
-    int lower_bound(const string &to);
-    bool valid();
-    int next(bool validate=true);
-    string key();
-    bufferlist value();
-    int status() {
-      return 0;
-    }
-  };
-
   class OpSequencer;
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
-
-
-
 
   struct KVSyncThread : public Thread {
     BlueStore *store;

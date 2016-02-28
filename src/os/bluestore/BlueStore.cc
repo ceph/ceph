@@ -33,6 +33,25 @@
 #define dout_subsys ceph_subsys_bluestore
 
 
+class BlueStore::OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
+  CollectionRef c;
+  OnodeRef o;
+  KeyValueDB::Iterator it;
+  string head, tail;
+public:
+  OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
+  int seek_to_first();
+  int upper_bound(const string &after);
+  int lower_bound(const string &to);
+  bool valid();
+  int next(bool validate=true);
+  string key();
+  bufferlist value();
+  int status() {
+    return 0;
+  }
+};
+
 struct BlueStore::TransContext {
   typedef enum {
     STATE_PREPARE,
