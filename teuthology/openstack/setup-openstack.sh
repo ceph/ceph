@@ -95,6 +95,8 @@ openstack:
   $network
 EOF
     echo "OVERRIDE ~/.teuthology.yaml"
+    echo 'no password' > ~/.vault_pass.txt
+    echo "OVERRIDE ~/.vault_pass.txt"
     return 0
 }
 
