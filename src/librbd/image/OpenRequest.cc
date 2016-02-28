@@ -19,26 +19,6 @@
 namespace librbd {
 namespace image {
 
-namespace {
-
-template <typename I>
-class C_RegisterWatch : public Context {
-public:
-  I &image_ctx;
-  Context *on_finish;
-
-  C_RegisterWatch(I &image_ctx, Context *on_finish)
-    : image_ctx(image_ctx), on_finish(on_finish) {
-  }
-
-  virtual void finish(int r) {
-    assert(r == 0);
-    on_finish->complete(image_ctx.register_watch());
-  }
-};
-
-} // anonymous namespace
-
 using util::create_context_callback;
 using util::create_rados_ack_callback;
 
@@ -291,12 +271,10 @@ void OpenRequest<I>::send_register_watch() {
     CephContext *cct = m_image_ctx->cct;
     ldout(cct, 10) << this << " " << __func__ << dendl;
 
-    // no librados async version of watch
     using klass = OpenRequest<I>;
-    Context *ctx = new C_RegisterWatch<I>(
-      *m_image_ctx,
-      create_context_callback<klass, &klass::handle_register_watch>(this));
-    m_image_ctx->op_work_queue->queue(ctx);
+    Context *ctx = create_context_callback<
+      klass, &klass::handle_register_watch>(this);
+    m_image_ctx->register_watch(ctx);
   } else {
     send_refresh();
   }
