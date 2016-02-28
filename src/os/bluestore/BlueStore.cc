@@ -33,6 +33,26 @@
 #define dout_subsys ceph_subsys_bluestore
 
 
+struct BlueStore::EnodeSet {
+  typedef boost::intrusive::unordered_set<Enode>::bucket_type bucket_type;
+  typedef boost::intrusive::unordered_set<Enode>::bucket_traits bucket_traits;
+
+  unsigned num_buckets;
+  vector<bucket_type> buckets;
+
+  boost::intrusive::unordered_set<Enode> uset;
+
+  explicit EnodeSet(unsigned n)
+    : num_buckets(n),
+      buckets(n),
+      uset(bucket_traits(buckets.data(), num_buckets)) {
+    assert(n > 0);
+  }
+  ~EnodeSet() {
+    assert(uset.empty());
+  }
+};
+
 struct BlueStore::Onode {
   std::atomic_int nref;  ///< reference count
 
