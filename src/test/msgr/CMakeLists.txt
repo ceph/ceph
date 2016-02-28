@@ -34,10 +34,20 @@ set_target_properties(ceph_perf_msgr_client PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_perf_msgr_client os global ${UNITTEST_LIBS})
 
+# test_userspace_event
+add_executable(ceph_test_userspace_event test_userspace_event.cc)
+set_target_properties(ceph_test_userspace_event PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_userspace_event
+    global
+    ${CMAKE_DL_LIBS}
+    ${UNITTEST_LIBS})
+
 install(TARGETS
   ceph_test_async_driver
   ceph_test_msgr
   ceph_test_async_networkstack
+  ceph_test_userspace_event
   ceph_perf_msgr_server
   ceph_perf_msgr_client
   DESTINATION ${CMAKE_INSTALL_BINDIR})
