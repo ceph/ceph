@@ -3451,12 +3451,13 @@ def main_deactivate_locked(args):
         LOG.info("OSD already out/down. Do not do anything now.")
         return
 
-    # remove 'ready', 'active', and INIT-specific files.
-    _remove_osd_directory_files(mounted_path, args.cluster)
+    if not args.once:
+        # remove 'ready', 'active', and INIT-specific files.
+        _remove_osd_directory_files(mounted_path, args.cluster)
 
-    # Write deactivate to osd directory!
-    with open(os.path.join(mounted_path, 'deactive'), 'w'):
-        path_set_context(os.path.join(mounted_path, 'deactive'))
+        # Write deactivate to osd directory!
+        with open(os.path.join(mounted_path, 'deactive'), 'w'):
+            path_set_context(os.path.join(mounted_path, 'deactive'))
 
     unmount(mounted_path)
     LOG.info("Umount `%s` successfully.", mounted_path)
@@ -4755,11 +4756,18 @@ def make_deactivate_parser(subparsers):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=textwrap.fill(textwrap.dedent("""\
         Deactivate the OSD located at PATH. It stops the OSD daemon
-        and optionally marks it out. The content of the OSD is
-        left untouched but the, ready, active, INIT-specific
-        files are removed (so that it is not automatically
-        re-activated by the udev rules) and the file deactive
-        is created to remember the OSD is deactivated.
+        and optionally marks it out (with --mark-out). The content of
+        the OSD is left untouched.
+
+        By default, the, ready, active, INIT-specific files are
+        removed (so that it is not automatically re-activated by the
+        udev rules or ceph-disk trigger) and the file deactive is
+        created to remember the OSD is deactivated.
+
+        If the --once option is given, the ready, active, INIT-specific
+        files are not removed and the OSD will reactivate whenever
+        ceph-disk trigger is run on one of the devices (journal, data,
+        block, lockbox, ...).
 
         If the OSD is dmcrypt, remove the data dmcrypt map. When
         deactivate finishes, the OSD is down.
@@ -4786,6 +4794,11 @@ def make_deactivate_parser(subparsers):
         '--mark-out',
         action='store_true', default=False,
         help='option to mark the osd out',
+    )
+    deactivate_parser.add_argument(
+        '--once',
+        action='store_true', default=False,
+        help='does not need --reactivate to activate again',
     )
     deactivate_parser.set_defaults(
         func=main_deactivate,
