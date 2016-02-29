@@ -64,26 +64,18 @@ class BlueStore : public ObjectStore {
   struct OnodeHashLRU;
   class Collection;
   class OmapIteratorImpl;
-public:
   class Enode;
   struct Onode;
+  class OpSequencer;
   class WALWQ;
   class TransContext;
-
   /// an in-memory extent-map, shared by a group of objects (w/ same hash value)
   struct EnodeSet;
-
   typedef boost::intrusive_ptr<Enode> EnodeRef;
-
-  /// hash of Enodes, by (object) hash value
-
-  /// an in-memory object
   typedef boost::intrusive_ptr<Onode> OnodeRef;
   typedef boost::intrusive_ptr<Collection> CollectionRef;
-
-  class OpSequencer;
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
-
+public:
   struct KVSyncThread : public Thread {
     BlueStore *store;
     explicit KVSyncThread(BlueStore *s) : store(s) {}
@@ -571,10 +563,5 @@ private:
 
 };
 
-void intrusive_ptr_add_ref(BlueStore::Onode *o);
-void intrusive_ptr_release(BlueStore::Onode *o);
-
-void intrusive_ptr_add_ref(BlueStore::OpSequencer *o);
-void intrusive_ptr_release(BlueStore::OpSequencer *o);
 
 #endif

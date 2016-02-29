@@ -63,6 +63,7 @@
    }
  };
 
+/// hash of Enodes, by (object) hash value
 struct BlueStore::EnodeSet {
   typedef boost::intrusive::unordered_set<Enode>::bucket_type bucket_type;
   typedef boost::intrusive::unordered_set<Enode>::bucket_traits bucket_traits;
@@ -83,6 +84,7 @@ struct BlueStore::EnodeSet {
   }
 };
 
+/// an in-memory object
 struct BlueStore::Onode {
   std::atomic_int nref;  ///< reference count
 
@@ -123,14 +125,15 @@ struct BlueStore::Onode {
     tail_offset = 0;
     tail_bl.clear();
   }
+
+  friend void intrusive_ptr_add_ref(Onode *o) {
+    o->get();
+  }
+  friend void intrusive_ptr_release(Onode *o) {
+    o->put();
+  }
 };
 
-void intrusive_ptr_add_ref(BlueStore::Onode *o) {
-  o->get();
-}
-void intrusive_ptr_release(BlueStore::Onode *o) {
-  o->put();
-}
 
 struct BlueStore::OnodeHashLRU {
   typedef boost::intrusive::list<
@@ -394,18 +397,21 @@ public:
 	break;
     }
   }
+
+  friend inline ostream& operator<<(ostream& out,
+				    const BlueStore::OpSequencer& s) {
+    return out << *s.parent;
+  }
+
+  friend void intrusive_ptr_add_ref(BlueStore::OpSequencer *o) {
+    o->get();
+  }
+  friend void intrusive_ptr_release(BlueStore::OpSequencer *o) {
+    o->put();
+  }
+
 };
 
-inline ostream& operator<<(ostream& out, const BlueStore::OpSequencer& s) {
-  return out << *s.parent;
-}
-
-void intrusive_ptr_add_ref(BlueStore::OpSequencer *o) {
-  o->get();
-}
-void intrusive_ptr_release(BlueStore::OpSequencer *o) {
-  o->put();
-}
 
 class BlueStore::WALWQ : public ThreadPool::WorkQueue<TransContext> {
   // We need to order WAL items within each Sequencer.  To do that,
