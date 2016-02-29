@@ -852,7 +852,7 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     f->close_section();
     f->flush(odata);
     return 0;
-  };
+  }
 
   ss << "unknown pg command " << prefix;
   return -EINVAL;
