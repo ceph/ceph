@@ -261,6 +261,23 @@ namespace crimson {
       };
 
 
+      // when we try to get the next request, we'll have one to
+      // return, have one that can fire in the future, or not have any
+      enum class NextReqStat { returning, future, none };
+
+      // specifies which queue next request will get pulled from
+      enum class HeapId { reservation, ready, proportional };
+
+      // this is returned from next_req to tell the caller the situation
+      struct NextReq {
+	NextReqStat status;
+	union {
+	  HeapId heap_id;
+	  Time when_ready;
+	};
+      };
+
+
       ClientInfoFunc       client_info_f;
       CanHandleRequestFunc can_handle_f;
       HandleRequestFunc    handle_f;
@@ -273,7 +290,7 @@ namespace crimson {
 
       // four heaps that maintain the earliest request by each of the
       // tag components
-      c::Heap<EntryRef, ReservationCompare> res_q;
+      c::Heap<EntryRef, ReservationCompare> reserv_q;
       c::Heap<EntryRef, ProportionCompare> prop_q;
 
       // AKA not-ready queue
@@ -300,7 +317,7 @@ namespace crimson {
       Counter tick = 0;
 
       // performance data collection
-      size_t res_sched_count = 0;
+      size_t reserv_sched_count = 0;
       size_t prop_sched_count = 0;
       size_t limit_break_sched_count = 0;
 
@@ -314,19 +331,36 @@ namespace crimson {
       std::thread sched_ahead_thd;
       std::unique_ptr<RunEvery> cleaning_job;
 
-    public:
 
+      // COMMON constructor that others feed into
       PriorityQueue(ClientInfoFunc _client_info_f,
 		    Duration _idle_age,
 		    Duration _erase_age,
 		    Duration _check_time,
-		    bool _allow_limit_break = false) :
-	PriorityQueue(_client_info_f, _idle_age, _erase_age, _check_time, _allow_limit_break, Mechanism::pull)
+		    bool _allow_limit_break,
+		    Mechanism _mechanism) :
+	client_info_f(_client_info_f),
+	allowLimitBreak(_allow_limit_break),
+	mechanism(_mechanism),
+	finishing(false),
+	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
+	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
+	check_time(std::chrono::duration_cast<Duration>(_check_time))
       {
-	// empty
+	assert(_erase_age >= _idle_age);
+	assert(_check_time < _idle_age);
+	cleaning_job =
+	  std::unique_ptr<RunEvery>(
+	    new RunEvery(check_time,
+			 std::bind(&PriorityQueue::do_clean, this)));
       }
 
+    public:
 
+      // PUSH constructors -- full and convenience
+
+
+      // push full constructor
       PriorityQueue(ClientInfoFunc _client_info_f,
 		    CanHandleRequestFunc _can_handle_f,
 		    HandleRequestFunc _handle_f,
@@ -334,7 +368,9 @@ namespace crimson {
 		    Duration _erase_age,
 		    Duration _check_time,
 		    bool _allow_limit_break = false) :
-	PriorityQueue(_client_info_f, _idle_age, _erase_age, _check_time, _allow_limit_break, Mechanism::push)
+	PriorityQueue(_client_info_f,
+		      _idle_age, _erase_age, _check_time,
+		      _allow_limit_break, Mechanism::push)
       {
 	can_handle_f = _can_handle_f;
 	handle_f = _handle_f;
@@ -342,11 +378,7 @@ namespace crimson {
       }
 
 
-      // push convenience constructor -- the reason we're overloading
-      // the constructor rather than using default values for the
-      // arguments is so that callers have to either use all defaults
-      // or specify all timings; with default arguments they could
-      // specify some without others
+      // push convenience constructor
       PriorityQueue(ClientInfoFunc _client_info_f,
 		    CanHandleRequestFunc _can_handle_f,
 		    HandleRequestFunc _handle_f,
@@ -358,6 +390,22 @@ namespace crimson {
 		      std::chrono::minutes(15),
 		      std::chrono::minutes(6),
 		      _allow_limit_break)
+      {
+	// empty
+      }
+
+
+      // PULL constructors -- full and convenience
+
+      // pull full constructor
+      PriorityQueue(ClientInfoFunc _client_info_f,
+		    Duration _idle_age,
+		    Duration _erase_age,
+		    Duration _check_time,
+		    bool _allow_limit_break = false) :
+	PriorityQueue(_client_info_f,
+		      _idle_age, _erase_age, _check_time,
+		      _allow_limit_break, Mechanism::pull)
       {
 	// empty
       }
@@ -375,29 +423,13 @@ namespace crimson {
 	// empty
       }
 
-    protected:
 
-      // common
-      PriorityQueue(ClientInfoFunc _client_info_f,
-		    Duration _idle_age,
-		    Duration _erase_age,
-		    Duration _check_time,
-		    bool _allow_limit_break,
-		    Mechanism _mechanism) :
-	client_info_f(_client_info_f),
-	allowLimitBreak(_allow_limit_break),
-	mechanism(_mechanism),
-	finishing(false),
-	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
-	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
-	check_time(std::chrono::duration_cast<Duration>(_check_time))
-      {
-	assert(_erase_age >= _idle_age);
-	cleaning_job =
-	  std::unique_ptr<RunEvery>(
-	    new RunEvery(check_time,
-			 std::bind(&PriorityQueue::do_clean, this)));
-      }
+      // NB: the reason the convenience constructors overload the
+      // constructor rather than using default values for the timing
+      // arguments is so that callers have to either use all defaults
+      // or specify all timings. Mixing default and passed could be
+      // problematic as they have to be consistent with one another.
+
 
     public:
 
@@ -476,7 +508,7 @@ namespace crimson {
 	client_it->second.update_req_tag(entry->tag, tick);
 
 	if (0.0 != entry->tag.reservation) {
-	  res_q.push(entry);
+	  reserv_q.push(entry);
 	}
 
 	if (0.0 != entry->tag.proportion) {
@@ -522,7 +554,7 @@ namespace crimson {
       // for debugging
       void display_queues() {
 	auto filter = [](const EntryRef& e)->bool { return !e->handled; };
-	res_q.displaySorted(std::cout << "RESER:", filter) << std::endl;
+	reserv_q.displaySorted(std::cout << "RESER:", filter) << std::endl;
 	lim_q.displaySorted(std::cout << "LIMIT:", filter) << std::endl;
 	ready_q.displaySorted(std::cout << "READY:", filter) << std::endl;
 	prop_q.displaySorted(std::cout << "PROPO:", filter) << std::endl;
@@ -538,7 +570,7 @@ namespace crimson {
 	if (client_map.end() == client_it) return;
 
 	double reduction = client_it->second.info.reservation_inv;
-	for (auto i = res_q.begin(); i != res_q.end(); ++i) {
+	for (auto i = reserv_q.begin(); i != reserv_q.end(); ++i) {
 	  if ((*i)->client == client_id) {
 	    (*i)->tag.reservation -= reduction;
 	    i.increase(); // since tag goes down, priority increases
@@ -572,15 +604,61 @@ namespace crimson {
 
       // data_mtx should be held when called
       void schedule_request() {
-	if (!can_handle_f()) {
+	NextReq next_req = next_request();
+	switch (next_req.status) {
+	case NextReqStat::none:
 	  return;
+	case NextReqStat::future:
+	  sched_at(next_req.when_ready);
+	  break;
+	case NextReqStat::returning:
+	  submit_request(next_req.heap_id);
+	  break;
+	default:
+	  assert(false);
+	}
+      }
+
+
+      // data_mtx should be held when called
+      void submit_request(HeapId heap_id) {
+	C client;
+	switch(heap_id) {
+	case HeapId::reservation:
+	  // don't need to note client
+	  (void) submit_top_request(reserv_q, PhaseType::reservation);
+	  ++reserv_sched_count;
+	  break;
+	case HeapId::ready:
+	  client = submit_top_request(ready_q, PhaseType::priority);
+	  reduce_reservation_tags(client);
+	  ++prop_sched_count;
+	  break;
+	case HeapId::proportional:
+	  client = submit_top_request(prop_q, PhaseType::priority);
+	  reduce_reservation_tags(client);
+	  ++limit_break_sched_count;
+	  break;
+	default:
+	  assert(false);
+	}
+      }
+
+
+      // data_mtx should be held when called
+      NextReq next_request() {
+	NextReq result;
+	
+	if (Mechanism::push == mechanism && !can_handle_f()) {
+	  result.status = NextReqStat::none;
+	  return result;
 	}
 
 	Time now = get_time();
 
 	// so queue management is handled incrementally, remove
 	// handled items from each of the queues
-	prepare_queue(res_q);
+	prepare_queue(reserv_q);
 	prepare_queue(ready_q);
 	prepare_queue(lim_q);
 	prepare_queue(prop_q);
@@ -601,10 +679,10 @@ namespace crimson {
 	}
 #endif
 
-	if (!res_q.empty() && res_q.top()->tag.reservation <= now) {
-	  (void) submit_top_request(res_q, PhaseType::reservation);
-	  ++res_sched_count;
-	  return;
+	if (!reserv_q.empty() && reserv_q.top()->tag.reservation <= now) {
+	  result.status = NextReqStat::returning;
+	  result.heap_id = HeapId::reservation;
+	  return result;
 	}
 
 	// no existing reservations before now, so try weight-based
@@ -639,18 +717,16 @@ namespace crimson {
 #endif
 
 	if (!ready_q.empty()) {
-	  C client = submit_top_request(ready_q, PhaseType::priority);
-	  reduce_reservation_tags(client);
-	  ++prop_sched_count;
-	  return;
+	  result.status = NextReqStat::returning;
+	  result.heap_id = HeapId::ready;
+	  return result;
 	}
 
 	if (allowLimitBreak) {
 	  if (!prop_q.empty()) {
-	    C client = submit_top_request(prop_q, PhaseType::priority);
-	    reduce_reservation_tags(client);
-	    ++limit_break_sched_count;
-	    return;
+	    result.status = NextReqStat::returning;
+	    result.heap_id = HeapId::proportional;
+	    return result;
 	  }
 	}
 
@@ -658,14 +734,19 @@ namespace crimson {
 	// reservation item or next limited item comes up
 
 	Time next_call = TimeMax;
-	if (!res_q.empty()) {
-	  next_call = min_not_0_time(next_call, res_q.top()->tag.reservation);
+	if (!reserv_q.empty()) {
+	  next_call = min_not_0_time(next_call, reserv_q.top()->tag.reservation);
 	}
 	if (!lim_q.empty()) {
 	  next_call = min_not_0_time(next_call, lim_q.top()->tag.limit);
 	}
 	if (next_call < TimeMax) {
-	  sched_at(next_call);
+	  result.status = NextReqStat::future;
+	  result.when_ready = next_call;
+	  return result;
+	} else {
+	  result.status = NextReqStat::none;
+	  return result;
 	}
       } // schedule_request
 
@@ -716,8 +797,7 @@ namespace crimson {
 	}
       }
 
-
-    private:
+    protected:
 
       /*
        * This is being called regularly by RunEvery. Every time it's
