@@ -224,6 +224,8 @@ namespace crimson {
 
     public:
 
+      enum class Mechanism { push, pull };
+
       // a function that can be called to look up client information
       using ClientInfoFunc = std::function<ClientInfo(C)>;
 
@@ -284,7 +286,8 @@ namespace crimson {
       // if all reservations are met and all other requestes are under
       // limit, this will allow the request next in terms of
       // proportion to still get issued
-      bool allowLimitBreak;
+      bool             allowLimitBreak;
+      Mechanism        mechanism;
 
       std::atomic_bool finishing;
 
@@ -314,54 +317,97 @@ namespace crimson {
     public:
 
       PriorityQueue(ClientInfoFunc _client_info_f,
+		    Duration _idle_age,
+		    Duration _erase_age,
+		    Duration _check_time,
+		    bool _allow_limit_break = false) :
+	PriorityQueue(_client_info_f, _idle_age, _erase_age, _check_time, _allow_limit_break, Mechanism::pull)
+      {
+	// empty
+      }
+
+
+      PriorityQueue(ClientInfoFunc _client_info_f,
 		    CanHandleRequestFunc _can_handle_f,
 		    HandleRequestFunc _handle_f,
 		    Duration _idle_age,
 		    Duration _erase_age,
 		    Duration _check_time,
-		    bool _allowLimitBreak = false) :
-	client_info_f(_client_info_f),
-	can_handle_f(_can_handle_f),
-	handle_f(_handle_f),
-	allowLimitBreak(_allowLimitBreak),
-	finishing(false),
-	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
-	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
-	check_time(std::chrono::duration_cast<Duration>(_check_time))
+		    bool _allow_limit_break = false) :
+	PriorityQueue(_client_info_f, _idle_age, _erase_age, _check_time, _allow_limit_break, Mechanism::push)
       {
-	assert(_erase_age >= _idle_age);
+	can_handle_f = _can_handle_f;
+	handle_f = _handle_f;
 	sched_ahead_thd = std::thread(&PriorityQueue::run_sched_ahead, this);
-	cleaning_job =
-	  std::unique_ptr<RunEvery>(
-	    new RunEvery(check_time,
-			 std::bind(&PriorityQueue::do_clean, this)));
       }
 
 
-      // the reason we're overloading the constructor rather than
-      // using default values for the arguments is so that callers
-      // have to either use all defaults or specify all timings; with
-      // default arguments they could specify some without others
+      // push convenience constructor -- the reason we're overloading
+      // the constructor rather than using default values for the
+      // arguments is so that callers have to either use all defaults
+      // or specify all timings; with default arguments they could
+      // specify some without others
       PriorityQueue(ClientInfoFunc _client_info_f,
 		    CanHandleRequestFunc _can_handle_f,
 		    HandleRequestFunc _handle_f,
-		    bool _allowLimitBreak = false) :
+		    bool _allow_limit_break = false) :
 	PriorityQueue(_client_info_f,
 		      _can_handle_f,
 		      _handle_f,
 		      std::chrono::minutes(10),
 		      std::chrono::minutes(15),
 		      std::chrono::minutes(6),
-		      _allowLimitBreak)
+		      _allow_limit_break)
       {
 	// empty
       }
 
-      
+
+      // pull convenience constructor
+      PriorityQueue(ClientInfoFunc _client_info_f,
+		    bool _allow_limit_break = false) :
+	PriorityQueue(_client_info_f,
+		      std::chrono::minutes(10),
+		      std::chrono::minutes(15),
+		      std::chrono::minutes(6),
+		      _allow_limit_break)
+      {
+	// empty
+      }
+
+    protected:
+
+      // common
+      PriorityQueue(ClientInfoFunc _client_info_f,
+		    Duration _idle_age,
+		    Duration _erase_age,
+		    Duration _check_time,
+		    bool _allow_limit_break,
+		    Mechanism _mechanism) :
+	client_info_f(_client_info_f),
+	allowLimitBreak(_allow_limit_break),
+	mechanism(_mechanism),
+	finishing(false),
+	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
+	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
+	check_time(std::chrono::duration_cast<Duration>(_check_time))
+      {
+	assert(_erase_age >= _idle_age);
+	cleaning_job =
+	  std::unique_ptr<RunEvery>(
+	    new RunEvery(check_time,
+			 std::bind(&PriorityQueue::do_clean, this)));
+      }
+
+    public:
+
+
       ~PriorityQueue() {
 	finishing = true;
-	sched_ahead_cv.notify_one();
-	sched_ahead_thd.join();
+	if (Mechanism::push == mechanism) {
+	  sched_ahead_cv.notify_one();
+	  sched_ahead_thd.join();
+	}
       }
 
 
@@ -457,13 +503,17 @@ namespace crimson {
 	}
 #endif
 
-	schedule_request();
+	if (Mechanism::push == mechanism) {
+	  schedule_request();
+	}
       }
 
 
       void request_completed() {
-	DataGuard g(data_mtx);
-	schedule_request();
+	if (Mechanism::push == mechanism) {
+	  DataGuard g(data_mtx);
+	  schedule_request();
+	}
       }
 
 
