@@ -455,10 +455,11 @@ class TeuthologyOpenStack(OpenStack):
         self.key_filename = self.args.key_filename
         self.verify_openstack()
         self.setup()
+        exit_code = 0
         if self.args.suite:
             if self.args.wait:
                 self.reminders()
-            self.run_suite()
+            exit_code = self.run_suite()
             self.reminders()
         if self.args.teardown:
             if self.args.suite and not self.args.wait:
@@ -466,6 +467,7 @@ class TeuthologyOpenStack(OpenStack):
                           " right after a suite is scheduled")
             else:
                 self.teardown()
+        return exit_code
 
     def run_suite(self):
         """
@@ -502,7 +504,7 @@ class TeuthologyOpenStack(OpenStack):
             " --machine-type openstack " +
             " ".join(map(lambda x: "'" + x + "'", argv))
         )
-        self.ssh(command)
+        return self.ssh(command)
 
     def reminders(self):
         if self.args.key_filename:

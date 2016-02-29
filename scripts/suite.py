@@ -92,4 +92,4 @@ Scheduler arguments:
 
 def main(argv=sys.argv[1:]):
     args = docopt.docopt(doc, argv=argv)
-    teuthology.suite.main(args)
+    return teuthology.suite.main(args)

@@ -3,10 +3,8 @@ import sys
 
 import teuthology.openstack
 
-
 def main(argv=sys.argv[1:]):
-    teuthology.openstack.main(parse_args(argv), argv)
-
+    sys.exit(teuthology.openstack.main(parse_args(argv), argv))
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(
