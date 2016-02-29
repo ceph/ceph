@@ -883,21 +883,7 @@ rm -rf $RPM_BUILD_ROOT
 %dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph_common.sh
 %dir %{_libdir}/rados-classes
-%{_libdir}/rados-classes/libcls_cephfs.so*
-%{_libdir}/rados-classes/libcls_rbd.so*
-%{_libdir}/rados-classes/libcls_hello.so*
-%{_libdir}/rados-classes/libcls_numops.so*
-%{_libdir}/rados-classes/libcls_rgw.so*
-%{_libdir}/rados-classes/libcls_lock.so*
-%{_libdir}/rados-classes/libcls_kvs.so*
-%{_libdir}/rados-classes/libcls_refcount.so*
-%{_libdir}/rados-classes/libcls_log.so*
-%{_libdir}/rados-classes/libcls_replica_log.so*
-%{_libdir}/rados-classes/libcls_statelog.so*
-%{_libdir}/rados-classes/libcls_timeindex.so*
-%{_libdir}/rados-classes/libcls_user.so*
-%{_libdir}/rados-classes/libcls_version.so*
-%{_libdir}/rados-classes/libcls_journal.so*
+%{_libdir}/rados-classes/*
 %dir %{_libdir}/ceph
 %dir %{_libdir}/ceph/erasure-code
 %{_libdir}/ceph/erasure-code/libec_*.so*
@@ -1152,18 +1138,6 @@ fi
 %{_sbindir}/ceph-disk
 %{_sbindir}/ceph-disk-udev
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
-%dir %{_libdir}/rados-classes
-%{_libdir}/rados-classes/libcls_rbd.so*
-%{_libdir}/rados-classes/libcls_hello.so*
-%{_libdir}/rados-classes/libcls_rgw.so*
-%{_libdir}/rados-classes/libcls_lock.so*
-%{_libdir}/rados-classes/libcls_kvs.so*
-%{_libdir}/rados-classes/libcls_refcount.so*
-%{_libdir}/rados-classes/libcls_log.so*
-%{_libdir}/rados-classes/libcls_replica_log.so*
-%{_libdir}/rados-classes/libcls_statelog.so*
-%{_libdir}/rados-classes/libcls_user.so*
-%{_libdir}/rados-classes/libcls_version.so*
 %{_udevrulesdir}/60-ceph-partuuid-workaround.rules
 %{_udevrulesdir}/95-ceph-osd.rules
 %{_mandir}/man8/ceph-clsinfo.8*
