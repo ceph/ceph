@@ -149,12 +149,20 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   dump_last_modified(s, lastmod);
 
   if (! op_ret) {
-    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
-    if (iter != attrs.end()) {
-      bufferlist& bl = iter->second;
-      if (bl.length()) {
-	char *etag = bl.c_str();
-	dump_etag(s, etag);
+    if (! lo_etag.empty()) {
+      /* Handle etag of Swift API's large objects (DLO/SLO). It's entirerly
+       * legit to perform GET on them through S3 API. In such situation,
+       * a client should receive the composited content with corresponding
+       * etag value. */
+      dump_etag(s, lo_etag.c_str());
+    } else {
+      auto iter = attrs.find(RGW_ATTR_ETAG);
+      if (iter != attrs.end()) {
+        bufferlist& bl = iter->second;
+        if (bl.length()) {
+	  const char * etag = bl.c_str();
+	  dump_etag(s, etag);
+        }
       }
     }
 
@@ -171,7 +179,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       }
     }
 
-    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    for (auto iter = attrs.begin(); iter != attrs.end(); ++iter) {
       const char *name = iter->first.c_str();
       map<string, string>::iterator aiter = rgw_to_http_attrs.find(name);
       if (aiter != rgw_to_http_attrs.end()) {
