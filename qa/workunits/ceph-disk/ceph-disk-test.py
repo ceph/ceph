@@ -88,7 +88,7 @@ class CephDisk:
                     LOG.debug('SKIP dangerous and experimental')
                     continue
                 lines.append(line)
-                LOG.debug(str(line.strip()))
+                LOG.debug(line.strip().encode('ascii', 'ignore'))
         if proc.wait() != 0:
             raise subprocess.CalledProcessError(
                 returncode=proc.returncode,
