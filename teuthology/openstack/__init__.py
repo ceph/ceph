@@ -777,6 +777,7 @@ openstack security group rule create --proto udp --dst-port 53 teuthology # dns
         self.ssh("sudo /etc/init.d/teuthology stop || true")
         instance_id = self.get_instance_id(self.args.name)
         self.delete_floating_ip(instance_id)
+        misc.sh("openstack server delete packages-repository || true")
         misc.sh("openstack server delete --wait " + self.args.name)
 
 def main(ctx, argv):

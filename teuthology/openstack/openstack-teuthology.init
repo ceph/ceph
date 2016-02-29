@@ -70,14 +70,24 @@ case $1 in
                 source /home/$user/teuthology/virtualenv/bin/activate
                 source /home/$user/openrc.sh
                 ip=$(ip a show dev eth0 | sed -n "s:.*inet \(.*\)/.*:\1:p")
-                openstack server list --long -f json | \
+                openstack server list --long -f json --name target | \
+                    jq ".[] | select(.Properties | contains(\"ownedby='$ip'\")) | .ID" | \
+                    xargs --no-run-if-empty --max-args 1 -P20 openstack server delete --wait
+                openstack server list --long -f json --name ceph- | \
                     jq ".[] | select(.Properties | contains(\"ownedby='$ip'\")) | .ID" | \
                     xargs --no-run-if-empty --max-args 1 -P20 openstack server delete --wait
                 openstack volume list --long -f json | \
                     jq ".[] | select(.Properties | contains(\"ownedby='$ip'\")) | .ID" | \
                     xargs --no-run-if-empty --max-args 1 -P20 openstack volume delete
                 perl -pi -e 's/.*gitbuilder_host.*/gitbuilder_host: gitbuilder.ceph.com/' /home/$user/.teuthology.yaml
-                rm -fr /home/$user/src/* /tmp/stampsdir
+                rm -fr /home/$user/src/*
+                mv /tmp/stampsdir /tmp/stampsdir.old
+                mkdir /tmp/stampsdir
+                chown $user /tmp/stampsdir
+                if test -f /tmp/stampsdir.old/packages-repository ; then
+                    mv /tmp/stampsdir.old/*packages-repository* /tmp/stampsdir
+                fi
+                rm -fr /tmp/stampsdir.old
                 ;;
         restart)
                 $0 stop
