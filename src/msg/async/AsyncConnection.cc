@@ -1517,6 +1517,8 @@ ssize_t AsyncConnection::_process_connection()
         memset(&connect_msg, 0, sizeof(connect_msg));
         write_lock.Lock();
         can_write = CANWRITE;
+        if (is_queued())
+          center->dispatch_event_external(write_handler);
         write_lock.Unlock();
         break;
       }
