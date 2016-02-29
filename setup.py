@@ -73,6 +73,9 @@ setup(
                       'ndg-httpsclient',
                       'pyasn1',
                       'python-openstackclient',
+                      # with openstacklient >= 2.1.0, neutronclient no longer is
+                      # a dependency but we need it anyway.
+                      'python-neutronclient',
                       'prettytable',
                       'libvirt-python',
                       # For teuthology-coverage
