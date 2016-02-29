@@ -1,0 +1,6 @@
+meta:
+- desc: "Set os_tuning_params to values that are safe for VMs"
+overrides:
+  ceph_ansible:
+    vars:
+      os_tuning_params: '[{"name": "kernel.pid_max", "value": 4194303},{"name": "fs.file-max", "value": 26234859}]'

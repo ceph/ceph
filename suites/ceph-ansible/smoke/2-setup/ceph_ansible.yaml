@@ -1,0 +1,5 @@
+meta:
+- desc: "Build the cluster using ceph-ansible"
+tasks:
+- ceph_ansible:
+- install.ship_utilities:
