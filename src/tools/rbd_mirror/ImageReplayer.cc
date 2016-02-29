@@ -62,6 +62,30 @@ struct C_ReplayCommitted : public Context {
   }
 };
 
+class BootstrapThread : public Thread {
+public:
+  explicit BootstrapThread(ImageReplayer *replayer,
+			   const ImageReplayer::BootstrapParams &params,
+			   Context *on_finish)
+    : replayer(replayer), params(params), on_finish(on_finish) {}
+
+  virtual ~BootstrapThread() {}
+
+protected:
+  void *entry()
+  {
+    int r = replayer->bootstrap(params);
+    on_finish->complete(r);
+    delete this;
+    return NULL;
+  }
+
+private:
+  ImageReplayer *replayer;
+  ImageReplayer::BootstrapParams params;
+  Context *on_finish;
+};
+
 class ImageReplayerAdminSocketCommand {
 public:
   virtual ~ImageReplayerAdminSocketCommand() {}
@@ -174,7 +198,8 @@ ImageReplayer::ImageReplayer(RadosRef local, RadosRef remote,
   m_local_image_ctx(nullptr),
   m_local_replay(nullptr),
   m_remote_journaler(nullptr),
-  m_replay_handler(nullptr)
+  m_replay_handler(nullptr),
+  m_on_finish(nullptr)
 {
   CephContext *cct = static_cast<CephContext *>(m_local->cct());
 
@@ -193,208 +218,17 @@ ImageReplayer::~ImageReplayer()
 
 int ImageReplayer::start(const BootstrapParams *bootstrap_params)
 {
-  // TODO: make async
-
-  dout(20) << "enter" << dendl;
-
-  {
-    Mutex::Locker locker(m_lock);
-    assert(m_state == STATE_UNINITIALIZED || m_state == STATE_STOPPED);
-
-    m_state = STATE_STARTING;
-  }
-
-  std::string remote_journal_id = m_remote_image_id;
-  std::string image_name = "";
-  C_SaferCond cond, lock_ctx;
-  double commit_interval;
-  bool registered;
-  int r = 0;
-
-  r = m_remote->ioctx_create2(m_remote_pool_id, m_remote_ioctx);
-  if (r < 0) {
-    derr << "error opening ioctx for remote pool " << m_remote_pool_id
-	 << ": " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  CephContext *cct = static_cast<CephContext *>(m_local->cct());
-  commit_interval = cct->_conf->rbd_journal_commit_age;
-  bool remote_journaler_initialized = false;
-  m_remote_journaler = new ::journal::Journaler(m_remote_ioctx,
-						remote_journal_id,
-						m_client_id, commit_interval);
-  r = get_registered_client_status(&registered);
-  if (r < 0) {
-    derr << "error obtaining registered client status: "
-	 << cpp_strerror(r) << dendl;
-    goto fail;
-  }
-
-  if (registered) {
-    if (bootstrap_params) {
-      dout(0) << "ignoring bootsrap params: client already registered" << dendl;
-    }
-  } else {
-    r = bootstrap(bootstrap_params);
-    if (r < 0) {
-      derr << "bootstrap failed: " << cpp_strerror(r) << dendl;
-      goto fail;
-    }
-  }
-
-  m_remote_journaler->init(&cond);
-  r = cond.wait();
-  if (r < 0) {
-    derr << "error initializing journal: " << cpp_strerror(r) << dendl;
-    goto fail;
-  }
-  remote_journaler_initialized = true;
-
-  r = m_local->ioctx_create2(m_local_pool_id, m_local_ioctx);
-  if (r < 0) {
-    derr << "error opening ioctx for local pool " << m_local_pool_id
-	 << ": " << cpp_strerror(r) << dendl;
-    goto fail;
-  }
-
-  m_local_image_ctx = new librbd::ImageCtx("", m_local_image_id, NULL,
-					   m_local_ioctx, false);
-  r = m_local_image_ctx->state->open();
-  if (r < 0) {
-    derr << "error opening local image " <<  m_local_image_id
-	 << ": " << cpp_strerror(r) << dendl;
-    delete m_local_image_ctx;
-    m_local_image_ctx = nullptr;
-    goto fail;
-  }
-
-  {
-    RWLock::WLocker owner_locker(m_local_image_ctx->owner_lock);
-    m_local_image_ctx->exclusive_lock->request_lock(&lock_ctx);
-  }
-  r = lock_ctx.wait();
-  if (r < 0) {
-    derr << "error to lock exclusively local image " <<  m_local_image_id
-	 << ": " << cpp_strerror(r) << dendl;
-    goto fail;
-  }
-
-  if (m_local_image_ctx->journal == nullptr) {
-    derr << "journaling is not enabled on local image " <<  m_local_image_id
-	 << ": " << cpp_strerror(r) << dendl;
-    goto fail;
-  }
-
-  r = m_local_image_ctx->journal->start_external_replay(&m_local_replay);
-  if (r < 0) {
-    derr << "error starting external replay on local image "
-	 <<  m_local_image_id << ": " << cpp_strerror(r) << dendl;
-    goto fail;
-  }
-
-  m_replay_handler = new ReplayHandler(this);
-
-  m_remote_journaler->start_live_replay(m_replay_handler,
-					1 /* TODO: configurable */);
-
-  dout(20) << "m_remote_journaler=" << *m_remote_journaler << dendl;
-
-  {
-    Mutex::Locker locker(m_lock);
-    assert(m_state == STATE_STARTING);
-
-    m_state = STATE_REPLAYING;
-  }
-
-  return 0;
-
-fail:
-  dout(20) << "fail, r=" << r << dendl;
-
-  if (m_remote_journaler) {
-    if (remote_journaler_initialized) {
-      m_remote_journaler->stop_replay();
-      m_remote_journaler->shutdown();
-    }
-    delete m_remote_journaler;
-    m_remote_journaler = nullptr;
-  }
-
-  if (m_local_replay) {
-    Mutex::Locker locker(m_lock);
-    shut_down_journal_replay();
-    m_local_image_ctx->journal->stop_external_replay();
-    m_local_replay = nullptr;
-  }
-
-  if (m_replay_handler) {
-    delete m_replay_handler;
-    m_replay_handler = nullptr;
-  }
-
-  if (m_local_image_ctx) {
-    bool owner;
-    if (librbd::is_exclusive_lock_owner(m_local_image_ctx, &owner) == 0 &&
-	owner) {
-      librbd::unlock(m_local_image_ctx, "");
-    }
-    m_local_image_ctx->state->close();
-    m_local_image_ctx = nullptr;
-  }
-
-  m_local_ioctx.close();
-  m_remote_ioctx.close();
-
-  {
-    Mutex::Locker locker(m_lock);
-    assert(m_state == STATE_STARTING);
-
-    m_state = STATE_UNINITIALIZED;
-  }
-
-  return r;
+  C_SaferCond ctx;
+  start(&ctx, bootstrap_params);
+  return ctx.wait();
 }
 
 void ImageReplayer::stop()
 {
-  dout(20) << "enter" << dendl;
-
-  {
-    Mutex::Locker locker(m_lock);
-    assert(m_state == STATE_REPLAYING);
-
-    m_state = STATE_STOPPING;
-  }
-
-  shut_down_journal_replay();
-
-  m_local_image_ctx->journal->stop_external_replay();
-  m_local_replay = nullptr;
-
-  m_local_image_ctx->state->close();
-  m_local_image_ctx = nullptr;
-
-  m_local_ioctx.close();
-
-  m_remote_journaler->stop_replay();
-  m_remote_journaler->shutdown();
-  delete m_remote_journaler;
-  m_remote_journaler = nullptr;
-
-  delete m_replay_handler;
-  m_replay_handler = nullptr;
-
-  m_remote_ioctx.close();
-
-  {
-    Mutex::Locker locker(m_lock);
-    assert(m_state == STATE_STOPPING);
-
-    m_state = STATE_STOPPED;
-  }
-
-  dout(20) << "done" << dendl;
+  C_SaferCond ctx;
+  stop(&ctx);
+  int r = ctx.wait();
+  assert(r == 0);
 }
 
 int ImageReplayer::flush()
@@ -438,6 +272,445 @@ int ImageReplayer::flush()
   dout(20) << "done" << dendl;
 
   return r < 0 ? r : r1;
+}
+
+void ImageReplayer::start(Context *on_finish,
+			 const BootstrapParams *bootstrap_params)
+{
+  dout(20) << "enter" << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_state == STATE_UNINITIALIZED || m_state == STATE_STOPPED);
+
+    m_state = STATE_STARTING;
+  }
+
+  m_on_finish = on_finish;
+
+  int r = m_remote->ioctx_create2(m_remote_pool_id, m_remote_ioctx);
+  if (r < 0) {
+    derr << "error opening ioctx for remote pool " << m_remote_pool_id
+	 << ": " << cpp_strerror(r) << dendl;
+    on_start_finish(r);
+    return;
+  }
+
+  r = m_local->cluster_fsid(&m_local_cluster_id);
+  if (r < 0) {
+    derr << "error retrieving local cluster id: " << cpp_strerror(r)
+	 << dendl;
+    on_start_finish(r);
+    return;
+  }
+
+  CephContext *cct = static_cast<CephContext *>(m_local->cct());
+  double commit_interval = cct->_conf->rbd_journal_commit_age;
+  m_remote_journaler = new ::journal::Journaler(m_remote_ioctx,
+						m_remote_image_id,
+						m_client_id, commit_interval);
+
+  on_start_get_registered_client_status_start(bootstrap_params);
+}
+
+void ImageReplayer::on_start_get_registered_client_status_start(
+  const BootstrapParams *bootstrap_params)
+{
+  dout(20) << "enter" << dendl;
+
+  struct Metadata {
+    uint64_t minimum_set;
+    uint64_t active_set;
+    std::set<cls::journal::Client> registered_clients;
+    BootstrapParams bootstrap_params;
+  } *m = new Metadata();
+
+  if (bootstrap_params) {
+    m->bootstrap_params = *bootstrap_params;
+  }
+
+  FunctionContext *ctx = new FunctionContext(
+    [this, m, bootstrap_params](int r) {
+      on_start_get_registered_client_status_finish(r, m->registered_clients,
+						   m->bootstrap_params);
+      delete m;
+    });
+
+  m_remote_journaler->get_mutable_metadata(&m->minimum_set, &m->active_set,
+					   &m->registered_clients, ctx);
+}
+
+void ImageReplayer::on_start_get_registered_client_status_finish(int r,
+  const std::set<cls::journal::Client> &registered_clients,
+  const BootstrapParams &bootstrap_params)
+{
+  dout(20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "error obtaining registered client status: "
+	 << cpp_strerror(r) << dendl;
+    on_start_finish(r);
+    return;
+  }
+
+  for (auto c : registered_clients) {
+    if (c.id == m_client_id) {
+      librbd::journal::ClientData client_data;
+      bufferlist::iterator bl = c.data.begin();
+      try {
+	::decode(client_data, bl);
+      } catch (const buffer::error &err) {
+	derr << "failed to decode client meta data: " << err.what() << dendl;
+	on_start_finish(-EINVAL);
+	return;
+      }
+      librbd::journal::MirrorPeerClientMeta &cm =
+	boost::get<librbd::journal::MirrorPeerClientMeta>(client_data.client_meta);
+
+      dout(20) << "client found, cluster_id=" << cm.cluster_id << ", pool_id="
+	       << cm.pool_id << ", image_id=" << cm.image_id << ", snap_name="
+	       << cm.snap_name << dendl;
+
+      if (cm.cluster_id != m_local_cluster_id) {
+	derr <<
+	  "registered cluster_id does not match us, restarting"
+	     << dendl;
+	goto start_bootstrap;
+      }
+
+      m_snap_name = cm.snap_name;
+
+      if (!m_snap_name.empty()) {
+	derr <<
+	  "non empty snap name: previos bootstrap likely failed, restarting"
+	     << dendl;
+	goto start_bootstrap;
+      }
+
+      m_local_pool_id = cm.pool_id;
+      m_local_image_id = cm.image_id;
+
+      if (!bootstrap_params.empty()) {
+	dout(0) << "ignoring bootsrap params: client already registered" << dendl;
+      }
+
+      on_start_bootstrap_finish(0);
+      return;
+    }
+  }
+
+  dout(20) << "client not found" << dendl;
+
+start_bootstrap:
+  on_start_bootstrap_start(bootstrap_params);
+}
+
+void ImageReplayer::on_start_bootstrap_start(const BootstrapParams &params)
+{
+  dout(20) << "enter" << dendl;
+
+  FunctionContext *ctx = new FunctionContext(
+    [this](int r) {
+      on_start_bootstrap_finish(r);
+    });
+
+  BootstrapThread *thread = new BootstrapThread(this, params, ctx);
+
+  thread->create("bootstrap");
+  thread->detach();
+  // TODO: As the bootstrap might take long time it needs some control
+  // to get current status, interrupt, etc...
+}
+
+void ImageReplayer::on_start_bootstrap_finish(int r)
+{
+  dout(20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    on_start_finish(r);
+    return;
+  }
+
+  on_start_remote_journaler_init_start();
+}
+
+void ImageReplayer::on_start_remote_journaler_init_start()
+{
+  dout(20) << "enter" << dendl;
+
+  FunctionContext *ctx = new FunctionContext(
+    [this](int r) {
+      on_start_remote_journaler_init_finish(r);
+    });
+
+  m_remote_journaler->init(ctx);
+}
+
+void ImageReplayer::on_start_remote_journaler_init_finish(int r)
+{
+  dout(20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "error initializing journal: " << cpp_strerror(r) << dendl;
+    on_start_finish(r);
+    return;
+  }
+
+  r = m_local->ioctx_create2(m_local_pool_id, m_local_ioctx);
+  if (r < 0) {
+    derr << "error opening ioctx for local pool " << m_local_pool_id
+	 << ": " << cpp_strerror(r) << dendl;
+    on_start_finish(r);
+    return;
+  }
+
+  on_start_local_image_open_start();
+}
+
+void ImageReplayer::on_start_local_image_open_start()
+{
+  dout(20) << "enter" << dendl;
+
+  m_local_image_ctx = new librbd::ImageCtx("", m_local_image_id, NULL,
+					   m_local_ioctx, false);
+
+  FunctionContext *ctx = new FunctionContext(
+    [this](int r) {
+      on_start_local_image_open_finish(r);
+    });
+  m_local_image_ctx->state->open(ctx);
+}
+
+void ImageReplayer::on_start_local_image_open_finish(int r)
+{
+  dout(20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "error opening local image " <<  m_local_image_id
+	 << ": " << cpp_strerror(r) << dendl;
+    delete m_local_image_ctx;
+    m_local_image_ctx = nullptr;
+    on_start_finish(r);
+    return;
+  }
+
+  on_start_local_image_lock_start();
+}
+
+void ImageReplayer::on_start_local_image_lock_start()
+{
+  dout(20) << "enter" << dendl;
+
+  RWLock::WLocker owner_locker(m_local_image_ctx->owner_lock);
+  FunctionContext *ctx = new FunctionContext(
+    [this](int r) {
+      on_start_local_image_lock_finish(r);
+    });
+  m_local_image_ctx->exclusive_lock->request_lock(ctx);
+}
+
+void ImageReplayer::on_start_local_image_lock_finish(int r)
+{
+  dout(20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "error to lock exclusively local image " <<  m_local_image_id
+	 << ": " << cpp_strerror(r) << dendl;
+    on_start_finish(r);
+    return;
+  }
+
+  if (m_local_image_ctx->journal == nullptr) {
+    on_start_finish(-EINVAL);
+    return;
+  }
+
+  on_start_wait_for_local_journal_ready_start();
+}
+
+void ImageReplayer::on_start_wait_for_local_journal_ready_start()
+{
+  dout(20) << "enter" << dendl;
+
+  FunctionContext *ctx = new FunctionContext(
+    [this](int r) {
+      on_start_wait_for_local_journal_ready_finish(r);
+    });
+  m_local_image_ctx->journal->wait_for_journal_ready(ctx);
+}
+
+void ImageReplayer::on_start_wait_for_local_journal_ready_finish(int r)
+{
+  dout(20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "error when waiting for local journal ready: " << cpp_strerror(r)
+	 << dendl;
+    on_start_finish(r);
+    return;
+  }
+
+  r = m_local_image_ctx->journal->start_external_replay(&m_local_replay);
+  if (r < 0) {
+    derr << "error starting external replay on local image "
+	 <<  m_local_image_id << ": " << cpp_strerror(r) << dendl;
+    on_start_finish(r);
+    return;
+  }
+
+  m_replay_handler = new ReplayHandler(this);
+
+  m_remote_journaler->start_live_replay(m_replay_handler,
+					1 /* TODO: configurable */);
+
+  dout(20) << "m_remote_journaler=" << *m_remote_journaler << dendl;
+
+  on_start_finish(0);
+}
+
+void ImageReplayer::on_start_finish(int r)
+{
+  dout(20) << "r=" << r << dendl;
+
+  assert(m_on_finish);
+
+  if (r < 0) {
+    if (m_remote_journaler) {
+      if (m_remote_journaler->is_initialized()) {
+	m_remote_journaler->shutdown();
+      }
+      delete m_remote_journaler;
+      m_remote_journaler = nullptr;
+    }
+
+    if (m_local_replay) {
+      Mutex::Locker locker(m_lock);
+      shut_down_journal_replay();
+      m_local_image_ctx->journal->stop_external_replay();
+      m_local_replay = nullptr;
+    }
+
+    if (m_replay_handler) {
+      delete m_replay_handler;
+      m_replay_handler = nullptr;
+    }
+
+    if (m_local_image_ctx) {
+      bool owner;
+      if (librbd::is_exclusive_lock_owner(m_local_image_ctx, &owner) == 0 &&
+	  owner) {
+	librbd::unlock(m_local_image_ctx, "");
+      }
+      m_local_image_ctx->state->close();
+      m_local_image_ctx = nullptr;
+    }
+
+    m_local_ioctx.close();
+    m_remote_ioctx.close();
+  }
+
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_state == STATE_STARTING);
+
+    m_state = r < 0 ? STATE_UNINITIALIZED : STATE_REPLAYING;
+  }
+
+  m_on_finish->complete(r);
+  m_on_finish = nullptr;
+
+  dout(20) << "start complete" << dendl;
+}
+
+void ImageReplayer::stop(Context *on_finish)
+{
+  dout(20) << "enter" << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_state == STATE_REPLAYING);
+
+    m_state = STATE_STOPPING;
+  }
+
+  m_on_finish = on_finish;
+
+  on_stop_journal_replay_shut_down_start();
+}
+
+void ImageReplayer::on_stop_journal_replay_shut_down_start()
+{
+  dout(20) << "enter" << dendl;
+
+  FunctionContext *ctx = new FunctionContext(
+    [this](int r) {
+      on_stop_journal_replay_shut_down_finish(r);
+    });
+
+  m_local_replay->shut_down(ctx);
+}
+
+void ImageReplayer::on_stop_journal_replay_shut_down_finish(int r)
+{
+  dout(20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "error flushing journal replay: " << cpp_strerror(r) << dendl;
+  }
+
+  m_local_image_ctx->journal->stop_external_replay();
+  m_local_replay = nullptr;
+
+  on_stop_local_image_close_start();
+}
+
+void ImageReplayer::on_stop_local_image_close_start()
+{
+  dout(20) << "enter" << dendl;
+
+  FunctionContext *ctx = new FunctionContext(
+    [this](int r) {
+      on_stop_local_image_close_finish(r);
+    });
+
+  m_local_image_ctx->state->close(ctx);
+}
+
+void ImageReplayer::on_stop_local_image_close_finish(int r)
+{
+  dout(20) << "r=" << r << dendl;
+
+  assert(m_on_finish);
+
+  if (r < 0) {
+    derr << "error closing local image: " << cpp_strerror(r) << dendl;
+  }
+
+  m_local_image_ctx = nullptr;
+
+  m_local_ioctx.close();
+
+  m_remote_journaler->stop_replay();
+  m_remote_journaler->shutdown();
+  delete m_remote_journaler;
+  m_remote_journaler = nullptr;
+
+  delete m_replay_handler;
+  m_replay_handler = nullptr;
+
+  m_remote_ioctx.close();
+
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_state == STATE_STOPPING);
+
+    m_state = STATE_STOPPED;
+  }
+
+  m_on_finish->complete(r);
+  m_on_finish = nullptr;
+
+  dout(20) << "stop complete" << dendl;
 }
 
 void ImageReplayer::handle_replay_ready()
@@ -491,77 +764,51 @@ void ImageReplayer::handle_replay_committed(
   m_remote_journaler->committed(*replay_entry);
 }
 
-int ImageReplayer::get_registered_client_status(bool *registered)
-{
-  dout(20) << "enter" << dendl;
-
-  uint64_t minimum_set;
-  uint64_t active_set;
-  std::set<cls::journal::Client> registered_clients;
-  C_SaferCond cond;
-  m_remote_journaler->get_mutable_metadata(&minimum_set, &active_set,
-					   &registered_clients, &cond);
-  int r = cond.wait();
-  if (r < 0) {
-    derr << "error retrieving remote journal registered clients: "
-	 << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  for (auto c : registered_clients) {
-    if (c.id == m_client_id) {
-      *registered = true;
-      librbd::journal::ClientData client_data;
-      bufferlist::iterator bl = c.data.begin();
-      try {
-	::decode(client_data, bl);
-      } catch (const buffer::error &err) {
-	derr << "failed to decode client meta data: " << err.what() << dendl;
-	return -EINVAL;
-      }
-      librbd::journal::MirrorPeerClientMeta &cm =
-	boost::get<librbd::journal::MirrorPeerClientMeta>(client_data.client_meta);
-      m_local_pool_id = cm.pool_id;
-      m_local_image_id = cm.image_id;
-      m_snap_name = cm.snap_name;
-
-      dout(20) << "client found, pool_id=" << m_local_pool_id << ", image_id="
-	       << m_local_image_id << ", snap_name=" << m_snap_name << dendl;
-      return 0;
-    }
-  }
-
-  dout(20) << "client not found" << dendl;
-
-  *registered = false;
-  return 0;
-}
-
 int ImageReplayer::register_client()
 {
-  int r;
-
-  std::string local_cluster_id;
-  r = m_local->cluster_fsid(&local_cluster_id);
-  if (r < 0) {
-    derr << "error retrieving local cluster id: " << cpp_strerror(r)
-	 << dendl;
-    return r;
-  }
-  std::string m_snap_name = ".rbd-mirror." + m_client_id;
-
-  dout(20) << "m_cluster_id=" << local_cluster_id << ", pool_id="
+  dout(20) << "cluster_id=" << m_local_cluster_id << ", pool_id="
 	   << m_local_pool_id << ", image_id=" << m_local_image_id
 	   << ", snap_name=" << m_snap_name << dendl;
 
   bufferlist client_data;
   ::encode(librbd::journal::ClientData{librbd::journal::MirrorPeerClientMeta{
-	local_cluster_id, m_local_pool_id, m_local_image_id, m_snap_name}},
+	m_local_cluster_id, m_local_pool_id, m_local_image_id, m_snap_name}},
     client_data);
 
-  r = m_remote_journaler->register_client(client_data);
+  int r = m_remote_journaler->register_client(client_data);
   if (r < 0) {
     derr << "error registering client: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int ImageReplayer::update_client()
+{
+  dout(20) << "cluster_id=" << m_local_cluster_id << ", pool_id="
+	   << m_local_pool_id << ", image_id=" << m_local_image_id
+	   << ", snap_name=" << m_snap_name << dendl;
+
+  bufferlist client_data;
+  ::encode(librbd::journal::ClientData{librbd::journal::MirrorPeerClientMeta{
+	m_local_cluster_id, m_local_pool_id, m_local_image_id, m_snap_name}},
+    client_data);
+
+  int r = m_remote_journaler->update_client(client_data);
+  if (r < 0) {
+    derr << "error updating client: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int ImageReplayer::unregister_client()
+{
+  int r = m_remote_journaler->unregister_client();
+  if (r < 0) {
+    derr << "error unregistering client: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -584,7 +831,7 @@ int ImageReplayer::get_bootrstap_params(BootstrapParams *params)
   return 0;
 }
 
-int ImageReplayer::bootstrap(const BootstrapParams *bootstrap_params)
+int ImageReplayer::bootstrap(const BootstrapParams &bootstrap_params)
 {
   // Register client and sync images
 
@@ -593,13 +840,13 @@ int ImageReplayer::bootstrap(const BootstrapParams *bootstrap_params)
   int r;
   BootstrapParams params;
 
-  if (bootstrap_params) {
+  if (!bootstrap_params.empty()) {
     dout(20) << "using external bootstrap params" << dendl;
-    params = *bootstrap_params;
+    params = bootstrap_params;
   } else {
     r = get_bootrstap_params(&params);
     if (r < 0) {
-      derr << "error obtaining bootrstap parameters: "
+      derr << "error obtaining bootstrap parameters: "
 	   << cpp_strerror(r) << dendl;
       return r;
     }
@@ -607,6 +854,14 @@ int ImageReplayer::bootstrap(const BootstrapParams *bootstrap_params)
 
   dout(20) << "bootstrap params: local_pool_name=" << params.local_pool_name
 	   << ", local_image_name=" << params.local_image_name << dendl;
+
+  if (!m_snap_name.empty()) {
+    dout(0) << "bootstrap has been restarted, "
+	    << "it might fail due to remnants from previous bootstrap"
+	    << dendl;
+    // TODO: Try to cleanup possible remnants from previous bootstrap
+    // (remove remote image snapshot and local image)?
+  }
 
   r = create_local_image(params);
   if (r < 0) {
@@ -616,6 +871,7 @@ int ImageReplayer::bootstrap(const BootstrapParams *bootstrap_params)
     return r;
   }
 
+  m_snap_name = ".rbd-mirror." + m_client_id;
   r = register_client();
   if (r < 0) {
     derr << "error registering journal client: " << cpp_strerror(r) << dendl;
@@ -625,6 +881,13 @@ int ImageReplayer::bootstrap(const BootstrapParams *bootstrap_params)
   r = copy();
   if (r < 0) {
     derr << "error copying data to local image: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  m_snap_name = "";
+  r = update_client();
+  if (r < 0) {
+    derr << "error updating journal client: " << cpp_strerror(r) << dendl;
     return r;
   }
 

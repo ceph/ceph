@@ -120,6 +120,10 @@ void Journaler::shutdown() {
   m_metadata->shutdown();
 }
 
+bool Journaler::is_initialized() const {
+  return m_metadata->is_initialized();
+}
+
 void Journaler::get_immutable_metadata(uint8_t *order, uint8_t *splay_width,
 				       int64_t *pool_id, Context *on_finish) {
   m_metadata->get_immutable_metadata(order, splay_width, pool_id, on_finish);
@@ -177,6 +181,10 @@ void Journaler::flush_commit_position(Context *on_safe) {
 
 int Journaler::register_client(const bufferlist &data) {
   return m_metadata->register_client(data);
+}
+
+int Journaler::update_client(const bufferlist &data) {
+  return m_metadata->update_client(data);
 }
 
 int Journaler::unregister_client() {
