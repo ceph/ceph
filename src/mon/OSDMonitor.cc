@@ -125,6 +125,9 @@ void OSDMonitor::create_initial()
   // new clusters should sort bitwise by default.
   newmap.set_flag(CEPH_OSDMAP_SORTBITWISE);
 
+  // new cluster should require jewel by default
+  newmap.set_flag(CEPH_OSDMAP_REQUIRE_JEWEL);
+
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap, mon->quorum_features | CEPH_FEATURE_RESERVED);
   pending_inc.full_crc = newmap.get_crc();
@@ -1868,6 +1871,16 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     dout(0) << __func__ << " osdmap requires erasure code plugins v3 but osd at "
             << m->get_orig_source_inst()
             << " doesn't announce support -- ignore" << dendl;
+    goto ignore;
+  }
+
+  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL) &&
+      !(m->get_connection()->get_features() & CEPH_FEATURE_SERVER_JEWEL)) {
+    mon->clog->info() << "disallowing boot of OSD "
+		      << m->get_orig_source_inst()
+		      << " because the osdmap requires"
+		      << " CEPH_FEATURE_SERVER_JEWEL"
+		      << " but the osd lacks CEPH_FEATURE_SERVER_JEWEL\n";
     goto ignore;
   }
 
@@ -6150,6 +6163,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	return prepare_set_flag(op, CEPH_OSDMAP_SORTBITWISE);
       } else {
 	ss << "not all up OSDs have OSD_BITWISE_HOBJ_SORT feature";
+	err = -EPERM;
+      }
+    } else if (key == "require_jewel_osds") {
+      if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_JEWEL) {
+	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_JEWEL);
+      } else {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_JEWEL feature";
 	err = -EPERM;
       }
     } else {

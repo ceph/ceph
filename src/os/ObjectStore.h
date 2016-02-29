@@ -408,6 +408,8 @@ public:
 
       OP_SETALLOCHINT = 39,  // cid, oid, object_size, write_size
       OP_COLL_HINT = 40, // cid, type, bl
+
+      OP_TRY_RENAME = 41,   // oldcid, oldoid, newoid
     };
 
     // Transaction hint type
@@ -1411,6 +1413,23 @@ public:
         _op->cid = _get_coll_id(oldcid);
         _op->oid = _get_object_id(oldoid);
         _op->dest_cid = _get_coll_id(cid);
+        _op->dest_oid = _get_object_id(oid);
+      }
+      data.ops++;
+    }
+    void try_rename(coll_t cid, const ghobject_t& oldoid,
+                    const ghobject_t& oid) {
+      if (use_tbl) {
+        __u32 op = OP_TRY_RENAME;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oldoid, tbl);
+        ::encode(oid, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_TRY_RENAME;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oldoid);
         _op->dest_oid = _get_object_id(oid);
       }
       data.ops++;

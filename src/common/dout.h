@@ -39,6 +39,14 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
   return out;
 }
 
+class DoutPrefixProvider {
+public:
+  virtual string gen_prefix() const = 0;
+  virtual CephContext *get_cct() const = 0;
+  virtual unsigned get_subsys() const = 0;
+  virtual ~DoutPrefixProvider() {}
+};
+
 // generic macros
 #define dout_prefix *_dout
 
@@ -57,6 +65,8 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
 #define lsubdout(cct, sub, v)  dout_impl(cct, ceph_subsys_##sub, v) dout_prefix
 #define ldout(cct, v)  dout_impl(cct, dout_subsys, v) dout_prefix
 #define lderr(cct) dout_impl(cct, ceph_subsys_, -1) dout_prefix
+
+#define ldpp_dout(dpp, v) if (dpp) dout_impl(dpp->get_cct(), dpp->get_subsys(), v) (*_dout << dpp->gen_prefix())
 
 #define lgeneric_subdout(cct, sub, v) dout_impl(cct, ceph_subsys_##sub, v) *_dout
 #define lgeneric_dout(cct, v) dout_impl(cct, ceph_subsys_, v) *_dout

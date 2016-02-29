@@ -776,6 +776,7 @@ void ECBackend::sub_write_committed(
     r->op.last_complete = last_complete;
     r->op.committed = true;
     r->op.from = get_parent()->whoami_shard();
+    r->set_priority(CEPH_MSG_PRIO_HIGH);
     get_parent()->send_message_osd_cluster(
       get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
   }
@@ -816,6 +817,7 @@ void ECBackend::sub_write_applied(
     r->op.from = get_parent()->whoami_shard();
     r->op.tid = tid;
     r->op.applied = true;
+    r->set_priority(CEPH_MSG_PRIO_HIGH);
     get_parent()->send_message_osd_cluster(
       get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
   }
@@ -858,7 +860,7 @@ void ECBackend::handle_sub_write(
     op.trim_to,
     op.trim_rollback_to,
     !(op.t.empty()),
-    &localt);
+    localt);
 
   ReplicatedPG *_rPG = dynamic_cast<ReplicatedPG *>(get_parent());
   if (_rPG && !_rPG->is_undersized() &&
@@ -1342,7 +1344,7 @@ struct MustPrependHashInfo : public ObjectModDesc::Visitor {
 void ECBackend::submit_transaction(
   const hobject_t &hoid,
   const eversion_t &at_version,
-  PGTransaction *_t,
+  PGTransactionUPtr &&_t,
   const eversion_t &trim_to,
   const eversion_t &trim_rollback_to,
   const vector<pg_log_entry_t> &log_entries,
@@ -1370,7 +1372,7 @@ void ECBackend::submit_transaction(
   op->reqid = reqid;
   op->client_op = client_op;
   
-  op->t = static_cast<ECTransaction*>(_t);
+  op->t.reset(static_cast<ECTransaction*>(_t.release()));
 
   set<hobject_t, hobject_t::BitwiseComparator> need_hinfos;
   op->t->get_append_objects(&need_hinfos);
@@ -1830,7 +1832,6 @@ void ECBackend::start_write(Op *op) {
       op->on_local_applied_sync = 0;
     } else {
       MOSDECSubOpWrite *r = new MOSDECSubOpWrite(sop);
-      r->set_priority(cct->_conf->osd_client_op_priority);
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
       r->map_epoch = get_parent()->get_epoch();
       get_parent()->send_message_osd_cluster(
@@ -1972,7 +1973,7 @@ void ECBackend::objects_read_async(
 	c)));
 
   start_read_op(
-    cct->_conf->osd_client_op_priority,
+    CEPH_MSG_PRIO_DEFAULT,
     for_read_op,
     OpRequestRef(),
     fast_read, false);
