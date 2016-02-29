@@ -4258,11 +4258,15 @@ def main_trigger(args):
         partid=partid,
     ))
 
+    ceph_disk = ['ceph-disk']
+    if args.verbose:
+        ceph_disk.append('--verbose')
+
     if parttype in (PTYPE['regular']['osd']['ready'],
                     PTYPE['mpath']['osd']['ready']):
-        command(
+        out, err, ret = command(
+            ceph_disk +
             [
-                'ceph-disk',
                 'activate',
                 args.dev,
             ]
@@ -4270,9 +4274,9 @@ def main_trigger(args):
 
     elif parttype in (PTYPE['plain']['osd']['ready'],
                       PTYPE['luks']['osd']['ready']):
-        command(
+        out, err, ret = command(
+            ceph_disk +
             [
-                '/usr/sbin/ceph-disk',
                 'activate',
                 '--dmcrypt',
                 args.dev,
@@ -4281,9 +4285,9 @@ def main_trigger(args):
 
     elif parttype in (PTYPE['regular']['journal']['ready'],
                       PTYPE['mpath']['journal']['ready']):
-        command(
+        out, err, ret = command(
+            ceph_disk +
             [
-                'ceph-disk',
                 'activate-journal',
                 args.dev,
             ]
@@ -4291,9 +4295,9 @@ def main_trigger(args):
 
     elif parttype in (PTYPE['plain']['journal']['ready'],
                       PTYPE['luks']['journal']['ready']):
-        command(
+        out, err, ret = command(
+            ceph_disk +
             [
-                '/usr/sbin/ceph-disk',
                 'activate-journal',
                 '--dmcrypt',
                 args.dev,
@@ -4302,9 +4306,9 @@ def main_trigger(args):
 
     elif parttype in (PTYPE['regular']['block']['ready'],
                       PTYPE['mpath']['block']['ready']):
-        command(
+        out, err, ret = command(
+            ceph_disk +
             [
-                'ceph-disk',
                 'activate-block',
                 args.dev,
             ]
@@ -4312,9 +4316,9 @@ def main_trigger(args):
 
     elif parttype in (PTYPE['plain']['block']['ready'],
                       PTYPE['luks']['block']['ready']):
-        command(
+        out, err, ret = command(
+            ceph_disk +
             [
-                '/usr/sbin/ceph-disk',
                 'activate-block',
                 '--dmcrypt',
                 args.dev,
@@ -4323,9 +4327,9 @@ def main_trigger(args):
 
     elif parttype in (PTYPE['regular']['lockbox']['ready'],
                       PTYPE['mpath']['lockbox']['ready']):
-        command(
+        out, err, ret = command(
+            ceph_disk +
             [
-                'ceph-disk',
                 'activate-lockbox',
                 args.dev,
             ]
@@ -4333,6 +4337,14 @@ def main_trigger(args):
 
     else:
         raise Error('unrecognized partition type %s' % parttype)
+
+    if ret != 0:
+        LOG.info(out)
+        LOG.error(err)
+        raise Error('return code ' + str(ret))
+    else:
+        LOG.debug(out)
+        LOG.debug(err)
 
 
 def setup_statedir(dir):
