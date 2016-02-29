@@ -1317,7 +1317,10 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
         return r;
       }
 
-      if ((features & RBD_FEATURES_MUTABLE) != features) {
+      uint64_t disable_mask = (RBD_FEATURES_MUTABLE |
+                               RBD_FEATURES_DISABLE_ONLY);
+      if ((enabled && (features & RBD_FEATURES_MUTABLE) != features) ||
+          (!enabled && (features & disable_mask) != features)) {
         lderr(cct) << "cannot update immutable features" << dendl;
         return -EINVAL;
       } else if (features == 0) {
@@ -1390,7 +1393,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
             lderr(cct) << "cannot disable exclusive lock" << dendl;
             return -EINVAL;
           }
-          features_mask |= RBD_FEATURE_OBJECT_MAP;
+          features_mask |= (RBD_FEATURE_OBJECT_MAP |
+                            RBD_FEATURE_JOURNALING);
         }
         if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
           if ((new_features & RBD_FEATURE_FAST_DIFF) != 0) {

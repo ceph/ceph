@@ -3520,6 +3520,9 @@ TEST_F(TestLibRBD, UpdateFeatures)
     return;
   }
 
+  uint64_t features;
+  ASSERT_EQ(0, image.features(&features));
+
   // must provide a single feature
   ASSERT_EQ(-EINVAL, image.update_features(0, true));
 
@@ -3565,6 +3568,11 @@ TEST_F(TestLibRBD, UpdateFeatures)
   ASSERT_EQ(0U, flags);
 
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
+
+  if ((features & RBD_FEATURE_DEEP_FLATTEN) != 0) {
+    ASSERT_EQ(0, image.update_features(RBD_FEATURE_DEEP_FLATTEN, false));
+  }
+  ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_DEEP_FLATTEN, true));
 }
 
 TEST_F(TestLibRBD, RebuildObjectMap)
