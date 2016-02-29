@@ -336,11 +336,16 @@ openstack keypair delete {key_name} || true
             '--filter-out', 'erasure-code',
             '--throttle', '3',
         ]
+        archive_upload = 'user@archive:/tmp'
         argv = (self.options +
                 ['--upload',
-                 '--archive-upload', 'user@archive:/tmp'] +
+                 '--archive-upload', archive_upload] +
                 teuthology_argv)
         args = scripts.openstack.parse_args(argv)
+        teuthology_argv.extend([
+            '--archive-upload', archive_upload,
+            '--archive-upload-url', args.archive_upload_url,
+        ])
         teuthology = TeuthologyOpenStack(args, None, argv)
         teuthology.user_data = 'teuthology/openstack/test/user-data-test1.txt'
         teuthology.teuthology_suite = 'echo --'

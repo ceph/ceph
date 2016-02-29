@@ -479,6 +479,7 @@ class TeuthologyOpenStack(OpenStack):
         while len(original_argv) > 0:
             if original_argv[0] in ('--name',
                                     '--archive-upload',
+                                    '--archive-upload-url',
                                     '--key-name',
                                     '--key-filename',
                                     '--simultaneous-jobs',
@@ -490,6 +491,15 @@ class TeuthologyOpenStack(OpenStack):
                 del original_argv[0]
             else:
                 argv.append(original_argv.pop(0))
+        #
+        # If --upload, provide --archive-upload{,-url} regardless of
+        # what was originally provided on the command line because the
+        # teuthology-openstack defaults are different from the
+        # teuthology-suite defaults.
+        #
+        if self.args.upload:
+            argv.extend(['--archive-upload', self.args.archive_upload,
+                         '--archive-upload-url', self.args.archive_upload_url])
         for arg in ('ceph_git_url', 'ceph_qa_suite_git_url'):
             if getattr(self.args, arg):
                 command = (
