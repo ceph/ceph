@@ -1,5 +1,8 @@
 meta:
-- desc: "Build the cluster using ceph-ansible"
+- desc: "Build the cluster using ceph-ansible; then check health"
 tasks:
 - ceph_ansible:
+- exec:
+    mon.a:
+      - "sudo ceph health"
 - install.ship_utilities:
