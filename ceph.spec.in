@@ -1019,7 +1019,6 @@ fi
 %else
 %{_initrddir}/ceph
 %endif
-%dir %{_localstatedir}/lib/ceph/mds
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mds
 
 %files mon
@@ -1027,7 +1026,6 @@ fi
 %{_bindir}/ceph-rest-api
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-rest-api.8*
-%dir %{_localstatedir}/lib/ceph/mon
 %{python_sitelib}/ceph_rest_api.py*
 %if 0%{?_with_systemd}
 %{_unitdir}/ceph-mon@.service
@@ -1148,7 +1146,6 @@ fi
 %else
 %{_initrddir}/ceph
 %endif
-%dir %{_localstatedir}/lib/ceph/osd
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
 
 #################################################################################
