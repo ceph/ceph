@@ -415,10 +415,6 @@ class TestMDS(TestArgparse):
     def test_rmfailed(self):
         self.assert_valid_command(['mds', 'rmfailed', '0'])
         self.assert_valid_command(['mds', 'rmfailed', '0', '--yes-i-really-mean-it'])
-        assert_equal({}, validate_command(sigdict, ['mds', 'rmfailed',
-                                                    '--yes-i-really-mean-it']))
-        assert_equal({}, validate_command(sigdict, ['mds', 'rmfailed', '-1',
-                                                    '--yes-i-really-mean-it']))
         assert_equal({}, validate_command(sigdict, ['mds', 'rmfailed', '0',
                                                     '--yes-i-really-mean-it',
                                                     'toomany']))
