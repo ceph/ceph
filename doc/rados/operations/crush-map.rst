@@ -34,14 +34,13 @@ data cluster, you should give significant consideration to developing a custom
 CRUSH map, because it will help you manage your Ceph cluster, improve
 performance and ensure data safety. 
 
-For example, if an OSD goes down, a CRUSH map can help you can locate
+For example, if an OSD goes down, a CRUSH map can help you to locate
 the physical data center, room, row and rack of the host with the failed OSD in
 the event you need to use onsite support or replace hardware. 
 
 Similarly, CRUSH may help you identify faults more quickly. For example, if all
 OSDs in a particular rack go down simultaneously, the fault may lie with a
-network switch or power to the rack or the network switch rather than the 
-OSDs themselves.
+network switch or power to the rack rather than the OSDs themselves.
 
 A custom CRUSH map can also help you identify the physical locations where
 Ceph stores redundant copies of data when the placement group(s) associated
@@ -89,7 +88,7 @@ preference:
 In a typical deployment scenario, provisioning software (or the system
 administrator) can simply set the 'crush location' field in a host's
 ceph.conf to describe that machine's location within the datacenter or
-cluster.  This will be provide location awareness to both Ceph daemons
+cluster.  This will provide location awareness to both Ceph daemons
 and clients alike.
 
 It is possible to manage the CRUSH map entirely manually by toggling
@@ -100,8 +99,8 @@ the hook off in the configuration::
 Custom location hooks
 ---------------------
 
-A customize location hook can be used in place of the generic hook for OSD
-daemon placement in the hierarchy.  (On startup, each OSD ensure its position is
+A customized location hook can be used in place of the generic hook for OSD
+daemon placement in the hierarchy.  (On startup, each OSD ensures its position is
 correct.)::
 
   osd crush location hook = /path/to/script
@@ -126,7 +125,7 @@ To edit an existing CRUSH map:
 #. `Recompile`_ the CRUSH map.
 #. `Set the CRUSH map`_.
 
-To activate CRUSH Map rules for a specific pool, identify the common ruleset
+To activate CRUSH map rules for a specific pool, identify the common ruleset
 number for those rules and specify that ruleset number for the pool. See `Set
 Pool Values`_ for details. 
 
@@ -486,7 +485,7 @@ default pools.
 
 
 CRUSH rules deﬁnes placement and replication strategies or distribution policies
-that  allow you to specify exactly how CRUSH places object replicas. For
+that allow you to specify exactly how CRUSH places object replicas. For
 example, you might create a rule selecting a pair of targets for 2-way
 mirroring, another rule for selecting three targets in two different data
 centers for 3-way mirroring, and yet another rule for erasure coding over six
@@ -976,9 +975,9 @@ Impact of Legacy Values
 
 The legacy values result in several misbehaviors:
 
- * For hiearchies with a small number of devices in the leaf buckets,
+ * For hierarchies with a small number of devices in the leaf buckets,
    some PGs map to fewer than the desired number of replicas.  This
-   commonly happens for hiearchies with "host" nodes with a small
+   commonly happens for hierarchies with "host" nodes with a small
    number (1-3) of OSDs nested beneath each one.
 
  * For large clusters, some small percentages of PGs map to less than
