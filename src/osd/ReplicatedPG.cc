@@ -1301,6 +1301,9 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
       result = -EINVAL;
       break;
     }
+
+    if (result < 0)
+      break;
   }
 
   // reply
