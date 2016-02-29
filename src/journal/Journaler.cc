@@ -176,11 +176,27 @@ void Journaler::flush_commit_position(Context *on_safe) {
 }
 
 int Journaler::register_client(const bufferlist &data) {
-  return m_metadata->register_client(data);
+  C_SaferCond cond;
+  register_client(data, &cond);
+  return cond.wait();
 }
 
 int Journaler::unregister_client() {
-  return m_metadata->unregister_client();
+  C_SaferCond cond;
+  unregister_client(&cond);
+  return cond.wait();
+}
+
+void Journaler::register_client(const bufferlist &data, Context *on_finish) {
+  return m_metadata->register_client(data, on_finish);
+}
+
+void Journaler::update_client(const bufferlist &data, Context *on_finish) {
+  return m_metadata->update_client(data, on_finish);
+}
+
+void Journaler::unregister_client(Context *on_finish) {
+  return m_metadata->unregister_client(on_finish);
 }
 
 void Journaler::allocate_tag(const bufferlist &data, cls::journal::Tag *tag,

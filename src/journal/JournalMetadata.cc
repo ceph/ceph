@@ -357,32 +357,53 @@ void JournalMetadata::get_mutable_metadata(uint64_t *minimum_set,
 			       on_finish);
 }
 
-int JournalMetadata::register_client(const bufferlist &data) {
+void JournalMetadata::register_client(const bufferlist &data,
+				      Context *on_finish) {
   ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
-  int r = client::client_register(m_ioctx, m_oid, m_client_id, data);
-  if (r < 0) {
-    lderr(m_cct) << "failed to register journal client '" << m_client_id
-                 << "': " << cpp_strerror(r) << dendl;
-    return r;
-  }
+  librados::ObjectWriteOperation op;
+  client::client_register(&op, m_client_id, data);
 
-  notify_update();
-  return 0;
+  C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_finish);
+
+  librados::AioCompletion *comp =
+    librados::Rados::aio_create_completion(ctx, NULL,
+                                           utils::rados_ctx_callback);
+  int r = m_ioctx.aio_operate(m_oid, comp, &op);
+  assert(r == 0);
+  comp->release();
 }
 
-int JournalMetadata::unregister_client() {
+void JournalMetadata::update_client(const bufferlist &data,
+				    Context *on_finish) {
+  ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
+  librados::ObjectWriteOperation op;
+  client::client_update(&op, m_client_id, data);
+
+  C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_finish);
+
+  librados::AioCompletion *comp =
+    librados::Rados::aio_create_completion(ctx, NULL,
+                                           utils::rados_ctx_callback);
+  int r = m_ioctx.aio_operate(m_oid, comp, &op);
+  assert(r == 0);
+  comp->release();
+}
+
+void JournalMetadata::unregister_client(Context *on_finish) {
   assert(!m_client_id.empty());
 
   ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
-  int r = client::client_unregister(m_ioctx, m_oid, m_client_id);
-  if (r < 0) {
-    lderr(m_cct) << "failed to unregister journal client '" << m_client_id
-                 << "': " << cpp_strerror(r) << dendl;
-    return r;
-  }
+  librados::ObjectWriteOperation op;
+  client::client_unregister(&op, m_client_id);
 
-  notify_update();
-  return 0;
+  C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_finish);
+
+  librados::AioCompletion *comp =
+    librados::Rados::aio_create_completion(ctx, NULL,
+                                           utils::rados_ctx_callback);
+  int r = m_ioctx.aio_operate(m_oid, comp, &op);
+  assert(r == 0);
+  comp->release();
 }
 
 void JournalMetadata::allocate_tag(uint64_t tag_class, const bufferlist &data,

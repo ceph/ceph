@@ -60,8 +60,9 @@ public:
   void add_listener(Listener *listener);
   void remove_listener(Listener *listener);
 
-  int register_client(const bufferlist &data);
-  int unregister_client();
+  void register_client(const bufferlist &data, Context *on_finish);
+  void update_client(const bufferlist &data, Context *on_finish);
+  void unregister_client(Context *on_finish);
 
   void allocate_tag(uint64_t tag_class, const bufferlist &data,
                     Tag *tag, Context *on_finish);
