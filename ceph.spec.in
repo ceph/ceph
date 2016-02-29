@@ -56,7 +56,7 @@ restorecon -R /var/log/ceph > /dev/null 2>&1;
 # the _with_systemd variable only implies that we'll install
 # /etc/tmpfiles.d/ceph.conf in order to set up the socket directory in
 # /var/run/ceph.
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1210
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
 %global _with_systemd 1
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
 %endif
@@ -93,27 +93,6 @@ Patch0:		init-ceph.in-fedora.patch
 Requires:       ceph-osd = %{epoch}:%{version}-%{release}
 Requires:       ceph-mds = %{epoch}:%{version}-%{release}
 Requires:       ceph-mon = %{epoch}:%{version}-%{release}
-Requires:	librbd1 = %{epoch}:%{version}-%{release}
-Requires:	librados2 = %{epoch}:%{version}-%{release}
-Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
-Requires:	ceph-common = %{epoch}:%{version}-%{release}
-%if 0%{with selinux}
-Requires:	ceph-selinux = %{epoch}:%{version}-%{release}
-%endif
-Requires:	python-rados = %{epoch}:%{version}-%{release}
-Requires:	python-rbd = %{epoch}:%{version}-%{release}
-Requires:	python-cephfs = %{epoch}:%{version}-%{release}
-Requires:	python
-Requires:	python-requests
-Requires:	grep
-Requires:	xfsprogs
-Requires:	logrotate
-Requires:	parted
-Requires:	util-linux
-Requires:	hdparm
-Requires:	cryptsetup
-Requires:	findutils
-Requires:	which
 Requires(post):	binutils
 %if 0%{with cephfs_java}
 BuildRequires:	java-devel
@@ -171,17 +150,10 @@ BuildRequires:	systemd
 %{?systemd_requires}
 %endif
 PreReq:		%fillup_prereq
-Requires:	python-Flask
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
-%if 0%{?suse_version} > 1210
-Requires:	gptfdisk
 %if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel
-%endif
-%else
-Requires:	scsirastools
-BuildRequires:	google-perftools-devel
 %endif
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
@@ -193,19 +165,17 @@ Requires:	systemd
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
-Requires:	gdisk
 Requires(post):	chkconfig
 Requires(preun):	chkconfig
 Requires(preun):	initscripts
 BuildRequires:	gperftools-devel
-Requires:	python-flask
 %endif
 # boost
 %if 0%{?fedora} || 0%{?rhel} 
 BuildRequires:  boost-random
 %endif
 # python-argparse for distros with Python 2.6 or lower
-%if (0%{?rhel} && 0%{?rhel} <= 6) || (0%{?suse_version} && 0%{?suse_version} <= 1110)
+%if (0%{?rhel} && 0%{?rhel} <= 6)
 BuildRequires:	python-argparse
 %endif
 # lttng and babeltrace for rbd-replay-prep
@@ -248,6 +218,24 @@ on commodity hardware and delivers object, block and file system storage.
 Summary:       Ceph Base Package
 Group:         System Environment/Base
 Requires:      ceph-common = %{epoch}:%{version}-%{release}
+Requires:      librbd1 = %{epoch}:%{version}-%{release}
+Requires:      librados2 = %{epoch}:%{version}-%{release}
+Requires:      libcephfs1 = %{epoch}:%{version}-%{release}
+%if 0%{with selinux}
+Requires:      ceph-selinux = %{epoch}:%{version}-%{release}
+%endif
+Requires:      python
+Requires:      python-requests
+Requires:      python-setuptools
+Requires:      grep
+Requires:      xfsprogs
+Requires:      logrotate
+Requires:      parted
+Requires:      util-linux
+Requires:      hdparm
+Requires:      cryptsetup
+Requires:      findutils
+Requires:      which
 %description base
 Base is the package that includes all the files shared amongst ceph servers
 
@@ -267,7 +255,7 @@ Requires:	python-requests
 Requires(pre):	pwdutils
 %endif
 # python-argparse is only needed in distros with Python 2.6 or lower
-%if (0%{?rhel} && 0%{?rhel} <= 6) || (0%{?suse_version} && 0%{?suse_version} <= 1110)
+%if (0%{?rhel} && 0%{?rhel} <= 6)
 Requires:	python-argparse
 %endif
 %description -n ceph-common
@@ -288,7 +276,12 @@ Summary:	Ceph Monitor Daemon
 Group:		System Environment/Base
 Requires:	ceph-base = %{epoch}:%{version}-%{release}
 # For ceph-rest-api
-Requires:	python-flask
+%if 0%{?fedora} || 0%{?rhel}
+Requires:      python-flask
+%endif
+%if 0%{?suse_version}
+Requires:      python-Flask
+%endif
 %description mon
 ceph-mon is the cluster monitor daemon for the Ceph distributed file
 system. One or more instances of ceph-mon form a Paxos part-time
@@ -340,6 +333,12 @@ Requires:	ceph-selinux = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 %if 0%{?rhel} || 0%{?fedora}
 Requires:	mailcap
+# python-flask for powerdns
+Requires:	python-flask
+%endif
+%if 0%{?suse_version}
+# python-Flask for powerdns
+Requires:      python-Flask
 %endif
 %description radosgw
 This package is an S3 HTTP REST gateway for the RADOS object store. It
@@ -363,6 +362,13 @@ managers such as Pacemaker.
 Summary:	Ceph Object Storage Daemon
 Group:		System Environment/Base
 Requires:	ceph-base = %{epoch}:%{version}-%{release}
+# for sgdisk, used by ceph-disk
+%if 0%{?fedora} || 0%{?rhel}
+Requires:	gdisk
+%endif
+%if 0%{?suse_version}
+Requires:	gptfdisk
+%endif
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
@@ -877,21 +883,7 @@ rm -rf $RPM_BUILD_ROOT
 %dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph_common.sh
 %dir %{_libdir}/rados-classes
-%{_libdir}/rados-classes/libcls_cephfs.so*
-%{_libdir}/rados-classes/libcls_rbd.so*
-%{_libdir}/rados-classes/libcls_hello.so*
-%{_libdir}/rados-classes/libcls_numops.so*
-%{_libdir}/rados-classes/libcls_rgw.so*
-%{_libdir}/rados-classes/libcls_lock.so*
-%{_libdir}/rados-classes/libcls_kvs.so*
-%{_libdir}/rados-classes/libcls_refcount.so*
-%{_libdir}/rados-classes/libcls_log.so*
-%{_libdir}/rados-classes/libcls_replica_log.so*
-%{_libdir}/rados-classes/libcls_statelog.so*
-%{_libdir}/rados-classes/libcls_timeindex.so*
-%{_libdir}/rados-classes/libcls_user.so*
-%{_libdir}/rados-classes/libcls_version.so*
-%{_libdir}/rados-classes/libcls_journal.so*
+%{_libdir}/rados-classes/*
 %dir %{_libdir}/ceph
 %dir %{_libdir}/ceph/erasure-code
 %{_libdir}/ceph/erasure-code/libec_*.so*
@@ -901,8 +893,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/libos_tp.so*
 %{_libdir}/libosd_tp.so*
 %endif
-%{_udevrulesdir}/60-ceph-partuuid-workaround.rules
-%{_udevrulesdir}/95-ceph-osd.rules
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %if 0%{?fedora} || 0%{?rhel}
@@ -1029,7 +1019,6 @@ fi
 %else
 %{_initrddir}/ceph
 %endif
-%dir %{_localstatedir}/lib/ceph/mds
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mds
 
 %files mon
@@ -1037,7 +1026,6 @@ fi
 %{_bindir}/ceph-rest-api
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-rest-api.8*
-%dir %{_localstatedir}/lib/ceph/mon
 %{python_sitelib}/ceph_rest_api.py*
 %if 0%{?_with_systemd}
 %{_unitdir}/ceph-mon@.service
@@ -1146,18 +1134,6 @@ fi
 %{_sbindir}/ceph-disk
 %{_sbindir}/ceph-disk-udev
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
-%dir %{_libdir}/rados-classes
-%{_libdir}/rados-classes/libcls_rbd.so*
-%{_libdir}/rados-classes/libcls_hello.so*
-%{_libdir}/rados-classes/libcls_rgw.so*
-%{_libdir}/rados-classes/libcls_lock.so*
-%{_libdir}/rados-classes/libcls_kvs.so*
-%{_libdir}/rados-classes/libcls_refcount.so*
-%{_libdir}/rados-classes/libcls_log.so*
-%{_libdir}/rados-classes/libcls_replica_log.so*
-%{_libdir}/rados-classes/libcls_statelog.so*
-%{_libdir}/rados-classes/libcls_user.so*
-%{_libdir}/rados-classes/libcls_version.so*
 %{_udevrulesdir}/60-ceph-partuuid-workaround.rules
 %{_udevrulesdir}/95-ceph-osd.rules
 %{_mandir}/man8/ceph-clsinfo.8*
@@ -1170,7 +1146,6 @@ fi
 %else
 %{_initrddir}/ceph
 %endif
-%dir %{_localstatedir}/lib/ceph/osd
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
 
 #################################################################################
