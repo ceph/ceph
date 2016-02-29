@@ -1153,7 +1153,7 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 
   op->mark_started();
 
-  RepModifyRef rm(new RepModify);
+  RepModifyRef rm(std::make_shared<RepModify>());
   rm->op = op;
   rm->ackerosd = ackerosd;
   rm->last_complete = get_info().last_complete;

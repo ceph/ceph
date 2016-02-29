@@ -581,7 +581,7 @@ public:
     }
     void register_on_complete(Context *c) {
       if (!c) return;
-      RunOnDeleteRef _complete(new RunOnDelete(c));
+      RunOnDeleteRef _complete (std::make_shared<RunOnDelete>(c));
       register_on_applied(new ContainerContext<RunOnDeleteRef>(_complete));
       register_on_commit(new ContainerContext<RunOnDeleteRef>(_complete));
     }

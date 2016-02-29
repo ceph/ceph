@@ -77,8 +77,8 @@ protected:
   /// Type of returned paths
   typedef ceph::shared_ptr<Path> IndexedPath;
 
-  static IndexedPath get_testing_path(string path, const coll_t& collection) {
-    return IndexedPath(new Path(path, collection));
+  static IndexedPath get_testing_path(string path, coll_t collection) {
+    return std::make_shared<Path>(path, collection);
   }
 
   static const uint32_t FLAT_INDEX_TAG = 0;
