@@ -703,16 +703,23 @@ cdef class LibCephFS(object):
             char *ret_buf = NULL
 
         try:
-            while True:
-                ret_buf = <char *>realloc_chk(ret_buf, ret_length)
+            ret_buf = <char *>realloc_chk(ret_buf, ret_length)
+            with nogil:
+                ret = ceph_getxattr(self.cluster, _path, _name, ret_buf,
+                                    ret_length)
+
+            if ret < 0:
+                raise make_ex(ret, "error in getxattr")
+
+            if ret > ret_length:
+                ret_buf = <char *>realloc_chk(ret_buf, ret)
                 with nogil:
-                    ret = ceph_getxattr(self.cluster, _path, _name, ret_buf, ret_length)
+                    ret = ceph_getxattr(self.cluster, _path, _name, ret_buf,
+                                        ret)
                 if ret < 0:
                     raise make_ex(ret, "error in getxattr")
-                elif ret > ret_length:
-                    ret_length = ret
-                else:
-                    return ret_buf[:ret]
+
+            return ret_buf[:ret]
         finally:
             free(ret_buf)
 
