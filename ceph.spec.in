@@ -893,8 +893,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/libos_tp.so*
 %{_libdir}/libosd_tp.so*
 %endif
-%{_udevrulesdir}/60-ceph-partuuid-workaround.rules
-%{_udevrulesdir}/95-ceph-osd.rules
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %if 0%{?fedora} || 0%{?rhel}
