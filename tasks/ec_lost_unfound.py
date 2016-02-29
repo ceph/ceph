@@ -1,10 +1,12 @@
 """
 Lost_unfound
 """
+from teuthology.orchestra import run
 import logging
 import ceph_manager
 from teuthology import misc as teuthology
 from util.rados import rados
+import time
 
 log = logging.getLogger(__name__)
 
@@ -97,6 +99,30 @@ def task(ctx, config):
     log.info("there are %d unfound objects" % unfound)
     assert unfound
 
+    testdir = teuthology.get_testdir(ctx)
+    procs = []
+    if config.get('parallel_bench', True):
+        procs.append(mon.run(
+            args=[
+                "/bin/sh", "-c",
+                " ".join(['adjust-ulimits',
+                          'ceph-coverage',
+                          '{tdir}/archive/coverage',
+                          'rados',
+                          '--no-log-to-stderr',
+                          '--name', 'client.admin',
+                          '-b', str(4<<10),
+                          '-p' , pool,
+                          '-t', '20',
+                          'bench', '240', 'write',
+                      ]).format(tdir=testdir),
+            ],
+            logger=log.getChild('radosbench.{id}'.format(id='client.admin')),
+            stdin=run.PIPE,
+            wait=False
+        ))
+    time.sleep(10)
+
     # mark stuff lost
     pgs = manager.get_pg_stats()
     for pg in pgs:
@@ -122,6 +148,9 @@ def task(ctx, config):
     manager.raw_cluster_cmd('tell', 'osd.3', 'flush_pg_stats')
     manager.wait_for_recovery()
 
+    if not config.get('parallel_bench', True):
+        time.sleep(20)
+
     # verify result
     for f in range(1, 10):
         err = rados(ctx, mon, ['-p', pool, 'get', 'new_%d' % f, '-'])
@@ -135,3 +164,4 @@ def task(ctx, config):
     manager.revive_osd(1)
     manager.wait_till_osd_is_up(1)
     manager.wait_for_clean()
+    run.wait(procs)
