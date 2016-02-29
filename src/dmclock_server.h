@@ -226,6 +226,23 @@ namespace crimson {
 
       enum class Mechanism { push, pull };
 
+      // when we try to get the next request, we'll be in one of three
+      // situations -- we'll have one to return, have one that can
+      // fire in the future, or not have any
+      enum class NextReqStat { returning, future, none };
+
+      struct PullReq {
+	NextReqStat status;
+	union {
+	  struct {
+	    C&         client;
+	    RequestRef request;
+	    PhaseType  phase;
+	  } retn;
+	  Time when_next;
+	};
+      };
+
       // a function that can be called to look up client information
       using ClientInfoFunc = std::function<ClientInfo(C)>;
 
@@ -260,12 +277,7 @@ namespace crimson {
 	}
       };
 
-
-      // when we try to get the next request, we'll have one to
-      // return, have one that can fire in the future, or not have any
-      enum class NextReqStat { returning, future, none };
-
-      // specifies which queue next request will get pulled from
+      // specifies which queue next request will get popped from
       enum class HeapId { reservation, ready, proportional };
 
       // this is returned from next_req to tell the caller the situation
@@ -549,6 +561,65 @@ namespace crimson {
       }
 
 
+      PullReq pull_request() {
+	assert(Mechanism::pull == mechanism);
+
+	PullReq result;
+	DataGuard g(data_mtx);
+	
+	NextReq next = next_request();
+	result.status = next.status;
+	switch(next.status) {
+	case NextReqStat::none:
+	  return result;
+	  break;
+	case NextReqStat::future:
+	  result.when_next = next.when_ready;
+	  return result;
+	  break;
+	case NextReqStat::returning:
+	  break;
+	default:
+	  assert(false);
+	}
+
+	// we'll only get here if we're returning an entry
+
+	switch(next.heap_id) {
+	case HeapId::reservation:
+	  pull_request_help(result, reserv_q, PhaseType::reservation);
+	  ++reserv_sched_count;
+	  break;
+	case HeapId::ready:
+	  pull_request_help(result, ready_q, PhaseType::priority);
+	  reduce_reservation_tags(result.client);
+	  ++prop_sched_count;
+	  break;
+	case HeapId::proportional:
+	  pull_request_help(result, prop_q, PhaseType::priority);
+	  reduce_reservation_tags(result.client);
+	  ++limit_break_sched_count;
+	  break;
+	default:
+	  assert(false);
+	}
+
+	return result;
+      }
+
+
+      template<typename K>
+      void pull_request_ehlp(PullReq& result,
+			     Heap<EntryRef, K>& heap,
+			     PhaseType phase) {
+	EntryRef& top = heap.top();
+	top->handled = true;
+	result.retn.client = top->client;
+	result.retn.request = std::move(top->request);
+	result.retn.phase = phase;
+	heap.pop();
+      }
+
     protected:
 
       // for debugging
@@ -627,6 +698,8 @@ namespace crimson {
 	case HeapId::reservation:
 	  // don't need to note client
 	  (void) submit_top_request(reserv_q, PhaseType::reservation);
+	  // unlike the other two cases, we do not reduce reservation
+	  // tags here
 	  ++reserv_sched_count;
 	  break;
 	case HeapId::ready:
