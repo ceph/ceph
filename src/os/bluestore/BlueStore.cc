@@ -3911,7 +3911,7 @@ void BlueStore::_kv_sync_thread()
       // flush/barrier on block device
       bdev->flush();
 
-      if (!g_conf->bluestore_sync_submit_transaction) {
+      if (!g_conf->bluestore_sync_transaction && !g_conf->bluestore_sync_submit_transaction) {
 	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
 	     it != kv_committing.end();
 	     ++it) {
