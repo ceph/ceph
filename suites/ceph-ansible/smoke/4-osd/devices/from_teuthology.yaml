@@ -1,0 +1,6 @@
+meta:
+- desc: "Have teuthology tell ceph-ansible which OSD devices to use"
+overrides:
+  ceph_ansible:
+    vars:
+      osd_auto_discovery: false
