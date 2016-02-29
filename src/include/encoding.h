@@ -429,7 +429,7 @@ inline void decode(std::list<ceph::shared_ptr<T> >& ls, bufferlist::iterator& p)
   decode(n, p);
   ls.clear();
   while (n--) {
-    ceph::shared_ptr<T> v(new T);
+    ceph::shared_ptr<T> v(std::make_shared<T>());
     decode(*v, p);
     ls.push_back(v);
   }
@@ -595,7 +595,7 @@ inline void decode(std::vector<ceph::shared_ptr<T> >& v, bufferlist::iterator& p
   decode(n, p);
   v.resize(n);
   for (__u32 i=0; i<n; i++) {
-    v[i].reset(new T());
+    v[i] = std::make_shared<T>();
     decode(*v[i], p);
   }
 }

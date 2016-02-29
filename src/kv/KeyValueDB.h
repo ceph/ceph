@@ -247,9 +247,7 @@ public:
   }
 
   Iterator get_iterator(const std::string &prefix) {
-    return ceph::shared_ptr<IteratorImpl>(
-      new IteratorImpl(prefix, get_iterator())
-    );
+    return std::make_shared<IteratorImpl>(prefix, get_iterator());
   }
 
   WholeSpaceIterator get_snapshot_iterator() {
@@ -257,9 +255,7 @@ public:
   }
 
   Iterator get_snapshot_iterator(const std::string &prefix) {
-    return ceph::shared_ptr<IteratorImpl>(
-      new IteratorImpl(prefix, get_snapshot_iterator())
-    );
+    return std::make_shared<IteratorImpl>(prefix, get_snapshot_iterator());
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;

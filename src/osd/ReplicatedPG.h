@@ -169,7 +169,7 @@ public:
       results.mirror_snapset = mirror_snapset;
     }
   };
-  typedef boost::shared_ptr<CopyOp> CopyOpRef;
+  typedef ceph::shared_ptr<CopyOp> CopyOpRef;
 
   /**
    * The CopyCallback class defines an interface for completions to the
@@ -214,7 +214,7 @@ public:
 	user_version(0), data_offset(0),
 	canceled(false) { }
   };
-  typedef boost::shared_ptr<ProxyReadOp> ProxyReadOpRef;
+  typedef ceph::shared_ptr<ProxyReadOp> ProxyReadOpRef;
 
   struct ProxyWriteOp {
     OpContext *ctx;
@@ -236,7 +236,7 @@ public:
 	sent_ack(false), canceled(false),
         reqid(_reqid) { }
   };
-  typedef boost::shared_ptr<ProxyWriteOp> ProxyWriteOpRef;
+  typedef ceph::shared_ptr<ProxyWriteOp> ProxyWriteOpRef;
 
   struct FlushOp {
     ObjectContextRef obc;       ///< obc we are flushing
@@ -254,7 +254,7 @@ public:
 	blocking(false), removal(false) {}
     ~FlushOp() { assert(!on_flush); }
   };
-  typedef boost::shared_ptr<FlushOp> FlushOpRef;
+  typedef ceph::shared_ptr<FlushOp> FlushOpRef;
 
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() {
