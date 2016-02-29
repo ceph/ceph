@@ -3560,10 +3560,13 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->state = TransContext::STATE_KV_QUEUED;
       if (!g_conf->bluestore_sync_transaction) {
 	if (g_conf->bluestore_sync_submit_transaction) {
+	  _txc_update_fm(txc);
 	  db->submit_transaction(txc->t);
 	}
-      } else
+      } else {
+	_txc_update_fm(txc);
 	db->submit_transaction_sync(txc->t);
+      }
       {
 	std::lock_guard<std::mutex> l(kv_lock);
 	kv_queue.push_back(txc);
@@ -3791,6 +3794,43 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
   }
 }
 
+void BlueStore::_txc_update_fm(TransContext *txc)
+{
+  if (txc->wal_txn)
+    dout(20) << __func__ << " txc " << txc
+      << " allocated " << txc->allocated
+      << " (will release " << txc->released << " after wal)"
+      << dendl;
+  else
+    dout(20) << __func__ << " txc " << txc
+      << " allocated " << txc->allocated
+      << " released " << txc->released
+      << dendl;
+
+  for (interval_set<uint64_t>::iterator p = txc->allocated.begin();
+      p != txc->allocated.end();
+      ++p) {
+    fm->allocate(p.get_start(), p.get_len(), txc->t);
+  }
+
+  if (txc->wal_txn) {
+    txc->wal_txn->released.swap(txc->released);
+    assert(txc->released.empty());
+  } else {
+    for (interval_set<uint64_t>::iterator p = txc->released.begin();
+	p != txc->released.end();
+	++p) {
+      dout(20) << __func__ << " release " << p.get_start()
+	<< "~" << p.get_len() << dendl;
+      fm->release(p.get_start(), p.get_len(), txc->t);
+
+      if (!g_conf->bluestore_debug_no_reuse_blocks)
+	alloc->release(p.get_start(), p.get_len());
+    }
+  }
+}
+
+
 void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
@@ -3821,54 +3861,21 @@ void BlueStore::_kv_sync_thread()
 
       // allocations and deallocations
       interval_set<uint64_t> released;
-      for (std::deque<TransContext *>::iterator it = kv_committing.begin();
-	   it != kv_committing.end();
-	   ++it) {
-	TransContext *txc = *it;
-	if (txc->wal_txn)
-	  dout(20) << __func__ << " txc " << txc
-		   << " allocated " << txc->allocated
-		   << " (will release " << txc->released << " after wal)"
-		   << dendl;
-	else
-	  dout(20) << __func__ << " txc " << *it
-		   << " allocated " << txc->allocated
-		   << " released " << txc->released
-		   << dendl;
-	for (interval_set<uint64_t>::iterator p = txc->allocated.begin();
-	     p != txc->allocated.end();
-	     ++p) {
-	  fm->allocate(p.get_start(), p.get_len(), txc->t);
-	}
-	if (txc->wal_txn) {
-	  txc->wal_txn->released.swap(txc->released);
-	  assert(txc->released.empty());
-	} else {
-	  released.insert(txc->released);
-	  for (interval_set<uint64_t>::iterator p = txc->released.begin();
-	       p != txc->released.end();
-	       ++p) {
-	    dout(20) << __func__ << " release " << p.get_start()
-		     << "~" << p.get_len() << dendl;
-	    fm->release(p.get_start(), p.get_len(), txc->t);
-	  }
-	}
-      }
       for (std::deque<TransContext *>::iterator it = wal_cleaning.begin();
-	   it != wal_cleaning.end();
-	   ++it) {
+	  it != wal_cleaning.end();
+	  ++it) {
 	TransContext *txc = *it;
 	if (!txc->wal_txn->released.empty()) {
 	  dout(20) << __func__ << " txc " << txc
-		   << " (post-wal) released " << txc->wal_txn->released
-		   << dendl;
+	    << " (post-wal) released " << txc->wal_txn->released
+	    << dendl;
 	  released.insert(txc->wal_txn->released);
 	  for (interval_set<uint64_t>::iterator p =
-		 txc->wal_txn->released.begin();
-	       p != txc->wal_txn->released.end();
-	       ++p) {
+	      txc->wal_txn->released.begin();
+	      p != txc->wal_txn->released.end();
+	      ++p) {
 	    dout(20) << __func__ << " release " << p.get_start()
-		     << "~" << p.get_len() << dendl;
+	      << "~" << p.get_len() << dendl;
 	    fm->release(p.get_start(), p.get_len(), t);
 	  }
 	}
@@ -3908,6 +3915,7 @@ void BlueStore::_kv_sync_thread()
 	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
 	     it != kv_committing.end();
 	     ++it) {
+	  _txc_update_fm((*it));
 	  db->submit_transaction((*it)->t);
 	}
       }
