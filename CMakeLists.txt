@@ -280,7 +280,7 @@ set(HAVE_LIBROCKSDB 1)
 find_package(ZLIB REQUIRED)
 
 #option for LTTng
-option(WITH_LTTNG "LTTng tracing is enabled" ON)
+option(WITH_LTTNG "LTTng tracing is enabled" OFF)
 if(${WITH_LTTNG})
   find_package(lttng-ust)
   set(WITH_LTTNG ${LTTNG_FOUND})
