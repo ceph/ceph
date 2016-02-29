@@ -390,6 +390,9 @@ int get_image_options(const boost::program_options::variables_map &vm,
     } else {
       format = g_conf->rbd_default_format;
     }
+    if (format == 1) {
+      std::cerr << "rbd: image format 1 is deprecated" << std::endl;
+    }
 
     if (features_specified && features != 0) {
       if (format_specified && format == 1) {

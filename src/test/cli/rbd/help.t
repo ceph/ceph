@@ -228,7 +228,7 @@
   Optional arguments
     -p [ --pool ] arg         pool name
     --image arg               image name
-    --image-format arg        image format [1 or 2]
+    --image-format arg        image format [1 (deprecated) or 2]
     --new-format              use image format 2
                               (deprecated)
     --order arg               object order [12 <= order <= 25]
@@ -473,7 +473,7 @@
     --path arg                import file (or '-' for stdin)
     --dest-pool arg           destination pool name
     --dest arg                destination image name
-    --image-format arg        image format [1 or 2]
+    --image-format arg        image format [1 (deprecated) or 2]
     --new-format              use image format 2
                               (deprecated)
     --order arg               object order [12 <= order <= 25]
