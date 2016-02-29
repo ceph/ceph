@@ -29,6 +29,7 @@
 
 class PGLogTest : public ::testing::Test, protected PGLog {
 public:
+  PGLogTest() : PGLog(g_ceph_context) {}
   virtual void SetUp() { }
 
   virtual void TearDown() {

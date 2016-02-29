@@ -95,7 +95,7 @@ public:
   void submit_transaction(
     const hobject_t &hoid,
     const eversion_t &at_version,
-    PGTransaction *t,
+    PGTransactionUPtr &&t,
     const eversion_t &trim_to,
     const eversion_t &trim_rollback_to,
     const vector<pg_log_entry_t> &log_entries,
@@ -359,7 +359,7 @@ public:
     osd_reqid_t reqid;
     OpRequestRef client_op;
 
-    ECTransaction *t;
+    std::unique_ptr<ECTransaction> t;
 
     set<hobject_t, hobject_t::BitwiseComparator> temp_added;
     set<hobject_t, hobject_t::BitwiseComparator> temp_cleared;
@@ -369,7 +369,6 @@ public:
 
     map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> unstable_hash_infos;
     ~Op() {
-      delete t;
       delete on_local_applied_sync;
       delete on_all_applied;
       delete on_all_commit;

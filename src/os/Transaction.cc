@@ -323,6 +323,20 @@ void ObjectStore::Transaction::_build_actions_from_tbl()
       }
       break;
 
+    case Transaction::OP_TRY_RENAME:
+      {
+	coll_t cid;
+	ghobject_t oldoid;
+	ghobject_t newoid;
+
+	::decode(cid, p);
+	::decode(oldoid, p);
+	::decode(newoid, p);
+
+	try_rename(cid, oldoid, newoid);
+      }
+      break;
+
     case Transaction::OP_COLL_SETATTR:
       {
 	coll_t cid;

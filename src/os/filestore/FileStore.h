@@ -675,7 +675,8 @@ public:
 		      const SequencerPosition& spos);
   int _collection_move_rename(const coll_t& oldcid, const ghobject_t& oldoid,
 			      coll_t c, const ghobject_t& o,
-			      const SequencerPosition& spos);
+			      const SequencerPosition& spos,
+			      bool ignore_enoent = false);
 
   int _set_alloc_hint(const coll_t& cid, const ghobject_t& oid,
                       uint64_t expected_object_size,

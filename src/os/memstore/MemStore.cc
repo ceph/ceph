@@ -860,6 +860,19 @@ void MemStore::_do_transaction(Transaction& t)
         coll_t newcid = i.get_cid(op->dest_cid);
         ghobject_t newoid = i.get_oid(op->dest_oid);
 	r = _collection_move_rename(oldcid, oldoid, newcid, newoid);
+	if (r == -ENOENT)
+	  r = 0;
+      }
+      break;
+
+    case Transaction::OP_TRY_RENAME:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oldoid = i.get_oid(op->oid);
+        ghobject_t newoid = i.get_oid(op->dest_oid);
+	r = _collection_move_rename(cid, oldoid, cid, newoid);
+	if (r == -ENOENT)
+	  r = 0;
       }
       break;
 
