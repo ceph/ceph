@@ -507,16 +507,23 @@ WRITE_CLASS_ENCODER(rgw_cls_obj_check_mtime)
 
 struct rgw_cls_usage_log_add_op {
   rgw_usage_log_info info;
+  rgw_user user;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(info, bl);
+    ::encode(user.to_str(), bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(info, bl);
+    if (struct_v >= 2) {
+      string s;
+      ::decode(s, bl);
+      user.from_str(s);
+    }
     DECODE_FINISH(bl);
   }
 };

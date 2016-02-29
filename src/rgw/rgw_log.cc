@@ -127,13 +127,14 @@ public:
     round_timestamp = ts.round_to_hour();
   }
 
-  void insert(utime_t& timestamp, rgw_usage_log_entry& entry) {
+  void insert_user(utime_t& timestamp, const rgw_user& user, rgw_usage_log_entry& entry) {
     lock.Lock();
     if (timestamp.sec() > round_timestamp + 3600)
       recalc_round_timestamp(timestamp);
     entry.epoch = round_timestamp.sec();
     bool account;
-    rgw_user_bucket ub(entry.owner, entry.bucket);
+    string u = user.to_str();
+    rgw_user_bucket ub(u, entry.bucket);
     usage_map[ub].insert(round_timestamp, entry, &account);
     if (account)
       num_entries++;
@@ -142,6 +143,14 @@ public:
     if (need_flush) {
       Mutex::Locker l(timer_lock);
       flush();
+    }
+  }
+
+  void insert(utime_t& timestamp, rgw_usage_log_entry& entry) {
+    if (entry.payer.empty()) {
+      insert_user(timestamp, entry.owner, entry);
+    } else {
+      insert_user(timestamp, entry.payer, entry);
     }
   }
 
@@ -178,14 +187,20 @@ static void log_usage(struct req_state *s, const string& op_name)
     return;
 
   rgw_user user;
+  rgw_user payer;
 
-  if (!s->bucket_name.empty())
+  if (!s->bucket_name.empty()) {
     user = s->bucket_owner.get_id();
-  else
+    if (s->bucket_info.requester_pays) {
+      payer = s->user->user_id;
+    }
+  } else {
     user = s->user->user_id;
+  }
 
-  string id = user.to_str();
-  rgw_usage_log_entry entry(id, s->bucket.name);
+  string u = user.to_str();
+  string p = payer.to_str();
+  rgw_usage_log_entry entry(u, p, s->bucket.name);
 
   uint64_t bytes_sent = s->cio->get_bytes_sent();
   uint64_t bytes_received = s->cio->get_bytes_received();
