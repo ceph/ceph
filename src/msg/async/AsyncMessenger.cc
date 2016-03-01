@@ -140,6 +140,7 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
                          << "-" << msgr->cct->_conf->ms_bind_port_max << ": "
                          << cpp_strerror(errno) << dendl;
         r = -errno;
+        listen_addr.set_port(0); // Clear port before retry, otherwise we shall fail again.
         continue;
       }
       ldout(msgr->cct, 10) << __func__ << " bound on random port " << listen_addr << dendl;
