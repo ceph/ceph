@@ -151,6 +151,13 @@ function ceph_watch_start()
     CEPH_WATCH_FILE=${TMPDIR}/CEPH_WATCH_$$
     ceph $whatch_opt > $CEPH_WATCH_FILE &
     CEPH_WATCH_PID=$!
+
+    # wait until the "ceph" client is connected and receiving
+    # log messages from monitor
+    for i in `seq 3`; do
+        grep -q "cluster" $CEPH_WATCH_FILE && break
+        sleep 1
+    done
 }
 
 function ceph_watch_wait()
