@@ -106,9 +106,6 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
   conf->parse_env(); // environment variables override
 
   conf->parse_argv(args); // argv override
-
-  // Now we're ready to complain about config file parse errors
-  complain_about_parse_errors(cct, &parse_errors);
 }
 
 void global_init(std::vector < const char * > *alt_def_args,
@@ -255,6 +252,9 @@ void global_init(std::vector < const char * > *alt_def_args,
 	g_ceph_context->get_set_gid());
     }
   }
+
+  // Now we're ready to complain about config file parse errors
+  complain_about_parse_errors(cct, &parse_errors);
 
   // test leak checking
   if (g_conf->debug_deliberately_leak_memory) {
