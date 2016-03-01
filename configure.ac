@@ -126,7 +126,7 @@ AM_CONDITIONAL(WITH_RBD, test "$with_rbd" = "yes")
 #AS_IF([test "$with_rbd" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_RBD])])
 
 AC_ARG_WITH([cython],
-	[AS_HELP_STRING([--with-cython], [build python bindings for librbd])],
+	[AS_HELP_STRING([--with-cython], [build python bindings for libraries])],
 	[],
 	[with_cython=yes])
 AM_CONDITIONAL(WITH_CYTHON, test "$with_cython" = "yes")
@@ -207,7 +207,7 @@ AC_ARG_ENABLE([server],
 AM_CONDITIONAL(ENABLE_SERVER, test "$enable_server" = "yes")
 #AS_IF([test "$enable_server" = "yes"], [AC_DEFINE([WITH_MON, WITH_OSD, WITH_MDS, ENABLE_SERVER])])
 
-# cython is required to build librbd python bindings
+# cython is required to build python bindings for libraries
 if test x"$with_cython" = xyes; then
     AC_CHECK_PROG(CYTHON_CHECK, cython, yes)
     if test x"$CYTHON_CHECK" != xyes; then
