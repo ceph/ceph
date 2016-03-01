@@ -6,7 +6,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 static int civetweb_callback(struct mg_connection* conn) {
-  struct mg_request_info* req_info = mg_get_request_info(conn);
+  const struct mg_request_info* req_info = mg_get_request_info(conn);
   RGWMongooseEnv* pe = static_cast<RGWMongooseEnv *>(req_info->user_data);
 
   {
@@ -43,6 +43,8 @@ int RGWMongooseFrontend::run() {
   set_conf_default(conf_map, "enable_keep_alive", "yes");
   set_conf_default(conf_map, "num_threads", thread_pool_buf);
   set_conf_default(conf_map, "decode_url", "no");
+  set_conf_default(conf_map, "validate_http_method", "no");
+  set_conf_default(conf_map, "canonicalize_url_path", "no");
 
   // Set run_as_user. This will cause civetweb to invoke setuid() and setgid()
   // based on pw_uid and pw_gid obtained from pw_name.

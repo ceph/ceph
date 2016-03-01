@@ -90,13 +90,13 @@ int RGWMongoose::complete_request()
 void RGWMongoose::init_env(CephContext *cct)
 {
   env.init(cct);
-  struct mg_request_info *info = mg_get_request_info(conn);
+  const struct mg_request_info *info = mg_get_request_info(conn);
 
   if (!info)
     return;
 
   for (int i = 0; i < info->num_headers; i++) {
-    struct mg_request_info::mg_header *header = &info->http_headers[i];
+    const struct mg_request_info::mg_header *header = &info->http_headers[i];
 
     if (strcasecmp(header->name, "content-length") == 0) {
       env.set("CONTENT_LENGTH", header->value);

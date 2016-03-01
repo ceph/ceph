@@ -68,6 +68,9 @@ core
 /Makefile
 /tags
 
+# config-time generated symlink
+/src/include/civetweb
+
 # temporary directory used by e.g. "make distcheck", e.g. ceph-0.42
 /ceph-[0-9]*/
 
