@@ -77,7 +77,6 @@ cephfs_SOURCES = cephfs.cc
 cephfs_LDADD = $(LIBCOMMON)
 bin_PROGRAMS += cephfs
 
-python_PYTHON += pybind/cephfs.py
 python_PYTHON += pybind/ceph_volume_client.py
 
 # libcephfs (this should go somewhere else in the future)

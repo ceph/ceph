@@ -85,6 +85,7 @@ nm $vdir/lib/python*/*-packages/rados.so | grep 'U rados_' | \
 # --global-option=build_ext --global-option="--cython-include-dirs $TOPDIR/src/pybind/rados/"
 # but that doesn't work, so copying the file in the rbd module directly, that's ok for docs
 cp -f $TOPDIR/src/pybind/rados/rados.pxd $TOPDIR/src/pybind/rbd/
+cp -f $TOPDIR/src/pybind/rados/rados.pxd $TOPDIR/src/pybind/cephfs/
 
 ln -sf librbd.so.1 $vdir/lib/librbd.so
 gcc -shared -o $vdir/lib/librbd.so.1 -xc /dev/null
@@ -96,7 +97,19 @@ nm $vdir/lib/python*/*-packages/rbd.so | grep 'U rbd_' | \
     awk '{ print "void "$2"(void) {}" }' | \
     gcc -shared -o $vdir/lib/librbd.so.1 -xc -
 
-rm -f $TOPDIR/src/pybind/rbd/rados.pxd
+
+ln -sf libcephfs.so.1 $vdir/lib/libcephfs.so
+gcc -shared -o $vdir/lib/libcephfs.so.1 -xc /dev/null
+CFLAGS="-iquote $TOPDIR/src/include" \
+    CPPFLAGS="-iquote $TOPDIR/src/include" \
+    LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
+    $vdir/bin/pip install $TOPDIR/src/pybind/cephfs
+nm $vdir/lib/python*/*-packages/cephfs.so | grep 'U cephfs_' | \
+    awk '{ print "void "$2"(void) {}" }' | \
+    gcc -shared -o $vdir/lib/libcephfs.so.1 -xc -
+
+rm -f $TOPDIR/src/pybind/rbd/rados.pxd $TOPDIR/src/pybind/cephfs/rados.pxd
+
 
 $vdir/bin/sphinx-build -a -n -b dirhtml -d doctrees $TOPDIR/doc $TOPDIR/build-doc/output/html
 $vdir/bin/sphinx-build -a -b man -d doctrees $TOPDIR/doc $TOPDIR/build-doc/output/man
