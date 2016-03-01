@@ -649,6 +649,7 @@ class TestIoctx(object):
         assert(loops <= 10)
 
         eq(retval[0], payload)
+        eq(sys.getrefcount(comp), 2)
 
         # test2: use wait_for_complete_and_cb(), verify retval[0] is
         # set by the time we regain control
@@ -666,6 +667,25 @@ class TestIoctx(object):
         comp.wait_for_complete_and_cb()
         assert(retval[0] is not None)
         eq(retval[0], payload)
+        eq(sys.getrefcount(comp), 2)
+
+        # test3: error case, use wait_for_complete_and_cb(), verify retval[0] is
+        # set by the time we regain control
+
+        retval[0] = 1
+        self._take_down_acting_set('test_pool', 'bar')
+        comp = self.ioctx.aio_read("bar", len(payload), 0, cb)
+        eq(False, comp.is_complete())
+        time.sleep(3)
+        eq(False, comp.is_complete())
+        with lock:
+            eq(1, retval[0])
+        self._let_osds_back_up()
+
+        comp.wait_for_complete_and_cb()
+        eq(None, retval[0])
+        assert(comp.get_return_value() < 0)
+        eq(sys.getrefcount(comp), 2)
 
         [i.remove() for i in self.ioctx.list_objects()]
 
