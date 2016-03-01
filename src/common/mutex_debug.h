@@ -139,13 +139,22 @@ public:
   mutex_debug_impl(const std::string &n = std::string(), bool bt = false,
 		   CephContext *cct = nullptr) :
     mutex_debugging<mutex_debug_impl<Recursive> >(n, bt, cct) {
+    pthread_mutexattr_t a;
+    pthread_mutexattr_init(&a);
+    int r;
     if (recursive)
-      m = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+      r = pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE);
     else
-      m = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+      r = pthread_mutexattr_settype(&a, PTHREAD_MUTEX_ERRORCHECK);
+    assert(r == 0);
+    r = pthread_mutex_init(&m, &a);
+    assert(r == 0);
   }
   // Mutex is Destructible
-  ~mutex_debug_impl() = default;
+  ~mutex_debug_impl() {
+    int r = pthread_mutex_destroy(&m);
+    assert(r == 0);
+  }
 
   // Mutex concept is non-Copyable
   mutex_debug_impl(const mutex_debug_impl&) = delete;
