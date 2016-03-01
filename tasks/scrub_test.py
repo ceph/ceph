@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import time
-import ctypes
 import tempfile
 
 import ceph_manager
@@ -214,8 +213,6 @@ class MessUp:
 class InconsistentObjChecker:
     """Check the returned inconsistents/inconsistent info"""
 
-    CEPH_NOSNAP = ctypes.c_uint64(-2).value
-
     def __init__(self, osd, acting, obj_name):
         self.osd = osd
         self.acting = acting
@@ -224,7 +221,7 @@ class InconsistentObjChecker:
 
     def basic_checks(self, inc):
         assert inc['object']['name'] == self.obj
-        assert inc['object']['snap'] == self.CEPH_NOSNAP
+        assert inc['object']['snap'] == "head"
         assert len(inc['shards']) == len(self.acting), \
             "the number of returned shard does not match with the acting set"
 
@@ -309,9 +306,9 @@ def test_list_inconsistent_obj(ctx, manager, osd_remote, pg, acting, osd_id,
 
             checker = InconsistentObjChecker(osd_id, acting, obj_name)
             inc_obj = objs[0]
+            log.info('inc = %r', inc_obj)
             checker.basic_checks(inc_obj)
             for check in checks:
-                log.info('inc = %r', inc_obj)
                 checker.run(check, inc_obj)
 
 
