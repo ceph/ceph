@@ -25,7 +25,6 @@ namespace rgw {
     RGWLibFrontend* fe;
     OpsLogSocket* olog;
     RGWREST rest; // XXX needed for RGWProcessEnv
-    RGWProcessEnv env;
     RGWRados* store;
 
   public:
