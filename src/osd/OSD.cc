@@ -3663,10 +3663,11 @@ void OSD::maybe_update_heartbeat_peers()
     }
   }
 
-  Mutex::Locker l(heartbeat_lock);
   if (!heartbeat_peers_need_update())
     return;
-  heartbeat_need_update = false;
+  heartbeat_clear_peers_need_update();
+
+  Mutex::Locker l(heartbeat_lock);
 
   dout(10) << "maybe_update_heartbeat_peers updating" << dendl;
 
