@@ -20,7 +20,7 @@
 #include "msg/msg_types.h"
 #include "msg/async/net_handler.h"
 
-#include "GenericSocket.h"
+#include "Stack.h"
 
 class PosixNetworkStack : public NetworkStack {
   NetHandler net;

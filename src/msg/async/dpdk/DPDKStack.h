@@ -20,7 +20,7 @@
 #include "common/ceph_context.h"
 #include "common/Tub.h"
 
-#include "msg/async/GenericSocket.h"
+#include "msg/async/Stack.h"
 #include "DPDK.h"
 #include "net.h"
 #include "const.h"

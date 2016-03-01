@@ -31,7 +31,7 @@ using namespace std;
 #include "include/buffer.h"
 #include "msg/Connection.h"
 #include "msg/Messenger.h"
-#include "GenericSocket.h"
+#include "Stack.h"
 
 #include "Event.h"
 

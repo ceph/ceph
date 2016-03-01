@@ -17,7 +17,7 @@
 #define CEPH_EVENTDPDK_H
 
 #include "msg/async/Event.h"
-#include "msg/async/GenericSocket.h"
+#include "msg/async/Stack.h"
 #include "UserspaceEvent.h"
 
 class DPDKDriver : public EventDriver {

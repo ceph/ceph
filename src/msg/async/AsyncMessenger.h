@@ -36,7 +36,6 @@ using namespace std;
 #include "include/assert.h"
 #include "AsyncConnection.h"
 #include "Event.h"
-#include "GenericSocket.h"
 
 
 class AsyncMessenger;

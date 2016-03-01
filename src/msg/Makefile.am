@@ -70,6 +70,7 @@ libmsg_la_SOURCES += \
 	msg/async/dpdk/dpdk_rte.cc \
 	msg/async/dpdk/DPDKStack.cc \
 	msg/async/dpdk/EventDPDK.cc \
+	msg/async/dpdk/Stack.cc \
 	msg/async/dpdk/ethernet.cc \
 	msg/async/dpdk/IP.cc \
 	msg/async/dpdk/Packet.cc \
@@ -86,7 +87,7 @@ noinst_HEADERS += \
 	msg/async/dpdk/DPDKStack.h \
 	msg/async/dpdk/ethernet.h \
 	msg/async/dpdk/EventDPDK.h \
-	msg/async/dpdk/GenericSocket.h \
+	msg/async/dpdk/Stack.h \
 	msg/async/dpdk/IP.h \
 	msg/async/dpdk/IPChecksum.h \
 	msg/async/dpdk/Packet.h \
