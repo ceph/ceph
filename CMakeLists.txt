@@ -376,6 +376,12 @@ option(DEBUG_GATHER "C_Gather debugging is enabled" ON)
 option(HAVE_LIBZFS "LibZFS is enabled" OFF)
 option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
+# we want to include civetweb.h as "civetweb/civetweb.h".  Make it so.
+execute_process(
+COMMAND rm -f "${CMAKE_BINARY_DIR}/src/include/civetweb"
+COMMAND mkdir -p "${CMAKE_BINARY_DIR}/src/include"
+COMMAND ln -s "${CMAKE_SOURCE_DIR}/src/civetweb/include"
+        "${CMAKE_BINARY_DIR}/src/include/civetweb")
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
 
