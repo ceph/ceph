@@ -13,13 +13,11 @@ method.
 # Copyright 2015 Hector Martin <marcan@marcan.st>
 # Copyright 2016 Mehdi Abaakouk <sileht@redhat.com>
 
-from cpython cimport PyObject, ref, exc, array
-from cpython.dict cimport PyDict_New
+from cpython cimport PyObject, ref
 from libc cimport errno
 from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
 
-import array
 import sys
 import threading
 import time
