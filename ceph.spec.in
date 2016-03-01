@@ -27,6 +27,10 @@
 %bcond_with selinux
 %endif
 
+# LTTng-UST enabled on Fedora, RHEL 6+, and SLES 12
+%if 0%{?fedora} || 0%{?rhel} >= 6 || 0%{?suse_version} == 1315
+%bcond_without lttng
+%endif
 
 %if (0%{?el5} || (0%{?rhel_version} >= 500 && 0%{?rhel_version} <= 600))
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
@@ -60,11 +64,6 @@ restorecon -R /var/log/radosgw > /dev/null 2>&1;
 %if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
 %global _with_systemd 1
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
-%endif
-
-# LTTng-UST enabled on Fedora, RHEL 6, and SLES 12
-%if 0%{?fedora} || 0%{?rhel} == 6 || 0%{?suse_version} == 1315
-%global _with_lttng 1
 %endif
 
 # unify libexec for all targets
@@ -187,7 +186,7 @@ BuildRequires:  boost-random
 BuildRequires:	python-argparse
 %endif
 # lttng and babeltrace for rbd-replay-prep
-%if 0%{?_with_lttng}
+%if %{with lttng}
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:	lttng-ust-devel
 BuildRequires:	libbabeltrace-devel
@@ -706,6 +705,10 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 %endif
 		--with-librocksdb-static=check \
 		--with-radosgw \
+%if %{without lttng}
+		--without-lttng \
+		--without-babeltrace \
+%endif
 		$CEPH_EXTRA_CONFIGURE_ARGS \
 		%{?_with_ocf} \
 		%{?_with_tcmalloc} \
@@ -860,7 +863,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/ceph/erasure-code/libec_*.so*
 %dir %{_libdir}/ceph/compressor
 %{_libdir}/ceph/compressor/libceph_*.so*
-%if 0%{?_with_lttng}
+%if %{with lttng}
 %{_libdir}/libos_tp.so*
 %{_libdir}/libosd_tp.so*
 %endif
@@ -976,7 +979,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
 %{_bindir}/rbdmap
-%if 0%{?_with_lttng}
+%if %{with lttng}
 %{_bindir}/rbd-replay-prep
 %endif
 %{_bindir}/ceph-post-file
@@ -1202,7 +1205,7 @@ fi
 %files -n librados2
 %defattr(-,root,root,-)
 %{_libdir}/librados.so.*
-%if 0%{?_with_lttng}
+%if %{with lttng}
 %{_libdir}/librados_tp.so.*
 %endif
 
@@ -1226,7 +1229,7 @@ fi
 %{_includedir}/rados/rados_types.hpp
 %{_includedir}/rados/memory.h
 %{_libdir}/librados.so
-%if 0%{?_with_lttng}
+%if %{with lttng}
 %{_libdir}/librados_tp.so
 %endif
 %{_bindir}/librados-config
@@ -1261,7 +1264,7 @@ fi
 %files -n librbd1
 %defattr(-,root,root,-)
 %{_libdir}/librbd.so.*
-%if 0%{?_with_lttng}
+%if %{with lttng}
 %{_libdir}/librbd_tp.so.*
 %endif
 
@@ -1281,7 +1284,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_includedir}/rbd/librbd.hpp
 %{_includedir}/rbd/features.h
 %{_libdir}/librbd.so
-%if 0%{?_with_lttng}
+%if %{with lttng}
 %{_libdir}/librbd_tp.so
 %endif
 
