@@ -10,3 +10,4 @@ overrides:
         debug rocksdb: 10
         enable experimental unrecoverable data corrupting features: "*"
         osd debug randomize hobject sort order: false
+        bluestore bluefs env mirror: true
