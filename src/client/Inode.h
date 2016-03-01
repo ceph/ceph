@@ -205,10 +205,7 @@ struct Inode {
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
 
   bool has_dir_layout() const {
-    for (unsigned c = 0; c < sizeof(layout); c++)
-      if (*((const char *)&layout + c))
-	return true;
-    return false;
+    return layout != file_layout_t();
   }
 
   __u32 hash_dentry_name(const string &dn) {
