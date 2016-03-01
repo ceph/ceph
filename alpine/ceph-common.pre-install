@@ -1,0 +1,5 @@
+#!/bin/sh
+
+groupadd ceph -o -r 2>/dev/null
+useradd ceph -o -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2> /dev/null
+exit 0
