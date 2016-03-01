@@ -6225,10 +6225,30 @@ int BlueStore::_clone(TransContext *txc,
     dout(20) << __func__ << " hash " << e->hash << " ref_map now "
 	     << e->ref_map << dendl;
     newo->onode.block_map = oldo->onode.block_map;
-    newo->onode.size = oldo->onode.size;
     newo->enode = e;
     dout(20) << __func__ << " block_map " << newo->onode.block_map << dendl;
     txc->write_enode(e);
+
+    //don't care _can_overlay_write()
+    for (auto& v : oldo->onode.overlay_map) {
+      string key;
+      bufferlist val;
+      get_overlay_key(oldo->onode.nid, v.second.key, &key);
+      int r  = db->get(PREFIX_OVERLAY, key, &val);
+      if (r < 0) {
+	derr << __func__ << " get oid " << oldo->oid << " overlay value(key=" << v.second.key
+	  << ")" << "failed: " << cpp_strerror(r) << dendl;
+	goto out;
+      }
+
+      newo->onode.overlay_map[v.first] = bluestore_overlay_t(++newo->onode.last_overlay_key, 0, v.second.length);
+      dout(20) << __func__ << " added " << v.first << " " << v.second.length << dendl;
+      key.clear();
+      get_overlay_key(newo->onode.nid, newo->onode.last_overlay_key, &key);
+      txc->t->set(PREFIX_OVERLAY, key, val);
+    }
+
+    newo->onode.size = oldo->onode.size;
     if (marked)
       txc->write_onode(oldo);
   } else {
