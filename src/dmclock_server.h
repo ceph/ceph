@@ -224,6 +224,25 @@ namespace crimson {
 
     public:
 
+      enum class Mechanism { push, pull };
+
+      // when we try to get the next request, we'll be in one of three
+      // situations -- we'll have one to return, have one that can
+      // fire in the future, or not have any
+      enum class NextReqStat { returning, future, none };
+
+      struct PullReq {
+	NextReqStat status;
+	union {
+	  struct {
+	    C&         client;
+	    RequestRef request;
+	    PhaseType  phase;
+	  } retn;
+	  Time when_next;
+	};
+      };
+
       // a function that can be called to look up client information
       using ClientInfoFunc = std::function<ClientInfo(C)>;
 
@@ -258,6 +277,18 @@ namespace crimson {
 	}
       };
 
+      // specifies which queue next request will get popped from
+      enum class HeapId { reservation, ready, proportional };
+
+      // this is returned from next_req to tell the caller the situation
+      struct NextReq {
+	NextReqStat status;
+	union {
+	  HeapId heap_id;
+	  Time when_ready;
+	};
+      };
+
 
       ClientInfoFunc       client_info_f;
       CanHandleRequestFunc can_handle_f;
@@ -271,7 +302,7 @@ namespace crimson {
 
       // four heaps that maintain the earliest request by each of the
       // tag components
-      c::Heap<EntryRef, ReservationCompare> res_q;
+      c::Heap<EntryRef, ReservationCompare> reserv_q;
       c::Heap<EntryRef, ProportionCompare> prop_q;
 
       // AKA not-ready queue
@@ -284,7 +315,8 @@ namespace crimson {
       // if all reservations are met and all other requestes are under
       // limit, this will allow the request next in terms of
       // proportion to still get issued
-      bool allowLimitBreak;
+      bool             allowLimitBreak;
+      Mechanism        mechanism;
 
       std::atomic_bool finishing;
 
@@ -297,7 +329,7 @@ namespace crimson {
       Counter tick = 0;
 
       // performance data collection
-      size_t res_sched_count = 0;
+      size_t reserv_sched_count = 0;
       size_t prop_sched_count = 0;
       size_t limit_break_sched_count = 0;
 
@@ -311,57 +343,115 @@ namespace crimson {
       std::thread sched_ahead_thd;
       std::unique_ptr<RunEvery> cleaning_job;
 
-    public:
 
+      // COMMON constructor that others feed into
       PriorityQueue(ClientInfoFunc _client_info_f,
-		    CanHandleRequestFunc _can_handle_f,
-		    HandleRequestFunc _handle_f,
 		    Duration _idle_age,
 		    Duration _erase_age,
 		    Duration _check_time,
-		    bool _allowLimitBreak = false) :
+		    bool _allow_limit_break,
+		    Mechanism _mechanism) :
 	client_info_f(_client_info_f),
-	can_handle_f(_can_handle_f),
-	handle_f(_handle_f),
-	allowLimitBreak(_allowLimitBreak),
+	allowLimitBreak(_allow_limit_break),
+	mechanism(_mechanism),
 	finishing(false),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
 	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
 	check_time(std::chrono::duration_cast<Duration>(_check_time))
       {
 	assert(_erase_age >= _idle_age);
-	sched_ahead_thd = std::thread(&PriorityQueue::run_sched_ahead, this);
+	assert(_check_time < _idle_age);
 	cleaning_job =
 	  std::unique_ptr<RunEvery>(
 	    new RunEvery(check_time,
 			 std::bind(&PriorityQueue::do_clean, this)));
       }
 
+    public:
 
-      // the reason we're overloading the constructor rather than
-      // using default values for the arguments is so that callers
-      // have to either use all defaults or specify all timings; with
-      // default arguments they could specify some without others
+      // PUSH constructors -- full and convenience
+
+
+      // push full constructor
       PriorityQueue(ClientInfoFunc _client_info_f,
 		    CanHandleRequestFunc _can_handle_f,
 		    HandleRequestFunc _handle_f,
-		    bool _allowLimitBreak = false) :
+		    Duration _idle_age,
+		    Duration _erase_age,
+		    Duration _check_time,
+		    bool _allow_limit_break = false) :
+	PriorityQueue(_client_info_f,
+		      _idle_age, _erase_age, _check_time,
+		      _allow_limit_break, Mechanism::push)
+      {
+	can_handle_f = _can_handle_f;
+	handle_f = _handle_f;
+	sched_ahead_thd = std::thread(&PriorityQueue::run_sched_ahead, this);
+      }
+
+
+      // push convenience constructor
+      PriorityQueue(ClientInfoFunc _client_info_f,
+		    CanHandleRequestFunc _can_handle_f,
+		    HandleRequestFunc _handle_f,
+		    bool _allow_limit_break = false) :
 	PriorityQueue(_client_info_f,
 		      _can_handle_f,
 		      _handle_f,
 		      std::chrono::minutes(10),
 		      std::chrono::minutes(15),
 		      std::chrono::minutes(6),
-		      _allowLimitBreak)
+		      _allow_limit_break)
       {
 	// empty
       }
 
-      
+
+      // PULL constructors -- full and convenience
+
+      // pull full constructor
+      PriorityQueue(ClientInfoFunc _client_info_f,
+		    Duration _idle_age,
+		    Duration _erase_age,
+		    Duration _check_time,
+		    bool _allow_limit_break = false) :
+	PriorityQueue(_client_info_f,
+		      _idle_age, _erase_age, _check_time,
+		      _allow_limit_break, Mechanism::pull)
+      {
+	// empty
+      }
+
+
+      // pull convenience constructor
+      PriorityQueue(ClientInfoFunc _client_info_f,
+		    bool _allow_limit_break = false) :
+	PriorityQueue(_client_info_f,
+		      std::chrono::minutes(10),
+		      std::chrono::minutes(15),
+		      std::chrono::minutes(6),
+		      _allow_limit_break)
+      {
+	// empty
+      }
+
+
+      // NB: the reason the convenience constructors overload the
+      // constructor rather than using default values for the timing
+      // arguments is so that callers have to either use all defaults
+      // or specify all timings. Mixing default and passed could be
+      // problematic as they have to be consistent with one another.
+
+
+    public:
+
+
       ~PriorityQueue() {
 	finishing = true;
-	sched_ahead_cv.notify_one();
-	sched_ahead_thd.join();
+	if (Mechanism::push == mechanism) {
+	  sched_ahead_cv.notify_one();
+	  sched_ahead_thd.join();
+	}
       }
 
 
@@ -430,7 +520,7 @@ namespace crimson {
 	client_it->second.update_req_tag(entry->tag, tick);
 
 	if (0.0 != entry->tag.reservation) {
-	  res_q.push(entry);
+	  reserv_q.push(entry);
 	}
 
 	if (0.0 != entry->tag.proportion) {
@@ -457,22 +547,85 @@ namespace crimson {
 	}
 #endif
 
-	schedule_request();
+	if (Mechanism::push == mechanism) {
+	  schedule_request();
+	}
       }
 
 
       void request_completed() {
-	DataGuard g(data_mtx);
-	schedule_request();
+	if (Mechanism::push == mechanism) {
+	  DataGuard g(data_mtx);
+	  schedule_request();
+	}
       }
 
+
+      PullReq pull_request() {
+	assert(Mechanism::pull == mechanism);
+
+	PullReq result;
+	DataGuard g(data_mtx);
+	
+	NextReq next = next_request();
+	result.status = next.status;
+	switch(next.status) {
+	case NextReqStat::none:
+	  return result;
+	  break;
+	case NextReqStat::future:
+	  result.when_next = next.when_ready;
+	  return result;
+	  break;
+	case NextReqStat::returning:
+	  break;
+	default:
+	  assert(false);
+	}
+
+	// we'll only get here if we're returning an entry
+
+	switch(next.heap_id) {
+	case HeapId::reservation:
+	  pull_request_help(result, reserv_q, PhaseType::reservation);
+	  ++reserv_sched_count;
+	  break;
+	case HeapId::ready:
+	  pull_request_help(result, ready_q, PhaseType::priority);
+	  reduce_reservation_tags(result.client);
+	  ++prop_sched_count;
+	  break;
+	case HeapId::proportional:
+	  pull_request_help(result, prop_q, PhaseType::priority);
+	  reduce_reservation_tags(result.client);
+	  ++limit_break_sched_count;
+	  break;
+	default:
+	  assert(false);
+	}
+
+	return result;
+      }
+
+
+      template<typename K>
+      void pull_request_ehlp(PullReq& result,
+			     Heap<EntryRef, K>& heap,
+			     PhaseType phase) {
+	EntryRef& top = heap.top();
+	top->handled = true;
+	result.retn.client = top->client;
+	result.retn.request = std::move(top->request);
+	result.retn.phase = phase;
+	heap.pop();
+      }
 
     protected:
 
       // for debugging
       void display_queues() {
 	auto filter = [](const EntryRef& e)->bool { return !e->handled; };
-	res_q.displaySorted(std::cout << "RESER:", filter) << std::endl;
+	reserv_q.displaySorted(std::cout << "RESER:", filter) << std::endl;
 	lim_q.displaySorted(std::cout << "LIMIT:", filter) << std::endl;
 	ready_q.displaySorted(std::cout << "READY:", filter) << std::endl;
 	prop_q.displaySorted(std::cout << "PROPO:", filter) << std::endl;
@@ -488,7 +641,7 @@ namespace crimson {
 	if (client_map.end() == client_it) return;
 
 	double reduction = client_it->second.info.reservation_inv;
-	for (auto i = res_q.begin(); i != res_q.end(); ++i) {
+	for (auto i = reserv_q.begin(); i != reserv_q.end(); ++i) {
 	  if ((*i)->client == client_id) {
 	    (*i)->tag.reservation -= reduction;
 	    i.increase(); // since tag goes down, priority increases
@@ -522,15 +675,63 @@ namespace crimson {
 
       // data_mtx should be held when called
       void schedule_request() {
-	if (!can_handle_f()) {
+	NextReq next_req = next_request();
+	switch (next_req.status) {
+	case NextReqStat::none:
 	  return;
+	case NextReqStat::future:
+	  sched_at(next_req.when_ready);
+	  break;
+	case NextReqStat::returning:
+	  submit_request(next_req.heap_id);
+	  break;
+	default:
+	  assert(false);
+	}
+      }
+
+
+      // data_mtx should be held when called
+      void submit_request(HeapId heap_id) {
+	C client;
+	switch(heap_id) {
+	case HeapId::reservation:
+	  // don't need to note client
+	  (void) submit_top_request(reserv_q, PhaseType::reservation);
+	  // unlike the other two cases, we do not reduce reservation
+	  // tags here
+	  ++reserv_sched_count;
+	  break;
+	case HeapId::ready:
+	  client = submit_top_request(ready_q, PhaseType::priority);
+	  reduce_reservation_tags(client);
+	  ++prop_sched_count;
+	  break;
+	case HeapId::proportional:
+	  client = submit_top_request(prop_q, PhaseType::priority);
+	  reduce_reservation_tags(client);
+	  ++limit_break_sched_count;
+	  break;
+	default:
+	  assert(false);
+	}
+      }
+
+
+      // data_mtx should be held when called
+      NextReq next_request() {
+	NextReq result;
+	
+	if (Mechanism::push == mechanism && !can_handle_f()) {
+	  result.status = NextReqStat::none;
+	  return result;
 	}
 
 	Time now = get_time();
 
 	// so queue management is handled incrementally, remove
 	// handled items from each of the queues
-	prepare_queue(res_q);
+	prepare_queue(reserv_q);
 	prepare_queue(ready_q);
 	prepare_queue(lim_q);
 	prepare_queue(prop_q);
@@ -551,10 +752,10 @@ namespace crimson {
 	}
 #endif
 
-	if (!res_q.empty() && res_q.top()->tag.reservation <= now) {
-	  (void) submit_top_request(res_q, PhaseType::reservation);
-	  ++res_sched_count;
-	  return;
+	if (!reserv_q.empty() && reserv_q.top()->tag.reservation <= now) {
+	  result.status = NextReqStat::returning;
+	  result.heap_id = HeapId::reservation;
+	  return result;
 	}
 
 	// no existing reservations before now, so try weight-based
@@ -589,18 +790,16 @@ namespace crimson {
 #endif
 
 	if (!ready_q.empty()) {
-	  C client = submit_top_request(ready_q, PhaseType::priority);
-	  reduce_reservation_tags(client);
-	  ++prop_sched_count;
-	  return;
+	  result.status = NextReqStat::returning;
+	  result.heap_id = HeapId::ready;
+	  return result;
 	}
 
 	if (allowLimitBreak) {
 	  if (!prop_q.empty()) {
-	    C client = submit_top_request(prop_q, PhaseType::priority);
-	    reduce_reservation_tags(client);
-	    ++limit_break_sched_count;
-	    return;
+	    result.status = NextReqStat::returning;
+	    result.heap_id = HeapId::proportional;
+	    return result;
 	  }
 	}
 
@@ -608,14 +807,19 @@ namespace crimson {
 	// reservation item or next limited item comes up
 
 	Time next_call = TimeMax;
-	if (!res_q.empty()) {
-	  next_call = min_not_0_time(next_call, res_q.top()->tag.reservation);
+	if (!reserv_q.empty()) {
+	  next_call = min_not_0_time(next_call, reserv_q.top()->tag.reservation);
 	}
 	if (!lim_q.empty()) {
 	  next_call = min_not_0_time(next_call, lim_q.top()->tag.limit);
 	}
 	if (next_call < TimeMax) {
-	  sched_at(next_call);
+	  result.status = NextReqStat::future;
+	  result.when_ready = next_call;
+	  return result;
+	} else {
+	  result.status = NextReqStat::none;
+	  return result;
 	}
       } // schedule_request
 
@@ -666,8 +870,7 @@ namespace crimson {
 	}
       }
 
-
-    private:
+    protected:
 
       /*
        * This is being called regularly by RunEvery. Every time it's
