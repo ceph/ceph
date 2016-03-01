@@ -35,6 +35,7 @@ static const char *signed_subresources[] = {
   "versioning",
   "versions",
   "website",
+  "oplog",
   NULL
 };
 

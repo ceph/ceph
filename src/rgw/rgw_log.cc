@@ -22,9 +22,9 @@ static void set_param_str(struct req_state *s, const char *name, string& str)
     str = p;
 }
 
-string render_log_object_name(const string& format,
-			      struct tm *dt, string& bucket_id,
-			      const string& bucket_name)
+string rgw_render_ops_log_object_name(const string& format,
+			              struct tm *dt, string& bucket_id,
+			              const string& bucket_name)
 {
   string o;
   for (unsigned i=0; i<format.size(); i++) {
@@ -374,8 +374,8 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   int ret = 0;
 
   if (s->cct->_conf->rgw_ops_log_rados) {
-    string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
-				        s->bucket.bucket_id, entry.bucket);
+    string oid = rgw_render_ops_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
+				                s->bucket.bucket_id, entry.bucket);
 
     rgw_obj obj(store->get_zone_params().log_pool, oid);
 
