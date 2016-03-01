@@ -6222,7 +6222,7 @@ int BlueStore::_clone(TransContext *txc,
 	marked = true;
       }
     }
-    dout(20) << __func__ << " hash " << e->hash << " ref_map now "
+    dout(20) << __func__ << " hash " << std::hex << e->hash << std::dec << " ref_map now "
 	     << e->ref_map << dendl;
     newo->onode.block_map = oldo->onode.block_map;
     newo->enode = e;
