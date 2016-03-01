@@ -84,11 +84,11 @@ namespace crimson {
 
     // parent(0) should be a negative value, which it is due to
     // truncating towards negative infinity
-    static int parent(int i) { return (i - 1) / 2; }
+    static inline int parent(int i) { return (i - 1) / 2; }
 
-    static int lhs(int i) { return 2*i + 1; }
+    static inline int lhs(int i) { return 2*i + 1; }
 
-    static int rhs(int i) { return 2*i + 2; }
+    static inline int rhs(int i) { return 2*i + 2; }
 
     void siftUp(int i) {
       assert(i < count);
@@ -99,9 +99,7 @@ namespace crimson {
 	  break;
 	}
 
-	T temp = data[pi];
-	data[pi] = data[i];
-	data[i] = temp;
+	std::swap(data[i], data[pi]);
 	i = pi;
       }
     }
@@ -114,20 +112,14 @@ namespace crimson {
 	if (li < count) {
 	  if (comparator(data[li], data[i])) {
 	    if (ri < count && comparator(data[ri], data[li])) {
-	      T temp = data[i];
-	      data[i] = data[ri];
-	      data[ri] = temp;
+	      std::swap(data[i], data[ri]);
 	      i = ri;
 	    } else {
-	      T temp = data[i];
-	      data[i] = data[li];
-	      data[li] = temp;
+	      std::swap(data[i], data[li]);
 	      i = li;
 	    }
 	  } else if (ri < count && comparator(data[ri], data[i])) {
-	    T temp = data[i];
-	    data[i] = data[ri];
-	    data[ri] = temp;
+	    std::swap(data[i], data[ri]);
 	    i = ri;
 	  } else {
 	    break;
