@@ -158,7 +158,9 @@ BuildRequires:	gperftools-devel
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
-%else
+BuildRequires:  lsb-release
+%endif
+%if 0%{?fedora} || 0%{?rhel} 
 %if 0%{?_with_systemd}
 Requires:	systemd
 %endif
@@ -169,6 +171,7 @@ Requires(post):	chkconfig
 Requires(preun):	chkconfig
 Requires(preun):	initscripts
 BuildRequires:	gperftools-devel
+BuildRequires:  redhat-lsb-core
 %endif
 # boost
 %if 0%{?fedora} || 0%{?rhel} 
@@ -236,6 +239,12 @@ Requires:      hdparm
 Requires:      cryptsetup
 Requires:      findutils
 Requires:      which
+%if 0%{?suse_version}
+Requires:      lsb-release
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+Requires:      redhat-lsb-core
+%endif
 %description base
 Base is the package that includes all the files shared amongst ceph servers
 
