@@ -189,7 +189,7 @@ class EventCenter {
   ostream& _event_prefix(std::ostream *_dout);
 
   int init(int nevent);
-  void set_owner();
+  void set_owner(unsigned i = 0);
   pthread_t get_owner() { return owner; }
   unsigned cpu_id() { return id; }
 
@@ -203,6 +203,9 @@ class EventCenter {
   int process_events(int timeout_microseconds);
   void wakeup();
 
+  bool exist_pending_event() const {
+    return !external_events.empty() || !time_events.empty();
+  }
   // Used by external thread
   void dispatch_event_external(EventCallbackRef e);
   inline bool in_thread() const {

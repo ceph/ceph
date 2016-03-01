@@ -20,13 +20,13 @@
 #endif
 
 
-std::unique_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string &type, EventCenter *center, unsigned i)
+std::unique_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string &type, EventCenter *center)
 {
   if (type == "posix")
     return std::unique_ptr<NetworkStack>(new PosixNetworkStack(c));
 #ifdef HAVE_DPDK
   else if (type == "dpdk")
-    return DPDKStack::create(c, center, i);
+    return DPDKStack::create(c, center);
 #endif
 
   return nullptr;

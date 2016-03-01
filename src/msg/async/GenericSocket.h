@@ -177,7 +177,7 @@ class NetworkStack {
   NetworkStack(CephContext *c): cct(c) {}
  public:
   CephContext *cct;
-  static std::unique_ptr<NetworkStack> create(CephContext *c, const string &type, EventCenter *center, unsigned i);
+  static std::unique_ptr<NetworkStack> create(CephContext *c, const string &type, EventCenter *center);
   virtual ~NetworkStack() {}
   virtual bool support_zero_copy_read() const = 0;
   virtual int listen(entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) = 0;

@@ -220,13 +220,13 @@ int DPDKDevice::init_port_start()
   /* for port configuration all features are off by default */
   rte_eth_conf port_conf = { 0 };
 
-  ldout(cct, 5) << __func__ << " Port " << _port_idx << ": max_rx_queues "
+  ldout(cct, 5) << __func__ << " Port " << int(_port_idx) << ": max_rx_queues "
                 << _dev_info.max_rx_queues << "  max_tx_queues "
                 << _dev_info.max_tx_queues << dendl;
 
   _num_queues = std::min({_num_queues, _dev_info.max_rx_queues, _dev_info.max_tx_queues});
 
-  ldout(cct, 5) << __func__ << " Port " << _port_idx << ": using "
+  ldout(cct, 5) << __func__ << " Port " << int(_port_idx) << ": using "
                 << _num_queues << " queues" << dendl;;
 
   // Set RSS mode: enable RSS if seastar is configured with more than 1 CPU.
@@ -242,6 +242,8 @@ int DPDKDevice::init_port_start()
       rte_exit(EXIT_FAILURE,
                "Port %d: We support only 40 or 52 bytes RSS hash keys, %d bytes key requested",
                _port_idx, _dev_info.hash_key_size);
+    } else {
+      _rss_key = default_rsskey_40bytes;
     }
 
     port_conf.rxmode.mq_mode = ETH_MQ_RX_RSS;
@@ -262,9 +264,10 @@ int DPDKDevice::init_port_start()
       // Set the RSS table to the correct size
       _redir_table.resize(_dev_info.reta_size);
       _rss_table_bits = std::lround(std::log2(_dev_info.reta_size));
-      ldout(cct, 5) << __func__ << " Port " << _port_idx
+      ldout(cct, 5) << __func__ << " Port " << int(_port_idx)
                     << ": RSS table size is " << _dev_info.reta_size << dendl;
     } else {
+      _redir_table.resize(_num_queues);
       _rss_table_bits = std::lround(std::log2(_dev_info.max_rx_queues));
     }
   } else {
@@ -345,7 +348,7 @@ int DPDKDevice::init_port_start()
 
   int retval;
 
-  ldout(cct, 1) << __func__ << " Port " << _port_idx << " init ... " << dendl;
+  ldout(cct, 1) << __func__ << " Port " << int(_port_idx) << " init ... " << dendl;
 
   /*
    * Standard DPDK port initialisation - config port, then set up
@@ -1140,6 +1143,12 @@ size_t DPDKQueuePair::tx_buf::copy_one_data_buf(
 
 void DPDKDevice::set_rss_table()
 {
+  // always fill our local indirection table.
+  unsigned i = 0;
+  for (auto& r : _redir_table) {
+    r = i++ % _num_queues;
+  }
+
   if (_dev_info.reta_size == 0)
     return;
 
@@ -1147,7 +1156,7 @@ void DPDKDevice::set_rss_table()
   rte_eth_rss_reta_entry64 reta_conf[reta_conf_size];
 
   // Configure the HW indirection table
-  unsigned i = 0;
+  i = 0;
   for (auto& x : reta_conf) {
     x.mask = ~0ULL;
     for (auto& r: x.reta) {
@@ -1158,12 +1167,6 @@ void DPDKDevice::set_rss_table()
   if (rte_eth_dev_rss_reta_update(_port_idx, reta_conf, _dev_info.reta_size)) {
     rte_exit(EXIT_FAILURE, "Port %d: Failed to update an RSS indirection table", _port_idx);
   }
-
-  // Fill our local indirection table. Make it in a separate loop to keep things simple.
-  i = 0;
-  for (auto& r : _redir_table) {
-    r = i++ % _num_queues;
-  }
 }
 
 /******************************** Interface functions *************************/
@@ -1171,7 +1174,6 @@ void DPDKDevice::set_rss_table()
 std::unique_ptr<DPDKDevice> create_dpdk_net_device(
     CephContext *cct,
     uint8_t port_idx,
-    uint8_t num_queues,
     bool use_lro,
     bool enable_fc)
 {
@@ -1186,9 +1188,9 @@ std::unique_ptr<DPDKDevice> create_dpdk_net_device(
   if (rte_eth_dev_count() == 0) {
     rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
   } else {
-    ldout(cct, 10) << __func__ << " ports number: " << rte_eth_dev_count() << dendl;
+    ldout(cct, 10) << __func__ << " ports number: " << int(rte_eth_dev_count()) << dendl;
   }
 
   return std::unique_ptr<DPDKDevice>(
-      new DPDKDevice(cct, port_idx, num_queues, use_lro, enable_fc));
+      new DPDKDevice(cct, port_idx, rte_lcore_count(), use_lro, enable_fc));
 }

@@ -998,7 +998,7 @@ class DPDKDevice {
 
 
 std::unique_ptr<DPDKDevice> create_dpdk_net_device(
-    CephContext *c, uint8_t port_idx = 0, uint8_t num_queues = 1,
+    CephContext *c, uint8_t port_idx = 0,
     bool use_lro = true, bool enable_fc = true);
 
 enum {

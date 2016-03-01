@@ -54,7 +54,7 @@
 #define dout_prefix *_dout << "dpdkstack "
 
 
-std::unique_ptr<NetworkStack> DPDKStack::create(CephContext *cct, EventCenter *center, unsigned i) {
+std::unique_ptr<NetworkStack> DPDKStack::create(CephContext *cct, EventCenter *center) {
   static enum {
     WAIT_DEVICE_STAGE,
     WAIT_PORT_FIN_STAGE,
@@ -62,17 +62,21 @@ std::unique_ptr<NetworkStack> DPDKStack::create(CephContext *cct, EventCenter *c
   } create_stage = WAIT_DEVICE_STAGE;
   static Mutex lock("DPDKStack::lock");
   static Cond cond;
-  int cores = cct->_conf->ms_dpdk_num_cores;
-  std::shared_ptr<DPDKDevice> sdev;
+  static unsigned queue_init_done = 0;
+  static unsigned cores = 0;
+  static std::shared_ptr<DPDKDevice> sdev;
+  unsigned i = center->cpu_id();
   if (i == 0) {
     // Hardcoded port index 0.
     // TODO: Inherit it from the opts
     std::unique_ptr<DPDKDevice> dev = create_dpdk_net_device(
-        cct, 0, cores,
+        cct, cct->_conf->ms_dpdk_port_id,
         cct->_conf->ms_dpdk_lro,
         cct->_conf->ms_dpdk_hw_flow_control);
+    cores = rte_lcore_count();
     sdev = std::shared_ptr<DPDKDevice>(dev.release());
     sdev->stacks.resize(cores);
+    ldout(cct, 1) << __func__ << " using " << cores << " cores " << dendl;
 
     Mutex::Locker l(lock);
     create_stage = WAIT_PORT_FIN_STAGE;
@@ -87,17 +91,26 @@ std::unique_ptr<NetworkStack> DPDKStack::create(CephContext *cct, EventCenter *c
     auto qp = sdev->init_local_queue(cct, center, cct->_conf->ms_dpdk_hugepages, i);
     std::map<unsigned, float> cpu_weights;
     for (unsigned j = sdev->hw_queues_count() + i % sdev->hw_queues_count();
-         j < (unsigned)cct->_conf->ms_dpdk_num_cores; j+= sdev->hw_queues_count())
+         j < cores; j+= sdev->hw_queues_count())
       cpu_weights[i] = 1;
     cpu_weights[i] = cct->_conf->ms_dpdk_hw_queue_weight;
     qp->configure_proxies(cpu_weights);
     sdev->set_local_queue(i, std::move(qp));
+    Mutex::Locker l(lock);
+    ++queue_init_done;
+    cond.Signal();
   } else {
     // auto master = qid % sdev->hw_queues_count();
     // sdev->set_local_queue(create_proxy_net_device(master, sdev.get()));
     assert(0);
   }
   if (i == 0) {
+    {
+      Mutex::Locker l(lock);
+      while (queue_init_done < cores)
+        cond.Wait(lock);
+    }
+
     if (sdev->init_port_fini() < 0)
       return nullptr;
     Mutex::Locker l(lock);
@@ -109,8 +122,14 @@ std::unique_ptr<NetworkStack> DPDKStack::create(CephContext *cct, EventCenter *c
       cond.Wait(lock);
   }
 
-  sdev->stacks[i] = new DPDKStack(cct, center, sdev, cores);
-  return std::unique_ptr<DPDKStack>(sdev->stacks[i]);
+  DPDKStack *stack = new DPDKStack(cct, center, sdev, cores);
+  sdev->stacks[i] = stack;
+  {
+    Mutex::Locker l(lock);
+    if (!--queue_init_done)
+      sdev.reset();
+  }
+  return std::unique_ptr<DPDKStack>(stack);
 }
 
 using AvailableIPAddress = std::tuple<string, string, string>;
@@ -151,12 +170,6 @@ DPDKStack::DPDKStack(CephContext *cct, EventCenter *c,
     : NetworkStack(cct), _netif(cct, std::move(dev), c), _inet(cct, c, &_netif),
       cores(cores), center(c)
 {
-}
-
-int DPDKStack::listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket *sock) {
-  assert(sa.get_family() == AF_INET);
-  assert(sock);
-
   vector<AvailableIPAddress> tuples;
   bool parsed = parse_available_address(cct->_conf->ms_dpdk_host_ipv4_addr,
                                         cct->_conf->ms_dpdk_gateway_ipv4_addr,
@@ -167,17 +180,38 @@ int DPDKStack::listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket 
                << cct->_conf->ms_dpdk_gateway_ipv4_addr << ", "
                << cct->_conf->ms_dpdk_netmask_ipv4_addr << ", "
                << dendl;
-    return -EINVAL;
+    assert(0);
   }
-  int idx;
-  parsed = match_available_address(tuples, sa, idx);
-  if (!parsed) {
-    lderr(cct) << __func__ << " no matched address for " << sa << dendl;
-    return -EINVAL;
-  }
-  _inet.set_host_address(ipv4_address(std::get<0>(tuples[idx])));
-  _inet.set_gw_address(ipv4_address(std::get<1>(tuples[idx])));
-  _inet.set_netmask_address(ipv4_address(std::get<2>(tuples[idx])));
+  _inet.set_host_address(ipv4_address(std::get<0>(tuples[0])));
+  _inet.set_gw_address(ipv4_address(std::get<1>(tuples[0])));
+  _inet.set_netmask_address(ipv4_address(std::get<2>(tuples[0])));
+}
+
+int DPDKStack::listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket *sock) {
+  assert(sa.get_family() == AF_INET);
+  assert(sock);
+
+  // vector<AvailableIPAddress> tuples;
+  // bool parsed = parse_available_address(cct->_conf->ms_dpdk_host_ipv4_addr,
+  //                                       cct->_conf->ms_dpdk_gateway_ipv4_addr,
+  //                                       cct->_conf->ms_dpdk_netmask_ipv4_addr, tuples);
+  // if (!parsed) {
+  //   lderr(cct) << __func__ << " no available address "
+  //              << cct->_conf->ms_dpdk_host_ipv4_addr << ", "
+  //              << cct->_conf->ms_dpdk_gateway_ipv4_addr << ", "
+  //              << cct->_conf->ms_dpdk_netmask_ipv4_addr << ", "
+  //              << dendl;
+  //   return -EINVAL;
+  // }
+  // int idx;
+  // parsed = match_available_address(tuples, sa, idx);
+  // if (!parsed) {
+  //   lderr(cct) << __func__ << " no matched address for " << sa << dendl;
+  //   return -EINVAL;
+  // }
+  // _inet.set_host_address(ipv4_address(std::get<0>(tuples[idx])));
+  // _inet.set_gw_address(ipv4_address(std::get<1>(tuples[idx])));
+  // _inet.set_netmask_address(ipv4_address(std::get<2>(tuples[idx])));
   return tcpv4_listen(_inet.get_tcp(), sa.get_port(), opt, sock);
 }
 

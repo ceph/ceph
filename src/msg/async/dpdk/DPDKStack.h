@@ -218,7 +218,7 @@ class DPDKStack : public NetworkStack {
                      std::shared_ptr<DPDKDevice> dev, unsigned cores);
   virtual int listen(entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) override;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
-  static std::unique_ptr<NetworkStack> create(CephContext *cct, EventCenter *center, unsigned i);
+  static std::unique_ptr<NetworkStack> create(CephContext *cct, EventCenter *center);
   void arp_learn(ethernet_address l2, ipv4_address l3) {
     _inet.learn(l2, l3);
   }

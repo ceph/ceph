@@ -186,9 +186,10 @@ EventCenter::~EventCenter()
 }
 
 
-void EventCenter::set_owner()
+void EventCenter::set_owner(unsigned idx)
 {
   thread_id = owner = pthread_self();
+  id = idx;
 }
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)

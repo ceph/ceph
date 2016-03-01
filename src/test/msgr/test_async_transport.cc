@@ -35,9 +35,62 @@
 #if GTEST_HAS_PARAM_TEST
 
 class TransportTest : public ::testing::TestWithParam<const char*> {
+  struct StackThread {
+    CephContext *cct;
+    std::thread thread;
+    EventCenter center;
+    std::unique_ptr<NetworkStack> transport;
+    unsigned idx;
+    bool done = false;
+    bool init_done = false;
+
+    StackThread(CephContext *c, unsigned i): cct(c), center(cct), idx(i) {}
+    void start(const char *type) {
+      center.init(1000);
+      if (idx) {
+        thread = std::thread(&StackThread::worker, this, type);
+      } else {
+        center.set_owner(idx);
+        transport = NetworkStack::create(cct, type, &center);
+        transport->initialize();
+        init_done = true;
+      }
+    }
+
+    void stop() {
+      done = true;
+      if (idx)
+        thread.join();
+      transport.reset();
+    }
+
+    void ready() {
+      while (!init_done)
+        usleep(100);
+    }
+
+    void worker(const char *type) {
+      center.set_owner(idx);
+      transport = NetworkStack::create(cct, type, &center);
+      transport->initialize();
+      init_done = true;
+      while (!done) {
+        center.process_events(0);
+      }
+      usleep(100);
+    }
+  };
+
+  int count_one_bits(unsigned value) {
+    int ones = 0;
+    for (; value != 0; value = value >> 1)
+      if (value % 2 != 0)
+          ones = ones + 1;
+    return ones;
+  }
+
  public:
-  EventCenter *center;
-  std::unique_ptr<NetworkStack> transport;
+  std::vector<StackThread*> stacks;
   string addr, port_addr;
 
   TransportTest() {}
@@ -49,6 +102,7 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
       port_addr = "127.0.0.1:15001";
     } else {
       g_ceph_context->_conf->set_val("ms_dpdk_enable", "true");
+      g_ceph_context->_conf->set_val("ms_dpdk_coremask", "3", false, false);
       g_ceph_context->_conf->set_val("ms_dpdk_host_ipv4_addr", "172.16.218.199", false, false);
       g_ceph_context->_conf->set_val("ms_dpdk_gateway_ipv4_addr", "172.16.218.2", false, false);
       g_ceph_context->_conf->set_val("ms_dpdk_netmask_ipv4_addr", "255.255.255.0", false, false);
@@ -56,15 +110,26 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
       port_addr = "172.16.218.199:15001";
     }
     g_ceph_context->_conf->apply_changes(nullptr);
-    center = new EventCenter(g_ceph_context);
-    center->init(1000);
-    center->set_owner();
-    transport = NetworkStack::create(g_ceph_context, GetParam(), center, 0);
-    transport->initialize();
+    unsigned x;
+    std::stringstream ss;
+    ss << std::dec << g_ceph_context->_conf->ms_dpdk_coremask;
+    ss >> x;
+    x = count_one_bits(x);
+    stacks.resize(x);
+    for (unsigned i = x; i > 0; --i) {
+       StackThread *t = new StackThread(g_ceph_context, i-1);
+       stacks[i-1] = t;
+       t->start(GetParam());
+    }
+    for (auto &&t : stacks)
+       t->ready();
   }
   virtual void TearDown() {
-    transport.reset();
-    delete center;
+    for (auto &&t : stacks) {
+      t->stop();
+      delete t;
+    }
+    stacks.clear();
   }
   string get_addr() const {
     return addr;
@@ -74,6 +139,12 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
   }
   string get_different_ip() const {
     return "10.0.123.100:4323";
+  }
+  EventCenter *get_center(unsigned i) {
+    return &stacks[i]->center;
+  }
+  NetworkStack *get_transport(unsigned i) {
+    return stacks[i]->transport.get();
   }
 };
 
@@ -114,6 +185,8 @@ TEST_P(TransportTest, SimpleTest) {
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
   SocketOptions options;
   ServerSocket bind_socket;
+  NetworkStack *transport = get_transport(0);
+  EventCenter *center = get_center(0);
   ssize_t r = transport->listen(bind_addr, options, &bind_socket);
   ASSERT_EQ(r, 0);
   ConnectedSocket cli_socket, srv_socket;
@@ -185,6 +258,8 @@ TEST_P(TransportTest, SimpleTest) {
 }
 
 TEST_P(TransportTest, ConnectFailedTest) {
+  NetworkStack *transport = get_transport(0);
+  EventCenter *center = get_center(0);
   entity_addr_t bind_addr, cli_addr;
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
   ASSERT_EQ(cli_addr.parse(get_ip_different_port().c_str()), true);
@@ -226,6 +301,7 @@ TEST_P(TransportTest, ConnectFailedTest) {
 }
 
 TEST_P(TransportTest, ListenTest) {
+  NetworkStack *transport = get_transport(0);
   entity_addr_t bind_addr;
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
   SocketOptions options;
@@ -238,6 +314,8 @@ TEST_P(TransportTest, ListenTest) {
 }
 
 TEST_P(TransportTest, AcceptAndCloseTest) {
+  NetworkStack *transport = get_transport(0);
+  EventCenter *center = get_center(0);
   entity_addr_t bind_addr, cli_addr;
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
   SocketOptions options;
@@ -310,6 +388,8 @@ TEST_P(TransportTest, AcceptAndCloseTest) {
 }
 
 TEST_P(TransportTest, ComplexTest) {
+  NetworkStack *transport = get_transport(0);
+  EventCenter *center = get_center(0);
   entity_addr_t bind_addr, cli_addr;
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
   SocketOptions options;
@@ -384,6 +464,7 @@ TEST_P(TransportTest, ComplexTest) {
     while (!done)
       usleep(100);
     center->delete_file_event(cli_fd, EVENT_WRITABLE);
+    usleep(100);
   }, center, std::ref(cli_socket), std::ref(message), std::ref(lock), std::ref(done));
 
   char buf[1000];
@@ -473,7 +554,7 @@ class StressFactory {
       for (auto &&s : strs)
         content.append(s);
     }
-    bool verify(const string &b, size_t len = 0) const {
+    bool verify(const char *b, size_t len = 0) const {
       return content.compare(0, len, b, 0, len) == 0;
     }
   };
@@ -495,6 +576,7 @@ class StressFactory {
     std::deque<StressFactory::Message*> acking;
     std::deque<StressFactory::Message*> writings;
     std::string buffer;
+    bufferlist buf_bl;
     size_t index = 0;
     size_t left;
     bool write_enabled = false;
@@ -556,21 +638,29 @@ class StressFactory {
         buffer.resize(m->len);
       bool must_no = false;
       while (true) {
-        r = socket.read((char*)buffer.data() + read_offset,
-                        m->len - read_offset);
+        if (factory->zero_copy_read) {
+          r = socket.zero_copy_read(m->len - read_offset, buf_bl);
+        } else {
+          r = socket.read((char*)buffer.data() + read_offset,
+                          m->len - read_offset);
+        }
+
         ASSERT_TRUE(r == -EAGAIN || r > 0);
         if (r == -EAGAIN)
           break;
         std::cerr << " client " << this << " receive " << m->idx << " len " << r << " content: "  << std::endl;
         ASSERT_FALSE(must_no);
         read_offset += r;
-        std::cerr << " compare " << read_offset << " content: " << std::endl;
-        ASSERT_TRUE(m->verify(buffer, read_offset));
         if ((m->len - read_offset) == 0) {
+          if (factory->zero_copy_read)
+            ASSERT_TRUE(m->verify(buf_bl.c_str(), 0));
+          else
+            ASSERT_TRUE(m->verify(buffer.data(), 0));
           delete m;
           acking.pop_front();
           read_offset = 0;
           buffer.clear();
+          buf_bl.clear();
           if (acking.empty()) {
             m = &homeless_message;
             must_no = true;
@@ -677,15 +767,24 @@ class StressFactory {
       int r = 0;
       while (true) {
         char buf[4096];
-        r = socket.read(buf, sizeof(buf));
-        ASSERT_TRUE(r == -EAGAIN || r >= 0);
+        bufferlist data;
+        if (factory->zero_copy_read) {
+          r = socket.zero_copy_read(sizeof(buf), data);
+        } else {
+          r = socket.read(buf, sizeof(buf));
+        }
+        ASSERT_TRUE(r == -EAGAIN || (r >= 0 && (size_t)r <= sizeof(buf)));
         if (r == 0) {
           ASSERT_TRUE(buffers.empty());
           dead = true;
           return ;
         } else if (r == -EAGAIN)
           break;
-        buffers.emplace_back(buf, 0, r);
+        if (factory->zero_copy_read) {
+          buffers.emplace_back(data.c_str(), 0, r);
+        } else {
+          buffers.emplace_back(buf, 0, r);
+        }
         std::cerr << " server " << this << " receive " << r << " content: " << std::endl;
       }
       if (!buffers.empty() && !write_enabled)
@@ -777,13 +876,15 @@ class StressFactory {
   std::set<Client*> clients;
   std::set<Server*> servers;
   SocketOptions options;
+  bool zero_copy_read;
 
  public:
   explicit StressFactory(NetworkStack *_stack, EventCenter *c,
                          const string &addr,
                          size_t cli, size_t qd, size_t mc, size_t l)
       : stack(_stack), center(c), rs(128), client_num(cli), queue_depth(qd),
-        max_message_length(l), message_count(mc), message_left(mc) {
+        max_message_length(l), message_count(mc), message_left(mc),
+        zero_copy_read(stack->support_zero_copy_read()) {
     bind_addr.parse(addr.c_str());
     rs.prepare(100);
   }
@@ -853,14 +954,13 @@ class StressFactory {
     }
     center->delete_file_event(bind_fd, EVENT_READABLE);
     ASSERT_EQ(message_left, 0U);
-    // process leaked external events;
-    center->process_events(1);
-    center->process_events(1);
+    while (center->exist_pending_event())
+      center->process_events(0);
   }
 };
 
 TEST_P(TransportTest, StressTest) {
-  StressFactory factory(transport.get(), center, get_addr(),
+  StressFactory factory(get_transport(0), get_center(0), get_addr(),
                         16, 16, 10000, 1024);
   factory.start();
 }
