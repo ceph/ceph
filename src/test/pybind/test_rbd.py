@@ -37,8 +37,7 @@ def setup_module():
     ioctx = rados.open_ioctx(pool_name)
     global features
     features = os.getenv("RBD_FEATURES")
-    if features is not None:
-        features = int(features)
+    features = int(features) if features is not None else 61
 
 def teardown_module():
     global ioctx
