@@ -1793,6 +1793,146 @@ void RGWStatBucket::execute()
   }
 }
 
+int RGWGetBucketOplog::verify_permission()
+{
+  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWGetBucketOplog::execute()
+{
+  RGWAccessHandle h;
+  struct rgw_log_entry entry;
+  string st = s->info.args.get("start-time"),
+         et = s->info.args.get("end-time"),
+         marker = s->info.args.get("marker");
+  uint64_t epoch = 0;
+  utime_t  ut_st, ut_et, ut_curr, ut_end, ut_marker;
+  uint32_t skip = 0, count = 0, index;
+  string oid_marker;
+  struct tm bdt;
+  time_t tt;
+  bool found = false;
+
+  http_ret = 0;
+  if (st.empty() || et.empty()) {
+    ldout(s->cct, 0) << "start-time and end-time must be non-null! " << st << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  if (utime_t::parse_date(st, &epoch, NULL) < 0) {
+    ldout(s->cct, 0) << "Error parsing date. st=" << st << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+  ut_st = utime_t(epoch, 0);
+
+  if (utime_t::parse_date(et, &epoch, NULL) < 0) {
+    ldout(s->cct, 0) << "Error parsing date. et=" << et << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+  ut_et = utime_t(epoch, 0);
+
+  if (ut_st >= ut_et || (ut_et - ut_st) > utime_t(24 * 3600, 0)) {
+    ldout(s->cct, 0) << "Invalid argument! st=" << st << " et=" << et << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  if (!marker.empty()) {
+    size_t pos = marker.find('#');
+    if (pos == std::string::npos) {
+      ldout(s->cct, 0) << "marker is wrong! marker:" << marker << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    oid_marker = marker.substr(0, pos);
+
+    pos += 1;
+    string skip_str = marker.substr(pos, marker.length() - pos);
+    int ret = stringtoul(skip_str, &skip);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "marker is wrong! marker:" << marker << dendl;
+      http_ret = ret;
+      return;
+    }
+  }
+
+  ut_curr = ut_st;
+  ut_end = ut_et + utime_t((time_t)3600, 0);
+  ldout(s->cct, 20) << "start-time:" << ut_st << " end-time:" << ut_et << " skip:" << skip << dendl;
+  while (ut_curr <= ut_et) {
+    string oid;
+
+    tt = ut_curr.sec();
+    if (s->cct->_conf->rgw_log_object_name_utc)
+      gmtime_r(&tt, &bdt);
+    else
+      localtime_r(&tt, &bdt);
+
+    oid = rgw_render_ops_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
+                                         s->bucket.bucket_id, s->bucket_name);
+    ldout(s->cct, 20) << "oid:" << oid << dendl;
+
+    if (!found && !oid_marker.empty()) {
+      if (oid_marker != oid) {
+        ut_curr += utime_t((time_t)3600, 0);
+        continue;
+      } else {
+        found = true;
+      }
+    }
+
+    index = 0;
+    int r = store->log_show_init(oid, &h);
+    if (r < 0) {
+        ldout(s->cct, 0) << "Error opening log " << oid << dendl;
+        http_ret = -EINVAL;
+        return;
+    }
+
+    do {
+      r = store->log_show_next(h, &entry);
+      if (r < 0 && r != -ENOENT) {
+        ldout(s->cct, 0) << "Error opening log " << oid << " r:" << r << dendl;
+        http_ret = -EINVAL;
+        return;
+      } else if (r == 0 || r == -ENOENT) {
+        break;
+      }
+
+      index++;
+      if (!oid_marker.empty() && oid_marker == oid && index <= skip) {
+        continue;
+      }
+
+      if (entry.time >= ut_st && entry.time <= ut_et) {
+        entries.push_back(entry);
+        count++;
+      } else if (entry.time > ut_et) {
+        break;
+      }
+
+    } while (count < default_max);
+
+    if (count == default_max) {
+      is_truncated = true;
+
+      std::ostringstream oss;
+      oss << "#" << index;
+      last_marker = oid + oss.str();
+      break;
+    }
+
+    ut_curr += utime_t((time_t)3600, 0);
+  }
+
+}
+
 int RGWListBucket::verify_permission()
 {
   if (!verify_bucket_permission(s, RGW_PERM_READ)) {

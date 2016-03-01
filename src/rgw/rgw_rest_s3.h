@@ -71,6 +71,14 @@ public:
   void send_versioned_response();
 };
 
+class RGWGetBucketOplog_ObjStore_S3 : public RGWGetBucketOplog {
+public:
+  RGWGetBucketOplog_ObjStore_S3() {}
+  ~RGWGetBucketOplog_ObjStore_S3() {}
+
+  void send_response();
+};
+
 class RGWGetBucketLogging_ObjStore_S3 : public RGWGetBucketLogging {
 public:
   RGWGetBucketLogging_ObjStore_S3() {}
