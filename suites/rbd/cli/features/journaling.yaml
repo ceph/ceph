@@ -3,4 +3,4 @@ overrides:
     conf:
       client:
         rbd default format: 2
-        rbd default features: 13
+        rbd default features: 125
