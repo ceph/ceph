@@ -195,6 +195,14 @@ void interface::arp_learn(ethernet_address l2, ipv4_address l3)
   }
 }
 
+void interface::dispatch_stack(EventCallback *c, unsigned except_id)
+{
+  for (auto &&s: _dev->stacks) {
+    if (s->center->cpu_id() != except_id)
+      s->center->dispatch_event_external(c);
+  }
+}
+
 l3_protocol::l3_protocol(interface* netif, eth_protocol_num proto_num, packet_provider_type func)
     : _netif(netif), _proto_num(proto_num)  {
   _netif->register_packet_provider(std::move(func));

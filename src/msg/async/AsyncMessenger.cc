@@ -167,13 +167,12 @@ int Processor::rebind(const set<int>& avoid_ports)
   return bind(addr, new_avoid);
 }
 
-int Processor::start(Worker *w)
+int Processor::start()
 {
   ldout(msgr->cct, 1) << __func__ << " " << dendl;
 
   // start thread
   if (listen_socket) {
-    worker = w;
     worker->center.submit_event([this]() {
       worker->center.create_file_event(listen_socket.fd(), EVENT_READABLE, listen_handler); });
   }
@@ -340,10 +339,14 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
 {
   ceph_spin_init(&global_seq_lock);
   cct->lookup_or_create_singleton_object<WorkerPool>(pool, WorkerPool::name);
-  local_connection = create_anon_connection();
+  Worker *w = pool->get_worker();
+  local_connection = new AsyncConnection(cct, this, &w->center, w->get_perf_counter(),
+                                         w->transport.get());
+  local_worker = w;
   local_features = features;
   init_local_connection();
   reap_handler = new C_handle_reap(this);
+  processor.set_worker(w);
 }
 
 /**
@@ -361,9 +364,7 @@ void AsyncMessenger::ready()
 {
   ldout(cct,10) << __func__ << " " << get_myaddr() << dendl;
 
-  Mutex::Locker l(lock);
-  Worker *w = pool->get_worker();
-  processor.start(w);
+  processor.start();
 }
 
 int AsyncMessenger::shutdown()
@@ -411,8 +412,7 @@ int AsyncMessenger::rebind(const set<int>& avoid_ports)
   mark_down_all();
   int r = processor.rebind(avoid_ports);
   if (r == 0) {
-    Worker *w = pool->get_worker();
-    processor.start(w);
+    processor.start();
   }
   return r;
 }
@@ -467,7 +467,12 @@ void AsyncMessenger::wait()
 AsyncConnectionRef AsyncMessenger::add_accept(ConnectedSocket cli_socket, entity_addr_t &addr)
 {
   lock.Lock();
-  Worker *w = pool->get_worker();
+  Worker *w;
+  // dpdk need to keep connection in current thread
+  if (cct->_conf->ms_async_transport_type == "dpdk")
+    w = local_worker;
+  else
+    w = pool->get_worker();
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center, w->get_perf_counter(),
                                                 w->transport.get());
   conn->accept(std::move(cli_socket), addr);

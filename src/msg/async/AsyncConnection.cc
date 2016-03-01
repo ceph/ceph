@@ -28,8 +28,9 @@
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
 ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
+  int fd = cs ? cs.fd() : -1;
   return *_dout << "-- " << async_msgr->get_myinst().addr << " >> " << peer_addr << " conn(" << this
-                << " sd=" << cs.fd() << " :" << port
+                << " sd=" << fd << " :" << port
                 << " s=" << get_state_name(state)
                 << " pgs=" << peer_global_seq
                 << " cs=" << connect_seq
@@ -220,12 +221,12 @@ void AsyncConnection::maybe_start_delay_thread()
 ssize_t AsyncConnection::read_bulk(char *buf, unsigned len)
 {
   ssize_t nread = cs.read(buf, len);
-  if (nread == -1) {
-    if (errno == EAGAIN || errno == EINTR) {
+  if (nread < 0) {
+    if (nread == -EAGAIN || nread == -EINTR) {
       nread = 0;
     } else {
       ldout(async_msgr->cct, 1) << __func__ << " reading from fd=" << cs.fd()
-                                << " : "<< strerror(errno) << dendl;
+                                << " : "<< strerror(nread) << dendl;
       return -1;
     }
   } else if (nread == 0) {
@@ -1859,7 +1860,7 @@ void AsyncConnection::_connect()
 void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
 {
   ldout(async_msgr->cct, 10) << __func__ << " sd=" << socket.fd() << dendl;
-  assert(socket.fd() < 0);
+  assert(socket.fd() > 0);
 
   Mutex::Locker l(lock);
   cs = std::move(socket);

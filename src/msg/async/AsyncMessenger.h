@@ -70,7 +70,7 @@ class Worker : public Thread {
   std::unique_ptr<NetworkStack> transport;
   Worker(CephContext *c, WorkerPool *p, int i)
     : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c) {
-    center.init(InitEventNumber);
+    center.init(InitEventNumber, cct->_conf->ms_async_transport_type);
     char name[128];
     sprintf(name, "AsyncMessenger::Worker-%d", id);
     // initialize perf_logger
@@ -128,8 +128,11 @@ class Processor {
   void stop();
   int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
   int rebind(const set<int>& avoid_port);
-  int start(Worker *w);
+  int start();
   void accept();
+  void set_worker(Worker *w) {
+    worker = w;
+  }
 };
 
 class WorkerPool {

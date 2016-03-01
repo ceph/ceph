@@ -97,11 +97,11 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
   virtual void SetUp() {
     cerr << __func__ << " start set up " << GetParam() << std::endl;
     if (strncmp(GetParam(), "dpdk", 4)) {
-      g_ceph_context->_conf->set_val("ms_dpdk_enable", "false");
+      g_ceph_context->_conf->set_val("ms_async_transport_type", "posix");
       addr = "127.0.0.1:15000";
       port_addr = "127.0.0.1:15001";
     } else {
-      g_ceph_context->_conf->set_val("ms_dpdk_enable", "true");
+      g_ceph_context->_conf->set_val("ms_async_transport_type", "dpdk");
       g_ceph_context->_conf->set_val("ms_dpdk_coremask", "3", false, false);
       g_ceph_context->_conf->set_val("ms_dpdk_host_ipv4_addr", "172.16.218.199", false, false);
       g_ceph_context->_conf->set_val("ms_dpdk_gateway_ipv4_addr", "172.16.218.2", false, false);

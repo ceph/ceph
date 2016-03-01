@@ -103,13 +103,13 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
 
 thread_local pthread_t EventCenter::thread_id = 0;
 
-int EventCenter::init(int n)
+int EventCenter::init(int n, string type)
 {
   // can't init multi times
   assert(nevent == 0);
 
   driver = nullptr;
-  if (cct->_conf->ms_dpdk_enable) {
+  if (type == "dpdk") {
 #ifdef HAVE_DPDK
     driver = new DPDKDriver(cct);
 #endif

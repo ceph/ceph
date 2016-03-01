@@ -74,6 +74,11 @@ std::unique_ptr<NetworkStack> DPDKStack::create(CephContext *cct, EventCenter *c
         cct->_conf->ms_dpdk_lro,
         cct->_conf->ms_dpdk_hw_flow_control);
     cores = rte_lcore_count();
+    if ((int)cores != cct->_conf->ms_async_op_threads) {
+      lderr(cct) << __func__ << " async op threads " << cct->_conf->ms_async_op_threads
+                    << " != " << " dpdk core mask count" << cores << dendl;
+      assert(0);
+    }
     sdev = std::shared_ptr<DPDKDevice>(dev.release());
     sdev->stacks.resize(cores);
     ldout(cct, 1) << __func__ << " using " << cores << " cores " << dendl;

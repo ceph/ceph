@@ -188,7 +188,7 @@ class EventCenter {
   ~EventCenter();
   ostream& _event_prefix(std::ostream *_dout);
 
-  int init(int nevent);
+  int init(int nevent, string type);
   void set_owner(unsigned i = 0);
   pthread_t get_owner() { return owner; }
   unsigned cpu_id() { return id; }
