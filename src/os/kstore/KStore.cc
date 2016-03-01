@@ -2280,8 +2280,10 @@ void KStore::_txc_finish(TransContext *txc)
   }
 
   OpSequencerRef osr = txc->osr;
-  std::lock_guard<std::mutex> l(osr->qlock);
-  txc->state = TransContext::STATE_DONE;
+  {
+    std::lock_guard<std::mutex> l(osr->qlock);
+    txc->state = TransContext::STATE_DONE;
+  }
 
   _osr_reap_done(osr.get());
 }
