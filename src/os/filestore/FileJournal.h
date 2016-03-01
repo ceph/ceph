@@ -24,6 +24,8 @@ using std::deque;
 #include "common/Mutex.h"
 #include "common/Thread.h"
 #include "common/Throttle.h"
+#include "JournalThrottle.h"
+
 
 #ifdef HAVE_LIBAIO
 # include <libaio.h>
@@ -32,9 +34,11 @@ using std::deque;
 /**
  * Implements journaling on top of block device or file.
  *
- * Lock ordering is write_lock > aio_lock > finisher_lock
+ * Lock ordering is write_lock > aio_lock > (completions_lock | finisher_lock)
  */
-class FileJournal : public Journal {
+class FileJournal :
+  public Journal,
+  public md_config_obs_t {
 public:
   /// Protected by finisher_lock
   struct completion_item {
@@ -265,6 +269,8 @@ private:
   io_context_t aio_ctx;
   list<aio_info> aio_queue;
   int aio_num, aio_bytes;
+  uint64_t aio_write_queue_ops;
+  uint64_t aio_write_queue_bytes;
   /// End protected by aio_lock
 #endif
 
@@ -293,9 +299,23 @@ private:
 
 
   // throttle
-  Throttle throttle_ops, throttle_bytes;
+  int set_throttle_params();
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(
+    const struct md_config_t *conf,
+    const std::set <std::string> &changed) override {
+    for (const char **i = get_tracked_conf_keys();
+	 *i;
+	 ++i) {
+      if (changed.count(string(*i))) {
+	set_throttle_params();
+	return;
+      }
+    }
+  }
 
-  void put_throttle(uint64_t ops, uint64_t bytes);
+  void complete_write(uint64_t ops, uint64_t bytes);
+  JournalThrottle throttle;
 
   // write thread
   Mutex write_lock;
@@ -388,14 +408,15 @@ private:
     aio_lock("FileJournal::aio_lock"),
     aio_ctx(0),
     aio_num(0), aio_bytes(0),
+    aio_write_queue_ops(0),
+    aio_write_queue_bytes(0),
 #endif
     last_committed_seq(0),
     journaled_since_start(0),
     full_state(FULL_NOTFULL),
     fd(-1),
     writing_seq(0),
-    throttle_ops(g_ceph_context, "journal_ops", g_conf->journal_queue_max_ops),
-    throttle_bytes(g_ceph_context, "journal_bytes", g_conf->journal_queue_max_bytes),
+    throttle(g_conf->filestore_caller_concurrency),
     write_lock("FileJournal::write_lock", false, true, false, g_ceph_context),
     write_stop(true),
     aio_stop(true),
@@ -412,10 +433,13 @@ private:
         aio = false;
       }
 #endif
+
+      g_conf->add_observer(this);
   }
   ~FileJournal() {
     assert(fd == -1);
     delete[] zero_buf;
+    g_conf->remove_observer(this);
   }
 
   int check();
@@ -430,7 +454,7 @@ private:
 
   void flush();
 
-  void throttle();
+  void reserve_throttle_and_backoff(uint64_t count);
 
   bool is_writeable() {
     return read_pos == 0;

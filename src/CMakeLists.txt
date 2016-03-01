@@ -638,6 +638,7 @@ set(libos_srcs
   os/filestore/DBObjectMap.cc
   os/filestore/FileJournal.cc
   os/filestore/FileStore.cc
+  os/filestore/JournalThrottle.cc
   os/filestore/GenericFileStoreBackend.cc
   os/filestore/JournalingObjectStore.cc
   os/filestore/HashIndex.cc

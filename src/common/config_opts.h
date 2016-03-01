@@ -1026,10 +1026,25 @@ OPTION(filestore_xfs_extsize, OPT_BOOL, false)
 OPTION(filestore_journal_parallel, OPT_BOOL, false)
 OPTION(filestore_journal_writeahead, OPT_BOOL, false)
 OPTION(filestore_journal_trailing, OPT_BOOL, false)
-OPTION(filestore_queue_max_ops, OPT_INT, 50)
-OPTION(filestore_queue_max_bytes, OPT_INT, 100 << 20)
-OPTION(filestore_queue_committing_max_ops, OPT_INT, 500)        // this is ON TOP of filestore_queue_max_*
-OPTION(filestore_queue_committing_max_bytes, OPT_INT, 100 << 20) //  "
+OPTION(filestore_queue_max_ops, OPT_U64, 50)
+OPTION(filestore_queue_max_bytes, OPT_U64, 100 << 20)
+
+OPTION(filestore_caller_concurrency, OPT_INT, 10)
+
+/// Expected filestore throughput in B/s
+OPTION(filestore_expected_throughput_bytes, OPT_DOUBLE, 100 << 20)
+/// Expected filestore throughput in ops/s
+OPTION(filestore_expected_throughput_ops, OPT_DOUBLE, 100)
+
+/// Filestore max delay multiple (probably don't need to change)
+OPTION(filestore_queue_max_delay_multiple, OPT_DOUBLE, 10)
+/// Filestore max delay multiple (probably don't need to change)
+OPTION(filestore_queue_high_delay_multiple, OPT_DOUBLE, 2)
+
+/// Use above to inject delays intended to keep the op queue between low and high
+OPTION(filestore_queue_low_threshhold, OPT_DOUBLE, 0.2)
+OPTION(filestore_queue_high_threshhold, OPT_DOUBLE, 0.8)
+
 OPTION(filestore_op_threads, OPT_INT, 2)
 OPTION(filestore_op_thread_timeout, OPT_INT, 60)
 OPTION(filestore_op_thread_suicide_timeout, OPT_INT, 180)
@@ -1058,8 +1073,16 @@ OPTION(journal_block_align, OPT_BOOL, true)
 OPTION(journal_write_header_frequency, OPT_U64, 0)
 OPTION(journal_max_write_bytes, OPT_INT, 10 << 20)
 OPTION(journal_max_write_entries, OPT_INT, 100)
-OPTION(journal_queue_max_ops, OPT_INT, 300)
-OPTION(journal_queue_max_bytes, OPT_INT, 32 << 20)
+
+/// Target range for journal fullness
+OPTION(journal_throttle_low_threshhold, OPT_DOUBLE, 0.5)
+OPTION(journal_throttle_high_threshhold, OPT_DOUBLE, 0.8)
+
+/// Multiple over expected at high_threshhold (probably don't need to change)
+OPTION(journal_throttle_high_multiple, OPT_DOUBLE, 2)
+/// Multiple over expected at max (probably don't need to change)
+OPTION(journal_throttle_max_multiple, OPT_DOUBLE, 10)
+
 OPTION(journal_align_min_size, OPT_INT, 64 << 10)  // align data payloads >= this.
 OPTION(journal_replay_from, OPT_INT, 0)
 OPTION(journal_zero_on_create, OPT_BOOL, false)

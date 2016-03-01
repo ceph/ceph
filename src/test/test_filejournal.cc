@@ -142,6 +142,7 @@ TEST(TestFileJournal, WriteSmall) {
     bufferlist bl;
     bl.append("small");
     int orig_len = j.prepare_entry(tls, &bl);
+    j.reserve_throttle_and_backoff(bl.length());
     j.submit_entry(1, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
     wait();
 
@@ -170,6 +171,7 @@ TEST(TestFileJournal, WriteBig) {
     }
     vector<ObjectStore::Transaction> tls;
     int orig_len = j.prepare_entry(tls, &bl);
+    j.reserve_throttle_and_backoff(bl.length());
     j.submit_entry(1, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
     wait();
     j.close();
@@ -198,6 +200,7 @@ TEST(TestFileJournal, WriteMany) {
     for (int i=0; i<100; i++) {
       bl.append("small");
       int orig_len = j.prepare_entry(tls, &bl);
+      j.reserve_throttle_and_backoff(bl.length());
       j.submit_entry(seq++, bl, orig_len, gb.new_sub());
     }
     gb.activate();
@@ -227,6 +230,7 @@ TEST(TestFileJournal, WriteManyVecs) {
     first.append("small");
     vector<ObjectStore::Transaction> tls;
     int orig_len = j.prepare_entry(tls, &first);
+    j.reserve_throttle_and_backoff(first.length());
     j.submit_entry(1, first, orig_len, gb.new_sub());
 
     bufferlist bl;
@@ -237,6 +241,7 @@ TEST(TestFileJournal, WriteManyVecs) {
     }
     bufferlist origbl = bl;
     orig_len = j.prepare_entry(tls, &bl);
+    j.reserve_throttle_and_backoff(bl.length());
     j.submit_entry(2, bl, orig_len, gb.new_sub());
     gb.activate();
     wait();
@@ -276,12 +281,15 @@ TEST(TestFileJournal, ReplaySmall) {
     bufferlist bl;
     bl.append("small");
     int orig_len = j.prepare_entry(tls, &bl);
+    j.reserve_throttle_and_backoff(bl.length());
     j.submit_entry(1, bl, orig_len, gb.new_sub());
     bl.append("small");
     orig_len = j.prepare_entry(tls, &bl);
+    j.reserve_throttle_and_backoff(bl.length());
     j.submit_entry(2, bl, orig_len, gb.new_sub());
     bl.append("small");
     orig_len = j.prepare_entry(tls, &bl);
+    j.reserve_throttle_and_backoff(bl.length());
     j.submit_entry(3, bl, orig_len, gb.new_sub());
     gb.activate();
     wait();
@@ -335,15 +343,19 @@ TEST(TestFileJournal, ReplayCorrupt) {
     bufferlist bl;
     bl.append(needle);
     int orig_len = j.prepare_entry(tls, &bl);
+    j.reserve_throttle_and_backoff(bl.length());
     j.submit_entry(1, bl, orig_len, gb.new_sub());
     bl.append(needle);
     orig_len = j.prepare_entry(tls, &bl);
+    j.reserve_throttle_and_backoff(bl.length());
     j.submit_entry(2, bl, orig_len, gb.new_sub());
     bl.append(needle);
     orig_len = j.prepare_entry(tls, &bl);
+    j.reserve_throttle_and_backoff(bl.length());
     j.submit_entry(3, bl, orig_len, gb.new_sub());
     bl.append(needle);
     orig_len = j.prepare_entry(tls, &bl);
+    j.reserve_throttle_and_backoff(bl.length());
     j.submit_entry(4, bl, orig_len, gb.new_sub());
     gb.activate();
     wait();
@@ -424,6 +436,7 @@ TEST(TestFileJournal, WriteTrim) {
       bl.zero();
       ls.push_back(new C_Sync);
       int orig_len = j.prepare_entry(tls, &bl);
+      j.reserve_throttle_and_backoff(bl.length());
       j.submit_entry(seq++, bl, orig_len, ls.back()->c);
 
       while (ls.size() > size_mb/2) {
@@ -475,6 +488,7 @@ TEST(TestFileJournal, WriteTrimSmall) {
       bl.zero();
       ls.push_back(new C_Sync);
       int orig_len = j.prepare_entry(tls, &bl);
+      j.reserve_throttle_and_backoff(bl.length());
       j.submit_entry(seq++, bl, orig_len, ls.back()->c);
 
       while (ls.size() > size_mb/2) {
@@ -516,6 +530,7 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
       bufferlist bl;
       bl.append(needle);
       int orig_len = j.prepare_entry(tls, &bl);
+      j.reserve_throttle_and_backoff(bl.length());
       j.submit_entry(i, bl, orig_len, gb.new_sub());
     }
     gb.activate();
@@ -524,6 +539,7 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
     bufferlist bl;
     bl.append("needle");
     int orig_len = j.prepare_entry(tls, &bl);
+    j.reserve_throttle_and_backoff(bl.length());
     j.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
     wait();
 
@@ -573,6 +589,7 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
       bufferlist bl;
       bl.append(needle);
       int orig_len = j.prepare_entry(tls, &bl);
+      j.reserve_throttle_and_backoff(bl.length());
       j.submit_entry(i, bl, orig_len, gb.new_sub());
     }
     gb.activate();
@@ -581,6 +598,7 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
     bufferlist bl;
     bl.append("needle");
     int orig_len = j.prepare_entry(tls, &bl);
+    j.reserve_throttle_and_backoff(bl.length());
     j.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
     wait();
 
@@ -630,6 +648,7 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
       bufferlist bl;
       bl.append(needle);
       int orig_len = j.prepare_entry(tls, &bl);
+      j.reserve_throttle_and_backoff(bl.length());
       j.submit_entry(i, bl, orig_len, gb.new_sub());
     }
     gb.activate();
@@ -638,6 +657,7 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
     bufferlist bl;
     bl.append("needle");
     int orig_len = j.prepare_entry(tls, &bl);
+    j.reserve_throttle_and_backoff(bl.length());
     j.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
     wait();
 
