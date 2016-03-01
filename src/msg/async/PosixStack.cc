@@ -32,6 +32,7 @@
 #include "msg/async/dpdk/Packet.h"
 
 #include "include/buffer.h"
+#include "include/sock_compat.h"
 #include "common/errno.h"
 #include "common/Tub.h"
 #include "common/dout.h"
@@ -46,6 +47,11 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   int _fd;
   entity_addr_t sa;
   bool connected;
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+  sigset_t sigpipe_mask;
+  bool sigpipe_pending;
+  bool sigpipe_unblock;
+#endif
 
  public:
   explicit PosixConnectedSocketImpl(NetHandler &h, const entity_addr_t &sa, int f, bool connected)
@@ -66,21 +72,85 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     }
   }
 
-  virtual int zero_copy_read(size_t, bufferlist&) override {
+  virtual ssize_t zero_copy_read(size_t, bufferlist&) override {
     return -EOPNOTSUPP;
   }
 
-  virtual int read(char *buf, size_t len) override {
-    int r = ::read(_fd, buf, len);
+  virtual ssize_t read(char *buf, size_t len) override {
+    ssize_t r = ::read(_fd, buf, len);
     if (r < 0)
       r = -errno;
     return r;
+  }
+
+  /*
+   SIGPIPE suppression - for platforms without SO_NOSIGPIPE or MSG_NOSIGNAL
+    http://krokisplace.blogspot.in/2010/02/suppressing-sigpipe-in-library.html 
+    http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html 
+  */
+  static void suppress_sigpipe()
+  {
+  #if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+    /*
+      We want to ignore possible SIGPIPE that we can generate on write.
+      SIGPIPE is delivered *synchronously* and *only* to the thread
+      doing the write.  So if it is reported as already pending (which
+      means the thread blocks it), then we do nothing: if we generate
+      SIGPIPE, it will be merged with the pending one (there's no
+      queuing), and that suits us well.  If it is not pending, we block
+      it in this thread (and we avoid changing signal action, because it
+      is per-process).
+    */
+    sigset_t pending;
+    sigemptyset(&pending);
+    sigpending(&pending);
+    sigpipe_pending = sigismember(&pending, SIGPIPE);
+    if (!sigpipe_pending) {
+      sigset_t blocked;
+      sigemptyset(&blocked);
+      pthread_sigmask(SIG_BLOCK, &sigpipe_mask, &blocked);
+
+      /* Maybe is was blocked already?  */
+      sigpipe_unblock = ! sigismember(&blocked, SIGPIPE);
+    }
+  #endif /* !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE) */
+  }
+
+  static void restore_sigpipe()
+  {
+  #if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+    /*
+      If SIGPIPE was pending already we do nothing.  Otherwise, if it
+      become pending (i.e., we generated it), then we sigwait() it (thus
+      clearing pending status).  Then we unblock SIGPIPE, but only if it
+      were us who blocked it.
+    */
+    if (!sigpipe_pending) {
+      sigset_t pending;
+      sigemptyset(&pending);
+      sigpending(&pending);
+      if (sigismember(&pending, SIGPIPE)) {
+        /*
+          Protect ourselves from a situation when SIGPIPE was sent
+          by the user to the whole process, and was delivered to
+          other thread before we had a chance to wait for it.
+        */
+        static const struct timespec nowait = { 0, 0 };
+        TEMP_FAILURE_RETRY(sigtimedwait(&sigpipe_mask, NULL, &nowait));
+      }
+
+      if (sigpipe_unblock)
+        pthread_sigmask(SIG_UNBLOCK, &sigpipe_mask, NULL);
+    }
+  #endif  /* !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE) */
   }
 
   // return the sent length
   // < 0 means error occured
   static ssize_t do_sendmsg(int fd, struct msghdr &msg, unsigned len, bool more)
   {
+    suppress_sigpipe();
+
     ssize_t sent = 0;
     while (sent < len) {
       ssize_t r;
@@ -115,6 +185,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
         }
       }
     }
+    restore_sigpipe();
     return (ssize_t)sent;
   }
 
@@ -183,7 +254,7 @@ class PosixServerSocketImpl : public ServerSocketImpl {
 
  public:
   explicit PosixServerSocketImpl(NetHandler &h, const entity_addr_t &sa, int f): handler(h), sa(sa), _fd(f) {}
-  virtual int accept(ConnectedSocket *sock, entity_addr_t *out) override;
+  virtual int accept(ConnectedSocket *sock, const SocketOptions &opts, entity_addr_t *out) override;
   virtual void abort_accept() override {
     ::close(_fd);
   }
@@ -192,7 +263,7 @@ class PosixServerSocketImpl : public ServerSocketImpl {
   }
 };
 
-int PosixServerSocketImpl::accept(ConnectedSocket *sock, entity_addr_t *out) {
+int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out) {
   assert(sock);
   socklen_t slen = sizeof(out->ss_addr());
   int sd = ::accept(_fd, (sockaddr*)&out->ss_addr(), &slen);
@@ -201,6 +272,12 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, entity_addr_t *out) {
   }
 
   int r = handler.set_nonblock(sd);
+  if (r < 0) {
+    ::close(sd);
+    return -errno;
+  }
+
+  r = handler.set_socket_options(sd, opt.nodelay, opt.rcbuf_size);
   if (r < 0) {
     ::close(sd);
     return -errno;

@@ -41,7 +41,7 @@ class DPDKServerSocketImpl : public ServerSocketImpl {
   int listen() {
     return _listener.listen();
   }
-  virtual int accept(ConnectedSocket *s, entity_addr_t *out) override;
+  virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out) override;
   virtual void abort_accept() override;
   virtual int fd() const override {
     return _listener.fd();
@@ -64,9 +64,9 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     return _conn.is_connected();
   }
 
-  virtual int read(char *buf, size_t len) override {
+  virtual ssize_t read(char *buf, size_t len) override {
     bufferlist data;
-    int r = zero_copy_read(len, data);
+    ssize_t r = zero_copy_read(len, data);
     if (r < 0)
       return r;
     assert(data.length() <= len);
@@ -74,7 +74,7 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     return data.length();
   }
 
-  virtual int zero_copy_read(size_t len, bufferlist &data) override {
+  virtual ssize_t zero_copy_read(size_t len, bufferlist &data) override {
     auto err = _conn.get_errno();
     if (err <= 0)
       return err;
@@ -181,7 +181,7 @@ DPDKServerSocketImpl<Protocol>::DPDKServerSocketImpl(
         : _listener(proto.listen(port)) {}
 
 template <typename Protocol>
-int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, entity_addr_t *out){
+int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, const SocketOptions &options, entity_addr_t *out){
   if (_listener.get_errno() < 0)
     return _listener.get_errno();
   auto c = _listener.accept();

@@ -200,7 +200,7 @@ TEST_P(TransportTest, SimpleTest) {
     center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
   }
 
-  r = bind_socket.accept(&srv_socket, &cli_addr);
+  r = bind_socket.accept(&srv_socket, options, &cli_addr);
   ASSERT_EQ(r, 0);
   ASSERT_TRUE(srv_socket.fd() > 0);
 
@@ -326,7 +326,7 @@ TEST_P(TransportTest, AcceptAndCloseTest) {
     ASSERT_EQ(r, 0);
 
     ConnectedSocket srv_socket, cli_socket;
-    r = bind_socket.accept(&srv_socket, &cli_addr);
+    r = bind_socket.accept(&srv_socket, options, &cli_addr);
     ASSERT_EQ(r, -EAGAIN);
 
     C_poll cb(center);
@@ -337,7 +337,7 @@ TEST_P(TransportTest, AcceptAndCloseTest) {
 
     {
       ConnectedSocket srv_socket2;
-      r = bind_socket.accept(&srv_socket2, &cli_addr);
+      r = bind_socket.accept(&srv_socket2, options, &cli_addr);
       ASSERT_EQ(r, 0);
       ASSERT_TRUE(srv_socket2.fd() > 0);
 
@@ -366,7 +366,7 @@ TEST_P(TransportTest, AcceptAndCloseTest) {
     ASSERT_EQ(cb.poll(500), true);
     center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
     cli_socket.close();
-    r = bind_socket.accept(&srv_socket, &cli_addr);
+    r = bind_socket.accept(&srv_socket, options, &cli_addr);
     ASSERT_EQ(r, 0);
     center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
     // unbind
@@ -407,7 +407,7 @@ TEST_P(TransportTest, ComplexTest) {
     center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
   }
 
-  r = bind_socket.accept(&srv_socket, &cli_addr);
+  r = bind_socket.accept(&srv_socket, options, &cli_addr);
   ASSERT_EQ(r, 0);
   ASSERT_TRUE(srv_socket.fd() > 0);
 
@@ -429,43 +429,40 @@ TEST_P(TransportTest, ComplexTest) {
   for (size_t i = 0; i < message_size; i += 100)
     message[i] = ',';
   auto cli_fd = cli_socket.fd();
-  bool done = false;
   size_t len = message_size * count;
   Mutex lock("test_async_transport::lock");
-  std::thread t([len, cli_fd, count](EventCenter *center, ConnectedSocket &cli_socket, const string &message, Mutex &lock, bool &done) {
-    bool first = true;
-   again:
-    bufferlist bl;
-    for (size_t i = 0; i < count; ++i)
-      bl.push_back(bufferptr((char*)message.data(), message_size));
-
-    ASSERT_TRUE(center->get_owner());
+  bool done = false;
+  auto sssss = [len, cli_fd, count](EventCenter *center, ConnectedSocket &cli_socket, const string &message, Mutex &lock, bool &done) {
+    int c = 2;
     C_poll cb(center, &lock);
     center->create_file_event(cli_fd, EVENT_WRITABLE, &cb);
-    ssize_t r = 0;
-    size_t left = len;
-    usleep(100);
-    while (left > 0) {
-      lock.Lock();
-      r = cli_socket.send(bl, false);
-      lock.Unlock();
-      ASSERT_TRUE(r > 0 || r == -EAGAIN);
-      if (r > 0)
-        left -= r;
-      if (left == 0)
-        break;
-      cb.reset();
-      ASSERT_EQ(cb.poll(500), true);
-    }
-    if (first) {
-      first = false;
-      goto again;
-    }
-    while (!done)
+    while (c--) {
+      bufferlist bl;
+      for (size_t i = 0; i < count; ++i)
+        bl.push_back(bufferptr((char*)message.data(), message_size));
+
+      ASSERT_TRUE(center->get_owner());
+      ssize_t r = 0;
+      size_t left = len;
       usleep(100);
+      while (left > 0) {
+        lock.Lock();
+        r = cli_socket.send(bl, false);
+        lock.Unlock();
+        ASSERT_TRUE(r > 0 || r == -EAGAIN);
+        if (r > 0)
+          left -= r;
+        if (left == 0)
+          break;
+        cb.reset();
+        ASSERT_EQ(cb.poll(5000), true);
+      }
+    }
     center->delete_file_event(cli_fd, EVENT_WRITABLE);
-    usleep(100);
-  }, center, std::ref(cli_socket), std::ref(message), std::ref(lock), std::ref(done));
+    done = true;
+  };
+  std::thread t(std::move(sssss), center, std::ref(cli_socket), std::ref(message), std::ref(lock), std::ref(done));
+  t.detach();
 
   char buf[1000];
   C_poll cb(center, &lock);
@@ -482,17 +479,16 @@ TEST_P(TransportTest, ComplexTest) {
       len -= r;
     }
     if (r == -EAGAIN) {
-      ASSERT_EQ(cb.poll(500), true);
+      ASSERT_EQ(cb.poll(5000), true);
       cb.reset();
     }
   }
+  while (!done)
+    usleep(100);
   center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
-  done = true;
-  t.join();
   for (size_t i = 0; i < read_string.size(); i += message_size)
     ASSERT_EQ(memcmp(read_string.c_str()+i, message.c_str(), message_size), 0);
 
-  center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
   bind_socket.abort_accept();
   srv_socket.close();
   cli_socket.close();
@@ -851,7 +847,8 @@ class StressFactory {
       while (true) {
         entity_addr_t cli_addr;
         ConnectedSocket srv_socket;
-        int r = bind_socket.accept(&srv_socket, &cli_addr);
+        SocketOptions options;
+        int r = bind_socket.accept(&srv_socket, options, &cli_addr);
         if (r == -EAGAIN) {
           break;
         }

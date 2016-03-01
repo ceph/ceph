@@ -36,6 +36,7 @@ using namespace std;
 #include "include/assert.h"
 #include "AsyncConnection.h"
 #include "Event.h"
+#include "GenericSocket.h"
 
 
 class AsyncMessenger;
@@ -64,7 +65,9 @@ class Worker : public Thread {
   PerfCounters *perf_logger;
 
  public:
+  bool init_done = false;
   EventCenter center;
+  std::unique_ptr<NetworkStack> transport;
   Worker(CephContext *c, WorkerPool *p, int i)
     : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c) {
     center.init(InitEventNumber);
@@ -103,7 +106,7 @@ class Processor {
   AsyncMessenger *msgr;
   NetHandler net;
   Worker *worker;
-  int listen_sd;
+  ServerSocket listen_socket;
   uint64_t nonce;
   EventCallbackRef listen_handler;
 
@@ -119,7 +122,7 @@ class Processor {
 
  public:
   Processor(AsyncMessenger *r, CephContext *c, uint64_t n)
-          : msgr(r), net(c), worker(NULL), listen_sd(-1), nonce(n), listen_handler(new C_processor_accept(this)) {}
+          : msgr(r), net(c), worker(NULL), nonce(n), listen_handler(new C_processor_accept(this)) {}
   ~Processor() { delete listen_handler; };
 
   void stop();
@@ -157,7 +160,6 @@ class WorkerPool {
  public:
   explicit WorkerPool(CephContext *c);
   virtual ~WorkerPool();
-  void start();
   Worker *get_worker() {
     return workers[(seq++)%workers.size()];
   }
@@ -267,7 +269,8 @@ public:
   Connection *create_anon_connection() {
     Mutex::Locker l(lock);
     Worker *w = pool->get_worker();
-    return new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+    return new AsyncConnection(cct, this, &w->center, w->get_perf_counter(),
+                               w->transport.get());
   }
 
   /**
@@ -470,7 +473,7 @@ public:
   }
 
   void learned_addr(const entity_addr_t &peer_addr_for_me);
-  AsyncConnectionRef add_accept(int sd);
+  AsyncConnectionRef add_accept(ConnectedSocket cli_socket, entity_addr_t &addr);
 
   /**
    * This wraps ms_deliver_get_authorizer. We use it for AsyncConnection.

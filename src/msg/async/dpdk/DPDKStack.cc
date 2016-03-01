@@ -126,8 +126,10 @@ std::unique_ptr<NetworkStack> DPDKStack::create(CephContext *cct, EventCenter *c
   sdev->stacks[i] = stack;
   {
     Mutex::Locker l(lock);
-    if (!--queue_init_done)
+    if (!--queue_init_done) {
+      create_stage = WAIT_DEVICE_STAGE;
       sdev.reset();
+    }
   }
   return std::unique_ptr<DPDKStack>(stack);
 }

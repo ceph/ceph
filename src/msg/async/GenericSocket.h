@@ -26,8 +26,8 @@ class ConnectedSocketImpl {
  public:
   virtual ~ConnectedSocketImpl() {}
   virtual int is_connected() = 0;
-  virtual int read(char*, size_t) = 0;
-  virtual int zero_copy_read(size_t, bufferlist&) = 0;
+  virtual ssize_t read(char*, size_t) = 0;
+  virtual ssize_t zero_copy_read(size_t, bufferlist&) = 0;
   virtual ssize_t send(bufferlist &bl, bool more) = 0;
   virtual void shutdown() = 0;
   virtual void close() = 0;
@@ -35,12 +35,17 @@ class ConnectedSocketImpl {
 };
 
 class ConnectedSocket;
+struct SocketOptions {
+  bool nonblock = true;
+  bool nodelay = true;
+  int rcbuf_size = 0;
+};
 
 /// \cond internal
 class ServerSocketImpl {
  public:
   virtual ~ServerSocketImpl() {}
-  virtual int accept(ConnectedSocket *sock, entity_addr_t *out) = 0;
+  virtual int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out) = 0;
   virtual void abort_accept() = 0;
   /// Get file descriptor
   virtual int fd() const = 0;
@@ -79,13 +84,13 @@ class ConnectedSocket {
   /// Read the input stream with copy.
   ///
   /// Copy an object returning data sent from the remote endpoint.
-  int read(char* buf, size_t len) {
+  ssize_t read(char* buf, size_t len) {
     return _csi->read(buf, len);
   }
   /// Gets the input stream.
   ///
   /// Gets an object returning data sent from the remote endpoint.
-  int zero_copy_read(size_t len, bufferlist &data) {
+  ssize_t zero_copy_read(size_t len, bufferlist &data) {
     return _csi->zero_copy_read(len, data);
   }
   /// Gets the output stream.
@@ -109,12 +114,17 @@ class ConnectedSocket {
   /// This is useful to abort operations on a socket that is not making
   /// progress due to a peer failure.
   void close() {
-    return _csi->close();
+    _csi->close();
+    _csi.reset();
   }
 
   /// Get file descriptor
   int fd() const {
     return _csi->fd();
+  }
+
+  explicit operator bool() const {
+    return _csi.get();
   }
 };
 /// @}
@@ -145,8 +155,8 @@ class ServerSocket {
   ///
   /// \Accepts a \ref ConnectedSocket representing the connection, and
   ///          a \ref entity_addr_t describing the remote endpoint.
-  int accept(ConnectedSocket *sock, entity_addr_t *out) {
-    return _ssi->accept(sock, out);
+  int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out) {
+    return _ssi->accept(sock, opt, out);
   }
 
   /// Stops any \ref accept() in progress.
@@ -154,21 +164,20 @@ class ServerSocket {
   /// Current and future \ref accept() calls will terminate immediately
   /// with an error.
   void abort_accept() {
-    return _ssi->abort_accept();
+    _ssi->abort_accept();
+    _ssi.reset();
   }
 
   /// Get file descriptor
   int fd() const {
     return _ssi->fd();
   }
+
+  explicit operator bool() const {
+    return _ssi.get();
+  }
 };
 /// @}
-
-struct SocketOptions {
-  bool nonblock = true;
-  bool nodelay = true;
-  int rcbuf_size = 0;
-};
 
 class EventCenter;
 
