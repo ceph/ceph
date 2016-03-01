@@ -121,21 +121,64 @@ struct C_aio_linger_Complete : public Context {
   }
 };
 
+struct C_aio_notify_Complete : public C_aio_linger_Complete {
+  Mutex lock;
+  bool acked = false;
+  bool finished = false;
+  int ret_val = 0;
+
+  C_aio_notify_Complete(AioCompletionImpl *_c, Objecter::LingerOp *_linger_op)
+    : C_aio_linger_Complete(_c, _linger_op, false),
+      lock("C_aio_notify_Complete::lock") {
+  }
+
+  void handle_ack(int r) {
+    // invoked by C_aio_notify_Ack
+    lock.Lock();
+    acked = true;
+    complete_unlock(r);
+  }
+
+  virtual void complete(int r) override {
+    // invoked by C_notify_Finish (or C_aio_notify_Ack on failure)
+    lock.Lock();
+    finished = true;
+    complete_unlock(r);
+  }
+
+  void complete_unlock(int r) {
+    if (ret_val == 0 && r < 0) {
+      ret_val = r;
+    }
+
+    if (acked && finished) {
+      lock.Unlock();
+      C_aio_linger_Complete::complete(ret_val);
+    } else {
+      lock.Unlock();
+    }
+  }
+};
+
 struct C_aio_notify_Ack : public Context {
   CephContext *cct;
-  C_notify_Finish *f;
+  C_notify_Finish *onfinish;
+  C_aio_notify_Complete *oncomplete;
 
-  C_aio_notify_Ack(CephContext *_cct, C_notify_Finish *_f)
-    : cct(_cct), f(_f)
+  C_aio_notify_Ack(CephContext *_cct, C_notify_Finish *_onfinish,
+                   C_aio_notify_Complete *_oncomplete)
+    : cct(_cct), onfinish(_onfinish), oncomplete(_oncomplete)
   {
   }
 
   virtual void finish(int r)
   {
-    ldout(cct, 10) << __func__ << " linger op " << f->linger_op << " acked ("
-                   << r << ")" << dendl;
+    ldout(cct, 10) << __func__ << " linger op " << oncomplete->linger_op << " "
+                   << "acked (" << r << ")" << dendl;
+    oncomplete->handle_ack(r);
     if (r < 0) {
-      f->complete(r);
+      // on failure, we won't expect to see a notify_finish callback
+      onfinish->complete(r);
     }
   }
 };
@@ -1434,12 +1477,12 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
 
   c->io = this;
 
-  Context *oncomplete = new C_aio_linger_Complete(c, linger_op, true);
+  C_aio_notify_Complete *oncomplete = new C_aio_notify_Complete(c, linger_op);
   C_notify_Finish *onnotify = new C_notify_Finish(client->cct, oncomplete,
                                                   objecter, linger_op,
                                                   preply_bl, preply_buf,
                                                   preply_buf_len);
-  Context *onack = new C_aio_notify_Ack(client->cct, onnotify);
+  Context *onack = new C_aio_notify_Ack(client->cct, onnotify, oncomplete);
 
   uint32_t timeout = notify_timeout;
   if (timeout_ms)
