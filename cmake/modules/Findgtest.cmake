@@ -4,26 +4,24 @@
 #  GTEST_LIBRARIES      - List of libraries when using mcas.
 #  GTEST                - True if mcas found.
 
-message(STATUS $ENV{HOME}/develop/usr/local/include)
-
 find_path(GTEST_INCLUDE_DIR NAMES gtest/gtest.h gmock/gmock.h
-    PATHS /usr/local/include $ENV{HOME}/develop/usr/local/include)
+    PATHS /usr/include /usr/local/include $ENV{HOME}/develop/usr/local/include)
 
 find_library(GTEST_LIBRARY
   NAMES gtest
-  PATHS /usr/local/lib $ENV{HOME}/develop/usr/local/lib)
+  PATHS /usr/local/lib /usr/lib64 $ENV{HOME}/develop/usr/local/lib)
 
 find_library(GTEST_MAIN_LIBRARY
   NAMES gtest_main
-  PATHS /usr/local/lib $ENV{HOME}/develop/usr/local/lib)
+  PATHS /usr/local/lib /usr/lib64 $ENV{HOME}/develop/usr/local/lib)
 
 find_library(GMOCK_LIBRARY
   NAMES gmock
-  PATHS /usr/local/lib $ENV{HOME}/develop/usr/local/lib)
+  PATHS /usr/local/lib /usr/lib64 $ENV{HOME}/develop/usr/local/lib)
 
 find_library(GMOCK_MAIN_LIBRARY
   NAMES gmock_main
-  PATHS /usr/local/lib $ENV{HOME}/develop/usr/local/lib)
+  PATHS /usr/local/lib /usr/lib64 $ENV{HOME}/develop/usr/local/lib)
 
 
 include(FindPackageHandleStandardArgs)
