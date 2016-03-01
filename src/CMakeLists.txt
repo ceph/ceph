@@ -687,6 +687,8 @@ if(WITH_SPDK)
 endif(WITH_SPDK)
 
 # make rocksdb statically
+if(WITH_ROCKSDB)
+else(WITH_ROCKSDB)
 add_custom_target(build_rocksdb
     COMMAND
     PORTABLE=1 $(MAKE) static_lib EXTRA_CXXFLAGS='-fPIC -Wno-unused-variable'
@@ -698,6 +700,7 @@ add_library(rocksdb STATIC IMPORTED)
 set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a")
 add_dependencies(rocksdb build_rocksdb)
 set(ROCKSDB_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
+endif(WITH_ROCKSDB)
 
 add_subdirectory(kv)
 
@@ -1207,7 +1210,9 @@ if(${WITH_RADOSGW})
   set(civetweb_common_files civetweb/src/civetweb.c)
   add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
   set_property(TARGET civetweb_common_objs
-	       APPEND PROPERTY COMPILE_DEFINITIONS NO_SSL_DL=1)
+	       APPEND PROPERTY COMPILE_DEFINITIONS NO_SSL_DL=1 USE_IPV6=1)
+  target_include_directories(civetweb_common_objs PRIVATE
+	"${CMAKE_BINARY_DIR}/src/include/civetweb")
 
   if(HAVE_BOOST_ASIO_COROUTINE)
     target_compile_definitions(rgw_a PUBLIC "HAVE_BOOST_ASIO_COROUTINE")
