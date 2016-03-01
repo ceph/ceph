@@ -104,7 +104,6 @@ class SharedDriverData {
   friend class AioCompletionThread;
 
   bool aio_stop = false;
-  int ref = 1;
   void _aio_thread();
   void _aio_start() {
     aio_thread.create("nvme_aio_thread");
@@ -503,7 +502,8 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
 
   ProbeContext ctx = {sn_tag, this, nullptr};
   r = spdk_nvme_probe(&ctx, probe_cb, attach_cb);
-  if (r || !ctx.driver) {
+  if (r < 0) {
+    assert(!ctx.driver);
     derr << __func__ << " device probe nvme failed" << dendl;
     return r;
   }
@@ -604,7 +604,11 @@ int NVMEDevice::open(string p)
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   fd = -1; // defensive
   if (r <= 0) {
-    r = -errno;
+    if (r == 0) {
+      r = -EINVAL;
+    } else {
+      r = -errno;
+    }
     derr << __func__ << " unable to read " << p << ": " << cpp_strerror(r) << dendl;
     return r;
   }
