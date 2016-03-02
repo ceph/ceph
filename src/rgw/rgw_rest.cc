@@ -1001,10 +1001,13 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
     bufferptr bp(cl);
 
     int read_len; /* cio->read() expects int * */
-    int r = STREAM_IO(s)->read(bp.c_str(), cl, &read_len, true);
-    len = read_len;
-    if (r < 0)
+    int r = STREAM_IO(s)->read(bp.c_str(), cl, &read_len,
+                               s->aws4_auth_needs_complete);
+    if (r < 0) {
       return r;
+    }
+
+    len = read_len;
     bl.append(bp, 0, len);
   }
 
