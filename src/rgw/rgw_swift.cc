@@ -515,6 +515,25 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
   return 0;
 }
 
+static void temp_url_make_content_disp(req_state * const s)
+{
+  bool inline_exists = false;
+  string filename = s->info.args.get("filename");
+
+  s->info.args.get("inline", &inline_exists);
+  if (inline_exists) {
+    s->content_disp.override = "inline";
+  } else if (!filename.empty()) {
+    string fenc;
+    url_encode(filename, fenc);
+    s->content_disp.override = "attachment; filename=\"" + fenc + "\"";
+  } else {
+    string fenc;
+    url_encode(s->object.name, fenc);
+    s->content_disp.fallback = "attachment; filename=\"" + fenc + "\"";
+  }
+}
+
 int authenticate_temp_url(RGWRados *store, req_state *s)
 {
   /* temp url requires bucket and object specified in the requets */
@@ -592,6 +611,7 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
     if (dest_str != temp_url_sig) {
       dout(5) << "temp url signature mismatch: " << dest_str << " != " << temp_url_sig << dendl;
     } else {
+      temp_url_make_content_disp(s);
       return 0;
     }
   }
