@@ -233,8 +233,8 @@ inline void decode(buffer::ptr& bp, bufferlist::iterator& p)
   p.copy(len, s);
 
   if (len) {
-    if (s.buffers().size() == 1)
-      bp = s.buffers().front();
+    if (s.get_num_buffers() == 1)
+      bp = s.front();
     else
       bp = buffer::copy(s.c_str(), s.length());
   }

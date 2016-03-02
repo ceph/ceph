@@ -39,6 +39,9 @@
 #include <ostream>
 namespace ceph {
 
+#define CEPH_BUFFER_ALLOC_UNIT  (MIN(CEPH_PAGE_SIZE, 4096))
+#define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
+
 #ifdef BUFFER_DEBUG
 static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 # define bdout { simple_spin_lock(&buffer_debug_lock); std::cout
@@ -232,6 +235,55 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
         crc_map.clear();
       }
       simple_spin_unlock(&crc_spinlock);
+    }
+  };
+
+  /*
+   * raw_combined is always placed within a single allocation along
+   * with the data buffer.  the data goes at the beginning, and
+   * raw_combined at the end.
+   */
+  class buffer::raw_combined : public buffer::raw {
+    size_t alignment;
+  public:
+    raw_combined(char *dataptr, unsigned l, unsigned align=0)
+      : raw(dataptr, l),
+	alignment(align) {
+      inc_total_alloc(len);
+    }
+    ~raw_combined() {
+      dec_total_alloc(len);
+    }
+    raw* clone_empty() {
+      return create(len, alignment);
+    }
+
+    static raw_combined *create(unsigned len, unsigned align=0) {
+      if (!align)
+	align = sizeof(size_t);
+      size_t rawlen = ROUND_UP_TO(sizeof(buffer::raw_combined),
+				  alignof(buffer::raw_combined));
+      size_t datalen = ROUND_UP_TO(len, alignof(buffer::raw_combined));
+
+#ifdef DARWIN
+      char *ptr = (char *) valloc(rawlen + datalen);
+#else
+      char *ptr = 0;
+      int r = ::posix_memalign((void**)(void*)&ptr, align, rawlen + datalen);
+      if (r)
+	throw bad_alloc();
+#endif /* DARWIN */
+      if (!ptr)
+	throw bad_alloc();
+
+      // actual data first, since it has presumably larger alignment restriction
+      // then put the raw_combined at the end
+      return new (ptr + datalen) raw_combined(ptr, len, align);
+    }
+
+    static void operator delete(void *ptr) {
+      raw_combined *raw = (raw_combined *)ptr;
+      ::free((void *)raw->data);
     }
   };
 
@@ -635,12 +687,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 #endif /* HAVE_XIO */
 
   buffer::raw* buffer::copy(const char *c, unsigned len) {
-    raw* r = new raw_char(len);
+    raw* r = buffer::create_aligned(len, sizeof(size_t));
     memcpy(r->data, c, len);
     return r;
   }
+
   buffer::raw* buffer::create(unsigned len) {
-    return new raw_char(len);
+    return buffer::create_aligned(len, sizeof(size_t));
   }
   buffer::raw* buffer::claim_char(unsigned len, char *buf) {
     return new raw_char(len, buf);
@@ -654,14 +707,28 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   buffer::raw* buffer::create_static(unsigned len, char *buf) {
     return new raw_static(buf, len);
   }
+
   buffer::raw* buffer::create_aligned(unsigned len, unsigned align) {
+    // If alignment is a page multiple, use a separate buffer::raw to
+    // avoid fragmenting the heap.
+    //
+    // Somewhat unexpectedly, I see consistently better performance
+    // from raw_combined than from raw even when the allocation size is
+    // a page multiple (but alignment is not).
+    //
+    // I also see better performance from a separate buffer::raw once the
+    // size passes 8KB.
+    if ((align & ~CEPH_PAGE_MASK) == 0 ||
+	len >= CEPH_PAGE_SIZE * 2) {
 #ifndef __CYGWIN__
-    //return new raw_mmap_pages(len);
-    return new raw_posix_aligned(len, align);
+      return new raw_posix_aligned(len, align);
 #else
-    return new raw_hack_aligned(len, align);
+      return new raw_hack_aligned(len, align);
 #endif
+    }
+    return raw_combined::create(len, align);
   }
+
   buffer::raw* buffer::create_page_aligned(unsigned len) {
     return create_aligned(len, CEPH_PAGE_SIZE);
   }
@@ -1590,7 +1657,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     unsigned gap = append_buffer.unused_tail_length();
     if (!gap) {
       // make a new append_buffer!
-      append_buffer = create_aligned(CEPH_BUFFER_APPEND_SIZE, CEPH_BUFFER_APPEND_SIZE);
+      append_buffer = raw_combined::create(CEPH_BUFFER_APPEND_SIZE);
       append_buffer.set_length(0);   // unused, so far.
     }
     append(append_buffer, append_buffer.append(c) - 1, 1);	// add segment to the list
@@ -1612,9 +1679,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       if (len == 0)
         break;  // done!
       
-      // make a new append_buffer!
-      unsigned alen = CEPH_BUFFER_APPEND_SIZE * (((len-1) / CEPH_BUFFER_APPEND_SIZE) + 1);
-      append_buffer = create_aligned(alen, CEPH_BUFFER_APPEND_SIZE);
+      // make a new append_buffer.  fill out a complete page, factoring in the
+      // raw_combined overhead.
+      size_t need = ROUND_UP_TO(len, sizeof(size_t)) + sizeof(raw_combined);
+      size_t alen = ROUND_UP_TO(need, CEPH_BUFFER_ALLOC_UNIT) -
+	sizeof(raw_combined);
+      append_buffer = raw_combined::create(alen);
       append_buffer.set_length(0);   // unused, so far.
     }
   }
@@ -1945,8 +2015,7 @@ ssize_t buffer::list::read_fd(int fd, size_t len)
     // available for raw_pipe until we actually inspect the data
     return 0;
   }
-  int s = ROUND_UP_TO(len, CEPH_BUFFER_APPEND_SIZE);
-  bufferptr bp = buffer::create_aligned(s, CEPH_BUFFER_APPEND_SIZE);
+  bufferptr bp = buffer::create(len);
   ssize_t ret = safe_read(fd, (void*)bp.c_str(), len);
   if (ret >= 0) {
     bp.set_length(ret);
