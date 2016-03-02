@@ -417,6 +417,8 @@ namespace rgw {
 	new RGWWriteRequest(fs->get_context(), fs->get_user(), this,
 			    bucket_name(), object_name);
       rc = rgwlib.get_fe()->start_req(f->write_req);
+      if (rc < 0)
+        return -EIO;
     }
 
     buffer::list bl;
