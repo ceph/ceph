@@ -267,7 +267,8 @@ def start_rgw(ctx, config, on_client = None, except_client = None):
         if client == except_client:
             continue
         (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-
+        zone = rgw_utils.zone_for_client(ctx, client)
+        log.debug('zone %s', zone)
         client_config = config.get(client)
         if client_config is None:
             client_config = {}
@@ -311,6 +312,9 @@ def start_rgw(ctx, config, on_client = None, except_client = None):
                 '--rgw-frontends',
                 'civetweb port={port}'.format(port=port),
             ])
+
+        if zone is not None:
+            rgw_cmd.extend(['--rgw-zone', zone])
 
         rgw_cmd.extend([
             '-n', client,
