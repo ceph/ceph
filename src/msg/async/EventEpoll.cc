@@ -87,7 +87,7 @@ int EpollDriver::del_event(int fd, int cur_mask, int delmask)
     if ((r = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ee)) < 0) {
       lderr(cct) << __func__ << " epoll_ctl: modify fd=" << fd << " mask=" << mask
                  << " failed." << cpp_strerror(errno) << dendl;
-      return r;
+      return -errno;
     }
   } else {
     /* Note, Kernel < 2.6.9 requires a non null event pointer even for
@@ -95,7 +95,7 @@ int EpollDriver::del_event(int fd, int cur_mask, int delmask)
     if ((r = epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ee)) < 0) {
       lderr(cct) << __func__ << " epoll_ctl: delete fd=" << fd
                  << " failed." << cpp_strerror(errno) << dendl;
-      return r;
+      return -errno;
     }
   }
   return 0;
