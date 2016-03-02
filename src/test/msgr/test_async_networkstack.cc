@@ -441,7 +441,6 @@ TEST_P(TransportTest, ComplexTest) {
       for (size_t i = 0; i < count; ++i)
         bl.push_back(bufferptr((char*)message.data(), message_size));
 
-      ASSERT_TRUE(center->get_id());
       ssize_t r = 0;
       size_t left = len;
       usleep(100);
