@@ -13,3 +13,7 @@ overrides:
   ceph_ansible:
     vars:
       ceph_test: true
+openstack:
+  - volumes:
+      count: 3
+      size: 20  # GB
