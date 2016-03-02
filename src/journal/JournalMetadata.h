@@ -15,6 +15,7 @@
 #include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/optional.hpp>
+#include <functional>
 #include <list>
 #include <map>
 #include <string>
@@ -30,8 +31,9 @@ typedef boost::intrusive_ptr<JournalMetadata> JournalMetadataPtr;
 
 class JournalMetadata : public RefCountedObject, boost::noncopyable {
 public:
-  typedef cls::journal::EntryPosition EntryPosition;
-  typedef cls::journal::EntryPositions EntryPositions;
+  typedef std::function<Context*()> CreateContext;
+  typedef cls::journal::ObjectPosition ObjectPosition;
+  typedef cls::journal::ObjectPositions ObjectPositions;
   typedef cls::journal::ObjectSetPosition ObjectSetPosition;
   typedef cls::journal::Client Client;
   typedef cls::journal::Tag Tag;
@@ -107,8 +109,6 @@ public:
 
   void flush_commit_position();
   void flush_commit_position(Context *on_safe);
-  void set_commit_position(const ObjectSetPosition &commit_position,
-                           Context *on_safe);
   void get_commit_position(ObjectSetPosition *commit_position) const {
     Mutex::Locker locker(m_lock);
     *commit_position = m_client.commit_position;
@@ -128,7 +128,7 @@ public:
 
   uint64_t allocate_commit_tid(uint64_t object_num, uint64_t tag_tid,
                                uint64_t entry_tid);
-  bool committed(uint64_t commit_tid, ObjectSetPosition *object_set_position);
+  void committed(uint64_t commit_tid, const CreateContext &create_context);
 
   void notify_update();
   void async_notify_update();
@@ -307,6 +307,7 @@ private:
   size_t m_update_notifications;
   Cond m_update_cond;
 
+  uint64_t m_commit_position_tid = 0;
   ObjectSetPosition m_commit_position;
   Context *m_commit_position_ctx;
   Context *m_commit_position_task_ctx;

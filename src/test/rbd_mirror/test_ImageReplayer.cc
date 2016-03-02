@@ -204,16 +204,18 @@ public:
     std::set<cls::journal::Client>::const_iterator c;
     for (c = registered_clients.begin(); c != registered_clients.end(); c++) {
       std::cout << __func__ << ": client: " << *c << std::endl;
-      cls::journal::EntryPositions entry_positions =
-	c->commit_position.entry_positions;
-      cls::journal::EntryPositions::const_iterator p;
-      for (p = entry_positions.begin(); p != entry_positions.end(); p++) {
+      cls::journal::ObjectPositions object_positions =
+	c->commit_position.object_positions;
+      cls::journal::ObjectPositions::const_iterator p;
+      for (p = object_positions.begin(); p != object_positions.end(); p++) {
 	if (c->id == master_client_id) {
 	  ASSERT_EQ(-1, master_tid);
 	  master_tid = p->entry_tid;
+          break;
 	} else if (c->id == mirror_client_id) {
 	  ASSERT_EQ(-1, mirror_tid);
 	  mirror_tid = p->entry_tid;
+          break;
 	}
       }
     }

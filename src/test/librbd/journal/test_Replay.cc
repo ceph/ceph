@@ -73,15 +73,15 @@ public:
       *tid = -1;
       return;
     }
-    cls::journal::EntryPositions entry_positions =
-	c->commit_position.entry_positions;
-    cls::journal::EntryPositions::const_iterator p;
-    for (p = entry_positions.begin(); p != entry_positions.end(); ++p) {
+    cls::journal::ObjectPositions object_positions =
+	c->commit_position.object_positions;
+    cls::journal::ObjectPositions::const_iterator p;
+    for (p = object_positions.begin(); p != object_positions.end(); p++) {
       if (p->tag_tid == 0) {
 	break;
       }
     }
-    *tid = p == entry_positions.end() ? -1 : p->entry_tid;
+    *tid = p == object_positions.end() ? -1 : p->entry_tid;
 
     C_SaferCond open_cond;
     ictx->journal = new librbd::Journal<>(*ictx);
@@ -599,7 +599,7 @@ TEST_F(TestJournalReplay, Flatten) {
   ASSERT_EQ(-EINVAL, ictx2->operations->flatten(no_op));
 }
 
-TEST_F(TestJournalReplay, EntryPosition) {
+TEST_F(TestJournalReplay, ObjectPosition) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
   librbd::ImageCtx *ictx;

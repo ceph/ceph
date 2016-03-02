@@ -141,7 +141,7 @@ TEST_F(TestObjectPlayer, FetchCorrupt) {
 
   C_SaferCond cond;
   object->fetch(&cond);
-  ASSERT_EQ(-EINVAL, cond.wait());
+  ASSERT_EQ(-EBADMSG, cond.wait());
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);

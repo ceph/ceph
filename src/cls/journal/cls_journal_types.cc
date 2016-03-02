@@ -7,51 +7,50 @@
 namespace cls {
 namespace journal {
 
-void EntryPosition::encode(bufferlist& bl) const {
+void ObjectPosition::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
+  ::encode(object_number, bl);
   ::encode(tag_tid, bl);
   ::encode(entry_tid, bl);
   ENCODE_FINISH(bl);
 }
 
-void EntryPosition::decode(bufferlist::iterator& iter) {
+void ObjectPosition::decode(bufferlist::iterator& iter) {
   DECODE_START(1, iter);
+  ::decode(object_number, iter);
   ::decode(tag_tid, iter);
   ::decode(entry_tid, iter);
   DECODE_FINISH(iter);
 }
 
-void EntryPosition::dump(Formatter *f) const {
+void ObjectPosition::dump(Formatter *f) const {
+  f->dump_unsigned("object_number", object_number);
   f->dump_unsigned("tag_tid", tag_tid);
   f->dump_unsigned("entry_tid", entry_tid);
 }
 
-void EntryPosition::generate_test_instances(std::list<EntryPosition *> &o) {
-  o.push_back(new EntryPosition());
-  o.push_back(new EntryPosition(1, 2));
+void ObjectPosition::generate_test_instances(std::list<ObjectPosition *> &o) {
+  o.push_back(new ObjectPosition());
+  o.push_back(new ObjectPosition(1, 2, 3));
 }
 
 void ObjectSetPosition::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  ::encode(object_number, bl);
-  ::encode(entry_positions, bl);
+  ::encode(object_positions, bl);
   ENCODE_FINISH(bl);
 }
 
 void ObjectSetPosition::decode(bufferlist::iterator& iter) {
   DECODE_START(1, iter);
-  ::decode(object_number, iter);
-  ::decode(entry_positions, iter);
+  ::decode(object_positions, iter);
   DECODE_FINISH(iter);
 }
 
 void ObjectSetPosition::dump(Formatter *f) const {
-  f->dump_unsigned("object_number", object_number);
-  f->open_array_section("entry_positions");
-  for (EntryPositions::const_iterator it = entry_positions.begin();
-       it != entry_positions.end(); ++it) {
-    f->open_object_section("entry_position");
-    it->dump(f);
+  f->open_array_section("object_positions");
+  for (auto &pos : object_positions) {
+    f->open_object_section("object_position");
+    pos.dump(f);
     f->close_section();
   }
   f->close_section();
@@ -60,7 +59,7 @@ void ObjectSetPosition::dump(Formatter *f) const {
 void ObjectSetPosition::generate_test_instances(
     std::list<ObjectSetPosition *> &o) {
   o.push_back(new ObjectSetPosition());
-  o.push_back(new ObjectSetPosition(1, {{1, 120}, {2, 121}}));
+  o.push_back(new ObjectSetPosition({{0, 1, 120}, {121, 2, 121}}));
 }
 
 void Client::encode(bufferlist& bl) const {
@@ -97,7 +96,7 @@ void Client::generate_test_instances(std::list<Client *> &o) {
 
   o.push_back(new Client());
   o.push_back(new Client("id", data));
-  o.push_back(new Client("id", data, {1, {{1, 120}, {2, 121}}}));
+  o.push_back(new Client("id", data, {{{1, 2, 120}, {2, 3, 121}}}));
 }
 
 void Tag::encode(bufferlist& bl) const {
@@ -134,19 +133,20 @@ void Tag::generate_test_instances(std::list<Tag *> &o) {
 }
 
 std::ostream &operator<<(std::ostream &os,
-                         const EntryPosition &entry_position) {
-  os << "[tag_tid=" << entry_position.tag_tid << ", entry_tid="
-     << entry_position.entry_tid << "]";
+                         const ObjectPosition &object_position) {
+  os << "["
+     << "object_number=" << object_position.object_number << ", "
+     << "tag_tid=" << object_position.tag_tid << ", "
+     << "entry_tid=" << object_position.entry_tid << "]";
   return os;
 }
 
 std::ostream &operator<<(std::ostream &os,
                          const ObjectSetPosition &object_set_position) {
-  os << "[object_number=" << object_set_position.object_number << ", "
-     << "positions=[";
+  os << "[positions=[";
   std::string delim;
-  for (auto &entry_position : object_set_position.entry_positions) {
-    os << entry_position << delim;
+  for (auto &object_position : object_set_position.object_positions) {
+    os << delim << object_position;
     delim = ", ";
   }
   os << "]]";
