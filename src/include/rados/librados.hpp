@@ -474,6 +474,7 @@ namespace librados
     ~ObjectReadOperation() {}
 
     void stat(uint64_t *psize, time_t *pmtime, int *prval);
+    void stat2(uint64_t *psize, struct timespec *pts, int *prval);
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
@@ -697,6 +698,7 @@ namespace librados
     int setxattr(const std::string& oid, const char *name, bufferlist& bl);
     int rmxattr(const std::string& oid, const char *name);
     int stat(const std::string& oid, uint64_t *psize, time_t *pmtime);
+    int stat2(const std::string& oid, uint64_t *psize, struct timespec *pts);
     int exec(const std::string& oid, const char *cls, const char *method,
 	     bufferlist& inbl, bufferlist& outbl);
     /**
@@ -941,6 +943,7 @@ namespace librados
     int aio_flush_async(AioCompletion *c);
 
     int aio_stat(const std::string& oid, AioCompletion *c, uint64_t *psize, time_t *pmtime);
+    int aio_stat2(const std::string& oid, AioCompletion *c, uint64_t *psize, struct timespec *pts);
 
     /**
      * Cancel aio operation
