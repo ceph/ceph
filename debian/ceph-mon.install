@@ -1,0 +1,5 @@
+usr/bin/ceph-mon
+usr/bin/ceph-rest-api
+usr/share/man/man8/ceph-mon.8
+usr/share/man/man8/ceph-rest-api.8
+usr/lib/python*/dist-packages/ceph_rest_api.py*

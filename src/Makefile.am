@@ -77,6 +77,7 @@ editpaths = sed \
 	-e 's|@sysconfdir[@]|$(sysconfdir)|g' \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
 	-e 's|@prefix[@]|$(prefix)|g' \
+	-e 's|@libexecdir[@]|$(libexecdir)|g' \
 	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
 shell_scripts = ceph-debugpack ceph-post-file ceph-crush-location
 $(shell_scripts): Makefile
@@ -143,13 +144,10 @@ docdir ?= ${datadir}/doc/ceph
 doc_DATA = $(srcdir)/sample.ceph.conf sample.fetch_config
 
 
-# various scripts
-
-shell_commondir = $(libdir)/ceph
-shell_common_SCRIPTS = ceph_common.sh
+# various scripts in $(libexecdir)
 
 ceph_libexecdir = $(libexecdir)/ceph
-ceph_libexec_SCRIPTS = ceph-osd-prestart.sh
+ceph_libexec_SCRIPTS = ceph_common.sh ceph-osd-prestart.sh
 
 
 # tests to actually run on "make check"; if you need extra, non-test,
