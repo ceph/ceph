@@ -654,6 +654,9 @@ COMMAND("osd pool stats " \
         "name=name,type=CephString,req=false",
         "obtain stats from all pools, or from specified pool",
         "osd", "r", "cli,rest")
+COMMAND("osd utilization",
+	"get basic pg distribution stats",
+	"osd", "r", "cli,rest")
 COMMAND("osd reweight-by-utilization " \
 	"name=oload,type=CephInt,range=100,req=false " \
 	"name=max_change,type=CephFloat,req=false "			\
