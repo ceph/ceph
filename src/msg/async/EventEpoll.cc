@@ -26,9 +26,8 @@ int EpollDriver::init(int nevent)
 {
   events = (struct epoll_event*)malloc(sizeof(struct epoll_event)*nevent);
   if (!events) {
-    lderr(cct) << __func__ << " unable to malloc memory: "
-                           << cpp_strerror(errno) << dendl;
-    return -errno;
+    lderr(cct) << __func__ << " unable to malloc memory. " << dendl;
+    return -ENOMEM;
   }
   memset(events, 0, sizeof(struct epoll_event)*nevent);
 
