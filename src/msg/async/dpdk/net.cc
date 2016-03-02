@@ -47,7 +47,7 @@
 interface::interface(CephContext *c, std::shared_ptr<DPDKDevice> dev, EventCenter *center)
     : cct(c), _dev(dev),
       _rx(_dev->receive(
-          center->cpu_id(),
+          center->get_id(),
           [center, this] (Packet p) {
             return dispatch_packet(center, std::move(p));
           }
@@ -55,8 +55,8 @@ interface::interface(CephContext *c, std::shared_ptr<DPDKDevice> dev, EventCente
       _hw_address(_dev->hw_address()),
       _hw_features(_dev->get_hw_features()) {
   auto idx = 0u;
-  unsigned qid = center->cpu_id();
-  dev->queue_for_cpu(center->cpu_id()).register_packet_provider([this, idx, qid] () mutable {
+  unsigned qid = center->get_id();
+  dev->queue_for_cpu(center->get_id()).register_packet_provider([this, idx, qid] () mutable {
     Tub<Packet> p;
     for (size_t i = 0; i < _pkt_providers.size(); i++) {
       auto l3p = _pkt_providers[idx++]();
@@ -129,7 +129,7 @@ void interface::forward(EventCenter *source, unsigned target, Packet p) {
   if (queue_depth < 1000) {
     queue_depth++;
     // FIXME: need ensure this event not be called after EventCenter destruct
-    _dev->stacks[target]->center->dispatch_event_external(
+    _dev->workers[target]->center.dispatch_event_external(
         new C_handle_l2forward(_dev, queue_depth, std::move(p.free_on_cpu(source)), target));
   }
 }
@@ -143,7 +143,7 @@ int interface::dispatch_packet(EventCenter *center, Packet p) {
                   << " length " << std::dec << p.len() << dendl;
     if (i != _proto_map.end()) {
       l3_rx_stream& l3 = i->second;
-      auto fw = _dev->forward_dst(center->cpu_id(), [&p, &l3, this] () {
+      auto fw = _dev->forward_dst(center->get_id(), [&p, &l3, this] () {
         auto hwrss = p.rss_hash();
         if (hwrss) {
           return *hwrss;
@@ -155,7 +155,7 @@ int interface::dispatch_packet(EventCenter *center, Packet p) {
           return 0u;
         }
       });
-      if (fw != center->cpu_id()) {
+      if (fw != center->get_id()) {
         ldout(cct, 1) << __func__ << " forward to " << fw << dendl;
         forward(center, fw, std::move(p));
       } else {
@@ -174,32 +174,24 @@ int interface::dispatch_packet(EventCenter *center, Packet p) {
 }
 
 class C_arp_learn : public EventCallback {
-  DPDKStack *stack;
+  DPDKWorker *worker;
   ethernet_address l2_addr;
   ipv4_address l3_addr;
 
  public:
-  C_arp_learn(DPDKStack *s, ethernet_address l2, ipv4_address l3)
-      : stack(s), l2_addr(l2), l3_addr(l3) {}
+  C_arp_learn(DPDKWorker *w, ethernet_address l2, ipv4_address l3)
+      : worker(w), l2_addr(l2), l3_addr(l3) {}
   void do_request(int id) {
-    stack->arp_learn(l2_addr, l3_addr);
+    worker->arp_learn(l2_addr, l3_addr);
     delete this;
   }
 };
 
 void interface::arp_learn(ethernet_address l2, ipv4_address l3)
 {
-  for (auto &&s: _dev->stacks) {
-    s->center->dispatch_event_external(
-        new C_arp_learn(s, l2, l3));
-  }
-}
-
-void interface::dispatch_stack(EventCallback *c, unsigned except_id)
-{
-  for (auto &&s: _dev->stacks) {
-    if (s->center->cpu_id() != except_id)
-      s->center->dispatch_event_external(c);
+  for (auto &&w : _dev->workers) {
+    w->center.dispatch_event_external(
+        new C_arp_learn(w, l2, l3));
   }
 }
 

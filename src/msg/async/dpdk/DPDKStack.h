@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 /*
  * Ceph - scalable distributed file system
  *
@@ -201,29 +201,59 @@ void DPDKServerSocketImpl<Protocol>::abort_accept() {
   _listener.abort_accept();
 }
 
-class DPDKStack : public NetworkStack {
-  interface _netif;
-  ipv4 _inet;
-  unsigned cores;
+int dpdk_thread_adaptor(void* f)
+{
+  (*static_cast<std::function<void ()>*>(f))();
+  return 0;
+}
 
+class DPDKWorker : public Worker {
+  struct Impl {
+    interface _netif;
+    ipv4 _inet;
+    Impl(CephContext *cct, EventCenter *c, std::shared_ptr<DPDKDevice> dev);
+  };
+  std::unique_ptr<Impl> _impl;
+  bool init_done = false;
+
+  virtual void initialize();
   void set_ipv4_packet_filter(ip_packet_filter* filter) {
-    _inet.set_packet_filter(filter);
+    _impl->_inet.set_packet_filter(filter);
   }
   using tcp4 = tcp<ipv4_traits>;
 
- public:
-  EventCenter *center;
+ protected:
+  virtual bool is_started() {
+    return init_done;
+  }
 
-  explicit DPDKStack(CephContext *cct, EventCenter *c,
-                     std::shared_ptr<DPDKDevice> dev, unsigned cores);
+ public:
+  explicit DPDKWorker(CephContext *c, unsigned i): Worker(c, i) {}
   virtual int listen(entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) override;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
   static std::unique_ptr<NetworkStack> create(CephContext *cct, EventCenter *center);
   void arp_learn(ethernet_address l2, ipv4_address l3) {
-    _inet.learn(l2, l3);
+    _impl->_inet.learn(l2, l3);
   }
-  virtual bool support_zero_copy_read() const override { return true; }
+
+  virtual void spawn_worker(std::function<void ()> f) override {
+    int r = -EBUSY;
+    while (r != -EBUSY)
+      r = rte_eal_remote_launch(
+              dpdk_thread_adaptor, static_cast<void*>(&f), id);
+  }
+  virtual void join_worker() override {
+    rte_eal_wait_lcore(id);
+  }
+
   friend class DPDKServerSocketImpl<tcp4>;
+};
+
+class DPDKStack : public NetworkStack {
+ public:
+  explicit DPDKStack(CephContext *cct, const string &t): NetworkStack(cct, t) {}
+  virtual bool support_zero_copy_read() const override { return true; }
+  virtual bool accept_require_same_thread() const { return true; }
 };
 
 #endif

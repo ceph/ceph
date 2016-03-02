@@ -20,7 +20,9 @@
 #ifndef CEPH_GENERICSOCKET_H
 #define CEPH_GENERICSOCKET_H
 
+#include "common/perf_counters.h"
 #include "msg/msg_types.h"
+#include "msg/async/Event.h"
 
 class ConnectedSocketImpl {
  public:
@@ -179,19 +181,109 @@ class ServerSocket {
 };
 /// @}
 
-class EventCenter;
+class NetworkStack;
+
+enum {
+  l_msgr_first = 94000,
+  l_msgr_recv_messages,
+  l_msgr_send_messages,
+  l_msgr_send_messages_inline,
+  l_msgr_recv_bytes,
+  l_msgr_send_bytes,
+  l_msgr_created_connections,
+  l_msgr_active_connections,
+  l_msgr_last,
+};
+
+class Worker {
+  static const uint64_t InitEventNumber = 5000;
+ public:
+  bool done = false;
+
+  CephContext *cct;
+  PerfCounters *perf_logger;
+  unsigned id;
+
+  EventCenter center;
+  Worker(CephContext *c, unsigned i)
+    : cct(c), perf_logger(NULL), id(i), center(c) {
+    center.init(InitEventNumber);
+    char name[128];
+    sprintf(name, "AsyncMessenger::Worker-%d", id);
+    // initialize perf_logger
+    PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
+
+    plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
+    plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
+    plb.add_u64_counter(l_msgr_send_messages_inline, "msgr_send_messages_inline", "Network sent inline messages");
+    plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes");
+    plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network received bytes");
+    plb.add_u64_counter(l_msgr_created_connections, "msgr_active_connections", "Active connection number");
+    plb.add_u64_counter(l_msgr_active_connections, "msgr_created_connections", "Created connection number");
+
+    perf_logger = plb.create_perf_counters();
+    cct->get_perfcounters_collection()->add(perf_logger);
+  }
+  virtual ~Worker() {
+    if (perf_logger) {
+      cct->get_perfcounters_collection()->remove(perf_logger);
+      delete perf_logger;
+    }
+  }
+
+  virtual int listen(entity_addr_t &addr,
+                     const SocketOptions &opts, ServerSocket *) = 0;
+  virtual int connect(const entity_addr_t &addr,
+                      const SocketOptions &opts, ConnectedSocket *socket) = 0;
+
+  virtual void initialize() {}
+  void stop();
+  PerfCounters *get_perf_counter() { return perf_logger; }
+  virtual bool is_started() {
+    return true;
+  }
+
+  virtual void spawn_worker(std::function<void ()>) = 0;
+  virtual void join_worker() = 0;
+};
 
 class NetworkStack {
+  bool started = false;
+  unsigned num_workers = 0;
+  uint64_t seq = 0;
+  string type;
+
  protected:
-  NetworkStack(CephContext *c): cct(c) {}
- public:
   CephContext *cct;
-  static std::unique_ptr<NetworkStack> create(CephContext *c, const string &type, EventCenter *center);
-  virtual ~NetworkStack() {}
-  virtual bool support_zero_copy_read() const = 0;
-  virtual int listen(entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) = 0;
-  virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) = 0;
-  virtual void initialize() {}
+  vector<Worker*> workers;
+  // Used to indicate whether thread started
+
+ public:
+  explicit NetworkStack(CephContext *c, const string &t);
+  virtual ~NetworkStack();
+
+  static std::shared_ptr<NetworkStack> create(
+          CephContext *c, const string &type);
+
+  static Worker* create_worker(
+          CephContext *c, const string &t, unsigned i);
+  virtual bool support_zero_copy_read() const { return false; }
+  virtual bool accept_require_same_thread() const { return false; }
+
+  virtual Worker *get_worker() {
+    return workers[(seq++)%workers.size()];
+  }
+  Worker *get_worker(unsigned i) {
+    return workers[i];
+  }
+  void barrier();
+  uint64_t get_num_worker() const {
+    return workers.size();
+  }
+
+ private:
+  NetworkStack(const NetworkStack &);
+  NetworkStack& operator=(const NetworkStack &);
 };
 
 #endif //CEPH_GENERICSOCKET_H

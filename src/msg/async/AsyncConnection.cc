@@ -172,14 +172,14 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   }
 }
 
-AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p, NetworkStack *s)
-  : Connection(cct, m), delay_state(NULL), async_msgr(m), logger(p), transport(s), global_seq(0), connect_seq(0),
+AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, Worker *w)
+  : Connection(cct, m), delay_state(NULL), async_msgr(m), logger(w->get_perf_counter()), worker(w), global_seq(0), connect_seq(0),
     peer_global_seq(0), out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(0),
     port(-1), write_lock("AsyncConnection::write_lock"), can_write(WriteStatus::NOWRITE),
     open_write(false), keepalive(false), lock("AsyncConnection::lock"), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0), got_bad_auth(false), authorizer(NULL), replacing(false),
-    is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), center(c)
+    is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), center(&w->center)
 {
   read_handler = new C_handle_read(this);
   write_handler = new C_handle_write(this);
@@ -914,7 +914,7 @@ ssize_t AsyncConnection::_process_connection()
         }
 
         SocketOptions opts;
-        r = transport->connect(get_peer_addr(), opts, &cs);
+        r = worker->connect(get_peer_addr(), opts, &cs);
         if (r < 0)
           goto fail;
 

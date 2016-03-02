@@ -29,7 +29,7 @@
 #include "global/global_init.h"
 
 #include "msg/async/Event.h"
-#include "msg/async/GenericSocket.h"
+#include "msg/async/Stack.h"
 #include "msg/async/dpdk/Packet.h"
 
 #if GTEST_HAS_PARAM_TEST
@@ -39,7 +39,7 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
     CephContext *cct;
     std::thread thread;
     EventCenter center;
-    std::unique_ptr<NetworkStack> transport;
+    std::shared_ptr<Worker> transport;
     unsigned idx;
     bool done = false;
     bool init_done = false;
@@ -50,8 +50,8 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
       if (idx) {
         thread = std::thread(&StackThread::worker, this, type);
       } else {
-        center.set_owner(idx);
-        transport = NetworkStack::create(cct, type, &center);
+        center.set_id(idx);
+        transport = NetworkStack::create_worker(cct, type, idx);
         transport->initialize();
         init_done = true;
       }
@@ -70,8 +70,8 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
     }
 
     void worker(const char *type) {
-      center.set_owner(idx);
-      transport = NetworkStack::create(cct, type, &center);
+      center.set_id(idx);
+      transport = NetworkStack::create(cct, type);
       transport->initialize();
       init_done = true;
       while (!done) {

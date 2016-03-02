@@ -97,19 +97,19 @@ EventCenter::Poller::~Poller()
 
 ostream& EventCenter::_event_prefix(std::ostream *_dout)
 {
-  return *_dout << "Event(" << this << " owner=" << get_owner() << " nevent=" << nevent
+  return *_dout << "Event(" << this << " id=" << get_id() << " nevent=" << nevent
                 << " time_id=" << time_event_next_id << ").";
 }
 
-thread_local pthread_t EventCenter::thread_id = 0;
+thread_local unsigned local_id = 0;
 
-int EventCenter::init(int n, string type)
+int EventCenter::init(int n)
 {
   // can't init multi times
   assert(nevent == 0);
 
   driver = nullptr;
-  if (type == "dpdk") {
+  if (cct->_conf->ms_async_transport_type == "dpdk") {
 #ifdef HAVE_DPDK
     driver = new DPDKDriver(cct);
 #endif
@@ -186,10 +186,9 @@ EventCenter::~EventCenter()
 }
 
 
-void EventCenter::set_owner(unsigned idx)
+void EventCenter::set_id(unsigned idx)
 {
-  thread_id = owner = pthread_self();
-  id = idx;
+  local_id = id = idx;
 }
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
@@ -366,8 +365,6 @@ int EventCenter::process_time_events()
 
 int EventCenter::process_events(int timeout_microseconds)
 {
-  // Must set owner before looping
-  assert(owner);
   struct timeval tv;
   int numevents;
   bool trigger_time = false;
@@ -475,6 +472,6 @@ void EventCenter::dispatch_event_external(EventCallbackRef e)
   external_events.push_back(e);
   ++external_num_events;
   external_lock.unlock();
-  if (thread_id != owner)
+  if (local_id != id)
     wakeup();
 }

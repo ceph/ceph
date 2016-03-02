@@ -162,7 +162,7 @@ class AsyncConnection : public Connection {
   } *delay_state;
 
  public:
-  AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p, NetworkStack *s);
+  AsyncConnection(CephContext *cct, AsyncMessenger *m, Worker *w);
   ~AsyncConnection();
   void maybe_start_delay_thread();
 
@@ -267,7 +267,7 @@ class AsyncConnection : public Connection {
 
   AsyncMessenger *async_msgr;
   PerfCounters *logger;
-  NetworkStack *transport;
+  Worker *worker;
   int global_seq;
   __u32 connect_seq, peer_global_seq;
   atomic_t out_seq;

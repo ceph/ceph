@@ -181,7 +181,7 @@ struct qp_stats {
 };
 
 class DPDKDevice;
-class DPDKStack;
+class DPDKWorker;
 
 class DPDKQueuePair {
   using packet_provider_type = std::function<Tub<Packet> ()>;
@@ -835,7 +835,7 @@ class DPDKDevice {
   CephContext *cct;
   PerfCounters *perf_logger;
   std::vector<std::unique_ptr<DPDKQueuePair>> _queues;
-  std::vector<DPDKStack*> stacks;
+  std::vector<DPDKWorker*> workers;
   size_t _rss_table_bits = 0;
   uint8_t _port_idx;
   uint16_t _num_queues;
@@ -970,7 +970,7 @@ class DPDKDevice {
     return reta[hash % reta.size()];
   }
   unsigned hash2cpu(uint32_t hash) {
-    // there is an assumption here that qid == cpu_id which will
+    // there is an assumption here that qid == get_id() which will
     // not necessary be true in the future
     return forward_dst(hash2qid(hash), [hash] { return hash; });
   }

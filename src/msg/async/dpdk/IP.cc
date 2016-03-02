@@ -199,7 +199,7 @@ int ipv4::handle_received_packet(Packet p, ethernet_address from)
       auto dropped_size = frag.mem_size;
       auto& ip_data = frag.data.map.begin()->second;
       // Choose a cpu to forward this packet
-      auto cpu_id = center->cpu_id();
+      auto cpu_id = center->get_id();
       auto l4 = _l4[h.ip_proto];
       if (l4) {
         size_t l4_offset = 0;
@@ -211,7 +211,7 @@ int ipv4::handle_received_packet(Packet p, ethernet_address from)
       }
 
       // No need to forward if the dst cpu is the current cpu
-      if (cpu_id == center->cpu_id()) {
+      if (cpu_id == center->get_id()) {
         l4->received(std::move(ip_data), h.src_ip, h.dst_ip);
       } else {
         auto to = _netif->hw_address();

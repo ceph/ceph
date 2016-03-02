@@ -32,9 +32,11 @@
 #include "msg/async/dpdk/Packet.h"
 
 #include "include/buffer.h"
+#include "include/str_list.h"
 #include "include/sock_compat.h"
 #include "common/errno.h"
 #include "common/Tub.h"
+#include "common/strtol.h"
 #include "common/dout.h"
 #include "include/assert.h"
 
@@ -290,9 +292,21 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
   return 0;
 }
 
-int PosixNetworkStack::listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket *sock)
+void PosixWorker::initialize()
 {
-  assert(sock);
+  // coremask
+  // if (cct->_conf->ms_async_set_affinity) {
+  //   int cid = static_cast<PosixNetworkStack*>(stack)->get_cpuid(id);
+  //   if (cid >= 0 && set_affinity(cid)) {
+  //     ldout(cct, 0) << __func__ << " sched_setaffinity failed: "
+  //                   << cpp_strerror(errno) << dendl;
+  //   }
+  // }
+}
+
+int PosixWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
+                        ServerSocket *sock)
+{
   int listen_sd = net.create_socket(sa.get_family(), true);
   if (listen_sd < 0) {
     return -errno;
@@ -327,11 +341,13 @@ int PosixNetworkStack::listen(entity_addr_t &sa, const SocketOptions &opt, Serve
     return r;
   }
 
-  *sock = ServerSocket(std::unique_ptr<PosixServerSocketImpl>(new PosixServerSocketImpl(net, sa, listen_sd)));
+  *sock = ServerSocket(
+          std::unique_ptr<PosixServerSocketImpl>(
+              new PosixServerSocketImpl(net, sa, listen_sd)));
   return 0;
 }
 
-int PosixNetworkStack::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) {
+int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) {
   int sd;
 
   if (opts.nonblock) {
@@ -348,4 +364,20 @@ int PosixNetworkStack::connect(const entity_addr_t &addr, const SocketOptions &o
   *socket = ConnectedSocket(
       std::unique_ptr<PosixConnectedSocketImpl>(new PosixConnectedSocketImpl(net, addr, sd, !opts.nonblock)));
   return 0;
+}
+
+PosixNetworkStack::PosixNetworkStack(CephContext *c, const string &t)
+    : NetworkStack(c, t)
+{
+  vector<string> corestrs;
+  get_str_vec(cct->_conf->ms_async_affinity_cores, corestrs);
+  for (vector<string>::iterator it = corestrs.begin();
+       it != corestrs.end(); ++it) {
+    string err;
+    int coreid = strict_strtol(it->c_str(), 10, &err);
+    if (err == "")
+      coreids.push_back(coreid);
+    else
+      lderr(cct) << __func__ << " failed to parse " << *it << " in " << cct->_conf->ms_async_affinity_cores << dendl;
+  }
 }

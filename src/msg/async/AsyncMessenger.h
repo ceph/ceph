@@ -39,63 +39,6 @@ using namespace std;
 
 
 class AsyncMessenger;
-class WorkerPool;
-
-enum {
-  l_msgr_first = 94000,
-  l_msgr_recv_messages,
-  l_msgr_send_messages,
-  l_msgr_send_messages_inline,
-  l_msgr_recv_bytes,
-  l_msgr_send_bytes,
-  l_msgr_created_connections,
-  l_msgr_active_connections,
-  l_msgr_last,
-};
-
-
-class Worker : public Thread {
-  static const uint64_t InitEventNumber = 5000;
-  static const uint64_t EventMaxWaitUs = 30000000;
-  CephContext *cct;
-  WorkerPool *pool;
-  bool done;
-  int id;
-  PerfCounters *perf_logger;
-
- public:
-  bool init_done = false;
-  EventCenter center;
-  std::unique_ptr<NetworkStack> transport;
-  Worker(CephContext *c, WorkerPool *p, int i)
-    : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c) {
-    center.init(InitEventNumber, cct->_conf->ms_async_transport_type);
-    char name[128];
-    sprintf(name, "AsyncMessenger::Worker-%d", id);
-    // initialize perf_logger
-    PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
-
-    plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
-    plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
-    plb.add_u64_counter(l_msgr_send_messages_inline, "msgr_send_messages_inline", "Network sent inline messages");
-    plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes");
-    plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network received bytes");
-    plb.add_u64_counter(l_msgr_created_connections, "msgr_created_connections", "Created connection number");
-    plb.add_u64_counter(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
-
-    perf_logger = plb.create_perf_counters();
-    cct->get_perfcounters_collection()->add(perf_logger);
-  }
-  ~Worker() {
-    if (perf_logger) {
-      cct->get_perfcounters_collection()->remove(perf_logger);
-      delete perf_logger;
-    }
-  }
-  void *entry();
-  void stop();
-  PerfCounters *get_perf_counter() { return perf_logger; }
-};
 
 /**
  * If the Messenger binds to a specific address, the Processor runs
@@ -120,8 +63,8 @@ class Processor {
   };
 
  public:
-  Processor(AsyncMessenger *r, CephContext *c, uint64_t n)
-          : msgr(r), net(c), worker(NULL), nonce(n), listen_handler(new C_processor_accept(this)) {}
+  Processor(AsyncMessenger *r, Worker *w, CephContext *c, uint64_t n)
+          : msgr(r), net(c), worker(w), nonce(n), listen_handler(new C_processor_accept(this)) {}
   ~Processor() { delete listen_handler; };
 
   void stop();
@@ -129,50 +72,6 @@ class Processor {
   int rebind(const set<int>& avoid_port);
   int start();
   void accept();
-  void set_worker(Worker *w) {
-    worker = w;
-  }
-};
-
-class WorkerPool {
-  WorkerPool(const WorkerPool &);
-  WorkerPool& operator=(const WorkerPool &);
-  CephContext *cct;
-  uint64_t seq;
-  vector<Worker*> workers;
-  vector<int> coreids;
-  // Used to indicate whether thread started
-  bool started;
-  Mutex barrier_lock;
-  Cond barrier_cond;
-  atomic_t barrier_count;
-
-  class C_barrier : public EventCallback {
-    WorkerPool *pool;
-   public:
-    explicit C_barrier(WorkerPool *p): pool(p) {}
-    void do_request(int id) {
-      Mutex::Locker l(pool->barrier_lock);
-      pool->barrier_count.dec();
-      pool->barrier_cond.Signal();
-      delete this;
-    }
-  };
-  friend class C_barrier;
- public:
-  explicit WorkerPool(CephContext *c);
-  virtual ~WorkerPool();
-  Worker *get_worker() {
-    return workers[(seq++)%workers.size()];
-  }
-  int get_cpuid(int id) {
-    if (coreids.empty())
-      return -1;
-    return coreids[id % coreids.size()];
-  }
-  void barrier();
-  // uniq name for CephContext to distinguish differnt object
-  static const string name;
 };
 
 /*
@@ -270,9 +169,8 @@ public:
 
   Connection *create_anon_connection() {
     Mutex::Locker l(lock);
-    Worker *w = pool->get_worker();
-    return new AsyncConnection(cct, this, &w->center, w->get_perf_counter(),
-                               w->transport.get());
+    Worker *w = stack->get_worker();
+    return new AsyncConnection(cct, this, w);
   }
 
   /**
@@ -330,9 +228,9 @@ private:
  private:
   static const uint64_t ReapDeadConnectionThreshold = 5;
 
-  WorkerPool *pool;
+  std::shared_ptr<NetworkStack> stack;
 
-  Processor processor;
+  std::vector<Processor*> processors;
   friend class Processor;
 
   class C_handle_reap : public EventCallback {
@@ -475,7 +373,7 @@ public:
   }
 
   void learned_addr(const entity_addr_t &peer_addr_for_me);
-  AsyncConnectionRef add_accept(ConnectedSocket cli_socket, entity_addr_t &addr);
+  AsyncConnectionRef add_accept(Worker *w, ConnectedSocket cli_socket, entity_addr_t &addr);
 
   /**
    * This wraps ms_deliver_get_authorizer. We use it for AsyncConnection.

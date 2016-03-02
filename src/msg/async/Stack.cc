@@ -19,15 +19,116 @@
 #include "msg/async/dpdk/DPDKStack.h"
 #endif
 
+#include "common/errno.h"
+#include "common/dout.h"
+#include "include/assert.h"
 
-std::unique_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string &type, EventCenter *center)
+#define dout_subsys ceph_subsys_dpdk
+#undef dout_prefix
+#define dout_prefix *_dout << "stack "
+
+void Worker::stop()
 {
-  if (type == "posix")
-    return std::unique_ptr<NetworkStack>(new PosixNetworkStack(c));
+  ldout(cct, 10) << __func__ << dendl;
+  done = true;
+  center.wakeup();
+}
+
+std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string &t)
+{
+  if (t == "posix")
+    return std::shared_ptr<NetworkStack>(new PosixNetworkStack(c, t));
 #ifdef HAVE_DPDK
-  else if (type == "dpdk")
-    return DPDKStack::create(c, center);
+  else if (t == "dpdk")
+    return std::shared_ptr<NetworkStack>(new DPDKStack(c, t));
 #endif
 
   return nullptr;
+}
+
+Worker* create_worker(CephContext *c, const string &type, unsigned i)
+{
+  if (type == "posix")
+    return new PosixWorker(c, i);
+  else if (type == "dpdk")
+    return new DPDKWorker(c, i);
+  return nullptr;
+}
+
+NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), cct(c)
+{
+  assert(cct->_conf->ms_async_op_threads > 0);
+  num_workers = cct->_conf->ms_async_op_threads;
+  for (unsigned i = 0; i < num_workers; ++i) {
+    Worker *w = create_worker(cct, type, i);
+    workers.push_back(w);
+  }
+
+  for (auto &&w : workers) {
+    w->spawn_worker(
+      [this, w]() {
+        const uint64_t EventMaxWaitUs = 30000000;
+        ldout(cct, 10) << __func__ << " starting" << dendl;
+        w->center.set_id(w->id);
+        w->initialize();
+        while (!w->done) {
+          ldout(cct, 20) << __func__ << " calling event process" << dendl;
+
+          int r = w->center.process_events(EventMaxWaitUs);
+          if (r < 0) {
+            ldout(cct, 20) << __func__ << " process events failed: "
+                           << cpp_strerror(errno) << dendl;
+            // TODO do something?
+          }
+        }
+      }
+    );
+  }
+
+  for (auto &&w : workers) {
+    while (!w->is_started())
+      usleep(100);
+  }
+}
+
+NetworkStack::~NetworkStack()
+{
+  for (auto &&w : workers) {
+    w->join_worker();
+    delete w;
+  }
+}
+
+class C_barrier : public EventCallback {
+  Mutex barrier_lock;
+  Cond barrier_cond;
+  atomic_t barrier_count;
+
+ public:
+  explicit C_barrier(size_t c)
+      : barrier_lock("C_barrier::barrier_lock"),
+        barrier_count(c) {}
+  void do_request(int id) {
+    Mutex::Locker l(barrier_lock);
+    barrier_count.dec();
+    barrier_cond.Signal();
+  }
+  void wait() {
+    Mutex::Locker l(barrier_lock);
+    while (barrier_count.read())
+      barrier_cond.Wait(barrier_lock);
+  }
+};
+
+void NetworkStack::barrier()
+{
+  ldout(cct, 10) << __func__ << " started." << dendl;
+  pthread_t cur = pthread_self();
+  C_barrier barrier(workers.size());
+  for (auto &&worker : workers) {
+    assert(cur != worker->center.get_id());
+    worker->center.dispatch_event_external(EventCallbackRef(&barrier));
+  }
+  barrier.wait();
+  ldout(cct, 10) << __func__ << " end." << dendl;
 }

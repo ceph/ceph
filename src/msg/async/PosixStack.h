@@ -17,22 +17,43 @@
 #ifndef CEPH_MSG_POSIXSTACK_H_H
 #define CEPH_MSG_POSIXSTACK_H_H
 
+#include <thread>
+
 #include "msg/msg_types.h"
 #include "msg/async/net_handler.h"
 
 #include "Stack.h"
 
-class PosixNetworkStack : public NetworkStack {
+class PosixWorker : public Worker {
   NetHandler net;
+  std::thread t;
+  virtual void initialize();
+ public:
+  PosixWorker(CephContext *c, unsigned i)
+      : Worker(c, i), net(c) {}
+  virtual int listen(entity_addr_t &sa, const SocketOptions &opt,
+                     ServerSocket *socks) override;
+  virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
+
+  virtual void spawn_worker(std::function<void ()> f) override {
+    t = std::thread(std::move(f));
+  }
+  virtual void join_worker() override {
+    t.join();
+  }
+};
+
+class PosixNetworkStack : public NetworkStack {
+  vector<int> coreids;
 
  public:
-  explicit PosixNetworkStack(CephContext *c): NetworkStack(c), net(c) {}
-  virtual int listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket *sock) override;
-  virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
-  static std::unique_ptr<NetworkStack> create(CephContext *cct, unsigned i) {
-    return std::unique_ptr<NetworkStack>(std::unique_ptr<NetworkStack>(new PosixNetworkStack(cct)));
+  explicit PosixNetworkStack(CephContext *c, const string &t);
+
+  int get_cpuid(int id) {
+    if (coreids.empty())
+      return -1;
+    return coreids[id % coreids.size()];
   }
-  virtual bool support_zero_copy_read() const override { return false; }
 };
 
 #endif //CEPH_MSG_POSIXSTACK_H_H
