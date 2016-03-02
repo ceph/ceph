@@ -372,6 +372,7 @@ private:
 	return NULL;
       OpSequencer *osr = store->op_queue.front();
       store->op_queue.pop_front();
+      store->apply_manager.op_apply_start(osr->dequeue_seq());
       return osr;
     }
     void _process(OpSequencer *osr, ThreadPool::TPHandle &handle) override {
