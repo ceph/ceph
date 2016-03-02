@@ -881,6 +881,20 @@ static void dump_object_metadata(struct req_state * const s,
     }
   }
 
+  /* Handle override and fallback for Content-Disposition HTTP header.
+   * At the moment this will be used only by TempURL of the Swift API. */
+  const auto cditer = rgw_to_http_attrs.find(RGW_ATTR_CONTENT_DISP);
+  if (cditer != std::end(rgw_to_http_attrs)) {
+    const auto& name = cditer->second;
+
+    if (!s->content_disp.override.empty()) {
+      response_attrs[name] = s->content_disp.override;
+    } else if (!s->content_disp.fallback.empty()
+        && response_attrs.find(name) == std::end(response_attrs)) {
+      response_attrs[name] = s->content_disp.fallback;
+    }
+  }
+
   for (riter = response_attrs.begin(); riter != response_attrs.end();
        ++riter) {
     STREAM_IO(s)->print("%s: %s\r\n", riter->first.c_str(),
