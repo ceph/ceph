@@ -864,20 +864,18 @@ static void dump_object_metadata(struct req_state * const s,
 				 map<string, bufferlist> attrs)
 {
   map<string, string> response_attrs;
-  map<string, string>::const_iterator riter;
-  map<string, bufferlist>::iterator iter;
 
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    const char *name = iter->first.c_str();
-    map<string, string>::const_iterator aiter = rgw_to_http_attrs.find(name);
+  for (auto kv : attrs) {
+    const char * name = kv.first.c_str();
+    const auto aiter = rgw_to_http_attrs.find(name);
 
-    if (aiter != rgw_to_http_attrs.end()) {
-      response_attrs[aiter->second] = iter->second.c_str();
+    if (aiter != std::end(rgw_to_http_attrs)) {
+      response_attrs[aiter->second] = kv.second.c_str();
     } else if (strncmp(name, RGW_ATTR_META_PREFIX,
 		       sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
       name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-      STREAM_IO(s)->print("X-Object-Meta-%s: %s\r\n",
-			  name, iter->second.c_str());
+      STREAM_IO(s)->print("X-Object-Meta-%s: %s\r\n", name,
+                          kv.second.c_str());
     }
   }
 
@@ -895,21 +893,20 @@ static void dump_object_metadata(struct req_state * const s,
     }
   }
 
-  for (riter = response_attrs.begin(); riter != response_attrs.end();
-       ++riter) {
-    STREAM_IO(s)->print("%s: %s\r\n", riter->first.c_str(),
-			riter->second.c_str());
+  for (const auto kv : response_attrs) {
+    STREAM_IO(s)->print("%s: %s\r\n", kv.first.c_str(), kv.second.c_str());
   }
 
-  iter = attrs.find(RGW_ATTR_DELETE_AT);
-  if (iter != attrs.end()) {
+  const auto iter = attrs.find(RGW_ATTR_DELETE_AT);
+  if (iter != std::end(attrs)) {
     utime_t delete_at;
     try {
       ::decode(delete_at, iter->second);
       STREAM_IO(s)->print("X-Delete-At: %lu\r\n", delete_at.sec());
     } catch (buffer::error& err) {
-      dout(0) << "ERROR: cannot decode object's " RGW_ATTR_DELETE_AT
-	" attr, ignoring" << dendl;
+      ldout(s->cct, 0) << "ERROR: cannot decode object's " RGW_ATTR_DELETE_AT
+                          " attr, ignoring"
+                       << dendl;
     }
   }
 }
