@@ -201,11 +201,7 @@ void DPDKServerSocketImpl<Protocol>::abort_accept() {
   _listener.abort_accept();
 }
 
-int dpdk_thread_adaptor(void* f)
-{
-  (*static_cast<std::function<void ()>*>(f))();
-  return 0;
-}
+int dpdk_thread_adaptor(void* f);
 
 class DPDKWorker : public Worker {
   struct Impl {

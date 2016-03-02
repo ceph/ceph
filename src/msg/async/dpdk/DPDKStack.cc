@@ -53,6 +53,11 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "dpdkstack "
 
+int dpdk_thread_adaptor(void* f)
+{
+  (*static_cast<std::function<void ()>*>(f))();
+  return 0;
+}
 
 void DPDKWorker::initialize()
 {

@@ -39,7 +39,7 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
     CephContext *cct;
     std::thread thread;
     EventCenter center;
-    std::shared_ptr<Worker> transport;
+    Worker *worker;
     unsigned idx;
     bool done = false;
     bool init_done = false;
@@ -48,11 +48,11 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
     void start(const char *type) {
       center.init(1000);
       if (idx) {
-        thread = std::thread(&StackThread::worker, this, type);
+        thread = std::thread(&StackThread::run, this, type);
       } else {
         center.set_id(idx);
-        transport = NetworkStack::create_worker(cct, type, idx);
-        transport->initialize();
+        worker = NetworkStack::create_worker(cct, string(type), idx);
+        worker->initialize();
         init_done = true;
       }
     }
@@ -61,7 +61,7 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
       done = true;
       if (idx)
         thread.join();
-      transport.reset();
+      delete worker;
     }
 
     void ready() {
@@ -69,10 +69,10 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
         usleep(100);
     }
 
-    void worker(const char *type) {
+    void run(const char *type) {
       center.set_id(idx);
-      transport = NetworkStack::create(cct, type);
-      transport->initialize();
+      worker = NetworkStack::create_worker(cct, string(type), idx);
+      worker->initialize();
       init_done = true;
       while (!done) {
         center.process_events(0);
@@ -143,8 +143,8 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
   EventCenter *get_center(unsigned i) {
     return &stacks[i]->center;
   }
-  NetworkStack *get_transport(unsigned i) {
-    return stacks[i]->transport.get();
+  Worker *get_worker(unsigned i) {
+    return stacks[i]->worker;
   }
 };
 
@@ -185,12 +185,12 @@ TEST_P(TransportTest, SimpleTest) {
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
   SocketOptions options;
   ServerSocket bind_socket;
-  NetworkStack *transport = get_transport(0);
+  Worker *worker = get_worker(0);
   EventCenter *center = get_center(0);
-  ssize_t r = transport->listen(bind_addr, options, &bind_socket);
+  ssize_t r = worker->listen(bind_addr, options, &bind_socket);
   ASSERT_EQ(r, 0);
   ConnectedSocket cli_socket, srv_socket;
-  r = transport->connect(bind_addr, options, &cli_socket);
+  r = worker->connect(bind_addr, options, &cli_socket);
   ASSERT_EQ(r, 0);
 
   {
@@ -258,18 +258,18 @@ TEST_P(TransportTest, SimpleTest) {
 }
 
 TEST_P(TransportTest, ConnectFailedTest) {
-  NetworkStack *transport = get_transport(0);
+  Worker *worker = get_worker(0);
   EventCenter *center = get_center(0);
   entity_addr_t bind_addr, cli_addr;
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
   ASSERT_EQ(cli_addr.parse(get_ip_different_port().c_str()), true);
   SocketOptions options;
   ServerSocket bind_socket;
-  int r = transport->listen(bind_addr, options, &bind_socket);
+  int r = worker->listen(bind_addr, options, &bind_socket);
   ASSERT_EQ(r, 0);
 
   ConnectedSocket cli_socket1, cli_socket2;
-  r = transport->connect(cli_addr, options, &cli_socket1);
+  r = worker->connect(cli_addr, options, &cli_socket1);
   ASSERT_EQ(r, 0);
 
   {
@@ -284,7 +284,7 @@ TEST_P(TransportTest, ConnectFailedTest) {
   }
 
   ASSERT_EQ(cli_addr.parse(get_different_ip().c_str()), true);
-  r = transport->connect(cli_addr, options, &cli_socket2);
+  r = worker->connect(cli_addr, options, &cli_socket2);
   ASSERT_EQ(r, 0);
 
   {
@@ -301,20 +301,20 @@ TEST_P(TransportTest, ConnectFailedTest) {
 }
 
 TEST_P(TransportTest, ListenTest) {
-  NetworkStack *transport = get_transport(0);
+  Worker *worker = get_worker(0);
   entity_addr_t bind_addr;
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
   SocketOptions options;
   ServerSocket bind_socket1, bind_socket2;
-  int r = transport->listen(bind_addr, options, &bind_socket1);
+  int r = worker->listen(bind_addr, options, &bind_socket1);
   ASSERT_EQ(r, 0);
 
-  r = transport->listen(bind_addr, options, &bind_socket2);
+  r = worker->listen(bind_addr, options, &bind_socket2);
   ASSERT_EQ(r, -EADDRINUSE);
 }
 
 TEST_P(TransportTest, AcceptAndCloseTest) {
-  NetworkStack *transport = get_transport(0);
+  Worker *worker = get_worker(0);
   EventCenter *center = get_center(0);
   entity_addr_t bind_addr, cli_addr;
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
@@ -322,7 +322,7 @@ TEST_P(TransportTest, AcceptAndCloseTest) {
   int r = 0;
   {
     ServerSocket bind_socket;
-    r = transport->listen(bind_addr, options, &bind_socket);
+    r = worker->listen(bind_addr, options, &bind_socket);
     ASSERT_EQ(r, 0);
 
     ConnectedSocket srv_socket, cli_socket;
@@ -331,7 +331,7 @@ TEST_P(TransportTest, AcceptAndCloseTest) {
 
     C_poll cb(center);
     center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
-    r = transport->connect(bind_addr, options, &cli_socket);
+    r = worker->connect(bind_addr, options, &cli_socket);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(cb.poll(500), true);
 
@@ -360,7 +360,7 @@ TEST_P(TransportTest, AcceptAndCloseTest) {
 
     cb.reset();
     center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
-    r = transport->connect(bind_addr, options, &cli_socket);
+    r = worker->connect(bind_addr, options, &cli_socket);
     ASSERT_EQ(r, 0);
 
     ASSERT_EQ(cb.poll(500), true);
@@ -373,7 +373,7 @@ TEST_P(TransportTest, AcceptAndCloseTest) {
   }
 
   ConnectedSocket cli_socket;
-  r = transport->connect(bind_addr, options, &cli_socket);
+  r = worker->connect(bind_addr, options, &cli_socket);
   ASSERT_EQ(r, 0);
   {
     C_poll cb(center);
@@ -388,16 +388,16 @@ TEST_P(TransportTest, AcceptAndCloseTest) {
 }
 
 TEST_P(TransportTest, ComplexTest) {
-  NetworkStack *transport = get_transport(0);
+  Worker *worker = get_worker(0);
   EventCenter *center = get_center(0);
   entity_addr_t bind_addr, cli_addr;
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
   SocketOptions options;
   ServerSocket bind_socket;
-  int r = transport->listen(bind_addr, options, &bind_socket);
+  int r = worker->listen(bind_addr, options, &bind_socket);
   ASSERT_EQ(r, 0);
   ConnectedSocket cli_socket, srv_socket;
-  r = transport->connect(bind_addr, options, &cli_socket);
+  r = worker->connect(bind_addr, options, &cli_socket);
   ASSERT_EQ(r, 0);
 
   {
@@ -441,7 +441,7 @@ TEST_P(TransportTest, ComplexTest) {
       for (size_t i = 0; i < count; ++i)
         bl.push_back(bufferptr((char*)message.data(), message_size));
 
-      ASSERT_TRUE(center->get_owner());
+      ASSERT_TRUE(center->get_id());
       ssize_t r = 0;
       size_t left = len;
       usleep(100);
@@ -863,7 +863,7 @@ class StressFactory {
 
   static const size_t min_client_send_messages = 100;
   static const size_t max_client_send_messages = 1000;
-  NetworkStack *stack;
+  Worker *worker;
   EventCenter *center;
   RandomString rs;
   std::random_device rd;
@@ -876,12 +876,12 @@ class StressFactory {
   bool zero_copy_read;
 
  public:
-  explicit StressFactory(NetworkStack *_stack, EventCenter *c,
+  explicit StressFactory(Worker *w, EventCenter *c,
                          const string &addr,
-                         size_t cli, size_t qd, size_t mc, size_t l)
-      : stack(_stack), center(c), rs(128), client_num(cli), queue_depth(qd),
+                         size_t cli, size_t qd, size_t mc, size_t l, bool zero_copy)
+      : worker(w), center(c), rs(128), client_num(cli), queue_depth(qd),
         max_message_length(l), message_count(mc), message_left(mc),
-        zero_copy_read(stack->support_zero_copy_read()) {
+        zero_copy_read(zero_copy) {
     bind_addr.parse(addr.c_str());
     rs.prepare(100);
   }
@@ -894,7 +894,7 @@ class StressFactory {
 
   void add_client() {
     ConnectedSocket sock;
-    int r = stack->connect(bind_addr, options, &sock);
+    int r = worker->connect(bind_addr, options, &sock);
     std::default_random_engine rng(rd());
     std::uniform_int_distribution<> dist(
             min_client_send_messages, max_client_send_messages);
@@ -918,7 +918,7 @@ class StressFactory {
 
   void start() {
     ServerSocket bind_socket;
-    int r = stack->listen(bind_addr, options, &bind_socket);
+    int r = worker->listen(bind_addr, options, &bind_socket);
     ASSERT_EQ(r, 0);
     auto bind_fd = bind_socket.fd();
     C_accept accept_handler(this, std::move(bind_socket));
@@ -957,8 +957,8 @@ class StressFactory {
 };
 
 TEST_P(TransportTest, StressTest) {
-  StressFactory factory(get_transport(0), get_center(0), get_addr(),
-                        16, 16, 10000, 1024);
+  StressFactory factory(get_worker(0), get_center(0), get_addr(),
+                        16, 16, 10000, 1024, strncmp(GetParam(), "dpdk", 4) == 0);
   factory.start();
 }
 

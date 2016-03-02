@@ -46,7 +46,7 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string 
   return nullptr;
 }
 
-Worker* create_worker(CephContext *c, const string &type, unsigned i)
+Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned i)
 {
   if (type == "posix")
     return new PosixWorker(c, i);
