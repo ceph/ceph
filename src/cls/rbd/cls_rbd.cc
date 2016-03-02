@@ -380,12 +380,6 @@ int set_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  if ((mask & RBD_FEATURES_MUTABLE) != mask) {
-    CLS_ERR("Attempting to set immutable feature: %" PRIu64,
-            mask & ~RBD_FEATURES_MUTABLE);
-    return -EINVAL;
-  }
-
   // check that features exists to make sure this is a header object
   // that was created correctly
   uint64_t orig_features = 0;
@@ -394,6 +388,22 @@ int set_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     CLS_ERR("Could not read image's features off disk: %s",
             cpp_strerror(r).c_str());
     return r;
+  }
+
+  uint64_t changed_features = (orig_features ^ features) & mask;
+  uint64_t enabled_features = changed_features & features;
+  if ((enabled_features & RBD_FEATURES_MUTABLE) != enabled_features) {
+    CLS_ERR("Attempting to enable immutable feature: %" PRIu64,
+            enabled_features & ~RBD_FEATURES_MUTABLE);
+    return -EINVAL;
+  }
+
+  uint64_t disabled_features = changed_features & orig_features;
+  uint64_t disable_mask = (RBD_FEATURES_MUTABLE | RBD_FEATURES_DISABLE_ONLY);
+  if ((disabled_features & disable_mask) != disabled_features) {
+       CLS_ERR("Attempting to disable immutable feature: %" PRIu64,
+               enabled_features & ~disable_mask);
+       return -EINVAL;
   }
 
   features = (orig_features & ~mask) | (features & mask);

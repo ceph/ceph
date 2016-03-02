@@ -37,8 +37,7 @@ def setup_module():
     ioctx = rados.open_ioctx(pool_name)
     global features
     features = os.getenv("RBD_FEATURES")
-    if features is not None:
-        features = int(features)
+    features = int(features) if features is not None else 61
 
 def teardown_module():
     global ioctx
@@ -143,7 +142,7 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
 
                     expected_features = features
                     if expected_features is None or format == 1:
-                        expected_features = 0 if format == 1 else 3
+                        expected_features = 0 if format == 1 else 61
                     eq(expected_features, image.features())
 
                     expected_stripe_count = stripe_count
