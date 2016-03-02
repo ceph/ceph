@@ -134,6 +134,10 @@ protected:
   bool is_slo;
   string lo_etag;
 
+  // compression attrs
+  RGWCompressionInfo cs_info;
+  bool need_decompress;
+
   int init_common();
 public:
   RGWGetObj() {

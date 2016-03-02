@@ -72,6 +72,30 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, rgw_bucket& bu
 
 int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy);
 
+struct RGWCompressionInfo {
+  string compression_type;
+  uint64_t orig_size;
+
+  RGWCompressionInfo() : compression_type("none"), orig_size(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(compression_type, bl);
+    ::encode(orig_size, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(compression_type, bl);
+     ::decode(orig_size, bl);
+     DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWCompressionInfo)
+
+int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need_decompress, RGWCompressionInfo& cs_info);
+
 struct RGWOLHInfo {
   rgw_obj target;
   bool removed;
