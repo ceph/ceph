@@ -3147,6 +3147,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ds << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
       rdata.append(ds);
     }
+  } else if (prefix == "osd utilization") {
+    string out;
+    osdmap.summarize_mapping_stats(NULL, NULL, &out, f.get());
+    if (f)
+      f->flush(rdata);
+    else
+      rdata.append(out);
+    r = 0;
+    goto reply;
   } else if (prefix  == "osd find") {
     int64_t osd;
     if (!cmd_getval(g_ceph_context, cmdmap, "id", osd)) {
