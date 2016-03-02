@@ -2304,7 +2304,8 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
     m->get();
   }
 
-  m->calc_header_crc();
+  if (msgr->crcflags & MSG_CRC_HEADER)
+    m->calc_header_crc();
 
   ceph_msg_header& header = m->get_header();
   ceph_msg_footer& footer = m->get_footer();
