@@ -2414,6 +2414,12 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
   for (map<int, vector<snapid_t> >::iterator p = m->snaps.begin();
        p != m->snaps.end();
        ++p) {
+
+    if (!osdmap.have_pg_pool(p->first)) {
+      dout(10) << " ignoring removed_snaps " << p->second << " on non-existent pool " << p->first << dendl;
+      continue;
+    }
+
     pg_pool_t& pi = osdmap.pools[p->first];
     for (vector<snapid_t>::iterator q = p->second.begin();
 	 q != p->second.end();

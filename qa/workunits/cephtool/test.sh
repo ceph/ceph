@@ -1235,6 +1235,7 @@ function test_mon_osd_pool()
   ceph osd pool mksnap data datasnap
   rados -p data lssnap | grep datasnap
   ceph osd pool rmsnap data datasnap
+  expect_false ceph osd pool rmsnap pool_fake snapshot
   ceph osd pool delete data data --yes-i-really-really-mean-it
 
   ceph osd pool create data2 10
