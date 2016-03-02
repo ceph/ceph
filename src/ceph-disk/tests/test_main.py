@@ -1158,6 +1158,8 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
             main.unmount(path)
 
     def test_main_destroy(self):
+        data = tempfile.mkdtemp()
+        main.setup_statedir(data)
         OSD_UUID = '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
         MPATH_OSD_UUID = '4fbd7e29-8ae0-4982-bf9d-5a8d867af560'
         part_uuid = '0ce28a16-6d5d-11e5-aec3-fa163e5c167b'
@@ -1253,6 +1255,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 _check_osd_status=lambda cluster, osd_id: 1,
         ):
             self.assertRaises(Exception, main.main_destroy, args)
+        shutil.rmtree(data)
 
     def test_remove_from_crush_map_fail(self):
         cluster = 'ceph'
