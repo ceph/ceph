@@ -1657,7 +1657,6 @@ class DevicePartitionCrypt(DevicePartition):
     def format(self):
         self.setup_crypt()
         self.map()
-        self.unmap()
 
 
 class DevicePartitionCryptPlain(DevicePartitionCrypt):
@@ -2062,6 +2061,7 @@ class PrepareSpace(object):
 
         if isinstance(partition, DevicePartitionCrypt):
             partition.format()
+            partition.map()
 
             command_check_call(
                 [
