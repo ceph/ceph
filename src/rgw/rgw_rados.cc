@@ -2370,8 +2370,9 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash,
   bufferlist in_bl;
 
   // compression stuff
+  bool compression_enabled = store->ctx()->_conf->rgw_compression_type != "none";
   if ((ofs > 0 && compressed) ||                                // if previous part was compressed
-      (ofs == 0 && store->ctx()->_conf->rgw_compression_enabled)) {   // or it's the first part and flag is set
+      (ofs == 0 && compression_enabled)) {   // or it's the first part and flag is set
     ldout(store->ctx(), 10) << "Compression for rgw is enabled, compress part" << dendl;
     CompressorRef compressor = Compressor::create(store->ctx(), store->ctx()->_conf->rgw_compression_type);
     if (!compressor.get()) {
@@ -9052,16 +9053,12 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
     return r;
   }
 
-  int dec_size = 0;
   if (params.attrs) {
     *params.attrs = astate->attrset;
     if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
       for (iter = params.attrs->begin(); iter != params.attrs->end(); ++iter) {
-        ldout(cct, 20) << "Read xattr: " << iter->first << "=" << iter->second << dendl;
+        ldout(cct, 20) << "Read xattr: " << iter->first << dendl;
       }
-    }
-    if (params.attrs->find(RGW_ATTR_COMPRESSION) != params.attrs->end()) {
-      dec_size = atoi(params.attrs->at(RGW_ATTR_COMPRESSION_ORIG_SIZE).c_str());
     }
   }
 
@@ -9139,12 +9136,8 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
     *pofs = ofs;
   if (pend)
     *pend = end;
-  if (params.read_size) {
-    if (dec_size)
-      *params.read_size = dec_size;
-    else
-      *params.read_size = (ofs <= end ? end + 1 - ofs : 0);
-  }
+  if (params.read_size)
+    *params.read_size = (ofs <= end ? end + 1 - ofs : 0);
   if (params.obj_size)
     *params.obj_size = astate->size;
   if (params.lastmod)
@@ -12891,4 +12884,21 @@ int RGWRados::delete_obj_aio(rgw_obj& obj, rgw_bucket& bucket,
   }
   return ret;
 }
+
+int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need_decompress, RGWCompressionInfo& cs_info) {
+  if (attrs.find(RGW_ATTR_COMPRESSION) != attrs.end()) {
+    bufferlist::iterator bliter = attrs[RGW_ATTR_COMPRESSION].begin();
+    try {
+      ::decode(cs_info, bliter);
+    } catch (buffer::error& err) {
+      return -EIO;
+    }
+    need_decompress = true;
+    return 0;
+  } else {
+    need_decompress = false;
+    return 0;
+  }
+}
+
 
