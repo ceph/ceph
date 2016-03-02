@@ -12,6 +12,10 @@ v10.0.0
   limit max waiting time of monitor election process, which was previously
   restricted by 'mon_lease'.
 
+* The rbd legacy image format (version 1) is deprecated with the Jewel release.
+  Attempting to create a new version 1 RBD image will result in a warning.
+  Future releases of Ceph will remove support for version 1 RBD images.
+
 v9.3.0
 ======
 * Some symbols wrongly exposed by librados in v9.1.0 and v9.2.0 were removed.

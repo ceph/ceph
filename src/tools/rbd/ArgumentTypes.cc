@@ -209,7 +209,8 @@ void add_create_image_options(po::options_description *opt,
   // TODO get default image format from conf
   if (include_format) {
     opt->add_options()
-      (IMAGE_FORMAT.c_str(), po::value<ImageFormat>(), "image format [1 or 2]")
+      (IMAGE_FORMAT.c_str(), po::value<ImageFormat>(),
+       "image format [1 (deprecated) or 2]")
       (IMAGE_NEW_FORMAT.c_str(),
        po::value<ImageNewFormat>()->zero_tokens(),
        "use image format 2\n(deprecated)");
