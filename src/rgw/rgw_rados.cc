@@ -5651,6 +5651,76 @@ int RGWRados::BucketShard::init(rgw_bucket& _bucket, rgw_obj& obj)
 }
 
 
+int RGWRados::swift_versioning_copy(RGWBucketInfo& bucket_info, RGWRados::Object *source, RGWObjState *state,
+                                    rgw_user& user)
+{
+  if (!bucket_info.has_swift_versioning() || bucket_info.swift_ver_location.empty()) {
+    return 0;
+  }
+
+  if (!state->exists) {
+    return 0;
+  }
+
+  string client_id;
+  string op_id;
+
+  rgw_obj& obj = source->get_obj();
+  const string& src_name = obj.get_object();
+  char buf[src_name.size() + 32];
+  snprintf(buf, sizeof(buf), "%03d%s%lld.%06d", (int)src_name.size(), src_name.c_str(), (long long)state->mtime, 0);
+
+  RGWBucketInfo dest_bucket_info;
+
+  int r = get_bucket_info(source->get_ctx(), bucket_info.bucket.tenant, bucket_info.swift_ver_location, dest_bucket_info, NULL, NULL);
+  if (r < 0) {
+    ldout(cct, 10) << "failed to read dest bucket info: r=" << r << dendl;
+    return r;
+  }
+
+  if (dest_bucket_info.owner != bucket_info.owner) {
+    return -EPERM;
+  }
+
+  rgw_obj dest_obj(dest_bucket_info.bucket, buf);
+
+  string no_zone;
+
+  r = copy_obj(source->get_ctx(),
+               user,
+               client_id,
+               op_id,
+               NULL, /* req_info *info */
+               no_zone,
+               dest_obj,
+               obj,
+               dest_bucket_info,
+               bucket_info,
+               NULL, /* time_t *src_mtime */
+               NULL, /* time_t *mtime */
+               NULL, /* const time_t *mod_ptr */
+               NULL, /* const time_t *unmod_ptr */
+               NULL, /* const char *if_match */
+               NULL, /* const char *if_nomatch */
+               RGWRados::ATTRSMOD_NONE,
+               true, /* bool copy_if_newer */
+               state->attrset,
+               RGW_OBJ_CATEGORY_MAIN,
+               0, /* uint64_t olh_epoch */
+               0, /* time_t delete_at */
+               NULL, /* string *version_id */
+               NULL, /* string *ptag */
+               NULL, /* string *petag */
+               NULL, /* struct rgw_err *err */
+               NULL, /* void (*progress_cb)(off_t, void *) */
+               NULL); /* void *progress_data */
+  if (r == -ECANCELED || r == -ENOENT) { /* has already been overwritten, meaning another rgw process already copied it out */
+    return 0;
+  }
+
+  return r;
+}
+
 /**
  * Write/overwrite an object to the bucket storage.
  * bucket: the bucket to store the object in
@@ -5779,11 +5849,18 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
 
   bool versioned_op = (target->versioning_enabled() || is_olh || versioned_target);
 
-  RGWRados::Bucket bop(store, target->get_bucket_info());
+  RGWBucketInfo& bucket_info = target->get_bucket_info();
+
+  RGWRados::Bucket bop(store, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
 
   if (versioned_op) {
     index_op.set_bilog_flags(RGW_BILOG_FLAG_VERSIONED_OP);
+  }
+
+  r = store->swift_versioning_copy(bucket_info, target, state, meta.owner);
+  if (r < 0) {
+    goto done_cancel;
   }
 
   r = index_op.prepare(CLS_RGW_OP_ADD);
@@ -7362,10 +7439,17 @@ int RGWRados::Object::Delete::delete_obj()
 
   bool ret_not_existed = (!state->exists);
 
-  RGWRados::Bucket bop(store, target->get_bucket_info());
+  RGWBucketInfo& bucket_info = target->get_bucket_info();
+
+  RGWRados::Bucket bop(store, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
 
   index_op.set_bilog_flags(params.bilog_flags);
+
+  r = store->swift_versioning_copy(bucket_info, target, state, params.bucket_owner);
+  if (r < 0) {
+    return r;
+  }
 
   r = index_op.prepare(CLS_RGW_OP_DEL);
   if (r < 0)

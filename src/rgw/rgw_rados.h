@@ -2448,6 +2448,8 @@ public:
                        struct rgw_err *err,
                        void (*progress_cb)(off_t, void *),
                        void *progress_data);
+  int swift_versioning_copy(RGWBucketInfo& bucket_info, RGWRados::Object *source, RGWObjState *state,
+                            rgw_user& user);
   int copy_obj_to_remote_dest(RGWObjState *astate,
                               map<string, bufferlist>& src_attrs,
                               RGWRados::Object::Read& read_op,
