@@ -85,7 +85,7 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   if (r < 0) {
     ::close(listen_sd);
     listen_sd = -1;
-    return -errno;
+    return r;
   }
 
   net.set_socket_options(listen_sd);
