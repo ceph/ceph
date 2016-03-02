@@ -9,3 +9,7 @@ tasks:
     all:
       - "KEYRING=/etc/ceph/ceph.client.admin.keyring; test -f $KEYRING && sudo chmod o+r $KEYRING"
 - install.ship_utilities:
+overrides:
+  ceph_ansible:
+    vars:
+      ceph_test: true
