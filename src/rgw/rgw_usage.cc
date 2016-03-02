@@ -88,9 +88,10 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
         utime_t ut(entry.epoch, 0);
         ut.gmtime(formatter->dump_stream("time"));
         formatter->dump_int("epoch", entry.epoch);
-        formatter->dump_string("owner", entry.owner.to_str());
+        string owner = entry.owner.to_str();
         string payer = entry.payer.to_str();
-        if (!payer.empty()) {
+        formatter->dump_string("owner", owner);
+        if (!payer.empty() && payer != owner) {
           formatter->dump_string("payer", payer);
         }
         dump_usage_categories_info(formatter, entry, categories);
