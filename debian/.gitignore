@@ -2,13 +2,16 @@
 /*.debhelper.log
 /ceph-common-dbg
 /ceph-common
-/ceph-dbg
 /ceph-fuse-dbg
 /ceph-fuse
 /ceph-fs-common-dbg
 /ceph-fs-common
 /ceph-mds-dbg
 /ceph-mds
+/ceph-mon-dbg
+/ceph-mon
+/ceph-osd-dbg
+/ceph-osd
 /ceph-resource-agents
 /ceph.init
 /radosgw.init
