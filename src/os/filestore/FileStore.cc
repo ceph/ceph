@@ -3302,13 +3302,18 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
     }
     r = ::ftruncate(**n, 0);
     if (r < 0) {
+      r = -errno;
       goto out3;
     }
     struct stat st;
-    ::fstat(**o, &st);
-    r = _do_clone_range(**o, **n, 0, st.st_size, 0);
+    r = ::fstat(**o, &st);
     if (r < 0) {
       r = -errno;
+      goto out3;
+    }
+
+    r = _do_clone_range(**o, **n, 0, st.st_size, 0);
+    if (r < 0) {
       goto out3;
     }
 
@@ -3382,7 +3387,6 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
     uint64_t it_off = miter->first - srcoff + dstoff;
     r = _do_copy_range(from, to, miter->first, miter->second, it_off, true);
     if (r < 0) {
-      r = -errno;
       derr << "FileStore::_do_copy_range: copy error at " << miter->first << "~" << miter->second
              << " to " << it_off << ", " << cpp_strerror(r) << dendl;
       break;
@@ -3471,13 +3475,19 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 
     actual = ::lseek64(from, srcoff, SEEK_SET);
     if (actual != (int64_t)srcoff) {
-      r = -errno;
+      if (actual < 0)
+        r = -errno;
+      else
+        r = -EINVAL;
       derr << "lseek64 to " << srcoff << " got " << cpp_strerror(r) << dendl;
       return r;
     }
     actual = ::lseek64(to, dstoff, SEEK_SET);
     if (actual != (int64_t)dstoff) {
-      r = -errno;
+      if (actual < 0)
+        r = -errno;
+      else
+        r = -EINVAL;
       derr << "lseek64 to " << dstoff << " got " << cpp_strerror(r) << dendl;
       return r;
     }
