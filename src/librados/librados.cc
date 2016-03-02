@@ -215,6 +215,12 @@ void librados::ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *p
   o->stat(psize, pmtime, prval);
 }
 
+void librados::ObjectReadOperation::stat2(uint64_t *psize, struct timespec *pts, int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->stat(psize, pts, prval);
+}
+
 void librados::ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
@@ -1225,6 +1231,12 @@ int librados::IoCtx::stat(const std::string& oid, uint64_t *psize, time_t *pmtim
 {
   object_t obj(oid);
   return io_ctx_impl->stat(obj, psize, pmtime);
+}
+
+int librados::IoCtx::stat2(const std::string& oid, uint64_t *psize, struct timespec *pts)
+{
+  object_t obj(oid);
+  return io_ctx_impl->stat2(obj, psize, pts);
 }
 
 int librados::IoCtx::exec(const std::string& oid, const char *cls, const char *method,
