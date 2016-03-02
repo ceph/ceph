@@ -43,6 +43,14 @@ int RadosTestFixture::create(const std::string &oid, uint8_t order,
   return cls::journal::client::create(m_ioctx, oid, order, splay_width, -1);
 }
 
+journal::JournalMetadataPtr RadosTestFixture::create_metadata(
+    const std::string &oid, const std::string &client_id,
+    double commit_internal) {
+  journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
+    m_ioctx, oid, client_id, commit_internal));
+  return metadata;
+}
+
 int RadosTestFixture::append(const std::string &oid, const bufferlist &bl) {
   librados::ObjectWriteOperation op;
   op.append(bl);

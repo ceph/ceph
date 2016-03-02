@@ -19,11 +19,15 @@ public:
   virtual void SetUp();
   virtual void TearDown();
 
-  int create(const std::string &oid, uint8_t order, uint8_t splay_width);
+  int create(const std::string &oid, uint8_t order = 14,
+             uint8_t splay_width = 2);
+  journal::JournalMetadataPtr create_metadata(const std::string &oid,
+                                              const std::string &client_id = "client",
+                                              double commit_internal = 0.1);
   int append(const std::string &oid, const bufferlist &bl);
 
-  int client_register(const std::string &oid, const std::string &id,
-                      const std::string &description);
+  int client_register(const std::string &oid, const std::string &id = "client",
+                      const std::string &description = "");
   int client_commit(const std::string &oid, const std::string &id,
                     const cls::journal::ObjectSetPosition &commit_position);
 
