@@ -956,6 +956,19 @@ int librados::IoCtxImpl::aio_stat(const object_t& oid, AioCompletionImpl *c,
   return 0;
 }
 
+int librados::IoCtxImpl::aio_stat2(const object_t& oid, AioCompletionImpl *c,
+				  uint64_t *psize, struct timespec *pts)
+{
+  C_aio_stat2_Ack *onack = new C_aio_stat2_Ack(c, pts);
+
+  c->io = this;
+  c->tid = objecter->stat(oid, oloc,
+			  snap_seq, psize, &onack->mtime, 0,
+			  onack, &c->objver);
+
+  return 0;
+}
+
 int librados::IoCtxImpl::aio_cancel(AioCompletionImpl *c)
 {
   return objecter->op_cancel(c->tid, -ECANCELED);
@@ -1201,6 +1214,29 @@ int librados::IoCtxImpl::stat(const object_t& oid, uint64_t *psize, time_t *pmti
   }
 
   return r;
+}
+
+int librados::IoCtxImpl::stat2(const object_t& oid, uint64_t *psize, struct timespec *pts)
+{
+  uint64_t size;
+  ceph::real_time mtime;
+
+  if (!psize)
+    psize = &size;
+
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.stat(psize, &mtime, NULL);
+  int r = operate_read(oid, &rd, NULL);
+  if (r < 0) {
+    return r;
+  }
+
+  if (pts) {
+    *pts = ceph::real_clock::to_timespec(mtime);
+  }
+
+  return 0;
 }
 
 int librados::IoCtxImpl::getxattr(const object_t& oid,
@@ -1598,6 +1634,34 @@ void librados::IoCtxImpl::C_aio_stat_Ack::finish(int r)
 
   if (r >= 0 && pmtime) {
     *pmtime = real_clock::to_time_t(mtime);
+  }
+
+  if (c->callback_complete) {
+    c->io->client->finisher.queue(new C_AioComplete(c));
+  }
+
+  c->put_unlock();
+}
+
+///////////////////////////// C_aio_stat2_Ack ////////////////////////////
+
+librados::IoCtxImpl::C_aio_stat2_Ack::C_aio_stat2_Ack(AioCompletionImpl *_c,
+						     struct timespec *pt)
+   : c(_c), pts(pt)
+{
+  assert(!c->io);
+  c->get();
+}
+
+void librados::IoCtxImpl::C_aio_stat2_Ack::finish(int r)
+{
+  c->lock.Lock();
+  c->rval = r;
+  c->ack = true;
+  c->cond.Signal();
+
+  if (r >= 0 && pts) {
+    *pts = real_clock::to_timespec(mtime);
   }
 
   if (c->callback_complete) {
