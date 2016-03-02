@@ -3560,6 +3560,14 @@ def destroy_lookup_device(args, predicate, description):
 
 
 def main_destroy(args):
+    activate_lock.acquire()  # noqa
+    try:
+        main_destroy_locked(args)
+    finally:
+        activate_lock.release()  # noqa
+
+
+def main_destroy_locked(args):
     osd_id = args.destroy_by_id
     path = args.path
     target_dev = None
