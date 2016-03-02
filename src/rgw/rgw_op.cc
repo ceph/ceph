@@ -1266,22 +1266,20 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
     gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
   }
   // compression stuff
-  bool need_decompress = (attrs.find(RGW_ATTR_COMPRESSION) != attrs.end());
-  if (need_decompress) {   // or it's the first part and flag is set
+  if (need_decompress) {
     ldout(s->cct, 10) << "Compression for rgw is enabled, decompress part" << dendl;
-    string compression_type = attrs[RGW_ATTR_COMPRESSION].c_str();
-    CompressorRef compressor = Compressor::create(s->cct, compression_type);
+    CompressorRef compressor = Compressor::create(s->cct, cs_info.compression_type);
     if (!compressor.get()) {
       // if compressor isn't available - error, because cannot return decompressed data?
-      lderr(s->cct) << "Cannot load compressor of type " << compression_type 
+      lderr(s->cct) << "Cannot load compressor of type " << cs_info.compression_type 
                        << "for rgw, check rgw_compression_type config option" << dendl;
-      return -1;
+      return -EIO;
     } else {
       bufferlist out_bl;
       int cr = compressor->decompress(bl, out_bl);
-      if (cr != 0) {
+      if (cr < 0) {
         lderr(s->cct) << "Compression failed with exit code " << cr << dendl;
-        return -1;
+        return cr;
       }
       return send_response_data(out_bl, bl_ofs, out_bl.length());
     }
@@ -1436,6 +1434,16 @@ void RGWGetObj::execute()
     }
     return;
   }
+
+  op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
+  if (op_ret < 0) {
+    lderr(s->cct) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
+    goto done_err;
+  }
+  if (need_decompress) {
+    total_len = cs_info.orig_size;
+  }
+
 
   /* Check whether the object has expired. Swift API documentation
    * stands that we should return 404 Not Found in such case. */
@@ -3009,13 +3017,11 @@ void RGWPutObj::execute()
 
   if (processor->is_compressed()) {
     bufferlist tmp;
-    tmp.append(s->cct->_conf->rgw_compression_type.c_str(), s->cct->_conf->rgw_compression_type.length()+1);
+    RGWCompressionInfo cs_info;
+    cs_info.compression_type = s->cct->_conf->rgw_compression_type;
+    cs_info.orig_size = s->obj_size;
+    ::encode(cs_info, tmp);
     attrs[RGW_ATTR_COMPRESSION] = tmp;
-    tmp.clear();
-    char sz [20];
-    snprintf(sz, sizeof(sz), "%lu", s->obj_size);
-    tmp.append(sz, strlen(sz)+1);
-    attrs[RGW_ATTR_COMPRESSION_ORIG_SIZE] = tmp;
   }
 
 

@@ -135,6 +135,10 @@ protected:
   string lo_etag;
   bool rgwx_stat; /* extended rgw stat operation */
 
+  // compression attrs
+  RGWCompressionInfo cs_info;
+  bool need_decompress;
+
   int init_common();
 public:
   RGWGetObj() {

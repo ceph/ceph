@@ -1525,7 +1525,7 @@ OPTION(rgw_list_bucket_min_readahead, OPT_INT, 1000) // minimum number of entrie
 
 OPTION(rgw_rest_getusage_op_compat, OPT_BOOL, false) // dump description of total stats for s3 GetUsage API
 OPTION(rgw_compression_enabled, OPT_BOOL, true) // to use compression on rgw level
-OPTION(rgw_compression_type, OPT_STR, "zlib") // type of compressor
+OPTION(rgw_compression_type, OPT_STR, "none") // type of compressor, none to not use
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
