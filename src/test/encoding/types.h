@@ -330,7 +330,7 @@ TYPE(cls_user_get_header_ret)
 TYPE(cls_user_complete_stats_sync_op)
 
 #include "cls/journal/cls_journal_types.h"
-TYPE(cls::journal::EntryPosition)
+TYPE(cls::journal::ObjectPosition)
 TYPE(cls::journal::ObjectSetPosition)
 TYPE(cls::journal::Client)
 

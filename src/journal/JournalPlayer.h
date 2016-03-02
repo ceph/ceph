@@ -23,8 +23,8 @@ class ReplayHandler;
 
 class JournalPlayer {
 public:
-  typedef cls::journal::EntryPosition EntryPosition;
-  typedef cls::journal::EntryPositions EntryPositions;
+  typedef cls::journal::ObjectPosition ObjectPosition;
+  typedef cls::journal::ObjectPositions ObjectPositions;
   typedef cls::journal::ObjectSetPosition ObjectSetPosition;
 
   JournalPlayer(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
@@ -40,9 +40,9 @@ public:
 
 private:
   typedef std::set<uint8_t> PrefetchSplayOffsets;
-  typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;
   typedef std::map<uint64_t, ObjectPlayerPtr> ObjectPlayers;
   typedef std::map<uint8_t, ObjectPlayers> SplayedObjectPlayers;
+  typedef std::map<uint8_t, ObjectPosition> SplayedObjectPositions;
 
   enum State {
     STATE_INIT,
@@ -96,8 +96,7 @@ private:
   PrefetchSplayOffsets m_prefetch_splay_offsets;
   SplayedObjectPlayers m_object_players;
   uint64_t m_commit_object;
-  uint64_t m_commit_tag_tid;
-  AllocatedEntryTids m_commit_tids;
+  SplayedObjectPositions m_commit_positions;
 
   void advance_splay_object();
 
