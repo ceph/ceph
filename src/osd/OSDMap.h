@@ -867,6 +867,12 @@ public:
   void print_oneline_summary(ostream& out) const;
   void print_tree(Formatter *f, ostream *out) const;
 
+  int summarize_mapping_stats(
+    OSDMap *newmap,
+    const set<int64_t> *pools,
+    std::string *out,
+    Formatter *f) const;
+
   string get_flag_string() const;
   static string get_flag_string(unsigned flags);
   static void dump_erasure_code_profiles(const map<string,map<string,string> > &profiles,

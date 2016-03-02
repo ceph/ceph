@@ -2875,3 +2875,161 @@ int OSDMap::build_simple_crush_rulesets(CephContext *cct,
   // require the crush_v2 feature of clients
   return 0;
 }
+
+int OSDMap::summarize_mapping_stats(
+  OSDMap *newmap,
+  const set<int64_t> *pools,
+  std::string *out,
+  Formatter *f) const
+{
+  set<int64_t> ls;
+  if (pools) {
+    ls = *pools;
+  } else {
+    for (auto &p : get_pools())
+      ls.insert(p.first);
+  }
+
+  unsigned total_pg = 0;
+  unsigned moved_pg = 0;
+  vector<unsigned> base_by_osd(get_max_osd(), 0);
+  vector<unsigned> new_by_osd(get_max_osd(), 0);
+  for (int64_t pool_id : ls) {
+    const pg_pool_t *pi = get_pg_pool(pool_id);
+    vector<int> up, up2, acting;
+    int up_primary, acting_primary;
+    for (unsigned ps = 0; ps < pi->get_pg_num(); ++ps) {
+      pg_t pgid(ps, pool_id, -1);
+      total_pg += pi->get_size();
+      pg_to_up_acting_osds(pgid, &up, &up_primary,
+			   &acting, &acting_primary);
+      for (int osd : up) {
+	if (osd >= 0 && osd < get_max_osd())
+	  ++base_by_osd[osd];
+      }
+      if (newmap) {
+	newmap->pg_to_up_acting_osds(pgid, &up2, &up_primary,
+				     &acting, &acting_primary);
+	for (int osd : up2) {
+	  if (osd >= 0 && osd < get_max_osd())
+	    ++new_by_osd[osd];
+	}
+	if (pi->type == pg_pool_t::TYPE_ERASURE) {
+	  for (unsigned i=0; i<up.size(); ++i) {
+	    if (up[i] != up2[i]) {
+	      ++moved_pg;
+	    }
+	  }
+	} else if (pi->type == pg_pool_t::TYPE_REPLICATED) {
+	  for (int osd : up) {
+	    if (std::find(up2.begin(), up2.end(), osd) == up2.end()) {
+	      ++moved_pg;
+	    }
+	  }
+	} else {
+	  assert(0 == "unhandled pool type");
+	}
+      }
+    }
+  }
+
+  unsigned num_up_in = 0;
+  for (int osd = 0; osd < get_max_osd(); ++osd) {
+    if (is_up(osd) && is_in(osd))
+      ++num_up_in;
+  }
+  if (!num_up_in) {
+    return -EINVAL;
+  }
+
+  float avg_pg = (float)total_pg / (float)num_up_in;
+  float base_stddev = 0, new_stddev = 0;
+  int min = -1, max = -1;
+  unsigned min_base_pg = 0, max_base_pg = 0;
+  unsigned min_new_pg = 0, max_new_pg = 0;
+  for (int osd = 0; osd < get_max_osd(); ++osd) {
+    if (is_up(osd) && is_in(osd)) {
+      float base_diff = (float)base_by_osd[osd] - avg_pg;
+      base_stddev += base_diff * base_diff;
+      float new_diff = (float)new_by_osd[osd] - avg_pg;
+      new_stddev += new_diff * new_diff;
+      if (min < 0 || min_base_pg < base_by_osd[osd]) {
+	min = osd;
+	min_base_pg = base_by_osd[osd];
+	min_new_pg = new_by_osd[osd];
+      }
+      if (max < 0 || max_base_pg > base_by_osd[osd]) {
+	max = osd;
+	max_base_pg = base_by_osd[osd];
+	max_new_pg = new_by_osd[osd];
+      }
+    }
+  }
+  base_stddev = sqrt(base_stddev / num_up_in);
+  new_stddev = sqrt(new_stddev / num_up_in);
+
+  float edev = sqrt(avg_pg * (1.0 - (1.0 / (double)num_up_in)));
+
+  ostringstream ss;
+  if (f)
+    f->open_object_section("utilization");
+  if (newmap) {
+    if (f) {
+      f->dump_unsigned("moved_pgs", moved_pg);
+      f->dump_unsigned("total_pgs", total_pg);
+    } else {
+      ss << "moved " << moved_pg << " / " << total_pg
+	 << " (" << ((float)moved_pg * 100.0 / (float)total_pg) << "%)\n";
+    }
+  }
+  if (f) {
+    f->dump_float("avg_pgs", avg_pg);
+    f->dump_float("std_dev", base_stddev);
+    f->dump_float("expected_baseline_std_dev", edev);
+    if (newmap)
+      f->dump_float("new_std_dev", new_stddev);
+  } else {
+    ss << "avg " << avg_pg << "\n";
+    ss << "stddev " << base_stddev;
+    if (newmap)
+      ss << " -> " << new_stddev;
+    ss << " (expected baseline " << edev << ")\n";
+  }
+  if (min >= 0) {
+    if (f) {
+      f->dump_unsigned("min_osd", min);
+      f->dump_unsigned("min_osd_pgs", min_base_pg);
+      if (newmap)
+	f->dump_unsigned("new_min_osd_pgs", min_new_pg);
+    } else {
+      ss << "min osd." << min << " with " << min_base_pg;
+      if (newmap)
+	ss << " -> " << min_new_pg;
+      ss << " pgs (" << (float)min_base_pg / avg_pg;
+      if (newmap)
+	ss << " -> " << (float)min_new_pg / avg_pg;
+      ss << " * mean)\n";
+    }
+  }
+  if (max >= 0) {
+    if (f) {
+      f->dump_unsigned("max_osd", max);
+      f->dump_unsigned("max_osd_pgs", max_base_pg);
+      if (newmap)
+	f->dump_unsigned("new_max_osd_pgs", max_new_pg);
+    } else {
+      ss << "max osd." << min << " with " << max_base_pg;
+      if (newmap)
+	ss << " -> " << max_new_pg;
+      ss << " pgs (" << (float)max_base_pg / avg_pg;
+      if (newmap)
+	ss << " -> " << (float)max_new_pg / avg_pg;
+      ss << " * mean)\n";
+    }
+  }
+  if (f)
+    f->close_section();
+  if (out)
+    *out = ss.str();
+  return 0;
+}
