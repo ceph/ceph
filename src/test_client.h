@@ -21,6 +21,43 @@
 #include "dmclock_client.h"
 
 
+struct req_op_t {};
+struct wait_op_t {};
+constexpr struct req_op_t req_op;
+constexpr struct wait_op_t wait_op;
+
+enum class CliOp { req, wait };
+struct CliInst {
+  CliOp op;
+  union {
+    std::chrono::milliseconds wait_time;
+    struct {
+      uint16_t count;
+      std::chrono::milliseconds time_bw_reqs;
+      uint16_t max_outstanding;
+    } req_params;
+  } args;
+
+  template<typename T>
+  CliInst(wait_op_t, T duration) :
+    op(CliOp::wait)
+  {
+    args.wait_time =
+      std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+  }
+
+  CliInst(req_op_t,
+	  uint16_t count, double ops_per_sec, uint16_t max_outstanding) :
+    op(CliOp::req)
+  {
+    args.req_params.count = count;
+    args.req_params.max_outstanding = max_outstanding;
+    uint32_t ms = uint32_t(0.5 + 1.0 / ops_per_sec * 1000);
+    args.req_params.time_bw_reqs = std::chrono::milliseconds(ms);
+  }
+};
+
+
 class TestClient {
 public:
 
@@ -46,9 +83,13 @@ protected:
   const SubmitFunc submit_f;
   const ServerSelectFunc server_select_f;
 
-  const int ops_to_run;
-  const int iops_goal; // per second
-  const int outstanding_ops_allowed;
+#if 1 // removed consts
+  int ops_to_run;
+  int iops_goal; // per second
+  int outstanding_ops_allowed;
+#endif
+
+  std::vector<CliInst> instructions;
 
   crimson::dmclock::ServiceTracker<ServerId> service_tracker;
 
@@ -59,11 +100,9 @@ protected:
 
   std::mutex               mtx_req;
   std::condition_variable  cv_req;
-  std::thread              thd_req;
 
   std::mutex               mtx_resp;
   std::condition_variable  cv_resp;
-  std::thread              thd_resp;
 
   using RespGuard = std::lock_guard<decltype(mtx_resp)>;
   using Lock = std::unique_lock<std::mutex>;
@@ -74,7 +113,15 @@ protected:
   uint32_t                 reservation_counter = 0;
   uint32_t                 proportion_counter = 0;
 
+  std::thread              thd_req;
+  std::thread              thd_resp;
+
 public:
+
+  TestClient(ClientId _id,
+	     const SubmitFunc& _submit_f,
+	     const ServerSelectFunc& _server_select_f,
+	     const std::vector<CliInst>& _instrs);
 
   TestClient(ClientId _id,
 	     const SubmitFunc& _submit_f,

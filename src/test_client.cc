@@ -22,6 +22,29 @@ static const uint info = 0;
 TestClient::TestClient(ClientId _id,
 		       const SubmitFunc& _submit_f,
 		       const ServerSelectFunc& _server_select_f,
+		       const std::vector<CliInst>& _instrs) :
+  id(_id),
+  submit_f(_submit_f),
+  server_select_f(_server_select_f),
+  instructions(_instrs),
+#if 0
+  ops_to_run(_ops_to_run),
+  iops_goal(_iops_goal),
+  outstanding_ops_allowed(_outstanding_ops_allowed),
+#endif
+  service_tracker(),
+  op_times(ops_to_run),
+  outstanding_ops(0),
+  requests_complete(false)
+{
+  thd_resp = std::thread(&TestClient::run_resp, this);
+  thd_req = std::thread(&TestClient::run_req, this);
+}
+
+
+TestClient::TestClient(ClientId _id,
+		       const SubmitFunc& _submit_f,
+		       const ServerSelectFunc& _server_select_f,
 		       int _ops_to_run,
 		       int _iops_goal,
 		       int _outstanding_ops_allowed) :
