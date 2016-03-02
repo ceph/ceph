@@ -1791,6 +1791,12 @@ void FileJournal::do_discard(int64_t offset, int64_t end)
 	dout(1) << __func__ << "ioctl(BLKDISCARD) error:" << cpp_strerror(errno) << dendl;
 }
 
+uint64_t FileJournal::get_journaled_seq()
+{
+  Mutex::Locker locker(finisher_lock);
+  return journaled_seq;
+}
+
 void FileJournal::committed_thru(uint64_t seq)
 {
   Mutex::Locker locker(write_lock);

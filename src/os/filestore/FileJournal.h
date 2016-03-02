@@ -464,6 +464,7 @@ private:
   // writes
   void commit_start(uint64_t seq);
   void committed_thru(uint64_t seq);
+  uint64_t get_journaled_seq();
   bool should_commit_now() {
     return full_state != FULL_NOTFULL && !write_stop;
   }

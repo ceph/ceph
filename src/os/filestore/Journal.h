@@ -71,6 +71,7 @@ public:
   virtual void commit_start(uint64_t seq) = 0;
   virtual void committed_thru(uint64_t seq) = 0;
 
+  virtual uint64_t get_journaled_seq() = 0;
   /// Read next journal entry - asserts on invalid journal
   virtual bool read_entry(
     bufferlist &bl, ///< [out] payload on successful read
