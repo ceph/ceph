@@ -267,7 +267,7 @@ TEST_F(TestObjectPlayer, Unwatch) {
   bool done = false;
   int rval = 0;
   C_SafeCond *ctx = new C_SafeCond(&mutex, &cond, &done, &rval);
-  object->watch(ctx, 0.1);
+  object->watch(ctx, 600);
 
   usleep(200000);
   ASSERT_FALSE(done);
