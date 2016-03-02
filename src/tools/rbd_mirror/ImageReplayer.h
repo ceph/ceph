@@ -93,7 +93,7 @@ private:
 		   std::string *image_id);
   int copy();
 
-  void shut_down_journal_replay();
+  void shut_down_journal_replay(bool cancel_ops);
 
   friend std::ostream &operator<<(std::ostream &os,
 				  const ImageReplayer &replayer);

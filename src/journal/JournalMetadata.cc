@@ -475,12 +475,16 @@ void JournalMetadata::flush_commit_position(Context *on_safe) {
   Mutex::Locker locker(m_lock);
   if (m_commit_position_ctx == nullptr) {
     // nothing to flush
-    m_finisher->queue(on_safe, 0);
+    if (on_safe != nullptr) {
+      m_finisher->queue(on_safe, 0);
+    }
     return;
   }
 
-  m_commit_position_ctx = new C_FlushCommitPosition(
-    m_commit_position_ctx, on_safe);
+  if (on_safe != nullptr) {
+    m_commit_position_ctx = new C_FlushCommitPosition(
+      m_commit_position_ctx, on_safe);
+  }
   cancel_commit_task();
   handle_commit_position_task();
 }
