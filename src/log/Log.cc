@@ -190,7 +190,7 @@ void Log::submit_entry(Entry *e)
   m_queue_mutex_holder = pthread_self();
 
   if (m_inject_segv)
-    *(int *)(0) = 0xdead;
+    *(volatile int *)(0) = 0xdead;
 
   // wait for flush to catch up
   while (m_new.m_len > m_max_new)
