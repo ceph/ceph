@@ -30,8 +30,8 @@ public:
   ImageWatcher(ImageCtx& image_ctx);
   ~ImageWatcher();
 
-  int register_watch();
-  int unregister_watch();
+  void register_watch(Context *on_finish);
+  void unregister_watch(Context *on_finish);
   void flush(Context *on_finish);
 
   int notify_flatten(uint64_t request_id, ProgressContext &prog_ctx);
@@ -149,6 +149,18 @@ private:
     ProgressContext *m_prog_ctx;
   };
 
+  struct C_RegisterWatch : public Context {
+    ImageWatcher *image_watcher;
+    Context *on_finish;
+
+    C_RegisterWatch(ImageWatcher *image_watcher, Context *on_finish)
+       : image_watcher(image_watcher), on_finish(on_finish) {
+    }
+    virtual void finish(int r) override {
+      image_watcher->handle_register_watch(r);
+      on_finish->complete(r);
+    }
+  };
   struct C_NotifyAck : public Context {
     ImageWatcher *image_watcher;
     uint64_t notify_id;
@@ -223,6 +235,8 @@ private:
   watch_notify::ClientId m_owner_client_id;
 
   image_watcher::Notifier m_notifier;
+
+  void handle_register_watch(int r);
 
   void schedule_cancel_async_requests();
   void cancel_async_requests();

@@ -58,6 +58,23 @@ int TestWatchNotify::list_watchers(const std::string& o,
   return 0;
 }
 
+void TestWatchNotify::aio_flush(Context *on_finish) {
+  m_finisher->queue(on_finish);
+}
+
+void TestWatchNotify::aio_watch(const std::string& o, uint64_t gid,
+                                uint64_t *handle,
+                                librados::WatchCtx2 *watch_ctx,
+                                Context *on_finish) {
+  int r = watch(o, gid, handle, nullptr, watch_ctx);
+  m_finisher->queue(on_finish, r);
+}
+
+void TestWatchNotify::aio_unwatch(uint64_t handle, Context *on_finish) {
+  unwatch(handle);
+  m_finisher->queue(on_finish);
+}
+
 void TestWatchNotify::aio_notify(const std::string& oid, bufferlist& bl,
                                  uint64_t timeout_ms, bufferlist *pbl,
                                  Context *on_notify) {
