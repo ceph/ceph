@@ -118,13 +118,7 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
 uint64_t JournalingObjectStore::ApplyManager::op_apply_start(uint64_t op)
 {
   Mutex::Locker l(apply_lock);
-  while (blocked) {
-    // note: this only happens during journal replay
-    dout(10) << "op_apply_start blocked, waiting" << dendl;
-    blocked_cond.Wait(apply_lock);
-  }
   dout(10) << "op_apply_start " << op << " open_ops " << open_ops << " -> " << (open_ops+1) << dendl;
-  assert(!blocked);
   assert(op > committed_seq);
   open_ops++;
   return op;
@@ -140,10 +134,6 @@ void JournalingObjectStore::ApplyManager::op_apply_finish(uint64_t op)
   --open_ops;
   assert(open_ops >= 0);
 
-  // signal a blocked commit_start (only needed during journal replay)
-  if (blocked) {
-    blocked_cond.Signal();
-  }
 
   // there can be multiple applies in flight; track the max value we
   // note.  note that we can't _read_ this value and learn anything
@@ -227,8 +217,6 @@ void JournalingObjectStore::ApplyManager::commit_started()
   Mutex::Locker l(apply_lock);
   // allow new ops. (underlying fs should now be committing all prior ops)
   dout(10) << "commit_started committing " << committing_seq << ", unblocking" << dendl;
-  blocked = false;
-  blocked_cond.Signal();
 }
 
 void JournalingObjectStore::ApplyManager::commit_finish()

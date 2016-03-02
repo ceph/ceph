@@ -51,8 +51,6 @@ protected:
     Finisher &finisher;
 
     Mutex apply_lock;
-    bool blocked;
-    Cond blocked_cond;
     int open_ops;
     uint64_t max_applied_seq;
 
@@ -64,14 +62,12 @@ protected:
     ApplyManager(Journal *&j, Finisher &f) :
       journal(j), finisher(f),
       apply_lock("JOS::ApplyManager::apply_lock", false, true, false, g_ceph_context),
-      blocked(false),
       open_ops(0),
       max_applied_seq(0),
       com_lock("JOS::ApplyManager::com_lock", false, true, false, g_ceph_context),
       committing_seq(0), committed_seq(0) {}
     void reset() {
       assert(open_ops == 0);
-      assert(blocked == false);
       max_applied_seq = 0;
       committing_seq = 0;
       committed_seq = 0;
