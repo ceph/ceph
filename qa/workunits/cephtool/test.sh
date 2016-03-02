@@ -1403,8 +1403,12 @@ function test_mon_osd_misc()
   set -e
 
   ceph osd reweight-by-utilization 110
+  ceph osd reweight-by-utilization 110 .5
+  ceph osd test-reweight-by-utilization 110 .5 --no-increasing
   ceph osd reweight-by-pg 110
+  ceph osd test-reweight-by-pg 110 .5
   ceph osd reweight-by-pg 110 rbd
+  ceph osd reweight-by-pg 110 .5 rbd
   expect_false ceph osd reweight-by-pg 110 boguspoolasdfasdfasdf
 }
 
