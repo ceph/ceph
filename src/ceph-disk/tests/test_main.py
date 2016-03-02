@@ -591,7 +591,7 @@ class TestCephDisk(object):
 
     def test_list_other(self):
         if platform.system() == "FreeBSD":
-            # FreeBSD does not have the same type of devices 
+            # FreeBSD does not have the same type of devices
             print "SKIPPED: FreeBSD devices have different properties"
             return
         #
