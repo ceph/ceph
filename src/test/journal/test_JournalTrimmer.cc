@@ -34,14 +34,9 @@ public:
     return r;
   }
 
-  using RadosTestFixture::client_register;
-  int client_register(const std::string &oid) {
-    return RadosTestFixture::client_register(oid, "client", "");
-  }
-
   journal::JournalMetadataPtr create_metadata(const std::string &oid) {
-    journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
-      m_ioctx, oid, "client", 0.1));
+    journal::JournalMetadataPtr metadata = RadosTestFixture::create_metadata(
+      oid);
     m_metadata_list.push_back(metadata);
     metadata->add_listener(&m_listener);
     return metadata;

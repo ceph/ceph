@@ -20,8 +20,8 @@ public:
   journal::JournalMetadataPtr create_metadata(const std::string &oid,
                                               const std::string &client_id,
                                               double commit_internal = 0.1) {
-    journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
-      m_ioctx, oid, client_id, commit_internal));
+    journal::JournalMetadataPtr metadata = RadosTestFixture::create_metadata(
+      oid, client_id, commit_internal);
     m_metadata_list.push_back(metadata);
     metadata->add_listener(&m_listener);
     return metadata;
