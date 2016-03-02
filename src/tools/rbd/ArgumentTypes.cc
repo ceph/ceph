@@ -289,11 +289,13 @@ std::string get_short_features_help(bool append_suffix) {
 
     std::string suffix;
     if (append_suffix) {
-      if ((pair.first & RBD_FEATURES_MUTABLE) != 0) {
-        suffix += "*";
-      }
       if ((pair.first & g_conf->rbd_default_features) != 0) {
         suffix += "+";
+      }
+      if ((pair.first & RBD_FEATURES_MUTABLE) != 0) {
+        suffix += "*";
+      } else if ((pair.first & RBD_FEATURES_DISABLE_ONLY) != 0) {
+        suffix += "-";
       }
       if (!suffix.empty()) {
         suffix = "(" + suffix + ")";
@@ -309,6 +311,7 @@ std::string get_long_features_help() {
   std::ostringstream oss;
   oss << "Image Features:" << std::endl
       << "  (*) supports enabling/disabling on existing images" << std::endl
+      << "  (-) supports disabling-only on existing images" << std::endl
       << "  (+) enabled by default for new images if features not specified"
       << std::endl;
   return oss.str();

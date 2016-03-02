@@ -1259,7 +1259,8 @@ TEST_F(TestClsRbd, set_features)
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   string oid = get_temp_image_name();
-  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid));
+  uint64_t base_features = RBD_FEATURE_LAYERING | RBD_FEATURE_DEEP_FLATTEN;
+  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, base_features, oid));
 
   uint64_t features = RBD_FEATURES_MUTABLE;
   uint64_t mask = RBD_FEATURES_MUTABLE;
@@ -1268,7 +1269,7 @@ TEST_F(TestClsRbd, set_features)
   uint64_t actual_features;
   ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &actual_features));
 
-  uint64_t expected_features = RBD_FEATURES_MUTABLE;
+  uint64_t expected_features = RBD_FEATURES_MUTABLE | base_features;
   ASSERT_EQ(expected_features, actual_features);
 
   features = 0;
@@ -1277,11 +1278,15 @@ TEST_F(TestClsRbd, set_features)
 
   ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &actual_features));
 
-  expected_features = RBD_FEATURES_MUTABLE & ~RBD_FEATURE_OBJECT_MAP;
+  expected_features = (RBD_FEATURES_MUTABLE | base_features) &
+                      ~RBD_FEATURE_OBJECT_MAP;
   ASSERT_EQ(expected_features, actual_features);
 
-  mask = RBD_FEATURE_LAYERING;
-  ASSERT_EQ(-EINVAL, set_features(&ioctx, oid, features, mask));
+  ASSERT_EQ(0, set_features(&ioctx, oid, 0, RBD_FEATURE_DEEP_FLATTEN));
+  ASSERT_EQ(-EINVAL, set_features(&ioctx, oid, RBD_FEATURE_DEEP_FLATTEN,
+                                  RBD_FEATURE_DEEP_FLATTEN));
+
+  ASSERT_EQ(-EINVAL, set_features(&ioctx, oid, 0, RBD_FEATURE_LAYERING));
 }
 
 TEST_F(TestClsRbd, mirror) {
