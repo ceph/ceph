@@ -35,20 +35,24 @@ public:
 
   void process(bufferlist::iterator *it, Context *on_ready, Context *on_safe);
 
-  void shut_down(Context *on_finish);
+  void shut_down(bool cancel_ops, Context *on_finish);
   void flush(Context *on_finish);
 
   void replay_op_ready(uint64_t op_tid, Context *on_resume);
 
 private:
+  typedef std::unordered_set<int> ReturnValues;
+
   struct OpEvent {
     bool op_in_progress = false;
+    bool finish_on_ready = false;
     Context *on_op_finish_event = nullptr;
     Context *on_start_ready = nullptr;
     Context *on_start_safe = nullptr;
     Context *on_finish_ready = nullptr;
     Context *on_finish_safe = nullptr;
     Context *on_op_complete = nullptr;
+    ReturnValues ignore_error_codes;
   };
 
   typedef std::list<uint64_t> OpTids;

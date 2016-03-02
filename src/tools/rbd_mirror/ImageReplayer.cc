@@ -323,7 +323,7 @@ fail:
 
   if (m_local_replay) {
     Mutex::Locker locker(m_lock);
-    shut_down_journal_replay();
+    shut_down_journal_replay(true);
     m_local_image_ctx->journal->stop_external_replay();
     m_local_replay = nullptr;
   }
@@ -367,7 +367,7 @@ void ImageReplayer::stop()
     m_state = STATE_STOPPING;
   }
 
-  shut_down_journal_replay();
+  shut_down_journal_replay(false);
 
   m_local_image_ctx->journal->stop_external_replay();
   m_local_replay = nullptr;
@@ -822,10 +822,10 @@ cleanup:
   return r;
 }
 
-void ImageReplayer::shut_down_journal_replay()
+void ImageReplayer::shut_down_journal_replay(bool cancel_ops)
 {
   C_SaferCond cond;
-  m_local_replay->shut_down(&cond);
+  m_local_replay->shut_down(cancel_ops, &cond);
   int r = cond.wait();
   if (r < 0) {
     derr << "error flushing journal replay: " << cpp_strerror(r) << dendl;

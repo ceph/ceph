@@ -94,12 +94,13 @@ void Replay<I>::process(bufferlist::iterator *it, Context *on_ready,
 }
 
 template <typename I>
-void Replay<I>::shut_down(Context *on_finish) {
+void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
   AioCompletion *flush_comp = nullptr;
   OpTids cancel_op_tids;
+  Contexts op_finish_events;
   on_finish = util::create_async_context_callback(
     m_image_ctx, on_finish);
 
@@ -111,11 +112,23 @@ void Replay<I>::shut_down(Context *on_finish) {
       flush_comp = create_aio_flush_completion(nullptr, nullptr);;
     }
 
-    // cancel ops that are waiting to start
     for (auto &op_event_pair : m_op_events) {
-      const OpEvent &op_event = op_event_pair.second;
-      if (op_event.on_start_ready == nullptr) {
-        cancel_op_tids.push_back(op_event_pair.first);
+      OpEvent &op_event = op_event_pair.second;
+      if (cancel_ops) {
+        // cancel ops that are waiting to start (waiting for
+        // OpFinishEvent or waiting for ready)
+        if (op_event.on_start_ready == nullptr) {
+          cancel_op_tids.push_back(op_event_pair.first);
+        }
+      } else if (op_event.on_op_finish_event != nullptr) {
+        // start ops waiting for OpFinishEvent
+        Context *on_op_finish_event = nullptr;
+        std::swap(on_op_finish_event, op_event.on_op_finish_event);
+        m_image_ctx.op_work_queue->queue(on_op_finish_event, 0);
+      } else {
+        // waiting for op ready
+        assert(op_event.on_start_ready != nullptr);
+        op_event_pair.second.finish_on_ready = true;
       }
     }
 
@@ -172,7 +185,7 @@ void Replay<I>::replay_op_ready(uint64_t op_tid, Context *on_resume) {
   on_start_ready->complete(0);
 
   // cancel has been requested -- send error to paused state machine
-  if (m_flush_ctx != nullptr) {
+  if (!op_event.finish_on_ready && m_flush_ctx != nullptr) {
     m_image_ctx.op_work_queue->queue(on_resume, -ERESTART);
     return;
   }
@@ -183,6 +196,11 @@ void Replay<I>::replay_op_ready(uint64_t op_tid, Context *on_resume) {
     [on_resume](int r) {
       on_resume->complete(r);
     });
+
+  // shut down request -- don't expect OpFinishEvent
+  if (op_event.finish_on_ready) {
+    m_image_ctx.op_work_queue->queue(on_resume, 0);
+  }
 }
 
 template <typename I>
@@ -248,6 +266,7 @@ void Replay<I>::handle_event(const journal::OpFinishEvent &event,
                  << "op_tid=" << event.op_tid << dendl;
 
   bool op_in_progress;
+  Context *on_op_complete = nullptr;
   Context *on_op_finish_event = nullptr;
   {
     Mutex::Locker locker(m_lock);
@@ -265,6 +284,7 @@ void Replay<I>::handle_event(const journal::OpFinishEvent &event,
     op_event.on_finish_ready = on_ready;
     op_event.on_finish_safe = on_safe;
     op_in_progress = op_event.op_in_progress;
+    std::swap(on_op_complete, op_event.on_op_complete);
     std::swap(on_op_finish_event, op_event.on_op_finish_event);
   }
 
@@ -273,9 +293,13 @@ void Replay<I>::handle_event(const journal::OpFinishEvent &event,
       // bubble the error up to the in-progress op to cancel it
       on_op_finish_event->complete(event.r);
     } else {
-      // op hasn't been started -- no-op the event
+      // op hasn't been started -- bubble the error up since
+      // our image is now potentially in an inconsistent state
+      // since simple errors should have been caught before
+      // creating the op event
+      delete on_op_complete;
       delete on_op_finish_event;
-      handle_op_complete(event.op_tid, 0);
+      handle_op_complete(event.op_tid, event.r);
     }
     return;
   }
@@ -294,6 +318,9 @@ void Replay<I>::handle_event(const journal::SnapCreateEvent &event,
   OpEvent *op_event;
   Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
                                                        &op_event);
+
+  // ignore errors caused due to replay
+  op_event->ignore_error_codes = {-EEXIST};
 
   // avoid lock cycles
   m_image_ctx.op_work_queue->queue(
@@ -322,6 +349,9 @@ void Replay<I>::handle_event(const journal::SnapRemoveEvent &event,
                                           on_op_complete);
     });
 
+  // ignore errors caused due to replay
+  op_event->ignore_error_codes = {-ENOENT};
+
   on_ready->complete(0);
 }
 
@@ -342,6 +372,9 @@ void Replay<I>::handle_event(const journal::SnapRenameEvent &event,
                                           on_op_complete);
     });
 
+  // ignore errors caused due to replay
+  op_event->ignore_error_codes = {-EEXIST};
+
   on_ready->complete(0);
 }
 
@@ -360,6 +393,9 @@ void Replay<I>::handle_event(const journal::SnapProtectEvent &event,
       m_image_ctx.operations->snap_protect(event.snap_name.c_str(),
                                            on_op_complete);
     });
+
+  // ignore errors caused due to replay
+  op_event->ignore_error_codes = {-EBUSY};
 
   on_ready->complete(0);
 }
@@ -380,6 +416,9 @@ void Replay<I>::handle_event(const journal::SnapUnprotectEvent &event,
       m_image_ctx.operations->snap_unprotect(event.snap_name.c_str(),
                                              on_op_complete);
     });
+
+  // ignore errors caused due to replay
+  op_event->ignore_error_codes = {-EINVAL};
 
   on_ready->complete(0);
 }
@@ -420,6 +459,9 @@ void Replay<I>::handle_event(const journal::RenameEvent &event,
       m_image_ctx.operations->rename(event.image_name.c_str(), on_op_complete);
     });
 
+  // ignore errors caused due to replay
+  op_event->ignore_error_codes = {-EEXIST};
+
   on_ready->complete(0);
 }
 
@@ -459,6 +501,9 @@ void Replay<I>::handle_event(const journal::FlattenEvent &event,
     [this, event, on_op_complete](int r) {
       m_image_ctx.operations->flatten(no_op_progress_callback, on_op_complete);
     });
+
+  // ignore errors caused due to replay
+  op_event->ignore_error_codes = {-EINVAL};
 
   on_ready->complete(0);
 }
@@ -569,6 +614,7 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
 
   OpEvent op_event;
   Context *on_flush = nullptr;
+  bool shutting_down = false;
   {
     Mutex::Locker locker(m_lock);
     auto op_it = m_op_events.find(op_tid);
@@ -577,15 +623,25 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
     op_event = std::move(op_it->second);
     m_op_events.erase(op_it);
 
+    shutting_down = (m_flush_ctx != nullptr);
     if (m_op_events.empty() &&
         (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
       on_flush = m_flush_ctx;
     }
   }
 
-  assert(op_event.on_start_ready == nullptr);
-  assert((op_event.on_finish_ready != nullptr &&
-          op_event.on_finish_safe != nullptr) || r == -ERESTART);
+  assert(op_event.on_start_ready == nullptr || (r < 0 && r != -ERESTART));
+  if (op_event.on_start_ready != nullptr) {
+    // blocking op event failed before it became ready
+    assert(op_event.on_finish_ready == nullptr &&
+           op_event.on_finish_safe == nullptr);
+
+    op_event.on_start_ready->complete(0);
+  } else {
+    // event kicked off by OpFinishEvent
+    assert((op_event.on_finish_ready != nullptr &&
+            op_event.on_finish_safe != nullptr) || shutting_down);
+  }
 
   // skipped upon error -- so clean up if non-null
   delete op_event.on_op_finish_event;
@@ -595,6 +651,11 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
 
   if (op_event.on_finish_ready != nullptr) {
     op_event.on_finish_ready->complete(0);
+  }
+
+  // filter out errors caused by replay of the same op
+  if (r < 0 && op_event.ignore_error_codes.count(r) != 0) {
+    r = 0;
   }
 
   op_event.on_start_safe->complete(r);
