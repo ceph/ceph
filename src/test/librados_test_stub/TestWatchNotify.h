@@ -51,11 +51,17 @@ public:
   TestWatchNotify(CephContext *cct, Finisher *finisher);
   ~TestWatchNotify();
 
-  void flush();
   int list_watchers(const std::string& o,
                     std::list<obj_watch_t> *out_watchers);
+
+  void aio_flush(Context *on_finish);
+  void aio_watch(const std::string& o, uint64_t gid, uint64_t *handle,
+                 librados::WatchCtx2 *watch_ctx, Context *on_finish);
+  void aio_unwatch(uint64_t handle, Context *on_finish);
   void aio_notify(const std::string& oid, bufferlist& bl, uint64_t timeout_ms,
                   bufferlist *pbl, Context *on_notify);
+
+  void flush();
   int notify(const std::string& o, bufferlist& bl,
              uint64_t timeout_ms, bufferlist *pbl);
   void notify_ack(const std::string& o, uint64_t notify_id,

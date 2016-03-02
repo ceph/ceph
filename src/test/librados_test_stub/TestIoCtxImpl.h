@@ -81,7 +81,9 @@ public:
                                AioCompletionImpl *c, int flags,
                                bufferlist *pbl);
   virtual int aio_remove(const std::string& oid, AioCompletionImpl *c) = 0;
-
+  virtual int aio_watch(const std::string& o, AioCompletionImpl *c,
+                        uint64_t *handle, librados::WatchCtx2 *ctx);
+  virtual int aio_unwatch(uint64_t handle, AioCompletionImpl *c);
   virtual int append(const std::string& oid, const bufferlist &bl,
                      const SnapContext &snapc) = 0;
   virtual int assert_exists(const std::string &oid) = 0;

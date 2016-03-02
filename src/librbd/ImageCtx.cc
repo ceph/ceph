@@ -287,9 +287,8 @@ struct C_InvalidateCache : public Context {
   }
 
   void ImageCtx::shutdown() {
-    if (image_watcher != nullptr) {
-      unregister_watch();
-    }
+    delete image_watcher;
+    image_watcher = nullptr;
 
     delete asok_hook;
     asok_hook = nullptr;
@@ -780,17 +779,10 @@ struct C_InvalidateCache : public Context {
     object_cacher->clear_nonexistence(object_set);
   }
 
-  int ImageCtx::register_watch() {
+  void ImageCtx::register_watch(Context *on_finish) {
     assert(image_watcher == NULL);
     image_watcher = new ImageWatcher(*this);
-    return image_watcher->register_watch();
-  }
-
-  void ImageCtx::unregister_watch() {
-    assert(image_watcher != NULL);
-    image_watcher->unregister_watch();
-    delete image_watcher;
-    image_watcher = NULL;
+    image_watcher->register_watch(on_finish);
   }
 
   uint64_t ImageCtx::prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,

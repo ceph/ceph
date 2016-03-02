@@ -30,6 +30,43 @@ namespace librbd {
 using namespace image_watcher;
 using namespace watch_notify;
 using util::create_context_callback;
+using util::create_rados_safe_callback;
+
+namespace {
+
+struct C_UnwatchAndFlush : public Context {
+  librados::Rados rados;
+  Context *on_finish;
+  bool flushing = false;
+  int ret_val = 0;
+
+  C_UnwatchAndFlush(librados::IoCtx &io_ctx, Context *on_finish)
+    : rados(io_ctx), on_finish(on_finish) {
+  }
+
+  virtual void complete(int r) override {
+    if (ret_val == 0 && r < 0) {
+      ret_val = r;
+    }
+
+    if (!flushing) {
+      flushing = true;
+
+      librados::AioCompletion *aio_comp = create_rados_safe_callback(this);
+      r = rados.aio_watch_flush(aio_comp);
+      assert(r == 0);
+      aio_comp->release();
+    } else {
+      Context::complete(ret_val);
+    }
+  }
+
+  virtual void finish(int r) override {
+    on_finish->complete(r);
+  }
+};
+
+} // anonymous namespace
 
 static const double	RETRY_DELAY_SECONDS = 1.0;
 
@@ -54,40 +91,46 @@ ImageWatcher::~ImageWatcher()
   }
 }
 
-int ImageWatcher::register_watch() {
+void ImageWatcher::register_watch(Context *on_finish) {
   ldout(m_image_ctx.cct, 10) << this << " registering image watcher" << dendl;
 
-  RWLock::WLocker l(m_watch_lock);
+  RWLock::RLocker watch_locker(m_watch_lock);
   assert(m_watch_state == WATCH_STATE_UNREGISTERED);
-  int r = m_image_ctx.md_ctx.watch2(m_image_ctx.header_oid,
-				    &m_watch_handle,
-				    &m_watch_ctx);
-  if (r < 0) {
-    return r;
-  }
-
-  m_watch_state = WATCH_STATE_REGISTERED;
-  return 0;
+  librados::AioCompletion *aio_comp = create_rados_safe_callback(
+    new C_RegisterWatch(this, on_finish));
+  int r = m_image_ctx.md_ctx.aio_watch(m_image_ctx.header_oid, aio_comp,
+                                       &m_watch_handle, &m_watch_ctx);
+  assert(r == 0);
+  aio_comp->release();
 }
 
-int ImageWatcher::unregister_watch() {
+void ImageWatcher::handle_register_watch(int r) {
+  RWLock::WLocker watch_locker(m_watch_lock);
+  assert(m_watch_state == WATCH_STATE_UNREGISTERED);
+  if (r < 0) {
+    m_watch_handle = 0;
+  } else if (r >= 0) {
+    m_watch_state = WATCH_STATE_REGISTERED;
+  }
+}
+
+void ImageWatcher::unregister_watch(Context *on_finish) {
   ldout(m_image_ctx.cct, 10) << this << " unregistering image watcher" << dendl;
 
   cancel_async_requests();
   m_task_finisher->cancel_all();
 
-  int r = 0;
   {
     RWLock::WLocker l(m_watch_lock);
     if (m_watch_state == WATCH_STATE_REGISTERED) {
-      r = m_image_ctx.md_ctx.unwatch2(m_watch_handle);
+      librados::AioCompletion *aio_comp = create_rados_safe_callback(
+        new C_UnwatchAndFlush(m_image_ctx.md_ctx, on_finish));
+      int r = m_image_ctx.md_ctx.aio_unwatch(m_watch_handle, aio_comp);
+      assert(r == 0);
+      aio_comp->release();
     }
     m_watch_state = WATCH_STATE_UNREGISTERED;
   }
-
-  librados::Rados rados(m_image_ctx.md_ctx);
-  rados.watch_flush();
-  return r;
 }
 
 void ImageWatcher::flush(Context *on_finish) {
