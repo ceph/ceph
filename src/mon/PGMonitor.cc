@@ -2395,7 +2395,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	if (g_conf->mon_pg_warn_max_object_skew > 0 &&
 	    ratio > g_conf->mon_pg_warn_max_object_skew) {
 	  ostringstream ss;
-	  ss << "pool " << name << " has too few pgs";
+	  ss << "pool " << name << " has many more objects per pg than average (too few pgs?)";
 	  summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 	  if (detail) {
 	    ostringstream ss;
