@@ -42,7 +42,8 @@ setup(
     ext_modules = cythonize([
         Extension("cephfs",
             ["cephfs.pyx"],
-            libraries=["cephfs"]
+            libraries=["cephfs"],
+            language="c++"
             )
     ], build_dir=os.environ.get("CYTHON_BUILD_DIR", None), include_path=[
         os.path.join(os.path.dirname(__file__), "..", "rados")]
