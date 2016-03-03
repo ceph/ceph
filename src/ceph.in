@@ -98,7 +98,7 @@ elif os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
         # Developer mode, but in a cmake build dir instead of the src dir
         lib_path = os.path.join(os.getcwd(), "src")
         pybind_path = os.path.join(src_path, "src", "pybind")
-        pythonlib_path = os.path.join(src_path, "src", get_pythonlib_dir())
+        pythonlib_path = os.path.join(os.getcwd(), "../src/pybind", get_pythonlib_dir())
         respawn_in_path(lib_path, pybind_path, pythonlib_path)
 
         sys.path.insert(0, os.path.join(MYDIR, pybind_path))
