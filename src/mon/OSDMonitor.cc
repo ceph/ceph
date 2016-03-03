@@ -639,7 +639,7 @@ int OSDMonitor::reweight_by_utilization(int oload,
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
       new_weight = MIN(new_weight, weight + max_change);
       if (new_weight > 0x10000)
-          new_weight = 0x10000;
+	new_weight = 0x10000;
       if (new_weight > weight) {
 	newinc.new_weight[p->first] = new_weight;
 	if (!dry_run) {
