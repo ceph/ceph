@@ -36,7 +36,6 @@ int main(int argc, char* argv[]) {
 
   // simulation params
 
-  const int goal_secs_to_run = 30;
   const TestClient::TimePoint early_time = TestClient::now();
   const chrono::seconds skip_amount(2); // skip first 2 secondsd of data
   const chrono::seconds measure_unit(5); // calculate in groups of 5 seconds
@@ -44,6 +43,11 @@ int main(int argc, char* argv[]) {
 
   // server params
 
+  const uint server_count = 100;
+  const uint server_iops = 4;
+  const uint server_threads = 1;
+
+#if 0
   // name -> (server iops, server threads)
   const std::map<ServerId,std::pair<int,int>> server_info = {
     {'a', { 60, 1 }},
@@ -57,25 +61,33 @@ int main(int argc, char* argv[]) {
     {7, { 75, 7 }},
 #endif
   };
+#endif
 
   // client params
 
-  const int client_outstanding_ops = 200;
+  const uint client_total_ops = 60;
+  const uint client_count = 100;
+  const uint client_wait_count = 1;
+  const uint client_iops_goal = 2;
+  const uint client_outstanding_ops = 10;
+  const double client_reservation = 1.0;
+  const double client_limit = 3.0;
+  const double client_weight = 1.0;
 
+  dmc::ClientInfo client_info = {client_weight, client_reservation, client_limit};
+
+#if 0
   // id -> (client_info, goal iops)
   const std::map<ClientId,std::pair<dmc::ClientInfo,int>> client_info = {
     {1, {{ 1.0, 50.0, 200.0 }, 100 }},
     {2, {{ 3.0, 50.0, 200.0 }, 100 }},
   };
-
+#endif
 
   // construct servers
 
-  auto client_info_f =
-    [&client_info](const ClientId& c) -> dmc::ClientInfo {
-    auto it = client_info.find(c);
-    assert(client_info.end() != it);
-    return it->second.first;
+  auto client_info_f = [&client_info](const ClientId& c) -> dmc::ClientInfo {
+    return client_info;
   };
 
   ClientMap clients;
@@ -90,14 +102,12 @@ int main(int argc, char* argv[]) {
   std::vector<ServerId> server_ids;
 
   ServerMap servers;
-  for (auto const &i : server_info) {
-    const ServerId& id = i.first;
-    const int& iops = i.second.first;
-    const int& threads = i.second.second;
-
-    server_ids.push_back(id);
-    servers[id] =
-      new TestServer(id, iops, threads, client_info_f, client_response_f);
+  for (uint i = 0; i < server_count; ++i) {
+    server_ids.push_back(i);
+    servers[i] =
+      new TestServer(i,
+		     server_iops, server_threads,
+		     client_info_f, client_response_f);
   }
 
   // construct clients
@@ -135,15 +145,18 @@ int main(int argc, char* argv[]) {
     i->second->post(request, req_params);
   };
 
-  for (auto const &i : client_info) {
-    ClientId name = i.first;
-    int goal = i.second.second;
-    clients[name] = new TestClient(name,
-				   server_post_f,
-				   server_random_f,
-				   goal * goal_secs_to_run,
-				   goal,
-				   client_outstanding_ops);
+  for (uint i = 0; i < client_count; ++i) {
+    static std::vector<CliInst> no_wait =
+      { { req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
+    static std::vector<CliInst> wait =
+      { { wait_op, std::chrono::seconds(10) },
+	{ req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
+
+    clients[i] =
+      new TestClient(i,
+		     server_post_f,
+		     server_random_f,
+		     i < (client_count - client_wait_count) ? wait : no_wait);
   }
 
   // clients are now running; wait for all to finish

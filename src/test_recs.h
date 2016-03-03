@@ -14,7 +14,7 @@
 
 
 using ClientId = int;
-using ServerId = char;
+using ServerId = int;
 
 
 struct TestRequest {
