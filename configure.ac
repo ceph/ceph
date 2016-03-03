@@ -207,6 +207,13 @@ AC_ARG_ENABLE([server],
 AM_CONDITIONAL(ENABLE_SERVER, test "$enable_server" = "yes")
 #AS_IF([test "$enable_server" = "yes"], [AC_DEFINE([WITH_MON, WITH_OSD, WITH_MDS, ENABLE_SERVER])])
 
+# subscription manager?
+AC_ARG_ENABLE([subman],
+	[AS_HELP_STRING([--enable-subman], [enable subman])],
+	[],
+	[enable_subman=yes])
+AM_CONDITIONAL([ENABLE_SUBMAN], test "$enable_subman" = "yes")
+
 # cython is required to build python bindings for libraries
 if test x"$with_cython" = xyes; then
     AC_CHECK_PROG(CYTHON_CHECK, cython, yes)

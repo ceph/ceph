@@ -107,6 +107,7 @@ EXTRA_DIST += \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
 	$(srcdir)/tools/ceph-monstore-update-crush.sh \
+	$(srcdir)/script/subman.py \
 	$(srcdir)/upstart/ceph-all.conf \
 	$(srcdir)/upstart/ceph-disk.conf \
 	$(srcdir)/upstart/ceph-mon.conf \
@@ -149,6 +150,10 @@ doc_DATA = $(srcdir)/sample.ceph.conf sample.fetch_config
 ceph_libexecdir = $(libexecdir)/ceph
 ceph_libexec_SCRIPTS = ceph_common.sh ceph-osd-prestart.sh
 
+if ENABLE_SUBMAN
+submandir = /etc/cron.hourly
+subman_SCRIPTS = script/subman.py
+endif
 
 # tests to actually run on "make check"; if you need extra, non-test,
 # executables built, you need to replace this with manual assignments
