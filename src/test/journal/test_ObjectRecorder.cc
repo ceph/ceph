@@ -52,6 +52,8 @@ public:
       (*it)->flush(&cond);
       cond.wait();
     }
+    m_object_recorders.clear();
+
     RadosTestFixture::TearDown();
   }
 

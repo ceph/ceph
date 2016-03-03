@@ -20,7 +20,8 @@ public:
   virtual void SetUp() {
     RadosTestFixture::SetUp();
     m_journal_id = get_temp_journal_id();
-    m_journaler = new journal::Journaler(m_ioctx, m_journal_id, CLIENT_ID, 5);
+    m_journaler = new journal::Journaler(m_work_queue, m_timer, &m_timer_lock,
+                                         m_ioctx, m_journal_id, CLIENT_ID, 5);
   }
 
   virtual void TearDown() {
@@ -39,7 +40,8 @@ public:
   }
 
   int register_client(const std::string &client_id, const std::string &desc) {
-    journal::Journaler journaler(m_ioctx, m_journal_id, client_id, 5);
+    journal::Journaler journaler(m_work_queue, m_timer, &m_timer_lock,
+                                 m_ioctx, m_journal_id, client_id, 5);
     bufferlist data;
     data.append(desc);
     C_SaferCond cond;
@@ -48,7 +50,8 @@ public:
   }
 
   int update_client(const std::string &client_id, const std::string &desc) {
-    journal::Journaler journaler(m_ioctx, m_journal_id, client_id, 5);
+    journal::Journaler journaler(m_work_queue, m_timer, &m_timer_lock,
+                                 m_ioctx, m_journal_id, client_id, 5);
     bufferlist data;
     data.append(desc);
     C_SaferCond cond;
@@ -57,7 +60,8 @@ public:
   }
 
   int unregister_client(const std::string &client_id) {
-    journal::Journaler journaler(m_ioctx, m_journal_id, client_id, 5);
+    journal::Journaler journaler(m_work_queue, m_timer, &m_timer_lock,
+                                 m_ioctx, m_journal_id, client_id, 5);
     C_SaferCond cond;
     journaler.unregister_client(&cond);
     return cond.wait();

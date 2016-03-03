@@ -14,6 +14,8 @@ public:
          it != m_metadata_list.end(); ++it) {
       (*it)->remove_listener(&m_listener);
     }
+    m_metadata_list.clear();
+
     RadosTestFixture::TearDown();
   }
 

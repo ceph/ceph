@@ -16,6 +16,8 @@ public:
          it != m_metadata_list.end(); ++it) {
       (*it)->remove_listener(&m_listener);
     }
+    m_metadata_list.clear();
+
     for (std::list<journal::JournalTrimmer*>::iterator it = m_trimmers.begin();
          it != m_trimmers.end(); ++it) {
       delete *it;
