@@ -371,6 +371,14 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
       }
     }
   }
+
+  /* Dump container versioning info. */
+  if (!s->bucket_info.swift_ver_location.empty()) {
+    string encoded_loc;
+    url_encode(s->bucket_info.swift_ver_location, encoded_loc);
+    STREAM_IO(s)->print("X-Versions-Location: %s\r\n", encoded_loc.c_str());
+  }
+
 }
 
 void RGWStatAccount_ObjStore_SWIFT::execute()
