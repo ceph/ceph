@@ -287,6 +287,17 @@ void* AdminSocket::entry()
   ldout(m_cct, 5) << "entry exit" << dendl;
 }
 
+void AdminSocket::chown(uid_t uid, gid_t gid)
+{
+  if (m_sock_fd >= 0) {
+    int r = ::fchown(m_sock_fd, uid, gid);
+    if (r < 0) {
+      r = -errno;
+      lderr(m_cct) << "AdminSocket: failed to chown socket: "
+		   << cpp_strerror(r) << dendl;
+    }
+  }
+}
 
 bool AdminSocket::do_accept()
 {

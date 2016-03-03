@@ -37,6 +37,9 @@ enum common_init_flags_t {
 
   // don't do anything daemonish, like create /var/run/ceph, or print a banner
   CINIT_FLAG_NO_DAEMON_ACTIONS = 0x8,
+
+  // don't drop privileges
+  CINIT_FLAG_DEFER_DROP_PRIVILEGES = 0x16,
 };
 
 /*
