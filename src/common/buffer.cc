@@ -250,6 +250,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       : raw(dataptr, l),
 	alignment(align) {
       inc_total_alloc(len);
+      inc_history_alloc(len);
     }
     ~raw_combined() {
       dec_total_alloc(len);
