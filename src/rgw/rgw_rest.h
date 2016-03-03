@@ -371,7 +371,7 @@ protected:
   virtual RGWOp *op_options() { return NULL; }
 
   virtual int validate_tenant_name(const string& bucket);
-  virtual int validate_bucket_name(const string& bucket);
+  virtual int validate_bucket_name(const string& bucket, bool relaxed=false);
   virtual int validate_object_name(const string& object);
 
   static int allocate_formatter(struct req_state *s, int default_formatter,

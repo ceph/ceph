@@ -194,7 +194,7 @@ public:
   RGWHandler_REST_SWIFT() {}
   virtual ~RGWHandler_REST_SWIFT() {}
 
-  int validate_bucket_name(const string& bucket);
+  int validate_bucket_name(const string& bucket, bool relaxed=false);
 
   int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
   int authorize();

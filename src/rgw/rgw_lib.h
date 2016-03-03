@@ -154,6 +154,8 @@ namespace rgw {
 
     virtual int read_permissions(RGWOp *op);
 
+  private:
+    int init(RGWRados*, struct req_state*, RGWClientIO*) /* = delete */;
   }; /* RGWLibRequest */
 
   class RGWLibContinuedReq : public RGWLibRequest {
