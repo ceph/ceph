@@ -2984,8 +2984,12 @@ int RGWCopyObj::verify_permission()
     /* will only happen in intra region sync where the source and dest bucket is the same */
     op_ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, src_bucket_info, NULL, &src_attrs);
   }
-  if (op_ret < 0)
+  if (op_ret < 0) {
+    if (op_ret == -ENOENT) {
+      op_ret = -ERR_NO_SUCH_BUCKET;
+    }
     return op_ret;
+  }
 
   src_bucket = src_bucket_info.bucket;
 
@@ -3017,8 +3021,12 @@ int RGWCopyObj::verify_permission()
   } else {
     op_ret = store->get_bucket_info(obj_ctx, dest_tenant_name, dest_bucket_name,
 				    dest_bucket_info, NULL, &dest_attrs);
-    if (op_ret < 0)
+    if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        op_ret = -ERR_NO_SUCH_BUCKET;
+      }
       return op_ret;
+    }
   }
 
   dest_bucket = dest_bucket_info.bucket;
