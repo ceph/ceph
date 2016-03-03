@@ -23,6 +23,7 @@
 #include "include/types.h"
 #include "include/timegm.h"
 #include "common/strtol.h"
+#include "common/ceph_time.h"
 
 
 // --------
@@ -61,6 +62,10 @@ public:
     tv.tv_sec = v.tv_sec;
     tv.tv_nsec = v.tv_nsec;
   }
+  explicit utime_t(const ceph::real_time& rt) {
+    ceph_timespec ts = real_clock::to_ceph_timespec(rt);
+    decode_timeval(&ts);
+  }
   utime_t(const struct timeval &v) {
     set_from_timeval(&v);
   }
@@ -74,6 +79,12 @@ public:
   void set_from_double(double d) { 
     tv.tv_sec = (__u32)trunc(d);
     tv.tv_nsec = (__u32)((d - (double)tv.tv_sec) * (double)1000000000.0);
+  }
+
+  real_time to_real_time() const {
+    ceph_timespec ts;
+    encode_timeval(&ts);
+    return ceph::real_clock::from_ceph_timespec(ts);
   }
 
   // accessors
