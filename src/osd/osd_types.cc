@@ -1239,6 +1239,59 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
+  if ((features & CEPH_FEATURE_OSD_HITSET_GMT) == 0) {
+    // CEPH_FEATURE_OSD_HITSET_GMT requires pg_pool_t v21 which has
+    // use_gmt_hitset, and two fields added before v21. it's backward
+    // compatible, but re-encoding the same osdmap with different ceph
+    // versions causes CRC mismatch at the OSD side, the tracker#12410
+    // prevents the monitor from sending the single full map requested
+    // by OSD. so we need a way to encode pg_pool_t the same old way.
+    ENCODE_START(17, 5, bl);
+    ::encode(type, bl);
+    ::encode(size, bl);
+    ::encode(crush_ruleset, bl);
+    ::encode(object_hash, bl);
+    ::encode(pg_num, bl);
+    ::encode(pgp_num, bl);
+    __u32 lpg_num = 0, lpgp_num = 0;  // tell old code that there are no localized pgs.
+    ::encode(lpg_num, bl);
+    ::encode(lpgp_num, bl);
+    ::encode(last_change, bl);
+    ::encode(snap_seq, bl);
+    ::encode(snap_epoch, bl);
+    ::encode(snaps, bl, features);
+    ::encode(removed_snaps, bl);
+    ::encode(auid, bl);
+    ::encode(flags, bl);
+    ::encode(crash_replay_interval, bl);
+    ::encode(min_size, bl);
+    ::encode(quota_max_bytes, bl);
+    ::encode(quota_max_objects, bl);
+    ::encode(tiers, bl);
+    ::encode(tier_of, bl);
+    __u8 c = cache_mode;
+    ::encode(c, bl);
+    ::encode(read_tier, bl);
+    ::encode(write_tier, bl);
+    ::encode(properties, bl);
+    ::encode(hit_set_params, bl);
+    ::encode(hit_set_period, bl);
+    ::encode(hit_set_count, bl);
+    ::encode(stripe_width, bl);
+    ::encode(target_max_bytes, bl);
+    ::encode(target_max_objects, bl);
+    ::encode(cache_target_dirty_ratio_micro, bl);
+    ::encode(cache_target_full_ratio_micro, bl);
+    ::encode(cache_min_flush_age, bl);
+    ::encode(cache_min_evict_age, bl);
+    ::encode(erasure_code_profile, bl);
+    ::encode(last_force_op_resend, bl);
+    ::encode(min_read_recency_for_promote, bl);
+    ::encode(expected_num_objects, bl);
+    ENCODE_FINISH(bl);
+    return;
+  }
+
   ENCODE_START(21, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
