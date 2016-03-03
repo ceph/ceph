@@ -17,12 +17,9 @@ using namespace std::placeholders;
 namespace dmc = crimson::dmclock;
 
 
-static const bool info = false;
-
-
 TestServer::TestServer(ServerId _id,
 		       int _iops,
-		       int _thread_pool_size,
+		       size_t _thread_pool_size,
 		       const ClientInfoFunc& _client_info_f,
 		       const ClientRespFunc& _client_resp_f) :
   id(_id),
@@ -39,7 +36,7 @@ TestServer::TestServer(ServerId _id,
 				     thread_pool_size * 1000000.0 / iops));
   std::chrono::milliseconds delay(1000);
   threads = new std::thread[thread_pool_size];
-  for (int i = 0; i < thread_pool_size; ++i) {
+  for (size_t i = 0; i < thread_pool_size; ++i) {
     threads[i] = std::thread(&TestServer::run, this, delay);
   }
 }
@@ -51,7 +48,7 @@ TestServer::~TestServer() {
   inner_queue_cv.notify_all();
   l.unlock();
 
-  for (int i = 0; i < thread_pool_size; ++i) {
+  for (size_t i = 0; i < thread_pool_size; ++i) {
     threads[i].join();
   }
 
@@ -74,10 +71,10 @@ void TestServer::run(std::chrono::milliseconds check_period) {
 
       l.unlock();
 
-      if (info > 3) {
-	std::cout << "start req " << client << std::endl;
-      }
-
+#if INFO > 3
+      std::cout << "start req " << client << std::endl;
+#endif
+      
       // simulation operation by sleeping; then call function to
       // notify server of completion
       std::this_thread::sleep_for(op_time);
@@ -87,9 +84,9 @@ void TestServer::run(std::chrono::milliseconds check_period) {
 
       priority_queue.request_completed();
 
-      if (info > 3) {
+#if INFO > 3
 	std::cout << "end req " << client << std::endl;
-      }
+#endif
 
       l.lock(); // in prep for next iteration of loop
     } else {

@@ -201,7 +201,7 @@ int main(int argc, char* argv[]) {
 
   {
     bool has_data;
-    int i = 0;
+    size_t i = 0;
     do {
       std::string line_header = "t_" + std::to_string(i) + ":";
       std::cout << std::setw(head_w) << line_header;

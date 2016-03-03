@@ -160,8 +160,8 @@ namespace crimson {
 	Counter            last_tick;
 
 	ClientRec(const ClientInfo& _info, Counter current_tick) :
-	  info(_info),
 	  prev_tag(0.0, 0.0, 0.0),
+	  info(_info),
 	  idle(true),
 	  last_tick(current_tick)
 	{

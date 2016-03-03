@@ -53,7 +53,7 @@ protected:
   crimson::dmclock::PriorityQueue<ClientId,TestRequest> priority_queue;
   ClientRespFunc                 client_resp_f;
   int                            iops;
-  int                            thread_pool_size;
+  size_t                         thread_pool_size;
 
   bool                           finishing;
   std::chrono::microseconds      op_time;
@@ -76,7 +76,7 @@ public:
 
   TestServer(ServerId _id,
 	     int _iops,
-	     int _thread_pool_size,
+	     size_t _thread_pool_size,
 	     const ClientInfoFunc& _client_info_f,
 	     const ClientRespFunc& _client_resp_f);
 
