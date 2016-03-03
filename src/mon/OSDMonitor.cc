@@ -475,6 +475,7 @@ struct Sorter {
  */
 int OSDMonitor::reweight_by_utilization(int oload,
 					double max_changef,
+					int max_osds,
 					bool by_pg, const set<int64_t> *pools,
 					bool no_increasing,
 					bool dry_run,
@@ -562,11 +563,13 @@ int OSDMonitor::reweight_by_utilization(int oload,
     f->open_object_section("reweight_by_utilization");
     f->dump_unsigned("overload_min", oload);
     f->dump_float("max_change", max_changef);
+    f->dump_float("max_change_osds", max_osds);
     f->dump_float("average_utilization", average_util);
     f->dump_float("overload_utilization", overload_util);
   } else {
     oss << "oload " << oload << "\n";
     oss << "max_change " << max_changef << "\n";
+    oss << "max_change_osds " << max_osds << "\n";
     char buf[128];
     snprintf(buf, sizeof(buf), "average %04f\noverload %04f\n",
 	     average_util, overload_util);
@@ -630,7 +633,7 @@ int OSDMonitor::reweight_by_utilization(int oload,
 		 (float)new_weight / (float)0x10000);
 	oss << buf;
       }
-      if (++num_changed >= g_conf->mon_reweight_max_osds)
+      if (++num_changed >= max_osds)
 	break;
     }
     if (!no_increasing && util <= underload_util) {
@@ -651,7 +654,7 @@ int OSDMonitor::reweight_by_utilization(int oload,
 		 (float)weight / (float)0x10000,
 		 (float)new_weight / (float)0x10000);
 	oss << buf;
-	if (++num_changed >= g_conf->mon_reweight_max_osds)
+	if (++num_changed >= max_osds)
 	  break;
       }
     }
@@ -6673,11 +6676,14 @@ done:
       err = -EINVAL;
       goto reply;
     }
+    int64_t max_osds = g_conf->mon_reweight_max_osds;
+    cmd_getval(g_ceph_context, cmdmap, "max_osds", max_osds);
     string no_increasing;
     cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
     string out_str;
     err = reweight_by_utilization(oload,
 				  max_change,
+				  max_osds,
 				  by_pg,
 				  pools.empty() ? NULL : &pools,
 				  no_increasing == "--no-increasing",
