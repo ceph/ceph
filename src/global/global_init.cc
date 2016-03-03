@@ -256,6 +256,9 @@ void global_init(std::vector < const char * > *alt_def_args,
     }
   }
 
+  // Now we're ready to complain about config file parse errors
+  g_conf->complain_about_parse_errors(g_ceph_context);
+
   // test leak checking
   if (g_conf->debug_deliberately_leak_memory) {
     derr << "deliberately leaking some memory" << dendl;
