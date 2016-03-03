@@ -323,6 +323,7 @@ set(libcommon_files
   osdc/Striper.cc
   osdc/Objecter.cc
   common/Graylog.cc
+  common/fs_types.cc
   ${arch_files}
   ${auth_files}
   ${mds_files})
