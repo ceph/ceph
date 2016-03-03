@@ -735,6 +735,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                                        RGWAccessControlPolicy * const bucket_policy,
                                        uint64_t * const ptotal_len,
                                        uint64_t * const pobj_size,
+                                       string * const pobj_sum,
                                        int (*cb)(rgw_bucket& bucket,
                                                  const RGWObjEnt& ent,
                                                  RGWAccessControlPolicy * const bucket_policy,
@@ -757,16 +758,15 @@ static int iterate_user_manifest_parts(CephContext * const cct,
   list_op.params.prefix = obj_prefix;
   list_op.params.delim = delim;
 
+  MD5 etag_sum;
   do {
 #define MAX_LIST_OBJS 100
     int r = list_op.list_objects(MAX_LIST_OBJS, &objs, NULL, &is_truncated);
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
 
-    vector<RGWObjEnt>::iterator viter;
-
-    for (viter = objs.begin(); viter != objs.end(); ++viter) {
-      RGWObjEnt& ent = *viter;
+    for (RGWObjEnt& ent : objs) {
       uint64_t cur_total_len = obj_ofs;
       uint64_t start_ofs = 0, end_ofs = ent.size;
 
@@ -776,6 +776,10 @@ static int iterate_user_manifest_parts(CephContext * const cct,
       }
 
       obj_ofs += ent.size;
+      if (pobj_sum) {
+        etag_sum.Update((const byte *)ent.etag.c_str(),
+                        ent.etag.length());
+      }
 
       if (!found_end && obj_ofs > (uint64_t)end) {
 	end_ofs = end - cur_total_len + 1;
@@ -806,6 +810,9 @@ static int iterate_user_manifest_parts(CephContext * const cct,
   }
   if (pobj_size) {
     *pobj_size = obj_ofs;
+  }
+  if (pobj_sum) {
+    complete_etag(etag_sum, pobj_sum);
   }
 
   return 0;
@@ -947,10 +954,14 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
     bucket_policy = s->bucket_acl;
   }
 
-  /* dry run to find out total length */
+  /* dry run to find out:
+   * - total length (of the parts we are going to send to client),
+   * - overall DLO's content size,
+   * - md5 sum of overall DLO's content (for etag of Swift API). */
   int r = iterate_user_manifest_parts(s->cct, store, ofs, end,
-        bucket, obj_prefix, bucket_policy, &total_len, &s->obj_size,
-        NULL, NULL);
+        bucket, obj_prefix, bucket_policy,
+        &total_len, &s->obj_size, &lo_etag,
+        nullptr /* cb */, nullptr /* cb arg */);
   if (r < 0) {
     return r;
   }
@@ -962,7 +973,8 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   }
 
   r = iterate_user_manifest_parts(s->cct, store, ofs, end,
-        bucket, obj_prefix, bucket_policy, NULL, NULL,
+        bucket, obj_prefix, bucket_policy,
+        nullptr, nullptr, nullptr,
         get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0) {
     return r;
@@ -989,13 +1001,15 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 
   map<uint64_t, rgw_slo_part> slo_parts;
 
+  MD5 etag_sum;
   total_len = 0;
 
-  for (vector<rgw_slo_entry>::iterator iter = slo_info.entries.begin(); iter != slo_info.entries.end(); ++iter) {
-    string& path = iter->path;
-    int pos = path.find('/', 1); /* skip first / */
-    if (pos < 0)
+  for (const auto& entry : slo_info.entries) {
+    const string& path = entry.path;
+    const size_t pos = path.find('/', 1); /* skip first / */
+    if (pos == string::npos) {
       return -EINVAL;
+    }
 
     string bucket_name = path.substr(1, pos - 1);
     string obj_name = path.substr(pos + 1);
@@ -1004,7 +1018,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
     RGWAccessControlPolicy *bucket_policy;
 
     if (bucket_name.compare(s->bucket.name) != 0) {
-      map<string, RGWAccessControlPolicy *>::iterator piter = policies.find(bucket_name);
+      const auto& piter = policies.find(bucket_name);
       if (piter != policies.end()) {
         bucket_policy = piter->second;
         bucket = buckets[bucket_name];
@@ -1016,7 +1030,8 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
         map<string, bufferlist> bucket_attrs;
         RGWObjectCtx obj_ctx(store);
         int r = store->get_bucket_info(obj_ctx, s->user->user_id.tenant,
-              bucket_name, bucket_info, NULL, &bucket_attrs);
+                                       bucket_name, bucket_info, nullptr,
+                                       &bucket_attrs);
         if (r < 0) {
           ldout(s->cct, 0) << "could not get bucket info for bucket="
 			   << bucket_name << dendl;
@@ -1025,9 +1040,11 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
         bucket = bucket_info.bucket;
         rgw_obj_key no_obj;
         bucket_policy = &_bucket_policy;
-        r = read_policy(store, s, bucket_info, bucket_attrs, bucket_policy, bucket, no_obj);
+        r = read_policy(store, s, bucket_info, bucket_attrs, bucket_policy,
+                        bucket, no_obj);
         if (r < 0) {
-          ldout(s->cct, 0) << "failed to read bucket policy for bucket " << bucket << dendl;
+          ldout(s->cct, 0) << "failed to read bucket policy for bucket "
+                           << bucket << dendl;
           return r;
         }
         buckets[bucket_name] = bucket;
@@ -1042,8 +1059,8 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
     part.bucket_policy = bucket_policy;
     part.bucket = bucket;
     part.obj_name = obj_name;
-    part.size = iter->size_bytes;
-    part.etag = iter->etag;
+    part.size = entry.size_bytes;
+    part.etag = entry.etag;
     ldout(s->cct, 20) << "slo_part: ofs=" << ofs
                       << " bucket=" << part.bucket
                       << " obj=" << part.obj_name
@@ -1051,9 +1068,14 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
                       << " etag=" << part.etag
                       << dendl;
 
+    etag_sum.Update((const byte *)entry.etag.c_str(),
+                    entry.etag.length());
+
     slo_parts[total_len] = part;
     total_len += part.size;
   }
+
+  complete_etag(etag_sum, &lo_etag);
 
   s->obj_size = slo_info.total_size;
   ldout(s->cct, 20) << "s->obj_size=" << s->obj_size << dendl;

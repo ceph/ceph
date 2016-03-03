@@ -88,6 +88,7 @@ public:
 };
 
 class RGWPutObj_ObjStore_SWIFT : public RGWPutObj_ObjStore {
+  string lo_etag;
 public:
   RGWPutObj_ObjStore_SWIFT() {}
   ~RGWPutObj_ObjStore_SWIFT() {}
