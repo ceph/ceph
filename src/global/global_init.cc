@@ -79,8 +79,8 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
   if (alt_def_args)
     conf->parse_argv(*alt_def_args);  // alternative default args
 
-  std::deque<std::string> parse_errors;
-  int ret = conf->parse_config_files(c_str_or_null(conf_file_list), &parse_errors, &cerr, flags);
+  int ret = conf->parse_config_files(c_str_or_null(conf_file_list),
+				     &cerr, flags);
   if (ret == -EDOM) {
     dout_emergency("global_init: error parsing config file.\n");
     _exit(1);
@@ -108,7 +108,7 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
   conf->parse_argv(args); // argv override
 
   // Now we're ready to complain about config file parse errors
-  complain_about_parse_errors(cct, &parse_errors);
+  g_conf->complain_about_parse_errors(g_ceph_context);
 }
 
 void global_init(std::vector < const char * > *alt_def_args,

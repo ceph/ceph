@@ -2456,8 +2456,7 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path_list)
   tracepoint(librados, rados_conf_read_file_enter, cluster, path_list);
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   md_config_t *conf = client->cct->_conf;
-  std::deque<std::string> parse_errors;
-  int ret = conf->parse_config_files(path_list, &parse_errors, NULL, 0);
+  int ret = conf->parse_config_files(path_list, NULL, 0);
   if (ret) {
     tracepoint(librados, rados_conf_read_file_exit, ret);
     return ret;
@@ -2465,7 +2464,7 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path_list)
   conf->parse_env(); // environment variables override
 
   conf->apply_changes(NULL);
-  complain_about_parse_errors(client->cct, &parse_errors);
+  client->cct->_conf->complain_about_parse_errors(client->cct);
   tracepoint(librados, rados_conf_read_file_exit, 0);
   return 0;
 }

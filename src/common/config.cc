@@ -199,7 +199,6 @@ void md_config_t::remove_observer(md_config_obs_t* observer_)
 }
 
 int md_config_t::parse_config_files(const char *conf_files,
-				    std::deque<std::string> *parse_errors,
 				    std::ostream *warnings,
 				    int flags)
 {
@@ -219,11 +218,10 @@ int md_config_t::parse_config_files(const char *conf_files,
   }
   std::list<std::string> cfl;
   get_str_list(conf_files, cfl);
-  return parse_config_files_impl(cfl, parse_errors, warnings);
+  return parse_config_files_impl(cfl, warnings);
 }
 
 int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_files,
-					 std::deque<std::string> *parse_errors,
 					 std::ostream *warnings)
 {
   assert(lock.is_locked());
@@ -234,7 +232,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     cf.clear();
     string fn = *c;
     expand_meta(fn, warnings);
-    int ret = cf.parse_file(fn.c_str(), parse_errors, warnings);
+    int ret = cf.parse_file(fn.c_str(), &parse_errors, warnings);
     if (ret == 0)
       break;
     else if (ret != -ENOENT)
@@ -285,15 +283,14 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
   }
   if (!old_style_section_names.empty()) {
     ostringstream oss;
-    oss << "ERROR! old-style section name(s) found: ";
+    cerr << "ERROR! old-style section name(s) found: ";
     string sep;
     for (std::deque < std::string >::const_iterator os = old_style_section_names.begin();
 	 os != old_style_section_names.end(); ++os) {
-      oss << sep << *os;
+      cerr << sep << *os;
       sep = ", ";
     }
-    oss << ". Please use the new style section names that include a period.";
-    parse_errors->push_back(oss.str());
+    cerr << ". Please use the new style section names that include a period.";
   }
   return 0;
 }
@@ -1172,4 +1169,9 @@ void md_config_t::diff(
     if (strcmp(local_val, other_val))
       diff->insert(make_pair(opt->name, make_pair(local_val, other_val)));
   }
+}
+
+void md_config_t::complain_about_parse_errors(CephContext *cct)
+{
+  ::complain_about_parse_errors(cct, &parse_errors);
 }
