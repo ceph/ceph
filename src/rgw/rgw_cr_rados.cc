@@ -477,7 +477,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        attrs,
                        RGW_OBJ_CATEGORY_MAIN,
                        versioned_epoch,
-                       0, /* delete_at */
+                       real_time(), /* delete_at */
                        &key.instance, /* string *version_id, */
                        NULL, /* string *ptag, */
                        NULL, /* string *petag, */
@@ -624,7 +624,7 @@ int RGWAsyncStatObj::_send_request()
 
 RGWStatObjCR::RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
                            const rgw_obj& obj, uint64_t *psize,
-                           time_t *pmtime, uint64_t *pepoch,
+			   ceph::real_time *pmtime, uint64_t *pepoch,
                            RGWObjVersionTracker *objv_tracker)
   : RGWSimpleCoroutine(store->ctx()), store(store), async_rados(async_rados),
     obj(obj), psize(psize), pmtime(pmtime), pepoch(pepoch),

@@ -12,6 +12,7 @@
 #include "cls/version/cls_version_types.h"
 #include "cls/log/cls_log_types.h"
 #include "common/RWLock.h"
+#include "common/ceph_time.h"
 
 
 class RGWRados;
@@ -33,13 +34,13 @@ enum RGWMDLogStatus {
 class RGWMetadataObject {
 protected:
   obj_version objv;
-  time_t mtime;
+  ceph::real_time mtime;
   
 public:
-  RGWMetadataObject() : mtime(0) {}
+  RGWMetadataObject() {}
   virtual ~RGWMetadataObject() {}
   obj_version& get_version();
-  time_t get_mtime() { return mtime; }
+  real_time get_mtime() { return mtime; }
 
   virtual void dump(Formatter *f) const = 0;
 };
@@ -72,7 +73,7 @@ public:
 
   virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) = 0;
   virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-                  time_t mtime, JSONObj *obj, sync_type_t type) = 0;
+                  real_time mtime, JSONObj *obj, sync_type_t type) = 0;
   virtual int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
 
   virtual int list_keys_init(RGWRados *store, void **phandle) = 0;
@@ -92,8 +93,8 @@ protected:
    *
    * @return true if the update should proceed, false otherwise.
    */
-  bool check_versions(const obj_version& ondisk, const time_t& ondisk_time,
-                      const obj_version& incoming, const time_t& incoming_time,
+  bool check_versions(const obj_version& ondisk, const real_time& ondisk_time,
+                      const obj_version& incoming, const real_time& incoming_time,
                       sync_type_t sync_mode) {
     switch (sync_mode) {
     case APPLY_UPDATES:
@@ -131,7 +132,7 @@ protected:
 
 struct RGWMetadataLogInfo {
   string marker;
-  utime_t last_update;
+  real_time last_update;
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -172,8 +173,8 @@ public:
   struct LogListCtx {
     int cur_shard;
     string marker;
-    utime_t from_time;
-    utime_t end_time;
+    real_time from_time;
+    real_time end_time;
 
     string cur_oid;
 
@@ -182,7 +183,7 @@ public:
     LogListCtx() : cur_shard(0), done(false) {}
   };
 
-  void init_list_entries(int shard_id, utime_t& from_time, utime_t& end_time, string& marker, void **handle);
+  void init_list_entries(int shard_id, const real_time& from_time, const real_time& end_time, string& marker, void **handle);
   void complete_list_entries(void *handle);
   int list_entries(void *handle,
                    int max_entries,
@@ -190,10 +191,10 @@ public:
 		   string *out_marker,
 		   bool *truncated);
 
-  int trim(int shard_id, const utime_t& from_time, const utime_t& end_time, const string& start_marker, const string& end_marker);
+  int trim(int shard_id, const real_time& from_time, const real_time& end_time, const string& start_marker, const string& end_marker);
   int get_info(int shard_id, RGWMetadataLogInfo *info);
   int get_info_async(int shard_id, RGWMetadataLogInfo *info, RGWCompletionManager *completion_manager, void *user_info, int *pret);
-  int lock_exclusive(int shard_id, utime_t& duration, string&zone_id, string& owner_id);
+  int lock_exclusive(int shard_id, timespan duration, string&zone_id, string& owner_id);
   int unlock(int shard_id, string& zone_id, string& owner_id);
 
   int update_shards(list<int>& shards);
@@ -245,7 +246,7 @@ class RGWMetadataManager {
 
   string heap_oid(RGWMetadataHandler *handler, const string& key, const obj_version& objv);
   int store_in_heap(RGWMetadataHandler *handler, const string& key, bufferlist& bl,
-                    RGWObjVersionTracker *objv_tracker, time_t mtime,
+                    RGWObjVersionTracker *objv_tracker, real_time mtime,
                     map<string, bufferlist> *pattrs);
   int remove_from_heap(RGWMetadataHandler *handler, const string& key, RGWObjVersionTracker *objv_tracker);
 public:
@@ -266,7 +267,7 @@ public:
   RGWMetadataHandler *get_handler(const string& type);
 
   int put_entry(RGWMetadataHandler *handler, const string& key, bufferlist& bl, bool exclusive,
-                RGWObjVersionTracker *objv_tracker, time_t mtime, map<string, bufferlist> *pattrs = NULL);
+                RGWObjVersionTracker *objv_tracker, real_time mtime, map<string, bufferlist> *pattrs = NULL);
   int remove_entry(RGWMetadataHandler *handler, string& key, RGWObjVersionTracker *objv_tracker);
   int get(string& metadata_key, Formatter *f);
   int put(string& metadata_key, bufferlist& bl,
@@ -281,7 +282,7 @@ public:
   void dump_log_entry(cls_log_entry& entry, Formatter *f);
 
   void get_sections(list<string>& sections);
-  int lock_exclusive(string& metadata_key, utime_t duration, string& owner_id);
+  int lock_exclusive(string& metadata_key, timespan duration, string& owner_id);
   int unlock(string& metadata_key, string& owner_id);
 
   int get_log_shard_id(const string& section, const string& key, int *shard_id);

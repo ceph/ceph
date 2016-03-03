@@ -17,6 +17,7 @@
 
 #include "common/Formatter.h"
 #include "common/lru_map.h"
+#include "common/ceph_time.h"
 #include "rgw_formats.h"
 
 
@@ -27,10 +28,10 @@ extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id)
 
 extern int rgw_bucket_store_info(RGWRados *store, const string& bucket_name, bufferlist& bl, bool exclusive,
                                  map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
-                                 time_t mtime);
+                                 real_time mtime);
 extern int rgw_bucket_instance_store_info(RGWRados *store, string& oid, bufferlist& bl, bool exclusive,
                                  map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
-                                 time_t mtime);
+                                 real_time mtime);
 
 extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *target_bucket_instance, int *shard_id);
 
@@ -64,7 +65,7 @@ struct RGWBucketCompleteInfo {
 class RGWBucketEntryMetadataObject : public RGWMetadataObject {
   RGWBucketEntryPoint ep;
 public:
-  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, obj_version& v, time_t m) : ep(_ep) {
+  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, obj_version& v, real_time m) : ep(_ep) {
     objv = v;
     mtime = m;
   }
@@ -78,7 +79,7 @@ class RGWBucketInstanceMetadataObject : public RGWMetadataObject {
   RGWBucketCompleteInfo info;
 public:
   RGWBucketInstanceMetadataObject() {}
-  RGWBucketInstanceMetadataObject(RGWBucketCompleteInfo& i, obj_version& v, time_t m) : info(i) {
+  RGWBucketInstanceMetadataObject(RGWBucketCompleteInfo& i, obj_version& v, real_time m) : info(i) {
     objv = v;
     mtime = m;
   }
@@ -167,7 +168,7 @@ extern int rgw_read_user_buckets(RGWRados *store,
 				 bool* is_truncated,
                                  uint64_t default_amount = 1000);
 
-extern int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint = true);
+extern int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket, real_time creation_time, bool update_entrypoint = true);
 extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
                              const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
 
@@ -315,7 +316,7 @@ enum DataLogEntityType {
 struct rgw_data_change {
   DataLogEntityType entity_type;
   string key;
-  utime_t timestamp;
+  real_time timestamp;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -343,7 +344,7 @@ WRITE_CLASS_ENCODER(rgw_data_change)
 
 struct rgw_data_change_log_entry {
   string log_id;
-  utime_t log_timestamp;
+  real_time log_timestamp;
   rgw_data_change entry;
 
   void encode(bufferlist& bl) const {
@@ -369,7 +370,7 @@ WRITE_CLASS_ENCODER(rgw_data_change_log_entry)
 
 struct RGWDataChangesLogInfo {
   string marker;
-  utime_t last_update;
+  real_time last_update;
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -389,8 +390,8 @@ class RGWDataChangesLog {
   atomic_t down_flag;
 
   struct ChangeStatus {
-    utime_t cur_expiration;
-    utime_t cur_sent;
+    real_time cur_expiration;
+    real_time cur_sent;
     bool pending;
     RefCountedCond *cond;
     Mutex *lock;
@@ -412,7 +413,7 @@ class RGWDataChangesLog {
 
   void _get_change(const rgw_bucket_shard& bs, ChangeStatusPtr& status);
   void register_renew(rgw_bucket_shard& bs);
-  void update_renewed(rgw_bucket_shard& bs, utime_t& expiration);
+  void update_renewed(rgw_bucket_shard& bs, real_time& expiration);
 
   class ChangesRenewThread : public Thread {
     CephContext *cct;
@@ -459,17 +460,17 @@ public:
   int add_entry(rgw_bucket& bucket, int shard_id);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int renew_entries();
-  int list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
+  int list_entries(int shard, const real_time& start_time, const real_time& end_time, int max_entries,
 		   list<rgw_data_change_log_entry>& entries,
 		   const string& marker,
 		   string *out_marker,
 		   bool *truncated);
-  int trim_entries(int shard_id, const utime_t& start_time, const utime_t& end_time,
+  int trim_entries(int shard_id, const real_time& start_time, const real_time& end_time,
                    const string& start_marker, const string& end_marker);
-  int trim_entries(const utime_t& start_time, const utime_t& end_time,
+  int trim_entries(const real_time& start_time, const real_time& end_time,
                    const string& start_marker, const string& end_marker);
   int get_info(int shard_id, RGWDataChangesLogInfo *info);
-  int lock_exclusive(int shard_id, utime_t& duration, string& zone_id, string& owner_id) {
+  int lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id) {
     return store->lock_exclusive(store->get_zone_params().log_pool, oids[shard_id], duration, zone_id, owner_id);
   }
   int unlock(int shard_id, string& zone_id, string& owner_id) {
@@ -481,7 +482,7 @@ public:
 
     LogMarker() : shard(0) {}
   };
-  int list_entries(utime_t& start_time, utime_t& end_time, int max_entries,
+  int list_entries(const real_time& start_time, const real_time& end_time, int max_entries,
                list<rgw_data_change_log_entry>& entries, LogMarker& marker, bool *ptruncated);
 
   void mark_modified(int shard_id, rgw_bucket_shard& bs);

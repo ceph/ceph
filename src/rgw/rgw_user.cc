@@ -95,7 +95,7 @@ int rgw_store_user_info(RGWRados *store,
                         RGWUserInfo& info,
                         RGWUserInfo *old_info,
                         RGWObjVersionTracker *objv_tracker,
-                        time_t mtime,
+                        real_time mtime,
                         bool exclusive,
                         map<string, bufferlist> *pattrs)
 {
@@ -169,7 +169,7 @@ int rgw_store_user_info(RGWRados *store,
     if (!old_info ||
         old_info->user_email.compare(info.user_email) != 0) { /* only if new index changed */
       ret = rgw_put_system_obj(store, store->get_zone_params().user_email_pool, info.user_email,
-                               link_bl.c_str(), link_bl.length(), exclusive, NULL, 0);
+                               link_bl.c_str(), link_bl.length(), exclusive, NULL, real_time());
       if (ret < 0)
         return ret;
     }
@@ -184,7 +184,7 @@ int rgw_store_user_info(RGWRados *store,
 
       ret = rgw_put_system_obj(store, store->get_zone_params().user_keys_pool, k.id,
                                link_bl.c_str(), link_bl.length(), exclusive,
-                               NULL, 0);
+                               NULL, real_time());
       if (ret < 0)
         return ret;
     }
@@ -198,7 +198,7 @@ int rgw_store_user_info(RGWRados *store,
 
     ret = rgw_put_system_obj(store, store->get_zone_params().user_swift_pool, k.id,
                              link_bl.c_str(), link_bl.length(), exclusive,
-                             NULL, 0);
+                             NULL, real_time());
     if (ret < 0)
       return ret;
   }
@@ -209,13 +209,13 @@ int rgw_store_user_info(RGWRados *store,
 struct user_info_entry {
   RGWUserInfo info;
   RGWObjVersionTracker objv_tracker;
-  time_t mtime;
+  real_time mtime;
 };
 
 static RGWChainedCacheImpl<user_info_entry> uinfo_cache;
 
 int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucket, RGWUserInfo& info,
-                                 RGWObjVersionTracker *objv_tracker, time_t *pmtime)
+                                 RGWObjVersionTracker *objv_tracker, real_time *pmtime)
 {
   user_info_entry e;
   if (uinfo_cache.find(key, &e)) {
@@ -271,7 +271,7 @@ int rgw_get_user_info_by_uid(RGWRados *store,
                              const rgw_user& uid,
                              RGWUserInfo& info,
                              RGWObjVersionTracker *objv_tracker,
-                             time_t *pmtime,
+                             real_time *pmtime,
                              rgw_cache_entry_info *cache_info,
                              map<string, bufferlist> *pattrs)
 {
@@ -308,7 +308,7 @@ int rgw_get_user_info_by_uid(RGWRados *store,
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info,
-                               RGWObjVersionTracker *objv_tracker, time_t *pmtime)
+                               RGWObjVersionTracker *objv_tracker, real_time *pmtime)
 {
   return rgw_get_user_info_from_index(store, email, store->get_zone_params().user_email_pool, info, objv_tracker, pmtime);
 }
@@ -318,7 +318,7 @@ int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info,
-                                      RGWObjVersionTracker *objv_tracker, time_t *pmtime)
+                                      RGWObjVersionTracker *objv_tracker, real_time *pmtime)
 {
   return rgw_get_user_info_from_index(store, swift_name, store->get_zone_params().user_swift_pool, info, objv_tracker, pmtime);
 }
@@ -328,7 +328,7 @@ extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUs
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info,
-                                           RGWObjVersionTracker *objv_tracker, time_t *pmtime)
+                                           RGWObjVersionTracker *objv_tracker, real_time *pmtime)
 {
   return rgw_get_user_info_from_index(store, access_key, store->get_zone_params().user_keys_pool, info, objv_tracker, pmtime);
 }
@@ -1803,7 +1803,7 @@ int RGWUser::update(RGWUserAdminOpState& op_state, std::string *err_msg)
   }
 
   if (is_populated()) {
-    ret = rgw_store_user_info(store, user_info, &old_info, &op_state.objv, 0, false);
+    ret = rgw_store_user_info(store, user_info, &old_info, &op_state.objv, real_time(), false);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to store user info");
       return ret;
@@ -1815,7 +1815,7 @@ int RGWUser::update(RGWUserAdminOpState& op_state, std::string *err_msg)
       return ret;
     }
   } else {
-    ret = rgw_store_user_info(store, user_info, NULL, &op_state.objv, 0, false);
+    ret = rgw_store_user_info(store, user_info, NULL, &op_state.objv, real_time(), false);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to store user info");
       return ret;
@@ -2569,7 +2569,7 @@ struct RGWUserCompleteInfo {
 class RGWUserMetadataObject : public RGWMetadataObject {
   RGWUserCompleteInfo uci;
 public:
-  RGWUserMetadataObject(const RGWUserCompleteInfo& _uci, obj_version& v, time_t m)
+  RGWUserMetadataObject(const RGWUserCompleteInfo& _uci, obj_version& v, real_time m)
       : uci(_uci) {
     objv = v;
     mtime = m;
@@ -2587,7 +2587,7 @@ public:
   int get(RGWRados *store, string& entry, RGWMetadataObject **obj) {
     RGWUserCompleteInfo uci;
     RGWObjVersionTracker objv_tracker;
-    time_t mtime;
+    real_time mtime;
 
     rgw_user uid(entry);
 
@@ -2604,7 +2604,7 @@ public:
   }
 
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-          time_t mtime, JSONObj *obj, sync_type_t sync_mode) {
+          real_time mtime, JSONObj *obj, sync_type_t sync_mode) {
     RGWUserCompleteInfo uci;
 
     try {
@@ -2621,7 +2621,7 @@ public:
     rgw_user uid(entry);
 
     RGWUserInfo old_info;
-    time_t orig_mtime;
+    real_time orig_mtime;
     int ret = rgw_get_user_info_by_uid(store, uid, old_info, &objv_tracker, &orig_mtime);
     if (ret < 0 && ret != -ENOENT)
       return ret;

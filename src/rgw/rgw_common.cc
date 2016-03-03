@@ -388,7 +388,7 @@ bool parse_rfc2616(const char *s, struct tm *t)
   return parse_rfc850(s, t) || parse_asctime(s, t) || parse_rfc1123(s, t) || parse_rfc1123_alt(s,t);
 }
 
-bool parse_iso8601(const char *s, struct tm *t, bool extended_format)
+bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_format)
 {
   memset(t, 0, sizeof(*t));
   const char *p;
@@ -416,9 +416,32 @@ bool parse_iso8601(const char *s, struct tm *t, bool extended_format)
     return false;
 
   uint32_t ms;
-  int r = stringtoul(str.substr(1, len - 2), &ms);
+  string nsstr = str.substr(1,  len - 2);
+  int r = stringtoul(nsstr, &ms);
   if (r < 0)
     return false;
+
+  if (!pns) {
+    return true;
+  }
+
+  if (nsstr.size() > 9) {
+    nsstr = nsstr.substr(0, 9);
+  }
+
+  uint64_t mul_table[] = { 0,
+    100000000LL,
+    10000000LL,
+    1000000LL,
+    100000LL,
+    10000LL,
+    1000LL,
+    100LL,
+    10LL,
+    1 };
+
+
+  *pns = ms * mul_table[nsstr.size()];
 
   return true;
 }
@@ -445,14 +468,15 @@ int parse_key_value(string& in_str, string& key, string& val)
   return parse_key_value(in_str, "=", key,val);
 }
 
-int parse_time(const char *time_str, time_t *time)
+int parse_time(const char *time_str, real_time *time)
 {
   struct tm tm;
 
   if (!parse_rfc2616(time_str, &tm))
     return -EINVAL;
 
-  *time = timegm(&tm);
+  time_t sec = timegm(&tm);
+  *time = utime_t(sec, 0).to_real_time();
 
   return 0;
 }

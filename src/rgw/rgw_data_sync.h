@@ -74,7 +74,7 @@ struct rgw_data_sync_marker {
   string next_step_marker;
   uint64_t total_entries;
   uint64_t pos;
-  utime_t timestamp;
+  real_time timestamp;
 
   rgw_data_sync_marker() : state(FullSync), total_entries(0), pos(0) {}
 
@@ -106,7 +106,7 @@ struct rgw_data_sync_marker {
     encode_json("next_step_marker", next_step_marker, f);
     encode_json("total_entries", total_entries, f);
     encode_json("pos", pos, f);
-    encode_json("timestamp", timestamp, f);
+    encode_json("timestamp", utime_t(timestamp), f);
   }
 };
 WRITE_CLASS_ENCODER(rgw_data_sync_marker)
@@ -140,7 +140,7 @@ WRITE_CLASS_ENCODER(rgw_data_sync_status)
 
 struct rgw_datalog_entry {
   string key;
-  utime_t timestamp;
+  ceph::real_time timestamp;
 
   void decode_json(JSONObj *obj);
 };

@@ -30,10 +30,11 @@ void rgw_datalog_info::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("num_objects", num_shards, obj);
 }
 
-
 void rgw_datalog_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("key", key, obj);
-  JSONDecoder::decode_json("timestamp", timestamp, obj);
+  utime_t ut;
+  JSONDecoder::decode_json("timestamp", ut, obj);
+  timestamp = ut.to_real_time();
 }
 
 void rgw_datalog_shard_data::decode_json(JSONObj *obj) {
@@ -705,7 +706,7 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const utime_t& timestamp) {
+  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) {
     sync_marker.marker = new_marker;
     sync_marker.pos = index_pos;
 
@@ -984,7 +985,7 @@ public:
         for (; iter != entries.end(); ++iter) {
           ldout(sync_env->cct, 20) << __func__ << ": full sync: " << iter->first << dendl;
           total_entries++;
-          if (!marker_tracker->start(iter->first, total_entries, utime_t())) {
+          if (!marker_tracker->start(iter->first, total_entries, real_time())) {
             ldout(sync_env->cct, 0) << "ERROR: cannot start syncing " << iter->first << ". Duplicate entry?" << dendl;
           } else {
             // fetch remote and write locally
@@ -1656,7 +1657,7 @@ struct bucket_list_entry {
   bool delete_marker;
   rgw_obj_key key;
   bool is_latest;
-  utime_t mtime;
+  real_time mtime;
   string etag;
   uint64_t size;
   string storage_class;
@@ -1675,11 +1676,12 @@ struct bucket_list_entry {
     JSONDecoder::decode_json("LastModified", mtime_str, obj);
 
     struct tm t;
-    if (parse_iso8601(mtime_str.c_str(), &t)) {
-      time_t sec = timegm(&t);
-
-      /* FIXME: eventually we'll want to have a high def clock for rgw objects */
-      mtime = utime_t(sec, 0);
+    uint32_t nsec;
+    if (parse_iso8601(mtime_str.c_str(), &t, &nsec)) {
+      ceph_timespec ts;
+      ts.tv_sec = (uint64_t)timegm(&t);
+      ts.tv_nsec = nsec;
+      mtime = real_clock::from_ceph_timespec(ts);
     }
     JSONDecoder::decode_json("ETag", etag, obj);
     JSONDecoder::decode_json("Size", size, obj);
@@ -1827,7 +1829,7 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const rgw_obj_key& new_marker, uint64_t index_pos, const utime_t& timestamp) {
+  RGWCoroutine *store_marker(const rgw_obj_key& new_marker, uint64_t index_pos, const real_time& timestamp) {
     sync_marker.position = new_marker;
     sync_marker.count = index_pos;
 
@@ -1869,7 +1871,7 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const utime_t& timestamp) {
+  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) {
     sync_marker.position = new_marker;
 
     map<string, bufferlist> attrs;
@@ -1922,7 +1924,7 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
   bool versioned;
   uint64_t versioned_epoch;
   bucket_entry_owner owner;
-  utime_t timestamp;
+  real_time timestamp;
   RGWModifyOp op;
   RGWPendingState op_state;
 
@@ -1938,7 +1940,7 @@ public:
   RGWBucketSyncSingleEntryCR(RGWDataSyncEnv *_sync_env,
                              RGWBucketInfo *_bucket_info, int _shard_id,
                              const rgw_obj_key& _key, bool _versioned, uint64_t _versioned_epoch,
-                             utime_t& _timestamp,
+                             real_time& _timestamp,
                              const bucket_entry_owner& _owner,
                              RGWModifyOp _op, RGWPendingState _op_state,
 		             const T& _entry_marker, RGWSyncShardMarkerTrack<T, K> *_marker_tracker) : RGWCoroutine(_sync_env->cct),
@@ -2115,7 +2117,7 @@ int RGWBucketShardFullSyncCR::operate()
         entry = &(*entries_iter);
         total_entries++;
         list_marker = entries_iter->key;
-        if (!marker_tracker->start(entry->key, total_entries, utime_t())) {
+        if (!marker_tracker->start(entry->key, total_entries, real_time())) {
           ldout(sync_env->cct, 0) << "ERROR: cannot start syncing " << entry->key << ". Duplicate entry?" << dendl;
         } else {
           op = (entry->key.instance.empty() || entry->key.instance == "null" ? CLS_RGW_OP_ADD : CLS_RGW_OP_LINK_OLH);
@@ -2309,6 +2311,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
             if (entry->ver.pool < 0) {
               versioned_epoch = entry->ver.epoch;
             }
+ldout(sync_env->cct, 0) << __FILE__ << ":" << __LINE__ << " entry->timestamp=" << entry->timestamp << dendl;
             spawn(new RGWBucketSyncSingleEntryCR<string, rgw_obj_key>(sync_env, bucket_info, shard_id,
                                                          key, entry->is_versioned(), versioned_epoch, entry->timestamp, owner, entry->op,
                                                          entry->state, entry->id, marker_tracker), false);

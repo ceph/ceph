@@ -45,7 +45,8 @@ void RGWOLHInfo::dump(Formatter *f) const
 
 void RGWOLHPendingInfo::dump(Formatter *f) const
 {
-  encode_json("time", time, f);
+  utime_t ut(time);
+  encode_json("time", ut, f);
 }
 
 void RGWObjManifestPart::dump(Formatter *f) const
@@ -188,7 +189,7 @@ void RGWAccessControlPolicy::dump(Formatter *f) const
 void ObjectMetaInfo::dump(Formatter *f) const
 {
   encode_json("size", size, f);
-  encode_json("mtime", mtime, f);
+  encode_json("mtime", utime_t(mtime), f);
 }
 
 void ObjectCacheInfo::dump(Formatter *f) const
@@ -520,7 +521,8 @@ void RGWBucketEntryPoint::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
   encode_json("owner", owner, f);
-  encode_json("creation_time", creation_time, f);
+  utime_t ut(creation_time);
+  encode_json("creation_time", ut, f);
   encode_json("linked", linked, f);
   encode_json("has_bucket_info", has_bucket_info, f);
   if (has_bucket_info) {
@@ -531,7 +533,8 @@ void RGWBucketEntryPoint::dump(Formatter *f) const
 void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("bucket", bucket, obj);
   JSONDecoder::decode_json("owner", owner, obj);
-  JSONDecoder::decode_json("creation_time", creation_time, obj);
+  utime_t ut(creation_time);
+  JSONDecoder::decode_json("creation_time", ut, obj);
   JSONDecoder::decode_json("linked", linked, obj);
   JSONDecoder::decode_json("has_bucket_info", has_bucket_info, obj);
   if (has_bucket_info) {
@@ -623,7 +626,8 @@ void RGWBucketWebsiteConf::decode_json(JSONObj *obj) {
 void RGWBucketInfo::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
-  encode_json("creation_time", creation_time, f);
+  utime_t ut(creation_time);
+  encode_json("creation_time", ut, f);
   encode_json("owner", owner.to_str(), f);
   encode_json("flags", flags, f);
   encode_json("zonegroup", zonegroup, f);
@@ -643,7 +647,8 @@ void RGWBucketInfo::dump(Formatter *f) const
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("bucket", bucket, obj);
-  JSONDecoder::decode_json("creation_time", creation_time, obj);
+  utime_t ut(creation_time);
+  JSONDecoder::decode_json("creation_time", ut, obj);
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("flags", flags, obj);
   JSONDecoder::decode_json("zonegroup", zonegroup, obj);
@@ -681,7 +686,8 @@ void RGWObjEnt::dump(Formatter *f) const
   encode_json("owner", owner.to_str(), f);
   encode_json("owner_display_name", owner_display_name, f);
   encode_json("size", size, f);
-  encode_json("mtime", mtime, f);
+  utime_t ut(mtime);
+  encode_json("mtime", ut, f);
   encode_json("etag", etag, f);
   encode_json("content_type", content_type, f);
   encode_json("tag", tag, f);
@@ -693,7 +699,8 @@ void RGWBucketEnt::dump(Formatter *f) const
   encode_json("bucket", bucket, f);
   encode_json("size", size, f);
   encode_json("size_rounded", size_rounded, f);
-  encode_json("mtime", creation_time, f); /* mtime / creation time discrepency needed for backward compatibility */
+  utime_t ut(creation_time);
+  encode_json("mtime", ut, f); /* mtime / creation time discrepency needed for backward compatibility */
   encode_json("count", count, f);
 }
 
@@ -702,7 +709,8 @@ void RGWUploadPartInfo::dump(Formatter *f) const
   encode_json("num", num, f);
   encode_json("size", size, f);
   encode_json("etag", etag, f);
-  encode_json("modified", modified, f);
+  utime_t ut(modified);
+  encode_json("modified", ut, f);
 }
 
 void rgw_obj::dump(Formatter *f) const
@@ -1019,25 +1027,29 @@ void RGWZoneGroupMap::decode_json(JSONObj *obj)
 void RGWMetadataLogInfo::dump(Formatter *f) const
 {
   encode_json("marker", marker, f);
-  encode_json("last_update", last_update, f);
+  utime_t ut(last_update);
+  encode_json("last_update", ut, f);
 }
 
 void RGWMetadataLogInfo::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("marker", marker, obj);
-  JSONDecoder::decode_json("last_update", last_update, obj);
+  utime_t ut(last_update);
+  JSONDecoder::decode_json("last_update", ut, obj);
 }
 
 void RGWDataChangesLogInfo::dump(Formatter *f) const
 {
   encode_json("marker", marker, f);
-  encode_json("last_update", last_update, f);
+  utime_t ut(last_update);
+  encode_json("last_update", ut, f);
 }
 
 void RGWDataChangesLogInfo::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("marker", marker, obj);
-  JSONDecoder::decode_json("last_update", last_update, obj);
+  utime_t ut(last_update);
+  JSONDecoder::decode_json("last_update", ut, obj);
 }
 
 
@@ -1208,7 +1220,9 @@ void rgw_meta_sync_marker::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("next_step_marker", next_step_marker, obj);
   JSONDecoder::decode_json("total_entries", total_entries, obj);
   JSONDecoder::decode_json("pos", pos, obj);
-  JSONDecoder::decode_json("timestamp", timestamp, obj);
+  utime_t ut;
+  JSONDecoder::decode_json("timestamp", ut, obj);
+  timestamp = ut.to_real_time();
 }
 
 void rgw_meta_sync_marker::dump(Formatter *f) const
@@ -1218,7 +1232,7 @@ void rgw_meta_sync_marker::dump(Formatter *f) const
   encode_json("next_step_marker", next_step_marker, f);
   encode_json("total_entries", total_entries, f);
   encode_json("pos", pos, f);
-  encode_json("timestamp", timestamp, f);
+  encode_json("timestamp", utime_t(timestamp), f);
 }
 
 void rgw_meta_sync_status::decode_json(JSONObj *obj)
