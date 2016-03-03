@@ -183,6 +183,9 @@ class LibCephFSStateError(Error):
     pass
 
 
+class OutOfRange(Error):
+    pass
+
 cdef errno_to_exception =  {
     errno.EPERM     : PermissionError,
     errno.ENOENT    : ObjectNotFound,
@@ -192,6 +195,7 @@ cdef errno_to_exception =  {
     errno.ENODATA   : NoData,
     errno.EINVAL    : InvalidValue,
     errno.EOPNOTSUPP: OperationNotSupported,
+    errno.ERANGE    : OutOfRange,
 }
 
 
@@ -689,7 +693,7 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in write")
         return ret
 
-    def getxattr(self, path, name):
+    def getxattr(self, path, name, size=255):
         self.require_state("mounted")
 
         path = cstr(path, 'path')
@@ -699,7 +703,7 @@ cdef class LibCephFS(object):
             char* _path = path
             char* _name = name
 
-            size_t ret_length = 255
+            size_t ret_length = size
             char *ret_buf = NULL
 
         try:
@@ -710,14 +714,6 @@ cdef class LibCephFS(object):
 
             if ret < 0:
                 raise make_ex(ret, "error in getxattr")
-
-            if ret > ret_length:
-                ret_buf = <char *>realloc_chk(ret_buf, ret)
-                with nogil:
-                    ret = ceph_getxattr(self.cluster, _path, _name, ret_buf,
-                                        ret)
-                if ret < 0:
-                    raise make_ex(ret, "error in getxattr")
 
             return ret_buf[:ret]
         finally:

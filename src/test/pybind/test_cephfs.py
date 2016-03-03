@@ -86,13 +86,11 @@ def test_xattr():
 
     cephfs.setxattr("/", "user.big", "x" * 300, 0)
 
-    # FIXME: Python bindings expect ceph_getxattr to return the attr size,
-    # even if it's longer than the requested size.  It actually returns
-    # -ERANGE.
-    # What *should* happen is that the cephfs pythno bindings should
-    # either accept a size field, or they should increase the buffer size
-    # until they can accomodate the true size of the buffer.
-    # assert_equal(300, len(cephfs.getxattr("/", "user.big")))
+    # Default size is 255, get ERANGE
+    assert_raises(libcephfs.OutOfRange, cephfs.getxattr, "/", "user.big")
+
+    # Pass explicit size, and we'll get the value
+    assert_equal(300, len(cephfs.getxattr("/", "user.big", 300)))
 
 
 @with_setup(setup_test)
