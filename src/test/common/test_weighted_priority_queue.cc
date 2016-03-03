@@ -206,6 +206,18 @@ struct Greater {
   }
 };
 
+TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_filter_null) {
+  WQ wq(0, 0);
+  LQ strictq, normq;
+  unsigned num_items = 100;
+  fill_queue(wq, strictq, normq, num_items);
+  // Pick a value that we didn't enqueue
+  const Greater<Item> pred(std::make_tuple(0, 0, 1 << 17));
+  Removed wq_removed;
+  wq.remove_by_filter(pred, &wq_removed);
+  EXPECT_EQ(0u, wq_removed.size());
+}
+
 TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_filter) {
   WQ wq(0, 0);
   LQ strictq, normq;
@@ -253,6 +265,17 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_filter) {
   while (!(wq.empty())) {
     EXPECT_FALSE(pred(wq.dequeue()));
   }
+}
+
+TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_class_null) {
+  WQ wq(0, 0);
+  LQ strictq, normq;
+  unsigned num_items = 10;
+  fill_queue(wq, strictq, normq, num_items);
+  Removed wq_removed;
+  // Pick a klass that was not enqueued
+  wq.remove_by_class(klasses + 1, &wq_removed);
+  EXPECT_EQ(0u, wq_removed.size());
 }
 
 TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_class) {
