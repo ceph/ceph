@@ -570,13 +570,14 @@ class Filesystem(object):
                 "stripe_unit": 4194304,
                 "stripe_count": 1,
                 "object_size": 4194304,
-                "pg_pool": 1
+                "pool_id": 1,
+                "pool_ns": "",
             }
 
         :param pool: name of pool to read backtrace from.  If omitted, FS must have only
                      one data pool and that will be used.
         """
-        return self._read_data_xattr(ino_no, "layout", "ceph_file_layout_wrapper", pool)
+        return self._read_data_xattr(ino_no, "layout", "file_layout_t", pool)
 
     def _enumerate_data_objects(self, ino, size):
         """
