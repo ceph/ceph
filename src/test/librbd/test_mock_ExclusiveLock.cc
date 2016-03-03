@@ -12,6 +12,16 @@
 #include <list>
 
 namespace librbd {
+
+namespace {
+
+struct MockExclusiveLockImageCtx : public MockImageCtx {
+  MockExclusiveLockImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
+  }
+};
+
+} // anonymous namespace
+
 namespace exclusive_lock {
 
 template<typename T>
@@ -20,7 +30,7 @@ struct BaseRequest {
   Context *on_lock_unlock = nullptr;
   Context *on_finish = nullptr;
 
-  static T* create(MockImageCtx &image_ctx, const std::string &cookie,
+  static T* create(MockExclusiveLockImageCtx &image_ctx, const std::string &cookie,
                    Context *on_lock_unlock, Context *on_finish) {
     assert(!s_requests.empty());
     T* req = s_requests.front();
@@ -39,12 +49,12 @@ template<typename T>
 std::list<T *> BaseRequest<T>::s_requests;
 
 template <>
-struct AcquireRequest<MockImageCtx> : public BaseRequest<AcquireRequest<MockImageCtx> > {
+struct AcquireRequest<MockExclusiveLockImageCtx> : public BaseRequest<AcquireRequest<MockExclusiveLockImageCtx> > {
   MOCK_METHOD0(send, void());
 };
 
 template <>
-struct ReleaseRequest<MockImageCtx> : public BaseRequest<ReleaseRequest<MockImageCtx> > {
+struct ReleaseRequest<MockExclusiveLockImageCtx> : public BaseRequest<ReleaseRequest<MockExclusiveLockImageCtx> > {
   MOCK_METHOD0(send, void());
 };
 
@@ -53,7 +63,7 @@ struct ReleaseRequest<MockImageCtx> : public BaseRequest<ReleaseRequest<MockImag
 
 // template definitions
 #include "librbd/ExclusiveLock.cc"
-template class librbd::ExclusiveLock<librbd::MockImageCtx>;
+template class librbd::ExclusiveLock<librbd::MockExclusiveLockImageCtx>;
 
 ACTION_P(FinishLockUnlock, request) {
   if (request->on_lock_unlock != nullptr) {
@@ -71,11 +81,11 @@ using ::testing::Return;
 
 class TestMockExclusiveLock : public TestMockFixture {
 public:
-  typedef ExclusiveLock<MockImageCtx> MockExclusiveLock;
-  typedef exclusive_lock::AcquireRequest<MockImageCtx> MockAcquireRequest;
-  typedef exclusive_lock::ReleaseRequest<MockImageCtx> MockReleaseRequest;
+  typedef ExclusiveLock<MockExclusiveLockImageCtx> MockExclusiveLock;
+  typedef exclusive_lock::AcquireRequest<MockExclusiveLockImageCtx> MockAcquireRequest;
+  typedef exclusive_lock::ReleaseRequest<MockExclusiveLockImageCtx> MockReleaseRequest;
 
-  void expect_get_watch_handle(MockImageCtx &mock_image_ctx) {
+  void expect_get_watch_handle(MockExclusiveLockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.image_watcher, get_watch_handle())
                   .WillRepeatedly(Return(1234567890));
   }
@@ -101,7 +111,7 @@ public:
     EXPECT_CALL(*mock_image_ctx.aio_work_queue, unblock_writes());
   }
 
-  void expect_acquire_lock(MockImageCtx &mock_image_ctx,
+  void expect_acquire_lock(MockExclusiveLockImageCtx &mock_image_ctx,
                            MockAcquireRequest &acquire_request, int r) {
     expect_get_watch_handle(mock_image_ctx);
     EXPECT_CALL(acquire_request, send())
@@ -113,7 +123,7 @@ public:
     }
   }
 
-  void expect_release_lock(MockImageCtx &mock_image_ctx,
+  void expect_release_lock(MockExclusiveLockImageCtx &mock_image_ctx,
                            MockReleaseRequest &release_request, int r,
                            bool shutting_down = false) {
     EXPECT_CALL(release_request, send())
@@ -128,19 +138,19 @@ public:
     }
   }
 
-  void expect_notify_request_lock(MockImageCtx &mock_image_ctx,
+  void expect_notify_request_lock(MockExclusiveLockImageCtx &mock_image_ctx,
                                   MockExclusiveLock &mock_exclusive_lock) {
     EXPECT_CALL(*mock_image_ctx.image_watcher, notify_request_lock())
                   .WillRepeatedly(Invoke(&mock_exclusive_lock,
                                          &MockExclusiveLock::handle_lock_released));
   }
 
-  void expect_notify_acquired_lock(MockImageCtx &mock_image_ctx) {
+  void expect_notify_acquired_lock(MockExclusiveLockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.image_watcher, notify_acquired_lock())
                   .Times(1);
   }
 
-  void expect_notify_released_lock(MockImageCtx &mock_image_ctx) {
+  void expect_notify_released_lock(MockExclusiveLockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.image_watcher, notify_released_lock())
                   .Times(1);
   }
@@ -155,7 +165,7 @@ public:
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
-  int when_init(MockImageCtx &mock_image_ctx,
+  int when_init(MockExclusiveLockImageCtx &mock_image_ctx,
                 MockExclusiveLock &exclusive_lock) {
     C_SaferCond ctx;
     {
@@ -165,7 +175,7 @@ public:
     return ctx.wait();
   }
 
-  int when_try_lock(MockImageCtx &mock_image_ctx,
+  int when_try_lock(MockExclusiveLockImageCtx &mock_image_ctx,
                      MockExclusiveLock &exclusive_lock) {
     C_SaferCond ctx;
     {
@@ -174,7 +184,7 @@ public:
     }
     return ctx.wait();
   }
-  int when_request_lock(MockImageCtx &mock_image_ctx,
+  int when_request_lock(MockExclusiveLockImageCtx &mock_image_ctx,
                      MockExclusiveLock &exclusive_lock) {
     C_SaferCond ctx;
     {
@@ -183,7 +193,7 @@ public:
     }
     return ctx.wait();
   }
-  int when_release_lock(MockImageCtx &mock_image_ctx,
+  int when_release_lock(MockExclusiveLockImageCtx &mock_image_ctx,
                      MockExclusiveLock &exclusive_lock) {
     C_SaferCond ctx;
     {
@@ -192,7 +202,7 @@ public:
     }
     return ctx.wait();
   }
-  int when_shut_down(MockImageCtx &mock_image_ctx,
+  int when_shut_down(MockExclusiveLockImageCtx &mock_image_ctx,
                      MockExclusiveLock &exclusive_lock) {
     C_SaferCond ctx;
     {
@@ -202,7 +212,7 @@ public:
     return ctx.wait();
   }
 
-  bool is_lock_owner(MockImageCtx &mock_image_ctx,
+  bool is_lock_owner(MockExclusiveLockImageCtx &mock_image_ctx,
                      MockExclusiveLock &exclusive_lock) {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     return exclusive_lock.is_lock_owner();
@@ -215,7 +225,7 @@ TEST_F(TestMockExclusiveLock, StateTransitions) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -250,7 +260,7 @@ TEST_F(TestMockExclusiveLock, TryLockLockedState) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -274,7 +284,7 @@ TEST_F(TestMockExclusiveLock, TryLockAlreadyLocked) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -298,7 +308,7 @@ TEST_F(TestMockExclusiveLock, TryLockBusy) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -322,7 +332,7 @@ TEST_F(TestMockExclusiveLock, TryLockError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -347,7 +357,7 @@ TEST_F(TestMockExclusiveLock, RequestLockLockedState) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -372,7 +382,7 @@ TEST_F(TestMockExclusiveLock, RequestLockBlacklist) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -398,7 +408,7 @@ TEST_F(TestMockExclusiveLock, RequestLockBusy) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -427,7 +437,7 @@ TEST_F(TestMockExclusiveLock, RequestLockError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -456,7 +466,7 @@ TEST_F(TestMockExclusiveLock, ReleaseLockUnlockedState) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -477,7 +487,7 @@ TEST_F(TestMockExclusiveLock, ReleaseLockError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -507,7 +517,7 @@ TEST_F(TestMockExclusiveLock, ConcurrentRequests) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 

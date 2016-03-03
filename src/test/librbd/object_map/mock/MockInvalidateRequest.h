@@ -9,17 +9,17 @@
 namespace librbd {
 namespace object_map {
 
-template <>
-struct InvalidateRequest<MockImageCtx> {
-  static std::list<InvalidateRequest *> s_requests;
+template <typename I>
+struct MockInvalidateRequestBase {
+  static std::list<InvalidateRequest<I>*> s_requests;
   uint64_t snap_id;
   bool force;
   Context *on_finish;
 
-  static InvalidateRequest* create(MockImageCtx &image_ctx, uint64_t snap_id,
-                                   bool force, Context *on_finish) {
+  static InvalidateRequest<I>* create(I &image_ctx, uint64_t snap_id,
+                                      bool force, Context *on_finish) {
     assert(!s_requests.empty());
-    InvalidateRequest* req = s_requests.front();
+    InvalidateRequest<I>* req = s_requests.front();
     req->snap_id = snap_id;
     req->force = force;
     req->on_finish = on_finish;
@@ -27,16 +27,15 @@ struct InvalidateRequest<MockImageCtx> {
     return req;
   }
 
-  InvalidateRequest() {
-    s_requests.push_back(this);
+  MockInvalidateRequestBase() {
+    s_requests.push_back(static_cast<InvalidateRequest<I>*>(this));
   }
 
   MOCK_METHOD0(send, void());
 };
 
-typedef InvalidateRequest<MockImageCtx> MockInvalidateRequest;
-
-std::list<InvalidateRequest<MockImageCtx>*> InvalidateRequest<MockImageCtx>::s_requests;
+template <typename I>
+std::list<InvalidateRequest<I>*> MockInvalidateRequestBase<I>::s_requests;
 
 } // namespace object_map
 } // namespace librbd

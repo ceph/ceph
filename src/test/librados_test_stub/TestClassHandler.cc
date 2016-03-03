@@ -6,6 +6,8 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <dlfcn.h>
 #include <errno.h>
+#include <stdlib.h>
+#include <string.h>
 #include "common/debug.h"
 #include "include/assert.h"
 
@@ -43,7 +45,9 @@ void TestClassHandler::open_class(const std::string& name,
 void TestClassHandler::open_all_classes() {
   assert(m_class_handles.empty());
 
-  DIR *dir = ::opendir(".libs");
+  const char* env = getenv("CEPH_LIB");
+  std::string CEPH_LIB(env ? env : "lib");
+  DIR *dir = ::opendir(CEPH_LIB.c_str());
   if (dir == NULL) {
     assert(false);;
   }
@@ -58,7 +62,7 @@ void TestClassHandler::open_all_classes() {
       continue;
     }
     std::string class_name = name.substr(7, name.size() - 10);
-    open_class(class_name, ".libs/" + name);
+    open_class(class_name, CEPH_LIB + "/" + name);
   }
   closedir(dir);
 }
