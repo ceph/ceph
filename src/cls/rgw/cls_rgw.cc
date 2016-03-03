@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#include "include/utime.h"
+#include "common/ceph_time.h"
 #include "objclass/objclass.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "common/Clock.h"
@@ -114,10 +114,11 @@ static bool bi_entry_gt(const string& first, const string& second)
   return first > second;
 }
 
-static void get_time_key(utime_t& ut, string *key)
+static void get_time_key(real_time& ut, string *key)
 {
   char buf[32];
-  snprintf(buf, 32, "%011llu.%09u", (unsigned long long)ut.sec(), ut.nsec());
+  ceph_timespec ts = ceph::real_clock::to_ceph_timespec(ut);
+  snprintf(buf, 32, "%011llu.%09u", (unsigned long long)ts.tv_sec, (unsigned int)ts.tv_nsec);
   *key = buf;
 }
 
@@ -140,7 +141,7 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
 }
 
 static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_key, RGWModifyOp op,
-                               string& tag, utime_t& timestamp,
+                               string& tag, real_time& timestamp,
                                rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver,
                                string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name)
 {
@@ -678,7 +679,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   // fill in proper state
   struct rgw_bucket_pending_info info;
-  info.timestamp = ceph_clock_now(g_ceph_context);
+  info.timestamp = real_clock::now();
   info.state = CLS_RGW_STATE_PENDING_MODIFY;
   info.op = op.op;
   entry.pending_map.insert(pair<string, rgw_bucket_pending_info>(op.tag, info));
@@ -1183,7 +1184,7 @@ public:
     return 0;
   }
 
-  time_t mtime() {
+  real_time mtime() {
     return instance_entry.meta.mtime;
   }
 };
@@ -1389,7 +1390,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
-  if (existed && op.unmod_since > 0) {
+  if (existed && !real_clock::is_zero(op.unmod_since)) {
     if (obj.mtime() >= op.unmod_since) {
       return 0; /* no need to set error, we just return 0 and avoid writing to the bi log */
     }
@@ -1654,7 +1655,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     rgw_bucket_entry_ver ver;
     ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
 
-    utime_t mtime = ceph_clock_now(g_ceph_context); /* mtime has no real meaning in instance removal context */
+    real_time mtime = real_clock::now(); /* mtime has no real meaning in instance removal context */
     ret = log_index_operation(hctx, op.key, CLS_RGW_OP_UNLINK_INSTANCE, op.op_tag,
                               mtime, ver,
                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker,
@@ -1842,7 +1843,6 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
   bufferlist header_bl;
   struct rgw_bucket_dir_header header;
   bool header_changed = false;
-  uint64_t tag_timeout;
 
   int rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
@@ -1850,7 +1850,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
     return rc;
   }
 
-  tag_timeout = (header.tag_timeout ? header.tag_timeout : CEPH_RGW_TAG_TIMEOUT);
+  timespan tag_timeout(header.tag_timeout ? header.tag_timeout : CEPH_RGW_TAG_TIMEOUT);
 
   bufferlist::iterator in_iter = in->begin();
 
@@ -1882,7 +1882,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         return -EINVAL;
       }
 
-      utime_t cur_time = ceph_clock_now(g_ceph_context);
+      real_time cur_time = real_clock::now();
       map<string, struct rgw_bucket_pending_info>::iterator iter =
                 cur_disk.pending_map.begin();
       while(iter != cur_disk.pending_map.end()) {
@@ -2091,8 +2091,8 @@ static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
-  time_t mtime;
-  int ret = cls_cxx_stat(hctx, NULL, &mtime);
+  real_time obj_ut;
+  int ret = cls_cxx_stat2(hctx, NULL, &obj_ut);
   if (ret < 0 && ret != -ENOENT) {
     CLS_LOG(0, "ERROR: %s(): cls_cxx_stat() returned %d", __func__, ret);
     return ret;
@@ -2101,11 +2101,12 @@ static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, buffer
     CLS_LOG(10, "object does not exist, skipping check");
   }
 
-  utime_t obj_ut(mtime, 0);
+  ceph_timespec obj_ts = ceph::real_clock::to_ceph_timespec(obj_ut);
+  ceph_timespec op_ts = ceph::real_clock::to_ceph_timespec(op.mtime);
 
   CLS_LOG(10, "%s: obj_ut=%lld.%06lld op.mtime=%lld.%06lld", __func__,
-          (long long)obj_ut.sec(), (long long)obj_ut.nsec(),
-          (long long)op.mtime.sec(), (long long)op.mtime.nsec());
+          (long long)obj_ts.tv_sec, (long long)obj_ts.tv_nsec,
+          (long long)op_ts.tv_sec, (long long)op_ts.tv_nsec);
 
   bool check;
 
@@ -2931,8 +2932,8 @@ static int gc_update_entry(cls_method_context_t hctx, uint32_t expiration_secs,
       return ret;
     }
   }
-  info.time = ceph_clock_now(g_ceph_context);
-  info.time += expiration_secs;
+  info.time = ceph::real_clock::now();
+  info.time += timespan(expiration_secs);
   ret = gc_omap_set(hctx, GC_OBJ_NAME_INDEX, info.tag, &info);
   if (ret < 0)
     return ret;
@@ -3027,7 +3028,7 @@ static int gc_iterate_entries(cls_method_context_t hctx, const string& marker, b
   }
 
   if (expired_only) {
-    utime_t now = ceph_clock_now(g_ceph_context);
+    real_time now = ceph::real_clock::now();
     string now_str;
     get_time_key(now, &now_str);
     prepend_index_prefix(now_str, GC_OBJ_TIME_INDEX, &end_key);

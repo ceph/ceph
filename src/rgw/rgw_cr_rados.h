@@ -718,7 +718,7 @@ class RGWAsyncRemoveObj : public RGWAsyncRadosRequest {
   string marker_version_id;
 
   bool del_if_older;
-  utime_t timestamp;
+  ceph::real_time timestamp;
 
 protected:
   int _send_request();
@@ -733,7 +733,7 @@ public:
                          uint64_t _versioned_epoch,
                          bool _delete_marker,
                          bool _if_older,
-                         utime_t& _timestamp) : RGWAsyncRadosRequest(cn), store(_store),
+                         real_time& _timestamp) : RGWAsyncRadosRequest(cn), store(_store),
                                                       source_zone(_source_zone),
                                                       bucket_info(_bucket_info),
                                                       key(_key),
@@ -765,7 +765,7 @@ class RGWRemoveObjCR : public RGWSimpleCoroutine {
   string owner_display_name;
 
   bool del_if_older;
-  utime_t timestamp;
+  real_time timestamp;
 
   RGWAsyncRemoveObj *req;
 
@@ -779,7 +779,7 @@ public:
                       string *_owner,
                       string *_owner_display_name,
                       bool _delete_marker,
-                      utime_t *_timestamp) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
+                      real_time *_timestamp) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
                                        async_rados(_async_rados), store(_store),
                                        source_zone(_source_zone),
                                        bucket_info(_bucket_info),
@@ -896,7 +896,7 @@ class RGWAsyncStatObj : public RGWAsyncRadosRequest {
   RGWRados *store;
   rgw_obj obj;
   uint64_t *psize;
-  time_t *pmtime;
+  ceph::real_time *pmtime;
   uint64_t *pepoch;
   RGWObjVersionTracker *objv_tracker;
 protected:
@@ -904,7 +904,7 @@ protected:
 public:
   RGWAsyncStatObj(RGWAioCompletionNotifier *cn, RGWRados *store,
                   const rgw_obj& obj, uint64_t *psize = nullptr,
-                  time_t *pmtime = nullptr, uint64_t *pepoch = nullptr,
+                  ceph::real_time *pmtime = nullptr, uint64_t *pepoch = nullptr,
                   RGWObjVersionTracker *objv_tracker = nullptr)
     : RGWAsyncRadosRequest(cn), store(store), obj(obj), psize(psize),
       pmtime(pmtime), pepoch(pepoch), objv_tracker(objv_tracker) {}
@@ -915,14 +915,14 @@ class RGWStatObjCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   rgw_obj obj;
   uint64_t *psize;
-  time_t *pmtime;
+  ceph::real_time  *pmtime;
   uint64_t *pepoch;
   RGWObjVersionTracker *objv_tracker;
   RGWAsyncStatObj *req = nullptr;
  public:
   RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
                const rgw_obj& obj, uint64_t *psize = nullptr,
-               time_t *pmtime = nullptr, uint64_t *pepoch = nullptr,
+               ceph::real_time *pmtime = nullptr, uint64_t *pepoch = nullptr,
                RGWObjVersionTracker *objv_tracker = nullptr);
   ~RGWStatObjCR();
 

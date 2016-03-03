@@ -7,6 +7,7 @@
 #include "include/encoding.h"
 #include "include/types.h"
 #include "include/utime.h"
+#include "common/ceph_time.h"
 
 /*
  * this needs to be compatible with with rgw_bucket, as it replaces it
@@ -72,16 +73,16 @@ struct cls_user_bucket_entry {
   cls_user_bucket bucket;
   size_t size;
   size_t size_rounded;
-  time_t creation_time;
+  real_time creation_time;
   uint64_t count;
   bool user_stats_sync;
 
-  cls_user_bucket_entry() : size(0), size_rounded(0), creation_time(0), count(0), user_stats_sync(false) {}
+  cls_user_bucket_entry() : size(0), size_rounded(0), count(0), user_stats_sync(false) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 5, bl);
+    ENCODE_START(7, 5, bl);
     uint64_t s = size;
-    __u32 mt = creation_time;
+    __u32 mt = ceph::real_clock::to_time_t(creation_time);
     string empty_str;  // originally had the bucket name here, but we encode bucket later
     ::encode(empty_str, bl);
     ::encode(s, bl);
@@ -91,6 +92,7 @@ struct cls_user_bucket_entry {
     s = size_rounded;
     ::encode(s, bl);
     ::encode(user_stats_sync, bl);
+    ::encode(creation_time, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -102,7 +104,9 @@ struct cls_user_bucket_entry {
     ::decode(s, bl);
     ::decode(mt, bl);
     size = s;
-    creation_time = mt;
+    if (struct_v < 7) {
+      creation_time = ceph::real_clock::from_time_t(mt);
+    }
     if (struct_v >= 2)
       ::decode(count, bl);
     if (struct_v >= 3)
@@ -112,6 +116,8 @@ struct cls_user_bucket_entry {
     size_rounded = s;
     if (struct_v >= 6)
       ::decode(user_stats_sync, bl);
+    if (struct_v >= 7)
+      ::decode(creation_time, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -154,8 +160,8 @@ WRITE_CLASS_ENCODER(cls_user_stats)
  */
 struct cls_user_header {
   cls_user_stats stats;
-  utime_t last_stats_sync;     /* last time a full stats sync completed */
-  utime_t last_stats_update;   /* last time a stats update was done */
+  ceph::real_time last_stats_sync;     /* last time a full stats sync completed */
+  ceph::real_time last_stats_update;   /* last time a stats update was done */
 
   void encode(bufferlist& bl) const {
      ENCODE_START(1, 1, bl);

@@ -102,7 +102,7 @@ int RGWMetadataLog::add_entry(RGWMetadataHandler *handler, const string& section
   int shard_id;
   store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
   mark_modified(shard_id);
-  utime_t now = ceph_clock_now(cct);
+  real_time now = real_clock::now();
   return store->time_log_add(oid, now, section, key, bl);
 }
 
@@ -115,7 +115,7 @@ int RGWMetadataLog::store_entries_in_shard(list<cls_log_entry>& entries, int sha
   return store->time_log_add(oid, entries, completion, false);
 }
 
-void RGWMetadataLog::init_list_entries(int shard_id, utime_t& from_time, utime_t& end_time, 
+void RGWMetadataLog::init_list_entries(int shard_id, const real_time& from_time, const real_time& end_time, 
                                        string& marker, void **handle)
 {
   LogListCtx *ctx = new LogListCtx();
@@ -171,7 +171,7 @@ int RGWMetadataLog::get_info(int shard_id, RGWMetadataLogInfo *info)
     return ret;
 
   info->marker = header.max_marker;
-  info->last_update = header.max_time;
+  info->last_update = header.max_time.to_real_time();
 
   return 0;
 }
@@ -201,7 +201,7 @@ public:
     *pret = completion->get_return_value();
     if (*pret >= 0) {
       pinfo->marker = header.max_marker;
-      pinfo->last_update = header.max_time;
+      pinfo->last_update = header.max_time.to_real_time();
     }
     completion_manager->complete(NULL, user_info);
     put();
@@ -243,7 +243,7 @@ int RGWMetadataLog::get_info_async(int shard_id, RGWMetadataLogInfo *info, RGWCo
   return 0;
 }
 
-int RGWMetadataLog::trim(int shard_id, const utime_t& from_time, const utime_t& end_time,
+int RGWMetadataLog::trim(int shard_id, const real_time& from_time, const real_time& end_time,
                          const string& start_marker, const string& end_marker)
 {
   string oid;
@@ -259,7 +259,7 @@ int RGWMetadataLog::trim(int shard_id, const utime_t& from_time, const utime_t& 
   return ret;
 }
   
-int RGWMetadataLog::lock_exclusive(int shard_id, utime_t& duration, string& zone_id, string& owner_id) {
+int RGWMetadataLog::lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
 
@@ -311,7 +311,7 @@ public:
 
   virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) { return -ENOTSUP; }
   virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-                  time_t mtime, JSONObj *obj, sync_type_t sync_type) { return -ENOTSUP; }
+                  real_time mtime, JSONObj *obj, sync_type_t sync_type) { return -ENOTSUP; }
 
   virtual void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {}
 
@@ -567,9 +567,10 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f)
   f->open_object_section("metadata_info");
   encode_json("key", metadata_key, f);
   encode_json("ver", obj->get_version(), f);
-  time_t mtime = obj->get_mtime();
-  if (mtime > 0) {
-    encode_json("mtime", mtime, f);
+  real_time mtime = obj->get_mtime();
+  if (!real_clock::is_zero(mtime)) {
+    utime_t ut(mtime);
+    encode_json("mtime", ut, f);
   }
   encode_json("data", *obj, f);
   f->close_section();
@@ -599,7 +600,7 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
 
   obj_version *objv = &objv_tracker.write_version;
 
-  time_t mtime = 0;
+  utime_t mtime;
 
   try {
     JSONDecoder::decode_json("key", metadata_key, &parser);
@@ -614,7 +615,7 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
     return -EINVAL;
   }
 
-  ret = handler->put(store, entry, objv_tracker, mtime, jo, sync_type);
+  ret = handler->put(store, entry, objv_tracker, mtime.to_real_time(), jo, sync_type);
   if (existing_version) {
     *existing_version = objv_tracker.read_version;
   }
@@ -646,7 +647,7 @@ int RGWMetadataManager::remove(string& metadata_key)
   return handler->remove(store, entry, objv_tracker);
 }
 
-int RGWMetadataManager::lock_exclusive(string& metadata_key, utime_t duration, string& owner_id) {
+int RGWMetadataManager::lock_exclusive(string& metadata_key, timespan duration, string& owner_id) {
   RGWMetadataHandler *handler;
   string entry;
   string zone_id;
@@ -820,7 +821,7 @@ string RGWMetadataManager::heap_oid(RGWMetadataHandler *handler, const string& k
 }
 
 int RGWMetadataManager::store_in_heap(RGWMetadataHandler *handler, const string& key, bufferlist& bl,
-                                      RGWObjVersionTracker *objv_tracker, time_t mtime,
+                                      RGWObjVersionTracker *objv_tracker, real_time mtime,
 				      map<string, bufferlist> *pattrs)
 {
   if (!objv_tracker) {
@@ -863,7 +864,7 @@ int RGWMetadataManager::remove_from_heap(RGWMetadataHandler *handler, const stri
 }
 
 int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, const string& key, bufferlist& bl, bool exclusive,
-                                  RGWObjVersionTracker *objv_tracker, time_t mtime, map<string, bufferlist> *pattrs)
+                                  RGWObjVersionTracker *objv_tracker, real_time mtime, map<string, bufferlist> *pattrs)
 {
   string section;
   RGWMetadataLogData log_data;

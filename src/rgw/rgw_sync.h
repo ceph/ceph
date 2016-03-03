@@ -25,7 +25,7 @@ struct rgw_mdlog_entry {
   string id;
   string section;
   string name;
-  utime_t timestamp;
+  ceph::real_time timestamp;
   RGWMetadataLogData log_data;
 
   void decode_json(JSONObj *obj);
@@ -34,7 +34,7 @@ struct rgw_mdlog_entry {
     id = le.id;
     section = le.section;
     name = le.name;
-    timestamp = le.timestamp;
+    timestamp = le.timestamp.to_real_time();
     try {
       bufferlist::iterator iter = le.data.begin();
       ::decode(log_data, iter);
@@ -231,7 +231,7 @@ class RGWMetaSyncStatusManager {
   map<int, rgw_obj> shard_objs;
 
   struct utime_shard {
-    utime_t ts;
+    real_time ts;
     int shard_id;
 
     utime_shard() : shard_id(-1) {}
@@ -283,10 +283,10 @@ template <class T, class K>
 class RGWSyncShardMarkerTrack {
   struct marker_entry {
     uint64_t pos;
-    utime_t timestamp;
+    real_time timestamp;
 
     marker_entry() : pos(0) {}
-    marker_entry(uint64_t _p, const utime_t& _ts) : pos(_p), timestamp(_ts) {}
+    marker_entry(uint64_t _p, const real_time& _ts) : pos(_p), timestamp(_ts) {}
   };
   typename std::map<T, marker_entry> pending;
 
@@ -300,14 +300,14 @@ class RGWSyncShardMarkerTrack {
 protected:
   typename std::set<K> need_retry_set;
 
-  virtual RGWCoroutine *store_marker(const T& new_marker, uint64_t index_pos, const utime_t& timestamp) = 0;
+  virtual RGWCoroutine *store_marker(const T& new_marker, uint64_t index_pos, const real_time& timestamp) = 0;
   virtual void handle_finish(const T& marker) { }
 
 public:
   RGWSyncShardMarkerTrack(int _window_size) : window_size(_window_size), updates_since_flush(0) {}
   virtual ~RGWSyncShardMarkerTrack() {}
 
-  bool start(const T& pos, int index_pos, const utime_t& timestamp) {
+  bool start(const T& pos, int index_pos, const real_time& timestamp) {
     if (pending.find(pos) != pending.end()) {
       return false;
     }
@@ -315,7 +315,7 @@ public:
     return true;
   }
 
-  void try_update_high_marker(const T& pos, int index_pos, const utime_t& timestamp) {
+  void try_update_high_marker(const T& pos, int index_pos, const real_time& timestamp) {
     if (!(pos <= high_marker)) {
       high_marker = pos;
       high_entry = marker_entry(index_pos, timestamp);
