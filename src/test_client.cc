@@ -1,7 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
- * Copyright (C) 2015 Red Hat Inc.
+ * Copyright (C) 2016 Red Hat Inc.
  */
 
 
@@ -27,11 +28,6 @@ TestClient::TestClient(ClientId _id,
   submit_f(_submit_f),
   server_select_f(_server_select_f),
   instructions(_instrs),
-#if 0
-  ops_to_run(_ops_to_run),
-  iops_goal(_iops_goal),
-  outstanding_ops_allowed(_outstanding_ops_allowed),
-#endif
   service_tracker(),
   outstanding_ops(0),
   requests_complete(false)
