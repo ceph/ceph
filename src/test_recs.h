@@ -13,8 +13,8 @@
 #include "dmclock_recs.h"
 
 
-using ClientId = int;
-using ServerId = int;
+using ClientId = uint;
+using ServerId = uint;
 
 
 struct TestRequest {

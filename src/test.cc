@@ -204,11 +204,20 @@ int main(int argc, char* argv[]) {
   const int data_w = 8;
   const int data_prec = 2;
 
+  auto client_disp_filter = [=] (ClientId i) -> bool {
+    return i < 3 || i >= (client_count - 3);
+  };
+
+  auto server_disp_filter = [=] (ServerId i) -> bool {
+    return i < 3 || i >= (server_count - 3);
+  };
+
   std::cout << "==== Client Data ====" << std::endl;
 
   std::cout << std::setw(head_w) << "client:";
-  for (auto const &i : clients) {
-    std::cout << std::setw(data_w) << i.first;
+  for (auto const &c : clients) {
+    if (!client_disp_filter(c.first)) continue;
+    std::cout << std::setw(data_w) << c.first;
   }
   std::cout << std::setw(data_w) << "total" << std::endl;
 
@@ -227,6 +236,9 @@ int main(int argc, char* argv[]) {
 	  has_data = true;
 	}
 	total += data;
+
+	if (!client_disp_filter(c.first)) continue;
+
 	std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
 	  std::fixed << data;
       }
@@ -244,6 +256,7 @@ int main(int argc, char* argv[]) {
     int total = 0;
     for (auto const &c : clients) {
       total += c.second->get_res_count();
+      if (!client_disp_filter(c.first)) continue;
       std::cout << std::setw(data_w) << c.second->get_res_count();
     }
     std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
@@ -255,6 +268,7 @@ int main(int argc, char* argv[]) {
     int total = 0;
     for (auto const &c : clients) {
       total += c.second->get_prop_count();
+      if (!client_disp_filter(c.first)) continue;
       std::cout << std::setw(data_w) << c.second->get_prop_count();
     }
     std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
