@@ -2090,6 +2090,13 @@ void OSD::final_init()
     test_ops_hook,
     "inject metadata error");
   assert(r == 0);
+  r = admin_socket->register_command(
+    "set_recovery_delay",
+    "set_recovery_delay " \
+    "name=utime,type=CephInt,req=false",
+    test_ops_hook,
+     "Delay osd recovery by specified seconds");
+  assert(r == 0);
 }
 
 void OSD::create_logger()
@@ -2323,6 +2330,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("truncobj");
   cct->get_admin_socket()->unregister_command("injectdataerr");
   cct->get_admin_socket()->unregister_command("injectmdataerr");
+  cct->get_admin_socket()->unregister_command("set_recovery_delay");
   delete test_ops_hook;
   test_ops_hook = NULL;
 
@@ -2840,7 +2848,7 @@ void OSD::load_pgs()
 	  derr << __func__ << ": could not find map for epoch " << map_epoch
 	       << " on pg " << pgid << ", but the pool is not present in the "
 	       << "current map, so this is probably a result of bug 10617.  "
-	       << "Skipping the pg for now, you can use ceph_objectstore_tool "
+	       << "Skipping the pg for now, you can use ceph-objectstore-tool "
 	       << "to clean it up later." << dendl;
 	  continue;
 	} else {
@@ -4011,6 +4019,8 @@ void OSD::check_ops_in_flight()
 //   truncobj <pool-id> [namespace/]<obj-name> <newlen>
 //   injectmdataerr [namespace/]<obj-name>
 //   injectdataerr [namespace/]<obj-name>
+//
+//   set_recovery_delay [utime]
 void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
      std::string command, cmdmap_t& cmdmap, ostream &ss)
 {
@@ -4131,6 +4141,24 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       store->inject_mdata_error(obj);
       ss << "ok";
     }
+    return;
+  }
+  if (command == "set_recovery_delay") {
+    int64_t delay;
+    cmd_getval(service->cct, cmdmap, "utime", delay, (int64_t)0);
+    ostringstream oss;
+    oss << delay;
+    int r = service->cct->_conf->set_val("osd_recovery_delay_start",
+					 oss.str().c_str());
+    if (r != 0) {
+      ss << "set_recovery_delay: error setting "
+	 << "osd_recovery_delay_start to '" << delay << "': error "
+	 << r;
+      return;
+    }
+    service->cct->_conf->apply_changes(NULL);
+    ss << "set_recovery_delay: set osd_recovery_delay_start "
+       << "to " << service->cct->_conf->osd_recovery_delay_start;
     return;
   }
   ss << "Internal error - command=" << command;

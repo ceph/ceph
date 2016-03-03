@@ -134,7 +134,7 @@ public:
       start = block_size;
     }
 
-    uint64_t get_fsid64() {
+    uint64_t get_fsid64() const {
       return *(uint64_t*)&fsid.uuid[0];
     }
 
@@ -213,6 +213,8 @@ public:
 	magic2 == (fsid ^ seq ^ len);
     }
   } __attribute__((__packed__, aligned(4)));
+
+  bool journalq_empty() { return journalq.empty(); }
 
 private:
   string fn;
@@ -294,10 +296,12 @@ private:
 
   int _open(bool wr, bool create=false);
   int _open_block_device();
+  void _close(int fd) const;
   void _check_disk_write_cache() const;
   int _open_file(int64_t oldsize, blksize_t blksize, bool create);
-  void print_header();
-  int read_header();
+  int _dump(ostream& out, bool simple);
+  void print_header(const header_t &hdr) const;
+  int read_header(header_t *hdr) const;
   bufferptr prepare_header();
   void start_writer();
   void stop_writer();
@@ -325,7 +329,7 @@ private:
     int64_t len,      ///< [in] length to read
     bufferlist* bl,   ///< [out] result
     off64_t *out_pos  ///< [out] next position to read, will be wrapped
-    );
+    ) const;
 
   void do_discard(int64_t offset, int64_t end);
 
@@ -349,7 +353,7 @@ private:
     }
   } write_finish_thread;
 
-  off64_t get_top() {
+  off64_t get_top() const {
     return ROUND_UP_TO(sizeof(header), block_size);
   }
 
@@ -382,11 +386,24 @@ private:
     throttle_ops(g_ceph_context, "filestore_ops", g_conf->journal_queue_max_ops),
     throttle_bytes(g_ceph_context, "filestore_bytes", g_conf->journal_queue_max_bytes),
     write_lock("FileJournal::write_lock", false, true, false, g_ceph_context),
-    write_stop(false),
-    aio_stop(false),
+    write_stop(true),
+    aio_stop(true),
     write_thread(this),
-    write_finish_thread(this) { }
+    write_finish_thread(this) {
+
+      if (aio && !directio) {
+        derr << "FileJournal::_open_any: aio not supported without directio; disabling aio" << dendl;
+        aio = false;
+      }
+#ifndef HAVE_LIBAIO
+      if (aio) {
+        derr << "FileJournal::_open_any: libaio not compiled in; disabling aio" << dendl;
+        aio = false;
+      }
+#endif
+  }
   ~FileJournal() {
+    assert(fd == -1);
     delete[] zero_buf;
   }
 
@@ -397,6 +414,8 @@ private:
   int peek_fsid(uuid_d& fsid);
 
   int dump(ostream& out);
+  int simple_dump(ostream& out);
+  int _fdump(Formatter &f, bool simple);
 
   void flush();
 
@@ -413,6 +432,8 @@ private:
   bool should_commit_now() {
     return full_state != FULL_NOTFULL && !write_stop;
   }
+
+  void write_header_sync();
 
   void set_wait_on_full(bool b) { wait_on_full = b; }
 
@@ -446,7 +467,7 @@ private:
     uint64_t *seq,        ///< [out] seq of successful read
     ostream *ss,          ///< [out] error output
     entry_header_t *h = 0 ///< [out] header
-    ); ///< @return result code
+    ) const; ///< @return result code
 
   bool read_entry(
     bufferlist &bl,
