@@ -135,11 +135,6 @@ int main(int argc, char* argv[]) {
     i->second->post(request, req_params);
   };
 
-  TestClient fake(13, server_post_f, server_random_f,
-		  { {wait_op, std::chrono::seconds(5) },
-		    {req_op, 300, 12, 100}});
-
-
   for (auto const &i : client_info) {
     ClientId name = i.first;
     int goal = i.second.second;
@@ -227,7 +222,7 @@ int main(int argc, char* argv[]) {
       ++i;
     } while(has_data);
   }
-  
+
   // report how many ops were done by reservation and proportion for
   // each client
 
