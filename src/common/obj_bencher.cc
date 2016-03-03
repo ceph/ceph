@@ -1411,5 +1411,5 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
   lock.Lock();
   data.done = 1;
   lock.Unlock();
-  return -5;
+  return -EIO;
 }
