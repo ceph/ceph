@@ -807,7 +807,7 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Forma
 int bucket_stats(rgw_bucket& bucket, int shard_id, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
-  time_t mtime;
+  real_time mtime;
   RGWObjectCtx obj_ctx(store);
   int r = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, bucket_info, &mtime);
   if (r < 0)
@@ -829,7 +829,7 @@ int bucket_stats(rgw_bucket& bucket, int shard_id, Formatter *formatter)
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
   ::encode_json("owner", bucket_info.owner, formatter);
-  formatter->dump_int("mtime", mtime);
+  formatter->dump_int("mtime", utime_t(mtime));
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
   formatter->dump_string("max_marker", max_marker);
@@ -1043,7 +1043,7 @@ int set_bucket_quota(RGWRados *store, int opt_cmd,
 
   set_quota_info(bucket_info.quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
-   r = store->put_bucket_instance_info(bucket_info, false, 0, &attrs);
+   r = store->put_bucket_instance_info(bucket_info, false, real_time(), &attrs);
   if (r < 0) {
     cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1704,21 +1704,21 @@ static void get_md_sync_status(list<string>& status)
     if (ret < 0) {
       derr << "ERROR: failed to fetch master next positions (" << cpp_strerror(-ret) << ")" << dendl;
     } else {
-      utime_t oldest;
+      ceph::real_time oldest;
       for (auto iter : master_pos) {
         rgw_mdlog_shard_data& shard_data = iter.second;
 
         if (!shard_data.entries.empty()) {
           rgw_mdlog_entry& entry = shard_data.entries.front();
-          if (oldest.is_zero()) {
+          if (ceph::real_clock::is_zero(oldest)) {
             oldest = entry.timestamp;
-          } else if (!entry.timestamp.is_zero() && entry.timestamp < oldest) {
+          } else if (!ceph::real_clock::is_zero(entry.timestamp) && entry.timestamp < oldest) {
             oldest = entry.timestamp;
           }
         }
       }
 
-      if (!oldest.is_zero()) {
+      if (!ceph::real_clock::is_zero(oldest)) {
         push_ss(ss, status) << "oldest incremental change not applied: " << oldest;
       }
     }
@@ -1838,21 +1838,21 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
     if (ret < 0) {
       derr << "ERROR: failed to fetch next positions (" << cpp_strerror(-ret) << ")" << dendl;
     } else {
-      utime_t oldest;
+      ceph::real_time oldest;
       for (auto iter : master_pos) {
         rgw_datalog_shard_data& shard_data = iter.second;
 
         if (!shard_data.entries.empty()) {
           rgw_datalog_entry& entry = shard_data.entries.front();
-          if (oldest.is_zero()) {
+          if (ceph::real_clock::is_zero(oldest)) {
             oldest = entry.timestamp;
-          } else if (!entry.timestamp.is_zero() && entry.timestamp < oldest) {
+          } else if (!ceph::real_clock::is_zero(entry.timestamp) && entry.timestamp < oldest) {
             oldest = entry.timestamp;
           }
         }
       }
 
-      if (!oldest.is_zero()) {
+      if (!ceph::real_clock::is_zero(oldest)) {
         push_ss(ss, status, tab) << "oldest incremental change not applied: " << oldest;
       }
     }
@@ -4399,7 +4399,7 @@ next:
         formatter->dump_string("name", key.name);
         formatter->dump_string("instance", key.instance);
         formatter->dump_int("size", entry.size);
-        utime_t ut(entry.mtime, 0);
+        utime_t ut(entry.mtime);
         ut.gmtime(formatter->dump_stream("mtime"));
 
         if ((entry.size < min_rewrite_size) ||
@@ -4753,8 +4753,7 @@ next:
       list<cls_log_entry> entries;
 
 
-      meta_log->init_list_entries(i, start_time, end_time, marker, &handle);
-
+      meta_log->init_list_entries(i, start_time.to_real_time(), end_time.to_real_time(), marker, &handle); 
       bool truncated;
       do {
 	  int ret = meta_log->list_entries(handle, 1000, entries, NULL, &truncated);
@@ -4833,7 +4832,7 @@ next:
     }
     RGWMetadataLog *meta_log = store->meta_mgr->get_log(period_id);
 
-    ret = meta_log->trim(shard_id, start_time, end_time, start_marker, end_marker);
+    ret = meta_log->trim(shard_id, start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -5162,8 +5161,8 @@ next:
 
       do {
         list<cls_log_entry> entries;
-        ret = store->time_log_list(oid, start_time, end_time, max_entries - count, entries,
-                                   marker, &marker, &truncated);
+        ret = store->time_log_list(oid, start_time.to_real_time(), end_time.to_real_time(),
+                                   max_entries - count, entries, marker, &marker, &truncated);
         if (ret == -ENOENT) {
           break;
         }
@@ -5247,7 +5246,7 @@ next:
 
     do {
       list<rgw_data_change_log_entry> entries;
-      ret = log->list_entries(start_time, end_time, max_entries - count, entries, marker, &truncated);
+      ret = log->list_entries(start_time.to_real_time(), end_time.to_real_time(), max_entries - count, entries, marker, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -5303,7 +5302,7 @@ next:
       return -ret;
 
     RGWDataChangesLog *log = store->data_log;
-    ret = log->trim_entries(start_time, end_time, start_marker, end_marker);
+    ret = log->trim_entries(start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;

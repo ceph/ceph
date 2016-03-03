@@ -88,13 +88,13 @@ public:
   /* async request */
   int put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
                    map<string, bufferlist>& attrs, RGWRESTStreamWriteRequest **req);
-  int complete_request(RGWRESTStreamWriteRequest *req, string& etag, time_t *mtime);
+  int complete_request(RGWRESTStreamWriteRequest *req, string& etag, ceph::real_time *mtime);
 
   int get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
-              const time_t *mod_ptr, const time_t *unmod_ptr,
+              const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req);
-  int complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime, map<string, string>& attrs);
+  int complete_request(RGWRESTStreamReadRequest *req, string& etag, ceph::real_time *mtime, map<string, string>& attrs);
 
   int get_resource(const string& resource,
                    param_list_t *extra_params,

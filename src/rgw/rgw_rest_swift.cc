@@ -272,8 +272,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
         }
         s->formatter->dump_string("content_type", single_content_type);
       }
-      time_t mtime = iter->mtime.sec();
-      dump_time(s, "last_modified", &mtime);
+      dump_time(s, "last_modified", &iter->mtime);
       s->formatter->close_section();
     }
 
@@ -327,8 +326,9 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[32];
   /* Adding X-Timestamp to keep align with Swift API */
-  snprintf(buf, sizeof(buf), "%lld.00000",
-	   (long long)s->bucket_info.creation_time);
+  utime_t ut(s->bucket_info.creation_time);
+  snprintf(buf, sizeof(buf), "%lld.%05d",
+	   (long long)ut.sec(), (int)(ut.usec() / 10));
   STREAM_IO(s)->print("X-Timestamp: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.count);
   STREAM_IO(s)->print("X-Container-Object-Count: %s\r\n", buf);
@@ -503,10 +503,10 @@ void RGWDeleteBucket_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-static int get_delete_at_param(req_state *s, time_t *delete_at)
+static int get_delete_at_param(req_state *s, real_time *delete_at)
 {
   /* Handle Swift object expiration. */
-  utime_t delat_proposal;
+  real_time delat_proposal;
   string x_delete = s->info.env->get("HTTP_X_DELETE_AFTER", "");
 
   if (x_delete.empty()) {
@@ -514,7 +514,7 @@ static int get_delete_at_param(req_state *s, time_t *delete_at)
   } else {
     /* X-Delete-After HTTP is present. It means we need add its value
      * to the current time. */
-    delat_proposal = ceph_clock_now(g_ceph_context);
+    delat_proposal = real_clock::now();
   }
 
   if (x_delete.empty()) {
@@ -527,12 +527,12 @@ static int get_delete_at_param(req_state *s, time_t *delete_at)
     return -EINVAL;
   }
 
-  delat_proposal += utime_t(ts, 0);
-  if (delat_proposal < ceph_clock_now(g_ceph_context)) {
+  delat_proposal += timespan(ts);
+  if (delat_proposal < real_clock::now()) {
     return -EINVAL;
   }
 
-  *delete_at = delat_proposal.sec();
+  *delete_at = delat_proposal;
 
   return 0;
 }
@@ -1074,7 +1074,10 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
-  STREAM_IO(s)->print("X-Timestamp: %lld.00000\r\n", (long long)lastmod);
+  {
+    utime_t ut(lastmod);
+    STREAM_IO(s)->print("X-Timestamp: %lld.%05d\r\n", (long long)ut.sec(), (int)(ut.usec() / 10));
+  }
   if (is_slo) {
     STREAM_IO(s)->print("X-Static-Large-Object: True\r\n");
   }

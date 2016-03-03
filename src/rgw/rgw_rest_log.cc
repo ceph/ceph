@@ -23,7 +23,7 @@
 #define LOG_CLASS_LIST_MAX_ENTRIES (1000)
 #define dout_subsys ceph_subsys_rgw
 
-static int parse_date_str(string& in, utime_t& out) {
+static int parse_date_str(string& in, real_time& out) {
   uint64_t epoch = 0;
   uint64_t nsec = 0;
 
@@ -33,7 +33,7 @@ static int parse_date_str(string& in, utime_t& out) {
       return -EINVAL;
     }
   }
-  out = utime_t(epoch, nsec);
+  out = utime_t(epoch, nsec).to_real_time();
   return 0;
 }
 
@@ -45,8 +45,8 @@ void RGWOp_MDLog_List::execute() {
            et = s->info.args.get("end-time"),
            marker = s->info.args.get("marker"),
            err;
-  utime_t  ut_st, 
-           ut_et;
+  real_time  ut_st, 
+             ut_et;
   void    *handle;
   unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
@@ -183,8 +183,8 @@ void RGWOp_MDLog_Delete::execute() {
            period = s->info.args.get("period"),
            shard = s->info.args.get("id"),
            err;
-  utime_t  ut_st, 
-           ut_et;
+  real_time  ut_st, 
+             ut_et;
   unsigned shard_id;
 
   http_ret = 0;
@@ -258,8 +258,8 @@ void RGWOp_MDLog_Lock::execute() {
     http_ret = -EINVAL;
     return;
   }
-  utime_t time(dur, 0);
-  http_ret = meta_log.lock_exclusive(shard_id, time, zone_id, locker_id);
+  http_ret = meta_log.lock_exclusive(shard_id, timespan(dur), zone_id,
+				      locker_id);
   if (http_ret == -EBUSY)
     http_ret = -ERR_LOCKED;
 }
@@ -544,8 +544,8 @@ void RGWOp_DATALog_List::execute() {
            max_entries_str = s->info.args.get("max-entries"),
            marker = s->info.args.get("marker"),
            err;
-  utime_t  ut_st, 
-           ut_et;
+  real_time  ut_st, 
+             ut_et;
   unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
   s->info.args.get_bool("extra-info", &extra_info, false);
@@ -694,8 +694,7 @@ void RGWOp_DATALog_Lock::execute() {
     http_ret = -EINVAL;
     return;
   }
-  utime_t time(dur, 0);
-  http_ret = store->data_log->lock_exclusive(shard_id, time, zone_id, locker_id);
+  http_ret = store->data_log->lock_exclusive(shard_id, timespan(dur), zone_id, locker_id);
   if (http_ret == -EBUSY)
     http_ret = -ERR_LOCKED;
 }
@@ -782,8 +781,8 @@ void RGWOp_DATALog_Delete::execute() {
            end_marker = s->info.args.get("end-marker"),
            shard = s->info.args.get("id"),
            err;
-  utime_t  ut_st, 
-           ut_et;
+  real_time  ut_st, 
+             ut_et;
   unsigned shard_id;
 
   http_ret = 0;

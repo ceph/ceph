@@ -458,10 +458,10 @@ namespace rgw {
       state.size = size;
     }
 
-    void set_times(time_t t) {
-      state.ctime = {t, 0};
-      state.mtime = {t, 0};
-      state.atime = {t, 0};
+    void set_times(real_time t) {
+      state.ctime = real_clock::to_timespec(t);
+      state.mtime = state.ctime;
+      state.atime = state.ctime;
     }
 
     void set_ctime(const struct timespec &ts) {
@@ -1484,14 +1484,14 @@ public:
   virtual const string name() { return "stat_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_STAT_OBJ; }
 
-  time_t get_mtime() const {
+  real_time get_mtime() const {
     return lastmod;
   }
 
   /* attributes */
   uint64_t get_size() { return _size; }
-  time_t ctime() { return mod_time; } // XXX
-  time_t mtime() { return mod_time; }
+  real_time ctime() { return mod_time; } // XXX
+  real_time mtime() { return mod_time; }
   map<string, bufferlist>& get_attrs() { return attrs; }
 
   virtual bool only_bucket() { return false; }
@@ -1593,7 +1593,7 @@ public:
     return 0;
   }
 
-  time_t get_ctime() const {
+  real_time get_ctime() const {
     return bucket.creation_time;
   }
 
