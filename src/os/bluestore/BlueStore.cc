@@ -5538,6 +5538,7 @@ int BlueStore::_do_write(
 	uint64_t x_off = offset - bp->first;
 	dout(20) << __func__ << " write " << offset << "~" << length
 		 << " x_off " << x_off << dendl;
+	_do_overlay_trim(txc, o, offset, length);
 	bdev->aio_write(bp->second.offset + x_off, bl, &txc->ioc, buffered);
 	bp->second.clear_flag(bluestore_extent_t::FLAG_UNWRITTEN);
 	bp->second.clear_flag(bluestore_extent_t::FLAG_COW_HEAD);
