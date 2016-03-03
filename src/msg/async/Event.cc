@@ -101,12 +101,14 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
                 << " time_id=" << time_event_next_id << ").";
 }
 
-thread_local unsigned local_id = 0;
+thread_local unsigned local_id = 10000;
 
-int EventCenter::init(int n)
+int EventCenter::init(int n, unsigned idx)
 {
   // can't init multi times
   assert(nevent == 0);
+
+  local_id = id = idx;
 
   driver = nullptr;
   if (cct->_conf->ms_async_transport_type == "dpdk") {
@@ -183,12 +185,6 @@ EventCenter::~EventCenter()
 
   delete driver;
   delete notify_handler;
-}
-
-
-void EventCenter::set_id(unsigned idx)
-{
-  local_id = id = idx;
 }
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)

@@ -63,14 +63,21 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), cct(c)
     Worker *w = create_worker(cct, type, i);
     workers.push_back(w);
   }
+}
 
+void NetworkStack::start()
+{
+  static std::vector<std::function<void ()>> threads;
+  threads.clear();
   for (auto &&w : workers) {
-    w->spawn_worker(
+    threads.emplace_back(
       [this, w]() {
+        const uint64_t InitEventNumber = 5000;
         const uint64_t EventMaxWaitUs = 30000000;
+        w->center.init(InitEventNumber, w->id);
         ldout(cct, 10) << __func__ << " starting" << dendl;
-        w->center.set_id(w->id);
         w->initialize();
+        w->init_done = true;
         while (!w->done) {
           ldout(cct, 20) << __func__ << " calling event process" << dendl;
 
@@ -84,19 +91,19 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), cct(c)
       }
     );
   }
+  spawn_workers(threads);
 
   for (auto &&w : workers) {
-    while (!w->is_started())
+    while (!w->init_done)
       usleep(100);
   }
 }
 
-NetworkStack::~NetworkStack()
+void NetworkStack::stop()
 {
-  for (auto &&w : workers) {
-    w->join_worker();
-    delete w;
-  }
+  for (auto &&w : workers)
+    w->stop();
+  join_workers();
 }
 
 class C_barrier : public EventCallback {

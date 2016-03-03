@@ -16,6 +16,11 @@
  * under the License.
  */
 
+#include <rte_config.h>
+#include <rte_common.h>
+#include <rte_ethdev.h>
+#include <rte_version.h>
+
 #include "DPDK.h"
 #include "dpdk_rte.h"
 
@@ -37,10 +42,10 @@ namespace dpdk {
     return c;
   }
 
-  void eal::init(CephContext *c)
+  int eal::init(CephContext *c)
   {
     if (initialized) {
-      return;
+      return 0;
     }
 
     // TODO: Inherit these from the app parameters - "opts"
@@ -87,11 +92,11 @@ namespace dpdk {
     }
     /* initialise the EAL for all */
     int ret = rte_eal_init(cargs.size(), cargs.data());
-    if (ret < 0) {
-      rte_exit(EXIT_FAILURE, "Cannot init EAL\n");
-    }
+    if (ret < 0)
+      return ret;
 
     initialized = true;
+    return 0;
   }
 
   size_t eal::mem_size(int num_cpus)

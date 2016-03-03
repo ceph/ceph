@@ -19,7 +19,6 @@
 #include <iostream>
 #include <string>
 #include <set>
-#include <thread>
 #include <vector>
 #include <gtest/gtest.h>
 
@@ -34,74 +33,21 @@
 
 #if GTEST_HAS_PARAM_TEST
 
-class TransportTest : public ::testing::TestWithParam<const char*> {
-  struct StackThread {
-    CephContext *cct;
-    std::thread thread;
-    EventCenter center;
-    Worker *worker;
-    unsigned idx;
-    bool done = false;
-    bool init_done = false;
-
-    StackThread(CephContext *c, unsigned i): cct(c), center(cct), idx(i) {}
-    void start(const char *type) {
-      center.init(1000);
-      if (idx) {
-        thread = std::thread(&StackThread::run, this, type);
-      } else {
-        center.set_id(idx);
-        worker = NetworkStack::create_worker(cct, string(type), idx);
-        worker->initialize();
-        init_done = true;
-      }
-    }
-
-    void stop() {
-      done = true;
-      if (idx)
-        thread.join();
-      delete worker;
-    }
-
-    void ready() {
-      while (!init_done)
-        usleep(100);
-    }
-
-    void run(const char *type) {
-      center.set_id(idx);
-      worker = NetworkStack::create_worker(cct, string(type), idx);
-      worker->initialize();
-      init_done = true;
-      while (!done) {
-        center.process_events(0);
-      }
-      usleep(100);
-    }
-  };
-
-  int count_one_bits(unsigned value) {
-    int ones = 0;
-    for (; value != 0; value = value >> 1)
-      if (value % 2 != 0)
-          ones = ones + 1;
-    return ones;
-  }
-
+class NetworkWorkerTest : public ::testing::TestWithParam<const char*> {
  public:
-  std::vector<StackThread*> stacks;
+  std::shared_ptr<NetworkStack> stack;
   string addr, port_addr;
 
-  TransportTest() {}
+  NetworkWorkerTest() {}
   virtual void SetUp() {
     cerr << __func__ << " start set up " << GetParam() << std::endl;
     if (strncmp(GetParam(), "dpdk", 4)) {
-      g_ceph_context->_conf->set_val("ms_async_transport_type", "posix");
+      g_ceph_context->_conf->set_val("ms_async_transport_type", "posix", false, false);
       addr = "127.0.0.1:15000";
       port_addr = "127.0.0.1:15001";
     } else {
-      g_ceph_context->_conf->set_val("ms_async_transport_type", "dpdk");
+      g_ceph_context->_conf->set_val("ms_async_transport_type", "dpdk", false, false);
+      g_ceph_context->_conf->set_val("ms_async_op_threads", "2", false, false);
       g_ceph_context->_conf->set_val("ms_dpdk_coremask", "3", false, false);
       g_ceph_context->_conf->set_val("ms_dpdk_host_ipv4_addr", "172.16.218.199", false, false);
       g_ceph_context->_conf->set_val("ms_dpdk_gateway_ipv4_addr", "172.16.218.2", false, false);
@@ -110,26 +56,11 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
       port_addr = "172.16.218.199:15001";
     }
     g_ceph_context->_conf->apply_changes(nullptr);
-    unsigned x;
-    std::stringstream ss;
-    ss << std::dec << g_ceph_context->_conf->ms_dpdk_coremask;
-    ss >> x;
-    x = count_one_bits(x);
-    stacks.resize(x);
-    for (unsigned i = x; i > 0; --i) {
-       StackThread *t = new StackThread(g_ceph_context, i-1);
-       stacks[i-1] = t;
-       t->start(GetParam());
-    }
-    for (auto &&t : stacks)
-       t->ready();
+    stack = NetworkStack::create(g_ceph_context, GetParam());
+    stack->start();
   }
   virtual void TearDown() {
-    for (auto &&t : stacks) {
-      t->stop();
-      delete t;
-    }
-    stacks.clear();
+    stack->stop();
   }
   string get_addr() const {
     return addr;
@@ -141,10 +72,45 @@ class TransportTest : public ::testing::TestWithParam<const char*> {
     return "10.0.123.100:4323";
   }
   EventCenter *get_center(unsigned i) {
-    return &stacks[i]->center;
+    return &stack->get_worker(i)->center;
   }
   Worker *get_worker(unsigned i) {
-    return stacks[i]->worker;
+    return stack->get_worker(i);
+  }
+  template<typename func>
+  class C_dispatch : public EventCallback {
+    Worker *worker;
+    func f;
+    bool done;
+   public:
+    C_dispatch(Worker *w, func &&_f): worker(w), f(std::move(_f)), done(false) {}
+    void do_request(int id) {
+      f(worker);
+      done = true;
+    }
+    void wait() {
+      int us = 1000 * 1000 * 1000;
+      while (!done) {
+        ASSERT_TRUE(us > 0);
+        usleep(100);
+        us -= 100;
+      }
+    }
+  };
+  template<typename func>
+  void exec_events(func &&f) {
+    std::vector<C_dispatch<func>*> dis;
+    for (unsigned i = 0; i < stack->get_num_worker(); ++i) {
+      Worker *w = stack->get_worker(i);
+      C_dispatch<func> *e = new C_dispatch<func>(w, std::move(f));
+      stack->get_worker(i)->center.dispatch_event_external(e);
+      dis.push_back(e);
+    }
+
+    for (auto &&e : dis) {
+      e->wait();
+      delete e;
+    }
   }
 };
 
@@ -180,127 +146,153 @@ class C_poll : public EventCallback {
   }
 };
 
-TEST_P(TransportTest, SimpleTest) {
-  entity_addr_t bind_addr, cli_addr;
+TEST_P(NetworkWorkerTest, SimpleTest) {
+  entity_addr_t bind_addr;
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
-  SocketOptions options;
-  ServerSocket bind_socket;
-  Worker *worker = get_worker(0);
-  EventCenter *center = get_center(0);
-  ssize_t r = worker->listen(bind_addr, options, &bind_socket);
-  ASSERT_EQ(r, 0);
-  ConnectedSocket cli_socket, srv_socket;
-  r = worker->connect(bind_addr, options, &cli_socket);
-  ASSERT_EQ(r, 0);
+  std::atomic_bool accepted(false);
+  std::atomic_bool *accepted_p = &accepted;
 
-  {
-    C_poll cb(center);
-    center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
-    ASSERT_EQ(cb.poll(500), true);
-    center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
-  }
-
-  r = bind_socket.accept(&srv_socket, options, &cli_addr);
-  ASSERT_EQ(r, 0);
-  ASSERT_TRUE(srv_socket.fd() > 0);
-
-  {
-    C_poll cb(center);
-    center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
-    r = cli_socket.is_connected();
-    if (r == 0) {
-      ASSERT_EQ(cb.poll(500), true);
-      r = cli_socket.is_connected();
-    }
-    ASSERT_EQ(r, 1);
-    center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
-  }
-
-  const char *message = "this is a new message";
-  int len = strlen(message);
-  bufferlist bl;
-  bl.append(message, len);
-  r = cli_socket.send(bl, false);
-  ASSERT_EQ(r, len);
-
-  char buf[1024];
-  C_poll cb(center);
-  center->create_file_event(srv_socket.fd(), EVENT_READABLE, &cb);
-  {
-    r = srv_socket.read(buf, sizeof(buf));
-    if (r == -EAGAIN) {
-      ASSERT_EQ(cb.poll(500), true);
-      r = srv_socket.read(buf, sizeof(buf));
-    }
-    ASSERT_EQ(r, len);
-    ASSERT_EQ(0, memcmp(buf, message, len));
-  }
-  bind_socket.abort_accept();
-  cli_socket.shutdown();
-
-  bl.clear();
-  bl.append(message, len);
-  r = cli_socket.send(bl, false);
-  ASSERT_EQ(r, -EPIPE);
-  {
-    cb.reset();
-    ASSERT_EQ(cb.poll(500), true);
-    r = srv_socket.read(buf, sizeof(buf));
+  exec_events([this, accepted_p, bind_addr](Worker *worker) mutable {
+    entity_addr_t cli_addr;
+    SocketOptions options;
+    ServerSocket bind_socket;
+    EventCenter *center = &worker->center;
+    ssize_t r = 0;
+    if (stack->support_local_listen_table() || worker->id == 0)
+      r = worker->listen(bind_addr, options, &bind_socket);
     ASSERT_EQ(r, 0);
+
+    ConnectedSocket cli_socket, srv_socket;
+    if (worker->id == 0) {
+      r = worker->connect(bind_addr, options, &cli_socket);
+      ASSERT_EQ(r, 0);
+    }
+
+    bool is_my_accept = false;
+    if (bind_socket) {
+      C_poll cb(center);
+      center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
+      if (cb.poll(500)) {
+        *accepted_p = true;
+        is_my_accept = true;
+      }
+      ASSERT_EQ(*accepted_p, true);
+      center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
+    }
+
+    if (is_my_accept) {
+      r = bind_socket.accept(&srv_socket, options, &cli_addr);
+      ASSERT_EQ(r, 0);
+      ASSERT_TRUE(srv_socket.fd() > 0);
+    }
+
+    if (worker->id == 0) {
+      C_poll cb(center);
+      center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
+      r = cli_socket.is_connected();
+      if (r == 0) {
+        ASSERT_EQ(cb.poll(500), true);
+        r = cli_socket.is_connected();
+      }
+      ASSERT_EQ(r, 1);
+      center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
+    }
+
+    const char *message = "this is a new message";
+    int len = strlen(message);
+    bufferlist bl;
+    bl.append(message, len);
+    if (worker->id == 0) {
+      r = cli_socket.send(bl, false);
+      ASSERT_EQ(r, len);
+    }
+
+    char buf[1024];
+    C_poll cb(center);
+    if (is_my_accept) {
+      center->create_file_event(srv_socket.fd(), EVENT_READABLE, &cb);
+      {
+        r = srv_socket.read(buf, sizeof(buf));
+        while (r == -EAGAIN) {
+          ASSERT_EQ(cb.poll(500), true);
+          r = srv_socket.read(buf, sizeof(buf));
+        }
+        ASSERT_EQ(r, len);
+        ASSERT_EQ(0, memcmp(buf, message, len));
+      }
+      bind_socket.abort_accept();
+    }
+    if (worker->id == 0)
+      cli_socket.shutdown();
+
     bl.clear();
     bl.append(message, len);
-    r = srv_socket.send(bl, false);
-    ASSERT_EQ(r, len);
-  }
-  center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
-
-  srv_socket.close();
-}
-
-TEST_P(TransportTest, ConnectFailedTest) {
-  Worker *worker = get_worker(0);
-  EventCenter *center = get_center(0);
-  entity_addr_t bind_addr, cli_addr;
-  ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
-  ASSERT_EQ(cli_addr.parse(get_ip_different_port().c_str()), true);
-  SocketOptions options;
-  ServerSocket bind_socket;
-  int r = worker->listen(bind_addr, options, &bind_socket);
-  ASSERT_EQ(r, 0);
-
-  ConnectedSocket cli_socket1, cli_socket2;
-  r = worker->connect(cli_addr, options, &cli_socket1);
-  ASSERT_EQ(r, 0);
-
-  {
-    C_poll cb(center);
-    center->create_file_event(cli_socket1.fd(), EVENT_READABLE, &cb);
-    r = cli_socket1.is_connected();
-    if (r == 0) {
+    if (worker->id == 0) {
+      r = cli_socket.send(bl, false);
+      ASSERT_EQ(r, -EPIPE);
+    }
+    if (is_my_accept) {
+      cb.reset();
       ASSERT_EQ(cb.poll(500), true);
-      r = cli_socket1.is_connected();
+      r = srv_socket.read(buf, sizeof(buf));
+      ASSERT_EQ(r, 0);
+      bl.clear();
+      bl.append(message, len);
+      r = srv_socket.send(bl, false);
+      ASSERT_EQ(r, len);
+      center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
+      srv_socket.close();
     }
-    ASSERT_TRUE(r == -ECONNREFUSED || r == -ECONNRESET);
-  }
-
-  ASSERT_EQ(cli_addr.parse(get_different_ip().c_str()), true);
-  r = worker->connect(cli_addr, options, &cli_socket2);
-  ASSERT_EQ(r, 0);
-
-  {
-    C_poll cb(center);
-    center->create_file_event(cli_socket2.fd(), EVENT_READABLE, &cb);
-    r = cli_socket2.is_connected();
-    if (r == 0) {
-      ASSERT_EQ(cb.poll(500), false);
-      r = cli_socket2.is_connected();
-    }
-    ASSERT_TRUE(r != 1);
-    center->delete_file_event(cli_socket2.fd(), EVENT_READABLE);
-  }
+  });
 }
 
-TEST_P(TransportTest, ListenTest) {
+TEST_P(NetworkWorkerTest, ConnectFailedTest) {
+  entity_addr_t bind_addr;
+  ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
+
+  exec_events([this, bind_addr](Worker *worker) mutable {
+    EventCenter *center = &worker->center;
+    entity_addr_t cli_addr;
+    SocketOptions options;
+    ServerSocket bind_socket;
+    int r = 0;
+    if (stack->support_local_listen_table() || worker->id == 0)
+      r = worker->listen(bind_addr, options, &bind_socket);
+    ASSERT_EQ(r, 0);
+
+    ConnectedSocket cli_socket1, cli_socket2;
+    if (worker->id == 0) {
+      ASSERT_EQ(cli_addr.parse(get_ip_different_port().c_str()), true);
+      r = worker->connect(cli_addr, options, &cli_socket1);
+      ASSERT_EQ(r, 0);
+      C_poll cb(center);
+      center->create_file_event(cli_socket1.fd(), EVENT_READABLE, &cb);
+      r = cli_socket1.is_connected();
+      if (r == 0) {
+        ASSERT_EQ(cb.poll(500), true);
+        r = cli_socket1.is_connected();
+      }
+      ASSERT_TRUE(r == -ECONNREFUSED || r == -ECONNRESET);
+    }
+
+    if (worker->id == 1) {
+      ASSERT_EQ(cli_addr.parse(get_different_ip().c_str()), true);
+      r = worker->connect(cli_addr, options, &cli_socket2);
+      ASSERT_EQ(r, 0);
+      C_poll cb(center);
+      center->create_file_event(cli_socket2.fd(), EVENT_READABLE, &cb);
+      r = cli_socket2.is_connected();
+      if (r == 0) {
+        ASSERT_EQ(cb.poll(500), false);
+        r = cli_socket2.is_connected();
+      }
+      ASSERT_TRUE(r != 1);
+      center->delete_file_event(cli_socket2.fd(), EVENT_READABLE);
+    }
+  });
+}
+
+TEST_P(NetworkWorkerTest, ListenTest) {
   Worker *worker = get_worker(0);
   entity_addr_t bind_addr;
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
@@ -313,187 +305,254 @@ TEST_P(TransportTest, ListenTest) {
   ASSERT_EQ(r, -EADDRINUSE);
 }
 
-TEST_P(TransportTest, AcceptAndCloseTest) {
-  Worker *worker = get_worker(0);
-  EventCenter *center = get_center(0);
-  entity_addr_t bind_addr, cli_addr;
+TEST_P(NetworkWorkerTest, AcceptAndCloseTest) {
+  entity_addr_t bind_addr;
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
-  SocketOptions options;
-  int r = 0;
-  {
-    ServerSocket bind_socket;
-    r = worker->listen(bind_addr, options, &bind_socket);
-    ASSERT_EQ(r, 0);
-
-    ConnectedSocket srv_socket, cli_socket;
-    r = bind_socket.accept(&srv_socket, options, &cli_addr);
-    ASSERT_EQ(r, -EAGAIN);
-
-    C_poll cb(center);
-    center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
-    r = worker->connect(bind_addr, options, &cli_socket);
-    ASSERT_EQ(r, 0);
-    ASSERT_EQ(cb.poll(500), true);
-
+  std::atomic_bool accepted(false);
+  std::atomic_bool *accepted_p = &accepted;
+  std::atomic_int unbind_count(stack->get_num_worker());
+  std::atomic_int *count_p = &unbind_count;
+  exec_events([this, bind_addr, accepted_p, count_p](Worker *worker) mutable {
+    SocketOptions options;
+    EventCenter *center = &worker->center;
+    entity_addr_t cli_addr;
+    int r = 0;
     {
-      ConnectedSocket srv_socket2;
-      r = bind_socket.accept(&srv_socket2, options, &cli_addr);
+      ServerSocket bind_socket;
+      if (stack->support_local_listen_table() || worker->id == 0)
+        r = worker->listen(bind_addr, options, &bind_socket);
       ASSERT_EQ(r, 0);
-      ASSERT_TRUE(srv_socket2.fd() > 0);
 
-      // srv_socket2 closed
+      ConnectedSocket srv_socket, cli_socket;
+      if (bind_socket) {
+        r = bind_socket.accept(&srv_socket, options, &cli_addr);
+        ASSERT_EQ(r, -EAGAIN);
+      }
+
+      C_poll cb(center);
+      if (worker->id == 0) {
+        center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
+        r = worker->connect(bind_addr, options, &cli_socket);
+        ASSERT_EQ(r, 0);
+        ASSERT_EQ(cb.poll(500), true);
+      }
+
+      if (bind_socket) {
+        cb.reset();
+        cb.poll(500);
+        ConnectedSocket srv_socket2;
+        do {
+          r = bind_socket.accept(&srv_socket2, options, &cli_addr);
+          usleep(100);
+        } while (r == -EAGAIN && !*accepted_p);
+        if (r == 0)
+          *accepted_p = true;
+        ASSERT_EQ(*accepted_p, true);
+        // srv_socket2 closed
+        center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
+      }
+
+      if (worker->id == 0) {
+        char buf[100];
+        cb.reset();
+        center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
+        int i = 3;
+        while (!i--) {
+          ASSERT_EQ(cb.poll(500), true);
+          r = cli_socket.read(buf, sizeof(buf));
+          if (r == 0)
+            break;
+        }
+        ASSERT_EQ(r, 0);
+        center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
+      }
+
+      if (bind_socket)
+        center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
+      if (worker->id == 0) {
+        *accepted_p = false;
+        r = worker->connect(bind_addr, options, &cli_socket);
+        ASSERT_EQ(r, 0);
+        cb.reset();
+        ASSERT_EQ(cb.poll(500), true);
+        cli_socket.close();
+      }
+
+      if (bind_socket) {
+        do {
+          r = bind_socket.accept(&srv_socket, options, &cli_addr);
+          usleep(100);
+        } while (r == -EAGAIN && !*accepted_p);
+        if (r == 0)
+          *accepted_p = true;
+        ASSERT_EQ(*accepted_p, true);
+        center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
+      }
+      // unbind
     }
-    center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
 
-    char buf[100];
-    cb.reset();
-    center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
-    int i = 3;
-    while (!i--) {
-      ASSERT_EQ(cb.poll(500), true);
-      r = cli_socket.read(buf, sizeof(buf));
-      if (r == 0)
-        break;
-    }
-    ASSERT_EQ(r, 0);
-    center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
+    --*count_p;
+    while (*count_p > 0)
+      usleep(100);
 
-    cb.reset();
-    center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
+    ConnectedSocket cli_socket;
     r = worker->connect(bind_addr, options, &cli_socket);
     ASSERT_EQ(r, 0);
-
-    ASSERT_EQ(cb.poll(500), true);
-    center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
-    cli_socket.close();
-    r = bind_socket.accept(&srv_socket, options, &cli_addr);
-    ASSERT_EQ(r, 0);
-    center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
-    // unbind
-  }
-
-  ConnectedSocket cli_socket;
-  r = worker->connect(bind_addr, options, &cli_socket);
-  ASSERT_EQ(r, 0);
-  {
-    C_poll cb(center);
-    center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
-    r = cli_socket.is_connected();
-    if (r == 0) {
-      ASSERT_EQ(cb.poll(500), true);
+    {
+      C_poll cb(center);
+      center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
       r = cli_socket.is_connected();
+      if (r == 0) {
+        ASSERT_EQ(cb.poll(500), true);
+        r = cli_socket.is_connected();
+      }
+      ASSERT_TRUE(r == -ECONNREFUSED || r == -ECONNRESET);
     }
-    ASSERT_TRUE(r == -ECONNREFUSED || r == -ECONNRESET);
-  }
+  });
 }
 
-TEST_P(TransportTest, ComplexTest) {
-  Worker *worker = get_worker(0);
-  EventCenter *center = get_center(0);
-  entity_addr_t bind_addr, cli_addr;
+TEST_P(NetworkWorkerTest, ComplexTest) {
+  entity_addr_t bind_addr;
+  std::atomic_bool accepted(false);
+  std::atomic_bool *accepted_p = &accepted;
+  std::atomic_bool done(false);
+  std::atomic_bool *done_p = &done;
   ASSERT_EQ(bind_addr.parse(get_addr().c_str()), true);
-  SocketOptions options;
-  ServerSocket bind_socket;
-  int r = worker->listen(bind_addr, options, &bind_socket);
-  ASSERT_EQ(r, 0);
-  ConnectedSocket cli_socket, srv_socket;
-  r = worker->connect(bind_addr, options, &cli_socket);
-  ASSERT_EQ(r, 0);
-
-  {
-    C_poll cb(center);
-    center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
-    ASSERT_EQ(cb.poll(500), true);
-    center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
-  }
-
-  r = bind_socket.accept(&srv_socket, options, &cli_addr);
-  ASSERT_EQ(r, 0);
-  ASSERT_TRUE(srv_socket.fd() > 0);
-
-  {
-    C_poll cb(center);
-    center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
-    r = cli_socket.is_connected();
-    if (r == 0) {
-      ASSERT_EQ(cb.poll(500), true);
-      r = cli_socket.is_connected();
+  exec_events([this, bind_addr, accepted_p, done_p](Worker *worker) mutable {
+    entity_addr_t cli_addr;
+    EventCenter *center = &worker->center;
+    SocketOptions options;
+    ServerSocket bind_socket;
+    int r = 0;
+    if (stack->support_local_listen_table() || worker->id == 0) {
+      r = worker->listen(bind_addr, options, &bind_socket);
+      ASSERT_EQ(r, 0);
     }
-    ASSERT_EQ(r, 1);
-    center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
-  }
+    ConnectedSocket cli_socket, srv_socket;
+    if (worker->id == 1) {
+      r = worker->connect(bind_addr, options, &cli_socket);
+      ASSERT_EQ(r, 0);
+    }
 
-  const size_t message_size = 10240;
-  size_t count = 100;
-  string message(message_size, '!');
-  for (size_t i = 0; i < message_size; i += 100)
-    message[i] = ',';
-  auto cli_fd = cli_socket.fd();
-  size_t len = message_size * count;
-  Mutex lock("test_async_transport::lock");
-  bool done = false;
-  auto sssss = [len, cli_fd, count](EventCenter *center, ConnectedSocket &cli_socket, const string &message, Mutex &lock, bool &done) {
+    if (bind_socket) {
+      C_poll cb(center);
+      center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
+      if (cb.poll(500)) {
+        r = bind_socket.accept(&srv_socket, options, &cli_addr);
+        ASSERT_EQ(r, 0);
+        *accepted_p = true;
+      }
+      ASSERT_EQ(*accepted_p, true);
+      center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
+    }
+
+    if (worker->id == 1) {
+      C_poll cb(center);
+      center->create_file_event(cli_socket.fd(), EVENT_READABLE, &cb);
+      r = cli_socket.is_connected();
+      if (r == 0) {
+        ASSERT_EQ(cb.poll(500), true);
+        r = cli_socket.is_connected();
+      }
+      ASSERT_EQ(r, 1);
+      center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
+    }
+
+    const size_t message_size = 10240;
+    size_t count = 100;
+    string message(message_size, '!');
+    for (size_t i = 0; i < message_size; i += 100)
+      message[i] = ',';
+    size_t len = message_size * count;
+    C_poll cb(center);
+    if (worker->id == 1)
+      center->create_file_event(cli_socket.fd(), EVENT_WRITABLE, &cb);
+    if (srv_socket)
+      center->create_file_event(srv_socket.fd(), EVENT_READABLE, &cb);
+    size_t left = len;
+    len *= 2;
+    string read_string;
+    int again_count = 0;
     int c = 2;
-    C_poll cb(center, &lock);
-    center->create_file_event(cli_fd, EVENT_WRITABLE, &cb);
-    while (c--) {
-      bufferlist bl;
-      for (size_t i = 0; i < count; ++i)
-        bl.push_back(bufferptr((char*)message.data(), message_size));
+    bufferlist bl;
+    for (size_t i = 0; i < count; ++i)
+      bl.push_back(bufferptr((char*)message.data(), message_size));
+    while (!*done_p) {
+      again_count = 0;
+      if (worker->id == 1) {
+        if (c > 0) {
+          ssize_t r = 0;
+          usleep(100);
+          if (left > 0) {
+            r = cli_socket.send(bl, false);
+            ASSERT_TRUE(r > 0 || r == -EAGAIN);
+            if (r > 0)
+              left -= r;
+            if (r == -EAGAIN)
+              ++again_count;
+          }
+          if (left == 0) {
+            --c;
+            left = message_size * count;
+            ASSERT_EQ(bl.length(), 0U);
+            for (size_t i = 0; i < count; ++i)
+              bl.push_back(bufferptr((char*)message.data(), message_size));
+          }
+        }
+      }
 
-      ssize_t r = 0;
-      size_t left = len;
-      usleep(100);
-      while (left > 0) {
-        lock.Lock();
-        r = cli_socket.send(bl, false);
-        lock.Unlock();
-        ASSERT_TRUE(r > 0 || r == -EAGAIN);
-        if (r > 0)
-          left -= r;
-        if (left == 0)
-          break;
+      if (srv_socket) {
+        char buf[1000];
+        if (len > 0) {
+          r = srv_socket.read(buf, sizeof(buf));
+          ASSERT_TRUE(r > 0 || r == -EAGAIN);
+          if (r > 0) {
+            read_string.append(buf, r);
+            len -= r;
+          } else if (r == -EAGAIN) {
+            ++again_count;
+          }
+        }
+        if (len == 0) {
+          for (size_t i = 0; i < read_string.size(); i += message_size)
+            ASSERT_EQ(memcmp(read_string.c_str()+i, message.c_str(), message_size), 0);
+          *done_p = true;
+        }
+      }
+      if (again_count) {
         cb.reset();
-        ASSERT_EQ(cb.poll(5000), true);
+        cb.poll(500);
       }
     }
-    center->delete_file_event(cli_fd, EVENT_WRITABLE);
-    done = true;
-  };
-  std::thread t(std::move(sssss), center, std::ref(cli_socket), std::ref(message), std::ref(lock), std::ref(done));
-  t.detach();
+    if (worker->id == 1)
+      center->delete_file_event(cli_socket.fd(), EVENT_WRITABLE);
+    if (srv_socket)
+      center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
 
-  char buf[1000];
-  C_poll cb(center, &lock);
-  center->create_file_event(srv_socket.fd(), EVENT_READABLE, &cb);
-  string read_string;
-  len *= 2;
-  while (len > 0) {
-    lock.Lock();
-    r = srv_socket.read(buf, sizeof(buf));
-    lock.Unlock();
-    ASSERT_TRUE(r > 0 || r == -EAGAIN);
-    if (r > 0) {
-      read_string.append(buf, r);
-      len -= r;
-    }
-    if (r == -EAGAIN) {
-      ASSERT_EQ(cb.poll(5000), true);
-      cb.reset();
-    }
-  }
-  while (!done)
-    usleep(100);
-  center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
-  for (size_t i = 0; i < read_string.size(); i += message_size)
-    ASSERT_EQ(memcmp(read_string.c_str()+i, message.c_str(), message_size), 0);
-
-  bind_socket.abort_accept();
-  srv_socket.close();
-  cli_socket.close();
+    if (bind_socket)
+      bind_socket.abort_accept();
+    if (srv_socket)
+      srv_socket.close();
+    if (worker->id == 1)
+      cli_socket.close();
+  });
 }
 
 class StressFactory {
+  struct Client;
+  struct Server;
+  struct ThreadData {
+    Worker *worker;
+    std::set<Client*> clients;
+    std::set<Server*> servers;
+    ~ThreadData() {
+      for (auto && i : clients)
+        delete i;
+      for (auto && i : servers)
+        delete i;
+    }
+  };
+
   struct RandomString {
     size_t slen;
     vector<std::string> strs;
@@ -567,6 +626,7 @@ class StressFactory {
 
   class Client {
     StressFactory *factory;
+    EventCenter *center;
     ConnectedSocket socket;
     std::deque<StressFactory::Message*> acking;
     std::deque<StressFactory::Message*> writings;
@@ -599,19 +659,19 @@ class StressFactory {
     } write_ctxt;
 
    public:
-    Client(StressFactory *f, ConnectedSocket s, size_t c)
-        : factory(f), socket(std::move(s)), left(c), homeless_message(factory->rs, -1, 1024),
+    Client(StressFactory *f, EventCenter *cen, ConnectedSocket s, size_t c)
+        : factory(f), center(cen), socket(std::move(s)), left(c), homeless_message(factory->rs, -1, 1024),
           read_ctxt(this), write_ctxt(this) {
-      factory->center->create_file_event(
+      center->create_file_event(
               socket.fd(), EVENT_READABLE, &read_ctxt);
-      factory->center->dispatch_event_external(&read_ctxt);
+      center->dispatch_event_external(&read_ctxt);
     }
     void close() {
       ASSERT_FALSE(write_enabled);
       dead = true;
       socket.shutdown();
-      factory->center->delete_file_event(socket.fd(), EVENT_READABLE);
-      factory->center->dispatch_event_external(new C_delete<Client>(this));
+      center->delete_file_event(socket.fd(), EVENT_READABLE);
+      center->dispatch_event_external(new C_delete<Client>(this));
     }
 
     void do_read_request() {
@@ -623,7 +683,7 @@ class StressFactory {
       ASSERT_TRUE(!acking.empty() || first);
       if (first) {
         first = false;
-        factory->center->dispatch_event_external(&write_ctxt);
+        center->dispatch_event_external(&write_ctxt);
         if (acking.empty())
           return ;
       }
@@ -666,7 +726,7 @@ class StressFactory {
         }
       }
       if (acking.empty()) {
-        factory->center->dispatch_event_external(&write_ctxt);
+        center->dispatch_event_external(&write_ctxt);
         return ;
       }
     }
@@ -704,10 +764,10 @@ class StressFactory {
         }
       }
       if (writings.empty() && write_enabled) {
-        factory->center->delete_file_event(socket.fd(), EVENT_WRITABLE);
+        center->delete_file_event(socket.fd(), EVENT_WRITABLE);
         write_enabled = false;
       } else if (!writings.empty() && !write_enabled) {
-        ASSERT_EQ(factory->center->create_file_event(
+        ASSERT_EQ(center->create_file_event(
                   socket.fd(), EVENT_WRITABLE, &write_ctxt), 0);
         write_enabled = true;
       }
@@ -721,6 +781,7 @@ class StressFactory {
 
   class Server {
     StressFactory *factory;
+    EventCenter *center;
     ConnectedSocket socket;
     std::deque<std::string> buffers;
     bool write_enabled = false;
@@ -745,16 +806,16 @@ class StressFactory {
     } write_ctxt;
 
    public:
-    Server(StressFactory *f, ConnectedSocket s):
-        factory(f), socket(std::move(s)), read_ctxt(this), write_ctxt(this) {
-      factory->center->create_file_event(socket.fd(), EVENT_READABLE, &read_ctxt);
-      factory->center->dispatch_event_external(&read_ctxt);
+    Server(StressFactory *f, EventCenter *c, ConnectedSocket s):
+        factory(f), center(c), socket(std::move(s)), read_ctxt(this), write_ctxt(this) {
+      center->create_file_event(socket.fd(), EVENT_READABLE, &read_ctxt);
+      center->dispatch_event_external(&read_ctxt);
     }
     void close() {
       ASSERT_FALSE(write_enabled);
       socket.shutdown();
-      factory->center->delete_file_event(socket.fd(), EVENT_READABLE);
-      factory->center->dispatch_event_external(new C_delete<Server>(this));
+      center->delete_file_event(socket.fd(), EVENT_READABLE);
+      center->dispatch_event_external(new C_delete<Server>(this));
     }
     void do_read_request() {
       if (dead)
@@ -783,14 +844,13 @@ class StressFactory {
         std::cerr << " server " << this << " receive " << r << " content: " << std::endl;
       }
       if (!buffers.empty() && !write_enabled)
-        factory->center->dispatch_event_external(&write_ctxt);
+        center->dispatch_event_external(&write_ctxt);
     }
 
     void do_write_request() {
       if (dead)
         return ;
 
-      ASSERT_TRUE(!buffers.empty());
       while (!buffers.empty()) {
         bufferlist bl;
         auto it = buffers.begin();
@@ -819,11 +879,11 @@ class StressFactory {
       }
       if (buffers.empty()) {
         if (write_enabled) {
-          factory->center->delete_file_event(socket.fd(), EVENT_WRITABLE);
+          center->delete_file_event(socket.fd(), EVENT_WRITABLE);
           write_enabled = false;
         }
       } else if (!write_enabled) {
-        ASSERT_EQ(factory->center->create_file_event(
+        ASSERT_EQ(center->create_file_event(
                   socket.fd(), EVENT_WRITABLE, &write_ctxt), 0);
         write_enabled = true;
       }
@@ -838,10 +898,11 @@ class StressFactory {
   class C_accept : public EventCallback {
     StressFactory *factory;
     ServerSocket bind_socket;
+    ThreadData *t_data;
 
    public:
-    C_accept(StressFactory *f, ServerSocket s)
-        : factory(f), bind_socket(std::move(s)) {}
+    C_accept(StressFactory *f, ServerSocket s, ThreadData *data)
+        : factory(f), bind_socket(std::move(s)), t_data(data) {}
     void do_request(int id) {
       while (true) {
         entity_addr_t cli_addr;
@@ -853,118 +914,124 @@ class StressFactory {
         }
         ASSERT_EQ(r, 0);
         ASSERT_TRUE(srv_socket.fd() > 0);
-        Server *cb = new Server(factory, std::move(srv_socket));
-        factory->servers.insert(cb);
+        Server *cb = new Server(factory, &t_data->worker->center, std::move(srv_socket));
+        t_data->servers.insert(cb);
       }
     }
   };
   friend class C_accept;
 
+ public:
   static const size_t min_client_send_messages = 100;
   static const size_t max_client_send_messages = 1000;
-  Worker *worker;
-  EventCenter *center;
+  std::shared_ptr<NetworkStack> stack;
   RandomString rs;
   std::random_device rd;
   const size_t client_num, queue_depth, max_message_length;
-  size_t message_count, message_left;
+  atomic_int message_count, message_left;
   entity_addr_t bind_addr;
-  std::set<Client*> clients;
-  std::set<Server*> servers;
-  SocketOptions options;
   bool zero_copy_read;
+  SocketOptions options;
 
- public:
-  explicit StressFactory(Worker *w, EventCenter *c,
-                         const string &addr,
+  explicit StressFactory(std::shared_ptr<NetworkStack> s, const string &addr,
                          size_t cli, size_t qd, size_t mc, size_t l, bool zero_copy)
-      : worker(w), center(c), rs(128), client_num(cli), queue_depth(qd),
+      : stack(s), rs(128), client_num(cli), queue_depth(qd),
         max_message_length(l), message_count(mc), message_left(mc),
         zero_copy_read(zero_copy) {
     bind_addr.parse(addr.c_str());
     rs.prepare(100);
   }
   ~StressFactory() {
-    for (auto && i : clients)
-      delete i;
-    for (auto && i : servers)
-      delete i;
   }
 
-  void add_client() {
+  void add_client(ThreadData *t_data) {
+    static Mutex lock("add_client_lock");
+    Mutex::Locker l(lock);
     ConnectedSocket sock;
-    int r = worker->connect(bind_addr, options, &sock);
+    int r = t_data->worker->connect(bind_addr, options, &sock);
     std::default_random_engine rng(rd());
     std::uniform_int_distribution<> dist(
             min_client_send_messages, max_client_send_messages);
     ASSERT_EQ(r, 0);
-    size_t c = dist(rng);
-    c = std::min(c, message_count);
-    Client *cb = new Client(this, std::move(sock), c);
-    clients.insert(cb);
+    int c = dist(rng);
+    if (c > message_count.load())
+      c = message_count.load();
+    Client *cb = new Client(this, &t_data->worker->center, std::move(sock), c);
+    t_data->clients.insert(cb);
     message_count -= c;
   }
 
-  void drop_client(Client *c) {
+  void drop_client(ThreadData *t_data, Client *c) {
     c->close();
-    ASSERT_EQ(clients.erase(c), 1U);
+    ASSERT_EQ(t_data->clients.erase(c), 1U);
   }
 
-  void drop_server(Server *s) {
+  void drop_server(ThreadData *t_data, Server *s) {
     s->close();
-    ASSERT_EQ(servers.erase(s), 1U);
+    ASSERT_EQ(t_data->servers.erase(s), 1U);
   }
 
-  void start() {
+  void start(Worker *worker) {
+    int r = 0;
+    ThreadData t_data;
+    t_data.worker = worker;
     ServerSocket bind_socket;
-    int r = worker->listen(bind_addr, options, &bind_socket);
-    ASSERT_EQ(r, 0);
-    auto bind_fd = bind_socket.fd();
-    C_accept accept_handler(this, std::move(bind_socket));
-    ASSERT_EQ(center->create_file_event(
-                bind_fd, EVENT_READABLE, &accept_handler), 0);
+    if (stack->support_local_listen_table() || worker->id == 0) {
+      r = worker->listen(bind_addr, options, &bind_socket);
+      ASSERT_EQ(r, 0);
+    }
+    C_accept *accept_handler = nullptr;
+    int bind_fd = 0;
+    if (bind_socket) {
+      bind_fd = bind_socket.fd();
+      accept_handler = new C_accept(this, std::move(bind_socket), &t_data);
+      ASSERT_EQ(worker->center.create_file_event(
+                  bind_fd, EVENT_READABLE, accept_handler), 0);
+    }
 
-    size_t echo_throttle = message_count;
-    while (message_count > 0 || !clients.empty() || !servers.empty()) {
-      if (message_count > 0  && clients.size() < client_num && servers.size() < client_num)
-        add_client();
-      for (auto &&c : clients) {
+    int echo_throttle = message_count;
+    while (message_count > 0 || !t_data.clients.empty() || !t_data.servers.empty()) {
+      if (message_count > 0  && t_data.clients.size() < client_num && t_data.servers.size() < client_num)
+        add_client(&t_data);
+      for (auto &&c : t_data.clients) {
         if (c->finish()) {
-          drop_client(c);
+          drop_client(&t_data, c);
           break;
         }
       }
-      for (auto &&s : servers) {
+      for (auto &&s : t_data.servers) {
         if (s->finish()) {
-          drop_server(s);
+          drop_server(&t_data, s);
           break;
         }
       }
 
-      center->process_events(1);
+      worker->center.process_events(1);
       if (echo_throttle > message_left) {
-        std::cerr << " clients " << clients.size() << " servers " << servers.size()
+        std::cerr << " clients " << t_data.clients.size() << " servers " << t_data.servers.size()
                   << " message count " << message_left << std::endl;
         echo_throttle -= 100;
       }
     }
-    center->delete_file_event(bind_fd, EVENT_READABLE);
-    ASSERT_EQ(message_left, 0U);
-    while (center->exist_pending_event())
-      center->process_events(0);
+    if (bind_fd)
+      worker->center.delete_file_event(bind_fd, EVENT_READABLE);
+    delete accept_handler;
   }
 };
 
-TEST_P(TransportTest, StressTest) {
-  StressFactory factory(get_worker(0), get_center(0), get_addr(),
-                        16, 16, 10000, 1024, strncmp(GetParam(), "dpdk", 4) == 0);
-  factory.start();
+TEST_P(NetworkWorkerTest, StressTest) {
+  StressFactory factory(stack, get_addr(), 16, 16, 10000, 1024, strncmp(GetParam(), "dpdk", 4) == 0);
+  StressFactory *f = &factory;
+  exec_events([f](Worker *worker) mutable {
+    f->start(worker);
+  });
+  ASSERT_EQ(factory.message_left, 0);
 }
 
 
 INSTANTIATE_TEST_CASE_P(
   NetworkStack,
-  TransportTest,
+  NetworkWorkerTest,
   ::testing::Values(
 #ifdef HAVE_DPDK
     "dpdk",

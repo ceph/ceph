@@ -16,6 +16,7 @@
 #define CEPH_MSG_DPDKSTACK_H
 
 #include <functional>
+#include <thread>
 
 #include "common/ceph_context.h"
 #include "common/Tub.h"
@@ -210,18 +211,12 @@ class DPDKWorker : public Worker {
     Impl(CephContext *cct, EventCenter *c, std::shared_ptr<DPDKDevice> dev);
   };
   std::unique_ptr<Impl> _impl;
-  bool init_done = false;
 
   virtual void initialize();
   void set_ipv4_packet_filter(ip_packet_filter* filter) {
     _impl->_inet.set_packet_filter(filter);
   }
   using tcp4 = tcp<ipv4_traits>;
-
- protected:
-  virtual bool is_started() {
-    return init_done;
-  }
 
  public:
   explicit DPDKWorker(CephContext *c, unsigned i): Worker(c, i) {}
@@ -232,24 +227,22 @@ class DPDKWorker : public Worker {
     _impl->_inet.learn(l2, l3);
   }
 
-  virtual void spawn_worker(std::function<void ()> f) override {
-    int r = -EBUSY;
-    while (r != -EBUSY)
-      r = rte_eal_remote_launch(
-              dpdk_thread_adaptor, static_cast<void*>(&f), id);
-  }
-  virtual void join_worker() override {
-    rte_eal_wait_lcore(id);
-  }
-
   friend class DPDKServerSocketImpl<tcp4>;
 };
 
 class DPDKStack : public NetworkStack {
+  std::thread t;
  public:
   explicit DPDKStack(CephContext *cct, const string &t): NetworkStack(cct, t) {}
   virtual bool support_zero_copy_read() const override { return true; }
   virtual bool accept_require_same_thread() const { return true; }
+  virtual bool support_local_listen_table() const { return true; }
+
+  virtual void spawn_workers(std::vector<std::function<void ()>> &threads) override;
+  virtual void join_workers() override {
+    if (t.joinable())
+      t.join();
+  }
 };
 
 #endif

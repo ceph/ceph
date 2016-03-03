@@ -196,8 +196,8 @@ enum {
 };
 
 class Worker {
-  static const uint64_t InitEventNumber = 5000;
  public:
+  bool init_done = false;
   bool done = false;
 
   CephContext *cct;
@@ -207,7 +207,6 @@ class Worker {
   EventCenter center;
   Worker(CephContext *c, unsigned i)
     : cct(c), perf_logger(NULL), id(i), center(c) {
-    center.init(InitEventNumber);
     char name[128];
     sprintf(name, "AsyncMessenger::Worker-%d", id);
     // initialize perf_logger
@@ -239,12 +238,6 @@ class Worker {
   virtual void initialize() {}
   void stop();
   PerfCounters *get_perf_counter() { return perf_logger; }
-  virtual bool is_started() {
-    return true;
-  }
-
-  virtual void spawn_worker(std::function<void ()>) = 0;
-  virtual void join_worker() = 0;
 };
 
 class NetworkStack {
@@ -258,9 +251,12 @@ class NetworkStack {
   vector<Worker*> workers;
   // Used to indicate whether thread started
 
- public:
   explicit NetworkStack(CephContext *c, const string &t);
-  virtual ~NetworkStack();
+ public:
+  virtual ~NetworkStack() {
+    for (auto &&w : workers)
+      delete w;
+  }
 
   static std::shared_ptr<NetworkStack> create(
           CephContext *c, const string &type);
@@ -269,7 +265,10 @@ class NetworkStack {
           CephContext *c, const string &t, unsigned i);
   virtual bool support_zero_copy_read() const { return false; }
   virtual bool accept_require_same_thread() const { return false; }
+  virtual bool support_local_listen_table() const { return false; }
 
+  void start();
+  void stop();
   virtual Worker *get_worker() {
     return workers[(seq++)%workers.size()];
   }
@@ -280,6 +279,10 @@ class NetworkStack {
   uint64_t get_num_worker() const {
     return workers.size();
   }
+
+  // direct is used in tests only
+  virtual void spawn_workers(std::vector<std::function<void ()>> &) = 0;
+  virtual void join_workers() = 0;
 
  private:
   NetworkStack(const NetworkStack &);

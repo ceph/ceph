@@ -20,7 +20,6 @@
 
 #include <bitset>
 #include <rte_config.h>
-#include <rte_ethdev.h>
 #include <rte_version.h>
 #include <boost/program_options.hpp>
 
@@ -43,7 +42,7 @@ class eal {
 public:
     using cpuset = std::bitset<RTE_MAX_LCORE>;
 
-    static void init(CephContext *c);
+    static int init(CephContext *c);
     /**
      * Returns the amount of memory needed for DPDK
      * @param num_cpus Number of CPUs the application is going to use

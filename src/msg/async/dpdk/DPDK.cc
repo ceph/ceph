@@ -1177,13 +1177,6 @@ std::unique_ptr<DPDKDevice> create_dpdk_net_device(
     bool use_lro,
     bool enable_fc)
 {
-  static bool called = false;
-
-  if (!called) {
-    dpdk::eal::init(cct);
-    called = true;
-  }
-
   // Check that we have at least one DPDK-able port
   if (rte_eth_dev_count() == 0) {
     rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");

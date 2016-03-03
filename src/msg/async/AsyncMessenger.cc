@@ -222,6 +222,10 @@ struct StackSingleton {
   std::shared_ptr<NetworkStack> stack;
   StackSingleton(CephContext *c) {
     stack = NetworkStack::create(c, c->_conf->ms_async_transport_type);
+    stack->start();
+  }
+  ~StackSingleton() {
+    stack->stop();
   }
 };
 
@@ -244,7 +248,11 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   local_features = features;
   init_local_connection();
   reap_handler = new C_handle_reap(this);
-  for (unsigned i = 0; i < stack->get_num_worker(); ++i) {
+  unsigned processor_num = 1;
+  if (stack->support_local_listen_table()) {
+    processor_num = stack->get_num_worker();
+  }
+  for (unsigned i = 0; i < processor_num; ++i) {
     processors.push_back(
             new Processor(this, stack->get_worker(i), cct, _nonce));
   }

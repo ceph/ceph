@@ -41,6 +41,7 @@
 #include <tuple>
 
 #include "common/ceph_argparse.h"
+#include "dpdk_rte.h"
 #include "DPDKStack.h"
 #include "DPDK.h"
 #include "IP.h"
@@ -137,6 +138,8 @@ void DPDKWorker::initialize()
   }
 
   sdev->workers[i] = this;
+  _impl = std::unique_ptr<DPDKWorker::Impl>(
+          new DPDKWorker::Impl(cct, &center, sdev));
   {
     Mutex::Locker l(lock);
     if (!--queue_init_done) {
@@ -144,9 +147,6 @@ void DPDKWorker::initialize()
       sdev.reset();
     }
   }
-  _impl = std::unique_ptr<DPDKWorker::Impl>(
-          new DPDKWorker::Impl(cct, &center, sdev));
-  init_done = true;
 }
 
 using AvailableIPAddress = std::tuple<string, string, string>;
@@ -236,4 +236,36 @@ int DPDKWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
 {
   assert(addr.get_family() == AF_INET);
   return tcpv4_connect(_impl->_inet.get_tcp(), addr, socket);
+}
+
+void DPDKStack::spawn_workers(std::vector<std::function<void ()>> &threads) {
+  // create a extra master thread
+  //
+  t = std::thread([this](std::vector<std::function<void ()>> &threads) {
+    static bool called = false;
+
+    int r = 0;
+    if (!called) {
+      r = dpdk::eal::init(cct);
+      if (r < 0) {
+        lderr(cct) << __func__ << " init dpdk rte failed, r=" << r << dendl;
+        assert(0);
+      }
+      called = true;
+    }
+    auto it = threads.begin();
+    ++it;
+    unsigned i;
+    RTE_LCORE_FOREACH_SLAVE(i) {
+      rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&*(it++)), i);
+    }
+
+   if (r < 0) {
+      lderr(cct) << __func__ << " remote launch failed, r=" << r << dendl;
+      assert(0);
+    }
+
+    threads[0]();
+    rte_eal_mp_wait_lcore();
+  }, std::ref(threads));
 }
