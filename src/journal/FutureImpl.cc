@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "journal/FutureImpl.h"
-#include "common/Finisher.h"
 #include "journal/JournalMetadata.h"
 #include "journal/Utils.h"
 
@@ -52,7 +51,7 @@ void FutureImpl::flush(Context *on_safe) {
   }
 
   if (complete && on_safe != NULL) {
-    m_journal_metadata->get_finisher().queue(on_safe, m_return_value);
+    m_journal_metadata->queue(on_safe, m_return_value);
   } else if (flush_handler) {
     // attached to journal object -- instruct it to flush all entries through
     // this one.  possible to become detached while lock is released, so flush
@@ -70,7 +69,7 @@ void FutureImpl::wait(Context *on_safe) {
       return;
     }
   }
-  m_journal_metadata->get_finisher().queue(on_safe, m_return_value);
+  m_journal_metadata->queue(on_safe, m_return_value);
 }
 
 bool FutureImpl::is_complete() const {

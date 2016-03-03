@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "journal/JournalPlayer.h"
-#include "common/Finisher.h"
 #include "journal/Entry.h"
 #include "journal/ReplayHandler.h"
 #include "journal/Utils.h"
@@ -163,7 +162,7 @@ bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
       m_watch_scheduled = true;
     } else if (!m_watch_enabled && !object_player->is_fetch_in_progress()) {
       ldout(m_cct, 10) << __func__ << ": replay complete" << dendl;
-      m_journal_metadata->get_finisher().queue(new C_HandleComplete(
+      m_journal_metadata->queue(new C_HandleComplete(
         m_replay_handler), 0);
     }
     return false;
@@ -179,7 +178,7 @@ bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
     lderr(m_cct) << "missing prior journal entry: " << *entry << dendl;
 
     m_state = STATE_ERROR;
-    m_journal_metadata->get_finisher().queue(new C_HandleComplete(
+    m_journal_metadata->queue(new C_HandleComplete(
       m_replay_handler), -ENOMSG);
     return false;
   }
@@ -331,7 +330,7 @@ int JournalPlayer::process_prefetch(uint64_t object_number) {
   ObjectPlayerPtr object_player = get_object_player();
   if (!object_player->empty()) {
     ldout(m_cct, 10) << __func__ << ": entries available" << dendl;
-    m_journal_metadata->get_finisher().queue(new C_HandleEntriesAvailable(
+    m_journal_metadata->queue(new C_HandleEntriesAvailable(
       m_replay_handler), 0);
   } else if (m_watch_enabled) {
     object_player->watch(
@@ -341,7 +340,7 @@ int JournalPlayer::process_prefetch(uint64_t object_number) {
   } else {
     ldout(m_cct, 10) << __func__ << ": no uncommitted entries available"
                      << dendl;
-    m_journal_metadata->get_finisher().queue(new C_HandleComplete(
+    m_journal_metadata->queue(new C_HandleComplete(
       m_replay_handler), 0);
   }
   return 0;
@@ -360,11 +359,11 @@ int JournalPlayer::process_playback(uint64_t object_number) {
     uint64_t object_set = object_player->get_object_number() / splay_width;
     if (!object_player->empty()) {
       ldout(m_cct, 10) << __func__ << ": entries available" << dendl;
-      m_journal_metadata->get_finisher().queue(new C_HandleEntriesAvailable(
+      m_journal_metadata->queue(new C_HandleEntriesAvailable(
         m_replay_handler), 0);
     } else if (object_set == active_set) {
       ldout(m_cct, 10) << __func__ << ": replay complete" << dendl;
-      m_journal_metadata->get_finisher().queue(new C_HandleComplete(
+      m_journal_metadata->queue(new C_HandleComplete(
         m_replay_handler), 0);
     }
   }

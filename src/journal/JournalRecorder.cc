@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "journal/JournalRecorder.h"
-#include "common/Finisher.h"
 #include "journal/Entry.h"
 #include "journal/Utils.h"
 
@@ -32,7 +31,7 @@ struct C_Flush : public Context {
     }
     if (pending_flushes.dec() == 0) {
       // ensure all prior callback have been flushed as well
-      journal_metadata->get_finisher().queue(on_finish, ret_val);
+      journal_metadata->queue(on_finish, ret_val);
       delete this;
     }
   }

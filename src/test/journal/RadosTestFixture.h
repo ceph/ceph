@@ -8,6 +8,8 @@
 #include "cls/journal/cls_journal_types.h"
 #include "gtest/gtest.h"
 
+class ThreadPool;
+
 class RadosTestFixture : public ::testing::Test {
 public:
   static void SetUpTestCase();
@@ -56,8 +58,11 @@ public:
   static std::string _pool_name;
   static librados::Rados _rados;
   static uint64_t _oid_number;
+  static ThreadPool *_thread_pool;
 
   librados::IoCtx m_ioctx;
+
+  ContextWQ *m_work_queue;
 
   Mutex m_timer_lock;
   SafeTimer *m_timer;
