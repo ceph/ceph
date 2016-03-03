@@ -6,90 +6,102 @@
 
 #include "rgw_common.h"
 
+int rgw_open_cms_envelope(CephContext *cct, string& src, string& dst);
+int rgw_decode_b64_cms(CephContext *cct,
+                       const string& signed_b64,
+                       bufferlist& bl);
+bool rgw_is_pki_token(const string& token);
+void rgw_get_token_id(const string& token, string& token_id);
+bool rgw_decode_pki_token(CephContext *cct,
+                          const string& token,
+                          bufferlist& bl);
+
+enum class KeystoneApiVersion {
+  VER_2,
+  VER_3
+};
+
+class KeystoneService {
+public:
+  static KeystoneApiVersion get_api_version();
+};
+
 class KeystoneToken {
 public:
-  class Metadata {
+  class Domain {
   public:
-    Metadata() : is_admin(false) { }
-    bool is_admin;
+    string id;
+    string name;
     void decode_json(JSONObj *obj);
   };
-
-  class Service {
+  class Project {
   public:
-    class Endpoint {
-    public:
-      string id;
-      string admin_url;
-      string public_url;
-      string internal_url;
-      string region;
-      void decode_json(JSONObj *obj);
-    };
-    string type;
+    Domain domain;
+    string id;
     string name;
-    list<Endpoint> endpoints;
     void decode_json(JSONObj *obj);
   };
 
   class Token {
   public:
     Token() : expires(0) { }
-    class Tenant {
-    public:
-      Tenant() : enabled(false) { }
-      string id;
-      string name;
-      string description;
-      bool enabled;
-      void decode_json(JSONObj *obj);
-    };
     string id;
     time_t expires;
-    Tenant tenant;
+    Project tenant_v2;
+    void decode_json(JSONObj *obj);
+  };
+
+  class Role {
+  public:
+    string id;
+    string name;
     void decode_json(JSONObj *obj);
   };
 
   class User {
   public:
-    class Role {
-    public:
-      string id;
-      string name;
-      void decode_json(JSONObj *obj);
-    };
     string id;
     string name;
-    string user_name;
-    list<Role> roles;
+    Domain domain;
+    list<Role> roles_v2;
     void decode_json(JSONObj *obj);
-    bool has_role(const string& r);
   };
 
-  Metadata metadata;
-  list<Service> service_catalog;
   Token token;
+  Project project;
   User user;
+  list<Role> roles;
 
 public:
-  int parse(CephContext *cct, bufferlist& bl);
-
+  // FIXME: default ctor needs to be eradicated here
+  KeystoneToken() = default;
+  time_t get_expires() { return token.expires; }
+  string get_domain_id() {return project.domain.id;};
+  string get_domain_name()  {return project.domain.name;};
+  string get_project_id() {return project.id;};
+  string get_project_name() {return project.name;};
+  string get_user_id() {return user.id;};
+  string get_user_name() {return user.name;};
+  bool has_role(const string& r);
   bool expired() {
     uint64_t now = ceph_clock_now(NULL).sec();
-    return (now >= (uint64_t)token.expires);
+    return (now >= (uint64_t)get_expires());
   }
-
+  int parse(CephContext *cct,
+            const string& token_str,
+            bufferlist& bl /* in */);
   void decode_json(JSONObj *access_obj);
 };
 
-struct token_entry {
-  KeystoneToken token;
-  list<string>::iterator lru_iter;
-};
-
 class RGWKeystoneTokenCache {
+  struct token_entry {
+    KeystoneToken token;
+    list<string>::iterator lru_iter;
+  };
+
   CephContext *cct;
 
+  string admin_token_id;
   map<string, token_entry> tokens;
   list<string> tokens_lru;
 
@@ -98,12 +110,43 @@ class RGWKeystoneTokenCache {
   size_t max;
 
 public:
-  RGWKeystoneTokenCache(CephContext *_cct, int _max) : cct(_cct), lock("RGWKeystoneTokenCache"), max(_max) {}
+  RGWKeystoneTokenCache(CephContext *_cct, int _max)
+    : cct(_cct),
+      lock("RGWKeystoneTokenCache", true /* recursive */),
+      max(_max) {
+  }
 
   bool find(const string& token_id, KeystoneToken& token);
-  void add(const string& token_id, KeystoneToken& token);
+  bool find_admin(KeystoneToken& token);
+  void add(const string& token_id, const KeystoneToken& token);
+  void add_admin(const KeystoneToken& token);
   void invalidate(const string& token_id);
 };
 
+class KeystoneAdminTokenRequest {
+public:
+  virtual ~KeystoneAdminTokenRequest() = default;
+  virtual void dump(Formatter *f) const = 0;
+};
+
+class KeystoneAdminTokenRequestVer2 : public KeystoneAdminTokenRequest {
+  CephContext *cct;
+
+public:
+  KeystoneAdminTokenRequestVer2(CephContext * const _cct)
+    : cct(_cct) {
+  }
+  void dump(Formatter *f) const;
+};
+
+class KeystoneAdminTokenRequestVer3 : public KeystoneAdminTokenRequest {
+  CephContext *cct;
+
+public:
+  KeystoneAdminTokenRequestVer3(CephContext * const _cct)
+    : cct(_cct) {
+  }
+  void dump(Formatter *f) const;
+};
 
 #endif

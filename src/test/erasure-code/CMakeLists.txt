@@ -58,7 +58,6 @@ target_link_libraries(unittest_erasure_code_plugin
   ec_example
   common
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_plugin PROPERTIES COMPILE_FLAGS
   "${EC_LIBS_PATH_FLAG} ${UNITTEST_CXX_FLAGS}")
@@ -75,7 +74,6 @@ target_link_libraries(unittest_erasure_code
   osd
   common
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
@@ -116,7 +114,6 @@ target_link_libraries(unittest_erasure_code_plugin_jerasure
   ec_jerasure_generic
   common
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_plugin_jerasure PROPERTIES COMPILE_FLAGS
   "${EC_LIBS_PATH_FLAG} ${UNITTEST_CXX_FLAGS}")
@@ -138,7 +135,6 @@ target_link_libraries(unittest_erasure_code_isa
   erasure_code
   dl
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_isa PROPERTIES COMPILE_FLAGS
 ${UNITTEST_CXX_FLAGS})
@@ -159,7 +155,6 @@ target_link_libraries(unittest_erasure_code_plugin_isa
   dl
   erasure_code
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_plugin_isa PROPERTIES COMPILE_FLAGS
   "${EC_LIBS_PATH_FLAG} ${UNITTEST_CXX_FLAGS}")
@@ -180,7 +175,6 @@ target_link_libraries(unittest_erasure_code_lrc
   ec_lrc
   common
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_lrc PROPERTIES COMPILE_FLAGS
   "${EC_LIBS_PATH_FLAG} ${UNITTEST_CXX_FLAGS}")
@@ -205,7 +199,6 @@ target_link_libraries(unittest_erasure_code_plugin_lrc
   ec_jerasure_generic
   common
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_plugin_lrc PROPERTIES COMPILE_FLAGS
   "${EC_LIBS_PATH_FLAG} ${UNITTEST_CXX_FLAGS}")
@@ -248,7 +241,6 @@ target_link_libraries(unittest_erasure_code_plugin_shec
   common
   ec_shec_generic
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_plugin_shec PROPERTIES COMPILE_FLAGS
   "${EC_LIBS_PATH_FLAG} ${UNITTEST_CXX_FLAGS}")
@@ -268,7 +260,6 @@ target_link_libraries(unittest_erasure_code_example
   common
   erasure_code
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_example PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
@@ -288,7 +279,6 @@ target_link_libraries(unittest_erasure_code_jerasure
   common
   ec_jerasure_generic
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_jerasure PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
@@ -309,7 +299,6 @@ target_link_libraries(unittest_erasure_code_shec
   common
   ec_shec_generic
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_shec PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
@@ -327,7 +316,6 @@ target_link_libraries(unittest_erasure_code_shec_all
   common
   ec_shec_generic
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_shec_all PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
@@ -345,7 +333,6 @@ target_link_libraries(unittest_erasure_code_shec_thread
   common
   ec_shec_generic
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_shec_thread PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
@@ -363,7 +350,6 @@ target_link_libraries(unittest_erasure_code_shec_arguments
   common
   ec_shec_generic
   ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_shec_arguments PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})

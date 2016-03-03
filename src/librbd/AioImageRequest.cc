@@ -222,7 +222,6 @@ void AbstractAioImageWrite::send_request() {
   RWLock::RLocker md_locker(m_image_ctx.md_lock);
 
   bool journaling = false;
-  uint64_t journal_tid = 0;
 
   uint64_t clip_len = m_len;
   ObjectExtents object_extents;
@@ -257,6 +256,7 @@ void AbstractAioImageWrite::send_request() {
   }
 
   if (!object_extents.empty()) {
+    uint64_t journal_tid = 0;
     m_aio_comp->set_request_count(
       cct, object_extents.size() + get_cache_request_count(journaling));
 
@@ -414,11 +414,11 @@ AioObjectRequest *AioImageDiscard::create_object_request(
   CephContext *cct = m_image_ctx.cct;
 
   AioObjectRequest *req;
-  if (object_extent.length == m_image_ctx.layout.fl_object_size) {
+  if (object_extent.length == m_image_ctx.layout.object_size) {
     req = new AioObjectRemove(&m_image_ctx, object_extent.oid.name,
                               object_extent.objectno, snapc, on_finish);
   } else if (object_extent.offset + object_extent.length ==
-               m_image_ctx.layout.fl_object_size) {
+               m_image_ctx.layout.object_size) {
     req = new AioObjectTruncate(&m_image_ctx, object_extent.oid.name,
                                 object_extent.objectno, object_extent.offset,
                                 snapc, on_finish);

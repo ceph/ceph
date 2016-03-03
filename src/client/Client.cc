@@ -171,8 +171,8 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 // -------------
 
 dir_result_t::dir_result_t(Inode *in)
-  : inode(in), offset(0), this_offset(2), next_offset(2),
-    release_count(0), ordered_count(0), start_shared_gen(0),
+  : inode(in), owner_uid(-1), owner_gid(-1), offset(0), this_offset(2),
+    next_offset(2), release_count(0), ordered_count(0), start_shared_gen(0),
     buffer(0) {
 }
 
@@ -2287,7 +2287,7 @@ void Client::_handle_full_flag(int64_t pool)
   {
     Inode *inode = i->second;
     if (inode->oset.dirty_or_tx
-        && (pool == -1 || inode->layout.fl_pg_pool == pool)) {
+        && (pool == -1 || inode->layout.pool_id == pool)) {
       ldout(cct, 4) << __func__ << ": FULL: inode 0x" << std::hex << i->first << std::dec
         << " has dirty objects, purging and setting ENOSPC" << dendl;
       objectcacher->purge_set(&inode->oset);
@@ -3113,15 +3113,15 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
     m->head.xattr_version = in->xattr_version;
   }
   
-  m->head.layout = in->layout;
-  m->head.size = in->size;
-  m->head.max_size = in->max_size;
-  m->head.truncate_seq = in->truncate_seq;
-  m->head.truncate_size = in->truncate_size;
-  in->mtime.encode_timeval(&m->head.mtime);
-  in->atime.encode_timeval(&m->head.atime);
-  in->ctime.encode_timeval(&m->head.ctime);
-  m->head.time_warp_seq = in->time_warp_seq;
+  m->layout = in->layout;
+  m->size = in->size;
+  m->max_size = in->max_size;
+  m->truncate_seq = in->truncate_seq;
+  m->truncate_size = in->truncate_size;
+  m->mtime = in->mtime;
+  m->atime = in->atime;
+  m->ctime = in->ctime;
+  m->time_warp_seq = in->time_warp_seq;
     
   if (flush & CEPH_CAP_FILE_WR) {
     m->inline_version = in->inline_version;
@@ -3395,15 +3395,15 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
     m->head.gid = capsnap->gid;
     m->head.mode = capsnap->mode;
 
-    m->head.size = capsnap->size;
+    m->size = capsnap->size;
 
     m->head.xattr_version = capsnap->xattr_version;
     ::encode(capsnap->xattrs, m->xattrbl);
 
-    capsnap->ctime.encode_timeval(&m->head.ctime);
-    capsnap->mtime.encode_timeval(&m->head.mtime);
-    capsnap->atime.encode_timeval(&m->head.atime);
-    m->head.time_warp_seq = capsnap->time_warp_seq;
+    m->ctime = capsnap->ctime;
+    m->mtime = capsnap->mtime;
+    m->atime = capsnap->atime;
+    m->time_warp_seq = capsnap->time_warp_seq;
 
     if (capsnap->dirty & CEPH_CAP_FILE_WR) {
       m->inline_version = in->inline_version;
@@ -3542,7 +3542,7 @@ bool Client::_flush(Inode *in, Context *onfinish)
     return true;
   }
 
-  if (objecter->osdmap_pool_full(in->layout.fl_pg_pool)) {
+  if (objecter->osdmap_pool_full(in->layout.pool_id)) {
     ldout(cct, 1) << __func__ << ": FULL, purging for ENOSPC" << dendl;
     objectcacher->purge_set(&in->oset);
     if (onfinish) {
@@ -4816,6 +4816,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 
 int Client::_getgrouplist(gid_t** sgids, int uid, int gid)
 {
+  // cppcheck-suppress variableScope
   int sgid_count;
   gid_t *sgid_buf;
 
@@ -4875,9 +4876,8 @@ int Client::inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned 
   if (uid == 0)
     return 0;
 
-  int ret;
   if (uid != in->uid && (in->mode & S_IRWXG)) {
-    ret = _posix_acl_permission(in, uid, groups, want);
+    int ret = _posix_acl_permission(in, uid, groups, want);
     if (ret != -EAGAIN)
       return ret;
   }
@@ -6470,14 +6470,16 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   stat_set_mtime_sec(st, in->mtime.sec());
   stat_set_mtime_nsec(st, in->mtime.nsec());
   if (in->is_dir()) {
-    //st->st_size = in->dirstat.size();
-    st->st_size = in->rstat.rbytes;
+    if (cct->_conf->client_dirsize_rbytes)
+      st->st_size = in->rstat.rbytes;
+    else
+      st->st_size = in->dirstat.size();
     st->st_blocks = 1;
   } else {
     st->st_size = in->size;
     st->st_blocks = (in->size + 511) >> 9;
   }
-  st->st_blksize = MAX(in->layout.fl_stripe_unit, 4096);
+  st->st_blksize = MAX(in->layout.stripe_unit, 4096);
 
   if (dirstat)
     *dirstat = in->dirstat;
@@ -7543,7 +7545,7 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode)
   }
 
   const md_config_t *conf = cct->_conf;
-  loff_t p = in->layout.fl_stripe_count * in->layout.fl_object_size;
+  loff_t p = in->layout.stripe_count * in->layout.object_size;
   f->readahead.set_trigger_requests(1);
   f->readahead.set_min_readahead_size(conf->client_readahead_min);
   uint64_t max_readahead = Readahead::NO_LIMIT;
@@ -7556,7 +7558,7 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode)
   f->readahead.set_max_readahead_size(max_readahead);
   vector<uint64_t> alignments;
   alignments.push_back(p);
-  alignments.push_back(in->layout.fl_stripe_unit);
+  alignments.push_back(in->layout.stripe_unit);
   f->readahead.set_alignments(alignments);
 
   return f;
@@ -8216,7 +8218,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   //ldout(cct, 7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
   Inode *in = f->inode.get();
 
-  if (objecter->osdmap_pool_full(in->layout.fl_pg_pool)) {
+  if (objecter->osdmap_pool_full(in->layout.pool_id)) {
     return -ENOSPC;
   }
 
@@ -9969,52 +9971,55 @@ size_t Client::_vxattrcb_quota_max_files(Inode *in, char *val, size_t size)
 
 bool Client::_vxattrcb_layout_exists(Inode *in)
 {
-  char *p = (char *)&in->layout;
-  for (size_t s = 0; s < sizeof(in->layout); s++, p++)
-    if (*p)
-      return true;
-  return false;
+  return in->layout != file_layout_t();
 }
 size_t Client::_vxattrcb_layout(Inode *in, char *val, size_t size)
 {
   int r = snprintf(val, size,
       "stripe_unit=%lld stripe_count=%lld object_size=%lld pool=",
-      (unsigned long long)in->layout.fl_stripe_unit,
-      (unsigned long long)in->layout.fl_stripe_count,
-      (unsigned long long)in->layout.fl_object_size);
+      (unsigned long long)in->layout.stripe_unit,
+      (unsigned long long)in->layout.stripe_count,
+      (unsigned long long)in->layout.object_size);
   objecter->with_osdmap([&](const OSDMap& o) {
-      if (o.have_pg_pool(in->layout.fl_pg_pool))
+      if (o.have_pg_pool(in->layout.pool_id))
 	r += snprintf(val + r, size - r, "%s",
-		      o.get_pool_name(in->layout.fl_pg_pool).c_str());
+		      o.get_pool_name(in->layout.pool_id).c_str());
       else
 	r += snprintf(val + r, size - r, "%" PRIu64,
-		      (uint64_t)in->layout.fl_pg_pool);
+		      (uint64_t)in->layout.pool_id);
     });
+  if (in->layout.pool_ns.length())
+    r += snprintf(val + r, size - r, " pool_namespace=%s",
+		  in->layout.pool_ns.c_str());
   return r;
 }
 size_t Client::_vxattrcb_layout_stripe_unit(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%lld", (unsigned long long)in->layout.fl_stripe_unit);
+  return snprintf(val, size, "%lld", (unsigned long long)in->layout.stripe_unit);
 }
 size_t Client::_vxattrcb_layout_stripe_count(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%lld", (unsigned long long)in->layout.fl_stripe_count);
+  return snprintf(val, size, "%lld", (unsigned long long)in->layout.stripe_count);
 }
 size_t Client::_vxattrcb_layout_object_size(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%lld", (unsigned long long)in->layout.fl_object_size);
+  return snprintf(val, size, "%lld", (unsigned long long)in->layout.object_size);
 }
 size_t Client::_vxattrcb_layout_pool(Inode *in, char *val, size_t size)
 {
   size_t r;
   objecter->with_osdmap([&](const OSDMap& o) {
-      if (o.have_pg_pool(in->layout.fl_pg_pool))
+      if (o.have_pg_pool(in->layout.pool_id))
 	r = snprintf(val, size, "%s", o.get_pool_name(
-		       in->layout.fl_pg_pool).c_str());
+		       in->layout.pool_id).c_str());
       else
-	r = snprintf(val, size, "%" PRIu64, (uint64_t)in->layout.fl_pg_pool);
+	r = snprintf(val, size, "%" PRIu64, (uint64_t)in->layout.pool_id);
     });
   return r;
+}
+size_t Client::_vxattrcb_layout_pool_namespace(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%s", in->layout.pool_ns.c_str());
 }
 size_t Client::_vxattrcb_dir_entries(Inode *in, char *val, size_t size)
 {
@@ -10090,6 +10095,7 @@ const Client::VXattr Client::_dir_vxattrs[] = {
   XATTR_LAYOUT_FIELD(dir, layout, stripe_count),
   XATTR_LAYOUT_FIELD(dir, layout, object_size),
   XATTR_LAYOUT_FIELD(dir, layout, pool),
+  XATTR_LAYOUT_FIELD(dir, layout, pool_namespace),
   XATTR_NAME_CEPH(dir, entries),
   XATTR_NAME_CEPH(dir, files),
   XATTR_NAME_CEPH(dir, subdirs),
@@ -10122,6 +10128,7 @@ const Client::VXattr Client::_file_vxattrs[] = {
   XATTR_LAYOUT_FIELD(file, layout, stripe_count),
   XATTR_LAYOUT_FIELD(file, layout, object_size),
   XATTR_LAYOUT_FIELD(file, layout, pool),
+  XATTR_LAYOUT_FIELD(file, layout, pool_namespace),
   { name: "" }     /* Required table terminator */
 };
 
@@ -10882,7 +10889,7 @@ int Client::ll_osdaddr(int osd, uint32_t *addr)
 uint32_t Client::ll_stripe_unit(Inode *in)
 {
   Mutex::Locker lock(client_lock);
-  return in->layout.fl_stripe_unit;
+  return in->layout.stripe_unit;
 }
 
 uint64_t Client::ll_snap_seq(Inode *in)
@@ -10891,14 +10898,14 @@ uint64_t Client::ll_snap_seq(Inode *in)
   return in->snaprealm->seq;
 }
 
-int Client::ll_file_layout(Inode *in, ceph_file_layout *layout)
+int Client::ll_file_layout(Inode *in, file_layout_t *layout)
 {
   Mutex::Locker lock(client_lock);
   *layout = in->layout;
   return 0;
 }
 
-int Client::ll_file_layout(Fh *fh, ceph_file_layout *layout)
+int Client::ll_file_layout(Fh *fh, file_layout_t *layout)
 {
   return ll_file_layout(fh->inode.get(), layout);
 }
@@ -10911,13 +10918,13 @@ int Client::ll_file_layout(Fh *fh, ceph_file_layout *layout)
    tractable and works for demonstration purposes. */
 
 int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
-			      ceph_file_layout* layout)
+			      file_layout_t* layout)
 {
   Mutex::Locker lock(client_lock);
   inodeno_t ino = ll_get_inodeno(in);
-  uint32_t object_size = layout->fl_object_size;
-  uint32_t su = layout->fl_stripe_unit;
-  uint32_t stripe_count = layout->fl_stripe_count;
+  uint32_t object_size = layout->object_size;
+  uint32_t su = layout->stripe_unit;
+  uint32_t stripe_count = layout->stripe_count;
   uint64_t stripes_per_object = object_size / su;
 
   uint64_t stripeno = blockno / stripe_count;    // which horizontal stripe        (Y)
@@ -10928,7 +10935,7 @@ int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
   object_t oid = file_object_t(ino, objectno);
   return objecter->with_osdmap([&](const OSDMap& o) {
       ceph_object_layout olayout =
-	o.file_to_object_layout(oid, *layout, string());
+	o.file_to_object_layout(oid, *layout);
       pg_t pg = (pg_t)olayout.ol_pgid;
       vector<int> osds;
       int primary;
@@ -10942,9 +10949,9 @@ int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
 uint64_t Client::ll_get_internal_offset(Inode *in, uint64_t blockno)
 {
   Mutex::Locker lock(client_lock);
-  ceph_file_layout *layout=&(in->layout);
-  uint32_t object_size = layout->fl_object_size;
-  uint32_t su = layout->fl_stripe_unit;
+  file_layout_t *layout=&(in->layout);
+  uint32_t object_size = layout->object_size;
+  uint32_t su = layout->stripe_unit;
   uint64_t stripes_per_object = object_size / su;
 
   return (blockno % stripes_per_object) * su;
@@ -11142,7 +11149,7 @@ int Client::ll_read_block(Inode *in, uint64_t blockid,
 			  char *buf,
 			  uint64_t offset,
 			  uint64_t length,
-			  ceph_file_layout* layout)
+			  file_layout_t* layout)
 {
   Mutex::Locker lock(client_lock);
   Mutex flock("Client::ll_read_block flock");
@@ -11155,7 +11162,7 @@ int Client::ll_read_block(Inode *in, uint64_t blockid,
   bufferlist bl;
 
   objecter->read(oid,
-		 object_locator_t(layout->fl_pg_pool),
+		 object_locator_t(layout->pool_id),
 		 offset,
 		 length,
 		 vino.snapid,
@@ -11179,7 +11186,7 @@ int Client::ll_read_block(Inode *in, uint64_t blockid,
 
 int Client::ll_write_block(Inode *in, uint64_t blockid,
 			   char* buf, uint64_t offset,
-			   uint64_t length, ceph_file_layout* layout,
+			   uint64_t length, file_layout_t* layout,
 			   uint64_t snapseq, uint32_t sync)
 {
   Mutex flock("Client::ll_write_block flock");
@@ -11224,7 +11231,7 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
   client_lock.Lock();
 
   objecter->write(oid,
-		  object_locator_t(layout->fl_pg_pool),
+		  object_locator_t(layout->pool_id),
 		  offset,
 		  length,
 		  fakesnap,
@@ -11326,8 +11333,8 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 
   Inode *in = fh->inode.get();
 
-  if (objecter->osdmap_pool_full(in->layout.fl_pg_pool)
-      && !(mode & FALLOC_FL_PUNCH_HOLE)) {
+  if (objecter->osdmap_pool_full(in->layout.pool_id) &&
+      !(mode & FALLOC_FL_PUNCH_HOLE)) {
     return -ENOSPC;
   }
 
@@ -11557,7 +11564,7 @@ void Client::ll_interrupt(void *d)
 
 // expose file layouts
 
-int Client::describe_layout(const char *relpath, ceph_file_layout *lp)
+int Client::describe_layout(const char *relpath, file_layout_t *lp)
 {
   Mutex::Locker lock(client_lock);
 
@@ -11573,7 +11580,7 @@ int Client::describe_layout(const char *relpath, ceph_file_layout *lp)
   return 0;
 }
 
-int Client::fdescribe_layout(int fd, ceph_file_layout *lp)
+int Client::fdescribe_layout(int fd, file_layout_t *lp)
 {
   Mutex::Locker lock(client_lock);
 
@@ -11650,7 +11657,7 @@ int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& o
    * remainder.
    */
   if (len) {
-    uint64_t su = in->layout.fl_stripe_unit;
+    uint64_t su = in->layout.stripe_unit;
     *len = su - (off % su);
   }
 
@@ -11981,7 +11988,7 @@ int Client::check_pool_perm(Inode *in, int need)
   if (!cct->_conf->client_check_pool_perm)
     return 0;
 
-  int64_t pool = in->layout.fl_pg_pool;
+  int64_t pool = in->layout.pool_id;
   int have = 0;
   while (true) {
     std::map<int64_t, int>::iterator it = pool_perms.find(pool);

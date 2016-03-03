@@ -37,8 +37,7 @@ def setup_module():
     ioctx = rados.open_ioctx(pool_name)
     global features
     features = os.getenv("RBD_FEATURES")
-    if features is not None:
-        features = int(features)
+    features = int(features) if features is not None else 61
 
 def teardown_module():
     global ioctx
@@ -143,7 +142,7 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
 
                     expected_features = features
                     if expected_features is None or format == 1:
-                        expected_features = 0 if format == 1 else 3
+                        expected_features = 0 if format == 1 else 61
                     eq(expected_features, image.features())
 
                     expected_stripe_count = stripe_count
@@ -327,6 +326,9 @@ class TestImage(object):
         flags = self.image.flags()
         eq(0, flags)
 
+    def test_image_auto_close(self):
+        image = Image(ioctx, image_name)
+
     def test_write(self):
         data = rand_data(256)
         self.image.write(data, 0)
@@ -465,6 +467,11 @@ class TestImage(object):
         eq(['snap1', 'snap2'], [snap['name'] for snap in self.image.list_snaps()])
         self.image.remove_snap('snap1')
         self.image.remove_snap('snap2')
+
+    def test_list_snaps_iterator_auto_close(self):
+        self.image.create_snap('snap1')
+        self.image.list_snaps()
+        self.image.remove_snap('snap1')
 
     def test_remove_snap(self):
         eq([], list(self.image.list_snaps()))

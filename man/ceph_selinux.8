@@ -1,4 +1,4 @@
-.TH  "ceph_selinux"  "8"  "15-08-10" "ceph" "SELinux Policy ceph"
+.TH  "ceph_selinux"  "8"  "16-02-26" "ceph" "SELinux Policy ceph"
 .SH "NAME"
 ceph_selinux \- Security Enhanced Linux Policy for the ceph processes
 .SH "DESCRIPTION"
@@ -166,9 +166,19 @@ If you want to allow confined applications to run with kerberos for the ceph_t, 
 The SELinux process type ceph_t can manage files labeled with the following file types.  The paths listed are the default paths for these file types.  Note the processes UID still need to have DAC permissions.
 
 .br
+.B ceph_lock_t
+
+	/var/lock/ceph(/.*)?
+.br
+	/var/lock/ceph-disk
+.br
+
+.br
 .B ceph_log_t
 
 	/var/log/ceph(/.*)?
+.br
+	/var/log/radosgw(/.*)?
 .br
 
 .br
@@ -238,11 +248,61 @@ The SELinux process type ceph_t can manage files labeled with the following file
 .br
 
 .br
+.B initrc_tmp_t
+
+
+.br
+.B mnt_t
+
+	/mnt(/[^/]*)?
+.br
+	/mnt(/[^/]*)?
+.br
+	/rhev(/[^/]*)?
+.br
+	/media(/[^/]*)?
+.br
+	/media(/[^/]*)?
+.br
+	/media/\.hal-.*
+.br
+	/var/run/media(/[^/]*)?
+.br
+	/net
+.br
+	/afs
+.br
+	/rhev
+.br
+	/misc
+.br
+
+.br
 .B root_t
 
 	/
 .br
 	/initrd
+.br
+
+.br
+.B tmp_t
+
+	/sandbox(/.*)?
+.br
+	/tmp
+.br
+	/usr/tmp
+.br
+	/var/tmp
+.br
+	/var/tmp
+.br
+	/tmp-inst
+.br
+	/var/tmp-inst
+.br
+	/var/tmp/vi\.recover
 .br
 
 .br
@@ -268,6 +328,17 @@ You can see the context of a file using the \fB\-Z\fP option to \fBls\bP
 .PP
 Policy governs the access confined processes have to these files.
 SELinux ceph policy is very flexible allowing users to setup their ceph processes in as secure a method as possible.
+.PP
+
+.PP
+.B EQUIVALENCE DIRECTORIES
+
+.PP
+ceph policy stores data with multiple different file context types under the /var/lock/ceph directory.  If you would like to store the data in a different directory you can use the semanage command to create an equivalence mapping.  If you wanted to store this data under the /srv dirctory you would execute the following command:
+.PP
+.B semanage fcontext -a -e /var/lock/ceph /srv/ceph
+.br
+.B restorecon -R -v /srv/ceph
 .PP
 
 .PP
@@ -311,6 +382,18 @@ Paths:
 
 .EX
 .PP
+.B ceph_lock_t
+.EE
+
+- Set files with the ceph_lock_t type, if you want to treat the files as ceph lock data, stored under the /var/lock directory
+
+.br
+.TP 5
+Paths:
+/var/lock/ceph(/.*)?, /var/lock/ceph-disk
+
+.EX
+.PP
 .B ceph_log_t
 .EE
 
@@ -319,7 +402,7 @@ Paths:
 .br
 .TP 5
 Paths:
-/var/log/ceph(/.*)?
+/var/log/ceph(/.*)?, /var/log/radosgw(/.*)?
 
 .EX
 .PP

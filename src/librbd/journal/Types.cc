@@ -337,18 +337,21 @@ void MirrorPeerClientMeta::encode(bufferlist& bl) const {
   ::encode(cluster_id, bl);
   ::encode(pool_id, bl);
   ::encode(image_id, bl);
+  ::encode(snap_name, bl);
 }
 
 void MirrorPeerClientMeta::decode(__u8 version, bufferlist::iterator& it) {
   ::decode(cluster_id, it);
   ::decode(pool_id, it);
   ::decode(image_id, it);
+  ::decode(snap_name, it);
 }
 
 void MirrorPeerClientMeta::dump(Formatter *f) const {
   f->dump_string("cluster_id", cluster_id.c_str());
   f->dump_int("pool_id", pool_id);
   f->dump_string("image_id", image_id.c_str());
+  f->dump_string("snap_name", snap_name.c_str());
 }
 
 void CliClientMeta::encode(bufferlist& bl) const {

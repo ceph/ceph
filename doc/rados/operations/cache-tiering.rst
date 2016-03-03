@@ -286,7 +286,7 @@ objects with a higher speed. To set the ``cache_target_dirty_high_ratio``::
 
 	ceph osd pool set {cachepool} cache_target_dirty_high_ratio {0.0..1.0}
 
-For example, setting the value to ``0.6`` will begin aggressively flush diryt objects
+For example, setting the value to ``0.6`` will begin aggressively flush dirty objects
 when they reach 60% of the cache pool's capacity. obviously, we'd better set the value
 between dirty_ratio and full_ratio::
 

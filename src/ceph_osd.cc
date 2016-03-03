@@ -85,7 +85,7 @@ void usage()
        << "                    check whether a journal is allowed\n"
        << "  --check-needs-journal\n"
        << "                    check whether a journal is required\n"
-       << "  --debug_osd <N>   set debug level (e.g. 10)"
+       << "  --debug_osd <N>   set debug level (e.g. 10)\n"
        << "  --get-device-fsid PATH\n"
        << "                    get OSD fsid for the given block device\n"
        << std::endl;
@@ -461,6 +461,8 @@ int main(int argc, const char **argv)
   Messenger *ms_objecter = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "ms_objecter",
 					     getpid());
+  if (!ms_public || !ms_cluster || !ms_hbclient || !ms_hb_back_server || !ms_hb_front_server || !ms_objecter)
+    exit(1);
   ms_cluster->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms_hbclient->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms_hb_back_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);

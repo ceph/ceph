@@ -141,10 +141,10 @@ TEST(ErasureCodeTest, encode_misaligned_non_contiguous)
   map<int, bufferlist> encoded;
 
   ASSERT_FALSE(in.is_contiguous());
-  ASSERT_TRUE(in.buffers().front().is_aligned(ErasureCode::SIMD_ALIGN));
-  ASSERT_FALSE(in.buffers().front().is_n_align_sized(chunk_size));
-  ASSERT_TRUE(in.buffers().back().is_aligned(ErasureCode::SIMD_ALIGN));
-  ASSERT_FALSE(in.buffers().back().is_n_align_sized(chunk_size));
+  ASSERT_TRUE(in.front().is_aligned(ErasureCode::SIMD_ALIGN));
+  ASSERT_FALSE(in.front().is_n_align_sized(chunk_size));
+  ASSERT_TRUE(in.back().is_aligned(ErasureCode::SIMD_ALIGN));
+  ASSERT_FALSE(in.back().is_n_align_sized(chunk_size));
   ASSERT_EQ(0, erasure_code.encode(want_to_encode, in, &encoded));
   for (unsigned int i = 0; i < erasure_code.get_chunk_count(); i++) {
     ASSERT_TRUE(encoded[i].is_aligned(ErasureCode::SIMD_ALIGN));

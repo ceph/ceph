@@ -25,40 +25,21 @@ function run() {
 function TEST_without_pidfile() {
     local dir=$1
     setup $dir
-    local RUNID=`uuidgen`
-    run_mon $dir a --pid-file= --daemonize=$RUNID || { teardown_unexist_pidfile $dir $RUNID; return 1; }
-    run_osd $dir 0 --pid-file= --daemonize=$RUNID || { teardown_unexist_pidfile $dir $RUNID; return 1; }
-    teardown_unexist_pidfile $dir $RUNID || return 1
-}
-
-function teardown_unexist_pidfile() {
-    local dir=$1
-    shift
-    local RUNID=$1
-    shift
-    local delays=${4:-0 0 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120}
-    local pids=$(ps aux|awk "/cep[h].*$RUNID.*/ {print \$2}")
-    local status=0
-    for i in $pids ; do
-        local kill_complete=false
-        for try in $delays ; do  
-            if kill $i 2> /dev/null ; then
-                kill_complete=false
-                sleep $try
-            else
-                kill_complete=true
-                break
-            fi
-       done
-       if ! $kill_complete ; then
-            status=1
-       fi   
-    done
-    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
-         __teardown_btrfs $dir
-    fi
-    rm -fr $dir
-    return $status
+    local data=$dir/osd1
+    local id=1
+    ceph-mon \
+        --id $id \
+        --mkfs \
+        --mon-data=$data \
+        --run-dir=$dir || return 1
+    expect_failure $dir "ignore empty --pid-file" ceph-mon \
+        -f \
+        --log-to-stderr \
+        --pid-file= \
+        --id $id \
+        --mon-data=$data \
+        --run-dir=$dir || return 1
+    teardown $dir
 }
 
 function TEST_pidfile() {
@@ -87,6 +68,7 @@ function TEST_pidfile() {
     # if the pid in the file is different from the pid of the daemon
     # the file is not removed because it is assumed to be owned by
     # another daemon
+    cp $dir/osd.0.pid $dir/osd.0.pid.old  # so that kill_daemon finds the pid
     echo 123 > $dir/osd.0.pid
     kill_daemons $dir TERM osd.0 || return 1
     test -f $dir/osd.0.pid || return 1
@@ -99,4 +81,5 @@ function TEST_pidfile() {
     teardown $dir || return 1
 }
 
-main pidfile
+main pidfile "$@"
+

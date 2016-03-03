@@ -2518,6 +2518,7 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.last_fresh == r.last_fresh &&
     l.last_change == r.last_change &&
     l.last_active == r.last_active &&
+    l.last_peered == r.last_peered &&
     l.last_clean == r.last_clean &&
     l.last_unstale == r.last_unstale &&
     l.last_undegraded == r.last_undegraded &&
@@ -2542,6 +2543,7 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.mapping_epoch == r.mapping_epoch &&
     l.blocked_by == r.blocked_by &&
     l.last_became_active == r.last_became_active &&
+    l.last_became_peered == r.last_became_peered &&
     l.dirty_stats_invalid == r.dirty_stats_invalid &&
     l.omap_stats_invalid == r.omap_stats_invalid &&
     l.hitset_stats_invalid == r.hitset_stats_invalid &&
@@ -3270,6 +3272,12 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	set<snapid_t> snaps;
 	::decode(snaps, bp);
 	visitor->update_snaps(snaps);
+	break;
+      }
+      case TRY_DELETE: {
+	version_t old_version;
+	::decode(old_version, bp);
+	visitor->try_rmobject(old_version);
 	break;
       }
       default:
@@ -5497,6 +5505,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       break;
     case CEPH_OSD_OP_PG_HITSET_GET:
       out << " " << utime_t(op.op.hit_set_get.stamp);
+      break;
+    case CEPH_OSD_OP_SCRUBLS:
       break;
     }
   } else if (ceph_osd_op_type_multi(op.op.op)) {

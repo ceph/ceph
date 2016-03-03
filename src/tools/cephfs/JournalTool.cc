@@ -960,7 +960,7 @@ int JournalTool::replay_offline(EMetaBlob const &metablob, bool const dry_run)
     inode_bl.clear();
     std::string magic = CEPH_FS_ONDISK_MAGIC;
     ::encode(magic, inode_bl);
-    inode.encode(inode_bl);
+    inode.encode(inode_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
     if (!dry_run) {
       r = io.write_full(root_oid.name, inode_bl);
@@ -1043,7 +1043,7 @@ int JournalTool::replay_offline(EMetaBlob const &metablob, bool const dry_run)
       inode.snap_blob = fb.snapbl;
       inode.symlink = fb.symlink;
       inode.old_inodes = fb.old_inodes;
-      inode.encode_bare(dentry_bl);
+      inode.encode_bare(dentry_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
       
       vals[key] = dentry_bl;
       if (!dry_run) {
@@ -1095,7 +1095,7 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
   // is needed inside the ENoOp to make up the difference.
   bufferlist tmp;
   ENoOp enoop(0);
-  enoop.encode_with_header(tmp);
+  enoop.encode_with_header(tmp, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   dout(4) << "erase_region " << pos << " len=" << length << dendl;
 
@@ -1111,7 +1111,7 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
   // Serialize an ENoOp with the correct amount of padding
   enoop = ENoOp(padding);
   bufferlist entry;
-  enoop.encode_with_header(entry);
+  enoop.encode_with_header(entry, CEPH_FEATURES_SUPPORTED_DEFAULT);
   JournalStream stream(JOURNAL_FORMAT_RESILIENT);
 
   // Serialize region of log stream
@@ -1126,7 +1126,7 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
   uint32_t object_size = g_conf->mds_log_segment_size;
   if (object_size == 0) {
     // Default layout object size
-    object_size = g_default_file_layout.fl_object_size;
+    object_size = file_layout_t::get_default().object_size;
   }
 
   uint64_t write_offset = pos;
@@ -1184,9 +1184,9 @@ void JournalTool::encode_fullbit_as_inode(
 
   // Serialize InodeStore
   if (bare) {
-    new_inode.encode_bare(*out_bl);
+    new_inode.encode_bare(*out_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
   } else {
-    new_inode.encode(*out_bl);
+    new_inode.encode(*out_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
   }
 }
 

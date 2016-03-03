@@ -1541,6 +1541,10 @@ private:
     Mutex::Locker l(heartbeat_update_lock);
     heartbeat_need_update = true;
   }
+  void heartbeat_clear_peers_need_update() {
+    Mutex::Locker l(heartbeat_update_lock);
+    heartbeat_need_update = false;
+  }
   void heartbeat();
   void heartbeat_check();
   void heartbeat_entry();
@@ -1565,7 +1569,7 @@ public:
 
   struct HeartbeatDispatcher : public Dispatcher {
     OSD *osd;
-    explicit HeartbeatDispatcher(OSD *o) : Dispatcher(cct), osd(o) {}
+    explicit HeartbeatDispatcher(OSD *o) : Dispatcher(o->cct), osd(o) {}
     bool ms_dispatch(Message *m) {
       return osd->heartbeat_dispatch(m);
     }
@@ -2300,6 +2304,8 @@ protected:
     case MSG_OSD_EC_READ:
     case MSG_OSD_EC_READ_REPLY:
     case MSG_OSD_REP_SCRUB:
+    case MSG_OSD_PG_UPDATE_LOG_MISSING:
+    case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
       return true;
     default:
       return false;

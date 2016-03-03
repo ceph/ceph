@@ -7,18 +7,24 @@
 
 #include <memory>
 
-#include <boost/thread/mutex.hpp>
 #include <boost/asio.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
 
-#include "log/Entry.h"
-#include "log/SubsystemMap.h"
-#include "common/LogEntry.h"
 #include "include/memory.h"
+#include "include/assert.h"  // boost clobbers this
+
+struct uuid_d;
+class LogEntry;
 
 namespace ceph {
+
+class Formatter;
+
 namespace log {
+
+struct Entry;
+class SubsystemMap;
 
 // Graylog logging backend: Convert log datastructures (LogEntry, Entry) to
 // GELF (http://www.graylog2.org/resources/gelf/specification) and send it
@@ -41,11 +47,11 @@ class Graylog
    * until set_destination is called
    * @param logger Value for key "_logger" in GELF
    */
-  Graylog(std::string logger);
+  explicit Graylog(std::string logger);
   virtual ~Graylog();
 
   void set_hostname(const std::string& host);
-  void set_fsid(uuid_d fsid);
+  void set_fsid(const uuid_d& fsid);
 
   void set_destination(const std::string& host, int port);
 

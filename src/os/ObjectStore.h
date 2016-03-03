@@ -47,11 +47,9 @@ namespace ceph {
 
 enum {
   l_os_first = 84000,
-  l_os_jq_max_ops,
   l_os_jq_ops,
-  l_os_j_ops,
-  l_os_jq_max_bytes,
   l_os_jq_bytes,
+  l_os_j_ops,
   l_os_j_bytes,
   l_os_j_lat,
   l_os_j_wr,
@@ -408,6 +406,8 @@ public:
 
       OP_SETALLOCHINT = 39,  // cid, oid, object_size, write_size
       OP_COLL_HINT = 40, // cid, type, bl
+
+      OP_TRY_RENAME = 41,   // oldcid, oldoid, newoid
     };
 
     // Transaction hint type
@@ -579,7 +579,7 @@ public:
     }
     void register_on_complete(Context *c) {
       if (!c) return;
-      RunOnDeleteRef _complete(new RunOnDelete(c));
+      RunOnDeleteRef _complete (std::make_shared<RunOnDelete>(c));
       register_on_applied(new ContainerContext<RunOnDeleteRef>(_complete));
       register_on_commit(new ContainerContext<RunOnDeleteRef>(_complete));
     }
@@ -1411,6 +1411,23 @@ public:
         _op->cid = _get_coll_id(oldcid);
         _op->oid = _get_object_id(oldoid);
         _op->dest_cid = _get_coll_id(cid);
+        _op->dest_oid = _get_object_id(oid);
+      }
+      data.ops++;
+    }
+    void try_rename(coll_t cid, const ghobject_t& oldoid,
+                    const ghobject_t& oid) {
+      if (use_tbl) {
+        __u32 op = OP_TRY_RENAME;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oldoid, tbl);
+        ::encode(oid, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_TRY_RENAME;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oldoid);
         _op->dest_oid = _get_object_id(oid);
       }
       data.ops++;

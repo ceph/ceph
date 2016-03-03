@@ -35,6 +35,7 @@
 enum class IOCommand {
   READ_COMMAND,
   WRITE_COMMAND,
+  ZERO_COMMAND,
   FLUSH_COMMAND
 };
 

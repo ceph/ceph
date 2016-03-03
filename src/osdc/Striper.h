@@ -29,21 +29,21 @@ class CephContext;
      * ranges in objects on (primary) osds)
      */
     static void file_to_extents(CephContext *cct, const char *object_format,
-				const ceph_file_layout *layout,
+				const file_layout_t *layout,
 				uint64_t offset, uint64_t len,
 				uint64_t trunc_size,
 				map<object_t, vector<ObjectExtent> >& extents,
 				uint64_t buffer_offset=0);
 
     static void file_to_extents(CephContext *cct, const char *object_format,
-				const ceph_file_layout *layout,
+				const file_layout_t *layout,
 				uint64_t offset, uint64_t len,
 				uint64_t trunc_size,
 				vector<ObjectExtent>& extents,
 				uint64_t buffer_offset=0);
 
     static void file_to_extents(CephContext *cct, inodeno_t ino,
-				const ceph_file_layout *layout,
+				const file_layout_t *layout,
 				uint64_t offset, uint64_t len,
 				uint64_t trunc_size,
 				vector<ObjectExtent>& extents) {
@@ -61,15 +61,15 @@ class CephContext;
     /**
      * reverse map an object extent to file extents
      */
-    static void extent_to_file(CephContext *cct, ceph_file_layout *layout,
+    static void extent_to_file(CephContext *cct, file_layout_t *layout,
 			       uint64_t objectno, uint64_t off, uint64_t len,
 			       vector<pair<uint64_t, uint64_t> >& extents);
 
     static uint64_t object_truncate_size(
-      CephContext *cct, const ceph_file_layout *layout,
+      CephContext *cct, const file_layout_t *layout,
       uint64_t objectno, uint64_t trunc_size);
 
-    static uint64_t get_num_objects(const ceph_file_layout& layout,
+    static uint64_t get_num_objects(const file_layout_t& layout,
 				    uint64_t size);
     /*
      * helper to assemble a striped result
@@ -77,6 +77,7 @@ class CephContext;
     class StripedReadResult {
       // offset -> (data, intended length)
       map<uint64_t, pair<bufferlist, uint64_t> > partial;
+      uint64_t total_intended_len = 0; //sum of partial.second.second
 
     public:
       void add_partial_result(
@@ -97,6 +98,12 @@ class CephContext;
 	const vector<pair<uint64_t,uint64_t> >& buffer_extents);
 
       void assemble_result(CephContext *cct, bufferlist& bl, bool zero_tail);
+
+      /**
+       * @buffer copy read data into buffer
+       * @len the length of buffer
+       */
+      void assemble_result(CephContext *cct, char *buffer, size_t len);
     };
 
   };

@@ -20,35 +20,6 @@ using namespace cls::journal;
 
 namespace {
 
-// does not compare object number
-inline bool entry_positions_less_equal(const ObjectSetPosition &lhs,
-                                       const ObjectSetPosition &rhs) {
-  if (lhs.entry_positions == rhs.entry_positions) {
-    return true;
-  }
-
-  if (lhs.entry_positions.size() < rhs.entry_positions.size()) {
-    return true;
-  } else if (rhs.entry_positions.size() > rhs.entry_positions.size()) {
-    return false;
-  }
-
-  std::map<uint64_t, uint64_t> rhs_tids;
-  for (EntryPositions::const_iterator it = rhs.entry_positions.begin();
-       it != rhs.entry_positions.end(); ++it) {
-    rhs_tids[it->tag_tid] = it->entry_tid;
-  }
-
-  for (EntryPositions::const_iterator it = lhs.entry_positions.begin();
-       it != lhs.entry_positions.end(); ++it) {
-    const EntryPosition &entry_position = *it;
-    if (entry_position.entry_tid < rhs_tids[entry_position.tag_tid]) {
-      return true;
-    }
-  }
-  return false;
-}
-
 struct C_AllocateTag : public Context {
   CephContext *cct;
   librados::IoCtx &ioctx;
@@ -243,6 +214,21 @@ struct C_GetTags : public Context {
   }
 };
 
+struct C_FlushCommitPosition : public Context {
+  Context *commit_position_ctx;
+  Context *on_finish;
+
+  C_FlushCommitPosition(Context *commit_position_ctx, Context *on_finish)
+    : commit_position_ctx(commit_position_ctx), on_finish(on_finish) {
+  }
+  virtual void finish(int r) override {
+    if (commit_position_ctx != nullptr) {
+      commit_position_ctx->complete(r);
+    }
+    on_finish->complete(r);
+  }
+};
+
 } // anonymous namespace
 
 JournalMetadata::JournalMetadata(librados::IoCtx &ioctx,
@@ -286,8 +272,7 @@ void JournalMetadata::init(Context *on_init) {
   }
 
   C_ImmutableMetadata *ctx = new C_ImmutableMetadata(this, on_init);
-  client::get_immutable_metadata(m_ioctx, m_oid, &m_order, &m_splay_width,
-                                 &m_pool_id, ctx);
+  get_immutable_metadata(&m_order, &m_splay_width, &m_pool_id, ctx);
 }
 
 void JournalMetadata::shutdown() {
@@ -327,32 +312,69 @@ void JournalMetadata::shutdown() {
   m_ioctx.aio_flush();
 }
 
-int JournalMetadata::register_client(const bufferlist &data) {
-  ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
-  int r = client::client_register(m_ioctx, m_oid, m_client_id, data);
-  if (r < 0) {
-    lderr(m_cct) << "failed to register journal client '" << m_client_id
-                 << "': " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  notify_update();
-  return 0;
+void JournalMetadata::get_immutable_metadata(uint8_t *order,
+					     uint8_t *splay_width,
+					     int64_t *pool_id,
+					     Context *on_finish) {
+  client::get_immutable_metadata(m_ioctx, m_oid, order, splay_width, pool_id,
+				 on_finish);
 }
 
-int JournalMetadata::unregister_client() {
+void JournalMetadata::get_mutable_metadata(uint64_t *minimum_set,
+					   uint64_t *active_set,
+					   RegisteredClients *clients,
+					   Context *on_finish) {
+  client::get_mutable_metadata(m_ioctx, m_oid, minimum_set, active_set, clients,
+			       on_finish);
+}
+
+void JournalMetadata::register_client(const bufferlist &data,
+				      Context *on_finish) {
+  ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
+  librados::ObjectWriteOperation op;
+  client::client_register(&op, m_client_id, data);
+
+  C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_finish);
+
+  librados::AioCompletion *comp =
+    librados::Rados::aio_create_completion(ctx, NULL,
+                                           utils::rados_ctx_callback);
+  int r = m_ioctx.aio_operate(m_oid, comp, &op);
+  assert(r == 0);
+  comp->release();
+}
+
+void JournalMetadata::update_client(const bufferlist &data,
+				    Context *on_finish) {
+  ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
+  librados::ObjectWriteOperation op;
+  client::client_update(&op, m_client_id, data);
+
+  C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_finish);
+
+  librados::AioCompletion *comp =
+    librados::Rados::aio_create_completion(ctx, NULL,
+                                           utils::rados_ctx_callback);
+  int r = m_ioctx.aio_operate(m_oid, comp, &op);
+  assert(r == 0);
+  comp->release();
+}
+
+void JournalMetadata::unregister_client(Context *on_finish) {
   assert(!m_client_id.empty());
 
   ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
-  int r = client::client_unregister(m_ioctx, m_oid, m_client_id);
-  if (r < 0) {
-    lderr(m_cct) << "failed to unregister journal client '" << m_client_id
-                 << "': " << cpp_strerror(r) << dendl;
-    return r;
-  }
+  librados::ObjectWriteOperation op;
+  client::client_unregister(&op, m_client_id);
 
-  notify_update();
-  return 0;
+  C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_finish);
+
+  librados::AioCompletion *comp =
+    librados::Rados::aio_create_completion(ctx, NULL,
+                                           utils::rados_ctx_callback);
+  int r = m_ioctx.aio_operate(m_oid, comp, &op);
+  assert(r == 0);
+  comp->release();
 }
 
 void JournalMetadata::allocate_tag(uint64_t tag_class, const bufferlist &data,
@@ -434,48 +456,37 @@ void JournalMetadata::set_active_set(uint64_t object_set) {
 }
 
 void JournalMetadata::flush_commit_position() {
-
   ldout(m_cct, 20) << __func__ << dendl;
 
-  {
-    Mutex::Locker timer_locker(m_timer_lock);
-    Mutex::Locker locker(m_lock);
-    if (m_commit_position_task_ctx == NULL) {
-      return;
-    }
-
-    m_timer->cancel_event(m_commit_position_task_ctx);
-    m_commit_position_task_ctx = NULL;
+  Mutex::Locker timer_locker(m_timer_lock);
+  Mutex::Locker locker(m_lock);
+  if (m_commit_position_ctx == nullptr) {
+    return;
   }
+
+  cancel_commit_task();
   handle_commit_position_task();
 }
 
-void JournalMetadata::set_commit_position(
-    const ObjectSetPosition &commit_position, Context *on_safe) {
-  assert(on_safe != NULL);
+void JournalMetadata::flush_commit_position(Context *on_safe) {
+  ldout(m_cct, 20) << __func__ << dendl;
 
-  Context *stale_ctx = nullptr;
-  {
-    Mutex::Locker timer_locker(m_timer_lock);
-    Mutex::Locker locker(m_lock);
-    ldout(m_cct, 20) << __func__ << ": current=" << m_client.commit_position
-                     << ", new=" << commit_position << dendl;
-    if (entry_positions_less_equal(commit_position, m_client.commit_position) ||
-        entry_positions_less_equal(commit_position, m_commit_position)) {
-      stale_ctx = on_safe;
-    } else {
-      stale_ctx = m_commit_position_ctx;
-
-      m_client.commit_position = commit_position;
-      m_commit_position = commit_position;
-      m_commit_position_ctx = on_safe;
-      schedule_commit_task();
+  Mutex::Locker timer_locker(m_timer_lock);
+  Mutex::Locker locker(m_lock);
+  if (m_commit_position_ctx == nullptr) {
+    // nothing to flush
+    if (on_safe != nullptr) {
+      m_finisher->queue(on_safe, 0);
     }
+    return;
   }
 
-  if (stale_ctx != nullptr) {
-    stale_ctx->complete(-ESTALE);
+  if (on_safe != nullptr) {
+    m_commit_position_ctx = new C_FlushCommitPosition(
+      m_commit_position_ctx, on_safe);
   }
+  cancel_commit_task();
+  handle_commit_position_task();
 }
 
 void JournalMetadata::reserve_entry_tid(uint64_t tag_tid, uint64_t entry_tid) {
@@ -515,9 +526,8 @@ void JournalMetadata::handle_immutable_metadata(int r, Context *on_init) {
 void JournalMetadata::refresh(Context *on_complete) {
   ldout(m_cct, 10) << "refreshing mutable metadata" << dendl;
   C_Refresh *refresh = new C_Refresh(this, on_complete);
-  client::get_mutable_metadata(m_ioctx, m_oid, &refresh->minimum_set,
-                               &refresh->active_set,
-                               &refresh->registered_clients, refresh);
+  get_mutable_metadata(&refresh->minimum_set, &refresh->active_set,
+		       &refresh->registered_clients, refresh);
 }
 
 void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
@@ -528,8 +538,8 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
     Client client(m_client_id, bufferlist());
     RegisteredClients::iterator it = refresh->registered_clients.find(client);
     if (it != refresh->registered_clients.end()) {
-      m_minimum_set = refresh->minimum_set;
-      m_active_set = refresh->active_set;
+      m_minimum_set = MAX(m_minimum_set, refresh->minimum_set);
+      m_active_set = MAX(m_active_set, refresh->active_set);
       m_registered_clients = refresh->registered_clients;
       m_client = *it;
 
@@ -554,13 +564,24 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
   }
 }
 
-void JournalMetadata::schedule_commit_task() {
-
+void JournalMetadata::cancel_commit_task() {
   ldout(m_cct, 20) << __func__ << dendl;
 
   assert(m_timer_lock.is_locked());
   assert(m_lock.is_locked());
+  assert(m_commit_position_ctx != nullptr);
+  assert(m_commit_position_task_ctx != nullptr);
 
+  m_timer->cancel_event(m_commit_position_task_ctx);
+  m_commit_position_task_ctx = NULL;
+}
+
+void JournalMetadata::schedule_commit_task() {
+  ldout(m_cct, 20) << __func__ << dendl;
+
+  assert(m_timer_lock.is_locked());
+  assert(m_lock.is_locked());
+  assert(m_commit_position_ctx != nullptr);
   if (m_commit_position_task_ctx == NULL) {
     m_commit_position_task_ctx = new C_CommitPositionTask(this);
     m_timer->add_event_after(m_commit_interval, m_commit_position_task_ctx);
@@ -568,10 +589,9 @@ void JournalMetadata::schedule_commit_task() {
 }
 
 void JournalMetadata::handle_commit_position_task() {
-
+  assert(m_timer_lock.is_locked());
+  assert(m_lock.is_locked());
   ldout(m_cct, 20) << __func__ << dendl;
-
-  Mutex::Locker locker(m_lock);
 
   librados::ObjectWriteOperation op;
   client::client_commit(&op, m_client_id, m_commit_position);
@@ -646,68 +666,84 @@ uint64_t JournalMetadata::allocate_commit_tid(uint64_t object_num,
 
   ldout(m_cct, 20) << "allocated commit tid: commit_tid=" << commit_tid << " ["
                    << "object_num=" << object_num << ", "
-                   << "tag_tid=" << tag_tid << ", entry_tid=" << entry_tid << "]"
+                   << "tag_tid=" << tag_tid << ", "
+                   << "entry_tid=" << entry_tid << "]"
                    << dendl;
   return commit_tid;
 }
 
-bool JournalMetadata::committed(uint64_t commit_tid,
-                                ObjectSetPosition *object_set_position) {
+void JournalMetadata::committed(uint64_t commit_tid,
+                                const CreateContext &create_context) {
   ldout(m_cct, 20) << "committed tid=" << commit_tid << dendl;
 
-  Mutex::Locker locker(m_lock);
+  ObjectSetPosition commit_position;
+  Context *stale_ctx = nullptr;
   {
+    Mutex::Locker timer_locker(m_timer_lock);
+    Mutex::Locker locker(m_lock);
+    assert(commit_tid > m_commit_position_tid);
+
+    if (!m_commit_position.object_positions.empty()) {
+      // in-flight commit position update
+      commit_position = m_commit_position;
+    } else {
+      // safe commit position
+      commit_position = m_client.commit_position;
+    }
+
     CommitTids::iterator it = m_pending_commit_tids.find(commit_tid);
     assert(it != m_pending_commit_tids.end());
 
     CommitEntry &commit_entry = it->second;
     commit_entry.committed = true;
-  }
 
-  if (!m_commit_position.entry_positions.empty()) {
-    *object_set_position = m_commit_position;
-  } else {
-    *object_set_position = m_client.commit_position;
-  }
+    bool update_commit_position = false;
+    while (!m_pending_commit_tids.empty()) {
+      CommitTids::iterator it = m_pending_commit_tids.begin();
+      CommitEntry &commit_entry = it->second;
+      if (!commit_entry.committed) {
+        break;
+      }
 
-  bool update_commit_position = false;
-  while (!m_pending_commit_tids.empty()) {
-    CommitTids::iterator it = m_pending_commit_tids.begin();
-    CommitEntry &commit_entry = it->second;
-    if (!commit_entry.committed) {
-      break;
+      commit_position.object_positions.emplace_front(
+        commit_entry.object_num, commit_entry.tag_tid,
+        commit_entry.entry_tid);
+      m_pending_commit_tids.erase(it);
+      update_commit_position = true;
     }
 
-    object_set_position->object_number = commit_entry.object_num;
-    if (!object_set_position->entry_positions.empty() &&
-        object_set_position->entry_positions.front().tag_tid ==
-          commit_entry.tag_tid) {
-      object_set_position->entry_positions.front() = EntryPosition(
-        commit_entry.tag_tid, commit_entry.entry_tid);
-    } else {
-      object_set_position->entry_positions.push_front(EntryPosition(
-        commit_entry.tag_tid, commit_entry.entry_tid));
+    if (!update_commit_position) {
+      return;
     }
-    m_pending_commit_tids.erase(it);
-    update_commit_position = true;
-  }
 
-  if (update_commit_position) {
-    // prune the position to have unique tags in commit-order
-    std::set<uint64_t> in_use_tag_tids;
-    EntryPositions::iterator it = object_set_position->entry_positions.begin();
-    while (it != object_set_position->entry_positions.end()) {
-      if (!in_use_tag_tids.insert(it->tag_tid).second) {
-        it = object_set_position->entry_positions.erase(it);
+    // prune the position to have one position per splay offset
+    std::set<uint8_t> in_use_splay_offsets;
+    ObjectPositions::iterator ob_it = commit_position.object_positions.begin();
+    while (ob_it != commit_position.object_positions.end()) {
+      uint8_t splay_offset = ob_it->object_number % m_splay_width;
+      if (!in_use_splay_offsets.insert(splay_offset).second) {
+        ob_it = commit_position.object_positions.erase(ob_it);
       } else {
-        ++it;
+        ++ob_it;
       }
     }
 
-    ldout(m_cct, 20) << "updated object set position: " << *object_set_position
-                     << dendl;
+    stale_ctx = m_commit_position_ctx;
+    m_commit_position_ctx = create_context();
+    m_commit_position = commit_position;
+    m_commit_position_tid = commit_tid;
+
+    ldout(m_cct, 20) << "updated commit position: " << commit_position << ", "
+                     << "on_safe=" << m_commit_position_ctx << dendl;
+    schedule_commit_task();
   }
-  return update_commit_position;
+
+
+  if (stale_ctx != nullptr) {
+    ldout(m_cct, 20) << "canceling stale commit: on_safe=" << stale_ctx
+                     << dendl;
+    stale_ctx->complete(-ESTALE);
+  }
 }
 
 void JournalMetadata::notify_update() {

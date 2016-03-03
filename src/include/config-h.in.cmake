@@ -123,6 +123,9 @@
 /* Define to 1 if you have the `syncfs' function. */
 #cmakedefine HAVE_SYNCFS 1
 
+/* Define to 1 if you have the `pwritev' function. */
+#cmakedefine HAVE_PWRITEV 1
+
 /* sync_file_range(2) is supported */
 #cmakedefine HAVE_SYNC_FILE_RANGE
 

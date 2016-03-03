@@ -209,7 +209,8 @@ void add_create_image_options(po::options_description *opt,
   // TODO get default image format from conf
   if (include_format) {
     opt->add_options()
-      (IMAGE_FORMAT.c_str(), po::value<ImageFormat>(), "image format [1 or 2]")
+      (IMAGE_FORMAT.c_str(), po::value<ImageFormat>(),
+       "image format [1 (deprecated) or 2]")
       (IMAGE_NEW_FORMAT.c_str(),
        po::value<ImageNewFormat>()->zero_tokens(),
        "use image format 2\n(deprecated)");
@@ -288,11 +289,13 @@ std::string get_short_features_help(bool append_suffix) {
 
     std::string suffix;
     if (append_suffix) {
-      if ((pair.first & RBD_FEATURES_MUTABLE) != 0) {
-        suffix += "*";
-      }
       if ((pair.first & g_conf->rbd_default_features) != 0) {
         suffix += "+";
+      }
+      if ((pair.first & RBD_FEATURES_MUTABLE) != 0) {
+        suffix += "*";
+      } else if ((pair.first & RBD_FEATURES_DISABLE_ONLY) != 0) {
+        suffix += "-";
       }
       if (!suffix.empty()) {
         suffix = "(" + suffix + ")";
@@ -308,6 +311,7 @@ std::string get_long_features_help() {
   std::ostringstream oss;
   oss << "Image Features:" << std::endl
       << "  (*) supports enabling/disabling on existing images" << std::endl
+      << "  (-) supports disabling-only on existing images" << std::endl
       << "  (+) enabled by default for new images if features not specified"
       << std::endl;
   return oss.str();

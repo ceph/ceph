@@ -35,7 +35,7 @@
 namespace ceph {
 
 HTMLFormatter::HTMLFormatter(bool pretty)
-: XMLFormatter(pretty), m_header_done(false), m_status(0), m_status_name(NULL)
+: XMLFormatter(pretty), m_status(0), m_status_name(NULL)
 {
 }
 

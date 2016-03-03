@@ -177,7 +177,7 @@ int ObjectStore::queue_transactions(
   Context *oncomplete,
   TrackedOpRef op = TrackedOpRef())
 {
-  RunOnDeleteRef _complete(new RunOnDelete(oncomplete));
+  RunOnDeleteRef _complete (std::make_shared<RunOnDelete>(oncomplete));
   Context *_onreadable = new Wrapper<RunOnDeleteRef>(
     onreadable, _complete);
   Context *_oncommit = new Wrapper<RunOnDeleteRef>(

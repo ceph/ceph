@@ -36,3 +36,5 @@ target_link_libraries(libos_tp lttng-ust dl)
 target_include_directories(libos_tp PUBLIC ${CMAKE_SOURCE_DIR}/src/tracing)
 add_dependencies(libos_tp lttng_gen_tp)
 set_target_properties(libos_tp PROPERTIES OUTPUT_NAME os_tp VERSION 1.0.0 SOVERSION 1)
+
+install(TARGETS librados_tp libosd_tp librbd_tp libos_tp DESTINATION lib)

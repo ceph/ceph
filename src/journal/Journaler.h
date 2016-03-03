@@ -29,6 +29,7 @@ class ReplayHandler;
 class Journaler {
 public:
   typedef std::list<cls::journal::Tag> Tags;
+  typedef std::set<cls::journal::Client> RegisteredClients;
 
   static std::string header_oid(const std::string &journal_id);
   static std::string object_oid_prefix(int pool_id,
@@ -45,8 +46,18 @@ public:
   void init(Context *on_init);
   void shutdown();
 
+  void get_immutable_metadata(uint8_t *order, uint8_t *splay_width,
+			      int64_t *pool_id, Context *on_finish);
+  void get_mutable_metadata(uint64_t *minimum_set, uint64_t *active_set,
+			    RegisteredClients *clients, Context *on_finish);
+
   int register_client(const bufferlist &data);
   int unregister_client();
+  void register_client(const bufferlist &data, Context *on_finish);
+  void update_client(const bufferlist &data, Context *on_finish);
+  void unregister_client(Context *on_finish);
+
+  void flush_commit_position(Context *on_safe);
 
   void allocate_tag(const bufferlist &data, cls::journal::Tag *tag,
                     Context *on_finish);
@@ -61,7 +72,7 @@ public:
 
   void start_append(int flush_interval, uint64_t flush_bytes, double flush_age);
   Future append(uint64_t tag_tid, const bufferlist &bl);
-  void flush(Context *on_safe);
+  void flush_append(Context *on_safe);
   void stop_append(Context *on_safe);
 
   void committed(const ReplayEntry &replay_entry);

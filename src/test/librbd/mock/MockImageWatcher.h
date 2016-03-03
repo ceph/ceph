@@ -6,10 +6,13 @@
 
 #include "gmock/gmock.h"
 
+class Context;
+
 namespace librbd {
 
 struct MockImageWatcher {
   MOCK_METHOD0(unregister_watch, void());
+  MOCK_METHOD1(flush, void(Context *));
 
   MOCK_CONST_METHOD0(get_watch_handle, uint64_t());
 

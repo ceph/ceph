@@ -46,7 +46,7 @@
 
 #include "common/config.h"
 #include "common/perf_counters.h"
-#include "common/Finisher.h"
+#include "common/scrub_types.h"
 #include "include/str_list.h"
 #include "common/errno.h"
 
@@ -466,13 +466,6 @@ void Objecter::shutdown()
     tick_event = 0;
   }
 
-  if (m_request_state_hook) {
-    AdminSocket* admin_socket = cct->get_admin_socket();
-    admin_socket->unregister_command("objecter_requests");
-    delete m_request_state_hook;
-    m_request_state_hook = NULL;
-  }
-
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
     delete logger;
@@ -481,6 +474,16 @@ void Objecter::shutdown()
 
   // Let go of Objecter write lock so timer thread can shutdown
   wl.unlock();
+
+  // Outside of lock to avoid cycle WRT calls to RequestStateHook
+  // This is safe because we guarantee no concurrent calls to
+  // shutdown() with the ::initialized check at start.
+  if (m_request_state_hook) {
+    AdminSocket* admin_socket = cct->get_admin_socket();
+    admin_socket->unregister_command("objecter_requests");
+    delete m_request_state_hook;
+    m_request_state_hook = NULL;
+  }
 }
 
 void Objecter::_send_linger(LingerOp *info,
@@ -594,7 +597,6 @@ struct C_DoWatchError : public Context {
 
     info->finished_async();
     info->put();
-    objecter->_linger_callback_finish();
   }
 };
 
@@ -619,7 +621,6 @@ void Objecter::_linger_reconnect(LingerOp *info, int r)
       info->last_error = r;
       if (info->watch_context) {
 	finisher->queue(new C_DoWatchError(this, info, r));
-	_linger_callback_queue();
       }
     }
     wl.unlock();
@@ -684,7 +685,6 @@ void Objecter::_linger_ping(LingerOp *info, int r, mono_time sent,
       info->last_error = r;
       if (info->watch_context) {
 	finisher->queue(new C_DoWatchError(this, info, r));
-	_linger_callback_queue();
       }
     }
   } else {
@@ -867,7 +867,6 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
       info->last_error = -ENOTCONN;
       if (info->watch_context) {
 	finisher->queue(new C_DoWatchError(this, info, -ENOTCONN));
-	_linger_callback_queue();
       }
     }
   } else if (!info->is_watch) {
@@ -888,7 +887,6 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
     }
   } else {
     finisher->queue(new C_DoWatchNotify(this, info, m));
-    _linger_callback_queue();
   }
 }
 
@@ -922,7 +920,6 @@ void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
   info->finished_async();
   info->put();
   m->put();
-  _linger_callback_finish();
 }
 
 bool Objecter::ms_dispatch(Message *m)
@@ -2006,7 +2003,7 @@ void Objecter::tick()
 
   // look for laggy requests
   auto cutoff = ceph::mono_clock::now();
-  cutoff -= osd_timeout;  // timeout
+  cutoff -= ceph::make_timespan(cct->_conf->objecter_timeout);  // timeout
 
   unsigned laggy_ops = 0;
 
@@ -4864,7 +4861,8 @@ void Objecter::enumerate_objects(
     const hobject_t &start,
     const hobject_t &end,
     const uint32_t max,
-    std::list<librados::ListObjectImpl> *result,
+    const bufferlist &filter_bl,
+    std::list<librados::ListObjectImpl> *result, 
     hobject_t *next,
     Context *on_finish)
 {
@@ -4912,11 +4910,8 @@ void Objecter::enumerate_objects(
   C_EnumerateReply *on_ack = new C_EnumerateReply(
       this, next, result, end, pool_id, on_finish);
 
-  // Construct pgls operation
-  bufferlist filter; // FIXME pass in?
-
   ObjectOperation op;
-  op.pg_nls(max, filter, start, 0);
+  op.pg_nls(max, filter_bl, start, 0);
 
   // Issue.  See you later in _enumerate_reply
   object_locator_t oloc(pool_id, ns);
@@ -5013,3 +5008,94 @@ void Objecter::_enumerate_reply(
   return;
 }
 
+namespace {
+  using namespace librados;
+
+  template <typename T>
+  void do_decode(std::vector<T>& items, std::vector<bufferlist>& bls)
+  {
+    for (auto bl : bls) {
+      auto p = bl.begin();
+      T t;
+      decode(t, p);
+      items.push_back(t);
+    }
+  }
+
+  struct C_ObjectOperation_scrub_ls : public Context {
+    bufferlist bl;
+    uint32_t *interval;
+    std::vector<inconsistent_obj_t> *objects = nullptr;
+    std::vector<inconsistent_snapset_t> *snapsets = nullptr;
+    int *rval;
+
+    C_ObjectOperation_scrub_ls(uint32_t *interval,
+			       std::vector<inconsistent_obj_t> *objects,
+			       int *rval)
+      : interval(interval), objects(objects), rval(rval) {}
+    C_ObjectOperation_scrub_ls(uint32_t *interval,
+			       std::vector<inconsistent_snapset_t> *snapsets,
+			       int *rval)
+      : interval(interval), snapsets(snapsets), rval(rval) {}
+    void finish(int r) override {
+      if (r < 0 && r != -EAGAIN)
+	return;
+      try {
+	decode();
+      } catch (buffer::error&) {
+	if (rval)
+	  *rval = -EIO;
+      }
+    }
+  private:
+    void decode() {
+      scrub_ls_result_t result;
+      auto p = bl.begin();
+      result.decode(p);
+      *interval = result.interval;
+      if (objects) {
+	do_decode(*objects, result.vals);
+      } else {
+	do_decode(*snapsets, result.vals);
+      }
+    }
+  };
+
+  template <typename T>
+  void do_scrub_ls(::ObjectOperation *op,
+		   const scrub_ls_arg_t& arg,
+		   std::vector<T> *items,
+		   uint32_t *interval,
+		   int *rval)
+  {
+    OSDOp& osd_op = op->add_op(CEPH_OSD_OP_SCRUBLS);
+    op->flags |= CEPH_OSD_FLAG_PGOP;
+    assert(interval);
+    arg.encode(osd_op.indata);
+    unsigned p = op->ops.size() - 1;
+    auto *h = new C_ObjectOperation_scrub_ls{interval, items, rval};
+    op->out_handler[p] = h;
+    op->out_bl[p] = &h->bl;
+    op->out_rval[p] = rval;
+  }
+}
+
+void ::ObjectOperation::scrub_ls(const librados::object_id_t& start_after,
+				 uint64_t max_to_get,
+				 std::vector<librados::inconsistent_obj_t> *objects,
+				 uint32_t *interval,
+				 int *rval)
+{
+  scrub_ls_arg_t arg = {*interval, 0, start_after, max_to_get};
+  do_scrub_ls(this, arg, objects, interval, rval);
+}
+
+void ::ObjectOperation::scrub_ls(const librados::object_id_t& start_after,
+				 uint64_t max_to_get,
+				 std::vector<librados::inconsistent_snapset_t> *snapsets,
+				 uint32_t *interval,
+				 int *rval)
+{
+  scrub_ls_arg_t arg = {*interval, 1, start_after, max_to_get};
+  do_scrub_ls(this, arg, snapsets, interval, rval);
+}

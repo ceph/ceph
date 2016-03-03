@@ -15,13 +15,6 @@ import rados
 import cephfs
 from ceph_argparse import json_command
 
-# Generate missing lib errors at load time, rather than the
-# first time someone tries to use the FS
-try:
-    cephfs.load_libcephfs()
-except EnvironmentError as e:
-    raise ImportError(e.__str__())
-
 
 class RadosError(Exception):
     """

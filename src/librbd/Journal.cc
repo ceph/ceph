@@ -289,6 +289,16 @@ void Journal<I>::close(Context *on_finish) {
 }
 
 template <typename I>
+void Journal<I>::flush_commit_position(Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
+  Mutex::Locker locker(m_lock);
+  assert(m_journaler != nullptr);
+  m_journaler->flush_commit_position(on_finish);
+}
+
+template <typename I>
 uint64_t Journal<I>::append_io_event(AioCompletion *aio_comp,
                                      journal::EventEntry &&event_entry,
                                      const AioObjectRequests &requests,
@@ -397,10 +407,14 @@ void Journal<I>::append_op_event(uint64_t op_tid,
 
     // TODO: use allocated tag_id
     future = m_journaler->append(0, bl);
+
+    // delay committing op event to ensure consistent replay
+    assert(m_op_futures.count(op_tid) == 0);
+    m_op_futures[op_tid] = future;
   }
 
   on_safe = create_async_context_callback(m_image_ctx, on_safe);
-  future.flush(new C_OpEventSafe(this, op_tid, future, on_safe));
+  future.flush(on_safe);
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": "
@@ -419,16 +433,24 @@ void Journal<I>::commit_op_event(uint64_t op_tid, int r) {
   bufferlist bl;
   ::encode(event_entry, bl);
 
-  Future future;
+  Future op_start_future;
+  Future op_finish_future;
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_READY);
 
+    // ready to commit op event
+    auto it = m_op_futures.find(op_tid);
+    assert(it != m_op_futures.end());
+    op_start_future = it->second;
+    m_op_futures.erase(it);
+
     // TODO: use allocated tag_id
-    future = m_journaler->append(0, bl);
+    op_finish_future = m_journaler->append(0, bl);
   }
 
-  future.flush(new C_OpEventSafe(this, op_tid, future, nullptr));
+  op_finish_future.flush(new C_OpEventSafe(this, op_tid, op_start_future,
+                                           op_finish_future));
 }
 
 template <typename I>
@@ -490,6 +512,42 @@ typename Journal<I>::Future Journal<I>::wait_event(Mutex &lock, uint64_t tid,
   event.on_safe_contexts.push_back(create_async_context_callback(m_image_ctx,
                                                                  on_safe));
   return event.future;
+}
+
+template <typename I>
+int Journal<I>::start_external_replay(journal::Replay<I> **journal_replay) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
+  C_SaferCond cond;
+  wait_for_journal_ready(&cond);
+  int r = cond.wait();
+  if (r < 0) {
+    lderr(cct) << "failed waiting for ready state: " << cpp_strerror(r)
+	       << dendl;
+    return r;
+  }
+
+  Mutex::Locker locker(m_lock);
+  assert(m_state == STATE_READY);
+  assert(m_journal_replay == nullptr);
+
+  transition_state(STATE_REPLAYING, 0);
+  m_journal_replay = journal::Replay<I>::create(m_image_ctx);
+
+  *journal_replay = m_journal_replay;
+  return 0;
+}
+
+template <typename I>
+void Journal<I>::stop_external_replay() {
+  Mutex::Locker locker(m_lock);
+  assert(m_journal_replay != nullptr);
+  assert(m_state == STATE_REPLAYING);
+
+  delete m_journal_replay;
+  m_journal_replay = nullptr;
+  transition_state(STATE_READY, 0);
 }
 
 template <typename I>
@@ -629,13 +687,13 @@ void Journal<I>::handle_replay_complete(int r) {
     transition_state(STATE_FLUSHING_RESTART, r);
     m_lock.Unlock();
 
-    m_journal_replay->flush(create_context_callback<
+    m_journal_replay->shut_down(true, create_context_callback<
       Journal<I>, &Journal<I>::handle_flushing_restart>(this));
   } else {
     transition_state(STATE_FLUSHING_REPLAY, 0);
     m_lock.Unlock();
 
-    m_journal_replay->flush(create_context_callback<
+    m_journal_replay->shut_down(false, create_context_callback<
       Journal<I>, &Journal<I>::handle_flushing_replay>(this));
   }
 }
@@ -665,7 +723,7 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
       m_journaler->stop_replay();
       transition_state(STATE_FLUSHING_RESTART, r);
 
-      m_journal_replay->flush(create_context_callback<
+      m_journal_replay->shut_down(true, create_context_callback<
         Journal<I>, &Journal<I>::handle_flushing_restart>(this));
       return;
     } else if (m_state == STATE_FLUSHING_REPLAY) {
@@ -820,8 +878,9 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
 }
 
 template <typename I>
-void Journal<I>::handle_op_event_safe(int r, uint64_t tid, const Future &future,
-                                      Context *on_safe) {
+void Journal<I>::handle_op_event_safe(int r, uint64_t tid,
+                                      const Future &op_start_future,
+                                      const Future &op_finish_future) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": r=" << r << ", "
                  << "tid=" << tid << dendl;
@@ -832,10 +891,11 @@ void Journal<I>::handle_op_event_safe(int r, uint64_t tid, const Future &future,
     lderr(cct) << "failed to commit op event: "  << cpp_strerror(r) << dendl;
   }
 
-  m_journaler->committed(future);
-  if (on_safe != nullptr) {
-    on_safe->complete(r);
-  }
+  m_journaler->committed(op_start_future);
+  m_journaler->committed(op_finish_future);
+
+  // reduce the replay window after committing an op event
+  m_journaler->flush_commit_position(nullptr);
 }
 
 template <typename I>

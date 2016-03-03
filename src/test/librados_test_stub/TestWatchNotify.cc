@@ -7,7 +7,17 @@
 #include <boost/bind.hpp>
 #include <boost/function.hpp>
 
+#define dout_subsys ceph_subsys_rados
+#undef dout_prefix
+#define dout_prefix *_dout << "TestWatchNotify::" << __func__ << ": "
+
 namespace librados {
+
+std::ostream& operator<<(std::ostream& out,
+			 const TestWatchNotify::WatcherID &watcher_id) {
+  out << "(" << watcher_id.first << "," << watcher_id.second << ")";
+  return out;
+}
 
 TestWatchNotify::TestWatchNotify(CephContext *cct, Finisher *finisher)
   : m_cct(cct), m_finisher(finisher), m_handle(), m_notify_id(),
@@ -21,6 +31,8 @@ TestWatchNotify::~TestWatchNotify() {
 }
 
 void TestWatchNotify::flush() {
+  ldout(m_cct, 20) << "enter" << dendl;
+  // block until we know no additional async notify callbacks will occur
   Mutex::Locker locker(m_lock);
   while (m_pending_notifies > 0) {
     m_file_watcher_cond.Wait(m_lock);
@@ -46,12 +58,31 @@ int TestWatchNotify::list_watchers(const std::string& o,
   return 0;
 }
 
+void TestWatchNotify::aio_flush(Context *on_finish) {
+  m_finisher->queue(on_finish);
+}
+
+void TestWatchNotify::aio_watch(const std::string& o, uint64_t gid,
+                                uint64_t *handle,
+                                librados::WatchCtx2 *watch_ctx,
+                                Context *on_finish) {
+  int r = watch(o, gid, handle, nullptr, watch_ctx);
+  m_finisher->queue(on_finish, r);
+}
+
+void TestWatchNotify::aio_unwatch(uint64_t handle, Context *on_finish) {
+  unwatch(handle);
+  m_finisher->queue(on_finish);
+}
+
 void TestWatchNotify::aio_notify(const std::string& oid, bufferlist& bl,
                                  uint64_t timeout_ms, bufferlist *pbl,
                                  Context *on_notify) {
   Mutex::Locker lock(m_lock);
   ++m_pending_notifies;
   uint64_t notify_id = ++m_notify_id;
+
+  ldout(m_cct, 20) << "oid=" << oid << ": notify_id=" << notify_id << dendl;
 
   SharedWatcher watcher = get_watcher(oid);
 
@@ -80,6 +111,8 @@ int TestWatchNotify::notify(const std::string& oid, bufferlist& bl,
 void TestWatchNotify::notify_ack(const std::string& o, uint64_t notify_id,
                                  uint64_t handle, uint64_t gid,
                                  bufferlist& bl) {
+  ldout(m_cct, 20) << "notify_id=" << notify_id << ", handle=" << handle
+		   << ", gid=" << gid << dendl;
   Mutex::Locker lock(m_lock);
   WatcherID watcher_id = std::make_pair(gid, handle);
   ack_notify(o, notify_id, watcher_id, bl);
@@ -100,10 +133,14 @@ int TestWatchNotify::watch(const std::string& o, uint64_t gid,
   watcher->watch_handles[watch_handle.handle] = watch_handle;
 
   *handle = watch_handle.handle;
+
+  ldout(m_cct, 20) << "oid=" << o << ", gid=" << gid << ": handle=" << *handle
+		   << dendl;
   return 0;
 }
 
 int TestWatchNotify::unwatch(uint64_t handle) {
+  ldout(m_cct, 20) << "handle=" << handle << dendl;
   Mutex::Locker locker(m_lock);
   for (FileWatchers::iterator it = m_file_watchers.begin();
        it != m_file_watchers.end(); ++it) {
@@ -133,12 +170,16 @@ TestWatchNotify::SharedWatcher TestWatchNotify::get_watcher(
 
 void TestWatchNotify::execute_notify(const std::string &oid,
                                      bufferlist &bl, uint64_t notify_id) {
+  ldout(m_cct, 20) << "oid=" << oid << ", notify_id=" << notify_id << dendl;
+
   Mutex::Locker lock(m_lock);
   SharedWatcher watcher = get_watcher(oid);
   WatchHandles &watch_handles = watcher->watch_handles;
 
   NotifyHandles::iterator n_it = watcher->notify_handles.find(notify_id);
   if (n_it == watcher->notify_handles.end()) {
+    ldout(m_cct, 1) << "oid=" << oid << ", notify_id=" << notify_id
+		    << ": not found" << dendl;
     return;
   }
 
@@ -176,17 +217,26 @@ void TestWatchNotify::execute_notify(const std::string &oid,
   }
 
   finish_notify(oid, notify_id);
+
+  if (--m_pending_notifies == 0) {
+    m_file_watcher_cond.Signal();
+  }
 }
 
 void TestWatchNotify::ack_notify(const std::string &oid,
                                  uint64_t notify_id,
                                  const WatcherID &watcher_id,
                                  const bufferlist &bl) {
+  ldout(m_cct, 20) << "oid=" << oid << ", notify_id=" << notify_id
+		   << ", WatcherID=" << watcher_id << dendl;
+
   assert(m_lock.is_locked());
   SharedWatcher watcher = get_watcher(oid);
 
   NotifyHandles::iterator it = watcher->notify_handles.find(notify_id);
   if (it == watcher->notify_handles.end()) {
+    ldout(m_cct, 1) << "oid=" << oid << ", notify_id=" << notify_id
+		    << ", WatcherID=" << watcher_id << ": not found" << dendl;
     return;
   }
 
@@ -200,18 +250,27 @@ void TestWatchNotify::ack_notify(const std::string &oid,
 
 void TestWatchNotify::finish_notify(const std::string &oid,
                                     uint64_t notify_id) {
+  ldout(m_cct, 20) << "oid=" << oid << ", notify_id=" << notify_id << dendl;
+
   assert(m_lock.is_locked());
   SharedWatcher watcher = get_watcher(oid);
 
   NotifyHandles::iterator it = watcher->notify_handles.find(notify_id);
   if (it == watcher->notify_handles.end()) {
+    ldout(m_cct, 1) << "oid=" << oid << ", notify_id=" << notify_id
+		    << ": not found" << dendl;
     return;
   }
 
   SharedNotifyHandle notify_handle = it->second;
   if (!notify_handle->pending_watcher_ids.empty()) {
+    ldout(m_cct, 10) << "oid=" << oid << ", notify_id=" << notify_id
+		     << ": pending watchers, returning" << dendl;
     return;
   }
+
+  ldout(m_cct, 20) << "oid=" << oid << ", notify_id=" << notify_id
+		   << ": completing" << dendl;
 
   if (notify_handle->pbl != NULL) {
     ::encode(notify_handle->notify_responses, *notify_handle->pbl);
@@ -225,10 +284,6 @@ void TestWatchNotify::finish_notify(const std::string &oid,
   watcher->notify_handles.erase(notify_id);
   if (watcher->watch_handles.empty() && watcher->notify_handles.empty()) {
     m_file_watchers.erase(oid);
-  }
-
-  if (--m_pending_notifies == 0) {
-    m_file_watcher_cond.Signal();
   }
 }
 

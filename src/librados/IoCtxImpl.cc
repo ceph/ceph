@@ -89,19 +89,21 @@ struct C_aio_linger_cancel : public Context {
   }
 };
 
-struct C_aio_notify_Complete : public Context {
+struct C_aio_linger_Complete : public Context {
   AioCompletionImpl *c;
   Objecter::LingerOp *linger_op;
+  bool cancel;
 
-  C_aio_notify_Complete(AioCompletionImpl *_c, Objecter::LingerOp *_linger_op)
-    : c(_c), linger_op(_linger_op)
+  C_aio_linger_Complete(AioCompletionImpl *_c, Objecter::LingerOp *_linger_op, bool _cancel)
+    : c(_c), linger_op(_linger_op), cancel(_cancel)
   {
     c->get();
   }
 
   virtual void finish(int r) {
-    c->io->client->finisher.queue(new C_aio_linger_cancel(c->io->objecter,
-                                                          linger_op));
+    if (cancel || r < 0)
+      c->io->client->finisher.queue(new C_aio_linger_cancel(c->io->objecter,
+                                                            linger_op));
 
     c->lock.Lock();
     c->rval = r;
@@ -473,7 +475,6 @@ int librados::IoCtxImpl::nlist(Objecter::NListContext *context, int max_entries)
   Cond cond;
   bool done;
   int r = 0;
-  object_t oid;
   Mutex mylock("IoCtxImpl::nlist::mylock");
 
   if (context->at_end())
@@ -504,7 +505,6 @@ int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
   Cond cond;
   bool done;
   int r = 0;
-  object_t oid;
   Mutex mylock("IoCtxImpl::list::mylock");
 
   if (context->at_end())
@@ -972,6 +972,44 @@ int librados::IoCtxImpl::trunc(const object_t& oid, uint64_t size)
   return operate(oid, &op, NULL);
 }
 
+int librados::IoCtxImpl::get_inconsistent_objects(const pg_t& pg,
+						  const librados::object_id_t& start_after,
+						  uint64_t max_to_get,
+						  AioCompletionImpl *c,
+						  std::vector<inconsistent_obj_t>* objects,
+						  uint32_t* interval)
+{
+  Context *onack = new C_aio_Ack(c);
+  c->is_read = true;
+  c->io = this;
+
+  ::ObjectOperation op;
+  op.scrub_ls(start_after, max_to_get, objects, interval, nullptr);
+  object_locator_t oloc{poolid, pg.ps()};
+  c->tid = objecter->pg_read(oloc.hash, oloc, op, nullptr, CEPH_OSD_FLAG_PGOP, onack,
+			     nullptr, nullptr);
+  return 0;
+}
+
+int librados::IoCtxImpl::get_inconsistent_snapsets(const pg_t& pg,
+						   const librados::object_id_t& start_after,
+						   uint64_t max_to_get,
+						   AioCompletionImpl *c,
+						   std::vector<inconsistent_snapset_t>* snapsets,
+						   uint32_t* interval)
+{
+  Context *onack = new C_aio_Ack(c);
+  c->is_read = true;
+  c->io = this;
+
+  ::ObjectOperation op;
+  op.scrub_ls(start_after, max_to_get, snapsets, interval, nullptr);
+  object_locator_t oloc{poolid, pg.ps()};
+  c->tid = objecter->pg_read(oloc.hash, oloc, op, nullptr, CEPH_OSD_FLAG_PGOP, onack,
+			     nullptr, nullptr);
+  return 0;
+}
+
 int librados::IoCtxImpl::tmap_update(const object_t& oid, bufferlist& cmdbl)
 {
   ::ObjectOperation wr;
@@ -1258,6 +1296,30 @@ int librados::IoCtxImpl::watch(const object_t& oid,
   return r;
 }
 
+int librados::IoCtxImpl::aio_watch(const object_t& oid,
+                                   AioCompletionImpl *c,
+                                   uint64_t *handle,
+                                   librados::WatchCtx *ctx,
+                                   librados::WatchCtx2 *ctx2)
+{
+  Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc, 0);
+  c->io = this;
+  Context *oncomplete = new C_aio_linger_Complete(c, linger_op, false);
+
+  ::ObjectOperation wr;
+  *handle = linger_op->get_cookie();
+  linger_op->watch_context = new WatchInfo(this, oid, ctx, ctx2);
+
+  prepare_assert_ops(&wr);
+  wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH);
+  bufferlist bl;
+  objecter->linger_watch(linger_op, wr,
+                         snapc, ceph::real_clock::now(), bl,
+                         oncomplete, &c->objver);
+
+  return 0;
+}
+
 
 int librados::IoCtxImpl::notify_ack(
   const object_t& oid,
@@ -1281,7 +1343,6 @@ int librados::IoCtxImpl::watch_check(uint64_t cookie)
 int librados::IoCtxImpl::unwatch(uint64_t cookie)
 {
   Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
-  bufferlist inbl, outbl;
   C_SaferCond onfinish;
   version_t ver = 0;
 
@@ -1296,6 +1357,21 @@ int librados::IoCtxImpl::unwatch(uint64_t cookie)
   int r = onfinish.wait();
   set_sync_op_version(ver);
   return r;
+}
+
+int librados::IoCtxImpl::aio_unwatch(uint64_t cookie, AioCompletionImpl *c)
+{
+  c->io = this;
+  Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
+  Context *oncomplete = new C_aio_linger_Complete(c, linger_op, true);
+
+  ::ObjectOperation wr;
+  prepare_assert_ops(&wr);
+  wr.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
+  objecter->mutate(linger_op->target.base_oid, oloc, wr,
+		   snapc, ceph::real_clock::now(client->cct), 0, NULL,
+		   oncomplete, &c->objver);
+  return 0;
 }
 
 int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
@@ -1358,7 +1434,7 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
 
   c->io = this;
 
-  Context *oncomplete = new C_aio_notify_Complete(c, linger_op);
+  Context *oncomplete = new C_aio_linger_Complete(c, linger_op, true);
   C_notify_Finish *onnotify = new C_notify_Finish(client->cct, oncomplete,
                                                   objecter, linger_op,
                                                   preply_bl, preply_buf,
@@ -1378,7 +1454,7 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
   // Issue RADOS op
   objecter->linger_notify(linger_op,
 			  rd, snap_seq, inbl, NULL,
-			  onack, NULL);
+			  onack, &c->objver);
   return 0;
 }
 

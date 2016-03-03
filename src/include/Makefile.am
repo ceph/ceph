@@ -14,6 +14,11 @@ rados_include_DATA = \
 	$(srcdir)/include/crc32c.h \
 	$(srcdir)/include/memory.h
 
+if WITH_RADOSGW
+rados_include_DATA += \
+	$(srcdir)/include/rados/librgw.h \
+	$(srcdir)/include/rados/rgw_file.h
+endif # WITH_RADOSGW
 
 if WITH_RBD
 librbd_includedir = $(includedir)/rbd
@@ -75,6 +80,7 @@ noinst_HEADERS += \
 	include/error.h \
 	include/filepath.h \
 	include/frag.h \
+	include/fs_types.h \
 	include/hash.h \
 	include/inline_memory.h \
 	include/intarith.h \
@@ -110,6 +116,7 @@ noinst_HEADERS += \
 	include/rados/crc32c.h \
 	include/rados/buffer.h \
 	include/rados/buffer_fwd.h \
+	include/rados/rgw_file.h \
 	include/radosstriper/libradosstriper.h \
 	include/radosstriper/libradosstriper.hpp \
 	include/rbd/features.h \

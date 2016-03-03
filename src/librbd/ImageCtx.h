@@ -122,7 +122,7 @@ namespace librbd {
     uint64_t stripe_unit, stripe_count;
     uint64_t flags;
 
-    ceph_file_layout layout;
+    file_layout_t layout;
 
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
@@ -197,6 +197,7 @@ namespace librbd {
 	     const char *snap, IoCtx& p, bool read_only);
     ~ImageCtx();
     void init();
+    void shutdown();
     void init_layout();
     void perf_start(std::string name);
     void perf_stop();
@@ -254,8 +255,7 @@ namespace librbd {
     int invalidate_cache(bool purge_on_error=false);
     void invalidate_cache(Context *on_finish);
     void clear_nonexistence_cache();
-    int register_watch();
-    void unregister_watch();
+    void register_watch(Context *on_finish);
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
 
@@ -275,6 +275,11 @@ namespace librbd {
     Journal<ImageCtx> *create_journal();
 
     void clear_pending_completions();
+
+    void set_image_name(const std::string &name);
+
+    void notify_update();
+    void notify_update(Context *on_finish);
   };
 }
 

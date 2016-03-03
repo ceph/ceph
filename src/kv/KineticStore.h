@@ -95,8 +95,7 @@ public:
   };
 
   KeyValueDB::Transaction get_transaction() {
-    return ceph::shared_ptr< KineticTransactionImpl >(
-      new KineticTransactionImpl(this));
+    return std::make_shared<KineticTransactionImpl>(this);
   }
 
   int submit_transaction(KeyValueDB::Transaction t);
@@ -148,8 +147,7 @@ public:
 
 protected:
   WholeSpaceIterator _get_iterator() {
-    return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
-								new KineticWholeSpaceIteratorImpl(kinetic_conn.get()));
+    return std::make_shared<KineticWholeSpaceIteratorImpl>(kinetic_conn.get());
   }
 
   // TODO: remove snapshots from interface

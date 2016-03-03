@@ -192,6 +192,47 @@ interface(`ceph_manage_lib_dirs',`
 	manage_dirs_pattern($1, ceph_var_lib_t, ceph_var_lib_t)
 ')
 
+######################################
+## <summary>
+##	Create, read, write, and delete
+##	ceph lock files.
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed access.
+##	</summary>
+## </param>
+#
+interface(`ceph_manage_lock',`
+	gen_require(`
+		type ceph_lock_t;
+	')
+
+    files_search_locks($1)
+    manage_files_pattern($1, ceph_lock_t, ceph_lock_t)
+    manage_dirs_pattern($1, ceph_lock_t, ceph_lock_t)
+')
+
+
+########################################
+## <summary>
+##	Transition to ceph named content
+## </summary>
+## <param name="domain">
+##	<summary>
+##      Domain allowed access.
+##	</summary>
+## </param>
+#
+
+interface(`ceph_filetrans_named_content',`
+	gen_require(`
+		type ceph_lock_t;
+	')
+
+	files_lock_filetrans($1, ceph_lock_t, dir, "ceph")
+')
+
 ########################################
 ## <summary>
 ##	Read ceph PID files.
@@ -234,6 +275,7 @@ interface(`ceph_admin',`
 		type ceph_t;
 		type ceph_initrc_exec_t;
 		type ceph_log_t;
+		type ceph_lock_t;
 		type ceph_var_lib_t;
 		type ceph_var_run_t;
 	')
@@ -252,6 +294,9 @@ interface(`ceph_admin',`
 
 	logging_search_logs($1)
 	admin_pattern($1, ceph_log_t)
+
+	files_search_locks($1)
+	admin_pattern($1, ceph_lock_t)
 
 	files_search_var_lib($1)
 	admin_pattern($1, ceph_var_lib_t)

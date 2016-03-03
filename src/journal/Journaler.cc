@@ -120,6 +120,18 @@ void Journaler::shutdown() {
   m_metadata->shutdown();
 }
 
+void Journaler::get_immutable_metadata(uint8_t *order, uint8_t *splay_width,
+				       int64_t *pool_id, Context *on_finish) {
+  m_metadata->get_immutable_metadata(order, splay_width, pool_id, on_finish);
+}
+
+void Journaler::get_mutable_metadata(uint64_t *minimum_set,
+				     uint64_t *active_set,
+				     RegisteredClients *clients,
+				     Context *on_finish) {
+  m_metadata->get_mutable_metadata(minimum_set, active_set, clients, on_finish);
+}
+
 int Journaler::create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
   if (order > 64 || order < 12) {
     lderr(m_cct) << "order must be in the range [12, 64]" << dendl;
@@ -159,12 +171,32 @@ int Journaler::remove(bool force) {
   return 0;
 }
 
+void Journaler::flush_commit_position(Context *on_safe) {
+  m_metadata->flush_commit_position(on_safe);
+}
+
 int Journaler::register_client(const bufferlist &data) {
-  return m_metadata->register_client(data);
+  C_SaferCond cond;
+  register_client(data, &cond);
+  return cond.wait();
 }
 
 int Journaler::unregister_client() {
-  return m_metadata->unregister_client();
+  C_SaferCond cond;
+  unregister_client(&cond);
+  return cond.wait();
+}
+
+void Journaler::register_client(const bufferlist &data, Context *on_finish) {
+  return m_metadata->register_client(data, on_finish);
+}
+
+void Journaler::update_client(const bufferlist &data, Context *on_finish) {
+  return m_metadata->update_client(data, on_finish);
+}
+
+void Journaler::unregister_client(Context *on_finish) {
+  return m_metadata->unregister_client(on_finish);
 }
 
 void Journaler::allocate_tag(const bufferlist &data, cls::journal::Tag *tag,
@@ -240,7 +272,7 @@ void Journaler::start_append(int flush_interval, uint64_t flush_bytes,
 void Journaler::stop_append(Context *on_safe) {
   assert(m_recorder != NULL);
 
-  flush(new C_DeleteRecorder(m_recorder, on_safe));
+  flush_append(new C_DeleteRecorder(m_recorder, on_safe));
   m_recorder = NULL;
 }
 
@@ -248,7 +280,7 @@ Future Journaler::append(uint64_t tag_tid, const bufferlist &payload_bl) {
   return m_recorder->append(tag_tid, payload_bl);
 }
 
-void Journaler::flush(Context *on_safe) {
+void Journaler::flush_append(Context *on_safe) {
   m_recorder->flush(on_safe);
 }
 

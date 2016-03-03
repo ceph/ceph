@@ -4,13 +4,18 @@
 #ifndef CEPH_RGW_FCGI_H
 #define CEPH_RGW_FCGI_H
 
-#include "rgw_client_io.h"
+#include "acconfig.h"
+#ifdef FASTCGI_INCLUDE_DIR
+# include "fastcgi/fcgiapp.h"
+#else
+# include "fcgiapp.h"
+#endif
 
+#include "rgw_client_io.h"
 
 struct FCGX_Request;
 
-
-class RGWFCGX : public RGWClientIO
+class RGWFCGX : public RGWStreamIO
 {
   FCGX_Request *fcgx;
 
@@ -30,6 +35,5 @@ public:
   explicit RGWFCGX(FCGX_Request *_fcgx) : fcgx(_fcgx), status_num(0) {}
   void flush();
 };
-
 
 #endif

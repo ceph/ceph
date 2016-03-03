@@ -90,6 +90,8 @@
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "messages/MOSDPGUpdateLogMissing.h"
+#include "messages/MOSDPGUpdateLogMissingReply.h"
 
 #include "messages/MOSDAlive.h"
 
@@ -460,6 +462,7 @@ void OSDService::start_shutdown()
 
 void OSDService::shutdown()
 {
+  reserver_finisher.wait_for_empty();
   reserver_finisher.stop();
   {
     Mutex::Locker l(watch_lock);
@@ -467,6 +470,7 @@ void OSDService::shutdown()
   }
 
   objecter->shutdown();
+  objecter_finisher.wait_for_empty();
   objecter_finisher.stop();
 
   {
@@ -668,6 +672,11 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
 {
   Mutex::Locker lock(stat_lock);
 
+  osd_stat.hb_in.swap(hb_peers);
+  osd_stat.hb_out.clear();
+
+  osd->op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
+
   // fill in osd stats too
   struct statfs stbuf;
   int r = osd->store->statfs(&stbuf);
@@ -688,12 +697,7 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
   osd->logger->set(l_osd_stat_bytes_used, used);
   osd->logger->set(l_osd_stat_bytes_avail, avail);
 
-  osd_stat.hb_in.swap(hb_peers);
-  osd_stat.hb_out.clear();
-
   check_nearfull_warning(osd_stat);
-
-  osd->op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
 
   dout(20) << "update_osd_stat " << osd_stat << dendl;
 }
@@ -1788,7 +1792,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
       f->close_section(); //watch
     }
 
-    f->close_section(); //watches
+    f->close_section(); //watchers
   } else if (command == "dump_reservations") {
     f->open_object_section("reservations");
     f->open_object_section("local_reservations");
@@ -1885,6 +1889,7 @@ int OSD::enable_disable_fuse(bool stop)
       derr << __func__ << " failed to rmdir " << mntpath << dendl;
       return r;
     }
+    return 0;
   }
   if (!fuse_store && g_conf->osd_objectstore_fuse) {
     dout(1) << __func__ << " enabling" << dendl;
@@ -2493,7 +2498,7 @@ int OSD::shutdown()
   clear_pg_stat_queue();
 
   // finish ops
-  op_shardedwq.drain(); // should already be empty except for lagard PGs
+  op_shardedwq.drain(); // should already be empty except for laggard PGs
   {
     Mutex::Locker l(finished_lock);
     finished.clear(); // zap waiters (bleh, this is messy)
@@ -2725,8 +2730,8 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
     coll_t(),
     make_snapmapper_oid());
 
-  ceph::shared_ptr<ObjectStore::Sequencer> osr(
-    new ObjectStore::Sequencer("rm"));
+  ceph::shared_ptr<ObjectStore::Sequencer> osr (std::make_shared<
+                                      ObjectStore::Sequencer>("rm"));
   ObjectStore::Transaction t;
   SnapMapper mapper(&driver, 0, 0, 0, pgid.shard);
 
@@ -3662,10 +3667,11 @@ void OSD::maybe_update_heartbeat_peers()
     }
   }
 
-  Mutex::Locker l(heartbeat_lock);
   if (!heartbeat_peers_need_update())
     return;
-  heartbeat_need_update = false;
+  heartbeat_clear_peers_need_update();
+
+  Mutex::Locker l(heartbeat_lock);
 
   dout(10) << "maybe_update_heartbeat_peers updating" << dendl;
 
@@ -3699,7 +3705,7 @@ void OSD::maybe_update_heartbeat_peers()
   if (next >= 0)
     want.insert(next);
   int prev = osdmap->get_previous_up_osd_before(whoami);
-  if (prev >= 0)
+  if (prev >= 0 && prev != next)
     want.insert(prev);
 
   for (set<int>::iterator p = want.begin(); p != want.end(); ++p) {
@@ -5291,7 +5297,12 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 	  // simulate pg <pgid> cmd= for pg->do-command
 	  if (prefix != "pg")
 	    cmd_putval(cct, cmdmap, "cmd", prefix);
-	  r = pg->do_command(cmdmap, ss, data, odata);
+	  r = pg->do_command(cmdmap, ss, data, odata, con, tid);
+	  if (r == -EAGAIN) {
+	    pg->unlock();
+	    // don't reply, pg will do so async
+	    return;
+	  }
 	} else {
 	  ss << "not primary for pgid " << pgid;
 
@@ -5322,8 +5333,8 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     cmd_getval(cct, cmdmap, "object_size", osize, (int64_t)0);
     cmd_getval(cct, cmdmap, "object_num", onum, (int64_t)0);
 
-    ceph::shared_ptr<ObjectStore::Sequencer> osr(
-      new ObjectStore::Sequencer("bench"));
+    ceph::shared_ptr<ObjectStore::Sequencer> osr (std::make_shared<
+                                        ObjectStore::Sequencer>("bench"));
 
     uint32_t duration = g_conf->osd_bench_duration;
 
@@ -5591,7 +5602,6 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     reply->set_data(odata);
     con->send_message(reply);
   }
-  return;
 }
 
 
@@ -5949,6 +5959,14 @@ epoch_t op_required_epoch(OpRequestRef op)
     return replica_op_required_epoch<MOSDECSubOpReadReply, MSG_OSD_EC_READ_REPLY>(op);
   case MSG_OSD_REP_SCRUB:
     return replica_op_required_epoch<MOSDRepScrub, MSG_OSD_REP_SCRUB>(op);
+  case MSG_OSD_PG_UPDATE_LOG_MISSING:
+    return replica_op_required_epoch<
+      MOSDPGUpdateLogMissing, MSG_OSD_PG_UPDATE_LOG_MISSING>(
+      op);
+  case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
+    return replica_op_required_epoch<
+      MOSDPGUpdateLogMissingReply, MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY>(
+      op);
   default:
     assert(0);
     return 0;
@@ -6064,6 +6082,15 @@ bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap)
     break;
   case MSG_OSD_REP_SCRUB:
     handle_replica_op<MOSDRepScrub, MSG_OSD_REP_SCRUB>(op, osdmap);
+    break;
+  case MSG_OSD_PG_UPDATE_LOG_MISSING:
+    handle_replica_op<MOSDPGUpdateLogMissing, MSG_OSD_PG_UPDATE_LOG_MISSING>(
+      op, osdmap);
+    break;
+  case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
+    handle_replica_op<MOSDPGUpdateLogMissingReply,
+		      MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY>(
+      op, osdmap);
     break;
   default:
     assert(0);

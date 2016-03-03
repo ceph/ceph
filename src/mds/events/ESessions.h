@@ -38,7 +38,7 @@ public:
 
   void mark_old_encoding() { old_style_encode = true; }
 
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode_old(bufferlist::iterator &bl);
   void decode_new(bufferlist::iterator &bl);
   void decode(bufferlist::iterator &bl) {
@@ -55,5 +55,6 @@ public:
   void update_segment();
   void replay(MDSRank *mds);  
 };
+WRITE_CLASS_ENCODER_FEATURES(ESessions)
 
 #endif

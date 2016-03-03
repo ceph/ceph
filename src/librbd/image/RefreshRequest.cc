@@ -5,8 +5,10 @@
 #include "include/stringify.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/WorkQueue.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
@@ -22,13 +24,15 @@ namespace librbd {
 namespace image {
 
 using util::create_rados_ack_callback;
+using util::create_async_context_callback;
 using util::create_context_callback;
 
 template <typename I>
 RefreshRequest<I>::RefreshRequest(I &image_ctx, Context *on_finish)
-  : m_image_ctx(image_ctx), m_on_finish(on_finish), m_error_result(0),
-    m_flush_aio(false), m_exclusive_lock(nullptr), m_object_map(nullptr),
-    m_journal(nullptr), m_refresh_parent(nullptr) {
+  : m_image_ctx(image_ctx),
+    m_on_finish(create_async_context_callback(m_image_ctx, on_finish)),
+    m_error_result(0), m_flush_aio(false), m_exclusive_lock(nullptr),
+    m_object_map(nullptr), m_journal(nullptr), m_refresh_parent(nullptr) {
 }
 
 template <typename I>
@@ -420,7 +424,7 @@ Context *RefreshRequest<I>::send_v2_init_exclusive_lock() {
     klass, &klass::handle_v2_init_exclusive_lock>(this);
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  m_exclusive_lock->init(ctx);
+  m_exclusive_lock->init(m_features, ctx);
   return nullptr;
 }
 
@@ -448,6 +452,13 @@ Context *RefreshRequest<I>::send_v2_open_journal() {
       m_image_ctx.journal != nullptr ||
       m_image_ctx.exclusive_lock == nullptr ||
       !m_image_ctx.exclusive_lock->is_lock_owner()) {
+
+    // journal dynamically enabled -- doesn't own exclusive lock
+    if ((m_features & RBD_FEATURE_JOURNALING) != 0 &&
+        m_image_ctx.exclusive_lock != nullptr &&
+        m_image_ctx.journal == nullptr) {
+      m_image_ctx.aio_work_queue->set_require_lock_on_read();
+    }
     return send_v2_finalize_refresh_parent();
   }
 
@@ -698,7 +709,7 @@ void RefreshRequest<I>::apply() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::WLocker md_locker(m_image_ctx.md_lock);
 
   {
@@ -779,8 +790,12 @@ void RefreshRequest<I>::apply() {
         std::swap(m_exclusive_lock, m_image_ctx.exclusive_lock);
       }
       if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
-                                     m_image_ctx.snap_lock) ||
-          m_journal != nullptr) {
+                                     m_image_ctx.snap_lock)) {
+        if (m_image_ctx.journal != nullptr) {
+          m_image_ctx.aio_work_queue->clear_require_lock_on_read();
+        }
+        std::swap(m_journal, m_image_ctx.journal);
+      } else if (m_journal != nullptr) {
         std::swap(m_journal, m_image_ctx.journal);
       }
       if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,

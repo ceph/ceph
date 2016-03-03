@@ -45,7 +45,7 @@ void Journaler::set_writeable()
   readonly = false;
 }
 
-void Journaler::create(ceph_file_layout *l, stream_format_t const sf)
+void Journaler::create(file_layout_t *l, stream_format_t const sf)
 {
   lock_guard lk(lock);
 
@@ -58,24 +58,23 @@ void Journaler::create(ceph_file_layout *l, stream_format_t const sf)
 
   prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos =
     read_pos = requested_pos = received_pos =
-    expire_pos = trimming_pos = trimmed_pos =
-    (uint64_t)layout.fl_stripe_count * layout.fl_object_size;
+    expire_pos = trimming_pos = trimmed_pos = layout.get_period();
 
   ldout(cct, 1) << "created blank journal at inode 0x" << std::hex << ino
 		<< std::dec << ", format=" << stream_format << dendl;
 }
 
-void Journaler::set_layout(ceph_file_layout const *l)
+void Journaler::set_layout(file_layout_t const *l)
 {
     lock_guard lk(lock);
     _set_layout(l);
 }
 
-void Journaler::_set_layout(ceph_file_layout const *l)
+void Journaler::_set_layout(file_layout_t const *l)
 {
   layout = *l;
 
-  assert(layout.fl_pg_pool == pg_pool);
+  assert(layout.pool_id == pg_pool);
   last_written.layout = layout;
   last_committed.layout = layout;
 
@@ -84,7 +83,7 @@ void Journaler::_set_layout(ceph_file_layout const *l)
   uint64_t periods = cct->_conf->journaler_prefetch_periods;
   if (periods < 2)
     periods = 2;  // we need at least 2 periods to make progress.
-  fetch_len = layout.fl_stripe_count * layout.fl_object_size * periods;
+  fetch_len = layout.get_period() * periods;
 }
 
 
@@ -536,9 +535,8 @@ uint64_t Journaler::append_entry(bufferlist& bl)
 
   if (!cct->_conf->journaler_allow_split_entries) {
     // will we span a stripe boundary?
-    int p = layout.fl_stripe_unit;
-    if (write_pos / p != (write_pos + (int64_t)(bl.length() +
-						sizeof(s))) / p) {
+    int p = layout.stripe_unit;
+    if (write_pos / p != (write_pos + (int64_t)(bl.length() + sizeof(s))) / p) {
       // yes.
       // move write_pos forward.
       int64_t owp = write_pos;

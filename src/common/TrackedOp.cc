@@ -203,8 +203,7 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 
   int slow = 0;     // total slow
   int warned = 0;   // total logged
-  for (uint32_t iter = 0;
-       iter < num_optracker_shards && warned < log_threshold; iter++) {
+  for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[iter];
     assert(NULL != sdata);
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
@@ -215,12 +214,10 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
       slow++;
 
       // exponential backoff of warning intervals
-      if (((*i)->get_initiated() +
-	 (complaint_time * (*i)->warn_interval_multiplier)) < now) {
-      // will warn
+      if (warned < log_threshold &&
+         ((*i)->get_initiated() + (complaint_time * (*i)->warn_interval_multiplier)) < now) {
+        // will warn, increase counter
         warned++;
-        if (warned > log_threshold)
-          break;
 
         utime_t age = now - (*i)->get_initiated();
         stringstream ss;
@@ -247,7 +244,7 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
     warning_vector[0] = ss.str();
   }
 
-  return warned;
+  return warned > 0;
 }
 
 void OpTracker::get_age_ms_histogram(pow2_hist_t *h)

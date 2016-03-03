@@ -5,6 +5,8 @@
 #ifndef CEPH_RGW_SWIFT_H
 #define CEPH_RGW_SWIFT_H
 
+#include "include/assert.h"
+
 #include "rgw_common.h"
 #include "common/Cond.h"
 
@@ -29,7 +31,9 @@ class RGWSwift {
   int validate_keystone_token(RGWRados *store, const string& token, struct rgw_swift_auth_info *info,
 			      RGWUserInfo& rgw_user);
 
-  int parse_keystone_token_response(const string& token, bufferlist& bl, struct rgw_swift_auth_info *info,
+  int parse_keystone_token_response(const string& token,
+                                    bufferlist& bl,
+                                    struct rgw_swift_auth_info *info,
 		                    KeystoneToken& t);
   int update_user_info(RGWRados *store, struct rgw_swift_auth_info *info, RGWUserInfo& user_info);
   int get_keystone_url(std::string& url);

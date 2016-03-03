@@ -291,11 +291,17 @@ void client_update(librados::ObjectWriteOperation *op,
 
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,
                        const std::string &id) {
-  bufferlist inbl;
-  ::encode(id, inbl);
+  librados::ObjectWriteOperation op;
+  client_unregister(&op, id);
+  return ioctx.operate(oid, &op);
+}
 
-  bufferlist outbl;
-  return ioctx.exec(oid, "journal", "client_unregister", inbl, outbl);
+void client_unregister(librados::ObjectWriteOperation *op,
+		       const std::string &id) {
+
+  bufferlist bl;
+  ::encode(id, bl);
+  op->exec("journal", "client_unregister", bl);
 }
 
 void client_commit(librados::ObjectWriteOperation *op, const std::string &id,

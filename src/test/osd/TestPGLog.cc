@@ -29,6 +29,7 @@
 
 class PGLogTest : public ::testing::Test, protected PGLog {
 public:
+  PGLogTest() : PGLog(g_ceph_context) {}
   virtual void SetUp() { }
 
   virtual void TearDown() {
@@ -165,6 +166,9 @@ public:
       const hobject_t &hoid) {
       removed.insert(hoid);
     }
+    void try_stash(const hobject_t &, version_t) override {
+      // lost/unfound cases are not tested yet
+    }
     void trim(
       const pg_log_entry_t &entry) {}
   };
@@ -274,6 +278,9 @@ struct TestHandler : public PGLog::LogEntryHandler {
     removed.push_back(hoid);
   }
   void cant_rollback(const pg_log_entry_t &entry) {}
+  void try_stash(const hobject_t &, version_t) override {
+    // lost/unfound cases are not tested yet
+  }
   void trim(
     const pg_log_entry_t &entry) {}
 };

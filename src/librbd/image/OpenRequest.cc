@@ -19,26 +19,6 @@
 namespace librbd {
 namespace image {
 
-namespace {
-
-template <typename I>
-class C_RegisterWatch : public Context {
-public:
-  I &image_ctx;
-  Context *on_finish;
-
-  C_RegisterWatch(I &image_ctx, Context *on_finish)
-    : image_ctx(image_ctx), on_finish(on_finish) {
-  }
-
-  virtual void finish(int r) {
-    assert(r == 0);
-    on_finish->complete(image_ctx.register_watch());
-  }
-};
-
-} // anonymous namespace
-
 using util::create_context_callback;
 using util::create_rados_ack_callback;
 
@@ -78,6 +58,9 @@ Context *OpenRequest<I>::handle_v1_detect_header(int *result) {
     }
     send_close_image(*result);
   } else {
+    lderr(cct) << "RBD image format 1 is deprecated. "
+               << "Please copy this image to image format 2." << dendl;
+
     m_image_ctx->old_format = true;
     m_image_ctx->header_oid = util::old_header_name(m_image_ctx->name);
     send_register_watch();
@@ -102,7 +85,7 @@ void OpenRequest<I>::send_v2_detect_header() {
                                    comp, &op, &m_out_bl);
     comp->release();
   } else {
-    send_v2_get_immutable_metadata();
+    send_v2_get_name();
   }
 }
 
@@ -141,7 +124,7 @@ void OpenRequest<I>::send_v2_get_id() {
                                     comp, &op, &m_out_bl);
     comp->release();
   } else {
-    send_v2_get_immutable_metadata();
+    send_v2_get_name();
   }
 }
 
@@ -161,6 +144,42 @@ Context *OpenRequest<I>::handle_v2_get_id(int *result) {
   } else {
     send_v2_get_immutable_metadata();
   }
+  return nullptr;
+}
+
+template <typename I>
+void OpenRequest<I>::send_v2_get_name() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::dir_get_name_start(&op, m_image_ctx->id);
+
+  using klass = OpenRequest<I>;
+  librados::AioCompletion *comp = create_rados_ack_callback<
+    klass, &klass::handle_v2_get_name>(this);
+  m_out_bl.clear();
+  m_image_ctx->md_ctx.aio_operate(RBD_DIRECTORY, comp, &op, &m_out_bl);
+  comp->release();
+}
+
+template <typename I>
+Context *OpenRequest<I>::handle_v2_get_name(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
+
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    *result = cls_client::dir_get_name_finish(&it, &m_image_ctx->name);
+  }
+  if (*result < 0) {
+    lderr(cct) << "failed to retreive name: "
+               << cpp_strerror(*result) << dendl;
+    send_close_image(*result);
+  } else {
+    send_v2_get_immutable_metadata();
+  }
+
   return nullptr;
 }
 
@@ -255,12 +274,10 @@ void OpenRequest<I>::send_register_watch() {
     CephContext *cct = m_image_ctx->cct;
     ldout(cct, 10) << this << " " << __func__ << dendl;
 
-    // no librados async version of watch
     using klass = OpenRequest<I>;
-    Context *ctx = new C_RegisterWatch<I>(
-      *m_image_ctx,
-      create_context_callback<klass, &klass::handle_register_watch>(this));
-    m_image_ctx->op_work_queue->queue(ctx);
+    Context *ctx = create_context_callback<
+      klass, &klass::handle_register_watch>(this);
+    m_image_ctx->register_watch(ctx);
   } else {
     send_refresh();
   }

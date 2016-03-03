@@ -10,6 +10,7 @@
 #include "include/stringify.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
@@ -73,7 +74,28 @@ AcquireRequest<I>::~AcquireRequest() {
 
 template <typename I>
 void AcquireRequest<I>::send() {
+  send_flush_notifies();
+}
+
+template <typename I>
+void AcquireRequest<I>::send_flush_notifies() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  using klass = AcquireRequest<I>;
+  Context *ctx = create_context_callback<klass, &klass::handle_flush_notifies>(
+    this);
+  m_image_ctx.image_watcher->flush(ctx);
+}
+
+template <typename I>
+Context *AcquireRequest<I>::handle_flush_notifies(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  assert(*ret_val == 0);
   send_lock();
+  return nullptr;
 }
 
 template <typename I>

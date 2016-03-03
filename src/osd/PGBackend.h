@@ -27,6 +27,11 @@
 #include "common/LogClient.h"
 #include <string>
 
+namespace Scrub {
+  class Store;
+}
+struct shard_info_wrapper;
+
  /**
   * PGBackend
   *
@@ -181,7 +186,7 @@
        const eversion_t &trim_to,
        const eversion_t &trim_rollback_to,
        bool transaction_applied,
-       ObjectStore::Transaction *t) = 0;
+       ObjectStore::Transaction &t) = 0;
 
      virtual void update_peer_last_complete_ondisk(
        pg_shard_t fromosd,
@@ -467,6 +472,8 @@
      virtual uint64_t get_bytes_written() const = 0;
      virtual ~PGTransaction() {}
    };
+   using PGTransactionUPtr = std::unique_ptr<PGTransaction>;
+
    /// Get implementation specific empty transaction
    virtual PGTransaction *get_transaction() = 0;
 
@@ -474,7 +481,7 @@
    virtual void submit_transaction(
      const hobject_t &hoid,               ///< [in] object
      const eversion_t &at_version,        ///< [in] version
-     PGTransaction *t,                    ///< [in] trans to execute
+     PGTransactionUPtr &&t,               ///< [in] trans to execute (move)
      const eversion_t &trim_to,           ///< [in] trim log to here
      const eversion_t &trim_rollback_to,  ///< [in] trim rollback info to here
      const vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
@@ -488,6 +495,11 @@
      OpRequestRef op                      ///< [in] op
      ) = 0;
 
+
+   void try_stash(
+     const hobject_t &hoid,
+     version_t v,
+     ObjectStore::Transaction *t);
 
    void rollback(
      const hobject_t &hoid,
@@ -508,6 +520,12 @@
 
    /// Unstash object to rollback stash
    void rollback_stash(
+     const hobject_t &hoid,
+     version_t old_version,
+     ObjectStore::Transaction *t);
+
+   /// Unstash object to rollback stash
+   void rollback_try_stash(
      const hobject_t &hoid,
      version_t old_version,
      ObjectStore::Transaction *t);
@@ -571,6 +589,7 @@
      const object_info_t& auth_oi,
      bool okseed,
      const ScrubMap::object &candidate,
+     shard_info_wrapper& shard_error,
      ostream &errorstream);
    map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
@@ -586,6 +605,7 @@
      map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator> &authoritative,
      map<hobject_t, pair<uint32_t,uint32_t>, hobject_t::BitwiseComparator> &missing_digest,
      int &shallow_errors, int &deep_errors,
+     Scrub::Store *store,
      const spg_t& pgid,
      const vector<int> &acting,
      ostream &errorstream);

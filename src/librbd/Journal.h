@@ -8,7 +8,6 @@
 #include "include/atomic.h"
 #include "include/Context.h"
 #include "include/interval_set.h"
-#include "include/unordered_map.h"
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "journal/Future.h"
@@ -18,6 +17,7 @@
 #include <iosfwd>
 #include <list>
 #include <string>
+#include <unordered_map>
 
 class Context;
 namespace journal {
@@ -112,6 +112,8 @@ public:
   void open(Context *on_finish);
   void close(Context *on_finish);
 
+  void flush_commit_position(Context *on_finish);
+
   uint64_t append_io_event(AioCompletion *aio_comp,
                            journal::EventEntry &&event_entry,
                            const AioObjectRequests &requests,
@@ -134,6 +136,9 @@ public:
     assert(op_tid != 0);
     return op_tid;
   }
+
+  int start_external_replay(journal::Replay<ImageCtxT> **journal_replay);
+  void stop_external_replay();
 
 private:
   ImageCtxT &m_image_ctx;
@@ -168,7 +173,8 @@ private:
     }
   };
 
-  typedef ceph::unordered_map<uint64_t, Event> Events;
+  typedef std::unordered_map<uint64_t, Event> Events;
+  typedef std::unordered_map<uint64_t, Future> TidToFutures;
 
   struct C_IOEventSafe : public Context {
     Journal *journal;
@@ -186,16 +192,17 @@ private:
   struct C_OpEventSafe : public Context {
     Journal *journal;
     uint64_t tid;
-    Future future;
-    Context *on_safe;
+    Future op_start_future;
+    Future op_finish_future;
 
-    C_OpEventSafe(Journal *journal, uint64_t tid, const Future &future,
-                  Context *on_safe)
-      : journal(journal), tid(tid), future(future), on_safe(on_safe) {
+    C_OpEventSafe(Journal *journal, uint64_t tid, const Future &op_start_future,
+                  const Future &op_finish_future)
+      : journal(journal), tid(tid), op_start_future(op_start_future),
+        op_finish_future(op_finish_future) {
     }
 
     virtual void finish(int r) {
-      journal->handle_op_event_safe(r, tid, future, on_safe);
+      journal->handle_op_event_safe(r, tid, op_start_future, op_finish_future);
     }
   };
 
@@ -246,6 +253,7 @@ private:
   Events m_events;
 
   atomic_t m_op_tid;
+  TidToFutures m_op_futures;
 
   bool m_blocking_writes;
 
@@ -274,8 +282,8 @@ private:
   void handle_journal_destroyed(int r);
 
   void handle_io_event_safe(int r, uint64_t tid);
-  void handle_op_event_safe(int r, uint64_t tid, const Future &future,
-                            Context *on_safe);
+  void handle_op_event_safe(int r, uint64_t tid, const Future &op_start_future,
+                            const Future &op_finish_future);
 
   void stop_recording();
 

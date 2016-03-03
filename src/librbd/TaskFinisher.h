@@ -19,10 +19,10 @@ namespace librbd {
 template <typename Task>
 class TaskFinisher {
 public:
-  TaskFinisher(CephContext *cct)
+  TaskFinisher(CephContext &cct)
     : m_cct(cct), m_lock("librbd::TaskFinisher::m_lock"),
-      m_finisher(new Finisher(cct)),
-      m_safe_timer(new SafeTimer(cct, m_lock, false))
+      m_finisher(new Finisher(&cct)),
+      m_safe_timer(new SafeTimer(&cct, m_lock, false))
   {
     m_finisher->start();
     m_safe_timer->init();
@@ -112,7 +112,7 @@ private:
     Task m_task;
   };
 
-  CephContext *m_cct;
+  CephContext &m_cct;
 
   Mutex m_lock;
   Finisher *m_finisher;

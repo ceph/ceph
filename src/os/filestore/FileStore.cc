@@ -519,8 +519,8 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   fdcache(g_ceph_context),
   wbthrottle(g_ceph_context),
   next_osr_id(0),
-  throttle_ops(g_ceph_context, "filestore_ops", g_conf->filestore_queue_max_ops),
-  throttle_bytes(g_ceph_context, "filestore_bytes", g_conf->filestore_queue_max_bytes),
+  throttle_ops(g_conf->filestore_caller_concurrency),
+  throttle_bytes(g_conf->filestore_caller_concurrency),
   m_ondisk_finisher_num(g_conf->filestore_ondisk_finisher_threads),
   m_apply_finisher_num(g_conf->filestore_apply_finisher_threads),
   op_tp(g_ceph_context, "FileStore::op_tp", "tp_fstore_op", g_conf->filestore_op_threads, "filestore_op_threads"),
@@ -543,10 +543,6 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   m_journal_force_aio(g_conf->journal_force_aio),
   m_osd_rollback_to_cluster_snap(g_conf->osd_rollback_to_cluster_snap),
   m_osd_use_stale_snap(g_conf->osd_use_stale_snap),
-  m_filestore_queue_max_ops(g_conf->filestore_queue_max_ops),
-  m_filestore_queue_max_bytes(g_conf->filestore_queue_max_bytes),
-  m_filestore_queue_committing_max_ops(g_conf->filestore_queue_committing_max_ops),
-  m_filestore_queue_committing_max_bytes(g_conf->filestore_queue_committing_max_bytes),
   m_filestore_do_dump(false),
   m_filestore_dump_fmt(true),
   m_filestore_sloppy_crc(g_conf->filestore_sloppy_crc),
@@ -585,10 +581,8 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   // initialize logger
   PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_first, l_os_last);
 
-  plb.add_u64(l_os_jq_max_ops, "journal_queue_max_ops", "Max operations in journal queue");
   plb.add_u64(l_os_jq_ops, "journal_queue_ops", "Operations in journal queue");
   plb.add_u64_counter(l_os_j_ops, "journal_ops", "Total journal entries written");
-  plb.add_u64(l_os_jq_max_bytes, "journal_queue_max_bytes", "Max data in journal queue");
   plb.add_u64(l_os_jq_bytes, "journal_queue_bytes", "Size of journal queue");
   plb.add_u64_counter(l_os_j_bytes, "journal_bytes", "Total operations size in journal");
   plb.add_time_avg(l_os_j_lat, "journal_latency", "Average journal queue completing latency");
@@ -692,6 +686,7 @@ int FileStore::statfs(struct statfs *buf)
   if (::statfs(basedir.c_str(), buf) < 0) {
     int r = -errno;
     assert(!m_filestore_fail_eio || r != -EIO);
+    assert(r != -ENOENT);
     return r;
   }
   return 0;
@@ -877,16 +872,17 @@ int FileStore::mkfs()
     uint64_t initial_seq = 0;
     int fd = read_op_seq(&initial_seq);
     if (fd < 0) {
+      ret = fd;
       derr << "mkfs: failed to create " << current_op_seq_fn << ": "
-	   << cpp_strerror(fd) << dendl;
+	   << cpp_strerror(ret) << dendl;
       goto close_fsid_fd;
     }
     if (initial_seq == 0) {
-      int err = write_op_seq(fd, 1);
-      if (err < 0) {
+      ret = write_op_seq(fd, 1);
+      if (ret < 0) {
 	VOID_TEMP_FAILURE_RETRY(::close(fd));
 	derr << "mkfs: failed to write to " << current_op_seq_fn << ": "
-	     << cpp_strerror(err) << dendl;
+	     << cpp_strerror(ret) << dendl;
 	goto close_fsid_fd;
       }
 
@@ -1270,6 +1266,10 @@ int FileStore::mount()
   CompatSet supported_compat_set = get_fs_supported_compat_set();
 
   dout(5) << "basedir " << basedir << " journal " << journalpath << dendl;
+
+  ret = set_throttle_params();
+  if (ret != 0)
+    goto done;
 
   // make sure global base dir exists
   if (::access(basedir.c_str(), R_OK | W_OK)) {
@@ -1819,32 +1819,10 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
   op_wq.queue(osr);
 }
 
-void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
+void FileStore::op_queue_reserve_throttle(Op *o)
 {
-  // Do not call while holding the journal lock!
-  uint64_t max_ops = m_filestore_queue_max_ops;
-  uint64_t max_bytes = m_filestore_queue_max_bytes;
-
-  if (backend->can_checkpoint() && is_committing()) {
-    max_ops += m_filestore_queue_committing_max_ops;
-    max_bytes += m_filestore_queue_committing_max_bytes;
-  }
-
-  logger->set(l_os_oq_max_ops, max_ops);
-  logger->set(l_os_oq_max_bytes, max_bytes);
-
-  if (handle)
-    handle->suspend_tp_timeout();
-  if (throttle_ops.should_wait(1) ||
-    (throttle_bytes.get_current()      // let single large ops through!
-    && throttle_bytes.should_wait(o->bytes))) {
-    dout(2) << "waiting " << throttle_ops.get_current() + 1 << " > " << max_ops << " ops || "
-      << throttle_bytes.get_current() + o->bytes << " > " << max_bytes << dendl;
-  }
   throttle_ops.get();
   throttle_bytes.get(o->bytes);
-  if (handle)
-    handle->reset_tp_timeout();
 
   logger->set(l_os_oq_ops, throttle_ops.get_current());
   logger->set(l_os_oq_bytes, throttle_bytes.get_current());
@@ -1965,11 +1943,20 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
-    op_queue_reserve_throttle(o, handle);
-    journal->throttle();
+
     //prepare and encode transactions data out of lock
     bufferlist tbl;
     int orig_len = journal->prepare_entry(o->tls, &tbl);
+
+    if (handle)
+      handle->suspend_tp_timeout();
+
+    op_queue_reserve_throttle(o);
+    journal->reserve_throttle_and_backoff(tbl.length());
+
+    if (handle)
+      handle->reset_tp_timeout();
+
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
 
@@ -2004,7 +1991,13 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
     dout(5) << __func__ << " (no journal) " << o << " " << tls << dendl;
 
-    op_queue_reserve_throttle(o, handle);
+    if (handle)
+      handle->suspend_tp_timeout();
+
+    op_queue_reserve_throttle(o);
+
+    if (handle)
+      handle->reset_tp_timeout();
 
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
@@ -2660,6 +2653,20 @@ void FileStore::_do_transaction(
       }
       break;
 
+    case Transaction::OP_TRY_RENAME:
+      {
+        coll_t oldcid = i.get_cid(op->cid);
+	coll_t newcid = oldcid;
+        ghobject_t oldoid = i.get_oid(op->oid);
+        ghobject_t newoid = i.get_oid(op->dest_oid);
+	_kludge_temp_object_collection(oldcid, oldoid);
+	_kludge_temp_object_collection(newcid, newoid);
+        tracepoint(objectstore, coll_try_rename_enter);
+        r = _collection_move_rename(oldcid, oldoid, newcid, newoid, spos, true);
+        tracepoint(objectstore, coll_try_rename_exit, r);
+      }
+      break;
+
     case Transaction::OP_COLL_SETATTR:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -3194,8 +3201,6 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
   dout(15) << "write " << cid << "/" << oid << " " << offset << "~" << len << dendl;
   int r;
 
-  int64_t actual;
-
   FDRef fd;
   r = lfn_open(cid, oid, true, &fd);
   if (r < 0) {
@@ -3205,23 +3210,8 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
     goto out;
   }
 
-  // seek
-  actual = ::lseek64(**fd, offset, SEEK_SET);
-  if (actual < 0) {
-    r = -errno;
-    dout(0) << "write lseek64 to " << offset << " failed: " << cpp_strerror(r) << dendl;
-    lfn_close(fd);
-    goto out;
-  }
-  if (actual != (int64_t)offset) {
-    dout(0) << "write lseek64 to " << offset << " gave bad offset " << actual << dendl;
-    r = -EIO;
-    lfn_close(fd);
-    goto out;
-  }
-
   // write
-  r = bl.write_fd(**fd);
+  r = bl.write_fd(**fd, offset);
   if (r == 0)
     r = bl.length();
 
@@ -3313,13 +3303,18 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
     }
     r = ::ftruncate(**n, 0);
     if (r < 0) {
+      r = -errno;
       goto out3;
     }
     struct stat st;
-    ::fstat(**o, &st);
-    r = _do_clone_range(**o, **n, 0, st.st_size, 0);
+    r = ::fstat(**o, &st);
     if (r < 0) {
       r = -errno;
+      goto out3;
+    }
+
+    r = _do_clone_range(**o, **n, 0, st.st_size, 0);
+    if (r < 0) {
       goto out3;
     }
 
@@ -3393,7 +3388,6 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
     uint64_t it_off = miter->first - srcoff + dstoff;
     r = _do_copy_range(from, to, miter->first, miter->second, it_off, true);
     if (r < 0) {
-      r = -errno;
       derr << "FileStore::_do_copy_range: copy error at " << miter->first << "~" << miter->second
              << " to " << it_off << ", " << cpp_strerror(r) << dendl;
       break;
@@ -3482,13 +3476,19 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 
     actual = ::lseek64(from, srcoff, SEEK_SET);
     if (actual != (int64_t)srcoff) {
-      r = -errno;
+      if (actual < 0)
+        r = -errno;
+      else
+        r = -EINVAL;
       derr << "lseek64 to " << srcoff << " got " << cpp_strerror(r) << dendl;
       return r;
     }
     actual = ::lseek64(to, dstoff, SEEK_SET);
     if (actual != (int64_t)dstoff) {
-      r = -errno;
+      if (actual < 0)
+        r = -errno;
+      else
+        r = -EINVAL;
       derr << "lseek64 to " << dstoff << " got " << cpp_strerror(r) << dendl;
       return r;
     }
@@ -5088,7 +5088,8 @@ int FileStore::_collection_add(const coll_t& c, const coll_t& oldcid, const ghob
 
 int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& oldoid,
 				       coll_t c, const ghobject_t& o,
-				       const SequencerPosition& spos)
+				       const SequencerPosition& spos,
+				       bool allow_enoent)
 {
   dout(15) << __func__ << " " << c << "/" << o << " from " << oldcid << "/" << oldoid << dendl;
   int r = 0;
@@ -5120,9 +5121,16 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
     if (r < 0) {
       // the source collection/object does not exist. If we are replaying, we
       // should be safe, so just return 0 and move on.
-      assert(replaying);
-      dout(10) << __func__ << " " << c << "/" << o << " from "
-	       << oldcid << "/" << oldoid << " (dne, continue replay) " << dendl;
+      if (replaying) {
+	dout(10) << __func__ << " " << c << "/" << o << " from "
+		 << oldcid << "/" << oldoid << " (dne, continue replay) " << dendl;
+      } else if (allow_enoent) {
+	dout(10) << __func__ << " " << c << "/" << o << " from "
+		 << oldcid << "/" << oldoid << " (dne, ignoring enoent)"
+		 << dendl;
+      } else {
+	assert(0 == "ERROR: source must exist");
+      }
       return 0;
     }
     if (dstcmp > 0) {      // if dstcmp == 0 the guard already says "in-progress"
@@ -5435,8 +5443,13 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_max_sync_interval",
     "filestore_queue_max_ops",
     "filestore_queue_max_bytes",
-    "filestore_queue_committing_max_ops",
-    "filestore_queue_committing_max_bytes",
+    "filestore_queue_max_ops",
+    "filestore_expected_throughput_bytes",
+    "filestore_expected_throughput_ops",
+    "filestore_queue_low_threshhold",
+    "filestore_queue_high_threshhold",
+    "filestore_queue_high_delay_multiple",
+    "filestore_queue_max_delay_multiple",
     "filestore_commit_timeout",
     "filestore_dump_file",
     "filestore_kill_at",
@@ -5464,12 +5477,21 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     Mutex::Locker l(lock);
     set_xattr_limits_via_conf();
   }
+
+  if (changed.count("filestore_queue_max_bytes") ||
+      changed.count("filestore_queue_max_ops") ||
+      changed.count("filestore_expected_throughput_bytes") ||
+      changed.count("filestore_expected_throughput_ops") ||
+      changed.count("filestore_queue_low_threshhold") ||
+      changed.count("filestore_queue_high_threshhold") ||
+      changed.count("filestore_queue_high_delay_multiple") ||
+      changed.count("filestore_queue_max_delay_multiple")) {
+    Mutex::Locker l(lock);
+    set_throttle_params();
+  }
+
   if (changed.count("filestore_min_sync_interval") ||
       changed.count("filestore_max_sync_interval") ||
-      changed.count("filestore_queue_max_ops") ||
-      changed.count("filestore_queue_max_bytes") ||
-      changed.count("filestore_queue_committing_max_ops") ||
-      changed.count("filestore_queue_committing_max_bytes") ||
       changed.count("filestore_kill_at") ||
       changed.count("filestore_fail_eio") ||
       changed.count("filestore_sloppy_crc") ||
@@ -5479,18 +5501,12 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
-    m_filestore_queue_max_ops = conf->filestore_queue_max_ops;
-    m_filestore_queue_max_bytes = conf->filestore_queue_max_bytes;
-    m_filestore_queue_committing_max_ops = conf->filestore_queue_committing_max_ops;
-    m_filestore_queue_committing_max_bytes = conf->filestore_queue_committing_max_bytes;
     m_filestore_kill_at.set(conf->filestore_kill_at);
     m_filestore_fail_eio = conf->filestore_fail_eio;
     m_filestore_fadvise = conf->filestore_fadvise;
     m_filestore_sloppy_crc = conf->filestore_sloppy_crc;
     m_filestore_sloppy_crc_block_size = conf->filestore_sloppy_crc_block_size;
     m_filestore_max_alloc_hint_size = conf->filestore_max_alloc_hint_size;
-    throttle_ops.reset_max(conf->filestore_queue_max_ops);
-    throttle_bytes.reset_max(conf->filestore_queue_max_bytes);
   }
   if (changed.count("filestore_commit_timeout")) {
     Mutex::Locker l(sync_entry_timeo_lock);
@@ -5504,6 +5520,38 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       dump_stop();
     }
   }
+}
+
+int FileStore::set_throttle_params()
+{
+  stringstream ss;
+  bool valid = throttle_bytes.set_params(
+    g_conf->filestore_queue_low_threshhold,
+    g_conf->filestore_queue_high_threshhold,
+    g_conf->filestore_expected_throughput_bytes,
+    g_conf->filestore_queue_high_delay_multiple,
+    g_conf->filestore_queue_max_delay_multiple,
+    g_conf->filestore_queue_max_bytes,
+    &ss);
+
+  valid &= throttle_ops.set_params(
+    g_conf->filestore_queue_low_threshhold,
+    g_conf->filestore_queue_high_threshhold,
+    g_conf->filestore_expected_throughput_ops,
+    g_conf->filestore_queue_high_delay_multiple,
+    g_conf->filestore_queue_max_delay_multiple,
+    g_conf->filestore_queue_max_ops,
+    &ss);
+
+  logger->set(l_os_oq_max_ops, throttle_ops.get_max());
+  logger->set(l_os_oq_max_bytes, throttle_bytes.get_max());
+
+  if (!valid) {
+    derr << "tried to set invalid params: "
+	 << ss.str()
+	 << dendl;
+  }
+  return valid ? 0 : -EINVAL;
 }
 
 void FileStore::dump_start(const std::string& file)
