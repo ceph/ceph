@@ -37,7 +37,7 @@ int main(int argc, char* argv[]) {
   // simulation params
 
   const TestClient::TimePoint early_time = TestClient::now();
-  const chrono::seconds skip_amount(2); // skip first 2 secondsd of data
+  const chrono::seconds skip_amount(0); // skip first 2 secondsd of data
   const chrono::seconds measure_unit(5); // calculate in groups of 5 seconds
   const chrono::seconds report_unit(1); // unit to output reports in
 
@@ -46,22 +46,6 @@ int main(int argc, char* argv[]) {
   const uint server_count = 100;
   const uint server_iops = 4;
   const uint server_threads = 1;
-
-#if 0
-  // name -> (server iops, server threads)
-  const std::map<ServerId,std::pair<int,int>> server_info = {
-    {'a', { 60, 1 }},
-    {'b', { 60, 1 }},
-#if 0
-    {2, { 75, 7 }},
-    {3, { 75, 7 }},
-    {4, { 75, 7 }},
-    {5, { 75, 7 }},
-    {6, { 75, 7 }},
-    {7, { 75, 7 }},
-#endif
-  };
-#endif
 
   // client params
 
@@ -74,15 +58,8 @@ int main(int argc, char* argv[]) {
   const double client_limit = 3.0;
   const double client_weight = 1.0;
 
-  dmc::ClientInfo client_info = {client_weight, client_reservation, client_limit};
-
-#if 0
-  // id -> (client_info, goal iops)
-  const std::map<ClientId,std::pair<dmc::ClientInfo,int>> client_info = {
-    {1, {{ 1.0, 50.0, 200.0 }, 100 }},
-    {2, {{ 3.0, 50.0, 200.0 }, 100 }},
-  };
-#endif
+  dmc::ClientInfo client_info =
+    { client_weight, client_reservation, client_limit };
 
   // construct servers
 
@@ -156,7 +133,7 @@ int main(int argc, char* argv[]) {
       new TestClient(i,
 		     server_post_f,
 		     server_random_f,
-		     i < (client_count - client_wait_count) ? wait : no_wait);
+		     i < (client_count - client_wait_count) ? no_wait : wait);
   }
 
   // clients are now running; wait for all to finish
@@ -172,14 +149,33 @@ int main(int argc, char* argv[]) {
   TestClient::TimePoint earliest_finish = late_time;
   TestClient::TimePoint latest_finish = early_time;
 
-  for (auto const &i : clients) {
-    auto start = i.second->get_op_times().front();
-    auto end = i.second->get_op_times().back();
+  for (auto const &c : clients) {
+    auto start = c.second->get_op_times().front();
+    auto end = c.second->get_op_times().back();
 
     if (start > latest_start) { latest_start = start; }
     if (end < earliest_finish) { earliest_finish = end; }
     if (end > latest_finish) { latest_finish = end; }
   }
+
+#if 1
+  {
+    auto c1 = clients[0]->get_op_times();
+    auto c2 = clients[98]->get_op_times();
+    auto c3 = clients[99]->get_op_times();
+    assert (c1.size() == c2.size() && c2.size() == c3.size());
+    auto f = [](const TestClient::TimePoint& t) -> uint {
+      // return t.time_since_epoch().count() % 1000000000000;
+      return t.time_since_epoch().count();
+    };
+    const uint w = 20;
+    for (uint i = 0; i < c1.size(); ++i) {
+      std::cout << std::setw(w) << f(c1[i]) <<
+	std::setw(w) << f(c2[i]) <<
+	std::setw(w) << f(c3[i]) << std::endl;
+    }
+  }
+#endif
 
   const auto start_edge = latest_start + skip_amount;
 
@@ -278,8 +274,9 @@ int main(int argc, char* argv[]) {
   std::cout << std::endl << "==== Server Data ====" << std::endl;
 
   std::cout << std::setw(head_w) << "server:";
-  for (auto const &i : servers) {
-    std::cout << std::setw(data_w) << i.first;
+  for (auto const &s : servers) {
+    if (!server_disp_filter(s.first)) continue;
+    std::cout << std::setw(data_w) << s.first;
   }
   std::cout << std::setw(data_w) << "total" << std::endl;
 
@@ -288,6 +285,7 @@ int main(int argc, char* argv[]) {
     int total = 0;
     for (auto const &s : servers) {
       total += s.second->get_res_count();
+      if (!server_disp_filter(s.first)) continue;
       std::cout << std::setw(data_w) << s.second->get_res_count();
     }
     std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
@@ -299,6 +297,7 @@ int main(int argc, char* argv[]) {
     int total = 0;
     for (auto const &s : servers) {
       total += s.second->get_prop_count();
+      if (!server_disp_filter(s.first)) continue;
       std::cout << std::setw(data_w) << s.second->get_prop_count();
     }
     std::cout << std::setw(data_w) << std::setprecision(data_prec) <<

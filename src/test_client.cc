@@ -32,15 +32,14 @@ TestClient::TestClient(ClientId _id,
   outstanding_ops(0),
   requests_complete(false)
 {
-  {
-    size_t accum = 0;
-    for (auto i : instructions) {
-      if (CliOp::req == i.op) {
-	accum += i.args.req_params.count;
-      }
+  size_t op_count = 0;
+  for (auto i : instructions) {
+    if (CliOp::req == i.op) {
+      op_count += i.args.req_params.count;
     }
-    op_times.resize(accum);
   }
+  op_times.resize(op_count);
+
   thd_resp = std::thread(&TestClient::run_resp, this);
   thd_req = std::thread(&TestClient::run_req, this);
 }
@@ -122,7 +121,7 @@ void TestClient::run_resp() {
   // since the following code would otherwise be repeated (except for
   // the call to notify_one) in the two loops below; let's avoid
   // repetition and define it once.
-  const auto proc_resp = [this, &delay, &op, &l](const bool notify_req_cv) {
+  const auto proc_resp = [this, &op, &l](const bool notify_req_cv) {
     if (!resp_queue.empty()) {
       RespQueueItem item = resp_queue.front();
       resp_queue.pop_front();
