@@ -21,6 +21,7 @@
 #include "include/interval_set.h"
 #include "include/compact_map.h"
 #include "include/compact_set.h"
+#include "include/fs_types.h"
 
 #include "inode_backtrace.h"
 
@@ -438,7 +439,7 @@ struct inode_t {
 
   // file (data access)
   ceph_dir_layout  dir_layout;    // [dir only]
-  ceph_file_layout layout;
+  file_layout_t layout;
   compact_set <int64_t> old_pools;
   uint64_t   size;        // on directory, # dentries
   uint64_t   max_size_ever; // max size the file has ever been
@@ -505,20 +506,15 @@ struct inode_t {
   }
 
   bool has_layout() const {
-    // why on earth is there no converse of memchr() in string.h?
-    const char *p = (const char *)&layout;
-    for (size_t i = 0; i < sizeof(layout); i++)
-      if (p[i] != '\0')
-	return true;
-    return false;
+    return layout != file_layout_t();
   }
 
   void clear_layout() {
-    memset(&layout, 0, sizeof(layout));
+    layout = file_layout_t();
   }
 
   uint64_t get_layout_size_increment() {
-    return (uint64_t)layout.fl_object_size * (uint64_t)layout.fl_stripe_count;
+    return layout.get_period();
   }
 
   bool is_dirty_rstat() const { return !(rstat == accounted_rstat); }
@@ -565,7 +561,7 @@ struct inode_t {
     old_pools.insert(l);
   }
 
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<inode_t*>& ls);
@@ -585,7 +581,7 @@ struct inode_t {
 private:
   bool older_is_consistent(const inode_t &other) const;
 };
-WRITE_CLASS_ENCODER(inode_t)
+WRITE_CLASS_ENCODER_FEATURES(inode_t)
 
 
 /*
@@ -596,12 +592,12 @@ struct old_inode_t {
   inode_t inode;
   std::map<string,bufferptr> xattrs;
 
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<old_inode_t*>& ls);
 };
-WRITE_CLASS_ENCODER(old_inode_t)
+WRITE_CLASS_ENCODER_FEATURES(old_inode_t)
 
 
 /*
@@ -1603,26 +1599,6 @@ inline std::ostream& operator<<(std::ostream& out, mdsco_db_line_prefix o) {
   o.object->print_db_line_prefix(out);
   return out;
 }
-
-class ceph_file_layout_wrapper : public ceph_file_layout
-{
-public:
-  void encode(bufferlist &bl) const
-  {
-    ::encode(static_cast<const ceph_file_layout&>(*this), bl);
-  }
-
-  void decode(bufferlist::iterator &p)
-  {
-    ::decode(static_cast<ceph_file_layout&>(*this), p);
-  }
-
-  static void generate_test_instances(std::list<ceph_file_layout_wrapper*>& ls)
-  {
-  }
-
-  void dump(Formatter *f) const;
-};
 
 // parse a map of keys/values.
 namespace qi = boost::spirit::qi;

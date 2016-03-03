@@ -30,6 +30,7 @@ libcommon_internal_la_SOURCES = \
 	common/MemoryModel.cc \
 	common/armor.c \
 	common/fd.cc \
+	common/fs_types.cc \
 	common/safe_io.c \
 	common/snap_types.cc \
 	common/str_list.cc \

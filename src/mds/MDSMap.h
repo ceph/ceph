@@ -70,6 +70,7 @@ extern CompatSet get_mdsmap_compat_set_base(); // pre v0.20
 #define MDS_FEATURE_INCOMPAT_OMAPDIRFRAG CompatSet::Feature(6, "dirfrag is stored in omap")
 #define MDS_FEATURE_INCOMPAT_INLINE CompatSet::Feature(7, "mds uses inline data")
 #define MDS_FEATURE_INCOMPAT_NOANCHOR CompatSet::Feature(8, "no anchor table")
+#define MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2 CompatSet::Feature(8, "file layout v2")
 
 #define MDS_FS_NAME_DEFAULT "cephfs"
 
@@ -140,6 +141,7 @@ public:
     mds_rank_t standby_for_rank;
     std::string standby_for_name;
     std::set<mds_rank_t> export_targets;
+    uint64_t mds_features;
 
     mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0), state(STATE_STANDBY), state_seq(0),
 		   standby_for_rank(MDS_NO_STANDBY_PREF) { }
@@ -208,6 +210,8 @@ protected:
 
   bool inline_data_enabled;
 
+  uint64_t cached_up_features;
+
 public:
   CompatSet compat;
 
@@ -227,7 +231,8 @@ public:
       max_mds(0),
       ever_allowed_snaps(false),
       explicitly_allowed_snaps(false),
-      inline_data_enabled(false)
+      inline_data_enabled(false),
+      cached_up_features(0)
   { }
 
   bool get_inline_data_enabled() { return inline_data_enabled; }
@@ -348,6 +353,27 @@ public:
   }
   void get_failed_mds_set(std::set<mds_rank_t>& s) {
     s = failed;
+  }
+
+  // features
+  uint64_t get_up_features() {
+    if (!cached_up_features) {
+      bool first = true;
+      for (std::map<mds_rank_t, mds_gid_t>::const_iterator p = up.begin();
+	   p != up.end();
+	   ++p) {
+	std::map<mds_gid_t, mds_info_t>::const_iterator q =
+	  mds_info.find(p->second);
+	assert(q != mds_info.end());
+	if (first) {
+	  cached_up_features = q->second.mds_features;
+	  first = false;
+	} else {
+	  cached_up_features &= q->second.mds_features;
+	}
+      }
+    }
+    return cached_up_features;
   }
 
   /**

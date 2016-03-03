@@ -67,7 +67,7 @@ public:
 };
 
 int Filer::probe(inodeno_t ino,
-		 ceph_file_layout *layout,
+		 file_layout_t *layout,
 		 snapid_t snapid,
 		 uint64_t start_from,
 		 uint64_t *end, // LB, when !fwd
@@ -90,7 +90,7 @@ int Filer::probe(inodeno_t ino,
 }
 
 int Filer::probe(inodeno_t ino,
-		 ceph_file_layout *layout,
+		 file_layout_t *layout,
 		 snapid_t snapid,
 		 uint64_t start_from,
 		 uint64_t *end, // LB, when !fwd
@@ -111,12 +111,11 @@ int Filer::probe(inodeno_t ino,
   return probe_impl(probe, layout, start_from, end);
 }
 
-int Filer::probe_impl(Probe* probe, ceph_file_layout *layout,
+int Filer::probe_impl(Probe* probe, file_layout_t *layout,
 		      uint64_t start_from, uint64_t *end) // LB, when !fwd
 {
   // period (bytes before we jump unto a new set of object(s))
-  uint64_t period = (uint64_t)layout->fl_stripe_count *
-    (uint64_t)layout->fl_object_size;
+  uint64_t period = layout->get_period();
 
   // start with 1+ periods.
   probe->probing_len = period;
@@ -268,8 +267,7 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
     // keep probing!
     ldout(cct, 10) << "_probed probing further" << dendl;
 
-    uint64_t period = (uint64_t)probe->layout.fl_stripe_count *
-      (uint64_t)probe->layout.fl_object_size;
+    uint64_t period = probe->layout.get_period();
     if (probe->fwd) {
       probe->probing_off += probe->probing_len;
       assert(probe->probing_off % period == 0);
@@ -303,14 +301,14 @@ struct PurgeRange {
   typedef std::lock_guard<std::mutex> lock_guard;
   typedef std::unique_lock<std::mutex> unique_lock;
   inodeno_t ino;
-  ceph_file_layout layout;
+  file_layout_t layout;
   SnapContext snapc;
   uint64_t first, num;
   ceph::real_time mtime;
   int flags;
   Context *oncommit;
   int uncommitted;
-  PurgeRange(inodeno_t i, ceph_file_layout& l, const SnapContext& sc,
+  PurgeRange(inodeno_t i, file_layout_t& l, const SnapContext& sc,
 	     uint64_t fo, uint64_t no, ceph::real_time t, int fl,
 	     Context *fin)
     : ino(i), layout(l), snapc(sc), first(fo), num(no), mtime(t), flags(fl),
@@ -318,7 +316,7 @@ struct PurgeRange {
 };
 
 int Filer::purge_range(inodeno_t ino,
-		       ceph_file_layout *layout,
+		       file_layout_t *layout,
 		       const SnapContext& snapc,
 		       uint64_t first_obj, uint64_t num_obj,
 		       ceph::real_time mtime,

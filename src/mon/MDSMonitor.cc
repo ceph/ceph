@@ -375,7 +375,8 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   _note_beacon(m);
   mon->send_reply(op,
 		  new MMDSBeacon(mon->monmap->fsid, m->get_global_id(), m->get_name(),
-				 mdsmap.get_epoch(), state, seq));
+				 mdsmap.get_epoch(), state, seq,
+				 CEPH_FEATURES_SUPPORTED_DEFAULT));
   return true;
 
  ignore:
@@ -485,6 +486,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
     info.name = m->get_name();
     info.rank = -1;
     info.addr = addr;
+    info.mds_features = m->get_mds_features();
     info.state = MDSMap::STATE_STANDBY;
     info.state_seq = seq;
     info.standby_for_rank = m->get_standby_for_rank();
@@ -600,8 +602,11 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       pending_mdsmap.mds_info.erase(gid);
 
       // Respond to MDS, so that it knows it can continue to shut down
-      mon->send_reply(op, new MMDSBeacon(mon->monmap->fsid, m->get_global_id(),
-                    m->get_name(), mdsmap.get_epoch(), state, seq));
+      mon->send_reply(op,
+		      new MMDSBeacon(
+			mon->monmap->fsid, m->get_global_id(),
+			m->get_name(), mdsmap.get_epoch(), state, seq,
+			CEPH_FEATURES_SUPPORTED_DEFAULT));
     } else if (state == MDSMap::STATE_DNE) {
       if (!mon->osdmon()->is_writeable()) {
         dout(4) << __func__ << ": DNE from rank " << info.rank
@@ -615,8 +620,11 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       request_proposal(mon->osdmon());
 
       // Respond to MDS, so that it knows it can continue to shut down
-      mon->send_reply(op, new MMDSBeacon(mon->monmap->fsid, m->get_global_id(),
-                    m->get_name(), mdsmap.get_epoch(), state, seq));
+      mon->send_reply(op,
+		      new MMDSBeacon(
+			mon->monmap->fsid, m->get_global_id(),
+			m->get_name(), mdsmap.get_epoch(), state, seq,
+			CEPH_FEATURES_SUPPORTED_DEFAULT));
     } else {
       info.state = state;
       info.state_seq = seq;
@@ -664,11 +672,12 @@ void MDSMonitor::_updated(MonOpRequestRef op)
     mon->send_reply(op, new MMDSMap(mon->monmap->fsid, &mdsmap));
   } else {
     mon->send_reply(op, new MMDSBeacon(mon->monmap->fsid,
-				      m->get_global_id(),
-				      m->get_name(),
-				      mdsmap.get_epoch(),
-				      m->get_state(),
-				      m->get_seq()));
+				       m->get_global_id(),
+				       m->get_name(),
+				       mdsmap.get_epoch(),
+				       m->get_state(),
+				       m->get_seq(),
+				       CEPH_FEATURES_SUPPORTED_DEFAULT));
   }
 }
 
@@ -1266,6 +1275,10 @@ int MDSMonitor::management_command(
     if (data < 0) {
       ss << "pool '" << data_name << "' does not exist";
       return -ENOENT;
+    }
+    if (data == 0) {
+      ss << "pool '" << data_name << "' has id 0, which CephFS does not allow. Use another pool or recreate it to get a non-zero pool id.";
+      return -EINVAL;
     }
    
     string fs_name;

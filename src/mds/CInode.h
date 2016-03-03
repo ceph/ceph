@@ -89,11 +89,11 @@ public:
   static object_t get_object_name(inodeno_t ino, frag_t fg, const char *suffix);
 
   /* Full serialization for use in ".inode" root inode objects */
-  void encode(bufferlist &bl, const bufferlist *snap_blob=NULL) const;
+  void encode(bufferlist &bl, uint64_t features, const bufferlist *snap_blob=NULL) const;
   void decode(bufferlist::iterator &bl, bufferlist& snap_blob);
 
   /* Serialization without ENCODE_START/FINISH blocks for use embedded in dentry */
-  void encode_bare(bufferlist &bl, const bufferlist *snap_blob=NULL) const;
+  void encode_bare(bufferlist &bl, uint64_t features, const bufferlist *snap_blob=NULL) const;
   void decode_bare(bufferlist::iterator &bl, bufferlist &snap_blob, __u8 struct_v=5);
 
   /* For test/debug output */
@@ -108,14 +108,14 @@ class InodeStore : public InodeStoreBase {
 public:
   bufferlist snap_blob;  // Encoded copy of SnapRealm, because we can't
 			 // rehydrate it without full MDCache
-  void encode(bufferlist &bl) const {
-    InodeStoreBase::encode(bl, &snap_blob);
+  void encode(bufferlist &bl, uint64_t features) const {
+    InodeStoreBase::encode(bl, features, &snap_blob);
   }
   void decode(bufferlist::iterator &bl) {
     InodeStoreBase::decode(bl, snap_blob);
   }
-  void encode_bare(bufferlist &bl) const {
-    InodeStoreBase::encode_bare(bl, &snap_blob);
+  void encode_bare(bufferlist &bl, uint64_t features) const {
+    InodeStoreBase::encode_bare(bl, features, &snap_blob);
   }
   void decode_bare(bufferlist::iterator &bl) {
     InodeStoreBase::decode_bare(bl, snap_blob);
@@ -123,6 +123,7 @@ public:
 
   static void generate_test_instances(std::list<InodeStore*>& ls);
 };
+WRITE_CLASS_ENCODER_FEATURES(InodeStore)
 
 // cached inode wrapper
 class CInode : public MDSCacheObject, public InodeStoreBase {
@@ -743,10 +744,10 @@ public:
 
   void encode_snap_blob(bufferlist &bl);
   void decode_snap_blob(bufferlist &bl);
-  void encode_store(bufferlist& bl);
+  void encode_store(bufferlist& bl, uint64_t features);
   void decode_store(bufferlist::iterator& bl);
 
-  void encode_replica(mds_rank_t rep, bufferlist& bl) {
+  void encode_replica(mds_rank_t rep, bufferlist& bl, uint64_t features) {
     assert(is_auth());
     
     // relax locks?
@@ -756,7 +757,7 @@ public:
     __u32 nonce = add_replica(rep);
     ::encode(nonce, bl);
     
-    _encode_base(bl);
+    _encode_base(bl, features);
     _encode_locks_state_for_replica(bl);
   }
   void decode_replica(bufferlist::iterator& p, bool is_new) {
@@ -781,7 +782,7 @@ public:
   void take_waiting(uint64_t tag, std::list<MDSInternalContextBase*>& ls);
 
   // -- encode/decode helpers --
-  void _encode_base(bufferlist& bl);
+  void _encode_base(bufferlist& bl, uint64_t features);
   void _decode_base(bufferlist::iterator& p);
   void _encode_locks_full(bufferlist& bl);
   void _decode_locks_full(bufferlist::iterator& p);
@@ -954,7 +955,7 @@ public:
   int get_caps_allowed_by_type(int type) const;
   int get_caps_careful() const;
   int get_xlocker_mask(client_t client) const;
-  int get_caps_allowed_for_client(client_t client) const;
+  int get_caps_allowed_for_client(Session *s, inode_t *file_i) const;
 
   // caps issued, wanted
   int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,

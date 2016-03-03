@@ -15,8 +15,6 @@
 #ifndef CEPH_CONFIG_H
 #define CEPH_CONFIG_H
 
-extern struct ceph_file_layout g_default_file_layout;
-
 #include <iosfwd>
 #include <vector>
 #include <map>
