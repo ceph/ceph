@@ -623,41 +623,41 @@ public:
   BlueStore(CephContext *cct, const string& path);
   ~BlueStore();
 
-  string get_type() {
+  string get_type() override {
     return "bluestore";
   }
 
-  bool needs_journal() { return false; };
-  bool wants_journal() { return false; };
-  bool allows_journal() { return false; };
+  bool needs_journal() override { return false; };
+  bool wants_journal() override { return false; };
+  bool allows_journal() override { return false; };
 
   static int get_block_device_fsid(const string& path, uuid_d *fsid);
 
-  bool test_mount_in_use();
+  bool test_mount_in_use() override;
 
-  int mount();
-  int umount();
+  int mount() override;
+  int umount() override;
   void _sync();
 
-  int fsck();
+  int fsck() override;
 
-  unsigned get_max_object_name_length() {
+  unsigned get_max_object_name_length() override {
     return 4096;
   }
-  unsigned get_max_attr_name_length() {
+  unsigned get_max_attr_name_length() override {
     return 256;  // arbitrary; there is no real limit internally
   }
 
-  int mkfs();
-  int mkjournal() {
+  int mkfs() override;
+  int mkjournal() override {
     return 0;
   }
 
 public:
-  int statfs(struct statfs *buf);
+  int statfs(struct statfs *buf) override;
 
-  bool exists(const coll_t& cid, const ghobject_t& oid);
-  bool exists(CollectionHandle &c, const ghobject_t& oid);
+  bool exists(const coll_t& cid, const ghobject_t& oid) override;
+  bool exists(CollectionHandle &c, const ghobject_t& oid) override;
   int stat(
     const coll_t& cid,
     const ghobject_t& oid,
@@ -710,9 +710,9 @@ public:
 
   CollectionHandle open_collection(const coll_t &c) override;
 
-  bool collection_exists(const coll_t& c);
-  bool collection_empty(const coll_t& c);
-  int collection_bits(const coll_t& c);
+  bool collection_exists(const coll_t& c) override;
+  bool collection_empty(const coll_t& c) override;
+  int collection_bits(const coll_t& c) override;
 
   int collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
 		      bool sort_bitwise, int max,
@@ -758,7 +758,7 @@ public:
     CollectionHandle &c,              ///< [in] Collection containing oid
     const ghobject_t &oid, ///< [in] Object containing omap
     set<string> *keys      ///< [out] Keys defined on oid
-    );
+    ) override;
 
   /// Get key values
   int omap_get_values(
@@ -797,14 +797,14 @@ public:
     const ghobject_t &oid  ///< [in] object
     ) override;
 
-  void set_fsid(uuid_d u) {
+  void set_fsid(uuid_d u) override {
     fsid = u;
   }
-  uuid_d get_fsid() {
+  uuid_d get_fsid() override {
     return fsid;
   }
 
-  objectstore_perf_stat_t get_cur_stats() {
+  objectstore_perf_stat_t get_cur_stats() override {
     return objectstore_perf_stat_t();
   }
 
@@ -812,7 +812,7 @@ public:
     Sequencer *osr,
     vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
-    ThreadPool::TPHandle *handle = NULL);
+    ThreadPool::TPHandle *handle = NULL) override;
 
 private:
   // --------------------------------------------------------
