@@ -315,7 +315,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
           cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
       }
       if(need_dynamic)
-        delete buf;
+        delete[] buf;
     }
     if (do_graylog2 && m_graylog) {
       m_graylog->log_entry(e);
