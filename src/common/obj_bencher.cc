@@ -598,13 +598,13 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     index[slot] = data.started;
     lock.Unlock();
     completion_wait(slot);
+    lock.Lock();
     r = completion_ret(slot);
     if (r < 0) {
       cerr << "read got " << r << std::endl;
       lock.Unlock();
       goto ERR;
     }
-    lock.Lock();
     total_latency += data.cur_latency;
     if (data.cur_latency > data.max_latency) data.max_latency = data.cur_latency;
     if (data.cur_latency < data.min_latency) data.min_latency = data.cur_latency;
