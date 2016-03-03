@@ -5174,7 +5174,8 @@ int BlueStore::_do_allocate(
     } else {
       dout(20) << "  tail shared, but no COW needed" << dendl;
     }
-    if (cow_offset_raw & ~block_mask) {
+    if (cow_offset_raw < o->onode.size &&
+	(cow_offset_raw & ~block_mask)) {
       *cow_rmw_tail = bp->second.offset + cow_offset_raw - bp->first;
       dout(20) << "  cow_rmw_tail " << *cow_rmw_tail
 	       << " from " << bp->second << dendl;
