@@ -23,8 +23,8 @@
 
 struct req_op_t {};
 struct wait_op_t {};
-constexpr struct req_op_t req_op;
-constexpr struct wait_op_t wait_op;
+constexpr struct req_op_t req_op {};
+constexpr struct wait_op_t wait_op {};
 
 enum class CliOp { req, wait };
 struct CliInst {
@@ -83,16 +83,11 @@ protected:
   const SubmitFunc submit_f;
   const ServerSelectFunc server_select_f;
 
-#if 1 // removed consts
-  int ops_to_run;
-  int iops_goal; // per second
-  int outstanding_ops_allowed;
-#endif
-
   std::vector<CliInst> instructions;
 
   crimson::dmclock::ServiceTracker<ServerId> service_tracker;
 
+  // TODO: use lock rather than atomic???
   std::atomic_ulong        outstanding_ops;
   std::atomic_bool         requests_complete;
 
@@ -126,9 +121,9 @@ public:
   TestClient(ClientId _id,
 	     const SubmitFunc& _submit_f,
 	     const ServerSelectFunc& _server_select_f,
-	     int _ops_to_run,
-	     int _iops_goal,
-	     int _outstanding_ops_allowed);
+	     uint16_t _ops_to_run,
+	     double _iops_goal,
+	     uint16_t _outstanding_ops_allowed);
 
   TestClient(const TestClient&) = delete;
   TestClient(TestClient&&) = delete;

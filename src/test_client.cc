@@ -33,10 +33,18 @@ TestClient::TestClient(ClientId _id,
   outstanding_ops_allowed(_outstanding_ops_allowed),
 #endif
   service_tracker(),
-  op_times(ops_to_run),
   outstanding_ops(0),
   requests_complete(false)
 {
+  {
+    size_t accum = 0;
+    for (auto i : instructions) {
+      if (CliOp::req == i.op) {
+	accum += i.args.req_params.count;
+      }
+    }
+    op_times.resize(accum);
+  }
   thd_resp = std::thread(&TestClient::run_resp, this);
   thd_req = std::thread(&TestClient::run_req, this);
 }
@@ -45,22 +53,14 @@ TestClient::TestClient(ClientId _id,
 TestClient::TestClient(ClientId _id,
 		       const SubmitFunc& _submit_f,
 		       const ServerSelectFunc& _server_select_f,
-		       int _ops_to_run,
-		       int _iops_goal,
-		       int _outstanding_ops_allowed) :
-  id(_id),
-  submit_f(_submit_f),
-  server_select_f(_server_select_f),
-  ops_to_run(_ops_to_run),
-  iops_goal(_iops_goal),
-  outstanding_ops_allowed(_outstanding_ops_allowed),
-  service_tracker(),
-  op_times(ops_to_run),
-  outstanding_ops(0),
-  requests_complete(false)
+		       uint16_t _ops_to_run,
+		       double _iops_goal,
+		       uint16_t _outstanding_ops_allowed) :
+  TestClient(_id,
+	     _submit_f, _server_select_f,
+	     {{req_op, _ops_to_run, _iops_goal, _outstanding_ops_allowed}})
 {
-  thd_resp = std::thread(&TestClient::run_resp, this);
-  thd_req = std::thread(&TestClient::run_req, this);
+  // empty
 }
 
 
@@ -76,40 +76,41 @@ void TestClient::wait_until_done() {
 
 
 void TestClient::run_req() {
-  std::chrono::microseconds delay(int(0.5 + 1000000.0 / iops_goal));
+  size_t ops_count = 0;
+  for (auto i : instructions) {
+    if (CliOp::wait == i.op) {
+      std::this_thread::sleep_for(i.args.wait_time);
+    } else if (CliOp::req == i.op) {
+      Lock l(mtx_req);
+      auto now = std::chrono::steady_clock::now();
+      for (uint64_t o = 0; o < i.args.req_params.count; ++o) {
+	auto when = now + i.args.req_params.time_bw_reqs;
+	while ((now = std::chrono::steady_clock::now()) < when) {
+	  cv_req.wait_until(l, when);
+	}
+	while (outstanding_ops >= i.args.req_params.max_outstanding) {
+	  cv_req.wait(l);
+	}
 
-  if (info >= 1) {
-    std::cout << "client " << id << " about to run " << ops_to_run <<
-      " ops." << std::endl;
-  }
-
-  {
-    Lock l(mtx_req);
-    auto now = std::chrono::steady_clock::now();
-    for (uint64_t i = 0; i < ops_to_run; ++i) {
-      auto when = now + delay;
-      while ((now = std::chrono::steady_clock::now()) < when) {
-	cv_req.wait_until(l, when);
+	l.unlock();
+	const ServerId& server = server_select_f(o);
+	dmc::ReqParams<ClientId> rp = service_tracker.get_req_params(id, server);
+	TestRequest req(o, 12);
+	submit_f(server, req, rp);
+	++outstanding_ops;
+	l.lock(); // lock for return to top of loop
       }
-      while (outstanding_ops >= outstanding_ops_allowed) {
-	cv_req.wait(l);
-      }
-
-      l.unlock();
-      const ServerId& server = server_select_f(i);
-      dmc::ReqParams<ClientId> rp = service_tracker.get_req_params(id, server);
-      TestRequest req(i, 12);
-      submit_f(server, req, rp);
-      ++outstanding_ops;
-      l.lock(); // lock for return to top of loop
+      ops_count += i.args.req_params.count;
+    } else {
+      assert(false);
     }
-  }
+  } // for loop
 
   requests_complete = true;
 
   if (info >= 1) {
-    std::cout << "client " << id << " finished running " << ops_to_run <<
-      " ops." << std::endl;
+    std::cout << "client " << id << " finished running " << ops_count <<
+      " requests." << std::endl;
   }
 
   // all requests made, thread ends
