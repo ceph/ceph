@@ -230,6 +230,7 @@ public:
 private:
   int reweight_by_utilization(int oload,
 			      double max_change,
+			      int max_osds,
 			      bool by_pg,
 			      const set<int64_t> *pools,
 			      bool no_increasing,
