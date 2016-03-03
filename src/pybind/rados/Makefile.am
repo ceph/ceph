@@ -1,16 +1,16 @@
 EXTRA_DIST += $(srcdir)/pybind/rados/setup.py $(srcdir)/pybind/rados/rados.pyx $(srcdir)/pybind/rados/rados.pxd
 
-rados-pybind-all: librados.la ${srcdir}/ceph_ver.h
+rados-pybind-all: librados.la ./ceph_ver.h
 	cd $(srcdir)/pybind/rados; $(PY_DISTUTILS) build \
 	--build-base $(shell readlink -f $(builddir))/build \
 	--verbose
 
-rados-pybind-clean: ${srcdir}/ceph_ver.h
+rados-pybind-clean: ./ceph_ver.h
 	cd $(srcdir)/pybind/rados; $(PY_DISTUTILS) clean \
 	--build-base $(shell readlink -f $(builddir))/build \
 	--verbose
 
-rados-pybind-install-exec: ${srcdir}/ceph_ver.h
+rados-pybind-install-exec: ./ceph_ver.h
 	if test "$(DESTDIR)" ; then \
 		if lsb_release -si | grep --quiet 'Ubuntu\|Debian\|Devuan' ; then \
 			options=--install-layout=deb ; \

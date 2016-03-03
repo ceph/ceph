@@ -1,16 +1,16 @@
 EXTRA_DIST += $(srcdir)/pybind/rbd/setup.py $(srcdir)/pybind/rbd/rbd.pyx
 
-rbd-pybind-all: librbd.la ${srcdir}/ceph_ver.h
+rbd-pybind-all: librbd.la ./ceph_ver.h
 	cd $(srcdir)/pybind/rbd; $(PY_DISTUTILS) build \
 	--build-base $(shell readlink -f $(builddir))/build \
 	--verbose
 
-rbd-pybind-clean: ${srcdir}/ceph_ver.h
+rbd-pybind-clean: ./ceph_ver.h
 	cd $(srcdir)/pybind/rbd; $(PY_DISTUTILS) clean \
 	--build-base $(shell readlink -f $(builddir))/build \
 	--verbose
 
-rbd-pybind-install-exec: ${srcdir}/ceph_ver.h
+rbd-pybind-install-exec: ./ceph_ver.h
 	if test "$(DESTDIR)" ; then \
 		if lsb_release -si | grep --quiet 'Ubuntu\|Debian\|Devuan' ; then \
 			options=--install-layout=deb ; \
