@@ -1,11 +1,13 @@
 """
-Special case divergence test
+Special case divergence test with ceph-objectstore-tool export/remove/import
 """
 import logging
 import time
+from cStringIO import StringIO
 
 from teuthology import misc as teuthology
 from util.rados import rados
+import os
 
 
 log = logging.getLogger(__name__)
@@ -14,7 +16,7 @@ log = logging.getLogger(__name__)
 def task(ctx, config):
     """
     Test handling of divergent entries with prior_version
-    prior to log_tail
+    prior to log_tail and a ceph-objectstore-tool export/import
 
     overrides:
       ceph:
@@ -42,6 +44,7 @@ def task(ctx, config):
     # something that is always there
     dummyfile = '/etc/fstab'
     dummyfile2 = '/etc/resolv.conf'
+    testdir = teuthology.get_testdir(ctx)
 
     # create 1 pg pool
     log.info('creating foo')
@@ -140,8 +143,41 @@ def task(ctx, config):
 
     log.info("killing divergent %d", divergent)
     ctx.manager.kill_osd(divergent)
+
+    # Export a pg
+    (exp_remote,) = ctx.\
+        cluster.only('osd.{o}'.format(o=divergent)).remotes.iterkeys()
+    FSPATH = ctx.manager.get_filepath()
+    JPATH = os.path.join(FSPATH, "journal")
+    prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
+              "--data-path {fpath} --journal-path {jpath} "
+              "--log-file="
+              "/var/log/ceph/objectstore_tool.$$.log ".
+              format(fpath=FSPATH, jpath=JPATH))
+    pid = os.getpid()
+    expfile = os.path.join(testdir, "exp.{pid}.out".format(pid=pid))
+    cmd = ((prefix + "--op export --pgid 1.0 --file {file}").
+           format(id=divergent, file=expfile))
+    proc = exp_remote.run(args=cmd, wait=True,
+                          check_status=False, stdout=StringIO())
+    assert proc.exitstatus == 0
+
+    cmd = ((prefix + "--op remove --pgid 1.0").
+           format(id=divergent, file=expfile))
+    proc = exp_remote.run(args=cmd, wait=True,
+                          check_status=False, stdout=StringIO())
+    assert proc.exitstatus == 0
+
+    cmd = ((prefix + "--op import --file {file}").
+           format(id=divergent, file=expfile))
+    proc = exp_remote.run(args=cmd, wait=True,
+                          check_status=False, stdout=StringIO())
+    assert proc.exitstatus == 0
+
     log.info("reviving divergent %d", divergent)
     ctx.manager.revive_osd(divergent)
+    ctx.manager.wait_run_admin_socket('osd', divergent, ['dump_ops_in_flight'])
+    time.sleep(20);
 
     log.info('allowing recovery')
     # Set osd_recovery_delay_start back to 0 and kick the queue
@@ -164,4 +200,6 @@ def task(ctx, config):
     proc = remote.run(args=cmd, wait=True, check_status=False)
     assert proc.exitstatus == 0
 
+    cmd = 'rm {file}'.format(file=expfile)
+    remote.run(args=cmd, wait=True)
     log.info("success")
