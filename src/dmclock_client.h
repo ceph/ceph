@@ -81,8 +81,10 @@ namespace crimson {
 
     public:
 
-      // we have to start the counters at 1, as 0 is used in the cleaning process
-      ServiceTracker(Duration _clean_every, Duration _clean_age) :
+      // we have to start the counters at 1, as 0 is used in the
+      // cleaning process; D1 and D2 are durations
+      template<typename D1, typename D2>
+      ServiceTracker(D1 _clean_every, D2 _clean_age) :
 	delta_counter(1),
 	rho_counter(1),
 	clean_age(std::chrono::duration_cast<Duration>(_clean_age))

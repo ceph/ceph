@@ -16,15 +16,6 @@
 namespace chrono = std::chrono;
 
 
-crimson::RunEvery::RunEvery(chrono::milliseconds _wait_period,
-                            std::function<void()> _body) :
-  wait_period(chrono::duration_cast<chrono::milliseconds>(_wait_period)),
-  body(_body)
-{
-  thd = std::thread(&RunEvery::run, this);
-}
-
-
 #ifdef ADD_MOVE_SEMANTICS
 crimson::RunEvery::RunEvery()
 {

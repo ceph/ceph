@@ -14,6 +14,8 @@
 
 
 namespace crimson {
+  using std::chrono::duration_cast;
+  using std::chrono::milliseconds;
 
   // runs a given simple function object waiting wait_period
   // milliseconds between; the destructor stops the other thread
@@ -38,9 +40,15 @@ namespace crimson {
 #ifdef ADD_MOVE_SEMANTICS
     RunEvery();
 #endif
-    RunEvery(std::chrono::milliseconds _wait_period,
-	     std::function<void()>     _body);
-    ~RunEvery();
+
+    template<typename D>
+    RunEvery(D                     _wait_period,
+	     std::function<void()> _body) :
+      wait_period(duration_cast<milliseconds>(_wait_period)),
+      body(_body)
+    {
+      thd = std::thread(&RunEvery::run, this);
+    }
 
     RunEvery(const RunEvery& other) = delete;
     RunEvery& operator=(const RunEvery& other) = delete;
@@ -50,6 +58,8 @@ namespace crimson {
 #else
     RunEvery& operator=(RunEvery&& other) = delete;
 #endif
+
+    ~RunEvery();
 
   protected:
 

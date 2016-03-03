@@ -38,8 +38,9 @@ struct CliInst {
     } req_params;
   } args;
 
-  template<typename T>
-  CliInst(wait_op_t, T duration) :
+  // D is a duration type
+  template<typename D>
+  CliInst(wait_op_t, D duration) :
     op(CliOp::wait)
   {
     args.wait_time =

@@ -344,11 +344,13 @@ namespace crimson {
       std::unique_ptr<RunEvery> cleaning_job;
 
 
-      // COMMON constructor that others feed into
+      // COMMON constructor that others feed into; we can accept three
+      // different variations of durations
+      template<typename D1, typename D2, typename D3>
       PriorityQueue(ClientInfoFunc _client_info_f,
-		    Duration _idle_age,
-		    Duration _erase_age,
-		    Duration _check_time,
+		    D1 _idle_age,
+		    D2 _erase_age,
+		    D3 _check_time,
 		    bool _allow_limit_break,
 		    Mechanism _mechanism) :
 	client_info_f(_client_info_f),
@@ -372,13 +374,14 @@ namespace crimson {
       // PUSH constructors -- full and convenience
 
 
-      // push full constructor
+      // push full constructor; D1, D2, D3 are durations
+      template<typename D1, typename D2, typename D3>
       PriorityQueue(ClientInfoFunc _client_info_f,
 		    CanHandleRequestFunc _can_handle_f,
 		    HandleRequestFunc _handle_f,
-		    Duration _idle_age,
-		    Duration _erase_age,
-		    Duration _check_time,
+		    D1 _idle_age,
+		    D2 _erase_age,
+		    D3 _check_time,
 		    bool _allow_limit_break = false) :
 	PriorityQueue(_client_info_f,
 		      _idle_age, _erase_age, _check_time,
@@ -409,11 +412,12 @@ namespace crimson {
 
       // PULL constructors -- full and convenience
 
-      // pull full constructor
+      // pull full constructor; D1, D2, D3 are durations
+      template<typename D1, typename D2, typename D3>
       PriorityQueue(ClientInfoFunc _client_info_f,
-		    Duration _idle_age,
-		    Duration _erase_age,
-		    Duration _check_time,
+		    D1 _idle_age,
+		    D2 _erase_age,
+		    D3 _check_time,
 		    bool _allow_limit_break = false) :
 	PriorityQueue(_client_info_f,
 		      _idle_age, _erase_age, _check_time,
