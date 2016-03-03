@@ -126,7 +126,7 @@ int Resetter::reset_hard(int rank)
     objecter, 0, 0, &timer, &finisher);
   journaler.set_writeable();
 
-  ceph_file_layout default_log_layout = MDCache::gen_default_log_layout(*mdsmap);
+  file_layout_t default_log_layout = MDCache::gen_default_log_layout(*mdsmap);
   journaler.create(&default_log_layout, g_conf->mds_journal_format);
 
   C_SaferCond cond;
@@ -161,7 +161,7 @@ int Resetter::_write_reset_event(Journaler *journaler)
   LogEvent *le = new EResetJournal;
 
   bufferlist bl;
-  le->encode_with_header(bl);
+  le->encode_with_header(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
   
   cout << "writing EResetJournal entry" << std::endl;
   C_SaferCond cond;

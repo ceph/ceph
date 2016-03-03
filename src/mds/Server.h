@@ -141,20 +141,20 @@ public:
   CDentry *prepare_null_dentry(MDRequestRef& mdr, CDir *dir, const string& dname, bool okexist=false);
   CDentry *prepare_stray_dentry(MDRequestRef& mdr, CInode *in);
   CInode* prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
-			    ceph_file_layout *layout=NULL);
+			    file_layout_t *layout=NULL);
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
   void apply_allocated_inos(MDRequestRef& mdr);
 
   CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, set<SimpleLock*>& rdlocks, bool want_auth,
 			      bool no_want_auth=false,
-			      ceph_file_layout **layout=NULL,
+			      file_layout_t **layout=NULL,
 			      bool no_lookup=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
                                     set<SimpleLock*>& rdlocks,
                                     set<SimpleLock*>& wrlocks,
 				    set<SimpleLock*>& xlocks, bool okexist,
 				    bool mustexist, bool alwaysxlock,
-				    ceph_file_layout **layout=NULL);
+				    file_layout_t **layout=NULL);
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr);
 
@@ -173,10 +173,10 @@ public:
   void handle_client_setdirlayout(MDRequestRef& mdr);
 
   int parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
-			  ceph_file_layout *layout, bool validate=true);
+			  file_layout_t *layout, bool validate=true);
   int parse_quota_vxattr(string name, string value, quota_info_t *quota);
   void handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
-			 ceph_file_layout *dir_layout,
+			 file_layout_t *dir_layout,
 			 set<SimpleLock*> rdlocks,
 			 set<SimpleLock*> wrlocks,
 			 set<SimpleLock*> xlocks);

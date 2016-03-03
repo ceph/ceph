@@ -37,7 +37,7 @@ namespace librbd {
       m_hide_enoent(hide_enoent) {
 
     Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no,
-                            0, m_ictx->layout.fl_object_size, m_parent_extents);
+                            0, m_ictx->layout.object_size, m_parent_extents);
 
     RWLock::RLocker snap_locker(m_ictx->snap_lock);
     RWLock::RLocker parent_locker(m_ictx->parent_lock);

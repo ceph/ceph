@@ -218,7 +218,7 @@ namespace librbd {
     // reverse map this object extent onto the parent
     vector<pair<uint64_t,uint64_t> > objectx;
     Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-			  object_no, 0, m_ictx->layout.fl_object_size,
+			  object_no, 0, m_ictx->layout.object_size,
 			  objectx);
     uint64_t object_overlap = m_ictx->prune_parent_extents(objectx, overlap);
     bool may = object_overlap > 0;

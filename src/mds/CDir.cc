@@ -2116,7 +2116,7 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
 
     bufferlist snap_blob;
     in->encode_snap_blob(snap_blob);
-    in->encode_bare(bl, &snap_blob);
+    in->encode_bare(bl, cache->mds->mdsmap->get_up_features(), &snap_blob);
   }
 }
 

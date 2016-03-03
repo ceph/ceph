@@ -80,6 +80,7 @@ noinst_HEADERS += \
 	include/error.h \
 	include/filepath.h \
 	include/frag.h \
+	include/fs_types.h \
 	include/hash.h \
 	include/inline_memory.h \
 	include/intarith.h \

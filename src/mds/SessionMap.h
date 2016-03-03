@@ -303,8 +303,8 @@ public:
     completed_requests_dirty = false;
   }
 
-  bool check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
-		    int new_uid, int new_gid);
+  int check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
+		   int new_uid, int new_gid);
 
 
   Session() : 

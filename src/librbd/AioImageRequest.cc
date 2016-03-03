@@ -414,11 +414,11 @@ AioObjectRequest *AioImageDiscard::create_object_request(
   CephContext *cct = m_image_ctx.cct;
 
   AioObjectRequest *req;
-  if (object_extent.length == m_image_ctx.layout.fl_object_size) {
+  if (object_extent.length == m_image_ctx.layout.object_size) {
     req = new AioObjectRemove(&m_image_ctx, object_extent.oid.name,
                               object_extent.objectno, snapc, on_finish);
   } else if (object_extent.offset + object_extent.length ==
-               m_image_ctx.layout.fl_object_size) {
+               m_image_ctx.layout.object_size) {
     req = new AioObjectTruncate(&m_image_ctx, object_extent.oid.name,
                                 object_extent.objectno, object_extent.offset,
                                 snapc, on_finish);

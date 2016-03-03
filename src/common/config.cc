@@ -58,17 +58,6 @@ using std::string;
 
 const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf";
 
-// file layouts
-struct ceph_file_layout g_default_file_layout = {
- fl_stripe_unit: init_le32(1<<22),
- fl_stripe_count: init_le32(1),
- fl_object_size: init_le32(1<<22),
- fl_cas_hash: init_le32(0),
- fl_object_stripe_unit: init_le32(0),
- fl_unused: init_le32(-1),
- fl_pg_pool : init_le32(-1),
-};
-
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 

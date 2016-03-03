@@ -31,6 +31,7 @@ using namespace std;
 #include "buffer.h"
 #include "encoding.h"
 #include "include/types.h"
+#include "include/fs_types.h"
 
 #include "common/Formatter.h"
 
