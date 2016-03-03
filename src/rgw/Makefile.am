@@ -135,7 +135,7 @@ libcivetweb_la_SOURCES =  \
 
 libcivetweb_la_CXXFLAGS = ${CIVETWEB_INCLUDE} -fPIC -Woverloaded-virtual \
 	${AM_CXXFLAGS}
-libcivetweb_la_CFLAGS = -${CIVETWEB_INCLUDE} ${CIVETWEB_DEFINES} -I$(builddir)/include/civetweb -fPIC
+libcivetweb_la_CFLAGS = ${CIVETWEB_INCLUDE} ${CIVETWEB_DEFINES} -I$(builddir)/include/civetweb -fPIC
 LIBCIVETWEB_DEPS += -lssl -lcrypto
 
 noinst_LTLIBRARIES += libcivetweb.la
