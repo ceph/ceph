@@ -5668,7 +5668,8 @@ int RGWRados::swift_versioning_copy(RGWBucketInfo& bucket_info, RGWRados::Object
   rgw_obj& obj = source->get_obj();
   const string& src_name = obj.get_object();
   char buf[src_name.size() + 32];
-  snprintf(buf, sizeof(buf), "%03d%s%lld.%06d", (int)src_name.size(), src_name.c_str(), (long long)state->mtime, 0);
+  snprintf(buf, sizeof(buf), "%03d%s/%lld.%06d", (int)src_name.size(),
+           src_name.c_str(), (long long)state->mtime, 0);
 
   RGWBucketInfo dest_bucket_info;
 
