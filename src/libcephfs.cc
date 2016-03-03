@@ -231,6 +231,11 @@ public:
     return cwd.c_str();
   }
 
+  int chdir(const char *to)
+  {
+    return client->chdir(to, cwd);
+  }
+
   CephContext *get_ceph_context() const {
     return cct;
   }
@@ -454,7 +459,7 @@ extern "C" int ceph_chdir (struct ceph_mount_info *cmount, const char *s)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->chdir(s);
+  return cmount->chdir(s);
 }
 
 extern "C" int ceph_opendir(struct ceph_mount_info *cmount,
