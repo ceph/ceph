@@ -362,12 +362,15 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     s->bucket_owner = s->bucket_acl->get_owner();
 
     RGWZoneGroup zonegroup;
-    ret = store->get_zonegroup(s->bucket_info.zonegroup, zonegroup);
-    if (!ret) {
+    int r = store->get_zonegroup(s->bucket_info.zonegroup, zonegroup);
+    if (!r) {
       if (!zonegroup.endpoints.empty()) {
 	s->zonegroup_endpoint = zonegroup.endpoints.front();
       }
       s->zonegroup_name = zonegroup.get_name();
+    }
+    if (r < 0 && ret == 0) {
+      ret = r;
     }
 
     if (s->bucket_exists && !store->get_zonegroup().equals(s->bucket_info.zonegroup)) {
