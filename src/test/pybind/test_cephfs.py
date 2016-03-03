@@ -143,3 +143,15 @@ def test_symlink():
     cephfs.close(fd)
     cephfs.unlink('file-2')
 
+@with_setup(setup_test)
+def test_delete_cwd():
+    assert_equal("/", cephfs.getcwd())
+
+    cephfs.mkdir("/temp-directory", 0755)
+    cephfs.chdir("/temp-directory")
+    cephfs.rmdir("/temp-directory")
+
+    # getcwd gives you something stale here: it remembers the path string
+    # even when things are unlinked.  It's up to the caller to find out
+    # whether it really still exists
+    assert_equal("/temp-directory", cephfs.getcwd())
