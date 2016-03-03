@@ -6666,7 +6666,7 @@ done:
       }
       pools.insert(pool);
     }
-    double max_change = .05;
+    double max_change = g_conf->mon_reweight_max_change;
     cmd_getval(g_ceph_context, cmdmap, "max_change", max_change);
     if (max_change <= 0.0) {
       ss << "max_change " << max_change << " must be positive";
