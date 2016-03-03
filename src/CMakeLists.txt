@@ -864,7 +864,7 @@ if(${WITH_RADOSGW})
   set(civetweb_common_files civetweb/src/civetweb.c)
   add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
   target_include_directories(civetweb_common_objs PRIVATE
-	"${CMAKE_BINARY_DIR}/src/civetweb/include")
+	"${CMAKE_BINARY_DIR}/src/include/civetweb")
   set_property(TARGET civetweb_common_objs
     APPEND PROPERTY COMPILE_DEFINITIONS USE_IPV6=1)
   if(HAVE_SSL)
