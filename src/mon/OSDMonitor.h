@@ -218,7 +218,9 @@ private:
   void send_incremental(epoch_t first, MonSession *session, bool onetime);
 
   int reweight_by_utilization(int oload, std::string& out_str, bool by_pg,
-			      const set<int64_t> *pools, bool no_increasing,
+			      const set<int64_t> *pools,
+			      float max_change,
+			      bool no_increasing,
 			      bool sure);
   void print_utilization(ostream &out, Formatter *f, bool tree) const;
 

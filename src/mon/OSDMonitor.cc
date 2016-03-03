@@ -468,6 +468,7 @@ void OSDMonitor::update_logger()
  */
 int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
 					bool by_pg, const set<int64_t> *pools,
+					float max_change,
 					bool no_increasing, bool sure)
 {
   if (oload <= 100) {
@@ -593,7 +594,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
       // to represent e.g. differing storage capacities
       unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
-      new_weight = MAX(new_weight, weight - g_conf->mon_reweight_max_change);
+      new_weight = MAX(new_weight, weight - max_change);
       if (sure) {
 	pending_inc.new_weight[p->first] = new_weight;
 	changed = true;
@@ -610,7 +611,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
       // assign a higher weight.. if we can.
       unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
-      new_weight = MIN(new_weight, weight + g_conf->mon_reweight_max_change);
+      new_weight = MIN(new_weight, weight + max_change);
       if (new_weight > 0x10000)
           new_weight = 0x10000;
       if (new_weight > weight) {
@@ -6596,11 +6597,14 @@ done:
   } else if (prefix == "osd reweight-by-utilization") {
     int64_t oload;
     cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
+    float max_change;
+    cmd_getval(g_ceph_context, cmdmap, "max_change", max_change);
     string no_increasing, sure;
     cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     string out_str;
     err = reweight_by_utilization(oload, out_str, false, NULL,
+				  max_change,
 				  no_increasing == "--no-increasing",
 				  sure == "--yes-i-really-mean-it");
     if (err < 0) {
@@ -6629,12 +6633,15 @@ done:
       }
       pools.insert(pool);
     }
+    float max_change;
+    cmd_getval(g_ceph_context, cmdmap, "max_change", max_change);
     string no_increasing, sure;
     cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     string out_str;
     err = reweight_by_utilization(oload, out_str, true,
 				  pools.empty() ? NULL : &pools,
+				  max_change,
 				  no_increasing == "--no-increasing",
 				  sure == "--yes-i-really-mean-it");
     if (err < 0) {
