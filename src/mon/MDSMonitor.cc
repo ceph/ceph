@@ -367,6 +367,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   // do not match, to update our stored
   if (!(pending_daemon_health[gid] == m->get_health())) {
     dout(20) << __func__ << " health metrics for gid " << gid << " were updated" << dendl;
+    _note_beacon(m);
     return false;
   }
 
