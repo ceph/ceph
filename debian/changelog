@@ -1,3 +1,9 @@
+ceph (v10.0.4) stable; urgency=low
+
+  * New upstream release 
+
+ -- Sage Weil <sage@newdream.net>  Thu, 03 Mar 2016 13:34:18 -0500
+
 ceph (10.0.3) stable; urgency=low
 
   * New upstream release 
