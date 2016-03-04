@@ -105,7 +105,7 @@ function build_package() {
     # create the packages (with ccache)
     #
     j=$(maybe_parallel $NPROC $vers)
-    PATH=/usr/lib/ccache:$PATH dpkg-buildpackage $j -uc -us
+    PATH=/usr/lib/ccache:$PATH dpkg-buildpackage $j -uc -us -sa
 }
 
 function build_repo() {
