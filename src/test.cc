@@ -164,16 +164,25 @@ int main(int argc, char* argv[]) {
     auto c2 = clients[98]->get_op_times();
     auto c3 = clients[99]->get_op_times();
     assert (c1.size() == c2.size() && c2.size() == c3.size());
+#if 0
     auto f = [](const TestClient::TimePoint& t) -> uint64_t {
       auto c = t.time_since_epoch().count();
       return uint64_t(c / 1000000.0 + 0.5) % 100000;
     };
+#else
+    auto f = [](const TestClient::TimePoint& t) -> double {
+      auto c = t.time_since_epoch().count();
+      return uint64_t(c / 1000000.0 + 0.5) % 100000 / 1000.0;
+    };
+#endif
     const uint w = 8;
     for (uint i = 0; i < c1.size(); ++i) {
       if (i > 0) assert(c1[i-1] < c1[i]);
-      std::cout << std::setw(w) << f(c1[i]) <<
-	std::setw(w) << f(c2[i]) <<
-	std::setw(w) << f(c3[i]) << std::endl;
+      std::cout <<
+	std::setw(w) << std::fixed << std::setprecision(3) << f(c1[i]) <<
+	std::setw(w) << std::fixed << std::setprecision(3) << f(c2[i]) <<
+	std::setw(w) << std::fixed << std::setprecision(3) << f(c3[i]) <<
+	std::endl;
     }
   }
 #endif
