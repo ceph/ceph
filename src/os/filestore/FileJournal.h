@@ -282,7 +282,6 @@ private:
   enum {
     FULL_NOTFULL = 0,
     FULL_FULL = 1,
-    FULL_WAIT = 2,
   } full_state;
 
   int fd;
@@ -438,7 +437,6 @@ private:
   int make_writeable();
 
   // writes
-  void commit_start(uint64_t seq);
   void committed_thru(uint64_t seq);
   bool should_commit_now() {
     return full_state != FULL_NOTFULL && !write_stop;

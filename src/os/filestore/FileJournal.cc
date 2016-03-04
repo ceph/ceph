@@ -1702,38 +1702,6 @@ void FileJournal::batch_unpop_write(list<write_item> &items)
   writeq.splice(writeq.begin(), items);
 }
 
-void FileJournal::commit_start(uint64_t seq)
-{
-  dout(10) << "commit_start" << dendl;
-
-  // was full?
-  switch (full_state) {
-  case FULL_NOTFULL:
-    break; // all good
-
-  case FULL_FULL:
-    if (seq >= journaled_seq) {
-      dout(1) << " FULL_FULL -> FULL_WAIT.  commit_start on seq "
-	      << seq << " > journaled_seq " << journaled_seq
-	      << ", moving to FULL_WAIT."
-	      << dendl;
-      full_state = FULL_WAIT;
-    } else {
-      dout(1) << "FULL_FULL commit_start on seq "
-	      << seq << " < journaled_seq " << journaled_seq
-	      << ", remaining in FULL_FULL"
-	      << dendl;
-    }
-    break;
-
-  case FULL_WAIT:
-    dout(1) << " FULL_WAIT -> FULL_NOTFULL.  journal now active, setting completion plug." << dendl;
-    full_state = FULL_NOTFULL;
-    plug_journal_completions = true;
-    break;
-  }
-}
-
 /*
  *send discard command to joural block deivce
  */
@@ -1768,17 +1736,6 @@ void FileJournal::committed_thru(uint64_t seq)
   dout(5) << "committed_thru " << seq << " (last_committed_seq " << last_committed_seq << ")" << dendl;
   last_committed_seq = seq;
 
-  // completions!
-  {
-    Mutex::Locker locker(finisher_lock);
-    queue_completions_thru(seq);
-    if (plug_journal_completions && seq >= header.start_seq) {
-      dout(10) << " removing completion plug, queuing completions thru journaled_seq " << journaled_seq << dendl;
-      plug_journal_completions = false;
-      queue_completions_thru(journaled_seq);
-    }
-  }
-
   // adjust start pointer
   while (!journalq.empty() && journalq.front().first <= seq) {
     journalq.pop_front();
@@ -1806,14 +1763,7 @@ void FileJournal::committed_thru(uint64_t seq)
   must_write_header = true;
   print_header(header);
 
-  // committed but unjournaled items
-  while (!writeq_empty() && peek_write().seq <= seq) {
-    dout(15) << " dropping committed but unwritten seq " << peek_write().seq
-	     << " len " << peek_write().bl.length()
-	     << dendl;
-    put_throttle(1, peek_write().orig_len);
-    pop_write();
-  }
+  full_state = FULL_NOTFULL;
 
   commit_cond.Signal();
 
