@@ -165,10 +165,10 @@ int main(int argc, char* argv[]) {
     auto c3 = clients[99]->get_op_times();
     assert (c1.size() == c2.size() && c2.size() == c3.size());
     auto f = [](const TestClient::TimePoint& t) -> uint64_t {
-      // return t.time_since_epoch().count() % 1000000000000;
-      return t.time_since_epoch().count();
+      auto c = t.time_since_epoch().count();
+      return uint64_t(c / 1000000.0 + 0.5) % 100000;
     };
-    const uint w = 20;
+    const uint w = 8;
     for (uint i = 0; i < c1.size(); ++i) {
       if (i > 0) assert(c1[i-1] < c1[i]);
       std::cout << std::setw(w) << f(c1[i]) <<
