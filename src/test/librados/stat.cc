@@ -3,6 +3,8 @@
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
 
+#include "common/ceph_time.h"
+
 #include <algorithm>
 #include <errno.h>
 #include "gtest/gtest.h"
@@ -36,6 +38,77 @@ TEST_F(LibRadosStatPP, StatPP) {
   ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
   ASSERT_EQ(sizeof(buf), size);
   ASSERT_EQ(-ENOENT, ioctx.stat("nonexistent", &size, &mtime));
+}
+
+TEST_F(LibRadosStatPP, Stat2Mtime2PP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  librados::ObjectWriteOperation op;
+  struct timespec ts;
+  ts.tv_sec = 1457129052;
+  ts.tv_nsec = 123456789;
+  op.mtime2(&ts);
+  op.write(0, bl);
+  ASSERT_EQ(0, ioctx.operate("foo", &op));
+
+  uint64_t size;
+  time_t mtime;
+  ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
+  ASSERT_EQ(sizeof(buf), size);
+  ASSERT_EQ(mtime, ts.tv_sec);
+
+  struct timespec ts2;
+  ASSERT_EQ(0, ioctx.stat2("foo", &size, &ts2));
+  ASSERT_EQ(sizeof(buf), size);
+  ASSERT_EQ(ts2.tv_sec, ts.tv_sec);
+  ASSERT_EQ(ts2.tv_nsec, ts.tv_nsec);
+
+  real_time rt;
+  ASSERT_EQ(0, ioctx.stat2("foo", &size, (ceph_real_time_t *)&rt));
+  ASSERT_EQ(sizeof(buf), size);
+
+  struct timespec ts3 = ceph::real_clock::to_timespec(rt);
+  ASSERT_EQ(ts3.tv_sec, ts.tv_sec);
+  ASSERT_EQ(ts3.tv_nsec, ts.tv_nsec);
+
+  ASSERT_EQ(-ENOENT, ioctx.stat2("nonexistent", &size, (ceph_real_time_t *)&rt));
+}
+
+TEST_F(LibRadosStatPP, Stat2Mtime2RealTimePP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  librados::ObjectWriteOperation op;
+  struct timespec ts;
+  ts.tv_sec = 1457129052;
+  ts.tv_nsec = 123456789;
+  real_time rt = real_clock::from_timespec(ts);
+  op.mtime2((ceph_real_time_t *)&rt);
+  op.write(0, bl);
+  ASSERT_EQ(0, ioctx.operate("foo", &op));
+
+  uint64_t size;
+  time_t mtime;
+  ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
+  ASSERT_EQ(sizeof(buf), size);
+  ASSERT_EQ(mtime, ts.tv_sec);
+
+  struct timespec ts2;
+  ASSERT_EQ(0, ioctx.stat2("foo", &size, &ts2));
+  ASSERT_EQ(sizeof(buf), size);
+  ASSERT_EQ(ts2.tv_sec, ts.tv_sec);
+  ASSERT_EQ(ts2.tv_nsec, ts.tv_nsec);
+
+  real_time rt2;
+  ASSERT_EQ(0, ioctx.stat2("foo", &size, (ceph_real_time_t *)&rt2));
+  ASSERT_EQ(sizeof(buf), size);
+
+  ASSERT_EQ(rt, rt2);
+
+  ASSERT_EQ(-ENOENT, ioctx.stat2("nonexistent", &size, (ceph_real_time_t *)&rt));
 }
 
 TEST_F(LibRadosStat, StatNS) {
