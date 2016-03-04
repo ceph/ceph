@@ -1206,20 +1206,8 @@ void FileJournal::do_write(bufferlist& bl)
     Mutex::Locker locker(finisher_lock);
     journaled_seq = writing_seq;
 
-    // kick finisher?
-    //  only if we haven't filled up recently!
-    if (full_state != FULL_NOTFULL) {
-      dout(10) << "do_write NOT queueing finisher seq " << journaled_seq
-	       << ", full_commit_seq|full_restart_seq" << dendl;
-    } else {
-      if (plug_journal_completions) {
-	dout(20) << "do_write NOT queueing finishers through seq " << journaled_seq
-		 << " due to completion plug" << dendl;
-      } else {
-	dout(20) << "do_write queueing finishers through seq " << journaled_seq << dendl;
-	queue_completions_thru(journaled_seq);
-      }
-    }
+    dout(20) << "do_write queueing finishers through seq " << journaled_seq << dendl;
+    queue_completions_thru(journaled_seq);
   }
 }
 
@@ -1560,22 +1548,10 @@ void FileJournal::check_aio_completion()
   }
 
   if (completed_something) {
-    // kick finisher?
-    //  only if we haven't filled up recently!
     Mutex::Locker locker(finisher_lock);
     journaled_seq = new_journaled_seq;
-    if (full_state != FULL_NOTFULL) {
-      dout(10) << "check_aio_completion NOT queueing finisher seq " << journaled_seq
-	       << ", full_commit_seq|full_restart_seq" << dendl;
-    } else {
-      if (plug_journal_completions) {
-	dout(20) << "check_aio_completion NOT queueing finishers through seq " << journaled_seq
-		 << " due to completion plug" << dendl;
-      } else {
-	dout(20) << "check_aio_completion queueing finishers through seq " << journaled_seq << dendl;
-	queue_completions_thru(journaled_seq);
-      }
-    }
+    dout(20) << "check_aio_completion queueing finishers through seq " << journaled_seq << dendl;
+    queue_completions_thru(journaled_seq);
   }
   if (signal) {
     // maybe write queue was waiting for aio count to drop?

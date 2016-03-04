@@ -62,7 +62,6 @@ public:
   Mutex finisher_lock;
   Cond finisher_cond;
   uint64_t journaled_seq;
-  bool plug_journal_completions;
 
   Mutex writeq_lock;
   Cond writeq_cond;
@@ -372,7 +371,6 @@ private:
     Journal(fsid, fin, sync_cond),
     finisher_lock("FileJournal::finisher_lock", false, true, false, g_ceph_context),
     journaled_seq(0),
-    plug_journal_completions(false),
     writeq_lock("FileJournal::writeq_lock", false, true, false, g_ceph_context),
     completions_lock(
       "FileJournal::completions_lock", false, true, false, g_ceph_context),
