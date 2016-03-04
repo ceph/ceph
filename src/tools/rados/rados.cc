@@ -429,7 +429,7 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
       }
       continue;
     }
-    indata.append(buf, count);
+    indata.append(buffer::ptr(buffer::create_static(count, buf)));
     if (use_striper) {
       if (offset == 0)
 	ret = striper.write_full(oid, indata);
