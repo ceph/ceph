@@ -30,6 +30,7 @@ def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
             clone_repo(repo_url, dest_path, branch)
         elif time.time() - os.stat('/etc/passwd').st_mtime > 60:
             # only do this at most once per minute
+            set_remote(dest_path, repo_url)
             fetch(dest_path)
             out = subprocess.check_output(('touch', dest_path))
             if out:
@@ -77,6 +78,26 @@ def clone_repo(repo_url, dest_path, branch):
     elif result != 0:
         # Unknown error
         raise GitError("git clone failed!")
+
+
+def set_remote(repo_path, repo_url):
+    """
+    Call "git remote set-url origin <repo_url>"
+
+    :param repo_url:  The full URL to the repo (not including the branch)
+    :param repo_path: The full path to the repository
+    :raises:          GitError if the operation fails
+    """
+    log.debug("Setting repo remote to  %s", repo_url)
+    proc = subprocess.Popen(
+        ('git', 'remote', 'set-url', 'origin', repo_url),
+        cwd=repo_path,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    if proc.wait() != 0:
+        out = proc.stdout.read()
+        log.error(out)
+        raise GitError("git remote set-url failed!")
 
 
 def fetch(repo_path):
