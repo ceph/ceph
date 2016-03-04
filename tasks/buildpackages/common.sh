@@ -33,7 +33,10 @@ function get_ceph() {
 
     test -d ceph || git clone ${git_ceph_url}
     cd ceph
-    git fetch --tags http://github.com/ceph/ceph
+    if test -d src ; then # so we don't try to fetch when using a fixture
+       git fetch --tags http://github.com/ceph/ceph
+    fi
+    git fetch --tags ${git_ceph_url}
     git checkout ${sha1}
 }
 
