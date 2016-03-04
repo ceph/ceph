@@ -46,7 +46,7 @@ releasedir=$base/$(lsb_release -si)/WORKDIR
 # c) compares higher than any previous commit
 # d) contains the short hash of the commit
 #
-vers=$(git describe --long --match "v*" | sed s/^v//)
+vers=$(git describe --match "v*" | sed s/^v//)
 ceph_dir=$(pwd)
 
 #
