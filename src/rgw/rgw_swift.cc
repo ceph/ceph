@@ -668,7 +668,8 @@ bool RGWSwift::verify_swift_token(RGWRados *store, req_state *s)
 
 bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
 {
-  if (!s->os_auth_token) {
+  if (s->info.args.exists("temp_url_sig") ||
+      s->info.args.exists("temp_url_expires")) {
     int ret = authenticate_temp_url(store, s);
     return (ret >= 0);
   }
