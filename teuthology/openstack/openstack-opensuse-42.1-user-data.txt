@@ -1,0 +1,24 @@
+#cloud-config
+bootcmd:
+ - echo nameserver {nameserver} | tee /etc/resolv.conf
+ - echo search {lab_domain} | tee -a /etc/resolv.conf
+ - sed -ie 's/PEERDNS="yes"/PEERDNS="no"/' /etc/sysconfig/network-scripts/ifcfg-eth0
+ - ( curl --silent http://169.254.169.254/2009-04-04/meta-data/hostname | sed -e 's/[\.-].*//' ; eval printf "%03d%03d%03d%03d.{lab_domain}" $(curl --silent http://169.254.169.254/2009-04-04/meta-data/local-ipv4 | tr . ' ' ) ) | tee /etc/hostname
+ - hostname $(cat /etc/hostname)
+ - ( echo ; echo "MaxSessions 1000" ) >> /etc/ssh/sshd_config
+# See https://github.com/ceph/ceph-cm-ansible/blob/master/roles/cobbler/templates/snippets/cephlab_user
+ - ( echo 'Defaults !requiretty' ; echo 'Defaults visiblepw' ) | tee /etc/sudoers.d/cephlab_sudo ; chmod 0440 /etc/sudoers.d/cephlab_sudo
+preserve_hostname: true
+users: 
+  - name: {username}
+    gecos: User
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    groups: users
+runcmd:
+ - ( MYHOME=/home/{username} ; mkdir $MYHOME/.ssh ; chmod 700 $MYHOME/.ssh ; cp /root/.ssh/authorized_keys $MYHOME/.ssh ; chown -R {username}.users $MYHOME/.ssh )
+packages:
+ - python
+ - wget
+ - git
+ - ntp
+final_message: "{up}, after $UPTIME seconds"
