@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
 
   const TestClient::TimePoint early_time = TestClient::now();
   const chrono::seconds skip_amount(0); // skip first 2 secondsd of data
-  const chrono::seconds measure_unit(5); // calculate in groups of 5 seconds
+  const chrono::seconds measure_unit(2); // calculate in groups of 5 seconds
   const chrono::seconds report_unit(1); // unit to output reports in
 
   // server params
@@ -49,13 +49,13 @@ int main(int argc, char* argv[]) {
 
   // client params
 
-  const uint client_total_ops = 60;
+  const uint client_total_ops = 100;
   const uint client_count = 100;
   const uint client_wait_count = 1;
-  const uint client_iops_goal = 2;
+  const uint client_iops_goal = 5;
   const uint client_outstanding_ops = 10;
-  const double client_reservation = 1.0;
-  const double client_limit = 3.0;
+  const double client_reservation = 2.0;
+  const double client_limit = 6.0;
   const double client_weight = 1.0;
 
   dmc::ClientInfo client_info =
@@ -89,12 +89,22 @@ int main(int argc, char* argv[]) {
 
   // construct clients
 
-  // lambda to choose a server based on a seed; called by client
-  SelectFunc server_alternate_f =
-    [&server_ids](uint64_t seed) -> const ServerId& {
-    int index = seed % server_ids.size();
+  // lambda to choose a server based on a seed and client; called by client
+  auto server_alternate_f =
+    [&server_ids](uint16_t client_idx, uint64_t seed) -> const ServerId& {
+    int index = (client_idx + seed) % server_ids.size();
     return server_ids[index];
   };
+
+#if 0
+  // lambda to return a lambda choose a server based on a seed; called by client
+  auto make_server_alternate_f = [&](uint client_id) -> SelectFunc {
+    return [client_id, &server_ids](uint64_t seed) -> const ServerId& {
+      int index = (client_id + seed) % server_ids.size();
+      return server_ids[index];
+    };
+  };
+#endif
 
   std::default_random_engine
     srv_rand(std::chrono::system_clock::now().time_since_epoch().count());
@@ -105,6 +115,16 @@ int main(int argc, char* argv[]) {
     int index = srv_rand() % server_ids.size();
     return server_ids[index];
   };
+
+  // lambda to choose a server randomly
+  auto server_ran_range_f =
+    [&server_ids, &srv_rand] (uint16_t client_idx, uint16_t client_count, uint16_t servers_per, uint64_t seed) -> const ServerId& {
+    double factor = double(server_ids.size()) / client_count;
+    uint offset = srv_rand() % servers_per;
+    uint index = (uint(0.5 + client_idx * factor) + offset) % server_ids.size();
+    return server_ids[index];
+  };
+
 
   // lambda to always choose the first server
   SelectFunc server_0_f =
@@ -129,12 +149,29 @@ int main(int argc, char* argv[]) {
       { { wait_op, std::chrono::seconds(10) },
 	{ req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
 
+    SelectFunc server_select_f =
+#if 0
+      std::bind(server_alternate_f, i, _1)
+#elseif 0
+      server_random_f
+#else
+      std::bind(server_ran_range_f, i, client_count, 8, _1)
+#endif
+      ;
+
     clients[i] =
       new TestClient(i,
 		     server_post_f,
-		     server_random_f,
-		     i < (client_count - client_wait_count) ? no_wait : wait);
-  }
+		     server_select_f,
+#if 0
+		     i < client_wait_count ? wait : no_wait
+#else
+		     i < (client_count - client_wait_count) ? no_wait : wait
+#endif
+	);
+  } // for
+
+  auto clients_created_time = TestClient::now();
 
   // clients are now running; wait for all to finish
 
@@ -160,22 +197,23 @@ int main(int argc, char* argv[]) {
     if (end > latest_finish) { latest_finish = end; }
   }
 
-#if 1
-  auto c1 = clients[0]->get_op_times();
-  auto c2 = clients[98]->get_op_times();
-  auto c3 = clients[99]->get_op_times();
-  assert (c1.size() == c2.size() && c2.size() == c3.size());
-#if 0
-  auto f = [](const TestClient::TimePoint& t) -> uint64_t {
-    auto c = t.time_since_epoch().count();
-    return uint64_t(c / 1000000.0 + 0.5) % 100000;
-  };
-#else
+  double ops_factor =
+    std::chrono::duration_cast<std::chrono::duration<double>>(measure_unit) /
+    std::chrono::duration_cast<std::chrono::duration<double>>(report_unit);
+
+#if 0 // lambda to format TimePoints
   auto f = [](const TestClient::TimePoint& t) -> double {
     auto c = t.time_since_epoch().count();
     return uint64_t(c / 1000000.0 + 0.5) % 100000 / 1000.0;
   };
 #endif
+
+#if 0
+  auto c1 = clients[0]->get_op_times();
+  auto c2 = clients[98]->get_op_times();
+  auto c3 = clients[99]->get_op_times();
+  assert (c1.size() == c2.size() && c2.size() == c3.size());
+  
   const uint w = 8;
   for (uint i = 0; i < c1.size(); ++i) {
     if (i > 0) assert(c1[i-1] < c1[i]);
@@ -185,24 +223,16 @@ int main(int argc, char* argv[]) {
       std::setw(w) << std::fixed << std::setprecision(3) << f(c3[i]) <<
       std::endl;
   }
-
 #endif
-
-  const auto start_edge = earliest_start + skip_amount;
+  
+  const auto start_edge = clients_created_time + skip_amount;
 
   std::map<ClientId,std::vector<double>> ops_data;
-  double ops_factor =
-    std::chrono::duration_cast<std::chrono::duration<double>>(measure_unit) /
-    std::chrono::duration_cast<std::chrono::duration<double>>(report_unit);
 
   for (auto const &c : clients) {
-    auto cond = [&](std::function<void()> body) { if (99 == c.first) body(); };
-    
     auto it = c.second->get_op_times().begin();
     const auto end = c.second->get_op_times().end();
     while (it != end && *it < start_edge) { ++it; }
-
-    cond([&](){ std::cout << "start edge: " << f(start_edge) << std::endl; });
 
     for (auto time_edge = start_edge + measure_unit;
 	 time_edge < latest_finish;
@@ -211,7 +241,6 @@ int main(int argc, char* argv[]) {
       for (; it != end && *it < time_edge; ++count, ++it) { /* empty */ }
       double ops_per_second = double(count) / ops_factor;
       ops_data[c.first].push_back(ops_per_second);
-      cond([&](){ std::cout << "next edge: " << f(time_edge) << "; count=" << count << "; ops=" << ops_per_second << std::endl; });
     }
   }
 

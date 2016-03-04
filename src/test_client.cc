@@ -77,24 +77,25 @@ void TestClient::run_req() {
       std::this_thread::sleep_for(i.args.wait_time);
     } else if (CliOp::req == i.op) {
       Lock l(mtx_req);
-      auto now = std::chrono::steady_clock::now();
       for (uint64_t o = 0; o < i.args.req_params.count; ++o) {
-	auto when = now + i.args.req_params.time_bw_reqs;
-	while ((now = std::chrono::steady_clock::now()) < when) {
-	  cv_req.wait_until(l, when);
-	}
 	while (outstanding_ops >= i.args.req_params.max_outstanding) {
 	  cv_req.wait(l);
 	}
 
 	l.unlock();
+	auto now = std::chrono::steady_clock::now();
 	const ServerId& server = server_select_f(o);
 	dmc::ReqParams<ClientId> rp = service_tracker.get_req_params(id, server);
 	TestRequest req(o, 12);
 	submit_f(server, req, rp);
 	++outstanding_ops;
 	l.lock(); // lock for return to top of loop
-      }
+
+	auto delay_time = now + i.args.req_params.time_bw_reqs;
+	while (std::chrono::steady_clock::now() < delay_time) {
+	  cv_req.wait_until(l, delay_time);
+	} // while
+      } // for
       ops_count += i.args.req_params.count;
     } else {
       assert(false);
