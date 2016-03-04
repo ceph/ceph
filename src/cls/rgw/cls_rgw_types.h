@@ -7,6 +7,8 @@
 #include "include/utime.h"
 #include "common/Formatter.h"
 
+#include "rgw/rgw_basic_types.h"
+
 #define CEPH_RGW_REMOVE 'r'
 #define CEPH_RGW_UPDATE 'u'
 #define CEPH_RGW_TAG_TIMEOUT 60*60*24
@@ -662,7 +664,8 @@ WRITE_CLASS_ENCODER(rgw_usage_data)
 
 
 struct rgw_usage_log_entry {
-  string owner;
+  rgw_user owner;
+  rgw_user payer; /* if empty, same as owner */
   string bucket;
   uint64_t epoch;
   rgw_usage_data total_usage; /* this one is kept for backwards compatibility */
@@ -670,10 +673,11 @@ struct rgw_usage_log_entry {
 
   rgw_usage_log_entry() : epoch(0) {}
   rgw_usage_log_entry(string& o, string& b) : owner(o), bucket(b), epoch(0) {}
+  rgw_usage_log_entry(string& o, string& p, string& b) : owner(o), payer(p), bucket(b), epoch(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
-    ::encode(owner, bl);
+    ENCODE_START(3, 1, bl);
+    ::encode(owner.to_str(), bl);
     ::encode(bucket, bl);
     ::encode(epoch, bl);
     ::encode(total_usage.bytes_sent, bl);
@@ -681,13 +685,16 @@ struct rgw_usage_log_entry {
     ::encode(total_usage.ops, bl);
     ::encode(total_usage.successful_ops, bl);
     ::encode(usage_map, bl);
+    ::encode(payer.to_str(), bl);
     ENCODE_FINISH(bl);
   }
 
 
    void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
-    ::decode(owner, bl);
+    DECODE_START(3, bl);
+    string s;
+    ::decode(s, bl);
+    owner.from_str(s);
     ::decode(bucket, bl);
     ::decode(epoch, bl);
     ::decode(total_usage.bytes_sent, bl);
@@ -699,6 +706,11 @@ struct rgw_usage_log_entry {
     } else {
       ::decode(usage_map, bl);
     }
+    if (struct_v >= 3) {
+      string p;
+      ::decode(p, bl);
+      payer.from_str(p);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -707,6 +719,10 @@ struct rgw_usage_log_entry {
       owner = e.owner;
       bucket = e.bucket;
       epoch = e.epoch;
+      payer = e.payer;
+    }
+    if (payer != e.payer) {
+      return; /* can't aggregate differet payers */
     }
     map<string, rgw_usage_data>::const_iterator iter;
     for (iter = e.usage_map.begin(); iter != e.usage_map.end(); ++iter) {
@@ -756,7 +772,7 @@ struct rgw_user_bucket {
   string bucket;
 
   rgw_user_bucket() {}
-  rgw_user_bucket(string &u, string& b) : user(u), bucket(b) {}
+  rgw_user_bucket(const string& u, const string& b) : user(u), bucket(b) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

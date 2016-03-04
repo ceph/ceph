@@ -839,9 +839,6 @@ static inline bool check_deferred_bucket_acl(struct req_state * const s,
                                              const uint8_t deferred_check,
                                              const int perm)
 {
-  if (!verify_requester_payer_permission(s))
-    return false;
-
   return (s->defer_to_bucket_acls == deferred_check \
               && verify_bucket_permission(s, bucket_acl, perm));
 }
@@ -851,6 +848,9 @@ bool verify_object_permission(struct req_state * const s,
                               RGWAccessControlPolicy * const object_acl,
                               const int perm)
 {
+  if (!verify_requester_payer_permission(s))
+    return false;
+
   if (check_deferred_bucket_acl(s, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
       check_deferred_bucket_acl(s, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
     return true;
