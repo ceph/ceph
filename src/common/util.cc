@@ -159,6 +159,7 @@ static bool lsb_release_parse(map<string, string> *m, CephContext *cct)
       { "distro_version", "Release:" }
   };
 
+#if defined(__linux__)
   FILE *fp = popen("lsb_release -idrc", "r");
   if (!fp) {
     int ret = -errno;
@@ -209,6 +210,7 @@ static void distro_detect(map<string, string> *m, CephContext *cct)
     if (m->find(rk) == m->end())
       lderr(cct) << "distro_detect - can't detect " << rk << dendl;
   }
+#endif
 }
 
 void collect_sys_info(map<string, string> *m, CephContext *cct)
