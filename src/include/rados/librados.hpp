@@ -357,14 +357,14 @@ namespace librados
   class CEPH_RADOS_API ObjectWriteOperation : public ObjectOperation
   {
   protected:
-    time_t *pmtime;
+    time_t *unused;
   public:
-    ObjectWriteOperation() : pmtime(NULL) {}
+    ObjectWriteOperation() : unused(NULL) {}
     ~ObjectWriteOperation() {}
 
-    void mtime(time_t *pt) {
-      pmtime = pt;
-    }
+    void mtime(time_t *pt);
+    void mtime2(struct timespec *pts);
+    void mtime2(ceph_real_time_t *pmtime);
 
     void create(bool exclusive);
     void create(bool exclusive,

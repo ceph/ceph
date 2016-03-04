@@ -79,6 +79,12 @@
     ctf_integer(long int, field##_usec, (p) == NULL ? 0 : (p)->tv_usec) \
     ctf_integer(uint8_t, field##_isnull, (p) == NULL)
 
+// p should be of type struct timespec*
+#define ceph_ctf_timespecp(field, p) \
+    ctf_integer(long int, field##_sec, (p) == NULL ? 0 : (p)->tv_sec) \
+    ctf_integer(long int, field##_nsec, (p) == NULL ? 0 : (p)->tv_nsec) \
+    ctf_integer(uint8_t, field##_isnull, (p) == NULL)
+
 // val should be of type time_t
 // Currently assumes that time_t is an integer and no more than 64 bits wide.
 // This is verified by the configure script.
