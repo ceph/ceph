@@ -3,6 +3,9 @@
 # Environment file for ceph daemon systemd unit files.
 #
 
+# Increase tcmalloc cache size
+TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=128MB
+
 ## use jemalloc instead of tcmalloc
 #
 # jemalloc is generally faster for small IO workloads and when
