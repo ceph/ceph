@@ -439,7 +439,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     RGWCoroutinesStack *stack = *iter;
     env.stack = stack;
 
-    int ret = stack->operate(&env);
+    ret = stack->operate(&env);
     stack->set_is_scheduled(false);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: stack->operate() returned ret=" << ret << dendl;
@@ -531,6 +531,9 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       }
       handle_unblocked_stack(context_stacks, scheduled_stacks, blocked_stack, &blocked_count);
       iter = scheduled_stacks.begin();
+    }
+    if (ret == -ECANCELED) {
+      break;
     }
 
     if (iter == scheduled_stacks.end()) {
