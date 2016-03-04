@@ -1,4 +1,12 @@
-#!/bin/bash
+#!/bin/bash -xv
+
+verbose=true
+# pipes exit with fail if any of the commands fail.
+set -o pipestatus
+PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
+
+timeout=$(which timeout)
+TIMEOUT=120
 
 die() {
     echo "$@"
@@ -16,20 +24,52 @@ EOF
 }
 
 do_run() {
-    if [ "$1" == "--tee" ]; then
+    if [ "$1" = "--tee" ]; then
       shift
       tee_out="$1"
       shift
-      "$@" | tee $tee_out
+      run_timeout "$@" | tee $tee_out
     else
-      "$@"
+      run_timeout "$@"
     fi
+}
+
+function run_timeout() {
+    local status
+        local cmd
+        cmd="$@"
+
+    $timeout $TIMEOUT $cmd
+    status=$?
+    case $status in
+      0)
+        return 0
+        ;;
+      124)
+        echo "$cmd" has timed out.
+        ;;
+      126)
+        echo "$cmd" was invalid
+        ;;
+      127)
+        echo "$cmd" does not exist
+        ;;
+      *)
+        echo "$cmd" returned status $?
+        ;;
+    esac
+    return 1
+
 }
 
 run_expect_fail() {
     echo "RUN_EXPECT_FAIL: " "$@"
     do_run "$@"
     [ $? -eq 0 ] && die "expected failure, but got success! cmd: $@"
+}
+
+run_expect_fail_noout() {
+    run_expect_fail "$@" > /dev/null
 }
 
 run_expect_succ() {
@@ -155,17 +195,17 @@ for i in `seq 1 5`; do
 
 # a few random attrs
   for j in `seq 1 4`; do
-    rand_str=`dd if=/dev/urandom bs=4 count=1 | hexdump -x`
+    rand_str=`dd if=/dev/urandom bs=4 count=1 | hexdump -x | head -1 | sed 's/ //g'`
     run_expect_succ "$RADOS_TOOL" -p "$POOL" setxattr $objname attr.$j "$rand_str"
     run_expect_succ --tee "$fname.attr.$j" "$RADOS_TOOL" -p "$POOL" getxattr $objname attr.$j
   done
 
-  rand_str=`dd if=/dev/urandom bs=4 count=1 | hexdump -x`
+  rand_str=`dd if=/dev/urandom bs=4 count=1 | hexdump -x | head -1 | sed 's/ //g'`
   run_expect_succ "$RADOS_TOOL" -p "$POOL" setomapheader $objname "$rand_str"
   run_expect_succ --tee "$fname.omap.header" "$RADOS_TOOL" -p "$POOL" getomapheader $objname
 # a few random omap keys
   for j in `seq 1 4`; do
-    rand_str=`dd if=/dev/urandom bs=4 count=1 | hexdump -x`
+    rand_str=`dd if=/dev/urandom bs=4 count=1 | hexdump -x | head -1 | sed 's/ //g'`
     run_expect_succ "$RADOS_TOOL" -p "$POOL" setomapval $objname key.$j "$rand_str"
   done
   run_expect_succ --tee "$fname.omap.vals" "$RADOS_TOOL" -p "$POOL" listomapvals $objname
@@ -230,6 +270,9 @@ run_expect_succ "$RADOS_TOOL" mkpool delete_me_mkpool_test 0 0
 run_expect_fail "$RADOS_TOOL" mkpool delete_me_mkpool_test2 0k 0
 run_expect_fail "$RADOS_TOOL" mkpool delete_me_mkpool_test3 0 0k
 
+# for the benchmarks we reserve a bit more time
+TIMEOUT=300
+
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 write
 run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 1k write
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 write --format json --output "$TDIR/bench.json"
@@ -244,13 +287,14 @@ run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-xattr --write
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-xattr --write-omap
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-omap --write-object
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-xattr --write-omap --write-object
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-omap
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-object
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr --write-object
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr --write-omap
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-omap --write-object
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr --write-omap --write-object
+
+run_expect_fail_noout "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-omap 
+run_expect_fail_noout "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-object
+run_expect_fail_noout "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr
+run_expect_fail_noout "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr --write-object
+run_expect_fail_noout "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr --write-omap
+run_expect_fail_noout "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-omap --write-object
+run_expect_fail_noout "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr --write-omap --write-object
 
 for i in $("$RADOS_TOOL" --pool "$POOL" ls | grep "benchmark_data"); do
     "$RADOS_TOOL" --pool "$POOL" truncate $i 0
@@ -269,6 +313,7 @@ expect_false()
 }
 
 cleanup() {
+    # Ignore the result
     $RADOS_TOOL -p $POOL rm $OBJ || true
 }
 
@@ -304,7 +349,7 @@ test_xattr() {
     $RADOS_TOOL -p $POOL listxattr $OBJ > $V1
     grep -q foo $V1
     grep -q bar $V1
-    wc -l $V1 | grep -q "^2 "
+    wc -l $V1 | grep -q "^\W*2 "
     rm $V1 $V2
     cleanup
 }
@@ -345,18 +390,18 @@ test_ls() {
 	done
     done
     CHECK=$("$RADOS_TOOL" -p $p ls 2> /dev/null | wc -l)
-    if test "$OBJS" != "$CHECK";
+    if test "$OBJS" -ne "$CHECK";
     then
         die "Created $OBJS objects in default namespace but saw $CHECK"
     fi
     TESTNS=NS${NS}
     CHECK=$("$RADOS_TOOL" -p $p -N $TESTNS ls 2> /dev/null | wc -l)
-    if test "$OBJS" != "$CHECK";
+    if test "$OBJS" -ne "$CHECK";
     then
         die "Created $OBJS objects in $TESTNS namespace but saw $CHECK"
     fi
     CHECK=$("$RADOS_TOOL" -p $p --all ls 2> /dev/null | wc -l)
-    if test "$TOTAL" != "$CHECK";
+    if test "$TOTAL" -ne "$CHECK";
     then
         die "Created $TOTAL objects but saw $CHECK"
     fi
@@ -377,7 +422,7 @@ test_cleanup() {
     do
         for onum in `seq 1 $OBJS`
         do
-	    if [ "$nsnum" = "0" ];
+	    if [ $nsnum -eq 0 ];
 	    then
                 "$RADOS_TOOL" -p $p put obj${onum} /etc/fstab 2> /dev/null
             else
@@ -399,7 +444,7 @@ test_cleanup() {
     $RADOS_TOOL -p $p -N NS3 cleanup 2> /dev/null
     #echo "Check NS3 after specific cleanup"
     CHECK=$($RADOS_TOOL -p $p -N NS3 ls | wc -l)
-    if test "$OBJS" != "$CHECK";
+    if test "$OBJS" -ne "$CHECK";
     then
         die "Expected $OBJS objects in NS3 but saw $CHECK"
     fi
@@ -409,7 +454,7 @@ test_cleanup() {
     #echo "Check all namespaces"
     $RADOS_TOOL -p $p --all ls > $TDIR/after.ls.out 2> /dev/null
     CHECK=$(cat $TDIR/after.ls.out | wc -l)
-    if test "$TOTAL" != "$CHECK";
+    if test "$TOTAL" -ne "$CHECK";
     then
         die "Expected $TOTAL objects but saw $CHECK"
     fi
