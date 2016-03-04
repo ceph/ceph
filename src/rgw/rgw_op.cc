@@ -362,12 +362,15 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     s->bucket_owner = s->bucket_acl->get_owner();
 
     RGWZoneGroup zonegroup;
-    ret = store->get_zonegroup(s->bucket_info.zonegroup, zonegroup);
-    if (!ret) {
+    int r = store->get_zonegroup(s->bucket_info.zonegroup, zonegroup);
+    if (!r) {
       if (!zonegroup.endpoints.empty()) {
 	s->zonegroup_endpoint = zonegroup.endpoints.front();
       }
       s->zonegroup_name = zonegroup.get_name();
+    }
+    if (r < 0 && ret == 0) {
+      ret = r;
     }
 
     if (s->bucket_exists && !store->get_zonegroup().equals(s->bucket_info.zonegroup)) {
@@ -3010,8 +3013,12 @@ int RGWCopyObj::verify_permission()
     /* will only happen in intra region sync where the source and dest bucket is the same */
     op_ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, src_bucket_info, NULL, &src_attrs);
   }
-  if (op_ret < 0)
+  if (op_ret < 0) {
+    if (op_ret == -ENOENT) {
+      op_ret = -ERR_NO_SUCH_BUCKET;
+    }
     return op_ret;
+  }
 
   src_bucket = src_bucket_info.bucket;
 
@@ -3043,8 +3050,12 @@ int RGWCopyObj::verify_permission()
   } else {
     op_ret = store->get_bucket_info(obj_ctx, dest_tenant_name, dest_bucket_name,
 				    dest_bucket_info, NULL, &dest_attrs);
-    if (op_ret < 0)
+    if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        op_ret = -ERR_NO_SUCH_BUCKET;
+      }
       return op_ret;
+    }
   }
 
   dest_bucket = dest_bucket_info.bucket;
