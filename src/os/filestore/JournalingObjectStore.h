@@ -41,9 +41,6 @@ protected:
       Mutex::Locker l(lock);
       op_submitted = op_seq = seq;
     }
-    uint64_t get_op_seq() {
-      return op_seq;
-    }
   } submit_manager;
 
   class ApplyManager {
