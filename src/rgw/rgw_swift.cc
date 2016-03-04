@@ -539,6 +539,25 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
   return 0;
 }
 
+static string temp_url_gen_sig(const string& key,
+                               const string& method,
+                               const string& path,
+                               const string& expires)
+{
+  const string str = method + "\n" + expires + "\n" + path;
+  //dout(20) << "temp url signature (plain text): " << str << dendl;
+
+  /* unsigned */ char dest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
+  calc_hmac_sha1(key.c_str(), key.size(),
+                 str.c_str(), str.size(),
+                 dest);
+
+  char dest_str[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1];
+  buf_to_hex((const unsigned char *)dest, sizeof(dest), dest_str);
+
+  return dest_str;
+}
+
 int authenticate_temp_url(RGWRados *store, req_state *s)
 {
   /* temp url requires bucket and object specified in the requets */
@@ -589,32 +608,55 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
     return -EPERM;
   }
 
-  /* strip the swift prefix from the uri */
-  int pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
-  string object_path = s->info.request_uri.substr(pos + 1);
-  string str = string(s->info.method) + "\n" + temp_url_expires + "\n" + object_path;
+  /* We need to verify two paths because of compliance with Swift, Tempest
+   * and old versions of RadosGW. The second item will have the prefix
+   * of Swift API entry point removed. */
+  const size_t pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
+  vector<string> allowed_paths;
+  allowed_paths.push_back(s->info.request_uri);
+  allowed_paths.push_back(s->info.request_uri.substr(pos + 1));
 
-  dout(20) << "temp url signature (plain text): " << str << dendl;
+  vector<string> allowed_methods;
+  allowed_methods.push_back(s->info.method);
+  if (strcmp("HEAD", s->info.method) == 0) {
+    /* HEAD requests are specially handled. */
+    allowed_methods.push_back("PUT");
+    allowed_methods.push_back("GET");
+  }
 
-  map<int, string>::iterator iter;
-  for (iter = s->user.temp_url_keys.begin(); iter != s->user.temp_url_keys.end(); ++iter) {
-    string& temp_url_key = iter->second;
+  /* Need to try each combination of keys, allowed path and methods. */
+  map<int, string>::const_iterator key_iter;
+  for (key_iter = s->user.temp_url_keys.begin(); key_iter != s->user.temp_url_keys.end(); ++key_iter) {
+    const int temp_url_key_num = key_iter->first;
+    const string& temp_url_key = key_iter->second;
 
-    if (temp_url_key.empty())
+    if (temp_url_key.empty()) {
       continue;
+    }
 
-    char dest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
-    calc_hmac_sha1(temp_url_key.c_str(), temp_url_key.size(),
-                   str.c_str(), str.size(), dest);
+    vector<string>::const_iterator path_iter;
+    for (path_iter = allowed_paths.begin(); path_iter != allowed_paths.end(); ++path_iter) {
+      vector<string>::const_iterator method_iter;
+      for (method_iter = allowed_methods.begin(); method_iter != allowed_methods.end(); ++method_iter) {
+        const string local_sig = temp_url_gen_sig(temp_url_key,
+                                                  *method_iter, *path_iter,
+                                                  temp_url_expires);
 
-    char dest_str[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1];
-    buf_to_hex((const unsigned char *)dest, sizeof(dest), dest_str);
-    dout(20) << "temp url signature [" << iter->first << "] (calculated): " << dest_str << dendl;
+        dout(20) << "temp url signature [" << temp_url_key_num
+                 << "] (calculated): " << local_sig
+                 << dendl;
 
-    if (dest_str != temp_url_sig) {
-      dout(5) << "temp url signature mismatch: " << dest_str << " != " << temp_url_sig << dendl;
-    } else {
-      return 0;
+        if (local_sig != temp_url_sig) {
+          dout(5) << "temp url signature mismatch: " << local_sig
+                  << " != "
+                  << temp_url_sig
+                  << dendl;
+        } else {
+          dout(20) << "temp url signature match: " << local_sig
+                   << dendl;
+          return 0;
+        }
+      }
     }
   }
 
