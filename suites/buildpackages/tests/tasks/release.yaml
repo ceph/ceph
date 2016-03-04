@@ -1,0 +1,11 @@
+# --suite buildpackages/tests --ceph v10.0.1 --filter centos_7,ubuntu_14.04
+overrides:
+   ansible.cephlab:
+     playbook: users.yml
+roles:
+    - [client.0]
+tasks:
+    - install:
+    - exec:
+        client.0:
+          - ceph --version | grep 'version '
