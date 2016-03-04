@@ -200,7 +200,9 @@ EOF
     done >> $dir/crushmap.txt
     crushtool --compile $dir/crushmap.txt -o $dir/crushmap || return 1
     ceph osd setcrushmap -i $dir/crushmap  || return 1
-    ceph osd crush rule create-simple test_rule_nospace $root osd firstn 2>&1 | grep "Error ENOSPC" || return 1
+    ceph osd crush rule create-simple test_rule_nospace $root osd firstn > $dir/crushrule.out 2>&1 
+    grep "Error ENOSPC" $dir/crushrule.out || return 1
+    rm $dir/crushrule.out
 
 }
 
