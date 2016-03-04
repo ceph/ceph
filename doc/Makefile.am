@@ -6,6 +6,7 @@ EXTRA_DIST = \
 	man/8/ceph-debugpack.rst	\
 	man/8/ceph-dencoder.rst	\
 	man/8/ceph-deploy.rst	\
+	man/8/ceph-detect-init.rst	\
 	man/8/ceph-disk.rst	\
 	man/8/cephfs.rst	\
 	man/8/ceph-fuse.rst	\
