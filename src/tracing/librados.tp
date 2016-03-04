@@ -3056,6 +3056,22 @@ TRACEPOINT_EVENT(librados, rados_write_op_operate_enter,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_write_op_operate2_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        struct timespec*, ts,
+        int, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_timespecp(ts, ts)
+        ctf_integer_hex(int, flags, flags)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_write_op_operate_exit,
     TP_ARGS(
         int, retval),
