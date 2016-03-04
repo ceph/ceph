@@ -145,6 +145,7 @@ int main(int argc, char* argv[]) {
   // compute and display stats
 
   const TestClient::TimePoint late_time = TestClient::now();
+  TestClient::TimePoint earliest_start = late_time;
   TestClient::TimePoint latest_start = early_time;
   TestClient::TimePoint earliest_finish = late_time;
   TestClient::TimePoint latest_finish = early_time;
@@ -153,56 +154,64 @@ int main(int argc, char* argv[]) {
     auto start = c.second->get_op_times().front();
     auto end = c.second->get_op_times().back();
 
+    if (start < earliest_start) { earliest_start = start; }
     if (start > latest_start) { latest_start = start; }
     if (end < earliest_finish) { earliest_finish = end; }
     if (end > latest_finish) { latest_finish = end; }
   }
 
 #if 1
-  {
-    auto c1 = clients[0]->get_op_times();
-    auto c2 = clients[98]->get_op_times();
-    auto c3 = clients[99]->get_op_times();
-    assert (c1.size() == c2.size() && c2.size() == c3.size());
+  auto c1 = clients[0]->get_op_times();
+  auto c2 = clients[98]->get_op_times();
+  auto c3 = clients[99]->get_op_times();
+  assert (c1.size() == c2.size() && c2.size() == c3.size());
 #if 0
-    auto f = [](const TestClient::TimePoint& t) -> uint64_t {
-      auto c = t.time_since_epoch().count();
-      return uint64_t(c / 1000000.0 + 0.5) % 100000;
-    };
+  auto f = [](const TestClient::TimePoint& t) -> uint64_t {
+    auto c = t.time_since_epoch().count();
+    return uint64_t(c / 1000000.0 + 0.5) % 100000;
+  };
 #else
-    auto f = [](const TestClient::TimePoint& t) -> double {
-      auto c = t.time_since_epoch().count();
-      return uint64_t(c / 1000000.0 + 0.5) % 100000 / 1000.0;
-    };
+  auto f = [](const TestClient::TimePoint& t) -> double {
+    auto c = t.time_since_epoch().count();
+    return uint64_t(c / 1000000.0 + 0.5) % 100000 / 1000.0;
+  };
 #endif
-    const uint w = 8;
-    for (uint i = 0; i < c1.size(); ++i) {
-      if (i > 0) assert(c1[i-1] < c1[i]);
-      std::cout <<
-	std::setw(w) << std::fixed << std::setprecision(3) << f(c1[i]) <<
-	std::setw(w) << std::fixed << std::setprecision(3) << f(c2[i]) <<
-	std::setw(w) << std::fixed << std::setprecision(3) << f(c3[i]) <<
-	std::endl;
-    }
+  const uint w = 8;
+  for (uint i = 0; i < c1.size(); ++i) {
+    if (i > 0) assert(c1[i-1] < c1[i]);
+    std::cout <<
+      std::setw(w) << std::fixed << std::setprecision(3) << f(c1[i]) <<
+      std::setw(w) << std::fixed << std::setprecision(3) << f(c2[i]) <<
+      std::setw(w) << std::fixed << std::setprecision(3) << f(c3[i]) <<
+      std::endl;
   }
+
 #endif
 
-  const auto start_edge = latest_start + skip_amount;
+  const auto start_edge = earliest_start + skip_amount;
 
   std::map<ClientId,std::vector<double>> ops_data;
+  double ops_factor =
+    std::chrono::duration_cast<std::chrono::duration<double>>(measure_unit) /
+    std::chrono::duration_cast<std::chrono::duration<double>>(report_unit);
 
-  for (auto const &i : clients) {
-    auto it = i.second->get_op_times().begin();
-    const auto end = i.second->get_op_times().end();
+  for (auto const &c : clients) {
+    auto cond = [&](std::function<void()> body) { if (99 == c.first) body(); };
+    
+    auto it = c.second->get_op_times().begin();
+    const auto end = c.second->get_op_times().end();
     while (it != end && *it < start_edge) { ++it; }
+
+    cond([&](){ std::cout << "start edge: " << f(start_edge) << std::endl; });
 
     for (auto time_edge = start_edge + measure_unit;
 	 time_edge < latest_finish;
 	 time_edge += measure_unit) {
       int count = 0;
       for (; it != end && *it < time_edge; ++count, ++it) { /* empty */ }
-      double ops_per_second = double(count) / (measure_unit / report_unit);
-      ops_data[i.first].push_back(ops_per_second);
+      double ops_per_second = double(count) / ops_factor;
+      ops_data[c.first].push_back(ops_per_second);
+      cond([&](){ std::cout << "next edge: " << f(time_edge) << "; count=" << count << "; ops=" << ops_per_second << std::endl; });
     }
   }
 
