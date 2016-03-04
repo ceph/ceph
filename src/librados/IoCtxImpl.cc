@@ -656,12 +656,10 @@ int librados::IoCtxImpl::clone_range(const object_t& dst_oid,
 }
 
 int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
-				 time_t *pmtime, int flags)
+				 ceph::real_time *pmtime, int flags)
 {
-  ceph::real_time ut =
-    pmtime ?
-    ceph::real_clock::from_time_t(*pmtime) :
-    ceph::real_clock::now(client->cct);
+  ceph::real_time ut = (pmtime ? *pmtime :
+    ceph::real_clock::now(client->cct));
 
   /* can't write to a snapshot */
   if (snap_seq != CEPH_NOSNAP)
