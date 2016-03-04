@@ -553,25 +553,30 @@ static string temp_url_gen_sig(const string& key,
   return dest_str;
 }
 
-int authenticate_temp_url(RGWRados *store, req_state *s)
+int authenticate_temp_url(RGWRados * const store, req_state * const s)
 {
   /* We cannot use req_state::bucket_name because it isn't available
    * now. It will be initialized in RGWHandler_REST_SWIFT::postauth_init(). */
   const string& bucket_name = s->init_state.url_bucket;
+
   /* temp url requires bucket and object specified in the requets */
-  if (bucket_name.empty())
+  if (bucket_name.empty()) {
     return -EPERM;
+  }
 
-  if (s->object.empty())
+  if (s->object.empty()) {
     return -EPERM;
+  }
 
-  string temp_url_sig = s->info.args.get("temp_url_sig");
-  if (temp_url_sig.empty())
+  const string temp_url_sig = s->info.args.get("temp_url_sig");
+  if (temp_url_sig.empty()) {
     return -EPERM;
+  }
 
-  string temp_url_expires = s->info.args.get("temp_url_expires");
-  if (temp_url_expires.empty())
+  const string temp_url_expires = s->info.args.get("temp_url_expires");
+  if (temp_url_expires.empty()) {
     return -EPERM;
+  }
 
   /* TempURL case is completely different than the Keystone auth - you may
    * get account name only through extraction from URL. In turn, knowledge
@@ -597,7 +602,8 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
     return -EPERM;
   }
 
-  dout(20) << "temp url user (bucket owner): " << bucket_info.owner << dendl;
+  ldout(s->cct, 20) << "temp url user (bucket owner): " << bucket_info.owner
+                    << dendl;
   if (rgw_get_user_info_by_uid(store, bucket_info.owner, *(s->user)) < 0) {
     return -EPERM;
   }
@@ -611,10 +617,11 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
     return -EPERM;
   }
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  const utime_t now = ceph_clock_now(g_ceph_context);
 
   string err;
-  uint64_t expiration = (uint64_t)strict_strtoll(temp_url_expires.c_str(), 10, &err);
+  uint64_t expiration = (uint64_t)strict_strtoll(temp_url_expires.c_str(),
+                                                 10, &err);
   if (!err.empty()) {
     dout(5) << "failed to parse temp_url_expires: " << err << dendl;
     return -EPERM;
