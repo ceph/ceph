@@ -44,18 +44,18 @@ int main(int argc, char* argv[]) {
   // server params
 
   const uint server_count = 100;
-  const uint server_iops = 4;
+  const uint server_iops = 40;
   const uint server_threads = 1;
 
   // client params
 
-  const uint client_total_ops = 100;
+  const uint client_total_ops = 1000;
   const uint client_count = 100;
   const uint client_wait_count = 1;
-  const uint client_iops_goal = 5;
+  const uint client_iops_goal = 50;
   const uint client_outstanding_ops = 10;
-  const double client_reservation = 2.0;
-  const double client_limit = 6.0;
+  const double client_reservation = 20.0;
+  const double client_limit = 60.0;
   const double client_weight = 1.0;
 
   dmc::ClientInfo client_info =
