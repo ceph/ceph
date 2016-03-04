@@ -283,9 +283,8 @@ On your Cinder Backup node, edit ``/etc/cinder/cinder.conf`` and add::
     [DEFAULT]
     ...
     enabled_backends = ceph-ssd
-
-    [ceph-ssd]
     ...
+    [ceph-ssd]
     backup_driver = cinder.backup.drivers.ceph
     backup_ceph_conf = /etc/ceph/ceph.conf
     backup_ceph_user = cinder-backup
