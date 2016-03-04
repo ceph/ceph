@@ -534,6 +534,25 @@ static void temp_url_make_content_disp(req_state * const s)
   }
 }
 
+static string temp_url_gen_sig(const string& key,
+                               const string& method,
+                               const string& path,
+                               const string& expires)
+{
+  const string str = method + "\n" + expires + "\n" + path;
+  //dout(20) << "temp url signature (plain text): " << str << dendl;
+
+  /* unsigned */ char dest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
+  calc_hmac_sha1(key.c_str(), key.size(),
+                 str.c_str(), str.size(),
+                 dest);
+
+  char dest_str[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1];
+  buf_to_hex((const unsigned char *)dest, sizeof(dest), dest_str);
+
+  return dest_str;
+}
+
 int authenticate_temp_url(RGWRados *store, req_state *s)
 {
   /* We cannot use req_state::bucket_name because it isn't available
@@ -605,33 +624,56 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
     return -EPERM;
   }
 
-  /* strip the swift prefix from the uri */
-  int pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
-  string object_path = s->info.request_uri.substr(pos + 1);
-  string str = string(s->info.method) + "\n" + temp_url_expires + "\n" + object_path;
+  /* We need to verify two paths because of compliance with Swift, Tempest
+   * and old versions of RadosGW. The second item will have the prefix
+   * of Swift API entry point removed. */
+  const size_t pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
+  const vector<string> allowed_paths = {
+    s->info.request_uri,
+    s->info.request_uri.substr(pos + 1)
+  };
 
-  dout(20) << "temp url signature (plain text): " << str << dendl;
+  vector<string> allowed_methods;
+  if (strcmp("HEAD", s->info.method) == 0) {
+    /* HEAD requests are specially handled. */
+    allowed_methods = { s->info.method, "PUT", "GET" };
+  } else {
+    allowed_methods = { s->info.method };
+  }
 
-  map<int, string>::iterator iter;
-  for (iter = s->user->temp_url_keys.begin(); iter != s->user->temp_url_keys.end(); ++iter) {
-    string& temp_url_key = iter->second;
+  /* Need to try each combination of keys, allowed path and methods. */
+  for (const auto kv : s->user->temp_url_keys) {
+    const int temp_url_key_num = kv.first;
+    const string& temp_url_key = kv.second;
 
-    if (temp_url_key.empty())
+    if (temp_url_key.empty()) {
       continue;
+    }
 
-    char dest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
-    calc_hmac_sha1(temp_url_key.c_str(), temp_url_key.size(),
-                   str.c_str(), str.size(), dest);
+    for (const auto path : allowed_paths) {
+      for (const auto method : allowed_methods) {
+        const string local_sig = temp_url_gen_sig(temp_url_key,
+                                                  method, path,
+                                                  temp_url_expires);
 
-    char dest_str[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1];
-    buf_to_hex((const unsigned char *)dest, sizeof(dest), dest_str);
-    dout(20) << "temp url signature [" << iter->first << "] (calculated): " << dest_str << dendl;
+        ldout(s->cct, 20) << "temp url signature [" << temp_url_key_num
+                          << "] (calculated): " << local_sig
+                          << dendl;
 
-    if (dest_str != temp_url_sig) {
-      dout(5) << "temp url signature mismatch: " << dest_str << " != " << temp_url_sig << dendl;
-    } else {
-      temp_url_make_content_disp(s);
-      return 0;
+        if (local_sig != temp_url_sig) {
+          ldout(s->cct,  5) << "temp url signature mismatch: " << local_sig
+                            << " != "
+                            << temp_url_sig
+                            << dendl;
+        } else {
+          temp_url_make_content_disp(s);
+          ldout(s->cct, 20) << "temp url signature match: " << local_sig
+                            << " content_disp override " << s->content_disp.override
+                            << " content_disp fallback " << s->content_disp.fallback
+                            << dendl;
+          return 0;
+        }
+      }
     }
   }
 
