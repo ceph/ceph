@@ -139,7 +139,7 @@ def cat_file(level, filename):
 def vstart(new, opt=""):
     print "vstarting....",
     NEW = new and "-n" or ""
-    call("MON=1 OSD=4 CEPH_PORT=7400 {path}/src/vstart.sh --short -l {new} -d mon osd {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
+    call("MON=1 OSD=4 CEPH_PORT=7400 {path}/src/vstart.sh -l {new} -d mon osd {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
     print "DONE"
 
 
@@ -198,7 +198,7 @@ def verify(DATADIR, POOL, NAME_PREFIX, db):
             os.unlink(TMPFILE)
         except:
             pass
-        cmd = "{path}/rados -p {pool} -N '{nspace}' get {file} {out}".format(pool=POOL, file=file, out=TMPFILE, nspace=nspace, path=CEPH_BIN)
+        cmd = "timeout 300 {path}/rados -p {pool} -N '{nspace}' get {file} {out}".format(path=CEPH_BIN, pool=POOL, file=file, out=TMPFILE, nspace=nspace)
         logging.debug(cmd)
         call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
         cmd = "diff -q {src} {result}".format(src=path, result=TMPFILE)
@@ -212,7 +212,7 @@ def verify(DATADIR, POOL, NAME_PREFIX, db):
         except:
             pass
         for key, val in db[nspace][file]["xattr"].iteritems():
-            cmd = "{path}/rados -p {pool} -N '{nspace}' getxattr {name} {key}".format(pool=POOL, name=file, key=key, nspace=nspace, path=CEPH_BIN)
+            cmd = "timeout 300 {path}/rados -p {pool} -N '{nspace}' getxattr {name} {key}".format(path=CEPH_BIN, pool=POOL, name=file, key=key, nspace=nspace)
             logging.debug(cmd)
             getval = check_output(cmd, shell=True, stderr=nullfd)
             logging.debug("getxattr {key} {val}".format(key=key, val=getval))
@@ -221,7 +221,7 @@ def verify(DATADIR, POOL, NAME_PREFIX, db):
                 ERRORS += 1
                 continue
         hdr = db[nspace][file].get("omapheader", "")
-        cmd = "{path}/rados -p {pool} -N '{nspace}' getomapheader {name} {file}".format(pool=POOL, name=file, nspace=nspace, file=TMPFILE, path=CEPH_BIN)
+        cmd = "timeout 300 {path}/rados -p {pool} -N '{nspace}' getomapheader {name} {file}".format(path=CEPH_BIN, pool=POOL, name=file, nspace=nspace, file=TMPFILE)
         logging.debug(cmd)
         ret = call(cmd, shell=True, stderr=nullfd)
         if ret != 0:
@@ -239,7 +239,7 @@ def verify(DATADIR, POOL, NAME_PREFIX, db):
                 logging.error("getomapheader returned wrong val: {get} instead of {orig}".format(get=gethdr, orig=hdr))
                 ERRORS += 1
         for key, val in db[nspace][file]["omap"].iteritems():
-            cmd = "{path}/rados -p {pool} -N '{nspace}' getomapval {name} {key} {file}".format(pool=POOL, name=file, key=key, nspace=nspace, file=TMPFILE, path=CEPH_BIN)
+            cmd = "timeout 300 {path}/rados -p {pool} -N '{nspace}' getomapval {name} {key} {file}".format(path=CEPH_BIN, pool=POOL, name=file, key=key, nspace=nspace, file=TMPFILE)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
@@ -474,14 +474,6 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
     cmd = CFSD_PREFIX + "--op set-osdmap --file {osdmap_file} --epoch {epoch} --force"
     cmd = cmd.format(osd=osd_path, osdmap_file=osdmap_file.name, epoch=epoch)
     ret = call(cmd, stdout=subprocess.DEVNULL, shell=True)
-
-    try:
-        os.unlink(osdmap_file.name)
-        os.unlink(new_crush_file.name)
-        os.unlink(old_crush_file.name)
-    except:
-        pass
-
     return ret == 0
 
 def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
@@ -508,13 +500,6 @@ def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
     for line in output.strip().split('\n'):
         osd_id, weight, osd_name = re.split('\s+', line)
         weights.append(float(weight))
-
-    try:
-        os.unlink(osdmap_file.name)
-        os.unlink(crush_file.name)
-    except:
-        pass
-
     return weights
 
 
@@ -584,20 +569,12 @@ def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
         if ret:
             logging.error("Failed to revert the changed inc-osdmap")
             errors += 1
-
-    try:
-        os.unlink(file_e2.name)
-        os.unlink(file_e1_read.name)
-        os.unlink(file_e1_backup.name)
-    except:
-        pass
-
     return errors
 
 
 def main(argv):
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
-    if len(argv) > 1 and argv[1] == "debug":
+    if len(argv) > 0 and argv[0] == "debug":
         nullfd = sys.stdout
     else:
         nullfd = open(os.devnull, "w")
@@ -692,11 +669,11 @@ def main(argv):
                 fd.write(data)
             fd.close()
 
-            cmd = "{path}/rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=REP_POOL, name=NAME, ddname=DDNAME, nspace=nspace, path=CEPH_BIN)
+            cmd = "timeout 300 {path}/rados -p {pool} -N '{nspace}' put {name} {ddname}".format(path=CEPH_BIN, pool=REP_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
-                logging.critical("Rados put command failed with {ret}".format(ret=ret))
+                logging.critical("Rados put command " + cmd + " failed with {ret}".format(ret=ret))
                 return 1
 
             db[nspace][NAME] = {}
@@ -711,7 +688,7 @@ def main(argv):
                     continue
                 mykey = "key{i}-{k}".format(i=i, k=k)
                 myval = "val{i}-{k}".format(i=i, k=k)
-                cmd = "{path}/rados -p {pool} -N '{nspace}' setxattr {name} {key} {val}".format(pool=REP_POOL, name=NAME, key=mykey, val=myval, nspace=nspace, path=CEPH_BIN)
+                cmd = "timeout 300 {path}/rados -p {pool} -N '{nspace}' setxattr {name} {key} {val}".format(path=CEPH_BIN, pool=REP_POOL, name=NAME, key=mykey, val=myval, nspace=nspace)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True)
                 if ret != 0:
@@ -722,7 +699,7 @@ def main(argv):
             # Create omap header in all objects but REPobject1
             if i < ATTR_OBJS + 1 and i != 1:
                 myhdr = "hdr{i}".format(i=i)
-                cmd = "{path}/rados -p {pool} -N '{nspace}' setomapheader {name} {hdr}".format(pool=REP_POOL, name=NAME, hdr=myhdr, nspace=nspace, path=CEPH_BIN)
+                cmd = "timeout 300 {path}/rados -p {pool} -N '{nspace}' setomapheader {name} {hdr}".format(path=CEPH_BIN, pool=REP_POOL, name=NAME, hdr=myhdr, nspace=nspace)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True)
                 if ret != 0:
@@ -736,7 +713,7 @@ def main(argv):
                     continue
                 mykey = "okey{i}-{k}".format(i=i, k=k)
                 myval = "oval{i}-{k}".format(i=i, k=k)
-                cmd = "{path}/rados -p {pool} -N '{nspace}' setomapval {name} {key} {val}".format(pool=REP_POOL, name=NAME, key=mykey, val=myval, nspace=nspace, path=CEPH_BIN)
+                cmd = "timeout 300 {path}/rados -p {pool} -N '{nspace}' setomapval {name} {key} {val}".format(path=CEPH_BIN, pool=REP_POOL, name=NAME, key=mykey, val=myval, nspace=nspace)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True)
                 if ret != 0:
@@ -744,7 +721,7 @@ def main(argv):
                 db[nspace][NAME]["omap"][mykey] = myval
 
     # Create some clones
-    cmd = "{path}/rados -p {pool} mksnap snap1".format(pool=REP_POOL, path=CEPH_BIN)
+    cmd = "timeout 300 {path}/rados -p {pool} mksnap snap1".format(path=CEPH_BIN, pool=REP_POOL)
     logging.debug(cmd)
     call(cmd, shell=True)
 
@@ -775,11 +752,11 @@ def main(argv):
                 fd.write(data)
             fd.close()
 
-            cmd = "{path}/rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=REP_POOL, name=NAME, ddname=DDNAME, nspace=nspace, path=CEPH_BIN)
+            cmd = "timeout 300 {path}/rados -p {pool} -N '{nspace}' put {name} {ddname}".format(path=CEPH_BIN, pool=REP_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
-                logging.critical("Rados put command failed with {ret}".format(ret=ret))
+                logging.critical("Rados put command " + cmd + " failed with {ret}".format(ret=ret))
                 return 1
 
     print "Creating {objs} objects in erasure coded pool".format(objs=(NUM_EC_OBJECTS*NUM_NSPACES))
@@ -809,7 +786,7 @@ def main(argv):
                 fd.write(data)
             fd.close()
 
-            cmd = "{path}/rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=EC_POOL, name=NAME, ddname=DDNAME, nspace=nspace, path=CEPH_BIN)
+            cmd = "timeout 300 {path}/rados -p {pool} -N '{nspace}' put {name} {ddname}".format(path=CEPH_BIN, pool=EC_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
@@ -828,7 +805,7 @@ def main(argv):
                     continue
                 mykey = "key{i}-{k}".format(i=i, k=k)
                 myval = "val{i}-{k}".format(i=i, k=k)
-                cmd = "{path}/rados -p {pool} -N '{nspace}' setxattr {name} {key} {val}".format(pool=EC_POOL, name=NAME, key=mykey, val=myval, nspace=nspace, path=CEPH_BIN)
+                cmd = "timeout 300 {path}/rados -p {pool} -N '{nspace}' setxattr {name} {key} {val}".format(path=CEPH_BIN, pool=EC_POOL, name=NAME, key=mykey, val=myval, nspace=nspace)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True)
                 if ret != 0:
@@ -1710,7 +1687,7 @@ def main(argv):
 
     if EXP_ERRORS == 0:
         NEWPOOL = "rados-import-pool"
-        cmd = "{path}/rados mkpool {pool}".format(pool=NEWPOOL, path=CEPH_BIN)
+        cmd = "timeout 300 {path}/rados mkpool {pool}".format(path=CEPH_BIN, pool=NEWPOOL)
         logging.debug(cmd)
         ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 
@@ -1725,26 +1702,26 @@ def main(argv):
                 if first:
                     first = False
                     # This should do nothing
-                    cmd = "{path}/rados import -p {pool} --dry-run {file}".format(pool=NEWPOOL, file=file, path=CEPH_BIN)
+                    cmd = "timeout 300 {path}/rados import -p {pool} --dry-run {file}".format(path=CEPH_BIN, pool=NEWPOOL, file=file)
                     logging.debug(cmd)
                     ret = call(cmd, shell=True, stdout=nullfd)
                     if ret != 0:
                         logging.error("Rados import --dry-run failed from {file} with {ret}".format(file=file, ret=ret))
                         ERRORS += 1
-                    cmd = "{path}/rados -p {pool} ls".format(pool=NEWPOOL, path=CEPH_BIN)
+                    cmd = "timeout 300 {path}/rados -p {pool} ls".format(path=CEPH_BIN, pool=NEWPOOL)
                     logging.debug(cmd)
                     data = check_output(cmd, shell=True)
                     if data:
                         logging.error("'{data}'".format(data=data))
                         logging.error("Found objects after dry-run")
                         ERRORS += 1
-                cmd = "{path}/rados import -p {pool} {file}".format(pool=NEWPOOL, file=file, path=CEPH_BIN)
+                cmd = "timeout 300 {path}/rados import -p {pool} {file}".format(path=CEPH_BIN, pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
                     logging.error("Rados import failed from {file} with {ret}".format(file=file, ret=ret))
                     ERRORS += 1
-                cmd = "{path}/rados import -p {pool} --no-overwrite {file}".format(pool=NEWPOOL, file=file, path=CEPH_BIN)
+                cmd = "timeout 300 {path}/rados import -p {pool} --no-overwrite {file}".format(path=CEPH_BIN, pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
@@ -1802,7 +1779,7 @@ def main(argv):
                 fd.write(data)
             fd.close()
 
-            cmd = "{path}/rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=SPLIT_POOL, name=NAME, ddname=DDNAME, nspace=nspace, path=CEPH_BIN)
+            cmd = "timeout 300 {path}/rados -p {pool} -N '{nspace}' put {name} {ddname}".format(path=CEPH_BIN, pool=SPLIT_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
@@ -1913,6 +1890,9 @@ if __name__ == "__main__":
         status = main(sys.argv[1:])
     finally:
         kill_daemons()
-        remove_btrfs_subvolumes(CEPH_DIR)
-        call("/bin/rm -fr {dir}".format(dir=CEPH_DIR), shell=True)
+        if sys.platform.startswith('linux'):
+            remove_btrfs_subvolumes(CEPH_DIR)
+        if status == 0:
+	    # Keep test directory for post-mortum in case of errors
+            call("/bin/rm -fr {dir}".format(dir=CEPH_DIR), shell=True)
     sys.exit(status)
