@@ -182,6 +182,7 @@ public:
   }
   // This function maybe needs some work; assumes last event is completion time
   double get_duration() const {
+    Mutex::Locker l(lock);
     return events.empty() ?
       0.0 :
       (events.rbegin()->first - get_initiated());
@@ -189,6 +190,7 @@ public:
 
   void mark_event(const string &event);
   virtual const char *state_string() const {
+    Mutex::Locker l(lock);
     return events.rbegin()->second.c_str();
   }
   void dump(utime_t now, Formatter *f) const;
