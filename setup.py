@@ -49,7 +49,7 @@ setup(
         'Topic :: System :: Filesystems',
     ],
     install_requires=['setuptools',
-                      'gevent',
+                      'gevent == 1.0.2',
                       'MySQL-python == 1.2.3',
                       'PyYAML',
                       'argparse >= 1.2.1',
