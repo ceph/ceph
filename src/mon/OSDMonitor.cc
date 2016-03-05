@@ -5268,14 +5268,17 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     p.min_write_recency_for_promote = n;
   } else if (var == "fast_read") {
-    if (val == "true" || (interr.empty() && n == 1)) {
-      if (p.is_replicated()) {
+    if (p.is_replicated()) {
         ss << "fast read is not supported in replication pool";
         return -EINVAL;
-      }
+    }
+    if (val == "true" || (interr.empty() && n == 1)) {
       p.fast_read = true;
     } else if (val == "false" || (interr.empty() && n == 0)) {
       p.fast_read = false;
+    } else {
+      ss << "expecting value 'true', 'false', '0', or '1'";
+      return -EINVAL;
     }
   } else if (pool_opts_t::is_opt_name(var)) {
     pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
