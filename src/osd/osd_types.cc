@@ -888,6 +888,10 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_RECOVERY_WAIT;
   else if (state == "undersized")
     type = PG_STATE_UNDERSIZED;
+  else if (state == "activating")
+    type = PG_STATE_ACTIVATING;
+  else if (state == "peered")
+    type = PG_STATE_PEERED;
   else
     type = -1;
   return type;
