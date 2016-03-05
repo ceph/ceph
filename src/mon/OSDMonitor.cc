@@ -4999,7 +4999,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 	 k = erasure_code->get_data_chunk_count();
        } else {
 	 ss << __func__ << " get_erasure_code failed: " << tmp.rdbuf();
-	 return err;;
+	 return err;
        }
 
        if (n < k || n > p.size) {
@@ -7653,12 +7653,12 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
     return preprocess_pool_op_create(op);
 
   if (!osdmap.get_pg_pool(m->pool)) {
-    dout(10) << "attempt to delete non-existent pool id " << m->pool << dendl;
+    dout(10) << "attempt to operate on non-existent pool id " << m->pool << dendl;
     _pool_op_reply(op, 0, osdmap.get_epoch());
     return true;
   }
 
-  // check if the snap and snapname exists
+  // check if the snap and snapname exist
   bool snap_exists = false;
   const pg_pool_t *p = osdmap.get_pg_pool(m->pool);
   if (p->snap_exists(m->name.c_str()))
