@@ -40,6 +40,9 @@ public:
 private:
   void set_sources(const std::map<int64_t, std::set<std::string> > &images);
 
+  void start_image_replayer(unique_ptr<ImageReplayer> &image_replayer);
+  bool stop_image_replayer(unique_ptr<ImageReplayer> &image_replayer);
+
   Mutex m_lock;
   Cond m_cond;
   atomic_t m_stopping;
@@ -52,6 +55,7 @@ private:
   // when a pool's configuration changes
   std::map<int64_t, std::map<std::string,
 			     std::unique_ptr<ImageReplayer> > > m_images;
+  ContextWQ *m_op_work_queue;
 
   class ReplayerThread : public Thread {
     Replayer *m_replayer;
