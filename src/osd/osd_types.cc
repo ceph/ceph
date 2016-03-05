@@ -1120,8 +1120,8 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("min_size", get_min_size());
   f->dump_int("crush_ruleset", get_crush_ruleset());
   f->dump_int("object_hash", get_object_hash());
-  f->dump_int("pg_num", get_pg_num());
-  f->dump_int("pg_placement_num", get_pgp_num());
+  f->dump_unsigned("pg_num", get_pg_num());
+  f->dump_unsigned("pg_placement_num", get_pgp_num());
   f->dump_unsigned("crash_replay_interval", get_crash_replay_interval());
   f->dump_stream("last_change") << get_last_change();
   f->dump_stream("last_force_op_resend") << get_last_force_op_resend();
@@ -1137,11 +1137,11 @@ void pg_pool_t::dump(Formatter *f) const
   }
   f->close_section();
   f->dump_stream("removed_snaps") << removed_snaps;
-  f->dump_int("quota_max_bytes", quota_max_bytes);
-  f->dump_int("quota_max_objects", quota_max_objects);
+  f->dump_unsigned("quota_max_bytes", quota_max_bytes);
+  f->dump_unsigned("quota_max_objects", quota_max_objects);
   f->open_array_section("tiers");
   for (set<uint64_t>::const_iterator p = tiers.begin(); p != tiers.end(); ++p)
-    f->dump_int("pool_id", *p);
+    f->dump_unsigned("pool_id", *p);
   f->close_section();
   f->dump_int("tier_of", tier_of);
   f->dump_int("read_tier", read_tier);
