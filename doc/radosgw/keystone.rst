@@ -109,3 +109,11 @@ requests to the nss db format, for example::
 		certutil -d /var/ceph/nss -A -n ca -t "TCu,Cu,Tuw"
 	openssl x509 -in /etc/keystone/ssl/certs/signing_cert.pem -pubkey | \
 		certutil -A -d /var/ceph/nss -n signing_cert -t "P,P,P"
+
+
+Openstack keystone may also be terminated with a self signed ssl certificate, in
+order for radosgw to interact with keystone in such a case, you could either
+install keystone's ssl certificate in the node running radosgw. Alternatively
+radosgw could be made to not verify the ssl certificate at all (similar to
+openstack clients with a ``--insecure`` switch) by setting the value of the
+configurable ``rgw keystone verify ssl`` to false.
