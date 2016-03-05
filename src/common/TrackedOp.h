@@ -193,6 +193,7 @@ public:
   }
 
   double get_duration() const {
+    Mutex::Locker l(lock);
     if (!events.empty() && events.rbegin()->second.compare("done") == 0)
       return events.rbegin()->first - get_initiated();
     else
@@ -201,6 +202,7 @@ public:
 
   void mark_event(const string &event);
   virtual const char *state_string() const {
+    Mutex::Locker l(lock);
     return events.rbegin()->second.c_str();
   }
   void dump(utime_t now, Formatter *f) const;
