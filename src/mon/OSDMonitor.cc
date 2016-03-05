@@ -4757,6 +4757,24 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     dout(10) << " prepare_pool_stripe_width returns " << r << dendl;
     return r;
   }
+  
+  bool fread = false;
+  if (pool_type == pg_pool_t::TYPE_ERASURE) {
+    switch (fast_read) {
+      case FAST_READ_OFF:
+        fread = false;
+        break;
+      case FAST_READ_ON:
+        fread = true;
+        break;
+      case FAST_READ_DEFAULT:
+        fread = g_conf->mon_osd_pool_ec_fast_read;
+        break;
+      default:
+        *ss << "invalid fast_read setting: " << fast_read;
+        return -EINVAL;
+    }
+  }
 
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
@@ -4771,6 +4789,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   pg_pool_t empty;
   pg_pool_t *pi = pending_inc.get_new_pool(pool, &empty);
   pi->type = pool_type;
+  pi->fast_read = fread; 
   pi->flags = g_conf->osd_pool_default_flags;
   if (g_conf->osd_pool_default_flag_hashpspool)
     pi->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
@@ -4785,23 +4804,6 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pi->use_gmt_hitset = true;
   else
     pi->use_gmt_hitset = false;
-
-  if (pool_type == pg_pool_t::TYPE_ERASURE) {
-    switch (fast_read) {
-      case FAST_READ_OFF:
-        pi->fast_read = false;
-        break;
-      case FAST_READ_ON:
-        pi->fast_read = true;
-        break;
-      case FAST_READ_DEFAULT:
-        pi->fast_read = g_conf->mon_osd_pool_ec_fast_read;
-        break;
-      default:
-        *ss << "invalid fast_read setting: " << fast_read;
-        return -EINVAL;
-    }
-  }
 
   pi->size = size;
   pi->min_size = min_size;
