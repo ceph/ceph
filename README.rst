@@ -31,6 +31,7 @@ Provided Utilities
 * ``teuthology-kill`` - Kill running jobs or entire runs
 * ``teuthology-lock`` - Lock, unlock, and update status of machines
 * ``teuthology-ls`` - List job results by examining an archive directory
+* ``teuthology-openstack`` - Use OpenStack backend (wrapper around ``teuthology-suite``)
 * ``teuthology-nuke`` - Attempt to return a machine to a pristine state
 * ``teuthology-queue`` - List, or delete, jobs in the queue
 * ``teuthology-report`` - Submit test results to a web service (we use `paddles <https://github.com/ceph/paddles/>`__)
