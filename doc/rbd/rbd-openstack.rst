@@ -280,6 +280,11 @@ Configuring Cinder Backup
 OpenStack Cinder Backup requires a specific daemon so don't forget to install it.
 On your Cinder Backup node, edit ``/etc/cinder/cinder.conf`` and add::
 
+    [DEFAULT]
+    ...
+    enabled_backends = ceph-ssd
+    ...
+    [ceph-ssd]
     backup_driver = cinder.backup.drivers.ceph
     backup_ceph_conf = /etc/ceph/ceph.conf
     backup_ceph_user = cinder-backup
@@ -297,7 +302,9 @@ In order to attach Cinder devices (either normal block or by issuing a boot
 from volume), you must tell Nova (and libvirt) which user and UUID to refer to
 when attaching the device. libvirt will refer to this user when connecting and
 authenticating with the Ceph cluster. ::
-
+    
+    [ceph-ssd]
+    ...
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
