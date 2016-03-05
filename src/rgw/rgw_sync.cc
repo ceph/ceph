@@ -24,6 +24,9 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+#undef dout_prefix
+#define dout_prefix (*_dout << "rgw meta sync: ")
+
 static string mdlog_sync_status_oid = "mdlog.sync-status";
 static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
 static string mdlog_sync_full_sync_index_prefix = "meta.full-sync.index";
@@ -1286,18 +1289,18 @@ public:
       }
 
       if (!lost_lock) {
-        yield {
-          /* update marker to reflect we're done with full sync */
-          if (can_adjust_marker) {
-            sync_marker.state = rgw_meta_sync_marker::IncrementalSync;
-            sync_marker.marker = sync_marker.next_step_marker;
-            sync_marker.next_step_marker.clear();
-          }
-          // XXX: why write the marker if !can_adjust_marker?
+        /* update marker to reflect we're done with full sync */
+        if (can_adjust_marker) yield {
+          sync_marker.state = rgw_meta_sync_marker::IncrementalSync;
+          sync_marker.marker = sync_marker.next_step_marker;
+          sync_marker.next_step_marker.clear();
+
           RGWRados *store = sync_env->store;
           ldout(sync_env->cct, 0) << *this << ": saving marker pos=" << sync_marker.marker << dendl;
-          call(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, store, pool,
-                                                               sync_env->shard_obj_name(shard_id), sync_marker));
+          using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_meta_sync_marker>;
+          call(new WriteMarkerCR(sync_env->async_rados, store, pool,
+                                 sync_env->shard_obj_name(shard_id),
+                                 sync_marker));
         }
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to set sync marker: retcode=" << retcode << dendl;
@@ -1503,7 +1506,10 @@ class RGWMetaSyncCR : public RGWCoroutine {
   RGWPeriodHistory::Cursor next; //< next period in history
   rgw_meta_sync_status sync_status;
 
-  map<int, RGWMetaSyncShardControlCR *> shard_crs;
+  std::mutex mutex; //< protect access to shard_crs
+
+  using ControlCRRef = boost::intrusive_ptr<RGWMetaSyncShardControlCR>;
+  map<int, ControlCRRef> shard_crs;
 
 public:
   RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, RGWPeriodHistory::Cursor cursor,
@@ -1538,6 +1544,9 @@ public:
           auto& period_id = sync_status.sync_info.period;
           auto mdlog = sync_env->store->meta_mgr->get_log(period_id);
 
+          // prevent wakeup() from accessing shard_crs while we're spawning them
+          std::lock_guard<std::mutex> lock(mutex);
+
           // sync this period on each shard
           for (const auto& m : sync_status.sync_markers) {
             uint32_t shard_id = m.first;
@@ -1558,18 +1567,21 @@ public:
             auto cr = new RGWMetaSyncShardControlCR(sync_env, pool, period_id,
                                                     mdlog, shard_id, marker,
                                                     std::move(period_marker));
-            // XXX: do we need to hold a ref on cr while it's in shard_crs?
             shard_crs[shard_id] = cr;
             spawn(cr, false);
           }
         }
         // wait for each shard to complete
         collect(&ret);
+        drain_all();
+        {
+          // drop shard cr refs under lock
+          std::lock_guard<std::mutex> lock(mutex);
+          shard_crs.clear();
+        }
         if (ret < 0) {
-          drain_all();
           return set_cr_error(ret);
         }
-        drain_all();
         // advance to the next period
         assert(next);
         cursor = next;
@@ -1587,7 +1599,8 @@ public:
   }
 
   void wakeup(int shard_id) {
-    map<int, RGWMetaSyncShardControlCR *>::iterator iter = shard_crs.find(shard_id);
+    std::lock_guard<std::mutex> lock(mutex);
+    auto iter = shard_crs.find(shard_id);
     if (iter == shard_crs.end()) {
       return;
     }
@@ -1629,8 +1642,11 @@ int RGWRemoteMetaLog::init_sync_status()
       return r;
     }
     sync_info.num_shards = mdlog_info.num_shards;
-    sync_info.period = mdlog_info.period;
-    sync_info.realm_epoch = mdlog_info.realm_epoch;
+    auto cursor = store->period_history->get_current();
+    if (cursor) {
+      sync_info.period = cursor.get_period().get_id();
+      sync_info.realm_epoch = cursor.get_epoch();
+    }
   }
 
   RGWObjectCtx obj_ctx(store, NULL);
@@ -1666,9 +1682,9 @@ static RGWPeriodHistory::Cursor get_period_at(RGWRados* store,
     return cursor;
   }
 
-  // read the period from rados
-  RGWPeriod period(info.period);
-  int r = period.init(store->ctx(), store, store->realm.get_id());
+  // read the period from rados or pull it from the master
+  RGWPeriod period;
+  int r = store->period_puller->pull(info.period, period);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to read period id "
         << info.period << ": " << cpp_strerror(r) << dendl;
@@ -1707,17 +1723,25 @@ int RGWRemoteMetaLog::run_sync()
       return r;
     }
 
-    if (!mdlog_info.period.empty() && sync_status.sync_info.period.empty()) {
-      // restart sync if the remote has a period but our status does not
-      sync_status.sync_info.state = rgw_meta_sync_info::StateInit;
+    if (!mdlog_info.period.empty()) {
+      // restart sync if the remote has a period, but:
+      // a) our status does not, or
+      // b) our sync period comes before the remote's oldest log period
+      if (sync_status.sync_info.period.empty() ||
+          sync_status.sync_info.realm_epoch < mdlog_info.realm_epoch) {
+        sync_status.sync_info.state = rgw_meta_sync_info::StateInit;
+      }
     }
 
     if (sync_status.sync_info.state == rgw_meta_sync_info::StateInit) {
       ldout(store->ctx(), 20) << __func__ << "(): init" << dendl;
       sync_status.sync_info.num_shards = mdlog_info.num_shards;
-      // use the period/epoch from the master's oldest log
-      sync_status.sync_info.period = mdlog_info.period;
-      sync_status.sync_info.realm_epoch = mdlog_info.realm_epoch;
+      auto cursor = store->period_history->get_current();
+      if (cursor) {
+        // run full sync, then start incremental from the current period/epoch
+        sync_status.sync_info.period = cursor.get_period().get_id();
+        sync_status.sync_info.realm_epoch = cursor.get_epoch();
+      }
       r = run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx,
                                              sync_status.sync_info));
       if (r == -EBUSY) {

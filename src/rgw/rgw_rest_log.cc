@@ -81,13 +81,13 @@ void RGWOp_MDLog_List::execute() {
     http_ret = -EINVAL;
     return;
   }
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
+  RGWMetadataLog meta_log{s->cct, store, period};
 
-  meta_log->init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
+  meta_log.init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
 
   do {
-    http_ret = meta_log->list_entries(handle, max_entries, entries,
-				      &last_marker, &truncated);
+    http_ret = meta_log.list_entries(handle, max_entries, entries,
+				     &last_marker, &truncated);
     if (http_ret < 0) 
       break;
 
@@ -95,7 +95,7 @@ void RGWOp_MDLog_List::execute() {
       max_entries -= entries.size();
   } while (truncated && (max_entries > 0));
 
-  meta_log->complete_list_entries(handle);
+  meta_log.complete_list_entries(handle);
 }
 
 void RGWOp_MDLog_List::send_response() {
@@ -161,9 +161,9 @@ void RGWOp_MDLog_ShardInfo::execute() {
     http_ret = -EINVAL;
     return;
   }
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
+  RGWMetadataLog meta_log{s->cct, store, period};
 
-  http_ret = meta_log->get_info(shard_id, &info);
+  http_ret = meta_log.get_info(shard_id, &info);
 }
 
 void RGWOp_MDLog_ShardInfo::send_response() {
@@ -215,9 +215,9 @@ void RGWOp_MDLog_Delete::execute() {
     http_ret = -EINVAL;
     return;
   }
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
+  RGWMetadataLog meta_log{s->cct, store, period};
 
-  http_ret = meta_log->trim(shard_id, ut_st, ut_et, start_marker, end_marker);
+  http_ret = meta_log.trim(shard_id, ut_st, ut_et, start_marker, end_marker);
 }
 
 void RGWOp_MDLog_Lock::execute() {
@@ -250,7 +250,7 @@ void RGWOp_MDLog_Lock::execute() {
     return;
   }
 
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
+  RGWMetadataLog meta_log{s->cct, store, period};
   unsigned dur;
   dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
   if (!err.empty() || dur <= 0) {
@@ -259,7 +259,7 @@ void RGWOp_MDLog_Lock::execute() {
     return;
   }
   utime_t time(dur, 0);
-  http_ret = meta_log->lock_exclusive(shard_id, time, zone_id, locker_id);
+  http_ret = meta_log.lock_exclusive(shard_id, time, zone_id, locker_id);
   if (http_ret == -EBUSY)
     http_ret = -ERR_LOCKED;
 }
@@ -292,8 +292,8 @@ void RGWOp_MDLog_Unlock::execute() {
     return;
   }
 
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
-  http_ret = meta_log->unlock(shard_id, zone_id, locker_id);
+  RGWMetadataLog meta_log{s->cct, store, period};
+  http_ret = meta_log.unlock(shard_id, zone_id, locker_id);
 }
 
 void RGWOp_MDLog_Notify::execute() {

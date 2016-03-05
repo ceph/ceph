@@ -150,12 +150,6 @@ class RGWMetadataLog {
     return META_LOG_OBJ_PREFIX + period + ".";
   }
 
-  void get_shard_oid(int id, string& oid) {
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d", id);
-    oid = prefix + buf;
-  }
-
   RWLock lock;
   set<int> modified_shards;
 
@@ -165,6 +159,12 @@ public:
     : cct(_cct), store(_store),
       prefix(make_prefix(period)),
       lock("RGWMetaLog::lock") {}
+
+  void get_shard_oid(int id, string& oid) const {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d", id);
+    oid = prefix + buf;
+  }
 
   int add_entry(RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl);
   int store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);

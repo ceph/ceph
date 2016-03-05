@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/intrusive_ptr.hpp>
 #include "common/ceph_json.h"
 #include "rgw_metadata.h"
 #include "rgw_coroutine.h"
@@ -8,6 +9,9 @@
 
 #include "rgw_rados.h"
 #include "rgw_tools.h"
+
+#include "rgw_cr_rados.h"
+#include "rgw_boost_asio_yield.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -357,19 +361,126 @@ RGWMetadataManager::~RGWMetadataManager()
   handlers.clear();
 }
 
-static RGWPeriodHistory::Cursor find_oldest_log_period(RGWRados* store)
+namespace {
+
+class FindAnyShardCR : public RGWCoroutine {
+  RGWRados *const store;
+  const RGWMetadataLog& mdlog;
+  const int num_shards;
+  int ret = 0;
+ public:
+  FindAnyShardCR(RGWRados *store, const RGWMetadataLog& mdlog, int num_shards)
+    : RGWCoroutine(store->ctx()), store(store), mdlog(mdlog),
+      num_shards(num_shards) {}
+
+  int operate() {
+    reenter(this) {
+      // send stat requests for each shard in parallel
+      yield {
+        auto async_rados = store->get_async_rados();
+        auto& pool = store->get_zone_params().log_pool;
+        auto oid = std::string{};
+
+        for (int i = 0; i < num_shards; i++) {
+          mdlog.get_shard_oid(i, oid);
+          auto obj = rgw_obj{pool, oid};
+          spawn(new RGWStatObjCR(async_rados, store, obj), true);
+        }
+      }
+      drain_all();
+      // if any shards were found, return success
+      while (collect_next(&ret)) {
+        if (ret == 0) {
+          // TODO: cancel instead of waiting for the rest
+          return set_cr_done();
+        }
+        ret = 0; // collect_next() won't modify &ret unless it's a failure
+      }
+      // no shards found
+      set_retcode(-ENOENT);
+      return set_cr_error(-ENOENT);
+    }
+    return 0;
+  }
+};
+
+// return true if any log shards exist for the given period
+int find_shards_for_period(RGWRados *store, const std::string& period_id)
 {
-  // TODO: search backwards through the period history for the first period with
-  // no log shard objects, and return its successor (some shards may be missing
-  // if they contain no metadata yet, so we need to check all shards)
-  return store->period_history->get_current();
+  auto cct = store->ctx();
+  RGWMetadataLog mdlog(cct, store, period_id);
+  auto num_shards = cct->_conf->rgw_md_log_max_shards;
+
+  using FindAnyShardCRRef = boost::intrusive_ptr<FindAnyShardCR>;
+  auto cr = FindAnyShardCRRef{new FindAnyShardCR(store, mdlog, num_shards)};
+
+  RGWCoroutinesManager mgr(cct, nullptr);
+  int r = mgr.run(cr.get());
+  if (r < 0) {
+    return r;
+  }
+  return cr->get_ret_status();
 }
+
+RGWPeriodHistory::Cursor find_oldest_log_period(RGWRados *store)
+{
+  // search backwards through the period history for the first period with no
+  // log shard objects, and return its successor (some shards may be missing
+  // if they contain no metadata yet, so we need to check all shards)
+  auto cursor = store->period_history->get_current();
+  auto oldest_log = cursor;
+
+  while (cursor) {
+    // search for an existing log shard object for this period
+    int r = find_shards_for_period(store, cursor.get_period().get_id());
+    if (r == -ENOENT) {
+      ldout(store->ctx(), 10) << "find_oldest_log_period found no log shards "
+          "for period " << cursor.get_period().get_id() << "; returning "
+          "period " << oldest_log.get_period().get_id() << dendl;
+      return oldest_log;
+    }
+    if (r < 0) {
+      return RGWPeriodHistory::Cursor{r};
+    }
+    oldest_log = cursor;
+
+    // advance to the period's predecessor
+    if (!cursor.has_prev()) {
+      auto& predecessor = cursor.get_period().get_predecessor();
+      if (predecessor.empty()) {
+        // this is the first period, so our logs must start here
+        ldout(store->ctx(), 10) << "find_oldest_log_period returning first "
+            "period " << cursor.get_period().get_id() << dendl;
+        return cursor;
+      }
+      // pull the predecessor and add it to our history
+      RGWPeriod period;
+      int r = store->period_puller->pull(predecessor, period);
+      if (r < 0) {
+        return RGWPeriodHistory::Cursor{r};
+      }
+      auto prev = store->period_history->insert(std::move(period));
+      if (!prev) {
+        return prev;
+      }
+      ldout(store->ctx(), 10) << "find_oldest_log_period advancing to "
+          "predecessor period " << predecessor << dendl;
+      assert(cursor.has_prev());
+    }
+    cursor.prev();
+  }
+  ldout(store->ctx(), 10) << "find_oldest_log_period returning empty cursor" << dendl;
+  return cursor;
+}
+
+} // anonymous namespace
 
 int RGWMetadataManager::init(const std::string& current_period)
 {
-  // find our oldest log so we can tell other zones where to start their sync
-  oldest_log_period = find_oldest_log_period(store);
-
+  if (store->is_meta_master()) {
+    // find our oldest log so we can tell other zones where to start their sync
+    oldest_log_period = find_oldest_log_period(store);
+  }
   // open a log for the current period
   current_log = get_log(current_period);
   return 0;
