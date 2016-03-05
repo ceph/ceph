@@ -99,6 +99,18 @@ EOF
     return 0
 }
 
+function setup_docker() {
+    if test -f /etc/apt/sources.list.d/docker.list ; then
+        echo "OK docker is installed"
+    else
+        sudo apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D
+        echo deb https://apt.dockerproject.org/repo ubuntu-trusty main | sudo tee -a /etc/apt/sources.list.d/docker.list
+        sudo apt-get update
+        sudo apt-get -qq install -y docker-engine
+        echo "INSTALLED docker"
+    fi
+}
+
 function teardown_paddles() {
     if pkill -f 'pecan' ; then
         echo "SHUTDOWN the paddles server"
@@ -473,6 +485,7 @@ function main() {
     local ceph_workbench_branch
 
     local do_setup_keypair=false
+    local do_setup_docker=false
     local do_ceph_workbench=false
     local do_create_config=false
     local do_setup_dnsmasq=false
@@ -524,6 +537,9 @@ function main() {
             --config)
                 do_create_config=true
                 ;;
+            --setup-docker)
+                do_setup_docker=true
+                ;;
             --setup-keypair)
                 do_setup_keypair=true
                 ;;
@@ -547,6 +563,7 @@ function main() {
                 do_ceph_workbench=true
                 do_create_config=true
                 do_setup_keypair=true
+                do_setup_docker=true
                 do_setup_dnsmasq=true
                 do_setup_paddles=true
                 do_setup_pulpito=true
@@ -606,6 +623,10 @@ function main() {
 
     if $do_setup_keypair ; then
         get_or_create_keypair $keypair || return 1
+    fi
+
+    if $do_setup_docker ; then
+        setup_docker || return 1
     fi
 
     if $do_setup_dnsmasq ; then
