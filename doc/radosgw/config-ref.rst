@@ -975,6 +975,11 @@ Keystone Settings
 :Default: ``15 * 60``
 
 
+``rgw keystone verify ssl`
+
+:Description: Verify SSL certificates while making token requests to keystone.
+:Type: Boolean
+:Default: ``true``
 
 .. _Architecture: ../../architecture#data-striping
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
