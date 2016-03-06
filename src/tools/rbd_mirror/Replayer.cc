@@ -37,7 +37,9 @@ Replayer::~Replayer()
     Mutex::Locker l(m_lock);
     m_cond.Signal();
   }
-  m_replayer_thread.join();
+  if (m_replayer_thread.is_started()) {
+    m_replayer_thread.join();
+  }
 }
 
 int Replayer::init()
@@ -80,6 +82,8 @@ int Replayer::init()
   // TODO: make interval configurable
   m_pool_watcher.reset(new PoolWatcher(m_remote, 30, m_lock, m_cond));
   m_pool_watcher->refresh_images();
+
+  m_replayer_thread.create("replayer");
 
   return 0;
 }
