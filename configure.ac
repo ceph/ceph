@@ -1313,6 +1313,20 @@ if test "x$with_openldap" != "xno"; then
 fi
 AM_CONDITIONAL(WITH_OPENLDAP, [ test "$have_openldap" = "yes" ])
 
+AC_ARG_WITH([reentrant-strsignal],
+            [AS_HELP_STRING([--with-reentrant-strsignal], [Use strsignal(3) instead of sys_siglist[]])],
+            [],
+            [with_reentrant_strsignal=no])
+AS_IF([test "x$with_reentrant_strsignal" != xno],
+  [AC_DEFINE(HAVE_REENTRANT_STRSIGNAL, 1, [Define if strsignal(3) is reentrant])])
+
+AC_ARG_WITH([thread-safe-res-query],
+            [AS_HELP_STRING([--with-thread-safe-res-query], [Use res_query(3) without locking])],
+            [],
+            [with_thread_safe_res_query=no])
+AS_IF([test "x$with_thread_safe_res_query" != xno],
+  [AC_DEFINE(HAVE_THREAD_SAFE_RES_QUERY, 1, [Define if res_query(3) is thread safe])])
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
