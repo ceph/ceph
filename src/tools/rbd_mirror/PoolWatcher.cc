@@ -117,6 +117,8 @@ void PoolWatcher::refresh_images(bool reschedule)
       map<string, string> pool_images;
       r = dir_list(&ioctx, RBD_DIRECTORY,
 		   last_read, max_read, &pool_images);
+      if (r == -ENOENT)
+	r = 0;
       if (r < 0) {
         derr << "error listing images in pool " << pool_name << ": "
 	     << cpp_strerror(r) << dendl;
