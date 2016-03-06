@@ -54,10 +54,10 @@ public:
   void expect_remove_map(librbd::ImageCtx *ictx, uint64_t snap_id, int r) {
     std::string snap_oid(ObjectMap::object_map_name(ictx->id, snap_id));
     if (r < 0) {
-      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx), remove(snap_oid))
+      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx), remove(snap_oid, _))
                     .WillOnce(Return(r));
     } else {
-      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx), remove(snap_oid))
+      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx), remove(snap_oid, _))
                     .WillOnce(DoDefault());
     }
   }
