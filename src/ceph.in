@@ -471,7 +471,6 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
 
     if verbose:
         print("Submitting command ", valid_dict, file=sys.stderr)
-        print >> sys.stderr, "Submitting command ", valid_dict
     return json_command(cluster_handle, target=target, argdict=valid_dict,
                         inbuf=inbuf)
 
