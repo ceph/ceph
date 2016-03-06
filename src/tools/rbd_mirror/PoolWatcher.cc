@@ -14,7 +14,7 @@
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd-mirror: "
+#define dout_prefix *_dout << "rbd-mirror: PoolWatcher::" << __func__ << ": "
 
 using std::list;
 using std::map;
@@ -57,7 +57,7 @@ const map<int64_t, set<string> >& PoolWatcher::get_images() const
 
 void PoolWatcher::refresh_images(bool reschedule)
 {
-  dout(20) << __func__ << dendl;
+  dout(20) << "enter" << dendl;
   map<int64_t, set<string> > images;
   list<pair<int64_t, string> > pools;
   int r = m_cluster->pool_list2(pools);
