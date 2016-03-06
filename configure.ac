@@ -354,7 +354,7 @@ if test x"$linux" = x"yes"; then
 fi
 
 #
-# Check for res_nquery in libresolv. There are several variations. On OSX
+# Check for res_nquery or res_query in libresolv. There are several variations. On OSX
 # res_nquery is a macro defined in resolv.h, so the typical AC_CHECK_LIB
 # doesn't work. On FreeBSD res_nquery can be found in libc. The required
 # library for linking (if any) is defined RESOLV_LIBS.
@@ -362,30 +362,37 @@ fi
 AC_CHECK_HEADER([resolv.h], [], [], [#include <netinet/in.h>])
 
 AC_DEFUN([CHECK_RESOLV_LIBS], [{
-  AC_MSG_CHECKING([if res_nquery will link (LIBS=$1)])
+  AC_MSG_CHECKING([if $1 will link (LIBS=$2)])
   saved_LIBS="${LIBS}"
-  LIBS="$1"
+  LIBS="$2"
+  AS_CASE($1,
+          res_nquery, [resolve_func="res_nquery(0, 0, 0, 0, 0, 0)"],
+          res_query, [resolve_func="res_query(0, 0, 0, 0, 0)"],
+          AC_MSG_FAILURE([unknown resolv func]))
   AC_LINK_IFELSE([AC_LANG_PROGRAM([[
         #include <netinet/in.h>
         #include <resolv.h>
-      ]], [[res_nquery(0, 0, 0, 0, 0, 0);]])],
+      ]], [[$resolve_func;]])],
       [AC_MSG_RESULT([yes])
-      [$2]],
+      AC_DEFINE(AS_TR_CPP([HAVE_$1]), 1, [Define if you have $1])
+      [$3]],
       AC_MSG_RESULT([no]))
   LIBS="${saved_LIBS}"
 }])
 
 RESOLV_LIBS=""
-CHECK_RESOLV_LIBS([$RESOLV_LIBS], [resolv_libs="ok"])
+CHECK_RESOLV_LIBS([res_nquery], [$RESOLV_LIBS], [resolv_libs="ok"])
 if test x"$resolv_libs" != "xok"; then
-  RESOLV_LIBS="-lresolv"
-  CHECK_RESOLV_LIBS([$RESOLV_LIBS], [resolv_libs="ok"])
+  CHECK_RESOLV_LIBS([res_query], [$RESOLV_LIBS], [resolv_libs="ok"])
   if test x"$resolv_libs" != "xok"; then
-    AC_MSG_FAILURE([no resolv library found])
+    RESOLV_LIBS="-lresolv"
+    CHECK_RESOLV_LIBS([res_nquery], [$RESOLV_LIBS], [resolv_libs="ok"])
+    if test x"$resolv_libs" != "xok"; then
+      AC_MSG_FAILURE([no resolv library found])
+    fi
   fi
 fi
 AC_SUBST([RESOLV_LIBS])
-AC_DEFINE(HAVE_RES_NQUERY, 1, [Define if you have res_nquery])
 
 dnl check for libkeyutils on linux
 KEYUTILS_LIB=""
