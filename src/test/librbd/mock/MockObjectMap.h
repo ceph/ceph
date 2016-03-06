@@ -4,6 +4,7 @@
 #ifndef CEPH_TEST_LIBRBD_MOCK_OBJECT_MAP_H
 #define CEPH_TEST_LIBRBD_MOCK_OBJECT_MAP_H
 
+#include "common/RWLock.h"
 #include "gmock/gmock.h"
 
 namespace librbd {
