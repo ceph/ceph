@@ -422,10 +422,10 @@ repository`_ and are run via the `teuthology framework`_.
 .. _`teuthology framework`: https://github.com/ceph/teuthology
 
 If you have access to an OpenStack tenant, you are encouraged to run the
-integration tests yourself using teuthology's OpenStack backend, called
-`teuthology-openstack
-<https://github.com/dachary/teuthology/tree/openstack#openstack-backend>`_,
+integration tests yourself using `ceph-workbench ceph-qa-suite`_ 
 and post the test results to the PR.
+
+.. _`ceph-workbench ceph-qa-suite`: http://ceph-workbench.readthedocs.org/
 
 The Ceph community also uses the `Sepia lab
 <http://ceph.github.io/sepia/>`_ where the integration tests can be run on
@@ -451,10 +451,14 @@ While your PR is going through `Testing`_ and `Code review`_, you can
 modify it at any time by editing files in your local branch.
 
 After the changes are committed locally (to the ``fix_1`` branch in our
-example), they need to be pushed to GitHub so they appear in the PR. If the
-changes involved modification of the git history (because of a ``git
-rebase`` or ``git commit --amend``), you will need to force push your branch
-with:
+example), they need to be pushed to GitHub so they appear in the PR.
+
+Often it is necessary to modify the PR after it has been opened. This is
+done by adding commits to the ``fix_1`` branch and rebasing to modify the
+branch's git history. See `this tutorial
+<https://www.atlassian.com/git/tutorials/rewriting-history>`_ for a good
+introduction to rebasing. When you are done with your modifications,
+you will need to force push your branch with:
 
 .. code::
 
@@ -466,16 +470,22 @@ Merge
 The bugfixing process culminates when one of the project leads decides to
 merge your PR.
 
+When this happens, it is a signal for you (or the lead who merged the PR)
+to change the `Issue tracker`_ status to "Resolved". Some issues may be
+flagged for backporting, in which case the status should be changed to
+"Pending Backport" (see the ``Backporting``_ chapter for details).
+
 
 Testing
 =======
 
 Ceph has two types of tests: "make check" tests and integration tests.
 The former are run via ``GNU Make <https://www.gnu.org/software/make/>``,
-and the latter are run via the `teuthology framework`_.
+and the latter are run via the `teuthology framework`_. The following two
+chapters examine the "make check" and integration tests in detail.
 
-Make check intro
-----------------
+Testing - make check
+====================
 
 After compiling Ceph, the ``make check`` command can be used to run the
 code through a battery of tests covering various aspects of Ceph. For
@@ -489,9 +499,7 @@ inclusion in "make check", a test must:
 While it is possible to run ``make check`` directly, it can be tricky to
 correctly set up your environment. Fortunately, a script is provided to
 make it easier run "make check" on your code. It can be run from the
-top-level directory of the Ceph source tree by doing:
-
-.. code::
+top-level directory of the Ceph source tree by doing::
 
     $ ./run-make-check.sh
 
@@ -502,60 +510,92 @@ from 20 minutes to three hours to complete, but it's worth the wait.
 When you fix a bug, it's a good idea to add a test. See the `Writing make
 check tests`_ chapter.
 
-Integration tests intro
------------------------
+Further sections
+----------------
+
+* Principles of make check tests
+* Where to find test results
+* How to interpret test results
+* Find the corresponding source code
+* Writing make check tests
+* Make check caveats
+
+Testing - integration tests
+===========================
 
 When a test requires multiple machines, root access or lasts for a
 longer time (for example, to simulate a realistic Ceph deployment), it
-is deemed to be an integration test. Integration tests are defined
-in the `ceph-qa-suite repository`_ and run with the `teuthology
-framework`_.
+is deemed to be an integration test. Integration tests are organized into
+"suites", which are defined in the `ceph-qa-suite repository`_ and run with
+the `teuthology-suite`_ command.
 
-A number of integration tests are run on a regular basis against the
-official Ceph repositories (on the master development branch and the
-stable branches). Traditionally, these tests are called "the nightlies"
-because most of the Ceph developers used to live and work in California and
-from their perspective the tests were run overnight. 
+A number of integration tests are run on a regular basis in the `Sepia
+lab`_ against the official Ceph repositories (on the master development
+branch and the stable branches). Traditionally, these tests are called "the
+nightlies" because the Ceph core developers used to live and work in
+the same time zone and from their perspective the tests were run overnight. 
 
-The results of the nightlies are visible at either http://pulpito.ceph.com/
-and http://pulpito.ovh.sepia.ceph.com:8081/ (depending on how the tests
-were run) and are also reported on the `ceph-qa mailing list
-<http://ceph.com/resources/mailing-list-irc/>`_ for analysis.
+The results of the nightlies are published at http://pulpito.ceph.com/
+and http://pulpito.ovh.sepia.ceph.com:8081/, and are also reported on the
+`ceph-qa mailing list <http://ceph.com/resources/mailing-list-irc/>`_ for
+analysis.
 
-Some Ceph developers have access to the hardware running these tests
-(either bare metal or OpenStack provisioned) and are allowed to
-schedule integration tests there (the developer nick shows in the test
-results URL).
+Running integration tests
+-------------------------
 
-Ceph developers who have access to an OpenStack tenant (could be the Sepia
-OVH one or any other) can use the `ceph-workbench ceph-qa-suite`_ command
-to run integration tests and publish the results at
-http://teuthology-logs.public.ceph.com. This allows reviewers to verify
-that changes to the code base do not cause regressions, or to analyze test
-failures when they do occur.
+Some Ceph developers have access to the `Sepia lab`_ and are allowed to
+schedule integration tests there. The developer nick shows in the test
+results URL and in the first column of the Pulpito dashboard.
 
-.. _`ceph-workbench ceph-qa-suite`: http://ceph-workbench.readthedocs.org/
+"How can I run the integration tests in my own environment?" you may ask.
+One option is to set up a teuthology cluster on bare metal. Though this is
+a non-trivial task, it `is` possible. Here are `some notes
+<http://docs.ceph.com/teuthology/docs/LAB_SETUP.html>`_ to get you started
+if you decide to go this route.
 
-Understanding make check tests
-==============================
+If you have access to an OpenStack tenant, you have another option:
+teuthology has an OpenStack backend, which is documented `here
+<https://github.com/dachary/teuthology/tree/openstack#openstack-backend>`_.
+This OpenStack backend can build packages from a given git commit or
+branch, provision VMs in a public or private OpenStack
+instance (sometimes referred to as a "cloud"), install the packages and run
+integration tests on those VMs. This process is controlled using a tool
+called `ceph-workbench ceph-qa-suite`_. This tool also automates publishing
+of test results at http://teuthology-logs.public.ceph.com. 
 
-Principles of make check tests, where to find the results, how to interpret
-them, how to find the corresponding source code, how to write a make check
-test.
+Running integration tests on your code contributions and publishing the
+results allows reviewers to verify that changes to the code base do not
+cause regressions, or to analyze test failures when they do occur.
 
-Understanding integration tests
-===============================
+teuthology-suite
+----------------
 
-This is an introduction to integration tests. A detailed
-description of each option is available from ``teuthology-suite --help``.
+Every teuthology cluster, whether bare-metal or cloud-provisioned, has a
+so-called "teuthology node" from which tests suites are triggered using the
+``teuthology-suite`` command.
 
-Reading a standalone integration test
--------------------------------------
+A detailed description of each ``teuthology-suite`` option is available
+by running the following command on the teuthology node::
 
-A test is defined by yaml files found in the ``suites`` subdirectory
-of the `ceph-qa-suite repository`_ and implemented by python code
-found in the ``tasks`` subdirectory. Here is a commented example using
-`rados/singleton/all/admin-socket.yaml  <https://github.com/ceph/ceph-qa-suite/blob/master/suites/rados/singleton/all/admin-socket.yaml>`_ ::
+   $ teuthology-suite --help
+
+Integration tests are organized into suites for convenience. Before we
+discuss the suites, we first explain how to read individual integration
+tests.
+
+Integration tests are defined by yaml files found in the ``suites``
+subdirectory of the `ceph-qa-suite repository`_ and implemented by python
+code found in the ``tasks`` subdirectory. Some tests ("standalone tests")
+are defined in a single yaml file, while in others the definition is spread
+over multiple files placed within a single directory. 
+
+Reading a standalone test
+-------------------------
+
+Here is a commented example using the integration test
+`rados/singleton/all/admin-socket.yaml
+<https://github.com/ceph/ceph-qa-suite/blob/master/suites/rados/singleton/all/admin-socket.yaml>`_
+::
 
       roles:
       - - mon.a
@@ -584,9 +624,9 @@ id ``a`` (that is the ``mon.a`` in the list of roles) and two OSDs
 (``osd.0`` and ``osd.1``).
 
 The body of the test is in the ``tasks`` array: each element is
-evaluated in order and runs the corresponding python file found in the
+evaluated in order, causing the corresponding python file found in the
 ``tasks`` subdirectory of the `teuthology repository`_ or
-`ceph-qa-suite repository`_. The `install
+`ceph-qa-suite repository`_ to be run. The `install
 <https://github.com/ceph/teuthology/blob/master/teuthology/task/install.py>`_
 task comes first and installs the Ceph packages on each machine (as
 defined by the ``roles`` array). A full description of the ``install``
@@ -594,14 +634,15 @@ task is `found in the python file
 <https://github.com/ceph/teuthology/blob/master/teuthology/task/install.py>`_
 (search for "def task").
 
-The `ceph task
-<https://github.com/ceph/ceph-qa-suite/blob/master/tasks/ceph.py#L1232>`_
-starts OSDs and MONs as required by the ``roles`` array. In this example,
-it will start one MON (``mon.a``) and two OSDs (``osd.0`` and ``osd.1``),
-all on the same machine.
+The ``ceph`` task, which is documented `here
+<https://github.com/ceph/ceph-qa-suite/blob/master/tasks/ceph.py>`_ (again,
+search for "def tasks"), starts OSDs and MONs (and possibly MDSs as well)
+as required by the ``roles`` array. In this example, it will start one MON
+(``mon.a``) and two OSDs (``osd.0`` and ``osd.1``), all on the same
+machine.
 
-Once the Ceph cluster is healthy, the `admin_socket task
-<https://github.com/ceph/ceph-qa-suite/blob/master/tasks/admin_socket.py#L18>`_
+Once the Ceph cluster is healthy, the ``admin_socket`` task (`source code
+<https://github.com/ceph/ceph-qa-suite/blob/master/tasks/admin_socket.py>`_)
 starts. The parameter of the ``admin_socket`` task (and any other
 task) is a structure which is interpreted as documented in the
 task. In this example the parameters are a set of commands to be sent
@@ -612,13 +653,50 @@ This test can be run with::
 
   teuthology-suite --suite rados/singleton/all/admin-socket.yaml
 
+Test descriptions 
+-----------------
+
+In the previous example, the test was defined by a single yaml file. In
+this case, the test description is simply the relative path to the yaml
+file in question.
+
+Much more commonly, tests are defined as the concatenation of several yaml
+files. In these cases, the description of each test consists of the
+subdirectory under `suites/
+<https://github.com/ceph/ceph-qa-suite/tree/master/suites>`_ containing the
+yaml files followed by an expression in curly braces (``{}``) consisting of
+a list of yaml files to be concatenated. For instance the
+test description::
+
+  ceph-disk/basic/{distros/centos_7.0.yaml tasks/ceph-disk.yaml}
+
+signifies the concatenation of two files:
+
+* ceph-disk/basic/distros/centos_7.0.yaml
+* ceph-disk/basic/tasks/ceph-disk.yaml
+
 How are tests built from directories?
 -------------------------------------
 
-Most tests are not a single file but the concatenation of files
-collected from a tree. For instance, the `ceph-disk suite
-<https://github.com/ceph/ceph-qa-suite/tree/master/suites/ceph-disk/>`_
-is as follows::
+As noted in the previous section, most tests are not defined in a single
+yaml file, but rather as the concatenation of files collected from a
+directory tree within `ceph-qa-suite`_. 
+
+The set of all tests generated from a given subdirectory of
+`ceph-qa-suite`_ is called an "integration test suite", or a "teuthology
+suite".
+
+Concatenation is triggered by the presence of special files (``%`` and
+``+``) within the directory tree in question. This is best explained by
+example.
+
+Concatenation using percent
+---------------------------
+
+For instance, the `ceph-disk suite
+<https://github.com/ceph/ceph-qa-suite/tree/master/suites/ceph-disk/>`_ is
+defined by the ``suites/ceph-disk/`` tree, which consists of the
+files and subdirectories in the following structure:
 
   directory: ceph-disk/basic
       file: %
@@ -628,25 +706,53 @@ is as follows::
       directory: tasks
          file: ceph-disk.yaml
 
-This is interpreted as two tests:
+This is interpreted as two tests: (1) the concatenation of centos_7.0.yaml
+and ceph-disk.yaml, and (2) the concatenation of ubuntu_14.04.yaml and
+ceph-disk.yaml. In accordance with teuthology usage, the test descriptions
+are:
 
-* the concatenation of centos_7.0.yaml and ceph-disk.yaml
-* the concatenation of ubuntu_14.04.yaml and ceph-disk.yaml
+1. ceph-disk/basic/{distros/centos_7.0.yaml tasks/ceph-disk.yaml}
+2. ceph-disk/basic/{distros/ubuntu_14.04.yaml tasks/ceph-disk.yaml}
 
-Meaning the task found in ``ceph-disk.yaml`` is intended to run on
-both CentOS 7.0 and Ubuntu 14.04.
+(In human terms, this means that the task found in ``ceph-disk.yaml`` is
+intended to run on both CentOS 7.0 and Ubuntu 14.04.)
+
+If you look up these files in the `ceph-qa-suite`_ repo, you will notice
+that the ``centos_7.0.yaml`` and ``ubuntu_14.04.yaml`` files in the
+``suites/ceph-disk/basic/distros/`` directory are implemented as symlinks
+to ``distros/centos_7.0.yaml`` and ``distros/ubuntu_14.04.yaml``,
+respectively. The practice of using symlinks instead of files enables a
+single file to be used in multiple suites.
 
 The special file percent (``%``) is interpreted as a requirement to
 generate tests combining all files found in the current directory and
 in its direct subdirectories. Without the file percent, the
-``ceph-disk`` tree would create three independant tests:
+``ceph-disk`` tree would be interpreted as three standalone tests:
 
 * ceph-disk/basic/distros/centos_7.0.yaml
 * ceph-disk/basic/distros/ubuntu_14.04.yaml
-* ceph-disk/basic/distros/ceph-disk.yaml
+* ceph-disk/basic/tasks/ceph-disk.yaml
 
-To share parts of the test description between suites, the special
-file plus (``+``) can be used to concatenate them. For instance::
+All the tests generated from the ``suites/ceph-disk/`` directory tree
+(also known as the "ceph-disk suite") can be run with::
+
+  $ teuthology-suite --suite ceph-disk
+
+An individual test from the ceph-disk suite can be run by adding the
+``--filter`` option::
+
+  $ teuthology-suite \
+      --suite ceph-disk/basic \
+      --filter 'ceph-disk/basic/{distros/ubuntu_14.04.yaml tasks/ceph-disk.yaml}'
+
+Concatenation using plus
+------------------------
+
+For even greater flexibility in sharing yaml files between suites, the
+special file plus (``+``) can be used to concatenate files within a
+directory. For instance, consider the `suites/rbd/thrash
+<https://github.com/ceph/ceph-qa-suite/tree/master/suites/rbd/thrash>`_
+tree::
 
   directory: rbd/thrash
     file: %
@@ -658,22 +764,22 @@ file plus (``+``) can be used to concatenate them. For instance::
       file: rbd_api_tests_copy_on_read.yaml
       file: rbd_api_tests.yaml
 
-creates two tests:
+This creates two tests:
 
-* rbd/thrash/{clusters/fixed-2.yaml, clusters/openstack.yaml,
-  workloads/rbd_api_tests_copy_on_read.yaml}
-* rbd/thrash/{clusters/fixed-2.yaml, clusters/openstack.yaml,
-  workloads/rbd_api_tests.yaml}
+* rbd/thrash/{clusters/fixed-2.yaml clusters/openstack.yaml workloads/rbd_api_tests_copy_on_read.yaml}
+* rbd/thrash/{clusters/fixed-2.yaml clusters/openstack.yaml workloads/rbd_api_tests.yaml}
 
-Because of the special file plus (``+``), ``fixed-2.yaml`` and
-``openstack.yaml`` are concatenated together and treated as a single
-file. Without the special file plus, they would have been combined
-with the files from the workloads directory to create four tests:
+Because the ``clusters/`` subdirectory contains the special file plus
+(``+``), all the other files in that subdirectory (``fixed-2.yaml`` and
+``openstack.yaml`` in this case) are concatenated together
+and treated as a single file. Without the special file plus, they would
+have been combined with the files from the workloads directory to create
+a matrix of four tests:
 
-* rbd/thrash/{clusters/openstack.yaml, workloads/rbd_api_tests_copy_on_read.yaml}
-* rbd/thrash/{clusters/openstack.yaml, workloads/rbd_api_tests.yaml}
-* rbd/thrash/{clusters/fixed-2.yaml, workloads/rbd_api_tests_copy_on_read.yaml}
-* rbd/thrash/{clusters/fixed-2.yaml, workloads/rbd_api_tests.yaml}
+* rbd/thrash/{clusters/openstack.yaml workloads/rbd_api_tests_copy_on_read.yaml}
+* rbd/thrash/{clusters/openstack.yaml workloads/rbd_api_tests.yaml}
+* rbd/thrash/{clusters/fixed-2.yaml workloads/rbd_api_tests_copy_on_read.yaml}
+* rbd/thrash/{clusters/fixed-2.yaml workloads/rbd_api_tests.yaml}
 
 The ``clusters/fixed-2.yaml`` file is shared among many suites to
 define the following ``roles``::
@@ -682,24 +788,18 @@ define the following ``roles``::
   - [mon.a, mon.c, osd.0, osd.1, osd.2, client.0]
   - [mon.b, osd.3, osd.4, osd.5, client.1]
 
-The tests generated from the ``ceph-disk`` directory can be run with::
+The ``rbd/thrash`` suite as defined above, consisting of two tests, 
+can be run with::
 
-  teuthology-suite --suite ceph-disk
+  $ teuthology-suite --suite rbd/thrash
 
-.. _`teuthology repository`: https://github.com/ceph/teuthology/
+A single test from the rbd/thrash suite can be run by adding the
+``--filter`` option::
 
-Test descriptions are unique identifiers
-----------------------------------------
+  $ teuthology-suite \
+      --suite rbd/thrash \
+      --filter 'rbd/thrash/{clusters/fixed-2.yaml clusters/openstack.yaml workloads/rbd_api_tests_copy_on_read.yaml}'
 
-Each test is uniquely identified by its description which is made of
-the names of all files concatenated together. For instance the test::
-
-  ceph-disk/basic/{distros/centos_7.0.yaml tasks/ceph-disk.yaml}
-
-is the concatenation of the files:
-
-* ceph-disk/basic/distros/centos_7.0.yaml
-* ceph-disk/basic/tasks/ceph-disk.yaml
 
 Filtering tests by their description
 ------------------------------------
@@ -710,12 +810,12 @@ will select the tests with a matching description. For instance if the
 
   teuthology-suite --suite rados --filter all/peer.yaml
 
-The ``--filter-out`` option does the opposite (it matches test that do
+The ``--filter-out`` option does the opposite (it matches tests that do
 not contain a given string), and can be combined with the ``--filter``
 option.
 
 Both ``--filter`` and ``--filter-out`` take a comma-separated list of strings (which
-means comma are implicitly forbidden in filenames found in the
+means the comma character is implicitly forbidden in filenames found in the
 `ceph-qa-suite repository`_). For instance::
 
   teuthology-suite --suite rados --filter all/peer.yaml,all/rest-api.yaml
@@ -731,9 +831,12 @@ be an exact match: they are not regular expressions.
 Reducing the number of tests
 ----------------------------
 
-The rados suite generates thousands of tests out of a few hundred
-files. For instance all tests in the `rados/thrash suite <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados/thrash>`_ run for ``ext4``, ``xfs`` and ``btrfs`` because they are combined (the ``%`` file system)
-with the `fs directory <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados/thrash/fs>`_
+The ``rados`` suite generates thousands of tests out of a few hundred
+files. For instance, all tests in the `rados/thrash suite
+<https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados/thrash>`_
+run for ``ext4``, ``xfs`` and ``btrfs`` because they are combined (via
+special file ``%``) with the `fs directory
+<https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados/thrash/fs>`_
 
 All these tests are required before a Ceph release is published but it
 is too much when verifying a contribution can be merged without
@@ -744,14 +847,15 @@ reduce the number of tests that are triggered. For instance::
 
 will run as few tests as possible. The tradeoff is that some tests
 will only run on ``ext4`` and not on ``btrfs``, but all files in the
-suite will be in at least one test.
+suite will be in at least one test. Understanding the actual logic that
+drives this requires reading the teuthology source code.
 
 The ``--limit`` option only runs the first ``N`` tests in the suite:
 this is however rarely useful because there is no way to control which test
 will be first.
 
-Inventory
----------
+Suites inventory
+----------------
 
 The ``suites`` directory of the `ceph-qa-suite repository`_ contains
 all the integration tests, for all the Ceph components.
@@ -793,7 +897,7 @@ all the integration tests, for all the Ceph components.
   run RGW tests using actual Ceph clusters
 
 `smoke <https://github.com/ceph/ceph-qa-suite/tree/master/suites/smoke>`_
-  run test that exercise the Ceph API with an actual Ceph cluster
+  run tests that exercise the Ceph API with an actual Ceph cluster
 
 `teuthology <https://github.com/ceph/ceph-qa-suite/tree/master/suites/teuthology>`_
   verify that teuthology can run integration tests, with and without OpenStack
