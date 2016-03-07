@@ -558,6 +558,7 @@ void RGWHTTPManager::stop()
 {
   if (is_threaded) {
     going_down.set(1);
+    signal_thread();
     reqs_thread->join();
     delete reqs_thread;
   }
