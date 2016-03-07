@@ -18,6 +18,7 @@ namespace object_map {
 using ::testing::_;
 using ::testing::InSequence;
 using ::testing::Return;
+using ::testing::StrEq;
 
 class TestMockObjectMapUnlockRequest : public TestMockFixture {
 public:
@@ -26,7 +27,7 @@ public:
   void expect_unlock(MockImageCtx &mock_image_ctx, int r) {
     std::string oid(ObjectMap::object_map_name(mock_image_ctx.id, CEPH_NOSNAP));
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(oid, _, "lock", "unlock", _, _, _))
+                exec(oid, _, StrEq("lock"), StrEq("unlock"), _, _, _))
                   .WillOnce(Return(r));
   }
 };
