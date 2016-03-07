@@ -75,7 +75,6 @@ void Mirror::update_replayers(const map<peer_t, set<int64_t> > &peer_configs)
 {
   dout(20) << "enter" << dendl;
   assert(m_lock.is_locked());
-  set<peer_t> peers;
   for (auto &kv : peer_configs) {
     const peer_t &peer = kv.first;
     if (m_replayers.find(peer) == m_replayers.end()) {
@@ -93,7 +92,7 @@ void Mirror::update_replayers(const map<peer_t, set<int64_t> > &peer_configs)
   // TODO: make async
   for (auto it = m_replayers.begin(); it != m_replayers.end();) {
     peer_t peer = it->first;
-    if (peers.find(peer) == peers.end()) {
+    if (peer_configs.find(peer) == peer_configs.end()) {
       dout(20) << "removing replayer for " << peer << dendl;
       m_replayers.erase(it++);
     } else {
