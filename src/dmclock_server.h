@@ -177,6 +177,15 @@ namespace crimson {
 	  prev_tag = _prev;
 	  last_tick = _tick;
 	}
+
+	inline double get_prev_prop_tag() const {
+	  return prev_tag.proportion;
+	}
+
+	inline void set_prev_prop_tag(double value,
+				      bool adjust_by_inc = false) {
+	  prev_tag.proportion = value - (adjust_by_inc ? info.weight_inv : 0.0);
+	}
       }; // class ClientRec
 
 
@@ -498,14 +507,32 @@ namespace crimson {
 	}
 
 	if (client_it->second.idle) {
+	  // remove all handled requests from proportional queue
 	  while (!prop_q.empty() && prop_q.top()->handled) {
 	    prop_q.pop();
 	  }
+
+	  // We need to do an adjustment so that idle clients compete
+	  // fairly on proportional tags since those tags may have
+	  // drifted from real-time. Either use the lowest existing
+	  // proportion tag -- O(1) -- or the client with the lowest
+	  // previous proportion tag -- O(n) where n = # clients.
 	  if (!prop_q.empty()) {
 	    double min_prop_tag = prop_q.top()->tag.proportion;
-	    double reduction = min_prop_tag - time;
-	    for (auto i = prop_q.begin(); i != prop_q.end(); ++i) {
-	      (*i)->tag.proportion -= reduction;
+	    client_it->second.set_prev_prop_tag(min_prop_tag, true);
+	  } else {
+	    double lowest_prop_tag = -1.0;
+	    for (auto const &c : client_map) {
+	      // don't use ourselves since we're now in the map
+	      if (c.first != client_it->first) {
+		auto p = c.second.get_prev_prop_tag();
+		if (0.0 != p && (lowest_prop_tag < 0 || p < lowest_prop_tag)) {
+		    lowest_prop_tag = p;
+		}
+	      }
+	    }
+	    if (lowest_prop_tag > 0.0) {
+	      client_it->second.set_prev_prop_tag(lowest_prop_tag);
 	    }
 	  }
 	  client_it->second.idle = false;
