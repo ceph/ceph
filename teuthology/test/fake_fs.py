@@ -4,8 +4,8 @@ from contextlib import closing
 
 def make_fake_fstools(fake_filesystem):
     """
-    Build a fake listdir() and isfile(), to be used instead of
-    os.isdir() and os.isfile()
+    Build fake versions of os.listdir(), os.isfile(), etc. for use in
+    unit tests
 
     An example fake_filesystem value:
         >>> fake_fs = {\
