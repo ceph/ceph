@@ -7643,6 +7643,8 @@ done:
     ss << "will thrash map for " << thrash_map << " epochs";
     ret = thrash();
     err = 0;
+    if (ret)
+      goto update;
   } else {
     err = -EINVAL;
   }
