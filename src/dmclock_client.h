@@ -77,14 +77,15 @@ namespace crimson {
       // NB: All threads declared at end, so they're destructed firs!
 
       std::unique_ptr<RunEvery> cleaning_job;
-      
+
 
     public:
 
       // we have to start the counters at 1, as 0 is used in the
-      // cleaning process; D1 and D2 are durations
-      template<typename D1, typename D2>
-      ServiceTracker(D1 _clean_every, D2 _clean_age) :
+      // cleaning process
+      template<typename Rep, typename Per>
+      ServiceTracker(std::chrono::duration<Rep,Per> _clean_every,
+		     std::chrono::duration<Rep,Per> _clean_age) :
 	delta_counter(1),
 	rho_counter(1),
 	clean_age(std::chrono::duration_cast<Duration>(_clean_age))

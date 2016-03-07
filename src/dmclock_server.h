@@ -346,11 +346,11 @@ namespace crimson {
 
       // COMMON constructor that others feed into; we can accept three
       // different variations of durations
-      template<typename D1, typename D2, typename D3>
+      template<typename Rep, typename Per>
       PriorityQueue(ClientInfoFunc _client_info_f,
-		    D1 _idle_age,
-		    D2 _erase_age,
-		    D3 _check_time,
+		    std::chrono::duration<Rep,Per> _idle_age,
+		    std::chrono::duration<Rep,Per> _erase_age,
+		    std::chrono::duration<Rep,Per> _check_time,
 		    bool _allow_limit_break,
 		    Mechanism _mechanism) :
 	client_info_f(_client_info_f),
@@ -374,14 +374,14 @@ namespace crimson {
       // PUSH constructors -- full and convenience
 
 
-      // push full constructor; D1, D2, D3 are durations
-      template<typename D1, typename D2, typename D3>
+      // push full constructor
+      template<typename Rep, typename Per>
       PriorityQueue(ClientInfoFunc _client_info_f,
 		    CanHandleRequestFunc _can_handle_f,
 		    HandleRequestFunc _handle_f,
-		    D1 _idle_age,
-		    D2 _erase_age,
-		    D3 _check_time,
+		    std::chrono::duration<Rep,Per> _idle_age,
+		    std::chrono::duration<Rep,Per> _erase_age,
+		    std::chrono::duration<Rep,Per> _check_time,
 		    bool _allow_limit_break = false) :
 	PriorityQueue(_client_info_f,
 		      _idle_age, _erase_age, _check_time,
@@ -412,12 +412,11 @@ namespace crimson {
 
       // PULL constructors -- full and convenience
 
-      // pull full constructor; D1, D2, D3 are durations
-      template<typename D1, typename D2, typename D3>
+      template<typename Rep, typename Per>
       PriorityQueue(ClientInfoFunc _client_info_f,
-		    D1 _idle_age,
-		    D2 _erase_age,
-		    D3 _check_time,
+		    std::chrono::duration<Rep,Per> _idle_age,
+		    std::chrono::duration<Rep,Per> _erase_age,
+		    std::chrono::duration<Rep,Per> _check_time,
 		    bool _allow_limit_break = false) :
 	PriorityQueue(_client_info_f,
 		      _idle_age, _erase_age, _check_time,
