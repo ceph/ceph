@@ -554,7 +554,16 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   assert(off % block_size == 0);
   assert(len % block_size == 0);
-  int r = posix_fadvise(fd_buffered, off, len, POSIX_FADV_DONTNEED);
+
+  //POSIX_FADV_DONTNEED can't free dirty page. So we must firstly make those direty pages clean and then free.
+  int r = sync_file_range(fd_buffered, off , len, SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER);
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << " sync_file_range error: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = posix_fadvise(fd_buffered, off, len, POSIX_FADV_DONTNEED);
   if (r < 0) {
     r = -errno;
     derr << __func__ << " " << off << "~" << len << " error: "
