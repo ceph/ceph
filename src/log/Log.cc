@@ -51,6 +51,8 @@ Log::Log(SubsystemMap *s)
     m_flush_mutex_holder(0),
     m_new(), m_recent(),
     m_fd(-1),
+    m_uid(0),
+    m_gid(0),
     m_syslog_log(-2), m_syslog_crash(-2),
     m_stderr_log(1), m_stderr_crash(-1),
     m_graylog_log(-3), m_graylog_crash(-3),
@@ -137,10 +139,32 @@ void Log::reopen_log_file()
     VOID_TEMP_FAILURE_RETRY(::close(m_fd));
   if (m_log_file.length()) {
     m_fd = ::open(m_log_file.c_str(), O_CREAT|O_WRONLY|O_APPEND, 0644);
+    if (m_uid || m_gid) {
+      int r = ::fchown(m_fd, m_uid, m_gid);
+      if (r < 0) {
+	r = -errno;
+	cerr << "failed to chown " << m_log_file << ": " << cpp_strerror(r)
+	     << std::endl;
+      }
+    }
   } else {
     m_fd = -1;
   }
   m_flush_mutex_holder = 0;
+  pthread_mutex_unlock(&m_flush_mutex);
+}
+
+void Log::chown_log_file(uid_t uid, gid_t gid)
+{
+  pthread_mutex_lock(&m_flush_mutex);
+  if (m_fd >= 0) {
+    int r = ::fchown(m_fd, uid, gid);
+    if (r < 0) {
+      r = -errno;
+      cerr << "failed to chown " << m_log_file << ": " << cpp_strerror(r)
+	   << std::endl;
+    }
+  }
   pthread_mutex_unlock(&m_flush_mutex);
 }
 

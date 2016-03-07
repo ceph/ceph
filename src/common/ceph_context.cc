@@ -439,6 +439,8 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
     _log(NULL),
     _module_type(module_type_),
     _init_flags(init_flags_),
+    _set_uid(0),
+    _set_gid(0),
     _crypto_inited(false),
     _service_thread(NULL),
     _log_obs(NULL),

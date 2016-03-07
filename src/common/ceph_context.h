@@ -153,6 +153,17 @@ public:
     return _plugin_registry;
   }
 
+  void set_uid_gid(uid_t u, gid_t g) {
+    _set_uid = u;
+    _set_gid = g;
+  }
+  uid_t get_set_uid() const {
+    return _set_uid;
+  }
+  gid_t get_set_gid() const {
+    return _set_gid;
+  }
+
 private:
   struct SingletonWrapper : boost::noncopyable {
     virtual ~SingletonWrapper() {}
@@ -178,6 +189,9 @@ private:
   uint32_t _module_type;
 
   int _init_flags;
+
+  uid_t _set_uid; ///< uid to drop privs to
+  gid_t _set_gid; ///< gid to drop privs to
 
   bool _crypto_inited;
 
