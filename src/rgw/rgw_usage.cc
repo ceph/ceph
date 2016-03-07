@@ -30,6 +30,15 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
   formatter->close_section(); // categories
 }
 
+static void dump_usage_bucket_info(Formatter *formatter, string& name, cls_user_bucket_entry& entry)
+{
+  formatter->open_object_section("Entry");
+  formatter->dump_string("Bucket", name);
+  formatter->dump_int("Bytes", entry.size);
+  formatter->dump_int("Bytes_Rounded", entry.size_rounded);
+  formatter->close_section(); // entry
+}
+
 int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
 		   uint64_t end_epoch, bool show_log_entries, bool show_log_sum,
 		   map<string, bool> *categories,
