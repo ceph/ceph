@@ -708,7 +708,7 @@ public:
 
 protected:
   void dump_stray(F *f) {
-    for (int i = 0; i <= osdmap->get_max_osd(); i++) {
+    for (int i = 0; i < osdmap->get_max_osd(); i++) {
       if (osdmap->exists(i) && !this->is_touched(i))
 	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
     }
@@ -760,7 +760,7 @@ protected:
 
   double average_utilization() {
     int64_t kb = 0, kb_used = 0;
-    for (int i = 0; i <= osdmap->get_max_osd(); i++) {
+    for (int i = 0; i < osdmap->get_max_osd(); i++) {
       if (!osdmap->exists(i) || osdmap->get_weight(i) == 0)
 	continue;
       int64_t kb_i, kb_used_i, kb_avail_i;
@@ -1263,7 +1263,7 @@ void OSDMonitor::print_nodes(Formatter *f)
 {
   // group OSDs by their hosts
   map<string, list<int> > osds; // hostname => osd
-  for (int osd = 0; osd <= osdmap.get_max_osd(); osd++) {
+  for (int osd = 0; osd < osdmap.get_max_osd(); osd++) {
     map<string, string> m;
     if (load_metadata(osd, m, NULL)) {
       continue;
@@ -6227,7 +6227,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       // Check if the OSDs exist between current max and new value.
       // If there are any OSDs exist, then don't allow shrinking number
       // of OSDs.
-      for (int i = newmax; i <= osdmap.get_max_osd(); i++) {
+      for (int i = newmax; i < osdmap.get_max_osd(); i++) {
         if (osdmap.exists(i)) {
           err = -EBUSY;
           ss << "cannot shrink max_osd to " << newmax
