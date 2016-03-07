@@ -6732,8 +6732,11 @@ done:
     string addrstr;
     cmd_getval(g_ceph_context, cmdmap, "addr", addrstr);
     entity_addr_t addr;
-    if (!addr.parse(addrstr.c_str(), 0))
+    if (!addr.parse(addrstr.c_str(), 0)) {
       ss << "unable to parse address " << addrstr;
+      err = -EINVAL;
+      goto reply;
+    }
     else {
       string blacklistop;
       cmd_getval(g_ceph_context, cmdmap, "blacklistop", blacklistop);

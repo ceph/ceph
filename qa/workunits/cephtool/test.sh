@@ -1041,6 +1041,9 @@ function test_mon_osd()
   expect_false "ceph osd blacklist $bl/-1"
   expect_false "ceph osd blacklist $bl/foo"
 
+  # test with wrong address
+  expect_false "ceph osd blacklist 1234.56.78.90/100"
+
   # Test `clear`
   ceph osd blacklist add $bl
   ceph osd blacklist ls | grep $bl
