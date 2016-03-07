@@ -36,7 +36,7 @@ PoolWatcher::PoolWatcher(RadosRef cluster, double interval_seconds,
   m_refresh_cond(cond),
   m_stopping(false),
   m_cluster(cluster),
-  m_timer(g_ceph_context, m_lock),
+  m_timer(g_ceph_context, m_lock, false),
   m_interval(interval_seconds)
 {
   m_timer.init();
