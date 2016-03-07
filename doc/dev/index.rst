@@ -60,8 +60,8 @@ CephFS    Gregory Farnum  gregsfortytwo
 Build/Ops Ken Dreyer      ktdreyer
 ========= =============== =============
 
-The Ceph-specific acronyms in the table are explained under
-`Architecture`_, below.
+The Ceph-specific acronyms in the table are explained in
+:doc:`/architecture`.
 
 History
 -------
@@ -108,7 +108,8 @@ which is powered by `Redmine`_.
 .. _Redmine: http://www.redmine.org
 
 The tracker has a Ceph project with a number of subprojects loosely
-corresponding to the project components listed in `Architecture`_.
+corresponding to the various architectural components (see
+:doc:`/architecture`).
 
 Mere `registration`_ in the tracker automatically grants permissions
 sufficient to open new issues and comment on existing ones.
@@ -177,62 +178,6 @@ with:
     ./vstart.sh -n -x -l
     # check that it's there
     ./ceph health
-
-Architecture
-============
-
-Ceph is a collection of components built on top of RADOS and provide
-services (RBD, RGW, CephFS) and APIs (S3, Swift, POSIX) for the user to
-store and retrieve data.
-
-See :doc:`/architecture` for an overview of Ceph architecture. The
-following sections treat each of the major architectural components
-in more detail, with links to code and tests.
-
-.. FIXME The following are just stubs. These need to be developed into
-   detailed descriptions of the various high-level components (RADOS, RGW,
-   etc.) with breakdowns of their respective subcomponents.
-
-.. FIXME Later, in the Testing chapter I would like to take another look
-   at these components/subcomponents with a focus on how they are tested.
-
-RADOS
------
-
-RADOS stands for "Reliable, Autonomic Distributed Object Store". In a Ceph
-cluster, all data are stored in objects, and RADOS is the component responsible
-for that.
-
-RADOS itself can be further broken down into Monitors, Object Storage Daemons
-(OSDs), and client APIs (librados). Monitors and OSDs are introduced at
-:doc:`/start/intro`. The client library is explained at
-:doc:`/rados/api/index`.
-
-RGW
----
-
-RGW stands for RADOS Gateway. Using the embedded HTTP server civetweb_, RGW
-provides a REST interface to RADOS objects.
-
-.. _civetweb: https://github.com/civetweb/civetweb
-
-A more thorough introduction to RGW can be found at :doc:`/radosgw/index`.
-
-RBD
----
-
-RBD stands for RADOS Block Device. It enables a Ceph cluster to store disk
-images, and includes in-kernel code enabling RBD images to be mounted.
-
-To delve further into RBD, see :doc:`/rbd/rbd`.
-
-CephFS
-------
-
-CephFS is a distributed file system that enables a Ceph cluster to be used as a NAS.
-
-File system metadata is managed by Meta Data Server (MDS) daemons. The Ceph
-file system is explained in more detail at :doc:`/cephfs/index`.
 
 Issue tracker
 =============
@@ -421,7 +366,7 @@ see the `Testing`_ chapter.
 
 For now, let us just assume that you have finished work on the bugfix and
 that you have tested it and believe it works. Commit the changes to your local
-branch using the ``--sign`` option::
+branch using the ``--signoff`` option::
 
     $ git commit -as
 
@@ -677,6 +622,10 @@ annotations in the yaml files used to define the tests. The results can be
 seen in the `ceph-qa-suite wiki
 <http://tracker.ceph.com/projects/ceph-qa-suite/wiki/>`_.
 
+Since this is a new feature, many yaml files have yet to be annotated.
+Developers are encouraged to improve the documentation, in terms of both
+coverage and quality.
+
 Running integration tests
 -------------------------
 
@@ -693,8 +642,7 @@ If you have access to an OpenStack tenant, you have another option: the
 `teuthology framework`_ has an OpenStack backend, which is documented `here
 <https://github.com/dachary/teuthology/tree/openstack#openstack-backend>`_.
 This OpenStack backend can build packages from a given git commit or
-branch, provision VMs in a public or private OpenStack instance (sometimes
-referred to as a "cloud"), install the packages and run integration tests
+branch, provision VMs, install the packages and run integration tests
 on those VMs. This process is controlled using a tool called
 `ceph-workbench ceph-qa-suite`_. This tool also automates publishing of
 test results at http://teuthology-logs.public.ceph.com. 
@@ -948,7 +896,6 @@ A single test from the rbd/thrash suite can be run by adding the
       --suite rbd/thrash \
       --filter 'rbd/thrash/{clusters/fixed-2.yaml clusters/openstack.yaml workloads/rbd_api_tests_copy_on_read.yaml}'
 
-
 Filtering tests by their description
 ------------------------------------
 
@@ -1003,6 +950,77 @@ The ``--limit`` option only runs the first ``N`` tests in the suite:
 this is rarely useful, however, because there is no way to control which
 test will be first.
 
+Testing in the cloud
+====================
+
+In this chapter, we will explain in detail how use an OpenStack
+tenant as an environment for Ceph integration testing.
+
+Assumptions and caveat
+----------------------
+
+We assume that:
+
+1. you are the only person using the tenant
+2. you have the credentials
+3. the tenant supports the ``nova`` and ``cinder`` APIs
+4. you have not tried to use ``ceph-workbench`` with this tenant before
+
+Caveat: be aware that, as of this writing (March 2016), testing in
+OpenStack clouds is a new feature. Things may not work as advertised.
+If you run into trouble, ask for help on `IRC`_ or the `Mailing list`_, or
+open a bug report at `ceph-workbench bug tracker URL`_.
+
+Getting ceph-workbench
+----------------------
+
+Since testing in the cloud is done using the `ceph-workbench
+ceph-qa-suite`_ tool, you will need to install that first. It is designed
+to be installed via Docker, so if you don't have Docker running on your
+development machine, take care of that first. The Docker project has a good
+tutorial called `Get Started with Docker Engine for Linux
+<https://docs.docker.com/linux/>`_ if you unsure how to proceed.
+
+Once Docker is up and running, install ``ceph-workbench`` by following the
+`Installation instructions in the ceph-workbench documentation
+<http://ceph-workbench.readthedocs.org/en/latest/#installation>`_::
+
+Linking ceph-workbench with your OpenStack tenant
+-------------------------------------------------
+
+Before you can trigger your first teuthology suite, you will need to link
+``ceph-workbench`` with your OpenStack account. 
+
+First, download a ``openrc.sh`` file by clicking on the "Download OpenStack
+RC File" button, which can be found in the "API Access" tab of the "Access
+& Security" dialog of the OpenStack Horizon dashboard.
+
+Second, create a ``~/.ceph-workbench`` directory, set its permissions to
+700, and move the ``openrc.sh`` file into it. Make sure that the filename
+is exactly ``~/.ceph-workbench/openrc.sh``.
+
+Third, edit the file so it does not ask for your OpenStack password
+interactively. Comment out the relevant lines and replace them with
+something like::
+
+    export OS_PASSWORD="aiVeth0aejee3eep8rogho3eep7Pha6ek"
+
+When `ceph-workbench ceph-qa-suite`_ connects to your OpenStack tenant for
+the first time, it will generate two keypairs: ``teuthology-myself`` and
+``teuthology``. 
+
+.. If this is not the first time you have tried to use
+.. `ceph-workbench ceph-qa-suite`_ with this tenant, make sure to delete any
+.. stale keypairs with these names!
+
+Run the dummy suite
+-------------------
+
+You are now ready to take your OpenStack teuthology setup for a test
+drive::
+
+    $ ceph-workbench ceph-qa-suite --suite dummy
+
 .. WIP
 .. ===
 ..
@@ -1015,3 +1033,60 @@ test will be first.
 .. Ceph is regularly built and packaged for a number of major Linux
 .. distributions. At the time of this writing, these included CentOS, Debian,
 .. Fedora, openSUSE, and Ubuntu.
+..
+.. Architecture
+.. ============
+.. 
+.. Ceph is a collection of components built on top of RADOS and provide
+.. services (RBD, RGW, CephFS) and APIs (S3, Swift, POSIX) for the user to
+.. store and retrieve data.
+.. 
+.. See :doc:`/architecture` for an overview of Ceph architecture. The
+.. following sections treat each of the major architectural components
+.. in more detail, with links to code and tests.
+.. 
+.. FIXME The following are just stubs. These need to be developed into
+.. detailed descriptions of the various high-level components (RADOS, RGW,
+.. etc.) with breakdowns of their respective subcomponents.
+.. 
+.. FIXME Later, in the Testing chapter I would like to take another look
+.. at these components/subcomponents with a focus on how they are tested.
+.. 
+.. RADOS
+.. -----
+.. 
+.. RADOS stands for "Reliable, Autonomic Distributed Object Store". In a Ceph
+.. cluster, all data are stored in objects, and RADOS is the component responsible
+.. for that.
+.. 
+.. RADOS itself can be further broken down into Monitors, Object Storage Daemons
+.. (OSDs), and client APIs (librados). Monitors and OSDs are introduced at
+.. :doc:`/start/intro`. The client library is explained at
+.. :doc:`/rados/api/index`.
+.. 
+.. RGW
+.. ---
+.. 
+.. RGW stands for RADOS Gateway. Using the embedded HTTP server civetweb_ or
+.. Apache FastCGI, RGW provides a REST interface to RADOS objects.
+.. 
+.. .. _civetweb: https://github.com/civetweb/civetweb
+.. 
+.. A more thorough introduction to RGW can be found at :doc:`/radosgw/index`.
+.. 
+.. RBD
+.. ---
+.. 
+.. RBD stands for RADOS Block Device. It enables a Ceph cluster to store disk
+.. images, and includes in-kernel code enabling RBD images to be mounted.
+.. 
+.. To delve further into RBD, see :doc:`/rbd/rbd`.
+.. 
+.. CephFS
+.. ------
+.. 
+.. CephFS is a distributed file system that enables a Ceph cluster to be used as a NAS.
+.. 
+.. File system metadata is managed by Meta Data Server (MDS) daemons. The Ceph
+.. file system is explained in more detail at :doc:`/cephfs/index`.
+..
