@@ -9,15 +9,18 @@
 // template definitions
 #include "librbd/AsyncRequest.cc"
 #include "librbd/AsyncObjectThrottle.cc"
+#include "librbd/ExclusiveLock.cc"
 #include "librbd/operation/Request.cc"
 
 template class librbd::AsyncRequest<librbd::MockImageCtx>;
 template class librbd::AsyncObjectThrottle<librbd::MockImageCtx>;
+template class librbd::ExclusiveLock<librbd::MockImageCtx>;
 template class librbd::operation::Request<librbd::MockImageCtx>;
 
 using ::testing::_;
 using ::testing::DoDefault;
 using ::testing::Return;
+using ::testing::StrEq;
 using ::testing::WithArg;
 
 TestMockFixture::TestRadosClientPtr TestMockFixture::s_test_rados_client;
@@ -55,7 +58,7 @@ void TestMockFixture::TearDown() {
 
 void TestMockFixture::expect_unlock_exclusive_lock(librbd::ImageCtx &ictx) {
   EXPECT_CALL(get_mock_io_ctx(ictx.md_ctx),
-              exec(_, _, "lock", "unlock", _, _, _))
+              exec(_, _, StrEq("lock"), StrEq("unlock"), _, _, _))
                 .WillRepeatedly(DoDefault());
 }
 

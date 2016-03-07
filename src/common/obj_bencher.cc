@@ -28,28 +28,43 @@
 #include <sstream>
 #include <vector>
 
-
 const std::string BENCH_LASTRUN_METADATA = "benchmark_last_metadata";
 const std::string BENCH_PREFIX = "benchmark_data";
+static char cached_hostname[30] = {0};
+int cached_pid = 0;
 
 static std::string generate_object_prefix(int pid = 0) {
-  char hostname[30];
-  gethostname(hostname, sizeof(hostname)-1);
-  hostname[sizeof(hostname)-1] = 0;
+  if (cached_hostname[0] == 0) {
+    gethostname(cached_hostname, sizeof(cached_hostname)-1);
+    cached_hostname[sizeof(cached_hostname)-1] = 0;
+  }
 
-  if (!pid)
-    pid = getpid();
+  if (!cached_pid) {
+    if (!pid)
+      pid = getpid();
+    cached_pid = pid;
+  }
 
   std::ostringstream oss;
-  oss << BENCH_PREFIX << "_" << hostname << "_" << pid;
+  oss << BENCH_PREFIX << "_" << cached_hostname << "_" << cached_pid;
   return oss.str();
 }
 
 static std::string generate_object_name(int objnum, int pid = 0)
 {
-  std::ostringstream oss;
-  oss << generate_object_prefix(pid) << "_object" << objnum;
-  return oss.str();
+  if (cached_hostname[0] == 0) {
+    gethostname(cached_hostname, sizeof(cached_hostname)-1);
+    cached_hostname[sizeof(cached_hostname)-1] = 0;
+  }
+  if (!cached_pid) {
+    if (!pid)
+      pid = getpid();
+    cached_pid = pid;
+  }
+
+  char name[1024];
+  size_t l = sprintf(&name[0], "%s_%s_%d_object%d", BENCH_PREFIX.c_str(), cached_hostname, cached_pid, objnum);
+  return string(&name[0], l);
 }
 
 static void sanitize_object_contents (bench_data *data, size_t length) {

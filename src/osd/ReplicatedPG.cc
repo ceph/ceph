@@ -4153,7 +4153,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 
 	// read into a buffer
-	bufferlist bl;
 	bool async = false;
 	if (trimmed_read && op.extent.length == 0) {
 	  // read size was trimmed to zero and it is expected to do nothing

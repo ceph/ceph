@@ -624,6 +624,7 @@ public:
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  size_t encoded_size() const;
 
   inline bool operator==(const coll_t& rhs) const {
     // only compare type if meta
