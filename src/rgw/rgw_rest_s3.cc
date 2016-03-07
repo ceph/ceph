@@ -404,6 +404,15 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
   formatter->close_section(); // Category
 }
 
+static void dump_usage_bucket_info(Formatter *formatter, const std::string& name, const cls_user_bucket_entry& entry)
+{
+  formatter->open_object_section("Entry");
+  formatter->dump_string("Bucket", name);
+  formatter->dump_int("Bytes", entry.size);
+  formatter->dump_int("Bytes_Rounded", entry.size_rounded);
+  formatter->close_section(); // entry
+}
+
 void RGWGetUsage_ObjStore_S3::send_response()
 {
   if (op_ret < 0)
@@ -493,8 +502,21 @@ void RGWGetUsage_ObjStore_S3::send_response()
 
      formatter->close_section(); // summary
    }
-   formatter->close_section(); // usage
-   rgw_flush_formatter_and_reset(s, s->formatter);
+
+  formatter->open_array_section("CapacityUsed");
+  formatter->open_object_section("User");
+  formatter->open_array_section("Buckets");
+  map<string, cls_user_bucket_entry>::iterator biter;
+  for (biter = buckets_usage.begin(); biter != buckets_usage.end(); ++biter) {
+    const cls_user_bucket_entry& entry = biter->second;
+    dump_usage_bucket_info(formatter, biter->first, entry);
+  }
+  formatter->close_section(); // Buckets 
+  formatter->close_section(); // User 
+  formatter->close_section(); // CapacityUsed
+   
+  formatter->close_section(); // usage
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 int RGWListBucket_ObjStore_S3::get_params()
