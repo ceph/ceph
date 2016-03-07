@@ -129,9 +129,10 @@ def run_fio(remote, config, rbd_test_dir):
     for frmt in formats:
         for feature in features:
            log.info("Creating rbd images on {sn}".format(sn=sn))
-           rbd_name = 'i{i}f{f}{sn}'.format(i=frmt,f=feature,sn=sn)
-           rbd_snap_name = 'i{i}f{f}{sn}@i{i}f{f}{sn}Snap'.format(i=frmt,f=feature,sn=sn)
-           rbd_clone_name = 'i{i}f{f}{sn}Clone'.format(i=frmt,f=feature,sn=sn)
+           feature_name = '-'.join(feature)
+           rbd_name = 'i{i}f{f}{sn}'.format(i=frmt,f=feature_name,sn=sn)
+           rbd_snap_name = 'i{i}f{f}{sn}@i{i}f{f}{sn}Snap'.format(i=frmt,f=feature_name,sn=sn)
+           rbd_clone_name = 'i{i}f{f}{sn}Clone'.format(i=frmt,f=feature_name,sn=sn)
            create_args=['sudo', 'rbd', 'create',
                         '--size', '{size}'.format(size=image_size),
                         '--image', rbd_name,
