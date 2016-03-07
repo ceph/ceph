@@ -309,10 +309,17 @@ function setup_ceph_workbench() {
         if test "$url" ; then
             git clone -b $branch $url
             cd ceph-workbench
-            python setup.py install
+            pip install -e .
+            echo "INSTALLED ceph-workbench from $url"
         else
             pip install ceph-workbench
+            echo "INSTALLED ceph-workbench from pypi"
         fi
+        mkdir -p ~/.ceph-workbench
+        chmod 700 ~/.ceph-workbench
+        cp -a $HOME/openrc.sh ~/.ceph-workbench
+        cp -a $HOME/.ssh/id_rsa ~/.ceph-workbench/teuthology.pem
+        echo "RESET ceph-workbench credentials (key & OpenStack)"
     )
 }
 
@@ -617,12 +624,12 @@ function main() {
         setup_crontab || return 1
     fi
 
-    if $do_ceph_workbench ; then
-        setup_ceph_workbench $ceph_workbench_git_url $ceph_workbench_branch || return 1
-    fi
-
     if $do_setup_keypair ; then
         get_or_create_keypair $keypair || return 1
+    fi
+
+    if $do_ceph_workbench ; then
+        setup_ceph_workbench $ceph_workbench_git_url $ceph_workbench_branch || return 1
     fi
 
     if $do_setup_docker ; then
