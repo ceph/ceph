@@ -31,7 +31,7 @@ function get_ceph() {
     local git_ceph_url=$1
     local sha1=$2
 
-    test -d ceph || git clone ${git_ceph_url}
+    test -d ceph || git clone ${git_ceph_url} ceph
     cd ceph
     if test -d src ; then # so we don't try to fetch when using a fixture
        git fetch --tags http://github.com/ceph/ceph
