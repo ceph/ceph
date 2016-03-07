@@ -1985,7 +1985,15 @@ int buffer::list::read_file(const char *fn, std::string *error)
 
   struct stat st;
   memset(&st, 0, sizeof(st));
-  ::fstat(fd, &st);
+  if (::fstat(fd, &st) < 0) {
+    int err = errno;
+    std::ostringstream oss;
+    oss << "bufferlist::read_file(" << fn << "): stat error: "
+        << cpp_strerror(err);
+    *error = oss.str();
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    return -err;
+  }
 
   ssize_t ret = read_fd(fd, st.st_size);
   if (ret < 0) {
