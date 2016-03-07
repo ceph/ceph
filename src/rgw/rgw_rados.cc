@@ -3065,20 +3065,25 @@ int RGWRados::get_max_chunk_size(rgw_bucket& bucket, uint64_t *max_chunk_size)
 
 void RGWRados::finalize()
 {
+  if (run_sync_thread) {
+    Mutex::Locker l(meta_sync_thread_lock);
+    meta_sync_processor_thread->stop();
+
+    Mutex::Locker dl(data_sync_thread_lock);
+    for (auto iter : data_sync_processor_threads) {
+      RGWDataSyncProcessorThread *thread = iter.second;
+      thread->stop();
+    }
+  }
   if (async_rados) {
     async_rados->stop();
   }
   if (run_sync_thread) {
-    Mutex::Locker l(meta_sync_thread_lock);
-    meta_sync_processor_thread->stop();
     delete meta_sync_processor_thread;
     meta_sync_processor_thread = NULL;
-
     Mutex::Locker dl(data_sync_thread_lock);
-    map<string, RGWDataSyncProcessorThread *>::iterator iter = data_sync_processor_threads.begin();
-    for (; iter != data_sync_processor_threads.end(); ++iter) {
-      RGWDataSyncProcessorThread *thread = iter->second;
-      thread->stop();
+    for (auto iter : data_sync_processor_threads) {
+      RGWDataSyncProcessorThread *thread = iter.second;
       delete thread;
     }
     data_sync_processor_threads.clear();
