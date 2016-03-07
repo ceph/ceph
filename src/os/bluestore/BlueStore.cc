@@ -5401,7 +5401,10 @@ int BlueStore::_do_write(
       dout(20) << __func__ << "  chunk " << offset << "~" << length
 	       << " extent " << bp->first << ": " << bp->second << dendl;
 
-    if (_can_overlay_write(o, length)) {
+    //For append mode, byepass overlay.
+    if (_can_overlay_write(o, length) &&
+	(offset == o->onode.size &&  offset > bp->first &&
+	 (offset / block_size != (o->onode.size - 1) / block_size))) {
       r = _do_overlay_write(txc, o, offset, length, bl);
       if (r < 0)
 	goto out;
