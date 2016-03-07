@@ -5702,6 +5702,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (!newcrush.name_exists(name)) {
       err = -ENOENT;
       ss << "item " << name << " does not exist";
+      goto reply;
     } else {
       int id = newcrush.get_item_id(name);
       if (!newcrush.check_item_loc(g_ceph_context, id, loc, (int *)NULL)) {
@@ -5714,6 +5715,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	} else {
 	  ss << "cannot link item id " << id << " name '" << name
              << "' to location " << loc;
+          goto reply;
 	}
       } else {
 	ss << "no need to move item id " << id << " name '" << name
