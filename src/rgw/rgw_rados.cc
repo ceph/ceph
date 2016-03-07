@@ -3065,6 +3065,9 @@ int RGWRados::get_max_chunk_size(rgw_bucket& bucket, uint64_t *max_chunk_size)
 
 void RGWRados::finalize()
 {
+  if (async_rados) {
+    async_rados->stop();
+  }
   if (run_sync_thread) {
     Mutex::Locker l(meta_sync_thread_lock);
     meta_sync_processor_thread->stop();
@@ -3104,7 +3107,6 @@ void RGWRados::finalize()
   delete meta_mgr;
   delete data_log;
   if (async_rados) {
-    async_rados->stop();
     delete async_rados;
   }
   if (use_gc_thread) {
