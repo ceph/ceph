@@ -30,12 +30,23 @@
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "os/ObjectStore.h"
+#include "common/perf_counters.h"
 #include "os/fs/FS.h"
 #include "kv/KeyValueDB.h"
 
 #include "kstore_types.h"
 
 #include "boost/intrusive/list.hpp"
+
+enum {  
+  l_kstore_first = 832430,
+  l_kstore_state_prepare_lat,
+  l_kstore_state_kv_queued_lat,
+  l_kstore_state_kv_done_lat,
+  l_kstore_state_finishing_lat,
+  l_kstore_state_done_lat,
+  l_kstore_last
+};
 
 class KStore : public ObjectStore {
   // -----------------------------------------------------
@@ -192,6 +203,13 @@ public:
       return "???";
     }
 
+    void log_state_latency(PerfCounters *logger, int state) {      
+        utime_t lat, now = ceph_clock_now(g_ceph_context);
+        lat = now - start;
+        logger->tinc(state, lat);
+        start = now;
+    }
+
     OpSequencerRef osr;
     boost::intrusive::list_member_hook<> sequencer_item;
 
@@ -206,7 +224,7 @@ public:
     list<CollectionRef> removed_collections; ///< colls we removed
 
     CollectionRef first_collection;  ///< first referenced collection
-
+    utime_t start;
     explicit TransContext(OpSequencer *o)
       : state(STATE_PREPARE),
 	osr(o),
@@ -214,7 +232,8 @@ public:
 	bytes(0),
 	oncommit(NULL),
 	onreadable(NULL),
-	onreadable_sync(NULL) {
+	onreadable_sync(NULL),
+        start(ceph_clock_now(g_ceph_context)){
       //cout << "txc new " << this << std::endl;
     }
     ~TransContext() {
@@ -310,8 +329,8 @@ private:
   bool kv_stop;
   deque<TransContext*> kv_queue, kv_committing;
 
-  Logger *logger;
-
+  //Logger *logger;
+  PerfCounters *logger;
   std::mutex reap_lock;
   list<CollectionRef> removed_collections;
 

@@ -652,11 +652,22 @@ KStore::~KStore()
 void KStore::_init_logger()
 {
   // XXX
+  PerfCountersBuilder b(g_ceph_context, "KStore",
+                        l_kstore_first, l_kstore_last);
+  b.add_time_avg(l_kstore_state_prepare_lat, "state_prepare_lat", "Average prepare state latency");
+  b.add_time_avg(l_kstore_state_kv_queued_lat, "state_kv_queued_lat", "Average kv_queued state latency");
+  b.add_time_avg(l_kstore_state_kv_done_lat, "state_kv_done_lat", "Average kv_done state latency");
+  b.add_time_avg(l_kstore_state_finishing_lat, "state_finishing_lat", "Average finishing state latency");
+  b.add_time_avg(l_kstore_state_done_lat, "state_done_lat", "Average done state latency");
+  logger = b.create_perf_counters();
+  g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
 void KStore::_shutdown_logger()
 {
   // XXX
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
+  delete logger;
 }
 
 int KStore::_open_path()
@@ -2170,6 +2181,7 @@ void KStore::_txc_state_proc(TransContext *txc)
 	     << " " << txc->get_state_name() << dendl;
     switch (txc->state) {
     case TransContext::STATE_PREPARE:
+      txc->log_state_latency(logger, l_kstore_state_prepare_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
       if (!g_conf->kstore_sync_transaction) {
 	std::lock_guard<std::mutex> l(kv_lock);
@@ -2184,15 +2196,18 @@ void KStore::_txc_state_proc(TransContext *txc)
       break;
 
     case TransContext::STATE_KV_QUEUED:
+      txc->log_state_latency(logger, l_kstore_state_kv_queued_lat);
       txc->state = TransContext::STATE_KV_DONE;
       _txc_finish_kv(txc);
       // ** fall-thru **
 
     case TransContext::STATE_KV_DONE:
+      txc->log_state_latency(logger, l_kstore_state_kv_done_lat);
       txc->state = TransContext::STATE_FINISHING;
       break;
 
     case TransContext::TransContext::STATE_FINISHING:
+      txc->log_state_latency(logger, l_kstore_state_finishing_lat);
       _txc_finish(txc);
       return;
 
@@ -2305,6 +2320,7 @@ void KStore::_osr_reap_done(OpSequencer *osr)
     }
 
     osr->q.pop_front();
+    txc->log_state_latency(logger, l_kstore_state_done_lat);
     delete txc;
     osr->qcond.notify_all();
     if (osr->q.empty())
