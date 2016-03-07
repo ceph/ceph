@@ -2421,7 +2421,13 @@ int RGWPutObjProcessor_Atomic::complete_parts()
 int RGWPutObjProcessor_Atomic::complete_writing_data()
 {
   if (!data_ofs && !immutable_head()) {
-    first_chunk.claim(pending_data_bl);
+    /* only claim if pending_data_bl() is not empty. This is needed because we might be called twice
+     * (e.g., when a retry due to race happens). So a second call to first_chunk.claim() would
+     * clobber first_chunk
+     */
+    if (pending_data_bl.length() > 0) {
+      first_chunk.claim(pending_data_bl);
+    }
     obj_len = (uint64_t)first_chunk.length();
   }
   if (pending_data_bl.length()) {
