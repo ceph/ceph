@@ -3,7 +3,7 @@
 
 /*
  * This is a simple example RADOS class, designed to be usable as a
- * template from implementing new methods.
+ * template for implementing new methods.
  *
  * Our goal here is to illustrate the interface between the OSD and
  * the class and demonstrate what kinds of things a class can do.
