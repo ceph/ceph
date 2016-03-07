@@ -104,7 +104,6 @@ public:
 
   // Parse a config file
   int parse_config_files(const char *conf_files,
-			 std::deque<std::string> *parse_errors,
 			 std::ostream *warnings, int flags);
 
   // Absorb config settings from the environment
@@ -160,6 +159,9 @@ public:
   void diff(const md_config_t *other,
             map<string,pair<string,string> > *diff, set<string> *unknown);
 
+  /// print/log warnings/errors from parsing the config
+  void complain_about_parse_errors(CephContext *cct);
+
 private:
   void _show_config(std::ostream *out, Formatter *f);
 
@@ -174,7 +176,6 @@ private:
   int parse_injectargs(std::vector<const char*>& args,
 		      std::ostream *oss);
   int parse_config_files_impl(const std::list<std::string> &conf_files,
-			      std::deque<std::string> *parse_errors,
 			      std::ostream *warnings);
 
   int set_val_impl(const char *val, const config_option *opt);
@@ -195,6 +196,9 @@ private:
 
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;
+public:
+  std::deque<std::string> parse_errors;
+private:
 
   obs_map_t observers;
   changed_set_t changed;
