@@ -79,7 +79,8 @@ public:
 	     int _iops,
 	     size_t _thread_pool_size,
 	     const ClientInfoFunc& _client_info_f,
-	     const ClientRespFunc& _client_resp_f);
+	     const ClientRespFunc& _client_resp_f,
+	     bool use_soft_limit = false);
 
   virtual ~TestServer();
 

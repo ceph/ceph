@@ -46,6 +46,7 @@ int main(int argc, char* argv[]) {
   const uint server_count = 100;
   const uint server_iops = 40;
   const uint server_threads = 1;
+  const bool server_soft_limit = false;
 
   // client params
 
@@ -53,7 +54,7 @@ int main(int argc, char* argv[]) {
   const uint client_count = 100;
   const uint client_wait_count = 1;
   const uint client_iops_goal = 50;
-  const uint client_outstanding_ops = 10;
+  const uint client_outstanding_ops = 100;
   const double client_reservation = 20.0;
   const double client_limit = 60.0;
   const double client_weight = 1.0;
@@ -84,7 +85,8 @@ int main(int argc, char* argv[]) {
     servers[i] =
       new TestServer(i,
 		     server_iops, server_threads,
-		     client_info_f, client_response_f);
+		     client_info_f, client_response_f,
+		     server_soft_limit);
   }
 
   // construct clients
