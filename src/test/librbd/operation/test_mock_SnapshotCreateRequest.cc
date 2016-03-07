@@ -23,6 +23,7 @@ using ::testing::DoAll;
 using ::testing::DoDefault;
 using ::testing::Return;
 using ::testing::SetArgPointee;
+using ::testing::StrEq;
 using ::testing::WithArg;
 
 class TestMockOperationSnapshotCreateRequest : public TestMockFixture {
@@ -69,9 +70,9 @@ public:
     }
 
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, "rbd",
-                               mock_image_ctx.old_format ? "snap_add" :
-                                                           "snapshot_add",
+                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                               StrEq(mock_image_ctx.old_format ? "snap_add" :
+                                                                 "snapshot_add"),
                                _, _, _));
     if (r == -ESTALE) {
       expect.WillOnce(Return(r)).WillOnce(DoDefault());

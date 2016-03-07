@@ -17,6 +17,7 @@ namespace object_map {
 using ::testing::_;
 using ::testing::DoDefault;
 using ::testing::Return;
+using ::testing::StrEq;
 
 class TestMockObjectMapSnapshotRollbackRequest : public TestMockFixture {
 public:
@@ -35,7 +36,7 @@ public:
   void expect_write_map(librbd::ImageCtx *ictx, int r) {
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                 exec(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP), _,
-		     "lock", "assert_locked", _, _, _))
+		     StrEq("lock"), StrEq("assert_locked"), _, _, _))
                   .WillOnce(DoDefault());
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
@@ -52,10 +53,10 @@ public:
 
   void expect_invalidate(librbd::ImageCtx *ictx, uint32_t times) {
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, "lock", "assert_locked", _, _, _))
+                exec(ictx->header_oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
                   .Times(0);
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
+                exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                   .Times(times)
                   .WillRepeatedly(DoDefault());
   }

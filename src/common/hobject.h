@@ -442,6 +442,7 @@ public:
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void decode(json_spirit::Value& v);
+  size_t encoded_size() const;
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ghobject_t*>& o);
   friend int cmp_nibblewise(const ghobject_t& l, const ghobject_t& r);
