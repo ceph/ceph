@@ -1374,6 +1374,7 @@ function test_mon_pg()
 
   ceph osd primary-affinity osd.0 .9
   expect_false ceph osd primary-affinity osd.0 -2
+  expect_false ceph osd primary-affinity osd.9999 .5
   ceph osd primary-affinity osd.0 1
 
   ceph osd pg-temp 0.0 0 1 2

@@ -6546,6 +6546,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
                                                 get_last_committed() + 1));
       return true;
+    } else {
+      ss << "osd." << id << " does not exist";
+      err = -ENOENT;
+      goto reply;
     }
   } else if (prefix == "osd reweight") {
     int64_t id;
@@ -6575,8 +6579,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						get_last_committed() + 1));
       return true;
+    } else {
+      ss << "osd." << id << " does not exist";
+      err = -ENOENT;
+      goto reply;
     }
-
   } else if (prefix == "osd lost") {
     int64_t id;
     if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
