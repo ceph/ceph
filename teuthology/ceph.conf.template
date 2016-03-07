@@ -54,6 +54,7 @@
 	mon data avail warn = 5
 	mon reweight min pgs per osd = 4
 	mon osd reporter subtree level = osd
+	mon osd prime pg temp = true
 
 [mds]
         mds debug scatterstat = true
