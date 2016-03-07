@@ -808,7 +808,37 @@ public:
         return 1 + 8 + 8 + 4 + 4 + 4 + 4 + 4 + tbl.length();
       else {
         //layout: data_bl + op_bl + coll_index + object_index + data
-        //TODO: maybe we need better way to get encoded bytes;
+
+        // coll_index size, object_index size and sizeof(transaction_data)
+        // all here, so they may be computed at compile-time
+        size_t final_size = sizeof(__u32) * 2 + sizeof(data);
+
+        // coll_index second and object_index second
+        final_size += (coll_index.size() + object_index.size()) * sizeof(__le32);
+
+        // coll_index first
+        for (auto p = coll_index.begin(); p != coll_index.end(); ++p) {
+          final_size += p->first.encoded_size();
+        }
+
+        // object_index first
+        for (auto p = object_index.begin(); p != object_index.end(); ++p) {
+          final_size += p->first.encoded_size();
+        }
+        
+        return data_bl.length() +
+          op_bl.length() +
+          final_size;
+      }
+    }
+
+    /// Retain old version for regression testing purposes
+    uint64_t get_encoded_bytes_test() {
+      if (use_tbl)
+        return 1 + 8 + 8 + 4 + 4 + 4 + 4 + 4 + tbl.length();
+      else {
+        //layout: data_bl + op_bl + coll_index + object_index + data
+
         bufferlist bl;
         ::encode(coll_index, bl);
         ::encode(object_index, bl);
