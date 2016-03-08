@@ -89,7 +89,7 @@ namespace std {
 
 struct file_object_t {
   uint64_t ino, bno;
-  mutable char buf[33];
+  mutable char buf[34];
 
   file_object_t(uint64_t i=0, uint64_t b=0) : ino(i), bno(b) {
     buf[0] = 0;
@@ -97,7 +97,7 @@ struct file_object_t {
   
   const char *c_str() const {
     if (!buf[0])
-      sprintf(buf, "%llx.%08llx", (long long unsigned)ino, (long long unsigned)bno);
+      snprintf(buf, sizeof(buf), "%llx.%08llx", (long long unsigned)ino, (long long unsigned)bno);
     return buf;
   }
 
