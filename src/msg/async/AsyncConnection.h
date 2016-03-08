@@ -393,6 +393,12 @@ class AsyncConnection : public Connection {
       center->delete_time_event(t);
     register_time_events.clear();
     center->delete_time_event(last_tick_id);
+    if (sd >= 0) {
+      center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+      shutdown_socket();
+      ::close(sd);
+      sd = -1;
+    }
     delete read_handler;
     delete write_handler;
     delete wakeup_handler;
