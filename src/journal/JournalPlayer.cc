@@ -81,6 +81,10 @@ JournalPlayer::JournalPlayer(librados::IoCtx &ioctx,
 
 JournalPlayer::~JournalPlayer() {
   m_async_op_tracker.wait_for_ops();
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_fetch_object_numbers.empty());
+  }
   m_replay_handler->put();
 }
 
@@ -253,7 +257,8 @@ int JournalPlayer::process_prefetch(uint64_t object_number) {
   ObjectPlayers &object_players = m_object_players[splay_offset];
 
   // prefetch in-order since a newer splay object could prefetch first
-  while (!object_players.begin()->second->is_fetch_in_progress()) {
+  while (m_fetch_object_numbers.count(
+           object_players.begin()->second->get_object_number()) == 0) {
     ObjectPlayerPtr object_player = object_players.begin()->second;
     uint64_t player_object_number = object_player->get_object_number();
 
@@ -361,13 +366,8 @@ int JournalPlayer::process_playback(uint64_t object_number) {
 
 bool JournalPlayer::is_object_set_ready() const {
   assert(m_lock.is_locked());
-  if (m_watch_scheduled) {
+  if (m_watch_scheduled || !m_fetch_object_numbers.empty()) {
     return false;
-  }
-  for (auto &players : m_object_players) {
-    if (players.second.begin()->second->is_fetch_in_progress()) {
-      return false;
-    }
   }
   return true;
 }
@@ -476,6 +476,9 @@ void JournalPlayer::fetch(uint64_t object_num) {
 
   std::string oid = utils::get_object_name(m_object_oid_prefix, object_num);
 
+  assert(m_fetch_object_numbers.count(object_num) == 0);
+  m_fetch_object_numbers.insert(object_num);
+
   ldout(m_cct, 10) << __func__ << ": " << oid << dendl;
   C_Fetch *fetch_ctx = new C_Fetch(this, object_num);
   ObjectPlayerPtr object_player(new ObjectPlayer(
@@ -493,6 +496,9 @@ void JournalPlayer::handle_fetched(uint64_t object_num, int r) {
                    << ": r=" << r << dendl;
 
   Mutex::Locker locker(m_lock);
+  assert(m_fetch_object_numbers.count(object_num) == 1);
+  m_fetch_object_numbers.erase(object_num);
+
   if (r == -ENOENT) {
     r = 0;
   }
