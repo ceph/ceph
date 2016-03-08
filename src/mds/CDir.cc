@@ -1714,14 +1714,9 @@ CDentry *CDir::_load_dentry(
       }
     }
   } else {
-    dout(1) << "corrupt directory, i got tag char '" << type << "' pos "
-      << pos << dendl;
-    cache->mds->clog->error() << "Corrupt directory entry '" << key
-      << "' in dirfrag " << *this;
-    // TODO: add a mechanism for selectively marking a path
-    // damaged, rather than marking the whole rank damaged.
-    cache->mds->damaged();
-    assert(0);  // Unreachable: damaged() respawns us
+    std::ostringstream oss;
+    oss << "Invalid tag char '" << type << "' pos " << pos;
+    throw buffer::malformed_input(oss.str());
   }
 
   return dn;
@@ -1828,8 +1823,18 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       cache->mds->clog->warn() << "Corrupt dentry '" << dname << "' in "
                                   "dir frag " << dirfrag() << ": "
                                << err;
-      go_bad();
-      return;
+
+      // Remember that this dentry is damaged.  Subsequent operations
+      // that try to act directly on it will get their EIOs, but this
+      // dirfrag as a whole will continue to look okay (minus the
+      // mysteriously-missing dentry)
+      go_bad_dentry(last, dname);
+
+      // Anyone who was WAIT_DENTRY for this guy will get kicked
+      // to RetryRequest, and hit the DamageTable-interrogating path.
+      // Stats will now be bogus because we will think we're complete,
+      // but have 1 or more missing dentries.
+      continue;
     }
 
     if (dn && want_dn.length() && want_dn == dname) {
@@ -1893,7 +1898,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   finish_waiting(WAIT_COMPLETE, 0);
 }
 
-void CDir::go_bad()
+void CDir::_go_bad()
 {
   if (get_version() == 0)
     set_version(1);
@@ -1904,7 +1909,28 @@ void CDir::go_bad()
   auth_unpin(this);
 
   // kick waiters
-  finish_waiting(WAIT_COMPLETE, 0);
+  finish_waiting(WAIT_COMPLETE, -EIO);
+}
+
+void CDir::go_bad_dentry(snapid_t last, const std::string &dname)
+{
+  const bool fatal = cache->mds->damage_table.notify_dentry(
+      inode->ino(), frag, last, dname);
+  if (fatal) {
+    cache->mds->damaged();
+    assert(0);  // unreachable, damaged() respawns us
+  }
+}
+
+void CDir::go_bad()
+{
+  const bool fatal = cache->mds->damage_table.notify_dirfrag(inode->ino(), frag);
+  if (fatal) {
+    cache->mds->damaged();
+    assert(0);  // unreachable, damaged() respawns us
+  }
+
+  _go_bad();
 }
 
 // -----------------------

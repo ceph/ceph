@@ -686,6 +686,10 @@ COMMAND("session ls " \
 COMMAND("session evict " \
 	"name=filters,type=CephString,n=N,req=false",
 	"Evict client session(s)", "mds", "rw", "cli,rest")
+COMMAND("damage ls",
+	"List detected metadata damage", "mds", "r", "cli,rest")
+COMMAND("damage rm name=damage_id,type=CephInt",
+	"Remove a damage table entry", "mds", "rw", "cli,rest")
 COMMAND("heap " \
 	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	"show heap usage info (available only if compiled with tcmalloc)", \

@@ -16,6 +16,7 @@ LIBMDS_SOURCES = \
 	mds/CDentry.cc \
 	mds/CDir.cc \
 	mds/CInode.cc \
+	mds/DamageTable.cc \
 	mds/LogEvent.cc \
 	mds/MDSTable.cc \
 	mds/InoTable.cc \

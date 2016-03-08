@@ -56,6 +56,7 @@ MDSRank::MDSRank(
     objecter(objecter_),
     server(NULL), mdcache(NULL), locker(NULL), mdlog(NULL),
     balancer(NULL), scrubstack(NULL),
+    damage_table(whoami_),
     inotable(NULL), snapserver(NULL), snapclient(NULL),
     sessionmap(this), logger(NULL), mlogger(NULL),
     op_tracker(g_ceph_context, g_conf->mds_enable_op_tracker,
@@ -2582,6 +2583,22 @@ bool MDSRankDispatcher::handle_command(
 
     evict_sessions(filter);
 
+    return true;
+  } else if (prefix == "damage ls") {
+    Formatter *f = new JSONFormatter();
+    damage_table.dump(f);
+    f->flush(*ds);
+    delete f;
+    return true;
+  } else if (prefix == "damage rm") {
+    damage_entry_id_t id = 0;
+    bool got = cmd_getval(g_ceph_context, cmdmap, "damage_id", (int64_t&)id);
+    if (!got) {
+      *r = -EINVAL;
+      return true;
+    }
+
+    damage_table.erase(id);
     return true;
   } else {
     return false;
