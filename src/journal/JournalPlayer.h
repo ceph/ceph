@@ -112,6 +112,8 @@ private:
   bool m_watch_scheduled;
   double m_watch_interval;
 
+  bool m_handler_notified = false;
+
   PrefetchSplayOffsets m_prefetch_splay_offsets;
   SplayedObjectPlayers m_object_players;
   uint64_t m_commit_object;
@@ -136,6 +138,9 @@ private:
 
   void schedule_watch();
   void handle_watch(int r);
+
+  void notify_entries_available();
+  void notify_complete(int r);
 };
 
 } // namespace journal
