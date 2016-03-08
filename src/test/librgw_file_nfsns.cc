@@ -513,7 +513,7 @@ TEST(LibRGW, READ_DIRS1)
   if (do_dirs1) {
     int rc;
     char buf[256];
-    uint64_t nread;
+    size_t nread;
     for (auto& dirs_rec : dirs_vec) {
       obj_rec& dir = get<0>(dirs_rec);
       if (verbose) {
@@ -583,7 +583,7 @@ TEST(LibRGW, READF_DIRS1) {
       uint64_t offset = 0;
       uint64_t length = bufsz;
       for (int ix = 0; ix < 6; ++ix) {
-	uint64_t nread = 0;
+	size_t nread = 0;
 	memset(buffer, 0, length); // XXX
 	rc = rgw_read(fs, fobj.fh, offset, length, &nread, buffer,
 		      RGW_READ_FLAG_NONE);
@@ -635,7 +635,7 @@ TEST(LibRGW, WRITEF_DIRS1) {
       for (int ix = 0; ix < 6; ++ix) {
 	ASSERT_TRUE(ifs.good());
 	ifs.read(buffer, bufsz);
-	uint64_t nwritten = 0;
+	size_t nwritten = 0;
 	string str;
 	str.assign(buffer, 4);
 	if (verbose) {

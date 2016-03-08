@@ -5,6 +5,7 @@
 
 #include "include/types.h"
 #include "cls/rgw/cls_rgw_types.h"
+WRITE_INTTYPE_ENCODER(time_t, le64)
 
 struct rgw_cls_tag_timeout_op
 {
