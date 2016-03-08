@@ -323,7 +323,7 @@ int EventCenter::process_events(int timeout_microseconds)
   auto now = clock_type::now();
 
   // If exists external events, don't block
-  if (external_num_events.read()) {
+  if (external_num_events.load()) {
     tv.tv_sec = 0;
     tv.tv_usec = 0;
     next_time = now;
@@ -381,14 +381,14 @@ int EventCenter::process_events(int timeout_microseconds)
   if (trigger_time)
     numevents += process_time_events();
 
-  if (external_num_events.read()) {
+  if (external_num_events.load()) {
     external_lock.Lock();
     if (external_events.empty()) {
       external_lock.Unlock();
     } else {
       deque<EventCallbackRef> cur_process;
       cur_process.swap(external_events);
-      external_num_events.set(0);
+      external_num_events.store(0);
       external_lock.Unlock();
       while (!cur_process.empty()) {
         EventCallbackRef e = cur_process.front();
@@ -406,7 +406,7 @@ void EventCenter::dispatch_event_external(EventCallbackRef e)
 {
   external_lock.Lock();
   external_events.push_back(e);
-  uint64_t num = external_num_events.inc();
+  ++external_num_events;
   external_lock.Unlock();
   if (thread_id != owner)
     wakeup();
