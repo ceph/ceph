@@ -339,17 +339,20 @@ struct MirrorPeerSyncPoint {
 
 struct MirrorPeerClientMeta {
   typedef std::list<MirrorPeerSyncPoint> SyncPoints;
+  typedef std::map<uint64_t, uint64_t> SnapSeqs;
 
   static const ClientMetaType TYPE = MIRROR_PEER_CLIENT_META_TYPE;
 
   std::string image_id;
-  SyncPoints sync_points;
+  SyncPoints sync_points; ///< max two in-use snapshots for sync
+  SnapSeqs snap_seqs;     ///< local to peer snap seq mapping
 
   MirrorPeerClientMeta() {
   }
   MirrorPeerClientMeta(const std::string &image_id,
-                       const SyncPoints &sync_points = SyncPoints())
-    : image_id(image_id), sync_points(sync_points) {
+                       const SyncPoints &sync_points = SyncPoints(),
+                       const SnapSeqs &snap_seqs = SnapSeqs())
+    : image_id(image_id), sync_points(sync_points), snap_seqs(snap_seqs) {
   }
 
   void encode(bufferlist& bl) const;

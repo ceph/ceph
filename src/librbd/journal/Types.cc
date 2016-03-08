@@ -356,6 +356,7 @@ void MirrorPeerClientMeta::encode(bufferlist& bl) const {
   for (auto &sync_point : sync_points) {
     sync_point.encode(bl);
   }
+  ::encode(snap_seqs, bl);
 }
 
 void MirrorPeerClientMeta::decode(__u8 version, bufferlist::iterator& it) {
@@ -367,13 +368,25 @@ void MirrorPeerClientMeta::decode(__u8 version, bufferlist::iterator& it) {
   for (auto &sync_point : sync_points) {
     sync_point.decode(version, it);
   }
+
+  ::decode(snap_seqs, it);
 }
 
 void MirrorPeerClientMeta::dump(Formatter *f) const {
   f->dump_string("image_id", image_id);
   f->open_array_section("sync_points");
   for (auto &sync_point : sync_points) {
+    f->open_object_section("sync_point");
     sync_point.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("snap_seqs");
+  for (auto &pair : snap_seqs) {
+    f->open_object_section("snap_seq");
+    f->dump_unsigned("local_snap_seq", pair.first);
+    f->dump_unsigned("peer_snap_seq", pair.second);
+    f->close_section();
   }
   f->close_section();
 }
@@ -441,7 +454,8 @@ void ClientData::generate_test_instances(std::list<ClientData *> &o) {
   o.push_back(new ClientData(ImageClientMeta()));
   o.push_back(new ClientData(ImageClientMeta(123)));
   o.push_back(new ClientData(MirrorPeerClientMeta()));
-  o.push_back(new ClientData(MirrorPeerClientMeta("image_id", {{"snap 1", 123}})));
+  o.push_back(new ClientData(MirrorPeerClientMeta("image_id", {{"snap 1", 123}},
+                                                  {{1, 2}, {3, 4}})));
   o.push_back(new ClientData(CliClientMeta()));
 }
 
