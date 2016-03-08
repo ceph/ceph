@@ -28,4 +28,4 @@
 	url = https://github.com/ceph/spdk.git
 [submodule "src/xxHash"]
 	path = src/xxHash
-	url = https://github.com/Cyan4973/xxHash.git
+	url = https://github.com/ceph/xxHash.git
