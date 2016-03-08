@@ -127,10 +127,8 @@ EventCenter::~EventCenter()
   }
   assert(time_events.empty());
 
-  if (notify_receive_fd >= 0) {
-    delete_file_event(notify_receive_fd, EVENT_READABLE);
+  if (notify_receive_fd >= 0)
     ::close(notify_receive_fd);
-  }
   if (notify_send_fd >= 0)
     ::close(notify_send_fd);
 
