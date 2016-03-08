@@ -586,7 +586,7 @@ TEST_F(TestMockJournal, GetCachedClientError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockJournalImageCtx mock_image_ctx(*ictx);
   MockJournal mock_journal(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -605,7 +605,7 @@ TEST_F(TestMockJournal, GetTagsError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockImageCtx mock_image_ctx(*ictx);
+  MockJournalImageCtx mock_image_ctx(*ictx);
   MockJournal mock_journal(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 

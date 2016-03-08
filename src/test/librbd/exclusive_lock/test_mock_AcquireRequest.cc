@@ -17,6 +17,7 @@
 #include <list>
 
 // template definitions
+#include "librbd/Journal.cc"
 #include "librbd/exclusive_lock/AcquireRequest.cc"
 template class librbd::exclusive_lock::AcquireRequest<librbd::MockImageCtx>;
 
