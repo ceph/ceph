@@ -121,22 +121,6 @@ string ceph_osd_op_flag_string(unsigned flags)
   return string("-");
 }
 
-const char *num_char_map = "0123456789abcdef";
-template<typename T, const int base>
-static inline
-char* ritoa(T u, char *buf) {
-  if (u < base) {
-    *--buf = num_char_map[u];
-    return buf;
-  }
- 
-  while (u) {
-    *--buf = num_char_map[u % base]; 
-    u /= base;
-  }
-  return buf;
-}
-
 void pg_shard_t::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
@@ -463,7 +447,7 @@ char *spg_t::calc_name(char *buf, const char *suffix_backwords) const
     *--buf = *suffix_backwords++;
 
   if (!is_no_shard()) {
-    buf = ritoa<int8_t, 10>(shard.id, buf);
+    buf = ritoa<uint8_t, 10>((uint8_t)shard.id, buf);
     *--buf = 's';
   }
 
@@ -912,9 +896,12 @@ int pg_string_state(const std::string& state)
 // -- eversion_t --
 string eversion_t::get_key_name() const
 {
-  char key[40];
-  snprintf(
-    key, sizeof(key), "%010u.%020llu", epoch, (long long unsigned)version);
+  char key[32];
+  // Below is equivalent of sprintf("%010u.%020llu");
+  key[31] = 0;
+  ritoa<uint64_t, 10, 20>(version, key + 31);
+  key[10] = '.';
+  ritoa<uint32_t, 10, 10>(epoch, key + 10);
   return string(key);
 }
 
