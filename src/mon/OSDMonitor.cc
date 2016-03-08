@@ -2846,6 +2846,17 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	}
       }
     }
+    if (g_conf->mon_warn_on_crush_straw_calc_version_zero) {
+      if (osdmap.crush->get_straw_calc_version() == 0) {
+	ostringstream ss;
+	ss << "crush map has straw_calc_version=0";
+	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+	if (detail) {
+	  ss << "; see http://ceph.com/docs/master/rados/operations/crush-map/#tunables";
+	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+	}
+      }
+    }
 
     // hit_set-less cache_mode?
     if (g_conf->mon_warn_on_cache_pools_without_hit_sets) {
