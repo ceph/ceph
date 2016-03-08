@@ -37,7 +37,10 @@
 #endif
 #endif
 
-#include "include/atomic.h"
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
+
 #include "include/Context.h"
 #include "include/unordered_map.h"
 #include "common/ceph_time.h"
@@ -108,7 +111,7 @@ class EventCenter {
   int nevent;
   // Used only to external event
   Mutex external_lock, file_lock;
-  atomic_t external_num_events;
+  std::atomic_ulong external_num_events;
   deque<EventCallbackRef> external_events;
   vector<FileEvent> file_events;
   EventDriver *driver;
