@@ -41,11 +41,11 @@ extern "C" {
    * Similar to the above (non-exact version) and below (exact version).
    * See splice(2) for parameter descriptions.
    */
-  ssize_t safe_splice(int fd_in, loff_t *off_in, int fd_out, loff_t *off_out,
+  ssize_t safe_splice(int fd_in, off_t *off_in, int fd_out, off_t *off_out,
 		      size_t len, unsigned int flags)
     WARN_UNUSED_RESULT;
-  ssize_t safe_splice_exact(int fd_in, loff_t *off_in, int fd_out,
-			    loff_t *off_out, size_t len, unsigned int flags)
+  ssize_t safe_splice_exact(int fd_in, off_t *off_in, int fd_out,
+			    off_t *off_out, size_t len, unsigned int flags)
     WARN_UNUSED_RESULT;
 #endif
 
