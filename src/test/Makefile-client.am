@@ -454,7 +454,8 @@ noinst_LTLIBRARIES += librbd_mirror_test.la
 
 unittest_rbd_mirror_SOURCES = \
 	test/rbd_mirror/test_main.cc \
-	test/rbd_mirror/image_sync/test_mock_ObjectCopyRequest.cc
+	test/rbd_mirror/image_sync/test_mock_ObjectCopyRequest.cc \
+	test/rbd_mirror/image_sync/test_mock_SnapshotCopyRequest.cc
 unittest_rbd_mirror_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_rbd_mirror_LDADD = \
 	librbd_mirror_test.la \

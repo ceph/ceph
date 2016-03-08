@@ -14,6 +14,10 @@ class MockTestMemIoCtxImpl;
 class MockTestMemRadosClient;
 }
 
+ACTION_P(CompleteContext, r) {
+  arg0->complete(r);
+}
+
 namespace rbd {
 namespace mirror {
 
