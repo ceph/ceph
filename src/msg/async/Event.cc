@@ -61,7 +61,7 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
                 << " time_id=" << time_event_next_id << ").";
 }
 
-static thread_local pthread_t thread_id = 0;
+thread_local pthread_t EventCenter::thread_id = 0;
 
 int EventCenter::init(int n)
 {
@@ -146,6 +146,7 @@ void EventCenter::set_owner()
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 {
+  assert(in_thread());
   int r = 0;
   if (fd >= nevent) {
     int new_size = nevent << 2;
@@ -191,6 +192,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 void EventCenter::delete_file_event(int fd, int mask)
 {
   assert(fd >= 0);
+  assert(in_thread());
   if (fd >= nevent) {
     ldout(cct, 1) << __func__ << " delete event fd=" << fd << " is equal or greater than nevent=" << nevent
                   << "mask=" << mask << dendl;
