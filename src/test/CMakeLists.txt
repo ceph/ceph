@@ -1127,6 +1127,18 @@ target_link_libraries(unittest_mon_pgmap mon global ${CMAKE_DL_LIBS}
 set_target_properties(unittest_mon_pgmap PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
+# unittest_mon_montypes
+add_executable(unittest_mon_montypes EXCLUDE_FROM_ALL
+  ${unittest_mon_montypes_srcs}
+  mon/test_mon_types.cc
+  )
+add_test(unittest_mon_montypes unittest_mon_montypes)
+add_dependencies(check unittest_mon_montypes)
+target_link_libraries(unittest_mon_montypes mon global ${CMAKE_DL_LIBS}
+  ${UNITTEST_LIBS})
+set_target_properties(unittest_mon_montypes PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
 # unittest_ecbackend
 add_executable(unittest_ecbackend EXCLUDE_FROM_ALL
   osd/TestECBackend.cc
