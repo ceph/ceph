@@ -43,6 +43,14 @@ int RGWMongooseFrontend::run() {
   set_conf_default(conf_map, "num_threads", thread_pool_buf);
   set_conf_default(conf_map, "decode_url", "no");
 
+  // Set run_as_user. This will cause civetweb to invoke setuid() and setgid()
+  // based on pw_uid and pw_gid obtained from pw_name.
+  string uid_string = g_ceph_context->get_set_uid_string();
+  if (!uid_string.empty()) {
+    conf_map.erase("run_as_user");
+    conf_map["run_as_user"] = uid_string;
+  }
+
   const char *options[conf_map.size() * 2 + 1];
   int i = 0;
   for (map<string, string>::iterator iter = conf_map.begin();
