@@ -324,8 +324,16 @@ class AsyncConnection : public Connection {
     mark_down();
   }
   void cleanup_handler() {
-    if (sd >= 0)
+    for (set<uint64_t>::iterator it = register_time_events.begin();
+         it != register_time_events.end(); ++it)
+      center->delete_time_event(*it);
+    register_time_events.clear();
+    if (sd >= 0) {
       center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+      shutdown_socket();
+      ::close(sd);
+    }
+
     delete read_handler;
     delete write_handler;
     delete reset_handler;
