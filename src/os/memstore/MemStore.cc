@@ -1354,15 +1354,8 @@ int MemStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& ol
     return -ENOENT;
 
   // note: c and oc may be the same
-  if (&(*c) == &(*oc)) {
-    c->lock.get_write();
-  } else if (&(*c) < &(*oc)) {
-    c->lock.get_write();
-    oc->lock.get_write();
-  } else if (&(*c) > &(*oc)) {
-    oc->lock.get_write();
-    c->lock.get_write();
-  }
+  assert(&(*c) == &(*oc));
+  c->lock.get_write();
 
   int r = -EEXIST;
   if (c->object_hash.count(oid))
@@ -1380,8 +1373,6 @@ int MemStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& ol
   r = 0;
  out:
   c->lock.put_write();
-  if (&(*c) != &(*oc))
-    oc->lock.put_write();
   return r;
 }
 
