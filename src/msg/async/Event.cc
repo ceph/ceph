@@ -117,7 +117,7 @@ int EventCenter::init(int n)
 EventCenter::~EventCenter()
 {
   {
-    Mutex::Locker l(external_lock);
+    std::lock_guard<std::mutex> l(external_lock);
     while (!external_events.empty()) {
       EventCallbackRef e = external_events.front();
       if (e)
@@ -382,14 +382,14 @@ int EventCenter::process_events(int timeout_microseconds)
     numevents += process_time_events();
 
   if (external_num_events.load()) {
-    external_lock.Lock();
+    external_lock.lock();
     if (external_events.empty()) {
-      external_lock.Unlock();
+      external_lock.unlock();
     } else {
       deque<EventCallbackRef> cur_process;
       cur_process.swap(external_events);
       external_num_events.store(0);
-      external_lock.Unlock();
+      external_lock.unlock();
       while (!cur_process.empty()) {
         EventCallbackRef e = cur_process.front();
         if (e)
@@ -404,10 +404,10 @@ int EventCenter::process_events(int timeout_microseconds)
 
 void EventCenter::dispatch_event_external(EventCallbackRef e)
 {
-  external_lock.Lock();
+  external_lock.lock();
   external_events.push_back(e);
   ++external_num_events;
-  external_lock.Unlock();
+  external_lock.unlock();
   if (thread_id != owner)
     wakeup();
 }

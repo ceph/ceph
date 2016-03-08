@@ -43,10 +43,10 @@
 #include <mutex>
 #include <condition_variable>
 
-#include "include/Context.h"
+#include "include/utime.h"
 #include "include/unordered_map.h"
 #include "common/ceph_time.h"
-#include "common/WorkQueue.h"
+#include "common/dout.h"
 #include "net_handler.h"
 
 #define EVENT_NONE 0
@@ -109,7 +109,7 @@ class EventCenter {
   CephContext *cct;
   int nevent;
   // Used only to external event
-  Mutex external_lock;
+  std::mutex external_lock;
   std::atomic_ulong external_num_events;
   deque<EventCallbackRef> external_events;
   vector<FileEvent> file_events;
@@ -135,7 +135,6 @@ class EventCenter {
 
   explicit EventCenter(CephContext *c):
     cct(c), nevent(0),
-    external_lock("AsyncMessenger::external_lock"),
     external_num_events(0),
     driver(NULL), time_event_next_id(1),
     notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0),
