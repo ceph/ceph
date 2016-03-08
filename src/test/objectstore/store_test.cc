@@ -3075,13 +3075,14 @@ TEST_P(StoreTest, Rename) {
   coll_t cid(spg_t(pg_t(0, 2122),shard_id_t::NO_SHARD));
   ghobject_t srcoid(hobject_t("src_oid", "", CEPH_NOSNAP, 0, 0, ""));
   ghobject_t dstoid(hobject_t("dest_oid", "", CEPH_NOSNAP, 0, 0, ""));
-  bufferlist data;
-  data.append("foo");
+  bufferlist a, b;
+  a.append("foo");
+  b.append("bar");
   int r;
   {
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
-    t.write(cid, srcoid, 0, data.length(), data);
+    t.write(cid, srcoid, 0, a.length(), a);
     r = store->apply_transaction(&osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -3089,13 +3090,35 @@ TEST_P(StoreTest, Rename) {
   {
     ObjectStore::Transaction t;
     t.collection_move_rename(cid, srcoid, cid, dstoid);
-    t.write(cid, srcoid, 0, data.length(), data);
-    t.setattr(cid, srcoid, "attr", data);
+    t.remove(cid, srcoid);
+    t.write(cid, srcoid, 0, b.length(), b);
+    t.setattr(cid, srcoid, "attr", b);
     r = store->apply_transaction(&osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
   ASSERT_TRUE(store->exists(cid, srcoid));
   ASSERT_TRUE(store->exists(cid, dstoid));
+  {
+    bufferlist bl;
+    store->read(cid, srcoid, 0, 3, bl);
+    ASSERT_TRUE(bl.contents_equal(b));
+    store->read(cid, dstoid, 0, 3, bl);
+    ASSERT_TRUE(bl.contents_equal(a));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.collection_move_rename(cid, srcoid, cid, dstoid);
+    t.remove(cid, srcoid);
+    t.setattr(cid, srcoid, "attr", a);
+    r = store->apply_transaction(&osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_TRUE(store->exists(cid, dstoid));
+  {
+    bufferlist bl;
+    store->read(cid, dstoid, 0, 3, bl);
+    ASSERT_TRUE(bl.contents_equal(b));
+  }
   {
     ObjectStore::Transaction t;
     t.remove(cid, dstoid);
