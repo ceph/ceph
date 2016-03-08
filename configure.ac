@@ -948,13 +948,23 @@ AC_CHECK_HEADER([boost/program_options/option.hpp], [],
 
 # If we have the boost system library installed, then we may want to link
 # with it.
+saved_LIBS="${LIBS}"
+LIBS=""
 AC_CHECK_LIB(boost_system-mt, main, [],
     [AC_CHECK_LIB(boost_system, main, [],
         AC_MSG_NOTICE(["Boost system library not found."]))])
+BOOST_SYSTEM_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_SYSTEM_LIBS)
 
+saved_LIBS="${LIBS}"
+LIBS=""
 AC_CHECK_LIB(boost_iostreams-mt, main, [],
     [AC_CHECK_LIB(boost_iostreams, main, [],
         AC_MSG_FAILURE(["Boost iostreams library not found."]))])
+BOOST_IOSTREAMS_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_IOSTREAMS_LIBS)
 
 # Find the right boost_thread library.
 BOOST_THREAD_LIBS=""
