@@ -117,7 +117,7 @@ int EventCenter::init(int n)
 EventCenter::~EventCenter()
 {
   {
-    Mutex::Locker l(external_lock);
+    std::lock_guard<std::mutex> l(external_lock);
     while (!external_events.empty()) {
       EventCallbackRef e = external_events.front();
       if (e)
@@ -147,7 +147,7 @@ void EventCenter::set_owner()
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 {
   int r = 0;
-  Mutex::Locker l(file_lock);
+  std::lock_guard<std::mutex> l(file_lock);
   if (fd >= nevent) {
     int new_size = nevent << 2;
     while (fd > new_size)
@@ -192,7 +192,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 void EventCenter::delete_file_event(int fd, int mask)
 {
   assert(fd >= 0);
-  Mutex::Locker l(file_lock);
+  std::lock_guard<std::mutex> l(file_lock);
   if (fd >= nevent) {
     ldout(cct, 1) << __func__ << " delete event fd=" << fd << " is equal or greater than nevent=" << nevent
                   << "mask=" << mask << dendl;
@@ -329,7 +329,7 @@ int EventCenter::process_events(int timeout_microseconds)
   ldout(cct, 10) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
   vector<FiredFileEvent> fired_events;
   numevents = driver->event_wait(fired_events, &tv);
-  file_lock.Lock();
+  file_lock.lock();
   for (int j = 0; j < numevents; j++) {
     int rfired = 0;
     FileEvent *event;
@@ -344,36 +344,36 @@ int EventCenter::process_events(int timeout_microseconds)
     if (event->mask & fired_events[j].mask & EVENT_READABLE) {
       rfired = 1;
       cb = event->read_cb;
-      file_lock.Unlock();
+      file_lock.unlock();
       cb->do_request(fired_events[j].fd);
-      file_lock.Lock();
+      file_lock.lock();
     }
 
     if (event->mask & fired_events[j].mask & EVENT_WRITABLE) {
       if (!rfired || event->read_cb != event->write_cb) {
         cb = event->write_cb;
-        file_lock.Unlock();
+        file_lock.unlock();
         cb->do_request(fired_events[j].fd);
-        file_lock.Lock();
+        file_lock.lock();
       }
     }
 
     ldout(cct, 20) << __func__ << " event_wq process is " << fired_events[j].fd << " mask is " << fired_events[j].mask << dendl;
   }
-  file_lock.Unlock();
+  file_lock.unlock();
 
   if (trigger_time)
     numevents += process_time_events();
 
   if (external_num_events.load()) {
-    external_lock.Lock();
+    external_lock.lock();
     if (external_events.empty()) {
-      external_lock.Unlock();
+      external_lock.unlock();
     } else {
       deque<EventCallbackRef> cur_process;
       cur_process.swap(external_events);
       external_num_events.store(0);
-      external_lock.Unlock();
+      external_lock.unlock();
       while (!cur_process.empty()) {
         EventCallbackRef e = cur_process.front();
         if (e)
@@ -388,10 +388,10 @@ int EventCenter::process_events(int timeout_microseconds)
 
 void EventCenter::dispatch_event_external(EventCallbackRef e)
 {
-  external_lock.Lock();
+  external_lock.lock();
   external_events.push_back(e);
   uint64_t num = ++external_num_events;
-  external_lock.Unlock();
+  external_lock.unlock();
   if (!in_thread())
     wakeup();
 
