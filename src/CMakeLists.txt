@@ -1,15 +1,23 @@
 cmake_minimum_required(VERSION 2.8)
 
-set(local_flags)
+set(local_flags "-std=gnu++11 -Wall -pthread")
 
 set(core_srcs
   dmclock_server.cc dmclock_util.cc dmclock_recs.cc crimson/run_every.cc)
 set(test_srcs test_server.cc test_client.cc test.cc)
 
-set_source_files_properties(${core_srcs} ${test_srcs}
+set_source_files_properties(${core_srcs}
   PROPERTIES
-  COMPILE_FLAGS "${my_compile_flags} -std=gnu++11 -Wall -pthread ${local_flags}"
+  COMPILE_FLAGS "${my_compile_flags} ${local_flags}"
   )
+
+# we can relax warnings a bit for testing code since we may keep
+# multiple options open with unused variables or functions
+set_source_files_properties(${test_srcs}
+  PROPERTIES
+  COMPILE_FLAGS "${my_compile_flags} ${local_flags} -Wno-unused-but-set-variable -Wno-unused-function"
+  )
+
 
 add_executable(sim ${core_srcs} ${test_srcs})
 

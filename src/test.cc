@@ -28,6 +28,16 @@ using SelectFunc = TestClient::ServerSelectFunc;
 using SubmitFunc = TestClient::SubmitFunc;
 
 
+// If for debugging purposes we need to TimePoints, this converts them
+// into more easily read doubles in the unit of seconds. It also uses
+// modulo to strip off the upper digits (keeps 5 to the left of the
+// decimal point).
+static double fmt_tp(const TestClient::TimePoint& t) {
+  auto c = t.time_since_epoch().count();
+  return uint64_t(c / 1000000.0 + 0.5) % 100000 / 1000.0;
+}
+
+
 int main(int argc, char* argv[]) {
   using ClientMap = std::map<ClientId,TestClient*>;
   using ServerMap = std::map<ServerId,TestServer*>;
@@ -36,46 +46,37 @@ int main(int argc, char* argv[]) {
 
   // simulation params
 
-  const int goal_secs_to_run = 30;
   const TestClient::TimePoint early_time = TestClient::now();
-  const chrono::seconds skip_amount(2); // skip first 2 secondsd of data
-  const chrono::seconds measure_unit(5); // calculate in groups of 5 seconds
+  const chrono::seconds skip_amount(0); // skip first 2 secondsd of data
+  const chrono::seconds measure_unit(2); // calculate in groups of 5 seconds
   const chrono::seconds report_unit(1); // unit to output reports in
 
   // server params
 
-  // name -> (server iops, server threads)
-  const std::map<ServerId,std::pair<int,int>> server_info = {
-    {'a', { 60, 1 }},
-    {'b', { 60, 1 }},
-#if 0
-    {2, { 75, 7 }},
-    {3, { 75, 7 }},
-    {4, { 75, 7 }},
-    {5, { 75, 7 }},
-    {6, { 75, 7 }},
-    {7, { 75, 7 }},
-#endif
-  };
+  const uint server_count = 100;
+  const uint server_iops = 40;
+  const uint server_threads = 1;
+  const bool server_soft_limit = false;
 
   // client params
 
-  const int client_outstanding_ops = 200;
+  const uint client_total_ops = 1000;
+  const uint client_count = 100;
+  const uint client_wait_count = 1;
+  const uint client_iops_goal = 50;
+  const uint client_outstanding_ops = 100;
+  const double client_reservation = 20.0;
+  const double client_limit = 60.0;
+  const double client_weight = 1.0;
+  const std::chrono::seconds client_wait(10);
 
-  // id -> (client_info, goal iops)
-  const std::map<ClientId,std::pair<dmc::ClientInfo,int>> client_info = {
-    {1, {{ 1.0, 50.0, 200.0 }, 100 }},
-    {2, {{ 3.0, 50.0, 200.0 }, 100 }},
-  };
-
+  dmc::ClientInfo client_info =
+    { client_weight, client_reservation, client_limit };
 
   // construct servers
 
-  auto client_info_f =
-    [&client_info](const ClientId& c) -> dmc::ClientInfo {
-    auto it = client_info.find(c);
-    assert(client_info.end() != it);
-    return it->second.first;
+  auto client_info_f = [&client_info](const ClientId& c) -> dmc::ClientInfo {
+    return client_info;
   };
 
   ClientMap clients;
@@ -90,22 +91,21 @@ int main(int argc, char* argv[]) {
   std::vector<ServerId> server_ids;
 
   ServerMap servers;
-  for (auto const &i : server_info) {
-    const ServerId& id = i.first;
-    const int& iops = i.second.first;
-    const int& threads = i.second.second;
-
-    server_ids.push_back(id);
-    servers[id] =
-      new TestServer(id, iops, threads, client_info_f, client_response_f);
+  for (uint i = 0; i < server_count; ++i) {
+    server_ids.push_back(i);
+    servers[i] =
+      new TestServer(i,
+		     server_iops, server_threads,
+		     client_info_f, client_response_f,
+		     server_soft_limit);
   }
 
   // construct clients
 
-  // lambda to choose a server based on a seed; called by client
-  SelectFunc server_alternate_f =
-    [&server_ids](uint64_t seed) -> const ServerId& {
-    int index = seed % server_ids.size();
+  // lambda to choose a server based on a seed and client; called by client
+  auto server_alternate_f =
+    [&server_ids, &server_count](uint64_t seed, uint16_t client_idx) -> const ServerId& {
+    int index = (client_idx + seed) % server_count;
     return server_ids[index];
   };
 
@@ -113,11 +113,22 @@ int main(int argc, char* argv[]) {
     srv_rand(std::chrono::system_clock::now().time_since_epoch().count());
 
   // lambda to choose a server randomly
-  SelectFunc server_random_f =
-    [&server_ids, &srv_rand] (uint64_t seed) -> const ServerId& {
-    int index = srv_rand() % server_ids.size();
+  auto server_random_f =
+    [&server_ids, &srv_rand, &server_count] (uint64_t seed) -> const ServerId& {
+    int index = srv_rand() % server_count;
     return server_ids[index];
   };
+
+  // lambda to choose a server randomly
+  auto server_ran_range_f =
+    [&server_ids, &srv_rand, &server_count, &client_count]
+    (uint64_t seed, uint16_t client_idx, uint16_t servers_per) -> const ServerId& {
+    double factor = double(server_count) / client_count;
+    uint offset = srv_rand() % servers_per;
+    uint index = (uint(0.5 + client_idx * factor) + offset) % server_count;
+    return server_ids[index];
+  };
+
 
   // lambda to always choose the first server
   SelectFunc server_0_f =
@@ -135,16 +146,34 @@ int main(int argc, char* argv[]) {
     i->second->post(request, req_params);
   };
 
-  for (auto const &i : client_info) {
-    ClientId name = i.first;
-    int goal = i.second.second;
-    clients[name] = new TestClient(name,
-				   server_post_f,
-				   server_random_f,
-				   goal * goal_secs_to_run,
-				   goal,
-				   client_outstanding_ops);
-  }
+  for (uint i = 0; i < client_count; ++i) {
+    static std::vector<CliInst> no_wait =
+      { { req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
+    static std::vector<CliInst> wait =
+      { { wait_op, client_wait },
+	{ req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
+
+    SelectFunc server_select_f =
+#if 0
+      std::bind(server_alternate_f, _1, i)
+#elif 0
+      std::bind(server_random_f, _1)
+#elif 1
+      std::bind(server_ran_range_f, _1, i, 8)
+#else
+      server_0_f
+#endif
+      ;
+
+    clients[i] =
+      new TestClient(i,
+		     server_post_f,
+		     server_select_f,
+		     i < (client_count - client_wait_count) ? no_wait : wait
+	);
+  } // for
+
+  auto clients_created_time = TestClient::now();
 
   // clients are now running; wait for all to finish
 
@@ -155,26 +184,32 @@ int main(int argc, char* argv[]) {
   // compute and display stats
 
   const TestClient::TimePoint late_time = TestClient::now();
+  TestClient::TimePoint earliest_start = late_time;
   TestClient::TimePoint latest_start = early_time;
   TestClient::TimePoint earliest_finish = late_time;
   TestClient::TimePoint latest_finish = early_time;
 
-  for (auto const &i : clients) {
-    auto start = i.second->get_op_times().front();
-    auto end = i.second->get_op_times().back();
+  for (auto const &c : clients) {
+    auto start = c.second->get_op_times().front();
+    auto end = c.second->get_op_times().back();
 
+    if (start < earliest_start) { earliest_start = start; }
     if (start > latest_start) { latest_start = start; }
     if (end < earliest_finish) { earliest_finish = end; }
     if (end > latest_finish) { latest_finish = end; }
   }
 
-  const auto start_edge = latest_start + skip_amount;
+  double ops_factor =
+    std::chrono::duration_cast<std::chrono::duration<double>>(measure_unit) /
+    std::chrono::duration_cast<std::chrono::duration<double>>(report_unit);
+
+  const auto start_edge = clients_created_time + skip_amount;
 
   std::map<ClientId,std::vector<double>> ops_data;
 
-  for (auto const &i : clients) {
-    auto it = i.second->get_op_times().begin();
-    const auto end = i.second->get_op_times().end();
+  for (auto const &c : clients) {
+    auto it = c.second->get_op_times().begin();
+    const auto end = c.second->get_op_times().end();
     while (it != end && *it < start_edge) { ++it; }
 
     for (auto time_edge = start_edge + measure_unit;
@@ -182,8 +217,8 @@ int main(int argc, char* argv[]) {
 	 time_edge += measure_unit) {
       int count = 0;
       for (; it != end && *it < time_edge; ++count, ++it) { /* empty */ }
-      double ops_per_second = double(count) / (measure_unit / report_unit);
-      ops_data[i.first].push_back(ops_per_second);
+      double ops_per_second = double(count) / ops_factor;
+      ops_data[c.first].push_back(ops_per_second);
     }
   }
 
@@ -191,11 +226,20 @@ int main(int argc, char* argv[]) {
   const int data_w = 8;
   const int data_prec = 2;
 
+  auto client_disp_filter = [=] (ClientId i) -> bool {
+    return i < 3 || i >= (client_count - 3);
+  };
+
+  auto server_disp_filter = [=] (ServerId i) -> bool {
+    return i < 3 || i >= (server_count - 3);
+  };
+
   std::cout << "==== Client Data ====" << std::endl;
 
   std::cout << std::setw(head_w) << "client:";
-  for (auto const &i : clients) {
-    std::cout << std::setw(data_w) << i.first;
+  for (auto const &c : clients) {
+    if (!client_disp_filter(c.first)) continue;
+    std::cout << std::setw(data_w) << c.first;
   }
   std::cout << std::setw(data_w) << "total" << std::endl;
 
@@ -214,6 +258,9 @@ int main(int argc, char* argv[]) {
 	  has_data = true;
 	}
 	total += data;
+
+	if (!client_disp_filter(c.first)) continue;
+
 	std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
 	  std::fixed << data;
       }
@@ -231,6 +278,7 @@ int main(int argc, char* argv[]) {
     int total = 0;
     for (auto const &c : clients) {
       total += c.second->get_res_count();
+      if (!client_disp_filter(c.first)) continue;
       std::cout << std::setw(data_w) << c.second->get_res_count();
     }
     std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
@@ -242,6 +290,7 @@ int main(int argc, char* argv[]) {
     int total = 0;
     for (auto const &c : clients) {
       total += c.second->get_prop_count();
+      if (!client_disp_filter(c.first)) continue;
       std::cout << std::setw(data_w) << c.second->get_prop_count();
     }
     std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
@@ -251,8 +300,9 @@ int main(int argc, char* argv[]) {
   std::cout << std::endl << "==== Server Data ====" << std::endl;
 
   std::cout << std::setw(head_w) << "server:";
-  for (auto const &i : servers) {
-    std::cout << std::setw(data_w) << i.first;
+  for (auto const &s : servers) {
+    if (!server_disp_filter(s.first)) continue;
+    std::cout << std::setw(data_w) << s.first;
   }
   std::cout << std::setw(data_w) << "total" << std::endl;
 
@@ -261,6 +311,7 @@ int main(int argc, char* argv[]) {
     int total = 0;
     for (auto const &s : servers) {
       total += s.second->get_res_count();
+      if (!server_disp_filter(s.first)) continue;
       std::cout << std::setw(data_w) << s.second->get_res_count();
     }
     std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
@@ -272,6 +323,7 @@ int main(int argc, char* argv[]) {
     int total = 0;
     for (auto const &s : servers) {
       total += s.second->get_prop_count();
+      if (!server_disp_filter(s.first)) continue;
       std::cout << std::setw(data_w) << s.second->get_prop_count();
     }
     std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
