@@ -218,29 +218,43 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
  * If mds_debug_scatterstat is enabled, assert for correctness,
  * otherwise just print out the mismatch and continue.
  */
-bool CDir::check_rstats()
+bool CDir::check_rstats(bool scrub)
 {
-  if (!g_conf->mds_debug_scatterstat)
+  if (!g_conf->mds_debug_scatterstat && !scrub)
     return true;
 
   dout(25) << "check_rstats on " << this << dendl;
   if (!is_complete() || !is_auth() || is_frozen()) {
+    assert(!scrub);
     dout(10) << "check_rstats bailing out -- incomplete or non-auth or frozen dir!" << dendl;
     return true;
   }
 
+  frag_info_t frag_info;
+  nest_info_t nest_info;
+  for (map_t::iterator i = items.begin(); i != items.end(); ++i) {
+    if (i->second->last != CEPH_NOSNAP)
+      continue;
+    CDentry::linkage_t *dnl = i->second->get_linkage();
+    if (dnl->is_primary()) {
+      CInode *in = dnl->get_inode();
+      nest_info.add(in->inode.accounted_rstat);
+      if (in->is_dir())
+	frag_info.nsubdirs++;
+      else
+	frag_info.nfiles++;
+    } else if (dnl->is_remote())
+      frag_info.nfiles++;
+  }
+
+  bool good = true;
   // fragstat
-  if(!(get_num_head_items()==
-      (fnode.fragstat.nfiles + fnode.fragstat.nsubdirs))) {
+  if(!frag_info.same_sums(fnode.fragstat)) {
     dout(1) << "mismatch between head items and fnode.fragstat! printing dentries" << dendl;
     dout(1) << "get_num_head_items() = " << get_num_head_items()
              << "; fnode.fragstat.nfiles=" << fnode.fragstat.nfiles
              << " fnode.fragstat.nsubdirs=" << fnode.fragstat.nsubdirs << dendl;
-    for (map_t::iterator i = items.begin(); i != items.end(); ++i) {
-      //if (i->second->get_linkage()->is_primary())
-        dout(1) << *(i->second) << dendl;
-    }
-    assert(get_num_head_items() == (fnode.fragstat.nfiles + fnode.fragstat.nsubdirs));
+    good = false;
   } else {
     dout(20) << "get_num_head_items() = " << get_num_head_items()
              << "; fnode.fragstat.nfiles=" << fnode.fragstat.nfiles
@@ -248,39 +262,38 @@ bool CDir::check_rstats()
   }
 
   // rstat
-  nest_info_t sub_info;
-  for (map_t::iterator i = items.begin(); i != items.end(); ++i) {
-    if (i->second->get_linkage()->is_primary() &&
-	i->second->last == CEPH_NOSNAP) {
-      sub_info.add(i->second->get_linkage()->inode->inode.accounted_rstat);
-    }
-  }
-
-  if ((!(sub_info.rbytes == fnode.rstat.rbytes)) ||
-      (!(sub_info.rfiles == fnode.rstat.rfiles)) ||
-      (!(sub_info.rsubdirs == fnode.rstat.rsubdirs))) {
+  if (!nest_info.same_sums(fnode.rstat)) {
     dout(1) << "mismatch between child accounted_rstats and my rstats!" << dendl;
-    dout(1) << "total of child dentrys: " << sub_info << dendl;
+    dout(1) << "total of child dentrys: " << nest_info << dendl;
     dout(1) << "my rstats:              " << fnode.rstat << dendl;
-    for (map_t::iterator i = items.begin(); i != items.end(); ++i) {
-      if (i->second->get_linkage()->is_primary()) {
-        dout(1) << *(i->second) << " "
-                << i->second->get_linkage()->inode->inode.accounted_rstat
-                << dendl;
-      }
-    }
+    good = false;
   } else {
-    dout(25) << "total of child dentrys: " << sub_info << dendl;
-    dout(25) << "my rstats:              " << fnode.rstat << dendl;
+    dout(20) << "total of child dentrys: " << nest_info << dendl;
+    dout(20) << "my rstats:              " << fnode.rstat << dendl;
   }
 
-  assert(sub_info.rbytes == fnode.rstat.rbytes);
-  assert(sub_info.rfiles == fnode.rstat.rfiles);
-  assert(sub_info.rsubdirs == fnode.rstat.rsubdirs);
-  dout(10) << "check_rstats complete on " << this << dendl;
-  return true;
-}
+  if (!good) {
+    if (!scrub) {
+      for (map_t::iterator i = items.begin(); i != items.end(); ++i) {
+	CDentry *dn = i->second;
+	if (dn->get_linkage()->is_primary()) {
+	  CInode *in = dn->get_linkage()->inode;
+	  dout(1) << *dn << " rstat " << in->inode.accounted_rstat << dendl;
+	} else {
+	  dout(1) << *dn << dendl;
+	}
+      }
 
+      assert(frag_info.nfiles == fnode.fragstat.nfiles);
+      assert(frag_info.nsubdirs == fnode.fragstat.nsubdirs);
+      assert(nest_info.rbytes == fnode.rstat.rbytes);
+      assert(nest_info.rfiles == fnode.rstat.rfiles);
+      assert(nest_info.rsubdirs == fnode.rstat.rsubdirs);
+    }
+  }
+  dout(10) << "check_rstats complete on " << this << dendl;
+  return good;
+}
 
 CDentry *CDir::lookup(const char *name, snapid_t snap)
 { 
@@ -1857,6 +1870,11 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   mark_complete();
   state_clear(STATE_FETCHING);
 
+  if (scrub_infop && scrub_infop->need_scrub_local) {
+    scrub_infop->need_scrub_local = false;
+    scrub_local();
+  }
+
   // open & force frags
   while (!undef_inodes.empty()) {
     CInode *in = undef_inodes.front();
@@ -1877,12 +1895,14 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
 void CDir::go_bad()
 {
+  if (get_version() == 0)
+    set_version(1);
   state_set(STATE_BADFRAG);
   // mark complete, !fetching
   mark_complete();
   state_clear(STATE_FETCHING);
   auth_unpin(this);
-  
+
   // kick waiters
   finish_waiting(WAIT_COMPLETE, 0);
 }
@@ -2884,7 +2904,7 @@ void CDir::scrub_info_create() const
   me->scrub_infop = si;
 }
 
-void CDir::scrub_initialize()
+void CDir::scrub_initialize(const ScrubHeaderRefConst& header)
 {
   dout(20) << __func__ << dendl;
   assert(is_complete());
@@ -2922,8 +2942,7 @@ void CDir::scrub_initialize()
     }
   }
   scrub_infop->directory_scrubbing = true;
-
-  assert(scrub_local()); // TODO: handle failure
+  scrub_infop->header = header;
 }
 
 void CDir::scrub_finished()
@@ -2947,12 +2966,13 @@ int CDir::_next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
                               MDSInternalContext *cb, CDentry **dnout)
 {
   dentry_key_t dnkey;
+  CDentry *dn;
 
   while (!dns.empty()) {
     set<dentry_key_t>::iterator front = dns.begin();
     dnkey = *front;
-    *dnout = lookup(dnkey.name);
-    if (!*dnout) {
+    dn = lookup(dnkey.name);
+    if (!dn) {
       if (!is_complete() &&
           (!has_bloom() || is_in_bloom(dnkey.name))) {
         // need to re-read this dirfrag
@@ -2974,6 +2994,14 @@ int CDir::_next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
     // okay, we got a  dentry
     dns.erase(dnkey);
 
+    if (dn->get_projected_version() < scrub_infop->last_recursive.version &&
+	!(scrub_infop->header && scrub_infop->header->force)) {
+      dout(15) << " skip dentry " << dnkey.name
+	       << ", no change since last scrub" << dendl;
+      continue;
+    }
+
+    *dnout = dn;
     return 0;
   }
   *dnout = NULL;
@@ -3051,7 +3079,9 @@ void CDir::scrub_maybe_delete_info()
 {
   if (scrub_infop &&
       !scrub_infop->directory_scrubbing &&
+      !scrub_infop->need_scrub_local &&
       !scrub_infop->last_scrub_dirty &&
+      !scrub_infop->pending_scrub_error &&
       scrub_infop->dirty_scrub_stamps.empty()) {
     delete scrub_infop;
     scrub_infop = NULL;
@@ -3061,13 +3091,19 @@ void CDir::scrub_maybe_delete_info()
 bool CDir::scrub_local()
 {
   assert(is_complete());
-  bool rval = check_rstats();
+  bool rval = check_rstats(true);
 
+  scrub_info();
   if (rval) {
-    scrub_info();
     scrub_infop->last_local.time = ceph_clock_now(g_ceph_context);
     scrub_infop->last_local.version = get_projected_version();
+    scrub_infop->pending_scrub_error = false;
     scrub_infop->last_scrub_dirty = true;
+  } else {
+    scrub_infop->pending_scrub_error = true;
+    if (scrub_infop->header &&
+	scrub_infop->header->repair)
+      cache->repair_dirfrag_stats(this);
   }
   return rval;
 }
