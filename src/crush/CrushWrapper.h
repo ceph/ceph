@@ -316,6 +316,19 @@ public:
   bool is_v3_rule(unsigned ruleid) const;
   bool is_v5_rule(unsigned ruleid) const;
 
+  string get_min_required_version() const {
+    if (has_v5_rules() || has_nondefault_tunables5())
+      return "jewel";
+    else if (has_v4_buckets())
+      return "hammer";
+    else if (has_nondefault_tunables3())
+      return "firefly";
+    else if (has_nondefault_tunables2() || has_nondefault_tunables())
+      return "bobtail";
+    else
+      return "argonaut";
+  }
+
   // default bucket types
   unsigned get_default_bucket_alg() const {
     // in order of preference
