@@ -82,6 +82,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
         if merge:
             number = merge.group(1)
             pr = gh.repos("ceph")("ceph").pulls(number).get()
+            title = pr['title']
             message_lines = commit.message.split('\n')
             if not strict and len(message_lines) > 1:
                 lines = []
@@ -94,7 +95,13 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
                 duplicates_pr_title = lines[0] == pr['title'].strip()
                 if duplicates_pr_title:
                     lines.pop(0)
-                if len(lines) == 0 and duplicates_pr_title:
+                if len(lines) == 0:
+                    if duplicates_pr_title:
+                        message = None
+                elif len(lines) == 1:
+                    # assume that a single line means the intention is to
+                    # re-write the PR title
+                    title = lines[0]
                     message = None
                 else:
                     message = "    " + "\n    ".join(lines)
@@ -118,8 +125,6 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
                 print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " has no associated issue")
                 continue    
             
-            title = pr['title']
-
             if strict:
                 title_re = '^(?:hammer|infernalis|jewel|kraken): (cli|common|mon|osd|fs|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|cmake|doc|crush|librados)(:.*)'
                 match = re.match(title_re, title)
