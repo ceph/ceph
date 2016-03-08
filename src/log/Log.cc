@@ -305,9 +305,10 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 
       char *buf;
       size_t buf_size = 80 + e->size();
-      bool need_dynamic = buf_size >= 0x10000; //avoids >64K buffers allocation at stack
+      bool need_dynamic = buf_size >= 0x10000; //avoids >64K buffers
+					       //allocation at stack
       char buf0[need_dynamic ? 1 : buf_size];
-      if(need_dynamic) {
+      if (need_dynamic) {
         buf = new char[buf_size];
       } else {
         buf = buf0;
@@ -320,7 +321,8 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 			(unsigned long)e->m_thread, e->m_prio);
 
       buflen += e->snprintf(buf + buflen, buf_size - buflen - 1);
-      if (buflen > buf_size - 1) { //paranoid check, buf was declared to hold everything
+      if (buflen > buf_size - 1) { //paranoid check, buf was declared
+				   //to hold everything
         buflen = buf_size - 1;
         buf[buflen] = 0;
       }
@@ -336,10 +338,11 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
         buf[buflen] = '\n';
         int r = safe_write(m_fd, buf, buflen+1);
         if (r < 0)
-          cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
+          cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r)
+	       << std::endl;
       }
-      if(need_dynamic)
-        delete buf;
+      if (need_dynamic)
+        delete[] buf;
     }
     if (do_graylog2 && m_graylog) {
       m_graylog->log_entry(e);
