@@ -619,7 +619,17 @@ protected:
       list<CInode*> *undef_inodes);
 
   /**
-   * Mark this fragment as BADFRAG
+   * Mark this fragment as BADFRAG (common part of go_bad and go_bad_dentry)
+   */
+  void _go_bad();
+
+  /**
+   * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)
+   */
+  void go_bad_dentry(snapid_t last, const std::string &dname);
+
+  /**
+   * Go bad due to a damaged header (register with damagetable and go BADFRAG)
    */
   void go_bad();
 
