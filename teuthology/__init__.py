@@ -1,5 +1,9 @@
 from gevent import monkey
-monkey.patch_all(dns=False)
+monkey.patch_all(
+    dns=False,
+    # Don't patch subprocess to avoid http://tracker.ceph.com/issues/14990
+    subprocess=False,
+)
 from .orchestra import monkey
 monkey.patch_all()
 
