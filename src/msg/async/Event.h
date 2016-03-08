@@ -38,6 +38,8 @@
 #endif
 
 #include <pthread.h>
+#include <mutex>
+#include <condition_variable>
 
 #include "include/atomic.h"
 #include "include/Context.h"
@@ -87,6 +89,8 @@ class EventDriver {
  */
 class EventCenter {
   using clock_type = ceph::coarse_mono_clock;
+  thread_local static pthread_t thread_id;
+
   struct FileEvent {
     int mask;
     EventCallbackRef read_cb;
@@ -116,7 +120,7 @@ class EventCenter {
   int notify_receive_fd;
   int notify_send_fd;
   NetHandler net;
-  pthread_t owner;
+  pthread_t owner = 0;
   EventCallbackRef notify_handler;
 
   int process_time_events();
@@ -156,6 +160,41 @@ class EventCenter {
 
   // Used by external thread
   void dispatch_event_external(EventCallbackRef e);
+  inline bool in_thread() const {
+    return thread_id == owner;
+  }
+ private:
+  template <typename func>
+  class C_submit_event : public EventCallback {
+    std::mutex lock;
+    std::condition_variable cond;
+    bool done = false;
+    func &&f;
+   public:
+    C_submit_event(func &&_f): f(std::move(_f)) {}
+    void do_request(int id) {
+      f();
+      std::lock_guard<std::mutex> l(lock);
+      cond.notify_all();
+      done = true;
+    }
+    void wait() {
+      std::unique_lock<std::mutex> l(lock);
+      while (!done)
+        cond.wait(l);
+    }
+  };
+ public:
+  template <typename func>
+  void submit_event(func &&f) {
+    if (in_thread()) {
+      f();
+      return ;
+    }
+    C_submit_event<func> event(std::move(f));
+    dispatch_event_external(&event);
+    event.wait();
+  };
 };
 
 #endif
