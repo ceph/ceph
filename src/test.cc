@@ -58,6 +58,7 @@ int main(int argc, char* argv[]) {
   const double client_reservation = 20.0;
   const double client_limit = 60.0;
   const double client_weight = 1.0;
+  const std::chrono::seconds client_wait(12);
 
   dmc::ClientInfo client_info =
     { client_weight, client_reservation, client_limit };
@@ -148,7 +149,7 @@ int main(int argc, char* argv[]) {
     static std::vector<CliInst> no_wait =
       { { req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
     static std::vector<CliInst> wait =
-      { { wait_op, std::chrono::seconds(10) },
+      { { wait_op, client_wait },
 	{ req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
 
     SelectFunc server_select_f =
