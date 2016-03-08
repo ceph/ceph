@@ -412,6 +412,4 @@ void EventCenter::dispatch_event_external(EventCallbackRef e)
   external_lock.Unlock();
   if (thread_id != owner)
     wakeup();
-
-  ldout(cct, 10) << __func__ << " " << e << " pending " << num << dendl;
 }
