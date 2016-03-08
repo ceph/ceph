@@ -364,7 +364,7 @@ class MDSRank {
 
   protected:
     void dump_clientreplay_status(Formatter *f) const;
-    void command_scrub_path(Formatter *f, const string& path);
+    void command_scrub_path(Formatter *f, const string& path, vector<string>& scrubop_vec);
     void command_tag_path(Formatter *f, const string& path,
                           const string &tag);
     void command_flush_path(Formatter *f, const string& path);
