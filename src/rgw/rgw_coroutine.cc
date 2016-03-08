@@ -161,7 +161,7 @@ int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
   ldout(cct, 20) << *op << ": operate()" << dendl;
   int r = op->operate();
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: op->operate() returned r=" << r << dendl;
+    ldout(cct, 20) << *op << ": operate() returned r=" << r << dendl;
   }
 
   error_flag = op->is_error();
@@ -442,7 +442,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     ret = stack->operate(&env);
     stack->set_is_scheduled(false);
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: stack->operate() returned ret=" << ret << dendl;
+      ldout(cct, 20) << "stack->operate() returned ret=" << ret << dendl;
     }
 
     if (stack->is_error()) {
@@ -568,7 +568,7 @@ int RGWCoroutinesManager::run(RGWCoroutine *op)
 
   int r = run(stacks);
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: run(stacks) returned r=" << r << dendl;
+    ldout(cct, 20) << "run(stacks) returned r=" << r << dendl;
   } else {
     r = op->get_ret_status();
   }
@@ -579,7 +579,9 @@ int RGWCoroutinesManager::run(RGWCoroutine *op)
 
 RGWAioCompletionNotifier *RGWCoroutinesManager::create_completion_notifier(RGWCoroutinesStack *stack)
 {
-  return new RGWAioCompletionNotifier(&completion_mgr, (void *)stack);
+  RGWAioCompletionNotifier *cn = new RGWAioCompletionNotifier(completion_mgr, (void *)stack);
+  completion_mgr->register_completion_notifier(cn);
+  return cn;
 }
 
 void RGWCoroutinesManager::dump(Formatter *f) const {
@@ -733,7 +735,7 @@ bool RGWCoroutine::drain_children(int num_cr_left)
       int ret;
       while (collect(&ret)) {
         if (ret < 0) {
-          ldout(cct, 0) << "ERROR: collect() returned error" << dendl;
+          ldout(cct, 10) << "collect() returned ret=" << ret << dendl;
           /* we should have reported this error */
           log_error() << "ERROR: collect() returned error (ret=" << ret << ")";
         }
