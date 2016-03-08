@@ -385,7 +385,7 @@ void RGWHTTPManager::_complete_request(rgw_http_req_data *req_data)
     reqs.erase(iter);
   }
   if (completion_mgr) {
-    completion_mgr->complete(req_data->client->get_user_info());
+    completion_mgr->complete(NULL, req_data->client->get_user_info());
   }
   req_data->put();
 }
