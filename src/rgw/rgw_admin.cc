@@ -364,6 +364,7 @@ enum {
   OPT_PERIOD_LIST,
   OPT_PERIOD_UPDATE,
   OPT_PERIOD_COMMIT,
+  OPT_SYNC_STATUS,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -716,6 +717,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_REPLICALOG_UPDATE;
     if (strcmp(cmd, "delete") == 0)
       return OPT_REPLICALOG_DELETE;
+  } else if (strcmp(prev_cmd, "sync") == 0) {
+    if (strcmp(cmd, "status") == 0)
+      return OPT_SYNC_STATUS;
   }
 
   return -EINVAL;
@@ -1568,6 +1572,157 @@ static int read_current_period_id(RGWRados* store, const std::string& realm_id,
   }
   *period_id = realm.get_current_period();
   return 0;
+}
+
+static void get_md_sync_status(list<string>& status)
+{
+  RGWMetaSyncStatusManager sync(store, store->get_async_rados());
+
+  int ret = sync.init();
+  if (ret < 0) {
+    status.push_back(string("failed to retrieve sync info: sync.init() failed: ") + cpp_strerror(-ret));
+    return;
+  }
+
+  ret = sync.read_sync_status();
+  if (ret < 0) {
+    status.push_back(string("failed to read sync status: ") + cpp_strerror(-ret));
+    return;
+  }
+
+  const rgw_meta_sync_status& sync_status = sync.get_sync_status();
+
+  string status_str;
+  switch (sync_status.sync_info.state) {
+    case rgw_meta_sync_info::StateInit:
+      status_str = "init";
+      break;
+    case rgw_meta_sync_info::StateBuildingFullSyncMaps:
+      status_str = "preparing for full sync";
+      break;
+    case rgw_meta_sync_info::StateSync:
+      status_str = "syncing";
+      break;
+    default:
+      status_str = "unknown";
+  }
+
+  status.push_back(status_str);
+  
+  uint64_t full_total = 0;
+  uint64_t full_complete = 0;
+
+  int num_full = 0;
+  int num_inc = 0;
+  int total_shards = 0;
+
+  for (auto marker_iter : sync_status.sync_markers) {
+    full_total += marker_iter.second.total_entries;
+    total_shards++;
+    if (marker_iter.second.state == rgw_meta_sync_marker::SyncState::FullSync) {
+      num_full++;
+      full_complete += marker_iter.second.pos;
+    } else {
+      full_complete += marker_iter.second.total_entries;
+    }
+    if (marker_iter.second.state == rgw_meta_sync_marker::SyncState::IncrementalSync) {
+      num_inc++;
+    }
+  }
+
+  stringstream ss;
+  ss << "full sync: " << num_full << "/" << total_shards << " shards";
+  status.push_back(ss.str());
+  ss.str("");
+
+  if (num_full > 0) {
+    ss << "full sync: " << full_total - full_complete << " entries to sync";
+    status.push_back(ss.str());
+    ss.str("");
+  }
+
+  ss << "incremental sync: " << num_inc << "/" << total_shards << " shards";
+  status.push_back(ss.str());
+  ss.str("");
+
+  rgw_mdlog_info log_info;
+  ret = sync.read_log_info(&log_info);
+  if (ret < 0) {
+    status.push_back(string("failed to fetch local sync status: ") + cpp_strerror(-ret));
+    return;
+  }
+
+  map<int, RGWMetadataLogInfo> master_shards_info;
+  string master_period;
+
+  ret = sync.read_master_log_shards_info(&master_period, &master_shards_info);
+  if (ret < 0) {
+    status.push_back(string("failed to fetch master sync status: ") + cpp_strerror(-ret));
+    return;
+  }
+
+  vector<int> shards_behind;
+
+  if (sync_status.sync_info.period != master_period) {
+    status.push_back(string("master is on a different period: master_period=" + master_period + " local_period=" + sync_status.sync_info.period));
+  } else {
+    for (auto local_iter : sync_status.sync_markers) {
+      int shard_id = local_iter.first;
+      auto iter = master_shards_info.find(shard_id);
+
+      if (iter == master_shards_info.end()) {
+        /* huh? */
+        derr << "ERROR: could not find remote sync shard status for shard_id=" << shard_id << dendl;
+        continue;
+      }
+      auto master_marker = iter->second.marker;
+      if (master_marker > local_iter.second.marker) {
+        shards_behind.push_back(shard_id);
+      }
+    }
+  }
+
+  int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
+  if (total_behind == 0) {
+    status.push_back("metadata is caught up with master");
+  } else {
+    ss << "metadata is behind on " << total_behind << " shards";
+    status.push_back(ss.str());
+    ss.str("");
+  }
+
+}
+
+static void tab_dump(const string& header, int width, const list<string>& entries)
+{
+  string s = header;
+
+  for (auto e : entries) {
+    cout << std::setw(width) << s << std::setw(1) << " " << e << std::endl;
+    s.clear();
+  }
+}
+
+
+static void sync_status(Formatter *formatter)
+{
+  RGWZoneGroup zonegroup = store->get_zonegroup();
+  RGWZone& zone = store->get_zone();
+
+  int width = 20;
+
+  cout << std::setw(width) << "zonegroup" << std::setw(1) << " " << zonegroup.get_id() << " (" << zonegroup.get_name() << ")" << std::endl;
+  cout << std::setw(width) << "zone" << std::setw(1) << " " << zone.id << " (" << zone.name << ")" << std::endl;
+
+  list<string> md_status;
+
+  if (zone.id == zonegroup.master_zone) {
+    md_status.push_back("no sync (zone is master)");
+  } else {
+    get_md_sync_status(md_status);
+  }
+
+  tab_dump("metadata sync", 20, md_status);
 }
 
 int main(int argc, char **argv) 
@@ -4487,6 +4642,10 @@ next:
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+  }
+
+  if (opt_cmd == OPT_SYNC_STATUS) {
+    sync_status(formatter);
   }
 
   if (opt_cmd == OPT_METADATA_SYNC_STATUS) {

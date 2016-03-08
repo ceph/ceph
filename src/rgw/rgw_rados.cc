@@ -3381,7 +3381,7 @@ int RGWRados::replace_region_with_zonegroup()
   /* create zonegroups */
   for (iter = regions.begin(); iter != regions.end(); ++iter)
   {
-    derr << "create zonegroup " << *iter << dendl;
+    ldout(cct, 10) << "create zonegroup " << *iter << dendl;
     /* read region info default has no data */
     if (*iter != default_zonegroup_name){
       RGWZoneGroup zonegroup(*iter);
