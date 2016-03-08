@@ -290,23 +290,32 @@ function remove_crontab() {
 
 function get_or_create_keypair() {
     local keypair=$1
-    local key_file=$HOME/.ssh/id_rsa
 
-    if ! openstack keypair show $keypair > /dev/null 2>&1 ; then
-        if test -f $key_file ; then
-            if ! test -f $key_file.pub ; then
-                ssh-keygen -y -f $key_file > $key_file.pub || return 1
-            fi
-            openstack keypair create --public-key $key_file.pub $keypair || return 1
-            echo "IMPORTED keypair $keypair"
-        else
-            openstack keypair create $keypair > $key_file || return 1
-            chmod 600 $key_file
-            echo "CREATED keypair $keypair"
+    (
+        cd $HOME/.ssh
+        if ! test -f $keypair.pem ; then
+            openstack keypair delete $keypair || true
+            openstack keypair create $keypair > $keypair.pem || return 1
+            chmod 600 $keypair.pem
         fi
-    else
-        echo "OK keypair $keypair exists"
-    fi
+        if ! test -f $keypair.pub ; then
+            if ! ssh-keygen -y -f $keypair.pem > $keypair.pub ; then
+               cat $keypair.pub
+               return 1
+            fi
+        fi
+        if ! openstack keypair show $keypair > $keypair.keypair 2>&1 ; then
+            openstack keypair create --public-key $keypair.pub $keypair || return 1 # noqa
+        else
+            fingerprint=$(ssh-keygen -l -f $keypair.pub | cut -d' ' -f2)
+            if ! grep --quiet $fingerprint $keypair.keypair ; then
+                openstack keypair delete $keypair || return 1
+                openstack keypair create --public-key $keypair.pub $keypair || return 1 # noqa
+            fi
+        fi
+        ln -f $keypair.pem id_rsa
+        cat $keypair.pub >> authorized_keys
+    )
 }
 
 function delete_keypair() {
