@@ -229,8 +229,6 @@ find_package(libuuid REQUIRED)
 
 find_package(libcurl REQUIRED)
 
-find_package(libcurl REQUIRED)
-
 option(USE_CRYPTOPP "Cryptopp is ON" ON)
 find_package(cryptopp)
 if(CRYPTOPP_FOUND)
