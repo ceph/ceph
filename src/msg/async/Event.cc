@@ -224,7 +224,7 @@ void EventCenter::delete_file_event(int fd, int mask)
 
 uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef ctxt)
 {
-  Mutex::Locker l(time_lock);
+  assert(in_thread());
   uint64_t id = time_event_next_id++;
 
   ldout(cct, 10) << __func__ << " id=" << id << " trigger after " << microseconds << "us"<< dendl;
@@ -242,7 +242,7 @@ uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef 
 // TODO: Ineffective implementation now!
 void EventCenter::delete_time_event(uint64_t id)
 {
-  Mutex::Locker l(time_lock);
+  assert(in_thread());
   ldout(cct, 10) << __func__ << " id=" << id << dendl;
   if (id >= time_event_next_id)
     return ;
@@ -274,7 +274,6 @@ int EventCenter::process_time_events()
   clock_type::time_point now = clock_type::now();
   ldout(cct, 10) << __func__ << " cur time is " << now << dendl;
 
-  Mutex::Locker l(time_lock);
   while (!time_events.empty()) {
     auto it = time_events.begin();
     if (now >= it->first) {
@@ -284,9 +283,7 @@ int EventCenter::process_time_events()
       time_events.erase(it);
       ldout(cct, 10) << __func__ << " process time event: id=" << id << dendl;
       processed++;
-      time_lock.Unlock();
       cb->do_request(id);
-      time_lock.Lock();
     } else {
       break;
     }
@@ -311,9 +308,8 @@ int EventCenter::process_events(int timeout_microseconds)
     clock_type::time_point shortest;
     shortest = now + std::chrono::microseconds(timeout_microseconds); 
 
-    Mutex::Locker l(time_lock);
     auto it = time_events.begin();
-    if (it != time_events.end() && shortest > it->first) {
+    if (it != time_events.end() && shortest >= it->first) {
       ldout(cct, 10) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
       shortest = it->first;
       trigger_time = true;
