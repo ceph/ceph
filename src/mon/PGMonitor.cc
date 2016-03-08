@@ -999,11 +999,28 @@ void PGMonitor::register_pg(OSDMap *osdmap,
   stats.mapping_epoch = epoch;
 
   if (parent_found) {
-    stats.last_scrub_stamp = pg_map.pg_stat[parent].last_scrub_stamp;
-    stats.last_deep_scrub_stamp = pg_map.pg_stat[parent].last_deep_scrub_stamp;
-    stats.last_clean_scrub_stamp = pg_map.pg_stat[parent].last_clean_scrub_stamp;
+    pg_stat_t &ps = pg_map.pg_stat[parent];
+    stats.last_fresh = ps.last_fresh;
+    stats.last_active = ps.last_active;
+    stats.last_change = ps.last_change;
+    stats.last_peered = ps.last_peered;
+    stats.last_clean = ps.last_clean;
+    stats.last_unstale = ps.last_unstale;
+    stats.last_undegraded = ps.last_undegraded;
+    stats.last_fullsized = ps.last_fullsized;
+    stats.last_scrub_stamp = ps.last_scrub_stamp;
+    stats.last_deep_scrub_stamp = ps.last_deep_scrub_stamp;
+    stats.last_clean_scrub_stamp = ps.last_clean_scrub_stamp;
   } else {
     utime_t now = ceph_clock_now(g_ceph_context);
+    stats.last_fresh = now;
+    stats.last_active = now;
+    stats.last_change = now;
+    stats.last_peered = now;
+    stats.last_clean = now;
+    stats.last_unstale = now;
+    stats.last_undegraded = now;
+    stats.last_fullsized = now;
     stats.last_scrub_stamp = now;
     stats.last_deep_scrub_stamp = now;
     stats.last_clean_scrub_stamp = now;
