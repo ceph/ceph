@@ -45,6 +45,7 @@ private:
   typedef std::map<uint64_t, ObjectPlayerPtr> ObjectPlayers;
   typedef std::map<uint8_t, ObjectPlayers> SplayedObjectPlayers;
   typedef std::map<uint8_t, ObjectPosition> SplayedObjectPositions;
+  typedef std::set<uint64_t> ObjectNumbers;
 
   enum State {
     STATE_INIT,
@@ -113,6 +114,8 @@ private:
   double m_watch_interval;
 
   bool m_handler_notified = false;
+
+  ObjectNumbers m_fetch_object_numbers;
 
   PrefetchSplayOffsets m_prefetch_splay_offsets;
   SplayedObjectPlayers m_object_players;
