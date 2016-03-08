@@ -175,7 +175,7 @@ if __name__ == '__main__':
         map = expect('mds/getmap', 'GET', 200, '')
         assert(len(map.content) != 0)
         msg, r = expect_nofail(
-            'mds/setmap?epoch={0}'.format(current_epoch + 1), 'PUT', 200,
+            'mds/setmap?epoch={0}&confirm=--yes-i-really-mean-it'.format(current_epoch + 1), 'PUT', 200,
             'plain', {'Content-Type':'text/plain'}, data=map.content
             )
         if msg:
