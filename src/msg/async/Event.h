@@ -169,13 +169,17 @@ class EventCenter {
     std::condition_variable cond;
     bool done = false;
     func &&f;
+    bool nonwait;
    public:
-    C_submit_event(func &&_f): f(std::move(_f)) {}
+    C_submit_event(func &&_f, bool nw)
+      : f(std::move(_f)), nonwait(nw) {}
     void do_request(int id) {
       f();
       std::lock_guard<std::mutex> l(lock);
       cond.notify_all();
       done = true;
+      if (nonwait)
+        delete this;
     }
     void wait() {
       std::unique_lock<std::mutex> l(lock);
@@ -185,14 +189,19 @@ class EventCenter {
   };
  public:
   template <typename func>
-  void submit_event(func &&f) {
+  void submit_event(func &&f, bool nowait = false) {
     if (in_thread()) {
       f();
       return ;
     }
-    C_submit_event<func> event(std::move(f));
-    dispatch_event_external(&event);
-    event.wait();
+    if (nowait) {
+      C_submit_event<func> *event = new C_submit_event<func>(std::move(f), true);
+      dispatch_event_external(event);
+    } else {
+      C_submit_event<func> event(std::move(f), false);
+      dispatch_event_external(&event);
+      event.wait();
+    }
   };
 };
 

@@ -1836,18 +1836,14 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
       existing->is_reset_from_peer = true;
     }
 
-    center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+    int pre_exist_fd = existing->sd;
     // Now existing connection will be alive and the current connection will
     // exchange socket with existing connection because we want to maintain
     // original "connection_state"
-    // Note: potential wait, but it should not be a problem
-    existing->center->submit_event([this, existing]() {
-      if (existing->sd >= 0)
-        existing->center->delete_file_event(existing->sd, EVENT_READABLE|EVENT_WRITABLE);
-      existing->center->create_file_event(sd, EVENT_READABLE, existing->read_handler);
-    });
-
-    reply.global_seq = existing->peer_global_seq;
+    center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+    std::swap(existing->sd, sd);
+    _stop();
+    ldout(async_msgr->cct, 1) << __func__ << " stop myself to swap existing" << dendl;
 
     // Clean up output buffer
     existing->outcoming_bl.clear();
@@ -1865,15 +1861,28 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     assert(recv_start == recv_end);
 
     existing->write_lock.Unlock();
-    if (existing->_reply_accept(CEPH_MSGR_TAG_RETRY_GLOBAL, connect, reply, authorizer_reply) < 0) {
-      // handle error
-      ldout(async_msgr->cct, 0) << __func__ << " reply fault for existing connection." << dendl;
-      existing->fault();
-    }
-
-    ldout(async_msgr->cct, 1) << __func__ << " stop myself to swap existing" << dendl;
-    _stop();
     existing->lock.Unlock();
+
+    // existing->sd now isn't register any event while it's new,
+    // previous existing->sd now is closed, no event will notify
+    // existing(EventCenter*) from now.
+    // Note: potential wait, but it should not be a problem
+    existing->center->submit_event([existing, connect, reply, authorizer_reply, pre_exist_fd]() mutable {
+      Mutex::Locker l(existing->lock);
+      if (existing->state != STATE_ACCEPTING_WAIT_CONNECT_MSG) {
+        existing->fault();
+        return ;
+      }
+      reply.global_seq = existing->peer_global_seq;
+      if (pre_exist_fd >= 0)
+        existing->center->delete_file_event(pre_exist_fd, EVENT_READABLE|EVENT_WRITABLE);
+      existing->center->create_file_event(existing->sd, EVENT_READABLE, existing->read_handler);
+      if (existing->_reply_accept(CEPH_MSGR_TAG_RETRY_GLOBAL, connect, reply, authorizer_reply) < 0) {
+        // handle error
+        existing->fault();
+      }
+    }, true);
+
     return 0;
   }
   existing->lock.Unlock();
