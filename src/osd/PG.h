@@ -1087,7 +1087,7 @@ public:
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
 
   bool have_unfound() const { 
-    return missing_loc.num_unfound();
+    return missing_loc.num_unfound() > 0;
   }
   int get_num_unfound() const {
     return missing_loc.num_unfound();
