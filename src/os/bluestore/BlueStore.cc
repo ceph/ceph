@@ -4483,7 +4483,8 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_MOVE_RENAME:
-      {
+    case Transaction::OP_TRY_RENAME:
+    {
 	assert(op->cid == op->dest_cid);
 	const ghobject_t& noid = i.get_oid(op->dest_oid);
 	OnodeRef& no = ovec[op->dest_oid];
@@ -4491,15 +4492,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	  no = c->get_onode(noid, false);
 	}
 	r = _rename(txc, c, o, no, noid);
-      }
-      break;
-
-    case Transaction::OP_TRY_RENAME:
-      {
-	const ghobject_t& noid = i.get_oid(op->dest_oid);
-	OnodeRef no = c->get_onode(noid, true);
-	r = _rename(txc, c, o, no, noid);
-	if (r == -ENOENT)
+	if (r == -ENOENT && op->op == Transaction::OP_TRY_RENAME)
 	  r = 0;
       }
       break;
