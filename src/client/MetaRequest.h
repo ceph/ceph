@@ -11,19 +11,18 @@
 #include "include/filepath.h"
 #include "include/atomic.h"
 #include "mds/mdstypes.h"
+#include "InodeRef.h"
 
 #include "common/Mutex.h"
 
 #include "messages/MClientRequest.h"
 
 class MClientReply;
-struct Inode;
 class Dentry;
 
 struct MetaRequest {
 private:
-  Inode *_inode;
-  Inode *_old_inode, *_other_inode;
+  InodeRef _inode, _old_inode, _other_inode;
   Dentry *_dentry; //associated with path
   Dentry *_old_dentry; //associated with path2
 public:
@@ -61,7 +60,7 @@ public:
   uint64_t readdir_offset;
 
   frag_t readdir_reply_frag;
-  vector<pair<string,Inode*> > readdir_result;
+  vector<pair<string,InodeRef> > readdir_result;
   bool readdir_end;
   int readdir_num;
   string readdir_last_name;
@@ -76,10 +75,9 @@ public:
   Cond  *caller_cond;          // who to take up
   Cond  *dispatch_cond;        // who to kick back
 
-  Inode *target;
+  InodeRef target;
 
   MetaRequest(int op) :
-    _inode(NULL), _old_inode(NULL), _other_inode(NULL),
     _dentry(NULL), _old_dentry(NULL),
     tid(0),
     inode_drop(0), inode_unless(0),
@@ -95,33 +93,38 @@ public:
     readdir_offset(0), readdir_end(false), readdir_num(0),
     got_unsafe(false), item(this), unsafe_item(this),
     lock("MetaRequest lock"),
-    caller_cond(0), dispatch_cond(0),
-    target(0) {
+    caller_cond(0), dispatch_cond(0) {
     memset(&head, 0, sizeof(ceph_mds_request_head));
     head.op = op;
   }
   ~MetaRequest();
 
-  void set_inode(Inode *in);
-  Inode *inode();
-  Inode *take_inode() {
-    Inode *i = _inode;
-    _inode = 0;
-    return i;
+  void set_inode(Inode *in) {
+    _inode = in;
   }
-  void set_old_inode(Inode *in);
-  Inode *old_inode();
-  Inode *take_old_inode() {
-    Inode *i = _old_inode;
-    _old_inode = NULL;
-    return i;
+  Inode *inode() {
+    return _inode.get();
   }
-  void set_other_inode(Inode *in);
-  Inode *other_inode();
-  Inode *take_other_inode() {
-    Inode *i = _other_inode;
-    _other_inode = 0;
-    return i;
+  void take_inode(InodeRef *out) {
+    out->swap(_inode);
+  }
+  void set_old_inode(Inode *in) {
+    _old_inode = in;
+  }
+  Inode *old_inode() {
+    return _old_inode.get();
+  }
+  void take_old_inode(InodeRef *out) {
+    out->swap(_old_inode);
+  }
+  void set_other_inode(Inode *in) {
+    _old_inode = in;
+  }
+  Inode *other_inode() {
+    return _other_inode.get();
+  }
+  void take_other_inode(InodeRef *out) {
+    out->swap(_other_inode);
   }
   void set_dentry(Dentry *d);
   Dentry *dentry();

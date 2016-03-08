@@ -486,7 +486,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, st
       struct ceph_file_layout layout;
       struct ceph_ioctl_layout l;
       Fh *fh = (Fh*)fi->fh;
-      cfuse->client->ll_file_layout(fh->inode, &layout);
+      cfuse->client->ll_file_layout(fh, &layout);
       l.stripe_unit = layout.fl_stripe_unit;
       l.stripe_count = layout.fl_stripe_count;
       l.object_size = layout.fl_object_size;
