@@ -27,7 +27,8 @@ static TimePoint now() { return std::chrono::system_clock::now(); }
 
 TEST(test_client, full_bore_timing) {
   std::atomic_ulong count(0);
-  char server = 'a';
+
+  uint server = 3;
 
   TestResponse resp(0);
   dmc::RespParams<ServerId>
@@ -64,7 +65,7 @@ TEST(test_client, paused_timing) {
   std::atomic_ulong unresponded_count(0);
   std::atomic_bool auto_respond(false);
 
-  char server = 'a';
+  uint server = 3;
 
   TestResponse resp(0);
   dmc::RespParams<ServerId>
