@@ -90,6 +90,11 @@ using namespace std;
 #include "include/assert.h"
 #include "include/stat.h"
 
+#if HAVE_GETGROUPLIST
+#include <grp.h>
+#include <pwd.h>
+#endif
+
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << whoami << " "
 
@@ -4350,17 +4355,54 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
   gid_t *sgids = NULL;
   int sgid_count = 0;
   if (getgroups_cb) {
-    sgid_count = getgroups_cb(callback_handle, uid, &sgids);
-    if (sgid_count < 0) {
+    sgid_count = getgroups_cb(callback_handle, &sgids);
+    if (sgid_count > 0) {
       ldout(cct, 3) << "getgroups failed!" << dendl;
-      return sgid_count;
     }
   }
-  // check permissions before doing anything else
-  if (uid != 0 && !in->check_mode(uid, gid, sgids, sgid_count, flags)) {
-    return -EACCES;
+#if HAVE_GETGROUPLIST
+  if (sgid_count <= 0) {
+    // use PAM to get the group list
+    // initial number of group entries, defaults to posix standard of 16
+    // PAM implementations may provide more than 16 groups....
+    sgid_count = 16;
+    sgids = (gid_t*)malloc(sgid_count * sizeof(gid_t));
+    if (sgids == NULL) {
+      ldout(cct, 3) << "allocating group memory failed" << dendl;
+      return -EACCES;
+    }
+    struct passwd *pw;
+    pw = getpwuid(uid);
+    if (pw == NULL) {
+      ldout(cct, 3) << "getting user entry failed" << dendl;
+      return -EACCES;
+    }
+    while (1) {
+      if (getgrouplist(pw->pw_name, gid, sgids, &sgid_count) == -1) {
+	// we need to resize the group list and try again
+	void *_realloc = NULL;
+	if ((_realloc = realloc(sgids, sgid_count * sizeof(gid_t))) == NULL) {
+	  ldout(cct, 3) << "allocating group memory failed" << dendl;
+	  free(sgids);
+	  return -EACCES;
+	}
+	sgids = (gid_t*)_realloc;
+	continue;
+      }
+      // list was successfully retrieved
+      break;
+    }
   }
-  return 0;
+#endif
+
+  // check permissions before doing anything else
+  int ret = 0;
+  if (uid != 0 && !in->check_mode(uid, gid, sgids, sgid_count, flags)) {
+    ret = -EACCES;
+  }
+  if (sgids)
+    free(sgids);
+  return ret;
 }
 
 vinodeno_t Client::_get_vino(Inode *in)
