@@ -3666,7 +3666,8 @@ int BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
        ++p) {
     bufferlist bl;
     ::encode((*p)->onode, bl);
-    dout(20) << "  onode " << (*p)->oid << " is " << bl.length() << dendl;
+    dout(20) << "  onode " << *p << " "
+	     << (*p)->oid << " is " << bl.length() << dendl;
     txc->t->set(PREFIX_OBJ, (*p)->key, bl);
 
     std::lock_guard<std::mutex> l((*p)->flush_lock);
@@ -4261,6 +4262,8 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     Transaction::Op *op = i.decode_op();
     int r = 0;
 
+    dout(30) << __func__ << " txc onodes " << txc->onodes << dendl;
+
     // no coll or obj
     if (op->op == Transaction::OP_NOP)
       continue;
@@ -4370,6 +4373,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	  goto endop;
 	}
       }
+      dout(30) << __func__ << " ovec[" << op->oid << "] now " << o << dendl;
     }
 
     switch (op->op) {
