@@ -11,7 +11,6 @@ from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, needs_trimming
 from tasks.cephfs.fuse_mount import FuseMount
 import os
-import time
 
 
 log = logging.getLogger(__name__)
@@ -29,23 +28,6 @@ CAP_RECALL_MIN = 100
 class TestClientLimits(CephFSTestCase):
     REQUIRE_KCLIENT_REMOTE = True
     CLIENTS_REQUIRED = 2
-
-    def wait_for_health(self, pattern, timeout):
-        """
-        Wait until 'ceph health' contains a single message matching the pattern
-        """
-        def seen_health_warning():
-            health = self.fs.mon_manager.get_mon_health()
-            summary_strings = [s['summary'] for s in health['summary']]
-            if len(summary_strings) == 0:
-                log.debug("Not expected number of summary strings ({0})".format(summary_strings))
-                return False
-            elif len(summary_strings) == 1 and pattern in summary_strings[0]:
-                return True
-            else:
-                raise RuntimeError("Unexpected health messages: {0}".format(summary_strings))
-
-        self.wait_until_true(seen_health_warning, timeout)
 
     def _test_client_pin(self, use_subdir):
         """
@@ -194,20 +176,27 @@ class TestClientLimits(CephFSTestCase):
             os.mkdir("{path}")
             for n in range(0, {num_dirs}):
                 os.mkdir("{path}/dir{{0}}".format(n))
-            """);
+            """)
 
         num_dirs = 1000
         self.mount_a.run_python(mkdir_script.format(path=dir_path, num_dirs=num_dirs))
         self.mount_a.run_shell(["sync"])
 
-        dentry_count, dentry_pinned_count = self.mount_a.get_dentry_count();
-        self.assertGreaterEqual(dentry_count, num_dirs);
-        self.assertGreaterEqual(dentry_pinned_count, num_dirs);
+        dentry_count, dentry_pinned_count = self.mount_a.get_dentry_count()
+        self.assertGreaterEqual(dentry_count, num_dirs)
+        self.assertGreaterEqual(dentry_pinned_count, num_dirs)
 
-        cache_size = num_dirs / 10;
-        self.mount_a.set_cache_size(cache_size);
-        time.sleep(30);
+        cache_size = num_dirs / 10
+        self.mount_a.set_cache_size(cache_size)
 
-        dentry_count, dentry_pinned_count =  self.mount_a.get_dentry_count();
-        self.assertLessEqual(dentry_count, cache_size);
-        self.assertLessEqual(dentry_pinned_count, cache_size);
+        def trimmed():
+            dentry_count, dentry_pinned_count = self.mount_a.get_dentry_count()
+            log.info("waiting, dentry_count, dentry_pinned_count: {0}, {1}".format(
+                dentry_count, dentry_pinned_count
+            ))
+            if dentry_count > cache_size or dentry_pinned_count > cache_size:
+                return False
+
+            return True
+
+        self.wait_until_true(trimmed, 30)

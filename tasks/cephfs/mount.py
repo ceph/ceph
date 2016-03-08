@@ -460,7 +460,7 @@ class CephFSMount(object):
     def get_osd_epoch(self):
         raise NotImplementedError()
 
-    def stat(self, fs_path):
+    def stat(self, fs_path, wait=True):
         """
         stat a file, and return the result as a dictionary like this:
         {
@@ -484,16 +484,47 @@ class CephFSMount(object):
             import os
             import stat
             import json
+            import sys
 
-            s = os.stat("{path}")
+            try:
+                s = os.stat("{path}")
+            except OSError as e:
+                sys.exit(e.errno)
+
             attrs = ["st_mode", "st_ino", "st_dev", "st_nlink", "st_uid", "st_gid", "st_size", "st_atime", "st_mtime", "st_ctime"]
             print json.dumps(
                 dict([(a, getattr(s, a)) for a in attrs]),
                 indent=2)
             """).format(path=abs_path)
         proc = self._run_python(pyscript)
+        if wait:
+            proc.wait()
+            return json.loads(proc.stdout.getvalue().strip())
+        else:
+            return proc
+
+    def touch(self, fs_path):
+        """
+        Create a dentry if it doesn't already exist.  This python
+        implementation exists because the usual command line tool doesn't
+        pass through error codes like EIO.
+
+        :param fs_path:
+        :return:
+        """
+        abs_path = os.path.join(self.mountpoint, fs_path)
+        pyscript = dedent("""
+            import sys
+            import errno
+
+            try:
+                f = open("{path}", "w")
+                f.close()
+            except IOError as e:
+                sys.exit(errno.EIO)
+            """).format(path=abs_path)
+        proc = self._run_python(pyscript)
         proc.wait()
-        return json.loads(proc.stdout.getvalue().strip())
 
     def path_to_ino(self, fs_path):
         abs_path = os.path.join(self.mountpoint, fs_path)
@@ -516,3 +547,12 @@ class CephFSMount(object):
         if path:
             cmd.append(path)
         return self.run_shell(cmd).stdout.getvalue().strip().split("\n")
+
+    def getfattr(self, path, attr):
+        """
+        Wrap getfattr: return the values of a named xattr on one file.
+
+        :return: a string
+        """
+        p = self.run_shell(["getfattr", "--only-values", "-n", attr, path])
+        return p.stdout.getvalue()
