@@ -33,7 +33,7 @@ do_killall() {
     $SUDO killall -u $MYNAME $1
 }
 
-usage="usage: $0 [all] [mon] [mds] [osd]\n"
+usage="usage: $0 [all] [mon] [mds] [osd] [rgw]\n"
 
 stop_all=1
 stop_mon=0
@@ -56,6 +56,10 @@ while [ $# -ge 1 ]; do
             ;;
         osd | ceph-osd )
             stop_osd=1
+            stop_all=0
+            ;;
+        rgw | ceph-rgw )
+            stop_rgw=1
             stop_all=0
             ;;
         * )
