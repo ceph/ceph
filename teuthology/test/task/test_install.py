@@ -1,4 +1,6 @@
+import os
 import pytest
+import yaml
 
 from mock import patch, Mock
 
@@ -6,6 +8,43 @@ from teuthology.task import install
 
 
 class TestInstall(object):
+
+    def _get_default_package_list(self, project='ceph', debug=False):
+        path = os.path.join(
+            os.path.dirname(__file__),
+            '..', '..', 'task', 'packages.yaml',
+        )
+        pkgs = yaml.safe_load(open(path))[project]
+        if not debug:
+            pkgs['deb'] = filter(
+                lambda p: not p.endswith('-dbg'),
+                pkgs['deb']
+            )
+            pkgs['rpm'] = filter(
+                lambda p: not p.endswith('-debuginfo'),
+                pkgs['rpm']
+            )
+        return pkgs
+
+    def test_get_package_list_debug(self):
+        default_pkgs = self._get_default_package_list(debug=True)
+        config = dict(debuginfo=True)
+        result = install.get_package_list(ctx=None, config=config)
+        assert result == default_pkgs
+
+    def test_get_package_list_no_debug(self):
+        default_pkgs = self._get_default_package_list(debug=False)
+        config = dict(debuginfo=False)
+        result = install.get_package_list(ctx=None, config=config)
+        assert result == default_pkgs
+
+    def test_get_package_list_custom_rpm(self):
+        default_pkgs = self._get_default_package_list(debug=False)
+        rpms = ['rpm1', 'rpm2', 'rpm2-debuginfo']
+        config = dict(packages=dict(rpm=rpms))
+        result = install.get_package_list(ctx=None, config=config)
+        assert result['rpm'] == ['rpm1', 'rpm2']
+        assert result['deb'] == default_pkgs['deb']
 
     @patch("teuthology.task.install._get_gitbuilder_project")
     @patch("teuthology.task.install.packaging.get_package_version")
