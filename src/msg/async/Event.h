@@ -104,7 +104,7 @@ class EventCenter {
   CephContext *cct;
   int nevent;
   // Used only to external event
-  Mutex external_lock, file_lock, time_lock;
+  Mutex external_lock, time_lock;
   atomic_t external_num_events;
   deque<EventCallbackRef> external_events;
   vector<FileEvent> file_events;
@@ -131,7 +131,6 @@ class EventCenter {
   explicit EventCenter(CephContext *c):
     cct(c), nevent(0),
     external_lock("AsyncMessenger::external_lock"),
-    file_lock("AsyncMessenger::file_lock"),
     time_lock("AsyncMessenger::time_lock"),
     external_num_events(0),
     driver(NULL), time_event_next_id(1),
