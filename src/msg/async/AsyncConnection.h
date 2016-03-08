@@ -324,6 +324,8 @@ class AsyncConnection : public Connection {
     mark_down();
   }
   void cleanup_handler() {
+    if (sd >= 0)
+      center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
     delete read_handler;
     delete write_handler;
     delete reset_handler;
