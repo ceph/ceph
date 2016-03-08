@@ -227,7 +227,8 @@ int Processor::start(Worker *w)
   // start thread
   if (listen_sd >= 0) {
     worker = w;
-    w->center.create_file_event(listen_sd, EVENT_READABLE, listen_handler);
+    worker->center.submit_event([this]() {
+      worker->center.create_file_event(listen_sd, EVENT_READABLE, listen_handler); });
   }
 
   return 0;
@@ -266,10 +267,12 @@ void Processor::stop()
   ldout(msgr->cct,10) << __func__ << dendl;
 
   if (listen_sd >= 0) {
-    worker->center.delete_file_event(listen_sd, EVENT_READABLE);
-    ::shutdown(listen_sd, SHUT_RDWR);
-    ::close(listen_sd);
-    listen_sd = -1;
+    worker->center.submit_event([this]() {
+      worker->center.delete_file_event(listen_sd, EVENT_READABLE);
+      ::shutdown(listen_sd, SHUT_RDWR);
+      ::close(listen_sd);
+      listen_sd = -1;
+    });
   }
 }
 
