@@ -79,7 +79,7 @@ void NetworkStack::start()
         w->initialize();
         w->init_done = true;
         while (!w->done) {
-          ldout(cct, 20) << __func__ << " calling event process" << dendl;
+          ldout(cct, 30) << __func__ << " calling event process" << dendl;
 
           int r = w->center.process_events(EventMaxWaitUs);
           if (r < 0) {

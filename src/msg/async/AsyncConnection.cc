@@ -1239,10 +1239,6 @@ ssize_t AsyncConnection::_process_connection()
       {
         bufferlist bl;
 
-        if (net.set_nonblock(cs.fd()) < 0)
-          goto fail;
-
-        net.set_socket_options(cs.fd(), async_msgr->cct->_conf->ms_tcp_nodelay, async_msgr->cct->_conf->ms_tcp_rcvbuf);
         center->create_file_event(cs.fd(), EVENT_READABLE, read_handler);
 
         bl.append(CEPH_BANNER, strlen(CEPH_BANNER));
@@ -1690,20 +1686,14 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
       existing->is_reset_from_peer = true;
     }
 
-    int pre_exist_fd = existing->sd;
+    int pre_exist_fd = existing->cs.fd();
+    center->delete_file_event(cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
     // Now existing connection will be alive and the current connection will
     // exchange socket with existing connection because we want to maintain
     // original "connection_state"
-    center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
     std::swap(existing->sd, sd);
     _stop();
     ldout(async_msgr->cct, 1) << __func__ << " stop myself to swap existing" << dendl;
-    // Note: potential wait, but it should not be a problem
-    existing->center->submit_event([this, existing]() {
-      if (existing->cs.fd() >= 0)
-        existing->center->delete_file_event(existing->cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
-      existing->center->create_file_event(cs.fd(), EVENT_READABLE, existing->read_handler);
-    });
 
     reply.global_seq = existing->peer_global_seq;
 

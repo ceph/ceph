@@ -208,6 +208,7 @@ int DPDKWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
   assert(sa.get_family() == AF_INET);
   assert(sock);
 
+  ldout(cct, 10) << __func__ << " addr " << sa << dendl;
   // vector<AvailableIPAddress> tuples;
   // bool parsed = parse_available_address(cct->_conf->ms_dpdk_host_ipv4_addr,
   //                                       cct->_conf->ms_dpdk_gateway_ipv4_addr,
@@ -235,6 +236,7 @@ int DPDKWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
 int DPDKWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket)
 {
   assert(addr.get_family() == AF_INET);
+  ldout(cct, 10) << __func__ << " addr " << addr << dendl;
   return tcpv4_connect(_impl->_inet.get_tcp(), addr, socket);
 }
 

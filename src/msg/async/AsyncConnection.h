@@ -360,7 +360,7 @@ class AsyncConnection : public Connection {
          it != register_time_events.end(); ++it)
       center->delete_time_event(*it);
     register_time_events.clear();
-    if (cs.fd() >= 0) {
+    if (cs) {
       center->delete_file_event(cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
       cs.shutdown();
       cs.close();

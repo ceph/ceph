@@ -91,7 +91,7 @@ class EventDriver {
  */
 class EventCenter {
   using clock_type = ceph::coarse_mono_clock;
-  thread_local static unsigned thread_id;
+  thread_local static unsigned local_id;
 
   struct FileEvent {
     int mask;
@@ -206,7 +206,7 @@ class EventCenter {
   // Used by external thread
   void dispatch_event_external(EventCallbackRef e);
   inline bool in_thread() const {
-    return thread_id == owner;
+    return local_id == id;
   }
  private:
   template <typename func>

@@ -45,6 +45,34 @@ static ostream& _prefix(std::ostream *_dout, Processor *p) {
  * Processor
  */
 
+class C_listen_forward : public EventCallback {
+  Worker *worker;
+  entity_addr_t &addr;
+  SocketOptions &options;
+  ServerSocket *ss;
+  int &ret;
+  std::mutex lock;
+  std::condition_variable cond;
+  bool done = false;
+
+ public:
+  C_listen_forward(Worker *w, entity_addr_t &sa, SocketOptions opts,
+                   ServerSocket *_ss, int &r)
+      : worker(w), addr(sa), options(opts), ss(_ss), ret(r) {
+  }
+  void do_request(int id) {
+    ret = worker->listen(addr, options, ss);
+    std::unique_lock<std::mutex> l(lock);
+    done = true;
+    cond.notify_all();
+  }
+  void wait() {
+    std::unique_lock<std::mutex> l(lock);
+    while (!done)
+      cond.wait(l);
+  }
+};
+
 int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 {
   const md_config_t *conf = msgr->cct->_conf;
@@ -82,7 +110,9 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     }
 
     if (listen_addr.get_port()) {
-      r = worker->listen(listen_addr, opts, &listen_socket);
+      C_listen_forward listen_forward(worker, listen_addr, opts, &listen_socket, r);
+      worker->center.dispatch_event_external(&listen_forward);
+      listen_forward.wait();
       if (r < 0) {
         lderr(msgr->cct) << __func__ << " unable to listen to " << listen_addr
                          << ": " << cpp_strerror(r) << dendl;
@@ -95,7 +125,9 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
           continue;
 
         listen_addr.set_port(port);
-        r = worker->listen(listen_addr, opts, &listen_socket);
+        C_listen_forward listen_forward(worker, listen_addr, opts, &listen_socket, r);
+        worker->center.dispatch_event_external(&listen_forward);
+        listen_forward.wait();
         if (r == 0)
           break;
       }
@@ -205,7 +237,7 @@ void Processor::stop()
 {
   ldout(msgr->cct,10) << __func__ << dendl;
 
-  if (listen_sd >= 0) {
+  if (listen_socket) {
     worker->center.submit_event([this]() {
       worker->center.delete_file_event(listen_socket.fd(), EVENT_READABLE);
       listen_socket.abort_accept();

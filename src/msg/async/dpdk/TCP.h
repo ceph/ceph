@@ -444,7 +444,9 @@ class tcp {
     }
 
     uint64_t peek_sent_available() {
-      uint64_t left =  _tcp.user_queue_space.get_max() - _tcp.user_queue_space.get_current();
+      if (!in_state(ESTABLISHED))
+        return 0;
+      uint64_t left = _tcp.user_queue_space.get_max() - _tcp.user_queue_space.get_current();
       return left;
     }
 
@@ -1383,7 +1385,7 @@ bool tcp<InetTraits>::tcb::merge_out_of_order() {
     auto seg_beg = it->first;
     auto seg_len = p.len();
     auto seg_end = seg_beg + seg_len;
-    if (seg_beg <= _rcv.next  && seg_end > _rcv.next) {
+    if (seg_beg <= _rcv.next && seg_end > _rcv.next) {
       // This segment has been received out of order and its previous
       // segment has been received now
       auto trim = _rcv.next - seg_beg;

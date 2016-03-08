@@ -49,7 +49,6 @@ class DPDKServerSocketImpl : public ServerSocketImpl {
   }
 };
 
-
 // NativeConnectedSocketImpl
 template <typename Protocol>
 class NativeConnectedSocketImpl : public ConnectedSocketImpl {
@@ -68,7 +67,7 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   virtual ssize_t read(char *buf, size_t len) override {
     bufferlist data;
     ssize_t r = zero_copy_read(len, data);
-    if (r < 0)
+    if (r <= 0)
       return r;
     assert(data.length() <= len);
     data.copy(0, data.length(), buf);
@@ -127,7 +126,7 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     size_t available = _conn.peek_sent_available();
     if (available == 0) {
       _conn.register_write_waiter();
-      return -EAGAIN;
+      return 0;
     }
 
     std::vector<fragment> frags;
@@ -240,8 +239,7 @@ class DPDKStack : public NetworkStack {
 
   virtual void spawn_workers(std::vector<std::function<void ()>> &threads) override;
   virtual void join_workers() override {
-    if (t.joinable())
-      t.join();
+    t.join();
   }
 };
 

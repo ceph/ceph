@@ -236,10 +236,6 @@ TEST_P(NetworkWorkerTest, SimpleTest) {
       ASSERT_EQ(cb.poll(500), true);
       r = srv_socket.read(buf, sizeof(buf));
       ASSERT_EQ(r, 0);
-      bl.clear();
-      bl.append(message, len);
-      r = srv_socket.send(bl, false);
-      ASSERT_EQ(r, len);
       center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
       srv_socket.close();
     }
@@ -485,7 +481,7 @@ TEST_P(NetworkWorkerTest, ComplexTest) {
           usleep(100);
           if (left > 0) {
             r = cli_socket.send(bl, false);
-            ASSERT_TRUE(r > 0 || r == -EAGAIN);
+            ASSERT_TRUE(r >= 0 || r == -EAGAIN);
             if (r > 0)
               left -= r;
             if (r == -EAGAIN)
@@ -752,7 +748,7 @@ class StressFactory {
         bufferlist bl;
         bl.append(m->content.data() + write_offset, m->content.size() - write_offset);
         ssize_t r = socket.send(bl, false);
-        if (r == -EAGAIN)
+        if (r == 0)
           break;
         std::cerr << " client " << this << " send " << m->idx << " len " << r << " content: " << std::endl;
         ASSERT_TRUE(r >= 0);
@@ -861,7 +857,7 @@ class StressFactory {
 
         ssize_t r = socket.send(bl, false);
         std::cerr << " server " << this << " send " << r << std::endl;
-        if (r == -EAGAIN)
+        if (r == 0)
           break;
         ASSERT_TRUE(r >= 0);
         while (r > 0) {

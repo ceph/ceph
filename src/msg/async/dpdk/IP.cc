@@ -284,6 +284,7 @@ void ipv4::send(ipv4_address to, ip_protocol_num proto_num,
     iph->csum = 0;
     iph->src_ip = _host_address;
     iph->dst_ip = to;
+    ldout(cct, 20) << " ipv4::send " << _host_address << " -> " << to << " len " << pkt.len() << dendl;
     *iph = iph->hton();
 
     if (hw_features().tx_csum_ip_offload) {
@@ -327,6 +328,7 @@ Tub<l3_protocol::l3packet> ipv4::get_packet() {
         _pkt_provider_idx = 0;
       }
       if (l4p) {
+        ldout(cct, 20) << " ipv4::get_packet " << " len " << l4p->p.len() << dendl;
         send(l4p->to, l4p->proto_num, std::move(l4p->p), l4p->e_dst);
         break;
       }

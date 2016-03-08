@@ -785,10 +785,10 @@ class SyntheticDispatcher : public Dispatcher {
     ::decode(i, blp);
     ::decode(reply, blp);
     if (reply) {
-      //cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
+      cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
       reply_message(m, i);
     } else if (sent.count(i)) {
-      //cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
+      cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
       ASSERT_EQ(conn_sent[m->get_connection()].front(), i);
       ASSERT_TRUE(m->get_data().contents_equal(sent[i]));
       conn_sent[m->get_connection()].pop_front();
@@ -1064,7 +1064,7 @@ bool SyntheticDispatcher::ms_handle_reset(Connection *con) {
 }
 
 TEST_P(MessengerTest, SyntheticStressTest) {
-  SyntheticWorkload test_msg(8, 32, get_type(), 100,
+  SyntheticWorkload test_msg(1, 1, get_type(), 100,
                              Messenger::Policy::stateful_server(0, 0),
                              Messenger::Policy::lossless_client(0, 0));
   for (int i = 0; i < 100; ++i) {

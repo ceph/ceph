@@ -101,7 +101,7 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
                 << " time_id=" << time_event_next_id << ").";
 }
 
-thread_local unsigned local_id = 10000;
+thread_local unsigned EventCenter::local_id = 10000;
 
 int EventCenter::init(int n, unsigned idx)
 {
