@@ -25,10 +25,12 @@
 
 class RGWCoroutinesStack;
 class RGWCoroutinesManager;
+class RGWAioCompletionNotifier;
 
-class RGWCompletionManager {
+class RGWCompletionManager : public RefCountedObject {
   CephContext *cct;
   list<void *> complete_reqs;
+  set<RGWAioCompletionNotifier *> cns;
 
   Mutex lock;
   Cond cond;
@@ -53,12 +55,12 @@ class RGWCompletionManager {
 
 protected:
   void _wakeup(void *opaque);
-  void _complete(void *user_info);
+  void _complete(RGWAioCompletionNotifier *cn, void *user_info);
 public:
   RGWCompletionManager(CephContext *_cct);
   ~RGWCompletionManager();
 
-  void complete(void *user_info);
+  void complete(RGWAioCompletionNotifier *cn, void *user_info);
   int get_next(void **user_info);
   bool try_get_next(void **user_info);
 
@@ -69,6 +71,9 @@ public:
    */
   void wait_interval(void *opaque, const utime_t& interval, void *user_info);
   void wakeup(void *opaque);
+
+  void register_completion_notifier(RGWAioCompletionNotifier *cn);
+  void unregister_completion_notifier(RGWAioCompletionNotifier *cn);
 };
 
 /* a single use librados aio completion notifier that hooks into the RGWCompletionManager */
@@ -76,19 +81,50 @@ class RGWAioCompletionNotifier : public RefCountedObject {
   librados::AioCompletion *c;
   RGWCompletionManager *completion_mgr;
   void *user_data;
+  Mutex lock;
+  bool registered;
 
 public:
   RGWAioCompletionNotifier(RGWCompletionManager *_mgr, void *_user_data);
   ~RGWAioCompletionNotifier() {
     c->release();
+    lock.Lock();
+    bool need_unregister = registered;
+    if (registered) {
+      completion_mgr->get();
+    }
+    registered = false;
+    lock.Unlock();
+    if (need_unregister) {
+      completion_mgr->unregister_completion_notifier(this);
+      completion_mgr->put();
+    }
   }
 
   librados::AioCompletion *completion() {
     return c;
   }
 
+  void unregister() {
+    Mutex::Locker l(lock);
+    if (!registered) {
+      return;
+    }
+    registered = false;
+  }
+
   void cb() {
-    completion_mgr->complete(user_data);
+    lock.Lock();
+    if (!registered) {
+      lock.Unlock();
+      put();
+      return;
+    }
+    completion_mgr->get();
+    registered = false;
+    lock.Unlock();
+    completion_mgr->complete(this, user_data);
+    completion_mgr->put();
     put();
   }
 };
@@ -483,7 +519,7 @@ class RGWCoroutinesManager {
 
   void handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& scheduled_stacks, RGWCoroutinesStack *stack, int *waiting_count);
 protected:
-  RGWCompletionManager completion_mgr;
+  RGWCompletionManager *completion_mgr;
   RGWCoroutinesManagerRegistry *cr_registry;
 
   int ops_window;
@@ -493,12 +529,14 @@ protected:
   void put_completion_notifier(RGWAioCompletionNotifier *cn);
 public:
   RGWCoroutinesManager(CephContext *_cct, RGWCoroutinesManagerRegistry *_cr_registry) : cct(_cct), lock("RGWCoroutinesManager::lock"),
-                                                                                        completion_mgr(cct), cr_registry(_cr_registry), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {
+                                                                                        cr_registry(_cr_registry), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {
+    completion_mgr = new RGWCompletionManager(cct);
     if (cr_registry) {
       cr_registry->add(this);
     }
   }
   virtual ~RGWCoroutinesManager() {
+    completion_mgr->put();
     if (cr_registry) {
       cr_registry->remove(this);
     }
@@ -508,13 +546,13 @@ public:
   int run(RGWCoroutine *op);
   void stop() {
     going_down.set(1);
-    completion_mgr.go_down();
+    completion_mgr->go_down();
   }
 
   virtual void report_error(RGWCoroutinesStack *op);
 
   RGWAioCompletionNotifier *create_completion_notifier(RGWCoroutinesStack *stack);
-  RGWCompletionManager *get_completion_mgr() { return &completion_mgr; }
+  RGWCompletionManager *get_completion_mgr() { return completion_mgr; }
 
   void schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *stack);
   RGWCoroutinesStack *allocate_stack();

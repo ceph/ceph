@@ -203,7 +203,7 @@ public:
       pinfo->marker = header.max_marker;
       pinfo->last_update = header.max_time;
     }
-    completion_manager->complete(user_info);
+    completion_manager->complete(NULL, user_info);
     put();
   }
 
