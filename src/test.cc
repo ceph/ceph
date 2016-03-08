@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
   const double client_reservation = 20.0;
   const double client_limit = 60.0;
   const double client_weight = 1.0;
-  const std::chrono::seconds client_wait(12);
+  const std::chrono::seconds client_wait(10);
 
   dmc::ClientInfo client_info =
     { client_weight, client_reservation, client_limit };
