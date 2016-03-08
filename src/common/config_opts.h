@@ -550,6 +550,8 @@ OPTION(osd_client_message_cap, OPT_U64, 100)              // num client messages
 OPTION(osd_pg_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_pgp_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_crush_chooseleaf_type, OPT_INT, 1) // 1 = host
+// This parameter is not consumed by ceph C code but the upstart scripts.
+// OPTION(osd_crush_initial_weight, OPT_DOUBLE, 0) // the initial weight is for newly added osds.
 OPTION(osd_pool_use_gmt_hitset, OPT_BOOL, true) // try to use gmt for hitset archive names if all osds in cluster support it.
 OPTION(osd_pool_default_crush_rule, OPT_INT, -1) // deprecated for osd_pool_default_crush_replicated_ruleset
 OPTION(osd_pool_default_crush_replicated_ruleset, OPT_INT, CEPH_DEFAULT_CRUSH_REPLICATED_RULESET)
