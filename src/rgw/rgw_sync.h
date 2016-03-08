@@ -176,6 +176,7 @@ public:
   void finish();
 
   int read_log_info(rgw_mdlog_info *log_info);
+  int read_master_log_shards_info(string *master_period, map<int, RGWMetadataLogInfo> *shards_info);
   int read_sync_status();
   int init_sync_status();
   int run_sync();
@@ -227,6 +228,12 @@ public:
 
   int read_sync_status() { return master_log.read_sync_status(); }
   int init_sync_status() { return master_log.init_sync_status(); }
+  int read_log_info(rgw_mdlog_info *log_info) {
+    return master_log.read_log_info(log_info);
+  }
+  int read_master_log_shards_info(string *master_period, map<int, RGWMetadataLogInfo> *shards_info) {
+    return master_log.read_master_log_shards_info(master_period, shards_info);
+  }
 
   int run() { return master_log.run_sync(); }
 
