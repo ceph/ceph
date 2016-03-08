@@ -598,40 +598,12 @@ def install(ctx, config):
                 'librados2', 'librbd1',
                 'python-ceph']
         rpm = ['ceph-fuse', 'librbd1', 'librados2', 'ceph-test', 'python-ceph']
-
-    # install lib deps (so we explicitly specify version), but do not
-    # uninstall them, as other packages depend on them (e.g., kvm)
-    # TODO: these can probably be removed as these packages are now included
-    # in packages.yaml. We've found that not uninstalling them each run can
-    # sometimes cause a baremetal machine to end up in a weird state so
-    # they were included in packages.yaml to ensure that nuke cleans them up.
-    proj_install_debs = {'ceph': [
-        'librados2',
-        'librbd1',
-    ]}
-
-    proj_install_rpm = {'ceph': [
-        'librbd1',
-        'librados2',
-    ]}
-
-    install_debs = proj_install_debs.get(project, [])
-    install_rpm = proj_install_rpm.get(project, [])
-
-    # TODO: see previous todo comment. The install_debs and install_rpm
-    # part can and should be removed eventually as those packages are now
-    # present in packages.yaml.
-    install_info = {
-        "deb": debs + install_debs,
-        "rpm": rpm + install_rpm}
-    remove_info = {
-        "deb": debs,
-        "rpm": rpm}
-    install_packages(ctx, install_info, config)
+    package_list = dict(deb=debs, rpm=rpm)
+    install_packages(ctx, package_list, config)
     try:
         yield
     finally:
-        remove_packages(ctx, config, remove_info)
+        remove_packages(ctx, config, package_list)
         remove_sources(ctx, config)
         if project == 'ceph':
             purge_data(ctx)
