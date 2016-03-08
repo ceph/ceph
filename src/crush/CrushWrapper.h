@@ -232,7 +232,6 @@ public:
       crush->chooseleaf_descend_once == 0 &&
       crush->chooseleaf_vary_r == 0 &&
       crush->chooseleaf_stable == 0 &&
-      crush->straw_calc_version == 0 &&
       crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
   }
   bool has_bobtail_tunables() const {
@@ -243,7 +242,6 @@ public:
       crush->chooseleaf_descend_once == 1 &&
       crush->chooseleaf_vary_r == 0 &&
       crush->chooseleaf_stable == 0 &&
-      crush->straw_calc_version == 0 &&
       crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
   }
   bool has_firefly_tunables() const {
@@ -254,7 +252,6 @@ public:
       crush->chooseleaf_descend_once == 1 &&
       crush->chooseleaf_vary_r == 1 &&
       crush->chooseleaf_stable == 0 &&
-      crush->straw_calc_version == 0 &&
       crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
   }
   bool has_hammer_tunables() const {
@@ -265,7 +262,6 @@ public:
       crush->chooseleaf_descend_once == 1 &&
       crush->chooseleaf_vary_r == 1 &&
       crush->chooseleaf_stable == 0 &&
-      crush->straw_calc_version == 1 &&
       crush->allowed_bucket_algs == ((1 << CRUSH_BUCKET_UNIFORM) |
 				      (1 << CRUSH_BUCKET_LIST) |
 				      (1 << CRUSH_BUCKET_STRAW) |
@@ -279,7 +275,6 @@ public:
       crush->chooseleaf_descend_once == 1 &&
       crush->chooseleaf_vary_r == 1 &&
       crush->chooseleaf_stable == 1 &&
-      crush->straw_calc_version == 1 &&
       crush->allowed_bucket_algs == ((1 << CRUSH_BUCKET_UNIFORM) |
 				      (1 << CRUSH_BUCKET_LIST) |
 				      (1 << CRUSH_BUCKET_STRAW) |
