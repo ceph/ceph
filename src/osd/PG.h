@@ -267,9 +267,6 @@ public:
     _lock.Unlock();
   }
 
-  void assert_locked() {
-    assert(_lock.is_locked());
-  }
   bool is_locked() const {
     return _lock.is_locked();
   }
