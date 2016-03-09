@@ -16,6 +16,7 @@ extern std::map<std::string, std::string> rgw_to_http_attrs;
 
 extern string lowercase_dash_http_attr(const string& orig);
 
+extern void rgw_rest_init(CephContext *cct);
 extern void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group);
 
 extern void rgw_flush_formatter_and_reset(struct req_state *s,
@@ -137,7 +138,7 @@ protected:
   virtual void do_flush();
   virtual void do_start(int ret);
 public:
-  RGWRESTFlusher(struct req_state *_s, RGWOp *_op) :
+  RGWRESTFlusher(struct req_state *_s, boost::function<void()> _op) :
     RGWFormatterFlusher(_s->formatter), s(_s), op(_op) {}
   RGWRESTFlusher() : RGWFormatterFlusher(NULL), s(NULL), op(NULL) {}
 
@@ -474,6 +475,13 @@ extern void end_header(struct req_state *s,
 		       NO_CONTENT_LENGTH,
 		       bool force_content_type = false,
 		       bool force_no_error = false);
+extern void end_header(struct req_state *s,
+                       boost::function<void()> dump_more,
+                       const char *content_type = nullptr,
+                       const int64_t proposed_content_length =
+		       NO_CONTENT_LENGTH,
+		       bool force_content_type = false,
+		       bool force_no_error = false);
 extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
 extern void dump_owner(struct req_state *s, rgw_user& id, string& name,
@@ -487,6 +495,8 @@ extern void dump_time_header(struct req_state *s, const char *name, time_t t);
 extern void dump_last_modified(struct req_state *s, time_t t);
 extern void abort_early(struct req_state* s, RGWOp* op, int err,
 			RGWHandler* handler);
+extern void abort_early(struct req_state* s, boost::function<void()> dump_more,
+			string& error_content, int err);
 extern void dump_range(struct req_state* s, uint64_t ofs, uint64_t end,
 		       uint64_t total_size);
 extern void dump_continue(struct req_state *s);

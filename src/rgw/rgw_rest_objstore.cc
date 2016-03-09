@@ -114,6 +114,42 @@ void dump_access_control(req_state *s, RGWOp *op)
   dump_access_control(s, origin.c_str(), method.c_str(), header.c_str(),
 		      exp_header.c_str(), max_age);
 }
+
+void end_header(struct req_state* s, RGWOp* op, const char *content_type,
+		const int64_t proposed_content_length, bool force_content_type,
+		bool force_no_error)
+{
+  boost::function<void()> dump_more;
+
+  if (op) dump_more = op->dump_access_control_f();
+  end_header(s, dump_more, content_type,
+	proposed_content_length, force_content_type, force_no_error);
+}
+
+void abort_early(struct req_state *s, RGWOp* op, int err_no,
+		RGWHandler* handler)
+{
+  string error_content("");
+  boost::function<void()> dump_more;
+
+  // op->error_handler is responsible for calling it's handler error_handler
+  if (op != NULL) {
+    int new_err_no;
+    new_err_no = op->error_handler(err_no, &error_content);
+    ldout(s->cct, 20) << "op->ERRORHANDLER: err_no=" << err_no
+		      << " new_err_no=" << new_err_no << dendl;
+    err_no = new_err_no;
+  } else if (handler != NULL) {
+    int new_err_no;
+    new_err_no = handler->error_handler(err_no, &error_content);
+    ldout(s->cct, 20) << "handler->ERRORHANDLER: err_no=" << err_no
+		      << " new_err_no=" << new_err_no << dendl;
+    err_no = new_err_no;
+  }
+  if (op) dump_more = op->dump_access_control_f();
+  abort_early(s, dump_more, error_content, err_no);
+}
+
 int RGWGetObj_ObjStore::get_params()
 {
   range_str = s->info.env->get("HTTP_RANGE");
@@ -319,6 +355,17 @@ int RGWDeleteMultiObj_ObjStore::get_params()
   }
 
   return op_ret;
+}
+
+
+void RGWRESTOp::send_response()
+{
+  if (!flusher.did_start()) {
+    s->set_req_state_err(http_ret);
+    dump_errno(s);
+    end_header(s, this);
+  }
+  flusher.flush();
 }
 
 int RGWRESTOp::verify_permission()

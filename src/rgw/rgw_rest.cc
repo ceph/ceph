@@ -220,10 +220,8 @@ string camelcase_dash_http_attr(const string& orig)
 static set<string> hostnames_set;
 static set<string> hostnames_s3website_set;
 
-void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
+void rgw_rest_init(CephContext *cct)
 {
-  store->init_host_id();
-
   for (const auto& rgw2http : base_rgw_to_http_attrs)  {
     rgw_to_http_attrs[rgw2http.rgw_attr] = rgw2http.http_attr;
   }
@@ -255,6 +253,12 @@ void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
   if (!cct->_conf->rgw_dns_name.empty()) {
     hostnames_set.insert(cct->_conf->rgw_dns_name);
   }
+}
+
+void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
+{
+  store->init_host_id();
+  rgw_rest_init(cct);
   hostnames_set.insert(zone_group.hostnames.begin(),  zone_group.hostnames.end());
   string s;
   ldout(cct, 20) << "RGW hostnames: " << std::accumulate(hostnames_set.begin(), hostnames_set.end(), s) << dendl;
@@ -356,6 +360,16 @@ void rgw_flush_formatter(struct req_state *s, Formatter *formatter)
   }
 }
 
+void dump_errno(int http_ret, string& out) {
+  stringstream ss;
+
+  ss <<  http_ret << " " << http_status_names[http_ret];
+  out = ss.str();
+}
+
+void dump_errno(const struct rgw_err &err, string& out) {
+  dump_errno(err.http_ret_E, out);
+}
 
 void dump_errno(struct req_state *s)
 {
@@ -485,9 +499,9 @@ void dump_trans_id(req_state *s)
   }
 }
 
-void end_header(struct req_state* s, RGWOp* op, const char *content_type,
-		const int64_t proposed_content_length, bool force_content_type,
-		bool force_no_error)
+void end_header(struct req_state* s, boost::function<void()> dump_more,
+		const char *content_type, const int64_t proposed_content_length,
+		bool force_content_type, bool force_no_error)
 {
   string ctype;
 
@@ -499,8 +513,8 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
     STREAM_IO(s)->print("x-amz-request-charged: requester\r\n");
   }
 
-  if (op) {
-    dump_access_control(s, op);
+  if (dump_more) {
+    dump_more();
   }
 
   if (s->prot_flags & RGW_REST_SWIFT && !content_type) {
@@ -557,29 +571,14 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void abort_early(struct req_state *s, boost::function<void()> dump_more, int err_no,
-		RGWHandler* handler)
+void abort_early(struct req_state *s, boost::function<void()> dump_more,
+		string& error_content, int err_no)
 {
-  string error_content("");
   if (!s->formatter) {
     s->formatter = new JSONFormatter;
     s->format = RGW_FORMAT_JSON;
   }
 
-  // op->error_handler is responsible for calling it's handler error_handler
-  if (op != NULL) {
-    int new_err_no;
-    new_err_no = op->error_handler(err_no, &error_content);
-    ldout(s->cct, 20) << "op->ERRORHANDLER: err_no=" << err_no
-		      << " new_err_no=" << new_err_no << dendl;
-    err_no = new_err_no;
-  } else if (handler != NULL) {
-    int new_err_no;
-    new_err_no = handler->error_handler(err_no, &error_content);
-    ldout(s->cct, 20) << "handler->ERRORHANDLER: err_no=" << err_no
-		      << " new_err_no=" << new_err_no << dendl;
-    err_no = new_err_no;
-  }
   s->set_req_state_err(err_no);
   dump_errno(s);
   dump_bucket_from_state(s);
