@@ -1582,9 +1582,12 @@ void flush_ss(stringstream& ss, list<string>& l)
   ss.str("");
 }
 
-stringstream& push_ss(stringstream& ss, list<string>& l)
+stringstream& push_ss(stringstream& ss, list<string>& l, int tab = 0)
 {
   flush_ss(ss, l);
+  if (tab > 0) {
+    ss << setw(tab) << "" << setw(1);
+  }
   return ss;
 }
 
@@ -1724,6 +1727,116 @@ static void get_md_sync_status(list<string>& status)
   flush_ss(ss, status);
 }
 
+static void get_data_sync_status(const string& source_zone, list<string>& status, int tab)
+{
+  RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone);
+
+  stringstream ss;
+
+  int ret = sync.init();
+  if (ret < 0) {
+    push_ss(ss, status, tab) << string("failed to retrieve sync info: ") + cpp_strerror(-ret);
+    flush_ss(ss, status);
+    return;
+  }
+
+  ret = sync.read_sync_status();
+  if (ret < 0) {
+    status.push_back(string("failed to read sync status: ") + cpp_strerror(-ret));
+    return;
+  }
+
+  const rgw_data_sync_status& sync_status = sync.get_sync_status();
+
+  string status_str;
+  switch (sync_status.sync_info.state) {
+    case rgw_data_sync_info::StateInit:
+      status_str = "init";
+      break;
+    case rgw_data_sync_info::StateBuildingFullSyncMaps:
+      status_str = "preparing for full sync";
+      break;
+    case rgw_data_sync_info::StateSync:
+      status_str = "syncing";
+      break;
+    default:
+      status_str = "unknown";
+  }
+
+  push_ss(ss, status, tab) << status_str;
+  
+  uint64_t full_total = 0;
+  uint64_t full_complete = 0;
+
+  int num_full = 0;
+  int num_inc = 0;
+  int total_shards = 0;
+
+  for (auto marker_iter : sync_status.sync_markers) {
+    full_total += marker_iter.second.total_entries;
+    total_shards++;
+    if (marker_iter.second.state == rgw_data_sync_marker::SyncState::FullSync) {
+      num_full++;
+      full_complete += marker_iter.second.pos;
+    } else {
+      full_complete += marker_iter.second.total_entries;
+    }
+    if (marker_iter.second.state == rgw_data_sync_marker::SyncState::IncrementalSync) {
+      num_inc++;
+    }
+  }
+
+  push_ss(ss, status, tab) << "full sync: " << num_full << "/" << total_shards << " shards";
+
+  if (num_full > 0) {
+    push_ss(ss, status, tab) << "full sync: " << full_total - full_complete << " buckets to sync";
+  }
+
+  push_ss(ss, status, tab) << "incremental sync: " << num_inc << "/" << total_shards << " shards";
+
+  rgw_datalog_info log_info;
+  ret = sync.read_log_info(&log_info);
+  if (ret < 0) {
+    status.push_back(string("failed to fetch local sync status: ") + cpp_strerror(-ret));
+    return;
+  }
+
+
+  map<int, RGWDataChangesLogInfo> source_shards_info;
+
+  ret = sync.read_source_log_shards_info(&source_shards_info);
+  if (ret < 0) {
+    status.push_back(string("failed to fetch master sync status: ") + cpp_strerror(-ret));
+    return;
+  }
+
+  map<int, string> shards_behind;
+
+  for (auto local_iter : sync_status.sync_markers) {
+    int shard_id = local_iter.first;
+    auto iter = source_shards_info.find(shard_id);
+
+    if (iter == source_shards_info.end()) {
+      /* huh? */
+      derr << "ERROR: could not find remote sync shard status for shard_id=" << shard_id << dendl;
+      continue;
+    }
+    auto master_marker = iter->second.marker;
+    if (master_marker > local_iter.second.marker) {
+      shards_behind[shard_id] = local_iter.second.marker;
+    }
+  }
+
+  int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
+  if (total_behind == 0) {
+    status.push_back("data is caught up with master");
+  } else {
+    push_ss(ss, status, tab) << "data is behind on " << total_behind << " shards";
+  }
+
+  flush_ss(ss, status);
+}
+
 static void tab_dump(const string& header, int width, const list<string>& entries)
 {
   string s = header;
@@ -1754,6 +1867,23 @@ static void sync_status(Formatter *formatter)
   }
 
   tab_dump("metadata sync", width, md_status);
+
+  list<string> data_status;
+
+  for (auto iter : store->zone_conn_map) {
+    const string& source_id = iter.first;
+    string zone_name;
+    string source_str = "source: ";
+    string s = source_str + source_id;
+    auto siter = store->zone_name_by_id.find(source_id);
+    if (siter != store->zone_name_by_id.end()) {
+      s += string(" (") + siter->second + ")";
+    }
+    data_status.push_back(s);
+    get_data_sync_status(source_id, data_status, source_str.size());
+  }
+
+  tab_dump("data sync", width, data_status);
 }
 
 int main(int argc, char **argv) 

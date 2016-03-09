@@ -137,40 +137,12 @@ void rgw_mdlog_shard_data::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("entries", entries, obj);
 };
 
-class RGWShardCollectCR : public RGWCoroutine {
-  CephContext *cct;
+int RGWShardCollectCR::operate() {
+  reenter(this) {
+    while (spawn_next()) {
+      current_running++;
 
-  int cur_shard;
-  int current_running;
-  int max_concurrent;
-  int status;
-
-public:
-  RGWShardCollectCR(CephContext *_cct, int _max_concurrent) : RGWCoroutine(_cct),
-                                                             current_running(0),
-                                                             max_concurrent(_max_concurrent),
-                                                             status(0) {}
-
-  virtual bool spawn_next() = 0;
-
-  int operate() {
-    reenter(this) {
-      while (spawn_next()) {
-        current_running++;
-
-        while (current_running >= max_concurrent) {
-          int child_ret;
-          yield wait_for_child();
-          if (collect_next(&child_ret)) {
-            current_running--;
-            if (child_ret < 0 && child_ret != -ENOENT) {
-              ldout(cct, 10) << __func__ << ": failed to fetch log status, ret=" << child_ret << dendl;
-              status = child_ret;
-            }
-          }
-        }
-      }
-      while (current_running > 0) {
+      while (current_running >= max_concurrent) {
         int child_ret;
         yield wait_for_child();
         if (collect_next(&child_ret)) {
@@ -181,15 +153,25 @@ public:
           }
         }
       }
-      if (status < 0) {
-        return set_cr_error(status);
-      }
-      return set_cr_done();
     }
-    return 0;
+    while (current_running > 0) {
+      int child_ret;
+      yield wait_for_child();
+      if (collect_next(&child_ret)) {
+        current_running--;
+        if (child_ret < 0 && child_ret != -ENOENT) {
+          ldout(cct, 10) << __func__ << ": failed to fetch log status, ret=" << child_ret << dendl;
+          status = child_ret;
+        }
+      }
+    }
+    if (status < 0) {
+      return set_cr_error(status);
+    }
+    return set_cr_done();
   }
-
-};
+  return 0;
+}
 
 class RGWReadRemoteMDLogInfoCR : public RGWShardCollectCR {
   RGWMetaSyncEnv *sync_env;

@@ -418,6 +418,23 @@ public:
   int operate();
 };
 
+class RGWShardCollectCR : public RGWCoroutine {
+  CephContext *cct;
+
+  int cur_shard;
+  int current_running;
+  int max_concurrent;
+  int status;
+
+public:
+  RGWShardCollectCR(CephContext *_cct, int _max_concurrent) : RGWCoroutine(_cct),
+                                                             current_running(0),
+                                                             max_concurrent(_max_concurrent),
+                                                             status(0) {}
+
+  virtual bool spawn_next() = 0;
+  int operate();
+};
 
 
 #endif
