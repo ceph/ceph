@@ -578,7 +578,7 @@ private:
 
   void _assign_nid(TransContext *txc, OnodeRef o);
 
-  void _dump_onode(OnodeRef o);
+  void _dump_onode(OnodeRef o, int log_leverl=30);
 
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_release(TransContext *txc, CollectionRef& c, OnodeRef& onode,

@@ -4829,11 +4829,11 @@ void BlueStore::_do_read_all_overlays(bluestore_wal_op_t& wo)
   return;
 }
 
-void BlueStore::_dump_onode(OnodeRef o)
+void BlueStore::_dump_onode(OnodeRef o, int log_level)
 {
-  if (!g_conf->subsys.should_gather(ceph_subsys_bluestore, 30))
+  if (!g_conf->subsys.should_gather(ceph_subsys_bluestore, log_level))
     return;
-  dout(30) << __func__ << " " << o
+  dout(log_level) << __func__ << " " << o
 	   << " nid " << o->onode.nid
 	   << " size " << o->onode.size
 	   << " expected_object_size " << o->onode.expected_object_size
@@ -4842,14 +4842,14 @@ void BlueStore::_dump_onode(OnodeRef o)
   for (map<string,bufferptr>::iterator p = o->onode.attrs.begin();
        p != o->onode.attrs.end();
        ++p) {
-    dout(30) << __func__ << "  attr " << p->first
+    dout(log_level) << __func__ << "  attr " << p->first
 	     << " len " << p->second.length() << dendl;
   }
   uint64_t pos = 0;
   for (map<uint64_t,bluestore_extent_t>::iterator p = o->onode.block_map.begin();
        p != o->onode.block_map.end();
        ++p) {
-    dout(30) << __func__ << "  extent " << p->first << " " << p->second
+    dout(log_level) << __func__ << "  extent " << p->first << " " << p->second
 	     << dendl;
     assert(p->first >= pos);
     pos = p->first + p->second.length;
@@ -4858,13 +4858,13 @@ void BlueStore::_dump_onode(OnodeRef o)
   for (map<uint64_t,bluestore_overlay_t>::iterator p = o->onode.overlay_map.begin();
        p != o->onode.overlay_map.end();
        ++p) {
-    dout(30) << __func__ << "  overlay " << p->first << " " << p->second
+    dout(log_level) << __func__ << "  overlay " << p->first << " " << p->second
 	     << dendl;
     assert(p->first >= pos);
     pos = p->first + p->second.length;
   }
   if (!o->onode.overlay_refs.empty()) {
-    dout(30) << __func__ << "  overlay_refs " << o->onode.overlay_refs << dendl;
+    dout(log_level) << __func__ << "  overlay_refs " << o->onode.overlay_refs << dendl;
   }
 }
 
@@ -5598,14 +5598,14 @@ int BlueStore::_do_write(
     if (p->second.has_flag(bluestore_extent_t::FLAG_UNWRITTEN)) {
       derr << __func__ << " left behind an unwritten extent, out of sync with "
 	   << "_do_allocate" << dendl;
-      _dump_onode(o);
+      _dump_onode(o, 0);
       assert(0 == "leaked unwritten extent");
     }
     if (p->second.has_flag(bluestore_extent_t::FLAG_COW_HEAD) ||
 	p->second.has_flag(bluestore_extent_t::FLAG_COW_TAIL)) {
       derr << __func__ << " left behind a COW extent, out of sync with "
 	   << "_do_allocate" << dendl;
-      _dump_onode(o);
+      _dump_onode(o, 0);
       assert(0 == "leaked cow extent");
     }
   }
