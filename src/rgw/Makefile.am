@@ -80,6 +80,7 @@ librgw_la_SOURCES = \
 	rgw/rgw_rest_opstate.cc \
 	rgw/rgw_rest_realm.cc \
 	rgw/rgw_rest_replica_log.cc \
+	rgw/rgw_rest_objstore.cc \
 	rgw/rgw_rest_s3.cc \
 	rgw/rgw_rest_swift.cc \
 	rgw/rgw_rest_usage.cc \
@@ -174,6 +175,16 @@ ceph_rgw_jsonparser_SOURCES = \
 	rgw/rgw_json_enc.cc
 ceph_rgw_jsonparser_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_rgw_jsonparser
+
+rgw_sts_SOURCES = \
+	sts/sts_main.cc \
+	sts/rgw_rest_sts.cc \
+	sts/rgw_dummy.cc
+rgw_sts_CXXFLAGS = -fPIC -I$(srcdir)/xxHash -I$(srcdir)/rgw ${CIVETWEB_INCLUDE}
+rgw_sts_LDFLAGS = -Wl,-z,muldefs
+rgw_sts_LDADD = $(LIBRGW) $(LIBCIVETWEB) $(LIBCIVETWEB_DEPS) $(LIBRGW_DEPS) \
+	$(RESOLV_LIBS) $(CEPH_GLOBAL)
+bin_PROGRAMS += rgw-sts
 
 noinst_HEADERS += \
 	rgw/rgw_acl.h \
