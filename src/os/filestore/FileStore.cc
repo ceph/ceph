@@ -3239,6 +3239,7 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
 
 #ifdef CEPH_HAVE_FALLOCATE
 # if !defined(DARWIN) && !defined(__FreeBSD__)
+#    ifdef FALLOC_FL_KEEP_SIZE
   // first try to punch a hole.
   FDRef fd;
   ret = lfn_open(cid, oid, false, &fd);
@@ -3247,7 +3248,7 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
   }
 
   // first try fallocate
-  ret = fallocate(**fd, FALLOC_FL_PUNCH_HOLE, offset, len);
+  ret = fallocate(**fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE, offset, len);
   if (ret < 0)
     ret = -errno;
   lfn_close(fd);
@@ -3261,6 +3262,7 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
     goto out;  // yay!
   if (ret != -EOPNOTSUPP)
     goto out;  // some other error
+#    endif
 # endif
 #endif
 
