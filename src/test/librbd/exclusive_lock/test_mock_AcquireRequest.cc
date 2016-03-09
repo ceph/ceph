@@ -17,6 +17,7 @@
 #include <list>
 
 // template definitions
+#include "librbd/Journal.cc"
 #include "librbd/exclusive_lock/AcquireRequest.cc"
 template class librbd::exclusive_lock::AcquireRequest<librbd::MockImageCtx>;
 
@@ -78,6 +79,22 @@ public:
                            MockJournal &mock_journal, int r) {
     EXPECT_CALL(mock_journal, open(_))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
+  }
+
+  void expect_close_journal(MockImageCtx &mock_image_ctx,
+                            MockJournal &mock_journal) {
+    EXPECT_CALL(mock_journal, close(_))
+                  .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
+  }
+
+  void expect_is_journal_tag_owner(MockJournal &mock_journal, bool owner) {
+    EXPECT_CALL(mock_journal, is_tag_owner()).WillOnce(Return(owner));
+  }
+
+  void expect_allocate_journal_tag(MockImageCtx &mock_image_ctx,
+                                   MockJournal &mock_journal, int r) {
+    EXPECT_CALL(mock_journal, allocate_tag("", _))
+                  .WillOnce(WithArg<1>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 
   void expect_get_lock_info(MockImageCtx &mock_image_ctx, int r,
@@ -171,6 +188,8 @@ TEST_F(TestMockExclusiveLockAcquireRequest, Success) {
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
   expect_create_journal(mock_image_ctx, &mock_journal);
   expect_open_journal(mock_image_ctx, mock_journal, 0);
+  expect_is_journal_tag_owner(mock_journal, true);
+  expect_allocate_journal_tag(mock_image_ctx, mock_journal, 0);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
@@ -231,6 +250,8 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessObjectMapDisabled) {
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
   expect_create_journal(mock_image_ctx, &mock_journal);
   expect_open_journal(mock_image_ctx, mock_journal, 0);
+  expect_is_journal_tag_owner(mock_journal, true);
+  expect_allocate_journal_tag(mock_image_ctx, mock_journal, 0);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
@@ -264,6 +285,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, JournalError) {
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
   expect_create_journal(mock_image_ctx, mock_journal);
   expect_open_journal(mock_image_ctx, *mock_journal, -EINVAL);
+  expect_close_journal(mock_image_ctx, *mock_journal);
   expect_close_object_map(mock_image_ctx, *mock_object_map);
 
   C_SaferCond acquire_ctx;
@@ -273,6 +295,77 @@ TEST_F(TestMockExclusiveLockAcquireRequest, JournalError) {
                                                        &acquire_ctx, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
+}
+
+TEST_F(TestMockExclusiveLockAcquireRequest, NotJournalTagOwner) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
+  expect_lock(mock_image_ctx, 0);
+
+  MockObjectMap *mock_object_map = new MockObjectMap();
+  expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
+  expect_create_object_map(mock_image_ctx, mock_object_map);
+  expect_open_object_map(mock_image_ctx, *mock_object_map);
+
+  MockJournal *mock_journal = new MockJournal();
+  expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
+  expect_create_journal(mock_image_ctx, mock_journal);
+  expect_open_journal(mock_image_ctx, *mock_journal, 0);
+  expect_is_journal_tag_owner(*mock_journal, false);
+  expect_close_journal(mock_image_ctx, *mock_journal);
+  expect_close_object_map(mock_image_ctx, *mock_object_map);
+
+  C_SaferCond acquire_ctx;
+  C_SaferCond ctx;
+  MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
+                                                       TEST_COOKIE,
+                                                       &acquire_ctx, &ctx);
+  req->send();
+  ASSERT_EQ(-EPERM, ctx.wait());
+}
+
+TEST_F(TestMockExclusiveLockAcquireRequest, AllocateJournalTagError) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
+  expect_lock(mock_image_ctx, 0);
+
+  MockObjectMap *mock_object_map = new MockObjectMap();
+  expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
+  expect_create_object_map(mock_image_ctx, mock_object_map);
+  expect_open_object_map(mock_image_ctx, *mock_object_map);
+
+  MockJournal *mock_journal = new MockJournal();
+  expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
+  expect_create_journal(mock_image_ctx, mock_journal);
+  expect_open_journal(mock_image_ctx, *mock_journal, 0);
+  expect_is_journal_tag_owner(*mock_journal, true);
+  expect_allocate_journal_tag(mock_image_ctx, *mock_journal, -ESTALE);
+  expect_close_journal(mock_image_ctx, *mock_journal);
+  expect_close_object_map(mock_image_ctx, *mock_object_map);
+
+  C_SaferCond acquire_ctx;
+  C_SaferCond ctx;
+  MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
+                                                       TEST_COOKIE,
+                                                       &acquire_ctx, &ctx);
+  req->send();
+  ASSERT_EQ(-ESTALE, ctx.wait());
 }
 
 TEST_F(TestMockExclusiveLockAcquireRequest, LockBusy) {

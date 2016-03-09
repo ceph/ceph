@@ -333,25 +333,49 @@ void ImageClientMeta::dump(Formatter *f) const {
   f->dump_unsigned("tag_class", tag_class);
 }
 
-void MirrorPeerClientMeta::encode(bufferlist& bl) const {
-  ::encode(cluster_id, bl);
-  ::encode(pool_id, bl);
-  ::encode(image_id, bl);
+void MirrorPeerSyncPoint::encode(bufferlist& bl) const {
   ::encode(snap_name, bl);
+  ::encode(object_number, bl);
+}
+
+void MirrorPeerSyncPoint::decode(__u8 version, bufferlist::iterator& it) {
+  ::decode(snap_name, it);
+  ::decode(object_number, it);
+}
+
+void MirrorPeerSyncPoint::dump(Formatter *f) const {
+  f->dump_string("snap_name", snap_name);
+  if (object_number) {
+    f->dump_unsigned("object_number", *object_number);
+  }
+}
+
+void MirrorPeerClientMeta::encode(bufferlist& bl) const {
+  ::encode(image_id, bl);
+  ::encode(static_cast<uint32_t>(sync_points.size()), bl);
+  for (auto &sync_point : sync_points) {
+    sync_point.encode(bl);
+  }
 }
 
 void MirrorPeerClientMeta::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(cluster_id, it);
-  ::decode(pool_id, it);
   ::decode(image_id, it);
-  ::decode(snap_name, it);
+
+  uint32_t sync_point_count;
+  ::decode(sync_point_count, it);
+  sync_points.resize(sync_point_count);
+  for (auto &sync_point : sync_points) {
+    sync_point.decode(version, it);
+  }
 }
 
 void MirrorPeerClientMeta::dump(Formatter *f) const {
-  f->dump_string("cluster_id", cluster_id.c_str());
-  f->dump_int("pool_id", pool_id);
-  f->dump_string("image_id", image_id.c_str());
-  f->dump_string("snap_name", snap_name.c_str());
+  f->dump_string("image_id", image_id);
+  f->open_array_section("sync_points");
+  for (auto &sync_point : sync_points) {
+    sync_point.dump(f);
+  }
+  f->close_section();
 }
 
 void CliClientMeta::encode(bufferlist& bl) const {
@@ -417,46 +441,44 @@ void ClientData::generate_test_instances(std::list<ClientData *> &o) {
   o.push_back(new ClientData(ImageClientMeta()));
   o.push_back(new ClientData(ImageClientMeta(123)));
   o.push_back(new ClientData(MirrorPeerClientMeta()));
-  o.push_back(new ClientData(MirrorPeerClientMeta("cluster_id", 123, "image_id")));
+  o.push_back(new ClientData(MirrorPeerClientMeta("image_id", {{"snap 1", 123}})));
   o.push_back(new ClientData(CliClientMeta()));
 }
 
 // Journal Tag
 
 void TagData::encode(bufferlist& bl) const {
-  ::encode(cluster_id, bl);
-  ::encode(pool_id, bl);
-  ::encode(image_id, bl);
+  ::encode(mirror_uuid, bl);
+  ::encode(predecessor_mirror_uuid, bl);
+  ::encode(predecessor_commit_valid, bl);
   ::encode(predecessor_tag_tid, bl);
   ::encode(predecessor_entry_tid, bl);
 }
 
 void TagData::decode(bufferlist::iterator& it) {
-  ::decode(cluster_id, it);
-  ::decode(pool_id, it);
-  ::decode(image_id, it);
+  ::decode(mirror_uuid, it);
+  ::decode(predecessor_mirror_uuid, it);
+  ::decode(predecessor_commit_valid, it);
   ::decode(predecessor_tag_tid, it);
   ::decode(predecessor_entry_tid, it);
 }
 
 void TagData::dump(Formatter *f) const {
-  f->dump_string("cluster_id", cluster_id.c_str());
-  f->dump_int("pool_id", pool_id);
-  f->dump_string("image_id", image_id.c_str());
+  f->dump_string("mirror_uuid", mirror_uuid);
+  f->dump_string("predecessor_mirror_uuid", predecessor_mirror_uuid);
+  f->dump_string("predecessor_commit_valid",
+                 predecessor_commit_valid ? "true" : "false");
   f->dump_unsigned("predecessor_tag_tid", predecessor_tag_tid);
   f->dump_unsigned("predecessor_entry_tid", predecessor_entry_tid);
 }
 
 void TagData::generate_test_instances(std::list<TagData *> &o) {
   o.push_back(new TagData());
-  o.push_back(new TagData("cluster_id", 123, "image_id"));
+  o.push_back(new TagData("mirror-uuid"));
+  o.push_back(new TagData("mirror-uuid", "remote-mirror-uuid", true, 123, 234));
 }
 
-} // namespace journal
-} // namespace librbd
-
-std::ostream &operator<<(std::ostream &out,
-                         const librbd::journal::EventType &type) {
+std::ostream &operator<<(std::ostream &out, const EventType &type) {
   using namespace librbd::journal;
 
   switch (type) {
@@ -506,8 +528,7 @@ std::ostream &operator<<(std::ostream &out,
   return out;
 }
 
-std::ostream &operator<<(std::ostream &out,
-                         const librbd::journal::ClientMetaType &type) {
+std::ostream &operator<<(std::ostream &out, const ClientMetaType &type) {
   using namespace librbd::journal;
 
   switch (type) {
@@ -525,5 +546,26 @@ std::ostream &operator<<(std::ostream &out,
     break;
   }
   return out;
-
 }
+
+std::ostream &operator<<(std::ostream &out, const ImageClientMeta &meta) {
+  out << "[tag_class=" << meta.tag_class << "]";
+  return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const TagData &tag_data) {
+  out << "["
+      << "mirror_uuid=" << tag_data.mirror_uuid << ", "
+      << "predecessor_mirror_uuid=" << tag_data.predecessor_mirror_uuid;
+  if (tag_data.predecessor_commit_valid) {
+    out << ", "
+        << "predecessor_tag_tid=" << tag_data.predecessor_tag_tid << ", "
+        << "predecessor_entry_tid=" << tag_data.predecessor_entry_tid;
+  }
+  out << "]";
+  return out;
+}
+
+} // namespace journal
+} // namespace librbd
+
