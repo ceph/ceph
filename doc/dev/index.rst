@@ -163,21 +163,21 @@ All newcomers are encouraged to read that file carefully.
 Building from source
 --------------------
 
-See instructions at :doc:`/install/build-ceph`.
+See instructions at :doc:`/dev/quick_guide` and :doc:`/install/build-ceph`.
 
 Development-mode cluster
 ------------------------
 
 You can start a development-mode Ceph cluster, after compiling the source,
-with:
-
-.. code::
+with::
 
     cd src
     install -d -m0755 out dev/osd0
     ./vstart.sh -n -x -l
     # check that it's there
     ./ceph health
+
+For more ``vstart.sh`` examples, see :doc:`/dev/quick_guide`.
 
 Issue tracker
 =============
@@ -189,8 +189,8 @@ Ceph developers use the issue tracker to
 1. keep track of issues - bugs, fix requests, feature requests, backport
 requests, etc. 
 
-2. communicate with other developers as they work on issues and keep them
-informed on progress toward their resolution.
+2. communicate with other developers and keep them informed as work
+on the issues progresses.
 
 Issue tracker conventions
 -------------------------
@@ -540,7 +540,30 @@ When a test requires multiple machines, root access or lasts for a
 longer time (for example, to simulate a realistic Ceph deployment), it
 is deemed to be an integration test. Integration tests are organized into
 "suites", which are defined in the `ceph-qa-suite repository`_ and run with
-the `teuthology-suite`_ command.
+the ``teuthology-suite`` command.
+
+The ``teuthology-suite`` command is part of the `teuthology framework`_.
+In the sections that follow we attempt to provide a detailed introduction
+to that framework from the perspective of a beginning Ceph developer.
+
+Teuthology consumes packages 
+----------------------------
+
+It may take some time to understand the significance of this fact, but it
+is `very` significant. It means that automated tests can be conducted on
+multiple platforms using the same packages (RPM, DEB) that can be
+installed on any machine running those platforms.
+
+Teuthology has a `list of platforms that it supports
+<https://github.com/ceph/ceph-qa-suite/tree/master/distros/supported>`_ (as
+of March 2016 the list consisted of "CentOS 7.2" and "Ubuntu 14.04").  It
+expects to be provided pre-built Ceph packages for these platforms.
+Teuthology deploys these platforms on machines (bare-metal or
+cloud-provisioned), installs the packages on them, and deploys Ceph
+clusters on them - all as called for by the test.
+
+The nightlies
+-------------
 
 A number of integration tests are run on a regular basis in the `Sepia
 lab`_ against the official Ceph repositories (on the ``master`` development
@@ -571,7 +594,6 @@ all the integration tests, for all the Ceph components.
 `dummy <https://github.com/ceph/ceph-qa-suite/tree/master/suites/dummy>`_
   get a machine, do nothing and return success (commonly used to
   verify the integration testing infrastructure works as expected)
-  expected
 
 `fs <https://github.com/ceph/ceph-qa-suite/tree/master/suites/fs>`_
   test CephFS
@@ -626,8 +648,8 @@ Since this is a new feature, many yaml files have yet to be annotated.
 Developers are encouraged to improve the documentation, in terms of both
 coverage and quality.
 
-Running integration tests
--------------------------
+How integration tests are run
+-----------------------------
 
 Given that - as a new Ceph developer - you will typically not have access
 to the `Sepia lab`_, you may rightly ask how you can run the integration
@@ -651,21 +673,17 @@ Running integration tests on your code contributions and publishing the
 results allows reviewers to verify that changes to the code base do not
 cause regressions, or to analyze test failures when they do occur.
 
-teuthology-suite
-----------------
-
 Every teuthology cluster, whether bare-metal or cloud-provisioned, has a
 so-called "teuthology node" from which tests suites are triggered using the
-``teuthology-suite`` command.
+`teuthology-suite`_ command.
 
-A detailed description of each ``teuthology-suite`` option is available
-by running the following command on the teuthology node::
+A detailed and up-to-date description of each `teuthology-suite`_ option is
+available by running the following command on the teuthology node::
 
    $ teuthology-suite --help
 
-Integration tests are organized into suites for convenience. Before we
-discuss the suites, we first explain how to read individual integration
-tests.
+How integration tests are defined
+---------------------------------
 
 Integration tests are defined by yaml files found in the ``suites``
 subdirectory of the `ceph-qa-suite repository`_ and implemented by python
@@ -674,10 +692,10 @@ are defined in a single yaml file, while other tests are defined by a
 directory tree containing yaml files that are combined, at runtime, into a
 larger yaml file.
 
-Let us first examine a standalone test, or "singleton".
-
 Reading a standalone test
 -------------------------
+
+Let us first examine a standalone test, or "singleton". 
 
 Here is a commented example using the integration test
 `rados/singleton/all/admin-socket.yaml
@@ -747,15 +765,17 @@ This test can be run with::
 Test descriptions 
 -----------------
 
-Each test has a "test description". In the case of a standalone test, like
-the one in the previous example, the test description is identical to the
-relative path of the yaml file starting from the ``suites/`` directory of
-the `ceph-qa-suite repository`_.
+Each test has a "test description", which is similar to a directory path,
+but not the same. In the case of a standalone test, like the one in
+`Reading a standalone test`_, the test description is identical to the
+relative path (starting from the ``suites/`` directory of the
+`ceph-qa-suite repository`_) of the yaml file defining the test.
 
 Much more commonly, tests are defined not by a single yaml file, but by a
-`directory tree of yaml files`. At runtime, the yaml files (facets) are
-combined into a single yaml file that controls the test and is reproduced
-in full at the beginning of the test log.
+`directory tree of yaml files`. At runtime, the tree is walked and all yaml
+files (facets) are combined into larger yaml "programs" that define the
+tests. A full listing of the yaml defining the test is included at the
+beginning of every test log.
 
 In these cases, the description of each test consists of the
 subdirectory under `suites/
@@ -778,13 +798,13 @@ As noted in the previous section, most tests are not defined in a single
 yaml file, but rather as a `combination` of files collected from a
 directory tree within the ``suites/`` subdirectory of the `ceph-qa-suite repository`_. 
 
-The set of all tests generated from a given subdirectory of ``suites/``
-is called an "integration test suite", or a "teuthology suite".
+The set of all tests defined by a given subdirectory of ``suites/`` is
+called an "integration test suite", or a "teuthology suite".
 
 Combination of yaml facets is controlled by special files (``%`` and
-``+``) that are placed within the directory tree and serve as "operators".
-The ``%`` file is the "convolution" operator and ``+`` signifies
-concatenation. This is best explained by example.
+``+``) that are placed within the directory tree and can be thought of as
+operators.  The ``%`` file is the "convolution" operator and ``+``
+signifies concatenation.
 
 Convolution operator
 --------------------
@@ -793,8 +813,8 @@ The convolution operator, implemented as an empty file called ``%``, tells
 teuthology to construct a test matrix from yaml facets found in
 subdirectories below the directory containing the operator.
 
-The `ceph-disk suite
-<https://github.com/ceph/ceph-qa-suite/tree/master/suites/ceph-disk/>`_ is
+For example, the `ceph-disk suite
+<https://github.com/ceph/ceph-qa-suite/tree/jewel/suites/ceph-disk/>`_ is
 defined by the ``suites/ceph-disk/`` tree, which consists of the files and
 subdirectories in the following structure::
 
@@ -823,6 +843,8 @@ three standalone tests:
 * ceph-disk/basic/distros/ubuntu_14.04.yaml
 * ceph-disk/basic/tasks/ceph-disk.yaml
 
+(which would of course be wrong in this case).
+
 Referring to the `ceph-qa-suite repository`_, you will notice that the
 ``centos_7.0.yaml`` and ``ubuntu_14.04.yaml`` files in the
 ``suites/ceph-disk/basic/distros/`` directory are implemented as symlinks.
@@ -834,12 +856,18 @@ All the tests generated from the ``suites/ceph-disk/`` directory tree
 
   $ teuthology-suite --suite ceph-disk
 
-An individual test from the ceph-disk suite can be run by adding the
+An individual test from the `ceph-disk suite`_ can be run by adding the
 ``--filter`` option::
 
   $ teuthology-suite \
       --suite ceph-disk/basic \
       --filter 'ceph-disk/basic/{distros/ubuntu_14.04.yaml tasks/ceph-disk.yaml}'
+
+.. note: To run a standalone test like the one in `Reading a standalone
+   test`_, ``--suite`` alone is sufficient. If you want to run a single
+   test from a suite that is defined as a directory tree, ``--suite`` must
+   be combined with ``--filter``. This is because the ``--suite`` option
+   understands POSIX relative paths only.
 
 Concatenation operator
 ----------------------
@@ -1021,8 +1049,63 @@ drive::
 
     $ ceph-workbench ceph-qa-suite --suite dummy
 
+Be forewarned that the first run of `ceph-workbench ceph-qa-suite`_ on a
+pristine tenant will take a long time to complete because it downloads a VM
+image and during this time the command may not produce any output. 
+
+The images are cached in OpenStack, so they are only downloaded once.
+Subsequent runs of the same command will complete faster.
+
+Although ``dummy`` suite does not run any tests, in all other respects it
+behaves just like a teuthology suite and produces some of the same
+artifacts (see `Artifacts produced by teuthology-suite`_).
+
+The last bit of output should look something like this::
+
+  pulpito web interface: http://149.202.168.201:8081/
+  ssh access           : ssh -i /home/smithfarm/.ceph-workbench/teuthology-myself.pem ubuntu@149.202.168.201 # logs in /usr/share/nginx/html
+
+What this means is that `ceph-workbench ceph-qa-suite`_ triggered the test
+suite run. It does not mean that the suite run has completed. To monitor
+progress of the run, check the Pulpito web interface URL periodically, or
+if you are impatient, ssh to the teuthology node using the ssh command
+shown and do::
+
+    $ tail -f /var/log/teuthology.*
+
+The `/usr/share/nginx/html` directory contains the complete logs of the
+test suite. If we had provided the ``--upload`` option to the
+`ceph-workbench ceph-qa-suite`_ command, these logs would have been
+uploaded to http://teuthology-logs.public.ceph.com.
+
+Run a standalone test
+---------------------
+
+The standalone test explained in `Reading a standalone test`_ can be run
+with the following command::
+
+    $ ceph-workbench ceph-qa-suite --suite rados/singleton/all/admin-socket.yaml
+
+This will run the suite shown on the current ``master`` branch of
+``ceph/ceph.git``. You can specify a different branch with the ``--ceph``
+option, and even a different git repo with the ``--ceph-git-url`` option. (Run
+``ceph-workbench ceph-qa-suite --help`` for an up-to-date list of available
+options.)
+
+The first run of a suite will also take a long time, because ceph packages
+have to be built, first. Again, the packages so built are cached and
+`ceph-workbench ceph-qa-suite`_ will not build identical packages a second
+time.
+
 .. WIP
 .. ===
+..
+.. Artifacts produced by teuthology-suite
+.. --------------------------------------
+.. 
+.. This section examines the files (artifacts) produced by
+.. ``teuthology-suite``. These files are FIXME
+.. 
 ..
 .. Backporting
 .. -----------
