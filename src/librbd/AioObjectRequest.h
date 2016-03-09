@@ -318,8 +318,12 @@ namespace librbd {
     }
 
     virtual void pre_object_map_update(uint8_t *new_state) {
-      *new_state = OBJECT_EXISTS;
+      if (!m_object_exist && !has_parent())
+        *new_state = OBJECT_NONEXISTENT;
+      else
+	*new_state = OBJECT_EXISTS;
     }
+    virtual void send_write();
   };
 
   class AioObjectZero : public AbstractAioObjectWrite {
