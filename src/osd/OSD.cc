@@ -7332,42 +7332,32 @@ void OSD::handle_pg_create(OpRequestRef op)
     bool mapped = osdmap->get_primary_shard(on, &pgid);
     assert(mapped);
 
-    // does it already exist?
-    if (_have_pg(pgid)) {
-      dout(10) << "mkpg " << pgid << "  already exists, skipping" << dendl;
-      continue;
-    }
-
+    pg_interval_map_t pi;
     pg_history_t history;
     history.epoch_created = created;
     history.last_scrub_stamp = ci->second;
     history.last_deep_scrub_stamp = ci->second;
+
+    // project history from created epoch (handle_pg_peering_evt does
+    // it from msg send epoch)
     bool valid_history = project_pg_history(
       pgid, history, created, up, up_primary, acting, acting_primary);
-    /* the pg creation message must have come from a mon and therefore
-     * cannot be on the other side of a map gap
-     */
+    // the pg creation message must have come from a mon and therefore
+    // cannot be on the other side of a map gap
     assert(valid_history);
 
-    PG::RecoveryCtx rctx = create_context();
-    const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
-    PG::_create(*rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
-    PG::_init(*rctx.transaction, pgid, pp);
-
-    pg_interval_map_t pi;
-    PG *pg = _create_lock_pg(
-      osdmap, pgid, false, false,
-      0, up, up_primary,
-      acting, acting_primary,
-      history, pi,
-      *rctx.transaction);
-    pg->info.last_epoch_started = created;
-    pg->handle_create(&rctx);
-    pg->write_if_dirty(*rctx.transaction);
-    pg->publish_stats_to_osd();
-    pg->unlock();
-    wake_pg_waiters(pgid);
-    dispatch_context(rctx, pg, osdmap);
+    handle_pg_peering_evt(
+      pgid,
+      history,
+      pi,
+      m->epoch,
+      false,
+      PG::CephPeeringEvtRef(
+	new PG::CephPeeringEvt(
+	  m->epoch,
+	  m->epoch,
+	  PG::NullEvt()))
+      );
   }
 
   last_pg_create_epoch = m->epoch;
