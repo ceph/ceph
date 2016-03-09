@@ -71,6 +71,8 @@ public:
 };
 
 class RGWCreateBucket_ObjStore_SWIFT : public RGWCreateBucket_ObjStore {
+protected:
+  bool need_metadata_upload() const override { return true; }
 public:
   RGWCreateBucket_ObjStore_SWIFT() {}
   ~RGWCreateBucket_ObjStore_SWIFT() {}

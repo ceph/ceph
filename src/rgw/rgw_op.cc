@@ -1970,8 +1970,13 @@ void RGWCreateBucket::execute()
     }
   }
 
-  policy.encode(aclbl);
+  if (need_metadata_upload()) {
+    rgw_get_request_metadata(s->cct, s->info, attrs, false);
+    prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs, rmattrs);
+    populate_with_generic_attrs(s, attrs);
+  }
 
+  policy.encode(aclbl);
   attrs[RGW_ATTR_ACL] = aclbl;
 
   if (has_cors) {
@@ -2019,6 +2024,47 @@ void RGWCreateBucket::execute()
     }
   } else if (op_ret == -EEXIST || (op_ret == 0 && existed)) {
     op_ret = -ERR_BUCKET_EXISTS;
+  }
+
+  if (need_metadata_upload() && existed) {
+    /* OK, it looks we lost race with another request. As it's required to
+     * handle metadata fusion and upload, the whole operation becomes very
+     * similar in nature to PutMetadataBucket. However, as the attrs may
+     * changed in the meantime, we have to refresh. */
+    short tries = 0;
+    do {
+      RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+      RGWBucketInfo binfo;
+      map<string, bufferlist> battrs;
+
+      op_ret = store->get_bucket_info(obj_ctx, s->bucket_tenant, s->bucket_name,
+                                      binfo, nullptr, &battrs);
+      if (op_ret < 0) {
+        return;
+      } else if (binfo.owner.compare(s->user->user_id) != 0) {
+        /* New bucket doesn't belong to the account we're operating on. */
+        op_ret = -EEXIST;
+        return;
+      } else {
+        s->bucket_info = binfo;
+        s->bucket_attrs = battrs;
+      }
+
+      attrs.clear();
+      rmattrs.clear();
+
+      rgw_get_request_metadata(s->cct, s->info, attrs, false);
+      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs, rmattrs);
+      populate_with_generic_attrs(s, attrs);
+
+      op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+                                    &s->bucket_info.objv_tracker);
+    } while (op_ret == -ECANCELED && tries++ < 20);
+
+    /* Restore the proper return code. */
+    if (op_ret >= 0) {
+      op_ret = -ERR_BUCKET_EXISTS;
+    }
   }
 }
 
