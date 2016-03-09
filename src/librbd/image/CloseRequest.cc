@@ -244,9 +244,12 @@ void CloseRequest<I>::send_flush_image_watcher() {
 template <typename I>
 void CloseRequest<I>::handle_flush_image_watcher(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  assert(r == 0);
+  if (r < 0) {
+    lderr(cct) << "error flushing image watcher: " << cpp_strerror(r) << dendl;
+  }
+  save_result(r);
   finish();
 }
 
