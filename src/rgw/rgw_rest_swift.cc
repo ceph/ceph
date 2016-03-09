@@ -18,6 +18,20 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+struct swift_err : public rgw_err {
+  virtual bool set_rgw_err(int err_no) {
+    rgw_http_errors::const_iterator r;
+
+    r = rgw_http_swift_errors.find(err_no);
+    if (r != rgw_http_swift_errors.end()) {
+      http_ret_E = r->second.first;
+      s3_code_E = r->second.second;
+      return true;
+    }
+    return rgw_err::set_rgw_err(err_no);
+  }
+};
+
 int RGWListBuckets_ObjStore_SWIFT::get_params()
 {
   marker = s->info.args.get("marker");
@@ -774,7 +788,6 @@ void RGWPutMetadataObject_ObjStore_SWIFT::send_response()
 static void bulkdelete_respond(const unsigned num_deleted,
                                const unsigned int num_unfound,
                                const std::list<RGWBulkDelete::fail_desc_t>& failures,
-                               const int prot_flags,                  /* in  */
                                ceph::Formatter& formatter)            /* out */
 {
   formatter.open_object_section("delete");
@@ -790,8 +803,8 @@ static void bulkdelete_respond(const unsigned num_deleted,
       }
     }
 
-    rgw_err err;
-    set_req_state_err(err, reason, prot_flags);
+    swift_err err;
+    err.set_rgw_err(reason);
     dump_errno(err, resp_status);
   } else if (0 == num_deleted && 0 == num_unfound) {
     /* 400 Bad Request */
@@ -814,8 +827,8 @@ static void bulkdelete_respond(const unsigned num_deleted,
     ss_name << fail_desc.path;
     formatter.dump_string("Name", ss_name.str());
 
-    rgw_err err;
-    set_req_state_err(err, fail_desc.err, prot_flags);
+    swift_err err;
+    err.set_rgw_err(fail_desc.err);
     string status;
     dump_errno(err, status);
     formatter.dump_string("Status", status);
@@ -855,10 +868,9 @@ void RGWDeleteObj_ObjStore_SWIFT::send_response()
       bulkdelete_respond(deleter->get_num_deleted(),
                          deleter->get_num_unfound(),
                          deleter->get_failures(),
-                         s->prot_flags,
                          *s->formatter);
     } else if (-ENOENT == op_ret) {
-      bulkdelete_respond(0, 1, {}, s->prot_flags, *s->formatter);
+      bulkdelete_respond(0, 1, {}, *s->formatter);
     } else {
       RGWBulkDelete::acct_path_t path;
       path.bucket_name = s->bucket_name;
@@ -868,7 +880,7 @@ void RGWDeleteObj_ObjStore_SWIFT::send_response()
       fail_desc.err = op_ret;
       fail_desc.path = path;
 
-      bulkdelete_respond(0, 0, { fail_desc }, s->prot_flags, *s->formatter);
+      bulkdelete_respond(0, 0, { fail_desc }, *s->formatter);
     }
   } else {
     end_header(s, this);
@@ -1187,7 +1199,6 @@ void RGWBulkDelete_ObjStore_SWIFT::send_response()
   bulkdelete_respond(deleter->get_num_deleted(),
                      deleter->get_num_unfound(),
                      deleter->get_failures(),
-                     s->prot_flags,
                      *s->formatter);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -1451,20 +1462,6 @@ static void next_tok(string& str, string& tok, char delim)
     str = "";
   }
 }
-
-struct swift_err : public rgw_err {
-  virtual bool set_rgw_err(int err_no) {
-    rgw_http_errors::const_iterator r;
-
-    r = rgw_http_swift_errors.find(err_no);
-    if (r != rgw_http_swift_errors.end()) {
-      http_ret_E = r->second.first;
-      s3_code_E = r->second.second;
-      return true;
-    }
-    return rgw_err::set_rgw_err(err_no);
-  }
-};
 
 int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
 {
