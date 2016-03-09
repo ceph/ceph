@@ -638,6 +638,17 @@ TEST(BufferPtr, is_n_page_sized) {
   }
 }
 
+TEST(BufferPtr, is_partial) {
+  bufferptr a;
+  EXPECT_FALSE(a.is_partial());
+  bufferptr b(10);
+  EXPECT_FALSE(b.is_partial());
+  bufferptr c(b, 1, 9);
+  EXPECT_TRUE(c.is_partial());
+  bufferptr d(b, 0, 9);
+  EXPECT_TRUE(d.is_partial());
+}
+
 TEST(BufferPtr, accessors) {
   unsigned len = 17;
   bufferptr ptr(len);
