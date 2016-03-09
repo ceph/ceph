@@ -12,6 +12,8 @@
 #include "journal/JournalMetadata.h"
 #include "journal/ObjectPlayer.h"
 #include "cls/journal/cls_journal_types.h"
+#include <boost/none.hpp>
+#include <boost/optional.hpp>
 #include <map>
 
 class SafeTimer;
@@ -43,23 +45,13 @@ private:
   typedef std::map<uint64_t, ObjectPlayerPtr> ObjectPlayers;
   typedef std::map<uint8_t, ObjectPlayers> SplayedObjectPlayers;
   typedef std::map<uint8_t, ObjectPosition> SplayedObjectPositions;
+  typedef std::set<uint64_t> ObjectNumbers;
 
   enum State {
     STATE_INIT,
     STATE_PREFETCH,
     STATE_PLAYBACK,
     STATE_ERROR
-  };
-
-  struct C_Watch : public Context {
-    JournalPlayer *player;
-    uint64_t object_num;
-
-    C_Watch(JournalPlayer *p, uint64_t o) : player(p), object_num(o) {
-    }
-    virtual void finish(int r) {
-      player->handle_watch(object_num, r);
-    }
   };
 
   struct C_Fetch : public Context {
@@ -73,6 +65,34 @@ private:
     }
     virtual void finish(int r) {
       player->handle_fetched(object_num, r);
+    }
+  };
+
+  struct C_Watch : public Context {
+    JournalPlayer *player;
+    uint8_t pending_fetches = 1;
+    int ret_val = 0;
+
+    C_Watch(JournalPlayer *player) : player(player) {
+    }
+
+    virtual void complete(int r) override {
+      player->m_lock.Lock();
+      if (ret_val == 0 && r < 0) {
+        ret_val = r;
+      }
+
+      assert(pending_fetches > 0);
+      if (--pending_fetches == 0) {
+        player->m_lock.Unlock();
+        Context::complete(ret_val);
+      } else {
+        player->m_lock.Unlock();
+      }
+    }
+
+    virtual void finish(int r) override {
+      player->handle_watch(r);
     }
   };
 
@@ -93,13 +113,20 @@ private:
   bool m_watch_scheduled;
   double m_watch_interval;
 
+  bool m_handler_notified = false;
+
+  ObjectNumbers m_fetch_object_numbers;
+
   PrefetchSplayOffsets m_prefetch_splay_offsets;
   SplayedObjectPlayers m_object_players;
   uint64_t m_commit_object;
   SplayedObjectPositions m_commit_positions;
+  boost::optional<uint64_t> m_active_tag_tid = boost::none;
 
   void advance_splay_object();
 
+  bool is_object_set_ready() const;
+  bool verify_playback_ready();
   const ObjectPlayers &get_object_players() const;
   ObjectPlayerPtr get_object_player() const;
   ObjectPlayerPtr get_next_set_object_player() const;
@@ -111,7 +138,12 @@ private:
 
   void fetch(uint64_t object_num);
   void handle_fetched(uint64_t object_num, int r);
-  void handle_watch(uint64_t object_num, int r);
+
+  void schedule_watch();
+  void handle_watch(int r);
+
+  void notify_entries_available();
+  void notify_complete(int r);
 };
 
 } // namespace journal

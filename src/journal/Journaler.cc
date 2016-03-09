@@ -199,6 +199,20 @@ void Journaler::unregister_client(Context *on_finish) {
   return m_metadata->unregister_client(on_finish);
 }
 
+int Journaler::get_cached_client(const std::string &client_id,
+                                 cls::journal::Client *client) {
+  RegisteredClients clients;
+  m_metadata->get_registered_clients(&clients);
+
+  auto it = clients.find({client_id, {}});
+  if (it == clients.end()) {
+    return -ENOENT;
+  }
+
+  *client = *it;
+  return 0;
+}
+
 void Journaler::allocate_tag(const bufferlist &data, cls::journal::Tag *tag,
                              Context *on_finish) {
   m_metadata->allocate_tag(cls::journal::Tag::TAG_CLASS_NEW, data, tag,

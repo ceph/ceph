@@ -591,7 +591,9 @@ void JournalMetadata::schedule_commit_task() {
 void JournalMetadata::handle_commit_position_task() {
   assert(m_timer_lock.is_locked());
   assert(m_lock.is_locked());
-  ldout(m_cct, 20) << __func__ << dendl;
+  ldout(m_cct, 20) << __func__ << ": "
+                   << "client_id=" << m_client_id << ", "
+                   << "commit_position=" << m_commit_position << dendl;
 
   librados::ObjectWriteOperation op;
   client::client_commit(&op, m_client_id, m_commit_position);

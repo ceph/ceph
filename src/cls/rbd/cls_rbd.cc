@@ -111,6 +111,8 @@ cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
 cls_method_handle_t h_old_snapshot_rename;
+cls_method_handle_t h_mirror_uuid_get;
+cls_method_handle_t h_mirror_uuid_set;
 cls_method_handle_t h_mirror_mode_get;
 cls_method_handle_t h_mirror_mode_set;
 cls_method_handle_t h_mirror_peer_list;
@@ -201,6 +203,15 @@ static int read_key(cls_method_context_t hctx, const string &key, T *out)
     return -EIO;
   }
 
+  return 0;
+}
+
+static int remove_key(cls_method_context_t hctx, const string &key) {
+  int r = cls_cxx_map_remove_key(hctx, key);
+  if (r < 0 && r != -ENOENT) {
+      CLS_ERR("failed to remove key: %s", key.c_str());
+      return r;
+  }
   return 0;
 }
 
@@ -2939,6 +2950,7 @@ int old_snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
 namespace mirror {
 
+static const std::string UUID("mirror_uuid");
 static const std::string MODE("mirror_mode");
 static const std::string PEER_KEY_PREFIX("mirror_peer_");
 static const std::string IMAGE_KEY_PREFIX("image_");
@@ -2949,6 +2961,20 @@ std::string peer_key(const std::string &uuid) {
 
 std::string image_key(const string &image_id) {
   return IMAGE_KEY_PREFIX + image_id;
+}
+
+int uuid_get(cls_method_context_t hctx, std::string *mirror_uuid) {
+  bufferlist mirror_uuid_bl;
+  int r = cls_cxx_map_get_val(hctx, mirror::UUID, &mirror_uuid_bl);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error reading mirror uuid: %s", cpp_strerror(r).c_str());
+    }
+    return r;
+  }
+
+  *mirror_uuid = std::string(mirror_uuid_bl.c_str(), mirror_uuid_bl.length());
+  return 0;
 }
 
 int read_peers(cls_method_context_t hctx,
@@ -3120,6 +3146,67 @@ int image_remove(cls_method_context_t hctx, const string &image_id) {
  * none
  *
  * Output:
+ * @param uuid (std::string)
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_uuid_get(cls_method_context_t hctx, bufferlist *in,
+                    bufferlist *out) {
+  std::string mirror_uuid;
+  int r = mirror::uuid_get(hctx, &mirror_uuid);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(mirror_uuid, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param mirror_uuid (std::string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_uuid_set(cls_method_context_t hctx, bufferlist *in,
+                    bufferlist *out) {
+  std::string mirror_uuid;
+  try {
+    bufferlist::iterator bl_it = in->begin();
+    ::decode(mirror_uuid, bl_it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  if (mirror_uuid.empty()) {
+    CLS_ERR("cannot set empty mirror uuid");
+    return -EINVAL;
+  }
+
+  uint32_t mirror_mode;
+  int r = read_key(hctx, mirror::MODE, &mirror_mode);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  } else if (r == 0 && mirror_mode != cls::rbd::MIRROR_MODE_DISABLED) {
+    CLS_ERR("cannot set mirror uuid while mirroring enabled");
+    return -EINVAL;
+  }
+
+  bufferlist mirror_uuid_bl;
+  mirror_uuid_bl.append(mirror_uuid);
+  r = cls_cxx_map_set_val(hctx, mirror::UUID, &mirror_uuid_bl);
+  if (r < 0) {
+    CLS_ERR("failed to set mirror uuid");
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * none
+ *
+ * Output:
  * @param cls::rbd::MirrorMode (uint32_t)
  * @returns 0 on success, negative error code on failure
  */
@@ -3168,6 +3255,14 @@ int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
 
   int r;
   if (enabled) {
+    std::string mirror_uuid;
+    r = mirror::uuid_get(hctx, &mirror_uuid);
+    if (r == -ENOENT) {
+      return -EINVAL;
+    } else if (r < 0) {
+      return r;
+    }
+
     bufferlist bl;
     ::encode(mirror_mode_decode, bl);
 
@@ -3188,9 +3283,13 @@ int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
       return -EBUSY;
     }
 
-    r = cls_cxx_map_remove_key(hctx, mirror::MODE);
-    if (r < 0 && r != -ENOENT) {
-      CLS_ERR("error disabling mirroring: %s", cpp_strerror(r).c_str());
+    r = remove_key(hctx, mirror::MODE);
+    if (r < 0) {
+      return r;
+    }
+
+    r = remove_key(hctx, mirror::UUID);
+    if (r < 0) {
       return r;
     }
   }
@@ -3241,6 +3340,17 @@ int mirror_peer_add(cls_method_context_t hctx, bufferlist *in,
   } else if (r == -ENOENT ||
              mirror_mode_decode == cls::rbd::MIRROR_MODE_DISABLED) {
     CLS_ERR("mirroring must be enabled on the pool");
+    return -EINVAL;
+  } else if (!mirror_peer.is_valid()) {
+    CLS_ERR("mirror peer is not valid");
+    return -EINVAL;
+  }
+
+  std::string mirror_uuid;
+  r = mirror::uuid_get(hctx, &mirror_uuid);
+  if (mirror_peer.uuid == mirror_uuid) {
+    CLS_ERR("peer uuid '%s' matches pool mirroring uuid",
+            mirror_uuid.c_str());
     return -EINVAL;
   }
 
@@ -3626,6 +3736,11 @@ void __cls_init()
 			  old_snapshot_rename, &h_old_snapshot_rename);
 
   /* methods for the rbd_mirroring object */
+  cls_register_cxx_method(h_class, "mirror_uuid_get", CLS_METHOD_RD,
+                          mirror_uuid_get, &h_mirror_uuid_get);
+  cls_register_cxx_method(h_class, "mirror_uuid_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_uuid_set, &h_mirror_uuid_set);
   cls_register_cxx_method(h_class, "mirror_mode_get", CLS_METHOD_RD,
                           mirror_mode_get, &h_mirror_mode_get);
   cls_register_cxx_method(h_class, "mirror_mode_set",

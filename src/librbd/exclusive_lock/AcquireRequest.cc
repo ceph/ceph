@@ -166,10 +166,62 @@ Context *AcquireRequest<I>::handle_open_journal(int *ret_val) {
   if (*ret_val < 0) {
     lderr(cct) << "failed to open journal: " << cpp_strerror(*ret_val) << dendl;
     m_error_result = *ret_val;
-    return send_close_object_map();
+    send_close_journal();
+    return nullptr;
   }
 
+  send_allocate_journal_tag();
+  return nullptr;
+}
+
+template <typename I>
+void AcquireRequest<I>::send_allocate_journal_tag() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  if (!m_journal->is_tag_owner()) {
+    lderr(cct) << "local image not promoted" << dendl;
+    m_error_result = -EPERM;
+    send_close_journal();
+    return;
+  }
+
+  using klass = AcquireRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_allocate_journal_tag>(this);
+  m_journal->allocate_tag(Journal<I>::LOCAL_MIRROR_UUID, ctx);
+}
+
+template <typename I>
+Context *AcquireRequest<I>::handle_allocate_journal_tag(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+
+  if (*ret_val < 0) {
+    m_error_result = *ret_val;
+    send_close_journal();
+    return nullptr;
+  }
   return m_on_finish;
+}
+
+template <typename I>
+void AcquireRequest<I>::send_close_journal() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  using klass = AcquireRequest<I>;
+  Context *ctx = create_context_callback<klass, &klass::handle_close_journal>(
+    this);
+  m_journal->close(ctx);
+}
+
+template <typename I>
+Context *AcquireRequest<I>::handle_close_journal(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+
+  return send_close_object_map(ret_val);
 }
 
 template <typename I>
@@ -201,9 +253,9 @@ Context *AcquireRequest<I>::handle_open_object_map(int *ret_val) {
 }
 
 template <typename I>
-Context *AcquireRequest<I>::send_close_object_map() {
+Context *AcquireRequest<I>::send_close_object_map(int *ret_val) {
   if (m_object_map == nullptr) {
-    revert();
+    revert(ret_val);
     return m_on_finish;
   }
 
@@ -224,11 +276,7 @@ Context *AcquireRequest<I>::handle_close_object_map(int *ret_val) {
 
   // object map should never result in an error
   assert(*ret_val == 0);
-
-  assert(m_error_result < 0);
-  *ret_val = m_error_result;
-
-  revert();
+  revert(ret_val);
   return m_on_finish;
 }
 
@@ -439,13 +487,16 @@ void AcquireRequest<I>::apply() {
 }
 
 template <typename I>
-void AcquireRequest<I>::revert() {
+void AcquireRequest<I>::revert(int *ret_val) {
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
   m_image_ctx.object_map = nullptr;
   m_image_ctx.journal = nullptr;
 
   delete m_object_map;
   delete m_journal;
+
+  assert(m_error_result < 0);
+  *ret_val = m_error_result;
 }
 
 } // namespace exclusive_lock

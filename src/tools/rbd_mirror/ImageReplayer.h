@@ -65,7 +65,8 @@ public:
 
 public:
   ImageReplayer(RadosRef local, RadosRef remote, const std::string &client_id,
-		int64_t remote_pool_id, const std::string &remote_image_id);
+		int64_t local_pool_id, int64_t remote_pool_id,
+                const std::string &remote_image_id);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
