@@ -538,8 +538,11 @@ protected:
   bool has_cors;
   RGWCORSConfiguration cors_config;
   string swift_ver_location;
+  set<string> rmattr_names;
 
   bufferlist in_data;
+
+  virtual bool need_metadata_upload() const { return false; }
 
 public:
   RGWCreateBucket() : has_cors(false) {}
