@@ -215,6 +215,27 @@ TEST(SIStrToLL, Error) {
   test_strict_sistrtoll_err("1024E"); // overflows after adding the suffix
 }
 
+// since strict_sistrtoll is an alias of strict_si_cast<uint64_t>(), quite a few
+// of cases are covered by existing test cases of strict_sistrtoll already.
+TEST(StrictSICast, Error) {
+  {
+    std::string err;
+    // the SI prefix is way too large for `int`.
+    (void)strict_si_cast<int>("2E", &err);
+    ASSERT_NE(err, "");
+  }
+  {
+    std::string err;
+    (void)strict_si_cast<int>("-2E", &err);
+    ASSERT_NE(err, "");
+  }
+  {
+    std::string err;
+    (void)strict_si_cast<int>("1T", &err);
+    ASSERT_NE(err, "");
+  }
+}
+
 /*
  * Local Variables:
  * compile-command: "cd .. ; make unittest_strtol && ./unittest_strtol"
