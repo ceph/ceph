@@ -73,7 +73,7 @@ int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
 }
 
 
-RGWOp *RGWHandler::get_op(RGWRados *store)
+RGWOp *RGWHandler_REST::get_op(RGWRados *store)
 {
   RGWOp *op;
   switch (s->op) {
@@ -108,21 +108,23 @@ RGWOp *RGWHandler::get_op(RGWRados *store)
   return op;
 }
 
-void RGWHandler::put_op(RGWOp *op)
+void RGWHandler_REST::put_op(RGWOp *op)
 {
   delete op;
 }
 
 void dump_bucket_from_state(struct req_state *s)
 {
+#if 0
   int expose_bucket = g_conf->rgw_expose_bucket;
   if (expose_bucket) {
-    if (!s->bucket_name_str.empty()) {
+    if (!s->bucket_name.empty()) {
       string b;
-      url_encode(s->bucket_name_str, b);
+      url_encode(s->bucket_name, b);
       s->cio->print("Bucket: %s\r\n", b.c_str());
     }
   }
+#endif
 }
 
 void dump_access_control(req_state *s, RGWOp *op)
@@ -142,9 +144,9 @@ void dump_access_control(req_state *s, RGWOp *op)
 // assert here?
 }
 
-int RGWAccessControlList::get_perm(string& id, int perm_mask) {
+int RGWAccessControlList::get_perm(rgw_user& id, int perm_mask) {
   ldout(cct, 5) << "Searching permissions for uid=" << id << " mask=" << perm_mask << dendl;
-  map<string, int>::iterator iter = acl_user_map.find(id);
+  map<string, int>::iterator iter = acl_user_map.find(id.to_str());
   if (iter != acl_user_map.end()) {
     ldout(cct, 5) << "Found permission: " << iter->second << dendl;
     return iter->second & perm_mask;
@@ -164,7 +166,7 @@ int RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group, int perm_mask) 
   return 0;
 }
 
-int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
+int RGWAccessControlPolicy::get_perm(rgw_user& id, int perm_mask) {
   int perm = acl.get_perm(id, perm_mask);
 
   if (id.compare(owner.get_id()) == 0) {
@@ -178,7 +180,7 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
   if ((perm & perm_mask) != perm_mask) {
     perm |= acl.get_group_perm(ACL_GROUP_ALL_USERS, perm_mask);
 
-    if (!compare_group_name(id, ACL_GROUP_ALL_USERS)) {
+    if (id.compare(RGW_USER_ANON_ID)) {
       /* this is not the anonymous user */
       perm |= acl.get_group_perm(ACL_GROUP_AUTHENTICATED_USERS, perm_mask);
     }
@@ -189,7 +191,7 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
   return perm;
 }
 
-bool RGWAccessControlPolicy::verify_permission(string& uid, int user_perm_mask, int perm)
+bool RGWAccessControlPolicy::verify_permission(rgw_user& uid, int user_perm_mask, int perm)
 {
   int test_perm = perm | RGW_PERM_READ_OBJS | RGW_PERM_WRITE_OBJS;
 
