@@ -134,7 +134,7 @@ void Formatter::dump_format_unquoted(const char *name, const char *fmt, ...)
 
 // -----------------------
 
-JSONFormatter::JSONFormatter(bool p)
+JSONFormatter::JSONFormatter(bool p, Escape c)
 : m_pretty(p), m_is_pending_string(false), cook(c)
 {
   reset();
