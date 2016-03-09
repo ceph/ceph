@@ -575,4 +575,15 @@ namespace librbd {
 			   << m_object_off << "~" << m_object_len << dendl;
     send_write_op(true);
   }
+  void AioObjectTruncate::send_write() {
+    ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid
+			   << " truncate " << m_object_off << dendl;
+    if (!m_object_exist && ! has_parent()) {
+      m_state = LIBRBD_AIO_WRITE_FLAT;
+      Context *ctx = util::create_context_callback<AioObjectRequest>(this);
+      m_ictx->op_work_queue->queue(ctx, 0);
+    } else {
+      AbstractAioObjectWrite::send_write();
+    }
+  }
 }
