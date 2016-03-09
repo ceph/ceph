@@ -337,6 +337,12 @@ void Client::tear_down_cache()
   }
   fd_map.clear();
 
+  while (!opened_dirs.empty()) {
+    dir_result_t *dirp = *opened_dirs.begin();
+    ldout(cct, 1) << "tear_down_cache forcing close of dir " << dirp << " ino " << dirp->inode->ino << dendl;
+    _closedir(dirp);
+  }
+
   // caps!
   // *** FIXME ***
 
@@ -5486,6 +5492,12 @@ void Client::unmount()
     _release_fh(fh);
   }
 
+  while (!opened_dirs.empty()) {
+    dir_result_t *dirp = *opened_dirs.begin();
+    ldout(cct, 0) << " destroyed lost open dir " << dirp << " on " << *dirp->inode << dendl;
+    _closedir(dirp);
+  }
+
   _ll_drop_pins();
 
   while (unsafe_sync_write > 0) {
@@ -6691,6 +6703,7 @@ int Client::_opendir(Inode *in, dir_result_t **dirpp, int uid, int gid)
   if (!in->is_dir())
     return -ENOTDIR;
   *dirpp = new dir_result_t(in);
+  opened_dirs.insert(*dirpp);
   if (in->dir) {
     (*dirpp)->release_count = in->dir->release_count;
     (*dirpp)->ordered_count = in->dir->ordered_count;
@@ -6723,6 +6736,7 @@ void Client::_closedir(dir_result_t *dirp)
     dirp->inode.reset();
   }
   _readdir_drop_dirp_buffer(dirp);
+  opened_dirs.erase(dirp);
   delete dirp;
 }
 
@@ -10974,13 +10988,7 @@ int Client::ll_opendir(Inode *in, int flags, dir_result_t** dirpp,
       return r;
   }
 
-  int r = 0;
-  if (vino.snapid == CEPH_SNAPDIR) {
-    *dirpp = new dir_result_t(in);
-  } else {
-    r = _opendir(in, dirpp, uid, gid);
-  }
-
+  int r = _opendir(in, dirpp, uid, gid);
   tout(cct) << (unsigned long)*dirpp << std::endl;
 
   ldout(cct, 3) << "ll_opendir " << vino << " = " << r << " (" << *dirpp << ")"

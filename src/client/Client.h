@@ -30,6 +30,7 @@ using std::set;
 using std::map;
 using std::fstream;
 
+#include "include/unordered_set.h"
 #include "include/unordered_map.h"
 
 #include "include/filepath.h"
@@ -421,6 +422,8 @@ protected:
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds
   ceph::unordered_map<int, Fh*> fd_map;
+
+  ceph::unordered_set<dir_result_t*> opened_dirs;
   
   int get_fd() {
     int fd = free_fd_set.range_start();
