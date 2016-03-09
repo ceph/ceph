@@ -87,7 +87,6 @@ int Replayer::init()
 void Replayer::run()
 {
   while (!m_stopping.read()) {
-    Mutex::Locker l(m_lock);
     set_sources(m_pool_watcher->get_images());
     m_cond.WaitInterval(g_ceph_context, m_lock, seconds(30));
   }
@@ -95,13 +94,22 @@ void Replayer::run()
 
 void Replayer::set_sources(const map<int64_t, set<string> > &images)
 {
-  assert(m_lock.is_locked());
+  std::map<int64_t, std::map<std::string,
+                 std::unique_ptr<ImageReplayer> > > images_copy;
+  m_lock.Lock();
+  for( const auto &iter : m_images){
+      for(const auto &entry : ((iter).second)){
+          images_copy[iter.first].insert(make_pair((entry).first,
+                    unique_ptr<ImageReplayer>(new ImageReplayer (*((entry).second)) )));
+      }
+  }
+  m_lock.Unlock();
   // TODO: make stopping and starting ImageReplayers async
-  for (auto it = m_images.begin(); it != m_images.end();) {
+  for (auto it = images_copy.begin(); it != images_copy.end();) {
     int64_t pool_id = it->first;
     auto &pool_images = it->second;
     if (images.find(pool_id) == images.end()) {
-      m_images.erase(it++);
+      images_copy.erase(it++);
       continue;
     }
     for (auto images_it = pool_images.begin();
@@ -137,7 +145,7 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
     }
 
     // create entry for pool if it doesn't exist
-    auto &pool_replayers = m_images[pool_id];
+    auto &pool_replayers = images_copy[pool_id];
     for (const auto &image_id : kv.second) {
       if (pool_replayers.find(image_id) == pool_replayers.end()) {
 	unique_ptr<ImageReplayer> image_replayer(new ImageReplayer(m_local,
@@ -154,6 +162,14 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
       }
     }
   }
+  m_lock.Lock();
+  for( const auto &iter : images_copy){
+      for(const auto &entry : ((iter).second)){
+          m_images[iter.first].insert(make_pair((entry).first,
+                    unique_ptr<ImageReplayer>(new ImageReplayer (*((entry).second)) )));
+      }
+  }
+  m_lock.Unlock();
 }
 
 } // namespace mirror
