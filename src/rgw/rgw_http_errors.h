@@ -12,4 +12,24 @@ extern rgw_http_errors rgw_http_s3_errors;
 
 extern rgw_http_errors rgw_http_swift_errors;
 
+static inline int rgw_http_error_to_errno(int http_err)
+{
+  if (http_err >= 200 && http_err <= 299)
+    return 0;
+  switch (http_err) {
+    case 400:
+      return -EINVAL;
+    case 401:
+      return -EPERM;
+    case 403:
+        return -EACCES;
+    case 404:
+        return -ENOENT;
+    default:
+        return -EIO;
+  }
+
+  return 0; /* unreachable */
+}
+
 #endif
