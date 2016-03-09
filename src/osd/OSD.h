@@ -1939,7 +1939,7 @@ protected:
 
   void handle_pg_peering_evt(
     spg_t pgid,
-    const pg_info_t& info,
+    const pg_history_t& orig_history,
     pg_interval_map_t& pi,
     epoch_t epoch,
     pg_shard_t from,

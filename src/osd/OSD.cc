@@ -3326,7 +3326,7 @@ void OSD::build_past_intervals_parallel()
  */
 void OSD::handle_pg_peering_evt(
   spg_t pgid,
-  const pg_info_t& info,
+  const pg_history_t& orig_history,
   pg_interval_map_t& pi,
   epoch_t epoch,
   pg_shard_t from,
@@ -3348,7 +3348,7 @@ void OSD::handle_pg_peering_evt(
       pgid.pgid, &up, &up_primary, &acting, &acting_primary);
     int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
-    pg_history_t history = info.history;
+    pg_history_t history = orig_history;
     bool valid_history = project_pg_history(
       pgid, history, epoch, up, up_primary, acting, acting_primary);
 
@@ -7593,7 +7593,7 @@ void OSD::handle_pg_notify(OpRequestRef op)
 
     handle_pg_peering_evt(
       spg_t(it->first.info.pgid.pgid, it->first.to),
-      it->first.info, it->second,
+      it->first.info.history, it->second,
       it->first.query_epoch, pg_shard_t(from, it->first.from), true,
       PG::CephPeeringEvtRef(
 	new PG::CephPeeringEvt(
@@ -7625,7 +7625,7 @@ void OSD::handle_pg_log(OpRequestRef op)
   op->mark_started();
   handle_pg_peering_evt(
     spg_t(m->info.pgid.pgid, m->to),
-    m->info, m->past_intervals, m->get_epoch(),
+    m->info.history, m->past_intervals, m->get_epoch(),
     pg_shard_t(from, m->from), false,
     PG::CephPeeringEvtRef(
       new PG::CephPeeringEvt(
@@ -7659,7 +7659,7 @@ void OSD::handle_pg_info(OpRequestRef op)
 
     handle_pg_peering_evt(
       spg_t(p->first.info.pgid.pgid, p->first.to),
-      p->first.info, p->second, p->first.epoch_sent,
+      p->first.info.history, p->second, p->first.epoch_sent,
       pg_shard_t(from, p->first.from), false,
       PG::CephPeeringEvtRef(
 	new PG::CephPeeringEvt(
