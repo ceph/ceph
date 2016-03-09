@@ -1337,6 +1337,14 @@ AC_ARG_WITH([thread-safe-res-query],
 AS_IF([test "x$with_thread_safe_res_query" != xno],
   [AC_DEFINE(HAVE_THREAD_SAFE_RES_QUERY, 1, [Define if res_query(3) is thread safe])])
 
+EXECINFO_LIBS=""
+saved_LIBS="${LIBS}"
+LIBS=""
+AC_CHECK_LIB(execinfo, backtrace)
+EXECINFO_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(EXECINFO_LIBS)
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
