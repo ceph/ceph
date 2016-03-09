@@ -858,7 +858,7 @@ int ReplicatedPG::do_command(
     f->close_section();
     f->flush(odata);
     return 0;
-  };
+  }
 
   ss << "unknown pg command " << prefix;
   return -EINVAL;
@@ -1307,6 +1307,9 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
       result = -EINVAL;
       break;
     }
+
+    if (result < 0)
+      break;
   }
 
   // reply
