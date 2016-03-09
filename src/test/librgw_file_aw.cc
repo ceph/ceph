@@ -230,7 +230,7 @@ TEST(LibRGW, OPEN2) {
 }
 
 TEST(LibRGW, GET_OBJECT) {
-  uint64_t nread;
+  size_t nread;
   off_t offset = 0;
   struct iovec *iovs = zp_set1.get_iovs();
   for (int ix : {2 , 3}) {
