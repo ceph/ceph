@@ -73,7 +73,6 @@ static void signal_shutdown();
 
 struct STSStore {
   int next_id;
-  list<string>hostnames;	// XXX "region"...
   STSStore() : next_id(0) { };
   int get_new_req_id() {
     return ++next_id;
@@ -172,6 +171,7 @@ struct STSProcessEnv {
 class STSProcess {
   deque<STSRequest *> m_req_queue;
 protected:
+  CephContext *cct;
   STSStore *store;
   ThreadPool m_tp;
   Throttle req_throttle;
@@ -208,7 +208,7 @@ protected:
       return req;
     }
     using ThreadPool::WorkQueue<STSRequest>::_process;
-    void _process(STSRequest *req) {
+    void _process(STSRequest *req, ThreadPool::TPHandle &) override {
 //      perfcounter->inc(l_sts_qactive);
       process->handle_request(req);
       process->req_throttle.put(1);
@@ -235,7 +235,8 @@ protected:
 
 public:
   STSProcess(CephContext *cct, STSProcessEnv *pe, int num_threads, STSFrontendConfig *_conf)
-    : store(pe->store), m_tp(cct, "STSProcess::m_tp", num_threads),
+    : cct(cct), store(pe->store),
+      m_tp(cct, "STSProcess::m_tp", "tp_sts_process", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
       rest(pe->rest),
       conf(_conf),
@@ -412,7 +413,7 @@ static void godown_alarm(int signum)
   _exit(0);
 }
 
-static int process_request(STSStore *store, RGWREST *rest, STSRequest *req, RGWClientIO *client_io)
+static int process_request(STSStore *store, RGWREST *rest, STSRequest *req, RGWStreamIO *client_io)
 {
   int ret = 0;
 
@@ -424,9 +425,9 @@ static int process_request(STSStore *store, RGWREST *rest, STSRequest *req, RGWC
 //  perfcounter->inc(l_sts_req);
 
   RGWEnv& rgw_env = client_io->get_env();
+  RGWUserInfo userinfo;
 
-  struct req_state rstate(g_ceph_context, &rgw_env);
-
+  struct req_state rstate(g_ceph_context, &rgw_env, &userinfo);
   struct req_state *s = &rstate;
 
   s->err = new sts_err();
@@ -440,16 +441,16 @@ static int process_request(STSStore *store, RGWREST *rest, STSRequest *req, RGWC
   int init_error = 0;
   RGWRESTMgr *mgr;
 		// XXX fixme: do something better than (RGWRados*)
-  RGWHandler *handler = rest->get_handler((RGWRados*)store, s, client_io, &mgr, &init_error);
+  RGWHandler_REST *handler = rest->get_handler((RGWRados*)store, s, client_io, &mgr, &init_error);
   if (init_error != 0) {
-    abort_early(s, NULL, init_error);
+    abort_early(s, NULL, init_error, handler);
     goto done;
   }
 
   req->log(s, "getting op");
   op = handler->get_op((RGWRados *)store);	// XXX this cast is like really wrong...
   if (!op) {
-    abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED);
+    abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler);
     goto done;
   }
   req->op = op;
@@ -458,33 +459,33 @@ static int process_request(STSStore *store, RGWREST *rest, STSRequest *req, RGWC
   ret = handler->authorize();
   if (ret < 0) {
     dout(10) << "failed to authorize request" << dendl;
-    abort_early(s, op->dump_access_control_f(), ret);
+    abort_early(s, op, ret, handler);
     goto done;
   }
 
-  if (s->user.suspended) {
-    dout(10) << "user is suspended, uid=" << s->user.user_id << dendl;
-    abort_early(s, op->dump_access_control_f(), -ERR_USER_SUSPENDED);
+  if (s->user->suspended) {
+    dout(10) << "user is suspended, uid=" << s->user->user_id << dendl;
+    abort_early(s, op, -ERR_USER_SUSPENDED, handler);
     goto done;
   }
   req->log(s, "reading permissions");
   ret = handler->read_permissions(op);
   if (ret < 0) {
-    abort_early(s, op->dump_access_control_f(), ret);
+    abort_early(s, op, ret, handler);
     goto done;
   }
 
   req->log(s, "init op");
   ret = op->init_processing();
   if (ret < 0) {
-    abort_early(s, op->dump_access_control_f(), ret);
+    abort_early(s, op, ret, handler);
     goto done;
   }
 
   req->log(s, "verifying op mask");
   ret = op->verify_op_mask();
   if (ret < 0) {
-    abort_early(s, op->dump_access_control_f(), ret);
+    abort_early(s, op, ret, handler);
     goto done;
   }
 
@@ -494,7 +495,7 @@ static int process_request(STSStore *store, RGWREST *rest, STSRequest *req, RGWC
     if (s->system_request) {
       dout(2) << "overriding permissions due to system operation" << dendl;
     } else {
-      abort_early(s, op->dump_access_control_f(), ret);
+      abort_early(s, op, ret, handler);
       goto done;
     }
   }
@@ -502,7 +503,7 @@ static int process_request(STSStore *store, RGWREST *rest, STSRequest *req, RGWC
   req->log(s, "verifying op params");
   ret = op->verify_params();
   if (ret < 0) {
-    abort_early(s, op->dump_access_control_f(), ret);
+    abort_early(s, op, ret, handler);
     goto done;
   }
 
@@ -548,7 +549,7 @@ void STSFCGXProcess::handle_request(STSRequest *r)
 }
 
 static int civetweb_callback(struct mg_connection *conn) {
-  struct mg_request_info *req_info = mg_get_request_info(conn);
+  const struct mg_request_info *req_info = mg_get_request_info(conn);
   STSProcessEnv *pe = static_cast<STSProcessEnv *>(req_info->user_data);
   RGWREST *rest = pe->rest;
 
@@ -717,7 +718,7 @@ public:
   int run() {
     assert(pprocess); /* should have initialized by init() */
     thread = new STSProcessControlThread(pprocess);
-    thread->create();
+    thread->create("sts_frontend");
     return 0;
   }
 
@@ -843,7 +844,7 @@ int main(int argc, const char **argv)
   check_curl();
 
   if (g_conf->daemonize) {
-    global_init_daemonize(g_ceph_context, 0);
+    global_init_daemonize(g_ceph_context);
   }
   Mutex mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);
@@ -863,7 +864,7 @@ int main(int argc, const char **argv)
   int r = 0;
 
   STSStore *store = new STSStore();
-  rgw_rest_init(g_ceph_context, store->hostnames);
+  rgw_rest_init(g_ceph_context);
   r = rgw_perf_start(g_ceph_context);
 
   mutex.Lock();
