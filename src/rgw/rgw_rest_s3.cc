@@ -3889,11 +3889,11 @@ done:
   
 int RGWHandler_REST_S3Website::error_handler(int err_no,
 					    string* error_content) {
-  const struct rgw_http_errors* r;
+  rgw_http_errors::const_iterator r = rgw_http_s3_errors.find(err_no);
   int http_error_code = -1;
-  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
-  if (r) {
-    http_error_code = r->http_ret;
+
+  if (r != rgw_http_s3_errors.end()) {
+    http_error_code = r->second.first;
   }
 
   RGWBWRoutingRule rrule;
