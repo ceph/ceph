@@ -730,8 +730,18 @@ void AsyncConnection::process()
 
             ldout(async_msgr->cct, 20) << __func__ << " got front " << front.length() << dendl;
           }
-          state = STATE_OPEN_MESSAGE_READ_MIDDLE;
-          break;
+          if (current_header.middle_len) {
+            state = STATE_OPEN_MESSAGE_READ_MIDDLE;
+            // and go to STATE_OPEN_MESSAGE_READ_MIDDLE;
+          } else {
+            if (current_header.data_len) { // we don't care about endianness
+              state = STATE_OPEN_MESSAGE_READ_DATA_PREPARE;
+            } else {
+              msg_left = le32_to_cpu(current_header.data_len);
+              state = STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH;
+            }
+            break;
+          }
         }
 
       case STATE_OPEN_MESSAGE_READ_MIDDLE:
@@ -752,8 +762,15 @@ void AsyncConnection::process()
             ldout(async_msgr->cct, 20) << __func__ << " got middle " << middle.length() << dendl;
           }
 
-          state = STATE_OPEN_MESSAGE_READ_DATA_PREPARE;
-          break;
+          if (!current_header.data_len) { // we don't care about endianness
+            msg_left = le32_to_cpu(current_header.data_len);
+            state = STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH;
+            break;
+          } else {
+            // go straight to STATE_OPEN_MESSAGE_READ_DATA_PREPARE below 
+            state = STATE_OPEN_MESSAGE_READ_DATA_PREPARE;
+          }
+          
         }
 
       case STATE_OPEN_MESSAGE_READ_DATA_PREPARE:
@@ -781,8 +798,14 @@ void AsyncConnection::process()
           }
 
           msg_left = data_len;
-          state = STATE_OPEN_MESSAGE_READ_DATA;
-          break;
+          
+          if (!msg_left) {
+            state = STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH;
+            break;
+          } else {
+            // else go straight to STATE_OPEN_MESSAGE_READ_DATA below 
+            state = STATE_OPEN_MESSAGE_READ_DATA;
+          }
         }
 
       case STATE_OPEN_MESSAGE_READ_DATA:
@@ -803,10 +826,12 @@ void AsyncConnection::process()
             msg_left -= read;
           }
 
-          if (msg_left == 0)
+          if (!msg_left) {
             state = STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH;
-
-          break;
+            // go straight to STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH below 
+          } else {
+            break;  
+          }
         }
 
       case STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH:
