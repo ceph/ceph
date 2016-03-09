@@ -1398,7 +1398,7 @@ function test_mon_osd_misc()
   ceph pg set_full_ratio 95 2>$TMPFILE; check_response 'not in range' $? 22
 
   # expect "not in range" for invalid overload percentage
-  ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response 'not in range' $? 22
+  ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response 'higher than 100' $? 22
 
   set -e
 
