@@ -1323,7 +1323,10 @@ if(${WITH_RGW_STS})
   add_executable(rgw-sts ${rgw_sts_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
   set_property(TARGET rgw-sts
 	       APPEND PROPERTY INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/src/rgw)
+  set_property(TARGET rgw-sts
+		APPEND PROPERTY LINK_FLAGS "-Wl,-z,muldefs")
   target_link_libraries(rgw-sts rgw_a
-    curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES} ${TCMALLOC_LIBS})
+    curl expat global fcgi resolv ssl crypto
+    ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   install(TARGETS rgw-sts DESTINATION bin)
 endif(${WITH_RGW_STS})
