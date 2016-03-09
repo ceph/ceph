@@ -1464,8 +1464,9 @@ int RGWPostObj_ObjStore_S3::get_policy()
 	if (rgw_get_user_info_by_uid(store, uid, user_info) < 0) {
 	  int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
 	  if (ret < 0) {
-	    dout(10) << "NOTICE: failed to store new user's info: ret="
-		     << ret << dendl;
+	    ldout(store->ctx(), 10)
+	      << "NOTICE: failed to store new user's info: ret="
+	      << ret << dendl;
 	  }
 	  s->perm_mask = RGW_PERM_FULL_CONTROL;
 	}
@@ -1485,8 +1486,9 @@ int RGWPostObj_ObjStore_S3::get_policy()
 					user_info) < 0) {
 	  int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
 	  if (ret < 0) {
-	    dout(10) << "NOTICE: failed to store new user's info: ret=" << ret
-		     << dendl;
+	    ldout(store->ctx(), 10)
+	      << "NOTICE: failed to store new user's info: ret=" << ret
+	      << dendl;
 	  }
 	  s->perm_mask = RGW_PERM_FULL_CONTROL;
 	}

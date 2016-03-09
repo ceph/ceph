@@ -751,7 +751,7 @@ test_rgw_ldap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 test_rgw_ldap_LDADD = $(UNITTEST_LDADD) \
 	librados.la $(PTHREAD_LIBS) $(LIBOS) $(CEPH_GLOBAL) ${OPENLDAP_LIBS}
 	$(EXTRALIBS)
-bin_DEBUGPROGRAMS += test_rgw_token
+bin_DEBUGPROGRAMS += test_rgw_ldap
 
 endif # WITH_RADOSGW
 

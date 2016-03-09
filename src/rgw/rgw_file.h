@@ -674,7 +674,7 @@ namespace rgw {
 	  return -ERR_USER_SUSPENDED;
       } else {
 	/* try external authenticators (ldap for now) */
-	rgw::LDAPHelper* ldh = rgwlib.get_ldh();
+	rgw::LDAPHelper* ldh = rgwlib.get_ldh(); /* !nullptr */
 	RGWToken token{from_base64(key.id)};
 	if (ldh->auth(token.id, token.key) == 0) {
 	  /* try to store user if it doesn't already exist */
@@ -682,8 +682,9 @@ namespace rgw {
 	    int ret = rgw_store_user_info(store, user, NULL, NULL, 0,
 					  true);
 	    if (ret < 0) {
-	      dout(10) << "NOTICE: failed to store new user's info: ret=" << ret
-		       << dendl;
+	      lsubdout(get_context(), rgw, 10)
+		<< "NOTICE: failed to store new user's info: ret=" << ret
+		<< dendl;
 	    }
 	  }
 	} /* auth success */
