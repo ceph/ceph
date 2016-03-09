@@ -10,7 +10,7 @@
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd-mirror: "
+#define dout_prefix *_dout << "rbd-mirror: Replayer::" << __func__ << ": "
 
 using std::chrono::seconds;
 using std::map;
@@ -37,12 +37,14 @@ Replayer::~Replayer()
     Mutex::Locker l(m_lock);
     m_cond.Signal();
   }
-  m_replayer_thread.join();
+  if (m_replayer_thread.is_started()) {
+    m_replayer_thread.join();
+  }
 }
 
 int Replayer::init()
 {
-  dout(20) << __func__ << "Replaying for " << m_peer << dendl;
+  dout(20) << "replaying for " << m_peer << dendl;
 
   int r = m_remote->init2(m_peer.client_name.c_str(),
 			  m_peer.cluster_name.c_str(), 0);
@@ -66,7 +68,7 @@ int Replayer::init()
     return r;
   }
 
-  dout(20) << __func__ << "connected to " << m_peer << dendl;
+  dout(20) << "connected to " << m_peer << dendl;
 
   std::string uuid;
   r = m_local->cluster_fsid(&uuid);
@@ -81,11 +83,15 @@ int Replayer::init()
   m_pool_watcher.reset(new PoolWatcher(m_remote, 30, m_lock, m_cond));
   m_pool_watcher->refresh_images();
 
+  m_replayer_thread.create("replayer");
+
   return 0;
 }
 
 void Replayer::run()
 {
+  dout(20) << "enter" << dendl;
+
   while (!m_stopping.read()) {
     Mutex::Locker l(m_lock);
     set_sources(m_pool_watcher->get_images());
@@ -95,6 +101,8 @@ void Replayer::run()
 
 void Replayer::set_sources(const map<int64_t, set<string> > &images)
 {
+  dout(20) << "enter" << dendl;
+
   assert(m_lock.is_locked());
   // TODO: make stopping and starting ImageReplayers async
   for (auto it = m_images.begin(); it != m_images.end();) {
