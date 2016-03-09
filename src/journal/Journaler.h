@@ -15,7 +15,9 @@
 #include <string>
 #include "include/assert.h"
 
+class ContextWQ;
 class SafeTimer;
+class ThreadPool;
 
 namespace journal {
 
@@ -28,6 +30,17 @@ class ReplayHandler;
 
 class Journaler {
 public:
+  struct Threads {
+    Threads(CephContext *cct);
+    ~Threads();
+
+    ThreadPool *thread_pool = nullptr;
+    ContextWQ *work_queue = nullptr;
+
+    SafeTimer *timer = nullptr;
+    Mutex timer_lock;
+  };
+
   typedef std::list<cls::journal::Tag> Tags;
   typedef std::set<cls::journal::Client> RegisteredClients;
 
@@ -37,6 +50,9 @@ public:
 
   Journaler(librados::IoCtx &header_ioctx, const std::string &journal_id,
 	    const std::string &client_id, double commit_interval);
+  Journaler(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
+            librados::IoCtx &header_ioctx, const std::string &journal_id,
+	    const std::string &client_id, double commit_interval);
   ~Journaler();
 
   int exists(bool *header_exists) const;
@@ -44,7 +60,7 @@ public:
   int remove(bool force);
 
   void init(Context *on_init);
-  void shutdown();
+  void shut_down();
 
   void get_immutable_metadata(uint8_t *order, uint8_t *splay_width,
 			      int64_t *pool_id, Context *on_finish);
@@ -100,6 +116,8 @@ private:
     }
   };
 
+  Threads *m_threads = nullptr;
+
   mutable librados::IoCtx m_header_ioctx;
   librados::IoCtx m_data_ioctx;
   CephContext *m_cct;
@@ -108,10 +126,14 @@ private:
   std::string m_header_oid;
   std::string m_object_oid_prefix;
 
-  JournalMetadata *m_metadata;
-  JournalPlayer *m_player;
-  JournalRecorder *m_recorder;
-  JournalTrimmer *m_trimmer;
+  JournalMetadata *m_metadata = nullptr;
+  JournalPlayer *m_player = nullptr;
+  JournalRecorder *m_recorder = nullptr;
+  JournalTrimmer *m_trimmer = nullptr;
+
+  void set_up(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
+              librados::IoCtx &header_ioctx, const std::string &journal_id,
+              double commit_interval);
 
   int init_complete();
   void create_player(ReplayHandler *replay_handler);

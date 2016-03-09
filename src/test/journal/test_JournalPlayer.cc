@@ -53,14 +53,6 @@ public:
     RadosTestFixture::TearDown();
   }
 
-  int create(const std::string &oid, uint8_t splay_width = 2) {
-    return RadosTestFixture::create(oid, 14, splay_width);
-  }
-
-  int client_register(const std::string &oid) {
-    return RadosTestFixture::client_register(oid, "client", "");
-  }
-
   int client_commit(const std::string &oid,
                     journal::JournalPlayer::ObjectSetPosition position) {
     return RadosTestFixture::client_commit(oid, "client", position);
@@ -70,12 +62,6 @@ public:
     bufferlist payload_bl;
     payload_bl.append("playload");
     return journal::Entry(tag_tid, entry_tid, payload_bl);
-  }
-
-  journal::JournalMetadataPtr create_metadata(const std::string &oid) {
-    journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
-      m_ioctx, oid, "client", 0.1));
-    return metadata;
   }
 
   journal::JournalPlayer *create_player(const std::string &oid,
@@ -382,7 +368,7 @@ TEST_F(TestJournalPlayer, PrefetchSkippedObject) {
 
   cls::journal::ObjectSetPosition commit_position;
 
-  ASSERT_EQ(0, create(oid, 3));
+  ASSERT_EQ(0, create(oid, 14, 3));
   ASSERT_EQ(0, client_register(oid));
   ASSERT_EQ(0, client_commit(oid, commit_position));
 

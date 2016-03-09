@@ -21,7 +21,9 @@ using std::vector;
 namespace rbd {
 namespace mirror {
 
-Replayer::Replayer(RadosRef local_cluster, const peer_t &peer) :
+Replayer::Replayer(Threads *threads, RadosRef local_cluster,
+                   const peer_t &peer) :
+  m_threads(threads),
   m_lock(stringify("rbd::mirror::Replayer ") + stringify(peer)),
   m_peer(peer),
   m_local(local_cluster),
@@ -148,7 +150,8 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
     auto &pool_replayers = m_images[pool_id];
     for (const auto &image_id : kv.second) {
       if (pool_replayers.find(image_id) == pool_replayers.end()) {
-	unique_ptr<ImageReplayer> image_replayer(new ImageReplayer(m_local,
+	unique_ptr<ImageReplayer> image_replayer(new ImageReplayer(m_threads,
+                                                                   m_local,
 								   m_remote,
 								   m_client_id,
                                                                    local_ioctx.get_id(),

@@ -4,7 +4,6 @@
 #include "journal/JournalMetadata.h"
 #include "journal/Utils.h"
 #include "common/errno.h"
-#include "common/Finisher.h"
 #include "common/Timer.h"
 #include "cls/journal/cls_journal_client.h"
 #include <functional>
@@ -231,14 +230,15 @@ struct C_FlushCommitPosition : public Context {
 
 } // anonymous namespace
 
-JournalMetadata::JournalMetadata(librados::IoCtx &ioctx,
+JournalMetadata::JournalMetadata(ContextWQ *work_queue, SafeTimer *timer,
+                                 Mutex *timer_lock, librados::IoCtx &ioctx,
                                  const std::string &oid,
                                  const std::string &client_id,
                                  double commit_interval)
     : RefCountedObject(NULL, 0), m_cct(NULL), m_oid(oid),
       m_client_id(client_id), m_commit_interval(commit_interval), m_order(0),
-      m_splay_width(0), m_pool_id(-1), m_initialized(false), m_finisher(NULL),
-      m_timer(NULL), m_timer_lock("JournalMetadata::m_timer_lock"),
+      m_splay_width(0), m_pool_id(-1), m_initialized(false),
+      m_work_queue(work_queue), m_timer(timer), m_timer_lock(timer_lock),
       m_lock("JournalMetadata::m_lock"), m_commit_tid(0), m_watch_ctx(this),
       m_watch_handle(0), m_minimum_set(0), m_active_set(0),
       m_update_notifications(0), m_commit_position_ctx(NULL),
@@ -249,19 +249,13 @@ JournalMetadata::JournalMetadata(librados::IoCtx &ioctx,
 
 JournalMetadata::~JournalMetadata() {
   if (m_initialized) {
-    shutdown();
+    shut_down();
   }
 }
 
 void JournalMetadata::init(Context *on_init) {
   assert(!m_initialized);
   m_initialized = true;
-
-  m_finisher = new Finisher(m_cct);
-  m_finisher->start();
-
-  m_timer = new SafeTimer(m_cct, m_timer_lock, true);
-  m_timer->init();
 
   int r = m_ioctx.watch2(m_oid, &m_watch_handle, &m_watch_ctx);
   if (r < 0) {
@@ -275,7 +269,7 @@ void JournalMetadata::init(Context *on_init) {
   get_immutable_metadata(&m_order, &m_splay_width, &m_pool_id, ctx);
 }
 
-void JournalMetadata::shutdown() {
+void JournalMetadata::shut_down() {
 
   ldout(m_cct, 20) << __func__ << dendl;
 
@@ -292,24 +286,10 @@ void JournalMetadata::shutdown() {
 
   flush_commit_position();
 
-  if (m_timer != NULL) {
-    Mutex::Locker locker(m_timer_lock);
-    m_timer->shutdown();
-    delete m_timer;
-    m_timer = NULL;
-  }
-
-  if (m_finisher != NULL) {
-    m_finisher->stop();
-    delete m_finisher;
-    m_finisher = NULL;
-  }
-
   librados::Rados rados(m_ioctx);
   rados.watch_flush();
 
   m_async_op_tracker.wait_for_ops();
-  m_ioctx.aio_flush();
 }
 
 void JournalMetadata::get_immutable_metadata(uint8_t *order,
@@ -458,7 +438,7 @@ void JournalMetadata::set_active_set(uint64_t object_set) {
 void JournalMetadata::flush_commit_position() {
   ldout(m_cct, 20) << __func__ << dendl;
 
-  Mutex::Locker timer_locker(m_timer_lock);
+  Mutex::Locker timer_locker(*m_timer_lock);
   Mutex::Locker locker(m_lock);
   if (m_commit_position_ctx == nullptr) {
     return;
@@ -471,12 +451,12 @@ void JournalMetadata::flush_commit_position() {
 void JournalMetadata::flush_commit_position(Context *on_safe) {
   ldout(m_cct, 20) << __func__ << dendl;
 
-  Mutex::Locker timer_locker(m_timer_lock);
+  Mutex::Locker timer_locker(*m_timer_lock);
   Mutex::Locker locker(m_lock);
   if (m_commit_position_ctx == nullptr) {
     // nothing to flush
     if (on_safe != nullptr) {
-      m_finisher->queue(on_safe, 0);
+      m_work_queue->queue(on_safe, 0);
     }
     return;
   }
@@ -567,7 +547,7 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
 void JournalMetadata::cancel_commit_task() {
   ldout(m_cct, 20) << __func__ << dendl;
 
-  assert(m_timer_lock.is_locked());
+  assert(m_timer_lock->is_locked());
   assert(m_lock.is_locked());
   assert(m_commit_position_ctx != nullptr);
   assert(m_commit_position_task_ctx != nullptr);
@@ -579,7 +559,7 @@ void JournalMetadata::cancel_commit_task() {
 void JournalMetadata::schedule_commit_task() {
   ldout(m_cct, 20) << __func__ << dendl;
 
-  assert(m_timer_lock.is_locked());
+  assert(m_timer_lock->is_locked());
   assert(m_lock.is_locked());
   assert(m_commit_position_ctx != nullptr);
   if (m_commit_position_task_ctx == NULL) {
@@ -589,7 +569,7 @@ void JournalMetadata::schedule_commit_task() {
 }
 
 void JournalMetadata::handle_commit_position_task() {
-  assert(m_timer_lock.is_locked());
+  assert(m_timer_lock->is_locked());
   assert(m_lock.is_locked());
   ldout(m_cct, 20) << __func__ << ": "
                    << "client_id=" << m_client_id << ", "
@@ -612,12 +592,12 @@ void JournalMetadata::handle_commit_position_task() {
 }
 
 void JournalMetadata::schedule_watch_reset() {
-  assert(m_timer_lock.is_locked());
+  assert(m_timer_lock->is_locked());
   m_timer->add_event_after(0.1, new C_WatchReset(this));
 }
 
 void JournalMetadata::handle_watch_reset() {
-  assert(m_timer_lock.is_locked());
+  assert(m_timer_lock->is_locked());
   if (!m_initialized) {
     return;
   }
@@ -644,7 +624,7 @@ void JournalMetadata::handle_watch_notify(uint64_t notify_id, uint64_t cookie) {
 
 void JournalMetadata::handle_watch_error(int err) {
   lderr(m_cct) << "journal watch error: " << cpp_strerror(err) << dendl;
-  Mutex::Locker timer_locker(m_timer_lock);
+  Mutex::Locker timer_locker(*m_timer_lock);
   Mutex::Locker locker(m_lock);
 
   // release old watch on error
@@ -681,7 +661,7 @@ void JournalMetadata::committed(uint64_t commit_tid,
   ObjectSetPosition commit_position;
   Context *stale_ctx = nullptr;
   {
-    Mutex::Locker timer_locker(m_timer_lock);
+    Mutex::Locker timer_locker(*m_timer_lock);
     Mutex::Locker locker(m_lock);
     assert(commit_tid > m_commit_position_tid);
 

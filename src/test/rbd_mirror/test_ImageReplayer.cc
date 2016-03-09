@@ -30,6 +30,7 @@
 #include "librbd/internal.h"
 #include "tools/rbd_mirror/types.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
+#include "tools/rbd_mirror/Threads.h"
 
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
@@ -98,7 +99,11 @@ public:
 				false, features, &order, 0, 0));
     m_remote_image_id = get_image_id(m_remote_ioctx, m_image_name);
 
+    m_threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
+      m_local_ioctx.cct()));
+
     m_replayer = new rbd::mirror::ImageReplayer(
+      m_threads,
       rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
       rbd::mirror::RadosRef(new librados::Rados(m_remote_ioctx)),
       m_client_id, m_local_ioctx.get_id(), remote_pool_id, m_remote_image_id);
@@ -109,6 +114,7 @@ public:
   ~TestImageReplayer()
   {
     delete m_replayer;
+    delete m_threads;
 
     EXPECT_EQ(0, m_remote_cluster.pool_delete(m_remote_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster.pool_delete(m_local_pool_name.c_str()));
@@ -311,6 +317,7 @@ public:
 
   static int _image_number;
 
+  rbd::mirror::Threads *m_threads = nullptr;
   librados::Rados m_local_cluster, m_remote_cluster;
   std::string m_client_id;
   std::string m_local_pool_name, m_remote_pool_name;

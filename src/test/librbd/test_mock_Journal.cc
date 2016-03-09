@@ -113,6 +113,13 @@ struct MockJournalerProxy {
     MockJournaler::get_instance().construct();
   }
 
+  template <typename IoCtxT>
+  MockJournalerProxy(ContextWQ *work_queue, SafeTimer *safe_timer,
+                     Mutex *timer_lock, IoCtxT &header_ioctx,
+                     const std::string &, const std::string &, double) {
+    MockJournaler::get_instance().construct();
+  }
+
   int exists(bool *header_exists) const {
     return -EINVAL;
   }
