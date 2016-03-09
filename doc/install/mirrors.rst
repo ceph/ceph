@@ -20,6 +20,7 @@ These mirrors are available on the following locations:
 - **SE: Sweden**: http://se.ceph.com/
 - **DE: Germany**: http://de.ceph.com/
 - **HK: Hong Kong**: http://hk.ceph.com/
+- **FR: France**: http://fr.ceph.com/
 - **US-East: US East Coast**: http://us-east.ceph.com/
 - **US-West: US West Coast**: http://us-west.ceph.com/
 
