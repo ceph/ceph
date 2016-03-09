@@ -75,6 +75,7 @@ void Mirror::update_replayers(const map<peer_t, set<int64_t> > &peer_configs)
   set<peer_t> peers;
   for (auto &kv : peer_configs) {
     const peer_t &peer = kv.first;
+    peers.insert(peer);
     if (m_replayers.find(peer) == m_replayers.end()) {
       unique_ptr<Replayer> replayer(new Replayer(m_local, peer));
       // TODO: make async, and retry connecting within replayer
