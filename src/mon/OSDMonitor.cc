@@ -4519,7 +4519,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
       if (err == 0) {
 	*size = erasure_code->get_chunk_count();
-	*min_size = erasure_code->get_data_chunk_count();
+	*min_size = MIN(erasure_code->get_data_chunk_count() + 1, *size);
       }
     }
     break;
