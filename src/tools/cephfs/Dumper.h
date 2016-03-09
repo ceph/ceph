@@ -36,8 +36,6 @@ public:
   Dumper() : ino(-1)
   {}
 
-  void handle_mds_map(MFSMap* m);
-
   int init(mds_role_t role_);
   int recover_journal(Journaler *journaler);
   int dump(const char *dumpfile);

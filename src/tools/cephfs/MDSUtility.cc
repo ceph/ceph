@@ -144,7 +144,7 @@ bool MDSUtility::ms_dispatch(Message *m)
 
 void MDSUtility::handle_mds_map(MFSMap* m)
 {
-  fsmap->decode(m->get_encoded());
+  *fsmap = m->get_fsmap();
   if (waiting_for_mds_map) {
     waiting_for_mds_map->complete(0);
     waiting_for_mds_map = NULL;

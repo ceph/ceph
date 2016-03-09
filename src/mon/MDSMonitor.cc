@@ -2419,7 +2419,7 @@ void MDSMonitor::check_sub(Subscription *sub)
 
   if (sub->type == "fsmap") {
     if (sub->next <= fsmap.get_epoch()) {
-      sub->session->con->send_message(new MFSMap(mon->monmap->fsid, &fsmap));
+      sub->session->con->send_message(new MFSMap(mon->monmap->fsid, fsmap));
       if (sub->onetime) {
         mon->session_map.remove_sub(sub);
       } else {
