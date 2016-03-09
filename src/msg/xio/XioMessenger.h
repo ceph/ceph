@@ -28,7 +28,17 @@ extern "C" {
 #include "common/Mutex.h"
 #include "include/Spinlock.h"
 
-class XioMessenger : public SimplePolicyMessenger
+class XioInit {
+  /* safe to be called multiple times */
+  void package_init(CephContext *cct);
+
+protected:
+  XioInit(CephContext *cct) {
+    this->package_init(cct);
+  }
+};
+
+class XioMessenger : public SimplePolicyMessenger, XioInit
 {
 private:
   static atomic_t nInstances;
