@@ -1505,18 +1505,12 @@ int RGWZoneParams::create(bool exclusive)
   }
 
   r = RGWSystemMetaObj::create(exclusive);
-  if (r < 0 && r != -EEXIST) {
-    derr << "RGWZoneParams::creat(): error creating default zone params: " << cpp_strerror(-r) << dendl;
+  if (r < 0) {
+    ldout(cct, 0) << "RGWZoneParams::create(): error creating default zone params: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
-  if (r == -EEXIST) {
-    ldout(cct, 0) << "RGWZoneParams::create() returned -EEXIST, we raced with another zone params creation" << dendl;
-    r = read_info(id);
-    if (r < 0) {
-      return r;
-    }
-  } else if (zones.empty()) { /* first zone? maybe, it's a racy check */
+  if (zones.empty()) { /* first zone? maybe, it's a racy check */
     r = set_as_default();
     if (r < 0) {
       ldout(cct, 0) << "WARNING: failed to set zone as default, r=" << r << dendl;
@@ -3575,6 +3569,7 @@ int RGWRados::init_complete()
 
   ldout(cct, 10) << "Cannot find current period zone using local zone" << dendl;
   if (creating_defaults && cct->_conf->rgw_zone.empty()) {
+    ldout(cct, 10) << " Using default name "<< default_zone_name << dendl;
     zone_params.set_name(default_zone_name);
   }
 
