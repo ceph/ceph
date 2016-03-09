@@ -1602,7 +1602,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   last_pg_create_epoch(0),
   mon_report_lock("OSD::mon_report_lock"),
   stats_ack_timeout(cct->_conf->osd_mon_ack_timeout),
-  up_thru_wanted(0), up_thru_pending(0),
+  up_thru_wanted(0),
   requested_full_first(0),
   requested_full_last(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
@@ -4801,7 +4801,6 @@ void OSD::send_alive()
   epoch_t up_thru = osdmap->get_up_thru(whoami);
   dout(10) << "send_alive up_thru currently " << up_thru << " want " << up_thru_wanted << dendl;
   if (up_thru_wanted > up_thru) {
-    up_thru_pending = up_thru_wanted;
     dout(10) << "send_alive want " << up_thru_wanted << dendl;
     monc->send_mon_message(new MOSDAlive(osdmap->get_epoch(), up_thru_wanted));
   }

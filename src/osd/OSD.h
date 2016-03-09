@@ -2019,7 +2019,6 @@ protected:
 
   // -- alive --
   epoch_t up_thru_wanted;
-  epoch_t up_thru_pending;
 
   void queue_want_up_thru(epoch_t want);
   void send_alive();
