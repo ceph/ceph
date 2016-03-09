@@ -512,6 +512,8 @@ namespace rgw {
     fe->join();
 
     delete fe;
+    delete fec;
+    delete ldh;
 
     rgw_log_usage_finalize();
 
