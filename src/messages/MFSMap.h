@@ -26,16 +26,18 @@ class MFSMap : public Message {
   bufferlist encoded;
 
   version_t get_epoch() const { return epoch; }
-  bufferlist& get_encoded() { return encoded; }
+  const FSMap & get_fsmap() {return fsmap;}
 
   MFSMap() : 
     Message(CEPH_MSG_FS_MAP), epoch(0) {}
-  MFSMap(const uuid_d &f, FSMap *fsmap) :
-    Message(CEPH_MSG_FS_MAP), epoch(fsmap->get_epoch())
+  MFSMap(const uuid_d &f, const FSMap &fsmap_) :
+    Message(CEPH_MSG_FS_MAP), epoch(fsmap_.get_epoch())
   {
-    fsmap->encode(encoded, -1);
+    fsmap = fsmap_;
   }
 private:
+  FSMap fsmap;
+
   ~MFSMap() {}
 
 public:
@@ -48,11 +50,11 @@ public:
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
-    ::decode(encoded, p);
+    ::decode(fsmap, p);
   }
   void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
-    ::encode(encoded, payload);
+    ::encode(fsmap, payload, features);
   }
 };
 
