@@ -226,10 +226,18 @@ public:
   //            @c Monitor::send_reply() can mark_event with it.
   void send_incremental(epoch_t first, MonSession *session, bool onetime,
 			MonOpRequestRef req = MonOpRequestRef());
-private:
-  int reweight_by_utilization(int oload, std::string& out_str, bool by_pg,
-			      const set<int64_t> *pools);
 
+private:
+  int reweight_by_utilization(int oload,
+			      double max_change,
+			      int max_osds,
+			      bool by_pg,
+			      const set<int64_t> *pools,
+			      bool no_increasing,
+			      bool dry_run,
+			      std::stringstream *ss,
+			      std::string *out_str,
+			      Formatter *f);
   void print_utilization(ostream &out, Formatter *f, bool tree) const;
 
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
