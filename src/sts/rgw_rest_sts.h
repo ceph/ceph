@@ -326,13 +326,14 @@ public:
 };
 #endif
 
-class RGWHandler_STS: public RGWHandler {
+class RGWHandler_REST_STS: public RGWHandler_REST {
   friend class RGWRESTMgr_STS;
 public:
   static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
   
   int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
   int authorize();
+  int postauth_init() { return 0; }
 
 protected:
   RGWOp *get_obj_op(bool get_data);
@@ -344,8 +345,8 @@ protected:
   RGWOp *op_post();
   RGWOp *op_options();
 public:
-  RGWHandler_STS() {}
-  ~RGWHandler_STS() {}
+  RGWHandler_REST_STS() {}
+  ~RGWHandler_REST_STS() {}
 
   int read_permissions(RGWOp *op) {
     return 0;
@@ -357,7 +358,7 @@ public:
   RGWRESTMgr_STS() {}
   virtual ~RGWRESTMgr_STS() {}
 
-  RGWHandler *get_handler(struct req_state *s);
+  RGWHandler_REST *get_handler(struct req_state *s);
 };
 
 

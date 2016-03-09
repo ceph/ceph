@@ -1230,43 +1230,43 @@ void RGWGetPost_STS::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-RGWOp *RGWHandler_STS::get_obj_op(bool get_data)
+RGWOp *RGWHandler_REST_STS::get_obj_op(bool get_data)
 {
   RGWGetPost_STS *get_obj_op = new RGWGetPost_STS(get_data);
   return get_obj_op;
 }
 
-RGWOp *RGWHandler_STS::op_get()
+RGWOp *RGWHandler_REST_STS::op_get()
 {
   return get_obj_op(true);
 }
 
-RGWOp *RGWHandler_STS::op_head()
+RGWOp *RGWHandler_REST_STS::op_head()
 {
   return NULL;
 }
 
-RGWOp *RGWHandler_STS::op_put()
+RGWOp *RGWHandler_REST_STS::op_put()
 {
   return NULL;
 }
 
-RGWOp *RGWHandler_STS::op_delete()
+RGWOp *RGWHandler_REST_STS::op_delete()
 {
   return NULL;
 }
 
-RGWOp *RGWHandler_STS::op_post()
+RGWOp *RGWHandler_REST_STS::op_post()
 {
   return get_obj_op(false);
 }
 
-RGWOp *RGWHandler_STS::op_options()
+RGWOp *RGWHandler_REST_STS::op_options()
 {
   return NULL;
 }
 
-int RGWHandler_STS::init_from_header(struct req_state *s, int default_formatter, bool configurable_format)
+int RGWHandler_REST_STS::init_from_header(struct req_state *s, int default_formatter, bool configurable_format)
 {
   string req;
   string first;
@@ -1303,7 +1303,7 @@ int RGWHandler_STS::init_from_header(struct req_state *s, int default_formatter,
   return 0;
 }
 
-int RGWHandler_STS::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
+int RGWHandler_REST_STS::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
 {
   const char *cacl = s->info.env->get("HTTP_X_AMZ_ACL");
   if (cacl)
@@ -1395,7 +1395,7 @@ static void init_anon_user(struct req_state *s)
  * verify that a signed request comes from the keyholder
  * by checking the signature against our locally-computed version
  */
-int RGWHandler_STS::authorize()
+int RGWHandler_REST_STS::authorize()
 {
 #if 0
   bool qsr = false;
@@ -1577,11 +1577,11 @@ int RGWHandler_STS::authorize()
 #endif
 }
 
-RGWHandler *RGWRESTMgr_STS::get_handler(struct req_state *s)
+RGWHandler_REST *RGWRESTMgr_STS::get_handler(struct req_state *s)
 {
-  int ret = RGWHandler_STS::init_from_header(s, RGW_FORMAT_XML, false);
+  int ret = RGWHandler_REST_STS::init_from_header(s, RGW_FORMAT_XML, false);
   if (ret < 0)
     return NULL;
 
-  return new RGWHandler_STS;
+  return new RGWHandler_REST_STS;
 }
