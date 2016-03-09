@@ -21,6 +21,38 @@ struct rgw_mdlog_info {
 };
 
 
+struct rgw_mdlog_entry {
+  string id;
+  string section;
+  string name;
+  utime_t timestamp;
+  RGWMetadataLogData log_data;
+
+  void decode_json(JSONObj *obj);
+
+  bool convert_from(cls_log_entry& le) {
+    id = le.id;
+    section = le.section;
+    name = le.name;
+    timestamp = le.timestamp;
+    try {
+      bufferlist::iterator iter = le.data.begin();
+      ::decode(log_data, iter);
+    } catch (buffer::error& err) {
+      return false;
+    }
+    return true;
+  }
+};
+
+struct rgw_mdlog_shard_data {
+  string marker;
+  bool truncated;
+  vector<rgw_mdlog_entry> entries;
+
+  void decode_json(JSONObj *obj);
+};
+
 class RGWAsyncRadosProcessor;
 class RGWMetaSyncStatusManager;
 class RGWMetaSyncCR;
@@ -177,6 +209,7 @@ public:
 
   int read_log_info(rgw_mdlog_info *log_info);
   int read_master_log_shards_info(string *master_period, map<int, RGWMetadataLogInfo> *shards_info);
+  int read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result);
   int read_sync_status();
   int init_sync_status();
   int run_sync();
@@ -233,6 +266,9 @@ public:
   }
   int read_master_log_shards_info(string *master_period, map<int, RGWMetadataLogInfo> *shards_info) {
     return master_log.read_master_log_shards_info(master_period, shards_info);
+  }
+  int read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result) {
+    return master_log.read_master_log_shards_next(period, shard_markers, result);
   }
 
   int run() { return master_log.run_sync(); }

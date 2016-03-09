@@ -122,38 +122,6 @@ void rgw_mdlog_info::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
 }
 
-struct rgw_mdlog_entry {
-  string id;
-  string section;
-  string name;
-  utime_t timestamp;
-  RGWMetadataLogData log_data;
-
-  void decode_json(JSONObj *obj);
-
-  bool convert_from(cls_log_entry& le) {
-    id = le.id;
-    section = le.section;
-    name = le.name;
-    timestamp = le.timestamp;
-    try {
-      bufferlist::iterator iter = le.data.begin();
-      ::decode(log_data, iter);
-    } catch (buffer::error& err) {
-      return false;
-    }
-    return true;
-  }
-};
-
-struct rgw_mdlog_shard_data {
-  string marker;
-  bool truncated;
-  vector<rgw_mdlog_entry> entries;
-
-  void decode_json(JSONObj *obj);
-};
-
 
 void rgw_mdlog_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("id", id, obj);
@@ -225,7 +193,6 @@ public:
 
 class RGWReadRemoteMDLogInfoCR : public RGWShardCollectCR {
   RGWMetaSyncEnv *sync_env;
-  RGWMetadataLog *mdlog;
 
   const std::string& period;
   int num_shards;
@@ -235,12 +202,37 @@ class RGWReadRemoteMDLogInfoCR : public RGWShardCollectCR {
 #define READ_MDLOG_MAX_CONCURRENT 10
 
 public:
-  RGWReadRemoteMDLogInfoCR(RGWMetaSyncEnv *_sync_env, RGWMetadataLog* mdlog,
+  RGWReadRemoteMDLogInfoCR(RGWMetaSyncEnv *_sync_env,
                      const std::string& period, int _num_shards,
                      map<int, RGWMetadataLogInfo> *_mdlog_info) : RGWShardCollectCR(_sync_env->cct, READ_MDLOG_MAX_CONCURRENT),
-                                                                 sync_env(_sync_env), mdlog(mdlog),
+                                                                 sync_env(_sync_env),
                                                                  period(period), num_shards(_num_shards),
                                                                  mdlog_info(_mdlog_info), shard_id(0) {}
+  bool spawn_next();
+};
+
+class RGWListRemoteMDLogCR : public RGWShardCollectCR {
+  RGWMetaSyncEnv *sync_env;
+
+  const std::string& period;
+  map<int, string> shards;
+  int max_entries_per_shard;
+  map<int, rgw_mdlog_shard_data> *result;
+
+  map<int, string>::iterator iter;
+#define READ_MDLOG_MAX_CONCURRENT 10
+
+public:
+  RGWListRemoteMDLogCR(RGWMetaSyncEnv *_sync_env,
+                     const std::string& period, map<int, string>& _shards,
+                     int _max_entries_per_shard,
+                     map<int, rgw_mdlog_shard_data> *_result) : RGWShardCollectCR(_sync_env->cct, READ_MDLOG_MAX_CONCURRENT),
+                                                                 sync_env(_sync_env), period(period),
+                                                                 max_entries_per_shard(_max_entries_per_shard),
+                                                                 result(_result) {
+    shards.swap(_shards);
+    iter = shards.begin();
+  }
   bool spawn_next();
 };
 
@@ -279,9 +271,16 @@ int RGWRemoteMetaLog::read_master_log_shards_info(string *master_period, map<int
 
   *master_period = log_info.period;
 
-  RGWObjectCtx obj_ctx(store, NULL);
-  auto mdlog = store->meta_mgr->get_log(log_info.period);
-  return run(new RGWReadRemoteMDLogInfoCR(&sync_env, mdlog, log_info.period, log_info.num_shards, shards_info));
+  return run(new RGWReadRemoteMDLogInfoCR(&sync_env, log_info.period, log_info.num_shards, shards_info));
+}
+
+int RGWRemoteMetaLog::read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result)
+{
+  if (store->is_meta_master()) {
+    return 0;
+  }
+
+  return run(new RGWListRemoteMDLogCR(&sync_env, period, shard_markers, 1, result));
 }
 
 int RGWRemoteMetaLog::init()
@@ -570,7 +569,7 @@ public:
     return 0;
   }
 
-  int handle_response() {
+  int request_complete() {
     int ret = http_op->wait(result);
     if (ret < 0 && ret != -ENOENT) {
       ldout(sync_env->store->ctx(), 0) << "ERROR: failed to list remote mdlog shard, ret=" << ret << dendl;
@@ -581,9 +580,22 @@ public:
 };
 
 bool RGWReadRemoteMDLogInfoCR::spawn_next() {
+  if (shard_id >= num_shards) {
+    return false;
+  }
   spawn(new RGWReadRemoteMDLogShardInfoCR(sync_env, period, shard_id, &(*mdlog_info)[shard_id]), false);
   shard_id++;
-  return (shard_id < num_shards);
+  return true;
+}
+
+bool RGWListRemoteMDLogCR::spawn_next() {
+  if (iter == shards.end()) {
+    return false;
+  }
+
+  spawn(new RGWListRemoteMDLogShardCR(sync_env, period, iter->first, iter->second, max_entries_per_shard, &(*result)[iter->first]), false);
+  ++iter;
+  return true;
 }
 
 class RGWInitSyncStatusCoroutine : public RGWCoroutine {

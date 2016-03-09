@@ -1574,6 +1574,20 @@ static int read_current_period_id(RGWRados* store, const std::string& realm_id,
   return 0;
 }
 
+void flush_ss(stringstream& ss, list<string>& l)
+{
+  if (!ss.str().empty()) {
+    l.push_back(ss.str());
+  }
+  ss.str("");
+}
+
+stringstream& push_ss(stringstream& ss, list<string>& l)
+{
+  flush_ss(ss, l);
+  return ss;
+}
+
 static void get_md_sync_status(list<string>& status)
 {
   RGWMetaSyncStatusManager sync(store, store->get_async_rados());
@@ -1631,19 +1645,13 @@ static void get_md_sync_status(list<string>& status)
   }
 
   stringstream ss;
-  ss << "full sync: " << num_full << "/" << total_shards << " shards";
-  status.push_back(ss.str());
-  ss.str("");
+  push_ss(ss, status) << "full sync: " << num_full << "/" << total_shards << " shards";
 
   if (num_full > 0) {
-    ss << "full sync: " << full_total - full_complete << " entries to sync";
-    status.push_back(ss.str());
-    ss.str("");
+    push_ss(ss, status) << "full sync: " << full_total - full_complete << " entries to sync";
   }
 
-  ss << "incremental sync: " << num_inc << "/" << total_shards << " shards";
-  status.push_back(ss.str());
-  ss.str("");
+  push_ss(ss, status) << "incremental sync: " << num_inc << "/" << total_shards << " shards";
 
   rgw_mdlog_info log_info;
   ret = sync.read_log_info(&log_info);
@@ -1661,7 +1669,7 @@ static void get_md_sync_status(list<string>& status)
     return;
   }
 
-  vector<int> shards_behind;
+  map<int, string> shards_behind;
 
   if (sync_status.sync_info.period != master_period) {
     status.push_back(string("master is on a different period: master_period=" + master_period + " local_period=" + sync_status.sync_info.period));
@@ -1677,7 +1685,7 @@ static void get_md_sync_status(list<string>& status)
       }
       auto master_marker = iter->second.marker;
       if (master_marker > local_iter.second.marker) {
-        shards_behind.push_back(shard_id);
+        shards_behind[shard_id] = local_iter.second.marker;
       }
     }
   }
@@ -1686,11 +1694,34 @@ static void get_md_sync_status(list<string>& status)
   if (total_behind == 0) {
     status.push_back("metadata is caught up with master");
   } else {
-    ss << "metadata is behind on " << total_behind << " shards";
-    status.push_back(ss.str());
-    ss.str("");
+    push_ss(ss, status) << "metadata is behind on " << total_behind << " shards";
+
+    map<int, rgw_mdlog_shard_data> master_pos;
+    ret = sync.read_master_log_shards_next(sync_status.sync_info.period, shards_behind, &master_pos);
+    if (ret < 0) {
+      derr << "ERROR: failed to fetch master next positions (" << cpp_strerror(-ret) << ")" << dendl;
+    } else {
+      utime_t oldest;
+      for (auto iter : master_pos) {
+        rgw_mdlog_shard_data& shard_data = iter.second;
+
+        if (!shard_data.entries.empty()) {
+          rgw_mdlog_entry& entry = shard_data.entries.front();
+          if (oldest.is_zero()) {
+            oldest = entry.timestamp;
+          } else if (!entry.timestamp.is_zero() && entry.timestamp < oldest) {
+            oldest = entry.timestamp;
+          }
+        }
+      }
+
+      if (!oldest.is_zero()) {
+        push_ss(ss, status) << "oldest change not applied: " << oldest;
+      }
+    }
   }
 
+  flush_ss(ss, status);
 }
 
 static void tab_dump(const string& header, int width, const list<string>& entries)
@@ -1709,7 +1740,7 @@ static void sync_status(Formatter *formatter)
   RGWZoneGroup zonegroup = store->get_zonegroup();
   RGWZone& zone = store->get_zone();
 
-  int width = 20;
+  int width = 15;
 
   cout << std::setw(width) << "zonegroup" << std::setw(1) << " " << zonegroup.get_id() << " (" << zonegroup.get_name() << ")" << std::endl;
   cout << std::setw(width) << "zone" << std::setw(1) << " " << zone.id << " (" << zone.name << ")" << std::endl;
@@ -1722,7 +1753,7 @@ static void sync_status(Formatter *formatter)
     get_md_sync_status(md_status);
   }
 
-  tab_dump("metadata sync", 20, md_status);
+  tab_dump("metadata sync", width, md_status);
 }
 
 int main(int argc, char **argv) 
