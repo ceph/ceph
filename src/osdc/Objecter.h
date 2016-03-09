@@ -2074,9 +2074,10 @@ private:
 private:
 
   // low-level
-  ceph_tid_t _op_submit(Op *op, shunique_lock& lc);
-  ceph_tid_t _op_submit_with_budget(Op *op, shunique_lock& lc,
-				    int *ctx_budget = NULL);
+  void _op_submit(Op *op, shunique_lock& lc, ceph_tid_t *ptid);
+  void _op_submit_with_budget(Op *op, shunique_lock& lc,
+			      ceph_tid_t *ptid,
+			      int *ctx_budget = NULL);
   inline void unregister_op(Op *op);
 
   // public interface
