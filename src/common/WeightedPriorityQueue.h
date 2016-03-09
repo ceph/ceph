@@ -69,6 +69,12 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         Klass(K& k) :
           key(k)
           {}
+      friend bool operator< (const Klass &a, const Klass &b)
+        { return a.key < b.key; }
+      friend bool operator> (const Klass &a, const Klass &b)
+        { return a.key > b.key; }
+      friend bool operator== (const Klass &a, const Klass &b)
+        { return a.key == b.key; }
       void insert(unsigned cost, T& item, bool front) {
         if (front) {
           lp.push_front(*new ListPair(cost, item));
@@ -144,6 +150,12 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  key(p),
 	  next(klasses.begin())
 	  {}
+      friend bool operator< (const SubQueue &a, const SubQueue &b)
+        { return a.key < b.key; }
+      friend bool operator> (const SubQueue &a, const SubQueue &b)
+        { return a.key > b.key; }
+      friend bool operator== (const SubQueue &a, const SubQueue &b)
+        { return a.key == b.key; }
       bool empty() const {
         return klasses.empty();
       }
