@@ -32,6 +32,8 @@ class TestCephDisk(object):
         main.setup_logging(verbose=True, log_stdout=False)
 
     def test_main_list_json(self, capsys):
+        data = tempfile.mkdtemp()
+        main.setup_statedir(data)
         args = main.parse_args(['list', '--format', 'json'])
         with patch.multiple(
                 main,
@@ -39,8 +41,11 @@ class TestCephDisk(object):
             main.main_list(args)
             out, err = capsys.readouterr()
             assert '{}\n' == out
+        shutil.rmtree(data)
 
     def test_main_list_plain(self, capsys):
+        data = tempfile.mkdtemp()
+        main.setup_statedir(data)
         args = main.parse_args(['list'])
         with patch.multiple(
                 main,
@@ -48,6 +53,7 @@ class TestCephDisk(object):
             main.main_list(args)
             out, err = capsys.readouterr()
             assert '' == out
+        shutil.rmtree(data)
 
     def test_list_format_more_osd_info_plain(self):
         dev = {
@@ -1152,6 +1158,8 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
             main.unmount(path)
 
     def test_main_destroy(self):
+        data = tempfile.mkdtemp()
+        main.setup_statedir(data)
         OSD_UUID = '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
         MPATH_OSD_UUID = '4fbd7e29-8ae0-4982-bf9d-5a8d867af560'
         part_uuid = '0ce28a16-6d5d-11e5-aec3-fa163e5c167b'
@@ -1161,6 +1169,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         fake_devices_normal = [{'path': '/dev/sdY',
                                 'partitions': [{
                                     'dmcrypt': {},
+                                    'type': 'osd',
                                     'ptype': OSD_UUID,
                                     'path': '/dev/sdY1',
                                     'whoami': '5566',
@@ -1170,6 +1179,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                                {'path': '/dev/sdX',
                                 'partitions': [{
                                     'dmcrypt': {},
+                                    'type': 'osd',
                                     'ptype': MPATH_OSD_UUID,
                                     'path': '/dev/sdX1',
                                     'whoami': '7788',
@@ -1245,6 +1255,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 _check_osd_status=lambda cluster, osd_id: 1,
         ):
             self.assertRaises(Exception, main.main_destroy, args)
+        shutil.rmtree(data)
 
     def test_remove_from_crush_map_fail(self):
         cluster = 'ceph'
