@@ -244,14 +244,7 @@ AC_CHECK_PROG(YASM_CHECK, yasm, yes)
 if test x"$YASM_CHECK" = x"yes"; then
   if yasm -f elf64 src/common/crc32c_intel_fast_asm.S -o /dev/null; then
      echo 'we have a modern and working yasm'
-     # FreeBSD has uname -p not arch(1), so do not exec arch
-     arch_x86_64=0
-     if test x`uname -p`x = x"amd64"x ; then
-	arch_x86_64=1
-     elif which arch 2>&1 > /dev/null; then 
-	test x`arch`x = x"x86_64"x  && arch_x86_64=1
-     fi
-     if test $arch_x86_64 -eq 1 ; then
+     if test `uname -m` = "x86_64" ; then
         echo 'we are x86_64'
         arch_x32=0
         AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[
