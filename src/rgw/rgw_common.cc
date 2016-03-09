@@ -291,7 +291,7 @@ void req_state::set_req_state_err(int err_no)
     err_no = -err_no;
 
   err->ret_E = -err_no;
-  is_website_redirect ||= (prot_flags & RGW_REST_WEBSITE)
+  err->is_website_redirect |= (prot_flags & RGW_REST_WEBSITE)
 		&& err_no == ERR_WEBSITE_REDIRECT && err->is_clear();
   if (err->set_rgw_err(err_no))
     return;
