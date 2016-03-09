@@ -13,6 +13,8 @@
 #include "include/rados/librados.hpp"
 #include "types.h"
 
+class ContextWQ;
+
 namespace journal {
 
 class Journaler;
@@ -37,6 +39,7 @@ namespace rbd {
 namespace mirror {
 
 class ImageReplayerAdminSocketHook;
+struct Threads;
 
 /**
  * Replays changes from a remote cluster for a single image.
@@ -64,9 +67,9 @@ public:
   };
 
 public:
-  ImageReplayer(RadosRef local, RadosRef remote, const std::string &client_id,
-		int64_t local_pool_id, int64_t remote_pool_id,
-                const std::string &remote_image_id);
+  ImageReplayer(Threads *threads, RadosRef local, RadosRef remote,
+		const std::string &client_id, int64_t local_pool_id,
+		int64_t remote_pool_id, const std::string &remote_image_id);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
@@ -99,6 +102,7 @@ private:
   friend std::ostream &operator<<(std::ostream &os,
 				  const ImageReplayer &replayer);
 private:
+  Threads *m_threads;
   RadosRef m_local, m_remote;
   std::string m_client_id;
   int64_t m_remote_pool_id, m_local_pool_id;

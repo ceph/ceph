@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "journal/JournalPlayer.h"
-#include "common/Finisher.h"
 #include "journal/Entry.h"
 #include "journal/ReplayHandler.h"
 #include "journal/Utils.h"
@@ -562,7 +561,7 @@ void JournalPlayer::notify_entries_available() {
   m_handler_notified = true;
 
   ldout(m_cct, 10) << __func__ << ": entries available" << dendl;
-  m_journal_metadata->get_finisher().queue(new C_HandleEntriesAvailable(
+  m_journal_metadata->queue(new C_HandleEntriesAvailable(
     m_replay_handler), 0);
 }
 
@@ -571,7 +570,7 @@ void JournalPlayer::notify_complete(int r) {
   m_handler_notified = true;
 
   ldout(m_cct, 10) << __func__ << ": replay complete: r=" << r << dendl;
-  m_journal_metadata->get_finisher().queue(new C_HandleComplete(
+  m_journal_metadata->queue(new C_HandleComplete(
     m_replay_handler), r);
 }
 

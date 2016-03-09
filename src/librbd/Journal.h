@@ -21,6 +21,8 @@
 #include <unordered_map>
 
 class Context;
+class ContextWQ;
+class SafeTimer;
 namespace journal {
 class Journaler;
 }
@@ -243,6 +245,10 @@ private:
       journal->handle_replay_complete(r);
     }
   };
+
+  ContextWQ *m_work_queue = nullptr;
+  SafeTimer *m_timer = nullptr;
+  Mutex *m_timer_lock = nullptr;
 
   Journaler *m_journaler;
   mutable Mutex m_lock;

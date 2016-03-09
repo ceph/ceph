@@ -6,6 +6,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "Mirror.h"
+#include "Threads.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -31,6 +32,8 @@ Mirror::Mirror(CephContext *cct) :
   m_lock("rbd::mirror::Mirror"),
   m_local(new librados::Rados())
 {
+  cct->lookup_or_create_singleton_object<Threads>(m_threads,
+                                                  "rbd_mirror::threads");
 }
 
 void Mirror::handle_signal(int signum)
@@ -79,7 +82,7 @@ void Mirror::update_replayers(const map<peer_t, set<int64_t> > &peer_configs)
     const peer_t &peer = kv.first;
     if (m_replayers.find(peer) == m_replayers.end()) {
       dout(20) << "starting replayer for " << peer << dendl;
-      unique_ptr<Replayer> replayer(new Replayer(m_local, peer));
+      unique_ptr<Replayer> replayer(new Replayer(m_threads, m_local, peer));
       // TODO: make async, and retry connecting within replayer
       int r = replayer->init();
       if (r < 0) {

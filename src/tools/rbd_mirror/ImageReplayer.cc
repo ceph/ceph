@@ -6,6 +6,8 @@
 #include "common/errno.h"
 #include "include/stringify.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "common/Timer.h"
+#include "common/WorkQueue.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
@@ -18,6 +20,7 @@
 #include "librbd/internal.h"
 #include "librbd/journal/Replay.h"
 #include "ImageReplayer.h"
+#include "Threads.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -158,11 +161,12 @@ private:
   Commands commands;
 };
 
-ImageReplayer::ImageReplayer(RadosRef local, RadosRef remote,
+ImageReplayer::ImageReplayer(Threads *threads, RadosRef local, RadosRef remote,
 			     const std::string &client_id,
-                             int64_t local_pool_id,
+			     int64_t local_pool_id,
 			     int64_t remote_pool_id,
 			     const std::string &remote_image_id) :
+  m_threads(threads),
   m_local(local),
   m_remote(remote),
   m_client_id(client_id),
@@ -184,6 +188,8 @@ ImageReplayer::ImageReplayer(RadosRef local, RadosRef remote,
 
 ImageReplayer::~ImageReplayer()
 {
+  m_threads->work_queue->drain();
+
   assert(m_local_image_ctx == nullptr);
   assert(m_local_replay == nullptr);
   assert(m_remote_journaler == nullptr);
@@ -220,9 +226,13 @@ int ImageReplayer::start(const BootstrapParams *bootstrap_params)
   }
 
   CephContext *cct = static_cast<CephContext *>(m_local->cct());
+
   commit_interval = cct->_conf->rbd_journal_commit_age;
   bool remote_journaler_initialized = false;
-  m_remote_journaler = new ::journal::Journaler(m_remote_ioctx,
+  m_remote_journaler = new ::journal::Journaler(m_threads->work_queue,
+                                                m_threads->timer,
+                                                &m_threads->timer_lock,
+                                                m_remote_ioctx,
 						remote_journal_id,
 						m_client_id, commit_interval);
   r = get_registered_client_status(&registered);
@@ -316,7 +326,7 @@ fail:
   if (m_remote_journaler) {
     if (remote_journaler_initialized) {
       m_remote_journaler->stop_replay();
-      m_remote_journaler->shutdown();
+      m_remote_journaler->shut_down();
     }
     delete m_remote_journaler;
     m_remote_journaler = nullptr;
@@ -379,7 +389,7 @@ void ImageReplayer::stop()
   m_local_ioctx.close();
 
   m_remote_journaler->stop_replay();
-  m_remote_journaler->shutdown();
+  m_remote_journaler->shut_down();
   delete m_remote_journaler;
   m_remote_journaler = nullptr;
 

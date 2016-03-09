@@ -4,6 +4,7 @@
 #include "test/journal/RadosTestFixture.h"
 #include "cls/journal/cls_journal_client.h"
 #include "include/stringify.h"
+#include "common/WorkQueue.h"
 
 RadosTestFixture::RadosTestFixture()
   : m_timer_lock("m_timer_lock"), m_timer(NULL), m_listener(this) {
@@ -12,10 +13,18 @@ RadosTestFixture::RadosTestFixture()
 void RadosTestFixture::SetUpTestCase() {
   _pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool_pp(_pool_name, _rados));
+
+  CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
+  _thread_pool = new ThreadPool(cct, "RadosTestFixture::_thread_pool",
+                                 "tp_test", 1);
+  _thread_pool->start();
 }
 
 void RadosTestFixture::TearDownTestCase() {
   ASSERT_EQ(0, destroy_one_pool_pp(_pool_name, _rados));
+
+  _thread_pool->stop();
+  delete _thread_pool;
 }
 
 std::string RadosTestFixture::get_temp_oid() {
@@ -25,8 +34,12 @@ std::string RadosTestFixture::get_temp_oid() {
 
 void RadosTestFixture::SetUp() {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), m_ioctx));
-  m_timer = new SafeTimer(reinterpret_cast<CephContext*>(m_ioctx.cct()),
-                          m_timer_lock, true);
+
+  CephContext* cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
+  m_work_queue = new ContextWQ("RadosTestFixture::m_work_queue", 60,
+                               _thread_pool);
+
+  m_timer = new SafeTimer(cct, m_timer_lock, true);
   m_timer->init();
 }
 
@@ -36,11 +49,23 @@ void RadosTestFixture::TearDown() {
     m_timer->shutdown();
   }
   delete m_timer;
+
+  m_work_queue->drain();
+  delete m_work_queue;
 }
 
 int RadosTestFixture::create(const std::string &oid, uint8_t order,
                              uint8_t splay_width) {
   return cls::journal::client::create(m_ioctx, oid, order, splay_width, -1);
+}
+
+journal::JournalMetadataPtr RadosTestFixture::create_metadata(
+    const std::string &oid, const std::string &client_id,
+    double commit_internal) {
+  journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
+    m_work_queue, m_timer, &m_timer_lock, m_ioctx, oid, client_id,
+    commit_internal));
+  return metadata;
 }
 
 int RadosTestFixture::append(const std::string &oid, const bufferlist &bl) {
@@ -93,3 +118,4 @@ bool RadosTestFixture::wait_for_update(journal::JournalMetadataPtr metadata) {
 std::string RadosTestFixture::_pool_name;
 librados::Rados RadosTestFixture::_rados;
 uint64_t RadosTestFixture::_oid_number = 0;
+ThreadPool *RadosTestFixture::_thread_pool = nullptr;

@@ -23,12 +23,14 @@
 namespace rbd {
 namespace mirror {
 
+struct Threads;
+
 /**
  * Controls mirroring for a single remote cluster.
  */
 class Replayer {
 public:
-  Replayer(RadosRef local_cluster, const peer_t &peer);
+  Replayer(Threads *threads, RadosRef local_cluster, const peer_t &peer);
   ~Replayer();
   Replayer(const Replayer&) = delete;
   Replayer& operator=(const Replayer&) = delete;
@@ -40,6 +42,7 @@ public:
 private:
   void set_sources(const std::map<int64_t, std::set<std::string> > &images);
 
+  Threads *m_threads;
   Mutex m_lock;
   Cond m_cond;
   atomic_t m_stopping;
