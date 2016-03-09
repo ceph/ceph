@@ -151,6 +151,8 @@ void global_init(std::vector < const char * > *alt_def_args,
       g_conf->setuser.length()) {
     uid_t uid = 0;  // zero means no change; we can only drop privs here.
     gid_t gid = 0;
+    std::string uid_string;
+    std::string gid_string;
     if (g_conf->setuser.length()) {
       uid = atoi(g_conf->setuser.c_str());
       if (!uid) {
@@ -165,6 +167,7 @@ void global_init(std::vector < const char * > *alt_def_args,
 	}
 	uid = p->pw_uid;
 	gid = p->pw_gid;
+	uid_string = g_conf->setuser;
       }
     }
     if (g_conf->setgroup.length() > 0) {
@@ -180,6 +183,7 @@ void global_init(std::vector < const char * > *alt_def_args,
 	  exit(1);
 	}
 	gid = g->gr_gid;
+	gid_string = g_conf->setgroup;
       }
     }
     if ((uid || gid) &&
@@ -201,6 +205,8 @@ void global_init(std::vector < const char * > *alt_def_args,
 	     << std::endl;
 	uid = 0;
 	gid = 0;
+	uid_string.erase();
+	gid_string.erase();
       } else {
 	priv_ss << "setuser_match_path "
 		<< g_conf->setuser_match_path << " owned by "
@@ -208,6 +214,7 @@ void global_init(std::vector < const char * > *alt_def_args,
       }
     }
     g_ceph_context->set_uid_gid(uid, gid);
+    g_ceph_context->set_uid_gid_strings(uid_string, gid_string);
     if ((flags & CINIT_FLAG_DEFER_DROP_PRIVILEGES) == 0) {
       if (setgid(gid) != 0) {
 	int r = errno;
@@ -221,9 +228,9 @@ void global_init(std::vector < const char * > *alt_def_args,
 	     << std::endl;
 	exit(1);
       }
-      priv_ss << "set uid:gid to " << uid << ":" << gid;
+      priv_ss << "set uid:gid to " << uid << ":" << gid << " (" << uid_string << ":" << gid_string << ")";
     } else {
-      priv_ss << "deferred set uid:gid to " << uid << ":" << gid;
+      priv_ss << "deferred set uid:gid to " << uid << ":" << gid << " (" << uid_string << ":" << gid_string << ")";
     }
   }
 
