@@ -62,7 +62,7 @@ int RGWValidateSwiftToken::receive_header(void *ptr, size_t len)
           l++;
  
         if (strcmp(tok, "HTTP") == 0) {
-          info->status = atoi(l);
+          ;
         } else if (strcasecmp(tok, "X-Auth-Groups") == 0) {
           info->auth_groups = l;
           char *s = strchr(l, ',');
@@ -375,7 +375,6 @@ static void rgw_set_keystone_token_auth_info(KeystoneToken& token, struct rgw_sw
 {
   info->user = token.get_project_id();
   info->display_name = token.get_project_name();
-  info->status = 200;
 }
 
 int RGWSwift::parse_keystone_token_response(const string& token,
@@ -413,24 +412,59 @@ int RGWSwift::parse_keystone_token_response(const string& token,
 
 int RGWSwift::update_user_info(RGWRados *store, struct rgw_swift_auth_info *info, RGWUserInfo& user_info)
 {
-  if (rgw_get_user_info_by_uid(store, info->user, user_info) < 0) {
-    ldout(cct, 0) << "NOTICE: couldn't map swift user" << dendl;
-    user_info.user_id = info->user;
-    user_info.display_name = info->display_name;
-
-    int ret = rgw_store_user_info(store, user_info, NULL, NULL, real_time(), true);
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to store new user's info: ret=" << ret << dendl;
-      return ret;
+  ldout(cct, 20) << "updating user=" << info->user << dendl; // P3 XXX
+  /*
+   * Normally once someone parsed the token, the tenant and user are set
+   * in rgw_swift_auth_info. If .tenant is empty in it, the client has
+   * authenticated with the empty legacy tenant. But when we authenticate
+   * with Keystone, we have a special compatibility kludge. First, we try
+   * the same tenant as the user. If that user exists, we use it. This way,
+   * migrated OpenStack users can get their namespaced containers and
+   * nobody's the wiser. If that fails, we look up the user in the empty
+   * tenant. If neither is found, make one, and those migrating can
+   * set a special configurable rgw_keystone_implicit_tenants to create
+   * suitable tenantized users.
+   */
+  if (info->user.tenant.empty()) {
+    rgw_user uid;
+    uid.tenant = info->user.id;
+    uid.id = info->user.id;
+    if (rgw_get_user_info_by_uid(store, uid, user_info) < 0) {
+      uid.tenant.clear();
+      if (rgw_get_user_info_by_uid(store, uid, user_info) < 0) {
+        ldout(cct, 0) << "NOTICE: couldn't map swift user " << uid << dendl;
+        if (g_conf->rgw_keystone_implicit_tenants) {
+          uid.tenant = info->user.id;
+        }
+        user_info.user_id = uid;
+        user_info.display_name = info->display_name;
+        int ret = rgw_store_user_info(store, user_info, NULL, NULL, real_time(), true);
+        if (ret < 0) {
+          ldout(cct, 0) << "ERROR: failed to store new user info: user=" << user_info.user_id << " ret=" << ret << dendl;
+          return ret;
+        }
+      }
+    }
+  } else {
+    if (rgw_get_user_info_by_uid(store, info->user, user_info) < 0) {
+      ldout(cct, 0) << "NOTICE: couldn't map swift user " << info->user << dendl;
+      user_info.user_id = info->user;
+      user_info.display_name = info->display_name;
+      int ret = rgw_store_user_info(store, user_info, NULL, NULL, real_time(), true);
+      if (ret < 0) {
+        ldout(cct, 0) << "ERROR: failed to store new user info: user=" << user_info.user_id << " ret=" << ret << dendl;
+        return ret;
+      }
     }
   }
   return 0;
 }
 
-int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, struct rgw_swift_auth_info *info,
+int RGWSwift::validate_keystone_token(RGWRados *store, const string& token,
 				      RGWUserInfo& rgw_user)
 {
   KeystoneToken t;
+  struct rgw_swift_auth_info info;
 
   string token_id;
   rgw_get_token_id(token, token_id);
@@ -439,11 +473,11 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
   /* check cache first */
   if (keystone_token_cache->find(token_id, t)) {
-    rgw_set_keystone_token_auth_info(t, info);
+    rgw_set_keystone_token_auth_info(t, &info);
 
     ldout(cct, 20) << "cached token.project.id=" << t.get_project_id() << dendl;
 
-    int ret = update_user_info(store, info, rgw_user);
+    int ret = update_user_info(store, &info, rgw_user);
     if (ret < 0)
       return ret;
 
@@ -495,7 +529,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
   ldout(cct, 20) << "received response: " << bl.c_str() << dendl;
 
-  int ret = parse_keystone_token_response(token, bl, info, t);
+  int ret = parse_keystone_token_response(token, bl, &info, t);
   if (ret < 0)
     return ret;
 
@@ -508,7 +542,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
   keystone_token_cache->add(token_id, t);
 
-  ret = update_user_info(store, info, rgw_user);
+  ret = update_user_info(store, &info, rgw_user);
   if (ret < 0)
     return ret;
 
@@ -726,22 +760,16 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
   if (strncmp(s->os_auth_token, "AUTH_rgwtk", 10) == 0) {
     int ret = rgw_swift_verify_signed_token(s->cct, store, s->os_auth_token,
 					    *(s->user), &s->swift_user);
-    if (ret < 0)
-      return false;
+    return (ret >= 0);
+  }
 
-    return  true;
+  if (supports_keystone()) {
+    int ret = validate_keystone_token(store, s->os_auth_token, *(s->user));
+    return (ret >= 0);
   }
 
   struct rgw_swift_auth_info info;
-
-  info.status = 401; // start with access denied, validate_token might change that
-
   int ret;
-
-  if (supports_keystone()) {
-    ret = validate_keystone_token(store, s->os_auth_token, &info, *(s->user));
-    return (ret >= 0);
-  }
 
   ret = validate_token(s->os_auth_token, &info);
   if (ret < 0)
@@ -847,4 +875,3 @@ void RGWSwift::KeystoneRevokeThread::stop()
   Mutex::Locker l(lock);
   cond.Signal();
 }
-
