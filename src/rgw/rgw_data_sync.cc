@@ -234,6 +234,33 @@ public:
   }
 };
 
+class RGWReadRemoteDataLogInfoCR : public RGWShardCollectCR {
+  RGWDataSyncEnv *sync_env;
+
+  int num_shards;
+  map<int, RGWDataChangesLogInfo> *datalog_info;
+
+  int shard_id;
+#define READ_DATALOG_MAX_CONCURRENT 10
+
+public:
+  RGWReadRemoteDataLogInfoCR(RGWDataSyncEnv *_sync_env,
+                     int _num_shards,
+                     map<int, RGWDataChangesLogInfo> *_datalog_info) : RGWShardCollectCR(_sync_env->cct, READ_DATALOG_MAX_CONCURRENT),
+                                                                 sync_env(_sync_env), num_shards(_num_shards),
+                                                                 datalog_info(_datalog_info), shard_id(0) {}
+  bool spawn_next();
+};
+
+bool RGWReadRemoteDataLogInfoCR::spawn_next() {
+  if (shard_id >= num_shards) {
+    return false;
+  }
+  spawn(new RGWReadRemoteDataLogShardInfoCR(sync_env, shard_id, &(*datalog_info)[shard_id]), false);
+  shard_id++;
+  return true;
+}
+
 class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
 
@@ -351,6 +378,17 @@ int RGWRemoteDataLog::read_log_info(rgw_datalog_info *log_info)
   ldout(store->ctx(), 20) << "remote datalog, num_shards=" << log_info->num_shards << dendl;
 
   return 0;
+}
+
+int RGWRemoteDataLog::read_source_log_shards_info(map<int, RGWDataChangesLogInfo> *shards_info)
+{
+  rgw_datalog_info log_info;
+  int ret = read_log_info(&log_info);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return run(new RGWReadRemoteDataLogInfoCR(&sync_env, log_info.num_shards, shards_info));
 }
 
 int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger)

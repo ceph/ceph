@@ -3641,6 +3641,7 @@ int RGWRados::init_complete()
     const string& id = ziter->first;
     RGWZone& z = ziter->second;
     zone_id_by_name[z.name] = id;
+    zone_name_by_id[id] = z.name;
     if (id != zone_id()) {
       if (!z.endpoints.empty()) {
         ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;

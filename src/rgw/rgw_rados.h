@@ -1868,6 +1868,7 @@ public:
   map<string, RGWRESTConn *> zonegroup_conn_map;
 
   map<string, string> zone_id_by_name;
+  map<string, string> zone_name_by_id;
 
   RGWRESTConn *get_zone_conn_by_id(const string& id) {
     auto citer = zone_conn_map.find(id);
