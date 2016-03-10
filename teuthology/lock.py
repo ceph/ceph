@@ -313,7 +313,10 @@ def main(ctx):
                     return ret
             else:
                 machines_to_update.append(machine)
-                provision.create_if_vm(ctx, machine)
+                provision.create_if_vm(
+                    ctx,
+                    misc.canonicalize_hostname(machine),
+                )
     elif ctx.unlock:
         if ctx.owner is None and user is None:
             user = misc.get_user()
