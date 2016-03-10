@@ -185,6 +185,7 @@ namespace librbd {
 
   int mirror_image_enable(ImageCtx *ictx);
   int mirror_image_disable(ImageCtx *ictx, bool force);
+  int mirror_image_get(ImageCtx *ictx, mirror_image_t *mirror_image);
 }
 
 #endif
