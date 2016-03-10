@@ -4182,7 +4182,7 @@ bool Client::adjust_realm_parent(SnapRealm *realm, inodeno_t parent)
 static bool has_new_snaps(const SnapContext& old_snapc,
 			  const SnapContext& new_snapc)
 {
-	return !new_snapc.snaps.empty() && new_snapc.snaps[0] > old_snapc.seq;
+  return !new_snapc.snaps.empty() && new_snapc.snaps[0] > old_snapc.seq;
 }
 
 
@@ -4287,9 +4287,8 @@ void Client::handle_snap(MClientSnap *m)
 
   got_mds_push(session);
 
-  list<Inode*> to_move;
+  map<Inode*, SnapContext> to_move;
   SnapRealm *realm = 0;
-  SnapContext old_snapc;
 
   if (m->head.op == CEPH_SNAP_OP_SPLIT) {
     assert(m->head.split);
@@ -4301,7 +4300,6 @@ void Client::handle_snap(MClientSnap *m)
     // flush, then move, ino's.
     realm = get_snap_realm(info.ino());
     ldout(cct, 10) << " splitting off " << *realm << dendl;
-    old_snapc = realm->get_snap_context();
     for (vector<inodeno_t>::iterator p = m->split_inos.begin();
 	 p != m->split_inos.end();
 	 ++p) {
@@ -4319,8 +4317,8 @@ void Client::handle_snap(MClientSnap *m)
 
 
 	in->snaprealm_item.remove_myself();
+	to_move[in] = in->snaprealm->get_snap_context();
 	put_snap_realm(in->snaprealm);
-	to_move.push_back(in);
       }
     }
 
@@ -4340,15 +4338,14 @@ void Client::handle_snap(MClientSnap *m)
   update_snap_trace(m->bl, m->head.op != CEPH_SNAP_OP_DESTROY);
 
   if (realm) {
-    bool queue_snap = has_new_snaps(old_snapc, realm->get_snap_context());
-    for (list<Inode*>::iterator p = to_move.begin(); p != to_move.end(); ++p) {
-      Inode *in = *p;
+    for (auto p = to_move.begin(); p != to_move.end(); ++p) {
+      Inode *in = p->first;
       in->snaprealm = realm;
       realm->inodes_with_caps.push_back(&in->snaprealm_item);
       realm->nref++;
       // queue for snap writeback
-      if (queue_snap)
-	queue_cap_snap(in, old_snapc);
+      if (has_new_snaps(p->second, realm->get_snap_context()))
+	queue_cap_snap(in, p->second);
     }
     put_snap_realm(realm);
   }
