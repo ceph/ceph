@@ -1,0 +1,263 @@
+#!/bin/sh
+pkgname=ceph
+pkgver=10.0.3
+pkgrel=0
+pkgdesc="User space components of the Ceph file system"
+url="http://ceph.com"
+arch="all"
+license="LGPL-2.1 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and GPL-2.0-with-autoconf-exception and BSD-3-Clause and MIT"
+install="$pkgname-common.pre-install"
+depends="
+    binutils
+    btrfs-progs
+    cryptsetup
+    grep
+    findutils
+    logrotate
+    parted
+    python
+    util-linux
+    xfsprogs
+"
+
+makedepends="
+    autoconf
+    automake
+    acl-dev
+    argp-standalone
+    boost-dev
+    build-base
+    cmake
+    ccache
+    curl-dev
+    cython
+    eudev-dev
+    fcgi-dev
+    flex
+    fuse-dev
+    git
+    jemalloc-dev
+    jq
+    keyutils-dev
+    leveldb-dev
+    libaio-dev
+    libatomic_ops-dev
+    libedit-dev
+    libexecinfo-dev
+    libtirpc-dev
+    libtool
+    libxml2-dev
+    linux-headers
+    lvm2-dev
+    nss-dev
+    openssl-dev
+    python-dev
+    py-virtualenv
+    readline-dev
+    rpcgen
+    snappy-dev
+    userspace-rcu-dev
+    xfsprogs-dev
+    xmlstarlet
+    yasm
+"
+
+source="https://github.com/ceph/ceph/archive/v$pkgver.zip"
+
+subpackages="
+    $pkgname-common
+    librbd1
+    librbd1-dev:librbd1_dev
+    libcephfs1
+    libcephfs1-dev:libcephfs1_dev
+    librados2
+    librados2-dev:librados2_dev
+    python-rados:python_rados
+    python-rbd:python_rbd
+    python-cephfs:python_cephfs
+    radosgw
+    ceph-fuse:ceph_fuse
+"
+# incomplete packages
+# test
+# rbd-fuse:rbd_fuse
+
+_builddir="$srcdir"/$pkgname-$pkgver
+
+build() {
+   cd "$_builddir"
+   mkdir build
+   cd build
+   cmake -DWITH_CCACHE=ON -DCMAKE_INSTALL_PREFIX=/usr -DWITH_THREAD_SAFE_RES_QUERY=ON -DWITH_REENTRANT_STRSIGNAL=ON ..
+   make
+}
+
+package() {
+    cd "$_builddir"/build
+    make DESTDIR="$pkgdir" install
+
+    find "$pkgdir" -type f -name "*.la" -exec rm -f {} ';'
+    find "$pkgdir" -type f -name "*.a" -exec rm -f {} ';'
+
+    cd "$_builddir"
+
+    install -D src/rbdmap "$pkgdir"/etc/ceph/rbdmap
+    install -D src/init-rbdmap "$pkgdir"/etc/init.d/rbdmap
+
+    install -m 0644 -D src/logrotate.conf "$pkgdir"/etc/logrotate.d/ceph
+
+    # set up placeholder directories
+    mkdir -p "$pkgdir"/etc/ceph
+    mkdir -p "$pkgdir"/var/log/ceph
+    mkdir -p "$pkgdir"/var/lib/ceph/tmp
+    mkdir -p "$pkgdir"/var/lib/ceph/mon
+    mkdir -p "$pkgdir"/var/lib/ceph/osd
+    mkdir -p "$pkgdir"/var/lib/ceph/mds
+    mkdir -p "$pkgdir"/var/lib/ceph/radosgw
+    mkdir -p "$pkgdir"/var/lib/ceph/bootstrap-osd
+    mkdir -p "$pkgdir"/var/lib/ceph/bootstrap-mds
+    mkdir -p "$pkgdir"/var/lib/ceph/bootstrap-rgw
+
+    # udev rules
+    install -m 0644 -D udev/50-rbd.rules "$pkgdir"/etc/udev/rules.d//50-rbd.rules
+    install -m 0644 -D udev/60-ceph-partuuid-workaround.rules  "$pkgdir"/etc/udev/rules.d/60-ceph-partuuid-workaround.rules
+}
+
+common() {
+    depends="python-rados python-rbd python-cephfs"
+
+    mkdir -p "$subpkgdir"/usr/bin
+
+    #mv "$pkgdir"/usr/bin/ceph_bench_log "$subpkgdir"/usr/bin
+
+    mv "$pkgdir"/usr/bin/ceph "$subpkgdir"/usr/bin
+    mv "$pkgdir"/usr/bin/ceph-authtool "$subpkgdir"/usr/bin
+    mv "$pkgdir"/usr/bin/ceph-conf "$subpkgdir"/usr/bin
+    #mv "$pkgdir"/usr/bin/ceph-dencoder "$subpkgdir"/usr/bin
+    mv "$pkgdir"/usr/bin/ceph-rbdnamer "$subpkgdir"/usr/bin
+    mv "$pkgdir"/usr/bin/ceph-syn "$subpkgdir"/usr/bin
+    #mv "$pkgdir"/usr/bin/ceph-crush-location "$subpkgdir"/usr/bin
+    mv "$pkgdir"/usr/bin/rados "$subpkgdir"/usr/bin
+    mv "$pkgdir"/usr/bin/rbd "$subpkgdir"/usr/bin
+    mv "$pkgdir"/usr/bin/rbd_replay "$subpkgdir"/usr/bin/rbd-replay
+    #mv "$pkgdir"/usr/bin/rbd-replay-many "$subpkgdir"/usr/bin
+
+    #mv "$pkgdir"/usr/bin/ceph-post-file "$subpkgdir"/usr/bin
+}
+
+librbd1() {
+    mkdir -p "$subpkgdir"/usr/lib
+    mv "$pkgdir"/usr/lib/librbd.so.* "$subpkgdir"/usr/lib
+
+    #%post -n librbd1
+    #mkdir -p /usr/lib64/qemu/
+    #ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
+}
+
+librbd1_dev() {
+    mkdir -p "$subpkgdir"/usr/include/rbd
+    mv "$pkgdir"/usr/include/rbd "$subpkgdir"/usr/include
+    mv "$pkgdir"/usr/lib/librbd.so "$subpkgdir"/usr/lib
+}
+
+librados2() {
+    mkdir -p "$subpkgdir"/usr/lib
+    mv "$pkgdir"/usr/lib/librados.so.* "$subpkgdir"/usr/lib
+}
+
+librados2_dev() {
+    mkdir -p "$subpkgdir"/usr/include/rados
+    mv "$pkgdir"/usr/include/rados "$subpkgdir"/usr/include
+    mv "$pkgdir"/usr/lib/librados.so "$subpkgdir"/usr/lib
+}
+
+libcephfs1() {
+    mkdir -p "$subpkgdir"/usr/lib
+    mv "$pkgdir"/usr/lib/libcephfs.so.* "$subpkgdir"/usr/lib
+}
+
+libcephfs1_dev() {
+    mkdir -p "$subpkgdir"/usr/include/cephfs
+    mv "$pkgdir"/usr/include/cephfs "$subpkgdir"/usr/include
+    mv "$pkgdir"/usr/lib/libcephfs.so "$subpkgdir"/usr/lib
+}
+
+python_rados() {
+    depends="librados2"
+    mkdir -p "$subpkgdir"/usr/lib/python2.7/site-packages
+    mv "$pkgdir"/usr/lib/python2.7/site-packages/rados.py* "$subpkgdir"/usr/lib/python2.7/site-packages
+}
+
+python_rbd() {
+    depends="librbd1 python-rados"
+    mkdir -p "$subpkgdir"/usr/lib/python2.7
+    mv "$pkgdir"/usr/lib/python2.7/site-packages/rbd.py* "$subpkgdir"/usr/lib/python2.7/site-packages
+}
+
+python_cephfs() {
+    depends="libcephfs1 python-rados"
+    mkdir -p "$subpkgdir"/usr/lib/python2.7
+    mv "$pkgdir"/usr/lib/python2.7/site-packages/cephfs.py* "$subpkgdir"/usr/lib/python2.7/site-packages
+}
+
+radosgw() {
+    depends="ceph-common"
+    mkdir -p "$subpkgdir"/usr/bin
+    mv "$pkgdir"/usr/bin/radosgw "$subpkgdir"/usr/bin
+    mv "$pkgdir"/usr/bin/radosgw-admin "$subpkgdir"/usr/bin
+    mv "$pkgdir"/usr/bin/radosgw-object-expirer "$subpkgdir"/usr/bin
+   #%dir %{_localstatedir}/lib/ceph/radosgw
+}
+
+ceph_fuse() {
+    pkgdesc="FUSE based client for Ceph distributed network file system"
+    mkdir -p "$subpkgdir"/usr/bin
+    mv "$pkgdir"/usr/bin/ceph-fuse "$subpkgdir"/usr/bin
+    #mkdir -p "$subpkgdir"/usr/sbin
+    #mv "$pkgdir"/usr/sbin/mount.fuse.ceph "$subpkgdir"/usr/sbin
+}
+
+#rbd_fuse() {
+#    pkgdesc="FUSE based client to map Ceph rbd images to files"
+#    mkdir -p "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/rbd-fuse "$subpkgdir"/usr/bin
+#}
+
+#test() {
+#    depends="ceph-common"
+#    mkdir -p "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_bench_log "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_kvstorebench "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_multi_stress_watch "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_erasure_code "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_erasure_code_benchmark "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_omapbench "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_objectstore_bench "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_perf_objectstore "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_perf_local "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_perf_msgr_client "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_perf_msgr_server "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_psim "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_radosacl "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_rgw_jsonparser "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_rgw_multiparser "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_scratchtool "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_scratchtoolpp "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_smalliobench "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_smalliobenchdumb "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_smalliobenchfs "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_smalliobenchrbd "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_streamtest "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_test_* "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_tpbench "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph_xattr_bench "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph-monstore-tool "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph-osdomap-tool "$subpkgdir"/usr/bin
+#    mv "$pkgdir"/usr/bin/ceph-kvstore-tool "$subpkgdir"/usr/bin
+#    mkdir -p "$subpkgdir"/usr/lib
+#    "$pkgdir"/usr/lib/ceph/ceph-monstore-update-crush.sh "$subpkgdir"/usr/lib
+#}
+
+md5sums="69f22c2f839b162c610db3f476ed0f95  v10.0.3.zip"
+sha256sums="931e2c7bba66c8cf96be50c2f910d4a5a4c8dcfac0b718b3a6eda57600a96f95  v10.0.3.zip"
+sha512sums="3af811687eab112e5acf993d2229fdfd0018fa6442cd252f964057585bad26f67e198528d88310e86ce51d7accb9f963306aa8df9f951576874367e2152b9422  v10.0.3.zip"

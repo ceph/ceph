@@ -31,6 +31,9 @@ if type zypper > /dev/null 2>&1 ; then
     $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release
 fi
 
+# default to lsb_release distributor detection
+if $(which lsb_release) ; then
+
 case $(lsb_release -si) in
 Ubuntu|Debian|Devuan)
         $SUDO apt-get install -y dpkg-dev
@@ -87,6 +90,29 @@ CentOS|Fedora|RedHatEnterpriseServer)
         echo "$(lsb_release -si) is unknown, dependencies will have to be installed manually."
         ;;
 esac
+
+# fallback to /etc/os-release os detection
+elif test -f /etc/os-release ; then
+
+source /etc/os-release
+case $ID in
+alpine)
+    # for now we need the testing repo for (leveldb, libexecinfo, and xmlstartlet)
+    TESTREPO="http://nl.alpinelinux.org/alpine/edge/testing"
+    if ! grep -qF "$TESTREPO" /etc/apk/repositories ; then
+        echo $TESTREPO >> /etc/apk/repositories
+    fi
+    source alpine/APKBUILD
+    $SUDO apk --update add $makedepends $depends
+    ;;
+*)
+    echo "$ID is unknown, dependencies will have to be installed manually."
+    ;;
+esac
+
+else
+    echo "platform unknown, dependencies will have to be installed manually."
+fi
 
 function populate_wheelhouse() {
     local install=$1
