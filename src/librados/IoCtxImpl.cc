@@ -967,19 +967,6 @@ int librados::IoCtxImpl::aio_stat2(const object_t& oid, AioCompletionImpl *c,
   return 0;
 }
 
-int librados::IoCtxImpl::aio_stat2(const object_t& oid, AioCompletionImpl *c,
-				  uint64_t *psize, ceph_real_time_t *pmtime)
-{
-  Context *onack = new C_aio_Ack(c);
-
-  c->io = this;
-  c->tid = objecter->stat(oid, oloc,
-			  snap_seq, psize, (ceph::real_time *)pmtime, 0,
-			  onack, &c->objver);
-
-  return 0;
-}
-
 int librados::IoCtxImpl::aio_cancel(AioCompletionImpl *c)
 {
   return objecter->op_cancel(c->tid, -ECANCELED);
@@ -1245,25 +1232,6 @@ int librados::IoCtxImpl::stat2(const object_t& oid, uint64_t *psize, struct time
 
   if (pts) {
     *pts = ceph::real_clock::to_timespec(mtime);
-  }
-
-  return 0;
-}
-
-int librados::IoCtxImpl::stat2(const object_t& oid, uint64_t *psize, ceph_real_time_t *pmtime)
-{
-  uint64_t size;
-  ceph::real_time mtime;
-
-  if (!psize)
-    psize = &size;
-
-  ::ObjectOperation rd;
-  prepare_assert_ops(&rd);
-  rd.stat(psize, (ceph::real_time *)pmtime, NULL);
-  int r = operate_read(oid, &rd, NULL);
-  if (r < 0) {
-    return r;
   }
 
   return 0;

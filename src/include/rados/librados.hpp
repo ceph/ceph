@@ -51,8 +51,6 @@ namespace librados
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
 
-  typedef void *ceph_real_time_t;
-
   class CEPH_RADOS_API ListObject
   {
   public:
@@ -364,7 +362,6 @@ namespace librados
 
     void mtime(time_t *pt);
     void mtime2(struct timespec *pts);
-    void mtime2(ceph_real_time_t *pmtime);
 
     void create(bool exclusive);
     void create(bool exclusive,
@@ -477,7 +474,6 @@ namespace librados
 
     void stat(uint64_t *psize, time_t *pmtime, int *prval);
     void stat2(uint64_t *psize, struct timespec *pts, int *prval);
-    void stat2(uint64_t *psize, ceph_real_time_t *pmtime, int *prval);
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
@@ -702,7 +698,6 @@ namespace librados
     int rmxattr(const std::string& oid, const char *name);
     int stat(const std::string& oid, uint64_t *psize, time_t *pmtime);
     int stat2(const std::string& oid, uint64_t *psize, struct timespec *pts);
-    int stat2(const std::string& oid, uint64_t *psize, ceph_real_time_t *pmtime);
     int exec(const std::string& oid, const char *cls, const char *method,
 	     bufferlist& inbl, bufferlist& outbl);
     /**
@@ -948,7 +943,6 @@ namespace librados
 
     int aio_stat(const std::string& oid, AioCompletion *c, uint64_t *psize, time_t *pmtime);
     int aio_stat2(const std::string& oid, AioCompletion *c, uint64_t *psize, struct timespec *pts);
-    int aio_stat2(const std::string& oid, AioCompletion *c, uint64_t *psize, ceph_real_time_t *pmtime);
 
     /**
      * Cancel aio operation
