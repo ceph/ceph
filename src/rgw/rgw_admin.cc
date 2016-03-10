@@ -1832,6 +1832,30 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
     status.push_back("data is caught up with master");
   } else {
     push_ss(ss, status, tab) << "data is behind on " << total_behind << " shards";
+
+    map<int, rgw_datalog_shard_data> master_pos;
+    ret = sync.read_source_log_shards_next(shards_behind, &master_pos);
+    if (ret < 0) {
+      derr << "ERROR: failed to fetch next positions (" << cpp_strerror(-ret) << ")" << dendl;
+    } else {
+      utime_t oldest;
+      for (auto iter : master_pos) {
+        rgw_datalog_shard_data& shard_data = iter.second;
+
+        if (!shard_data.entries.empty()) {
+          rgw_datalog_entry& entry = shard_data.entries.front();
+          if (oldest.is_zero()) {
+            oldest = entry.timestamp;
+          } else if (!entry.timestamp.is_zero() && entry.timestamp < oldest) {
+            oldest = entry.timestamp;
+          }
+        }
+      }
+
+      if (!oldest.is_zero()) {
+        push_ss(ss, status, tab) << "oldest change not applied: " << oldest;
+      }
+    }
   }
 
   flush_ss(ss, status);
