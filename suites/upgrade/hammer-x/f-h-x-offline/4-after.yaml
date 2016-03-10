@@ -1,6 +1,5 @@
 tasks:
 - workunit:
-    branch: firefly
     clients:
       client.0:
         - rados/test.sh
