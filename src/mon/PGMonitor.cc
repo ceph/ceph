@@ -440,16 +440,19 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
       r = -ENOENT;
     } else {
       r = mon->store->get(pgmap_pg_prefix, stringify(pgid), pgbl);
-      dout(20) << " refreshing pg " << pgid << " got " << r << " len "
-               << pgbl.length() << dendl;
-
       if (pg_pool_sum_old.count(pgid.pool()) == 0)
 	pg_pool_sum_old[pgid.pool()] = pg_map.pg_pool_sum[pgid.pool()];
     }
 
     if (r >= 0) {
       pg_map.update_pg(pgid, pgbl);
+      dout(20) << " refreshing pg " << pgid
+	       << " " << pg_map.pg_stat[pgid].reported_epoch
+	       << ":" << pg_map.pg_stat[pgid].reported_seq
+	       << " " << pg_state_string(pg_map.pg_stat[pgid].state)
+	       << dendl;
     } else {
+      dout(20) << " removing pg " << pgid << dendl;
       pg_map.remove_pg(pgid);
       if (pgid.ps() == 0)
 	deleted_pools.insert(pgid.pool());
