@@ -119,6 +119,7 @@ BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libudev-devel
 BuildRequires:	libtool
 BuildRequires:	make
+BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:	parted
 BuildRequires:	perl
