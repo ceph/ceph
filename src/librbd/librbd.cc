@@ -1226,6 +1226,11 @@ namespace librbd {
     return r;
   }
 
+  int Image::mirror_image_enable() {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::mirror_image_enable(ictx);
+  }
+
 } // namespace librbd
 
 extern "C" void rbd_version(int *major, int *minor, int *extra)
@@ -2551,6 +2556,12 @@ extern "C" int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t 
   }
   tracepoint(librbd, metadata_list_exit, r);
   return r;
+}
+
+extern "C" int rbd_mirror_image_enable(rbd_image_t image)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::mirror_image_enable(ictx);
 }
 
 extern "C" int rbd_aio_is_complete(rbd_completion_t c)

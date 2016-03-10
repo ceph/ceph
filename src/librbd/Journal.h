@@ -109,6 +109,8 @@ public:
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
   static int reset(librados::IoCtx &io_ctx, const std::string &image_id);
 
+  static int is_tag_owner(ImageCtx *image_ctx, bool *is_tag_owner);
+
   bool is_journal_ready() const;
   bool is_journal_replaying() const;
 
