@@ -132,5 +132,5 @@ public:
     }
   }
 };
-  
+REGISTER_MESSAGE(MForward, MSG_FORWARD);
 #endif

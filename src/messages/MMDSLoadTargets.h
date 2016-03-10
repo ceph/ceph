@@ -54,5 +54,5 @@ public:
     ::encode(targets, payload);
   }
 };
-
+REGISTER_MESSAGE(MMDSLoadTargets, MSG_MDS_OFFLOAD_TARGETS);
 #endif

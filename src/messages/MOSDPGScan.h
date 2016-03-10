@@ -102,5 +102,5 @@ public:
 	<< ")";
   }
 };
-
+REGISTER_MESSAGE(MOSDPGScan, MSG_OSD_PG_SCAN);
 #endif

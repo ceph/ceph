@@ -40,5 +40,5 @@ struct MMDSFindInoReply : public Message {
     ::decode(path, p);
   }
 };
-
+REGISTER_MESSAGE(MMDSFindInoReply, MSG_MDS_FINDINOREPLY);
 #endif

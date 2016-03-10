@@ -39,5 +39,5 @@ public:
     ::encode(old_max_id, payload);
   }
 };
-
+REGISTER_MESSAGE(MMonGlobalID, MSG_MON_GLOBAL_ID);
 #endif

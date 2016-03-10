@@ -130,5 +130,5 @@ public:
 
 };
 
-
+REGISTER_MESSAGE(MOSDRepOpReply, MSG_OSD_REPOPREPLY);
 #endif

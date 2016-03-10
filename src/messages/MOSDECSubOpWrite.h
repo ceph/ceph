@@ -67,5 +67,5 @@ public:
     op.log_entries.clear();
   }
 };
-
+REGISTER_MESSAGE(MOSDECSubOpWrite, MSG_OSD_EC_WRITE);
 #endif

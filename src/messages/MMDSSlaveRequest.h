@@ -198,5 +198,5 @@ public:
   }  
 	
 };
-
+REGISTER_MESSAGE(MMDSSlaveRequest, MSG_MDS_SLAVE_REQUEST);
 #endif

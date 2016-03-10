@@ -58,5 +58,5 @@ public:
   }
   
 };
-
+REGISTER_MESSAGE(MMDSFragmentNotify, MSG_MDS_FRAGMENTNOTIFY);
 #endif

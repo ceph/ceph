@@ -58,5 +58,5 @@ public:
     out << ")";
   }
 };
-
+REGISTER_MESSAGE(MOSDECSubOpWriteReply, MSG_OSD_EC_WRITE_REPLY);
 #endif

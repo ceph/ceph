@@ -81,5 +81,5 @@ public:
   }
 
 };
-
+REGISTER_MESSAGE(MMonHealth, MSG_MON_HEALTH);
 #endif /* CEPH_MMON_HEALTH_H */

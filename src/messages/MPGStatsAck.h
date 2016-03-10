@@ -40,5 +40,5 @@ public:
     ::decode(pg_stat, p);
   }
 };
-
+REGISTER_MESSAGE(MPGStatsAck, MSG_PGSTATSACK);
 #endif

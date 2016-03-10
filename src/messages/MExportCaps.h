@@ -49,5 +49,5 @@ public:
   }
 
 };
-
+REGISTER_MESSAGE(MExportCaps, MSG_MDS_EXPORTCAPS);
 #endif

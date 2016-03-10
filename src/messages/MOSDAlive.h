@@ -45,5 +45,5 @@ public:
   }
   
 };
-
+REGISTER_MESSAGE(MOSDAlive, MSG_OSD_ALIVE);
 #endif

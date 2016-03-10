@@ -59,5 +59,5 @@ public:
     ::encode(osd_epoch_barrier, payload);
   }
 };
-
+REGISTER_MESSAGE(MClientCapRelease, CEPH_MSG_CLIENT_CAPRELEASE);
 #endif

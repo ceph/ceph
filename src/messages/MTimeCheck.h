@@ -83,5 +83,5 @@ public:
   }
 
 };
-
+REGISTER_MESSAGE(MTimeCheck, MSG_TIMECHECK);
 #endif /* CEPH_MTIMECHECK_H */

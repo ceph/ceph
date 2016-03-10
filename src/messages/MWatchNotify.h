@@ -88,5 +88,5 @@ public:
 	<< ")";
   }
 };
-
+REGISTER_MESSAGE(MWatchNotify, CEPH_MSG_WATCH_NOTIFY);
 #endif

@@ -97,5 +97,5 @@ public:
     }
   }
 };
-
+REGISTER_MESSAGE(MOSDPGLog, MSG_OSD_PG_LOG);
 #endif

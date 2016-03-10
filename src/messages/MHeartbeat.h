@@ -59,5 +59,5 @@ public:
   }
 
 };
-
+REGISTER_MESSAGE(MHeartbeat, MSG_MDS_HEARTBEAT);
 #endif

@@ -40,5 +40,5 @@ struct MMDSFindIno : public Message {
     ::decode(ino, p);
   }
 };
-
+REGISTER_MESSAGE(MMDSFindIno, MSG_MDS_FINDINO);
 #endif

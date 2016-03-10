@@ -49,5 +49,5 @@ struct MMDSOpenInoReply : public Message {
     ::decode(error, p);
   }
 };
-
+REGISTER_MESSAGE(MMDSOpenInoReply, MSG_MDS_OPENINOREPLY);
 #endif

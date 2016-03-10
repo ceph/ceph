@@ -49,5 +49,5 @@ public:
     ::decode(monmapbl, p);
   }
 };
-
+REGISTER_MESSAGE(MMonMap, CEPH_MSG_MON_MAP);
 #endif

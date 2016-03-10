@@ -78,5 +78,5 @@ public:
     ::decode(entries, p);
   }
 };
-
+REGISTER_MESSAGE(MOSDPGUpdateLogMissing, MSG_OSD_PG_UPDATE_LOG_MISSING);
 #endif

@@ -74,5 +74,5 @@ public:
 	<< " v" << version << ")";
   }
 };
-
+REGISTER_MESSAGE(MOSDFailure, MSG_OSD_FAILURE);
 #endif

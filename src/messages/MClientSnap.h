@@ -62,5 +62,5 @@ public:
   }
 
 };
-
+REGISTER_MESSAGE(MClientSnap, CEPH_MSG_CLIENT_SNAP);
 #endif

@@ -116,5 +116,5 @@ public:
   }
   
 };
-
+REGISTER_MESSAGE(MMonElection, MSG_MON_ELECTION);
 #endif

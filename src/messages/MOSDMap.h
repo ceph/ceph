@@ -138,5 +138,5 @@ public:
     out << ")";
   }
 };
-
+REGISTER_MESSAGE(MOSDMap, CEPH_MSG_OSD_MAP);
 #endif

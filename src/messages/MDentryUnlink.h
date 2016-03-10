@@ -53,5 +53,5 @@ public:
     ::encode(straybl, payload);
   }
 };
-
+REGISTER_MESSAGE(MDentryUnlink, MSG_MDS_DENTRYUNLINK);
 #endif

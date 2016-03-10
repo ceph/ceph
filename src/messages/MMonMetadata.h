@@ -48,5 +48,5 @@ public:
     ::decode(data, p);
   }
 };
-
+REGISTER_MESSAGE(MMonMetadata, CEPH_MSG_MON_METADATA);
 #endif

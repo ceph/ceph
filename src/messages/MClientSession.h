@@ -81,5 +81,5 @@ public:
 
   }
 };
-
+REGISTER_MESSAGE(MClientSession, CEPH_MSG_CLIENT_SESSION);
 #endif

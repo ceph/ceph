@@ -79,5 +79,5 @@ public:
   }
 
 };
-
+REGISTER_MESSAGE(MClientLease, CEPH_MSG_CLIENT_LEASE);
 #endif

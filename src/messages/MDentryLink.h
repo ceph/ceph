@@ -63,5 +63,5 @@ public:
     ::encode(bl, payload);
   }
 };
-
+REGISTER_MESSAGE(MDentryLink, MSG_MDS_DENTRYLINK);
 #endif
