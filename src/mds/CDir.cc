@@ -1675,6 +1675,12 @@ CDentry *CDir::_load_dentry(
         in->dirfragtree.swap(inode_data.dirfragtree);
         in->xattrs.swap(inode_data.xattrs);
         in->old_inodes.swap(inode_data.old_inodes);
+	if (!in->old_inodes.empty()) {
+	  snapid_t min_first = in->old_inodes.rbegin()->first + 1;
+	  if (min_first > in->first)
+	    in->first = min_first;
+	}
+
         in->oldest_snap = inode_data.oldest_snap;
         in->decode_snap_blob(inode_data.snap_blob);
         if (snaps && !in->snaprealm)

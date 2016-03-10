@@ -559,6 +559,12 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
     in->symlink = symlink;
   }
   in->old_inodes = old_inodes;
+  if (!in->old_inodes.empty()) {
+    snapid_t min_first = in->old_inodes.rbegin()->first + 1;
+    if (min_first > in->first)
+      in->first = min_first;
+  }
+
   /*
    * we can do this before linking hte inode bc the split_at would
    * be a no-op.. we have no children (namely open snaprealms) to
@@ -1274,8 +1280,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dir->link_primary_inode(dn, in);
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
-	p->update_inode(mds, in);
 	in->first = p->dnfirst;
+	p->update_inode(mds, in);
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  unlinked[in] = in->get_parent_dir();

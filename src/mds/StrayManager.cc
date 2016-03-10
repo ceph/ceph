@@ -319,12 +319,6 @@ void StrayManager::enqueue(CDentry *dn, bool trunc)
   dn->get(CDentry::PIN_PURGING);
   in->state_set(CInode::STATE_PURGING);
 
-  if (dn->item_stray.is_on_list()) {
-    dn->item_stray.remove_myself();
-    num_strays_delayed--;
-    logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
-  }
-
   /* We must clear this as soon as enqueuing it, to prevent the journal
    * expiry code from seeing a dirty parent and trying to write a backtrace */
   if (!trunc) {
@@ -545,6 +539,15 @@ bool StrayManager::__eval_stray(CDentry *dn, bool delay)
 
     in->mdcache->touch_dentry_bottom(dn);
     return false;
+  }
+
+  if (dn->item_stray.is_on_list()) {
+    if (delay)
+      return false;
+
+    dn->item_stray.remove_myself();
+    num_strays_delayed--;
+    logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
   }
 
   // purge?
