@@ -1622,6 +1622,89 @@ bool OSDMonitor::can_mark_in(int i)
   return true;
 }
 
+/* can_mark_out() checks if we can mark osds as being out. The -1 has no
+ * influence at all. The decision is made based on the ratio of "in" osds,
+ * and the function returns false if this ratio is lower that the minimum
+ * ratio set by g_conf->mon_osd_min_in_ratio. So it's not really up to us.
+ */
+bool OSDMonitor::check_osd_out(utime_t now)
+{
+  bool do_propose = false;
+  if (can_mark_out(-1)) {
+    set<int> down_cache;  // quick cache of down subtrees
+
+    map<int,utime_t>::iterator i = down_pending_out.begin();
+    while (i != down_pending_out.end()) {
+      int o = i->first;
+      utime_t down = now;
+      down -= i->second;
+      ++i;
+
+      if (osdmap.is_down(o) &&
+          osdmap.is_in(o) &&
+          can_mark_out(o)) {
+        utime_t orig_grace(g_conf->mon_osd_down_out_interval, 0);
+        utime_t grace = orig_grace;
+        double my_grace = 0.0;
+
+        if (g_conf->mon_osd_adjust_down_out_interval) {
+          // scale grace period the same way we do the heartbeat grace.
+          const osd_xinfo_t& xi = osdmap.get_xinfo(o);
+          double halflife = (double)g_conf->mon_osd_laggy_halflife;
+          double decay_k = ::log(.5) / halflife;
+          double decay = exp((double)down * decay_k);
+          dout(20) << "osd." << o << " laggy halflife " << halflife << " decay_k " << decay_k
+                   << " down for " << down << " decay " << decay << dendl;
+          my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
+          grace += my_grace;
+        }
+
+        // is this an entire large subtree down?
+        if (g_conf->mon_osd_down_out_subtree_limit.length()) {
+          int type = osdmap.crush->get_type_id(g_conf->mon_osd_down_out_subtree_limit);
+          if (type > 0) {
+            if (osdmap.containing_subtree_is_down(g_ceph_context, o, type, &down_cache)) {
+              dout(10) << "tick entire containing " << g_conf->mon_osd_down_out_subtree_limit
+                       << " subtree for osd." << o << " is down; resetting timer" << dendl;
+              // reset timer, too.
+              down_pending_out[o] = now;
+              continue;
+            }
+          }
+        }
+
+        if (g_conf->mon_osd_down_out_interval > 0 &&
+            down.sec() >= grace) {
+          dout(10) << "tick marking osd." << o << " OUT after " << down
+                   << " sec (target " << grace << " = " << orig_grace << " + " << my_grace << ")" << dendl;
+          pending_inc.new_weight[o] = CEPH_OSD_OUT;
+
+          // set the AUTOOUT bit.
+          if (pending_inc.new_state.count(o) == 0)
+            pending_inc.new_state[o] = 0;
+          pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
+
+          // remember previous weight
+          if (pending_inc.new_xinfo.count(o) == 0)
+            pending_inc.new_xinfo[o] = osdmap.osd_xinfo[o];
+          pending_inc.new_xinfo[o].old_weight = osdmap.osd_weight[o];
+
+          do_propose = true;
+
+          mon->clog->info() << "osd." << o << " out (down for " << down << ")\n";
+        } else
+          continue;
+      }
+
+      down_pending_out.erase(o);
+    }
+  } else {
+    dout(10) << "tick NOOUT flag set, not checking down osds" << dendl;
+  }
+
+  return do_propose;
+}
+
 void OSDMonitor::check_failures(utime_t now)
 {
   for (map<int,failure_info_t>::iterator p = failure_info.begin();
@@ -2581,84 +2664,8 @@ void OSDMonitor::tick()
   check_failures(now);
 
   // mark down osds out?
-
-  /* can_mark_out() checks if we can mark osds as being out. The -1 has no
-   * influence at all. The decision is made based on the ratio of "in" osds,
-   * and the function returns false if this ratio is lower that the minimum
-   * ratio set by g_conf->mon_osd_min_in_ratio. So it's not really up to us.
-   */
-  if (can_mark_out(-1)) {
-    set<int> down_cache;  // quick cache of down subtrees
-
-    map<int,utime_t>::iterator i = down_pending_out.begin();
-    while (i != down_pending_out.end()) {
-      int o = i->first;
-      utime_t down = now;
-      down -= i->second;
-      ++i;
-
-      if (osdmap.is_down(o) &&
-	  osdmap.is_in(o) &&
-	  can_mark_out(o)) {
-	utime_t orig_grace(g_conf->mon_osd_down_out_interval, 0);
-	utime_t grace = orig_grace;
-	double my_grace = 0.0;
-
-	if (g_conf->mon_osd_adjust_down_out_interval) {
-	  // scale grace period the same way we do the heartbeat grace.
-	  const osd_xinfo_t& xi = osdmap.get_xinfo(o);
-	  double halflife = (double)g_conf->mon_osd_laggy_halflife;
-	  double decay_k = ::log(.5) / halflife;
-	  double decay = exp((double)down * decay_k);
-	  dout(20) << "osd." << o << " laggy halflife " << halflife << " decay_k " << decay_k
-		   << " down for " << down << " decay " << decay << dendl;
-	  my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
-	  grace += my_grace;
-	}
-
-	// is this an entire large subtree down?
-	if (g_conf->mon_osd_down_out_subtree_limit.length()) {
-	  int type = osdmap.crush->get_type_id(g_conf->mon_osd_down_out_subtree_limit);
-	  if (type > 0) {
-	    if (osdmap.containing_subtree_is_down(g_ceph_context, o, type, &down_cache)) {
-	      dout(10) << "tick entire containing " << g_conf->mon_osd_down_out_subtree_limit
-		       << " subtree for osd." << o << " is down; resetting timer" << dendl;
-	      // reset timer, too.
-	      down_pending_out[o] = now;
-	      continue;
-	    }
-	  }
-	}
-
-	if (g_conf->mon_osd_down_out_interval > 0 &&
-	    down.sec() >= grace) {
-	  dout(10) << "tick marking osd." << o << " OUT after " << down
-		   << " sec (target " << grace << " = " << orig_grace << " + " << my_grace << ")" << dendl;
-	  pending_inc.new_weight[o] = CEPH_OSD_OUT;
-
-	  // set the AUTOOUT bit.
-	  if (pending_inc.new_state.count(o) == 0)
-	    pending_inc.new_state[o] = 0;
-	  pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
-
-	  // remember previous weight
-	  if (pending_inc.new_xinfo.count(o) == 0)
-	    pending_inc.new_xinfo[o] = osdmap.osd_xinfo[o];
-	  pending_inc.new_xinfo[o].old_weight = osdmap.osd_weight[o];
-
-	  do_propose = true;
-
-	  mon->clog->info() << "osd." << o << " out (down for " << down << ")\n";
-	} else
-	  continue;
-      }
-
-      down_pending_out.erase(o);
-    }
-  } else {
-    dout(10) << "tick NOOUT flag set, not checking down osds" << dendl;
-  }
-
+  do_propose = check_osd_out(now);  
+  
   // expire blacklisted items?
   for (ceph::unordered_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
        p != osdmap.blacklist.end();
@@ -2685,29 +2692,6 @@ void OSDMonitor::tick()
       do_propose = true;
     }
   }
-  // ---------------
-#define SWAP_PRIMARIES_AT_START 0
-#define SWAP_TIME 1
-#if 0
-  if (SWAP_PRIMARIES_AT_START) {
-    // For all PGs that have OSD 0 as the primary,
-    // switch them to use the first replca
-    ps_t numps = osdmap.get_pg_num();
-    for (int64_t pool=0; pool<1; pool++)
-      for (ps_t ps = 0; ps < numps; ++ps) {
-	pg_t pgid = pg_t(pg_t::TYPE_REPLICATED, ps, pool, -1);
-	vector<int> osds;
-	osdmap.pg_to_osds(pgid, osds);
-	if (osds[0] == 0) {
-	  pending_inc.new_pg_swap_primary[pgid] = osds[1];
-	  dout(3) << "Changing primary for PG " << pgid << " from " << osds[0] << " to "
-		  << osds[1] << dendl;
-	  do_propose = true;
-	}
-      }
-  }
-#endif
-  // ---------------
 
   if (update_pools_status())
     do_propose = true;
