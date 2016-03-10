@@ -425,6 +425,7 @@ noinst_HEADERS += \
 	test/librbd/mock/MockContextWQ.h \
 	test/librbd/mock/MockExclusiveLock.h \
 	test/librbd/mock/MockImageCtx.h \
+	test/librbd/mock/MockImageState.h \
 	test/librbd/mock/MockImageWatcher.h \
 	test/librbd/mock/MockJournal.h \
 	test/librbd/mock/MockObjectMap.h \
