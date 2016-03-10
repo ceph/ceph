@@ -1,0 +1,62 @@
+Building and using Ceph Radosgw STS "secure token service".
+
+Overview
+========
+The radosgw STS "secure token service" provides a federated identity service
+that can be used with the S3 service provided by radosgw.  Both radosgw and
+STS expect to occupy all of the URL path space, so must be run on different
+end points.  In practical terms, that means rgw-sts is a separate daemon
+that should be run on a different host than where radosgw is run.
+
+Building
+========
+
+For building with autoconf/configure, supply this parameter to configure
+--enable-sts
+
+For building with cmake, supply this parameter to cmake
+-DWITH_STS=YES
+
+This will enable building a "rgw-sts" executable.
+
+It will also ensure that the necessary bits are in radosgw
+to support using STS.
+
+Other usage particulars
+=======================
+In order to use STS, it is also necessary to have an externally
+deployed IDP.  This could be Ipsilon, shibboleth, or ADFS.
+Each of these supports a different variety of authentication and
+authorization information.
+For direct use (ie, with an end-user browser), this
+should be all that's necessary.  For programmatic use, it may be
+necessary to write extra code to interact with a particular
+deployment/configuration of IDP, and this would then be part
+of the calling application.
+
+Configuration
+=============
+In ceph.conf
+need to "name" the STS service.
+The same name needs to be given to rgw-sts when it is run.
+
+For instance,
+[global]
+	admin socket = /tmp/ceph-$name.asok
+	sts_port = 8080,8443s
+	log_to_stderr = true
+	err_to_stderr = true
+[client.sts.foo]
+	admin socket = /tmp/ceph-$name.asok
+
+then
+/usr/sbin/rgw-sts -f -c foo.conf --name client.sts.foo
+
+In Pictures
+===========
+
+browser -> IDP			acquire IDP token
+browser -> STS -> IDP		acquire STS token
+browser -> radosgw		access storage
+
+Application use is the same, except s/browser/application
