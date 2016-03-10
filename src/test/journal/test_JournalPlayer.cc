@@ -240,7 +240,7 @@ TEST_F(TestJournalPlayer, PrefetchMultipleTags) {
     cls::journal::ObjectPosition(0, 234, 120)};
   cls::journal::ObjectSetPosition commit_position(positions);
 
-  ASSERT_EQ(0, create(oid, 3));
+  ASSERT_EQ(0, create(oid, 14, 3));
   ASSERT_EQ(0, client_register(oid));
   ASSERT_EQ(0, client_commit(oid, commit_position));
 
