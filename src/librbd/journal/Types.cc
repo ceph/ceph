@@ -4,6 +4,7 @@
 #include "librbd/journal/Types.h"
 #include "include/assert.h"
 #include "include/stringify.h"
+#include "include/types.h"
 #include "common/Formatter.h"
 
 namespace librbd {
@@ -335,16 +336,19 @@ void ImageClientMeta::dump(Formatter *f) const {
 
 void MirrorPeerSyncPoint::encode(bufferlist& bl) const {
   ::encode(snap_name, bl);
+  ::encode(from_snap_name, bl);
   ::encode(object_number, bl);
 }
 
 void MirrorPeerSyncPoint::decode(__u8 version, bufferlist::iterator& it) {
   ::decode(snap_name, it);
+  ::decode(from_snap_name, it);
   ::decode(object_number, it);
 }
 
 void MirrorPeerSyncPoint::dump(Formatter *f) const {
   f->dump_string("snap_name", snap_name);
+  f->dump_string("from_snap_name", from_snap_name);
   if (object_number) {
     f->dump_unsigned("object_number", *object_number);
   }
@@ -454,7 +458,8 @@ void ClientData::generate_test_instances(std::list<ClientData *> &o) {
   o.push_back(new ClientData(ImageClientMeta()));
   o.push_back(new ClientData(ImageClientMeta(123)));
   o.push_back(new ClientData(MirrorPeerClientMeta()));
-  o.push_back(new ClientData(MirrorPeerClientMeta("image_id", {{"snap 1", 123}},
+  o.push_back(new ClientData(MirrorPeerClientMeta("image_id",
+                                                  {{"snap 2", "snap 1", 123}},
                                                   {{1, 2}, {3, 4}})));
   o.push_back(new ClientData(CliClientMeta()));
 }
@@ -564,6 +569,36 @@ std::ostream &operator<<(std::ostream &out, const ClientMetaType &type) {
 
 std::ostream &operator<<(std::ostream &out, const ImageClientMeta &meta) {
   out << "[tag_class=" << meta.tag_class << "]";
+  return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const MirrorPeerSyncPoint &sync) {
+  out << "[snap_name=" << sync.snap_name << ", "
+      << "from_snap_name=" << sync.from_snap_name;
+  if (sync.object_number) {
+    out << ", " << *sync.object_number;
+  }
+  out << "]";
+  return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const MirrorPeerClientMeta &meta) {
+  out << "[image_id=" << meta.image_id << ", "
+      << "sync_points=[";
+  std::string delimiter;
+  for (auto &sync_point : meta.sync_points) {
+    out << delimiter << "[" << sync_point << "]";
+    delimiter = ", ";
+  }
+  out << "], snap_seqs=[";
+  delimiter = "";
+  for (auto &pair : meta.snap_seqs) {
+    out << delimiter << "["
+        << "local_snap_seq=" << pair.first << ", "
+        << "peer_snap_seq" << pair.second << "]";
+    delimiter = ", ";
+  }
+  out << "]";
   return out;
 }
 
