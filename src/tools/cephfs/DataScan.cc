@@ -90,7 +90,7 @@ bool DataScan::parse_kwarg(
     dout(10) << "Applying tag filter: '" << filter_tag << "'" << dendl;
     return true;
   } else if (arg == std::string("--filesystem")) {
-    std::shared_ptr<Filesystem> fs;
+    std::shared_ptr<const Filesystem> fs;
     *r = fsmap->parse_filesystem(val, &fs);
     if (*r != 0) {
       std::cerr << "Invalid filesystem '" << val << "'" << std::endl;

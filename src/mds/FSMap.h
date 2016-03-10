@@ -381,14 +381,14 @@ public:
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
-  std::shared_ptr<Filesystem> get_filesystem(fs_cluster_id_t fscid) const
+  std::shared_ptr<const Filesystem> get_filesystem(fs_cluster_id_t fscid) const
   {
-    return filesystems.at(fscid);
+    return std::const_pointer_cast<const Filesystem>(filesystems.at(fscid));
   }
 
   int parse_filesystem(
       std::string const &ns_str,
-      std::shared_ptr<Filesystem> *result
+      std::shared_ptr<const Filesystem> *result
       ) const;
 
   int parse_role(

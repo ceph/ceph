@@ -46,7 +46,7 @@ int MDSRoleSelector::parse(const FSMap &fsmap, std::string const &str)
   } else {
     const std::string ns_str = str.substr(0, colon_pos);
     const std::string rank_str = str.substr(colon_pos + 1);
-    std::shared_ptr<Filesystem> fs_ptr;
+    std::shared_ptr<const Filesystem> fs_ptr;
     int r = fsmap.parse_filesystem(ns_str, &fs_ptr);
     if (r != 0) {
       return r;

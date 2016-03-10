@@ -374,7 +374,7 @@ void Filesystem::decode(bufferlist::iterator& p)
 
 int FSMap::parse_filesystem(
       std::string const &ns_str,
-      std::shared_ptr<Filesystem> *result
+      std::shared_ptr<const Filesystem> *result
       ) const
 {
   std::string ns_err;
@@ -382,7 +382,7 @@ int FSMap::parse_filesystem(
   if (!ns_err.empty() || filesystems.count(fscid) == 0) {
     for (auto fs : filesystems) {
       if (fs.second->mds_map.fs_name == ns_str) {
-        *result = fs.second;
+        *result = std::const_pointer_cast<const Filesystem>(fs.second);
         return 0;
       }
     }
