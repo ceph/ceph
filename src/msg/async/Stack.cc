@@ -67,8 +67,6 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), cct(c)
 
 void NetworkStack::start()
 {
-  static std::vector<std::function<void ()>> threads;
-  threads.clear();
   for (auto &&w : workers) {
     threads.emplace_back(
       [this, w]() {
@@ -104,6 +102,7 @@ void NetworkStack::stop()
   for (auto &&w : workers)
     w->stop();
   join_workers();
+  threads.clear();
 }
 
 class C_barrier : public EventCallback {

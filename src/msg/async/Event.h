@@ -214,7 +214,7 @@ class EventCenter {
     std::mutex lock;
     std::condition_variable cond;
     bool done = false;
-    func &&f;
+    func f;
     bool nonwait;
    public:
     C_submit_event(func &&_f, bool nw)

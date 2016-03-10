@@ -690,7 +690,7 @@ class tcp {
   class listener {
     tcp& _tcp;
     uint16_t _port;
-    Tub<int> _fd;
+    int _fd = -1;
     int16_t _errno;
     queue<connection> _q;
     size_t _q_max_length;
@@ -705,7 +705,7 @@ class tcp {
     listener(listener&& x)
         : _tcp(x._tcp), _port(x._port), _fd(std::move(x._fd)), _errno(x._errno),
           _q(std::move(x._q)) {
-      if (_fd)
+      if (_fd >= 0)
         _tcp._listening[_port] = this;
     }
     ~listener() {
@@ -715,7 +715,7 @@ class tcp {
       if (_tcp._listening.find(_port) != _tcp._listening.end())
         return -EADDRINUSE;
       _tcp._listening.emplace(_port, this);
-      _fd.construct(_tcp.manager.get_eventfd());
+      _fd = _tcp.manager.get_eventfd();
       return 0;
     }
     Tub<connection> accept() {
@@ -729,10 +729,10 @@ class tcp {
     void abort_accept() {
       while (!_q.empty())
         _q.pop();
-      if (_fd) {
+      if (_fd >= 0) {
         _tcp._listening.erase(_port);
-        _tcp.manager.close(*_fd);
-        _fd.destroy();
+        _tcp.manager.close(_fd);
+        _fd = -1;
       }
     }
     int16_t get_errno() const {
@@ -742,7 +742,7 @@ class tcp {
       return _q.size() == _q_max_length;
     }
     int fd() const {
-      return *_fd;
+      return _fd;
     }
     friend class tcp;
   };

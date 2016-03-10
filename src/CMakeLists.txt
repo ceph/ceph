@@ -14,7 +14,7 @@ add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT 
 
 set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
 set(CMAKE_ASM_FLAGS "-f elf64")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC -fsanitize=address -fsanitize=leak -fsanitize=undefined")
 
 include(CheckCCompilerFlag)
 CHECK_C_COMPILER_FLAG("-Wp,-D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
@@ -88,7 +88,7 @@ else()
 endif()
 
 
-set(EXTRALIBS uuid rt dl ${ATOMIC_OPS_LIBRARIES})
+set(EXTRALIBS uuid rt dl ${ATOMIC_OPS_LIBRARIES} asan ubsan)
 
 if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
@@ -229,6 +229,7 @@ if(HAVE_DPDK)
 	msg/async/dpdk/dpdk_rte.cc
 	msg/async/dpdk/DPDKStack.cc
 	msg/async/dpdk/EventDPDK.cc
+    msg/async/dpdk/UserspaceEvent.cc
     msg/async/dpdk/ethernet.cc
 	msg/async/dpdk/IP.cc
     msg/async/dpdk/IPChecksum.cc

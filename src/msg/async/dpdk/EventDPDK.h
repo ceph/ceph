@@ -26,7 +26,7 @@ class DPDKDriver : public EventDriver {
  public:
   UserspaceEventManager manager;
 
-  DPDKDriver(CephContext *c): cct(c) {}
+  DPDKDriver(CephContext *c): cct(c), manager(c) {}
   virtual ~DPDKDriver() { }
 
   int init(EventCenter *c, int nevent) override;

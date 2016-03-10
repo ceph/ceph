@@ -249,6 +249,7 @@ class NetworkStack {
  protected:
   CephContext *cct;
   vector<Worker*> workers;
+  std::vector<std::function<void ()>> threads;
   // Used to indicate whether thread started
 
   explicit NetworkStack(CephContext *c, const string &t);

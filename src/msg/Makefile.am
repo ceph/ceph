@@ -70,6 +70,7 @@ libmsg_la_SOURCES += \
 	msg/async/dpdk/dpdk_rte.cc \
 	msg/async/dpdk/DPDKStack.cc \
 	msg/async/dpdk/EventDPDK.cc \
+	msg/async/dpdk/UserspaceEvent.cc \
 	msg/async/dpdk/Stack.cc \
 	msg/async/dpdk/ethernet.cc \
 	msg/async/dpdk/IP.cc \

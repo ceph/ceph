@@ -62,7 +62,7 @@ class AsyncConnection : public Connection {
   ssize_t read_until(unsigned needed, char *p);
   ssize_t _process_connection();
   void _connect();
-  void _stop();
+  void _stop(bool delay_cleanup = false);
   int handle_connect_reply(ceph_msg_connect &connect, ceph_msg_connect_reply &r);
   ssize_t handle_connect_msg(ceph_msg_connect &m, bufferlist &aubl, bufferlist &bl);
   void was_session_reset();
@@ -301,6 +301,7 @@ class AsyncConnection : public Connection {
   EventCallbackRef connect_handler;
   EventCallbackRef local_deliver_handler;
   EventCallbackRef wakeup_handler;
+  EventCallbackRef cleanup_handler;
   struct iovec msgvec[ASYNC_IOV_MAX];
   char *recv_buf;
   uint32_t recv_max_prefetch;
@@ -355,7 +356,8 @@ class AsyncConnection : public Connection {
     lock.Unlock();
     mark_down();
   }
-  void cleanup_handler() {
+  void cleanup() {
+    assert(cleanup_handler);
     for (set<uint64_t>::iterator it = register_time_events.begin();
          it != register_time_events.end(); ++it)
       center->delete_time_event(*it);
@@ -377,6 +379,7 @@ class AsyncConnection : public Connection {
       delete delay_state;
       delay_state = NULL;
     }
+    cleanup_handler = nullptr;
   }
   PerfCounters *get_perf_counter() {
     return logger;

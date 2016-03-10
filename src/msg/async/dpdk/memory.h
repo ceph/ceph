@@ -33,8 +33,8 @@
  *
  */
 
-#ifndef CEPH_MSG_DPDK_MEMORY_H_H
-#define CEPH_MSG_DPDK_MEMORY_H_H
+#ifndef CEPH_MSG_DPDK_MEMORY_H
+#define CEPH_MSG_DPDK_MEMORY_H
 
 #include <stdint.h>
 #include <stddef.h>

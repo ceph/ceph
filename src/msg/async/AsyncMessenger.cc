@@ -45,34 +45,6 @@ static ostream& _prefix(std::ostream *_dout, Processor *p) {
  * Processor
  */
 
-class C_listen_forward : public EventCallback {
-  Worker *worker;
-  entity_addr_t &addr;
-  SocketOptions &options;
-  ServerSocket *ss;
-  int &ret;
-  std::mutex lock;
-  std::condition_variable cond;
-  bool done = false;
-
- public:
-  C_listen_forward(Worker *w, entity_addr_t &sa, SocketOptions opts,
-                   ServerSocket *_ss, int &r)
-      : worker(w), addr(sa), options(opts), ss(_ss), ret(r) {
-  }
-  void do_request(int id) {
-    ret = worker->listen(addr, options, ss);
-    std::unique_lock<std::mutex> l(lock);
-    done = true;
-    cond.notify_all();
-  }
-  void wait() {
-    std::unique_lock<std::mutex> l(lock);
-    while (!done)
-      cond.wait(l);
-  }
-};
-
 int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 {
   const md_config_t *conf = msgr->cct->_conf;
@@ -110,9 +82,9 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     }
 
     if (listen_addr.get_port()) {
-      C_listen_forward listen_forward(worker, listen_addr, opts, &listen_socket, r);
-      worker->center.dispatch_event_external(&listen_forward);
-      listen_forward.wait();
+      worker->center.submit_event([this, &listen_addr, &opts, &r]() {
+        r = worker->listen(listen_addr, opts, &listen_socket);
+      });
       if (r < 0) {
         lderr(msgr->cct) << __func__ << " unable to listen to " << listen_addr
                          << ": " << cpp_strerror(r) << dendl;
@@ -125,9 +97,9 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
           continue;
 
         listen_addr.set_port(port);
-        C_listen_forward listen_forward(worker, listen_addr, opts, &listen_socket, r);
-        worker->center.dispatch_event_external(&listen_forward);
-        listen_forward.wait();
+        worker->center.submit_event([this, &listen_addr, &opts, &r]() {
+          r = worker->listen(listen_addr, opts, &listen_socket);
+        });
         if (r == 0)
           break;
       }
@@ -191,7 +163,7 @@ int Processor::rebind(const set<int>& avoid_ports)
 
 int Processor::start()
 {
-  ldout(msgr->cct, 1) << __func__ << " " << dendl;
+  ldout(msgr->cct, 1) << __func__ << dendl;
 
   // start thread
   if (listen_socket) {

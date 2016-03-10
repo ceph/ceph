@@ -179,7 +179,7 @@ int tcpv4_connect(tcp<ipv4_traits>& tcpv4, const entity_addr_t &addr,
 template<typename InetTraits>
 ostream& tcp<InetTraits>::tcb::_prefix(std::ostream *_dout) {
   return *_dout << "tcp " << _local_ip << ":" << _local_port << " -> " << _foreign_ip << ":" << _foreign_port
-                << " tcb(" << this << " s=" << _state << ").";
+                << " tcb(" << this << " fd=" << fd << " s=" << _state << ").";
 }
 
 template<typename InetTraits>
@@ -647,6 +647,7 @@ template <typename InetTraits>
 void tcp<InetTraits>::tcb::close_final_cleanup()
 {
   if (_snd._all_data_acked_fd >= 0) {
+    center->delete_file_event(_snd._all_data_acked_fd, EVENT_READABLE);
     _tcp.manager.close(_snd._all_data_acked_fd);
     _snd._all_data_acked_fd = -1;
   }

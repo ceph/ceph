@@ -59,7 +59,8 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
     string ms_type = get_type();
     if (ms_type == "async") {
       if (string(GetParam()+6, 4) == "dpdk") {
-        g_ceph_context->_conf->set_val("ms_async_op_threads", "1");
+        g_ceph_context->_conf->set_val("ms_async_op_threads", "1", false, false);
+        g_ceph_context->_conf->set_val("ms_async_send_inline", "false", false, false);
         g_ceph_context->_conf->set_val("ms_async_transport_type", "dpdk", false, false);
         g_ceph_context->_conf->set_val("ms_dpdk_coremask", "1", false, false);
         g_ceph_context->_conf->set_val("ms_dpdk_host_ipv4_addr", "127.0.0.1", false, false);
@@ -1064,7 +1065,7 @@ bool SyntheticDispatcher::ms_handle_reset(Connection *con) {
 }
 
 TEST_P(MessengerTest, SyntheticStressTest) {
-  SyntheticWorkload test_msg(1, 1, get_type(), 100,
+  SyntheticWorkload test_msg(8, 32, get_type(), 100,
                              Messenger::Policy::stateful_server(0, 0),
                              Messenger::Policy::lossless_client(0, 0));
   for (int i = 0; i < 100; ++i) {
