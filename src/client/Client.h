@@ -421,6 +421,7 @@ protected:
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds
   ceph::unordered_map<int, Fh*> fd_map;
+  set<Fh*> ll_unclosed_fh_set;
   
   int get_fd() {
     int fd = free_fd_set.range_start();
