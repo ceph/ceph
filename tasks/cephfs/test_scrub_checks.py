@@ -4,6 +4,7 @@ MDS admin socket scrubbing-related tests.
 import json
 import logging
 import errno
+import time
 from teuthology.exceptions import CommandFailedError
 import os
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -56,22 +57,14 @@ class TestScrubChecks(CephFSTestCase):
                      id_=mds_rank, path=abs_test_path, seq=run_seq)
                  )
 
-        def json_validator(json_out, rc, element, expected_value):
-            if rc != 0:
-                return False, "asok command returned error {rc}".format(rc=rc)
-            element_value = json_out.get(element)
-            if element_value != expected_value:
-                return False, "unexpectedly got {jv} instead of {ev}!".format(
-                    jv=element_value, ev=expected_value)
-            return True, "Succeeded"
 
-        success_validator = lambda j, r: json_validator(j, r, "return_code", 0)
+        success_validator = lambda j, r: self.json_validator(j, r, "return_code", 0)
 
         nep = "{test_path}/i/dont/exist".format(test_path=abs_test_path)
         self.asok_command(mds_rank, "flush_path {nep}".format(nep=nep),
-                          lambda j, r: json_validator(j, r, "return_code", -errno.ENOENT))
+                          lambda j, r: self.json_validator(j, r, "return_code", -errno.ENOENT))
         self.asok_command(mds_rank, "scrub_path {nep}".format(nep=nep),
-                          lambda j, r: json_validator(j, r, "return_code", -errno.ENOENT))
+                          lambda j, r: self.json_validator(j, r, "return_code", -errno.ENOENT))
 
         test_repo_path = "{test_path}/ceph-qa-suite".format(test_path=abs_test_path)
         dirpath = "{repo_path}/suites".format(repo_path=test_repo_path)
@@ -96,8 +89,8 @@ class TestScrubChecks(CephFSTestCase):
             format(repo_path=test_repo_path)
         command = "scrub_path {filepath}".format(filepath=filepath)
         self.asok_command(mds_rank, command,
-                          lambda j, r: json_validator(j, r, "performed_validation",
-                                                      False))
+                          lambda j, r: self.json_validator(j, r, "performed_validation",
+                                                           False))
 
         if run_seq == 0:
             log.info("First run: flushing base dir /")
@@ -130,15 +123,63 @@ class TestScrubChecks(CephFSTestCase):
         # Missing parent xattr -> ENODATA
         self.fs.rados(["rmxattr", rados_obj_name, "parent"], pool=self.fs.get_data_pool_name())
         self.asok_command(mds_rank, command,
-                          lambda j, r: json_validator(j, r, "return_code", -errno.ENODATA))
+                          lambda j, r: self.json_validator(j, r, "return_code", -errno.ENODATA))
 
         # Missing object -> ENOENT
         self.fs.rados(["rm", rados_obj_name], pool=self.fs.get_data_pool_name())
         self.asok_command(mds_rank, command,
-                          lambda j, r: json_validator(j, r, "return_code", -errno.ENOENT))
+                          lambda j, r: self.json_validator(j, r, "return_code", -errno.ENOENT))
 
         command = "flush_path /"
         self.asok_command(mds_rank, command, success_validator)
+
+    def test_scrub_repair(self):
+        mds_rank = 0
+        test_dir = "scrub_repair_path"
+
+        self.mount_a.run_shell(["sudo", "mkdir", test_dir])
+        self.mount_a.run_shell(["sudo", "touch", "{0}/file".format(test_dir)])
+        dir_objname = "{:x}.00000000".format(self.mount_a.path_to_ino(test_dir))
+
+        self.mount_a.umount_wait()
+
+        # flush journal entries to dirfrag objects, and expire journal
+        self.fs.mds_asok(['flush', 'journal'])
+        self.fs.mds_stop()
+
+        # remove the dentry from dirfrag, cause incorrect fragstat/rstat
+        self.fs.rados(["rmomapkey", dir_objname, "file_head"],
+                      pool=self.fs.get_metadata_pool_name())
+
+        self.fs.mds_fail_restart()
+        self.fs.wait_for_daemons()
+
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
+
+        # fragstat indicates the directory is not empty, rmdir should fail
+        with self.assertRaises(CommandFailedError) as ar:
+            self.mount_a.run_shell(["sudo", "rmdir", test_dir])
+        self.assertEqual(ar.exception.exitstatus, 1)
+
+        self.asok_command(mds_rank, "scrub_path /{0} repair".format(test_dir),
+                          lambda j, r: self.json_validator(j, r, "return_code", 0))
+
+        # wait a few second for background repair
+        time.sleep(10)
+
+        # fragstat should be fixed
+        self.mount_a.run_shell(["sudo", "rmdir", test_dir])
+
+    @staticmethod
+    def json_validator(json_out, rc, element, expected_value):
+        if rc != 0:
+            return False, "asok command returned error {rc}".format(rc=rc)
+        element_value = json_out.get(element)
+        if element_value != expected_value:
+            return False, "unexpectedly got {jv} instead of {ev}!".format(
+                jv=element_value, ev=expected_value)
+        return True, "Succeeded"
 
     def asok_command(self, mds_rank, command, validator):
         log.info("Running command '{command}'".format(command=command))
