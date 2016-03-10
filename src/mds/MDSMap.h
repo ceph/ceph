@@ -482,10 +482,10 @@ public:
     return i->second.state;
   }
 
-  const mds_info_t& get_info(const mds_rank_t m) {
+  const mds_info_t& get_info(const mds_rank_t m) const {
     return mds_info.at(up.at(m));
   }
-  const mds_info_t& get_info_gid(const mds_gid_t gid) {
+  const mds_info_t& get_info_gid(const mds_gid_t gid) const {
     return mds_info.at(gid);
   }
 

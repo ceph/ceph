@@ -2235,10 +2235,13 @@ int MDSMonitor::filesystem_command(
       return -EINVAL;
     }
 
-    std::shared_ptr<Filesystem> fs = pending_fsmap.get_filesystem(role.fscid);
-    assert(fs != nullptr);
+    pending_fsmap.modify_filesystem(
+        role.fscid,
+        [role](std::shared_ptr<Filesystem> fs)
+    {
+      fs->mds_map.failed.erase(role.rank);
+    });
 
-    fs->mds_map.failed.erase(role.rank);
     stringstream ss;
     ss << "removed failed mds." << role;
     return 0;
@@ -2699,7 +2702,7 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid,
     *osd_propose |= fail_mds_gid(gid);
 
     // Promote the replacement
-    const std::shared_ptr<Filesystem> fs = pending_fsmap.get_filesystem(fscid);
+    auto fs = pending_fsmap.filesystems.at(fscid);
     pending_fsmap.promote(sgid, fs, info.rank);
 
     *mds_propose = true;
