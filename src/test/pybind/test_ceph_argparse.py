@@ -1112,7 +1112,6 @@ class TestOSD(TestArgparse):
         self.assert_valid_command(['osd', 'reweight-by-utilization'])
         self.assert_valid_command(['osd', 'reweight-by-utilization', '100'])
         self.assert_valid_command(['osd', 'reweight-by-utilization', '--no-increasing'])
-        self.assert_valid_command(['osd', 'reweight-by-utilization', '--yes-i-really-mean-it'])
         assert_equal({}, validate_command(sigdict, ['osd',
                                                     'reweight-by-utilization',
                                                     '50']))
