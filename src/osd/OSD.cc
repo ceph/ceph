@@ -3329,7 +3329,6 @@ void OSD::handle_pg_peering_evt(
   const pg_history_t& orig_history,
   pg_interval_map_t& pi,
   epoch_t epoch,
-  bool primary,
   PG::CephPeeringEvtRef evt)
 {
   if (service.splitting(pgid)) {
@@ -7351,7 +7350,6 @@ void OSD::handle_pg_create(OpRequestRef op)
       history,
       pi,
       m->epoch,
-      false,
       PG::CephPeeringEvtRef(
 	new PG::CephPeeringEvt(
 	  m->epoch,
@@ -7584,7 +7582,6 @@ void OSD::handle_pg_notify(OpRequestRef op)
       spg_t(it->first.info.pgid.pgid, it->first.to),
       it->first.info.history, it->second,
       it->first.query_epoch,
-      true,
       PG::CephPeeringEvtRef(
 	new PG::CephPeeringEvt(
 	  it->first.epoch_sent, it->first.query_epoch,
@@ -7616,7 +7613,6 @@ void OSD::handle_pg_log(OpRequestRef op)
   handle_pg_peering_evt(
     spg_t(m->info.pgid.pgid, m->to),
     m->info.history, m->past_intervals, m->get_epoch(),
-    false,
     PG::CephPeeringEvtRef(
       new PG::CephPeeringEvt(
 	m->get_epoch(), m->get_query_epoch(),
@@ -7650,7 +7646,6 @@ void OSD::handle_pg_info(OpRequestRef op)
     handle_pg_peering_evt(
       spg_t(p->first.info.pgid.pgid, p->first.to),
       p->first.info.history, p->second, p->first.epoch_sent,
-      false,
       PG::CephPeeringEvtRef(
 	new PG::CephPeeringEvt(
 	  p->first.epoch_sent, p->first.query_epoch,
