@@ -323,13 +323,20 @@ struct MirrorPeerSyncPoint {
   typedef boost::optional<uint64_t> ObjectNumber;
 
   std::string snap_name;
+  std::string from_snap_name;
   ObjectNumber object_number;
 
-  MirrorPeerSyncPoint() : object_number(boost::none) {
+  MirrorPeerSyncPoint() : MirrorPeerSyncPoint("", "", boost::none) {
   }
   MirrorPeerSyncPoint(const std::string &snap_name,
                       const ObjectNumber &object_number)
-    : snap_name(snap_name), object_number(object_number) {
+    : MirrorPeerSyncPoint(snap_name, "", object_number) {
+  }
+  MirrorPeerSyncPoint(const std::string &snap_name,
+                      const std::string &from_snap_name,
+                      const ObjectNumber &object_number)
+    : snap_name(snap_name), from_snap_name(from_snap_name),
+      object_number(object_number) {
   }
 
   void encode(bufferlist& bl) const;
@@ -435,6 +442,8 @@ struct TagData {
 std::ostream &operator<<(std::ostream &out, const EventType &type);
 std::ostream &operator<<(std::ostream &out, const ClientMetaType &type);
 std::ostream &operator<<(std::ostream &out, const ImageClientMeta &meta);
+std::ostream &operator<<(std::ostream &out, const MirrorPeerSyncPoint &sync);
+std::ostream &operator<<(std::ostream &out, const MirrorPeerClientMeta &meta);
 std::ostream &operator<<(std::ostream &out, const TagData &tag_data);
 
 } // namespace journal
