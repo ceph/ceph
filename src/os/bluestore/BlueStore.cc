@@ -4486,9 +4486,11 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
 	assert(op->cid == op->dest_cid);
 	const ghobject_t& noid = i.get_oid(op->dest_oid);
-	OnodeRef no = c->get_onode(noid, false);
+	OnodeRef& no = ovec[op->dest_oid];
+	if (!no) {
+	  no = c->get_onode(noid, false);
+	}
 	r = _rename(txc, c, o, no, noid);
-	o.reset();
       }
       break;
 
@@ -4499,7 +4501,6 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	r = _rename(txc, c, o, no, noid);
 	if (r == -ENOENT)
 	  r = 0;
-	o.reset();
       }
       break;
 
@@ -6334,15 +6335,18 @@ int BlueStore::_rename(TransContext *txc,
   int r;
   ghobject_t old_oid = oldo->oid;
 
-  if (newo && newo->exists) {
-    // destination object already exists, remove it first
-    r = _do_remove(txc, c, newo);
-    if (r < 0)
+  if (newo) {
+    if (newo->exists) {
+      r = -EEXIST;
       goto out;
+    }
+    assert(txc->onodes.count(newo) == 0);
   }
 
   txc->t->rmkey(PREFIX_OBJ, oldo->key);
   txc->write_onode(oldo);
+  newo = oldo;
+  oldo.reset(NULL);
   c->onode_map.rename(old_oid, new_oid);  // this adjusts oldo->{oid,key}
   r = 0;
 
