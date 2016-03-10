@@ -1359,7 +1359,7 @@ int RGWDataSyncStatusManager::init()
   rgw_datalog_info datalog_info;
   r = source_log.read_log_info(&datalog_info);
   if (r < 0) {
-    lderr(store->ctx()) << "ERROR: master.read_log_info() returned r=" << r << dendl;
+    ldout(store->ctx(), 5) << "ERROR: master.read_log_info() returned r=" << r << dendl;
     return r;
   }
 
