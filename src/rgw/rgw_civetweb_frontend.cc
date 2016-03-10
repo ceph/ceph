@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <pwd.h>
 #include "rgw_frontend.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -42,6 +43,22 @@ int RGWMongooseFrontend::run() {
   set_conf_default(conf_map, "enable_keep_alive", "yes");
   set_conf_default(conf_map, "num_threads", thread_pool_buf);
   set_conf_default(conf_map, "decode_url", "no");
+
+  // Set run_as_user. This will cause civetweb to invoke setuid() and setgid()
+  // based on pw_uid and pw_gid obtained from pw_name.
+  uid_t uid = g_ceph_context->get_set_uid();
+  if (uid) {
+    char buf[4096];
+    struct passwd pa;
+    struct passwd *p = 0;
+    getpwuid_r(uid, &pa, buf, sizeof(buf), &p);
+    if (!p) {
+      derr << "unable to look up uid " << uid << dendl;
+      exit(1);
+    }
+    conf_map.erase("run_as_user");
+    conf_map["run_as_user"] = std::string(p->pw_name);
+  }
 
   const char *options[conf_map.size() * 2 + 1];
   int i = 0;
