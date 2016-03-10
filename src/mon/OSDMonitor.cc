@@ -461,23 +461,32 @@ void OSDMonitor::update_logger()
   mon->cluster_logger->set(l_cluster_osd_epoch, osdmap.get_epoch());
 }
 
+struct Sorter {
+  bool operator()(std::pair<int,float> l,
+		  std::pair<int,float> r) {
+    return l.second > r.second;
+  }
+};
+
 /* Assign a lower weight to overloaded OSDs.
  *
  * The osds that will get a lower weight are those with with a utilization
  * percentage 'oload' percent greater than the average utilization.
  */
-int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
+int OSDMonitor::reweight_by_utilization(int oload,
+					double max_changef,
 					bool by_pg, const set<int64_t> *pools,
-					float max_change,
-					bool no_increasing, bool sure)
+					bool no_increasing,
+					bool dry_run,
+					std::stringstream *ss,
+					std::string *out_str,
+					Formatter *f)
 {
   if (oload <= 100) {
-    ostringstream oss;
-    oss << "You must give a percentage higher than 100. "
+    *ss << "You must give a percentage higher than 100. "
       "The reweighting threshold will be calculated as <average-utilization> "
       "times <input-percentage>. For example, an argument of 200 would "
       "reweight OSDs which are twice as utilized as the average OSD.\n";
-    out_str = oss.str();
     return -EINVAL;
   }
 
@@ -513,10 +522,8 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
     }
 
     if (!num_osds || (num_pg_copies / num_osds < g_conf->mon_reweight_min_pgs_per_osd)) {
-      ostringstream oss;
-      oss << "Refusing to reweight: we only have " << num_pg_copies
+      *ss << "Refusing to reweight: we only have " << num_pg_copies
 	  << " PGs across " << num_osds << " osds!\n";
-      out_str = oss.str();
       return -EDOM;
     }
 
@@ -527,17 +534,15 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
     if ((uint64_t)pgm.osd_sum.kb * 1024 / num_osd
 	< g_conf->mon_reweight_min_bytes_per_osd) {
       ostringstream oss;
-      oss << "Refusing to reweight: we only have " << pgm.osd_sum.kb
+      *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb
 	  << " kb across all osds!\n";
-      out_str = oss.str();
       return -EDOM;
     }
     if ((uint64_t)pgm.osd_sum.kb_used * 1024 / num_osd
 	< g_conf->mon_reweight_min_bytes_per_osd) {
       ostringstream oss;
-      oss << "Refusing to reweight: we only have " << pgm.osd_sum.kb_used
+      *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb_used
 	  << " kb used across all osds!\n";
-      out_str = oss.str();
       return -EDOM;
     }
 
@@ -550,13 +555,23 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
   // but aggressively adjust weights up whenever possible.
   double underload_util = average_util;
 
+  unsigned max_change = (unsigned)(max_changef * (double)0x10000);
+
   ostringstream oss;
-  char buf[128];
-  snprintf(buf, sizeof(buf), "average %04f, overload %04f. ",
-	   average_util, overload_util);
-  oss << buf;
-  std::string sep;
-  oss << "reweighted: ";
+  if (f) {
+    f->open_object_section("reweight_by_utilization");
+    f->dump_unsigned("overload_min", oload);
+    f->dump_float("max_change", max_changef);
+    f->dump_float("average_utilization", average_util);
+    f->dump_float("overload_utilization", overload_util);
+  } else {
+    oss << "oload " << oload << "\n";
+    oss << "max_change " << max_changef << "\n";
+    char buf[128];
+    snprintf(buf, sizeof(buf), "average %04f\noverload %04f\n",
+	     average_util, overload_util);
+    oss << buf;
+  }
   bool changed = false;
   int num_changed = 0;
 
@@ -577,9 +592,12 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
   }
 
   // sort and iterate from most to least utilized
-  std::sort(util_by_osd.begin(), util_by_osd.end(), [](std::pair<int, float> l, std::pair<int, float> r) {
-    return l.second > r.second;
-  });
+  std::sort(util_by_osd.begin(), util_by_osd.end(), Sorter());
+
+  OSDMap::Incremental newinc;
+
+  if (f)
+    f->open_array_section("reweights");
 
   for (std::vector<std::pair<int, float> >::const_iterator p =
 	 util_by_osd.begin();
@@ -588,22 +606,30 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
     float util = p->second;
 
     if (util >= overload_util) {
-      sep = ", ";
       // Assign a lower weight to overloaded OSDs. The current weight
       // is a factor to take into account the original weights,
       // to represent e.g. differing storage capacities
       unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
       new_weight = MAX(new_weight, weight - max_change);
-      if (sure) {
+      newinc.new_weight[p->first] = new_weight;
+      if (!dry_run) {
 	pending_inc.new_weight[p->first] = new_weight;
 	changed = true;
       }
-      char buf[128];
-      snprintf(buf, sizeof(buf), "osd.%d [%04f -> %04f]", p->first,
-	       (float)weight / (float)0x10000,
-	       (float)new_weight / (float)0x10000);
-      oss << buf << sep;
+      if (f) {
+	f->open_object_section("osd");
+	f->dump_unsigned("osd", p->first);
+	f->dump_float("weight", (float)weight / (float)0x10000);
+	f->dump_float("new_weight", (float)new_weight / (float)0x10000);
+	f->close_section();
+      } else {
+	char buf[128];
+	snprintf(buf, sizeof(buf), "osd.%d weight %04f -> %04f\n", p->first,
+		 (float)weight / (float)0x10000,
+		 (float)new_weight / (float)0x10000);
+	oss << buf;
+      }
       if (++num_changed >= g_conf->mon_reweight_max_osds)
 	break;
     }
@@ -615,25 +641,39 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
       if (new_weight > 0x10000)
           new_weight = 0x10000;
       if (new_weight > weight) {
-	sep = ", ";
-	if (sure) {
+	newinc.new_weight[p->first] = new_weight;
+	if (!dry_run) {
 	  pending_inc.new_weight[p->first] = new_weight;
 	  changed = true;
 	}
 	char buf[128];
-	snprintf(buf, sizeof(buf), "osd.%d [%04f -> %04f]", p->first,
+	snprintf(buf, sizeof(buf), "osd.%d weight %04f -> %04f\n", p->first,
 		 (float)weight / (float)0x10000,
 		 (float)new_weight / (float)0x10000);
-	oss << buf << sep;
+	oss << buf;
 	if (++num_changed >= g_conf->mon_reweight_max_osds)
 	  break;
       }
     }
   }
-  if (sep.empty()) {
-    oss << "(none)";
+  if (f) {
+    f->close_section();
   }
-  out_str = oss.str();
+
+  OSDMap newmap;
+  newmap.deepish_copy_from(osdmap);
+  newinc.fsid = newmap.fsid;
+  newinc.epoch = newmap.get_epoch() + 1;
+  newmap.apply_incremental(newinc);
+
+  osdmap.summarize_mapping_stats(&newmap, pools, out_str, f);
+
+  if (f) {
+    f->close_section();
+  } else {
+    *out_str += "\n";
+    *out_str += oss.str();
+  }
   dout(10) << "reweight_by_utilization: finished with " << out_str << dendl;
   return changed;
 }
@@ -6603,31 +6643,15 @@ done:
 					      get_last_committed() + 1));
     return true;
 
-  } else if (prefix == "osd reweight-by-utilization") {
-    int64_t oload;
-    cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
-    float max_change;
-    cmd_getval(g_ceph_context, cmdmap, "max_change", max_change);
-    string no_increasing, sure;
-    cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
-    string out_str;
-    err = reweight_by_utilization(oload, out_str, false, NULL,
-				  max_change,
-				  no_increasing == "--no-increasing",
-				  sure == "--yes-i-really-mean-it");
-    if (err < 0) {
-      ss << "FAILED reweight-by-utilization: " << out_str;
-    } else if (err == 0) {
-      ss << "no change: " << out_str;
-    } else {
-      ss << "SUCCESSFUL reweight-by-utilization: " << out_str;
-      getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
-						get_last_committed() + 1));
-      return true;
-    }
-  } else if (prefix == "osd reweight-by-pg") {
+  } else if (prefix == "osd reweight-by-pg" ||
+	     prefix == "osd reweight-by-utilization" ||
+	     prefix == "osd test-reweight-by-pg" ||
+	     prefix == "osd test-reweight-by-utilization") {
+    bool by_pg =
+      prefix == "osd reweight-by-pg" || prefix == "osd test-reweight-by-pg";
+    bool dry_run =
+      prefix == "osd test-reweight-by-pg" ||
+      prefix == "osd test-reweight-by-utilization";
     int64_t oload;
     cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
     set<int64_t> pools;
@@ -6642,26 +6666,35 @@ done:
       }
       pools.insert(pool);
     }
-    float max_change;
+    double max_change = .05;
     cmd_getval(g_ceph_context, cmdmap, "max_change", max_change);
-    string no_increasing, sure;
+    if (max_change <= 0.0) {
+      ss << "max_change " << max_change << " must be positive";
+      err = -EINVAL;
+      goto reply;
+    }
+    string no_increasing;
     cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     string out_str;
-    err = reweight_by_utilization(oload, out_str, true,
-				  pools.empty() ? NULL : &pools,
+    err = reweight_by_utilization(oload,
 				  max_change,
+				  by_pg,
+				  pools.empty() ? NULL : &pools,
 				  no_increasing == "--no-increasing",
-				  sure == "--yes-i-really-mean-it");
+				  dry_run,
+				  &ss, &out_str, f.get());
+    if (f)
+      f->flush(rdata);
+    else
+      rdata.append(out_str);
     if (err < 0) {
-      ss << "FAILED reweight-by-pg: " << out_str;
+      ss << "FAILED reweight-by-pg";
     } else if (err == 0) {
-      ss << "no change: " << out_str;
+      ss << "no change";
     } else {
-      ss << "SUCCESSFUL reweight-by-pg: " << out_str;
-      getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
-						get_last_committed() + 1));
+      ss << "SUCCESSFUL reweight-by-pg";
+      wait_for_finished_proposal(
+	new Monitor::C_Command(mon, m, 0, rs, rdata, get_last_committed() + 1));
       return true;
     }
   } else if (prefix == "osd thrash") {
