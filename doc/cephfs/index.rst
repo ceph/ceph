@@ -92,6 +92,7 @@ authentication keyring.
 	Troubleshooting <troubleshooting>
 	Disaster recovery <disaster-recovery>
 	Client authentication <client-auth>
+	Upgrading old filesystems <upgrading>
 
 .. raw:: html
 

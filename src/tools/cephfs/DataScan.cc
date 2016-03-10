@@ -39,6 +39,8 @@ void DataScan::usage()
     << "    --force-pool: use data pool even if it is not in MDSMap\n"
     << "\n"
     << "  cephfs-data-scan scan_frags [--force-corrupt]\n"
+    << "\n"
+    << "  cephfs-data-scan tmap_upgrade <metadata_pool>\n"
     << std::endl;
 
   generic_client_usage();
@@ -131,6 +133,7 @@ int DataScan::main(const std::vector<const char*> &args)
 
   std::string const &command = args[0];
   std::string data_pool_name;
+  std::string metadata_pool_name;
 
   // Consume any known --key val or --flag arguments
   for (std::vector<const char *>::const_iterator i = args.begin() + 1;
@@ -147,9 +150,16 @@ int DataScan::main(const std::vector<const char*> &args)
       continue;
     }
 
+    // Trailing positional argument
     if (i + 1 == args.end() &&
         (command == "scan_inodes" || command == "scan_extents")) {
       data_pool_name = *i;
+      continue;
+    }
+
+    // Trailing positional argument
+    if (i + 1 == args.end() && (command == "tmap_upgrade")) {
+      metadata_pool_name = *i;
       continue;
     }
 
@@ -207,9 +217,9 @@ int DataScan::main(const std::vector<const char*> &args)
     }
   }
 
+  // Initialize metadata_io from MDSMap for scan_frags
   if (command == "scan_frags") {
     int const metadata_pool_id = mdsmap->get_metadata_pool();
-
     dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
     std::string metadata_pool_name;
     int r = rados.pool_reverse_lookup(metadata_pool_id, &metadata_pool_name);
@@ -225,6 +235,30 @@ int DataScan::main(const std::vector<const char*> &args)
     }
   }
 
+  // Initialize metadata_io from pool on command line for tmap_upgrade
+  if (command == "tmap_upgrade") {
+    if (metadata_pool_name.empty()) {
+      std::cerr << "Metadata pool not specified" << std::endl;
+      usage();
+      return -EINVAL;
+    }
+
+    long metadata_pool_id = rados.pool_lookup(metadata_pool_name.c_str());
+    if (metadata_pool_id < 0) {
+      std::cerr << "Pool '" << metadata_pool_name << "' not found!" << std::endl;
+      return -ENOENT;
+    } else {
+      dout(4) << "pool '" << metadata_pool_name
+        << "' has ID " << metadata_pool_id << dendl;
+    }
+
+    r = rados.ioctx_create(metadata_pool_name.c_str(), metadata_io);
+    if (r != 0) {
+      return r;
+    }
+    std::cerr << "Created ioctx for " << metadata_pool_name << std::endl;
+  }
+
   // Finally, dispatch command
   if (command == "scan_inodes") {
     return scan_inodes();
@@ -232,6 +266,8 @@ int DataScan::main(const std::vector<const char*> &args)
     return scan_extents();
   } else if (command == "scan_frags") {
     return scan_frags();
+  } else if (command == "tmap_upgrade") {
+    return tmap_upgrade();
   } else if (command == "init") {
     return driver->init_roots(mdsmap->get_first_data_pool());
   } else {
@@ -772,7 +808,51 @@ int DataScan::scan_inodes()
   });
 }
 
+bool DataScan::valid_ino(inodeno_t ino) const
+{
+  return (ino >= inodeno_t((1ull << 40)))
+    || (MDS_INO_IS_STRAY(ino))
+    || (MDS_INO_IS_MDSDIR(ino))
+    || ino == MDS_INO_ROOT
+    || ino == MDS_INO_CEPH;
+}
 
+int DataScan::tmap_upgrade()
+{
+  librados::NObjectIterator i = metadata_io.nobjects_begin();
+  const librados::NObjectIterator i_end = metadata_io.nobjects_end();
+
+  int overall_r = 0;
+
+  for (; i != i_end; ++i) {
+    const std::string oid = i->get_oid();
+
+    uint64_t inode_no = 0;
+    uint64_t frag_id = 0;
+    int r = parse_oid(oid, &inode_no, &frag_id);
+    if (r == -EINVAL) {
+      dout(10) << "Not a dirfrag: '" << oid << "'" << dendl;
+      continue;
+    } else {
+      // parse_oid can only do 0 or -EINVAL
+      assert(r == 0);
+    }
+
+    if (!valid_ino(inode_no)) {
+      dout(10) << "Not a difrag (invalid ino): '" << oid << "'" << dendl;
+      continue;
+    }
+
+    r = metadata_io.tmap_to_omap(oid, true);
+    dout(20) << "tmap2omap(" << oid << "): " << r << dendl;
+    if (r < 0) {
+      derr << "Error converting '" << oid << "': " << cpp_strerror(r) << dendl;
+      overall_r = r;
+    }
+  }
+
+  return overall_r;
+}
 
 int DataScan::scan_frags()
 {
