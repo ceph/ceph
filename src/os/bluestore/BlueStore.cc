@@ -6398,6 +6398,8 @@ int BlueStore::_remove_collection(TransContext *txc, coll_t cid,
     pair<ghobject_t,OnodeRef> next;
     while ((*c)->onode_map.get_next(next.first, &next)) {
       if (next.second->exists) {
+	dout(10) << __func__ << " " << next.first << " " << next.second
+		 << " exists in onode_map" << dendl;
 	r = -ENOTEMPTY;
 	goto out;
       }
