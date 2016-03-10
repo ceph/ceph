@@ -2286,41 +2286,17 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   // Info
   child->info.history = info.history;
   child->info.purged_snaps = info.purged_snaps;
-  if (info.last_backfill_bitwise) {
-    // sort order respects pg boundaries
-    if (cmp(info.last_backfill, info.pgid.pgid.get_hobj_end(split_bits),
-	    info.last_backfill_bitwise) >= 0) {
-      // parent is done
-      info.set_last_backfill(hobject_t::get_max(), info.last_backfill_bitwise);
-      if (cmp(info.last_backfill, child->info.pgid.pgid.get_hobj_start(),
-	      info.last_backfill_bitwise) < 0) {
-	// child hasn't started
-	child->info.set_last_backfill(hobject_t(), info.last_backfill_bitwise);
-      } else if (cmp(info.last_backfill,
-		     child->info.pgid.pgid.get_hobj_end(split_bits),
-		     info.last_backfill_bitwise) < 0) {
-	// child backfilling
-	child->info.set_last_backfill(info.last_backfill,
-				      info.last_backfill_bitwise);
-      } else {
-	// child done
-        child->info.set_last_backfill(hobject_t::get_max(),
-				      info.last_backfill_bitwise);
-      }
-    } else {
-      // parent not done; entire child needs to backfill
-      child->info.set_last_backfill(hobject_t(), info.last_backfill_bitwise);
-    }
+
+  if (info.last_backfill.is_max()) {
+    child->info.set_last_backfill(hobject_t::get_max(),
+				  info.last_backfill_bitwise);
   } else {
-    // nibble sort does not respect pg boundaries
-    if (info.last_backfill.is_max()) {
-      child->info.set_last_backfill(hobject_t::get_max(),
-				    info.last_backfill_bitwise);
-    } else {
-      // restart backfill on parent and child to be safe.
-      info.set_last_backfill(hobject_t(), info.last_backfill_bitwise);
-      child->info.set_last_backfill(hobject_t(), info.last_backfill_bitwise);
-    }
+    // restart backfill on parent and child to be safe.  we could
+    // probably do better in the bitwise sort case, but it's more
+    // fragile (there may be special work to do on backfill completion
+    // in the future).
+    info.set_last_backfill(hobject_t(), info.last_backfill_bitwise);
+    child->info.set_last_backfill(hobject_t(), info.last_backfill_bitwise);
   }
 
   child->info.stats = info.stats;
