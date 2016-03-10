@@ -7661,6 +7661,7 @@ int Client::close(int fd)
     return -EBADF;
   int err = _release_fh(fh);
   fd_map.erase(fd);
+  put_fd(fd);
   ldout(cct, 3) << "close exit(" << fd << ")" << dendl;
   return err;
 }
