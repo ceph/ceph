@@ -568,7 +568,7 @@ int ObjBencher::write_bench(int secondsToRun,
        << "Total writes made:      " << data.finished << std::endl
        << "Write size:             " << data.op_size << std::endl
        << "Object size:            " << data.object_size << std::endl      
-       << "Bandwidth (MB/sec):     " << setprecision(3) << bandwidth << std::endl
+       << "Bandwidth (MB/sec):     " << setprecision(6) << bandwidth << std::endl
        << "Stddev Bandwidth:       " << vec_stddev(data.history.bandwidth) << std::endl
        << "Max bandwidth (MB/sec): " << data.idata.max_bandwidth << std::endl
        << "Min bandwidth (MB/sec): " << data.idata.min_bandwidth << std::endl
@@ -817,7 +817,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
        << "Total reads made:     " << data.finished << std::endl
        << "Read size:            " << data.op_size << std::endl
        << "Object size:          " << data.object_size << std::endl
-       << "Bandwidth (MB/sec):   " << setprecision(3) << bandwidth << std::endl
+       << "Bandwidth (MB/sec):   " << setprecision(6) << bandwidth << std::endl
        << "Average IOPS          " << (int)(data.finished/runtime) << std::endl
        << "Stddev IOPS:          " << vec_stddev(data.history.iops) << std::endl
        << "Max IOPS:             " << data.idata.max_iops << std::endl
@@ -1050,7 +1050,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
        << "Total reads made:     " << data.finished << std::endl
        << "Read size:            " << data.op_size << std::endl
        << "Object size:          " << data.object_size << std::endl
-       << "Bandwidth (MB/sec):   " << setprecision(3) << bandwidth << std::endl
+       << "Bandwidth (MB/sec):   " << setprecision(6) << bandwidth << std::endl
        << "Average IOPS:         " << (int)(data.finished/runtime) << std::endl
        << "Stddev IOPS:          " << vec_stddev(data.history.iops) << std::endl
        << "Max IOPS:             " << data.idata.max_iops << std::endl
