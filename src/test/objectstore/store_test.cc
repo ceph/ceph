@@ -342,6 +342,65 @@ TEST_P(StoreTest, SimpleObjectLongnameTest) {
   }
 }
 
+ghobject_t generate_long_name(unsigned i)
+{
+  stringstream name;
+  name << "object id " << i << " ";
+  for (unsigned j = 0; j < 500; ++j) name << 'a';
+  ghobject_t hoid(hobject_t(sobject_t(name.str(), CEPH_NOSNAP)));
+  hoid.hobj.set_hash(i % 2);
+  return hoid;
+}
+
+TEST_P(StoreTest, LongnameSplitTest) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  for (unsigned i = 0; i < 320; ++i) {
+    ObjectStore::Transaction t;
+    ghobject_t hoid = generate_long_name(i);
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = store->apply_transaction(&osr, t);
+  }
+
+  ghobject_t test_obj = generate_long_name(319);
+  ghobject_t test_obj_2 = test_obj;
+  test_obj_2.generation = 0;
+  {
+    ObjectStore::Transaction t;
+    // should cause a split
+    t.collection_move_rename(
+      cid, test_obj,
+      cid, test_obj_2);
+    r = store->apply_transaction(&osr, t);
+  }
+
+  for (unsigned i = 0; i < 319; ++i) {
+    ObjectStore::Transaction t;
+    ghobject_t hoid = generate_long_name(i);
+    t.remove(cid, hoid);
+    cerr << "Removing object " << hoid << std::endl;
+    r = store->apply_transaction(&osr, t);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, test_obj_2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+
+}
+
 TEST_P(StoreTest, ManyObjectTest) {
   int NUM_OBJS = 2000;
   int r = 0;
