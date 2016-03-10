@@ -317,6 +317,33 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
+class RGWGetUsage : public RGWOp {
+protected:
+  bool sent_data;
+  string start_date;
+  string end_date;
+  int show_log_entries;
+  int show_log_sum;
+  map<string, bool> categories;
+  map<rgw_user_bucket, rgw_usage_log_entry> usage;
+  map<string, rgw_usage_log_entry> summary_map;
+  cls_user_header header;
+public:
+  RGWGetUsage() : sent_data(false), show_log_entries(true), show_log_sum(true){
+  }
+
+  int verify_permission();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() {}
+
+  virtual bool should_get_stats() { return false; }
+
+  virtual const string name() { return "get_usage"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
 class RGWStatAccount : public RGWOp {
 protected:
   uint32_t buckets_count;

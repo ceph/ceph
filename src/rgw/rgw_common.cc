@@ -728,11 +728,14 @@ void RGWHTTPArgs::append(const string& name, const string& val)
       (name.compare("cors") == 0) ||
       (name.compare("location") == 0) ||
       (name.compare("logging") == 0) ||
+      (name.compare("usage") == 0) ||
       (name.compare("delete") == 0) ||
       (name.compare("uploads") == 0) ||
       (name.compare("partNumber") == 0) ||
       (name.compare("uploadId") == 0) ||
       (name.compare("versionId") == 0) ||
+      (name.compare("start-date") == 0) ||
+      (name.compare("end-date") == 0) ||
       (name.compare("versions") == 0) ||
       (name.compare("versioning") == 0) ||
       (name.compare("website") == 0) ||
