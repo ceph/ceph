@@ -165,11 +165,11 @@ class TestScrubChecks(CephFSTestCase):
         self.asok_command(mds_rank, "scrub_path /{0} repair".format(test_dir),
                           lambda j, r: self.json_validator(j, r, "return_code", 0))
 
-        # wait a few second for background repair
-        time.sleep(10)
+	# wait a few second for background repair
+	time.sleep(10)
 
-        # fragstat should be fixed
-        self.mount_a.run_shell(["sudo", "rmdir", test_dir])
+	# fragstat should be fixed
+	self.mount_a.run_shell(["sudo", "rmdir", test_dir])
 
     @staticmethod
     def json_validator(json_out, rc, element, expected_value):
