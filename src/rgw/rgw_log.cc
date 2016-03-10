@@ -188,19 +188,27 @@ static void log_usage(struct req_state *s, const string& op_name)
 
   rgw_user user;
   rgw_user payer;
+  string bucket_name;
 
-  if (!s->bucket_name.empty()) {
+  bucket_name = s->bucket_name;
+
+  if (!bucket_name.empty()) {
     user = s->bucket_owner.get_id();
     if (s->bucket_info.requester_pays) {
       payer = s->user->user_id;
     }
   } else {
-    user = s->user->user_id;
+      user = s->user->user_id;
+  }
+
+  bool error = s->err.is_err();
+  if (error && s->err.http_ret == 404) {
+    bucket_name = "-"; /* bucket not found, use the invalid '-' as bucket name */
   }
 
   string u = user.to_str();
   string p = payer.to_str();
-  rgw_usage_log_entry entry(u, p, s->bucket.name);
+  rgw_usage_log_entry entry(u, p, bucket_name);
 
   uint64_t bytes_sent = s->cio->get_bytes_sent();
   uint64_t bytes_received = s->cio->get_bytes_received();
@@ -208,7 +216,7 @@ static void log_usage(struct req_state *s, const string& op_name)
   rgw_usage_data data(bytes_sent, bytes_received);
 
   data.ops = 1;
-  if (!s->err.is_err())
+  if (!error)
     data.successful_ops = 1;
 
   entry.add(op_name, data);
