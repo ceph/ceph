@@ -39,6 +39,8 @@ class Log : private Thread
   uid_t m_uid;
   gid_t m_gid;
 
+  int m_fd_last_error;  ///< last error we say writing to fd (if any)
+
   int m_syslog_log, m_syslog_crash;
   int m_stderr_log, m_stderr_crash;
   int m_graylog_log, m_graylog_crash;
