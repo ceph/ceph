@@ -285,14 +285,23 @@ def remove_yum_timedhosts(ctx):
 
 def remove_installed_packages(ctx):
     dpkg_configure(ctx)
-    conf = {'project': 'ceph'}
+    conf = dict(
+        project='ceph',
+        debuginfo='true',
+    )
+    packages = install_task.get_package_list(ctx, conf)
+    debs = packages['deb'] + \
+        ['salt-common', 'salt-minion', 'calamari-server', 'python-rados']
+    rpms = packages['rpm'] + \
+        ['salt-common', 'salt-minion', 'calamari-server']
     install_task.remove_packages(
         ctx,
         conf,
-        {"deb": install_task.PACKAGES['ceph']['deb'] +
-         ['salt-common', 'salt-minion', 'calamari-server', 'python-rados'],
-         "rpm": install_task.PACKAGES['ceph']['rpm'] +
-         ['salt-common', 'salt-minion', 'calamari-server']})
+        dict(
+            deb=debs,
+            rpm=rpms,
+        )
+    )
     install_task.remove_sources(ctx, conf)
     install_task.purge_data(ctx)
 

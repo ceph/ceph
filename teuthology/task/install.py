@@ -6,6 +6,7 @@ import logging
 import time
 import os
 import subprocess
+import yaml
 
 from teuthology.config import config as teuth_config
 from teuthology import misc as teuthology
@@ -19,55 +20,6 @@ log = logging.getLogger(__name__)
 # Should the RELEASE value get extracted from somewhere?
 RELEASE = "1-0"
 
-# This is intended to be a complete listing of ceph packages. If we're going
-# to hardcode this stuff, I don't want to do it in more than once place.
-PACKAGES = {}
-PACKAGES['ceph'] = {}
-PACKAGES['ceph']['deb'] = [
-    'ceph',
-    'ceph-mds',
-    'ceph-common',
-    'ceph-fuse',
-    'ceph-test',
-    'radosgw',
-    'python-ceph',
-    'libcephfs1',
-    'libcephfs-java',
-    'libcephfs-jni',
-    'librados2',
-    'librbd1',
-    'rbd-fuse',
-]
-# These packages are only installed if 'debuginfo: true' is in the config.
-DEBUG_PACKAGES = {}
-DEBUG_PACKAGES['ceph'] = {}
-DEBUG_PACKAGES['ceph']['deb'] = [
-    'ceph-dbg',
-    'ceph-mds-dbg',
-    'ceph-common-dbg',
-    'ceph-fuse-dbg',
-    'radosgw-dbg',
-    'libcephfs1-dbg',
-    'librados2-dbg',
-    'librbd1-dbg',
-]
-PACKAGES['ceph']['rpm'] = [
-    'ceph-radosgw',
-    'ceph-test',
-    'ceph-devel',
-    'ceph',
-    'ceph-fuse',
-    'cephfs-java',
-    'libcephfs_jni1',
-    'libcephfs1',
-    'librados2',
-    'librbd1',
-    'python-ceph',
-    'rbd-fuse',
-]
-DEBUG_PACKAGES['ceph']['rpm'] = [
-    'ceph-debuginfo',
-]
 
 def _get_gitbuilder_project(ctx, remote, config):
     return packaging.GitbuilderProject(
@@ -577,6 +529,42 @@ def remove_sources(ctx, config):
             p.spawn(remove_fn, remote, project)
 
 
+def get_package_list(ctx, config):
+    debug = config.get('debuginfo', False)
+    project = config.get('project', 'ceph')
+    yaml_path = None
+    # Look for <suite_path>/packages/packages.yaml
+    if hasattr(ctx, 'config') and 'suite_path' in ctx.config:
+        suite_packages_path = os.path.join(
+            ctx.config['suite_path'],
+            'packages',
+            'packages.yaml',
+        )
+        if os.path.exists(suite_packages_path):
+            yaml_path = suite_packages_path
+    # If packages.yaml isn't found in the suite_path, potentially use
+    # teuthology's
+    yaml_path = yaml_path or os.path.join(
+        os.path.dirname(__file__),
+        'packages.yaml',
+    )
+    default_packages = yaml.safe_load(open(yaml_path))
+    default_debs = default_packages.get(project, dict()).get('deb', [])
+    default_rpms = default_packages.get(project, dict()).get('rpm', [])
+    # If a custom deb and/or rpm list is provided via the task config, use
+    # that. Otherwise, use the list from whichever packages.yaml was found
+    # first
+    debs = config.get('packages', dict()).get('deb', default_debs)
+    rpms = config.get('packages', dict()).get('rpm', default_rpms)
+    # Optionally include or exclude debug packages
+    if not debug:
+        debs = filter(lambda p: not p.endswith('-dbg'), debs)
+        rpms = filter(lambda p: not p.endswith('-debuginfo'), rpms)
+    package_list = dict(deb=debs, rpm=rpms)
+    log.debug("Package list is: {}".format(package_list))
+    return package_list
+
+
 @contextlib.contextmanager
 def install(ctx, config):
     """
@@ -589,12 +577,9 @@ def install(ctx, config):
 
     project = config.get('project', 'ceph')
 
-    debs = PACKAGES.get(project, {}).get('deb', [])
-    rpm = PACKAGES.get(project, {}).get('rpm', [])
-
-    if config.get('debuginfo'):
-        debs += DEBUG_PACKAGES.get(project, {}).get('deb', [])
-        rpm += DEBUG_PACKAGES.get(project, {}).get('rpm', [])
+    package_list = get_package_list(ctx, config)
+    debs = package_list['deb']
+    rpm = package_list['rpm']
 
     # pull any additional packages out of config
     extra_pkgs = config.get('extra_packages')
@@ -613,40 +598,12 @@ def install(ctx, config):
                 'librados2', 'librbd1',
                 'python-ceph']
         rpm = ['ceph-fuse', 'librbd1', 'librados2', 'ceph-test', 'python-ceph']
-
-    # install lib deps (so we explicitly specify version), but do not
-    # uninstall them, as other packages depend on them (e.g., kvm)
-    # TODO: these can probably be removed as these packages are now included
-    # in PACKAGES. We've found that not uninstalling them each run can
-    # sometimes cause a baremetal machine to end up in a weird state so
-    # they were included in PACKAGES to ensure that nuke cleans them up.
-    proj_install_debs = {'ceph': [
-        'librados2',
-        'librbd1',
-    ]}
-
-    proj_install_rpm = {'ceph': [
-        'librbd1',
-        'librados2',
-    ]}
-
-    install_debs = proj_install_debs.get(project, [])
-    install_rpm = proj_install_rpm.get(project, [])
-
-    # TODO: see previous todo comment. The install_debs and install_rpm
-    # part can and should be removed eventually as those packages are now
-    # present in PACKAGES.
-    install_info = {
-        "deb": debs + install_debs,
-        "rpm": rpm + install_rpm}
-    remove_info = {
-        "deb": debs,
-        "rpm": rpm}
-    install_packages(ctx, install_info, config)
+    package_list = dict(deb=debs, rpm=rpm)
+    install_packages(ctx, package_list, config)
     try:
         yield
     finally:
-        remove_packages(ctx, config, remove_info)
+        remove_packages(ctx, config, package_list)
         remove_sources(ctx, config)
         if project == 'ceph':
             purge_data(ctx)
@@ -966,6 +923,7 @@ def upgrade_remote_to_config(ctx, config):
 
     return result
 
+
 def upgrade_common(ctx, config, deploy_style):
     """
     Common code for upgrading
@@ -981,9 +939,7 @@ def upgrade_common(ctx, config, deploy_style):
 
         system_type = teuthology.get_system_type(remote)
         assert system_type in ('deb', 'rpm')
-        pkgs = PACKAGES[project][system_type]
-        if config.get('debuginfo'):
-            pkgs += DEBUG_PACKAGES[project][system_type]
+        pkgs = get_package_list(ctx, config)[system_type]
         excluded_packages = config.get('exclude_packages', list())
         pkgs = list(set(pkgs).difference(set(excluded_packages)))
         log.info("Upgrading {proj} {system_type} packages: {pkgs}".format(
@@ -1165,7 +1121,7 @@ def task(ctx, config):
         branch: foo
         extra_packages: ['samba']
     - install:
-        rhbuild: 1.3.0 
+        rhbuild: 1.3.0
         playbook: downstream_setup.yml
         vars:
            yum_repos:
@@ -1178,6 +1134,28 @@ def task(ctx, config):
       install:
         ceph:
           sha1: ...
+
+
+    Debug packages may optionally be installed:
+
+    overrides:
+      install:
+        ceph:
+          debuginfo: true
+
+
+    Default package lists (which come from packages.yaml) may be overridden:
+
+    overrides:
+      install:
+        ceph:
+          packages:
+            deb:
+            - ceph-osd
+            - ceph-mon
+            rpm:
+            - ceph-devel
+            - rbd-fuse
 
     When tag, branch and sha1 do not reference the same commit hash, the
     tag takes precedence over the branch and the branch takes precedence
@@ -1275,6 +1253,7 @@ def task(ctx, config):
                 extras=config.get('extras', None),
                 wait_for_package=config.get('wait_for_package', False),
                 project=project,
+                packages=config.get('packages', dict()),
             )),
             lambda: ship_utilities(ctx=ctx, config=None),
         ):
