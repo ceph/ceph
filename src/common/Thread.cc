@@ -200,8 +200,9 @@ int Thread::set_ioprio(int cls, int prio)
 
 int Thread::set_affinity(int id)
 {
+  int r = 0;
   cpuid = id;
   if (pid && ceph_gettid() == pid)
-    _set_affinity(id);
-  return 0;
+    r = _set_affinity(id);
+  return r;
 }
