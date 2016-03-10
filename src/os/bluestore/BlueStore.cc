@@ -4450,7 +4450,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_CLONE:
       {
         const ghobject_t& noid = i.get_oid(op->dest_oid);
-	OnodeRef no = c->get_onode(noid, true);
+	OnodeRef& no = ovec[op->dest_oid];
+	if (!no) {
+	  no = c->get_onode(noid, true);
+	}
 	r = _clone(txc, c, o, no);
       }
       break;
@@ -4462,7 +4465,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_CLONERANGE2:
       {
 	const ghobject_t& noid = i.get_oid(op->dest_oid);
-	OnodeRef no = c->get_onode(noid, true);
+	OnodeRef& no = ovec[op->dest_oid];
+	if (!no) {
+	  no = c->get_onode(noid, true);
+	}
         uint64_t srcoff = op->off;
         uint64_t len = op->len;
         uint64_t dstoff = op->dest_off;
