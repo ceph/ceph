@@ -213,7 +213,7 @@ void FSMap::get_health(list<pair<health_status_t,string> >& summary,
 
 void FSMap::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(10, 10, bl);
+  ENCODE_START(6, 6, bl);
   ::encode(epoch, bl);
   ::encode(next_filesystem_id, bl);
   ::encode(legacy_client_fscid, bl);
@@ -239,8 +239,12 @@ void FSMap::decode(bufferlist::iterator& p)
   MDSMap &legacy_mds_map = legacy_fs.mds_map;
   bool enabled = false;
   
-  DECODE_START_LEGACY_COMPAT_LEN_16(10, 4, 4, p);
-  if (struct_v < 10) {
+  // The highest MDSMap encoding version before we changed the
+  // MDSMonitor to store an FSMap instead of an MDSMap was
+  // 5, so anything older than 6 is decoded as an MDSMap,
+  // and anything newer is decoded as an FSMap.
+  DECODE_START_LEGACY_COMPAT_LEN_16(6, 4, 4, p);
+  if (struct_v < 6) {
     // Decoding an MDSMap (upgrade)
     ::decode(epoch, p);
     ::decode(legacy_mds_map.flags, p);
