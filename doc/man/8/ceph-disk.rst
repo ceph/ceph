@@ -27,20 +27,19 @@ Synopsis
 
 | subcommands:
 
-    prepare             Prepare a directory or disk for a Ceph OSD
-    activate            Activate a Ceph OSD
-    activate-lockbox    Activate a Ceph lockbox
-    activate-block      Activate an OSD via its block device
-    activate-journal    Activate an OSD via its journal device
-    activate-all        Activate all tagged OSD partitions
-    list                List disks, partitions, and Ceph OSDs
-    suppress-activate   Suppress activate on a device (prefix)
-    unsuppress-activate
-                        Stop suppressing activate on a device (prefix)
-    deactivate          Deactivate a Ceph OSD
-    destroy             Destroy a Ceph OSD
-    zap                 Zap/erase/destroy a device's partition table (and contents)
-    trigger             Trigger an event (caled by udev)
+    prepare              Prepare a directory or disk for a Ceph OSD
+    activate             Activate a Ceph OSD
+    activate-lockbox     Activate a Ceph lockbox
+    activate-block       Activate an OSD via its block device
+    activate-journal     Activate an OSD via its journal device
+    activate-all         Activate all tagged OSD partitions
+    list                 List disks, partitions, and Ceph OSDs
+    suppress-activate    Suppress activate on a device (prefix)
+    unsuppress-activate  Stop suppressing activate on a device (prefix)
+    deactivate           Deactivate a Ceph OSD
+    destroy              Destroy a Ceph OSD
+    zap                  Zap/erase/destroy a device's partition table (and contents)
+    trigger              Trigger an event (caled by udev)
 
 Description
 ===========
