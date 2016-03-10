@@ -22,7 +22,6 @@ overrides:
     - failed to encode
 roles:
 - - mon.a
-  - mds.a
   - osd.0
   - osd.1
   - mon.b
@@ -93,7 +92,7 @@ tasks:
   - install.upgrade:
       mon.a:
         branch: hammer
-  - ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, mds.a]
+  - ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2]
   - ceph_manager.wait_for_clean: null
   - ceph.restart: [osd.0, osd.1, osd.2]
   - ceph_manager.wait_for_clean: null
@@ -104,7 +103,7 @@ tasks:
 
   - install.upgrade:
       mon.a: null
-  - ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, mds.a]
+  - ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2]
   - ceph_manager.wait_for_clean: null
   - ceph.restart: [osd.0, osd.1, osd.2]
   - exec:
