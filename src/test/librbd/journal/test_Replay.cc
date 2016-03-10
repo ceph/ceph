@@ -11,6 +11,7 @@
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
@@ -444,6 +445,7 @@ TEST_F(TestJournalReplay, SnapRename) {
   get_journal_commit_position(ictx, &current_tag, &current_entry);
   ASSERT_EQ(initial_tag, current_tag);
   ASSERT_EQ(initial_entry + 2, current_entry);
+  ASSERT_EQ(0, ictx->state->refresh());
 
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
