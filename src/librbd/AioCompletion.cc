@@ -176,9 +176,10 @@ namespace librbd {
   void C_CacheRead::complete(int r) {
     if (!m_enqueued) {
       // cache_lock creates a lock ordering issue -- so re-execute this context
-      // outside the cache_lock
+      // outside the cache_lock. use the writeback handler's dedicated thread
+      // to avoid blocking a dependent operation
       m_enqueued = true;
-      m_image_ctx.op_work_queue->queue(this, r);
+      m_image_ctx.writeback_handler->queue(this, r);
       return;
     }
     Context::complete(r);
