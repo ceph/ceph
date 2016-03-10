@@ -37,7 +37,7 @@ public:
 					    const librados::object_id_t& start,
 					    uint64_t max_return);
 private:
-  Store(const coll_t& coll, const hobject_t& oid, ObjectStore* store);
+  Store(const coll_t& coll, const ghobject_t& oid, ObjectStore* store);
   std::vector<bufferlist> get_errors(ObjectStore* store,
 				     const string& start, const string& end,
 				     uint64_t max_return);

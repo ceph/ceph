@@ -3666,7 +3666,8 @@ int BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
        ++p) {
     bufferlist bl;
     ::encode((*p)->onode, bl);
-    dout(20) << "  onode " << (*p)->oid << " is " << bl.length() << dendl;
+    dout(20) << "  onode " << *p << " "
+	     << (*p)->oid << " is " << bl.length() << dendl;
     txc->t->set(PREFIX_OBJ, (*p)->key, bl);
 
     std::lock_guard<std::mutex> l((*p)->flush_lock);
@@ -4261,6 +4262,8 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     Transaction::Op *op = i.decode_op();
     int r = 0;
 
+    dout(30) << __func__ << " txc onodes " << txc->onodes << dendl;
+
     // no coll or obj
     if (op->op == Transaction::OP_NOP)
       continue;
@@ -4370,6 +4373,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	  goto endop;
 	}
       }
+      dout(30) << __func__ << " ovec[" << op->oid << "] now " << o << dendl;
     }
 
     switch (op->op) {
@@ -4450,7 +4454,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_CLONE:
       {
         const ghobject_t& noid = i.get_oid(op->dest_oid);
-	OnodeRef no = c->get_onode(noid, true);
+	OnodeRef& no = ovec[op->dest_oid];
+	if (!no) {
+	  no = c->get_onode(noid, true);
+	}
 	r = _clone(txc, c, o, no);
       }
       break;
@@ -4462,7 +4469,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_CLONERANGE2:
       {
 	const ghobject_t& noid = i.get_oid(op->dest_oid);
-	OnodeRef no = c->get_onode(noid, true);
+	OnodeRef& no = ovec[op->dest_oid];
+	if (!no) {
+	  no = c->get_onode(noid, true);
+	}
         uint64_t srcoff = op->off;
         uint64_t len = op->len;
         uint64_t dstoff = op->dest_off;
@@ -4483,23 +4493,17 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_MOVE_RENAME:
-      {
+    case Transaction::OP_TRY_RENAME:
+    {
 	assert(op->cid == op->dest_cid);
 	const ghobject_t& noid = i.get_oid(op->dest_oid);
-	OnodeRef no = c->get_onode(noid, false);
+	OnodeRef& no = ovec[op->dest_oid];
+	if (!no) {
+	  no = c->get_onode(noid, false);
+	}
 	r = _rename(txc, c, o, no, noid);
-	o.reset();
-      }
-      break;
-
-    case Transaction::OP_TRY_RENAME:
-      {
-	const ghobject_t& noid = i.get_oid(op->dest_oid);
-	OnodeRef no = c->get_onode(noid, true);
-	r = _rename(txc, c, o, no, noid);
-	if (r == -ENOENT)
+	if (r == -ENOENT && op->op == Transaction::OP_TRY_RENAME)
 	  r = 0;
-	o.reset();
       }
       break;
 
@@ -5174,7 +5178,8 @@ int BlueStore::_do_allocate(
     } else {
       dout(20) << "  tail shared, but no COW needed" << dendl;
     }
-    if (cow_offset_raw & ~block_mask) {
+    if (cow_offset_raw < o->onode.size &&
+	(cow_offset_raw & ~block_mask)) {
       *cow_rmw_tail = bp->second.offset + cow_offset_raw - bp->first;
       dout(20) << "  cow_rmw_tail " << *cow_rmw_tail
 	       << " from " << bp->second << dendl;
@@ -6030,7 +6035,8 @@ void BlueStore::_do_omap_clear(TransContext *txc, uint64_t id)
   it->lower_bound(prefix);
   while (it->valid()) {
     if (it->key() >= tail) {
-      dout(30) << __func__ << "  stop at " << tail << dendl;
+      dout(30) << __func__ << "  stop at " << pretty_binary_string(tail)
+	       << dendl;
       break;
     }
     txc->t->rmkey(PREFIX_OMAP, it->key());
@@ -6332,15 +6338,18 @@ int BlueStore::_rename(TransContext *txc,
   int r;
   ghobject_t old_oid = oldo->oid;
 
-  if (newo && newo->exists) {
-    // destination object already exists, remove it first
-    r = _do_remove(txc, c, newo);
-    if (r < 0)
+  if (newo) {
+    if (newo->exists) {
+      r = -EEXIST;
       goto out;
+    }
+    assert(txc->onodes.count(newo) == 0);
   }
 
   txc->t->rmkey(PREFIX_OBJ, oldo->key);
   txc->write_onode(oldo);
+  newo = oldo;
+  oldo.reset(NULL);
   c->onode_map.rename(old_oid, new_oid);  // this adjusts oldo->{oid,key}
   r = 0;
 
@@ -6397,6 +6406,8 @@ int BlueStore::_remove_collection(TransContext *txc, coll_t cid,
     pair<ghobject_t,OnodeRef> next;
     while ((*c)->onode_map.get_next(next.first, &next)) {
       if (next.second->exists) {
+	dout(10) << __func__ << " " << next.first << " " << next.second
+		 << " exists in onode_map" << dendl;
 	r = -ENOTEMPTY;
 	goto out;
       }
