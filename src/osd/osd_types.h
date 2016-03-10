@@ -497,10 +497,19 @@ struct spg_t {
     DECODE_FINISH(bl);
   }
 
-  hobject_t make_temp_object(const string& name) const {
+  hobject_t make_temp_hobject(const string& name) const {
     return hobject_t(object_t(name), "", CEPH_NOSNAP,
 		     pgid.ps(),
 		     hobject_t::POOL_TEMP_START - pgid.pool(), "");
+  }
+
+  ghobject_t make_temp_ghobject(const string& name) const {
+    return ghobject_t(
+      hobject_t(object_t(name), "", CEPH_NOSNAP,
+		pgid.ps(),
+		hobject_t::POOL_TEMP_START - pgid.pool(), ""),
+      ghobject_t::NO_GEN,
+      shard);
   }
 };
 WRITE_CLASS_ENCODER(spg_t)

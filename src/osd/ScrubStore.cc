@@ -7,11 +7,11 @@
 #include "include/rados/rados_types.hpp"
 
 namespace {
-hobject_t make_scrub_object(const spg_t& pgid)
+ghobject_t make_scrub_object(const spg_t& pgid)
 {
   ostringstream ss;
   ss << "scrub_" << pgid;
-  return pgid.make_temp_object(ss.str());
+  return pgid.make_temp_ghobject(ss.str());
 }
 
 string first_object_key(int64_t pool)
@@ -101,12 +101,12 @@ Store::create(ObjectStore* store,
 {
   assert(store);
   assert(t);
-  hobject_t oid = make_scrub_object(pgid);
-  t->touch(coll, ghobject_t{oid});
+  ghobject_t oid = make_scrub_object(pgid);
+  t->touch(coll, oid);
   return new Store{coll, oid, store};
 }
 
-Store::Store(const coll_t& coll, const hobject_t& oid, ObjectStore* store)
+Store::Store(const coll_t& coll, const ghobject_t& oid, ObjectStore* store)
   : coll(coll),
     hoid(oid),
     driver(store, coll, hoid),
