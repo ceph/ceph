@@ -517,8 +517,15 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
 int authenticate_temp_url(RGWRados *store, req_state *s)
 {
+  /* FIXME: we cannot use req_state::bucket_name because it isn't available
+   * now. It will be initialized in RGWHandler_REST_SWIFT::postauth_init().
+   *
+   * Directly employing url_bucket here seems to be OK at the moment but
+   * the situation might easily change in the future as that field is
+   * supposed to carry information about bucket's tenant as well. */
+  const string& bucket_name = s->init_state.url_bucket;
   /* temp url requires bucket and object specified in the requets */
-  if (s->bucket_name.empty())
+  if (bucket_name.empty())
     return -EPERM;
 
   if (s->object.empty())
@@ -536,7 +543,7 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   RGWBucketInfo bucket_info;
 
   int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-                                   s->bucket_tenant, s->bucket_name,
+                                   s->bucket_tenant, bucket_name,
                                    bucket_info, NULL);
   if (ret < 0)
     return -EPERM;
