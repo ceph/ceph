@@ -7,6 +7,7 @@
 #include "test/librbd/mock/MockAioImageRequestWQ.h"
 #include "test/librbd/mock/MockContextWQ.h"
 #include "test/librbd/mock/MockExclusiveLock.h"
+#include "test/librbd/mock/MockImageState.h"
 #include "test/librbd/mock/MockImageWatcher.h"
 #include "test/librbd/mock/MockJournal.h"
 #include "test/librbd/mock/MockObjectMap.h"
@@ -59,6 +60,7 @@ struct MockImageCtx {
       aio_work_queue(new MockAioImageRequestWQ()),
       op_work_queue(new MockContextWQ()),
       parent(NULL), operations(new MockOperations()),
+      state(new MockImageState()),
       image_watcher(NULL), object_map(NULL),
       exclusive_lock(NULL), journal(NULL),
       concurrent_management_ops(image_ctx.concurrent_management_ops),
@@ -85,6 +87,7 @@ struct MockImageCtx {
     image_ctx->md_ctx.aio_flush();
     image_ctx->data_ctx.aio_flush();
     image_ctx->op_work_queue->drain();
+    delete state;
     delete operations;
     delete image_watcher;
     delete op_work_queue;
@@ -200,6 +203,7 @@ struct MockImageCtx {
 
   MockImageCtx *parent;
   MockOperations *operations;
+  MockImageState *state;
 
   MockImageWatcher *image_watcher;
   MockObjectMap *object_map;
