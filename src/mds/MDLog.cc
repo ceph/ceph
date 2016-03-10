@@ -99,7 +99,13 @@ class C_MDL_WriteError : public MDSIOContextBase {
       mds->respawn();
     } else {
       derr << "unhandled error " << cpp_strerror(r) << ", shutting down..." << dendl;
-      mds->suicide();
+      // Although it's possible that this could be something transient,
+      // it's severe and scary, so disable this rank until an administrator
+      // intervenes.
+      mds->clog->error() << "Unhandled journal write error on MDS rank " <<
+        mds->get_nodeid() << ": " << cpp_strerror(r) << ", shutting down.";
+      mds->damaged();
+      assert(0);  // damaged should never return
     }
   }
 
@@ -886,7 +892,11 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
   if (g_conf->mds_journal_format > JOURNAL_FORMAT_MAX) {
       dout(0) << "Configuration value for mds_journal_format is out of bounds, max is "
               << JOURNAL_FORMAT_MAX << dendl;
-      mds->suicide();
+
+      // Oh dear, something unreadable in the store for this rank: require
+      // operator intervention.
+      mds->damaged();
+      assert(0);  // damaged should not return
   }
 
   // First, read the pointer object.

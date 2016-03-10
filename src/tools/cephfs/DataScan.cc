@@ -365,6 +365,11 @@ int MetadataDriver::init_roots(int64_t data_pool_id)
   if (r != 0) {
     return r;
   }
+  bool created = false;
+  r = find_or_create_dirfrag(MDS_INO_MDSDIR(0), frag_t(), &created);
+  if (r != 0) {
+    return r;
+  }
 
   return 0;
 }
