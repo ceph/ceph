@@ -1839,8 +1839,7 @@ static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
 
 static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
                                   const set<string>& rmattr_names,
-                                  map<string, bufferlist>& out_attrs,
-                                  map<string, bufferlist>& out_rmattrs)
+                                  map<string, bufferlist>& out_attrs)
 {
   for (const auto kv : orig_attrs) {
     const string& name = kv.first;
@@ -1856,8 +1855,6 @@ static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
         if (aiter != std::end(out_attrs)) {
           out_attrs.erase(aiter);
         }
-
-        out_rmattrs[name] = kv.second;
       }
     } else if (out_attrs.find(name) == std::end(out_attrs)) {
       out_attrs[name] = kv.second;
@@ -1881,7 +1878,7 @@ static void populate_with_generic_attrs(const req_state * const s,
 void RGWCreateBucket::execute()
 {
   RGWAccessControlPolicy old_policy(s->cct);
-  map<string, bufferlist> attrs, rmattrs;
+  map<string, bufferlist> attrs;
   bufferlist aclbl;
   bufferlist corsbl;
   bool existed;
@@ -1972,7 +1969,7 @@ void RGWCreateBucket::execute()
 
   if (need_metadata_upload()) {
     rgw_get_request_metadata(s->cct, s->info, attrs, false);
-    prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs, rmattrs);
+    prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
     populate_with_generic_attrs(s, attrs);
   }
 
@@ -2051,10 +2048,9 @@ void RGWCreateBucket::execute()
       }
 
       attrs.clear();
-      rmattrs.clear();
 
       rgw_get_request_metadata(s->cct, s->info, attrs, false);
-      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs, rmattrs);
+      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
       populate_with_generic_attrs(s, attrs);
 
       op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
@@ -2826,7 +2822,7 @@ void RGWPutMetadataBucket::pre_exec()
 
 void RGWPutMetadataBucket::execute()
 {
-  map<string, bufferlist> attrs, orig_attrs, rmattrs;
+  map<string, bufferlist> attrs, orig_attrs;
 
   op_ret = get_params();
   if (op_ret < 0) {
@@ -2842,7 +2838,7 @@ void RGWPutMetadataBucket::execute()
   }
 
   orig_attrs = s->bucket_attrs;
-  prepare_add_del_attrs(orig_attrs, rmattr_names, attrs, rmattrs);
+  prepare_add_del_attrs(orig_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
 
   if (has_policy) {
