@@ -41,6 +41,7 @@ Log::Log(SubsystemMap *s)
     m_flush_mutex_holder(0),
     m_new(), m_recent(),
     m_fd(-1),
+    m_fd_last_error(0),
     m_syslog_log(-2), m_syslog_crash(-2),
     m_stderr_log(1), m_stderr_crash(-1),
     m_stop(false),
@@ -236,8 +237,13 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 	  r = safe_write(m_fd, s.data(), s.size());
 	if (r >= 0)
 	  r = write(m_fd, "\n", 1);
-	if (r < 0)
-	  cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
+	if (r != m_fd_last_error) {
+	  if (r < 0)
+	    cerr << "problem writing to " << m_log_file
+		 << ": " << cpp_strerror(r)
+		 << std::endl;
+	  m_fd_last_error = r;
+	}
       }
 
       if (do_syslog) {
