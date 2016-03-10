@@ -68,14 +68,6 @@ void TestMockFixture::expect_op_work_queue(librbd::MockImageCtx &mock_image_ctx)
                   mock_image_ctx.image_ctx->op_work_queue));
 }
 
-librados::MockTestMemIoCtxImpl &TestMockFixture::get_mock_io_ctx(
-    librados::IoCtx &ioctx) {
-  // TODO become friend of IoCtx so that we can cleanly extract io_ctx_impl
-  librados::MockTestMemIoCtxImpl **mock =
-    reinterpret_cast<librados::MockTestMemIoCtxImpl **>(&ioctx);
-  return **mock;
-}
-
 void TestMockFixture::initialize_features(librbd::ImageCtx *ictx,
                                           librbd::MockImageCtx &mock_image_ctx,
                                           librbd::MockExclusiveLock &mock_exclusive_lock,

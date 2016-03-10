@@ -66,6 +66,16 @@ void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen) {
 
 } // anonymous namespace
 
+namespace librados {
+
+MockTestMemIoCtxImpl &get_mock_io_ctx(IoCtx &ioctx) {
+  MockTestMemIoCtxImpl **mock =
+    reinterpret_cast<MockTestMemIoCtxImpl **>(&ioctx);
+  return **mock;
+}
+
+}
+
 namespace librados_test_stub {
 
 TestRadosClientPtr *rados_client() {
