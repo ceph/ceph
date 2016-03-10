@@ -1612,7 +1612,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       if (dir_follows+1 > dn->first) {
 	snapid_t oldfirst = dn->first;
 	dn->first = dir_follows+1;
-	if (realm->has_snaps_in_range(oldfirst, dn->last)) {
+	if (realm->has_snaps_in_range(oldfirst, dir_follows)) {
 	  CDentry *olddn = dn->dir->add_remote_dentry(dn->name, in->ino(),  in->d_type(),
 						      oldfirst, dir_follows);
 	  olddn->pre_dirty();
@@ -1643,7 +1643,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       return;
     }
 
-    if (!realm->has_snaps_in_range(in->first, in->last)) {
+    if (!realm->has_snaps_in_range(in->first, follows)) {
       dout(10) << "journal_cow_dentry no snapshot follows " << follows << " on " << *in << dendl;
       in->first = follows + 1;
       return;
@@ -1668,7 +1668,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 
     CInode *in = dnl->is_primary() ? dnl->get_inode() : NULL;
 
-    if (!realm->has_snaps_in_range(oldfirst, dn->last)) {
+    if (!realm->has_snaps_in_range(oldfirst, follows)) {
       dout(10) << "journal_cow_dentry no snapshot follows " << follows << " on " << *dn << dendl;
       if (in)
 	in->first = follows+1;
