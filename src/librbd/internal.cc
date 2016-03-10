@@ -2301,6 +2301,70 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return cls_client::metadata_list(&ictx->md_ctx, ictx->header_oid, start, max, pairs);
   }
 
+  int mirror_image_enable(ImageCtx *ictx) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "mirror_image_enable " << ictx << dendl;
+
+    if ((ictx->features & RBD_FEATURE_JOURNALING) == 0) {
+      lderr(cct) << "cannot enable mirroring: journaling is not enabled"
+        << dendl;
+      return -EINVAL;
+    }
+
+    bool is_primary;
+    int r = Journal<>::is_tag_owner(ictx, &is_primary);
+    if (r < 0) {
+      lderr(cct) << "cannot enable mirroring: failed to check tag ownership: "
+        << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if (!is_primary) {
+      lderr(cct) <<
+        "cannot enable mirroring: last journal tag not owned by local cluster"
+        << dendl;
+      return -EINVAL;
+    }
+
+    cls::rbd::MirrorImage mirror_image_internal;
+    r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+                                 &mirror_image_internal);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "cannot enable mirroring: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if (mirror_image_internal.state ==
+        cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED) {
+      // mirroring is already enabled
+      return 0;
+    }
+    else if (r != -ENOENT) {
+      lderr(cct) << "cannot enable mirroring: mirroring image is in "
+        "disabling state" << dendl;
+      return -EINVAL;
+    }
+
+    mirror_image_internal.state =
+      cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED;
+
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    mirror_image_internal.global_image_id = uuid_gen.to_string();
+
+    r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id,
+                                     mirror_image_internal);
+    if (r < 0) {
+      lderr(cct) << "cannot enable mirroring: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    ldout(cct, 20) << "image mirroring is enabled: global_id=" <<
+      mirror_image_internal.global_image_id << dendl;
+
+    return 0;
+  }
+
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode) {
     CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
     ldout(cct, 20) << __func__ << dendl;

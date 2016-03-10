@@ -321,6 +321,8 @@ public:
    */
   int metadata_list(const std::string &start, uint64_t max, std::map<std::string, ceph::bufferlist> *pairs);
 
+  int mirror_image_enable();
+
 private:
   friend class RBD;
 
