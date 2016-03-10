@@ -213,6 +213,9 @@ void RGW_SWIFT_Auth_Get::execute()
   if (!g_conf->rgw_swift_tenant_name.empty()) {
     tenant_path = "/AUTH_";
     tenant_path.append(g_conf->rgw_swift_tenant_name);
+  } else if (g_conf->rgw_swift_account_in_url) {
+    tenant_path = "/AUTH_";
+    tenant_path.append(user_str);
   }
 
   STREAM_IO(s)->print("X-Storage-Url: %s/%s/v1%s\r\n", swift_url.c_str(),

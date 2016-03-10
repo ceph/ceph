@@ -1191,6 +1191,8 @@ struct req_state {
   utime_t header_time;
 
   /* Set once when url_bucket is parsed and not violated thereafter. */
+  string account_name;
+
   string bucket_tenant;
   string bucket_name;
 
@@ -1236,6 +1238,11 @@ struct req_state {
   const char *os_auth_token;
   string swift_user;
   string swift_groups;
+  /* Content-Disposition override for TempURL of Swift API. */
+  struct {
+    string override;
+    string fallback;
+  } content_disp;
 
   string host_id;
 
