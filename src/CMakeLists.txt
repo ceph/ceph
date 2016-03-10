@@ -1207,13 +1207,6 @@ if(${WITH_RADOSGW})
     $<TARGET_OBJECTS:civetweb_common_objs>
     )
 
-  set(civetweb_common_files civetweb/src/civetweb.c)
-  add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
-  target_include_directories(civetweb_common_objs PUBLIC
-	"${CMAKE_SOURCE_DIR}/src/civetweb/include")
-  set_property(TARGET civetweb_common_objs
-	       APPEND PROPERTY COMPILE_DEFINITIONS NO_SSL_DL=1)
-
   add_library(rgw_a STATIC ${rgw_a_srcs})
   target_link_libraries(rgw_a librados cls_rgw_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
