@@ -30,3 +30,4 @@ etc/ceph/rbdmap
 etc/init.d/rbdmap
 lib/udev/rules.d/50-rbd.rules
 usr/lib/python*/dist-packages/ceph_argparse.py*
+usr/lib/python*/dist-packages/ceph_daemon.py*
