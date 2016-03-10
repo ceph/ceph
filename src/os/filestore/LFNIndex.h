@@ -547,7 +547,6 @@ private:
   int decompose_full_path(
     const char *in,      ///< [in] Full path to object.
     vector<string> *out, ///< [out] Path to object at in.
-    ghobject_t *oid,	 ///< [out] Object at in.
     string *shortname	 ///< [out] Filename of object at in.
     ); ///< @return Error Code, 0 on success.
 

@@ -85,8 +85,7 @@ int LFNIndex::created(const ghobject_t &oid, const char *path)
   WRAP_RETRY(
   vector<string> path_comp;
   string short_name;
-  r = decompose_full_path(path, &path_comp, 0, &short_name);
-  if (r < 0)
+  r = decompose_full_path(path, &path_comp, &short_name);
     goto out;
   r = lfn_created(path_comp, oid, short_name);
   if (r < 0)
@@ -1325,8 +1324,10 @@ string LFNIndex::demangle_path_component(const string &component)
   return component.substr(SUBDIR_PREFIX.size(), component.size() - SUBDIR_PREFIX.size());
 }
 
-int LFNIndex::decompose_full_path(const char *in, vector<string> *out,
-				  ghobject_t *oid, string *shortname)
+int LFNIndex::decompose_full_path(
+  const char *in,
+  vector<string> *out,
+  string *shortname)
 {
   const char *beginning = in + get_base_path().size();
   const char *end = beginning;
@@ -1342,11 +1343,6 @@ int LFNIndex::decompose_full_path(const char *in, vector<string> *out,
     }
   }
   *shortname = string(beginning, end - beginning);
-  if (oid) {
-    int r = lfn_translate(*out, *shortname, oid);
-    if (r < 0)
-      return r;
-  }
   return 0;
 }
 
