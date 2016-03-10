@@ -10550,7 +10550,6 @@ int RGWRados::list_bi_log_entries(rgw_bucket& bucket, int shard_id, string& mark
   if (r < 0)
     return r;
 
-  vector<string> shard_ids_str;
   map<int, list<rgw_bi_log_entry>::iterator> vcurrents;
   map<int, list<rgw_bi_log_entry>::iterator> vends;
   if (truncated) {
