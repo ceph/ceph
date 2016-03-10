@@ -89,8 +89,19 @@ int LFNIndex::created(const ghobject_t &oid, const char *path)
   if (r < 0)
     goto out;
   r = lfn_created(path_comp, oid, short_name);
-  if (r < 0)
+  if (r < 0) {
+    if (failed) {
+      /* This is hacky, but the only way we get ENOENT from lfn_created here is
+       * if we did a failure injection in _created below AND actually started the
+       * split or merge.  In that case, lfn_created already suceeded, and
+       * WRAP_RETRY already cleaned it up and we are actually done.  In a real
+       * failure, the filestore itself would have ended up calling this with
+       * the new path, not the old one, so we'd find it.
+       */
+      r = 0;
+    }
     goto out;
+  }
   r = _created(path_comp, oid, short_name);
   if (r < 0)
     goto out;
