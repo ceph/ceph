@@ -1719,7 +1719,7 @@ static void get_md_sync_status(list<string>& status)
       }
 
       if (!oldest.is_zero()) {
-        push_ss(ss, status) << "oldest change not applied: " << oldest;
+        push_ss(ss, status) << "oldest incremental change not applied: " << oldest;
       }
     }
   }
@@ -1742,7 +1742,7 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
 
   ret = sync.read_sync_status();
   if (ret < 0) {
-    status.push_back(string("failed to read sync status: ") + cpp_strerror(-ret));
+    push_ss(ss, status, tab) << string("failed read sync status: ") + cpp_strerror(-ret);
     return;
   }
 
@@ -1797,7 +1797,7 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
   rgw_datalog_info log_info;
   ret = sync.read_log_info(&log_info);
   if (ret < 0) {
-    status.push_back(string("failed to fetch local sync status: ") + cpp_strerror(-ret));
+    push_ss(ss, status, tab) << string("failed to fetch local sync status: ") + cpp_strerror(-ret);
     return;
   }
 
@@ -1806,7 +1806,7 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
 
   ret = sync.read_source_log_shards_info(&source_shards_info);
   if (ret < 0) {
-    status.push_back(string("failed to fetch master sync status: ") + cpp_strerror(-ret));
+    push_ss(ss, status, tab) << string("failed to fetch source sync status: ") + cpp_strerror(-ret);
     return;
   }
 
@@ -1829,7 +1829,7 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
 
   int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
   if (total_behind == 0) {
-    status.push_back("data is caught up with master");
+    push_ss(ss, status, tab) << "data is caught up with source";
   } else {
     push_ss(ss, status, tab) << "data is behind on " << total_behind << " shards";
 
@@ -1853,7 +1853,7 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
       }
 
       if (!oldest.is_zero()) {
-        push_ss(ss, status, tab) << "oldest change not applied: " << oldest;
+        push_ss(ss, status, tab) << "oldest incremental change not applied: " << oldest;
       }
     }
   }
