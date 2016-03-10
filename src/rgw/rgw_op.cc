@@ -1823,16 +1823,16 @@ static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
                                   map<string, bufferlist>& out_attrs,
                                   map<string, bufferlist>& out_rmattrs)
 {
-  map<string, bufferlist>::const_iterator iter;
+  for (const auto kv : orig_attrs) {
+    const string& name = kv.first;
 
-  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
-    const string& name = iter->first;
-    /* check if the attr is user-defined metadata item */
-    if (name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1, RGW_ATTR_META_PREFIX) == 0) {
-      /* for the objects all existing meta attrs have to be removed */
-      out_rmattrs[name] = iter->second;
-    } else if (out_attrs.find(name) == out_attrs.end()) {
-      out_attrs[name] = iter->second;
+    /* Check if the attr is user-defined metadata item. */
+    if (name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1,
+                     RGW_ATTR_META_PREFIX) == 0) {
+      /* For the objects all existing meta attrs have to be removed. */
+      out_rmattrs[name] = kv.second;
+    } else if (out_attrs.find(name) == std::end(out_attrs)) {
+      out_attrs[name] = kv.second;
     }
   }
 }
@@ -1842,23 +1842,25 @@ static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
                                   map<string, bufferlist>& out_attrs,
                                   map<string, bufferlist>& out_rmattrs)
 {
-  map<string, bufferlist>::const_iterator iter;
+  for (const auto kv : orig_attrs) {
+    const string& name = kv.first;
 
-  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
-    const string& name = iter->first;
-    /* check if the attr is user-defined metadata item */
-    if (name.compare(0, strlen(RGW_ATTR_META_PREFIX), RGW_ATTR_META_PREFIX) == 0) {
-      /* for the buckets all existing meta attrs are preserved,
+    /* Check if the attr is user-defined metadata item. */
+    if (name.compare(0, strlen(RGW_ATTR_META_PREFIX),
+                     RGW_ATTR_META_PREFIX) == 0) {
+      /* For the buckets all existing meta attrs are preserved,
          except those that are listed in rmattr_names. */
-      if (rmattr_names.find(name) != rmattr_names.end()) {
-        map<string, bufferlist>::iterator aiter = out_attrs.find(name);
-        if (aiter != out_attrs.end()) {
+      if (rmattr_names.find(name) != std::end(rmattr_names)) {
+        const auto aiter = out_attrs.find(name);
+
+        if (aiter != std::end(out_attrs)) {
           out_attrs.erase(aiter);
         }
-        out_rmattrs[name] = iter->second;
+
+        out_rmattrs[name] = kv.second;
       }
-    } else if (out_attrs.find(name) == out_attrs.end()) {
-      out_attrs[name] = iter->second;
+    } else if (out_attrs.find(name) == std::end(out_attrs)) {
+      out_attrs[name] = kv.second;
     }
   }
 }
@@ -1867,11 +1869,9 @@ static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
 static void populate_with_generic_attrs(const req_state * const s,
                                         map<string, bufferlist>& out_attrs)
 {
-  map<string, string>::const_iterator giter;
-
-  for (giter = s->generic_attrs.begin(); giter != s->generic_attrs.end(); ++giter) {
-    bufferlist& attrbl = out_attrs[giter->first];
-    const string& val = giter->second;
+  for (auto kv : s->generic_attrs) {
+    bufferlist& attrbl = out_attrs[kv.first];
+    const string& val = kv.second;
     attrbl.clear();
     attrbl.append(val.c_str(), val.size() + 1);
   }
