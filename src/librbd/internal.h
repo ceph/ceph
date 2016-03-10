@@ -184,6 +184,7 @@ namespace librbd {
                               const std::string &cluster_name);
 
   int mirror_image_enable(ImageCtx *ictx);
+  int mirror_image_disable(ImageCtx *ictx, bool force);
 }
 
 #endif

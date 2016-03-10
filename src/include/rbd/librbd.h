@@ -588,6 +588,7 @@ CEPH_RBD_API int rbd_metadata_list(rbd_image_t image, const char *start, uint64_
 
 
 CEPH_RBD_API int rbd_mirror_image_enable(rbd_image_t image);
+CEPH_RBD_API int rbd_mirror_image_disable(rbd_image_t image, bool force);
 
 #ifdef __cplusplus
 }
