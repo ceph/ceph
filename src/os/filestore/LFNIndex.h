@@ -547,7 +547,6 @@ private:
   int decompose_full_path(
     const char *in,      ///< [in] Full path to object.
     vector<string> *out, ///< [out] Path to object at in.
-    ghobject_t *oid,	 ///< [out] Object at in.
     string *shortname	 ///< [out] Filename of object at in.
     ); ///< @return Error Code, 0 on success.
 
@@ -555,6 +554,12 @@ private:
   string mangle_attr_name(
     const string &attr ///< [in] Attribute to mangle.
     ); ///< @return Mangled attribute name.
+
+  /// checks whether long_name could hash to short_name
+  bool short_name_matches(
+    const char *short_name,    ///< [in] name to check against
+    const char *cand_long_name ///< [in] candidate long name
+    );
 
   /// Builds hashed filename
   void build_filename(
