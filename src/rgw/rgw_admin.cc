@@ -3462,9 +3462,18 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_POLICY) {
-    int ret = RGWBucketAdminOp::get_policy(store, bucket_op, cout);
-    if (ret >= 0) {
-      cout << std::endl;
+    if (format == "xml") {
+      int ret = RGWBucketAdminOp::dump_s3_policy(store, bucket_op, cout);
+      if (ret < 0) {
+        cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    } else {
+      int ret = RGWBucketAdminOp::get_policy(store, bucket_op, f);
+      if (ret < 0) {
+        cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
     }
   }
 
