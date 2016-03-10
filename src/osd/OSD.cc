@@ -604,7 +604,7 @@ void OSDService::promote_throttle_recalibrate()
   utime_t now = ceph_clock_now(NULL);
   double dur = now - last_recalibrate;
   last_recalibrate = now;
-  unsigned prob = promote_probability_millis;
+  unsigned prob = promote_probability_millis.read();
 
   uint64_t target_obj_sec = g_conf->osd_tier_promote_max_objects_sec;
   uint64_t target_bytes_sec = g_conf->osd_tier_promote_max_bytes_sec;
@@ -660,9 +660,9 @@ void OSDService::promote_throttle_recalibrate()
   dout(10) << __func__ << "  actual " << actual
 	   << ", actual/prob ratio " << ratio
 	   << ", adjusted new_prob " << new_prob
-	   << ", prob " << promote_probability_millis << " -> " << prob
+	   << ", prob " << promote_probability_millis.read() << " -> " << prob
 	   << dendl;
-  promote_probability_millis = prob;
+  promote_probability_millis.set(prob);
 
   // set hard limits for this interval to mitigate stampedes
   promote_max_objects = target_obj_sec * OSD::OSD_TICK_INTERVAL * 2;

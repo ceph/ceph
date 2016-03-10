@@ -782,7 +782,7 @@ public:
   }
 
   /// throttle promotion attempts
-  unsigned promote_probability_millis; ///< probability thousands. one word.
+  atomic_t promote_probability_millis; ///< probability thousands. one word.
   PromoteCounter promote_counter;
   utime_t last_recalibrate;
   unsigned long promote_max_objects, promote_max_bytes;
@@ -790,7 +790,7 @@ public:
   bool promote_throttle() {
     // NOTE: lockless!  we rely on the probability being a single word.
     promote_counter.attempt();
-    if ((unsigned)rand() % 1000 > promote_probability_millis)
+    if ((unsigned)rand() % 1000 > promote_probability_millis.read())
       return true;  // yes throttle (no promote)
     if (promote_max_objects &&
 	promote_counter.objects.read() > promote_max_objects)
