@@ -171,6 +171,12 @@ public:
   ~RGWListBuckets_ObjStore() {}
 };
 
+class RGWGetUsage_ObjStore : public RGWGetUsage {
+public:
+  RGWGetUsage_ObjStore() {}
+  ~RGWGetUsage_ObjStore() {}
+};
+
 class RGWListBucket_ObjStore : public RGWListBucket {
 public:
   RGWListBucket_ObjStore() {}
