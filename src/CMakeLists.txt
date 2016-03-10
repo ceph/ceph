@@ -1092,6 +1092,7 @@ if(${WITH_RBD})
     tools/rbd/action/Lock.cc
     tools/rbd/action/MergeDiff.cc
     tools/rbd/action/MirrorPool.cc
+    tools/rbd/action/MirrorImage.cc
     tools/rbd/action/Nbd.cc
     tools/rbd/action/ObjectMap.cc
     tools/rbd/action/Remove.cc
