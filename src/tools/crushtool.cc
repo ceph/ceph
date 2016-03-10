@@ -583,7 +583,12 @@ int main(int argc, const char **argv)
       }
     }
     bufferlist::iterator p = bl.begin();
-    crush.decode(p);
+    try {
+      crush.decode(p);
+    } catch(...) {
+      cerr << me << ": unable to decode " << infn << std::endl;
+      exit(EXIT_FAILURE);
+    }
   }
 
   if (compile) {
