@@ -950,10 +950,26 @@ int LFNIndex::lfn_translate(const vector<string> &path,
   if (!lfn_is_hashed_filename(short_name)) {
     return lfn_parse_object_name(short_name, out);
   }
-  // Get lfn_attr
   string full_path = get_full_path(path, short_name);
   char attr[PATH_MAX];
-  int r = chain_getxattr(full_path.c_str(), get_lfn_attr().c_str(), attr, sizeof(attr) - 1);
+  // First, check alt attr
+  int r = chain_getxattr(
+    full_path.c_str(),
+    get_alt_lfn_attr().c_str(),
+    attr,
+    sizeof(attr) - 1);
+  if (r >= 0) {
+    // There is an alt attr, does it match?
+    if (r < (int)sizeof(attr))
+      attr[r] = '\0';
+    if (short_name_matches(short_name.c_str(), attr)) {
+      string long_name(attr);
+      return lfn_parse_object_name(long_name, out);
+    }
+  }
+
+  // Get lfn_attr
+  r = chain_getxattr(full_path.c_str(), get_lfn_attr().c_str(), attr, sizeof(attr) - 1);
   if (r < 0)
     return -errno;
   if (r < (int)sizeof(attr))
@@ -1308,6 +1324,28 @@ void LFNIndex::build_filename(const char *old_filename, int i, char *filename, i
       break;
     ofs--;
   }
+}
+
+bool LFNIndex::short_name_matches(const char *short_name, const char *cand_long_name)
+{
+  const char *end = short_name;
+  while (*end) ++end;
+  const char *suffix = end;
+  if (suffix > short_name)  --suffix;                   // last char
+  while (suffix > short_name && *suffix != '_') --suffix; // back to first _
+  if (suffix > short_name) --suffix;                   // one behind that
+  while (suffix > short_name && *suffix != '_') --suffix; // back to second _
+
+  int index = -1;
+  char buf[FILENAME_SHORT_LEN + 4];
+  assert((end - suffix) < (int)sizeof(buf));
+  int r = sscanf(suffix, "_%d_%s", &index, buf);
+  if (r < 2)
+    return false;
+  if (strcmp(buf, FILENAME_COOKIE.c_str()) != 0)
+    return false;
+  build_filename(cand_long_name, index, buf, sizeof(buf));
+  return strcmp(short_name, buf) == 0;
 }
 
 string LFNIndex::lfn_get_short_name(const ghobject_t &oid, int i)
