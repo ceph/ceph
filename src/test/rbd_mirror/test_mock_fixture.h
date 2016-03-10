@@ -5,6 +5,7 @@
 #define CEPH_TEST_RBD_MIRROR_TEST_MOCK_FIXTURE_H
 
 #include "test/rbd_mirror/test_fixture.h"
+#include "test/librados_test_stub/LibradosTestStub.h"
 #include <boost/shared_ptr.hpp>
 #include <gmock/gmock.h>
 
@@ -34,7 +35,6 @@ public:
   ::testing::NiceMock<librados::MockTestMemRadosClient> &get_mock_rados_client() {
     return *s_mock_rados_client;
   }
-  librados::MockTestMemIoCtxImpl &get_mock_io_ctx(librados::IoCtx &ioctx);
 
 private:
   static TestRadosClientPtr s_test_rados_client;

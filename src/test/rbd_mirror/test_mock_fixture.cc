@@ -41,13 +41,6 @@ void TestMockFixture::TearDown() {
   s_mock_rados_client->default_to_dispatch();
 }
 
-librados::MockTestMemIoCtxImpl &TestMockFixture::get_mock_io_ctx(
-    librados::IoCtx &ioctx) {
-  librados::MockTestMemIoCtxImpl **mock =
-    reinterpret_cast<librados::MockTestMemIoCtxImpl **>(&ioctx);
-  return **mock;
-}
-
 } // namespace mirror
 } // namespace rbd
 
