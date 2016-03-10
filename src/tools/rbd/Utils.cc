@@ -619,5 +619,18 @@ std::string image_id(librbd::Image& image) {
   return string(prefix + strlen(RBD_DATA_PREFIX));
 }
 
+std::string mirror_image_state(rbd_mirror_image_state_t mirror_image_state) {
+  switch (mirror_image_state) {
+    case RBD_MIRROR_IMAGE_DISABLING:
+      return "disabling";
+    case RBD_MIRROR_IMAGE_ENABLED:
+      return "enabled";
+    case RBD_MIRROR_IMAGE_DISABLED:
+      return "disabled";
+    default:
+      return "unknown";
+  }
+}
+
 } // namespace utils
 } // namespace rbd
