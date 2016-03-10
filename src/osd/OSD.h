@@ -1343,19 +1343,12 @@ public:
 	   session_waiting_for_pg.begin();
 	 i != session_waiting_for_pg.end();
 	 ++i) {
-      for (set<Session*>::iterator j = i->second.begin();
-	   j != i->second.end();
-	   ++j) {
-	(*j)->put();
-      }
+        std::for_each(i->second.begin(), i->second.end(), mem_fun(&Session::put));
     }
+
     session_waiting_for_pg.clear();
 
-    for (set<Session*>::iterator i = session_waiting_for_map.begin();
-	 i != session_waiting_for_map.end();
-	 ++i) {
-      (*i)->put();
-    }
+    std::for_each(session_waiting_for_map.begin(), session_waiting_for_map.end(), mem_fun(&Session::put));
     session_waiting_for_map.clear();
   }
 
@@ -1449,11 +1442,7 @@ public:
 	pgid = pgid.get_parent();
       }
     }
-    for (set<Session*>::iterator i = sessions->begin();
-	 i != sessions->end();
-	 ++i) {
-      (*i)->get();
-    }
+    std::for_each(sessions->begin(), sessions->end(), mem_fun(&Session::get));
   }
   void get_pgs_with_waiting_sessions(set<spg_t> *pgs) {
     Mutex::Locker l(session_waiting_lock);
