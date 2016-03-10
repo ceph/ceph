@@ -2,7 +2,7 @@
 #ifndef SCRUB_HEADER_H_
 #define SCRUB_HEADER_H_
 
-class CDentry;
+class CInode;
 
 /**
  * Externally input parameters for a scrub, associated with the root
@@ -13,8 +13,13 @@ class CDentry;
  */
 class ScrubHeader {
 public:
+  CInode *origin;
   std::string tag;
-  CDentry *origin;
+
+  bool force;
+  bool recursive;
+  bool repair;
+  Formatter *formatter;
 };
 typedef ceph::shared_ptr<ScrubHeader> ScrubHeaderRef;
 typedef ceph::shared_ptr<const ScrubHeader> ScrubHeaderRefConst;

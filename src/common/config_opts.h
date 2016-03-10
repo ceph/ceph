@@ -545,6 +545,9 @@ OPTION(mds_root_ino_gid, OPT_INT, 0) // The GID of / on new filesystems
 
 OPTION(mds_max_scrub_ops_in_progress, OPT_INT, 5) // the number of simultaneous scrubs allowed
 
+// Maximum number of damaged frags/dentries before whole MDS rank goes damaged
+OPTION(mds_damage_table_max_entries, OPT_INT, 10000)
+
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
 

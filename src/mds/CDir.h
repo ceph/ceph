@@ -253,7 +253,9 @@ public:
     scrub_stamps last_local; // when we last did a local scrub
 
     bool directory_scrubbing; /// safety check
+    bool need_scrub_local;
     bool last_scrub_dirty; /// is scrub info dirty or is it flushed to fnode?
+    bool pending_scrub_error;
 
     /// these are lists of children in each stage of scrubbing
     set<dentry_key_t> directories_to_scrub;
@@ -263,7 +265,13 @@ public:
     set<dentry_key_t> others_scrubbing;
     set<dentry_key_t> others_scrubbed;
 
-    scrub_info_t() : directory_scrubbing(false), last_scrub_dirty(false) {}
+    ScrubHeaderRefConst header;
+
+    scrub_info_t() :
+      directory_scrubbing(false),
+      need_scrub_local(false),
+      last_scrub_dirty(false),
+      pending_scrub_error(false) {}
   };
   /**
    * Call to start this CDir on a new scrub.
@@ -271,7 +279,7 @@ public:
    * @pre The CDir is marked complete.
    * @post It has set up its internal scrubbing state.
    */
-  void scrub_initialize();
+  void scrub_initialize(const ScrubHeaderRefConst& header);
   /**
    * Get the next dentry to scrub. Gives you a CDentry* and its meaning. This
    * function will give you all directory-representing dentries before any
@@ -425,7 +433,7 @@ protected:
   unsigned get_num_snap_null() const { return num_snap_null; }
   unsigned get_num_any() const { return num_head_items + num_head_null + num_snap_items + num_snap_null; }
   
-  bool check_rstats();
+  bool check_rstats(bool scrub=false);
 
   void inc_num_dirty() { num_dirty++; }
   void dec_num_dirty() { 
@@ -611,7 +619,17 @@ protected:
       list<CInode*> *undef_inodes);
 
   /**
-   * Mark this fragment as BADFRAG
+   * Mark this fragment as BADFRAG (common part of go_bad and go_bad_dentry)
+   */
+  void _go_bad();
+
+  /**
+   * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)
+   */
+  void go_bad_dentry(snapid_t last, const std::string &dname);
+
+  /**
+   * Go bad due to a damaged header (register with damagetable and go BADFRAG)
    */
   void go_bad();
 
