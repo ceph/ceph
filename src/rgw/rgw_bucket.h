@@ -292,7 +292,8 @@ public:
                   RGWFormatterFlusher& flusher);
   static int get_policy(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWAccessControlPolicy& policy);
-
+  static int dump_s3_policy(RGWRados *store, RGWBucketAdminOpState& op_state,
+                  ostream& os);
 
   static int unlink(RGWRados *store, RGWBucketAdminOpState& op_state);
   static int link(RGWRados *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);

@@ -1012,6 +1012,20 @@ int RGWBucketAdminOp::get_policy(RGWRados *store, RGWBucketAdminOpState& op_stat
   return 0;
 }
 
+int RGWBucketAdminOp::dump_s3_policy(RGWRados *store, RGWBucketAdminOpState& op_state,
+                  ostream& os)
+{
+  RGWAccessControlPolicy_S3 policy(store->ctx());
+
+  int ret = get_policy(store, op_state, policy);
+  if (ret < 0)
+    return ret;
+
+  policy.to_xml(os);
+
+  return 0;
+}
+
 int RGWBucketAdminOp::unlink(RGWRados *store, RGWBucketAdminOpState& op_state)
 {
   RGWBucket bucket;
