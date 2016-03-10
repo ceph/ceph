@@ -1,0 +1,37 @@
+---
+ceph:
+  deb:
+  - ceph
+  - ceph-mds
+  - ceph-common
+  - ceph-fuse
+  - ceph-test
+  - radosgw
+  - python-ceph
+  - libcephfs1
+  - libcephfs-java
+  - libcephfs-jni
+  - librados2
+  - librbd1
+  - rbd-fuse
+  - ceph-mds-dbg
+  - ceph-common-dbg
+  - ceph-fuse-dbg
+  - radosgw-dbg
+  - libcephfs1-dbg
+  - librados2-dbg
+  - librbd1-dbg
+  rpm:
+  - ceph-radosgw
+  - ceph-test
+  - ceph-devel
+  - ceph
+  - ceph-fuse
+  - cephfs-java
+  - libcephfs_jni1
+  - libcephfs1
+  - librados2
+  - librbd1
+  - python-ceph
+  - rbd-fuse
+  - ceph-debuginfo
