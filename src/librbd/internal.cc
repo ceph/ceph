@@ -2483,6 +2483,30 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
+  int mirror_image_get(ImageCtx *ictx, mirror_image_t *mirror_image) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "mirror_image_get " << ictx << dendl;
+
+    cls::rbd::MirrorImage mirror_image_internal;
+    int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+        &mirror_image_internal);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
+        << dendl;
+      return r;
+    }
+
+    mirror_image->global_id = mirror_image_internal.global_image_id;
+    if (r == -ENOENT) {
+      mirror_image->state = RBD_MIRROR_IMAGE_DISABLED;
+    } else {
+      mirror_image->state =
+        static_cast<rbd_mirror_image_state_t>(mirror_image_internal.state);
+    }
+
+    return 0;
+  }
+
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode) {
     CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
     ldout(cct, 20) << __func__ << dendl;
