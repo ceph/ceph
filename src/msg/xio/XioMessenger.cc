@@ -249,6 +249,12 @@ static string xio_uri_from_entity(const string &type,
 } /* xio_uri_from_entity */
 
 /* XioMessenger */
+#undef dout_prefix
+#define dout_prefix _prefix(_dout, this)
+static ostream& _prefix(std::ostream *_dout, XioMessenger *msgr) {
+  return *_dout << "-- " << msgr->get_myaddr() << " ";
+}
+
 XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
 			   string mname, uint64_t _nonce, uint64_t features,
 			   DispatchStrategy *ds)
