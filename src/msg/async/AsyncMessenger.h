@@ -78,8 +78,8 @@ class Worker : public Thread {
     plb.add_u64_counter(l_msgr_send_messages_inline, "msgr_send_messages_inline", "Network sent inline messages");
     plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes");
     plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network received bytes");
-    plb.add_u64_counter(l_msgr_created_connections, "msgr_active_connections", "Active connection number");
-    plb.add_u64_counter(l_msgr_active_connections, "msgr_created_connections", "Created connection number");
+    plb.add_u64_counter(l_msgr_created_connections, "msgr_created_connections", "Created connection number");
+    plb.add_u64_counter(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
 
     perf_logger = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_logger);
