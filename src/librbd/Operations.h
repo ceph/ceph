@@ -36,6 +36,7 @@ public:
                       Context *on_finish, uint64_t journal_op_tid);
 
   int snap_create(const char *snap_name);
+  void snap_create(const char *snap_name, Context *on_finish);
   void execute_snap_create(const char *snap_name, Context *on_finish,
                            uint64_t journal_op_tid);
 
@@ -44,6 +45,7 @@ public:
                              Context *on_finish);
 
   int snap_remove(const char *snap_name);
+  void snap_remove(const char *snap_name, Context *on_finish);
   void execute_snap_remove(const char *snap_name, Context *on_finish);
 
   int snap_rename(const char *srcname, const char *dstname);

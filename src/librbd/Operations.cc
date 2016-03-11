@@ -19,6 +19,7 @@
 #include "librbd/operation/SnapshotRenameRequest.h"
 #include "librbd/operation/SnapshotRollbackRequest.h"
 #include "librbd/operation/SnapshotUnprotectRequest.h"
+#include <set>
 #include <boost/bind.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -84,16 +85,18 @@ struct C_InvokeAsyncRequest : public Context {
   bool permit_snapshot;
   boost::function<void(Context*)> local;
   boost::function<void(Context*)> remote;
+  std::set<int> filter_error_codes;
   Context *on_finish;
 
   C_InvokeAsyncRequest(I &image_ctx, const std::string& request_type,
                        bool permit_snapshot,
                        const boost::function<void(Context*)>& local,
                        const boost::function<void(Context*)>& remote,
+                       const std::set<int> &filter_error_codes,
                        Context *on_finish)
     : image_ctx(image_ctx), request_type(request_type),
       permit_snapshot(permit_snapshot), local(local), remote(remote),
-      on_finish(on_finish) {
+      filter_error_codes(filter_error_codes), on_finish(on_finish) {
   }
 
   void send() {
@@ -201,6 +204,9 @@ struct C_InvokeAsyncRequest : public Context {
   }
 
   virtual void finish(int r) override {
+    if (filter_error_codes.count(r) != 0) {
+      r = 0;
+    }
     on_finish->complete(r);
   }
 };
@@ -471,37 +477,53 @@ void Operations<I>::execute_resize(uint64_t size, ProgressContext &prog_ctx,
 
 template <typename I>
 int Operations<I>::snap_create(const char *snap_name) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
-                << dendl;
-
   if (m_image_ctx.read_only) {
     return -EROFS;
   }
 
   int r = m_image_ctx.state->refresh_if_required();
-  if (r < 0)
+  if (r < 0) {
     return r;
-
-  {
-    RWLock::RLocker l(m_image_ctx.snap_lock);
-    if (m_image_ctx.get_snap_id(snap_name) != CEPH_NOSNAP) {
-      return -EEXIST;
-    }
   }
 
-  r = invoke_async_request("snap_create", true,
-                           boost::bind(&Operations<I>::execute_snap_create,
-                                       this, snap_name, _1, 0),
-                           boost::bind(&ImageWatcher::notify_snap_create,
-                                       m_image_ctx.image_watcher, snap_name,
-                                       _1));
-  if (r < 0 && r != -EEXIST) {
+  C_SaferCond ctx;
+  snap_create(snap_name, &ctx);
+  r = ctx.wait();
+
+  if (r < 0) {
     return r;
   }
 
   m_image_ctx.perfcounter->inc(l_librbd_snap_create);
-  return 0;
+  return r;
+}
+
+template <typename I>
+void Operations<I>::snap_create(const char *snap_name, Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
+                << dendl;
+
+  if (m_image_ctx.read_only) {
+    on_finish->complete(-EROFS);
+    return;
+  }
+
+  {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    if (m_image_ctx.get_snap_id(snap_name) != CEPH_NOSNAP) {
+      on_finish->complete(-EEXIST);
+      return;
+    }
+  }
+
+  C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(
+    m_image_ctx, "snap_create", true,
+    boost::bind(&Operations<I>::execute_snap_create, this, snap_name, _1, 0),
+    boost::bind(&ImageWatcher::notify_snap_create, m_image_ctx.image_watcher,
+                snap_name, _1),
+    {-EEXIST}, on_finish);
+  req->send();
 }
 
 template <typename I>
@@ -606,50 +628,61 @@ void Operations<I>::execute_snap_rollback(const char *snap_name,
 
 template <typename I>
 int Operations<I>::snap_remove(const char *snap_name) {
+  if (m_image_ctx.read_only) {
+    return -EROFS;
+  }
+
+  int r = m_image_ctx.state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  C_SaferCond ctx;
+  snap_remove(snap_name, &ctx);
+  r = ctx.wait();
+
+  if (r < 0) {
+    return r;
+  }
+
+  m_image_ctx.perfcounter->inc(l_librbd_snap_remove);
+  return 0;
+}
+
+template <typename I>
+void Operations<I>::snap_remove(const char *snap_name, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
 
-  if (m_image_ctx.read_only)
-    return -EROFS;
-
-  int r = m_image_ctx.state->refresh_if_required();
-  if (r < 0)
-    return r;
+  if (m_image_ctx.read_only) {
+    on_finish->complete(-EROFS);
+    return;
+  }
 
   bool proxy_op = false;
   {
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     if (m_image_ctx.get_snap_id(snap_name) == CEPH_NOSNAP) {
-      return -ENOENT;
+      on_finish->complete(-ENOENT);
+      return;
     }
     proxy_op = ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0 ||
                 (m_image_ctx.features & RBD_FEATURE_JOURNALING) != 0);
   }
 
   if (proxy_op) {
-    r = invoke_async_request("snap_remove", true,
-                             boost::bind(&Operations<I>::execute_snap_remove,
-                                         this, snap_name, _1),
-                             boost::bind(&ImageWatcher::notify_snap_remove,
-                                         m_image_ctx.image_watcher, snap_name,
-                                         _1));
-    if (r < 0 && r != -ENOENT) {
-      return r;
-    }
+    C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(
+      m_image_ctx, "snap_remove", true,
+      boost::bind(&Operations<I>::execute_snap_remove, this, snap_name, _1),
+      boost::bind(&ImageWatcher::notify_snap_remove, m_image_ctx.image_watcher,
+                  snap_name, _1),
+      {-ENOENT}, on_finish);
+    req->send();
   } else {
     RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
-    C_SaferCond cond_ctx;
-    execute_snap_remove(snap_name, &cond_ctx);
-
-    r = cond_ctx.wait();
-    if (r < 0) {
-      return r;
-    }
+    execute_snap_remove(snap_name, on_finish);
   }
-
-  m_image_ctx.perfcounter->inc(l_librbd_snap_remove);
-  return 0;
 }
 
 template <typename I>
@@ -954,7 +987,7 @@ int Operations<I>::invoke_async_request(const std::string& request_type,
                                                              permit_snapshot,
                                                              local_request,
                                                              remote_request,
-                                                             &ctx);
+                                                             {}, &ctx);
   req->send();
   return ctx.wait();
 }
