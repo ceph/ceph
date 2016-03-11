@@ -712,15 +712,6 @@ int Journal<I>::start_external_replay(journal::Replay<I> **journal_replay) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
-  C_SaferCond cond;
-  wait_for_journal_ready(&cond);
-  int r = cond.wait();
-  if (r < 0) {
-    lderr(cct) << "failed waiting for ready state: " << cpp_strerror(r)
-	       << dendl;
-    return r;
-  }
-
   Mutex::Locker locker(m_lock);
   assert(m_state == STATE_READY);
   assert(m_journal_replay == nullptr);
