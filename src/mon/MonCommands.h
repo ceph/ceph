@@ -808,6 +808,9 @@ COMMAND("osd tier set-overlay " \
 COMMAND("osd tier remove-overlay " \
 	"name=pool,type=CephPoolname ", \
 	"remove the overlay pool for base pool <pool>", "osd", "rw", "cli,rest")
+COMMAND("osd tier rm-overlay " \
+	"name=pool,type=CephPoolname ", \
+	"remove the overlay pool for base pool <pool>", "osd", "rw", "cli,rest")
 
 COMMAND("osd tier add-cache " \
 	"name=pool,type=CephPoolname " \
