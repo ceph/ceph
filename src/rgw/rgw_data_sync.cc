@@ -936,6 +936,12 @@ public:
 	if (datalog_marker > sync_marker.marker) {
           spawned_keys.clear();
           yield call(new RGWReadRemoteDataLogShardCR(sync_env, shard_id, &sync_marker.marker, &log_entries, &truncated));
+          if (retcode < 0) {
+            ldout(sync_env->cct, 0) << "ERROR: failed to read remote data log info: ret=" << retcode << dendl;
+            lease_cr->go_down();
+            drain_all();
+            return set_cr_error(retcode);
+          }
           for (log_iter = log_entries.begin(); log_iter != log_entries.end(); ++log_iter) {
             ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " log_entry: " << log_iter->log_id << ":" << log_iter->log_timestamp << ":" << log_iter->entry.key << dendl;
             if (!marker_tracker->index_key_to_marker(log_iter->entry.key, log_iter->log_id)) {

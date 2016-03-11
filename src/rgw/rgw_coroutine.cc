@@ -22,14 +22,36 @@ RGWCompletionManager::~RGWCompletionManager()
   timer.shutdown();
 }
 
-void RGWCompletionManager::complete(void *user_info)
+void RGWCompletionManager::complete(RGWAioCompletionNotifier *cn, void *user_info)
 {
   Mutex::Locker l(lock);
-  _complete(user_info);
+  _complete(cn, user_info);
 }
 
-void RGWCompletionManager::_complete(void *user_info)
+void RGWCompletionManager::register_completion_notifier(RGWAioCompletionNotifier *cn)
 {
+  Mutex::Locker l(lock);
+  if (cn) {
+    cns.insert(cn);
+    cn->get();
+  }
+}
+
+void RGWCompletionManager::unregister_completion_notifier(RGWAioCompletionNotifier *cn)
+{
+  Mutex::Locker l(lock);
+  if (cn) {
+    cns.erase(cn);
+    cn->put();
+  }
+}
+
+void RGWCompletionManager::_complete(RGWAioCompletionNotifier *cn, void *user_info)
+{
+  if (cn) {
+    cns.erase(cn);
+    cn->put();
+  }
   complete_reqs.push_back(user_info);
   cond.Signal();
 }
@@ -62,6 +84,9 @@ bool RGWCompletionManager::try_get_next(void **user_info)
 void RGWCompletionManager::go_down()
 {
   Mutex::Locker l(lock);
+  for (auto cn : cns) {
+    cn->unregister();
+  }
   going_down.set(1);
   cond.Signal();
 }
@@ -86,7 +111,7 @@ void RGWCompletionManager::_wakeup(void *opaque)
   if (iter != waiters.end()) {
     void *user_id = iter->second;
     waiters.erase(iter);
-    _complete(user_id);
+    _complete(NULL, user_id);
   }
 }
 
@@ -161,7 +186,7 @@ int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
   ldout(cct, 20) << *op << ": operate()" << dendl;
   int r = op->operate();
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: op->operate() returned r=" << r << dendl;
+    ldout(cct, 20) << *op << ": operate() returned r=" << r << dendl;
   }
 
   error_flag = op->is_error();
@@ -336,7 +361,8 @@ static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
   ((RGWAioCompletionNotifier *)arg)->cb();
 }
 
-RGWAioCompletionNotifier::RGWAioCompletionNotifier(RGWCompletionManager *_mgr, void *_user_data) : completion_mgr(_mgr), user_data(_user_data) {
+RGWAioCompletionNotifier::RGWAioCompletionNotifier(RGWCompletionManager *_mgr, void *_user_data) : completion_mgr(_mgr),
+                                                                         user_data(_user_data), lock("RGWAioCompletionNotifier"), registered(true) {
   c = librados::Rados::aio_create_completion((void *)this, _aio_completion_notifier_cb, NULL);
 }
 
@@ -442,7 +468,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     ret = stack->operate(&env);
     stack->set_is_scheduled(false);
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: stack->operate() returned ret=" << ret << dendl;
+      ldout(cct, 20) << "stack->operate() returned ret=" << ret << dendl;
     }
 
     if (stack->is_error()) {
@@ -498,7 +524,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     lock.unlock();
 
     RGWCoroutinesStack *blocked_stack;
-    while (completion_mgr.try_get_next((void **)&blocked_stack)) {
+    while (completion_mgr->try_get_next((void **)&blocked_stack)) {
       handle_unblocked_stack(context_stacks, scheduled_stacks, blocked_stack, &blocked_count);
     }
 
@@ -508,7 +534,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
      * these aren't really waiting for IOs
      */
     while (blocked_count - interval_wait_count >= ops_window) {
-      ret = completion_mgr.get_next((void **)&blocked_stack);
+      ret = completion_mgr->get_next((void **)&blocked_stack);
       if (ret < 0) {
        ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       }
@@ -520,7 +546,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 
 
     while (scheduled_stacks.empty() && blocked_count > 0) {
-      ret = completion_mgr.get_next((void **)&blocked_stack);
+      ret = completion_mgr->get_next((void **)&blocked_stack);
       if (ret < 0) {
 	ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       }
@@ -568,7 +594,7 @@ int RGWCoroutinesManager::run(RGWCoroutine *op)
 
   int r = run(stacks);
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: run(stacks) returned r=" << r << dendl;
+    ldout(cct, 20) << "run(stacks) returned r=" << r << dendl;
   } else {
     r = op->get_ret_status();
   }
@@ -579,7 +605,9 @@ int RGWCoroutinesManager::run(RGWCoroutine *op)
 
 RGWAioCompletionNotifier *RGWCoroutinesManager::create_completion_notifier(RGWCoroutinesStack *stack)
 {
-  return new RGWAioCompletionNotifier(&completion_mgr, (void *)stack);
+  RGWAioCompletionNotifier *cn = new RGWAioCompletionNotifier(completion_mgr, (void *)stack);
+  completion_mgr->register_completion_notifier(cn);
+  return cn;
 }
 
 void RGWCoroutinesManager::dump(Formatter *f) const {
@@ -733,7 +761,7 @@ bool RGWCoroutine::drain_children(int num_cr_left)
       int ret;
       while (collect(&ret)) {
         if (ret < 0) {
-          ldout(cct, 0) << "ERROR: collect() returned error" << dendl;
+          ldout(cct, 10) << "collect() returned ret=" << ret << dendl;
           /* we should have reported this error */
           log_error() << "ERROR: collect() returned error (ret=" << ret << ")";
         }

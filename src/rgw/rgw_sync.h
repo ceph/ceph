@@ -167,7 +167,7 @@ public:
                    RGWMetaSyncStatusManager *_sm)
     : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
       store(_store), conn(NULL), async_rados(async_rados),
-      http_manager(store->ctx(), &completion_mgr),
+      http_manager(store->ctx(), completion_mgr),
       status_manager(_sm), error_logger(NULL), meta_sync_cr(NULL) {}
 
   ~RGWRemoteMetaLog();
