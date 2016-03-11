@@ -2125,12 +2125,13 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
-ceph_tid_t Objecter::op_submit(Op *op, int *ctx_budget)
+void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
 {
   shunique_lock rl(rwlock, ceph::acquire_shared);
   ceph_tid_t tid = 0;
-  _op_submit_with_budget(op, rl, &tid, ctx_budget);
-  return tid;
+  if (!ptid)
+    ptid = &tid;
+  _op_submit_with_budget(op, rl, ptid, ctx_budget);
 }
 
 void Objecter::_op_submit_with_budget(Op *op, shunique_lock& sul,

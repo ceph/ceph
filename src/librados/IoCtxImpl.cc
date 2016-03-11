@@ -745,7 +745,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
   Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
 		 *o, snap_seq, pbl, flags,
 		 onack, &c->objver);
-  c->tid = objecter->op_submit(objecter_op);
+  objecter->op_submit(objecter_op, &c->tid);
   return 0;
 }
 
