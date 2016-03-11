@@ -552,7 +552,7 @@ if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc
 ceph_test_librbd_fsx_LDADD = \
 	libjournal.la libcls_journal_client.la \
-	$(LIBKRBD) $(LIBRBD) $(LIBRADOS) \
+	$(LIBKRBD) $(LIBCOMMON) $(LIBRBD) $(LIBRADOS) \
 	$(CRYPTO_LIBS) $(PTHREAD_LIBS)
 ceph_test_librbd_fsx_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librbd_fsx
