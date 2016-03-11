@@ -235,6 +235,9 @@ OSDService::OSDService(OSD *osd) :
   agent_stop_flag(false),
   agent_timer_lock("OSD::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
+  promote_probability_millis(1000),
+  promote_max_objects(0),
+  promote_max_bytes(0),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
   objecter_finisher(osd->client_messenger->cct),
   watch_lock("OSD::watch_lock"),
@@ -592,6 +595,78 @@ void OSDService::agent_stop()
     agent_cond.Signal();
   }
   agent_thread.join();
+}
+
+// -------------------------------------
+
+void OSDService::promote_throttle_recalibrate()
+{
+  utime_t now = ceph_clock_now(NULL);
+  double dur = now - last_recalibrate;
+  last_recalibrate = now;
+  unsigned prob = promote_probability_millis.read();
+
+  uint64_t target_obj_sec = g_conf->osd_tier_promote_max_objects_sec;
+  uint64_t target_bytes_sec = g_conf->osd_tier_promote_max_bytes_sec;
+
+  unsigned min_prob = 1;
+
+  uint64_t attempts, obj, bytes;
+  promote_counter.sample_and_attenuate(&attempts, &obj, &bytes);
+  dout(10) << __func__ << " " << attempts << " attempts, promoted "
+	   << obj << " objects and " << pretty_si_t(bytes) << " bytes; target "
+	   << target_obj_sec << " obj/sec or "
+	   << pretty_si_t(target_bytes_sec) << " bytes/sec"
+	   << dendl;
+
+  // calculate what the probability *should* be, given the targets
+  unsigned new_prob;
+  if (attempts && dur > 0) {
+    uint64_t avg_size = 1;
+    if (obj)
+      avg_size = MAX(bytes / obj, 1);
+    unsigned po = (double)target_obj_sec * dur * 1000.0 / (double)attempts;
+    unsigned pb = (double)target_bytes_sec / (double)avg_size * dur * 1000.0
+      / (double)attempts;
+    derr << __func__ << "  po " << po << " pb " << pb << " avg_size " << avg_size << dendl;
+    if (target_obj_sec && target_bytes_sec)
+      new_prob = MIN(po, pb);
+    else if (target_obj_sec)
+      new_prob = po;
+    else if (target_bytes_sec)
+      new_prob = pb;
+    else
+      new_prob = 1000;
+  } else {
+    new_prob = 1000;
+  }
+  dout(20) << __func__ << "  new_prob " << new_prob << dendl;
+
+  // correct for persistent skew between target rate and actual rate, adjust
+  double ratio = 1.0;
+  unsigned actual = 0;
+  if (attempts && obj) {
+    actual = obj * 1000 / attempts;
+    ratio = (double)actual / (double)prob;
+    new_prob = (double)new_prob / ratio;
+  }
+  new_prob = MAX(new_prob, min_prob);
+  new_prob = MIN(new_prob, 1000);
+
+  // adjust
+  prob = (prob + new_prob) / 2;
+  prob = MAX(prob, min_prob);
+  prob = MIN(prob, 1000);
+  dout(10) << __func__ << "  actual " << actual
+	   << ", actual/prob ratio " << ratio
+	   << ", adjusted new_prob " << new_prob
+	   << ", prob " << promote_probability_millis.read() << " -> " << prob
+	   << dendl;
+  promote_probability_millis.set(prob);
+
+  // set hard limits for this interval to mitigate stampedes
+  promote_max_objects = target_obj_sec * OSD::OSD_TICK_INTERVAL * 2;
+  promote_max_bytes = target_bytes_sec * OSD::OSD_TICK_INTERVAL * 2;
 }
 
 // -------------------------------------
@@ -4124,6 +4199,8 @@ void OSD::tick()
     recovery_tp.wake();
 
     check_replay_queue();
+
+    service.promote_throttle_recalibrate();
   }
 
   // only do waiters if dispatch() isn't currently running.  (if it is,

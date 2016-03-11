@@ -2338,12 +2338,11 @@ bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
 
   switch (recency) {
   case 0:
-    promote_object(obc, missing_oid, oloc, promote_op, promote_obc);
     break;
   case 1:
     // Check if in the current hit set
     if (in_hit_set) {
-      promote_object(obc, missing_oid, oloc, promote_op, promote_obc);
+      break;
     } else {
       // not promoting
       return false;
@@ -2369,15 +2368,18 @@ bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
 	}
       }
       if (count >= recency) {
-	promote_object(obc, missing_oid, oloc, promote_op);
-      } else {
-	// not promoting
-	return false;
+	break;
       }
+      return false;	// not promoting
     }
     break;
   }
 
+  if (osd->promote_throttle()) {
+    dout(10) << __func__ << " promote throttled" << dendl;
+    return false;
+  }
+  promote_object(obc, missing_oid, oloc, promote_op, promote_obc);
   return true;
 }
 
@@ -7609,6 +7611,8 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
     }
     return;
   }
+
+  osd->promote_finish(results->object_size);
 
   OpContextUPtr tctx =  simple_opc_create(obc);
   tctx->at_version = get_next_version();
