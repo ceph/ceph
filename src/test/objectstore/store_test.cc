@@ -531,6 +531,12 @@ public:
       name = "DIR_" + name;
     }
 
+    if (seq % 2) {
+      for (unsigned i = 0; i < 300; ++i) {
+	name.push_back('a');
+      }
+    }
+
     // hash
     //boost::binomial_distribution<uint32_t> bin(0xFFFFFF, 0.5);
     ++seq;
