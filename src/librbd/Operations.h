@@ -63,8 +63,8 @@ private:
 
   int invoke_async_request(const std::string& request_type,
                            bool permit_snapshot,
-                           const boost::function<void(Context*)>& local_request,
-                           const boost::function<int()>& remote_request);
+                           const boost::function<void(Context*)>& local,
+                           const boost::function<void(Context*)>& remote);
 };
 
 } // namespace librbd
