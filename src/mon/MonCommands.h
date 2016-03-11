@@ -706,6 +706,12 @@ COMMAND("osd pool delete " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it,req=false", \
 	"delete pool", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd pool rm " \
+	"name=pool,type=CephPoolname " \
+	"name=pool2,type=CephPoolname,req=false " \
+	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it,req=false", \
+	"remove pool", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd pool rename " \
 	"name=srcpool,type=CephPoolname " \
 	"name=destpool,type=CephPoolname", \
