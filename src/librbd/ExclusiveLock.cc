@@ -113,7 +113,7 @@ template <typename I>
 void ExclusiveLock<I>::try_lock(Context *on_tried_lock) {
   {
     Mutex::Locker locker(m_lock);
-    assert(m_image_ctx.owner_lock.is_wlocked());
+    assert(m_image_ctx.owner_lock.is_locked());
     assert(!is_shutdown());
 
     if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
