@@ -2431,16 +2431,15 @@ void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
 {
   assert(write_lock.is_locked());
 
-  utime_t t = ceph_clock_now(async_msgr->cct);
-  struct ceph_timespec ts;
-  t.encode_timeval(&ts);
   if (ack) {
     assert(tp);
+    struct ceph_timespec ts;
     tp->encode_timeval(&ts);
     outcoming_bl.append(CEPH_MSGR_TAG_KEEPALIVE2_ACK);
     outcoming_bl.append((char*)&ts, sizeof(ts));
   } else if (has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
     struct ceph_timespec ts;
+    utime_t t = ceph_clock_now(async_msgr->cct);
     t.encode_timeval(&ts);
     outcoming_bl.append(CEPH_MSGR_TAG_KEEPALIVE2);
     outcoming_bl.append((char*)&ts, sizeof(ts));
@@ -2449,7 +2448,6 @@ void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
   }
 
   ldout(async_msgr->cct, 10) << __func__ << " try send keepalive or ack" << dendl;
-  _try_send(false);
 }
 
 void AsyncConnection::handle_write()
