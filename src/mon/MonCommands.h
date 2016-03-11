@@ -367,6 +367,9 @@ COMMAND("mds add_data_pool " \
 COMMAND("mds remove_data_pool " \
 	"name=pool,type=CephString", \
 	"remove data pool <pool>", "mds", "rw", "cli,rest")
+COMMAND("mds rm_data_pool " \
+	"name=pool,type=CephString", \
+	"remove data pool <pool>", "mds", "rw", "cli,rest")
 COMMAND("mds newfs " \
 	"name=metadata,type=CephInt,range=0 " \
 	"name=data,type=CephInt,range=0 " \
