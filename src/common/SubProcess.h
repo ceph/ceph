@@ -87,7 +87,7 @@ public:
 
   void kill(int signo = SIGTERM) const;
 
-  const char* err() const;
+  const std::string err() const;
 
 protected:
   bool is_child() const { return pid == 0; }
@@ -219,8 +219,8 @@ inline void SubProcess::kill(int signo) const {
   assert(ret == 0);
 }
 
-inline const char* SubProcess::err() const {
-  return errstr.str().c_str();
+inline const std::string SubProcess::err() const {
+  return errstr.str();
 }
 
 class fd_buf : public std::streambuf {

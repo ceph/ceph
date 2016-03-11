@@ -1045,7 +1045,7 @@ nbd_open(const char *name, struct rbd_ctx *ctx)
 
         r = process.spawn();
         if (r < 0) {
-		prt("nbd_open failed to run rbd-nbd error: %s\n", process.err());
+		prt("nbd_open failed to run rbd-nbd error: %s\n", process.err().c_str());
 		return r;
         }
 	r = safe_read(process.get_stdout(), dev, sizeof(dev));
@@ -1059,7 +1059,7 @@ nbd_open(const char *name, struct rbd_ctx *ctx)
 	dev[r] = 0;
 	r = process.join();
 	if (r) {
-		prt("rbd-nbd failed with error: %s", process.err());
+		prt("rbd-nbd failed with error: %s", process.err().c_str());
 		return -EINVAL;
 	}
 
@@ -1099,12 +1099,12 @@ nbd_close(struct rbd_ctx *ctx)
 
         r = process.spawn();
         if (r < 0) {
-		prt("nbd_close failed to run rbd-nbd error: %s\n", process.err());
+		prt("nbd_close failed to run rbd-nbd error: %s\n", process.err().c_str());
 		return r;
         }
 	r = process.join();
 	if (r) {
-		prt("rbd-nbd failed with error: %d", process.err());
+		prt("rbd-nbd failed with error: %d", process.err().c_str());
 		return -EINVAL;
 	}
 
