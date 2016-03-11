@@ -876,6 +876,7 @@ OPTION(bdev_inject_crash_flush_delay, OPT_INT, 2) // wait N more seconds on flus
 OPTION(bdev_aio, OPT_BOOL, true)
 OPTION(bdev_aio_poll_ms, OPT_INT, 250)  // milliseconds
 OPTION(bdev_aio_max_queue_depth, OPT_INT, 32)
+OPTION(bdev_block_size, OPT_INT, 4096)
 
 // if yes, osd will unbind all NVMe devices from kernel driver and bind them
 // to the uio_pci_generic driver. The purpose is to prevent the case where
