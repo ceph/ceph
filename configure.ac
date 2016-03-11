@@ -1238,6 +1238,14 @@ if test "x$enable_valgrind" = "xyes"; then
   AC_CHECK_HEADERS([valgrind/helgrind.h])
 fi
 
+# STS?
+AC_ARG_ENABLE([sts],
+	[AS_HELP_STRING([--enable-sts], [enable radoswgw sts])],
+	[],
+	[enable_sts=no])
+AM_CONDITIONAL(ENABLE_STS, test "$enable_sts" = "yes")
+#AS_IF([test "$enable_sts" = "yes"], [AC_DEFINE([WITH_RADOS, ENABLE_STS])])
+
 AC_SUBST(systemd_unit_dir)
 AC_ARG_WITH(
     systemd-unit-dir,

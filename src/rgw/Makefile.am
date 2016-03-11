@@ -176,6 +176,8 @@ ceph_rgw_jsonparser_SOURCES = \
 ceph_rgw_jsonparser_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_rgw_jsonparser
 
+if ENABLE_STS
+
 rgw_sts_SOURCES = \
 	sts/sts_main.cc \
 	sts/rgw_rest_sts.cc \
@@ -185,6 +187,8 @@ rgw_sts_LDFLAGS = -Wl,-z,muldefs
 rgw_sts_LDADD = $(LIBRGW) $(LIBCIVETWEB) $(LIBCIVETWEB_DEPS) $(LIBRGW_DEPS) \
 	$(RESOLV_LIBS) $(CEPH_GLOBAL)
 bin_PROGRAMS += rgw-sts
+
+endif # ENABLE_STS
 
 noinst_HEADERS += \
 	rgw/rgw_acl.h \
