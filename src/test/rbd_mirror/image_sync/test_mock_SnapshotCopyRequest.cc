@@ -8,39 +8,9 @@
 #include "librbd/Operations.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "test/rbd_mirror/mock/MockJournaler.h"
 #include "tools/rbd_mirror/image_sync/SnapshotCopyRequest.h"
 #include "tools/rbd_mirror/Threads.h"
-
-namespace journal {
-
-struct MockJournaler {
-  static MockJournaler *s_instance;
-  static MockJournaler &get_instance() {
-    assert(s_instance != nullptr);
-    return *s_instance;
-  }
-
-  MockJournaler() {
-    s_instance = this;
-  }
-
-  MOCK_METHOD2(update_client, void(const bufferlist&, Context *on_safe));
-};
-
-MockJournaler *MockJournaler::s_instance = nullptr;
-
-} // namespace journal
-
-namespace librbd {
-namespace journal {
-
-template <>
-struct TypeTraits<MockImageCtx> {
-  typedef ::journal::MockJournaler Journaler;
-};
-
-} // namespace journal
-} // namespace librbd
 
 // template definitions
 #include "tools/rbd_mirror/image_sync/SnapshotCopyRequest.cc"
