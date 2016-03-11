@@ -42,6 +42,9 @@ public:
 private:
   void set_sources(const std::map<int64_t, std::set<std::string> > &images);
 
+  void start_image_replayer(unique_ptr<ImageReplayer> &image_replayer);
+  bool stop_image_replayer(unique_ptr<ImageReplayer> &image_replayer);
+
   Threads *m_threads;
   Mutex m_lock;
   Cond m_cond;

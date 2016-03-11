@@ -99,6 +99,17 @@ void Replayer::run()
     set_sources(m_pool_watcher->get_images());
     m_cond.WaitInterval(g_ceph_context, m_lock, seconds(30));
   }
+
+  // Stopping
+  map<int64_t, set<string> > empty_sources;
+  while (true) {
+    Mutex::Locker l(m_lock);
+    set_sources(empty_sources);
+    if (m_images.empty()) {
+      break;
+    }
+    m_cond.WaitInterval(g_ceph_context, m_lock, seconds(1));
+  }
 }
 
 void Replayer::set_sources(const map<int64_t, set<string> > &images)
@@ -106,19 +117,28 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
   dout(20) << "enter" << dendl;
 
   assert(m_lock.is_locked());
-  // TODO: make stopping and starting ImageReplayers async
   for (auto it = m_images.begin(); it != m_images.end();) {
     int64_t pool_id = it->first;
     auto &pool_images = it->second;
     if (images.find(pool_id) == images.end()) {
-      m_images.erase(it++);
+      for (auto images_it = pool_images.begin();
+	   images_it != pool_images.end();) {
+	if (stop_image_replayer(images_it->second)) {
+	  pool_images.erase(images_it++);
+	}
+      }
+      if (pool_images.empty()) {
+	m_images.erase(it++);
+      }
       continue;
     }
     for (auto images_it = pool_images.begin();
 	 images_it != pool_images.end();) {
       if (images.at(pool_id).find(images_it->first) ==
 	  images.at(pool_id).end()) {
-	pool_images.erase(images_it++);
+	if (stop_image_replayer(images_it->second)) {
+	  pool_images.erase(images_it++);
+	}
       } else {
 	++images_it;
       }
@@ -149,22 +169,45 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
     // create entry for pool if it doesn't exist
     auto &pool_replayers = m_images[pool_id];
     for (const auto &image_id : kv.second) {
-      if (pool_replayers.find(image_id) == pool_replayers.end()) {
+      auto it = pool_replayers.find(image_id);
+      if (it == pool_replayers.end()) {
 	unique_ptr<ImageReplayer> image_replayer(new ImageReplayer(m_threads,
-                                                                   m_local,
+								   m_local,
 								   m_remote,
 								   m_client_id,
-                                                                   local_ioctx.get_id(),
+								   local_ioctx.get_id(),
 								   pool_id,
 								   image_id));
-	int r = image_replayer->start();
-	if (r < 0) {
-	  continue;
-	}
-	pool_replayers.insert(std::make_pair(image_id, std::move(image_replayer)));
+	it = pool_replayers.insert(
+	  std::make_pair(image_id, std::move(image_replayer))).first;
       }
+      start_image_replayer(it->second);
     }
   }
+}
+
+void Replayer::start_image_replayer(unique_ptr<ImageReplayer> &image_replayer)
+{
+  if (!image_replayer->is_stopped()) {
+    return;
+  }
+
+  image_replayer->start();
+}
+
+bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer> &image_replayer)
+{
+  if (image_replayer->is_stopped()) {
+    return true;
+  }
+
+  if (image_replayer->is_running()) {
+    image_replayer->stop();
+  } else {
+    // TODO: check how long it is stopping and alert if it is too long.
+  }
+
+  return false;
 }
 
 } // namespace mirror
