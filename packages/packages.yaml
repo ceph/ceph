@@ -14,13 +14,22 @@ ceph:
   - librados2
   - librbd1
   - rbd-fuse
-  - ceph-mds-dbg
   - ceph-common-dbg
+  - ceph-fs-common-dbg
   - ceph-fuse-dbg
-  - radosgw-dbg
+  - ceph-mds-dbg
+  - ceph-mon-dbg
+  - ceph-osd-dbg
+  - ceph-test-dbg
   - libcephfs1-dbg
   - librados2-dbg
+  - libradosstriper1-dbg
   - librbd1-dbg
+  - librgw2-dbg
+  - radosgw-dbg
+  - rbd-fuse-dbg
+  - rbd-mirror-dbg
+  - rbd-nbd-dbg
   rpm:
   - ceph-radosgw
   - ceph-test
