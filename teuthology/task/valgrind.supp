@@ -285,3 +285,12 @@
 	fun:pthread_create@*
 	...
 }
+{
+	thread_local memory is falsely detected (https://svn.boost.org/trac/boost/ticket/3296)
+	Memcheck:Leak
+	...
+	fun:boost::detail::get_once_per_thread_epoch()
+	fun:void boost::call_once*
+	fun:boost::detail::get_current_thread_data()
+	...
+}
