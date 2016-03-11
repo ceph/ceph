@@ -1466,6 +1466,7 @@ int FileStore::mount()
 
   op_fd = read_op_seq(&initial_op_seq);
   if (op_fd < 0) {
+    ret = op_fd;
     derr << "FileStore::mount: read_op_seq failed" << dendl;
     goto close_current_fd;
   }
@@ -1482,6 +1483,7 @@ int FileStore::mount()
     // from it.
     int r = ::creat(nosnapfn, 0644);
     if (r < 0) {
+      ret = -errno;
       derr << "FileStore::mount: failed to create current/nosnap" << dendl;
       goto close_current_fd;
     }
