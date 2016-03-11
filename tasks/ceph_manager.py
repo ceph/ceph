@@ -49,17 +49,6 @@ def write_conf(ctx, conf_path=DEFAULT_CONF_PATH):
     run.wait(writes)
 
 
-def make_admin_daemon_dir(ctx, remote):
-    """
-    Create /var/run/ceph directory on remote site.
-
-    :param ctx: Context
-    :param remote: Remote site
-    """
-    remote.run(args=['sudo',
-                     'install', '-d', '-m0777', '--', '/var/run/ceph', ], )
-
-
 def mount_osd_data(ctx, remote, osd):
     """
     Mount a remote OSD
@@ -1785,7 +1774,7 @@ class CephManager:
                                 format(o=osd))
             teuthology.reconnect(self.ctx, 60, [remote])
             mount_osd_data(self.ctx, remote, str(osd))
-            make_admin_daemon_dir(self.ctx, remote)
+            self.make_admin_daemon_dir(remote)
             self.ctx.daemons.get_daemon('osd', osd).reset()
         self.ctx.daemons.get_daemon('osd', osd).restart()
 
@@ -1859,7 +1848,7 @@ class CephManager:
                                                 "Check ipmi config.")
 
             remote.console.power_on()
-            make_admin_daemon_dir(self.ctx, remote)
+            self.make_admin_daemon_dir(remote)
         self.ctx.daemons.get_daemon('mon', mon).restart()
 
     def get_mon_status(self, mon):
@@ -1902,60 +1891,6 @@ class CephManager:
             self.log('health:\n{h}'.format(h=out))
         return json.loads(out)
 
-    ## metadata servers
-
-    def kill_mds(self, mds):
-        """
-        Powercyle if set in config, otherwise just stop.
-        """
-        if self.config.get('powercycle'):
-            (remote,) = (self.ctx.cluster.only('mds.{m}'.format(m=mds)).
-                         remotes.iterkeys())
-            self.log('kill_mds on mds.{m} doing powercycle of {s}'.
-                     format(m=mds, s=remote.name))
-            assert remote.console is not None, ("powercycling requested "
-                                                "but RemoteConsole is not "
-                                                "initialized.  "
-                                                "Check ipmi config.")
-            remote.console.power_off()
-        else:
-            self.ctx.daemons.get_daemon('mds', mds).stop()
-
-    def kill_mds_by_rank(self, rank):
-        """
-        kill_mds wrapper to kill based on rank passed.
-        """
-        status = self.get_mds_status_by_rank(rank)
-        self.kill_mds(status['name'])
-
-    def revive_mds(self, mds, standby_for_rank=None):
-        """
-        Revive mds -- do an ipmpi powercycle (if indicated by the config)
-        and then restart (using --hot-standby if specified.
-        """
-        if self.config.get('powercycle'):
-            (remote,) = (self.ctx.cluster.only('mds.{m}'.format(m=mds)).
-                         remotes.iterkeys())
-            self.log('revive_mds on mds.{m} doing powercycle of {s}'.
-                     format(m=mds, s=remote.name))
-            assert remote.console is not None, ("powercycling requested "
-                                                "but RemoteConsole is not "
-                                                "initialized.  "
-                                                "Check ipmi config.")
-            remote.console.power_on()
-            make_admin_daemon_dir(self.ctx, remote)
-        args = []
-        if standby_for_rank:
-            args.extend(['--hot-standby', standby_for_rank])
-        self.ctx.daemons.get_daemon('mds', mds).restart(*args)
-
-    def revive_mds_by_rank(self, rank, standby_for_rank=None):
-        """
-        revive_mds wrapper to revive based on rank passed.
-        """
-        status = self.get_mds_status_by_rank(rank)
-        self.revive_mds(status['name'], standby_for_rank)
-
     def get_mds_status(self, mds):
         """
         Run cluster commands for the mds in order to get mds information
@@ -1968,31 +1903,22 @@ class CephManager:
                 return info
         return None
 
-    def get_mds_status_by_rank(self, rank):
-        """
-        Run cluster commands for the mds in order to get mds information
-        check rank.
-        """
-        j = self.get_mds_status_all()
-        # collate; for dup ids, larger gid wins.
-        for info in j['info'].itervalues():
-            if info['rank'] == rank:
-                return info
-        return None
-
-    def get_mds_status_all(self):
-        """
-        Run cluster command to extract all the mds status.
-        """
-        out = self.raw_cluster_cmd('mds', 'dump', '--format=json')
-        j = json.loads(' '.join(out.splitlines()[1:]))
-        return j
-
     def get_filepath(self):
         """
         Return path to osd data with {id} needing to be replaced
         """
         return "/var/lib/ceph/osd/ceph-{id}"
+
+    def make_admin_daemon_dir(self, remote):
+        """
+        Create /var/run/ceph directory on remote site.
+
+        :param ctx: Context
+        :param remote: Remote site
+        """
+        remote.run(args=['sudo',
+                         'install', '-d', '-m0777', '--', '/var/run/ceph', ], )
+
 
 def utility_task(name):
     """
