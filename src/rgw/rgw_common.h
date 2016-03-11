@@ -1196,7 +1196,7 @@ struct req_state {
   const char *length;
   int64_t content_length;
   map<string, string> generic_attrs;
-  rgw_err *err;
+  std::unique_ptr<rgw_err> err;
   bool expect_cont;
   bool header_ended;
   uint64_t obj_size;

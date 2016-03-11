@@ -239,8 +239,8 @@ void req_info::rebuild_from(req_info& src)
 
 
 req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
-  : cct(_cct), cio(NULL), op(OP_UNKNOWN), err(0), user(u), has_acl_header(false),
-    os_auth_token(NULL), info(_cct, e)
+  : cct(_cct), cio(NULL), op(OP_UNKNOWN), err(new rgw_err), user(u),
+    has_acl_header(false), os_auth_token(NULL), info(_cct, e)
 {
   enable_ops_log = e->conf->enable_ops_log;
   enable_usage_log = e->conf->enable_usage_log;
@@ -277,7 +277,6 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
 
 req_state::~req_state() {
   delete formatter;
-  delete err;
   delete bucket_acl;
   delete object_acl;
   delete aws4_auth;
@@ -285,7 +284,8 @@ req_state::~req_state() {
 
 void req_state::set_req_state_err(int err_no)
 {
-  if (!err) err = new rgw_err();
+  if (!err)
+    err.reset(new rgw_err);
 
   if (err_no < 0)
     err_no = -err_no;

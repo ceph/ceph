@@ -294,7 +294,7 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   struct rgw_log_entry entry;
   string bucket_id;
 
-  if (!s->err) s->err = new rgw_err();
+  if (!s->err) s->err.reset(new rgw_err);
 
   if (s->enable_usage_log)
     log_usage(s, op_name);

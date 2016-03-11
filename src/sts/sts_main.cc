@@ -430,7 +430,7 @@ static int process_request(STSStore *store, RGWREST *rest, STSRequest *req, RGWS
   struct req_state rstate(g_ceph_context, &rgw_env, &userinfo);
   struct req_state *s = &rstate;
 
-  s->err = new sts_err();
+  s->err.reset(new sts_err);
 
 //  s->req_id = store->unique_id(req->id);
 //  s->trans_id = store->unique_trans_id(req->id);

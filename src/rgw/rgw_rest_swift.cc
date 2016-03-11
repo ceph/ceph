@@ -1469,7 +1469,7 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
   string first;
 
   assert(!s->err);
-  s->err = new swift_err();
+  s->err.reset(new swift_err);
   s->prot_flags |= RGW_REST_SWIFT;
 
   const char *req_name = s->decoded_uri.c_str();

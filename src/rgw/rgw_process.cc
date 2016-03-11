@@ -183,7 +183,7 @@ done:
     rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
   }
 
-  if (!s->err) s->err = new rgw_err();
+  if (!s->err) s->err.reset(new rgw_err);
 
   int http_ret = s->err->http_ret_E;
   int op_ret = 0;

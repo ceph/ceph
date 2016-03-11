@@ -957,7 +957,8 @@ int RGWGetPost_STS::assume_role_execute(boost::function<void()>&f)
     }
     if (r) return r;
   }
-  assume_role_response response(dynamic_cast<sts_err*>(s->err)->request_id);
+  assume_role_response response(dynamic_cast<sts_err*>(s->err.get())
+				->request_id);
   make_fake_response(response);
   f = boost::function<void()>([this,response]{response.dump(s->formatter);});
   return 0;
@@ -992,7 +993,7 @@ int RGWGetPost_STS::assume_role_with_web_identity_execute(boost::function<void()
     }
     if (r) return r;
   }
-  assume_role_with_web_identity_response response(dynamic_cast<sts_err*>(s->err)->request_id);
+  assume_role_with_web_identity_response response(dynamic_cast<sts_err*>(s->err.get())->request_id);
   make_fake_response(response);
   f = boost::function<void()>([this,response]{response.dump(s->formatter);});
   return 0;
@@ -1021,7 +1022,7 @@ int RGWGetPost_STS::get_federation_token_execute(boost::function<void()>&f)
     }
     if (r) return r;
   }
-  get_federation_token_response response(dynamic_cast<sts_err*>(s->err)->request_id);
+  get_federation_token_response response(dynamic_cast<sts_err*>(s->err.get())->request_id);
   make_fake_response(response);
   f = boost::function<void()>([this,response]{response.dump(s->formatter);});
   return 0;
@@ -1052,7 +1053,7 @@ int RGWGetPost_STS::get_session_token_execute(boost::function<void()>&f)
     }
     if (r) return r;
   }
-  get_session_token_response response(dynamic_cast<sts_err*>(s->err)->request_id);
+  get_session_token_response response(dynamic_cast<sts_err*>(s->err.get())->request_id);
   make_fake_response(response);
   f = boost::function<void()>([this,response]{response.dump(s->formatter);});
   return 0;
@@ -1084,7 +1085,7 @@ int RGWGetPost_STS::assume_role_with_saml_execute(boost::function<void()>&f)
     }
     if (r) return r;
   }
-  assume_role_with_saml_response response(dynamic_cast<sts_err*>(s->err)->request_id);
+  assume_role_with_saml_response response(dynamic_cast<sts_err*>(s->err.get())->request_id);
   make_fake_response(response);
   f = boost::function<void()>([this,response]{response.dump(s->formatter);});
   return 0;
@@ -1113,7 +1114,7 @@ int RGWGetPost_STS::decode_authorization_message(boost::function<void()>&f)
     return -ERR_MALFORMED_INPUT;
   }
 
-  authorization_message_response response(dynamic_cast<sts_err*>(s->err)->request_id);
+  authorization_message_response response(dynamic_cast<sts_err*>(s->err.get())->request_id);
   make_fake_decode_auth(response);
   f = boost::function<void()>([this,response]{response.dump(s->formatter);});
   return 0;
