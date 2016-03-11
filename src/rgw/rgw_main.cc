@@ -200,8 +200,53 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
+
+  // First, let's determine which frontends are configured.
+  int flags = CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS;
+  global_pre_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
+		  flags);
+
+  list<string> frontends;
+  get_str_list(g_conf->rgw_frontends, ",", frontends);
+  multimap<string, RGWFrontendConfig *> fe_map;
+  list<RGWFrontendConfig *> configs;
+  if (frontends.empty()) {
+    frontends.push_back("fastcgi");
+  }
+  for (list<string>::iterator iter = frontends.begin(); iter != frontends.end(); ++iter) {
+    string& f = *iter;
+
+    if (f.find("civetweb") != string::npos) {
+      // If civetweb is configured as a frontend, prevent global_init() from
+      // dropping permissions by setting the appropriate flag.
+      flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
+      if (f.find("port") != string::npos) {
+	// check for the most common ws problems
+	if ((f.find("port=") == string::npos) ||
+	    (f.find("port= ") != string::npos)) {
+	  derr << "WARNING: civetweb frontend config found unexpected spacing around 'port' (ensure civetweb port parameter has the form 'port=80' with no spaces before or after '=')" << dendl;
+	}
+      }
+    }
+
+    RGWFrontendConfig *config = new RGWFrontendConfig(f);
+    int r = config->init();
+    if (r < 0) {
+      cerr << "ERROR: failed to init config: " << f << std::endl;
+      return EINVAL;
+    }
+
+    configs.push_back(config);
+
+    string framework = config->get_framework();
+    fe_map.insert(pair<string, RGWFrontendConfig*>(framework, config));
+  }
+
+  // Now that we've determined which frontend(s) to use, continue with global
+  // initialization. Passing false as the final argument ensures that
+  // global_pre_init() is not invoked twice.
   global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS, "rgw_data");
+	      flags, "rgw_data", false);
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ++i) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
@@ -330,41 +375,6 @@ int main(int argc, const char **argv)
   register_async_signal_handler(SIGINT, handle_sigterm);
   register_async_signal_handler(SIGUSR1, handle_sigterm);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
-
-  list<string> frontends;
-  get_str_list(g_conf->rgw_frontends, ",", frontends);
-
-  multimap<string, RGWFrontendConfig *> fe_map;
-  list<RGWFrontendConfig *> configs;
-  if (frontends.empty()) {
-    frontends.push_back("fastcgi");
-  }
-  for (list<string>::iterator iter = frontends.begin();
-       iter != frontends.end(); ++iter) {
-    string& f = *iter;
-
-    if (f.find("civetweb") != string::npos) {
-      if (f.find("port") != string::npos) {
-	// check for the most common ws problems
-	if ((f.find("port=") == string::npos) ||
-	    (f.find("port= ") != string::npos)) {
-	  derr << "WARNING: civetweb frontend config found unexpected spacing around 'port' (ensure civetweb port parameter has the form 'port=80' with no spaces before or after '=')" << dendl;
-	}
-      }
-    }
-
-    RGWFrontendConfig *config = new RGWFrontendConfig(f);
-    int r = config->init();
-    if (r < 0) {
-      cerr << "ERROR: failed to init config: " << f << std::endl;
-      return EINVAL;
-    }
-
-    configs.push_back(config);
-
-    string framework = config->get_framework();
-    fe_map.insert(pair<string, RGWFrontendConfig*>(framework, config));
-  }
 
   list<RGWFrontend *> fes;
 
