@@ -321,5 +321,5 @@ public:
 
 };
 
-
+REGISTER_MESSAGE(MOSDOpReply, CEPH_MSG_OSD_OPREPLY);
 #endif

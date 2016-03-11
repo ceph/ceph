@@ -59,5 +59,5 @@ public:
   }
 
 };
-
+REGISTER_MESSAGE(MExportDir, MSG_MDS_EXPORTDIR);
 #endif

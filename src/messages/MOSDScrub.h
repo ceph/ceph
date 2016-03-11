@@ -75,5 +75,5 @@ public:
     }
   }
 };
-
+REGISTER_MESSAGE(MOSDScrub, MSG_OSD_SCRUB);
 #endif

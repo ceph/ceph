@@ -313,5 +313,5 @@ public:
     ::encode(layout.pool_ns, payload);
   }
 };
-
+REGISTER_MESSAGE(MClientCaps, CEPH_MSG_CLIENT_CAPS);
 #endif

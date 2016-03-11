@@ -100,5 +100,5 @@ public:
 };
 
 WRITE_CLASS_ENCODER(MCacheExpire::realm)
-
+REGISTER_MESSAGE(MCacheExpire, MSG_MDS_CACHEEXPIRE);
 #endif

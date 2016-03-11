@@ -86,5 +86,5 @@ public:
     out << ")";
   }
 };
-
+REGISTER_MESSAGE(MOSDPGRemove, MSG_OSD_PG_REMOVE);
 #endif

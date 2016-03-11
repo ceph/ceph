@@ -263,6 +263,7 @@ set(libcommon_files
   msg/simple/Accepter.cc
   msg/simple/DispatchQueue.cc
   msg/Message.cc
+  msg/MessageFactory.h
   osd/ECMsgTypes.cc
   osd/HitSet.cc
   common/RefCountedObj.cc
@@ -794,7 +795,6 @@ if(${WITH_MDS})
     mds/MDSTableClient.cc
     mds/MDSTableServer.cc
     mds/ScrubStack.cc
-    mds/DamageTable.cc
     mds/SimpleLock.cc
     mds/SnapRealm.cc
     mds/SnapServer.cc

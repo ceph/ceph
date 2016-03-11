@@ -224,5 +224,5 @@ public:
 };
 
 WRITE_CLASS_ENCODER(MClientRequest::Release)
-
+REGISTER_MESSAGE(MClientRequest, CEPH_MSG_CLIENT_REQUEST);
 #endif

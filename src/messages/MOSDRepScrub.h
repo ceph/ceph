@@ -117,5 +117,5 @@ public:
     }
   }
 };
-
+REGISTER_MESSAGE(MOSDRepScrub, MSG_OSD_REP_SCRUB);
 #endif

@@ -41,4 +41,5 @@ public:
   }
 };
 
+REGISTER_MESSAGE(MStatfsReply, CEPH_MSG_STATFS_REPLY);
 #endif

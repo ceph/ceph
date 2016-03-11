@@ -69,5 +69,5 @@ public:
     ::decode(slave_requests, p);
   }
 };
-
+REGISTER_MESSAGE(MMDSResolve, MSG_MDS_RESOLVE);
 #endif

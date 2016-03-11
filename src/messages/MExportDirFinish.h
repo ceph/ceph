@@ -50,5 +50,5 @@ public:
   }
 
 };
-
+REGISTER_MESSAGE(MExportDirFinish, MSG_MDS_EXPORTDIRFINISH);
 #endif

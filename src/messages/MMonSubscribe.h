@@ -92,5 +92,5 @@ public:
     }
   }
 };
-
+REGISTER_MESSAGE(MMonSubscribe, CEPH_MSG_MON_SUBSCRIBE);
 #endif

@@ -50,5 +50,5 @@ public:
     ::decode(cmd, p);
   }
 };
-
+REGISTER_MESSAGE(MMonCommandAck, MSG_MON_COMMAND_ACK);
 #endif

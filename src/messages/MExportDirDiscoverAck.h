@@ -56,5 +56,5 @@ public:
     ::encode(success, payload);
   }
 };
-
+REGISTER_MESSAGE(MExportDirDiscoverAck, MSG_MDS_EXPORTDIRDISCOVERACK);
 #endif

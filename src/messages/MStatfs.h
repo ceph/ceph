@@ -48,5 +48,5 @@ public:
     ::decode(fsid, p);
   }
 };
-
+REGISTER_MESSAGE(MStatfs, CEPH_MSG_STATFS);
 #endif

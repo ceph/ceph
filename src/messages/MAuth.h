@@ -53,5 +53,5 @@ public:
   }
   bufferlist& get_auth_payload() { return auth_payload; }
 };
-
+REGISTER_MESSAGE(MAuth, CEPH_MSG_AUTH);
 #endif

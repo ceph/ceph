@@ -46,5 +46,5 @@ public:
     ::encode(fsid, payload);
   }
 };
-
+REGISTER_MESSAGE(MMonSubscribeAck, CEPH_MSG_MON_SUBSCRIBE_ACK);
 #endif

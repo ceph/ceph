@@ -76,5 +76,5 @@ public:
     }
   }
 };
-
+REGISTER_MESSAGE(MPoolOpReply, CEPH_MSG_POOLOP_REPLY);
 #endif

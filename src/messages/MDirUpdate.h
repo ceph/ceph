@@ -82,5 +82,5 @@ public:
     ::encode(path, payload);
   }
 };
-
+REGISTER_MESSAGE(MDirUpdate, MSG_MDS_DIRUPDATE);
 #endif

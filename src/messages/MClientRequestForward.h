@@ -63,5 +63,5 @@ public:
     ::decode(client_must_resend, p);
   }
 };
-
+REGISTER_MESSAGE(MClientRequestForward, CEPH_MSG_CLIENT_REQUEST_FORWARD);
 #endif

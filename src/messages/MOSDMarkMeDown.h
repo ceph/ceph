@@ -70,5 +70,5 @@ public:
 	<< ")";
   }
 };
-
+REGISTER_MESSAGE(MOSDMarkMeDown, MSG_OSD_MARK_ME_DOWN);
 #endif

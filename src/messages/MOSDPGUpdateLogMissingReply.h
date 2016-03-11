@@ -83,5 +83,5 @@ public:
     ::decode(rep_tid, p);
   }
 };
-
+REGISTER_MESSAGE(MOSDPGUpdateLogMissingReply, MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY);
 #endif

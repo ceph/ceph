@@ -165,5 +165,5 @@ public:
 
 };
 
-
+REGISTER_MESSAGE(MOSDSubOpReply, MSG_OSD_SUBOPREPLY);
 #endif

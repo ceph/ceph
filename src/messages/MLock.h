@@ -92,5 +92,5 @@ public:
   }
 
 };
-
+REGISTER_MESSAGE(MLock, MSG_MDS_LOCK);
 #endif

@@ -524,5 +524,5 @@ struct ceph_osd_request_head {
   }
 };
 
-
+REGISTER_MESSAGE(MOSDOp, CEPH_MSG_OSD_OP);
 #endif

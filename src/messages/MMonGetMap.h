@@ -31,5 +31,5 @@ public:
   void encode_payload(uint64_t features) { }
   void decode_payload() { }
 };
-
+REGISTER_MESSAGE(MMonGetMap, CEPH_MSG_MON_GET_MAP);
 #endif

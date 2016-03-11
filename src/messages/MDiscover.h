@@ -88,5 +88,5 @@ public:
   }
 
 };
-
+REGISTER_MESSAGE(MDiscover, MSG_MDS_DISCOVER);
 #endif

@@ -50,5 +50,5 @@ public:
     ::encode(success, payload);
   }
 };
-
+REGISTER_MESSAGE(MExportDirPrepAck, MSG_MDS_EXPORTDIRPREPACK);
 #endif

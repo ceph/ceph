@@ -45,5 +45,5 @@ public:
       ::decode(channel, p);
   }
 };
-
+REGISTER_MESSAGE(MLogAck, MSG_LOGACK);
 #endif

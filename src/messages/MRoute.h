@@ -101,5 +101,5 @@ public:
       o << " to " << dest << ")";
   }
 };
-
+REGISTER_MESSAGE(MRoute, MSG_ROUTE);
 #endif

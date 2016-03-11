@@ -83,5 +83,5 @@ public:
     ::decode(inc_last, p);
   }
 };
-
+REGISTER_MESSAGE(MMonGetOSDMap, CEPH_MSG_MON_GET_OSDMAP);
 #endif

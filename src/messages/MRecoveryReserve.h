@@ -79,5 +79,5 @@ public:
     ::encode(pgid.shard, payload);
   }
 };
-
+REGISTER_MESSAGE(MRecoveryReserve, MSG_OSD_RECOVERY_RESERVE);
 #endif

@@ -75,5 +75,5 @@ public:
     ::decode(bounds, p);
   }
 };
-
+REGISTER_MESSAGE(MExportDirNotify, MSG_MDS_EXPORTDIRNOTIFY);
 #endif

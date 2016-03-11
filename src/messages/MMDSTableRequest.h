@@ -61,5 +61,5 @@ public:
     ::encode(bl, payload);
   }
 };
-
+REGISTER_MESSAGE(MMDSTableRequest, MSG_MDS_TABLE_REQUEST);
 #endif

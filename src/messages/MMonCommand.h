@@ -57,5 +57,5 @@ public:
     ::decode(cmd, p);
   }
 };
-
+REGISTER_MESSAGE(MMonCommand, MSG_MON_COMMAND);
 #endif

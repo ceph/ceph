@@ -150,5 +150,5 @@ public:
   }
 };
 
-
+REGISTER_MESSAGE(MOSDRepOp, MSG_OSD_REPOP);
 #endif

@@ -28,5 +28,5 @@ public:
   }
 
 };
-
+REGISTER_MESSAGE(MGatherCaps, MSG_MDS_GATHERCAPS);
 #endif

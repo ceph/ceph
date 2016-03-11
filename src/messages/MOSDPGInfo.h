@@ -133,5 +133,5 @@ public:
     }
   }
 };
-
+REGISTER_MESSAGE(MOSDPGInfo, MSG_OSD_PG_INFO);
 #endif

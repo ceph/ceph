@@ -124,5 +124,5 @@ public:
       required_features = 0;
   }
 };
-
+REGISTER_MESSAGE(MMonProbe, MSG_MON_PROBE);
 #endif

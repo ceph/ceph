@@ -55,5 +55,5 @@ public:
     ::decode(addr, p);
   }
 };
-
+REGISTER_MESSAGE(MMonJoin, MSG_MON_JOIN);
 #endif

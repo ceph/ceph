@@ -59,5 +59,5 @@ public:
       pgid.shard = shard_id_t::NO_SHARD;
   }
 };
-
+REGISTER_MESSAGE(MOSDPGTrim, MSG_OSD_PG_TRIM);
 #endif

@@ -154,5 +154,5 @@ public:
 	<< ")";
   }
 };
-
+REGISTER_MESSAGE(MOSDPGNotify, MSG_OSD_PG_NOTIFY);
 #endif

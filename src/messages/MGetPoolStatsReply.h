@@ -49,5 +49,5 @@ public:
     ::decode(pool_stats, p);
   }
 };
-
+REGISTER_MESSAGE(MGetPoolStatsReply, MSG_GETPOOLSTATSREPLY);
 #endif
