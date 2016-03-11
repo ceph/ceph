@@ -2,8 +2,8 @@ meta:
 - desc: |
    run run randomized correctness test for rados operations
    on an erasure-coded pool
-tasks:
-- full_sequential:
+workload:
+  full_sequential:
   - rados:
       clients: [client.0]
       ops: 4000
