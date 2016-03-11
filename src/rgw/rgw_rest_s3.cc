@@ -3160,7 +3160,11 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
   string algorithm = "AWS4-HMAC-SHA256";
 
-  s->aws4_auth = new rgw_aws4_auth;
+  try {
+    s->aws4_auth = new rgw_aws4_auth;
+  } catch (std::bad_alloc&) {
+    return -ENOMEM;
+  }
 
   if ((!s->http_auth) || !(*s->http_auth)) {
 
