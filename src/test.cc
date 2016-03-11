@@ -109,6 +109,16 @@ int main(int argc, char* argv[]) {
     return server_ids[index];
   };
 
+  // lambda to choose a server alternately in a range
+  auto server_alt_range_f =
+    [&server_ids, &server_count, &client_count]
+    (uint64_t seed, uint16_t client_idx, uint16_t servers_per) -> const ServerId& {
+    double factor = double(server_count) / client_count;
+    uint offset = seed % servers_per;
+    uint index = (uint(0.5 + client_idx * factor) + offset) % server_count;
+    return server_ids[index];
+  };
+
   std::default_random_engine
     srv_rand(std::chrono::system_clock::now().time_since_epoch().count());
 
@@ -156,9 +166,11 @@ int main(int argc, char* argv[]) {
     SelectFunc server_select_f =
 #if 0
       std::bind(server_alternate_f, _1, i)
+#elif 1
+      std::bind(server_alt_range_f, _1, i, 8)
 #elif 0
       std::bind(server_random_f, _1)
-#elif 1
+#elif 0
       std::bind(server_ran_range_f, _1, i, 8)
 #else
       server_0_f
