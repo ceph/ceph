@@ -213,8 +213,6 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   http_auth = NULL;
   local_source = false;
 
-  aws4_auth = NULL;
-
   obj_ctx = NULL;
 }
 
@@ -222,7 +220,6 @@ req_state::~req_state() {
   delete formatter;
   delete bucket_acl;
   delete object_acl;
-  delete aws4_auth;
 }
 
 struct str_len {
