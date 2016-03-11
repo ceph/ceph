@@ -8,8 +8,8 @@
 #include <map>
 #include <functional>
 #include <memory>
-#include "Message.h"
 
+class Message;
 struct MessageFactory
 {
     template<typename T>
@@ -20,15 +20,10 @@ struct MessageFactory
             MessageFactory::get().map_.emplace(key, &register_t<T>::create);
         }
 
-        template<typename... Args>
-        register_t(int key, Args... args)
-        {
-            MessageFactory::get().map_.emplace(key, [&] { return new T(args...); });
-        }
-        inline static Message* create() { return new T; }
+        static Message* create() { return new T; }
     };
 
-	inline Message* produce(int key)
+	Message* produce(int key)
 	{
 		auto it = map_.find(key);
 		if (it == map_.end())
@@ -68,6 +63,6 @@ private:
 //std::map<std::string, factory::FunPtr> factory::map_;
 
 #define REGISTER_MESSAGE_VNAME(T) reg_msg_##T##_
-#define REGISTER_MESSAGE(T, key, ...) static MessageFactory::register_t<T> REGISTER_MESSAGE_VNAME(T)(key, ##__VA_ARGS__);
+#define REGISTER_MESSAGE(T, key) static MessageFactory::register_t<T> REGISTER_MESSAGE_VNAME(T)(key);
 
 #endif //CEPH_MESSAGEFACTORY_H
