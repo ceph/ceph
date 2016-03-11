@@ -3,3 +3,5 @@ overrides:
     conf:
       global:
         ms die on skipped message: false
+      client:
+        rbd default features: 1

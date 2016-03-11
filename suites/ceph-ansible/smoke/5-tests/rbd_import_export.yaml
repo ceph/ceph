@@ -1,0 +1,7 @@
+meta:
+- desc: "Run the rbd import/export tests"
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rbd/import_export.sh

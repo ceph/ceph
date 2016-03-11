@@ -1,0 +1,7 @@
+meta:
+- desc: "Use a collocated journal"
+overrides:
+  ceph_ansible:
+    vars:
+      journal_collocation: true
+      journal_size: 1024

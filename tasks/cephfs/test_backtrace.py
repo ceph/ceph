@@ -29,7 +29,8 @@ class TestBacktrace(CephFSTestCase):
             "stripe_unit": 4194304,
             "stripe_count": 1,
             "object_size": 4194304,
-            "pg_pool": old_pool_id
+            "pool_id": old_pool_id,
+            "pool_ns": "",
         })
         self.assertEqual(backtrace['pool'], old_pool_id)
 
@@ -56,7 +57,8 @@ class TestBacktrace(CephFSTestCase):
         backtrace_new_pool = self.fs.read_backtrace(file_ino, pool=new_pool_name)
         self.assertEqual(backtrace_new_pool['pool'], new_pool_id)
         new_pool_layout = self.fs.read_layout(file_ino, pool=new_pool_name)
-        self.assertEqual(new_pool_layout['pg_pool'], new_pool_id)
+        self.assertEqual(new_pool_layout['pool_id'], new_pool_id)
+        self.assertEqual(new_pool_layout['pool_ns'], '')
 
         # That subsequent linkage changes are only written to new pool backtrace
         self.mount_a.run_shell(["mkdir", "parent_c"])
