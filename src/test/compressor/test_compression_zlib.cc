@@ -36,7 +36,9 @@ TEST(CompressionZlib, compress_decompress)
   bufferlist after;
   res = sp.decompress(out, after);
   EXPECT_EQ(res, 0);
-  EXPECT_STREQ(test, after.c_str());
+  bufferlist exp;
+  exp.append(test);
+  EXPECT_TRUE(exp.contents_equal(after));
 }
 
 TEST(CompressionZlib, compress_decompress_chunk)
@@ -54,7 +56,9 @@ TEST(CompressionZlib, compress_decompress_chunk)
   bufferlist after;
   res = sp.decompress(out, after);
   EXPECT_EQ(res, 0);
-  EXPECT_STREQ("This is test text1234567890", after.c_str());
+  bufferlist exp;
+  exp.append("This is test text1234567890");
+  EXPECT_TRUE(exp.contents_equal(after));
 }
 
 int main(int argc, char **argv) {
