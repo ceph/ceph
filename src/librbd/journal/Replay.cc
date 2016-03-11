@@ -168,7 +168,8 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
       if (cancel_ops) {
         // cancel ops that are waiting to start (waiting for
         // OpFinishEvent or waiting for ready)
-        if (op_event.on_start_ready == nullptr) {
+        if (op_event.on_start_ready == nullptr &&
+            op_event.on_op_finish_event != nullptr) {
           cancel_op_tids.push_back(op_event_pair.first);
         }
       } else if (op_event.on_op_finish_event != nullptr) {
@@ -176,9 +177,8 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
         Context *on_op_finish_event = nullptr;
         std::swap(on_op_finish_event, op_event.on_op_finish_event);
         m_image_ctx.op_work_queue->queue(on_op_finish_event, 0);
-      } else {
+      } else if (op_event.on_start_ready != nullptr) {
         // waiting for op ready
-        assert(op_event.on_start_ready != nullptr);
         op_event_pair.second.finish_on_ready = true;
       }
     }
