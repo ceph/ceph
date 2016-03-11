@@ -3249,10 +3249,29 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
     goto out;
   }
 
+  struct stat st;
+  ret = ::fstat(**fd, &st);
+  if (ret < 0) {
+    ret = -errno;
+    lfn_close(fd);
+    goto out;
+  }
+
   // first try fallocate
   ret = fallocate(**fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE, offset, len);
-  if (ret < 0)
+  if (ret < 0) {
     ret = -errno;
+  } else {
+    // ensure we extent file size, if needed
+    if (offset + len > st.st_size) {
+      ret = ::ftruncate(**fd, offset + len);
+      if (ret < 0) {
+	ret = -errno;
+	lfn_close(fd);
+	goto out;
+      }
+    }
+  }
   lfn_close(fd);
 
   if (ret >= 0 && m_filestore_sloppy_crc) {
