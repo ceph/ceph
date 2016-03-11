@@ -260,7 +260,7 @@ void RGWOp_MDLog_Lock::execute() {
     return;
   }
   http_ret = meta_log.lock_exclusive(shard_id, timespan(dur), zone_id,
-				      locker_id);
+				     locker_id);
   if (http_ret == -EBUSY)
     http_ret = -ERR_LOCKED;
 }

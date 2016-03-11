@@ -634,7 +634,7 @@ class RGWAsyncFetchRemoteObj : public RGWAsyncRadosRequest {
   rgw_obj_key key;
   uint64_t versioned_epoch;
 
-  time_t src_mtime;
+  real_time src_mtime;
 
   bool copy_if_newer;
 
@@ -665,7 +665,7 @@ class RGWFetchRemoteObjCR : public RGWSimpleCoroutine {
   rgw_obj_key key;
   uint64_t versioned_epoch;
 
-  time_t src_mtime;
+  real_time src_mtime;
 
   bool copy_if_newer;
 
@@ -896,7 +896,7 @@ class RGWAsyncStatObj : public RGWAsyncRadosRequest {
   RGWRados *store;
   rgw_obj obj;
   uint64_t *psize;
-  ceph::real_time *pmtime;
+  real_time *pmtime;
   uint64_t *pepoch;
   RGWObjVersionTracker *objv_tracker;
 protected:
@@ -904,10 +904,10 @@ protected:
 public:
   RGWAsyncStatObj(RGWAioCompletionNotifier *cn, RGWRados *store,
                   const rgw_obj& obj, uint64_t *psize = nullptr,
-                  ceph::real_time *pmtime = nullptr, uint64_t *pepoch = nullptr,
+                  real_time *pmtime = nullptr, uint64_t *pepoch = nullptr,
                   RGWObjVersionTracker *objv_tracker = nullptr)
-    : RGWAsyncRadosRequest(cn), store(store), obj(obj), psize(psize),
-      pmtime(pmtime), pepoch(pepoch), objv_tracker(objv_tracker) {}
+	  : RGWAsyncRadosRequest(cn), store(store), obj(obj), psize(psize),
+	  pmtime(pmtime), pepoch(pepoch), objv_tracker(objv_tracker) {}
 };
 
 class RGWStatObjCR : public RGWSimpleCoroutine {
@@ -915,15 +915,15 @@ class RGWStatObjCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   rgw_obj obj;
   uint64_t *psize;
-  ceph::real_time  *pmtime;
+  real_time *pmtime;
   uint64_t *pepoch;
   RGWObjVersionTracker *objv_tracker;
   RGWAsyncStatObj *req = nullptr;
  public:
   RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
-               const rgw_obj& obj, uint64_t *psize = nullptr,
-               ceph::real_time *pmtime = nullptr, uint64_t *pepoch = nullptr,
-               RGWObjVersionTracker *objv_tracker = nullptr);
+	  const rgw_obj& obj, uint64_t *psize = nullptr,
+	  real_time* pmtime = nullptr, uint64_t *pepoch = nullptr,
+	  RGWObjVersionTracker *objv_tracker = nullptr);
   ~RGWStatObjCR();
 
   int send_request() override;
