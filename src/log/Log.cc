@@ -53,6 +53,7 @@ Log::Log(SubsystemMap *s)
     m_fd(-1),
     m_uid(0),
     m_gid(0),
+    m_fd_last_error(0),
     m_syslog_log(-2), m_syslog_crash(-2),
     m_stderr_log(1), m_stderr_crash(-1),
     m_graylog_log(-3), m_graylog_crash(-3),
@@ -337,9 +338,13 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
       if (do_fd) {
         buf[buflen] = '\n';
         int r = safe_write(m_fd, buf, buflen+1);
-        if (r < 0)
-          cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r)
-	       << std::endl;
+	if (r != m_fd_last_error) {
+	  if (r < 0)
+	    cerr << "problem writing to " << m_log_file
+		 << ": " << cpp_strerror(r)
+		 << std::endl;
+	  m_fd_last_error = r;
+	}
       }
       if (need_dynamic)
         delete[] buf;
