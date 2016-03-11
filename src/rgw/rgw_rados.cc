@@ -3375,7 +3375,7 @@ int RGWRados::replace_region_with_zonegroup()
   /* create zonegroups */
   for (iter = regions.begin(); iter != regions.end(); ++iter)
   {
-    derr << "create zonegroup " << *iter << dendl;
+    ldout(cct, 10) << "create zonegroup " << *iter << dendl;
     /* read region info default has no data */
     if (*iter != default_zonegroup_name){
       RGWZoneGroup zonegroup(*iter);
@@ -3636,6 +3636,7 @@ int RGWRados::init_complete()
     const string& id = ziter->first;
     RGWZone& z = ziter->second;
     zone_id_by_name[z.name] = id;
+    zone_name_by_id[id] = z.name;
     if (id != zone_id()) {
       if (!z.endpoints.empty()) {
         ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;

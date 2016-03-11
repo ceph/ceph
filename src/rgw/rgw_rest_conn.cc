@@ -204,7 +204,7 @@ int RGWRESTConn::get_resource(const string& resource,
 
   ret = req.get_resource(key, headers, resource, mgr);
   if (ret < 0) {
-    ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
+    ldout(cct, 5) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -251,7 +251,7 @@ int RGWRESTReadResource::read()
 {
   int ret = req.get_resource(conn->get_key(), headers, resource, mgr);
   if (ret < 0) {
-    ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
+    ldout(cct, 5) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -266,7 +266,7 @@ int RGWRESTReadResource::aio_read()
   int ret = req.get_resource(conn->get_key(), headers, resource, mgr);
   if (ret < 0) {
     put();
-    ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
+    ldout(cct, 5) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -312,7 +312,7 @@ int RGWRESTPostResource::send(bufferlist& outbl)
   req.set_outbl(outbl);
   int ret = req.get_resource(conn->get_key(), headers, resource, mgr);
   if (ret < 0) {
-    ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
+    ldout(cct, 5) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -328,7 +328,7 @@ int RGWRESTPostResource::aio_send(bufferlist& outbl)
   int ret = req.get_resource(conn->get_key(), headers, resource, mgr);
   if (ret < 0) {
     put();
-    ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
+    ldout(cct, 5) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
   }
 

@@ -3,6 +3,7 @@
 
 #include "rgw_coroutine.h"
 #include "rgw_http_client.h"
+#include "rgw_bucket.h"
 
 #include "common/RWLock.h"
 
@@ -137,6 +138,21 @@ struct rgw_data_sync_status {
 };
 WRITE_CLASS_ENCODER(rgw_data_sync_status)
 
+struct rgw_datalog_entry {
+  string key;
+  utime_t timestamp;
+
+  void decode_json(JSONObj *obj);
+};
+
+struct rgw_datalog_shard_data {
+  string marker;
+  bool truncated;
+  vector<rgw_datalog_entry> entries;
+
+  void decode_json(JSONObj *obj);
+};
+
 class RGWAsyncRadosProcessor;
 class RGWDataSyncStatusManager;
 class RGWDataSyncControlCR;
@@ -191,6 +207,8 @@ public:
   void finish();
 
   int read_log_info(rgw_datalog_info *log_info);
+  int read_source_log_shards_info(map<int, RGWDataChangesLogInfo> *shards_info);
+  int read_source_log_shards_next(map<int, string> shard_markers, map<int, rgw_datalog_shard_data> *result);
   int get_shard_info(int shard_id);
   int read_sync_status(rgw_data_sync_status *sync_status);
   int init_sync_status(int num_shards);
@@ -235,6 +253,16 @@ public:
 
   int read_sync_status() { return source_log.read_sync_status(&sync_status); }
   int init_sync_status() { return source_log.init_sync_status(num_shards); }
+
+  int read_log_info(rgw_datalog_info *log_info) {
+    return source_log.read_log_info(log_info);
+  }
+  int read_source_log_shards_info(map<int, RGWDataChangesLogInfo> *shards_info) {
+    return source_log.read_source_log_shards_info(shards_info);
+  }
+  int read_source_log_shards_next(map<int, string> shard_markers, map<int, rgw_datalog_shard_data> *result) {
+    return source_log.read_source_log_shards_next(shard_markers, result);
+  }
 
   int run() { return source_log.run_sync(num_shards, sync_status); }
 

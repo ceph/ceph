@@ -30,21 +30,6 @@ void rgw_datalog_info::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("num_objects", num_shards, obj);
 }
 
-struct rgw_datalog_entry {
-  string key;
-  utime_t timestamp;
-
-  void decode_json(JSONObj *obj);
-};
-
-struct rgw_datalog_shard_data {
-  string marker;
-  bool truncated;
-  vector<rgw_datalog_entry> entries;
-
-  void decode_json(JSONObj *obj);
-};
-
 
 void rgw_datalog_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("key", key, obj);
@@ -234,6 +219,126 @@ public:
   }
 };
 
+class RGWReadRemoteDataLogInfoCR : public RGWShardCollectCR {
+  RGWDataSyncEnv *sync_env;
+
+  int num_shards;
+  map<int, RGWDataChangesLogInfo> *datalog_info;
+
+  int shard_id;
+#define READ_DATALOG_MAX_CONCURRENT 10
+
+public:
+  RGWReadRemoteDataLogInfoCR(RGWDataSyncEnv *_sync_env,
+                     int _num_shards,
+                     map<int, RGWDataChangesLogInfo> *_datalog_info) : RGWShardCollectCR(_sync_env->cct, READ_DATALOG_MAX_CONCURRENT),
+                                                                 sync_env(_sync_env), num_shards(_num_shards),
+                                                                 datalog_info(_datalog_info), shard_id(0) {}
+  bool spawn_next();
+};
+
+bool RGWReadRemoteDataLogInfoCR::spawn_next() {
+  if (shard_id >= num_shards) {
+    return false;
+  }
+  spawn(new RGWReadRemoteDataLogShardInfoCR(sync_env, shard_id, &(*datalog_info)[shard_id]), false);
+  shard_id++;
+  return true;
+}
+
+class RGWListRemoteDataLogShardCR : public RGWSimpleCoroutine {
+  RGWDataSyncEnv *sync_env;
+  RGWRESTReadResource *http_op;
+
+  int shard_id;
+  string marker;
+  uint32_t max_entries;
+  rgw_datalog_shard_data *result;
+
+public:
+  RGWListRemoteDataLogShardCR(RGWDataSyncEnv *env, int _shard_id,
+                              const string& _marker, uint32_t _max_entries,
+                              rgw_datalog_shard_data *_result)
+    : RGWSimpleCoroutine(env->store->ctx()), sync_env(env), http_op(NULL),
+      shard_id(_shard_id), marker(_marker), max_entries(_max_entries), result(_result) {}
+
+  int send_request() {
+    RGWRESTConn *conn = sync_env->conn;
+    RGWRados *store = sync_env->store;
+
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%d", shard_id);
+
+    char max_entries_buf[32];
+    snprintf(max_entries_buf, sizeof(max_entries_buf), "%d", (int)max_entries);
+
+    const char *marker_key = (marker.empty() ? "" : "marker");
+
+    rgw_http_param_pair pairs[] = { { "type", "data" },
+      { "id", buf },
+      { "max-entries", max_entries_buf },
+      { marker_key, marker.c_str() },
+      { NULL, NULL } };
+
+    string p = "/admin/log/";
+
+    http_op = new RGWRESTReadResource(conn, p, pairs, NULL, sync_env->http_manager);
+    http_op->set_user_info((void *)stack);
+
+    int ret = http_op->aio_read();
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to read from " << p << dendl;
+      log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+      http_op->put();
+      return ret;
+    }
+
+    return 0;
+  }
+
+  int request_complete() {
+    int ret = http_op->wait(result);
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(sync_env->store->ctx(), 0) << "ERROR: failed to list remote datalog shard, ret=" << ret << dendl;
+      return ret;
+    }
+    return 0;
+  }
+};
+
+class RGWListRemoteDataLogCR : public RGWShardCollectCR {
+  RGWDataSyncEnv *sync_env;
+
+  map<int, string> shards;
+  int max_entries_per_shard;
+  map<int, rgw_datalog_shard_data> *result;
+
+  map<int, string>::iterator iter;
+#define READ_DATALOG_MAX_CONCURRENT 10
+
+public:
+  RGWListRemoteDataLogCR(RGWDataSyncEnv *_sync_env,
+                     map<int, string>& _shards,
+                     int _max_entries_per_shard,
+                     map<int, rgw_datalog_shard_data> *_result) : RGWShardCollectCR(_sync_env->cct, READ_DATALOG_MAX_CONCURRENT),
+                                                                 sync_env(_sync_env), max_entries_per_shard(_max_entries_per_shard),
+                                                                 result(_result) {
+    shards.swap(_shards);
+    iter = shards.begin();
+  }
+  bool spawn_next();
+};
+
+bool RGWListRemoteDataLogCR::spawn_next() {
+  if (iter == shards.end()) {
+    return false;
+  }
+
+  spawn(new RGWListRemoteDataLogShardCR(sync_env, iter->first, iter->second, max_entries_per_shard, &(*result)[iter->first]), false);
+  ++iter;
+  return true;
+}
+
 class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
 
@@ -351,6 +456,26 @@ int RGWRemoteDataLog::read_log_info(rgw_datalog_info *log_info)
   ldout(store->ctx(), 20) << "remote datalog, num_shards=" << log_info->num_shards << dendl;
 
   return 0;
+}
+
+int RGWRemoteDataLog::read_source_log_shards_info(map<int, RGWDataChangesLogInfo> *shards_info)
+{
+  rgw_datalog_info log_info;
+  int ret = read_log_info(&log_info);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return run(new RGWReadRemoteDataLogInfoCR(&sync_env, log_info.num_shards, shards_info));
+}
+
+int RGWRemoteDataLog::read_source_log_shards_next(map<int, string> shard_markers, map<int, rgw_datalog_shard_data> *result)
+{
+  if (store->is_meta_master()) {
+    return 0;
+  }
+
+  return run(new RGWListRemoteDataLogCR(&sync_env, shard_markers, 1, result));
 }
 
 int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger)
@@ -1234,7 +1359,7 @@ int RGWDataSyncStatusManager::init()
   rgw_datalog_info datalog_info;
   r = source_log.read_log_info(&datalog_info);
   if (r < 0) {
-    lderr(store->ctx()) << "ERROR: master.read_log_info() returned r=" << r << dendl;
+    ldout(store->ctx(), 5) << "ERROR: master.read_log_info() returned r=" << r << dendl;
     return r;
   }
 
