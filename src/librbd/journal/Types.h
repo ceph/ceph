@@ -339,6 +339,12 @@ struct MirrorPeerSyncPoint {
       object_number(object_number) {
   }
 
+  inline bool operator==(const MirrorPeerSyncPoint &sync) const {
+    return (snap_name == sync.snap_name &&
+            from_snap_name == sync.from_snap_name &&
+            object_number == sync.object_number);
+  }
+
   void encode(bufferlist& bl) const;
   void decode(__u8 version, bufferlist::iterator& it);
   void dump(Formatter *f) const;
@@ -360,6 +366,12 @@ struct MirrorPeerClientMeta {
                        const SyncPoints &sync_points = SyncPoints(),
                        const SnapSeqs &snap_seqs = SnapSeqs())
     : image_id(image_id), sync_points(sync_points), snap_seqs(snap_seqs) {
+  }
+
+  inline bool operator==(const MirrorPeerClientMeta &meta) const {
+    return (image_id == meta.image_id &&
+            sync_points == meta.sync_points &&
+            snap_seqs == meta.snap_seqs);
   }
 
   void encode(bufferlist& bl) const;
