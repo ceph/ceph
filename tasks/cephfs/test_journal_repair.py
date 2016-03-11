@@ -11,6 +11,7 @@ import time
 from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.filesystem import ObjectNotFound, ROOT_INO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, long_running
+from tasks.workunit import task as workunit
 
 log = logging.getLogger(__name__)
 
@@ -242,7 +243,14 @@ class TestJournalRepair(CephFSTestCase):
 
         self.wait_until_true(is_marked_damaged, 60)
 
-        self.fs.wait_for_state("up:standby", timeout=60, mds_id=damaged_id)
+        def get_state():
+            info = self.mds_cluster.get_mds_info(damaged_id)
+            return info['state'] if info is not None else None
+
+        self.wait_until_equal(
+                get_state,
+                "up:standby",
+                timeout=60)
 
         self.fs.mds_stop(damaged_id)
         self.fs.mds_fail(damaged_id)
@@ -256,7 +264,8 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.table_tool(["0", "reset", "session"])
         self.fs.journal_tool(["journal", "reset"], rank=0)
         self.fs.erase_mds_objects(1)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'reset', 'default', '--yes-i-really-mean-it')
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'reset', self.fs.name,
+                '--yes-i-really-mean-it')
 
         # Bring an MDS back online, mount a client, and see that we can walk the full
         # filesystem tree again
@@ -384,3 +393,45 @@ class TestJournalRepair(CephFSTestCase):
                                      "len": initial_range_len - 101}]}},
                    "result": 0}}
         )
+
+    @long_running  # Hack: "long running" because .sh doesn't work outside teuth
+    def test_journal_smoke(self):
+        workunit(self.ctx, {
+            'clients': {
+                "client.{0}".format(self.mount_a.client_id): [
+                    "fs/misc/trivial_sync.sh"],
+            },
+            "timeout": "1h"
+        })
+
+        for mount in self.mounts:
+            mount.umount_wait()
+
+        self.fs.mds_stop()
+        self.fs.mds_fail()
+
+        # journal tool smoke
+        workunit(self.ctx, {
+            'clients': {
+                "client.{0}".format(self.mount_a.client_id): [
+                    "suites/cephfs_journal_tool_smoke.sh"],
+            },
+            "timeout": "1h"
+        })
+
+
+
+        self.fs.mds_restart()
+        self.fs.wait_for_daemons()
+
+        self.mount_a.mount()
+
+        # trivial sync moutn a
+        workunit(self.ctx, {
+            'clients': {
+                "client.{0}".format(self.mount_a.client_id): [
+                    "fs/misc/trivial_sync.sh"],
+            },
+            "timeout": "1h"
+        })
+

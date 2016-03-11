@@ -4,8 +4,7 @@ import os
 import unittest
 from unittest import suite, loader, case
 from teuthology.task import interactive
-from tasks.cephfs.filesystem import Filesystem
-
+from tasks.cephfs.filesystem import Filesystem, MDSCluster
 
 log = logging.getLogger(__name__)
 
@@ -116,6 +115,7 @@ def task(ctx, config):
 
     """
     fs = Filesystem(ctx)
+    mds_cluster = MDSCluster(ctx)
 
     # Mount objects, sorted by ID
     mounts = [v for k, v in sorted(ctx.mounts.items(), lambda a, b: cmp(a[0], b[0]))]
@@ -123,13 +123,15 @@ def task(ctx, config):
     decorating_loader = DecoratingLoader({
         "ctx": ctx,
         "mounts": mounts,
-        "fs": fs
+        "fs": fs,
+        "mds_cluster": mds_cluster
     })
 
     fail_on_skip = config.get('fail_on_skip', True)
 
     # Put useful things onto ctx for interactive debugging
     ctx.fs = fs
+    ctx.mds_cluster = mds_cluster
 
     # Depending on config, either load specific modules, or scan for moduless
     if config and 'modules' in config and config['modules']:

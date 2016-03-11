@@ -1,0 +1,15 @@
+overrides:
+  ceph:
+    conf:
+      mds:
+        debug ms: 1
+        debug mds: 20
+      client.0:
+        debug ms: 1
+        debug client: 20
+      client.1:
+        debug ms: 1
+        debug client: 20
+      mon:
+        debug mon: 20
+

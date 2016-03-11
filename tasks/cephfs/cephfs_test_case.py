@@ -8,6 +8,7 @@ import re
 from StringIO import StringIO
 
 from tasks.cephfs.fuse_mount import FuseMount
+
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
 
@@ -42,6 +43,7 @@ class CephFSTestCase(unittest.TestCase):
     # Environment references
     mounts = None
     fs = None
+    mds_cluster = None
     ctx = None
 
     # FIXME weird explicit naming
@@ -55,6 +57,9 @@ class CephFSTestCase(unittest.TestCase):
     REQUIRE_KCLIENT_REMOTE = False
     REQUIRE_ONE_CLIENT_REMOTE = False
     REQUIRE_MEMSTORE = False
+
+    # Whether to create the default filesystem during setUp
+    REQUIRE_FILESYSTEM = True
 
     LOAD_SETTINGS = []
 
@@ -111,12 +116,8 @@ class CephFSTestCase(unittest.TestCase):
 
         # To avoid any issues with e.g. unlink bugs, we destroy and recreate
         # the filesystem rather than just doing a rm -rf of files
-        self.fs.mds_stop()
-        if self.fs.exists():
-            self.fs.mon_manager.raw_cluster_cmd('mds', 'cluster_down')
-            self.fs.mds_fail()
-        self.fs.delete_all()
-        self.fs.create()
+        self.mds_cluster.mds_stop()
+        self.mds_cluster.delete_all_filesystems()
 
         # In case the previous filesystem had filled up the RADOS cluster, wait for that
         # flag to pass.
@@ -153,16 +154,18 @@ class CephFSTestCase(unittest.TestCase):
             if ent_type == "client" and ent_id not in client_mount_ids and ent_id != "admin":
                 self.fs.mon_manager.raw_cluster_cmd("auth", "del", entry['entity'])
 
-        self.fs.mds_restart()
-        self.fs.wait_for_daemons()
-        if not self.mount_a.is_mounted():
-            self.mount_a.mount()
-            self.mount_a.wait_until_mounted()
+        if self.REQUIRE_FILESYSTEM:
+            self.fs.create()
+            self.fs.mds_restart()
+            self.fs.wait_for_daemons()
+            if not self.mount_a.is_mounted():
+                self.mount_a.mount()
+                self.mount_a.wait_until_mounted()
 
-        if self.mount_b:
-            if not self.mount_b.is_mounted():
-                self.mount_b.mount()
-                self.mount_b.wait_until_mounted()
+            if self.mount_b:
+                if not self.mount_b.is_mounted():
+                    self.mount_b.mount()
+                    self.mount_b.wait_until_mounted()
 
         # Load an config settings of interest
         for setting in self.LOAD_SETTINGS:
@@ -181,11 +184,11 @@ class CephFSTestCase(unittest.TestCase):
             m.client_id = self._original_client_ids[i]
 
         for subsys, key in self.configs_set:
-            self.fs.clear_ceph_conf(subsys, key)
+            self.mds_cluster.clear_ceph_conf(subsys, key)
 
     def set_conf(self, subsys, key, value):
         self.configs_set.add((subsys, key))
-        self.fs.set_ceph_conf(subsys, key, value)
+        self.mds_cluster.set_ceph_conf(subsys, key, value)
 
     def auth_list(self):
         """
@@ -262,6 +265,33 @@ class CephFSTestCase(unittest.TestCase):
                 elapsed += period
 
         log.debug("wait_until_true: success")
+
+    def wait_for_daemon_start(self, daemon_ids=None):
+        """
+        Wait until all the daemons appear in the FSMap, either assigned
+        MDS ranks or in the list of standbys
+        """
+        def get_daemon_names():
+            fs_map = self.mds_cluster.get_fs_map()
+            names = [m['name'] for m in fs_map['standbys']]
+            for fs in fs_map['filesystems']:
+                names.extend([info['name'] for info in fs['mdsmap']['info'].values()])
+
+            return names
+
+        if daemon_ids is None:
+            daemon_ids = self.mds_cluster.mds_ids
+
+        try:
+            self.wait_until_true(
+                lambda: set(daemon_ids) & set(get_daemon_names()) == set(daemon_ids),
+                timeout=30
+            )
+        except RuntimeError:
+            log.warn("Timeout waiting for daemons {0}, while we have {1}".format(
+                daemon_ids, get_daemon_names()
+            ))
+            raise
 
     def assert_mds_crash(self, daemon_id):
         """
