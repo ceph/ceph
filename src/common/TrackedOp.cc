@@ -322,6 +322,9 @@ void TrackedOp::mark_event(const string &event)
 
 void TrackedOp::dump(utime_t now, Formatter *f) const
 {
+  // Ignore if still in the constructor
+  if (!is_tracked)
+    return;
   stringstream name;
   _dump_op_descriptor_unlocked(name);
   f->dump_string("description", name.str().c_str()); // this TrackedOp

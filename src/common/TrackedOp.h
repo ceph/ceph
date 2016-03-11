@@ -22,6 +22,7 @@
 #include "msg/Message.h"
 #include "include/memory.h"
 #include "common/RWLock.h"
+#include <atomic>
 
 class TrackedOp;
 typedef ceph::shared_ptr<TrackedOp> TrackedOpRef;
@@ -139,6 +140,7 @@ public:
   {
     typename T::Ref retval(new T(params, this),
 			   RemoveOnDelete(this));
+    retval->tracking_start();
     return retval;
   }
 };
@@ -158,7 +160,8 @@ protected:
   uint64_t seq; /// a unique value set by the OpTracker
 
   uint32_t warn_interval_multiplier; // limits output of a given op warning
-  bool is_tracked; //whether in tracker
+  // Transitions from false -> true without locks being held
+  atomic<bool> is_tracked; //whether in tracker and out of constructor
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     xitem(this),
     tracker(_tracker),
@@ -167,14 +170,7 @@ protected:
     seq(0),
     warn_interval_multiplier(1),
     is_tracked(false)
-  {
-    RWLock::RLocker l(tracker->lock);
-    if (tracker->tracking_enabled) {
-      tracker->register_inflight_op(&xitem);
-      events.push_back(make_pair(initiated_at, "initiated"));
-      is_tracked = true;
-    }
-  }
+  { }
 
   /// output any type-specific data you want to get when dump() is called
   virtual void _dump(utime_t now, Formatter *f) const {}
@@ -206,6 +202,14 @@ public:
     return events.rbegin()->second.c_str();
   }
   void dump(utime_t now, Formatter *f) const;
+  void tracking_start() {
+    RWLock::RLocker l(tracker->lock);
+    if (tracker->tracking_enabled) {
+      tracker->register_inflight_op(&xitem);
+      events.push_back(make_pair(initiated_at, "initiated"));
+      is_tracked = true;
+    }
+  }
 };
 
 #endif
