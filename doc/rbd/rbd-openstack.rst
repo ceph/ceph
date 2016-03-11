@@ -255,6 +255,11 @@ OpenStack requires a driver to interact with Ceph block devices. You must also
 specify the pool name for the block device. On your OpenStack node, edit
 ``/etc/cinder/cinder.conf`` by adding::
 
+    [DEFAULT]
+    ...
+    enabled_backends = ceph
+    ...
+    [ceph]
     volume_driver = cinder.volume.drivers.rbd.RBDDriver
     rbd_pool = volumes
     rbd_ceph_conf = /etc/ceph/ceph.conf
@@ -267,6 +272,8 @@ specify the pool name for the block device. On your OpenStack node, edit
 If you're using `cephx authentication`_, also configure the user and uuid of
 the secret you added to ``libvirt`` as documented earlier::
 
+    [ceph]
+    ...
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
