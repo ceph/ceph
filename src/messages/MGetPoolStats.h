@@ -51,5 +51,5 @@ public:
     ::decode(pools, p);
   }
 };
-
+REGISTER_MESSAGE(MGetPoolStats, MSG_GETPOOLSTATS);
 #endif

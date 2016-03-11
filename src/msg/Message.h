@@ -33,7 +33,7 @@
 
 #include "common/debug.h"
 #include "common/config.h"
-
+#include "MessageFactory.h"
 // monitor internal
 #define MSG_MON_SCRUB              64
 #define MSG_MON_ELECTION           65

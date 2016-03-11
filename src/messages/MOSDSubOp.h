@@ -278,5 +278,5 @@ public:
   }
 };
 
-
+REGISTER_MESSAGE(MOSDSubOp, MSG_OSD_SUBOP);
 #endif

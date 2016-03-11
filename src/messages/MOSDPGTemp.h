@@ -48,5 +48,5 @@ public:
   }
   
 };
-
+REGISTER_MESSAGE(MOSDPGTemp, MSG_OSD_PGTEMP);
 #endif

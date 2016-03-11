@@ -54,5 +54,5 @@ public:
     ::decode(entries, p);
   }
 };
-
+REGISTER_MESSAGE(MLog, MSG_LOG);
 #endif

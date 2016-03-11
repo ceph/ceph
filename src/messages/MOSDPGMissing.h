@@ -53,5 +53,5 @@ public:
     missing.decode(p, info.pgid.pool());
   }
 };
-
+REGISTER_MESSAGE(MOSDPGMissing, MSG_OSD_PG_MISSING);
 #endif

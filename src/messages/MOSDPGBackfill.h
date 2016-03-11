@@ -107,5 +107,5 @@ public:
 	<< ")";
   }
 };
-
+REGISTER_MESSAGE(MOSDPGBackfill, MSG_OSD_PG_BACKFILL);
 #endif

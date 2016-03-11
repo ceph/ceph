@@ -81,5 +81,5 @@ public:
     ::encode(bystanders, payload);
   }
 };
-
+REGISTER_MESSAGE(MExportDirPrep, MSG_MDS_EXPORTDIRPREP);
 #endif

@@ -55,5 +55,5 @@ public:
     ::decode(abort, p);
   }
 };
-
+REGISTER_MESSAGE(MMDSResolveAck, MSG_MDS_RESOLVEACK);
 #endif

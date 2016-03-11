@@ -90,5 +90,5 @@ public:
     out << ")";
   }
 };
-
+REGISTER_MESSAGE(MOSDPGCreate, MSG_OSD_PG_CREATE);
 #endif

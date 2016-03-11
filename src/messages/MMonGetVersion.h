@@ -54,5 +54,5 @@ public:
 private:
   ~MMonGetVersion() {}
 };
-
+REGISTER_MESSAGE(MMonGetVersion, CEPH_MSG_MON_GET_VERSION);
 #endif

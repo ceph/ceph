@@ -91,5 +91,5 @@ public:
       osd_features = 0;
   }
 };
-
+REGISTER_MESSAGE(MOSDBoot, MSG_OSD_BOOT);
 #endif

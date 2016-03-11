@@ -46,5 +46,5 @@ public:
     ::decode(dirfrag, p);
   }
 };
-
+REGISTER_MESSAGE(MExportDirCancel, MSG_MDS_EXPORTDIRCANCEL);
 #endif

@@ -61,5 +61,5 @@ public:
     ::encode(path, payload);
   }
 };
-
+REGISTER_MESSAGE(MExportDirDiscover, MSG_MDS_EXPORTDIRDISCOVER);
 #endif

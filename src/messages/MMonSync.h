@@ -107,5 +107,5 @@ public:
     ::decode(reply_to, p);
   }
 };
-
+REGISTER_MESSAGE(MMonSync, MSG_MON_SYNC);
 #endif /* CEPH_MMONSYNC_H */

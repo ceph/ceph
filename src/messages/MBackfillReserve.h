@@ -87,5 +87,5 @@ public:
     ::encode(pgid.shard, payload);
   }
 };
-
+REGISTER_MESSAGE(MBackfillReserve, MSG_OSD_BACKFILL_RESERVE);
 #endif

@@ -90,4 +90,5 @@ public:
   }
 };
 
+REGISTER_MESSAGE(MDataPing, MSG_DATA_PING);
 #endif /* CEPH_MDATAPING_H */

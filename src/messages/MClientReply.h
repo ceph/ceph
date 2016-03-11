@@ -275,5 +275,5 @@ public:
     return trace_bl;
   }
 };
-
+REGISTER_MESSAGE(MClientReply, CEPH_MSG_CLIENT_REPLY);
 #endif

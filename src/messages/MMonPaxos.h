@@ -125,5 +125,5 @@ public:
     ::decode(values, p);
   }
 };
-
+REGISTER_MESSAGE(MMonPaxos, MSG_MON_PAXOS);
 #endif

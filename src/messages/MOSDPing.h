@@ -92,5 +92,5 @@ public:
 	<< ")";
   }
 };
-
+REGISTER_MESSAGE(MOSDPing, MSG_OSD_PING);
 #endif

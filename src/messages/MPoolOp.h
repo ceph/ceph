@@ -97,5 +97,5 @@ public:
       crush_rule = -1;
   }
 };
-
+REGISTER_MESSAGE(MPoolOp, CEPH_MSG_POOLOP);
 #endif

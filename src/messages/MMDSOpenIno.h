@@ -42,5 +42,5 @@ struct MMDSOpenIno : public Message {
     ::decode(ancestors, p);
   }
 };
-
+REGISTER_MESSAGE(MMDSOpenIno, MSG_MDS_OPENINO);
 #endif

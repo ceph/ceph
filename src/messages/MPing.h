@@ -29,5 +29,5 @@ public:
   void encode_payload(uint64_t features) { }
   const char *get_type_name() const { return "ping"; }
 };
-
+REGISTER_MESSAGE(MPing, CEPH_MSG_PING);
 #endif

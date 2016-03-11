@@ -342,5 +342,5 @@ WRITE_CLASS_ENCODER(MMDSCacheRejoin::slave_reqid)
 inline ostream& operator<<(ostream& out, const MMDSCacheRejoin::slave_reqid& r) {
   return out << r.reqid << '.' << r.attempt;
 }
-
+REGISTER_MESSAGE(MMDSCacheRejoin, MSG_MDS_CACHEREJOIN);
 #endif

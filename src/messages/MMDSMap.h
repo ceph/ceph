@@ -91,5 +91,5 @@ public:
     ::encode(encoded, payload);
   }
 };
-
+REGISTER_MESSAGE(MMDSMap, CEPH_MSG_MDS_MAP);
 #endif

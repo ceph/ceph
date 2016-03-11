@@ -206,5 +206,5 @@ public:
     ::encode(trace, payload);
   }
 };
-
+REGISTER_MESSAGE(MDiscoverReply, MSG_MDS_DISCOVERREPLY);
 #endif

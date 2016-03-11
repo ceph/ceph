@@ -61,5 +61,5 @@ public:
     ::encode(result_msg, payload);
   }
 };
-
+REGISTER_MESSAGE(MAuthReply, CEPH_MSG_AUTH_REPLY);
 #endif

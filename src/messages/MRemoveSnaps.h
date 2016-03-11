@@ -47,5 +47,5 @@ public:
   }
 
 };
-
+REGISTER_MESSAGE(MRemoveSnaps, MSG_REMOVE_SNAPS);
 #endif

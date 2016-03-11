@@ -49,5 +49,5 @@ public:
     ::decode(caps, p);
   }
 };
-
+REGISTER_MESSAGE(MInodeFileCaps, MSG_MDS_INODEFILECAPS);
 #endif

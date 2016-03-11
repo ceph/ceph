@@ -99,5 +99,5 @@ public:
     }
   }
 };
-
+REGISTER_MESSAGE(MOSDPGQuery, MSG_OSD_PG_QUERY);
 #endif

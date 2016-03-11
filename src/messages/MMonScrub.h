@@ -85,5 +85,5 @@ public:
     }
   }
 };
-
+REGISTER_MESSAGE(MMonScrub, MSG_MON_SCRUB);
 #endif /* CEPH_MMONSCRUB_H */

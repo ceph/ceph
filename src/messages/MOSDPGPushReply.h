@@ -81,5 +81,5 @@ public:
 
   const char *get_type_name() const { return "MOSDPGPushReply"; }
 };
-
+REGISTER_MESSAGE(MOSDPGPushReply, MSG_OSD_PG_PUSH_REPLY);
 #endif

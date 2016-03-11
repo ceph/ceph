@@ -51,5 +51,5 @@ public:
     ::decode(rs, p);
   }
 };
-
+REGISTER_MESSAGE(MCommandReply, MSG_COMMAND_REPLY);
 #endif

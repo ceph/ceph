@@ -104,5 +104,5 @@ public:
 
 };
 
-
+REGISTER_MESSAGE(MClientReconnect, CEPH_MSG_CLIENT_RECONNECT);
 #endif

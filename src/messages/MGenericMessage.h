@@ -35,5 +35,5 @@ class MGenericMessage : public Message {
   void decode_payload() { }
   void encode_payload(uint64_t features) { }
 };
-
+REGISTER_MESSAGE(MGenericMessage, CEPH_MSG_SHUTDOWN);
 #endif

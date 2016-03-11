@@ -81,5 +81,5 @@ public:
     out << ")";
   }
 };
-
+REGISTER_MESSAGE(MOSDPGPull, MSG_OSD_PG_PULL);
 #endif

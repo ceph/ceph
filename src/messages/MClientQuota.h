@@ -46,5 +46,5 @@ public:
     assert(p.end());
   }
 };
-
+REGISTER_MESSAGE(MClientQuota, CEPH_MSG_CLIENT_QUOTA);
 #endif

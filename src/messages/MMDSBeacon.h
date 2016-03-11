@@ -222,5 +222,5 @@ public:
     }
   }
 };
-
+REGISTER_MESSAGE(MMDSBeacon, MSG_MDS_BEACON);
 #endif

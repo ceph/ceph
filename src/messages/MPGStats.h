@@ -61,5 +61,5 @@ public:
     ::decode(had_map_for, p);
   }
 };
-
+REGISTER_MESSAGE(MPGStats, MSG_PGSTATS);
 #endif
