@@ -408,6 +408,7 @@ OPTION(client_try_dentry_invalidate, OPT_BOOL, true) // the client should try to
 OPTION(client_die_on_failed_remount, OPT_BOOL, true)
 OPTION(client_check_pool_perm, OPT_BOOL, true)
 OPTION(client_use_faked_inos, OPT_BOOL, false)
+OPTION(client_mds_namespace, OPT_INT, -1)
 
 OPTION(crush_location, OPT_STR, "")       // whitespace-separated list of key=value pairs describing crush location
 
