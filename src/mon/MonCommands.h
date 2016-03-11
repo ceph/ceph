@@ -792,6 +792,11 @@ COMMAND("osd tier remove " \
 	"name=tierpool,type=CephPoolname",
 	"remove the tier <tierpool> (the second one) from base pool <pool> (the first one)", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd tier rm " \
+	"name=pool,type=CephPoolname " \
+	"name=tierpool,type=CephPoolname",
+	"remove the tier <tierpool> (the second one) from base pool <pool> (the first one)", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd tier cache-mode " \
 	"name=pool,type=CephPoolname " \
 	"name=mode,type=CephChoices,strings=none|writeback|forward|readonly|readforward|readproxy", \
