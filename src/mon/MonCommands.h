@@ -219,6 +219,10 @@ COMMAND("auth del " \
 	"name=entity,type=CephString", \
 	"delete all caps for <name>", \
 	"auth", "rwx", "cli,rest")
+COMMAND("auth rm " \
+	"name=entity,type=CephString", \
+	"remove all caps for <name>", \
+	"auth", "rwx", "cli,rest")
 
 /*
  * Monitor commands (Monitor.cc)
