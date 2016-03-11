@@ -86,7 +86,7 @@ void TestClient::run_req() {
 	auto now = std::chrono::steady_clock::now();
 	const ServerId& server = server_select_f(o);
 	dmc::ReqParams<ClientId> rp = service_tracker.get_req_params(id, server);
-	TestRequest req(o, 12);
+	TestRequest req(server, o, 12);
 	submit_f(server, req, rp);
 	++outstanding_ops;
 	l.lock(); // lock for return to top of loop

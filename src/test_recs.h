@@ -18,18 +18,22 @@ using ServerId = uint;
 
 
 struct TestRequest {
+  ServerId server; // allows debugging
   uint32_t epoch;
   uint32_t op;
 
-  TestRequest(uint32_t _epoch,
+  TestRequest(ServerId _server,
+	      uint32_t _epoch,
 	      uint32_t _op) :
-    epoch(_epoch), op(_op)
+    server(_server),
+    epoch(_epoch),
+    op(_op)
   {
     // empty
   }
 
   TestRequest(const TestRequest& r) :
-    TestRequest(r.epoch, r.op)
+    TestRequest(r.server, r.epoch, r.op)
   {
     // empty
   }
