@@ -1887,7 +1887,6 @@ private:
     PG::RecoveryCtx *rctx,
     set<boost::intrusive_ptr<PG> > *split_pgs
   );
-  void advance_map();
   void consume_map();
   void activate_map();
 

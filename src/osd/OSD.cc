@@ -6693,6 +6693,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   map_lock.get_write();
 
+  bool do_shutdown = false;
+  bool do_restart = false;
+  bool network_error = false;
+
   // advance through the new maps
   for (epoch_t cur = start; cur <= superblock.newest_map; cur++) {
     dout(10) << " advance to epoch " << cur << " (<= newest " << superblock.newest_map << ")" << dendl;
@@ -6719,11 +6723,40 @@ void OSD::handle_osd_map(MOSDMap *m)
       }
     }
 
+    if (osdmap->test_flag(CEPH_OSDMAP_NOUP) &&
+	!newmap->test_flag(CEPH_OSDMAP_NOUP)) {
+      dout(10) << __func__ << " NOUP flag cleared in " << newmap->get_epoch()
+	       << dendl;
+      if (is_booting()) {
+	// this captures the case where we sent the boot message while
+	// NOUP was being set on the mon and our boot request was
+	// dropped, and then later it is cleared.  it imperfectly
+	// handles the case where our original boot message was not
+	// dropped and we restart even though we might have booted, but
+	// that is harmless (boot will just take slightly longer).
+	do_restart = true;
+      }
+    }
+
     osdmap = newmap;
 
     superblock.current_epoch = cur;
-    advance_map();
     had_map_since = ceph_clock_now(cct);
+
+    epoch_t up_epoch;
+    epoch_t boot_epoch;
+    service.retrieve_epochs(&boot_epoch, &up_epoch, NULL);
+    if (!up_epoch &&
+	osdmap->is_up(whoami) &&
+	osdmap->get_inst(whoami) == client_messenger->get_myinst()) {
+      up_epoch = osdmap->get_epoch();
+      dout(10) << "up_epoch is " << up_epoch << dendl;
+      if (!boot_epoch) {
+	boot_epoch = osdmap->get_epoch();
+	dout(10) << "boot_epoch is " << boot_epoch << dendl;
+      }
+      service.set_epochs(&boot_epoch, &up_epoch, NULL);
+    }
   }
 
   epoch_t _bind_epoch = service.get_bind_epoch();
@@ -6741,9 +6774,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
   }
 
-  bool do_shutdown = false;
-  bool do_restart = false;
-  bool network_error = false;
   if (osdmap->get_epoch() > 0 &&
       is_active()) {
     if (!osdmap->exists(whoami)) {
@@ -7022,32 +7052,6 @@ bool OSD::advance_pg(
     return false;
   }
   return true;
-}
-
-/**
- * update service map; check pg creations
- */
-void OSD::advance_map()
-{
-  assert(osd_lock.is_locked());
-
-  dout(7) << "advance_map epoch " << osdmap->get_epoch()
-          << dendl;
-
-  epoch_t up_epoch;
-  epoch_t boot_epoch;
-  service.retrieve_epochs(&boot_epoch, &up_epoch, NULL);
-  if (!up_epoch &&
-      osdmap->is_up(whoami) &&
-      osdmap->get_inst(whoami) == client_messenger->get_myinst()) {
-    up_epoch = osdmap->get_epoch();
-    dout(10) << "up_epoch is " << up_epoch << dendl;
-    if (!boot_epoch) {
-      boot_epoch = osdmap->get_epoch();
-      dout(10) << "boot_epoch is " << boot_epoch << dendl;
-    }
-    service.set_epochs(&boot_epoch, &up_epoch, NULL);
-  }
 }
 
 void OSD::consume_map()
