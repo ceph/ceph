@@ -5511,6 +5511,7 @@ int RGWRados::move_rados_obj(librados::IoCtx& src_ioctx,
   uint64_t chunk_size = COPY_BUF_SIZE;
   uint64_t ofs = 0;
   int ret = 0;
+  real_time mtime;
   struct timespec mtime_ts;
   uint64_t size;
 
@@ -5528,6 +5529,7 @@ int RGWRados::move_rados_obj(librados::IoCtx& src_ioctx,
 
     if (ofs == 0) {
       rop.stat2(&size, &mtime_ts, NULL);
+      mtime = real_clock::from_timespec(mtime_ts);
     }
     rop.read(ofs, chunk_size, &data, NULL);
     ret = src_ioctx.operate(src_oid, &rop, NULL);
@@ -5542,6 +5544,7 @@ int RGWRados::move_rados_obj(librados::IoCtx& src_ioctx,
     if (ofs == 0) {
       wop.create(true); /* make it exclusive */
       wop.mtime2(&mtime_ts);
+      mtime = real_clock::from_timespec(mtime_ts);
     }
     wop.write(ofs, data);
     ret = dst_ioctx.operate(dst_oid, &wop);
@@ -5706,7 +5709,8 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   if (state->is_olh) {
     op.setxattr(RGW_ATTR_OLH_ID_TAG, state->olh_tag);
   }
-  struct timespec mtime_ts = ceph::real_clock::to_timespec(meta.set_mtime);
+
+  struct timespec mtime_ts = real_clock::to_timespec(meta.set_mtime);
   op.mtime2(&mtime_ts);
 
   if (meta.data) {
@@ -5924,8 +5928,7 @@ int RGWRados::put_system_obj_impl(rgw_obj& obj, uint64_t size, real_time *mtime,
     set_mtime = real_clock::now();
   }
 
-  struct timespec mtime_ts = ceph::real_clock::to_timespec(set_mtime);
-
+  struct timespec mtime_ts = real_clock::to_timespec(set_mtime);
   op.mtime2(&mtime_ts);
   op.write_full(data);
 
@@ -7761,7 +7764,9 @@ int RGWRados::Object::Stat::stat_async()
   state.io_ctx.locator_set_key(loc);
   r = state.io_ctx.aio_operate(oid, state.completion, &op, NULL);
   if (r < 0) {
-    ldout(store->ctx(), 5) << __func__ << ": ERROR: aio_operate() returned ret=" << r << dendl;
+    ldout(store->ctx(), 5) << __func__
+						   << ": ERROR: aio_operate() returned ret=" << r
+						   << dendl;
     return r;
   }
 
