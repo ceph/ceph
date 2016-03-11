@@ -434,6 +434,9 @@ COMMAND("mon add " \
 COMMAND("mon remove " \
 	"name=name,type=CephString", \
 	"remove monitor named <name>", "mon", "rw", "cli,rest")
+COMMAND("mon rm " \
+	"name=name,type=CephString", \
+	"remove monitor named <name>", "mon", "rw", "cli,rest")
 
 /*
  * OSD commands
