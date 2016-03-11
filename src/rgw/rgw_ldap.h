@@ -21,7 +21,7 @@ namespace rgw {
     std::string binddn;
     std::string searchdn;
     std::string memberattr;
-    LDAP *ldap, *tldap;
+    LDAP *ldap;
 
   public:
     LDAPHelper(std::string _uri, std::string _binddn, std::string _searchdn,
@@ -34,21 +34,23 @@ namespace rgw {
     int init() {
       int ret;
       ret = ldap_initialize(&ldap, uri.c_str());
-      return ret;
+      return (ret == LDAP_SUCCESS) ? ret : -EINVAL;
     }
 
     int bind() {
-      return ldap_simple_bind_s(ldap, nullptr, nullptr);
+      int ret;
+      ret = ldap_simple_bind_s(ldap, nullptr, nullptr);
+      return (ret == LDAP_SUCCESS) ? ret : -EINVAL;
     }
 
     int simple_bind(const char *dn, const std::string& pwd) {
+      LDAP* tldap;
       int ret = ldap_initialize(&tldap, uri.c_str());
       ret = ldap_simple_bind_s(tldap, dn, pwd.c_str());
       if (ret == LDAP_SUCCESS) {
 	ldap_unbind(tldap);
-	return 0;
       }
-      return -1;
+      return ret; // OpenLDAP client error space
     }
 
     int auth(const std::string uid, const std::string pwd) {
@@ -66,12 +68,11 @@ namespace rgw {
       if (ret == LDAP_SUCCESS) {
 	entry = ldap_first_entry(ldap, answer);
 	char *dn = ldap_get_dn(ldap, entry);
-	//std::cout << dn << std::endl;
 	ret = simple_bind(dn, pwd);
 	ldap_memfree(dn);
 	ldap_msgfree(answer);
       }
-      return ret;
+      return (ret == LDAP_SUCCESS) ? ret : -EACCES;
     }
 
     ~LDAPHelper() {

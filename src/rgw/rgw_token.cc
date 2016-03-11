@@ -49,9 +49,10 @@ namespace {
 
 void usage()
 {
-  cout << "usage: radosgw-token [options...]" << std::endl;
-  cout << "\t(maybe exporting RGW_ACCESS_KEY_ID and RGW_SECRET_ACCESS_KEY)"
+  cout << "usage: radosgw-token --encode --ttype=<token type> [options...]" << std::endl;
+  cout << "\t(maybe exporting RGW_ACCESS_KEY_ID and RGW_SECRET_ACCESS_KEY)"    
        << std::endl;
+  cout << "\t <token type> := ad | ldap" << std::endl;
   cout << "\n";
   generic_client_usage();
 }
