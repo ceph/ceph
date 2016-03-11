@@ -524,17 +524,18 @@ public:
 
     boost::uniform_int<> true_false(0, 1);
     string name(buf);
-    if (true_false(*gen)) {
-      // long
-      for (int i = 0; i < 100; ++i) name.append("aaaaa");
-    } else if (true_false(*gen)) {
-      name = "DIR_" + name;
+    if (seq % 2) {
+      for (unsigned i = 0; i < 300; ++i) {
+	name.push_back('a');
+      }
     }
-
-    // hash
-    //boost::binomial_distribution<uint32_t> bin(0xFFFFFF, 0.5);
     ++seq;
-    return ghobject_t(hobject_t(name, string(), rand() & 2 ? CEPH_NOSNAP : rand(), rand() & 0xFF, 0, ""));
+    return ghobject_t(
+      hobject_t(
+	name, string(), rand() & 2 ? CEPH_NOSNAP : rand(),
+	(((seq / 1024) % 2) * 0xF00 ) +
+	(seq & 0xFF),
+	0, ""));
   }
 };
 
