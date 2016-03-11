@@ -526,10 +526,10 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   fdcache(g_ceph_context),
   wbthrottle(g_ceph_context),
   next_osr_id(0),
-  throttle_ops(g_conf->filestore_caller_concurrency),
-  throttle_bytes(g_conf->filestore_caller_concurrency),
   m_disable_wbthrottle(g_conf->filestore_odsync_write || 
                       !g_conf->filestore_wbthrottle_enable),
+  throttle_ops(g_conf->filestore_caller_concurrency),
+  throttle_bytes(g_conf->filestore_caller_concurrency),
   m_ondisk_finisher_num(g_conf->filestore_ondisk_finisher_threads),
   m_apply_finisher_num(g_conf->filestore_apply_finisher_threads),
   op_tp(g_ceph_context, "FileStore::op_tp", "tp_fstore_op", g_conf->filestore_op_threads, "filestore_op_threads"),
