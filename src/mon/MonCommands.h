@@ -833,6 +833,9 @@ COMMAND("config-key put " \
 COMMAND("config-key del " \
 	"name=key,type=CephString", \
 	"delete <key>", "config-key", "rw", "cli,rest")
+COMMAND("config-key rm " \
+	"name=key,type=CephString", \
+	"rm <key>", "config-key", "rw", "cli,rest")
 COMMAND("config-key exists " \
 	"name=key,type=CephString", \
 	"check for <key>'s existence", "config-key", "r", "cli,rest")
