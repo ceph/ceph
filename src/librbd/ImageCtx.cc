@@ -26,6 +26,7 @@
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/Utils.h"
 
+#include "osdc/Striper.h"
 #include <boost/bind.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -539,6 +540,12 @@ struct C_InvalidateCache : public Context {
       return info->size;
     }
     return 0;
+  }
+
+  uint64_t ImageCtx::get_object_count(snap_t in_snap_id) const {
+    assert(snap_lock.is_locked());
+    uint64_t image_size = get_image_size(in_snap_id);
+    return Striper::get_num_objects(layout, image_size);
   }
 
   bool ImageCtx::test_features(uint64_t features) const
