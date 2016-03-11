@@ -6943,8 +6943,9 @@ done:
 					      get_last_committed() + 1));
     return true;
 
-  } else if (prefix == "osd pool delete") {
-    // osd pool delete <poolname> <poolname again> --yes-i-really-really-mean-it
+  } else if (prefix == "osd pool delete" ||
+             prefix == "osd pool rm") {
+    // osd pool delete/rm <poolname> <poolname again> --yes-i-really-really-mean-it
     string poolstr, poolstr2, sure;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     cmd_getval(g_ceph_context, cmdmap, "pool2", poolstr2);
