@@ -192,10 +192,5 @@ Store::get_errors(ObjectStore* store,
   }
   return errors;
 }
-string to_snap_key(int64_t pool, const librados::object_id_t& oid)
-{
-  return "SCRUB_SS_" + std::to_string(pool) + "." + oid.name + oid.nspace;
-}
-
 
 } // namespace Scrub
