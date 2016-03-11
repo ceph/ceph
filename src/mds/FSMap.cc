@@ -286,6 +286,8 @@ void FSMap::decode(bufferlist::iterator& p)
     } else {
       ::decode(legacy_mds_map.metadata_pool, p);
     }
+    ::decode(legacy_mds_map.created, p);
+    ::decode(legacy_mds_map.modified, p);
     ::decode(legacy_mds_map.tableserver, p);
     ::decode(legacy_mds_map.in, p);
     ::decode(legacy_mds_map.inc, p);
@@ -331,6 +333,7 @@ void FSMap::decode(bufferlist::iterator& p)
     migrate_fs->fscid = FS_CLUSTER_ID_ANONYMOUS;
     migrate_fs->mds_map.fs_name = "default";
     legacy_client_fscid = migrate_fs->fscid;
+    filesystems[migrate_fs->fscid] = migrate_fs;
     compat = migrate_fs->mds_map.compat;
     enable_multiple = false;
   } else {
