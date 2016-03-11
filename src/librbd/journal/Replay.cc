@@ -367,8 +367,11 @@ void Replay<I>::handle_event(const journal::SnapCreateEvent &event,
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
-  Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
-                                                       &op_event);
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
 
   // ignore errors caused due to replay
   op_event->ignore_error_codes = {-EEXIST};
@@ -393,8 +396,12 @@ void Replay<I>::handle_event(const journal::SnapRemoveEvent &event,
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
-  Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
-                                                       &op_event);
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
+
   op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
     m_image_ctx, new ExecuteOp<I, journal::SnapRemoveEvent>(m_image_ctx, event,
                                                             on_op_complete));
@@ -413,8 +420,12 @@ void Replay<I>::handle_event(const journal::SnapRenameEvent &event,
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
-  Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
-                                                       &op_event);
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
+
   op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
     m_image_ctx, new ExecuteOp<I, journal::SnapRenameEvent>(m_image_ctx, event,
                                                             on_op_complete));
@@ -433,8 +444,12 @@ void Replay<I>::handle_event(const journal::SnapProtectEvent &event,
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
-  Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
-                                                       &op_event);
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
+
   op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
     m_image_ctx, new ExecuteOp<I, journal::SnapProtectEvent>(m_image_ctx, event,
                                                              on_op_complete));
@@ -454,8 +469,12 @@ void Replay<I>::handle_event(const journal::SnapUnprotectEvent &event,
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
-  Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
-                                                       &op_event);
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
+
   op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
     m_image_ctx, new ExecuteOp<I, journal::SnapUnprotectEvent>(m_image_ctx,
                                                                event,
@@ -476,8 +495,12 @@ void Replay<I>::handle_event(const journal::SnapRollbackEvent &event,
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
-  Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
-                                                       &op_event);
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
+
   op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
     m_image_ctx, new ExecuteOp<I, journal::SnapRollbackEvent>(m_image_ctx,
                                                               event,
@@ -494,8 +517,12 @@ void Replay<I>::handle_event(const journal::RenameEvent &event,
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
-  Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
-                                                       &op_event);
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
+
   op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
     m_image_ctx, new ExecuteOp<I, journal::RenameEvent>(m_image_ctx, event,
                                                         on_op_complete));
@@ -514,8 +541,11 @@ void Replay<I>::handle_event(const journal::ResizeEvent &event,
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
-  Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
-                                                       &op_event);
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
 
   // avoid lock cycles
   m_image_ctx.op_work_queue->queue(new C_RefreshIfRequired<I>(
@@ -536,8 +566,12 @@ void Replay<I>::handle_event(const journal::FlattenEvent &event,
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
-  Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
-                                                       &op_event);
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
+
   op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
     m_image_ctx, new ExecuteOp<I, journal::FlattenEvent>(m_image_ctx, event,
                                                          on_op_complete));
@@ -634,9 +668,18 @@ void Replay<I>::handle_aio_flush_complete(Context *on_flush_safe,
 
 template <typename I>
 Context *Replay<I>::create_op_context_callback(uint64_t op_tid,
+                                               Context *on_ready,
                                                Context *on_safe,
                                                OpEvent **op_event) {
+  CephContext *cct = m_image_ctx.cct;
+
   assert(m_lock.is_locked());
+  if (m_op_events.count(op_tid) != 0) {
+    lderr(cct) << "duplicate op tid detected: " << op_tid << dendl;
+    on_ready->complete(0);
+    on_safe->complete(-EINVAL);
+    return nullptr;
+  }
 
   *op_event = &m_op_events[op_tid];
   (*op_event)->on_start_safe = on_safe;
