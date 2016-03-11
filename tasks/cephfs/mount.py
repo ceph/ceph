@@ -288,7 +288,7 @@ class CephFSMount(object):
         assert(self.is_mounted())
 
         return self.run_shell(["dd", "if=/dev/urandom", "of={0}".format(filename),
-                               "bs=1M",
+                               "bs=1M", "conv=fdatasync",
                                "count={0}".format(n_mb),
                                "seek={0}".format(seek)
                                ], wait=wait)
