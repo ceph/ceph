@@ -94,7 +94,7 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_remove>(
       this);
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->snap_remove(m_snap_name.c_str(), ctx);
+  m_local_image_ctx->operations->execute_snap_remove(m_snap_name.c_str(), ctx);
 }
 
 template <typename I>
@@ -143,7 +143,8 @@ void SnapshotCopyRequest<I>::send_snap_create() {
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_create>(
       this);
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->snap_create(m_snap_name.c_str(), ctx, 0U);
+  m_local_image_ctx->operations->execute_snap_create(m_snap_name.c_str(), ctx,
+                                                     0U);
 }
 
 template <typename I>

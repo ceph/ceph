@@ -85,7 +85,7 @@ public:
 
   void expect_snap_create(librbd::MockImageCtx &mock_image_ctx,
                           const std::string &snap_name, uint64_t snap_id, int r) {
-    EXPECT_CALL(*mock_image_ctx.operations, snap_create(StrEq(snap_name), _, 0))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(StrEq(snap_name), _, 0))
                   .WillOnce(DoAll(InvokeWithoutArgs([&mock_image_ctx, snap_id, snap_name]() {
                                     inject_snap(mock_image_ctx, snap_id, snap_name);
                                   }),
@@ -96,7 +96,7 @@ public:
 
   void expect_snap_remove(librbd::MockImageCtx &mock_image_ctx,
                           const std::string &snap_name, int r) {
-    EXPECT_CALL(*mock_image_ctx.operations, snap_remove(StrEq(snap_name), _))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_remove(StrEq(snap_name), _))
                   .WillOnce(WithArg<1>(Invoke([this, r](Context *ctx) {
                               m_threads->work_queue->queue(ctx, r);
                             })));
