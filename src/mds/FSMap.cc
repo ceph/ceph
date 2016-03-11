@@ -286,6 +286,8 @@ void FSMap::decode(bufferlist::iterator& p)
     } else {
       ::decode(legacy_mds_map.metadata_pool, p);
     }
+    ::decode(legacy_mds_map.created, p);
+    ::decode(legacy_mds_map.modified, p);
     ::decode(legacy_mds_map.tableserver, p);
     ::decode(legacy_mds_map.in, p);
     ::decode(legacy_mds_map.inc, p);
