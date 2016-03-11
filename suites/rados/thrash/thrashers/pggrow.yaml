@@ -8,6 +8,7 @@ tasks:
       osd:
         osd scrub min interval: 60
         osd scrub max interval: 120
+        filestore odsync write: true
 - thrashosds:
     timeout: 1200
     chance_pgnum_grow: 2

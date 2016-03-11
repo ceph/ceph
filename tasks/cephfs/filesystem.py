@@ -2,6 +2,7 @@
 from StringIO import StringIO
 import json
 import logging
+from gevent import Greenlet
 import os
 import time
 import datetime
@@ -203,7 +204,23 @@ class Filesystem(object):
             elif mds_status['state'] == 'up:active':
                 active_count += 1
 
-        return active_count >= status['max_mds']
+        if active_count >= status['max_mds']:
+            # The MDSMap says these guys are active, but let's check they really are
+            for mds_id, mds_status in status['info'].items():
+                if mds_status['state'] == 'up:active':
+                    try:
+                        daemon_status = self.mds_asok(["status"], mds_id=mds_status['name'])
+                    except CommandFailedError:
+                        # MDS not even running
+                        return False
+
+                    if daemon_status['state'] != 'up:active':
+                        # MDS hasn't taken the latest map yet
+                        return False
+
+            return True
+        else:
+            return False
 
     def get_daemon_names(self, state):
         """
@@ -569,13 +586,14 @@ class Filesystem(object):
                 "stripe_unit": 4194304,
                 "stripe_count": 1,
                 "object_size": 4194304,
-                "pg_pool": 1
+                "pool_id": 1,
+                "pool_ns": "",
             }
 
         :param pool: name of pool to read backtrace from.  If omitted, FS must have only
                      one data pool and that will be used.
         """
-        return self._read_data_xattr(ino_no, "layout", "ceph_file_layout_wrapper", pool)
+        return self._read_data_xattr(ino_no, "layout", "file_layout_t", pool)
 
     def _enumerate_data_objects(self, ino, size):
         """
@@ -752,8 +770,32 @@ class Filesystem(object):
         """
         return self._run_tool("cephfs-table-tool", args, None, quiet)
 
-    def data_scan(self, args, quiet=False):
+    def data_scan(self, args, quiet=False, worker_count=1):
         """
         Invoke cephfs-data-scan with the passed arguments, and return its stdout
+
+        :param worker_count: if greater than 1, multiple workers will be run
+                             in parallel and the return value will be None
         """
-        return self._run_tool("cephfs-data-scan", args, None, quiet)
+
+        workers = []
+
+        for n in range(0, worker_count):
+            if worker_count > 1:
+                # data-scan args first token is a command, followed by args to it.
+                # insert worker arguments after the command.
+                cmd = args[0]
+                worker_args = [cmd] + ["--worker_n", n.__str__(), "--worker_m", worker_count.__str__()] + args[1:]
+            else:
+                worker_args = args
+
+            workers.append(Greenlet.spawn(lambda wargs=worker_args:
+                                          self._run_tool("cephfs-data-scan", wargs, None, quiet)))
+
+        for w in workers:
+            w.get()
+
+        if worker_count == 1:
+            return workers[0].value
+        else:
+            return None

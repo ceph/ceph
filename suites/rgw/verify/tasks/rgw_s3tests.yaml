@@ -1,6 +1,7 @@
 tasks:
 - install:
     flavor: notcmalloc
+    debuginfo: true
 - ceph:
 - rgw:
     client.0:

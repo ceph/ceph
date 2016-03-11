@@ -1582,8 +1582,12 @@ class CephManager:
                     start = time.time()
                 else:
                     self.log("no progress seen, keeping timeout for now")
-                    assert time.time() - start < timeout, \
-                        'failed to become clean before timeout expired'
+                    if time.time() - start >= timeout:
+                        self.log('dumping pgs')
+                        out = self.raw_cluster_cmd('pg', 'dump')
+                        self.log(out)
+                        assert time.time() - start < timeout, \
+                            'failed to become clean before timeout expired'
             cur_active_clean = self.get_num_active_clean()
             if cur_active_clean != num_active_clean:
                 start = time.time()
@@ -1620,17 +1624,18 @@ class CephManager:
         start = time.time()
         num_active_recovered = self.get_num_active_recovered()
         while not self.is_recovered():
+            now = time.time()
             if timeout is not None:
                 if self.get_is_making_recovery_progress():
                     self.log("making progress, resetting timeout")
                     start = time.time()
                 else:
                     self.log("no progress seen, keeping timeout for now")
-                    if time.time() - start >= timeout:
+                    if now - start >= timeout:
                         self.log('dumping pgs')
                         out = self.raw_cluster_cmd('pg', 'dump')
                         self.log(out)
-                        assert time.time() - start < timeout, \
+                        assert now - start < timeout, \
                             'failed to recover before timeout expired'
             cur_active_recovered = self.get_num_active_recovered()
             if cur_active_recovered != num_active_recovered:
@@ -1648,8 +1653,12 @@ class CephManager:
         num_active = self.get_num_active()
         while not self.is_active():
             if timeout is not None:
-                assert time.time() - start < timeout, \
-                    'failed to recover before timeout expired'
+                if time.time() - start >= timeout:
+                    self.log('dumping pgs')
+                    out = self.raw_cluster_cmd('pg', 'dump')
+                    self.log(out)
+                    assert time.time() - start < timeout, \
+                        'failed to recover before timeout expired'
             cur_active = self.get_num_active()
             if cur_active != num_active:
                 start = time.time()
@@ -1667,8 +1676,12 @@ class CephManager:
         num_active_down = self.get_num_active_down()
         while not self.is_active_or_down():
             if timeout is not None:
-                assert time.time() - start < timeout, \
-                    'failed to recover before timeout expired'
+                if time.time() - start >= timeout:
+                    self.log('dumping pgs')
+                    out = self.raw_cluster_cmd('pg', 'dump')
+                    self.log(out)
+                    assert time.time() - start < timeout, \
+                        'failed to recover before timeout expired'
             cur_active_down = self.get_num_active_down()
             if cur_active_down != num_active_down:
                 start = time.time()
@@ -1710,8 +1723,12 @@ class CephManager:
         start = time.time()
         while not self.is_active():
             if timeout is not None:
-                assert time.time() - start < timeout, \
-                    'failed to become active before timeout expired'
+                if time.time() - start >= timeout:
+                    self.log('dumping pgs')
+                    out = self.raw_cluster_cmd('pg', 'dump')
+                    self.log(out)
+                    assert time.time() - start < timeout, \
+                        'failed to become active before timeout expired'
             time.sleep(3)
         self.log("active!")
 
