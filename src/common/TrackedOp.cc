@@ -87,14 +87,23 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
   f->close_section();
 }
 
-void OpTracker::dump_historic_ops(Formatter *f)
+bool OpTracker::dump_historic_ops(Formatter *f)
 {
+  RWLock::RLocker l(lock);
+  if (!tracking_enabled)
+    return false;
+
   utime_t now = ceph_clock_now(cct);
   history.dump_ops(now, f);
+  return true;
 }
 
-void OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
+bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
 {
+  RWLock::RLocker l(lock);
+  if (!tracking_enabled)
+    return false;
+
   f->open_object_section("ops_in_flight"); // overall dump
   uint64_t total_ops_in_flight = 0;
   f->open_array_section("ops"); // list of TrackedOps
@@ -119,6 +128,7 @@ void OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
   } else
     f->dump_int("num_ops", total_ops_in_flight);
   f->close_section(); // overall dump
+  return true;
 }
 
 void OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
