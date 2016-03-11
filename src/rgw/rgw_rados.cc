@@ -2415,7 +2415,13 @@ int RGWPutObjProcessor_Atomic::complete_parts()
 int RGWPutObjProcessor_Atomic::complete_writing_data()
 {
   if (!data_ofs && !immutable_head()) {
-    first_chunk.claim(pending_data_bl);
+    /* only claim if pending_data_bl() is not empty. This is needed because we might be called twice
+     * (e.g., when a retry due to race happens). So a second call to first_chunk.claim() would
+     * clobber first_chunk
+     */
+    if (pending_data_bl.length() > 0) {
+      first_chunk.claim(pending_data_bl);
+    }
     obj_len = (uint64_t)first_chunk.length();
   }
   if (pending_data_bl.length()) {
@@ -2661,7 +2667,7 @@ class RGWMetaNotifierManager : public RGWCoroutinesManager {
 
 public:
   RGWMetaNotifierManager(RGWRados *_store) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
-                                             http_manager(store->ctx(), &completion_mgr) {
+                                             http_manager(store->ctx(), completion_mgr) {
     http_manager.set_threaded();
   }
 
@@ -2688,7 +2694,7 @@ class RGWDataNotifierManager : public RGWCoroutinesManager {
 
 public:
   RGWDataNotifierManager(RGWRados *_store) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
-                                             http_manager(store->ctx(), &completion_mgr) {
+                                             http_manager(store->ctx(), completion_mgr) {
     http_manager.set_threaded();
   }
 
@@ -3056,14 +3062,22 @@ void RGWRados::finalize()
   if (run_sync_thread) {
     Mutex::Locker l(meta_sync_thread_lock);
     meta_sync_processor_thread->stop();
-    delete meta_sync_processor_thread;
-    meta_sync_processor_thread = NULL;
 
     Mutex::Locker dl(data_sync_thread_lock);
-    map<string, RGWDataSyncProcessorThread *>::iterator iter = data_sync_processor_threads.begin();
-    for (; iter != data_sync_processor_threads.end(); ++iter) {
-      RGWDataSyncProcessorThread *thread = iter->second;
+    for (auto iter : data_sync_processor_threads) {
+      RGWDataSyncProcessorThread *thread = iter.second;
       thread->stop();
+    }
+  }
+  if (async_rados) {
+    async_rados->stop();
+  }
+  if (run_sync_thread) {
+    delete meta_sync_processor_thread;
+    meta_sync_processor_thread = NULL;
+    Mutex::Locker dl(data_sync_thread_lock);
+    for (auto iter : data_sync_processor_threads) {
+      RGWDataSyncProcessorThread *thread = iter.second;
       delete thread;
     }
     data_sync_processor_threads.clear();
@@ -3092,7 +3106,6 @@ void RGWRados::finalize()
   delete meta_mgr;
   delete data_log;
   if (async_rados) {
-    async_rados->stop();
     delete async_rados;
   }
   if (use_gc_thread) {
