@@ -261,6 +261,8 @@ run_expect_fail "$RADOS_TOOL" mkpool delete_me_mkpool_test3 0 0k
 
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 write
 run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 1k write
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 rand
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 seq
 
 
 echo "SUCCESS!"
