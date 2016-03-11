@@ -357,8 +357,9 @@ struct MirrorPeerClientMeta {
   static const ClientMetaType TYPE = MIRROR_PEER_CLIENT_META_TYPE;
 
   std::string image_id;
-  SyncPoints sync_points; ///< max two in-use snapshots for sync
-  SnapSeqs snap_seqs;     ///< local to peer snap seq mapping
+  uint64_t sync_object_count = 0; ///< maximum number of objects ever sync'ed
+  SyncPoints sync_points;         ///< max two in-use snapshots for sync
+  SnapSeqs snap_seqs;             ///< local to peer snap seq mapping
 
   MirrorPeerClientMeta() {
   }
@@ -370,6 +371,7 @@ struct MirrorPeerClientMeta {
 
   inline bool operator==(const MirrorPeerClientMeta &meta) const {
     return (image_id == meta.image_id &&
+            sync_object_count == meta.sync_object_count &&
             sync_points == meta.sync_points &&
             snap_seqs == meta.snap_seqs);
   }
