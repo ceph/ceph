@@ -453,7 +453,7 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
       do {
         int ret = stats->sync_all_users();
         if (ret < 0) {
-          ldout(cct, 0) << "ERROR: sync_all_users() returned ret=" << ret << dendl;
+          ldout(cct, 5) << "ERROR: sync_all_users() returned ret=" << ret << dendl;
         }
 
         lock.Lock();
@@ -611,7 +611,7 @@ int RGWUserStatsCache::sync_all_users()
 
   int ret = store->meta_mgr->list_keys_init(key, &handle);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: can't get key: ret=" << ret << dendl;
+    ldout(store->ctx(), 10) << "ERROR: can't get key: ret=" << ret << dendl;
     return ret;
   }
 
