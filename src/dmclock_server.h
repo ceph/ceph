@@ -653,12 +653,23 @@ namespace crimson {
     protected:
 
       // for debugging
-      void display_queues() {
+      void display_queues(bool show_res = true,
+			  bool show_lim = true,
+			  bool show_ready = true,
+			  bool show_prop = true) {
 	auto filter = [](const EntryRef& e)->bool { return !e->handled; };
-	reserv_q.displaySorted(std::cout << "RESER:", filter) << std::endl;
-	lim_q.displaySorted(std::cout << "LIMIT:", filter) << std::endl;
-	ready_q.displaySorted(std::cout << "READY:", filter) << std::endl;
-	prop_q.displaySorted(std::cout << "PROPO:", filter) << std::endl;
+	if (show_res) {
+	  reserv_q.displaySorted(std::cout << "RESER:", filter) << std::endl;
+	}
+	if (show_lim) {
+	  lim_q.displaySorted(std::cout << "LIMIT:", filter) << std::endl;
+	}
+	if (show_ready) {
+	  ready_q.displaySorted(std::cout << "READY:", filter) << std::endl;
+	}
+	if (show_prop) {
+	  prop_q.displaySorted(std::cout << "PROPO:", filter) << std::endl;
+	}
       }
 
 
