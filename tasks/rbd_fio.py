@@ -101,7 +101,7 @@ def run_fio(remote, config, rbd_test_dir):
 
     formats=[1,2]
     features=[['layering'],['striping'],['exclusive-lock','object-map']]
-    fio_version='2.2.11'
+    fio_version='2.7'
     if config.get('formats'):
         formats=config['formats']
     if config.get('features'):
