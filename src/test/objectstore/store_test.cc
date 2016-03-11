@@ -1681,11 +1681,17 @@ public:
     char buf[100];
     snprintf(buf, sizeof(buf), "OBJ_%u", seq);
     string name(buf);
+    if (seq % 2) {
+      for (unsigned i = 0; i < 300; ++i) {
+	name.push_back('a');
+      }
+    }
     ++seq;
     return ghobject_t(
       hobject_t(
 	name, string(), rand() & 2 ? CEPH_NOSNAP : rand(),
-	seq % 16, // use smaller set of hash values so clone can work
+	(((seq / 1024) % 2) * 0xF00 ) +
+	(seq & 0xFF),
 	poolid, ""));
   }
 };
