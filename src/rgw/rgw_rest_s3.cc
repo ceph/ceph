@@ -165,14 +165,14 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   if (s->system_request && lastmod) {
     /* we end up dumping mtime in two different methods, a bit redundant */
     dump_epoch_header(s, "Rgwx-Mtime", lastmod);
-    uint64_t pg_ver;
+    uint64_t pg_ver = 0;
     int r = decode_attr_bl_single_value(attrs, RGW_ATTR_PG_VER, &pg_ver, (uint64_t)0);
     if (r < 0) {
       ldout(s->cct, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
     }
     STREAM_IO(s)->print("Rgwx-Obj-PG-Ver: %lld\r\n", (long long)pg_ver);
 
-    uint32_t source_zone_short_id;
+    uint32_t source_zone_short_id = 0;
     r = decode_attr_bl_single_value(attrs, RGW_ATTR_SOURCE_ZONE, &source_zone_short_id, (uint32_t)0);
     if (r < 0) {
       ldout(s->cct, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
