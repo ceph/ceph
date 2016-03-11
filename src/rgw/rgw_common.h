@@ -1226,7 +1226,7 @@ struct req_state {
 
   /* aws4 auth support */
   bool aws4_auth_needs_complete;
-  rgw_aws4_auth *aws4_auth;
+  unique_ptr<rgw_aws4_auth> aws4_auth;
 
   string canned_acl;
   bool has_acl_header;
