@@ -69,9 +69,9 @@ Standards-Version: 3.9.3
 
 Package: ceph
 Architecture: linux-any
-Depends: ceph-mon,
-         ceph-osd
-Recommends: ceph-mds
+Depends: ceph-mon (= ${binary:Version}),
+         ceph-osd (= ${binary:Version})
+Recommends: ceph-mds (= ${binary:Version})
 Description: distributed storage and file system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -80,7 +80,7 @@ Description: distributed storage and file system
 Package: ceph-base
 Architecture: linux-any
 Depends: binutils,
-         ceph-common (>= 9.0.0-943),
+         ceph-common (= ${binary:Version}),
          cryptsetup-bin | cryptsetup,
          debianutils,
          findutils,
@@ -96,7 +96,11 @@ Depends: binutils,
          xfsprogs,
          ${misc:Depends},
          ${shlibs:Depends}
-Recommends: btrfs-tools, ceph-mds, librados2, libradosstriper1, librbd1
+Recommends: btrfs-tools,
+            ceph-mds (= ${binary:Version}),
+            librados2 (= ${binary:Version}),
+            libradosstriper1 (= ${binary:Version}),
+            librbd1 (= ${binary:Version})
 Replaces: ceph-common (<< 0.78-500), python-ceph (<< 0.92-1223),
 	  ceph-test (<< 0.94-1322)
 Breaks: python-ceph (<< 0.92-1223), ceph-test (<< 0.94-1322)
@@ -113,7 +117,9 @@ Description: common ceph daemon libraries and management tools
 Package: ceph-mds
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
-Recommends: ceph-fs-common, ceph-fuse, libcephfs1
+Recommends: ceph-fs-common (= ${binary:Version}),
+            ceph-fuse (= ${binary:Version}),
+            libcephfs1 (= ${binary:Version})
 Replaces: ceph (<< 0.93-417)
 Breaks: ceph (<< 0.93-417)
 Description: metadata server for the ceph distributed file system
@@ -170,7 +176,7 @@ Description: debugging symbols for ceph-mon
 Package: ceph-osd
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
-Recommends: ceph-common
+Recommends: ceph-common (= ${binary:Version})
 Replaces: ceph (<< 9.0.1-1294)
 Breaks: ceph (<< 9.0.1-1294)
 Description: OSD server for the ceph storage system
@@ -320,7 +326,7 @@ Breaks: ceph (<< 9.0.0-943),
 	ceph-test (<< 9.0.3-1646),
 	python-ceph (<< 0.92-1223),
 	librbd1 (<< 0.92-1238)
-Suggests: ceph-base, ceph-mds
+Suggests: ceph-base (= ${binary:Version}), ceph-mds (= ${binary:Version})
 Description: common utilities to mount and interact with a ceph storage cluster
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -348,7 +354,7 @@ Package: ceph-fs-common
 Architecture: linux-any
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: ceph-client-tools
-Suggests: ceph-mds
+Suggests: ceph-mds (= ${binary:Version})
 Description: common utilities to mount and interact with a ceph file system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -487,7 +493,8 @@ Description: debugging symbols for librbd1
 Package: librbd-dev
 Architecture: linux-any
 Section: libdevel
-Depends: librados-dev, librbd1 (= ${binary:Version}), ${misc:Depends}
+Depends: librados-dev (= ${binary:Version}),
+         librbd1 (= ${binary:Version}), ${misc:Depends}
 Conflicts: librbd1-dev
 Replaces: librbd1-dev
 Description: RADOS block device client library (development files)
@@ -572,7 +579,8 @@ Description: debugging symbols for librbd1
 Package: librgw-dev
 Architecture: linux-any
 Section: libdevel
-Depends: librados-dev, librgw2 (= ${binary:Version}), ${misc:Depends}
+Depends: librados-dev (= ${binary:Version}),
+         librgw2 (= ${binary:Version}), ${misc:Depends}
 Description: RADOS client library (development files)
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the
@@ -587,7 +595,7 @@ Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}),
          mime-support,
          python-flask,
-	 librgw2,
+         librgw2 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Description: REST gateway for RADOS distributed object store
@@ -621,7 +629,8 @@ Package: ceph-test-dbg
 Architecture: linux-any
 Section: debug
 Priority: extra
-Depends: ceph-test (= ${binary:Version}), ceph-common, curl, xml2,
+Depends: ceph-test (= ${binary:Version}), ceph-common (= ${binary:Version}),
+         curl, xml2,
          ${misc:Depends}, ${shlibs:Depends}
 Description: Ceph test and benchmarking tools
  .
@@ -630,7 +639,9 @@ Description: Ceph test and benchmarking tools
 Package: python-ceph
 Architecture: linux-any
 Section: python
-Depends: python-rados, python-rbd, python-cephfs
+Depends: python-rados (= ${binary:Version}),
+         python-rbd (= ${binary:Version}),
+         python-cephfs (= ${binary:Version})
 X-Python-Version: >= 2.6
 Description: Meta-package for python libraries for the Ceph libraries
  Ceph is a massively scalable, open-source, distributed
@@ -642,7 +653,7 @@ Description: Meta-package for python libraries for the Ceph libraries
 Package: python-rados
 Architecture: linux-any
 Section: python
-Depends: librados2, ${misc:Depends}, ${python:Depends}
+Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
 X-Python-Version: >= 2.6
@@ -672,7 +683,7 @@ Description: Python libraries for the Ceph librbd library
 Package: python-cephfs
 Architecture: linux-any
 Section: python
-Depends: libcephfs1, ${misc:Depends}, ${python:Depends}
+Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
 X-Python-Version: >= 2.6
@@ -687,11 +698,12 @@ Description: Python libraries for the Ceph libcephfs library
 Package: libcephfs-java
 Section: java
 Architecture: all
-Depends: libcephfs-jni, ${java:Depends}, ${misc:Depends}
+Depends: libcephfs-jni (= ${binary:Version}), ${java:Depends}, ${misc:Depends}
 Description: Java libraries for the Ceph File System
 
 Package: libcephfs-jni
 Architecture: linux-any
 Section: libs
-Depends: libcephfs1, ${java:Depends}, ${misc:Depends}, ${shlibs:Depends}
+Depends: libcephfs1 (= ${binary:Version}), ${java:Depends},
+         ${misc:Depends}, ${shlibs:Depends}
 Description: Java Native Interface library for CephFS Java bindings
