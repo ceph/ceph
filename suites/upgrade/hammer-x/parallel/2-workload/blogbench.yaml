@@ -1,0 +1,13 @@
+meta:
+- desc: |
+   run a cephfs stress test
+   mount ceph-fuse on client.2 before running workunit
+workload:
+  sequential:
+  - ceph-fuse:
+  - print: "**** done ceph-fuse 2-workload"
+  - workunit:
+      clients:
+         client.2:
+          - suites/blogbench.sh
+  - print: "**** done suites/blogbench.sh 2-workload"
