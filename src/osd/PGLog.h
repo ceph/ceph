@@ -36,7 +36,8 @@ struct PGLog : DoutPrefixProvider {
     return prefix_provider ? prefix_provider->gen_prefix() : "";
   }
   unsigned get_subsys() const {
-    return prefix_provider ? prefix_provider->get_subsys() : ceph_subsys_osd;
+    return prefix_provider ? prefix_provider->get_subsys() :
+      (unsigned)ceph_subsys_osd;
   }
   CephContext *get_cct() const {
     return cct;
