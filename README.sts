@@ -15,7 +15,7 @@ For building with autoconf/configure, supply this parameter to configure
 --enable-sts
 
 For building with cmake, supply this parameter to cmake
--DWITH_STS=YES
+-DWITH_RGW_STS=YES
 
 This will enable building a "rgw-sts" executable.
 
