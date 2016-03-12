@@ -1979,7 +1979,7 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
 {
   public:
   RemoveDataPoolHandler()
-    : FileSystemCommandHandler("fs remove_data_pool")
+    : FileSystemCommandHandler("fs rm_data_pool")
   {}
 
   int handle(

@@ -412,7 +412,7 @@ COMMAND("fs flag set name=flag_name,type=CephChoices,strings=enable_multiple "
 COMMAND("fs add_data_pool name=fs_name,type=CephString " \
 	"name=pool,type=CephString", \
 	"add data pool <pool>", "mds", "rw", "cli,rest")
-COMMAND("fs remove_data_pool name=fs_name,type=CephString " \
+COMMAND("fs rm_data_pool name=fs_name,type=CephString " \
 	"name=pool,type=CephString", \
 	"remove data pool <pool>", "mds", "rw", "cli,rest")
 
