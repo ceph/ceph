@@ -307,7 +307,7 @@ int EventCenter::process_time_events()
     map<utime_t, list<TimeEvent> > changed;
     for (map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
          it != time_events.end(); ++it) {
-      changed[utime_t()].swap(it->second);
+      changed[utime_t()].splice(changed[utime_t()].end(), it->second);
     }
     time_events.swap(changed);
   }
