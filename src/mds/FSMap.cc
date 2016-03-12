@@ -326,8 +326,14 @@ void FSMap::decode(bufferlist::iterator& p)
     }
 
     // We're upgrading, populate filesystems from the legacy fields
-    assert(filesystems.empty());
+    filesystems.clear();
+    standby_daemons.clear();
+    standby_epochs.clear();
+    mds_roles.clear();
+    compat = legacy_mds_map.compat;
+    enable_multiple = false;
 
+    // Synthesise a Filesystem from legacy_mds_map, if enabled
     if (legacy_mds_map.enabled) {
       // Construct a Filesystem from the legacy MDSMap
       auto migrate_fs = std::make_shared<Filesystem>(); 
@@ -355,9 +361,6 @@ void FSMap::decode(bufferlist::iterator& p)
     } else {
       legacy_client_fscid = FS_CLUSTER_ID_NONE;
     }
-
-    compat = legacy_mds_map.compat;
-    enable_multiple = false;
   } else {
     ::decode(epoch, p);
     ::decode(next_filesystem_id, p);
