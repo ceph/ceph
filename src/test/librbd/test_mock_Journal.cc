@@ -7,6 +7,7 @@
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "cls/journal/cls_journal_types.h"
+#include "journal/Journaler.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Replay.h"
@@ -87,6 +88,9 @@ struct MockJournaler {
   MOCK_METHOD1(init, void(Context*));
   MOCK_METHOD1(flush_commit_position, void(Context*));
 
+  MOCK_METHOD2(get_cached_client, int(const std::string&, cls::journal::Client*));
+  MOCK_METHOD3(get_tags, void(uint64_t, journal::Journaler::Tags*, Context*));
+
   MOCK_METHOD1(start_replay, void(::journal::ReplayHandler *replay_handler));
   MOCK_METHOD1(try_pop_front, bool(MockReplayEntryProxy *replay_entry));
   MOCK_METHOD0(stop_replay, void());
@@ -106,6 +110,13 @@ struct MockJournalerProxy {
   template <typename IoCtxT>
   MockJournalerProxy(IoCtxT &header_ioctx, const std::string &,
                      const std::string &, double) {
+    MockJournaler::get_instance().construct();
+  }
+
+  template <typename IoCtxT>
+  MockJournalerProxy(ContextWQ *work_queue, SafeTimer *safe_timer,
+                     Mutex *timer_lock, IoCtxT &header_ioctx,
+                     const std::string &, const std::string &, double) {
     MockJournaler::get_instance().construct();
   }
 
@@ -132,6 +143,16 @@ struct MockJournalerProxy {
 
   void init(Context *on_finish) {
     MockJournaler::get_instance().init(on_finish);
+  }
+
+  int get_cached_client(const std::string& client_id,
+                        cls::journal::Client* client) {
+    return MockJournaler::get_instance().get_cached_client(client_id, client);
+  }
+
+  void get_tags(uint64_t tag_class, journal::Journaler::Tags *tags,
+                Context *on_finish) {
+    MockJournaler::get_instance().get_tags(tag_class, tags, on_finish);
   }
 
   void flush_commit_position(Context *on_finish) {
@@ -308,7 +329,36 @@ public:
   void expect_init_journaler(::journal::MockJournaler &mock_journaler, int r) {
     EXPECT_CALL(mock_journaler, init(_))
                   .WillOnce(CompleteContext(r, NULL));
+  }
 
+  void expect_get_journaler_cached_client(::journal::MockJournaler &mock_journaler, int r) {
+
+    journal::ImageClientMeta image_client_meta;
+    image_client_meta.tag_class = 0;
+
+    journal::ClientData client_data;
+    client_data.client_meta = image_client_meta;
+
+    cls::journal::Client client;
+    ::encode(client_data, client.data);
+
+    EXPECT_CALL(mock_journaler, get_cached_client("", _))
+                  .WillOnce(DoAll(SetArgPointee<1>(client),
+                                  Return(r)));
+  }
+
+  void expect_get_journaler_tags(MockImageCtx &mock_image_ctx,
+                                 ::journal::MockJournaler &mock_journaler,
+                                 int r) {
+    journal::TagData tag_data;
+
+    bufferlist tag_data_bl;
+    ::encode(tag_data, tag_data_bl);
+
+    ::journal::Journaler::Tags tags = {{0, 0, {}}, {1, 0, tag_data_bl}};
+    EXPECT_CALL(mock_journaler, get_tags(0, _, _))
+                  .WillOnce(DoAll(SetArgPointee<1>(tags),
+                                  WithArg<2>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue))));
   }
 
   void expect_start_replay(MockJournalImageCtx &mock_image_ctx,
@@ -442,6 +492,8 @@ public:
     InSequence seq;
     expect_construct_journaler(mock_journaler);
     expect_init_journaler(mock_journaler, 0);
+    expect_get_journaler_cached_client(mock_journaler, 0);
+    expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
     expect_start_replay(
       mock_image_ctx, mock_journaler, {
         std::bind(&invoke_replay_complete, _1, 0)
@@ -485,6 +537,8 @@ TEST_F(TestMockJournal, StateTransitions) {
   ::journal::MockJournaler mock_journaler;
   expect_construct_journaler(mock_journaler);
   expect_init_journaler(mock_journaler, 0);
+  expect_get_journaler_cached_client(mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler, {
       std::bind(&invoke_replay_ready, _1),
@@ -533,6 +587,45 @@ TEST_F(TestMockJournal, InitError) {
   ASSERT_EQ(-EINVAL, when_open(mock_journal));
 }
 
+TEST_F(TestMockJournal, GetCachedClientError) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockJournalImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+
+  ::journal::MockJournaler mock_journaler;
+  expect_construct_journaler(mock_journaler);
+  expect_init_journaler(mock_journaler, 0);
+  expect_get_journaler_cached_client(mock_journaler, -ENOENT);
+  ASSERT_EQ(-ENOENT, when_open(mock_journal));
+}
+
+TEST_F(TestMockJournal, GetTagsError) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockJournalImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+
+  ::journal::MockJournaler mock_journaler;
+  expect_construct_journaler(mock_journaler);
+  expect_init_journaler(mock_journaler, 0);
+  expect_get_journaler_cached_client(mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, -EBADMSG);
+  ASSERT_EQ(-EBADMSG, when_open(mock_journal));
+}
+
 TEST_F(TestMockJournal, ReplayCompleteError) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
@@ -548,6 +641,8 @@ TEST_F(TestMockJournal, ReplayCompleteError) {
   ::journal::MockJournaler mock_journaler;
   expect_construct_journaler(mock_journaler);
   expect_init_journaler(mock_journaler, 0);
+  expect_get_journaler_cached_client(mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler, {
       std::bind(&invoke_replay_complete, _1, -EINVAL)
@@ -560,6 +655,8 @@ TEST_F(TestMockJournal, ReplayCompleteError) {
   // replay failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
   expect_init_journaler(mock_journaler, 0);
+  expect_get_journaler_cached_client(mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler, {
       std::bind(&invoke_replay_complete, _1, 0)
@@ -589,6 +686,8 @@ TEST_F(TestMockJournal, FlushReplayError) {
   ::journal::MockJournaler mock_journaler;
   expect_construct_journaler(mock_journaler);
   expect_init_journaler(mock_journaler, 0);
+  expect_get_journaler_cached_client(mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler, {
       std::bind(&invoke_replay_ready, _1),
@@ -606,6 +705,8 @@ TEST_F(TestMockJournal, FlushReplayError) {
   // replay flush failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
   expect_init_journaler(mock_journaler, 0);
+  expect_get_journaler_cached_client(mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler, {
       std::bind(&invoke_replay_complete, _1, 0)
@@ -635,6 +736,8 @@ TEST_F(TestMockJournal, StopError) {
   ::journal::MockJournaler mock_journaler;
   expect_construct_journaler(mock_journaler);
   expect_init_journaler(mock_journaler, 0);
+  expect_get_journaler_cached_client(mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler, {
       std::bind(&invoke_replay_complete, _1, 0)
@@ -664,6 +767,8 @@ TEST_F(TestMockJournal, ReplayOnDiskPreFlushError) {
   ::journal::MockJournaler mock_journaler;
   expect_construct_journaler(mock_journaler);
   expect_init_journaler(mock_journaler, 0);
+  expect_get_journaler_cached_client(mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
 
   ::journal::ReplayHandler *replay_handler = nullptr;
   expect_start_replay(
@@ -688,6 +793,8 @@ TEST_F(TestMockJournal, ReplayOnDiskPreFlushError) {
   // replay write-to-disk failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
   expect_init_journaler(mock_journaler, 0);
+  expect_get_journaler_cached_client(mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler, {
       std::bind(&invoke_replay_complete, _1, 0)
@@ -738,6 +845,8 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
   ::journal::MockJournaler mock_journaler;
   expect_construct_journaler(mock_journaler);
   expect_init_journaler(mock_journaler, 0);
+  expect_get_journaler_cached_client(mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler, {
       std::bind(&invoke_replay_ready, _1),
@@ -759,6 +868,8 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
   // replay write-to-disk failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
   expect_init_journaler(mock_journaler, 0);
+  expect_get_journaler_cached_client(mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler, {
       std::bind(&invoke_replay_complete, _1, 0)

@@ -21,6 +21,38 @@ struct rgw_mdlog_info {
 };
 
 
+struct rgw_mdlog_entry {
+  string id;
+  string section;
+  string name;
+  utime_t timestamp;
+  RGWMetadataLogData log_data;
+
+  void decode_json(JSONObj *obj);
+
+  bool convert_from(cls_log_entry& le) {
+    id = le.id;
+    section = le.section;
+    name = le.name;
+    timestamp = le.timestamp;
+    try {
+      bufferlist::iterator iter = le.data.begin();
+      ::decode(log_data, iter);
+    } catch (buffer::error& err) {
+      return false;
+    }
+    return true;
+  }
+};
+
+struct rgw_mdlog_shard_data {
+  string marker;
+  bool truncated;
+  vector<rgw_mdlog_entry> entries;
+
+  void decode_json(JSONObj *obj);
+};
+
 class RGWAsyncRadosProcessor;
 class RGWMetaSyncStatusManager;
 class RGWMetaSyncCR;
@@ -167,7 +199,7 @@ public:
                    RGWMetaSyncStatusManager *_sm)
     : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
       store(_store), conn(NULL), async_rados(async_rados),
-      http_manager(store->ctx(), &completion_mgr),
+      http_manager(store->ctx(), completion_mgr),
       status_manager(_sm), error_logger(NULL), meta_sync_cr(NULL) {}
 
   ~RGWRemoteMetaLog();
@@ -176,6 +208,8 @@ public:
   void finish();
 
   int read_log_info(rgw_mdlog_info *log_info);
+  int read_master_log_shards_info(string *master_period, map<int, RGWMetadataLogInfo> *shards_info);
+  int read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result);
   int read_sync_status();
   int init_sync_status();
   int run_sync();
@@ -227,6 +261,15 @@ public:
 
   int read_sync_status() { return master_log.read_sync_status(); }
   int init_sync_status() { return master_log.init_sync_status(); }
+  int read_log_info(rgw_mdlog_info *log_info) {
+    return master_log.read_log_info(log_info);
+  }
+  int read_master_log_shards_info(string *master_period, map<int, RGWMetadataLogInfo> *shards_info) {
+    return master_log.read_master_log_shards_info(master_period, shards_info);
+  }
+  int read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result) {
+    return master_log.read_master_log_shards_next(period, shard_markers, result);
+  }
 
   int run() { return master_log.run_sync(); }
 
@@ -375,6 +418,23 @@ public:
   int operate();
 };
 
+class RGWShardCollectCR : public RGWCoroutine {
+  CephContext *cct;
+
+  int cur_shard;
+  int current_running;
+  int max_concurrent;
+  int status;
+
+public:
+  RGWShardCollectCR(CephContext *_cct, int _max_concurrent) : RGWCoroutine(_cct),
+                                                             current_running(0),
+                                                             max_concurrent(_max_concurrent),
+                                                             status(0) {}
+
+  virtual bool spawn_next() = 0;
+  int operate();
+};
 
 
 #endif

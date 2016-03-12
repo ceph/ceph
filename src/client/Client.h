@@ -30,6 +30,7 @@ using std::set;
 using std::map;
 using std::fstream;
 
+#include "include/unordered_set.h"
 #include "include/unordered_map.h"
 
 #include "include/filepath.h"
@@ -56,7 +57,7 @@ using std::fstream;
 #include "InodeRef.h"
 #include "UserGroups.h"
 
-class MDSMap;
+class FSMap;
 class MonClient;
 
 class CephContext;
@@ -292,6 +293,10 @@ protected:
   map<mds_rank_t, MetaSession*> mds_sessions;  // mds -> push seq
   list<Cond*> waiting_for_mdsmap;
 
+  // FSMap, for when using mds_command
+  list<Cond*> waiting_for_fsmap;
+  FSMap *fsmap;
+
   // MDS command state
   std::map<ceph_tid_t, CommandOp> commands;
   void handle_command_reply(MCommandReply *m);
@@ -421,6 +426,8 @@ protected:
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds
   ceph::unordered_map<int, Fh*> fd_map;
+  set<Fh*> ll_unclosed_fh_set;
+  ceph::unordered_set<dir_result_t*> opened_dirs;
   
   int get_fd() {
     int fd = free_fd_set.range_start();
@@ -568,6 +575,7 @@ protected:
 
   // messaging
   void handle_mds_map(class MMDSMap *m);
+  void handle_fs_map(class MFSMap *m);
   void handle_osd_map(class MOSDMap *m);
 
   void handle_lease(MClientLease *m);
@@ -867,6 +875,9 @@ private:
   int _posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl, int uid, int gid);
   int _posix_acl_chmod(Inode *in, mode_t mode, int uid, int gid);
   int _posix_acl_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
+
+  mds_rank_t _get_random_up_mds() const;
+
 public:
   int mount(const std::string &mount_root, bool require_mds=false);
   void unmount();

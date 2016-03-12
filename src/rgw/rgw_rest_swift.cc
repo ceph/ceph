@@ -891,38 +891,49 @@ static void dump_object_metadata(struct req_state * const s,
 				 map<string, bufferlist> attrs)
 {
   map<string, string> response_attrs;
-  map<string, string>::const_iterator riter;
-  map<string, bufferlist>::iterator iter;
 
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    const char *name = iter->first.c_str();
-    map<string, string>::const_iterator aiter = rgw_to_http_attrs.find(name);
+  for (auto kv : attrs) {
+    const char * name = kv.first.c_str();
+    const auto aiter = rgw_to_http_attrs.find(name);
 
-    if (aiter != rgw_to_http_attrs.end()) {
-      response_attrs[aiter->second] = iter->second.c_str();
+    if (aiter != std::end(rgw_to_http_attrs)) {
+      response_attrs[aiter->second] = kv.second.c_str();
     } else if (strncmp(name, RGW_ATTR_META_PREFIX,
 		       sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
       name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-      STREAM_IO(s)->print("X-Object-Meta-%s: %s\r\n",
-			  name, iter->second.c_str());
+      STREAM_IO(s)->print("X-Object-Meta-%s: %s\r\n", name,
+                          kv.second.c_str());
     }
   }
 
-  for (riter = response_attrs.begin(); riter != response_attrs.end();
-       ++riter) {
-    STREAM_IO(s)->print("%s: %s\r\n", riter->first.c_str(),
-			riter->second.c_str());
+  /* Handle override and fallback for Content-Disposition HTTP header.
+   * At the moment this will be used only by TempURL of the Swift API. */
+  const auto cditer = rgw_to_http_attrs.find(RGW_ATTR_CONTENT_DISP);
+  if (cditer != std::end(rgw_to_http_attrs)) {
+    const auto& name = cditer->second;
+
+    if (!s->content_disp.override.empty()) {
+      response_attrs[name] = s->content_disp.override;
+    } else if (!s->content_disp.fallback.empty()
+        && response_attrs.find(name) == std::end(response_attrs)) {
+      response_attrs[name] = s->content_disp.fallback;
+    }
   }
 
-  iter = attrs.find(RGW_ATTR_DELETE_AT);
-  if (iter != attrs.end()) {
+  for (const auto kv : response_attrs) {
+    STREAM_IO(s)->print("%s: %s\r\n", kv.first.c_str(), kv.second.c_str());
+  }
+
+  const auto iter = attrs.find(RGW_ATTR_DELETE_AT);
+  if (iter != std::end(attrs)) {
     utime_t delete_at;
     try {
       ::decode(delete_at, iter->second);
       STREAM_IO(s)->print("X-Delete-At: %lu\r\n", delete_at.sec());
     } catch (buffer::error& err) {
-      dout(0) << "ERROR: cannot decode object's " RGW_ATTR_DELETE_AT
-	" attr, ignoring" << dendl;
+      ldout(s->cct, 0) << "ERROR: cannot decode object's " RGW_ATTR_DELETE_AT
+                          " attr, ignoring"
+                       << dendl;
     }
   }
 }
@@ -1510,9 +1521,27 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
 
   next_tok(req, ver, '/');
 
-  string tenant;
-  if (!tenant_path.empty()) {
-    next_tok(req, tenant, '/');
+  if (!tenant_path.empty() || g_conf->rgw_swift_account_in_url) {
+    string account_name;
+    next_tok(req, account_name, '/');
+
+    /* Erase all pre-defined prefixes like "AUTH_" or "KEY_". */
+    const vector<string> skipped_prefixes = { "AUTH_", "KEY_" };
+
+    for (const auto pfx : skipped_prefixes) {
+      const size_t comp_len = min(account_name.length(), pfx.length());
+      if (account_name.compare(0, comp_len, pfx) == 0) {
+        /* Prefix is present. Drop it. */
+        account_name = account_name.substr(comp_len);
+        break;
+      }
+    }
+
+    if (account_name.empty()) {
+      return -ERR_PRECONDITION_FAILED;
+    } else {
+      s->account_name = account_name;
+    }
   }
 
   s->os_auth_token = s->info.env->get("HTTP_X_AUTH_TOKEN");

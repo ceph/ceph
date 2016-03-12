@@ -44,6 +44,15 @@ public:
   virtual void send_response_end();
 };
 
+class RGWGetUsage_ObjStore_S3 : public RGWGetUsage_ObjStore {
+public:
+  RGWGetUsage_ObjStore_S3() {}
+  ~RGWGetUsage_ObjStore_S3() {}
+
+  int get_params() ;
+  virtual void send_response();
+};
+
 class RGWListBucket_ObjStore_S3 : public RGWListBucket_ObjStore {
   bool objs_container;
 public:
@@ -467,6 +476,9 @@ public:
 
 class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {
 protected:
+    bool is_usage_op() {
+    return s->info.args.exists("usage");
+  }
   RGWOp *op_get();
   RGWOp *op_head();
 public:

@@ -106,15 +106,43 @@ flush()
     ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok ${cmd}
 }
 
+get_position()
+{
+    local id=$1
+
+    # Parse line like below, looking for the first entry_tid
+    # [id=, commit_position=[positions=[[object_number=1, tag_tid=3, entry_tid=9], [object_number=0, tag_tid=3, entry_tid=8], [object_number=3, tag_tid=3, entry_tid=7], [object_number=2, tag_tid=3, entry_tid=6]]]]
+
+    local status_log=${TEMPDIR}/${RMT_POOL}-${IMAGE}.status
+    rbd -p ${RMT_POOL} journal status --image ${IMAGE} | tee ${status_log} >&2
+    sed -Ee 's/[][,]/ /g' ${status_log} |
+	awk '$1 == "id='${id}'" {
+               for (i = 1; i < NF; i++) {
+                 if ($i ~ /entry_tid=/) {
+                   print $i;
+                   exit
+                 }
+               }
+             }'
+}
+
+get_master_position()
+{
+    get_position ''
+}
+
+get_mirror_position()
+{
+    get_position "${CLIENT_ID}"
+}
+
 wait_for_replay_complete()
 {
     for s in 0.2 0.4 0.8 1.6 2 2 4 4 8; do
 	sleep ${s}
 	flush
-	local status_log=${TEMPDIR}/${RMT_POOL}-${IMAGE}.status
-	rbd -p ${RMT_POOL} journal status --image ${IMAGE} | tee ${status_log}
-	local master_pos=`sed -nEe 's/^.*id=,.*entry_tid=([0-9]+).*$/\1/p' ${status_log}`
-	local mirror_pos=`sed -nEe 's/^.*id='${CLIENT_ID}',.*entry_tid=([0-9]+).*$/\1/p' ${status_log}`
+	master_pos=$(get_master_position)
+	mirror_pos=$(get_mirror_position)
 	test -n "${master_pos}" -a "${master_pos}" = "${mirror_pos}" && return 0
     done
     return 1

@@ -240,6 +240,9 @@ int FileStore::lfn_open(const coll_t& cid,
 
   if (create)
     flags |= O_CREAT;
+  if (g_conf->filestore_odsync_write) {
+    flags |= O_DSYNC;
+  }
 
   Index index2;
   if (!index) {
@@ -464,7 +467,9 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
 
     if (!force_clear_omap) {
       if (hardlink == 0) {
-	  wbthrottle.clear_object(o); // should be only non-cache ref
+          if (!m_disable_wbthrottle) {
+	    wbthrottle.clear_object(o); // should be only non-cache ref
+          }
 	  fdcache.clear(o);
 	  return 0;
       } else if (hardlink == 1) {
@@ -483,7 +488,9 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
       if (g_conf->filestore_debug_inject_read_err) {
 	debug_obj_on_delete(o);
       }
-      wbthrottle.clear_object(o); // should be only non-cache ref
+      if (!m_disable_wbthrottle) {
+        wbthrottle.clear_object(o); // should be only non-cache ref
+      }
       fdcache.clear(o);
     } else {
       /* Ensure that replay of this op doesn't result in the object_map
@@ -519,6 +526,8 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   fdcache(g_ceph_context),
   wbthrottle(g_ceph_context),
   next_osr_id(0),
+  m_disable_wbthrottle(g_conf->filestore_odsync_write || 
+                      !g_conf->filestore_wbthrottle_enable),
   throttle_ops(g_conf->filestore_caller_concurrency),
   throttle_bytes(g_conf->filestore_caller_concurrency),
   m_ondisk_finisher_num(g_conf->filestore_ondisk_finisher_threads),
@@ -752,7 +761,9 @@ void FileStore::create_backend(long f_type)
   switch (f_type) {
 #if defined(__linux__)
   case BTRFS_SUPER_MAGIC:
-    wbthrottle.set_fs(WBThrottle::BTRFS);
+    if (!m_disable_wbthrottle){
+      wbthrottle.set_fs(WBThrottle::BTRFS);
+    }
     break;
 
   case XFS_SUPER_MAGIC:
@@ -1466,6 +1477,7 @@ int FileStore::mount()
 
   op_fd = read_op_seq(&initial_op_seq);
   if (op_fd < 0) {
+    ret = op_fd;
     derr << "FileStore::mount: read_op_seq failed" << dendl;
     goto close_current_fd;
   }
@@ -1482,6 +1494,7 @@ int FileStore::mount()
     // from it.
     int r = ::creat(nosnapfn, 0644);
     if (r < 0) {
+      ret = -errno;
       derr << "FileStore::mount: failed to create current/nosnap" << dendl;
       goto close_current_fd;
     }
@@ -1594,8 +1607,14 @@ int FileStore::mount()
       index->cleanup();
     }
   }
-
-  wbthrottle.start();
+  if (!m_disable_wbthrottle) {
+    wbthrottle.start();
+  } else {
+    dout(0) << "mount INFO: WbThrottle is disabled" << dendl;
+    if (g_conf->filestore_odsync_write) {
+      dout(0) << "mount INFO: O_DSYNC write is enabled" << dendl;
+    }
+  }
   sync_thread.create("filestore_sync");
 
   if (!(generic_flags & SKIP_JOURNAL_REPLAY)) {
@@ -1654,8 +1673,9 @@ stop_sync:
   sync_cond.Signal();
   lock.Unlock();
   sync_thread.join();
-
-  wbthrottle.stop();
+  if (!m_disable_wbthrottle) {
+    wbthrottle.stop();
+  }
 close_current_fd:
   VOID_TEMP_FAILURE_RETRY(::close(current_fd));
   current_fd = -1;
@@ -1722,7 +1742,9 @@ int FileStore::umount()
   sync_cond.Signal();
   lock.Unlock();
   sync_thread.join();
-  wbthrottle.stop();
+  if (!m_disable_wbthrottle){
+    wbthrottle.stop();
+  }
   op_tp.stop();
 
   journal_stop();
@@ -1838,7 +1860,9 @@ void FileStore::op_queue_release_throttle(Op *o)
 
 void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 {
-  wbthrottle.throttle();
+  if (!m_disable_wbthrottle) {
+    wbthrottle.throttle();
+  }
   // inject a stall?
   if (g_conf->filestore_inject_stall) {
     int orig = g_conf->filestore_inject_stall;
@@ -3219,12 +3243,16 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
     int rc = backend->_crc_update_write(**fd, offset, len, bl);
     assert(rc >= 0);
   }
-
-  // flush?
-  if (!replaying &&
-      g_conf->filestore_wbthrottle_enable)
+ 
+  if (replaying || m_disable_wbthrottle) {
+    if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED) {
+        posix_fadvise(**fd, 0, 0, POSIX_FADV_DONTNEED);
+    }
+  } else {
     wbthrottle.queue_wb(fd, oid, offset, len,
-			  fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+        fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+  }
+ 
   lfn_close(fd);
 
  out:
@@ -3239,6 +3267,7 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
 
 #ifdef CEPH_HAVE_FALLOCATE
 # if !defined(DARWIN) && !defined(__FreeBSD__)
+#    ifdef FALLOC_FL_KEEP_SIZE
   // first try to punch a hole.
   FDRef fd;
   ret = lfn_open(cid, oid, false, &fd);
@@ -3247,7 +3276,7 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
   }
 
   // first try fallocate
-  ret = fallocate(**fd, FALLOC_FL_PUNCH_HOLE, offset, len);
+  ret = fallocate(**fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE, offset, len);
   if (ret < 0)
     ret = -errno;
   lfn_close(fd);
@@ -3261,6 +3290,7 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
     goto out;  // yay!
   if (ret != -EOPNOTSUPP)
     goto out;  // some other error
+#    endif
 # endif
 #endif
 
@@ -3730,7 +3760,9 @@ void FileStore::sync_entry()
       logger->tinc(l_os_commit_len, dur);
 
       apply_manager.commit_finish();
-      wbthrottle.clear();
+      if (!m_disable_wbthrottle) {
+        wbthrottle.clear();
+      }
 
       logger->set(l_os_committing, 0);
 

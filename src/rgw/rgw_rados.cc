@@ -150,20 +150,20 @@ int RGWZoneGroup::create_default(bool old_format)
 
   int r = zone_params.init(cct, store, false);
   if (r < 0) {
-    derr << "create_default: error initializing zone params: " << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "create_default: error initializing zone params: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
   r = zone_params.create_default();
   if (r < 0 && r != -EEXIST) {
-    derr << "create_default: error in create_default  zone params: " << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "create_default: error in create_default  zone params: " << cpp_strerror(-r) << dendl;
     return r;
   } else if (r == -EEXIST) {
-    ldout(cct, 0) << "zone_params::create_default() returned -EEXIST, we raced with another default zone_params creation" << dendl;
+    ldout(cct, 10) << "zone_params::create_default() returned -EEXIST, we raced with another default zone_params creation" << dendl;
     zone_params.clear_id();
     r = zone_params.init(cct, store);
     if (r < 0) {
-      derr << "create_default: error in init existing zone params: " << cpp_strerror(-r) << dendl;
+      ldout(cct, 0) << "create_default: error in init existing zone params: " << cpp_strerror(-r) << dendl;
       return r;
     }
     ldout(cct, 20) << "zone_params::create_default() " << zone_params.get_name() << " id " << zone_params.get_id()
@@ -177,12 +177,12 @@ int RGWZoneGroup::create_default(bool old_format)
   
   r = create();
   if (r < 0 && r != -EEXIST) {
-    derr << "error storing zone group info: " << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "error storing zone group info: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
   if (r == -EEXIST) {
-    ldout(cct, 0) << "create_default() returned -EEXIST, we raced with another zonegroup creation" << dendl;
+    ldout(cct, 10) << "create_default() returned -EEXIST, we raced with another zonegroup creation" << dendl;
     id.clear();
     r = init(cct, store);
     if (r < 0) {
@@ -323,7 +323,7 @@ int RGWZoneGroup::remove_zone(const RGWZoneParams& zone_params)
   map<string, RGWZone>::iterator iter = zones.find(zone_params.get_id());
 
   if (iter == zones.end()) {
-    lderr(cct) << "zone " << zone_params.get_name() << " " << zone_params.get_id() << " doesn't exists "<< dendl;
+    ldout(cct, 0) << "zone " << zone_params.get_name() << " " << zone_params.get_id() << " doesn't exists "<< dendl;
     return -ENOENT;
   }
 
@@ -341,7 +341,7 @@ int RGWZoneGroup::read_default_id(string& default_id, bool old_format)
     RGWRealm realm;
     int ret = realm.init(cct, store);
     if (ret < 0) {
-      lderr(cct) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
+      ldout(cct, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
       return -ENOENT;
     }
     realm_id = realm.get_id();
@@ -357,7 +357,7 @@ int RGWZoneGroup::set_as_default()
     RGWRealm realm;
     int ret = realm.init(cct, store);
     if (ret < 0) {
-      lderr(cct) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
+      ldout(cct, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
       return -EINVAL;
     }
     realm_id = realm.get_id();
@@ -391,7 +391,7 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, 
     } else if (!old_format) {
       r = read_id(name, id);
       if (r < 0) {
-	lderr(cct) << "error in read_id for id " << id << " : " << cpp_strerror(-r) << dendl;
+	ldout(cct, 0) << "error in read_id for id " << id << " : " << cpp_strerror(-r) << dendl;
 	return r;
       }
     }
@@ -415,7 +415,7 @@ int RGWSystemMetaObj::read_default(RGWDefaultSystemMetaObjInfo& default_info, co
     bufferlist::iterator iter = bl.begin();
     ::decode(default_info, iter);
   } catch (buffer::error& err) {
-    derr << "error decoding data from " << pool << ":" << oid << dendl;
+    ldout(cct, 0) << "error decoding data from " << pool << ":" << oid << dendl;
     return -EIO;
   }
 
@@ -502,7 +502,7 @@ int RGWSystemMetaObj::delete_obj(bool old_format)
     rgw_obj default_named_obj(pool, oid);
     ret = store->delete_system_obj(default_named_obj);
     if (ret < 0) {
-      lderr(cct) << "Error delete default obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
+      ldout(cct, 0) << "Error delete default obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
       return ret;
     }
   }
@@ -511,7 +511,7 @@ int RGWSystemMetaObj::delete_obj(bool old_format)
     rgw_obj object_name(pool, oid);
     ret = store->delete_system_obj(object_name);
     if (ret < 0) {
-      lderr(cct) << "Error delete obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
+      ldout(cct, 0) << "Error delete obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
       return ret;
     }
   }
@@ -526,7 +526,7 @@ int RGWSystemMetaObj::delete_obj(bool old_format)
   rgw_obj object_id(pool, oid);
   ret = store->delete_system_obj(object_id);
   if (ret < 0) {
-    lderr(cct) << "Error delete object id " << id << ": " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "Error delete object id " << id << ": " << cpp_strerror(-ret) << dendl;
   }
 
   return ret;
@@ -555,19 +555,19 @@ int RGWSystemMetaObj::rename(const string& new_name)
     return -EEXIST;
   }
   if (ret < 0 && ret != -ENOENT) {
-    lderr(cct) << "Error read_id " << new_name << ": " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "Error read_id " << new_name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
   string old_name = name;
   name = new_name;
   ret = update();
   if (ret < 0) {
-    lderr(cct) << "Error storing new obj info " << new_name << ": " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "Error storing new obj info " << new_name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
   ret = store_name(true);
   if (ret < 0) {
-    lderr(cct) << "Error storing new name " << new_name << ": " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "Error storing new name " << new_name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
   /* delete old name */
@@ -577,7 +577,7 @@ int RGWSystemMetaObj::rename(const string& new_name)
   rgw_obj old_name_obj(pool, oid);
   ret = store->delete_system_obj(old_name_obj);
   if (ret < 0) {
-    lderr(cct) << "Error delete old obj name  " << old_name << ": " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "Error delete old obj name  " << old_name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -596,7 +596,7 @@ int RGWSystemMetaObj::read_info(const string& obj_id, bool old_format)
   RGWObjectCtx obj_ctx(store);
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
-    lderr(cct) << "failed reading obj info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "failed reading obj info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -628,10 +628,10 @@ int RGWSystemMetaObj::create(bool exclusive)
   /* check to see the name is not used */
   ret = read_id(name, id);
   if (exclusive && ret == 0) {
-    ldout(cct, 0) << "ERROR: name " << name << " already in use for obj id " << id << dendl;
+    ldout(cct, 10) << "ERROR: name " << name << " already in use for obj id " << id << dendl;
     return -EEXIST;
   } else if ( ret < 0 && ret != -ENOENT) {
-    lderr(cct) << "failed reading obj id  " << id << ": " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "failed reading obj id  " << id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -724,13 +724,13 @@ int RGWRealm::create(bool exclusive)
     period = RGWPeriod(current_period, 0);
     int ret = period.init(cct, store, id, name);
     if (ret < 0) {
-      lderr(cct) << "ERROR: failed to init period " << current_period << dendl;
+      ldout(cct, 0) << "ERROR: failed to init period " << current_period << dendl;
       return ret;
     }
   }
   ret = set_current_period(period);
   if (ret < 0) {
-    lderr(cct) << "ERROR: failed set current period " << current_period << dendl;
+    ldout(cct, 0) << "ERROR: failed set current period " << current_period << dendl;
     return ret;
   }
 
@@ -800,12 +800,12 @@ int RGWRealm::set_current_period(RGWPeriod& period)
 {
   // update realm epoch to match the period's
   if (epoch > period.get_realm_epoch()) {
-    lderr(cct) << "ERROR: set_current_period with old realm epoch "
+    ldout(cct, 0) << "ERROR: set_current_period with old realm epoch "
         << period.get_realm_epoch() << ", current epoch=" << epoch << dendl;
     return -EINVAL;
   }
   if (epoch == period.get_realm_epoch() && current_period != period.get_id()) {
-    lderr(cct) << "ERROR: set_current_period with same realm epoch "
+    ldout(cct, 0) << "ERROR: set_current_period with same realm epoch "
         << period.get_realm_epoch() << ", but different period id "
         << period.get_id() << " != " << current_period << dendl;
     return -EINVAL;
@@ -841,13 +841,13 @@ int RGWRealm::notify_zone(bufferlist& bl)
   librados::IoCtx ctx;
   int r = store->get_rados_handle()->ioctx_create(pool.c_str(), ctx);
   if (r < 0) {
-    lderr(cct) << "Failed to open pool " << pool << dendl;
+    ldout(cct, 0) << "Failed to open pool " << pool << dendl;
     return r;
   }
   // send a notify on the realm object
   r = ctx.notify2(get_control_oid(), bl, 0, nullptr);
   if (r < 0) {
-    lderr(cct) << "Realm notify failed with " << r << dendl;
+    ldout(cct, 0) << "Realm notify failed with " << r << dendl;
     return r;
   }
   return 0;
@@ -892,8 +892,7 @@ int RGWPeriod::init(CephContext *_cct, RGWRados *_store, bool setup_obj)
     RGWRealm realm(realm_id, realm_name);
     int ret = realm.init(cct, store);
     if (ret < 0) {
-      derr << "RGWPeriod::init failed to init realm " << realm_id << " for period " << id << dendl;
-      ldout(cct, 0) << "failed to init realm " << realm_name  << " id " << realm_id << " : " <<
+      ldout(cct, 0) << "RGWPeriod::init failed to init realm " << realm_name  << " id " << realm_id << " : " <<
 	cpp_strerror(-ret) << dendl;
       return ret;
     }
@@ -904,7 +903,7 @@ int RGWPeriod::init(CephContext *_cct, RGWRados *_store, bool setup_obj)
   if (!epoch) {
     int ret = use_latest_epoch();
     if (ret < 0) {
-      derr << "failed to use_latest_epoch period id " << id << " realm " << realm_name  << " id " << realm_id
+      ldout(cct, 0) << "failed to use_latest_epoch period id " << id << " realm " << realm_name  << " id " << realm_id
 	   << " : " << cpp_strerror(-ret) << dendl;
       return ret;
     }
@@ -967,14 +966,14 @@ int RGWPeriod::read_latest_epoch(RGWPeriodLatestEpochInfo& info)
   RGWObjectCtx obj_ctx(store);
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
-    derr << "error read_lastest_epoch " << pool << ":" << oid << dendl;
+    ldout(cct, 0) << "error read_lastest_epoch " << pool << ":" << oid << dendl;
     return ret;
   }
   try {
     bufferlist::iterator iter = bl.begin();
     ::decode(info, iter);
   } catch (buffer::error& err) {
-    derr << "error decoding data from " << pool << ":" << oid << dendl;
+    ldout(cct, 0) << "error decoding data from " << pool << ":" << oid << dendl;
     return -EIO;
   }
 
@@ -1033,7 +1032,7 @@ int RGWPeriod::delete_obj()
   rgw_obj object_id(pool, get_period_oid());
   int ret = store->delete_system_obj(object_id);
   if (ret < 0) {
-    lderr(cct) << "Error delete object id " << id << ": " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "Error delete object id " << id << ": " << cpp_strerror(-ret) << dendl;
   }
 
   return ret;
@@ -1049,7 +1048,7 @@ int RGWPeriod::read_info()
   RGWObjectCtx obj_ctx(store);
   int ret = rgw_get_system_obj(store, obj_ctx, pool, get_period_oid(), bl, NULL, NULL);
   if (ret < 0) {
-    lderr(cct) << "failed reading obj info from " << pool << ":" << get_period_oid() << ": " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "failed reading obj info from " << pool << ":" << get_period_oid() << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -1145,7 +1144,7 @@ int RGWPeriod::use_next_epoch()
   if (ret == -ENOENT) {
     ret = create();
     if (ret < 0) {
-      derr << "Error creating new epoch " << epoch << dendl;
+      ldout(cct, 0) << "Error creating new epoch " << epoch << dendl;
       return ret;
     }
   }
@@ -1245,7 +1244,7 @@ int RGWPeriod::update_sync_status()
 {
   // must be new period's master zone to write sync status
   if (master_zone != store->get_zone_params().get_id()) {
-    lderr(cct) << "my zone " << store->get_zone_params().get_id()
+    ldout(cct, 0) << "my zone " << store->get_zone_params().get_id()
         << " is not period's master zone " << master_zone << dendl;
     return -EINVAL;
   }
@@ -1262,7 +1261,7 @@ int RGWPeriod::update_sync_status()
     RGWMetadataLogInfo info;
     int r = mdlog->get_info(i, &info);
     if (r < 0) {
-      lderr(cct) << "period failed to get metadata log info for shard " << i
+      ldout(cct, 0) << "period failed to get metadata log info for shard " << i
           << ": " << cpp_strerror(-r) << dendl;
       return r;
     }
@@ -1279,20 +1278,20 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
   ldout(cct, 20) << __func__ << " realm " << realm.get_id() << " period " << current_period.get_id() << dendl;
   // gateway must be in the master zone to commit
   if (master_zone != store->get_zone_params().get_id()) {
-    lderr(cct) << "period commit on zone " << store->get_zone_params().get_id()
+    ldout(cct, 0) << "period commit on zone " << store->get_zone_params().get_id()
         << ", not period's master zone " << master_zone << dendl;
     return -EINVAL;
   }
   // period predecessor must match current period
   if (predecessor_uuid != current_period.get_id()) {
-    lderr(cct) << "period predecessor " << predecessor_uuid
+    ldout(cct, 0) << "period predecessor " << predecessor_uuid
         << " does not match current period " << current_period.get_id()
         << dendl;
     return -EINVAL;
   }
   // realm epoch must be 1 greater than current period
   if (realm_epoch != current_period.get_realm_epoch() + 1) {
-    lderr(cct) << "period's realm epoch " << realm_epoch
+    ldout(cct, 0) << "period's realm epoch " << realm_epoch
         << " does not come directly after current realm epoch "
         << current_period.get_realm_epoch() << dendl;
     return -EINVAL;
@@ -1302,20 +1301,20 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
     // store the current metadata sync status in the period
     int r = update_sync_status();
     if (r < 0) {
-      lderr(cct) << "failed to update metadata sync status: "
+      ldout(cct, 0) << "failed to update metadata sync status: "
           << cpp_strerror(-r) << dendl;
       return r;
     }
     // create an object with a new period id
     r = create(true);
     if (r < 0) {
-      lderr(cct) << "failed to create new period: " << cpp_strerror(-r) << dendl;
+      ldout(cct, 0) << "failed to create new period: " << cpp_strerror(-r) << dendl;
       return r;
     }
     // set as current period
     r = realm.set_current_period(*this);
     if (r < 0) {
-      lderr(cct) << "failed to update realm's current period: "
+      ldout(cct, 0) << "failed to update realm's current period: "
           << cpp_strerror(-r) << dendl;
       return r;
     }
@@ -1326,7 +1325,7 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
   }
   // period must be based on current epoch
   if (epoch != current_period.get_epoch()) {
-    lderr(cct) << "period epoch " << epoch << " does not match "
+    ldout(cct, 0) << "period epoch " << epoch << " does not match "
         "predecessor epoch " << current_period.get_epoch() << dendl;
     return -EINVAL;
   }
@@ -1338,18 +1337,18 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
   // write the period to rados
   int r = store_info(false);
   if (r < 0) {
-    lderr(cct) << "failed to store period: " << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "failed to store period: " << cpp_strerror(-r) << dendl;
     return r;
   }
   // set as latest epoch
   r = set_latest_epoch(epoch);
   if (r < 0) {
-    lderr(cct) << "failed to set latest epoch: " << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "failed to set latest epoch: " << cpp_strerror(-r) << dendl;
     return r;
   }
   r = reflect();
   if (r < 0) {
-    lderr(cct) << "failed to update local objects: " << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "failed to update local objects: " << cpp_strerror(-r) << dendl;
     return r;
   }
   ldout(cct, 4) << "Committed new epoch " << epoch
@@ -1443,7 +1442,7 @@ int RGWZoneParams::fix_pool_names()
   list<string> zones;
   int r = store->list_zones(zones);
   if (r < 0) {
-    ldout(cct, 0) << "WARNING: store->list_zones() returned r=" << r << dendl;
+    ldout(cct, 10) << "WARNING: store->list_zones() returned r=" << r << dendl;
   }
 
   set<string> pool_names;
@@ -1482,14 +1481,14 @@ int RGWZoneParams::create(bool exclusive)
   list<string> zones;
   int r = store->list_zones(zones);
   if (r < 0) {
-    ldout(cct, 0) << "WARNING: store->list_zones() returned r=" << r << dendl;
+    ldout(cct, 10) << "WARNING: store->list_zones() returned r=" << r << dendl;
   }
 
   /* check for old pools config */
   rgw_obj obj(domain_root, avail_pools);
   r = store->raw_obj_stat(obj, NULL, NULL, NULL, NULL, NULL, NULL);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
+    ldout(store->ctx(), 10) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
     /* a new system, let's set new placement info */
     RGWZonePlacementInfo default_placement;
     default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
@@ -1505,21 +1504,15 @@ int RGWZoneParams::create(bool exclusive)
   }
 
   r = RGWSystemMetaObj::create(exclusive);
-  if (r < 0 && r != -EEXIST) {
-    derr << "RGWZoneParams::creat(): error creating default zone params: " << cpp_strerror(-r) << dendl;
+  if (r < 0) {
+    ldout(cct, 0) << "RGWZoneParams::create(): error creating default zone params: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
-  if (r == -EEXIST) {
-    ldout(cct, 0) << "RGWZoneParams::create() returned -EEXIST, we raced with another zone params creation" << dendl;
-    r = read_info(id);
-    if (r < 0) {
-      return r;
-    }
-  } else if (zones.empty()) { /* first zone? maybe, it's a racy check */
+  if (zones.empty()) { /* first zone? maybe, it's a racy check */
     r = set_as_default();
     if (r < 0) {
-      ldout(cct, 0) << "WARNING: failed to set zone as default, r=" << r << dendl;
+      ldout(cct, 10) << "WARNING: failed to set zone as default, r=" << r << dendl;
     }
   }
 
@@ -1579,7 +1572,7 @@ int RGWZoneParams::read_default_id(string& default_id, bool old_format)
     RGWRealm realm;
     int ret = realm.init(cct, store);
     if (ret < 0) {
-      lderr(cct) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
+      ldout(cct, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
       return -ENOENT;
     }
     realm_id = realm.get_id();
@@ -1596,7 +1589,7 @@ int RGWZoneParams::set_as_default()
     RGWRealm realm;
     int ret = realm.init(cct, store);
     if (ret < 0) {
-      lderr(cct) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
+      ldout(cct, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
       return -EINVAL;
     }
     realm_id = realm.get_id();
@@ -1638,8 +1631,6 @@ void RGWPeriodMap::decode(bufferlist::iterator& bl) {
 int RGWPeriodMap::update(const RGWZoneGroup& zonegroup)
 {
   if (zonegroup.is_master && (!master_zonegroup.empty() && zonegroup.get_id() != master_zonegroup)) {
-      derr << "cannot update zonegroup map, master_zonegroup conflict master zonegroup " <<
-	master_zonegroup << dendl;
     return -EINVAL;
   }
   map<string, RGWZoneGroup>::iterator iter = zonegroups.find(zonegroup.get_id());
@@ -2421,7 +2412,13 @@ int RGWPutObjProcessor_Atomic::complete_parts()
 int RGWPutObjProcessor_Atomic::complete_writing_data()
 {
   if (!data_ofs && !immutable_head()) {
-    first_chunk.claim(pending_data_bl);
+    /* only claim if pending_data_bl() is not empty. This is needed because we might be called twice
+     * (e.g., when a retry due to race happens). So a second call to first_chunk.claim() would
+     * clobber first_chunk
+     */
+    if (pending_data_bl.length() > 0) {
+      first_chunk.claim(pending_data_bl);
+    }
     obj_len = (uint64_t)first_chunk.length();
   }
   if (pending_data_bl.length()) {
@@ -2667,7 +2664,7 @@ class RGWMetaNotifierManager : public RGWCoroutinesManager {
 
 public:
   RGWMetaNotifierManager(RGWRados *_store) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
-                                             http_manager(store->ctx(), &completion_mgr) {
+                                             http_manager(store->ctx(), completion_mgr) {
     http_manager.set_threaded();
   }
 
@@ -2694,7 +2691,7 @@ class RGWDataNotifierManager : public RGWCoroutinesManager {
 
 public:
   RGWDataNotifierManager(RGWRados *_store) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
-                                             http_manager(store->ctx(), &completion_mgr) {
+                                             http_manager(store->ctx(), completion_mgr) {
     http_manager.set_threaded();
   }
 
@@ -3062,14 +3059,22 @@ void RGWRados::finalize()
   if (run_sync_thread) {
     Mutex::Locker l(meta_sync_thread_lock);
     meta_sync_processor_thread->stop();
-    delete meta_sync_processor_thread;
-    meta_sync_processor_thread = NULL;
 
     Mutex::Locker dl(data_sync_thread_lock);
-    map<string, RGWDataSyncProcessorThread *>::iterator iter = data_sync_processor_threads.begin();
-    for (; iter != data_sync_processor_threads.end(); ++iter) {
-      RGWDataSyncProcessorThread *thread = iter->second;
+    for (auto iter : data_sync_processor_threads) {
+      RGWDataSyncProcessorThread *thread = iter.second;
       thread->stop();
+    }
+  }
+  if (async_rados) {
+    async_rados->stop();
+  }
+  if (run_sync_thread) {
+    delete meta_sync_processor_thread;
+    meta_sync_processor_thread = NULL;
+    Mutex::Locker dl(data_sync_thread_lock);
+    for (auto iter : data_sync_processor_threads) {
+      RGWDataSyncProcessorThread *thread = iter.second;
       delete thread;
     }
     data_sync_processor_threads.clear();
@@ -3098,7 +3103,6 @@ void RGWRados::finalize()
   delete meta_mgr;
   delete data_log;
   if (async_rados) {
-    async_rados->stop();
     delete async_rados;
   }
   if (use_gc_thread) {
@@ -3234,7 +3238,7 @@ int RGWRados::convert_regionmap()
     bufferlist::iterator iter = bl.begin();
     ::decode(zonegroupmap, iter);
   } catch (buffer::error& err) {
-    derr << "error decoding regionmap from " << pool << ":" << oid << dendl;
+    ldout(cct, 0) << "error decoding regionmap from " << pool << ":" << oid << dendl;
     return -EIO;
   }
   
@@ -3273,7 +3277,7 @@ int RGWRados::replace_region_with_zonegroup()
   if (!cct->_conf->rgw_region.empty() && cct->_conf->rgw_zonegroup.empty()) {
     int ret = cct->_conf->set_val("rgw_zonegroup", cct->_conf->rgw_region, true, false);
     if (ret < 0) {
-      lderr(cct) << "failed to set rgw_zonegroup to " << cct->_conf->rgw_region << dendl;
+      ldout(cct, 0) << "failed to set rgw_zonegroup to " << cct->_conf->rgw_region << dendl;
       return ret;
     }
   }
@@ -3289,12 +3293,12 @@ int RGWRados::replace_region_with_zonegroup()
   RGWZoneGroup default_zonegroup;
   int ret = default_zonegroup.init(cct, this, false, true);
   if (ret < 0) {
-    lderr(cct) << "failed init default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "failed init default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }    
   ret  = default_zonegroup.read_default_id(default_region, true);
   if (ret < 0 && ret != -ENOENT) {
-    lderr(cct) << "failed reading old default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "failed reading old default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -3302,7 +3306,7 @@ int RGWRados::replace_region_with_zonegroup()
   list<string> regions;
   ret = list_regions(regions);
   if (ret < 0 && ret != -ENOENT) {
-    lderr(cct) << "failed to list regions: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "failed to list regions: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   } else if (ret == -ENOENT || regions.empty()) {
     return 0;
@@ -3314,7 +3318,7 @@ int RGWRados::replace_region_with_zonegroup()
       RGWZoneGroup region(*iter);
       int ret = region.init(cct, this, true, true);
       if (ret < 0) {
-	  lderr(cct) << "failed init region "<< *iter << ": " << cpp_strerror(-ret) << dendl;
+	  ldout(cct, 0) << "failed init region "<< *iter << ": " << cpp_strerror(-ret) << dendl;
 	  return ret;
       }
       if (region.is_master) {
@@ -3339,27 +3343,27 @@ int RGWRados::replace_region_with_zonegroup()
     RGWRealm new_realm(new_realm_id,new_realm_name);
     ret = new_realm.init(cct, this, false);
     if (ret < 0) {
-      lderr(cct) << "Error initing new realm: " << cpp_strerror(-ret)  << dendl;
+      ldout(cct, 0) << "Error initing new realm: " << cpp_strerror(-ret)  << dendl;
       return ret;
     }
     ret = new_realm.create();
     if (ret < 0 && ret != -EEXIST) {
-      lderr(cct) << "Error creating new realm: " << cpp_strerror(-ret)  << dendl;
+      ldout(cct, 0) << "Error creating new realm: " << cpp_strerror(-ret)  << dendl;
       return ret;
     }
     ret = new_realm.set_as_default();
     if (ret < 0) {
-      lderr(cct) << "Error setting realm as default: " << cpp_strerror(-ret)  << dendl;
+      ldout(cct, 0) << "Error setting realm as default: " << cpp_strerror(-ret)  << dendl;
       return ret;
     }
     ret = realm.init(cct, this);
     if (ret < 0) {
-      lderr(cct) << "Error initing realm: " << cpp_strerror(-ret)  << dendl;
+      ldout(cct, 0) << "Error initing realm: " << cpp_strerror(-ret)  << dendl;
       return ret;
     }
     ret = current_period.init(cct, this, realm.get_id(), realm.get_name());
     if (ret < 0) {
-      lderr(cct) << "Error initing current period: " << cpp_strerror(-ret)  << dendl;
+      ldout(cct, 0) << "Error initing current period: " << cpp_strerror(-ret)  << dendl;
       return ret;
     }
   }
@@ -3368,33 +3372,31 @@ int RGWRados::replace_region_with_zonegroup()
   /* create zonegroups */
   for (iter = regions.begin(); iter != regions.end(); ++iter)
   {
-    derr << "create zonegroup " << *iter << dendl;
     /* read region info default has no data */
     if (*iter != default_zonegroup_name){
       RGWZoneGroup zonegroup(*iter);
       int ret = zonegroup.init(cct, this, true, true);
       if (ret < 0) {
-	lderr(cct) << "failed init zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+	ldout(cct, 0) << "failed init zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
 	return ret;
       }
       zonegroup.realm_id = realm.get_id();
-      derr << "create zonegroup: name " << *iter << dendl;
       ret = zonegroup.update();
       if (ret < 0 && ret != -EEXIST) {
-	lderr(cct) << "failed to update zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+	ldout(cct, 0) << "failed to update zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
 		   << dendl;
 	return ret;
       }
       ret = zonegroup.update_name();
       if (ret < 0 && ret != -EEXIST) {
-	lderr(cct) << "failed to update_name for zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+	ldout(cct, 0) << "failed to update_name for zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
 		   << dendl;
 	return ret;
       }
       if (zonegroup.get_name() == default_region) {
 	ret = zonegroup.set_as_default();
 	if (ret < 0) {
-	  lderr(cct) << "failed to set_as_default " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+	  ldout(cct, 0) << "failed to set_as_default " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
 		     << dendl;
 	  return ret;
 	}
@@ -3404,18 +3406,18 @@ int RGWRados::replace_region_with_zonegroup()
 	RGWZoneParams zoneparams(iter->first, iter->first);
 	ret = zoneparams.init(cct, this);
 	if (ret < 0) {
-	  lderr(cct) << "failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
+	  ldout(cct, 0) << "failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
 	  return ret;
 	}
 	zonegroup.realm_id = realm.get_id();
 	ret = zoneparams.update();
 	if (ret < 0 && ret != -EEXIST) {
-	  lderr(cct) << "failed to update zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
+	  ldout(cct, 0) << "failed to update zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
 	  return ret;
 	}
 	ret = zoneparams.update_name();
 	if (ret < 0 && ret != -EEXIST) {
-	  lderr(cct) << "failed to init zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
+	  ldout(cct, 0) << "failed to init zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
 	  return ret;
 	}
       }
@@ -3423,20 +3425,19 @@ int RGWRados::replace_region_with_zonegroup()
       if (!current_period.get_id().empty()) {
 	ret = current_period.add_zonegroup(zonegroup);
 	if (ret < 0) {
-	  lderr(cct) << "failed to add zonegroup to current_period: " << cpp_strerror(-ret) << dendl;
+	  ldout(cct, 0) << "failed to add zonegroup to current_period: " << cpp_strerror(-ret) << dendl;
 	  return ret;
 	}
 	ret = current_period.update();
 	if (ret < 0) {
-	  lderr(cct) << "failed to update current_period: " << cpp_strerror(-ret) << dendl;
+	  ldout(cct, 0) << "failed to update current_period: " << cpp_strerror(-ret) << dendl;
 	  return ret;
 	}
       }
 
-      derr << "delete region " << *iter << dendl;
       ret = zonegroup.delete_obj(true);
       if (ret < 0 && ret != -ENOENT) {
-	lderr(cct) << "failed to delete region " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+	ldout(cct, 0) << "failed to delete region " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
 		   << dendl;
 	return ret;
       }
@@ -3460,7 +3461,7 @@ int RGWRados::init_zg_from_period(bool *initialized)
     return 0;
   }
   if (ret < 0) {
-    lderr(cct) << "failed reading zonegroup info: " << " " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "failed reading zonegroup info: " << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }
   ldout(cct, 20) << "period zonegroup name " << zonegroup.get_name() << dendl;
@@ -3473,7 +3474,7 @@ int RGWRados::init_zg_from_period(bool *initialized)
     zonegroup = iter->second;
     ret = zone_params.init(cct, this);
     if (ret < 0 && ret != -ENOENT) {
-      lderr(cct) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
+      ldout(cct, 0) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
       return ret;
     }
   }
@@ -3496,20 +3497,20 @@ int RGWRados::init_zg_from_local(bool *creating_defaults)
 {
   int ret = zonegroup.init(cct, this);
   if ( (ret < 0 && ret != -ENOENT) || (ret == -ENOENT && !cct->_conf->rgw_zonegroup.empty())) {
-    lderr(cct) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   } else if (ret == -ENOENT) {
     *creating_defaults = true;
-    lderr(cct) << "Creating default zonegroup " << dendl;
+    ldout(cct, 10) << "Creating default zonegroup " << dendl;
     ret = zonegroup.create_default();
     if (ret < 0) {
-      lderr(cct) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
+      ldout(cct, 0) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
         << dendl;
       return ret;
     }
     ret = zonegroup.init(cct, this);
     if (ret < 0) {
-      lderr(cct) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
+      ldout(cct, 0) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
         << dendl;
       return ret;
     }
@@ -3530,13 +3531,13 @@ int RGWRados::init_complete()
 {
   int ret = realm.init(cct, this);
   if (ret < 0 && ret != -ENOENT) {
-    lderr(cct) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   } else if (ret != -ENOENT) {
     ldout(cct, 20) << "realm  " << realm.get_name() << " " << realm.get_id() << dendl;
     ret = current_period.init(cct, this, realm.get_id(), realm.get_name());
     if (ret < 0 && ret != -ENOENT) {
-      lderr(cct) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
+      ldout(cct, 0) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
       return ret;
     }
     ldout(cct, 20) << "current period " << current_period.get_id() << dendl;  
@@ -3575,6 +3576,7 @@ int RGWRados::init_complete()
 
   ldout(cct, 10) << "Cannot find current period zone using local zone" << dendl;
   if (creating_defaults && cct->_conf->rgw_zone.empty()) {
+    ldout(cct, 10) << " Using default name "<< default_zone_name << dendl;
     zone_params.set_name(default_zone_name);
   }
 
@@ -3589,7 +3591,7 @@ int RGWRados::init_complete()
       lderr(cct) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << ")" << dendl;
       return -EINVAL;
     }
-    lderr(cct) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << "), switching to local zonegroup configuration" << dendl;
+    ldout(cct, 0) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << "), switching to local zonegroup configuration" << dendl;
     ret = init_zg_from_local(&creating_defaults);
     if (ret < 0) {
       return ret;
@@ -3628,6 +3630,7 @@ int RGWRados::init_complete()
     const string& id = ziter->first;
     RGWZone& z = ziter->second;
     zone_id_by_name[z.name] = id;
+    zone_name_by_id[id] = z.name;
     if (id != zone_id()) {
       if (!z.endpoints.empty()) {
         ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
@@ -3921,14 +3924,12 @@ int RGWRados::init_watch()
 
   if (r == -ENOENT) {
     r = rad->pool_create(control_pool);
-    derr << "init_watch pool_create " << cpp_strerror(-r) << dendl;
     if (r == -EEXIST)
       r = 0;
     if (r < 0)
       return r;
 
     r = rad->ioctx_create(control_pool, control_pool_ctx);
-    derr << "init_watch ioctx_create " << cpp_strerror(-r) << dendl;
     if (r < 0)
       return r;
   }
@@ -10555,7 +10556,6 @@ int RGWRados::list_bi_log_entries(rgw_bucket& bucket, int shard_id, string& mark
   if (r < 0)
     return r;
 
-  vector<string> shard_ids_str;
   map<int, list<rgw_bi_log_entry>::iterator> vcurrents;
   map<int, list<rgw_bi_log_entry>::iterator> vends;
   if (truncated) {

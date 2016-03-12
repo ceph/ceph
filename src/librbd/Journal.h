@@ -13,6 +13,7 @@
 #include "journal/Future.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
+#include "librbd/journal/Types.h"
 #include <algorithm>
 #include <iosfwd>
 #include <list>
@@ -20,6 +21,8 @@
 #include <unordered_map>
 
 class Context;
+class ContextWQ;
+class SafeTimer;
 namespace journal {
 class Journaler;
 }
@@ -32,7 +35,6 @@ class ImageCtx;
 
 namespace journal {
 
-class EventEntry;
 template <typename> class Replay;
 
 template <typename ImageCtxT>
@@ -92,6 +94,9 @@ public:
     STATE_CLOSED
   };
 
+  static const std::string IMAGE_CLIENT_ID;
+  static const std::string LOCAL_MIRROR_UUID;
+
   typedef std::list<AioObjectRequest *> AioObjectRequests;
 
   Journal(ImageCtxT &image_ctx);
@@ -111,6 +116,9 @@ public:
 
   void open(Context *on_finish);
   void close(Context *on_finish);
+
+  bool is_tag_owner() const;
+  void allocate_tag(const std::string &mirror_uuid, Context *on_finish);
 
   void flush_commit_position(Context *on_finish);
 
@@ -238,9 +246,16 @@ private:
     }
   };
 
+  ContextWQ *m_work_queue = nullptr;
+  SafeTimer *m_timer = nullptr;
+  Mutex *m_timer_lock = nullptr;
+
   Journaler *m_journaler;
   mutable Mutex m_lock;
   State m_state;
+  uint64_t m_tag_class = 0;
+  uint64_t m_tag_tid = 0;
+  journal::TagData m_tag_data;
 
   int m_error_result;
   Contexts m_wait_for_state_contexts;
@@ -268,6 +283,7 @@ private:
   void complete_event(typename Events::iterator it, int r);
 
   void handle_initialized(int r);
+  void handle_get_tags(int r);
 
   void handle_replay_ready();
   void handle_replay_complete(int r);

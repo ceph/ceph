@@ -282,6 +282,8 @@ OPTION(mon_daemon_bytes, OPT_U64, 400ul << 20)  // mds, osd message memory cap (
 OPTION(mon_max_log_entries_per_event, OPT_INT, 4096)
 OPTION(mon_reweight_min_pgs_per_osd, OPT_U64, 10)   // min pgs per osd for reweight-by-pg command
 OPTION(mon_reweight_min_bytes_per_osd, OPT_U64, 100*1024*1024)   // min bytes per osd for reweight-by-utilization command
+OPTION(mon_reweight_max_osds, OPT_INT, 4)   // max osds to change per reweight-by-* command
+OPTION(mon_reweight_max_change, OPT_DOUBLE, 0.05)
 OPTION(mon_health_data_update_interval, OPT_FLOAT, 60.0)
 OPTION(mon_health_to_clog, OPT_BOOL, true)
 OPTION(mon_health_to_clog_interval, OPT_INT, 3600)
@@ -400,11 +402,13 @@ OPTION(fuse_atomic_o_trunc, OPT_BOOL, true)
 OPTION(fuse_debug, OPT_BOOL, false)
 OPTION(fuse_multithreaded, OPT_BOOL, true)
 OPTION(fuse_require_active_mds, OPT_BOOL, true) // if ceph_fuse requires active mds server
+OPTION(fuse_syncfs_on_mksnap, OPT_BOOL, true)
 
 OPTION(client_try_dentry_invalidate, OPT_BOOL, true) // the client should try to use dentry invaldation instead of remounting, on kernels it believes that will work for
 OPTION(client_die_on_failed_remount, OPT_BOOL, true)
 OPTION(client_check_pool_perm, OPT_BOOL, true)
 OPTION(client_use_faked_inos, OPT_BOOL, false)
+OPTION(client_mds_namespace, OPT_INT, -1)
 
 OPTION(crush_location, OPT_STR, "")       // whitespace-separated list of key=value pairs describing crush location
 
@@ -543,6 +547,9 @@ OPTION(mds_root_ino_gid, OPT_INT, 0) // The GID of / on new filesystems
 
 OPTION(mds_max_scrub_ops_in_progress, OPT_INT, 5) // the number of simultaneous scrubs allowed
 
+// Maximum number of damaged frags/dentries before whole MDS rank goes damaged
+OPTION(mds_damage_table_max_entries, OPT_INT, 10000)
+
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
 
@@ -632,6 +639,10 @@ OPTION(osd_pool_default_cache_max_evict_check_size, OPT_INT, 10)  // max size to
 OPTION(osd_hit_set_min_size, OPT_INT, 1000)  // min target size for a HitSet
 OPTION(osd_hit_set_max_size, OPT_INT, 100000)  // max target size for a HitSet
 OPTION(osd_hit_set_namespace, OPT_STR, ".ceph-internal") // rados namespace for hit_set tracking
+
+// conservative default throttling values
+OPTION(osd_tier_promote_max_objects_sec, OPT_U64, 5 * 1024*1024)
+OPTION(osd_tier_promote_max_bytes_sec, OPT_U64, 25)
 
 OPTION(osd_tier_default_cache_mode, OPT_STR, "writeback")
 OPTION(osd_tier_default_cache_hit_set_count, OPT_INT, 4)
@@ -870,6 +881,7 @@ OPTION(bdev_inject_crash_flush_delay, OPT_INT, 2) // wait N more seconds on flus
 OPTION(bdev_aio, OPT_BOOL, true)
 OPTION(bdev_aio_poll_ms, OPT_INT, 250)  // milliseconds
 OPTION(bdev_aio_max_queue_depth, OPT_INT, 32)
+OPTION(bdev_block_size, OPT_INT, 4096)
 
 // if yes, osd will unbind all NVMe devices from kernel driver and bind them
 // to the uio_pci_generic driver. The purpose is to prevent the case where
@@ -974,6 +986,9 @@ OPTION(filestore_wbthrottle_xfs_inodes_start_flusher, OPT_U64, 500)
 /// These must be less than the fd limit
 OPTION(filestore_wbthrottle_btrfs_inodes_hard_limit, OPT_U64, 5000)
 OPTION(filestore_wbthrottle_xfs_inodes_hard_limit, OPT_U64, 5000)
+
+//Introduce a O_DSYNC write in the filestore
+OPTION(filestore_odsync_write, OPT_BOOL, false)
 
 // Tests index failure paths
 OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
@@ -1206,6 +1221,7 @@ OPTION(rgw_swift_url_prefix, OPT_STR, "swift") // entry point for which a url is
 OPTION(rgw_swift_auth_url, OPT_STR, "")        // default URL to go and verify tokens for v1 auth (if not using internal swift auth)
 OPTION(rgw_swift_auth_entry, OPT_STR, "auth")  // entry point for which a url is considered a swift auth url
 OPTION(rgw_swift_tenant_name, OPT_STR, "")  // tenant name to use for swift access
+OPTION(rgw_swift_account_in_url, OPT_BOOL, false)  // assume that URL always contain the account (aka tenant) part
 OPTION(rgw_swift_enforce_content_length, OPT_BOOL, false)  // enforce generation of Content-Length even in cost of performance or scalability
 OPTION(rgw_keystone_url, OPT_STR, "")  // url for keystone server
 OPTION(rgw_keystone_admin_token, OPT_STR, "")  // keystone admin token (shared secret)

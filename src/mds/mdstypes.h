@@ -76,9 +76,45 @@
 
 
 typedef int32_t mds_rank_t;
+typedef int32_t fs_cluster_id_t;
+
+
+
 BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
 extern const mds_gid_t MDS_GID_NONE;
+constexpr fs_cluster_id_t FS_CLUSTER_ID_NONE = {-1};
+// The namespace ID of the anonymous default filesystem from legacy systems
+constexpr fs_cluster_id_t FS_CLUSTER_ID_ANONYMOUS = {0};
 extern const mds_rank_t MDS_RANK_NONE;
+
+class mds_role_t
+{
+  public:
+  mds_rank_t rank;
+  fs_cluster_id_t fscid;
+  mds_role_t(fs_cluster_id_t fscid_, mds_rank_t rank_)
+    : rank(rank_), fscid(fscid_)
+  {}
+  mds_role_t()
+    : rank(MDS_RANK_NONE), fscid(FS_CLUSTER_ID_NONE)
+  {}
+  bool operator<(mds_role_t const &rhs) const
+  {
+    if (fscid < rhs.fscid) {
+      return true;
+    } else if (fscid == rhs.fscid) {
+      return rank < rhs.rank;
+    } else {
+      return false;
+    }
+  }
+
+  bool is_none() const
+  {
+    return (rank == MDS_RANK_NONE);
+  }
+};
+std::ostream& operator<<(std::ostream &out, const mds_role_t &role);
 
 
 extern long g_num_ino, g_num_dir, g_num_dn, g_num_cap;
@@ -161,6 +197,12 @@ struct frag_info_t : public scatter_info_t {
     nsubdirs += other.nsubdirs;
   }
 
+  bool same_sums(const frag_info_t &o) const {
+    return mtime <= o.mtime &&
+	nfiles == o.nfiles &&
+	nsubdirs == o.nsubdirs;
+  }
+
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
@@ -214,7 +256,7 @@ struct nest_info_t : public scatter_info_t {
   }
 
   bool same_sums(const nest_info_t &o) const {
-    return rctime == o.rctime &&
+    return rctime <= o.rctime &&
         rbytes == o.rbytes &&
         rfiles == o.rfiles &&
         rsubdirs == o.rsubdirs &&

@@ -38,7 +38,7 @@ if [ $? -ne 0 ]; then
 fi
 
 pos=`echo $pos | cut -d: -f1`
-base_port=$((6800+pos*10))
+base_port=$((6800+pos*20))
 
 export VSTART_DEST=$RUN_ROOT_PATH/$instance
 export CEPH_PORT=$base_port

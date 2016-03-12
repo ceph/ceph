@@ -2332,13 +2332,12 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
     ldout(cct, 20) << __func__ << dendl;
 
-    cls::rbd::MirrorMode mirror_mode_internal;
+    cls::rbd::MirrorMode next_mirror_mode;
     switch (mirror_mode) {
     case RBD_MIRROR_MODE_DISABLED:
     case RBD_MIRROR_MODE_IMAGE:
     case RBD_MIRROR_MODE_POOL:
-      mirror_mode_internal = static_cast<cls::rbd::MirrorMode>(
-        mirror_mode);
+      next_mirror_mode = static_cast<cls::rbd::MirrorMode>(mirror_mode);
       break;
     default:
       lderr(cct) << "Unknown mirror mode ("
@@ -2346,7 +2345,28 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -EINVAL;
     }
 
-    int r = cls_client::mirror_mode_set(&io_ctx, mirror_mode_internal);
+    cls::rbd::MirrorMode current_mirror_mode;
+    int r = cls_client::mirror_mode_get(&io_ctx, &current_mirror_mode);
+    if (r < 0) {
+      lderr(cct) << "Failed to retrieve mirror mode: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+
+    if (current_mirror_mode == next_mirror_mode) {
+      return 0;
+    } else if (current_mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+      uuid_d uuid_gen;
+      uuid_gen.generate_random();
+      r = cls_client::mirror_uuid_set(&io_ctx, uuid_gen.to_string());
+      if (r < 0) {
+        lderr(cct) << "Failed to allocate mirroring uuid: " << cpp_strerror(r)
+                   << dendl;
+        return r;
+      }
+    }
+
+    r = cls_client::mirror_mode_set(&io_ctx, next_mirror_mode);
     if (r < 0) {
       lderr(cct) << "Failed to set mirror mode: " << cpp_strerror(r) << dendl;
       return r;

@@ -235,6 +235,9 @@ OSDService::OSDService(OSD *osd) :
   agent_stop_flag(false),
   agent_timer_lock("OSD::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
+  promote_probability_millis(1000),
+  promote_max_objects(0),
+  promote_max_bytes(0),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
   objecter_finisher(osd->client_messenger->cct),
   watch_lock("OSD::watch_lock"),
@@ -592,6 +595,78 @@ void OSDService::agent_stop()
     agent_cond.Signal();
   }
   agent_thread.join();
+}
+
+// -------------------------------------
+
+void OSDService::promote_throttle_recalibrate()
+{
+  utime_t now = ceph_clock_now(NULL);
+  double dur = now - last_recalibrate;
+  last_recalibrate = now;
+  unsigned prob = promote_probability_millis.read();
+
+  uint64_t target_obj_sec = g_conf->osd_tier_promote_max_objects_sec;
+  uint64_t target_bytes_sec = g_conf->osd_tier_promote_max_bytes_sec;
+
+  unsigned min_prob = 1;
+
+  uint64_t attempts, obj, bytes;
+  promote_counter.sample_and_attenuate(&attempts, &obj, &bytes);
+  dout(10) << __func__ << " " << attempts << " attempts, promoted "
+	   << obj << " objects and " << pretty_si_t(bytes) << " bytes; target "
+	   << target_obj_sec << " obj/sec or "
+	   << pretty_si_t(target_bytes_sec) << " bytes/sec"
+	   << dendl;
+
+  // calculate what the probability *should* be, given the targets
+  unsigned new_prob;
+  if (attempts && dur > 0) {
+    uint64_t avg_size = 1;
+    if (obj)
+      avg_size = MAX(bytes / obj, 1);
+    unsigned po = (double)target_obj_sec * dur * 1000.0 / (double)attempts;
+    unsigned pb = (double)target_bytes_sec / (double)avg_size * dur * 1000.0
+      / (double)attempts;
+    derr << __func__ << "  po " << po << " pb " << pb << " avg_size " << avg_size << dendl;
+    if (target_obj_sec && target_bytes_sec)
+      new_prob = MIN(po, pb);
+    else if (target_obj_sec)
+      new_prob = po;
+    else if (target_bytes_sec)
+      new_prob = pb;
+    else
+      new_prob = 1000;
+  } else {
+    new_prob = 1000;
+  }
+  dout(20) << __func__ << "  new_prob " << new_prob << dendl;
+
+  // correct for persistent skew between target rate and actual rate, adjust
+  double ratio = 1.0;
+  unsigned actual = 0;
+  if (attempts && obj) {
+    actual = obj * 1000 / attempts;
+    ratio = (double)actual / (double)prob;
+    new_prob = (double)new_prob / ratio;
+  }
+  new_prob = MAX(new_prob, min_prob);
+  new_prob = MIN(new_prob, 1000);
+
+  // adjust
+  prob = (prob + new_prob) / 2;
+  prob = MAX(prob, min_prob);
+  prob = MIN(prob, 1000);
+  dout(10) << __func__ << "  actual " << actual
+	   << ", actual/prob ratio " << ratio
+	   << ", adjusted new_prob " << new_prob
+	   << ", prob " << promote_probability_millis.read() << " -> " << prob
+	   << dendl;
+  promote_probability_millis.set(prob);
+
+  // set hard limits for this interval to mitigate stampedes
+  promote_max_objects = target_obj_sec * OSD::OSD_TICK_INTERVAL * 2;
+  promote_max_bytes = target_bytes_sec * OSD::OSD_TICK_INTERVAL * 2;
 }
 
 // -------------------------------------
@@ -1602,7 +1677,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   last_pg_create_epoch(0),
   mon_report_lock("OSD::mon_report_lock"),
   stats_ack_timeout(cct->_conf->osd_mon_ack_timeout),
-  up_thru_wanted(0), up_thru_pending(0),
+  up_thru_wanted(0),
   requested_full_first(0),
   requested_full_last(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
@@ -4124,6 +4199,8 @@ void OSD::tick()
     recovery_tp.wake();
 
     check_replay_queue();
+
+    service.promote_throttle_recalibrate();
   }
 
   // only do waiters if dispatch() isn't currently running.  (if it is,
@@ -4801,7 +4878,6 @@ void OSD::send_alive()
   epoch_t up_thru = osdmap->get_up_thru(whoami);
   dout(10) << "send_alive up_thru currently " << up_thru << " want " << up_thru_wanted << dendl;
   if (up_thru_wanted > up_thru) {
-    up_thru_pending = up_thru_wanted;
     dout(10) << "send_alive want " << up_thru_wanted << dendl;
     monc->send_mon_message(new MOSDAlive(osdmap->get_epoch(), up_thru_wanted));
   }
@@ -6617,6 +6693,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   map_lock.get_write();
 
+  bool do_shutdown = false;
+  bool do_restart = false;
+  bool network_error = false;
+
   // advance through the new maps
   for (epoch_t cur = start; cur <= superblock.newest_map; cur++) {
     dout(10) << " advance to epoch " << cur << " (<= newest " << superblock.newest_map << ")" << dendl;
@@ -6643,11 +6723,40 @@ void OSD::handle_osd_map(MOSDMap *m)
       }
     }
 
+    if (osdmap->test_flag(CEPH_OSDMAP_NOUP) &&
+	!newmap->test_flag(CEPH_OSDMAP_NOUP)) {
+      dout(10) << __func__ << " NOUP flag cleared in " << newmap->get_epoch()
+	       << dendl;
+      if (is_booting()) {
+	// this captures the case where we sent the boot message while
+	// NOUP was being set on the mon and our boot request was
+	// dropped, and then later it is cleared.  it imperfectly
+	// handles the case where our original boot message was not
+	// dropped and we restart even though we might have booted, but
+	// that is harmless (boot will just take slightly longer).
+	do_restart = true;
+      }
+    }
+
     osdmap = newmap;
 
     superblock.current_epoch = cur;
-    advance_map();
     had_map_since = ceph_clock_now(cct);
+
+    epoch_t up_epoch;
+    epoch_t boot_epoch;
+    service.retrieve_epochs(&boot_epoch, &up_epoch, NULL);
+    if (!up_epoch &&
+	osdmap->is_up(whoami) &&
+	osdmap->get_inst(whoami) == client_messenger->get_myinst()) {
+      up_epoch = osdmap->get_epoch();
+      dout(10) << "up_epoch is " << up_epoch << dendl;
+      if (!boot_epoch) {
+	boot_epoch = osdmap->get_epoch();
+	dout(10) << "boot_epoch is " << boot_epoch << dendl;
+      }
+      service.set_epochs(&boot_epoch, &up_epoch, NULL);
+    }
   }
 
   epoch_t _bind_epoch = service.get_bind_epoch();
@@ -6665,9 +6774,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
   }
 
-  bool do_shutdown = false;
-  bool do_restart = false;
-  bool network_error = false;
   if (osdmap->get_epoch() > 0 &&
       is_active()) {
     if (!osdmap->exists(whoami)) {
@@ -6946,32 +7052,6 @@ bool OSD::advance_pg(
     return false;
   }
   return true;
-}
-
-/**
- * update service map; check pg creations
- */
-void OSD::advance_map()
-{
-  assert(osd_lock.is_locked());
-
-  dout(7) << "advance_map epoch " << osdmap->get_epoch()
-          << dendl;
-
-  epoch_t up_epoch;
-  epoch_t boot_epoch;
-  service.retrieve_epochs(&boot_epoch, &up_epoch, NULL);
-  if (!up_epoch &&
-      osdmap->is_up(whoami) &&
-      osdmap->get_inst(whoami) == client_messenger->get_myinst()) {
-    up_epoch = osdmap->get_epoch();
-    dout(10) << "up_epoch is " << up_epoch << dendl;
-    if (!boot_epoch) {
-      boot_epoch = osdmap->get_epoch();
-      dout(10) << "boot_epoch is " << boot_epoch << dendl;
-    }
-    service.set_epochs(&boot_epoch, &up_epoch, NULL);
-  }
 }
 
 void OSD::consume_map()

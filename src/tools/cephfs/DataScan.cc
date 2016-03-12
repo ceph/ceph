@@ -36,9 +36,11 @@ void DataScan::usage()
     << "\n"
     << "    --force-corrupt: overrite apparently corrupt structures\n"
     << "    --force-init: write root inodes even if they exist\n"
-    << "    --force-pool: use data pool even if it is not in MDSMap\n"
+    << "    --force-pool: use data pool even if it is not in FSMap\n"
     << "\n"
     << "  cephfs-data-scan scan_frags [--force-corrupt]\n"
+    << "\n"
+    << "  cephfs-data-scan tmap_upgrade <metadata_pool>\n"
     << std::endl;
 
   generic_client_usage();
@@ -87,6 +89,15 @@ bool DataScan::parse_kwarg(
     filter_tag = val;
     dout(10) << "Applying tag filter: '" << filter_tag << "'" << dendl;
     return true;
+  } else if (arg == std::string("--filesystem")) {
+    std::shared_ptr<const Filesystem> fs;
+    *r = fsmap->parse_filesystem(val, &fs);
+    if (*r != 0) {
+      std::cerr << "Invalid filesystem '" << val << "'" << std::endl;
+      return false;
+    }
+    fscid = fs->fscid;
+    return true;
   } else {
     return false;
   }
@@ -131,6 +142,7 @@ int DataScan::main(const std::vector<const char*> &args)
 
   std::string const &command = args[0];
   std::string data_pool_name;
+  std::string metadata_pool_name;
 
   // Consume any known --key val or --flag arguments
   for (std::vector<const char *>::const_iterator i = args.begin() + 1;
@@ -147,9 +159,16 @@ int DataScan::main(const std::vector<const char*> &args)
       continue;
     }
 
+    // Trailing positional argument
     if (i + 1 == args.end() &&
         (command == "scan_inodes" || command == "scan_extents")) {
       data_pool_name = *i;
+      continue;
+    }
+
+    // Trailing positional argument
+    if (i + 1 == args.end() && (command == "tmap_upgrade")) {
+      metadata_pool_name = *i;
       continue;
     }
 
@@ -157,6 +176,19 @@ int DataScan::main(const std::vector<const char*> &args)
     std::cerr << "Unknown argument '" << *i << "'" << std::endl;
     return -EINVAL;
   }
+
+  // If caller didn't specify a namespace, try to pick
+  // one if only one exists
+  if (fscid == FS_CLUSTER_ID_NONE) {
+    if (fsmap->get_filesystems().size() == 1) {
+      fscid = fsmap->get_filesystems().begin()->first;
+    } else {
+      std::cerr << "Specify a filesystem with --filesystem" << std::endl;
+      return -EINVAL;
+    }
+  }
+  auto fs =  fsmap->get_filesystem(fscid);
+  assert(fs != nullptr);
 
   // Default to output to metadata pool
   if (driver == NULL) {
@@ -168,7 +200,7 @@ int DataScan::main(const std::vector<const char*> &args)
 
   dout(4) << "connecting to RADOS..." << dendl;
   rados.connect();
-  r = driver->init(rados, mdsmap);
+  r = driver->init(rados, fsmap, fscid);
   if (r < 0) {
     return r;
   }
@@ -191,7 +223,7 @@ int DataScan::main(const std::vector<const char*> &args)
         << "' has ID " << data_pool_id << dendl;
     }
 
-    if (!mdsmap->is_data_pool(data_pool_id)) {
+    if (!fs->mds_map.is_data_pool(data_pool_id)) {
       std::cerr << "Warning: pool '" << data_pool_name << "' is not a "
         "CephFS data pool!" << std::endl;
       if (!force_pool) {
@@ -207,8 +239,14 @@ int DataScan::main(const std::vector<const char*> &args)
     }
   }
 
+  // Initialize metadata_io from MDSMap for scan_frags
   if (command == "scan_frags") {
-    int const metadata_pool_id = mdsmap->get_metadata_pool();
+    const auto fs = fsmap->get_filesystem(fscid);
+    if (fs == nullptr) {
+      std::cerr << "Filesystem id " << fscid << " does not exist" << std::endl;
+      return -ENOENT;
+    }
+    int const metadata_pool_id = fs->mds_map.get_metadata_pool();
 
     dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
     std::string metadata_pool_name;
@@ -225,6 +263,30 @@ int DataScan::main(const std::vector<const char*> &args)
     }
   }
 
+  // Initialize metadata_io from pool on command line for tmap_upgrade
+  if (command == "tmap_upgrade") {
+    if (metadata_pool_name.empty()) {
+      std::cerr << "Metadata pool not specified" << std::endl;
+      usage();
+      return -EINVAL;
+    }
+
+    long metadata_pool_id = rados.pool_lookup(metadata_pool_name.c_str());
+    if (metadata_pool_id < 0) {
+      std::cerr << "Pool '" << metadata_pool_name << "' not found!" << std::endl;
+      return -ENOENT;
+    } else {
+      dout(4) << "pool '" << metadata_pool_name
+        << "' has ID " << metadata_pool_id << dendl;
+    }
+
+    r = rados.ioctx_create(metadata_pool_name.c_str(), metadata_io);
+    if (r != 0) {
+      return r;
+    }
+    std::cerr << "Created ioctx for " << metadata_pool_name << std::endl;
+  }
+
   // Finally, dispatch command
   if (command == "scan_inodes") {
     return scan_inodes();
@@ -232,8 +294,10 @@ int DataScan::main(const std::vector<const char*> &args)
     return scan_extents();
   } else if (command == "scan_frags") {
     return scan_frags();
+  } else if (command == "tmap_upgrade") {
+    return tmap_upgrade();
   } else if (command == "init") {
-    return driver->init_roots(mdsmap->get_first_data_pool());
+    return driver->init_roots(fs->mds_map.get_first_data_pool());
   } else {
     std::cerr << "Unknown command '" << command << "'" << std::endl;
     return -EINVAL;
@@ -326,6 +390,11 @@ int MetadataDriver::init_roots(int64_t data_pool_id)
     return r;
   }
   r = inject_unlinked_inode(MDS_INO_MDSDIR(0), S_IFDIR, data_pool_id);
+  if (r != 0) {
+    return r;
+  }
+  bool created = false;
+  r = find_or_create_dirfrag(MDS_INO_MDSDIR(0), frag_t(), &created);
   if (r != 0) {
     return r;
   }
@@ -772,7 +841,51 @@ int DataScan::scan_inodes()
   });
 }
 
+bool DataScan::valid_ino(inodeno_t ino) const
+{
+  return (ino >= inodeno_t((1ull << 40)))
+    || (MDS_INO_IS_STRAY(ino))
+    || (MDS_INO_IS_MDSDIR(ino))
+    || ino == MDS_INO_ROOT
+    || ino == MDS_INO_CEPH;
+}
 
+int DataScan::tmap_upgrade()
+{
+  librados::NObjectIterator i = metadata_io.nobjects_begin();
+  const librados::NObjectIterator i_end = metadata_io.nobjects_end();
+
+  int overall_r = 0;
+
+  for (; i != i_end; ++i) {
+    const std::string oid = i->get_oid();
+
+    uint64_t inode_no = 0;
+    uint64_t frag_id = 0;
+    int r = parse_oid(oid, &inode_no, &frag_id);
+    if (r == -EINVAL) {
+      dout(10) << "Not a dirfrag: '" << oid << "'" << dendl;
+      continue;
+    } else {
+      // parse_oid can only do 0 or -EINVAL
+      assert(r == 0);
+    }
+
+    if (!valid_ino(inode_no)) {
+      dout(10) << "Not a difrag (invalid ino): '" << oid << "'" << dendl;
+      continue;
+    }
+
+    r = metadata_io.tmap_to_omap(oid, true);
+    dout(20) << "tmap2omap(" << oid << "): " << r << dendl;
+    if (r < 0) {
+      derr << "Error converting '" << oid << "': " << cpp_strerror(r) << dendl;
+      overall_r = r;
+    }
+  }
+
+  return overall_r;
+}
 
 int DataScan::scan_frags()
 {
@@ -1448,9 +1561,12 @@ int MetadataDriver::inject_linkage(
 }
 
 
-int MetadataDriver::init(librados::Rados &rados, const MDSMap *mdsmap)
+int MetadataDriver::init(
+    librados::Rados &rados, const FSMap *fsmap, fs_cluster_id_t fscid)
 {
-  int const metadata_pool_id = mdsmap->get_metadata_pool();
+  auto fs =  fsmap->get_filesystem(fscid);
+  assert(fs != nullptr);
+  int const metadata_pool_id = fs->mds_map.get_metadata_pool();
 
   dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
   std::string metadata_pool_name;
@@ -1464,7 +1580,8 @@ int MetadataDriver::init(librados::Rados &rados, const MDSMap *mdsmap)
   return rados.ioctx_create(metadata_pool_name.c_str(), metadata_io);
 }
 
-int LocalFileDriver::init(librados::Rados &rados, const MDSMap *mdsmap)
+int LocalFileDriver::init(
+    librados::Rados &rados, const FSMap *fsmap, fs_cluster_id_t fscid)
 {
   return 0;
 }

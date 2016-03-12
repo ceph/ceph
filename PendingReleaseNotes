@@ -24,6 +24,10 @@ v10.0.0
   limit max waiting time of monitor election process, which was previously
   restricted by 'mon_lease'.
 
+* CephFS filesystems created using versions older than Firefly (0.80) must
+  use the new "cephfs-data-scan tmap_upgrade" command after upgrading to
+  Jewel.  See 'Upgrading' in the CephFS documentation for more information.
+
 v9.3.0
 ======
 * Some symbols wrongly exposed by librados in v9.1.0 and v9.2.0 were removed.

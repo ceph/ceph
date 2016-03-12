@@ -164,7 +164,7 @@ struct rgw_cls_link_olh_op {
   uint64_t olh_epoch;
   bool log_op;
   uint16_t bilog_flags;
-  time_t unmod_since; /* only create delete marker if newer then this */
+  uint64_t unmod_since; /* only create delete marker if newer then this */
 
   rgw_cls_link_olh_op() : delete_marker(false), olh_epoch(0), log_op(false), bilog_flags(0) {}
 

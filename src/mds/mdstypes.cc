@@ -448,7 +448,7 @@ int inode_t::compare(const inode_t &other, bool *divergent) const
         gid != other.gid ||
         nlink != other.nlink ||
         memcmp(&dir_layout, &other.dir_layout, sizeof(dir_layout)) ||
-        memcmp(&layout, &other.layout, sizeof(layout)) ||
+        layout != other.layout ||
         old_pools != other.old_pools ||
         size != other.size ||
         max_size_ever != other.max_size_ever ||
@@ -1098,4 +1098,10 @@ void MDSCacheObject::dump_states(Formatter *f) const
     f->dump_string("state", "rejoinundef");
 }
 
+
+ostream& operator<<(ostream &out, const mds_role_t &role)
+{
+  out << role.fscid << ":" << role.rank;
+  return out;
+}
 

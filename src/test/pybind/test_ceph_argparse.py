@@ -415,10 +415,6 @@ class TestMDS(TestArgparse):
     def test_rmfailed(self):
         self.assert_valid_command(['mds', 'rmfailed', '0'])
         self.assert_valid_command(['mds', 'rmfailed', '0', '--yes-i-really-mean-it'])
-        assert_equal({}, validate_command(sigdict, ['mds', 'rmfailed',
-                                                    '--yes-i-really-mean-it']))
-        assert_equal({}, validate_command(sigdict, ['mds', 'rmfailed', '-1',
-                                                    '--yes-i-really-mean-it']))
         assert_equal({}, validate_command(sigdict, ['mds', 'rmfailed', '0',
                                                     '--yes-i-really-mean-it',
                                                     'toomany']))
@@ -1111,9 +1107,8 @@ class TestOSD(TestArgparse):
     def test_reweight_by_utilization(self):
         self.assert_valid_command(['osd', 'reweight-by-utilization'])
         self.assert_valid_command(['osd', 'reweight-by-utilization', '100'])
-        assert_equal({}, validate_command(sigdict, ['osd',
-                                                    'reweight-by-utilization',
-                                                    '50']))
+		self.assert_valid_command(['osd', 'reweight-by-utilization', '100', '.1'])
+        self.assert_valid_command(['osd', 'reweight-by-utilization', '--no-increasing'])
         assert_equal({}, validate_command(sigdict, ['osd',
                                                     'reweight-by-utilization',
                                                     '100',

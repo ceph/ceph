@@ -4297,4 +4297,29 @@ enum scrub_error_type {
   DEEP_ERROR,
   SHALLOW_ERROR
 };
+
+// PromoteCounter
+
+struct PromoteCounter {
+  atomic64_t attempts, objects, bytes;
+
+  void attempt() {
+    attempts.inc();
+  }
+
+  void finish(uint64_t size) {
+    objects.inc();
+    bytes.add(size);
+  }
+
+  void sample_and_attenuate(uint64_t *a, uint64_t *o, uint64_t *b) {
+    *a = attempts.read();
+    *o = objects.read();
+    *b = bytes.read();
+    attempts.set(*a / 2);
+    objects.set(*o / 2);
+    bytes.set(*b / 2);
+  }
+};
+
 #endif

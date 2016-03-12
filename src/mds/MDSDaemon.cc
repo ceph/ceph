@@ -246,7 +246,9 @@ void MDSDaemon::set_up_admin_socket()
 				     "show slowest recent ops");
   assert(r == 0);
   r = admin_socket->register_command("scrub_path",
-                                     "scrub_path name=path,type=CephString",
+				     "scrub_path name=path,type=CephString "
+				     "name=scrubops,type=CephChoices,"
+				     "strings=force|recursive|repair,n=N,req=false",
                                      asok_hook,
                                      "scrub an inode and output results");
   assert(r == 0);
@@ -684,6 +686,10 @@ COMMAND("session ls " \
 COMMAND("session evict " \
 	"name=filters,type=CephString,n=N,req=false",
 	"Evict client session(s)", "mds", "rw", "cli,rest")
+COMMAND("damage ls",
+	"List detected metadata damage", "mds", "r", "cli,rest")
+COMMAND("damage rm name=damage_id,type=CephInt",
+	"Remove a damage table entry", "mds", "rw", "cli,rest")
 COMMAND("heap " \
 	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	"show heap usage info (available only if compiled with tcmalloc)", \
@@ -971,7 +977,7 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
       // here!
       if (g_conf->mds_enforce_unique_name) {
         if (mds_gid_t existing = mdsmap->find_mds_gid_by_name(name)) {
-          MDSMap::mds_info_t& i = mdsmap->get_info_gid(existing);
+          const MDSMap::mds_info_t& i = mdsmap->get_info_gid(existing);
           if (i.global_id > monc->get_global_id()) {
             dout(1) << "handle_mds_map i (" << addr
                     << ") dne in the mdsmap, new instance has larger gid " << i.global_id

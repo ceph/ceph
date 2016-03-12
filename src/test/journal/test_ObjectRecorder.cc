@@ -3,7 +3,6 @@
 
 #include "journal/ObjectRecorder.h"
 #include "common/Cond.h"
-#include "common/Finisher.h"
 #include "common/Mutex.h"
 #include "common/Timer.h"
 #include "gtest/gtest.h"
@@ -16,14 +15,8 @@ public:
   TestObjectRecorder()
     : m_flush_interval(std::numeric_limits<uint32_t>::max()),
       m_flush_bytes(std::numeric_limits<uint64_t>::max()),
-      m_flush_age(600),
-      m_finisher(NULL)
+      m_flush_age(600)
   {
-  }
-
-  ~TestObjectRecorder() {
-    m_finisher->stop();
-    delete m_finisher;
   }
 
   struct OverflowHandler : public journal::ObjectRecorder::OverflowHandler {
@@ -52,14 +45,6 @@ public:
   double m_flush_age;
   OverflowHandler m_overflow_handler;
 
-  Finisher *m_finisher;
-
-  void SetUp() {
-    RadosTestFixture::SetUp();
-    m_finisher = new Finisher(reinterpret_cast<CephContext*>(m_ioctx.cct()));
-    m_finisher->start();
-  }
-
   void TearDown() {
     for (ObjectRecorders::iterator it = m_object_recorders.begin();
          it != m_object_recorders.end(); ++it) {
@@ -67,6 +52,8 @@ public:
       (*it)->flush(&cond);
       cond.wait();
     }
+    m_object_recorders.clear();
+
     RadosTestFixture::TearDown();
   }
 
@@ -80,10 +67,11 @@ public:
     m_flush_age = i;
   }
 
-  journal::AppendBuffer create_append_buffer(uint64_t tag_tid, uint64_t entry_tid,
+  journal::AppendBuffer create_append_buffer(journal::JournalMetadataPtr metadata,
+                                             uint64_t tag_tid, uint64_t entry_tid,
                                              const std::string &payload) {
-    journal::FutureImplPtr future(new journal::FutureImpl(*m_finisher,
-                                                          tag_tid, entry_tid, 456));
+    journal::FutureImplPtr future(new journal::FutureImpl(metadata, tag_tid,
+                                                          entry_tid, 456));
     future->init(journal::FutureImplPtr());
 
     bufferlist bl;
@@ -103,18 +91,24 @@ public:
 
 TEST_F(TestObjectRecorder, Append) {
   std::string oid = get_temp_oid();
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid));
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
-                                                             "payload");
+  journal::AppendBuffer append_buffer1 = create_append_buffer(metadata,
+                                                              234, 123,
+                                                              "payload");
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(1U, object->get_pending_appends());
 
-  journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
-                                                             "payload");
+  journal::AppendBuffer append_buffer2 = create_append_buffer(metadata,
+                                                              234, 124,
+                                                              "payload");
   append_buffers = {append_buffer2};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(2U, object->get_pending_appends());
@@ -127,19 +121,25 @@ TEST_F(TestObjectRecorder, Append) {
 
 TEST_F(TestObjectRecorder, AppendFlushByCount) {
   std::string oid = get_temp_oid();
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid));
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
 
   set_flush_interval(2);
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
-                                                             "payload");
+  journal::AppendBuffer append_buffer1 = create_append_buffer(metadata,
+                                                              234, 123,
+                                                              "payload");
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(1U, object->get_pending_appends());
 
-  journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
-                                                             "payload");
+  journal::AppendBuffer append_buffer2 = create_append_buffer(metadata,
+                                                              234, 124,
+                                                              "payload");
   append_buffers = {append_buffer2};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(0U, object->get_pending_appends());
@@ -151,19 +151,25 @@ TEST_F(TestObjectRecorder, AppendFlushByCount) {
 
 TEST_F(TestObjectRecorder, AppendFlushByBytes) {
   std::string oid = get_temp_oid();
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid));
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
 
   set_flush_bytes(10);
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
-                                                             "payload");
+  journal::AppendBuffer append_buffer1 = create_append_buffer(metadata,
+                                                              234, 123,
+                                                              "payload");
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(1U, object->get_pending_appends());
 
-  journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
-                                                             "payload");
+  journal::AppendBuffer append_buffer2 = create_append_buffer(metadata,
+                                                              234, 124,
+                                                              "payload");
   append_buffers = {append_buffer2};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(0U, object->get_pending_appends());
@@ -175,18 +181,24 @@ TEST_F(TestObjectRecorder, AppendFlushByBytes) {
 
 TEST_F(TestObjectRecorder, AppendFlushByAge) {
   std::string oid = get_temp_oid();
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid));
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
 
   set_flush_age(0.1);
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
-                                                             "payload");
+  journal::AppendBuffer append_buffer1 = create_append_buffer(metadata,
+                                                              234, 123,
+                                                              "payload");
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
 
-  journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
-                                                             "payload");
+  journal::AppendBuffer append_buffer2 = create_append_buffer(metadata,
+                                                              234, 124,
+                                                              "payload");
   append_buffers = {append_buffer2};
   ASSERT_FALSE(object->append(append_buffers));
 
@@ -198,17 +210,23 @@ TEST_F(TestObjectRecorder, AppendFlushByAge) {
 
 TEST_F(TestObjectRecorder, AppendFilledObject) {
   std::string oid = get_temp_oid();
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid));
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::ObjectRecorderPtr object = create_object(oid, 12);
 
   std::string payload(2048, '1');
-  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
+  journal::AppendBuffer append_buffer1 = create_append_buffer(metadata,
+                                                              234, 123,
                                                               payload);
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
 
-  journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
+  journal::AppendBuffer append_buffer2 = create_append_buffer(metadata,
+                                                              234, 124,
                                                               payload);
   append_buffers = {append_buffer2};
   ASSERT_TRUE(object->append(append_buffers));
@@ -221,11 +239,16 @@ TEST_F(TestObjectRecorder, AppendFilledObject) {
 
 TEST_F(TestObjectRecorder, Flush) {
   std::string oid = get_temp_oid();
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid));
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
-                                                             "payload");
+  journal::AppendBuffer append_buffer1 = create_append_buffer(metadata,
+                                                              234, 123,
+                                                              "payload");
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
@@ -243,10 +266,15 @@ TEST_F(TestObjectRecorder, Flush) {
 
 TEST_F(TestObjectRecorder, FlushFuture) {
   std::string oid = get_temp_oid();
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid));
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer = create_append_buffer(234, 123,
+  journal::AppendBuffer append_buffer = create_append_buffer(metadata,
+                                                             234, 123,
                                                              "payload");
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer};
@@ -263,10 +291,15 @@ TEST_F(TestObjectRecorder, FlushFuture) {
 
 TEST_F(TestObjectRecorder, FlushDetachedFuture) {
   std::string oid = get_temp_oid();
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid));
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::ObjectRecorderPtr object = create_object(oid, 24);
 
-  journal::AppendBuffer append_buffer = create_append_buffer(234, 123,
+  journal::AppendBuffer append_buffer = create_append_buffer(metadata,
+                                                             234, 123,
                                                              "payload");
 
   journal::AppendBuffers append_buffers;
@@ -284,14 +317,20 @@ TEST_F(TestObjectRecorder, FlushDetachedFuture) {
 
 TEST_F(TestObjectRecorder, Overflow) {
   std::string oid = get_temp_oid();
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid));
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::ObjectRecorderPtr object1 = create_object(oid, 12);
   journal::ObjectRecorderPtr object2 = create_object(oid, 12);
 
   std::string payload(2048, '1');
-  journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
+  journal::AppendBuffer append_buffer1 = create_append_buffer(metadata,
+                                                              234, 123,
                                                               payload);
-  journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
+  journal::AppendBuffer append_buffer2 = create_append_buffer(metadata,
+                                                              234, 124,
                                                               payload);
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1, append_buffer2};
@@ -302,7 +341,8 @@ TEST_F(TestObjectRecorder, Overflow) {
   ASSERT_EQ(0, cond.wait());
   ASSERT_EQ(0U, object1->get_pending_appends());
 
-  journal::AppendBuffer append_buffer3 = create_append_buffer(456, 123,
+  journal::AppendBuffer append_buffer3 = create_append_buffer(metadata,
+                                                              456, 123,
                                                               payload);
   append_buffers = {append_buffer3};
 

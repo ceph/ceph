@@ -205,8 +205,8 @@ public:
     return 0;
   }
 
-  int shutdown() {
-    ::journal::Journaler::shutdown();
+  int shut_down() {
+    ::journal::Journaler::shut_down();
 
     int r = unregister_client();
     if (r < 0) {
@@ -250,7 +250,7 @@ public:
       }
     }
 
-    r = m_journaler.shutdown();
+    r = m_journaler.shut_down();
     if (r < 0 && m_r == 0) {
       m_r = r;
     }
@@ -679,7 +679,7 @@ public:
     if (r1 < 0 && r == 0) {
       r = r1;
     }
-    r1 = m_journaler.shutdown();
+    r1 = m_journaler.shut_down();
     if (r1 < 0 && r == 0) {
       r = r1;
     }

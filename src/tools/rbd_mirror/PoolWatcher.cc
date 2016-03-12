@@ -14,7 +14,7 @@
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd-mirror: "
+#define dout_prefix *_dout << "rbd-mirror: PoolWatcher::" << __func__ << ": "
 
 using std::list;
 using std::map;
@@ -36,7 +36,7 @@ PoolWatcher::PoolWatcher(RadosRef cluster, double interval_seconds,
   m_refresh_cond(cond),
   m_stopping(false),
   m_cluster(cluster),
-  m_timer(g_ceph_context, m_lock),
+  m_timer(g_ceph_context, m_lock, false),
   m_interval(interval_seconds)
 {
   m_timer.init();
@@ -57,7 +57,7 @@ const map<int64_t, set<string> >& PoolWatcher::get_images() const
 
 void PoolWatcher::refresh_images(bool reschedule)
 {
-  dout(20) << __func__ << dendl;
+  dout(20) << "enter" << dendl;
   map<int64_t, set<string> > images;
   list<pair<int64_t, string> > pools;
   int r = m_cluster->pool_list2(pools);
@@ -117,6 +117,8 @@ void PoolWatcher::refresh_images(bool reschedule)
       map<string, string> pool_images;
       r = dir_list(&ioctx, RBD_DIRECTORY,
 		   last_read, max_read, &pool_images);
+      if (r == -ENOENT)
+	r = 0;
       if (r < 0) {
         derr << "error listing images in pool " << pool_name << ": "
 	     << cpp_strerror(r) << dendl;
