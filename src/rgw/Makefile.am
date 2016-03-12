@@ -195,6 +195,7 @@ noinst_HEADERS += \
 	rgw/rgw_file.h \
 	rgw/rgw_formats.h \
 	rgw/rgw_http_errors.h \
+	rgw/rgw_ldap.h \
 	rgw/rgw_lib.h \
 	rgw/rgw_lib_frontend.h \
 	rgw/rgw_log.h \
