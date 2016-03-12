@@ -131,7 +131,7 @@ bool MDSUtility::ms_dispatch(Message *m)
    Mutex::Locker locker(lock);
    switch (m->get_type()) {
    case CEPH_MSG_FS_MAP:
-     handle_mds_map((MFSMap*)m);
+     handle_fs_map((MFSMap*)m);
      break;
    case CEPH_MSG_OSD_MAP:
      break;
@@ -142,7 +142,7 @@ bool MDSUtility::ms_dispatch(Message *m)
 }
 
 
-void MDSUtility::handle_mds_map(MFSMap* m)
+void MDSUtility::handle_fs_map(MFSMap* m)
 {
   *fsmap = m->get_fsmap();
   if (waiting_for_mds_map) {
