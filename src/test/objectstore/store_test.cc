@@ -590,6 +590,38 @@ public:
     }
   };
 
+  class C_SyntheticOnStash : public Context {
+  public:
+    SyntheticWorkloadState *state;
+    ObjectStore::Transaction *t;
+    ghobject_t oid, noid;
+
+    C_SyntheticOnStash(SyntheticWorkloadState *state,
+		       ObjectStore::Transaction *t, ghobject_t oid,
+		       ghobject_t noid)
+      : state(state), t(t), oid(oid), noid(noid) {}
+
+    void finish(int r) {
+      Mutex::Locker locker(state->lock);
+      ASSERT_TRUE(state->in_flight_objects.count(oid));
+      ASSERT_EQ(r, 0);
+      state->in_flight_objects.erase(oid);
+      if (state->contents.count(noid))
+        state->available_objects.insert(noid);
+      --(state->in_flight);
+      bufferlist r2;
+      r = state->store->read(
+	state->cid, noid, 0,
+	state->contents[noid].data.length(), r2);
+      if (!state->contents[noid].data.contents_equal(r2)) {
+	assert(0 == " mismatch after clone");
+        ASSERT_TRUE(state->contents[noid].data.contents_equal(r2));
+      }
+      state->cond.Signal();
+      delete t;
+    }
+  };
+
   class C_SyntheticOnClone : public Context {
   public:
     SyntheticWorkloadState *state;
@@ -691,6 +723,41 @@ public:
     if (!contents.count(new_obj))
       contents[new_obj] = Object();
     return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, new_obj));
+  }
+
+  int stash() {
+    Mutex::Locker locker(lock);
+    if (!can_unlink())
+      return -ENOENT;
+    if (!can_create())
+      return -ENOSPC;
+    wait_for_ready();
+
+    ghobject_t old_obj;
+    int max = 20;
+    do {
+      old_obj = get_uniform_random_object();
+    } while (--max && !contents[old_obj].data.length());
+    available_objects.erase(old_obj);
+    ghobject_t new_obj = old_obj;
+    new_obj.generation++;
+    available_objects.erase(new_obj);
+
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    t->collection_move_rename(cid, old_obj, cid, new_obj);
+    ++in_flight;
+    in_flight_objects.insert(old_obj);
+
+    // *copy* the data buffer, since we may modify it later.
+    contents[new_obj].attrs = contents[old_obj].attrs;
+    contents[new_obj].data.clear();
+    contents[new_obj].data.append(contents[old_obj].data.c_str(),
+				  contents[old_obj].data.length());
+    contents.erase(old_obj);
+    int status = store->queue_transaction(
+      osr, t,
+      new C_SyntheticOnStash(this, t, old_obj, new_obj));
+    return status;
   }
 
   int clone() {
@@ -1063,6 +1130,8 @@ TEST_P(StoreTest, Synthetic) {
       test_obj.write();
     } else if (val > 50) {
       test_obj.clone();
+    } else if (val > 30) {
+      test_obj.stash();
     } else if (val > 10) {
       test_obj.read();
     } else {
@@ -1101,6 +1170,8 @@ TEST_P(StoreTest, AttrSynthetic) {
       test_obj.setattrs();
     } else if (val > 45) {
       test_obj.clone();
+    } else if (val > 37) {
+      test_obj.stash();
     } else if (val > 30) {
       test_obj.getattrs();
     } else {
