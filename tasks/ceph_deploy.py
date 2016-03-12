@@ -557,19 +557,12 @@ def cli_test(ctx, config):
     out = r.stdout.getvalue()
     log.info('Ceph health: %s', out.rstrip('\n'))
     log.info("Waiting for cluster to become healthy")
-    retry = 1
-    while (out.split(None, 1)[0] != 'HEALTH_OK') and (retry <= 6):
-        r = remote.run(args=['sudo', 'ceph', 'health'], stdout=StringIO())
-        log.info('Retry: %d Ceph health: %s', retry, out.rstrip('\n'))
-        time.sleep(10)
-        retry += 1
-    if (retry > 6):
-        raise RuntimeError(
-            "Failed to reach HEALTH_OK state after {r} retries".format(
-                r=retry))
-    else:
-        log.info('All ceph-deploy cli tests passed')
-    # test rgw cli
+    with contextutil.safe_while(sleep=10, tries=6,
+                                action='check health') as proceed:
+       while proceed():
+           r = remote.run(args=['sudo', 'ceph', 'health'], stdout=StringIO())
+           if (out.split(None,1)[0] == 'HEALTH_OK'):
+               break
     rgw_install = 'install {branch} --rgw {node}'.format(
         branch=test_branch,
         node=nodename,
@@ -577,6 +570,7 @@ def cli_test(ctx, config):
     rgw_create = 'rgw create ' + nodename
     execute_cdeploy(admin, rgw_install, path)
     execute_cdeploy(admin, rgw_create, path)
+    log.info('All ceph-deploy cli tests passed')
     try:
         yield
     finally:
