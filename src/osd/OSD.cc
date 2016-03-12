@@ -3603,23 +3603,21 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
       &acting,
       &actingprimary);
 
-    // acting set change?
+    // acting set change or split?
     if ((actingprimary != currentactingprimary ||
 	 upprimary != currentupprimary ||
 	 acting != currentacting ||
-	 up != currentup) && e > h.same_interval_since) {
+	 up != currentup ||
+         pgid.is_split(oldmap->get_pg_num(pgid.pool()),
+                       osdmap->get_pg_num(pgid.pool()),
+                       0)) && 
+         e > h.same_interval_since) {
       dout(15) << "project_pg_history " << pgid << " acting|up changed in " << e
 	       << " from " << acting << "/" << up
 	       << " " << actingprimary << "/" << upprimary
 	       << " -> " << currentacting << "/" << currentup
 	       << " " << currentactingprimary << "/" << currentupprimary
 	       << dendl;
-      h.same_interval_since = e;
-    }
-    // split?
-    if (pgid.is_split(oldmap->get_pg_num(pgid.pool()),
-		      osdmap->get_pg_num(pgid.pool()),
-		      0)) {
       h.same_interval_since = e;
     }
     // up set change?
