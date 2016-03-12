@@ -63,6 +63,22 @@ void SnapshotCopyRequest<I>::send() {
 
 template <typename I>
 void SnapshotCopyRequest<I>::send_snap_remove() {
+  CephContext *cct = m_local_image_ctx->cct;
+  // TODO: issue #14937 needs to add support for cloned images
+  {
+    RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
+    if (m_remote_image_ctx->parent_md.spec.pool_id != -1 ||
+        std::find_if(m_remote_image_ctx->snap_info.begin(),
+                     m_remote_image_ctx->snap_info.end(),
+                     [](const std::pair<librados::snap_t, librbd::SnapInfo>& pair) {
+            return pair.second.parent.spec.pool_id != -1;
+          }) != m_remote_image_ctx->snap_info.end()) {
+      lderr(cct) << "cloned images are not currentl supported" << dendl;
+      finish(-EINVAL);
+      return;
+    }
+  }
+
   librados::snap_t local_snap_id = CEPH_NOSNAP;
   while (local_snap_id == CEPH_NOSNAP && !m_local_snap_ids.empty()) {
     librados::snap_t snap_id = *m_local_snap_ids.begin();
@@ -85,7 +101,6 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
 
   m_snap_name = get_snapshot_name(m_local_image_ctx, local_snap_id);
 
-  CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << ": "
                  << "snap_name=" << m_snap_name << ", "
                  << "snap_id=" << local_snap_id << dendl;
