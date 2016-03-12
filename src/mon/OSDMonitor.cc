@@ -1694,18 +1694,21 @@ bool OSDMonitor::can_mark_in(int i)
   return true;
 }
 
-void OSDMonitor::check_failures(utime_t now)
+bool OSDMonitor::check_failures(utime_t now)
 {
+  bool propose_now = false;
   for (map<int,failure_info_t>::iterator p = failure_info.begin();
        p != failure_info.end();
        ++p) {
     if (can_mark_down(p->first)) {
-      check_failure(now, p->first, p->second);
+      check_failure(now, p->first, p->second, propose_now ? NULL : &propose_now);
     }
   }
+  return propose_now;
 }
 
-bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
+bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi,
+  bool *propose_now)
 {
   set<string> reporters_by_subtree;
   string reporter_subtree_level = g_conf->mon_osd_reporter_subtree_level;
@@ -1715,6 +1718,8 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 
   utime_t grace = orig_grace;
   double my_grace = 0, peer_grace = 0;
+  if (propose_now)
+    *propose_now = false;
   if (g_conf->mon_osd_adjust_heartbeat_grace) {
     double halflife = (double)g_conf->mon_osd_laggy_halflife;
     double decay_k = ::log(.5) / halflife;
@@ -1775,6 +1780,10 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
     dout(1) << " we have enough reporters to mark osd." << target_osd
 	    << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
+    if (propose_now) {
+      // caller is tick(), trigger an immediate propose
+      *propose_now = true;
+    }
 
     mon->clog->info() << osdmap.get_inst(target_osd) << " failed ("
 		      << (int)reporters_by_subtree.size() << " reporters from different "
@@ -2660,7 +2669,8 @@ void OSDMonitor::tick()
   utime_t now = ceph_clock_now(g_ceph_context);
 
   // mark osds down?
-  check_failures(now);
+  if(check_failures(now))
+    do_propose = true;
 
   // mark down osds out?
 
