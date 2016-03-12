@@ -233,6 +233,7 @@ function setup_pulpito() {
     if ! grep -qq 'autoindex on' $nginx_conf ; then
         sudo perl -pi -e 's|location / {|location / { autoindex on;|' $nginx_conf
         sudo /etc/init.d/nginx restart
+        sudo rm -f /usr/share/nginx/html/*.html
         echo "ADDED autoindex on to nginx configuration"
     fi
     sudo chown $USER /usr/share/nginx/html
