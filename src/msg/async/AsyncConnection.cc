@@ -731,7 +731,6 @@ void AsyncConnection::process()
             ldout(async_msgr->cct, 20) << __func__ << " got front " << front.length() << dendl;
           }
           state = STATE_OPEN_MESSAGE_READ_MIDDLE;
-          break;
         }
 
       case STATE_OPEN_MESSAGE_READ_MIDDLE:
@@ -753,7 +752,6 @@ void AsyncConnection::process()
           }
 
           state = STATE_OPEN_MESSAGE_READ_DATA_PREPARE;
-          break;
         }
 
       case STATE_OPEN_MESSAGE_READ_DATA_PREPARE:
@@ -782,7 +780,6 @@ void AsyncConnection::process()
 
           msg_left = data_len;
           state = STATE_OPEN_MESSAGE_READ_DATA;
-          break;
         }
 
       case STATE_OPEN_MESSAGE_READ_DATA:
@@ -803,10 +800,10 @@ void AsyncConnection::process()
             msg_left -= read;
           }
 
-          if (msg_left == 0)
-            state = STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH;
+          if (msg_left > 0)
+            break;
 
-          break;
+          state = STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH;
         }
 
       case STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH:
