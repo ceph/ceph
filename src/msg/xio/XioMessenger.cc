@@ -693,17 +693,13 @@ xio_place_buffers(buffer::list& bl, XioMsg *xmsg, struct xio_msg*& req,
 
 int XioMessenger::bind(const entity_addr_t& addr)
 {
-  const entity_addr_t *a = &addr;
-  struct entity_addr_t _addr = *a;
-
-  if (a->is_blank_ip()) {
+  if (addr.is_blank_ip()) {
       lderr(cct) << "ERROR: need rdma ip for remote use! " << dendl;
       cout << "Error: xio bind failed. public/cluster ip not specified" << std::endl;
       return -1;
   }
 
-  entity_addr_t shift_addr = *a;
-
+  entity_addr_t shift_addr = addr;
   string base_uri = xio_uri_from_entity(cct->_conf->xio_transport_type,
 					shift_addr, false /* want_port */);
   ldout(cct,4) << "XioMessenger " << this << " bind: xio_uri "

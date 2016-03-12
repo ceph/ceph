@@ -81,6 +81,7 @@ authentication keyring.
 .. toctree:: 
 	:maxdepth: 1
 
+    Administrative commands <administration>
 	POSIX compatibility <posix>
         CephFS Quotas <quota>
 	Using Ceph with Hadoop <hadoop>
@@ -92,6 +93,7 @@ authentication keyring.
 	Troubleshooting <troubleshooting>
 	Disaster recovery <disaster-recovery>
 	Client authentication <client-auth>
+	Upgrading old filesystems <upgrading>
 
 .. raw:: html
 

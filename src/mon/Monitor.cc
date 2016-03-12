@@ -2461,8 +2461,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     f->open_object_section("pgmap");
     pgmon()->pg_map.print_summary(f, NULL);
     f->close_section();
-    f->open_object_section("mdsmap");
-    mdsmon()->mdsmap.print_summary(f, NULL);
+    f->open_object_section("fsmap");
+    mdsmon()->fsmap.print_summary(f, NULL);
     f->close_section();
     f->close_section();
   } else {
@@ -2472,8 +2472,10 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     ss << "     monmap " << *monmap << "\n";
     ss << "            election epoch " << get_epoch()
        << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
-    if (mdsmon()->mdsmap.get_enabled())
-      ss << "     mdsmap " << mdsmon()->mdsmap << "\n";
+    if (mdsmon()->fsmap.any_filesystems()) {
+      ss << "     mdsmap " << mdsmon()->fsmap << "\n";
+    }
+
     osdmon()->osdmap.print_summary(NULL, ss);
     pgmon()->pg_map.print_summary(NULL, &ss);
   }
@@ -4244,9 +4246,12 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
 			       p->second.flags & CEPH_SUBSCRIBE_ONETIME,
 			       m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
 
-    if (p->first == "mdsmap") {
+    if (p->first.find("mdsmap") == 0 || p->first == "fsmap") {
+      dout(10) << __func__ << ": MDS sub '" << p->first << "'" << dendl;
       if ((int)s->is_capable("mds", MON_CAP_R)) {
-        mdsmon()->check_sub(s->sub_map["mdsmap"]);
+        Subscription *sub = s->sub_map[p->first];
+        assert(sub != nullptr);
+        mdsmon()->check_sub(sub);
       }
     } else if (p->first == "osdmap") {
       if ((int)s->is_capable("osd", MON_CAP_R)) {
@@ -4294,6 +4299,8 @@ void Monitor::handle_get_version(MonOpRequestRef op)
   }
 
   if (m->what == "mdsmap") {
+    svc = mdsmon();
+  } else if (m->what == "fsmap") {
     svc = mdsmon();
   } else if (m->what == "osdmap") {
     svc = osdmon();

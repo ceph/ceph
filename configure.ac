@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [10.0.4], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [10.0.5], [ceph-devel@vger.kernel.org])
 
 AX_CXX_COMPILE_STDCXX_11(, mandatory)
 
@@ -126,7 +126,7 @@ AM_CONDITIONAL(WITH_RBD, test "$with_rbd" = "yes")
 #AS_IF([test "$with_rbd" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_RBD])])
 
 AC_ARG_WITH([cython],
-	[AS_HELP_STRING([--with-cython], [build python bindings for librbd])],
+	[AS_HELP_STRING([--with-cython], [build python bindings for libraries])],
 	[],
 	[with_cython=yes])
 AM_CONDITIONAL(WITH_CYTHON, test "$with_cython" = "yes")
@@ -207,12 +207,20 @@ AC_ARG_ENABLE([server],
 AM_CONDITIONAL(ENABLE_SERVER, test "$enable_server" = "yes")
 #AS_IF([test "$enable_server" = "yes"], [AC_DEFINE([WITH_MON, WITH_OSD, WITH_MDS, ENABLE_SERVER])])
 
-# cython is required to build librbd python bindings
+# cython is required to build python bindings for libraries
 if test x"$with_cython" = xyes; then
     AC_CHECK_PROG(CYTHON_CHECK, cython, yes)
     if test x"$CYTHON_CHECK" != xyes; then
         AC_MSG_FAILURE([cython not found])
     fi
+    AC_CHECK_PROG(PYTHON_CONFIG_CHECK, python-config, yes)
+    if test x"$PYTHON_CONFIG_CHECK" != xyes; then
+        AC_MSG_FAILURE([python-config not found])
+    fi
+    PYTHON_CFLAGS=`python-config --cflags`
+    AC_SUBST(PYTHON_CFLAGS)
+    PYTHON_LDFLAGS=`python-config --ldflags`
+    AC_SUBST(PYTHON_LDFLAGS)
 fi
 
 # cond-check if snappy-devel is installed, needed by leveldb that is need by server parts of the project

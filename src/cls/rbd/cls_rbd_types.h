@@ -35,6 +35,10 @@ struct MirrorPeer {
   std::string client_name;
   int64_t pool_id = -1;
 
+  inline bool is_valid() const {
+    return (!uuid.empty() && !cluster_name.empty() && !client_name.empty());
+  }
+
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &it);
   void dump(Formatter *f) const;

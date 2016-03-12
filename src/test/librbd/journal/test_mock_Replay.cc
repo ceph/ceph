@@ -188,6 +188,16 @@ public:
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
+  void expect_refresh_image(MockReplayImageCtx &mock_image_ctx, bool required,
+                            int r) {
+    EXPECT_CALL(*mock_image_ctx.state, is_refresh_required())
+                  .WillOnce(Return(required));
+    if (required) {
+      EXPECT_CALL(*mock_image_ctx.state, refresh(_))
+                    .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
+    }
+  }
+
   void when_process(MockJournalReplay &mock_journal_replay,
                     EventEntry &&event_entry, Context *on_ready,
                     Context *on_safe) {
@@ -504,7 +514,8 @@ TEST_F(TestMockJournalReplay, BlockedOpFinishError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_create(mock_image_ctx, &on_finish, "snap", 123);
 
   C_SaferCond on_start_ready;
@@ -522,7 +533,7 @@ TEST_F(TestMockJournalReplay, BlockedOpFinishError) {
                &on_finish_ready, &on_finish_safe);
 
   ASSERT_EQ(-EBADMSG, on_resume.wait());
-  on_finish->complete(-ESTALE);
+  wait_for_op_invoked(&on_finish, -ESTALE);
 
   ASSERT_EQ(-ESTALE, on_start_safe.wait());
   ASSERT_EQ(-ESTALE, on_finish_safe.wait());
@@ -536,6 +547,9 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
   MockReplayImageCtx mock_image_ctx(*ictx);
   MockJournalReplay mock_journal_replay(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
+
+  EXPECT_CALL(*mock_image_ctx.state, is_refresh_required())
+                .WillRepeatedly(Return(false));
 
   InSequence seq;
   Context *on_snap_create_finish = nullptr;
@@ -565,7 +579,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
   when_replay_op_ready(mock_journal_replay, 123, &on_snap_create_resume);
   ASSERT_EQ(0, on_snap_create_resume.wait());
 
-  on_snap_create_finish->complete(0);
+  wait_for_op_invoked(&on_snap_create_finish, 0);
   ASSERT_EQ(0, on_snap_create_ready.wait());
   ASSERT_EQ(0, on_snap_create_safe.wait());
 
@@ -582,6 +596,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEventCancelOps) {
 
   InSequence seq;
   Context *on_snap_create_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_create(mock_image_ctx, &on_snap_create_finish, "snap", 123);
 
   C_SaferCond on_snap_remove_ready;
@@ -633,7 +648,8 @@ TEST_F(TestMockJournalReplay, OpEventError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_remove(mock_image_ctx, &on_finish, "snap");
 
   C_SaferCond on_start_ready;
@@ -647,7 +663,7 @@ TEST_F(TestMockJournalReplay, OpEventError) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(-EINVAL);
+  wait_for_op_invoked(&on_finish, -EINVAL);
   ASSERT_EQ(-EINVAL, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(-EINVAL, on_finish_safe.wait());
@@ -664,7 +680,8 @@ TEST_F(TestMockJournalReplay, SnapCreateEvent) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_create(mock_image_ctx, &on_finish, "snap", 123);
 
   C_SaferCond on_start_ready;
@@ -682,7 +699,7 @@ TEST_F(TestMockJournalReplay, SnapCreateEvent) {
                &on_finish_ready, &on_finish_safe);
 
   ASSERT_EQ(0, on_resume.wait());
-  on_finish->complete(0);
+  wait_for_op_invoked(&on_finish, 0);
 
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
@@ -701,6 +718,7 @@ TEST_F(TestMockJournalReplay, SnapCreateEventExists) {
 
   InSequence seq;
   Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_create(mock_image_ctx, &on_finish, "snap", 123);
 
   C_SaferCond on_start_ready;
@@ -732,7 +750,8 @@ TEST_F(TestMockJournalReplay, SnapRemoveEvent) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_remove(mock_image_ctx, &on_finish, "snap");
 
   C_SaferCond on_start_ready;
@@ -746,7 +765,7 @@ TEST_F(TestMockJournalReplay, SnapRemoveEvent) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(0);
+  wait_for_op_invoked(&on_finish, 0);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
@@ -763,7 +782,8 @@ TEST_F(TestMockJournalReplay, SnapRemoveEventDNE) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_remove(mock_image_ctx, &on_finish, "snap");
 
   C_SaferCond on_start_ready;
@@ -777,7 +797,7 @@ TEST_F(TestMockJournalReplay, SnapRemoveEventDNE) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(-ENOENT);
+  wait_for_op_invoked(&on_finish, -ENOENT);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
@@ -794,7 +814,8 @@ TEST_F(TestMockJournalReplay, SnapRenameEvent) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_rename(mock_image_ctx, &on_finish, 234, "snap");
 
   C_SaferCond on_start_ready;
@@ -809,7 +830,7 @@ TEST_F(TestMockJournalReplay, SnapRenameEvent) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(0);
+  wait_for_op_invoked(&on_finish, 0);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
@@ -826,7 +847,8 @@ TEST_F(TestMockJournalReplay, SnapRenameEventExists) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_rename(mock_image_ctx, &on_finish, 234, "snap");
 
   C_SaferCond on_start_ready;
@@ -841,7 +863,7 @@ TEST_F(TestMockJournalReplay, SnapRenameEventExists) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(-EEXIST);
+  wait_for_op_invoked(&on_finish, -EEXIST);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
@@ -858,7 +880,8 @@ TEST_F(TestMockJournalReplay, SnapProtectEvent) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_protect(mock_image_ctx, &on_finish, "snap");
 
   C_SaferCond on_start_ready;
@@ -872,7 +895,7 @@ TEST_F(TestMockJournalReplay, SnapProtectEvent) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(0);
+  wait_for_op_invoked(&on_finish, 0);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
@@ -889,7 +912,8 @@ TEST_F(TestMockJournalReplay, SnapProtectEventBusy) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_protect(mock_image_ctx, &on_finish, "snap");
 
   C_SaferCond on_start_ready;
@@ -903,7 +927,7 @@ TEST_F(TestMockJournalReplay, SnapProtectEventBusy) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(-EBUSY);
+  wait_for_op_invoked(&on_finish, -EBUSY);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
@@ -920,7 +944,8 @@ TEST_F(TestMockJournalReplay, SnapUnprotectEvent) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_unprotect(mock_image_ctx, &on_finish, "snap");
 
   C_SaferCond on_start_ready;
@@ -934,7 +959,7 @@ TEST_F(TestMockJournalReplay, SnapUnprotectEvent) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(0);
+  wait_for_op_invoked(&on_finish, 0);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
@@ -951,7 +976,8 @@ TEST_F(TestMockJournalReplay, SnapUnprotectEventInvalid) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_unprotect(mock_image_ctx, &on_finish, "snap");
 
   C_SaferCond on_start_ready;
@@ -965,7 +991,7 @@ TEST_F(TestMockJournalReplay, SnapUnprotectEventInvalid) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(-EINVAL);
+  wait_for_op_invoked(&on_finish, -EINVAL);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
@@ -982,7 +1008,8 @@ TEST_F(TestMockJournalReplay, SnapRollbackEvent) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_snap_rollback(mock_image_ctx, &on_finish, "snap");
 
   C_SaferCond on_start_ready;
@@ -996,7 +1023,7 @@ TEST_F(TestMockJournalReplay, SnapRollbackEvent) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(0);
+  wait_for_op_invoked(&on_finish, 0);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
@@ -1013,7 +1040,8 @@ TEST_F(TestMockJournalReplay, RenameEvent) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_rename(mock_image_ctx, &on_finish, "image");
 
   C_SaferCond on_start_ready;
@@ -1027,7 +1055,7 @@ TEST_F(TestMockJournalReplay, RenameEvent) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(0);
+  wait_for_op_invoked(&on_finish, 0);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
@@ -1044,7 +1072,8 @@ TEST_F(TestMockJournalReplay, RenameEventExists) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_rename(mock_image_ctx, &on_finish, "image");
 
   C_SaferCond on_start_ready;
@@ -1058,7 +1087,7 @@ TEST_F(TestMockJournalReplay, RenameEventExists) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(-EEXIST);
+  wait_for_op_invoked(&on_finish, -EEXIST);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
@@ -1075,7 +1104,8 @@ TEST_F(TestMockJournalReplay, ResizeEvent) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_resize(mock_image_ctx, &on_finish, 234, 123);
 
   C_SaferCond on_start_ready;
@@ -1093,7 +1123,7 @@ TEST_F(TestMockJournalReplay, ResizeEvent) {
                &on_finish_ready, &on_finish_safe);
 
   ASSERT_EQ(0, on_resume.wait());
-  on_finish->complete(0);
+  wait_for_op_invoked(&on_finish, 0);
 
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
@@ -1111,7 +1141,8 @@ TEST_F(TestMockJournalReplay, FlattenEvent) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_flatten(mock_image_ctx, &on_finish);
 
   C_SaferCond on_start_ready;
@@ -1125,7 +1156,7 @@ TEST_F(TestMockJournalReplay, FlattenEvent) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(0);
+  wait_for_op_invoked(&on_finish, 0);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
@@ -1142,7 +1173,8 @@ TEST_F(TestMockJournalReplay, FlattenEventInvalid) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  Context *on_finish;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
   expect_flatten(mock_image_ctx, &on_finish);
 
   C_SaferCond on_start_ready;
@@ -1156,7 +1188,7 @@ TEST_F(TestMockJournalReplay, FlattenEventInvalid) {
   when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
                &on_finish_ready, &on_finish_safe);
 
-  on_finish->complete(-EINVAL);
+  wait_for_op_invoked(&on_finish, -EINVAL);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
@@ -1186,6 +1218,43 @@ TEST_F(TestMockJournalReplay, UnknownEvent) {
 
   ASSERT_EQ(0, on_safe.wait());
   ASSERT_EQ(0, on_ready.wait());
+}
+
+TEST_F(TestMockJournalReplay, RefreshImageBeforeOpStart) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, true, 0);
+  expect_resize(mock_image_ctx, &on_finish, 234, 123);
+
+  C_SaferCond on_start_ready;
+  C_SaferCond on_start_safe;
+  when_process(mock_journal_replay, EventEntry{ResizeEvent(123, 234)},
+               &on_start_ready, &on_start_safe);
+
+  C_SaferCond on_resume;
+  when_replay_op_ready(mock_journal_replay, 123, &on_resume);
+  ASSERT_EQ(0, on_start_ready.wait());
+
+  C_SaferCond on_finish_ready;
+  C_SaferCond on_finish_safe;
+  when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
+               &on_finish_ready, &on_finish_safe);
+
+  ASSERT_EQ(0, on_resume.wait());
+  wait_for_op_invoked(&on_finish, 0);
+
+  ASSERT_EQ(0, on_start_safe.wait());
+  ASSERT_EQ(0, on_finish_ready.wait());
+  ASSERT_EQ(0, on_finish_safe.wait());
 }
 
 } // namespace journal

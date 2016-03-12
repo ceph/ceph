@@ -982,6 +982,7 @@ Subcommand ``reweight-by-pg`` reweight OSDs by PG distribution
 Usage::
 
 	ceph osd reweight-by-pg {<int[100-]>} {<poolname> [<poolname...]}
+	{--no-increasing}
 
 Subcommand ``reweight-by-utilization`` reweight OSDs by utilization
 [overload-percentage-for-consideration, default 120].
@@ -989,6 +990,7 @@ Subcommand ``reweight-by-utilization`` reweight OSDs by utilization
 Usage::
 
 	ceph osd reweight-by-utilization {<int[100-]>}
+	{--no-increasing}
 
 Subcommand ``rm`` removes osd(s) <id> [<id>...] in the cluster.
 

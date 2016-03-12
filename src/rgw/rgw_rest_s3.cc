@@ -172,14 +172,14 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   if (s->system_request && lastmod) {
     /* we end up dumping mtime in two different methods, a bit redundant */
     dump_epoch_header(s, "Rgwx-Mtime", lastmod);
-    uint64_t pg_ver;
+    uint64_t pg_ver = 0;
     int r = decode_attr_bl_single_value(attrs, RGW_ATTR_PG_VER, &pg_ver, (uint64_t)0);
     if (r < 0) {
       ldout(s->cct, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
     }
     STREAM_IO(s)->print("Rgwx-Obj-PG-Ver: %lld\r\n", (long long)pg_ver);
 
-    uint32_t source_zone_short_id;
+    uint32_t source_zone_short_id = 0;
     r = decode_attr_bl_single_value(attrs, RGW_ATTR_SOURCE_ZONE, &source_zone_short_id, (uint32_t)0);
     if (r < 0) {
       ldout(s->cct, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
@@ -314,6 +314,115 @@ void RGWListBuckets_ObjStore_S3::send_response_end()
     list_all_buckets_end(s);
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
+}
+
+int RGWGetUsage_ObjStore_S3::get_params()
+{
+  start_date = s->info.args.get("start-date");
+  end_date = s->info.args.get("end-date"); 
+  return 0;
+}
+
+static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry, map<string, bool> *categories)
+{
+  formatter->open_array_section("categories");
+  map<string, rgw_usage_data>::const_iterator uiter;
+  for (uiter = entry.usage_map.begin(); uiter != entry.usage_map.end(); ++uiter) {
+    if (categories && !categories->empty() && !categories->count(uiter->first))
+      continue;
+    const rgw_usage_data& usage = uiter->second;
+    formatter->open_object_section("Entry");
+    formatter->dump_string("Category", uiter->first);
+    formatter->dump_int("BytesSent", usage.bytes_sent);
+    formatter->dump_int("BytesReceived", usage.bytes_received);
+    formatter->dump_int("Ops", usage.ops);
+    formatter->dump_int("SuccessfulOps", usage.successful_ops);
+    formatter->close_section(); // Entry
+  }
+  formatter->close_section(); // Category
+}
+
+void RGWGetUsage_ObjStore_S3::send_response()
+{
+  if (op_ret < 0)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+
+  end_header(s, this, "application/xml");
+  dump_start(s);
+  if (op_ret < 0)
+    return;
+
+  Formatter *formatter = s->formatter;
+  string last_owner;
+  bool user_section_open = false;
+  
+  formatter->open_object_section("Usage");
+  if (show_log_entries) {
+    formatter->open_array_section("Entries");
+  }
+  map<rgw_user_bucket, rgw_usage_log_entry>::iterator iter;
+  for (iter = usage.begin(); iter != usage.end(); ++iter) {
+    const rgw_user_bucket& ub = iter->first;
+    const rgw_usage_log_entry& entry = iter->second;
+
+    if (show_log_entries) {
+      if (ub.user.compare(last_owner) != 0) {
+        if (user_section_open) {
+          formatter->close_section();
+          formatter->close_section();
+        }
+        formatter->open_object_section("User");
+        formatter->dump_string("Owner", ub.user);
+        formatter->open_array_section("Buckets");
+        user_section_open = true;
+        last_owner = ub.user;
+      }
+      formatter->open_object_section("Bucket");
+      formatter->dump_string("Bucket", ub.bucket);
+      utime_t ut(entry.epoch, 0);
+      ut.gmtime(formatter->dump_stream("Time"));
+      formatter->dump_int("Epoch", entry.epoch);
+      dump_usage_categories_info(formatter, entry, &categories);
+      formatter->close_section(); // bucket
+    }
+
+    summary_map[ub.user].aggregate(entry, &categories);
+  }
+
+  if (show_log_entries) {
+     if (user_section_open) {
+       formatter->close_section(); // buckets
+       formatter->close_section(); //user
+     }
+     formatter->close_section(); // entries
+   }
+  
+   if (show_log_sum) {
+     formatter->open_array_section("Summary");
+     map<string, rgw_usage_log_entry>::iterator siter;
+     for (siter = summary_map.begin(); siter != summary_map.end(); ++siter) {
+       const rgw_usage_log_entry& entry = siter->second;
+       formatter->open_object_section("User");
+       formatter->dump_string("User", siter->first);
+       dump_usage_categories_info(formatter, entry, &categories);
+       rgw_usage_data total_usage;
+       entry.sum(total_usage, categories);
+       formatter->open_object_section("Total");
+       formatter->dump_int("BytesSent", total_usage.bytes_sent);
+       formatter->dump_int("BytesReceived", total_usage.bytes_received);
+       formatter->dump_int("Ops", total_usage.ops);
+       formatter->dump_int("SuccessfulOps", total_usage.successful_ops);
+       formatter->close_section(); // total 
+       formatter->close_section(); // user
+     } 
+     formatter->dump_int("TotalBytes", header.stats.total_bytes);
+     formatter->dump_int("TotalBytesRounded", header.stats.total_bytes_rounded);
+     formatter->dump_int("TotalEntries", header.stats.total_entries);
+     formatter->close_section(); // summary
+   }
+   formatter->close_section(); // usage
+   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 int RGWListBucket_ObjStore_S3::get_params()
@@ -2470,7 +2579,11 @@ void RGWDeleteMultiObj_ObjStore_S3::end_response()
 
 RGWOp *RGWHandler_REST_Service_S3::op_get()
 {
-  return new RGWListBuckets_ObjStore_S3;
+  if (is_usage_op()) {
+    return new RGWGetUsage_ObjStore_S3;
+  } else {
+    return new RGWListBuckets_ObjStore_S3;
+  }
 }
 
 RGWOp *RGWHandler_REST_Service_S3::op_head()

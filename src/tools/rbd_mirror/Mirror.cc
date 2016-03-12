@@ -6,10 +6,11 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "Mirror.h"
+#include "Threads.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd-mirror: "
+#define dout_prefix *_dout << "rbd-mirror: Mirror::" << __func__ << ": "
 
 using std::chrono::seconds;
 using std::list;
@@ -31,6 +32,8 @@ Mirror::Mirror(CephContext *cct) :
   m_lock("rbd::mirror::Mirror"),
   m_local(new librados::Rados())
 {
+  cct->lookup_or_create_singleton_object<Threads>(m_threads,
+                                                  "rbd_mirror::threads");
 }
 
 void Mirror::handle_signal(int signum)
@@ -60,6 +63,7 @@ int Mirror::init()
 
 void Mirror::run()
 {
+  dout(20) << "enter" << dendl;
   while (!m_stopping.read()) {
     m_local_cluster_watcher->refresh_pools();
     Mutex::Locker l(m_lock);
@@ -67,16 +71,18 @@ void Mirror::run()
     // TODO: make interval configurable
     m_cond.WaitInterval(g_ceph_context, m_lock, seconds(30));
   }
+  dout(20) << "return" << dendl;
 }
 
 void Mirror::update_replayers(const map<peer_t, set<int64_t> > &peer_configs)
 {
+  dout(20) << "enter" << dendl;
   assert(m_lock.is_locked());
-  set<peer_t> peers;
   for (auto &kv : peer_configs) {
     const peer_t &peer = kv.first;
     if (m_replayers.find(peer) == m_replayers.end()) {
-      unique_ptr<Replayer> replayer(new Replayer(m_local, peer));
+      dout(20) << "starting replayer for " << peer << dendl;
+      unique_ptr<Replayer> replayer(new Replayer(m_threads, m_local, peer));
       // TODO: make async, and retry connecting within replayer
       int r = replayer->init();
       if (r < 0) {
@@ -89,7 +95,8 @@ void Mirror::update_replayers(const map<peer_t, set<int64_t> > &peer_configs)
   // TODO: make async
   for (auto it = m_replayers.begin(); it != m_replayers.end();) {
     peer_t peer = it->first;
-    if (peers.find(peer) == peers.end()) {
+    if (peer_configs.find(peer) == peer_configs.end()) {
+      dout(20) << "removing replayer for " << peer << dendl;
       m_replayers.erase(it++);
     } else {
       ++it;

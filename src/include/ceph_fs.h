@@ -131,6 +131,9 @@ struct ceph_dir_layout {
 #define CEPH_MSG_OSD_OPREPLY            43
 #define CEPH_MSG_WATCH_NOTIFY           44
 
+/* FSMap subscribers (see all MDS clusters at once) */
+#define CEPH_MSG_FS_MAP                 45
+
 
 /* watch-notify operations */
 enum {
@@ -353,9 +356,10 @@ enum {
 	// internal op
 	CEPH_MDS_OP_FRAGMENTDIR= 0x01500,
 	CEPH_MDS_OP_EXPORTDIR  = 0x01501,
-	CEPH_MDS_OP_VALIDATE   = 0x01502,
-	CEPH_MDS_OP_FLUSH      = 0x01503,
-	CEPH_MDS_OP_ENQUEUE_SCRUB = 0x01504
+	CEPH_MDS_OP_FLUSH      = 0x01502,
+	CEPH_MDS_OP_ENQUEUE_SCRUB  = 0x01503,
+	CEPH_MDS_OP_REPAIR_FRAGSTATS = 0x01504,
+	CEPH_MDS_OP_REPAIR_INODESTATS = 0x01505
 };
 
 extern const char *ceph_mds_op_name(int op);

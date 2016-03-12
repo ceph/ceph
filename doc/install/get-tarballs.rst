@@ -7,8 +7,8 @@ source code. You may download source code tarballs for Ceph releases here:
 
 `Ceph Release Tarballs`_
 
-`Ceph Release Tarballs (EU mirror)`_
+.. tip:: For international users: There might be a mirror close to you where download Ceph from. For more information see: `Ceph Mirrors`_.
 
 
 .. _Ceph Release Tarballs: http://ceph.com/download/
-.. _Ceph Release Tarballs (EU mirror): http://eu.ceph.com/download/
+.. _Ceph Mirrors: ../mirrors

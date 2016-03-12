@@ -164,6 +164,17 @@ public:
     return _set_gid;
   }
 
+  void set_uid_gid_strings(std::string u, std::string g) {
+    _set_uid_string = u;
+    _set_gid_string = g;
+  }
+  std::string get_set_uid_string() const {
+    return _set_uid_string;
+  }
+  std::string get_set_gid_string() const {
+    return _set_gid_string;
+  }
+
 private:
   struct SingletonWrapper : boost::noncopyable {
     virtual ~SingletonWrapper() {}
@@ -192,6 +203,8 @@ private:
 
   uid_t _set_uid; ///< uid to drop privs to
   gid_t _set_gid; ///< gid to drop privs to
+  std::string _set_uid_string;
+  std::string _set_gid_string;
 
   bool _crypto_inited;
 

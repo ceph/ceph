@@ -478,7 +478,7 @@ TEST(BufferPtr, constructors) {
     bufferptr ptr(std::move(original));
     EXPECT_TRUE(ptr.have_raw());
     EXPECT_FALSE(original.have_raw());
-    EXPECT_EQ(str.compare(0, str.size(), ptr.c_str(), ptr.length()), 0);
+    EXPECT_EQ(0, ::memcmp(str.c_str(), ptr.c_str(), len));
     EXPECT_EQ(1, ptr.raw_nref());
   }
 }

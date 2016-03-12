@@ -28,7 +28,6 @@ namespace rgw {
     OpsLogSocket* olog;
     rgw::LDAPHelper* ldh;
     RGWREST rest; // XXX needed for RGWProcessEnv
-    RGWProcessEnv env;
     RGWRados* store;
 
   public:

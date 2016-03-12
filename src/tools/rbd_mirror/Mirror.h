@@ -19,6 +19,8 @@
 namespace rbd {
 namespace mirror {
 
+struct Threads;
+
 /**
  * Contains the main loop and overall state for rbd-mirror.
  *
@@ -40,6 +42,7 @@ private:
   void update_replayers(const map<peer_t, set<int64_t> > &peer_configs);
 
   CephContext *m_cct;
+  Threads *m_threads = nullptr;
   Mutex m_lock;
   Cond m_cond;
   RadosRef m_local;

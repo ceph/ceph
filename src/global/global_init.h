@@ -35,7 +35,8 @@ void global_init(std::vector < const char * > *alt_def_args,
 		 uint32_t module_type,
 		 code_environment_t code_env,
 		 int flags,
-		 const char *data_dir_option = 0);
+		 const char *data_dir_option = 0,
+		 bool run_pre_init = true);
 
 // just the first half; enough to get config parsed but doesn't start up the
 // cct or log.

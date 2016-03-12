@@ -166,14 +166,21 @@ T strict_si_cast(const char *str, std::string *err)
     *err = "strict_sistrtoll: value should not be negative";
     return 0;
   }
-  if (ll < (long long)std::numeric_limits<T>::min() >> m) {
+  if (static_cast<unsigned>(m) >= sizeof(T) * CHAR_BIT) {
+    *err = ("strict_sistrtoll: the SI prefix is too large for the designated "
+	    "type");
+    return 0;
+  }
+  using promoted_t = typename std::common_type<decltype(ll), T>::type;
+  if (static_cast<promoted_t>(ll) <
+      static_cast<promoted_t>(std::numeric_limits<T>::min()) >> m) {
     *err = "strict_sistrtoll: value seems to be too small";
     return 0;
   }
-  if (ll > std::numeric_limits<T>::max() >> m) {
+  if (static_cast<promoted_t>(ll) >
+      static_cast<promoted_t>(std::numeric_limits<T>::max()) >> m) {
     *err = "strict_sistrtoll: value seems to be too large";
     return 0;
-
   }
   return (ll << m);
 }

@@ -93,9 +93,7 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
   cstate(this)
 {
   pthread_spin_init(&sp, PTHREAD_PROCESS_PRIVATE);
-  if (xio_conn_type == XioConnection::ACTIVE)
-    peer_addr = peer.addr;
-  peer_type = peer.name.type();
+  set_peer_type(peer.name.type());
   set_peer_addr(peer.addr);
 
   Messenger::Policy policy;

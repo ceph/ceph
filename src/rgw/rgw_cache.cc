@@ -52,7 +52,7 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cac
     if(perfcounter) perfcounter->inc(l_rgw_cache_miss);
     return -ENOENT;
   }
-  ldout(cct, 10) << "cache get: name=" << name << " : hit" << dendl;
+  ldout(cct, 10) << "cache get: name=" << name << " : hit (requested=" << mask << ", cached=" << src.flags << ")" << dendl;
 
   info = src;
   if (cache_info) {
@@ -119,7 +119,7 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info 
     return;
   }
 
-  ldout(cct, 10) << "cache put: name=" << name << dendl;
+  ldout(cct, 10) << "cache put: name=" << name << " info.flags=" << info.flags << dendl;
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end()) {
     ObjectCacheEntry entry;

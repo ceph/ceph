@@ -313,6 +313,13 @@ void Beacon::notify_health(MDSRank const *mds)
 
   health.metrics.clear();
 
+  // Detect presence of entries in DamageTable
+  if (!mds->damage_table.empty()) {
+    MDSHealthMetric m(MDS_HEALTH_DAMAGE, HEALTH_ERR, std::string(
+          "Metadata damage detected"));
+    health.metrics.push_back(m);
+  }
+
   // Detect MDS_HEALTH_TRIM condition
   // Arbitrary factor of 2, indicates MDS is not trimming promptly
   {

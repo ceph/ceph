@@ -280,7 +280,7 @@ public:
 
   int remove_object(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int policy_bl_to_stream(bufferlist& bl, ostream& o);
-  int get_policy(RGWBucketAdminOpState& op_state, ostream& o);
+  int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy);
 
   void clear_failure() { failure = false; }
 };
@@ -291,8 +291,9 @@ public:
   static int get_policy(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher);
   static int get_policy(RGWRados *store, RGWBucketAdminOpState& op_state,
+                  RGWAccessControlPolicy& policy);
+  static int dump_s3_policy(RGWRados *store, RGWBucketAdminOpState& op_state,
                   ostream& os);
-
 
   static int unlink(RGWRados *store, RGWBucketAdminOpState& op_state);
   static int link(RGWRados *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);

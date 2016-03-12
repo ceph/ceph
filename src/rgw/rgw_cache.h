@@ -401,13 +401,19 @@ int RGWCache<T>::put_system_obj_impl(rgw_obj& obj, uint64_t size, time_t *mtime,
   info.status = 0;
   info.flags = CACHE_FLAG_XATTRS;
   info.data = data;
-  info.flags |= CACHE_FLAG_DATA;
+  info.flags |= CACHE_FLAG_DATA | CACHE_FLAG_META;
   if (objv_tracker) {
     info.version = objv_tracker->write_version;
     info.flags |= CACHE_FLAG_OBJV;
   }
-  int ret = T::put_system_obj_impl(obj, size, mtime, attrs, flags, data,
+  time_t result_mtime;
+  int ret = T::put_system_obj_impl(obj, size, &result_mtime, attrs, flags, data,
                                    objv_tracker, set_mtime);
+  if (mtime) {
+    *mtime = result_mtime;
+  }
+  info.meta.mtime = result_mtime;
+  info.meta.size = size;
   string name = normal_name(bucket, oid);
   if (ret >= 0) {
     cache.put(name, info, NULL);

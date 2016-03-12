@@ -248,7 +248,7 @@ TEST(LibRGW, GET_OBJECT) {
   if (do_get) {
     char sbuf[512];
     memset(sbuf, 0, 512);
-    uint64_t nread;
+    size_t nread;
     int ret = rgw_read(fs, object_fh, 0 /* off */, 512 /* len */, &nread, sbuf,
 		       RGW_READ_FLAG_NONE);
     ASSERT_EQ(ret, 0);

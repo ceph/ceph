@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "journal/JournalRecorder.h"
-#include "common/Finisher.h"
 #include "journal/Entry.h"
 #include "journal/Utils.h"
 
@@ -32,7 +31,7 @@ struct C_Flush : public Context {
     }
     if (pending_flushes.dec() == 0) {
       // ensure all prior callback have been flushed as well
-      journal_metadata->get_finisher().queue(on_finish, ret_val);
+      journal_metadata->queue(on_finish, ret_val);
       delete this;
     }
   }
@@ -81,8 +80,8 @@ Future JournalRecorder::append(uint64_t tag_tid,
   ObjectRecorderPtr object_ptr = get_object(splay_offset);
   uint64_t commit_tid = m_journal_metadata->allocate_commit_tid(
     object_ptr->get_object_number(), tag_tid, entry_tid);
-  FutureImplPtr future(new FutureImpl(m_journal_metadata->get_finisher(),
-                                      tag_tid, entry_tid, commit_tid));
+  FutureImplPtr future(new FutureImpl(m_journal_metadata, tag_tid, entry_tid,
+                                      commit_tid));
   future->init(m_prev_future);
   m_prev_future = future;
 

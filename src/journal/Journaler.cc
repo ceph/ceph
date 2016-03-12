@@ -4,6 +4,8 @@
 #include "journal/Journaler.h"
 #include "include/stringify.h"
 #include "common/errno.h"
+#include "common/Timer.h"
+#include "common/WorkQueue.h"
 #include "journal/Entry.h"
 #include "journal/FutureImpl.h"
 #include "journal/JournalMetadata.h"
@@ -51,31 +53,74 @@ std::string Journaler::object_oid_prefix(int pool_id,
   return JOURNAL_OBJECT_PREFIX + stringify(pool_id) + "." + journal_id + ".";
 }
 
+Journaler::Threads::Threads(CephContext *cct)
+    : timer_lock("Journaler::timer_lock") {
+  thread_pool = new ThreadPool(cct, "Journaler::thread_pool", "tp_journal", 1);
+  thread_pool->start();
+
+  work_queue = new ContextWQ("Journaler::work_queue", 60, thread_pool);
+
+  timer = new SafeTimer(cct, timer_lock, true);
+  timer->init();
+}
+
+Journaler::Threads::~Threads() {
+  {
+    Mutex::Locker timer_locker(timer_lock);
+    timer->shutdown();
+  }
+  delete timer;
+
+  work_queue->drain();
+  delete work_queue;
+
+  thread_pool->stop();
+  delete thread_pool;
+}
+
 Journaler::Journaler(librados::IoCtx &header_ioctx,
+                     const std::string &journal_id,
+                     const std::string &client_id, double commit_interval)
+    : m_threads(new Threads(reinterpret_cast<CephContext*>(header_ioctx.cct()))),
+      m_client_id(client_id) {
+  set_up(m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
+         header_ioctx, journal_id, commit_interval);
+}
+
+Journaler::Journaler(ContextWQ *work_queue, SafeTimer *timer,
+                     Mutex *timer_lock, librados::IoCtx &header_ioctx,
 		     const std::string &journal_id,
 		     const std::string &client_id, double commit_interval)
-  : m_client_id(client_id), m_metadata(NULL), m_player(NULL), m_recorder(NULL),
-    m_trimmer(NULL)
-{
+    : m_client_id(client_id) {
+  set_up(work_queue, timer, timer_lock, header_ioctx, journal_id,
+         commit_interval);
+}
+
+void Journaler::set_up(ContextWQ *work_queue, SafeTimer *timer,
+                       Mutex *timer_lock, librados::IoCtx &header_ioctx,
+                       const std::string &journal_id, double commit_interval) {
   m_header_ioctx.dup(header_ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_header_ioctx.cct());
 
   m_header_oid = header_oid(journal_id);
   m_object_oid_prefix = object_oid_prefix(m_header_ioctx.get_id(), journal_id);
 
-  m_metadata = new JournalMetadata(m_header_ioctx, m_header_oid, m_client_id,
+  m_metadata = new JournalMetadata(work_queue, timer, timer_lock,
+                                   m_header_ioctx, m_header_oid, m_client_id,
                                    commit_interval);
   m_metadata->get();
 }
 
 Journaler::~Journaler() {
-  if (m_metadata != NULL) {
+  if (m_metadata != nullptr) {
     m_metadata->put();
-    m_metadata = NULL;
+    m_metadata = nullptr;
   }
   delete m_trimmer;
-  assert(m_player == NULL);
-  assert(m_recorder == NULL);
+  assert(m_player == nullptr);
+  assert(m_recorder == nullptr);
+
+  delete m_threads;
 }
 
 int Journaler::exists(bool *header_exists) const {
@@ -116,8 +161,12 @@ int Journaler::init_complete() {
   return 0;
 }
 
-void Journaler::shutdown() {
-  m_metadata->shutdown();
+void Journaler::shut_down() {
+  m_metadata->shut_down();
+}
+
+bool Journaler::is_initialized() const {
+  return m_metadata->is_initialized();
 }
 
 void Journaler::get_immutable_metadata(uint8_t *order, uint8_t *splay_width,
@@ -152,7 +201,7 @@ int Journaler::create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
 }
 
 int Journaler::remove(bool force) {
-  m_metadata->shutdown();
+  m_metadata->shut_down();
 
   ldout(m_cct, 5) << "removing journal: " << m_header_oid << dendl;
   int r = m_trimmer->remove_objects(force);
@@ -197,6 +246,20 @@ void Journaler::update_client(const bufferlist &data, Context *on_finish) {
 
 void Journaler::unregister_client(Context *on_finish) {
   return m_metadata->unregister_client(on_finish);
+}
+
+int Journaler::get_cached_client(const std::string &client_id,
+                                 cls::journal::Client *client) {
+  RegisteredClients clients;
+  m_metadata->get_registered_clients(&clients);
+
+  auto it = clients.find({client_id, {}});
+  if (it == clients.end()) {
+    return -ENOENT;
+  }
+
+  *client = *it;
+  return 0;
 }
 
 void Journaler::allocate_tag(const bufferlist &data, cls::journal::Tag *tag,

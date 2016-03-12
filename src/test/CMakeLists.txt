@@ -1900,6 +1900,17 @@ set_target_properties(test_rados_api_misc PROPERTIES COMPILE_FLAGS
 target_link_libraries(test_rados_api_misc
   librados global ${UNITTEST_LIBS} radostest)
 
+add_executable(test_rados_api_tmap_migrate
+  ../tools/cephfs/DataScan.cc
+  ../tools/cephfs/MDSUtility.cc
+  librados/tmap_migrate.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_rados_api_tmap_migrate PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_rados_api_tmap_migrate
+  librados mds osdc global cls_cephfs_client ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+
 add_executable(test_rados_api_lock
   librados/lock.cc
   )

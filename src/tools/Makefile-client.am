@@ -86,6 +86,7 @@ librbd_mirror_internal_la_SOURCES = \
 	tools/rbd_mirror/Mirror.cc \
 	tools/rbd_mirror/PoolWatcher.cc \
 	tools/rbd_mirror/Replayer.cc \
+	tools/rbd_mirror/Threads.cc \
 	tools/rbd_mirror/types.cc
 noinst_LTLIBRARIES += librbd_mirror_internal.la
 noinst_HEADERS += \
@@ -94,6 +95,7 @@ noinst_HEADERS += \
 	tools/rbd_mirror/Mirror.h \
 	tools/rbd_mirror/PoolWatcher.h \
 	tools/rbd_mirror/Replayer.h \
+	tools/rbd_mirror/Threads.h \
 	tools/rbd_mirror/types.h
 
 rbd_mirror_SOURCES = \

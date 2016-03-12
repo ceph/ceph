@@ -45,6 +45,7 @@ public:
 
 class RGWAsyncRadosProcessor {
   deque<RGWAsyncRadosRequest *> m_req_queue;
+  atomic_t going_down;
 protected:
   RGWRados *store;
   ThreadPool m_tp;
@@ -76,6 +77,10 @@ public:
   void stop();
   void handle_request(RGWAsyncRadosRequest *req);
   void queue(RGWAsyncRadosRequest *req);
+
+  bool is_going_down() {
+    return (going_down.read() != 0);
+  }
 };
 
 

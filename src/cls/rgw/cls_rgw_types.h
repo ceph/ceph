@@ -721,9 +721,7 @@ struct rgw_usage_log_entry {
       epoch = e.epoch;
       payer = e.payer;
     }
-    if (payer != e.payer) {
-      return; /* can't aggregate differet payers */
-    }
+
     map<string, rgw_usage_data>::const_iterator iter;
     for (iter = e.usage_map.begin(); iter != e.usage_map.end(); ++iter) {
       if (!categories || !categories->size() || categories->count(iter->first)) {

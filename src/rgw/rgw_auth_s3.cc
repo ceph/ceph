@@ -29,6 +29,8 @@ static const char *signed_subresources[] = {
   "torrent",
   "uploadId",
   "uploads",
+  "start-date",
+  "end-date",
   "versionId",
   "versioning",
   "versions",

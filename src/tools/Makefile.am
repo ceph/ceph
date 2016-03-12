@@ -43,7 +43,8 @@ noinst_HEADERS += \
 	tools/rados/RadosImport.h \
 	tools/ceph_objectstore_tool.h \
 	tools/rados/PoolDump.h \
-	tools/cephfs/DataScan.h
+	tools/cephfs/DataScan.h \
+	tools/cephfs/RoleSelector.h
 
 EXTRA_DIST += \
 	tools/setup-virtualenv.sh

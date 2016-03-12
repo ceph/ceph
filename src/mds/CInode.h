@@ -171,6 +171,7 @@ public:
   static const int PIN_EXPORTINGCAPS =    22;
   static const int PIN_DIRTYPARENT =      23;
   static const int PIN_DIRWAITER =        24;
+  static const int PIN_SCRUBQUEUE =       25;
 
   const char *pin_name(int p) const {
     switch (p) {
@@ -195,6 +196,7 @@ public:
     case PIN_DIRTYRSTAT: return "dirtyrstat";
     case PIN_DIRTYPARENT: return "dirtyparent";
     case PIN_DIRWAITER: return "dirwaiter";
+    case PIN_SCRUBQUEUE: return "scrubqueue";
     default: return generic_pin_name(p);
     }
   }
@@ -214,6 +216,7 @@ public:
   static const int STATE_STRAYPINNED = (1<<16);
   static const int STATE_FROZENAUTHPIN = (1<<17);
   static const int STATE_DIRTYPOOL =   (1<<18);
+  static const int STATE_REPAIRSTATS = (1<<19);
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 
@@ -254,17 +257,30 @@ public:
     /// time we started our most recent finished scrub
     utime_t last_scrub_stamp;
     scrub_stamp_info_t() : scrub_start_version(0), last_scrub_version(0) {}
+    void reset() {
+      scrub_start_version = 0;
+      scrub_start_stamp = utime_t();
+    }
   };
 
   class scrub_info_t : public scrub_stamp_info_t {
   public:
+    CDentry *scrub_parent;
+    MDSInternalContextBase *on_finish;
+
     bool last_scrub_dirty; /// are our stamps dirty with respect to disk state?
     bool scrub_in_progress; /// are we currently scrubbing?
+    bool children_scrubbed;
+
     /// my own (temporary) stamps and versions for each dirfrag we have
     std::map<frag_t, scrub_stamp_info_t> dirfrag_stamps;
 
-    scrub_info_t() : scrub_stamp_info_t(), last_scrub_dirty(false),
-        scrub_in_progress(false) {}
+    ScrubHeaderRefConst header;
+
+    scrub_info_t() : scrub_stamp_info_t(),
+	scrub_parent(NULL), on_finish(NULL),
+	last_scrub_dirty(false), scrub_in_progress(false),
+	children_scrubbed(false) {}
   };
 
   const scrub_info_t *scrub_info() const{
@@ -280,7 +296,9 @@ public:
    * @param scrub_version What version are we scrubbing at (usually, parent
    * directory's get_projected_version())
    */
-  void scrub_initialize(version_t scrub_version);
+  void scrub_initialize(CDentry *scrub_parent,
+			const ScrubHeaderRefConst& header,
+			MDSInternalContextBase *f);
   /**
    * Get the next dirfrag to scrub. Gives you a frag_t in output param which
    * you must convert to a CDir (and possibly load off disk).
@@ -311,7 +329,17 @@ public:
    * @param c An out param which is filled in with a Context* that must
    * be complete()ed.
    */
-  void scrub_finished(Context **c);
+  void scrub_finished(MDSInternalContextBase **c);
+  /**
+   * Report to the CInode that alldirfrags it owns have been scrubbed.
+   */
+  void scrub_children_finished() {
+    scrub_infop->children_scrubbed = true;
+  }
+  void scrub_set_finisher(MDSInternalContextBase *c) {
+    assert(!scrub_infop->on_finish);
+    scrub_infop->on_finish = c;
+  }
 
 private:
   /**
@@ -597,6 +625,7 @@ public:
   elist<CInode*>::item item_dirty_dirfrag_dir;
   elist<CInode*>::item item_dirty_dirfrag_nest;
   elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
+  elist<CInode*>::item item_scrub;
 
 public:
   int auth_pin_freeze_allowance;
@@ -1076,9 +1105,14 @@ public:
     bool performed_validation;
     bool passed_validation;
 
+    struct raw_stats_t {
+      frag_info_t dirstat;
+      nest_info_t rstat;
+    };
+
     member_status<inode_backtrace_t> backtrace;
     member_status<inode_t> inode;
-    member_status<nest_info_t> raw_rstats;
+    member_status<raw_stats_t> raw_stats;
 
     validated_data() : performed_validation(false),
         passed_validation(false) {}
@@ -1100,7 +1134,6 @@ public:
    * @param fin Context to call back on completion (or NULL)
    */
   void validate_disk_state(validated_data *results,
-                           MDRequestRef& mdr,
                            MDSInternalContext *fin);
   static void dump_validation_results(const validated_data& results,
                                       Formatter *f);

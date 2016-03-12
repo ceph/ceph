@@ -1129,21 +1129,8 @@ public:
     return p->second;
   }
 
-  void scrub_dentry(const string& path, Formatter *f, Context *fin);
-  /**
-   * Scrub the named dentry only (skip the scrubstack)
-   */
-  void scrub_dentry_work(MDRequestRef& mdr);
-
-  void flush_dentry(const string& path, Context *fin);
+protected:
   void flush_dentry_work(MDRequestRef& mdr);
-
-  /**
-   * Create and start an OP_ENQUEUE_SCRUB
-   */
-  void enqueue_scrub(const string& path, const std::string &tag,
-                     Formatter *f, Context *fin);
-
   /**
    * Resolve path to a dentry and pass it onto the ScrubStack.
    *
@@ -1153,6 +1140,19 @@ public:
    * long time)
    */
   void enqueue_scrub_work(MDRequestRef& mdr);
+  void repair_inode_stats_work(MDRequestRef& mdr);
+  void repair_dirfrag_stats_work(MDRequestRef& mdr);
+  friend class C_MDC_RepairDirfragStats;
+public:
+  void flush_dentry(const string& path, Context *fin);
+  /**
+   * Create and start an OP_ENQUEUE_SCRUB
+   */
+  void enqueue_scrub(const string& path, const std::string &tag,
+                     bool force, bool recursive, bool repair,
+		     Formatter *f, Context *fin);
+  void repair_inode_stats(CInode *diri);
+  void repair_dirfrag_stats(CDir *dir);
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {

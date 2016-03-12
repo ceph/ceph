@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 #
 # Script to mirror Ceph locally
 #
@@ -10,8 +11,15 @@ SILENT=0
 # All available source mirrors
 declare -A SOURCES
 SOURCES[eu]="eu.ceph.com"
+SOURCES[de]="de.ceph.com"
+SOURCES[se]="se.ceph.com"
+SOURCES[cz]="cz.ceph.com"
 SOURCES[au]="au.ceph.com"
 SOURCES[us]="download.ceph.com"
+SOURCES[hk]="hk.ceph.com"
+SOURCES[fr]="fr.ceph.com"
+SOURCES[us-east]="us-east.ceph.com"
+SOURCES[us-west]="us-west.ceph.com"
 SOURCES[global]="download.ceph.com"
 
 function print_usage() {
@@ -77,8 +85,6 @@ fi
 #
 
 # Exclude all metadata files
-RET=0
-
 rsync ${RSYNC_OPTS} ${SOURCE_HOST}::ceph --recursive --times --links \
                                          --hard-links \
                                          --exclude Packages* \
@@ -90,17 +96,7 @@ rsync ${RSYNC_OPTS} ${SOURCE_HOST}::ceph --recursive --times --links \
                                          --exclude repodata/* \
                                          ${TARGET}
 
-if [ "$?" -ne 0 ]; then
-    RET=$?
-fi
-
 # Now also transfer the metadata and delete afterwards
 rsync ${RSYNC_OPTS} ${SOURCE_HOST}::ceph --recursive --times --links \
                                          --hard-links --delete-after \
-                                        ${TARGET}
-
-if [ "$?" -ne 0 ]; then
-    RET=$?
-fi
-
-exit $RET
+                                         ${TARGET}

@@ -1307,6 +1307,13 @@ int RGWListBuckets::verify_permission()
   return 0;
 }
 
+int RGWGetUsage::verify_permission()
+{
+  if (!rgw_user_is_authenticated(*s->user))
+    return -EACCES;
+  return 0;
+}
+
 void RGWListBuckets::execute()
 {
   bool done;
@@ -1380,6 +1387,66 @@ send_end:
     send_response_begin(false);
   }
   send_response_end();
+}
+
+void RGWGetUsage::execute()
+{
+  uint64_t start_epoch = 0;
+  uint64_t end_epoch = (uint64_t)-1;
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+    
+  if (!start_date.empty()) {
+    op_ret = utime_t::parse_date(start_date, &start_epoch, NULL);
+    if (op_ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to parse start date" << dendl;
+      return;
+    }
+  }
+    
+  if (!end_date.empty()) {
+    op_ret = utime_t::parse_date(end_date, &end_epoch, NULL);
+    if (op_ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to parse end date" << dendl;
+      return;
+    }
+  }
+     
+  uint32_t max_entries = 1000;
+
+  bool is_truncated = true;
+
+  RGWUsageIter usage_iter;
+  
+  while (is_truncated) {
+    op_ret = store->read_usage(s->user->user_id, start_epoch, end_epoch, max_entries,
+                                &is_truncated, usage_iter, usage);
+
+    if (op_ret == -ENOENT) {
+      op_ret = 0;
+      is_truncated = false;
+    }
+
+    if (op_ret < 0) {
+      return;
+    }    
+  }
+
+  op_ret = rgw_user_sync_all_stats(store, s->user->user_id);
+  if (op_ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to sync user stats: " << dendl;
+    return ;
+  }
+  
+  string user_str = s->user->user_id.to_str();
+  op_ret = store->cls_user_get_header(user_str, &header);
+  if (op_ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: can't read user header: "  << dendl;
+    return ;
+  }
+  
+  return;
 }
 
 int RGWStatAccount::verify_permission()

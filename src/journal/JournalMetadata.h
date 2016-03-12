@@ -10,6 +10,7 @@
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/RefCountedObj.h"
+#include "common/WorkQueue.h"
 #include "cls/journal/cls_journal_types.h"
 #include "journal/AsyncOpTracker.h"
 #include <boost/intrusive_ptr.hpp>
@@ -21,7 +22,6 @@
 #include <string>
 #include "include/assert.h"
 
-class Finisher;
 class SafeTimer;
 
 namespace journal {
@@ -46,12 +46,15 @@ public:
     virtual void handle_update(JournalMetadata *) = 0;
   };
 
-  JournalMetadata(librados::IoCtx &ioctx, const std::string &oid,
+  JournalMetadata(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
+                  librados::IoCtx &ioctx, const std::string &oid,
                   const std::string &client_id, double commit_interval);
   ~JournalMetadata();
 
   void init(Context *on_init);
-  void shutdown();
+  void shut_down();
+
+  bool is_initialized() const { return m_initialized; }
 
   void get_immutable_metadata(uint8_t *order, uint8_t *splay_width,
 			      int64_t *pool_id, Context *on_finish);
@@ -84,15 +87,15 @@ public:
     return m_pool_id;
   }
 
-  inline Finisher &get_finisher() {
-    return *m_finisher;
+  inline void queue(Context *on_finish, int r) {
+    m_work_queue->queue(on_finish, r);
   }
 
   inline SafeTimer &get_timer() {
     return *m_timer;
   }
   inline Mutex &get_timer_lock() {
-    return m_timer_lock;
+    return *m_timer_lock;
   }
 
   void set_minimum_set(uint64_t object_set);
@@ -283,9 +286,9 @@ private:
   int64_t m_pool_id;
   bool m_initialized;
 
-  Finisher *m_finisher;
+  ContextWQ *m_work_queue;
   SafeTimer *m_timer;
-  Mutex m_timer_lock;
+  Mutex *m_timer_lock;
 
   mutable Mutex m_lock;
 
