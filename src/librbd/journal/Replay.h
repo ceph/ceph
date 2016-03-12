@@ -159,8 +159,8 @@ private:
   void handle_aio_flush_complete(Context *on_flush_safe, Contexts &on_safe_ctxs,
                                  int r);
 
-  Context *create_op_context_callback(uint64_t op_tid, Context *on_safe,
-                                      OpEvent **op_event);
+  Context *create_op_context_callback(uint64_t op_tid, Context *on_ready,
+                                      Context *on_safe, OpEvent **op_event);
   void handle_op_complete(uint64_t op_tid, int r);
 
   AioCompletion *create_aio_modify_completion(Context *on_ready,
