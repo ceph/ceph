@@ -6,6 +6,7 @@
 #include "include/rbd/librbd.hpp"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
+#include "librbd/Operations.h"
 #include "test/librados/test.h"
 
 namespace rbd {
@@ -50,7 +51,7 @@ void TestFixture::TearDown() {
 
 int TestFixture::create_image(librbd::RBD &rbd, librados::IoCtx &ioctx,
                               const std::string &name, uint64_t size) {
-  int order = 0;
+  int order = 18;
   return rbd.create2(ioctx, name.c_str(), size, RBD_FEATURES_ALL, &order);
 }
 
@@ -61,6 +62,28 @@ int TestFixture::open_image(librados::IoCtx &io_ctx,
                                     false);
   m_image_ctxs.insert(*image_ctx);
   return (*image_ctx)->state->open();
+}
+
+int TestFixture::create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
+                             librados::snap_t *snap_id) {
+  int r = image_ctx->operations->snap_create(snap_name);
+  if (r < 0) {
+    return r;
+  }
+
+  r = image_ctx->state->refresh();
+  if (r < 0) {
+    return r;
+  }
+
+  if (image_ctx->snap_ids.count(snap_name) == 0) {
+    return -ENOENT;
+  }
+
+  if (snap_id != nullptr) {
+    *snap_id = image_ctx->snap_ids[snap_name];
+  }
+  return 0;
 }
 
 std::string TestFixture::get_temp_image_name() {
