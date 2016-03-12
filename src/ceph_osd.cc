@@ -257,7 +257,8 @@ int main(int argc, const char **argv)
   ObjectStore *store = ObjectStore::create(g_ceph_context,
 					   store_type,
 					   g_conf->osd_data,
-					   g_conf->osd_journal);
+					   g_conf->osd_journal,
+                                           g_conf->osd_os_flags);
   if (!store) {
     derr << "unable to create object store" << dendl;
     return -ENODEV;

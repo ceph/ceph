@@ -586,6 +586,12 @@ OPTION(osd_uuid, OPT_UUID, uuid_d())
 OPTION(osd_data, OPT_STR, "/var/lib/ceph/osd/$cluster-$id")
 OPTION(osd_journal, OPT_STR, "/var/lib/ceph/osd/$cluster-$id/journal")
 OPTION(osd_journal_size, OPT_INT, 5120)         // in mb
+// flags for specific control purpose during osd mount() process. 
+// e.g., can be 1 to skip over replaying journal
+// or 2 to skip over mounting omap or 3 to skip over both.
+// This might be helpful in case the journal is totally corrupted
+// and we still want to bring the osd daemon back normally, etc.
+OPTION(osd_os_flags, OPT_U32, 0)
 OPTION(osd_max_write_size, OPT_INT, 90)
 OPTION(osd_max_pgls, OPT_U64, 1024) // max number of pgls entries to return
 OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // client data allowed in-memory (in bytes)
