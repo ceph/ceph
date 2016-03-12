@@ -483,7 +483,9 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
   location_constraint = store->get_zonegroup().api_name;
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
-  swift_ver_location = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
+  if (s->cct->_conf->rgw_swift_versioning_enabled) {
+    swift_ver_location = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
+  }
 
   return 0;
 }
@@ -735,7 +737,9 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
 			   rmattr_names);
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
-  swift_ver_location = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
+  if (s->cct->_conf->rgw_swift_versioning_enabled) {
+    swift_ver_location = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
+  }
   return 0;
 }
 
