@@ -133,13 +133,13 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   assert(version >= fsmap.epoch);
 
   // read and decode
-  mdsmap_bl.clear();
-  int err = get_version(version, mdsmap_bl);
+  fsmap_bl.clear();
+  int err = get_version(version, fsmap_bl);
   assert(err == 0);
 
-  assert(mdsmap_bl.length() > 0);
+  assert(fsmap_bl.length() > 0);
   dout(10) << __func__ << " got " << version << dendl;
-  fsmap.decode(mdsmap_bl);
+  fsmap.decode(fsmap_bl);
 
   // new map
   dout(4) << "new map" << dendl;
@@ -181,11 +181,11 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // apply to paxos
   assert(get_last_committed() + 1 == pending_fsmap.epoch);
-  bufferlist mdsmap_bl;
-  pending_fsmap.encode(mdsmap_bl, mon->get_quorum_features());
+  bufferlist fsmap_bl;
+  pending_fsmap.encode(fsmap_bl, mon->get_quorum_features());
 
   /* put everything in the transaction */
-  put_version(t, pending_fsmap.epoch, mdsmap_bl);
+  put_version(t, pending_fsmap.epoch, fsmap_bl);
   put_last_committed(t, pending_fsmap.epoch);
 
   // Encode MDSHealth data
