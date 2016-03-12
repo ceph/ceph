@@ -466,10 +466,10 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        src_obj,
                        bucket_info, /* dest */
                        bucket_info, /* source */
-                       NULL, /* time_t *src_mtime, */
-                       NULL, /* time_t *mtime, */
-                       NULL, /* const time_t *mod_ptr, */
-                       NULL, /* const time_t *unmod_ptr, */
+                       NULL, /* real_time* src_mtime, */
+                       NULL, /* real_time* mtime, */
+                       NULL, /* const real_time* mod_ptr, */
+                       NULL, /* const real_time* unmod_ptr, */
                        NULL, /* const char *if_match, */
                        NULL, /* const char *if_nomatch, */
                        RGWRados::ATTRSMOD_NONE,
@@ -477,7 +477,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        attrs,
                        RGW_OBJ_CATEGORY_MAIN,
                        versioned_epoch,
-                       0, /* delete_at */
+                       real_time(), /* delete_at */
                        &key.instance, /* string *version_id, */
                        NULL, /* string *ptag, */
                        NULL, /* string *petag, */
@@ -624,7 +624,7 @@ int RGWAsyncStatObj::_send_request()
 
 RGWStatObjCR::RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
                            const rgw_obj& obj, uint64_t *psize,
-                           time_t *pmtime, uint64_t *pepoch,
+                           real_time* pmtime, uint64_t *pepoch,
                            RGWObjVersionTracker *objv_tracker)
   : RGWSimpleCoroutine(store->ctx()), store(store), async_rados(async_rados),
     obj(obj), psize(psize), pmtime(pmtime), pepoch(pepoch),

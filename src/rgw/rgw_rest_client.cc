@@ -532,7 +532,7 @@ void set_str_from_headers(map<string, string>& out_headers, const string& header
   }
 }
 
-int RGWRESTStreamWriteRequest::complete(string& etag, time_t *mtime)
+int RGWRESTStreamWriteRequest::complete(string& etag, real_time *mtime)
 {
   int ret = http_manager.complete_requests();
   if (ret < 0)
@@ -542,13 +542,14 @@ int RGWRESTStreamWriteRequest::complete(string& etag, time_t *mtime)
   if (mtime) {
     string mtime_str;
     set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
+#warning FIXME parse high def mtime
     string err;
     long t = strict_strtol(mtime_str.c_str(), 10, &err);
     if (!err.empty()) {
       ldout(cct, 0) << "ERROR: failed converting mtime (" << mtime_str << ") to int " << dendl;
       return -EINVAL;
     }
-    *mtime = (time_t)t;
+    *mtime = utime_t(t, 0).to_real_time();
   }
 
   return status;
@@ -639,12 +640,13 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
   return 0;
 }
 
-int RGWRESTStreamRWRequest::complete(string& etag, time_t *mtime, map<string, string>& attrs)
+int RGWRESTStreamRWRequest::complete(string& etag, real_time *mtime, map<string, string>& attrs)
 {
   set_str_from_headers(out_headers, "ETAG", etag);
   if (mtime) {
     string mtime_str;
     set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
+#warning FIXME parse high def mtime
     if (!mtime_str.empty()) {
       string err;
       long t = strict_strtol(mtime_str.c_str(), 10, &err);
@@ -652,7 +654,7 @@ int RGWRESTStreamRWRequest::complete(string& etag, time_t *mtime, map<string, st
         ldout(cct, 0) << "ERROR: failed converting mtime (" << mtime_str << ") to int " << dendl;
         return -EINVAL;
       }
-      *mtime = (time_t)t;
+      *mtime = utime_t(t, 0).to_real_time();
     }
   }
 

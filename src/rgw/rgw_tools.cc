@@ -19,7 +19,7 @@
 static map<string, string> ext_mime_map;
 
 int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, const char *data, size_t size, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, time_t set_mtime, map<string, bufferlist> *pattrs)
+                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
   if (!pattrs)
@@ -39,7 +39,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, cons
 }
 
 int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bucket, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, time_t *pmtime, map<string, bufferlist> *pattrs,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info)
 {
   struct rgw_err err;

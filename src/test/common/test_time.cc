@@ -122,7 +122,9 @@ static void system_clock_conversions() {
 
   ASSERT_EQ(Clock::to_double(brt), bd);
   // Fudge factor
-  ASSERT_LT(abs((Clock::from_double(bd) - brt).count()), 30);
+  ASSERT_LT((Clock::from_double(bd) >  brt ?
+	     Clock::from_double(bd) - brt :
+	     brt - Clock::from_double(bd)).count(), 30U);
 }
 
 TEST(RealClock, Sanity) {

@@ -257,10 +257,11 @@ struct ObjectOperation {
     uint64_t *psize;
     ceph::real_time *pmtime;
     time_t *ptime;
+    struct timespec *pts;
     int *prval;
-    C_ObjectOperation_stat(uint64_t *ps, ceph::real_time *pm, time_t *pt,
+    C_ObjectOperation_stat(uint64_t *ps, ceph::real_time *pm, time_t *pt, struct timespec *_pts,
 			   int *prval)
-      : psize(ps), pmtime(pm), ptime(pt), prval(prval) {}
+      : psize(ps), pmtime(pm), ptime(pt), pts(_pts), prval(prval) {}
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
@@ -275,6 +276,8 @@ struct ObjectOperation {
 	    *pmtime = mtime;
 	  if (ptime)
 	    *ptime = ceph::real_clock::to_time_t(mtime);
+	  if (pts)
+	    *pts = ceph::real_clock::to_timespec(mtime);
 	} catch (buffer::error& e) {
 	  if (prval)
 	    *prval = -EIO;
@@ -285,7 +288,7 @@ struct ObjectOperation {
   void stat(uint64_t *psize, ceph::real_time *pmtime, int *prval) {
     add_op(CEPH_OSD_OP_STAT);
     unsigned p = ops.size() - 1;
-    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime, NULL,
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime, NULL, NULL,
 							   prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
@@ -294,13 +297,21 @@ struct ObjectOperation {
   void stat(uint64_t *psize, time_t *ptime, int *prval) {
     add_op(CEPH_OSD_OP_STAT);
     unsigned p = ops.size() - 1;
-    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, ptime,
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, ptime, NULL,
 							   prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
     out_rval[p] = prval;
   }
-
+  void stat(uint64_t *psize, struct timespec *pts, int *prval) {
+    add_op(CEPH_OSD_OP_STAT);
+    unsigned p = ops.size() - 1;
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, NULL, pts,
+							   prval);
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
+    out_rval[p] = prval;
+  }
   // object data
   void read(uint64_t off, uint64_t len, bufferlist *pbl, int *prval,
 	    Context* ctx) {

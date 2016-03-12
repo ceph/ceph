@@ -418,7 +418,7 @@ int RGWSwift::update_user_info(RGWRados *store, struct rgw_swift_auth_info *info
     user_info.user_id = info->user;
     user_info.display_name = info->display_name;
 
-    int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
+    int ret = rgw_store_user_info(store, user_info, NULL, NULL, real_time(), true);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to store new user's info: ret=" << ret << dendl;
       return ret;

@@ -147,7 +147,7 @@ void RGWOp_OBJLog_DeleteBounds::execute() {
 
 static int bucket_instance_to_bucket(RGWRados *store, const string& bucket_instance, rgw_bucket& bucket) {
   RGWBucketInfo bucket_info;
-  time_t mtime;
+  real_time mtime;
   
   RGWObjectCtx obj_ctx(store);
   int r = store->get_bucket_instance_info(obj_ctx, bucket_instance, bucket_info, &mtime, NULL);
