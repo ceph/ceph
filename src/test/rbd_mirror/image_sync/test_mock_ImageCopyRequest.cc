@@ -152,25 +152,7 @@ public:
                                     &sync_point, ctx);
   }
 
-  int create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
-                  librados::snap_t *snap_id) {
-    int r = image_ctx->operations->snap_create(snap_name);
-    if (r < 0) {
-      return r;
-    }
-
-    r = image_ctx->state->refresh();
-    if (r < 0) {
-      return r;
-    }
-
-    if (image_ctx->snap_ids.count(snap_name) == 0) {
-      return -ENOENT;
-    }
-    *snap_id = image_ctx->snap_ids[snap_name];
-    return 0;
-  }
-
+  using TestFixture::create_snap;
   int create_snap(const char* snap_name) {
     librados::snap_t remote_snap_id;
     int r = create_snap(m_remote_image_ctx, snap_name, &remote_snap_id);
@@ -344,7 +326,7 @@ TEST_F(TestMockImageSyncImageCopyRequest, RestartCatchup) {
 
 TEST_F(TestMockImageSyncImageCopyRequest, RestartPartialSync) {
   ASSERT_EQ(0, create_snap("snap1"));
-  m_client_meta.sync_points = {{"snap1", 0}};
+  m_client_meta.sync_points = {{"snap1", librbd::journal::MirrorPeerSyncPoint::ObjectNumber{0U}}};
 
   librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);

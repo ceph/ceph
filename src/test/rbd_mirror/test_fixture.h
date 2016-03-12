@@ -31,7 +31,7 @@ public:
   librados::IoCtx m_remote_io_ctx;
 
   std::string m_image_name;
-  uint64_t m_image_size = 2 << 20;
+  uint64_t m_image_size = 1 << 24;
 
   std::set<librbd::ImageCtx *> m_image_ctxs;
 
@@ -39,6 +39,9 @@ public:
                    const std::string &name, uint64_t size);
   int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
                  librbd::ImageCtx **image_ctx);
+
+  int create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
+                  librados::snap_t *snap_id = nullptr);
 
   static std::string get_temp_image_name();
 
