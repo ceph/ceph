@@ -213,6 +213,14 @@ if test x"$with_cython" = xyes; then
     if test x"$CYTHON_CHECK" != xyes; then
         AC_MSG_FAILURE([cython not found])
     fi
+    AC_CHECK_PROG(PYTHON_CONFIG_CHECK, python-config, yes)
+    if test x"$PYTHON_CONFIG_CHECK" != xyes; then
+        AC_MSG_FAILURE([python-config not found])
+    fi
+    PYTHON_CFLAGS=`python-config --cflags`
+    AC_SUBST(PYTHON_CFLAGS)
+    PYTHON_LDFLAGS=`python-config --ldflags`
+    AC_SUBST(PYTHON_LDFLAGS)
 fi
 
 # cond-check if snappy-devel is installed, needed by leveldb that is need by server parts of the project
