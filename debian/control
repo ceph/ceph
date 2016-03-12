@@ -98,8 +98,9 @@ Depends: binutils,
          ${shlibs:Depends}
 Recommends: btrfs-tools, ceph-mds, librados2, libradosstriper1, librbd1
 Replaces: ceph-common (<< 0.78-500), python-ceph (<< 0.92-1223),
-	  ceph-test (<< 0.94-1322)
-Breaks: python-ceph (<< 0.92-1223), ceph-test (<< 0.94-1322)
+	  ceph-test (<< 0.94-1322), ceph (<< 10)
+Breaks: python-ceph (<< 0.92-1223), ceph-test (<< 0.94-1322), 
+        ceph (<< 10)
 X-Python-Version: >= 2.6
 Description: common ceph daemon libraries and management tools
  Ceph is a massively scalable, open-source, distributed
@@ -143,8 +144,8 @@ Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Recommends: ceph-common
-Replaces: ceph (<< 9.0.1-1294)
-Breaks: ceph (<< 9.0.1-1294)
+Replaces: ceph (<< 10)
+Breaks: ceph (<< 10)
 Description: monitor server for the ceph storage system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -171,8 +172,8 @@ Package: ceph-osd
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Recommends: ceph-common
-Replaces: ceph (<< 9.0.1-1294)
-Breaks: ceph (<< 9.0.1-1294)
+Replaces: ceph (<< 10)
+Breaks: ceph (<< 10)
 Description: OSD server for the ceph storage system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -312,11 +313,11 @@ Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
 	 python-requests
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools,
-	  ceph (<< 9.0.0-943),
+	  ceph (<< 10),
 	  ceph-test (<< 9.0.3-1646),
 	  python-ceph (<< 0.92-1223),
 	  librbd1 (<< 0.92-1238)
-Breaks: ceph (<< 9.0.0-943),
+Breaks: ceph (<< 10),
 	ceph-test (<< 9.0.3-1646),
 	python-ceph (<< 0.92-1223),
 	librbd1 (<< 0.92-1238)
