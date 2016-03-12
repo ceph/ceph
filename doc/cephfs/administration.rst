@@ -39,7 +39,7 @@ creation of multiple filesystems use ``ceph fs flag set enable_multiple true``.
 
 ::
 
-    fs remove_data_pool <filesystem name> <pool name/id>
+    fs rm_data_pool <filesystem name> <pool name/id>
 
 
 Daemons
