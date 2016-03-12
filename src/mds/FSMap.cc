@@ -235,9 +235,7 @@ void FSMap::decode(bufferlist::iterator& p)
   // Because the mon used to store an MDSMap where we now
   // store an FSMap, FSMap knows how to decode the legacy
   // MDSMap format (it never needs to encode it though).
-  Filesystem legacy_fs;
-  MDSMap &legacy_mds_map = legacy_fs.mds_map;
-  bool enabled = false;
+  MDSMap legacy_mds_map;
   
   // The highest MDSMap encoding version before we changed the
   // MDSMonitor to store an FSMap instead of an MDSMap was
@@ -308,33 +306,57 @@ void FSMap::decode(bufferlist::iterator& p)
 
     if (ev >= 8) {
       assert(struct_v >= 5);
-      ::decode(enabled, p);
+      ::decode(legacy_mds_map.enabled, p);
       ::decode(legacy_mds_map.fs_name, p);
     } else {
+      legacy_mds_map.fs_name = "default";
       if (epoch > 1) {
         // If an MDS has ever been started, epoch will be greater than 1,
         // assume filesystem is enabled.
-        enabled = true;
+        legacy_mds_map.enabled = true;
       } else {
         // Upgrading from a cluster that never used an MDS, switch off
         // filesystem until it's explicitly enabled.
-        enabled = false;
+        legacy_mds_map.enabled = false;
       }
     }
 
     if (ev >= 9) {
       ::decode(legacy_mds_map.damaged, p);
     }
-    // We're upgrading, populate fs_list from the legacy fields
-    assert(filesystems.empty());
-    auto migrate_fs = std::make_shared<Filesystem>(); 
 
-    *migrate_fs = legacy_fs;
-    migrate_fs->fscid = FS_CLUSTER_ID_ANONYMOUS;
-    migrate_fs->mds_map.fs_name = "default";
-    legacy_client_fscid = migrate_fs->fscid;
-    filesystems[migrate_fs->fscid] = migrate_fs;
-    compat = migrate_fs->mds_map.compat;
+    // We're upgrading, populate filesystems from the legacy fields
+    assert(filesystems.empty());
+
+    if (legacy_mds_map.enabled) {
+      // Construct a Filesystem from the legacy MDSMap
+      auto migrate_fs = std::make_shared<Filesystem>(); 
+      migrate_fs->fscid = FS_CLUSTER_ID_ANONYMOUS;
+      migrate_fs->mds_map = legacy_mds_map;
+      migrate_fs->mds_map.epoch = epoch;
+      filesystems[migrate_fs->fscid] = migrate_fs;
+
+      // Construct mds_roles, standby_daemons, and remove
+      // standbys from the MDSMap in the Filesystem.
+      for (const auto &p : migrate_fs->mds_map.mds_info) {
+        if (p.second.rank == MDS_RANK_NONE) {
+          standby_daemons[p.first] = p.second;
+          standby_epochs[p.first] = epoch;
+          mds_roles[p.first] = FS_CLUSTER_ID_NONE;
+        } else {
+          mds_roles[p.first] = migrate_fs->fscid;
+        }
+      }
+      for (const auto &p : standby_daemons) {
+        migrate_fs->mds_map.mds_info.erase(p.first);
+      }
+
+      legacy_client_fscid = migrate_fs->fscid;
+    } else {
+      legacy_client_fscid = FS_CLUSTER_ID_NONE;
+    }
+
+    compat = legacy_mds_map.compat;
     enable_multiple = false;
   } else {
     ::decode(epoch, p);
