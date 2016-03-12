@@ -46,7 +46,7 @@ public:
   MDSUtility();
   ~MDSUtility();
 
-  void handle_mds_map(MFSMap* m);
+  void handle_fs_map(MFSMap* m);
   bool ms_dispatch(Message *m);
   bool ms_handle_reset(Connection *con) { return false; }
   void ms_handle_remote_reset(Connection *con) {}
