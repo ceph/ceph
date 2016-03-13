@@ -8,6 +8,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "test/librados/test.h"
+#include "tools/rbd_mirror/Threads.h"
 
 namespace rbd {
 namespace mirror {
@@ -38,6 +39,9 @@ void TestFixture::SetUp() {
   ASSERT_EQ(0, _rados.ioctx_create(_local_pool_name.c_str(), m_local_io_ctx));
   ASSERT_EQ(0, _rados.ioctx_create(_remote_pool_name.c_str(), m_remote_io_ctx));
   m_image_name = get_temp_image_name();
+
+  m_threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
+    m_local_io_ctx.cct()));
 }
 
 void TestFixture::TearDown() {
@@ -47,6 +51,8 @@ void TestFixture::TearDown() {
 
   m_remote_io_ctx.close();
   m_local_io_ctx.close();
+
+  delete m_threads;
 }
 
 int TestFixture::create_image(librbd::RBD &rbd, librados::IoCtx &ioctx,
