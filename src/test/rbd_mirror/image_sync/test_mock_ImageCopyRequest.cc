@@ -80,14 +80,6 @@ public:
 
     ASSERT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, m_image_size));
     ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &m_local_image_ctx));
-
-    m_threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
-      m_local_io_ctx.cct()));
-  }
-
-  virtual void TearDown() {
-    delete m_threads;
-    TestMockFixture::TearDown();
   }
 
   void expect_get_snap_id(librbd::MockImageCtx &mock_image_ctx) {
@@ -182,8 +174,6 @@ public:
   librbd::ImageCtx *m_local_image_ctx;
   librbd::journal::MirrorPeerClientMeta m_client_meta;
   MockImageCopyRequest::SnapMap m_snap_map;
-
-  rbd::mirror::Threads *m_threads = nullptr;
 };
 
 TEST_F(TestMockImageSyncImageCopyRequest, SimpleImage) {

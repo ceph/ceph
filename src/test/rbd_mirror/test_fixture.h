@@ -17,6 +17,8 @@ class RBD;
 namespace rbd {
 namespace mirror {
 
+class Threads;
+
 class TestFixture : public ::testing::Test {
 public:
   TestFixture();
@@ -34,6 +36,8 @@ public:
   uint64_t m_image_size = 1 << 24;
 
   std::set<librbd::ImageCtx *> m_image_ctxs;
+
+  Threads *m_threads = nullptr;
 
   int create_image(librbd::RBD &rbd, librados::IoCtx &ioctx,
                    const std::string &name, uint64_t size);

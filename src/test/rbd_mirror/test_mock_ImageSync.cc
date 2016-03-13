@@ -6,6 +6,7 @@
 #include "librbd/journal/Types.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "test/librbd/mock/MockObjectMap.h"
 #include "test/rbd_mirror/mock/MockJournaler.h"
 #include "tools/rbd_mirror/ImageSync.h"
 #include "tools/rbd_mirror/Threads.h"
@@ -127,6 +128,8 @@ SyncPointPruneRequest<librbd::MockImageCtx>* SyncPointPruneRequest<librbd::MockI
 using ::testing::_;
 using ::testing::InSequence;
 using ::testing::Invoke;
+using ::testing::Return;
+using ::testing::WithArg;
 
 class TestMockImageSync : public TestMockFixture {
 public:
@@ -145,21 +148,15 @@ public:
 
     ASSERT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, m_image_size));
     ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &m_local_image_ctx));
-
-    m_threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
-      m_local_io_ctx.cct()));
   }
 
-  virtual void TearDown() {
-    delete m_threads;
-    TestMockFixture::TearDown();
-  }
-
-  void expect_create_sync_point(MockSyncPointCreateRequest &mock_sync_point_create_request,
+  void expect_create_sync_point(librbd::MockImageCtx &mock_local_image_ctx,
+                                MockSyncPointCreateRequest &mock_sync_point_create_request,
                                 int r) {
     EXPECT_CALL(mock_sync_point_create_request, send())
-      .WillOnce(Invoke([this, &mock_sync_point_create_request, r]() {
+      .WillOnce(Invoke([this, &mock_local_image_ctx, &mock_sync_point_create_request, r]() {
           if (r == 0) {
+            mock_local_image_ctx.snap_ids["snap1"] = 123;
             m_client_meta.sync_points.emplace_back("snap1", boost::none);
           }
           m_threads->work_queue->queue(mock_sync_point_create_request.on_finish, r);
@@ -177,6 +174,29 @@ public:
     EXPECT_CALL(mock_image_copy_request, send())
       .WillOnce(Invoke([this, &mock_image_copy_request, r]() {
           m_threads->work_queue->queue(mock_image_copy_request.on_finish, r);
+        }));
+  }
+
+  void expect_rollback_object_map(librbd::MockObjectMap &mock_object_map, int r) {
+    if ((m_local_image_ctx->features & RBD_FEATURE_OBJECT_MAP) != 0) {
+      EXPECT_CALL(mock_object_map, rollback(_, _))
+        .WillOnce(WithArg<1>(Invoke([this, r](Context *ctx) {
+            m_threads->work_queue->queue(ctx, r);
+          })));
+    }
+  }
+
+  void expect_create_object_map(librbd::MockImageCtx &mock_image_ctx,
+                                librbd::MockObjectMap *mock_object_map) {
+    EXPECT_CALL(mock_image_ctx, create_object_map(CEPH_NOSNAP))
+      .WillOnce(Return(mock_object_map));
+  }
+
+  void expect_open_object_map(librbd::MockImageCtx &mock_image_ctx,
+                              librbd::MockObjectMap &mock_object_map) {
+    EXPECT_CALL(mock_object_map, open(_))
+      .WillOnce(Invoke([this](Context *ctx) {
+          m_threads->work_queue->queue(ctx, 0);
         }));
   }
 
@@ -211,8 +231,6 @@ public:
   librbd::ImageCtx *m_remote_image_ctx;
   librbd::ImageCtx *m_local_image_ctx;
   librbd::journal::MirrorPeerClientMeta m_client_meta;
-
-  rbd::mirror::Threads *m_threads = nullptr;
 };
 
 TEST_F(TestMockImageSync, SimpleSync) {
@@ -224,10 +242,17 @@ TEST_F(TestMockImageSync, SimpleSync) {
   MockSyncPointCreateRequest mock_sync_point_create_request;
   MockSyncPointPruneRequest mock_sync_point_prune_request;
 
+  librbd::MockObjectMap *mock_object_map = new librbd::MockObjectMap();
+  mock_local_image_ctx.object_map = mock_object_map;
+  expect_test_features(mock_local_image_ctx);
+
   InSequence seq;
-  expect_create_sync_point(mock_sync_point_create_request, 0);
+  expect_create_sync_point(mock_local_image_ctx, mock_sync_point_create_request, 0);
   expect_copy_snapshots(mock_snapshot_copy_request, 0);
   expect_copy_image(mock_image_copy_request, 0);
+  expect_rollback_object_map(*mock_object_map, 0);
+  expect_create_object_map(mock_local_image_ctx, mock_object_map);
+  expect_open_object_map(mock_local_image_ctx, *mock_object_map);
   expect_prune_sync_point(mock_sync_point_prune_request, true, 0);
 
   C_SaferCond ctx;
@@ -249,11 +274,20 @@ TEST_F(TestMockImageSync, RestartSync) {
 
   m_client_meta.sync_points = {{"snap1", boost::none},
                                {"snap2", "snap1", boost::none}};
+  mock_local_image_ctx.snap_ids["snap1"] = 123;
+  mock_local_image_ctx.snap_ids["snap2"] = 234;
+
+  librbd::MockObjectMap *mock_object_map = new librbd::MockObjectMap();
+  mock_local_image_ctx.object_map = mock_object_map;
+  expect_test_features(mock_local_image_ctx);
 
   InSequence seq;
   expect_prune_sync_point(mock_sync_point_prune_request, false, 0);
   expect_copy_snapshots(mock_snapshot_copy_request, 0);
   expect_copy_image(mock_image_copy_request, 0);
+  expect_rollback_object_map(*mock_object_map, 0);
+  expect_create_object_map(mock_local_image_ctx, mock_object_map);
+  expect_open_object_map(mock_local_image_ctx, *mock_object_map);
   expect_prune_sync_point(mock_sync_point_prune_request, true, 0);
 
   C_SaferCond ctx;

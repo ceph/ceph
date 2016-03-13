@@ -17,7 +17,10 @@ struct MockObjectMap {
 
   MOCK_METHOD3(aio_resize, void(uint64_t new_size, uint8_t default_object_state,
                                 Context *on_finish));
-
+  MOCK_METHOD6(aio_update, void(uint64_t snap_id, uint64_t start_object_no,
+                                uint64_t end_object_no, uint8_t new_state,
+                                const boost::optional<uint8_t> &current_state,
+                                Context *on_finish));
   MOCK_METHOD2(snapshot_add, void(uint64_t snap_id, Context *on_finish));
   MOCK_METHOD2(snapshot_remove, void(uint64_t snap_id, Context *on_finish));
   MOCK_METHOD2(rollback, void(uint64_t snap_id, Context *on_finish));

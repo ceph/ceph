@@ -44,9 +44,6 @@ public:
     create_and_open(m_local_io_ctx, &m_local_image_ctx);
     create_and_open(m_remote_io_ctx, &m_remote_image_ctx);
 
-    m_threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
-      m_local_io_ctx.cct()));
-
     m_remote_journaler = new ::journal::Journaler(
       m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
       m_remote_io_ctx, m_remote_image_ctx->id, "mirror-uuid", 5);
@@ -58,11 +55,6 @@ public:
     ::encode(client_data, client_data_bl);
 
     ASSERT_EQ(0, m_remote_journaler->register_client(client_data_bl));
-  }
-
-  virtual void TearDown() {
-    delete m_threads;
-    TestFixture::TearDown();
   }
 
   void create_and_open(librados::IoCtx &io_ctx, librbd::ImageCtx **image_ctx) {
@@ -90,8 +82,6 @@ public:
   librbd::ImageCtx *m_local_image_ctx;
   ::journal::Journaler *m_remote_journaler;
   librbd::journal::MirrorPeerClientMeta m_client_meta;
-
-  rbd::mirror::Threads *m_threads = nullptr;
 };
 
 TEST_F(TestImageSync, Empty) {

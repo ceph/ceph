@@ -15,6 +15,10 @@ class MockTestMemIoCtxImpl;
 class MockTestMemRadosClient;
 }
 
+namespace librbd {
+class MockImageCtx;
+}
+
 ACTION_P(CompleteContext, r) {
   arg0->complete(r);
 }
@@ -31,6 +35,8 @@ public:
 
   virtual void SetUp();
   virtual void TearDown();
+
+  void expect_test_features(librbd::MockImageCtx &mock_image_ctx);
 
   ::testing::NiceMock<librados::MockTestMemRadosClient> &get_mock_rados_client() {
     return *s_mock_rados_client;
