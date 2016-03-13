@@ -1144,7 +1144,6 @@ if(${WITH_RADOSGW})
     rgw/rgw_http_client.cc
     rgw/rgw_json_enc.cc
     rgw/rgw_keystone.cc
-    rgw/rgw_ldap.cc
     rgw/rgw_loadgen.cc
     rgw/rgw_log.cc
     rgw/rgw_metadata.cc
@@ -1221,9 +1220,6 @@ if(${WITH_RADOSGW})
     rgw/rgw_admin.cc
     rgw/rgw_orphan.cc)
 
-  set(radosgw_token_srcs
-    rgw/rgw_token.cc)
-
   set(radosgw_object_expirer_srcs
     rgw/rgw_object_expirer.cc)
 
@@ -1261,8 +1257,7 @@ if(${WITH_RADOSGW})
     cls_rgw_client cls_lock_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client
     cls_version_client cls_replica_log_client cls_user_client
-    curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES} ${OPENLDAP_LIBS}
-    ${ALLOC_LIBS})
+    curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES})
   install(TARGETS radosgw DESTINATION bin)
 
   add_executable(radosgw-admin ${radosgw_admin_srcs})
@@ -1273,11 +1268,6 @@ if(${WITH_RADOSGW})
     curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES})
 
   install(TARGETS radosgw-admin DESTINATION bin)
-
-  add_executable(radosgw-token ${radosgw_token_srcs})
-  target_link_libraries(radosgw-token librados
-    global ${ALLOC_LIBS})
-  install(TARGETS radosgw-token DESTINATION bin)
 
   add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
   target_link_libraries(radosgw-object-expirer rgw_a librados

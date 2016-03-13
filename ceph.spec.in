@@ -119,7 +119,6 @@ BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libudev-devel
 BuildRequires:	libtool
 BuildRequires:	make
-BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:	parted
 BuildRequires:	perl
@@ -1109,7 +1108,6 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/radosgw
 %{_bindir}/radosgw-admin
-%{_bindir}/radosgw-token
 %{_bindir}/radosgw-object-expirer
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
