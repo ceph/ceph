@@ -6,12 +6,15 @@
 #define CEPH_RGW_REST_S3_H
 #define TIME_BUF_SIZE 128
 
+#include <mutex>
+
 #include "rgw_op.h"
 #include "rgw_http_errors.h"
 #include "rgw_acl_s3.h"
 #include "rgw_policy_s3.h"
 #include "rgw_keystone.h"
 #include "rgw_rest_conn.h"
+#include "rgw_ldap.h"
 
 #define RGW_AUTH_GRACE_MINS 15
 
@@ -401,15 +404,34 @@ public:
 };
 
 class RGW_Auth_S3 {
-public:
-  static int authorize(RGWRados *store, struct req_state *s);
-  static int authorize_aws4_auth_complete(RGWRados *store, struct req_state *s);
 private:
+  static std::mutex mtx;
+  static rgw::LDAPHelper* ldh;
+
   static int authorize_v2(RGWRados *store, struct req_state *s);
   static int authorize_v4(RGWRados *store, struct req_state *s);
   static int authorize_v4_complete(RGWRados *store, struct req_state *s,
-                                   const string& request_payload, bool unsigned_payload);
+				  const string& request_payload,
+				  bool unsigned_payload);
+public:
+  static int authorize(RGWRados *store, struct req_state *s);
+  static int authorize_aws4_auth_complete(RGWRados *store, struct req_state *s);
 
+  static inline void init(RGWRados* store) {
+    if (! ldh) {
+      std::lock_guard<std::mutex> lck(mtx);
+      if (! ldh) {
+	init_impl(store);
+      }
+    }
+  }
+
+  static inline rgw::LDAPHelper* get_ldap_ctx(RGWRados* store) {
+    init(store);
+    return ldh;
+  }
+
+  static void init_impl(RGWRados* store);
 };
 
 class RGWHandler_Auth_S3 : public RGWHandler_REST {

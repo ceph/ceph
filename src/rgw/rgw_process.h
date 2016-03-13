@@ -11,6 +11,8 @@
 #include "rgw_op.h"
 #include "rgw_rest.h"
 
+#include "include/assert.h"
+
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
 

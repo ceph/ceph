@@ -74,6 +74,7 @@ Makefile
 /rados
 /radosgw
 /radosgw-admin
+/radosgw-token
 /radosgw-object-expirer
 /rbd
 /rbd-mirror
