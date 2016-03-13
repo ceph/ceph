@@ -9823,7 +9823,7 @@ void RGWRados::check_pending_olh_entries(map<string, bufferlist>& pending_entrie
 
     map<string, bufferlist>::iterator cur_iter = iter;
     ++iter;
-    if (now - pending_info.time >= timespan(cct->_conf->rgw_olh_pending_timeout_sec)) {
+    if (now - pending_info.time >= make_timespan(cct->_conf->rgw_olh_pending_timeout_sec)) {
       (*rm_pending_entries)[cur_iter->first] = cur_iter->second;
       pending_entries.erase(cur_iter);
     } else {
@@ -11850,7 +11850,7 @@ int RGWOpStateSingleOp::renew_state() {
 
   int rate_limit_sec = cct->_conf->rgw_opstate_ratelimit_sec;
 
-  if (rate_limit_sec && now - last_update < timespan(rate_limit_sec)) {
+  if (rate_limit_sec && now - last_update < make_timespan(rate_limit_sec)) {
     return 0;
   }
 

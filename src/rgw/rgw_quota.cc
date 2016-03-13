@@ -591,7 +591,7 @@ int RGWUserStatsCache::sync_user(const rgw_user& user)
   }
 
   real_time when_need_full_sync = header.last_stats_sync;
-  when_need_full_sync += timespan(store->ctx()->_conf->rgw_user_quota_sync_wait_time);
+  when_need_full_sync += make_timespan(store->ctx()->_conf->rgw_user_quota_sync_wait_time);
   
   // check if enough time passed since last full sync
   /* FIXME: missing check? */

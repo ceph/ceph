@@ -1360,7 +1360,7 @@ int RGWDataChangesLog::renew_entries()
     }
 
     real_time expiration = now;
-    expiration += timespan(cct->_conf->rgw_data_log_window);
+    expiration += make_timespan(cct->_conf->rgw_data_log_window);
 
     list<rgw_bucket_shard>& buckets = miter->second.first;
     list<rgw_bucket_shard>::iterator liter;
@@ -1463,7 +1463,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
     status->cur_sent = now;
 
     expiration = now;
-    expiration += timespan(cct->_conf->rgw_data_log_window);
+    expiration += ceph::make_timespan(cct->_conf->rgw_data_log_window);
 
     status->lock->Unlock();
   
@@ -1494,7 +1494,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
 
   status->pending = false;
   status->cur_expiration = status->cur_sent; /* time of when operation started, not completed */
-  status->cur_expiration += timespan(cct->_conf->rgw_data_log_window);
+  status->cur_expiration += make_timespan(cct->_conf->rgw_data_log_window);
   status->cond = NULL;
   status->lock->Unlock();
 
