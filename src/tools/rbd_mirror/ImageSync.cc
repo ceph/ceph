@@ -5,6 +5,7 @@
 #include "common/errno.h"
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
 #include "tools/rbd_mirror/image_sync/ImageCopyRequest.h"
@@ -192,6 +193,72 @@ void ImageSync<I>::handle_copy_image(int r) {
     finish(r);
     return;
   }
+
+  send_copy_object_map();
+}
+
+template <typename I>
+void ImageSync<I>::send_copy_object_map() {
+  m_local_image_ctx->snap_lock.get_read();
+  if (!m_local_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP,
+                                        m_local_image_ctx->snap_lock)) {
+    m_local_image_ctx->snap_lock.put_read();
+    send_prune_sync_points();
+    return;
+  }
+
+  assert(m_local_image_ctx->object_map != nullptr);
+
+  assert(!m_client_meta->sync_points.empty());
+  librbd::journal::MirrorPeerSyncPoint &sync_point =
+    m_client_meta->sync_points.front();
+  auto snap_id_it = m_local_image_ctx->snap_ids.find(sync_point.snap_name);
+  assert(snap_id_it != m_local_image_ctx->snap_ids.end());
+  librados::snap_t snap_id = snap_id_it->second;
+
+  CephContext *cct = m_local_image_ctx->cct;
+  ldout(cct, 20) << ": snap_id=" << snap_id << ", "
+                 << "snap_name=" << sync_point.snap_name << dendl;
+
+  // rollback the object map (copy snapshot object map to HEAD)
+  RWLock::WLocker object_map_locker(m_local_image_ctx->object_map_lock);
+  Context *ctx = create_context_callback<
+    ImageSync<I>, &ImageSync<I>::handle_copy_object_map>(this);
+  m_local_image_ctx->object_map->rollback(snap_id, ctx);
+  m_local_image_ctx->snap_lock.put_read();
+}
+
+template <typename I>
+void ImageSync<I>::handle_copy_object_map(int r) {
+  CephContext *cct = m_local_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  assert(r == 0);
+  send_refresh_object_map();
+}
+
+template <typename I>
+void ImageSync<I>::send_refresh_object_map() {
+  CephContext *cct = m_local_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  Context *ctx = create_context_callback<
+    ImageSync<I>, &ImageSync<I>::handle_refresh_object_map>(this);
+  m_object_map = m_local_image_ctx->create_object_map(CEPH_NOSNAP);
+  m_object_map->open(ctx);
+}
+
+template <typename I>
+void ImageSync<I>::handle_refresh_object_map(int r) {
+  CephContext *cct = m_local_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  assert(r == 0);
+  {
+    RWLock::WLocker snap_locker(m_local_image_ctx->snap_lock);
+    std::swap(m_local_image_ctx->object_map, m_object_map);
+  }
+  delete m_object_map;
 
   send_prune_sync_points();
 }
