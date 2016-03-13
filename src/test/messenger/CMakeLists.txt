@@ -41,4 +41,3 @@ if(HAVE_XIO)
     ${CMAKE_DL_LIBS}
     )
 endif(HAVE_XIO)
-
