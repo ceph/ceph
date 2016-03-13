@@ -2032,6 +2032,7 @@ public:
   virtual int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
                             const string& placement_rule,
+                            const string& swift_ver_location,
                             map<std::string,bufferlist>& attrs,
                             RGWBucketInfo& bucket_info,
                             obj_version *pobjv,
@@ -2447,6 +2448,8 @@ public:
                        struct rgw_err *err,
                        void (*progress_cb)(off_t, void *),
                        void *progress_data);
+  int swift_versioning_copy(RGWBucketInfo& bucket_info, RGWRados::Object *source, RGWObjState *state,
+                            rgw_user& user);
   int copy_obj_to_remote_dest(RGWObjState *astate,
                               map<string, bufferlist>& src_attrs,
                               RGWRados::Object::Read& read_op,

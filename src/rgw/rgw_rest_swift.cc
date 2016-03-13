@@ -371,6 +371,14 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
       }
     }
   }
+
+  /* Dump container versioning info. */
+  if (!s->bucket_info.swift_ver_location.empty()) {
+    string encoded_loc;
+    url_encode(s->bucket_info.swift_ver_location, encoded_loc);
+    STREAM_IO(s)->print("X-Versions-Location: %s\r\n", encoded_loc.c_str());
+  }
+
 }
 
 void RGWStatAccount_ObjStore_SWIFT::execute()
@@ -474,6 +482,10 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
 
   location_constraint = store->get_zonegroup().api_name;
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
+
+  if (s->cct->_conf->rgw_swift_versioning_enabled) {
+    swift_ver_location = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
+  }
 
   return 0;
 }
@@ -724,6 +736,10 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
   get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX, CONT_REMOVE_ATTR_PREFIX,
 			   rmattr_names);
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
+
+  if (s->cct->_conf->rgw_swift_versioning_enabled) {
+    swift_ver_location = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
+  }
   return 0;
 }
 
