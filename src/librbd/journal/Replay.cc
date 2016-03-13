@@ -39,45 +39,51 @@ struct ExecuteOp : public Context {
   }
 
   void execute(const journal::SnapCreateEvent &_) {
-    image_ctx.operations->snap_create(event.snap_name.c_str(), on_op_complete,
-                                      event.op_tid);
+    image_ctx.operations->execute_snap_create(event.snap_name.c_str(),
+                                              on_op_complete,
+                                              event.op_tid);
   }
 
   void execute(const journal::SnapRemoveEvent &_) {
-    image_ctx.operations->snap_remove(event.snap_name.c_str(), on_op_complete);
+    image_ctx.operations->execute_snap_remove(event.snap_name.c_str(),
+                                              on_op_complete);
   }
 
   void execute(const journal::SnapRenameEvent &_) {
-    image_ctx.operations->snap_rename(event.snap_id, event.snap_name.c_str(),
-                                      on_op_complete);
+    image_ctx.operations->execute_snap_rename(event.snap_id,
+                                              event.snap_name.c_str(),
+                                              on_op_complete);
   }
 
   void execute(const journal::SnapProtectEvent &_) {
-    image_ctx.operations->snap_protect(event.snap_name.c_str(), on_op_complete);
+    image_ctx.operations->execute_snap_protect(event.snap_name.c_str(),
+                                               on_op_complete);
   }
 
   void execute(const journal::SnapUnprotectEvent &_) {
-    image_ctx.operations->snap_unprotect(event.snap_name.c_str(),
-                                         on_op_complete);
+    image_ctx.operations->execute_snap_unprotect(event.snap_name.c_str(),
+                                                 on_op_complete);
   }
 
   void execute(const journal::SnapRollbackEvent &_) {
-    image_ctx.operations->snap_rollback(event.snap_name.c_str(),
-                                        no_op_progress_callback,
-                                        on_op_complete);
+    image_ctx.operations->execute_snap_rollback(event.snap_name.c_str(),
+                                                no_op_progress_callback,
+                                                on_op_complete);
   }
 
   void execute(const journal::RenameEvent &_) {
-    image_ctx.operations->rename(event.image_name.c_str(), on_op_complete);
+    image_ctx.operations->execute_rename(event.image_name.c_str(),
+                                         on_op_complete);
   }
 
   void execute(const journal::ResizeEvent &_) {
-    image_ctx.operations->resize(event.size, no_op_progress_callback,
-                                 on_op_complete, event.op_tid);
+    image_ctx.operations->execute_resize(event.size, no_op_progress_callback,
+                                         on_op_complete, event.op_tid);
   }
 
   void execute(const journal::FlattenEvent &_) {
-    image_ctx.operations->flatten(no_op_progress_callback, on_op_complete);
+    image_ctx.operations->execute_flatten(no_op_progress_callback,
+                                          on_op_complete);
   }
 
   virtual void finish(int r) override {

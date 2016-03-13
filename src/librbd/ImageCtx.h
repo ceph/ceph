@@ -228,6 +228,7 @@ namespace librbd {
                   uint8_t protection_status, uint64_t flags);
     void rm_snap(std::string in_snap_name, librados::snap_t id);
     uint64_t get_image_size(librados::snap_t in_snap_id) const;
+    uint64_t get_object_count(librados::snap_t in_snap_id) const;
     bool test_features(uint64_t test_features) const;
     bool test_features(uint64_t test_features,
                        const RWLock &in_snap_lock) const;

@@ -7,7 +7,11 @@
 #include <boost/shared_ptr.hpp>
 
 namespace librados {
+class IoCtx;
 class TestRadosClient;
+class MockTestMemIoCtxImpl;
+
+MockTestMemIoCtxImpl &get_mock_io_ctx(IoCtx &ioctx);
 }
 
 namespace librados_test_stub {
