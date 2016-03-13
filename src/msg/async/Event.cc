@@ -303,13 +303,9 @@ int EventCenter::process_time_events()
    * events to be processed ASAP when this happens: the idea is that
    * processing events earlier is less dangerous than delaying them
    * indefinitely, and practice suggests it is. */
+  bool clock_skewed = false;
   if (now < last_time) {
-    map<utime_t, list<TimeEvent> > changed;
-    for (map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
-         it != time_events.end(); ++it) {
-      changed[utime_t()].swap(it->second);
-    }
-    time_events.swap(changed);
+    clock_skewed = true;
   }
   last_time = now;
 
@@ -318,7 +314,7 @@ int EventCenter::process_time_events()
   for (map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
        it != time_events.end(); ) {
     prev = it;
-    if (cur >= it->first) {
+    if (cur >= it->first || clock_skewed) {
       need_process.splice(need_process.end(), it->second);
       ++it;
       time_events.erase(prev);
