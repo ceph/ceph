@@ -27,16 +27,9 @@
 
 #include <typeinfo> // for 'typeid'
 
-#include "rgw_ldap.h"
-#include "rgw_token.h"
-#include "include/assert.h"
-
 #define dout_subsys ceph_subsys_rgw
 
-using namespace rgw;
 using namespace ceph::crypto;
-
-using std::get;
 
 void list_all_buckets_start(struct req_state *s)
 {
@@ -1542,67 +1535,40 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
     op_ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
     if (op_ret < 0) {
-        // try external authenticators
-      if (store->ctx()->_conf->rgw_s3_auth_use_keystone &&
-	  store->ctx()->_conf->rgw_keystone_url.empty())
-      {
-	// keystone
-	int external_auth_result = -EINVAL;
-	dout(20) << "s3 keystone: trying keystone auth" << dendl;
-
-	RGW_Auth_S3_Keystone_ValidateToken keystone_validator(store->ctx());
-	external_auth_result =
-	  keystone_validator.validate_s3token(s3_access_key,
-					      string(encoded_policy.c_str(),
-						    encoded_policy.length()),
-					      received_signature_str);
-
-	if (external_auth_result < 0) {
-	  ldout(s->cct, 0) << "User lookup failed!" << dendl;
-	  err_msg = "Bad access key / signature";
-	  return -EACCES;
-	}
-
-	string project_id = keystone_validator.response.get_project_id();
-	rgw_user uid(project_id);
-
-	user_info.user_id = project_id;
-	user_info.display_name = keystone_validator.response.get_project_name();
-
-	/* try to store user if it not already exists */
-	if (rgw_get_user_info_by_uid(store, uid, user_info) < 0) {
-	  int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
-	  if (ret < 0) {
-	    ldout(store->ctx(), 10)
-	      << "NOTICE: failed to store new user's info: ret="
-	      << ret << dendl;
-	  }
-	  s->perm_mask = RGW_PERM_FULL_CONTROL;
-	}
-      } else if (store->ctx()->_conf->rgw_s3_auth_use_ldap &&
-		store->ctx()->_conf->rgw_ldap_uri.empty()) {
-	RGWToken token{from_base64(s3_access_key)};
-	rgw::LDAPHelper *ldh = RGW_Auth_S3::get_ldap_ctx(store);
-	if (ldh->auth(token.id, token.key) != 0)
-	  return -EACCES;
-
-	/* ok, succeeded, try to create shadow */
-	user_info.user_id = token.id;
-	user_info.display_name = token.id; // cn?
-
-	/* try to store user if it not already exists */
-	if (rgw_get_user_info_by_uid(store, user_info.user_id,
-					user_info) < 0) {
-	  int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
-	  if (ret < 0) {
-	    ldout(store->ctx(), 10)
-	      << "NOTICE: failed to store new user's info: ret=" << ret
-	      << dendl;
-	  }
-	  s->perm_mask = RGW_PERM_FULL_CONTROL;
-	}
-      } else {
+      // Try keystone authentication as well
+      int keystone_result = -EINVAL;
+      if (!store->ctx()->_conf->rgw_s3_auth_use_keystone ||
+	  store->ctx()->_conf->rgw_keystone_url.empty()) {
 	return -EACCES;
+      }
+      dout(20) << "s3 keystone: trying keystone auth" << dendl;
+
+      RGW_Auth_S3_Keystone_ValidateToken keystone_validator(store->ctx());
+      keystone_result =
+	keystone_validator.validate_s3token(s3_access_key,
+					    string(encoded_policy.c_str(),
+						   encoded_policy.length()),
+					    received_signature_str);
+
+      if (keystone_result < 0) {
+	ldout(s->cct, 0) << "User lookup failed!" << dendl;
+	err_msg = "Bad access key / signature";
+	return -EACCES;
+      }
+
+      string project_id = keystone_validator.response.get_project_id();
+      user_info.user_id = project_id;
+      user_info.display_name = keystone_validator.response.get_project_name();
+
+      rgw_user uid(project_id);
+      /* try to store user if it not already exists */
+      if (rgw_get_user_info_by_uid(store, uid, user_info) < 0) {
+        int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
+        if (ret < 0) {
+          dout(10) << "NOTICE: failed to store new user's info: ret="
+		   << ret << dendl;
+        }
+	s->perm_mask = RGW_PERM_FULL_CONTROL;
       }
     } else {
       map<string, RGWAccessKey> access_keys  = user_info.access_keys;
@@ -2899,26 +2865,6 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
   return RGWHandler_REST::init(store, s, cio);
 }
 
-/* RGW_Auth_S3 static members */
-std::mutex RGW_Auth_S3::mtx;
-rgw::LDAPHelper* RGW_Auth_S3::ldh;
-
-/* static */
-void RGW_Auth_S3::init_impl(RGWRados* store)
-{
-  const string& ldap_uri = store->ctx()->_conf->rgw_ldap_uri;
-  const string& ldap_binddn = store->ctx()->_conf->rgw_ldap_binddn;
-  const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
-  const string& ldap_memberattr =
-    store->ctx()->_conf->rgw_ldap_memberattr;
-
-  ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_searchdn,
-			    ldap_memberattr);
-
-  ldh->init();
-  ldh->bind();
-}
-
 /*
  * Try to validate S3 auth against keystone s3token interface
  */
@@ -3029,9 +2975,8 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
 {
 
   /* neither keystone and rados enabled; warn and exit! */
-  if (!store->ctx()->_conf->rgw_s3_auth_use_rados &&
-      !store->ctx()->_conf->rgw_s3_auth_use_keystone &&
-      !store->ctx()->_conf->rgw_s3_auth_use_ldap) {
+  if (!store->ctx()->_conf->rgw_s3_auth_use_rados
+      && !store->ctx()->_conf->rgw_s3_auth_use_keystone) {
     dout(0) << "WARNING: no authorization backend enabled! Users will never authenticate." << dendl;
     return -EPERM;
   }
@@ -3646,7 +3591,7 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
   }
 
   /* try keystone auth first */
-  int external_auth_result = -ERR_INVALID_ACCESS_KEY;;
+  int keystone_result = -ERR_INVALID_ACCESS_KEY;;
   if (store->ctx()->_conf->rgw_s3_auth_use_keystone
       && !store->ctx()->_conf->rgw_keystone_url.empty()) {
     dout(20) << "s3 keystone: trying keystone auth" << dendl;
@@ -3657,11 +3602,11 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
     if (!rgw_create_s3_canonical_header(s->info,
                                         &s->header_time, token, qsr)) {
       dout(10) << "failed to create auth header\n" << token << dendl;
-      external_auth_result = -EPERM;
+      keystone_result = -EPERM;
     } else {
-      external_auth_result = keystone_validator.validate_s3token(auth_id, token,
+      keystone_result = keystone_validator.validate_s3token(auth_id, token,
 							    auth_sign);
-      if (external_auth_result == 0) {
+      if (keystone_result == 0) {
 	// Check for time skew first
 	time_t req_sec = s->header_time.sec();
 
@@ -3699,45 +3644,17 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
     }
   }
 
-  if ((external_auth_result < 0) &&
-      (store->ctx()->_conf->rgw_s3_auth_use_ldap) &&
-      (! store->ctx()->_conf->rgw_ldap_uri.empty())) {
+  if (keystone_result < 0) {
+    if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {
+      /* No other auth option possible. Terminate request. */
+      return keystone_result;
+    }
 
-    RGW_Auth_S3::init(store);
-
-    RGWToken token{from_base64(auth_id)};
-    if (ldh->auth(token.id, token.key) != 0)
-      external_auth_result = -EACCES;
-    else {
-      /* ok, succeeded */
-      external_auth_result = 0;
-      /* create local account, if none exists */
-      s->user->user_id = token.id;
-      s->user->display_name = token.id; // cn?
-      if (rgw_get_user_info_by_uid(store, s->user->user_id,
-				   *(s->user)) < 0) {
-	int ret = rgw_store_user_info(store, *(s->user), NULL, NULL, 0, true);
-	if (ret < 0) {
-	  dout(10) << "NOTICE: failed to store new user's info: ret=" << ret
-		   << dendl;
-	}
-	s->perm_mask = RGW_PERM_FULL_CONTROL;
-      }
-    } /* success */
-  } /* ldap */
-
-  /* keystone failed (or not enabled); check if we want to use rados backend */
-  if (!store->ctx()->_conf->rgw_s3_auth_use_rados
-      && external_auth_result < 0)
-    return external_auth_result;
-
-  /* now try rados backend, but only if keystone did not succeed */
-  if (external_auth_result < 0) {
     /* get the user info */
     if (rgw_get_user_info_by_access_key(store, auth_id, *(s->user)) < 0) {
       dout(5) << "error reading user info, uid=" << auth_id
               << " can't authenticate" << dendl;
-      return external_auth_result;
+      return keystone_result;
     }
 
     /* now verify signature */
@@ -3813,7 +3730,7 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
       }
     }
 
-  } /* if external_auth_result < 0 */
+  } /* if keystone_result < 0 */
 
   // populate the owner info
   s->owner.set_id(s->user->user_id);

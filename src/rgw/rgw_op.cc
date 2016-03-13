@@ -27,9 +27,8 @@
 #include "rgw_cors_s3.h"
 #include "rgw_rest_conn.h"
 #include "rgw_rest_s3.h"
-#include "rgw_client_io.h"
 
-#include "include/assert.h"
+#include "rgw_client_io.h"
 
 #define dout_subsys ceph_subsys_rgw
 

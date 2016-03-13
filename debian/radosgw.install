@@ -1,7 +1,6 @@
 etc/bash_completion.d/radosgw-admin
 usr/bin/radosgw
 usr/bin/radosgw-admin
-usr/bin/radosgw-token
 usr/bin/radosgw-object-expirer
 usr/share/man/man8/radosgw-admin.8
 usr/share/man/man8/radosgw.8

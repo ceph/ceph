@@ -6,8 +6,6 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_config.h"
 
-#include "include/assert.h"
-
 #define dout_subsys ceph_subsys_rgw
 
 // reject 'period push' if we would have to fetch too many intermediate periods
