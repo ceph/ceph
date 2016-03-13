@@ -746,6 +746,19 @@ librgw_file_nfsns_LDADD = $(UNITTEST_LDADD) \
 	librgw.la librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += librgw_file_nfsns
 
+test_rgw_token_SOURCES = test/test_rgw_token.cc
+test_rgw_token_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+test_rgw_token_LDADD = $(UNITTEST_LDADD) \
+	librgw.la $(PTHREAD_LIBS) $(LIBOS) $(CEPH_GLOBAL) $(EXTRALIBS)
+bin_DEBUGPROGRAMS += test_rgw_token
+
+test_rgw_ldap_SOURCES = ../rgw/rgw_ldap.cc test/test_rgw_ldap.cc
+test_rgw_ldap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+test_rgw_ldap_LDADD = $(UNITTEST_LDADD) \
+	librados.la $(PTHREAD_LIBS) $(LIBOS) $(CEPH_GLOBAL) ${OPENLDAP_LIBS}
+	$(EXTRALIBS)
+bin_DEBUGPROGRAMS += test_rgw_token
+
 endif # WITH_RADOSGW
 
 

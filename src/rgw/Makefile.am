@@ -44,6 +44,7 @@ librgw_la_SOURCES = \
 	rgw/rgw_http_client.cc \
 	rgw/rgw_json_enc.cc \
 	rgw/rgw_keystone.cc \
+	rgw/rgw_ldap.cc \
 	rgw/rgw_loadgen.cc \
 	rgw/rgw_log.cc \
 	rgw/rgw_metadata.cc \
@@ -152,6 +153,10 @@ radosgw_admin_SOURCES = rgw/rgw_admin.cc rgw/rgw_orphan.cc
 radosgw_admin_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
 bin_PROGRAMS += radosgw-admin
 
+radosgw_token_SOURCES = rgw/rgw_token.cc
+radosgw_token_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
+bin_PROGRAMS += radosgw-token
+
 radosgw_object_expirer_SOURCES = rgw/rgw_object_expirer.cc
 radosgw_object_expirer_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
 bin_PROGRAMS += radosgw-object-expirer
@@ -172,12 +177,14 @@ noinst_HEADERS += \
 	rgw/rgw_acl.h \
 	rgw/rgw_acl_s3.h \
 	rgw/rgw_acl_swift.h \
+	rgw/rgw_b64.h \
 	rgw/rgw_client_io.h \
 	rgw/rgw_coroutine.h \
 	rgw/rgw_cr_rados.h \
 	rgw/rgw_cr_rest.h \
 	rgw/rgw_fcgi.h \
 	rgw/rgw_xml.h \
+	rgw/rgw_token.h \
 	rgw/rgw_basic_types.h \
 	rgw/rgw_cache.h \
 	rgw/rgw_common.h \
