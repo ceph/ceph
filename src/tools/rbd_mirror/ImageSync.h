@@ -5,6 +5,7 @@
 #define RBD_MIRROR_IMAGE_SYNC_H
 
 #include "include/int_types.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
 #include "common/Mutex.h"
 #include <map>
@@ -14,7 +15,6 @@ class Context;
 class Mutex;
 class SafeTimer;
 namespace journal { class Journaler; }
-namespace librbd { class ImageCtx; }
 namespace librbd { namespace journal { struct MirrorPeerClientMeta; } }
 
 namespace rbd {
@@ -53,13 +53,19 @@ private:
    * COPY_SNAPSHOTS
    *    |
    *    v
-   * COPY_IMAGE . . . . . .
-   *    |                 .
-   *    v                 .
-   * PRUNE_SYNC_POINTS    . (image sync canceled)
-   *    |                 .
-   *    v                 .
-   * <finish> < . . . . . .
+   * COPY_IMAGE . . . . . . . . . . . . . .
+   *    |                                 .
+   *    v                                 .
+   * COPY_OBJECT_MAP (skip if object      .
+   *    |             map disabled)       .
+   *    v                                 .
+   * REFRESH_OBJECT_MAP (skip if object   .
+   *    |                map disabled)    .
+   *    v
+   * PRUNE_SYNC_POINTS                    . (image sync canceled)
+   *    |                                 .
+   *    v                                 .
+   * <finish> < . . . . . . . . . . . . . .
    *
    * @endverbatim
    */
@@ -82,6 +88,7 @@ private:
   bool m_canceled = false;
 
   image_sync::ImageCopyRequest<ImageCtxT> *m_image_copy_request;
+  decltype(ImageCtxT::object_map) m_object_map = nullptr;
 
   void send_prune_catch_up_sync_point();
   void handle_prune_catch_up_sync_point(int r);
@@ -94,6 +101,12 @@ private:
 
   void send_copy_image();
   void handle_copy_image(int r);
+
+  void send_copy_object_map();
+  void handle_copy_object_map(int r);
+
+  void send_refresh_object_map();
+  void handle_refresh_object_map(int r);
 
   void send_prune_sync_points();
   void handle_prune_sync_points(int r);

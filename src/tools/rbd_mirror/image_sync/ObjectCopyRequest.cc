@@ -3,6 +3,7 @@
 
 #include "ObjectCopyRequest.h"
 #include "librados/snap_set_diff.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "common/errno.h"
 
@@ -15,6 +16,7 @@ namespace rbd {
 namespace mirror {
 namespace image_sync {
 
+using librbd::util::create_context_callback;
 using librbd::util::create_rados_ack_callback;
 using librbd::util::create_rados_safe_callback;
 
@@ -218,7 +220,55 @@ void ObjectCopyRequest<I>::handle_write_object(int r) {
     return;
   }
 
-  finish(r);
+  send_update_object_map();
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::send_update_object_map() {
+  m_local_image_ctx->snap_lock.get_read();
+  if (!m_local_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP,
+                                        m_local_image_ctx->snap_lock) ||
+      m_snap_object_states.empty()) {
+    m_local_image_ctx->snap_lock.put_read();
+    finish(0);
+    return;
+  }
+
+  assert(m_local_image_ctx->object_map != nullptr);
+
+  auto snap_object_state = *m_snap_object_states.begin();
+  m_snap_object_states.erase(m_snap_object_states.begin());
+
+  CephContext *cct = m_local_image_ctx->cct;
+  ldout(cct, 20) << ": "
+                 << "snap_id=" << snap_object_state.first << ", "
+                 << "object_state=" << static_cast<uint32_t>(
+                      snap_object_state.second)
+                 << dendl;
+
+  RWLock::WLocker object_map_locker(m_local_image_ctx->object_map_lock);
+  Context *ctx = create_context_callback<
+    ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_update_object_map>(
+      this);
+  m_local_image_ctx->object_map->aio_update(snap_object_state.first,
+                                            m_object_number,
+                                            m_object_number + 1,
+                                            snap_object_state.second,
+                                            boost::none, ctx);
+  m_local_image_ctx->snap_lock.put_read();
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::handle_update_object_map(int r) {
+  CephContext *cct = m_local_image_ctx->cct;
+  ldout(cct, 20) << ": r=" << r << dendl;
+
+  assert(r == 0);
+  if (!m_snap_object_states.empty()) {
+    send_update_object_map();
+    return;
+  }
+  finish(0);
 }
 
 template <typename I>
@@ -256,6 +306,18 @@ void ObjectCopyRequest<I>::compute_diffs() {
         ldout(cct, 20) << ": clearing truncate diff: " << trunc << dendl;
       }
 
+      // prepare the object map state
+      {
+        RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
+        uint8_t object_state = OBJECT_EXISTS;
+        if (m_local_image_ctx->test_features(RBD_FEATURE_FAST_DIFF,
+                                             m_local_image_ctx->snap_lock) &&
+            diff.empty() && end_size == prev_end_size) {
+          object_state = OBJECT_EXISTS_CLEAN;
+        }
+        m_snap_object_states[end_snap_id] = object_state;
+      }
+
       // object write/zero, or truncate
       for (auto it = diff.begin(); it != diff.end(); ++it) {
         ldout(cct, 20) << ": read/write op: " << it.get_start() << "~"
@@ -270,11 +332,14 @@ void ObjectCopyRequest<I>::compute_diffs() {
         m_snap_sync_ops[start_snap_id].emplace_back(SYNC_OP_TYPE_TRUNC,
                                                     end_size, 0U, bufferlist());
       }
-    } else if (prev_exists) {
-      // object remove
-      ldout(cct, 20) << ": remove op" << dendl;
-      m_snap_sync_ops[start_snap_id].emplace_back(SYNC_OP_TYPE_REMOVE, 0U, 0U,
-                                                  bufferlist());
+    } else {
+      m_snap_object_states[end_snap_id] = OBJECT_NONEXISTENT;
+      if (prev_exists) {
+        // object remove
+        ldout(cct, 20) << ": remove op" << dendl;
+        m_snap_sync_ops[start_snap_id].emplace_back(SYNC_OP_TYPE_REMOVE, 0U, 0U,
+                                                    bufferlist());
+      }
     }
 
     prev_end_size = end_size;

@@ -58,10 +58,16 @@ private:
    * LIST_SNAPS
    *    |
    *    v
-   * READ_OBJECT <----\
-   *    |             | (repeat for each snapshot)
-   *    v             |
-   * WRITE_OBJECT ----/
+   * READ_OBJECT <--------\
+   *    |                 | (repeat for each snapshot)
+   *    v                 |
+   * WRITE_OBJECT --------/
+   *    |
+   *    |     /-----------\
+   *    |     |           | (repeat for each snapshot)
+   *    v     v           |
+   * UPDATE_OBJECT_MAP ---/ (skip if object
+   *    |                    map disabled)
    *    |
    *    v
    * <finish>
@@ -78,6 +84,7 @@ private:
   typedef std::tuple<SyncOpType, uint64_t, uint64_t, bufferlist> SyncOp;
   typedef std::list<SyncOp> SyncOps;
   typedef std::map<librados::snap_t, SyncOps> SnapSyncOps;
+  typedef std::map<librados::snap_t, uint8_t> SnapObjectStates;
 
   ImageCtxT *m_local_image_ctx;
   ImageCtxT *m_remote_image_ctx;
@@ -94,6 +101,7 @@ private:
   int m_snap_ret;
 
   SnapSyncOps m_snap_sync_ops;
+  SnapObjectStates m_snap_object_states;
 
   void send_list_snaps();
   void handle_list_snaps(int r);
@@ -103,6 +111,9 @@ private:
 
   void send_write_object();
   void handle_write_object(int r);
+
+  void send_update_object_map();
+  void handle_update_object_map(int r);
 
   void compute_diffs();
   void finish(int r);
