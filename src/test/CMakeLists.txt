@@ -2333,3 +2333,12 @@ if(HAVE_XIO)
     )
 endif(HAVE_XIO)
 
+# unittest_direct_messenger
+add_executable(unittest_direct_messenger EXCLUDE_FROM_ALL
+                messenger/test_direct_messenger.cc)
+add_test(unittest_direct_messenger unittest_direct_messenger)
+add_dependencies(check unittest_direct_messenger)
+target_link_libraries(unittest_direct_messenger global boost_system)
+set_target_properties(unittest_direct_messenger
+  PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS}
+)

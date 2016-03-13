@@ -277,6 +277,7 @@ set(libcommon_files
   msg/async/EventEpoll.cc
   msg/async/EventSelect.cc
   msg/async/net_handler.cc
+  msg/direct/DirectMessenger.cc
   ${xio_common_srcs}
   msg/msg_types.cc
   common/hobject.cc
