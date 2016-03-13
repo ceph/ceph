@@ -15,7 +15,12 @@
 
 #define RGW_AUTH_GRACE_MINS 15
 
-void rgw_get_errno_s3(struct rgw_http_errors *e, int err_no);
+struct rgw_http_error {
+  int http_ret;
+  const char *s3_code;
+};
+
+void rgw_get_errno_s3(struct rgw_http_error *e, int err_no);
 
 class RGWGetObj_ObjStore_S3 : public RGWGetObj_ObjStore
 {

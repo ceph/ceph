@@ -35,8 +35,8 @@
 #include "common/config.h"
 #include "include/assert.h"
 
-#include <fuse.h>
-#include <fuse_lowlevel.h>
+#include <fuse/fuse.h>
+#include <fuse/fuse_lowlevel.h>
 #include "fuse_ll.h"
 
 #define FINO_INO(x) ((x) & ((1ull<<48)-1ull))

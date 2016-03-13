@@ -687,6 +687,8 @@ if(WITH_SPDK)
 endif(WITH_SPDK)
 
 # make rocksdb statically
+if(WITH_ROCKSDB)
+else(WITH_ROCKSDB)
 add_custom_target(build_rocksdb
     COMMAND
     PORTABLE=1 $(MAKE) static_lib EXTRA_CXXFLAGS='-fPIC -Wno-unused-variable'
@@ -698,6 +700,7 @@ add_library(rocksdb STATIC IMPORTED)
 set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a")
 add_dependencies(rocksdb build_rocksdb)
 set(ROCKSDB_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
+endif(WITH_ROCKSDB)
 
 add_subdirectory(kv)
 
@@ -1123,6 +1126,14 @@ if(${WITH_KVS})
 endif(${WITH_KVS})
 
 if(${WITH_RADOSGW})
+
+  set(civetweb_common_files civetweb/src/civetweb.c)
+  add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
+  set_property(TARGET civetweb_common_objs
+	       APPEND PROPERTY COMPILE_DEFINITIONS NO_SSL_DL=1 USE_IPV6=1)
+  target_include_directories(civetweb_common_objs PRIVATE
+	"${CMAKE_BINARY_DIR}/src/include/civetweb")
+
   set(rgw_a_srcs
     rgw/rgw_acl.cc
     rgw/rgw_acl_s3.cc
@@ -1168,8 +1179,8 @@ if(${WITH_RADOSGW})
     rgw/rgw_replica_log.cc
     rgw/rgw_request.cc
     rgw/rgw_resolve.cc
-    rgw/rgw_rest_bucket.cc
     rgw/rgw_rest.cc
+    rgw/rgw_rest_bucket.cc
     rgw/rgw_rest_client.cc
     rgw/rgw_rest_config.cc
     rgw/rgw_rest_conn.cc
@@ -1178,6 +1189,7 @@ if(${WITH_RADOSGW})
     rgw/rgw_rest_opstate.cc
     rgw/rgw_rest_realm.cc
     rgw/rgw_rest_replica_log.cc
+    rgw/rgw_rest_objstore.cc
     rgw/rgw_rest_s3.cc
     rgw/rgw_rest_swift.cc
     rgw/rgw_rest_usage.cc
@@ -1190,14 +1202,10 @@ if(${WITH_RADOSGW})
     rgw/rgw_website.cc
     rgw/rgw_xml.cc
     rgw/rgw_xml_enc.cc
+    rgw/rgw_civetweb.cc
+    rgw/rgw_civetweb_log.cc
+    $<TARGET_OBJECTS:civetweb_common_objs>
     )
-
-  set(civetweb_common_files civetweb/src/civetweb.c)
-  add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
-  target_include_directories(civetweb_common_objs PUBLIC
-	"${CMAKE_SOURCE_DIR}/src/civetweb/include")
-  set_property(TARGET civetweb_common_objs
-	       APPEND PROPERTY COMPILE_DEFINITIONS NO_SSL_DL=1)
 
   add_library(rgw_a STATIC ${rgw_a_srcs})
   target_link_libraries(rgw_a librados cls_rgw_client cls_refcount_client
@@ -1211,9 +1219,7 @@ if(${WITH_RADOSGW})
   set(radosgw_srcs
     rgw/rgw_fcgi_process.cc
     rgw/rgw_loadgen_process.cc
-    rgw/rgw_civetweb.cc
     rgw/rgw_civetweb_frontend.cc
-    rgw/rgw_civetweb_log.cc
     rgw/rgw_main.cc)
 
   set(radosgw_admin_srcs
@@ -1252,12 +1258,12 @@ if(${WITH_RADOSGW})
     include/rados/rgw_file.h
   DESTINATION include/rados)
 
-  add_executable(radosgw ${radosgw_srcs}  $<TARGET_OBJECTS:civetweb_common_objs>)
+  add_executable(radosgw ${radosgw_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
   target_link_libraries(radosgw rgw_a librados
     cls_rgw_client cls_lock_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client
     cls_version_client cls_replica_log_client cls_user_client
-    curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES})
+    curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES} ${ALLOC_LIBS})
   install(TARGETS radosgw DESTINATION bin)
 
   add_executable(radosgw-admin ${radosgw_admin_srcs})
@@ -1265,7 +1271,7 @@ if(${WITH_RADOSGW})
     cls_rgw_client cls_lock_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client
     cls_version_client cls_replica_log_client cls_user_client
-    curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES})
+    curl expat global fcgi resolv ssl crypto ${BLKID_LIBRARIES} ${ALLOC_LIBS})
 
   install(TARGETS radosgw-admin DESTINATION bin)
 
@@ -1299,3 +1305,21 @@ add_custom_target(cephfs_testing DEPENDS
     cephfs-journal-tool
     cephfs-data-scan
     cephfs-table-tool)
+
+if(${WITH_RGW_STS})
+  set(rgw_sts_srcs
+    sts/sts_main.cc
+    sts/rgw_rest_sts.cc
+    sts/rgw_dummy.cc
+)
+
+  add_executable(rgw-sts ${rgw_sts_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
+  set_property(TARGET rgw-sts
+	       APPEND PROPERTY INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/src/rgw)
+  set_property(TARGET rgw-sts
+		APPEND PROPERTY LINK_FLAGS "-Wl,-z,muldefs")
+  target_link_libraries(rgw-sts rgw_a
+    curl expat global fcgi resolv ssl crypto
+    ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
+  install(TARGETS rgw-sts DESTINATION bin)
+endif(${WITH_RGW_STS})

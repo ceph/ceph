@@ -988,9 +988,9 @@ static void update_olh_log(struct rgw_bucket_olh_entry& olh_data_entry, OLHLogOp
 
 static string escape_str(const string& s)
 {
-   int len = escape_json_attr_len(s.c_str(), s.size());
+   int len = escape_json_attr_len(s.c_str(), s.size(), 0);
    char escaped[len];
-   escape_json_attr(s.c_str(), s.size(), escaped);
+   escape_json_attr(s.c_str(), s.size(), escaped, 0);
    return string(escaped);
 }
 

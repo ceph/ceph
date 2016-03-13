@@ -6257,7 +6257,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
     return ret;
   }
 
-  return copy_obj_data(rctx, dest_bucket_info, read_op, end, obj, obj, max_chunk_size, NULL, mtime, attrset, RGW_OBJ_CATEGORY_MAIN, 0, 0, NULL, NULL, NULL, NULL);
+  return copy_obj_data(rctx, dest_bucket_info, read_op, end, obj, obj, max_chunk_size, NULL, mtime, attrset, RGW_OBJ_CATEGORY_MAIN, 0, 0, NULL, NULL, NULL);
 }
 
 struct obj_time_weight {
@@ -6328,7 +6328,6 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                string *version_id,
                string *ptag,
                string *petag,
-               struct rgw_err *err,
                void (*progress_cb)(off_t, void *),
                void *progress_data)
 {
@@ -6603,7 +6602,6 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                string *version_id,
                string *ptag,
                string *petag,
-               struct rgw_err *err,
                void (*progress_cb)(off_t, void *),
                void *progress_data)
 {
@@ -6632,7 +6630,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     return fetch_remote_obj(obj_ctx, user_id, client_id, op_id, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
                unmod_ptr, if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
-               olh_epoch, delete_at, version_id, ptag, petag, err, progress_cb, progress_data);
+               olh_epoch, delete_at, version_id, ptag, petag, progress_cb, progress_data);
   }
 
   map<string, bufferlist> src_attrs;
@@ -6649,7 +6647,6 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   read_op.params.lastmod = src_mtime;
   read_op.params.read_size = &total_len;
   read_op.params.obj_size = &obj_size;
-  read_op.params.perr = err;
 
   ret = read_op.prepare(&ofs, &end);
   if (ret < 0) {
@@ -6714,7 +6711,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     return copy_obj_data(obj_ctx, dest_bucket_info, read_op, end, dest_obj, src_obj,
                          max_chunk_size, mtime, 0, attrs, category, olh_epoch, delete_at,
-                         version_id, ptag, petag, err);
+                         version_id, ptag, petag);
   }
 
   RGWObjManifest::obj_iterator miter = astate->manifest.obj_begin();
@@ -6852,8 +6849,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 	       time_t delete_at,
                string *version_id,
                string *ptag,
-               string *petag,
-               struct rgw_err *err)
+               string *petag)
 {
   bufferlist first_chunk;
   RGWObjManifest manifest;

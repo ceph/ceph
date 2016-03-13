@@ -47,6 +47,7 @@ link_directories(
 include(CheckIncludeFiles)
 include(CheckIncludeFileCXX)
 include(CheckFunctionExists)
+include(CheckLibraryExists)
 
 CHECK_FUNCTION_EXISTS(fallocate CEPH_HAVE_FALLOCATE)
 CHECK_FUNCTION_EXISTS(posix_fadvise HAVE_POSIX_FADVISE)
@@ -156,6 +157,8 @@ if(WITH_SPDK)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
 
+CHECK_LIBRARY_EXISTS (curl curl_multi_wait "" HAVE_CURL_MULTI_WAIT)
+
 find_package(blkid REQUIRED)
 set(HAVE_LIBBLKID ${BLKID_FOUND})
 
@@ -259,6 +262,9 @@ endif(WITH_XIO)
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 
+#option for STS
+option(WITH_RGW_STS "Rados Secure Token Service is enabled" OFF)
+
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
 
@@ -272,6 +278,7 @@ if(WITH_REENTRANT_STRSIGNAL)
     set(HAVE_REENTRANT_STRSIGNAL 1 CACHE INTERNAL "Reentrant strsignal is supported.")
 endif(WITH_REENTRANT_STRSIGNAL)
 
+option(WITH_ROCKSDB "Use system rocksdb" OFF)
 set(HAVE_LIBROCKSDB 1)
 
 # -lz link into kv
@@ -300,6 +307,12 @@ configure_file(
   ${PROJECT_BINARY_DIR}/include/acconfig.h
 )
 include_directories(${PROJECT_BINARY_DIR}/include)
+# we want to include civetweb.h as "civetweb/civetweb.h".  Make it so.
+execute_process(
+COMMAND rm -f "${CMAKE_BINARY_DIR}/src/include/civetweb"
+COMMAND mkdir -p "${CMAKE_BINARY_DIR}/src/include"
+COMMAND ln -s "${CMAKE_SOURCE_DIR}/src/civetweb/include"
+        "${CMAKE_BINARY_DIR}/src/include/civetweb")
 
 add_definitions(-D__linux__)
 

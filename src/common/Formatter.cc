@@ -134,8 +134,8 @@ void Formatter::dump_format_unquoted(const char *name, const char *fmt, ...)
 
 // -----------------------
 
-JSONFormatter::JSONFormatter(bool p)
-: m_pretty(p), m_is_pending_string(false)
+JSONFormatter::JSONFormatter(bool p, Escape c)
+: m_pretty(p), m_is_pending_string(false), cook(c)
 {
   reset();
 }
@@ -178,9 +178,9 @@ void JSONFormatter::print_comma(json_formatter_stack_entry_d& entry)
 
 void JSONFormatter::print_quoted_string(const std::string& s)
 {
-  int len = escape_json_attr_len(s.c_str(), s.size());
+  int len = escape_json_attr_len(s.c_str(), s.size(), static_cast<int>(cook));
   char escaped[len];
-  escape_json_attr(s.c_str(), s.size(), escaped);
+  escape_json_attr(s.c_str(), s.size(), escaped, static_cast<int>(cook));
   m_ss << '\"' << escaped << '\"';
 }
 
@@ -481,6 +481,53 @@ void XMLFormatter::dump_string_with_attrs(const char *name, const std::string& s
   m_ss << "<" << e << attrs_str << ">" << escape_xml_str(s.c_str()) << "</" << e << ">";
   if (m_pretty)
     m_ss << "\n";
+}
+
+void XMLFormatter::dump_string_linewrap(const char *name, const std::string& s)
+{
+  std::string e(name);
+  std::string escaped = escape_xml_str(s.c_str());
+  print_spaces();
+  m_ss << "<" << e << ">";
+  if (m_pretty) {
+    int lw = 0;
+    int dont_break = 0;
+    m_sections.push_back("");
+    m_ss << "\n";
+    for (unsigned i = 0; i < escaped.length(); ++i) {
+      if (!dont_break && lw >= 72) {
+	m_ss << '\n';
+	lw = 0;
+      }
+      if (!lw) {
+        print_spaces();
+        lw = m_sections.size();
+      }
+      m_ss << escaped[i];
+      switch(dont_break) {
+      case 0:
+	if (escaped[i] == '=') dont_break = 2;
+	else if (escaped[i] == '&') dont_break = 1;
+	break;
+      case 1:
+	if (escaped[i] == ';') dont_break = 0;
+	break;
+      case 2:
+	if (escaped[i] != '=') dont_break = 0;
+      }
+      ++lw;
+    }
+    if (lw) m_ss << '\n';
+  } else {
+    m_ss << escaped;
+  }
+  if (m_pretty) {
+    m_sections.pop_back();
+    print_spaces();
+  }
+  m_ss << "</" << e << ">";
+  if (m_pretty)
+    m_ss << '\n';
 }
 
 std::ostream& XMLFormatter::dump_stream(const char *name)

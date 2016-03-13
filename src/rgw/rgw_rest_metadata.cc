@@ -199,7 +199,7 @@ void RGWOp_Metadata_Put::send_response() {
   int http_return_code = http_ret;
   if ((http_ret == STATUS_NO_APPLY) || (http_ret == STATUS_APPLIED))
     http_return_code = STATUS_NO_CONTENT;
-  set_req_state_err(s, http_return_code);
+  s->set_req_state_err(http_return_code);
   dump_errno(s);
   stringstream ver_stream;
   ver_stream << "ver:" << ondisk_version.ver

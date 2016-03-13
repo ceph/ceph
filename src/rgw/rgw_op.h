@@ -18,6 +18,8 @@
 #include <set>
 #include <map>
 
+#include <boost/function.hpp>
+
 #include "common/armor.h"
 #include "common/mime.h"
 #include "common/utf8.h"
@@ -96,6 +98,8 @@ RGWOp() : s(nullptr), dialect_handler(nullptr), store(nullptr),
   virtual uint32_t op_mask() { return 0; }
 
   virtual int error_handler(int err_no, string *error_content);
+
+  boost::function<void()> dump_access_control_f();
 };
 
 class RGWGetObj : public RGWOp {

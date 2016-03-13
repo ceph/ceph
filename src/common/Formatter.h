@@ -87,11 +87,20 @@ namespace ceph {
     {
       dump_string(name, s);
     }
+    virtual void dump_string_linewrap(const char *name, const std::string& s)
+    {
+      dump_string(name, s);
+    }
   };
 
   class JSONFormatter : public Formatter {
   public:
-    explicit JSONFormatter(bool p = false);
+    enum Escape {
+      Always = 0,
+      Least = 1,
+      SmartHtml = 2,
+    };
+    explicit JSONFormatter(bool p = false, Escape c = Always);
 
     virtual void set_status(int status, const char* status_name) {};
     virtual void output_header() {};
@@ -113,6 +122,7 @@ namespace ceph {
     int get_len() const;
     void write_raw_data(const char *data);
 
+
   private:
 
     struct json_formatter_stack_entry_d {
@@ -131,6 +141,7 @@ namespace ceph {
     std::stringstream m_ss, m_pending_string;
     std::list<json_formatter_stack_entry_d> m_stack;
     bool m_is_pending_string;
+    Escape cook;
   };
 
   class XMLFormatter : public Formatter {
@@ -163,6 +174,7 @@ namespace ceph {
     void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs);
     void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs);
     void dump_string_with_attrs(const char *name, const std::string& s, const FormatterAttrs& attrs);
+    void dump_string_linewrap(const char *name, const std::string& s);
   protected:
     void open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs);
     void finish_pending_string();

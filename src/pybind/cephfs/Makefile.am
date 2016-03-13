@@ -1,16 +1,16 @@
 EXTRA_DIST += $(srcdir)/pybind/cephfs/setup.py $(srcdir)/pybind/cephfs/cephfs.pyx
 
-cephfs-pybind-all: libcephfs.la ${srcdir}/ceph_ver.h
+cephfs-pybind-all: libcephfs.la ./ceph_ver.h
 	cd $(srcdir)/pybind/cephfs; $(PY_DISTUTILS) build \
 	--build-base $(shell readlink -f $(builddir))/build \
 	--verbose
 
-cephfs-pybind-clean: ${srcdir}/ceph_ver.h
+cephfs-pybind-clean: ./ceph_ver.h
 	cd $(srcdir)/pybind/cephfs; $(PY_DISTUTILS) clean \
 	--build-base $(shell readlink -f $(builddir))/build \
 	--verbose
 
-cephfs-pybind-install-exec: ${srcdir}/ceph_ver.h
+cephfs-pybind-install-exec: ./ceph_ver.h
 	if test "$(DESTDIR)" ; then \
 		if lsb_release -si | grep --quiet 'Ubuntu\|Debian\|Devuan' ; then \
 			options=--install-layout=deb ; \

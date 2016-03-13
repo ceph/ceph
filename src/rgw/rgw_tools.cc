@@ -53,7 +53,6 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
 
     rop.stat_params.attrs = pattrs;
     rop.stat_params.lastmod = pmtime;
-    rop.stat_params.perr = &err;
 
     int ret = rop.stat(objv_tracker);
     if (ret < 0)

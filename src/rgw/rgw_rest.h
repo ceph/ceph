@@ -16,6 +16,7 @@ extern std::map<std::string, std::string> rgw_to_http_attrs;
 
 extern string lowercase_dash_http_attr(const string& orig);
 
+extern void rgw_rest_init(CephContext *cct);
 extern void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group);
 
 extern void rgw_flush_formatter_and_reset(struct req_state *s,
@@ -132,16 +133,16 @@ public:
 
 class RGWRESTFlusher : public RGWFormatterFlusher {
   struct req_state *s;
-  RGWOp *op;
+  boost::function<void()> op;
 protected:
   virtual void do_flush();
   virtual void do_start(int ret);
 public:
-  RGWRESTFlusher(struct req_state *_s, RGWOp *_op) :
+  RGWRESTFlusher(struct req_state *_s, boost::function<void()> _op) :
     RGWFormatterFlusher(_s->formatter), s(_s), op(_op) {}
   RGWRESTFlusher() : RGWFormatterFlusher(NULL), s(NULL), op(NULL) {}
 
-  void init(struct req_state *_s, RGWOp *_op) {
+  void init(struct req_state *_s, boost::function<void()> _op) {
     s = _s;
     op = _op;
     set_formatter(s->formatter);
@@ -357,7 +358,7 @@ public:
   virtual void init(RGWRados *store, struct req_state *s,
 		    RGWHandler *dialect_handler) {
     RGWOp::init(store, s, dialect_handler);
-    flusher.init(s, this);
+    flusher.init(s, dump_access_control_f());
   }
   virtual void send_response();
   virtual int check_caps(RGWUserCaps& caps)
@@ -463,14 +464,19 @@ public:
 
 static constexpr int64_t NO_CONTENT_LENGTH = -1;
 
-extern void set_req_state_err(struct rgw_err &err, int err_no, int prot_flags);
-extern void set_req_state_err(struct req_state *s, int err_no);
 extern void dump_errno(int http_ret, string& out);
 extern void dump_errno(const struct rgw_err &err, string& out);
 extern void dump_errno(struct req_state *s);
-extern void dump_errno(struct req_state *s, int http_ret);
+// XXX kill or keep? extern void dump_errno(struct req_state *s, int http_ret);
 extern void end_header(struct req_state *s,
                        RGWOp* op = nullptr,
+                       const char *content_type = nullptr,
+                       const int64_t proposed_content_length =
+		       NO_CONTENT_LENGTH,
+		       bool force_content_type = false,
+		       bool force_no_error = false);
+extern void end_header(struct req_state *s,
+                       boost::function<void()> dump_more,
                        const char *content_type = nullptr,
                        const int64_t proposed_content_length =
 		       NO_CONTENT_LENGTH,
@@ -489,6 +495,8 @@ extern void dump_time_header(struct req_state *s, const char *name, time_t t);
 extern void dump_last_modified(struct req_state *s, time_t t);
 extern void abort_early(struct req_state* s, RGWOp* op, int err,
 			RGWHandler* handler);
+extern void abort_early(struct req_state* s, boost::function<void()> dump_more,
+			string& error_content, int err);
 extern void dump_range(struct req_state* s, uint64_t ofs, uint64_t end,
 		       uint64_t total_size);
 extern void dump_continue(struct req_state *s);

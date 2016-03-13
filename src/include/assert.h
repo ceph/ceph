@@ -20,7 +20,12 @@
 # include "acconfig.h"
 #endif
 
+#ifdef __cplusplus
 class CephContext;
+#else
+struct CephContext;
+typedef struct CephContext CephContext;
+#endif
 
 #ifdef __cplusplus
 namespace ceph {

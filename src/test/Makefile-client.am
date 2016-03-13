@@ -741,7 +741,7 @@ librgw_file_aw_LDADD = $(UNITTEST_LDADD) \
 bin_DEBUGPROGRAMS += librgw_file_aw
 
 librgw_file_nfsns_SOURCES = test/librgw_file_nfsns.cc
-librgw_file_nfsns_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
+librgw_file_nfsns_CXXFLAGS = -I$(srcdir)/xxHash $(CIVETWEB_INCLUDE) $(UNITTEST_CXXFLAGS)
 librgw_file_nfsns_LDADD = $(UNITTEST_LDADD) \
 	librgw.la librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += librgw_file_nfsns

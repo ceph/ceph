@@ -9,9 +9,17 @@ from Cython.Build import cythonize
 
 def get_version():
     try:
-        for line in open(os.path.join(os.path.dirname(__file__), "..", "ceph_ver.h")):
-            if "CEPH_GIT_NICE_VER" in line:
-                return line.split()[2][1:-1]
+        for line in open(os.path.join(os.path.dirname(__file__), "..", ".git_version")):
+            if "v" in line:
+		a=line[1:-1].split("-",2)
+		if len(a) > 2:
+		  return "{}.post{}+{}".format( a[0], a[1], a[2] )
+		elif len(a) > 1:
+		  return "{}+{}".format( a[0], a[1] )
+		else:
+		  return a[0]
+
+                return line[1:-1]
         else:
             return "0"
     except IOError:

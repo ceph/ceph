@@ -183,29 +183,29 @@ base: core-daemons admin-tools \
 # version stuff
 
 FORCE:
-.git_version: FORCE
-	$(srcdir)/make_version -g $(srcdir)/.git_version
+$(srcdir)/.git_version: FORCE
+	GIT_DIR=$(top_srcdir)/.git $(srcdir)/make_version -g $(srcdir)/.git_version
 
 # if NO_VERSION is set, only generate a new ceph_ver.h if there currently 
 # is none, and call "make_version -n" to fill it with a fixed string.
 # Otherwise, set it from the contents of .git_version.
 
-ceph_ver.h: .git_version FORCE
+ceph_ver.h: $(srcdir)/.git_version FORCE
 	if [ -n "$$NO_VERSION" ] ; then \
-		$(srcdir)/make_version -g $(srcdir)/.git_version -c $(srcdir)/ceph_ver.h -n ; \
+		$(top_srcdir)/make_version -g $(srcdir)/.git_version -c ceph_ver.h -n ; \
 	else \
-		$(srcdir)/make_version -g $(srcdir)/.git_version -c $(srcdir)/ceph_ver.h ; \
+		GIT_DIR=$(top_srcdir)/.git $(srcdir)/make_version -g $(srcdir)/.git_version -c ceph_ver.h ; \
 	fi
 
-ceph_ver.c: ./ceph_ver.h
-common/version.cc: ./ceph_ver.h
-test/encoding/ceph_dencoder.cc: ./ceph_ver.h
+ceph_ver.c: ceph_ver.h
+common/version.cc: ceph_ver.h
+test/encoding/ceph_dencoder.cc: ceph_ver.h
 
 sample.fetch_config: fetch_config
 	cp -f $(srcdir)/fetch_config ./sample.fetch_config
 
 dist-hook:
-	$(srcdir)/make_version -g $(srcdir)/.git_version
+	GIT_DIR=$(top_srcdir)/.git $(srcdir)/make_version -g $(srcdir)/.git_version
 
 CLEANFILES += ceph_ver.h sample.fetch_config
 
