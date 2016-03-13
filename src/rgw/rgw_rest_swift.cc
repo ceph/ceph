@@ -539,7 +539,7 @@ static int get_delete_at_param(req_state *s, real_time *delete_at)
     return -EINVAL;
   }
 
-  delat_proposal += timespan(ts);
+  delat_proposal += make_timespan(ts);
   if (delat_proposal < real_clock::now()) {
     return -EINVAL;
   }

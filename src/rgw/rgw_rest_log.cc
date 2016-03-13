@@ -259,7 +259,7 @@ void RGWOp_MDLog_Lock::execute() {
     http_ret = -EINVAL;
     return;
   }
-  http_ret = meta_log.lock_exclusive(shard_id, timespan(dur), zone_id,
+  http_ret = meta_log.lock_exclusive(shard_id, make_timespan(dur), zone_id,
 				     locker_id);
   if (http_ret == -EBUSY)
     http_ret = -ERR_LOCKED;
@@ -695,7 +695,7 @@ void RGWOp_DATALog_Lock::execute() {
     http_ret = -EINVAL;
     return;
   }
-  http_ret = store->data_log->lock_exclusive(shard_id, timespan(dur), zone_id, locker_id);
+  http_ret = store->data_log->lock_exclusive(shard_id, make_timespan(dur), zone_id, locker_id);
   if (http_ret == -EBUSY)
     http_ret = -ERR_LOCKED;
 }
