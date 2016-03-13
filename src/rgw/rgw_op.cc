@@ -1922,6 +1922,7 @@ void RGWCreateBucket::execute()
   s->bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
   s->bucket.name = s->bucket_name;
   op_ret = store->create_bucket(*(s->user), s->bucket, zonegroup_id, placement_rule,
+                                swift_ver_location,
 				attrs, info, pobjv, &ep_objv, creation_time,
 				pmaster_bucket, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
@@ -2808,6 +2809,9 @@ void RGWPutMetadataBucket::execute()
     cors_config.encode(bl);
     attrs[RGW_ATTR_CORS] = bl;
   }
+
+  s->bucket_info.swift_ver_location = swift_ver_location;
+  s->bucket_info.swift_versioning = (!swift_ver_location.empty());
 
   op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
 }
