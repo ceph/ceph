@@ -3186,20 +3186,14 @@ ostream& operator<<(ostream& out, const pg_interval_t& i)
 // -- pg_query_t --
 
 void pg_query_t::encode(bufferlist &bl, uint64_t features) const {
-  if (features & CEPH_FEATURE_QUERY_T) {
-    ENCODE_START(3, 2, bl);
-    ::encode(type, bl);
-    ::encode(since, bl);
-    history.encode(bl);
-    ::encode(epoch_sent, bl);
-    ::encode(to, bl);
-    ::encode(from, bl);
-    ENCODE_FINISH(bl);
-  } else {
-    ::encode(type, bl);
-    ::encode(since, bl);
-    history.encode(bl);
-  }
+  ENCODE_START(3, 2, bl);
+  ::encode(type, bl);
+  ::encode(since, bl);
+  history.encode(bl);
+  ::encode(epoch_sent, bl);
+  ::encode(to, bl);
+  ::encode(from, bl);
+  ENCODE_FINISH(bl);
 }
 
 void pg_query_t::decode(bufferlist::iterator &bl) {
