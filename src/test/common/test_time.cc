@@ -122,9 +122,7 @@ static void system_clock_conversions() {
 
   ASSERT_EQ(Clock::to_double(brt), bd);
   // Fudge factor
-  ASSERT_LT((Clock::from_double(bd) >  brt ?
-	     Clock::from_double(bd) - brt :
-	     brt - Clock::from_double(bd)).count(), 30U);
+  ASSERT_LT(std::abs((Clock::from_double(bd) - brt).count()), 30);
 }
 
 TEST(RealClock, Sanity) {
@@ -143,4 +141,38 @@ TEST(CoarseRealClock, Sanity) {
 
 TEST(CoarseRealClock, Conversions) {
   system_clock_conversions<coarse_real_clock>();
+}
+
+TEST(TimePoints, SignedSubtraciton) {
+  ceph::real_time rta(std::chrono::seconds(3));
+  ceph::real_time rtb(std::chrono::seconds(5));
+
+  ceph::coarse_real_time crta(std::chrono::seconds(3));
+  ceph::coarse_real_time crtb(std::chrono::seconds(5));
+
+  ceph::mono_time mta(std::chrono::seconds(3));
+  ceph::mono_time mtb(std::chrono::seconds(5));
+
+  ceph::coarse_mono_time cmta(std::chrono::seconds(3));
+  ceph::coarse_mono_time cmtb(std::chrono::seconds(5));
+
+  ASSERT_LT(rta - rtb, ceph::signedspan::zero());
+  ASSERT_LT((rta - rtb).count(), 0);
+  ASSERT_GT(rtb - rta, ceph::signedspan::zero());
+  ASSERT_GT((rtb - rta).count(), 0);
+
+  ASSERT_LT(crta - crtb, ceph::signedspan::zero());
+  ASSERT_LT((crta - crtb).count(), 0);
+  ASSERT_GT(crtb - crta, ceph::signedspan::zero());
+  ASSERT_GT((crtb - crta).count(), 0);
+
+  ASSERT_LT(mta - mtb, ceph::signedspan::zero());
+  ASSERT_LT((mta - mtb).count(), 0);
+  ASSERT_GT(mtb - mta, ceph::signedspan::zero());
+  ASSERT_GT((mtb - mta).count(), 0);
+
+  ASSERT_LT(cmta - cmtb, ceph::signedspan::zero());
+  ASSERT_LT((cmta - cmtb).count(), 0);
+  ASSERT_GT(cmtb - cmta, ceph::signedspan::zero());
+  ASSERT_GT((cmtb - cmta).count(), 0);
 }
