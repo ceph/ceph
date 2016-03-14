@@ -153,6 +153,7 @@ struct C_aio_notify_Complete : public C_aio_linger_Complete {
 
     if (acked && finished) {
       lock.Unlock();
+      cancel = true;
       C_aio_linger_Complete::complete(ret_val);
     } else {
       lock.Unlock();
