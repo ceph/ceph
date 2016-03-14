@@ -68,7 +68,7 @@
 #define CEPH_FEATURE_CRUSH_V4      (1ULL<<48)  /* straw2 buckets */
 #define DEPRECATED_CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY (1ULL<<49) // DEPRECATED: JEWEL (can't remove until all 1<<49 are ready)
 // duplicated since it was introduced at the same time as MIN_SIZE_RECOVERY
-#define CEPH_FEATURE_OSD_PROXY_FEATURES (1ULL<<49)  /* overlap w/ above */
+#define DEPRECATED_CEPH_FEATURE_OSD_PROXY_FEATURES (1ULL<<49)  /* overlap w/ above */
 #define CEPH_FEATURE_MON_METADATA (1ULL<<50)
 #define CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT (1ULL<<51) /* can sort objs bitwise */
 #define CEPH_FEATURE_OSD_PROXY_WRITE_FEATURES (1ULL<<52)
