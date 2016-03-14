@@ -4480,11 +4480,6 @@ int Monitor::scrub_start()
   dout(10) << __func__ << dendl;
   assert(is_leader());
 
-  if ((get_quorum_features() & CEPH_FEATURE_MON_SCRUB) == 0) {
-    clog->warn() << "scrub not supported by entire quorum\n";
-    return -EOPNOTSUPP;
-  }
-
   if (!scrub_result.empty()) {
     clog->info() << "scrub already in progress\n";
     return -EBUSY;
