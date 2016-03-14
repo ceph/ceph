@@ -941,7 +941,7 @@ TEST_F(LibRadosListPP, EnumerateObjectsFilterPP) {
     std::vector<ObjectItem> result;
     int r = ioctx.object_list(c, end, 12, filter_bl, &result, &c);
     ASSERT_GE(r, 0);
-    ASSERT_EQ(r, result.size());
+    ASSERT_EQ(r, (int)result.size());
     for (int i = 0; i < r; ++i) {
       auto oid = result[i].oid;
       // We should only see the object that matches the filter
