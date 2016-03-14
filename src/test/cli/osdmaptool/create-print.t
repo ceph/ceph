@@ -11,6 +11,7 @@
   tunable choose_local_fallback_tries 0
   tunable choose_total_tries 50
   tunable chooseleaf_descend_once 1
+  tunable chooseleaf_vary_r 1
   tunable straw_calc_version 1
   
   # devices
