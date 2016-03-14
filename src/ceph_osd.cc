@@ -495,8 +495,7 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_OSDENC |
     CEPH_FEATURE_OSD_SNAPMAPPER |
-    CEPH_FEATURE_OSD_PACKED_RECOVERY |
-    CEPH_FEATURE_RECOVERY_RESERVATION;
+    CEPH_FEATURE_OSD_PACKED_RECOVERY;
 
   ms_public->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
   ms_public->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
