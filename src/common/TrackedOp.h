@@ -74,9 +74,9 @@ class OpTracker {
   float complaint_time;
   int log_threshold;
   void _mark_event(TrackedOp *op, const string &evt, utime_t now);
+  bool tracking_enabled;
 
 public:
-  bool tracking_enabled;
   CephContext *cct;
   OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards) : seq(0), 
                                      num_optracker_shards(num_shards),
@@ -100,7 +100,7 @@ public:
   }
   bool dump_ops_in_flight(Formatter *f, bool print_only_blocked=false);
   bool dump_historic_ops(Formatter *f);
-  void register_inflight_op(xlist<TrackedOp*>::item *i);
+  bool register_inflight_op(xlist<TrackedOp*>::item *i);
   void unregister_inflight_op(TrackedOp *i);
 
   void get_age_ms_histogram(pow2_hist_t *h);
@@ -194,9 +194,7 @@ public:
   }
   void dump(utime_t now, Formatter *f) const;
   void tracking_start() {
-    RWLock::RLocker l(tracker->lock);
-    if (tracker->tracking_enabled) {
-      tracker->register_inflight_op(&xitem);
+    if (tracker->register_inflight_op(&xitem)) {
       events.push_back(make_pair(initiated_at, "initiated"));
       is_tracked.set(1);
     }
