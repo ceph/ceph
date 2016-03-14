@@ -3265,38 +3265,60 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
   dout(15) << "zero " << cid << "/" << oid << " " << offset << "~" << len << dendl;
   int ret = 0;
 
+  if (g_conf->filestore_punch_hole) {
 #ifdef CEPH_HAVE_FALLOCATE
 # if !defined(DARWIN) && !defined(__FreeBSD__)
 #    ifdef FALLOC_FL_KEEP_SIZE
-  // first try to punch a hole.
-  FDRef fd;
-  ret = lfn_open(cid, oid, false, &fd);
-  if (ret < 0) {
-    goto out;
-  }
+    // first try to punch a hole.
+    FDRef fd;
+    ret = lfn_open(cid, oid, false, &fd);
+    if (ret < 0) {
+      goto out;
+    }
 
-  // first try fallocate
-  ret = fallocate(**fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE, offset, len);
-  if (ret < 0)
-    ret = -errno;
-  lfn_close(fd);
+    struct stat st;
+    ret = ::fstat(**fd, &st);
+    if (ret < 0) {
+      ret = -errno;
+      lfn_close(fd);
+      goto out;
+    }
 
-  if (ret >= 0 && m_filestore_sloppy_crc) {
-    int rc = backend->_crc_update_zero(**fd, offset, len);
-    assert(rc >= 0);
-  }
+    // first try fallocate
+    ret = fallocate(**fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE,
+		    offset, len);
+    if (ret < 0) {
+      ret = -errno;
+    } else {
+      // ensure we extent file size, if needed
+      if (offset + len > st.st_size) {
+	ret = ::ftruncate(**fd, offset + len);
+	if (ret < 0) {
+	  ret = -errno;
+	  lfn_close(fd);
+	  goto out;
+	}
+      }
+    }
+    lfn_close(fd);
 
-  if (ret == 0)
-    goto out;  // yay!
-  if (ret != -EOPNOTSUPP)
-    goto out;  // some other error
+    if (ret >= 0 && m_filestore_sloppy_crc) {
+      int rc = backend->_crc_update_zero(**fd, offset, len);
+      assert(rc >= 0);
+    }
+
+    if (ret == 0)
+      goto out;  // yay!
+    if (ret != -EOPNOTSUPP)
+      goto out;  // some other error
 #    endif
 # endif
 #endif
+  }
 
   // lame, kernel is old and doesn't support it.
   // write zeros.. yuck!
-  dout(20) << "zero FALLOC_FL_PUNCH_HOLE not supported, falling back to writing zeros" << dendl;
+  dout(20) << "zero falling back to writing zeros" << dendl;
   {
     bufferlist bl;
     bl.append_zero(len);
