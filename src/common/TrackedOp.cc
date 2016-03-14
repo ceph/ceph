@@ -131,10 +131,11 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
   return true;
 }
 
-void OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
+bool OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
 {
-  // caller checks;
-  assert(tracking_enabled);
+  RWLock::RLocker l(lock);
+  if (!tracking_enabled)
+    return false;
 
   uint64_t current_seq = seq.inc();
   uint32_t shard_index = current_seq % num_optracker_shards;
@@ -145,6 +146,7 @@ void OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
     sdata->ops_in_flight_sharded.push_back(i);
     sdata->ops_in_flight_sharded.back()->seq = current_seq;
   }
+  return true;
 }
 
 void OpTracker::unregister_inflight_op(TrackedOp *i)
