@@ -22,6 +22,22 @@ int RGWRESTSimpleRequest::get_status()
   return status;
 }
 
+int RGWRESTSimpleRequest::handle_header(const string& name, const string& val) 
+{
+  if (name == "CONTENT_LENGTH") {
+    string err;
+    long len = strict_strtol(val.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldout(cct, 0) << "ERROR: failed converting content length (" << val << ") to int " << dendl;
+      return -EINVAL;
+    }
+
+    max_response = len;
+  }
+
+  return 0;
+}
+
 int RGWRESTSimpleRequest::receive_header(void *ptr, size_t len)
 {
   char line[len + 1];
@@ -143,10 +159,14 @@ int RGWRESTSimpleRequest::send_data(void *ptr, size_t len)
 
 int RGWRESTSimpleRequest::receive_data(void *ptr, size_t len)
 {
-  if (response.length() > max_response)
+  size_t cp_len, left_len;
+
+  left_len = max_response > response.length() ? (max_response - response.length()) : 0;
+  if (left_len == 0)
     return 0; /* don't read extra data */
 
-  bufferptr p((char *)ptr, len);
+  cp_len = (len > left_len) ? left_len : len;
+  bufferptr p((char *)ptr, cp_len);
 
   response.append(p);
 

@@ -25,7 +25,7 @@ protected:
   size_t max_response; /* we need this as we don't stream out response */
   bufferlist response;
 
-  virtual int handle_header(const string& name, const string& val) { return 0; }
+  virtual int handle_header(const string& name, const string& val);
   void append_param(string& dest, const string& name, const string& val);
   void get_params_str(map<string, string>& extra_args, string& dest);
 
