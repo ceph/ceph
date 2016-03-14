@@ -27,9 +27,11 @@ public:
     Test1(int _data) : data(_data) {}
 
     friend std::ostream& operator<<(std::ostream& out, const Test1& d) {
-        out << d.data;
+        out << d.data << " (" << d.heap_data << ")";
         return out;
     }
+
+    int& the_data() { return data; }
 };
 
 
@@ -59,8 +61,26 @@ int main(int argc, char** argv) {
     my_heap.push(d2);
     my_heap.push(d3);
     my_heap.push(d4);
+    my_heap.push(Test1(-9));
+    my_heap.push(Test1(99));
+    my_heap.push(Test1(0));
 
     std::cout << my_heap << std::endl;
+
+    auto& t = my_heap.top();
+    t.the_data() = 17;
+    my_heap.adjust_down(t);
+
+    std::cout << my_heap << std::endl;
+
+    my_heap.display_sorted(std::cout);
+
+    while (!my_heap.empty()) {
+        auto& top = my_heap.top();
+        std::cout << top << std::endl;
+        my_heap.pop();
+        std::cout << my_heap << std::endl;
+    }
 
     return 0;
 }
