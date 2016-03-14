@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Copyright (C) 2013 Inktank <info@inktank.com>
 # Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
@@ -70,18 +70,21 @@ while [ $# -ge 1 ]; do
 done
 
 if [ $stop_all -eq 1 ]; then
-    while read DEV; do
-        # While it is currently possible to create an rbd image with
-        # whitespace chars in its name, krbd will refuse mapping such
-        # an image, so we can safely split on whitespace here.  (The
-        # same goes for whitespace chars in names of the pools that
-        # contain rbd images).
-        DEV="$(echo "${DEV}" | tr -s '[:space:]' | awk '{ print $5 }')"
-        sudo "${CEPH_BIN}"/rbd unmap "${DEV}"
-    done < <("${CEPH_BIN}"/rbd showmapped | tail -n +2)
+    if "${CEPH_BIN}"/rbd showmapped >/dev/null 2>&1; then
+        "${CEPH_BIN}"/rbd showmapped | tail -n +2 |
+        while read DEV; do
+            # While it is currently possible to create an rbd image with
+            # whitespace chars in its name, krbd will refuse mapping such
+            # an image, so we can safely split on whitespace here.  (The
+            # same goes for whitespace chars in names of the pools that
+            # contain rbd images).
+            DEV="$(echo "${DEV}" | tr -s '[:space:]' | awk '{ print $5 }')"
+            sudo "${CEPH_BIN}"/rbd unmap "${DEV}"
+        done
 
-    if [ -n "$("${CEPH_BIN}"/rbd showmapped)" ]; then
-        echo "WARNING: Some rbd images are still mapped!" >&2
+        if [ -n "$("${CEPH_BIN}"/rbd showmapped)" ]; then
+            echo "WARNING: Some rbd images are still mapped!" >&2
+        fi
     fi
 
     for p in ceph-mon ceph-mds ceph-osd radosgw lt-radosgw apache2 ; do

@@ -63,7 +63,7 @@ HARDENING_CFLAGS = \
                    --param=ssp-buffer-size=4 \
                    -fPIE
 
-SET_STACK_PROTECTOR_STRONG = $(shell expr `gcc -dumpversion` \>= 4.9)
+SET_STACK_PROTECTOR_STRONG = $(shell expr `$(CC) -dumpversion` \>= 4.9)
 
 		ifeq ($(SET_STACK_PROTECTOR_STRONG),1)
 				HARDENING_CFLAGS += -fstack-protector-strong

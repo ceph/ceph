@@ -22,6 +22,11 @@ EXTRA_DIST += \
 	share/id_dsa_drop.ceph.com \
 	share/id_dsa_drop.ceph.com.pub
 
+NPROC = nproc
+if FREEBSD
+	NPROC = sysctl -n hw.ncpu
+endif
+
 # why is it so hard to make autotools to this?
 install-data-local::
 	-mkdir -p $(DESTDIR)$(datadir)/ceph
@@ -46,7 +51,7 @@ check-local:: all
 	@cd src/gmock && $(MAKE) $(AM_MAKEFLAGS) lib/libgmock.la lib/libgmock_main.la
 #	exercise cli tools
 	u=`ulimit -u` ; \
-	p=`expr $(shell nproc) / 2` ; \
+	p=`expr $(shell ${NPROC}) / 2` ; \
 	n=`expr $$p \* 1024` ; \
 	if ${CHECK_ULIMIT} && echo ${MAKEFLAGS} | grep --quiet -e -j && test $$u -lt $$n ; then \
 		echo "ulimit -u is $$u which is lower than $$n = $$p / 2 * 1024" ; \
