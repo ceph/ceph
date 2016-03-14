@@ -667,14 +667,14 @@ MDSMap::availability_t MDSMap::is_cluster_available() const
     return STUCK_UNAVAILABLE;
   }
 
-  for (const auto rank : in) {                                                  
-  if (up.count(rank) && mds_info.at(up.at(rank)).laggy()) {
-    // This might only be transient, but because we can't see
-    // standbys, we have no way of knowing whether there is a
-    // standby available to replace the laggy guy.
-    return STUCK_UNAVAILABLE;                                                 
-  }                                                                           
-}   
+  for (const auto rank : in) {
+    if (up.count(rank) && mds_info.at(up.at(rank)).laggy()) {
+      // This might only be transient, but because we can't see
+      // standbys, we have no way of knowing whether there is a
+      // standby available to replace the laggy guy.
+      return STUCK_UNAVAILABLE;
+    }
+  }
 
   if (get_num_mds(CEPH_MDS_STATE_ACTIVE) > 0) {
     // Nobody looks stuck, so indicate to client they should go ahead
