@@ -933,6 +933,18 @@ TEST(BufferListIterator, constructors) {
     j.advance(-1);
     EXPECT_EQ('X', *j);
   }
+
+  //
+  // const_iterator(const iterator& other)
+  //
+  {
+    bufferlist bl;
+    bl.append("ABC", 3);
+    bufferlist::iterator i(&bl);
+    bufferlist::const_iterator ci(i);
+    EXPECT_EQ(0u, ci.get_off());
+    EXPECT_EQ('A', *ci);
+  }
 }
 
 TEST(BufferListIterator, empty_create_append_copy) {
@@ -946,7 +958,7 @@ TEST(BufferListIterator, empty_create_append_copy) {
   ASSERT_TRUE(out.contents_equal(bl));
 }
 
-TEST(BufferListIterator, operator_equal) {
+TEST(BufferListIterator, operator_assign) {
   bufferlist bl;
   bl.append("ABC", 3);
   bufferlist::iterator i(&bl, 1);
@@ -1038,6 +1050,49 @@ TEST(BufferListIterator, operator_star) {
   }
 }
 
+TEST(BufferListIterator, operator_equal) {
+  bufferlist bl;
+  bl.append("ABC", 3);
+  {
+    bufferlist::iterator i(&bl);
+    bufferlist::iterator j(&bl);
+    EXPECT_EQ(i, j);
+  }
+  {
+    bufferlist::const_iterator ci = bl.begin();
+    bufferlist::iterator i = bl.begin();
+    EXPECT_EQ(i, ci);
+    EXPECT_EQ(ci, i);
+  }
+}
+
+TEST(BufferListIterator, operator_nequal) {
+  bufferlist bl;
+  bl.append("ABC", 3);
+  {
+    bufferlist::iterator i(&bl);
+    bufferlist::iterator j(&bl);
+    EXPECT_NE(++i, j);
+  }
+  {
+    bufferlist::const_iterator ci = bl.begin();
+    bufferlist::const_iterator cj = bl.begin();
+    ++ci;
+    EXPECT_NE(ci, cj);
+    bufferlist::iterator i = bl.begin();
+    EXPECT_NE(i, ci);
+    EXPECT_NE(ci, i);
+  }
+  {
+    // tests begin(), end(), operator++() also
+    string s("ABC");
+    int i = 0;
+    for (auto c : bl) {
+      EXPECT_EQ(s[i++], c);
+    }
+  }
+}
+
 TEST(BufferListIterator, operator_plus_plus) {
   bufferlist bl;
   {
@@ -1049,7 +1104,7 @@ TEST(BufferListIterator, operator_plus_plus) {
     bufferlist::iterator i(&bl);
     ++i;
     EXPECT_EQ('B', *i);
-  }  
+  }
 }
 
 TEST(BufferListIterator, get_current_ptr) {
