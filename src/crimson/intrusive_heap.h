@@ -25,6 +25,16 @@ namespace crimson {
   // refs and return true if the first precedes the second
   template<typename T, typename I, typename C>
   class IntruHeap {
+
+    static_assert(
+      std::is_same<IntruHeapData&,typename std::result_of<I(T&)>::type>::value,
+      "class I must define operator() to take T& and return a IntruHeapData&.");
+
+    static_assert(
+      std::is_same<bool,typename std::result_of<C(const T&,const T&)>::type>::value,
+      "class C must define operator() to take two const T& and return a bool.");
+
+
   protected:
     using index_t = IntruHeapData;
 
