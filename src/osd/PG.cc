@@ -1406,7 +1406,6 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
   // Otherwise, we will go "peered", but not "active"
   if (num_want_acting < pool.info.min_size &&
       (pool.info.ec_pool() ||
-       (!(get_min_peer_features() & CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY)) ||
        !cct->_conf->osd_allow_recovery_below_min_size)) {
     want_acting.clear();
     dout(10) << "choose_acting failed, below min size" << dendl;
@@ -6987,12 +6986,6 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
 
   ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
   if (msg->info.last_backfill == hobject_t()) {
-    if (!(msg->get_connection()->get_features() & CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY)) {
-      dout(10) << "Got logevt resetting backfill from peer featuring bug"
-	       << " 10780, setting msg->info.last_epoch_started to logevt.query_epoch,"
-	       << " which is the activation epoch." << dendl;
-      msg->info.last_epoch_started = msg->get_query_epoch();
-    }
     // restart backfill
     pg->unreg_next_scrub();
     pg->info = msg->info;
