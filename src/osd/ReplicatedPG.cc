@@ -4879,10 +4879,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_write;
       {
 	tracepoint(osd, do_osd_op_pre_setallochint, soid.oid.name.c_str(), soid.snap.val, op.alloc_hint.expected_object_size, op.alloc_hint.expected_write_size);
-        if (!(get_min_upacting_features() & CEPH_FEATURE_OSD_SET_ALLOC_HINT)) { 
-          result = -EOPNOTSUPP;
-          break;
-        }
 	if (maybe_create_new_object(ctx)) {
           ctx->mod_desc.create();
           t->touch(soid);
