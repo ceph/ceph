@@ -6499,6 +6499,17 @@ void OSD::note_up_osd(int peer)
   service.forget_peer_epoch(peer, osdmap->get_epoch() - 1);
 }
 
+struct C_OnMapCommit : public Context {
+  OSD *osd;
+  epoch_t first, last;
+  MOSDMap *msg;
+  C_OnMapCommit(OSD *o, epoch_t f, epoch_t l, MOSDMap *m)
+    : osd(o), first(f), last(l), msg(m) {}
+  void finish(int r) {
+    osd->_committed_osd_maps(first, last, msg);
+  }
+};
+
 struct C_OnMapApply : public Context {
   OSDService *service;
   list<OSDMapRef> pinned_maps;
@@ -6559,18 +6570,18 @@ void OSD::handle_osd_map(MOSDMap *m)
   epoch_t first = m->get_first();
   epoch_t last = m->get_last();
   dout(3) << "handle_osd_map epochs [" << first << "," << last << "], i have "
-	  << osdmap->get_epoch()
+	  << superblock.newest_map
 	  << ", src has [" << m->oldest_map << "," << m->newest_map << "]"
 	  << dendl;
 
   logger->inc(l_osd_map);
   logger->inc(l_osd_mape, last - first + 1);
-  if (first <= osdmap->get_epoch())
-    logger->inc(l_osd_mape_dup, osdmap->get_epoch() - first + 1);
+  if (first <= superblock.newest_map)
+    logger->inc(l_osd_mape_dup, superblock.newest_map - first + 1);
 
   // make sure there is something new, here, before we bother flushing
   // the queues and such
-  if (last <= osdmap->get_epoch()) {
+  if (last <= superblock.newest_map) {
     dout(10) << " no new maps here, dropping" << dendl;
     m->put();
     return;
@@ -6578,11 +6589,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // missing some?
   bool skip_maps = false;
-  if (first > osdmap->get_epoch() + 1) {
-    dout(10) << "handle_osd_map message skips epochs " << osdmap->get_epoch() + 1
-	     << ".." << (first-1) << dendl;
-    if (m->oldest_map <= osdmap->get_epoch() + 1) {
-      osdmap_subscribe(osdmap->get_epoch()+1, false);
+  if (first > superblock.newest_map + 1) {
+    dout(10) << "handle_osd_map message skips epochs "
+	     << superblock.newest_map + 1 << ".." << (first-1) << dendl;
+    if (m->oldest_map <= superblock.newest_map + 1) {
+      osdmap_subscribe(superblock.newest_map + 1, false);
       m->put();
       return;
     }
@@ -6601,7 +6612,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   ObjectStore::Transaction t;
 
   // store new maps: queue for disk and put in the osdmap cache
-  epoch_t start = MAX(osdmap->get_epoch() + 1, first);
+  epoch_t start = MAX(superblock.newest_map + 1, first);
   for (epoch_t e = start; e <= last; e++) {
     map<epoch_t,bufferlist>::iterator p;
     p = m->maps.find(e);
@@ -6682,7 +6693,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // even if this map isn't from a mon, we may have satisfied our subscription
   monc->sub_got("osdmap", last);
 
-  if (last <= osdmap->get_epoch()) {
+  if (last <= superblock.newest_map) {
     dout(10) << " no new maps here, dropping" << dendl;
     m->put();
     return;
@@ -6709,7 +6720,29 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (!superblock.oldest_map || skip_maps)
     superblock.oldest_map = first;
   superblock.newest_map = last;
+  superblock.current_epoch = last;
 
+  // note in the superblock that we were clean thru the prior epoch
+  epoch_t boot_epoch = service.get_boot_epoch();
+  if (boot_epoch && boot_epoch >= superblock.mounted) {
+    superblock.mounted = boot_epoch;
+    superblock.clean_thru = last;
+  }
+
+  // superblock and commit
+  write_superblock(t);
+  store->queue_transaction(
+    service.meta_osr.get(),
+    std::move(t),
+    new C_OnMapApply(&service, pinned_maps, last),
+    new C_OnMapCommit(this, start, last, m), 0);
+  service.publish_superblock(superblock);
+}
+
+void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
+{
+  dout(10) << __func__ << " " << first << ".." << last << dendl;
+  Mutex::Locker l(osd_lock);
   map_lock.get_write();
 
   bool do_shutdown = false;
@@ -6717,9 +6750,11 @@ void OSD::handle_osd_map(MOSDMap *m)
   bool network_error = false;
 
   // advance through the new maps
-  for (epoch_t cur = start; cur <= superblock.newest_map; cur++) {
+  for (epoch_t cur = first; cur <= last; cur++) {
     dout(10) << " advance to epoch " << cur
-	     << " (<= newest " << superblock.newest_map << ")" << dendl;
+	     << " (<= last " << last
+	     << " <= newest_map " << superblock.newest_map
+	     << ")" << dendl;
 
     OSDMapRef newmap = get_map(cur);
     assert(newmap);  // we just cached it above!
@@ -6760,7 +6795,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     osdmap = newmap;
 
-    superblock.current_epoch = cur;
     had_map_since = ceph_clock_now(cct);
 
     epoch_t up_epoch;
@@ -6895,23 +6929,6 @@ void OSD::handle_osd_map(MOSDMap *m)
       }
     }
   }
-
-
-  // note in the superblock that we were clean thru the prior epoch
-  epoch_t boot_epoch = service.get_boot_epoch();
-  if (boot_epoch && boot_epoch >= superblock.mounted) {
-    superblock.mounted = boot_epoch;
-    superblock.clean_thru = osdmap->get_epoch();
-  }
-
-  // superblock and commit
-  write_superblock(t);
-  store->queue_transaction(
-    service.meta_osr.get(),
-    std::move(t),
-    new C_OnMapApply(&service, pinned_maps, osdmap->get_epoch()),
-    0, 0);
-  service.publish_superblock(superblock);
 
   map_lock.put_write();
 
