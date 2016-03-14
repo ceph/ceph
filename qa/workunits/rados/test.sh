@@ -16,6 +16,7 @@ for f in \
     api_tier api_pool api_snapshots api_stat api_watch_notify api_cmd \
     api_c_write_operations \
     api_c_read_operations \
+    api_tmap_migrate \
     list_parallel \
     open_pools_parallel \
     delete_pools_parallel \
