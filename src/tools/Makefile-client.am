@@ -95,6 +95,9 @@ librbd_mirror_internal_la_SOURCES = \
 	tools/rbd_mirror/Replayer.cc \
 	tools/rbd_mirror/Threads.cc \
 	tools/rbd_mirror/types.cc \
+	tools/rbd_mirror/image_replayer/BootstrapRequest.cc \
+	tools/rbd_mirror/image_replayer/CloseImageRequest.cc \
+	tools/rbd_mirror/image_replayer/OpenLocalImageRequest.cc \
 	tools/rbd_mirror/image_sync/ImageCopyRequest.cc \
 	tools/rbd_mirror/image_sync/ObjectCopyRequest.cc \
 	tools/rbd_mirror/image_sync/SnapshotCopyRequest.cc \
@@ -110,6 +113,9 @@ noinst_HEADERS += \
 	tools/rbd_mirror/Replayer.h \
 	tools/rbd_mirror/Threads.h \
 	tools/rbd_mirror/types.h \
+	tools/rbd_mirror/image_replayer/BootstrapRequest.h \
+	tools/rbd_mirror/image_replayer/CloseImageRequest.h \
+	tools/rbd_mirror/image_replayer/OpenLocalImageRequest.h \
 	tools/rbd_mirror/image_sync/ImageCopyRequest.h \
 	tools/rbd_mirror/image_sync/ObjectCopyRequest.h \
 	tools/rbd_mirror/image_sync/SnapshotCopyRequest.h \
