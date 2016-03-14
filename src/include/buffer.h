@@ -263,6 +263,10 @@ namespace buffer CEPH_BUFFER_API {
     unsigned _memcopy_count; //the total of memcopy using rebuild().
     ptr append_buffer;  // where i put small appends.
 
+  public:
+    class iterator;
+
+  private:
     template <bool is_const>
     class CEPH_BUFFER_DETAILS iterator_impl
       : public std::iterator<std::forward_iterator_tag, char> {
@@ -281,6 +285,7 @@ namespace buffer CEPH_BUFFER_API {
       unsigned off; // in bl
       list_iter_t p;
       unsigned p_off;   // in *p
+      friend class iterator_impl<true>;
 
     public:
       // constructor.  position.
@@ -289,6 +294,7 @@ namespace buffer CEPH_BUFFER_API {
       iterator_impl(bl_t *l, unsigned o=0);
       iterator_impl(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
 	: bl(l), ls(&bl->_buffers), off(o), p(ip), p_off(po) {}
+      iterator_impl(const list::iterator& i);
 
       /// get current iterator offset in buffer::list
       unsigned get_off() const { return off; }
@@ -304,12 +310,11 @@ namespace buffer CEPH_BUFFER_API {
 
       void advance(int o);
       void seek(unsigned o);
-      bool operator!=(const iterator_impl& rhs) const;
       char operator*() const;
       iterator_impl& operator++();
       ptr get_current_ptr() const;
 
-      bl_t& get_bl() { return *bl; }
+      bl_t& get_bl() const { return *bl; }
 
       // copy data out.
       // note that these all _append_ to dest!
@@ -318,6 +323,15 @@ namespace buffer CEPH_BUFFER_API {
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
       void copy_all(list &dest);
+
+      friend bool operator==(const iterator_impl& lhs,
+			     const iterator_impl& rhs) {
+	return &lhs.get_bl() == &rhs.get_bl() && lhs.get_off() == rhs.get_off();
+      }
+      friend bool operator!=(const iterator_impl& lhs,
+			     const iterator_impl& rhs) {
+	return &lhs.get_bl() != &rhs.get_bl() || lhs.get_off() != rhs.get_off();
+      }
     };
 
   public:
@@ -346,6 +360,13 @@ namespace buffer CEPH_BUFFER_API {
       void copy_in(unsigned len, const char *src);
       void copy_in(unsigned len, const char *src, bool crc_reset);
       void copy_in(unsigned len, const list& otherl);
+
+      bool operator==(const iterator& rhs) const {
+	return bl == rhs.bl && off == rhs.off;
+      }
+      bool operator!=(const iterator& rhs) const {
+	return bl != rhs.bl || off != rhs.off;
+      }
     };
 
   private:
@@ -631,6 +652,7 @@ inline bufferhash& operator<<(bufferhash& l, bufferlist &r) {
   l.update(r);
   return l;
 }
+
 }
 
 #if defined(HAVE_XIO)
