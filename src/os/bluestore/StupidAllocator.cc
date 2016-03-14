@@ -115,10 +115,11 @@ int StupidAllocator::allocate(
     }
   }
 
-  // search up (from origin)
+  // search up (from origin, and skip searched extents by hint)
   for (bin = orig_bin; bin < (int)free.size(); ++bin) {
     p = free[bin].begin();
-    while (p != free[bin].end()) {
+    auto end = hint ? free[bin].lower_bound(hint) : free[bin].end();
+    while (p != end) {
       if (aligned_len(p, alloc_unit) >= need_size) {
 	goto found;
       }
@@ -139,10 +140,11 @@ int StupidAllocator::allocate(
     }
   }
 
-  // search down (origin)
+  // search down (from origin, and skip searched extents by hint)
   for (bin = orig_bin; bin >= 0; --bin) {
     p = free[bin].begin();
-    while (p != free[bin].end()) {
+    auto end = hint ? free[bin].lower_bound(hint) : free[bin].end();
+    while (p != end) {
       if (aligned_len(p, alloc_unit) >= alloc_unit) {
 	goto found;
       }
