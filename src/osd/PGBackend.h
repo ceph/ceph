@@ -587,18 +587,15 @@ struct shard_info_wrapper;
      pg_shard_t auth_shard,
      const ScrubMap::object &auth,
      const object_info_t& auth_oi,
-     bool okseed,
      const ScrubMap::object &candidate,
      shard_info_wrapper& shard_error,
      ostream &errorstream);
    map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
      const map<pg_shard_t,ScrubMap*> &maps,
-     bool okseed,
      object_info_t *auth_oi);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
-     bool okseed,   ///< true if scrub digests have same seed our oi digests
      bool repair,
      map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &missing,
      map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &inconsistent,
