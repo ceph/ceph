@@ -4075,10 +4075,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  osd->clog->info(oss);
 	}
 
-	if (get_min_acting_features() & CEPH_FEATURE_OSD_OBJECT_DIGEST)
-	  scrubber.seed = -1; // better, and enables oi digest checks
-	else
-	  scrubber.seed = 0;  // compat
+	scrubber.seed = -1;
 
         break;
 
@@ -4325,13 +4322,8 @@ void PG::scrub_compare_maps()
       maps[*i] = &scrubber.received_maps[*i];
     }
 
-    // can we relate scrub digests to oi digests?
-    bool okseed = (get_min_upacting_features() & CEPH_FEATURE_OSD_OBJECT_DIGEST);
-    assert(okseed == (scrubber.seed == 0xffffffff));
-
     get_pgbackend()->be_compare_scrubmaps(
       maps,
-      okseed,
       state_test(PG_STATE_REPAIR),
       scrubber.missing,
       scrubber.inconsistent,
