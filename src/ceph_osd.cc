@@ -493,8 +493,7 @@ int main(int argc, const char **argv)
   uint64_t osd_required =
     CEPH_FEATURE_UID |
     CEPH_FEATURE_PGID64 |
-    CEPH_FEATURE_OSDENC |
-    CEPH_FEATURE_OSD_PACKED_RECOVERY;
+    CEPH_FEATURE_OSDENC;
 
   ms_public->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
   ms_public->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
