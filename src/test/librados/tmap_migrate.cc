@@ -53,7 +53,7 @@ TEST_F(TmapMigratePP, DataScan) {
   // Check that the TMAP object is now an omap object
   std::map<std::string, bufferlist> read_vals;
   ASSERT_EQ(0, ioctx.omap_get_vals("10000000000.00000000", "", 1, &read_vals));
-  ASSERT_EQ(read_vals.size(), 1);
+  ASSERT_EQ(read_vals.size(), 1u);
   bufferlist tmap_expect_val;
   tmap_expect_val.append("custard");
   ASSERT_EQ(read_vals.at("rhubarb"), tmap_expect_val);
@@ -62,7 +62,7 @@ TEST_F(TmapMigratePP, DataScan) {
   // Check that the OMAP object is still readable
   read_vals.clear();
   ASSERT_EQ(0, ioctx.omap_get_vals("10000000001.00000000", "", 1, &read_vals));
-  ASSERT_EQ(read_vals.size(), 1);
+  ASSERT_EQ(read_vals.size(), 1u);
   bufferlist expect_omap_val;
   expect_omap_val.append("waffles");
   ASSERT_EQ(read_vals.at("tasty"), expect_omap_val);
