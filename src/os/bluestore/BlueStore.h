@@ -31,15 +31,10 @@
 #include "include/unordered_map.h"
 #include "include/memory.h"
 #include "common/Finisher.h"
-#include "common/RWLock.h"
-#include "common/WorkQueue.h"
-#include "common/perf_counters.h"
 #include "os/ObjectStore.h"
-#include "kv/KeyValueDB.h"
 
 #include "bluestore_types.h"
 #include "BlockDevice.h"
-
 class Allocator;
 class FreelistManager;
 class BlueFS;
