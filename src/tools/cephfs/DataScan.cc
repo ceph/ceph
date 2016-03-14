@@ -987,17 +987,18 @@ int DataScan::scan_frags()
     if (r == -EINVAL) {
       derr << "Corrupt fnode on " << oid << dendl;
       if (force_corrupt) {
-        fnode.fragstat.mtime = 0;
-        fnode.fragstat.nfiles = 1;
-        fnode.fragstat.nsubdirs = 0;
+	fnode.fragstat.mtime = 0;
+	fnode.fragstat.nfiles = 1;
+	fnode.fragstat.nsubdirs = 0;
+	fnode.accounted_fragstat = fnode.fragstat;
       } else {
         return r;
       }
     }
 
     InodeStore dentry;
-    build_dir_dentry(obj_name_ino, fnode.fragstat.nfiles,
-        fnode.fragstat.mtime, loaded_layout, &dentry);
+    build_dir_dentry(obj_name_ino, fnode.accounted_fragstat,
+		loaded_layout, &dentry);
 
     // Inject inode to the metadata pool
     if (have_backtrace) {
@@ -1141,7 +1142,9 @@ int MetadataDriver::inject_lost_and_found(
     file_layout_t inherit_layout;
 
     // Construct LF inode
-    build_dir_dentry(CEPH_INO_LOST_AND_FOUND, 1, 0, inherit_layout, &lf_ino);
+    frag_info_t fragstat;
+    fragstat.nfiles = 1,
+    build_dir_dentry(CEPH_INO_LOST_AND_FOUND, fragstat, inherit_layout, &lf_ino);
 
     // Inject link to LF inode in the root dir
     r = inject_linkage(CEPH_INO_ROOT, "lost+found", frag_t(), lf_ino);
@@ -1470,6 +1473,9 @@ int MetadataDriver::find_or_create_dirfrag(
     bufferlist fnode_bl;
     fnode_t blank_fnode;
     blank_fnode.version = 1;
+    // mark it as non-empty
+    blank_fnode.fragstat.nfiles = 1;
+    blank_fnode.accounted_fragstat = blank_fnode.fragstat;
     blank_fnode.damage_flags |= (DAMAGE_STATS | DAMAGE_RSTATS);
     blank_fnode.encode(fnode_bl);
 
@@ -1740,16 +1746,16 @@ void MetadataTool::build_file_dentry(
 }
 
 void MetadataTool::build_dir_dentry(
-    inodeno_t ino, uint64_t nfiles,
-    time_t mtime, const file_layout_t &layout, InodeStore *out)
+    inodeno_t ino, const frag_info_t &fragstat,
+    const file_layout_t &layout, InodeStore *out)
 {
   assert(out != NULL);
 
   out->inode.mode = 0755 | S_IFDIR;
-  out->inode.dirstat.nfiles = nfiles;
-  out->inode.mtime.tv.tv_sec = mtime;
-  out->inode.atime.tv.tv_sec = mtime;
-  out->inode.ctime.tv.tv_sec = mtime;
+  out->inode.dirstat = fragstat;
+  out->inode.mtime.tv.tv_sec = fragstat.mtime;
+  out->inode.atime.tv.tv_sec = fragstat.mtime;
+  out->inode.ctime.tv.tv_sec = fragstat.mtime;
 
   out->inode.layout = layout;
 
