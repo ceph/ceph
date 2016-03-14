@@ -658,8 +658,6 @@ bool PG::needs_backfill() const
 {
   assert(is_primary());
 
-  bool ret = false;
-
   // We can assume that only possible osds that need backfill
   // are on the backfill_targets vector nodes.
   set<pg_shard_t>::const_iterator end = backfill_targets.end();
@@ -669,13 +667,12 @@ bool PG::needs_backfill() const
     map<pg_shard_t, pg_info_t>::const_iterator pi = peer_info.find(peer);
     if (!pi->second.last_backfill.is_max()) {
       dout(10) << __func__ << " osd." << peer << " has last_backfill " << pi->second.last_backfill << dendl;
-      ret = true;
+      return true;
     }
   }
 
-  if (!ret)
-    dout(10) << __func__ << " does not need backfill" << dendl;
-  return ret;
+  dout(10) << __func__ << " does not need backfill" << dendl;
+  return false;
 }
 
 bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end, epoch_t oldest_map)
