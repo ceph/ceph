@@ -497,8 +497,7 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_OSD_SNAPMAPPER |
     CEPH_FEATURE_OSD_PACKED_RECOVERY |
     CEPH_FEATURE_RECOVERY_RESERVATION |
-    CEPH_FEATURE_BACKFILL_RESERVATION |
-    CEPH_FEATURE_CHUNKY_SCRUB;
+    CEPH_FEATURE_BACKFILL_RESERVATION;
 
   ms_public->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
   ms_public->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
