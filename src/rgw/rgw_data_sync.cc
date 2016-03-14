@@ -1136,6 +1136,13 @@ public:
     return new RGWDataSyncShardCR(sync_env, pool, shard_id, sync_marker, backoff_ptr());
   }
 
+  RGWCoroutine *alloc_finisher_cr() {
+    RGWRados *store = sync_env->store;
+    RGWObjectCtx obj_ctx(store, NULL);
+    return new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+                                                    RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, shard_id), &sync_marker);
+  }
+
   void append_modified_shards(set<string>& keys) {
     Mutex::Locker l(cr_lock());
 
