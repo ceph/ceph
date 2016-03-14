@@ -175,6 +175,7 @@ void usage()
   cout << "      [--min-x x] [--max-x x] [--x x]\n";
   cout << "      [--min-rule r] [--max-rule r] [--rule r] [--ruleset rs]\n";
   cout << "      [--num-rep n]\n";
+  cout << "      [--pool-id n]      specifies pool id\n";
   cout << "      [--batches b]      split the CRUSH mapping into b > 1 rounds\n";
   cout << "      [--weight|-w devno weight]\n";
   cout << "                         where weight is 0 to 1.0\n";
@@ -276,6 +277,7 @@ int main(int argc, const char **argv)
 
   int x;
   float y;
+  long long z;
 
   std::string val;
   std::ostringstream err;
@@ -448,6 +450,12 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       tester.set_min_x(x);
+    } else if (ceph_argparse_witharg(args, i, &z, err, "--pool_id", (char*)NULL)) {
+      if (!err.str().empty()) {
+  cerr << err.str() << std::endl;
+  exit(EXIT_FAILURE);
+      }
+      tester.set_pool_id(z);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--x", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;

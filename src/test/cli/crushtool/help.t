@@ -69,6 +69,7 @@
         [--min-x x] [--max-x x] [--x x]
         [--min-rule r] [--max-rule r] [--rule r] [--ruleset rs]
         [--num-rep n]
+        [--pool-id n]      specifies pool id
         [--batches b]      split the CRUSH mapping into b > 1 rounds
         [--weight|-w devno weight]
                            where weight is 0 to 1.0
