@@ -676,7 +676,6 @@ protected:
   set<pg_shard_t> peer_missing_requested;
 
   // i deleted these strays; ignore racing PGInfo from them
-  set<pg_shard_t> stray_purged;
   set<pg_shard_t> peer_activated;
 
   // primary-only, recovery-only state
