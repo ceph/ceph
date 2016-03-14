@@ -30,7 +30,9 @@ using namespace std;
 
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
+#if defined(__linux__)
 #include "common/linux_version.h"
+#endif
 #include "global/global_init.h"
 #include "common/safe_io.h"
        
