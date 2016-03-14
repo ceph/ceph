@@ -3023,7 +3023,7 @@ int OSDMap::summarize_mapping_stats(
       if (newmap)
 	f->dump_unsigned("new_max_osd_pgs", max_new_pg);
     } else {
-      ss << "max osd." << min << " with " << max_base_pg;
+      ss << "max osd." << max << " with " << max_base_pg;
       if (newmap)
 	ss << " -> " << max_new_pg;
       ss << " pgs (" << (float)max_base_pg / avg_pg;
