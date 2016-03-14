@@ -1109,6 +1109,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   bool cluster_full = _osdmap_full_flag();
   bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || cluster_full ||
     _osdmap_has_pool_full();
+  bool first_map = false;
   map<int64_t, bool> pool_full_map;
   for (map<int64_t, pg_pool_t>::const_iterator it
 	 = osdmap->get_pools().begin();
@@ -1191,6 +1192,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
     } else {
       // first map.  we want the full thing.
+      first_map = true;
       if (m->maps.count(m->get_last())) {
 	for (map<int,OSDSession*>::iterator p = osd_sessions.begin();
 	     p != osd_sessions.end(); ++p) {
@@ -1219,8 +1221,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
     || _osdmap_has_pool_full();
 
   // was/is paused?
-  if (was_pauserd || was_pausewr || pauserd || pausewr ||
-      osdmap->get_epoch() < epoch_barrier) {
+  if ((first_map == false) && (was_pauserd || was_pausewr || pauserd || pausewr ||
+      osdmap->get_epoch() < epoch_barrier)) {
     _maybe_request_map();
   }
 
