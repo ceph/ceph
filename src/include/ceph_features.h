@@ -24,7 +24,7 @@
 #define CEPH_FEATURE_PGPOOL3        (1ULL<<11)
 #define CEPH_FEATURE_OSDREPLYMUX    (1ULL<<12)
 #define CEPH_FEATURE_OSDENC         (1ULL<<13)
-#define CEPH_FEATURE_OMAP           (1ULL<<14)
+// UNUSED: (1ULL<<14)
 #define CEPH_FEATURE_MONENC         (1ULL<<15)
 #define CEPH_FEATURE_QUERY_T        (1ULL<<16)
 #define CEPH_FEATURE_INDEP_PG_MAP   (1ULL<<17)
@@ -129,7 +129,6 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_PGPOOL3 |		 \
 	 CEPH_FEATURE_OSDREPLYMUX |	 \
 	 CEPH_FEATURE_OSDENC |		 \
-	 CEPH_FEATURE_OMAP |		 \
 	 CEPH_FEATURE_QUERY_T |		 \
 	 CEPH_FEATURE_MONENC |		 \
 	 CEPH_FEATURE_INDEP_PG_MAP |	 \
