@@ -44,7 +44,7 @@ public:
   void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
     ::encode(info, payload);
-    ::encode(missing, payload);
+    ::encode(missing, payload, features);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();

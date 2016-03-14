@@ -2173,6 +2173,8 @@ struct pg_log_entry_t {
   bufferlist snaps;   // only for clone entries
   bool invalid_hash; // only when decoding sobject_t based entries
   bool invalid_pool; // only when decoding pool-less hobject based entries
+  bool can_recover_partial; // do partial recovery only if a single overwrite
+  interval_set<uint64_t>  dirty_extents; // describes the modified extents for a object
 
   uint64_t offset;   // [soft state] my offset on disk
 
@@ -2183,7 +2185,7 @@ struct pg_log_entry_t {
 
   pg_log_entry_t()
     : op(0), user_version(0),
-      invalid_hash(false), invalid_pool(false), offset(0) {}
+      invalid_hash(false), invalid_pool(false), can_recover_partial(false), offset(0) {}
   pg_log_entry_t(int _op, const hobject_t& _soid, 
 		 const eversion_t& v, const eversion_t& pv,
 		 version_t uv,
@@ -2191,7 +2193,7 @@ struct pg_log_entry_t {
     : op(_op), soid(_soid), version(v),
       prior_version(pv), user_version(uv),
       reqid(rid), mtime(mt), invalid_hash(false), invalid_pool(false),
-      offset(0) {}
+      can_recover_partial(false), offset(0) {}
       
   bool is_clone() const { return op == CLONE; }
   bool is_modify() const { return op == MODIFY; }
@@ -2364,11 +2366,11 @@ inline ostream& operator<<(ostream& out, const pg_log_t& log)
  *  also used to pass missing info in messages.
  */
 struct pg_missing_t {
-  struct item {
+  struct old_item {
     eversion_t need, have;
-    item() {}
-    item(eversion_t n) : need(n) {}  // have no old version
-    item(eversion_t n, eversion_t h) : need(n), have(h) {}
+    old_item() {}
+    old_item(eversion_t n) : need(n) {}  // have no old version
+    old_item(eversion_t n, eversion_t h) : need(n), have(h) {}
 
     void encode(bufferlist& bl) const {
       ::encode(need, bl);
@@ -2378,15 +2380,53 @@ struct pg_missing_t {
       ::decode(need, bl);
       ::decode(have, bl);
     }
+  }; 
+  WRITE_CLASS_ENCODER(old_item)
+
+  struct item {
+    eversion_t need, have;
+    bool can_recover_partial;
+    interval_set<uint64_t> dirty_extents;
+    item() : can_recover_partial(false) {}
+    item(eversion_t n, eversion_t h) : need(n), have(h), can_recover_partial(false) {}
+    item(const pg_log_entry_t& e) : need(e.version), have(e.prior_version),
+      can_recover_partial(e.can_recover_partial) {
+        if (can_recover_partial)
+          dirty_extents.insert(e.dirty_extents);
+    }
+
+    void update(const pg_log_entry_t& e) {
+      need = e.version;
+      can_recover_partial = (can_recover_partial && e.can_recover_partial);
+      dirty_extents.union_of(e.dirty_extents);
+    }
+
+    void encode(bufferlist& bl) const {
+      ::encode(need, bl);
+      ::encode(have, bl);
+      ::encode(can_recover_partial, bl);
+      ::encode(dirty_extents, bl);
+    }
+    void decode(bufferlist::iterator& bl) {
+      ::decode(need, bl);
+      ::decode(have, bl);
+      ::decode(can_recover_partial, bl);
+      ::decode(dirty_extents, bl);
+    }
+
     void dump(Formatter *f) const {
       f->dump_stream("need") << need;
       f->dump_stream("have") << have;
+      f->dump_stream("can_recover_partial") << can_recover_partial;
+      f->dump_stream("dirty_extents") << dirty_extents;
     }
     static void generate_test_instances(list<item*>& o) {
       o.push_back(new item);
       o.push_back(new item);
       o.back()->need = eversion_t(1, 2);
       o.back()->have = eversion_t(1, 1);
+      o.back()->can_recover_partial = true;
+      o.back()->dirty_extents.insert(0, 4096);
     }
   }; 
   WRITE_CLASS_ENCODER(item)
@@ -2415,13 +2455,14 @@ struct pg_missing_t {
     rmissing.clear();
   }
 
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl, int64_t pool = -1);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_missing_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_missing_t::item)
-WRITE_CLASS_ENCODER(pg_missing_t)
+WRITE_CLASS_ENCODER(pg_missing_t::old_item)
+WRITE_CLASS_ENCODER_FEATURES(pg_missing_t)
 
 ostream& operator<<(ostream& out, const pg_missing_t::item& i);
 ostream& operator<<(ostream& out, const pg_missing_t& missing);
@@ -3399,8 +3440,9 @@ struct ObjectRecoveryInfo {
   SnapSet ss;
   interval_set<uint64_t> copy_subset;
   map<hobject_t, interval_set<uint64_t> > clone_subset;
+  bool can_recover_partial;
 
-  ObjectRecoveryInfo() : size(0) { }
+  ObjectRecoveryInfo() : size(0), can_recover_partial(false) { }
 
   static void generate_test_instances(list<ObjectRecoveryInfo*>& o);
   void encode(bufferlist &bl) const;

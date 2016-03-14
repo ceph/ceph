@@ -3357,6 +3357,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p, ctx->current_osd_subop_num++) {
     OSDOp& osd_op = *p;
     ceph_osd_op& op = osd_op.op;
+    ctx->can_recover_partial = false;
 
     // TODO: check endianness (__le32 vs uint32_t, etc.)
     // The fields in ceph_osd_op are little-endian (according to the definition in rados.h),
@@ -4168,6 +4169,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	}
 
+        if (cct->_conf->osd_recovery_partial)
+          ctx->can_recover_partial = true;
+        else
+          ctx->can_recover_partial = false;
         if (seq && (seq > op.extent.truncate_seq) &&
             (op.extent.offset + op.extent.length > oi.size)) {
 	  // old write, arrived after trimtrunc
@@ -4183,6 +4188,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  if (obs.exists && !oi.is_whiteout()) {
 	    dout(10) << " truncate_seq " << op.extent.truncate_seq << " > current " << seq
 		     << ", truncating to " << op.extent.truncate_size << dendl;
+            ctx->can_recover_partial = false;
 	    t->truncate(soid, op.extent.truncate_size);
 	    oi.truncate_seq = op.extent.truncate_seq;
 	    oi.truncate_size = op.extent.truncate_size;
@@ -4202,6 +4208,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (result < 0)
 	  break;
 	if (pool.info.require_rollback()) {
+          ctx->can_recover_partial = false;
 	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	} else {
 	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
@@ -5855,6 +5862,10 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 				    ctx->obs->oi.version,
 				    ctx->user_at_version, ctx->reqid,
 				    ctx->mtime));
+  ctx->log.back().can_recover_partial = ctx->can_recover_partial;
+  if (ctx->can_recover_partial)
+    ctx->log.back().dirty_extents.insert(ctx->modified_ranges);
+
   if (soid.snap < CEPH_NOSNAP) {
     set<snapid_t> _snaps(ctx->new_obs.oi.snaps.begin(),
 			 ctx->new_obs.oi.snaps.end());
