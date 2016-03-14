@@ -328,9 +328,8 @@ int MetadataDriver::inject_unlinked_inode(
   inode.inode.version = 1;
   inode.inode.xattr_version = 1;
   inode.inode.mode = 0500 | mode;
-  // Fake size to 1, so that the directory doesn't appear to be empty
-  // (we won't actually give the *correct* size here though)
-  inode.inode.size = 1;
+  // Fake dirstat.nfiles to 1, so that the directory doesn't appear to be empty
+  // (we won't actually give the *correct* dirstat here though)
   inode.inode.dirstat.nfiles = 1;
 
   inode.inode.ctime = 
@@ -1415,7 +1414,6 @@ int MetadataDriver::inject_with_backtrace(
         // accurate, but it should avoid functional issues.
 
         ancestor_dentry.inode.dirstat.nfiles = 1;
-        ancestor_dentry.inode.size = 1;
 
         ancestor_dentry.inode.nlink = 1;
         ancestor_dentry.inode.ino = ino;
@@ -1748,9 +1746,7 @@ void MetadataTool::build_dir_dentry(
   assert(out != NULL);
 
   out->inode.mode = 0755 | S_IFDIR;
-  out->inode.size = nfiles;
   out->inode.dirstat.nfiles = nfiles;
-  out->inode.max_size_ever = nfiles;
   out->inode.mtime.tv.tv_sec = mtime;
   out->inode.atime.tv.tv_sec = mtime;
   out->inode.ctime.tv.tv_sec = mtime;
