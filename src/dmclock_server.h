@@ -111,7 +111,7 @@ namespace crimson {
 
     private:
 
-      static double tag_calc(Time time,
+      static double tag_calc(const Time& time,
 			     double prev,
 			     double increment,
 			     uint32_t dist_req_val) {
