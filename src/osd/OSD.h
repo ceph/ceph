@@ -1878,8 +1878,10 @@ private:
 
   void wait_for_new_map(OpRequestRef op);
   void handle_osd_map(class MOSDMap *m);
+  void _committed_osd_maps(epoch_t first, epoch_t last, class MOSDMap *m);
   void note_down_osd(int osd);
   void note_up_osd(int osd);
+  friend class C_OnMapCommit;
 
   bool advance_pg(
     epoch_t advance_to, PG *pg,
