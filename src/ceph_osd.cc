@@ -494,7 +494,6 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_UID |
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_OSDENC |
-    CEPH_FEATURE_OSD_SNAPMAPPER |
     CEPH_FEATURE_OSD_PACKED_RECOVERY;
 
   ms_public->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
