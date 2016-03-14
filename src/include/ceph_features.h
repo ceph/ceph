@@ -66,7 +66,7 @@
 #define DEPRECATED_CEPH_FEATURE_OSD_TRANSACTION_MAY_LAYOUT (1ULL<<46) // DEPRECATED: JEWEL (can't remove until all 1<<46 are ready)
 #define CEPH_FEATURE_MDS_QUOTA      (1ULL<<47)
 #define CEPH_FEATURE_CRUSH_V4      (1ULL<<48)  /* straw2 buckets */
-#define CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY (1ULL<<49)
+#define DEPRECATED_CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY (1ULL<<49) // DEPRECATED: JEWEL (can't remove until all 1<<49 are ready)
 // duplicated since it was introduced at the same time as MIN_SIZE_RECOVERY
 #define CEPH_FEATURE_OSD_PROXY_FEATURES (1ULL<<49)  /* overlap w/ above */
 #define CEPH_FEATURE_MON_METADATA (1ULL<<50)
@@ -167,7 +167,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
          DEPRECATED_CEPH_FEATURE_OSD_TRANSACTION_MAY_LAYOUT |   \
 	 CEPH_FEATURE_MDS_QUOTA | \
          CEPH_FEATURE_CRUSH_V4 |	     \
-         CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY |		 \
+         DEPRECATED_CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY |		 \
 	 CEPH_FEATURE_MON_METADATA |			 \
 	 CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT |		 \
          CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3 |   \
