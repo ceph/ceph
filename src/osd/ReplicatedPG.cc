@@ -2176,8 +2176,6 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
   }
 
   // older versions do not proxy the feature bits.
-  bool can_proxy_read = get_osdmap()->get_up_osd_features() &
-    CEPH_FEATURE_OSD_PROXY_FEATURES;
   bool can_proxy_write = get_osdmap()->get_up_osd_features() &
     CEPH_FEATURE_OSD_PROXY_WRITE_FEATURES;
   OpRequestRef promote_op;
@@ -2188,16 +2186,9 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
 	agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
       if (!op->may_write() && !op->may_cache() &&
 	  !write_ordered && !must_promote) {
-	if (can_proxy_read) {
-	  dout(20) << __func__ << " cache pool full, proxying read" << dendl;
-	  do_proxy_read(op);
-	  return cache_result_t::HANDLED_PROXY;
-	} else {
-	  dout(20) << __func__ << " cache pool full, redirect read" << dendl;
-	  do_cache_redirect(op);
-	  return cache_result_t::HANDLED_REDIRECT;
-	}
-	assert(0 == "unreachable");
+	dout(20) << __func__ << " cache pool full, proxying read" << dendl;
+	do_proxy_read(op);
+	return cache_result_t::HANDLED_PROXY;
       }
       dout(20) << __func__ << " cache pool full, waiting" << dendl;
       block_write_on_full_cache(missing_oid, op);
@@ -2229,12 +2220,8 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       return cache_result_t::HANDLED_PROXY;
     } else {
       bool did_proxy_read = false;
-      if (can_proxy_read) {
-        do_proxy_read(op);
-	did_proxy_read = true;
-      } else {
-        promote_op = op;   // for non-proxy case promote_object needs this
-      }
+      do_proxy_read(op);
+      did_proxy_read = true;
 
       // Avoid duplicate promotion
       if (obc.get() && obc->is_blocked()) {
