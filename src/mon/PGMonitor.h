@@ -141,7 +141,7 @@ private:
    * @return true if we updated pending_inc (and should propose)
    */
   bool check_down_pgs();
-  void _mark_pg_stale(pg_t pgid, const pg_stat_t& cur_stat);
+  void _try_mark_pg_stale(OSDMap *osdmap, pg_t pgid, const pg_stat_t& cur_stat);
 
 
   /**
