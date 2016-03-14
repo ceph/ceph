@@ -368,24 +368,10 @@ inline void decode(std::pair<A,B> &pa, bufferlist::iterator &p)
 template<class T>
 inline void encode(const std::list<T>& ls, bufferlist& bl)
 {
-  // should i pre- or post- count?
-  if (!ls.empty()) {
-    unsigned pos = bl.length();
-    unsigned n = 0;
-    encode(n, bl);
-    for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p) {
-      n++;
-      encode(*p, bl);
-    }
-    ceph_le32 en;
-    en = n;
-    bl.copy_in(pos, sizeof(en), (char*)&en);
-  } else {
-    __u32 n = (__u32)(ls.size());    // FIXME: this is slow on a list.
-    encode(n, bl);
-    for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
-      encode(*p, bl);
-  }
+  __u32 n = (__u32)(ls.size());  // c++11 std::list::size() is O(1)
+  encode(n, bl);
+  for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
+    encode(*p, bl);
 }
 template<class T>
 inline void decode(std::list<T>& ls, bufferlist::iterator& p)
@@ -403,46 +389,18 @@ inline void decode(std::list<T>& ls, bufferlist::iterator& p)
 template<class T>
 inline void encode(const std::list<ceph::shared_ptr<T> >& ls, bufferlist& bl)
 {
-  // should i pre- or post- count?
-  if (!ls.empty()) {
-    unsigned pos = bl.length();
-    unsigned n = 0;
-    encode(n, bl);
-    for (typename std::list<ceph::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p) {
-      n++;
-      encode(**p, bl);
-    }
-    ceph_le32 en;
-    en = n;
-    bl.copy_in(pos, sizeof(en), (char*)&en);
-  } else {
-    __u32 n = (__u32)(ls.size());    // FIXME: this is slow on a list.
-    encode(n, bl);
-    for (typename std::list<ceph::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p)
-      encode(**p, bl);
-  }
+  __u32 n = (__u32)(ls.size());  // c++11 std::list::size() is O(1)
+  encode(n, bl);
+  for (typename std::list<ceph::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p)
+    encode(**p, bl);
 }
 template<class T>
 inline void encode(const std::list<ceph::shared_ptr<T> >& ls, bufferlist& bl, uint64_t features)
 {
-  // should i pre- or post- count?
-  if (!ls.empty()) {
-    unsigned pos = bl.length();
-    unsigned n = 0;
-    encode(n, bl);
-    for (typename std::list<ceph::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p) {
-      n++;
-      encode(**p, bl, features);
-    }
-    ceph_le32 en;
-    en = n;
-    bl.copy_in(pos, sizeof(en), (char*)&en);
-  } else {
-    __u32 n = (__u32)(ls.size());    // FIXME: this is slow on a list.
-    encode(n, bl);
-    for (typename std::list<ceph::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p)
-      encode(**p, bl, features);
-  }
+  __u32 n = (__u32)(ls.size());  // c++11 std::list::size() is O(1)
+  encode(n, bl);
+  for (typename std::list<ceph::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p)
+    encode(**p, bl, features);
 }
 template<class T>
 inline void decode(std::list<ceph::shared_ptr<T> >& ls, bufferlist::iterator& p)
