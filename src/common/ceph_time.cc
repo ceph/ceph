@@ -62,7 +62,7 @@ namespace ceph {
       to_ceph_timespec(t, ts);
       return ts;
     }
-    real_clock::time_point coarse_real_clock::from_ceph_timespec(
+    coarse_real_clock::time_point coarse_real_clock::from_ceph_timespec(
       const struct ceph_timespec& ts) {
       return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
     }
