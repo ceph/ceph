@@ -266,7 +266,9 @@ OPTION(mon_globalid_prealloc, OPT_U32, 10000)   // how many globalids to preallo
 OPTION(mon_osd_report_timeout, OPT_INT, 900)    // grace period before declaring unresponsive OSDs dead
 OPTION(mon_force_standby_active, OPT_BOOL, true) // should mons force standby-replay mds to be active
 OPTION(mon_warn_on_old_mons, OPT_BOOL, true) // should mons set health to WARN if part of quorum is old?
-OPTION(mon_warn_on_legacy_crush_tunables, OPT_BOOL, true) // warn if crush tunables are not optimal
+OPTION(mon_warn_on_legacy_crush_tunables, OPT_BOOL, true) // warn if crush tunables are too old (older than mon_min_crush_required_version)
+OPTION(mon_crush_min_required_version, OPT_STR, "firefly")
+OPTION(mon_warn_on_crush_straw_calc_version_zero, OPT_BOOL, true) // warn if crush straw_calc_version==0
 OPTION(mon_warn_on_osd_down_out_interval_zero, OPT_BOOL, true) // warn if 'mon_osd_down_out_interval == 0'
 OPTION(mon_warn_on_cache_pools_without_hit_sets, OPT_BOOL, true)
 OPTION(mon_min_osdmap_epochs, OPT_INT, 500)

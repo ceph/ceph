@@ -1568,6 +1568,9 @@ void CrushWrapper::dump_tunables(Formatter *f) const
   f->dump_int("optimal_tunables", (int)has_optimal_tunables());
   f->dump_int("legacy_tunables", (int)has_legacy_tunables());
 
+  // be helpful about minimum version required
+  f->dump_string("minimum_required_version", get_min_required_version());
+
   f->dump_int("require_feature_tunables", (int)has_nondefault_tunables());
   f->dump_int("require_feature_tunables2", (int)has_nondefault_tunables2());
   f->dump_int("has_v2_rules", (int)has_v2_rules());
