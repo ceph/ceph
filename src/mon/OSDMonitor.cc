@@ -4829,7 +4829,8 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
        var == "cache_target_full_ratio" || var == "cache_target_dirty_ratio" ||
        var == "cache_target_dirty_high_ratio" ||
        var == "cache_min_flush_age" || var == "cache_min_evict_age" ||
-       var == "hit_set_grade_decay_rate" || var == "hit_set_search_last_n")) {
+       var == "hit_set_grade_decay_rate" || var == "hit_set_search_last_n" ||
+       var == "min_read_recency_for_promote" || var == "min_write_recency_for_promote")) {
     return -EACCES;
   }
 
