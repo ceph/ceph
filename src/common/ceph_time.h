@@ -63,7 +63,7 @@ namespace ceph {
       typedef duration::period period;
       // The second template parameter defaults to the clock's duration
       // type.
-      typedef std::chrono::time_point<real_clock> time_point;
+      typedef std::chrono::time_point<real_clock, signedspan> time_point;
       static constexpr const bool is_steady = false;
 
       static time_point now() noexcept {
@@ -146,7 +146,7 @@ namespace ceph {
       typedef duration::period period;
       // The second template parameter defaults to the clock's duration
       // type.
-      typedef std::chrono::time_point<real_clock> time_point;
+      typedef std::chrono::time_point<real_clock, signedspan> time_point;
       static constexpr const bool is_steady = false;
 
       static time_point now() noexcept {
@@ -220,7 +220,7 @@ namespace ceph {
       typedef timespan duration;
       typedef duration::rep rep;
       typedef duration::period period;
-      typedef std::chrono::time_point<mono_clock> time_point;
+      typedef std::chrono::time_point<mono_clock, signedspan> time_point;
       static constexpr const bool is_steady = true;
 
       static time_point now() noexcept {
@@ -239,7 +239,7 @@ namespace ceph {
       typedef timespan duration;
       typedef duration::rep rep;
       typedef duration::period period;
-      typedef std::chrono::time_point<mono_clock> time_point;
+      typedef std::chrono::time_point<mono_clock, signedspan> time_point;
       static constexpr const bool is_steady = true;
 
       static time_point now() noexcept {
