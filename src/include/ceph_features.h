@@ -63,7 +63,7 @@
 #define CEPH_FEATURE_OSD_FADVISE_FLAGS (1ULL<<46)
 #define DEPRECATED_CEPH_FEATURE_OSD_REPOP         (1ULL<<46) // DEPRECATED: JEWEL (can't remove until all 1<<46 are ready)
 #define DEPRECATED_CEPH_FEATURE_OSD_OBJECT_DIGEST  (1ULL<<46) // DEPRECATED: JEWEL (can't remove until all 1<<46 are ready)
-#define CEPH_FEATURE_OSD_TRANSACTION_MAY_LAYOUT (1ULL<<46) /* overlap w/ fadvise */
+#define DEPRECATED_CEPH_FEATURE_OSD_TRANSACTION_MAY_LAYOUT (1ULL<<46) // DEPRECATED: JEWEL (can't remove until all 1<<46 are ready)
 #define CEPH_FEATURE_MDS_QUOTA      (1ULL<<47)
 #define CEPH_FEATURE_CRUSH_V4      (1ULL<<48)  /* straw2 buckets */
 #define CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY (1ULL<<49)
@@ -164,7 +164,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_OSD_FADVISE_FLAGS |     \
          DEPRECATED_CEPH_FEATURE_OSD_REPOP |   \
 	 DEPRECATED_CEPH_FEATURE_OSD_OBJECT_DIGEST	|    \
-         CEPH_FEATURE_OSD_TRANSACTION_MAY_LAYOUT |   \
+         DEPRECATED_CEPH_FEATURE_OSD_TRANSACTION_MAY_LAYOUT |   \
 	 CEPH_FEATURE_MDS_QUOTA | \
          CEPH_FEATURE_CRUSH_V4 |	     \
          CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY |		 \

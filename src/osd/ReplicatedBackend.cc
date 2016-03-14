@@ -328,10 +328,8 @@ class RPGTransaction : public PGBackend::PGTransaction {
     return coll;
   }
 public:
-  RPGTransaction(coll_t coll, bool use_tbl)
-    : coll(coll), written(0) {
-    t.set_use_tbl(use_tbl);
-  }
+  RPGTransaction(coll_t coll)
+    : coll(coll), written(0) {}
 
   /// Yields ownership of contained transaction
   ObjectStore::Transaction&& get_transaction() {
@@ -517,7 +515,7 @@ public:
 
 PGBackend::PGTransaction *ReplicatedBackend::get_transaction()
 {
-  return new RPGTransaction(coll, parent->transaction_use_tbl());
+  return new RPGTransaction(coll);
 }
 
 class C_OSD_OnOpCommit : public Context {
@@ -1009,7 +1007,6 @@ Message * ReplicatedBackend::generate_subop(
 	     << ", pinfo.last_backfill "
 	     << pinfo.last_backfill << ")" << dendl;
     ObjectStore::Transaction t;
-    t.set_use_tbl(op_t.get_use_tbl());
     ::encode(t, wr->get_data());
   } else {
     ::encode(op_t, wr->get_data());
@@ -1123,7 +1120,6 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
 
   bufferlist::iterator p = m->get_data().begin();
   ::decode(rm->opt, p);
-  rm->localt.set_use_tbl(rm->opt.get_use_tbl());
 
   if (m->new_temp_oid != hobject_t()) {
     dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
