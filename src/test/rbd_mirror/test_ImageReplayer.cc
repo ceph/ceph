@@ -533,12 +533,6 @@ protected:
 	bootstrap_params);
   }
 
-  virtual void on_start_bootstrap_finish(int r) {
-    ASSERT_EQ(0, r);
-    rbd::mirror::ImageReplayer::on_start_bootstrap_finish(
-      get_error("on_start_bootstrap"));
-  }
-
   virtual void on_start_remote_journaler_init_finish(int r) {
     ASSERT_EQ(0, r);
     rbd::mirror::ImageReplayer::on_start_remote_journaler_init_finish(
@@ -561,12 +555,6 @@ protected:
 	on_start_local_image_open_finish(test_r);
       });
     close_local_image(ctx);
-  }
-
-  virtual void on_start_local_image_lock_finish(int r) {
-    ASSERT_EQ(0, r);
-    rbd::mirror::ImageReplayer::on_start_local_image_lock_finish(
-      get_error("on_start_local_image_lock"));
   }
 
   virtual void on_start_wait_for_local_journal_ready_finish(int r) {
@@ -622,13 +610,9 @@ TEST_F(TestImageReplayer, Error_on_stop_##state)			\
 }
 
 TEST_ON_START_ERROR(get_registered_client_status);
-TEST_ON_START_ERROR(bootstrap);
 TEST_ON_START_ERROR(remote_journaler_init);
-TEST_ON_START_ERROR(local_image_open);
-TEST_ON_START_ERROR(local_image_lock);
 TEST_ON_START_ERROR(wait_for_local_journal_ready);
 
 TEST_ON_STOP_ERROR(journal_replay_shut_down);
-TEST_ON_STOP_ERROR(local_image_close);
 TEST_ON_STOP_ERROR(no_error);
 
