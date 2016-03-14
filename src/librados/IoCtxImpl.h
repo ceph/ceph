@@ -137,6 +137,7 @@ struct librados::IoCtxImpl {
   int remove(const object_t& oid);
   int remove(const object_t& oid, int flags);
   int stat(const object_t& oid, uint64_t *psize, time_t *pmtime);
+  int stat2(const object_t& oid, uint64_t *psize, struct timespec *pts);
   int trunc(const object_t& oid, uint64_t size);
 
   int tmap_update(const object_t& oid, bufferlist& cmdbl);
@@ -151,7 +152,7 @@ struct librados::IoCtxImpl {
   int getxattrs(const object_t& oid, map<string, bufferlist>& attrset);
   int rmxattr(const object_t& oid, const char *name);
 
-  int operate(const object_t& oid, ::ObjectOperation *o, time_t *pmtime, int flags=0);
+  int operate(const object_t& oid, ::ObjectOperation *o, ceph::real_time *pmtime, int flags=0);
   int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl, int flags=0);
   int aio_operate(const object_t& oid, ::ObjectOperation *o,
 		  AioCompletionImpl *c, const SnapContext& snap_context,
@@ -170,6 +171,14 @@ struct librados::IoCtxImpl {
     time_t *pmtime;
     ceph::real_time mtime;
     C_aio_stat_Ack(AioCompletionImpl *_c, time_t *pm);
+    void finish(int r);
+  };
+
+  struct C_aio_stat2_Ack : public Context {
+    librados::AioCompletionImpl *c;
+    struct timespec *pts;
+    ceph::real_time mtime;
+    C_aio_stat2_Ack(AioCompletionImpl *_c, struct timespec *pts);
     void finish(int r);
   };
 
@@ -196,6 +205,7 @@ struct librados::IoCtxImpl {
   int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
 	       const char *method, bufferlist& inbl, bufferlist *outbl);
   int aio_stat(const object_t& oid, AioCompletionImpl *c, uint64_t *psize, time_t *pmtime);
+  int aio_stat2(const object_t& oid, AioCompletionImpl *c, uint64_t *psize, struct timespec *pts);
   int aio_cancel(AioCompletionImpl *c);
 
   int pool_change_auid(unsigned long long auid);
