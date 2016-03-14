@@ -922,7 +922,6 @@ void PG::clear_primary_state()
   peer_activated.clear();
   min_last_complete_ondisk = eversion_t();
   pg_trim_to = eversion_t();
-  stray_purged.clear();
   might_have_unfound.clear();
 
   last_update_ondisk = eversion_t();
@@ -2368,7 +2367,6 @@ void PG::purge_strays()
 	get_osdmap()->get_epoch(),
 	to_remove);
       osd->send_message_osd_cluster(p->osd, m, get_osdmap()->get_epoch());
-      stray_purged.insert(*p);
     } else {
       dout(10) << "not sending PGRemove to down osd." << *p << dendl;
     }
