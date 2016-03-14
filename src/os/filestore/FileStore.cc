@@ -3000,6 +3000,7 @@ int FileStore::read(
     return got;
   }
   bptr.set_length(got);   // properly size the buffer
+  bl.clear();
   bl.push_back(std::move(bptr));   // put it in the target bufferlist
 
 #ifdef HAVE_POSIX_FADVISE

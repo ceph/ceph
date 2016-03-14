@@ -2286,7 +2286,18 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   // Info
   child->info.history = info.history;
   child->info.purged_snaps = info.purged_snaps;
-  child->info.set_last_backfill(info.last_backfill, info.last_backfill_bitwise);
+
+  if (info.last_backfill.is_max()) {
+    child->info.set_last_backfill(hobject_t::get_max(),
+				  info.last_backfill_bitwise);
+  } else {
+    // restart backfill on parent and child to be safe.  we could
+    // probably do better in the bitwise sort case, but it's more
+    // fragile (there may be special work to do on backfill completion
+    // in the future).
+    info.set_last_backfill(hobject_t(), info.last_backfill_bitwise);
+    child->info.set_last_backfill(hobject_t(), info.last_backfill_bitwise);
+  }
 
   child->info.stats = info.stats;
   info.stats.stats_invalid = true;
