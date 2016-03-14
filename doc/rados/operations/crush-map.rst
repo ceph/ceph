@@ -947,33 +947,34 @@ The following example removes the ``rack12`` bucket from the hierarchy::
 Tunables
 ========
 
-.. versionadded:: 0.48
+Over time, we have made (and continue to make) improvements to the
+CRUSH algorithm used to calculate the placement of data.  In order to
+support the change in behavior, we have introduced a series of tunable
+options that control whether the legacy or improved variation of the
+algorithm is used.
 
-There are several magic numbers that were used in the original CRUSH
-implementation that have proven to be poor choices.  To support
-the transition away from them, newer versions of CRUSH (starting with
-the v0.48 argonaut series) allow the values to be adjusted or tuned.
+In order to use newer tunables, both clients and servers must support
+the new version of CRUSH.  For this reason, we have created
+``profiles'' that are named after the Ceph version in which they were
+introduced.  For example, the ``firefly'' tunables are first supported
+in the firefly release, and will not work with older (e.g., dumpling)
+clients.  Once a given set of tunables are changed from the legacy
+default behavior, the ``ceph-mon`` and ``ceph-osd`` will prevent older
+clients who do not support the new CRUSH features from connecting to
+the cluster.
 
-Clusters running recent Ceph releases support using the tunable values
-in the CRUSH maps.  However, older clients and daemons will not correctly interact
-with clusters using the "tuned" CRUSH maps.  To detect this situation,
-there are now features bits ``CRUSH_TUNABLES`` (value 0x40000) and ``CRUSH_TUNABLES2`` to
-reflect support for tunables.
+argonaut (legacy)
+-----------------
 
-If the OSDMap currently used by the ``ceph-mon`` or ``ceph-osd``
-daemon has non-legacy values, it will require the ``CRUSH_TUNABLES`` or ``CRUSH_TUNABLES2``
-feature bits from clients and daemons who connect to it.  This means
-that old clients will not be able to connect.
+The legacy CRUSH behavior used by argonaut and older releases works
+fine for most clusters, provided there are not too many OSDs that have
+been marked out.
 
-At some future point in time, newly created clusters will have
-improved default values for the tunables.  This is a matter of waiting
-until the support has been present in the Linux kernel clients long
-enough to make this a painless transition for most users.
+bobtail
+-------
 
-Impact of Legacy Values
------------------------
-
-The legacy values result in several misbehaviors:
+The bobtail tunable profile (CRUSH_TUNABLES feature) fixes a few key
+misbehaviors:
 
  * For hierarchies with a small number of devices in the leaf buckets,
    some PGs map to fewer than the desired number of replicas.  This
@@ -987,8 +988,7 @@ The legacy values result in several misbehaviors:
  * When some OSDs are marked out, the data tends to get redistributed
    to nearby OSDs instead of across the entire hierarchy.
 
-CRUSH_TUNABLES
---------------
+The new tunables are:
 
  * ``choose_local_tries``: Number of local retries.  Legacy value is
    2, optimal value is 0.
@@ -1001,15 +1001,24 @@ CRUSH_TUNABLES
    50 is more appropriate for typical clusters.  For extremely large
    clusters, a larger value might be necessary.
 
-CRUSH_TUNABLES2
----------------
-
  * ``chooseleaf_descend_once``: Whether a recursive chooseleaf attempt
    will retry, or only try once and allow the original placement to
    retry.  Legacy default is 0, optimal value is 1.
 
-CRUSH_TUNABLES3
----------------
+Migration impact:
+
+ * Moving from argonaut to bobtail tunables triggers a moderate amount
+   of data movement.  Use caution on a cluster that is already
+   populated with data.
+
+firefly
+-------
+
+The firefly tunable profile (CRUSH_TUNABLES2 feature) fixes a problem
+with the ``chooseleaf`` CRUSH rule behavior that tends to result in PG
+mappings with too few results when too many OSDs have been marked out.
+
+The new tunable is:
 
  * ``chooseleaf_vary_r``: Whether a recursive chooseleaf attempt will
    start with a non-zero value of r, based on how many attempts the
@@ -1017,39 +1026,80 @@ CRUSH_TUNABLES3
    CRUSH is sometimes unable to find a mapping.  The optimal value (in
    terms of computational cost and correctness) is 1.
 
-   For existing clusters that have lots of existing data, changing
+Migration impact: 
+
+ * For existing clusters that have lots of existing data, changing
    from 0 to 1 will cause a lot of data to move; a value of 4 or 5
    will allow CRUSH to find a valid mapping but will make less data
    move.
 
-CRUSH_V4
---------
+straw_calc_version tunable
+--------------------------
 
- * Bucket type ``straw2``: The new ``straw2`` bucket type fixes
-   several limitations in the original ``straw`` bucket.
-   Specifically, the old ``straw`` buckets would change some mappings
-   that should have changed when a weight was adjusted, while
-   ``straw2`` achieves the original goal of only changing mappings to
-   or from the bucket item whose weight has changed.
+There were some problems with the internal weights calculated and
+stored in the CRUSH map for ``straw`` buckets.  Specifically, when
+there were items with a CRUSH weight of 0 or both a mix of weights and
+some duplicated weights CRUSH would distribute data incorrectly (i.e.,
+not in proportion to the weights).
 
-   Changing an existing bucket from ``straw`` to ``straw2`` is
-   possible but will result in a reasonably small amount of data
-   movement, depending on how much the bucket item weights vary from
-   each other.  When the weights are all the same no data will move,
-   and when item weights vary significantly there will be more
-   movement.
+The new tunable is:
 
-CRUSH_TUNABLES5
----------------
+ * ``straw_calc_version``: A value of 0 preserves the old, broken
+   internal weight calculation; a value of 1 fixes the behavior.
+
+Migration impact:
+
+ * Moving to straw_calc_version 1 and then adjusting a straw bucket
+   (by adding, removing, or reweighting an item, or by using the
+   reweight-all command) can trigger a small to moderate amount of
+   data movement *if* the cluster has hit one of the problematic
+   conditions.
+
+hammer
+------
+
+The hammer tunable profile (CRUSH_V4 feature) does not affect the
+mapping of existing CRUSH maps simply by changing the profile.  However:
+
+ * There is a new bucket type (``straw2``) supported.  The new
+   ``straw2`` bucket type fixes several limitations in the original
+   ``straw`` bucket.  Specifically, the old ``straw`` buckets would
+   change some mappings that should have changed when a weight was
+   adjusted, while ``straw2`` achieves the original goal of only
+   changing mappings to or from the bucket item whose weight has
+   changed.
+
+ * ``straw2`` is the default for any newly created buckets.
+
+Migration impact:
+
+ * Changing a bucket type from ``straw`` to ``straw2`` will result in
+   a reasonably small amount of data movement, depending on how much
+   the bucket item weights vary from each other.  When the weights are
+   all the same no data will move, and when item weights vary
+   significantly there will be more movement.
+
+jewel
+-----
+
+The jewel tunable profile (CRUSH_TUNABLES5 feature) improves the
+overall behavior of CRUSH such that significantly fewer mappings
+change when an OSD is marked out of the cluster.
+
+The new tunable is:
 
  * ``chooseleaf_stable``: Whether a recursive chooseleaf attempt will
    use a better value for an inner loop that greatly reduces the number
    of mapping changes when an OSD is marked out.  The legacy value is 0,
    while the new value of 1 uses the new approach.
 
-   Changing this value on an existing cluster will result in a very
+Migration impact:
+
+ * Changing this value on an existing cluster will result in a very
    large amount of data movement as almost every PG mapping is likely
    to change.
+
+
 
 
 Which client versions support CRUSH_TUNABLES

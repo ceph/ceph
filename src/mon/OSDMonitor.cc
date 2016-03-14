@@ -2905,9 +2905,22 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 
     // old crush tunables?
     if (g_conf->mon_warn_on_legacy_crush_tunables) {
-      if (osdmap.crush->has_legacy_tunables()) {
+      string min = osdmap.crush->get_min_required_version();
+      if (min < g_conf->mon_crush_min_required_version) {
 	ostringstream ss;
-	ss << "crush map has legacy tunables";
+	ss << "crush map has legacy tunables (require " << min
+	   << ", min is " << g_conf->mon_crush_min_required_version << ")";
+	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+	if (detail) {
+	  ss << "; see http://ceph.com/docs/master/rados/operations/crush-map/#tunables";
+	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+	}
+      }
+    }
+    if (g_conf->mon_warn_on_crush_straw_calc_version_zero) {
+      if (osdmap.crush->get_straw_calc_version() == 0) {
+	ostringstream ss;
+	ss << "crush map has straw_calc_version=0";
 	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 	if (detail) {
 	  ss << "; see http://ceph.com/docs/master/rados/operations/crush-map/#tunables";
