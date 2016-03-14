@@ -65,10 +65,13 @@ int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store,
 				  const char *token, RGWUserInfo& info,
 				  string *pswift_user)
 {
-  if (strncmp(token, "AUTH_rgwtk", 10) != 0)
+  if (strncmp(token, "AUTH_rgwtk", 10) == 0) {
+    token += 10;
+  } else if (strncmp(token, "AUTH_rgwts", 10) == 0) {
+    token += 10;
+  } else {
     return -EINVAL;
-
-  token += 10;
+  }
 
   int len = strlen(token);
   if (len & 1) {
@@ -141,6 +144,7 @@ int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store,
 void RGW_SWIFT_Auth_Get::execute()
 {
   int ret = -EPERM;
+  const char *token_tag = "rgwtk";
 
   const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
   const char *user = s->info.env->get("HTTP_X_AUTH_USER");
@@ -213,9 +217,10 @@ void RGW_SWIFT_Auth_Get::execute()
   if (!g_conf->rgw_swift_tenant_name.empty()) {
     tenant_path = "/AUTH_";
     tenant_path.append(g_conf->rgw_swift_tenant_name);
-  } else if (g_conf->rgw_swift_account_in_url) {
+  } else {
     tenant_path = "/AUTH_";
     tenant_path.append(user_str);
+    token_tag = "rgwts";
   }
 
   STREAM_IO(s)->print("X-Storage-Url: %s/%s/v1%s\r\n", swift_url.c_str(),
@@ -228,8 +233,8 @@ void RGW_SWIFT_Auth_Get::execute()
     char buf[bl.length() * 2 + 1];
     buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
 
-    STREAM_IO(s)->print("X-Storage-Token: AUTH_rgwtk%s\r\n", buf);
-    STREAM_IO(s)->print("X-Auth-Token: AUTH_rgwtk%s\r\n", buf);
+    STREAM_IO(s)->print("X-Storage-Token: AUTH_%s%s\r\n", token_tag, buf);
+    STREAM_IO(s)->print("X-Auth-Token: AUTH_%s%s\r\n", token_tag, buf);
   }
 
   ret = STATUS_NO_CONTENT;

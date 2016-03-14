@@ -1221,7 +1221,6 @@ OPTION(rgw_swift_url_prefix, OPT_STR, "swift") // entry point for which a url is
 OPTION(rgw_swift_auth_url, OPT_STR, "")        // default URL to go and verify tokens for v1 auth (if not using internal swift auth)
 OPTION(rgw_swift_auth_entry, OPT_STR, "auth")  // entry point for which a url is considered a swift auth url
 OPTION(rgw_swift_tenant_name, OPT_STR, "")  // tenant name to use for swift access
-OPTION(rgw_swift_account_in_url, OPT_BOOL, false)  // assume that URL always contain the account (aka tenant) part
 OPTION(rgw_swift_enforce_content_length, OPT_BOOL, false)  // enforce generation of Content-Length even in cost of performance or scalability
 OPTION(rgw_keystone_url, OPT_STR, "")  // url for keystone server
 OPTION(rgw_keystone_admin_token, OPT_STR, "")  // keystone admin token (shared secret)
