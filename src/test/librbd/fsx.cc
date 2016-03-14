@@ -140,6 +140,7 @@ unsigned long	debugstart = 0;		/* -D flag */
 int	flush_enabled = 0;		/* -f flag */
 int	holebdy = 1;			/* -h flag */
 bool    journal_replay = false;         /* -j flah */
+int	keep_on_success = 0;		/* -k flag */
 int	do_fsync = 0;			/* -y flag */
 unsigned long	maxfilelen = 256 * 1024;	/* -l flag */
 int	sizechecks = 1;			/* -n flag disables them */
@@ -2454,7 +2455,7 @@ main(int argc, char **argv)
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dfh:jl:m:no:p:qr:s:t:w:xyACD:FHKMLN:OP:RS:UWZ"))
+	while ((ch = getopt(argc, argv, "b:c:dfh:jkl:m:no:p:qr:s:t:w:xyACD:FHKMLN:OP:RS:UWZ"))
 	       != EOF)
 		switch (ch) {
 		case 'b':
@@ -2489,6 +2490,9 @@ main(int argc, char **argv)
                 case 'j':
                         journal_replay = true;
                         break;
+		case 'k':
+			keep_on_success = 1;
+			break;
 		case 'l':
 			{
 				int _num = getnum(optarg, &endp);
@@ -2761,23 +2765,28 @@ main(int argc, char **argv)
 		check_clone(num_clones - 1, false);
         }
 
-	while (num_clones >= 0) {
-		static bool remove_snap = false;
+	if (!keep_on_success) {
+		while (num_clones >= 0) {
+			static bool remove_snap = false;
 
-                if (journal_replay) {
-                        char replayimagename[1024];
-                        replay_imagename(replayimagename,
-                                         sizeof(replayimagename), num_clones);
-                        remove_image(ioctx, replayimagename, remove_snap,
-                                     false);
-                }
+			if (journal_replay) {
+				char replayimagename[1024];
+				replay_imagename(replayimagename,
+						 sizeof(replayimagename),
+						 num_clones);
+				remove_image(ioctx, replayimagename,
+					     remove_snap,
+					     false);
+			}
 
-		char clonename[128];
-		clone_imagename(clonename, 128, num_clones);
-                remove_image(ioctx, clonename, remove_snap, journal_replay);
+			char clonename[128];
+			clone_imagename(clonename, 128, num_clones);
+			remove_image(ioctx, clonename, remove_snap,
+				     journal_replay);
 
-                remove_snap = true;
-		num_clones--;
+			remove_snap = true;
+			num_clones--;
+		}
 	}
 
 	prt("All operations completed A-OK!\n");
