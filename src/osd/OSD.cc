@@ -1715,6 +1715,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
       op_tracker.dump_ops_in_flight(f);
     }
   } else if (command == "dump_blocked_ops") {
+    RWLock::RLocker l(op_tracker.lock);
     if (!op_tracker.tracking_enabled) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
