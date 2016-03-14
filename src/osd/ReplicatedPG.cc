@@ -3655,6 +3655,39 @@ int ReplicatedPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
   }
 }
 
+int ReplicatedPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
+{
+  ceph_osd_op& op = osd_op.op;
+  vector<OSDOp> read_ops(1);
+  OSDOp& read_op = read_ops[0];
+  int result = 0;
+
+  read_op.op.op = CEPH_OSD_OP_SYNC_READ;
+  read_op.op.extent.offset = op.extent.offset;
+  read_op.op.extent.length = op.extent.length;
+  read_op.op.extent.truncate_seq = op.extent.truncate_seq;
+  read_op.op.extent.truncate_size = op.extent.truncate_size;
+
+  result = do_osd_ops(ctx, read_ops);
+  if (result < 0) {
+    derr << "do_extent_cmp do_osd_ops failed " << result << dendl;
+    return result;
+  }
+
+  if (read_op.outdata.length() != osd_op.indata.length())
+    return -EINVAL;
+
+  for (uint64_t p = 0; p < osd_op.indata.length(); p++) {
+    if (read_op.outdata[p] != osd_op.indata[p]) {
+      ::encode(p, osd_op.outdata);
+      osd_op.outdata.claim_append(read_op.outdata);
+      return -EILSEQ;
+    }
+  }
+
+  return 0;
+}
+
 int ReplicatedPG::do_writesame(OpContext *ctx, OSDOp& osd_op)
 {
   ceph_osd_op& op = osd_op.op;
@@ -4158,6 +4191,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     switch (op.op) {
       
       // --- READS ---
+
+    case CEPH_OSD_OP_CMPEXT:
+      tracepoint(osd, do_osd_op_pre_extent_cmp, soid.oid.name.c_str(), soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset, op.extent.length, op.extent.truncate_size, op.extent.truncate_seq);
+      result = do_extent_cmp(ctx, osd_op);
+      break;
 
     case CEPH_OSD_OP_SYNC_READ:
       if (pool.info.require_rollback()) {
