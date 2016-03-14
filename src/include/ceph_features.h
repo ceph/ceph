@@ -3,10 +3,16 @@
 
 /*
  * feature bits
+ *
+ * Feature reuse:
+ * Features marked DEPRECATED: <release> are advertized, but not checked in
+ * <release>
+ * Feature bit values marked as UNUSED are not referenced or checked by any
+ * versions we could be talking to and can be reused.
  */
 #define CEPH_FEATURE_UID            (1ULL<<0)
 #define CEPH_FEATURE_NOSRCADDR      (1ULL<<1)
-#define CEPH_FEATURE_MONCLOCKCHECK  (1ULL<<2)
+#define DEPRECATED_CEPH_FEATURE_MONCLOCKCHECK  (1ULL<<2) // DEPRECATED: JEWEL
 #define CEPH_FEATURE_FLOCK          (1ULL<<3)
 #define CEPH_FEATURE_SUBSCRIBE2     (1ULL<<4)
 #define CEPH_FEATURE_MONNAMES       (1ULL<<5)
@@ -111,7 +117,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 #define CEPH_FEATURES_ALL		 \
 	(CEPH_FEATURE_UID |		 \
 	 CEPH_FEATURE_NOSRCADDR |	 \
-	 CEPH_FEATURE_MONCLOCKCHECK |	 \
+	 DEPRECATED_CEPH_FEATURE_MONCLOCKCHECK |	 \
 	 CEPH_FEATURE_FLOCK |		 \
 	 CEPH_FEATURE_SUBSCRIBE2 |	 \
 	 CEPH_FEATURE_MONNAMES |	 \
