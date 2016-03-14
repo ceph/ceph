@@ -123,14 +123,20 @@ void ImageWatcher::unregister_watch(Context *on_finish) {
   {
     RWLock::WLocker l(m_watch_lock);
     if (m_watch_state == WATCH_STATE_REGISTERED) {
+      m_watch_state = WATCH_STATE_UNREGISTERED;
+
       librados::AioCompletion *aio_comp = create_rados_safe_callback(
         new C_UnwatchAndFlush(m_image_ctx.md_ctx, on_finish));
       int r = m_image_ctx.md_ctx.aio_unwatch(m_watch_handle, aio_comp);
       assert(r == 0);
       aio_comp->release();
+      return;
+    } else if (m_watch_state == WATCH_STATE_ERROR) {
+      m_watch_state = WATCH_STATE_UNREGISTERED;
     }
-    m_watch_state = WATCH_STATE_UNREGISTERED;
   }
+
+  on_finish->complete(0);
 }
 
 void ImageWatcher::flush(Context *on_finish) {
