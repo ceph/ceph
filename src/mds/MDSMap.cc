@@ -88,8 +88,8 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
        p != export_targets.end(); ++p) {
     f->dump_int("mds", *p);
   }
-  f->dump_unsigned("features", mds_features);
   f->close_section();
+  f->dump_unsigned("features", mds_features);
 }
 
 void MDSMap::mds_info_t::generate_test_instances(list<mds_info_t*>& ls)
