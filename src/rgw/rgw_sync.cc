@@ -1514,7 +1514,6 @@ public:
           set_sleeping(true);
           yield;
         }
-        *reset_backoff = true;
       }
       mdlog_marker = sync_marker.marker;
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(sync_env,
@@ -1554,6 +1553,7 @@ public:
           drain_all();
           return retcode;
         }
+        *reset_backoff = true; /* if we got to this point, all systems function */
 	ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
 	if (mdlog_marker > max_marker) {
           marker = max_marker;
