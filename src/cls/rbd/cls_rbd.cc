@@ -130,6 +130,7 @@ cls_method_handle_t h_mirror_image_remove;
 #define RBD_DIR_ID_KEY_PREFIX "id_"
 #define RBD_DIR_NAME_KEY_PREFIX "name_"
 #define RBD_METADATA_KEY_PREFIX "metadata_"
+#define RBD_MAX_OBJECT_MAP_OBJECT_COUNT 256000000
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -2256,6 +2257,12 @@ int object_map_resize(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     ::decode(object_count, iter);
     ::decode(default_state, iter);
   } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  // protect against excessive memory requirements
+  if (object_count > RBD_MAX_OBJECT_MAP_OBJECT_COUNT) {
+    CLS_ERR("object map too large: %" PRIu64, object_count);
     return -EINVAL;
   }
 
