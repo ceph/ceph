@@ -336,7 +336,7 @@ public:
    * for the one we had previously.  Impose the new one
    * on all filesystems.
    */
-  void update_compat(CompatSet c)
+  void update_compat(const CompatSet &c)
   {
     // We could do something more complicated here to enable
     // different filesystems to be served by different MDS versions,
