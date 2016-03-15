@@ -149,6 +149,18 @@ def test_get_mons():
                     'ceph.mon.c': ips[2] + ':6789'}
 
 
+def test_split_role():
+    expected = {
+        'client.0': ('ceph', 'client', '0'),
+        'foo.client.0': ('foo', 'client', '0'),
+        'bar.baz.x.y.z': ('bar', 'baz', 'x.y.z'),
+        'mds.a-s-b': ('ceph', 'mds', 'a-s-b'),
+    }
+
+    for role, expected_split in expected.items():
+        actual_split = misc.split_role(role)
+        assert actual_split == expected_split
+
 class TestHostnames(object):
     def setup(self):
         config._conf = dict()

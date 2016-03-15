@@ -346,6 +346,26 @@ def skeleton_config(ctx, roles, ips):
     return conf
 
 
+def ceph_role(role):
+    """
+    Return the ceph name for the role, without any cluster prefix, e.g. osd.0.
+    """
+    _, type_, id_ = split_role(role)
+    return type_ + '.' + id_
+
+
+def split_role(role):
+    """
+    Return a tuple of cluster, type, and id
+    If no cluster is included in the role, the default cluster, 'ceph', is used
+    """
+    cluster = 'ceph'
+    if role.count('.') > 1:
+        cluster, role = role.split('.', 1)
+    type_, id_ = role.split('.', 1)
+    return cluster, type_, id_
+
+
 def roles_of_type(roles_for_host, type_):
     """
     Generator of roles.
