@@ -7,6 +7,9 @@ usr/bin/ceph-dencoder
 usr/bin/ceph-rbdnamer
 usr/bin/ceph-syn
 usr/bin/ceph-crush-location
+usr/bin/cephfs-data-scan
+usr/bin/cephfs-journal-tool
+usr/bin/cephfs-table-tool
 usr/bin/rados
 usr/bin/rbd
 usr/bin/rbdmap
