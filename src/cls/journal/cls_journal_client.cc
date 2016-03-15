@@ -274,19 +274,30 @@ void client_register(librados::ObjectWriteOperation *op,
   op->exec("journal", "client_register", bl);
 }
 
-int client_update(librados::IoCtx &ioctx, const std::string &oid,
-                  const std::string &id, const bufferlist &data) {
+int client_update_data(librados::IoCtx &ioctx, const std::string &oid,
+                       const std::string &id, const bufferlist &data) {
   librados::ObjectWriteOperation op;
-  client_update(&op, id, data);
+  client_update_data(&op, id, data);
   return ioctx.operate(oid, &op);
 }
 
-void client_update(librados::ObjectWriteOperation *op,
-                   const std::string &id, const bufferlist &data) {
+void client_update_data(librados::ObjectWriteOperation *op,
+                        const std::string &id, const bufferlist &data) {
   bufferlist bl;
   ::encode(id, bl);
   ::encode(data, bl);
-  op->exec("journal", "client_update", bl);
+  op->exec("journal", "client_update_data", bl);
+}
+
+int client_update_state(librados::IoCtx &ioctx, const std::string &oid,
+                        const std::string &id, cls::journal::ClientState state) {
+  bufferlist bl;
+  ::encode(id, bl);
+  ::encode(static_cast<uint8_t>(state), bl);
+
+  librados::ObjectWriteOperation op;
+  op.exec("journal", "client_update_state", bl);
+  return ioctx.operate(oid, &op);
 }
 
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,

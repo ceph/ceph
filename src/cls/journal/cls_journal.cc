@@ -26,7 +26,8 @@ cls_method_handle_t h_journal_get_active_set;
 cls_method_handle_t h_journal_set_active_set;
 cls_method_handle_t h_journal_get_client;
 cls_method_handle_t h_journal_client_register;
-cls_method_handle_t h_journal_client_update;
+cls_method_handle_t h_journal_client_update_data;
+cls_method_handle_t h_journal_client_update_state;
 cls_method_handle_t h_journal_client_unregister;
 cls_method_handle_t h_journal_client_commit;
 cls_method_handle_t h_journal_client_list;
@@ -571,8 +572,8 @@ int journal_client_register(cls_method_context_t hctx, bufferlist *in,
  * Output:
  * @returns 0 on success, negative error code on failure
  */
-int journal_client_update(cls_method_context_t hctx, bufferlist *in,
-                          bufferlist *out) {
+int journal_client_update_data(cls_method_context_t hctx, bufferlist *in,
+                               bufferlist *out) {
   std::string id;
   bufferlist data;
   try {
@@ -592,6 +593,45 @@ int journal_client_update(cls_method_context_t hctx, bufferlist *in,
   }
 
   client.data = data;
+  r = write_key(hctx, key, client);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param id (string) - unique client id
+ * @param state (uint8_t) - client state
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int journal_client_update_state(cls_method_context_t hctx, bufferlist *in,
+                                bufferlist *out) {
+  std::string id;
+  cls::journal::ClientState state;
+  bufferlist data;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(id, iter);
+    uint8_t state_raw;
+    ::decode(state_raw, iter);
+    state = static_cast<cls::journal::ClientState>(state_raw);
+  } catch (const buffer::error &err) {
+    CLS_ERR("failed to decode input parameters: %s", err.what());
+    return -EINVAL;
+  }
+
+  std::string key(key_from_client_id(id));
+  cls::journal::Client client;
+  int r = read_key(hctx, key, &client);
+  if (r < 0) {
+    return r;
+  }
+
+  client.state = state;
   r = write_key(hctx, key, client);
   if (r < 0) {
     return r;
@@ -1069,9 +1109,14 @@ void CEPH_CLS_API __cls_init()
   cls_register_cxx_method(h_class, "client_register",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           journal_client_register, &h_journal_client_register);
-  cls_register_cxx_method(h_class, "client_update",
+  cls_register_cxx_method(h_class, "client_update_data",
                           CLS_METHOD_RD | CLS_METHOD_WR,
-                          journal_client_update, &h_journal_client_update);
+                          journal_client_update_data,
+                          &h_journal_client_update_data);
+  cls_register_cxx_method(h_class, "client_update_state",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          journal_client_update_state,
+                          &h_journal_client_update_state);
   cls_register_cxx_method(h_class, "client_unregister",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           journal_client_unregister,

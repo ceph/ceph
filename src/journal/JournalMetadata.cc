@@ -328,7 +328,7 @@ void JournalMetadata::update_client(const bufferlist &data,
 				    Context *on_finish) {
   ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
   librados::ObjectWriteOperation op;
-  client::client_update(&op, m_client_id, data);
+  client::client_update_data(&op, m_client_id, data);
 
   C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_finish);
 
