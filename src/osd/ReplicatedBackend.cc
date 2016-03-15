@@ -768,6 +768,10 @@ void ReplicatedBackend::be_deep_scrub(
     if (r <= 0)
       break;
 
+    dout(20) << __func__ << " HACK offset " << pos << " len " << bl.length() << "\n";
+    bl.hexdump(*_dout);
+    *_dout << dendl;
+
     h << bl;
     pos += bl.length();
     bl.clear();
