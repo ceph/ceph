@@ -11,7 +11,6 @@ overrides:
     valgrind:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]
-      mds: [--tool=memcheck]
 roles:
 - [mon.0, osd.0, osd.1, client.0]
 tasks:

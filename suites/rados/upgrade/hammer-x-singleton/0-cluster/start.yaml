@@ -7,7 +7,6 @@ roles:
 - - mon.a
   - mon.b
   - mon.c
-  - mds.a
   - osd.0
   - osd.1
   - osd.2
