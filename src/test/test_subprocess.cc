@@ -38,7 +38,7 @@ TEST(SubProcess, True)
   SubProcess p("true");
   ASSERT_EQ(p.spawn(), 0);
   ASSERT_EQ(p.join(), 0);
-  ASSERT_TRUE(p.err()[0] == '\0');
+  ASSERT_TRUE(p.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcess, False)
@@ -46,7 +46,7 @@ TEST(SubProcess, False)
   SubProcess p("false");
   ASSERT_EQ(p.spawn(), 0);
   ASSERT_EQ(p.join(), 1);
-  ASSERT_FALSE(p.err()[0] == '\0');
+  ASSERT_FALSE(p.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcess, NotFound)
@@ -58,7 +58,7 @@ TEST(SubProcess, NotFound)
   std::cerr << "stderr: " << buf;
   ASSERT_EQ(p.join(), 1);
   std::cerr << "err: " << p.err() << std::endl;
-  ASSERT_FALSE(p.err()[0] == '\0');
+  ASSERT_FALSE(p.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcess, Echo)
@@ -72,7 +72,7 @@ TEST(SubProcess, Echo)
   std::cerr << "stdout: " << buf;
   ASSERT_EQ(buf, "1 2 3\n");
   ASSERT_EQ(echo.join(), 0);
-  ASSERT_TRUE(echo.err()[0] == '\0');
+  ASSERT_TRUE(echo.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcess, Cat)
@@ -91,7 +91,7 @@ TEST(SubProcess, Cat)
   ASSERT_TRUE(read_from_fd(cat.get_stderr(), buf));
   ASSERT_EQ(buf, "");
   ASSERT_EQ(cat.join(), 0);
-  ASSERT_TRUE(cat.err()[0] == '\0');
+  ASSERT_TRUE(cat.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcess, CatDevNull)
@@ -106,7 +106,7 @@ TEST(SubProcess, CatDevNull)
   ASSERT_TRUE(read_from_fd(cat.get_stderr(), buf));
   ASSERT_EQ(buf, "");
   ASSERT_EQ(cat.join(), 0);
-  ASSERT_TRUE(cat.err()[0] == '\0');
+  ASSERT_TRUE(cat.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcess, Killed)
@@ -117,7 +117,7 @@ TEST(SubProcess, Killed)
   cat.kill();
   ASSERT_EQ(cat.join(), 128 + SIGTERM);
   std::cerr << "err: " << cat.err() << std::endl;
-  ASSERT_FALSE(cat.err()[0] == '\0');
+  ASSERT_FALSE(cat.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcess, CatWithArgs)
@@ -139,7 +139,7 @@ TEST(SubProcess, CatWithArgs)
   ASSERT_FALSE(buf.empty());
   ASSERT_EQ(cat.join(), 1);
   std::cerr << "err: " << cat.err() << std::endl;
-  ASSERT_FALSE(cat.err()[0] == '\0');
+  ASSERT_FALSE(cat.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcess, Subshell)
@@ -164,7 +164,7 @@ TEST(SubProcess, Subshell)
   ASSERT_EQ(buf, "error from subshell\n");
   ASSERT_EQ(sh.join(), 13);
   std::cerr << "err: " << sh.err() << std::endl;
-  ASSERT_FALSE(sh.err()[0] == '\0');
+  ASSERT_FALSE(sh.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcessTimed, True)
@@ -172,7 +172,7 @@ TEST(SubProcessTimed, True)
   SubProcessTimed p("true", SubProcess::CLOSE, SubProcess::CLOSE, SubProcess::CLOSE, 10);
   ASSERT_EQ(p.spawn(), 0);
   ASSERT_EQ(p.join(), 0);
-  ASSERT_TRUE(p.err()[0] == '\0');
+  ASSERT_TRUE(p.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcessTimed, SleepNoTimeout)
@@ -182,7 +182,7 @@ TEST(SubProcessTimed, SleepNoTimeout)
 
   ASSERT_EQ(sleep.spawn(), 0);
   ASSERT_EQ(sleep.join(), 0);
-  ASSERT_TRUE(sleep.err()[0] == '\0');
+  ASSERT_TRUE(sleep.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcessTimed, Killed)
@@ -198,7 +198,7 @@ TEST(SubProcessTimed, Killed)
   ASSERT_TRUE(buf.empty());
   ASSERT_EQ(cat.join(), 128 + SIGTERM);
   std::cerr << "err: " << cat.err() << std::endl;
-  ASSERT_FALSE(cat.err()[0] == '\0');
+  ASSERT_FALSE(cat.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcessTimed, SleepTimedout)
@@ -213,7 +213,7 @@ TEST(SubProcessTimed, SleepTimedout)
   ASSERT_FALSE(buf.empty());
   ASSERT_EQ(sleep.join(), 128 + SIGKILL);
   std::cerr << "err: " << sleep.err() << std::endl;
-  ASSERT_FALSE(sleep.err()[0] == '\0');
+  ASSERT_FALSE(sleep.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcessTimed, SubshellNoTimeout)
@@ -233,7 +233,7 @@ TEST(SubProcessTimed, SubshellNoTimeout)
   std::cerr << "stderr: " << buf << std::endl;
   ASSERT_EQ(buf, msg);
   ASSERT_EQ(sh.join(), 0);
-  ASSERT_TRUE(sh.err()[0] == '\0');
+  ASSERT_TRUE(sh.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcessTimed, SubshellKilled)
@@ -250,7 +250,7 @@ TEST(SubProcessTimed, SubshellKilled)
   ASSERT_TRUE(buf.empty());
   ASSERT_EQ(sh.join(), 128 + SIGTERM);
   std::cerr << "err: " << sh.err() << std::endl;
-  ASSERT_FALSE(sh.err()[0] == '\0');
+  ASSERT_FALSE(sh.err().c_str()[0] == '\0');
 }
 
 TEST(SubProcessTimed, SubshellTimedout)
@@ -264,5 +264,5 @@ TEST(SubProcessTimed, SubshellTimedout)
   ASSERT_FALSE(buf.empty());
   ASSERT_EQ(sh.join(), 128 + SIGTERM);
   std::cerr << "err: " << sh.err() << std::endl;
-  ASSERT_FALSE(sh.err()[0] == '\0');
+  ASSERT_FALSE(sh.err().c_str()[0] == '\0');
 }
