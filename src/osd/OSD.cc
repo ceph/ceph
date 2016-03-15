@@ -533,6 +533,7 @@ void OSDService::agent_entry()
     }
     uint64_t level = agent_queue.rbegin()->first;
     set<PGRef>& top = agent_queue.rbegin()->second;
+    assert(!top.empty());
     dout(10) << __func__
 	     << " tiers " << agent_queue.size()
 	     << ", top is " << level
@@ -542,7 +543,7 @@ void OSDService::agent_entry()
 	     << (agent_active ? " active" : " NOT ACTIVE")
 	     << dendl;
     dout(20) << __func__ << " oids " << agent_oids << dendl;
-    if (agent_ops >= g_conf->osd_agent_max_ops || top.empty() ||
+    if (agent_ops >= g_conf->osd_agent_max_ops ||
 	!agent_active) {
       agent_cond.Wait(agent_lock);
       continue;
