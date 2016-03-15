@@ -2909,11 +2909,11 @@ void RGW_Auth_S3::init_impl(RGWRados* store)
   const string& ldap_uri = store->ctx()->_conf->rgw_ldap_uri;
   const string& ldap_binddn = store->ctx()->_conf->rgw_ldap_binddn;
   const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
-  const string& ldap_memberattr =
-    store->ctx()->_conf->rgw_ldap_memberattr;
+  const string& ldap_dnattr =
+    store->ctx()->_conf->rgw_ldap_dnattr;
 
   ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_searchdn,
-			    ldap_memberattr);
+			    ldap_dnattr);
 
   ldh->init();
   ldh->bind();
