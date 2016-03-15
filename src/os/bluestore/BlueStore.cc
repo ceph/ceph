@@ -4081,9 +4081,13 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
     assert(wo.extent.length == wo.src_extent.length);
     assert((wo.src_extent.offset & ~block_mask) == 0);
     bufferlist bl;
-    r = bdev->read(wo.src_extent.offset, wo.src_extent.length, &bl, ioc,
-		       true);
-    assert(r == 0);
+    if (g_conf->bluestore_wal_async_read)
+      bl.claim_append(wo.head_data);
+    else {
+      r = bdev->read(wo.src_extent.offset, wo.src_extent.length, &bl, ioc,
+		      true);
+      assert(r == 0);
+    }
     assert(bl.length() == wo.extent.length);
     r = bdev->aio_write(wo.extent.offset, bl, ioc, true);
     assert(r == 0);
@@ -5144,6 +5148,12 @@ int BlueStore::_do_allocate(
       cow_head_op->src_extent.length = cow_length;
       cow_head_op->extent.offset = 0;   // _do_write will reset this
       cow_head_op->extent.length = cow_length;
+
+      if (g_conf->bluestore_wal_async_read) {
+	int r = bdev->aio_read(cow_head_op->src_extent.offset, cow_head_op->src_extent.length,
+				  &(cow_head_op->head_data), &(txc->ioc), true);
+	assert(r >= 0);
+      }
     } else {
       dout(20) << "  head shared, but no COW needed" << dendl;
     }
@@ -5171,6 +5181,12 @@ int BlueStore::_do_allocate(
       // _do_write will adjust logical offset -> final bdev offset
       cow_tail_op->extent.offset = cow_offset;
       cow_tail_op->extent.length = cow_length;
+
+      if (g_conf->bluestore_wal_async_read) {
+	int r = bdev->aio_read(cow_tail_op->src_extent.offset, cow_tail_op->src_extent.length,
+				  &(cow_tail_op->head_data), &(txc->ioc), true);
+	assert(r >= 0);
+      }
     } else {
       dout(20) << "  tail shared, but no COW needed" << dendl;
     }
