@@ -97,6 +97,8 @@ def task(ctx, config):
     ceph_objectstore_tool: (true) whether to export/import a pg while an osd is down
     chance_move_pg: (1.0) chance of moving a pg if more than 1 osd is down (default 100%)
 
+    dump_ops_enable: (true) continuously dump ops on all live osds
+
     example:
 
     tasks:
@@ -112,6 +114,8 @@ def task(ctx, config):
         config = {}
     assert isinstance(config, dict), \
         'thrashosds task only accepts a dict for configuration'
+    # add default value for dump_ops_enable
+    config['dump_ops_enable'] = config.get('dump_ops_enable', "true")
     overrides = ctx.config.get('overrides', {})
     teuthology.deep_merge(config, overrides.get('thrashosds', {}))
 
