@@ -398,7 +398,7 @@ for name in $what; do
 
 	    if [ "$type" = "osd" ]; then
 		get_conf update_crush "" "osd crush update on start"
-		if [ "${update_crush:-1}" = "1" -o "${update_crush:-1}" = "true" ]; then
+		case "${update_crush:-1}" in 1|[Tt][Rr][Uu][Ee])
 		    # update location in crush
 		    get_conf osd_location_hook "$BINDIR/ceph-crush-location" "osd crush location hook"
 		    osd_location=`$osd_location_hook --cluster $cluster --id $id --type osd`
@@ -410,7 +410,7 @@ for name in $what; do
 			EXIT_STATUS=$ERR
 			continue
 		    fi
-		fi
+		esac
 	    fi
 
 	    echo Starting Ceph $name on $host...
