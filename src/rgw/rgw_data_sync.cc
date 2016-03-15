@@ -1125,7 +1125,7 @@ class RGWDataSyncShardControlCR : public RGWBackoffControlCR {
 
 public:
   RGWDataSyncShardControlCR(RGWDataSyncEnv *_sync_env, rgw_bucket& _pool,
-		     uint32_t _shard_id, rgw_data_sync_marker& _marker) : RGWBackoffControlCR(_sync_env->cct),
+		     uint32_t _shard_id, rgw_data_sync_marker& _marker) : RGWBackoffControlCR(_sync_env->cct, false),
                                                       sync_env(_sync_env),
 						      pool(_pool),
 						      shard_id(_shard_id),
@@ -1178,6 +1178,12 @@ public:
                                                       marker_tracker(NULL),
                                                       shard_crs_lock("RGWDataSyncCR::shard_crs_lock"),
                                                       reset_backoff(_reset_backoff) {
+  }
+
+  ~RGWDataSyncCR() {
+    for (auto iter : shard_crs) {
+      iter.second->put();
+    }
   }
 
   int operate() {
@@ -1237,6 +1243,7 @@ public:
                  iter != sync_status.sync_markers.end(); ++iter) {
               RGWDataSyncShardControlCR *cr = new RGWDataSyncShardControlCR(sync_env, sync_env->store->get_zone_params().log_pool,
                                                         iter->first, iter->second);
+              cr->get();
               shard_crs_lock.Lock();
               shard_crs[iter->first] = cr;
               shard_crs_lock.Unlock();
@@ -1274,7 +1281,7 @@ class RGWDataSyncControlCR : public RGWBackoffControlCR
   uint32_t num_shards;
 
 public:
-  RGWDataSyncControlCR(RGWDataSyncEnv *_sync_env, uint32_t _num_shards) : RGWBackoffControlCR(_sync_env->cct),
+  RGWDataSyncControlCR(RGWDataSyncEnv *_sync_env, uint32_t _num_shards) : RGWBackoffControlCR(_sync_env->cct, true),
                                                       sync_env(_sync_env), num_shards(_num_shards) {
   }
 

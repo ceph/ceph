@@ -126,6 +126,8 @@ class RGWBackoffControlCR : public RGWCoroutine
   RGWSyncBackoff backoff;
   bool reset_backoff;
 
+  bool exit_on_error;
+
 protected:
   bool *backoff_ptr() {
     return &reset_backoff;
@@ -140,7 +142,8 @@ protected:
   }
 
 public:
-  RGWBackoffControlCR(CephContext *_cct) : RGWCoroutine(_cct), cr(NULL), lock("RGWBackoffControlCR::lock"), reset_backoff(false) {
+  RGWBackoffControlCR(CephContext *_cct, bool _exit_on_error) : RGWCoroutine(_cct), cr(NULL), lock("RGWBackoffControlCR::lock"),
+                                                                reset_backoff(false), exit_on_error(_exit_on_error) {
   }
 
   virtual ~RGWBackoffControlCR() {
