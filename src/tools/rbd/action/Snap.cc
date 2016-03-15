@@ -175,7 +175,7 @@ int execute_list(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", false, &rados,
+  r = utils::init_and_open_image(pool_name, image_name, "", true, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;
