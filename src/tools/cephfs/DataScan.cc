@@ -177,6 +177,38 @@ int DataScan::main(const std::vector<const char*> &args)
     return -EINVAL;
   }
 
+  if (command == "tmap_upgrade") {
+    // Special case tmap_upgrade away from other modes, as this is a
+    // specialized command that will only exist in the Jewel series,
+    // and doesn't require the initialization of the `driver` member
+    // that is done below.
+    rados.connect();
+
+    // Initialize metadata_io from pool on command line
+    if (metadata_pool_name.empty()) {
+      std::cerr << "Metadata pool not specified" << std::endl;
+      usage();
+      return -EINVAL;
+    }
+
+    long metadata_pool_id = rados.pool_lookup(metadata_pool_name.c_str());
+    if (metadata_pool_id < 0) {
+      std::cerr << "Pool '" << metadata_pool_name << "' not found!" << std::endl;
+      return -ENOENT;
+    } else {
+      dout(4) << "pool '" << metadata_pool_name
+        << "' has ID " << metadata_pool_id << dendl;
+    }
+
+    r = rados.ioctx_create(metadata_pool_name.c_str(), metadata_io);
+    if (r != 0) {
+      return r;
+    }
+    std::cerr << "Created ioctx for " << metadata_pool_name << std::endl;
+
+    return tmap_upgrade();
+  }
+
   // If caller didn't specify a namespace, try to pick
   // one if only one exists
   if (fscid == FS_CLUSTER_ID_NONE) {
@@ -263,30 +295,6 @@ int DataScan::main(const std::vector<const char*> &args)
     }
   }
 
-  // Initialize metadata_io from pool on command line for tmap_upgrade
-  if (command == "tmap_upgrade") {
-    if (metadata_pool_name.empty()) {
-      std::cerr << "Metadata pool not specified" << std::endl;
-      usage();
-      return -EINVAL;
-    }
-
-    long metadata_pool_id = rados.pool_lookup(metadata_pool_name.c_str());
-    if (metadata_pool_id < 0) {
-      std::cerr << "Pool '" << metadata_pool_name << "' not found!" << std::endl;
-      return -ENOENT;
-    } else {
-      dout(4) << "pool '" << metadata_pool_name
-        << "' has ID " << metadata_pool_id << dendl;
-    }
-
-    r = rados.ioctx_create(metadata_pool_name.c_str(), metadata_io);
-    if (r != 0) {
-      return r;
-    }
-    std::cerr << "Created ioctx for " << metadata_pool_name << std::endl;
-  }
-
   // Finally, dispatch command
   if (command == "scan_inodes") {
     return scan_inodes();
@@ -294,8 +302,6 @@ int DataScan::main(const std::vector<const char*> &args)
     return scan_extents();
   } else if (command == "scan_frags") {
     return scan_frags();
-  } else if (command == "tmap_upgrade") {
-    return tmap_upgrade();
   } else if (command == "init") {
     return driver->init_roots(fs->mds_map.get_first_data_pool());
   } else {
