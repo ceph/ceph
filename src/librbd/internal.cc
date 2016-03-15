@@ -2502,9 +2502,13 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return -EOPNOTSUPP;
   }
 
-  int mirror_image_get(ImageCtx *ictx, mirror_image_t *mirror_image) {
+  int mirror_image_get_info(ImageCtx *ictx, mirror_image_info_t *mirror_image_info,
+                            size_t info_size) {
     CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "mirror_image_get " << ictx << dendl;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
+    if (info_size < sizeof(mirror_image_info_t)) {
+      return -ERANGE;
+    }
 
     cls::rbd::MirrorImage mirror_image_internal;
     int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
@@ -2515,12 +2519,19 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
     }
 
-    mirror_image->global_id = mirror_image_internal.global_image_id;
+    mirror_image_info->global_id = mirror_image_internal.global_image_id;
     if (r == -ENOENT) {
-      mirror_image->state = RBD_MIRROR_IMAGE_DISABLED;
+      mirror_image_info->state = RBD_MIRROR_IMAGE_DISABLED;
     } else {
-      mirror_image->state =
+      mirror_image_info->state =
         static_cast<rbd_mirror_image_state_t>(mirror_image_internal.state);
+    }
+
+    r = Journal<>::is_tag_owner(ictx, &mirror_image_info->primary);
+    if (r < 0) {
+      lderr(cct) << "failed to check tag ownership: "
+                 << cpp_strerror(r) << dendl;
+      return r;
     }
 
     return 0;

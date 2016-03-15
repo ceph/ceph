@@ -110,7 +110,8 @@ typedef enum {
 typedef struct {
   char *global_id;
   rbd_mirror_image_state_t state;
-} rbd_mirror_image_t;
+  bool primary;
+} rbd_mirror_image_info_t;
 
 CEPH_RBD_API void rbd_version(int *major, int *minor, int *extra);
 
@@ -603,8 +604,9 @@ CEPH_RBD_API int rbd_mirror_image_disable(rbd_image_t image, bool force);
 CEPH_RBD_API int rbd_mirror_image_promote(rbd_image_t image, bool force);
 CEPH_RBD_API int rbd_mirror_image_demote(rbd_image_t image);
 CEPH_RBD_API int rbd_mirror_image_resync(rbd_image_t image);
-CEPH_RBD_API int rbd_mirror_image_get(rbd_image_t image,
-    rbd_mirror_image_t *mirror_image);
+CEPH_RBD_API int rbd_mirror_image_get_info(rbd_image_t image,
+                                           rbd_mirror_image_info_t *mirror_image_info,
+                                           size_t info_size);
 
 #ifdef __cplusplus
 }
