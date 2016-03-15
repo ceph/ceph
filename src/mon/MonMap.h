@@ -25,34 +25,124 @@ namespace ceph {
   class Formatter;
 }
 
+struct mon_info_t {
+  /**
+   * monitor name
+   *
+   * i.e., 'foo' in 'mon.foo'
+   */
+  string name;
+  /**
+   * monitor's public address
+   *
+   * public facing address, traditionally used to communicate with all clients
+   * and other monitors.
+   */
+  entity_addr_t public_addr;
+
+  mon_info_t(string &n, entity_addr_t& p_addr)
+    : name(n), public_addr(p_addr)
+  { }
+
+  mon_info_t() { }
+
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void print(ostream& out) const;
+};
+WRITE_CLASS_ENCODER(mon_info_t)
+inline ostream& operator<<(ostream& out, const mon_info_t& mon) {
+  mon.print(out);
+  return out;
+}
+
+
 class MonMap {
  public:
   epoch_t epoch;       // what epoch/version of the monmap
   uuid_d fsid;
-  map<string, entity_addr_t> mon_addr;
   utime_t last_changed;
   utime_t created;
 
-  map<entity_addr_t,string> addr_name;
+  /* we don't use this anymore, but we keep it around to make
+   * compatibility easier, as there may be monitors that do not
+   * support our way to do monmaps (e.g., during an upgrade).
+   *
+   * This map is kept populated at all times with the public address of
+   * each entry in 'mons'.
+   *
+   * This will be encoded with every map we produce just as well. We could
+   * generate this during encoding, but seems like that's just wasting
+   * cycles. And this barelly wastes any resources, so there's no big
+   * tradeoff anyway.
+   */
+  map<string, entity_addr_t> mon_addr;
+
+  map<string, mon_info_t> mons;
+  map<entity_addr_t, mon_info_t> addr_mons;
+
+  vector<mon_info_t> ranks;
+
   vector<string> rank_name;
   vector<entity_addr_t> rank_addr;
 
-  void calc_ranks() {
-    rank_name.resize(mon_addr.size());
-    rank_addr.resize(mon_addr.size());
-    addr_name.clear();
-    for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
-	 p != mon_addr.end();
-	 ++p) {
-      assert(addr_name.count(p->second) == 0);
-      addr_name[p->second] = p->first;
+
+  /* Nasty kludge to make sure we understand older clients and that older
+   * clients get up-to-date information on their monmaps.
+   */
+  void normalize_mon_addr(bool update) {
+
+    if (mons.empty()) {
+      /* must be an older version, or an empty monmap; copy from
+       * mon_addr. */
+      for (map<string, entity_addr_t>::iterator p = mon_addr.begin();
+           p != mon_addr.end();
+           ++p) {
+        mon_info_t &m = mons[p->first];
+        m.name = p->first;
+        m.public_addr = p->second;
+      }
     }
+
+    if (!update)
+      return;
+
+    // copy whatever is on 'mons' to 'mon_addr'
+    mon_addr.clear();
+    for (map<string, mon_info_t>::iterator p = mons.begin();
+         p != mons.end();
+         ++p) {
+
+      mon_addr[p->first] = p->second.public_addr;
+    }
+  }
+
+  void calc_ranks() {
+
+    ranks.resize(mons.size());
+    addr_mons.clear();
+
+    // used to order entries according to public_addr, because that's
+    // how the ranks are expected to be ordered by.
+    set<mon_info_t, rank_cmp> tmp;
+
+    for (map<string,mon_info_t>::iterator p = mons.begin();
+         p != mons.end();
+         ++p) {
+      mon_info_t &m = p->second;
+      tmp.insert(m);
+
+      // populate addr_mons
+      assert(addr_mons.count(m.public_addr) == 0);
+    }
+
+    // map the set to the actual ranks etc
     unsigned i = 0;
-    for (map<entity_addr_t,string>::iterator p = addr_name.begin();
-	 p != addr_name.end();
-	 ++p, i++) {
-      rank_name[i] = p->second;
-      rank_addr[i] = p->first;
+    for (set<mon_info_t>::iterator p = tmp.begin();
+         p != tmp.end();
+         ++p, ++i) {
+      ranks[i] = *p;
     }
   }
 
@@ -64,111 +154,147 @@ class MonMap {
   uuid_d& get_fsid() { return fsid; }
 
   unsigned size() {
-    return mon_addr.size();
+    return mons.size();
   }
 
   epoch_t get_epoch() { return epoch; }
   void set_epoch(epoch_t e) { epoch = e; }
 
+  /**
+   * Obtain list of public facing addresses
+   *
+   * @param ls list to populate with the monitors' addresses
+   */
   void list_addrs(list<entity_addr_t>& ls) const {
-    for (map<string,entity_addr_t>::const_iterator p = mon_addr.begin();
-	 p != mon_addr.end();
-	 ++p)
-      ls.push_back(p->second);
+    for (map<string,mon_info_t>::const_iterator p = mons.begin();
+         p != mons.end();
+         ++p) {
+      ls.push_back(p->second.public_addr);
+    }
   }
 
+  /**
+   * Add new monitor to the monmap
+   *
+   * @param name Monitor name (i.e., 'foo' in 'mon.foo')
+   * @param addr Monitor's public address
+   */
   void add(const string &name, const entity_addr_t &addr) {
-    assert(mon_addr.count(name) == 0);
-    assert(addr_name.count(addr) == 0);
-    mon_addr[name] = addr;
+    assert(mons.count(name) == 0);
+    assert(addr_mons.count(addr) == 0);
+    mon_info_t &m = mons[name];
+    m.name = name;
+    m.public_addr = addr;
+    normalize_mon_addr(true);
     calc_ranks();
   }
-  
+ 
+  /**
+   * Remove monitor from the monmap
+   *
+   * @param name Monitor name (i.e., 'foo' in 'mon.foo')
+   */
   void remove(const string &name) {
-    assert(mon_addr.count(name));
-    mon_addr.erase(name);
+    assert(mons.count(name));
+    mons.erase(name);
+    normalize_mon_addr(true);
     calc_ranks();
   }
 
+  /**
+   * Rename monitor from @p oldname to @p newname
+   *
+   * @param oldname monitor's current name (i.e., 'foo' in 'mon.foo')
+   * @param newname monitor's new name (i.e., 'bar' in 'mon.bar')
+   */
   void rename(string oldname, string newname) {
     assert(contains(oldname));
     assert(!contains(newname));
-    mon_addr[newname] = mon_addr[oldname];
-    mon_addr.erase(oldname);
+    mons[newname] = mons[oldname];
+    mons.erase(oldname);
+    mons[newname].name = newname;
+    normalize_mon_addr(true);
     calc_ranks();
   }
 
   bool contains(const string& name) {
-    return mon_addr.count(name);
+    return mons.count(name);
   }
 
+  /**
+   * Check if monmap contains a monitor with address @p a
+   *
+   * @note checks for all addresses a monitor may have, public or otherwise.
+   *
+   * @param a monitor address
+   * @returns true if monmap contains a monitor with address @p;
+   *          false otherwise.
+   */
   bool contains(const entity_addr_t &a) {
-    for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
-	 p != mon_addr.end();
-	 ++p) {
-      if (p->second == a)
-	return true;
+    for (map<string,mon_info_t>::iterator p = mons.begin();
+         p != mons.end();
+         ++p) {
+      if (p->second.public_addr == a)
+        return true;
     }
     return false;
   }
 
   string get_name(unsigned n) const {
-    assert(n < rank_name.size());
-    return rank_name[n];
+    assert(n < ranks.size());
+    return ranks[n].name;
   }
   string get_name(const entity_addr_t& a) const {
-    map<entity_addr_t,string>::const_iterator p = addr_name.find(a);
-    if (p == addr_name.end())
+    map<entity_addr_t,mon_info_t>::const_iterator p = addr_mons.find(a);
+    if (p == addr_mons.end())
       return string();
     else
-      return p->second;
+      return p->second.name;
   }
 
   int get_rank(const string& n) {
-    for (unsigned i=0; i<rank_name.size(); i++)
-      if (rank_name[i] == n)
+    for (unsigned i = 0; i < ranks.size(); i++)
+      if (ranks[i].name == n)
 	return i;
     return -1;
   }
   int get_rank(const entity_addr_t& a) {
-    for (unsigned i=0; i<rank_addr.size(); i++)
-      if (rank_addr[i] == a)
+    for (unsigned i = 0; i < ranks.size(); i++)
+      if (ranks[i].public_addr == a)
 	return i;
     return -1;
   }
   bool get_addr_name(const entity_addr_t& a, string& name) {
-    if (addr_name.count(a) == 0)
+    if (addr_mons.count(a) == 0)
       return false;
-    name = addr_name[a];
+    name = addr_mons[a].name;
     return true;
   }
 
   const entity_addr_t& get_addr(const string& n) {
-    assert(mon_addr.count(n));
-    return mon_addr[n];
+    assert(mons.count(n));
+    return mons[n].public_addr;
   }
   const entity_addr_t& get_addr(unsigned m) {
-    assert(m < rank_addr.size());
-    return rank_addr[m];
+    assert(m < ranks.size());
+    return ranks[m].public_addr;
   }
   void set_addr(const string& n, const entity_addr_t& a) {
-    assert(mon_addr.count(n));
-    mon_addr[n] = a;
+    assert(mons.count(n));
+    mons[n].public_addr = a;
+    normalize_mon_addr(true);
     calc_ranks();
   }
   entity_inst_t get_inst(const string& n) {
-    assert(mon_addr.count(n));
+    assert(mons.count(n));
     int m = get_rank(n);
     assert(m >= 0); // vector can't take negative indicies
-    entity_inst_t i;
-    i.addr = rank_addr[m];
-    i.name = entity_name_t::MON(m);
-    return i;
+    return get_inst(m);
   }
   entity_inst_t get_inst(unsigned m) const {
-    assert(m < rank_addr.size());
+    assert(m < ranks.size());
     entity_inst_t i;
-    i.addr = rank_addr[m];
+    i.addr = ranks[m].public_addr;
     i.name = entity_name_t::MON(m);
     return i;
   }
@@ -237,6 +363,15 @@ class MonMap {
   void dump(ceph::Formatter *f) const;
 
   static void generate_test_instances(list<MonMap*>& o);
+
+private:
+  struct rank_cmp {
+    bool operator()(const mon_info_t &a, const mon_info_t &b) const {
+      if (a.public_addr == b.public_addr)
+        return a.name < b.name;
+      return a.public_addr < b.public_addr;
+    }
+  };
 };
 WRITE_CLASS_ENCODER_FEATURES(MonMap)
 
