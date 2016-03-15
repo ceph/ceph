@@ -64,6 +64,7 @@ int execute(const po::variables_map &vm) {
   if (r < 0) {
     return r;
   }
+  opts.set(RBD_IMAGE_OPTION_FORMAT, static_cast<uint64_t>(2));
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
