@@ -257,7 +257,9 @@ struct FlattenTask {
 
   void operator()() {
     RWLock::RLocker l(ictx->owner_lock);
-    result = ictx->image_watcher->notify_flatten(0, *progress_context);
+    C_SaferCond ctx;
+    ictx->image_watcher->notify_flatten(0, *progress_context, &ctx);
+    result = ctx.wait();
   }
 };
 
@@ -271,7 +273,9 @@ struct ResizeTask {
 
   void operator()() {
     RWLock::RLocker l(ictx->owner_lock);
-    result = ictx->image_watcher->notify_resize(0, 0, *progress_context);
+    C_SaferCond ctx;
+    ictx->image_watcher->notify_resize(0, 0, *progress_context, &ctx);
+    result = ctx.wait();
   }
 };
 
@@ -285,7 +289,9 @@ struct RebuildObjectMapTask {
 
   void operator()() {
     RWLock::RLocker l(ictx->owner_lock);
-    result = ictx->image_watcher->notify_rebuild_object_map(0, *progress_context);
+    C_SaferCond ctx;
+    ictx->image_watcher->notify_rebuild_object_map(0, *progress_context, &ctx);
+    result = ctx.wait();
   }
 };
 
@@ -481,7 +487,9 @@ TEST_F(TestImageWatcher, NotifySnapCreate) {
   m_notify_acks = {{NOTIFY_OP_SNAP_CREATE, create_response_message(0)}};
 
   RWLock::RLocker l(ictx->owner_lock);
-  ASSERT_EQ(0, ictx->image_watcher->notify_snap_create("snap"));
+  C_SaferCond notify_ctx;
+  ictx->image_watcher->notify_snap_create("snap", &notify_ctx);
+  ASSERT_EQ(0, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_SNAP_CREATE;
@@ -501,7 +509,9 @@ TEST_F(TestImageWatcher, NotifySnapCreateError) {
   m_notify_acks = {{NOTIFY_OP_SNAP_CREATE, create_response_message(-EEXIST)}};
 
   RWLock::RLocker l(ictx->owner_lock);
-  ASSERT_EQ(-EEXIST, ictx->image_watcher->notify_snap_create("snap"));
+  C_SaferCond notify_ctx;
+  ictx->image_watcher->notify_snap_create("snap", &notify_ctx);
+  ASSERT_EQ(-EEXIST, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_SNAP_CREATE;
@@ -521,7 +531,9 @@ TEST_F(TestImageWatcher, NotifySnapRename) {
   m_notify_acks = {{NOTIFY_OP_SNAP_RENAME, create_response_message(0)}};
 
   RWLock::RLocker l(ictx->owner_lock);
-  ASSERT_EQ(0, ictx->image_watcher->notify_snap_rename(1, "snap-rename"));
+  C_SaferCond notify_ctx;
+  ictx->image_watcher->notify_snap_rename(1, "snap-rename", &notify_ctx);
+  ASSERT_EQ(0, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_SNAP_RENAME;
@@ -541,7 +553,9 @@ TEST_F(TestImageWatcher, NotifySnapRenameError) {
   m_notify_acks = {{NOTIFY_OP_SNAP_RENAME, create_response_message(-EEXIST)}};
 
   RWLock::RLocker l(ictx->owner_lock);
-  ASSERT_EQ(-EEXIST, ictx->image_watcher->notify_snap_rename(1, "snap-rename"));
+  C_SaferCond notify_ctx;
+  ictx->image_watcher->notify_snap_rename(1, "snap-rename", &notify_ctx);
+  ASSERT_EQ(-EEXIST, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_SNAP_RENAME;
@@ -561,7 +575,9 @@ TEST_F(TestImageWatcher, NotifySnapRemove) {
   m_notify_acks = {{NOTIFY_OP_SNAP_REMOVE, create_response_message(0)}};
 
   RWLock::RLocker l(ictx->owner_lock);
-  ASSERT_EQ(0, ictx->image_watcher->notify_snap_remove("snap"));
+  C_SaferCond notify_ctx;
+  ictx->image_watcher->notify_snap_remove("snap", &notify_ctx);
+  ASSERT_EQ(0, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_SNAP_REMOVE;
@@ -581,7 +597,9 @@ TEST_F(TestImageWatcher, NotifySnapProtect) {
   m_notify_acks = {{NOTIFY_OP_SNAP_PROTECT, create_response_message(0)}};
 
   RWLock::RLocker l(ictx->owner_lock);
-  ASSERT_EQ(0, ictx->image_watcher->notify_snap_protect("snap"));
+  C_SaferCond notify_ctx;
+  ictx->image_watcher->notify_snap_protect("snap", &notify_ctx);
+  ASSERT_EQ(0, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_SNAP_PROTECT;
@@ -601,7 +619,9 @@ TEST_F(TestImageWatcher, NotifySnapUnprotect) {
   m_notify_acks = {{NOTIFY_OP_SNAP_UNPROTECT, create_response_message(0)}};
 
   RWLock::RLocker l(ictx->owner_lock);
-  ASSERT_EQ(0, ictx->image_watcher->notify_snap_unprotect("snap"));
+  C_SaferCond notify_ctx;
+  ictx->image_watcher->notify_snap_unprotect("snap", &notify_ctx);
+  ASSERT_EQ(0, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_SNAP_UNPROTECT;
@@ -621,7 +641,9 @@ TEST_F(TestImageWatcher, NotifyRename) {
   m_notify_acks = {{NOTIFY_OP_RENAME, create_response_message(0)}};
 
   RWLock::RLocker l(ictx->owner_lock);
-  ASSERT_EQ(0, ictx->image_watcher->notify_rename("new_name"));
+  C_SaferCond notify_ctx;
+  ictx->image_watcher->notify_rename("new_name", &notify_ctx);
+  ASSERT_EQ(0, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_RENAME;
@@ -720,6 +742,6 @@ TEST_F(TestImageWatcher, NotifyAsyncRequestTimedOut) {
   ASSERT_TRUE(wait_for_notifies(*ictx));
 
   ASSERT_TRUE(thread.timed_join(boost::posix_time::seconds(10)));
-  ASSERT_EQ(-ERESTART, flatten_task.result);
+  ASSERT_EQ(-ETIMEDOUT, flatten_task.result);
 }
 

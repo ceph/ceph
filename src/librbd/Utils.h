@@ -124,6 +124,12 @@ librados::AioCompletion *create_rados_safe_callback(T *obj) {
     obj, nullptr, &detail::rados_callback<T>);
 }
 
+template <typename T, void(T::*MF)(int)>
+librados::AioCompletion *create_rados_safe_callback(T *obj) {
+  return librados::Rados::aio_create_completion(
+    obj, nullptr, &detail::rados_callback<T, MF>);
+}
+
 template <typename T, Context*(T::*MF)(int*), bool destroy=true>
 librados::AioCompletion *create_rados_safe_callback(T *obj) {
   return librados::Rados::aio_create_completion(

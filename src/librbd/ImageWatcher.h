@@ -34,18 +34,20 @@ public:
   void unregister_watch(Context *on_finish);
   void flush(Context *on_finish);
 
-  int notify_flatten(uint64_t request_id, ProgressContext &prog_ctx);
-  int notify_resize(uint64_t request_id, uint64_t size,
-                    ProgressContext &prog_ctx);
-  int notify_snap_create(const std::string &snap_name);
-  int notify_snap_rename(const snapid_t &src_snap_id,
-                         const std::string &dst_snap_name);
-  int notify_snap_remove(const std::string &snap_name);
-  int notify_snap_protect(const std::string &snap_name);
-  int notify_snap_unprotect(const std::string &snap_name);
-  int notify_rebuild_object_map(uint64_t request_id,
-                                ProgressContext &prog_ctx);
-  int notify_rename(const std::string &image_name);
+  void notify_flatten(uint64_t request_id, ProgressContext &prog_ctx,
+                      Context *on_finish);
+  void notify_resize(uint64_t request_id, uint64_t size,
+                     ProgressContext &prog_ctx, Context *on_finish);
+  void notify_snap_create(const std::string &snap_name, Context *on_finish);
+  void notify_snap_rename(const snapid_t &src_snap_id,
+                          const std::string &dst_snap_name,
+                          Context *on_finish);
+  void notify_snap_remove(const std::string &snap_name, Context *on_finish);
+  void notify_snap_protect(const std::string &snap_name, Context *on_finish);
+  void notify_snap_unprotect(const std::string &snap_name, Context *on_finish);
+  void notify_rebuild_object_map(uint64_t request_id,
+                                 ProgressContext &prog_ctx, Context *on_finish);
+  void notify_rename(const std::string &image_name, Context *on_finish);
 
   void notify_acquired_lock();
   void notify_released_lock();
@@ -247,13 +249,14 @@ private:
   void handle_request_lock(int r);
   void schedule_request_lock(bool use_timer, int timer_delay = -1);
 
-  int notify_lock_owner(bufferlist &&bl);
   void notify_lock_owner(bufferlist &&bl, Context *on_finish);
 
+  Context *remove_async_request(const watch_notify::AsyncRequestId &id);
   void schedule_async_request_timed_out(const watch_notify::AsyncRequestId &id);
   void async_request_timed_out(const watch_notify::AsyncRequestId &id);
-  int notify_async_request(const watch_notify::AsyncRequestId &id,
-                           bufferlist &&in, ProgressContext& prog_ctx);
+  void notify_async_request(const watch_notify::AsyncRequestId &id,
+                            bufferlist &&in, ProgressContext& prog_ctx,
+                            Context *on_finish);
 
   void schedule_async_progress(const watch_notify::AsyncRequestId &id,
                                uint64_t offset, uint64_t total);

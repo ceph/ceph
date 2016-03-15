@@ -4,6 +4,7 @@
 #include "librbd/journal/Types.h"
 #include "include/assert.h"
 #include "include/stringify.h"
+#include "include/types.h"
 #include "common/Formatter.h"
 
 namespace librbd {
@@ -335,16 +336,19 @@ void ImageClientMeta::dump(Formatter *f) const {
 
 void MirrorPeerSyncPoint::encode(bufferlist& bl) const {
   ::encode(snap_name, bl);
+  ::encode(from_snap_name, bl);
   ::encode(object_number, bl);
 }
 
 void MirrorPeerSyncPoint::decode(__u8 version, bufferlist::iterator& it) {
   ::decode(snap_name, it);
+  ::decode(from_snap_name, it);
   ::decode(object_number, it);
 }
 
 void MirrorPeerSyncPoint::dump(Formatter *f) const {
   f->dump_string("snap_name", snap_name);
+  f->dump_string("from_snap_name", from_snap_name);
   if (object_number) {
     f->dump_unsigned("object_number", *object_number);
   }
@@ -352,14 +356,17 @@ void MirrorPeerSyncPoint::dump(Formatter *f) const {
 
 void MirrorPeerClientMeta::encode(bufferlist& bl) const {
   ::encode(image_id, bl);
+  ::encode(sync_object_count, bl);
   ::encode(static_cast<uint32_t>(sync_points.size()), bl);
   for (auto &sync_point : sync_points) {
     sync_point.encode(bl);
   }
+  ::encode(snap_seqs, bl);
 }
 
 void MirrorPeerClientMeta::decode(__u8 version, bufferlist::iterator& it) {
   ::decode(image_id, it);
+  ::decode(sync_object_count, it);
 
   uint32_t sync_point_count;
   ::decode(sync_point_count, it);
@@ -367,13 +374,26 @@ void MirrorPeerClientMeta::decode(__u8 version, bufferlist::iterator& it) {
   for (auto &sync_point : sync_points) {
     sync_point.decode(version, it);
   }
+
+  ::decode(snap_seqs, it);
 }
 
 void MirrorPeerClientMeta::dump(Formatter *f) const {
   f->dump_string("image_id", image_id);
+  f->dump_unsigned("sync_object_count", sync_object_count);
   f->open_array_section("sync_points");
   for (auto &sync_point : sync_points) {
+    f->open_object_section("sync_point");
     sync_point.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("snap_seqs");
+  for (auto &pair : snap_seqs) {
+    f->open_object_section("snap_seq");
+    f->dump_unsigned("local_snap_seq", pair.first);
+    f->dump_unsigned("peer_snap_seq", pair.second);
+    f->close_section();
   }
   f->close_section();
 }
@@ -441,7 +461,9 @@ void ClientData::generate_test_instances(std::list<ClientData *> &o) {
   o.push_back(new ClientData(ImageClientMeta()));
   o.push_back(new ClientData(ImageClientMeta(123)));
   o.push_back(new ClientData(MirrorPeerClientMeta()));
-  o.push_back(new ClientData(MirrorPeerClientMeta("image_id", {{"snap 1", 123}})));
+  o.push_back(new ClientData(MirrorPeerClientMeta("image_id",
+                                                  {{"snap 2", "snap 1", 123}},
+                                                  {{1, 2}, {3, 4}})));
   o.push_back(new ClientData(CliClientMeta()));
 }
 
@@ -550,6 +572,37 @@ std::ostream &operator<<(std::ostream &out, const ClientMetaType &type) {
 
 std::ostream &operator<<(std::ostream &out, const ImageClientMeta &meta) {
   out << "[tag_class=" << meta.tag_class << "]";
+  return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const MirrorPeerSyncPoint &sync) {
+  out << "[snap_name=" << sync.snap_name << ", "
+      << "from_snap_name=" << sync.from_snap_name;
+  if (sync.object_number) {
+    out << ", " << *sync.object_number;
+  }
+  out << "]";
+  return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const MirrorPeerClientMeta &meta) {
+  out << "[image_id=" << meta.image_id << ", "
+      << "sync_object_count=" << meta.sync_object_count << ", "
+      << "sync_points=[";
+  std::string delimiter;
+  for (auto &sync_point : meta.sync_points) {
+    out << delimiter << "[" << sync_point << "]";
+    delimiter = ", ";
+  }
+  out << "], snap_seqs=[";
+  delimiter = "";
+  for (auto &pair : meta.snap_seqs) {
+    out << delimiter << "["
+        << "local_snap_seq=" << pair.first << ", "
+        << "peer_snap_seq" << pair.second << "]";
+    delimiter = ", ";
+  }
+  out << "]";
   return out;
 }
 

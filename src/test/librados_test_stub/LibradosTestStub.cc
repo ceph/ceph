@@ -66,6 +66,16 @@ void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen) {
 
 } // anonymous namespace
 
+namespace librados {
+
+MockTestMemIoCtxImpl &get_mock_io_ctx(IoCtx &ioctx) {
+  MockTestMemIoCtxImpl **mock =
+    reinterpret_cast<MockTestMemIoCtxImpl **>(&ioctx);
+  return **mock;
+}
+
+}
+
 namespace librados_test_stub {
 
 TestRadosClientPtr *rados_client() {
@@ -538,8 +548,7 @@ int IoCtx::read(const std::string& oid, bufferlist& bl, size_t len,
 int IoCtx::remove(const std::string& oid) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->execute_operation(
-    oid, boost::bind(&TestIoCtxImpl::remove, _1, _2));
-  return ctx->remove(oid);
+    oid, boost::bind(&TestIoCtxImpl::remove, _1, _2, ctx->get_snap_context()));
 }
 
 int IoCtx::selfmanaged_snap_create(uint64_t *snapid) {
@@ -579,6 +588,13 @@ int IoCtx::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->execute_operation(
     oid, boost::bind(&TestIoCtxImpl::tmap_update, _1, _2, cmdbl));
+}
+
+int IoCtx::trunc(const std::string& oid, uint64_t off) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::truncate, _1, _2, off,
+                     ctx->get_snap_context()));
 }
 
 int IoCtx::unwatch2(uint64_t handle) {
@@ -751,7 +767,7 @@ void ObjectWriteOperation::omap_set(const std::map<std::string, bufferlist> &map
 
 void ObjectWriteOperation::remove() {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
-  o->ops.push_back(boost::bind(&TestIoCtxImpl::remove, _1, _2));
+  o->ops.push_back(boost::bind(&TestIoCtxImpl::remove, _1, _2, _4));
 }
 
 void ObjectWriteOperation::selfmanaged_snap_rollback(uint64_t snapid) {
