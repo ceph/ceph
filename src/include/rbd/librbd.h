@@ -101,6 +101,17 @@ typedef struct {
   char *client_name;
 } rbd_mirror_peer_t;
 
+typedef enum {
+  RBD_MIRROR_IMAGE_DISABLING = 0,
+  RBD_MIRROR_IMAGE_ENABLED = 1,
+  RBD_MIRROR_IMAGE_DISABLED = 2
+} rbd_mirror_image_state_t;
+
+typedef struct {
+  char *global_id;
+  rbd_mirror_image_state_t state;
+} rbd_mirror_image_t;
+
 CEPH_RBD_API void rbd_version(int *major, int *minor, int *extra);
 
 /* image options */
@@ -586,6 +597,11 @@ CEPH_RBD_API int rbd_metadata_remove(rbd_image_t image, const char *key);
 CEPH_RBD_API int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
     char *keys, size_t *key_len, char *values, size_t *vals_len);
 
+
+CEPH_RBD_API int rbd_mirror_image_enable(rbd_image_t image);
+CEPH_RBD_API int rbd_mirror_image_disable(rbd_image_t image, bool force);
+CEPH_RBD_API int rbd_mirror_image_get(rbd_image_t image,
+    rbd_mirror_image_t *mirror_image);
 
 #ifdef __cplusplus
 }

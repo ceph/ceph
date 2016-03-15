@@ -183,6 +183,9 @@ namespace librbd {
   int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
                               const std::string &cluster_name);
 
+  int mirror_image_enable(ImageCtx *ictx);
+  int mirror_image_disable(ImageCtx *ictx, bool force);
+  int mirror_image_get(ImageCtx *ictx, mirror_image_t *mirror_image);
 }
 
 #endif

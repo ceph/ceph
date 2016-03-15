@@ -42,6 +42,8 @@
       lock remove (lock rm)       Release a lock on an image.
       map                         Map image to a block device using the kernel.
       merge-diff                  Merge two diff exports together.
+      mirror image disable        Disable RBD mirroring for an image.
+      mirror image enable         Enable RBD mirroring for an image.
       mirror pool disable         Disable RBD mirroring by default within a pool.
       mirror pool enable          Enable RBD mirroring by default within a pool.
       mirror pool info            Show information about the pool mirroring
@@ -745,6 +747,35 @@
   Optional arguments
     --path arg           path to merged diff (or '-' for stdout)
     --no-progress        disable progress output
+  
+  rbd help mirror image disable
+  usage: rbd mirror image disable [--force] [--pool <pool>] [--image <image>] 
+                                  <image-spec> 
+  
+  Disable RBD mirroring for an image.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    --force              disable even if not primary
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+  
+  rbd help mirror image enable
+  usage: rbd mirror image enable [--pool <pool>] [--image <image>] 
+                                 <image-spec> 
+  
+  Enable RBD mirroring for an image.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
   
   rbd help mirror pool disable
   usage: rbd mirror pool disable [--pool <pool>] 
