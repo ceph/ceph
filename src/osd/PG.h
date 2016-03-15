@@ -2107,7 +2107,6 @@ public:
 
  public:
   const spg_t&      get_pgid() const { return pg_id; }
-  int        get_nrep() const { return acting.size(); }
 
   void reset_min_peer_features() {
     peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
