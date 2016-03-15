@@ -97,7 +97,9 @@ int RGWBackoffControlCR::operate() {
       }
       if (retcode < 0 && retcode != -EBUSY && retcode != -EAGAIN) {
         ldout(cct, 0) << "ERROR: RGWBackoffControlCR called coroutine returned " << retcode << dendl;
-        return set_cr_error(retcode);
+        if (exit_on_error) {
+          return set_cr_error(retcode);
+        }
       }
       if (reset_backoff) {
         backoff.reset();
@@ -108,7 +110,9 @@ int RGWBackoffControlCR::operate() {
         yield call(finisher_cr);
         if (retcode < 0) {
           ldout(cct, 0) << "ERROR: call to finisher_cr() failed: retcode=" << retcode << dendl;
-          return set_cr_error(retcode);
+          if (exit_on_error) {
+            return set_cr_error(retcode);
+          }
         }
       }
     }
@@ -1638,7 +1642,7 @@ public:
                             const std::string& period, RGWMetadataLog* mdlog,
                             uint32_t _shard_id, const rgw_meta_sync_marker& _marker,
                             std::string&& period_marker)
-    : RGWBackoffControlCR(_sync_env->cct), sync_env(_sync_env),
+    : RGWBackoffControlCR(_sync_env->cct, true), sync_env(_sync_env),
       pool(_pool), period(period), mdlog(mdlog), shard_id(_shard_id),
       sync_marker(_marker), period_marker(std::move(period_marker)),
       obj_ctx(sync_env->store) {}
