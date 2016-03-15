@@ -153,7 +153,8 @@ class FuseMount(CephFSMount):
         try:
             proc.wait()
         except CommandFailedError:
-            if "endpoint is not connected" in proc.stderr.getvalue():
+            if ("endpoint is not connected" in proc.stderr.getvalue()
+            or "Software caused connection abort" in proc.stderr.getvalue()):
                 # This happens is fuse is killed without unmount
                 log.warn("Found stale moutn point at {0}".format(self.mountpoint))
                 return True
