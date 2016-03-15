@@ -1284,9 +1284,11 @@ epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
   return last + 1;
 }
 
-void PGMonitor::_mark_pg_stale(pg_t pgid, const pg_stat_t& cur_stat)
+void PGMonitor::_try_mark_pg_stale(
+  OSDMap *osdmap,
+  pg_t pgid,
+  const pg_stat_t& cur_stat)
 {
-  dout(10) << " marking pg " << pgid << " stale" << dendl;
   map<pg_t,pg_stat_t>::iterator q = pending_inc.pg_stat_updates.find(pgid);
   pg_stat_t *stat;
   if (q == pending_inc.pg_stat_updates.end()) {
@@ -1295,7 +1297,12 @@ void PGMonitor::_mark_pg_stale(pg_t pgid, const pg_stat_t& cur_stat)
   } else {
     stat = &q->second;
   }
-  if (stat->acting_primary == cur_stat.acting_primary) {
+  if ((stat->acting_primary == cur_stat.acting_primary) ||
+      ((stat->state & PG_STATE_STALE) == 0 &&
+       stat->acting_primary != -1 &&
+       osdmap->is_down(stat->acting_primary))) {
+    dout(10) << " marking pg " << pgid << " stale (acting_primary "
+	     << stat->acting_primary << ")" << dendl;
     stat->state |= PG_STATE_STALE;  
     stat->last_unstale = ceph_clock_now(g_ceph_context);
   }
@@ -1319,7 +1326,7 @@ bool PGMonitor::check_down_pgs()
       if ((p.second.state & PG_STATE_STALE) == 0 &&
           p.second.acting_primary != -1 &&
           osdmap->is_down(p.second.acting_primary)) {
-	_mark_pg_stale(p.first, p.second);
+	_try_mark_pg_stale(osdmap, p.first, p.second);
 	ret = true;
       }
     }
@@ -1330,7 +1337,7 @@ bool PGMonitor::check_down_pgs()
 	  const pg_stat_t &stat = pg_map.pg_stat[pgid];
 	  if ((stat.state & PG_STATE_STALE) == 0 &&
 	      stat.acting_primary != -1) {
-	    _mark_pg_stale(pgid, stat);
+	    _try_mark_pg_stale(osdmap, pgid, stat);
 	    ret = true;
 	  }
 	}
