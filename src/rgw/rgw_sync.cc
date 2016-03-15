@@ -48,7 +48,7 @@ RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const string& source_zone, const 
   rgw_sync_error_info info(source_zone, error_code, message);
   bufferlist bl;
   ::encode(info, bl);
-  store->time_log_prepare_entry(entry, ceph_clock_now(store->ctx()), section, name, bl);
+  store->time_log_prepare_entry(entry, real_clock::now(), section, name, bl);
 
   uint32_t shard_id = counter.inc() % num_shards;
 
@@ -122,12 +122,13 @@ void rgw_mdlog_info::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
 }
 
-
 void rgw_mdlog_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("section", section, obj);
   JSONDecoder::decode_json("name", name, obj);
-  JSONDecoder::decode_json("timestamp", timestamp, obj);
+  utime_t ut;
+  JSONDecoder::decode_json("timestamp", ut, obj);
+  timestamp = ut.to_real_time();
   JSONDecoder::decode_json("data", log_data, obj);
 }
 
@@ -375,8 +376,8 @@ class RGWAsyncReadMDLogEntries : public RGWAsyncRadosRequest {
 
 protected:
   int _send_request() {
-    utime_t from_time;
-    utime_t end_time;
+    real_time from_time;
+    real_time end_time;
 
     void *handle;
 
@@ -1081,13 +1082,13 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const utime_t& timestamp) {
+  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) {
     sync_marker.marker = new_marker;
     if (index_pos > 0) {
       sync_marker.pos = index_pos;
     }
 
-    if (timestamp.sec() > 0) {
+    if (!real_clock::is_zero(timestamp)) {
       sync_marker.timestamp = timestamp;
     }
 
@@ -1422,7 +1423,7 @@ public:
         for (; iter != entries.end(); ++iter) {
           ldout(sync_env->cct, 20) << __func__ << ": full sync: " << iter->first << dendl;
           total_entries++;
-          if (!marker_tracker->start(iter->first, total_entries, utime_t())) {
+          if (!marker_tracker->start(iter->first, total_entries, real_time())) {
             ldout(sync_env->cct, 0) << "ERROR: cannot start syncing " << iter->first << ". Duplicate entry?" << dendl;
           } else {
             // fetch remote and write locally
@@ -1570,7 +1571,7 @@ public:
               continue;
             }
             ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp << dendl;
-            if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp)) {
+            if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp.to_real_time())) {
               ldout(sync_env->cct, 0) << "ERROR: cannot start syncing " << log_iter->id << ". Duplicate entry?" << dendl;
             } else {
               raw_key = log_iter->section + ":" + log_iter->name;
@@ -2124,7 +2125,7 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
     dest_entry.id = entry.id;
     dest_entry.section = entry.section;
     dest_entry.name = entry.name;
-    dest_entry.timestamp = entry.timestamp;
+    dest_entry.timestamp = utime_t(entry.timestamp);
   
     ::encode(entry.log_data, dest_entry.data);
 

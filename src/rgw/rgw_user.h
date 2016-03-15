@@ -63,7 +63,7 @@ extern int rgw_store_user_info(RGWRados *store,
                                RGWUserInfo& info,
                                RGWUserInfo *old_info,
                                RGWObjVersionTracker *objv_tracker,
-                               time_t mtime,
+                               real_time mtime,
                                bool exclusive,
                                map<string, bufferlist> *pattrs = NULL);
 
@@ -75,7 +75,7 @@ extern int rgw_get_user_info_by_uid(RGWRados *store,
                                     const rgw_user& user_id,
                                     RGWUserInfo& info,
                                     RGWObjVersionTracker *objv_tracker = NULL,
-                                    time_t *pmtime                     = NULL,
+                                    real_time *pmtime                     = NULL,
                                     rgw_cache_entry_info *cache_info   = NULL,
                                     map<string, bufferlist> *pattrs    = NULL);
 /**
@@ -83,19 +83,19 @@ extern int rgw_get_user_info_by_uid(RGWRados *store,
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info,
-                                      RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
+                                      RGWObjVersionTracker *objv_tracker = NULL, real_time *pmtime = NULL);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info,
-                                      RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
+                                      RGWObjVersionTracker *objv_tracker = NULL, real_time *pmtime = NULL);
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info,
-                                           RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
+                                           RGWObjVersionTracker *objv_tracker = NULL, real_time *pmtime = NULL);
 /**
  * Get all the custom metadata stored for user specified in @user_id
  * and put it into @attrs.

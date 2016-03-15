@@ -484,16 +484,16 @@ extern void dump_string_header(struct req_state *s, const char *name,
 			       const char *val);
 extern void dump_content_length(struct req_state *s, uint64_t len);
 extern void dump_etag(struct req_state *s, const char *etag);
-extern void dump_epoch_header(struct req_state *s, const char *name, time_t t);
-extern void dump_time_header(struct req_state *s, const char *name, time_t t);
-extern void dump_last_modified(struct req_state *s, time_t t);
+extern void dump_epoch_header(struct req_state *s, const char *name, real_time t);
+extern void dump_time_header(struct req_state *s, const char *name, real_time t);
+extern void dump_last_modified(struct req_state *s, real_time t);
 extern void abort_early(struct req_state* s, RGWOp* op, int err,
 			RGWHandler* handler);
 extern void dump_range(struct req_state* s, uint64_t ofs, uint64_t end,
 		       uint64_t total_size);
 extern void dump_continue(struct req_state *s);
 extern void list_all_buckets_end(struct req_state *s);
-extern void dump_time(struct req_state *s, const char *name, time_t *t);
+extern void dump_time(struct req_state *s, const char *name, real_time *t);
 extern void dump_bucket_from_state(struct req_state *s);
 extern void dump_uri_from_state(struct req_state *s);
 extern void dump_redirect(struct req_state *s, const string& redirect);

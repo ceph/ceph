@@ -866,7 +866,7 @@ struct RGWBucketInfo
   rgw_user owner;
   uint32_t flags;
   string zonegroup;
-  time_t creation_time;
+  ceph::real_time creation_time;
   string placement_rule;
   bool has_instance_obj;
   RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
@@ -897,12 +897,12 @@ struct RGWBucketInfo
 
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(16, 4, bl);
+     ENCODE_START(17, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner.id, bl);
      ::encode(flags, bl);
      ::encode(zonegroup, bl);
-     uint64_t ct = (uint64_t)creation_time;
+     uint64_t ct = real_clock::to_time_t(creation_time);
      ::encode(ct, bl);
      ::encode(placement_rule, bl);
      ::encode(has_instance_obj, bl);
@@ -920,10 +920,11 @@ struct RGWBucketInfo
      if (swift_versioning) {
        ::encode(swift_ver_location, bl);
      }
+     ::encode(creation_time, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(16, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(17, 4, 4, bl);
      ::decode(bucket, bl);
      if (struct_v >= 2) {
        string s;
@@ -934,10 +935,10 @@ struct RGWBucketInfo
        ::decode(flags, bl);
      if (struct_v >= 5)
        ::decode(zonegroup, bl);
-     if (struct_v >= 6) {
-       uint64_t ct;
-       ::decode(ct, bl);
-       creation_time = (time_t)ct;
+     uint64_t ct;
+     ::decode(ct, bl);
+     if (struct_v >= 6 && struct_v < 17) {
+       creation_time = ceph::real_clock::from_time_t((time_t)ct);
      }
      if (struct_v >= 7)
        ::decode(placement_rule, bl);
@@ -976,6 +977,9 @@ struct RGWBucketInfo
          ::decode(swift_ver_location, bl);
        }
      }
+     if (struct_v >= 17) {
+       ::decode(creation_time, bl);
+     }
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -989,7 +993,7 @@ struct RGWBucketInfo
 
   bool has_swift_versioning() { return swift_versioning; }
 
-  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD), requester_pays(false),
+  RGWBucketInfo() : flags(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD), requester_pays(false),
                     has_website(false), swift_versioning(false) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
@@ -998,27 +1002,28 @@ struct RGWBucketEntryPoint
 {
   rgw_bucket bucket;
   rgw_user owner;
-  time_t creation_time;
+  ceph::real_time creation_time;
   bool linked;
 
   bool has_bucket_info;
   RGWBucketInfo old_bucket_info;
 
-  RGWBucketEntryPoint() : creation_time(0), linked(false), has_bucket_info(false) {}
+  RGWBucketEntryPoint() : linked(false), has_bucket_info(false) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(9, 8, bl);
+    ENCODE_START(10, 8, bl);
     ::encode(bucket, bl);
     ::encode(owner.id, bl);
     ::encode(linked, bl);
-    uint64_t ctime = (uint64_t)creation_time;
+    uint64_t ctime = (uint64_t)real_clock::to_time_t(creation_time);
     ::encode(ctime, bl);
     ::encode(owner, bl);
+    ::encode(creation_time, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     bufferlist::iterator orig_iter = bl;
-    DECODE_START_LEGACY_COMPAT_LEN_32(9, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(10, 4, 4, bl);
     if (struct_v < 8) {
       /* ouch, old entry, contains the bucket info itself */
       old_bucket_info.decode(orig_iter);
@@ -1031,9 +1036,14 @@ struct RGWBucketEntryPoint
     ::decode(linked, bl);
     uint64_t ctime;
     ::decode(ctime, bl);
-    creation_time = (uint64_t)ctime;
+    if (struct_v < 10) {
+      creation_time = real_clock::from_time_t((time_t)ctime);
+    }
     if (struct_v >= 9) {
       ::decode(owner, bl);
+    }
+    if (struct_v >= 10) {
+      ::decode(creation_time, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -1284,7 +1294,7 @@ struct RGWObjEnt {
   rgw_user owner;
   std::string owner_display_name;
   uint64_t size;
-  utime_t mtime;
+  ceph::real_time mtime;
   string etag;
   string content_type;
   string tag;
@@ -1311,10 +1321,10 @@ struct RGWBucketEnt {
   rgw_bucket bucket;
   size_t size;
   size_t size_rounded;
-  time_t creation_time;
+  real_time creation_time;
   uint64_t count;
 
-  RGWBucketEnt() : size(0), size_rounded(0), creation_time(0), count(0) {}
+  RGWBucketEnt() : size(0), size_rounded(0), count(0) {}
 
   explicit RGWBucketEnt(const cls_user_bucket_entry& e) : bucket(e.bucket),
 		  					  size(e.size), 
@@ -1331,9 +1341,9 @@ struct RGWBucketEnt {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(5, 5, bl);
+    ENCODE_START(6, 5, bl);
     uint64_t s = size;
-    __u32 mt = creation_time;
+    __u32 mt = ceph::real_clock::to_time_t(creation_time);
     string empty_str;  // originally had the bucket name here, but we encode bucket later
     ::encode(empty_str, bl);
     ::encode(s, bl);
@@ -1342,10 +1352,11 @@ struct RGWBucketEnt {
     ::encode(bucket, bl);
     s = size_rounded;
     ::encode(s, bl);
+    ::encode(creation_time, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
     __u32 mt;
     uint64_t s;
     string empty_str;  // backward compatibility
@@ -1353,7 +1364,9 @@ struct RGWBucketEnt {
     ::decode(s, bl);
     ::decode(mt, bl);
     size = s;
-    creation_time = mt;
+    if (struct_v < 6) {
+      creation_time = ceph::real_clock::from_time_t(mt);
+    }
     if (struct_v >= 2)
       ::decode(count, bl);
     if (struct_v >= 3)
@@ -1361,6 +1374,8 @@ struct RGWBucketEnt {
     if (struct_v >= 4)
       ::decode(s, bl);
     size_rounded = s;
+    if (struct_v >= 6)
+      ::decode(creation_time, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -1816,9 +1831,9 @@ extern void parse_csv_string(const string& ival, vector<string>& ovals);
 extern int parse_key_value(string& in_str, string& key, string& val);
 extern int parse_key_value(string& in_str, const char *delim, string& key, string& val);
 /** time parsing */
-extern int parse_time(const char *time_str, time_t *time);
+extern int parse_time(const char *time_str, real_time *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
-extern bool parse_iso8601(const char *s, struct tm *t, bool extended_format = true);
+extern bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns = NULL, bool extended_format = true);
 extern string rgw_trim_whitespace(const string& src);
 extern string rgw_trim_quotes(const string& val);
 
