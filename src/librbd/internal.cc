@@ -2483,6 +2483,25 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
+  int mirror_image_promote(ImageCtx *ictx, bool force) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << ", "
+                   << "force=" << force << dendl;
+    return -EOPNOTSUPP;
+  }
+
+  int mirror_image_demote(ImageCtx *ictx) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
+    return -EOPNOTSUPP;
+  }
+
+  int mirror_image_resync(ImageCtx *ictx) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
+    return -EOPNOTSUPP;
+  }
+
   int mirror_image_get(ImageCtx *ictx, mirror_image_t *mirror_image) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "mirror_image_get " << ictx << dendl;
