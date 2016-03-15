@@ -1,4 +1,53 @@
 #!/bin/sh
+#
+# rbd_mirror.sh - test rbd-mirror daemon
+#
+# The scripts starts two ("local" and "remote") clusters using mstart.sh script,
+# creates a temporary directory, used for cluster configs, daemon logs, admin
+# socket, temporary files, and launches rbd-mirror daemon.
+#
+# There are several env variables useful when troubleshooting a test failure:
+#
+#  RBD_MIRROR_NOCLEANUP - if not empty, don't run the cleanup (stop processes,
+#                         destroy the clusters and remove the temp directory)
+#                         on exit, so it is possible to check the test state
+#                         after failure.
+#  RBD_MIRROR_TEMDIR    - use this path when creating the temporary directory
+#                         (should not exist) instead of running mktemp(1).
+#
+# The cleanup can be done as a separate step, running the script with
+# `cleanup ${RBD_MIRROR_TEMDIR}' arguments.
+#
+# Note, as other workunits tests, rbd_mirror.sh expects to find ceph binaries
+# in PATH.
+#
+# Thus a typical troubleshooting session:
+#
+# From Ceph src dir (CEPH_SRC_PATH), start the test in NOCLEANUP mode and with
+# TEMPDIR pointing to a known location:
+#
+#   cd $CEPH_SRC_PATH
+#   PATH=$CEPH_SRC_PATH:$PATH
+#   RBD_MIRROR_NOCLEANUP=1 RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror \
+#     ../qa/workunits/rbd/rbd_mirror.sh
+#
+# After the test failure cd to TEMPDIR and check the current state:
+#
+#   cd /tmp/tmp.rbd_mirror
+#   ls
+#   less rbd-mirror.log
+#   ceph --cluster remote -s
+#   ceph --cluster local -s
+#   rbd --cluster remote -p mirror ls
+#   rbd --cluster remote -p mirror journal status --image test
+#   ceph --admin-daemon rbd-mirror.asok help
+#   ...
+#
+# Eventually, run the cleanup:
+#
+#   cd $CEPH_SRC_PATH
+#   ../qa/workunits/rbd/rbd_mirror.sh cleanup /tmp/tmp.rbd_mirror
+#
 
 LOC_CLUSTER=local
 RMT_CLUSTER=remote
@@ -17,7 +66,12 @@ setup()
     local c
     trap cleanup INT TERM EXIT
 
-    TEMPDIR=`mktemp -d`
+    if [ -n "${RBD_MIRROR_TEMDIR}" ]; then
+	mkdir "${RBD_MIRROR_TEMDIR}"
+	TEMPDIR="${RBD_MIRROR_TEMDIR}"
+    else
+	TEMPDIR=`mktemp -d`
+    fi
 
     cd ${SRC_DIR}
     ./mstart.sh ${LOC_CLUSTER} -n
@@ -113,24 +167,48 @@ flush()
     ceph --admin-daemon ${TEMPDIR}/rbd-mirror.asok ${cmd}
 }
 
-wait_for_image_replay_started()
+test_image_replay_state()
 {
-    local image=$1
-    local image_id s
+    local image_id=$1
+    local test_state=$2
+    local current_state=stopped
 
     test -n "${RBD_MIRROR_ASOK}"
+
+    ceph --admin-daemon ${RBD_MIRROR_ASOK} help | fgrep "${image_id}" &&
+	current_state=started
+    test "${test_state}" = "${current_state}"
+}
+
+wait_for_image_replay_state()
+{
+    local image=$1
+    local state=$2
+    local image_id s
 
     image_id=$(remote_image_id ${image})
     test -n "${image_id}"
 
     # TODO: add a way to force rbd-mirror to update replayers
-
     for s in 1 2 4 8 8 8 8 8 8 8 8; do
 	sleep ${s}
-	ceph --admin-daemon ${RBD_MIRROR_ASOK} help | grep "${image_id}" &&
-	    return 0
+	test_image_replay_state "${image_id}" "${state}" && return 0
     done
     return 1
+}
+
+wait_for_image_replay_started()
+{
+    local image=$1
+
+    wait_for_image_replay_state ${image} started
+}
+
+wait_for_image_replay_stopped()
+{
+    local image=$1
+
+    wait_for_image_replay_state ${image} stopped
 }
 
 get_position()
@@ -174,7 +252,7 @@ wait_for_replay_complete()
     local image=$1
     local s master_pos mirror_pos
 
-    for s in 0.2 0.4 0.8 1.6 2 2 4 4 8; do
+    for s in 0.2 0.4 0.8 1.6 2 2 4 4 8 8 16 16; do
 	sleep ${s}
 	flush ${image}
 	master_pos=$(get_master_position ${image})
@@ -260,6 +338,10 @@ compare_images()
 if [ "$1" = clean ]; then
     TEMPDIR=$2
 
+    if [ -z "${TEMPDIR}" -a -n "${RBD_MIRROR_TEMDIR}" ]; then
+	TEMPDIR="${RBD_MIRROR_TEMDIR}"
+    fi
+
     test -n "${TEMPDIR}"
 
     RBD_MIRROR_PID_FILE=${TEMPDIR}/rbd-mirror.pid
@@ -274,7 +356,7 @@ set -xe
 
 setup
 
-# add image and test replay
+echo "TEST: add image and test replay"
 image=test
 create_remote_image ${image}
 wait_for_image_replay_started ${image}
@@ -282,19 +364,19 @@ write_image ${image} 100
 wait_for_replay_complete ${image}
 compare_images ${image}
 
-# stop mirror, add image, start mirror and test replay
+echo "TEST: stop mirror, add image, start mirror and test replay"
 stop_mirror
 image1=test1
 create_remote_image ${image1}
 write_image ${image1} 100
 start_mirror
 wait_for_image_replay_started ${image1}
-wait_for_replay_complete ${image}
+wait_for_replay_complete ${image1}
 compare_images ${image1}
 
-# test the first image is replaying after restart
+echo "TEST: test the first image is replaying after restart"
 write_image ${image} 100
-wait_for_image_replay_started ${image}
+wait_for_replay_complete ${image}
 compare_images ${image}
 
 echo OK
