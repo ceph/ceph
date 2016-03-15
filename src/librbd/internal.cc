@@ -2580,7 +2580,31 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
   int mirror_image_resync(ImageCtx *ictx) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
-    return -EOPNOTSUPP;
+
+    int r = validate_mirroring_enabled(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    std::string mirror_uuid;
+    r = Journal<>::get_tag_owner(ictx, &mirror_uuid);
+    if (r < 0) {
+      lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    } else if (mirror_uuid == Journal<>::LOCAL_MIRROR_UUID) {
+      lderr(cct) << "image is primary, cannot resync to itself" << dendl;
+      return -EINVAL;
+    }
+
+    // flag the journal indicating that we want to rebuild the local image
+    r = Journal<>::request_resync(ictx);
+    if (r < 0) {
+      lderr(cct) << "failed to request resync: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    return 0;
   }
 
   int mirror_image_get_info(ImageCtx *ictx, mirror_image_info_t *mirror_image_info,
