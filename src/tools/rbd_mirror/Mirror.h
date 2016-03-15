@@ -49,6 +49,7 @@ private:
 
   // monitor local cluster for config changes in peers
   std::unique_ptr<ClusterWatcher> m_local_cluster_watcher;
+  Mutex m_replayers_lock;
   std::map<peer_t, std::unique_ptr<Replayer> > m_replayers;
   atomic_t m_stopping;
 };
