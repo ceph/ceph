@@ -5713,6 +5713,7 @@ int RGWRados::swift_versioning_copy(RGWBucketInfo& bucket_info, RGWRados::Object
                NULL, /* time_t *mtime */
                NULL, /* const time_t *mod_ptr */
                NULL, /* const time_t *unmod_ptr */
+               false, /* bool high_precision_time */
                NULL, /* const char *if_match */
                NULL, /* const char *if_nomatch */
                RGWRados::ATTRSMOD_NONE,
@@ -5908,7 +5909,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   state = NULL;
 
   if (versioned_op) {
-    r = store->set_olh(target->get_ctx(), target->get_bucket_info(), obj, false, NULL, meta.olh_epoch, real_time());
+    r = store->set_olh(target->get_ctx(), target->get_bucket_info(), obj, false, NULL, meta.olh_epoch, real_time(), false);
     if (r < 0) {
       return r;
     }
@@ -6272,10 +6273,32 @@ struct obj_time_weight {
   real_time mtime;
   uint32_t zone_short_id;
   uint64_t pg_ver;
+  bool high_precision;
 
-  obj_time_weight() : zone_short_id(0), pg_ver(0) {}
+  obj_time_weight() : zone_short_id(0), pg_ver(0), high_precision(false) {}
+
+  bool compare_low_precision(const obj_time_weight& rhs) {
+    struct timespec l = ceph::real_clock::to_timespec(mtime);
+    struct timespec r = ceph::real_clock::to_timespec(rhs.mtime);
+    l.tv_nsec = 0;
+    r.tv_nsec = 0;
+    if (l > r) {
+      return false;
+    }
+    if (l < r) {
+      return true;
+    }
+    if (zone_short_id != rhs.zone_short_id) {
+      return (zone_short_id < rhs.zone_short_id);
+    }
+    return (pg_ver < rhs.pg_ver);
+
+  }
 
   bool operator<(const obj_time_weight& rhs) {
+    if (!high_precision || !rhs.high_precision) {
+      return compare_low_precision(rhs);
+    }
     if (mtime > rhs.mtime) {
       return false;
     }
@@ -6325,6 +6348,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                real_time *mtime,
                const real_time *mod_ptr,
                const real_time *unmod_ptr,
+               bool high_precision_time,
                const char *if_match,
                const char *if_nomatch,
                AttrsMod attrs_mod,
@@ -6348,6 +6372,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   int i;
   append_rand_alpha(cct, tag, tag, 32);
   obj_time_weight set_mtime_weight;
+  set_mtime_weight.high_precision = high_precision_time;
 
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.get_orig_obj(),
@@ -6504,6 +6529,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
         goto set_err_state;
       }
       dest_mtime_weight.init(dest_state);
+      dest_mtime_weight.high_precision = high_precision_time;
       if (!dest_state->exists ||
         dest_mtime_weight < set_mtime_weight) {
         ldout(cct, 20) << "retrying writing object mtime=" << set_mtime << " dest_state->mtime=" << dest_state->mtime << " dest_state->exists=" << dest_state->exists << dendl;
@@ -6598,6 +6624,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                real_time *mtime,
                const real_time *mod_ptr,
                const real_time *unmod_ptr,
+               bool high_precision_time,
                const char *if_match,
                const char *if_nomatch,
                AttrsMod attrs_mod,
@@ -6637,7 +6664,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (remote_src || !source_zone.empty()) {
     return fetch_remote_obj(obj_ctx, user_id, client_id, op_id, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
-               unmod_ptr, if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
+               unmod_ptr, high_precision_time,
+               if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
                olh_epoch, delete_at, version_id, ptag, petag, err, progress_cb, progress_data);
   }
 
@@ -6649,6 +6677,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   read_op.conds.mod_ptr = mod_ptr;
   read_op.conds.unmod_ptr = unmod_ptr;
+  read_op.conds.high_precision_time = high_precision_time;
   read_op.conds.if_match = if_match;
   read_op.conds.if_nomatch = if_nomatch;
   read_op.params.attrs = &src_attrs;
@@ -7308,9 +7337,9 @@ void RGWRados::cls_obj_check_prefix_exist(ObjectOperation& op, const string& pre
   cls_rgw_obj_check_attrs_prefix(op, prefix, fail_if_exist);
 }
 
-void RGWRados::cls_obj_check_mtime(ObjectOperation& op, const real_time& mtime, RGWCheckMTimeType type)
+void RGWRados::cls_obj_check_mtime(ObjectOperation& op, const real_time& mtime, bool high_precision_time, RGWCheckMTimeType type)
 {
-  cls_rgw_obj_check_mtime(op, mtime, type);
+  cls_rgw_obj_check_mtime(op, mtime, high_precision_time, type);
 }
 
 
@@ -7359,7 +7388,7 @@ int RGWRados::Object::Delete::delete_obj()
         meta.mtime = params.mtime;
       }
 
-      int r = store->set_olh(target->get_ctx(), target->get_bucket_info(), marker, true, &meta, params.olh_epoch, params.unmod_since);
+      int r = store->set_olh(target->get_ctx(), target->get_bucket_info(), marker, true, &meta, params.olh_epoch, params.unmod_since, params.high_precision_time);
       if (r < 0) {
         return r;
       }
@@ -7409,15 +7438,20 @@ int RGWRados::Object::Delete::delete_obj()
   ObjectWriteOperation op;
 
   if (!real_clock::is_zero(params.unmod_since)) {
-    real_time ctime = state->mtime;
+    struct timespec ctime = ceph::real_clock::to_timespec(state->mtime);
+    struct timespec unmod = ceph::real_clock::to_timespec(params.unmod_since);
+    if (!params.high_precision_time) {
+      ctime.tv_nsec = 0;
+      unmod.tv_nsec = 0;
+    }
 
     ldout(store->ctx(), 10) << "If-UnModified-Since: " << params.unmod_since << " Last-Modified: " << ctime << dendl;
-    if (ctime > params.unmod_since) {
+    if (ctime > unmod) {
       return -ERR_PRECONDITION_FAILED;
     }
 
     /* only delete object if mtime is less than or equal to params.unmod_since */
-    store->cls_obj_check_mtime(op, params.unmod_since, CLS_RGW_CHECK_TIME_MTIME_LE);
+    store->cls_obj_check_mtime(op, params.unmod_since, params.high_precision_time, CLS_RGW_CHECK_TIME_MTIME_LE);
   }
   uint64_t obj_size = state->size;
 
@@ -8307,8 +8341,10 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
   if (conds.mod_ptr || conds.unmod_ptr) {
     obj_time_weight src_weight;
     src_weight.init(astate);
+    src_weight.high_precision = conds.high_precision_time;
 
     obj_time_weight dest_weight;
+    dest_weight.high_precision = conds.high_precision_time;
 
     if (conds.mod_ptr) {
       dest_weight.init(*conds.mod_ptr, conds.mod_zone_id, conds.mod_pg_ver);
@@ -9327,7 +9363,7 @@ int RGWRados::bucket_index_link_olh(RGWObjState& olh_state, rgw_obj& obj_instanc
                                     const string& op_tag,
                                     struct rgw_bucket_dir_entry_meta *meta,
                                     uint64_t olh_epoch,
-                                    real_time unmod_since)
+                                    real_time unmod_since, bool high_precision_time)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -9345,7 +9381,7 @@ int RGWRados::bucket_index_link_olh(RGWObjState& olh_state, rgw_obj& obj_instanc
 
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), obj_instance.get_instance());
   ret = cls_rgw_bucket_link_olh(bs.index_ctx, bs.bucket_obj, key, olh_state.olh_tag, delete_marker, op_tag, meta, olh_epoch,
-                                unmod_since,
+                                unmod_since, high_precision_time,
                                 get_zone().log_data);
   if (ret < 0) {
     return ret;
@@ -9627,7 +9663,7 @@ int RGWRados::update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, RGWBucketInf
 }
 
 int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
-                      uint64_t olh_epoch, real_time unmod_since)
+                      uint64_t olh_epoch, real_time unmod_since, bool high_precision_time)
 {
   string op_tag;
 
@@ -9658,7 +9694,7 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw_obj
       }
       return ret;
     }
-    ret = bucket_index_link_olh(*state, target_obj, delete_marker, op_tag, meta, olh_epoch, unmod_since);
+    ret = bucket_index_link_olh(*state, target_obj, delete_marker, op_tag, meta, olh_epoch, unmod_since, high_precision_time);
     if (ret < 0) {
       ldout(cct, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
       if (ret == -ECANCELED) {

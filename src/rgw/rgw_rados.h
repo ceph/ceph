@@ -1786,7 +1786,7 @@ class RGWRados
 
   void remove_rgw_head_obj(librados::ObjectWriteOperation& op);
   void cls_obj_check_prefix_exist(librados::ObjectOperation& op, const string& prefix, bool fail_if_exist);
-  void cls_obj_check_mtime(librados::ObjectOperation& op, const real_time& mtime, RGWCheckMTimeType type);
+  void cls_obj_check_mtime(librados::ObjectOperation& op, const real_time& mtime, bool high_precision_time, RGWCheckMTimeType type);
 protected:
   CephContext *cct;
 
@@ -2177,13 +2177,14 @@ public:
       struct ConditionParams {
         const ceph::real_time *mod_ptr;
         const ceph::real_time *unmod_ptr;
+        bool high_precision_time;
         uint32_t mod_zone_id;
         uint64_t mod_pg_ver;
         const char *if_match;
         const char *if_nomatch;
         
         ConditionParams() : 
-                 mod_ptr(NULL), unmod_ptr(NULL), mod_zone_id(0), mod_pg_ver(0),
+                 mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false), mod_zone_id(0), mod_pg_ver(0),
                  if_match(NULL), if_nomatch(NULL) {}
       } conds;
 
@@ -2250,8 +2251,9 @@ public:
         ceph::real_time expiration_time;
         ceph::real_time unmod_since;
         ceph::real_time mtime; /* for setting delete marker mtime */
+        bool high_precision_time;
 
-        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL) {}
+        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL), high_precision_time(false) {}
       } params;
 
       struct DeleteResult {
@@ -2435,6 +2437,7 @@ public:
                        ceph::real_time *mtime,
                        const ceph::real_time *mod_ptr,
                        const ceph::real_time *unmod_ptr,
+                       bool high_precision_time,
                        const char *if_match,
                        const char *if_nomatch,
                        AttrsMod attrs_mod,
@@ -2486,6 +2489,7 @@ public:
                ceph::real_time *mtime,
                const ceph::real_time *mod_ptr,
                const ceph::real_time *unmod_ptr,
+               bool high_precision_time,
                const char *if_match,
                const char *if_nomatch,
                AttrsMod attrs_mod,
@@ -2638,7 +2642,7 @@ public:
   int bucket_index_link_olh(RGWObjState& olh_state, rgw_obj& obj_instance, bool delete_marker,
                             const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch,
-                            ceph::real_time unmod_since);
+                            ceph::real_time unmod_since, bool high_precision_time);
   int bucket_index_unlink_instance(rgw_obj& obj_instance, const string& op_tag, uint64_t olh_epoch);
   int bucket_index_read_olh_log(RGWObjState& state, rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
@@ -2649,7 +2653,7 @@ public:
                     uint64_t *plast_ver);
   int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, RGWBucketInfo& bucket_info, rgw_obj& obj);
   int set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
-              uint64_t olh_epoch, ceph::real_time unmod_since);
+              uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time);
   int unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw_obj& target_obj,
                           uint64_t olh_epoch);
 

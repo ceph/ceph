@@ -227,11 +227,12 @@ void cls_rgw_obj_check_attrs_prefix(librados::ObjectOperation& o, const string& 
   o.exec("rgw", "obj_check_attrs_prefix", in);
 }
 
-void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const real_time& mtime, RGWCheckMTimeType type)
+void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const real_time& mtime, bool high_precision_time, RGWCheckMTimeType type)
 {
   bufferlist in;
   struct rgw_cls_obj_check_mtime call;
   call.mtime = mtime;
+  call.high_precision_time = high_precision_time;
   call.type = type;
   ::encode(call, in);
   o.exec("rgw", "obj_check_mtime", in);
@@ -306,7 +307,7 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
 
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key, bufferlist& olh_tag,
                             bool delete_marker, const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
-                            uint64_t olh_epoch, ceph::real_time unmod_since, bool log_op)
+                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op)
 {
   bufferlist in, out;
   struct rgw_cls_link_olh_op call;
@@ -320,6 +321,7 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cl
   call.olh_epoch = olh_epoch;
   call.log_op = log_op;
   call.unmod_since = unmod_since;
+  call.high_precision_time = high_precision_time;
   ::encode(call, in);
   int r = io_ctx.exec(oid, "rgw", "bucket_link_olh", in, out);
   if (r < 0)
