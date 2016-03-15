@@ -65,9 +65,10 @@ void Packet::linearize(size_t at_frag, size_t desired_size) {
   if (at_frag == 0 && desired_size == len()) {
     // We can drop the old buffer safely
     auto x = std::move(_impl->_deleter);
-    _impl->_deleter = make_deleter([new_frag] { delete new_frag; });
+    _impl->_deleter = make_deleter([new_frag] { delete []new_frag; });
   } else {
-    auto del = std::bind([new_frag](deleter &d) { delete new_frag; }, std::move(_impl->_deleter));
+    auto del = std::bind(
+            [new_frag](deleter &d) { delete []new_frag; }, std::move(_impl->_deleter));
     _impl->_deleter = make_deleter(std::move(del));
   }
 }

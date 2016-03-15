@@ -372,12 +372,11 @@ inline Packet::Packet(Iterator begin, Iterator end, deleter del) {
 inline Packet::Packet(Packet&& x, fragment frag)
     : _impl(impl::allocate_if_needed(std::move(x._impl), 1)) {
   _impl->_len += frag.size;
-  std::unique_ptr<char[]> buf(new char[frag.size]);
-  std::copy(frag.base, frag.base + frag.size, buf.get());
-  _impl->frags[_impl->_nr_frags++] = {buf.get(), frag.size};
-  auto bufp = buf.release();
-  _impl->_deleter = make_deleter(std::move(_impl->_deleter), [bufp] {
-    delete[] bufp;
+  char* buf = new char[frag.size];
+  std::copy(frag.base, frag.base + frag.size, buf);
+  _impl->frags[_impl->_nr_frags++] = {buf, frag.size};
+  _impl->_deleter = make_deleter(std::move(_impl->_deleter), [buf] {
+    delete[] buf;
   });
 }
 
@@ -418,7 +417,8 @@ inline Packet::Packet(fragment frag, Packet&& x)
             _impl->frags + _impl->_nr_frags + 1);
     ++_impl->_nr_frags;
     _impl->frags[0] = {buf, frag.size};
-    _impl->_deleter = make_deleter(std::move(_impl->_deleter), [buf] { delete buf; });
+    _impl->_deleter = make_deleter(
+            std::move(_impl->_deleter), [buf] { delete []buf; });
   }
 }
 
@@ -530,7 +530,7 @@ inline char* Packet::prepend_uninitialized_header(size_t size) {
       ++_impl->_nr_frags;
       _impl->frags[0] = {buf, size};
       _impl->_deleter = make_deleter(std::move(_impl->_deleter),
-              [buf] { delete buf; });
+              [buf] { delete []buf; });
     }
   }
   return _impl->frags[0].base;
