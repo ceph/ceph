@@ -267,6 +267,13 @@ struct bluestore_wal_op_t {
   vector<bluestore_overlay_t> overlays;
   vector<uint64_t> removed_overlays;
 
+  //For aligned-write, if offset or end don't aligned with block_size
+  //we need firstly read data then update and write
+  //Then don't need encode
+  //One expect, for OP_COPY, we use head_data store source object content.
+  bufferlist head_data; //if offset % block_size != 0
+  bufferlist tail_data; //if (offset+len) % block_size != 0
+
   bluestore_wal_op_t() : src_rmw_head(0), src_rmw_tail(0), nid(0) {}
 
   void encode(bufferlist& bl) const;
