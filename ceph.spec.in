@@ -313,14 +313,12 @@ of cluster membership, configuration, and state.
 %package fuse
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
-Requires:	%{name}
 %description fuse
 FUSE based client for Ceph distributed network file system
 
 %package -n rbd-fuse
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
-Requires:	%{name}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 %description -n rbd-fuse
@@ -329,7 +327,6 @@ FUSE based client to map Ceph rbd images to files
 %package -n rbd-mirror
 Summary:	Ceph daemon for mirroring RBD images
 Group:		System Environment/Base
-Requires:	%{name}
 Requires:	ceph-common = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 %description -n rbd-mirror
@@ -339,7 +336,6 @@ changes asynchronously.
 %package -n rbd-nbd
 Summary:	Ceph RBD client base on NBD
 Group:		System Environment/Base
-Requires:	%{name}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 %description -n rbd-nbd
@@ -373,7 +369,7 @@ conjunction with any FastCGI capable web server.
 Summary:	OCF-compliant resource agents for Ceph daemons
 Group:		System Environment/Base
 License:	LGPL-2.0
-Requires:	%{name} = %{epoch}:%{version}
+Requires:	ceph-base = %{epoch}:%{version}
 Requires:	resource-agents
 %description resource-agents
 Resource agents for monitoring and managing Ceph daemons
@@ -596,7 +592,7 @@ This package contains the Java libraries for the Ceph File System.
 %package selinux
 Summary:	SELinux support for Ceph MON, OSD and MDS
 Group:		System Environment/Base
-Requires:	%{name}
+Requires:	ceph-base = %{epoch}:%{version}-%{release}
 Requires:	policycoreutils, libselinux-utils
 Requires(post): selinux-policy-base >= %{_selinux_policy_version}, policycoreutils, gawk
 Requires(postun): policycoreutils
@@ -633,7 +629,6 @@ Summary:	Compatibility package for Ceph headers
 Group:		Development/Libraries
 License:	LGPL-2.0
 Obsoletes:	ceph-devel
-Requires:	%{name} = %{epoch}:%{version}-%{release}
 Requires:	librados2-devel = %{epoch}:%{version}-%{release}
 Requires:	libradosstriper1-devel = %{epoch}:%{version}-%{release}
 Requires:	librbd1-devel = %{epoch}:%{version}-%{release}
