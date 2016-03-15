@@ -1442,21 +1442,34 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
   epoch_t first = get_first_committed();
   epoch_t last = osdmap.get_epoch();
   int max = g_conf->osd_map_message_max;
-  for (epoch_t e = MAX(first, m->get_full_first());
-       e <= MIN(last, m->get_full_last()) && max > 0;
-       ++e, --max) {
-    int r = get_version_full(e, reply->maps[e]);
-    assert(r >= 0);
+
+  int full_map_got = 0;
+  int inc_map_got = 0;
+  epoch_t full_first = MAX(first, m->get_full_first());
+  epoch_t inc_first = MAX(first, m->get_inc_first());
+
+  while (full_map_got <= m->get_full_last()
+          && inc_map_got <= m->get_inc_last()) {
+    epoch_t e;
+    for (e = MAX(full_first, full_map_got);
+         e <= MIN(last, m->get_full_last()) && max > 0;
+         ++e, --max) {
+      int r = get_version_full(e, reply->maps[e]);
+      assert(r >= 0);
+    }
+    full_map_got = e;
+
+    for (e = MAX(inc_first, inc_map_got);
+         e <= MIN(last, m->get_inc_last()) && max > 0;
+         ++e, --max) {
+      int r = get_version(e, reply->incremental_maps[e]);
+      assert(r >= 0);
+    }
+    inc_map_got = e;
+    reply->oldest_map = get_first_committed();
+    reply->newest_map = osdmap.get_epoch();
+    mon->send_reply(op, reply);
   }
-  for (epoch_t e = MAX(first, m->get_inc_first());
-       e <= MIN(last, m->get_inc_last()) && max > 0;
-       ++e, --max) {
-    int r = get_version(e, reply->incremental_maps[e]);
-    assert(r >= 0);
-  }
-  reply->oldest_map = get_first_committed();
-  reply->newest_map = osdmap.get_epoch();
-  mon->send_reply(op, reply);
   return true;
 }
 
