@@ -5041,19 +5041,6 @@ int BlueStore::_do_allocate(
   // start with any full blocks we will write
   uint64_t offset = orig_offset;
   uint64_t length = orig_length;
-  uint64_t head = 0;
-  uint64_t tail = 0;
-  if (offset % min_alloc_size) {
-    head = min_alloc_size - (offset % min_alloc_size);
-    offset += head;
-    if (length >= head)
-      length -= head;
-  }
-  if ((offset + length) % min_alloc_size) {
-    tail = (offset + length) % min_alloc_size;
-    if (length >= tail)
-      length -= tail;
-  }
 
   map<uint64_t, bluestore_extent_t>::iterator bp;
   bool shared_head = false;
@@ -5081,6 +5068,20 @@ int BlueStore::_do_allocate(
       }
     }
   } else {
+    uint64_t head = 0;
+    uint64_t tail = 0;
+    if (offset % min_alloc_size) {
+      head = min_alloc_size - (offset % min_alloc_size);
+      offset += head;
+      if (length >= head)
+	length -= head;
+    }
+    if ((offset + length) % min_alloc_size) {
+      tail = (offset + length) % min_alloc_size;
+      if (length >= tail)
+	length -= tail;
+    }
+
     dout(20) << "  initial full " << offset << "~" << length
 	     << ", head " << head << " tail " << tail << dendl;
 
