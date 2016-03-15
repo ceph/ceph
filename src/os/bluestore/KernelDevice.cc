@@ -125,7 +125,7 @@ int KernelDevice::open(string p)
   // require a read/modify/write if we write something smaller than
   // it.
   block_size = g_conf->bdev_block_size;
-  if (block_size != st.st_blksize) {
+  if (block_size != static_cast<uint64_t>(st.st_blksize)) {
     dout(1) << __func__ << " backing device/file reports st_blksize "
 	    << st.st_blksize << ", using bdev_block_size "
 	    << block_size << " anyway" << dendl;
