@@ -52,6 +52,13 @@ namespace librbd {
     std::string client_name;
   } mirror_peer_t;
 
+  typedef rbd_mirror_image_state_t mirror_image_state_t;
+
+  typedef struct {
+    std::string global_id;
+    mirror_image_state_t state;
+  } mirror_image_t;
+
   typedef rbd_image_info_t image_info_t;
 
   class CEPH_RBD_API ProgressContext
@@ -320,6 +327,10 @@ public:
    * Returns a pair of key/value for this image
    */
   int metadata_list(const std::string &start, uint64_t max, std::map<std::string, ceph::bufferlist> *pairs);
+
+  int mirror_image_enable();
+  int mirror_image_disable(bool force);
+  int mirror_image_get(mirror_image_t *mirror_image);
 
 private:
   friend class RBD;

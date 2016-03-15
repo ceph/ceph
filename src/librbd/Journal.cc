@@ -392,6 +392,68 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
 }
 
 template <typename I>
+int Journal<I>::is_tag_owner(ImageCtx *image_ctx, bool *is_tag_owner) {
+
+  cls::journal::Client client;
+  librbd::journal::ClientData client_data;
+  bufferlist::iterator bl;
+  journal::TagData tag_data;
+  uint64_t tag_class;
+  librbd::journal::ImageClientMeta *image_client_meta;
+  Mutex lock("lock");
+  C_SaferCond get_tags_ctx;
+  C_DecodeTags *tags_ctx;
+
+  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID,
+                      image_ctx->cct->_conf->rbd_journal_commit_age);
+
+  C_SaferCond init_ctx;
+  journaler.init(&init_ctx);
+  int r = init_ctx.wait();
+  if (r < 0) {
+    return r;
+  }
+
+  r = journaler.get_cached_client(Journal<ImageCtx>::IMAGE_CLIENT_ID, &client);
+  if (r < 0) {
+    goto clean_up;
+  }
+
+  bl = client.data.begin();
+  try {
+    ::decode(client_data, bl);
+  } catch (const buffer::error &err) {
+    r = -EINVAL;
+    goto clean_up;
+  }
+
+  image_client_meta =
+    boost::get<librbd::journal::ImageClientMeta>(&client_data.client_meta);
+  if (image_client_meta == nullptr) {
+    r = -EINVAL;
+    goto clean_up;
+  }
+
+  tag_class = image_client_meta->tag_class;
+  uint64_t tag_tid;
+  tags_ctx = new C_DecodeTags(
+    image_ctx->cct, &lock, &tag_tid, &tag_data, &get_tags_ctx);
+  journaler.get_tags(tag_class, &tags_ctx->tags, tags_ctx);
+
+  r = get_tags_ctx.wait();
+  if (r < 0) {
+    goto clean_up;
+  }
+
+  *is_tag_owner = (tag_data.mirror_uuid == LOCAL_MIRROR_UUID);
+
+clean_up:
+  journaler.shut_down();
+
+  return r;
+}
+
+template <typename I>
 bool Journal<I>::is_journal_ready() const {
   Mutex::Locker locker(m_lock);
   return (m_state == STATE_READY);
