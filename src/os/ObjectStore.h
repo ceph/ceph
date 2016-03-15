@@ -1467,8 +1467,8 @@ public:
     // backends need not implement these at all.
 
     /// Set an xattr on a collection
-    void collection_setattr(const coll_t& cid, const string& name, bufferlist& val)
-      __attribute__ ((deprecated)) {
+    void collection_setattr(const coll_t& cid, const string& name,
+			    bufferlist& val) {
       if (use_tbl) {
         __u32 op = OP_COLL_SETATTR;
         ::encode(op, tbl);
@@ -1486,8 +1486,7 @@ public:
     }
 
     /// Remove an xattr from a collection
-    void collection_rmattr(const coll_t& cid, const string& name)
-      __attribute__ ((deprecated)) {
+    void collection_rmattr(const coll_t& cid, const string& name) {
       if (use_tbl) {
         __u32 op = OP_COLL_RMATTR;
         ::encode(op, tbl);
@@ -1502,8 +1501,7 @@ public:
       data.ops++;
     }
     /// Set multiple xattrs on a collection
-    void collection_setattrs(const coll_t& cid, map<string,bufferptr>& aset)
-      __attribute__ ((deprecated)) {
+    void collection_setattrs(const coll_t& cid, map<string,bufferptr>& aset) {
       if (use_tbl) {
         __u32 op = OP_COLL_SETATTRS;
         ::encode(op, tbl);
@@ -1518,8 +1516,7 @@ public:
       data.ops++;
     }
     /// Set multiple xattrs on a collection
-    void collection_setattrs(const coll_t& cid, map<string,bufferlist>& aset)
-      __attribute__ ((deprecated)) {
+    void collection_setattrs(const coll_t& cid, map<string,bufferlist>& aset) {
       if (use_tbl) {
         __u32 op = OP_COLL_SETATTRS;
         ::encode(op, tbl);
@@ -2208,8 +2205,7 @@ public:
    * @returns 0 on success, negative error code on failure
    */
   virtual int collection_getattr(const coll_t& cid, const char *name,
-	                         void *value, size_t size)
-    __attribute__ ((deprecated)) {
+	                         void *value, size_t size) {
     return -EOPNOTSUPP;
   }
 
@@ -2221,8 +2217,8 @@ public:
    * @param bl buffer to receive value
    * @returns 0 on success, negative error code on failure
    */
-  virtual int collection_getattr(const coll_t& cid, const char *name, bufferlist& bl)
-    __attribute__ ((deprecated)) {
+  virtual int collection_getattr(const coll_t& cid, const char *name,
+				 bufferlist& bl) {
     return -EOPNOTSUPP;
   }
 
@@ -2233,8 +2229,8 @@ public:
    * @param aset map of keys and buffers that contain the values
    * @returns 0 on success, negative error code on failure
    */
-  virtual int collection_getattrs(const coll_t& cid, map<string,bufferptr> &aset)
-    __attribute__ ((deprecated)) {
+  virtual int collection_getattrs(const coll_t& cid,
+				  map<string,bufferptr> &aset) {
     return -EOPNOTSUPP;
   }
 
