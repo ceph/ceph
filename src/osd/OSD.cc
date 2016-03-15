@@ -1229,7 +1229,14 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
       return;
     }
 
-    if (to > since && (int64_t)(to - since) > cct->_conf->osd_map_share_max_epochs) {
+    if (to <= since) {
+      // the map range to send is lower bound-exclusive((since, to]),
+      // so if since and to are equivalent, build_incremental_map_msg()
+      // will return an empty msg, which we don't want to share.
+      return;
+    }
+
+    if ((int64_t)(to - since) > cct->_conf->osd_map_share_max_epochs) {
       dout(10) << "  " << (to - since) << " > max " << cct->_conf->osd_map_share_max_epochs
 	       << ", only sending most recent" << dendl;
       since = to - cct->_conf->osd_map_share_max_epochs;
