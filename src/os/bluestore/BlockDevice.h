@@ -44,6 +44,8 @@ struct IOContext {
   std::atomic_int num_reading = {0};
   std::atomic_int num_waiting = {0};
 
+  map<uint64_t, bufferlist*> aio_read_queue; //offset, bufferlist
+
   explicit IOContext(void *p)
     : priv(p)
     {}
@@ -95,7 +97,7 @@ public:
 		IOContext *ioc, bool buffered) = 0;
   virtual int aio_zero(uint64_t off, uint64_t len, IOContext *ioc) = 0;
   virtual int flush() = 0;
-
+  virtual int aio_read(uint64_t off, uint64_t len, bufferlist *pbl, IOContext *ioc, bool buffered) = 0;
   void queue_reap_ioc(IOContext *ioc);
   void reap_ioc();
 
