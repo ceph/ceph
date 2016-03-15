@@ -1442,15 +1442,15 @@ TEST(ghobject_t, parse) {
   const char *v[] = {
     "GHMIN",
     "GHMAX",
-    "13!0:00000000::::head!",
-    "13!0:00000000::::head!deadbeef",
-    "!-1:60c2fa6d:::inc_osdmap.1:333!deadbeef",
-    "!-1:60c2fa6d:::inc%02osdmap.1:333!deadbeef",
-    "!-1:60c2fa6d:::inc_osdmap.1:333!",
-    "1!MIN!deadbeefff",
-    "1!MAX!",
-    "!MAX!123",
-    "!-40:00000000:nspace::obj:head!",
+    "13#0:00000000::::head#",
+    "13#0:00000000::::head#deadbeef",
+    "#-1:60c2fa6d:::inc_osdmap.1:333#deadbeef",
+    "#-1:60c2fa6d:::inc%02osdmap.1:333#deadbeef",
+    "#-1:60c2fa6d:::inc_osdmap.1:333#",
+    "1#MIN#deadbeefff",
+    "1#MAX#",
+    "#MAX#123",
+    "#-40:00000000:nspace::obj:head#",
     NULL
   };
 

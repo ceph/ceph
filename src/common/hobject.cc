@@ -541,7 +541,7 @@ ostream& operator<<(ostream& out, const ghobject_t& o)
     return out << "GHMAX";
   if (o.shard_id != shard_id_t::NO_SHARD)
     out << std::hex << o.shard_id << std::dec;
-  out << '!' << o.hobj << '!';
+  out << '#' << o.hobj << '#';
   if (o.generation != ghobject_t::NO_GEN)
     out << std::hex << (unsigned long long)(o.generation) << std::dec;
   return out;
@@ -558,12 +558,12 @@ bool ghobject_t::parse(const string& s)
     return true;
   }
 
-  // look for shard! prefix
+  // look for shard# prefix
   const char *start = s.c_str();
   const char *p;
   int sh = shard_id_t::NO_SHARD;
   for (p = start; *p && isxdigit(*p); ++p) ;
-  if (!*p && *p != '!')
+  if (!*p && *p != '#')
     return false;
   if (p > start) {
     int r = sscanf(s.c_str(), "%x", &sh);
@@ -574,13 +574,13 @@ bool ghobject_t::parse(const string& s)
     ++start;
   }
 
-  // look for !generation suffix
+  // look for #generation suffix
   long long unsigned g = NO_GEN;
   const char *last = start + strlen(start) - 1;
   p = last;
   while (isxdigit(*p))
     p--;
-  if (*p != '!')
+  if (*p != '#')
     return false;
   if (p < last) {
     sscanf(p + 1, "%llx", &g);
