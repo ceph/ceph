@@ -86,6 +86,7 @@ struct MockJournaler {
   MOCK_METHOD3(get_metadata, void(uint8_t *order, uint8_t *splay_width,
                                   int64_t *pool_id));
   MOCK_METHOD1(init, void(Context*));
+  MOCK_METHOD0(shut_down, void());
   MOCK_METHOD1(flush_commit_position, void(Context*));
 
   MOCK_METHOD2(get_cached_client, int(const std::string&, cls::journal::Client*));
@@ -143,6 +144,9 @@ struct MockJournalerProxy {
 
   void init(Context *on_finish) {
     MockJournaler::get_instance().init(on_finish);
+  }
+  void shut_down() {
+    MockJournaler::get_instance().shut_down();
   }
 
   int get_cached_client(const std::string& client_id,
