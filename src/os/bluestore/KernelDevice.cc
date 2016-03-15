@@ -422,6 +422,8 @@ int KernelDevice::aio_write(
     bl.prepare_iov(&iov);
     int r = ::pwritev(buffered ? fd_buffered : fd_direct,
 		      &iov[0], iov.size(), off);
+    _aio_log_finish(ioc, off, bl.length());
+
     if (r < 0) {
       r = -errno;
       derr << __func__ << " pwritev error: " << cpp_strerror(r) << dendl;
@@ -438,7 +440,6 @@ int KernelDevice::aio_write(
     }
   }
 
-  _aio_log_finish(ioc, off, bl.length());
   io_since_flush.set(1);
   return 0;
 }
