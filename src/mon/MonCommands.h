@@ -329,10 +329,6 @@ COMMAND("mds set " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
-COMMAND("mds setmap " \
-	"name=epoch,type=CephInt,range=0 " \
-	"name=confirm,type=CephString,req=false",
-	"set mds map; must supply correct epoch number", "mds", "rw", "cli,rest")
 // arbitrary limit 0-20 below; worth standing on head to make it
 // relate to actual state definitions?
 // #include "include/ceph_fs.h"
