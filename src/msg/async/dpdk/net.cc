@@ -72,12 +72,8 @@ interface::interface(CephContext *c, std::shared_ptr<DPDKDevice> dev, EventCente
         ldout(cct, 10) << "=== tx === proto " << std::hex << uint16_t(l3pv.proto_num)
                        << " " << _hw_address << " -> " << l3pv.to
                        << " length " << std::dec << l3pv.p.len() << dendl;
-        if (eh->dst_mac == eh->src_mac) {
-          _dev->l2receive(qid, std::move(l3pv.p));
-        } else {
-          p = std::move(l3pv.p);
-          return p;
-        }
+        p = std::move(l3pv.p);
+        return p;
       }
     }
     return p;

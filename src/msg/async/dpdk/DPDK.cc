@@ -631,26 +631,34 @@ DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, 
 }
 
 inline bool DPDKQueuePair::poll_tx() {
+  bool nonloopback = !cct->_conf->ms_dpdk_debug_allow_loopback;
   if (_tx_packetq.size() < 16) {
     // refill send queue from upper layers
-    uint32_t work;
+    uint32_t total_work = 0, work;
     do {
       work = 0;
       for (auto&& pr : _pkt_providers) {
         auto p = pr();
         if (p) {
           work++;
-          ldout(cct, 20) << __func__ << " p len " << p->len() << dendl;
-          _tx_packetq.push_back(std::move(*p));
+          if (likely(nonloopback)) {
+            _tx_packetq.push_back(std::move(*p));
+          } else {
+            auto th = p->get_header<eth_hdr>(0);
+            if (th->dst_mac == th->src_mac) {
+              _dev->l2receive(_qid, std::move(*p));
+            } else {
+              _tx_packetq.push_back(std::move(*p));
+            }
+          }
           if (_tx_packetq.size() == 128) {
             break;
           }
         }
       }
-    } while (work && _tx_packetq.size() < 128);
+      total_work += work;
+    } while (work && total_work < 256 && _tx_packetq.size() < 128);
   }
-  for (auto&& p : _tx_packetq)
-    ldout(cct, 20) << __func__ << " p len " << p.len() << dendl;
   if (!_tx_packetq.empty()) {
     _stats.tx.good.update_pkts_bunch(send(_tx_packetq));
     return true;
@@ -672,9 +680,12 @@ inline Tub<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
   }
 
   Tub<Packet> p;
+  auto del = std::bind(
+          [](std::vector<char*> &bufs) {
+            for (auto&& b : bufs) { rte_free(b); }
+          }, std::move(_bufs));
   p.construct(
-      _frags.begin(), _frags.end(),
-      make_deleter(deleter(), [this] { for (auto&& b : _bufs) { rte_free(b); } }));
+      _frags.begin(), _frags.end(), make_deleter(std::move(del)));
   return p;
 }
 
@@ -787,9 +798,9 @@ void DPDKQueuePair::process_packets(
       // the checksum again, because we did this here.
     }
 
-    (*p).set_offload_info(oi);
+    p->set_offload_info(oi);
     if (m->ol_flags & PKT_RX_RSS_HASH) {
-      (*p).set_rss_hash(m->hash.rss);
+      p->set_rss_hash(m->hash.rss);
     }
 
     _dev->l2receive(_qid, std::move(*p));
@@ -966,7 +977,7 @@ DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(Packet&& p, DPDKQue
     ++qp._stats.tx.linearized;
   }
 
-  build_mbuf_cluster:
+ build_mbuf_cluster:
   rte_mbuf *head = nullptr, *last_seg = nullptr;
   unsigned nsegs = 0;
 
