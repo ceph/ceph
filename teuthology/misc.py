@@ -272,9 +272,10 @@ def get_mons(roles, ips):
     mons = {}
     mon_ports = {}
     mon_id = 0
+    is_mon = is_type('mon')
     for idx, roles in enumerate(roles):
         for role in roles:
-            if not role.startswith('mon.'):
+            if not is_mon(role):
                 continue
             if ips[idx] not in mon_ports:
                 mon_ports[ips[idx]] = 6789

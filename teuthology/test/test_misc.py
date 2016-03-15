@@ -128,6 +128,27 @@ def test_is_type():
     assert not is_client('hadoop.master.0')
 
 
+def test_get_mons():
+    ips = ['1.1.1.1', '2.2.2.2', '3.3.3.3']
+    addrs = ['1.1.1.1:6789', '1.1.1.1:6790', '1.1.1.1:6791']
+
+    mons = misc.get_mons([['mon.a']], ips)
+    assert mons == {'mon.a': addrs[0]}
+
+    mons = misc.get_mons([['cluster-a.mon.foo', 'client.b'], ['osd.0']], ips)
+    assert mons == {'cluster-a.mon.foo': addrs[0]}
+
+    mons = misc.get_mons([['mon.a', 'mon.b', 'ceph.mon.c']], ips)
+    assert mons == {'mon.a': addrs[0],
+                    'mon.b': addrs[1],
+                    'ceph.mon.c': addrs[2]}
+
+    mons = misc.get_mons([['mon.a'], ['mon.b'], ['ceph.mon.c']], ips)
+    assert mons == {'mon.a': addrs[0],
+                    'mon.b': ips[1] + ':6789',
+                    'ceph.mon.c': ips[2] + ':6789'}
+
+
 class TestHostnames(object):
     def setup(self):
         config._conf = dict()
