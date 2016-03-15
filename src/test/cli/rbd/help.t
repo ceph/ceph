@@ -42,8 +42,11 @@
       lock remove (lock rm)       Release a lock on an image.
       map                         Map image to a block device using the kernel.
       merge-diff                  Merge two diff exports together.
+      mirror image demote         Demote an image to secondary for RBD mirroring.
       mirror image disable        Disable RBD mirroring for an image.
       mirror image enable         Enable RBD mirroring for an image.
+      mirror image promote        Promote an image to primary for RBD mirroring.
+      mirror image resync         Force resync to primary image for RBD mirroring.
       mirror pool disable         Disable RBD mirroring by default within a pool.
       mirror pool enable          Enable RBD mirroring by default within a pool.
       mirror pool info            Show information about the pool mirroring
@@ -748,6 +751,20 @@
     --path arg           path to merged diff (or '-' for stdout)
     --no-progress        disable progress output
   
+  rbd help mirror image demote
+  usage: rbd mirror image demote [--pool <pool>] [--image <image>] 
+                                 <image-spec> 
+  
+  Demote an image to secondary for RBD mirroring.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+  
   rbd help mirror image disable
   usage: rbd mirror image disable [--force] [--pool <pool>] [--image <image>] 
                                   <image-spec> 
@@ -768,6 +785,35 @@
                                  <image-spec> 
   
   Enable RBD mirroring for an image.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+  
+  rbd help mirror image promote
+  usage: rbd mirror image promote [--force] [--pool <pool>] [--image <image>] 
+                                  <image-spec> 
+  
+  Promote an image to primary for RBD mirroring.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    --force              promote even if not cleanly demoted by remote cluster
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+  
+  rbd help mirror image resync
+  usage: rbd mirror image resync [--pool <pool>] [--image <image>] 
+                                 <image-spec> 
+  
+  Force resync to primary image for RBD mirroring.
   
   Positional arguments
     <image-spec>         image specification
