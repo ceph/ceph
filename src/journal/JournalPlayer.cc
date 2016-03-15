@@ -352,7 +352,9 @@ int JournalPlayer::process_playback(uint64_t object_number) {
   ObjectPlayerPtr object_player = get_object_player();
   if (verify_playback_ready()) {
     notify_entries_available();
-  } else if (!m_watch_enabled && is_object_set_ready()) {
+  } else if (m_watch_enabled) {
+    schedule_watch();
+  } else {
     uint8_t splay_width = m_journal_metadata->get_splay_width();
     uint64_t active_set = m_journal_metadata->get_active_set();
     uint64_t object_set = object_player->get_object_number() / splay_width;
