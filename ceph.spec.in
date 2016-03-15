@@ -974,6 +974,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/ceph-rbdnamer
 %{_bindir}/ceph-syn
 %{_bindir}/ceph-crush-location
+%{_bindir}/cephfs-data-scan
+%{_bindir}/cephfs-journal-tool
+%{_bindir}/cephfs-table-tool
 %{_bindir}/rados
 %{_bindir}/rbd
 %{_bindir}/rbd-replay
@@ -1050,9 +1053,6 @@ fi
 #################################################################################
 %files mds
 %{_bindir}/ceph-mds
-%{_bindir}/cephfs-journal-tool
-%{_bindir}/cephfs-table-tool
-%{_bindir}/cephfs-data-scan
 %{_mandir}/man8/ceph-mds.8*
 %if 0%{?_with_systemd}
 %{_unitdir}/ceph-mds@.service
