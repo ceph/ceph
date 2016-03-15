@@ -236,6 +236,7 @@ OSDService::OSDService(OSD *osd) :
   agent_timer_lock("OSD::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
   promote_probability_millis(1000),
+  last_recalibrate(ceph_clock_now(NULL)),
   promote_max_objects(0),
   promote_max_bytes(0),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
