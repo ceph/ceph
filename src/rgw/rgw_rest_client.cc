@@ -10,6 +10,7 @@
 #include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
 #include "common/strtol.h"
+#include "include/str_list.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -532,25 +533,54 @@ void set_str_from_headers(map<string, string>& out_headers, const string& header
   }
 }
 
-int RGWRESTStreamWriteRequest::complete(string& etag, time_t *mtime)
+static int parse_rgwx_mtime(CephContext *cct, const string& s, ceph::real_time *rt)
+{
+  string err;
+  vector<string> vec;
+
+  get_str_vec(s, ".", vec);
+
+  if (vec.empty()) {
+    return -EINVAL;
+  }
+
+  long secs = strict_strtol(vec[0].c_str(), 10, &err);
+  long nsecs = 0;
+  if (!err.empty()) {
+    ldout(cct, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
+    return -EINVAL;
+  }
+
+  if (vec.size() > 1) {
+    nsecs = strict_strtol(vec[1].c_str(), 10, &err);
+    if (!err.empty()) {
+      ldout(cct, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
+      return -EINVAL;
+    }
+  }
+
+  *rt = utime_t(secs, nsecs).to_real_time();
+
+  return 0;
+}
+
+int RGWRESTStreamWriteRequest::complete(string& etag, real_time *mtime)
 {
   int ret = http_manager.complete_requests();
   if (ret < 0)
     return ret;
 
   set_str_from_headers(out_headers, "ETAG", etag);
+
   if (mtime) {
     string mtime_str;
     set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
-    string err;
-    long t = strict_strtol(mtime_str.c_str(), 10, &err);
-    if (!err.empty()) {
-      ldout(cct, 0) << "ERROR: failed converting mtime (" << mtime_str << ") to int " << dendl;
-      return -EINVAL;
-    }
-    *mtime = (time_t)t;
-  }
 
+    ret = parse_rgwx_mtime(cct, mtime_str, mtime);
+    if (ret < 0) {
+      return ret;
+    }
+  }
   return status;
 }
 
@@ -639,20 +669,15 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
   return 0;
 }
 
-int RGWRESTStreamRWRequest::complete(string& etag, time_t *mtime, map<string, string>& attrs)
+int RGWRESTStreamRWRequest::complete(string& etag, real_time *mtime, map<string, string>& attrs)
 {
   set_str_from_headers(out_headers, "ETAG", etag);
   if (mtime) {
     string mtime_str;
     set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
-    if (!mtime_str.empty()) {
-      string err;
-      long t = strict_strtol(mtime_str.c_str(), 10, &err);
-      if (!err.empty()) {
-        ldout(cct, 0) << "ERROR: failed converting mtime (" << mtime_str << ") to int " << dendl;
-        return -EINVAL;
-      }
-      *mtime = (time_t)t;
+    int ret = parse_rgwx_mtime(cct, mtime_str, mtime);
+    if (ret < 0) {
+      return ret;
     }
   }
 

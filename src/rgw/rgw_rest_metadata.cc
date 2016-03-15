@@ -250,8 +250,7 @@ void RGWOp_Metadata_Lock::execute() {
     http_ret = -EINVAL;
     return;
   }
-  utime_t time(dur, 0);
-  http_ret = store->meta_mgr->lock_exclusive(metadata_key, time, lock_id);
+  http_ret = store->meta_mgr->lock_exclusive(metadata_key, make_timespan(dur), lock_id);
   if (http_ret == -EBUSY)
     http_ret = -ERR_LOCKED;
 }

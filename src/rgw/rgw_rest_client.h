@@ -79,7 +79,7 @@ public:
                 lock("RGWRESTStreamWriteRequest"), cb(NULL), http_manager(_cct) {}
   ~RGWRESTStreamWriteRequest();
   int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs);
-  int complete(string& etag, time_t *mtime);
+  int complete(string& etag, real_time *mtime);
 
   RGWGetDataCB *get_out_cb() { return cb; }
 };
@@ -109,7 +109,7 @@ public:
   virtual ~RGWRESTStreamRWRequest() {}
   int get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj);
   int get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr = NULL);
-  int complete(string& etag, time_t *mtime, map<string, string>& attrs);
+  int complete(string& etag, real_time *mtime, map<string, string>& attrs);
 
   void set_outbl(bufferlist& _outbl) {
     outbl.swap(_outbl);

@@ -3,6 +3,8 @@
 
 #include <string>
 
+#include "common/ceph_time.h"
+
 struct rgw_meta_sync_info {
   enum SyncState {
     StateInit = 0,
@@ -52,7 +54,7 @@ struct rgw_meta_sync_marker {
   string next_step_marker;
   uint64_t total_entries;
   uint64_t pos;
-  utime_t timestamp;
+  real_time timestamp;
 
   rgw_meta_sync_marker() : state(FullSync), total_entries(0), pos(0) {}
 

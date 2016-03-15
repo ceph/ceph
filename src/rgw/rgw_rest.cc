@@ -468,12 +468,14 @@ void dump_redirect(struct req_state *s, const string& redirect)
   STREAM_IO(s)->print("Location: %s\r\n", redirect.c_str());
 }
 
-void dump_time_header(struct req_state *s, const char *name, time_t t)
+void dump_time_header(struct req_state *s, const char *name, real_time t)
 {
+  utime_t ut(t);
+  time_t secs = (time_t)ut.sec();
 
   char timestr[TIME_BUF_SIZE];
   struct tm result;
-  struct tm *tmp = gmtime_r(&t, &result);
+  struct tm *tmp = gmtime_r(&secs, &result);
   if (tmp == NULL)
     return;
 
@@ -486,34 +488,42 @@ void dump_time_header(struct req_state *s, const char *name, time_t t)
   }
 }
 
-void dump_last_modified(struct req_state *s, time_t t)
+void dump_last_modified(struct req_state *s, real_time t)
 {
   dump_time_header(s, "Last-Modified", t);
 }
 
-void dump_epoch_header(struct req_state *s, const char *name, time_t t)
+void dump_epoch_header(struct req_state *s, const char *name, real_time t)
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%lld", (long long)t);
+  utime_t ut(t);
+  char sec_buf[32], nsec_buf[32];
+  snprintf(sec_buf, sizeof(sec_buf), "%lld", (long long)ut.sec());
+  snprintf(nsec_buf, sizeof(nsec_buf), "%09lld", (long long)ut.nsec());
 
-  int r = STREAM_IO(s)->print("%s: %s\r\n", name, buf);
+  int r = STREAM_IO(s)->print("%s: %s.%s\r\n", name, sec_buf, nsec_buf);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
 }
 
-void dump_time(struct req_state *s, const char *name, time_t *t)
+void dump_time(struct req_state *s, const char *name, real_time *t)
 {
+  utime_t ut(*t);
+
   char buf[TIME_BUF_SIZE];
   struct tm result;
-  struct tm *tmp = gmtime_r(t, &result);
+  time_t epoch = ut.sec();
+  struct tm *tmp = gmtime_r(&epoch, &result);
   if (tmp == NULL)
     return;
 
-  if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", tmp) == 0)
+  if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T", tmp) == 0)
     return;
 
-  s->formatter->dump_string(name, buf);
+  char buf2[TIME_BUF_SIZE];
+  snprintf(buf2, sizeof(buf2), "%s.%03dZ", buf, (int)(ut.usec() / 1000));
+
+  s->formatter->dump_string(name, buf2);
 }
 
 void dump_owner(struct req_state *s, rgw_user& id, string& name,

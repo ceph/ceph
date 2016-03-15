@@ -105,7 +105,7 @@ namespace rgw {
 	  if (get<0>(fhr)) {
 	    RGWFileHandle* rgw_fh = get<0>(fhr);
 	    rgw_fh->set_size(req.get_size());
-	    rgw_fh->set_mtime({req.get_mtime(), 0});
+	    rgw_fh->set_mtime(real_clock::to_timespec(req.get_mtime()));
 	  }
 	  goto done;
 	}
@@ -614,11 +614,11 @@ namespace rgw {
       attrs[RGW_ATTR_SLO_UINDICATOR] = slo_userindicator_bl;
     }
 
-    op_ret = processor->complete(etag, &mtime, 0, attrs, delete_at, if_match,
+    op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at, if_match,
 				 if_nomatch);
     if (! op_ret) {
       /* update stats */
-      rgw_fh->set_mtime({mtime, 0});
+      rgw_fh->set_mtime(real_clock::to_timespec(mtime));
       rgw_fh->set_size(bytes_written);
     }
 
@@ -758,8 +758,7 @@ int rgw_create(struct rgw_fs *rgw_fs,
 	if (rgw_fh) {
 	  if (get<1>(fhr) & RGWFileHandle::FLAG_CREATE) {
 	    /* fill in stat data */
-	    time_t now = time(0);
-	    rgw_fh->set_times(now);
+	    rgw_fh->set_times(real_clock::now());
 	    rgw_fh->open_for_create(); // XXX needed?
 	  }
 	  (void) rgw_fh->stat(st);
@@ -832,8 +831,7 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
     rgw_fh = get<0>(fhr);
     if (rgw_fh) {
       /* XXX unify timestamps */
-      time_t now = time(0);
-      rgw_fh->set_times(now);
+      rgw_fh->set_times(real_clock::now());
       rgw_fh->stat(st);
       struct rgw_file_handle *rfh = rgw_fh->get_fh();
       *fh = rfh;

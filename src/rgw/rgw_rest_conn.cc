@@ -87,7 +87,7 @@ int RGWRESTConn::put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_si
   return (*req)->put_obj_init(key, obj, obj_size, attrs);
 }
 
-int RGWRESTConn::complete_request(RGWRESTStreamWriteRequest *req, string& etag, time_t *mtime)
+int RGWRESTConn::complete_request(RGWRESTStreamWriteRequest *req, string& etag, real_time *mtime)
 {
   int ret = req->complete(etag, mtime);
   delete req;
@@ -95,14 +95,14 @@ int RGWRESTConn::complete_request(RGWRESTStreamWriteRequest *req, string& etag, 
   return ret;
 }
 
-static void set_date_header(const time_t *t, map<string, string>& headers, const string& header_name)
+static void set_date_header(const real_time *t, map<string, string>& headers, const string& header_name)
 {
   if (!t) {
     return;
   }
   stringstream s;
-  utime_t tm = utime_t(*t, 0);
-  tm.asctime(s);
+  utime_t tm = utime_t(*t);
+  tm.gmtime_nsec(s);
   headers[header_name] = s.str();
 }
 
@@ -116,7 +116,7 @@ static void set_header(T val, map<string, string>& headers, const string& header
 
 
 int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
-                         const time_t *mod_ptr, const time_t *unmod_ptr,
+                         const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
                          bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
 {
@@ -166,7 +166,7 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
   return (*req)->get_obj(key, extra_headers, obj);
 }
 
-int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime, map<string, string>& attrs)
+int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, real_time *mtime, map<string, string>& attrs)
 {
   int ret = req->complete(etag, mtime, attrs);
   delete req;
