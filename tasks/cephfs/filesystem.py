@@ -7,6 +7,7 @@ import os
 import time
 import datetime
 import re
+import errno
 
 from teuthology.exceptions import CommandFailedError
 from teuthology import misc
@@ -364,15 +365,28 @@ class Filesystem(MDSCluster):
         Return true if all daemons are in one of active, standby, standby-replay, and
         at least max_mds daemons are in 'active'.
 
+        Unlike most of Filesystem, this function is tolerant of new-style `fs`
+        commands being missing, because we are part of the ceph installation
+        process during upgrade suites, so must fall back to old style commands
+        when we get an EINVAL on a new style command.
+
         :return:
         """
 
         active_count = 0
-        status = self.get_mds_map()
+        try:
+            mds_map = self.get_mds_map()
+        except CommandFailedError as cfe:
+            # Old version, fall back to non-multi-fs commands
+            if cfe.exitstatus == errno.EINVAL:
+                mds_map = json.loads(
+                        self.mon_manager.raw_cluster_cmd('mds', 'dump', '--format=json'))
+            else:
+                raise
 
-        log.info("are_daemons_healthy: mds map: {0}".format(status))
+        log.info("are_daemons_healthy: mds map: {0}".format(mds_map))
 
-        for mds_id, mds_status in status['info'].items():
+        for mds_id, mds_status in mds_map['info'].items():
             if mds_status['state'] not in ["up:active", "up:standby", "up:standby-replay"]:
                 log.warning("Unhealthy mds state {0}:{1}".format(mds_id, mds_status['state']))
                 return False
@@ -380,18 +394,22 @@ class Filesystem(MDSCluster):
                 active_count += 1
 
         log.info("are_daemons_healthy: {0}/{1}".format(
-            active_count, status['max_mds']
+            active_count, mds_map['max_mds']
         ))
 
-        if active_count >= status['max_mds']:
+        if active_count >= mds_map['max_mds']:
             # The MDSMap says these guys are active, but let's check they really are
-            for mds_id, mds_status in status['info'].items():
+            for mds_id, mds_status in mds_map['info'].items():
                 if mds_status['state'] == 'up:active':
                     try:
                         daemon_status = self.mds_asok(["status"], mds_id=mds_status['name'])
-                    except CommandFailedError:
-                        # MDS not even running
-                        return False
+                    except CommandFailedError as cfe:
+                        if cfe.exitstatus == errno.EINVAL:
+                            # Old version, can't do this check
+                            continue
+                        else:
+                            # MDS not even running
+                            return False
 
                     if daemon_status['state'] != 'up:active':
                         # MDS hasn't taken the latest map yet
