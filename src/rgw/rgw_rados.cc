@@ -2842,7 +2842,7 @@ int RGWMetaNotifier::process()
     ldout(cct, 20) << __func__ << "(): notifying mdlog change, shard_id=" << *iter << dendl;
   }
 
-  notify_mgr.notify_all(store->zonegroup_conn_map, shards);
+  notify_mgr.notify_all(store->zone_conn_map, shards);
 
   return 0;
 }
