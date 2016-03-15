@@ -22,7 +22,6 @@ overrides:
     - failed to encode
 roles:
 - - mon.a
-  - mds.a
   - osd.0
   - osd.1
   - mon.b
