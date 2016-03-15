@@ -1203,6 +1203,7 @@ void RGWGetObj::execute()
 
   read_op.conds.mod_ptr = mod_ptr;
   read_op.conds.unmod_ptr = unmod_ptr;
+  read_op.conds.high_precision_time = s->system_request; /* system request need to use high precision time */
   read_op.conds.mod_zone_id = mod_zone_id;
   read_op.conds.mod_pg_ver = mod_pg_ver;
   read_op.conds.if_match = if_match;
@@ -2996,6 +2997,7 @@ void RGWDeleteObj::execute()
     del_op.params.versioning_status = s->bucket_info.versioning_status();
     del_op.params.obj_owner = s->owner;
     del_op.params.unmod_since = unmod_since;
+    del_op.params.high_precision_time = s->system_request; /* system request uses high precision time */
 
     op_ret = del_op.delete_obj();
     if (op_ret >= 0) {
@@ -3227,6 +3229,8 @@ void RGWCopyObj::execute()
 
   encode_delete_at_attr(delete_at, attrs);
 
+  bool high_precision_time = (s->system_request);
+
   op_ret = store->copy_obj(obj_ctx,
 			   s->user->user_id,
 			   client_id,
@@ -3241,6 +3245,7 @@ void RGWCopyObj::execute()
 			   &mtime,
 			   mod_ptr,
 			   unmod_ptr,
+                           high_precision_time,
 			   if_match,
 			   if_nomatch,
 			   attrs_mod,

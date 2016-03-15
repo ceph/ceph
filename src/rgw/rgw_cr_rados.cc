@@ -470,6 +470,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        NULL, /* real_time* mtime, */
                        NULL, /* const real_time* mod_ptr, */
                        NULL, /* const real_time* unmod_ptr, */
+                       false, /* high precision time */
                        NULL, /* const char *if_match, */
                        NULL, /* const char *if_nomatch, */
                        RGWRados::ATTRSMOD_NONE,
@@ -547,6 +548,7 @@ int RGWAsyncRemoveObj::_send_request()
   del_op.params.obj_owner.set_id(owner);
   del_op.params.obj_owner.set_name(owner_display_name);
   del_op.params.mtime = timestamp;
+  del_op.params.high_precision_time = true;
 
   ret = del_op.delete_obj();
   if (ret < 0) {

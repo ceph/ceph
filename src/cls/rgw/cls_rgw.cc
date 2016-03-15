@@ -1391,7 +1391,13 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   if (existed && !real_clock::is_zero(op.unmod_since)) {
-    if (obj.mtime() >= op.unmod_since) {
+    struct timespec mtime = ceph::real_clock::to_timespec(obj.mtime);
+    struct timespec unmod = ceph::real_clock::to_timespec(op.unmod_since);
+    if (!op.high_precision_time) {
+      mtime.tv_nsec = 0;
+      unmod.tv_nsec = 0;
+    }
+    if (mtime >= unmod) {
       return 0; /* no need to set error, we just return 0 and avoid writing to the bi log */
     }
   }
@@ -2104,6 +2110,11 @@ static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, buffer
   ceph_timespec obj_ts = ceph::real_clock::to_ceph_timespec(obj_ut);
   ceph_timespec op_ts = ceph::real_clock::to_ceph_timespec(op.mtime);
 
+  if (!op.high_precision_time) {
+    obj_ts.tv_nsec = 0;
+    op_ts.tv_nsec = 0;
+  }
+
   CLS_LOG(10, "%s: obj_ut=%lld.%06lld op.mtime=%lld.%06lld", __func__,
           (long long)obj_ts.tv_sec, (long long)obj_ts.tv_nsec,
           (long long)op_ts.tv_sec, (long long)op_ts.tv_nsec);
@@ -2112,19 +2123,19 @@ static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, buffer
 
   switch (op.type) {
   case CLS_RGW_CHECK_TIME_MTIME_EQ:
-    check = (obj_ut == op.mtime);
+    check = (obj_ts == op_ts);
     break;
   case CLS_RGW_CHECK_TIME_MTIME_LT:
-    check = (obj_ut < op.mtime);
+    check = (obj_ts < op_ts);
     break;
   case CLS_RGW_CHECK_TIME_MTIME_LE:
-    check = (obj_ut <= op.mtime);
+    check = (obj_ts <= op_ts);
     break;
   case CLS_RGW_CHECK_TIME_MTIME_GT:
-    check = (obj_ut > op.mtime);
+    check = (obj_ts > op_ts);
     break;
   case CLS_RGW_CHECK_TIME_MTIME_GE:
-    check = (obj_ut >= op.mtime);
+    check = (obj_ts >= op_ts);
     break;
   default:
     return -EINVAL;

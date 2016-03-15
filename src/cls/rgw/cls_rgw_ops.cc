@@ -178,6 +178,7 @@ void rgw_cls_link_olh_op::dump(Formatter *f) const
   ::encode_json("bilog_flags", (uint32_t)bilog_flags, f);
   utime_t ut(unmod_since);
   ::encode_json("unmod_since", ut, f);
+  ::encode_json("high_precision_time", high_precision_time, f);
 }
 
 void rgw_cls_unlink_instance_op::generate_test_instances(list<rgw_cls_unlink_instance_op*>& o)
