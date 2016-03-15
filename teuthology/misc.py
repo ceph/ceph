@@ -377,11 +377,11 @@ def roles_of_type(roles_for_host, type_):
     :param roles_for host: list of roles possible
     :param type_: type of role
     """
-    prefix = '{type}.'.format(type=type_)
+    is_of_type = is_type(type_)
     for name in roles_for_host:
-        if not name.startswith(prefix):
+        if not is_of_type(name):
             continue
-        id_ = name[len(prefix):]
+        _, _, id_ = split_role(name)
         yield id_
 
 

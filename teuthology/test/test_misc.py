@@ -89,6 +89,19 @@ def test_get_clients_simple():
         next(g)
 
 
+def test_roles_of_type():
+    expected = [
+        (['client.0', 'osd.0', 'ceph.osd.1'], 'osd', ['0', '1']),
+        (['client.0', 'osd.0', 'ceph.osd.1'], 'client', ['0']),
+        (['foo.client.1', 'bar.client.2.3', 'baz.osd.1'], 'mon', []),
+        (['foo.client.1', 'bar.client.2.3', 'baz.osd.1'], 'client',
+         ['1', '2.3']),
+        ]
+    for roles_for_host, type_, expected_ids in expected:
+        ids = list(misc.roles_of_type(roles_for_host, type_))
+        assert ids == expected_ids
+
+
 def test_get_http_log_path():
     # Fake configuration
     archive_server = "http://example.com/server_root"
