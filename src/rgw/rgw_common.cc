@@ -396,10 +396,14 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
   if (!s)
     s = "";
 
-  if (extended_format)
+  if (extended_format) {
     p = strptime(s, "%Y-%m-%dT%T", t);
-  else
+    if (!p) {
+      p = strptime(s, "%Y-%m-%d %T", t);
+    }
+  } else {
     p = strptime(s, "%Y%m%dT%H%M%S", t);
+  }
   if (!p) {
     dout(0) << "parse_iso8601 failed" << dendl;
     return false;
