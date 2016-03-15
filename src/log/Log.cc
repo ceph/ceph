@@ -140,7 +140,7 @@ void Log::reopen_log_file()
     VOID_TEMP_FAILURE_RETRY(::close(m_fd));
   if (m_log_file.length()) {
     m_fd = ::open(m_log_file.c_str(), O_CREAT|O_WRONLY|O_APPEND, 0644);
-    if (m_uid || m_gid) {
+    if (m_fd >= 0 && (m_uid || m_gid)) {
       int r = ::fchown(m_fd, m_uid, m_gid);
       if (r < 0) {
 	r = -errno;
