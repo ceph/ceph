@@ -404,12 +404,8 @@ def all_roles_of_type(cluster, type_):
     :param cluster: Cluster extracted from the ctx.
     :type_: role type
     """
-    prefix = '{type}.'.format(type=type_)
     for _, roles_for_host in cluster.remotes.iteritems():
-        for name in roles_for_host:
-            if not name.startswith(prefix):
-                continue
-            id_ = name[len(prefix):]
+        for id_ in roles_of_type(roles_for_host, type_):
             yield id_
 
 

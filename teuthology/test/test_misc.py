@@ -1,7 +1,7 @@
 import argparse
 from datetime import datetime
 
-from mock import patch
+from mock import Mock, patch
 from ..orchestra import cluster
 from .. import misc
 from ..config import config
@@ -99,6 +99,23 @@ def test_roles_of_type():
         ]
     for roles_for_host, type_, expected_ids in expected:
         ids = list(misc.roles_of_type(roles_for_host, type_))
+        assert ids == expected_ids
+
+
+def test_all_roles_of_type():
+    expected = [
+        ([['client.0', 'osd.0', 'ceph.osd.1'], ['bar.osd.2']],
+         'osd', ['0', '1', '2']),
+        ([['client.0', 'osd.0', 'ceph.osd.1'], ['bar.osd.2', 'baz.client.1']],
+         'client', ['0', '1']),
+        ([['foo.client.1', 'bar.client.2.3'], ['baz.osd.1']], 'mon', []),
+        ([['foo.client.1', 'bar.client.2.3'], ['baz.osd.1', 'ceph.client.bar']],
+         'client', ['1', '2.3', 'bar']),
+        ]
+    for host_roles, type_, expected_ids in expected:
+        cluster = Mock()
+        cluster.remotes = dict(enumerate(host_roles))
+        ids = list(misc.all_roles_of_type(cluster, type_))
         assert ids == expected_ids
 
 
