@@ -50,6 +50,10 @@ class TestCephDetectInit(testtools.TestCase):
             self.assertEqual('sysvinit', debian.choose_init())
         with mock.patch.multiple('ceph_detect_init.debian',
                                  distro='debian',
+                                 codename='squeeze'):
+            self.assertEqual('sysvinit', debian.choose_init())
+        with mock.patch.multiple('ceph_detect_init.debian',
+                                 distro='debian',
                                  codename='jessie'):
             self.assertEqual('systemd', debian.choose_init())
         with mock.patch.multiple('ceph_detect_init.debian',
