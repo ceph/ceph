@@ -556,6 +556,12 @@ private:
     const string &attr ///< [in] Attribute to mangle.
     ); ///< @return Mangled attribute name.
 
+  /// checks whether long_name could hash to short_name
+  bool short_name_matches(
+    const char *short_name,    ///< [in] name to check against
+    const char *cand_long_name ///< [in] candidate long name
+    );
+
   /// Builds hashed filename
   void build_filename(
     const char *old_filename, ///< [in] Filename to convert.
