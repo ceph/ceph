@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "cls/journal/cls_journal_types.h"
+#include "include/stringify.h"
 #include "common/Formatter.h"
 
 namespace cls {
@@ -67,6 +68,7 @@ void Client::encode(bufferlist& bl) const {
   ::encode(id, bl);
   ::encode(data, bl);
   ::encode(commit_position, bl);
+  ::encode(static_cast<uint8_t>(state), bl);
   ENCODE_FINISH(bl);
 }
 
@@ -75,6 +77,10 @@ void Client::decode(bufferlist::iterator& iter) {
   ::decode(id, iter);
   ::decode(data, iter);
   ::decode(commit_position, iter);
+
+  uint8_t state_raw;
+  ::decode(state_raw, iter);
+  state = static_cast<ClientState>(state_raw);
   DECODE_FINISH(iter);
 }
 
@@ -88,6 +94,8 @@ void Client::dump(Formatter *f) const {
   f->open_object_section("commit_position");
   commit_position.dump(f);
   f->close_section();
+
+  f->dump_string("state", stringify(state));
 }
 
 void Client::generate_test_instances(std::list<Client *> &o) {
@@ -132,6 +140,21 @@ void Tag::generate_test_instances(std::list<Tag *> &o) {
   o.push_back(new Tag(123, 234, data));
 }
 
+std::ostream &operator<<(std::ostream &os, const ClientState &state) {
+  switch (state) {
+  case CLIENT_STATE_CONNECTED:
+    os << "connected";
+    break;
+  case CLIENT_STATE_DISCONNECTED:
+    os << "disconnected";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return os;
+}
+
 std::ostream &operator<<(std::ostream &os,
                          const ObjectPosition &object_position) {
   os << "["
@@ -155,7 +178,8 @@ std::ostream &operator<<(std::ostream &os,
 
 std::ostream &operator<<(std::ostream &os, const Client &client) {
   os << "[id=" << client.id << ", "
-     << "commit_position=" << client.commit_position << "]";
+     << "commit_position=" << client.commit_position << ", "
+     << "state=" << client.state << "]";
   return os;
 }
 
