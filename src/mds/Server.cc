@@ -3533,14 +3533,17 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
     respond_to_request(mdr, 0);
   } else {
     dout(10) << " lock attempt on " << set_lock << dendl;
+    bool deadlock = false;
     if (mdr->more()->flock_was_waiting &&
 	!lock_state->is_waiting(set_lock)) {
       dout(10) << " was waiting for lock but not anymore, must have been canceled " << set_lock << dendl;
       respond_to_request(mdr, -EINTR);
-    } else if (!lock_state->add_lock(set_lock, will_wait, mdr->more()->flock_was_waiting)) {
+    } else if (!lock_state->add_lock(set_lock, will_wait, mdr->more()->flock_was_waiting, &deadlock)) {
       dout(10) << " it failed on this attempt" << dendl;
       // couldn't set lock right now
-      if (!will_wait) {
+      if (deadlock) {
+	respond_to_request(mdr, -EDEADLK);
+      } else if (!will_wait) {
 	respond_to_request(mdr, -EWOULDBLOCK);
       } else {
 	dout(10) << " added to waiting list" << dendl;

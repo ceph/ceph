@@ -8836,11 +8836,11 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
       ceph_lock_state_t *lock_state;
       if (lock_type == CEPH_LOCK_FCNTL) {
 	if (!in->fcntl_locks)
-	  in->fcntl_locks = new ceph_lock_state_t(cct);
+	  in->fcntl_locks = new ceph_lock_state_t(cct, CEPH_LOCK_FCNTL);
 	lock_state = in->fcntl_locks;
       } else if (lock_type == CEPH_LOCK_FLOCK) {
 	if (!in->flock_locks)
-	  in->flock_locks = new ceph_lock_state_t(cct);
+	  in->flock_locks = new ceph_lock_state_t(cct, CEPH_LOCK_FLOCK);
 	lock_state = in->flock_locks;
       } else {
 	assert(0);
@@ -8851,11 +8851,11 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
       if (fh) {
 	if (lock_type == CEPH_LOCK_FCNTL) {
 	  if (!fh->fcntl_locks)
-	    fh->fcntl_locks = new ceph_lock_state_t(cct);
+	    fh->fcntl_locks = new ceph_lock_state_t(cct, CEPH_LOCK_FCNTL);
 	  lock_state = fh->fcntl_locks;
 	} else {
 	  if (!fh->flock_locks)
-	    fh->flock_locks = new ceph_lock_state_t(cct);
+	    fh->flock_locks = new ceph_lock_state_t(cct, CEPH_LOCK_FLOCK);
 	  lock_state = fh->flock_locks;
 	}
 	_update_lock_state(fl, owner, lock_state);
@@ -8990,7 +8990,7 @@ void Client::_update_lock_state(struct flock *fl, uint64_t owner,
     list<ceph_filelock> activated_locks;
     lock_state->remove_lock(filelock, activated_locks);
   } else {
-    bool r = lock_state->add_lock(filelock, false, false);
+    bool r = lock_state->add_lock(filelock, false, false, NULL);
     assert(r);
   }
 }
