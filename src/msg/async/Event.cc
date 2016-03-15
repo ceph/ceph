@@ -451,7 +451,7 @@ int EventCenter::process_events(int timeout_microseconds)
     }
   }
 
-  if (!numevents && !blocking) {
+  if (!blocking) {
     for (uint32_t i = 0; i < pollers.size(); i++)
       numevents += pollers[i]->poll();
   }
