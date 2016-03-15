@@ -20,38 +20,20 @@
 # Find the blkid library and includes
 #
 # BLKID_INCLUDE_DIR - where to find blkid.h, etc.
-# BLKID_LIBRARIES - List of libraries when using blkid.
-# BLKID_FOUND - True if blkid found.
+# BLKID_LIBRARY - List of libraries when using blkid.
+# BLKID_FOUND - TRUE if blkid found.
 
 find_path(BLKID_INCLUDE_DIR blkid/blkid.h)
 
 set(BLKID_NAMES ${BLKID_NAMES} blkid)
 find_library(BLKID_LIBRARY NAMES ${BLKID_NAMES})
 
-if (BLKID_INCLUDE_DIR AND BLKID_LIBRARY)
-  set(BLKID_FOUND TRUE)
-  set( BLKID_LIBRARIES ${BLKID_LIBRARY} )
-else ()
-  set(BLKID_FOUND FALSE)
-  set( BLKID_LIBRARIES )
-endif ()
-
-if (BLKID_FOUND)
-  message(STATUS "Found libblkid: ${BLKID_LIBRARY}")
-else ()
-  message(STATUS "Not Found libblkid: ${BLKID_LIBRARY}")
-  if (BLKID_FIND_REQUIRED)
-    message(STATUS "Looked for libblkid named ${BLKID_NAMES}.")
-    message(FATAL_ERROR "Could NOT find libblkid")
-  endif ()
-endif ()
-
 # handle the QUIETLY and REQUIRED arguments and set UUID_FOUND to TRUE if
 # all listed variables are TRUE
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(blkid DEFAULT_MSG BLKID_LIBRARIES BLKID_INCLUDE_DIR)
+find_package_handle_standard_args(blkid DEFAULT_MSG BLKID_LIBRARY BLKID_INCLUDE_DIR)
 
 mark_as_advanced(
   BLKID_LIBRARY
-  BLKID_I
+  BLKID_INCLUDE_DIR
 )
