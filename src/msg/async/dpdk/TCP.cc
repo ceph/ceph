@@ -174,6 +174,49 @@ int tcpv4_connect(tcp<ipv4_traits>& tcpv4, const entity_addr_t &addr,
   return 0;
 }
 
+template <typename InetTraits>
+void tcp<InetTraits>::respond_with_reset(tcp_hdr* rth, ipaddr local_ip, ipaddr foreign_ip)
+{
+  ldout(cct, 5) << __func__ << dendl;
+  if (rth->f_rst) {
+    return;
+  }
+  Packet p;
+  auto th = p.prepend_header<tcp_hdr>();
+  th->src_port = rth->dst_port;
+  th->dst_port = rth->src_port;
+  if (rth->f_ack) {
+    th->seq = rth->ack;
+  }
+  // If this RST packet is in response to a SYN packet. We ACK the ISN.
+  if (rth->f_syn) {
+    th->ack = rth->seq + 1;
+    th->f_ack = true;
+  }
+  th->f_rst = true;
+  th->data_offset = sizeof(*th) / 4;
+  th->checksum = 0;
+  *th = th->hton();
+
+  checksummer csum;
+  offload_info oi;
+  InetTraits::tcp_pseudo_header_checksum(csum, local_ip, foreign_ip, sizeof(*th));
+  if (get_hw_features().tx_csum_l4_offload) {
+    th->checksum = ~csum.get();
+    oi.needs_csum = true;
+  } else {
+    csum.sum(p);
+    th->checksum = csum.get();
+    oi.needs_csum = false;
+  }
+
+  oi.protocol = ip_protocol_num::tcp;
+  oi.tcp_hdr_len = sizeof(tcp_hdr);
+  p.set_offload_info(oi);
+
+  send_packet_without_tcb(local_ip, foreign_ip, std::move(p));
+}
+
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 template<typename InetTraits>
@@ -221,6 +264,9 @@ void tcp<InetTraits>::tcb::input_handle_syn_sent_state(tcp_hdr* th, Packet p)
   p.trim_front(th->data_offset * 4);
   tcp_sequence seg_seq = th->seq;
   auto seg_ack = th->ack;
+
+  ldout(_tcp.cct, 20) << __func__ << " tcp header seq " << seg_seq.raw << " ack " << seg_ack.raw
+                      << " fin=" << bool(th->f_fin) << " syn=" << bool(th->f_syn) << dendl;
 
   bool acceptable = false;
   // 3.1 first check the ACK bit
@@ -294,7 +340,8 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
   auto seg_len = p.len();
   ldout(_tcp.cct, 20) << __func__ << " tcp header seq " << seg_seq.raw << " ack " << seg_ack.raw
                       << " snd next " << _snd.next.raw << " unack " << _snd.unacknowledged.raw
-                      << " rcv next " << _rcv.next.raw << " len " << seg_len << dendl;
+                      << " rcv next " << _rcv.next.raw << " len " << seg_len
+                      << " fin=" << bool(th->f_fin) << " syn=" << bool(th->f_syn) << dendl;
 
   // 4.1 first check sequence number
   if (!segment_acceptable(seg_seq, seg_len)) {
@@ -383,6 +430,12 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
       if (_snd.unacknowledged <= seg_ack && seg_ack <= _snd.next) {
         ldout(_tcp.cct, 20) << __func__ << " SYN_RECEIVED -> ESTABLISHED" << dendl;
         do_established();
+        if (_tcp.push_listen_queue(_local_port, this)) {
+          ldout(_tcp.cct, 20) << __func__ << " successfully accepting socket" << dendl;
+        } else {
+          ldout(_tcp.cct, 5) << __func__ << " not exist listener or full queue, reset" << dendl;
+          return respond_with_reset(th);
+        }
       } else {
         // <SEQ=SEG.ACK><CTL=RST>
         return respond_with_reset(th);
@@ -567,7 +620,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
   }
 
   // 4.7 seventh, process the segment text
-  if (in_state(ESTABLISHED | FIN_WAIT_1 | FIN_WAIT_1)) {
+  if (in_state(ESTABLISHED | FIN_WAIT_1 | FIN_WAIT_2)) {
     if (p.len()) {
       // Once the TCP takes responsibility for the data it advances
       // RCV.NXT over the data accepted, and adjusts RCV.WND as
@@ -644,6 +697,25 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
 }
 
 template <typename InetTraits>
+void tcp<InetTraits>::tcb::connect()
+{
+  ldout(_tcp.cct, 20) << __func__ << dendl;
+  // An initial send sequence number (ISS) is selected.  A SYN segment of the
+  // form <SEQ=ISS><CTL=SYN> is sent.  Set SND.UNA to ISS, SND.NXT to ISS+1,
+  // enter SYN-SENT state, and return.
+  do_setup_isn();
+
+  // Local receive window scale factor
+  _rcv.window_scale = _option._local_win_scale = 7;
+  // Maximum segment size local can receive
+  _rcv.mss = _option._local_mss = local_mss();
+  // Linux's default window size
+  _rcv.window = 29200 << _rcv.window_scale;
+
+  do_syn_sent();
+}
+
+template <typename InetTraits>
 void tcp<InetTraits>::tcb::close_final_cleanup()
 {
   if (_snd._all_data_acked_fd >= 0) {
@@ -669,6 +741,78 @@ void tcp<InetTraits>::tcb::close_final_cleanup()
   output_one();
   output();
   center->delete_file_event(fd, EVENT_READABLE|EVENT_WRITABLE);
+}
+
+template <typename InetTraits>
+void tcp<InetTraits>::tcb::retransmit()
+{
+  auto output_update_rto = [this] {
+    output();
+    // According to RFC6298, Update RTO <- RTO * 2 to perform binary exponential back-off
+    this->_rto = std::min(this->_rto * 2, this->_rto_max);
+    start_retransmit_timer();
+  };
+
+  // Retransmit SYN
+  if (syn_needs_on()) {
+    if (_snd.syn_retransmit++ < _max_nr_retransmit) {
+      output_update_rto();
+    } else {
+      _errno = -ECONNABORTED;
+      ldout(_tcp.cct, 5) << __func__ << " syn retransmit exceed max "
+                         << _max_nr_retransmit << dendl;
+      cleanup();
+      return;
+    }
+  }
+
+  // Retransmit FIN
+  if (fin_needs_on()) {
+    if (_snd.fin_retransmit++ < _max_nr_retransmit) {
+      output_update_rto();
+    } else {
+      ldout(_tcp.cct, 5) << __func__ << " fin retransmit exceed max "
+                         << _max_nr_retransmit << dendl;
+      cleanup();
+      return;
+    }
+  }
+
+  // Retransmit Data
+  if (_snd.data.empty()) {
+    return;
+  }
+
+  // If there are unacked data, retransmit the earliest segment
+  auto& unacked_seg = _snd.data.front();
+
+  // According to RFC5681
+  // Update ssthresh only for the first retransmit
+  uint32_t smss = _snd.mss;
+  if (unacked_seg.nr_transmits == 0) {
+    _snd.ssthresh = std::max(flight_size() / 2, 2 * smss);
+  }
+  // RFC6582 Step 4
+  _snd.recover = _snd.next - 1;
+  // Start the slow start process
+  _snd.cwnd = smss;
+  // End fast recovery
+  exit_fast_recovery();
+
+  ldout(_tcp.cct, 20) << __func__ << " unack data size " << _snd.data.size()
+                      << " nr=" << unacked_seg.nr_transmits << dendl;
+  if (unacked_seg.nr_transmits < _max_nr_retransmit) {
+    unacked_seg.nr_transmits++;
+  } else {
+    // Delete connection when max num of retransmission is reached
+    ldout(_tcp.cct, 5) << __func__ << " seg retransmit exceed max "
+                       << _max_nr_retransmit << dendl;
+    cleanup();
+    return;
+  }
+  retransmit_one();
+
+  output_update_rto();
 }
 
 template <typename InetTraits>

@@ -235,9 +235,10 @@ int DPDKWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
 
 int DPDKWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket)
 {
-  assert(addr.get_family() == AF_INET);
+  // assert(addr.get_family() == AF_INET);
+  int r =  tcpv4_connect(_impl->_inet.get_tcp(), addr, socket);
   ldout(cct, 10) << __func__ << " addr " << addr << dendl;
-  return tcpv4_connect(_impl->_inet.get_tcp(), addr, socket);
+  return r;
 }
 
 void DPDKStack::spawn_workers(std::vector<std::function<void ()>> &threads) {

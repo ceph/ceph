@@ -89,7 +89,7 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
 
       size_t off = 0;
       for (auto&& f : _buf->fragments()) {
-        if (f.size <= left) {
+        if (f.size < left) {
           Packet p = _buf->share(off, f.size);
           auto del = std::bind(
                   [](Packet &p) {}, std::move(p));
@@ -125,7 +125,6 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
 
     size_t available = _conn.peek_sent_available();
     if (available == 0) {
-      _conn.register_write_waiter();
       return 0;
     }
 
@@ -150,7 +149,6 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
 
     Packet p;
     if (len != bl.length()) {
-      _conn.register_write_waiter();
       bufferlist swapped;
       bl.splice(0, len, &swapped);
       auto del = std::bind(

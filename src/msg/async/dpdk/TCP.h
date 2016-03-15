@@ -324,6 +324,8 @@ class tcp {
       bool closed = false;
       // Wait for all data are acked
       int _all_data_acked_fd = -1;
+      // Limit number of data queued into send queue
+      Throttle user_queue_space;
       // Round-trip time variation
       std::chrono::microseconds rttvar;
       // Smoothed round-trip time
@@ -342,6 +344,7 @@ class tcp {
       uint32_t partial_ack = 0;
       tcp_sequence recover;
       bool window_probe = false;
+      send(CephContext *c): user_queue_space(c, "DPDK::tcp::tcb::user_queue_space", 81920) {}
     } _snd;
     struct receive {
       tcp_sequence next;
@@ -446,12 +449,8 @@ class tcp {
     uint64_t peek_sent_available() {
       if (!in_state(ESTABLISHED))
         return 0;
-      uint64_t left = _tcp.user_queue_space.get_max() - _tcp.user_queue_space.get_current();
+      uint64_t left = _snd.user_queue_space.get_max() - _snd.user_queue_space.get_current();
       return left;
-    }
-
-    void register_write_waiter() {
-      _tcp.user_queue_waiters.push_back(this->shared_from_this());
     }
 
     int is_connected() const {
@@ -563,7 +562,7 @@ class tcp {
     void do_reset() {
       _state = CLOSED;
       // Free packets to be sent which are waiting for user_queue_space
-      _tcp.user_queue_space.reset();
+      _snd.user_queue_space.reset();
       cleanup();
       _errno = -ECONNRESET;
       _tcp.manager.notify(fd, EVENT_READABLE);
@@ -637,8 +636,6 @@ class tcp {
   circular_buffer<ipv4_traits::l4packet> _packetq;
   Throttle _queue_space;
   // Limit number of data queued into send queue
-  Throttle user_queue_space;
-  std::deque<lw_shared_ptr<tcb>> user_queue_waiters;
  public:
   class connection {
     lw_shared_ptr<tcb> _tcb;
@@ -681,9 +678,6 @@ class tcp {
     }
     uint64_t peek_sent_available() {
       return _tcb->peek_sent_available();
-    }
-    void register_write_waiter() {
-      _tcb->register_write_waiter();
     }
     int is_connected() const { return _tcb->is_connected(); }
   };
@@ -756,6 +750,15 @@ class tcp {
   void poll_tcb(const ethernet_address &dst, lw_shared_ptr<tcb> tcb) {
     _poll_tcbs.emplace_back(std::move(tcb), dst);
   }
+  bool push_listen_queue(uint16_t port, tcb *t) {
+    auto listener = _listening.find(port);
+    if (listener == _listening.end() || listener->second->full()) {
+      return false;
+    }
+    listener->second->_q.push(connection(t->shared_from_this()));
+    manager.notify(listener->second->_fd, EVENT_READABLE);
+    return true;
+  }
 
  private:
   void send_packet_without_tcb(ipaddr from, ipaddr to, Packet p);
@@ -767,8 +770,7 @@ template <typename InetTraits>
 tcp<InetTraits>::tcp(CephContext *c, inet_type& inet, EventCenter *cen)
     : cct(c), _inet(inet), center(cen),
       manager(static_cast<DPDKDriver*>(cen->get_driver())->manager),
-      _e(_rd()), _queue_space(cct, "DPDK::tcp::queue_space", 81920),
-      user_queue_space(cct, "DPDK::tcp::user_queue_space", 81920) {
+      _e(_rd()), _queue_space(cct, "DPDK::tcp::queue_space", 81920) {
   int tcb_polled = 0u;
   _inet.register_packet_provider([this, tcb_polled] () mutable {
     Tub<typename InetTraits::l4packet> l4p;
@@ -811,9 +813,13 @@ typename tcp<InetTraits>::connection tcp<InetTraits>::connect(const entity_addr_
   do {
     src_port = _port_dist(_e);
     id = connid{src_ip, dst_ip, src_port, (uint16_t)dst_port};
-  } while (_inet._inet.netif()->hw_queues_count() > 1 &&
-           (_inet._inet.netif()->hash2cpu(id.hash(_inet._inet.netif()->rss_key())) != center->get_id()
-           || _tcbs.find(id) != _tcbs.end()));
+    if (_tcbs.find(id) == _tcbs.end()) {
+      if (_inet._inet.netif()->hw_queues_count() == 1 ||
+          _inet._inet.netif()->hash2cpu(
+              id.hash(_inet._inet.netif()->rss_key())) != center->get_id())
+        break;
+    }
+  } while (true);
 
   auto tcbp = make_lw_shared<tcb>(*this, id);
   _tcbs.insert({id, tcbp});
@@ -884,8 +890,6 @@ void tcp<InetTraits>::received(Packet p, ipaddr from, ipaddr to) {
         // check the security
         // NOTE: Ignored for now
         tcbp = make_lw_shared<tcb>(*this, id);
-        listener->second->_q.push(connection(tcbp));
-        manager.notify(listener->second->_fd, EVENT_READABLE);
         _tcbs.insert({id, tcbp});
         return tcbp->input_handle_listen_state(&h, std::move(p));
       }
@@ -932,6 +936,7 @@ template <typename InetTraits>
 tcp<InetTraits>::tcb::tcb(tcp& t, connid id)
     : _tcp(t), _local_ip(id.local_ip) , _foreign_ip(id.foreign_ip),
       _local_port(id.local_port), _foreign_port(id.foreign_port),
+      _snd(_tcp.cct),
       center(t.center),
       fd(t.manager.get_eventfd()),
       delayed_ack_event(new tcp<InetTraits>::C_handle_delayed_ack(this)),
@@ -962,48 +967,6 @@ void tcp<InetTraits>::tcb::respond_with_reset(tcp_hdr* rth)
 }
 
 template <typename InetTraits>
-void tcp<InetTraits>::respond_with_reset(tcp_hdr* rth, ipaddr local_ip, ipaddr foreign_ip)
-{
-  if (rth->f_rst) {
-    return;
-  }
-  Packet p;
-  auto th = p.prepend_header<tcp_hdr>();
-  th->src_port = rth->dst_port;
-  th->dst_port = rth->src_port;
-  if (rth->f_ack) {
-    th->seq = rth->ack;
-  }
-  // If this RST packet is in response to a SYN packet. We ACK the ISN.
-  if (rth->f_syn) {
-    th->ack = rth->seq + 1;
-    th->f_ack = true;
-  }
-  th->f_rst = true;
-  th->data_offset = sizeof(*th) / 4;
-  th->checksum = 0;
-  *th = th->hton();
-
-  checksummer csum;
-  offload_info oi;
-  InetTraits::tcp_pseudo_header_checksum(csum, local_ip, foreign_ip, sizeof(*th));
-  if (get_hw_features().tx_csum_l4_offload) {
-    th->checksum = ~csum.get();
-    oi.needs_csum = true;
-  } else {
-    csum.sum(p);
-    th->checksum = csum.get();
-    oi.needs_csum = false;
-  }
-
-  oi.protocol = ip_protocol_num::tcp;
-  oi.tcp_hdr_len = sizeof(tcp_hdr);
-  p.set_offload_info(oi);
-
-  send_packet_without_tcb(local_ip, foreign_ip, std::move(p));
-}
-
-template <typename InetTraits>
 uint32_t tcp<InetTraits>::tcb::data_segment_acked(tcp_sequence seg_ack) {
   uint32_t total_acked_bytes = 0;
   // Full ACK of segment
@@ -1017,12 +980,8 @@ uint32_t tcp<InetTraits>::tcb::data_segment_acked(tcp_sequence seg_ack) {
     }
     update_cwnd(acked_bytes);
     total_acked_bytes += acked_bytes;
-    _tcp.user_queue_space.put(_snd.data.front().data_len);
-    if (!_tcp.user_queue_waiters.empty()) {
-      for (auto && t : _tcp.user_queue_waiters)
-        _tcp.manager.notify(t->fd, EVENT_WRITABLE);
-      _tcp.user_queue_waiters.clear();
-    }
+    _snd.user_queue_space.put(_snd.data.front().data_len);
+    _tcp.manager.notify(fd, EVENT_WRITABLE);
     _snd.data.pop_front();
   }
   // Partial ACK of segment
@@ -1242,7 +1201,7 @@ void tcp<InetTraits>::tcb::output_one(bool data_retransmit) {
       _snd.data.emplace_back(unacked_segment{std::move(clone),
                                              len, nr_transmits, now});
     }
-    if (retransmit_fd) {
+    if (!retransmit_fd) {
       start_retransmit_timer();
     }
   }
@@ -1256,23 +1215,6 @@ bool tcp<InetTraits>::tcb::is_all_data_acked() {
     return true;
   }
   return false;
-}
-
-template <typename InetTraits>
-void tcp<InetTraits>::tcb::connect() {
-  // An initial send sequence number (ISS) is selected.  A SYN segment of the
-  // form <SEQ=ISS><CTL=SYN> is sent.  Set SND.UNA to ISS, SND.NXT to ISS+1,
-  // enter SYN-SENT state, and return.
-  do_setup_isn();
-
-  // Local receive window scale factor
-  _rcv.window_scale = _option._local_win_scale = 7;
-  // Maximum segment size local can receive
-  _rcv.mss = _option._local_mss = local_mss();
-  // Linux's default window size
-  _rcv.window = 29200 << _rcv.window_scale;
-
-  do_syn_sent();
 }
 
 template <typename InetTraits>
@@ -1298,7 +1240,7 @@ int tcp<InetTraits>::tcb::send(Packet p) {
     return -ECONNRESET;
 
   auto len = p.len();
-  if (!_tcp.user_queue_space.get_or_fail(len)) {
+  if (!_snd.user_queue_space.get_or_fail(len)) {
     // note: caller must ensure enough queue space to send
     assert(0);
   }
@@ -1419,69 +1361,6 @@ void tcp<InetTraits>::tcb::insert_out_of_order(tcp_sequence seg, Packet p) {
 template <typename InetTraits>
 void tcp<InetTraits>::tcb::trim_receive_data_after_window() {
   abort();
-}
-
-template <typename InetTraits>
-void tcp<InetTraits>::tcb::retransmit() {
-  auto output_update_rto = [this] {
-    output();
-    // According to RFC6298, Update RTO <- RTO * 2 to perform binary exponential back-off
-    this->_rto = std::min(this->_rto * 2, this->_rto_max);
-    start_retransmit_timer();
-  };
-
-  // Retransmit SYN
-  if (syn_needs_on()) {
-    if (_snd.syn_retransmit++ < _max_nr_retransmit) {
-      output_update_rto();
-    } else {
-      _errno = -ECONNABORTED;
-      cleanup();
-      return;
-    }
-  }
-
-  // Retransmit FIN
-  if (fin_needs_on()) {
-    if (_snd.fin_retransmit++ < _max_nr_retransmit) {
-      output_update_rto();
-    } else {
-      cleanup();
-      return;
-    }
-  }
-
-  // Retransmit Data
-  if (_snd.data.empty()) {
-    return;
-  }
-
-  // If there are unacked data, retransmit the earliest segment
-  auto& unacked_seg = _snd.data.front();
-
-  // According to RFC5681
-  // Update ssthresh only for the first retransmit
-  uint32_t smss = _snd.mss;
-  if (unacked_seg.nr_transmits == 0) {
-    _snd.ssthresh = std::max(flight_size() / 2, 2 * smss);
-  }
-  // RFC6582 Step 4
-  _snd.recover = _snd.next - 1;
-  // Start the slow start process
-  _snd.cwnd = smss;
-  // End fast recovery
-  exit_fast_recovery();
-
-  if (unacked_seg.nr_transmits < _max_nr_retransmit) {
-    unacked_seg.nr_transmits++;
-  } else {
-    // Delete connection when max num of retransmission is reached
-    cleanup();
-    return;
-  }
-  retransmit_one();
-
-  output_update_rto();
 }
 
 template <typename InetTraits>
