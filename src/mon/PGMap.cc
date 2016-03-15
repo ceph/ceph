@@ -459,7 +459,7 @@ void PGMap::remove_osd(int osd)
   }
 }
 
-void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool nocreating,
+void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
                         bool sameosds)
 {
   pg_pool_sum[pgid.pool()].add(s);
@@ -468,12 +468,10 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool nocreating,
   num_pg++;
   num_pg_by_state[s.state]++;
 
-  if (!nocreating) {
-    if (s.state & PG_STATE_CREATING) {
-      creating_pgs.insert(pgid);
-      if (s.acting_primary >= 0) {
-	creating_pgs_by_osd_epoch[s.acting_primary][s.mapping_epoch].insert(pgid);
-      }
+  if (s.state & PG_STATE_CREATING) {
+    creating_pgs.insert(pgid);
+    if (s.acting_primary >= 0) {
+      creating_pgs_by_osd_epoch[s.acting_primary][s.mapping_epoch].insert(pgid);
     }
   }
 
@@ -492,7 +490,7 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool nocreating,
     pg_by_osd[*p].insert(pgid);
 }
 
-void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool nocreating,
+void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
                         bool sameosds)
 {
   pool_stat_t& ps = pg_pool_sum[pgid.pool()];
@@ -507,17 +505,15 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool nocreating,
   if (end == 0)
     num_pg_by_state.erase(s.state);
 
-  if (!nocreating) {
-    if (s.state & PG_STATE_CREATING) {
-      creating_pgs.erase(pgid);
-      if (s.acting_primary >= 0) {
-	map<epoch_t,set<pg_t> >& r = creating_pgs_by_osd_epoch[s.acting_primary];
-	r[s.mapping_epoch].erase(pgid);
-	if (r[s.mapping_epoch].empty())
-	  r.erase(s.mapping_epoch);
-	if (r.empty())
-	  creating_pgs_by_osd_epoch.erase(s.acting_primary);
-      }
+  if (s.state & PG_STATE_CREATING) {
+    creating_pgs.erase(pgid);
+    if (s.acting_primary >= 0) {
+      map<epoch_t,set<pg_t> >& r = creating_pgs_by_osd_epoch[s.acting_primary];
+      r[s.mapping_epoch].erase(pgid);
+      if (r[s.mapping_epoch].empty())
+	r.erase(s.mapping_epoch);
+      if (r.empty())
+	creating_pgs_by_osd_epoch.erase(s.acting_primary);
     }
   }
 
@@ -559,9 +555,9 @@ void PGMap::stat_pg_update(const pg_t pgid, pg_stat_t& s,
     s.up == n.up &&
     s.blocked_by == n.blocked_by;
 
-  stat_pg_sub(pgid, s, false, sameosds);
+  stat_pg_sub(pgid, s, sameosds);
   s = n;
-  stat_pg_add(pgid, n, false, sameosds);
+  stat_pg_add(pgid, n, sameosds);
 }
 
 void PGMap::stat_osd_add(const osd_stat_t &s)
