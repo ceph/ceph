@@ -100,6 +100,11 @@ def task(ctx, config):
     ceph_objectstore_tool: (true) whether to export/import a pg while an osd is down
     chance_move_pg: (1.0) chance of moving a pg if more than 1 osd is down (default 100%)
 
+    optrack_toggle_delay: (2.0) duration to delay between toggling op tracker
+                  enablement to all osds
+
+    dump_ops_enable: (true) continuously dump ops on all live osds
+
     example:
 
     tasks:
@@ -117,6 +122,10 @@ def task(ctx, config):
         'thrashosds task only accepts a dict for configuration'
     # add default value for sighup_delay
     config['sighup_delay'] = config.get('sighup_delay', 0.1)
+    # add default value for optrack_toggle_delay
+    config['optrack_toggle_delay'] = config.get('optrack_toggle_delay', 2.0)
+    # add default value for dump_ops_enable
+    config['dump_ops_enable'] = config.get('dump_ops_enable', "true")
     overrides = ctx.config.get('overrides', {})
     teuthology.deep_merge(config, overrides.get('thrashosds', {}))
 
