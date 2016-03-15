@@ -333,16 +333,19 @@ def skeleton_config(ctx, roles, ips):
     conf = configobj.ConfigObj(StringIO(skconf), file_error=True)
     mons = get_mons(roles=roles, ips=ips)
     for role, addr in mons.iteritems():
-        conf.setdefault(role, {})
-        conf[role]['mon addr'] = addr
+        name = ceph_role(role)
+        conf.setdefault(name, {})
+        conf[name]['mon addr'] = addr
     # set up standby mds's
+    is_mds = is_type('mds', cluster)
     for roles_subset in roles:
         for role in roles_subset:
-            if role.startswith('mds.'):
-                conf.setdefault(role, {})
-                if role.find('-s-') != -1:
-                    standby_mds = role[role.find('-s-') + 3:]
-                    conf[role]['mds standby for name'] = standby_mds
+            if is_mds(role):
+                name = ceph_role(role)
+                conf.setdefault(name, {})
+                if '-s-' in name:
+                    standby_mds = name[name.find('-s-') + 3:]
+                    conf[name]['mds standby for name'] = standby_mds
     return conf
 
 
