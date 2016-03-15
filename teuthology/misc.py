@@ -1015,9 +1015,8 @@ def get_clients(ctx, roles):
     """
     for role in roles:
         assert isinstance(role, basestring)
-        PREFIX = 'client.'
-        assert role.startswith(PREFIX)
-        id_ = role[len(PREFIX):]
+        assert 'client.' in role
+        _, _, id_ = split_role(role)
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
         yield (id_, remote)
 
