@@ -471,12 +471,14 @@ int parse_key_value(string& in_str, string& key, string& val)
 int parse_time(const char *time_str, real_time *time)
 {
   struct tm tm;
+  uint32_t ns = 0;
 
-  if (!parse_rfc2616(time_str, &tm))
+  if (!parse_rfc2616(time_str, &tm) && !parse_iso8601(time_str, &tm, &ns)) {
     return -EINVAL;
+  }
 
   time_t sec = timegm(&tm);
-  *time = utime_t(sec, 0).to_real_time();
+  *time = utime_t(sec, ns).to_real_time();
 
   return 0;
 }
