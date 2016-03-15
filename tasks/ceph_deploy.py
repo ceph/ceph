@@ -36,16 +36,16 @@ def download_ceph_deploy(ctx, config):
             'git', 'clone', '-b', ceph_deploy_branch,
             teuth_config.ceph_git_base_url + 'ceph-deploy.git',
             '{tdir}/ceph-deploy'.format(tdir=testdir),
-            ],
-        )
+        ],
+    )
     ceph_admin.run(
         args=[
             'cd',
             '{tdir}/ceph-deploy'.format(tdir=testdir),
             run.Raw('&&'),
             './bootstrap',
-            ],
-        )
+        ],
+    )
 
     try:
         yield
@@ -56,8 +56,8 @@ def download_ceph_deploy(ctx, config):
                 'rm',
                 '-rf',
                 '{tdir}/ceph-deploy'.format(tdir=testdir),
-                ],
-            )
+            ],
+        )
 
 
 def is_healthy(ctx, config):
@@ -89,10 +89,10 @@ def is_healthy(ctx, config):
                 run.Raw('&&'),
                 'sudo', 'ceph',
                 'health',
-                ],
+            ],
             stdout=StringIO(),
             logger=log.getChild('health'),
-            )
+        )
         out = r.stdout.getvalue()
         log.info('Ceph health: %s', out.rstrip('\n'))
         if out.split(None, 1)[0] == 'HEALTH_OK':
@@ -124,13 +124,15 @@ def get_nodes_using_role(ctx, target_role):
                 else:
                     nodes_of_interest.append(nodename)
 
-                modified_remotes[_remote].append("{0}.{1}".format(target_role, nodename))
+                modified_remotes[_remote].append(
+                    "{0}.{1}".format(target_role, nodename))
             else:
                 modified_remotes[_remote].append(svc_id)
 
     ctx.cluster.remotes = modified_remotes
 
     return nodes_of_interest
+
 
 def get_dev_for_osd(ctx, config):
     """Get a list of all osd device names."""
@@ -139,12 +141,15 @@ def get_dev_for_osd(ctx, config):
         host = remote.name.split('@')[-1]
         shortname = host.split('.')[0]
         devs = teuthology.get_scratch_devices(remote)
-        num_osd_per_host = list(teuthology.roles_of_type(roles_for_host, 'osd'))
+        num_osd_per_host = list(
+            teuthology.roles_of_type(
+                roles_for_host, 'osd'))
         num_osds = len(num_osd_per_host)
         if config.get('separate_journal_disk') is not None:
             num_devs_reqd = 2 * num_osds
-            assert num_devs_reqd <= len(devs), 'fewer data and journal disks than required ' + shortname
-            for dindex in range(0,num_devs_reqd,2):
+            assert num_devs_reqd <= len(
+                devs), 'fewer data and journal disks than required ' + shortname
+            for dindex in range(0, num_devs_reqd, 2):
                 jd_index = dindex + 1
                 dev_short = devs[dindex].split('/')[-1]
                 jdev_short = devs[jd_index].split('/')[-1]
@@ -156,6 +161,7 @@ def get_dev_for_osd(ctx, config):
                 osd_devs.append((shortname, dev_short))
     return osd_devs
 
+
 def get_all_nodes(ctx, config):
     """Return a string of node names separated by blanks"""
     nodelist = []
@@ -166,6 +172,7 @@ def get_all_nodes(ctx, config):
     nodelist = " ".join(nodelist)
     return nodelist
 
+
 @contextlib.contextmanager
 def build_ceph_cluster(ctx, config):
     """Build a ceph cluster"""
@@ -173,7 +180,8 @@ def build_ceph_cluster(ctx, config):
     # Expect to find ceph_admin on the first mon by ID, same place that the download task
     # puts it.  Remember this here, because subsequently IDs will change from those in
     # the test config to those that ceph-deploy invents.
-    (ceph_admin,) = ctx.cluster.only(teuthology.get_first_mon(ctx, config)).remotes.iterkeys()
+    (ceph_admin,) = ctx.cluster.only(
+        teuthology.get_first_mon(ctx, config)).remotes.iterkeys()
 
     def execute_ceph_deploy(cmd):
         """Remotely execute a ceph_deploy command"""
@@ -200,11 +208,11 @@ def build_ceph_cluster(ctx, config):
         mds_nodes = " ".join(mds_nodes)
         mon_node = get_nodes_using_role(ctx, 'mon')
         mon_nodes = " ".join(mon_node)
-        new_mon = './ceph-deploy new'+" "+mon_nodes
+        new_mon = './ceph-deploy new' + " " + mon_nodes
         mon_hostname = mon_nodes.split(' ')[0]
         mon_hostname = str(mon_hostname)
-        gather_keys = './ceph-deploy gatherkeys'+" "+mon_hostname
-        deploy_mds = './ceph-deploy mds create'+" "+mds_nodes
+        gather_keys = './ceph-deploy gatherkeys' + " " + mon_hostname
+        deploy_mds = './ceph-deploy mds create' + " " + mds_nodes
         no_of_osds = 0
 
         if mon_nodes is None:
@@ -227,16 +235,18 @@ def build_ceph_cluster(ctx, config):
                 for key, value in keys.iteritems():
                     log.info("[%s] %s = %s" % (section, key, value))
                     lines = '{key} = {value}\n'.format(key=key, value=value)
-                    teuthology.append_lines_to_file(ceph_admin, conf_path, lines,
-                                                    sudo=True)
+                    teuthology.append_lines_to_file(
+                        ceph_admin, conf_path, lines, sudo=True)
 
         # install ceph
-        install_nodes = './ceph-deploy install ' + (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
+        install_nodes = './ceph-deploy install ' + \
+            (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
         estatus_install = execute_ceph_deploy(install_nodes)
         if estatus_install != 0:
             raise RuntimeError("ceph-deploy: Failed to install ceph")
         # install ceph-test package too
-        install_nodes2 = './ceph-deploy install --tests ' + (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
+        install_nodes2 = './ceph-deploy install --tests ' + \
+            (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
         estatus_install = execute_ceph_deploy(install_nodes2)
         if estatus_install != 0:
             raise RuntimeError("ceph-deploy: Failed to install ceph-test")
@@ -265,7 +275,8 @@ def build_ceph_cluster(ctx, config):
 
         if config.get('test_mon_destroy') is not None:
             for d in range(1, len(mon_node)):
-                mon_destroy_nodes = './ceph-deploy mon destroy'+" "+mon_node[d]
+                mon_destroy_nodes = './ceph-deploy mon destroy' + \
+                    " " + mon_node[d]
                 estatus_mon_d = execute_ceph_deploy(mon_destroy_nodes)
                 if estatus_mon_d != 0:
                     raise RuntimeError("ceph-deploy: Failed to delete monitor")
@@ -301,12 +312,12 @@ def build_ceph_cluster(ctx, config):
                 remote=mon0_remote,
                 path=conf_path,
                 sudo=True,
-                )
+            )
             admin_keyring = teuthology.get_file(
                 remote=mon0_remote,
                 path=admin_keyring_path,
                 sudo=True,
-                )
+            )
 
             clients = ctx.cluster.only(teuthology.is_type('client'))
             for remot, roles_for_host in clients.remotes.iteritems():
@@ -329,13 +340,13 @@ def build_ceph_cluster(ctx, config):
                             run.Raw('>'),
                             client_keyring,
                             run.Raw('"'),
-                            ],
-                        )
+                        ],
+                    )
                     key_data = teuthology.get_file(
                         remote=mon0_remote,
                         path=client_keyring,
                         sudo=True,
-                        )
+                    )
                     teuthology.sudo_write_file(
                         remote=remot,
                         path=client_keyring,
@@ -357,7 +368,8 @@ def build_ceph_cluster(ctx, config):
 
             if mds_nodes:
                 log.info('Configuring CephFS...')
-                ceph_fs = Filesystem(ctx, admin_remote=clients.remotes.keys()[0])
+                ceph_fs = Filesystem(
+                    ctx, admin_remote=clients.remotes.keys()[0])
                 if not ceph_fs.legacy_configured():
                     ceph_fs.create()
         elif not config.get('only_mon'):
@@ -366,7 +378,8 @@ def build_ceph_cluster(ctx, config):
         yield
 
     except Exception:
-        log.info("Error encountered, logging exception before tearing down ceph-deploy")
+        log.info(
+            "Error encountered, logging exception before tearing down ceph-deploy")
         log.info(traceback.format_exc())
         raise
     finally:
@@ -383,7 +396,7 @@ def build_ceph_cluster(ctx, config):
         ctx.cluster.run(
             args=[
                 'sudo', 'status', 'ceph-all', run.Raw('||'),
-                'sudo', 'service',  'ceph', 'status', run.Raw('||'),
+                'sudo', 'service', 'ceph', 'status', run.Raw('||'),
                 'sudo', 'systemctl', 'status', 'ceph.target'],
             check_status=False)
 
@@ -425,10 +438,10 @@ def build_ceph_cluster(ctx, config):
                         '--',
                         'gzip',
                         '--',
-                        ],
+                    ],
                     wait=False,
-                    ),
-                )
+                ),
+            )
 
             log.info('Archiving logs...')
             path = os.path.join(ctx.archive, 'remote')
@@ -441,8 +454,8 @@ def build_ceph_cluster(ctx, config):
 
         # Prevent these from being undefined if the try block fails
         all_nodes = get_all_nodes(ctx, config)
-        purge_nodes = './ceph-deploy purge'+" "+all_nodes
-        purgedata_nodes = './ceph-deploy purgedata'+" "+all_nodes
+        purge_nodes = './ceph-deploy purge' + " " + all_nodes
+        purgedata_nodes = './ceph-deploy purgedata' + " " + all_nodes
 
         log.info('Purging package...')
         execute_ceph_deploy(purge_nodes)
@@ -450,109 +463,114 @@ def build_ceph_cluster(ctx, config):
         execute_ceph_deploy(purgedata_nodes)
 
 
-def execute_cdeploy(admin,cmd,path):
-    """Execute ceph-deploy commands """
-    """Either use git path or repo path """
-    if path is not None:
-       ec= admin.run(
-            args=[
-                 'cd',
-                 run.Raw('~/cdtest'),
-                 run.Raw(';'),
-                '{path}/ceph-deploy/ceph-deploy'.format(path=path),
-                 run.Raw(cmd),
-                ],
-               check_status=False,
-           ).exitstatus
-    else:
-      ec= admin.run(
-              args=[
-                  'cd',
-                   run.Raw('~/cdtest'),
-                   run.Raw(';'),
-                  'ceph-deploy',
-                  run.Raw(cmd),
-                ],
-              check_status=False,
-              ).exitstatus
-    if ec != 0:
-       raise RuntimeError ("failed during ceph-deploy cmd: {cmd} , ec={ec}".format(cmd=cmd,ec=ec)) 
-
 @contextlib.contextmanager
 def cli_test(ctx, config):
     """
      ceph-deploy cli to exercise most commonly use cli's and ensure
      all commands works and also startup the init system.
-        
+
     """
     log.info('Ceph-deploy Test')
     if config is None:
         config = {}
-        
-    test_branch=''
+    test_branch = ''
+    conf_dir = teuthology.get_testdir(ctx) + "/cdtest"
+
+    def execute_cdeploy(admin, cmd, path):
+        """Execute ceph-deploy commands """
+        """Either use git path or repo path """
+        args = ['cd', conf_dir, run.Raw(';')]
+        if path:
+            args.append('{path}/ceph-deploy/ceph-deploy'.format(path=path));
+        else:
+            args.append('ceph-deploy')
+        args.append(run.Raw(cmd))
+        ec = admin.run(args=args, check_status=False).exitstatus
+        if ec != 0:
+            raise RuntimeError(
+                "failed during ceph-deploy cmd: {cmd} , ec={ec}".format(cmd=cmd, ec=ec))
+
     if config.get('rhbuild'):
-        path=None
+        path = None
     else:
         path = teuthology.get_testdir(ctx)
         # test on branch from config eg: wip-* , master or next etc
         # packages for all distro's should exist for wip*
         if ctx.config.get('branch'):
-            branch=ctx.config.get('branch')
-            test_branch=' --dev={branch} '.format(branch=branch)
+            branch = ctx.config.get('branch')
+            test_branch = ' --dev={branch} '.format(branch=branch)
     mons = ctx.cluster.only(teuthology.is_type('mon'))
-    for node,role in mons.remotes.iteritems():
-        admin=node
-        admin.run( args=[ 'mkdir', '~/', 'cdtest' ],check_status=False)
-        nodename=admin.shortname
+    for node, role in mons.remotes.iteritems():
+        admin = node
+        admin.run(args=['mkdir', conf_dir], check_status=False)
+        nodename = admin.shortname
     system_type = teuthology.get_system_type(admin)
     if config.get('rhbuild'):
-        admin.run(args = ['sudo', 'yum', 'install', 'ceph-deploy', '-y'])
+        admin.run(args=['sudo', 'yum', 'install', 'ceph-deploy', '-y'])
     log.info('system type is %s', system_type)
     osds = ctx.cluster.only(teuthology.is_type('osd'))
-   
-    for remote,roles in osds.remotes.iteritems():
+
+    for remote, roles in osds.remotes.iteritems():
         devs = teuthology.get_scratch_devices(remote)
-        log.info("roles %s" , roles)
+        log.info("roles %s", roles)
         if (len(devs) < 3):
-            log.error('Test needs minimum of 3 devices, only found %s', str(devs))
-            raise RuntimeError ( "Needs minimum of 3 devices ")
-    
-    new_cmd= 'new ' + nodename
-    new_mon_install = 'install {branch} --mon '.format(branch=test_branch) + nodename
-    new_osd_install = 'install {branch} --osd '.format(branch=test_branch) + nodename
+            log.error(
+                'Test needs minimum of 3 devices, only found %s',
+                str(devs))
+            raise RuntimeError("Needs minimum of 3 devices ")
+
+    conf_path = '{conf_dir}/ceph.conf'.format(conf_dir=conf_dir)
+    new_cmd = 'new ' + nodename
+    execute_cdeploy(admin, new_cmd, path)
+    if config.get('conf') is not None:
+        confp = config.get('conf')
+        for section, keys in confp.iteritems():
+            lines = '[{section}]\n'.format(section=section)
+            teuthology.append_lines_to_file(admin, conf_path, lines,
+                                            sudo=True)
+            for key, value in keys.iteritems():
+                log.info("[%s] %s = %s" % (section, key, value))
+                lines = '{key} = {value}\n'.format(key=key, value=value)
+                teuthology.append_lines_to_file(admin, conf_path, lines,
+                                                sudo=True)
+    new_mon_install = 'install {branch} --mon '.format(
+        branch=test_branch) + nodename
+    new_osd_install = 'install {branch} --osd '.format(
+        branch=test_branch) + nodename
     new_admin = 'install {branch} --cli '.format(branch=test_branch) + nodename
-    create_initial= '--overwrite-conf mon create-initial '
-    execute_cdeploy(admin,new_cmd,path)
-    execute_cdeploy(admin,new_mon_install,path)
-    execute_cdeploy(admin,new_osd_install,path)
-    execute_cdeploy(admin,new_admin,path)
-    execute_cdeploy(admin,create_initial,path)
+    create_initial = 'mon create-initial '
+    execute_cdeploy(admin, new_mon_install, path)
+    execute_cdeploy(admin, new_osd_install, path)
+    execute_cdeploy(admin, new_admin, path)
+    execute_cdeploy(admin, create_initial, path)
 
     for i in range(3):
-        zap_disk = 'disk zap '  + "{n}:{d}".format(n=nodename,d=devs[i])
-        prepare= 'osd prepare ' + "{n}:{d}".format(n=nodename,d=devs[i])
-        execute_cdeploy(admin,zap_disk,path)
-        execute_cdeploy(admin,prepare,path)
-        
-    admin.run(args=['ls',run.Raw('-lt'),run.Raw('~/cdtest/')])
-    time.sleep(4)
-    remote.run(args=['sudo', 'ceph','-s'],check_status=False)
-    r = remote.run(args=['sudo', 'ceph','health'],stdout=StringIO())
+        zap_disk = 'disk zap ' + "{n}:{d}".format(n=nodename, d=devs[i])
+        prepare = 'osd prepare ' + "{n}:{d}".format(n=nodename, d=devs[i])
+        execute_cdeploy(admin, zap_disk, path)
+        execute_cdeploy(admin, prepare, path)
+
+    log.info("list files for debugging purpose to check file permissions")
+    admin.run(args=['ls', run.Raw('-lt'), conf_dir])
+    remote.run(args=['sudo', 'ceph', '-s'], check_status=False)
+    r = remote.run(args=['sudo', 'ceph', 'health'], stdout=StringIO())
     out = r.stdout.getvalue()
     log.info('Ceph health: %s', out.rstrip('\n'))
-    if out.split(None, 1)[0] == 'HEALTH_WARN':
-        log.info('All ceph-deploy cli tests passed')
-    else:
-        raise RuntimeError ( "Failed to reach HEALTH_WARN State")
-
-    #test rgw cli
+    log.info("Waiting for cluster to become healthy")
+    with contextutil.safe_while(sleep=10, tries=6,
+                                action='check health') as proceed:
+       while proceed():
+           r = remote.run(args=['sudo', 'ceph', 'health'], stdout=StringIO())
+           if (out.split(None,1)[0] == 'HEALTH_OK'):
+               break
     rgw_install = 'install {branch} --rgw {node}'.format(
         branch=test_branch,
         node=nodename,
     )
-    rgw_create =  'rgw create ' + nodename
-    execute_cdeploy(admin,rgw_install,path)
-    execute_cdeploy(admin,rgw_create,path)
+    rgw_create = 'rgw create ' + nodename
+    execute_cdeploy(admin, rgw_install, path)
+    execute_cdeploy(admin, rgw_create, path)
+    log.info('All ceph-deploy cli tests passed')
     try:
         yield
     finally:
@@ -564,44 +582,53 @@ def cli_test(ctx, config):
         time.sleep(4)
         for i in range(3):
             umount_dev = "{d}1".format(d=devs[i])
-            r = remote.run(args=['sudo', 'umount',run.Raw(umount_dev)])
+            r = remote.run(args=['sudo', 'umount', run.Raw(umount_dev)])
         cmd = 'purge ' + nodename
-        execute_cdeploy(admin,cmd,path)
+        execute_cdeploy(admin, cmd, path)
         cmd = 'purgedata ' + nodename
-        execute_cdeploy(admin,cmd,path)
-        admin.run(args=['rm',run.Raw('-rf'),run.Raw('~/cdtest/*')])
-        admin.run(args=['rmdir',run.Raw('~/cdtest')])
+        execute_cdeploy(admin, cmd, path)
+        log.info("Removing temporary dir")
+        admin.run(
+            args=[
+                'rm',
+                run.Raw('-rf'),
+                run.Raw(conf_dir)],
+            check_status=False)
         if config.get('rhbuild'):
-            admin.run(args = ['sudo', 'yum', 'remove', 'ceph-deploy', '-y'])
+            admin.run(args=['sudo', 'yum', 'remove', 'ceph-deploy', '-y'])
+
 
 @contextlib.contextmanager
 def single_node_test(ctx, config):
     """
     - ceph-deploy.single_node_test: null
-    
+
     #rhbuild testing
-    - ceph-deploy.single_node_test: 
+    - ceph-deploy.single_node_test:
         rhbuild: 1.2.3
-        
+
     """
     log.info("Testing ceph-deploy on single node")
     if config is None:
         config = {}
+    overrides = ctx.config.get('overrides', {})
+    teuthology.deep_merge(config, overrides.get('ceph-deploy', {}))
 
     if config.get('rhbuild'):
         log.info("RH Build, Skip Download")
         with contextutil.nested(
-          lambda: cli_test(ctx=ctx,config=config),
-          ):
-          yield
+            lambda: cli_test(ctx=ctx, config=config),
+        ):
+            yield
     else:
         with contextutil.nested(
-             lambda: install_fn.ship_utilities(ctx=ctx, config=None),
-             lambda: download_ceph_deploy(ctx=ctx, config=config),
-             lambda: cli_test(ctx=ctx,config=config),
-            ):
+            lambda: install_fn.ship_utilities(ctx=ctx, config=None),
+            lambda: download_ceph_deploy(ctx=ctx, config=config),
+            lambda: cli_test(ctx=ctx, config=config),
+        ):
             yield
-    
+
+
 @contextlib.contextmanager
 def task(ctx, config):
     """
@@ -652,13 +679,14 @@ def task(ctx, config):
     teuthology.deep_merge(config, overrides.get('ceph-deploy', {}))
 
     if config.get('branch') is not None:
-        assert isinstance(config['branch'], dict), 'branch must be a dictionary'
+        assert isinstance(
+            config['branch'], dict), 'branch must be a dictionary'
 
     log.info('task ceph-deploy with config ' + str(config))
 
     with contextutil.nested(
-         lambda: install_fn.ship_utilities(ctx=ctx, config=None),
-         lambda: download_ceph_deploy(ctx=ctx, config=config),
-         lambda: build_ceph_cluster(ctx=ctx, config=config),
-        ):
+        lambda: install_fn.ship_utilities(ctx=ctx, config=None),
+        lambda: download_ceph_deploy(ctx=ctx, config=config),
+        lambda: build_ceph_cluster(ctx=ctx, config=config),
+    ):
         yield
