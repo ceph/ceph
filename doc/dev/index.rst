@@ -1097,6 +1097,29 @@ have to be built, first. Again, the packages so built are cached and
 `ceph-workbench ceph-qa-suite`_ will not build identical packages a second
 time.
 
+Interrupt a running suite
+-------------------------
+
+Teuthology suites take time to run. From time to time one may wish to
+interrupt a running suite. One obvious way to do this is::
+
+    ceph-workbench ceph-qa-suite --teardown
+
+This destroys all VMs created by `ceph-workbench ceph-qa-suite`_ and
+returns the OpenStack tenant to a "clean slate".
+
+Sometimes you may wish to interrupt the running suite, but keep the logs,
+the teuthology VM, the packages-repository VM, etc. To do this, you can
+``ssh`` to the teuthology VM (using the ``ssh access`` command reported
+when you triggered the suite -- see `Run the dummy suite`_) and, once
+there::
+
+    sudo /etc/init.d/teuthology restart
+
+This will keep the teuthology machine, the logs and the packages-repository
+instance but nuke everything else.
+
+
 .. WIP
 .. ===
 ..
