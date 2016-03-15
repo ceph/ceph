@@ -144,9 +144,9 @@ int ipv4::handle_received_packet(Packet p, ethernet_address from)
 
   ldout(cct, 10) << __func__ << " get " << std::hex << int(h.ip_proto)
                  << std::dec << " packet from "
-                 << h.src_ip << " -> " << h.dst_ip << " ip_len=" << ip_len
-                 << " ip_hdr_len=" << ip_hdr_len << " pkt_len=" << pkt_len
-                 << " offset=" << offset << dendl;
+                 << h.src_ip << " -> " << h.dst_ip << " id=" << h.id
+                 << " ip_len=" << ip_len << " ip_hdr_len=" << ip_hdr_len
+                 << " pkt_len=" << pkt_len << " offset=" << offset << dendl;
 
   if (pkt_len > ip_len) {
     // Trim extra data in the packet beyond IP total length
@@ -263,6 +263,7 @@ void ipv4::send(ipv4_address to, ip_protocol_num proto_num,
   auto needs_frag = this->needs_frag(p, proto_num, hw_features());
 
   auto send_pkt = [this, to, proto_num, needs_frag, e_dst] (Packet& pkt, uint16_t remaining, uint16_t offset) mutable  {
+    static uint16_t id = 0;
     auto iph = pkt.prepend_header<ip_hdr>();
     iph->ihl = sizeof(*iph) / 4;
     iph->ver = 4;
@@ -270,7 +271,7 @@ void ipv4::send(ipv4_address to, ip_protocol_num proto_num,
     iph->ecn = 0;
     iph->len = pkt.len();
     // FIXME: a proper id
-    iph->id = 0;
+    iph->id = id++;
     if (needs_frag) {
       uint16_t mf = remaining > 0;
       // The fragment offset is measured in units of 8 octets (64 bits)
@@ -284,7 +285,8 @@ void ipv4::send(ipv4_address to, ip_protocol_num proto_num,
     iph->csum = 0;
     iph->src_ip = _host_address;
     iph->dst_ip = to;
-    ldout(cct, 20) << " ipv4::send " << _host_address << " -> " << to << " len " << pkt.len() << dendl;
+    ldout(cct, 20) << " ipv4::send " << " id=" << iph->id << " " << _host_address << " -> " << to
+                   << " len " << pkt.len() << dendl;
     *iph = iph->hton();
 
     if (hw_features().tx_csum_ip_offload) {
