@@ -653,3 +653,24 @@ class TestStrays(CephFSTestCase):
 
         self.assertTrue(self.fs.data_objects_absent(file_a_ino, size_mb * 1024 * 1024))
         self.await_data_pool_empty()
+
+    def test_fancy_layout(self):
+        """
+        purge stray file with fancy layout
+        """
+
+        file_name = "fancy_layout_file"
+        self.mount_a.run_shell(["touch", file_name])
+
+        file_layout = "stripe_unit=1048576 stripe_count=4 object_size=8388608"
+        self.mount_a.run_shell(["setfattr", "-n", "ceph.file.layout", "-v", file_layout, file_name])
+
+        # 35MB requires 7 objects
+        size_mb = 35
+        self.mount_a.write_n_mb(file_name, size_mb)
+
+        self.mount_a.run_shell(["rm", "-f", file_name])
+        self.fs.mds_asok(["flush", "journal"])
+
+        # can't use self.fs.data_objects_absent here, it does not support fancy layout
+        self.await_data_pool_empty()
