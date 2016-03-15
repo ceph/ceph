@@ -11759,7 +11759,7 @@ void RGWStateLog::dump_entry(const cls_statelog_entry& entry, Formatter *f)
   f->dump_string("client_id", entry.client_id);
   f->dump_string("op_id", entry.op_id);
   f->dump_string("object", entry.object);
-  entry.timestamp.gmtime(f->dump_stream("timestamp"));
+  entry.timestamp.gmtime_nsec(f->dump_stream("timestamp"));
   if (!dump_entry_internal(entry, f)) {
     f->dump_int("state", entry.state);
   }
