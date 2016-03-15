@@ -113,6 +113,7 @@ public:
   static int is_tag_owner(ImageCtxT *image_ctx, bool *is_tag_owner);
   static int get_tag_owner(ImageCtxT *image_ctx, std::string *mirror_uuid);
   static int allocate_tag(ImageCtxT *image_ctx, const std::string &mirror_uuid);
+  static int request_resync(ImageCtxT *image_ctx);
 
   bool is_journal_ready() const;
   bool is_journal_replaying() const;
