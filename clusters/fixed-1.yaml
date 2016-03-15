@@ -1,2 +1,10 @@
+overrides:
+  ceph-deploy:
+    conf:
+      global:
+        osd pool default size: 2
+        osd crush chooseleaf type: 0
+        osd pool default pg num:  128
+        osd pool default pgp num:  128
 roles:
-- [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, client.0]
+- [mon.a, osd.0, osd.1, osd.2, client.0]
