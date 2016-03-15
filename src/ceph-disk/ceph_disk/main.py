@@ -567,29 +567,6 @@ def get_dev_relpath(name):
     return name.replace('!', '/')
 
 
-def get_dev_size(dev, size='megabytes'):
-    """
-    Attempt to get the size of a device so that we can prevent errors
-    from actions to devices that are smaller, and improve error reporting.
-
-    Because we want to avoid breakage in case this approach is not robust, we
-    will issue a warning if we failed to get the size.
-
-    :param size: bytes or megabytes
-    :param dev: the device to calculate the size
-    """
-    fd = os.open(dev, os.O_RDONLY)
-    dividers = {'bytes': 1, 'megabytes': 1024 * 1024}
-    try:
-        device_size = os.lseek(fd, 0, os.SEEK_END)
-        divider = dividers.get(size, 1024 * 1024)  # default to megabytes
-        return device_size / divider
-    except Exception as error:
-        LOG.warning('failed to get size of %s: %s' % (dev, str(error)))
-    finally:
-        os.close(fd)
-
-
 def get_partition_mpath(dev, pnum):
     part_re = "part{pnum}-mpath-".format(pnum=pnum)
     partitions = list_partitions_mpath(dev, part_re)
@@ -1361,6 +1338,86 @@ def get_free_partition_index(dev):
         return 1
 
 
+def get_free_partition_size(dev, size='mebibyte'):
+    """
+    Get the last free partition size on a given device.
+
+    :param size: units to calculate size
+    :param dev: the device to calculate the size
+    """
+    parted_unit_map = {
+        'bytes': 'B',
+        'gibibyte': 'GiB',
+        'gigabyte': 'GB',
+        'mebibyte': 'MiB',
+        'megabytes': 'MB',
+    }
+    parted_unit = parted_unit_map.get(size)
+    if parted_unit is None:
+        raise Error('get_free_partition_size argument error')
+    try:
+        partitions = _check_output(
+            args=[
+                'parted',
+                '--machine',
+                '--',
+                dev,
+                'unit',
+                parted_unit,
+                'print',
+                'free'
+            ],
+        )
+    except subprocess.CalledProcessError as e:
+        LOG.info('cannot read partition index; assume it '
+                 'isn\'t present\n (Error: %s)' % e)
+        raise Error('cannot read partition index; assume it '
+                    'isn\'t present\n (Error: %s)' % e)
+    if not partitions:
+        raise Error('parted failed to output anything for %s' % (dev))
+    LOG.debug('get_free_partition_size: analyzing ' + partitions)
+    # Details about the disk
+    device_line = None
+    # Details about the last partition.
+    partion_last_line = None
+    for line in partitions.split('\n'):
+        if len(line) == 0:
+            continue
+        splitline = line.split(':')
+        if len(splitline) == 1:
+            continue
+        if line[0] == '/':
+            device_line = splitline
+            continue
+        partion_last_line = splitline
+    # We set this variable from the data
+    freespace_str_unit = None
+    if partion_last_line is not None:
+        # We have a partion table
+        if len(partion_last_line) < 5:
+            LOG.error('Failed to parse size free space in %s' % (dev))
+            raise Error('Failed to parse size free space in %s' % (dev))
+        if partion_last_line[4] != 'free;':
+            LOG.warning('No free disk space at end of %s' % (dev))
+            return 0
+        freespace_str_unit = partion_last_line[3]
+    if device_line is not None and partion_last_line is None:
+        # We have no partitions
+        LOG.info('No partiiton table for disk %s' % (dev))
+        freespace_str_unit = splitline[1]
+    if freespace_str_unit is None:
+        # We have an issue parsing the output
+        LOG.error('Failed to get size free space in %s' % (dev))
+        raise Error('Failed to get size free space in %s' % (dev))
+    if freespace_str_unit[-len(parted_unit):] != parted_unit:
+        LOG.warning('Failed to get unit size free space in %s' % (dev))
+        raise Error('Failed to get unit size free space in %s' % (dev))
+    # Remove the units, and strip decimal fractions
+    freespace_str = freespace_str_unit[:-len(parted_unit)].split(".")[0]
+    # Return the result cast as a long so we can handle bytes
+    return long(freespace_str)
+
+
 def check_journal_reqs(args):
     _, _, allows_journal = command([
         'ceph-osd', '--check-allows-journal',
@@ -1501,9 +1558,9 @@ class Device(object):
             new = '--new={num}:0:+{size}M'.format(num=num, size=size)
             if size > self.get_dev_size():
                 LOG.error('refusing to create %s on %s' % (name, self.path))
-                LOG.error('%s size (%sM) is bigger than device (%sM)'
+                LOG.error('%s size (%sM) is bigger than device space (%sM)'
                           % (name, size, self.get_dev_size()))
-                raise Error('%s device size (%sM) is not big enough for %s'
+                raise Error('%s device space (%sM) is not big enough for %s'
                             % (self.path, self.get_dev_size(), name))
         else:
             new = '--largest-new={num}'.format(num=num)
@@ -1551,7 +1608,7 @@ class Device(object):
 
     def get_dev_size(self):
         if self.dev_size is None:
-            self.dev_size = get_dev_size(self.path)
+            self.dev_size = get_free_partition_size(self.path)
         return self.dev_size
 
     @staticmethod
