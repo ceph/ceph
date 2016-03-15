@@ -450,6 +450,8 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
    Enter ``0`` as your hash setting to select ``rjenkins1``.
 
 
+.. _weightingbucketitems:
+
 .. topic:: Weighting Bucket Items
 
    Ceph expresses bucket weights as doubles, which allows for fine

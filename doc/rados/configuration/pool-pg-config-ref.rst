@@ -66,6 +66,16 @@ Ceph configuration file.
 :Default: ``1``. Typically a host containing one or more Ceph OSD Daemons.
 
 
+``osd crush initial weight``
+
+:Description: The initial crush weight for newly added osds into crushmap.
+
+:Type: Double
+:Default: ``the size of newly added osd in TB``. By default, the initial crush
+          weight for the newly added osd is set to its volume size in TB.
+          See `Weighting Bucket Items`_ for details.
+
+
 ``osd pool default crush replicated ruleset`` 
 
 :Description: The default CRUSH ruleset to use when creating a replicated pool.
@@ -164,3 +174,4 @@ Ceph configuration file.
 
 .. _pool: ../../operations/pools
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering
+.. _Weighting Bucket Items: ../../operations/crush-map#weightingbucketitems
