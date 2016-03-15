@@ -52,6 +52,21 @@ private:
   Mutex m_replayers_lock;
   std::map<peer_t, std::unique_ptr<Replayer> > m_replayers;
   atomic_t m_stopping;
+
+  struct C_ShutdownReplayer : public Context {
+    std::map<peer_t, std::unique_ptr<Replayer> > *m_replayers;
+    Mutex *m_replayers_lock;
+    peer_t peer;
+
+    C_ShutdownReplayer(
+        std::map<peer_t, std::unique_ptr<Replayer> > *m_replayers,
+        Mutex *m_replayers_lock, peer_t peer)
+      : m_replayers(m_replayers), m_replayers_lock(m_replayers_lock),
+        peer(peer) {
+    }
+
+    virtual void finish(int r);
+  };
 };
 
 } // namespace mirror

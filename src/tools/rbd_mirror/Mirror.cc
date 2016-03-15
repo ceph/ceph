@@ -27,6 +27,15 @@ using librbd::mirror_peer_t;
 namespace rbd {
 namespace mirror {
 
+void Mirror::C_ShutdownReplayer::finish(int r) {
+  Mutex::Locker l(*m_replayers_lock);
+  auto it = m_replayers->find(peer);
+  if (it != m_replayers->end()) {
+    dout(20) << "removing replayer for " << peer << dendl;
+    m_replayers->erase(it);
+  }
+}
+
 Mirror::Mirror(CephContext *cct) :
   m_cct(cct),
   m_lock("rbd::mirror::Mirror"),
@@ -108,16 +117,15 @@ void Mirror::update_replayers(const map<peer_t, set<int64_t> > &peer_configs)
     }
   }
 
-  // TODO: make async
-  for (auto it = m_replayers.begin(); it != m_replayers.end();) {
+  m_replayers_lock.Lock();
+  for (auto it = m_replayers.begin(); it != m_replayers.end(); ++it) {
     peer_t peer = it->first;
     if (peer_configs.find(peer) == peer_configs.end()) {
-      dout(20) << "removing replayer for " << peer << dendl;
-      m_replayers.erase(it++);
-    } else {
-      ++it;
+      m_threads->work_queue->queue(new C_ShutdownReplayer(&m_replayers,
+        &m_replayers_lock, peer));
     }
   }
+  m_replayers_lock.Unlock();
 }
 
 } // namespace mirror
