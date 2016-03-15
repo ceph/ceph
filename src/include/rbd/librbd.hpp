@@ -57,7 +57,8 @@ namespace librbd {
   typedef struct {
     std::string global_id;
     mirror_image_state_t state;
-  } mirror_image_t;
+    bool primary;
+  } mirror_image_info_t;
 
   typedef rbd_image_info_t image_info_t;
 
@@ -334,7 +335,8 @@ public:
   int mirror_image_promote(bool force);
   int mirror_image_demote();
   int mirror_image_resync();
-  int mirror_image_get(mirror_image_t *mirror_image);
+  int mirror_image_get_info(mirror_image_info_t *mirror_image_info,
+                            size_t info_size);
 
 private:
   friend class RBD;
