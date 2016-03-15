@@ -100,7 +100,7 @@ struct err_t {
 };
 
 struct shard_info_t : err_t {
-  std::map<std::string, bufferlist> attrs;
+  std::map<std::string, ceph::bufferlist> attrs;
   uint64_t size = -1;
   bool omap_digest_present = false;
   uint32_t omap_digest = 0;
