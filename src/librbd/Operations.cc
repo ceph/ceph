@@ -214,7 +214,8 @@ struct C_InvokeAsyncRequest : public Context {
 } // anonymous namespace
 
 template <typename I>
-Operations<I>::Operations(I &image_ctx) : m_image_ctx(image_ctx) {
+Operations<I>::Operations(I &image_ctx)
+  : m_image_ctx(image_ctx), m_async_request_seq(0) {
 }
 
 template <typename I>
