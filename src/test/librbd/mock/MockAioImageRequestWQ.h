@@ -6,6 +6,8 @@
 
 #include "gmock/gmock.h"
 
+class Context;
+
 namespace librbd {
 
 struct MockAioImageRequestWQ {

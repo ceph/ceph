@@ -336,7 +336,7 @@ TEST_F(TestInternal, CancelAsyncResize) {
     size -= MIN(size, 1<<18);
     {
       RWLock::RLocker l(ictx->owner_lock);
-      ictx->operations->resize(size, prog_ctx, &ctx, 0);
+      ictx->operations->execute_resize(size, prog_ctx, &ctx, 0);
     }
 
     // try to interrupt the in-progress resize
@@ -384,7 +384,7 @@ TEST_F(TestInternal, MultipleResize) {
 
     RWLock::RLocker l(ictx->owner_lock);
     contexts.push_back(new C_SaferCond());
-    ictx->operations->resize(new_size, prog_ctx, contexts.back(), 0);
+    ictx->operations->execute_resize(new_size, prog_ctx, contexts.back(), 0);
   }
 
   for (uint32_t i = 0; i < contexts.size(); ++i) {

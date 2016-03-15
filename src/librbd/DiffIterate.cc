@@ -125,9 +125,11 @@ private:
 
     // calc diff from from_snap_id -> to_snap_id
     interval_set<uint64_t> diff;
+    uint64_t end_size;
     bool end_exists;
     calc_snap_set_diff(cct, m_snap_set, m_diff_context.from_snap_id,
-                       m_diff_context.end_snap_id, &diff, &end_exists);
+                       m_diff_context.end_snap_id, &diff, &end_size,
+                       &end_exists);
     ldout(cct, 20) << "  diff " << diff << " end_exists=" << end_exists
                    << dendl;
     if (diff.empty()) {

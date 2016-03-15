@@ -114,7 +114,7 @@ public:
                            bufferlist *pbl);
   virtual int read(const std::string& oid, size_t len, uint64_t off,
                    bufferlist *bl) = 0;
-  virtual int remove(const std::string& oid) = 0;
+  virtual int remove(const std::string& oid, const SnapContext &snapc) = 0;
   virtual int selfmanaged_snap_create(uint64_t *snapid) = 0;
   virtual int selfmanaged_snap_remove(uint64_t snapid) = 0;
   virtual int selfmanaged_snap_rollback(const std::string& oid,

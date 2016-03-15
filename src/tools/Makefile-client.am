@@ -89,20 +89,32 @@ endif # LINUX
 librbd_mirror_internal_la_SOURCES = \
 	tools/rbd_mirror/ClusterWatcher.cc \
 	tools/rbd_mirror/ImageReplayer.cc \
+	tools/rbd_mirror/ImageSync.cc \
 	tools/rbd_mirror/Mirror.cc \
 	tools/rbd_mirror/PoolWatcher.cc \
 	tools/rbd_mirror/Replayer.cc \
 	tools/rbd_mirror/Threads.cc \
-	tools/rbd_mirror/types.cc
+	tools/rbd_mirror/types.cc \
+	tools/rbd_mirror/image_sync/ImageCopyRequest.cc \
+	tools/rbd_mirror/image_sync/ObjectCopyRequest.cc \
+	tools/rbd_mirror/image_sync/SnapshotCopyRequest.cc \
+	tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc \
+	tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc
 noinst_LTLIBRARIES += librbd_mirror_internal.la
 noinst_HEADERS += \
 	tools/rbd_mirror/ClusterWatcher.h \
 	tools/rbd_mirror/ImageReplayer.h \
+	tools/rbd_mirror/ImageSync.h \
 	tools/rbd_mirror/Mirror.h \
 	tools/rbd_mirror/PoolWatcher.h \
 	tools/rbd_mirror/Replayer.h \
 	tools/rbd_mirror/Threads.h \
-	tools/rbd_mirror/types.h
+	tools/rbd_mirror/types.h \
+	tools/rbd_mirror/image_sync/ImageCopyRequest.h \
+	tools/rbd_mirror/image_sync/ObjectCopyRequest.h \
+	tools/rbd_mirror/image_sync/SnapshotCopyRequest.h \
+	tools/rbd_mirror/image_sync/SyncPointCreateRequest.h \
+	tools/rbd_mirror/image_sync/SyncPointPruneRequest.h
 
 rbd_mirror_SOURCES = \
 	tools/rbd_mirror/main.cc
