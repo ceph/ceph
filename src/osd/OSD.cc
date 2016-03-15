@@ -1236,7 +1236,7 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
     }
 
     if (to - since > (epoch_t)cct->_conf->osd_map_message_max)
-      to = since + cct->_conf->osd_map_message_max;
+      since = to - cct->_conf->osd_map_message_max;
     m = build_incremental_map_msg(since, to, sblock);
   }
   send_map(m, con);
