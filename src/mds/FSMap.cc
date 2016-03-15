@@ -223,7 +223,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
   for (auto i : filesystems) {
     fs_list.push_back(*(i.second));
   }
-  ::encode(fs_list, bl);
+  ::encode(fs_list, bl, features);
   ::encode(mds_roles, bl);
   ::encode(standby_daemons, bl, features);
   ::encode(standby_epochs, bl);
@@ -383,12 +383,12 @@ void FSMap::decode(bufferlist::iterator& p)
 }
 
 
-void Filesystem::encode(bufferlist& bl) const
+void Filesystem::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(fscid, bl);
   bufferlist mdsmap_bl;
-  mds_map.encode(mdsmap_bl, CEPH_FEATURE_PGID64 | CEPH_FEATURE_MDSENC);
+  mds_map.encode(mdsmap_bl, features);
   ::encode(mdsmap_bl, bl);
   ENCODE_FINISH(bl);
 }
