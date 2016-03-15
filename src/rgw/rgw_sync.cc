@@ -97,7 +97,9 @@ int RGWBackoffControlCR::operate() {
       }
       if (retcode < 0 && retcode != -EBUSY && retcode != -EAGAIN) {
         ldout(cct, 0) << "ERROR: RGWBackoffControlCR called coroutine returned " << retcode << dendl;
-        return set_cr_error(retcode);
+        if (exit_on_error) {
+          return set_cr_error(retcode);
+        }
       }
       if (reset_backoff) {
         backoff.reset();
@@ -108,7 +110,9 @@ int RGWBackoffControlCR::operate() {
         yield call(finisher_cr);
         if (retcode < 0) {
           ldout(cct, 0) << "ERROR: call to finisher_cr() failed: retcode=" << retcode << dendl;
-          return set_cr_error(retcode);
+          if (exit_on_error) {
+            return set_cr_error(retcode);
+          }
         }
       }
     }
@@ -1515,7 +1519,6 @@ public:
           set_sleeping(true);
           yield;
         }
-        *reset_backoff = true;
       }
       mdlog_marker = sync_marker.marker;
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(sync_env,
@@ -1555,6 +1558,7 @@ public:
           drain_all();
           return retcode;
         }
+        *reset_backoff = true; /* if we got to this point, all systems function */
 	ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
 	if (mdlog_marker > max_marker) {
           marker = max_marker;
@@ -1639,7 +1643,7 @@ public:
                             const std::string& period, RGWMetadataLog* mdlog,
                             uint32_t _shard_id, const rgw_meta_sync_marker& _marker,
                             std::string&& period_marker)
-    : RGWBackoffControlCR(_sync_env->cct), sync_env(_sync_env),
+    : RGWBackoffControlCR(_sync_env->cct, true), sync_env(_sync_env),
       pool(_pool), period(period), mdlog(mdlog), shard_id(_shard_id),
       sync_marker(_marker), period_marker(std::move(period_marker)),
       obj_ctx(sync_env->store) {}
