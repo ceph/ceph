@@ -442,8 +442,8 @@ def num_instances_of_type(cluster, type_):
     """
     remotes_and_roles = cluster.remotes.items()
     roles = [roles for (remote, roles) in remotes_and_roles]
-    prefix = '{type}.'.format(type=type_)
-    num = sum(sum(1 for role in hostroles if role.startswith(prefix))
+    is_ceph_type = is_type(type_)
+    num = sum(sum(1 for role in hostroles if is_ceph_type(role))
               for hostroles in roles)
     return num
 
