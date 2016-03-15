@@ -1,5 +1,7 @@
 #!/bin/bash -ex
 
+IMAGE_FEATURES="layering,exclusive-lock,object-map,fast-diff"
+
 create_pools() {
     ceph osd pool create images 100
     ceph osd pool create volumes 100
@@ -50,7 +52,7 @@ expect() {
 }
 
 test_images_access() {
-    rbd -k $KEYRING --id images create --image-format 2 -s 1 images/foo
+    rbd -k $KEYRING --id images create --image-format 2 --image-feature $IMAGE_FEATURES -s 1 images/foo
     rbd -k $KEYRING --id images snap create images/foo@snap
     rbd -k $KEYRING --id images snap protect images/foo@snap
     rbd -k $KEYRING --id images snap unprotect images/foo@snap
@@ -58,7 +60,7 @@ test_images_access() {
     rbd -k $KEYRING --id images export images/foo@snap - >/dev/null
     expect 16 rbd -k $KEYRING --id images snap rm images/foo@snap
 
-    rbd -k $KEYRING --id volumes clone images/foo@snap volumes/child
+    rbd -k $KEYRING --id volumes clone --image-feature $IMAGE_FEATURES images/foo@snap volumes/child
     expect 16 rbd -k $KEYRING --id images snap unprotect images/foo@snap
     expect 1 rbd -k $KEYRING --id volumes snap unprotect images/foo@snap
     expect 1 rbd -k $KEYRING --id images flatten volumes/child
@@ -73,7 +75,7 @@ test_images_access() {
 }
 
 test_volumes_access() {
-    rbd -k $KEYRING --id images create --image-format 2 -s 1 images/foo
+    rbd -k $KEYRING --id images create --image-format 2 --image-feature $IMAGE_FEATURES -s 1 images/foo
     rbd -k $KEYRING --id images snap create images/foo@snap
     rbd -k $KEYRING --id images snap protect images/foo@snap
 
@@ -99,7 +101,7 @@ test_volumes_access() {
     expect 1 rbd -k $KEYRING --id volumes ls rbd
 
     # create clone and snapshot
-    rbd -k $KEYRING --id volumes clone images/foo@snap volumes/child
+    rbd -k $KEYRING --id volumes clone --image-feature $IMAGE_FEATURES images/foo@snap volumes/child
     rbd -k $KEYRING --id volumes snap create volumes/child@snap1
     rbd -k $KEYRING --id volumes snap protect volumes/child@snap1
     rbd -k $KEYRING --id volumes snap create volumes/child@snap2
