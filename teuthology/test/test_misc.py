@@ -114,6 +114,20 @@ def test_get_http_log_path():
     assert path == "http://qa-proxy.ceph.com/teuthology/teuthology-2013-09-12_11:49:50-ceph-deploy-master-testing-basic-vps/"
 
 
+def test_is_type():
+    is_client = misc.is_type('client')
+    assert is_client('client.0')
+    assert is_client('ceph.client.0')
+    assert is_client('foo.client.0')
+    assert is_client('foo.client.bar.baz')
+
+    assert not is_client('')
+    assert not is_client('foo.bar.baz')
+    assert not is_client('ceph.client')
+    assert not is_client('client')
+    assert not is_client('hadoop.master.0')
+
+
 class TestHostnames(object):
     def setup(self):
         config._conf = dict()

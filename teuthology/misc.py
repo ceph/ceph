@@ -397,10 +397,15 @@ def is_type(type_):
 
     def _is_type(role):
         """
-        Return type based on the starting role name.  This should
-        probably be improved in the future.
+        Return type based on the starting role name.
+
+        If there is more than one period, strip the first part
+        (ostensibly a cluster name) and check the remainder for the prefix.
         """
-        return role.startswith(prefix)
+        if role.startswith(prefix):
+            return True
+        return (role.count('.') > 1 and
+                role[role.find('.') + 1:].startswith(prefix))
     return _is_type
 
 
