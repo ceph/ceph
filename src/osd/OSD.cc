@@ -3402,11 +3402,10 @@ void OSD::build_past_intervals_parallel()
  */
 void OSD::handle_pg_peering_evt(
   spg_t pgid,
-  const pg_info_t& info,
+  const pg_history_t& orig_history,
   pg_interval_map_t& pi,
   epoch_t epoch,
-  pg_shard_t from,
-  bool primary,
+  bool same_primary,
   PG::CephPeeringEvtRef evt)
 {
   if (service.splitting(pgid)) {
@@ -3424,11 +3423,18 @@ void OSD::handle_pg_peering_evt(
       pgid.pgid, &up, &up_primary, &acting, &acting_primary);
     int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
-    pg_history_t history = info.history;
+    pg_history_t history = orig_history;
     bool valid_history = project_pg_history(
       pgid, history, epoch, up, up_primary, acting, acting_primary);
 
-    if (!valid_history || epoch < history.same_interval_since) {
+    if (same_primary && epoch < history.same_primary_since) {
+      dout(10) << "get_or_create_pg " << pgid << " primary changed in "
+	       << history.same_primary_since << " (msg from " << epoch << ")"
+	       << dendl;
+      return;
+    }
+    if (!valid_history ||
+	(!same_primary && epoch < history.same_interval_since)) {
       dout(10) << "get_or_create_pg " << pgid << " acting changed in "
 	       << history.same_interval_since << " (msg from " << epoch << ")"
 	       << dendl;
@@ -3554,7 +3560,15 @@ void OSD::handle_pg_peering_evt(
   } else {
     // already had it.  did the mapping change?
     PG *pg = _lookup_lock_pg(pgid);
-    if (epoch < pg->info.history.same_interval_since) {
+    if (same_primary && epoch < pg->info.history.same_primary_since) {
+      dout(10) << "get_or_create_pg " << pgid << " primary changed in "
+	       << pg->info.history.same_primary_since
+	       << " (msg from " << epoch << ")"
+	       << dendl;
+      pg->unlock();
+      return;
+    }
+    if (!same_primary && epoch < pg->info.history.same_interval_since) {
       dout(10) << *pg << " get_or_create_pg acting changed in "
 	       << pg->info.history.same_interval_since
 	       << " (msg from " << epoch << ")" << dendl;
@@ -7414,42 +7428,32 @@ void OSD::handle_pg_create(OpRequestRef op)
     bool mapped = osdmap->get_primary_shard(on, &pgid);
     assert(mapped);
 
-    // does it already exist?
-    if (_have_pg(pgid)) {
-      dout(10) << "mkpg " << pgid << "  already exists, skipping" << dendl;
-      continue;
-    }
-
+    pg_interval_map_t pi;
     pg_history_t history;
     history.epoch_created = created;
     history.last_scrub_stamp = ci->second;
     history.last_deep_scrub_stamp = ci->second;
+
+    // project history from created epoch (handle_pg_peering_evt does
+    // it from msg send epoch)
     bool valid_history = project_pg_history(
       pgid, history, created, up, up_primary, acting, acting_primary);
-    /* the pg creation message must have come from a mon and therefore
-     * cannot be on the other side of a map gap
-     */
+    // the pg creation message must have come from a mon and therefore
+    // cannot be on the other side of a map gap
     assert(valid_history);
 
-    PG::RecoveryCtx rctx = create_context();
-    const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
-    PG::_create(*rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
-    PG::_init(*rctx.transaction, pgid, pp);
-
-    pg_interval_map_t pi;
-    PG *pg = _create_lock_pg(
-      osdmap, pgid, false, false,
-      0, up, up_primary,
-      acting, acting_primary,
-      history, pi,
-      *rctx.transaction);
-    pg->info.last_epoch_started = created;
-    pg->handle_create(&rctx);
-    pg->write_if_dirty(*rctx.transaction);
-    pg->publish_stats_to_osd();
-    pg->unlock();
-    wake_pg_waiters(pgid);
-    dispatch_context(rctx, pg, osdmap);
+    handle_pg_peering_evt(
+      pgid,
+      history,
+      pi,
+      m->epoch,
+      true,  // same primary, bc this is a create
+      PG::CephPeeringEvtRef(
+	new PG::CephPeeringEvt(
+	  m->epoch,
+	  m->epoch,
+	  PG::NullEvt()))
+      );
   }
 
   last_pg_create_epoch = m->epoch;
@@ -7674,8 +7678,9 @@ void OSD::handle_pg_notify(OpRequestRef op)
 
     handle_pg_peering_evt(
       spg_t(it->first.info.pgid.pgid, it->first.to),
-      it->first.info, it->second,
-      it->first.query_epoch, pg_shard_t(from, it->first.from), true,
+      it->first.info.history, it->second,
+      it->first.query_epoch,
+      false, // same interval
       PG::CephPeeringEvtRef(
 	new PG::CephPeeringEvt(
 	  it->first.epoch_sent, it->first.query_epoch,
@@ -7706,8 +7711,8 @@ void OSD::handle_pg_log(OpRequestRef op)
   op->mark_started();
   handle_pg_peering_evt(
     spg_t(m->info.pgid.pgid, m->to),
-    m->info, m->past_intervals, m->get_epoch(),
-    pg_shard_t(from, m->from), false,
+    m->info.history, m->past_intervals, m->get_epoch(),
+    false, // same interval
     PG::CephPeeringEvtRef(
       new PG::CephPeeringEvt(
 	m->get_epoch(), m->get_query_epoch(),
@@ -7740,8 +7745,8 @@ void OSD::handle_pg_info(OpRequestRef op)
 
     handle_pg_peering_evt(
       spg_t(p->first.info.pgid.pgid, p->first.to),
-      p->first.info, p->second, p->first.epoch_sent,
-      pg_shard_t(from, p->first.from), false,
+      p->first.info.history, p->second, p->first.epoch_sent,
+      false, // same interval
       PG::CephPeeringEvtRef(
 	new PG::CephPeeringEvt(
 	  p->first.epoch_sent, p->first.query_epoch,
