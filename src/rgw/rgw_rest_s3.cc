@@ -511,6 +511,8 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
           s->formatter->dump_int("VersionedEpoch", iter->versioned_epoch);
         }
         s->formatter->dump_string("RgwxTag", iter->tag);
+        utime_t ut(iter->mtime);
+        ut.gmtime_nsec(s->formatter->dump_stream("RgwxMtime"));
       }
       s->formatter->dump_string("VersionId", version_id);
       s->formatter->dump_bool("IsLatest", iter->is_current());

@@ -102,7 +102,7 @@ static void set_date_header(const real_time *t, map<string, string>& headers, co
   }
   stringstream s;
   utime_t tm = utime_t(*t);
-  tm.gmtime(s);
+  tm.gmtime_nsec(s);
   headers[header_name] = s.str();
 }
 

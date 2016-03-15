@@ -1673,7 +1673,7 @@ struct bucket_list_entry {
     JSONDecoder::decode_json("VersionId", key.instance, obj);
     JSONDecoder::decode_json("IsLatest", is_latest, obj);
     string mtime_str;
-    JSONDecoder::decode_json("LastModified", mtime_str, obj);
+    JSONDecoder::decode_json("RgwxMtime", mtime_str, obj);
 
     struct tm t;
     uint32_t nsec;

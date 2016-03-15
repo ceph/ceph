@@ -407,7 +407,7 @@ void rgw_bi_log_entry::dump(Formatter *f) const
 
   f->dump_int("index_ver", index_ver);
   utime_t ut(timestamp);
-  ut.gmtime(f->dump_stream("timestamp"));
+  ut.gmtime_nsec(f->dump_stream("timestamp"));
   f->open_object_section("ver");
   ver.dump(f);
   f->close_section();
