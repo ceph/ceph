@@ -105,10 +105,6 @@ filesystem.
 
 ::
 
-    mds setmap
-
-::
-
     mds getmap
 
 ::
