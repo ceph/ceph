@@ -75,12 +75,29 @@ void FSMap::generate_test_instances(list<FSMap*>& ls)
 
 void FSMap::print(ostream& out) const
 {
-  // TODO add a non-json print?
-  JSONFormatter f(true);
-  f.open_object_section("fsmap");
-  dump(&f);
-  f.close_section();
-  f.flush(out);
+  out << "e" << epoch << std::endl;
+  out << "enable_multiple: " << enable_multiple << std::endl;
+  out << "compat: " << enable_multiple << std::endl;
+  out << " " << std::endl;
+
+  if (filesystems.empty()) {
+    out << "No filesystems configured" << std::endl;
+    return;
+  }
+
+  for (const auto &fs : filesystems) {
+    fs.second->print(out);
+    out << " " << std::endl << " " << std::endl;  // Space out a bit
+  }
+
+  if (!standby_daemons.empty()) {
+    out << "Standby daemons:" << std::endl << " " << std::endl;
+  }
+
+  for (const auto &p : standby_daemons) {
+    p.second.print_summary(out);
+    out << std::endl;
+  }
 }
 
 
@@ -402,10 +419,9 @@ int FSMap::parse_filesystem(
 
 void Filesystem::print(std::ostream &out) const
 {
-  // TODO add a non-json print?
-  JSONFormatter f;
-  dump(&f);
-  f.flush(out);
+  out << "Filesystem '" << mds_map.fs_name
+      << "' (" << fscid << ")" << std::endl;
+  mds_map.print(out);
 }
 
 mds_gid_t FSMap::find_standby_for(mds_role_t role, const std::string& name) const
