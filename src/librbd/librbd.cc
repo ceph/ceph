@@ -1236,9 +1236,26 @@ namespace librbd {
     return librbd::mirror_image_disable(ictx, force);
   }
 
-  int Image::mirror_image_get(mirror_image_t *mirror_image) {
+  int Image::mirror_image_promote(bool force) {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::mirror_image_get(ictx, mirror_image);
+    return librbd::mirror_image_promote(ictx, force);
+  }
+
+  int Image::mirror_image_demote() {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::mirror_image_demote(ictx);
+  }
+
+  int Image::mirror_image_resync()
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::mirror_image_resync(ictx);
+  }
+
+  int Image::mirror_image_get_info(mirror_image_info_t *mirror_image_info,
+                                   size_t info_size) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::mirror_image_get_info(ictx, mirror_image_info, info_size);
   }
 
 } // namespace librbd
@@ -2580,20 +2597,40 @@ extern "C" int rbd_mirror_image_disable(rbd_image_t image, bool force)
   return librbd::mirror_image_disable(ictx, force);
 }
 
-extern "C" int rbd_mirror_image_get(rbd_image_t image,
-    rbd_mirror_image_t *mirror_image)
+extern "C" int rbd_mirror_image_promote(rbd_image_t image, bool force)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::mirror_image_promote(ictx, force);
+}
+
+extern "C" int rbd_mirror_image_demote(rbd_image_t image)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::mirror_image_demote(ictx);
+}
+
+extern "C" int rbd_mirror_image_resync(rbd_image_t image)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::mirror_image_resync(ictx);
+}
+
+extern "C" int rbd_mirror_image_get_info(rbd_image_t image,
+                                         rbd_mirror_image_info_t *mirror_image_info,
+                                         size_t info_size)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
 
-  librbd::mirror_image_t cpp_mirror_image;
-  int r = librbd::mirror_image_get(ictx, &cpp_mirror_image);
+  librbd::mirror_image_info_t cpp_mirror_image;
+  int r = librbd::mirror_image_get_info(ictx, &cpp_mirror_image,
+                                        sizeof(cpp_mirror_image));
   if (r < 0) {
     return r;
   }
 
-  mirror_image->global_id = strdup(cpp_mirror_image.global_id.c_str());
-  mirror_image->state = cpp_mirror_image.state;
-
+  mirror_image_info->global_id = strdup(cpp_mirror_image.global_id.c_str());
+  mirror_image_info->state = cpp_mirror_image.state;
+  mirror_image_info->primary = cpp_mirror_image.primary;
   return 0;
 }
 

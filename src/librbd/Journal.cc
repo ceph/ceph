@@ -15,6 +15,7 @@
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
+#include <boost/scope_exit.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -159,6 +160,53 @@ public:
   }
 };
 
+template <typename I, typename J>
+int open_journaler(I *image_ctx, J *journaler, bool *initialized,
+                   journal::ImageClientMeta *client_meta,
+                   journal::TagData *tag_data) {
+  C_SaferCond init_ctx;
+  journaler->init(&init_ctx);
+  int r = init_ctx.wait();
+  *initialized = (r >= 0);
+  if (r < 0) {
+    return r;
+  }
+
+  cls::journal::Client client;
+  r = journaler->get_cached_client(Journal<ImageCtx>::IMAGE_CLIENT_ID, &client);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::journal::ClientData client_data;
+  bufferlist::iterator bl_it = client.data.begin();
+  try {
+    ::decode(client_data, bl_it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  journal::ImageClientMeta *image_client_meta =
+    boost::get<journal::ImageClientMeta>(&client_data.client_meta);
+  if (image_client_meta == nullptr) {
+    return -EINVAL;
+  }
+  *client_meta = *image_client_meta;
+
+  C_SaferCond get_tags_ctx;
+  Mutex lock("lock");
+  uint64_t tag_tid;
+  C_DecodeTags *tags_ctx = new C_DecodeTags(
+    image_ctx->cct, &lock, &tag_tid, tag_data, &get_tags_ctx);
+  journaler->get_tags(client_meta->tag_class, &tags_ctx->tags, tags_ctx);
+
+  r = get_tags_ctx.wait();
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
 } // anonymous namespace
 
 using util::create_async_context_callback;
@@ -171,6 +219,10 @@ const std::string Journal<I>::IMAGE_CLIENT_ID("");
 // mirror uuid to use for local images
 template <typename I>
 const std::string Journal<I>::LOCAL_MIRROR_UUID("");
+
+// mirror uuid to use for orphaned (demoted) images
+template <typename I>
+const std::string Journal<I>::ORPHAN_MIRROR_UUID("<orphan>");
 
 template <typename I>
 std::ostream &operator<<(std::ostream &os,
@@ -392,65 +444,122 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
 }
 
 template <typename I>
-int Journal<I>::is_tag_owner(ImageCtx *image_ctx, bool *is_tag_owner) {
-
-  cls::journal::Client client;
-  librbd::journal::ClientData client_data;
-  bufferlist::iterator bl;
-  journal::TagData tag_data;
-  uint64_t tag_class;
-  librbd::journal::ImageClientMeta *image_client_meta;
-  Mutex lock("lock");
-  C_SaferCond get_tags_ctx;
-  C_DecodeTags *tags_ctx;
-
-  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID,
-                      image_ctx->cct->_conf->rbd_journal_commit_age);
-
-  C_SaferCond init_ctx;
-  journaler.init(&init_ctx);
-  int r = init_ctx.wait();
+int Journal<I>::is_tag_owner(I *image_ctx, bool *is_tag_owner) {
+  std::string mirror_uuid;
+  int r = get_tag_owner(image_ctx, &mirror_uuid);
   if (r < 0) {
     return r;
   }
 
-  r = journaler.get_cached_client(Journal<ImageCtx>::IMAGE_CLIENT_ID, &client);
-  if (r < 0) {
-    goto clean_up;
+  *is_tag_owner = (mirror_uuid == LOCAL_MIRROR_UUID);
+  return 0;
+}
+
+template <typename I>
+int Journal<I>::get_tag_owner(I *image_ctx, std::string *mirror_uuid) {
+  CephContext *cct = image_ctx->cct;
+  ldout(cct, 20) << __func__ << dendl;
+
+  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID,
+                      image_ctx->cct->_conf->rbd_journal_commit_age);
+
+  bool initialized;
+  journal::ImageClientMeta client_meta;
+  journal::TagData tag_data;
+  int r = open_journaler(image_ctx, &journaler, &initialized, &client_meta,
+                         &tag_data);
+  if (r >= 0) {
+    *mirror_uuid = tag_data.mirror_uuid;
   }
 
-  bl = client.data.begin();
-  try {
-    ::decode(client_data, bl);
-  } catch (const buffer::error &err) {
-    r = -EINVAL;
-    goto clean_up;
+  if (initialized) {
+    journaler.shut_down();
   }
-
-  image_client_meta =
-    boost::get<librbd::journal::ImageClientMeta>(&client_data.client_meta);
-  if (image_client_meta == nullptr) {
-    r = -EINVAL;
-    goto clean_up;
-  }
-
-  tag_class = image_client_meta->tag_class;
-  uint64_t tag_tid;
-  tags_ctx = new C_DecodeTags(
-    image_ctx->cct, &lock, &tag_tid, &tag_data, &get_tags_ctx);
-  journaler.get_tags(tag_class, &tags_ctx->tags, tags_ctx);
-
-  r = get_tags_ctx.wait();
-  if (r < 0) {
-    goto clean_up;
-  }
-
-  *is_tag_owner = (tag_data.mirror_uuid == LOCAL_MIRROR_UUID);
-
-clean_up:
-  journaler.shut_down();
-
   return r;
+}
+
+template <typename I>
+int Journal<I>::allocate_tag(I *image_ctx, const std::string &mirror_uuid) {
+  CephContext *cct = image_ctx->cct;
+  ldout(cct, 20) << __func__ << ": mirror_uuid=" << mirror_uuid << dendl;
+
+  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID,
+                      image_ctx->cct->_conf->rbd_journal_commit_age);
+
+  bool initialized;
+  journal::ImageClientMeta client_meta;
+  journal::TagData tag_data;
+  int r = open_journaler(image_ctx, &journaler, &initialized, &client_meta,
+                         &tag_data);
+  BOOST_SCOPE_EXIT_ALL(&journaler, &initialized) {
+    if (initialized) {
+      journaler.shut_down();
+    }
+  };
+
+  if (r < 0) {
+    return r;
+  }
+
+  // TODO: inject current commit position into tag data
+  tag_data.mirror_uuid = mirror_uuid;
+  tag_data.predecessor_mirror_uuid = mirror_uuid;
+
+  bufferlist tag_bl;
+  ::encode(tag_data, tag_bl);
+
+  C_SaferCond allocate_tag_ctx;
+  cls::journal::Tag tag;
+  journaler.allocate_tag(client_meta.tag_class, tag_bl, &tag,
+                         &allocate_tag_ctx);
+
+  r = allocate_tag_ctx.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to allocate tag: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
+int Journal<I>::request_resync(I *image_ctx) {
+  CephContext *cct = image_ctx->cct;
+  ldout(cct, 20) << __func__ << dendl;
+
+  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID,
+                      image_ctx->cct->_conf->rbd_journal_commit_age);
+
+  bool initialized;
+  journal::ImageClientMeta client_meta;
+  journal::TagData tag_data;
+  int r = open_journaler(image_ctx, &journaler, &initialized, &client_meta,
+                         &tag_data);
+  BOOST_SCOPE_EXIT_ALL(&journaler, &initialized) {
+    if (initialized) {
+      journaler.shut_down();
+    }
+  };
+
+  if (r < 0) {
+    return r;
+  }
+
+  client_meta.resync_requested = true;
+
+  journal::ClientData client_data(client_meta);
+  bufferlist client_data_bl;
+  ::encode(client_data, client_data_bl);
+
+  C_SaferCond update_client_ctx;
+  journaler.update_client(client_data_bl, &update_client_ctx);
+
+  r = update_client_ctx.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to update client: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return 0;
 }
 
 template <typename I>
@@ -910,8 +1019,8 @@ void Journal<I>::handle_initialized(int r) {
     return;
   }
 
-  librbd::journal::ImageClientMeta *image_client_meta =
-    boost::get<librbd::journal::ImageClientMeta>(&client_data.client_meta);
+  journal::ImageClientMeta *image_client_meta =
+    boost::get<journal::ImageClientMeta>(&client_data.client_meta);
   if (image_client_meta == nullptr) {
     lderr(cct) << "failed to extract client meta data" << dendl;
     destroy_journaler(-EINVAL);

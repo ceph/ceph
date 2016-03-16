@@ -308,6 +308,7 @@ struct ImageClientMeta {
   static const ClientMetaType TYPE = IMAGE_CLIENT_META_TYPE;
 
   uint64_t tag_class = 0;
+  bool resync_requested = false;
 
   ImageClientMeta() {
   }
