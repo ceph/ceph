@@ -44,9 +44,9 @@ namespace {
   string ldap_uri = "ldaps://f23-kdc.rgw.com";
   string ldap_binddn = "uid=admin,cn=users,cn=accounts,dc=rgw,dc=com";
   string ldap_searchdn = "cn=users,cn=accounts,dc=rgw,dc=com";
-  string ldap_memberattr = "uid";
+  string ldap_dnattr = "uid";
 
-  rgw::LDAPHelper ldh(ldap_uri, ldap_binddn, ldap_searchdn, ldap_memberattr);
+  rgw::LDAPHelper ldh(ldap_uri, ldap_binddn, ldap_searchdn, ldap_dnattr);
 
 } /* namespace */
 

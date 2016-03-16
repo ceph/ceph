@@ -15,19 +15,21 @@
 
 namespace rgw {
 
+#if defined(HAVE_OPENLDAP)
+
   class LDAPHelper
   {
     std::string uri;
     std::string binddn;
     std::string searchdn;
-    std::string memberattr;
+    std::string dnattr;
     LDAP *ldap;
 
   public:
     LDAPHelper(std::string _uri, std::string _binddn, std::string _searchdn,
-	      std::string _memberattr)
+	      std::string _dnattr)
       : uri(std::move(_uri)), binddn(std::move(_binddn)), searchdn(_searchdn),
-	memberattr(_memberattr), ldap(nullptr) {
+	dnattr(_dnattr), ldap(nullptr) {
       // nothing
     }
 
@@ -57,11 +59,11 @@ namespace rgw {
       int ret;
       std::string filter;
       filter = "(";
-      filter += memberattr;
+      filter += dnattr;
       filter += "=";
       filter += uid;
       filter += ")";
-      char *attrs[] = { const_cast<char*>(memberattr.c_str()), nullptr };
+      char *attrs[] = { const_cast<char*>(dnattr.c_str()), nullptr };
       LDAPMessage *answer, *entry;
       ret = ldap_search_s(ldap, searchdn.c_str(), LDAP_SCOPE_SUBTREE,
 			  filter.c_str(), attrs, 0, &answer);
@@ -80,7 +82,35 @@ namespace rgw {
 	ldap_unbind(ldap);
     }
 
-  };
+  }; /* LDAPHelper */
+
+#else
+
+  class LDAPHelper
+  {
+  public:
+    LDAPHelper(std::string _uri, std::string _binddn, std::string _searchdn,
+	      std::string _dnattr)
+      {}
+
+    int init() {
+      return -ENOTSUP;
+    }
+
+    int bind() {
+      return -ENOTSUP;
+    }
+
+    int auth(const std::string uid, const std::string pwd) {
+      return -EACCES;
+    }
+
+    ~LDAPHelper() {}
+
+  }; /* LDAPHelper */
+
+
+#endif /* HAVE_OPENLDAP */
 
 } /* namespace rgw */
 

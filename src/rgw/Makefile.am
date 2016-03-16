@@ -44,7 +44,6 @@ librgw_la_SOURCES = \
 	rgw/rgw_http_client.cc \
 	rgw/rgw_json_enc.cc \
 	rgw/rgw_keystone.cc \
-	rgw/rgw_ldap.cc \
 	rgw/rgw_loadgen.cc \
 	rgw/rgw_log.cc \
 	rgw/rgw_metadata.cc \
@@ -91,6 +90,10 @@ librgw_la_SOURCES = \
 	rgw/rgw_xml.cc \
 	rgw/rgw_xml_enc.cc \
 	rgw/rgw_website.cc
+
+if WITH_OPENLDAP
+librgw_la_SOURCES += rgw/rgw_ldap.cc
+endif
 
 librgw_la_CXXFLAGS = -Woverloaded-virtual -fPIC -I$(srcdir)/xxHash \
 	${AM_CXXFLAGS}
