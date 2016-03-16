@@ -1024,26 +1024,24 @@ def get_user():
     return getpass.getuser() + '@' + socket.gethostname()
 
 
-def get_mon_names(ctx):
+def get_mon_names(ctx, cluster='ceph'):
     """
     :returns: a list of monitor names
     """
-    mons = []
-    for remote, roles in ctx.cluster.remotes.items():
-        for role in roles:
-            if not role.startswith('mon.'):
-                continue
-            mons.append(role)
-    return mons
+    is_mon = is_type('mon', cluster)
+    host_mons = [[role for role in roles if is_mon(role)]
+                 for roles in ctx.cluster.remotes.values()]
+    return [mon for mons in host_mons for mon in mons]
 
 
-def get_first_mon(ctx, config):
+def get_first_mon(ctx, config, cluster='ceph'):
     """
-    return the "first" mon (alphanumerically, for lack of anything better)
+    return the "first" mon role (alphanumerically, for lack of anything better)
     """
-    firstmon = sorted(get_mon_names(ctx))[0]
-    assert firstmon
-    return firstmon
+    mons = get_mon_names(ctx, cluster)
+    if mons:
+        return sorted(mons)[0]
+    assert False, 'no mon for cluster found'
 
 
 def replace_all_with_clients(cluster, config):

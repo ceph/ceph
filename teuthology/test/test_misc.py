@@ -89,6 +89,38 @@ def test_get_clients_simple():
         next(g)
 
 
+def test_get_mon_names():
+    expected = [
+        ([['mon.a', 'osd.0', 'mon.c']], 'ceph', ['mon.a', 'mon.c']),
+        ([['ceph.mon.a', 'osd.0', 'ceph.mon.c']], 'ceph', ['ceph.mon.a', 'ceph.mon.c']),
+        ([['mon.a', 'osd.0', 'mon.c'], ['ceph.mon.b']], 'ceph', ['mon.a', 'mon.c', 'ceph.mon.b']),
+        ([['mon.a', 'osd.0', 'mon.c'], ['foo.mon.a']], 'ceph', ['mon.a', 'mon.c']),
+        ([['mon.a', 'osd.0', 'mon.c'], ['foo.mon.a']], 'foo', ['foo.mon.a']),
+    ]
+    for remote_roles, cluster_name, expected_mons in expected:
+        ctx = argparse.Namespace()
+        ctx.cluster = Mock()
+        ctx.cluster.remotes = {i: roles for i, roles in enumerate(remote_roles)}
+        mons = misc.get_mon_names(ctx, cluster_name)
+        assert expected_mons == mons
+
+
+def test_get_first_mon():
+    expected = [
+        ([['mon.a', 'osd.0', 'mon.c']], 'ceph', 'mon.a'),
+        ([['ceph.mon.a', 'osd.0', 'ceph.mon.c']], 'ceph', 'ceph.mon.a'),
+        ([['mon.a', 'osd.0', 'mon.c'], ['ceph.mon.b']], 'ceph', 'ceph.mon.b'),
+        ([['mon.a', 'osd.0', 'mon.c'], ['foo.mon.a']], 'ceph', 'mon.a'),
+        ([['foo.mon.b', 'osd.0', 'mon.c'], ['foo.mon.a']], 'foo', 'foo.mon.a'),
+    ]
+    for remote_roles, cluster_name, expected_mon in expected:
+        ctx = argparse.Namespace()
+        ctx.cluster = Mock()
+        ctx.cluster.remotes = {i: roles for i, roles in enumerate(remote_roles)}
+        mon = misc.get_first_mon(ctx, None, cluster_name)
+        assert expected_mon == mon
+
+
 def test_roles_of_type():
     expected = [
         (['client.0', 'osd.0', 'ceph.osd.1'], 'osd', ['0', '1']),
