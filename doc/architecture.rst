@@ -1241,11 +1241,11 @@ Data Striping
 
 Storage devices have throughput limitations, which impact performance and
 scalability. So storage systems often support `striping`_--storing sequential
-pieces of information across across multiple storage devices--to increase
-throughput and performance. The most common form of data striping comes from
-`RAID`_. The RAID type most similar to Ceph's striping is `RAID 0`_, or a
-'striped volume.' Ceph's striping offers the throughput of RAID 0 striping,
-the reliability of n-way RAID mirroring and faster recovery.
+pieces of information across multiple storage devices--to increase throughput
+and performance. The most common form of data striping comes from `RAID`_. 
+The RAID type most similar to Ceph's striping is `RAID 0`_, or a 'striped 
+volume.' Ceph's striping offers the throughput of RAID 0 striping, the
+reliability of n-way RAID mirroring and faster recovery.
 
 Ceph provides three types of clients: Ceph Block Device, Ceph Filesystem, and
 Ceph Object Storage. A Ceph Client converts its data from the representation 
