@@ -194,9 +194,8 @@ Here is a sample configuration with many of the options set and documented::
         cpus: 1
 
       # The volumes attached to each instance. In the following example,
-      # three volumes of 10 GB will be created for each instanced and 
+      # three volumes of 10 GB will be created for each instance and 
       # will show as /dev/vdb, /dev/vdc and /dev/vdd
-      #
       #
       # This configuration applies to all instances created for teuthology jobs
       # that do not redefine these values.
@@ -205,7 +204,7 @@ Here is a sample configuration with many of the options set and documented::
 
         # The number of volumes
         #
-        count: 0
+        count: 3
         
         # The size of each volume, in GB
         #
