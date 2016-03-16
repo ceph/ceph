@@ -324,14 +324,17 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
 
 void ImageClientMeta::encode(bufferlist& bl) const {
   ::encode(tag_class, bl);
+  ::encode(resync_requested, bl);
 }
 
 void ImageClientMeta::decode(__u8 version, bufferlist::iterator& it) {
   ::decode(tag_class, it);
+  ::decode(resync_requested, it);
 }
 
 void ImageClientMeta::dump(Formatter *f) const {
   f->dump_unsigned("tag_class", tag_class);
+  f->dump_bool("resync_requested", resync_requested);
 }
 
 void MirrorPeerSyncPoint::encode(bufferlist& bl) const {

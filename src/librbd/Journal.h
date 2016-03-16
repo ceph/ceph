@@ -96,6 +96,7 @@ public:
 
   static const std::string IMAGE_CLIENT_ID;
   static const std::string LOCAL_MIRROR_UUID;
+  static const std::string ORPHAN_MIRROR_UUID;
 
   typedef std::list<AioObjectRequest *> AioObjectRequests;
 
@@ -109,7 +110,10 @@ public:
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
   static int reset(librados::IoCtx &io_ctx, const std::string &image_id);
 
-  static int is_tag_owner(ImageCtx *image_ctx, bool *is_tag_owner);
+  static int is_tag_owner(ImageCtxT *image_ctx, bool *is_tag_owner);
+  static int get_tag_owner(ImageCtxT *image_ctx, std::string *mirror_uuid);
+  static int allocate_tag(ImageCtxT *image_ctx, const std::string &mirror_uuid);
+  static int request_resync(ImageCtxT *image_ctx);
 
   bool is_journal_ready() const;
   bool is_journal_replaying() const;

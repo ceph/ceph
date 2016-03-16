@@ -72,20 +72,28 @@ struct ObjectSetPosition {
   static void generate_test_instances(std::list<ObjectSetPosition *> &o);
 };
 
+enum ClientState {
+  CLIENT_STATE_CONNECTED = 0,
+  CLIENT_STATE_DISCONNECTED = 1
+};
+
 struct Client {
   std::string id;
   bufferlist data;
   ObjectSetPosition commit_position;
+  ClientState state;
 
-  Client() {}
+  Client() : state(CLIENT_STATE_CONNECTED) {}
   Client(const std::string& _id, const bufferlist &_data,
-         const ObjectSetPosition &_commit_position = ObjectSetPosition())
-    : id(_id), data(_data), commit_position(_commit_position) {}
+         const ObjectSetPosition &_commit_position = ObjectSetPosition(),
+         ClientState _state = CLIENT_STATE_CONNECTED)
+    : id(_id), data(_data), commit_position(_commit_position), state(_state) {}
 
   inline bool operator==(const Client &rhs) const {
     return (id == rhs.id &&
             data.contents_equal(rhs.data) &&
-            commit_position == rhs.commit_position);
+            commit_position == rhs.commit_position &&
+            state == rhs.state);
   }
   inline bool operator<(const Client &rhs) const {
     return (id < rhs.id);
@@ -130,6 +138,7 @@ WRITE_CLASS_ENCODER(ObjectSetPosition);
 WRITE_CLASS_ENCODER(Client);
 WRITE_CLASS_ENCODER(Tag);
 
+std::ostream &operator<<(std::ostream &os, const ClientState &state);
 std::ostream &operator<<(std::ostream &os,
                          const ObjectPosition &object_position);
 std::ostream &operator<<(std::ostream &os,

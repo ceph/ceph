@@ -183,6 +183,23 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   return 0;
 }
 
+int validate_mirroring_enabled(ImageCtx *ictx) {
+  CephContext *cct = ictx->cct;
+  cls::rbd::MirrorImage mirror_image_internal;
+  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+      &mirror_image_internal);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
+      << dendl;
+    return r;
+  } else if (mirror_image_internal.state !=
+               cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED) {
+    lderr(cct) << "mirroring is not currently enabled" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
 } // anonymous namespace
 
   int detect_format(IoCtx &io_ctx, const string &name,
@@ -2483,9 +2500,120 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
-  int mirror_image_get(ImageCtx *ictx, mirror_image_t *mirror_image) {
+  int mirror_image_promote(ImageCtx *ictx, bool force) {
     CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "mirror_image_get " << ictx << dendl;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << ", "
+                   << "force=" << force << dendl;
+
+    int r = validate_mirroring_enabled(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    std::string mirror_uuid;
+    r = Journal<>::get_tag_owner(ictx, &mirror_uuid);
+    if (r < 0) {
+      lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    } else if (mirror_uuid == Journal<>::LOCAL_MIRROR_UUID) {
+      lderr(cct) << "image is already primary" << dendl;
+      return -EINVAL;
+    } else if (mirror_uuid != Journal<>::ORPHAN_MIRROR_UUID && !force) {
+      lderr(cct) << "image is still primary within a remote cluster" << dendl;
+      return -EBUSY;
+    }
+
+    // TODO: need interlock with local rbd-mirror daemon to ensure it has stopped
+    //       replay
+
+    r = Journal<>::allocate_tag(ictx, Journal<>::LOCAL_MIRROR_UUID);
+    if (r < 0) {
+      lderr(cct) << "failed to promote image: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+    return 0;
+  }
+
+  int mirror_image_demote(ImageCtx *ictx) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
+
+    int r = validate_mirroring_enabled(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    bool is_primary;
+    r = Journal<>::is_tag_owner(ictx, &is_primary);
+    if (r < 0) {
+      lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+
+    if (!is_primary) {
+      lderr(cct) << "image is not currently the primary" << dendl;
+      return -EINVAL;
+    }
+
+    RWLock::RLocker owner_lock(ictx->owner_lock);
+    C_SaferCond lock_ctx;
+    ictx->exclusive_lock->request_lock(&lock_ctx);
+    r = lock_ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to lock image: " << cpp_strerror(r) << dendl;
+    } else if (!ictx->exclusive_lock->is_lock_owner()) {
+      lderr(cct) << "failed to acquire exclusive lock" << dendl;
+    }
+
+    r = Journal<>::allocate_tag(ictx, Journal<>::ORPHAN_MIRROR_UUID);
+    if (r < 0) {
+      lderr(cct) << "failed to demote image: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+    return 0;
+  }
+
+  int mirror_image_resync(ImageCtx *ictx) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
+
+    int r = validate_mirroring_enabled(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    std::string mirror_uuid;
+    r = Journal<>::get_tag_owner(ictx, &mirror_uuid);
+    if (r < 0) {
+      lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    } else if (mirror_uuid == Journal<>::LOCAL_MIRROR_UUID) {
+      lderr(cct) << "image is primary, cannot resync to itself" << dendl;
+      return -EINVAL;
+    }
+
+    // flag the journal indicating that we want to rebuild the local image
+    r = Journal<>::request_resync(ictx);
+    if (r < 0) {
+      lderr(cct) << "failed to request resync: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    return 0;
+  }
+
+  int mirror_image_get_info(ImageCtx *ictx, mirror_image_info_t *mirror_image_info,
+                            size_t info_size) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
+    if (info_size < sizeof(mirror_image_info_t)) {
+      return -ERANGE;
+    }
 
     cls::rbd::MirrorImage mirror_image_internal;
     int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
@@ -2496,12 +2624,19 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
     }
 
-    mirror_image->global_id = mirror_image_internal.global_image_id;
+    mirror_image_info->global_id = mirror_image_internal.global_image_id;
     if (r == -ENOENT) {
-      mirror_image->state = RBD_MIRROR_IMAGE_DISABLED;
+      mirror_image_info->state = RBD_MIRROR_IMAGE_DISABLED;
     } else {
-      mirror_image->state =
+      mirror_image_info->state =
         static_cast<rbd_mirror_image_state_t>(mirror_image_internal.state);
+    }
+
+    r = Journal<>::is_tag_owner(ictx, &mirror_image_info->primary);
+    if (r < 0) {
+      lderr(cct) << "failed to check tag ownership: "
+                 << cpp_strerror(r) << dendl;
+      return r;
     }
 
     return 0;
