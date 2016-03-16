@@ -266,6 +266,7 @@ Summary:	Ceph Common
 Group:		System Environment/Base
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
+Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
 Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
