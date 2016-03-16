@@ -146,17 +146,21 @@ class DaemonGroup(object):
         """
         self.daemons = {}
 
-    def add_daemon(self, remote, role, id_, *args, **kwargs):
+    def add_daemon(self, remote, type_, id_, *args, **kwargs):
         """
         Add a daemon.  If there already is a daemon for this id_ and role, stop
         that daemon and.  Restart the damon once the new value is set.
 
         :param remote: Remote site
-        :param role: Role (osd, mds, mon, rgw,  for example)
+        :param type_: type of daemon (osd, mds, mon, rgw,  for example)
         :param id_: Id (index into role dictionary)
         :param args: Daemonstate positional parameters
         :param kwargs: Daemonstate keyword parameters
         """
+        # for backwards compatibility with older ceph-qa-suite branches,
+        # we can only get optional args from unused kwargs entries
+        cluster = kwargs.pop('cluster', 'ceph')
+        role = cluster + '.' + type_
         if role not in self.daemons:
             self.daemons[role] = {}
         if id_ in self.daemons[role]:
@@ -166,24 +170,26 @@ class DaemonGroup(object):
                                               **kwargs)
         self.daemons[role][id_].restart()
 
-    def get_daemon(self, role, id_):
+    def get_daemon(self, type_, id_, cluster='ceph'):
         """
         get the daemon associated with this id_ for this role.
 
-        :param role: Role (osd, mds, mon, rgw,  for example)
+        :param type_: type of daemon (osd, mds, mon, rgw,  for example)
         :param id_: Id (index into role dictionary)
         """
+        role = cluster + '.' + type_
         if role not in self.daemons:
             return None
         return self.daemons[role].get(str(id_), None)
 
-    def iter_daemons_of_role(self, role):
+    def iter_daemons_of_role(self, type_, cluster='ceph'):
         """
         Iterate through all daemon instances for this role.  Return dictionary
         of daemon values.
 
-        :param role: Role (osd, mds, mon, rgw,  for example)
+        :param type_: type of daemon (osd, mds, mon, rgw,  for example)
         """
+        role = cluster + '.' + type_
         return self.daemons.get(role, {}).values()
 
     def resolve_role_list(self, roles, types):
