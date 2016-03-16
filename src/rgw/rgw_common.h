@@ -935,9 +935,9 @@ struct RGWBucketInfo
        ::decode(flags, bl);
      if (struct_v >= 5)
        ::decode(zonegroup, bl);
-     uint64_t ct;
-     ::decode(ct, bl);
      if (struct_v >= 6 && struct_v < 17) {
+       uint64_t ct;
+       ::decode(ct, bl);
        creation_time = ceph::real_clock::from_time_t((time_t)ct);
      }
      if (struct_v >= 7)
