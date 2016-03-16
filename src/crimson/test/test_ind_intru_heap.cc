@@ -6,6 +6,7 @@
  */
 
 
+#include <memory>
 #include <string>
 #include <iostream>
 
@@ -42,15 +43,6 @@ struct TestCompare {
 };
 
 
-#if 0
-struct TestIntruData {
-    crimson::IndIntruHeapData& operator()(Test1& d) {
-        return d.heap_data;
-    }
-};
-#endif
-
-
 int main(int argc, char** argv) {
     Test1 d1(2);
     Test1 d2(3);
@@ -59,16 +51,15 @@ int main(int argc, char** argv) {
 
     crimson::IndIntruHeap<std::shared_ptr<Test1>, Test1, &Test1::heap_data, TestCompare> my_heap;
 
-    crimson::IndIntruHeap<std::shared_ptr<int>, Test1, &Test1::heap_data, TestCompare> my_heap2;
+    const std::shared_ptr<Test1> d99 = std::make_shared<Test1>(99);
 
-#if 0
-    my_heap.push(d1);
-    my_heap.push(d2);
-    my_heap.push(d3);
-    my_heap.push(d4);
-    my_heap.push(Test1(-9));
-    my_heap.push(Test1(99));
-    my_heap.push(Test1(0));
+    my_heap.push(std::make_shared<Test1>(2));
+    my_heap.push(d99);
+    my_heap.push(std::make_shared<Test1>(1));
+    my_heap.push(std::make_shared<Test1>(-5));
+    my_heap.push(std::make_shared<Test1>(12));
+    my_heap.push(std::make_shared<Test1>(-12));
+    my_heap.push(std::make_shared<Test1>(-7));
 
     std::cout << my_heap << std::endl;
 
@@ -86,7 +77,6 @@ int main(int argc, char** argv) {
         my_heap.pop();
         std::cout << my_heap << std::endl;
     }
-#endif
 
     return 0;
 }

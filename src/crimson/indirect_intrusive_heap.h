@@ -20,7 +20,19 @@
 namespace crimson {
   using IndIntruHeapData = size_t;
 
-  // TODO add comment
+  /* T is the ultimate data that's being stored in the heap, although
+   *   through indirection.
+   *
+   * I is the indirect type that will actually be stored in the heap
+   *   and that must allow dereferencing (via operator*) to yield a
+   *   T&.
+   *
+   * C is a functor when given T& will return true if the first
+   *   definitely precedes the first.
+   *
+   * heap_info is a data member pointer as to where the heap data in T
+   * is stored.
+   */
   template<typename I, typename T, IndIntruHeapData T::*heap_info, typename C>
   class IndIntruHeap {
 
@@ -48,8 +60,7 @@ namespace crimson {
       // empty
     }
 
-#if 0
-    IndIntruHeap(const IndIntruHeap<T,I,C>& other) :
+    IndIntruHeap(const IndIntruHeap<I,T,heap_info,C>& other) :
       count(other.count)
     {
       for (int i = 0; i < other.count; ++i) {
@@ -59,17 +70,20 @@ namespace crimson {
 
     bool empty() const { return 0 == count; }
 
-    T& top() { return data[0]; }
+    T& top() { return *data[0]; }
 
-    void push(T&& item) {
+    I& top_ind() { return data[0]; }
+
+    template<typename J>
+    void push(J&& item) {
       index_t i = count++;
       intru_data_of(item) = i;
       data.emplace_back(item);
       sift_up(i);
     }
 
-    void push(const T& item) {
-      T copy(item);
+    void push(const I& item) {
+      I copy(item);
       push(std::move(copy));
     }
 
@@ -81,20 +95,20 @@ namespace crimson {
     }
 
     void adjust_up(T& item) {
-      sift_up(intru_data_of(item));
+      sift_up(item.*heap_info);
     }
 
     void adjust_down(T& item) {
-      sift_down(intru_data_of(item));
+      sift_down(item.*heap_info);
     }
 
     void adjust(T& item) {
-      sift(intru_data_of(item));
+      sift(item.*heap_info);
     }
 
     friend std::ostream& operator<<(std::ostream& out, const IndIntruHeap& h) {
       for (int i = 0; i < h.count; ++i) {
-	out << h.data[i] << ", ";
+	out << *h.data[i] << ", ";
       }
       return out;
     }
@@ -103,7 +117,7 @@ namespace crimson {
     display_sorted(std::ostream& out,
 		   bool insert_line_breaks = true,
 		   std::function<bool(const T&)> filter = all_filter) const {
-      IndIntruHeap<T,I,C> copy = *this;
+      IndIntruHeap<I,T,heap_info,C> copy = *this;
 
       bool first = true;
       out << "[ ";
@@ -134,6 +148,10 @@ namespace crimson {
 
   protected:
 
+    static index_t& intru_data_of(I& item) {
+      return (*item).*heap_info;
+    }
+
     // default value of filter parameter to display_sorted
     static bool all_filter(const T& data) { return true; }
 
@@ -150,7 +168,7 @@ namespace crimson {
     void sift_up(index_t i) {
       while (i > 0) {
 	index_t pi = parent(i);
-	if (comparator(data[pi], data[i])) {
+	if (comparator(*data[pi], *data[i])) {
 	  break;
 	}
 
@@ -167,8 +185,8 @@ namespace crimson {
 	index_t ri = rhs(i);
 
 	if (li < count) {
-	  if (comparator(data[li], data[i])) {
-	    if (ri < count && comparator(data[ri], data[li])) {
+	  if (comparator(*data[li], *data[i])) {
+	    if (ri < count && comparator(*data[ri], *data[li])) {
 	      std::swap(data[i], data[ri]);
 	      intru_data_of(data[i]) = i;
 	      intru_data_of(data[ri]) = ri;
@@ -179,7 +197,7 @@ namespace crimson {
 	      intru_data_of(data[li]) = li;
 	      i = li;
 	    }
-	  } else if (ri < count && comparator(data[ri], data[i])) {
+	  } else if (ri < count && comparator(*data[ri], *data[i])) {
 	    std::swap(data[i], data[ri]);
 	    intru_data_of(data[i]) = i;
 	    intru_data_of(data[ri]) = ri;
@@ -199,7 +217,7 @@ namespace crimson {
 	sift_down(i);
       } else {
 	index_t pi = parent(i);
-	if (comparator(data[pi], data[i])) {
+	if (comparator(*data[pi], *data[i])) {
 	  // if we can go up, we will
 	  sift_up(i);
 	} else {
@@ -208,6 +226,5 @@ namespace crimson {
 	}
       }
     } // sift
-#endif
   }; // class IndIntruHeap
 } // namespace crimson
