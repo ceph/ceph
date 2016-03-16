@@ -1194,12 +1194,27 @@ fi
 
 #################################################################################
 %if %{with ocf}
+
 %files resource-agents
 %defattr(0755,root,root,-)
-%dir /usr/lib/ocf
-%dir /usr/lib/ocf/resource.d
-%dir /usr/lib/ocf/resource.d/ceph
-/usr/lib/ocf/resource.d/%{name}/*
+# N.B. src/ocf/Makefile.am uses $(prefix)/lib
+%dir %{_prefix}/lib/ocf
+%dir %{_prefix}/lib/ocf/resource.d
+%dir %{_prefix}/lib/ocf/resource.d/ceph
+%if 0%{_with_systemd}
+%exclude %{_prefix}/lib/ocf/resource.d/ceph/ceph
+%exclude %{_prefix}/lib/ocf/resource.d/ceph/mds
+%exclude %{_prefix}/lib/ocf/resource.d/ceph/mon
+%exclude %{_prefix}/lib/ocf/resource.d/ceph/osd
+%endif
+%if ! 0%{_with_systemd}
+%{_prefix}/lib/ocf/resource.d/ceph/ceph
+%{_prefix}/lib/ocf/resource.d/ceph/mds
+%{_prefix}/lib/ocf/resource.d/ceph/mon
+%{_prefix}/lib/ocf/resource.d/ceph/osd
+%endif
+%{_prefix}/lib/ocf/resource.d/ceph/rbd
+
 %endif
 
 #################################################################################
