@@ -1820,6 +1820,62 @@ void RGWCreateBucket::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
+static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
+                                  map<string, bufferlist>& out_attrs,
+                                  map<string, bufferlist>& out_rmattrs)
+{
+  for (const auto kv : orig_attrs) {
+    const string& name = kv.first;
+
+    /* Check if the attr is user-defined metadata item. */
+    if (name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1,
+                     RGW_ATTR_META_PREFIX) == 0) {
+      /* For the objects all existing meta attrs have to be removed. */
+      out_rmattrs[name] = kv.second;
+    } else if (out_attrs.find(name) == std::end(out_attrs)) {
+      out_attrs[name] = kv.second;
+    }
+  }
+}
+
+static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
+                                  const set<string>& rmattr_names,
+                                  map<string, bufferlist>& out_attrs)
+{
+  for (const auto kv : orig_attrs) {
+    const string& name = kv.first;
+
+    /* Check if the attr is user-defined metadata item. */
+    if (name.compare(0, strlen(RGW_ATTR_META_PREFIX),
+                     RGW_ATTR_META_PREFIX) == 0) {
+      /* For the buckets all existing meta attrs are preserved,
+         except those that are listed in rmattr_names. */
+      if (rmattr_names.find(name) != std::end(rmattr_names)) {
+        const auto aiter = out_attrs.find(name);
+
+        if (aiter != std::end(out_attrs)) {
+          out_attrs.erase(aiter);
+        }
+      }
+    } else if (out_attrs.find(name) == std::end(out_attrs)) {
+      out_attrs[name] = kv.second;
+    }
+  }
+}
+
+
+static void populate_with_generic_attrs(const req_state * const s,
+                                        map<string, bufferlist>& out_attrs)
+{
+  for (auto kv : s->generic_attrs) {
+    bufferlist& attrbl = out_attrs[kv.first];
+    const string& val = kv.second;
+    attrbl.clear();
+    attrbl.append(val.c_str(), val.size() + 1);
+  }
+}
+
+
 void RGWCreateBucket::execute()
 {
   RGWAccessControlPolicy old_policy(s->cct);
@@ -1911,8 +1967,13 @@ void RGWCreateBucket::execute()
     }
   }
 
-  policy.encode(aclbl);
+  if (need_metadata_upload()) {
+    rgw_get_request_metadata(s->cct, s->info, attrs, false);
+    prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
+    populate_with_generic_attrs(s, attrs);
+  }
 
+  policy.encode(aclbl);
   attrs[RGW_ATTR_ACL] = aclbl;
 
   if (has_cors) {
@@ -1960,6 +2021,46 @@ void RGWCreateBucket::execute()
     }
   } else if (op_ret == -EEXIST || (op_ret == 0 && existed)) {
     op_ret = -ERR_BUCKET_EXISTS;
+  }
+
+  if (need_metadata_upload() && existed) {
+    /* OK, it looks we lost race with another request. As it's required to
+     * handle metadata fusion and upload, the whole operation becomes very
+     * similar in nature to PutMetadataBucket. However, as the attrs may
+     * changed in the meantime, we have to refresh. */
+    short tries = 0;
+    do {
+      RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+      RGWBucketInfo binfo;
+      map<string, bufferlist> battrs;
+
+      op_ret = store->get_bucket_info(obj_ctx, s->bucket_tenant, s->bucket_name,
+                                      binfo, nullptr, &battrs);
+      if (op_ret < 0) {
+        return;
+      } else if (binfo.owner.compare(s->user->user_id) != 0) {
+        /* New bucket doesn't belong to the account we're operating on. */
+        op_ret = -EEXIST;
+        return;
+      } else {
+        s->bucket_info = binfo;
+        s->bucket_attrs = battrs;
+      }
+
+      attrs.clear();
+
+      rgw_get_request_metadata(s->cct, s->info, attrs, false);
+      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
+      populate_with_generic_attrs(s, attrs);
+
+      op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+                                    &s->bucket_info.objv_tracker);
+    } while (op_ret == -ECANCELED && tries++ < 20);
+
+    /* Restore the proper return code. */
+    if (op_ret >= 0) {
+      op_ret = -ERR_BUCKET_EXISTS;
+    }
   }
 }
 
@@ -2595,64 +2696,6 @@ done:
   dispose_processor(processor);
 }
 
-
-static void populate_with_generic_attrs(const req_state * const s,
-                                        map<string, bufferlist>& out_attrs)
-{
-  map<string, string>::const_iterator giter;
-
-  for (giter = s->generic_attrs.begin(); giter != s->generic_attrs.end(); ++giter) {
-    bufferlist& attrbl = out_attrs[giter->first];
-    const string& val = giter->second;
-    attrbl.clear();
-    attrbl.append(val.c_str(), val.size() + 1);
-  }
-}
-
-static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
-                                  map<string, bufferlist>& out_attrs,
-                                  map<string, bufferlist>& out_rmattrs)
-{
-  map<string, bufferlist>::const_iterator iter;
-
-  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
-    const string& name = iter->first;
-    /* check if the attr is user-defined metadata item */
-    if (name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1, RGW_ATTR_META_PREFIX) == 0) {
-      /* for the objects all existing meta attrs have to be removed */
-      out_rmattrs[name] = iter->second;
-    } else if (out_attrs.find(name) == out_attrs.end()) {
-      out_attrs[name] = iter->second;
-    }
-  }
-}
-
-static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
-                                  const set<string>& rmattr_names,
-                                  map<string, bufferlist>& out_attrs,
-                                  map<string, bufferlist>& out_rmattrs)
-{
-  map<string, bufferlist>::const_iterator iter;
-
-  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
-    const string& name = iter->first;
-    /* check if the attr is user-defined metadata item */
-    if (name.compare(0, strlen(RGW_ATTR_META_PREFIX), RGW_ATTR_META_PREFIX) == 0) {
-      /* for the buckets all existing meta attrs are preserved,
-         except those that are listed in rmattr_names. */
-      if (rmattr_names.find(name) != rmattr_names.end()) {
-        map<string, bufferlist>::iterator aiter = out_attrs.find(name);
-        if (aiter != out_attrs.end()) {
-          out_attrs.erase(aiter);
-        }
-        out_rmattrs[name] = iter->second;
-      }
-    } else if (out_attrs.find(name) == out_attrs.end()) {
-      out_attrs[name] = iter->second;
-    }
-  }
-}
-
 int RGWPutMetadataAccount::handle_temp_url_update(
   const map<int, string>& temp_url_keys) {
   RGWUserAdminOpState user_op;
@@ -2779,7 +2822,7 @@ void RGWPutMetadataBucket::pre_exec()
 
 void RGWPutMetadataBucket::execute()
 {
-  map<string, bufferlist> attrs, orig_attrs, rmattrs;
+  map<string, bufferlist> attrs, orig_attrs;
 
   op_ret = get_params();
   if (op_ret < 0) {
@@ -2795,7 +2838,7 @@ void RGWPutMetadataBucket::execute()
   }
 
   orig_attrs = s->bucket_attrs;
-  prepare_add_del_attrs(orig_attrs, rmattr_names, attrs, rmattrs);
+  prepare_add_del_attrs(orig_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
 
   if (has_policy) {
