@@ -113,6 +113,7 @@ class SELinux(Task):
             'comm="dmidecode"',
             'chronyd.service',
             'name="cephtest"',
+            'scontext=system_u:system_r:nrpe_t:s0',
         ]
         se_whitelist = self.config.get('whitelist', [])
         if se_whitelist:
