@@ -387,6 +387,7 @@ public:
 
   int get_nodeid() const { return whoami; }
 
+  atomic_t max_oldest_map;
   OSDMapRef osdmap;
   OSDMapRef get_osdmap() {
     Mutex::Locker l(publish_lock);
