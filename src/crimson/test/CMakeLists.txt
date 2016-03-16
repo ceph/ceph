@@ -5,6 +5,8 @@ include_directories(../src)
 
 set(local_flags "-std=gnu++11 -Wall -pthread")
 
+set(local_flags "${local_flags} -g -O0")
+
 set(srcs
   test_intrusive_heap.cc
   test_ind_intru_heap.cc)

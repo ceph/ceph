@@ -21,7 +21,7 @@ struct Elem {
     Elem(int _data) : data(_data) { }
 
     friend std::ostream& operator<<(std::ostream& out, const Elem& d) {
-        out << d.data << " (" << d.heap_data << ")";
+        out << d.data;
         return out;
     }
 };
@@ -155,4 +155,139 @@ TEST(IndIntruHeap, regular_ptr) {
     EXPECT_FALSE(heap.empty());
     heap.pop();
     EXPECT_TRUE(heap.empty());
+}
+
+
+TEST(IndIntruHeap, adjust_down) {
+    crimson::IndIntruHeap<std::unique_ptr<Elem>, Elem, &Elem::heap_data, ElemCompare> heap;
+
+    heap.push(std::unique_ptr<Elem>(new Elem(2)));
+    heap.push(std::unique_ptr<Elem>(new Elem(99)));
+    heap.push(std::unique_ptr<Elem>(new Elem(1)));
+    heap.push(std::unique_ptr<Elem>(new Elem(-5)));
+    heap.push(std::unique_ptr<Elem>(new Elem(12)));
+    heap.push(std::unique_ptr<Elem>(new Elem(-12)));
+    heap.push(std::unique_ptr<Elem>(new Elem(-7)));
+
+    heap.top().data = 24;
+
+    heap.adjust_down(heap.top());
+
+    EXPECT_EQ(-7, heap.top().data);
+
+    heap.pop();
+    heap.pop();
+    heap.pop();
+    heap.pop();
+    heap.pop();
+
+    EXPECT_EQ(24, heap.top().data);
+}
+
+
+
+TEST(IndIntruHeap, adjust_down_not) {
+    crimson::IndIntruHeap<std::unique_ptr<Elem>, Elem, &Elem::heap_data, ElemCompare> heap;
+
+    heap.push(std::unique_ptr<Elem>(new Elem(2)));
+    heap.push(std::unique_ptr<Elem>(new Elem(99)));
+    heap.push(std::unique_ptr<Elem>(new Elem(1)));
+    heap.push(std::unique_ptr<Elem>(new Elem(-5)));
+    heap.push(std::unique_ptr<Elem>(new Elem(12)));
+    heap.push(std::unique_ptr<Elem>(new Elem(-12)));
+    heap.push(std::unique_ptr<Elem>(new Elem(-7)));
+
+    heap.top().data = -99;
+
+    heap.adjust_down(heap.top());
+
+    EXPECT_EQ(-99, heap.top().data);
+
+    heap.pop();
+
+    EXPECT_EQ(-7, heap.top().data);
+}
+
+
+TEST(IndIntruHeap, adjust_up_and_adjust_down) {
+    crimson::IndIntruHeap<std::shared_ptr<Elem>,
+                          Elem,
+                          &Elem::heap_data,
+                          ElemCompare> heap;
+
+    auto data1 = std::make_shared<Elem>(1);
+
+    heap.push(std::make_shared<Elem>(2));
+    heap.push(std::make_shared<Elem>(99));
+    heap.push(data1);
+    heap.push(std::make_shared<Elem>(-5));
+    heap.push(std::make_shared<Elem>(12));
+    heap.push(std::make_shared<Elem>(-12));
+    heap.push(std::make_shared<Elem>(-7));
+
+    EXPECT_EQ(-12, heap.top().data);
+
+    data1->data = -99;
+    heap.adjust_up(*data1);
+
+    EXPECT_EQ(-99, heap.top().data);
+
+    data1->data = 999;
+    heap.adjust_down(*data1);
+
+    EXPECT_EQ(-12, heap.top().data);
+
+    data1->data = 9;
+    heap.adjust_up(*data1);
+
+    heap.pop(); // remove -12
+    heap.pop(); // remove -7
+    heap.pop(); // remove -5
+    heap.pop(); // remove 2
+
+    EXPECT_EQ(9, heap.top().data);
+}
+
+
+TEST(IndIntruHeap, adjust) {
+    crimson::IndIntruHeap<std::shared_ptr<Elem>,
+                          Elem,
+                          &Elem::heap_data,
+                          ElemCompare> heap;
+
+    auto data1 = std::make_shared<Elem>(1);
+
+    heap.push(std::make_shared<Elem>(2));
+    heap.push(std::make_shared<Elem>(99));
+    heap.push(data1);
+    heap.push(std::make_shared<Elem>(-5));
+    heap.push(std::make_shared<Elem>(12));
+    heap.push(std::make_shared<Elem>(-12));
+    heap.push(std::make_shared<Elem>(-7));
+
+    // heap.display_sorted(std::cout);
+
+    EXPECT_EQ(-12, heap.top().data);
+
+    data1->data = 999;
+    heap.adjust(*data1);
+
+    EXPECT_EQ(-12, heap.top().data);
+
+    data1->data = -99;
+    heap.adjust(*data1);
+
+    EXPECT_EQ(-99, heap.top().data);
+
+    data1->data = 9;
+    heap.adjust(*data1);
+
+    EXPECT_EQ(-12, heap.top().data);
+
+    heap.pop(); // remove -12
+    heap.pop(); // remove -7
+    heap.pop(); // remove -5
+    heap.pop(); // remove 2
+
+    EXPECT_EQ(9, heap.top().data);
 }

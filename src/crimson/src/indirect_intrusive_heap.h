@@ -39,11 +39,12 @@ namespace crimson {
 
     static_assert(
       std::is_same<T,typename std::pointer_traits<I>::element_type>::value,
-      "class I must resolve to class T by indirection (pointer dereference).");
+      "class I must resolve to class T by indirection (pointer dereference)");
 
     static_assert(
-      std::is_same<bool,typename std::result_of<C(const T&,const T&)>::type>::value,
-      "class C must define operator() to take two const T& and return a bool.");
+      std::is_same<bool,
+      typename std::result_of<C(const T&,const T&)>::type>::value,
+      "class C must define operator() to take two const T& and return a bool");
 
 
   protected:
@@ -75,8 +76,7 @@ namespace crimson {
 
     I& top_ind() { return data[0]; }
 
-    template<typename J>
-    void push(J&& item) {
+    void push(I&& item) {
       index_t i = count++;
       intru_data_of(item) = i;
       data.emplace_back(std::move(item));
@@ -108,39 +108,38 @@ namespace crimson {
     }
 
     friend std::ostream& operator<<(std::ostream& out, const IndIntruHeap& h) {
-      for (uint i = 0; i < h.count; ++i) {
-	out << *h.data[i] << ", ";
+      auto i = h.data.cbegin();
+      if (i != h.data.cend()) {
+	out << **i;
+	++i;
+	while (i != h.data.cend()) {
+	  out << ", " << **i;
+	}
       }
       return out;
     }
 
+    // can only be called if I is copyable
     std::ostream&
     display_sorted(std::ostream& out,
-		   bool insert_line_breaks = true,
 		   std::function<bool(const T&)> filter = all_filter) const {
+      static_assert(std::is_copy_constructible<I>::value,
+		    "cannot call display_sorted when class I is not copy"
+		    " constructible");
+
       IndIntruHeap<I,T,heap_info,C> copy = *this;
 
       bool first = true;
-      out << "[ ";
-
       while(!copy.empty()) {
 	const T& top = copy.top();
 	if (filter(top)) {
 	  if (!first) {
 	    out << ", ";
 	  }
-	  if (insert_line_breaks) {
-	    out << std::endl << "    ";
-	  }
 	  out << copy.top();
 	  first = false;
 	}
 	copy.pop();
-      }
-
-      out << " ]";
-      if (insert_line_breaks) {
-	out << std::endl;
       }
 
       return out;
@@ -218,7 +217,7 @@ namespace crimson {
 	sift_down(i);
       } else {
 	index_t pi = parent(i);
-	if (comparator(*data[pi], *data[i])) {
+	if (comparator(*data[i], *data[pi])) {
 	  // if we can go up, we will
 	  sift_up(i);
 	} else {
