@@ -8484,12 +8484,6 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op)
     return ret;
   }
 
-  ret = store->data_log->add_entry(bs->bucket, bs->shard_id);
-  if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
-    return ret;
-  }
-
   if (obj_state && obj_state->write_tag.length()) {
     optag = string(obj_state->write_tag.c_str(), obj_state->write_tag.length());
   } else {
@@ -8535,6 +8529,11 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint
 
   ret = store->cls_obj_complete_add(*bs, optag, poolid, epoch, ent, category, remove_objs, bilog_flags);
 
+  int r = store->data_log->add_entry(bs->bucket, bs->shard_id);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+  }
+
   return ret;
 }
 
@@ -8551,7 +8550,15 @@ int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
     ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
     return ret;
   }
-  return store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, remove_objs, bilog_flags);
+
+  ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, remove_objs, bilog_flags);
+
+  int r = store->data_log->add_entry(bs->bucket, bs->shard_id);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+  }
+
+  return ret;
 }
 
 
