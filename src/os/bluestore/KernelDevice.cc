@@ -116,6 +116,11 @@ int KernelDevice::open(string p)
       goto out_fail;
     }
     size = s;
+
+    //For rotational disk, use async_read is better.
+    if (!g_conf->bluestore_wal_async_read && block_device_is_rotational(path.c_str()))
+      g_conf->set_val("bluestore_wal_async_read", "true");
+
   } else {
     size = st.st_size;
   }
