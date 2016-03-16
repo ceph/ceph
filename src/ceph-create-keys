@@ -84,12 +84,12 @@ def get_key(cluster, mon_id):
     pathdir = os.path.dirname(path)
     if not os.path.exists(pathdir):
         os.makedirs(pathdir)
-        os.chmod(pathdir, 0770)
+        os.chmod(pathdir, 0o770)
         os.chown(pathdir, get_ceph_uid(), get_ceph_gid())
     while True:
         try:
             with file(tmp, 'w') as f:
-                os.fchmod(f.fileno(), 0600)
+                os.fchmod(f.fileno(), 0o600)
                 os.fchown(f.fileno(), get_ceph_uid(), get_ceph_gid())
                 LOG.info('Talking to monitor...')
                 returncode = subprocess.call(
@@ -156,13 +156,13 @@ def bootstrap_key(cluster, type_):
     pathdir = os.path.dirname(path)
     if not os.path.exists(pathdir):
         os.makedirs(pathdir)
-        os.chmod(pathdir, 0770)
+        os.chmod(pathdir, 0o770)
         os.chown(pathdir, get_ceph_uid(), get_ceph_gid())
 
     while True:
         try:
             with file(tmp, 'w') as f:
-                os.fchmod(f.fileno(), 0600)
+                os.fchmod(f.fileno(), 0o600)
                 os.fchown(f.fileno(), get_ceph_uid(), get_ceph_gid())
                 LOG.info('Talking to monitor...')
                 returncode = subprocess.call(
