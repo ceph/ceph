@@ -4301,7 +4301,6 @@ error:
 
 bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
                                                map<string, bufferlist>& battrs,
-                                               rgw_obj& obj,
                                                ACLOwner& bucket_owner /* out */)
 {
   RGWAccessControlPolicy bacl(store->ctx());
@@ -4311,26 +4310,7 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
     return false;
   }
 
-  RGWAccessControlPolicy oacl(s->cct);
-  ret = read_policy(store, s, binfo, battrs, &oacl, binfo.bucket, s->object);
-  if (ret < 0) {
-    return false;
-  }
-
   bucket_owner = bacl.get_owner();
-
-  return verify_object_permission(s, &bacl, &oacl, RGW_PERM_WRITE);
-}
-
-bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
-                                               map<string, bufferlist>& battrs)
-{
-  RGWAccessControlPolicy bacl(store->ctx());
-  rgw_obj_key no_obj;
-  int ret = read_policy(store, s, binfo, battrs, &bacl, binfo.bucket, no_obj);
-  if (ret < 0) {
-    return false;
-  }
 
   return verify_bucket_permission(s, &bacl, RGW_PERM_WRITE);
 }
@@ -4341,10 +4321,18 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
 
   RGWBucketInfo binfo;
   map<string, bufferlist> battrs;
+  ACLOwner bowner;
+
   int ret = store->get_bucket_info(obj_ctx, s->user->user_id.tenant,
-				  path.bucket_name, binfo, NULL, &battrs);
+                                   path.bucket_name, binfo, nullptr,
+                                   &battrs);
   if (ret < 0) {
     goto binfo_fail;
+  }
+
+  if (!verify_permission(binfo, battrs, bowner)) {
+    ret = -EACCES;
+    goto auth_fail;
   }
 
   if (!path.obj_key.empty()) {
@@ -4354,15 +4342,9 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
     RGWRados::Object del_target(store, binfo, obj_ctx, obj);
     RGWRados::Object::Delete del_op(&del_target);
 
-    ACLOwner owner;
-    if (!verify_permission(binfo, battrs, obj, owner)) {
-      ret = -EACCES;
-      goto auth_fail;
-    }
-
     del_op.params.bucket_owner = binfo.owner;
     del_op.params.versioning_status = binfo.versioning_status();
-    del_op.params.obj_owner = owner;
+    del_op.params.obj_owner = bowner;
 
     ret = del_op.delete_obj();
     if (ret < 0) {
@@ -4372,18 +4354,13 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
     RGWObjVersionTracker ot;
     ot.read_version = binfo.ep_objv;
 
-    if (!verify_permission(binfo, battrs)) {
-      ret = -EACCES;
-      goto auth_fail;
-    }
-
     ret = store->delete_bucket(binfo.bucket, ot);
     if (0 == ret) {
       ret = rgw_unlink_bucket(store, binfo.owner, binfo.bucket.tenant,
-			      binfo.bucket.name, false);
+                              binfo.bucket.name, false);
       if (ret < 0) {
         ldout(s->cct, 0) << "WARNING: failed to unlink bucket: ret=" << ret
-			 << dendl;
+                         << dendl;
       }
     }
     if (ret < 0) {
@@ -4393,11 +4370,11 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
     if (!store->get_zonegroup().is_master) {
       bufferlist in_data;
       ret = forward_request_to_master(s, &ot.read_version, store, in_data,
-				      NULL);
+                                      nullptr);
       if (ret < 0) {
         if (ret == -ENOENT) {
           /* adjust error, we want to return with NoSuchBucket and not
-	   * NoSuchKey */
+           * NoSuchKey */
           ret = -ERR_NO_SUCH_BUCKET;
         }
         goto delop_fail;
@@ -4415,7 +4392,7 @@ binfo_fail:
       num_unfound++;
     } else {
       ldout(store->ctx(), 20) << "cannot get bucket info, ret = " << ret
-			      << dendl;
+                              << dendl;
 
       fail_desc_t failed_item = {
         .err  = ret,
