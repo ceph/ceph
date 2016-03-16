@@ -9,7 +9,7 @@
 #include <string>
 #include <iostream>
 
-#include "../intrusive_heap.h"
+#include "intrusive_heap.h"
 
 
 class TestCompare;

@@ -1,9 +1,13 @@
 cmake_minimum_required(VERSION 2.8)
 
+add_subdirectory(crimson)
+
+include_directories(crimson/src)
+
 set(local_flags "-std=gnu++11 -Wall -pthread")
 
 set(core_srcs
-  dmclock_server.cc dmclock_util.cc dmclock_recs.cc crimson/run_every.cc)
+  dmclock_server.cc dmclock_util.cc dmclock_recs.cc crimson/src/run_every.cc)
 set(test_srcs test_server.cc test_client.cc test.cc)
 
 set_source_files_properties(${core_srcs}

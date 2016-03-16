@@ -63,7 +63,7 @@ namespace crimson {
     IndIntruHeap(const IndIntruHeap<I,T,heap_info,C>& other) :
       count(other.count)
     {
-      for (int i = 0; i < other.count; ++i) {
+      for (uint i = 0; i < other.count; ++i) {
 	data.push_back(other.data[i]);
       }
     }
@@ -107,7 +107,7 @@ namespace crimson {
     }
 
     friend std::ostream& operator<<(std::ostream& out, const IndIntruHeap& h) {
-      for (int i = 0; i < h.count; ++i) {
+      for (uint i = 0; i < h.count; ++i) {
 	out << *h.data[i] << ", ";
       }
       return out;

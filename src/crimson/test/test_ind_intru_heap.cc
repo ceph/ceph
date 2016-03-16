@@ -10,7 +10,7 @@
 #include <string>
 #include <iostream>
 
-#include "../indirect_intrusive_heap.h"
+#include "indirect_intrusive_heap.h"
 
 
 class TestCompare;

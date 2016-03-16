@@ -15,7 +15,7 @@
 #include <mutex>
 #include <condition_variable>
 
-#include "crimson/run_every.h"
+#include "run_every.h"
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
 

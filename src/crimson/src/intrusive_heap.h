@@ -54,7 +54,7 @@ namespace crimson {
     IntruHeap(const IntruHeap<T,I,C>& other) :
       count(other.count)
     {
-      for (int i = 0; i < other.count; ++i) {
+      for (uint i = 0; i < other.count; ++i) {
 	data.push_back(other.data[i]);
       }
     }
@@ -95,7 +95,7 @@ namespace crimson {
     }
 
     friend std::ostream& operator<<(std::ostream& out, const IntruHeap& h) {
-      for (int i = 0; i < h.count; ++i) {
+      for (uint i = 0; i < h.count; ++i) {
 	out << h.data[i] << ", ";
       }
       return out;

@@ -24,8 +24,8 @@
 #include <thread>
 #include <iostream>
 
-#include "crimson/heap.h"
-#include "crimson/run_every.h"
+#include "heap.h"
+#include "run_every.h"
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
 
