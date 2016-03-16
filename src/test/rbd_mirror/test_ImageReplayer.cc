@@ -41,7 +41,7 @@ void register_test_rbd_mirror() {
 }
 
 #define TEST_IO_SIZE 512
-#define TEST_IO_COUNT 10
+#define TEST_IO_COUNT 11
 
 class TestImageReplayer : public ::testing::Test {
 public:
@@ -194,7 +194,8 @@ public:
     ictx->state->close();
   }
 
-  void get_commit_positions(int64_t *master_tid_p, int64_t *mirror_tid_p)
+  void get_commit_positions(cls::journal::ObjectPosition *master_position,
+			    cls::journal::ObjectPosition *mirror_position)
   {
     std::string master_client_id = "";
     std::string mirror_client_id = m_client_id;
@@ -209,30 +210,26 @@ public:
 					       &registered_clients, &cond);
     ASSERT_EQ(0, cond.wait());
 
-    int64_t master_tid = -1;
-    int64_t mirror_tid = -1;
+    *master_position = cls::journal::ObjectPosition();
+    *mirror_position = cls::journal::ObjectPosition();
 
     std::set<cls::journal::Client>::const_iterator c;
     for (c = registered_clients.begin(); c != registered_clients.end(); c++) {
       std::cout << __func__ << ": client: " << *c << std::endl;
       cls::journal::ObjectPositions object_positions =
 	c->commit_position.object_positions;
-      cls::journal::ObjectPositions::const_iterator p;
-      for (p = object_positions.begin(); p != object_positions.end(); p++) {
+      cls::journal::ObjectPositions::const_iterator p =
+	object_positions.begin();
+      if (p != object_positions.end()) {
 	if (c->id == master_client_id) {
-	  ASSERT_EQ(-1, master_tid);
-	  master_tid = p->entry_tid;
-          break;
+	  ASSERT_EQ(cls::journal::ObjectPosition(), *master_position);
+	  *master_position = *p;
 	} else if (c->id == mirror_client_id) {
-	  ASSERT_EQ(-1, mirror_tid);
-	  mirror_tid = p->entry_tid;
-          break;
+	  ASSERT_EQ(cls::journal::ObjectPosition(), *mirror_position);
+	  *mirror_position = *p;
 	}
       }
     }
-
-    *master_tid_p = master_tid;
-    *mirror_tid_p = mirror_tid;
   }
 
   bool wait_for_watcher_notify(int seconds)
@@ -254,20 +251,20 @@ public:
 
   void wait_for_replay_complete()
   {
-    int64_t master_tid;
-    int64_t mirror_tid;
+    cls::journal::ObjectPosition master_position;
+    cls::journal::ObjectPosition mirror_position;
 
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 100; i++) {
       printf("m_replayer->flush()\n");
       m_replayer->flush();
-      get_commit_positions(&master_tid, &mirror_tid);
-      if (master_tid == mirror_tid) {
+      get_commit_positions(&master_position, &mirror_position);
+      if (master_position == mirror_position) {
 	break;
       }
       wait_for_watcher_notify(1);
     }
 
-    ASSERT_EQ(master_tid, mirror_tid);
+    ASSERT_EQ(master_position, mirror_position);
   }
 
   void write_test_data(librbd::ImageCtx *ictx, const char *test_data, off_t off,
@@ -498,6 +495,39 @@ TEST_F(TestImageReplayer, StartReplayAndWrite)
 
   open_local_image(&ictx);
   for (int i = 0; i < 2 * TEST_IO_COUNT; ++i) {
+    read_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  close_image(ictx);
+
+  stop();
+}
+
+TEST_F(TestImageReplayer, NextTag)
+{
+  bootstrap();
+
+  // write, reopen, and write again to test switch to the next tag
+
+  librbd::ImageCtx *ictx;
+
+  start();
+
+  generate_test_data();
+
+  const int N = 10;
+
+  for (int j = 0; j < N; j++) {
+    open_remote_image(&ictx);
+    for (int i = j * TEST_IO_COUNT; i < (j + 1) * TEST_IO_COUNT; ++i) {
+      write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+    }
+    close_image(ictx);
+  }
+
+  wait_for_replay_complete();
+
+  open_local_image(&ictx);
+  for (int i = 0; i < N * TEST_IO_COUNT; ++i) {
     read_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
   }
   close_image(ictx);
