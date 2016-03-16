@@ -332,8 +332,10 @@ void FSMap::decode(bufferlist::iterator& p)
     *migrate_fs = legacy_fs;
     migrate_fs->fscid = FS_CLUSTER_ID_ANONYMOUS;
     migrate_fs->mds_map.fs_name = "default";
-    legacy_client_fscid = migrate_fs->fscid;
-    filesystems[migrate_fs->fscid] = migrate_fs;
+    if (migrate_fs->mds_map.enabled) {
+      legacy_client_fscid = migrate_fs->fscid;
+      filesystems[migrate_fs->fscid] = migrate_fs;
+    }
     compat = migrate_fs->mds_map.compat;
     enable_multiple = false;
   } else {
