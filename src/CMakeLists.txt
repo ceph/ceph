@@ -743,7 +743,6 @@ set(osd_srcs
   osd/ECBackend.cc
   osd/ECTransaction.cc
   osd/PGBackend.cc
-  osd/OSD.cc
   osd/OSDCap.cc
   osd/Watch.cc
   osd/ClassHandler.cc
