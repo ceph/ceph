@@ -632,9 +632,12 @@ void *RGWHTTPManager::reqs_thread_entry()
   }
 
   RWLock::WLocker rl(reqs_lock);
-  map<uint64_t, rgw_http_req_data *>::iterator iter = reqs.begin();
-  for (; iter != reqs.end(); ++iter) {
-    _finish_request(iter->second, -ECANCELED);
+  set<rgw_http_req_data *> all_reqs;
+  for (auto iter : reqs) {
+    all_reqs.insert(iter.second); /* can't call _finish_request() on iter.second, it will modify reqs */
+  }
+  for (auto iter : all_reqs) {
+    _finish_request(iter, -ECANCELED);
   }
 
   reqs.clear();
