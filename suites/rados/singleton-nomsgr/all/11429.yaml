@@ -1,3 +1,6 @@
+# we don't have el7 packages for old releases
+# http://tracker.ceph.com/issues/15139
+os_type: ubuntu
 overrides:
   ceph:
     conf:
