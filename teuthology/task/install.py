@@ -162,9 +162,18 @@ def _yum_set_check_obsoletes(remote):
     """
     conf_path = '/etc/yum/pluginconf.d/priorities.conf'
     conf_path_orig = conf_path + '.orig'
-    remote.run(args=['sudo', 'cp', '-af', conf_path, conf_path_orig])
-    remote.run(args=['echo', 'check_obsoletes = 1', run.Raw('|'),
-                     'sudo', 'tee', '-a', conf_path])
+    cmd = [
+        'test', '-e', conf_path_orig, run.Raw('||'), 'sudo', 'cp', '-af',
+        conf_path, conf_path_orig,
+    ]
+    remote.run(args=cmd)
+    cmd = [
+        'grep', 'check_obsoletes', conf_path, run.Raw('&&'), 'sudo', 'sed',
+        '-i', 's/check_obsoletes.*0/check_obsoletes = 1/g', conf_path,
+        run.Raw('||'), 'echo', 'check_obsoletes = 1', run.Raw('|'), 'sudo',
+        'tee', '-a', conf_path,
+    ]
+    remote.run(args=cmd)
 
 
 def _yum_unset_check_obsoletes(remote):
