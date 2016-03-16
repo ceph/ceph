@@ -105,11 +105,16 @@ class SELinux(Task):
         Look for denials in the audit log
         """
         all_denials = dict()
-        # dmidecode issue https://bugzilla.redhat.com/show_bug.cgi?id=1289274
-        # tracker for chronyd/cephtest issue http://tracker.ceph.com/issues/14244
-        known_denials = ['comm="dmidecode"',
-			 'chronyd.service',
-			 'name="cephtest"',]
+        # dmidecode issue:
+        #  https://bugzilla.redhat.com/show_bug.cgi?id=1289274
+        # tracker for chronyd/cephtest issue:
+        #  http://tracker.ceph.com/issues/14244
+        known_denials = [
+            'comm="dmidecode"',
+            'chronyd.service',
+            'name="cephtest"',
+            'scontext=system_u:system_r:nrpe_t:s0',
+        ]
         se_whitelist = self.config.get('whitelist', [])
         if se_whitelist:
             known_denials.extend(se_whitelist)
