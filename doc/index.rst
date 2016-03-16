@@ -36,6 +36,7 @@ system**.
 - KVM/libvirt support
 - Back-end for cloud solutions
 - Incremental backup
+- Disaster recovery
 
 .. raw:: html 
 
