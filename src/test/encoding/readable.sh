@@ -86,14 +86,18 @@ test_object() {
           continue
         fi;
 
+        ./ceph-dencoder type $type import $vdir/objects/$type/$f decode dump_json > $tmp1 &
+        pid1="$!"
+        ./ceph-dencoder type $type import $vdir/objects/$type/$f decode encode decode dump_json > $tmp2 &
+        pid2="$!"
         #echo "\t$vdir/$type/$f"
-        if ! ./ceph-dencoder type $type import $vdir/objects/$type/$f decode dump_json > $tmp1; then
+        if ! wait $pid1; then
           echo "**** failed to decode $vdir/objects/$type/$f ****"
           failed=$(($failed + 1))
           rm -f $tmp1 $tmp2
           continue      
         fi
-        if ! ./ceph-dencoder type $type import $vdir/objects/$type/$f decode encode decode dump_json > $tmp2; then
+        if ! wait $pid2; then
           echo "**** failed to decode+encode+decode $vdir/objects/$type/$f ****"
           failed=$(($failed + 1))
           rm -f $tmp1 $tmp2
