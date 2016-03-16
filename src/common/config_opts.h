@@ -1251,8 +1251,8 @@ OPTION(rgw_ldap_uri, OPT_STR, "ldaps://<ldap.your.domain>")
 OPTION(rgw_ldap_binddn, OPT_STR, "uid=admin,cn=users,dc=example,dc=com")
 /* rgw_ldap_searchdn  LDAP search base (basedn) */
 OPTION(rgw_ldap_searchdn, OPT_STR, "cn=users,cn=accounts,dc=example,dc=com")
-/* rgw_ldap_memberattr  LDAP attribute containing RGW user names */
-OPTION(rgw_ldap_memberattr, OPT_STR, "uid")
+/* rgw_ldap_dnattr  LDAP attribute containing RGW user names (to form binddns)*/
+OPTION(rgw_ldap_dnattr, OPT_STR, "uid")
 /* rgw_ldap_secret  file containing credentials for rgw_ldap_binddn */
 OPTION(rgw_ldap_secret, OPT_STR, "/etc/openldap/secret")
 /* rgw_s3_auth_use_ldap  use LDAP for RGW auth? */

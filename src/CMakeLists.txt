@@ -1124,6 +1124,11 @@ if(${WITH_KVS})
 endif(${WITH_KVS})
 
 if(${WITH_RADOSGW})
+
+  if(${HAVE_OPENLDAP})
+    set(rgw_ldap_srcs rgw/rgw_ldap.cc)
+  endif(${HAVE_OPENLDAP})
+
   set(rgw_a_srcs
     rgw/rgw_acl.cc
     rgw/rgw_acl_s3.cc
@@ -1145,7 +1150,7 @@ if(${WITH_RADOSGW})
     rgw/rgw_http_client.cc
     rgw/rgw_json_enc.cc
     rgw/rgw_keystone.cc
-    rgw/rgw_ldap.cc
+    ${rgw_ldap_srcs}
     rgw/rgw_loadgen.cc
     rgw/rgw_log.cc
     rgw/rgw_metadata.cc

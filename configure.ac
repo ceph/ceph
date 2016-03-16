@@ -1279,6 +1279,19 @@ AS_IF([test "x$with_eventfd" != xno],
                      [AC_DEFINE(HAVE_EVENTFD, 1, [Have eventfd extension.])])])
 AM_CONDITIONAL(WITH_EVENTFD, [ test "$with_eventfd" = "yes" ])
 
+# disable OpenLDAP support
+AC_ARG_WITH([openldap],
+            [AS_HELP_STRING([--without-openldap], [Disable OpenLDAP support (RGW)])])
+if test "x$with_openldap" != "xno"; then
+   AC_CHECK_HEADER([ldap.h], [],
+      AC_MSG_ERROR([ldap.h not found (openldap-dev, openldap-devel)]))
+    AC_CHECK_LIB([ldap], [ldap_initialize], [true],
+      AC_MSG_FAILURE([libldap not found]))
+   AC_DEFINE([HAVE_OPENLDAP], [1], [Defined if OpenLDAP enabled])
+   have_openldap="yes"
+fi
+AM_CONDITIONAL(WITH_OPENLDAP, [ test "$have_openldap" = "yes" ])
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
