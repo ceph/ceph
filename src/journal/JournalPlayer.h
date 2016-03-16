@@ -112,6 +112,7 @@ private:
   bool m_watch_enabled;
   bool m_watch_scheduled;
   double m_watch_interval;
+  bool m_watch_required = false;
 
   bool m_handler_notified = false;
 
