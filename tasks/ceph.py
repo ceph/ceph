@@ -1196,11 +1196,10 @@ def restart(ctx, config):
     elif isinstance(config, list):
         config = {'daemons': config}
 
-    daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES)
-    for i in daemons:
-        type_ = i.split('.', 1)[0]
-        id_ = i.split('.', 1)[1]
-        ctx.daemons.get_daemon(type_, id_).restart()
+    daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES, True)
+    for role in daemons:
+        cluster, type_, id_ = teuthology.split_role(role)
+        ctx.daemons.get_daemon(type_, id_, cluster).restart()
 
     if config.get('wait-for-healthy', True):
         healthy(ctx=ctx, config=None)
@@ -1231,11 +1230,10 @@ def stop(ctx, config):
     elif isinstance(config, list):
         config = {'daemons': config}
 
-    daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES)
-    for i in daemons:
-        type_ = i.split('.', 1)[0]
-        id_ = i.split('.', 1)[1]
-        ctx.daemons.get_daemon(type_, id_).stop()
+    daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES, True)
+    for role in daemons:
+        cluster, type_, id_ = teuthology.split_role(role)
+        ctx.daemons.get_daemon(type_, id_, cluster).stop()
 
     yield
 
@@ -1262,17 +1260,16 @@ def wait_for_failure(ctx, config):
     elif isinstance(config, list):
         config = {'daemons': config}
 
-    daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES)
-    for i in daemons:
-        type_ = i.split('.', 1)[0]
-        id_ = i.split('.', 1)[1]
+    daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES, True)
+    for role in daemons:
+        cluster, type_, id_ = teuthology.split_role(role)
         try:
-            ctx.daemons.get_daemon(type_, id_).wait()
+            ctx.daemons.get_daemon(type_, id_, cluster).wait()
         except:
             log.info('Saw expected daemon failure.  Continuing.')
             pass
         else:
-            raise RuntimeError('daemon %s did not fail' % i)
+            raise RuntimeError('daemon %s did not fail' % role)
 
     yield
 
