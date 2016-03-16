@@ -80,11 +80,13 @@ export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 [ -z "$CEPH_NUM_MON" ] && CEPH_NUM_MON="$MON"
 [ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD="$OSD"
 [ -z "$CEPH_NUM_MDS" ] && CEPH_NUM_MDS="$MDS"
+[ -z "$CEPH_NUM_FS"  ] && CEPH_NUM_FS="$FS"
 [ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW="$RGW"
 
 [ -z "$CEPH_NUM_MON" ] && CEPH_NUM_MON=3
 [ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD=3
 [ -z "$CEPH_NUM_MDS" ] && CEPH_NUM_MDS=3
+[ -z "$CEPH_NUM_FS"  ] && CEPH_NUM_FS=1
 [ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW=1
 
 [ -z "$CEPH_DIR" ] && CEPH_DIR="$PWD"
@@ -627,17 +629,24 @@ EOF
 fi
 
 if [ "$start_mds" -eq 1 -a "$CEPH_NUM_MDS" -gt 0 ]; then
-    cmd="$CEPH_ADM osd pool create cephfs_data 8"
-    echo $cmd
-    $cmd
+    if [ "$CEPH_NUM_FS" -gt "1" ] ; then
+        $CEPH_ADM fs flag set enable_multiple true
+    fi
 
-    cmd="$CEPH_ADM osd pool create cephfs_metadata 8"
-    echo $cmd
-    $cmd
+    fs=0
+    for name in a b c d e f g h i j k l m n o p
+    do
+        cmd="$CEPH_ADM osd pool create cephfs_data_${name} 8"
+        $cmd
 
-    cmd="$CEPH_ADM fs new cephfs cephfs_metadata cephfs_data"
-    echo $cmd
-    $cmd
+        cmd="$CEPH_ADM osd pool create cephfs_metadata_${name} 8"
+        $cmd
+
+        cmd="$CEPH_ADM fs new cephfs_${name} cephfs_metadata_${name} cephfs_data_${name}"
+        $cmd
+        fs=$(($fs + 1))
+        [ $fs -eq $CEPH_NUM_FS ] && break
+    done
 
     mds=0
     for name in a b c d e f g h i j k l m n o p
