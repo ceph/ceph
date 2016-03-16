@@ -15,6 +15,8 @@
 
 namespace rgw {
 
+#if defined(HAVE_OPENLDAP)
+
   class LDAPHelper
   {
     std::string uri;
@@ -80,7 +82,35 @@ namespace rgw {
 	ldap_unbind(ldap);
     }
 
-  };
+  }; /* LDAPHelper */
+
+#else
+
+  class LDAPHelper
+  {
+  public:
+    LDAPHelper(std::string _uri, std::string _binddn, std::string _searchdn,
+	      std::string _dnattr)
+      {}
+
+    int init() {
+      return -ENOTSUP;
+    }
+
+    int bind() {
+      return -ENOTSUP;
+    }
+
+    int auth(const std::string uid, const std::string pwd) {
+      return -EACCES;
+    }
+
+    ~LDAPHelper() {}
+
+  }; /* LDAPHelper */
+
+
+#endif /* HAVE_OPENLDAP */
 
 } /* namespace rgw */
 
