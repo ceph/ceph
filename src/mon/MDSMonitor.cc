@@ -144,7 +144,9 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   // new map
   dout(4) << "new map" << dendl;
   print_map(fsmap, 0);
-  fsmap.sanity();
+  if (!g_conf->mon_mds_skip_sanity) {
+    fsmap.sanity();
+  }
 
   check_subs();
   update_logger();
@@ -170,7 +172,9 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // print map iff 'debug mon = 30' or higher
   print_map(pending_fsmap, 30);
-  pending_fsmap.sanity();
+  if (!g_conf->mon_mds_skip_sanity) {
+    pending_fsmap.sanity();
+  }
 
   // Set 'modified' on maps modified this epoch
   for (auto &i : fsmap.filesystems) {
