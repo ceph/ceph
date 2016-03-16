@@ -1,5 +1,7 @@
 #!/bin/sh -e
 
+source ../qa/workunits/ceph-helpers.sh
+
 dir=$1
 
 set -e
@@ -24,16 +26,28 @@ for type in `./ceph-dencoder list_types`; do
 	    continue
 	fi
 
-	./ceph-dencoder type $type select_test $n dump_json > $tmp1
-	./ceph-dencoder type $type select_test $n encode decode dump_json > $tmp2
-	./ceph-dencoder type $type select_test $n copy dump_json > $tmp3
-	./ceph-dencoder type $type select_test $n copy_ctor dump_json > $tmp4
+	safe_type=$type
+	# BitVector<2> needs some escaping to avoid bash issues with <>
+	if [ "$type" = "BitVector<2>" ]; then
+	    safe_type="BitVector\<2\>"
+	fi
+
+	pids=""
+	run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n dump_json > $tmp1"
+	run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n encode decode dump_json > $tmp2"
+	run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n copy dump_json > $tmp3"
+	run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n copy_ctor dump_json > $tmp4"
+	wait_background pids
 
 	# nondeterministic classes may dump nondeterministically.  compare
 	# the sorted json output.  this is a weaker test, but is better
 	# than nothing.
-	if ! ./ceph-dencoder type $type is_deterministic
-	then
+	deterministic=0
+	if ./ceph-dencoder type $type is_deterministic; then
+	    deterministic=1
+	fi
+
+	if [ $deterministic -eq 0 ]; then
 	    echo "  sorting json output for nondeterministic object"
 	    for f in $tmp1 $tmp2 $tmp3 $tmp4; do
 		sort $f | sed 's/,$//' > $f.new
@@ -65,10 +79,11 @@ for type in `./ceph-dencoder list_types`; do
 	    failed=$(($failed + 1))
 	fi
 
-	if ./ceph-dencoder type $type is_deterministic
-	then
-	    ./ceph-dencoder type $type select_test $n encode export $tmp1
-	    ./ceph-dencoder type $type select_test $n encode decode encode export $tmp2
+	if [ $deterministic -ne 0 ]; then
+	    run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n encode export $tmp1"
+	    run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n encode decode encode export $tmp2"
+	    wait_background pids
+
 	    if ! cmp $tmp1 $tmp2; then
 		echo "**** $type test $n binary reencode check failed ****"
 		echo "   ./ceph-dencoder type $type select_test $n encode export $tmp1"
@@ -77,7 +92,6 @@ for type in `./ceph-dencoder list_types`; do
 		failed=$(($failed + 1))
 	    fi
 	fi
-
 
 	numtests=$(($numtests + 3))
     done
