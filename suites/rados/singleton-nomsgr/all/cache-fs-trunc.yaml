@@ -6,9 +6,9 @@ tasks:
 - exec:
     client.0:
     - ceph osd pool create data_cache 4
-    - ceph osd tier add data data_cache
+    - ceph osd tier add cephfs_data data_cache
     - ceph osd tier cache-mode data_cache writeback
-    - ceph osd tier set-overlay data data_cache
+    - ceph osd tier set-overlay cephfs_data data_cache
     - ceph osd pool set data_cache hit_set_type bloom
     - ceph osd pool set data_cache hit_set_count 8
     - ceph osd pool set data_cache hit_set_period 3600
