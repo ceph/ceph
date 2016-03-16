@@ -19,7 +19,7 @@ add_executable(test_ind_intru_heap test_ind_intru_heap.cc)
 
 # target_link_libraries(sim PUBLIC pthread)
 
-add_custom_target(runheaptests
+add_custom_target(crimtests
   DEPENDS test_intru_heap test_ind_intru_heap
   COMMAND $<TARGET_FILE:test_intru_heap>
   COMMAND $<TARGET_FILE:test_ind_intru_heap>
