@@ -35,7 +35,7 @@
 #
 #   cd /tmp/tmp.rbd_mirror
 #   ls
-#   less rbd-mirror.log
+#   less rbd-mirror.<pid>.log
 #   ceph --cluster remote -s
 #   ceph --cluster local -s
 #   rbd --cluster remote -p mirror ls
@@ -120,7 +120,7 @@ start_mirror()
     rbd-mirror \
 	--cluster ${LOC_CLUSTER} \
 	--pid-file=${RBD_MIRROR_PID_FILE} \
-	--log-file=${TEMPDIR}/rbd-mirror.log \
+	--log-file=${TEMPDIR}/rbd-mirror.\$pid.log \
 	--admin-socket=${RBD_MIRROR_ASOK} \
 	--debug-rbd=30 --debug-journaler=30 \
 	--debug-rbd_mirror=30 \
