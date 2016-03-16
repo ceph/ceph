@@ -290,7 +290,7 @@ image_id()
     local cluster=$1
     local image=$2
 
-    rbd --cluster ${cluster} -p ${POOL} info --image test |
+    rbd --cluster ${cluster} -p ${POOL} info --image ${image} |
 	sed -ne 's/^.*block_name_prefix: rbd_data\.//p'
 }
 
