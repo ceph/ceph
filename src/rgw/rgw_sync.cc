@@ -394,11 +394,11 @@ protected:
     return ret;
   }
 public:
-  RGWAsyncReadMDLogEntries(RGWAioCompletionNotifier *cn, RGWRados *_store,
+  RGWAsyncReadMDLogEntries(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                            RGWMetadataLog* mdlog, int _shard_id,
                            string* _marker, int _max_entries,
                            list<cls_log_entry> *_entries, bool *_truncated)
-    : RGWAsyncRadosRequest(cn), store(_store), mdlog(mdlog),
+    : RGWAsyncRadosRequest(caller, cn), store(_store), mdlog(mdlog),
       shard_id(_shard_id), marker(_marker), max_entries(_max_entries),
       entries(_entries), truncated(_truncated) {}
 };
@@ -431,7 +431,7 @@ public:
 
   int send_request() {
     marker = *pmarker;
-    req = new RGWAsyncReadMDLogEntries(stack->create_completion_notifier(),
+    req = new RGWAsyncReadMDLogEntries(this, stack->create_completion_notifier(),
                                        sync_env->store, mdlog, shard_id, &marker,
                                        max_entries, entries, truncated);
     sync_env->async_rados->queue(req);
@@ -977,9 +977,9 @@ protected:
     return 0;
   }
 public:
-  RGWAsyncMetaStoreEntry(RGWAioCompletionNotifier *cn, RGWRados *_store,
+  RGWAsyncMetaStoreEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                        const string& _raw_key,
-                       bufferlist& _bl) : RGWAsyncRadosRequest(cn), store(_store),
+                       bufferlist& _bl) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                           raw_key(_raw_key), bl(_bl) {}
 };
 
@@ -1005,7 +1005,7 @@ public:
   }
 
   int send_request() {
-    req = new RGWAsyncMetaStoreEntry(stack->create_completion_notifier(),
+    req = new RGWAsyncMetaStoreEntry(this, stack->create_completion_notifier(),
 			           sync_env->store, raw_key, bl);
     sync_env->async_rados->queue(req);
     return 0;
@@ -1029,8 +1029,8 @@ protected:
     return 0;
   }
 public:
-  RGWAsyncMetaRemoveEntry(RGWAioCompletionNotifier *cn, RGWRados *_store,
-                       const string& _raw_key) : RGWAsyncRadosRequest(cn), store(_store),
+  RGWAsyncMetaRemoveEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+                       const string& _raw_key) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                           raw_key(_raw_key) {}
 };
 
@@ -1054,7 +1054,7 @@ public:
   }
 
   int send_request() {
-    req = new RGWAsyncMetaRemoveEntry(stack->create_completion_notifier(),
+    req = new RGWAsyncMetaRemoveEntry(this, stack->create_completion_notifier(),
 			           sync_env->store, raw_key);
     sync_env->async_rados->queue(req);
     return 0;
