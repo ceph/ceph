@@ -392,6 +392,14 @@ bool JournalPlayer::verify_playback_ready() {
     }
   }
 
+  // if we just advanced to this object, make sure we have the latest
+  // set of data before advancing to a new tag
+  if (m_watch_enabled && m_watch_required) {
+    m_watch_required = false;
+    schedule_watch();
+    return false;
+  }
+
   // NOTE: replay currently does not check tag class to playback multiple tags
   // from different classes (issue #14909).  When a new tag is discovered, it
   // is assumed that the previous tag was closed at the last replayable entry.
@@ -443,6 +451,7 @@ void JournalPlayer::advance_splay_object() {
   assert(m_lock.is_locked());
   ++m_splay_offset;
   m_splay_offset %= m_journal_metadata->get_splay_width();
+  m_watch_required = true;
   ldout(m_cct, 20) << __func__ << ": new offset "
                    << static_cast<uint32_t>(m_splay_offset) << dendl;
 }
