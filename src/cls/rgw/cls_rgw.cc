@@ -1391,7 +1391,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   if (existed && !real_clock::is_zero(op.unmod_since)) {
-    struct timespec mtime = ceph::real_clock::to_timespec(obj.mtime);
+    struct timespec mtime = ceph::real_clock::to_timespec(obj.mtime());
     struct timespec unmod = ceph::real_clock::to_timespec(op.unmod_since);
     if (!op.high_precision_time) {
       mtime.tv_nsec = 0;
