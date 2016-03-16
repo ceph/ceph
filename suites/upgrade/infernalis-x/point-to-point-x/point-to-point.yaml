@@ -179,8 +179,7 @@ workload_x:
        branch: infernalis
        clients:
          client.1:
-         #- rados/test-upgrade-v9.0.1.sh
-         - rados/test.sh
+         - rados/test-upgrade-from-9.2.sh
          - cls
    - print: "**** done rados/test.sh &  cls workload_x NOT upgraded  client"
    - workunit:
