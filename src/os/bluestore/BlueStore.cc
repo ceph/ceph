@@ -4082,6 +4082,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
   const uint64_t block_size = bdev->get_block_size();
   const uint64_t block_mask = ~(block_size - 1);
   int r = 0;
+  bool allow_async_read = g_conf->bluestore_wal_async_read;
 
   // read all the overlay data first for apply
   _do_read_all_overlays(wo);
@@ -4106,7 +4107,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       else
 	src_offset = wo.extent.offset & block_mask;
       offset = offset & block_mask;
-      if (g_conf->bluestore_wal_async_read)
+      if (allow_async_read)
 	first.claim(wo.head_data);
       else {
 	dout(20) << __func__ << "  reading initial partial block "
@@ -4129,7 +4130,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       if (last_offset == offset && first.length()) {
 	last.claim(first);   // same block we read above
       } else {
-	if (g_conf->bluestore_wal_async_read)
+	if (allow_async_read)
 	  last.claim(wo.tail_data);
 	else {
 	  dout(20) << __func__ << "  reading trailing partial block "
@@ -4158,7 +4159,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
     assert(wo.extent.length == wo.src_extent.length);
     assert((wo.src_extent.offset & ~block_mask) == 0);
     bufferlist bl;
-    if (g_conf->bluestore_wal_async_read)
+    if (allow_async_read)
       bl.claim_append(wo.head_data);
     else {
       r = bdev->read(wo.src_extent.offset, wo.src_extent.length, &bl, ioc,
@@ -4182,7 +4183,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       uint64_t first_offset = offset & block_mask;
       dout(20) << __func__ << "  reading initial partial block "
 	       << first_offset << "~" << block_size << dendl;
-      if (g_conf->bluestore_wal_async_read)
+      if (allow_async_read)
 	first.claim_append(wo.head_data);
       else
 	r = bdev->read(first_offset, block_size, &first, ioc, true);
@@ -4209,7 +4210,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       bufferlist last;
       dout(20) << __func__ << "  reading trailing partial block "
 	       << offset << "~" << block_size << dendl;
-      if (g_conf->bluestore_wal_async_read)
+      if (allow_async_read)
 	last.claim_append(wo.tail_data);
       else
 	r = bdev->read(offset, block_size, &last, ioc, true);
