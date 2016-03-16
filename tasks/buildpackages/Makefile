@@ -38,6 +38,9 @@ flock-${PKG_REPO}:
 	ssh $$ip sudo apt-get update ; \
 	ssh $$ip sudo apt-get install -y nginx && \
 	ssh $$ip sudo chown -R ubuntu /usr/share/nginx/html && \
+	ssh $$ip sudo rm /usr/share/nginx/html/\* && \
+	ssh $$ip sudo perl -pi -e '"s|location / {|location / { autoindex on;|"' /etc/nginx/sites-available/default && \
+	ssh $$ip sudo /etc/init.d/nginx restart && \
 	perl -pi -e "s/^gitbuilder_host:.*/gitbuilder_host: $$ip/" ~/.teuthology.yaml
 	touch ${D}/$@
 
