@@ -14,13 +14,12 @@ class RGWRados;
 class KeystoneToken;
 
 struct rgw_swift_auth_info {
-  int status;
   string auth_groups;
   rgw_user user;
   string display_name;
   long long ttl;
 
-  rgw_swift_auth_info() : status(0), ttl(0) {}
+  rgw_swift_auth_info() : ttl(0) {}
 };
 
 class RGWSwift {
@@ -28,7 +27,7 @@ class RGWSwift {
   atomic_t down_flag;
 
   int validate_token(const char *token, struct rgw_swift_auth_info *info);
-  int validate_keystone_token(RGWRados *store, const string& token, struct rgw_swift_auth_info *info,
+  int validate_keystone_token(RGWRados *store, const string& token,
 			      RGWUserInfo& rgw_user);
 
   int parse_keystone_token_response(const string& token,
