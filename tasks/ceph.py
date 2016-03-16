@@ -877,6 +877,7 @@ def cluster(ctx, config):
                     keyring_path,
                     '{tdir}/data'.format(tdir=testdir),
                     '{tdir}/monmap'.format(tdir=testdir),
+                    run.Raw('{tdir}/../*.pid'.format(tdir=testdir)),
                 ],
                 wait=False,
             ),
