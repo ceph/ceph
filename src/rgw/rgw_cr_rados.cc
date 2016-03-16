@@ -87,9 +87,9 @@ int RGWAsyncGetSystemObj::_send_request()
   return store->get_system_obj(*obj_ctx, read_state, objv_tracker, obj, *pbl, ofs, end, pattrs, NULL);
 }
 
-RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store, RGWObjectCtx *_obj_ctx,
+RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store, RGWObjectCtx *_obj_ctx,
                        RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
-                       bufferlist *_pbl, off_t _ofs, off_t _end) : RGWAsyncRadosRequest(cn), store(_store), obj_ctx(_obj_ctx),
+                       bufferlist *_pbl, off_t _ofs, off_t _end) : RGWAsyncRadosRequest(caller, cn), store(_store), obj_ctx(_obj_ctx),
                                                                    objv_tracker(_objv_tracker), obj(_obj), pbl(_pbl), pattrs(NULL),
                                                                   ofs(_ofs), end(_end)
 {
@@ -98,7 +98,7 @@ RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWAioCompletionNotifier *cn, RGWRado
 int RGWSimpleRadosReadAttrsCR::send_request()
 {
   rgw_obj obj = rgw_obj(pool, oid);
-  req = new RGWAsyncGetSystemObj(stack->create_completion_notifier(),
+  req = new RGWAsyncGetSystemObj(this, stack->create_completion_notifier(),
 			         store, &obj_ctx, NULL,
 				 obj,
 				 &bl, 0, -1);
@@ -119,9 +119,9 @@ int RGWAsyncPutSystemObj::_send_request()
   return store->put_system_obj_data(NULL, obj, bl, -1, exclusive);
 }
 
-RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store,
+RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                      rgw_obj& _obj, bool _exclusive,
-                     bufferlist& _bl) : RGWAsyncRadosRequest(cn), store(_store),
+                     bufferlist& _bl) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                                        obj(_obj), exclusive(_exclusive),
                                                        bl(_bl)
 {
@@ -132,9 +132,9 @@ int RGWAsyncPutSystemObjAttrs::_send_request()
   return store->system_obj_set_attrs(NULL, obj, *attrs, NULL, objv_tracker);
 }
 
-RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(RGWAioCompletionNotifier *cn, RGWRados *_store,
+RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                      RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
-                     map<string, bufferlist> *_attrs) : RGWAsyncRadosRequest(cn), store(_store),
+                     map<string, bufferlist> *_attrs) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                                        objv_tracker(_objv_tracker), obj(_obj),
                                                        attrs(_attrs)
 {
@@ -166,9 +166,9 @@ int RGWAsyncLockSystemObj::_send_request()
   return l.lock_exclusive(&ioctx, obj.get_object());
 }
 
-RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store,
+RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                       RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
-                       const string& _name, const string& _cookie, uint32_t _duration_secs) : RGWAsyncRadosRequest(cn), store(_store),
+                       const string& _name, const string& _cookie, uint32_t _duration_secs) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                                               obj(_obj),
                                                               lock_name(_name),
                                                               cookie(_cookie),
@@ -193,9 +193,9 @@ int RGWAsyncUnlockSystemObj::_send_request()
   return l.unlock(&ioctx, obj.get_object());
 }
 
-RGWAsyncUnlockSystemObj::RGWAsyncUnlockSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store,
+RGWAsyncUnlockSystemObj::RGWAsyncUnlockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                                                  RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
-                                                 const string& _name, const string& _cookie) : RGWAsyncRadosRequest(cn), store(_store),
+                                                 const string& _name, const string& _cookie) : RGWAsyncRadosRequest(caller, cn), store(_store),
   obj(_obj),
   lock_name(_name), cookie(_cookie)
 {
@@ -316,7 +316,7 @@ int RGWSimpleRadosLockCR::send_request()
 {
   set_status() << "sending request";
   rgw_obj obj = rgw_obj(pool, oid);
-  req = new RGWAsyncLockSystemObj(stack->create_completion_notifier(),
+  req = new RGWAsyncLockSystemObj(this, stack->create_completion_notifier(),
                                  store, NULL, obj, lock_name, cookie, duration);
   async_rados->queue(req);
   return 0;
@@ -353,7 +353,7 @@ int RGWSimpleRadosUnlockCR::send_request()
   set_status() << "sending request";
 
   rgw_obj obj = rgw_obj(pool, oid);
-  req = new RGWAsyncUnlockSystemObj(stack->create_completion_notifier(),
+  req = new RGWAsyncUnlockSystemObj(this, stack->create_completion_notifier(),
                                  store, NULL, obj, lock_name, cookie);
   async_rados->queue(req);
   return 0;
@@ -643,7 +643,7 @@ RGWStatObjCR::~RGWStatObjCR()
 
 int RGWStatObjCR::send_request()
 {
-  req = new RGWAsyncStatObj(stack->create_completion_notifier(),
+  req = new RGWAsyncStatObj(this, stack->create_completion_notifier(),
                             store, obj, psize, pmtime, pepoch, objv_tracker);
   async_rados->queue(req);
   return 0;
