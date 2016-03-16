@@ -1,0 +1,23 @@
+#!/bin/sh -ex
+
+ceph_test_rados_api_aio
+ceph_test_rados_api_io
+ceph_test_rados_api_list
+ceph_test_rados_api_lock
+ceph_test_rados_api_misc
+# skip *Whiteout tests (see #15095)
+ceph_test_rados_api_tier --gtest_filter=-*Whiteout
+ceph_test_rados_api_pool
+ceph_test_rados_api_snapshots
+ceph_test_rados_api_stat
+ceph_test_rados_api_watch_notify
+ceph_test_rados_api_cmd
+ceph_test_rados_api_c_write_operations
+ceph_test_rados_api_c_read_operations
+
+ceph_test_rados_list_parallel
+ceph_test_rados_open_pools_parallel
+ceph_test_rados_delete_pools_parallel
+ceph_test_rados_watch_notify
+
+exit 0
