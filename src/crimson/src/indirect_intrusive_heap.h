@@ -9,6 +9,7 @@
 #pragma once
 
 
+#include <memory>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -37,7 +38,7 @@ namespace crimson {
   class IndIntruHeap {
 
     static_assert(
-      std::is_same<T&,typename std::result_of<decltype(&I::operator*)(I)>::type>::value,
+      std::is_same<T,typename std::pointer_traits<I>::element_type>::value,
       "class I must resolve to class T by indirection (pointer dereference).");
 
     static_assert(
@@ -78,7 +79,7 @@ namespace crimson {
     void push(J&& item) {
       index_t i = count++;
       intru_data_of(item) = i;
-      data.emplace_back(item);
+      data.emplace_back(std::move(item));
       sift_up(i);
     }
 
