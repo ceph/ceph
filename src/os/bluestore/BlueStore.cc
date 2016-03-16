@@ -4041,10 +4041,16 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
 	       << src_offset << "~" << block_size << dendl;
       r = bdev->read(src_offset, block_size, &first, ioc, true);
       assert(r == 0);
+      dout(20) << __func__ << " HACK initial bl is\n";
+      first.hexdump(*_dout);
+      *_dout << dendl;
       bufferlist t;
       t.substr_of(first, 0, first_len);
       t.claim_append(bl);
       bl.swap(t);
+      dout(20) << __func__ << " HACK final bl is\n";
+      bl.hexdump(*_dout);
+      *_dout << dendl;
     }
     if (wo.extent.end() & ~block_mask) {
       uint64_t last_offset;
