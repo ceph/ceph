@@ -880,6 +880,33 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
         lderr(cct) << "error creating journal: " << cpp_strerror(r) << dendl;
         goto err_remove_object_map;
       }
+
+      rbd_mirror_mode_t mirror_mode;
+      r = librbd::mirror_mode_get(io_ctx, &mirror_mode);
+      if (r < 0) {
+        lderr(cct) << "error in retrieving pool mirroring status: "
+          << cpp_strerror(r) << dendl;
+        goto err_remove_object_map;
+      }
+
+      if (mirror_mode == RBD_MIRROR_MODE_POOL) {
+        ImageCtx *img_ctx = new ImageCtx("", id, nullptr, io_ctx, false);
+        r = img_ctx->state->open();
+        if (r < 0) {
+          lderr(cct) << "error opening image: " << cpp_strerror(r) << dendl;
+          delete img_ctx;
+          goto err_remove_object_map;
+        }
+        r = mirror_image_enable(img_ctx);
+        if (r < 0) {
+          lderr(cct) << "error enabling mirroring: " << cpp_strerror(r)
+            << dendl;
+          img_ctx->state->close();
+          goto err_remove_object_map;
+        }
+        img_ctx->state->close();
+      }
+
     }
 
     ldout(cct, 2) << "done." << dendl;
