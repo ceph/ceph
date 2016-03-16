@@ -11869,6 +11869,9 @@ bool ReplicatedPG::agent_work(int start_max, int agent_flush_quota)
     }
   }
 
+  // record latest flush/evict timestamp of this pg
+  info.history.last_flush_evict_stamp = ceph_clock_now(NULL);
+  
   if (++agent_state->hist_age > g_conf->osd_agent_hist_halflife) {
     dout(20) << __func__ << " resetting atime and temp histograms" << dendl;
     agent_state->hist_age = 0;
@@ -12188,6 +12191,7 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
   }
 
   {
+  utime_t now = ceph_clock_now(NULL);
   uint64_t divisor = pool.info.get_pg_num_divisor(info.pgid.pgid);
   assert(divisor > 0);
 
@@ -12279,9 +12283,14 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
 
   if (dirty_micro > flush_high_target) {
     flush_mode = TierAgentState::FLUSH_MODE_HIGH;
-  } else if (dirty_micro > flush_target) {
+  } else if (dirty_micro > flush_target
+    || info.history.last_flush_evict_stamp == utime_t()
+    || (g_conf->osd_agent_flush_evict_interval &&
+      (utime_t(g_conf->osd_agent_flush_evict_interval, 0) +
+      info.history.last_flush_evict_stamp) < now)) {
     flush_mode = TierAgentState::FLUSH_MODE_LOW;
   }
+
 
   // evict mode
   uint64_t evict_target = pool.info.cache_target_full_ratio_micro;
@@ -12312,6 +12321,12 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
       evict_effort = inc;
     assert(evict_effort >= inc && evict_effort <= 1000000);
     dout(30) << __func__ << " evict_effort " << was << " quantized by " << inc << " to " << evict_effort << dendl;
+  } else if (info.history.last_flush_evict_stamp == utime_t()
+    || (g_conf->osd_agent_flush_evict_interval &&
+      (utime_t(g_conf->osd_agent_flush_evict_interval, 0) +
+      info.history.last_flush_evict_stamp) < now)) {
+    evict_mode = TierAgentState::EVICT_MODE_SOME;
+    evict_effort = 1000000;
   }
   }
 
