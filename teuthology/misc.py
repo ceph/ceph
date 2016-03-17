@@ -445,16 +445,17 @@ def is_type(type_, cluster=None):
     return _is_type
 
 
-def num_instances_of_type(cluster, type_):
+def num_instances_of_type(cluster, type_, ceph_cluster='ceph'):
     """
     Total the number of instances of the role type specified in all remotes.
 
     :param cluster: Cluster extracted from ctx.
     :param type_: role
+    :param ceph_cluster: filter for ceph cluster name
     """
     remotes_and_roles = cluster.remotes.items()
     roles = [roles for (remote, roles) in remotes_and_roles]
-    is_ceph_type = is_type(type_)
+    is_ceph_type = is_type(type_, ceph_cluster)
     num = sum(sum(1 for role in hostroles if is_ceph_type(role))
               for hostroles in roles)
     return num
