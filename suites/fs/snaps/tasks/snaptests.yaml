@@ -2,20 +2,4 @@ tasks:
 - workunit:
     clients:
       all:
-        - fs/snaps/snaptest-0.sh
-        - fs/snaps/snaptest-1.sh
-        - fs/snaps/snaptest-2.sh
-        - fs/snaps/snap-rm-diff.sh
-        - fs/snaps/snaptest-authwb.sh
-        - fs/snaps/snaptest-capwb.sh
-        - fs/snaps/snaptest-dir-rename.sh
-        - fs/snaps/snaptest-double-null.sh
-        - fs/snaps/snaptest-estale.sh
-        - fs/snaps/snaptest-git-ceph.sh
-        - fs/snaps/snaptest-intodir.sh
-        - fs/snaps/snaptest-multiple-capsnaps.sh
-        - fs/snaps/snaptest-snap-rename.sh
-        #- fs/snaps/snaptest-snap-rm-cmp.sh see issue 10436
-        - fs/snaps/snaptest-upchildrealms.sh
-        - fs/snaps/snaptest-xattrwb.sh
-        - fs/snaps/untar_snap_rm.sh
+        - fs/snaps
