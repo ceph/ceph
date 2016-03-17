@@ -5466,6 +5466,7 @@ int BlueStore::_do_write(
     if (offset >= bp->first &&
 	offset > tail_start &&
 	offset + length >= o->onode.size &&
+	o->tail_offset == tail_start &&
 	o->tail_bl.length() &&
 	(offset / block_size == (o->onode.size - 1) / block_size)) {
       dout(20) << __func__ << " using cached tail" << dendl;
