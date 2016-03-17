@@ -12,7 +12,7 @@ class RGWReadRESTResourceCR : public RGWSimpleCoroutine {
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
   string path;
-  param_list_t params;
+  param_vec_t params;
   T *result;
 
   boost::intrusive_ptr<RGWRESTReadResource> http_op;
@@ -64,7 +64,7 @@ class RGWPostRESTResourceCR : public RGWSimpleCoroutine {
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
   string path;
-  param_list_t params;
+  param_vec_t params;
   T *result;
   S input;
 

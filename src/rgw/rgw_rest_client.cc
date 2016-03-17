@@ -200,7 +200,7 @@ void RGWRESTSimpleRequest::get_params_str(map<string, string>& extra_args, strin
   for (miter = extra_args.begin(); miter != extra_args.end(); ++miter) {
     append_param(dest, miter->first, miter->second);
   }
-  list<pair<string, string> >::iterator iter;
+  param_vec_t::iterator iter;
   for (iter = params.begin(); iter != params.end(); ++iter) {
     append_param(dest, iter->first, iter->second);
   }
@@ -631,7 +631,7 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
   get_params_str(args, params_str);
 
   /* merge params with extra args so that we can sign correctly */
-  for (list<pair<string, string> >::iterator iter = params.begin(); iter != params.end(); ++iter) {
+  for (param_vec_t::iterator iter = params.begin(); iter != params.end(); ++iter) {
     new_info.args.append(iter->first, iter->second);
   }
 
