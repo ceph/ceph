@@ -171,6 +171,10 @@ bool block_device_support_discard(const char *devname)
   return get_block_device_int_property(devname, "discard_granularity") > 0;
 }
 
+bool block_device_is_rotational(const char *devname)
+{
+  return get_block_device_int_property(devname, "rotational") > 0;
+}
 int block_device_discard(int fd, int64_t offset, int64_t len)
 {
   uint64_t range[2] = {(uint64_t)offset, (uint64_t)len};
@@ -248,6 +252,11 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 {
   return -EOPNOTSUPP;
 }
+
+bool block_device_is_rotational(const char *devname)
+{
+  return -EOPNOTSUPP;
+}
 #elif defined(__FreeBSD__)
 #include <sys/disk.h>
 
@@ -274,6 +283,12 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 {
   return -EOPNOTSUPP;
 }
+
+bool block_device_is_rotational(const char *devname)
+{
+  return -EOPNOTSUPP;
+}
+
 #else
 int get_block_device_size(int fd, int64_t *psize)
 {
@@ -292,6 +307,10 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
 
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 	char* device)
+{
+  return -EOPNOTSUPP;
+}
+bool block_device_is_rotational(const char *devname)
 {
   return -EOPNOTSUPP;
 }

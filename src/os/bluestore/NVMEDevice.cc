@@ -948,3 +948,10 @@ int NVMEDevice::invalidate_cache(uint64_t off, uint64_t len)
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   return 0;
 }
+
+int NVMEDevice::aio_read(uint64_t off, uint64_t len, bufferlist *pbl,
+                     IOContext *ioc,
+                     bool buffered)
+{
+  return -EOPNOTSUPP;
+}

@@ -583,6 +583,9 @@ private:
   int _txc_finalize(OpSequencer *osr, TransContext *txc);
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
+
+  void _aio_read_wal_op_zero(bluestore_wal_op_t *op, IOContext *ioc);
+  void _aio_read_wal_op_write(bluestore_wal_op_t *op, IOContext *ioc);
 public:
   void _txc_aio_finish(void *p) {
     _txc_state_proc(static_cast<TransContext*>(p));

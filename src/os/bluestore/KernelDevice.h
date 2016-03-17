@@ -84,6 +84,7 @@ public:
 		bool buffered) override;
   int aio_zero(uint64_t off, uint64_t len,
 	       IOContext *ioc) override;
+  int aio_read(uint64_t off, uint64_t len, bufferlist *pbl, IOContext *ioc, bool buffered);
   int flush() override;
 
   // for managing buffered readers/writers

@@ -116,6 +116,11 @@ int KernelDevice::open(string p)
       goto out_fail;
     }
     size = s;
+
+    //For rotational disk, use async_read is better.
+    if (!g_conf->bluestore_wal_async_read && block_device_is_rotational(path.c_str()))
+      g_conf->set_val("bluestore_wal_async_read", "true");
+
   } else {
     size = st.st_size;
   }
@@ -256,6 +261,15 @@ void KernelDevice::_aio_thread()
 		 << " ioc " << ioc
 		 << " with " << left << " aios left" << dendl;
 	assert(r >= 0);
+
+	std::map<uint64_t, bufferlist*>::iterator it =  ioc->aio_read_queue.find(aio[i]->offset);
+	if (it != ioc->aio_read_queue.end()) {
+	  bufferlist *bl = it->second;
+	  bl->clear();
+	  bl->claim_append(aio[i]->bl);
+	  --ioc->num_reading;
+	}
+
 	if (left == 0) {
 	  // check waiting count before doing callback (which may
 	  // destroy this ioc).
@@ -548,3 +562,22 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   return r;
 }
 
+int KernelDevice::aio_read(uint64_t off, uint64_t len, bufferlist *pbl, IOContext *ioc, bool buffered)
+{
+  dout(20) << __func__ << " " << off << "~" << len << dendl;
+  assert(off % block_size == 0);
+  assert(len % block_size == 0);
+  assert(len > 0);
+  assert(off < size);
+  assert(off + len <= size);
+
+  _aio_log_start(ioc, off, len);
+  ioc->pending_aios.push_back(FS::aio_t(ioc, buffered ? fd_buffered : fd_direct));
+  ++ioc->num_pending;
+  ++ioc->num_reading;
+  assert(ioc->aio_read_queue.find(off) == ioc->aio_read_queue.end());
+  ioc->aio_read_queue[off] = pbl;
+  FS::aio_t& aio = ioc->pending_aios.back();
+  aio.pread(off, len);
+  return 0;
+}
