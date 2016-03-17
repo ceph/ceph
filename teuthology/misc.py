@@ -409,12 +409,12 @@ def all_roles_of_type(cluster, type_):
             yield id_
 
 
-def is_type(type_):
+def is_type(type_, cluster=None):
     """
     Returns a matcher function for whether role is of type given.
-    """
-    prefix = '{type}.'.format(type=type_)
 
+    :param cluster: cluster name to check in matcher (default to no check for cluster)
+    """
     def _is_type(role):
         """
         Return type based on the starting role name.
@@ -422,10 +422,10 @@ def is_type(type_):
         If there is more than one period, strip the first part
         (ostensibly a cluster name) and check the remainder for the prefix.
         """
-        if role.startswith(prefix):
-            return True
-        return (role.count('.') > 1 and
-                role[role.find('.') + 1:].startswith(prefix))
+        role_cluster, role_type, _ = split_role(role)
+        if cluster is not None and role_cluster != cluster:
+            return False
+        return role_type == type_
     return _is_type
 
 

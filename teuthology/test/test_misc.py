@@ -183,11 +183,24 @@ def test_is_type():
     assert is_client('foo.client.0')
     assert is_client('foo.client.bar.baz')
 
-    assert not is_client('')
+    with pytest.raises(ValueError):
+        is_client('')
+        is_client('client')
     assert not is_client('foo.bar.baz')
     assert not is_client('ceph.client')
-    assert not is_client('client')
     assert not is_client('hadoop.master.0')
+
+
+def test_is_type_in_cluster():
+    is_c1_osd = misc.is_type('osd', 'c1')
+    with pytest.raises(ValueError):
+        is_c1_osd('')
+    assert not is_c1_osd('osd.0')
+    assert not is_c1_osd('ceph.osd.0')
+    assert not is_c1_osd('ceph.osd.0')
+    assert not is_c1_osd('c11.osd.0')
+    assert is_c1_osd('c1.osd.0')
+    assert is_c1_osd('c1.osd.999')
 
 
 def test_get_mons():
