@@ -464,6 +464,7 @@ int EventCenter::process_events(int timeout_microseconds)
 
 void EventCenter::dispatch_event_external(EventCallbackRef e)
 {
+  ldout(cct, 20) << __func__ << " event=" << e << dendl;
   external_lock.lock();
   external_events.push_back(e);
   ++external_num_events;

@@ -62,7 +62,7 @@ class AsyncConnection : public Connection {
   ssize_t read_until(unsigned needed, char *p);
   ssize_t _process_connection();
   void _connect();
-  void _stop(bool delay_cleanup = false);
+  void _stop();
   int handle_connect_reply(ceph_msg_connect &connect, ceph_msg_connect_reply &r);
   ssize_t handle_connect_msg(ceph_msg_connect &m, bufferlist &aubl, bufferlist &bl);
   void was_session_reset();
@@ -335,6 +335,7 @@ class AsyncConnection : public Connection {
                      // presentation
   bool is_reset_from_peer;
   bool once_ready;
+  bool delay_cleanup = false;
 
   // used only for local state, it will be overwrite when state transition
   char *state_buffer;
@@ -357,11 +358,13 @@ class AsyncConnection : public Connection {
     mark_down();
   }
   void cleanup() {
+    assert(!delay_cleanup);
     assert(cleanup_handler);
     for (set<uint64_t>::iterator it = register_time_events.begin();
          it != register_time_events.end(); ++it)
       center->delete_time_event(*it);
     register_time_events.clear();
+
     if (cs) {
       center->delete_file_event(cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
       cs.shutdown();
