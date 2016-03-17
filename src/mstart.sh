@@ -39,13 +39,16 @@ fi
 
 pos=`echo $pos | cut -d: -f1`
 base_port=$((6800+pos*20))
+rgw_port=$((8000+pos*1))
 
 export VSTART_DEST=$RUN_ROOT_PATH/$instance
 export CEPH_PORT=$base_port
+export CEPH_RGW_PORT=$rgw_port
 
 mkdir -p $VSTART_DEST
 
 echo "Cluster dest path: $VSTART_DEST"
 echo "monitors base port: $CEPH_PORT"
+echo "rgw base port: $CEPH_RGW_PORT"
 
 $vstart_path/vstart.sh "$@"
