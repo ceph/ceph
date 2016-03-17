@@ -912,7 +912,7 @@ def get_scratch_devices(remote):
     return retval
 
 
-def wait_until_healthy(ctx, remote):
+def wait_until_healthy(ctx, remote, ceph_cluster='ceph'):
     """
     Wait until a Ceph cluster is healthy. Give up after 15min.
     """
@@ -925,6 +925,7 @@ def wait_until_healthy(ctx, remote):
                     'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
                     'ceph',
+                    '--cluster', ceph_cluster,
                     'health',
                 ],
                 stdout=StringIO(),
