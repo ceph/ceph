@@ -319,7 +319,7 @@ def generate_caps(type_):
         yield capability
 
 
-def skeleton_config(ctx, roles, ips):
+def skeleton_config(ctx, roles, ips, cluster='ceph'):
     """
     Returns a ConfigObj that is prefilled with a skeleton config.
 
@@ -333,6 +333,9 @@ def skeleton_config(ctx, roles, ips):
     conf = configobj.ConfigObj(StringIO(skconf), file_error=True)
     mons = get_mons(roles=roles, ips=ips)
     for role, addr in mons.iteritems():
+        mon_cluster, _, _ = split_role(role)
+        if mon_cluster != cluster:
+            continue
         name = ceph_role(role)
         conf.setdefault(name, {})
         conf[name]['mon addr'] = addr
