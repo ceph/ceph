@@ -4913,7 +4913,7 @@ void BlueStore::_pad_zeros(
     bl->substr_of(old, 0, *length - back_copy);
     bl->append(tail);
     *length += back_pad;
-    if (end > o->onode.size && g_conf->bluestore_cache_tails) {
+    if (end >= o->onode.size && g_conf->bluestore_cache_tails) {
       o->tail_bl.clear();
       o->tail_bl.append(tail, 0, back_copy);
       o->tail_offset = end - back_copy;
@@ -4994,7 +4994,7 @@ void BlueStore::_pad_zeros_tail(
   bl->substr_of(old, 0, *length - back_copy);
   bl->append(tail);
   *length += back_pad;
-  if (end > o->onode.size && g_conf->bluestore_cache_tails) {
+  if (end >= o->onode.size && g_conf->bluestore_cache_tails) {
     o->tail_bl.clear();
     o->tail_bl.append(tail, 0, back_copy);
     o->tail_offset = end - back_copy;
