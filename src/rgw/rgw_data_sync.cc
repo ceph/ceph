@@ -2325,7 +2325,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
             if (entry->ver.pool < 0) {
               versioned_epoch = entry->ver.epoch;
             }
-ldout(sync_env->cct, 0) << __FILE__ << ":" << __LINE__ << " entry->timestamp=" << entry->timestamp << dendl;
+            ldout(sync_env->cct, 20) << __func__ << "(): entry->timestamp=" << entry->timestamp << dendl;
             spawn(new RGWBucketSyncSingleEntryCR<string, rgw_obj_key>(sync_env, bucket_info, shard_id,
                                                          key, entry->is_versioned(), versioned_epoch, entry->timestamp, owner, entry->op,
                                                          entry->state, entry->id, marker_tracker), false);
