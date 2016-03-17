@@ -774,7 +774,7 @@ def rh_install_pkgs(ctx, remote, installed_version):
         remote.run(args=['sudo', 'yum', 'install', 'ceph-test', '-y'])
 
     # check package version
-    version = packaging.get_package_version(remote, 'ceph')
+    version = packaging.get_package_version(remote, 'ceph-common')
     log.info("Node: {n} Ceph version installed is {v}".format(n=remote.shortname,v=version))
     if rh_version_check[version] == installed_version:
         log.info("Installed version matches on %s", remote.shortname)
