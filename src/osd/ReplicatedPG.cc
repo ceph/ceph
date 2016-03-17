@@ -3012,8 +3012,6 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 	log_op_stats(
 	  ctx);
 
-      publish_stats_to_osd();
-
       if (m && m->wants_ondisk() && !ctx->sent_disk) {
 	// send commit.
 	MOSDOpReply *reply = ctx->reply;
@@ -8359,6 +8357,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   if (repop->all_applied && repop->all_committed) {
     repop->rep_done = true;
 
+    publish_stats_to_osd();
     calc_min_last_complete_ondisk();
 
     for (auto p = repop->on_success.begin();
