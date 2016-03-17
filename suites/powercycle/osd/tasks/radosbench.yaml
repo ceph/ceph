@@ -1,4 +1,4 @@
 tasks:
 - radosbench:
     clients: [client.0]
-    time: 600
+    time: 200
