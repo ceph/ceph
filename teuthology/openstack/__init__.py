@@ -478,6 +478,8 @@ class TeuthologyOpenStack(OpenStack):
         argv = []
         while len(original_argv) > 0:
             if original_argv[0] in ('--name',
+                                    '--teuthology-branch',
+                                    '--teuthology-git-url',
                                     '--archive-upload',
                                     '--archive-upload-url',
                                     '--key-name',
@@ -646,6 +648,10 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         else:
             upload = ''
         clone = teuth_config.openstack['clone']
+        if self.args.teuthology_git_url:
+            clone = ("git clone -b {branch} {url}".format(
+                branch=self.args.teuthology_branch,
+                url=self.args.teuthology_git_url))
         log.debug("OPENRC = " + openrc + " " +
                   "TEUTHOLOGY_USERNAME = " + self.username + " " +
                   "CLONE_OPENSTACK = " + clone + " " +

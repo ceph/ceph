@@ -62,6 +62,15 @@ and analyze results.
         help='destroy the cluster, if it exists',
     )
     parser.add_argument(
+        '--teuthology-git-url',
+        help=("git clone url for teuthology"),
+    )
+    parser.add_argument(
+        '--teuthology-branch',
+        help="use this teuthology branch instead of master",
+        default='master',
+    )
+    parser.add_argument(
         '--upload',
         action='store_true', default=False,
         help='upload archives to an rsync server',
