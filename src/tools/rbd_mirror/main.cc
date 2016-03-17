@@ -58,7 +58,10 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGINT, handle_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_signal);
 
-  mirror = new rbd::mirror::Mirror(g_ceph_context);
+  std::vector<const char*> cmd_args;
+  argv_to_vec(argc, argv, cmd_args);
+
+  mirror = new rbd::mirror::Mirror(g_ceph_context, cmd_args);
   int r = mirror->init();
   if (r < 0) {
     std::cerr << "failed to initialize: " << cpp_strerror(r) << std::endl;

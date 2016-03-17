@@ -30,7 +30,8 @@ struct Threads;
  */
 class Replayer {
 public:
-  Replayer(Threads *threads, RadosRef local_cluster, const peer_t &peer);
+  Replayer(Threads *threads, RadosRef local_cluster, const peer_t &peer,
+	   const std::vector<const char*> &args);
   ~Replayer();
   Replayer(const Replayer&) = delete;
   Replayer& operator=(const Replayer&) = delete;
@@ -51,6 +52,7 @@ private:
   atomic_t m_stopping;
 
   peer_t m_peer;
+  std::vector<const char*> m_args;
   std::string m_client_id;
   RadosRef m_local, m_remote;
   std::unique_ptr<PoolWatcher> m_pool_watcher;
