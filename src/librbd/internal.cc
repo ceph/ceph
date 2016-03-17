@@ -1391,6 +1391,7 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
         return 0;
       }
 
+      bool enable_mirroring = false;
       uint64_t features_mask = features;
       uint64_t disable_flags = 0;
       if (enabled) {
@@ -1427,6 +1428,16 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
                        << dendl;
             return r;
           }
+
+          rbd_mirror_mode_t mirror_mode;
+          r = librbd::mirror_mode_get(ictx->md_ctx, &mirror_mode);
+          if (r < 0) {
+            lderr(cct) << "error in retrieving pool mirroring status: "
+              << cpp_strerror(r) << dendl;
+            return r;
+          }
+
+          enable_mirroring = (mirror_mode == RBD_MIRROR_MODE_POOL);
         }
 
         if (enable_flags != 0) {
@@ -1495,7 +1506,24 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
           return r;
         }
       }
-    }
+
+      if (enable_mirroring) {
+        ImageCtx *img_ctx = new ImageCtx("", ictx->id, nullptr,
+            ictx->md_ctx, false);
+        r = img_ctx->state->open();
+        if (r < 0) {
+          lderr(cct) << "error opening image: " << cpp_strerror(r) << dendl;
+          delete img_ctx;
+        } else {
+          r = mirror_image_enable(img_ctx);
+          if (r < 0) {
+            lderr(cct) << "error enabling mirroring: " << cpp_strerror(r)
+              << dendl;
+          }
+          img_ctx->state->close();
+        }
+      }
+   }
 
     ictx->notify_update();
     return 0;
