@@ -60,6 +60,7 @@
     zonegroup-map get          show zonegroup-map
     zonegroup-map set          set zonegroup-map (requires infile)
     zone create                create a new zone
+    zone delete                delete a zone
     zone get                   show zone cluster params
     zone modify                set/clear zone master status
     zone set                   set zone cluster params (requires infile)
