@@ -1473,6 +1473,37 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
           disable_flags = RBD_FLAG_FAST_DIFF_INVALID;
         }
         if ((features & RBD_FEATURE_JOURNALING) != 0) {
+          rbd_mirror_mode_t mirror_mode;
+          r = librbd::mirror_mode_get(ictx->md_ctx, &mirror_mode);
+          if (r < 0) {
+            lderr(cct) << "error in retrieving pool mirroring status: "
+              << cpp_strerror(r) << dendl;
+            return r;
+          }
+
+          if (mirror_mode == RBD_MIRROR_MODE_IMAGE) {
+            cls::rbd::MirrorImage mirror_image;
+            r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+                                             &mirror_image);
+            if (r < 0 && r != -ENOENT) {
+              lderr(cct) << "error retrieving mirroring state: "
+                << cpp_strerror(r) << dendl;
+            }
+
+            if (mirror_image.state ==
+                cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED) {
+              lderr(cct) << "cannot disable journaling: image mirroring "
+                " enabled and mirror pool mode set to image" << dendl;
+              return -EINVAL;
+            }
+          } else if (mirror_mode == RBD_MIRROR_MODE_POOL) {
+            r = mirror_image_disable(ictx, false);
+            if (r < 0) {
+              lderr(cct) << "error disabling image mirroring: "
+                << cpp_strerror(r) << dendl;
+            }
+          }
+
           r = Journal<>::remove(ictx->md_ctx, ictx->id);
           if (r < 0) {
             lderr(cct) << "error removing image journal: " << cpp_strerror(r)
