@@ -4736,6 +4736,18 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     dout(10) << " prepare_pool_size returns " << r << dendl;
     return r;
   }
+  const int64_t minsize = osdmap.crush->get_rule_mask_min_size(crush_ruleset);
+  if ((int64_t)size < minsize) {
+    *ss << "pool size " << size << " is smaller than crush ruleset name "
+        << crush_ruleset_name << " min size " << minsize;
+    return -EINVAL;
+  }
+  const int64_t maxsize = osdmap.crush->get_rule_mask_max_size(crush_ruleset);
+  if ((int64_t)size > maxsize) {
+    *ss << "pool size " << size << " is bigger than crush ruleset name "
+        << crush_ruleset_name << " max size " << maxsize;
+    return -EINVAL;
+  }
   uint32_t stripe_width = 0;
   r = prepare_pool_stripe_width(pool_type, erasure_code_profile, &stripe_width, ss);
   if (r) {
