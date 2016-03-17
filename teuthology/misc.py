@@ -937,9 +937,9 @@ def wait_until_healthy(ctx, remote):
             time.sleep(1)
 
 
-def wait_until_osds_up(ctx, cluster, remote):
+def wait_until_osds_up(ctx, cluster, remote, ceph_cluster='ceph'):
     """Wait until all Ceph OSDs are booted."""
-    num_osds = num_instances_of_type(cluster, 'osd')
+    num_osds = num_instances_of_type(cluster, 'osd', ceph_cluster)
     testdir = get_testdir(ctx)
     while True:
         r = remote.run(
@@ -948,6 +948,7 @@ def wait_until_osds_up(ctx, cluster, remote):
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
+                '--cluster', ceph_cluster,
                 'osd', 'dump', '--format=json'
             ],
             stdout=StringIO(),
