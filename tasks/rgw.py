@@ -928,6 +928,11 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
                          cmd=['zonegroup', 'default', '--rgw-zonegroup', master_zonegroup],
                          check_status=True)
 
+        (zonegroup, zone, zone_info, user_info) = role_zones[client]
+        rgwadmin(ctx, client,
+                 cmd=['zone', 'default', master_zone],
+                 check_status=True)
+
     rgwadmin(ctx, master_client,
              cmd=['-n', master_client, 'period', 'update', '--commit'],
              check_status=True)
