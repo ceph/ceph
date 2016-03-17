@@ -732,8 +732,12 @@ def rh_install_pkgs(ctx, remote, installed_version):
     :param remote: the teuthology.orchestra.remote.Remote object
     """
     pkgs = ['ceph-deploy']
+    # install ceph-selinux for 1.3.2 as its not dependency of any core packages
     if (installed_version == '1.3.2'):
         pkgs.append('ceph-selinux')
+    # install ceph-fuse for 2.0 as its not dependency of any core packages
+    if (installed_version == '2.0'):
+        pkgs.append('ceph-fuse')
     rh_version_check = {'0.94.1': '1.3.0', '0.94.3': '1.3.1',
                         '0.94.5': '1.3.2', '10.0.4': '2.0'}
     log.info("Remove any epel packages installed on node %s", remote.shortname)
