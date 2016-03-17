@@ -6214,26 +6214,48 @@ int BlueStore::_clone(TransContext *txc,
     goto out;
 
   if (g_conf->bluestore_clone_cow) {
-    EnodeRef e = c->get_enode(newo->oid.hobj.get_hash());
-    bool marked = false;
-    for (auto& p : oldo->onode.block_map) {
-      if (p.second.has_flag(bluestore_extent_t::FLAG_SHARED)) {
-	e->ref_map.get(p.second.offset, p.second.length);
-      } else {
-	p.second.set_flag(bluestore_extent_t::FLAG_SHARED);
-	e->ref_map.add(p.second.offset, p.second.length, 2);
-	marked = true;
+    if (!oldo->onode.block_map.empty()) {
+      EnodeRef e = c->get_enode(newo->oid.hobj.get_hash());
+      bool marked = false;
+      for (auto& p : oldo->onode.block_map) {
+	if (p.second.has_flag(bluestore_extent_t::FLAG_SHARED)) {
+	  e->ref_map.get(p.second.offset, p.second.length);
+	} else {
+	  p.second.set_flag(bluestore_extent_t::FLAG_SHARED);
+	  e->ref_map.add(p.second.offset, p.second.length, 2);
+	  marked = true;
+	}
       }
+      dout(20) << __func__ << " hash " << std::hex << e->hash << std::dec << " ref_map now "
+	<< e->ref_map << dendl;
+      newo->onode.block_map = oldo->onode.block_map;
+      newo->enode = e;
+      dout(20) << __func__ << " block_map " << newo->onode.block_map << dendl;
+      txc->write_enode(e);
+      if (marked)
+	txc->write_onode(oldo);
     }
-    dout(20) << __func__ << " hash " << e->hash << " ref_map now "
-	     << e->ref_map << dendl;
-    newo->onode.block_map = oldo->onode.block_map;
+
+    //don't care _can_overlay_write()
+    for (auto& v : oldo->onode.overlay_map) {
+      string key;
+      bufferlist val;
+      get_overlay_key(oldo->onode.nid, v.second.key, &key);
+      int r  = db->get(PREFIX_OVERLAY, key, &val);
+      if (r < 0) {
+	derr << __func__ << " get oid " << oldo->oid << " overlay value(key=" << v.second.key
+	  << ")" << "failed: " << cpp_strerror(r) << dendl;
+	goto out;
+      }
+
+      newo->onode.overlay_map[v.first] = bluestore_overlay_t(++newo->onode.last_overlay_key, 0, v.second.length);
+      dout(20) << __func__ << " added " << v.first << " " << v.second.length << dendl;
+      key.clear();
+      get_overlay_key(newo->onode.nid, newo->onode.last_overlay_key, &key);
+      txc->t->set(PREFIX_OVERLAY, key, val);
+    }
+
     newo->onode.size = oldo->onode.size;
-    newo->enode = e;
-    dout(20) << __func__ << " block_map " << newo->onode.block_map << dendl;
-    txc->write_enode(e);
-    if (marked)
-      txc->write_onode(oldo);
   } else {
     // read + write
     r = _do_read(oldo, 0, oldo->onode.size, bl, 0);
