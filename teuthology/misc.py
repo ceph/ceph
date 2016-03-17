@@ -460,9 +460,10 @@ def num_instances_of_type(cluster, type_):
     return num
 
 
-def create_simple_monmap(ctx, remote, conf):
+def create_simple_monmap(ctx, remote, conf, path=None):
     """
-    Writes a simple monmap based on current ceph.conf into <tmpdir>/monmap.
+    Writes a simple monmap based on current ceph.conf into path, or
+    <testdir>/monmap by default.
 
     Assumes ceph_conf is up to date.
 
@@ -499,9 +500,11 @@ def create_simple_monmap(ctx, remote, conf):
     ]
     for (name, addr) in addresses:
         args.extend(('--add', name, addr))
+    if not path:
+        path = '{tdir}/monmap'.format(tdir=testdir)
     args.extend([
         '--print',
-        '{tdir}/monmap'.format(tdir=testdir),
+        path
     ])
 
     r = remote.run(
