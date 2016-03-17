@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+import types
 
 from copy import deepcopy
 
@@ -14,35 +15,54 @@ from .timer import Timer
 log = logging.getLogger(__name__)
 
 
-def import_task(name):
-    internal_pkg = __import__('teuthology.task', globals(), locals(), [name],
-                              0)
-    if hasattr(internal_pkg, name):
-        return getattr(internal_pkg, name)
+def get_task(name):
+    if '.' in name:
+        module_name, task_name = name.split('.')
     else:
-        external_pkg = __import__('tasks', globals(), locals(),
-                                  [name], 0)
-    if hasattr(external_pkg, name):
-        return getattr(external_pkg, name)
-    raise ImportError("Could not find task '%s'" % name)
+        module_name, task_name = (name, 'task')
+
+    # First look for the tasks's module inside teuthology
+    module = _import('teuthology.task', module_name, task_name)
+    # If it is not found, try ceph-qa-suite (if it is in sys.path)
+    if not module:
+        module = _import('tasks', module_name, task_name)
+    # If it is still not found, fail
+    if not module:
+        raise ImportError("Could not find task '{}'".format(name))
+    try:
+        # Attempt to locate the task object inside the module
+        task = getattr(module, task_name)
+        # If we get another module, we need to go deeper
+        if isinstance(task, types.ModuleType):
+            task = getattr(task, task_name)
+    except AttributeError:
+        log.error("No subtask of '{}' named '{}' was found".format(
+            module_name,
+            task_name,
+        ))
+        raise
+    return task
+
+
+def _import(from_package, module_name, task_name):
+    full_module_name = '.'.join([from_package, module_name])
+    try:
+        module = __import__(
+            full_module_name,
+            globals(),
+            locals(),
+            [task_name],
+            0,
+        )
+    except ImportError:
+        return None
+    return module
 
 
 def run_one_task(taskname, **kwargs):
-    submod = taskname
-    subtask = 'task'
-    if '.' in taskname:
-        (submod, subtask) = taskname.rsplit('.', 1)
-
-    # Teuthology configs may refer to modules like ceph_deploy as ceph-deploy
-    submod = submod.replace('-', '_')
-
-    task = import_task(submod)
-    try:
-        fn = getattr(task, subtask)
-    except AttributeError:
-        log.error("No subtask of %s named %s was found", task, subtask)
-        raise
-    return fn(**kwargs)
+    taskname = taskname.replace('-', '_')
+    task = get_task(taskname)
+    return task(**kwargs)
 
 
 def run_tasks(tasks, ctx):
