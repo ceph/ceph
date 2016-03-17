@@ -9,6 +9,9 @@
 #include "include/atomic.h"
 #include "rgw_common.h"
 
+using param_pair_t = pair<string, string>;
+using param_vec_t = vector<param_pair_t>;
+
 struct rgw_http_req_data;
 
 class RGWHTTPClient
@@ -32,7 +35,7 @@ class RGWHTTPClient
 protected:
   CephContext *cct;
 
-  list<pair<string, string> > headers;
+  param_vec_t headers;
   int init_request(const char *method, const char *url, rgw_http_req_data *req_data);
 public:
 

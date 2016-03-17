@@ -51,7 +51,7 @@ int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv,
   if (ret < 0)
     return ret;
   string uid_str = uid.to_str();
-  param_list_t params;
+  param_vec_t params;
   if (!uid.empty())
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid_str));
   params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", self_zone_group));
@@ -80,7 +80,7 @@ int RGWRESTConn::put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_si
     return ret;
 
   string uid_str = uid.to_str();
-  param_list_t params;
+  param_vec_t params;
   params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid_str));
   params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", self_zone_group));
   *req = new RGWRESTStreamWriteRequest(cct, url, NULL, &params);
@@ -125,7 +125,7 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
   if (ret < 0)
     return ret;
 
-  param_list_t params;
+  param_vec_t params;
   if (!uid.empty()) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid.to_str()));
   }
@@ -175,7 +175,7 @@ int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, r
 }
 
 int RGWRESTConn::get_resource(const string& resource,
-		     param_list_t *extra_params,
+		     param_vec_t *extra_params,
 		     map<string, string> *extra_headers,
 		     bufferlist& bl,
 		     RGWHTTPManager *mgr)
@@ -185,7 +185,7 @@ int RGWRESTConn::get_resource(const string& resource,
   if (ret < 0)
     return ret;
 
-  param_list_t params;
+  param_vec_t params;
 
   if (extra_params) {
     params.insert(params.end(), extra_params->begin(), extra_params->end());
@@ -216,7 +216,7 @@ int RGWRESTConn::get_resource(const string& resource,
 RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
                                          const string& _resource,
 		                         const rgw_http_param_pair *pp,
-                                         param_list_t *extra_headers,
+					 param_vec_t *extra_headers,
                                          RGWHTTPManager *_mgr)
   : cct(_conn->get_ctx()), conn(_conn), resource(_resource),
     params(make_param_list(pp)), cb(bl), mgr(_mgr),
@@ -227,8 +227,8 @@ RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
 
 RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
                                          const string& _resource,
-		                         param_list_t& _params,
-                                         param_list_t *extra_headers,
+					 param_vec_t& _params,
+					 param_vec_t *extra_headers,
                                          RGWHTTPManager *_mgr)
   : cct(_conn->get_ctx()), conn(_conn), resource(_resource), params(_params),
     cb(bl), mgr(_mgr), req(cct, conn->get_url(), &cb, NULL, NULL)
@@ -236,7 +236,7 @@ RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
   init_common(extra_headers);
 }
 
-void RGWRESTReadResource::init_common(param_list_t *extra_headers)
+void RGWRESTReadResource::init_common(param_vec_t *extra_headers)
 {
   params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_self_zonegroup()));
 
@@ -276,7 +276,7 @@ int RGWRESTReadResource::aio_read()
 RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
                                          const string& _resource,
 		                         const rgw_http_param_pair *pp,
-                                         param_list_t *extra_headers,
+					 param_vec_t *extra_headers,
                                          RGWHTTPManager *_mgr)
   : cct(_conn->get_ctx()), conn(_conn), resource(_resource),
     params(make_param_list(pp)), cb(bl), mgr(_mgr),
@@ -287,8 +287,8 @@ RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
 
 RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
                                          const string& _resource,
-		                         param_list_t& params,
-                                         param_list_t *extra_headers,
+					 param_vec_t& params,
+					 param_vec_t *extra_headers,
                                          RGWHTTPManager *_mgr)
   : cct(_conn->get_ctx()), conn(_conn), resource(_resource), params(params),
     cb(bl), mgr(_mgr), req(cct, "POST", conn->get_url(), &cb, NULL, NULL)
@@ -296,7 +296,7 @@ RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
   init_common(extra_headers);
 }
 
-void RGWRESTPostResource::init_common(param_list_t *extra_headers)
+void RGWRESTPostResource::init_common(param_vec_t *extra_headers)
 {
   params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_self_zonegroup()));
 
