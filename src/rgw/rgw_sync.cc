@@ -712,7 +712,7 @@ public:
 int RGWReadSyncStatusCoroutine::handle_data(rgw_meta_sync_info& data)
 {
   if (retcode == -ENOENT) {
-    return retcode;
+    return 0;
   }
 
   RGWRados *store = sync_env->store;
