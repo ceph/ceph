@@ -15,6 +15,9 @@ ProtectHome=true
 ProtectSystem=full
 PrivateTmp=true
 TasksMax=infinity
+Restart=on-failure
+StartLimitInterval=30s
+StartLimitBurst=5
 
 [Install]
 WantedBy=ceph-radosgw.target
