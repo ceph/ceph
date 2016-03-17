@@ -526,6 +526,17 @@ TEST_P(StoreTest, SimpleObjectTest) {
     ASSERT_TRUE(in.contents_equal(bl));
   }
   {
+    bufferlist bl;
+    bl.append("abcde01234012340123401234abcde01234012340123401234abcde01234012340123401234abcde01234012340123401234");
+
+    //test: offset=len=0 mean read all data
+    bufferlist in;
+    r = store->read(cid, hoid, 0, 0, in);
+    ASSERT_EQ((int)bl.length(), r);
+    in.hexdump(cout);
+    ASSERT_TRUE(in.contents_equal(bl));
+  }
+  {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove_collection(cid);
