@@ -1399,6 +1399,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
        * splitting.  The simplest thing is to detect such cases here and drop
        * them without an error (the client will resend anyway).
        */
+    assert(m->get_map_epoch() <= superblock.newest_map);
     OSDMapRef opmap = try_get_map(m->get_map_epoch());
     if (!opmap) {
       dout(7) << __func__ << ": " << *pg << " no longer have map for "
@@ -6500,6 +6501,17 @@ void OSD::note_up_osd(int peer)
   service.forget_peer_epoch(peer, osdmap->get_epoch() - 1);
 }
 
+struct C_OnMapCommit : public Context {
+  OSD *osd;
+  epoch_t first, last;
+  MOSDMap *msg;
+  C_OnMapCommit(OSD *o, epoch_t f, epoch_t l, MOSDMap *m)
+    : osd(o), first(f), last(l), msg(m) {}
+  void finish(int r) {
+    osd->_committed_osd_maps(first, last, msg);
+  }
+};
+
 struct C_OnMapApply : public Context {
   OSDService *service;
   list<OSDMapRef> pinned_maps;
@@ -6530,7 +6542,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   assert(osd_lock.is_locked());
   list<OSDMapRef> pinned_maps;
   if (m->fsid != monc->get_fsid()) {
-    dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
+    dout(0) << "handle_osd_map fsid " << m->fsid << " != "
+	    << monc->get_fsid() << dendl;
     m->put();
     return;
   }
@@ -6541,7 +6554,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   Session *session = static_cast<Session *>(m->get_connection()->get_priv());
-  if (session && !(session->entity_name.is_mon() || session->entity_name.is_osd())) {
+  if (session && !(session->entity_name.is_mon() ||
+		   session->entity_name.is_osd())) {
     //not enough perms!
     dout(10) << "got osd map from Session " << session
              << " which we can't take maps from (not a mon or osd)" << dendl;
@@ -6558,17 +6572,18 @@ void OSD::handle_osd_map(MOSDMap *m)
   epoch_t first = m->get_first();
   epoch_t last = m->get_last();
   dout(3) << "handle_osd_map epochs [" << first << "," << last << "], i have "
-	  << osdmap->get_epoch()
+	  << superblock.newest_map
 	  << ", src has [" << m->oldest_map << "," << m->newest_map << "]"
 	  << dendl;
 
   logger->inc(l_osd_map);
   logger->inc(l_osd_mape, last - first + 1);
-  if (first <= osdmap->get_epoch())
-    logger->inc(l_osd_mape_dup, osdmap->get_epoch() - first + 1);
+  if (first <= superblock.newest_map)
+    logger->inc(l_osd_mape_dup, superblock.newest_map - first + 1);
 
-  // make sure there is something new, here, before we bother flushing the queues and such
-  if (last <= osdmap->get_epoch()) {
+  // make sure there is something new, here, before we bother flushing
+  // the queues and such
+  if (last <= superblock.newest_map) {
     dout(10) << " no new maps here, dropping" << dendl;
     m->put();
     return;
@@ -6576,11 +6591,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // missing some?
   bool skip_maps = false;
-  if (first > osdmap->get_epoch() + 1) {
-    dout(10) << "handle_osd_map message skips epochs " << osdmap->get_epoch() + 1
-	     << ".." << (first-1) << dendl;
-    if (m->oldest_map <= osdmap->get_epoch() + 1) {
-      osdmap_subscribe(osdmap->get_epoch()+1, false);
+  if (first > superblock.newest_map + 1) {
+    dout(10) << "handle_osd_map message skips epochs "
+	     << superblock.newest_map + 1 << ".." << (first-1) << dendl;
+    if (m->oldest_map <= superblock.newest_map + 1) {
+      osdmap_subscribe(superblock.newest_map + 1, false);
       m->put();
       return;
     }
@@ -6599,7 +6614,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   ObjectStore::Transaction t;
 
   // store new maps: queue for disk and put in the osdmap cache
-  epoch_t start = MAX(osdmap->get_epoch() + 1, first);
+  epoch_t start = MAX(superblock.newest_map + 1, first);
   for (epoch_t e = start; e <= last; e++) {
     map<epoch_t,bufferlist>::iterator p;
     p = m->maps.find(e);
@@ -6680,7 +6695,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // even if this map isn't from a mon, we may have satisfied our subscription
   monc->sub_got("osdmap", last);
 
-  if (last <= osdmap->get_epoch()) {
+  if (last <= superblock.newest_map) {
     dout(10) << " no new maps here, dropping" << dendl;
     m->put();
     return;
@@ -6697,8 +6712,9 @@ void OSD::handle_osd_map(MOSDMap *m)
       t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(e));
       superblock.oldest_map = e+1;
       num++;
+      // make sure we at least keep pace with incoming maps
       if (num >= cct->_conf->osd_target_transaction_size &&
-	  (uint64_t)num > (last - first))  // make sure we at least keep pace with incoming maps
+	  (uint64_t)num > (last - first))
 	break;
     }
   }
@@ -6706,7 +6722,29 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (!superblock.oldest_map || skip_maps)
     superblock.oldest_map = first;
   superblock.newest_map = last;
+  superblock.current_epoch = last;
 
+  // note in the superblock that we were clean thru the prior epoch
+  epoch_t boot_epoch = service.get_boot_epoch();
+  if (boot_epoch && boot_epoch >= superblock.mounted) {
+    superblock.mounted = boot_epoch;
+    superblock.clean_thru = last;
+  }
+
+  // superblock and commit
+  write_superblock(t);
+  store->queue_transaction(
+    service.meta_osr.get(),
+    std::move(t),
+    new C_OnMapApply(&service, pinned_maps, last),
+    new C_OnMapCommit(this, start, last, m), 0);
+  service.publish_superblock(superblock);
+}
+
+void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
+{
+  dout(10) << __func__ << " " << first << ".." << last << dendl;
+  Mutex::Locker l(osd_lock);
   map_lock.get_write();
 
   bool do_shutdown = false;
@@ -6714,8 +6752,11 @@ void OSD::handle_osd_map(MOSDMap *m)
   bool network_error = false;
 
   // advance through the new maps
-  for (epoch_t cur = start; cur <= superblock.newest_map; cur++) {
-    dout(10) << " advance to epoch " << cur << " (<= newest " << superblock.newest_map << ")" << dendl;
+  for (epoch_t cur = first; cur <= last; cur++) {
+    dout(10) << " advance to epoch " << cur
+	     << " (<= last " << last
+	     << " <= newest_map " << superblock.newest_map
+	     << ")" << dendl;
 
     OSDMapRef newmap = get_map(cur);
     assert(newmap);  // we just cached it above!
@@ -6756,7 +6797,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     osdmap = newmap;
 
-    superblock.current_epoch = cur;
     had_map_since = ceph_clock_now(cct);
 
     epoch_t up_epoch;
@@ -6794,38 +6834,52 @@ void OSD::handle_osd_map(MOSDMap *m)
       is_active()) {
     if (!osdmap->exists(whoami)) {
       dout(0) << "map says i do not exist.  shutting down." << dendl;
-      do_shutdown = true;   // don't call shutdown() while we have everything paused
+      do_shutdown = true;   // don't call shutdown() while we have
+			    // everything paused
     } else if (!osdmap->is_up(whoami) ||
-	       !osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()) ||
-	       !osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()) ||
-	       !osdmap->get_hb_back_addr(whoami).probably_equals(hb_back_server_messenger->get_myaddr()) ||
+	       !osdmap->get_addr(whoami).probably_equals(
+		 client_messenger->get_myaddr()) ||
+	       !osdmap->get_cluster_addr(whoami).probably_equals(
+		 cluster_messenger->get_myaddr()) ||
+	       !osdmap->get_hb_back_addr(whoami).probably_equals(
+		 hb_back_server_messenger->get_myaddr()) ||
 	       (osdmap->get_hb_front_addr(whoami) != entity_addr_t() &&
-                !osdmap->get_hb_front_addr(whoami).probably_equals(hb_front_server_messenger->get_myaddr()))) {
+                !osdmap->get_hb_front_addr(whoami).probably_equals(
+		  hb_front_server_messenger->get_myaddr()))) {
       if (!osdmap->is_up(whoami)) {
 	if (service.is_preparing_to_stop() || service.is_stopping()) {
 	  service.got_stop_ack();
 	} else {
 	  clog->warn() << "map e" << osdmap->get_epoch()
-		      << " wrongly marked me down";
+		       << " wrongly marked me down";
 	}
+      } else if (!osdmap->get_addr(whoami).probably_equals(
+		   client_messenger->get_myaddr())) {
+	clog->error() << "map e" << osdmap->get_epoch()
+		      << " had wrong client addr (" << osdmap->get_addr(whoami)
+		      << " != my " << client_messenger->get_myaddr() << ")";
+      } else if (!osdmap->get_cluster_addr(whoami).probably_equals(
+		   cluster_messenger->get_myaddr())) {
+	clog->error() << "map e" << osdmap->get_epoch()
+		      << " had wrong cluster addr ("
+		      << osdmap->get_cluster_addr(whoami)
+		      << " != my " << cluster_messenger->get_myaddr() << ")";
+      } else if (!osdmap->get_hb_back_addr(whoami).probably_equals(
+		   hb_back_server_messenger->get_myaddr())) {
+	clog->error() << "map e" << osdmap->get_epoch()
+		      << " had wrong hb back addr ("
+		      << osdmap->get_hb_back_addr(whoami)
+		      << " != my " << hb_back_server_messenger->get_myaddr()
+		      << ")";
+      } else if (osdmap->get_hb_front_addr(whoami) != entity_addr_t() &&
+		 !osdmap->get_hb_front_addr(whoami).probably_equals(
+		   hb_front_server_messenger->get_myaddr())) {
+	clog->error() << "map e" << osdmap->get_epoch()
+		      << " had wrong hb front addr ("
+		      << osdmap->get_hb_front_addr(whoami)
+		      << " != my " << hb_front_server_messenger->get_myaddr()
+		      << ")";
       }
-      else if (!osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()))
-	clog->error() << "map e" << osdmap->get_epoch()
-		    << " had wrong client addr (" << osdmap->get_addr(whoami)
-		     << " != my " << client_messenger->get_myaddr() << ")";
-      else if (!osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()))
-	clog->error() << "map e" << osdmap->get_epoch()
-		    << " had wrong cluster addr (" << osdmap->get_cluster_addr(whoami)
-		     << " != my " << cluster_messenger->get_myaddr() << ")";
-      else if (!osdmap->get_hb_back_addr(whoami).probably_equals(hb_back_server_messenger->get_myaddr()))
-	clog->error() << "map e" << osdmap->get_epoch()
-		    << " had wrong hb back addr (" << osdmap->get_hb_back_addr(whoami)
-		     << " != my " << hb_back_server_messenger->get_myaddr() << ")";
-      else if (osdmap->get_hb_front_addr(whoami) != entity_addr_t() &&
-               !osdmap->get_hb_front_addr(whoami).probably_equals(hb_front_server_messenger->get_myaddr()))
-	clog->error() << "map e" << osdmap->get_epoch()
-		    << " had wrong hb front addr (" << osdmap->get_hb_front_addr(whoami)
-		     << " != my " << hb_front_server_messenger->get_myaddr() << ")";
 
       if (!service.is_stopping()) {
         epoch_t up_epoch = 0;
@@ -6838,7 +6892,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 	utime_t grace = utime_t(g_conf->osd_max_markdown_period, 0);
 	osd_markdown_log.push_back(now);
 	//clear all out-of-date log
-	while (!osd_markdown_log.empty() && osd_markdown_log.front() + grace < now)
+	while (!osd_markdown_log.empty() &&
+	       osd_markdown_log.front() + grace < now)
 	  osd_markdown_log.pop_front();
 	if ((int)osd_markdown_log.size() > g_conf->osd_max_markdown_count) {
 	  do_restart = false;
@@ -6877,23 +6932,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
   }
 
-
-  // note in the superblock that we were clean thru the prior epoch
-  epoch_t boot_epoch = service.get_boot_epoch();
-  if (boot_epoch && boot_epoch >= superblock.mounted) {
-    superblock.mounted = boot_epoch;
-    superblock.clean_thru = osdmap->get_epoch();
-  }
-
-  // superblock and commit
-  write_superblock(t);
-  store->queue_transaction(
-    service.meta_osr.get(),
-    std::move(t),
-    new C_OnMapApply(&service, pinned_maps, osdmap->get_epoch()),
-    0, 0);
-  service.publish_superblock(superblock);
-
   map_lock.put_write();
 
   check_osdmap_features(store);
@@ -6912,15 +6950,18 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   if (m->newest_map && m->newest_map > last) {
-    dout(10) << " msg say newest map is " << m->newest_map << ", requesting more" << dendl;
+    dout(10) << " msg say newest map is " << m->newest_map
+	     << ", requesting more" << dendl;
     osdmap_subscribe(osdmap->get_epoch()+1, false);
   }
   else if (do_shutdown) {
     if (network_error) {
       Mutex::Locker l(heartbeat_lock);
-      map<int,pair<utime_t,entity_inst_t>>::iterator it = failure_pending.begin();
+      map<int,pair<utime_t,entity_inst_t>>::iterator it =
+	failure_pending.begin();
       while (it != failure_pending.end()) {
-        dout(10) << "handle_osd_ping canceling in-flight failure report for osd." << it->first << dendl;
+        dout(10) << "handle_osd_ping canceling in-flight failure report for osd."
+		 << it->first << dendl;
         send_still_alive(osdmap->get_epoch(), it->second.second);
         failure_pending.erase(it++);
       }
