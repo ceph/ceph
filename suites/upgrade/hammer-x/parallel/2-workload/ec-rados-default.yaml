@@ -1,5 +1,5 @@
-tasks:
-- full_sequential:
+workload:
+  sequential:
   - rados:
       clients: [client.0]
       ops: 4000
