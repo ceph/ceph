@@ -134,6 +134,23 @@ def test_roles_of_type():
         assert ids == expected_ids
 
 
+def test_cluster_roles_of_type():
+    expected = [
+        (['client.0', 'osd.0', 'ceph.osd.1'], 'osd', 'ceph',
+         ['osd.0', 'ceph.osd.1']),
+        (['client.0', 'osd.0', 'ceph.osd.1'], 'client', 'ceph',
+         ['client.0']),
+        (['foo.client.1', 'bar.client.2.3', 'baz.osd.1'], 'mon', None, []),
+        (['foo.client.1', 'bar.client.2.3', 'baz.osd.1'], 'client', None,
+         ['foo.client.1', 'bar.client.2.3']),
+        (['foo.client.1', 'bar.client.2.3', 'baz.osd.1'], 'client', 'bar',
+         ['bar.client.2.3']),
+        ]
+    for roles_for_host, type_, cluster, expected_roles in expected:
+        roles = list(misc.cluster_roles_of_type(roles_for_host, type_, cluster))
+        assert roles == expected_roles
+
+
 def test_all_roles_of_type():
     expected = [
         ([['client.0', 'osd.0', 'ceph.osd.1'], ['bar.osd.2']],

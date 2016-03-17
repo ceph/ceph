@@ -371,18 +371,31 @@ def split_role(role):
 
 def roles_of_type(roles_for_host, type_):
     """
-    Generator of roles.
+    Generator of ids.
 
     Each call returns the next possible role of the type specified.
     :param roles_for host: list of roles possible
     :param type_: type of role
     """
-    is_of_type = is_type(type_)
-    for name in roles_for_host:
-        if not is_of_type(name):
-            continue
-        _, _, id_ = split_role(name)
+    for role in cluster_roles_of_type(roles_for_host, type_, None):
+        _, _, id_ = split_role(role)
         yield id_
+
+
+def cluster_roles_of_type(roles_for_host, type_, cluster):
+    """
+    Generator of roles.
+
+    Each call returns the next possible role of the type specified.
+    :param roles_for host: list of roles possible
+    :param type_: type of role
+    :param cluster: cluster name
+    """
+    is_type_in_cluster = is_type(type_, cluster)
+    for role in roles_for_host:
+        if not is_type_in_cluster(role):
+            continue
+        yield role
 
 
 def all_roles(cluster):
