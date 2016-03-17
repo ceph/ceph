@@ -12,7 +12,6 @@ import yaml
 import subprocess
 
 from teuthology import lock
-from teuthology import lockstatus
 from teuthology import misc
 from teuthology.packaging import get_builder_project
 from teuthology import report
@@ -63,33 +62,6 @@ def save_config(ctx, config):
     if ctx.archive is not None:
         with file(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
             yaml.safe_dump(ctx.config, f, default_flow_style=False)
-
-
-def check_lock(ctx, config, check_up=True):
-    """
-    Check lock status of remote machines.
-    """
-    if not teuth_config.lock_server or ctx.config.get('check-locks') is False:
-        log.info('Lock checking disabled.')
-        return
-    log.info('Checking locks...')
-    for machine in ctx.config['targets'].iterkeys():
-        status = lockstatus.get_status(machine)
-        log.debug('machine status is %s', repr(status))
-        assert status is not None, \
-            'could not read lock status for {name}'.format(name=machine)
-        if check_up:
-            assert status['up'], 'machine {name} is marked down'.format(
-                name=machine
-            )
-        assert status['locked'], \
-            'machine {name} is not locked'.format(name=machine)
-        assert status['locked_by'] == ctx.owner, \
-            'machine {name} is locked by {user}, not {owner}'.format(
-                name=machine,
-                user=status['locked_by'],
-                owner=ctx.owner,
-            )
 
 
 def check_packages(ctx, config):
