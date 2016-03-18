@@ -272,22 +272,23 @@ def crush_setup(ctx, config):
 
 @contextlib.contextmanager
 def cephfs_setup(ctx, config):
+    cluster_name = config['cluster']
     testdir = teuthology.get_testdir(ctx)
     coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
 
-    first_mon = teuthology.get_first_mon(ctx, config)
+    first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
     (mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-    mdss = ctx.cluster.only(teuthology.is_type('mds'))
+    mdss = ctx.cluster.only(teuthology.is_type('mds', cluster_name))
     # If there are any MDSs, then create a filesystem for them to use
     # Do this last because requires mon cluster to be up and running
     if mdss.remotes:
         log.info('Setting up CephFS filesystem...')
 
-        ceph_fs = Filesystem(ctx)
+        ceph_fs = Filesystem(ctx) # TODO: make Filesystem cluster-aware
         if not ceph_fs.legacy_configured():
             ceph_fs.create()
 
-        is_active_mds = lambda role: role.startswith('mds.') and not role.endswith('-s') and role.find('-s-') == -1
+        is_active_mds = lambda role: 'mds.' in role and not role.endswith('-s') and '-s-' not in role
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
         num_active = len([r for r in all_roles if is_active_mds(r)])
         mon_remote.run(
@@ -306,6 +307,7 @@ def cephfs_setup(ctx, config):
             'ceph-coverage',
             coverage_dir,
             'ceph',
+            '--cluster', cluster_name,
             'mds', 'set_max_mds', str(num_active)])
 
     yield
