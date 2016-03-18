@@ -551,10 +551,10 @@ static string full_data_sync_index_shard_oid(const string& source_zone, int shar
 struct bucket_instance_meta_info {
   string key;
   obj_version ver;
-  time_t mtime;
+  utime_t mtime;
   RGWBucketInstanceMetadataObject data;
 
-  bucket_instance_meta_info() : mtime(0) {}
+  bucket_instance_meta_info() {}
 
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("key", key, obj);
