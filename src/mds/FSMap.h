@@ -95,6 +95,7 @@ protected:
   fs_cluster_id_t legacy_client_fscid;
   CompatSet compat;
   bool enable_multiple;
+  bool ever_enabled_multiple; // < the cluster had multiple MDSes enabled once
 
   std::map<fs_cluster_id_t, std::shared_ptr<Filesystem> > filesystems;
 
@@ -115,7 +116,7 @@ public:
       next_filesystem_id(FS_CLUSTER_ID_ANONYMOUS + 1),
       legacy_client_fscid(FS_CLUSTER_ID_NONE),
       compat(get_mdsmap_compat_set_default()),
-      enable_multiple(false)
+      enable_multiple(false), ever_enabled_multiple(false)
   { }
 
   FSMap(const FSMap &rhs)
@@ -125,6 +126,7 @@ public:
       legacy_client_fscid(rhs.legacy_client_fscid),
       compat(rhs.compat),
       enable_multiple(rhs.enable_multiple),
+      ever_enabled_multiple(rhs.ever_enabled_multiple),
       mds_roles(rhs.mds_roles),
       standby_daemons(rhs.standby_daemons),
       standby_epochs(rhs.standby_epochs)
@@ -159,6 +161,9 @@ public:
   void set_enable_multiple(const bool v)
   {
     enable_multiple = v;
+    if (true == v) {
+      ever_enabled_multiple = true;
+    }
   }
 
   bool get_enable_multiple() const

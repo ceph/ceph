@@ -402,7 +402,8 @@ COMMAND("fs set " \
 	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
 COMMAND("fs flag set name=flag_name,type=CephChoices,strings=enable_multiple "
-        "name=val,type=CephString", \
+        "name=val,type=CephString " \
+	"name=confirm,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"Set a global CephFS flag", \
 	"fs", "rw", "cli,rest")
 COMMAND("fs add_data_pool name=fs_name,type=CephString " \

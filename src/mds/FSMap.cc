@@ -231,7 +231,7 @@ void FSMap::get_health(list<pair<health_status_t,string> >& summary,
 void FSMap::encode(bufferlist& bl, uint64_t features) const
 {
   if (features & CEPH_FEATURE_SERVER_JEWEL) {
-    ENCODE_START(6, 6, bl);
+    ENCODE_START(7, 6, bl);
     ::encode(epoch, bl);
     ::encode(next_filesystem_id, bl);
     ::encode(legacy_client_fscid, bl);
@@ -245,6 +245,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(mds_roles, bl);
     ::encode(standby_daemons, bl, features);
     ::encode(standby_epochs, bl);
+    ::encode(ever_enabled_multiple, bl);
     ENCODE_FINISH(bl);
   } else {
     if (filesystems.empty()) {
@@ -406,6 +407,7 @@ void FSMap::decode(bufferlist::iterator& p)
     ::decode(legacy_client_fscid, p);
     ::decode(compat, p);
     ::decode(enable_multiple, p);
+    ::decode(ever_enabled_multiple, p);
     std::vector<Filesystem> fs_list;
     ::decode(fs_list, p);
     filesystems.clear();

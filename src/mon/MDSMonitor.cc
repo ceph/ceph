@@ -1508,6 +1508,9 @@ class FlagSetHandler : public FileSystemCommandHandler
     string flag_val;
     cmd_getval(g_ceph_context, cmdmap, "val", flag_val);
 
+    string confirm;
+    cmd_getval(g_ceph_context, cmdmap, "confirm", confirm);
+
     if (flag_name == "enable_multiple") {
       bool flag_bool = false;
       int r = parse_bool(flag_val, &flag_bool, ss);
@@ -1521,7 +1524,12 @@ class FlagSetHandler : public FileSystemCommandHandler
         ss << "Multiple-filesystems are forbidden until all mons are updated";
         return -EINVAL;
       }
-
+      if (confirm != "--yes-i-really-mean-it") {
+	ss << "Multiple FSes is an EXPERIMENTAL and BARELY-TESTED configuration"
+	  " that may break your entire cluster, probably prevent serious"
+	  " support, and irrevocably marks your cluster."
+	  " Add --yes-i-really-mean-it if you are sure you wish to continue.";
+      }
       fsmap.set_enable_multiple(flag_bool);
       return 0;
     } else {
