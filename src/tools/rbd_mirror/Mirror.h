@@ -29,7 +29,7 @@ struct Threads;
  */
 class Mirror {
 public:
-  Mirror(CephContext *cct);
+  Mirror(CephContext *cct, const std::vector<const char*> &args);
   Mirror(const Mirror&) = delete;
   Mirror& operator=(const Mirror&) = delete;
 
@@ -42,6 +42,7 @@ private:
   void update_replayers(const map<peer_t, set<int64_t> > &peer_configs);
 
   CephContext *m_cct;
+  std::vector<const char*> m_args;
   Threads *m_threads = nullptr;
   Mutex m_lock;
   Cond m_cond;

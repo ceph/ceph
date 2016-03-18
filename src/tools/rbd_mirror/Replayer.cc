@@ -22,10 +22,11 @@ namespace rbd {
 namespace mirror {
 
 Replayer::Replayer(Threads *threads, RadosRef local_cluster,
-                   const peer_t &peer) :
+                   const peer_t &peer, const std::vector<const char*> &args) :
   m_threads(threads),
   m_lock(stringify("rbd::mirror::Replayer ") + stringify(peer)),
   m_peer(peer),
+  m_args(args),
   m_local(local_cluster),
   m_remote(new librados::Rados),
   m_replayer_thread(this)
@@ -61,6 +62,22 @@ int Replayer::init()
     derr << "could not read ceph conf for " << m_peer
 	 << " : " << cpp_strerror(r) << dendl;
     return r;
+  }
+
+  r = m_remote->conf_parse_env(nullptr);
+  if (r < 0) {
+    derr << "could not parse environment for " << m_peer
+	 << " : " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (!m_args.empty()) {
+    r = m_remote->conf_parse_argv(m_args.size(), &m_args[0]);
+    if (r < 0) {
+      derr << "could not parse command line args for " << m_peer
+	   << " : " << cpp_strerror(r) << dendl;
+      return r;
+    }
   }
 
   r = m_remote->connect();

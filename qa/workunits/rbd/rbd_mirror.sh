@@ -35,7 +35,7 @@
 #
 #   cd /tmp/tmp.rbd_mirror
 #   ls
-#   less rbd-mirror.<pid>.log
+#   less rbd-mirror.local.<pid>.log
 #   ceph --cluster remote -s
 #   ceph --cluster local -s
 #   rbd --cluster remote -p mirror ls
@@ -53,7 +53,8 @@ LOC_CLUSTER=local
 RMT_CLUSTER=remote
 POOL=mirror
 RBD_MIRROR_PID_FILE=
-RBD_MIRROR_ASOK=
+RBD_MIRROR_LOC_ASOK=
+RBD_MIRROR_RMT_ASOK=
 SRC_DIR=$(readlink -f $(dirname $0)/../../../src)
 TEMPDIR=
 
@@ -115,13 +116,14 @@ cleanup()
 start_mirror()
 {
     RBD_MIRROR_PID_FILE=${TEMPDIR}/rbd-mirror.pid
-    RBD_MIRROR_ASOK=${TEMPDIR}/rbd-mirror.asok
+    RBD_MIRROR_LOC_ASOK=${TEMPDIR}/rbd-mirror.${LOC_CLUSTER}.asok
+    RBD_MIRROR_RMT_ASOK=${TEMPDIR}/rbd-mirror.${RMT_CLUSTER}.asok
 
     rbd-mirror \
 	--cluster ${LOC_CLUSTER} \
 	--pid-file=${RBD_MIRROR_PID_FILE} \
-	--log-file=${TEMPDIR}/rbd-mirror.\$pid.log \
-	--admin-socket=${RBD_MIRROR_ASOK} \
+	--log-file=${TEMPDIR}/rbd-mirror.\$cluster.\$pid.log \
+	--admin-socket=${TEMPDIR}/rbd-mirror.\$cluster.asok \
 	--debug-rbd=30 --debug-journaler=30 \
 	--debug-rbd_mirror=30 \
 	--daemonize=true
@@ -145,10 +147,10 @@ stop_mirror()
 	done
 	ps auxww | awk -v pid=${pid} '$2 == pid {print; exit 1}'
     fi
-    rm -f ${RBD_MIRROR_ASOK}
-    rm -f ${RBD_MIRROR_PID_FILE}
+    rm -f ${RBD_MIRROR_LOC_ASOK} ${RBD_MIRROR_RMT_ASOK} ${RBD_MIRROR_PID_FILE}
     RBD_MIRROR_PID_FILE=
-    RBD_MIRROR_ASOK=
+    RBD_MIRROR_LOC_ASOK=
+    RBD_MIRROR_RMT_ASOK=
 }
 
 flush()
@@ -156,9 +158,9 @@ flush()
     local image=$1
     local image_id cmd
 
-    test -n "${RBD_MIRROR_ASOK}"
+    test -n "${RBD_MIRROR_LOC_ASOK}"
 
-    ceph --admin-daemon ${TEMPDIR}/rbd-mirror.asok \
+    ceph --admin-daemon ${RBD_MIRROR_LOC_ASOK} \
 	 rbd mirror flush ${POOL}/${image}
 }
 
@@ -168,9 +170,9 @@ test_image_replay_state()
     local test_state=$2
     local current_state=stopped
 
-    test -n "${RBD_MIRROR_ASOK}"
+    test -n "${RBD_MIRROR_LOC_ASOK}"
 
-    ceph --admin-daemon ${RBD_MIRROR_ASOK} help |
+    ceph --admin-daemon ${RBD_MIRROR_LOC_ASOK} help |
 	fgrep "rbd mirror status ${POOL}/${image}" && current_state=started
     test "${test_state}" = "${current_state}"
 }
@@ -314,7 +316,6 @@ if [ "$1" = clean ]; then
     test -n "${TEMPDIR}"
 
     RBD_MIRROR_PID_FILE=${TEMPDIR}/rbd-mirror.pid
-    RBD_MIRROR_ASOK=${TEMPDIR}/rbd-mirror.asok
     RBD_MIRROR_NOCLEANUP=
 
     cleanup
