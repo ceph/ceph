@@ -38,7 +38,7 @@ TestClient::TestClient(ClientId _id,
       op_count += i.args.req_params.count;
     }
   }
-  op_times.resize(op_count);
+  op_times.reserve(op_count);
 
   thd_resp = std::thread(&TestClient::run_resp, this);
   thd_req = std::thread(&TestClient::run_req, this);
@@ -131,7 +131,7 @@ void TestClient::run_resp() {
 
       // data collection
 
-      op_times[op++] = now();
+      op_times.push_back(now());
       if (dmc::PhaseType::reservation == item.resp_params.phase) {
 	++reservation_counter;
       } else {
