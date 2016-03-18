@@ -160,7 +160,8 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     // return for now; we'll put the message once it's done.
     return true;
 
-  } else if (prefix == "config-key del") {
+  } else if (prefix == "config-key del" ||
+             prefix == "config-key rm") {
     if (!mon->is_leader()) {
       mon->forward_request_leader(op);
       return true;
