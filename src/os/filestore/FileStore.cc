@@ -3291,7 +3291,7 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
       ret = -errno;
     } else {
       // ensure we extent file size, if needed
-      if (offset + len > st.st_size) {
+      if (offset + len > (uint64_t)st.st_size) {
 	ret = ::ftruncate(**fd, offset + len);
 	if (ret < 0) {
 	  ret = -errno;
