@@ -25,6 +25,7 @@
 #include <iostream>
 
 #include "heap.h"
+#include "indirect_intrusive_heap.h"
 #include "run_every.h"
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
@@ -193,10 +194,10 @@ namespace crimson {
       class Entry {
 	friend PriorityQueue<C,R>;
 
-	C          client;
-	RequestTag tag;
-	RequestRef request;
-	bool       handled;
+	C                   client;
+	RequestTag          tag;
+	RequestRef          request;
+	bool                handled;
 
       public:
 
@@ -220,7 +221,83 @@ namespace crimson {
       }; // struct Entry
 
 
+      class ClientEntry; // forward decl for friend decls
+
+
+      class ClientReq {
+	friend ClientEntry;
+
+	RequestTag          tag;
+	RequestRef          request;
+
+      public:
+
+	ClientReq(const RequestTag& _tag,
+		  RequestRef&&      _request) :
+	  tag(_tag),
+	  request(_request)
+	{
+	  // empty
+	}
+
+	friend std::ostream& operator<<(std::ostream& out, const ClientReq& c) {
+	  out << c.tag;
+	  return out;
+	}
+      };
+
+
+      class ClientEntry {
+	friend PriorityQueue<C,R>;
+
+	C                     client;
+	std::deque<ClientRec> requests;
+	c::IndIntruHeapData   res_heap_data;
+	c::IndIntruHeapData   lim_heap_data;
+	c::IndIntruHeapData   ready_heap_data;
+	c::IndIntruHeapData   prop_heap_data;
+
+      public:
+
+	ClientEntry(C _client) :
+	  client(_client)
+	{
+	  // empty
+	}
+
+
+	inline void add_request(const RequestTag& tag, RequestRef&& request) {
+	  requests.emplace_back(ClientReq(tag, request));
+	}
+
+
+	inline const ClientReq& next_request() const {
+	  return requests.front();
+	}
+
+
+	inline void pop_request() {
+	  requests.pop_front();
+	}
+
+
+	inline bool has_next_request() const {
+	  return !requests.empty();
+	}
+
+
+	friend
+	std::ostream& operator<<(std::ostream& out,
+				 const typename PriorityQueue<C,R>::ClientEntry& e) {
+	  out << "{ client:" << e.client << " top req: " <<
+	    (e.has_requests() ? e.next_request() : "none") << " }";
+	  return out;
+	}
+      }; // struct ClientEntry
+
+
       using EntryRef = std::shared_ptr<Entry>;
+      using ClientEntryRef = std::shared_ptr<ClientEntry>;
 
       // if you try to display an EntryRef (shared pointer to an
       // Entry), dereference the shared pointer so we get data, not
@@ -266,6 +343,23 @@ namespace crimson {
 
     protected:
 
+      template<double RequestTag::*tag>
+      struct ClientCompare {
+	bool operator()(const ClientEntry& n1, const ClientEntry& n2) const {
+	  if (n1.has_requests()) {
+	    if (n2.has_requests()) {
+	      return n1.*tag < n2.*tag;
+	    } else {
+	      return true;
+	    }
+	  } else if (n2.has_requests()) {
+	    return false;
+	  } else {
+	    return false; // both have none; keep stable w false
+	  }
+	}
+      };
+
       struct ReservationCompare {
 	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
 	  assert(n1->tag.reservation > 0 && n2->tag.reservation > 0);
@@ -309,6 +403,9 @@ namespace crimson {
 
       // stable mappiing between client ids and client queues
       std::map<C,ClientRec> client_map;
+
+
+      c::IndIntruHeap<ClientEntryRef, ClientEntry, &ClientEntry::res_heap_data, ClientCompare<&RequestTag::reservation>> new_reserv_q;
 
       // four heaps that maintain the earliest request by each of the
       // tag components
@@ -597,7 +694,7 @@ namespace crimson {
 
 	PullReq result;
 	DataGuard g(data_mtx);
-	
+
 	NextReq next = next_request();
 	result.status = next.status;
 	switch(next.status) {
