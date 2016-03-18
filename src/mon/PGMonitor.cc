@@ -1310,9 +1310,19 @@ void PGMonitor::_try_mark_pg_stale(
 
 bool PGMonitor::check_down_pgs()
 {
-  dout(10) << "check_down_pgs" << dendl;
+  dout(10) << "check_down_pgs last_osdmap_epoch "
+	   << pg_map.last_osdmap_epoch << dendl;
+  if (pg_map.last_osdmap_epoch == 0)
+    return false;
 
-  OSDMap *osdmap = &mon->osdmon()->osdmap;
+  // use the OSDMap that matches the one pg_map has consumed.
+  std::unique_ptr<OSDMap> osdmap;
+  bufferlist bl;
+  int err = mon->osdmon()->get_version_full(pg_map.last_osdmap_epoch, bl);
+  assert(err == 0);
+  osdmap.reset(new OSDMap);
+  osdmap->decode(bl);
+
   bool ret = false;
 
   // if a large number of osds changed state, just iterate over the whole
@@ -1326,7 +1336,7 @@ bool PGMonitor::check_down_pgs()
       if ((p.second.state & PG_STATE_STALE) == 0 &&
           p.second.acting_primary != -1 &&
           osdmap->is_down(p.second.acting_primary)) {
-	_try_mark_pg_stale(osdmap, p.first, p.second);
+	_try_mark_pg_stale(osdmap.get(), p.first, p.second);
 	ret = true;
       }
     }
@@ -1335,9 +1345,9 @@ bool PGMonitor::check_down_pgs()
       if (osdmap->is_down(osd)) {
 	for (auto pgid : pg_map.pg_by_osd[osd]) {
 	  const pg_stat_t &stat = pg_map.pg_stat[pgid];
-	  if ((stat.state & PG_STATE_STALE) == 0 &&
-	      stat.acting_primary != -1) {
-	    _try_mark_pg_stale(osdmap, pgid, stat);
+	  assert(stat.acting_primary == osd);
+	  if ((stat.state & PG_STATE_STALE) == 0) {
+	    _try_mark_pg_stale(osdmap.get(), pgid, stat);
 	    ret = true;
 	  }
 	}
