@@ -507,8 +507,8 @@ ceph_test_rbd_mirror_image_replay_LDADD = \
 	librbd_api.la \
 	$(LIBRBD_TYPES) \
 	libjournal.la \
-	$(LIBRADOS) $(LIBOSDC) \
-	librados_internal.la \
+	librados_api.la \
+	$(LIBRADOS_DEPS) \
 	libcls_rbd_client.la \
 	libcls_lock_client.la \
 	libcls_journal_client.la \
