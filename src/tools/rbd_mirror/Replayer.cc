@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "include/stringify.h"
 #include "Replayer.h"
+#include "Threads.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -20,6 +21,54 @@ using std::vector;
 
 namespace rbd {
 namespace mirror {
+
+void Replayer::C_InitReplayer::finish(int r) {
+  assert(r == 0);
+
+  std::string uuid;
+
+  r = replayer->m_remote->init2(replayer->m_peer.client_name.c_str(),
+      replayer->m_peer.cluster_name.c_str(), 0);
+  if (r < 0) {
+    derr << "error initializing remote cluster handle for " <<
+      replayer->m_peer << " : " << cpp_strerror(r) << dendl;
+    goto call_on_finish;
+  }
+
+  r = replayer->m_remote->conf_read_file(nullptr);
+  if (r < 0) {
+    derr << "could not read ceph conf for " << replayer->m_peer
+      << " : " << cpp_strerror(r) << dendl;
+    goto call_on_finish;
+  }
+
+  r = replayer->m_remote->connect();
+  if (r < 0) {
+    derr << "error connecting to remote cluster " << replayer->m_peer
+      << " : " << cpp_strerror(r) << dendl;
+    goto call_on_finish;
+  }
+
+  dout(20) << "connected to " << replayer->m_peer << dendl;
+
+  r = replayer->m_local->cluster_fsid(&uuid);
+  if (r < 0) {
+    derr << "error retrieving local cluster uuid: " << cpp_strerror(r)
+      << dendl;
+    goto call_on_finish;
+  }
+  replayer->m_client_id = uuid;
+
+  // TODO: make interval configurable
+  replayer->m_pool_watcher.reset(new PoolWatcher(
+        replayer->m_remote, 30, replayer->m_lock, replayer->m_cond));
+  replayer->m_pool_watcher->refresh_images();
+
+  replayer->m_replayer_thread.create("replayer");
+
+call_on_finish:
+  on_finish->complete(r);
+}
 
 Replayer::Replayer(Threads *threads, RadosRef local_cluster,
                    const peer_t &peer) :
@@ -44,50 +93,10 @@ Replayer::~Replayer()
   }
 }
 
-int Replayer::init()
+void Replayer::init(Context *on_finish)
 {
-  dout(20) << "replaying for " << m_peer << dendl;
-
-  int r = m_remote->init2(m_peer.client_name.c_str(),
-			  m_peer.cluster_name.c_str(), 0);
-  if (r < 0) {
-    derr << "error initializing remote cluster handle for " << m_peer
-	 << " : " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  r = m_remote->conf_read_file(nullptr);
-  if (r < 0) {
-    derr << "could not read ceph conf for " << m_peer
-	 << " : " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  r = m_remote->connect();
-  if (r < 0) {
-    derr << "error connecting to remote cluster " << m_peer
-	 << " : " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  dout(20) << "connected to " << m_peer << dendl;
-
-  std::string uuid;
-  r = m_local->cluster_fsid(&uuid);
-  if (r < 0) {
-    derr << "error retrieving local cluster uuid: " << cpp_strerror(r)
-	 << dendl;
-    return r;
-  }
-  m_client_id = uuid;
-
-  // TODO: make interval configurable
-  m_pool_watcher.reset(new PoolWatcher(m_remote, 30, m_lock, m_cond));
-  m_pool_watcher->refresh_images();
-
-  m_replayer_thread.create("replayer");
-
-  return 0;
+  dout(20) << "init replaying for " << m_peer << dendl;
+  m_threads->work_queue->queue(new C_InitReplayer(this, on_finish), 0);
 }
 
 void Replayer::run()

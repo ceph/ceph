@@ -35,7 +35,7 @@ public:
   Replayer(const Replayer&) = delete;
   Replayer& operator=(const Replayer&) = delete;
 
-  int init();
+  void init(Context *on_finish);
   void run();
   void shutdown();
 
@@ -68,6 +68,17 @@ private:
       return 0;
     }
   } m_replayer_thread;
+
+  struct C_InitReplayer : public Context {
+    Replayer *replayer;
+    Context *on_finish;
+
+    C_InitReplayer(Replayer *replayer, Context *on_finish) :
+      replayer(replayer), on_finish(on_finish) {
+    }
+
+    virtual void finish(int r);
+  };
 };
 
 } // namespace mirror

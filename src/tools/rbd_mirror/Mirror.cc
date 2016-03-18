@@ -27,10 +27,20 @@ using librbd::mirror_peer_t;
 namespace rbd {
 namespace mirror {
 
+void Mirror::C_ShutdownReplayer::finish(int r) {
+  Mutex::Locker l(*m_replayers_lock);
+  auto it = m_replayers->find(peer);
+  if (it != m_replayers->end()) {
+    dout(20) << "removing replayer for " << peer << dendl;
+    m_replayers->erase(it);
+  }
+}
+
 Mirror::Mirror(CephContext *cct) :
   m_cct(cct),
   m_lock("rbd::mirror::Mirror"),
-  m_local(new librados::Rados())
+  m_local(new librados::Rados()),
+  m_replayers_lock("rbd::mirror::Mirror::replayers_map")
 {
   cct->lookup_or_create_singleton_object<Threads>(m_threads,
                                                   "rbd_mirror::threads");
@@ -80,28 +90,42 @@ void Mirror::update_replayers(const map<peer_t, set<int64_t> > &peer_configs)
   assert(m_lock.is_locked());
   for (auto &kv : peer_configs) {
     const peer_t &peer = kv.first;
-    if (m_replayers.find(peer) == m_replayers.end()) {
+
+    m_replayers_lock.Lock();
+    auto it = m_replayers.find(peer);
+    if (it == m_replayers.end()) {
       dout(20) << "starting replayer for " << peer << dendl;
-      unique_ptr<Replayer> replayer(new Replayer(m_threads, m_local, peer));
-      // TODO: make async, and retry connecting within replayer
-      int r = replayer->init();
-      if (r < 0) {
-	continue;
-      }
-      m_replayers.insert(std::make_pair(peer, std::move(replayer)));
+
+      m_replayers.insert(std::make_pair(peer,
+              unique_ptr<Replayer>(new Replayer(m_threads, m_local, peer))));
+      m_replayers_lock.Unlock();
+
+      FunctionContext *ctx = new FunctionContext(
+          [this, peer](int r) {
+            if (r < 0) {
+              derr << "failed to initialize replayer for " << peer << dendl;
+              m_replayers_lock.Lock();
+              auto it = m_replayers.find(peer);
+              assert(it != m_replayers.end());
+              m_replayers.erase(it);
+              m_replayers_lock.Unlock();
+            }
+          });
+      m_replayers[peer]->init(ctx);
+    } else {
+      m_replayers_lock.Unlock();
     }
   }
 
-  // TODO: make async
-  for (auto it = m_replayers.begin(); it != m_replayers.end();) {
+  m_replayers_lock.Lock();
+  for (auto it = m_replayers.begin(); it != m_replayers.end(); ++it) {
     peer_t peer = it->first;
     if (peer_configs.find(peer) == peer_configs.end()) {
-      dout(20) << "removing replayer for " << peer << dendl;
-      m_replayers.erase(it++);
-    } else {
-      ++it;
+      m_threads->work_queue->queue(new C_ShutdownReplayer(&m_replayers,
+        &m_replayers_lock, peer));
     }
   }
+  m_replayers_lock.Unlock();
 }
 
 } // namespace mirror
