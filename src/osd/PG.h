@@ -267,9 +267,6 @@ public:
     _lock.Unlock();
   }
 
-  void assert_locked() {
-    assert(_lock.is_locked());
-  }
   bool is_locked() const {
     return _lock.is_locked();
   }
@@ -679,7 +676,6 @@ protected:
   set<pg_shard_t> peer_missing_requested;
 
   // i deleted these strays; ignore racing PGInfo from them
-  set<pg_shard_t> stray_purged;
   set<pg_shard_t> peer_activated;
 
   // primary-only, recovery-only state
@@ -1087,7 +1083,7 @@ public:
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
 
   bool have_unfound() const { 
-    return missing_loc.num_unfound();
+    return missing_loc.num_unfound() > 0;
   }
   int get_num_unfound() const {
     return missing_loc.num_unfound();
@@ -2111,7 +2107,6 @@ public:
 
  public:
   const spg_t&      get_pgid() const { return pg_id; }
-  int        get_nrep() const { return acting.size(); }
 
   void reset_min_peer_features() {
     peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;

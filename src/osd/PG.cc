@@ -658,8 +658,6 @@ bool PG::needs_backfill() const
 {
   assert(is_primary());
 
-  bool ret = false;
-
   // We can assume that only possible osds that need backfill
   // are on the backfill_targets vector nodes.
   set<pg_shard_t>::const_iterator end = backfill_targets.end();
@@ -669,13 +667,12 @@ bool PG::needs_backfill() const
     map<pg_shard_t, pg_info_t>::const_iterator pi = peer_info.find(peer);
     if (!pi->second.last_backfill.is_max()) {
       dout(10) << __func__ << " osd." << peer << " has last_backfill " << pi->second.last_backfill << dendl;
-      ret = true;
+      return true;
     }
   }
 
-  if (!ret)
-    dout(10) << __func__ << " does not need backfill" << dendl;
-  return ret;
+  dout(10) << __func__ << " does not need backfill" << dendl;
+  return false;
 }
 
 bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end, epoch_t oldest_map)
@@ -925,7 +922,6 @@ void PG::clear_primary_state()
   peer_activated.clear();
   min_last_complete_ondisk = eversion_t();
   pg_trim_to = eversion_t();
-  stray_purged.clear();
   might_have_unfound.clear();
 
   last_update_ondisk = eversion_t();
@@ -2382,7 +2378,6 @@ void PG::purge_strays()
 	get_osdmap()->get_epoch(),
 	to_remove);
       osd->send_message_osd_cluster(p->osd, m, get_osdmap()->get_epoch());
-      stray_purged.insert(*p);
     } else {
       dout(10) << "not sending PGRemove to down osd." << *p << dendl;
     }
@@ -2425,21 +2420,22 @@ void PG::update_heartbeat_peers()
 {
   assert(is_locked());
 
+  if (!is_primary())
+    return;
+
   set<int> new_peers;
-  if (is_primary()) {
-    for (unsigned i=0; i<acting.size(); i++) {
-      if (acting[i] != CRUSH_ITEM_NONE)
-	new_peers.insert(acting[i]);
-    }
-    for (unsigned i=0; i<up.size(); i++) {
-      if (up[i] != CRUSH_ITEM_NONE)
-	new_peers.insert(up[i]);
-    }
-    for (map<pg_shard_t,pg_info_t>::iterator p = peer_info.begin();
-	 p != peer_info.end();
-	 ++p)
-      new_peers.insert(p->first.osd);
+  for (unsigned i=0; i<acting.size(); i++) {
+    if (acting[i] != CRUSH_ITEM_NONE)
+      new_peers.insert(acting[i]);
   }
+  for (unsigned i=0; i<up.size(); i++) {
+    if (up[i] != CRUSH_ITEM_NONE)
+      new_peers.insert(up[i]);
+  }
+  for (map<pg_shard_t,pg_info_t>::iterator p = peer_info.begin();
+    p != peer_info.end();
+    ++p)
+    new_peers.insert(p->first.osd);
 
   bool need_update = false;
   heartbeat_peer_lock.Lock();

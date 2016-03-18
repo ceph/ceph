@@ -1475,7 +1475,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     goto free_store;
   }
 
-  ret = store->read(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, 0, sbbl);
+  ret = store->read(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, 0, sbbl);
   if (ret >= 0) {
     /* if we already have superblock, check content of superblock */
     dout(0) << " have superblock" << dendl;
@@ -1512,10 +1512,10 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 
     ObjectStore::Transaction t;
     t.create_collection(coll_t::meta(), 0);
-    t.write(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+    t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
     ret = store->apply_transaction(osr.get(), std::move(t));
     if (ret) {
-      derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_POBJECT: "
+      derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_GOBJECT: "
 	   << "apply_transaction returned " << ret << dendl;
       goto umount_store;
     }
@@ -2738,13 +2738,13 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
 
   bufferlist bl;
   ::encode(superblock, bl);
-  t.write(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+  t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
 }
 
 int OSD::read_superblock()
 {
   bufferlist bl;
-  int r = store->read(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+  int r = store->read(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, 0, bl);
   if (r < 0)
     return r;
 
@@ -4503,9 +4503,12 @@ bool remove_dir(
     store->get_ideal_list_max(),
     &olist,
     &next);
+  // default cont to true, this is safe because caller(OSD::RemoveWQ::_process()) 
+  // will recheck the answer before it really goes on.
+  bool cont = true;
   for (vector<ghobject_t>::iterator i = olist.begin();
        i != olist.end();
-       ++i, ++num) {
+       ++i) {
     if (i->is_pgmeta())
       continue;
     OSDriver::OSTransaction _t(osdriver->get_transaction(&t));
@@ -4514,10 +4517,10 @@ bool remove_dir(
       assert(0);
     }
     t.remove(coll, *i);
-    if (num >= cct->_conf->osd_target_transaction_size) {
+    if (++num >= cct->_conf->osd_target_transaction_size) {
       C_SaferCond waiter;
       store->queue_transaction(osr, std::move(t), &waiter);
-      bool cont = dstate->pause_clearing();
+      cont = dstate->pause_clearing();
       handle.suspend_tp_timeout();
       waiter.wait();
       handle.reset_tp_timeout();
@@ -4529,14 +4532,16 @@ bool remove_dir(
       num = 0;
     }
   }
-  C_SaferCond waiter;
-  store->queue_transaction(osr, std::move(t), &waiter);
-  bool cont = dstate->pause_clearing();
-  handle.suspend_tp_timeout();
-  waiter.wait();
-  handle.reset_tp_timeout();
-  if (cont)
-    cont = dstate->resume_clearing();
+  if (num) {
+    C_SaferCond waiter;
+    store->queue_transaction(osr, std::move(t), &waiter);
+    cont = dstate->pause_clearing();
+    handle.suspend_tp_timeout();
+    waiter.wait();
+    handle.reset_tp_timeout();
+    if (cont)
+      cont = dstate->resume_clearing();
+  }
   // whether there are more objects to remove in the collection
   *finished = next.is_max();
   return cont;

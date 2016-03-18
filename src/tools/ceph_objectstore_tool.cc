@@ -2514,7 +2514,7 @@ int main(int argc, char **argv)
   bufferlist bl;
   OSDSuperblock superblock;
   bufferlist::iterator p;
-  ret = fs->read(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+  ret = fs->read(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, 0, bl);
   if (ret < 0) {
     cerr << "Failure to read OSD superblock: " << cpp_strerror(ret) << std::endl;
     goto out;
