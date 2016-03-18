@@ -414,7 +414,8 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     dout(0) << __func__ << " proposing new mon." << name << dendl;
     goto reply;
 
-  } else if (prefix == "mon remove") {
+  } else if (prefix == "mon remove" ||
+             prefix == "mon rm") {
     string name;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
     if (!monmap.contains(name)) {

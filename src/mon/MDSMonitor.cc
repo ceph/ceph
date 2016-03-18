@@ -1979,7 +1979,7 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
 {
   public:
   RemoveDataPoolHandler()
-    : FileSystemCommandHandler("fs remove_data_pool")
+    : FileSystemCommandHandler("fs rm_data_pool")
   {}
 
   int handle(
@@ -2926,5 +2926,7 @@ MDSMonitor::MDSMonitor(Monitor *mn, Paxos *p, string service_name)
   handlers.push_back(std::make_shared<RemoveDataPoolHandler>());
   handlers.push_back(std::make_shared<LegacyHandler<RemoveDataPoolHandler> >(
         "mds remove_data_pool"));
+  handlers.push_back(std::make_shared<LegacyHandler<RemoveDataPoolHandler> >(
+        "mds rm_data_pool"));
 }
 

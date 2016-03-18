@@ -219,6 +219,10 @@ COMMAND("auth del " \
 	"name=entity,type=CephString", \
 	"delete all caps for <name>", \
 	"auth", "rwx", "cli,rest")
+COMMAND("auth rm " \
+	"name=entity,type=CephString", \
+	"remove all caps for <name>", \
+	"auth", "rwx", "cli,rest")
 
 /*
  * Monitor commands (Monitor.cc)
@@ -363,6 +367,9 @@ COMMAND("mds add_data_pool " \
 COMMAND("mds remove_data_pool " \
 	"name=pool,type=CephString", \
 	"remove data pool <pool>", "mds", "rw", "cli,rest")
+COMMAND("mds rm_data_pool " \
+	"name=pool,type=CephString", \
+	"remove data pool <pool>", "mds", "rw", "cli,rest")
 COMMAND("mds newfs " \
 	"name=metadata,type=CephInt,range=0 " \
 	"name=data,type=CephInt,range=0 " \
@@ -405,7 +412,7 @@ COMMAND("fs flag set name=flag_name,type=CephChoices,strings=enable_multiple "
 COMMAND("fs add_data_pool name=fs_name,type=CephString " \
 	"name=pool,type=CephString", \
 	"add data pool <pool>", "mds", "rw", "cli,rest")
-COMMAND("fs remove_data_pool name=fs_name,type=CephString " \
+COMMAND("fs rm_data_pool name=fs_name,type=CephString " \
 	"name=pool,type=CephString", \
 	"remove data pool <pool>", "mds", "rw", "cli,rest")
 
@@ -425,6 +432,9 @@ COMMAND("mon add " \
 	"name=addr,type=CephIPAddr", \
 	"add new monitor named <name> at <addr>", "mon", "rw", "cli,rest")
 COMMAND("mon remove " \
+	"name=name,type=CephString", \
+	"remove monitor named <name>", "mon", "rw", "cli,rest")
+COMMAND("mon rm " \
 	"name=name,type=CephString", \
 	"remove monitor named <name>", "mon", "rw", "cli,rest")
 
@@ -696,6 +706,12 @@ COMMAND("osd pool delete " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it,req=false", \
 	"delete pool", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd pool rm " \
+	"name=pool,type=CephPoolname " \
+	"name=pool2,type=CephPoolname,req=false " \
+	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it,req=false", \
+	"remove pool", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd pool rename " \
 	"name=srcpool,type=CephPoolname " \
 	"name=destpool,type=CephPoolname", \
@@ -776,6 +792,11 @@ COMMAND("osd tier remove " \
 	"name=tierpool,type=CephPoolname",
 	"remove the tier <tierpool> (the second one) from base pool <pool> (the first one)", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd tier rm " \
+	"name=pool,type=CephPoolname " \
+	"name=tierpool,type=CephPoolname",
+	"remove the tier <tierpool> (the second one) from base pool <pool> (the first one)", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd tier cache-mode " \
 	"name=pool,type=CephPoolname " \
 	"name=mode,type=CephChoices,strings=none|writeback|forward|readonly|readforward|readproxy", \
@@ -785,6 +806,9 @@ COMMAND("osd tier set-overlay " \
 	"name=overlaypool,type=CephPoolname", \
 	"set the overlay pool for base pool <pool> to be <overlaypool>", "osd", "rw", "cli,rest")
 COMMAND("osd tier remove-overlay " \
+	"name=pool,type=CephPoolname ", \
+	"remove the overlay pool for base pool <pool>", "osd", "rw", "cli,rest")
+COMMAND("osd tier rm-overlay " \
 	"name=pool,type=CephPoolname ", \
 	"remove the overlay pool for base pool <pool>", "osd", "rw", "cli,rest")
 
@@ -809,6 +833,9 @@ COMMAND("config-key put " \
 COMMAND("config-key del " \
 	"name=key,type=CephString", \
 	"delete <key>", "config-key", "rw", "cli,rest")
+COMMAND("config-key rm " \
+	"name=key,type=CephString", \
+	"rm <key>", "config-key", "rw", "cli,rest")
 COMMAND("config-key exists " \
 	"name=key,type=CephString", \
 	"check for <key>'s existence", "config-key", "r", "cli,rest")
