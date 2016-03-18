@@ -40,6 +40,7 @@ Canonical <contact@canonical.com> Jonathan Davies <jonathan.davies@canonical.com
 Carnegie Mellon University <contact@cmu.edu> Jan Harkes <jaharkes@cs.cmu.edu>
 Catalyst <enquiries@catalyst.net.nz> Andrew Bartlett <abartlet@catalyst.net.nz>
 CCM Benchmark <contact@ccmbenchmark.com> Laurent Barbe <laurent@ksperis.com>
+Cdiscount <contact@cdiscount.com> Rémi Buisson <remi.buisson@cdiscount.com>
 CERN <contact@cern.ch> Andreas Peters <andreas.joachim.peters@cern.ch>
 CERN <contact@cern.ch> Dan van der Ster <daniel.vanderster@cern.ch>
 CERN <contact@cern.ch> Hervé Rousseau <hroussea@cern.ch>
@@ -65,6 +66,7 @@ Debian GNU/Linux <contact@debian.org> Thorsten Glaser <tg@mirbsd.de>
 Deutsche Telekom <contact@telekom.de> Daniel Gollub <d.gollub@telekom.de>
 Deutsche Telekom <contact@telekom.de> Danny Al-Gaaf <danny.al-gaaf@bisect.de>
 Deutsche Telekom <contact@telekom.de> Thomas Bechtold <t.bechtold@telekom.de>
+Digiware <contact@digiware.nl> Willem Jan Withagen <wjw@digiware.nl>
 DreamHost <contact@dreamhost.com> Andrew Farmer <andrewf@hq.newdream.net>
 DreamHost <contact@dreamhost.com> Colin P. McCabe <colinm@hq.newdream.net>
 DreamHost <contact@dreamhost.com> Emily Popper <emily.popper@dreamhost.com>
@@ -91,8 +93,11 @@ eNovance <contact@enovance.com> Babu Shanmugam <anbu@enovance.com>
 eNovance <contact@enovance.com> Sebastien Han <sebastien.han@enovance.com>
 EPAM <contact@epam.com> Andrey Kuznetsov <Andrey_Kuznetsov@epam.com>
 Exalead <contact@exalead.com> <roche+git@exalead.com>
+Easystack <contact@easystack.cn> Dongsheng Yang <dongsheng.yang@easystack.cn>
 Fairbanks <contact@fairbanks.nl> Robert Jansen <r.jansen@fairbanks.nl>
+Flipkart <contact@flipkart.com> Abhishek Varshney <abhishek.varshney@flipkart.com>
 Free Software Foundation Europe <office@fsfeurope.org> Benoît Knecht <benoit.knecht@fsfe.org>
+Fujitsu <contact@fujitsu.com> Edward Yang <eyang@us.fujitsu.com>
 Fujitsu <contact@fujitsu.com> Igor Podoski <igor.podoski@ts.fujitsu.com>
 Fujitsu <contact@fujitsu.com> Piotr Dałek <piotr.dalek@ts.fujitsu.com>
 Fujitsu <contact@fujitsu.com> Shotaro Kawaguchi <kawaguchi.s@jp.fujitsu.com>
@@ -225,6 +230,7 @@ LETV <contact@letv.com> Wu Xingyi <wuxingyi@letv.com>
 Linaro <contact@linaro.org> Steve Capper <steve.capper@linaro.org>
 Linaro <contact@linaro.org> Yazen Ghannam <yazen.ghannam@linaro.org>
 Los Alamos National Laboratory <contact@lanl.gov> Esteban Molina-Estolano <eestolan@lanl.gov>
+Mellanox <contact@mellanox.com> Avner BenHanoch <avnerb@mellanox.com>
 Mellanox <contact@mellanox.com> Vu Pham <vu@mellanox.com>
 Mellanox <contact@mellanox.com> Roi Dayan <roid@mellanox.com>
 Mirantis <contact@mirantis.com> Adam Kupczyk <akupczyk@mirantis.com>
@@ -240,6 +246,7 @@ MIT Computer Science and Artificial Intelligence Laboratory <webmaster@csail.mit
 MSys Technologies <contact@msystechnologies.com> Rajesh Nambiar <rajesh.n@msystechnologies.com>
 Nebula <info@nebula.com> Anton Aksola <anton.aksola@nebula.fi>
 Nebula <info@nebula.com> Chris Holcombe <chris.holcombe@nebula.com>
+Ocado <contact@ocado.com> Luis Periquito <luis.periquito@ocado.com>
 Opower <contact@opower.com> Derrick Schneider <derrick.schneider@opower.com>
 Pacific Northwest National Laboratory <contact@pnl.gov> Brown, David M JR <david.brown@pnl.gov>
 Pacific Northwest National Laboratory <contact@pnl.gov> Erwin, Brock A <Brock.Erwin@pnl.gov>
@@ -247,6 +254,7 @@ Pacific Northwest National Laboratory <contact@pnl.gov> Evan Felix <evan.felix@p
 Pacific Northwest National Laboratory <contact@pnl.gov> Scott Devoid <devoid@anl.gov>
 Piston Cloud Computing <info@pistoncloud.com> Mike Lundy <mike@fluffypenguin.org>
 Pogoapp <contact@pogoapp.com> Paul Meserve <paul@pogodan.com>
+Purdue University <contact@purdue.edu> Mike Shuey <shuey@purdue.edu>
 Red Hat <contact@redhat.com> Adam C. Emerson <aemerson@redhat.com>
 Red Hat <contact@redhat.com> Alexander Chuzhoy <achuzhoy@redhat.com>
 Red Hat <contact@redhat.com> Alexandre Marangone <amarango@redhat.com>
@@ -284,9 +292,11 @@ Red Hat <contact@redhat.com> Ken Dreyer <kdreyer@redhat.com>
 Red Hat <contact@redhat.com> Loic Dachary <ldachary@redhat.com>
 Red Hat <contact@redhat.com> Loic Dachary <loic-201408@dachary.org>
 Red Hat <contact@redhat.com> Luis Pabón <lpabon@redhat.com>
+Red Hat <contact@redhat.com> Marcus Watts <mwatts@redhat.com>
 Red Hat <contact@redhat.com> Mark Nelson <mnelson@redhat.com>
 Red Hat <contact@redhat.com> Matt Benjamin <mbenjamin@redhat.com>
 Red Hat <contact@redhat.com> Milan Broz <mbroz@redhat.com>
+Red Hat <contact@redhat.com> Mehdi Abaakouk <sileht@redhat.com>
 Red Hat <contact@redhat.com> Neil Levine <nlevine@redhat.com>
 Red Hat <contact@redhat.com> Nilamdyuti Goswami <ngoswami@redhat.com>
 Red Hat <contact@redhat.com> Noah Watkins <nwatkins@redhat.com>
@@ -315,12 +325,14 @@ Red Hat <contact@redhat.com> Warren Usui <wusui@redhat.com>
 Red Hat <contact@redhat.com> Yan, Zheng <zyan@redhat.com>
 Red Hat <contact@redhat.com> Yehuda Sadeh <ysadehwe@redhat.com>
 Red Hat <contact@redhat.com> Yuri Weinstein <yuriw@redhat.com>
+Red Hat <contact@redhat.com> Zack Cerza <zack@redhat.com>
 Reliance Jio Infocomm Ltd. <contact@ril.com> Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
 Reliance Jio Infocomm Ltd. <contact@ril.com> Ashish Chandra <ashish.a.chandra@ril.com>
 Reliance Jio Infocomm Ltd. <contact@ril.com> Swami Reddy <swami.reddy@ril.com>
 Roald van Loon Consultancy <roald@roaldvanloon.nl> Roald J. van Loon <roald@roaldvanloon.nl>
 Ruijie Networks <contact@ruijie.com.cn> Ning Yao <yaoning@ruijie.com.cn>
 Sandia National Laboratories <contact@sandia.gov> Jim Schutt <jaschut@sandia.gov>
+Samsung <contact@samsung.com> Subramanyam Varanasi <s.varanasi@ssi.samsung.com>
 SanDisk <contact@sandisk.com> Allen Samuels <allen.samuels@sandisk.com>
 SanDisk <contact@sandisk.com> Anand Bhat <anand.bhat@sandisk.com>
 SanDisk <contact@sandisk.com> Evgeniy Firsov <evgeniy.firsov@sandisk.com>
@@ -366,6 +378,7 @@ The University of Arizona <contact@arizona.edu> James Ryan Cresawn <jrcresawn@gm
 Ubuntu Kylin <contact@ubuntukylin.com> Min Chen <minchen@ubuntukylin.com>
 UMCloud <contact@umcloud.com> Jiaying Ren <mikulely@gmail.com>
 UMCloud <contact@umcloud.com> Rongze Zhu <zrzhit@gmail.com>
+Unaffiliated <no@organization.net> Aaron Bassett <abassett@gmail.com>
 Unaffiliated <no@organization.net> Abhishek Dixit <dixitabhi@gmail.com>
 Unaffiliated <no@organization.net> Accela Zhao <accelazh@gmail.com>
 Unaffiliated <no@organization.net> Adam Twardowski <adam.twardowski@gmail.com>
@@ -422,6 +435,7 @@ Unaffiliated <no@organization.net> Ismael Serrano <ismael.serrano@gmail.com>
 Unaffiliated <no@organization.net> Ivan Grcic <igrcic@gmail.com>
 Unaffiliated <no@organization.net> Janne Grunau <j@jannau.net>
 Unaffiliated <no@organization.net> Jashan Kamboj <jashank42@gmail.com>
+Unaffiliated <no@organization.net> Javen Wu <javen.wu@xtaotech.com>
 Unaffiliated <no@organization.net> Javier Guerra <javier@guerrag.com>
 Unaffiliated <no@organization.net> Jean-Rémi Deveaux <jeanremi.deveaux@gmail.com>
 Unaffiliated <no@organization.net> Jeff Epstein <jepst79@gmail.com>
@@ -499,11 +513,11 @@ Unaffiliated <no@organization.net> Xie Rui <875016668@qq.com>
 Unaffiliated <no@organization.net> Xingyi Wu <wuxingyi2015@outlook.com>
 Unaffiliated <no@organization.net> Xinze Chi <xmdxcxz@gmail.com>
 Unaffiliated <no@organization.net> Xiong Yiliang <xiongyiliang@xunlei.com>
-Unaffiliated <no@organization.net> YankunLi <YankunLi@users.noreply.github.com>
 Unaffiliated <no@organization.net> Yann Dupont <yann@objoo.org>
 Unaffiliated <no@organization.net> Yannick Atchy Dalama <yannick.atchy.dalama@gmail.com>
 Unaffiliated <no@organization.net> YiQiang Chen <cyqsign@163.com>
 Unaffiliated <no@organization.net> Yongyue Sun <abioy.sun@gmail.com>
+Unaffiliated <no@organization.net> You Ji <jiyou09@gmail.com>
 Unaffiliated <no@organization.net> Zhe Zhang <zzxuanyuan@gmail.com>
 Unaffiliated <no@organization.net> Zhicheng Wei <zhicheng@opensourceforge.net>
 Unilogic Networks B.V <contact@unilogicnetworks.net> Pascal de Bruijn <pascal@unilogicnetworks.net> 
@@ -513,6 +527,7 @@ UnitedStack <contact@unitedstack.com> Guangliang Zhao <guangliang@unitedstack.co
 UnitedStack <contact@unitedstack.com> Jevon Qiao <qiaojianfeng@unitedstack.com>
 UnitedStack <contact@unitedstack.com> Kun Huang <academicgareth@gmail.com>
 UnitedStack <contact@unitedstack.com> Li Tianqing <tianqing@unitedstack.com>
+UnitedStack <contact@unitedstack.com> Yankun Li <liyankun@unitedstack.com>
 University of California, Santa Cruz <contact@cs.ucsc.edu> Adam Crume <adamcrume@gmail.com>
 University of California, Santa Cruz <contact@cs.ucsc.edu> Andrew Leung <aleung@cs.ucsc.edu>
 University of California, Santa Cruz <contact@cs.ucsc.edu> Carlos Maltzahn <carlosm@cs.ucsc.edu>
