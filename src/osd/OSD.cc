@@ -3358,14 +3358,7 @@ void OSD::build_past_intervals_parallel()
     PG *pg = i->first;
     pistate& p = i->second;
 
-    // Verify same_interval_since is correct
-    if (pg->info.history.same_interval_since) {
-      if (pg->info.history.same_interval_since != p.same_interval_since) {
-	dout(0) << __func__ << " history same_interval_since " << pg->info.history.same_interval_since << dendl;
-	dout(0) << __func__ << " same_interval_since " << p.same_interval_since << " pg " << *pg << dendl;
-      }
-      assert(pg->info.history.same_interval_since == p.same_interval_since);
-    } else {
+    if (pg->info.history.same_interval_since == 0) {
       assert(p.same_interval_since);
       dout(10) << __func__ << " fix same_interval_since " << p.same_interval_since << " pg " << *pg << dendl;
       dout(10) << __func__ << " past_intervals " << pg->past_intervals << dendl;
