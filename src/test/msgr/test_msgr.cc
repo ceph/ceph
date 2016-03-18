@@ -1048,7 +1048,7 @@ TEST_P(MessengerTest, SyntheticStressTest) {
     test_msg.generate_connection();
   }
   gen_type rng(time(NULL));
-  for (int i = 0; i < 10000; ++i) {
+  for (int i = 0; i < 5000; ++i) {
     if (!(i % 10)) {
       cerr << "Op " << i << ": ";
       test_msg.print_internal_state();
