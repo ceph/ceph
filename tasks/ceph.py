@@ -258,13 +258,15 @@ def valgrind_post(ctx, config):
 
 @contextlib.contextmanager
 def crush_setup(ctx, config):
-    first_mon = teuthology.get_first_mon(ctx, config)
+    cluster_name = config['cluster']
+    first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
     (mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
 
     profile = config.get('crush_tunables', 'default')
     log.info('Setting crush tunables to %s', profile)
     mon_remote.run(
-        args=['sudo', 'ceph', 'osd', 'crush', 'tunables', profile])
+        args=['sudo', 'ceph', '--cluster', cluster_name,
+              'osd', 'crush', 'tunables', profile])
     yield
 
 
