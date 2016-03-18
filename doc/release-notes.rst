@@ -823,6 +823,14 @@ We recommend that all infernalis v9.2.0 users upgrade.
 
 For more detailed information, see :download:`the complete changelog <changelog/v9.2.1.txt>`.
 
+Upgrading
+---------
+
+* Some symbols wrongly exposed by librados in v9.1.0 and v9.2.0 were removed.
+  If you compiled your own application against librados shipped with these
+  releases, it is very likely referencing these removed symbols. So you will
+  need to recompile it.
+
 
 Notable Changes
 ---------------

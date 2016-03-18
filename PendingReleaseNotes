@@ -27,10 +27,3 @@ v10.0.0
 * CephFS filesystems created using versions older than Firefly (0.80) must
   use the new "cephfs-data-scan tmap_upgrade" command after upgrading to
   Jewel.  See 'Upgrading' in the CephFS documentation for more information.
-
-v9.3.0
-======
-* Some symbols wrongly exposed by librados in v9.1.0 and v9.2.0 were removed.
-  If you compiled your own application against librados shipped with these
-  releases, it is very likely referencing these removed symbols. So you will
-  need to recompile it.
