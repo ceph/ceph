@@ -1524,6 +1524,7 @@ add_executable(unittest_librbd EXCLUDE_FROM_ALL
   librbd/test_fixture.cc
   librbd/test_ImageWatcher.cc
   librbd/test_internal.cc
+  librbd/test_mirroring.cc
   librbd/test_support.cc
   librbd/test_main.cc
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
