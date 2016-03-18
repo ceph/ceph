@@ -6338,6 +6338,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                const string& client_id,
                const string& op_id,
+               bool record_op_state,
                req_info *info,
                const string& source_zone,
                rgw_obj& dest_obj,
@@ -6411,14 +6412,20 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   string obj_name = dest_obj.bucket.name + "/" + dest_obj.get_object();
 
-  RGWOpStateSingleOp opstate(this, client_id, op_id, obj_name);
+  RGWOpStateSingleOp *opstate = NULL;
 
-  ret = opstate.set_state(RGWOpState::OPSTATE_IN_PROGRESS);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to set opstate ret=" << ret << dendl;
-    return ret;
+  if (record_op_state) {
+    opstate = new RGWOpStateSingleOp(this, client_id, op_id, obj_name);
+
+    ret = opstate->set_state(RGWOpState::OPSTATE_IN_PROGRESS);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to set opstate ret=" << ret << dendl;
+      delete opstate;
+      return ret;
+    }
   }
-  RGWRadosPutObj cb(&processor, &opstate, progress_cb, progress_data);
+
+  RGWRadosPutObj cb(&processor, opstate, progress_cb, progress_data);
   string etag;
   map<string, string> req_headers;
   real_time set_mtime;
@@ -6547,21 +6554,27 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     goto set_err_state;
   }
 
-  ret = opstate.set_state(RGWOpState::OPSTATE_COMPLETE);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to set opstate ret=" << ret << dendl;
+  if (opstate) {
+    ret = opstate->set_state(RGWOpState::OPSTATE_COMPLETE);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to set opstate ret=" << ret << dendl;
+    }
+    delete opstate;
   }
 
   return 0;
 set_err_state:
-  RGWOpState::OpState state = RGWOpState::OPSTATE_ERROR;
-  if (copy_if_newer && ret == -ERR_NOT_MODIFIED) {
-    state = RGWOpState::OPSTATE_COMPLETE;
-    ret = 0;
-  }
-  int r = opstate.set_state(state);
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to set opstate r=" << ret << dendl;
+  if (opstate) {
+    RGWOpState::OpState state = RGWOpState::OPSTATE_ERROR;
+    if (copy_if_newer && ret == -ERR_NOT_MODIFIED) {
+      state = RGWOpState::OPSTATE_COMPLETE;
+      ret = 0;
+    }
+    int r = opstate->set_state(state);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to set opstate r=" << ret << dendl;
+    }
+    delete opstate;
   }
   return ret;
 }
@@ -6662,7 +6675,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   ldout(cct, 5) << "Copy object " << src_obj.bucket << ":" << src_obj.get_object() << " => " << dest_obj.bucket << ":" << dest_obj.get_object() << dendl;
 
   if (remote_src || !source_zone.empty()) {
-    return fetch_remote_obj(obj_ctx, user_id, client_id, op_id, info, source_zone,
+    return fetch_remote_obj(obj_ctx, user_id, client_id, op_id, true, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
                if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
