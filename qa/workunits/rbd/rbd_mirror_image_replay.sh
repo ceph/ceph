@@ -71,6 +71,8 @@ start_replay()
 	--debug-rbd_mirror=30 \
 	--daemonize=true \
 	${CLIENT_ID} ${LOC_POOL} ${RMT_POOL} ${IMAGE}
+
+    wait_for_replay_started
 }
 
 stop_replay()
@@ -96,14 +98,24 @@ stop_replay()
     RBD_IMAGE_REPLAY_PID_FILE=
 }
 
+wait_for_replay_started()
+{
+    local s
+
+    for s in 0.1 0.2 0.4 0.8 1.6 3.2 6.4; do
+	sleep ${s}
+	ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok help || :
+	test -S ${TEMPDIR}/rbd-mirror-image-replay.asok &&
+	    ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok help |
+		fgrep "rbd mirror status ${LOC_POOL}/${IMAGE}" && return 0
+    done
+    return 1
+}
+
 flush()
 {
-    local cmd
-
-    cmd=$(ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok help |
-		 sed -nEe 's/^.*"(rbd mirror flush [^"]*)":.*$/\1/p')
-    test -n "${cmd}"
-    ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok ${cmd}
+    ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok \
+	 rbd mirror flush ${LOC_POOL}/${IMAGE}
 }
 
 get_position()
