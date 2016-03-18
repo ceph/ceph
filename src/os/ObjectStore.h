@@ -718,6 +718,14 @@ public:
         op->dest_oid = om[op->dest_oid];
         break;
 
+      case OP_TRY_RENAME:
+        assert(op->cid < cm.size());
+        assert(op->oid < om.size());
+        assert(op->dest_oid < om.size());
+        op->cid = cm[op->cid];
+        op->oid = om[op->oid];
+        op->dest_oid = om[op->dest_oid];
+
       case OP_SPLIT_COLLECTION2:
         assert(op->cid < cm.size());
         op->dest_cid = cm[op->dest_oid];
