@@ -5,11 +5,12 @@ include_directories(../src)
 
 set(local_flags "-std=gnu++11 -Wall -pthread")
 
-set(local_flags "${local_flags} -g -O0")
+# set(local_flags "${local_flags} -g -O0")
 
+# get ready to remove this once gtest tests are made
 set(srcs
-  test_intrusive_heap.cc
-  test_ind_intru_heap.cc)
+  test_intrusive_heap.cc)
+add_executable(test_intru_heap test_intrusive_heap.cc)
 
 set(test_srcs test_indirect_intrusive_heap.cc)
 
@@ -19,8 +20,6 @@ set_source_files_properties(${srcs} ${test_src}
   )
 
 add_executable(crim_tests EXCLUDE_FROM_ALL ${test_srcs})
-add_executable(test_intru_heap test_intrusive_heap.cc)
-add_executable(test_ind_intru_heap test_ind_intru_heap.cc)
 
 target_link_libraries(crim_tests
   PUBLIC pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})

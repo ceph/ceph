@@ -12,8 +12,8 @@
 #include "intrusive_heap.h"
 
 
-class TestCompare;
-class TestIntruData;
+struct TestCompare;
+struct TestIntruData;
 
 
 class Test1 {
