@@ -751,8 +751,6 @@ function test_mon_mds()
   mdsmapfile=$TMPDIR/mdsmap.$$
   current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | grep epoch | sed 's/.*epoch //')
   [ -s $mdsmapfile ]
-  ((epoch = current_epoch + 1))
-  ceph mds setmap -i $mdsmapfile $epoch
   rm $mdsmapfile
 
   ceph osd pool create data2 10
