@@ -559,8 +559,14 @@ endif()
 target_link_libraries(librados LINK_PRIVATE osdc osd os global common cls_lock_client
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
 if(ENABLE_SHARED)
-  set_target_properties(librados PROPERTIES OUTPUT_NAME rados VERSION 2.0.0
-    SOVERSION 2)
+  set_target_properties(librados PROPERTIES
+    OUTPUT_NAME rados
+    VERSION 2.0.0
+    SOVERSION 2
+    # use COMPILE_FLAGS for the backward compatibility with cmake 2.8.11, should have been:
+    #  CXX_VISIBILITY_PRESET hidden
+    #  VISIBILITY_INLINES_HIDDEN ON
+    COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
 endif(ENABLE_SHARED)
 
 add_library(librados_api STATIC common/buffer.cc librados/librados.cc)
@@ -1142,10 +1148,13 @@ if(WITH_LIBCEPHFS)
   target_link_libraries(cephfs LINK_PRIVATE client osdc osd os global common
     ${BLKID_LIBRARIES}
     ${CRYPTO_LIBS} ${EXTRALIBS})
-if(ENABLE_SHARED)
-  set_target_properties(cephfs PROPERTIES OUTPUT_NAME cephfs VERSION 1.0.0
-    SOVERSION 1)
-endif(ENABLE_SHARED)
+  if(ENABLE_SHARED)
+    set_target_properties(cephfs PROPERTIES
+      OUTPUT_NAME cephfs
+      VERSION 1.0.0
+      SOVERSION 1
+      COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
+  endif(ENABLE_SHARED)
   install(TARGETS cephfs DESTINATION lib)
   install(DIRECTORY
     "${CMAKE_SOURCE_DIR}/src/include/cephfs"
