@@ -395,9 +395,7 @@ ssize_t AsyncConnection::_try_send(bool send, bool more)
   // trim already sent for outcoming_bl
   if (sent_bytes) {
     if (sent_bytes < outcoming_bl.length()) {
-      bufferlist bl;
-      outcoming_bl.splice(sent_bytes, outcoming_bl.length()-sent_bytes, &bl);
-      bl.swap(outcoming_bl);
+      outcoming_bl.splice(0, sent_bytes);
     } else {
       outcoming_bl.clear();
     }
