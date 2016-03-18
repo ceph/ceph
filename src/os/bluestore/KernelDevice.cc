@@ -185,7 +185,8 @@ int KernelDevice::flush()
   }
   dout(10) << __func__ << " start" << dendl;
   io_since_flush.set(0);
-  if (g_conf->bdev_inject_crash) {
+  if (g_conf->bdev_inject_crash &&
+      rand() % g_conf->bdev_inject_crash == 0) {
     ++injecting_crash;
     // sleep for a moment to give other threads a chance to submit or
     // wait on io that races with a flush.
@@ -267,7 +268,8 @@ void KernelDevice::_aio_thread()
       }
     }
     reap_ioc();
-    if (g_conf->bdev_inject_crash) {
+    if (g_conf->bdev_inject_crash &&
+        rand() % g_conf->bdev_inject_crash == 0) {
       ++inject_crash_count;
       if (inject_crash_count * g_conf->bdev_aio_poll_ms / 1000 >
 	  g_conf->bdev_inject_crash + g_conf->bdev_inject_crash_flush_delay) {
