@@ -318,7 +318,7 @@ public:
      * CLEARING_WAITING and QUEUED indicate that the remover will check
      * stop_deleting before queueing any further operations.  CANCELED
      * indicates that the remover has already halted.  DELETED_DIR
-     * indicates that the deletion has been fully queueud.
+     * indicates that the deletion has been fully queued.
      */
     while (status == DELETING_DIR || status == CLEARING_DIR)
       cond.Wait(lock);
