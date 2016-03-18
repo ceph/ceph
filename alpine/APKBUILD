@@ -55,6 +55,7 @@ makedepends="
     linux-headers
     lvm2-dev
     nss-dev
+    openldap-dev
     openssl-dev
     python-dev
     py-nose
