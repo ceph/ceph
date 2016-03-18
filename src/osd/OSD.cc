@@ -223,6 +223,7 @@ OSDService::OSDService(OSD *osd) :
   pg_epoch_lock("OSDService::pg_epoch_lock"),
   publish_lock("OSDService::publish_lock"),
   pre_publish_lock("OSDService::pre_publish_lock"),
+  max_oldest_map(0),
   peer_map_epoch_lock("OSDService::peer_map_epoch_lock"),
   sched_scrub_lock("OSDService::sched_scrub_lock"), scrubs_pending(0),
   scrubs_active(0),
@@ -1183,7 +1184,7 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
                                                OSDSuperblock& sblock)
 {
   MOSDMap *m = new MOSDMap(monc->get_fsid());
-  m->oldest_map = sblock.oldest_map;
+  m->oldest_map = max_oldest_map;
   m->newest_map = sblock.newest_map;
 
   for (epoch_t e = to; e > since; e--) {
@@ -1223,7 +1224,7 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
     if (since < sblock.oldest_map) {
       // just send latest full map
       MOSDMap *m = new MOSDMap(monc->get_fsid());
-      m->oldest_map = sblock.oldest_map;
+      m->oldest_map = max_oldest_map;
       m->newest_map = sblock.newest_map;
       get_map_bl(to, m->maps[to]);
       send_map(m, con);
@@ -2162,6 +2163,7 @@ int OSD::init()
   service.init();
   service.publish_map(osdmap);
   service.publish_superblock(superblock);
+  service.max_oldest_map = superblock.oldest_map;
 
   osd_lock.Unlock();
 
@@ -6580,6 +6582,10 @@ void OSD::handle_osd_map(MOSDMap *m)
   logger->inc(l_osd_mape, last - first + 1);
   if (first <= superblock.newest_map)
     logger->inc(l_osd_mape_dup, superblock.newest_map - first + 1);
+  if (service.max_oldest_map < m->oldest_map) {
+    service.max_oldest_map = m->oldest_map;
+    assert(service.max_oldest_map >= superblock.oldest_map);
+  }
 
   // make sure there is something new, here, before we bother flushing
   // the queues and such
