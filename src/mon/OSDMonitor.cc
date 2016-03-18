@@ -4863,6 +4863,19 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "pool size must be between 1 and 10";
       return -EINVAL;
     }
+    const int64_t crush_ruleset = p.get_crush_ruleset();
+    const int64_t minsize = osdmap.crush->get_rule_mask_min_size(crush_ruleset);
+    if (n < minsize) {
+      ss << "pool size " << n << " is smaller than crush ruleset "
+         << crush_ruleset << " min size " << minsize;
+      return -EINVAL;
+    }
+    const int64_t maxsize = osdmap.crush->get_rule_mask_max_size(crush_ruleset);
+    if (n > maxsize) {
+      ss << "pool size " << n << " is bigger than crush ruleset "
+         << crush_ruleset << " max size " << maxsize;
+      return -EINVAL;
+    }
     p.size = n;
     if (n < p.min_size)
       p.min_size = n;
