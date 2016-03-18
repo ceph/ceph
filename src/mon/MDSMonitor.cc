@@ -2135,35 +2135,6 @@ int MDSMonitor::filesystem_command(
         info->state = MDSMap::STATE_STOPPING;
       });
     }
-  } else if (prefix == "mds setmap") {
-    string confirm;
-    if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
-       confirm != "--yes-i-really-mean-it") {
-      ss << "WARNING: this can make your filesystem inaccessible! "
-           "Add --yes-i-really-mean-it if you are sure you wish to continue.";
-      return -EINVAL;;
-    }
-    
-    FSMap map;
-    try {
-      map.decode(m->get_data());
-    } catch(buffer::error &e) {
-      ss << "invalid mdsmap";
-      return -EINVAL;
-    }
-    epoch_t e = 0;
-    int64_t epochnum;
-    if (cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum))
-      e = epochnum;
-
-    if (pending_fsmap.epoch == e) {
-      map.epoch = pending_fsmap.epoch;  // make sure epoch is correct
-      pending_fsmap = map;
-      ss << "set mds map";
-    } else {
-      ss << "next fsmap epoch " << pending_fsmap.epoch << " != " << e;
-      return -EINVAL;
-    }
   } else if (prefix == "mds set_state") {
     mds_gid_t gid;
     if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {

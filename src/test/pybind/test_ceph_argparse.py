@@ -380,17 +380,6 @@ class TestMDS(TestArgparse):
     def test_set_max_mds(self):
         self.check_1_natural_arg('mds', 'set_max_mds')
 
-    def test_setmap(self):
-        self.assert_valid_command(['mds', 'setmap', '1'])
-        self.assert_valid_command(['mds', 'setmap', '1', '--yes-i-really-mean-it'])
-        assert_equal({}, validate_command(sigdict, ['mds', 'setmap',
-                                                    '--yes-i-really-mean-it']))
-        assert_equal({}, validate_command(sigdict, ['mds', 'setmap', '-1',
-                                                    '--yes-i-really-mean-it']))
-        assert_equal({}, validate_command(sigdict, ['mds', 'setmap', '1',
-                                                    '--yes-i-really-mean-it',
-                                                    'toomany']))
-
     def test_set_state(self):
         self.assert_valid_command(['mds', 'set_state', '1', '2'])
         assert_equal({}, validate_command(sigdict, ['mds', 'set_state']))

@@ -793,20 +793,6 @@ function test_mon_mds()
   mdsmapfile=$TMPDIR/mdsmap.$$
   current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | grep epoch | sed 's/.*epoch //')
   [ -s $mdsmapfile ]
-  # make several attempts in case we race with another mdsmap update
-  ((epoch = current_epoch + 1))
-  ((epoch2 = current_epoch + 2))
-  ((epoch3 = current_epoch + 3))
-  ((epoch4 = current_epoch + 4))
-  # no conformation
-  expect_false ceph mds setmap -i $mdsmapfile $epoch
-  # no input
-  expect_false ceph mds setmap $epoch --yes-i-really-mean-it
-
-  ceph mds setmap -i $mdsmapfile $epoch --yes-i-really-mean-it || \
-      ceph mds setmap -i $mdsmapfile $epoch2 --yes-i-really-mean-it || \
-      ceph mds setmap -i $mdsmapfile $epoch3 --yes-i-really-mean-it || \
-      ceph mds setmap -i $mdsmapfile $epoch4 --yes-i-really-mean-it
   rm $mdsmapfile
 
   ceph osd pool create data2 10

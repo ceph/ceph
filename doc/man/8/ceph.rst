@@ -33,7 +33,7 @@ Synopsis
 
 | **ceph** **log** *<logtext>* [ *<logtext>*... ]
 
-| **ceph** **mds** [ *add_data_pool* \| *cluster_down* \| *cluster_up* \| *compat* \| *deactivate* \| *dump* \| *fail* \| *getmap* \| *newfs* \| *remove_data_pool* \| *rm* \| *rmfailed* \| *set* \| *set_max_mds* \| *set_state* \| *setmap* \| *stat* \| *stop* \| *tell* ] ...
+| **ceph** **mds** [ *add_data_pool* \| *cluster_down* \| *cluster_up* \| *compat* \| *deactivate* \| *dump* \| *fail* \| *getmap* \| *newfs* \| *remove_data_pool* \| *rm* \| *rmfailed* \| *set* \| *set_max_mds* \| *set_state* \| *stat* \| *stop* \| *tell* ] ...
 
 | **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
 
@@ -432,12 +432,6 @@ Subcommand ``set_state`` sets mds state of <gid> to <numeric-state>.
 Usage::
 
 	ceph mds set_state <int[0-]> <int[0-20]>
-
-Subcommand ``setmap`` sets mds map; must supply correct epoch number.
-
-Usage::
-
-	ceph mds setmap <int[0-]>
 
 Subcommand ``stat`` shows MDS status.
 
