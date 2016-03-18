@@ -288,6 +288,10 @@ public:
       scrub_info_create();
     return scrub_infop;
   }
+
+  bool scrub_is_in_progress() const {
+    return (scrub_infop && scrub_infop->scrub_in_progress);
+  }
   /**
    * Start scrubbing on this inode. That could be very short if it's
    * a file, or take a long time if we're recursively scrubbing a directory.

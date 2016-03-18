@@ -4173,12 +4173,10 @@ void CInode::scrub_initialize(CDentry *scrub_parent,
 			      MDSInternalContextBase *f)
 {
   dout(20) << __func__ << " with scrub_version " << get_version() << dendl;
-  assert(!scrub_infop || !scrub_infop->scrub_in_progress);
+  assert(!scrub_is_in_progress());
   scrub_info();
   if (!scrub_infop)
     scrub_infop = new scrub_info_t();
-  else
-    assert(!scrub_infop->scrub_in_progress);
 
   if (get_projected_inode()->is_dir()) {
     // fill in dirfrag_stamps with initial state
@@ -4210,7 +4208,7 @@ void CInode::scrub_initialize(CDentry *scrub_parent,
 int CInode::scrub_dirfrag_next(frag_t* out_dirfrag)
 {
   dout(20) << __func__ << dendl;
-  assert(scrub_infop && scrub_infop->scrub_in_progress);
+  assert(scrub_is_in_progress());
 
   if (!is_dir()) {
     return -ENOTDIR;
@@ -4258,7 +4256,7 @@ void CInode::scrub_dirfrags_scrubbing(list<frag_t>* out_dirfrags)
 void CInode::scrub_dirfrag_finished(frag_t dirfrag)
 {
   dout(20) << __func__ << " on frag " << dirfrag << dendl;
-  assert(scrub_infop && scrub_infop->scrub_in_progress);
+  assert(scrub_is_in_progress());
 
   std::map<frag_t, scrub_stamp_info_t>::iterator i =
       scrub_infop->dirfrag_stamps.find(dirfrag);
@@ -4271,7 +4269,7 @@ void CInode::scrub_dirfrag_finished(frag_t dirfrag)
 
 void CInode::scrub_finished(MDSInternalContextBase **c) {
   dout(20) << __func__ << dendl;
-  assert(scrub_info()->scrub_in_progress);
+  assert(scrub_is_in_progress());
   for (std::map<frag_t, scrub_stamp_info_t>::iterator i =
       scrub_infop->dirfrag_stamps.begin();
       i != scrub_infop->dirfrag_stamps.end();
