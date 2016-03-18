@@ -2747,6 +2747,7 @@ public:
   int cls_bucket_head_async(rgw_bucket& bucket, int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio);
   int list_bi_log_entries(rgw_bucket& bucket, int shard_id, string& marker, uint32_t max, std::list<rgw_bi_log_entry>& result, bool *truncated);
   int trim_bi_log_entries(rgw_bucket& bucket, int shard_id, string& marker, string& end_marker);
+  int get_bi_log_status(rgw_bucket& bucket, int shard_id, map<int, string>& max_marker);
 
   int bi_get_instance(rgw_obj& obj, rgw_bucket_dir_entry *dirent);
   int bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry);
