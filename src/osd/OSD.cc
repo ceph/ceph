@@ -3360,10 +3360,6 @@ void OSD::build_past_intervals_parallel()
 
     // Verify same_interval_since is correct
     if (pg->info.history.same_interval_since) {
-      if (pg->info.history.same_interval_since != p.same_interval_since) {
-	dout(0) << __func__ << " history same_interval_since " << pg->info.history.same_interval_since << dendl;
-	dout(0) << __func__ << " same_interval_since " << p.same_interval_since << " pg " << *pg << dendl;
-      }
       assert(pg->info.history.same_interval_since == p.same_interval_since);
     } else {
       assert(p.same_interval_since);
