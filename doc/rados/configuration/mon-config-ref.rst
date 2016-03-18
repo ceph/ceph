@@ -843,6 +843,24 @@ Miscellaneous
 :Default: ``4096``
 
 
+``mon osd prime pg temp``
+
+:Description: Enables or disable priming the PGMap with the previous OSDs when an out
+              OSD comes back into the cluster. With the ``true`` setting the clients
+              will continue to use the previous OSDs until the newly in OSDs as that
+              PG peered.
+:Type: Boolean
+:Default: ``true``
+
+
+``mon osd prime pg temp max time``
+
+:Description: How much time in seconds the monitor should spend trying to prime the
+              PGMap when an out OSD comes back into the cluster.
+:Type: Float
+:Default: ``0.5``
+
+
 
 .. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
 .. _Monitor Keyrings: ../../operations/authentication#monitor-keyrings
