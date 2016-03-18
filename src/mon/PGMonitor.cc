@@ -125,18 +125,6 @@ void PGMonitor::tick()
 
   handle_osd_timeouts();
 
-  if (mon->is_leader()) {
-    bool propose = false;
-
-    if ((need_check_down_pgs || !need_check_down_pg_osds.empty()) &&
-        check_down_pgs())
-      propose = true;
-
-    if (propose) {
-      propose_pending();
-    }
-  }
-
   if (!pg_map.pg_sum_deltas.empty()) {
     utime_t age = ceph_clock_now(g_ceph_context) - pg_map.stamp;
     if (age > 2 * g_conf->mon_delta_reset_interval) {
