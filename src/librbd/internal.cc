@@ -2718,11 +2718,15 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
         static_cast<rbd_mirror_image_state_t>(mirror_image_internal.state);
     }
 
-    r = Journal<>::is_tag_owner(ictx, &mirror_image_info->primary);
-    if (r < 0) {
-      lderr(cct) << "failed to check tag ownership: "
-                 << cpp_strerror(r) << dendl;
-      return r;
+    if (mirror_image_info->state == RBD_MIRROR_IMAGE_ENABLED) {
+      r = Journal<>::is_tag_owner(ictx, &mirror_image_info->primary);
+      if (r < 0) {
+        lderr(cct) << "failed to check tag ownership: "
+                   << cpp_strerror(r) << dendl;
+        return r;
+      }
+    } else {
+      mirror_image_info->primary = false;
     }
 
     return 0;
