@@ -1,5 +1,5 @@
 workload:
-  sequential:
+  full_sequential:
     - workunit:
         branch: hammer
         clients:
