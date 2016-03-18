@@ -231,7 +231,7 @@ void FSMap::get_health(list<pair<health_status_t,string> >& summary,
 void FSMap::encode(bufferlist& bl, uint64_t features) const
 {
   if (features & CEPH_FEATURE_SERVER_JEWEL) {
-    ENCODE_START(6, 6, bl);
+    ENCODE_START(7, 6, bl);
     ::encode(epoch, bl);
     ::encode(next_filesystem_id, bl);
     ::encode(legacy_client_fscid, bl);
@@ -245,6 +245,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(mds_roles, bl);
     ::encode(standby_daemons, bl, features);
     ::encode(standby_epochs, bl);
+    ::encode(ever_enabled_multiple, bl);
     ENCODE_FINISH(bl);
   } else {
     if (filesystems.empty()) {
@@ -280,7 +281,7 @@ void FSMap::decode(bufferlist::iterator& p)
   // MDSMonitor to store an FSMap instead of an MDSMap was
   // 5, so anything older than 6 is decoded as an MDSMap,
   // and anything newer is decoded as an FSMap.
-  DECODE_START_LEGACY_COMPAT_LEN_16(6, 4, 4, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(7, 4, 4, p);
   if (struct_v < 6) {
     // Decoding an MDSMap (upgrade)
     ::decode(epoch, p);
@@ -416,6 +417,7 @@ void FSMap::decode(bufferlist::iterator& p)
     ::decode(mds_roles, p);
     ::decode(standby_daemons, p);
     ::decode(standby_epochs, p);
+    ::decode(ever_enabled_multiple, p);
   }
 
   DECODE_FINISH(p);
