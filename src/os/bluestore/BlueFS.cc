@@ -311,6 +311,7 @@ int BlueFS::_write_super()
   bl.rebuild();
 
   IOContext ioc(NULL);
+  assert(bdev.size() >= 1);
   bdev[0]->aio_write(get_super_offset(), bl, &ioc, false);
   bdev[0]->aio_submit(&ioc);
   ioc.aio_wait();
@@ -328,6 +329,7 @@ int BlueFS::_open_super()
   int r;
 
   // always the second block
+  assert(bdev.size() >= 1);
   r = bdev[0]->read(get_super_offset(), get_super_length(),
 		    &bl, ioc[0], false);
   if (r < 0)
