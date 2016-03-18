@@ -1095,22 +1095,25 @@ def healthy(ctx, config):
     :param ctx: Context
     :param config: Configuration
     """
-    log.info('Waiting until ceph is healthy...')
-    firstmon = teuthology.get_first_mon(ctx, config)
+    cluster_name = config.get('cluster', 'ceph')
+    log.info('Waiting until ceph cluster %s is healthy...', cluster_name)
+    firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
     (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     teuthology.wait_until_osds_up(
         ctx,
         cluster=ctx.cluster,
-        remote=mon0_remote
+        remote=mon0_remote,
+        ceph_cluster=cluster_name,
     )
     teuthology.wait_until_healthy(
         ctx,
         remote=mon0_remote,
+        ceph_cluster=cluster_name,
     )
 
-    if ctx.cluster.only(teuthology.is_type('mds')).remotes:
+    if ctx.cluster.only(teuthology.is_type('mds', cluster_name)).remotes:
         # Some MDSs exist, wait for them to be healthy
-        ceph_fs = Filesystem(ctx)
+        ceph_fs = Filesystem(ctx) # TODO: make Filesystem cluster-aware
         ceph_fs.wait_for_daemons(timeout=300)
 
 
@@ -1464,8 +1467,8 @@ def task(ctx, config):
     ):
         try:
             if config.get('wait-for-healthy', True):
-                healthy(ctx=ctx, config=None)
-            first_mon = teuthology.get_first_mon(ctx, config)
+                healthy(ctx=ctx, config=dict(cluster=config['cluster']))
+            first_mon = teuthology.get_first_mon(ctx, config, config['cluster'])
             (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
             ctx.manager = CephManager(
                 mon,
