@@ -47,6 +47,12 @@ bool ObjectRecorder::append(const AppendBuffers &append_buffers) {
   bool schedule_append = false;
   {
     Mutex::Locker locker(m_lock);
+    if (m_overflowed) {
+      m_append_buffers.insert(m_append_buffers.end(),
+                              append_buffers.begin(), append_buffers.end());
+      return false;
+    }
+
     for (AppendBuffers::const_iterator iter = append_buffers.begin();
          iter != append_buffers.end(); ++iter) {
       if (append(*iter, &schedule_append)) {
