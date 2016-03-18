@@ -96,7 +96,7 @@ namespace crimson {
 
       while (i > 0) {
 	int pi = parent(i);
-	if (comparator(data[pi], data[i])) {
+	if (!comparator(data[i], data[pi])) {
 	  break;
 	}
 

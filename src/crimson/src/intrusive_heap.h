@@ -152,7 +152,7 @@ namespace crimson {
     void sift_up(index_t i) {
       while (i > 0) {
 	index_t pi = parent(i);
-	if (comparator(data[pi], data[i])) {
+	if (!comparator(data[i], data[pi])) {
 	  break;
 	}
 
@@ -201,7 +201,7 @@ namespace crimson {
 	sift_down(i);
       } else {
 	index_t pi = parent(i);
-	if (comparator(data[pi], data[i])) {
+	if (comparator(data[i], data[pi])) {
 	  // if we can go up, we will
 	  sift_up(i);
 	} else {
