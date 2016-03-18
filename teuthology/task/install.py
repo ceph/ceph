@@ -688,7 +688,7 @@ def rh_install(ctx, config):
     :param config: the config dict
     """
     version = config['rhbuild']
-    rh_versions = ['1.3.0', '1.3.1']
+    rh_versions = ['1.3.0', '1.3.1', '1.3.2', '2.0']
     if version in rh_versions:
         log.info("%s is a supported version", version)
     else:
@@ -732,11 +732,18 @@ def rh_install_pkgs(ctx, remote, installed_version):
     :param remote: the teuthology.orchestra.remote.Remote object
     """
     pkgs = ['ceph-deploy']
-    rh_version_check = {'0.94.1': '1.3.0', '0.94.3': '1.3.1'}
+    # install ceph-selinux for 1.3.2 as its not dependency of any core packages
+    if (installed_version == '1.3.2'):
+        pkgs.append('ceph-selinux')
+    # install ceph-fuse for 2.0 as its not dependency of any core packages
+    if (installed_version == '2.0'):
+        pkgs.append('ceph-fuse')
+    rh_version_check = {'0.94.1': '1.3.0', '0.94.3': '1.3.1',
+                        '0.94.5': '1.3.2', '10.0.4': '2.0'}
     log.info("Remove any epel packages installed on node %s", remote.shortname)
     remote.run(args=['sudo', 'yum', 'remove', run.Raw("leveldb xmlstarlet fcgi"), '-y'],check_status=False)
     for pkg in pkgs:
-        log.info("Check if ceph-deploy is already installed on node %s", remote.shortname)
+        log.info("Check if %s is already installed on node %s", pkg, remote.shortname)
         remote.run(args=['sudo', 'yum', 'clean', 'metadata'])
         r = remote.run(
              args=['yum', 'list', 'installed', run.Raw(pkg)],
@@ -747,7 +754,7 @@ def rh_install_pkgs(ctx, remote, installed_version):
             log.info("Installing %s " % pkg)
             remote.run(args=['sudo', 'yum', 'install', pkg, '-y'])
         else:
-            log.info("Removing and reinstalling ceph-deploy on %s", remote.shortname)
+            log.info("Removing and reinstalling %s on %s", pkg, remote.shortname)
             remote.run(args=['sudo', 'yum', 'remove', pkg, '-y'])
             remote.run(args=['sudo', 'yum', 'install', pkg, '-y'])
 
@@ -771,7 +778,7 @@ def rh_install_pkgs(ctx, remote, installed_version):
         remote.run(args=['sudo', 'yum', 'install', 'ceph-test', '-y'])
 
     # check package version
-    version = packaging.get_package_version(remote, 'ceph')
+    version = packaging.get_package_version(remote, 'ceph-common')
     log.info("Node: {n} Ceph version installed is {v}".format(n=remote.shortname,v=version))
     if rh_version_check[version] == installed_version:
         log.info("Installed version matches on %s", remote.shortname)
