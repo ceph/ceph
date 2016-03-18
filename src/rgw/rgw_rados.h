@@ -1928,6 +1928,9 @@ public:
     return current_period.get_config().user_quota;
   }
 
+  const string& get_current_period_id() {
+    return current_period.get_id();
+  }
   // pulls missing periods for period_history
   std::unique_ptr<RGWPeriodPuller> period_puller;
   // maintains a connected history of periods
