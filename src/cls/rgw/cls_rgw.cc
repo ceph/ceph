@@ -2944,7 +2944,7 @@ static int gc_update_entry(cls_method_context_t hctx, uint32_t expiration_secs,
     }
   }
   info.time = ceph::real_clock::now();
-  info.time += timespan(expiration_secs);
+  info.time += make_timespan(expiration_secs);
   ret = gc_omap_set(hctx, GC_OBJ_NAME_INDEX, info.tag, &info);
   if (ret < 0)
     return ret;
