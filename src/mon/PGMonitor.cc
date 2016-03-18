@@ -1285,7 +1285,7 @@ epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
 }
 
 void PGMonitor::_try_mark_pg_stale(
-  OSDMap *osdmap,
+  const OSDMap *osdmap,
   pg_t pgid,
   const pg_stat_t& cur_stat)
 {
