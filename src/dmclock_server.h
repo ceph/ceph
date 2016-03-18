@@ -182,9 +182,15 @@ namespace crimson {
 
       class ClientEntry; // forward decl for friend decls
 
+      template<double RequestTag::*tag_field>
+      struct ClientCompare; // forward decl for friend decls
+
 
       class ClientReq {
 	friend ClientEntry;
+	friend ClientCompare<&RequestTag::reservation>;
+	friend ClientCompare<&RequestTag::limit>;
+	friend ClientCompare<&RequestTag::proportion>;
 
 	RequestTag          tag;
 	RequestRef          request;
@@ -208,6 +214,9 @@ namespace crimson {
 
       class ClientEntry {
 	friend PriorityQueue<C,R>;
+	friend ClientCompare<&RequestTag::reservation>;
+	friend ClientCompare<&RequestTag::limit>;
+	friend ClientCompare<&RequestTag::proportion>;
 
 	C                     client;
 	std::deque<ClientReq> requests;
@@ -224,32 +233,27 @@ namespace crimson {
 	  // empty
 	}
 
-
 	inline void add_request(const RequestTag& tag, RequestRef&& request) {
 	  requests.emplace_back(ClientReq(tag, request));
 	}
-
 
 	inline const ClientReq& next_request() const {
 	  return requests.front();
 	}
 
-
 	inline void pop_request() {
 	  requests.pop_front();
 	}
 
-
-	inline bool has_next_request() const {
+	inline bool has_request() const {
 	  return !requests.empty();
 	}
-
 
 	friend
 	std::ostream& operator<<(std::ostream& out,
 				 const typename PriorityQueue<C,R>::ClientEntry& e) {
 	  out << "{ client:" << e.client << " top req: " <<
-	    (e.has_requests() ? e.next_request() : "none") << " }";
+	    (e.has_request() ? e.next_request() : "none") << " }";
 	  return out;
 	}
       }; // struct ClientEntry
@@ -348,16 +352,16 @@ namespace crimson {
 
     protected:
 
-      template<double RequestTag::*tag>
+      template<double RequestTag::*tag_field>
       struct ClientCompare {
 	bool operator()(const ClientEntry& n1, const ClientEntry& n2) const {
-	  if (n1.has_requests()) {
-	    if (n2.has_requests()) {
-	      return n1.*tag < n2.*tag;
+	  if (n1.has_request()) {
+	    if (n2.has_request()) {
+	      return n1.next_request().tag.*tag_field < n2.next_request().tag.*tag_field;
 	    } else {
 	      return true;
 	    }
-	  } else if (n2.has_requests()) {
+	  } else if (n2.has_request()) {
 	    return false;
 	  } else {
 	    return false; // both have none; keep stable w false
@@ -623,6 +627,10 @@ namespace crimson {
 	if (client_map.end() == client_it) {
 	  ClientInfo ci = client_info_f(client_id);
 	  ClientEntryRef client_entry = std::make_shared<ClientEntry>(client_id);
+	  new_reserv_q.push(client_entry);
+	  new_prop_q.push(client_entry);
+	  new_lim_q.push(client_entry);
+	  new_ready_q.push(client_entry);
 	  client_map.emplace(client_id, ClientRec(ci, tick, client_entry));
 	  client_it = client_map.find(client_id);
 	}
