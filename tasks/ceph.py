@@ -1019,9 +1019,10 @@ def run_daemon(ctx, config, type_):
     :param config: Configuration
     :paran type_: Role type
     """
-    log.info('Starting %s daemons...' % type_)
+    cluster_name = config['cluster']
+    log.info('Starting %s daemons in cluster %s...', type_, cluster_name)
     testdir = teuthology.get_testdir(ctx)
-    daemons = ctx.cluster.only(teuthology.is_type(type_))
+    daemons = ctx.cluster.only(teuthology.is_type(type_, cluster_name))
 
     # check whether any daemons if this type are configured
     if daemons is None:
@@ -1033,8 +1034,11 @@ def run_daemon(ctx, config, type_):
         daemon_signal = 'term'
 
     for remote, roles_for_host in daemons.remotes.iteritems():
-        for id_ in teuthology.roles_of_type(roles_for_host, type_):
-            name = '%s.%s' % (type_, id_)
+        is_type_ = teuthology.is_type(type_, cluster_name)
+        for role in roles_for_host:
+            if not is_type_(role):
+                continue
+            _, _, id_ = teuthology.split_role(role)
 
             run_cmd = [
                 'sudo',
@@ -1047,27 +1051,29 @@ def run_daemon(ctx, config, type_):
             run_cmd_tail = [
                 'ceph-%s' % (type_),
                 '-f',
+                '--cluster', cluster_name,
                 '-i', id_]
 
             if type_ in config.get('cpu_profile', []):
-                profile_path = '/var/log/ceph/profiling-logger/%s.%s.prof' % (type_, id_)
+                profile_path = '/var/log/ceph/profiling-logger/%s.prof' % (role)
                 run_cmd.extend(['env', 'CPUPROFILE=%s' % profile_path])
 
             if config.get('valgrind') is not None:
                 valgrind_args = None
                 if type_ in config['valgrind']:
                     valgrind_args = config['valgrind'][type_]
-                if name in config['valgrind']:
-                    valgrind_args = config['valgrind'][name]
-                run_cmd = teuthology.get_valgrind_args(testdir, name,
+                if role in config['valgrind']:
+                    valgrind_args = config['valgrind'][role]
+                run_cmd = teuthology.get_valgrind_args(testdir, role,
                                                        run_cmd,
                                                        valgrind_args)
 
             run_cmd.extend(run_cmd_tail)
 
             ctx.daemons.add_daemon(remote, type_, id_,
+                                   cluster=cluster_name,
                                    args=run_cmd,
-                                   logger=log.getChild(name),
+                                   logger=log.getChild(role),
                                    stdin=run.PIPE,
                                    wait=False,
                                    )
@@ -1075,7 +1081,7 @@ def run_daemon(ctx, config, type_):
     try:
         yield
     finally:
-        teuthology.stop_daemons_of_type(ctx, type_)
+        teuthology.stop_daemons_of_type(ctx, type_, cluster_name)
 
 
 def healthy(ctx, config):
@@ -1413,7 +1419,8 @@ def task(ctx, config):
     overrides = ctx.config.get('overrides', {})
     teuthology.deep_merge(config, overrides.get('ceph', {}))
 
-    ctx.daemons = DaemonGroup()
+    if not hasattr(ctx, 'daemons'):
+        ctx.daemons = DaemonGroup()
 
     testdir = teuthology.get_testdir(ctx)
     if config.get('coverage'):
