@@ -2204,7 +2204,7 @@ void KStore::_txc_state_proc(TransContext *txc)
     case TransContext::STATE_KV_DONE:
       txc->log_state_latency(logger, l_kstore_state_kv_done_lat);
       txc->state = TransContext::STATE_FINISHING;
-      break;
+      // ** fall-thru **
 
     case TransContext::TransContext::STATE_FINISHING:
       txc->log_state_latency(logger, l_kstore_state_finishing_lat);
