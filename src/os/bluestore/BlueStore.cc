@@ -4049,10 +4049,16 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
 	       << src_offset << "~" << block_size << dendl;
       r = bdev->read(src_offset, block_size, &first, ioc, true);
       assert(r == 0);
+      dout(20) << __func__ << " HACK initial bl is\n";
+      first.hexdump(*_dout);
+      *_dout << dendl;
       bufferlist t;
       t.substr_of(first, 0, first_len);
       t.claim_append(bl);
       bl.swap(t);
+      dout(20) << __func__ << " HACK final bl is\n";
+      bl.hexdump(*_dout);
+      *_dout << dendl;
     }
     if (wo.extent.end() & ~block_mask) {
       uint64_t last_offset;
@@ -4921,7 +4927,7 @@ void BlueStore::_pad_zeros(
     bl->substr_of(old, 0, *length - back_copy);
     bl->append(tail);
     *length += back_pad;
-    if (end > o->onode.size && g_conf->bluestore_cache_tails) {
+    if (end >= o->onode.size && g_conf->bluestore_cache_tails) {
       o->tail_bl.clear();
       o->tail_bl.append(tail, 0, back_copy);
       o->tail_offset = end - back_copy;
@@ -5002,7 +5008,8 @@ void BlueStore::_pad_zeros_tail(
   bl->substr_of(old, 0, *length - back_copy);
   bl->append(tail);
   *length += back_pad;
-  if (end > o->onode.size && g_conf->bluestore_cache_tails) {
+  if (tail_len == block_size &&
+      end >= o->onode.size && g_conf->bluestore_cache_tails) {
     o->tail_bl.clear();
     o->tail_bl.append(tail, 0, back_copy);
     o->tail_offset = end - back_copy;
@@ -5466,6 +5473,7 @@ int BlueStore::_do_write(
     if (offset >= bp->first &&
 	offset > tail_start &&
 	offset + length >= o->onode.size &&
+	o->tail_offset == tail_start &&
 	o->tail_bl.length() &&
 	(offset / block_size == (o->onode.size - 1) / block_size)) {
       dout(20) << __func__ << " using cached tail" << dendl;
