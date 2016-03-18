@@ -737,9 +737,7 @@ public:
       ret = check_quota("bucket", bucket_quota, bucket_stats, num_objs, size_kb);
       if (ret < 0)
         return ret;
-    }
-
-    if (def_bucket_quota.enabled) {
+    } else if (def_bucket_quota.enabled) {
       ret = check_quota("def_bucket", def_bucket_quota, bucket_stats, num_objs, size_kb);
       if (ret < 0)
         return ret;
