@@ -1470,10 +1470,12 @@ def task(ctx, config):
                 healthy(ctx=ctx, config=dict(cluster=config['cluster']))
             first_mon = teuthology.get_first_mon(ctx, config, config['cluster'])
             (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-            ctx.manager = CephManager(
+            if not hasattr(ctx, 'managers'):
+                ctx.managers = {}
+            ctx.managers[config['cluster']] = CephManager(
                 mon,
                 ctx=ctx,
-                logger=log.getChild('ceph_manager'),
+                logger=log.getChild('ceph_manager.' + config['cluster']),
             )
             yield
         finally:
