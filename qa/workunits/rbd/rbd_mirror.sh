@@ -158,25 +158,20 @@ flush()
 
     test -n "${RBD_MIRROR_ASOK}"
 
-    image_id=$(remote_image_id ${image})
-    test -n "${image_id}"
-
-    cmd=$(ceph --admin-daemon ${RBD_MIRROR_ASOK} help |
-		 sed -nEe 's/^.*"(rbd mirror flush.*'${image_id}'])":.*$/\1/p')
-    test -n "${cmd}"
-    ceph --admin-daemon ${TEMPDIR}/rbd-mirror.asok ${cmd}
+    ceph --admin-daemon ${TEMPDIR}/rbd-mirror.asok \
+	 rbd mirror flush ${POOL}/${image}
 }
 
 test_image_replay_state()
 {
-    local image_id=$1
+    local image=$1
     local test_state=$2
     local current_state=stopped
 
     test -n "${RBD_MIRROR_ASOK}"
 
-    ceph --admin-daemon ${RBD_MIRROR_ASOK} help | fgrep "${image_id}" &&
-	current_state=started
+    ceph --admin-daemon ${RBD_MIRROR_ASOK} help |
+	fgrep "rbd mirror status ${POOL}/${image}" && current_state=started
     test "${test_state}" = "${current_state}"
 }
 
@@ -184,15 +179,12 @@ wait_for_image_replay_state()
 {
     local image=$1
     local state=$2
-    local image_id s
-
-    image_id=$(remote_image_id ${image})
-    test -n "${image_id}"
+    local s
 
     # TODO: add a way to force rbd-mirror to update replayers
     for s in 1 2 4 8 8 8 8 8 8 8 8; do
 	sleep ${s}
-	test_image_replay_state "${image_id}" "${state}" && return 0
+	test_image_replay_state "${image}" "${state}" && return 0
     done
     return 1
 }
@@ -283,29 +275,6 @@ create_local_image()
     local image=$1
 
     create_image ${LOC_CLUSTER} ${image}
-}
-
-image_id()
-{
-    local cluster=$1
-    local image=$2
-
-    rbd --cluster ${cluster} -p ${POOL} info --image ${image} |
-	sed -ne 's/^.*block_name_prefix: rbd_data\.//p'
-}
-
-remote_image_id()
-{
-    local image=$1
-
-    image_id ${RMT_CLUSTER} ${image}
-}
-
-local_image_id()
-{
-    local image=$1
-
-    image_id ${LOC_CLUSTER} ${image}
 }
 
 write_image()
