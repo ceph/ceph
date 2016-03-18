@@ -119,6 +119,9 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/ceph-mds.conf \
 	$(srcdir)/upstart/ceph-mds-all.conf \
 	$(srcdir)/upstart/ceph-mds-all-starter.conf \
+	$(srcdir)/upstart/ceph-rbd-mirror.conf \
+	$(srcdir)/upstart/ceph-rbd-mirror-all.conf \
+	$(srcdir)/upstart/ceph-rbd-mirror-all-starter.conf \
 	$(srcdir)/upstart/radosgw.conf \
 	$(srcdir)/upstart/radosgw-all.conf \
 	$(srcdir)/upstart/radosgw-all-starter.conf \
