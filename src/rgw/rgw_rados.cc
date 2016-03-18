@@ -10060,6 +10060,30 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, int shard_id, string *bucket_
   return 0;
 }
 
+int RGWRados::get_bi_log_status(rgw_bucket& bucket, int shard_id,
+    map<int, string>& markers)
+{
+  map<string, rgw_bucket_dir_header> headers;
+  map<int, string> bucket_instance_ids;
+  int r = cls_bucket_head(bucket, shard_id, headers, &bucket_instance_ids);
+  if (r < 0)
+    return r;
+
+  assert(headers.size() == bucket_instance_ids.size());
+
+  map<string, rgw_bucket_dir_header>::iterator iter = headers.begin();
+  map<int, string>::iterator viter = bucket_instance_ids.begin();
+
+  for(; iter != headers.end(); ++iter, ++viter) {
+    if (shard_id >= 0) {
+      markers[shard_id] = iter->second.max_marker;
+    } else {
+      markers[viter->first] = iter->second.max_marker;
+    }
+  }
+  return 0;
+}
+
 class RGWGetBucketStatsContext : public RGWGetDirHeader_CB {
   RGWGetBucketStats_CB *cb;
   uint32_t pendings;
