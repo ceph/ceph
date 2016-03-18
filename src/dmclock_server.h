@@ -150,47 +150,6 @@ namespace crimson {
       using MarkPoint = std::pair<TimePoint,Counter>;
 
 
-      class ClientRec {
-	// we're keeping this private to force callers to use
-	// update_req_tag, to make sure the tick gets updated
-	RequestTag         prev_tag;
-
-      public:
-
-	ClientInfo         info;
-	bool               idle;
-	Counter            last_tick;
-
-	ClientRec(const ClientInfo& _info, Counter current_tick) :
-	  prev_tag(0.0, 0.0, 0.0),
-	  info(_info),
-	  idle(true),
-	  last_tick(current_tick)
-	{
-	  // empty
-	}
-
-	inline const RequestTag& get_req_tag() const {
-	  return prev_tag;
-	}
-
-	inline void update_req_tag(const RequestTag& _prev,
-				   const Counter& _tick) {
-	  prev_tag = _prev;
-	  last_tick = _tick;
-	}
-
-	inline double get_prev_prop_tag() const {
-	  return prev_tag.proportion;
-	}
-
-	inline void set_prev_prop_tag(double value,
-				      bool adjust_by_inc = false) {
-	  prev_tag.proportion = value - (adjust_by_inc ? info.weight_inv : 0.0);
-	}
-      }; // class ClientRec
-
-
       class Entry {
 	friend PriorityQueue<C,R>;
 
@@ -251,8 +210,8 @@ namespace crimson {
 	friend PriorityQueue<C,R>;
 
 	C                     client;
-	std::deque<ClientRec> requests;
-	c::IndIntruHeapData   res_heap_data;
+	std::deque<ClientReq> requests;
+	c::IndIntruHeapData   reserv_heap_data;
 	c::IndIntruHeapData   lim_heap_data;
 	c::IndIntruHeapData   ready_heap_data;
 	c::IndIntruHeapData   prop_heap_data;
@@ -308,6 +267,52 @@ namespace crimson {
 	out << *e;
 	return out;
       }
+
+      class ClientRec {
+	// we're keeping this private to force callers to use
+	// update_req_tag, to make sure the tick gets updated
+	RequestTag         prev_tag;
+
+      public:
+
+	ClientInfo         info;
+	bool               idle;
+	Counter            last_tick;
+	// TODO consider merging ClientEntry and ClientRec
+	ClientEntryRef     client_entry;
+
+	ClientRec(const ClientInfo& _info,
+		  Counter current_tick,
+		  const ClientEntryRef& _client_entry) :
+	  prev_tag(0.0, 0.0, 0.0),
+	  info(_info),
+	  idle(true),
+	  last_tick(current_tick),
+	  client_entry(_client_entry)
+	{
+	  // empty
+	}
+
+	inline const RequestTag& get_req_tag() const {
+	  return prev_tag;
+	}
+
+	inline void update_req_tag(const RequestTag& _prev,
+				   const Counter& _tick) {
+	  prev_tag = _prev;
+	  last_tick = _tick;
+	}
+
+	inline double get_prev_prop_tag() const {
+	  return prev_tag.proportion;
+	}
+
+	inline void set_prev_prop_tag(double value,
+				      bool adjust_by_inc = false) {
+	  prev_tag.proportion = value - (adjust_by_inc ? info.weight_inv : 0.0);
+	}
+      }; // class ClientRec
+
 
     public:
 
@@ -405,8 +410,24 @@ namespace crimson {
       std::map<C,ClientRec> client_map;
 
 
-      c::IndIntruHeap<ClientEntryRef, ClientEntry, &ClientEntry::res_heap_data, ClientCompare<&RequestTag::reservation>> new_reserv_q;
+      c::IndIntruHeap<ClientEntryRef,
+		      ClientEntry,
+		      &ClientEntry::reserv_heap_data,
+		      ClientCompare<&RequestTag::reservation>> new_reserv_q;
+      c::IndIntruHeap<ClientEntryRef,
+		      ClientEntry,
+		      &ClientEntry::prop_heap_data,
+		      ClientCompare<&RequestTag::proportion>> new_prop_q;
+      c::IndIntruHeap<ClientEntryRef,
+		      ClientEntry,
+		      &ClientEntry::lim_heap_data,
+		      ClientCompare<&RequestTag::limit>> new_lim_q;
+      c::IndIntruHeap<ClientEntryRef,
+		      ClientEntry,
+		      &ClientEntry::ready_heap_data,
+		      ClientCompare<&RequestTag::proportion>> new_ready_q;
 
+#if 1
       // four heaps that maintain the earliest request by each of the
       // tag components
       c::Heap<EntryRef, ReservationCompare> reserv_q;
@@ -418,6 +439,7 @@ namespace crimson {
       // for entries whose limit is passed and that'll be sorted by
       // their proportion tag
       c::Heap<EntryRef, ProportionCompare> ready_q;
+#endif
 
       // if all reservations are met and all other requestes are under
       // limit, this will allow the request next in terms of
@@ -600,7 +622,8 @@ namespace crimson {
 	auto client_it = client_map.find(client_id);
 	if (client_map.end() == client_it) {
 	  ClientInfo ci = client_info_f(client_id);
-	  client_map.emplace(client_id, ClientRec(ci, tick));
+	  ClientEntryRef client_entry = std::make_shared<ClientEntry>(client_id);
+	  client_map.emplace(client_id, ClientRec(ci, tick, client_entry));
 	  client_it = client_map.find(client_id);
 	}
 
