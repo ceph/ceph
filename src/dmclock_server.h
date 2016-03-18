@@ -200,7 +200,7 @@ namespace crimson {
 	ClientReq(const RequestTag& _tag,
 		  RequestRef&&      _request) :
 	  tag(_tag),
-	  request(_request)
+	  request(std::move(_request))
 	{
 	  // empty
 	}
@@ -234,7 +234,7 @@ namespace crimson {
 	}
 
 	inline void add_request(const RequestTag& tag, RequestRef&& request) {
-	  requests.emplace_back(ClientReq(tag, request));
+	  requests.emplace_back(ClientReq(tag, std::move(request)));
 	}
 
 	inline const ClientReq& next_request() const {
@@ -635,12 +635,8 @@ namespace crimson {
 	  client_it = client_map.find(client_id);
 	}
 
+#if 0 // translate later
 	if (client_it->second.idle) {
-	  // remove all handled requests from proportional queue
-	  while (!prop_q.empty() && prop_q.top()->handled) {
-	    prop_q.pop();
-	  }
-
 	  // We need to do an adjustment so that idle clients compete
 	  // fairly on proportional tags since those tags may have
 	  // drifted from real-time. Either use the lowest existing
@@ -665,19 +661,27 @@ namespace crimson {
 	    }
 	  }
 	  client_it->second.idle = false;
-	}
+	} // if
+#endif
 
-	EntryRef entry =
-	  std::make_shared<Entry>(client_id,
-				  RequestTag(client_it->second.get_req_tag(),
-					     client_it->second.info,
-					     req_params,
-					     time),
-				  std::move(request));
+	ClientRec& client_rec = client_it->second;
+
+	RequestTag tag(client_rec.get_req_tag(),
+		       client_rec.info,
+		       req_params,
+		       time);
+	client_rec.client_entry->add_request(tag,
+					     std::move(request));
 
 	// copy tag to previous tag for client
-	client_it->second.update_req_tag(entry->tag, tick);
+	client_rec.update_req_tag(tag, tick);
 
+	new_reserv_q.adjust(*client_rec.client_entry);
+	new_lim_q.adjust(*client_rec.client_entry);
+	new_ready_q.adjust(*client_rec.client_entry);
+	new_prop_q.adjust(*client_rec.client_entry);
+
+#if 0
 	if (0.0 != entry->tag.reservation) {
 	  reserv_q.push(entry);
 	}
@@ -691,6 +695,7 @@ namespace crimson {
 	    lim_q.push(entry);
 	  }
 	}
+#endif
 
 #if 0
 	{
@@ -709,7 +714,7 @@ namespace crimson {
 	if (Mechanism::push == mechanism) {
 	  schedule_request();
 	}
-      }
+      } // add_request
 
 
       void request_completed() {
