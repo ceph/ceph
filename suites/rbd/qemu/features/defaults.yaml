@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd default format: 2
+        rbd default features: 61
