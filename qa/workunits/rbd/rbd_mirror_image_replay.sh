@@ -122,20 +122,13 @@ get_position()
 {
     local id=$1
 
-    # Parse line like below, looking for the first entry_tid
+    # Parse line like below, looking for the first position
     # [id=, commit_position=[positions=[[object_number=1, tag_tid=3, entry_tid=9], [object_number=0, tag_tid=3, entry_tid=8], [object_number=3, tag_tid=3, entry_tid=7], [object_number=2, tag_tid=3, entry_tid=6]]]]
 
     local status_log=${TEMPDIR}/${RMT_POOL}-${IMAGE}.status
     rbd -p ${RMT_POOL} journal status --image ${IMAGE} | tee ${status_log} >&2
-    sed -Ee 's/[][,]/ /g' ${status_log} |
-	awk '$1 == "id='${id}'" {
-               for (i = 1; i < NF; i++) {
-                 if ($i ~ /entry_tid=/) {
-                   print $i;
-                   exit
-                 }
-               }
-             }'
+    sed -nEe 's/^.*\[id='"${id}"',.*positions=\[\[([^]]*)\],.*$/\1/p' \
+	${status_log}
 }
 
 get_master_position()
