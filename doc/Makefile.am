@@ -33,4 +33,5 @@ EXTRA_DIST = \
 	man/8/rbd-replay-many.rst	\
 	man/8/rbd-replay-prep.rst	\
 	man/8/rbd-replay.rst	\
-	man/8/rbd.rst
+	man/8/rbd.rst           \
+	man/8/rbdmap.rst
