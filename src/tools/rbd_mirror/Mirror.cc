@@ -40,6 +40,10 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
 void Mirror::handle_signal(int signum)
 {
   m_stopping.set(1);
+  {
+    Mutex::Locker l(m_lock);
+    m_cond.Signal();
+  }
 }
 
 int Mirror::init()
