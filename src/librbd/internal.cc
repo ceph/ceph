@@ -880,6 +880,33 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
         lderr(cct) << "error creating journal: " << cpp_strerror(r) << dendl;
         goto err_remove_object_map;
       }
+
+      rbd_mirror_mode_t mirror_mode;
+      r = librbd::mirror_mode_get(io_ctx, &mirror_mode);
+      if (r < 0) {
+        lderr(cct) << "error in retrieving pool mirroring status: "
+          << cpp_strerror(r) << dendl;
+        goto err_remove_object_map;
+      }
+
+      if (mirror_mode == RBD_MIRROR_MODE_POOL) {
+        ImageCtx *img_ctx = new ImageCtx("", id, nullptr, io_ctx, false);
+        r = img_ctx->state->open();
+        if (r < 0) {
+          lderr(cct) << "error opening image: " << cpp_strerror(r) << dendl;
+          delete img_ctx;
+          goto err_remove_object_map;
+        }
+        r = mirror_image_enable(img_ctx);
+        if (r < 0) {
+          lderr(cct) << "error enabling mirroring: " << cpp_strerror(r)
+            << dendl;
+          img_ctx->state->close();
+          goto err_remove_object_map;
+        }
+        img_ctx->state->close();
+      }
+
     }
 
     ldout(cct, 2) << "done." << dendl;
@@ -1364,6 +1391,7 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
         return 0;
       }
 
+      bool enable_mirroring = false;
       uint64_t features_mask = features;
       uint64_t disable_flags = 0;
       if (enabled) {
@@ -1400,6 +1428,16 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
                        << dendl;
             return r;
           }
+
+          rbd_mirror_mode_t mirror_mode;
+          r = librbd::mirror_mode_get(ictx->md_ctx, &mirror_mode);
+          if (r < 0) {
+            lderr(cct) << "error in retrieving pool mirroring status: "
+              << cpp_strerror(r) << dendl;
+            return r;
+          }
+
+          enable_mirroring = (mirror_mode == RBD_MIRROR_MODE_POOL);
         }
 
         if (enable_flags != 0) {
@@ -1435,6 +1473,37 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
           disable_flags = RBD_FLAG_FAST_DIFF_INVALID;
         }
         if ((features & RBD_FEATURE_JOURNALING) != 0) {
+          rbd_mirror_mode_t mirror_mode;
+          r = librbd::mirror_mode_get(ictx->md_ctx, &mirror_mode);
+          if (r < 0) {
+            lderr(cct) << "error in retrieving pool mirroring status: "
+              << cpp_strerror(r) << dendl;
+            return r;
+          }
+
+          if (mirror_mode == RBD_MIRROR_MODE_IMAGE) {
+            cls::rbd::MirrorImage mirror_image;
+            r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+                                             &mirror_image);
+            if (r < 0 && r != -ENOENT) {
+              lderr(cct) << "error retrieving mirroring state: "
+                << cpp_strerror(r) << dendl;
+            }
+
+            if (mirror_image.state ==
+                cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED) {
+              lderr(cct) << "cannot disable journaling: image mirroring "
+                " enabled and mirror pool mode set to image" << dendl;
+              return -EINVAL;
+            }
+          } else if (mirror_mode == RBD_MIRROR_MODE_POOL) {
+            r = mirror_image_disable(ictx, false);
+            if (r < 0) {
+              lderr(cct) << "error disabling image mirroring: "
+                << cpp_strerror(r) << dendl;
+            }
+          }
+
           r = Journal<>::remove(ictx->md_ctx, ictx->id);
           if (r < 0) {
             lderr(cct) << "error removing image journal: " << cpp_strerror(r)
@@ -1468,7 +1537,24 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
           return r;
         }
       }
-    }
+
+      if (enable_mirroring) {
+        ImageCtx *img_ctx = new ImageCtx("", ictx->id, nullptr,
+            ictx->md_ctx, false);
+        r = img_ctx->state->open();
+        if (r < 0) {
+          lderr(cct) << "error opening image: " << cpp_strerror(r) << dendl;
+          delete img_ctx;
+        } else {
+          r = mirror_image_enable(img_ctx);
+          if (r < 0) {
+            lderr(cct) << "error enabling mirroring: " << cpp_strerror(r)
+              << dendl;
+          }
+          img_ctx->state->close();
+        }
+      }
+   }
 
     ictx->notify_update();
     return 0;
@@ -2632,11 +2718,15 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
         static_cast<rbd_mirror_image_state_t>(mirror_image_internal.state);
     }
 
-    r = Journal<>::is_tag_owner(ictx, &mirror_image_info->primary);
-    if (r < 0) {
-      lderr(cct) << "failed to check tag ownership: "
-                 << cpp_strerror(r) << dendl;
-      return r;
+    if (mirror_image_info->state == RBD_MIRROR_IMAGE_ENABLED) {
+      r = Journal<>::is_tag_owner(ictx, &mirror_image_info->primary);
+      if (r < 0) {
+        lderr(cct) << "failed to check tag ownership: "
+                   << cpp_strerror(r) << dendl;
+        return r;
+      }
+    } else {
+      mirror_image_info->primary = false;
     }
 
     return 0;
