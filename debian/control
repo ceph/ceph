@@ -604,7 +604,7 @@ Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the
  object store that aims to implement a superset of Amazon's S3
- service.
+ service as well as the OpenStack Object Storage ("Swift") API.
  .
  This package contains the proxy daemon and related tools only.
 
@@ -617,7 +617,7 @@ Description: debugging symbols for radosgw
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the
  object store that aims to implement a superset of Amazon's S3
- service.
+ service as well as the OpenStack Object Storage ("Swift") API.
  .
  This package contains debugging symbols for radosgw.
 

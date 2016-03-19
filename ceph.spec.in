@@ -361,9 +361,10 @@ Requires:	python-flask
 Requires:      python-Flask
 %endif
 %description radosgw
-This package is an S3 HTTP REST gateway for the RADOS object store. It
-is implemented as a FastCGI module using libfcgi, and can be used in
-conjunction with any FastCGI capable web server.
+RADOS is a distributed object store used by the Ceph distributed
+storage system.  This package provides a REST gateway to the
+object store that aims to implement a superset of Amazon's S3
+service as well as the OpenStack Object Storage ("Swift") API.
 
 %if %{with ocf}
 %package resource-agents
