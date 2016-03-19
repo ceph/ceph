@@ -1307,6 +1307,7 @@ void BlueFS::_close_writer(FileWriter *h)
 {
   dout(10) << __func__ << " " << h << dendl;
   for (unsigned i=0; i<bdev.size(); ++i) {
+    h->iocv[i]->aio_wait();
     bdev[i]->queue_reap_ioc(h->iocv[i]);
   }
   h->iocv.clear();
