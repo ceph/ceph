@@ -1,6 +1,10 @@
 #!/bin/sh
 
 do_map() {
+
+        # default to reasonable value if RBDMAPFILE not set in environment
+        printenv RBDMAPFILE >/dev/null || local RBDMAPFILE=/etc/ceph/rbdmap
+
 	if [ ! -f "$RBDMAPFILE" ]; then
 		logger -p "daemon.warning" -t init-rbdmap "No $RBDMAPFILE found."
 		exit 0
