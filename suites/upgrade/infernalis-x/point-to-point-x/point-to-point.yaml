@@ -91,13 +91,14 @@ workload_infernalis:
          - rados/test.sh
          - cls
    - print: "**** done rados/test.sh &  cls workload_infernalis"
-   - rgw: [client.0]
-   - print: "**** done rgw workload_infernalis"
-   - s3tests:
-       client.0:
-         force-branch: ceph-infernalis
-         rgw_server: client.0
-   - print: "**** done s3tests workload_infernalis"
+   - sequential:
+     - rgw: [client.0]
+     - print: "**** done rgw workload_infernalis"
+     - s3tests:
+         client.0:
+           force-branch: ceph-infernalis
+           rgw_server: client.0
+     - print: "**** done s3tests workload_infernalis"
 upgrade-sequence_infernalis:
    sequential:
    - print: "**** done branch: infernalis install.upgrade"
