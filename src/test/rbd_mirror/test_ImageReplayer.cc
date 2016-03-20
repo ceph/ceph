@@ -256,7 +256,9 @@ public:
 
     for (int i = 0; i < 100; i++) {
       printf("m_replayer->flush()\n");
-      m_replayer->flush();
+      C_SaferCond cond;
+      m_replayer->flush(&cond);
+      ASSERT_EQ(0, cond.wait());
       get_commit_positions(&master_position, &mirror_position);
       if (master_position == mirror_position) {
 	break;
