@@ -147,7 +147,6 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
       ++pb;
     }
 
-    Packet p;
     if (len != bl.length()) {
       bufferlist swapped;
       bl.splice(0, len, &swapped);
@@ -179,7 +178,7 @@ DPDKServerSocketImpl<Protocol>::DPDKServerSocketImpl(
         : _listener(proto.listen(port)) {}
 
 template <typename Protocol>
-int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, const SocketOptions &options, entity_addr_t *out){
+int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, const SocketOptions &options, entity_addr_t *out) {
   if (_listener.get_errno() < 0)
     return _listener.get_errno();
   auto c = _listener.accept();

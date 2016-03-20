@@ -155,8 +155,8 @@ static bool parse_available_address(
 {
   vector<string> ip_vec, gate_vec, mask_vec;
   string_to_vec(ip_vec, ips);
-  string_to_vec(gate_vec, ips);
-  string_to_vec(mask_vec, ips);
+  string_to_vec(gate_vec, gates);
+  string_to_vec(mask_vec, masks);
   if (ip_vec.empty() || ip_vec.size() != gate_vec.size() || ip_vec.size() != mask_vec.size())
     return false;
 
