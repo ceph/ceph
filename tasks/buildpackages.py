@@ -123,12 +123,25 @@ def task(ctx, config):
           ram: 15000 # MB
           cpus: 16
     - install:
+
+    When a buildpackages task is already included, the values it contains can be
+    overriden with:
+
+    overrides:
+      buildpackages:
+        machine:
+          disk: 10 # GB
+          ram: 1000 # MB
+          cpus: 1
+
     """
     log.info('Beginning buildpackages...')
     if config is None:
         config = {}
     assert isinstance(config, dict), \
         'task only accepts a dict for config not ' + str(config)
+    overrides = ctx.config.get('overrides', {})
+    misc.deep_merge(config, overrides.get('buildpackages', {}))
     d = os.path.join(os.path.dirname(__file__), 'buildpackages')
     os_type = misc.get_distro(ctx)
     os_version = misc.get_distro_version(ctx)
