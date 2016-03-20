@@ -9,6 +9,10 @@ tasks:
 - print: "**** done installing infernalis"
 - ceph:
 - print: "**** done ceph"
+- install.upgrade:
+    mon.a:
+    mon.b:
+- print: "**** done install.upgrade mon.a and mon.b"
 - parallel:
     - workload
     - upgrade-sequence
