@@ -2,7 +2,7 @@ meta:
 - desc: |
    object class functional tests
 workload:
-  sequential:
+  full_sequential:
     - workunit:
         branch: infernalis
         clients:
