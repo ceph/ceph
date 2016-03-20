@@ -162,6 +162,7 @@ int ipv4::handle_received_packet(Packet p, ethernet_address from)
 
   // FIXME: process options
   if (in_my_netmask(h.src_ip) && h.src_ip != _host_address) {
+    ldout(cct, 20) << __func__ << " learn mac " << from << " with " << h.src_ip << dendl;
     _arp.learn(from, h.src_ip);
   }
 
@@ -330,7 +331,7 @@ Tub<l3_protocol::l3packet> ipv4::get_packet() {
         _pkt_provider_idx = 0;
       }
       if (l4p) {
-        ldout(cct, 20) << " ipv4::get_packet " << " len " << l4p->p.len() << dendl;
+        ldout(cct, 20) << " ipv4::get_packet len " << l4p->p.len() << dendl;
         send(l4p->to, l4p->proto_num, std::move(l4p->p), l4p->e_dst);
         break;
       }

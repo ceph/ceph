@@ -134,9 +134,9 @@ int interface::dispatch_packet(EventCenter *center, Packet p) {
   auto eh = p.get_header<eth_hdr>();
   if (eh) {
     auto i = _proto_map.find(ntoh(eh->eth_proto));
-    ldout(cct, 1) << __func__ << " === rx === proto " << std::hex << ::ntoh(eh->eth_proto)
-                  << " "<< eh->src_mac.ntoh() << " -> " << eh->dst_mac.ntoh()
-                  << " length " << std::dec << p.len() << dendl;
+    ldout(cct, 10) << __func__ << " === rx === proto " << std::hex << ::ntoh(eh->eth_proto)
+                   << " "<< eh->src_mac.ntoh() << " -> " << eh->dst_mac.ntoh()
+                   << " length " << std::dec << p.len() << dendl;
     if (i != _proto_map.end()) {
       l3_rx_stream& l3 = i->second;
       auto fw = _dev->forward_dst(center->get_id(), [&p, &l3, this] () {
