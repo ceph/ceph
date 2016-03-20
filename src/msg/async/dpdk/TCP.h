@@ -275,7 +275,6 @@ class tcp {
    public:
     C_actual_remove_tcb(tcb *t): tc(t->shared_from_this()) {}
     void do_request(int r) {
-      tc->remove_from_tcbs();
       delete this;
     }
   };
@@ -958,6 +957,7 @@ tcp<InetTraits>::tcb::~tcb()
   delete persist_event;
   delete all_data_ack_event;
   _tcp.manager.close(fd);
+  fd = -1;
 }
 
 template <typename InetTraits>
@@ -1263,6 +1263,7 @@ void tcp<InetTraits>::tcb::close() {
   // TODO: We should make this asynchronous
 
   _errno = -EPIPE;
+  center->delete_file_event(fd, EVENT_READABLE|EVENT_WRITABLE);
   bool acked = is_all_data_acked();
   if (!acked) {
     _snd._all_data_acked_fd = _tcp.manager.get_eventfd();
@@ -1415,6 +1416,7 @@ void tcp<InetTraits>::tcb::update_cwnd(uint32_t acked_bytes) {
 
 template <typename InetTraits>
 void tcp<InetTraits>::tcb::cleanup() {
+  _snd.closed = true;
   _snd.unsent.clear();
   _snd.data.clear();
   _rcv.out_of_order.map.clear();
@@ -1422,6 +1424,7 @@ void tcp<InetTraits>::tcb::cleanup() {
   stop_retransmit_timer();
   clear_delayed_ack();
   center->dispatch_event_external(new tcp<InetTraits>::C_actual_remove_tcb(this));
+  remove_from_tcbs();
 }
 
 template <typename InetTraits>
