@@ -47,6 +47,14 @@ tasks:
 - sequential:
    - workload
 - print: "**** done workload v9.2.0"
+- install.upgrade:
+    mon.a:
+      branch: infernalis
+    mon.b:
+      branch: infernalis
+    # Note that client.a IS NOT upgraded at this point
+    #client.1:
+      #branch: hammer
 - parallel:
    - workload_infernalis
    - upgrade-sequence_infernalis
@@ -92,14 +100,6 @@ workload_infernalis:
    - print: "**** done s3tests workload_infernalis"
 upgrade-sequence_infernalis:
    sequential:
-   - install.upgrade:
-       mon.a:
-         branch: infernalis
-       mon.b:
-         branch: infernalis
-       # Note that client.a IS NOT upgraded at this point
-       #client.1:
-         #branch: hammer
    - print: "**** done branch: infernalis install.upgrade"
    - ceph.restart: [mds.a]
    - sleep:
