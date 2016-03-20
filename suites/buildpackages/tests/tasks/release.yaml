@@ -2,6 +2,11 @@
 overrides:
    ansible.cephlab:
      playbook: users.yml
+   buildpackages:
+     machine:
+       disk: 10 # GB
+       ram: 1000 # MB
+       cpus: 1
 roles:
     - [client.0]
 tasks:
