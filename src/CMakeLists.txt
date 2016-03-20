@@ -88,7 +88,7 @@ else()
 endif()
 
 
-set(EXTRALIBS uuid rt dl ${ATOMIC_OPS_LIBRARIES} asan ubsan)
+set(EXTRALIBS uuid rt dl ${ATOMIC_OPS_LIBRARIES})
 
 if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
@@ -138,11 +138,6 @@ if(HAVE_XIO)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
   list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread rt)
 endif(HAVE_XIO)
-
-if(HAVE_DPDK)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${DPDK_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${DPDK_LIBRARY})
-endif(HAVE_DPDK)
 
 # sort out which allocator to use
 if(Tcmalloc_FOUND)
@@ -239,7 +234,6 @@ if(HAVE_DPDK)
 	msg/async/dpdk/TCP.cc)
 
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${DPDK_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${DPDK_LIBRARIES})
 endif(HAVE_DPDK)
 
 if(HAVE_GOOD_YASM_ELF64)
@@ -431,7 +425,7 @@ add_library(global_common_objs OBJECT ${global_common_files})
 add_library(global STATIC ${libglobal_srcs}
   $<TARGET_OBJECTS:global_common_objs>)
 target_link_libraries(global common ${CMAKE_THREAD_LIBS_INIT} ${CRYPTO_LIBS}
-  ${EXTRALIBS})
+  ${DPDK_LIBRARIES} ${EXTRALIBS})
 if(${WITH_LTTNG})
   target_link_libraries(global lttng-ust dl)
 endif(${WITH_LTTNG})
