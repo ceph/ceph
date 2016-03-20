@@ -2,7 +2,7 @@ meta:
 - desc: |
    generate read/write load with rados objects ranging from 1MB to 25MB
 workload:
-  sequential:
+  full_sequential:
     - workunit:
         branch: infernalis
         clients:
