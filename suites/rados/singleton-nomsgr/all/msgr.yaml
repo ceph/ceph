@@ -14,3 +14,8 @@ openstack:
     volumes: # attached to each instance
       count: 0
       size: 1 # GB
+overrides:
+  ceph:
+    conf:
+      client:
+        debug ms: 20
