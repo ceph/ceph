@@ -74,47 +74,6 @@ workload:
        clients:
          client.0:
            - suites/blogbench.sh
-   sequential:
-   - install.upgrade:
-       mon.a:
-         branch: infernalis
-       mon.b:
-         branch: infernalis
-       # Note that client.a IS NOT upgraded at this point
-       #client.1:
-         #branch: infernalis
-   - print: "**** done branch: infernalis install.upgrade"
-   - ceph.restart: [mds.a]
-   - sleep:
-       duration: 60
-   - ceph.restart: [osd.0]
-   - sleep:
-       duration: 30
-   - ceph.restart: [osd.1]
-   - sleep:
-       duration: 30
-   - ceph.restart: [osd.2]
-   - sleep:
-       duration: 30
-   - ceph.restart: [osd.3]
-   - sleep:
-       duration: 30
-   - ceph.restart: [osd.4]
-   - sleep:
-       duration: 30
-   - ceph.restart: [osd.5]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.a]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.b]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.c]
-   - sleep:
-       duration: 60
-   - print: "**** done ceph.restart all infernalis branch mds/osd/mon"
 workload_infernalis:
    sequential:
    - workunit:
