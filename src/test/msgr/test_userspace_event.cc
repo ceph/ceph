@@ -30,7 +30,7 @@ class UserspaceManagerTest : public ::testing::Test {
 
   UserspaceManagerTest() {}
   virtual void SetUp() {
-    manager = new UserspaceEventManager();
+    manager = new UserspaceEventManager(g_ceph_context);
   }
   virtual void TearDown() {
     delete manager;

@@ -450,8 +450,7 @@ double eventcenter_poll()
 {
   int count = 1000000;
   EventCenter center(g_ceph_context);
-  center.init(1000);
-  center.set_owner();
+  center.init(1000, 0);
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
     center.process_events(0);
@@ -467,14 +466,13 @@ class CenterWorker : public Thread {
  public:
   EventCenter center;
   explicit CenterWorker(CephContext *c): cct(c), done(false), center(c) {
-    center.init(100);
+    center.init(100, 0);
   }
   void stop() {
     done = true;
     center.wakeup();
   }
   void* entry() {
-    center.set_owner();
     bind_thread_to_cpu(2);
     while (!done)
       center.process_events(1000);
