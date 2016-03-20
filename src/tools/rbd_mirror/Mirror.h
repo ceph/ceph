@@ -20,6 +20,7 @@ namespace rbd {
 namespace mirror {
 
 struct Threads;
+class MirrorAdminSocketHook;
 
 /**
  * Contains the main loop and overall state for rbd-mirror.
@@ -32,10 +33,14 @@ public:
   Mirror(CephContext *cct, const std::vector<const char*> &args);
   Mirror(const Mirror&) = delete;
   Mirror& operator=(const Mirror&) = delete;
+  ~Mirror();
 
   int init();
   void run();
   void handle_signal(int signum);
+
+  void print_status(Formatter *f, stringstream *ss);
+  void flush();
 
 private:
   void refresh_peers(const set<peer_t> &peers);
@@ -52,6 +57,7 @@ private:
   std::unique_ptr<ClusterWatcher> m_local_cluster_watcher;
   std::map<peer_t, std::unique_ptr<Replayer> > m_replayers;
   atomic_t m_stopping;
+  MirrorAdminSocketHook *m_asok_hook;
 };
 
 } // namespace mirror
