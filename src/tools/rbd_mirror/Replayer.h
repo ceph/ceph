@@ -24,6 +24,7 @@ namespace rbd {
 namespace mirror {
 
 struct Threads;
+class ReplayerAdminSocketHook;
 
 /**
  * Controls mirroring for a single remote cluster.
@@ -38,7 +39,9 @@ public:
 
   int init();
   void run();
-  void shutdown();
+
+  void print_status(Formatter *f, stringstream *ss);
+  void flush();
 
 private:
   void set_sources(const std::map<int64_t, std::set<std::string> > &images);
@@ -60,6 +63,7 @@ private:
   // when a pool's configuration changes
   std::map<int64_t, std::map<std::string,
 			     std::unique_ptr<ImageReplayer> > > m_images;
+  ReplayerAdminSocketHook *m_asok_hook;
 
   class ReplayerThread : public Thread {
     Replayer *m_replayer;

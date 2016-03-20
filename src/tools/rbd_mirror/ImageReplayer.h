@@ -81,10 +81,14 @@ public:
   bool is_stopped() { Mutex::Locker l(m_lock); return is_stopped_(); }
   bool is_running() { Mutex::Locker l(m_lock); return is_running_(); }
 
+  std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
+
   void start(Context *on_finish = nullptr,
 	     const BootstrapParams *bootstrap_params = nullptr);
   void stop(Context *on_finish = nullptr);
   void flush(Context *on_finish = nullptr);
+
+  void print_status(Formatter *f, stringstream *ss);
 
   virtual void handle_replay_ready();
   virtual void handle_replay_process_ready(int r);
@@ -190,6 +194,7 @@ private:
   std::string m_client_id;
   int64_t m_remote_pool_id, m_local_pool_id;
   std::string m_remote_image_id, m_local_image_id;
+  std::string m_name;
   Mutex m_lock;
   State m_state;
   std::string m_local_pool_name, m_remote_pool_name;

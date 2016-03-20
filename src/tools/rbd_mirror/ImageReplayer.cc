@@ -41,6 +41,8 @@ namespace mirror {
 using librbd::util::create_context_callback;
 using namespace rbd::mirror::image_replayer;
 
+std::ostream &operator<<(std::ostream &os, const ImageReplayer::State &state);
+
 namespace {
 
 struct ReplayHandler : public ::journal::ReplayHandler {
@@ -81,14 +83,7 @@ public:
   explicit StatusCommand(ImageReplayer *replayer) : replayer(replayer) {}
 
   bool call(Formatter *f, stringstream *ss) {
-    if (f) {
-      f->open_object_section("status");
-      f->dump_stream("state") << replayer->get_state();
-      f->close_section();
-      f->flush(*ss);
-    } else {
-      *ss << "state: " << replayer->get_state();
-    }
+    replayer->print_status(f, ss);
     return true;
   }
 
@@ -179,6 +174,7 @@ ImageReplayer::ImageReplayer(Threads *threads, RadosRef local, RadosRef remote,
   m_remote_pool_id(remote_pool_id),
   m_local_pool_id(local_pool_id),
   m_remote_image_id(remote_image_id),
+  m_name(stringify(remote_pool_id) + "/" + remote_image_id),
   m_lock("rbd::mirror::ImageReplayer " + stringify(remote_pool_id) + " " +
 	 remote_image_id),
   m_state(STATE_UNINITIALIZED),
@@ -452,11 +448,13 @@ void ImageReplayer::on_start_wait_for_local_journal_ready_start()
   dout(20) << "enter" << dendl;
 
   if (!m_asok_hook) {
-    CephContext *cct = static_cast<CephContext *>(m_local->cct());
-    std::string name = m_local_ioctx.get_pool_name() + "/" +
-      m_local_image_ctx->name;
+    Mutex::Locker locker(m_lock);
 
-    m_asok_hook = new ImageReplayerAdminSocketHook(cct, name, this);
+    m_name = m_local_ioctx.get_pool_name() + "/" + m_local_image_ctx->name;
+
+    CephContext *cct = static_cast<CephContext *>(m_local->cct());
+
+    m_asok_hook = new ImageReplayerAdminSocketHook(cct, m_name, this);
   }
 
   FunctionContext *ctx = new FunctionContext(
@@ -873,6 +871,23 @@ bool ImageReplayer::on_flush_interrupted()
   }
 
   return true;
+}
+
+void ImageReplayer::print_status(Formatter *f, stringstream *ss)
+{
+  dout(20) << "enter" << dendl;
+
+  Mutex::Locker l(m_lock);
+
+  if (f) {
+    f->open_object_section("image_replayer");
+    f->dump_string("name", m_name);
+    f->dump_stream("state") << m_state;
+    f->close_section();
+    f->flush(*ss);
+  } else {
+    *ss << m_name << ": state: " << m_state;
+  }
 }
 
 void ImageReplayer::handle_replay_process_ready(int r)
