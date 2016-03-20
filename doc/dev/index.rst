@@ -674,11 +674,11 @@ results allows reviewers to verify that changes to the code base do not
 cause regressions, or to analyze test failures when they do occur.
 
 Every teuthology cluster, whether bare-metal or cloud-provisioned, has a
-so-called "teuthology node" from which tests suites are triggered using the
+so-called "teuthology machine" from which tests suites are triggered using the
 `teuthology-suite`_ command.
 
 A detailed and up-to-date description of each `teuthology-suite`_ option is
-available by running the following command on the teuthology node::
+available by running the following command on the teuthology machine::
 
    $ teuthology-suite --help
 
@@ -1068,7 +1068,7 @@ The last bit of output should look something like this::
 What this means is that `ceph-workbench ceph-qa-suite`_ triggered the test
 suite run. It does not mean that the suite run has completed. To monitor
 progress of the run, check the Pulpito web interface URL periodically, or
-if you are impatient, ssh to the teuthology node using the ssh command
+if you are impatient, ssh to the teuthology machine using the ssh command
 shown and do::
 
     $ tail -f /var/log/teuthology.*
@@ -1118,6 +1118,64 @@ there::
 
 This will keep the teuthology machine, the logs and the packages-repository
 instance but nuke everything else.
+
+Deploy a cluster for manual testing
+-----------------------------------
+
+The `teuthology framework`_ and `ceph-workbench ceph-qa-suite`_ are 
+versatile tools that automatically provision Ceph clusters in the cloud and
+run various tests on them in an automated fashion. This enables a single
+engineer, in a matter of hours, to perform thousands of tests that would
+keep dozens of human testers occupied for days or weeks if conducted
+manually.
+
+However, there are times when the automated tests do not cover a particular
+scenario and manual testing is desired. It turns out that it is simple to
+adapt a test to stop and wait after the Ceph installation phase, and the
+engineer can then ssh into the running cluster.
+
+This common use case is currently provided for by the following command::
+
+   ceph-workbench ceph-qa-suite --simultaneous-jobs 9 --verbose
+   --teuthology-git-url http://github.com/dachary/teuthology
+   --teuthology-branch openstack --ceph-qa-suite-git-url
+   http://github.com/dachary/ceph-qa-suite --suite-branch wip-ceph-disk
+   --ceph-git-url http://github.com/ceph/ceph --ceph jewel --suite
+   ceph-disk --filter ubuntu_14
+
+This builds packages from the Ceph git repository and branch specified in
+the ``--ceph-git-url`` and ``--ceph`` options, respectively, provisions VMs
+in OpenStack, installs the packages, and deploys a Ceph cluster on them.
+Then, instead of running automated tests, it stops and enters a wait loop.
+
+The VMs (or "instances" in OpenStack terminology) created by
+`ceph-workbench ceph-qa-suite`_ are named as follows:
+
+``teuthology`` - the teuthology machine
+
+``packages-repository`` - VM where packages are stored
+
+``ceph-*`` - VM where packages are built
+
+``target*`` - machines where tests are run
+
+The VMs named ``target*`` are used by tests. If you are monitoring the
+teuthology log for a given test, the hostnames of these target machines can
+be found out by searching for the string ``Locked targets``::
+
+    2016-03-20T11:39:06.166 INFO:teuthology.task.internal:Locked targets:
+      target149202171058.teuthology: null
+      target149202171059.teuthology: null
+
+The IP addresses of the target machines can be found by running
+``openstack server list`` on the teuthology machine.
+
+The whole process, which takes some time to complete, can be monitored as
+described in `Run the dummy suite`_. Be patient.
+
+Once the target machines are up and running and the test enters its wait
+loop, the engineer can ssh into the target machines and do whatever manual
+testing is required. Use the teuthology machine as jump host.
 
 
 .. WIP
