@@ -75,7 +75,7 @@ workload:
          client.0:
            - suites/blogbench.sh
 workload_infernalis:
-   sequential:
+   full_sequential:
    - workunit:
        branch: infernalis
        clients:
