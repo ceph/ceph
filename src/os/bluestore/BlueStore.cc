@@ -289,6 +289,18 @@ static void get_enode_key(shard_id_t shard, int64_t pool, uint32_t hash,
   _key_encode_u32(hobject_t::_reverse_bits(hash), key);
 }
 
+static int get_key_enode(const string& key, shard_id_t *shard,
+			 int64_t *pool, uint32_t *hash)
+{
+  const char *p = key.c_str();
+  if (key.length() < 2 + 8 + 4)
+    return -2;
+  p = _key_decode_shard(p, shard);
+  p = _key_decode_u64(p, (uint64_t*)pool);
+  p = _key_decode_u32(p, hash);
+  return 0;
+}
+
 static int get_key_object(const string& key, ghobject_t *oid);
 
 static void get_object_key(const ghobject_t& oid, string *key)
@@ -1947,7 +1959,8 @@ int BlueStore::umount()
 
 int BlueStore::_verify_enode_shared(
   EnodeRef enode,
-  vector<bluestore_extent_t>& v)
+  vector<bluestore_extent_t>& v,
+  interval_set<uint64_t> &used_blocks)
 {
   int errors = 0;
   interval_set<uint64_t> span;
@@ -1973,6 +1986,14 @@ int BlueStore::_verify_enode_shared(
 	 << " != expected " << ref_map << dendl;
     ++errors;
   }
+  interval_set<uint64_t> i;
+  i.intersection_of(span, used_blocks);
+  if (!i.empty()) {
+    derr << " hash " << enode->hash << " extent(s) " << i
+	 << " already allocated" << dendl;
+    ++errors;
+  }
+  used_blocks.insert(span);
   return errors;
 }
 
@@ -1984,6 +2005,7 @@ int BlueStore::fsck()
   set<uint64_t> used_omap_head;
   interval_set<uint64_t> used_blocks;
   KeyValueDB::Iterator it;
+  EnodeRef enode;
   vector<bluestore_extent_t> hash_shared;
 
   int r = _open_path();
@@ -2041,7 +2063,6 @@ int BlueStore::fsck()
     CollectionRef c = _get_collection(p->first);
     RWLock::RLocker l(c->lock);
     ghobject_t pos;
-    EnodeRef enode;
     while (true) {
       vector<ghobject_t> ols;
       int r = collection_list(p->first, pos, ghobject_t::get_max(), true,
@@ -2062,7 +2083,7 @@ int BlueStore::fsck()
 	}
 	if (!enode || enode->hash != o->oid.hobj.get_hash()) {
 	  if (enode)
-	    errors += _verify_enode_shared(enode, hash_shared);
+	    errors += _verify_enode_shared(enode, hash_shared, used_blocks);
 	  enode = c->get_enode(o->oid.hobj.get_hash());
 	  hash_shared.clear();
 	}
@@ -2077,19 +2098,21 @@ int BlueStore::fsck()
 	}
 	// blocks
 	for (auto& b : o->onode.block_map) {
-	  if (b.second.has_flag(bluestore_extent_t::FLAG_SHARED))
+	  if (b.second.has_flag(bluestore_extent_t::FLAG_SHARED)) {
 	    hash_shared.push_back(b.second);
-	  if (used_blocks.intersects(b.second.offset, b.second.length)) {
-	    derr << " " << oid << " extent " << b.first << ": " << b.second
-		 << " already allocated" << dendl;
-	    ++errors;
-	    continue;
-	  }
-	  used_blocks.insert(b.second.offset, b.second.length);
-	  if (b.second.end() > bdev->get_size()) {
-	    derr << " " << oid << " extent " << b.first << ": " << b.second
-		 << " past end of block device" << dendl;
-	    ++errors;
+	  } else {
+	    if (used_blocks.intersects(b.second.offset, b.second.length)) {
+	      derr << " " << oid << " extent " << b.first << ": " << b.second
+		   << " already allocated" << dendl;
+	      ++errors;
+	      continue;
+	    }
+	    used_blocks.insert(b.second.offset, b.second.length);
+	    if (b.second.end() > bdev->get_size()) {
+	      derr << " " << oid << " extent " << b.first << ": " << b.second
+		   << " past end of block device" << dendl;
+	      ++errors;
+	    }
 	  }
 	}
 	// overlays
@@ -2202,19 +2225,46 @@ int BlueStore::fsck()
       }
     }
   }
+  if (enode) {
+    errors += _verify_enode_shared(enode, hash_shared, used_blocks);
+    hash_shared.clear();
+    enode.reset();
+  }
 
-  dout(1) << __func__ << " checking for stray objects" << dendl;
+  dout(1) << __func__ << " checking for stray enodes and onodes" << dendl;
   it = db->get_iterator(PREFIX_OBJ);
   if (it) {
     CollectionRef c;
+    bool expecting_objects = false;
+    shard_id_t expecting_shard;
+    int64_t expecting_pool;
+    uint32_t expecting_hash;
     for (it->lower_bound(string()); it->valid(); it->next()) {
       ghobject_t oid;
+      if (is_enode_key(it->key())) {
+	if (expecting_objects) {
+	  dout(30) << __func__ << "  had enode but no objects for "
+		   << std::hex << expecting_hash << std::dec << dendl;
+	  ++errors;
+	}
+	get_key_enode(it->key(), &expecting_shard, &expecting_pool,
+		      &expecting_hash);
+	continue;
+      }
       int r = get_key_object(it->key(), &oid);
       if (r < 0) {
 	dout(30) << __func__ << "  bad object key "
 		 << pretty_binary_string(it->key()) << dendl;
 	++errors;
 	continue;
+      }
+      if (expecting_objects) {
+	if (oid.hobj.get_bitwise_key_u32() != expecting_hash) {
+	  dout(30) << __func__ << "  had enode but no objects for "
+		   << std::hex << expecting_hash << std::dec << dendl;
+	  ++errors;
+	}
+	expecting_objects = false;
       }
       if (!c || !c->contains(oid)) {
 	c = NULL;
@@ -2234,6 +2284,12 @@ int BlueStore::fsck()
 	  continue;
 	}
       }
+    }
+    if (expecting_objects) {
+      dout(30) << __func__ << "  had enode but no objects for "
+	       << std::hex << expecting_hash << std::dec << dendl;
+      ++errors;
+      expecting_objects = false;
     }
   }
 

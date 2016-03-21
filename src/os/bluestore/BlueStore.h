@@ -613,7 +613,8 @@ private:
   int _wal_replay();
 
   // for fsck
-  int _verify_enode_shared(EnodeRef enode, vector<bluestore_extent_t>& v);
+  int _verify_enode_shared(EnodeRef enode, vector<bluestore_extent_t>& v,
+			   interval_set<uint64_t> &used_blocks);
 
 public:
   BlueStore(CephContext *cct, const string& path);
