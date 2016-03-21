@@ -377,7 +377,11 @@ $SUDO rm -f core*
 
 test -d $CEPH_OUT_DIR || mkdir $CEPH_OUT_DIR
 test -d $CEPH_DEV_DIR || mkdir $CEPH_DEV_DIR
-$SUDO rm -rf $CEPH_OUT_DIR/*
+
+# Only clear out pidfiles/heartbeats/logs/etc on a $new run.
+if [ "$new" -eq 1 ]; then
+    $SUDO rm -rf $CEPH_OUT_DIR/*
+fi
 test -d gmon && $SUDO rm -rf gmon/*
 
 [ "$cephx" -eq 1 ] && [ "$new" -eq 1 ] && test -e $keyring_fn && rm $keyring_fn
