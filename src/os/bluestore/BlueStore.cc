@@ -507,6 +507,7 @@ void BlueStore::OnodeHashLRU::add(const ghobject_t& oid, OnodeRef o)
   assert(onode_map.count(oid) == 0);
   onode_map[oid] = o;
   lru.push_front(*o);
+  _trim(max_size);
 }
 
 BlueStore::OnodeRef BlueStore::OnodeHashLRU::lookup(const ghobject_t& oid)
@@ -594,8 +595,15 @@ bool BlueStore::OnodeHashLRU::get_next(
 int BlueStore::OnodeHashLRU::trim(int max)
 {
   std::lock_guard<std::mutex> l(lock);
-  dout(20) << __func__ << " max " << max
-	   << " size " << onode_map.size() << dendl;
+  if (max < 0) {
+    max = max_size;
+  }
+  return _trim(max);
+}
+
+int BlueStore::OnodeHashLRU::_trim(int max)
+{
+  dout(20) << __func__ << " max " << max << " size " << onode_map.size() << dendl;
   int trimmed = 0;
   int num = onode_map.size() - max;
   if (onode_map.size() == 0 || num <= 0)
