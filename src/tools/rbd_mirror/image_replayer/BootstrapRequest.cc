@@ -12,6 +12,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
+#include "librbd/journal/Types.h"
 #include "librbd/Utils.h"
 #include "tools/rbd_mirror/ImageSync.h"
 

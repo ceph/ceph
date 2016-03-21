@@ -14,6 +14,7 @@
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
 #include "librbd/journal/Types.h"
+#include "librbd/journal/TypeTraits.h"
 #include <algorithm>
 #include <iosfwd>
 #include <list>
@@ -33,19 +34,7 @@ class AioCompletion;
 class AioObjectRequest;
 class ImageCtx;
 
-namespace journal {
-
-template <typename> class Replay;
-
-template <typename ImageCtxT>
-struct TypeTraits {
-  typedef ::journal::Journaler Journaler;
-  typedef ::journal::Future Future;
-  typedef ::journal::ReplayEntry ReplayEntry;
-};
-
-} // namespace journal
-
+namespace journal { template <typename> class Replay; }
 
 template <typename ImageCtxT = ImageCtx>
 class Journal {

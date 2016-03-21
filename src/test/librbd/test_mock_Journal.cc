@@ -12,6 +12,7 @@
 #include "librbd/Utils.h"
 #include "librbd/journal/Replay.h"
 #include "librbd/journal/Types.h"
+#include "librbd/journal/TypeTraits.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <functional>

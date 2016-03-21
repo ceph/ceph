@@ -6,6 +6,7 @@
 
 #include <gmock/gmock.h>
 #include "librbd/Journal.h"
+#include "librbd/journal/TypeTraits.h"
 
 namespace journal {
 
