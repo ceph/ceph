@@ -522,6 +522,10 @@ public:
     return fsid;
   }
 
+  uint64_t estimate_objects_overhead(uint64_t num_objects) override {
+    return num_objects * 300; //assuming per-object overhead is 300 bytes
+  }
+
   objectstore_perf_stat_t get_cur_stats() {
     return objectstore_perf_stat_t();
   }
