@@ -641,7 +641,7 @@ BlueStore::Collection::Collection(BlueStore *ns, coll_t c)
     lock("BlueStore::Collection::lock", true, false),
     exists(true),
     enode_set(g_conf->bluestore_onode_map_size),
-    onode_map()
+    onode_map(g_conf->bluestore_onode_map_size)
 {
 }
 
@@ -3838,7 +3838,7 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
     }
 
     if (txc->first_collection) {
-      txc->first_collection->onode_map.trim(g_conf->bluestore_onode_map_size);
+      txc->first_collection->onode_map.trim();
     }
 
     osr->q.pop_front();
