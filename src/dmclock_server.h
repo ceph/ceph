@@ -72,6 +72,7 @@ namespace crimson {
       double reservation;
       double proportion;
       double limit;
+      bool   ready; // true when within limit
 
       template<typename I>
       RequestTag(const RequestTag& prev_tag,
@@ -89,7 +90,8 @@ namespace crimson {
 	limit(tag_calc(time,
 		       prev_tag.limit,
 		       client.limit_inv,
-		       req_params.delta))
+		       req_params.delta)),
+	ready(false)
       {
 	// empty
       }
@@ -97,7 +99,8 @@ namespace crimson {
       RequestTag(double _res, double _prop, double _lim) :
 	reservation(_res),
 	proportion(_prop),
-	limit(_lim)
+	limit(_lim),
+	ready(false)
       {
 	// empty
       }
@@ -105,7 +108,8 @@ namespace crimson {
       RequestTag(const RequestTag& other) :
 	reservation(other.reservation),
 	proportion(other.proportion),
-	limit(other.limit)
+	limit(other.limit),
+	ready(other.ready)
       {
 	// empty
       }
@@ -182,15 +186,18 @@ namespace crimson {
 
       class ClientEntry; // forward decl for friend decls
 
-      template<double RequestTag::*tag_field>
+      template<double RequestTag::*tag_field,bool use_ready=false>
       struct ClientCompare; // forward decl for friend decls
 
 
       class ClientReq {
 	friend ClientEntry;
-	friend ClientCompare<&RequestTag::reservation>;
-	friend ClientCompare<&RequestTag::limit>;
-	friend ClientCompare<&RequestTag::proportion>;
+	friend ClientCompare<&RequestTag::reservation,false>;
+	friend ClientCompare<&RequestTag::limit,false>;
+	friend ClientCompare<&RequestTag::proportion,false>;
+	friend ClientCompare<&RequestTag::reservation,true>;
+	friend ClientCompare<&RequestTag::limit,true>;
+	friend ClientCompare<&RequestTag::proportion,true>;
 
 	RequestTag          tag;
 	RequestRef          request;
@@ -352,12 +359,20 @@ namespace crimson {
 
     protected:
 
-      template<double RequestTag::*tag_field>
+      template<double RequestTag::*tag_field, bool use_ready>
       struct ClientCompare {
 	bool operator()(const ClientEntry& n1, const ClientEntry& n2) const {
 	  if (n1.has_request()) {
 	    if (n2.has_request()) {
-	      return n1.next_request().tag.*tag_field < n2.next_request().tag.*tag_field;
+	      const auto& t1 = n1.next_request().tag;
+	      const auto& t2 = n2.next_request().tag;
+	      if (!use_ready || t1.ready == t2.ready) {
+		// if we don't care about ready or the ready values are the same
+		return t1.*tag_field < t2.*tag_field;
+	      } else {
+		// use_ready == true && the ready fields are different
+		return t1.ready;
+	      }
 	    } else {
 	      return true;
 	    }
@@ -429,7 +444,7 @@ namespace crimson {
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::ready_heap_data,
-		      ClientCompare<&RequestTag::proportion>> new_ready_q;
+		      ClientCompare<&RequestTag::proportion,true>> new_ready_q;
 
 #if 1
       // four heaps that maintain the earliest request by each of the
