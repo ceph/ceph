@@ -11,7 +11,7 @@ port=$2
 
 shift 2
 
-run_root=$script_root/run/$name
+run_root=run/$name
 pidfile=$run_root/out/radosgw.${port}.pid
 asokfile=$run_root/out/radosgw.${port}.asok
 logfile=$run_root/out/radosgw.${port}.log
