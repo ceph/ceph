@@ -3,7 +3,7 @@ meta:
    librbd C and C++ api tests
 tasks:
 - workunit:
-     branch: hammer
+     branch: infernalis
      clients:
         client.0:
            - rbd/test_librbd.sh
