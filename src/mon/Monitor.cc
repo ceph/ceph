@@ -18,6 +18,7 @@
 #include <signal.h>
 #include <limits.h>
 #include <cstring>
+#include <boost/scope_exit.hpp>
 
 #include "Monitor.h"
 #include "common/version.h"
@@ -2597,8 +2598,15 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  MonSession *session = m->get_session();
-  assert(session);
+  MonSession *session = static_cast<MonSession *>(
+    m->get_connection()->get_priv());
+  if (!session) {
+    dout(5) << __func__ << " dropping stray message " << *m << dendl;
+    return;
+  }
+  BOOST_SCOPE_EXIT_ALL(=) {
+    session->put();
+  };
 
   if (m->cmd.empty()) {
     string rs = "No command supplied";
