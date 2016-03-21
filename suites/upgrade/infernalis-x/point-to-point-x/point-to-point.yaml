@@ -62,6 +62,13 @@ tasks:
 - install.upgrade:
    client.1:
      branch: infernalis
+- print: "**** done branch: -infernalis install.upgrade on client.1"
+- install.upgrade:
+   mon.a:
+     #branch: infernalis
+   mon.b:
+     #branch: infernalis
+- print: "**** done branch: -x install.upgrade on mon.a and mon.b"
 - parallel:
    - workload_x
    - upgrade-sequence_x
@@ -157,15 +164,6 @@ workload_x:
    - print: "**** done s3tests workload_x"
 upgrade-sequence_x:
    sequential:
-   - install.upgrade:
-       mon.a:
-         #branch: infernalis
-       mon.b:
-         #branch: infernalis
-       # Note that client.a IS NOT upgraded here 
-       #client.1:
-         #branch: infernalis
-   - print: "**** done branch: -x install.upgrade"
    - ceph.restart: [mds.a]
    - sleep:
        duration: 60
