@@ -52,6 +52,8 @@ namespace librbd {
   class ObjectMap;
   template <typename> class Operations;
 
+  namespace exclusive_lock { struct Policy; }
+
   namespace operation {
   template <typename> class ResizeRequest;
   }
@@ -185,6 +187,8 @@ namespace librbd {
 
     LibrbdAdminSocketHook *asok_hook;
 
+    exclusive_lock::Policy *exclusive_lock_policy = nullptr;
+
     static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
                                        map<string, bufferlist> &pairs, map<string, bufferlist> *res);
 
@@ -281,6 +285,9 @@ namespace librbd {
 
     void notify_update();
     void notify_update(Context *on_finish);
+
+    exclusive_lock::Policy *get_exclusive_lock_policy() const;
+    void set_exclusive_lock_policy(exclusive_lock::Policy *policy);
   };
 }
 
