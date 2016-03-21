@@ -7,4 +7,4 @@ ConditionPathExists=!/var/lib/ceph/bootstrap-mds/ceph.keyring
 [Service]
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
-ExecStart=/usr/sbin/ceph-create-keys --cluster ${CLUSTER} --id %i
+ExecStart=/usr/sbin/ceph-create-keys --cluster ${CLUSTER} -c ${CLUSTER}.conf --id %i
