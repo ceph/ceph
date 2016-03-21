@@ -3991,6 +3991,16 @@ int BlueStore::_wal_apply(TransContext *txc)
   txc->log_state_latency(logger, l_bluestore_state_wal_queued_lat);
   txc->state = TransContext::STATE_WAL_APPLYING;
 
+  if (g_conf->bluestore_inject_wal_apply_delay) {
+    dout(20) << __func__ << " bluestore_inject_wal_apply_delay "
+	     << g_conf->bluestore_inject_wal_apply_delay
+	     << dendl;
+    utime_t t;
+    t.set_from_double(g_conf->bluestore_inject_wal_apply_delay);
+    t.sleep();
+    dout(20) << __func__ << " finished sleep" << dendl;
+  }
+
   assert(txc->ioc.pending_aios.empty());
   vector<OnodeRef>::iterator q = txc->wal_op_onodes.begin();
   for (list<bluestore_wal_op_t>::iterator p = wt.ops.begin();
