@@ -8587,7 +8587,20 @@ int RGWRados::Bucket::UpdateIndex::cancel()
     ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
     return ret;
   }
-  return store->cls_obj_complete_cancel(*bs, optag, obj, bilog_flags);
+
+  ret = store->cls_obj_complete_cancel(*bs, optag, obj, bilog_flags);
+
+  /*
+   * need to update data log anyhow, so that whoever follows needs to update its internal markers
+   * for following the specific bucket shard log. Otherwise they end up staying behind, and users
+   * have no way to tell that they're all caught up
+   */
+  int r = store->data_log->add_entry(bs->bucket, bs->shard_id);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+  }
+
+  return ret;
 }
 
 int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
