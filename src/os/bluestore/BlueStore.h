@@ -174,8 +174,9 @@ public:
     std::mutex lock;
     ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
     lru_list_t lru;                                      ///< lru
+    size_t max_size;
 
-    OnodeHashLRU() {}
+    OnodeHashLRU(size_t s) : max_size(s) {}
 
     void add(const ghobject_t& oid, OnodeRef o);
     void _touch(OnodeRef o);
