@@ -247,7 +247,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   cct->lookup_or_create_singleton_object<StackSingleton>(single, uniq_name);
   stack = single->stack;
   Worker *w = stack->get_worker();
-  local_connection = new AsyncConnection(cct, this, w);
+  local_connection = new AsyncConnection(cct, this, w, stack->support_local_listen_table());
   local_worker = w;
   local_features = features;
   init_local_connection();
@@ -402,9 +402,9 @@ void AsyncMessenger::wait()
 AsyncConnectionRef AsyncMessenger::add_accept(Worker *w, ConnectedSocket cli_socket, entity_addr_t &addr)
 {
   lock.Lock();
-  if (!stack->accept_require_same_thread())
+  if (!stack->support_local_listen_table())
     w = stack->get_worker();
-  AsyncConnectionRef conn = new AsyncConnection(cct, this, w);
+  AsyncConnectionRef conn = new AsyncConnection(cct, this, w, stack->support_local_listen_table());
   conn->accept(std::move(cli_socket), addr);
   accepting_conns.insert(conn);
   lock.Unlock();
@@ -421,7 +421,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int
 
   // create connection
   Worker *w = stack->get_worker();
-  AsyncConnectionRef conn = new AsyncConnection(cct, this, w);
+  AsyncConnectionRef conn = new AsyncConnection(cct, this, w, stack->support_local_listen_table());
   conn->connect(addr, type);
   assert(!conns.count(addr));
   conns[addr] = conn;

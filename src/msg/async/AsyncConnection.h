@@ -162,7 +162,7 @@ class AsyncConnection : public Connection {
   } *delay_state;
 
  public:
-  AsyncConnection(CephContext *cct, AsyncMessenger *m, Worker *w);
+  AsyncConnection(CephContext *cct, AsyncMessenger *m, Worker *w, bool local);
   ~AsyncConnection();
   void maybe_start_delay_thread();
 
@@ -277,6 +277,7 @@ class AsyncConnection : public Connection {
   ConnectedSocket cs;
   int port;
   Messenger::Policy policy;
+  bool local_stack;
 
   Mutex write_lock;
   enum class WriteStatus {

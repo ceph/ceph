@@ -170,7 +170,8 @@ public:
   Connection *create_anon_connection() {
     Mutex::Locker l(lock);
     Worker *w = stack->get_worker();
-    return new AsyncConnection(cct, this, w);
+    return new AsyncConnection(
+            cct, this, w, stack->support_local_listen_table());
   }
 
   /**
