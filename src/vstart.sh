@@ -732,28 +732,40 @@ do_rgw()
     # Create S3 user
     local akey='0555b35654ad1656d804'
     local skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
-    echo "setting up user testid"
-    $CEPH_BIN/radosgw-admin user create --uid testid --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn > /dev/null
+    if [ "$new" -eq 1 ]; then
+        echo "setting up user testid"
+        $CEPH_BIN/radosgw-admin user create --uid testid --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn > /dev/null
+    else
+        echo "re-using user testid"
+    fi
 
     # Create S3-test users
     # See: https://github.com/ceph/s3-tests
-    echo "setting up s3-test users"
-    $CEPH_BIN/radosgw-admin user create \
-        --uid 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
-        --access-key ABCDEFGHIJKLMNOPQRST \
-        --secret abcdefghijklmnopqrstuvwxyzabcdefghijklmn \
-        --display-name youruseridhere \
-        --email s3@example.com -c $conf_fn > /dev/null
-    $CEPH_BIN/radosgw-admin user create \
-        --uid 56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234 \
-        --access-key NOPQRSTUVWXYZABCDEFG \
-        --secret nopqrstuvwxyzabcdefghijklmnabcdefghijklm \
-        --display-name john.doe \
-        --email john.doe@example.com -c $conf_fn > /dev/null
+    if [ "$new" -eq 1 ]; then
+        echo "setting up s3-test users"
+        $CEPH_BIN/radosgw-admin user create \
+            --uid 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+            --access-key ABCDEFGHIJKLMNOPQRST \
+            --secret abcdefghijklmnopqrstuvwxyzabcdefghijklmn \
+            --display-name youruseridhere \
+            --email s3@example.com -c $conf_fn > /dev/null
+        $CEPH_BIN/radosgw-admin user create \
+            --uid 56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234 \
+            --access-key NOPQRSTUVWXYZABCDEFG \
+            --secret nopqrstuvwxyzabcdefghijklmnabcdefghijklm \
+            --display-name john.doe \
+            --email john.doe@example.com -c $conf_fn > /dev/null
+    else
+        echo "re-using s3-test users"
+    fi
 
     # Create Swift user
-    echo "setting up user tester"
-    $CEPH_BIN/radosgw-admin user create -c $conf_fn --subuser=test:tester --display-name=Tester-Subuser --key-type=swift --secret=testing --access=full > /dev/null
+    if [ "$new" -eq 1 ]; then
+        echo "setting up user tester"
+        $CEPH_BIN/radosgw-admin user create -c $conf_fn --subuser=test:tester --display-name=Tester-Subuser --key-type=swift --secret=testing --access=full > /dev/null
+    else
+        echo "re-using user tester"
+    fi
 
     echo ""
     echo "S3 User Info:"
