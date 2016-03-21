@@ -257,10 +257,14 @@ done:
 			riter->second.c_str());
   }
 
-  if (!content_type)
-    content_type = "binary/octet-stream";
+  if (op_ret == ERR_NOT_MODIFIED) {
+      end_header(s, this);
+  } else {
+      if (!content_type)
+          content_type = "binary/octet-stream";
 
-  end_header(s, this, content_type);
+      end_header(s, this, content_type);
+  }
 
   if (metadata_bl.length()) {
     STREAM_IO(s)->write(metadata_bl.c_str(), metadata_bl.length());
