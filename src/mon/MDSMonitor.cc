@@ -98,12 +98,18 @@ void MDSMonitor::create_new_fs(FSMap &fsm, const std::string &name,
   fs->mds_map.session_timeout = g_conf->mds_session_timeout;
   fs->mds_map.session_autoclose = g_conf->mds_session_autoclose;
   fs->mds_map.enabled = true;
-  fs->fscid = fsm.next_filesystem_id++;
+  if (mon->get_quorum_features() & CEPH_FEATURE_SERVER_JEWEL) {
+    fs->fscid = fsm.next_filesystem_id++;
+    // ANONYMOUS is only for upgrades from legacy mdsmaps, we should
+    // have initialized next_filesystem_id such that it's never used here.
+    assert(fs->fscid != FS_CLUSTER_ID_ANONYMOUS);
+  } else {
+    // Use anon fscid because this will get thrown away when encoding
+    // as legacy MDSMap for legacy mons.
+    assert(fsm.filesystems.empty());
+    fs->fscid = FS_CLUSTER_ID_ANONYMOUS;
+  }
   fsm.filesystems[fs->fscid] = fs;
-
-  // ANONYMOUS is only for upgrades from legacy mdsmaps, we should
-  // have initialized next_filesystem_id such that it's never used here.
-  assert(fs->fscid != FS_CLUSTER_ID_ANONYMOUS);
 
   // Created first filesystem?  Set it as the one
   // for legacy clients to use
@@ -1507,6 +1513,13 @@ class FlagSetHandler : public FileSystemCommandHandler
         ss << "Invalid boolean value '" << flag_val << "'";
         return r;
       }
+
+      bool jewel = mon->get_quorum_features() && CEPH_FEATURE_SERVER_JEWEL;
+      if (flag_bool && !jewel) {
+        ss << "Multiple-filesystems are forbidden until all mons are updated";
+        return -EINVAL;
+      }
+
       fsmap.set_enable_multiple(flag_bool);
       return 0;
     } else {
