@@ -177,6 +177,11 @@ unittest_mon_pgmap_LDADD = $(LIBMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_mon_pgmap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_mon_pgmap
 
+unittest_mon_montypes_SOURCES = test/mon/test_mon_types.cc
+unittest_mon_montypes_LDADD = $(LIBMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_mon_montypes_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_mon_montypes
+
 endif # WITH_MON
 
 

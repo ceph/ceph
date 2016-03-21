@@ -228,7 +228,14 @@ private:
   set<int> quorum;       // current active set of monitors (if !starting)
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
   utime_t exited_quorum; // time detected as not in quorum; 0 if in
-  uint64_t quorum_features;  ///< intersection of quorum member feature bits
+  /**
+   * Intersection of quorum member's connection feature bits.
+   */
+  uint64_t quorum_con_features;
+  /**
+   * Intersection of quorum members mon-specific feature bits
+   */
+  mon_feature_t quorum_mon_features;
   bufferlist supported_commands_bl; // encoded MonCommands we support
   bufferlist classic_commands_bl; // encoded MonCommands supported by Dumpling
   set<int> classic_mons; // set of "classic" monitors; only valid on leader
@@ -607,11 +614,14 @@ public:
       q.push_back(monmap->get_name(*p));
     return q;
   }
-  uint64_t get_quorum_features() const {
-    return quorum_features;
+  uint64_t get_quorum_con_features() const {
+    return quorum_con_features;
   }
   uint64_t get_required_features() const {
     return required_features;
+  }
+  mon_feature_t get_required_mon_features() const {
+    return monmap->get_required_features();
   }
   void apply_quorum_to_compatset_features();
   void apply_compatset_features_to_quorum_requirements();
@@ -627,10 +637,13 @@ public:
   // end election (called by Elector)
   void win_election(epoch_t epoch, set<int>& q,
 		    uint64_t features,
+                    const mon_feature_t& mon_features,
 		    const MonCommand *cmdset, int cmdsize,
 		    const set<int> *classic_monitors);
   void lose_election(epoch_t epoch, set<int>& q, int l,
-		     uint64_t features); // end election (called by Elector)
+		     uint64_t features,
+                     const mon_feature_t& mon_features);
+  // end election (called by Elector)
   void finish_election();
 
   const bufferlist& get_supported_commands_bl() {
@@ -998,6 +1011,7 @@ public:
 #define CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC CompatSet::Feature(5, "new-style osdmap encoding")
 #define CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2 CompatSet::Feature(6, "support isa/lrc erasure code")
 #define CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3 CompatSet::Feature(7, "support shec erasure code")
+#define CEPH_MON_FEATURE_INCOMPAT_JEWEL CompatSet::Feature(8, "support monmap features")
 // make sure you add your feature to Monitor::get_supported_features
 
 long parse_pos_long(const char *s, ostream *pss = NULL);
