@@ -676,7 +676,7 @@ namespace rgw {
 	/* try external authenticators (ldap for now) */
 	rgw::LDAPHelper* ldh = rgwlib.get_ldh(); /* !nullptr */
 	RGWToken token{from_base64(key.id)};
-	if (ldh->auth(token.id, token.key) == 0) {
+	if (token.valid() && (ldh->auth(token.id, token.key) == 0)) {
 	  /* try to store user if it doesn't already exist */
 	  if (rgw_get_user_info_by_uid(store, token.id, user) < 0) {
 	    int ret = rgw_store_user_info(store, user, NULL, NULL, real_time(),
