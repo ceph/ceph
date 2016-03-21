@@ -628,8 +628,8 @@ BlueStore::Collection::Collection(BlueStore *ns, coll_t c)
     cid(c),
     lock("BlueStore::Collection::lock", true, false),
     exists(true),
-    onode_map(),
-    enode_set(g_conf->bluestore_onode_map_size)
+    enode_set(g_conf->bluestore_onode_map_size),
+    onode_map()
 {
 }
 
