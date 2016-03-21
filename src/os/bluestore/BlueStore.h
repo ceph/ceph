@@ -136,7 +136,8 @@ public:
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
     set<TransContext*> flush_txns;   ///< committing or wal txns
 
-    uint64_t tail_offset;
+    uint64_t tail_offset = 0;
+    uint64_t tail_txc_seq = 0;
     bufferlist tail_bl;
 
     Onode(const ghobject_t& o, const string& k)
@@ -842,12 +843,14 @@ private:
   int _do_write_overlays(TransContext *txc, CollectionRef& c, OnodeRef o,
 			 uint64_t offset, uint64_t length);
   void _do_read_all_overlays(bluestore_wal_op_t& wo);
-  void _pad_zeros(OnodeRef o, bufferlist *bl, uint64_t *offset, uint64_t *length,
+  void _pad_zeros(TransContext *txc,
+		  OnodeRef o, bufferlist *bl, uint64_t *offset, uint64_t *length,
 		  uint64_t block_size);
   void _pad_zeros_head(OnodeRef o, bufferlist *bl,
 		       uint64_t *offset, uint64_t *length,
 		       uint64_t block_size);
-  void _pad_zeros_tail(OnodeRef o, bufferlist *bl,
+  void _pad_zeros_tail(TransContext *txc,
+		       OnodeRef o, bufferlist *bl,
 		       uint64_t offset, uint64_t *length,
 		       uint64_t block_size);
   int _do_allocate(TransContext *txc,
