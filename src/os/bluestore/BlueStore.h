@@ -193,11 +193,11 @@ public:
 
     bool exists;
 
+    EnodeSet enode_set;      ///< open Enodes
+
     // cache onodes on a per-collection basis to avoid lock
     // contention.
     OnodeHashLRU onode_map;
-
-    EnodeSet enode_set;      ///< open Enodes
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
     EnodeRef get_enode(uint32_t hash);
