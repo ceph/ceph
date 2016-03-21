@@ -405,6 +405,28 @@ public:
       txc->oncommits.push_back(c);
       return false;
     }
+
+    /// if there is a wal on @seq, wait for it to apply
+    void wait_for_wal_on_seq(uint64_t seq) {
+      std::unique_lock<std::mutex> l(qlock);
+      restart:
+      for (OpSequencer::q_list_t::reverse_iterator p = q.rbegin();
+	   p != q.rend();
+	   ++p) {
+	if (p->seq == seq) {
+	  TransContext *txc = &(*p);
+	  if (txc->wal_txn) {
+	    while (txc->state < TransContext::STATE_WAL_CLEANUP) {
+	      txc->osr->qcond.wait(l);
+	      goto restart;  // txc may have gone away
+	    }
+	  }
+	  break;
+	}
+	if (p->seq < seq)
+	  break;
+      }
+    }
   };
 
   class WALWQ : public ThreadPool::WorkQueue<TransContext> {
