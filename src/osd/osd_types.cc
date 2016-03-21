@@ -3190,20 +3190,14 @@ ostream& operator<<(ostream& out, const pg_interval_t& i)
 // -- pg_query_t --
 
 void pg_query_t::encode(bufferlist &bl, uint64_t features) const {
-  if (features & CEPH_FEATURE_QUERY_T) {
-    ENCODE_START(3, 2, bl);
-    ::encode(type, bl);
-    ::encode(since, bl);
-    history.encode(bl);
-    ::encode(epoch_sent, bl);
-    ::encode(to, bl);
-    ::encode(from, bl);
-    ENCODE_FINISH(bl);
-  } else {
-    ::encode(type, bl);
-    ::encode(since, bl);
-    history.encode(bl);
-  }
+  ENCODE_START(3, 2, bl);
+  ::encode(type, bl);
+  ::encode(since, bl);
+  history.encode(bl);
+  ::encode(epoch_sent, bl);
+  ::encode(to, bl);
+  ::encode(from, bl);
+  ENCODE_FINISH(bl);
 }
 
 void pg_query_t::decode(bufferlist::iterator &bl) {
@@ -4068,28 +4062,6 @@ void object_copy_data_t::decode_classic(bufferlist::iterator& bl)
 
 void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
 {
-  if ((features & CEPH_FEATURE_OSD_OBJECT_DIGEST) == 0) {
-    ENCODE_START(4, 1, bl);
-    ::encode(size, bl);
-    ::encode(mtime, bl);
-    ::encode((__u32)0, bl);  // was category; no longer used
-    ::encode(attrs, bl);
-    ::encode(data, bl);
-    if (omap_data.length())
-      bl.append(omap_data);
-    else
-      ::encode((__u32)0, bl);
-    ::encode(cursor, bl);
-    ::encode(omap_header, bl);
-    ::encode(snaps, bl);
-    ::encode(snap_seq, bl);
-    ::encode(flags, bl);
-    ::encode(data_digest, bl);
-    ::encode(omap_digest, bl);
-    ENCODE_FINISH(bl);
-    return;
-  }
-
   ENCODE_START(7, 5, bl);
   ::encode(size, bl);
   ::encode(mtime, bl);
