@@ -120,6 +120,7 @@ noinst_HEADERS += \
 	librbd/image_watcher/NotifyLockOwner.h \
 	librbd/journal/Replay.h \
 	librbd/journal/Types.h \
+	librbd/journal/TypeTraits.h \
 	librbd/object_map/InvalidateRequest.h \
 	librbd/object_map/LockRequest.h \
 	librbd/object_map/Request.h \

@@ -7,12 +7,13 @@
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
-#include "librbd/Journal.h"
 #include "librbd/journal/Types.h"
+#include "librbd/journal/TypeTraits.h"
 #include <map>
 #include <vector>
 
 class Context;
+class SafeTimer;
 namespace journal { class Journaler; }
 namespace librbd { struct ImageCtx; }
 

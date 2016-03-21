@@ -8,7 +8,7 @@
 #include "include/rados/librados.hpp"
 #include "common/snap_types.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/Journal.h"
+#include "librbd/journal/TypeTraits.h"
 #include <map>
 #include <set>
 #include <string>

@@ -6,7 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
-#include "librbd/Journal.h"
+#include "librbd/journal/TypeTraits.h"
 #include <string>
 
 class Context;
@@ -15,6 +15,7 @@ class Mutex;
 class SafeTimer;
 namespace journal { class Journaler; }
 namespace librbd { class ImageCtx; }
+namespace librbd { namespace journal { struct MirrorPeerClientMeta; } }
 
 namespace rbd {
 namespace mirror {
