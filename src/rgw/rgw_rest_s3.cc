@@ -1584,7 +1584,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
 		store->ctx()->_conf->rgw_ldap_uri.empty()) {
 	RGWToken token{from_base64(s3_access_key)};
 	rgw::LDAPHelper *ldh = RGW_Auth_S3::get_ldap_ctx(store);
-	if (ldh->auth(token.id, token.key) != 0)
+	if ((! token.valid()) || ldh->auth(token.id, token.key) != 0)
 	  return -EACCES;
 
 	/* ok, succeeded, try to create shadow */
@@ -3700,7 +3700,7 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
     RGW_Auth_S3::init(store);
 
     RGWToken token{from_base64(auth_id)};
-    if (ldh->auth(token.id, token.key) != 0)
+    if ((! token.valid()) || ldh->auth(token.id, token.key) != 0)
       external_auth_result = -EACCES;
     else {
       /* ok, succeeded */
@@ -3708,9 +3708,10 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
       /* create local account, if none exists */
       s->user->user_id = token.id;
       s->user->display_name = token.id; // cn?
-      if (rgw_get_user_info_by_uid(store, s->user->user_id,
-				   *(s->user)) < 0) {
-	int ret = rgw_store_user_info(store, *(s->user), NULL, NULL, real_time(), true);
+      int ret = rgw_get_user_info_by_uid(store, s->user->user_id, *(s->user));
+      if (ret < 0) {
+	ret = rgw_store_user_info(store, *(s->user), NULL, NULL, real_time(),
+				  true);
 	if (ret < 0) {
 	  dout(10) << "NOTICE: failed to store new user's info: ret=" << ret
 		   << dendl;

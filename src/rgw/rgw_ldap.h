@@ -64,14 +64,18 @@ namespace rgw {
       filter += uid;
       filter += ")";
       char *attrs[] = { const_cast<char*>(dnattr.c_str()), nullptr };
-      LDAPMessage *answer, *entry;
+      LDAPMessage *answer = nullptr, *entry = nullptr;
       ret = ldap_search_s(ldap, searchdn.c_str(), LDAP_SCOPE_SUBTREE,
 			  filter.c_str(), attrs, 0, &answer);
       if (ret == LDAP_SUCCESS) {
 	entry = ldap_first_entry(ldap, answer);
-	char *dn = ldap_get_dn(ldap, entry);
-	ret = simple_bind(dn, pwd);
-	ldap_memfree(dn);
+	if (entry) {
+	  char *dn = ldap_get_dn(ldap, entry);
+	  ret = simple_bind(dn, pwd);
+	  ldap_memfree(dn);
+	} else {
+	  ret = LDAP_NO_SUCH_ATTRIBUTE; // fixup result
+	}
 	ldap_msgfree(answer);
       }
       return (ret == LDAP_SUCCESS) ? ret : -EACCES;
