@@ -158,10 +158,10 @@ function test_teardown() {
 # sleep intervals can be specified as **delays** and defaults
 # to:
 #
-#  0 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120
+#  0.1 0.2 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120
 #
-# This sequence is designed to not require a sleep time (0) if the
-# machine is fast enough and the daemon terminates in a fraction of a
+# This sequence is designed to run first a very short sleep time (0.1)
+# if the machine is fast enough and the daemon terminates in a fraction of a
 # second. The increasing sleep numbers should give plenty of time for
 # the daemon to die even on the slowest running machine. If a daemon
 # takes more than a few minutes to stop (the sum of all sleep times),
@@ -175,10 +175,9 @@ function test_teardown() {
 function kill_daemon() {
     local pid=$(cat $1)
     local send_signal=$2
-    local delays=${3:-0 0 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120}
+    local delays=${3:-0.1 0.2 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120}
     local exit_code=1
     for try in $delays ; do
-         sleep $try
          if kill -$send_signal $pid 2> /dev/null ; then
             exit_code=1
          else
@@ -186,8 +185,43 @@ function kill_daemon() {
             break
          fi
          send_signal=0
+         sleep $try
     done;
     return $exit_code
+}
+
+function test_kill_daemon() {
+    local dir=$1
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
+
+    name_prefix=osd
+    for pidfile in $(find $dir 2>/dev/null | grep $name_prefix'[^/]*\.pid') ; do
+        #
+        # sending signal 0 won't kill the daemon
+        # waiting just for one second instead of the default schedule
+        # allows us to quickly verify what happens when kill fails
+        # to stop the daemon (i.e. it must return false)
+        #
+        ! kill_daemon $pidfile 0 1 || return 1
+        #
+        # killing just the osd and verify the mon still is responsive
+        #
+        kill_daemon $pidfile TERM || return 1
+    done
+
+    ceph osd dump | grep "osd.0 down" || return 1
+
+    for pidfile in $(find $dir -name "*.pid" 2>/dev/null) ; do
+        #
+        # kill the mon and verify it cannot be reached
+        #
+        kill_daemon $pidfile TERM || return 1
+        ! ceph --connect-timeout 60 status || return 1
+    done
+
+    teardown $dir || return 1
 }
 
 ##
