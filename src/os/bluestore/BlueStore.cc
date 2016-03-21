@@ -6057,6 +6057,8 @@ int BlueStore::_omap_clear(TransContext *txc,
   int r = 0;
   if (o->onode.omap_head != 0) {
     _do_omap_clear(txc, o->onode.omap_head);
+    o->onode.omap_head = 0;
+    txc->write_onode(o);
   }
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
