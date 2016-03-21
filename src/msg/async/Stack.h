@@ -265,7 +265,6 @@ class NetworkStack {
   static Worker* create_worker(
           CephContext *c, const string &t, unsigned i);
   virtual bool support_zero_copy_read() const { return false; }
-  virtual bool accept_require_same_thread() const { return false; }
   virtual bool support_local_listen_table() const { return false; }
 
   void start();

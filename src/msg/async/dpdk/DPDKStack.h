@@ -231,7 +231,6 @@ class DPDKStack : public NetworkStack {
  public:
   explicit DPDKStack(CephContext *cct, const string &t): NetworkStack(cct, t) {}
   virtual bool support_zero_copy_read() const override { return true; }
-  virtual bool accept_require_same_thread() const { return true; }
   virtual bool support_local_listen_table() const { return true; }
 
   virtual void spawn_workers(std::vector<std::function<void ()>> &threads) override;
