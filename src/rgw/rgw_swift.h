@@ -25,7 +25,8 @@ struct rgw_swift_auth_info {
   rgw_swift_auth_info()
     : status(401), /* start with access denied */
       ttl(0),
-      is_admin(false) {
+      is_admin(false),
+      perm_mask(0) {
   }
 };
 
