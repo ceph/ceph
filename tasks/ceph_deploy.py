@@ -368,8 +368,7 @@ def build_ceph_cluster(ctx, config):
 
             if mds_nodes:
                 log.info('Configuring CephFS...')
-                ceph_fs = Filesystem(
-                    ctx, admin_remote=clients.remotes.keys()[0])
+                ceph_fs = Filesystem(ctx)
                 if not ceph_fs.legacy_configured():
                     ceph_fs.create()
         elif not config.get('only_mon'):
