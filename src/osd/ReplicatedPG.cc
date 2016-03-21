@@ -4058,6 +4058,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p, ctx->current_osd_subop_num++) {
     OSDOp& osd_op = *p;
     ceph_osd_op& op = osd_op.op;
+    ctx->can_recover_partial = false;
 
     // TODO: check endianness (__le32 vs uint32_t, etc.)
     // The fields in ceph_osd_op are little-endian (according to the definition in rados.h),
@@ -4901,6 +4902,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_write;
       { // write
         __u32 seq = oi.truncate_seq;
+        if (get_min_peer_features() & CEPH_OSD_PARTIAL_RECOVERY)
+          ctx->can_recover_partial = true;
+        else
+          ctx->can_recover_partial = false;
 	tracepoint(osd, do_osd_op_pre_write, soid.oid.name.c_str(), soid.snap.val, oi.size, seq, op.extent.offset, op.extent.length, op.extent.truncate_size, op.extent.truncate_seq);
 	if (op.extent.length != osd_op.indata.length()) {
 	  result = -EINVAL;
@@ -4947,6 +4952,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  if (obs.exists && !oi.is_whiteout()) {
 	    dout(10) << " truncate_seq " << op.extent.truncate_seq << " > current " << seq
 		     << ", truncating to " << op.extent.truncate_size << dendl;
+        ctx->can_recover_partial = false;
 	    t->truncate(soid, op.extent.truncate_size);
 	    oi.truncate_seq = op.extent.truncate_seq;
 	    oi.truncate_size = op.extent.truncate_size;
@@ -4966,6 +4972,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (result < 0)
 	  break;
 	if (pool.info.require_rollback()) {
+      ctx->can_recover_partial = false;
 	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	} else {
 	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
@@ -6724,6 +6731,10 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 				    ctx->obs->oi.version,
 				    ctx->user_at_version, ctx->reqid,
 				    ctx->mtime));
+  ctx->log.back().can_recover_partial = ctx->can_recover_partial;
+  if (ctx->can_recover_partial)
+    ctx->log.back().dirty_extents.insert(ctx->modified_ranges);
+
   if (soid.snap < CEPH_NOSNAP) {
     switch (log_op_type) {
     case pg_log_entry_t::MODIFY:

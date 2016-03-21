@@ -3431,7 +3431,7 @@ void pg_log_entry_t::decode_with_checksum(bufferlist::iterator& p)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(10, 4, bl);
+  ENCODE_START(11, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -3456,12 +3456,14 @@ void pg_log_entry_t::encode(bufferlist &bl) const
   ::encode(user_version, bl);
   ::encode(mod_desc, bl);
   ::encode(extra_reqids, bl);
+  ::encode(can_recover_partial, bl);
+  ::encode(dirty_extents, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(10, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(11, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -3510,6 +3512,12 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
     mod_desc.mark_unrollbackable();
   if (struct_v >= 10)
     ::decode(extra_reqids, bl);
+  if (struct_v >= 11) {
+    ::decode(can_recover_partial, bl);
+    ::decode(dirty_extents, bl);
+  } else {
+    can_recover_partial = false;
+  }
 
   DECODE_FINISH(bl);
 }
@@ -3566,7 +3574,8 @@ void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
 ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 {
   out << e.version << " (" << e.prior_version << ") "
-      << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime;
+      << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime
+      << " partial flag=" << e.can_recover_partial << " dirty_extents: " << e.dirty_extents;
   if (e.snaps.length()) {
     vector<snapid_t> snaps;
     bufferlist c = e.snaps;
@@ -3767,17 +3776,38 @@ void pg_missing_t::resort(bool sort_bitwise)
   }
 }
 
-void pg_missing_t::encode(bufferlist &bl) const
+void pg_missing_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(3, 2, bl);
+  if ((features & CEPH_OSD_PARTIAL_RECOVERY) == 0) {
+    ENCODE_START(3, 2, bl);
+    map<hobject_t, old_item, hobject_t::ComparatorWithDefault> tmp;
+    for (map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator i = missing.begin();
+        i != missing.end(); ++i) {
+      tmp[i->first] = old_item(i->second.need, i->second.have);
+    }
+    ::encode(tmp, bl);
+    ENCODE_FINISH(bl);
+    return;
+  }
+  ENCODE_START(4, 2, bl);
   ::encode(missing, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
-  ::decode(missing, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+  if (struct_v <= 3) {
+    map<hobject_t, old_item, hobject_t::ComparatorWithDefault> tmp;
+    ::decode(tmp, bl);
+    // copy old item style to new style
+    for (map<hobject_t, old_item, hobject_t::ComparatorWithDefault>::iterator i = tmp.begin();
+        i != tmp.end(); ++i) {
+      missing[i->first] = item(i->second.need, i->second.have);
+    }
+  } else {
+    ::decode(missing, bl);
+  }
   DECODE_FINISH(bl);
 
   if (struct_v < 3) {
@@ -3895,20 +3925,23 @@ void pg_missing_t::add_next_event(const pg_log_entry_t& e)
       // new object.
       if (is_missing_divergent_item) {  // use iterator
         rmissing.erase((missing_it->second).need.version);
-        missing_it->second = item(e.version, eversion_t());  // .have = nil
-      } else  // create new element in missing map
-        missing[e.soid] = item(e.version, eversion_t());     // .have = nil
+        (missing_it->second).update(e);  // .have = nil
+        (missing_it->second).have = eversion_t();
+      } else { // create new element in missing map
+        missing[e.soid] = item(e);     // .have = nil
+        missing[e.soid].have = eversion_t();
+      }
     } else if (is_missing_divergent_item) {
       // already missing (prior).
       rmissing.erase((missing_it->second).need.version);
-      (missing_it->second).need = e.version;  // leave .have unchanged.
+      (missing_it->second).update(e);  // leave .have unchanged.
     } else if (e.is_backlog()) {
       // May not have prior version
       assert(0 == "these don't exist anymore");
     } else {
       // not missing, we must have prior_version (if any)
       assert(!is_missing_divergent_item);
-      missing[e.soid] = item(e.version, e.prior_version);
+      missing[e.soid] = item(e);
     }
     rmissing[e.version.version] = e.soid;
   } else
@@ -3917,9 +3950,11 @@ void pg_missing_t::add_next_event(const pg_log_entry_t& e)
 
 void pg_missing_t::revise_need(hobject_t oid, eversion_t need)
 {
-  if (missing.count(oid)) {
-    rmissing.erase(missing[oid].need.version);
-    missing[oid].need = need;            // no not adjust .have
+  std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
+  if (p != missing.end()) {
+    rmissing.erase(p->second.need.version);
+    p->second.need = need;            // no not adjust .have
+    p->second.can_recover_partial = false;
   } else {
     missing[oid] = item(need, eversion_t());
   }
@@ -3928,8 +3963,11 @@ void pg_missing_t::revise_need(hobject_t oid, eversion_t need)
 
 void pg_missing_t::revise_have(hobject_t oid, eversion_t have)
 {
-  if (missing.count(oid)) {
-    missing[oid].have = have;
+  std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
+  if (p != missing.end()) {
+    (p->second).have = have;
+    (p->second).can_recover_partial = false;
+    (p->second).dirty_extents.clear();
   }
 }
 
@@ -4963,7 +5001,7 @@ void ObjectRecoveryProgress::dump(Formatter *f) const
 
 void ObjectRecoveryInfo::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
   ::encode(size, bl);
@@ -4971,13 +5009,14 @@ void ObjectRecoveryInfo::encode(bufferlist &bl) const
   ::encode(ss, bl);
   ::encode(copy_subset, bl);
   ::encode(clone_subset, bl);
+  ::encode(can_recover_partial, bl);
   ENCODE_FINISH(bl);
 }
 
 void ObjectRecoveryInfo::decode(bufferlist::iterator &bl,
 				int64_t pool)
 {
-  DECODE_START(2, bl);
+  DECODE_START(3, bl);
   ::decode(soid, bl);
   ::decode(version, bl);
   ::decode(size, bl);
@@ -4985,6 +5024,8 @@ void ObjectRecoveryInfo::decode(bufferlist::iterator &bl,
   ::decode(ss, bl);
   ::decode(copy_subset, bl);
   ::decode(clone_subset, bl);
+  if (struct_v > 2)
+    ::decode(can_recover_partial, bl);
   DECODE_FINISH(bl);
 
   if (struct_v < 2) {

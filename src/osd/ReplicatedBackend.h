@@ -307,12 +307,13 @@ private:
 		 interval_set<uint64_t> &data_subset,
 		 map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets,
 		 PushOp *op,
-                 bool cache = false);
+                 bool cache = false, bool can_recover_partial = false);
   void calc_head_subsets(ObjectContextRef obc, SnapSet& snapset, const hobject_t& head,
 			 const pg_missing_t& missing,
 			 const hobject_t &last_backfill,
 			 interval_set<uint64_t>& data_subset,
-			 map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets);
+			 map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets,
+             bool& can_recover_partial);
   ObjectRecoveryInfo recalc_subsets(
     const ObjectRecoveryInfo& recovery_info,
     SnapSetContext *ssc
