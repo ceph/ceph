@@ -2388,6 +2388,12 @@ public:
   virtual void set_fsid(uuid_d u) = 0;
   virtual uuid_d get_fsid() = 0;
 
+  /**
+  * Estimates additional disk space used by the specified amount of objects and caused by file allocation granularity and metadata store
+  * - num objects - total (including witeouts) object count to measure used space for.
+  */
+  virtual uint64_t estimate_objects_overhead(uint64_t num_objects) = 0;
+
   // DEBUG
   virtual void inject_data_error(const ghobject_t &oid) {}
   virtual void inject_mdata_error(const ghobject_t &oid) {}

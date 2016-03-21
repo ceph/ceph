@@ -5685,6 +5685,12 @@ void FileStore::set_xattr_limits_via_conf()
     m_filestore_max_inline_xattrs = fs_xattrs;
 }
 
+uint64_t FileStore::estimate_objects_overhead(uint64_t num_objects)
+{
+  uint64_t res = num_objects * blk_size / 2; //assumes that each object uses ( in average ) additional 1/2 block due to FS allocation granularity.
+  return res;
+}
+
 // -- FSSuperblock --
 
 void FSSuperblock::encode(bufferlist &bl) const
