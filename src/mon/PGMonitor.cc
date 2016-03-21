@@ -1159,27 +1159,35 @@ bool PGMonitor::map_pg_creates()
         up_primary != s->up_primary ||
         acting !=  s->acting ||
         acting_primary != s->acting_primary) {
-      dout(20) << __func__ << "  " << pgid << " "
-               << " acting_primary: " << s->acting_primary
-               << " -> " << acting_primary
-               << " acting: " << s->acting << " -> " << acting
-               << " up_primary: " << s->up_primary << " -> " << up_primary
-               << " up: " << s->up << " -> " << up
-               << dendl;
-
       pg_stat_t *ns = &pending_inc.pg_stat_updates[pgid];
-      *ns = *s;
+      if (osdmap->get_epoch() > ns->reported_epoch) {
+	dout(20) << __func__ << "  " << pgid << " "
+		 << " acting_primary: " << s->acting_primary
+		 << " -> " << acting_primary
+		 << " acting: " << s->acting << " -> " << acting
+		 << " up_primary: " << s->up_primary << " -> " << up_primary
+		 << " up: " << s->up << " -> " << up
+		 << dendl;
 
-      // note epoch if the target of the create message changed
-      if (acting_primary != ns->acting_primary)
-	ns->mapping_epoch = osdmap->get_epoch();
+	// only initialize if it wasn't already a pending update
+	if (ns->reported_epoch == 0)
+	  *ns = *s;
 
-      ns->up = up;
-      ns->up_primary = up_primary;
-      ns->acting = acting;
-      ns->acting_primary = acting_primary;
+	// note epoch if the target of the create message changed
+	if (acting_primary != ns->acting_primary)
+	  ns->mapping_epoch = osdmap->get_epoch();
 
-      ++changed;
+	ns->up = up;
+	ns->up_primary = up_primary;
+	ns->acting = acting;
+	ns->acting_primary = acting_primary;
+
+	++changed;
+      } else {
+	dout(20) << __func__ << "  " << pgid << " has pending update from newer"
+		 << " epoch " << ns->reported_epoch
+		 << dendl;
+      }
     }
   }
   if (changed) {
