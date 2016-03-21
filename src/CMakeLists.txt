@@ -1387,7 +1387,7 @@ if(${WITH_RADOSGW})
   add_library(rgw_a STATIC ${rgw_a_srcs})
   target_link_libraries(rgw_a librados cls_rgw_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
-    cls_replica_log_client cls_user_client curl global expat)
+    cls_replica_log_client cls_user_client curl global expat ${OPENLDAP_LIBS})
 
   set(radosgw_srcs
     rgw/rgw_fcgi_process.cc
@@ -1441,7 +1441,7 @@ if(${WITH_RADOSGW})
     cls_rgw_client cls_lock_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client
     cls_version_client cls_replica_log_client cls_user_client
-    curl expat global fcgi resolv ${OPENSSL_LIBRARIES} ${BLKID_LIBRARIES} ${OPENLDAP_LIBS}
+    curl expat global fcgi resolv ${OPENSSL_LIBRARIES} ${BLKID_LIBRARIES}
     ${ALLOC_LIBS})
   install(TARGETS radosgw DESTINATION bin)
 
