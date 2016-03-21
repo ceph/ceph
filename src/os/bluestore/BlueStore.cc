@@ -4943,6 +4943,7 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
 }
 
 void BlueStore::_pad_zeros(
+  TransContext *txc,
   OnodeRef o,
   bufferlist *bl, uint64_t *offset, uint64_t *length,
   uint64_t block_size)
@@ -4991,6 +4992,7 @@ void BlueStore::_pad_zeros(
       o->tail_bl.clear();
       o->tail_bl.append(tail, 0, back_copy);
       o->tail_offset = end - back_copy;
+      o->tail_txc_seq = txc->seq;
       dout(20) << __func__ << " cached "<< back_copy << " of tail block at "
 	       << o->tail_offset << dendl;
     }
@@ -5037,6 +5039,7 @@ void BlueStore::_pad_zeros_head(
 }
 
 void BlueStore::_pad_zeros_tail(
+  TransContext *txc,
   OnodeRef o,
   bufferlist *bl, uint64_t offset, uint64_t *length,
   uint64_t block_size)
@@ -5073,6 +5076,7 @@ void BlueStore::_pad_zeros_tail(
     o->tail_bl.clear();
     o->tail_bl.append(tail, 0, back_copy);
     o->tail_offset = end - back_copy;
+    o->tail_txc_seq = txc->seq;
     dout(20) << __func__ << " cached "<< back_copy << " of tail block at "
 	     << o->tail_offset << dendl;
   }
@@ -5496,7 +5500,7 @@ int BlueStore::_do_write(
 	offset >= o->onode.size &&                                  // past eof +
 	(offset / block_size != (o->onode.size - 1) / block_size)) {// diff block
       dout(20) << __func__ << " append" << dendl;
-      _pad_zeros(o, &bl, &offset, &length, block_size);
+      _pad_zeros(txc, o, &bl, &offset, &length, block_size);
       assert(offset % block_size == 0);
       assert(length % block_size == 0);
       uint64_t x_off = offset - bp->first;
@@ -5565,7 +5569,7 @@ int BlueStore::_do_write(
 	     offset == bp->first);
       bp->second.clear_flag(bluestore_extent_t::FLAG_COW_HEAD);
       bp->second.clear_flag(bluestore_extent_t::FLAG_UNWRITTEN);
-      _pad_zeros(o, &bl, &offset, &length, block_size);
+      _pad_zeros(txc, o, &bl, &offset, &length, block_size);
       uint64_t x_off = offset - bp->first;
       dout(20) << __func__ << " write " << offset << "~" << length
 	       << " x_off " << x_off << dendl;
@@ -5609,7 +5613,7 @@ int BlueStore::_do_write(
 	_pad_zeros_head(o, &bl, &offset, &length, block_size);
       }
       if (((offset + length) & ~block_mask) != 0 && !cow_rmw_tail) {
-	_pad_zeros_tail(o, &bl, offset, &length, block_size);
+	_pad_zeros_tail(txc, o, &bl, offset, &length, block_size);
       }
       if ((offset & ~block_mask) == 0 && (length & ~block_mask) == 0) {
 	uint64_t x_off = offset - bp->first;
@@ -5643,7 +5647,7 @@ int BlueStore::_do_write(
     } else if (((offset + length) & ~block_mask) &&
 	       offset + length > o->onode.size) {
       dout(20) << __func__ << " past eof, padding out tail block" << dendl;
-      _pad_zeros_tail(o, &bl, offset, &length, block_size);
+      _pad_zeros_tail(txc, o, &bl, offset, &length, block_size);
     }
     bp->second.clear_flag(bluestore_extent_t::FLAG_COW_HEAD);
     bp->second.clear_flag(bluestore_extent_t::FLAG_COW_TAIL);
