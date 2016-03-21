@@ -213,21 +213,43 @@ void FSMap::get_health(list<pair<health_status_t,string> >& summary,
 
 void FSMap::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(6, 6, bl);
-  ::encode(epoch, bl);
-  ::encode(next_filesystem_id, bl);
-  ::encode(legacy_client_fscid, bl);
-  ::encode(compat, bl);
-  ::encode(enable_multiple, bl);
-  std::vector<Filesystem> fs_list;
-  for (auto i : filesystems) {
-    fs_list.push_back(*(i.second));
+  if (features & CEPH_FEATURE_SERVER_JEWEL) {
+    ENCODE_START(6, 6, bl);
+    ::encode(epoch, bl);
+    ::encode(next_filesystem_id, bl);
+    ::encode(legacy_client_fscid, bl);
+    ::encode(compat, bl);
+    ::encode(enable_multiple, bl);
+    std::vector<Filesystem> fs_list;
+    for (auto i : filesystems) {
+      fs_list.push_back(*(i.second));
+    }
+    ::encode(fs_list, bl);
+    ::encode(mds_roles, bl);
+    ::encode(standby_daemons, bl, features);
+    ::encode(standby_epochs, bl);
+    ENCODE_FINISH(bl);
+  } else {
+    if (filesystems.empty()) {
+      MDSMap disabled_map;
+      disabled_map.epoch = epoch;
+      disabled_map.encode(bl, features);
+    } else {
+      // MDSMonitor should never have created multiple filesystems
+      // until the quorum features indicated Jewel
+      assert(filesystems.size() == 1);
+      auto fs = filesystems.begin()->second;
+
+      // Take the MDSMap for the enabled filesystem, and populated its
+      // mds_info with the standbys to get a pre-jewel-style mon MDSMap.
+      MDSMap full_mdsmap = fs->mds_map;
+      full_mdsmap.epoch = epoch;
+      for (const auto p : standby_daemons) {
+        full_mdsmap.mds_info[p.first] = p.second;
+      }
+      full_mdsmap.encode(bl, features);
+    }
   }
-  ::encode(fs_list, bl);
-  ::encode(mds_roles, bl);
-  ::encode(standby_daemons, bl, features);
-  ::encode(standby_epochs, bl);
-  ENCODE_FINISH(bl);
 }
 
 void FSMap::decode(bufferlist::iterator& p)
