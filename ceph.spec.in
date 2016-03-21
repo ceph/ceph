@@ -151,9 +151,7 @@ BuildRequires:	libbz2-devel
 %if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel
 %endif
-%if 0%{with tests}
 BuildRequires:  btrfsprogs
-%endif
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
@@ -166,9 +164,7 @@ BuildRequires:	python-Cython
 %if 0%{?_with_systemd}
 Requires:	systemd
 %endif
-%if 0%{with tests}
 BuildRequires:	btrfs-progs
-%endif
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
