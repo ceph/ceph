@@ -588,6 +588,8 @@ public:
     fsid = u;
   }
   uuid_d get_fsid() { return fsid; }
+  
+  uint64_t estimate_objects_overhead(uint64_t num_objects);
 
   // DEBUG read error injection, an object is removed from both on delete()
   Mutex read_error_lock;
