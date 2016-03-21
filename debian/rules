@@ -134,6 +134,8 @@ binary-arch: build install
 	install -m0644 src/upstart/ceph-mds.conf debian/ceph-mds/etc/init
 	install -d -m0755 debian/radosgw/etc/init
 	install -m0644 src/upstart/radosgw*.conf debian/radosgw/etc/init
+	install -d -m0755 debian/rbd-mirror/etc/init
+	install -m0644 src/upstart/ceph-rbd-mirror*.conf debian/rbd-mirror/etc/init
 	# install the systemd stuff manually since we have funny service names
 	install -d -m0755 debian/ceph-common/lib/systemd/system
 	install -m0644 systemd/ceph.target debian/ceph-common/lib/systemd/system
@@ -161,6 +163,10 @@ binary-arch: build install
 	install -d -m0755 debian/radosgw/lib/systemd/system
 	install -m0644 systemd/ceph-radosgw@.service debian/radosgw/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/radosgw/lib/systemd/system/ceph-radosgw@.service
+
+	install -d -m0755 debian/rbd-mirror/lib/systemd/system
+	install -m0644 systemd/ceph-rbd-mirror@.service debian/rbd-mirror/lib/systemd/system
+	sed -i s./etc/sysconfig/./etc/default/.g debian/rbd-mirror/lib/systemd/system/ceph-rbd-mirror@.service
 
 	dh_installman -a
 	dh_lintian -a
