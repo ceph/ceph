@@ -5049,10 +5049,9 @@ int BlueStore::_do_allocate(
     if (length >= head)
       length -= head;
   }
-  if ((offset + length) % min_alloc_size) {
-    tail = (offset + length) % min_alloc_size;
-    if (length >= tail)
-      length -= tail;
+  if (length % min_alloc_size) {
+    tail = length % min_alloc_size;
+    length -= tail;
   }
 
   map<uint64_t, bluestore_extent_t>::iterator bp;
