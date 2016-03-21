@@ -167,10 +167,14 @@ done:
     s->cio->print("%s: %s\r\n", riter->first.c_str(), riter->second.c_str());
   }
 
-  if (!content_type)
-    content_type = "binary/octet-stream";
+  if (ret == ERR_NOT_MODIFIED) {
+      end_header(s, this);
+  } else {
+      if (!content_type)
+          content_type = "binary/octet-stream";
 
-  end_header(s, this, content_type);
+      end_header(s, this, content_type);
+  }
 
   if (metadata_bl.length()) {
     s->cio->write(metadata_bl.c_str(), metadata_bl.length());
