@@ -75,8 +75,13 @@ function corrupt_and_repair_two() {
     #
     # 1) remove the corresponding file from the OSDs
     #
-    objectstore_tool $dir $first SOMETHING remove || return 1
-    objectstore_tool $dir $second SOMETHING remove || return 1
+    pids=""
+    run_in_background pids objectstore_tool $dir $first SOMETHING remove
+    run_in_background pids objectstore_tool $dir $second SOMETHING remove
+    wait_background pids
+    return_code=$?
+    if [ $return_code -ne 0 ]; then return $return_code; fi
+
     #
     # 2) repair the PG
     #
@@ -85,8 +90,13 @@ function corrupt_and_repair_two() {
     #
     # 3) The files must be back
     #
-    objectstore_tool $dir $first SOMETHING list-attrs || return 1
-    objectstore_tool $dir $second SOMETHING list-attrs || return 1
+    pids=""
+    run_in_background pids objectstore_tool $dir $first SOMETHING list-attrs
+    run_in_background pids objectstore_tool $dir $second SOMETHING list-attrs
+    wait_background pids
+    return_code=$?
+    if [ $return_code -ne 0 ]; then return $return_code; fi
+
     rados --pool $poolname get SOMETHING $dir/COPY || return 1
     diff $dir/ORIGINAL $dir/COPY || return 1
 }
@@ -258,9 +268,14 @@ function TEST_unfound_erasure_coded() {
     #
     # 1) remove the corresponding file from the OSDs
     #
-    objectstore_tool $dir $not_primary_first SOMETHING remove || return 1
-    objectstore_tool $dir $not_primary_second SOMETHING remove || return 1
-    objectstore_tool $dir $not_primary_third SOMETHING remove || return 1
+    pids=""
+    run_in_background pids objectstore_tool $dir $not_primary_first SOMETHING remove
+    run_in_background pids objectstore_tool $dir $not_primary_second SOMETHING remove
+    run_in_background pids objectstore_tool $dir $not_primary_third SOMETHING remove
+    wait_background pids
+    return_code=$?
+    if [ $return_code -ne 0 ]; then return $return_code; fi
+
     #
     # 2) repair the PG
     #
@@ -299,14 +314,26 @@ function TEST_list_missing_erasure_coded() {
     # Put an object and remove the two shards (including primary)
     add_something $dir $poolname OBJ0 || return 1
     local -a osds=($(get_osds $poolname OBJ0))
-    objectstore_tool $dir ${osds[0]} OBJ0 remove || return 1
-    objectstore_tool $dir ${osds[1]} OBJ0 remove || return 1
+
+    pids=""
+    run_in_background pids objectstore_tool $dir ${osds[0]} OBJ0 remove
+    run_in_background pids objectstore_tool $dir ${osds[1]} OBJ0 remove
+    wait_background pids
+    return_code=$?
+    if [ $return_code -ne 0 ]; then return $return_code; fi
+
 
     # Put another object and remove two shards (excluding primary)
     add_something $dir $poolname OBJ1 || return 1
     local -a osds=($(get_osds $poolname OBJ1))
-    objectstore_tool $dir ${osds[1]} OBJ1 remove || return 1
-    objectstore_tool $dir ${osds[2]} OBJ1 remove || return 1
+
+    pids=""
+    run_in_background pids objectstore_tool $dir ${osds[1]} OBJ1 remove
+    run_in_background pids objectstore_tool $dir ${osds[2]} OBJ1 remove
+    wait_background pids
+    return_code=$?
+    if [ $return_code -ne 0 ]; then return $return_code; fi
+
 
     # Get get - both objects should in the same PG
     local pg=$(get_pg $poolname OBJ0)
