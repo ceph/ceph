@@ -1315,7 +1315,7 @@ int RGWListBuckets::verify_permission()
 
 int RGWGetUsage::verify_permission()
 {
-  if (!rgw_user_is_authenticated(*s->user))
+  if (!rgw_user_is_authenticated(s->auth_user))
     return -EACCES;
   return 0;
 }

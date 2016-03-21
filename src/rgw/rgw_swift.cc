@@ -415,7 +415,7 @@ static void rgw_set_keystone_token_auth_info(const KeystoneToken& token,
   /* Check whether the user has an admin status. */
   bool is_admin = false;
   for (const auto admin_role : accepted_admin_roles) {
-    if (token.user.has_role(admin_role)) {
+    if (token.has_role(admin_role)) {
       is_admin = true;
       break;
     }
