@@ -1084,10 +1084,10 @@ function test_mon_osd()
   ceph osd down 0
   ceph osd dump | grep 'osd.0 down'
   ceph osd unset noup
-  for ((i=0; i < 100; i++)); do
+  for ((i=0; i < 1000; i++)); do
     if ! ceph osd dump | grep 'osd.0 up'; then
       echo "waiting for osd.0 to come back up"
-      sleep 10
+      sleep 1
     else
       break
     fi
