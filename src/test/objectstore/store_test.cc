@@ -647,6 +647,82 @@ TEST_P(StoreTest, SmallSkipFront) {
   }
 }
 
+TEST_P(StoreTest, AppendWalVsTailCache) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t a(hobject_t(sobject_t("fooo", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(&osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  unsigned min_alloc = g_conf->bluestore_min_alloc_size;
+  g_conf->set_val("bluestore_inject_wal_apply_delay", "1.0");
+  g_ceph_context->_conf->apply_changes(NULL);
+  unsigned size = min_alloc / 3;
+  bufferptr bpa(size);
+  memset(bpa.c_str(), 1, bpa.length());
+  bufferlist bla;
+  bla.append(bpa);
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, a, 0, bla.length(), bla, 0);
+    r = store->apply_transaction(&osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // force cached tail to clear ...
+  {
+    store->umount();
+    int r = store->mount();
+    ASSERT_EQ(0, r);
+  }
+
+  bufferptr bpb(size);
+  memset(bpb.c_str(), 2, bpb.length());
+  bufferlist blb;
+  blb.append(bpb);
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, a, bla.length(), blb.length(), blb, 0);
+    r = store->apply_transaction(&osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferptr bpc(size);
+  memset(bpc.c_str(), 3, bpc.length());
+  bufferlist blc;
+  blc.append(bpc);
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, a, bla.length() + blb.length(), blc.length(), blc, 0);
+    r = store->apply_transaction(&osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist final;
+  final.append(bla);
+  final.append(blb);
+  final.append(blc);
+  bufferlist actual;
+  {
+    ASSERT_EQ((int)final.length(),
+	      store->read(cid, a, 0, final.length(), actual));
+    ASSERT_TRUE(final.contents_equal(actual));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, a);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(&osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  g_conf->set_val("bluestore_inject_wal_apply_delay", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
+}
+
 TEST_P(StoreTest, SmallSequentialUnaligned) {
   ObjectStore::Sequencer osr("test");
   int r;
