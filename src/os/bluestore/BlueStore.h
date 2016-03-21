@@ -312,6 +312,7 @@ public:
 
     CollectionRef first_collection;  ///< first referenced collection
 
+    uint64_t seq = 0;
     utime_t start;
 
     explicit TransContext(OpSequencer *o)
@@ -367,6 +368,8 @@ public:
     std::mutex wal_apply_mutex;
     std::unique_lock<std::mutex> wal_apply_lock;
 
+    uint64_t last_seq = 0;
+
     OpSequencer()
 	//set the qlock to to PTHREAD_MUTEX_RECURSIVE mode
       : parent(NULL),
@@ -378,6 +381,7 @@ public:
 
     void queue_new(TransContext *txc) {
       std::lock_guard<std::mutex> l(qlock);
+      txc->seq = ++last_seq;
       q.push_back(*txc);
     }
 
