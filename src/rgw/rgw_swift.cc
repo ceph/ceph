@@ -476,7 +476,7 @@ int RGWSwift::load_acct_info(RGWRados * const store,
    * suitable tenantized users.
    */
   if (info.user.tenant.empty()) {
-    const rgw_user uid = !account_name.empty() ? account_name : info.user;
+    rgw_user uid = !account_name.empty() ? account_name : info.user;
 
     if (rgw_get_user_info_by_uid(store, uid, user_info) < 0) {
       uid.tenant.clear();

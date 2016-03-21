@@ -14,6 +14,7 @@ class RGWRados;
 class KeystoneToken;
 
 struct rgw_swift_auth_info {
+  int status;
   string auth_groups;
   rgw_user user;
   string display_name;
