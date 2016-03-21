@@ -73,13 +73,6 @@ public:
   void encode_payload(uint64_t features) {
     ::encode(session_mon_tid, payload);
     ::encode(dest, payload);
-    if ((features & CEPH_FEATURE_MON_NULLROUTE) == 0) {
-      header.version = 1;
-      header.compat_version = 1;
-      assert(msg);
-      encode_message(msg, features, payload);
-      return;
-    }
     bool m = msg ? true : false;
     ::encode(m, payload);
     if (msg)

@@ -90,10 +90,7 @@ public:
   }
 
   void encode_payload(uint64_t features) {
-    if ((features & CEPH_FEATURE_MONCLOCKCHECK) == 0)
-      header.version = 0;
-    else
-      header.version = HEAD_VERSION;
+    header.version = HEAD_VERSION;
     ::encode(epoch, payload);
     ::encode(op, payload);
     ::encode(first_committed, payload);
@@ -102,8 +99,7 @@ public:
     ::encode(pn, payload);
     ::encode(uncommitted_pn, payload);
     ::encode(lease_timestamp, payload);
-    if (features & CEPH_FEATURE_MONCLOCKCHECK)
-      ::encode(sent_timestamp, payload);
+    ::encode(sent_timestamp, payload);
     ::encode(latest_version, payload);
     ::encode(latest_value, payload);
     ::encode(values, payload);
