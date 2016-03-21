@@ -639,7 +639,7 @@ namespace crimson {
 
 
       template<typename K>
-      void pull_request_ehlp(PullReq& result,
+      void pull_request_help(PullReq& result,
 			     Heap<EntryRef, K>& heap,
 			     PhaseType phase) {
 	EntryRef& top = heap.top();
