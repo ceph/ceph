@@ -8,6 +8,8 @@
 
 #define DEBUGGER
 
+#define OLD_Q 0
+
 
 #pragma once
 
@@ -186,18 +188,25 @@ namespace crimson {
 
       class ClientEntry; // forward decl for friend decls
 
-      template<double RequestTag::*tag_field,bool use_ready=false>
-      struct ClientCompare; // forward decl for friend decls
+      enum class ReadyOption {ignore, lowers, raises};
 
+      template<double RequestTag::*tag_field,ReadyOption ready_opt=ReadyOption::ignore>
+
+      struct ClientCompare; // forward decl for friend decls
 
       class ClientReq {
 	friend ClientEntry;
-	friend ClientCompare<&RequestTag::reservation,false>;
-	friend ClientCompare<&RequestTag::limit,false>;
-	friend ClientCompare<&RequestTag::proportion,false>;
-	friend ClientCompare<&RequestTag::reservation,true>;
-	friend ClientCompare<&RequestTag::limit,true>;
-	friend ClientCompare<&RequestTag::proportion,true>;
+	friend PriorityQueue;
+
+	friend ClientCompare<&RequestTag::reservation,ReadyOption::ignore>;
+	friend ClientCompare<&RequestTag::limit,ReadyOption::ignore>;
+	friend ClientCompare<&RequestTag::proportion,ReadyOption::ignore>;
+	friend ClientCompare<&RequestTag::reservation,ReadyOption::lowers>;
+	friend ClientCompare<&RequestTag::limit,ReadyOption::lowers>;
+	friend ClientCompare<&RequestTag::proportion,ReadyOption::lowers>;
+	friend ClientCompare<&RequestTag::reservation,ReadyOption::raises>;
+	friend ClientCompare<&RequestTag::limit,ReadyOption::raises>;
+	friend ClientCompare<&RequestTag::proportion,ReadyOption::raises>;
 
 	RequestTag          tag;
 	RequestRef          request;
@@ -245,6 +254,10 @@ namespace crimson {
 	}
 
 	inline const ClientReq& next_request() const {
+	  return requests.front();
+	}
+
+	inline ClientReq& next_request() {
 	  return requests.front();
 	}
 
@@ -359,19 +372,21 @@ namespace crimson {
 
     protected:
 
-      template<double RequestTag::*tag_field, bool use_ready>
+      template<double RequestTag::*tag_field, ReadyOption ready_opt>
       struct ClientCompare {
 	bool operator()(const ClientEntry& n1, const ClientEntry& n2) const {
 	  if (n1.has_request()) {
 	    if (n2.has_request()) {
 	      const auto& t1 = n1.next_request().tag;
 	      const auto& t2 = n2.next_request().tag;
-	      if (!use_ready || t1.ready == t2.ready) {
+	      if (ReadyOption::ignore == ready_opt || t1.ready == t2.ready) {
 		// if we don't care about ready or the ready values are the same
 		return t1.*tag_field < t2.*tag_field;
-	      } else {
+	      } else if (ReadyOption::raises == ready_opt) {
 		// use_ready == true && the ready fields are different
 		return t1.ready;
+	      } else {
+		return t2.ready;
 	      }
 	    } else {
 	      return true;
@@ -440,11 +455,11 @@ namespace crimson {
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::lim_heap_data,
-		      ClientCompare<&RequestTag::limit>> new_lim_q;
+		      ClientCompare<&RequestTag::limit,ReadyOption::lowers>> new_limit_q;
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::ready_heap_data,
-		      ClientCompare<&RequestTag::proportion,true>> new_ready_q;
+		      ClientCompare<&RequestTag::proportion,ReadyOption::raises>> new_ready_q;
 
 #if 1
       // four heaps that maintain the earliest request by each of the
@@ -644,13 +659,13 @@ namespace crimson {
 	  ClientEntryRef client_entry = std::make_shared<ClientEntry>(client_id);
 	  new_reserv_q.push(client_entry);
 	  new_prop_q.push(client_entry);
-	  new_lim_q.push(client_entry);
+	  new_limit_q.push(client_entry);
 	  new_ready_q.push(client_entry);
 	  client_map.emplace(client_id, ClientRec(ci, tick, client_entry));
 	  client_it = client_map.find(client_id);
 	}
 
-#if 0 // translate later
+#if OLD_Q // translate later
 	if (client_it->second.idle) {
 	  // We need to do an adjustment so that idle clients compete
 	  // fairly on proportional tags since those tags may have
@@ -692,11 +707,11 @@ namespace crimson {
 	client_rec.update_req_tag(tag, tick);
 
 	new_reserv_q.adjust(*client_rec.client_entry);
-	new_lim_q.adjust(*client_rec.client_entry);
+	new_limit_q.adjust(*client_rec.client_entry);
 	new_ready_q.adjust(*client_rec.client_entry);
 	new_prop_q.adjust(*client_rec.client_entry);
 
-#if 0
+#if OLD_Q
 	if (0.0 != entry->tag.reservation) {
 	  reserv_q.push(entry);
 	}
@@ -788,7 +803,7 @@ namespace crimson {
 
 
       template<typename K>
-      void pull_request_ehlp(PullReq& result,
+      void pull_request_help(PullReq& result,
 			     Heap<EntryRef, K>& heap,
 			     PhaseType phase) {
 	EntryRef& top = heap.top();
@@ -917,14 +932,22 @@ namespace crimson {
 	  return result;
 	}
 
+	// if reservation queue is empty, all are empty (i.e., no active clients)
+	if(new_reserv_q.empty()) {
+	  result.status = NextReqStat::none;
+	  return result;
+	}
+
 	Time now = get_time();
 
+#if OLD_Q
 	// so queue management is handled incrementally, remove
 	// handled items from each of the queues
 	prepare_queue(reserv_q);
 	prepare_queue(ready_q);
 	prepare_queue(lim_q);
 	prepare_queue(prop_q);
+#endif
 
 	// try constraint (reservation) based scheduling
 
@@ -942,15 +965,36 @@ namespace crimson {
 	}
 #endif
 
-	if (!reserv_q.empty() && reserv_q.top()->tag.reservation <= now) {
+	auto& reserv = new_reserv_q.top();
+	if (reserv.has_request() && reserv.next_request().tag.reservation <= now) {
 	  result.status = NextReqStat::returning;
 	  result.heap_id = HeapId::reservation;
 	  return result;
 	}
 
+#if OLD_Q
+	if (!reserv_q.empty() && reserv_q.top()->tag.reservation <= now) {
+	  result.status = NextReqStat::returning;
+	  result.heap_id = HeapId::reservation;
+	  return result;
+	}
+#endif
+
 	// no existing reservations before now, so try weight-based
 	// scheduling
 
+	// all items that are within limit are eligible based on
+	// priority
+	auto limits = &new_limit_q.top();
+	while (limits->has_request() && limits->next_request().tag.limit <= now) {
+	  limits->next_request().tag.ready = true;
+	  new_ready_q.adjust_up(*limits);
+	  new_limit_q.adjust_down(*limits);
+
+	  limits = &new_limit_q.top();
+	}
+
+#if OLD_Q
 	// all items that are within limit are eligible based on
 	// priority
 	while (!lim_q.empty()) {
@@ -964,6 +1008,7 @@ namespace crimson {
 	    break;
 	  }
 	}
+#endif
 
 #if 0
 	{
@@ -979,11 +1024,20 @@ namespace crimson {
 	}
 #endif
 
+	auto readys = &new_ready_q.top();
+	if (readys->has_request() && readys->next_request().tag.ready) {
+	  result.status = NextReqStat::returning;
+	  result.heap_id = HeapId::ready;
+	  return result;
+	}
+
+#if OLD_Q
 	if (!ready_q.empty()) {
 	  result.status = NextReqStat::returning;
 	  result.heap_id = HeapId::ready;
 	  return result;
 	}
+#endif
 
 	if (allowLimitBreak) {
 	  if (!prop_q.empty()) {
