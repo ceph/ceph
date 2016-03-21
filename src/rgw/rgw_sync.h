@@ -294,6 +294,7 @@ class RGWSyncShardMarkerTrack {
   typename std::map<T, marker_entry> pending;
 
   T high_marker;
+  T last_stored_marker;
   marker_entry high_entry;
 
   int window_size;
@@ -355,14 +356,19 @@ public:
     updates_since_flush++;
 
     if (is_first && (updates_since_flush >= window_size || pending.empty())) {
-      return update_marker(high_marker, high_entry);
+      return flush();
     }
     return NULL;
   }
 
-  RGWCoroutine *update_marker(const T& new_marker, marker_entry& entry) {
+  RGWCoroutine *flush() {
+    if (last_stored_marker == high_marker) {
+      return NULL;
+    }
+
     updates_since_flush = 0;
-    return store_marker(new_marker, entry.pos, entry.timestamp);
+    last_stored_marker = high_marker;
+    return store_marker(high_marker, high_entry.pos, high_entry.timestamp);
   }
 
   /*
