@@ -108,9 +108,9 @@ class lw_shared_ptr {
   mutable shared_ptr_impl<T>* _p = nullptr;
  private:
   lw_shared_ptr(shared_ptr_impl<T>* p) noexcept : _p(p) {
-      if (_p) {
-          ++_p->_count;
-      }
+    if (_p) {
+      ++_p->_count;
+    }
   }
   template <typename... A>
   static lw_shared_ptr make(A&&... a) {
@@ -122,18 +122,18 @@ class lw_shared_ptr {
   lw_shared_ptr() noexcept = default;
   lw_shared_ptr(std::nullptr_t) noexcept : lw_shared_ptr() {}
   lw_shared_ptr(const lw_shared_ptr& x) noexcept : _p(x._p) {
-      if (_p) {
-          ++_p->_count;
-      }
+    if (_p) {
+      ++_p->_count;
+    }
   }
   lw_shared_ptr(lw_shared_ptr&& x) noexcept  : _p(x._p) {
       x._p = nullptr;
   }
   [[gnu::always_inline]]
   ~lw_shared_ptr() {
-      if (_p && !--_p->_count) {
-          delete _p->to_internal_object();
-      }
+    if (_p && !--_p->_count) {
+      delete _p->to_internal_object();
+    }
   }
   lw_shared_ptr& operator=(const lw_shared_ptr& x) noexcept {
       if (_p != x._p) {
@@ -163,11 +163,11 @@ class lw_shared_ptr {
   T* get() const noexcept { return _p->to_value(); }
 
   long int use_count() const noexcept {
-      if (_p) {
-          return _p->_count;
-      } else {
-          return 0;
-      }
+    if (_p) {
+      return _p->_count;
+    } else {
+      return 0;
+    }
   }
 
   operator lw_shared_ptr<const T>() const noexcept {
@@ -179,7 +179,7 @@ class lw_shared_ptr {
   }
 
   bool owned() const noexcept {
-      return _p->_count == 1;
+    return _p->_count == 1;
   }
 
   bool operator==(const lw_shared_ptr<const T>& x) const {
