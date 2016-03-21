@@ -940,7 +940,7 @@ function get_num_active_clean() {
     # grep -v '^$' 
     ceph --format xml pg dump pgs 2>/dev/null | \
         $XMLSTARLET sel -t -m "//pg_stat/state[$expression]" -v . -n | \
-        grep -v '^$' | wc -l
+        grep -cv '^$'
 }
 
 function test_get_num_active_clean() {
