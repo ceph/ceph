@@ -55,11 +55,13 @@ EXTRA_DIST += \
 
 ceph-detect-init-all: ceph-detect-init/virtualenv
 
+CEPH_DETECT_INIT_VIRTUALENV := .
+
 ceph-detect-init/virtualenv:
-	cd $(srcdir)/ceph-detect-init ; ../tools/setup-virtualenv.sh ; test -d wheelhouse && export NO_INDEX=--no-index ; virtualenv/bin/pip install $$NO_INDEX --use-wheel --find-links=file://$$(pwd)/wheelhouse -e .
+	cd $(srcdir)/ceph-detect-init ; ../tools/setup-virtualenv.sh ${CEPH_DETECT_INIT_VIRTUALENV} ; test -d wheelhouse && export NO_INDEX=--no-index ; ${CEPH_DETECT_INIT_VIRTUALENV}/virtualenv/bin/pip install $$NO_INDEX --use-wheel --find-links=file://$$(pwd)/wheelhouse -e .
 
 ceph-detect-init-clean:
-	cd $(srcdir)/ceph-detect-init ; python setup.py clean ; rm -fr wheelhouse .tox build virtualenv .coverage *.egg-info
+	cd $(srcdir)/ceph-detect-init ; python setup.py clean ; rm -fr wheelhouse .tox build ${CEPH_DETECT_INIT_VIRTUALENV}/virtualenv .coverage *.egg-info
 
 ceph-detect-init-install-data:
 	cd $(srcdir)/ceph-detect-init ; \
