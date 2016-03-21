@@ -1040,32 +1040,36 @@ function test_is_clean() {
 
 ##
 # Wait until the cluster becomes clean or if it does not make progress
-# for $TIMEOUT seconds. The function **is_clean** is used to determine
-# if the cluster is clean. Progress is measured either vian the
-# **get_is_making_recovery_progress** predicate or if the number of
-# clean PGs changes.
+# for $TIMEOUT seconds.
+# Progress is measured either via the **get_is_making_recovery_progress**
+# predicate or if the number of clean PGs changes (as returned by get_num_active_clean)
 #
 # @return 0 if the cluster is clean, 1 otherwise
 #
 function wait_for_clean() {
     local status=1
-    local num_active_clean=$(get_num_active_clean)
+    local num_active_clean=-1
     local cur_active_clean
     local -i timer=0
-    while ! is_clean ; do
-        if get_is_making_recovery_progress ; then
-            timer=0
-        elif (( timer >= $TIMEOUT )) ; then
-            ceph report
-            return 1
-        fi
+    local num_pgs=$(get_num_pgs)
+    test $num_pgs != 0 || return 1
 
+    while true ; do
+        # Comparing get_num_active_clean & get_num_pgs is used to determine
+        # if the cluster is clean. That's almost an inline of is_clean() to
+        # get more performance by avoiding multiple calls of get_num_active_clean.
         cur_active_clean=$(get_num_active_clean)
+        test $cur_active_clean = $num_pgs && break
         if test $cur_active_clean != $num_active_clean ; then
             timer=0
             num_active_clean=$cur_active_clean
+        elif get_is_making_recovery_progress ; then
+            timer=0
+        elif (( timer >= $(($TIMEOUT * 10)))) ; then
+            ceph report
+            return 1
         fi
-        sleep 1
+        sleep .1
         timer=$(expr $timer + 1)
     done
     return 0
