@@ -102,6 +102,7 @@ start_mon=0
 start_mds=0
 start_osd=0
 start_rgw=0
+rgw_port_override=0
 ip=""
 nodaemon=0
 smallmds=0
@@ -120,7 +121,7 @@ keyring_fn="$CEPH_CONF_PATH/keyring"
 osdmap_fn="/tmp/ceph_osdmap.$$"
 monmap_fn="/tmp/ceph_monmap.$$"
 
-usage="usage: $0 [option]... [\"mon\"] [\"mds\"] [\"osd\"]\n"
+usage="usage: $0 [option]... [\"mon\"] [\"mds\"] [\"osd\"] [\"rgw\"]\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
@@ -222,6 +223,7 @@ case $1 in
             ;;
     --rgw_port )
             CEPH_RGW_PORT=$2
+            rgw_port_override=1
             shift
             ;;
     mon )
@@ -234,6 +236,10 @@ case $1 in
 	    ;;
     osd )
 	    start_osd=1
+	    start_all=0
+	    ;;
+    rgw )
+	    start_rgw=1
 	    start_all=0
 	    ;;
     -m )
@@ -317,6 +323,8 @@ if [ "$debug" -eq 0 ]; then
         debug ms = 1'
     CMDSDEBUG='
         debug ms = 1'
+    CRGWDEBUG='
+        debug rgw = 1'
 else
     echo "** going verbose **"
     CMONDEBUG='
@@ -345,6 +353,9 @@ else
         mds debug scatterstat = true
         mds verify scatter = true
         mds log max segments = 2'
+    CRGWDEBUG='
+        debug ms = 1
+        debug rgw = 20'
 fi
 
 if [ -n "$MON_ADDR" ]; then
@@ -459,8 +470,6 @@ if [ "$start_mon" -eq 1 ]; then
         erasure code dir = $EC_PATH
         plugin dir = $CS_PATH
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
-        rgw frontends = fastcgi, civetweb port=$CEPH_RGW_PORT
-        rgw dns name = localhost
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
@@ -626,6 +635,29 @@ EOF
     done
 fi
 
+# rgw
+if [ "$start_rgw" -eq 1 ]; then
+    for rgw in `seq 0 $((CEPH_NUM_RGW-1))`
+    do
+	if [ "$new" -eq 1 ]; then
+            mkdir -p $CEPH_DEV_DIR/client.rgw.$rgw
+	    key_fn=$CEPH_DEV_DIR/client.rgw.$rgw/keyring
+	    if [ $overwrite_conf -eq 1 ]; then
+		    cat <<EOF >> $conf_fn
+[client.rgw.$rgw]
+        rgw frontends = fastcgi, civetweb port=$((CEPH_RGW_PORT+$rgw))
+        rgw dns name = localhost
+        keyring = $key_fn
+$DAEMONOPTS
+$CRGWDEBUG
+EOF
+            fi
+	    $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=client.rgw.$rgw $key_fn
+	    $SUDO $CEPH_ADM -i $key_fn auth add client.rgw.$rgw osd "allow rwx" mon 'allow rwx'
+        fi
+    done
+fi
+
 # mds
 if [ "$smallmds" -eq 1 ]; then
     cat <<EOF >> $conf_fn
@@ -783,16 +815,53 @@ do_rgw()
     echo "  password  : testing"
     echo ""
 
-    # Start server
-    echo start rgw on http://localhost:$CEPH_RGW_PORT
-    RGWDEBUG=""
-    if [ "$debug" -ne 0 ]; then
-        RGWDEBUG="--debug-rgw=20"
+    # There is currently no --rgw_port command line option that we can pass
+    # directly to radosgw. Instead, when applicable, we need to override the
+    # --rgw_frontends option, which includes the civetweb port.
+    # First, when this is not a _new_ run, and CEPH_RGW_PORT != ceph_rgw_conf_port,
+    # we check:
+    # 1. If rgw_port_override is set, CEPH_RGW_PORT actually has been overridden,
+    #    which means we must override --rgw_frontends when setting the rgw
+    #    commandline. This is controlled by setting port_modified=1.
+    # 2. Else rgw_port_override is not set, meaning the user simply didn't supply
+    #    a port. rgw_frontends is picked up from the config file and for accurate
+    #    command output, we reset CEPH_RGW_PORT to ceph_rgw_conf_port.
+    # Note that if more than once instance of rgw is to be run, we only check the first
+    # port found (client.rgw.0) and use that as a base port. Each additional instance
+    # will run on port="$CEPH_RGW_PORT+rgw instance number".
+    local port_modified=0
+    local ceph_rgw_conf_port=$(grep "rgw frontends" $conf_fn | sed "s/.*port=\(.*\)$/\1/" | head -n 1) 2>/dev/null
+    if [ "$new" -ne 1 ] && [ "$CEPH_RGW_PORT" -ne "$ceph_rgw_conf_port" ]; then
+        if [ "$rgw_port_override" -eq 1 ]; then
+            port_modified=1
+        else
+            CEPH_RGW_PORT="$ceph_rgw_conf_port"
+        fi
     fi
+
+    # Start server
+    for rgw in `seq 0 $((CEPH_NUM_RGW-1))`
+    do
+        if [ "$port_modified" -eq 1 ]; then
+            echo "start rgw on http://localhost:$((CEPH_RGW_PORT+$rgw)) - config file port ($ceph_rgw_conf_port) overridden"
+        else
+            echo "start rgw on http://localhost:$((CEPH_RGW_PORT+$rgw))"
+        fi
+    done
 
     RGWSUDO=
     [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
-    $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
+    if [ "$port_modified" -eq 1 ]; then
+        for rgw in `seq 0 $((CEPH_NUM_RGW-1))`
+        do
+            $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --name client.rgw.$rgw --rgw_frontends="fastcgi, civetweb port=$((CEPH_RGW_PORT+$rgw))"
+        done
+    else
+        for rgw in `seq 0 $((CEPH_NUM_RGW-1))`
+        do
+            $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --name client.rgw.$rgw
+        done       
+    fi
 }
 if [ "$start_rgw" -eq 1 ]; then
     do_rgw
