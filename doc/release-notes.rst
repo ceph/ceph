@@ -10,6 +10,20 @@ long-term stable release.  There have been many major changes since
 the Infernalis (9.2.x) and Hammer (0.94.x) releases, and the upgrade
 process is non-trivial Please read these release notes carefully.
 
+There are a few known issues with this release candidate; see below.
+
+Known Issues with v10.1.0
+-------------------------
+
+ * While running a mixed version cluster of jewel and infernalis or
+   hammer monitors, any MDSMap updates will cause the pre-jewel
+   monitors to crash.  Workaround is to simply upgrde all monitors.
+   There is a fix but it is still being tested.
+
+ * Some of the rbd-mirror functionality for switching between active
+   and replica images is not yet merged.
+
+
 Major Changes from Infernalis
 -----------------------------
 
