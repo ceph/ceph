@@ -147,6 +147,50 @@ function test_teardown() {
 #######################################################################
 
 ##
+# Sends a signal to a single daemon.
+# This is a helper function for kill_daemons
+#
+# After the daemon is sent **signal**, its actual termination
+# will be verified by sending it signal 0. If the daemon is
+# still alive, kill_daemon will pause for a few seconds and
+# try again. This will repeat for a fixed number of times
+# before kill_daemon returns on failure. The list of
+# sleep intervals can be specified as **delays** and defaults
+# to:
+#
+#  0 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120
+#
+# This sequence is designed to not require a sleep time (0) if the
+# machine is fast enough and the daemon terminates in a fraction of a
+# second. The increasing sleep numbers should give plenty of time for
+# the daemon to die even on the slowest running machine. If a daemon
+# takes more than a few minutes to stop (the sum of all sleep times),
+# there probably is no point in waiting more and a number of things
+# are likely to go wrong anyway: better give up and return on error.
+#
+# @param pid the process id to send a signal
+# @param send_signal the signal to send
+# @param delays sequence of sleep times before failure
+#
+function kill_daemon() {
+    local pid=$(cat $1)
+    local send_signal=$2
+    local delays=${3:-0 0 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120}
+    local exit_code=1
+    for try in $delays ; do
+         sleep $try
+         if kill -$send_signal $pid 2> /dev/null ; then
+            exit_code=1
+         else
+            exit_code=0
+            break
+         fi
+         send_signal=0
+    done;
+    return $exit_code
+}
+
+##
 # Kill all daemons for which a .pid file exists in **dir**.  Each
 # daemon is sent a **signal** and kill_daemons waits for it to exit
 # during a few minutes. By default all daemons are killed. If a
@@ -168,24 +212,6 @@ function test_teardown() {
 # if at least one daemon remains, this is treated as an 
 # error and the function return 1.
 #
-# After the daemon is sent **signal**, its actual termination
-# will be verified by sending it signal 0. If the daemon is
-# still alive, kill_daemons will pause for a few seconds and
-# try again. This will repeat for a fixed number of times
-# before kill_daemons returns on failure. The list of
-# sleep intervals can be specified as **delays** and defaults
-# to:
-#
-#  0 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120
-#
-# This sequence is designed to not require a sleep time (0) if the
-# machine is fast enough and the daemon terminates in a fraction of a
-# second. The increasing sleep numbers should give plenty of time for
-# the daemon to die even on the slowest running machine. If a daemon
-# takes more than a few minutes to stop (the sum of all sleep times),
-# there probably is no point in waiting more and a number of things
-# are likely to go wrong anyway: better give up and return on error.
-#
 # @param dir path name of the environment
 # @param signal name of the first signal (defaults to TERM)
 # @param name_prefix only kill match daemons (defaults to all)
@@ -198,27 +224,17 @@ function kill_daemons() {
     local dir=$1
     local signal=${2:-TERM}
     local name_prefix=$3 # optional, osd, mon, osd.1
-    local delays=${4:-0 0 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120}
-
+    local delays=$4 #optional timing
     local status=0
+    local pids=""
+
     for pidfile in $(find $dir 2>/dev/null | grep $name_prefix'[^/]*\.pid') ; do
-        pid=$(cat $pidfile)
-        local send_signal=$signal
-        local kill_complete=false
-        for try in $delays ; do
-            sleep $try
-            if kill -$send_signal $pid 2> /dev/null ; then
-                kill_complete=false
-            else
-                kill_complete=true
-                break
-            fi
-            send_signal=0
-        done
-        if ! $kill_complete ; then
-            status=1
-        fi
+	run_in_background pids kill_daemon $pidfile $signal $delays
     done
+
+    wait_background pids
+    status=$?
+
     $trace && shopt -s -o xtrace
     return $status
 }
