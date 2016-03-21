@@ -38,14 +38,15 @@
 #include "Cycles.h"
 
 double Cycles::cycles_per_sec = 0;
-static Initialize _(Cycles::init);
 
 /**
  * Perform once-only overall initialization for the Cycles class, such
- * as calibrating the clock frequency.  This method is invoked automatically
- * during initialization, but it may be invoked explicitly by other modules
- * to ensure that initialization occurs before those modules initialize
- * themselves.
+ * as calibrating the clock frequency.  This method must be called
+ * before using the Cycles module.
+ *
+ * It is not initialized by default because the timing loops cause
+ * general process startup times to balloon
+ * (http://tracker.ceph.com/issues/15225).
  */
 void Cycles::init()
 {
