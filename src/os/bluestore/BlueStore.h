@@ -185,6 +185,7 @@ public:
     void clear();
     bool get_next(const ghobject_t& after, pair<ghobject_t,OnodeRef> *next);
     int trim(int max=-1);
+    int _trim(int max);
   };
 
   struct Collection : public CollectionImpl {
