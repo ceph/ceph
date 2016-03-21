@@ -421,7 +421,7 @@ class tcp {
         auto tcb = this->shared_from_this();
         _tcp._inet.wait_l2_dst_address(_foreign_ip, Packet(), [tcb] (const ethernet_address &dst, Packet p, int r) {
           if (r == 0) {
-            tcb->_tcp.poll_tcb(dst, tcb);
+            tcb->_tcp.poll_tcb(dst, std::move(tcb));
           } else if (r == -ETIMEDOUT) {
             // in other states connection should time out
             if (tcb->in_state(SYN_SENT)) {
