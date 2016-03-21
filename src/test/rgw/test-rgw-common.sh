@@ -54,7 +54,7 @@ x() {
 
 
 script_dir=`dirname $0`
-root_path=`(cd $script_dir/../..; pwd)`
+root_path=$script_dir/../..
 
 mstart=$root_path/mstart.sh
 mstop=$root_path/mstop.sh
