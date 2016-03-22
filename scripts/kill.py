@@ -16,6 +16,9 @@ Kill running teuthology jobs:
 2. Kills any running jobs
 3. Nukes any machines involved
 
+NOTE: Must be run on the same machine that is executing the teuthology job
+processes.
+
 optional arguments:
   -h, --help            show this help message and exit
   -a ARCHIVE, --archive ARCHIVE
