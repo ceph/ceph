@@ -11,6 +11,7 @@ import copy
 import json
 import logging
 import time
+import datetime
 
 from cStringIO import StringIO
 
@@ -388,7 +389,9 @@ def task(ctx, config):
             # manually edit mtime for this bucket to be 300 seconds in the past
             log.debug('manually edit mtime for this bucket to be 300 seconds in the past')
             new_data = copy.deepcopy(orig_data)
-            new_data['mtime'] =  orig_data['mtime'] - 300
+            mtime = datetime.datetime.strptime(orig_data['mtime'], "%Y-%m-%d %H:%M:%S.%fZ") - datetime.timedelta(300)
+            new_data['mtime'] =  unicode(mtime.strftime("%Y-%m-%d %H:%M:%S.%fZ"))
+            log.debug("new mtime ", mtime)
             assert new_data != orig_data
             (err, out) = rgwadmin(ctx, source_client,
                 ['metadata', 'put', 'bucket:{bucket_name}'.format(bucket_name=bucket_name2)],
