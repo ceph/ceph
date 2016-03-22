@@ -22,7 +22,6 @@ Notable Changes
 * Event: fix clock skew problem (`pr#7949 <http://github.com/ceph/ceph/pull/7949>`_, Wei Jin)
 * FileStore: Added O_DSYNC write scheme (`pr#7752 <http://github.com/ceph/ceph/pull/7752>`_, Somnath Roy)
 * FileStore: fix initialization order for m_disable_wbthrottle (`pr#8067 <http://github.com/ceph/ceph/pull/8067>`_, Samuel Just)
-* Fix unicode encoding for non-ASCII characters in title and author names (`pr#7 <http://github.com/ceph/ceph/pull/7>`_, Abhishek Varshney)
 * Fixing BTFS issue at 'make check' (`pr#7805 <http://github.com/ceph/ceph/pull/7805>`_, Erwan Velu)
 * FreeBSD related fixes (`pr#7170 <http://github.com/ceph/ceph/pull/7170>`_, Mykola Golub)
 * Improving 'make check' for ceph-disk (`pr#7762 <http://github.com/ceph/ceph/pull/7762>`_, Erwan Velu)
@@ -35,21 +34,21 @@ Notable Changes
 * RPM: fix openldap and openssl build dependencies for SUSE (`issue#15138 <http://tracker.ceph.com/issues/15138>`_, `pr#8120 <http://github.com/ceph/ceph/pull/8120>`_, Nathan Cutler)
 * Repop and lost-unfound overhaul (`pr#7765 <http://github.com/ceph/ceph/pull/7765>`_, Samuel Just)
 * Revert "librbd: use task finisher per CephContext" (`issue#14780 <http://tracker.ceph.com/issues/14780>`_, `pr#7667 <http://github.com/ceph/ceph/pull/7667>`_, Josh Durgin)
-* Reviewed-y: Yehuda Sadeh <yehuda@redhat.com> (`pr#7618 <http://github.com/ceph/ceph/pull/7618>`_, Pete Zaitcev)
+* rgw: Fix subuser harder with tenants (`pr#7618 <http://github.com/ceph/ceph/pull/7618>`_, Pete Zaitcev)
 * Rgw ldap fixes (`pr#8168 <http://github.com/ceph/ceph/pull/8168>`_, Matt Benjamin)
 * Rgw: check the return value when call fe->run() (`issue#14585 <http://tracker.ceph.com/issues/14585>`_, `pr#7457 <http://github.com/ceph/ceph/pull/7457>`_, wei qiaomiao)
-* Signed-off-by: Yehuda Sadeh <yehuda@redhat.com> (`pr#8075 <http://github.com/ceph/ceph/pull/8075>`_, Yehuda Sadeh)
+* Revert "rgw ldap" (`pr#8075 <http://github.com/ceph/ceph/pull/8075>`_, Yehuda Sadeh)
 * Stripper: Fix incorrect push_front -> append_zero change (`pr#7578 <http://github.com/ceph/ceph/pull/7578>`_, Haomai Wang)
 * This follows a revert of the previous PR. This branch has some build related fixes. (`pr#8076 <http://github.com/ceph/ceph/pull/8076>`_, Yehuda Sadeh, Matt Benjamin)
 * Updated scripts and documentation for mirrors (`pr#7847 <http://github.com/ceph/ceph/pull/7847>`_, Wido den Hollander)
 * Use make_shared while creating shared_ptr (`pr#7769 <http://github.com/ceph/ceph/pull/7769>`_, Somnath Roy)
-* Wip cmake (`pr#7849 <http://github.com/ceph/ceph/pull/7849>`_, Ali Maredia)
-* Wip filelock deadlock (`pr#7713 <http://github.com/ceph/ceph/pull/7713>`_, Yan, Zheng)
-* Wip fix fsmap decode (`pr#8063 <http://github.com/ceph/ceph/pull/8063>`_, Greg Farnum)
-* Wip rgw fix mdlog (`pr#8183 <http://github.com/ceph/ceph/pull/8183>`_, Orit Wasserman)
-* Wip rgw highres 3 (`pr#8108 <http://github.com/ceph/ceph/pull/8108>`_, Yehuda Sadeh, Adam C. Emerson, Matt Benjamin)
-* Wip rgw swift versioning disabled (`pr#8066 <http://github.com/ceph/ceph/pull/8066>`_, Yehuda Sadeh, Radoslaw Zarzynski)
-* Wip rgw sync fixes 3 (`pr#8170 <http://github.com/ceph/ceph/pull/8170>`_, Yehuda Sadeh)
+* cmake (`pr#7849 <http://github.com/ceph/ceph/pull/7849>`_, Ali Maredia)
+* filelock deadlock (`pr#7713 <http://github.com/ceph/ceph/pull/7713>`_, Yan, Zheng)
+* fix fsmap decode (`pr#8063 <http://github.com/ceph/ceph/pull/8063>`_, Greg Farnum)
+* rgw fix mdlog (`pr#8183 <http://github.com/ceph/ceph/pull/8183>`_, Orit Wasserman)
+* rgw highres 3 (`pr#8108 <http://github.com/ceph/ceph/pull/8108>`_, Yehuda Sadeh, Adam C. Emerson, Matt Benjamin)
+* rgw swift versioning disabled (`pr#8066 <http://github.com/ceph/ceph/pull/8066>`_, Yehuda Sadeh, Radoslaw Zarzynski)
+* rgw sync fixes 3 (`pr#8170 <http://github.com/ceph/ceph/pull/8170>`_, Yehuda Sadeh)
 * Xio fixes (`pr#7603 <http://github.com/ceph/ceph/pull/7603>`_, Roi Dayan)
 * [cephfs] fix free fds being exhausted eventually because freed fds are never put back (`issue#14798 <http://tracker.ceph.com/issues/14798>`_, `pr#7685 <http://github.com/ceph/ceph/pull/7685>`_, Zhi Zhang)
 * [rgw] RGWLib::env is not used so remove it (`pr#7874 <http://github.com/ceph/ceph/pull/7874>`_, Brad Hubbard)
@@ -413,28 +412,21 @@ Notable Changes
 * client: add option to control how directory size is calculated (`pr#7323 <http://github.com/ceph/ceph/pull/7323>`_, Yan, Zheng)
     This lets you disable rstats if your workload is unhappy about directories
     changing size (eg, tar of recently-moved/created/untarred files).
-* Wip rgw keystone v3 (`pr#7719 <http://github.com/ceph/ceph/pull/7719>`_, Mark Barnes, Radoslaw Zarzynski)
-    rgw keystone v3 (Mark Barnes, Radoslaw Zarzynski)
+* rgw keystone v3 (`pr#7719 <http://github.com/ceph/ceph/pull/7719>`_, Mark Barnes, Radoslaw Zarzynski)
     support for keystone v3
-* Wip rgw new multisite merge (`issue#14549 <http://tracker.ceph.com/issues/14549>`_, `pr#7709 <http://github.com/ceph/ceph/pull/7709>`_, Yehuda Sadeh, Orit Wasserman, Casey Bodley, Daniel Gryniewicz)
-    rgw multisite v2 (Yehuda Sadeh, Orit Wasserman, Casey Bodley)
+* rgw new multisite merge (`issue#14549 <http://tracker.ceph.com/issues/14549>`_, `pr#7709 <http://github.com/ceph/ceph/pull/7709>`_, Yehuda Sadeh, Orit Wasserman, Casey Bodley, Daniel Gryniewicz)
     - rename region to zonegroup
     - new zone and zonegroup configuration
     - new realm and period structures
     - rgw handles synchronization (no need for sync agent)
     - active-active data
-    Signed-off-by: Yehuda Sadeh
-* Wip 14975 (`issue#14975 <http://tracker.ceph.com/issues/14975>`_, `pr#7916 <http://github.com/ceph/ceph/pull/7916>`_, Yehuda Sadeh)
-    rgw: adjust error code when bucket does not exist in copy operation
-    rgw: don't override error when initializing zonegroup
-    Fixes: #14975
-* Wip rgw indexless (`pr#7786 <http://github.com/ceph/ceph/pull/7786>`_, Yehuda Sadeh)
-    rgw: indexless buckets (Yehuda Sadeh)
+* rgw: adjust error code when bucket does not exist in copy operation (`issue#14975 <http://tracker.ceph.com/issues/14975>`_, `pr#7916 <http://github.com/ceph/ceph/pull/7916>`_, Yehuda Sadeh)
+    don't override error when initializing zonegroup
+* rgw indexless (`pr#7786 <http://github.com/ceph/ceph/pull/7786>`_, Yehuda Sadeh)
     - can define a policy, for which buckets are indexless
     - users can then create buckets under the specified placement target
     - indexless buckets will not be synced across zones
     - does not work with (s3) versioned buckets
-    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
 
 v10.0.4
 =======
