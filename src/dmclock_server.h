@@ -271,8 +271,9 @@ namespace crimson {
 	}
 
 	friend
-	std::ostream& operator<<(std::ostream& out,
-				 const typename PriorityQueue<C,R>::ClientEntry& e) {
+	std::ostream&
+	operator<<(std::ostream& out,
+		   const typename PriorityQueue<C,R>::ClientEntry& e) {
 	  out << "{ client:" << e.client << " top req: " <<
 	    (e.has_request() ? e.next_request() : "none") << " }";
 	  return out;
@@ -451,19 +452,19 @@ namespace crimson {
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::reserv_heap_data,
-		      ClientCompare<&RequestTag::reservation>> new_reserv_q;
+		      ClientCompare<&RequestTag::reservation>> reserv_q;
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::prop_heap_data,
-		      ClientCompare<&RequestTag::proportion>> new_prop_q;
+		      ClientCompare<&RequestTag::proportion>> prop_q;
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::lim_heap_data,
-		      ClientCompare<&RequestTag::limit,ReadyOption::lowers>> new_limit_q;
+		      ClientCompare<&RequestTag::limit,ReadyOption::lowers>> limit_q;
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::ready_heap_data,
-		      ClientCompare<&RequestTag::proportion,ReadyOption::raises>> new_ready_q;
+		      ClientCompare<&RequestTag::proportion,ReadyOption::raises>> ready_q;
 
 #if 0
       // four heaps that maintain the earliest request by each of the
@@ -661,10 +662,10 @@ namespace crimson {
 	if (client_map.end() == client_it) {
 	  ClientInfo ci = client_info_f(client_id);
 	  ClientEntryRef client_entry = std::make_shared<ClientEntry>(client_id);
-	  new_reserv_q.push(client_entry);
-	  new_prop_q.push(client_entry);
-	  new_limit_q.push(client_entry);
-	  new_ready_q.push(client_entry);
+	  reserv_q.push(client_entry);
+	  prop_q.push(client_entry);
+	  limit_q.push(client_entry);
+	  ready_q.push(client_entry);
 	  client_map.emplace(client_id, ClientRec(ci, tick, client_entry));
 	  client_it = client_map.find(client_id);
 	}
@@ -710,10 +711,10 @@ namespace crimson {
 	// copy tag to previous tag for client
 	client_rec.update_req_tag(tag, tick);
 
-	new_reserv_q.adjust(*client_rec.client_entry);
-	new_limit_q.adjust(*client_rec.client_entry);
-	new_ready_q.adjust(*client_rec.client_entry);
-	new_prop_q.adjust(*client_rec.client_entry);
+	reserv_q.adjust(*client_rec.client_entry);
+	limit_q.adjust(*client_rec.client_entry);
+	ready_q.adjust(*client_rec.client_entry);
+	prop_q.adjust(*client_rec.client_entry);
 
 #if 0
 	{
@@ -769,16 +770,16 @@ namespace crimson {
 
 	switch(next.heap_id) {
 	case HeapId::reservation:
-	  pull_request_help(result, new_reserv_q, PhaseType::reservation);
+	  pull_request_help(result, reserv_q, PhaseType::reservation);
 	  ++reserv_sched_count;
 	  break;
 	case HeapId::ready:
-	  pull_request_help(result, new_ready_q, PhaseType::priority);
+	  pull_request_help(result, ready_q, PhaseType::priority);
 	  reduce_reservation_tags(result.client);
 	  ++prop_sched_count;
 	  break;
 	case HeapId::proportional:
-	  pull_request_help(result, new_prop_q, PhaseType::priority);
+	  pull_request_help(result, prop_q, PhaseType::priority);
 	  reduce_reservation_tags(result.client);
 	  ++limit_break_sched_count;
 	  break;
@@ -790,6 +791,7 @@ namespace crimson {
       }
 
 
+      // data_mtx should be held when called
       template<typename C1, IndIntruHeapData ClientEntry::*C2, typename C3>
       void pull_request_help(PullReq& result,
 			     IndIntruHeap<C1, ClientEntry, C2, C3>& heap,
@@ -798,14 +800,17 @@ namespace crimson {
 	ClientReq& first = top.next_request();
 
 	result.retn.client = top.client;
+#if 1
+	std::cout << "req: " << first.request.get() << std::endl;
+#endif
 	result.retn.request = std::move(first.request);
 	result.retn.phase = phase;
 
 	top.pop_request();
-	new_reserv_q.adjust_down(top);
-	new_limit_q.adjust_down(top);
-	new_prop_q.adjust_down(top);
-	new_ready_q.adjust_down(top);
+	reserv_q.adjust_down(top);
+	limit_q.adjust_down(top);
+	prop_q.adjust_down(top);
+	ready_q.adjust_down(top);
       }
 
 
@@ -831,16 +836,16 @@ namespace crimson {
 			  bool show_prop = true) {
 	auto filter = [](const EntryRef& e)->bool { return !e->handled; };
 	if (show_res) {
-	  new_reserv_q.display_sorted(std::cout << "RESER:", filter) << std::endl;
+	  reserv_q.display_sorted(std::cout << "RESER:", filter) << std::endl;
 	}
 	if (show_lim) {
-	  new_limit_q.display_sorted(std::cout << "LIMIT:", filter) << std::endl;
+	  limit_q.display_sorted(std::cout << "LIMIT:", filter) << std::endl;
 	}
 	if (show_ready) {
-	  new_ready_q.display_sorted(std::cout << "READY:", filter) << std::endl;
+	  ready_q.display_sorted(std::cout << "READY:", filter) << std::endl;
 	}
 	if (show_prop) {
-	  new_prop_q.display_sorted(std::cout << "PROPO:", filter) << std::endl;
+	  prop_q.display_sorted(std::cout << "PROPO:", filter) << std::endl;
 	}
       }
 
@@ -898,18 +903,18 @@ namespace crimson {
 	switch(heap_id) {
 	case HeapId::reservation:
 	  // don't need to note client
-	  (void) submit_top_request(new_reserv_q, PhaseType::reservation);
+	  (void) submit_top_request(reserv_q, PhaseType::reservation);
 	  // unlike the other two cases, we do not reduce reservation
 	  // tags here
 	  ++reserv_sched_count;
 	  break;
 	case HeapId::ready:
-	  client = submit_top_request(new_ready_q, PhaseType::priority);
+	  client = submit_top_request(ready_q, PhaseType::priority);
 	  reduce_reservation_tags(client);
 	  ++prop_sched_count;
 	  break;
 	case HeapId::proportional:
-	  client = submit_top_request(new_prop_q, PhaseType::priority);
+	  client = submit_top_request(prop_q, PhaseType::priority);
 	  reduce_reservation_tags(client);
 	  ++limit_break_sched_count;
 	  break;
@@ -929,7 +934,7 @@ namespace crimson {
 	}
 
 	// if reservation queue is empty, all are empty (i.e., no active clients)
-	if(new_reserv_q.empty()) {
+	if(reserv_q.empty()) {
 	  result.status = NextReqStat::none;
 	  return result;
 	}
@@ -952,7 +957,7 @@ namespace crimson {
 	}
 #endif
 
-	auto& reserv = new_reserv_q.top();
+	auto& reserv = reserv_q.top();
 	if (reserv.has_request() &&
 	    reserv.next_request().tag.reservation <= now) {
 	  result.status = NextReqStat::returning;
@@ -965,13 +970,13 @@ namespace crimson {
 
 	// all items that are within limit are eligible based on
 	// priority
-	auto limits = &new_limit_q.top();
+	auto limits = &limit_q.top();
 	while (limits->has_request() && limits->next_request().tag.limit <= now) {
 	  limits->next_request().tag.ready = true;
-	  new_ready_q.adjust_up(*limits);
-	  new_limit_q.adjust_down(*limits);
+	  ready_q.adjust_up(*limits);
+	  limit_q.adjust_down(*limits);
 
-	  limits = &new_limit_q.top();
+	  limits = &limit_q.top();
 	}
 
 #if 0
@@ -988,7 +993,7 @@ namespace crimson {
 	}
 #endif
 
-	auto readys = &new_ready_q.top();
+	auto readys = &ready_q.top();
 	if (readys->has_request() &&
 	    (readys->next_request().tag.ready || allow_limit_break)) {
 	  result.status = NextReqStat::returning;
@@ -1000,13 +1005,13 @@ namespace crimson {
 	// reservation item or next limited item comes up
 
 	Time next_call = TimeMax;
-	if (new_reserv_q.top().has_request()) {
+	if (reserv_q.top().has_request()) {
 	  next_call =
 	    min_not_0_time(next_call,
-			   new_reserv_q.top().next_request().tag.reservation);
+			   reserv_q.top().next_request().tag.reservation);
 	}
-	if (new_limit_q.top().has_request()) {
-	  const auto& next = new_limit_q.top().next_request();
+	if (limit_q.top().has_request()) {
+	  const auto& next = limit_q.top().next_request();
 	  if (!next.tag.ready) {
 	    next_call = min_not_0_time(next_call, next.tag.limit);
 	  }
