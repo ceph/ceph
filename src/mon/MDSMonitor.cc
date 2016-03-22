@@ -518,6 +518,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       new_info.state_seq = seq;
       new_info.standby_for_rank = m->get_standby_for_rank();
       new_info.standby_for_name = m->get_standby_for_name();
+      new_info.standby_for_fscid = m->get_standby_for_fscid();
       pending_fsmap.insert(new_info);
     }
 
@@ -614,10 +615,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
           return false;
         }
       } else if (m->get_standby_for_rank() >= 0) {
-        // TODO get this from MDS message
-        // >>
-        fs_cluster_id_t target_ns = FS_CLUSTER_ID_NONE;
-        // <<
+        fs_cluster_id_t target_ns = m->get_standby_for_fscid();
 
         mds_role_t target_role = {
           target_ns == FS_CLUSTER_ID_NONE ?
