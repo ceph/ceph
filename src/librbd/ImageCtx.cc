@@ -21,6 +21,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
+#include "librbd/journal/StandardPolicy.h"
 #include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
@@ -190,6 +191,7 @@ struct C_InvalidateCache : public Context {
                                   thread_pool_singleton);
 
     exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
+    journal_policy = new journal::StandardPolicy(this);
   }
 
   ImageCtx::~ImageCtx() {
@@ -221,6 +223,7 @@ struct C_InvalidateCache : public Context {
     op_work_queue->drain();
     aio_work_queue->drain();
 
+    delete journal_policy;
     delete exclusive_lock_policy;
     delete op_work_queue;
     delete aio_work_queue;
@@ -1062,5 +1065,18 @@ struct C_InvalidateCache : public Context {
     assert(policy != nullptr);
     delete exclusive_lock_policy;
     exclusive_lock_policy = policy;
+  }
+
+  journal::Policy *ImageCtx::get_journal_policy() const {
+    assert(snap_lock.is_locked());
+    assert(journal_policy != nullptr);
+    return journal_policy;
+  }
+
+  void ImageCtx::set_journal_policy(journal::Policy *policy) {
+    assert(snap_lock.is_wlocked());
+    assert(policy != nullptr);
+    delete journal_policy;
+    journal_policy = policy;
   }
 }
