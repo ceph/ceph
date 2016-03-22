@@ -669,9 +669,9 @@ void AsyncConnection::process()
                                        << policy.throttler_messages->get_current() << "/"
                                        << policy.throttler_messages->get_max() << dendl;
             if (!policy.throttler_messages->get_or_fail()) {
-              ldout(async_msgr->cct, 1) << __func__ << " wants 1 message from policy throttle "
-                                        << policy.throttler_messages->get_current() << "/"
-                                        << policy.throttler_messages->get_max() << " failed, just wait." << dendl;
+              ldout(async_msgr->cct, 10) << __func__ << " wants 1 message from policy throttle "
+					 << policy.throttler_messages->get_current() << "/"
+					 << policy.throttler_messages->get_max() << " failed, just wait." << dendl;
               // following thread pool deal with th full message queue isn't a
               // short time, so we can wait a ms.
               if (register_time_events.empty())
