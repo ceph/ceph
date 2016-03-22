@@ -105,88 +105,9 @@ class MonMap {
     return (persistent_features | optional_features);
   }
 
-  void sanitize_mons(map<string,entity_addr_t>& o) {
-
-    // if mon_info is populated, it means we decoded a map encoded
-    // by someone who understands the new format (i.e., is able to
-    // encode 'mon_info'). This means they must also have provided
-    // a properly populated 'mon_addr' (which we have dropped with
-    // this patch), 'o' being the contents of said map. In this
-    // case, 'o' must have the same number of entries as 'mon_info'.
-    //
-    // Also, for each entry in 'o', there has to be a matching
-    // 'mon_info' entry, properly populated with a name and a matching
-    // 'public_addr'.
-    //
-    // OTOH, if 'mon_info' is not populated, it means the one that
-    // originally encoded the map does not know the new format, and
-    // 'o' will be our only source of info about the monitors in the
-    // cluster -- and we will use it to populate our 'mon_info' map.
-
-    bool has_mon_info = false;
-    if (mon_info.size() > 0) {
-      assert(o.size() == mon_info.size());
-      has_mon_info = true;
-    }
-
-    for (map<string, entity_addr_t>::const_iterator p = o.begin();
-         p != o.end();
-         ++p) {
-
-      // make sure the info we have is accurate
-      if (has_mon_info) {
-        assert(mon_info.count(p->first));
-        assert(mon_info[p->first].name == p->first);
-        assert(mon_info[p->first].public_addr == p->second);
-        continue;
-      }
-
-      mon_info_t &m = mon_info[p->first];
-      m.name = p->first;
-      m.public_addr = p->second;    
-    }
-  }
-
-  void calc_ranks() {
-
-    ranks.resize(mon_info.size());
-    addr_mons.clear();
-
-    // Used to order entries according to public_addr, because that's
-    // how the ranks are expected to be ordered by. We may expand this
-    // later on, according to some other criteria, by specifying a
-    // different comparator.
-    //
-    // Please note that we use a 'set' here instead of resorting to
-    // std::sort() because we need more info than that's available in
-    // the vector. The vector will thus be ordered by, e.g., public_addr
-    // while only containing the names of each individual monitor.
-    // The only way of achieving this with std::sort() would be to first
-    // insert every mon_info_t entry into a vector 'foo', std::sort() 'foo'
-    // with custom comparison functions, and then copy each invidual entry
-    // to a new vector. Unless there's a simpler way, we don't think the
-    // added complexity makes up for the additional memory usage of a 'set'.
-    set<mon_info_t, rank_cmp> tmp;
-
-    for (map<string,mon_info_t>::iterator p = mon_info.begin();
-         p != mon_info.end();
-         ++p) {
-      mon_info_t &m = p->second;
-      tmp.insert(m);
-
-      // populate addr_mons
-      assert(addr_mons.count(m.public_addr) == 0);
-      addr_mons[m.public_addr] = m.name;
-    }
-
-    // map the set to the actual ranks etc
-    unsigned i = 0;
-    for (set<mon_info_t>::iterator p = tmp.begin();
-         p != tmp.end();
-         ++p, ++i) {
-      ranks[i] = p->name;
-    }
-  }
+public:
+  void sanitize_mons(map<string,entity_addr_t>& o);
+  void calc_ranks();
 
   MonMap()
     : epoch(0) {
@@ -407,15 +328,6 @@ class MonMap {
   void dump(ceph::Formatter *f) const;
 
   static void generate_test_instances(list<MonMap*>& o);
-
-private:
-  struct rank_cmp {
-    bool operator()(const mon_info_t &a, const mon_info_t &b) const {
-      if (a.public_addr == b.public_addr)
-        return a.name < b.name;
-      return a.public_addr < b.public_addr;
-    }
-  };
 };
 WRITE_CLASS_ENCODER_FEATURES(MonMap)
 
