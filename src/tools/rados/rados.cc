@@ -1403,8 +1403,13 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     completion->wait_for_safe();
     ret = completion->get_return_value();
     completion->release();
-    if (ret == -EAGAIN) {
-      cerr << "interval#" << interval << " expired." << std::endl;
+    if (ret < 0) {
+      if (ret == -EAGAIN)
+        cerr << "interval#" << interval << " expired." << std::endl;
+      else if (ret == -ENOENT)
+        cerr << "No scrub information available for pg " << pg << std::endl;
+      else
+        cerr << "Unknown error " << cpp_strerror(ret) << std::endl;
       break;
     }
     if (start.name.empty()) {
