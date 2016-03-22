@@ -148,6 +148,8 @@ struct MockImageCtx {
   MOCK_METHOD0(notify_update, void());
   MOCK_METHOD1(notify_update, void(Context *));
 
+  MOCK_CONST_METHOD0(get_journal_policy, journal::Policy*());
+
   ImageCtx *image_ctx;
   CephContext *cct;
 

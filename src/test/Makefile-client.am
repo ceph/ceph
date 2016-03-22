@@ -434,6 +434,7 @@ noinst_HEADERS += \
 	test/librbd/mock/MockImageState.h \
 	test/librbd/mock/MockImageWatcher.h \
 	test/librbd/mock/MockJournal.h \
+	test/librbd/mock/MockJournalPolicy.h \
 	test/librbd/mock/MockObjectMap.h \
 	test/librbd/mock/MockOperations.h \
 	test/librbd/mock/MockReadahead.h \
