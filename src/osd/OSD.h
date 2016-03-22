@@ -1968,7 +1968,6 @@ protected:
     const pg_history_t& orig_history,
     pg_interval_map_t& pi,
     epoch_t epoch,
-    bool same_primary,
     PG::CephPeeringEvtRef evt);
   
   void load_pgs();
