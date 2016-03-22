@@ -78,7 +78,7 @@ class MessengerClient {
    public:
     Mutex lock;
     Cond cond;
-    uint64_t inflight;
+    uint64_t inflight = 0;
 
     ClientThread(Messenger *m, int c, ConnectionRef con, int len, int ops, int think_time_us):
         msgr(m), concurrent(c), conn(con), client_inc(0), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
