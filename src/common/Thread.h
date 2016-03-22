@@ -16,6 +16,8 @@
 #ifndef CEPH_THREAD_H
 #define CEPH_THREAD_H
 
+#include <system_error>
+#include <thread>
 #include <pthread.h>
 #include <sys/types.h>
 
@@ -55,5 +57,18 @@ class Thread {
   int set_ioprio(int cls, int prio);
   int set_affinity(int cpuid);
 };
+
+template<typename Fun, typename... Args>
+std::thread make_named_thread(const std::string& s,
+			      Fun&& fun,
+			      Args&& ...args) {
+  auto t = std::thread(std::forward<Fun>(fun),
+		       std::forward<Args>(args)...);
+  int r = pthread_setname_np(t.native_handle(), s.c_str());
+  if (r != 0) {
+    throw std::system_error(r, std::generic_category());
+  }
+  return t;
+}
 
 #endif

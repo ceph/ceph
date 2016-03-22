@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,35 +7,40 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #ifndef CEPH_MONCLIENT_H
 #define CEPH_MONCLIENT_H
+
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <random>
+
+#include <boost/intrusive/set.hpp>
 
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 
 #include "MonMap.h"
 
-#include "common/Timer.h"
+#include "common/ceph_timer.h"
 #include "common/Finisher.h"
 
 #include "auth/AuthClientHandler.h"
 #include "auth/RotatingKeyRing.h"
 
 #include "messages/MMonSubscribe.h"
+#include "messages/MMonGetVersion.h"
 
-#include "common/SimpleRNG.h"
 #include "osd/osd_types.h"
 
-#include <memory>
 
 class MonMap;
 class MMonMap;
-class MMonGetVersion;
 class MMonGetVersionReply;
 struct MMonSubscribeAck;
 class MMonCommandAck;
@@ -56,52 +61,48 @@ enum MonClientState {
 };
 
 struct MonClientPinger : public Dispatcher {
-
-  Mutex lock;
-  Cond ping_recvd_cond;
+  std::mutex lock;
+  using lock_guard = std::lock_guard<decltype(lock)>;
+  using unique_lock = std::unique_lock<decltype(lock)>;
+  std::condition_variable ping_recvd_cond;
   string *result;
   bool done;
 
-  MonClientPinger(CephContext *cct_, string *res_) :
-    Dispatcher(cct_),
-    lock("MonClientPinger::lock"),
-    result(res_),
-    done(false)
-  { }
+  MonClientPinger(CephContext *cct_, string *res_)
+    : Dispatcher(cct_), result(res_), done(false) { }
 
-  int wait_for_reply(double timeout = 0.0) {
-    utime_t until = ceph_clock_now(cct);
-    until += (timeout > 0 ? timeout : cct->_conf->client_mount_timeout);
+  int wait_for_reply(unique_lock& l, double timeout = 0.0) {
+    auto dur = ceph::make_timespan(timeout == 0.0 ?
+				   cct->_conf->client_mount_timeout :
+				   timeout);
     done = false;
 
-    int ret = 0;
-    while (!done) {
-      ret = ping_recvd_cond.WaitUntil(lock, until);
-      if (ret == -ETIMEDOUT)
-        break;
-    }
-    return ret;
+    ping_recvd_cond.wait_for(l, dur, [this] { return done; });
+    if (!done)
+      return -ETIMEDOUT;
+
+    return 0;
   }
 
   bool ms_dispatch(Message *m) {
-    Mutex::Locker l(lock);
+    lock_guard l(lock);
     if (m->get_type() != CEPH_MSG_PING)
       return false;
 
     bufferlist &payload = m->get_payload();
     if (result && payload.length() > 0) {
-      bufferlist::iterator p = payload.begin();
+      auto p = payload.begin();
       ::decode(*result, p);
     }
     done = true;
-    ping_recvd_cond.SignalAll();
+    ping_recvd_cond.notify_all();
     m->put();
     return true;
   }
   bool ms_handle_reset(Connection *con) {
-    Mutex::Locker l(lock);
+    lock_guard l(lock);
     done = true;
-    ping_recvd_cond.SignalAll();
+    ping_recvd_cond.notify_all();
     return true;
   }
   void ms_handle_remote_reset(Connection *con) {}
@@ -111,36 +112,38 @@ class MonClient : public Dispatcher {
 public:
   MonMap monmap;
 private:
-  MonClientState state;
+  MonClientState state = MC_STATE_NONE;
 
-  Messenger *messenger;
+  Messenger *messenger = nullptr;
 
   string cur_mon;
-  ConnectionRef cur_con;
+  ConnectionRef cur_con = nullptr;
 
-  SimpleRNG rng;
+  std::minstd_rand rng;
 
   EntityName entity_name;
 
   entity_addr_t my_addr;
 
-  Mutex monc_lock;
-  SafeTimer timer;
+  std::mutex monc_lock;
+  using lock_guard = std::lock_guard<decltype(monc_lock)>;
+  using unique_lock = std::unique_lock<decltype(monc_lock)>;
+  ceph::timer<ceph::mono_clock> timer;
   Finisher finisher;
 
   // Added to support session signatures.  PLR
 
-  AuthAuthorizeHandlerRegistry *authorize_handler_registry;
+  AuthAuthorizeHandlerRegistry *authorize_handler_registry = nullptr;
 
-  bool initialized;
-  bool no_keyring_disabled_cephx;
+  bool initialized = false;
+  bool no_keyring_disabled_cephx = false;
 
-  LogClient *log_client;
-  bool more_log_pending;
+  LogClient *log_client = nullptr;
+  bool more_log_pending = false;
 
   void send_log();
 
-  AuthMethodList *auth_supported;
+  std::unique_ptr<AuthMethodList> auth_supported;
 
   bool ms_dispatch(Message *m);
   bool ms_handle_reset(Connection *con);
@@ -148,40 +151,34 @@ private:
 
   void handle_monmap(MMonMap *m);
 
-  void handle_auth(MAuthReply *m);
+  void handle_auth(unique_lock& l, MAuthReply *m);
 
   // monitor session
-  bool hunting;
+  bool hunting = true;
 
-  struct C_Tick : public Context {
-    MonClient *monc;
-    explicit C_Tick(MonClient *m) : monc(m) {}
-    void finish(int r) {
-      monc->tick();
-    }
-  };
   void tick();
-  void schedule_tick();
+  ceph::timespan tick_time();
 
-  Cond auth_cond;
+  std::condition_variable auth_cond;
 
   void handle_auth_rotating_response(MAuthRotating *m);
   // monclient
-  bool want_monmap;
+  bool want_monmap = true;
 
-  uint32_t want_keys;
+  uint32_t want_keys = 0;
 
-  uint64_t global_id;
+  uint64_t global_id = 0;
 
   // authenticate
 private:
-  Cond map_cond;
-  int authenticate_err;
+  std::condition_variable map_cond;
+  int authenticate_err = 0;
 
-  list<Message*> waiting_for_session;
-  Context *session_established_context;
-  bool had_a_connection;
-  double reopen_interval_multiplier;
+  std::vector<MessageRef> waiting_for_session;
+  using thunk = cxx_function::unique_function<void()&& noexcept>;
+  std::unique_ptr<thunk> session_established;
+  bool had_a_connection = false;
+  double reopen_interval_multiplier = 1.0;
 
   string _pick_random_mon();
   void _finish_hunting();
@@ -189,7 +186,7 @@ private:
   void _reopen_session() {
     _reopen_session(-1, string());
   }
-  void _send_mon_message(Message *m, bool force=false);
+  void _send_mon_message(MessageRef&& m, bool force=false);
 
 public:
   void set_entity_name(EntityName name) { entity_name = name; }
@@ -209,9 +206,11 @@ public:
 
   // mon subscriptions
 private:
-  map<string,ceph_mon_subscribe_item> sub_sent; // my subs, and current versions
+  map<string,ceph_mon_subscribe_item> sub_sent; // my subs, and
+						// current versions
   map<string,ceph_mon_subscribe_item> sub_new;  // unsent new subs
-  utime_t sub_renew_sent, sub_renew_after;
+  ceph::real_time sub_renew_sent = ceph::real_time::min();
+  ceph::real_time sub_renew_after = ceph::real_time::min();
 
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
@@ -253,22 +252,22 @@ private:
 
   // auth tickets
 public:
-  AuthClientHandler *auth;
+  std::unique_ptr<AuthClientHandler> auth;
 public:
   void renew_subs() {
-    Mutex::Locker l(monc_lock);
+    lock_guard l(monc_lock);
     _renew_subs();
   }
   bool sub_want(string what, version_t start, unsigned flags) {
-    Mutex::Locker l(monc_lock);
+    lock_guard l(monc_lock);
     return _sub_want(what, start, flags);
   }
   void sub_got(string what, version_t have) {
-    Mutex::Locker l(monc_lock);
+    lock_guard l(monc_lock);
     _sub_got(what, have);
   }
   void sub_unwant(string what) {
-    Mutex::Locker l(monc_lock);
+    lock_guard l(monc_lock);
     _sub_unwant(what);
   }
   /**
@@ -276,8 +275,8 @@ public:
    * the value, apply the passed-in flags as well; otherwise do nothing.
    */
   bool sub_want_increment(string what, version_t start, unsigned flags) {
-    Mutex::Locker l(monc_lock);
-    map<string,ceph_mon_subscribe_item>::iterator i = sub_new.find(what);
+    lock_guard l(monc_lock);
+    auto i = sub_new.find(what);
     if (i != sub_new.end()) {
       if (i->second.start >= start)
 	return false;
@@ -295,9 +294,9 @@ public:
     }
     return false;
   }
-  
-  KeyRing *keyring;
-  RotatingKeyRing *rotating_secrets;
+
+  std::unique_ptr<KeyRing> keyring;
+  std::unique_ptr<RotatingKeyRing> rotating_secrets;
 
  public:
   explicit MonClient(CephContext *cct_);
@@ -325,9 +324,9 @@ public:
    */
   int ping_monitor(const string &mon_id, string *result_reply);
 
-  void send_mon_message(Message *m) {
-    Mutex::Locker l(monc_lock);
-    _send_mon_message(m);
+  void send_mon_message(MessageRef&& m) {
+    lock_guard l(monc_lock);
+    _send_mon_message(std::move(m));
   }
   /**
    * If you specify a callback, you should not call
@@ -336,12 +335,17 @@ public:
    * the session has been killed and the MonClient has started trying
    * to reconnect to another monitor.
    */
-  void reopen_session(Context *cb=NULL) {
-    Mutex::Locker l(monc_lock);
-    if (cb) {
-      delete session_established_context;
-      session_established_context = cb;
-    }
+  void reopen_session() {
+    lock_guard l(monc_lock);
+    session_established.reset();
+    _reopen_session();
+  }
+
+  template<typename... Args>
+  void reopen_session(Args&&... args) {
+    lock_guard l(monc_lock);
+    session_established = std::unique_ptr<thunk>(
+      new thunk(std::forward<Args>(args)...));
     _reopen_session();
   }
 
@@ -354,19 +358,19 @@ public:
   }
 
   entity_addr_t get_mon_addr(unsigned i) {
-    Mutex::Locker l(monc_lock);
+    lock_guard l(monc_lock);
     if (i < monmap.size())
       return monmap.get_addr(i);
     return entity_addr_t();
   }
   entity_inst_t get_mon_inst(unsigned i) {
-    Mutex::Locker l(monc_lock);
+    lock_guard l(monc_lock);
     if (i < monmap.size())
       return monmap.get_inst(i);
     return entity_inst_t();
   }
   int get_num_mon() {
-    Mutex::Locker l(monc_lock);
+    lock_guard l(monc_lock);
     return monmap.size();
   }
 
@@ -376,8 +380,8 @@ public:
 
   void set_messenger(Messenger *m) { messenger = m; }
 
-  void send_auth_message(Message *m) {
-    _send_mon_message(m, true);
+  void send_auth_message(MessageRef&& m) {
+    _send_mon_message(std::move(m), true);
   }
 
   void set_want_keys(uint32_t want) {
@@ -392,80 +396,102 @@ public:
       auth->add_want_keys(want);
   }
 
+  using MonCommand_cb = cxx_function::unique_function<
+    void(int&, string&, bufferlist&)&& noexcept>;
+
   // admin commands
 private:
-  uint64_t last_mon_command_tid;
-  struct MonCommand {
-    string target_name;
-    int target_rank;
+  uint64_t last_mon_command_tid = 0;
+
+  struct MonCommand : public boost::intrusive::set_base_hook<> {
+    struct compare {
+      bool operator()(const MonCommand& l, const MonCommand& r) const {
+	return l.tid < r.tid;
+      }
+
+      bool operator()(const MonCommand& l, const uint64_t& r) const {
+	return l.tid < r;
+      }
+
+      bool operator()(const uint64_t& l, const MonCommand& r) const {
+	return l < r.tid;
+      }
+    };
+    std::string target_name;
+    int target_rank = -1;
     uint64_t tid;
-    vector<string> cmd;
+    std::vector<std::string> cmd;
     bufferlist inbl;
-    bufferlist *poutbl;
-    string *prs;
-    int *prval;
-    Context *onfinish, *ontimeout;
+    MonCommand_cb onfinish;
+    uint64_t ontimeout = 0;
 
-    explicit MonCommand(uint64_t t)
-      : target_rank(-1),
-	tid(t),
-	poutbl(NULL), prs(NULL), prval(NULL), onfinish(NULL), ontimeout(NULL)
-    {}
+    explicit MonCommand(uint64_t t) : tid(t) { }
   };
-  map<uint64_t,MonCommand*> mon_commands;
+  // For our purposes, we treat this as owning its contents
+  boost::intrusive::set<
+    MonCommand,
+    boost::intrusive::compare<MonCommand::compare> > mon_commands;
 
-  class C_CancelMonCommand : public Context
-  {
-    uint64_t tid;
-    MonClient *monc;
-  public:
-    C_CancelMonCommand(uint64_t tid, MonClient *monc) : tid(tid), monc(monc) {}
-    void finish(int r) {
-      monc->_cancel_mon_command(tid, -ETIMEDOUT);
-    }
-  };
-
-  void _send_command(MonCommand *r);
+  std::unique_ptr<MonCommand> _reclaim_mon_command(
+    decltype(mon_commands)::iterator i) {
+    std::unique_ptr<MonCommand> m(&(*i));
+    mon_commands.erase(i);
+    return m;
+  }
+  void _send_and_record(std::unique_ptr<MonCommand> m) {
+    MonCommand& q = *m; // Non-owning reference we pass to send
+    mon_commands.insert(*(m.release()));
+    _send_command(q);
+  }
+  void _send_command(MonCommand& r);
   void _resend_mon_commands();
   int _cancel_mon_command(uint64_t tid, int r);
-  void _finish_command(MonCommand *r, int ret, string rs);
+  void cancel_mon_commands();
+  void _finish_command(std::unique_ptr<MonCommand> r, int ret, string&& rs,
+		       bufferlist&& rbl);
   void handle_mon_command_ack(MMonCommandAck *ack);
 
 public:
   int start_mon_command(const vector<string>& cmd, const bufferlist& inbl,
-			bufferlist *outbl, string *outs,
-			Context *onfinish);
+			MonCommand_cb&& onfinish);
   int start_mon_command(int mon_rank,
 			const vector<string>& cmd, const bufferlist& inbl,
-			bufferlist *outbl, string *outs,
-			Context *onfinish);
-  int start_mon_command(const string &mon_name,  ///< mon name, with mon. prefix
+			MonCommand_cb&& onfinish);
+  int start_mon_command(const string &mon_name, ///< mon name, with mon. prefix
 			const vector<string>& cmd, const bufferlist& inbl,
-			bufferlist *outbl, string *outs,
-			Context *onfinish);
+			MonCommand_cb&& onfinish);
 
   // version requests
 public:
+
+  // Response code, newest, oldest
+  using Version_cb = cxx_function::unique_function<
+    void(int, version_t, version_t) &&>;
+
   /**
    * get latest known version(s) of cluster map
    *
    * @param map string name of map (e.g., 'osdmap')
-   * @param newest pointer where newest map version will be stored
-   * @param oldest pointer where oldest map version will be stored
-   * @param onfinish context that will be triggered on completion
-   * @return (via context) 0 on success, -EAGAIN if we need to resubmit our request
+   * @param onfinish Callback to be triggered on success
+   *
+   * \note Versions are invalid unless response code is 0
+   *       -EAGAIN means we need to resubmit.
    */
-  void get_version(string map, version_t *newest, version_t *oldest, Context *onfinish);
+  template<typename... Args>
+  void get_version(string map, Version_cb&& onfinish) {
+    lock_guard l(monc_lock);
+    boost::intrusive_ptr<MMonGetVersion> m(new MMonGetVersion, false);
+    m->what = map;
+    m->handle = ++version_req_id;
+    version_requests.emplace(m->handle,
+			     std::move(onfinish));
+    _send_mon_message(std::move(m));
+  }
 
 private:
-  struct version_req_d {
-    Context *context;
-    version_t *newest, *oldest;
-    version_req_d(Context *con, version_t *n, version_t *o) : context(con),newest(n), oldest(o) {}
-  };
 
-  map<ceph_tid_t, version_req_d*> version_requests;
-  ceph_tid_t version_req_id;
+  std::map<ceph_tid_t, Version_cb> version_requests;
+  ceph_tid_t version_req_id = 0;
   void handle_get_version_reply(MMonGetVersionReply* m);
 
 

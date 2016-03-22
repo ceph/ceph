@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/config.h"
+#include "common/ceph_time.h"
+
 #include "Finisher.h"
 
 #include "common/debug.h"
@@ -12,96 +14,93 @@
 void Finisher::start()
 {
   ldout(cct, 10) << __func__ << dendl;
-  finisher_thread.create(thread_name.c_str());
+  finisher_thread = make_named_thread(thread_name,
+				      &Finisher::finisher_thread_entry, this);
 }
 
 void Finisher::stop()
 {
   ldout(cct, 10) << __func__ << dendl;
-  finisher_lock.Lock();
-  finisher_stop = true;
-  // we don't have any new work to do, but we want the worker to wake up anyway
-  // to process the stop condition.
-  finisher_cond.Signal();
-  finisher_lock.Unlock();
+  {
+    lock_guard l(finisher_lock);
+    finisher_stop = true;
+    // we don't have any new work to do, but we want the worker to
+    // wake up anyway to process the stop condition.
+    finisher_cond.notify_one();
+  }
   finisher_thread.join(); // wait until the worker exits completely
   ldout(cct, 10) << __func__ << " finish" << dendl;
 }
 
-void Finisher::wait_for_empty()
+void Finisher::wait_for_empty() noexcept
 {
-  finisher_lock.Lock();
-  while (!finisher_queue.empty() || finisher_running) {
-    ldout(cct, 10) << "wait_for_empty waiting" << dendl;
-    finisher_empty_cond.Wait(finisher_lock);
-  }
+  unique_lock l(finisher_lock);
+  ldout(cct, 10) << "wait_for_empty waiting" << dendl;
+  // Since we can't capture const this
+  finisher_empty_cond.wait(l, [this] {
+      return finisher_queue.empty() && !finisher_running;
+    });
   ldout(cct, 10) << "wait_for_empty empty" << dendl;
-  finisher_lock.Unlock();
 }
 
-void *Finisher::finisher_thread_entry()
+// We declare this noexcept specifically to get around a limitation in
+// libstdc++. To handle thread cancellation, they catch all exceptions
+// at thread start and call terminate on any but the specific
+// __thread_cancel exception.
+
+// With the noexcept specification here, our stack shouldn't be
+// unwound before terminate() is called.
+
+void Finisher::finisher_thread_entry() noexcept
 {
-  finisher_lock.Lock();
+  unique_lock l(finisher_lock);
   ldout(cct, 10) << "finisher_thread start" << dendl;
 
-  utime_t start;
+  ceph::coarse_mono_time start;
   while (!finisher_stop) {
     /// Every time we are woken up, we process the queue until it is empty.
     while (!finisher_queue.empty()) {
       if (logger)
-        start = ceph_clock_now(cct);
+	start = ceph::coarse_mono_clock::now();
       // To reduce lock contention, we swap out the queue to process.
-      // This way other threads can submit new contexts to complete while we are working.
-      vector<Context*> ls;
-      list<pair<Context*,int> > ls_rval;
-      ls.swap(finisher_queue);
-      ls_rval.swap(finisher_queue_rval);
+      // This way other threads can submit new contexts to complete
+      // while we are working.
+      decltype(finisher_queue) ls = std::move(finisher_queue);
+      finisher_queue.clear();
       finisher_running = true;
-      finisher_lock.Unlock();
-      ldout(cct, 10) << "finisher_thread doing " << ls << dendl;
+      l.unlock();
+      // We don't have jobs identified by addresses any more and
+      // there's no really good way of printing a function, generally.
+      ldout(cct, 10) << "finisher_thread doing stuff" << dendl;
 
       // Now actually process the contexts.
-      for (vector<Context*>::iterator p = ls.begin();
-	   p != ls.end();
-	   ++p) {
-	if (*p) {
-	  (*p)->complete(0);
-	} else {
-	  // When an item is NULL in the finisher_queue, it means
-	  // we should instead process an item from finisher_queue_rval,
-	  // which has a parameter for complete() other than zero.
-	  // This preserves the order while saving some storage.
-	  assert(!ls_rval.empty());
-	  Context *c = ls_rval.front().first;
-	  c->complete(ls_rval.front().second);
-	  ls_rval.pop_front();
-	}
+      for (auto&& p : ls) {
+	std::move(p)();
 	if (logger) {
 	  logger->dec(l_finisher_queue_len);
-          logger->tinc(l_finisher_complete_lat, ceph_clock_now(cct) - start);
-        }
+	  logger->tinc(l_finisher_complete_lat,
+		       ceph::coarse_mono_clock::now() - start);
+	}
       }
-      ldout(cct, 10) << "finisher_thread done with " << ls << dendl;
+      ldout(cct, 10) << "finisher_thread done with stuff" << dendl;
       ls.clear();
 
-      finisher_lock.Lock();
+      l.lock();
       finisher_running = false;
     }
     ldout(cct, 10) << "finisher_thread empty" << dendl;
-    finisher_empty_cond.Signal();
+    finisher_empty_cond.notify_all();
     if (finisher_stop)
       break;
-    
+
     ldout(cct, 10) << "finisher_thread sleeping" << dendl;
-    finisher_cond.Wait(finisher_lock);
+    finisher_cond.wait(l);
   }
   // If we are exiting, we signal the thread waiting in stop(),
   // otherwise it would never unblock
-  finisher_empty_cond.Signal();
+  finisher_empty_cond.notify_all();
 
   ldout(cct, 10) << "finisher_thread stop" << dendl;
   finisher_stop = false;
-  finisher_lock.Unlock();
-  return 0;
 }
 

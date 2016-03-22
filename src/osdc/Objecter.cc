@@ -1301,42 +1301,6 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
 }
 
-// op pool check
-
-void Objecter::C_Op_Map_Latest::finish(int r)
-{
-  if (r == -EAGAIN || r == -ECANCELED)
-    return;
-
-  lgeneric_subdout(objecter->cct, objecter, 10)
-    << "op_map_latest r=" << r << " tid=" << tid
-    << " latest " << latest << dendl;
-
-  Objecter::unique_lock wl(objecter->rwlock);
-
-  map<ceph_tid_t, Op*>::iterator iter =
-    objecter->check_latest_map_ops.find(tid);
-  if (iter == objecter->check_latest_map_ops.end()) {
-    lgeneric_subdout(objecter->cct, objecter, 10)
-      << "op_map_latest op "<< tid << " not found" << dendl;
-    return;
-  }
-
-  Op *op = iter->second;
-  objecter->check_latest_map_ops.erase(iter);
-
-  lgeneric_subdout(objecter->cct, objecter, 20)
-    << "op_map_latest op "<< op << dendl;
-
-  if (op->map_dne_bound == 0)
-    op->map_dne_bound = latest;
-
-  OSDSession::unique_lock sl(op->session->lock, defer_lock);
-  objecter->_check_op_pool_dne(op, sl);
-
-  op->put();
-}
-
 int Objecter::pool_snap_by_name(int64_t poolid, const char *snap_name,
 				snapid_t *snap)
 {
@@ -1446,6 +1410,42 @@ void Objecter::_check_op_pool_dne(Op *op, unique_lock& sl)
   }
 }
 
+void Objecter::op_map_latest(ceph_tid_t tid, int r, version_t latest,
+			     version_t)
+{
+  if (r == -EAGAIN || r == -ECANCELED)
+    return;
+
+  lgeneric_subdout(cct, objecter, 10)
+    << "op_map_latest r=" << r << " tid=" << tid
+    << " latest " << latest << dendl;
+
+  unique_lock wl(rwlock);
+
+  auto iter = check_latest_map_ops.find(tid);
+  if (iter == check_latest_map_ops.end()) {
+    lgeneric_subdout(cct, objecter, 10)
+      << "op_map_latest op "<< tid << " not found" << dendl;
+    return;
+  }
+
+  Op *op = iter->second;
+  check_latest_map_ops.erase(iter);
+
+  lgeneric_subdout(cct, objecter, 20)
+    << "op_map_latest op "<< op << dendl;
+
+  if (op->map_dne_bound == 0)
+    op->map_dne_bound = latest;
+
+  OSDSession::unique_lock sl(op->session->lock, defer_lock);
+  _check_op_pool_dne(op, sl);
+
+  op->put();
+}
+
+using namespace std::placeholders;
+
 void Objecter::_send_op_map_check(Op *op)
 {
   // rwlock is locked unique
@@ -1453,8 +1453,8 @@ void Objecter::_send_op_map_check(Op *op)
   if (check_latest_map_ops.count(op->tid) == 0) {
     op->get();
     check_latest_map_ops[op->tid] = op;
-    C_Op_Map_Latest *c = new C_Op_Map_Latest(this, op->tid);
-    monc->get_version("osdmap", &c->latest, NULL, c);
+    monc->get_version("osdmap", std::bind(&Objecter::op_map_latest,
+					  this, op->tid, _1, _2, _3));
   }
 }
 
@@ -1468,39 +1468,6 @@ void Objecter::_op_cancel_map_check(Op *op)
     op->put();
     check_latest_map_ops.erase(iter);
   }
-}
-
-// linger pool check
-
-void Objecter::C_Linger_Map_Latest::finish(int r)
-{
-  if (r == -EAGAIN || r == -ECANCELED) {
-    // ignore callback; we will retry in resend_mon_ops()
-    return;
-  }
-
-  unique_lock wl(objecter->rwlock);
-
-  map<uint64_t, LingerOp*>::iterator iter =
-    objecter->check_latest_map_lingers.find(linger_id);
-  if (iter == objecter->check_latest_map_lingers.end()) {
-    return;
-  }
-
-  LingerOp *op = iter->second;
-  objecter->check_latest_map_lingers.erase(iter);
-
-  if (op->map_dne_bound == 0)
-    op->map_dne_bound = latest;
-
-  bool unregister;
-  objecter->_check_linger_pool_dne(op, &unregister);
-
-  if (unregister) {
-    objecter->_linger_cancel(op);
-  }
-
-  op->put();
 }
 
 void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
@@ -1532,14 +1499,43 @@ void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
   }
 }
 
+void Objecter::linger_map_latest(ceph_tid_t linger_id, int r, version_t latest,
+				 version_t)
+{
+  if (r == -EAGAIN || r == -ECANCELED) {
+    // ignore callback; we will retry in resend_mon_ops()
+    return;
+  }
+
+  unique_lock wl(rwlock);
+
+  auto iter = check_latest_map_lingers.find(linger_id);
+  if (iter == check_latest_map_lingers.end())
+    return;
+
+  LingerOp *op = iter->second;
+  check_latest_map_lingers.erase(iter);
+
+  if (op->map_dne_bound == 0)
+    op->map_dne_bound = latest;
+
+  bool unregister;
+  _check_linger_pool_dne(op, &unregister);
+
+  if (unregister)
+    _linger_cancel(op);
+
+  op->put();
+}
+
 void Objecter::_send_linger_map_check(LingerOp *op)
 {
   // ask the monitor
   if (check_latest_map_lingers.count(op->linger_id) == 0) {
     op->get();
     check_latest_map_lingers[op->linger_id] = op;
-    C_Linger_Map_Latest *c = new C_Linger_Map_Latest(this, op->linger_id);
-    monc->get_version("osdmap", &c->latest, NULL, c);
+    monc->get_version("osdmap", std::bind(&Objecter::linger_map_latest,
+					  this, op->linger_id, _1, _2, _3));
   }
 }
 
@@ -1554,34 +1550,6 @@ void Objecter::_linger_cancel_map_check(LingerOp *op)
     op->put();
     check_latest_map_lingers.erase(iter);
   }
-}
-
-// command pool check
-
-void Objecter::C_Command_Map_Latest::finish(int r)
-{
-  if (r == -EAGAIN || r == -ECANCELED) {
-    // ignore callback; we will retry in resend_mon_ops()
-    return;
-  }
-
-  unique_lock wl(objecter->rwlock);
-
-  map<uint64_t, CommandOp*>::iterator iter =
-    objecter->check_latest_map_commands.find(tid);
-  if (iter == objecter->check_latest_map_commands.end()) {
-    return;
-  }
-
-  CommandOp *c = iter->second;
-  objecter->check_latest_map_commands.erase(iter);
-
-  if (c->map_dne_bound == 0)
-    c->map_dne_bound = latest;
-
-  objecter->_check_command_map_dne(c);
-
-  c->put();
 }
 
 void Objecter::_check_command_map_dne(CommandOp *c)
@@ -1601,6 +1569,32 @@ void Objecter::_check_command_map_dne(CommandOp *c)
   }
 }
 
+void Objecter::command_map_latest(ceph_tid_t tid, int r, version_t latest,
+				  version_t)
+{
+  if (r == -EAGAIN || r == -ECANCELED) {
+    // ignore callback; we will retry in resend_mon_ops()
+    return;
+  }
+
+  unique_lock wl(rwlock);
+
+  auto iter = check_latest_map_commands.find(tid);
+  if (iter == check_latest_map_commands.end()) {
+    return;
+  }
+
+  CommandOp *c = iter->second;
+  check_latest_map_commands.erase(iter);
+
+  if (c->map_dne_bound == 0)
+    c->map_dne_bound = latest;
+
+  _check_command_map_dne(c);
+
+  c->put();
+}
+
 void Objecter::_send_command_map_check(CommandOp *c)
 {
   // rwlock is locked unique
@@ -1609,8 +1603,8 @@ void Objecter::_send_command_map_check(CommandOp *c)
   if (check_latest_map_commands.count(c->tid) == 0) {
     c->get();
     check_latest_map_commands[c->tid] = c;
-    C_Command_Map_Latest *f = new C_Command_Map_Latest(this, c->tid);
-    monc->get_version("osdmap", &f->latest, NULL, f);
+    monc->get_version("osdmap", std::bind(&Objecter::command_map_latest, this,
+					  c->tid, _1, _2, _3));
   }
 }
 
@@ -1786,29 +1780,21 @@ void Objecter::wait_for_osd_map()
   lock.Unlock();
 }
 
-struct C_Objecter_GetVersion : public Context {
-  Objecter *objecter;
-  uint64_t oldest, newest;
-  Context *fin;
-  C_Objecter_GetVersion(Objecter *o, Context *c)
-    : objecter(o), oldest(0), newest(0), fin(c) {}
-  void finish(int r) {
-    if (r >= 0) {
-      objecter->get_latest_version(oldest, newest, fin);
-    } else if (r == -EAGAIN) { // try again as instructed
-      objecter->wait_for_latest_osdmap(fin);
-    } else {
-      // it doesn't return any other error codes!
-      assert(0);
-    }
-  }
-};
-
 void Objecter::wait_for_latest_osdmap(Context *fin)
 {
   ldout(cct, 10) << __func__ << dendl;
-  C_Objecter_GetVersion *c = new C_Objecter_GetVersion(this, fin);
-  monc->get_version("osdmap", &c->newest, &c->oldest, c);
+  monc->get_version(
+    "osdmap",
+    [this, fin](int r, version_t newest, version_t oldest) {
+      if (r >= 0) {
+	get_latest_version(oldest, newest, fin);
+      } else if (r == -EAGAIN) { // try again as instructed
+	wait_for_latest_osdmap(fin);
+      } else {
+	// it doesn't return any other error codes!
+	assert(0);
+      }
+    });
 }
 
 void Objecter::get_latest_version(epoch_t oldest, epoch_t newest, Context *fin)
@@ -2102,24 +2088,24 @@ void Objecter::resend_mon_ops()
   for (map<ceph_tid_t, Op*>::iterator p = check_latest_map_ops.begin();
        p != check_latest_map_ops.end();
        ++p) {
-    C_Op_Map_Latest *c = new C_Op_Map_Latest(this, p->second->tid);
-    monc->get_version("osdmap", &c->latest, NULL, c);
+    monc->get_version(
+      "osdmap", std::bind(&Objecter::op_map_latest, this, p->second->tid,
+			  _1, _2, _3));
   }
 
   for (map<uint64_t, LingerOp*>::iterator p = check_latest_map_lingers.begin();
        p != check_latest_map_lingers.end();
        ++p) {
-    C_Linger_Map_Latest *c
-      = new C_Linger_Map_Latest(this, p->second->linger_id);
-    monc->get_version("osdmap", &c->latest, NULL, c);
+    monc->get_version("osdmap", std::bind(&Objecter::linger_map_latest, this,
+					  p->second->linger_id, _1, _2, _3));
   }
 
   for (map<uint64_t, CommandOp*>::iterator p
 	 = check_latest_map_commands.begin();
        p != check_latest_map_commands.end();
        ++p) {
-    C_Command_Map_Latest *c = new C_Command_Map_Latest(this, p->second->tid);
-    monc->get_version("osdmap", &c->latest, NULL, c);
+    monc->get_version("osdmap", std::bind(&Objecter::command_map_latest,
+					  this, p->second->tid, _1, _2, _3));
   }
 }
 

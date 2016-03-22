@@ -1341,24 +1341,6 @@ public:
     }
   };
 
-  struct C_Op_Map_Latest : public Context {
-    Objecter *objecter;
-    ceph_tid_t tid;
-    version_t latest;
-    C_Op_Map_Latest(Objecter *o, ceph_tid_t t) : objecter(o), tid(t),
-						 latest(0) {}
-    void finish(int r);
-  };
-
-  struct C_Command_Map_Latest : public Context {
-    Objecter *objecter;
-    uint64_t tid;
-    version_t latest;
-    C_Command_Map_Latest(Objecter *o, ceph_tid_t t) :  objecter(o), tid(t),
-						       latest(0) {}
-    void finish(int r);
-  };
-
   struct C_Stat : public Context {
     bufferlist bl;
     uint64_t *psize;
@@ -1754,15 +1736,6 @@ public:
     }
   };
 
-  struct C_Linger_Map_Latest : public Context {
-    Objecter *objecter;
-    uint64_t linger_id;
-    version_t latest;
-    C_Linger_Map_Latest(Objecter *o, uint64_t id) :
-      objecter(o), linger_id(id), latest(0) {}
-    void finish(int r);
-  };
-
   // -- osd sessions --
   struct OSDSession : public RefCountedObject {
     boost::shared_mutex lock;
@@ -1893,6 +1866,10 @@ public:
 private:
   void _check_op_pool_dne(Op *op, unique_lock& sl);
   void _send_op_map_check(Op *op);
+  void op_map_latest(ceph_tid_t tid, int r, version_t latest, version_t);
+  void linger_map_latest(ceph_tid_t tid, int r, version_t latest, version_t);
+  void command_map_latest(ceph_tid_t tid, int r, version_t latest, version_t);
+
   void _op_cancel_map_check(Op *op);
   void _check_linger_pool_dne(LingerOp *op, bool *need_unregister);
   void _send_linger_map_check(LingerOp *op);
