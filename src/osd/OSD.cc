@@ -7479,15 +7479,28 @@ void OSD::handle_pg_create(OpRequestRef op)
     // cannot be on the other side of a map gap
     assert(valid_history);
 
+    // The mon won't resend unless the primary changed, so
+    // we ignore same_interval_since.  We'll pass this history
+    // to handle_pg_peering_evt with the current epoch as the
+    // event -- the project_pg_history check in
+    // handle_pg_peering_evt will be a noop.
+    if (history.same_primary_since > m->epoch) {
+      dout(10) << __func__ << ": got obsolete pg create on pgid "
+	       << pgid << " from epoch " << m->epoch
+	       << ", primary changed in " << history.same_primary_since
+	       << dendl;
+      continue;
+    }
+
     handle_pg_peering_evt(
       pgid,
       history,
       pi,
-      m->epoch,
+      osdmap->get_epoch(),
       PG::CephPeeringEvtRef(
 	new PG::CephPeeringEvt(
-	  m->epoch,
-	  m->epoch,
+	  osdmap->get_epoch(),
+	  osdmap->get_epoch(),
 	  PG::NullEvt()))
       );
   }
