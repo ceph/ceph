@@ -6483,15 +6483,17 @@ done:
      *  writeback:  Cache writes, promote reads from base pool
      *  readonly:   Forward writes to base pool
      *  readforward: Writes are in writeback mode, Reads are in forward mode
+     *  proxy:       Proxy all reads and writes to base pool
      *  readproxy:   Writes are in writeback mode, Reads are in proxy mode
      *
      * Hence, these are the allowed transitions:
      *
      *  none -> any
-     *  forward -> readforward || readproxy || writeback || any IF num_objects_dirty == 0
-     *  readforward -> forward || readproxy || writeback || any IF num_objects_dirty == 0
-     *  readproxy -> forward || readforward || writeback || any IF num_objects_dirty == 0
-     *  writeback -> readforward || readproxy || forward
+     *  forward -> proxy || readforward || readproxy || writeback || any IF num_objects_dirty == 0
+     *  proxy -> forward || readforward || readproxy || writeback || any IF num_objects_dirty == 0
+     *  readforward -> forward || proxy || readproxy || writeback || any IF num_objects_dirty == 0
+     *  readproxy -> forward || proxy || readforward || writeback || any IF num_objects_dirty == 0
+     *  writeback -> readforward || readproxy || forward || proxy
      *  readonly -> any
      */
 
@@ -6501,12 +6503,15 @@ done:
 
     if (p->cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
         (mode != pg_pool_t::CACHEMODE_FORWARD &&
+	  mode != pg_pool_t::CACHEMODE_PROXY &&
 	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
 	  mode != pg_pool_t::CACHEMODE_READPROXY)) {
       ss << "unable to set cache-mode '" << pg_pool_t::get_cache_mode_name(mode)
          << "' on a '" << pg_pool_t::get_cache_mode_name(p->cache_mode)
          << "' pool; only '"
          << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_FORWARD)
+	 << "','"
+         << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_PROXY)
 	 << "','"
          << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_READFORWARD)
 	 << "','"
@@ -6518,16 +6523,25 @@ done:
     if ((p->cache_mode == pg_pool_t::CACHEMODE_READFORWARD &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
 	  mode != pg_pool_t::CACHEMODE_FORWARD &&
+	  mode != pg_pool_t::CACHEMODE_PROXY &&
 	  mode != pg_pool_t::CACHEMODE_READPROXY)) ||
 
         (p->cache_mode == pg_pool_t::CACHEMODE_READPROXY &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
 	  mode != pg_pool_t::CACHEMODE_FORWARD &&
-	  mode != pg_pool_t::CACHEMODE_READFORWARD)) ||
+	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
+	  mode != pg_pool_t::CACHEMODE_PROXY)) ||
+
+        (p->cache_mode == pg_pool_t::CACHEMODE_PROXY &&
+        (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
+	  mode != pg_pool_t::CACHEMODE_FORWARD &&
+	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
+	  mode != pg_pool_t::CACHEMODE_READPROXY)) ||
 
         (p->cache_mode == pg_pool_t::CACHEMODE_FORWARD &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
 	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
+	  mode != pg_pool_t::CACHEMODE_PROXY &&
 	  mode != pg_pool_t::CACHEMODE_READPROXY))) {
 
       const pool_stat_t& tier_stats =
