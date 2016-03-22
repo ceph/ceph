@@ -1392,9 +1392,9 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     cerr << "bad pg: " << nargs[1] << std::endl;
     return ret;
   }
-
-  uint32_t interval = 0;
+  uint32_t interval = 0, first_interval = 0;
   const unsigned max_item_num = 32;
+  bool opened = false;
   for (librados::object_id_t start;;) {
     std::vector<T> items;
     auto completion = librados::Rados::aio_create_completion();
@@ -1412,8 +1412,15 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
         cerr << "Unknown error " << cpp_strerror(ret) << std::endl;
       break;
     }
+    // It must be the same interval every time.  EAGAIN would
+    // occur if interval changes.
+    assert(start.name.empty() || first_interval == interval);
     if (start.name.empty()) {
+      first_interval = interval;
+      formatter.open_object_section("info");
+      formatter.dump_int("epoch", interval);
       formatter.open_array_section("inconsistents");
+      opened = true;
     }
     for (auto& inc : items) {
       formatter.open_object_section("inconsistent");
@@ -1428,7 +1435,10 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     }
     items.clear();
   }
-  formatter.flush(cout);
+  if (opened) {
+    formatter.close_section();
+    formatter.flush(cout);
+  }
   return ret;
 }
 
