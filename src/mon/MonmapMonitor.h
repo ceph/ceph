@@ -84,26 +84,6 @@ class MonmapMonitor : public PaxosService {
 
  private:
   bufferlist monmap_bl;
-
-  class C_ApplyFeatures : public Context {
-    MonmapMonitor *svc;
-    mon_feature_t features;
-  public:
-    C_ApplyFeatures(MonmapMonitor *s, const mon_feature_t& f) :
-      svc(s), features(f) { }
-    void finish(int r) {
-      if (r >= 0) {
-        svc->apply_mon_features(features);
-      } else if (r == -EAGAIN || r == -ECANCELED) {
-        // discard features if we're no longer on the quorum that
-        // established them in the first place.
-        return;
-      } else {
-        assert(0 == "bad C_ApplyFeatures return value");
-      }
-    }
-  };
-
 };
 
 

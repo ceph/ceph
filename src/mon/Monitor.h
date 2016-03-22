@@ -617,6 +617,9 @@ public:
   uint64_t get_quorum_con_features() const {
     return quorum_con_features;
   }
+  mon_feature_t get_quorum_mon_features() const {
+    return quorum_mon_features;
+  }
   uint64_t get_required_features() const {
     return required_features;
   }
