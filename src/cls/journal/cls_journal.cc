@@ -547,9 +547,15 @@ int journal_client_register(cls_method_context_t hctx, bufferlist *in,
     return -EINVAL;
   }
 
+  uint8_t order;
+  int r = read_key(hctx, HEADER_KEY_ORDER, &order);
+  if (r < 0) {
+    return r;
+  }
+
   std::string key(key_from_client_id(id));
   bufferlist stored_clientbl;
-  int r = cls_cxx_map_get_val(hctx, key, &stored_clientbl);
+  r = cls_cxx_map_get_val(hctx, key, &stored_clientbl);
   if (r != -ENOENT) {
     CLS_ERR("duplicate client id: %s", id.c_str());
     return -EEXIST;
