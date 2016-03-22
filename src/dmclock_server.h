@@ -644,16 +644,6 @@ namespace crimson {
       void add_request(RequestRef&& request,
 		       const ReqParams<C>& req_params,
 		       const Time& time) {
-#if 0
-	{
-	  static std::atomic_ulong counter(0);
-	  ++counter;
-	  uint32_t counter2 = counter.load();
-	  if (counter2 >= 200 && counter2 < 220) {
-	    std::cout << req_params << std::endl;
-	  }
-	}
-#endif
 	const C& client_id = req_params.client;
 	DataGuard g(data_mtx);
 	++tick;
@@ -715,20 +705,6 @@ namespace crimson {
 	limit_q.adjust(*client_rec.client_entry);
 	ready_q.adjust(*client_rec.client_entry);
 	prop_q.adjust(*client_rec.client_entry);
-
-#if 0
-	{
-	  static uint count = 0;
-	  ++count;
-	  if (50 <= count && count < 55) {
-	    std::cout << "add_request:" << std::endl;
-	    std::cout << "time:" << format_time(time) << std::endl;
-	    displayQueues();
-	    std::cout << std::endl;
-	    debugger();
-	  }
-	}
-#endif
 
 	if (Mechanism::push == mechanism) {
 	  schedule_request();
@@ -943,20 +919,6 @@ namespace crimson {
 
 	// try constraint (reservation) based scheduling
 
-#if 0
-	{
-	  static uint count = 0;
-	  ++count;
-	  if (50 <= count && count <= 55) {
-	    std::cout << "schedule_request A:" << std::endl;
-	    std::cout << "now:" << format_time(now) << std::endl;
-	    display_queues();
-	    std::cout << std::endl;
-	    debugger();
-	  }
-	}
-#endif
-
 	auto& reserv = reserv_q.top();
 	if (reserv.has_request() &&
 	    reserv.next_request().tag.reservation <= now) {
@@ -978,20 +940,6 @@ namespace crimson {
 
 	  limits = &limit_q.top();
 	}
-
-#if 0
-	{
-	  static uint count = 0;
-	  ++count;
-	  if (2000 <= count && count < 2002) {
-	    std::cout << "schedule_request B:" << std::endl;
-	    std::cout << "now:" << format_time(now) << std::endl;
-	    display_queues();
-	    std::cout << std::endl;
-	    debugger();
-	  }
-	}
-#endif
 
 	auto readys = &ready_q.top();
 	if (readys->has_request() &&
