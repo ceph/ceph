@@ -22,7 +22,7 @@ void StandardPolicy::allocate_tag_on_lock(Context *on_finish) {
     return;
   }
 
-  m_image_ctx->journal->allocate_tag(Journal<>::LOCAL_MIRROR_UUID, on_finish);
+  m_image_ctx->journal->allocate_local_tag(on_finish);
 }
 
 void StandardPolicy::cancel_external_replay(Context *on_finish) {

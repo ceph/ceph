@@ -113,7 +113,11 @@ public:
   void close(Context *on_finish);
 
   bool is_tag_owner() const;
-  void allocate_tag(const std::string &mirror_uuid, Context *on_finish);
+  void allocate_local_tag(Context *on_finish);
+  void allocate_tag(const std::string &mirror_uuid,
+                    const std::string &predecessor_mirror_uuid,
+                    bool predecessor_commit_valid, uint64_t predecessor_tag_tid,
+                    uint64_t predecessor_entry_tid, Context *on_finish);
 
   void flush_commit_position(Context *on_finish);
 
