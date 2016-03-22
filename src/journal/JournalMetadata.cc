@@ -19,6 +19,62 @@ using namespace cls::journal;
 
 namespace {
 
+struct C_GetClient : public Context {
+  CephContext *cct;
+  librados::IoCtx &ioctx;
+  const std::string &oid;
+  AsyncOpTracker &async_op_tracker;
+  std::string client_id;
+  cls::journal::Client *client;
+  Context *on_finish;
+
+  bufferlist out_bl;
+
+  C_GetClient(CephContext *cct, librados::IoCtx &ioctx, const std::string &oid,
+              AsyncOpTracker &async_op_tracker, const std::string &client_id,
+              cls::journal::Client *client, Context *on_finish)
+    : cct(cct), ioctx(ioctx), oid(oid), async_op_tracker(async_op_tracker),
+      client_id(client_id), client(client), on_finish(on_finish) {
+    async_op_tracker.start_op();
+  }
+  virtual ~C_GetClient() {
+    async_op_tracker.finish_op();
+  }
+
+  virtual void send() {
+    send_get_client();
+  }
+
+  void send_get_client() {
+    ldout(cct, 20) << "C_GetClient: " << __func__ << dendl;
+
+    librados::ObjectReadOperation op;
+    client::get_client_start(&op, client_id);
+
+    librados::AioCompletion *comp = librados::Rados::aio_create_completion(
+      this, nullptr, &utils::rados_state_callback<
+        C_GetClient, &C_GetClient::handle_get_client>);
+
+    int r = ioctx.aio_operate(oid, comp, &op, &out_bl);
+    assert(r == 0);
+    comp->release();
+  }
+
+  void handle_get_client(int r) {
+    ldout(cct, 20) << "C_GetClient: " << __func__ << ": r=" << r << dendl;
+
+    if (r == 0) {
+      bufferlist::iterator it = out_bl.begin();
+      r = client::get_client_finish(&it, client);
+    }
+    complete(r);
+  }
+
+  virtual void finish(int r) override {
+    on_finish->complete(r);
+  }
+};
+
 struct C_AllocateTag : public Context {
   CephContext *cct;
   librados::IoCtx &ioctx;
@@ -362,6 +418,14 @@ void JournalMetadata::allocate_tag(uint64_t tag_class, const bufferlist &data,
   C_AllocateTag *ctx = new C_AllocateTag(m_cct, m_ioctx, m_oid,
                                          m_async_op_tracker, tag_class,
                                          data, tag, on_finish);
+  ctx->send();
+}
+
+void JournalMetadata::get_client(const std::string &client_id,
+                                 cls::journal::Client *client,
+                                 Context *on_finish) {
+  C_GetClient *ctx = new C_GetClient(m_cct, m_ioctx, m_oid, m_async_op_tracker,
+                                     client_id, client, on_finish);
   ctx->send();
 }
 

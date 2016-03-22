@@ -76,7 +76,8 @@ public:
   void unregister_client(Context *on_finish);
 
   void update_client(const bufferlist &data, Context *on_finish);
-
+  void get_client(const std::string &client_id, cls::journal::Client *client,
+                  Context *on_finish);
   int get_cached_client(const std::string &client_id,
                         cls::journal::Client *client);
 

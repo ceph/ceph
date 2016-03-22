@@ -248,6 +248,12 @@ void Journaler::unregister_client(Context *on_finish) {
   return m_metadata->unregister_client(on_finish);
 }
 
+void Journaler::get_client(const std::string &client_id,
+                           cls::journal::Client *client,
+                           Context *on_finish) {
+  m_metadata->get_client(client_id, client, on_finish);
+}
+
 int Journaler::get_cached_client(const std::string &client_id,
                                  cls::journal::Client *client) {
   RegisteredClients clients;
