@@ -83,7 +83,7 @@ struct CloseImageRequest<librbd::MockImageReplayerImageCtx> {
   Context *on_finish = nullptr;
 
   static CloseImageRequest* create(librbd::MockImageReplayerImageCtx **image_ctx,
-                                   ContextWQ *work_queue,
+                                   ContextWQ *work_queue, bool destroy_only,
                                    Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;

@@ -71,7 +71,7 @@ private:
   void send_lock_image();
   void handle_lock_image(int r);
 
-  void send_close_image(int r);
+  void send_close_image(bool destroy_only, int r);
   void handle_close_image(int r);
 
   void finish(int r);

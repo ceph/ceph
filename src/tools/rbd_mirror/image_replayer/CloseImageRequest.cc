@@ -22,8 +22,9 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 CloseImageRequest<I>::CloseImageRequest(I **image_ctx, ContextWQ *work_queue,
-                                        Context *on_finish)
-  : m_image_ctx(image_ctx), m_work_queue(work_queue), m_on_finish(on_finish) {
+                                        bool destroy_only, Context *on_finish)
+  : m_image_ctx(image_ctx), m_work_queue(work_queue),
+    m_destroy_only(destroy_only), m_on_finish(on_finish) {
 }
 
 template <typename I>
@@ -33,6 +34,11 @@ void CloseImageRequest<I>::send() {
 
 template <typename I>
 void CloseImageRequest<I>::close_image() {
+  if (m_destroy_only) {
+    switch_thread_context();
+    return;
+  }
+
   dout(20) << dendl;
 
   Context *ctx = create_context_callback<
