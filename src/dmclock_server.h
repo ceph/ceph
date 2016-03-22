@@ -357,6 +357,9 @@ namespace crimson {
 	  } retn;
 	  Time when_next;
 	};
+
+	PullReq() {}
+	~PullReq() {}
       };
 
       // a function that can be called to look up client information
@@ -461,7 +464,7 @@ namespace crimson {
 		      &ClientEntry::ready_heap_data,
 		      ClientCompare<&RequestTag::proportion,ReadyOption::raises>> new_ready_q;
 
-#if 1
+#if 0
       // four heaps that maintain the earliest request by each of the
       // tag components
       c::Heap<EntryRef, ReservationCompare> reserv_q;
@@ -665,7 +668,7 @@ namespace crimson {
 	  client_it = client_map.find(client_id);
 	}
 
-#if OLD_Q // translate later
+#if OLD_Q // ********** TRANSLATE LATER *****************
 	if (client_it->second.idle) {
 	  // We need to do an adjustment so that idle clients compete
 	  // fairly on proportional tags since those tags may have
@@ -710,22 +713,6 @@ namespace crimson {
 	new_limit_q.adjust(*client_rec.client_entry);
 	new_ready_q.adjust(*client_rec.client_entry);
 	new_prop_q.adjust(*client_rec.client_entry);
-
-#if OLD_Q
-	if (0.0 != entry->tag.reservation) {
-	  reserv_q.push(entry);
-	}
-
-	if (0.0 != entry->tag.proportion) {
-	  prop_q.push(entry);
-
-	  if (0.0 == entry->tag.limit) {
-	    ready_q.push(entry);
-	  } else {
-	    lim_q.push(entry);
-	  }
-	}
-#endif
 
 #if 0
 	{
@@ -781,16 +768,16 @@ namespace crimson {
 
 	switch(next.heap_id) {
 	case HeapId::reservation:
-	  pull_request_help(result, reserv_q, PhaseType::reservation);
+	  pull_request_help(result, new_reserv_q, PhaseType::reservation);
 	  ++reserv_sched_count;
 	  break;
 	case HeapId::ready:
-	  pull_request_help(result, ready_q, PhaseType::priority);
+	  pull_request_help(result, new_ready_q, PhaseType::priority);
 	  reduce_reservation_tags(result.client);
 	  ++prop_sched_count;
 	  break;
 	case HeapId::proportional:
-	  pull_request_help(result, prop_q, PhaseType::priority);
+	  pull_request_help(result, new_prop_q, PhaseType::priority);
 	  reduce_reservation_tags(result.client);
 	  ++limit_break_sched_count;
 	  break;
@@ -802,17 +789,37 @@ namespace crimson {
       }
 
 
-      template<typename K>
+      template<typename C1, IndIntruHeapData ClientEntry::*C2, typename C3>
       void pull_request_help(PullReq& result,
-			     Heap<EntryRef, K>& heap,
+			     IndIntruHeap<C1, ClientEntry, C2, C3>& heap,
 			     PhaseType phase) {
-	EntryRef& top = heap.top();
-	top->handled = true;
-	result.retn.client = top->client;
-	result.retn.request = std::move(top->request);
+	ClientEntry& top = heap.top();
+	ClientReq& first = top.next_request();
+
+	result.retn.client = top.client;
+	result.retn.request = std::move(first.request);
 	result.retn.phase = phase;
-	heap.pop();
+
+	top.pop_request();
+	new_reserv_q.adjust_down(top);
+	new_limit_q.adjust_down(top);
+	new_prop_q.adjust_down(top);
+	new_ready_q.adjust_down(top);
       }
+
+
+      // data_mtx should be held when called; furthermore, the heap
+      // should not be empty and the top element of the heap should
+      // not be already handled
+      template<typename C1, IndIntruHeapData ClientEntry::*C2, typename C3>
+      C submit_top_request(IndIntruHeap<C1, ClientEntry, C2, C3>& heap,
+			   PhaseType phase) {
+	PullReq result;
+	pull_request_help(result, heap, phase);
+	handle_f(result.retn.client, std::move(result.retn.request), phase);
+	return result.retn.client;
+      }
+
 
     protected:
 
@@ -823,16 +830,16 @@ namespace crimson {
 			  bool show_prop = true) {
 	auto filter = [](const EntryRef& e)->bool { return !e->handled; };
 	if (show_res) {
-	  reserv_q.displaySorted(std::cout << "RESER:", filter) << std::endl;
+	  new_reserv_q.display_sorted(std::cout << "RESER:", filter) << std::endl;
 	}
 	if (show_lim) {
-	  lim_q.displaySorted(std::cout << "LIMIT:", filter) << std::endl;
+	  new_limit_q.display_sorted(std::cout << "LIMIT:", filter) << std::endl;
 	}
 	if (show_ready) {
-	  ready_q.displaySorted(std::cout << "READY:", filter) << std::endl;
+	  new_ready_q.display_sorted(std::cout << "READY:", filter) << std::endl;
 	}
 	if (show_prop) {
-	  prop_q.displaySorted(std::cout << "PROPO:", filter) << std::endl;
+	  new_prop_q.display_sorted(std::cout << "PROPO:", filter) << std::endl;
 	}
       }
 
@@ -845,6 +852,7 @@ namespace crimson {
 	// as long as cleaning times are long enough
 	if (client_map.end() == client_it) return;
 
+#if OLD_Q // ************** TRANSLATE LATER ****************
 	double reduction = client_it->second.info.reservation_inv;
 	for (auto i = reserv_q.begin(); i != reserv_q.end(); ++i) {
 	  if ((*i)->client == client_id) {
@@ -852,20 +860,7 @@ namespace crimson {
 	    i.increase(); // since tag goes down, priority increases
 	  }
 	}
-      }
-
-
-      // data_mtx should be held when called; furthermore, the heap
-      // should not be empty and the top element of the heap should
-      // not be already handled
-      template<typename K>
-      C submit_top_request(Heap<EntryRef, K>& heap, PhaseType phase) {
-	EntryRef& top = heap.top();
-	top->handled = true;
-	handle_f(top->client, std::move(top->request), phase);
-	C client_result = top->client;
-	heap.pop();
-	return client_result;
+#endif
       }
 
 
@@ -902,18 +897,18 @@ namespace crimson {
 	switch(heap_id) {
 	case HeapId::reservation:
 	  // don't need to note client
-	  (void) submit_top_request(reserv_q, PhaseType::reservation);
+	  (void) submit_top_request(new_reserv_q, PhaseType::reservation);
 	  // unlike the other two cases, we do not reduce reservation
 	  // tags here
 	  ++reserv_sched_count;
 	  break;
 	case HeapId::ready:
-	  client = submit_top_request(ready_q, PhaseType::priority);
+	  client = submit_top_request(new_ready_q, PhaseType::priority);
 	  reduce_reservation_tags(client);
 	  ++prop_sched_count;
 	  break;
 	case HeapId::proportional:
-	  client = submit_top_request(prop_q, PhaseType::priority);
+	  client = submit_top_request(new_prop_q, PhaseType::priority);
 	  reduce_reservation_tags(client);
 	  ++limit_break_sched_count;
 	  break;
@@ -940,15 +935,6 @@ namespace crimson {
 
 	Time now = get_time();
 
-#if OLD_Q
-	// so queue management is handled incrementally, remove
-	// handled items from each of the queues
-	prepare_queue(reserv_q);
-	prepare_queue(ready_q);
-	prepare_queue(lim_q);
-	prepare_queue(prop_q);
-#endif
-
 	// try constraint (reservation) based scheduling
 
 #if 0
@@ -972,14 +958,6 @@ namespace crimson {
 	  return result;
 	}
 
-#if OLD_Q
-	if (!reserv_q.empty() && reserv_q.top()->tag.reservation <= now) {
-	  result.status = NextReqStat::returning;
-	  result.heap_id = HeapId::reservation;
-	  return result;
-	}
-#endif
-
 	// no existing reservations before now, so try weight-based
 	// scheduling
 
@@ -993,22 +971,6 @@ namespace crimson {
 
 	  limits = &new_limit_q.top();
 	}
-
-#if OLD_Q
-	// all items that are within limit are eligible based on
-	// priority
-	while (!lim_q.empty()) {
-	  auto top = lim_q.top();
-	  if (top->handled) {
-	    lim_q.pop();
-	  } else if (top->tag.limit <= now) {
-	    ready_q.push(top);
-	    lim_q.pop();
-	  } else {
-	    break;
-	  }
-	}
-#endif
 
 #if 0
 	{
@@ -1031,24 +993,6 @@ namespace crimson {
 	  result.heap_id = HeapId::ready;
 	  return result;
 	}
-
-#if OLD_Q
-	if (!ready_q.empty()) {
-	  result.status = NextReqStat::returning;
-	  result.heap_id = HeapId::ready;
-	  return result;
-	}
-#endif
-
-#if OLD_Q
-	if (allow_limit_break) {
-	  if (!prop_q.empty()) {
-	    result.status = NextReqStat::returning;
-	    result.heap_id = HeapId::proportional;
-	    return result;
-	  }
-	}
-#endif
 
 	// nothing scheduled; make sure we re-run when next
 	// reservation item or next limited item comes up
@@ -1073,23 +1017,6 @@ namespace crimson {
 	  result.status = NextReqStat::none;
 	  return result;
 	}
-
-#if OLD_Q
-	if (!reserv_q.empty()) {
-	  next_call = min_not_0_time(next_call, reserv_q.top()->tag.reservation);
-	}
-	if (!lim_q.empty()) {
-	  next_call = min_not_0_time(next_call, lim_q.top()->tag.limit);
-	}
-	if (next_call < TimeMax) {
-	  result.status = NextReqStat::future;
-	  result.when_ready = next_call;
-	  return result;
-	} else {
-	  result.status = NextReqStat::none;
-	  return result;
-	}
-#endif
       } // schedule_request
 
 
