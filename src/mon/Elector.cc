@@ -409,24 +409,21 @@ void Elector::nak_old_peer(MonOpRequestRef op)
   op->mark_event("elector:nak_old_peer");
   MMonElection *m = static_cast<MMonElection*>(op->get_req());
   uint64_t supported_features = m->get_connection()->get_features();
+  uint64_t required_features = mon->get_required_features();
+  mon_feature_t required_mon_features = mon->get_required_mon_features();
+  dout(10) << "sending nak to peer " << m->get_source()
+    << " that only supports " << supported_features
+    << " " << m->mon_features
+    << " of the required " << required_features
+    << " " << required_mon_features
+    << dendl;
 
-  if (supported_features & CEPH_FEATURE_OSDMAP_ENC) {
-    uint64_t required_features = mon->get_required_features();
-    mon_feature_t required_mon_features = mon->get_required_mon_features();
-    dout(10) << "sending nak to peer " << m->get_source()
-	     << " that only supports " << supported_features
-             << " " << m->mon_features
-	     << " of the required " << required_features
-             << " " << required_mon_features
-             << dendl;
-    
-    MMonElection *reply = new MMonElection(MMonElection::OP_NAK, m->epoch,
-					   mon->monmap);
-    reply->quorum_features = required_features;
-    reply->mon_features = required_mon_features;
-    mon->features.encode(reply->sharing_bl);
-    m->get_connection()->send_message(reply);
-  }
+  MMonElection *reply = new MMonElection(MMonElection::OP_NAK, m->epoch,
+                                         mon->monmap);
+  reply->quorum_features = required_features;
+  reply->mon_features = required_mon_features;
+  mon->features.encode(reply->sharing_bl);
+  m->get_connection()->send_message(reply);
 }
 
 void Elector::handle_nak(MonOpRequestRef op)
