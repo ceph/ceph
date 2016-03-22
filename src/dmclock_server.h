@@ -190,14 +190,15 @@ namespace crimson {
 
       enum class ReadyOption {ignore, lowers, raises};
 
-      template<double RequestTag::*tag_field,ReadyOption ready_opt=ReadyOption::ignore>
-
+      template<double RequestTag::*tag_field,
+	       ReadyOption ready_opt=ReadyOption::ignore>
       struct ClientCompare; // forward decl for friend decls
 
       class ClientReq {
 	friend ClientEntry;
 	friend PriorityQueue;
 
+	// NB: is there a better way than enumerating all possibilities?
 	friend ClientCompare<&RequestTag::reservation,ReadyOption::ignore>;
 	friend ClientCompare<&RequestTag::limit,ReadyOption::ignore>;
 	friend ClientCompare<&RequestTag::proportion,ReadyOption::ignore>;
@@ -952,7 +953,8 @@ namespace crimson {
 #endif
 
 	auto& reserv = new_reserv_q.top();
-	if (reserv.has_request() && reserv.next_request().tag.reservation <= now) {
+	if (reserv.has_request() &&
+	    reserv.next_request().tag.reservation <= now) {
 	  result.status = NextReqStat::returning;
 	  result.heap_id = HeapId::reservation;
 	  return result;
