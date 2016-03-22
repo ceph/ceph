@@ -86,6 +86,66 @@ BootstrapRequest<I>::~BootstrapRequest() {
 
 template <typename I>
 void BootstrapRequest<I>::send() {
+  get_client();
+}
+
+template <typename I>
+void BootstrapRequest<I>::get_client() {
+  dout(20) << dendl;
+
+  Context *ctx = create_context_callback<
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_client>(
+      this);
+  m_journaler->get_client(m_mirror_uuid, &m_client, ctx);
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_get_client(int r) {
+  dout(20) << ": r=" << r << dendl;
+
+  if (r == -ENOENT) {
+    dout(10) << ": client not registered" << dendl;
+  } else if (r < 0) {
+    derr << ": failed to retreive client: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  } else if (decode_client_meta()) {
+    // skip registration if it already exists
+    open_remote_image();
+    return;
+  }
+
+  register_client();
+}
+
+template <typename I>
+void BootstrapRequest<I>::register_client() {
+  dout(20) << dendl;
+
+  // record an empty place-holder record
+  librbd::journal::ClientData client_data{
+    librbd::journal::MirrorPeerClientMeta{}};
+  bufferlist client_data_bl;
+  ::encode(client_data, client_data_bl);
+
+  Context *ctx = create_context_callback<
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_register_client>(
+      this);
+  m_journaler->register_client(client_data_bl, ctx);
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_register_client(int r) {
+  dout(20) << ": r=" << r << dendl;
+
+  if (r < 0) {
+    derr << ": failed to register with remote journal: " << cpp_strerror(r)
+         << dendl;
+    finish(r);
+    return;
+  }
+
+  *m_client_meta = librbd::journal::MirrorPeerClientMeta();
   open_remote_image();
 }
 
@@ -108,21 +168,76 @@ void BootstrapRequest<I>::handle_open_remote_image(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << "failed to open remote image: " << cpp_strerror(r) << dendl;
+    derr << ": failed to open remote image: " << cpp_strerror(r) << dendl;
     m_ret_val = r;
     close_remote_image();
     return;
   }
 
-  create_local_image();
+  // default local image name to the remote image name if not provided
+  if (m_local_image_name.empty()) {
+    m_local_image_name = m_remote_image_ctx->name;
+  }
+
+  if (m_local_image_id.empty()) {
+    create_local_image();
+    return;
+  }
+
+  open_local_image();
+}
+
+template <typename I>
+void BootstrapRequest<I>::open_local_image() {
+  dout(20) << dendl;
+
+  Context *ctx = create_context_callback<
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_open_local_image>(
+      this);
+  OpenLocalImageRequest<I> *request = OpenLocalImageRequest<I>::create(
+    m_local_io_ctx, m_local_image_ctx,
+    (!m_local_image_id.empty() ? std::string() : m_local_image_name),
+    m_local_image_id, m_work_queue, ctx);
+  request->send();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_open_local_image(int r) {
+  dout(20) << ": r=" << r << dendl;
+
+  if (r == -ENOENT) {
+    assert(*m_local_image_ctx == nullptr);
+    dout(10) << ": local image missing" << dendl;
+    create_local_image();
+    return;
+  } else if (r < 0) {
+    assert(*m_local_image_ctx == nullptr);
+    derr << ": failed to open local image: " << cpp_strerror(r) << dendl;
+    m_ret_val = r;
+    close_remote_image();
+    return;
+  }
+
+  update_client();
+}
+
+template <typename I>
+void BootstrapRequest<I>::remove_local_image() {
+  dout(20) << dendl;
+
+  // TODO
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_remove_local_image(int r) {
+  dout(20) << ": r=" << r << dendl;
+
+  // TODO
 }
 
 template <typename I>
 void BootstrapRequest<I>::create_local_image() {
   dout(20) << dendl;
-
-  // TODO: local image might already exist (e.g. interrupted sync)
-  //       need to determine what type of bootstrap we are performing
 
   // TODO: librbd should provide an AIO image creation method -- this is
   //       blocking so we execute in our worker thread
@@ -138,7 +253,7 @@ void BootstrapRequest<I>::handle_create_local_image(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << "failed to create local image: " << cpp_strerror(r) << dendl;
+    derr << ": failed to create local image: " << cpp_strerror(r) << dendl;
     m_ret_val = r;
     close_remote_image();
     return;
@@ -148,66 +263,40 @@ void BootstrapRequest<I>::handle_create_local_image(int r) {
 }
 
 template <typename I>
-void BootstrapRequest<I>::open_local_image() {
-  dout(20) << dendl;
-
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_open_local_image>(
-      this);
-  OpenLocalImageRequest<I> *request = OpenLocalImageRequest<I>::create(
-    m_local_io_ctx, m_local_image_ctx, m_local_image_name, "", m_work_queue,
-    ctx);
-  request->send();
-}
-
-template <typename I>
-void BootstrapRequest<I>::handle_open_local_image(int r) {
-  dout(20) << ": r=" << r << dendl;
-
-  if (r < 0) {
-    assert(*m_local_image_ctx == nullptr);
-    derr << "failed to open local image: " << cpp_strerror(r) << dendl;
-    m_ret_val = r;
-    close_remote_image();
+void BootstrapRequest<I>::update_client() {
+  if (m_local_image_id == (*m_local_image_ctx)->id) {
+    image_sync();
     return;
   }
+  m_local_image_id = (*m_local_image_ctx)->id;
 
-  register_client();
-}
-
-template <typename I>
-void BootstrapRequest<I>::register_client() {
   dout(20) << dendl;
 
-  // TODO: if client fails to register newly created image to journal,
-  //       need to ensure we can recover (i.e. see if image of the same
-  //       name already exists)
-
-  librbd::journal::MirrorPeerClientMeta client_meta(*m_client_meta);
-  client_meta.image_id = (*m_local_image_ctx)->id;
+  librbd::journal::MirrorPeerClientMeta client_meta;
+  client_meta.image_id = m_local_image_id;
 
   librbd::journal::ClientData client_data(client_meta);
-  bufferlist client_data_bl;
-  ::encode(client_data, client_data_bl);
+  bufferlist data_bl;
+  ::encode(client_data, data_bl);
 
   Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_register_client>(
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_update_client>(
       this);
-  m_journaler->register_client(client_data_bl, ctx);
+  m_journaler->update_client(data_bl, ctx);
 }
 
 template <typename I>
-void BootstrapRequest<I>::handle_register_client(int r) {
+void BootstrapRequest<I>::handle_update_client(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << "failed to register with remote journal: " << cpp_strerror(r)
-         << dendl;
+    derr << ": failed to update client: " << cpp_strerror(r) << dendl;
+    m_ret_val = r;
     close_local_image();
     return;
   }
 
-  m_client_meta->image_id = (*m_local_image_ctx)->id;
+  m_client_meta->image_id = m_local_image_id;
   image_sync();
 }
 
@@ -231,7 +320,7 @@ void BootstrapRequest<I>::handle_image_sync(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << "failed to sync remote image: " << cpp_strerror(r) << dendl;
+    derr << ": failed to sync remote image: " << cpp_strerror(r) << dendl;
     m_ret_val = r;
     close_local_image();
     return;
@@ -248,7 +337,7 @@ void BootstrapRequest<I>::close_local_image() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_close_local_image>(
       this);
   CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    m_local_image_ctx, m_work_queue, ctx);
+    m_local_image_ctx, m_work_queue, false, ctx);
   request->send();
 }
 
@@ -257,7 +346,7 @@ void BootstrapRequest<I>::handle_close_local_image(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << "error encountered closing local image: " << cpp_strerror(r)
+    derr << ": error encountered closing local image: " << cpp_strerror(r)
          << dendl;
   }
 
@@ -272,7 +361,7 @@ void BootstrapRequest<I>::close_remote_image() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_close_remote_image>(
       this);
   CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    &m_remote_image_ctx, m_work_queue, ctx);
+    &m_remote_image_ctx, m_work_queue, false, ctx);
   request->send();
 }
 
@@ -281,7 +370,7 @@ void BootstrapRequest<I>::handle_close_remote_image(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << "error encountered closing remote image: " << cpp_strerror(r)
+    derr << ": error encountered closing remote image: " << cpp_strerror(r)
          << dendl;
   }
 
@@ -294,6 +383,35 @@ void BootstrapRequest<I>::finish(int r) {
 
   m_on_finish->complete(r);
   delete this;
+}
+
+template <typename I>
+bool BootstrapRequest<I>::decode_client_meta() {
+  dout(20) << dendl;
+
+  librbd::journal::ClientData client_data;
+  bufferlist::iterator it = m_client.data.begin();
+  try {
+    ::decode(client_data, it);
+  } catch (const buffer::error &err) {
+    derr << ": failed to decode client meta data: " << err.what() << dendl;
+    return true;
+  }
+
+  librbd::journal::MirrorPeerClientMeta *client_meta =
+    boost::get<librbd::journal::MirrorPeerClientMeta>(&client_data.client_meta);
+  if (client_meta == nullptr) {
+    derr << ": unknown peer registration" << dendl;
+    return true;
+  } else if (!client_meta->image_id.empty()) {
+    // have an image id -- use that to open the image
+    m_local_image_id = client_meta->image_id;
+  }
+
+  *m_client_meta = *client_meta;
+
+  dout(20) << ": client found: image_id=" << m_local_image_id << dendl;
+  return true;
 }
 
 } // namespace image_replayer

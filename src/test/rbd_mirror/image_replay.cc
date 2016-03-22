@@ -103,8 +103,7 @@ int main(int argc, const char **argv)
 	  << local_pool_name << ", remote_pool_name=" << remote_pool_name
 	  << ", image_name=" << image_name << dendl;
 
-  rbd::mirror::ImageReplayer<>::BootstrapParams bootstap_params(local_pool_name,
-							        image_name);
+  rbd::mirror::ImageReplayer<>::BootstrapParams bootstap_params(image_name);
   int64_t local_pool_id;
   int64_t remote_pool_id;
   std::string remote_image_id;
