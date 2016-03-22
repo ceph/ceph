@@ -7834,40 +7834,39 @@ void OSD::handle_pg_trim(OpRequestRef op)
 
   op->mark_started();
 
-  if (!_have_pg(m->pgid)) {
+  PG *pg = _lookup_lock_pg(m->pgid);
+  if(!pg) {
     dout(10) << " don't have pg " << m->pgid << dendl;
-  } else {
-    PG *pg = _lookup_lock_pg(m->pgid);
-    assert(pg);
-    if (m->epoch < pg->info.history.same_interval_since) {
-      dout(10) << *pg << " got old trim to " << m->trim_to << ", ignoring" << dendl;
-      pg->unlock();
-      return;
-    }
-
-    if (pg->is_primary()) {
-      // peer is informing us of their last_complete_ondisk
-      dout(10) << *pg << " replica osd." << from << " lcod " << m->trim_to << dendl;
-      pg->peer_last_complete_ondisk[pg_shard_t(from, m->pgid.shard)] =
-	m->trim_to;
-      if (pg->calc_min_last_complete_ondisk()) {
-	dout(10) << *pg << " min lcod now " << pg->min_last_complete_ondisk << dendl;
-	pg->trim_peers();
-      }
-    } else {
-      // primary is instructing us to trim
-      ObjectStore::Transaction t;
-      PG::PGLogEntryHandler handler;
-      pg->pg_log.trim(&handler, m->trim_to, pg->info);
-      handler.apply(pg, &t);
-      pg->dirty_info = true;
-      pg->write_if_dirty(t);
-      int tr = store->queue_transaction(
-	pg->osr.get(), std::move(t), NULL);
-      assert(tr == 0);
-    }
-    pg->unlock();
+    return;
   }
+
+  if (m->epoch < pg->info.history.same_interval_since) {
+    dout(10) << *pg << " got old trim to " << m->trim_to << ", ignoring" << dendl;
+    pg->unlock();
+    return;
+  }
+
+  if (pg->is_primary()) {
+    // peer is informing us of their last_complete_ondisk
+    dout(10) << *pg << " replica osd." << from << " lcod " << m->trim_to << dendl;
+    pg->peer_last_complete_ondisk[pg_shard_t(from, m->pgid.shard)] =
+      m->trim_to;
+    if (pg->calc_min_last_complete_ondisk()) {
+      dout(10) << *pg << " min lcod now " << pg->min_last_complete_ondisk << dendl;
+      pg->trim_peers();
+    }
+  } else {
+    // primary is instructing us to trim
+    ObjectStore::Transaction t;
+    PG::PGLogEntryHandler handler;
+    pg->pg_log.trim(&handler, m->trim_to, pg->info);
+    handler.apply(pg, &t);
+    pg->dirty_info = true;
+    pg->write_if_dirty(t);
+    int tr = store->queue_transaction(pg->osr.get(), std::move(t), NULL);
+    assert(tr == 0);
+  }
+  pg->unlock();
 }
 
 void OSD::handle_pg_backfill_reserve(OpRequestRef op)
@@ -7908,12 +7907,11 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
     return;
   }
 
-  PG *pg = 0;
-  if (!_have_pg(m->pgid))
+  PG *pg = _lookup_lock_pg(m->pgid);
+  if (!pg) {
+    dout(10) << " don't have pg " << m->pgid << dendl;
     return;
-
-  pg = _lookup_lock_pg(m->pgid);
-  assert(pg);
+  }
 
   pg->queue_peering_event(evt);
   pg->unlock();
@@ -7957,12 +7955,11 @@ void OSD::handle_pg_recovery_reserve(OpRequestRef op)
     return;
   }
 
-  PG *pg = 0;
-  if (!_have_pg(m->pgid))
+  PG *pg = _lookup_lock_pg(m->pgid);
+  if (!pg) {
+    dout(10) << " don't have pg " << m->pgid << dendl;
     return;
-
-  pg = _lookup_lock_pg(m->pgid);
-  assert(pg);
+  }
 
   pg->queue_peering_event(evt);
   pg->unlock();
