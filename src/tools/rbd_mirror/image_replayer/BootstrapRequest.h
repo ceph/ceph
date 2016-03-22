@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
+#include "cls/journal/cls_journal_types.h"
 #include "librbd/journal/TypeTraits.h"
 #include <string>
 
@@ -64,21 +65,36 @@ private:
    * <start>
    *    |
    *    v
+   * GET_CLIENT * * * * * * * * * * * * * * * *
+   *    |                                     *
+   *    v (skip if not needed)                * (error)
+   * REGISTER_CLIENT  * * * * * * * * * * * * *
+   *    |                                     *
+   *    v                                     *
    * OPEN_REMOTE_IMAGE  * * * * * * * * * * * *
    *    |                                     *
    *    v                                     *
-   * CREATE_LOCAL_IMAGE * * * * * * * * * * * * (error)
-   *    |                                     *
-   *    v                                     *
    * OPEN_LOCAL_IMAGE * * * * * * * * * * * * *
+   *    |   .   ^                             *
+   *    |   .   |                             *
+   *    |   .   \-----------------------\     *
+   *    |   .                           |     *
+   *    |   . (image sync requested)    |     *
+   *    |   . . > REMOVE_LOCAL_IMAGE  * * * * *
+   *    |   .                   |       |     *
+   *    |   . (image doesn't    |       |     *
+   *    |   .  exist)           v       |     *
+   *    |   . . > CREATE_LOCAL_IMAGE  * * * * *
+   *    |             |                 |     *
+   *    |             \-----------------/     *
    *    |                                     *
-   *    v                                     *
-   * REGISTER_CLIENT  * * * *                 *
-   *    |                   *                 *
-   *    v                   v                 *
+   *    v (skip if not needed)                *
+   * UPDATE_CLIENT                            *
+   *    |                                     *
+   *    v (skip if not needed)                *
    * IMAGE_SYNC * * * > CLOSE_LOCAL_IMAGE     *
-   *    |                   |                 *
-   *    |     /-------------/                 *
+   *    |                         |           *
+   *    |     /-------------------/           *
    *    |     |                               *
    *    v     v                               *
    * CLOSE_REMOTE_IMAGE < * * * * * * * * * * *
@@ -92,6 +108,7 @@ private:
   librados::IoCtx &m_remote_io_ctx;
   ImageCtxT **m_local_image_ctx;
   std::string m_local_image_name;
+  std::string m_local_image_id;
   std::string m_remote_image_id;
   ContextWQ *m_work_queue;
   SafeTimer *m_timer;
@@ -101,20 +118,30 @@ private:
   MirrorPeerClientMeta *m_client_meta;
   Context *m_on_finish;
 
+  cls::journal::Client m_client;
   ImageCtxT *m_remote_image_ctx = nullptr;
   int m_ret_val = 0;
+
+  void get_client();
+  void handle_get_client(int r);
+
+  void register_client();
+  void handle_register_client(int r);
 
   void open_remote_image();
   void handle_open_remote_image(int r);
 
-  void create_local_image();
-  void handle_create_local_image(int r);
-
   void open_local_image();
   void handle_open_local_image(int r);
 
-  void register_client();
-  void handle_register_client(int r);
+  void remove_local_image();
+  void handle_remove_local_image(int r);
+
+  void create_local_image();
+  void handle_create_local_image(int r);
+
+  void update_client();
+  void handle_update_client(int r);
 
   void image_sync();
   void handle_image_sync(int r);
@@ -127,6 +154,7 @@ private:
 
   void finish(int r);
 
+  bool decode_client_meta();
 };
 
 } // namespace image_replayer
