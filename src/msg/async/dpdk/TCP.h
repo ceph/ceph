@@ -815,7 +815,7 @@ typename tcp<InetTraits>::connection tcp<InetTraits>::connect(const entity_addr_
     if (_tcbs.find(id) == _tcbs.end()) {
       if (_inet._inet.netif()->hw_queues_count() == 1 ||
           _inet._inet.netif()->hash2cpu(
-              id.hash(_inet._inet.netif()->rss_key())) != center->get_id())
+              id.hash(_inet._inet.netif()->rss_key())) == center->get_id())
         break;
     }
   } while (true);
@@ -857,6 +857,7 @@ void tcp<InetTraits>::received(Packet p, ipaddr from, ipaddr to) {
   }
   auto h = th->ntoh();
   auto id = connid{to, from, h.dst_port, h.src_port};
+  std::cerr << " " << from << ":" << h.src_port << " -> " << from << ":" << h.dst_port << std::endl;
   auto tcbi = _tcbs.find(id);
   lw_shared_ptr<tcb> tcbp;
   if (tcbi == _tcbs.end()) {
@@ -1416,6 +1417,7 @@ void tcp<InetTraits>::tcb::update_cwnd(uint32_t acked_bytes) {
 
 template <typename InetTraits>
 void tcp<InetTraits>::tcb::cleanup() {
+  _tcp.manager.notify(fd, EVENT_READABLE);
   _snd.closed = true;
   _snd.unsent.clear();
   _snd.data.clear();

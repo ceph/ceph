@@ -267,8 +267,9 @@ int DPDKDevice::init_port_start()
       ldout(cct, 5) << __func__ << " Port " << int(_port_idx)
                     << ": RSS table size is " << _dev_info.reta_size << dendl;
     } else {
-      _redir_table.resize(_num_queues);
-      _rss_table_bits = std::lround(std::log2(_dev_info.max_rx_queues));
+      // FIXME: same with sw_reta
+      _redir_table.resize(128);
+      _rss_table_bits = std::lround(std::log2(128));
     }
   } else {
     _redir_table.push_back(0);

@@ -30,7 +30,7 @@
 
 #define dout_subsys ceph_subsys_dpdk
 #undef dout_prefix
-#define dout_prefix *_dout << "dpdk "
+#define dout_prefix *_dout << "tcp "
 
 void tcp_option::parse(uint8_t* beg, uint8_t* end)
 {
@@ -177,7 +177,8 @@ int tcpv4_connect(tcp<ipv4_traits>& tcpv4, const entity_addr_t &addr,
 template <typename InetTraits>
 void tcp<InetTraits>::respond_with_reset(tcp_hdr* rth, ipaddr local_ip, ipaddr foreign_ip)
 {
-  ldout(cct, 5) << __func__ << dendl;
+  ldout(cct, 20) << __func__ << " tcp header rst=" << bool(rth->f_rst) << " fin=" << bool(rth->f_fin)
+                 << " syn=" << bool(rth->f_syn) << dendl;
   if (rth->f_rst) {
     return;
   }
@@ -761,6 +762,7 @@ void tcp<InetTraits>::tcb::retransmit()
       _errno = -ECONNABORTED;
       ldout(_tcp.cct, 5) << __func__ << " syn retransmit exceed max "
                          << _max_nr_retransmit << dendl;
+      _errno = -ETIMEDOUT;
       cleanup();
       return;
     }
@@ -773,6 +775,7 @@ void tcp<InetTraits>::tcb::retransmit()
     } else {
       ldout(_tcp.cct, 5) << __func__ << " fin retransmit exceed max "
                          << _max_nr_retransmit << dendl;
+      _errno = -ETIMEDOUT;
       cleanup();
       return;
     }
@@ -807,6 +810,7 @@ void tcp<InetTraits>::tcb::retransmit()
     // Delete connection when max num of retransmission is reached
     ldout(_tcp.cct, 5) << __func__ << " seg retransmit exceed max "
                        << _max_nr_retransmit << dendl;
+    _errno = -ETIMEDOUT;
     cleanup();
     return;
   }

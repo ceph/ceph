@@ -962,9 +962,10 @@ class DPDKDevice {
   template <typename Func>
   unsigned forward_dst(unsigned src_cpuid, Func&& hashfn) {
     auto& qp = queue_for_cpu(src_cpuid);
-    if (!qp._sw_reta) {
+    if (!qp._sw_reta)
       return src_cpuid;
-    }
+
+    assert(!qp._sw_reta);
     auto hash = hashfn() >> _rss_table_bits;
     auto& reta = *qp._sw_reta;
     return reta[hash % reta.size()];
