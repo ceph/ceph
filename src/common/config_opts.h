@@ -950,7 +950,8 @@ OPTION(bluestore_wal_max_bytes, OPT_U64, 128*1024*1024)
 OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
 OPTION(bluestore_overlay_max_length, OPT_INT, 65536)
 OPTION(bluestore_overlay_max, OPT_INT, 0)
-OPTION(bluestore_clone_cow, OPT_BOOL, true)  // do copy-on-write for clones
+OPTION(bluestore_clone_cow, OPT_BOOL, true)          // do copy-on-write for clones
+OPTION(bluestore_no_device_flush, OPT_BOOL, false)   // for setup has no buffered writes(WAL avoided), all direct & aio writes
 OPTION(bluestore_default_buffered_read, OPT_BOOL, false)
 OPTION(bluestore_debug_misc, OPT_BOOL, false)
 OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL, false)
