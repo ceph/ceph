@@ -2255,6 +2255,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
     return cache_result_t::NOOP;
 
   case pg_pool_t::CACHEMODE_FORWARD:
+    // FIXME: this mode allows requests to be reordered.
     do_cache_redirect(op);
     return cache_result_t::HANDLED_REDIRECT;
 
@@ -2288,6 +2289,28 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
     // If it is a read, we can read, we need to forward it
     do_cache_redirect(op);
     return cache_result_t::HANDLED_REDIRECT;
+
+  case pg_pool_t::CACHEMODE_PROXY:
+    if (!must_promote) {
+      if (op->may_write() || op->may_cache() || write_ordered) {
+	if (can_proxy_write) {
+	  do_proxy_write(op, missing_oid);
+	  return cache_result_t::HANDLED_PROXY;
+	}
+      } else {
+	do_proxy_read(op);
+	return cache_result_t::HANDLED_PROXY;
+      }
+    }
+    // ugh, we're forced to promote.
+    if (agent_state &&
+	agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
+      dout(20) << __func__ << " cache pool full, waiting" << dendl;
+      block_write_on_full_cache(missing_oid, op);
+      return cache_result_t::BLOCKED_FULL;
+    }
+    promote_object(obc, missing_oid, oloc, op, promote_obc);
+    return cache_result_t::BLOCKED_PROMOTE;
 
   case pg_pool_t::CACHEMODE_READPROXY:
     // Do writeback to the cache tier for writes
