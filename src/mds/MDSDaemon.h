@@ -109,8 +109,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   // handle a signal (e.g., SIGTERM)
   void handle_signal(int signum);
 
-  // start up, shutdown
-  int init(MDSMap::DaemonState wanted_state=MDSMap::STATE_BOOT);
+  int init();
 
   /**
    * Hint at whether we were shutdown gracefully (i.e. we were only
@@ -144,7 +143,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 
   mds_rank_t standby_for_rank;
   string standby_for_name;
-  MDSMap::DaemonState standby_type;  // one of STANDBY_REPLAY, ONESHOT_REPLAY
+  bool standby_replay;
 
  private:
   bool ms_dispatch(Message *m);

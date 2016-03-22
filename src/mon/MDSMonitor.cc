@@ -386,8 +386,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   if (info.state != state) {
     // legal state change?
     if ((info.state == MDSMap::STATE_STANDBY ||
-	 info.state == MDSMap::STATE_STANDBY_REPLAY ||
-	 info.state == MDSMap::STATE_ONESHOT_REPLAY) && state > 0) {
+	 info.state == MDSMap::STATE_STANDBY_REPLAY) && state > 0) {
       dout(10) << "mds_beacon mds can't activate itself (" << ceph_mds_state_name(info.state)
 	       << " -> " << ceph_mds_state_name(state) << ")" << dendl;
       goto reply;
