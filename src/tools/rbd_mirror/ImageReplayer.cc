@@ -117,23 +117,22 @@ private:
 
 class ImageReplayerAdminSocketHook : public AdminSocketHook {
 public:
-  ImageReplayerAdminSocketHook(CephContext *cct, ImageReplayer *replayer) :
+  ImageReplayerAdminSocketHook(CephContext *cct, const std::string &name,
+			       ImageReplayer *replayer) :
     admin_socket(cct->get_admin_socket()) {
     std::string command;
     int r;
 
-    command = "rbd mirror status " + stringify(*replayer);
+    command = "rbd mirror status " + name;
     r = admin_socket->register_command(command, command, this,
-				       "get status for rbd mirror " +
-				       stringify(*replayer));
+				       "get status for rbd mirror " + name);
     if (r == 0) {
       commands[command] = new StatusCommand(replayer);
     }
 
-    command = "rbd mirror flush " + stringify(*replayer);
+    command = "rbd mirror flush " + name;
     r = admin_socket->register_command(command, command, this,
-				       "flush rbd mirror " +
-				       stringify(*replayer));
+				       "flush rbd mirror " + name);
     if (r == 0) {
       commands[command] = new FlushCommand(replayer);
     }
@@ -185,11 +184,9 @@ ImageReplayer::ImageReplayer(Threads *threads, RadosRef local, RadosRef remote,
   m_local_replay(nullptr),
   m_remote_journaler(nullptr),
   m_replay_handler(nullptr),
-  m_on_finish(nullptr)
+  m_on_finish(nullptr),
+  m_asok_hook(nullptr)
 {
-  CephContext *cct = static_cast<CephContext *>(m_local->cct());
-
-  m_asok_hook = new ImageReplayerAdminSocketHook(cct, this);
 }
 
 ImageReplayer::~ImageReplayer()
@@ -451,6 +448,14 @@ void ImageReplayer::on_start_local_image_open_finish(int r)
 void ImageReplayer::on_start_wait_for_local_journal_ready_start()
 {
   dout(20) << "enter" << dendl;
+
+  if (!m_asok_hook) {
+    CephContext *cct = static_cast<CephContext *>(m_local->cct());
+    std::string name = m_local_ioctx.get_pool_name() + "/" +
+      m_local_image_ctx->name;
+
+    m_asok_hook = new ImageReplayerAdminSocketHook(cct, name, this);
+  }
 
   FunctionContext *ctx = new FunctionContext(
     [this](int r) {

@@ -34,16 +34,16 @@ function TEST_pool_create() {
     local poolname=rulepool
     local var=`ceph osd crush rule dump|grep -w ruleset|sed -n '$p'|grep -o '[0-9]\+'`
     var=`expr  $var + 1 `
-    ceph osd getcrushmap -o  map1
-    crushtool -d map1 -o map1.txt
+    ceph osd getcrushmap -o "$dir/map1"
+    crushtool -d "$dir/map1" -o "$dir/map1.txt"
 
     local minsize=0
     local maxsize=1
-    sed -i '/# end crush map/i\rule '$rulename' {\n ruleset \'$var'\n type replicated\n min_size \'$minsize'\n max_size \'$maxsize'\n step take default\n step choose firstn 0 type osd\n step emit\n }\n' map1.txt
-    crushtool  -c map1.txt -o  map1.bin
-    ceph osd setcrushmap -i map1.bin
-    ceph osd  pool create  $poolname 200 $rulename 2>rev
-    local result=$(cat rev|grep "Error EINVAL: pool size")
+    sed -i '/# end crush map/i\rule '$rulename' {\n ruleset \'$var'\n type replicated\n min_size \'$minsize'\n max_size \'$maxsize'\n step take default\n step choose firstn 0 type osd\n step emit\n }\n' "$dir/map1.txt"
+    crushtool  -c "$dir/map1.txt" -o "$dir/map1.bin"
+    ceph osd setcrushmap -i "$dir/map1.bin"
+    ceph osd pool create $poolname 200 $rulename 2>"$dir/rev"
+    local result=$(cat "$dir/rev" | grep "Error EINVAL: pool size")
 
     if [ "$result" = "" ];
     then

@@ -18,6 +18,7 @@
 #include <signal.h>
 #include <limits.h>
 #include <cstring>
+#include <boost/scope_exit.hpp>
 
 #include "Monitor.h"
 #include "common/version.h"
@@ -2597,8 +2598,15 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  MonSession *session = m->get_session();
-  assert(session);
+  MonSession *session = static_cast<MonSession *>(
+    m->get_connection()->get_priv());
+  if (!session) {
+    dout(5) << __func__ << " dropping stray message " << *m << dendl;
+    return;
+  }
+  BOOST_SCOPE_EXIT_ALL(=) {
+    session->put();
+  };
 
   if (m->cmd.empty()) {
     string rs = "No command supplied";
@@ -3254,19 +3262,11 @@ void Monitor::no_reply(MonOpRequestRef op)
   Message *req = op->get_req();
 
   if (session->proxy_con) {
-    if (get_quorum_features() & CEPH_FEATURE_MON_NULLROUTE) {
-      dout(10) << "no_reply to " << req->get_source_inst()
-	       << " via " << session->proxy_con->get_peer_addr()
-	       << " for request " << *req << dendl;
-      session->proxy_con->send_message(new MRoute(session->proxy_tid, NULL));
-      op->mark_event("no_reply: send routed request");
-    } else {
-      dout(10) << "no_reply no quorum nullroute feature for "
-               << req->get_source_inst()
-	       << " via " << session->proxy_con->get_peer_addr()
-	       << " for request " << *req << dendl;
-      op->mark_event("no_reply: no quorum support");
-    }
+    dout(10) << "no_reply to " << req->get_source_inst()
+	     << " via " << session->proxy_con->get_peer_addr()
+	     << " for request " << *req << dendl;
+    session->proxy_con->send_message(new MRoute(session->proxy_tid, NULL));
+    op->mark_event("no_reply: send routed request");
   } else {
     dout(10) << "no_reply to " << req->get_source_inst()
              << " " << *req << dendl;
@@ -4487,11 +4487,6 @@ int Monitor::scrub_start()
 {
   dout(10) << __func__ << dendl;
   assert(is_leader());
-
-  if ((get_quorum_features() & CEPH_FEATURE_MON_SCRUB) == 0) {
-    clog->warn() << "scrub not supported by entire quorum\n";
-    return -EOPNOTSUPP;
-  }
 
   if (!scrub_result.empty()) {
     clog->info() << "scrub already in progress\n";

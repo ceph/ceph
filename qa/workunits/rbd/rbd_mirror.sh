@@ -35,7 +35,7 @@
 #
 #   cd /tmp/tmp.rbd_mirror
 #   ls
-#   less rbd-mirror.<pid>.log
+#   less rbd-mirror.local.<pid>.log
 #   ceph --cluster remote -s
 #   ceph --cluster local -s
 #   rbd --cluster remote -p mirror ls
@@ -53,7 +53,8 @@ LOC_CLUSTER=local
 RMT_CLUSTER=remote
 POOL=mirror
 RBD_MIRROR_PID_FILE=
-RBD_MIRROR_ASOK=
+RBD_MIRROR_LOC_ASOK=
+RBD_MIRROR_RMT_ASOK=
 SRC_DIR=$(readlink -f $(dirname $0)/../../../src)
 TEMPDIR=
 
@@ -115,13 +116,14 @@ cleanup()
 start_mirror()
 {
     RBD_MIRROR_PID_FILE=${TEMPDIR}/rbd-mirror.pid
-    RBD_MIRROR_ASOK=${TEMPDIR}/rbd-mirror.asok
+    RBD_MIRROR_LOC_ASOK=${TEMPDIR}/rbd-mirror.${LOC_CLUSTER}.asok
+    RBD_MIRROR_RMT_ASOK=${TEMPDIR}/rbd-mirror.${RMT_CLUSTER}.asok
 
     rbd-mirror \
 	--cluster ${LOC_CLUSTER} \
 	--pid-file=${RBD_MIRROR_PID_FILE} \
-	--log-file=${TEMPDIR}/rbd-mirror.\$pid.log \
-	--admin-socket=${RBD_MIRROR_ASOK} \
+	--log-file=${TEMPDIR}/rbd-mirror.\$cluster.\$pid.log \
+	--admin-socket=${TEMPDIR}/rbd-mirror.\$cluster.asok \
 	--debug-rbd=30 --debug-journaler=30 \
 	--debug-rbd_mirror=30 \
 	--daemonize=true
@@ -145,10 +147,10 @@ stop_mirror()
 	done
 	ps auxww | awk -v pid=${pid} '$2 == pid {print; exit 1}'
     fi
-    rm -f ${RBD_MIRROR_ASOK}
-    rm -f ${RBD_MIRROR_PID_FILE}
+    rm -f ${RBD_MIRROR_LOC_ASOK} ${RBD_MIRROR_RMT_ASOK} ${RBD_MIRROR_PID_FILE}
     RBD_MIRROR_PID_FILE=
-    RBD_MIRROR_ASOK=
+    RBD_MIRROR_LOC_ASOK=
+    RBD_MIRROR_RMT_ASOK=
 }
 
 flush()
@@ -156,27 +158,22 @@ flush()
     local image=$1
     local image_id cmd
 
-    test -n "${RBD_MIRROR_ASOK}"
+    test -n "${RBD_MIRROR_LOC_ASOK}"
 
-    image_id=$(remote_image_id ${image})
-    test -n "${image_id}"
-
-    cmd=$(ceph --admin-daemon ${RBD_MIRROR_ASOK} help |
-		 sed -nEe 's/^.*"(rbd mirror flush.*'${image_id}'])":.*$/\1/p')
-    test -n "${cmd}"
-    ceph --admin-daemon ${TEMPDIR}/rbd-mirror.asok ${cmd}
+    ceph --admin-daemon ${RBD_MIRROR_LOC_ASOK} \
+	 rbd mirror flush ${POOL}/${image}
 }
 
 test_image_replay_state()
 {
-    local image_id=$1
+    local image=$1
     local test_state=$2
     local current_state=stopped
 
-    test -n "${RBD_MIRROR_ASOK}"
+    test -n "${RBD_MIRROR_LOC_ASOK}"
 
-    ceph --admin-daemon ${RBD_MIRROR_ASOK} help | fgrep "${image_id}" &&
-	current_state=started
+    ceph --admin-daemon ${RBD_MIRROR_LOC_ASOK} help |
+	fgrep "rbd mirror status ${POOL}/${image}" && current_state=started
     test "${test_state}" = "${current_state}"
 }
 
@@ -184,15 +181,12 @@ wait_for_image_replay_state()
 {
     local image=$1
     local state=$2
-    local image_id s
-
-    image_id=$(remote_image_id ${image})
-    test -n "${image_id}"
+    local s
 
     # TODO: add a way to force rbd-mirror to update replayers
     for s in 1 2 4 8 8 8 8 8 8 8 8; do
 	sleep ${s}
-	test_image_replay_state "${image_id}" "${state}" && return 0
+	test_image_replay_state "${image}" "${state}" && return 0
     done
     return 1
 }
@@ -216,21 +210,14 @@ get_position()
     local image=$1
     local id_regexp=$2
 
-    # Parse line like below, looking for the first entry_tid
+    # Parse line like below, looking for the first position
     # [id=, commit_position=[positions=[[object_number=1, tag_tid=3, entry_tid=9], [object_number=0, tag_tid=3, entry_tid=8], [object_number=3, tag_tid=3, entry_tid=7], [object_number=2, tag_tid=3, entry_tid=6]]]]
 
     local status_log=${TEMPDIR}/${RMT_CLUSTER}-${POOL}-${image}.status
     rbd --cluster ${RMT_CLUSTER} -p ${POOL} journal status --image ${image} |
 	tee ${status_log} >&2
-    sed -Ee 's/[][,]/ /g' ${status_log} |
-	awk '$1 ~ /id='"${id_regexp}"'$/ {
-               for (i = 1; i < NF; i++) {
-                 if ($i ~ /entry_tid=/) {
-                   print $i;
-                   exit
-                 }
-               }
-             }'
+    sed -nEe 's/^.*\[id='"${id_regexp}"',.*positions=\[\[([^]]*)\],.*$/\1/p' \
+	${status_log}
 }
 
 get_master_position()
@@ -285,29 +272,6 @@ create_local_image()
     create_image ${LOC_CLUSTER} ${image}
 }
 
-image_id()
-{
-    local cluster=$1
-    local image=$2
-
-    rbd --cluster ${cluster} -p ${POOL} info --image ${image} |
-	sed -ne 's/^.*block_name_prefix: rbd_data\.//p'
-}
-
-remote_image_id()
-{
-    local image=$1
-
-    image_id ${RMT_CLUSTER} ${image}
-}
-
-local_image_id()
-{
-    local image=$1
-
-    image_id ${LOC_CLUSTER} ${image}
-}
-
 write_image()
 {
     local image=$1
@@ -345,7 +309,6 @@ if [ "$1" = clean ]; then
     test -n "${TEMPDIR}"
 
     RBD_MIRROR_PID_FILE=${TEMPDIR}/rbd-mirror.pid
-    RBD_MIRROR_ASOK=${TEMPDIR}/rbd-mirror.asok
     RBD_MIRROR_NOCLEANUP=
 
     cleanup

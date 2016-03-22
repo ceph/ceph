@@ -34,7 +34,7 @@ public:
   void unreserve(uint64_t unused);
 
   int allocate(
-    uint64_t need_size, uint64_t alloc_unit, int64_t hint,
+    uint64_t want_size, uint64_t alloc_unit, int64_t hint,
     uint64_t *offset, uint32_t *length);
 
   int release(

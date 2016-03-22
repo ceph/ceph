@@ -25,7 +25,7 @@ using std::vector;
 
 using librados::Rados;
 using librados::IoCtx;
-using librbd::cls_client::dir_list;
+using librbd::cls_client::mirror_image_list;
 
 namespace rbd {
 namespace mirror {
@@ -93,8 +93,6 @@ void PoolWatcher::refresh_images(bool reschedule)
       continue;
     }
 
-    // TODO: read mirrored images from mirroring settings object. For
-    // now just treat all images in a pool with mirroring enabled as mirrored
     rbd_mirror_mode_t mirror_mode;
     r = librbd::mirror_mode_get(ioctx, &mirror_mode);
     if (r < 0) {
@@ -107,34 +105,19 @@ void PoolWatcher::refresh_images(bool reschedule)
       continue;
     }
 
-    set<string> image_ids;
-
     // only format 2 images can be mirrored, so only check the format
     // 2 rbd_directory structure
-    int max_read = 1024;
-    string last_read = "";
-    do {
-      map<string, string> pool_images;
-      r = dir_list(&ioctx, RBD_DIRECTORY,
-		   last_read, max_read, &pool_images);
-      if (r == -ENOENT)
-	r = 0;
-      if (r < 0) {
-        derr << "error listing images in pool " << pool_name << ": "
-	     << cpp_strerror(r) << dendl;
-        continue;
-      }
-      for (auto& pair : pool_images) {
-	image_ids.insert(pair.second);
-      }
-      if (!pool_images.empty()) {
-	last_read = pool_images.rbegin()->first;
-      }
-      r = pool_images.size();
-    } while (r == max_read);
+    std::vector<std::string> image_ids;
+    r = mirror_image_list(&ioctx, &image_ids);
+    if (r < 0) {
+      derr << "error listing mirrored images in pool " << pool_name << ": "
+           << cpp_strerror(r) << dendl;
+      continue;
+    }
 
-    if (r > 0) {
-      images[pool_id] = std::move(image_ids);
+    if (!image_ids.empty()) {
+      std::set<std::string> image_set(image_ids.begin(), image_ids.end());
+      images[pool_id] = std::move(image_set);
     }
   }
 

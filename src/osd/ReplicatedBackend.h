@@ -361,7 +361,6 @@ public:
     );
 
 private:
-  template<typename T, int MSGTYPE>
   Message * generate_subop(
     const hobject_t &soid,
     const eversion_t &at_version,
@@ -392,11 +391,8 @@ private:
     ObjectStore::Transaction &op_t);
   void op_applied(InProgressOp *op);
   void op_commit(InProgressOp *op);
-  template<typename T, int MSGTYPE>
   void sub_op_modify_reply(OpRequestRef op);
   void sub_op_modify(OpRequestRef op);
-  template<typename T, int MSGTYPE>
-  void sub_op_modify_impl(OpRequestRef op);
 
   struct RepModify {
     OpRequestRef op;
