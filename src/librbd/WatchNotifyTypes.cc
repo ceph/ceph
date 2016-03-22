@@ -131,11 +131,15 @@ void ReleasedLockPayload::dump(Formatter *f) const {
 
 void RequestLockPayload::encode(bufferlist &bl) const {
   ::encode(client_id, bl);
+  ::encode(force, bl);
 }
 
 void RequestLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
   if (version >= 2) {
     ::decode(client_id, iter);
+  }
+  if (version >= 3) {
+    ::decode(force, iter);
   }
 }
 
@@ -143,6 +147,7 @@ void RequestLockPayload::dump(Formatter *f) const {
   f->open_object_section("client_id");
   client_id.dump(f);
   f->close_section();
+  f->dump_bool("force", force);
 }
 
 void HeaderUpdatePayload::encode(bufferlist &bl) const {
@@ -270,7 +275,7 @@ bool NotifyMessage::check_for_refresh() const {
 }
 
 void NotifyMessage::encode(bufferlist& bl) const {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   boost::apply_visitor(EncodePayloadVisitor(bl), payload);
   ENCODE_FINISH(bl);
 }
@@ -344,7 +349,7 @@ void NotifyMessage::dump(Formatter *f) const {
 void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(AcquiredLockPayload(ClientId(1, 2))));
   o.push_back(new NotifyMessage(ReleasedLockPayload(ClientId(1, 2))));
-  o.push_back(new NotifyMessage(RequestLockPayload(ClientId(1, 2))));
+  o.push_back(new NotifyMessage(RequestLockPayload(ClientId(1, 2), true)));
   o.push_back(new NotifyMessage(HeaderUpdatePayload()));
   o.push_back(new NotifyMessage(AsyncProgressPayload(AsyncRequestId(ClientId(0, 1), 2), 3, 4)));
   o.push_back(new NotifyMessage(AsyncCompletePayload(AsyncRequestId(ClientId(0, 1), 2), 3)));
