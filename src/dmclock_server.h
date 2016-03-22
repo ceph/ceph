@@ -933,7 +933,9 @@ namespace crimson {
 	// all items that are within limit are eligible based on
 	// priority
 	auto limits = &limit_q.top();
-	while (limits->has_request() && limits->next_request().tag.limit <= now) {
+	while (limits->has_request() &&
+	       !limits->next_request().tag.ready &&
+	       limits->next_request().tag.limit <= now) {
 	  limits->next_request().tag.ready = true;
 	  ready_q.adjust_up(*limits);
 	  limit_q.adjust_down(*limits);
