@@ -98,11 +98,11 @@ void OpenLocalImageRequest<I>::handle_open_image(int r) {
   if (r < 0) {
     derr << "failed to open image '" << m_local_image_id << "': "
          << cpp_strerror(r) << dendl;
-    send_close_image(r);
+    send_close_image(true, r);
     return;
   } else if ((*m_local_image_ctx)->exclusive_lock == nullptr) {
     derr << "image does not support exclusive lock" << dendl;
-    send_close_image(-EINVAL);
+    send_close_image(false, -EINVAL);
     return;
   }
 
@@ -128,12 +128,12 @@ void OpenLocalImageRequest<I>::handle_lock_image(int r) {
   if (r < 0) {
     derr << "failed to lock image '" << m_local_image_id << "': "
        << cpp_strerror(r) << dendl;
-    send_close_image(r);
+    send_close_image(false, r);
     return;
   } else if ((*m_local_image_ctx)->exclusive_lock == nullptr ||
              !(*m_local_image_ctx)->exclusive_lock->is_lock_owner()) {
     derr << "image is not locked" << dendl;
-    send_close_image(-EBUSY);
+    send_close_image(false, -EBUSY);
     return;
   }
 
@@ -141,7 +141,7 @@ void OpenLocalImageRequest<I>::handle_lock_image(int r) {
 }
 
 template <typename I>
-void OpenLocalImageRequest<I>::send_close_image(int r) {
+void OpenLocalImageRequest<I>::send_close_image(bool destroy_only, int r) {
   dout(20) << dendl;
 
   if (m_ret_val == 0 && r < 0) {
@@ -152,7 +152,7 @@ void OpenLocalImageRequest<I>::send_close_image(int r) {
     OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_close_image>(
       this);
   CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    m_local_image_ctx, m_work_queue, ctx);
+    m_local_image_ctx, m_work_queue, destroy_only, ctx);
   request->send();
 }
 
