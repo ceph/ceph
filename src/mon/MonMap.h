@@ -195,11 +195,11 @@ class MonMap {
 
   uuid_d& get_fsid() { return fsid; }
 
-  unsigned size() {
+  unsigned size() const {
     return mon_info.size();
   }
 
-  epoch_t get_epoch() { return epoch; }
+  epoch_t get_epoch() const { return epoch; }
   void set_epoch(epoch_t e) { epoch = e; }
 
   /**
@@ -257,7 +257,7 @@ class MonMap {
     calc_ranks();
   }
 
-  bool contains(const string& name) {
+  bool contains(const string& name) const {
     return mon_info.count(name);
   }
 
@@ -270,8 +270,8 @@ class MonMap {
    * @returns true if monmap contains a monitor with address @p;
    *          false otherwise.
    */
-  bool contains(const entity_addr_t &a) {
-    for (map<string,mon_info_t>::iterator p = mon_info.begin();
+  bool contains(const entity_addr_t &a) const {
+    for (map<string,mon_info_t>::const_iterator p = mon_info.begin();
          p != mon_info.end();
          ++p) {
       if (p->second.public_addr == a)
