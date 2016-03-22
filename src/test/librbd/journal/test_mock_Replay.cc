@@ -1162,6 +1162,31 @@ TEST_F(TestMockJournalReplay, FlattenEvent) {
   ASSERT_EQ(0, on_finish_safe.wait());
 }
 
+TEST_F(TestMockJournalReplay, ExclusiveLockReleaseEvent) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  C_SaferCond on_start_ready;
+  C_SaferCond on_start_safe;
+  when_process(mock_journal_replay, EventEntry{ExclusiveLockReleaseEvent()},
+               &on_start_ready, &on_start_safe);
+  ASSERT_EQ(0, on_start_ready.wait());
+
+  C_SaferCond on_finish_ready;
+  C_SaferCond on_finish_safe;
+  when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
+               &on_finish_ready, &on_finish_safe);
+
+  ASSERT_EQ(0, on_start_safe.wait());
+  ASSERT_EQ(0, on_finish_ready.wait());
+  ASSERT_EQ(0, on_finish_safe.wait());
+}
+
 TEST_F(TestMockJournalReplay, FlattenEventInvalid) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
