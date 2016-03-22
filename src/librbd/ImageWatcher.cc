@@ -408,7 +408,7 @@ void ImageWatcher::notify_request_lock() {
   ldout(m_image_ctx.cct, 10) << this << " notify request lock" << dendl;
 
   bufferlist bl;
-  ::encode(NotifyMessage(RequestLockPayload(get_client_id())), bl);
+  ::encode(NotifyMessage(RequestLockPayload(get_client_id(), false)), bl);
   notify_lock_owner(std::move(bl), create_context_callback<
     ImageWatcher, &ImageWatcher::handle_request_lock>(this));
 }
@@ -616,7 +616,7 @@ bool ImageWatcher::handle_payload(const RequestLockPayload &payload,
 
     ldout(m_image_ctx.cct, 10) << this << " queuing release of exclusive lock"
                                << dendl;
-    m_image_ctx.get_exclusive_lock_policy()->lock_requested(false);
+    m_image_ctx.get_exclusive_lock_policy()->lock_requested(payload.force);
   }
   return true;
 }
