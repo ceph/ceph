@@ -962,9 +962,8 @@ namespace crimson {
 	}
 	if (limit_q.top().has_request()) {
 	  const auto& next = limit_q.top().next_request();
-	  if (!next.tag.ready) {
-	    next_call = min_not_0_time(next_call, next.tag.limit);
-	  }
+	  assert(!next.tag.ready);
+	  next_call = min_not_0_time(next_call, next.tag.limit);
 	}
 	if (next_call < TimeMax) {
 	  result.status = NextReqStat::future;
