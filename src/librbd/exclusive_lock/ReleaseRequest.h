@@ -39,7 +39,10 @@ private:
    * CANCEL_OP_REQUESTS
    *    |
    *    v
-   * FLUSH_NOTIFIES . . . . . . . . . . . . . .
+   * FLUSH_NOTIFIES
+   *    |
+   *    v
+   * APPEND_JOURNAL_EVENT . . . . . . . . . . .
    *    |                                     .
    *    v                                     .
    * CLOSE_JOURNAL                            .
@@ -75,6 +78,9 @@ private:
 
   void send_flush_notifies();
   Context *handle_flush_notifies(int *ret_val);
+
+  void send_append_journal_event();
+  Context *handle_append_journal_event(int *ret_val);
 
   void send_close_journal();
   Context *handle_close_journal(int *ret_val);

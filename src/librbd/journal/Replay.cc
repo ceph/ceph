@@ -598,13 +598,24 @@ void Replay<I>::handle_event(const journal::DemoteEvent &event,
 }
 
 template <typename I>
-void Replay<I>::handle_event(const journal::UnknownEvent &event,
-			     Context *on_ready, Context *on_safe) {
+void Replay<I>::handle_event(const librbd::journal::ExclusiveLockReleaseEvent &event,
+                 Context *on_ready, Context *on_safe) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": Exclusive lock release event" << dendl;
+
+  on_ready->complete(0);
+  on_safe->complete(0);
+}
+
+template <typename I>
+void Replay<I>::handle_event(const librbd::journal::UnknownEvent &event,
+                 Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": unknown event" << dendl;
   on_ready->complete(0);
   on_safe->complete(0);
 }
+
 
 template <typename I>
 void Replay<I>::handle_aio_modify_complete(Context *on_ready, Context *on_safe,
