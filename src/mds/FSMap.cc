@@ -477,10 +477,14 @@ mds_gid_t FSMap::find_standby_for(mds_role_t role, const std::string& name) cons
         || (name.length() && info.standby_for_name == name)) {
       // It's a named standby for *me*, use it.
       return gid;
-    } else if (info.standby_for_rank < 0 && info.standby_for_name.length() == 0)
-      // It's not a named standby for anyone, use it if we don't find
-      // a named standby for me later.
-      result = gid;
+    } else if (
+        info.standby_for_rank < 0 && info.standby_for_name.length() == 0 &&
+        (info.standby_for_fscid == FS_CLUSTER_ID_NONE ||
+         info.standby_for_fscid == role.fscid)) {
+        // It's not a named standby for anyone, use it if we don't find
+        // a named standby for me later, unless it targets another FSCID.
+        result = gid;
+      }
   }
 
   return result;
