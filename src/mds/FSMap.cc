@@ -473,7 +473,7 @@ mds_gid_t FSMap::find_standby_for(mds_role_t role, const std::string& name) cons
       continue;
     }
 
-    if ((info.standby_for_rank == role.rank && info.standby_for_ns == role.fscid)
+    if ((info.standby_for_rank == role.rank && info.standby_for_fscid == role.fscid)
         || (name.length() && info.standby_for_name == name)) {
       // It's a named standby for *me*, use it.
       return gid;
