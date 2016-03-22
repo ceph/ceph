@@ -136,6 +136,7 @@ public:
 
   void append_op_event(uint64_t op_tid, journal::EventEntry &&event_entry,
                        Context *on_safe);
+  void append_lock_release_event(Context *ctx);
   void commit_op_event(uint64_t tid, int r);
   void replay_op_ready(uint64_t op_tid, Context *on_resume);
 

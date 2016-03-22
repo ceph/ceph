@@ -917,6 +917,25 @@ void Journal<I>::append_op_event(uint64_t op_tid,
 }
 
 template <typename I>
+void Journal<I>::append_lock_release_event(Context *ctx) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  journal::EventEntry event_entry((journal::ExclusiveLockReleaseEvent()));
+
+  bufferlist bl;
+  ::encode(event_entry, bl);
+
+  Future future;
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_state == STATE_READY);
+    future = m_journaler->append(m_tag_tid, bl);
+  }
+    future.flush(ctx);
+}
+
+template <typename I>
 void Journal<I>::commit_op_event(uint64_t op_tid, int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": op_tid=" << op_tid << ", "
