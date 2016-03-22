@@ -71,6 +71,8 @@ start_replay()
 	--debug-rbd_mirror=30 \
 	--daemonize=true \
 	${CLIENT_ID} ${LOC_POOL} ${RMT_POOL} ${IMAGE}
+
+    wait_for_replay_started
 }
 
 stop_replay()
@@ -96,34 +98,37 @@ stop_replay()
     RBD_IMAGE_REPLAY_PID_FILE=
 }
 
+wait_for_replay_started()
+{
+    local s
+
+    for s in 0.1 0.2 0.4 0.8 1.6 3.2 6.4; do
+	sleep ${s}
+	ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok help || :
+	test -S ${TEMPDIR}/rbd-mirror-image-replay.asok &&
+	    ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok help |
+		fgrep "rbd mirror status ${LOC_POOL}/${IMAGE}" && return 0
+    done
+    return 1
+}
+
 flush()
 {
-    local cmd
-
-    cmd=$(ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok help |
-		 sed -nEe 's/^.*"(rbd mirror flush [^"]*)":.*$/\1/p')
-    test -n "${cmd}"
-    ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok ${cmd}
+    ceph --admin-daemon ${TEMPDIR}/rbd-mirror-image-replay.asok \
+	 rbd mirror flush ${LOC_POOL}/${IMAGE}
 }
 
 get_position()
 {
     local id=$1
 
-    # Parse line like below, looking for the first entry_tid
+    # Parse line like below, looking for the first position
     # [id=, commit_position=[positions=[[object_number=1, tag_tid=3, entry_tid=9], [object_number=0, tag_tid=3, entry_tid=8], [object_number=3, tag_tid=3, entry_tid=7], [object_number=2, tag_tid=3, entry_tid=6]]]]
 
     local status_log=${TEMPDIR}/${RMT_POOL}-${IMAGE}.status
     rbd -p ${RMT_POOL} journal status --image ${IMAGE} | tee ${status_log} >&2
-    sed -Ee 's/[][,]/ /g' ${status_log} |
-	awk '$1 == "id='${id}'" {
-               for (i = 1; i < NF; i++) {
-                 if ($i ~ /entry_tid=/) {
-                   print $i;
-                   exit
-                 }
-               }
-             }'
+    sed -nEe 's/^.*\[id='"${id}"',.*positions=\[\[([^]]*)\],.*$/\1/p' \
+	${status_log}
 }
 
 get_master_position()

@@ -78,10 +78,15 @@ void RGWOp_MDLog_List::execute() {
   } 
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id" << dendl;
-    http_ret = -EINVAL;
-    return;
+    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_current_period_id();
+    if (period.empty()) {
+      ldout(s->cct, 5) << "Missing period id" << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
   }
+
   RGWMetadataLog meta_log{s->cct, store, period};
 
   meta_log.init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
@@ -233,6 +238,11 @@ void RGWOp_MDLog_Lock::execute() {
   locker_id    = s->info.args.get("locker-id");
   zone_id      = s->info.args.get("zone-id");
 
+  if (period.empty()) {
+    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_current_period_id();
+  }
+
   if (period.empty() ||
       shard_id_str.empty() ||
       (duration_str.empty()) ||
@@ -275,6 +285,11 @@ void RGWOp_MDLog_Unlock::execute() {
   shard_id_str = s->info.args.get("id");
   locker_id    = s->info.args.get("locker-id");
   zone_id      = s->info.args.get("zone-id");
+
+  if (period.empty()) {
+    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_current_period_id();
+  }
 
   if (period.empty() ||
       shard_id_str.empty() ||

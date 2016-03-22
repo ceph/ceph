@@ -402,15 +402,14 @@ int set_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
-  uint64_t changed_features = (orig_features ^ features) & mask;
-  uint64_t enabled_features = changed_features & features;
+  uint64_t enabled_features = features & mask;
   if ((enabled_features & RBD_FEATURES_MUTABLE) != enabled_features) {
     CLS_ERR("Attempting to enable immutable feature: %" PRIu64,
             enabled_features & ~RBD_FEATURES_MUTABLE);
     return -EINVAL;
   }
 
-  uint64_t disabled_features = changed_features & orig_features;
+  uint64_t disabled_features = ~features & mask;
   uint64_t disable_mask = (RBD_FEATURES_MUTABLE | RBD_FEATURES_DISABLE_ONLY);
   if ((disabled_features & disable_mask) != disabled_features) {
        CLS_ERR("Attempting to disable immutable feature: %" PRIu64,

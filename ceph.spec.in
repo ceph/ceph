@@ -151,9 +151,7 @@ BuildRequires:	libbz2-devel
 %if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel
 %endif
-%if 0%{with tests}
 BuildRequires:  btrfsprogs
-%endif
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
@@ -166,9 +164,7 @@ BuildRequires:	python-Cython
 %if 0%{?_with_systemd}
 Requires:	systemd
 %endif
-%if 0%{with tests}
 BuildRequires:	btrfs-progs
-%endif
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
@@ -361,9 +357,10 @@ Requires:	python-flask
 Requires:      python-Flask
 %endif
 %description radosgw
-This package is an S3 HTTP REST gateway for the RADOS object store. It
-is implemented as a FastCGI module using libfcgi, and can be used in
-conjunction with any FastCGI capable web server.
+RADOS is a distributed object store used by the Ceph distributed
+storage system.  This package provides a REST gateway to the
+object store that aims to implement a superset of Amazon's S3
+service as well as the OpenStack Object Storage ("Swift") API.
 
 %if %{with ocf}
 %package resource-agents
@@ -761,11 +758,13 @@ install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_localstatedir}/adm/fillu
   install -m 0644 -D systemd/ceph-create-keys@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-create-keys@.service
   install -m 0644 -D systemd/ceph-mds@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-mds@.service
   install -m 0644 -D systemd/ceph-radosgw@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-radosgw@.service
+  install -m 0644 -D systemd/ceph-rbd-mirror@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-rbd-mirror@.service
   install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}/ceph.target
   install -m 0644 -D systemd/ceph-osd.target $RPM_BUILD_ROOT%{_unitdir}/ceph-osd.target
   install -m 0644 -D systemd/ceph-mon.target $RPM_BUILD_ROOT%{_unitdir}/ceph-mon.target
   install -m 0644 -D systemd/ceph-mds.target $RPM_BUILD_ROOT%{_unitdir}/ceph-mds.target
   install -m 0644 -D systemd/ceph-radosgw.target $RPM_BUILD_ROOT%{_unitdir}/ceph-radosgw.target
+  install -m 0644 -D systemd/ceph-rbd-mirror.target $RPM_BUILD_ROOT%{_unitdir}/ceph-rbd-mirror.target
   install -m 0644 -D systemd/ceph-disk@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk@.service
   install -m 0755 -D systemd/ceph $RPM_BUILD_ROOT%{_sbindir}/rcceph
 %else
@@ -1095,6 +1094,10 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/rbd-mirror
 %{_mandir}/man8/rbd-mirror.8*
+%if 0%{?_with_systemd}
+%{_unitdir}/ceph-rbd-mirror@.service
+%{_unitdir}/ceph-rbd-mirror.target
+%endif
 
 #################################################################################
 %files -n rbd-nbd

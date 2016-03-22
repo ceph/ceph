@@ -27,8 +27,9 @@ using librbd::mirror_peer_t;
 namespace rbd {
 namespace mirror {
 
-Mirror::Mirror(CephContext *cct) :
+Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
   m_cct(cct),
+  m_args(args),
   m_lock("rbd::mirror::Mirror"),
   m_local(new librados::Rados())
 {
@@ -39,6 +40,10 @@ Mirror::Mirror(CephContext *cct) :
 void Mirror::handle_signal(int signum)
 {
   m_stopping.set(1);
+  {
+    Mutex::Locker l(m_lock);
+    m_cond.Signal();
+  }
 }
 
 int Mirror::init()
@@ -82,7 +87,8 @@ void Mirror::update_replayers(const map<peer_t, set<int64_t> > &peer_configs)
     const peer_t &peer = kv.first;
     if (m_replayers.find(peer) == m_replayers.end()) {
       dout(20) << "starting replayer for " << peer << dendl;
-      unique_ptr<Replayer> replayer(new Replayer(m_threads, m_local, peer));
+      unique_ptr<Replayer> replayer(new Replayer(m_threads, m_local, peer,
+						 m_args));
       // TODO: make async, and retry connecting within replayer
       int r = replayer->init();
       if (r < 0) {

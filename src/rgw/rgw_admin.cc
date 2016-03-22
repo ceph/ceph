@@ -3261,7 +3261,7 @@ int main(int argc, char **argv)
 
 	ret = zone.delete_obj();
 	if (ret < 0) {
-	  cerr << "failed to create zone " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to delete zone " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
       }

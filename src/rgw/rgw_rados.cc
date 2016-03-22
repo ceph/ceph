@@ -323,7 +323,7 @@ int RGWZoneGroup::remove_zone(const RGWZoneParams& zone_params)
   map<string, RGWZone>::iterator iter = zones.find(zone_params.get_id());
 
   if (iter == zones.end()) {
-    ldout(cct, 0) << "zone " << zone_params.get_name() << " " << zone_params.get_id() << " doesn't exists "<< dendl;
+    ldout(cct, 0) << "zone " << zone_params.get_name() << " " << zone_params.get_id() << "is not a part of zonegroup "<< name << dendl;
     return -ENOENT;
   }
 
