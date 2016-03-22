@@ -46,8 +46,8 @@ public:
 private:
   void set_sources(const std::map<int64_t, std::set<std::string> > &images);
 
-  void start_image_replayer(unique_ptr<ImageReplayer> &image_replayer);
-  bool stop_image_replayer(unique_ptr<ImageReplayer> &image_replayer);
+  void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
+  bool stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
 
   Threads *m_threads;
   Mutex m_lock;
@@ -61,7 +61,7 @@ private:
   // index by pool so it's easy to tell what is affected
   // when a pool's configuration changes
   std::map<int64_t, std::map<std::string,
-			     std::unique_ptr<ImageReplayer> > > m_images;
+			     std::unique_ptr<ImageReplayer<> > > > m_images;
   ReplayerAdminSocketHook *m_asok_hook;
 
   class ReplayerThread : public Thread {

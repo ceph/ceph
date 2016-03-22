@@ -111,7 +111,7 @@ public:
     EXPECT_EQ(0, m_local_cluster.pool_delete(m_local_pool_name.c_str()));
   }
 
-  template <typename ImageReplayerT = rbd::mirror::ImageReplayer>
+  template <typename ImageReplayerT = rbd::mirror::ImageReplayer<> >
   void create_replayer() {
     m_replayer = new ImageReplayerT(m_threads,
       rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
@@ -119,7 +119,7 @@ public:
       m_client_id, m_local_ioctx.get_id(), m_remote_pool_id, m_remote_image_id);
   }
 
-  void start(rbd::mirror::ImageReplayer::BootstrapParams *bootstap_params =
+  void start(rbd::mirror::ImageReplayer<>::BootstrapParams *bootstap_params =
 	     nullptr)
   {
     C_SaferCond cond;
@@ -150,7 +150,7 @@ public:
   {
     create_replayer<>();
 
-    rbd::mirror::ImageReplayer::BootstrapParams
+    rbd::mirror::ImageReplayer<>::BootstrapParams
       bootstap_params(m_local_pool_name, m_image_name);
     start(&bootstap_params);
     wait_for_replay_complete();
@@ -329,7 +329,7 @@ public:
   std::string m_image_name;
   int64_t m_remote_pool_id;
   std::string m_remote_image_id;
-  rbd::mirror::ImageReplayer *m_replayer;
+  rbd::mirror::ImageReplayer<> *m_replayer;
   C_WatchCtx *m_watch_ctx;
   uint64_t m_watch_handle;
   char m_test_data[TEST_IO_SIZE + 1];
@@ -346,7 +346,7 @@ TEST_F(TestImageReplayer, BootstrapErrorInvalidPool)
 {
   create_replayer<>();
 
-  rbd::mirror::ImageReplayer::BootstrapParams
+  rbd::mirror::ImageReplayer<>::BootstrapParams
     bootstap_params("INVALID_LOCAL_POOL_NAME", m_image_name);
   C_SaferCond cond;
   m_replayer->start(&cond, &bootstap_params);
@@ -360,7 +360,7 @@ TEST_F(TestImageReplayer, BootstrapErrorLocalImageExists)
 			      false, 0, &order, 0, 0));
 
   create_replayer<>();
-  rbd::mirror::ImageReplayer::BootstrapParams
+  rbd::mirror::ImageReplayer<>::BootstrapParams
     bootstap_params(m_local_pool_name, m_image_name);
   C_SaferCond cond;
   m_replayer->start(&cond, &bootstap_params);
@@ -378,7 +378,7 @@ TEST_F(TestImageReplayer, BootstrapErrorNoJournal)
   close_image(ictx);
 
   create_replayer<>();
-  rbd::mirror::ImageReplayer::BootstrapParams
+  rbd::mirror::ImageReplayer<>::BootstrapParams
     bootstap_params(m_local_pool_name, m_image_name);
   C_SaferCond cond;
   m_replayer->start(&cond, &bootstap_params);
@@ -388,7 +388,7 @@ TEST_F(TestImageReplayer, BootstrapErrorNoJournal)
 TEST_F(TestImageReplayer, StartInterrupted)
 {
   create_replayer<>();
-  rbd::mirror::ImageReplayer::BootstrapParams
+  rbd::mirror::ImageReplayer<>::BootstrapParams
     bootstap_params(m_local_pool_name, m_image_name);
   C_SaferCond start_cond, stop_cond;
   m_replayer->start(&start_cond, &bootstap_params);
@@ -425,7 +425,7 @@ TEST_F(TestImageReplayer, ErrorNoJournal)
   ASSERT_EQ(0, librbd::update_features(ictx, RBD_FEATURE_JOURNALING, false));
   close_image(ictx);
 
-  rbd::mirror::ImageReplayer::BootstrapParams
+  rbd::mirror::ImageReplayer<>::BootstrapParams
     bootstap_params(m_local_pool_name, m_image_name);
   C_SaferCond cond;
   m_replayer->start(&cond, &bootstap_params);
@@ -537,14 +537,15 @@ TEST_F(TestImageReplayer, NextTag)
   stop();
 }
 
-class ImageReplayer : public rbd::mirror::ImageReplayer {
+class ImageReplayer : public rbd::mirror::ImageReplayer<> {
 public:
   ImageReplayer(rbd::mirror::Threads *threads,
 		rbd::mirror::RadosRef local, rbd::mirror::RadosRef remote,
 		const std::string &client_id, int64_t local_pool_id,
 		int64_t remote_pool_id,	const std::string &remote_image_id)
-    : rbd::mirror::ImageReplayer(threads, local, remote, client_id,
-				 local_pool_id, remote_pool_id, remote_image_id)
+    : rbd::mirror::ImageReplayer<>(threads, local, remote, client_id,
+				   local_pool_id, remote_pool_id,
+                                   remote_image_id)
     {}
 
   void set_error(const std::string &state, int r) {
@@ -560,21 +561,21 @@ protected:
   virtual void on_start_get_registered_client_status_finish(int r,
       const std::set<cls::journal::Client> &registered_clients,
       const BootstrapParams &bootstrap_params) {
-      rbd::mirror::ImageReplayer::on_start_get_registered_client_status_finish(
+      rbd::mirror::ImageReplayer<>::on_start_get_registered_client_status_finish(
 	get_error("on_start_get_registered_client_status"), registered_clients,
 	bootstrap_params);
   }
 
   virtual void on_start_remote_journaler_init_finish(int r) {
     ASSERT_EQ(0, r);
-    rbd::mirror::ImageReplayer::on_start_remote_journaler_init_finish(
+    rbd::mirror::ImageReplayer<>::on_start_remote_journaler_init_finish(
       get_error("on_start_remote_journaler_init"));
   }
 
   virtual void on_start_local_image_open_finish(int r) {
     int test_r = get_error("on_start_local_image_open");
     if (!test_r) {
-      rbd::mirror::ImageReplayer::on_start_local_image_open_finish(r);
+      rbd::mirror::ImageReplayer<>::on_start_local_image_open_finish(r);
       return;
     }
 
@@ -591,19 +592,19 @@ protected:
 
   virtual void on_start_wait_for_local_journal_ready_finish(int r) {
     ASSERT_EQ(0, r);
-    rbd::mirror::ImageReplayer::on_start_wait_for_local_journal_ready_finish(
+    rbd::mirror::ImageReplayer<>::on_start_wait_for_local_journal_ready_finish(
       get_error("on_start_wait_for_local_journal_ready"));
   }
 
   virtual void on_stop_journal_replay_shut_down_finish(int r) {
     ASSERT_EQ(0, r);
-    rbd::mirror::ImageReplayer::on_stop_journal_replay_shut_down_finish(
+    rbd::mirror::ImageReplayer<>::on_stop_journal_replay_shut_down_finish(
       get_error("on_stop_journal_replay_shut_down"));
   }
 
   virtual void on_stop_local_image_close_finish(int r) {
     ASSERT_EQ(0, r);
-    rbd::mirror::ImageReplayer::on_stop_local_image_close_finish(
+    rbd::mirror::ImageReplayer<>::on_stop_local_image_close_finish(
       get_error("on_stop_local_image_close"));
   }
 
@@ -617,7 +618,7 @@ TEST_F(TestImageReplayer, Error_on_start_##state)			\
   create_replayer<ImageReplayer>();					\
   reinterpret_cast<ImageReplayer *>(m_replayer)->			\
     set_error("on_start_" #state, -1);					\
-  rbd::mirror::ImageReplayer::BootstrapParams				\
+  rbd::mirror::ImageReplayer<>::BootstrapParams				\
     bootstap_params(m_local_pool_name, m_image_name);			\
   C_SaferCond cond;							\
   m_replayer->start(&cond, &bootstap_params);				\
@@ -630,7 +631,7 @@ TEST_F(TestImageReplayer, Error_on_stop_##state)			\
   create_replayer<ImageReplayer>();					\
   reinterpret_cast<ImageReplayer *>(m_replayer)->			\
     set_error("on_stop_" #state, -1);					\
-  rbd::mirror::ImageReplayer::BootstrapParams				\
+  rbd::mirror::ImageReplayer<>::BootstrapParams				\
     bootstap_params(m_local_pool_name, m_image_name);			\
   start(&bootstap_params);						\
   /* TODO: investigate: without wait below I observe: */		\
