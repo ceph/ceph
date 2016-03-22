@@ -121,7 +121,7 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   mds_rank(NULL),
   tick_event(0),
   standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
-  standby_type(MDSMap::STATE_NULL),
+  standby_replay(false),
   asok_hook(NULL)
 {
   orig_argc = 0;
@@ -438,7 +438,7 @@ void MDSDaemon::handle_conf_change(const struct md_config_t *conf,
 }
 
 
-int MDSDaemon::init(MDSMap::DaemonState wanted_state)
+int MDSDaemon::init()
 {
   dout(10) << sizeof(MDSCacheObject) << "\tMDSCacheObject" << dendl;
   dout(10) << sizeof(CInode) << "\tCInode" << dendl;
@@ -545,41 +545,23 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
 
   timer.init();
 
-  if (wanted_state==MDSMap::STATE_BOOT && g_conf->mds_standby_replay) {
-    wanted_state = MDSMap::STATE_STANDBY_REPLAY;
-  }
-
-  // starting beacon.  this will induce an MDSMap from the monitor
-  if (wanted_state==MDSMap::STATE_STANDBY_REPLAY ||
-      wanted_state==MDSMap::STATE_ONESHOT_REPLAY) {
-    g_conf->set_val_or_die("mds_standby_replay", "true");
-    g_conf->apply_changes(NULL);
-    if ( wanted_state == MDSMap::STATE_ONESHOT_REPLAY &&
-        (g_conf->mds_standby_for_rank == -1) &&
-        g_conf->mds_standby_for_name.empty()) {
-      // uh-oh, must specify one or the other!
-      dout(0) << "Specified oneshot replay mode but not an MDS!" << dendl;
-      suicide();
-    }
-    standby_type = wanted_state;
-    wanted_state = MDSMap::STATE_BOOT;
+  MDSMap::DaemonState wanted_state = MDSMap::STATE_BOOT;
+  if (g_conf->mds_standby_replay) {
+    standby_replay = true;
   }
 
   standby_for_rank = mds_rank_t(g_conf->mds_standby_for_rank);
   standby_for_name.assign(g_conf->mds_standby_for_name);
 
-  if (standby_type == MDSMap::STATE_STANDBY_REPLAY &&
-      standby_for_rank == -1) {
+  if (standby_replay && standby_for_rank == -1) {
     if (standby_for_name.empty())
       standby_for_rank = MDSMap::MDS_STANDBY_ANY;
     else
       standby_for_rank = MDSMap::MDS_STANDBY_NAME;
-  } else if (standby_type == MDSMap::STATE_NULL && !standby_for_name.empty())
+  } else if (!standby_replay && !standby_for_name.empty()) {
     standby_for_rank = MDSMap::MDS_MATCHED_ACTIVE;
-
-  if (wanted_state == MDSMap::STATE_NULL) {
-    wanted_state = MDSMap::STATE_BOOT;
   }
+
   beacon.init(mdsmap, wanted_state,
     standby_for_rank, standby_for_name,
     fs_cluster_id_t(g_conf->mds_standby_for_fscid));
@@ -974,19 +956,8 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
     }
   }
 
-  // If I was put into standby replay, but I am configured for a different standby
-  // type, ignore the map's state and request my standby type (only used
-  // for oneshot replay?)
-  if (new_state == MDSMap::STATE_STANDBY_REPLAY) {
-    if (standby_type != MDSMap::STATE_NULL && standby_type != MDSMap::STATE_STANDBY_REPLAY) {
-      beacon.set_want_state(mdsmap, standby_type);
-      beacon.send();
-      goto out;
-    }
-  }
-
-  if (whoami == MDS_RANK_NONE && (
-      new_state == MDSMap::STATE_STANDBY_REPLAY || new_state == MDSMap::STATE_ONESHOT_REPLAY)) {
+  if (whoami == MDS_RANK_NONE && 
+      new_state == MDSMap::STATE_STANDBY_REPLAY) {
     whoami = mdsmap->get_mds_info_gid(mds_gid_t(monc->get_global_id())).standby_for_rank;
   }
 
@@ -1066,8 +1037,9 @@ void MDSDaemon::_handle_mds_map(MDSMap *oldmap)
     beacon.set_want_state(mdsmap, new_state);
     dout(1) << "handle_mds_map standby" << dendl;
 
-    if (standby_type != MDSMap::STATE_NULL) {// we want to be in standby_replay or oneshot_replay!
-      beacon.set_want_state(mdsmap, standby_type);
+    if (standby_replay) {
+      // we want to be in standby_replay
+      beacon.set_want_state(mdsmap, MDSMap::STATE_STANDBY_REPLAY);
       beacon.send();
     }
     return;
