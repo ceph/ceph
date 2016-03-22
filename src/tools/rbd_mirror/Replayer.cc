@@ -327,13 +327,9 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
     for (const auto &image_id : kv.second) {
       auto it = pool_replayers.find(image_id);
       if (it == pool_replayers.end()) {
-	unique_ptr<ImageReplayer> image_replayer(new ImageReplayer(m_threads,
-								   m_local,
-								   m_remote,
-								   mirror_uuid,
-								   local_ioctx.get_id(),
-								   pool_id,
-								   image_id));
+	unique_ptr<ImageReplayer<> > image_replayer(new ImageReplayer<>(
+          m_threads, m_local, m_remote, mirror_uuid, local_ioctx.get_id(),
+          pool_id, image_id));
 	it = pool_replayers.insert(
 	  std::make_pair(image_id, std::move(image_replayer))).first;
       }
@@ -342,7 +338,7 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
   }
 }
 
-void Replayer::start_image_replayer(unique_ptr<ImageReplayer> &image_replayer)
+void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
 {
   if (!image_replayer->is_stopped()) {
     return;
@@ -351,7 +347,7 @@ void Replayer::start_image_replayer(unique_ptr<ImageReplayer> &image_replayer)
   image_replayer->start();
 }
 
-bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer> &image_replayer)
+bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
 {
   if (image_replayer->is_stopped()) {
     return true;

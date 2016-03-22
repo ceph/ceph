@@ -13,39 +13,38 @@
 #include "include/rados/librados.hpp"
 #include "cls/journal/cls_journal_types.h"
 #include "librbd/journal/Types.h"
+#include "librbd/journal/TypeTraits.h"
 #include "types.h"
+
+class AdminSocketHook;
 
 namespace journal {
 
 class Journaler;
 class ReplayHandler;
-class ReplayEntry;
 
 }
 
 namespace librbd {
 
 class ImageCtx;
-
-namespace journal {
-
-template <typename> class Replay;
-
-}
+namespace journal { template <typename> class Replay; }
 
 }
 
 namespace rbd {
 namespace mirror {
 
-class ImageReplayerAdminSocketHook;
 struct Threads;
 
 /**
  * Replays changes from a remote cluster for a single image.
  */
+template <typename ImageCtxT = librbd::ImageCtx>
 class ImageReplayer {
 public:
+  typedef typename librbd::journal::TypeTraits<ImageCtxT>::ReplayEntry ReplayEntry;
+
   enum State {
     STATE_UNINITIALIZED,
     STATE_STARTING,
@@ -94,8 +93,14 @@ public:
   virtual void handle_replay_process_ready(int r);
   virtual void handle_replay_complete(int r);
 
-  virtual void handle_replay_committed(::journal::ReplayEntry* replay_entry, int r);
+  virtual void handle_replay_committed(ReplayEntry* replay_entry, int r);
 
+  inline int64_t get_remote_pool_id() const {
+    return m_remote_pool_id;
+  }
+  inline const std::string get_remote_image_id() const {
+    return m_remote_image_id;
+  }
 protected:
   /**
    * @verbatim
@@ -177,6 +182,8 @@ protected:
   void close_local_image(Context *on_finish); // for tests
 
 private:
+  typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
+
   State get_state_() const { return m_state; }
   bool is_stopped_() const { return m_state == STATE_UNINITIALIZED ||
                                     m_state == STATE_STOPPED; }
@@ -185,9 +192,6 @@ private:
   int get_bootstrap_params(BootstrapParams *params);
 
   void shut_down_journal_replay(bool cancel_ops);
-
-  friend std::ostream &operator<<(std::ostream &os,
-				  const ImageReplayer &replayer);
 
   Threads *m_threads;
   RadosRef m_local, m_remote;
@@ -199,17 +203,19 @@ private:
   State m_state;
   std::string m_local_pool_name, m_remote_pool_name;
   librados::IoCtx m_local_ioctx, m_remote_ioctx;
-  librbd::ImageCtx *m_local_image_ctx;
-  librbd::journal::Replay<librbd::ImageCtx> *m_local_replay;
-  ::journal::Journaler *m_remote_journaler;
+  ImageCtxT *m_local_image_ctx;
+  librbd::journal::Replay<ImageCtxT> *m_local_replay;
+  Journaler* m_remote_journaler;
   ::journal::ReplayHandler *m_replay_handler;
   Context *m_on_finish;
-  ImageReplayerAdminSocketHook *m_asok_hook;
+  AdminSocketHook *m_asok_hook;
 
   librbd::journal::MirrorPeerClientMeta m_client_meta;
 };
 
 } // namespace mirror
 } // namespace rbd
+
+extern template class rbd::mirror::ImageReplayer<librbd::ImageCtx>;
 
 #endif // CEPH_RBD_MIRROR_IMAGE_REPLAYER_H

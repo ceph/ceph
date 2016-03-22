@@ -55,6 +55,7 @@ struct MockImageCtx {
       object_prefix(image_ctx.object_prefix),
       header_oid(image_ctx.header_oid),
       id(image_ctx.id),
+      name(image_ctx.name),
       parent_md(image_ctx.parent_md),
       layout(image_ctx.layout),
       aio_work_queue(new MockAioImageRequestWQ()),
@@ -190,6 +191,7 @@ struct MockImageCtx {
   std::string object_prefix;
   std::string header_oid;
   std::string id;
+  std::string name;
   parent_info parent_md;
 
   file_layout_t layout;
