@@ -319,7 +319,7 @@ public:
    *
    * Returns all the elements in our features that are not in @p other
    *
-   * @returns all the features in @p other but not in our features.
+   * @returns all the features not in @p other
    */
   mon_feature_t diff(const mon_feature_t other) const {
     return mon_feature_t((features ^ other.features) & features);
@@ -424,8 +424,6 @@ namespace ceph {
             FEATURE_NONE
             );
       }
-
-      constexpr mon_feature_t FLAG_NONE(          (0ULL));
     }
   }
 }
