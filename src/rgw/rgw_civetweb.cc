@@ -52,8 +52,15 @@ int RGWMongoose::complete_request()
       /*
        * Status 204 should not include a content-length header
        * RFC7230 says so
+       *
+       * Same goes for status 304: Not Modified
+       *
+       * 'If a cache uses a received 304 response to update a cache entry,'
+       * 'the cache MUST update the entry to reflect any new field values'
+       * 'given in the response.'
+       *
        */
-      if (status_num == 204) {
+      if (status_num == 204 || status_num == 304) {
         has_content_length = true;
       } else if (0 && data.length() == 0) {
         has_content_length = true;
