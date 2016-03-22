@@ -478,7 +478,7 @@ namespace crimson {
       // if all reservations are met and all other requestes are under
       // limit, this will allow the request next in terms of
       // proportion to still get issued
-      bool             allowLimitBreak;
+      bool             allow_limit_break;
       Mechanism        mechanism;
 
       std::atomic_bool finishing;
@@ -517,7 +517,7 @@ namespace crimson {
 		    bool _allow_limit_break,
 		    Mechanism _mechanism) :
 	client_info_f(_client_info_f),
-	allowLimitBreak(_allow_limit_break),
+	allow_limit_break(_allow_limit_break),
 	mechanism(_mechanism),
 	finishing(false),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
@@ -1025,7 +1025,8 @@ namespace crimson {
 #endif
 
 	auto readys = &new_ready_q.top();
-	if (readys->has_request() && readys->next_request().tag.ready) {
+	if (readys->has_request() &&
+	    (readys->next_request().tag.ready || allow_limit_break)) {
 	  result.status = NextReqStat::returning;
 	  result.heap_id = HeapId::ready;
 	  return result;
@@ -1039,18 +1040,41 @@ namespace crimson {
 	}
 #endif
 
-	if (allowLimitBreak) {
+#if OLD_Q
+	if (allow_limit_break) {
 	  if (!prop_q.empty()) {
 	    result.status = NextReqStat::returning;
 	    result.heap_id = HeapId::proportional;
 	    return result;
 	  }
 	}
+#endif
 
 	// nothing scheduled; make sure we re-run when next
 	// reservation item or next limited item comes up
 
 	Time next_call = TimeMax;
+	if (new_reserv_q.top().has_request()) {
+	  next_call =
+	    min_not_0_time(next_call,
+			   new_reserv_q.top().next_request().tag.reservation);
+	}
+	if (new_limit_q.top().has_request()) {
+	  const auto& next = new_limit_q.top().next_request();
+	  if (!next.tag.ready) {
+	    next_call = min_not_0_time(next_call, next.tag.limit);
+	  }
+	}
+	if (next_call < TimeMax) {
+	  result.status = NextReqStat::future;
+	  result.when_ready = next_call;
+	  return result;
+	} else {
+	  result.status = NextReqStat::none;
+	  return result;
+	}
+
+#if OLD_Q
 	if (!reserv_q.empty()) {
 	  next_call = min_not_0_time(next_call, reserv_q.top()->tag.reservation);
 	}
@@ -1065,6 +1089,7 @@ namespace crimson {
 	  result.status = NextReqStat::none;
 	  return result;
 	}
+#endif
       } // schedule_request
 
 
