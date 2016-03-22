@@ -632,6 +632,7 @@ public:
 private:
   void _reset();   ///< called from bootstrap, start_, or join_election
   void wait_for_paxos_write();
+  void _finish_svc_election(); ///< called by {win,lose}_election
 public:
   void bootstrap();
   void join_election();

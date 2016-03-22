@@ -1868,6 +1868,15 @@ epoch_t Monitor::get_epoch()
   return elector.get_epoch();
 }
 
+void Monitor::_finish_svc_election()
+{
+  assert(state == STATE_LEADER || state == STATE_PEON);
+
+  for (auto p : paxos_service) {
+    p->election_finished();
+  }
+}
+
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
                            const MonCommand *cmdset, int cmdsize,
@@ -1900,11 +1909,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   // when monitors are call elections or participating in a paxos
   // round without agreeing on who the participants are.
   monmon()->election_finished();
-  for (vector<PaxosService*>::iterator p = paxos_service.begin();
-       p != paxos_service.end(); ++p) {
-    if (*p != monmon())
-      (*p)->election_finished();
-  }
+  _finish_svc_election();
   health_monitor->start(epoch);
 
   logger->inc(l_mon_election_win);
@@ -1937,8 +1942,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
            << dendl;
 
   paxos->peon_init();
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
-    (*p)->election_finished();
+  _finish_svc_election();
   health_monitor->start(epoch);
 
   logger->inc(l_mon_election_lose);
