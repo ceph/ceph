@@ -69,7 +69,7 @@ void ImageCopyRequest<I>::send_update_max_object_count() {
     }
   }
 
-  if (max_objects == m_client_meta->sync_object_count) {
+  if (max_objects <= m_client_meta->sync_object_count) {
     send_object_copies();
     return;
   }
@@ -103,11 +103,6 @@ void ImageCopyRequest<I>::handle_update_max_object_count(int r) {
 
   // update provided meta structure to reflect reality
   m_client_meta->sync_object_count = m_client_meta_copy.sync_object_count;
-  m_object_no = 0;
-  if (m_sync_point->object_number) {
-    m_object_no = *m_sync_point->object_number + 1;
-  }
-  m_end_object_no = m_client_meta_copy.sync_object_count;
 
   send_object_copies();
 }
@@ -115,6 +110,16 @@ void ImageCopyRequest<I>::handle_update_max_object_count(int r) {
 template <typename I>
 void ImageCopyRequest<I>::send_object_copies() {
   CephContext *cct = m_local_image_ctx->cct;
+
+  m_object_no = 0;
+  if (m_sync_point->object_number) {
+    m_object_no = *m_sync_point->object_number + 1;
+  }
+  m_end_object_no = m_client_meta->sync_object_count;
+
+  dout(20) << ": start_object=" << m_object_no << ", "
+           << "end_object=" << m_end_object_no << dendl;
+
   bool complete;
   {
     Mutex::Locker locker(m_lock);
