@@ -56,8 +56,24 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
   MessengerTest(): server_msgr(NULL), client_msgr(NULL) {}
   virtual void SetUp() {
     cerr << __func__ << " start set up " << GetParam() << std::endl;
-    server_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid());
-    client_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::CLIENT(-1), "client", getpid());
+    string ms_type = get_type();
+    if (ms_type == "async") {
+      if (string(GetParam()+6, 4) == "dpdk") {
+        g_ceph_context->_conf->set_val("ms_dpdk_debug_allow_loopback", "true", false, false);
+        g_ceph_context->_conf->set_val("ms_async_op_threads", "2", false, false);
+        g_ceph_context->_conf->set_val("ms_async_send_inline", "false", false, false);
+        g_ceph_context->_conf->set_val("ms_async_transport_type", "dpdk", false, false);
+        g_ceph_context->_conf->set_val("ms_dpdk_coremask", "3", false, false);
+        g_ceph_context->_conf->set_val("ms_dpdk_host_ipv4_addr", "127.0.0.1", false, false);
+        g_ceph_context->_conf->set_val("ms_dpdk_gateway_ipv4_addr", "127.0.0.1", false, false);
+        g_ceph_context->_conf->set_val("ms_dpdk_netmask_ipv4_addr", "255.255.255.0", false, false);
+      } else {
+        g_ceph_context->_conf->set_val("ms_async_transport_type", "posix", false, false);
+      }
+      g_ceph_context->_conf->apply_changes(nullptr);
+    }
+    server_msgr = Messenger::create(g_ceph_context, ms_type, entity_name_t::OSD(0), "server", getpid());
+    client_msgr = Messenger::create(g_ceph_context, ms_type, entity_name_t::CLIENT(-1), "client", getpid());
     server_msgr->set_default_policy(Messenger::Policy::stateless_server(0, 0));
     client_msgr->set_default_policy(Messenger::Policy::lossy_client(0, 0));
   }
@@ -66,6 +82,15 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
     delete client_msgr;
   }
 
+  string get_type() {
+    string ms_type;
+    if (string(GetParam(), 5) == "async") {
+      ms_type = "async";
+    } else {
+      ms_type = "simple";
+    }
+    return ms_type;
+  }
 };
 
 
@@ -1040,7 +1065,7 @@ bool SyntheticDispatcher::ms_handle_reset(Connection *con) {
 }
 
 TEST_P(MessengerTest, SyntheticStressTest) {
-  SyntheticWorkload test_msg(8, 32, GetParam(), 100,
+  SyntheticWorkload test_msg(8, 32, get_type(), 100,
                              Messenger::Policy::stateful_server(0, 0),
                              Messenger::Policy::lossless_client(0, 0));
   for (int i = 0; i < 100; ++i) {
@@ -1069,7 +1094,7 @@ TEST_P(MessengerTest, SyntheticStressTest) {
 }
 
 TEST_P(MessengerTest, SyntheticStressTest1) {
-  SyntheticWorkload test_msg(16, 32, GetParam(), 100,
+  SyntheticWorkload test_msg(16, 32, get_type(), 100,
                              Messenger::Policy::lossless_peer_reuse(0, 0),
                              Messenger::Policy::lossless_peer_reuse(0, 0));
   for (int i = 0; i < 10; ++i) {
@@ -1099,9 +1124,9 @@ TEST_P(MessengerTest, SyntheticStressTest1) {
 
 
 TEST_P(MessengerTest, SyntheticInjectTest) {
-  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
+  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "3000");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
-  SyntheticWorkload test_msg(8, 32, GetParam(), 100,
+  SyntheticWorkload test_msg(8, 32, get_type(), 100,
                              Messenger::Policy::stateful_server(0, 0),
                              Messenger::Policy::lossless_client(0, 0));
   for (int i = 0; i < 100; ++i) {
@@ -1132,9 +1157,9 @@ TEST_P(MessengerTest, SyntheticInjectTest) {
 }
 
 TEST_P(MessengerTest, SyntheticInjectTest2) {
-  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
+  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "3000");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
-  SyntheticWorkload test_msg(8, 16, GetParam(), 100,
+  SyntheticWorkload test_msg(8, 16, get_type(), 100,
                              Messenger::Policy::lossless_peer_reuse(0, 0),
                              Messenger::Policy::lossless_peer_reuse(0, 0));
   for (int i = 0; i < 100; ++i) {
@@ -1167,7 +1192,7 @@ TEST_P(MessengerTest, SyntheticInjectTest2) {
 TEST_P(MessengerTest, SyntheticInjectTest3) {
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "600");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
-  SyntheticWorkload test_msg(8, 16, GetParam(), 100,
+  SyntheticWorkload test_msg(8, 16, get_type(), 100,
                              Messenger::Policy::stateless_server(0, 0),
                              Messenger::Policy::lossy_client(0, 0));
   for (int i = 0; i < 100; ++i) {
@@ -1199,7 +1224,7 @@ TEST_P(MessengerTest, SyntheticInjectTest3) {
 
 
 TEST_P(MessengerTest, SyntheticInjectTest4) {
-  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
+  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "3000");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
   g_ceph_context->_conf->set_val("ms_inject_delay_probability", "1");
   g_ceph_context->_conf->set_val("ms_inject_delay_type", "client osd", false, false);
@@ -1313,7 +1338,7 @@ class MarkdownDispatcher : public Dispatcher {
 
 // Markdown with external lock
 TEST_P(MessengerTest, MarkdownTest) {
-  Messenger *server_msgr2 = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid());
+  Messenger *server_msgr2 = Messenger::create(g_ceph_context, get_type(), entity_name_t::OSD(0), "server", getpid());
   MarkdownDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("127.0.0.1:16800");
@@ -1366,7 +1391,10 @@ INSTANTIATE_TEST_CASE_P(
   Messenger,
   MessengerTest,
   ::testing::Values(
-    "async",
+#ifdef HAVE_DPDK
+    "async-dpdk",
+#endif
+    "async-posix",
     "simple"
   )
 );
