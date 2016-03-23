@@ -184,8 +184,9 @@ def task(ctx, config):
                             r=remote.name))
 
     log.info('Beginning thrashosds...')
+    cluster_manager = ctx.managers[cluster]
     thrash_proc = ceph_manager.Thrasher(
-        ctx.manager,
+        cluster_manager,
         config,
         logger=log.getChild('thrasher')
         )
@@ -194,4 +195,4 @@ def task(ctx, config):
     finally:
         log.info('joining thrashosds')
         thrash_proc.do_join()
-        ctx.manager.wait_for_recovery(config.get('timeout', 360))
+        cluster_manager.wait_for_recovery(config.get('timeout', 360))
