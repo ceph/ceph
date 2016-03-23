@@ -658,6 +658,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
   o->oncommit_sync = onack;
   o->target = info->target;
   o->should_resend = false;
+  o->priority = CEPH_MSG_PRIO_HIGHEST;
   _send_op_account(o);
   MOSDOp *m = _prepare_osd_op(o);
   o->tid = last_tid.inc();
