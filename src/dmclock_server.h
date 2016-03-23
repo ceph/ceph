@@ -674,34 +674,36 @@ namespace crimson {
 	  client_it = client_map.find(client_id);
 	}
 
-#if OLD_Q // ********** TRANSLATE LATER *****************
 	if (client_it->second.idle) {
 	  // We need to do an adjustment so that idle clients compete
 	  // fairly on proportional tags since those tags may have
 	  // drifted from real-time. Either use the lowest existing
 	  // proportion tag -- O(1) -- or the client with the lowest
 	  // previous proportion tag -- O(n) where n = # clients.
-	  if (!prop_q.empty()) {
-	    double min_prop_tag = prop_q.top()->tag.proportion;
-	    client_it->second.set_prev_prop_tag(min_prop_tag, true);
-	  } else {
-	    double lowest_prop_tag = -1.0;
-	    for (auto const &c : client_map) {
-	      // don't use ourselves since we're now in the map
-	      if (c.first != client_it->first) {
-		auto p = c.second.get_prev_prop_tag();
-		if (0.0 != p && (lowest_prop_tag < 0 || p < lowest_prop_tag)) {
-		    lowest_prop_tag = p;
-		}
+	  //
+	  // So we don't have to maintain a propotional queue that
+	  // keeps the minimum on proportional tag alone (we're
+	  // instead using a ready queue), we'll have to check each
+	  // client.
+	  double lowest_prop_tag = -1.0;
+	  for (auto const &c : client_map) {
+	    // don't use ourselves since we're now in the map
+	    if (c.first != client_it->first) {
+	      const auto& entry = c.second.client_entry;
+	      // use either lowest proportion tag or previous proportion tag
+	      double p = entry->has_request() ?
+		entry->next_request().tag.proportion :
+		c.second.get_prev_prop_tag();
+	      if (0.0 != p && (lowest_prop_tag < 0 || p < lowest_prop_tag)) {
+		lowest_prop_tag = p;
 	      }
 	    }
-	    if (lowest_prop_tag > 0.0) {
-	      client_it->second.set_prev_prop_tag(lowest_prop_tag);
-	    }
+	  }
+	  if (lowest_prop_tag > 0.0) {
+	    client_it->second.set_prev_prop_tag(lowest_prop_tag);
 	  }
 	  client_it->second.idle = false;
-	} // if
-#endif
+	} // if this client was idle
 
 	ClientRec& client_rec = client_it->second;
 
