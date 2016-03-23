@@ -409,7 +409,8 @@ public:
 
     /// Adds recovery sources in batch
     void add_batch_sources_info(
-      const set<pg_shard_t> &sources  ///< [in] a set of resources which can be used for all objects
+      const set<pg_shard_t> &sources,  ///< [in] a set of resources which can be used for all objects
+      ThreadPool::TPHandle* handle  ///< [in] ThreadPool handle
       );
 
     /// Uses osdmap to update structures for now down sources
