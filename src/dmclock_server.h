@@ -379,14 +379,15 @@ namespace crimson {
 	Time        when_next; // used for future
       };
 #else
-      struct PullReqRetn {
-	C           client;    // used for returning
-	RequestRef  request;   // used for returning
-	PhaseType   phase;     // used for returning
-      };
       struct PullReq {
+	struct Retn {
+	  C           client;
+	  RequestRef  request;
+	  PhaseType   phase;
+	};
+
 	NextReqType type;
-	boost::variant<PullReqRetn,Time> data;
+	boost::variant<Retn,Time> data;
       };
 #endif
 
@@ -805,7 +806,7 @@ namespace crimson {
 	ClientReq& first = top.next_request();
 
 	result.type = NextReqType::returning;
-	result.data = PullReqRetn{top.client, std::move(first.request), phase};
+	result.data = typename PullReq::Retn{top.client, std::move(first.request), phase};
 
 	top.pop_request();
 	reserv_q.adjust_down(top);
@@ -823,7 +824,7 @@ namespace crimson {
 			   PhaseType phase) {
 	PullReq result;
 	pull_request_help(result, heap, phase);
-	PullReqRetn& data = boost::get<PullReqRetn>(result.data);
+	typename PullReq::Retn& data = boost::get<typename PullReq::Retn>(result.data);
 	handle_f(data.client, std::move(data.request), phase);
 	return data.client;
       }
