@@ -709,9 +709,17 @@ configuration.
 ``rgw region root pool``
 
 :Description: The pool for storing all region-specific information.
+              Not used in Ceph version ``Jewel``.
 :Type: String
 :Default: ``.rgw.root``
 
+.. versionadded:: Jewel
+
+``rgw zonegroup root pool``
+
+:Description: The pool for storing all zonegroup-specific information.
+:Type: String
+:Default: ``.rgw.root``
 
 
 .. versionadded:: v.67
