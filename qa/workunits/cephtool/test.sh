@@ -170,8 +170,8 @@ function ceph_watch_wait()
     fi
 
     for i in `seq ${timeout}`; do
-	sleep 1
 	grep -q "$regexp" $CEPH_WATCH_FILE && break
+	sleep 1
     done
 
     kill $CEPH_WATCH_PID
