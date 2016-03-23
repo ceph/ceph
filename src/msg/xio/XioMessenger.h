@@ -153,6 +153,9 @@ public:
    */
   void learned_addr(const entity_addr_t& peer_addr_for_me);
 
+private:
+  int get_nconns_per_portal();
+  int get_nportals();
 
 protected:
   virtual void ready()

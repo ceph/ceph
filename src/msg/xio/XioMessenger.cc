@@ -366,7 +366,7 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
     XioInit(cct),
     nsessions(0),
     shutdown_called(false),
-    portals(this, cct->_conf->xio_portal_threads),
+    portals(this, get_nportals(), get_nconns_per_portal()),
     dispatch_strategy(ds),
     loop_con(new XioLoopbackConnection(this)),
     special_handling(0),
@@ -391,6 +391,12 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
   local_features = features;
   loop_con->set_features(features);
 
+  ldout(cct,2) << "Create msgr: " << this << " instance: "
+    << nInstances.read() << " type: " << name.type_str()
+    << " subtype: " << mname << " nportals: " << get_nportals()
+    << " nconns_per_portal: " << get_nconns_per_portal() << " features: "
+    << features << dendl;
+
 } /* ctor */
 
 int XioMessenger::pool_hint(uint32_t dsize) {
@@ -401,6 +407,16 @@ int XioMessenger::pool_hint(uint32_t dsize) {
   return xio_mempool_add_slab(xio_msgr_noreg_mpool, dsize, 0,
 				   cct->_conf->xio_mp_max_hint,
 				   XMSG_MEMPOOL_QUANTUM, 0);
+}
+
+int XioMessenger::get_nconns_per_portal()
+{
+  return max(cct->_conf->xio_max_conns_per_portal, 32);
+}
+
+int XioMessenger::get_nportals()
+{
+  return max(cct->_conf->xio_portal_threads, 1);
 }
 
 void XioMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
@@ -516,9 +532,9 @@ int XioMessenger::session_event(struct xio_session *session,
     /* XXXX pre-merge of session startup negotiation ONLY! */
     xcon->cstate.state_up_ready(XioConnection::CState::OP_FLAG_NONE);
 
-    ldout(cct,2) << "new connection session " << session
-		 << " xcon " << xcon << dendl;
-    ldout(cct,2) << "server: connected from " << s_inst.addr << " to " << peer_addr_for_me << dendl;
+    ldout(cct,2) << "New connection session " << session
+      << " xcon " << xcon << " on msgr: " << this << " portal: " << xcon->portal << dendl;
+    ldout(cct,2) << "Server: connected from " << s_inst.addr << " to " << peer_addr_for_me << dendl;
   }
   break;
   case XIO_SESSION_CONNECTION_ERROR_EVENT:
@@ -1011,8 +1027,9 @@ ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
     /* XXXX pre-merge of session startup negotiation ONLY! */
     xcon->cstate.state_up_ready(XioConnection::CState::OP_FLAG_NONE);
 
-    ldout(cct,2) << "new connection xcon: " << xcon <<
-      " up_ready on session " << xcon->session << dendl;
+    ldout(cct,2) << "New connection xcon: " << xcon <<
+      " up_ready on session " << xcon->session <<
+      " on msgr: " << this << " portal: " << xcon->portal << dendl;
 
     return xcon->get(); /* nref +1 */
   }
