@@ -4684,6 +4684,11 @@ next:
   }
 
   if (opt_cmd == OPT_METADATA_RM) {
+	if (!yes_i_really_mean_it) {
+	  cerr << "usage metadata rm without user specified may take risks" << std::endl;
+	  cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+	  return 1;
+	}
     int ret = store->meta_mgr->remove(metadata_key);
     if (ret < 0) {
       cerr << "ERROR: can't remove key: " << cpp_strerror(-ret) << std::endl;
