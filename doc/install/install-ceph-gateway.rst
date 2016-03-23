@@ -83,9 +83,8 @@ your administration server. Add a section entitled
 ``[client.rgw.<gateway-node>]``, replacing ``<gateway-node>`` with the short
 node name of your Ceph Object Gateway node (i.e., ``hostname -s``).
 
-.. note:: In version 0.94, the Ceph Object Gateway does not support SSL. You
-          may setup a reverse proxy web server with SSL to dispatch HTTPS 
-          requests as HTTP requests to CivetWeb.
+.. note:: As of version 10.0.5, the Ceph Object Gateway **does** support SSL.
+	See `Using SSL with Civetweb`_ for information on how to set that up.
 
 For example, if your node name is ``gateway-node1``, add a section like this
 after the ``[global]`` section::
@@ -144,6 +143,29 @@ If you add a new ``IPv4`` iptables rule after installing
 execute the following as the ``root`` user::
 
  iptables-save > /etc/iptables/rules.v4
+
+Using SSL with Civetweb
+-----------------------
+.. _Using SSL with Civetweb:
+
+Before using SSL with civetweb, you will need a certificate that will match
+the host name that that will be used to access the Ceph Object Gateway.
+You may wish to obtain one that has `subject alternate name` fields for
+more flexibility.  If you intend to use S3-style subdomains
+(`Add Wildcard to DNS`_), you will need a `wildcard` certificate.
+
+Civetweb requires that the server key, server certificate, and any other
+CA or intermediate certificates be supplied in one file.  Each of these
+items must be in `pem` form.  Because the combined file contains the
+secret key, it should be protected from unauthorized access.
+
+To configure ssl operation on a port, append ``s`` to the port number.
+More than one port number may be given, concatenated with ``+``.
+The server will listen to all ports and support ssl on ports
+flagged with ``s``.  So::
+
+ [client.rgw.gateway-node1]
+ rgw_frontends = civetweb port=80+443s ssl_certificate=/etc/ceph/private/keyandcert.pem
 
 Migrating from Apache to Civetweb
 ---------------------------------
@@ -267,6 +289,7 @@ Where ``client.rgw.ceph-client`` is the name of the gateway user.
 
 Add Wildcard to DNS
 -------------------
+.. _Add Wildcard to DNS:
 
 To use Ceph with S3-style subdomains (e.g., bucket-name.domain-name.com), you
 need to add a wildcard to the DNS record of the DNS server you use with the
