@@ -1073,6 +1073,9 @@ public:
     initialized = true;
   }
 
+  void set_epoch(uint64_t epoch) {
+    instance_entry.versioned_epoch = epoch;
+  }
 
   int unlink_list_entry() {
     string list_idx;
@@ -1574,10 +1577,25 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return ret;
   }
 
-  ret = olh.init(NULL);
+  bool olh_found;
+  ret = olh.init(&olh_found);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: olh.init() returned ret=%d", ret);
     return ret;
+  }
+
+  if (!olh_found) {
+    bool instance_only = false;
+    cls_rgw_obj_key key(dest_key.name);
+    ret = convert_plain_entry_to_versioned(hctx, key, true, instance_only);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
+      return ret;
+    }
+    olh.update(dest_key, false);
+    olh.set_tag(op.olh_tag);
+
+    obj.set_epoch(1);
   }
 
   if (!olh.start_modify(op.olh_epoch)) {
