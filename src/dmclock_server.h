@@ -9,7 +9,7 @@
 #define DEBUGGER
 
 #define OLD_Q 0
-#define DEBUG_NEW_HEAP 1
+#define DEBUG_NEW_HEAP 0
 
 #pragma once
 
@@ -353,6 +353,11 @@ namespace crimson {
       // fire in the future, or not have any
       enum class NextReqStat { returning, future, none };
 
+      // unions with unique_ptrs are tricky and require manual calls
+      // to destructors and placement new operators; it may be
+      // worthwhile to revisit this implementation, but for now we'll
+      // get rid of the union to avoid such issues
+#if 0 
       struct PullReq {
 	NextReqStat status;
 	union {
@@ -367,6 +372,16 @@ namespace crimson {
 	PullReq() {}
 	~PullReq() {}
       };
+#else
+      struct PullReq {
+	NextReqStat status;    // used for returning
+	C           client;    // used for returning
+	RequestRef  request;   // used for returning
+	PhaseType   phase;     // used for returning
+	Time        when_next; // used for future
+      };
+#endif
+
 
       // a function that can be called to look up client information
       using ClientInfoFunc = std::function<ClientInfo(C)>;
@@ -786,7 +801,8 @@ namespace crimson {
 	ClientEntry& top = heap.top();
 	ClientReq& first = top.next_request();
 
-	result.retn.client = top.client;
+	result.status = NextReqStat::returning;
+	result.client = top.client;
 #if DEBUG_NEW_HEAP
 	R* hold = first.request.get();
 	{
@@ -795,8 +811,8 @@ namespace crimson {
 	  std::cout << "    " << hold->epoch << " " << hold->server << " " << hold->op << std::endl;
 	}
 #endif
-	result.retn.request = std::move(first.request);
-	result.retn.phase = phase;
+	result.request = std::move(first.request);
+	result.phase = phase;
 
 	top.pop_request();
 	reserv_q.adjust_down(top);
@@ -814,8 +830,8 @@ namespace crimson {
 			   PhaseType phase) {
 	PullReq result;
 	pull_request_help(result, heap, phase);
-	handle_f(result.retn.client, std::move(result.retn.request), phase);
-	return result.retn.client;
+	handle_f(result.client, std::move(result.request), phase);
+	return result.client;
       }
 
 
