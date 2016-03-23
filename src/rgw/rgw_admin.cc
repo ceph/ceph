@@ -2746,6 +2746,11 @@ int main(int argc, char **argv)
                                         info, bl, p);
         if (ret < 0) {
           cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
+          if (ret == -EACCES) {
+            cerr << "If the realm has been changed on the master zone, the "
+                "master zone's gateway may need to be restarted to recognize "
+                "this user." << std::endl;
+          }
           return ret;
         }
         RGWRealm realm;
