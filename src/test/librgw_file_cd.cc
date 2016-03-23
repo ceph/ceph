@@ -33,6 +33,10 @@ namespace {
   string secret_key("");
   struct rgw_fs *fs = nullptr;
 
+  uint32_t owner_uid = 867;
+  uint32_t owner_gid = 5309;
+  uint32_t create_mask = RGW_SETATTR_UID | RGW_SETATTR_GID | RGW_SETATTR_MODE;
+
   bool do_create = false;
   bool do_delete = false;
   bool do_multi = false;
@@ -63,8 +67,13 @@ TEST(LibRGW, CREATE_BUCKET) {
   if (do_create) {
     struct stat st;
     struct rgw_file_handle *fh;
-    int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st, &fh,
-			RGW_MKDIR_FLAG_NONE);
+
+    st.st_uid = owner_uid;
+    st.st_gid = owner_gid;
+    st.st_mode = 755;
+
+    int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), &st, create_mask,
+			&fh, RGW_MKDIR_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -82,10 +91,15 @@ TEST(LibRGW, CREATE_BUCKET_MULTI) {
     int ret;
     struct stat st;
     struct rgw_file_handle *fh;
+
+    st.st_uid = owner_uid;
+    st.st_gid = owner_gid;
+    st.st_mode = 755;
+
     for (int ix = 0; ix < multi_cnt; ++ix) {
       string bn = bucket_name;
       bn += to_string(ix);
-      ret = rgw_mkdir(fs, fs->root_fh, bn.c_str(), 755, &st, &fh,
+      ret = rgw_mkdir(fs, fs->root_fh, bn.c_str(), &st, create_mask, &fh,
 		      RGW_MKDIR_FLAG_NONE);
       ASSERT_EQ(ret, 0);
       std::cout << "created: " << bn << std::endl;
