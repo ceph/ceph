@@ -153,10 +153,8 @@ template <typename I>
 void BootstrapRequest<I>::open_remote_image() {
   dout(20) << dendl;
 
-  // TODO: need factory method to support mocking
-  m_remote_image_ctx = new I("", m_remote_image_id, nullptr, m_remote_io_ctx,
-                             false);
-
+  m_remote_image_ctx = I::create("", m_remote_image_id, nullptr,
+                                 m_remote_io_ctx, false);
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_open_remote_image>(
       this);
@@ -304,14 +302,13 @@ template <typename I>
 void BootstrapRequest<I>::image_sync() {
   dout(20) << dendl;
 
-  // TODO: need factory method to support mocking
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(
       this);
-  ImageSync<I> *request = new ImageSync<I>(*m_local_image_ctx,
-                                           m_remote_image_ctx, m_timer,
-                                           m_timer_lock, m_mirror_uuid,
-                                           m_journaler, m_client_meta, ctx);
+  ImageSync<I> *request = ImageSync<I>::create(*m_local_image_ctx,
+                                               m_remote_image_ctx, m_timer,
+                                               m_timer_lock, m_mirror_uuid,
+                                               m_journaler, m_client_meta, ctx);
   request->start();
 }
 

@@ -194,6 +194,16 @@ namespace librbd {
     static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
                                        map<string, bufferlist> &pairs, map<string, bufferlist> *res);
 
+    // unit test mock helpers
+    static ImageCtx* create(const std::string &image_name,
+                            const std::string &image_id,
+                            const char *snap, IoCtx& p, bool read_only) {
+      return new ImageCtx(image_name, image_id, snap, p, read_only);
+    }
+    void destroy() {
+      delete this;
+    }
+
     /**
      * Either image_name or image_id must be set.
      * If id is not known, pass the empty std::string,

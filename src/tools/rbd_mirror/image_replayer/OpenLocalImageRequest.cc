@@ -77,9 +77,8 @@ template <typename I>
 void OpenLocalImageRequest<I>::send_open_image() {
   dout(20) << dendl;
 
-  *m_local_image_ctx = new librbd::ImageCtx(m_local_image_name,
-                                            m_local_image_id, nullptr,
-                                            m_local_io_ctx, false);
+  *m_local_image_ctx = I::create(m_local_image_name, m_local_image_id, nullptr,
+                                 m_local_io_ctx, false);
   (*m_local_image_ctx)->set_exclusive_lock_policy(
     new MirrorExclusiveLockPolicy());
   (*m_local_image_ctx)->set_journal_policy(
