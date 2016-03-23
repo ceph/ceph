@@ -5821,6 +5821,7 @@ int BlueStore::_do_truncate(
     if (bp != o->onode.block_map.begin())
       --bp;
     uint64_t x_end = bp->first + bp->second.length;
+    old_size = ROUND_UP_TO(old_size, block_size); //_do_write make sure this area already zero.
     if (bp != o->onode.block_map.end() &&
 	x_end > old_size) {
       // we need to zero from old_size to (end of extent or offset)
