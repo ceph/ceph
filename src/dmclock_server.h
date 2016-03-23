@@ -25,6 +25,8 @@
 #include <thread>
 #include <iostream>
 
+#include "boost/variant.hpp"
+
 #include "heap.h"
 #include "indirect_intrusive_heap.h"
 #include "run_every.h"
@@ -346,7 +348,7 @@ namespace crimson {
       // when we try to get the next request, we'll be in one of three
       // situations -- we'll have one to return, have one that can
       // fire in the future, or not have any
-      enum class NextReqStat { returning, future, none };
+      enum class NextReqType { returning, future, none };
 
       // unions with unique_ptrs are tricky and require manual calls
       // to destructors and placement new operators; it may be
@@ -354,7 +356,7 @@ namespace crimson {
       // get rid of the union to avoid such issues
 #if 0 
       struct PullReq {
-	NextReqStat status;
+	NextReqType type;
 	union {
 	  struct {
 	    C&         client;
@@ -367,13 +369,24 @@ namespace crimson {
 	PullReq() {}
 	~PullReq() {}
       };
-#else
+#elif 0
       struct PullReq {
-	NextReqStat status;    // used for returning
+	NextReqType type;      // which type
+
 	C           client;    // used for returning
 	RequestRef  request;   // used for returning
 	PhaseType   phase;     // used for returning
 	Time        when_next; // used for future
+      };
+#else
+      struct PullReqRetn {
+	C           client;    // used for returning
+	RequestRef  request;   // used for returning
+	PhaseType   phase;     // used for returning
+      };
+      struct PullReq {
+	NextReqType type;
+	boost::variant<PullReqRetn,Time> data;
       };
 #endif
 
@@ -444,7 +457,7 @@ namespace crimson {
 
       // this is returned from next_req to tell the caller the situation
       struct NextReq {
-	NextReqStat status;
+	NextReqType type;
 	union {
 	  HeapId heap_id;
 	  Time when_ready;
@@ -743,16 +756,16 @@ namespace crimson {
 	DataGuard g(data_mtx);
 
 	NextReq next = next_request();
-	result.status = next.status;
+	result.type = next.type;
 	switch(next.status) {
-	case NextReqStat::none:
+	case NextReqType::none:
 	  return result;
 	  break;
-	case NextReqStat::future:
+	case NextReqType::future:
 	  result.when_next = next.when_ready;
 	  return result;
 	  break;
-	case NextReqStat::returning:
+	case NextReqType::returning:
 	  break;
 	default:
 	  assert(false);
@@ -791,10 +804,8 @@ namespace crimson {
 	ClientEntry& top = heap.top();
 	ClientReq& first = top.next_request();
 
-	result.status = NextReqStat::returning;
-	result.client = top.client;
-	result.request = std::move(first.request);
-	result.phase = phase;
+	result.type = NextReqType::returning;
+	result.data = PullReqRetn{top.client, std::move(first.request), phase};
 
 	top.pop_request();
 	reserv_q.adjust_down(top);
@@ -812,8 +823,9 @@ namespace crimson {
 			   PhaseType phase) {
 	PullReq result;
 	pull_request_help(result, heap, phase);
-	handle_f(result.client, std::move(result.request), phase);
-	return result.client;
+	PullReqRetn& data = boost::get<PullReqRetn>(result.data);
+	handle_f(data.client, std::move(data.request), phase);
+	return data.client;
       }
 
 
@@ -872,13 +884,13 @@ namespace crimson {
       // data_mtx should be held when called
       void schedule_request() {
 	NextReq next_req = next_request();
-	switch (next_req.status) {
-	case NextReqStat::none:
+	switch (next_req.type) {
+	case NextReqType::none:
 	  return;
-	case NextReqStat::future:
+	case NextReqType::future:
 	  sched_at(next_req.when_ready);
 	  break;
-	case NextReqStat::returning:
+	case NextReqType::returning:
 	  submit_request(next_req.heap_id);
 	  break;
 	default:
@@ -919,13 +931,13 @@ namespace crimson {
 	NextReq result;
 	
 	if (Mechanism::push == mechanism && !can_handle_f()) {
-	  result.status = NextReqStat::none;
+	  result.type = NextReqType::none;
 	  return result;
 	}
 
 	// if reservation queue is empty, all are empty (i.e., no active clients)
 	if(reserv_q.empty()) {
-	  result.status = NextReqStat::none;
+	  result.type = NextReqType::none;
 	  return result;
 	}
 
@@ -936,7 +948,7 @@ namespace crimson {
 	auto& reserv = reserv_q.top();
 	if (reserv.has_request() &&
 	    reserv.next_request().tag.reservation <= now) {
-	  result.status = NextReqStat::returning;
+	  result.type = NextReqType::returning;
 	  result.heap_id = HeapId::reservation;
 	  return result;
 	}
@@ -960,7 +972,7 @@ namespace crimson {
 	auto readys = &ready_q.top();
 	if (readys->has_request() &&
 	    (readys->next_request().tag.ready || allow_limit_break)) {
-	  result.status = NextReqStat::returning;
+	  result.type = NextReqType::returning;
 	  result.heap_id = HeapId::ready;
 	  return result;
 	}
@@ -980,11 +992,11 @@ namespace crimson {
 	  next_call = min_not_0_time(next_call, next.tag.limit);
 	}
 	if (next_call < TimeMax) {
-	  result.status = NextReqStat::future;
+	  result.type = NextReqType::future;
 	  result.when_ready = next_call;
 	  return result;
 	} else {
-	  result.status = NextReqStat::none;
+	  result.type = NextReqType::none;
 	  return result;
 	}
       } // schedule_request
