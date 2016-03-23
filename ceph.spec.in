@@ -1017,19 +1017,22 @@ rm -rf $RPM_BUILD_ROOT
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/
 
 %pre common
-CEPH_GROUP_ID=""
-CEPH_USER_ID=""
+CEPH_GROUP_ID=167
+CEPH_USER_ID=167
 %if 0%{?rhel} || 0%{?fedora}
-CEPH_GROUP_ID="-g 167"
-CEPH_USER_ID="-u 167"
-%endif
-%if 0%{?rhel} || 0%{?fedora}
-%{_sbindir}/groupadd ceph $CEPH_GROUP_ID -o -r 2>/dev/null || :
-%{_sbindir}/useradd ceph $CEPH_USER_ID -o -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2> /dev/null || :
+%{_sbindir}/groupadd ceph -g $CEPH_GROUP_ID -o -r 2>/dev/null || :
+%{_sbindir}/useradd ceph -u $CEPH_USER_ID -o -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2>/dev/null || :
 %endif
 %if 0%{?suse_version}
-getent group ceph >/dev/null || groupadd -r ceph
-getent passwd ceph >/dev/null || useradd -r -g ceph -d %{_localstatedir}/lib/ceph -s /sbin/nologin -c "Ceph daemons" ceph
+if ! getent group ceph >/dev/null ; then
+    CEPH_GROUP_ID_OPTION=""
+    getent group $CEPH_GROUP_ID >/dev/null || CEPH_GROUP_ID_OPTION="-g $CEPH_GROUP_ID"
+    groupadd ceph $CEPH_GROUP_ID_OPTION -r 2>/dev/null || :
+fi
+if ! getent passwd ceph >/dev/null ; then
+    CEPH_USER_ID_OPTION=""
+    getent passwd $CEPH_USER_ID >/dev/null || CEPH_USER_ID_OPTION="-u $CEPH_USER_ID"
+    useradd ceph $CEPH_USER_ID_OPTION -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2>/dev/null || :
 %endif
 exit 0
 
