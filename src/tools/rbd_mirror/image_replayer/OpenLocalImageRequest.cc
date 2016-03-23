@@ -9,6 +9,8 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
+#include "librbd/exclusive_lock/Policy.h"
+#include "librbd/journal/Policy.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -20,6 +22,39 @@ namespace mirror {
 namespace image_replayer {
 
 using librbd::util::create_context_callback;
+
+namespace {
+
+struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
+
+  virtual void lock_requested(bool force) {
+    // TODO: interlock is being requested (e.g. local promotion)
+    // Wait for demote event from peer or abort replay on forced
+    // promotion.
+  }
+
+};
+
+struct MirrorJournalPolicy : public librbd::journal::Policy {
+  ContextWQ *work_queue;
+
+  MirrorJournalPolicy(ContextWQ *work_queue) : work_queue(work_queue) {
+  }
+
+  virtual void allocate_tag_on_lock(Context *on_finish) {
+    // rbd-mirror will manually create tags by copying them from the peer
+    work_queue->queue(on_finish, 0);
+  }
+
+  virtual void cancel_external_replay(Context *on_finish) {
+    // TODO: journal is being closed due to a comms error.  This means
+    // the journal is being closed and the exclusive lock is being released.
+    // ImageReplayer needs to restart.
+  }
+
+};
+
+} // anonymous namespace
 
 template <typename I>
 OpenLocalImageRequest<I>::OpenLocalImageRequest(librados::IoCtx &local_io_ctx,
@@ -45,6 +80,10 @@ void OpenLocalImageRequest<I>::send_open_image() {
   *m_local_image_ctx = new librbd::ImageCtx(m_local_image_name,
                                             m_local_image_id, nullptr,
                                             m_local_io_ctx, false);
+  (*m_local_image_ctx)->set_exclusive_lock_policy(
+    new MirrorExclusiveLockPolicy());
+  (*m_local_image_ctx)->set_journal_policy(
+    new MirrorJournalPolicy(m_work_queue));
 
   Context *ctx = create_context_callback<
     OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_open_image>(
