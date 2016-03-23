@@ -29,7 +29,7 @@ EXTRA_DIST += \
 	ceph-disk/tests/test_main.py \
 	ceph-disk/tox.ini
 
-export CEPH_DISK_VIRTUALENV = ${CEPH_BUILD_VIRTUALENV}/ceph-disk-virtualenv
+export CEPH_DISK_VIRTUALENV = ${CEPH_BUILD_VIRTUALENV}ceph-disk-virtualenv
 
 ceph-disk-all: ${CEPH_DISK_VIRTUALENV}
 
