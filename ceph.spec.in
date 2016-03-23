@@ -685,6 +685,9 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
                 --libexecdir=%{_libexecdir} \
 		--localstatedir=/var \
 		--sysconfdir=/etc \
+%if 0%{?rhel}
+                --enable-subman \
+%endif
 %if 0%{?_with_systemd}
 		--with-systemdsystemunitdir=%_unitdir \
 %endif
@@ -1185,6 +1188,9 @@ fi
 %{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/ceph-disk.8*
 %{_mandir}/man8/ceph-osd.8*
+%if 0%{?rhel}
+/etc/cron.hourly/subman.py
+%endif
 %if 0%{?_with_systemd}
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-osd.target
