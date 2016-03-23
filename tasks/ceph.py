@@ -429,8 +429,10 @@ def cluster(ctx, config):
     if config.get('tmpfs_journal'):
         conf['journal dio'] = False
 
-    ctx.ceph = argparse.Namespace()
-    ctx.ceph.conf = conf
+    if not hasattr(ctx, 'ceph'):
+        ctx.ceph = {}
+    ctx.ceph[cluster_name] = argparse.Namespace()
+    ctx.ceph[cluster_name].conf = conf
 
     default_keyring = '/etc/ceph/{cluster}.keyring'.format(cluster=cluster_name)
     keyring_path = config.get('keyring_path', default_keyring)
