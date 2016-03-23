@@ -1040,13 +1040,15 @@ class CephManager:
         :return: a Remote instance for the host where the
                  requested role is placed
         """
-        for _remote, roles_for_host in self.ctx.cluster.remotes.iteritems():
-            for id_ in teuthology.roles_of_type(roles_for_host, service_type):
-                if id_ == str(service_id):
-                    return _remote
-
-        raise KeyError("Service {0}.{1} not found".format(service_type,
-                                                          service_id))
+        def _is_instance(role):
+            role_tuple = teuthology.split_role(role)
+            return role_tuple == (self.cluster, service_type, str(service_id))
+        try:
+            (remote,) = self.ctx.cluster.only(_is_instance).remotes.keys()
+        except ValueError:
+            raise KeyError("Service {0}.{1} not found".format(service_type,
+                                                              service_id))
+        return remote
 
     def admin_socket(self, service_type, service_id,
                      command, check_status=True, timeout=0):
@@ -1864,8 +1866,7 @@ class CephManager:
         or by stopping.
         """
         if self.config.get('powercycle'):
-            (remote,) = (self.ctx.cluster.only('osd.{o}'.format(o=osd)).
-                         remotes.iterkeys())
+            remote = self.find_remote('osd', osd)
             self.log('kill_osd on osd.{o} '
                      'doing powercycle of {s}'.format(o=osd, s=remote.name))
             assert remote.console is not None, ("powercycling requested "
@@ -1891,8 +1892,7 @@ class CephManager:
         or by restarting.
         """
         if self.config.get('powercycle'):
-            (remote,) = (self.ctx.cluster.only('osd.{o}'.format(o=osd)).
-                         remotes.iterkeys())
+            remote = self.find_remote('osd', osd)
             self.log('kill_osd on osd.{o} doing powercycle of {s}'.
                      format(o=osd, s=remote.name))
             assert remote.console is not None, ("powercycling requested "
@@ -1952,8 +1952,7 @@ class CephManager:
         or by doing a stop.
         """
         if self.config.get('powercycle'):
-            (remote,) = (self.ctx.cluster.only('mon.{m}'.format(m=mon)).
-                         remotes.iterkeys())
+            remote = self.find_remote('mon', mon)
             self.log('kill_mon on mon.{m} doing powercycle of {s}'.
                      format(m=mon, s=remote.name))
             assert remote.console is not None, ("powercycling requested "
@@ -1971,8 +1970,7 @@ class CephManager:
         or by doing a normal restart.
         """
         if self.config.get('powercycle'):
-            (remote,) = (self.ctx.cluster.only('mon.{m}'.format(m=mon)).
-                         remotes.iterkeys())
+            remote = self.find_remote('mon', mon)
             self.log('revive_mon on mon.{m} doing powercycle of {s}'.
                      format(m=mon, s=remote.name))
             assert remote.console is not None, ("powercycling requested "
