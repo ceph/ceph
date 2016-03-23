@@ -18,7 +18,7 @@
 DIR=$1
 rm -fr $DIR
 mkdir -p $DIR
-virtualenv $DIR
+virtualenv --python python2.7 $DIR
 . $DIR/bin/activate
 # older versions of pip will not install wrap_console scripts
 # when using wheel packages
