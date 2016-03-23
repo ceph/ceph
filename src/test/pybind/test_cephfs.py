@@ -4,28 +4,35 @@ import cephfs as libcephfs
 
 cephfs = None
 
+
 def setup_module():
     global cephfs
     cephfs = libcephfs.LibCephFS(conffile='')
     cephfs.mount()
 
+
 def teardown_module():
     global cephfs
     cephfs.shutdown()
+
 
 def test_conf_get():
     fsid = cephfs.conf_get("fsid")
     assert(fsid != "")
 
+
 def test_version():
     cephfs.version()
+
 
 def test_statfs():
     stat = cephfs.statfs('/')
     assert(len(stat) == 11)
 
+
 def test_syncfs():
     stat = cephfs.sync_fs()
+
 
 def test_directory():
     cephfs.mkdir("/temp-directory", 0755)
@@ -36,6 +43,7 @@ def test_directory():
     cephfs.rmdir("/temp-directory/foo")
     cephfs.rmdir("/temp-directory")
     assert_raises(libcephfs.ObjectNotFound, cephfs.chdir, "/temp-directory")
+
 
 def test_walk_dir():
     cephfs.chdir("/")
@@ -55,16 +63,18 @@ def test_walk_dir():
         cephfs.rmdir(i)
     cephfs.closedir(handler)
 
+
 def test_xattr():
     assert_raises(libcephfs.OperationNotSupported, cephfs.setxattr, "/", "key", "value", 0)
     cephfs.setxattr("/", "user.key", "value", 0)
     assert_equal("value", cephfs.getxattr("/", "user.key"))
     cephfs.setxattr("/", "user.big", "" * 300, 0)
-    # NOTE(sileht): this actually doesn't work, cephfs returns errno -34 
+    # NOTE(sileht): this actually doesn't work, cephfs returns errno -34
     # when we retrieve big xattr value, at least on my setup
     # The old python binding was not checking the return code and was
     # returning a empty string in that case.
     assert_equal(300, len(cephfs.getxattr("/", "user.big")))
+
 
 def test_rename():
     cephfs.mkdir("/a", 0755)
@@ -73,6 +83,7 @@ def test_rename():
     cephfs.stat("/b/b")
     cephfs.rmdir("/b/b")
     cephfs.rmdir("/b")
+
 
 def test_open():
     assert_raises(libcephfs.ObjectNotFound, cephfs.open, 'file-1', 'r')
@@ -94,6 +105,7 @@ def test_open():
     cephfs.close(fd)
     assert_raises(libcephfs.OperationNotSupported, cephfs.open, 'file-1', 'a')
     cephfs.unlink('file-1')
+
 
 def test_symlink():
     fd = cephfs.open('file-1', 'w')

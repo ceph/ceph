@@ -28,10 +28,10 @@ import sys
 
 bucket_name = sys.argv[1]
 conn = S3Connection(calling_format=OrdinaryCallingFormat(), is_secure=False,
-                aws_access_key_id=os.environ["AKEY"],
-                aws_secret_access_key=os.environ["SKEY"])
+                    aws_access_key_id=os.environ["AKEY"],
+                    aws_secret_access_key=os.environ["SKEY"])
 bucket = conn.lookup(bucket_name)
-if (bucket == None):
+if (bucket is None):
     print "bucket '%s' no longer exists" % bucket_name
     sys.exit(0)
 

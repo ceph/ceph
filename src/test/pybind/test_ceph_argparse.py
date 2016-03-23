@@ -24,8 +24,10 @@ import os
 import re
 import json
 
+
 def get_command_descriptions(what):
     return os.popen("./get_command_descriptions " + "--" + what).read()
+
 
 def test_parse_json_funcsigs():
     commands = get_command_descriptions("all")
@@ -35,15 +37,15 @@ def test_parse_json_funcsigs():
     commands = get_command_descriptions("pull585")
     assert_raises(TypeError, parse_json_funcsigs, commands, 'cli')
 
-sigdict = parse_json_funcsigs(get_command_descriptions("all"), 'cli')
+    sigdict = parse_json_funcsigs(get_command_descriptions("all"), 'cli')
 
 
 class TestArgparse:
 
     def assert_valid_command(self, args):
         result = validate_command(sigdict, args)
-        assert_not_equal(result,None)
-        assert_not_equal(result,{})
+        assert_not_equal(result, None)
+        assert_not_equal(result, {})
 
     def check_1_natural_arg(self, prefix, command):
         self.assert_valid_command([prefix, command, '1'])
@@ -88,11 +90,11 @@ class TestArgparse:
 
 class TestBasic:
 
-	def test_non_ascii_in_non_options(self):
-		# unicode() is not able to convert this str parameter into unicode
-		# using the default encoding 'ascii'. and validate_command() should
-		# not choke on it.
-		assert_is_none(validate_command(sigdict, ['章鱼和鱿鱼']))
+    def test_non_ascii_in_non_options(self):
+        # unicode() is not able to convert this str parameter into unicode
+        # using the default encoding 'ascii'. and validate_command() should
+        # not choke on it.
+        assert_is_none(validate_command(sigdict, ['章鱼和鱿鱼']))
 
 
 class TestPG(TestArgparse):
@@ -491,6 +493,7 @@ class TestFS(TestArgparse):
         self.assert_valid_command(['fs', 'ls'])
         assert_equal({}, validate_command(sigdict, ['fs', 'ls', 'toomany']))
 
+
 class TestMon(TestArgparse):
 
     def test_dump(self):
@@ -632,7 +635,7 @@ class TestOSD(TestArgparse):
                                                     'rename-bucket']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     'rename-bucket',
-													'srcname']))
+                                                    'srcname']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     'rename-bucket', 'srcname',
                                                     'dstname',
@@ -657,9 +660,9 @@ class TestOSD(TestArgparse):
                                                     setter,
                                                     'osd.0']))
         ret = validate_command(sigdict, ['osd', 'crush',
-                                             setter,
-                                             'osd.0',
-                                             '-1.0'])
+                                         setter,
+                                         'osd.0',
+                                         '-1.0'])
         assert ret in [None, {}]
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     setter,
@@ -738,7 +741,7 @@ class TestOSD(TestArgparse):
 
     def test_crush_tunables(self):
         for tunable in ('legacy', 'argonaut', 'bobtail', 'firefly',
-						'optimal', 'default'):
+                        'optimal', 'default'):
             self.assert_valid_command(['osd', 'crush', 'tunables',
                                        tunable])
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
@@ -762,13 +765,13 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
                                                     'create-simple',
                                                     '^^^',
-                                                      'AZaz09-_.',
+                                                    'AZaz09-_.',
                                                     'AZaz09-_.']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
                                                     'create-simple',
                                                     'AZaz09-_.',
                                                     '|||',
-                                                      'AZaz09-_.']))
+                                                    'AZaz09-_.']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
                                                     'create-simple',
                                                     'AZaz09-_.',
@@ -990,13 +993,13 @@ class TestOSD(TestArgparse):
                                                     'poolname',
                                                     '128', '128',
                                                     'erasure', '^^^',
-													'ruleset']))
+                                                    'ruleset']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
                                                     'erasure', 'profile',
                                                     'ruleset',
-												    'toomany']))
+                                                    'toomany']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
@@ -1096,7 +1099,7 @@ class TestOSD(TestArgparse):
     def test_reweight_by_utilization(self):
         self.assert_valid_command(['osd', 'reweight-by-utilization'])
         self.assert_valid_command(['osd', 'reweight-by-utilization', '100'])
-		self.assert_valid_command(['osd', 'reweight-by-utilization', '100', '.1'])
+        self.assert_valid_command(['osd', 'reweight-by-utilization', '100', '.1'])
         self.assert_valid_command(['osd', 'reweight-by-utilization', '--no-increasing'])
         assert_equal({}, validate_command(sigdict, ['osd',
                                                     'reweight-by-utilization',

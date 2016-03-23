@@ -565,7 +565,7 @@ class argdesc(object):
         else:
             self.t = t
             self.typeargs = kwargs
-            self.req = bool(req == True or req == 'True')
+            self.req = bool(req is True or req == 'True')
 
         self.name = name
         self.N = (n in ['n', 'N'])
@@ -906,7 +906,7 @@ def validate(args, signature, partial=False):
                 if not desc.req:
                     # if not required, just push back; it might match
                     # the next arg
-                    save_exception = [ myarg, e ]
+                    save_exception = [myarg, e]
                     myargs.insert(0, myarg)
                     break
                 else:
@@ -1096,14 +1096,14 @@ class RadosThread(threading.Thread):
         self.args = args
         self.kwargs = kwargs
         self.target = target
-	self.exception = None
+        self.exception = None
         threading.Thread.__init__(self)
 
     def run(self):
         try:
-		self.retval = self.target(*self.args, **self.kwargs)
-	except Exception as e:
-		self.exception = e
+            self.retval = self.target(*self.args, **self.kwargs)
+        except Exception as e:
+            self.exception = e
 
 
 # time in seconds between each call to t.join() for child thread
@@ -1271,4 +1271,3 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
             raise
 
     return ret, outbuf, outs
-

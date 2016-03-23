@@ -165,7 +165,7 @@ def test_failure(cmd, errmsg, tty=False):
         logging.error("Should have failed, but got exit 0")
         return 1
     lines = get_lines(TMPFILE)
-    matched = [ l for l in lines if errmsg in l ]
+    matched = [l for l in lines if errmsg in l]
     if any(matched):
         logging.info("Correctly failed with message \"" + matched[0] + "\"")
         return 0
@@ -421,7 +421,7 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
     new_crush_file = tempfile.NamedTemporaryFile(delete=False)
     old_crush_file = tempfile.NamedTemporaryFile(delete=False)
     ret = call("./osdmaptool --export-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
-                                                                          crush_file=old_crush_file.name),
+               crush_file=old_crush_file.name),
                stdout=subprocess.DEVNULL,
                stderr=subprocess.DEVNULL,
                shell=True)
@@ -459,6 +459,7 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
     cmd = cmd.format(osd=osd_path, osdmap_file=osdmap_file.name, epoch=epoch)
     ret = call(cmd, stdout=subprocess.DEVNULL, shell=True)
     return ret == 0
+
 
 def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
     osdmap_file = tempfile.NamedTemporaryFile()
@@ -512,6 +513,7 @@ def test_get_set_osdmap(CFSD_PREFIX, osd_ids, osd_paths):
             errors += 1
     return errors
 
+
 def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
     # incrementals are not used unless we need to build an MOSDMap to update
     # OSD's peers, so an obvious way to test it is simply overwrite an epoch
@@ -527,20 +529,24 @@ def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
     file_e1_backup = tempfile.NamedTemporaryFile()
     cmd = CFSD_PREFIX + "--op get-inc-osdmap --epoch {epoch} --file {file}"
     ret = call(cmd.format(osd=osd_path, epoch=epoch, file=file_e1_backup.name), shell=True)
-    if ret: return 1
+    if ret:
+        return 1
     # overwrite e1 with e2
     cmd = CFSD_PREFIX + "--op set-inc-osdmap --force --epoch {epoch} --file {file}"
     ret = call(cmd.format(osd=osd_path, epoch=epoch, file=file_e2.name), shell=True)
-    if ret: return 1
+    if ret:
+        return 1
     # Use dry-run to set back to e1 which shouldn't happen
     cmd = CFSD_PREFIX + "--op set-inc-osdmap --dry-run --epoch {epoch} --file {file}"
     ret = call(cmd.format(osd=osd_path, epoch=epoch, file=file_e1_backup.name), shell=True)
-    if ret: return 1
+    if ret:
+        return 1
     # read from e1
     file_e1_read = tempfile.NamedTemporaryFile(delete=False)
     cmd = CFSD_PREFIX + "--op get-inc-osdmap --epoch {epoch} --file {file}"
     ret = call(cmd.format(osd=osd_path, epoch=epoch, file=file_e1_read.name), shell=True)
-    if ret: return 1
+    if ret:
+        return 1
     errors = 0
     try:
         if not filecmp.cmp(file_e2.name, file_e1_read.name, shallow=False):
@@ -864,7 +870,7 @@ def main(argv):
     ERRORS += test_failure(cmd, "Can't specify a sharded pgid with a non-sharded export")
 
     # On import can't specify a PG with a bad seed
-    TMPPG="{pool}.80".format(pool=REPID)
+    TMPPG = "{pool}.80".format(pool=REPID)
     cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEOSD, pg=TMPPG, file=OTHERFILE)
     ERRORS += test_failure(cmd, "Illegal pgid, the seed is larger than current pg_num")
 
@@ -1864,7 +1870,7 @@ def remove_btrfs_subvolumes(path):
     if filesystem.rstrip('\n') == "btrfs":
         result = subprocess.Popen("btrfs subvolume list %s" % path, shell=True, stdout=subprocess.PIPE)
         for line in result.stdout.readlines():
-            subvolume=line.split()[8]
+            subvolume = line.split()[8]
             # extracting the relative volume name
             m = re.search(".*(%s.*)" % path, subvolume)
             if m:
