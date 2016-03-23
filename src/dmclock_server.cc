@@ -11,6 +11,15 @@
 
 namespace dmc = crimson::dmclock;
 
+#if DEBUG_NEW_HEAP
+namespace crimson {
+  namespace dmclock {
+    std::mutex debug_mtx;
+  }
+}
+#endif
+
+
 
 std::ostream& dmc::operator<<(std::ostream& out,
 			      const dmc::ClientInfo& client) {
