@@ -4,6 +4,7 @@
 #ifndef CEPH_TEST_LIBRBD_MOCK_IMAGE_CTX_H
 #define CEPH_TEST_LIBRBD_MOCK_IMAGE_CTX_H
 
+#include "include/rados/librados.hpp"
 #include "test/librbd/mock/MockAioImageRequestWQ.h"
 #include "test/librbd/mock/MockContextWQ.h"
 #include "test/librbd/mock/MockExclusiveLock.h"
@@ -17,6 +18,7 @@
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "gmock/gmock.h"
+#include <string>
 
 namespace librbd {
 
@@ -25,6 +27,15 @@ template <typename> class ResizeRequest;
 }
 
 struct MockImageCtx {
+  static MockImageCtx *s_instance;
+  static MockImageCtx *create(const std::string &image_name,
+                              const std::string &image_id,
+                              const char *snap, librados::IoCtx& p,
+                              bool read_only) {
+    assert(s_instance != nullptr);
+    return s_instance;
+  }
+
   MockImageCtx(librbd::ImageCtx &image_ctx)
     : image_ctx(&image_ctx),
       cct(image_ctx.cct),

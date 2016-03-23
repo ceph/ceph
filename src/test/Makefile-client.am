@@ -368,6 +368,11 @@ librbd_test_la_SOURCES = \
 librbd_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 noinst_LTLIBRARIES += librbd_test.la
 
+librbd_test_mock_la_SOURCES = \
+	test/librbd/mock/MockImageCtx.cc
+librbd_test_mock_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+noinst_LTLIBRARIES += librbd_test_mock.la
+
 unittest_librbd_SOURCES = \
         test/librbd/test_main.cc \
 	test/librbd/test_mock_fixture.cc \
@@ -394,7 +399,8 @@ unittest_librbd_SOURCES = \
 	test/librbd/operation/test_mock_SnapshotUnprotectRequest.cc
 unittest_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS) -DTEST_LIBRBD_INTERNALS
 unittest_librbd_LDADD = \
-	librbd_test.la librbd_api.la librbd_internal.la $(LIBRBD_TYPES) \
+	librbd_test.la librbd_test_mock.la \
+	librbd_api.la librbd_internal.la $(LIBRBD_TYPES) \
 	libcls_rbd_client.la libcls_lock_client.la \
 	libjournal.la libcls_journal_client.la \
 	librados_test_stub.la librados_internal.la \
@@ -469,6 +475,7 @@ unittest_rbd_mirror_SOURCES = \
 unittest_rbd_mirror_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_rbd_mirror_LDADD = \
 	librbd_mirror_test.la \
+	librbd_test_mock.la \
 	librados_test_stub.la \
 	librbd_mirror_internal.la \
 	librbd_internal.la \
