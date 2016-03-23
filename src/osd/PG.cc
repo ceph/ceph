@@ -506,14 +506,16 @@ bool PG::MissingLoc::add_source_info(
   ThreadPool::TPHandle* handle)
 {
   bool found_missing = false;
+  unsigned loop = 0;
   // found items?
   for (map<hobject_t,pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator p = needs_recovery_map.begin();
        p != needs_recovery_map.end();
        ++p) {
     const hobject_t &soid(p->first);
     eversion_t need = p->second.need;
-    if (handle) {
+    if (handle && ++loop >= g_conf->osd_loop_before_reset_tphandle) {
       handle->reset_tp_timeout();
+      loop = 0;
     }
     if (oinfo.last_update < need) {
       dout(10) << "search_for_missing " << soid << " " << need
