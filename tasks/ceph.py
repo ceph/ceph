@@ -489,7 +489,7 @@ def cluster(ctx, config):
     default_conf_path = '/etc/ceph/{cluster}.conf'.format(cluster=cluster_name)
     conf_path = config.get('conf_path', default_conf_path)
     log.info('Writing %s for FSID %s...' % (conf_path, fsid))
-    write_conf(ctx, conf_path)
+    write_conf(ctx, conf_path, cluster_name)
 
     log.info('Creating admin key on %s...' % firstmon)
     ctx.cluster.only(firstmon).run(
