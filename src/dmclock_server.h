@@ -9,7 +9,6 @@
 #define DEBUGGER
 
 #define OLD_Q 0
-#define DEBUG_NEW_HEAP 0
 
 #pragma once
 
@@ -38,10 +37,6 @@
 namespace crimson {
 
   namespace dmclock {
-
-#if DEBUG_NEW_HEAP
-    extern std::mutex debug_mtx;
-#endif
 
     namespace c = crimson;
 
@@ -714,13 +709,6 @@ namespace crimson {
 		       client_rec.info,
 		       req_params,
 		       time);
-#if DEBUG_NEW_HEAP
-	{
-	  DataGuard m(debug_mtx);
-	  std::cout << "adding: " << request.get() << std::endl;
-	  // std::cout << "adding: " << std::endl;
-	}
-#endif
 	client_rec.client_entry->add_request(tag,
 					     std::move(request));
 
@@ -803,14 +791,6 @@ namespace crimson {
 
 	result.status = NextReqStat::returning;
 	result.client = top.client;
-#if DEBUG_NEW_HEAP
-	R* hold = first.request.get();
-	{
-	  DataGuard m(debug_mtx);
-	  std::cout << "removing: " << first.request.get() << std::endl;
-	  std::cout << "    " << hold->epoch << " " << hold->server << " " << hold->op << std::endl;
-	}
-#endif
 	result.request = std::move(first.request);
 	result.phase = phase;
 
