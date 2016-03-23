@@ -81,7 +81,7 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
 			     const entity_inst_t& _peer) :
   Connection(m->cct, m),
   xio_conn_type(_type),
-  portal(m->default_portal()),
+  portal(m->get_portal()),
   connected(false),
   peer(_peer),
   session(NULL),

@@ -68,7 +68,7 @@ public:
 
   virtual ~XioMessenger();
 
-  XioPortal* default_portal() { return portals.get_portal0(); }
+  XioPortal* get_portal() { return portals.get_next_portal(); }
 
   virtual void set_myaddr(const entity_addr_t& a) {
     Messenger::set_myaddr(a);

@@ -62,9 +62,6 @@ int XioPortals::bind(struct xio_session_ops *ops, const string& base_uri,
 
   /* bind the portals */
   for (size_t i = 0; i < portals.size(); i++) {
-    if (!portals[i])
-      portals[i] = new XioPortal(msgr, max_conns_per_ctx);
-
     uint16_t result_port;
     if (port != 0) {
       // bind directly to the given port
