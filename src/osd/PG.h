@@ -1306,11 +1306,6 @@ public:
     int seed,
     const pg_pool_t *pool,
     ObjectStore::Transaction *t) = 0;
-  virtual bool _report_snap_collection_errors(
-    const hobject_t &hoid,
-    const map<string, bufferptr> &attrs,
-    pg_shard_t osd,
-    ostream &out) { return false; }
   void clear_scrub_reserved();
   void scrub_reserve_replicas();
   void scrub_unreserve_replicas();
