@@ -44,7 +44,8 @@ def wait_for_health():
     print "Wait for health_ok...",
     tries = 0
     while call("./ceph health 2> /dev/null | grep -v 'HEALTH_OK\|HEALTH_WARN' > /dev/null", shell=True) == 0:
-        if ++tries == 150:
+        tries += 1
+        if tries == 150:
             raise Exception("Time exceeded to go to health")
         time.sleep(1)
     print "DONE"
