@@ -1814,7 +1814,10 @@ function test_mon_cephdf_commands()
   rados put cephdf_for_test cephdf_for_test -p cephdf_for_test
 
   #wait for update
-  sleep 10
+  for i in `seq 1 10`; do
+    rados -p cephdf_for_test ls - | grep -q cephdf_for_test && break
+    sleep 1
+  done
 
   cal_raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' ' '{printf "%d\n", 2 * $4}'`
   raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' '  '{print $11}'`
