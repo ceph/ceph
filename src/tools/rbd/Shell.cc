@@ -78,11 +78,10 @@ std::set<std::string>& Shell::get_switch_arguments() {
   return switch_arguments;
 }
 
-int Shell::execute(int arg_count, const char **arg_values) {
+int Shell::execute(const Arguments& cmdline_arguments) {
 
-  std::vector<std::string> arguments;
-  prune_command_line_arguments(arg_count, arg_values, &arguments);
-
+  std::vector<std::string> arguments(cmdline_arguments.begin(),
+                                     cmdline_arguments.end());
   std::vector<std::string> command_spec;
   get_command_spec(arguments, &command_spec);
 
@@ -253,32 +252,6 @@ void Shell::get_global_options(po::options_description *opts) {
     ("secret", po::value<Secret>(), "path to secret key (deprecated)")
     ("keyfile,K", po::value<std::string>(), "path to secret key")
     ("keyring,k", po::value<std::string>(), "path to keyring");
-}
-
-void Shell::prune_command_line_arguments(int arg_count, const char **arg_values,
-                                         std::vector<std::string> *args) {
-
-  std::vector<std::string> config_keys;
-  g_conf->get_all_keys(&config_keys);
-  std::set<std::string> config_key_set(config_keys.begin(), config_keys.end());
-
-  args->reserve(arg_count);
-  for (int i = 1; i < arg_count; ++i) {
-    std::string arg(arg_values[i]);
-    if (arg.size() > 2 && arg.substr(0, 2) == "--") {
-      std::string option_name(arg.substr(2));
-      std::string alt_option_name(option_name);
-      std::replace(alt_option_name.begin(), alt_option_name.end(), '-', '_');
-      if (config_key_set.count(option_name) ||
-          config_key_set.count(alt_option_name)) {
-        // Ceph config override -- skip since it's handled by CephContext
-        ++i;
-        continue;
-      }
-    }
-
-    args->push_back(arg);
-  }
 }
 
 void Shell::print_help() {
