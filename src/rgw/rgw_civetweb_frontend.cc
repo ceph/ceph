@@ -38,6 +38,7 @@ int RGWMongooseFrontend::run() {
   map<string, string> conf_map = conf->get_config_map();
   conf->get_val("port", "80", &port_str);
   conf_map.erase("port");
+  std::replace(port_str.begin(), port_str.end(), '+', ',');
   conf_map["listening_ports"] = port_str;
   set_conf_default(conf_map, "enable_keep_alive", "yes");
   set_conf_default(conf_map, "num_threads", thread_pool_buf);
