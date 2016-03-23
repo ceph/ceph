@@ -299,5 +299,3 @@ DENCODER_DEPS =
 
 
 radoslibdir = $(libdir)/rados-classes
-
-CEPH_BUILD_VIRTUALENV = .

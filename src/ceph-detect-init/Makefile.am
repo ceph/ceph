@@ -53,7 +53,7 @@ EXTRA_DIST += \
 	ceph-detect-init/tests/test_all.py \
 	ceph-detect-init/tox.ini
 
-export CEPH_DETECT_INIT_VIRTUALENV = ${CEPH_BUILD_VIRTUALENV}/ceph-detect-init-virtualenv
+export CEPH_DETECT_INIT_VIRTUALENV = ${CEPH_BUILD_VIRTUALENV}ceph-detect-init-virtualenv
 
 ceph-detect-init-all: ${CEPH_DETECT_INIT_VIRTUALENV}
 
