@@ -798,11 +798,10 @@ void RGWHTTPArgs::append(const string& name, const string& val)
   }
 }
 
-string& RGWHTTPArgs::get(const string& name, bool *exists)
+const string& RGWHTTPArgs::get(const string& name, bool *exists) const
 {
-  map<string, string>::iterator iter;
-  iter = val_map.find(name);
-  bool e = (iter != val_map.end());
+  auto iter = val_map.find(name);
+  bool e = (iter != std::end(val_map));
   if (exists)
     *exists = e;
   if (e)

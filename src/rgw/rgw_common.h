@@ -296,7 +296,7 @@ class RGWHTTPArgs
   int parse();
   void append(const string& name, const string& val);
   /** Get the value for a specific argument parameter */
-  string& get(const string& name, bool *exists = NULL);
+  const string& get(const string& name, bool *exists = NULL) const;
   int get_bool(const string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
@@ -305,22 +305,20 @@ class RGWHTTPArgs
   string sys_get(const string& name, bool *exists = nullptr);
 
   /** see if a parameter is contained in this RGWHTTPArgs */
-  bool exists(const char *name) {
-    map<string, string>::iterator iter = val_map.find(name);
-    return (iter != val_map.end());
+  bool exists(const char *name) const {
+    return (val_map.find(name) != std::end(val_map));
   }
-  bool sub_resource_exists(const char *name) {
-    map<string, string>::iterator iter = sub_resources.find(name);
-    return (iter != sub_resources.end());
+  bool sub_resource_exists(const char *name) const {
+    return (sub_resources.find(name) != std::end(sub_resources));
   }
   map<string, string>& get_params() {
     return val_map;
   }
   map<string, string>& get_sub_resources() { return sub_resources; }
-  unsigned get_num_params() {
+  unsigned get_num_params() const {
     return val_map.size();
   }
-  bool has_response_modifier() {
+  bool has_response_modifier() const {
     return has_resp_modifier;
   }
   void set_system() { /* make all system params visible */
