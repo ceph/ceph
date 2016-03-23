@@ -248,11 +248,116 @@ static string xio_uri_from_entity(const string &type,
   return xio_uri;
 } /* xio_uri_from_entity */
 
+void XioInit::package_init(CephContext *cct) {
+   if (! initialized.read()) {
+
+     mtx.Lock();
+     if (! initialized.read()) {
+
+       xio_init();
+
+       // claim a reference to the first context we see
+       xio_log::context = cct->get();
+
+       int xopt;
+       xopt = xio_log::get_level();
+       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_LOG_LEVEL,
+ 		  &xopt, sizeof(xopt));
+       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_LOG_FN,
+ 		  (const void*)xio_log::log_dout, sizeof(xio_log_fn));
+
+       xopt = 1;
+       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_DISABLE_HUGETBL,
+ 		  &xopt, sizeof(xopt));
+
+       if (g_code_env == CODE_ENVIRONMENT_DAEMON) {
+         xopt = 1;
+         xio_set_opt(NULL, XIO_OPTLEVEL_RDMA, XIO_OPTNAME_ENABLE_FORK_INIT,
+ 		    &xopt, sizeof(xopt));
+       }
+
+       xopt = XIO_MSGR_IOVLEN;
+       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_IN_IOVLEN,
+ 		  &xopt, sizeof(xopt));
+       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
+ 		  &xopt, sizeof(xopt));
+
+       /* enable flow-control */
+       xopt = 1;
+       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_ENABLE_FLOW_CONTROL,
+                  &xopt, sizeof(xopt));
+
+       /* and set threshold for buffer callouts */
+       xopt = max(cct->_conf->xio_max_send_inline, 512);
+       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_XIO_DATA,
+                  &xopt, sizeof(xopt));
+       xopt = 216;
+       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_XIO_HEADER,
+                  &xopt, sizeof(xopt));
+
+       size_t queue_depth = cct->_conf->xio_queue_depth;
+       struct xio_mempool_config mempool_config = {
+         6,
+         {
+           {1024,  0,  queue_depth,  262144},
+           {4096,  0,  queue_depth,  262144},
+           {16384, 0,  queue_depth,  262144},
+           {65536, 0,  128,  65536},
+           {262144, 0,  32,  16384},
+           {1048576, 0, 8,  8192}
+         }
+       };
+       xio_set_opt(NULL,
+                   XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_CONFIG_MEMPOOL,
+                   &mempool_config, sizeof(mempool_config));
+
+       /* and unregisterd one */
+ #define XMSG_MEMPOOL_QUANTUM 4096
+
+       xio_msgr_noreg_mpool =
+ 	xio_mempool_create(-1 /* nodeid */,
+ 			   XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC);
+
+       (void) xio_mempool_add_slab(xio_msgr_noreg_mpool, 64,
+ 				       cct->_conf->xio_mp_min,
+ 				       cct->_conf->xio_mp_max_64,
+ 				       XMSG_MEMPOOL_QUANTUM, 0);
+       (void) xio_mempool_add_slab(xio_msgr_noreg_mpool, 256,
+ 				       cct->_conf->xio_mp_min,
+ 				       cct->_conf->xio_mp_max_256,
+ 				       XMSG_MEMPOOL_QUANTUM, 0);
+       (void) xio_mempool_add_slab(xio_msgr_noreg_mpool, 1024,
+ 				       cct->_conf->xio_mp_min,
+ 				       cct->_conf->xio_mp_max_1k,
+ 				       XMSG_MEMPOOL_QUANTUM, 0);
+       (void) xio_mempool_add_slab(xio_msgr_noreg_mpool, getpagesize(),
+ 				       cct->_conf->xio_mp_min,
+ 				       cct->_conf->xio_mp_max_page,
+ 				       XMSG_MEMPOOL_QUANTUM, 0);
+
+       /* initialize ops singleton */
+       xio_msgr_ops.on_session_event = on_session_event;
+       xio_msgr_ops.on_new_session = on_new_session;
+       xio_msgr_ops.on_session_established = NULL;
+       xio_msgr_ops.on_msg = on_msg;
+       xio_msgr_ops.on_ow_msg_send_complete = on_ow_msg_send_complete;
+       xio_msgr_ops.on_msg_error = on_msg_error;
+       xio_msgr_ops.on_cancel = on_cancel;
+       xio_msgr_ops.on_cancel_request = on_cancel_request;
+
+       /* mark initialized */
+       initialized.set(1);
+     }
+     mtx.Unlock();
+   }
+ }
+
 /* XioMessenger */
 XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
 			   string mname, uint64_t _nonce, uint64_t features,
 			   DispatchStrategy *ds)
   : SimplePolicyMessenger(cct, name, mname, _nonce),
+    XioInit(cct),
     nsessions(0),
     shutdown_called(false),
     portals(this, cct->_conf->xio_portal_threads),
@@ -271,109 +376,6 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
 
   XioPool::trace_mempool = (cct->_conf->xio_trace_mempool);
   XioPool::trace_msgcnt = (cct->_conf->xio_trace_msgcnt);
-
-  /* package init */
-  if (! initialized.read()) {
-
-    mtx.Lock();
-    if (! initialized.read()) {
-
-      xio_init();
-
-      // claim a reference to the first context we see
-      xio_log::context = cct->get();
-
-      int xopt;
-      xopt = xio_log::get_level();
-      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_LOG_LEVEL,
-		  &xopt, sizeof(xopt));
-      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_LOG_FN,
-		  (const void*)xio_log::log_dout, sizeof(xio_log_fn));
-
-      xopt = 1;
-      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_DISABLE_HUGETBL,
-		  &xopt, sizeof(xopt));
-
-      if (g_code_env == CODE_ENVIRONMENT_DAEMON) {
-        xopt = 1;
-        xio_set_opt(NULL, XIO_OPTLEVEL_RDMA, XIO_OPTNAME_ENABLE_FORK_INIT,
-		    &xopt, sizeof(xopt));
-      }
-
-      xopt = XIO_MSGR_IOVLEN;
-      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_IN_IOVLEN,
-		  &xopt, sizeof(xopt));
-      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
-		  &xopt, sizeof(xopt));
-
-      /* enable flow-control */
-      xopt = 1;
-      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_ENABLE_FLOW_CONTROL,
-                 &xopt, sizeof(xopt));
-
-      /* and set threshold for buffer callouts */
-      xopt = max(cct->_conf->xio_max_send_inline, 512);
-      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_XIO_DATA,
-                 &xopt, sizeof(xopt));
-      xopt = 216;
-      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_XIO_HEADER,
-                 &xopt, sizeof(xopt));
-
-      size_t queue_depth = cct->_conf->xio_queue_depth;
-      struct xio_mempool_config mempool_config = {
-        6,
-        {
-          {1024,  0,  queue_depth,  262144},
-          {4096,  0,  queue_depth,  262144},
-          {16384, 0,  queue_depth,  262144},
-          {65536, 0,  128,  65536},
-          {262144, 0,  32,  16384},
-          {1048576, 0, 8,  8192}
-        }
-      };
-      xio_set_opt(NULL,
-                  XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_CONFIG_MEMPOOL,
-                  &mempool_config, sizeof(mempool_config));
-
-      /* and unregisterd one */
-#define XMSG_MEMPOOL_QUANTUM 4096
-
-      xio_msgr_noreg_mpool =
-	xio_mempool_create(-1 /* nodeid */,
-			   XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC);
-
-      (void) xio_mempool_add_slab(xio_msgr_noreg_mpool, 64,
-				       cct->_conf->xio_mp_min,
-				       cct->_conf->xio_mp_max_64,
-				       XMSG_MEMPOOL_QUANTUM, 0);
-      (void) xio_mempool_add_slab(xio_msgr_noreg_mpool, 256,
-				       cct->_conf->xio_mp_min,
-				       cct->_conf->xio_mp_max_256,
-				       XMSG_MEMPOOL_QUANTUM, 0);
-      (void) xio_mempool_add_slab(xio_msgr_noreg_mpool, 1024,
-				       cct->_conf->xio_mp_min,
-				       cct->_conf->xio_mp_max_1k,
-				       XMSG_MEMPOOL_QUANTUM, 0);
-      (void) xio_mempool_add_slab(xio_msgr_noreg_mpool, getpagesize(),
-				       cct->_conf->xio_mp_min,
-				       cct->_conf->xio_mp_max_page,
-				       XMSG_MEMPOOL_QUANTUM, 0);
-
-      /* initialize ops singleton */
-      xio_msgr_ops.on_session_event = on_session_event;
-      xio_msgr_ops.on_new_session = on_new_session;
-      xio_msgr_ops.on_session_established = NULL;
-      xio_msgr_ops.on_msg = on_msg;
-      xio_msgr_ops.on_ow_msg_send_complete = on_ow_msg_send_complete;
-      xio_msgr_ops.on_msg_error = on_msg_error;
-      xio_msgr_ops.on_cancel = on_cancel;
-      xio_msgr_ops.on_cancel_request = on_cancel_request;
-
-      /* mark initialized */
-      initialized.set(1);
-    }
-    mtx.Unlock();
-  }
 
   dispatch_strategy->set_messenger(this);
 
