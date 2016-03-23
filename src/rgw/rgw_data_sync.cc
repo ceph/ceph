@@ -1239,17 +1239,16 @@ public:
 
       yield {
         if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateSync) {
-          case rgw_data_sync_info::StateSync:
-            for (map<uint32_t, rgw_data_sync_marker>::iterator iter = sync_status.sync_markers.begin();
-                 iter != sync_status.sync_markers.end(); ++iter) {
-              RGWDataSyncShardControlCR *cr = new RGWDataSyncShardControlCR(sync_env, sync_env->store->get_zone_params().log_pool,
-                                                        iter->first, iter->second);
-              cr->get();
-              shard_crs_lock.Lock();
-              shard_crs[iter->first] = cr;
-              shard_crs_lock.Unlock();
-              spawn(cr, true);
-            }
+          for (map<uint32_t, rgw_data_sync_marker>::iterator iter = sync_status.sync_markers.begin();
+               iter != sync_status.sync_markers.end(); ++iter) {
+            RGWDataSyncShardControlCR *cr = new RGWDataSyncShardControlCR(sync_env, sync_env->store->get_zone_params().log_pool,
+                                                                          iter->first, iter->second);
+            cr->get();
+            shard_crs_lock.Lock();
+            shard_crs[iter->first] = cr;
+            shard_crs_lock.Unlock();
+            spawn(cr, true);
+          }
         }
       }
 

@@ -5,6 +5,7 @@
 #include "rgw_http_client.h"
 #include "rgw_meta_sync_status.h"
 
+#include "include/stringify.h"
 #include "common/RWLock.h"
 
 #define ERROR_LOGGER_SHARDS 32
@@ -142,7 +143,7 @@ protected:
   }
 
 public:
-  RGWBackoffControlCR(CephContext *_cct, bool _exit_on_error) : RGWCoroutine(_cct), cr(NULL), lock("RGWBackoffControlCR::lock"),
+  RGWBackoffControlCR(CephContext *_cct, bool _exit_on_error) : RGWCoroutine(_cct), cr(NULL), lock("RGWBackoffControlCR::lock:" + stringify(this)),
                                                                 reset_backoff(false), exit_on_error(_exit_on_error) {
   }
 
