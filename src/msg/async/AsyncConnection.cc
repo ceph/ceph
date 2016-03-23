@@ -217,27 +217,6 @@ void AsyncConnection::maybe_start_delay_thread()
   }
 }
 
-/* return -1 means `fd` occurs error or closed, it should be closed
- * return 0 means EAGAIN or EINTR */
-ssize_t AsyncConnection::read_bulk(char *buf, unsigned len)
-{
-  ssize_t nread = cs.read(buf, len);
-  if (nread < 0) {
-    if (nread == -EAGAIN || nread == -EINTR) {
-      nread = 0;
-    } else {
-      ldout(async_msgr->cct, 1) << __func__ << " reading from fd=" << cs.fd()
-                                << " : "<< strerror(nread) << dendl;
-      return -1;
-    }
-  } else if (nread == 0) {
-    ldout(async_msgr->cct, 1) << __func__ << " peer close file descriptor "
-                              << cs.fd() << dendl;
-    return -1;
-  }
-  return nread;
-}
-
 // return the remaining bytes, it may larger than the length of ptr
 // else return < 0 means error
 ssize_t AsyncConnection::_try_send(bool more)
@@ -303,7 +282,6 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
     }
   }
 
-  ssize_t r = 0;
   uint64_t left = len - state_offset;
   if (recv_end > recv_start) {
     uint64_t to_read = MIN(recv_end - recv_start, left);
@@ -320,31 +298,49 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
   }
 
   recv_end = recv_start = 0;
+  ssize_t r = 0;
   /* nothing left in the prefetch buffer */
   if (len > recv_max_prefetch) {
     /* this was a large read, we don't prefetch for these */
     do {
-      r = read_bulk(p+state_offset, left);
-      ldout(async_msgr->cct, 25) << __func__ << " read_bulk left is " << left << " got " << r << dendl;
+      r = cs.read(p+state_offset, left);
+
+      ldout(async_msgr->cct, 25) << __func__ << " read left is " << left << " got " << r << dendl;
       if (r < 0) {
-        ldout(async_msgr->cct, 1) << __func__ << " read failed" << dendl;
-        return -1;
+        if (r != -EAGAIN && r != -EINTR) {
+          ldout(async_msgr->cct, 1) << __func__ << " reading failed:"
+                                    << cpp_strerror(r) << dendl;
+          return -1;
+        }
+        break;
       } else if (r == static_cast<int>(left)) {
         state_offset = 0;
         return 0;
+      } else if (r == 0) {
+        ldout(async_msgr->cct, 1) << __func__ << " peer close file descriptor" << dendl;
+        return -1;
+      } else {
+        state_offset += r;
+        left -= r;
       }
-      state_offset += r;
-      left -= r;
     } while (r > 0);
   } else {
     do {
-      r = read_bulk(recv_buf+recv_end, recv_max_prefetch);
-      ldout(async_msgr->cct, 25) << __func__ << " read_bulk recv_end is " << recv_end
+      r = cs.read(recv_buf+recv_end, recv_max_prefetch);
+      ldout(async_msgr->cct, 25) << __func__ << " read recv_end is " << recv_end
                                  << " left is " << left << " got " << r << dendl;
       if (r < 0) {
-        ldout(async_msgr->cct, 1) << __func__ << " read failed" << dendl;
+        if (r != -EAGAIN && r != -EINTR) {
+          ldout(async_msgr->cct, 1) << __func__ << " reading failed:"
+                                    << cpp_strerror(r) << dendl;
+          return -1;
+        }
+        break;
+      } else if (r == 0) {
+        ldout(async_msgr->cct, 1) << __func__ << " peer close file descriptor" << dendl;
         return -1;
       }
+
       recv_end += r;
       if (r >= static_cast<int>(left)) {
         recv_start = len - state_offset;

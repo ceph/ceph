@@ -47,7 +47,6 @@ static const int ASYNC_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
  * sequence, try to reconnect peer endpoint.
  */
 class AsyncConnection : public Connection {
-  ssize_t read_bulk(char *buf, unsigned len);
   ssize_t do_sendmsg(struct msghdr &msg, unsigned len, bool more);
   ssize_t try_send(bufferlist &bl, bool more=false) {
     Mutex::Locker l(write_lock);
