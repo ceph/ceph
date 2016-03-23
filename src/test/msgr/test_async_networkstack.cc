@@ -627,7 +627,7 @@ class StressFactory {
     std::deque<StressFactory::Message*> acking;
     std::deque<StressFactory::Message*> writings;
     std::string buffer;
-    bufferlist buf_bl;
+    bufferptr buf_bl;
     size_t index = 0;
     size_t left;
     bool write_enabled = false;
@@ -689,24 +689,17 @@ class StressFactory {
         buffer.resize(m->len);
       bool must_no = false;
       while (true) {
-        if (factory->zero_copy_read) {
-          r = socket.zero_copy_read(m->len - read_offset, buf_bl);
-        } else {
-          r = socket.read((char*)buffer.data() + read_offset,
-                          m->len - read_offset);
-        }
-
+        r = socket.read((char*)buffer.data() + read_offset,
+                        m->len - read_offset);
         ASSERT_TRUE(r == -EAGAIN || r > 0);
         if (r == -EAGAIN)
           break;
+        read_offset += r;
+
         std::cerr << " client " << this << " receive " << m->idx << " len " << r << " content: "  << std::endl;
         ASSERT_FALSE(must_no);
-        read_offset += r;
         if ((m->len - read_offset) == 0) {
-          if (factory->zero_copy_read)
-            ASSERT_TRUE(m->verify(buf_bl.c_str(), 0));
-          else
-            ASSERT_TRUE(m->verify(buffer.data(), 0));
+          ASSERT_TRUE(m->verify(buf_bl.c_str(), 0));
           delete m;
           acking.pop_front();
           read_offset = 0;
@@ -819,9 +812,9 @@ class StressFactory {
       int r = 0;
       while (true) {
         char buf[4096];
-        bufferlist data;
+        bufferptr data;
         if (factory->zero_copy_read) {
-          r = socket.zero_copy_read(sizeof(buf), data);
+          r = socket.zero_copy_read(data);
         } else {
           r = socket.read(buf, sizeof(buf));
         }
@@ -833,7 +826,7 @@ class StressFactory {
         } else if (r == -EAGAIN)
           break;
         if (factory->zero_copy_read) {
-          buffers.emplace_back(data.c_str(), 0, r);
+          buffers.emplace_back(data.c_str(), 0, buf.length());
         } else {
           buffers.emplace_back(buf, 0, r);
         }

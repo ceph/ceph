@@ -74,7 +74,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     }
   }
 
-  virtual ssize_t zero_copy_read(size_t, bufferlist&) override {
+  virtual ssize_t zero_copy_read(bufferptr&) override {
     return -EOPNOTSUPP;
   }
 
