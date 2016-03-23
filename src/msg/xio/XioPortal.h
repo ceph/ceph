@@ -356,16 +356,19 @@ private:
   char **p_vec;
   int n;
   int last_unused;
-  int max_conns_per_ctx;
 
 public:
   XioPortals(Messenger *msgr, int _n, int nconns) : p_vec(NULL), last_unused(0)
   {
-    max_conns_per_ctx = nconns;
     n = max(_n, 1);
-    /* portal0 */
-    portals.push_back(new XioPortal(msgr, nconns));
-    /* additional portals allocated on bind() */
+
+    portals.resize(n);
+    for (int i = 0; i < n; i++) {
+      if (!portals[i]) {
+        portals[i] = new XioPortal(msgr, nconns);
+        assert(portals[i] != nullptr);
+      }
+    }
   }
 
   vector<XioPortal*>& get() { return portals; }
@@ -388,9 +391,10 @@ public:
     return pix;
   }
 
-  XioPortal* get_portal0()
+  XioPortal* get_next_portal()
   {
-    return portals[0];
+    int pix = get_last_unused();
+    return portals[pix];
   }
 
   int bind(struct xio_session_ops *ops, const string& base_uri,
@@ -420,7 +424,6 @@ public:
     p_vec = new char*[nportals];
     for (p_ix = 0; p_ix < nportals; ++p_ix) {
       portal = portals[p_ix];
-      /* shift left */
       p_vec[p_ix] = (char*) /* portal->xio_uri.c_str() */
 			portal->portal_id;
     }

@@ -541,9 +541,9 @@ int XioMessenger::session_event(struct xio_session *session,
   case XIO_SESSION_CONNECTION_CLOSED_EVENT: /* orderly discon */
   case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT: /* unexpected discon */
   case XIO_SESSION_CONNECTION_REFUSED_EVENT:
-    ldout(cct,2) << xio_session_event_types[event_data->event]
-      << " user_context " << event_data->conn_user_context << dendl;
     xcon = static_cast<XioConnection*>(event_data->conn_user_context);
+    ldout(cct,2) << xio_session_event_types[event_data->event]
+      << " xcon " << xcon << " session " << session  << dendl;
     if (likely(!!xcon)) {
       Spinlock::Locker lckr(conns_sp);
       XioConnection::EntitySet::iterator conn_iter =
@@ -565,9 +565,9 @@ int XioMessenger::session_event(struct xio_session *session,
     }
     break;
   case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
-    ldout(cct,2) << xio_session_event_types[event_data->event]
-      << " user_context " << event_data->conn_user_context << dendl;
     xcon = static_cast<XioConnection*>(event_data->conn_user_context);
+    ldout(cct,2) << xio_session_event_types[event_data->event]
+      << " xcon " << xcon << " session " << session << dendl;
     xcon->on_teardown_event();
     break;
   case XIO_SESSION_TEARDOWN_EVENT:
@@ -1004,7 +1004,7 @@ ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
      * we can always set it explicitly */
     struct xio_connection_params xcp = {};
     xcp.session           = xcon->session;
-    xcp.ctx               = this->portals.get_portal0()->ctx;
+    xcp.ctx               = xcon->portal->ctx;
     xcp.conn_user_context = xcon;
 
     xcon->conn = xio_connect(&xcp);
