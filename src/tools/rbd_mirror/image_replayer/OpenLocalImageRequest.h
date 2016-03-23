@@ -46,13 +46,13 @@ private:
    * <start>
    *    |
    *    v
-   * OPEN_IMAGE * * * * * * *
-   *    |                   *
-   *    v                   v
+   * OPEN_IMAGE * * * * * * * *
+   *    |                     *
+   *    v (skip if primary)   v
    * LOCK_IMAGE * * * > CLOSE_IMAGE
-   *    |                   |
-   *    v                   |
-   * <finish> <-------------/
+   *    |                     |
+   *    v                     |
+   * <finish> <---------------/
    *
    * @endverbatim
    */

@@ -208,6 +208,12 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
     dout(10) << ": local image missing" << dendl;
     create_local_image();
     return;
+  } else if (r == -EREMOTEIO) {
+    assert(*m_local_image_ctx == nullptr);
+    dout(10) << "local image is primary -- skipping image replay" << dendl;
+    m_ret_val = r;
+    close_remote_image();
+    return;
   } else if (r < 0) {
     assert(*m_local_image_ctx == nullptr);
     derr << ": failed to open local image: " << cpp_strerror(r) << dendl;
