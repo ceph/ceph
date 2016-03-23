@@ -23,6 +23,7 @@ import sys
 from setuptools import setup
 from setuptools import find_packages
 
+
 def read(fname):
     path = os.path.join(os.path.dirname(__file__), fname)
     f = open(path)

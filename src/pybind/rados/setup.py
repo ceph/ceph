@@ -7,6 +7,7 @@ from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize
 
+
 def get_version():
     try:
         for line in open(os.path.join(os.path.dirname(__file__), "..", "ceph_ver.h")):
@@ -16,6 +17,7 @@ def get_version():
             return "0"
     except IOError:
         return "0"
+
 
 class EggInfoCommand(egg_info):
     def finalize_options(self):
@@ -27,23 +29,22 @@ class EggInfoCommand(egg_info):
 
 # Disable cythonification if we're not really building anything
 if (len(sys.argv) >= 2 and
-    any(i in sys.argv[1:] for i in ('--help', 'clean', 'egg_info', '--version')
-    )):
+        any(i in sys.argv[1:] for i in ('--help', 'clean', 'egg_info', '--version'))):
     def cythonize(x, **kwargs):
         return x
 
 setup(
-    name = 'rados',
-    version = get_version(),
-    description = "Python libraries for the Ceph librados library",
-    long_description = (
+    name='rados',
+    version=get_version(),
+    description="Python libraries for the Ceph librados library",
+    long_description=(
         "This package contains Python libraries for interacting with Ceph's "
         "rados library."),
     ext_modules = cythonize([
         Extension("rados",
-            ["rados.pyx"],
-            libraries=["rados"]
-            )
+                  ["rados.pyx"],
+                  libraries=["rados"]
+                  )
     ], build_dir=os.environ.get("CYTHON_BUILD_DIR", None)),
     cmdclass={
         "egg_info": EggInfoCommand,

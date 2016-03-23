@@ -13,11 +13,13 @@ import sys
 # Are we running Python 2.x
 _python2 = sys.hexversion < 0x03000000
 
+
 def test_rados_init_error():
     assert_raises(Error, Rados, conffile='', rados_id='admin',
                   name='client.admin')
     assert_raises(Error, Rados, conffile='', name='invalid')
     assert_raises(Error, Rados, conffile='', name='bad.invalid')
+
 
 def test_rados_init():
     with Rados(conffile='', rados_id='admin'):
@@ -29,20 +31,24 @@ def test_rados_init():
     with Rados(conffile='', name='client.admin'):
         pass
 
+
 def test_ioctx_context_manager():
     with Rados(conffile='', rados_id='admin') as conn:
         with conn.open_ioctx('rbd') as ioctx:
             pass
+
 
 def test_parse_argv():
     args = ['osd', 'pool', 'delete', 'foobar', 'foobar', '--yes-i-really-really-mean-it']
     r = Rados()
     eq(args, r.conf_parse_argv(args))
 
+
 def test_parse_argv_empty_str():
     args = ['']
     r = Rados()
     eq(args, r.conf_parse_argv(args))
+
 
 class TestRequires(object):
     @requires(('foo', str), ('bar', int), ('baz', int))
@@ -140,7 +146,7 @@ class TestRados(object):
 
     def test_ping_monitor(self):
         assert_raises(ObjectNotFound, self.rados.ping_monitor, 'not_exists_monitor')
-        cmd = {'prefix': 'mon dump', 'format':'json'}
+        cmd = {'prefix': 'mon dump', 'format': 'json'}
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'')
         for mon in json.loads(buf.decode('utf8'))['mons']:
             buf = json.loads(self.rados.ping_monitor(mon['name']))
@@ -214,12 +220,12 @@ class TestRados(object):
                 pool_id = self.rados.pool_lookup('foo')
                 tier_pool_id = self.rados.pool_lookup('foo-cache')
 
-                cmd = {"prefix":"osd tier add", "pool":"foo", "tierpool":"foo-cache", "force_nonempty":""}
+                cmd = {"prefix": "osd tier add", "pool": "foo", "tierpool": "foo-cache", "force_nonempty": ""}
                 ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
                 eq(ret, 0)
 
                 try:
-                    cmd = {"prefix":"osd tier cache-mode", "pool":"foo-cache", "tierpool":"foo-cache", "mode":"readonly"}
+                    cmd = {"prefix": "osd tier cache-mode", "pool": "foo-cache", "tierpool": "foo-cache", "mode": "readonly"}
                     ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
                     eq(ret, 0)
 
@@ -228,7 +234,7 @@ class TestRados(object):
                     eq(pool_id, self.rados.get_pool_base_tier(pool_id))
                     eq(pool_id, self.rados.get_pool_base_tier(tier_pool_id))
                 finally:
-                    cmd = {"prefix":"osd tier remove", "pool":"foo", "tierpool":"foo-cache"}
+                    cmd = {"prefix": "osd tier remove", "pool": "foo", "tierpool": "foo-cache"}
                     ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
                     eq(ret, 0)
             finally:
@@ -252,6 +258,7 @@ class TestRados(object):
 
     def test_monitor_log(self):
         lock = threading.Condition()
+
         def cb(arg, line, who, sec, nsec, seq, level, msg):
             # NOTE(sileht): the old pyrados API was received the pointer as int
             # instead of the value of arg
@@ -268,6 +275,7 @@ class TestRados(object):
         MonitorLog(self.rados, "debug", None, None)
         eq(None, self.rados.monitor_callback)
 
+
 class TestIoctx(object):
 
     def setUp(self):
@@ -278,7 +286,7 @@ class TestIoctx(object):
         self.ioctx = self.rados.open_ioctx('test_pool')
 
     def tearDown(self):
-        cmd = {"prefix":"osd unset", "key":"noup"}
+        cmd = {"prefix": "osd unset", "key": "noup"}
         self.rados.mon_command(json.dumps(cmd), b'')
         self.ioctx.close()
         self.rados.delete_pool('test_pool')
@@ -358,9 +366,9 @@ class TestIoctx(object):
         self.ioctx.append('d', b'jazz')
         self.ioctx.set_namespace(LIBRADOS_ALL_NSPACES)
         object_names = [(obj.nspace, obj.key) for obj in self.ioctx.list_objects()]
-        eq(sorted(object_names), [('', 'a'), ('','b'), ('','c'), ('','d'),\
-                ('ns1', 'd'), ('ns1', 'ns1-a'), ('ns1', 'ns1-b'),\
-                ('ns1', 'ns1-c'), ('ns1', 'ns1-d')])
+        eq(sorted(object_names), [('', 'a'), ('', 'b'), ('', 'c'), ('', 'd'),
+                                  ('ns1', 'd'), ('ns1', 'ns1-a'), ('ns1', 'ns1-b'),
+                                  ('ns1', 'ns1-c'), ('ns1', 'ns1-d')])
 
     def test_xattrs(self):
         xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0')
@@ -467,7 +475,7 @@ class TestIoctx(object):
             self.ioctx.set_omap(write_op, keys, values)
             self.ioctx.operate_write_op(write_op, "hw")
         with ReadOpCtx(self.ioctx) as read_op:
-            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op,("3","4",))
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op, ("3", "4",))
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [("3", b"ccc"), ("4", b"\x04\x04\x04\x04")])
 
@@ -478,7 +486,7 @@ class TestIoctx(object):
             self.ioctx.set_omap(write_op, keys, values)
             self.ioctx.operate_write_op(write_op, "hw")
         with ReadOpCtx(self.ioctx) as read_op:
-            iter, ret = self.ioctx.get_omap_keys(read_op,"",2)
+            iter, ret = self.ioctx.get_omap_keys(read_op, "", 2)
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [("1", None), ("2", None)])
 
@@ -492,7 +500,7 @@ class TestIoctx(object):
             self.ioctx.clear_omap(write_op_1)
             self.ioctx.operate_write_op(write_op_1, "hw")
         with ReadOpCtx(self.ioctx) as read_op:
-            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op,("1",))
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op, ("1",))
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [])
 
@@ -518,6 +526,7 @@ class TestIoctx(object):
     def test_aio_write(self):
         lock = threading.Condition()
         count = [0]
+
         def cb(blah):
             with lock:
                 count[0] += 1
@@ -537,6 +546,7 @@ class TestIoctx(object):
     def test_aio_write_no_comp_ref(self):
         lock = threading.Condition()
         count = [0]
+
         def cb(blah):
             with lock:
                 count[0] += 1
@@ -555,6 +565,7 @@ class TestIoctx(object):
     def test_aio_append(self):
         lock = threading.Condition()
         count = [0]
+
         def cb(blah):
             with lock:
                 count[0] += 1
@@ -575,6 +586,7 @@ class TestIoctx(object):
     def test_aio_write_full(self):
         lock = threading.Condition()
         count = [0]
+
         def cb(blah):
             with lock:
                 count[0] += 1
@@ -596,18 +608,18 @@ class TestIoctx(object):
         # find acting_set for pool:objectname and take it down; used to
         # verify that async reads don't complete while acting set is missing
         cmd = {
-            "prefix":"osd map",
-            "pool":pool,
-            "object":objectname,
-            "format":"json",
+            "prefix": "osd map",
+            "pool": pool,
+            "object": objectname,
+            "format": "json",
         }
         r, jsonout, _ = self.rados.mon_command(json.dumps(cmd), b'')
         objmap = json.loads(jsonout.decode("utf-8"))
         acting_set = objmap['acting']
-        cmd = {"prefix":"osd set", "key":"noup"}
+        cmd = {"prefix": "osd set", "key": "noup"}
         r, _, _ = self.rados.mon_command(json.dumps(cmd), b'')
         eq(r, 0)
-        cmd = {"prefix":"osd down", "ids":[str(i) for i in acting_set]}
+        cmd = {"prefix": "osd down", "ids": [str(i) for i in acting_set]}
         r, _, _ = self.rados.mon_command(json.dumps(cmd), b'')
         eq(r, 0)
 
@@ -615,7 +627,7 @@ class TestIoctx(object):
         eq(self.rados.wait_for_latest_osdmap(), 0)
 
     def _let_osds_back_up(self):
-        cmd = {"prefix":"osd unset", "key":"noup"}
+        cmd = {"prefix": "osd unset", "key": "noup"}
         r, _, _ = self.rados.mon_command(json.dumps(cmd), b'')
         eq(r, 0)
 
@@ -623,6 +635,7 @@ class TestIoctx(object):
         # this is a list so that the local cb() can modify it
         retval = [None]
         lock = threading.Condition()
+
         def cb(_, buf):
             with lock:
                 retval[0] = buf
@@ -711,13 +724,14 @@ class TestIoctx(object):
         assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker2")
 
     def test_execute(self):
-        self.ioctx.write("foo", b"") # ensure object exists
+        self.ioctx.write("foo", b"")  # ensure object exists
 
         ret, buf = self.ioctx.execute("foo", "hello", "say_hello", b"")
         eq(buf, b"Hello, world!")
 
         ret, buf = self.ioctx.execute("foo", "hello", "say_hello", b"nose")
         eq(buf, b"Hello, nose!")
+
 
 class TestObject(object):
 
@@ -752,6 +766,7 @@ class TestObject(object):
         eq(self.object.read(3), b'bar')
         eq(self.object.read(3), b'baz')
 
+
 class TestCommand(object):
 
     def setUp(self):
@@ -764,7 +779,7 @@ class TestCommand(object):
     def test_monmap_dump(self):
 
         # check for success and some plain output with epoch in it
-        cmd = {"prefix":"mon dump"}
+        cmd = {"prefix": "mon dump"}
         ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
         eq(ret, 0)
         assert len(buf) > 0

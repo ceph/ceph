@@ -149,10 +149,10 @@ class RankEvicter(threading.Thread):
             ))
             ret, outb, outs = self._volume_client.fs.mds_command(
                 "%s" % self.gid,
-                [json.dumps({
-                                "prefix": "session evict",
-                                "filters": self._client_spec
-                })], "")
+                [json.dumps({"prefix": "session evict",
+                             "filters": self._client_spec}
+                            )
+                 ], "")
             log.debug("mds_command: complete {0} {1}".format(ret, outs))
 
             # If we get a clean response, great, it's gone from that rank.
@@ -273,7 +273,7 @@ class CephFSVolumeClient(object):
             group_id
         )
 
-    def connect(self, premount_evict = None):
+    def connect(self, premount_evict=None):
         """
 
         :param premount_evict: Optional auth_id to evict before mounting the filesystem: callers

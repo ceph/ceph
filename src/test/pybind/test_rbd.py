@@ -23,8 +23,9 @@ image_idx = 0
 image_name = None
 pool_idx = 0
 pool_name = None
-IMG_SIZE = 8 << 20 # 8 MiB
-IMG_ORDER = 22 # 4 MiB objects
+IMG_SIZE = 8 << 20  # 8 MiB
+IMG_ORDER = 22  # 4 MiB objects
+
 
 def setup_module():
     global rados
@@ -39,6 +40,7 @@ def setup_module():
     features = os.getenv("RBD_FEATURES")
     features = int(features) if features is not None else 61
 
+
 def teardown_module():
     global ioctx
     ioctx.__del__()
@@ -46,16 +48,19 @@ def teardown_module():
     rados.delete_pool(pool_name)
     rados.shutdown()
 
+
 def get_temp_pool_name():
     global pool_idx
     pool_idx += 1
     return "test-rbd-api-" + socket.gethostname() + '-' + str(os.getpid()) + \
            '-' + str(pool_idx)
 
+
 def get_temp_image_name():
     global image_idx
     image_idx += 1
     return "image" + str(image_idx)
+
 
 def create_image():
     global image_name
@@ -66,9 +71,11 @@ def create_image():
     else:
         RBD().create(ioctx, image_name, IMG_SIZE, IMG_ORDER, old_format=True)
 
+
 def remove_image():
     if image_name is not None:
         RBD().remove(ioctx, image_name)
+
 
 def require_new_format():
     def wrapper(fn):
@@ -79,6 +86,7 @@ def require_new_format():
             return fn(*args, **kwargs)
         return functools.wraps(fn)(_require_new_format)
     return wrapper
+
 
 def require_features(required_features):
     def wrapper(fn):
@@ -93,6 +101,7 @@ def require_features(required_features):
         return functools.wraps(fn)(_require_features)
     return wrapper
 
+
 def blacklist_features(blacklisted_features):
     def wrapper(fn):
         def _blacklist_features(*args, **kwargs):
@@ -104,12 +113,15 @@ def blacklist_features(blacklisted_features):
         return functools.wraps(fn)(_blacklist_features)
     return wrapper
 
+
 def test_version():
     RBD().version()
+
 
 def test_create():
     create_image()
     remove_image()
+
 
 def check_default_params(format, order=None, features=None, stripe_count=None,
                          stripe_unit=None, exception=None):
@@ -147,13 +159,13 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
 
                     expected_stripe_count = stripe_count
                     if not expected_stripe_count or format == 1 or \
-                           features & RBD_FEATURE_STRIPINGV2 == 0:
+                            features & RBD_FEATURE_STRIPINGV2 == 0:
                         expected_stripe_count = 1
                     eq(expected_stripe_count, image.stripe_count())
 
                     expected_stripe_unit = stripe_unit
                     if not expected_stripe_unit or format == 1 or \
-                           features & RBD_FEATURE_STRIPINGV2 == 0:
+                            features & RBD_FEATURE_STRIPINGV2 == 0:
                         expected_stripe_unit = 1 << actual_order
                     eq(expected_stripe_unit, image.stripe_unit())
             finally:
@@ -163,6 +175,7 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
     finally:
         for k, v in orig_vals.items():
             rados.conf_set(k, v)
+
 
 def test_create_defaults():
     # basic format 1 and 2
@@ -196,6 +209,7 @@ def test_create_defaults():
     # 0 stripe unit and count are still ignored
     check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 0, 0)
 
+
 def test_context_manager():
     with Rados(conffile='') as cluster:
         with cluster.open_ioctx(pool_name) as ioctx:
@@ -207,6 +221,7 @@ def test_context_manager():
                 read = image.read(0, 256)
             RBD().remove(ioctx, image_name)
             eq(data, read)
+
 
 def test_open_read_only():
     with Rados(conffile='') as cluster:
@@ -233,11 +248,13 @@ def test_open_read_only():
             RBD().remove(ioctx, image_name)
             eq(data, read)
 
+
 def test_open_dne():
     for i in range(100):
         image_name = get_temp_image_name()
         assert_raises(ImageNotFound, Image, ioctx, image_name + 'dne')
         assert_raises(ImageNotFound, Image, ioctx, image_name, 'snap')
+
 
 def test_open_readonly_dne():
     for i in range(100):
@@ -247,15 +264,19 @@ def test_open_readonly_dne():
         assert_raises(ImageNotFound, Image, ioctx, image_name, 'snap',
                       read_only=True)
 
+
 def test_remove_dne():
     assert_raises(ImageNotFound, remove_image)
+
 
 def test_list_empty():
     eq([], RBD().list(ioctx))
 
+
 @with_setup(create_image, remove_image)
 def test_list():
     eq([image_name], RBD().list(ioctx))
+
 
 @with_setup(create_image, remove_image)
 def test_rename():
@@ -266,8 +287,10 @@ def test_rename():
     rbd.rename(ioctx, image_name2, image_name)
     eq([image_name], rbd.list(ioctx))
 
+
 def rand_data(size):
     return os.urandom(size)
+
 
 def check_stat(info, size, order):
     assert 'block_name_prefix' in info
@@ -275,6 +298,7 @@ def check_stat(info, size, order):
     eq(info['order'], order)
     eq(info['num_objs'], size // (1 << order))
     eq(info['obj_size'], 1 << order)
+
 
 class TestImage(object):
 
@@ -391,7 +415,7 @@ class TestImage(object):
     def test_resize_down(self):
         new_size = IMG_SIZE // 2
         data = rand_data(256)
-        self.image.write(data, IMG_SIZE // 2);
+        self.image.write(data, IMG_SIZE // 2)
         self.image.resize(new_size)
         self.image.resize(IMG_SIZE)
         read = self.image.read(IMG_SIZE // 2, 256)
@@ -400,7 +424,7 @@ class TestImage(object):
     def test_resize_bytes(self):
         new_size = IMG_SIZE // 2 - 5
         data = rand_data(256)
-        self.image.write(data, IMG_SIZE // 2 - 10);
+        self.image.write(data, IMG_SIZE // 2 - 10)
         self.image.resize(new_size)
         self.image.resize(IMG_SIZE)
         read = self.image.read(IMG_SIZE // 2 - 10, 5)
@@ -717,10 +741,12 @@ class TestImage(object):
 
 def check_diff(image, offset, length, from_snapshot, expected):
     extents = []
+
     def cb(offset, length, exists):
         extents.append((offset, length, exists))
     image.diff_iterate(0, IMG_SIZE, None, cb)
     eq(extents, expected)
+
 
 class TestClone(object):
 
@@ -921,7 +947,7 @@ class TestClone(object):
         clone_name2 = get_temp_image_name()
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
                        features, new_order)
-        #with Image(ioctx, 'clone2') as clone:
+        # with Image(ioctx, 'clone2') as clone:
         clone2 = Image(ioctx, clone_name2)
         clone2.flatten()
         eq(clone2.overlap(), 0)
@@ -1008,6 +1034,7 @@ class TestClone(object):
         self.clone.unprotect_snap('snap2')
         self.clone.remove_snap('snap2')
 
+
 class TestExclusiveLock(object):
 
     @require_features([RBD_FEATURE_EXCLUSIVE_LOCK])
@@ -1081,7 +1108,7 @@ class TestExclusiveLock(object):
         with Image(ioctx, image_name) as image1, Image(ioctx2, image_name) as image2:
             image1.write(b'0'*256, 0)
             for new_size in [IMG_SIZE * 2, IMG_SIZE // 2]:
-                image2.resize(new_size);
+                image2.resize(new_size)
                 eq(new_size, image1.size())
                 for x in range(30):
                     if new_size == image2.size():

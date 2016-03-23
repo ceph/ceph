@@ -13,12 +13,13 @@ from rbd import (RBD,
                  RBD_FEATURE_FAST_DIFF,
                  RBD_FLAG_OBJECT_MAP_INVALID)
 
-POOL_NAME='rbd'
-PARENT_IMG_NAME='test_notify_parent'
-CLONE_IMG_NAME='test_notify_clone'
-CLONE_IMG_RENAME='test_notify_clone2'
+POOL_NAME = 'rbd'
+PARENT_IMG_NAME = 'test_notify_parent'
+CLONE_IMG_NAME = 'test_notify_clone'
+CLONE_IMG_RENAME = 'test_notify_clone2'
 IMG_SIZE = 16 << 20
 IMG_ORDER = 20
+
 
 def delete_image(ioctx, img_name):
     image = Image(ioctx, img_name)
@@ -32,11 +33,13 @@ def delete_image(ioctx, img_name):
     print("removing image: %s" % img_name)
     RBD().remove(ioctx, img_name)
 
+
 def safe_delete_image(ioctx, img_name):
     try:
         delete_image(ioctx, img_name)
     except ImageNotFound:
         pass
+
 
 def get_features():
     features = os.getenv("RBD_FEATURES")
@@ -47,6 +50,7 @@ def get_features():
     assert((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0)
     assert((features & RBD_FEATURE_LAYERING) != 0)
     return features
+
 
 def master(ioctx):
     print("starting master")
@@ -82,6 +86,7 @@ def master(ioctx):
     delete_image(ioctx, PARENT_IMG_NAME)
     print ("finished")
 
+
 def slave(ioctx):
     print("starting slave")
 
@@ -89,15 +94,15 @@ def slave(ioctx):
         try:
             with Image(ioctx, CLONE_IMG_NAME) as image:
                 if (image.list_lockers() != [] and
-                    image.read(IMG_SIZE - 1, 1) == '1'):
-                    break
+                        image.read(IMG_SIZE - 1, 1) == '1'):
+                        break
         except Exception:
             pass
 
     print("detected master")
 
     print("rename")
-    RBD().rename(ioctx, CLONE_IMG_NAME, CLONE_IMG_RENAME);
+    RBD().rename(ioctx, CLONE_IMG_NAME, CLONE_IMG_RENAME)
     assert(not image.is_exclusive_lock_owner())
 
     with Image(ioctx, CLONE_IMG_RENAME) as image:
@@ -151,6 +156,7 @@ def slave(ioctx):
         assert(image.is_exclusive_lock_owner())
 
     print("finished")
+
 
 def main():
     if len(sys.argv) != 2 or sys.argv[1] not in ['master', 'slave']:

@@ -27,5 +27,5 @@ setup(
     ],
     zip_safe=False,
     packages=find_packages(),
-    #packages=find_packages(exclude=['ez_setup'])
+    # packages=find_packages(exclude=['ez_setup'])
 )

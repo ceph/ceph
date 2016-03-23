@@ -20,7 +20,7 @@ from nose.tools import eq_ as eq
 log_level = 20
 
 num_buckets = 0
-run_prefix=''.join(random.SystemRandom().choice(string.ascii_lowercase) for _ in range(6))
+run_prefix = ''.join(random.SystemRandom().choice(string.ascii_lowercase) for _ in range(6))
 
 mstart_path = os.getenv('MSTART_PATH')
 if mstart_path is None:
@@ -28,8 +28,10 @@ if mstart_path is None:
 
 test_path = os.path.normpath(os.path.dirname(os.path.realpath(__file__))) + '/'
 
+
 def lineno():
     return inspect.currentframe().f_back.f_lineno
+
 
 def log(level, *params):
     if level > log_level:
@@ -43,6 +45,7 @@ def log(level, *params):
     print s
     sys.stdout.flush()
 
+
 def build_cmd(*params):
     s = ''
     for p in params:
@@ -52,12 +55,14 @@ def build_cmd(*params):
 
     return s
 
+
 def mpath(bin, *params):
     s = mstart_path + bin
     for p in params:
         s += ' ' + str(p)
 
     return s
+
 
 def tpath(bin, *params):
     s = test_path + bin
@@ -66,7 +71,8 @@ def tpath(bin, *params):
 
     return s
 
-def bash(cmd, check_retcode = True):
+
+def bash(cmd, check_retcode=True):
     log(5, 'running cmd: ', cmd)
     process = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE)
     s = process.communicate()[0]
@@ -75,6 +81,7 @@ def bash(cmd, check_retcode = True):
         assert(process.returncode == 0)
     return (s, process.returncode)
 
+
 def mstart(cluster_id, is_new):
     cmd = mpath('mstart.sh', cluster_id)
     if is_new:
@@ -82,17 +89,20 @@ def mstart(cluster_id, is_new):
 
     bash(cmd)
 
-def mstop(cluster_id, entity = None):
-    cmd  = mpath('mstop.sh', cluster_id)
+
+def mstop(cluster_id, entity=None):
+    cmd = mpath('mstop.sh', cluster_id)
     if entity is not None:
         cmd += ' ' + entity
     bash(cmd)
 
-def mrgw(cluster_id, port, extra_cmd = None):
-    cmd  = mpath('mrgw.sh', cluster_id, port)
+
+def mrgw(cluster_id, port, extra_cmd=None):
+    cmd = mpath('mrgw.sh', cluster_id, port)
     if extra_cmd is not None:
         cmd += ' ' + extra_cmd
     bash(cmd)
+
 
 def init_multi_site(num_clusters):
     bash(tpath('test-rgw-multisite.sh', num_clusters))
@@ -102,6 +112,7 @@ class RGWRealmCredentials:
     def __init__(self, access_key, secret):
         self.access_key = access_key
         self.secret = secret
+
 
 class RGWCluster:
     def __init__(self, cluster_num, port):
@@ -123,13 +134,14 @@ class RGWCluster:
     def stop_rgw(self):
         mstop(self.cluster_id, 'radosgw')
 
-    def rgw_admin(self, cmd, check_retcode = True):
+    def rgw_admin(self, cmd, check_retcode=True):
         (s, retcode) = bash(tpath('test-rgw-call.sh', 'call_rgw_admin', self.cluster_num, cmd))
         return (s, retcode)
 
-    def rgw_admin_ro(self, cmd, check_retcode = True):
+    def rgw_admin_ro(self, cmd, check_retcode=True):
         (s, retcode) = bash(tpath('test-rgw-call.sh', 'call_rgw_admin', self.cluster_num, '--rgw-cache-enabled=false ' + cmd), check_retcode)
         return (s, retcode)
+
 
 class RGWZone:
     def __init__(self, realm, cluster, zg, zone_name):
@@ -141,13 +153,14 @@ class RGWZone:
 
     def get_connection(self, user):
         if self.connection is None:
-            self.connection = boto.connect_s3(aws_access_key_id = user.access_key,
-                                          aws_secret_access_key = user.secret,
-                                          host = 'localhost',
-                                          port = self.cluster.port,
-                                          is_secure = False,
-                                          calling_format = boto.s3.connection.OrdinaryCallingFormat())
+            self.connection = boto.connect_s3(aws_access_key_id=user.access_key,
+                                              aws_secret_access_key=user.secret,
+                                              host='localhost',
+                                              port=self.cluster.port,
+                                              is_secure=False,
+                                              calling_format=boto.s3.connection.OrdinaryCallingFormat())
         return self.connection
+
 
 class RGWRealm:
     def __init__(self, realm, credentials, clusters):
@@ -178,7 +191,6 @@ class RGWRealm:
         if is_master:
             self.master_zone = zone
 
-
     def get_zone(self, num):
         if num >= self.total_zones:
             return None
@@ -188,7 +200,6 @@ class RGWRealm:
         for (k, zone) in self.zones.iteritems():
             yield zone
 
-
     def num_zones(self):
         return self.total_zones
 
@@ -197,23 +208,23 @@ class RGWRealm:
             return None
 
         while True:
-            (meta_sync_status_json, retcode) = zone.cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' metadata sync status', check_retcode = False)
+            (meta_sync_status_json, retcode) = zone.cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' metadata sync status', check_retcode=False)
             if retcode == 0:
                 break
 
-            assert(retcode == 2) # ENOENT
+            assert(retcode == 2)  # ENOENT
 
         log(20, 'current meta sync status=', meta_sync_status_json)
         sync_status = json.loads(meta_sync_status_json)
-        
-        global_sync_status=sync_status['sync_status']['info']['status']
-        num_shards=sync_status['sync_status']['info']['num_shards']
 
-        sync_markers=sync_status['sync_status']['markers']
+        global_sync_statusi = sync_status['sync_status']['info']['status']
+        num_shards = sync_status['sync_status']['info']['num_shards']
+
+        sync_markers = sync_status['sync_status']['markers']
         log(20, 'sync_markers=', sync_markers)
         assert(num_shards == len(sync_markers))
 
-        markers={}
+        markers = {}
         for i in xrange(num_shards):
             markers[i] = sync_markers[i]['val']['marker']
 
@@ -223,7 +234,7 @@ class RGWRealm:
         (mdlog_status_json, retcode) = master_zone.cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' mdlog status')
         mdlog_status = json.loads(mdlog_status_json)
 
-        markers={}
+        markers = {}
         i = 0
         for s in mdlog_status:
             markers[i] = s['marker']
@@ -238,7 +249,7 @@ class RGWRealm:
             log(10, 'len(log_status)=', len(log_status), ' len(sync_status=', len(sync_status))
             return False
 
-        msg =  ''
+        msg = ''
         for i, l, s in zip(log_status, log_status.itervalues(), sync_status.itervalues()):
             if l > s:
                 if len(s) != 0:
@@ -269,7 +280,6 @@ class RGWRealm:
 
             time.sleep(5)
 
-
         log(10, 'finish meta checkpoint for zone=', zone.zone_name)
 
     def meta_checkpoint(self):
@@ -282,23 +292,23 @@ class RGWRealm:
             return None
 
         while True:
-            (data_sync_status_json, retcode) = target_zone.cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' data sync status --source-zone=' + source_zone.zone_name, check_retcode = False)
+            (data_sync_status_json, retcode) = target_zone.cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' data sync status --source-zone=' + source_zone.zone_name, check_retcode=False)
             if retcode == 0:
                 break
 
-            assert(retcode == 2) # ENOENT
+            assert(retcode == 2)  # ENOENT
 
         log(20, 'current data sync status=', data_sync_status_json)
         sync_status = json.loads(data_sync_status_json)
-        
-        global_sync_status=sync_status['sync_status']['info']['status']
-        num_shards=sync_status['sync_status']['info']['num_shards']
 
-        sync_markers=sync_status['sync_status']['markers']
+        global_sync_status = sync_status['sync_status']['info']['status']
+        num_shards = sync_status['sync_status']['info']['num_shards']
+
+        sync_markers = sync_status['sync_status']['markers']
         log(20, 'sync_markers=', sync_markers)
         assert(num_shards == len(sync_markers))
 
-        markers={}
+        markers = {}
         for i in xrange(num_shards):
             markers[i] = sync_markers[i]['val']['marker']
 
@@ -309,7 +319,7 @@ class RGWRealm:
         (datalog_status_json, retcode) = source_cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' datalog status')
         datalog_status = json.loads(datalog_status_json)
 
-        markers={}
+        markers = {}
         i = 0
         for s in datalog_status:
             markers[i] = s['marker']
@@ -324,7 +334,7 @@ class RGWRealm:
             log(10, 'len(log_status)=', len(log_status), ' len(sync_status)=', len(sync_status))
             return False
 
-        msg =  ''
+        msg = ''
         for i, l, s in zip(log_status, log_status.itervalues(), sync_status.itervalues()):
             if l > s:
                 if len(s) != 0:
@@ -357,8 +367,7 @@ class RGWRealm:
 
         log(10, 'finished data checkpoint for target_zone=', target_zone.zone_name, ' source_zone=', source_zone.zone_name)
 
-
-    def create_user(self, user, wait_meta = True):
+    def create_user(self, user, wait_meta=True):
         log(5, 'creating user uid=', user.uid)
         cmd = build_cmd('--uid', user.uid, '--display-name', user.display_name,
                         '--access-key', user.access_key, '--secret', user.secret)
@@ -370,7 +379,7 @@ class RGWRealm:
     def set_master_zone(self, zone):
         (zg_json, retcode) = zone.cluster.rgw_admin('--rgw-realm=' + self.realm + ' --rgw-zonegroup=' + zone.zg + ' --rgw-zone=' + zone.zone_name + ' zone modify --master=1')
         (period_json, retcode) = zone.cluster.rgw_admin('--rgw-realm=' + self.realm + ' period update --commit')
-	self.master_zone = zone
+        self.master_zone = zone
 
 
 class RGWUser:
@@ -380,17 +389,20 @@ class RGWUser:
         self.access_key = access_key
         self.secret = secret
 
+
 def gen_access_key():
-     return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(16))
+    return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(16))
+
 
 def gen_secret():
-     return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(32))
+    return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(32))
+
 
 def gen_bucket_name():
     global num_buckets
-
     num_buckets += 1
     return run_prefix + '-' + str(num_buckets)
+
 
 class RGWMulti:
     def __init__(self, num_clusters):
@@ -429,6 +441,7 @@ class RGWMulti:
 
         realm.meta_checkpoint()
 
+
 def check_all_buckets_exist(zone, buckets):
     conn = zone.get_connection(user)
 
@@ -440,6 +453,7 @@ def check_all_buckets_exist(zone, buckets):
             return False
 
     return True
+
 
 def check_all_buckets_dont_exist(zone, buckets):
     conn = zone.get_connection(user)
@@ -455,6 +469,7 @@ def check_all_buckets_dont_exist(zone, buckets):
 
     return True
 
+
 def create_bucket_per_zone():
     buckets = []
     zone_bucket = {}
@@ -468,12 +483,14 @@ def create_bucket_per_zone():
 
     return buckets, zone_bucket
 
+
 def test_bucket_create():
     buckets, _ = create_bucket_per_zone()
     realm.meta_checkpoint()
 
     for zone in realm.get_zones():
         assert check_all_buckets_exist(zone, buckets)
+
 
 def test_bucket_recreate():
     buckets, _ = create_bucket_per_zone()
@@ -496,6 +513,7 @@ def test_bucket_recreate():
     for zone in realm.get_zones():
         assert check_all_buckets_exist(zone, buckets)
 
+
 def test_bucket_remove():
     buckets, zone_bucket = create_bucket_per_zone()
     realm.meta_checkpoint()
@@ -512,19 +530,23 @@ def test_bucket_remove():
     for zone in realm.get_zones():
         assert check_all_buckets_dont_exist(zone, buckets)
 
+
 def get_bucket(zone, bucket_name):
     conn = zone.get_connection(user)
     return conn.get_bucket(bucket_name)
+
 
 def get_key(zone, bucket_name, obj_name):
     b = get_bucket(zone, bucket_name)
     return b.get_key(obj_name)
 
+
 def new_key(zone, bucket_name, obj_name):
     b = get_bucket(zone, bucket_name)
     return b.new_key(obj_name)
 
-def check_object_eq(k1, k2, check_extra = True):
+
+def check_object_eq(k1, k2, check_extra=True):
     assert k1
     assert k2
     log(10, 'comparing key name=', k1.name)
@@ -545,6 +567,7 @@ def check_object_eq(k1, k2, check_extra = True):
     eq(k1.size, k2.size)
     eq(k1.version_id, k2.version_id)
     eq(k1.encrypted, k2.encrypted)
+
 
 def check_bucket_eq(zone1, zone2, bucket_name):
     log(10, 'comparing bucket=', bucket_name, ' zones={', zone1.zone_name, ', ', zone2.zone_name, '}')
@@ -584,7 +607,7 @@ def test_object_sync():
     for z in zone_bucket:
         all_zones.append(z)
 
-    objnames = [ 'myobj', '_myobj', ':', '&' ]
+    objnames = ['myobj', '_myobj', ':', '&']
     content = 'asdasd'
 
     # don't wait for meta sync just yet
@@ -603,6 +626,7 @@ def test_object_sync():
             realm.zone_data_checkpoint(target_zone, source_zone)
 
             check_bucket_eq(source_zone, target_zone, bucket_name)
+
 
 def test_object_delete():
     buckets, zone_bucket = create_bucket_per_zone()
@@ -643,6 +667,7 @@ def test_object_delete():
 
             check_bucket_eq(source_zone, target_zone, bucket_name)
 
+
 def test_multi_period_incremental_sync():
     if len(realm.clusters) < 3:
         from nose.plugins.skip import SkipTest
@@ -655,7 +680,7 @@ def test_multi_period_incremental_sync():
         all_zones.append(z)
 
     for zone, bucket_name in zone_bucket.iteritems():
-        for objname in [ 'p1', '_p1' ]:
+        for objname in ['p1', '_p1']:
             k = new_key(zone, bucket_name, objname)
             k.set_contents_from_string('asdasd')
     realm.meta_checkpoint()
@@ -670,7 +695,7 @@ def test_multi_period_incremental_sync():
     for zone, bucket_name in zone_bucket.iteritems():
         if zone == z3:
             continue
-        for objname in [ 'p2', '_p2' ]:
+        for objname in ['p2', '_p2']:
             k = new_key(zone, bucket_name, objname)
             k.set_contents_from_string('qweqwe')
 
@@ -683,7 +708,7 @@ def test_multi_period_incremental_sync():
     for zone, bucket_name in zone_bucket.iteritems():
         if zone == z3:
             continue
-        for objname in [ 'p3', '_p3' ]:
+        for objname in ['p3', '_p3']:
             k = new_key(zone, bucket_name, objname)
             k.set_contents_from_string('zxczxc')
 
