@@ -3949,7 +3949,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
       if (i != heartbeat_peers.end()) {
 	if (m->get_connection() == i->second.con_back) {
 	  dout(25) << "handle_osd_ping got reply from osd." << from
-		   << " first_rx " << i->second.first_tx
+		   << " first_tx " << i->second.first_tx
 		   << " last_tx " << i->second.last_tx
 		   << " last_rx_back " << i->second.last_rx_back << " -> " << m->stamp
 		   << " last_rx_front " << i->second.last_rx_front
@@ -3960,7 +3960,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	    i->second.last_rx_front = m->stamp;
 	} else if (m->get_connection() == i->second.con_front) {
 	  dout(25) << "handle_osd_ping got reply from osd." << from
-		   << " first_rx " << i->second.first_tx
+		   << " first_tx " << i->second.first_tx
 		   << " last_tx " << i->second.last_tx
 		   << " last_rx_back " << i->second.last_rx_back
 		   << " last_rx_front " << i->second.last_rx_front << " -> " << m->stamp
