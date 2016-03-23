@@ -14,10 +14,21 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-
+set -x
 DIR=$1
 rm -fr $DIR
 mkdir -p $DIR
+#
+# On Debian jessie python-virtualenv recommends virtualenv but
+# pbuilder does not install recommended packages, so it's not installed.
+# The virtualenv package does not exist on all deb based distribution
+# therefore it cannot be added to debian/control. The following
+# will only succeed on Debian jessie and workaround the problem that
+# should really be fixed in at the packaging level or by having one
+# debian directory per deb distribution instead of one that tries
+# to fit all.
+#
+sudo apt-get install -y virtualenv || true
 virtualenv --python python2.7 $DIR
 . $DIR/bin/activate
 # older versions of pip will not install wrap_console scripts

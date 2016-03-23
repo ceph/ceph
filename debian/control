@@ -57,7 +57,7 @@ Build-Depends: autoconf,
                python-nose,
 	       python-setuptools,
                python-sphinx,
-               python-virtualenv | virtualenv,
+               python-virtualenv,
                sdparm | hdparm,
                uuid-runtime,
                valgrind,
@@ -65,7 +65,8 @@ Build-Depends: autoconf,
                xfsprogs,
                xmlstarlet,
                yasm [amd64],
-               zlib1g-dev
+               zlib1g-dev,
+               sudo
 Standards-Version: 3.9.3
 
 Package: ceph
