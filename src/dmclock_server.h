@@ -763,10 +763,11 @@ namespace crimson {
 	  return result;
 	  break;
 	case NextReqType::future:
-	  result.when_next = next.when_ready;
+	  result.data = next.when_ready;
 	  return result;
 	  break;
 	case NextReqType::returning:
+	  // to avoid nesting, break out and let code below handle this case
 	  break;
 	default:
 	  assert(false);
@@ -775,11 +776,11 @@ namespace crimson {
 	// we'll only get here if we're returning an entry
 
 	auto process_f =
-	  [&] (PullReq& request,
-	       PhaseType phase) -> std::function<void(const C&, RequestRef&)> {
+	  [&] (PullReq& pull_result, PhaseType phase) ->
+	  std::function<void(const C&,
+			     RequestRef&)> {
 	  return [&](const C& client, RequestRef& request) {
-	    result.type = NextReqType::returning;
-	    result.data =
+	    pull_result.data =
 	    typename PullReq::Retn{client, std::move(request), phase};
 	  };
 	};
