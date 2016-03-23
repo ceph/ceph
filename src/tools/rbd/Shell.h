@@ -14,6 +14,7 @@ namespace rbd {
 
 class Shell {
 public:
+  typedef std::vector<const char *> Arguments;
   typedef std::vector<std::string> CommandSpec;
 
   struct Action {
@@ -47,7 +48,7 @@ public:
     }
   };
 
-  int execute(int arg_count, const char **arg_values);
+  int execute(const Arguments &argument);
 
 private:
   static std::vector<Action *>& get_actions();
@@ -59,8 +60,6 @@ private:
                       CommandSpec **matching_spec);
 
   void get_global_options(boost::program_options::options_description *opts);
-  void prune_command_line_arguments(int arg_count, const char **arg_values,
-                                    std::vector<std::string> *args);
 
   void print_help();
   void print_action_help(Action *action);
