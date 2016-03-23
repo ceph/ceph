@@ -774,18 +774,29 @@ namespace crimson {
 
 	// we'll only get here if we're returning an entry
 
+	auto process_f =
+	  [&] (PullReq& request,
+	       PhaseType phase) -> std::function<void(const C&, RequestRef&)> {
+	  return [&](const C& client, RequestRef& request) {
+	    result.type = NextReqType::returning;
+	    result.data =
+	    typename PullReq::Retn{client, std::move(request), phase};
+	  };
+	};
+
 	switch(next.heap_id) {
 	case HeapId::reservation:
-	  pull_request_help(result, reserv_q, PhaseType::reservation);
+	  pop_process_request(reserv_q,
+			      process_f(result, PhaseType::reservation));
 	  ++reserv_sched_count;
 	  break;
 	case HeapId::ready:
-	  pull_request_help(result, ready_q, PhaseType::priority);
+	  pop_process_request(reserv_q, process_f(result, PhaseType::priority));
 	  reduce_reservation_tags(result.client);
 	  ++prop_sched_count;
 	  break;
 	case HeapId::proportional:
-	  pull_request_help(result, prop_q, PhaseType::priority);
+	  pop_process_request(reserv_q, process_f(result, PhaseType::priority));
 	  reduce_reservation_tags(result.client);
 	  ++limit_break_sched_count;
 	  break;
@@ -797,22 +808,26 @@ namespace crimson {
       }
 
 
-      // data_mtx should be held when called
+      // data_mtx should be held when called; top of heap should have
+      // a ready request
       template<typename C1, IndIntruHeapData ClientEntry::*C2, typename C3>
-      void pull_request_help(PullReq& result,
-			     IndIntruHeap<C1, ClientEntry, C2, C3>& heap,
-			     PhaseType phase) {
+      void pop_process_request(IndIntruHeap<C1, ClientEntry, C2, C3>& heap,
+			       std::function<void(const C& client,
+						  RequestRef& request)> process) {
+	// gain access to data
 	ClientEntry& top = heap.top();
 	ClientReq& first = top.next_request();
+	RequestRef request = std::move(first.request);
 
-	result.type = NextReqType::returning;
-	result.data = typename PullReq::Retn{top.client, std::move(first.request), phase};
-
+	// pop request and adjust heaps
 	top.pop_request();
 	reserv_q.adjust_down(top);
 	limit_q.adjust_down(top);
 	prop_q.adjust_down(top);
 	ready_q.adjust_down(top);
+
+	// process
+	process(top.client, request);
       }
 
 
@@ -822,11 +837,13 @@ namespace crimson {
       template<typename C1, IndIntruHeapData ClientEntry::*C2, typename C3>
       C submit_top_request(IndIntruHeap<C1, ClientEntry, C2, C3>& heap,
 			   PhaseType phase) {
-	PullReq result;
-	pull_request_help(result, heap, phase);
-	typename PullReq::Retn& data = boost::get<typename PullReq::Retn>(result.data);
-	handle_f(data.client, std::move(data.request), phase);
-	return data.client;
+	C client_result;
+	pop_process_request(heap,
+			    [&] (const C& client, RequestRef& request) {
+			      client_result = client;
+			      handle_f(client, std::move(request), phase);
+			    });
+	return client_result;
       }
 
 
