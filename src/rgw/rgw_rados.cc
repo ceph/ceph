@@ -1273,27 +1273,32 @@ int RGWPeriod::update_sync_status()
   return 0;
 }
 
-int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
+int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period,
+                      std::ostream& error_stream)
 {
   ldout(cct, 20) << __func__ << " realm " << realm.get_id() << " period " << current_period.get_id() << dendl;
   // gateway must be in the master zone to commit
   if (master_zone != store->get_zone_params().get_id()) {
-    ldout(cct, 0) << "period commit on zone " << store->get_zone_params().get_id()
-        << ", not period's master zone " << master_zone << dendl;
+    error_stream << "Cannot commit period on zone "
+        << store->get_zone_params().get_id() << ", it must be sent to "
+        "the period's master zone " << master_zone << '.' << std::endl;
     return -EINVAL;
   }
   // period predecessor must match current period
   if (predecessor_uuid != current_period.get_id()) {
-    ldout(cct, 0) << "period predecessor " << predecessor_uuid
+    error_stream << "Period predecessor " << predecessor_uuid
         << " does not match current period " << current_period.get_id()
-        << dendl;
+        << ". Use 'period pull' to get the latest period from the master, "
+        "reapply your changes, and try again." << std::endl;
     return -EINVAL;
   }
   // realm epoch must be 1 greater than current period
   if (realm_epoch != current_period.get_realm_epoch() + 1) {
-    ldout(cct, 0) << "period's realm epoch " << realm_epoch
+    error_stream << "Period's realm epoch " << realm_epoch
         << " does not come directly after current realm epoch "
-        << current_period.get_realm_epoch() << dendl;
+        << current_period.get_realm_epoch() << ". Use 'realm pull' to get the "
+        "latest realm and period from the master zone, reapply your changes, "
+        "and try again." << std::endl;
     return -EINVAL;
   }
   // did the master zone change?
@@ -1325,8 +1330,10 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
   }
   // period must be based on current epoch
   if (epoch != current_period.get_epoch()) {
-    ldout(cct, 0) << "period epoch " << epoch << " does not match "
-        "predecessor epoch " << current_period.get_epoch() << dendl;
+    error_stream << "Period epoch " << epoch << " does not match "
+        "predecessor epoch " << current_period.get_epoch()
+        << ". Use 'period pull' to get the latest epoch from the master zone, "
+        "reapply your changes, and try again." << std::endl;
     return -EINVAL;
   }
   // set period as next epoch

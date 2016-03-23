@@ -1469,7 +1469,8 @@ public:
   int update();
 
   // commit a staging period; only for use on master zone
-  int commit(RGWRealm& realm, const RGWPeriod &current_period);
+  int commit(RGWRealm& realm, const RGWPeriod &current_period,
+             std::ostream& error_stream);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

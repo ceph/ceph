@@ -1319,15 +1319,13 @@ static int send_to_remote_gateway(const string& remote, req_info& info,
   }
   rgw_user user;
   int ret = conn->forward(user, info, NULL, MAX_REST_RESPONSE, &in_data, &response);
-  if (ret < 0) {
-    return ret;
-  }
-  ret = parser.parse(response.c_str(), response.length());
-  if (ret < 0) {
+
+  int parse_ret = parser.parse(response.c_str(), response.length());
+  if (parse_ret < 0) {
     cerr << "failed to parse response" << std::endl;
-    return ret;
+    return parse_ret;
   }
-  return 0;
+  return ret;
 }
 
 static int send_to_url(const string& url, RGWAccessKey& key, req_info& info,
@@ -1338,15 +1336,13 @@ static int send_to_url(const string& url, RGWAccessKey& key, req_info& info,
 
   bufferlist response;
   int ret = req.forward_request(key, info, MAX_REST_RESPONSE, &in_data, &response);
-  if (ret < 0) {
-    return ret;
-  }
-  ret = parser.parse(response.c_str(), response.length());
-  if (ret < 0) {
+
+  int parse_ret = parser.parse(response.c_str(), response.length());
+  if (parse_ret < 0) {
     cout << "failed to parse response" << std::endl;
-    return ret;
+    return parse_ret;
   }
-  return 0;
+  return ret;
 }
 
 static int send_to_remote_or_url(const string& remote, const string& url,
@@ -1388,7 +1384,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
       return ret;
     }
     // the master zone can commit locally
-    ret = period.commit(realm, current_period);
+    ret = period.commit(realm, current_period, cerr);
     if (ret < 0) {
       cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
     }
@@ -1413,6 +1409,12 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
   int ret = send_to_remote_or_url(remote, url, access, secret, info, bl, p);
   if (ret < 0) {
     cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
+
+    // did we parse an error message?
+    auto message = p.find_obj("Message");
+    if (message) {
+      cerr << "Reason: " << message->get_data() << std::endl;
+    }
     return ret;
   }
 
@@ -2747,6 +2749,11 @@ int main(int argc, char **argv)
                                         info, bl, p);
         if (ret < 0) {
           cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
+          if (ret == -EACCES) {
+            cerr << "If the realm has been changed on the master zone, the "
+                "master zone's gateway may need to be restarted to recognize "
+                "this user." << std::endl;
+          }
           return ret;
         }
         RGWRealm realm;
