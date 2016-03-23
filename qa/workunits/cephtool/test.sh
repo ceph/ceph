@@ -248,24 +248,24 @@ function test_tiering_agent()
   # wait for the object to be evicted from the cache
   local evicted
   evicted=false
-  for i in 1 2 4 8 16 32 64 128 256 ; do
+  for i in `seq 1 300` ; do
       if ! rados -p $fast ls | grep obj1 ; then
           evicted=true
           break
       fi
-      sleep $i
+      sleep 1
   done
   $evicted # assert
   # the object is proxy read and promoted to the cache
   rados -p $slow get obj1 - >/dev/null
   # wait for the promoted object to be evicted again
   evicted=false
-  for i in 1 2 4 8 16 32 64 128 256 ; do
+  for i in `seq 1 300` ; do
       if ! rados -p $fast ls | grep obj1 ; then
           evicted=true
           break
       fi
-      sleep $i
+      sleep 1
   done
   $evicted # assert
   ceph osd tier remove-overlay $slow
