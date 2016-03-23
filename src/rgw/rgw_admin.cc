@@ -108,6 +108,7 @@ void _usage()
   cout << "  zonegroup-map get          show zonegroup-map\n";
   cout << "  zonegroup-map set          set zonegroup-map (requires infile)\n";
   cout << "  zone create                create a new zone\n";
+  cout << "  zone delete                delete a zone\n";
   cout << "  zone get                   show zone cluster params\n";
   cout << "  zone modify                set/clear zone master status\n";
   cout << "  zone set                   set zone cluster params (requires infile)\n";
