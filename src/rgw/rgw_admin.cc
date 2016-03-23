@@ -331,6 +331,7 @@ enum {
   OPT_SYNC_ERROR_LIST,
   OPT_BILOG_LIST,
   OPT_BILOG_TRIM,
+  OPT_BILOG_STATUS,
   OPT_DATA_SYNC_STATUS,
   OPT_DATA_SYNC_INIT,
   OPT_DATA_SYNC_RUN,
@@ -681,6 +682,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_BILOG_LIST;
     if (strcmp(cmd, "trim") == 0)
       return OPT_BILOG_TRIM;
+    if (strcmp(cmd, "status") == 0)
+      return OPT_BILOG_STATUS;
   } else if (strcmp(prev_cmd, "data") == 0) {
     if (strcmp(cmd, "sync") == 0) {
       *need_more = true;
@@ -5222,6 +5225,29 @@ next:
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+  }
+
+  if (opt_cmd == OPT_BILOG_STATUS) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return -EINVAL;
+    }
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    map<int, string> markers;
+    ret = store->get_bi_log_status(bucket, shard_id, markers);
+    if (ret < 0) {
+      cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    formatter->open_object_section("entries");
+    encode_json("markers", markers, formatter);
+    formatter->close_section();
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_DATALOG_LIST) {

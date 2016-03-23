@@ -460,6 +460,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        user_id,
                        client_id,
                        op_id,
+                       false, /* don't record op state in ops log */
                        NULL, /* req_info */
                        source_zone,
                        dest_obj,

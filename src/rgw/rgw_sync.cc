@@ -712,7 +712,7 @@ public:
 int RGWReadSyncStatusCoroutine::handle_data(rgw_meta_sync_info& data)
 {
   if (retcode == -ENOENT) {
-    return retcode;
+    return 0;
   }
 
   RGWRados *store = sync_env->store;
@@ -1878,6 +1878,10 @@ int RGWRemoteMetaLog::run_sync()
   }
 
   do {
+    if (going_down.read()) {
+      ldout(store->ctx(), 1) << __func__ << "(): going down" << dendl;
+      return 0;
+    }
     r = run(new RGWReadSyncStatusCoroutine(&sync_env, obj_ctx, &sync_status));
     if (r < 0 && r != -ENOENT) {
       ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status r=" << r << dendl;
