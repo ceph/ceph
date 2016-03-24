@@ -484,10 +484,12 @@ namespace crimson {
 		      ClientEntry,
 		      &ClientEntry::reserv_heap_data,
 		      ClientCompare<&RequestTag::reservation,ReadyOption::ignore,true>> reserv_q;
+#if REMOVE_2
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::prop_heap_data,
 		      ClientCompare<&RequestTag::proportion>> prop_q;
+#endif
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::lim_heap_data,
@@ -684,7 +686,9 @@ namespace crimson {
 	  ClientInfo ci = client_info_f(client_id);
 	  ClientEntryRef client_entry = std::make_shared<ClientEntry>(client_id);
 	  reserv_q.push(client_entry);
+#if REMOVE_2
 	  prop_q.push(client_entry);
+#endif
 	  limit_q.push(client_entry);
 	  ready_q.push(client_entry);
 	  client_map.emplace(client_id, ClientRec(ci, tick, client_entry));
@@ -737,7 +741,9 @@ namespace crimson {
 	reserv_q.adjust(*client_rec.client_entry);
 	limit_q.adjust(*client_rec.client_entry);
 	ready_q.adjust(*client_rec.client_entry);
+#if REMOVE_2
 	prop_q.adjust(*client_rec.client_entry);
+#endif
 
 	if (Mechanism::push == mechanism) {
 	  schedule_request();
@@ -799,11 +805,13 @@ namespace crimson {
 	  reduce_reservation_tags(result.client);
 	  ++prop_sched_count;
 	  break;
+#if REMOVE_2
 	case HeapId::proportional:
 	  pop_process_request(reserv_q, process_f(result, PhaseType::priority));
 	  reduce_reservation_tags(result.client);
 	  ++limit_break_sched_count;
 	  break;
+#endif
 	default:
 	  assert(false);
 	}
@@ -827,7 +835,9 @@ namespace crimson {
 	top.pop_request();
 	reserv_q.demote(top);
 	limit_q.demote(top);
+#if REMOVE_2
 	prop_q.demote(top);
+#endif
 	ready_q.demote(top);
 
 	// process
@@ -868,9 +878,11 @@ namespace crimson {
 	if (show_ready) {
 	  ready_q.display_sorted(std::cout << "READY:", filter) << std::endl;
 	}
+#if REMOVE_2
 	if (show_prop) {
 	  prop_q.display_sorted(std::cout << "PROPO:", filter) << std::endl;
 	}
+#endif
       }
 
 
@@ -932,11 +944,13 @@ namespace crimson {
 	  reduce_reservation_tags(client);
 	  ++prop_sched_count;
 	  break;
+#if REMOVE_2
 	case HeapId::proportional:
 	  client = submit_top_request(prop_q, PhaseType::priority);
 	  reduce_reservation_tags(client);
 	  ++limit_break_sched_count;
 	  break;
+#endif
 	default:
 	  assert(false);
 	}
