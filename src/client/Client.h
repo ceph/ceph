@@ -892,7 +892,7 @@ public:
   int statfs(const char *path, struct statvfs *stbuf);
 
   // crap
-  int chdir(const char *s);
+  int chdir(const char *s, std::string &new_cwd);
   void getcwd(std::string& cwd);
 
   // namespace ops

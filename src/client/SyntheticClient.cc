@@ -1206,7 +1206,10 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       client->fsync(fd, b);
     } else if (strcmp(op, "chdir") == 0) {
       const char *a = t.get_string(buf, p);
-      client->chdir(a);
+      // Client users should remember their path, but since this
+      // is just a synthetic client we ignore it.
+      std::string ignore;
+      client->chdir(a, ignore);
     } else if (strcmp(op, "statfs") == 0) {
       struct statvfs stbuf;
       client->statfs("/", &stbuf);
