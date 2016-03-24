@@ -4,6 +4,7 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "test/librbd/mock/MockJournal.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/exclusive_lock/AcquireRequest.h"
 #include "librbd/exclusive_lock/ReleaseRequest.h"
@@ -165,6 +166,12 @@ public:
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
+  void expect_append_lock_release_event(MockExclusiveLockImageCtx &mock_image_ctx,
+                                            MockJournal &mock_journal, int r) {
+        EXPECT_CALL(mock_journal, append_lock_release_event(_))
+                      .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
+  }
+
   int when_init(MockExclusiveLockImageCtx &mock_image_ctx,
                 MockExclusiveLock &exclusive_lock) {
     C_SaferCond ctx;
@@ -286,6 +293,7 @@ TEST_F(TestMockExclusiveLock, TryLockAlreadyLocked) {
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockJournal *mock_journal = new MockJournal();
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -299,6 +307,7 @@ TEST_F(TestMockExclusiveLock, TryLockAlreadyLocked) {
 
   expect_unblock_writes(mock_image_ctx);
   expect_flush_notifies(mock_image_ctx);
+  expect_append_lock_release_event(mock_image_ctx, *mock_journal, 0);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -310,6 +319,7 @@ TEST_F(TestMockExclusiveLock, TryLockBusy) {
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockJournal *mock_journal = new MockJournal();
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -323,6 +333,7 @@ TEST_F(TestMockExclusiveLock, TryLockBusy) {
 
   expect_unblock_writes(mock_image_ctx);
   expect_flush_notifies(mock_image_ctx);
+  expect_append_lock_release_event(mock_image_ctx, *mock_journal, 0);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -334,6 +345,7 @@ TEST_F(TestMockExclusiveLock, TryLockError) {
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockJournal *mock_journal = new MockJournal();
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -348,6 +360,7 @@ TEST_F(TestMockExclusiveLock, TryLockError) {
 
   expect_unblock_writes(mock_image_ctx);
   expect_flush_notifies(mock_image_ctx);
+  expect_append_lock_release_event(mock_image_ctx, *mock_journal, 0);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -384,6 +397,7 @@ TEST_F(TestMockExclusiveLock, RequestLockBlacklist) {
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockJournal *mock_journal = new MockJournal();
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -399,6 +413,7 @@ TEST_F(TestMockExclusiveLock, RequestLockBlacklist) {
 
   expect_unblock_writes(mock_image_ctx);
   expect_flush_notifies(mock_image_ctx);
+  expect_append_lock_release_event(mock_image_ctx, *mock_journal, 0);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -468,6 +483,7 @@ TEST_F(TestMockExclusiveLock, ReleaseLockUnlockedState) {
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockJournal *mock_journal = new MockJournal();
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -478,6 +494,7 @@ TEST_F(TestMockExclusiveLock, ReleaseLockUnlockedState) {
 
   expect_unblock_writes(mock_image_ctx);
   expect_flush_notifies(mock_image_ctx);
+  expect_append_lock_release_event(mock_image_ctx, *mock_journal, 0);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
@@ -519,6 +536,7 @@ TEST_F(TestMockExclusiveLock, ConcurrentRequests) {
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockJournal *mock_journal = new MockJournal();
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -586,6 +604,7 @@ TEST_F(TestMockExclusiveLock, ConcurrentRequests) {
 
   expect_unblock_writes(mock_image_ctx);
   expect_flush_notifies(mock_image_ctx);
+  expect_append_lock_release_event(mock_image_ctx, *mock_journal, 0);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 

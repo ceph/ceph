@@ -81,6 +81,12 @@ public:
     EXPECT_CALL(*mock_image_ctx.image_watcher, flush(_))
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
+
+  void expect_append_lock_release_event(MockImageCtx &mock_image_ctx,
+                                           MockJournal &mock_journal, int r) {
+       EXPECT_CALL(mock_journal, append_lock_release_event(_))
+                     .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
+  }
 };
 
 TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
@@ -99,6 +105,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
 
   MockJournal *mock_journal = new MockJournal();
   mock_image_ctx.journal = mock_journal;
+  expect_append_lock_release_event(mock_image_ctx, *mock_journal, 0);
   expect_close_journal(mock_image_ctx, *mock_journal, -EINVAL);
 
   MockObjectMap *mock_object_map = new MockObjectMap();
@@ -133,6 +140,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessJournalDisabled) {
 
   MockObjectMap *mock_object_map = new MockObjectMap();
   mock_image_ctx.object_map = mock_object_map;
+
   expect_close_object_map(mock_image_ctx, *mock_object_map);
 
   expect_unlock(mock_image_ctx, 0);
@@ -160,7 +168,6 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessObjectMapDisabled) {
   InSequence seq;
   expect_cancel_op_requests(mock_image_ctx, 0);
   expect_flush_notifies(mock_image_ctx);
-
   expect_unlock(mock_image_ctx, 0);
 
   C_SaferCond release_ctx;
@@ -201,13 +208,14 @@ TEST_F(TestMockExclusiveLockReleaseRequest, UnlockError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
+  MockJournal *mock_journal = new MockJournal();
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
   expect_block_writes(mock_image_ctx, 0);
   expect_cancel_op_requests(mock_image_ctx, 0);
   expect_flush_notifies(mock_image_ctx);
-
+  expect_append_lock_release_event(mock_image_ctx, *mock_journal, 0);
   expect_unlock(mock_image_ctx, -EINVAL);
 
   C_SaferCond ctx;

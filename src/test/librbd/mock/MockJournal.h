@@ -29,6 +29,8 @@ struct MockJournal {
 
   MOCK_METHOD0(allocate_op_tid, uint64_t());
 
+  MOCK_METHOD1(append_lock_release_event,void(Context *));
+
   MOCK_METHOD3(append_op_event_mock, void(uint64_t, const journal::EventEntry&,
                                           Context *));
   void append_op_event(uint64_t op_tid, journal::EventEntry &&event_entry,
