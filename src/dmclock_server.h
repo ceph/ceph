@@ -156,7 +156,7 @@ namespace crimson {
       using Duration = std::chrono::milliseconds;
       using MarkPoint = std::pair<TimePoint,Counter>;
 
-
+#if REMOVE
       class Entry {
 	friend PriorityQueue<C,R>;
 
@@ -185,6 +185,9 @@ namespace crimson {
 	  return out;
 	}
       }; // struct Entry
+
+      using EntryRef = std::shared_ptr<Entry>;
+#endif
 
 
       class ClientEntry; // forward decl for friend decls
@@ -233,9 +236,11 @@ namespace crimson {
 
       class ClientEntry {
 	friend PriorityQueue<C,R>;
+#if REMOVE
 	friend ClientCompare<&RequestTag::reservation>;
 	friend ClientCompare<&RequestTag::limit>;
 	friend ClientCompare<&RequestTag::proportion>;
+#endif
 
 	C                     client;
 	std::deque<ClientReq> requests;
@@ -288,9 +293,10 @@ namespace crimson {
       }; // struct ClientEntry
 
 
-      using EntryRef = std::shared_ptr<Entry>;
       using ClientEntryRef = std::shared_ptr<ClientEntry>;
 
+
+#if REMOVE
       // if you try to display an EntryRef (shared pointer to an
       // Entry), dereference the shared pointer so we get data, not
       // addresses
@@ -300,6 +306,8 @@ namespace crimson {
 	out << *e;
 	return out;
       }
+#endif
+
 
       class ClientRec {
 	// we're keeping this private to force callers to use
@@ -360,35 +368,15 @@ namespace crimson {
       // fire in the future, or not have any
       enum class NextReqType { returning, future, none };
 
-      // unions with unique_ptrs are tricky and require manual calls
-      // to destructors and placement new operators; it may be
-      // worthwhile to revisit this implementation, but for now we'll
-      // get rid of the union to avoid such issues
-#if 0 
-      struct PullReq {
-	NextReqType type;
-	union {
-	  struct {
-	    C&         client;
-	    RequestRef request;
-	    PhaseType  phase;
-	  } retn;
-	  Time when_next;
-	};
+      // specifies which queue next request will get popped from
+      enum class HeapId { reservation, ready
+#if REMOVE_2
+	  , proportional
+#endif
+	  };
 
-	PullReq() {}
-	~PullReq() {}
-      };
-#elif 0
-      struct PullReq {
-	NextReqType type;      // which type
 
-	C           client;    // used for returning
-	RequestRef  request;   // used for returning
-	PhaseType   phase;     // used for returning
-	Time        when_next; // used for future
-      };
-#else
+      // When a request is pulled, this is the return type.
       struct PullReq {
 	struct Retn {
 	  C           client;
@@ -396,10 +384,18 @@ namespace crimson {
 	  PhaseType   phase;
 	};
 
-	NextReqType type;
+	NextReqType               type;
 	boost::variant<Retn,Time> data;
       };
-#endif
+
+      // this is returned from next_req to tell the caller the situation
+      struct NextReq {
+	NextReqType type;
+	union {
+	  HeapId    heap_id;
+	  Time      when_ready;
+	};
+      };
 
 
       // a function that can be called to look up client information
@@ -449,6 +445,7 @@ namespace crimson {
 	}
       };
 
+#if REMOVE
       struct ReservationCompare {
 	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
 	  assert(n1->tag.reservation > 0 && n2->tag.reservation > 0);
@@ -469,18 +466,7 @@ namespace crimson {
 	  return n1->tag.limit < n2->tag.limit;
 	}
       };
-
-      // specifies which queue next request will get popped from
-      enum class HeapId { reservation, ready, proportional };
-
-      // this is returned from next_req to tell the caller the situation
-      struct NextReq {
-	NextReqType type;
-	union {
-	  HeapId heap_id;
-	  Time when_ready;
-	};
-      };
+#endif
 
 
       ClientInfoFunc       client_info_f;
@@ -511,7 +497,7 @@ namespace crimson {
 		      &ClientEntry::ready_heap_data,
 		      ClientCompare<&RequestTag::proportion,ReadyOption::raises,false>> ready_q;
 
-#if 0
+#if REMOVE
       // four heaps that maintain the earliest request by each of the
       // tag components
       c::Heap<EntryRef, ReservationCompare> reserv_q;
@@ -872,7 +858,7 @@ namespace crimson {
 			  bool show_lim = true,
 			  bool show_ready = true,
 			  bool show_prop = true) {
-	auto filter = [](const EntryRef& e)->bool { return !e->handled; };
+	auto filter = [](const ClientEntryRef& e)->bool { return !e->handled; };
 	if (show_res) {
 	  reserv_q.display_sorted(std::cout << "RESER:", filter) << std::endl;
 	}
@@ -901,6 +887,7 @@ namespace crimson {
       }
 
 
+#if REMOVE
       // data_mtx should be held when called
       template<typename K>
       void prepare_queue(Heap<EntryRef, K>& heap) {
@@ -908,6 +895,7 @@ namespace crimson {
 	  heap.pop();
 	}
       }
+#endif
 
 
       // data_mtx should be held when called
@@ -1077,7 +1065,9 @@ namespace crimson {
 	}
       }
 
+
     protected:
+
 
       /*
        * This is being called regularly by RunEvery. Every time it's
