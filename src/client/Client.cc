@@ -370,7 +370,10 @@ void Client::tear_down_cache()
 
 inodeno_t Client::get_root_ino()
 {
-  return root->ino;
+  if (use_faked_inos())
+    return root->faked_ino;
+  else
+    return root->ino;
 }
 
 Inode *Client::get_root()
