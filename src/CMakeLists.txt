@@ -16,6 +16,18 @@ set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
 set(CMAKE_ASM_FLAGS "-f elf64")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
 
+include(CheckCCompilerFlag)
+CHECK_C_COMPILER_FLAG("-Wp,-D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(HAS_FORTIFY_SOURCE)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wp,-D_FORTIFY_SOURCE=2")
+endif()
+endif()
+CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
+if (HAS_STACK_PROTECT)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-protector-strong")
+endif()
+
 execute_process(
   COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
   RESULT_VARIABLE no_yasm
