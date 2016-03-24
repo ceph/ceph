@@ -118,16 +118,6 @@ public:
      */
   } DaemonState;
 
-  // indicate startup standby preferences for MDS
-  // of course, if they have a specific rank to follow, they just set that!
-  static const mds_rank_t MDS_NO_STANDBY_PREF; // doesn't have instructions to do anything
-  static const mds_rank_t MDS_STANDBY_ANY;     // is instructed to be standby-replay, may
-                                               // or may not have specific name to follow
-  static const mds_rank_t MDS_STANDBY_NAME;    // standby for a named MDS
-  static const mds_rank_t MDS_MATCHED_ACTIVE;  // has a matched standby, which if up
-                                               // it should follow, but otherwise should
-                                               // be assigned a rank
-
   struct mds_info_t {
     mds_gid_t global_id;
     std::string name;
@@ -140,12 +130,15 @@ public:
     mds_rank_t standby_for_rank;
     std::string standby_for_name;
     fs_cluster_id_t standby_for_fscid;
+    bool standby_replay;
     std::set<mds_rank_t> export_targets;
     uint64_t mds_features;
 
-    mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0), state(STATE_STANDBY), state_seq(0),
-		   standby_for_rank(MDS_NO_STANDBY_PREF),
-                   standby_for_fscid(FS_CLUSTER_ID_NONE)
+    mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0),
+                   state(STATE_STANDBY), state_seq(0),
+                   standby_for_rank(MDS_RANK_NONE),
+                   standby_for_fscid(FS_CLUSTER_ID_NONE),
+                   standby_replay(false)
     { }
 
     bool laggy() const { return !(laggy_since == utime_t()); }
