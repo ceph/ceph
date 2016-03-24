@@ -191,14 +191,14 @@ namespace crimson {
 
       enum class ReadyOption {ignore, lowers, raises};
 
-      template<double RequestTag::*tag_field,
-	       ReadyOption ready_opt=ReadyOption::ignore>
+      template<double RequestTag::*, ReadyOption, bool>
       struct ClientCompare; // forward decl for friend decls
 
       class ClientReq {
 	friend ClientEntry;
 	friend PriorityQueue;
 
+#if 0
 	// NB: is there a better way than enumerating all possibilities?
 	friend ClientCompare<&RequestTag::reservation,ReadyOption::ignore>;
 	friend ClientCompare<&RequestTag::limit,ReadyOption::ignore>;
@@ -209,6 +209,7 @@ namespace crimson {
 	friend ClientCompare<&RequestTag::reservation,ReadyOption::raises>;
 	friend ClientCompare<&RequestTag::limit,ReadyOption::raises>;
 	friend ClientCompare<&RequestTag::proportion,ReadyOption::raises>;
+#endif
 
 	RequestTag          tag;
 	RequestRef          request;
@@ -238,6 +239,10 @@ namespace crimson {
 
 	C                     client;
 	std::deque<ClientReq> requests;
+	// amount subtracted from the reservation tag as a result of
+	// proportional scheduling
+	double                reserv_delta;
+
 	c::IndIntruHeapData   reserv_heap_data;
 	c::IndIntruHeapData   lim_heap_data;
 	c::IndIntruHeapData   ready_heap_data;
@@ -246,7 +251,8 @@ namespace crimson {
       public:
 
 	ClientEntry(C _client) :
-	  client(_client)
+	  client(_client),
+	  reserv_delta(0.0)
 	{
 	  // empty
 	}
@@ -338,6 +344,10 @@ namespace crimson {
 				      bool adjust_by_inc = false) {
 	  prev_tag.proportion = value - (adjust_by_inc ? info.weight_inv : 0.0);
 	}
+
+	inline void increment_reserv_delta() {
+	  client_entry->reserv_delta += info.reservation_inv;
+	}
       }; // class ClientRec
 
 
@@ -405,7 +415,9 @@ namespace crimson {
 
     protected:
 
-      template<double RequestTag::*tag_field, ReadyOption ready_opt>
+      template<double RequestTag::*tag_field,
+	       ReadyOption ready_opt,
+	       bool reserv_delta>
       struct ClientCompare {
 	bool operator()(const ClientEntry& n1, const ClientEntry& n2) const {
 	  if (n1.has_request()) {
@@ -413,8 +425,13 @@ namespace crimson {
 	      const auto& t1 = n1.next_request().tag;
 	      const auto& t2 = n2.next_request().tag;
 	      if (ReadyOption::ignore == ready_opt || t1.ready == t2.ready) {
-		// if we don't care about ready or the ready values are the same
-		return t1.*tag_field < t2.*tag_field;
+		  // if we don't care about ready or the ready values are the same
+		if (reserv_delta) {
+		  return (t1.*tag_field - n1.reserv_delta) <
+		    (t2.*tag_field - n2.reserv_delta);
+		} else {
+		  return t1.*tag_field < t2.*tag_field;
+		}
 	      } else if (ReadyOption::raises == ready_opt) {
 		// use_ready == true && the ready fields are different
 		return t1.ready;
@@ -480,7 +497,7 @@ namespace crimson {
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::reserv_heap_data,
-		      ClientCompare<&RequestTag::reservation>> reserv_q;
+		      ClientCompare<&RequestTag::reservation,ReadyOption::ignore,true>> reserv_q;
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::prop_heap_data,
@@ -488,11 +505,11 @@ namespace crimson {
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::lim_heap_data,
-		      ClientCompare<&RequestTag::limit,ReadyOption::lowers>> limit_q;
+		      ClientCompare<&RequestTag::limit,ReadyOption::lowers,false>> limit_q;
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::ready_heap_data,
-		      ClientCompare<&RequestTag::proportion,ReadyOption::raises>> ready_q;
+		      ClientCompare<&RequestTag::proportion,ReadyOption::raises,false>> ready_q;
 
 #if 0
       // four heaps that maintain the earliest request by each of the
@@ -879,15 +896,8 @@ namespace crimson {
 	// as long as cleaning times are long enough
 	if (client_map.end() == client_it) return;
 
-#if OLD_Q // ************** TRANSLATE LATER ****************
-	double reduction = client_it->second.info.reservation_inv;
-	for (auto i = reserv_q.begin(); i != reserv_q.end(); ++i) {
-	  if ((*i)->client == client_id) {
-	    (*i)->tag.reservation -= reduction;
-	    i.increase(); // since tag goes down, priority increases
-	  }
-	}
-#endif
+	client_it->second.increment_reserv_delta();
+	reserv_q.demote(*client_it->second.client_entry);
       }
 
 
