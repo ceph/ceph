@@ -1067,6 +1067,9 @@ int CephFuse::Handle::loop()
 
 uint64_t CephFuse::Handle::fino_snap(uint64_t fino)
 {
+  if (fino == FUSE_ROOT_ID)
+    return CEPH_NOSNAP;
+
   if (client->use_faked_inos()) {
     vinodeno_t vino  = client->map_faked_ino(fino);
     return vino.snapid;
@@ -1080,11 +1083,12 @@ uint64_t CephFuse::Handle::fino_snap(uint64_t fino)
 
 Inode * CephFuse::Handle::iget(fuse_ino_t fino)
 {
+  if (fino == FUSE_ROOT_ID)
+    return client->get_root();
+
   if (client->use_faked_inos()) {
     return client->ll_get_inode((ino_t)fino);
   } else {
-    if (fino == 1)
-      fino = inodeno_t(client->get_root_ino());
     vinodeno_t vino(FINO_INO(fino), fino_snap(fino));
     return client->ll_get_inode(vino);
   }
@@ -1099,8 +1103,14 @@ uint64_t CephFuse::Handle::make_fake_ino(inodeno_t ino, snapid_t snapid)
 {
   if (client->use_faked_inos()) {
     // already faked by libcephfs
+    if (ino == client->get_root_ino())
+      return FUSE_ROOT_ID;
+
     return ino;
   } else {
+    if (snapid == CEPH_NOSNAP && ino == client->get_root_ino())
+      return FUSE_ROOT_ID;
+
     Mutex::Locker l(stag_lock);
     uint64_t stag;
     if (snap_stag_map.count(snapid) == 0) {
