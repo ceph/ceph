@@ -36,6 +36,10 @@ roles:
   - osd.5
   - client.0
 - - client.1
+openstack:
+- volumes: # attached to each instance
+    count: 3
+    size: 30 # GB
 tasks:
 - print: "****  v9.2.0 about to install"
 - install:
