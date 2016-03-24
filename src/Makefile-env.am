@@ -127,7 +127,9 @@ endif
 
 AM_CFLAGS = $(AM_COMMON_CFLAGS)
 if LINUX
+if WITH_HARDENING
 AM_CFLAGS += $(HARDENING_CFLAGS)
+endif
 endif
 AM_CPPFLAGS = $(AM_COMMON_CPPFLAGS)
 AM_CXXFLAGS = \
@@ -137,7 +139,9 @@ AM_CXXFLAGS = \
 	-Wnon-virtual-dtor \
 	-Wno-invalid-offsetof 
 if LINUX
-AM_CXXFLAGS += $(HARDENING_CFLAGS) 
+if WITH_HARDENING
+AM_CXXFLAGS += $(HARDENING_CFLAGS)
+endif
 endif
 if !CLANG
 	AM_CXXFLAGS += -Wstrict-null-sentinel
@@ -154,7 +158,9 @@ endif
 # http://sigquit.wordpress.com/2011/02/16/why-asneeded-doesnt-work-as-expected-for-your-libraries-on-your-autotools-project/
 AM_LDFLAGS =
 if LINUX
+if WITH_HARDENING
 AM_LDFLAGS += -Wl,--as-needed $(HARDENING_LDFLAGS)
+endif
 endif
 if AIX
 AM_LDFLAGS += -Wl,-brtl 

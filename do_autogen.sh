@@ -48,7 +48,10 @@ do
     j) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --enable-cephfs-java";;
     J) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-jemalloc";;
     L) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --without-lttng";;
-    O) CFLAGS="${CFLAGS} -O$OPTARG";;
+    O) if [ $OPTARG -lt 2 ]; then
+           CONFIGURE_FLAGS="$CONFIGURE_FLAGS --without-hardening"
+       fi
+       CFLAGS="${CFLAGS} -O$OPTARG";;
     p) with_profiler="--with-profiler" ;;
     P) profile=1;;
     R) rocksdb=0;;
