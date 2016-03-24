@@ -12,6 +12,7 @@
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
 #include "cls/journal/cls_journal_types.h"
+#include "journal/ReplayEntry.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "types.h"
@@ -49,7 +50,6 @@ public:
     STATE_UNINITIALIZED,
     STATE_STARTING,
     STATE_REPLAYING,
-    STATE_FLUSHING_REPLAY,
     STATE_STOPPING,
     STATE_STOPPED,
   };
@@ -67,7 +67,7 @@ public:
   };
 
   ImageReplayer(Threads *threads, RadosRef local, RadosRef remote,
-		const std::string &mirror_uuid, int64_t local_pool_id,
+                const std::string &mirror_uuid, int64_t local_pool_id,
 		int64_t remote_pool_id, const std::string &remote_image_id,
                 const std::string &global_image_id);
   virtual ~ImageReplayer();
@@ -88,10 +88,7 @@ public:
   void print_status(Formatter *f, stringstream *ss);
 
   virtual void handle_replay_ready();
-  virtual void handle_replay_process_ready(int r);
   virtual void handle_replay_complete(int r);
-
-  virtual void handle_replay_committed(ReplayEntry* replay_entry, int r);
 
   inline int64_t get_remote_pool_id() const {
     return m_remote_pool_id;
@@ -103,32 +100,56 @@ protected:
   /**
    * @verbatim
    *                   (error)
-   * <uninitialized> <------------------------ FAIL
-   *    |                                       ^
-   *    v                                       *
-   * <starting>                                 *
-   *    |                                       *
-   *    v                               (error) *
-   * BOOTSTRAP_IMAGE  * * * * * * * * * * * * * *
-   *    |                                       *
-   *    v                               (error) *
-   * INIT_REMOTE_JOURNALER  * * * * * * * * * * *
-   *    |                                       *
-   *    v                               (error) *
-   * START_REPLAY * * * * * * * * * * * * * * * *
+   * <uninitialized> <------------------------------------ FAIL
+   *    |                                                   ^
+   *    v                                                   *
+   * <starting>                                             *
+   *    |                                                   *
+   *    v                                           (error) *
+   * BOOTSTRAP_IMAGE  * * * * * * * * * * * * * * * * * * * *
+   *    |                                                   *
+   *    v                                           (error) *
+   * INIT_REMOTE_JOURNALER  * * * * * * * * * * * * * * * * *
+   *    |                                                   *
+   *    v                                           (error) *
+   * START_REPLAY * * * * * * * * * * * * * * * * * * * * * *
    *    |
-   *    |   /-------------------------------------------\
-   *    |   |                                           |
-   *    v   v                                           |
-   * <replaying> --------------> <flushing_replay>      |
-   *    |                           |                   |
-   *    v                           v                   |
-   * <stopping>                  LOCAL_REPLAY_FLUSH     |
-   *    |                           |                   |
-   *    v                           v                   |
-   * JOURNAL_REPLAY_SHUT_DOWN    FLUSH_COMMIT_POSITION  |
-   *    |                           |                   |
-   *    v                           \-------------------/
+   *    |  /--------------------------------------------\
+   *    |  |                                            |
+   *    v  v   (asok flush)                             |
+   * REPLAYING -------------> LOCAL_REPLAY_FLUSH        |
+   *    |       \                 |                     |
+   *    |       |                 v                     |
+   *    |       |             FLUSH_COMMIT_POSITION     |
+   *    |       |                 |                     |
+   *    |       |                 \--------------------/|
+   *    |       |                                       |
+   *    |       | (entries available)                   |
+   *    |       \-----------> REPLAY_READY              |
+   *    |                         |                     |
+   *    |                         | (skip if not        |
+   *    |                         v  needed)        (error)
+   *    |                     REPLAY_FLUSH  * * * * * * * * *
+   *    |                         |                     |   *
+   *    |                         | (skip if not        |   *
+   *    |                         v  needed)        (error) *
+   *    |                     GET_REMOTE_TAG  * * * * * * * *
+   *    |                         |                     |   *
+   *    |                         | (skip if not        |   *
+   *    |                         v  needed)        (error) *
+   *    |                     ALLOCATE_LOCAL_TAG  * * * * * *
+   *    |                         |                     |   *
+   *    |                         v                 (error) *
+   *    |                     PROCESS_ENTRY * * * * * * * * *
+   *    |                         |                     |   *
+   *    |                         \---------------------/   *
+   *    v                                                   *
+   * REPLAY_COMPLETE  < * * * * * * * * * * * * * * * * * * *
+   *    |
+   *    v
+   * JOURNAL_REPLAY_SHUT_DOWN
+   *    |
+   *    v
    * LOCAL_IMAGE_CLOSE
    *    |
    *    v
@@ -146,11 +167,12 @@ protected:
   virtual void on_stop_local_image_close_start();
   virtual void on_stop_local_image_close_finish(int r);
 
-  virtual void on_flush_local_replay_flush_start();
-  virtual void on_flush_local_replay_flush_finish(int r);
-  virtual void on_flush_flush_commit_position_start(int last_r);
-  virtual void on_flush_flush_commit_position_finish(int last_r, int r);
-  virtual bool on_flush_interrupted();
+  virtual void on_flush_local_replay_flush_start(Context *on_flush);
+  virtual void on_flush_local_replay_flush_finish(Context *on_flush, int r);
+  virtual void on_flush_flush_commit_position_start(Context *on_flush);
+  virtual void on_flush_flush_commit_position_finish(Context *on_flush, int r);
+
+  bool on_replay_interrupted();
 
   void close_local_image(Context *on_finish); // for tests
 
@@ -171,10 +193,29 @@ private:
   librbd::journal::Replay<ImageCtxT> *m_local_replay;
   Journaler* m_remote_journaler;
   ::journal::ReplayHandler *m_replay_handler;
-  Context *m_on_finish;
+
+  Context *m_on_start_finish = nullptr;
+  Context *m_on_stop_finish = nullptr;
+  bool m_stop_requested = false;
+
   AdminSocketHook *m_asok_hook;
 
   librbd::journal::MirrorPeerClientMeta m_client_meta;
+
+  ReplayEntry m_replay_entry;
+
+  struct C_ReplayCommitted : public Context {
+    ImageReplayer *replayer;
+    ReplayEntry replay_entry;
+
+    C_ReplayCommitted(ImageReplayer *replayer,
+                      ReplayEntry &&replay_entry)
+      : replayer(replayer), replay_entry(std::move(replay_entry)) {
+    }
+    virtual void finish(int r) {
+      replayer->handle_process_entry_safe(replay_entry, r);
+    }
+  };
 
   static std::string to_string(const State state);
 
@@ -192,6 +233,20 @@ private:
   void handle_init_remote_journaler(int r);
 
   void start_replay();
+
+  void replay_flush();
+  void handle_replay_flush(int r);
+
+  void get_remote_tag();
+  void handle_get_remote_tag(int r);
+
+  void allocate_local_tag();
+  void handle_allocate_local_tag(int r);
+
+  void process_entry();
+  void handle_process_entry_ready(int r);
+  void handle_process_entry_safe(const ReplayEntry& replay_entry, int r);
+
 };
 
 } // namespace mirror
