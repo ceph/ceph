@@ -27,7 +27,6 @@
 
 #include "boost/variant.hpp"
 
-#include "heap.h"
 #include "indirect_intrusive_heap.h"
 #include "run_every.h"
 #include "dmclock_util.h"
@@ -156,40 +155,6 @@ namespace crimson {
       using Duration = std::chrono::milliseconds;
       using MarkPoint = std::pair<TimePoint,Counter>;
 
-#if REMOVE
-      class Entry {
-	friend PriorityQueue<C,R>;
-
-	C                   client;
-	RequestTag          tag;
-	RequestRef          request;
-	bool                handled;
-
-      public:
-
-	Entry(C _client, RequestTag _tag, RequestRef&& _request) :
-	  client(_client),
-	  tag(_tag),
-	  request(std::move(_request)),
-	  handled(false)
-	{
-	  // empty
-	}
-
-	friend
-	std::ostream& operator<<(std::ostream& out,
-				 const typename PriorityQueue<C,R>::Entry& e) {
-	  out << "{ client:" << e.client <<
-	    ", tag:" << e.tag <<
-	    ", handled:" << (e.handled ? "T" : "f") << " }";
-	  return out;
-	}
-      }; // struct Entry
-
-      using EntryRef = std::shared_ptr<Entry>;
-#endif
-
-
       class ClientEntry; // forward decl for friend decls
 
       enum class ReadyOption {ignore, lowers, raises};
@@ -197,6 +162,7 @@ namespace crimson {
       template<double RequestTag::*, ReadyOption, bool>
       struct ClientCompare; // forward decl for friend decls
 
+      
       class ClientReq {
 	friend ClientEntry;
 	friend PriorityQueue;
@@ -236,11 +202,6 @@ namespace crimson {
 
       class ClientEntry {
 	friend PriorityQueue<C,R>;
-#if REMOVE
-	friend ClientCompare<&RequestTag::reservation>;
-	friend ClientCompare<&RequestTag::limit>;
-	friend ClientCompare<&RequestTag::proportion>;
-#endif
 
 	C                     client;
 	std::deque<ClientReq> requests;
@@ -293,19 +254,6 @@ namespace crimson {
 
 
       using ClientEntryRef = std::shared_ptr<ClientEntry>;
-
-
-#if REMOVE
-      // if you try to display an EntryRef (shared pointer to an
-      // Entry), dereference the shared pointer so we get data, not
-      // addresses
-      friend
-      std::ostream& operator<<(std::ostream& out,
-			       const typename PriorityQueue<C,R>::EntryRef& e) {
-	out << *e;
-	return out;
-      }
-#endif
 
 
       class ClientRec {
@@ -444,29 +392,6 @@ namespace crimson {
 	}
       };
 
-#if REMOVE
-      struct ReservationCompare {
-	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
-	  assert(n1->tag.reservation > 0 && n2->tag.reservation > 0);
-	  return n1->tag.reservation < n2->tag.reservation;
-	}
-      };
-
-      struct ProportionCompare {
-	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
-	  assert(n1->tag.proportion > 0 && n2->tag.proportion > 0);
-	  return n1->tag.proportion < n2->tag.proportion;
-	}
-      };
-
-      struct LimitCompare {
-	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
-	  assert(n1->tag.limit > 0 && n2->tag.limit > 0);
-	  return n1->tag.limit < n2->tag.limit;
-	}
-      };
-#endif
-
 
       ClientInfoFunc       client_info_f;
       CanHandleRequestFunc can_handle_f;
@@ -498,19 +423,6 @@ namespace crimson {
 		      &ClientEntry::ready_heap_data,
 		      ClientCompare<&RequestTag::proportion,ReadyOption::raises,false>> ready_q;
 
-#if REMOVE
-      // four heaps that maintain the earliest request by each of the
-      // tag components
-      c::Heap<EntryRef, ReservationCompare> reserv_q;
-      c::Heap<EntryRef, ProportionCompare> prop_q;
-
-      // AKA not-ready queue
-      c::Heap<EntryRef, LimitCompare> lim_q;
-
-      // for entries whose limit is passed and that'll be sorted by
-      // their proportion tag
-      c::Heap<EntryRef, ProportionCompare> ready_q;
-#endif
 
       // if all reservations are met and all other requestes are under
       // limit, this will allow the request next in terms of
@@ -896,17 +808,6 @@ namespace crimson {
 	client_it->second.increment_reserv_delta();
 	reserv_q.demote(*client_it->second.client_entry);
       }
-
-
-#if REMOVE
-      // data_mtx should be held when called
-      template<typename K>
-      void prepare_queue(Heap<EntryRef, K>& heap) {
-	while (!heap.empty() && heap.top()->handled) {
-	  heap.pop();
-	}
-      }
-#endif
 
 
       // data_mtx should be held when called
