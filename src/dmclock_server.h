@@ -822,10 +822,10 @@ namespace crimson {
 
 	// pop request and adjust heaps
 	top.pop_request();
-	reserv_q.adjust_down(top);
-	limit_q.adjust_down(top);
-	prop_q.adjust_down(top);
-	ready_q.adjust_down(top);
+	reserv_q.demote(top);
+	limit_q.demote(top);
+	prop_q.demote(top);
+	ready_q.demote(top);
 
 	// process
 	process(top.client, request);
@@ -982,8 +982,8 @@ namespace crimson {
 	       !limits->next_request().tag.ready &&
 	       limits->next_request().tag.limit <= now) {
 	  limits->next_request().tag.ready = true;
-	  ready_q.adjust_up(*limits);
-	  limit_q.adjust_down(*limits);
+	  ready_q.promote(*limits);
+	  limit_q.demote(*limits);
 
 	  limits = &limit_q.top();
 	}

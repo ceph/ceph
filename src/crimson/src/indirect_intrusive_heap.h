@@ -95,11 +95,11 @@ namespace crimson {
       sift_down(0);
     }
 
-    void adjust_up(T& item) {
+    void promote(T& item) {
       sift_up(item.*heap_info);
     }
 
-    void adjust_down(T& item) {
+    void demote(T& item) {
       sift_down(item.*heap_info);
     }
 
