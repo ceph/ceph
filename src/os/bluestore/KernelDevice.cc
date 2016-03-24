@@ -202,6 +202,7 @@ int KernelDevice::flush()
   if (r < 0) {
     r = -errno;
     derr << __func__ << " fdatasync got: " << cpp_strerror(r) << dendl;
+    assert(0);
   }
   dout(5) << __func__ << " in " << dur << dendl;;
   return r;
