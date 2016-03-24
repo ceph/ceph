@@ -228,7 +228,8 @@ namespace librbd {
                                 const std::string &uuid,
                                 const std::string &cluster_name);
     int mirror_image_list(librados::IoCtx *ioctx,
-			  std::vector<std::string> *image_ids);
+		          const std::string &start, uint64_t max_return,
+                          std::map<std::string, std::string> *mirror_image_ids);
     int mirror_image_get(librados::IoCtx *ioctx, const std::string &image_id,
 			 cls::rbd::MirrorImage *mirror_image);
     int mirror_image_set(librados::IoCtx *ioctx, const std::string &image_id,
