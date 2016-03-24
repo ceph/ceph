@@ -240,6 +240,7 @@ TEST(chain_xattr, listxattr) {
   char* actual = (char*)calloc(1, buffer_size);
   ASSERT_LT(buffer_size, chain_listxattr(file, NULL, 0)); // size evaluation is conservative
   chain_listxattr(file, actual, buffer_size);
+  ASSERT_EQ(0, ::memcmp(expected, actual, buffer_size));
   ::memset(actual, '\0', buffer_size);
   chain_flistxattr(fd, actual, buffer_size);
   ASSERT_EQ(0, ::memcmp(expected, actual, buffer_size));
