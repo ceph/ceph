@@ -313,7 +313,7 @@ bool Journal<I>::is_journal_supported(I &image_ctx) {
 template <typename I>
 int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
 		       uint8_t order, uint8_t splay_width,
-		       const std::string &object_pool) {
+		       const std::string &object_pool, bool non_primary) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
@@ -341,12 +341,16 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
   }
 
   // create tag class for this image's journal events
-  bufferlist tag_data;
-  ::encode(journal::TagData(), tag_data);
+  journal::TagData tag_data;
+  tag_data.mirror_uuid = (!non_primary ? LOCAL_MIRROR_UUID :
+                                         ORPHAN_MIRROR_UUID);
+
+  bufferlist tag_data_bl;
+  ::encode(tag_data, tag_data_bl);
 
   C_SaferCond tag_ctx;
   cls::journal::Tag tag;
-  journaler.allocate_tag(cls::journal::Tag::TAG_CLASS_NEW, tag_data,
+  journaler.allocate_tag(cls::journal::Tag::TAG_CLASS_NEW, tag_data_bl,
                          &tag, &tag_ctx);
   r = tag_ctx.wait();
   if (r < 0) {

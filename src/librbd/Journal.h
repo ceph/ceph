@@ -95,7 +95,7 @@ public:
   static bool is_journal_supported(ImageCtxT &image_ctx);
   static int create(librados::IoCtx &io_ctx, const std::string &image_id,
 		    uint8_t order, uint8_t splay_width,
-		    const std::string &object_pool);
+		    const std::string &object_pool, bool non_primary);
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
   static int reset(librados::IoCtx &io_ctx, const std::string &image_id);
 

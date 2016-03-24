@@ -96,6 +96,12 @@ namespace librbd {
 	     uint64_t stripe_unit, uint64_t stripe_count);
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     ImageOptions& opts);
+  int create_v2(IoCtx& io_ctx, const char *imgname, uint64_t bid, uint64_t size,
+		int order, uint64_t features, uint64_t stripe_unit,
+		uint64_t stripe_count, uint8_t journal_order,
+		uint8_t journal_splay_width,
+		const std::string &journal_pool,
+                const std::string &non_primary_global_image_id);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name,
 	    uint64_t features, int *c_order,
