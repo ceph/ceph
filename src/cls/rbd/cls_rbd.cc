@@ -121,6 +121,7 @@ cls_method_handle_t h_mirror_peer_remove;
 cls_method_handle_t h_mirror_peer_set_client;
 cls_method_handle_t h_mirror_peer_set_cluster;
 cls_method_handle_t h_mirror_image_list;
+cls_method_handle_t h_mirror_image_get_image_id;
 cls_method_handle_t h_mirror_image_get;
 cls_method_handle_t h_mirror_image_set;
 cls_method_handle_t h_mirror_image_remove;
@@ -2960,6 +2961,7 @@ static const std::string UUID("mirror_uuid");
 static const std::string MODE("mirror_mode");
 static const std::string PEER_KEY_PREFIX("mirror_peer_");
 static const std::string IMAGE_KEY_PREFIX("image_");
+static const std::string GLOBAL_KEY_PREFIX("global_");
 
 std::string peer_key(const std::string &uuid) {
   return PEER_KEY_PREFIX + uuid;
@@ -2967,6 +2969,10 @@ std::string peer_key(const std::string &uuid) {
 
 std::string image_key(const string &image_id) {
   return IMAGE_KEY_PREFIX + image_id;
+}
+
+std::string global_key(const string &global_id) {
+  return GLOBAL_KEY_PREFIX + global_id;
 }
 
 int uuid_get(cls_method_context_t hctx, std::string *mirror_uuid) {
@@ -3074,24 +3080,39 @@ int image_set(cls_method_context_t hctx, const string &image_id,
   bufferlist bl;
   ::encode(mirror_image, bl);
 
-  // don't overwrite the key if it already exists with a different
-  // global_image_id
   cls::rbd::MirrorImage existing_mirror_image;
   int r = image_get(hctx, image_id, &existing_mirror_image);
-  if (r < 0 && r != -ENOENT) {
+  if (r == -ENOENT) {
+    // make sure global id doesn't already exist
+    std::string global_id_key = global_key(mirror_image.global_image_id);
+    std::string image_id;
+    r = read_key(hctx, global_id_key, &image_id);
+    if (r != -ENOENT) {
+      return -EEXIST;
+    }
+  } else if (r < 0) {
     CLS_ERR("error reading mirrored image '%s': '%s'", image_id.c_str(),
 	    cpp_strerror(r).c_str());
     return r;
-  }
-
-  if (r != -ENOENT &&
-      existing_mirror_image.global_image_id != mirror_image.global_image_id) {
-    return -EEXIST;
+  } else if (existing_mirror_image.global_image_id !=
+                mirror_image.global_image_id) {
+    // cannot change the global id
+    return -EINVAL;
   }
 
   r = cls_cxx_map_set_val(hctx, image_key(image_id), &bl);
   if (r < 0) {
     CLS_ERR("error adding mirrored image '%s': %s", image_id.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  bufferlist image_id_bl;
+  ::encode(image_id, image_id_bl);
+  r = cls_cxx_map_set_val(hctx, global_key(mirror_image.global_image_id),
+                          &image_id_bl);
+  if (r < 0) {
+    CLS_ERR("error adding global id for image '%s': %s", image_id.c_str(),
             cpp_strerror(r).c_str());
     return r;
   }
@@ -3118,6 +3139,13 @@ int image_remove(cls_method_context_t hctx, const string &image_id) {
   if (r < 0) {
     CLS_ERR("error removing mirrored image '%s': %s", image_id.c_str(),
             cpp_strerror(r).c_str());
+    return r;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, global_key(mirror_image.global_image_id));
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("error removing global id for image '%s': %s", image_id.c_str(),
+           cpp_strerror(r).c_str());
     return r;
   }
   return 0;
@@ -3529,6 +3557,36 @@ int mirror_image_list(cls_method_context_t hctx, bufferlist *in,
 
 /**
  * Input:
+ * @param global_id (std::string)
+ *
+ * Output:
+ * @param std::string - image id
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_image_get_image_id(cls_method_context_t hctx, bufferlist *in,
+                              bufferlist *out) {
+  std::string global_id;
+  try {
+    bufferlist::iterator it = in->begin();
+    ::decode(global_id, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::string image_id;
+  int r = read_key(hctx, mirror::global_key(global_id), &image_id);
+  if (r < 0) {
+    CLS_ERR("error retrieving image id for global id '%s': %s",
+            global_id.c_str(), cpp_strerror(r).c_str());
+    return r;
+  }
+
+  ::encode(image_id, *out);
+  return 0;
+}
+
+/**
+ * Input:
  * @param image_id (std::string)
  *
  * Output:
@@ -3791,6 +3849,9 @@ void __cls_init()
                           mirror_peer_set_cluster, &h_mirror_peer_set_cluster);
   cls_register_cxx_method(h_class, "mirror_image_list", CLS_METHOD_RD,
                           mirror_image_list, &h_mirror_image_list);
+  cls_register_cxx_method(h_class, "mirror_image_get_image_id", CLS_METHOD_RD,
+                          mirror_image_get_image_id,
+                          &h_mirror_image_get_image_id);
   cls_register_cxx_method(h_class, "mirror_image_get", CLS_METHOD_RD,
                           mirror_image_get, &h_mirror_image_get);
   cls_register_cxx_method(h_class, "mirror_image_set",
