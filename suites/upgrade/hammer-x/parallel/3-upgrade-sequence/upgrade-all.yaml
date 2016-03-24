@@ -1,8 +1,4 @@
 upgrade-sequence:
    sequential:
-   - install.upgrade:
-       mon.a:
-       mon.b:
-   - print: "**** done install.upgrade mon.a and mon.b"
    - ceph.restart: [mon.a, mon.b, mon.c, mds.a, osd.0, osd.1, osd.2, osd.3]
    - print: "**** done ceph.restart all"
