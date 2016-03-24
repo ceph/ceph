@@ -553,10 +553,10 @@ mds_gid_t FSMap::find_unused(fs_cluster_id_t fscid,
         info.standby_for_fscid != fscid)
       continue;
 
-    if ((info.standby_for_rank == MDSMap::MDS_NO_STANDBY_PREF ||
-         info.standby_for_rank == MDSMap::MDS_MATCHED_ACTIVE ||
-         (info.standby_for_rank == MDSMap::MDS_STANDBY_ANY
-          && force_standby_active))) {
+    // To be considered 'unused' a daemon must either not
+    // be selected for standby-replay or the force_standby_active
+    // setting must be enabled to use replay daemons anyway.
+    if (!info.standby_replay || force_standby_active) {
       return gid;
     }
   }
