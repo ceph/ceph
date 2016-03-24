@@ -53,7 +53,6 @@ private:
 
   peer_t m_peer;
   std::vector<const char*> m_args;
-  std::string m_client_id;
   RadosRef m_local, m_remote;
   std::unique_ptr<PoolWatcher> m_pool_watcher;
   // index by pool so it's easy to tell what is affected

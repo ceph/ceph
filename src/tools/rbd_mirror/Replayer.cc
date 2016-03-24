@@ -6,6 +6,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "include/stringify.h"
+#include "cls/rbd/cls_rbd_client.h"
 #include "Replayer.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -88,15 +89,6 @@ int Replayer::init()
   }
 
   dout(20) << "connected to " << m_peer << dendl;
-
-  std::string uuid;
-  r = m_local->cluster_fsid(&uuid);
-  if (r < 0) {
-    derr << "error retrieving local cluster uuid: " << cpp_strerror(r)
-	 << dendl;
-    return r;
-  }
-  m_client_id = uuid;
 
   // TODO: make interval configurable
   m_pool_watcher.reset(new PoolWatcher(m_remote, 30, m_lock, m_cond));
@@ -183,6 +175,14 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
       continue;
     }
 
+    std::string mirror_uuid;
+    r = librbd::cls_client::mirror_uuid_get(&local_ioctx, &mirror_uuid);
+    if (r < 0) {
+      derr << "failed to retrieve mirror uuid from pool "
+        << local_ioctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;
+      continue;
+    }
+
     // create entry for pool if it doesn't exist
     auto &pool_replayers = m_images[pool_id];
     for (const auto &image_id : kv.second) {
@@ -191,7 +191,7 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
 	unique_ptr<ImageReplayer> image_replayer(new ImageReplayer(m_threads,
 								   m_local,
 								   m_remote,
-								   m_client_id,
+								   mirror_uuid,
 								   local_ioctx.get_id(),
 								   pool_id,
 								   image_id));
