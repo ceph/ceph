@@ -8,8 +8,6 @@
 
 #define DEBUGGER
 
-#define OLD_Q 0
-
 #pragma once
 
 
