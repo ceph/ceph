@@ -1,5 +1,4 @@
 tasks:
-- ceph-fuse:
 - cephfs_test_runner:
     modules:
       - tasks.cephfs.test_misc
