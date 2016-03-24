@@ -159,8 +159,7 @@ class TestClientLimits(CephFSTestCase):
         # Wait for the health warnings. Assume mds can handle 10 request per second at least
         self.wait_for_health("failing to advance its oldest client/flush tid", max_requests / 10)
 
-    @needs_trimming
-    def test_client_cache_size(self):
+    def _test_client_cache_size(self, mount_subdir):
         """
         check if client invalidate kernel dcache according to its cache size config
         """
@@ -168,6 +167,19 @@ class TestClientLimits(CephFSTestCase):
         # The debug hook to inject the failure only exists in the fuse client
         if not isinstance(self.mount_a, FuseMount):
             raise SkipTest("Require FUSE client to inject client release failure")
+
+        if mount_subdir:
+            # fuse assigns a fix inode number (1) to root inode. But in mounting into
+            # subdir case, the actual inode number of root is not 1. This mismatch
+            # confuses fuse_lowlevel_notify_inval_entry() when invalidating dentries
+            # in root directory.
+            self.mount_a.run_shell(["mkdir", "subdir"])
+            self.mount_a.umount_wait()
+            self.set_conf('client', 'client mountpoint', '/subdir')
+            self.mount_a.mount()
+            self.mount_a.wait_until_mounted()
+            root_ino = self.mount_a.path_to_ino(".")
+            self.assertEqual(root_ino, 1);
 
         dir_path = os.path.join(self.mount_a.mountpoint, "testdir")
 
@@ -200,3 +212,8 @@ class TestClientLimits(CephFSTestCase):
             return True
 
         self.wait_until_true(trimmed, 30)
+
+    @needs_trimming
+    def test_client_cache_size(self):
+        self._test_client_cache_size(False)
+        self._test_client_cache_size(True)
