@@ -8,6 +8,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
+#include "cls/rbd/cls_rbd_client.h"
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -26,6 +27,7 @@ namespace mirror {
 namespace image_replayer {
 
 using librbd::util::create_context_callback;
+using librbd::util::create_rados_ack_callback;
 
 namespace {
 
@@ -100,6 +102,43 @@ BootstrapRequest<I>::~BootstrapRequest() {
 
 template <typename I>
 void BootstrapRequest<I>::send() {
+  get_local_image_id();
+}
+
+template <typename I>
+void BootstrapRequest<I>::get_local_image_id() {
+  dout(20) << dendl;
+
+  // attempt to cross-reference a local image by the global image id
+  librados::ObjectReadOperation op;
+  librbd::cls_client::mirror_image_get_image_id_start(&op, m_global_image_id);
+
+  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_local_image_id>(
+      this);
+  int r = m_local_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
+  assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_get_local_image_id(int r) {
+  dout(20) << ": r=" << r << dendl;
+
+  if (r == 0) {
+    bufferlist::iterator iter = m_out_bl.begin();
+    r = librbd::cls_client::mirror_image_get_image_id_finish(
+      &iter, &m_local_image_id);
+  }
+
+  if (r == -ENOENT) {
+    dout(10) << ": image not registered locally" << dendl;
+  } else if (r < 0) {
+    derr << ": failed to retreive local image id: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
   get_client();
 }
 
@@ -136,9 +175,9 @@ template <typename I>
 void BootstrapRequest<I>::register_client() {
   dout(20) << dendl;
 
-  // record an empty place-holder record
+  // record an place-holder record
   librbd::journal::ClientData client_data{
-    librbd::journal::MirrorPeerClientMeta{}};
+    librbd::journal::MirrorPeerClientMeta{m_local_image_id}};
   bufferlist client_data_bl;
   ::encode(client_data, client_data_bl);
 
@@ -159,7 +198,7 @@ void BootstrapRequest<I>::handle_register_client(int r) {
     return;
   }
 
-  *m_client_meta = librbd::journal::MirrorPeerClientMeta();
+  *m_client_meta = librbd::journal::MirrorPeerClientMeta(m_local_image_id);
   open_remote_image();
 }
 
