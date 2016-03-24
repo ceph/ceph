@@ -49,11 +49,20 @@ struct C_CreateImage : public Context {
     // TODO: rbd-mirror should offer a feature mask capability
     RWLock::RLocker snap_locker(remote_image_ctx->snap_lock);
     int order = remote_image_ctx->order;
-    r = librbd::create(local_io_ctx, local_image_name.c_str(),
-                       remote_image_ctx->size, false,
-                       remote_image_ctx->features, &order,
-                       remote_image_ctx->stripe_unit,
-                       remote_image_ctx->stripe_count);
+
+    CephContext *cct = reinterpret_cast<CephContext*>(local_io_ctx.cct());
+    uint64_t journal_order = cct->_conf->rbd_journal_order;
+    uint64_t journal_splay_width = cct->_conf->rbd_journal_splay_width;
+    std::string journal_pool = cct->_conf->rbd_journal_pool;
+
+    r = librbd::create_v2(local_io_ctx, local_image_name.c_str(),
+                          reinterpret_cast<uint64_t>(this),
+                          remote_image_ctx->size, order,
+                          remote_image_ctx->features,
+                          remote_image_ctx->stripe_unit,
+                          remote_image_ctx->stripe_count,
+                          journal_order, journal_splay_width, journal_pool,
+                          "global-image-id");
     on_finish->complete(r);
   }
 };
