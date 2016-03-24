@@ -116,7 +116,8 @@ public:
     m_replayer = new ImageReplayerT(m_threads,
       rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
       rbd::mirror::RadosRef(new librados::Rados(m_remote_ioctx)),
-      m_client_id, m_local_ioctx.get_id(), m_remote_pool_id, m_remote_image_id);
+      m_client_id, m_local_ioctx.get_id(), m_remote_pool_id, m_remote_image_id,
+      "global image id");
   }
 
   void start(rbd::mirror::ImageReplayer<>::BootstrapParams *bootstap_params =
@@ -531,10 +532,11 @@ public:
   ImageReplayer(rbd::mirror::Threads *threads,
 		rbd::mirror::RadosRef local, rbd::mirror::RadosRef remote,
 		const std::string &client_id, int64_t local_pool_id,
-		int64_t remote_pool_id,	const std::string &remote_image_id)
+		int64_t remote_pool_id,	const std::string &remote_image_id,
+                const std::string &global_image_id)
     : rbd::mirror::ImageReplayer<>(threads, local, remote, client_id,
 				   local_pool_id, remote_pool_id,
-                                   remote_image_id)
+                                   remote_image_id, global_image_id)
     {}
 
   void set_error(const std::string &state, int r) {

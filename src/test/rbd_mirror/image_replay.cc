@@ -186,7 +186,8 @@ int main(int argc, const char **argv)
     local->cct()));
   replayer = new rbd::mirror::ImageReplayer<>(threads, local, remote, client_id,
 					      local_pool_id, remote_pool_id,
-					      remote_image_id);
+					      remote_image_id,
+                                              "global image id");
 
   replayer->start(&start_cond, &bootstap_params);
   r = start_cond.wait();

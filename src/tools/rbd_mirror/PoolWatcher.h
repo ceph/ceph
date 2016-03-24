@@ -24,12 +24,30 @@ namespace mirror {
  */
 class PoolWatcher {
 public:
+  struct ImageIds {
+    std::string id;
+    std::string global_id;
+
+    ImageIds(const std::string &id, const std::string &global_id = "")
+      : id(id), global_id(global_id) {
+    }
+
+    inline bool operator==(const ImageIds &rhs) const {
+      return (id == rhs.id && global_id == rhs.global_id);
+    }
+    inline bool operator<(const ImageIds &rhs) const {
+      return id < rhs.id;
+    }
+  };
+  typedef std::map<int64_t, std::set<ImageIds> > PoolImageIds;
+
   PoolWatcher(RadosRef cluster, double interval_seconds,
 	      Mutex &lock, Cond &cond);
   ~PoolWatcher();
   PoolWatcher(const PoolWatcher&) = delete;
   PoolWatcher& operator=(const PoolWatcher&) = delete;
-  const std::map<int64_t, std::set<std::string> >& get_images() const;
+
+  const PoolImageIds& get_images() const;
   void refresh_images(bool reschedule=true);
 
 private:
@@ -40,8 +58,8 @@ private:
   RadosRef m_cluster;
   SafeTimer m_timer;
   double m_interval;
-  // pool id -> image id
-  std::map<int64_t, std::set<std::string> > m_images;
+
+  PoolImageIds m_images;
 };
 
 } // namespace mirror

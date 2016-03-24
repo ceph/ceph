@@ -58,6 +58,7 @@ struct BootstrapRequest<librbd::MockImageReplayerImageCtx> {
                                   librbd::MockImageReplayerImageCtx **local_image_ctx,
                                   const std::string &local_image_name,
                                   const std::string &remote_image_id,
+                                  const std::string &global_image_id,
                                   ContextWQ *work_queue, SafeTimer *timer,
                                   Mutex *timer_lock,
                                   const std::string &mirror_uuid,

@@ -44,7 +44,10 @@ public:
   void flush();
 
 private:
-  void set_sources(const std::map<int64_t, std::set<std::string> > &images);
+  typedef PoolWatcher::ImageIds ImageIds;
+  typedef PoolWatcher::PoolImageIds PoolImageIds;
+
+  void set_sources(const PoolImageIds &pool_image_ids);
 
   void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
   bool stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);

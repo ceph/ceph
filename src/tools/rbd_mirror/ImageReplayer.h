@@ -68,7 +68,8 @@ public:
 
   ImageReplayer(Threads *threads, RadosRef local, RadosRef remote,
 		const std::string &mirror_uuid, int64_t local_pool_id,
-		int64_t remote_pool_id, const std::string &remote_image_id);
+		int64_t remote_pool_id, const std::string &remote_image_id,
+                const std::string &global_image_id);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
@@ -160,7 +161,7 @@ private:
   RadosRef m_local, m_remote;
   std::string m_mirror_uuid;
   int64_t m_remote_pool_id, m_local_pool_id;
-  std::string m_remote_image_id, m_local_image_id;
+  std::string m_remote_image_id, m_local_image_id, m_global_image_id;
   std::string m_local_image_name;
   std::string m_name;
   Mutex m_lock;
