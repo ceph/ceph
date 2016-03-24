@@ -106,6 +106,13 @@ AC_PROG_LIBTOOL
 AC_SUBST(AM_CXXFLAGS)
 AM_CXXFLAGS="${AM_CXXFLAGS}"
 
+# Hardened build
+AC_ARG_WITH([hardening],
+	    [AS_HELP_STRING([--without-hardening], [disable setting of hardening cflags (to be used with -O0)])],
+	    [],
+	    [with_hardening=yes])
+AM_CONDITIONAL(WITH_HARDENING, test "$with_hardening" = "yes")
+
 # Find out what to build (default is most of these)
 
 # rados?
