@@ -282,8 +282,7 @@ namespace crimson {
 	  return !requests.empty();
 	}
 
-	friend
-	std::ostream&
+	friend std::ostream&
 	operator<<(std::ostream& out,
 		   const typename PriorityQueue<C,R>::ClientEntry& e) {
 	  out << "{ client:" << e.client << " top req: " <<
@@ -801,13 +800,13 @@ namespace crimson {
 	  ++reserv_sched_count;
 	  break;
 	case HeapId::ready:
-	  pop_process_request(reserv_q, process_f(result, PhaseType::priority));
+	  pop_process_request(ready_q, process_f(result, PhaseType::priority));
 	  reduce_reservation_tags(result.client);
 	  ++prop_sched_count;
 	  break;
 #if REMOVE_2
 	case HeapId::proportional:
-	  pop_process_request(reserv_q, process_f(result, PhaseType::priority));
+	  pop_process_request(prop_q, process_f(result, PhaseType::priority));
 	  reduce_reservation_tags(result.client);
 	  ++limit_break_sched_count;
 	  break;
