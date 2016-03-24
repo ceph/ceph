@@ -175,6 +175,8 @@ private:
 
   librbd::journal::MirrorPeerClientMeta m_client_meta;
 
+  static std::string to_string(const State state);
+
   State get_state_() const { return m_state; }
   bool is_stopped_() const { return m_state == STATE_UNINITIALIZED ||
                                     m_state == STATE_STOPPED; }

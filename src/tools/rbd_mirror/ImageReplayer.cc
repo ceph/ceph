@@ -735,11 +735,11 @@ void ImageReplayer<I>::print_status(Formatter *f, stringstream *ss)
   if (f) {
     f->open_object_section("image_replayer");
     f->dump_string("name", m_name);
-    f->dump_stream("state") << m_state;
+    f->dump_string("state", to_string(m_state));
     f->close_section();
     f->flush(*ss);
   } else {
-    *ss << m_name << ": state: " << m_state;
+    *ss << m_name << ": state: " << to_string(m_state);
   }
 }
 
@@ -789,33 +789,24 @@ void ImageReplayer<I>::shut_down_journal_replay(bool cancel_ops)
 }
 
 template <typename I>
-std::ostream &operator<<(std::ostream &os,
-                         const typename ImageReplayer<I>::State &state)
-{
+std::string ImageReplayer<I>::to_string(const State state) {
   switch (state) {
   case ImageReplayer<I>::STATE_UNINITIALIZED:
-    os << "Uninitialized";
-    break;
+    return "Uninitialized";
   case ImageReplayer<I>::STATE_STARTING:
-    os << "Starting";
-    break;
+    return "Starting";
   case ImageReplayer<I>::STATE_REPLAYING:
-    os << "Replaying";
-    break;
+    return "Replaying";
   case ImageReplayer<I>::STATE_FLUSHING_REPLAY:
-    os << "FlushingReplay";
-    break;
+    return "FlushingReplay";
   case ImageReplayer<I>::STATE_STOPPING:
-    os << "Stopping";
-    break;
+    return "Stopping";
   case ImageReplayer<I>::STATE_STOPPED:
-    os << "Stopped";
-    break;
+    return "Stopped";
   default:
-    os << "Unknown(" << state << ")";
     break;
   }
-  return os;
+  return "Unknown(" + stringify(state) + ")";
 }
 
 template <typename I>
