@@ -96,7 +96,8 @@ void ImageCopyRequest<I>::handle_update_max_object_count(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to update client data: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
+               << dendl;
     finish(r);
     return;
   }
@@ -171,7 +172,7 @@ void ImageCopyRequest<I>::handle_object_copy(int r) {
     --m_current_ops;
 
     if (r < 0) {
-      lderr(cct) << "object copy failed: " << cpp_strerror(r) << dendl;
+      lderr(cct) << ": object copy failed: " << cpp_strerror(r) << dendl;
       if (m_ret_val == 0) {
         m_ret_val = r;
       }
@@ -221,7 +222,8 @@ void ImageCopyRequest<I>::handle_flush_sync_point(int r) {
   if (r < 0) {
     *m_client_meta = m_client_meta_copy;
 
-    lderr(cct) << "failed to update client data: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
+               << dendl;
     finish(r);
     return;
   }
@@ -248,7 +250,7 @@ int ImageCopyRequest<I>::compute_snap_map() {
     RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
     snap_id_end = m_remote_image_ctx->get_snap_id(m_sync_point->snap_name);
     if (snap_id_end == CEPH_NOSNAP) {
-      lderr(cct) << "failed to locate snapshot: "
+      lderr(cct) << ": failed to locate snapshot: "
                  << m_sync_point->snap_name << dendl;
       return -ENOENT;
     }
@@ -257,7 +259,7 @@ int ImageCopyRequest<I>::compute_snap_map() {
       snap_id_start = m_remote_image_ctx->get_snap_id(
         m_sync_point->from_snap_name);
       if (snap_id_start == CEPH_NOSNAP) {
-        lderr(cct) << "failed to locate from snapshot: "
+        lderr(cct) << ": failed to locate from snapshot: "
                    << m_sync_point->from_snap_name << dendl;
         return -ENOENT;
       }
@@ -278,7 +280,7 @@ int ImageCopyRequest<I>::compute_snap_map() {
   }
 
   if (m_snap_map.empty()) {
-    lderr(cct) << "failed to map snapshots within boundary" << dendl;
+    lderr(cct) << ": failed to map snapshots within boundary" << dendl;
     return -EINVAL;
   }
 

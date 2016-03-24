@@ -79,7 +79,8 @@ void SyncPointCreateRequest<I>::handle_update_client(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to update client data: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
+               << dendl;
     finish(r);
     return;
   }
@@ -107,7 +108,7 @@ void SyncPointCreateRequest<I>::handle_refresh_image(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "remote image refresh failed: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": remote image refresh failed: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -138,7 +139,7 @@ void SyncPointCreateRequest<I>::handle_create_snap(int r) {
     send_update_client();
     return;
   } else if (r < 0) {
-    lderr(cct) << "failed to create snapshot: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": failed to create snapshot: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
