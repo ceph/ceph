@@ -120,8 +120,6 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   mds_rank(NULL),
   tick_event(0),
-  standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
-  standby_replay(false),
   asok_hook(NULL)
 {
   orig_argc = 0;
@@ -545,26 +543,7 @@ int MDSDaemon::init()
 
   timer.init();
 
-  MDSMap::DaemonState wanted_state = MDSMap::STATE_BOOT;
-  if (g_conf->mds_standby_replay) {
-    standby_replay = true;
-  }
-
-  standby_for_rank = mds_rank_t(g_conf->mds_standby_for_rank);
-  standby_for_name.assign(g_conf->mds_standby_for_name);
-
-  if (standby_replay && standby_for_rank == -1) {
-    if (standby_for_name.empty())
-      standby_for_rank = MDSMap::MDS_STANDBY_ANY;
-    else
-      standby_for_rank = MDSMap::MDS_STANDBY_NAME;
-  } else if (!standby_replay && !standby_for_name.empty()) {
-    standby_for_rank = MDSMap::MDS_MATCHED_ACTIVE;
-  }
-
-  beacon.init(mdsmap, wanted_state,
-    standby_for_rank, standby_for_name,
-    fs_cluster_id_t(g_conf->mds_standby_for_fscid));
+  beacon.init(mdsmap);
   messenger->set_myname(entity_name_t::MDS(MDS_RANK_NONE));
 
   // schedule tick
@@ -1037,11 +1016,6 @@ void MDSDaemon::_handle_mds_map(MDSMap *oldmap)
     beacon.set_want_state(mdsmap, new_state);
     dout(1) << "handle_mds_map standby" << dendl;
 
-    if (standby_replay) {
-      // we want to be in standby_replay
-      beacon.set_want_state(mdsmap, MDSMap::STATE_STANDBY_REPLAY);
-      beacon.send();
-    }
     return;
   }
 

@@ -141,10 +141,6 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 
   void wait_for_omap_osds();
 
-  mds_rank_t standby_for_rank;
-  string standby_for_name;
-  bool standby_replay;
-
  private:
   bool ms_dispatch(Message *m);
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
