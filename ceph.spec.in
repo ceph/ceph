@@ -997,6 +997,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/ceph.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
+%{_mandir}/man8/rbdmap.8*
 %{_mandir}/man8/rbd-replay.8*
 %{_mandir}/man8/rbd-replay-many.8*
 %{_mandir}/man8/rbd-replay-prep.8*
