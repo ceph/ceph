@@ -41,6 +41,8 @@ namespace mirror {
 using librbd::util::create_context_callback;
 using namespace rbd::mirror::image_replayer;
 
+std::ostream &operator<<(std::ostream &os, const ImageReplayer::State &state);
+
 namespace {
 
 struct ReplayHandler : public ::journal::ReplayHandler {
@@ -81,14 +83,7 @@ public:
   explicit StatusCommand(ImageReplayer *replayer) : replayer(replayer) {}
 
   bool call(Formatter *f, stringstream *ss) {
-    if (f) {
-      f->open_object_section("status");
-      f->dump_stream("state") << replayer->get_state();
-      f->close_section();
-      f->flush(*ss);
-    } else {
-      *ss << "state: " << replayer->get_state();
-    }
+    replayer->print_status(f, ss);
     return true;
   }
 
@@ -101,7 +96,9 @@ public:
   explicit FlushCommand(ImageReplayer *replayer) : replayer(replayer) {}
 
   bool call(Formatter *f, stringstream *ss) {
-    int r = replayer->flush();
+    C_SaferCond cond;
+    replayer->flush(&cond);
+    int r = cond.wait();
     if (r < 0) {
       *ss << "flush: " << cpp_strerror(r);
       return false;
@@ -177,6 +174,7 @@ ImageReplayer::ImageReplayer(Threads *threads, RadosRef local, RadosRef remote,
   m_remote_pool_id(remote_pool_id),
   m_local_pool_id(local_pool_id),
   m_remote_image_id(remote_image_id),
+  m_name(stringify(remote_pool_id) + "/" + remote_image_id),
   m_lock("rbd::mirror::ImageReplayer " + stringify(remote_pool_id) + " " +
 	 remote_image_id),
   m_state(STATE_UNINITIALIZED),
@@ -450,11 +448,13 @@ void ImageReplayer::on_start_wait_for_local_journal_ready_start()
   dout(20) << "enter" << dendl;
 
   if (!m_asok_hook) {
-    CephContext *cct = static_cast<CephContext *>(m_local->cct());
-    std::string name = m_local_ioctx.get_pool_name() + "/" +
-      m_local_image_ctx->name;
+    Mutex::Locker locker(m_lock);
 
-    m_asok_hook = new ImageReplayerAdminSocketHook(cct, name, this);
+    m_name = m_local_ioctx.get_pool_name() + "/" + m_local_image_ctx->name;
+
+    CephContext *cct = static_cast<CephContext *>(m_local->cct());
+
+    m_asok_hook = new ImageReplayerAdminSocketHook(cct, m_name, this);
   }
 
   FunctionContext *ctx = new FunctionContext(
@@ -627,6 +627,21 @@ void ImageReplayer::stop(Context *on_finish)
 
       m_on_finish = ctx;
     }
+  } else if (m_state == STATE_FLUSHING_REPLAY) {
+    dout(20) << "interrupting flush" << dendl;
+
+    if (on_finish) {
+      Context *on_flush_finish = m_on_finish;
+      FunctionContext *ctx = new FunctionContext(
+	[this, on_flush_finish, on_finish](int r) {
+	  if (on_flush_finish) {
+	    on_flush_finish->complete(r);
+	  }
+	  on_finish->complete(0);
+	});
+
+      m_on_finish = ctx;
+    }
   } else {
     assert(m_on_finish == nullptr);
     m_on_finish = on_finish;
@@ -736,47 +751,143 @@ void ImageReplayer::handle_replay_ready()
   m_local_replay->process(&it, on_ready, on_commit);
 }
 
-int ImageReplayer::flush()
+void ImageReplayer::flush(Context *on_finish)
 {
-  // TODO: provide async method
-
   dout(20) << "enter" << dendl;
+
+  bool start_flush = false;
 
   {
     Mutex::Locker locker(m_lock);
 
-    if (m_state != STATE_REPLAYING) {
-      return 0;
-    }
+    if (m_state == STATE_REPLAYING) {
+      assert(m_on_finish == nullptr);
+      m_on_finish = on_finish;
 
-    m_state = STATE_FLUSHING_REPLAY;
+      m_state = STATE_FLUSHING_REPLAY;
+
+      start_flush = true;
+    }
   }
 
-  C_SaferCond replay_flush_ctx;
-  m_local_replay->flush(&replay_flush_ctx);
-  int r = replay_flush_ctx.wait();
+  if (start_flush) {
+    on_flush_local_replay_flush_start();
+  } else if (on_finish) {
+    on_finish->complete(0);
+  }
+}
+
+void ImageReplayer::on_flush_local_replay_flush_start()
+{
+  dout(20) << "enter" << dendl;
+
+  FunctionContext *ctx = new FunctionContext(
+    [this](int r) {
+      on_flush_local_replay_flush_finish(r);
+    });
+
+  m_local_replay->flush(ctx);
+}
+
+void ImageReplayer::on_flush_local_replay_flush_finish(int r)
+{
+  dout(20) << "r=" << r << dendl;
+
   if (r < 0) {
     derr << "error flushing local replay: " << cpp_strerror(r) << dendl;
   }
 
-  C_SaferCond journaler_flush_ctx;
-  m_remote_journaler->flush_commit_position(&journaler_flush_ctx);
-  int r1 = journaler_flush_ctx.wait();
-  if (r1 < 0) {
-    derr << "error flushing remote journal commit position: "
-	 << cpp_strerror(r1) << dendl;
+  if (on_flush_interrupted()) {
+    return;
   }
+
+  on_flush_flush_commit_position_start(r);
+}
+
+void ImageReplayer::on_flush_flush_commit_position_start(int last_r)
+{
+
+  FunctionContext *ctx = new FunctionContext(
+    [this, last_r](int r) {
+      on_flush_flush_commit_position_finish(last_r, r);
+    });
+
+  m_remote_journaler->flush_commit_position(ctx);
+}
+
+void ImageReplayer::on_flush_flush_commit_position_finish(int last_r, int r)
+{
+  if (r < 0) {
+    derr << "error flushing remote journal commit position: "
+	 << cpp_strerror(r) << dendl;
+  } else {
+    r = last_r;
+  }
+
+  Context *on_finish(nullptr);
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_state == STATE_FLUSHING_REPLAY);
+    if (m_state == STATE_STOPPING) {
+      r = -EINTR;
+    } else {
+      assert(m_state == STATE_FLUSHING_REPLAY);
 
-    m_state = STATE_REPLAYING;
+      m_state = STATE_REPLAYING;
+    }
+    std::swap(m_on_finish, on_finish);
   }
 
-  dout(20) << "done" << dendl;
+  dout(20) << "flush complete, r=" << r << dendl;
 
-  return r < 0 ? r : r1;
+  if (on_finish) {
+    dout(20) << "on finish complete, r=" << r << dendl;
+    on_finish->complete(r);
+  }
+}
+
+bool ImageReplayer::on_flush_interrupted()
+{
+  Context *on_finish(nullptr);
+
+  {
+    Mutex::Locker locker(m_lock);
+
+    if (m_state == STATE_FLUSHING_REPLAY) {
+      return false;
+    }
+
+    assert(m_state == STATE_STOPPING);
+
+    std::swap(m_on_finish, on_finish);
+  }
+
+  dout(20) << "flush interrupted" << dendl;
+
+  if (on_finish) {
+    int r = -EINTR;
+    dout(20) << "on finish complete, r=" << r << dendl;
+    on_finish->complete(r);
+  }
+
+  return true;
+}
+
+void ImageReplayer::print_status(Formatter *f, stringstream *ss)
+{
+  dout(20) << "enter" << dendl;
+
+  Mutex::Locker l(m_lock);
+
+  if (f) {
+    f->open_object_section("image_replayer");
+    f->dump_string("name", m_name);
+    f->dump_stream("state") << m_state;
+    f->close_section();
+    f->flush(*ss);
+  } else {
+    *ss << m_name << ": state: " << m_state;
+  }
 }
 
 void ImageReplayer::handle_replay_process_ready(int r)
