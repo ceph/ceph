@@ -67,6 +67,9 @@ private:
    * <start>
    *    |
    *    v
+   * GET_LOCAL_IMAGE_ID * * * * * * * * * * * *
+   *    |                                     *
+   *    v                                     *
    * GET_CLIENT * * * * * * * * * * * * * * * *
    *    |                                     *
    *    v (skip if not needed)                * (error)
@@ -124,6 +127,11 @@ private:
   cls::journal::Client m_client;
   ImageCtxT *m_remote_image_ctx = nullptr;
   int m_ret_val = 0;
+
+  bufferlist m_out_bl;
+
+  void get_local_image_id();
+  void handle_get_local_image_id(int r);
 
   void get_client();
   void handle_get_client(int r);
