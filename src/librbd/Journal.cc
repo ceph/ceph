@@ -429,19 +429,25 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
   int64_t pool_id;
   journaler.get_metadata(&order, &splay_width, &pool_id);
 
+  std::string pool_name;
+  if (pool_id != -1) {
+    librados::Rados rados(io_ctx);
+    r = rados.pool_reverse_lookup(pool_id, &pool_name);
+    if (r < 0) {
+      lderr(cct) << "failed to lookup data pool: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
   r = journaler.remove(true);
   if (r < 0) {
     lderr(cct) << "failed to reset journal: " << cpp_strerror(r) << dendl;
     return r;
   }
-  r = journaler.create(order, splay_width, pool_id);
+
+  r = create(io_ctx, image_id, order, splay_width, pool_name, false);
   if (r < 0) {
     lderr(cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  r = journaler.register_client(bufferlist());
-  if (r < 0) {
-    lderr(cct) << "failed to register client: " << cpp_strerror(r) << dendl;
     return r;
   }
   return 0;
