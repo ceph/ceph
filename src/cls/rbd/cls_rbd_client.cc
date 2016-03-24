@@ -1132,8 +1132,12 @@ namespace librbd {
     }
 
     int mirror_image_list(librados::IoCtx *ioctx,
-			  std::vector<std::string> *image_ids) {
+		          const std::string &start, uint64_t max_return,
+			  std::map<std::string, std::string> *mirror_image_ids) {
       bufferlist in_bl;
+      ::encode(start, in_bl);
+      ::encode(max_return, in_bl);
+
       bufferlist out_bl;
       int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_image_list", in_bl,
 			  out_bl);
@@ -1141,10 +1145,9 @@ namespace librbd {
         return r;
       }
 
-      image_ids->clear();
       try {
         bufferlist::iterator bl_it = out_bl.begin();
-        ::decode(*image_ids, bl_it);
+        ::decode(*mirror_image_ids, bl_it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }

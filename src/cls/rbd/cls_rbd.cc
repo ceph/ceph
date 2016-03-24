@@ -3046,28 +3046,6 @@ int write_peer(cls_method_context_t hctx, const std::string &id,
   return 0;
 }
 
-int image_list_ids(cls_method_context_t hctx, vector<string> *image_ids) {
-  string last_read = IMAGE_KEY_PREFIX;
-  int max_read = RBD_MAX_KEYS_READ;
-  int r = max_read;
-  while (r == max_read) {
-    set<string> keys;
-    r = cls_cxx_map_get_keys(hctx, last_read, max_read, &keys);
-    if (r < 0) {
-      CLS_ERR("error reading mirrored images: %s", cpp_strerror(r).c_str());
-      return r;
-    }
-
-    for (auto &image_key : keys) {
-      if (0 != image_key.compare(0, IMAGE_KEY_PREFIX.size(), IMAGE_KEY_PREFIX)) {
-	return 0;
-      }
-      image_ids->push_back(image_key.substr(IMAGE_KEY_PREFIX.size()));
-    }
-  }
-  return 0;
-}
-
 int image_get(cls_method_context_t hctx, const string &image_id,
 	      cls::rbd::MirrorImage *mirror_image) {
   bufferlist bl;
@@ -3486,21 +3464,66 @@ int mirror_peer_set_cluster(cls_method_context_t hctx, bufferlist *in,
 
 /**
  * Input:
- * none
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max_return the maximum number of names to list
  *
  * Output:
- * @param std::vector<std::string>: collection of image_ids
+ * @param std::map<std::string, std::string>: local id to global id map
  * @returns 0 on success, negative error code on failure
  */
 int mirror_image_list(cls_method_context_t hctx, bufferlist *in,
 		     bufferlist *out) {
-  vector<string> image_ids;
-  int r = mirror::image_list_ids(hctx, &image_ids);
-  if (r < 0) {
-    return r;
+  std::string start_after;
+  uint64_t max_return;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(start_after, iter);
+    ::decode(max_return, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
   }
 
-  ::encode(image_ids, *out);
+  int max_read = RBD_MAX_KEYS_READ;
+  int r = max_read;
+  std::map<std::string, std::string> mirror_images;
+  std::string last_read = mirror::image_key(start_after);
+
+  while (r == max_read && mirror_images.size() < max_return) {
+    std::map<std::string, bufferlist> vals;
+    CLS_LOG(20, "last_read = '%s'", last_read.c_str());
+    r = cls_cxx_map_get_vals(hctx, last_read, mirror::IMAGE_KEY_PREFIX,
+			     max_read, &vals);
+    if (r < 0) {
+      CLS_ERR("error reading mirror image directory by name: %s",
+              cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (auto it = vals.begin(); it != vals.end(); ++it) {
+      const std::string &image_id =
+        it->first.substr(mirror::IMAGE_KEY_PREFIX.size());
+      cls::rbd::MirrorImage mirror_image;
+      bufferlist::iterator iter = it->second.begin();
+      try {
+	::decode(mirror_image, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("could not decode mirror image payload of image '%s'",
+                image_id.c_str());
+	return -EIO;
+      }
+
+      mirror_images[image_id] = mirror_image.global_image_id;
+      if (mirror_images.size() >= max_return) {
+	break;
+      }
+    }
+    if (!vals.empty()) {
+      last_read = mirror::image_key(mirror_images.rbegin()->first);
+    }
+  }
+
+  ::encode(mirror_images, *out);
   return 0;
 }
 
