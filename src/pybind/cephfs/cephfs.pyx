@@ -123,6 +123,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
                       void *value, size_t size)
     int ceph_write(ceph_mount_info *cmount, int fd, const char *buf, int64_t size, int64_t offset)
     int ceph_read(ceph_mount_info *cmount, int fd, char *buf, int64_t size, int64_t offset)
+    int ceph_flock(ceph_mount_info *cmount, int fd, int operation, uint64_t owner)
     int ceph_close(ceph_mount_info *cmount, int fd)
     int ceph_open(ceph_mount_info *cmount, const char *path, int flags, mode_t mode)
     int ceph_mkdir(ceph_mount_info *cmount, const char *path, mode_t mode)
@@ -182,20 +183,23 @@ class IncompleteWriteError(Error):
 class LibCephFSStateError(Error):
     pass
 
+class WouldBlock(Error):
+    pass
 
 class OutOfRange(Error):
     pass
 
 cdef errno_to_exception =  {
-    errno.EPERM     : PermissionError,
-    errno.ENOENT    : ObjectNotFound,
-    errno.EIO       : IOError,
-    errno.ENOSPC    : NoSpace,
-    errno.EEXIST    : ObjectExists,
-    errno.ENODATA   : NoData,
-    errno.EINVAL    : InvalidValue,
-    errno.EOPNOTSUPP: OperationNotSupported,
-    errno.ERANGE    : OutOfRange,
+    errno.EPERM      : PermissionError,
+    errno.ENOENT     : ObjectNotFound,
+    errno.EIO        : IOError,
+    errno.ENOSPC     : NoSpace,
+    errno.EEXIST     : ObjectExists,
+    errno.ENODATA    : NoData,
+    errno.EINVAL     : InvalidValue,
+    errno.EOPNOTSUPP : OperationNotSupported,
+    errno.ERANGE     : OutOfRange,
+    errno.EWOULDBLOCK: WouldBlock,
 }
 
 
@@ -689,6 +693,24 @@ cdef class LibCephFS(object):
 
         with nogil:
             ret = ceph_write(self.cluster, _fd, _data, length, _offset)
+        if ret < 0:
+            raise make_ex(ret, "error in write")
+        return ret
+
+    def flock(self, fd, operation, owner):
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(operation, int):
+            raise TypeError('operation must be an int')
+
+        cdef:
+            int _fd = fd
+            int _op = operation
+            uint64_t _owner = owner
+
+        with nogil:
+            ret = ceph_flock(self.cluster, _fd, _op, _owner)
         if ret < 0:
             raise make_ex(ret, "error in write")
         return ret
