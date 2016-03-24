@@ -6837,6 +6837,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
 
   // info.last_epoch_started is set during activate()
   pg->info.history.last_epoch_started = pg->info.last_epoch_started;
+  pg->dirty_info = true;
 
   pg->share_pg_info();
   pg->publish_stats_to_osd();
