@@ -49,26 +49,33 @@ def write_conf(ctx, conf_path=DEFAULT_CONF_PATH, cluster='ceph'):
     run.wait(writes)
 
 
-def mount_osd_data(ctx, remote, osd):
+def mount_osd_data(ctx, remote, cluster, osd):
     """
     Mount a remote OSD
 
     :param ctx: Context
     :param remote: Remote site
-    :param ods: Osd name
+    :param cluster: name of ceph cluster
+    :param osd: Osd name
     """
     log.debug('Mounting data for osd.{o} on {r}'.format(o=osd, r=remote))
-    if (remote in ctx.disk_config.remote_to_roles_to_dev and
-            osd in ctx.disk_config.remote_to_roles_to_dev[remote]):
-        dev = ctx.disk_config.remote_to_roles_to_dev[remote][osd]
+    role = "{0}.osd.{1}".format(cluster, osd)
+    alt_role = role if cluster != 'ceph' else "osd.{0}".format(osd)
+    if remote in ctx.disk_config.remote_to_roles_to_dev:
+        if alt_role in ctx.disk_config.remote_to_roles_to_dev[remote]:
+            role = alt_role
+        if role not in ctx.disk_config.remote_to_roles_to_dev[remote]:
+            return
+        dev = ctx.disk_config.remote_to_roles_to_dev[remote][role]
         mount_options = ctx.disk_config.\
-            remote_to_roles_to_dev_mount_options[remote][osd]
-        fstype = ctx.disk_config.remote_to_roles_to_dev_fstype[remote][osd]
-        mnt = os.path.join('/var/lib/ceph/osd', 'ceph-{id}'.format(id=osd))
+            remote_to_roles_to_dev_mount_options[remote][role]
+        fstype = ctx.disk_config.remote_to_roles_to_dev_fstype[remote][role]
+        mnt = os.path.join('/var/lib/ceph/osd', '{0}-{1}'.format(cluster, osd))
 
-        log.info('Mounting osd.{o}: dev: {n}, '
+        log.info('Mounting osd.{o}: dev: {n}, cluster: {c}'
                  'mountpoint: {p}, type: {t}, options: {v}'.format(
-                     o=osd, n=remote.name, p=mnt, t=fstype, v=mount_options))
+                     o=osd, n=remote.name, p=mnt, t=fstype, v=mount_options,
+                     c=cluster))
 
         remote.run(
             args=[
@@ -1904,7 +1911,7 @@ class CephManager:
                 raise Exception('Failed to revive osd.{o} via ipmi'.
                                 format(o=osd))
             teuthology.reconnect(self.ctx, 60, [remote])
-            mount_osd_data(self.ctx, remote, str(osd))
+            mount_osd_data(self.ctx, remote, self.cluster, str(osd))
             self.make_admin_daemon_dir(remote)
             self.ctx.daemons.get_daemon('osd', osd, self.cluster).reset()
         self.ctx.daemons.get_daemon('osd', osd, self.cluster).restart()
