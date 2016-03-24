@@ -350,7 +350,9 @@ void PGLog::proc_replica_log(
  *    clear the object out of the store and add a missing entry at
  *    prior_version taking care to add a divergent_prior if
  *    necessary.
- */
+ */
+
+//merge object
 void PGLog::_merge_object_divergent_entries(
     const IndexedLog &log,
     const hobject_t &hoid,
@@ -405,13 +407,15 @@ void PGLog::_merge_object_divergent_entries(
              << " first_divergent_update: " << first_divergent_update
              << " last_divergent_update: " << last_divergent_update
              << dendl;
-
+    //注意，这里的log已经是merge之后的了，先merge log后处理差异
     ceph::unordered_map<hobject_t, pg_log_entry_t*>::const_iterator objiter =
         log.objects.find(hoid);
     if (objiter != log.objects.end() &&
             objiter->second->version >= first_divergent_update)
     {
         /// Case 1)
+        //这断言意思是如果还有更新的log,那么这些log必然来自auth log的节点，
+        //其log的version应该比last_divergent_update大
         assert(objiter->second->version > last_divergent_update);
 
         dout(10) << __func__ << ": more recent entry found: "
@@ -603,6 +607,8 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
     dirty_big_info = true;
 }
 
+//这个函数的功能是从auth的节点merge log。
+//就是说因为是以别人传过来的为准
 void PGLog::merge_log(ObjectStore::Transaction& t,
                       pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
                       pg_info_t &info, LogEntryHandler *rollbacker,
@@ -698,6 +704,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
                 break;
             }
         }
+		//如果版本出现分支了，那么lower_bound就是那个大家还一直的分叉点
         mark_dirty_from(lower_bound);
 
         // index, update missing, delete deleted
@@ -716,6 +723,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
         }
 
         // move aside divergent items
+        //那些在分叉点之后的本地pglog都是divergent
         list<pg_log_entry_t> divergent;
         while (!log.empty())
         {

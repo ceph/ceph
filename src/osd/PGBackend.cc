@@ -629,6 +629,7 @@ void PGBackend::be_compare_scrubmaps(
             ++k)
     {
         object_info_t auth_oi;
+		//先找到作为auth
         map<pg_shard_t, ScrubMap *>::const_iterator auth =
             be_select_auth_object(*k, maps, okseed, &auth_oi);
         list<pg_shard_t> auth_list;
@@ -646,6 +647,7 @@ void PGBackend::be_compare_scrubmaps(
         set<pg_shard_t> cur_missing;
         set<pg_shard_t> cur_inconsistent;
         bool clean = true;
+		//用其他的跟auth对比
         for (j = maps.begin(); j != maps.end(); ++j)
         {
             if (j == auth)
@@ -750,6 +752,8 @@ void PGBackend::be_compare_scrubmaps(
             if (update != NO)
             {
                 utime_t age = now - auth_oi.local_mtime;
+				//deep scrub的时候，如果本地最近更新时间超过2小时，并且object info中记录了
+				//的digest与计算出来的不符合，那么就更新digest
                 if (update == FORCE ||
                         age > g_conf->osd_deep_scrub_update_digest_min_age)
                 {

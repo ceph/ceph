@@ -84,7 +84,7 @@ struct osd_info_t {
   void decode(bufferlist::iterator& bl);
   static void generate_test_instances(list<osd_info_t*>& o);
 };
-WRITE_CLASS_ENCODER(osd_info_t)
+//WRITE_CLASS_ENCODER(osd_info_t)
 
 ostream& operator<<(ostream& out, const osd_info_t& info);
 
@@ -103,7 +103,7 @@ struct osd_xinfo_t {
   void decode(bufferlist::iterator& bl);
   static void generate_test_instances(list<osd_xinfo_t*>& o);
 };
-WRITE_CLASS_ENCODER(osd_xinfo_t)
+//WRITE_CLASS_ENCODER(osd_xinfo_t)
 
 ostream& operator<<(ostream& out, const osd_xinfo_t& xi);
 
@@ -851,8 +851,8 @@ public:
   static void generate_test_instances(list<OSDMap*>& o);
   bool check_new_blacklist_entries() const { return new_blacklist_entries; }
 };
-WRITE_CLASS_ENCODER_FEATURES(OSDMap)
-WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
+//WRITE_CLASS_ENCODER_FEATURES(OSDMap)
+//WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
 
 typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 

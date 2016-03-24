@@ -6619,6 +6619,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     }
 
     // use newer snapc?
+    //new snapset这时放的还是旧的snapset
+    //snapc中放的是需要访问的snap
     if (ctx->new_snapset.seq > snapc.seq)
     {
         snapc.seq = ctx->new_snapset.seq;
@@ -6640,7 +6642,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 
         unsigned l;
         for (l=1; l<snapc.snaps.size() && snapc.snaps[l] > ctx->new_snapset.seq; l++) ;
-
+        //存在这种情况，用户已经打了多个snap，但是对象上的还是很老的snap(因为一直没更新)
+        //这时创建的clone实际上包含了很多版本。这些版本的snap公用同一个clone对象
         vector<snapid_t> snaps(l);
         for (unsigned i=0; i<l; i++)
             snaps[i] = snapc.snaps[i];
@@ -6729,6 +6732,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     }
 
     // update snapset with latest snap context
+    //更新head对象上的snapset
     ctx->new_snapset.seq = snapc.seq;
     ctx->new_snapset.snaps = snapc.snaps;
     ctx->new_snapset.head_exists = ctx->new_obs.exists;
@@ -13808,6 +13812,7 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
             return discard_event();
         }
         assert(repop);
+		//完成osd_pg_max_concurrent_snap_trims指定数量的ops之后，继续下一轮
         repop->queue_snap_trimmer = true;
 
         pg->apply_ctx_stats(repop->ctx);

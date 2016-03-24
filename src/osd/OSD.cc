@@ -9068,6 +9068,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb )
             return;
         }
     }
+	//´Ópqueueµ½pg_for_processing
     pair<PGRef, PGQueueable> item = sdata->pqueue.dequeue();
     sdata->pg_for_processing[&*(item.first)].push_back(item.second);
     sdata->sdata_op_ordering_lock.Unlock();

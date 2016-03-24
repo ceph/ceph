@@ -4321,6 +4321,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
             break;
 
         case PG::Scrubber::WAIT_LAST_UPDATE:
+			//一般不会在这里停留
             if (last_update_applied >= scrubber.subset_last_update)
             {
                 scrubber.state = PG::Scrubber::BUILD_MAP;
