@@ -143,6 +143,11 @@ UNITTEST_LDADD += \
 	-lsocket -lnsl
 endif
 
+if FREEBSD
+UNITTEST_LDADD += \
+      -lexecinfo
+endif
+
 unittest_addrs_SOURCES = test/test_addrs.cc
 unittest_addrs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_addrs_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -447,8 +452,14 @@ unittest_async_compressor_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR) $(LIBCOMMON)
 check_PROGRAMS += unittest_async_compressor
 
+if LINUX
+#
+# XXX FREEBSD
+# These tests use nosetests and getting that to work thusfar has not worked
+#
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
 check_SCRIPTS += test/pybind/test_ceph_daemon.py
+endif
 
 ceph_test_objectcacher_stress_SOURCES = \
 	test/osdc/object_cacher_stress.cc \
