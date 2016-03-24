@@ -8663,7 +8663,7 @@ int Client::fstat(int fd, struct stat *stbuf)
 
 // not written yet, but i want to link!
 
-int Client::chdir(const char *relpath)
+int Client::chdir(const char *relpath, std::string &new_cwd)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "chdir" << std::endl;
@@ -8676,6 +8676,8 @@ int Client::chdir(const char *relpath)
   if (cwd != in)
     cwd.swap(in);
   ldout(cct, 3) << "chdir(" << relpath << ")  cwd now " << cwd->ino << dendl;
+
+  getcwd(new_cwd);
   return 0;
 }
 
@@ -8687,7 +8689,15 @@ void Client::getcwd(string& dir)
   Inode *in = cwd.get();
   while (in != root) {
     assert(in->dn_set.size() < 2); // dirs can't be hard-linked
+
+    // A cwd or ancester is unlinked
+    if (in->dn_set.empty()) {
+      return;
+    }
+
     Dentry *dn = in->get_first_parent();
+
+
     if (!dn) {
       // look it up
       ldout(cct, 10) << "getcwd looking up parent for " << *in << dendl;
