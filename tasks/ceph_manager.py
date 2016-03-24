@@ -95,6 +95,7 @@ class Thrasher:
     """
     def __init__(self, manager, config, logger=None):
         self.ceph_manager = manager
+        self.cluster = manager.cluster
         self.ceph_manager.wait_for_clean()
         osd_status = self.ceph_manager.get_osd_status()
         self.in_osds = osd_status['in']
@@ -162,7 +163,7 @@ class Thrasher:
 
     def cmd_exists_on_osds(self, cmd):
         allremotes = self.ceph_manager.ctx.cluster.only(\
-            teuthology.is_type('osd')).remotes.keys()
+            teuthology.is_type('osd', self.cluster)).remotes.keys()
         allremotes = list(set(allremotes))
         for remote in allremotes:
             proc = remote.run(args=['type', cmd], wait=True,
@@ -191,8 +192,7 @@ class Thrasher:
             self.out_osd(osd)
         if self.ceph_objectstore_tool:
             self.log("Testing ceph-objectstore-tool on down osd")
-            (remote,) = self.ceph_manager.ctx.\
-                cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
+            remote = self.ceph_manager.find_remote('osd', osd)
             FSPATH = self.ceph_manager.get_filepath()
             JPATH = os.path.join(FSPATH, "journal")
             exp_osd = imp_osd = osd
@@ -201,11 +201,9 @@ class Thrasher:
             if (len(self.dead_osds) > 1 and
                     random.random() < self.chance_move_pg):
                 exp_osd = random.choice(self.dead_osds[:-1])
-                (exp_remote,) = self.ceph_manager.ctx.\
-                    cluster.only('osd.{o}'.format(o=exp_osd)).\
-                    remotes.iterkeys()
+                exp_remote = self.ceph_manager.find_remote('osd', exp_osd)
             if ('keyvaluestore_backend' in
-                    self.ceph_manager.ctx.ceph.conf['osd']):
+                    self.ceph_manager.ctx.ceph[self.cluster].conf['osd']):
                 prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
                           "--data-path {fpath} --journal-path {jpath} "
                           "--type keyvaluestore "
@@ -231,9 +229,11 @@ class Thrasher:
                 return
             pg = random.choice(pgs)
             exp_path = teuthology.get_testdir(self.ceph_manager.ctx)
-            exp_path = os.path.join(exp_path, "data")
+            exp_path = os.path.join(exp_path, '{0}.data'.format(self.cluster))
             exp_path = os.path.join(exp_path,
-                                    "exp.{pg}.{id}".format(pg=pg, id=exp_osd))
+                                    "exp.{pg}.{id}".format(
+                                        pg=pg,
+                                        id=exp_osd))
             # export
             cmd = prefix + "--op export --pgid {pg} --file {file}"
             cmd = cmd.format(id=exp_osd, pg=pg, file=exp_path)
@@ -302,12 +302,11 @@ class Thrasher:
             if osd is None:
                 osd = random.choice(self.dead_osds)
             self.log("Use ceph_objectstore_tool to remove past intervals")
-            (remote,) = self.ceph_manager.ctx.\
-                cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
+            remote = self.ceph_manager.find_remote('osd', osd)
             FSPATH = self.ceph_manager.get_filepath()
             JPATH = os.path.join(FSPATH, "journal")
             if ('keyvaluestore_backend' in
-                    self.ceph_manager.ctx.ceph.conf['osd']):
+                    self.ceph_manager.ctx.ceph[self.cluster].conf['osd']):
                 prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
                           "--data-path {fpath} --journal-path {jpath} "
                           "--type keyvaluestore "
