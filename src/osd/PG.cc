@@ -5629,7 +5629,6 @@ boost::statechart::result PG::RecoveryState::Initial::react(const MNotifyRec& no
   PG *pg = context< RecoveryMachine >().pg;
   pg->proc_replica_info(
     notify.from, notify.notify.info, notify.notify.epoch_sent);
-  pg->update_heartbeat_peers();
   pg->set_last_peering_reset();
   return transit< Primary >();
 }
