@@ -17,6 +17,7 @@ import os
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
 from util.rados import cmd_erasure_code_profile
+from util import get_remote
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
@@ -1046,15 +1047,8 @@ class CephManager:
         :return: a Remote instance for the host where the
                  requested role is placed
         """
-        def _is_instance(role):
-            role_tuple = teuthology.split_role(role)
-            return role_tuple == (self.cluster, service_type, str(service_id))
-        try:
-            (remote,) = self.ctx.cluster.only(_is_instance).remotes.keys()
-        except ValueError:
-            raise KeyError("Service {0}.{1} not found".format(service_type,
-                                                              service_id))
-        return remote
+        return get_remote(self.ctx, self.cluster,
+                          service_type, service_id)
 
     def admin_socket(self, service_type, service_id,
                      command, check_status=True, timeout=0):
