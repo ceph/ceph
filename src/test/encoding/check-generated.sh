@@ -19,13 +19,6 @@ for type in `./ceph-dencoder list_types`; do
     num=`./ceph-dencoder type $type count_tests`
     echo "$num $type"
     for n in `seq 1 1 $num 2>/dev/null`; do
-	if ! ./ceph-dencoder type $type select_test $n encode decode; then
-	    echo "**** $type test $n encode+decode check failed ****"
-	    echo "   ceph-dencoder type $type select_test $n encode decode"
-	    failed=$(($failed + 3))
-	    continue
-	fi
-
 	safe_type=$type
 	# BitVector<2> needs some escaping to avoid bash issues with <>
 	if [ "$type" = "BitVector<2>" ]; then
@@ -38,6 +31,13 @@ for type in `./ceph-dencoder list_types`; do
 	run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n copy dump_json > $tmp3"
 	run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n copy_ctor dump_json > $tmp4"
 	wait_background pids
+
+	if [ $? -ne 0 ]; then
+	    echo "**** $type test $n encode+decode check failed ****"
+	    echo "   ceph-dencoder type $type select_test $n encode decode"
+	    failed=$(($failed + 3))
+	    continue
+	fi
 
 	# nondeterministic classes may dump nondeterministically.  compare
 	# the sorted json output.  this is a weaker test, but is better
