@@ -3,6 +3,8 @@
 
 #include <boost/bind.hpp>
 
+#include "common/Formatter.h"
+#include "common/admin_socket.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "include/stringify.h"
@@ -22,6 +24,92 @@ using std::vector;
 namespace rbd {
 namespace mirror {
 
+namespace {
+
+class ReplayerAdminSocketCommand {
+public:
+  virtual ~ReplayerAdminSocketCommand() {}
+  virtual bool call(Formatter *f, stringstream *ss) = 0;
+};
+
+class StatusCommand : public ReplayerAdminSocketCommand {
+public:
+  explicit StatusCommand(Replayer *replayer) : replayer(replayer) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    replayer->print_status(f, ss);
+    return true;
+  }
+
+private:
+  Replayer *replayer;
+};
+
+class FlushCommand : public ReplayerAdminSocketCommand {
+public:
+  explicit FlushCommand(Replayer *replayer) : replayer(replayer) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    replayer->flush();
+    return true;
+  }
+
+private:
+  Replayer *replayer;
+};
+
+} // anonymous namespace
+
+class ReplayerAdminSocketHook : public AdminSocketHook {
+public:
+  ReplayerAdminSocketHook(CephContext *cct, const std::string &name,
+			  Replayer *replayer) :
+    admin_socket(cct->get_admin_socket()) {
+    std::string command;
+    int r;
+
+    command = "rbd mirror status " + name;
+    r = admin_socket->register_command(command, command, this,
+				       "get status for rbd mirror " + name);
+    if (r == 0) {
+      commands[command] = new StatusCommand(replayer);
+    }
+
+    command = "rbd mirror flush " + name;
+    r = admin_socket->register_command(command, command, this,
+				       "flush rbd mirror " + name);
+    if (r == 0) {
+      commands[command] = new FlushCommand(replayer);
+    }
+  }
+
+  ~ReplayerAdminSocketHook() {
+    for (Commands::const_iterator i = commands.begin(); i != commands.end();
+	 ++i) {
+      (void)admin_socket->unregister_command(i->first);
+      delete i->second;
+    }
+  }
+
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+	    bufferlist& out) {
+    Commands::const_iterator i = commands.find(command);
+    assert(i != commands.end());
+    Formatter *f = Formatter::create(format);
+    stringstream ss;
+    bool r = i->second->call(f, &ss);
+    delete f;
+    out.append(ss);
+    return r;
+  }
+
+private:
+  typedef std::map<std::string, ReplayerAdminSocketCommand*> Commands;
+
+  AdminSocket *admin_socket;
+  Commands commands;
+};
+
 Replayer::Replayer(Threads *threads, RadosRef local_cluster,
                    const peer_t &peer, const std::vector<const char*> &args) :
   m_threads(threads),
@@ -30,12 +118,17 @@ Replayer::Replayer(Threads *threads, RadosRef local_cluster,
   m_args(args),
   m_local(local_cluster),
   m_remote(new librados::Rados),
+  m_asok_hook(nullptr),
   m_replayer_thread(this)
 {
+  CephContext *cct = static_cast<CephContext *>(m_local->cct());
+  m_asok_hook = new ReplayerAdminSocketHook(cct, m_peer.cluster_name, this);
 }
 
 Replayer::~Replayer()
 {
+  delete m_asok_hook;
+
   m_stopping.set(1);
   {
     Mutex::Locker l(m_lock);
@@ -118,6 +211,52 @@ void Replayer::run()
       break;
     }
     m_cond.WaitInterval(g_ceph_context, m_lock, seconds(1));
+  }
+}
+
+void Replayer::print_status(Formatter *f, stringstream *ss)
+{
+  dout(20) << "enter" << dendl;
+
+  Mutex::Locker l(m_lock);
+
+  if (f) {
+    f->open_object_section("replayer_status");
+    f->dump_stream("peer") << m_peer;
+    f->open_array_section("image_replayers");
+  };
+
+  for (auto it = m_images.begin(); it != m_images.end(); it++) {
+    auto &pool_images = it->second;
+    for (auto i = pool_images.begin(); i != pool_images.end(); i++) {
+      auto &image_replayer = i->second;
+      image_replayer->print_status(f, ss);
+    }
+  }
+
+  if (f) {
+    f->close_section();
+    f->close_section();
+    f->flush(*ss);
+  }
+}
+
+void Replayer::flush()
+{
+  dout(20) << "enter" << dendl;
+
+  Mutex::Locker l(m_lock);
+
+  if (m_stopping.read()) {
+    return;
+  }
+
+  for (auto it = m_images.begin(); it != m_images.end(); it++) {
+    auto &pool_images = it->second;
+    for (auto i = pool_images.begin(); i != pool_images.end(); i++) {
+      auto &image_replayer = i->second;
+      image_replayer->flush();
+    }
   }
 }
 

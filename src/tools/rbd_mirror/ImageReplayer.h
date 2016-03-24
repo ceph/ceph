@@ -81,10 +81,14 @@ public:
   bool is_stopped() { Mutex::Locker l(m_lock); return is_stopped_(); }
   bool is_running() { Mutex::Locker l(m_lock); return is_running_(); }
 
+  std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
+
   void start(Context *on_finish = nullptr,
 	     const BootstrapParams *bootstrap_params = nullptr);
   void stop(Context *on_finish = nullptr);
-  int flush();
+  void flush(Context *on_finish = nullptr);
+
+  void print_status(Formatter *f, stringstream *ss);
 
   virtual void handle_replay_ready();
   virtual void handle_replay_process_ready(int r);
@@ -107,7 +111,7 @@ protected:
    *    | (sync required)                       *
    *    |\-----\                                *
    *    |      |                                *
-   *    |      v                                *
+   *    |      v                        (error) *
    *    |   BOOTSTRAP_IMAGE * * * * * * * * * * *
    *    |      |                                *
    *    |      v                                *
@@ -117,21 +121,21 @@ protected:
    * REMOTE_JOURNALER_INIT  * * * * * * * * * * *
    *    |                                       *
    *    v                               (error) *
-   * LOCAL_IMAGE_OPEN (skip if not              *
+   * LOCAL_IMAGE_OPEN (skip if not  * * * * * * *
    *    |              needed                   *
    *    v                               (error) *
    * WAIT_FOR_LOCAL_JOURNAL_READY * * * * * * * *
    *    |
-   *    v
-   * <replaying>
-   *    |
-   *    v
-   * <stopping>
-   *    |
-   *    v
-   * JOURNAL_REPLAY_SHUT_DOWN
-   *    |
-   *    v
+   *    v-----------------------------------------------\
+   * <replaying> --------------> <flushing_replay>      |
+   *    |                           |                   |
+   *    v                           v                   |
+   * <stopping>                  LOCAL_REPLAY_FLUSH     |
+   *    |                           |                   |
+   *    v                           v                   |
+   * JOURNAL_REPLAY_SHUT_DOWN    FLUSH_COMMIT_POSITION  |
+   *    |                           |                   |
+   *    v                           \-------------------/
    * LOCAL_IMAGE_CLOSE
    *    |
    *    v
@@ -164,6 +168,12 @@ protected:
   virtual void on_stop_local_image_close_start();
   virtual void on_stop_local_image_close_finish(int r);
 
+  virtual void on_flush_local_replay_flush_start();
+  virtual void on_flush_local_replay_flush_finish(int r);
+  virtual void on_flush_flush_commit_position_start(int last_r);
+  virtual void on_flush_flush_commit_position_finish(int last_r, int r);
+  virtual bool on_flush_interrupted();
+
   void close_local_image(Context *on_finish); // for tests
 
 private:
@@ -184,6 +194,7 @@ private:
   std::string m_client_id;
   int64_t m_remote_pool_id, m_local_pool_id;
   std::string m_remote_image_id, m_local_image_id;
+  std::string m_name;
   Mutex m_lock;
   State m_state;
   std::string m_local_pool_name, m_remote_pool_name;
