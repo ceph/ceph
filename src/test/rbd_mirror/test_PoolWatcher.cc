@@ -140,8 +140,14 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
       librbd::RBD rbd;
       rbd.open(ioctx, image, name.c_str());
       image.mirror_image_enable();
+
+      librbd::mirror_image_info_t mirror_image_info;
+      ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image_info,
+                                               sizeof(mirror_image_info)));
       image.close();
-      m_mirrored_images[ioctx.get_id()].insert(get_image_id(&ioctx, name));
+
+      m_mirrored_images[ioctx.get_id()].insert(PoolWatcher::ImageIds(
+        get_image_id(&ioctx, name), mirror_image_info.global_id));
     }
     if (image_name != nullptr)
       *image_name = name;
@@ -179,8 +185,14 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
       librbd::RBD rbd;
       rbd.open(cioctx, image, name.c_str());
       image.mirror_image_enable();
+
+      librbd::mirror_image_info_t mirror_image_info;
+      ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image_info,
+                                               sizeof(mirror_image_info)));
       image.close();
-      m_mirrored_images[cioctx.get_id()].insert(get_image_id(&cioctx, name));
+
+      m_mirrored_images[cioctx.get_id()].insert(PoolWatcher::ImageIds(
+        get_image_id(&cioctx, name), mirror_image_info.global_id));
     }
     if (image_name != nullptr)
       *image_name = name;
@@ -198,7 +210,7 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
   unique_ptr<PoolWatcher> m_pool_watcher;
 
   set<string> m_pools;
-  std::map<int64_t, std::set<std::string> > m_mirrored_images;
+  PoolWatcher::PoolImageIds m_mirrored_images;
 
   uint64_t m_image_number;
   uint64_t m_snap_number;

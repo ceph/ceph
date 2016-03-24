@@ -34,6 +34,7 @@ public:
                                   ImageCtxT **local_image_ctx,
                                   const std::string &local_image_name,
                                   const std::string &remote_image_id,
+                                  const std::string &global_image_id,
                                   ContextWQ *work_queue, SafeTimer *timer,
                                   Mutex *timer_lock,
                                   const std::string &mirror_uuid,
@@ -41,16 +42,17 @@ public:
                                   MirrorPeerClientMeta *client_meta,
                                   Context *on_finish) {
     return new BootstrapRequest(local_io_ctx, remote_io_ctx, local_image_ctx,
-                                local_image_name, remote_image_id, work_queue,
-                                timer, timer_lock, mirror_uuid, journaler,
-                                client_meta, on_finish);
+                                local_image_name, remote_image_id,
+                                global_image_id, work_queue, timer, timer_lock,
+                                mirror_uuid, journaler, client_meta, on_finish);
   }
 
   BootstrapRequest(librados::IoCtx &local_io_ctx,
                    librados::IoCtx &remote_io_ctx,
                    ImageCtxT **local_image_ctx,
                    const std::string &local_image_name,
-                   const std::string &remote_image_id, ContextWQ *work_queue,
+                   const std::string &remote_image_id,
+                   const std::string &global_image_id, ContextWQ *work_queue,
                    SafeTimer *timer, Mutex *timer_lock,
                    const std::string &mirror_uuid, Journaler *journaler,
                    MirrorPeerClientMeta *client_meta, Context *on_finish);
@@ -110,6 +112,7 @@ private:
   std::string m_local_image_name;
   std::string m_local_image_id;
   std::string m_remote_image_id;
+  std::string m_global_image_id;
   ContextWQ *m_work_queue;
   SafeTimer *m_timer;
   Mutex *m_timer_lock;

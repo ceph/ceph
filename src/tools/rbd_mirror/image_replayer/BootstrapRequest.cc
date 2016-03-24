@@ -32,15 +32,18 @@ namespace {
 template <typename I>
 struct C_CreateImage : public Context {
   librados::IoCtx &local_io_ctx;
+  std::string global_image_id;
   std::string local_image_name;
   I *remote_image_ctx;
   Context *on_finish;
 
   C_CreateImage(librados::IoCtx &local_io_ctx,
+                const std::string &global_image_id,
                 const std::string &local_image_name, I *remote_image_ctx,
                 Context *on_finish)
-    : local_io_ctx(local_io_ctx), local_image_name(local_image_name),
-      remote_image_ctx(remote_image_ctx), on_finish(on_finish) {
+    : local_io_ctx(local_io_ctx), global_image_id(global_image_id),
+      local_image_name(local_image_name), remote_image_ctx(remote_image_ctx),
+      on_finish(on_finish) {
   }
 
   virtual void finish(int r) override {
@@ -62,7 +65,7 @@ struct C_CreateImage : public Context {
                           remote_image_ctx->stripe_unit,
                           remote_image_ctx->stripe_count,
                           journal_order, journal_splay_width, journal_pool,
-                          "global-image-id");
+                          global_image_id);
     on_finish->complete(r);
   }
 };
@@ -75,6 +78,7 @@ BootstrapRequest<I>::BootstrapRequest(librados::IoCtx &local_io_ctx,
                                       I **local_image_ctx,
                                       const std::string &local_image_name,
                                       const std::string &remote_image_id,
+                                      const std::string &global_image_id,
                                       ContextWQ *work_queue, SafeTimer *timer,
                                       Mutex *timer_lock,
                                       const std::string &mirror_uuid,
@@ -83,9 +87,10 @@ BootstrapRequest<I>::BootstrapRequest(librados::IoCtx &local_io_ctx,
                                       Context *on_finish)
   : m_local_io_ctx(local_io_ctx), m_remote_io_ctx(remote_io_ctx),
     m_local_image_ctx(local_image_ctx), m_local_image_name(local_image_name),
-    m_remote_image_id(remote_image_id), m_work_queue(work_queue),
-    m_timer(timer), m_timer_lock(timer_lock), m_mirror_uuid(mirror_uuid),
-    m_journaler(journaler), m_client_meta(client_meta), m_on_finish(on_finish) {
+    m_remote_image_id(remote_image_id), m_global_image_id(global_image_id),
+    m_work_queue(work_queue), m_timer(timer), m_timer_lock(timer_lock),
+    m_mirror_uuid(mirror_uuid), m_journaler(journaler),
+    m_client_meta(client_meta), m_on_finish(on_finish) {
 }
 
 template <typename I>
@@ -257,7 +262,8 @@ void BootstrapRequest<I>::create_local_image() {
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_create_local_image>(
       this);
-  m_work_queue->queue(new C_CreateImage<I>(m_local_io_ctx, m_local_image_name,
+  m_work_queue->queue(new C_CreateImage<I>(m_local_io_ctx, m_global_image_id,
+                                           m_local_image_name,
                                            m_remote_image_ctx, ctx), 0);
 }
 

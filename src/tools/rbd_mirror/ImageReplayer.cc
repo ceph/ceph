@@ -176,7 +176,8 @@ ImageReplayer<I>::ImageReplayer(Threads *threads, RadosRef local, RadosRef remot
 			     const std::string &mirror_uuid,
 			     int64_t local_pool_id,
 			     int64_t remote_pool_id,
-			     const std::string &remote_image_id) :
+			     const std::string &remote_image_id,
+                             const std::string &global_image_id) :
   m_threads(threads),
   m_local(local),
   m_remote(remote),
@@ -184,6 +185,7 @@ ImageReplayer<I>::ImageReplayer(Threads *threads, RadosRef local, RadosRef remot
   m_remote_pool_id(remote_pool_id),
   m_local_pool_id(local_pool_id),
   m_remote_image_id(remote_image_id),
+  m_global_image_id(global_image_id),
   m_name(stringify(remote_pool_id) + "/" + remote_image_id),
   m_lock("rbd::mirror::ImageReplayer " + stringify(remote_pool_id) + " " +
 	 remote_image_id),
@@ -266,9 +268,9 @@ void ImageReplayer<I>::bootstrap() {
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
   BootstrapRequest<I> *request = BootstrapRequest<I>::create(
     m_local_ioctx, m_remote_ioctx, &m_local_image_ctx,
-    m_local_image_name, m_remote_image_id, m_threads->work_queue,
-    m_threads->timer, &m_threads->timer_lock, m_mirror_uuid, m_remote_journaler,
-    &m_client_meta, ctx);
+    m_local_image_name, m_remote_image_id, m_global_image_id,
+    m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
+    m_mirror_uuid, m_remote_journaler, &m_client_meta, ctx);
   request->send();
 }
 
