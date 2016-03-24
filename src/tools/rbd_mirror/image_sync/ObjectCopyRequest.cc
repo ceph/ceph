@@ -74,7 +74,7 @@ void ObjectCopyRequest<I>::handle_list_snaps(int r) {
     return;
   }
   if (r < 0) {
-    lderr(cct) << "failed to list snaps: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": failed to list snaps: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -142,7 +142,7 @@ void ObjectCopyRequest<I>::handle_read_object(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to read from remote object: " << cpp_strerror(r)
+    lderr(cct) << ": failed to read from remote object: " << cpp_strerror(r)
                << dendl;
     finish(r);
     return;
@@ -208,7 +208,7 @@ void ObjectCopyRequest<I>::handle_write_object(int r) {
     r = 0;
   }
   if (r < 0) {
-    lderr(cct) << "failed to write to local object: " << cpp_strerror(r)
+    lderr(cct) << ": failed to write to local object: " << cpp_strerror(r)
                << dendl;
     finish(r);
     return;

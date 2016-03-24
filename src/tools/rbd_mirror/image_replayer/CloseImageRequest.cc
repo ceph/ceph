@@ -51,7 +51,7 @@ void CloseImageRequest<I>::handle_close_image(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << "error encountered while closing image: " << cpp_strerror(r)
+    derr << ": error encountered while closing image: " << cpp_strerror(r)
          << dendl;
   }
 

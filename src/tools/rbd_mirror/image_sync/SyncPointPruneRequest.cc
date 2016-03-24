@@ -113,7 +113,7 @@ void SyncPointPruneRequest<I>::handle_remove_snap(int r) {
     r = 0;
   }
   if (r < 0) {
-    lderr(cct) << "failed to remove snapshot '" << snap_name << "': "
+    lderr(cct) << ": failed to remove snapshot '" << snap_name << "': "
                << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -139,7 +139,7 @@ void SyncPointPruneRequest<I>::handle_refresh_image(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "remote image refresh failed: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": remote image refresh failed: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -176,7 +176,8 @@ void SyncPointPruneRequest<I>::handle_update_client(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to update client data: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
+               << dendl;
     finish(r);
     return;
   }

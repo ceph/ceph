@@ -101,7 +101,7 @@ void OpenLocalImageRequest<I>::handle_open_image(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << "failed to open image '" << m_local_image_id << "': "
+    derr << ": failed to open image '" << m_local_image_id << "': "
          << cpp_strerror(r) << dendl;
     send_close_image(true, r);
     return;
@@ -119,7 +119,7 @@ void OpenLocalImageRequest<I>::send_lock_image() {
 
   RWLock::RLocker owner_locker((*m_local_image_ctx)->owner_lock);
   if ((*m_local_image_ctx)->exclusive_lock == nullptr) {
-    derr << "image does not support exclusive lock" << dendl;
+    derr << ": image does not support exclusive lock" << dendl;
     send_close_image(false, -EINVAL);
     return;
   }
@@ -128,7 +128,7 @@ void OpenLocalImageRequest<I>::send_lock_image() {
   bool tag_owner;
   int r = Journal::is_tag_owner(*m_local_image_ctx, &tag_owner);
   if (r < 0) {
-    derr << "failed to query journal: " << cpp_strerror(r) << dendl;
+    derr << ": failed to query journal: " << cpp_strerror(r) << dendl;
     send_close_image(false, r);
     return;
   }
@@ -136,7 +136,7 @@ void OpenLocalImageRequest<I>::send_lock_image() {
   // if the local image owns the tag -- don't steal the lock since
   // we aren't going to mirror peer data into this image anyway
   if (tag_owner) {
-    dout(10) << "local image is primary -- skipping image replay" << dendl;
+    dout(10) << ": local image is primary -- skipping image replay" << dendl;
     send_close_image(false, -EREMOTEIO);
     return;
   }
@@ -153,13 +153,13 @@ void OpenLocalImageRequest<I>::handle_lock_image(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << "failed to lock image '" << m_local_image_id << "': "
+    derr << ": failed to lock image '" << m_local_image_id << "': "
        << cpp_strerror(r) << dendl;
     send_close_image(false, r);
     return;
   } else if ((*m_local_image_ctx)->exclusive_lock == nullptr ||
              !(*m_local_image_ctx)->exclusive_lock->is_lock_owner()) {
-    derr << "image is not locked" << dendl;
+    derr << ": image is not locked" << dendl;
     send_close_image(false, -EBUSY);
     return;
   }
