@@ -1283,6 +1283,83 @@ function test_display_logs() {
 }
 
 #######################################################################
+##
+# Spawn a command in background and save the pid in the variable name
+# passed in argument. To make the output reading easier, the output is
+# prepend with the process id.
+#
+# Example:
+#   pids1=""
+#   run_in_background pids1 bash -c 'sleep 1; exit 1'
+#
+# @param pid_variable the variable name (not value) where the pids will be stored
+# @param ... the command to execute
+# @return only the pid_variable output should be considered and used with **wait_background**
+#
+function run_in_background() {
+    local pid_variable=$1
+    shift;
+    # Execute the command and prepend the output with its pid
+    # We enforce to return the exit status of the command and not the awk one.
+    ("$@" |& awk '{ a[i++] = $0 }END{for (i = 0; i in a; ++i) { print PROCINFO["pid"] ": " a[i]} }'; return ${PIPESTATUS[0]}) &
+    eval "$pid_variable+=\" $!\""
+}
+
+function test_run_in_background() {
+    local pids
+    run_in_background pids sleep 1
+    run_in_background pids sleep 1
+    test $(echo $pids | wc -w) = 2 || return 1
+    wait $pids || return 1
+}
+
+#######################################################################
+##
+# Wait for pids running in background to complete.
+# This function is usually used after a **run_in_background** call
+# Example:
+#   pids1=""
+#   run_in_background pids1 bash -c 'sleep 1; exit 1'
+#   wait_background pids1
+#
+# @param pids The variable name that contains the active PIDS. Set as empty at then end of the function.
+# @return returns 1 if at least one process exits in error unless returns 0
+#
+function wait_background() {
+    # We extract the PIDS from the variable name
+    pids=${!1}
+
+    return_code=0
+    for pid in $pids; do
+        if ! wait $pid; then
+            # If one process failed then return 1
+            return_code=1
+        fi
+    done
+
+    # We empty the variable reporting that all process ended
+    eval "$1=''"
+
+    return $return_code
+}
+
+
+function test_wait_background() {
+    local pids=""
+    run_in_background pids bash -c "sleep 1; exit 1"
+    run_in_background pids bash -c "sleep 2; exit 0"
+    wait_background pids
+    if [ $? -ne 1 ]; then return 1; fi
+
+    run_in_background pids bash -c "sleep 1; exit 0"
+    run_in_background pids bash -c "sleep 2; exit 0"
+    wait_background pids
+    if [ $? -ne 0 ]; then return 1; fi
+
+    if [ ! -z "$pids" ]; then return 1; fi
+}
+
+#######################################################################
 
 ##
 # Call the **run** function (which must be defined by the caller) with
