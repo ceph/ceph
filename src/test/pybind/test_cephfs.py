@@ -153,3 +153,16 @@ def test_delete_cwd():
     # even when things are unlinked.  It's up to the caller to find out
     # whether it really still exists
     assert_equal("/temp-directory", cephfs.getcwd())
+
+@with_setup(setup_test)
+def test_flock():
+    fd = cephfs.open('file-1', 'w', 0755)
+
+    cephfs.flock(fd, fcntl.LOCK_EX, 123);
+    fd2 = cephfs.open('file-1', 'w', 0755)
+
+    assert_raises(libcephfs.WouldBlock, cephfs.flock, fd2,
+                  fcntl.LOCK_EX | fcntl.LOCK_NB, 456);
+    cephfs.close(fd2)
+
+    cephfs.close(fd)
