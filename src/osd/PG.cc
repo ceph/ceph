@@ -7225,6 +7225,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
 	  if (!any_up_complete_now && any_down_now) {
 	    dout(10) << " no osds up+complete from interval " << interval << dendl;
 	    pg->state_set(PG_STATE_DOWN);
+            pg->publish_stats_to_osd();
 	    return discard_event();
 	  }
 	  break;
