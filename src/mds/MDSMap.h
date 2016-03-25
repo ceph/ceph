@@ -140,13 +140,13 @@ public:
     utime_t laggy_since;
     mds_rank_t standby_for_rank;
     std::string standby_for_name;
-    fs_cluster_id_t standby_for_ns;
+    fs_cluster_id_t standby_for_fscid;
     std::set<mds_rank_t> export_targets;
     uint64_t mds_features;
 
     mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0), state(STATE_STANDBY), state_seq(0),
 		   standby_for_rank(MDS_NO_STANDBY_PREF),
-                   standby_for_ns(FS_CLUSTER_ID_NONE)
+                   standby_for_fscid(FS_CLUSTER_ID_NONE)
     { }
 
     bool laggy() const { return !(laggy_since == utime_t()); }

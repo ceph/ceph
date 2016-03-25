@@ -524,6 +524,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       new_info.state_seq = seq;
       new_info.standby_for_rank = m->get_standby_for_rank();
       new_info.standby_for_name = m->get_standby_for_name();
+      new_info.standby_for_fscid = m->get_standby_for_fscid();
       pending_fsmap.insert(new_info);
     }
 
@@ -540,7 +541,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
         pending_fsmap.modify_daemon(gid, [fscid, leaderinfo, followable](
               MDSMap::mds_info_t *info) {
             info->standby_for_rank = leaderinfo->rank;
-            info->standby_for_ns = fscid;
+            info->standby_for_fscid = fscid;
         });
       }
     }
@@ -611,7 +612,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
           pending_fsmap.modify_daemon(info.global_id,
               [target_info, target_ns, seq](MDSMap::mds_info_t *info) {
             info->standby_for_rank = target_info->rank;
-            info->standby_for_ns = target_ns;
+            info->standby_for_fscid = target_ns;
             info->state = MDSMap::STATE_STANDBY_REPLAY;
             info->state_seq = seq;
           });
@@ -620,14 +621,11 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
           return false;
         }
       } else if (m->get_standby_for_rank() >= 0) {
-        // TODO get this from MDS message
-        // >>
-        fs_cluster_id_t target_ns = FS_CLUSTER_ID_NONE;
-        // <<
+        fs_cluster_id_t target_ns = m->get_standby_for_fscid();
 
         mds_role_t target_role = {
           target_ns == FS_CLUSTER_ID_NONE ?
-            pending_fsmap.legacy_client_fscid : info.standby_for_ns,
+            pending_fsmap.legacy_client_fscid : info.standby_for_fscid,
           m->get_standby_for_rank()};
 
         if (target_role.fscid != FS_CLUSTER_ID_NONE) {
@@ -636,7 +634,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
             pending_fsmap.modify_daemon(info.global_id,
                 [target_role, seq](MDSMap::mds_info_t *info) {
               info->standby_for_rank = target_role.rank;
-              info->standby_for_ns = target_role.fscid;
+              info->standby_for_fscid = target_role.fscid;
               info->state = MDSMap::STATE_STANDBY_REPLAY;
               info->state_seq = seq;
             });
@@ -2766,8 +2764,8 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> fs)
         // The mds_info_t may or may not tell us exactly which filesystem
         // the standby_for_rank refers to: lookup via legacy_client_fscid
         mds_role_t target_role = {
-          info.standby_for_ns == FS_CLUSTER_ID_NONE ?
-            pending_fsmap.legacy_client_fscid : info.standby_for_ns,
+          info.standby_for_fscid == FS_CLUSTER_ID_NONE ?
+            pending_fsmap.legacy_client_fscid : info.standby_for_fscid,
           info.standby_for_rank};
 
         // If we managed to resolve a full target role

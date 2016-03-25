@@ -81,7 +81,7 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
     f->dump_stream("laggy_since") << laggy_since;
   
   f->dump_int("standby_for_rank", standby_for_rank);
-  f->dump_int("standby_for_ns", standby_for_ns);
+  f->dump_int("standby_for_fscid", standby_for_fscid);
   f->dump_string("standby_for_name", standby_for_name);
   f->open_array_section("export_targets");
   for (set<mds_rank_t>::iterator p = export_targets.begin();
@@ -419,7 +419,7 @@ void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) con
   ::encode(standby_for_name, bl);
   ::encode(export_targets, bl);
   ::encode(mds_features, bl);
-  ::encode(standby_for_ns, bl);
+  ::encode(standby_for_fscid, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -458,7 +458,7 @@ void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 5)
     ::decode(mds_features, bl);
   if (struct_v >= 6) {
-    ::decode(standby_for_ns, bl);
+    ::decode(standby_for_fscid, bl);
   }
   DECODE_FINISH(bl);
 }
