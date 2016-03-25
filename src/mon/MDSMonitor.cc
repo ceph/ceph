@@ -139,18 +139,20 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   assert(version >= fsmap.epoch);
 
   // read and decode
-  mdsmap_bl.clear();
-  int err = get_version(version, mdsmap_bl);
+  fsmap_bl.clear();
+  int err = get_version(version, fsmap_bl);
   assert(err == 0);
 
-  assert(mdsmap_bl.length() > 0);
+  assert(fsmap_bl.length() > 0);
   dout(10) << __func__ << " got " << version << dendl;
-  fsmap.decode(mdsmap_bl);
+  fsmap.decode(fsmap_bl);
 
   // new map
   dout(4) << "new map" << dendl;
   print_map(fsmap, 0);
-  fsmap.sanity();
+  if (!g_conf->mon_mds_skip_sanity) {
+    fsmap.sanity();
+  }
 
   check_subs();
   update_logger();
@@ -176,7 +178,9 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // print map iff 'debug mon = 30' or higher
   print_map(pending_fsmap, 30);
-  pending_fsmap.sanity();
+  if (!g_conf->mon_mds_skip_sanity) {
+    pending_fsmap.sanity();
+  }
 
   // Set 'modified' on maps modified this epoch
   for (auto &i : fsmap.filesystems) {
@@ -187,11 +191,11 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // apply to paxos
   assert(get_last_committed() + 1 == pending_fsmap.epoch);
-  bufferlist mdsmap_bl;
-  pending_fsmap.encode(mdsmap_bl, mon->get_quorum_features());
+  bufferlist fsmap_bl;
+  pending_fsmap.encode(fsmap_bl, mon->get_quorum_features());
 
   /* put everything in the transaction */
-  put_version(t, pending_fsmap.epoch, mdsmap_bl);
+  put_version(t, pending_fsmap.epoch, fsmap_bl);
   put_last_committed(t, pending_fsmap.epoch);
 
   // Encode MDSHealth data
@@ -2403,7 +2407,7 @@ void MDSMonitor::check_sub(Subscription *sub)
 
   if (sub->type == "fsmap") {
     if (sub->next <= fsmap.get_epoch()) {
-      sub->session->con->send_message(new MFSMap(mon->monmap->fsid, &fsmap));
+      sub->session->con->send_message(new MFSMap(mon->monmap->fsid, fsmap));
       if (sub->onetime) {
         mon->session_map.remove_sub(sub);
       } else {

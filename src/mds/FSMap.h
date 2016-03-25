@@ -57,7 +57,7 @@ class Filesystem
   fs_cluster_id_t fscid;
   MDSMap mds_map;
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& p);
 
   Filesystem()
@@ -86,7 +86,7 @@ class Filesystem
     return false;
   }
 };
-WRITE_CLASS_ENCODER(Filesystem)
+WRITE_CLASS_ENCODER_FEATURES(Filesystem)
 
 class FSMap {
 protected:
@@ -336,7 +336,7 @@ public:
    * for the one we had previously.  Impose the new one
    * on all filesystems.
    */
-  void update_compat(CompatSet c)
+  void update_compat(const CompatSet &c)
   {
     // We could do something more complicated here to enable
     // different filesystems to be served by different MDS versions,
