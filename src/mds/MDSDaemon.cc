@@ -559,7 +559,9 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
   if (wanted_state == MDSMap::STATE_NULL) {
     wanted_state = MDSMap::STATE_BOOT;
   }
-  beacon.init(mdsmap, wanted_state, standby_for_rank, standby_for_name);
+  beacon.init(mdsmap, wanted_state,
+    standby_for_rank, standby_for_name,
+    fs_cluster_id_t(g_conf->mds_standby_for_fscid));
   messenger->set_myname(entity_name_t::MDS(MDS_RANK_NONE));
 
   // schedule tick

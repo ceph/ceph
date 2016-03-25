@@ -522,6 +522,7 @@ OPTION(mds_skip_ino, OPT_INT, 0)
 OPTION(max_mds, OPT_INT, 1)
 OPTION(mds_standby_for_name, OPT_STR, "")
 OPTION(mds_standby_for_rank, OPT_INT, -1)
+OPTION(mds_standby_for_fscid, OPT_INT, -1)
 OPTION(mds_standby_replay, OPT_BOOL, false)
 OPTION(mds_enable_op_tracker, OPT_BOOL, true) // enable/disable MDS op tracking
 OPTION(mds_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
