@@ -29,4 +29,5 @@ install(FILES
 	rbd-nbd.8
 	rbd-replay.8
 	rbd-replay-prep.8
+	rbdmap.8
   DESTINATION ${CEPH_MAN_DIR}/man8)
