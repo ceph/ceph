@@ -1212,14 +1212,18 @@ def restart(ctx, config):
         config = {'daemons': config}
 
     daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES, True)
+    clusters = set()
     for role in daemons:
         cluster, type_, id_ = teuthology.split_role(role)
         ctx.daemons.get_daemon(type_, id_, cluster).restart()
+        clusters.add(cluster)
 
     if config.get('wait-for-healthy', True):
-        healthy(ctx=ctx, config=None)
+        for cluster in clusters:
+            healthy(ctx=ctx, config=dict(cluster=cluster))
     if config.get('wait-for-osds-up', False):
-        wait_for_osds_up(ctx=ctx, config=None)
+        for cluster in clusters:
+            wait_for_osds_up(ctx=ctx, config=dict(cluster=cluster))
     yield
 
 
