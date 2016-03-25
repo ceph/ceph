@@ -1144,9 +1144,14 @@ def wait_for_mon_quorum(ctx, config):
     :param ctx: Context
     :param config: Configuration
     """
-
-    assert isinstance(config, list)
-    firstmon = teuthology.get_first_mon(ctx, config)
+    if isinstance(config, dict):
+        mons = config['daemons']
+        cluster_name = config.get('cluster', 'ceph')
+    else:
+        assert isinstance(config, list)
+        mons = config
+        cluster_name = 'ceph'
+    firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
     (remote,) = ctx.cluster.only(firstmon).remotes.keys()
     while True:
         r = remote.run(
@@ -1161,7 +1166,7 @@ def wait_for_mon_quorum(ctx, config):
         j = json.loads(r.stdout.getvalue())
         q = j.get('quorum_names', [])
         log.debug('Quorum: %s', q)
-        if sorted(q) == sorted(config):
+        if sorted(q) == sorted(mons):
             break
         time.sleep(1)
 
