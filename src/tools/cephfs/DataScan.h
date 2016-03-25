@@ -155,8 +155,8 @@ class MetadataTool
    * Construct a synthetic InodeStore for a directory
    */
   void build_dir_dentry(
-    inodeno_t ino, uint64_t nfiles,
-    time_t mtime,
+    inodeno_t ino,
+    const frag_info_t &fragstat,
     const file_layout_t &layout,
     InodeStore *out);
 
