@@ -36,6 +36,14 @@ int FreelistManager::init(KeyValueDB *db, string p)
 
     total_free += length;
 
+    if (offset < last_offset + last_length) {
+      derr << __func__ << " detected overlapping extent on load, had "
+	   << last_offset << "~" << last_length
+	   << " and got "
+	   << offset << "~" << length
+	   << dendl;
+      return -EIO;
+    }
     if (offset && offset == last_offset + last_length) {
       derr << __func__ << " detected contiguous extent on load, merging "
 	   << last_offset << "~" << last_length << " with "
