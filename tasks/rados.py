@@ -199,10 +199,11 @@ def task(ctx, config):
         """Thread spawned by gevent"""
         clients = ['client.{id}'.format(id=id_) for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
         log.info('clients are %s' % clients)
+        manager = ctx.managers['ceph']
         if config.get('ec_pool', False):
             profile = config.get('erasure_code_profile', {})
             profile_name = profile.get('name', 'teuthologyprofile')
-            ctx.manager.create_erasure_code_profile(profile_name, profile)
+            manager.create_erasure_code_profile(profile_name, profile)
         else:
             profile_name = None
         for i in range(int(config.get('runs', '1'))):
@@ -220,10 +221,10 @@ def task(ctx, config):
                 if not pool and existing_pools:
                     pool = existing_pools.pop()
                 else:
-                    pool = ctx.manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
+                    pool = manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
                     created_pools.append(pool)
                     if config.get('fast_read', False):
-                        ctx.manager.raw_cluster_cmd(
+                        manager.raw_cluster_cmd(
                             'osd', 'pool', 'set', pool, 'fast_read', 'true')
 
                 (remote,) = ctx.cluster.only(role).remotes.iterkeys()
@@ -238,7 +239,7 @@ def task(ctx, config):
             run.wait(tests.itervalues())
 
             for pool in created_pools:
-                ctx.manager.remove_pool(pool)
+                manager.remove_pool(pool)
 
     running = gevent.spawn(thread)
 
