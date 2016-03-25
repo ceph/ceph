@@ -23,10 +23,11 @@ def setup(ctx, config):
     """
     Setup peering test on remotes.
     """
-    ctx.manager.clear_pools()
-    ctx.manager.create_pool(POOLNAME, config.num_pgs)
+    manager = ctx.managers['ceph']
+    manager.clear_pools()
+    manager.create_pool(POOLNAME, config.num_pgs)
     log.info("populating pool")
-    ctx.manager.rados_write_objects(
+    manager.rados_write_objects(
         POOLNAME,
         config.num_objects,
         config.object_size,
@@ -40,9 +41,10 @@ def do_run(ctx, config):
     """
     start = time.time()
     # mark in osd
-    ctx.manager.mark_in_osd(0)
+    manager = ctx.managers['ceph']
+    manager.mark_in_osd(0)
     log.info("writing out objects")
-    ctx.manager.rados_write_objects(
+    manager.rados_write_objects(
         POOLNAME,
         config.num_pgs, # write 1 object per pg or so
         1,
@@ -52,14 +54,14 @@ def do_run(ctx, config):
     peering_end = time.time()
 
     log.info("peering done, waiting on recovery")
-    ctx.manager.wait_for_clean()
+    manager.wait_for_clean()
 
     log.info("recovery done")
     recovery_end = time.time()
     if config.max_time:
         assert(peering_end - start < config.max_time)
-    ctx.manager.mark_out_osd(0)
-    ctx.manager.wait_for_clean()
+    manager.mark_out_osd(0)
+    manager.wait_for_clean()
     return {
         'time_to_active': peering_end - start,
         'time_to_clean': recovery_end - start
@@ -71,14 +73,15 @@ def task(ctx, config):
     Peering speed test
     """
     setup(ctx, config)
-    ctx.manager.mark_out_osd(0)
-    ctx.manager.wait_for_clean()
+    manager = ctx.managers['ceph']
+    manager.mark_out_osd(0)
+    manager.wait_for_clean()
     ret = []
     for i in range(config.runs):
         log.info("Run {i}".format(i = i))
         ret.append(do_run(ctx, config))
 
-    ctx.manager.mark_in_osd(0)
+    manager.mark_in_osd(0)
     ctx.summary['recovery_times'] = {
         'runs': ret
         }
