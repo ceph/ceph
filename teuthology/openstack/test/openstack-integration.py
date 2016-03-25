@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2015 Red Hat, Inc.
+# Copyright (c) 2015, 2016 Red Hat, Inc.
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -227,12 +227,22 @@ class TestLock(Integration):
         assert teuthology.lock.cli.main(args) == 0
 
     def test_lock_unlock(self):
-        for image in teuthology.openstack.OpenStack.image2url.keys():
-            (os_type, os_version) = image.split('-')
+        default_archs = teuthology.openstack.OpenStack().get_available_archs()
+        if 'TEST_IMAGES' in os.environ:
+            images = os.environ['TEST_IMAGES'].split()
+        else:
+            images = teuthology.openstack.OpenStack.image2url.keys()
+        for image in images:
+            (os_type, os_version, arch) = image.split('-')
+            if arch not in default_archs:
+                logging.info("skipping " + image + " because arch " +
+                             " is not supported (" + str(default_archs) + ")")
+                continue
             args = scripts.lock.parse_args(self.options +
                                            ['--lock-many', '1',
                                             '--os-type', os_type,
-                                            '--os-version', os_version])
+                                            '--os-version', os_version,
+                                            '--arch', arch])
             assert teuthology.lock.cli.main(args) == 0
             locks = teuthology.lock.query.list_locks(locked=True)
             assert len(locks) == 1
@@ -256,7 +266,7 @@ class TestNuke(Integration):
     def test_nuke(self):
         image = teuthology.openstack.OpenStack.image2url.keys()[0]
 
-        (os_type, os_version) = image.split('-')
+        (os_type, os_version, arch) = image.split('-')
         args = scripts.lock.parse_args(self.options +
                                        ['--lock-many', '1',
                                         '--os-type', os_type,

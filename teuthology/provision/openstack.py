@@ -109,17 +109,20 @@ class ProvisionOpenStack(OpenStack):
         described in resources_hint.
         """
         log.debug('ProvisionOpenStack:create')
+        if arch is None:
+            arch = self.get_default_arch()
         resources_hint = self.interpret_hints({
             'machine': config['openstack']['machine'],
             'volumes': config['openstack']['volumes'],
         }, resources_hint)
         self.init_user_data(os_type, os_version)
-        image = self.image(os_type, os_version)
+        image = self.image(os_type, os_version, arch)
         if 'network' in config['openstack']:
             net = "--nic net-id=" + str(self.net_id(config['openstack']['network']))
         else:
             net = ''
         flavor = self.flavor(resources_hint['machine'],
+                             arch,
                              config['openstack'].get('flavor-select-regexp'))
         cmd = ("flock --close --timeout 28800 /tmp/teuthology-server-create.lock" +
                " openstack server create" +

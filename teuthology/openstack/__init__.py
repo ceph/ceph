@@ -48,6 +48,9 @@ from teuthology import misc
 
 log = logging.getLogger(__name__)
 
+class NoFlavorException(Exception):
+    pass
+
 def enforce_json_dictionary(something):
     if type(something) is not types.DictType:
         raise Exception(
@@ -178,29 +181,25 @@ class OpenStackInstance(object):
 
 class OpenStack(object):
 
-    # wget -O debian-8.0.qcow2  http://cdimage.debian.org/cdimage/openstack/current/debian-8.1.0-openstack-amd64.qcow2
-    # wget -O ubuntu-12.04.qcow2 https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img
-    # wget -O ubuntu-12.04-i386.qcow2 https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-i386-disk1.img
-    # wget -O ubuntu-14.04.qcow2 https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
-    # wget -O ubuntu-14.04-i386.qcow2 https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-i386-disk1.img
-    # wget -O ubuntu-15.04.qcow2 https://cloud-images.ubuntu.com/vivid/current/vivid-server-cloudimg-arm64-disk1.img
-    # wget -O ubuntu-15.04-i386.qcow2 https://cloud-images.ubuntu.com/vivid/current/vivid-server-cloudimg-i386-disk1.img
-    # wget -O opensuse-13.2 http://download.opensuse.org/repositories/Cloud:/Images:/openSUSE_13.2/images/openSUSE-13.2-OpenStack-Guest.x86_64.qcow2
-    # wget -O opensuse-42.1 http://download.opensuse.org/repositories/Cloud:/Images:/Leap_42.1/images/openSUSE-Leap-42.1-OpenStack.x86_64.qcow2
-    # wget -O centos-7.0.qcow2 http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2
-    # wget -O centos-6.6.qcow2 http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud.qcow2
-    # wget -O fedora-22.qcow2 https://download.fedoraproject.org/pub/fedora/linux/releases/22/Cloud/x86_64/Images/Fedora-Cloud-Base-22-20150521.x86_64.qcow2
-    # wget -O fedora-21.qcow2 http://fedora.mirrors.ovh.net/linux/releases/21/Cloud/Images/x86_64/Fedora-Cloud-Base-20141203-21.x86_64.qcow2
-    # wget -O fedora-20.qcow2 http://fedora.mirrors.ovh.net/linux/releases/20/Images/x86_64/Fedora-x86_64-20-20131211.1-sda.qcow2
+    # http://cdimage.debian.org/cdimage/openstack/current/
+    # https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img etc.
+    # http://download.opensuse.org/repositories/Cloud:/Images:/openSUSE_13.2/images/openSUSE-13.2-OpenStack-Guest.x86_64.qcow2
+    # http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2 etc.
+    # http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud.qcow2 etc.
+    # https://download.fedoraproject.org/pub/fedora/linux/releases/22/Cloud/x86_64/Images/Fedora-Cloud-Base-22-20150521.x86_64.qcow2
+    # http://fedora.mirrors.ovh.net/linux/releases/21/Cloud/Images/x86_64/Fedora-Cloud-Base-20141203-21.x86_64.qcow2
+    # http://fedora.mirrors.ovh.net/linux/releases/20/Images/x86_64/Fedora-x86_64-20-20131211.1-sda.qcow2
     image2url = {
-        'centos-6.5': 'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud-1508.qcow2',
-        'centos-7.0': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1503.qcow2',
-        'centos-7.1': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1503.qcow2',
-        'centos-7.2': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1511.qcow2',
-        'opensuse-42.1': 'http://download.opensuse.org/repositories/Cloud:/Images:/Leap_42.1/images/openSUSE-Leap-42.1-OpenStack.x86_64.qcow2',
-        'ubuntu-12.04': 'https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img',
-        'ubuntu-14.04': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img',
-        'debian-8.0': 'http://cdimage.debian.org/cdimage/openstack/current/debian-8.2.0-openstack-amd64.qcow2',
+        'centos-6.5-x86_64': 'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud-1508.qcow2',
+        'centos-7.0-x86_64': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1503.qcow2',
+        'centos-7.1-x86_64': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1503.qcow2',
+        'centos-7.2-x86_64': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1511.qcow2',
+        'opensuse-42.1-x86_64': 'http://download.opensuse.org/repositories/Cloud:/Images:/Leap_42.1/images/openSUSE-Leap-42.1-OpenStack.x86_64.qcow2',
+        'ubuntu-12.04-x86_64': 'https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img',
+        'ubuntu-14.04-x86_64': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img',
+        'ubuntu-14.04-arm64': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-arm64-disk1.img',
+        'ubuntu-14.04-i686': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-i386-disk1.img',
+        'debian-8.0-x86_64': 'http://cdimage.debian.org/cdimage/openstack/current/debian-8.3.0-openstack-amd64.qcow2',
     }
 
     def __init__(self):
@@ -282,7 +281,8 @@ class OpenStack(object):
     def set_provider(self):
         if 'OS_AUTH_URL' not in os.environ:
             raise Exception('no OS_AUTH_URL environment variable')
-        providers = (('cloud.ovh.net', 'ovh'),
+        providers = (('runabove.io', 'runabove'),
+                     ('cloud.ovh.net', 'ovh'),
                      ('entercloudsuite.com', 'entercloudsuite'),
                      ('rackspacecloud.com', 'rackspace'),
                      ('dream.io', 'dreamhost'))
@@ -328,11 +328,11 @@ class OpenStack(object):
                                network))
         return self.get_value(r, 'id')
 
-    def type_version(self, os_type, os_version):
+    def type_version_arch(self, os_type, os_version, arch):
         """
         Return the string used to differentiate os_type and os_version in names.
         """
-        return os_type + '-' + os_version
+        return os_type + '-' + os_version + '-' + arch
 
     def image_name(self, name):
         """
@@ -341,9 +341,9 @@ class OpenStack(object):
         """
         return "teuthology-" + name
 
-    def image_create(self, name):
+    def image_create(self, name, arch):
         """
-        Upload an image into OpenStack with glance.
+        Upload an image into OpenStack
         """
         misc.sh("wget -c -O " + name + ".qcow2 " + self.image2url[name])
         if self.get_provider() == 'dreamhost':
@@ -353,22 +353,37 @@ class OpenStack(object):
         else:
             image = name + ".qcow2"
             disk_format = 'qcow2'
-        misc.sh("glance image-create --property ownedby=teuthology " +
-                " --disk-format=" + disk_format + " --container-format=bare " +
-                " --visibility private" +
-                " --file " + image + " --name " + self.image_name(name))
+        if self.provider == 'runabove':
+            properties = [
+                "--property architecture_restrict=" + arch,
+                "--property architecture=" + arch
+            ]
+        elif self.get_provider() == 'cloudlab':
+            # if not, nova-compute fails on the compute node with
+            # Error: Cirrus VGA not available
+            properties = [
+                "--property hw_video_model=vga",
+            ]
+        else:
+            properties = []
 
-    def image(self, os_type, os_version):
+        misc.sh("openstack image create --property ownedby=teuthology " +
+                " ".join(properties) +
+                " --disk-format=" + disk_format + " --container-format=bare " +
+                " --private" +
+                " --file " + image + " " + self.image_name(name))
+
+    def image(self, os_type, os_version, arch):
         """
         Return the image name for the given os_type and os_version. If the image
         does not exist it will be created.
         """
-        name = self.type_version(os_type, os_version)
+        name = self.type_version_arch(os_type, os_version, arch)
         if not self.image_exists(name):
-            self.image_create(name)
+            self.image_create(name, arch)
         return self.image_name(name)
 
-    def flavor(self, hint, select):
+    def get_sorted_flavors(self, arch, select):
         """
         Return the smallest flavor that satisfies the desired size.
         """
@@ -378,22 +393,54 @@ class OpenStack(object):
         for flavor in flavors:
             if select and not re.match(select, flavor['Name']):
                 continue
-            if (flavor['RAM'] >= hint['ram'] and
-                    flavor['VCPUs'] >= hint['cpus'] and
-                    flavor['Disk'] >= hint['disk']):
-                found.append(flavor)
-        if not found:
-            raise Exception("openstack flavor list: " + flavors_string +
-                            " does not contain a flavor in which" +
-                            " the desired " + str(hint) + " can fit")
+            found.append(flavor)
 
         def sort_flavor(a, b):
             return (a['VCPUs'] - b['VCPUs'] or
                     a['RAM'] - b['RAM'] or
                     a['Disk'] - b['Disk'])
-        sorted_flavor = sorted(found, cmp=sort_flavor)
-        log.debug("sorted flavor = " + str(sorted_flavor))
-        return sorted_flavor[0]['Name']
+        sorted_flavors = sorted(found, cmp=sort_flavor)
+        log.debug("sorted flavors = " + str(sorted_flavors))
+        return sorted_flavors
+
+    def flavor(self, hint, arch, select):
+        """
+        Return the smallest flavor that satisfies the desired size.
+        """
+        flavors = self.get_sorted_flavors(arch, select)
+        for flavor in flavors:
+            if (flavor['RAM'] >= hint['ram'] and
+                    flavor['VCPUs'] >= hint['cpus'] and
+                    flavor['Disk'] >= hint['disk']):
+                return flavor['Name']
+        raise NoFlavorException("openstack flavor list: " + str(flavors) +
+                                " does not contain a flavor in which" +
+                                " the desired " + str(hint) + " can fit")
+
+    def flavor_range(self, min, good, arch, select):
+        """
+        Return the smallest flavor that satisfies the good hint.
+        If no such flavor, get the largest flavor smaller than good
+        and larger than min.
+        """
+        flavors = self.get_sorted_flavors(arch, select)
+        low_range = []
+        for flavor in flavors:
+            if (flavor['RAM'] >= good['ram'] and
+                    flavor['VCPUs'] >= good['cpus'] and
+                    flavor['Disk'] >= good['disk']):
+                return flavor['Name']
+            else:
+                low_range.append(flavor)
+        low_range.reverse()
+        for flavor in low_range:
+            if (flavor['RAM'] >= min['ram'] and
+                    flavor['VCPUs'] >= min['cpus'] and
+                    flavor['Disk'] >= min['disk']):
+                return flavor['Name']
+        raise NoFlavorException("openstack flavor list: " + str(flavors) +
+                                " does not contain a flavor which" +
+                                " is larger than " + str(min))
 
     def interpret_hints(self, defaults, hints):
         """
@@ -507,6 +554,16 @@ class OpenStack(object):
 
     def get_ip(self, instance_id, network):
         return OpenStackInstance(instance_id).get_ip(network)
+
+    def get_available_arch(self):
+        if (self.provider == 'runabove' and
+            'HZ1' in os.environ.get('OS_REGION_NAME', '')):
+            return ('aarch64',)
+        else:
+            return ('x86_64', 'i686')
+
+    def get_default_arch(self):
+        return self.get_available_archs()[0]
 
 
 class TeuthologyOpenStack(OpenStack):
@@ -806,7 +863,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             log.exception("flavor list")
             raise Exception("verify openrc.sh has been sourced")
 
-    def flavor(self):
+    def flavor(self, arch):
         """
         Return an OpenStack flavor fit to run the teuthology cluster.
         The RAM size depends on the maximum number of workers that
@@ -827,7 +884,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         select = None
         if self.get_provider() == 'ovh':
             select = '^(vps|eg)-'
-        return super(TeuthologyOpenStack, self).flavor(hint, select)
+        return super(TeuthologyOpenStack, self).flavor(hint, arch, select)
 
     def net(self):
         """
@@ -983,10 +1040,11 @@ openstack security group rule create --proto udp --dst-port 16000:65535 teutholo
             security_group = ''
         else:
             security_group = " --security-group teuthology"
+        arch = self.get_default_arch()
         self.run(
             "server create " +
-            " --image '" + self.image('ubuntu', '14.04') + "' " +
-            " --flavor '" + self.flavor() + "' " +
+            " --image '" + self.image('ubuntu', '14.04', arch) + "' " +
+            " --flavor '" + self.flavor(arch) + "' " +
             " " + self.net() +
             " --key-name " + self.args.key_name +
             " --user-data " + user_data +

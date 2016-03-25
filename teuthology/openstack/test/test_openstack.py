@@ -34,6 +34,7 @@ import teuthology
 from teuthology import misc
 from teuthology.config import set_config_attr
 from teuthology.openstack import TeuthologyOpenStack, OpenStack, OpenStackInstance
+from teuthology.openstack import NoFlavorException
 import scripts.openstack
 
 
@@ -212,6 +213,344 @@ class TestOpenStackInstance(object):
             ).get_ip_neutron()
 
 class TestOpenStack(object):
+
+    flavors = """[
+          {
+            "Name": "eg-60",
+            "RAM": 60000,
+            "Ephemeral": 0,
+            "VCPUs": 16,
+            "Is Public": true,
+            "Disk": 1600,
+            "ID": "0297d7ac-fe6f-4ff1-b6e7-0b8b0908c94f"
+          },
+          {
+            "Name": "win-sp-60",
+            "RAM": 60000,
+            "Ephemeral": 0,
+            "VCPUs": 4,
+            "Is Public": true,
+            "Disk": 400,
+            "ID": "0417a0e6-f68a-4b8b-a642-ca5ecb9652f7"
+          },
+          {
+            "Name": "win-sp-240",
+            "RAM": 240000,
+            "Ephemeral": 0,
+            "VCPUs": 16,
+            "Is Public": true,
+            "Disk": 1600,
+            "ID": "07885848-8831-486d-8525-91484c09cc7e"
+          },
+          {
+            "Name": "vps-ssd-1",
+            "RAM": 2000,
+            "Ephemeral": 0,
+            "VCPUs": 1,
+            "Is Public": true,
+            "Disk": 10,
+            "ID": "164fcc7e-7771-414f-a607-b388cb7b7aa0"
+          },
+          {
+            "Name": "eg-120",
+            "RAM": 120000,
+            "Ephemeral": 0,
+            "VCPUs": 32,
+            "Is Public": true,
+            "Disk": 1600,
+            "ID": "1f1efedf-ec91-4a42-acd7-f5cf64b02d3c"
+          },
+          {
+            "Name": "win-eg-7",
+            "RAM": 7000,
+            "Ephemeral": 0,
+            "VCPUs": 2,
+            "Is Public": true,
+            "Disk": 200,
+            "ID": "377ded36-491f-4ad7-9eb4-876798b2aea9"
+          },
+          {
+            "Name": "eg-30",
+            "RAM": 30000,
+            "Ephemeral": 0,
+            "VCPUs": 8,
+            "Is Public": true,
+            "Disk": 800,
+            "ID": "3c1d6170-0097-4b5c-a3b3-adff1b7a86e0"
+          },
+          {
+            "Name": "eg-15",
+            "RAM": 15000,
+            "Ephemeral": 0,
+            "VCPUs": 4,
+            "Is Public": true,
+            "Disk": 400,
+            "ID": "675558ea-04fe-47a2-83de-40be9b2eacd4"
+          },
+          {
+            "Name": "win-eg-30",
+            "RAM": 30000,
+            "Ephemeral": 0,
+            "VCPUs": 8,
+            "Is Public": true,
+            "Disk": 800,
+            "ID": "6e12cae3-0492-483c-aa39-54a0dcaf86dd"
+          },
+          {
+            "Name": "vps-ssd-2",
+            "RAM": 4000,
+            "Ephemeral": 0,
+            "VCPUs": 1,
+            "Is Public": true,
+            "Disk": 20,
+            "ID": "7939cc5c-79b1-45c0-be2d-aa935d92faa1"
+          },
+          {
+            "Name": "sp-60",
+            "RAM": 60000,
+            "Ephemeral": 0,
+            "VCPUs": 4,
+            "Is Public": true,
+            "Disk": 400,
+            "ID": "80d8510a-79cc-4307-8db7-d1965c9e8ddb"
+          },
+          {
+            "Name": "win-sp-30",
+            "RAM": 30000,
+            "Ephemeral": 0,
+            "VCPUs": 2,
+            "Is Public": true,
+            "Disk": 200,
+            "ID": "8be9dc29-3eca-499b-ae2d-e3c99699131a"
+          },
+          {
+            "Name": "sp-120",
+            "RAM": 120000,
+            "Ephemeral": 0,
+            "VCPUs": 8,
+            "Is Public": true,
+            "Disk": 800,
+            "ID": "ac74cb45-d895-47dd-b9cf-c17778033d83"
+          },
+          {
+            "Name": "win-eg-15",
+            "RAM": 15000,
+            "Ephemeral": 0,
+            "VCPUs": 4,
+            "Is Public": true,
+            "Disk": 400,
+            "ID": "ae900175-72bd-4fbc-8ab2-4673b468aa5b"
+          },
+          {
+            "Name": "win-eg-120",
+            "RAM": 120000,
+            "Ephemeral": 0,
+            "VCPUs": 32,
+            "Is Public": true,
+            "Disk": 1600,
+            "ID": "b798e44e-bf71-488c-9335-f20bf5976547"
+          },
+          {
+            "Name": "sp-30",
+            "RAM": 30000,
+            "Ephemeral": 0,
+            "VCPUs": 2,
+            "Is Public": true,
+            "Disk": 200,
+            "ID": "d1acf88d-6f55-4c5c-a914-4ecbdbd50d6b"
+          },
+          {
+            "Name": "win-eg-60",
+            "RAM": 60000,
+            "Ephemeral": 0,
+            "VCPUs": 16,
+            "Is Public": true,
+            "Disk": 1600,
+            "ID": "def75cbd-a4b1-4f82-9152-90c65df9587b"
+          },
+          {
+            "Name": "vps-ssd-3",
+            "RAM": 8000,
+            "Ephemeral": 0,
+            "VCPUs": 2,
+            "Is Public": true,
+            "Disk": 40,
+            "ID": "e43d7458-6b82-4a78-a712-3a4dc6748cf4"
+          },
+          {
+            "Name": "sp-240",
+            "RAM": 240000,
+            "Ephemeral": 0,
+            "VCPUs": 16,
+            "Is Public": true,
+            "Disk": 1600,
+            "ID": "ed286e2c-769f-4c47-ac52-b8de7a4891f6"
+          },
+          {
+            "Name": "win-sp-120",
+            "RAM": 120000,
+            "Ephemeral": 0,
+            "VCPUs": 8,
+            "Is Public": true,
+            "Disk": 800,
+            "ID": "f247dc56-395b-49de-9a62-93ccc4fff4ed"
+          },
+          {
+            "Name": "eg-7",
+            "RAM": 7000,
+            "Ephemeral": 0,
+            "VCPUs": 2,
+            "Is Public": true,
+            "Disk": 200,
+            "ID": "fa3cc551-0358-4170-be64-56ea432b064c"
+          }
+    ]"""
+
+    @patch('teuthology.misc.sh')
+    def test_sorted_flavors(self, m_sh):
+        o = OpenStack()
+        select = '^(vps|eg)-'
+        m_sh.return_value = TestOpenStack.flavors
+        flavors = o.get_sorted_flavors('arch', select)
+        assert ['vps-ssd-1',
+                'vps-ssd-2',
+                'eg-7',
+                'vps-ssd-3',
+                'eg-15',
+                'eg-30',
+                'eg-60',
+                'eg-120',
+        ] == [ f['Name'] for f in flavors ]
+        m_sh.assert_called_with("openstack flavor list -f json")
+
+    def test_flavor(self):
+        def get_sorted_flavors(self, arch, select):
+            return [
+                {
+                    'Name': 'too_small',
+                    'RAM': 2048,
+                    'Disk': 50,
+                    'VCPUs': 1,
+                },
+            ]
+        with patch.multiple(
+                OpenStack,
+                get_sorted_flavors=get_sorted_flavors,
+        ):
+            with pytest.raises(NoFlavorException):
+                hint = { 'ram': 1000, 'disk': 40, 'cpus': 2 }
+                OpenStack().flavor(hint, 'arch', None)
+
+        flavor = 'good-flavor'
+        def get_sorted_flavors(self, arch, select):
+            return [
+                {
+                    'Name': flavor,
+                    'RAM': 2048,
+                    'Disk': 50,
+                    'VCPUs': 2,
+                },
+            ]
+        with patch.multiple(
+                OpenStack,
+                get_sorted_flavors=get_sorted_flavors,
+        ):
+            hint = { 'ram': 1000, 'disk': 40, 'cpus': 2 }
+            assert flavor == OpenStack().flavor(hint, 'arch', None)
+
+    def test_flavor_range(self):
+        flavors = [
+                {
+                    'Name': 'too_small',
+                    'RAM': 2048,
+                    'Disk': 50,
+                    'VCPUs': 1,
+                },
+        ]
+        def get_sorted_flavors(self, arch, select):
+            return flavors
+
+        min = { 'ram': 1000, 'disk': 40, 'cpus': 2 }
+        good = { 'ram': 4000, 'disk': 40, 'cpus': 2 }
+
+        #
+        # there are no flavors in the required range
+        #
+        with patch.multiple(
+                OpenStack,
+                get_sorted_flavors=get_sorted_flavors,
+        ):
+            with pytest.raises(NoFlavorException):
+                OpenStack().flavor_range(min, good, 'arch', None)
+
+        #
+        # there is one flavor in the required range
+        #
+        flavors.append({
+                    'Name': 'min',
+                    'RAM': 2048,
+                    'Disk': 40,
+                    'VCPUs': 2,
+        })
+
+        with patch.multiple(
+                OpenStack,
+                get_sorted_flavors=get_sorted_flavors,
+        ):
+
+            assert 'min' == OpenStack().flavor_range(min, good, 'arch', None)
+
+        #
+        # out of the two flavors in the required range, get the bigger one
+        #
+        flavors.append({
+                    'Name': 'good',
+                    'RAM': 3000,
+                    'Disk': 40,
+                    'VCPUs': 2,
+        })
+
+        with patch.multiple(
+                OpenStack,
+                get_sorted_flavors=get_sorted_flavors,
+        ):
+
+            assert 'good' == OpenStack().flavor_range(min, good, 'arch', None)
+
+        #
+        # there is one flavor bigger or equal to good, get this one
+        #
+        flavors.append({
+                    'Name': 'best',
+                    'RAM': 4000,
+                    'Disk': 40,
+                    'VCPUs': 2,
+        })
+
+        with patch.multiple(
+                OpenStack,
+                get_sorted_flavors=get_sorted_flavors,
+        ):
+
+            assert 'best' == OpenStack().flavor_range(min, good, 'arch', None)
+
+        #
+        # there are two flavors bigger or equal to good, get the smallest one
+        #
+        flavors.append({
+                    'Name': 'too_big',
+                    'RAM': 30000,
+                    'Disk': 400,
+                    'VCPUs': 20,
+        })
+
+        with patch.multiple(
+                OpenStack,
+                get_sorted_flavors=get_sorted_flavors,
+        ):
+
+            assert 'best' == OpenStack().flavor_range(min, good, 'arch', None)
+
 
     def test_interpret_hints(self):
         defaults = {
