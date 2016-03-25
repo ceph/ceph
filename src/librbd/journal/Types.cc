@@ -200,6 +200,15 @@ void ResizeEvent::dump(Formatter *f) const {
   f->dump_unsigned("size", size);
 }
 
+void DemoteEvent::encode(bufferlist& bl) const {
+}
+
+void DemoteEvent::decode(__u8 version, bufferlist::iterator& it) {
+}
+
+void DemoteEvent::dump(Formatter *f) const {
+}
+
 void UnknownEvent::encode(bufferlist& bl) const {
   assert(false);
 }
@@ -267,6 +276,9 @@ void EventEntry::decode(bufferlist::iterator& it) {
   case EVENT_TYPE_FLATTEN:
     event = FlattenEvent();
     break;
+  case EVENT_TYPE_DEMOTE:
+    event = DemoteEvent();
+    break;
   default:
     event = UnknownEvent();
     break;
@@ -318,6 +330,8 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(ResizeEvent(901, 1234)));
 
   o.push_back(new EventEntry(FlattenEvent(123)));
+
+  o.push_back(new EventEntry(DemoteEvent()));
 }
 
 // Journal Client
@@ -545,6 +559,9 @@ std::ostream &operator<<(std::ostream &out, const EventType &type) {
     break;
   case EVENT_TYPE_FLATTEN:
     out << "Flatten";
+    break;
+  case EVENT_TYPE_DEMOTE:
+    out << "Demote";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";
