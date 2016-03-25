@@ -19,6 +19,7 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 #include "include/ceph_features.h"
+#include <atomic>
 
 /*
  * OSD op
@@ -48,8 +49,10 @@ private:
   pg_t pgid;
   bufferlist::iterator p;
   // Decoding flags. Decoding is only needed for messages catched by pipe reader.
-  bool partial_decode_needed;
-  bool final_decode_needed;
+  // Transition from true -> false without locks being held
+  // Can never see final_decode_needed == false and partial_decode_needed == true
+  atomic<bool> partial_decode_needed;
+  atomic<bool> final_decode_needed;
   //
 public:
   vector<OSDOp> ops;
