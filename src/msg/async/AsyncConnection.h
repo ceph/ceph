@@ -58,7 +58,25 @@ class AsyncConnection : public Connection {
   ssize_t _try_send(bool more=false);
   ssize_t _send(Message *m);
   void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
-  ssize_t read_until(unsigned needed, char *p);
+  ssize_t _zero_read_until(unsigned needed, char *p);
+  ssize_t _copy_read_until(unsigned needed, char *p);
+  // Because this func will be called multi times to populate
+  // the needed buffer, so the passed in bufferptr must be the same.
+  // Normally, only "read_message" will pass existing bufferptr in
+  //
+  // And it will uses readahead method to reduce small read overhead,
+  // "recv_buf" is used to store read buffer
+  //
+  // return the remaining bytes, 0 means this buffer is finished
+  // else return < 0 means error
+  inline ssize_t read_until(unsigned needed, char *p) {
+    if (zero_copy)
+      return _zero_read_until(needed, p);
+    else
+      return _copy_read_until(needed, p);
+  }
+  template<bool ZeroCopy>
+  ssize_t read_data(unsigned needed, bufferlist &bl);
   ssize_t _process_connection();
   void _connect();
   void _stop();
@@ -161,7 +179,7 @@ class AsyncConnection : public Connection {
   } *delay_state;
 
  public:
-  AsyncConnection(CephContext *cct, AsyncMessenger *m, Worker *w, bool local);
+  AsyncConnection(CephContext *cct, AsyncMessenger *m, Worker *w);
   ~AsyncConnection();
   void maybe_start_delay_thread();
 
@@ -226,7 +244,6 @@ class AsyncConnection : public Connection {
     STATE_WAIT,       // just wait for racing connection
   };
 
-  static const int TCP_PREFETCH_MIN_SIZE;
   static const char *get_state_name(int state) {
       const char* const statenames[] = {"STATE_NONE",
                                         "STATE_OPEN",
@@ -277,6 +294,7 @@ class AsyncConnection : public Connection {
   int port;
   Messenger::Policy policy;
   bool local_stack;
+  bool zero_copy;
 
   Mutex write_lock;
   enum class WriteStatus {
@@ -303,10 +321,13 @@ class AsyncConnection : public Connection {
   EventCallbackRef wakeup_handler;
   EventCallbackRef cleanup_handler;
   struct iovec msgvec[ASYNC_IOV_MAX];
+  // used by ZeroCopy == false
   char *recv_buf;
-  uint32_t recv_max_prefetch;
-  uint32_t recv_start;
-  uint32_t recv_end;
+  unsigned recv_max_prefetch;
+  // used by ZeroCopy == true
+  bufferptr recv_ptr;
+  unsigned recv_start;
+  unsigned recv_end;
   set<uint64_t> register_time_events; // need to delete it if stop
 
   // Tis section are temp variables used by state transition
@@ -340,7 +361,7 @@ class AsyncConnection : public Connection {
   // used only for local state, it will be overwrite when state transition
   char *state_buffer;
   // used only by "read_until"
-  uint64_t state_offset;
+  unsigned state_offset;
   EventCenter *center;
   ceph::shared_ptr<AuthSessionHandler> session_security;
 

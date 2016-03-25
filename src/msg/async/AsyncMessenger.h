@@ -170,8 +170,7 @@ public:
   Connection *create_anon_connection() {
     Mutex::Locker l(lock);
     Worker *w = stack->get_worker();
-    return new AsyncConnection(
-            cct, this, w, stack->support_local_listen_table());
+    return new AsyncConnection(cct, this, w);
   }
 
   /**
@@ -228,8 +227,6 @@ private:
 
  private:
   static const uint64_t ReapDeadConnectionThreshold = 5;
-
-  std::shared_ptr<NetworkStack> stack;
 
   std::vector<Processor*> processors;
   friend class Processor;
@@ -336,7 +333,7 @@ private:
   }
 
 public:
-
+  std::shared_ptr<NetworkStack> stack;
   /// con used for sending messages to ourselves
   ConnectionRef local_connection;
   uint64_t local_features;

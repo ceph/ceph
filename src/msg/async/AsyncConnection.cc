@@ -27,6 +27,7 @@
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
+
 ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
   int fd = cs ? cs.fd() : -1;
   return *_dout << "-- " << async_msgr->get_myinst().addr << " >> " << peer_addr << " conn(" << this
@@ -41,7 +42,7 @@ ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
 // Notes:
 // 1. Don't dispatch any event when closed! It may cause AsyncConnection alive even if AsyncMessenger dead
 
-const int AsyncConnection::TCP_PREFETCH_MIN_SIZE = 512;
+const int TCP_PREFETCH_MIN_SIZE = 512;
 const int ASYNC_COALESCE_THRESHOLD = 256;
 
 class C_time_wakeup : public EventCallback {
@@ -172,10 +173,11 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   }
 }
 
-AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, Worker *w, bool local)
+AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, Worker *w)
   : Connection(cct, m), delay_state(NULL), async_msgr(m), logger(w->get_perf_counter()), worker(w), global_seq(0), connect_seq(0),
     peer_global_seq(0), out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(0),
-    port(-1), local_stack(local), write_lock("AsyncConnection::write_lock"), can_write(WriteStatus::NOWRITE),
+    port(-1), local_stack(m->stack->support_local_listen_table()),
+    zero_copy(m->stack->support_zero_copy_read()), write_lock("AsyncConnection::write_lock"), can_write(WriteStatus::NOWRITE),
     open_write(false), keepalive(false), lock("AsyncConnection::lock"), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0), got_bad_auth(false), authorizer(NULL), replacing(false),
@@ -261,16 +263,57 @@ ssize_t AsyncConnection::_try_send(bool more)
   return outcoming_bl.length();
 }
 
-// Because this func will be called multi times to populate
-// the needed buffer, so the passed in bufferptr must be the same.
-// Normally, only "read_message" will pass existing bufferptr in
-//
-// And it will uses readahead method to reduce small read overhead,
-// "recv_buf" is used to store read buffer
-//
-// return the remaining bytes, 0 means this buffer is finished
-// else return < 0 means error
-ssize_t AsyncConnection::read_until(unsigned len, char *p)
+ssize_t AsyncConnection::_zero_read_until(unsigned len, char *p)
+{
+  ldout(async_msgr->cct, 25) << __func__ << " len is " << len << " state_offset is "
+                             << state_offset << dendl;
+
+  if (async_msgr->cct->_conf->ms_inject_socket_failures && cs) {
+    if (rand() % async_msgr->cct->_conf->ms_inject_socket_failures == 0) {
+      ldout(async_msgr->cct, 0) << __func__ << " injecting socket failure" << dendl;
+      cs.shutdown();
+    }
+  }
+
+  unsigned left = len - state_offset;
+  ssize_t r = 0;
+  while (left > 0) {
+    if (recv_start == recv_end) {
+      r = cs.zero_copy_read(recv_ptr);
+      if (r < 0) {
+        if (r == -EAGAIN)
+          break;
+        ldout(async_msgr->cct, 1) << __func__ << " reading failed:"
+                                  << cpp_strerror(r) << dendl;
+        return -1;
+      } else if (r == 0) {
+        ldout(async_msgr->cct, 1) << __func__ << " peer close file descriptor" << dendl;
+        return -1;
+      }
+      recv_start = 0;
+      recv_end = r;
+    }
+
+    unsigned recv_gap = recv_end - recv_start;
+    if (recv_gap < left) {
+      recv_ptr.copy_out(recv_start, recv_gap, p+state_offset);
+      left -= recv_gap;
+      state_offset += recv_gap;
+      recv_start = recv_end;
+    } else {
+      recv_ptr.copy_out(recv_start, left, p+state_offset);
+      recv_start += left;
+      state_offset = 0;
+      return 0;
+    }
+  }
+
+  ldout(async_msgr->cct, 25) << __func__ << " need len " << len << " remaining "
+                             << len - state_offset << " bytes" << dendl;
+  return len - state_offset;
+}
+
+ssize_t AsyncConnection::_copy_read_until(unsigned len, char *p)
 {
   ldout(async_msgr->cct, 25) << __func__ << " len is " << len << " state_offset is "
                              << state_offset << dendl;
@@ -359,13 +402,93 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
   return len - state_offset;
 }
 
-void AsyncConnection::inject_delay() {
+void AsyncConnection::inject_delay()
+{
   if (async_msgr->cct->_conf->ms_inject_internal_delays) {
     ldout(async_msgr->cct, 10) << __func__ << " sleep for " << 
       async_msgr->cct->_conf->ms_inject_internal_delays << dendl;
     utime_t t;
     t.set_from_double(async_msgr->cct->_conf->ms_inject_internal_delays);
     t.sleep();
+  }
+}
+
+template<>
+ssize_t AsyncConnection::read_data<true>(unsigned len, bufferlist &data)
+{
+  ldout(async_msgr->cct, 25) << __func__ << " len is " << len << " state_offset is "
+                             << state_offset << dendl;
+
+  if (async_msgr->cct->_conf->ms_inject_socket_failures && cs) {
+    if (rand() % async_msgr->cct->_conf->ms_inject_socket_failures == 0) {
+      ldout(async_msgr->cct, 0) << __func__ << " injecting socket failure" << dendl;
+      cs.shutdown();
+    }
+  }
+
+  unsigned left = len - state_offset;
+  ssize_t r = 0;
+  while (left > 0) {
+    if (recv_start == recv_end) {
+      r = cs.zero_copy_read(recv_ptr);
+      if (r < 0) {
+        if (r == -EAGAIN)
+          break;
+        ldout(async_msgr->cct, 1) << __func__ << " reading failed:"
+                                  << cpp_strerror(r) << dendl;
+        return -1;
+      } else if (r == 0) {
+        ldout(async_msgr->cct, 1) << __func__ << " peer close file descriptor" << dendl;
+        return -1;
+      }
+      recv_start = 0;
+      recv_end = r;
+    }
+
+    unsigned recv_gap = recv_end - recv_start;
+    if (recv_gap < left) {
+      data.append(recv_ptr, recv_start, recv_gap);
+      left -= recv_gap;
+      state_offset += recv_gap;
+      recv_start = recv_end;
+    } else {
+      data.append(recv_ptr, recv_start, left);
+      recv_start += left;
+      state_offset = 0;
+      return 0;
+    }
+  }
+
+  ldout(async_msgr->cct, 25) << __func__ << " need len " << len << " remaining "
+                             << len - state_offset << " bytes" << dendl;
+  return len - state_offset;
+}
+
+template<>
+ssize_t AsyncConnection::read_data<false>(unsigned len, bufferlist &bl)
+{
+  if (!bl.length())
+    bl.push_back(buffer::create(len));
+  if (bl.is_contiguous()) {
+    return read_until(len, bl.c_str());
+  } else {
+    // special case: only for the real data read
+    // note: aware of data_blp and msg_left
+    while (msg_left > 0) {
+      bufferptr bp = data_blp.get_current_ptr();
+      ssize_t r = read_until(bp.length(), bp.c_str());
+      if (r < 0) {
+        ldout(async_msgr->cct, 1) << __func__ << " read data error " << dendl;
+        return r;
+      } else if (r > 0) {
+        break;
+      }
+
+      data_blp.advance(r);
+      bl.append(bp, 0, r);
+      msg_left -= r;
+    }
+    return msg_left;
   }
 }
 
@@ -586,10 +709,11 @@ void AsyncConnection::process()
           // read front
           unsigned front_len = current_header.front_len;
           if (front_len) {
-            if (!front.length())
-              front.push_back(buffer::create(front_len));
+            if (zero_copy)
+              r = read_data<true>(front_len, front);
+            else
+              r = read_data<false>(front_len, front);
 
-            r = read_until(front_len, front.c_str());
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read message front failed" << dendl;
               goto fail;
@@ -607,10 +731,10 @@ void AsyncConnection::process()
           // read middle
           unsigned middle_len = current_header.middle_len;
           if (middle_len) {
-            if (!middle.length())
-              middle.push_back(buffer::create(middle_len));
-
-            r = read_until(middle_len, middle.c_str());
+            if (zero_copy)
+              r = read_data<true>(middle_len, middle);
+            else
+              r = read_data<false>(middle_len, middle);
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read message middle failed" << dendl;
               goto fail;
@@ -628,7 +752,7 @@ void AsyncConnection::process()
           // read data
           unsigned data_len = le32_to_cpu(current_header.data_len);
           unsigned data_off = le32_to_cpu(current_header.data_off);
-          if (data_len) {
+          if (data_len && !zero_copy) {
             // get a buffer
             map<ceph_tid_t,pair<bufferlist,int> >::iterator p = rx_buffers.find(current_header.tid);
             if (p != rx_buffers.end()) {
@@ -653,20 +777,17 @@ void AsyncConnection::process()
 
       case STATE_OPEN_MESSAGE_READ_DATA:
         {
-          while (msg_left > 0) {
-            bufferptr bp = data_blp.get_current_ptr();
-            unsigned read = MIN(bp.length(), msg_left);
-            r = read_until(read, bp.c_str());
+          if (msg_left > 0) {
+            if (zero_copy)
+              r = read_data<true>(current_header.data_len, data);
+            else
+              r = read_data<false>(current_header.data_len, data);
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read data error " << dendl;
               goto fail;
             } else if (r > 0) {
               break;
             }
-
-            data_blp.advance(read);
-            data.append(bp, 0, read);
-            msg_left -= read;
           }
 
           if (msg_left > 0)
