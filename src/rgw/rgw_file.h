@@ -153,7 +153,7 @@ namespace rgw {
     using marker_cache_t = flat_map<uint64_t, dirent_string>;
     using name_cache_t = flat_map<dirent_string, uint8_t>;
 
-    struct state {
+    struct State {
       uint64_t dev;
       size_t size;
       uint64_t nlink;
@@ -163,7 +163,7 @@ namespace rgw {
       struct timespec ctime;
       struct timespec mtime;
       struct timespec atime;
-      state() : dev(0), size(0), nlink(1), owner_uid(0), owner_gid(0),
+      State() : dev(0), size(0), nlink(1), owner_uid(0), owner_gid(0),
 		ctime{0,0}, mtime{0,0}, atime{0,0} {}
     } state;
 
@@ -520,6 +520,42 @@ namespace rgw {
 
     void set_atime(const struct timespec &ts) {
       state.atime = ts;
+    }
+
+    void encode(bufferlist& bl) const {
+      ENCODE_START(1, 1, bl);
+      ::encode(fh.fh_hk.bucket, bl);
+      ::encode(fh.fh_hk.object, bl);
+      ::encode(state.dev, bl);
+      ::encode(state.size, bl);
+      ::encode(state.nlink, bl);
+      ::encode(state.owner_uid, bl);
+      ::encode(state.owner_gid, bl);
+      ::encode(state.unix_mode, bl);
+      for (const auto& t : { state.ctime, state.mtime, state.atime }) {
+	::encode(real_clock::from_timespec(t), bl);
+      }
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::iterator& bl) {
+      DECODE_START(1, bl);
+      struct rgw_file_handle tfh;
+      ::decode(tfh.fh_hk.bucket, bl);
+      ::decode(tfh.fh_hk.object, bl);
+      assert(fh.fh_hk == tfh.fh_hk);
+      ::decode(state.dev, bl);
+      ::decode(state.size, bl);
+      ::decode(state.nlink, bl);
+      ::decode(state.owner_uid, bl);
+      ::decode(state.owner_gid, bl);
+      ::decode(state.unix_mode, bl);
+      ceph::real_time enc_time;
+      for (auto& t : { state.ctime, state.mtime, state.atime }) {
+	::decode(enc_time, bl);
+	const_cast<struct timespec&>(t) = real_clock::to_timespec(enc_time);
+      }
+      DECODE_FINISH(bl);
     }
 
     virtual bool reclaim();
