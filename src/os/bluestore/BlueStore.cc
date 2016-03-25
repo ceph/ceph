@@ -3920,8 +3920,40 @@ void BlueStore::_kv_sync_thread()
       dout(30) << __func__ << " committing txc " << kv_committing << dendl;
       dout(30) << __func__ << " wal_cleaning txc " << wal_cleaning << dendl;
 
-      // one transaction to force a sync
+      alloc->commit_start();
+
+      // flush/barrier on block device
+      bdev->flush();
+
+      if (!g_conf->bluestore_sync_transaction &&
+	  !g_conf->bluestore_sync_submit_transaction) {
+	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
+	     it != kv_committing.end();
+	     ++it) {
+	  _txc_update_fm((*it));
+	  db->submit_transaction((*it)->t);
+	}
+      }
+
+      // one final transaction to force a sync
       KeyValueDB::Transaction t = db->get_transaction();
+
+      vector<bluestore_extent_t> bluefs_gift_extents;
+      if (bluefs) {
+	int r = _balance_bluefs_freespace(&bluefs_gift_extents, t);
+	assert(r >= 0);
+	if (r > 0) {
+	  for (auto& p : bluefs_gift_extents) {
+	    fm->allocate(p.offset, p.length, t);
+	    bluefs_extents.insert(p.offset, p.length);
+	  }
+	  bufferlist bl;
+	  ::encode(bluefs_extents, bl);
+	  dout(10) << __func__ << " bluefs_extents now " << bluefs_extents
+		   << dendl;
+	  t->set(PREFIX_SUPER, "bluefs_extents", bl);
+	}
+      }
 
       // allocations and deallocations
       for (std::deque<TransContext *>::iterator it = wal_cleaning.begin();
@@ -3942,37 +3974,6 @@ void BlueStore::_kv_sync_thread()
 	    if (!g_conf->bluestore_debug_no_reuse_blocks)
 	      alloc->release(p.get_start(), p.get_len());
 	  }
-	}
-      }
-
-      vector<bluestore_extent_t> bluefs_gift_extents;
-      if (bluefs) {
-	int r = _balance_bluefs_freespace(&bluefs_gift_extents, t);
-	assert(r >= 0);
-	if (r > 0) {
-	  for (auto& p : bluefs_gift_extents) {
-	    fm->allocate(p.offset, p.length, t);
-	    bluefs_extents.insert(p.offset, p.length);
-	  }
-	  bufferlist bl;
-	  ::encode(bluefs_extents, bl);
-	  dout(10) << __func__ << " bluefs_extents now " << bluefs_extents
-		   << dendl;
-	  t->set(PREFIX_SUPER, "bluefs_extents", bl);
-	}
-      }
-
-      alloc->commit_start();
-
-      // flush/barrier on block device
-      bdev->flush();
-
-      if (!g_conf->bluestore_sync_transaction && !g_conf->bluestore_sync_submit_transaction) {
-	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
-	     it != kv_committing.end();
-	     ++it) {
-	  _txc_update_fm((*it));
-	  db->submit_transaction((*it)->t);
 	}
       }
 
@@ -3997,6 +3998,7 @@ void BlueStore::_kv_sync_thread()
 	t->rmkey(PREFIX_WAL, key);
       }
       db->submit_transaction_sync(t);
+
       utime_t finish = ceph_clock_now(NULL);
       utime_t dur = finish - start;
       dout(20) << __func__ << " committed " << kv_committing.size()
