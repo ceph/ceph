@@ -93,7 +93,8 @@ run()
     std::string buf(get_random_buf(256));
     int ret = rados_write(io_ctx, oid, buf.c_str(), buf.size(), 0);
     if (ret != 0) {
-      printf("%s: rados_write error %d\n", get_id_str(), ret);
+      printf("%s: rados_write(%s) failed with error: %d\n",
+	     get_id_str(), oid, ret);
       ret_val = ret;
       goto out;
     }
