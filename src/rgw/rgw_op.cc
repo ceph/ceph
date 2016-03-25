@@ -1779,8 +1779,7 @@ int RGWCreateBucket::verify_permission()
     if (op_ret < 0)
       return op_ret;
 
-    map<string, RGWBucketEnt>& m = buckets.get_buckets();
-    if (m.size() >= s->user->max_buckets) {
+    if (buckets.count() >= s->user->max_buckets) {
       return -ERR_TOO_MANY_BUCKETS;
     }
   }
