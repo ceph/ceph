@@ -121,7 +121,7 @@ int execute_promote(const po::variables_map &vm) {
     return r;
   }
 
-  std::cout << "" << std::endl;
+  std::cout << "Image promoted to primary" << std::endl;
   return 0;
 }
 
@@ -148,11 +148,11 @@ int execute_demote(const po::variables_map &vm) {
 
   r = image.mirror_image_demote();
   if (r < 0) {
-    std::cerr << "rbd: error demoting image to secondary" << std::endl;
+    std::cerr << "rbd: error demoting image to non-primary" << std::endl;
     return r;
   }
 
-  std::cout << "Image demoted to secondary" << std::endl;
+  std::cout << "Image demoted to non-primary" << std::endl;
   return 0;
 }
 
@@ -201,7 +201,7 @@ Shell::Action action_promote(
   &get_arguments_promote, &execute_promote);
 Shell::Action action_demote(
   {"mirror", "image", "demote"}, {},
-  "Demote an image to secondary for RBD mirroring.", "",
+  "Demote an image to non-primary for RBD mirroring.", "",
   &get_arguments, &execute_demote);
 Shell::Action action_resync(
   {"mirror", "image", "resync"}, {},
