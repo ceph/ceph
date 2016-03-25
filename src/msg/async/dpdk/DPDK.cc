@@ -116,6 +116,13 @@ static constexpr uint8_t max_frags = 32 + 1;
 //
 static constexpr uint8_t i40e_max_xmit_segment_frags = 8;
 
+//
+// VMWare's virtual NIC limit for a number of fragments in an xmit segment.
+//
+// see drivers/net/vmxnet3/base/vmxnet3_defs.h VMXNET3_MAX_TXD_PER_PKT
+//
+static constexpr uint8_t vmxnet3_max_xmit_segment_frags = 16;
+
 static constexpr uint16_t inline_mbuf_size = inline_mbuf_data_size + mbuf_overhead;
 
 uint32_t qp_mempool_obj_size()
@@ -165,6 +172,11 @@ int DPDKDevice::init_port_start()
       std::string("rte_i40e_pmd") == _dev_info.driver_name) {
     ldout(cct, 1) << __func__ << " Device is an Intel's 40G NIC. Enabling 8 fragments hack!" << dendl;
     _is_i40e_device = true;
+  }
+
+  if (std::string("rte_vmxnet3_pmd") == _dev_info.driver_name) {
+    ldout(cct, 1) << __func__ << " Device is a VMWare Virtual NIC. Enabling 16 fragments hack!" << dendl;
+    _is_vmxnet3_device = true;
   }
 
   //
@@ -639,6 +651,7 @@ inline bool DPDKQueuePair::poll_tx() {
         if (p) {
           work++;
           if (likely(nonloopback)) {
+            ldout(cct, 20) << __func__ << " len: " << p->len() << " frags: " << p->nr_frags() << dendl;
             _tx_packetq.push_back(std::move(*p));
           } else {
             auto th = p->get_header<eth_hdr>(0);
@@ -1027,7 +1040,8 @@ DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(Packet&& p, DPDKQue
   //    - Build the cluster once again
   //
   if (head->nb_segs > max_frags ||
-      (p.nr_frags() > 1 && qp.port().is_i40e_device() && i40e_should_linearize(head))) {
+      (p.nr_frags() > 1 && qp.port().is_i40e_device() && i40e_should_linearize(head)) ||
+      (p.nr_frags() > vmxnet3_max_xmit_segment_frags && qp.port().is_vmxnet3_device())) {
     me(head)->recycle();
     p.linearize();
     ++qp._stats.tx.linearized;

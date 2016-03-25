@@ -849,6 +849,7 @@ class DPDKDevice {
   rss_key_type _rss_key;
   port_stats _stats;
   bool _is_i40e_device = false;
+  bool _is_vmxnet3_device = false;
 
  public:
   rte_eth_dev_info _dev_info = {};
@@ -994,6 +995,9 @@ class DPDKDevice {
   uint8_t port_idx() { return _port_idx; }
   bool is_i40e_device() const {
     return _is_i40e_device;
+  }
+  bool is_vmxnet3_device() const {
+    return _is_vmxnet3_device;
   }
 };
 
