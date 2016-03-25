@@ -146,8 +146,8 @@ def test_cluster_roles_of_type():
         (['foo.client.1', 'bar.client.2.3', 'baz.osd.1'], 'client', 'bar',
          ['bar.client.2.3']),
         ]
-    for roles_for_host, type_, cluster, expected_roles in expected:
-        roles = list(misc.cluster_roles_of_type(roles_for_host, type_, cluster))
+    for roles_for_host, type_, cluster_, expected_roles in expected:
+        roles = list(misc.cluster_roles_of_type(roles_for_host, type_, cluster_))
         assert roles == expected_roles
 
 
@@ -162,9 +162,9 @@ def test_all_roles_of_type():
          'client', ['1', '2.3', 'bar']),
         ]
     for host_roles, type_, expected_ids in expected:
-        cluster = Mock()
-        cluster.remotes = dict(enumerate(host_roles))
-        ids = list(misc.all_roles_of_type(cluster, type_))
+        cluster_ = Mock()
+        cluster_.remotes = dict(enumerate(host_roles))
+        ids = list(misc.all_roles_of_type(cluster_, type_))
         assert ids == expected_ids
 
 
