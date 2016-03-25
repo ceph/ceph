@@ -145,7 +145,7 @@ def task(ctx, config):
     d = os.path.join(os.path.dirname(__file__), 'buildpackages')
     os_type = misc.get_distro(ctx)
     os_version = misc.get_distro_version(ctx)
-    arch = ctx.config.get('arch', 'x86_64')
+    arch = ctx.config.get('arch', OpenStack().get_default_arch())
     dist = LocalGitbuilderProject()._get_distro(distro=os_type,
                                                 version=os_version)
     pkg_type = get_pkg_type(os_type)
