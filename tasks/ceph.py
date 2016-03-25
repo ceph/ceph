@@ -1127,7 +1127,8 @@ def wait_for_osds_up(ctx, config):
     :param config: Configuration
     """
     log.info('Waiting until ceph osds are all up...')
-    firstmon = teuthology.get_first_mon(ctx, config)
+    cluster_name = config.get('cluster', 'ceph')
+    firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
     (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     teuthology.wait_until_osds_up(
         ctx,
