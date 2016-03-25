@@ -414,7 +414,7 @@ union ceph_mds_request_args {
 		__le32 stripe_count;         /* ... */
 		__le32 object_size;
 		__le32 pool;                 /* if >= 0 and CREATEPOOLID feature */
-		__le32 unused;               /* used to be preferred */
+		__le32 mask;                 /* CEPH_CAP_* */
 		__le64 old_size;             /* if O_TRUNC */
 	} __attribute__ ((packed)) open;
 	struct {

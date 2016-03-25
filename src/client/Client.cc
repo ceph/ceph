@@ -129,6 +129,8 @@ using namespace std;
 #define O_DIRECT 0x0
 #endif
 
+#define DEBUG_GETATTR_CAPS (CEPH_CAP_XATTR_SHARED)
+
 void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 {
   Client *client = static_cast<Client*>(p);
@@ -1249,6 +1251,18 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
   Inode *in = 0;
   if (reply->head.is_target) {
     ist.decode(p, features);
+    if (cct->_conf->client_debug_getattr_caps) {
+      int op = request->get_op();
+      unsigned wanted = 0;
+      if (op == CEPH_MDS_OP_GETATTR || op == CEPH_MDS_OP_LOOKUP)
+	wanted = request->head.args.getattr.mask;
+      else if (op == CEPH_MDS_OP_OPEN || op == CEPH_MDS_OP_OPEN)
+	wanted = request->head.args.open.mask;
+
+      if ((wanted & CEPH_CAP_XATTR_SHARED) &&
+	  !(ist.xattr_version > 0 && ist.xattrbl.length() > 0))
+	  assert(0 == "MDS reply does not contain xattrs");
+    }
 
     in = add_update_inode(&ist, request->sent_stamp, session);
   }
@@ -5737,7 +5751,11 @@ int Client::_do_lookup(Inode *dir, const string& name, InodeRef *target,
   path.push_dentry(name);
   req->set_filepath(path);
   req->set_inode(dir);
-  req->head.args.getattr.mask = 0;
+  if (cct->_conf->client_debug_getattr_caps && op == CEPH_MDS_OP_LOOKUP)
+      req->head.args.getattr.mask = DEBUG_GETATTR_CAPS;
+  else
+      req->head.args.getattr.mask = 0;
+
   ldout(cct, 10) << "_do_lookup on " << path << dendl;
 
   int r = make_request(req, uid, gid, target);
@@ -7700,6 +7718,10 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
     req->head.args.open.flags = flags & ~O_CREAT;
     req->head.args.open.mode = mode;
     req->head.args.open.pool = -1;
+    if (cct->_conf->client_debug_getattr_caps)
+      req->head.args.open.mask = DEBUG_GETATTR_CAPS;
+    else
+      req->head.args.open.mask = 0;
     req->head.args.open.old_size = in->size;   // for O_TRUNC
     req->set_inode(in);
     result = make_request(req, uid, gid);
@@ -7963,7 +7985,7 @@ retry:
   }
 
   if (!conf->client_debug_force_sync_read &&
-      (cct->_conf->client_oc && (have & CEPH_CAP_FILE_CACHE))) {
+      (conf->client_oc && (have & CEPH_CAP_FILE_CACHE))) {
 
     if (f->flags & O_RSYNC) {
       _flush_range(in, offset, size);
@@ -10399,6 +10421,10 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   req->head.args.open.stripe_unit = stripe_unit;
   req->head.args.open.stripe_count = stripe_count;
   req->head.args.open.object_size = object_size;
+  if (cct->_conf->client_debug_getattr_caps)
+    req->head.args.open.mask = DEBUG_GETATTR_CAPS;
+  else
+    req->head.args.open.mask = 0;
   req->head.args.open.pool = pool_id;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
