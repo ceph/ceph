@@ -10569,6 +10569,11 @@ bool MDCache::can_fragment(CInode *diri, list<CDir*>& dirs)
     return false;
   }
 
+  if (diri->scrub_is_in_progress()) {
+    dout(7) << "can_fragment: scrub in progress" << dendl;
+    return false;
+  }
+
   for (list<CDir*>::iterator p = dirs.begin(); p != dirs.end(); ++p) {
     CDir *dir = *p;
     if (dir->state_test(CDir::STATE_FRAGMENTING)) {
