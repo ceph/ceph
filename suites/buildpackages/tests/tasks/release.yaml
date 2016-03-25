@@ -1,4 +1,4 @@
-# --suite buildpackages/tests --ceph v10.0.1 --filter centos_7,ubuntu_14.04
+# --suite buildpackages/tests --ceph v10.0.1 --filter centos_7.2,ubuntu_14.04
 overrides:
    ansible.cephlab:
      playbook: users.yml
