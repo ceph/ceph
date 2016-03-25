@@ -101,8 +101,8 @@ public:
 
   static int is_tag_owner(ImageCtxT *image_ctx, bool *is_tag_owner);
   static int get_tag_owner(ImageCtxT *image_ctx, std::string *mirror_uuid);
-  static int allocate_tag(ImageCtxT *image_ctx, const std::string &mirror_uuid);
   static int request_resync(ImageCtxT *image_ctx);
+  static int promote(ImageCtxT *image_ctx);
 
   bool is_journal_ready() const;
   bool is_journal_replaying() const;
@@ -113,6 +113,8 @@ public:
   void close(Context *on_finish);
 
   bool is_tag_owner() const;
+  int demote();
+
   void allocate_local_tag(Context *on_finish);
   void allocate_tag(const std::string &mirror_uuid,
                     const std::string &predecessor_mirror_uuid,

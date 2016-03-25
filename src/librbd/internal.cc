@@ -2686,7 +2686,7 @@ remove_mirroring_image:
     // TODO: need interlock with local rbd-mirror daemon to ensure it has stopped
     //       replay
 
-    r = Journal<>::allocate_tag(ictx, Journal<>::LOCAL_MIRROR_UUID);
+    r = Journal<>::promote(ictx);
     if (r < 0) {
       lderr(cct) << "failed to promote image: " << cpp_strerror(r)
                  << dendl;
@@ -2718,16 +2718,32 @@ remove_mirroring_image:
     }
 
     RWLock::RLocker owner_lock(ictx->owner_lock);
+    if (ictx->exclusive_lock == nullptr) {
+      lderr(cct) << "exclusive lock is not active" << dendl;
+      return -EINVAL;
+    }
+
     C_SaferCond lock_ctx;
     ictx->exclusive_lock->request_lock(&lock_ctx);
     r = lock_ctx.wait();
     if (r < 0) {
       lderr(cct) << "failed to lock image: " << cpp_strerror(r) << dendl;
+      return r;
     } else if (!ictx->exclusive_lock->is_lock_owner()) {
       lderr(cct) << "failed to acquire exclusive lock" << dendl;
+      return -EROFS;
     }
 
-    r = Journal<>::allocate_tag(ictx, Journal<>::ORPHAN_MIRROR_UUID);
+    RWLock::RLocker snap_locker(ictx->snap_lock);
+    if (ictx->journal == nullptr) {
+      lderr(cct) << "journal is not active" << dendl;
+      return -EINVAL;
+    } else if (!ictx->journal->is_tag_owner()) {
+      lderr(cct) << "image is not currently the primary" << dendl;
+      return -EINVAL;
+    }
+
+    r = ictx->journal->demote();
     if (r < 0) {
       lderr(cct) << "failed to demote image: " << cpp_strerror(r)
                  << dendl;
