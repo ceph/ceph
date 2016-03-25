@@ -2769,10 +2769,30 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
 
   CDentry *dn = in->get_projected_parent_dn();
   CInode *diri = dn ? dn->get_dir()->inode : NULL;
+
+  set<SimpleLock*> rdlocks;
   if (dn && (want_parent || want_dentry)) {
     mdr->pin(dn);
-    set<SimpleLock*> rdlocks, wrlocks, xlocks;
     rdlocks.insert(&dn->lock);
+  }
+
+  unsigned mask = req->head.args.getattr.mask;
+  if (mask) {
+    Capability *cap = in->get_client_cap(mdr->get_client());
+    int issued = 0;
+    if (cap && (mdr->snapid == CEPH_NOSNAP || mdr->snapid <= cap->client_follows))
+      issued = cap->issued();
+    // permission bits, ACL/security xattrs
+    if ((mask & CEPH_CAP_AUTH_SHARED) && (issued & CEPH_CAP_AUTH_EXCL) == 0)
+      rdlocks.insert(&in->authlock);
+    if ((mask & CEPH_CAP_XATTR_SHARED) && (issued & CEPH_CAP_XATTR_EXCL) == 0)
+      rdlocks.insert(&in->xattrlock);
+
+    mdr->getattr_caps = mask;
+  }
+
+  if (!rdlocks.empty()) {
+    set<SimpleLock*> wrlocks, xlocks;
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
@@ -2909,6 +2929,21 @@ void Server::handle_client_open(MDRequestRef& mdr)
     return;
   }
 
+  unsigned mask = req->head.args.open.mask;
+  if (mask) {
+    Capability *cap = cur->get_client_cap(mdr->get_client());
+    int issued = 0;
+    if (cap && (mdr->snapid == CEPH_NOSNAP || mdr->snapid <= cap->client_follows))
+      issued = cap->issued();
+    // permission bits, ACL/security xattrs
+    if ((mask & CEPH_CAP_AUTH_SHARED) && (issued & CEPH_CAP_AUTH_EXCL) == 0)
+      rdlocks.insert(&cur->authlock);
+    if ((mask & CEPH_CAP_XATTR_SHARED) && (issued & CEPH_CAP_XATTR_EXCL) == 0)
+      rdlocks.insert(&cur->xattrlock);
+
+    mdr->getattr_caps = mask;
+  }
+
   // O_TRUNC
   if ((flags & O_TRUNC) && !mdr->has_completed) {
     assert(cur->is_auth());
@@ -2945,7 +2980,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  int mask = MAY_READ;
+  mask = MAY_READ;
   if (cmode & CEPH_FILE_MODE_WR)
     mask |= MAY_WRITE;
   if (!check_access(mdr, cur, mask))
