@@ -45,6 +45,7 @@ def task(ctx, config):
     radosbench = {}
 
     testdir = teuthology.get_testdir(ctx)
+    manager = ctx.managers['ceph']
 
     create_pool = config.get('create_pool', True)
     for role in config.get('clients', ['client.0']):
@@ -57,7 +58,7 @@ def task(ctx, config):
         if config.get('ec_pool', False):
             profile = config.get('erasure_code_profile', {})
             profile_name = profile.get('name', 'teuthologyprofile')
-            ctx.manager.create_erasure_code_profile(profile_name, profile)
+            manager.create_erasure_code_profile(profile_name, profile)
         else:
             profile_name = None
 
@@ -68,9 +69,9 @@ def task(ctx, config):
         pool = config.get('pool', 'data')
         if create_pool:
             if pool != 'data':
-                ctx.manager.create_pool(pool, erasure_code_profile_name=profile_name)
+                manager.create_pool(pool, erasure_code_profile_name=profile_name)
             else:
-                pool = ctx.manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
+                pool = manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
 
         proc = remote.run(
             args=[
@@ -100,4 +101,4 @@ def task(ctx, config):
         run.wait(radosbench.itervalues(), timeout=timeout)
 
         if pool is not 'data' and create_pool:
-            ctx.manager.remove_pool(pool)
+            manager.remove_pool(pool)
