@@ -957,8 +957,8 @@ algorithm is used.
 
 In order to use newer tunables, both clients and servers must support
 the new version of CRUSH.  For this reason, we have created
-``profiles'' that are named after the Ceph version in which they were
-introduced.  For example, the ``firefly'' tunables are first supported
+``profiles`` that are named after the Ceph version in which they were
+introduced.  For example, the ``firefly`` tunables are first supported
 in the firefly release, and will not work with older (e.g., dumpling)
 clients.  Once a given set of tunables are changed from the legacy
 default behavior, the ``ceph-mon`` and ``ceph-osd`` will prevent older
