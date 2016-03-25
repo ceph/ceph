@@ -14,12 +14,14 @@
  *
  */
 
+#include "common/Cond.h"
+#include "common/errno.h"
+
 #include "PosixStack.h"
 #ifdef HAVE_DPDK
 #include "msg/async/dpdk/DPDKStack.h"
 #endif
 
-#include "common/errno.h"
 #include "common/dout.h"
 #include "include/assert.h"
 
@@ -43,8 +45,10 @@ Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned
 {
   if (type == "posix")
     return new PosixWorker(c, i);
+#ifdef HAVE_DPDK
   else if (type == "dpdk")
     return new DPDKWorker(c, i);
+#endif
   return nullptr;
 }
 
