@@ -297,5 +297,7 @@ LIBCIVETWEB_DEPS =
 DENCODER_SOURCES =
 DENCODER_DEPS =
 
+# put virtualenvs in this directory for build
+CEPH_BUILD_VIRTUALENV="/tmp/"
 
 radoslibdir = $(libdir)/rados-classes
