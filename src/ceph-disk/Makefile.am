@@ -29,13 +29,15 @@ EXTRA_DIST += \
 	ceph-disk/tests/test_main.py \
 	ceph-disk/tox.ini
 
-ceph-disk-all: ceph-disk/virtualenv
+export CEPH_DISK_VIRTUALENV = ${CEPH_BUILD_VIRTUALENV}ceph-disk-virtualenv
 
-ceph-disk/virtualenv:
-	cd $(srcdir)/ceph-disk ; ../tools/setup-virtualenv.sh ; test -d wheelhouse && export NO_INDEX=--no-index ; virtualenv/bin/pip install $$NO_INDEX --use-wheel --find-links=file://$$(pwd)/wheelhouse -e .
+ceph-disk-all: ${CEPH_DISK_VIRTUALENV}
+
+${CEPH_DISK_VIRTUALENV}:
+	cd $(srcdir)/ceph-disk ; ../tools/setup-virtualenv.sh ${CEPH_DISK_VIRTUALENV} ; test -d wheelhouse && export NO_INDEX=--no-index ; ${CEPH_DISK_VIRTUALENV}/bin/pip install $$NO_INDEX --use-wheel --find-links=file://$$(pwd)/wheelhouse -e .
 
 ceph-disk-clean:
-	cd $(srcdir)/ceph-disk ; python setup.py clean ; rm -fr wheelhouse .tox build virtualenv .coverage *.egg-info
+	cd $(srcdir)/ceph-disk ; python setup.py clean ; rm -fr wheelhouse .tox build ${CEPH_DISK_VIRTUALENV} .coverage *.egg-info
 
 ceph-disk-install-data:
 	cd $(srcdir)/ceph-disk ; \

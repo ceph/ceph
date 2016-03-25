@@ -16,9 +16,10 @@
 #
 
 # run from the ceph-disk directory or from its parent
+: ${CEPH_DISK_VIRTUALENV:=ceph-disk-virtualenv}
 test -d ceph-disk && cd ceph-disk
-source virtualenv/bin/activate
-tox > virtualenv/tox.out 2>&1
+source ${CEPH_DISK_VIRTUALENV}/bin/activate
+tox > ${CEPH_DISK_VIRTUALENV}/tox.out 2>&1
 status=$?
-grep -v InterpreterNotFound < virtualenv/tox.out
+grep -v InterpreterNotFound < ${CEPH_DISK_VIRTUALENV}/tox.out
 exit $status

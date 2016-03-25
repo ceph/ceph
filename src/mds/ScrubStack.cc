@@ -146,10 +146,14 @@ void ScrubStack::scrub_dir_inode(CInode *in,
 	++i) {
       // turn frags into CDir *
       CDir *dir = in->get_dirfrag(*i);
-      scrubbing_cdirs.push_back(dir);
-      dout(25) << __func__ << " got CDir " << *dir << " presently scrubbing" << dendl;
+      if (dir) {
+	scrubbing_cdirs.push_back(dir);
+	dout(25) << __func__ << " got CDir " << *dir << " presently scrubbing" << dendl;
+      } else {
+	in->scrub_dirfrag_finished(*i);
+	dout(25) << __func__ << " missing dirfrag " << *i << " skip scrubbing" << dendl;
+      }
     }
-
 
     dout(20) << __func__ << " consuming from " << scrubbing_cdirs.size()
 	     << " scrubbing cdirs" << dendl;
