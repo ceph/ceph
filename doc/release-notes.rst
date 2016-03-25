@@ -48,8 +48,8 @@ Major Changes from Infernalis
   * The AWS4 authentication protocol is now supported.
   * There is now support for S3 request payer buckets.
   * The new multitenancy infrastructure improves compatibility with
-    Swift (which has a provide namespace of containers for each
-    tenant).
+    Swift, which provides separate container namespace for each
+    user/tenant.
   * The OpenStack Keystone v3 API is now supported.  There are a range
     of other small Swift API features and compatibility improvements
     as well, including bulk delete and SLO (static large objects).
