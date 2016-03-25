@@ -307,7 +307,7 @@ class TestMultiFilesystems(CephFSTestCase):
         fs_a.wait_for_daemons()
         self.assertEqual(fs_a.get_active_names(), [mds_a])
 
-        # Create FS alpha and get mds_c to come up as active
+        # Create FS bravo and get mds_c to come up as active
         fs_b = self.mds_cluster.get_filesystem("bravo")
         fs_b.create()
         self.mds_cluster.mds_restart(mds_c)
@@ -369,3 +369,90 @@ class TestMultiFilesystems(CephFSTestCase):
         self.assertEqual(info_c['standby_for_name'], mds_d)
         self.assertEqual(info_c['rank'], 0)
 
+    def test_standby_for_rank(self):
+        use_daemons = sorted(self.mds_cluster.mds_ids[0:4])
+        mds_a, mds_b, mds_c, mds_d = use_daemons
+        log.info("Using MDS daemons: {0}".format(use_daemons))
+
+        def set_standby_for(leader_rank, leader_fs, follower_id):
+            self.set_conf("mds.{0}".format(follower_id),
+                          "mds_standby_for_rank", leader_rank)
+
+            fscid = leader_fs.get_namespace_id()
+            self.set_conf("mds.{0}".format(follower_id),
+                          "mds_standby_for_fscid", fscid)
+
+        fs_a = self.mds_cluster.get_filesystem("alpha")
+        fs_a.create()
+        fs_b = self.mds_cluster.get_filesystem("bravo")
+        fs_b.create()
+        set_standby_for(0, fs_a, mds_a)
+        set_standby_for(0, fs_a, mds_b)
+        set_standby_for(0, fs_b, mds_c)
+        set_standby_for(0, fs_b, mds_d)
+
+        self.mds_cluster.mds_restart(mds_a)
+        fs_a.wait_for_daemons()
+        self.assertEqual(fs_a.get_active_names(), [mds_a])
+
+        self.mds_cluster.mds_restart(mds_c)
+        fs_b.wait_for_daemons()
+        self.assertEqual(fs_b.get_active_names(), [mds_c])
+
+        self.mds_cluster.mds_restart(mds_b)
+        self.mds_cluster.mds_restart(mds_d)
+        self.wait_for_daemon_start([mds_b, mds_d])
+
+        self.mds_cluster.mds_stop(mds_a)
+        self.mds_cluster.mds_fail(mds_a)
+        self.mds_cluster.mds_stop(mds_c)
+        self.mds_cluster.mds_fail(mds_c)
+
+        fs_a.wait_for_daemons()
+        self.assertEqual(fs_a.get_active_names(), [mds_b])
+        fs_b.wait_for_daemons()
+        self.assertEqual(fs_b.get_active_names(), [mds_d])
+
+    def test_standby_for_fscid(self):
+        """
+        That I can set a standby FSCID with no rank, and the result is
+        that daemons join any rank for that filesystem.
+        """
+        use_daemons = sorted(self.mds_cluster.mds_ids[0:4])
+        mds_a, mds_b, mds_c, mds_d = use_daemons
+
+        log.info("Using MDS daemons: {0}".format(use_daemons))
+
+        def set_standby_for(leader_fs, follower_id):
+            fscid = leader_fs.get_namespace_id()
+            self.set_conf("mds.{0}".format(follower_id),
+                          "mds_standby_for_fscid", fscid)
+
+        # Create two filesystems which should have two ranks each
+        fs_a = self.mds_cluster.get_filesystem("alpha")
+        fs_a.create()
+        fs_b = self.mds_cluster.get_filesystem("bravo")
+        fs_b.create()
+        fs_a.mon_manager.raw_cluster_cmd('fs', 'set', fs_a.name,
+                                         'max_mds', "2")
+        fs_b.mon_manager.raw_cluster_cmd('fs', 'set', fs_b.name,
+                                         'max_mds', "2")
+
+        # Set all the daemons to have a FSCID assignment but no other
+        # standby preferences.
+        set_standby_for(fs_a, mds_a)
+        set_standby_for(fs_a, mds_b)
+        set_standby_for(fs_b, mds_c)
+        set_standby_for(fs_b, mds_d)
+
+        # Now when we start all daemons at once, they should fall into
+        # ranks in the right filesystem
+        self.mds_cluster.mds_restart(mds_a)
+        self.mds_cluster.mds_restart(mds_b)
+        self.mds_cluster.mds_restart(mds_c)
+        self.mds_cluster.mds_restart(mds_d)
+        self.wait_for_daemon_start([mds_a, mds_b, mds_c, mds_d])
+        fs_a.wait_for_daemons()
+        fs_b.wait_for_daemons()
+        self.assertEqual(set(fs_a.get_active_names()), {mds_a, mds_b})
+        self.assertEqual(set(fs_b.get_active_names()), {mds_c, mds_d})
