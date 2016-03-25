@@ -932,21 +932,6 @@ def cluster(ctx, config):
         )
 
 
-def get_all_pg_info(rem_site, testdir):
-    """
-    Get the results of a ceph pg dump
-    """
-    info = rem_site.run(args=[
-        'sudo',
-        'adjust-ulimits',
-        'ceph-coverage',
-        '{tdir}/archive/coverage'.format(tdir=testdir),
-        'ceph', 'pg', 'dump',
-        '--format', 'json'], stdout=StringIO())
-    all_info = json.loads(info.stdout.getvalue())
-    return all_info['pg_stats']
-
-
 def osd_scrub_pgs(ctx, config):
     """
     Scrub pgs when we exit.
@@ -959,12 +944,11 @@ def osd_scrub_pgs(ctx, config):
     """
     retries = 12
     delays = 10
-    vlist = ctx.cluster.remotes.values()
-    testdir = teuthology.get_testdir(ctx)
-    rem_site = ctx.cluster.remotes.keys()[0]
+    cluster_name = config['cluster']
+    manager = ctx.managers[cluster_name]
     all_clean = False
     for _ in range(0, retries):
-        stats = get_all_pg_info(rem_site, testdir)
+        stats = manager.get_pg_stats()
         states = [stat['state'] for stat in stats]
         if len(set(states)) == 1 and states[0] == 'active+clean':
             all_clean = True
@@ -976,21 +960,16 @@ def osd_scrub_pgs(ctx, config):
         return
     check_time_now = time.localtime()
     time.sleep(1)
-    for slists in vlist:
-        for role in slists:
-            if role.startswith('osd.'):
-                log.info("Scrubbing osd {osd}".format(osd=role))
-                rem_site.run(args=[
-                    'sudo',
-                    'adjust-ulimits',
-                    'ceph-coverage',
-                    '{tdir}/archive/coverage'.format(tdir=testdir),
-                    'ceph', 'osd', 'deep-scrub', role])
+    all_roles = teuthology.all_roles(ctx.cluster)
+    for role in teuthology.cluster_roles_of_type(all_roles, 'osd', cluster_name):
+        log.info("Scrubbing {osd}".format(osd=role))
+        _, _, id_ = teuthology.split_role(role)
+        manager.raw_cluster_cmd('osd', 'deep-scrub', id_)
     prev_good = 0
     gap_cnt = 0
     loop = True
     while loop:
-        stats = get_all_pg_info(rem_site, testdir)
+        stats = manager.get_pg_stats()
         timez = [stat['last_scrub_stamp'] for stat in stats]
         loop = False
         thiscnt = 0
