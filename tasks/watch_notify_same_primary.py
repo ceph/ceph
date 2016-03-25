@@ -45,9 +45,10 @@ def task(ctx, config):
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
-    ctx.manager.raw_cluster_cmd('osd', 'set', 'noout')
+    manager = ctx.managers['ceph']
+    manager.raw_cluster_cmd('osd', 'set', 'noout')
 
-    pool = ctx.manager.create_pool_with_unique_name()
+    pool = manager.create_pool_with_unique_name()
     def obj(n): return "foo-{num}".format(num=n)
     def start_watch(n):
         remote.run(
@@ -103,8 +104,8 @@ def task(ctx, config):
 
     [notify(n, 'notify1') for n in range(len(watches))]
 
-    ctx.manager.kill_osd(0)
-    ctx.manager.mark_down_osd(0)
+    manager.kill_osd(0)
+    manager.mark_down_osd(0)
 
     [notify(n, 'notify2') for n in range(len(watches))]
 
@@ -129,5 +130,5 @@ def task(ctx, config):
             log.info(lines)
             assert got1 and got2
 
-        ctx.manager.revive_osd(0)
-        ctx.manager.remove_pool(pool)
+        manager.revive_osd(0)
+        manager.remove_pool(pool)
