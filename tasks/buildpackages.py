@@ -174,12 +174,13 @@ def task(ctx, config):
         else:
             select = ''
         openstack.image(os_type, os_version) # create if it does not exist
-        build_flavor = openstack.flavor(config['machine'], select)
+        build_flavor = openstack.flavor(config['machine'], arch, select)
+        default_arch = self.get_default_arch()
         http_flavor = openstack.flavor({
             'disk': 40, # GB
             'ram': 1024, # MB
             'cpus': 1,
-        }, select)
+        }, default_arch, select)
         lock = "/tmp/buildpackages-" + sha1 + "-" + os_type + "-" + os_version
         cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; " +
                " flock --close " + lock +
@@ -196,6 +197,7 @@ def task(ctx, config):
                " CEPH_FLAVOR=" + flavor +
                " BUILD_FLAVOR=" + build_flavor +
                " HTTP_FLAVOR=" + http_flavor +
+               " HTTP_ARCH=" + default_arch +
                " " + target +
                " ")
         log.info("buildpackages: " + cmd)
