@@ -333,7 +333,7 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
     elector.stop_participating();
     ss << "stopped responding to quorum, initiated new election";
   } else if (command == "ops") {
-    op_tracker.dump_ops_in_flight(f.get());
+    (void)op_tracker.dump_ops_in_flight(f.get());
     if (f) {
       f->flush(ss);
     }
