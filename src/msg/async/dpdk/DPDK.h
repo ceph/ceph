@@ -953,7 +953,7 @@ class DPDKDevice {
     return std::move(qp);
   }
   unsigned hash2qid(uint32_t hash) {
-    assert(_redir_table.size());
+    // return hash % hw_queues_count();
     return _redir_table[hash & (_redir_table.size() - 1)];
   }
   void set_local_queue(unsigned i, std::unique_ptr<DPDKQueuePair> qp) {

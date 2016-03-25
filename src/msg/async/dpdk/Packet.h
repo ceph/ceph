@@ -283,7 +283,7 @@ public:
     }
   }
   Tub<uint32_t> rss_hash() {
-    return *_impl->rss_hash;
+    return _impl->rss_hash;
   }
   void set_rss_hash(uint32_t hash) {
     _impl->rss_hash.construct(hash);
