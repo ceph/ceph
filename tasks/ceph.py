@@ -1171,8 +1171,8 @@ def created_pool(ctx, config):
     knows about.
     """
     for new_pool in config:
-        if new_pool not in ctx.manager.pools:
-            ctx.manager.pools[new_pool] = ctx.manager.get_pool_property(
+        if new_pool not in ctx.managers['ceph'].pools:
+            ctx.managers['ceph'].pools[new_pool] = ctx.managers['ceph'].get_pool_property(
                 new_pool, 'pg_num')
 
 
