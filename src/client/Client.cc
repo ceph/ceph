@@ -2449,7 +2449,7 @@ void Client::handle_fs_map(MFSMap *m)
 {
   delete fsmap;
   fsmap = new FSMap;
-  fsmap->decode(m->get_encoded());
+  *fsmap = m->get_fsmap();
   m->put();
 
   signal_cond_list(waiting_for_fsmap);

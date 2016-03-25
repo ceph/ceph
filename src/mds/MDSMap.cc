@@ -88,8 +88,35 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
        p != export_targets.end(); ++p) {
     f->dump_int("mds", *p);
   }
-  f->dump_unsigned("features", mds_features);
   f->close_section();
+  f->dump_unsigned("features", mds_features);
+}
+
+void MDSMap::mds_info_t::print_summary(ostream &out) const
+{
+  out << global_id << ":\t"
+      << addr
+      << " '" << name << "'"
+      << " mds." << rank
+      << "." << inc
+      << " " << ceph_mds_state_name(state)
+      << " seq " << state_seq;
+  if (laggy()) {
+    out << " laggy since " << laggy_since;
+  }
+  if (standby_for_rank != -1 ||
+      !standby_for_name.empty()) {
+    out << " (standby for";
+    //if (standby_for_rank >= 0)
+      out << " rank " << standby_for_rank;
+    if (!standby_for_name.empty()) {
+      out << " '" << standby_for_name << "'";
+    }
+    out << ")";
+  }
+  if (!export_targets.empty()) {
+    out << " export_targets=" << export_targets;
+  }
 }
 
 void MDSMap::mds_info_t::generate_test_instances(list<mds_info_t*>& ls)
@@ -210,28 +237,8 @@ void MDSMap::print(ostream& out) const
 
   for (const auto &p : foo) {
     const mds_info_t& info = mds_info.at(p.second);
-    
-    out << p.second << ":\t"
-	<< info.addr
-	<< " '" << info.name << "'"
-	<< " mds." << info.rank
-	<< "." << info.inc
-	<< " " << ceph_mds_state_name(info.state)
-	<< " seq " << info.state_seq;
-    if (info.laggy())
-      out << " laggy since " << info.laggy_since;
-    if (info.standby_for_rank != -1 ||
-	!info.standby_for_name.empty()) {
-      out << " (standby for";
-      //if (info.standby_for_rank >= 0)
-	out << " rank " << info.standby_for_rank;
-      if (!info.standby_for_name.empty())
-	out << " '" << info.standby_for_name << "'";
-      out << ")";
-    }
-    if (!info.export_targets.empty())
-      out << " export_targets=" << info.export_targets;
-    out << "\n";    
+    info.print_summary(out);
+    out << "\n";
   }
 }
 
@@ -667,14 +674,14 @@ MDSMap::availability_t MDSMap::is_cluster_available() const
     return STUCK_UNAVAILABLE;
   }
 
-  for (const auto rank : in) {                                                  
-  if (up.count(rank) && mds_info.at(up.at(rank)).laggy()) {
-    // This might only be transient, but because we can't see
-    // standbys, we have no way of knowing whether there is a
-    // standby available to replace the laggy guy.
-    return STUCK_UNAVAILABLE;                                                 
-  }                                                                           
-}   
+  for (const auto rank : in) {
+    if (up.count(rank) && mds_info.at(up.at(rank)).laggy()) {
+      // This might only be transient, but because we can't see
+      // standbys, we have no way of knowing whether there is a
+      // standby available to replace the laggy guy.
+      return STUCK_UNAVAILABLE;
+    }
+  }
 
   if (get_num_mds(CEPH_MDS_STATE_ACTIVE) > 0) {
     // Nobody looks stuck, so indicate to client they should go ahead

@@ -160,6 +160,7 @@ public:
     }
     void decode(bufferlist::iterator& p);
     void dump(Formatter *f) const;
+    void print_summary(ostream &out) const;
     static void generate_test_instances(list<mds_info_t*>& ls);
   private:
     void encode_versioned(bufferlist& bl, uint64_t features) const;
