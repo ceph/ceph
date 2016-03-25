@@ -58,7 +58,7 @@ ceph-${CEPH_PKG_TYPE}-${CEPH_DIST}-${CEPH_ARCH}-${CEPH_FLAVOR}-${CEPH_SHA1}: ${P
 	for delay in 1 2 4 8 8 8 8 8 8 8 8 8 16 16 16 16 16 32 32 32 64 128 256 512 ; do if ssh -o 'ConnectTimeout=3' $$ip bash -c '"grep -q READYTORUN /var/log/cloud-init*.log"' ; then break ; else sleep $$delay ; fi ; done ; \
 	scp make-${CEPH_PKG_TYPE}.sh common.sh ubuntu@$$ip: ; \
 	packages_repository=$(call get_ip,${<F}) ; \
-	ssh -tt -A ubuntu@$$ip bash ./make-${CEPH_PKG_TYPE}.sh $$packages_repository ${CEPH_DIST} ${CEPH_GIT_URL} ${CEPH_SHA1} ${CEPH_FLAVOR}
+	ssh -tt -A ubuntu@$$ip bash ./make-${CEPH_PKG_TYPE}.sh $$packages_repository ${CEPH_DIST} ${CEPH_GIT_URL} ${CEPH_SHA1} ${CEPH_FLAVOR} ${CEPH_ARCH}
 	mkdir -p ${D}/${@D} ; touch ${D}/$@
 
 clobber:
