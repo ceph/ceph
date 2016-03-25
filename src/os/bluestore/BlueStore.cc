@@ -3924,7 +3924,6 @@ void BlueStore::_kv_sync_thread()
       KeyValueDB::Transaction t = db->get_transaction();
 
       // allocations and deallocations
-      interval_set<uint64_t> released;
       for (std::deque<TransContext *>::iterator it = wal_cleaning.begin();
 	  it != wal_cleaning.end();
 	  ++it) {
@@ -3933,7 +3932,6 @@ void BlueStore::_kv_sync_thread()
 	  dout(20) << __func__ << " txc " << txc
 	    << " (post-wal) released " << txc->wal_txn->released
 	    << dendl;
-	  released.insert(txc->wal_txn->released);
 	  for (interval_set<uint64_t>::iterator p =
 	      txc->wal_txn->released.begin();
 	      p != txc->wal_txn->released.end();
@@ -3941,16 +3939,10 @@ void BlueStore::_kv_sync_thread()
 	    dout(20) << __func__ << " release " << p.get_start()
 	      << "~" << p.get_len() << dendl;
 	    fm->release(p.get_start(), p.get_len(), t);
+	    if (!g_conf->bluestore_debug_no_reuse_blocks)
+	      alloc->release(p.get_start(), p.get_len());
 	  }
 	}
-      }
-      for (interval_set<uint64_t>::iterator p = released.begin();
-	   p != released.end();
-	   ++p) {
-	dout(20) << __func__ << " release " << p.get_start()
-		 << "~" << p.get_len() << dendl;
-	if (!g_conf->bluestore_debug_no_reuse_blocks)
-	  alloc->release(p.get_start(), p.get_len());
       }
 
       vector<bluestore_extent_t> bluefs_gift_extents;
