@@ -256,6 +256,7 @@ int DPDKDevice::init_port_start()
                _port_idx, _dev_info.hash_key_size);
     } else {
       _rss_key = default_rsskey_40bytes;
+      _dev_info.hash_key_size = 40;
     }
 
     port_conf.rxmode.mq_mode = ETH_MQ_RX_RSS;
