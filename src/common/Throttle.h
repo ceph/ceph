@@ -35,28 +35,28 @@ class Throttle {
   const bool use_perf;
 
 public:
-  Throttle(CephContext *cct, const std::string& n, int64_t m = 0, bool _use_perf = true);
+  Throttle(CephContext *cct, const std::string& n, uint64_t m = 0, bool _use_perf = true);
   ~Throttle();
 
 private:
-  void _reset_max(int64_t m);
-  bool _should_wait(int64_t c) const {
-    int64_t m = max.read();
-    int64_t cur = count.read();
+  void _reset_max(uint64_t m);
+  bool _should_wait(uint64_t c) const {
+    uint64_t m = max.read();
+    uint64_t cur = count.read();
     return
       m &&
       ((c <= m && cur + c > m) || // normally stay under max
        (c >= m && cur > m));     // except for large c
   }
 
-  bool _wait(int64_t c);
+  bool _wait(uint64_t c);
 
 public:
   /**
    * gets the number of currently taken slots
    * @returns the number of taken slots
    */
-  int64_t get_current() const {
+  uint64_t get_current() const {
     return count.read();
   }
 
@@ -64,7 +64,7 @@ public:
    * get the max number of slots
    * @returns the max number of slots
    */
-  int64_t get_max() const { return max.read(); }
+  uint64_t get_max() const { return max.read(); }
 
   /**
    * set the new max number, and wait until the number of taken slots drains
@@ -73,14 +73,14 @@ public:
    * @param m the new max number
    * @returns true if this method is blocked, false it it returns immediately
    */
-  bool wait(int64_t m = 0);
+  bool wait(uint64_t m = 0);
 
   /**
    * take the specified number of slots from the stock regardless the throttling
    * @param c number of slots to take
    * @returns the total number of taken slots
    */
-  int64_t take(int64_t c = 1);
+  uint64_t take(uint64_t c = 1);
 
   /**
    * get the specified amount of slots from the stock, but will wait if the
@@ -90,25 +90,25 @@ public:
    * @returns true if this request is blocked due to the throttling, false 
    * otherwise
    */
-  bool get(int64_t c = 1, int64_t m = 0);
+  bool get(uint64_t c = 1, uint64_t m = 0);
 
   /**
    * the unblocked version of @p get()
    * @returns true if it successfully got the requested amount,
    * or false if it would block.
    */
-  bool get_or_fail(int64_t c = 1);
+  bool get_or_fail(uint64_t c = 1);
 
   /**
    * put slots back to the stock
    * @param c number of slots to return
    * @returns number of requests being hold after this
    */
-  int64_t put(int64_t c = 1);
-  bool should_wait(int64_t c) const {
+  uint64_t put(uint64_t c = 1);
+  bool should_wait(uint64_t c) const {
     return _should_wait(c);
   }
-  void reset_max(int64_t m) {
+  void reset_max(uint64_t m) {
     Mutex::Locker l(lock);
     _reset_max(m);
   }

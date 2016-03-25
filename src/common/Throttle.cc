@@ -30,14 +30,12 @@ enum {
   l_throttle_last,
 };
 
-Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m, bool _use_perf)
+Throttle::Throttle(CephContext *cct, const std::string& n, uint64_t m, bool _use_perf)
   : cct(cct), name(n), logger(NULL),
     max(m),
     lock("Throttle::lock"),
     use_perf(_use_perf)
 {
-  assert(m >= 0);
-
   if (!use_perf)
     return;
 
@@ -78,10 +76,10 @@ Throttle::~Throttle()
   }
 }
 
-void Throttle::_reset_max(int64_t m)
+void Throttle::_reset_max(uint64_t m)
 {
   assert(lock.is_locked());
-  if ((int64_t)max.read() == m)
+  if (max.read() == m)
     return;
   if (!cond.empty())
     cond.front()->SignalOne();
@@ -90,7 +88,7 @@ void Throttle::_reset_max(int64_t m)
   max.set((size_t)m);
 }
 
-bool Throttle::_wait(int64_t c)
+bool Throttle::_wait(uint64_t c)
 {
   utime_t start;
   bool waited = false;
@@ -125,7 +123,7 @@ bool Throttle::_wait(int64_t c)
   return waited;
 }
 
-bool Throttle::wait(int64_t m)
+bool Throttle::wait(uint64_t m)
 {
   if (0 == max.read() && 0 == m) {
     return false;
@@ -133,19 +131,17 @@ bool Throttle::wait(int64_t m)
 
   Mutex::Locker l(lock);
   if (m) {
-    assert(m > 0);
     _reset_max(m);
   }
   ldout(cct, 10) << "wait" << dendl;
   return _wait(0);
 }
 
-int64_t Throttle::take(int64_t c)
+uint64_t Throttle::take(uint64_t c)
 {
   if (0 == max.read()) {
     return 0;
   }
-  assert(c >= 0);
   ldout(cct, 10) << "take " << c << dendl;
   {
     Mutex::Locker l(lock);
@@ -159,19 +155,17 @@ int64_t Throttle::take(int64_t c)
   return count.read();
 }
 
-bool Throttle::get(int64_t c, int64_t m)
+bool Throttle::get(uint64_t c, uint64_t m)
 {
   if (0 == max.read() && 0 == m) {
     return false;
   }
 
-  assert(c >= 0);
   ldout(cct, 10) << "get " << c << " (" << count.read() << " -> " << (count.read() + c) << ")" << dendl;
   bool waited = false;
   {
     Mutex::Locker l(lock);
     if (m) {
-      assert(m > 0);
       _reset_max(m);
     }
     waited = _wait(c);
@@ -188,13 +182,12 @@ bool Throttle::get(int64_t c, int64_t m)
 /* Returns true if it successfully got the requested amount,
  * or false if it would block.
  */
-bool Throttle::get_or_fail(int64_t c)
+bool Throttle::get_or_fail(uint64_t c)
 {
   if (0 == max.read()) {
     return true;
   }
 
-  assert (c >= 0);
   Mutex::Locker l(lock);
   if (_should_wait(c) || !cond.empty()) {
     ldout(cct, 10) << "get_or_fail " << c << " failed" << dendl;
@@ -215,19 +208,18 @@ bool Throttle::get_or_fail(int64_t c)
   }
 }
 
-int64_t Throttle::put(int64_t c)
+uint64_t Throttle::put(uint64_t c)
 {
   if (0 == max.read()) {
     return 0;
   }
 
-  assert(c >= 0);
   ldout(cct, 10) << "put " << c << " (" << count.read() << " -> " << (count.read()-c) << ")" << dendl;
   Mutex::Locker l(lock);
   if (c) {
     if (!cond.empty())
       cond.front()->SignalOne();
-    assert(((int64_t)count.read()) >= c); //if count goes negative, we failed somewhere!
+    assert((count.read()) >= c); //if count goes negative, we failed somewhere!
     count.sub(c);
     if (logger) {
       logger->inc(l_throttle_put);
