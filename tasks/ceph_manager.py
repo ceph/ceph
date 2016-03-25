@@ -2061,7 +2061,8 @@ def utility_task(name):
             config = {}
         args = config.get('args', [])
         kwargs = config.get('kwargs', {})
-        fn = getattr(ctx.manager, name)
+        cluster = config.get('cluster', 'ceph')
+        fn = getattr(ctx.managers[cluster], name)
         fn(*args, **kwargs)
     return task
 
