@@ -1,9 +1,0 @@
-workload:
-  sequential:
-  - rgw: [client.0]
-  - print: "**** done rgw: [client.0]"
-  - s3tests:
-      client.0:
-        force-branch: firefly-original
-        rgw_server: client.0
-  - print: "**** done s3tests"
