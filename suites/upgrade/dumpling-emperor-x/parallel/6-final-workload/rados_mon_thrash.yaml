@@ -1,9 +1,0 @@
-tasks:
-- mon_thrash:
-    revive_delay: 20
-    thrash_delay: 1
-- workunit:
-    branch: dumpling
-    clients:
-      client.1:
-      - rados/test.sh

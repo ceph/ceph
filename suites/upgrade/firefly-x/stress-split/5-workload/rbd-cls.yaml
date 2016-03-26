@@ -1,6 +1,0 @@
-tasks:
-- workunit:
-    branch: firefly
-    clients:
-      client.0:
-        - cls/test_cls_rbd.sh
