@@ -1369,7 +1369,7 @@ inline string percentify(const float& a) {
 //void PGMonitor::dump_object_stat_sum(stringstream& ss, Formatter *f,
 void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
                                      object_stat_sum_t &sum, uint64_t avail,
-                                     float raw_used_rate, bool verbose) const
+                                     float raw_used_rate, bool verbose, const pg_pool_t *pool) const
 {
   float curr_object_copies_rate = 0.0;
   if (sum.num_object_copies > 0)
@@ -1381,6 +1381,8 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
     f->dump_unsigned("max_avail", avail);
     f->dump_int("objects", sum.num_objects);
     if (verbose) {
+      f->dump_int("quota_objects", pool->quota_max_objects);
+      f->dump_int("quota_bytes", pool->quota_max_bytes);
       f->dump_int("dirty", sum.num_objects_dirty);
       f->dump_int("rd", sum.num_rd);
       f->dump_int("rd_bytes", sum.num_rd_kb * 1024ull);
@@ -1448,8 +1450,12 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
   } else {
     tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
-    if (verbose)
+    if (verbose) {
       tbl.define_column("CATEGORY", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("QUOTA OBJECTS", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("QUOTA BYTES", TextTable::LEFT, TextTable::LEFT);
+    }
+
     tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("%USED", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("MAX AVAIL", TextTable::LEFT, TextTable::RIGHT);
@@ -1519,10 +1525,22 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
     } else {
       tbl << pool_name
           << pool_id;
-      if (verbose)
+      if (verbose) {
 	tbl << "-";
+
+        if (pool->quota_max_objects == 0)
+          tbl << "N/A";
+        else
+          tbl << si_t(pool->quota_max_objects);
+
+        if (pool->quota_max_bytes == 0)
+          tbl << "N/A";
+        else
+          tbl << si_t(pool->quota_max_bytes);
+      }
+
     }
-    dump_object_stat_sum(tbl, f, stat.stats.sum, avail, raw_used_rate, verbose);
+    dump_object_stat_sum(tbl, f, stat.stats.sum, avail, raw_used_rate, verbose, pool);
     if (f)
       f->close_section();  // stats
     else
