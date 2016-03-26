@@ -158,7 +158,7 @@ private:
 			    object_stat_sum_t &sum,
 			    uint64_t avail,
 			    float raw_used_rate,
-			    bool verbose) const;
+			    bool verbose, const pg_pool_t *pool) const;
 
   int64_t get_rule_avail(OSDMap& osdmap, int ruleno) const;
 
