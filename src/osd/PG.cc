@@ -2009,12 +2009,7 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
     }
   }
 
-  if (dirty_info) {
-    ObjectStore::Transaction t;
-    write_if_dirty(t);
-    int tr = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
-    assert(tr == 0);
-  }
+  assert(!dirty_info);
 
   unlock();
 }
