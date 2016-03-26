@@ -1,5 +1,27 @@
 tasks:
-- radosbench:
-    clients: [client.0]
-    time: 1800
+- full_sequential:
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
 - print: "**** done 19-workload/radosbench.yaml"

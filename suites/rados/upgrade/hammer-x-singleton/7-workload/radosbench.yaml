@@ -1,5 +1,15 @@
 tasks:
-- radosbench:
-    clients: [client.0]
-    time: 900
+- full_sequential:
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
 - print: "**** done radosbench 7-workload"

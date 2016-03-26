@@ -18,7 +18,16 @@ tasks:
     chance_pgnum_grow: 2
     chance_pgpnum_fix: 1
     timeout: 1200
-- radosbench:
-    clients:
-    - client.0
-    time: 1800
+- full_sequential:
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180

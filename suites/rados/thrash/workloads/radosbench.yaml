@@ -6,6 +6,16 @@ overrides:
         debug objecter: 20
         debug rados: 20
 tasks:
-- radosbench:
-    clients: [client.0]
-    time: 200
+- full_sequential:
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
+  - radosbench:
+      clients: [client.0]
+      time: 180
