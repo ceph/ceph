@@ -30,6 +30,13 @@ using namespace std;
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
 
+#include "common/dout.h"
+#include "include/assert.h"
+
+#define dout_subsys ceph_subsys_ms
+#undef dout_prefix
+#define dout_prefix *_dout << "ms "
+
 class MessengerClient {
   class ClientThread;
   class ClientDispatcher : public Dispatcher {
@@ -93,14 +100,16 @@ class MessengerClient {
     void *entry() {
       lock.Lock();
       for (int i = 0; i < ops; ++i) {
-        if (inflight > uint64_t(concurrent)) {
+        if (inflight >= uint64_t(concurrent)) {
           cond.Wait(lock);
         }
+        bufferlist c = data;
         auto j = client_inc.inc();
         starts[j] = Cycles::rdtsc();
         MOSDOp *m = new MOSDOp(0, j, oid, oloc, pgid, 0, 0, 0);
-        m->write(0, msg_len, data);
+        m->write(0, msg_len, c);
         inflight++;
+        // ldout(g_ceph_context, 0) << __func__ << dendl;
         conn->send_message(m);
         //cerr << __func__ << " send m=" << m << std::endl;
       }
@@ -110,8 +119,8 @@ class MessengerClient {
     }
     void record(uint64_t tid) {
       auto start = starts[tid];
-      starts.erase(tid);
       assert(start);
+      starts.erase(tid);
       if (tid <= 5 * (uint64_t)concurrent)
         return ;
       auto us = Cycles::to_microseconds(Cycles::rdtsc() - start);
@@ -174,11 +183,11 @@ class MessengerClient {
 
 void MessengerClient::ClientDispatcher::ms_fast_dispatch(Message *m) {
   usleep(think_time);
-  m->put();
   Mutex::Locker l(thread->lock);
   thread->record(m->get_tid());
   thread->inflight--;
   thread->cond.Signal();
+  m->put();
 }
 
 
