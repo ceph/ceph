@@ -264,10 +264,10 @@ class TestOpenStack(object):
         }
         assert defaults == OpenStack().interpret_hints(defaults, None)
 
-    def test_set_provider(self):
+    def test_get_provider(self):
         auth = os.environ.get('OS_AUTH_URL', None)
         os.environ['OS_AUTH_URL'] = 'cloud.ovh.net'
-        assert OpenStack().set_provider() == 'ovh'
+        assert OpenStack().get_provider() == 'ovh'
         if auth != None:
             os.environ['OS_AUTH_URL'] = auth
         else:
