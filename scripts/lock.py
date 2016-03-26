@@ -159,6 +159,11 @@ def parse_args(argv):
         help='OS (distro) version such as "12.10"',
     )
     parser.add_argument(
+        '--arch',
+        default=None,
+        help='architecture (x86_64, i386, armv7, arm64)',
+    )
+    parser.add_argument(
         '--json-query',
         default=None,
         help=textwrap.dedent('''\
