@@ -1483,6 +1483,14 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents,
       gift = g;
     reclaim = 0;
   }
+  if (gift) {
+    float new_bluefs_ratio = (float)(bluefs_free + gift) / (float)total_free;
+    if (new_bluefs_ratio >= g_conf->bluestore_bluefs_max_ratio) {
+      dout(10) << __func__ << " gift would push us past the max_ratio,"
+	       << " doing nothing" << dendl;
+      gift = 0;
+    }
+  }
 
   if (gift) {
     // round up to alloc size
