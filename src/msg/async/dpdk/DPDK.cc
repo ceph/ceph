@@ -204,10 +204,6 @@ int DPDKDevice::init_port_start()
   //
   // Disable features that are not supported by port's HW
   //
-  if (!(_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_UDP_CKSUM)) {
-    _dev_info.default_txconf.txq_flags |= ETH_TXQ_FLAGS_NOXSUMUDP;
-  }
-
   if (!(_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM)) {
     _dev_info.default_txconf.txq_flags |= ETH_TXQ_FLAGS_NOXSUMTCP;
   }
@@ -224,8 +220,7 @@ int DPDKDevice::init_port_start()
     _dev_info.default_txconf.txq_flags |= ETH_TXQ_FLAGS_NOVLANOFFL;
   }
 
-  if (!(_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_TSO) &&
-      !(_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_UDP_TSO)) {
+  if (!_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_TSO) {
     _dev_info.default_txconf.txq_flags |= ETH_TXQ_FLAGS_NOMULTSEGS;
   }
 
@@ -309,17 +304,14 @@ int DPDKDevice::init_port_start()
   // Check that all CSUM features are either all set all together or not set
   // all together. If this assumption breaks we need to rework the below logic
   // by splitting the csum offload feature bit into separate bits for IPv4,
-  // TCP and UDP.
+  // TCP.
   assert(((_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) &&
-          (_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_UDP_CKSUM) &&
           (_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_TCP_CKSUM)) ||
          (!(_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) &&
-          !(_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_UDP_CKSUM) &&
           !(_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_TCP_CKSUM)));
 
   // Set Rx checksum checking
-  if (  (_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) &&
-      (_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_UDP_CKSUM) &&
+  if ((_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) &&
       (_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_TCP_CKSUM)) {
     ldout(cct, 1) << __func__ << " RX checksum offload supported" << dendl;
     port_conf.rxmode.hw_ip_checksum = 1;
@@ -337,26 +329,15 @@ int DPDKDevice::init_port_start()
     _hw_features.tx_tso = 1;
   }
 
-  // There is no UFO support in the PMDs yet.
-#if 0
-  if (_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_UDP_TSO) {
-    ldout(cct, 1) << __func__ << " UFO is supported" << dendl;
-    _hw_features.tx_ufo = 1;
-  }
-#endif
-
-  // Check that Tx TCP and UDP CSUM features are either all set all together
+  // Check that Tx TCP CSUM features are either all set all together
   // or not set all together. If this assumption breaks we need to rework the
   // below logic by splitting the csum offload feature bit into separate bits
-  // for TCP and UDP.
-  assert(((_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_UDP_CKSUM) &&
-          (_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM)) ||
-         (!(_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_UDP_CKSUM) &&
-          !(_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM)));
+  // for TCP.
+  assert((_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM) ||
+          !(_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM));
 
-  if (  (_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_UDP_CKSUM) &&
-      (_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM)) {
-    ldout(cct, 1) << __func__ << " TX TCP&UDP checksum offload supported" << dendl;
+  if (_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM) {
+    ldout(cct, 1) << __func__ << " TX TCP checksum offload supported" << dendl;
     _hw_features.tx_csum_l4_offload = 1;
   }
 
@@ -981,8 +962,6 @@ void DPDKQueuePair::tx_buf::set_cluster_offload_info(const Packet& p, const DPDK
         head->l4_len = oi.tcp_hdr_len;
         head->tso_segsz = oi.tso_seg_size;
       }
-    } else {
-      assert(0);
     }
   }
 }

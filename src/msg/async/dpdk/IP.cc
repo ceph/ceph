@@ -128,7 +128,7 @@ int ipv4::handle_received_packet(Packet p, ethernet_address from)
   }
 
   // Skip checking csum of reassembled IP datagram
-  if (!hw_features().rx_csum_offload && !p.offload_info_ref().reassembled) {
+  if (!get_hw_features().rx_csum_offload && !p.offload_info_ref().reassembled) {
     checksummer csum;
     csum.sum(reinterpret_cast<char*>(iph), sizeof(*iph));
     if (csum.get() != 0) {
@@ -261,7 +261,7 @@ const hw_features& ipv4::get_hw_features() const
 
 void ipv4::send(ipv4_address to, ip_protocol_num proto_num,
         Packet p, ethernet_address e_dst) {
-  auto needs_frag = this->needs_frag(p, proto_num, hw_features());
+  auto needs_frag = this->needs_frag(p, proto_num, get_hw_features());
 
   auto send_pkt = [this, to, proto_num, needs_frag, e_dst] (Packet& pkt, uint16_t remaining, uint16_t offset) mutable  {
     static uint16_t id = 0;
@@ -290,7 +290,7 @@ void ipv4::send(ipv4_address to, ip_protocol_num proto_num,
                    << " len " << pkt.len() << dendl;
     *iph = iph->hton();
 
-    if (hw_features().tx_csum_ip_offload) {
+    if (get_hw_features().tx_csum_ip_offload) {
       iph->csum = 0;
       pkt.offload_info_ref().needs_ip_csum = true;
     } else {
@@ -306,7 +306,7 @@ void ipv4::send(ipv4_address to, ip_protocol_num proto_num,
   if (needs_frag) {
     uint16_t offset = 0;
     uint16_t remaining = p.len();
-    auto mtu = hw_features().mtu;
+    auto mtu = get_hw_features().mtu;
 
     while (remaining) {
       auto can_send = std::min(uint16_t(mtu - ipv4_hdr_len_min), remaining);
