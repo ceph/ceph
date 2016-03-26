@@ -1,8 +1,0 @@
-tasks:
-- workunit:
-    branch: dumpling
-    clients:
-      client.0:
-        - rbd/import_export.sh
-    env:
-      RBD_CREATE_ARGS: --new-format

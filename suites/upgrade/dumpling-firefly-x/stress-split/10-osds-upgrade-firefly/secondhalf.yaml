@@ -1,6 +1,0 @@
-tasks:
-- install.upgrade:
-    osd.3: 
-       branch: firefly
-- ceph.restart:
-    daemons: [osd.3, osd.4, osd.5]

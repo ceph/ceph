@@ -1,8 +1,0 @@
-workload:
-  parallel:
-    - workunit:
-        branch: giant
-        clients:
-          client.1:
-            - cls
-    - print: "**** done cls 2-workload parallel"
