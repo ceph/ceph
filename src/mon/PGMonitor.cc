@@ -1252,11 +1252,12 @@ epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
              << dendl;
     last = q->first;
     for (set<pg_t>::iterator r = q->second.begin(); r != q->second.end(); ++r) {
+      pg_stat_t &st = pg_map.pg_stat[*r];
       if (!m)
 	m = new MOSDPGCreate(pg_map.last_osdmap_epoch);
-      m->mkpg[*r] = pg_create_t(pg_map.pg_stat[*r].created,
-                                pg_map.pg_stat[*r].parent,
-                                pg_map.pg_stat[*r].parent_split_bits);
+      m->mkpg[*r] = pg_create_t(st.created,
+                                st.parent,
+                                st.parent_split_bits);
       // Need the create time from the monitor using its clock to set
       // last_scrub_stamp upon pg creation.
       m->ctimes[*r] = pg_map.pg_stat[*r].last_scrub_stamp;
