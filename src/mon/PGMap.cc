@@ -468,7 +468,8 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
   num_pg++;
   num_pg_by_state[s.state]++;
 
-  if (s.state & PG_STATE_CREATING) {
+  if ((s.state & PG_STATE_CREATING) &&
+      s.parent_split_bits == 0) {
     creating_pgs.insert(pgid);
     if (s.acting_primary >= 0) {
       creating_pgs_by_osd_epoch[s.acting_primary][s.mapping_epoch].insert(pgid);
@@ -505,7 +506,8 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
   if (end == 0)
     num_pg_by_state.erase(s.state);
 
-  if (s.state & PG_STATE_CREATING) {
+  if ((s.state & PG_STATE_CREATING) &&
+      s.parent_split_bits == 0) {
     creating_pgs.erase(pgid);
     if (s.acting_primary >= 0) {
       map<epoch_t,set<pg_t> >& r = creating_pgs_by_osd_epoch[s.acting_primary];
