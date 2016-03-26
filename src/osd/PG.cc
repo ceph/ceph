@@ -303,9 +303,12 @@ void PG::proc_master_log(
   might_have_unfound.insert(from);
 
   // See doc/dev/osd_internals/last_epoch_started
-  if (oinfo.last_epoch_started > info.last_epoch_started)
+  if (oinfo.last_epoch_started > info.last_epoch_started) {
     info.last_epoch_started = oinfo.last_epoch_started;
-  info.history.merge(oinfo.history);
+    dirty_info = true;
+  }
+  if (info.history.merge(oinfo.history))
+    dirty_info = true;
   assert(cct->_conf->osd_find_best_info_ignore_history_les ||
 	 info.last_epoch_started >= info.history.last_epoch_started);
 
@@ -4627,7 +4630,8 @@ void PG::merge_new_log_entries(
 void PG::update_history_from_master(pg_history_t new_history)
 {
   unreg_next_scrub();
-  info.history.merge(new_history);
+  if (info.history.merge(new_history))
+    dirty_info = true;
   reg_next_scrub();
 }
 
@@ -5628,7 +5632,6 @@ boost::statechart::result PG::RecoveryState::Initial::react(const MNotifyRec& no
   PG *pg = context< RecoveryMachine >().pg;
   pg->proc_replica_info(
     notify.from, notify.notify.info, notify.notify.epoch_sent);
-  pg->update_heartbeat_peers();
   pg->set_last_peering_reset();
   return transit< Primary >();
 }
@@ -6397,9 +6400,6 @@ PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserve
 
   if (remote_recovery_reservation_it != context< Active >().remote_shards_to_reserve_recovery.end()) {
     assert(*remote_recovery_reservation_it != pg->pg_whoami);
-  }
-
-  if (remote_recovery_reservation_it != context< Active >().remote_shards_to_reserve_recovery.end()) {
     ConnectionRef con = pg->osd->get_con_osd_cluster(
       remote_recovery_reservation_it->osd, pg->get_osdmap()->get_epoch());
     if (con) {
@@ -6505,8 +6505,10 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
   // DEGRADED | UNDERSIZED is appropriate.
   assert(!pg->actingbackfill.empty());
   if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <=
-      pg->actingbackfill.size())
+      pg->actingbackfill.size()) {
     pg->state_clear(PG_STATE_DEGRADED);
+    pg->publish_stats_to_osd();
+  }
 
   // adjust acting set?  (e.g. because backfill completed...)
   bool history_les_bound = false;
@@ -6635,6 +6637,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
     }
   }
 
+  bool need_publish = false;
   /* Check for changes in pool size (if the acting set changed as a result,
    * this does not matter) */
   if (advmap.lastmap->get_pg_size(pg->info.pgid.pgid) !=
@@ -6650,15 +6653,18 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
       pg->state_set(PG_STATE_UNDERSIZED);
       pg->state_set(PG_STATE_DEGRADED);
     }
-    pg->publish_stats_to_osd(); // degraded may have changed
+    need_publish = true; // degraded may have changed
   }
 
   // if we haven't reported our PG stats in a long time, do so now.
   if (pg->info.stats.reported_epoch + pg->cct->_conf->osd_pg_stat_report_interval_max < advmap.osdmap->get_epoch()) {
     dout(20) << "reporting stats to osd after " << (advmap.osdmap->get_epoch() - pg->info.stats.reported_epoch)
 	     << " epochs" << dendl;
-    pg->publish_stats_to_osd();
+    need_publish = true;
   }
+
+  if (need_publish)
+    pg->publish_stats_to_osd();
 
   return forward_event();
 }
@@ -7233,6 +7239,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
 	  if (!any_up_complete_now && any_down_now) {
 	    dout(10) << " no osds up+complete from interval " << interval << dendl;
 	    pg->state_set(PG_STATE_DOWN);
+            pg->publish_stats_to_osd();
 	    return discard_event();
 	  }
 	  break;
