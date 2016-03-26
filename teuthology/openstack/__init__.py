@@ -353,7 +353,7 @@ class OpenStack(object):
         else:
             image = name + ".qcow2"
             disk_format = 'qcow2'
-        if self.provider == 'runabove':
+        if self.get_provider() == 'runabove':
             properties = [
                 "--property architecture_restrict=" + arch,
                 "--property architecture=" + arch
@@ -555,8 +555,8 @@ class OpenStack(object):
     def get_ip(self, instance_id, network):
         return OpenStackInstance(instance_id).get_ip(network)
 
-    def get_available_arch(self):
-        if (self.provider == 'runabove' and
+    def get_available_archs(self):
+        if (self.get_provider() == 'runabove' and
             'HZ1' in os.environ.get('OS_REGION_NAME', '')):
             return ('aarch64',)
         else:
