@@ -125,18 +125,6 @@ void PGMonitor::tick()
 
   handle_osd_timeouts();
 
-  if (mon->is_leader()) {
-    bool propose = false;
-
-    if ((need_check_down_pgs || !need_check_down_pg_osds.empty()) &&
-        check_down_pgs())
-      propose = true;
-
-    if (propose) {
-      propose_pending();
-    }
-  }
-
   if (!pg_map.pg_sum_deltas.empty()) {
     utime_t age = ceph_clock_now(g_ceph_context) - pg_map.stamp;
     if (age > 2 * g_conf->mon_delta_reset_interval) {
@@ -1171,27 +1159,35 @@ bool PGMonitor::map_pg_creates()
         up_primary != s->up_primary ||
         acting !=  s->acting ||
         acting_primary != s->acting_primary) {
-      dout(20) << __func__ << "  " << pgid << " "
-               << " acting_primary: " << s->acting_primary
-               << " -> " << acting_primary
-               << " acting: " << s->acting << " -> " << acting
-               << " up_primary: " << s->up_primary << " -> " << up_primary
-               << " up: " << s->up << " -> " << up
-               << dendl;
-
       pg_stat_t *ns = &pending_inc.pg_stat_updates[pgid];
-      *ns = *s;
+      if (osdmap->get_epoch() > ns->reported_epoch) {
+	dout(20) << __func__ << "  " << pgid << " "
+		 << " acting_primary: " << s->acting_primary
+		 << " -> " << acting_primary
+		 << " acting: " << s->acting << " -> " << acting
+		 << " up_primary: " << s->up_primary << " -> " << up_primary
+		 << " up: " << s->up << " -> " << up
+		 << dendl;
 
-      // note epoch if the target of the create message changed
-      if (acting_primary != ns->acting_primary)
-	ns->mapping_epoch = osdmap->get_epoch();
+	// only initialize if it wasn't already a pending update
+	if (ns->reported_epoch == 0)
+	  *ns = *s;
 
-      ns->up = up;
-      ns->up_primary = up_primary;
-      ns->acting = acting;
-      ns->acting_primary = acting_primary;
+	// note epoch if the target of the create message changed
+	if (acting_primary != ns->acting_primary)
+	  ns->mapping_epoch = osdmap->get_epoch();
 
-      ++changed;
+	ns->up = up;
+	ns->up_primary = up_primary;
+	ns->acting = acting;
+	ns->acting_primary = acting_primary;
+
+	++changed;
+      } else {
+	dout(20) << __func__ << "  " << pgid << " has pending update from newer"
+		 << " epoch " << ns->reported_epoch
+		 << dendl;
+      }
     }
   }
   if (changed) {
@@ -1285,7 +1281,7 @@ epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
 }
 
 void PGMonitor::_try_mark_pg_stale(
-  OSDMap *osdmap,
+  const OSDMap *osdmap,
   pg_t pgid,
   const pg_stat_t& cur_stat)
 {
@@ -1310,9 +1306,19 @@ void PGMonitor::_try_mark_pg_stale(
 
 bool PGMonitor::check_down_pgs()
 {
-  dout(10) << "check_down_pgs" << dendl;
+  dout(10) << "check_down_pgs last_osdmap_epoch "
+	   << pg_map.last_osdmap_epoch << dendl;
+  if (pg_map.last_osdmap_epoch == 0)
+    return false;
 
-  OSDMap *osdmap = &mon->osdmon()->osdmap;
+  // use the OSDMap that matches the one pg_map has consumed.
+  std::unique_ptr<OSDMap> osdmap;
+  bufferlist bl;
+  int err = mon->osdmon()->get_version_full(pg_map.last_osdmap_epoch, bl);
+  assert(err == 0);
+  osdmap.reset(new OSDMap);
+  osdmap->decode(bl);
+
   bool ret = false;
 
   // if a large number of osds changed state, just iterate over the whole
@@ -1326,7 +1332,7 @@ bool PGMonitor::check_down_pgs()
       if ((p.second.state & PG_STATE_STALE) == 0 &&
           p.second.acting_primary != -1 &&
           osdmap->is_down(p.second.acting_primary)) {
-	_try_mark_pg_stale(osdmap, p.first, p.second);
+	_try_mark_pg_stale(osdmap.get(), p.first, p.second);
 	ret = true;
       }
     }
@@ -1335,9 +1341,9 @@ bool PGMonitor::check_down_pgs()
       if (osdmap->is_down(osd)) {
 	for (auto pgid : pg_map.pg_by_osd[osd]) {
 	  const pg_stat_t &stat = pg_map.pg_stat[pgid];
-	  if ((stat.state & PG_STATE_STALE) == 0 &&
-	      stat.acting_primary != -1) {
-	    _try_mark_pg_stale(osdmap, pgid, stat);
+	  assert(stat.acting_primary == osd);
+	  if ((stat.state & PG_STATE_STALE) == 0) {
+	    _try_mark_pg_stale(osdmap.get(), pgid, stat);
 	    ret = true;
 	  }
 	}
