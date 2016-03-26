@@ -1,5 +1,0 @@
-tasks:
-  - rgw: [client.1]
-  - swift:
-      client.1:
-        rgw_server: client.1

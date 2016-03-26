@@ -1,7 +1,0 @@
-workload:
-   sequential:
-   - workunit:
-       branch: dumpling
-       clients:
-         client.0:
-         - rados/load-gen-big.sh

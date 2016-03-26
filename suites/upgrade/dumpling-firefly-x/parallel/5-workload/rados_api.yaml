@@ -1,9 +1,0 @@
-workload2:
-  sequential:
-  - workunit:
-      branch: firefly
-      clients:
-        client.0:
-        - rados/test.sh
-        - cls
-  - print: "**** done #rados/test.sh and cls 2"

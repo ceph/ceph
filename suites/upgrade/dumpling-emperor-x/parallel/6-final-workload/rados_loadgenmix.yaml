@@ -1,6 +1,0 @@
-tasks:
-  - workunit:
-      branch: dumpling
-      clients:
-        client.1:
-        - rados/load-gen-mix.sh
