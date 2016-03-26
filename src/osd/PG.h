@@ -409,7 +409,8 @@ public:
 
     /// Adds recovery sources in batch
     void add_batch_sources_info(
-      const set<pg_shard_t> &sources  ///< [in] a set of resources which can be used for all objects
+      const set<pg_shard_t> &sources,  ///< [in] a set of resources which can be used for all objects
+      ThreadPool::TPHandle* handle  ///< [in] ThreadPool handle
       );
 
     /// Uses osdmap to update structures for now down sources
@@ -1308,11 +1309,6 @@ public:
     int seed,
     const pg_pool_t *pool,
     ObjectStore::Transaction *t) = 0;
-  virtual bool _report_snap_collection_errors(
-    const hobject_t &hoid,
-    const map<string, bufferptr> &attrs,
-    pg_shard_t osd,
-    ostream &out) { return false; }
   void clear_scrub_reserved();
   void scrub_reserve_replicas();
   void scrub_unreserve_replicas();

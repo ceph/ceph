@@ -806,7 +806,7 @@ OPTION(osd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be 
 
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)
-
+OPTION(osd_loop_before_reset_tphandle, OPT_U32, 64) // Max number of loop before we reset thread-pool's handle
 // default timeout while caling WaitInterval on an empty queue
 OPTION(threadpool_default_timeout, OPT_INT, 60)
 // default wait time for an empty queue before pinging the hb timeout

@@ -490,12 +490,17 @@ bool PG::MissingLoc::readable_with_acting(
 }
 
 void PG::MissingLoc::add_batch_sources_info(
-  const set<pg_shard_t> &sources)
+  const set<pg_shard_t> &sources, ThreadPool::TPHandle* handle)
 {
   dout(10) << __func__ << ": adding sources in batch " << sources.size() << dendl;
+  unsigned loop = 0;
   for (map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator i = needs_recovery_map.begin();
       i != needs_recovery_map.end();
       ++i) {
+    if (handle && ++loop >= g_conf->osd_loop_before_reset_tphandle) {
+      handle->reset_tp_timeout();
+      loop = 0;
+    }
     missing_loc[i->first].insert(sources.begin(), sources.end());
     missing_loc_sources.insert(sources.begin(), sources.end());
   }
@@ -509,14 +514,16 @@ bool PG::MissingLoc::add_source_info(
   ThreadPool::TPHandle* handle)
 {
   bool found_missing = false;
+  unsigned loop = 0;
   // found items?
   for (map<hobject_t,pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator p = needs_recovery_map.begin();
        p != needs_recovery_map.end();
        ++p) {
     const hobject_t &soid(p->first);
     eversion_t need = p->second.need;
-    if (handle) {
+    if (handle && ++loop >= g_conf->osd_loop_before_reset_tphandle) {
       handle->reset_tp_timeout();
+      loop = 0;
     }
     if (oinfo.last_update < need) {
       dout(10) << "search_for_missing " << soid << " " << need
@@ -716,8 +723,10 @@ void PG::generate_past_intervals()
   epoch_t cur_epoch, end_epoch;
   if (!_calc_past_interval_range(&cur_epoch, &end_epoch,
       osd->get_superblock().oldest_map)) {
-    if (info.history.same_interval_since == 0)
+    if (info.history.same_interval_since == 0) {
       info.history.same_interval_since = end_epoch;
+      dirty_info = true;
+    }
     return;
   }
 
@@ -1803,7 +1812,7 @@ void PG::activate(ObjectStore::Transaction& t,
       // and covers vast majority of the use cases, like one OSD/host is down for
       // a while for hardware repairing
       if (complete_shards.size() + 1 == actingbackfill.size()) {
-        missing_loc.add_batch_sources_info(complete_shards);
+        missing_loc.add_batch_sources_info(complete_shards, ctx->handle);
       } else {
         missing_loc.add_source_info(pg_whoami, info, pg_log.get_missing(),
 				    get_sort_bitwise(), ctx->handle);
@@ -6843,6 +6852,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
 
   // info.last_epoch_started is set during activate()
   pg->info.history.last_epoch_started = pg->info.last_epoch_started;
+  pg->dirty_info = true;
 
   pg->share_pg_info();
   pg->publish_stats_to_osd();
