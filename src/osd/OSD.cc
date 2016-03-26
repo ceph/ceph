@@ -6902,6 +6902,12 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	       osd_markdown_log.front() + grace < now)
 	  osd_markdown_log.pop_front();
 	if ((int)osd_markdown_log.size() > g_conf->osd_max_markdown_count) {
+	  dout(10) << __func__ << " marked down "
+		   << osd_markdown_log.size()
+		   << " > osd_max_markdown_count "
+		   << g_conf->osd_max_markdown_count
+		   << " in last " << grace << " seconds, shutting down"
+		   << dendl;
 	  do_restart = false;
 	  do_shutdown = true;
 	}
