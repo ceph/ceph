@@ -1,5 +1,0 @@
-tasks:
-- workunit:
-     clients:
-        client.0:
-           - rbd/test_librbd.sh

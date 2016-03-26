@@ -1,5 +1,0 @@
-tasks:
-- install.upgrade:
-    osd.0: 
-- ceph.restart:
-    daemons: [osd.0, osd.1, osd.2, osd.3, osd.4, osd.5, osd.6]

@@ -1,9 +1,0 @@
-#
-# The lrc plugin cannot be used because some OSD are not upgraded
-# yet and would crash.
-#
-tasks: 
-- exec:
-    mon.a:
-      - |-
-        sudo ceph osd erasure-code-profile set profile-lrc plugin=lrc 2>&1 | grep "unsupported by:"
