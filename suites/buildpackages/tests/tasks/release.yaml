@@ -3,7 +3,11 @@ overrides:
    ansible.cephlab:
      playbook: users.yml
    buildpackages:
-     machine:
+     good_machine:
+       disk: 20 # GB
+       ram: 2000 # MB
+       cpus: 2
+     min_machine:
        disk: 10 # GB
        ram: 1000 # MB
        cpus: 1
