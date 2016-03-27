@@ -369,11 +369,15 @@ void DPDKDevice::set_hw_flow_control()
   auto ret = rte_eth_dev_flow_ctrl_get(_port_idx, &fc_conf);
 
   if (ret == -ENOTSUP) {
+    ldout(cct, 1) << __func__ << " port " << int(_port_idx)
+                  << ": not support to get hardware flow control settings: " << ret << dendl;
     goto not_supported;
   }
 
   if (ret < 0) {
-    rte_exit(EXIT_FAILURE, "Port %u: failed to get hardware flow control settings: (error %d)\n", _port_idx, ret);
+    lderr(cct) << __func__ << " port " << int(_port_idx)
+               << ": failed to get hardware flow control settings: " << ret << dendl;
+    assert(0);
   }
 
   if (_enable_fc) {
@@ -384,18 +388,22 @@ void DPDKDevice::set_hw_flow_control()
 
   ret = rte_eth_dev_flow_ctrl_set(_port_idx, &fc_conf);
   if (ret == -ENOTSUP) {
+    ldout(cct, 1) << __func__ << " port " << int(_port_idx)
+                  << ": not support to set hardware flow control settings: " << ret << dendl;
     goto not_supported;
   }
 
   if (ret < 0) {
-    rte_exit(EXIT_FAILURE, "Port %u: failed to set hardware flow control (error %d)\n", _port_idx, ret);
+    lderr(cct) << __func__ << " port " << int(_port_idx)
+               << ": failed to set hardware flow control settings: " << ret << dendl;
+    assert(0);
   }
 
-  ldout(cct, 5) << __func__ << " Port " << _port_idx << ":  HW FC " << _enable_fc << dendl;
+  ldout(cct, 1) << __func__ << " port " << int(_port_idx) << ":  HW FC " << _enable_fc << dendl;
   return;
 
 not_supported:
-  ldout(cct, 5) << __func__ << " Port " << _port_idx << ": Changing HW FC settings is not supported" << dendl;
+  ldout(cct, 1) << __func__ << " port " << int(_port_idx) << ": whanging HW FC settings is not supported" << dendl;
 }
 
 int DPDKDevice::init_port_fini()
