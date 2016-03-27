@@ -56,7 +56,7 @@ class packet_merger {
   }
 
   void merge(Offset offset, Packet p) {
-    bool insert;
+    bool insert = true;
     auto beg = offset;
     auto end = beg + p.len();
     // Fisrt, try to merge the packet with existing segment
