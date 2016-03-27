@@ -377,6 +377,8 @@ class DPDKQueuePair {
         DPDKQueuePair& qp, rte_mbuf*& m, char* va, size_t buf_len) {
       static constexpr size_t max_frag_len = 15 * 1024; // 15K
 
+      // FIXME: current all tx buf is alloced without rte_malloc
+      return copy_one_data_buf(qp, m, va, buf_len);
       //
       // Currently we break a buffer on a 15K boundary because 82599
       // devices have a 15.5K limitation on a maximum single fragment
