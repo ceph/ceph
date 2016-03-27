@@ -207,6 +207,10 @@ int DPDKDevice::init_port_start()
   //
   // Disable features that are not supported by port's HW
   //
+  if (!(_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_UDP_CKSUM)) {
+    _dev_info.default_txconf.txq_flags |= ETH_TXQ_FLAGS_NOXSUMUDP;
+  }
+
   if (!(_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM)) {
     _dev_info.default_txconf.txq_flags |= ETH_TXQ_FLAGS_NOXSUMTCP;
   }
@@ -406,7 +410,7 @@ void DPDKDevice::set_hw_flow_control()
   return;
 
 not_supported:
-  ldout(cct, 1) << __func__ << " port " << int(_port_idx) << ": whanging HW FC settings is not supported" << dendl;
+  ldout(cct, 1) << __func__ << " port " << int(_port_idx) << ": changing HW FC settings is not supported" << dendl;
 }
 
 int DPDKDevice::init_port_fini()
@@ -682,14 +686,12 @@ inline Tub<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
     _bufs.push_back(data);
   }
 
-  Tub<Packet> p;
   auto del = std::bind(
           [](std::vector<char*> &bufs) {
             for (auto&& b : bufs) { rte_free(b); }
           }, std::move(_bufs));
-  p.construct(
+  return Packet(
       _frags.begin(), _frags.end(), make_deleter(std::move(del)));
-  return std::move(p);
 }
 
 inline Tub<Packet> DPDKQueuePair::from_mbuf(rte_mbuf* m)
@@ -700,10 +702,8 @@ inline Tub<Packet> DPDKQueuePair::from_mbuf(rte_mbuf* m)
   if (!_dev->hw_features_ref().rx_lro || rte_pktmbuf_is_contiguous(m)) {
     char* data = rte_pktmbuf_mtod(m, char*);
 
-    Tub<Packet> p;
-    p.construct(fragment{data, rte_pktmbuf_data_len(m)},
-                make_deleter([data] { rte_free(data); }));
-    return std::move(p);
+    return Packet(fragment{data, rte_pktmbuf_data_len(m)},
+                  make_deleter([data] { rte_free(data); }));
   } else {
     return from_mbuf_lro(m);
   }
@@ -729,6 +729,13 @@ inline bool DPDKQueuePair::refill_one_cluster(rte_mbuf* head)
 bool DPDKQueuePair::rx_gc(bool force)
 {
   if (_num_rx_free_segs >= rx_gc_thresh || force) {
+    ldout(cct, 10) << __func__ << " free segs " << _num_rx_free_segs
+                   << " thresh " << rx_gc_thresh
+                   << " free pkts " << _rx_free_pkts.size()
+                   << " pool count " << rte_mempool_count(_pktmbuf_pool_rx)
+                   << " free pool count " << rte_mempool_free_count(_pktmbuf_pool_rx)
+                   << dendl;
+
     while (!_rx_free_pkts.empty()) {
       //
       // Use back() + pop_back() semantics to avoid an extra
@@ -739,6 +746,7 @@ bool DPDKQueuePair::rx_gc(bool force)
       _rx_free_pkts.pop_back();
 
       if (!refill_one_cluster(m)) {
+        ldout(cct, 1) << __func__ << " get new mbuf failed " << dendl;
         break;
       }
     }
@@ -977,7 +985,8 @@ void DPDKQueuePair::tx_buf::set_cluster_offload_info(const Packet& p, const DPDK
   }
 }
 
-DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(Packet&& p, DPDKQueuePair& qp)
+DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(
+        CephContext *cct, Packet&& p, DPDKQueuePair& qp)
 {
   // Too fragmented - linearize
   if (p.nr_frags() > max_frags) {
@@ -995,9 +1004,11 @@ DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(Packet&& p, DPDKQue
   //
   if (!check_frag0(p)) {
     if (!copy_one_frag(qp, p.frag(0), head, last_seg, nsegs)) {
+      ldout(cct, 1) << __func__ << " no available mbuf for " << p.frag(0).size << dendl;
       return nullptr;
     }
   } else if (!translate_one_frag(qp, p.frag(0), head, last_seg, nsegs)) {
+    ldout(cct, 1) << __func__ << " no available mbuf for " << p.frag(0).size << dendl;
     return nullptr;
   }
 
@@ -1006,6 +1017,7 @@ DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(Packet&& p, DPDKQue
   for (unsigned i = 1; i < p.nr_frags(); i++) {
     rte_mbuf *h = nullptr, *new_last_seg = nullptr;
     if (!translate_one_frag(qp, p.frag(i), h, new_last_seg, nsegs)) {
+      ldout(cct, 1) << __func__ << " no available mbuf for " << p.frag(i).size << dendl;
       me(head)->recycle();
       return nullptr;
     }

@@ -237,7 +237,8 @@ class DPDKQueuePair {
      * @return the HEAD tx_buf of the cluster or nullptr in case of a
      *         failure
      */
-    static tx_buf* from_packet_zc(Packet&& p, DPDKQueuePair& qp);
+    static tx_buf* from_packet_zc(
+            CephContext *cct, Packet&& p, DPDKQueuePair& qp);
 
     /**
      * Copy the contents of the "packet" into the given cluster of
@@ -632,7 +633,7 @@ class DPDKQueuePair {
   uint32_t send(circular_buffer<Packet>& pb) {
     // Zero-copy send
     return _send(pb, [&] (Packet&& p) {
-      return tx_buf::from_packet_zc(std::move(p), *this);
+      return tx_buf::from_packet_zc(cct, std::move(p), *this);
     });
   }
 
