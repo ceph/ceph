@@ -368,6 +368,7 @@ find_package(Threads REQUIRED)
 set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
 set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
 check_symbol_exists(pthread_setname_np "pthread.h" HAVE_PTHREAD_SETNAME_NP)
+check_symbol_exists(pthread_getname_np "pthread.h" HAVE_PTHREAD_GETNAME_NP)
 set(CMAKE_REQUIRED_LIBRARIES "")
 set(CMAKE_REQUIRED_DEFINITIONS "")
 

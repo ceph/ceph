@@ -270,4 +270,7 @@
 /* Defined if pthread_setname_np() is available */
 #cmakedefine HAVE_PTHREAD_SETNAME_NP 1
 
+/* Defined if pthread_getname_np() is available */
+#cmakedefine HAVE_PTHREAD_GETNAME_NP 1
+
 #endif /* CONFIG_H */
