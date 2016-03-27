@@ -115,11 +115,12 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
             [](Packet &p) {}, std::move(p));
     data = buffer::claim_buffer(
             f.size, f.base, make_deleter(std::move(del)));
-    _cur_off += f.size;
     if (++_cur_frag == _buf->nr_frags()) {
       _cur_frag = 0;
       _cur_off = 0;
       _buf.destroy();
+    } else {
+      _cur_off += f.size;
     }
     assert(data.length());
     return data.length();
@@ -157,11 +158,11 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
       bufferlist swapped;
       bl.splice(0, len, &swapped);
       auto del = std::bind(
-              [](bufferlist &bl) { bl.clear(); }, std::move(swapped));
+              [](bufferlist &bl) {}, std::move(swapped));
       return _conn.send(Packet(std::move(frags), make_deleter(std::move(del))));
     } else {
       auto del = std::bind(
-              [](bufferlist &bl) { bl.clear(); }, std::move(bl));
+              [](bufferlist &bl) {}, std::move(bl));
 
       return _conn.send(Packet(std::move(frags), make_deleter(std::move(del))));
     }

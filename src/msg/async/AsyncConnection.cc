@@ -2061,7 +2061,7 @@ int AsyncConnection::send_message(Message *m)
     ldout(async_msgr->cct, 5) << __func__ << " clear encoded buffer previous "
                               << f << " != " << get_features() << dendl;
   }
-  if (!is_queued() && can_write == WriteStatus::CANWRITE && !local_stack && async_msgr->cct->_conf->ms_async_send_inline) {
+  if (!is_queued() && can_write == WriteStatus::CANWRITE && center->in_thread() && async_msgr->cct->_conf->ms_async_send_inline) {
     if (!can_fast_prepare)
       prepare_send_message(get_features(), m, bl);
     logger->inc(l_msgr_send_messages_inline);
