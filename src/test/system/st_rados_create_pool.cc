@@ -22,6 +22,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <sstream>
 #include <string>
 
@@ -112,4 +113,18 @@ out:
   rados_ioctx_destroy(io_ctx);
   rados_shutdown(cl);
   return ret_val;
+}
+
+std::string get_temp_pool_name(const char* prefix)
+{
+  assert(prefix);
+  char hostname[80];
+  int ret = 0;
+  ret = gethostname(hostname, sizeof(hostname));
+  assert(!ret);
+  char poolname[256];
+  ret = snprintf(poolname, sizeof(poolname),
+                 "%s.%s-%d", prefix, hostname, getpid());
+  assert(ret < sizeof(poolname));
+  return poolname;
 }
