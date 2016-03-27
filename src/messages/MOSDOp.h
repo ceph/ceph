@@ -318,7 +318,13 @@ struct ceph_osd_request_head {
 
       ::encode(retry_attempt, payload);
       ::encode(features, payload);
-      ::encode(reqid, payload);
+      if (reqid.name != entity_name_t() || reqid.tid != 0) {
+	::encode(reqid, payload);
+      } else {
+	// don't include client_inc in the reqid for the legacy v6
+	// encoding or else we'll confuse older peers.
+	::encode(osd_reqid_t(), payload);
+      }
     } else {
       // new, reordered, v7 message encoding
       header.version = HEAD_VERSION;
