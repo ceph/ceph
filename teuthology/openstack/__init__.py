@@ -112,12 +112,11 @@ class OpenStackInstance(object):
 
     def get_ip_neutron(self):
         subnets = json.loads(misc.sh("neutron subnet-list -f json -c id -c ip_version"))
-        subnet_id = None
+        subnet_ids = []
         for subnet in subnets:
             if subnet['ip_version'] == 4:
-                subnet_id = subnet['id']
-                break
-        if not subnet_id:
+                subnet_ids.append(subnet['id'])
+        if not subnet_ids:
             raise Exception("no subnet with ip_version == 4")
         ports = json.loads(misc.sh("neutron port-list -f json -c fixed_ips -c device_id"))
         fixed_ips = None
@@ -130,7 +129,7 @@ class OpenStackInstance(object):
         ip = None
         for fixed_ip in fixed_ips:
             record = json.loads(fixed_ip)
-            if record['subnet_id'] == subnet_id:
+            if record['subnet_id'] in subnet_ids:
                 ip = record['ip_address']
                 break
         if not ip:
