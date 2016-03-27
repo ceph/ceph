@@ -228,7 +228,6 @@ if(HAVE_DPDK)
     msg/async/dpdk/ethernet.cc
 	msg/async/dpdk/IP.cc
     msg/async/dpdk/IPChecksum.cc
-    msg/async/dpdk/memory.cc
     msg/async/dpdk/net.cc
 	msg/async/dpdk/Packet.cc
 	msg/async/dpdk/TCP.cc)

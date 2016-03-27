@@ -377,24 +377,22 @@ class DPDKQueuePair {
         DPDKQueuePair& qp, rte_mbuf*& m, char* va, size_t buf_len) {
       static constexpr size_t max_frag_len = 15 * 1024; // 15K
 
-      translation tr = translate(va, buf_len);
       //
       // Currently we break a buffer on a 15K boundary because 82599
       // devices have a 15.5K limitation on a maximum single fragment
       // size.
       //
-      phys_addr_t pa = tr.addr;
-
-      if (!tr.size) {
+      phys_addr_t pa = rte_malloc_virt2phy(va);
+      if (!pa)
         return copy_one_data_buf(qp, m, va, buf_len);
-      }
 
+      assert(buf_len);
       tx_buf* buf = qp.get_tx_buf();
       if (!buf) {
         return 0;
       }
 
-      size_t len = std::min(tr.size, max_frag_len);
+      size_t len = std::min(buf_len, max_frag_len);
 
       buf->set_zc_info(va, pa, len);
       m = buf->rte_mbuf_p();
@@ -435,13 +433,8 @@ class DPDKQueuePair {
       // physically contiguous area. If that's the case - we are good to
       // go.
       //
-      size_t frag0_size = p.frag(0).size;
-      void* base = p.frag(0).base;
-      translation tr = translate(base, frag0_size);
-
-      if (tr.size < frag0_size && tr.size < 128) {
+      if (p.frag(0).size < 128)
         return false;
-      }
 
       return true;
     }

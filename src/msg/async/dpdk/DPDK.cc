@@ -45,6 +45,7 @@
 #include <rte_cycles.h>
 #include <rte_memzone.h>
 
+#include "include/page.h"
 #include "align.h"
 #include "IP.h"
 #include "const.h"
@@ -124,6 +125,8 @@ static constexpr uint8_t i40e_max_xmit_segment_frags = 8;
 static constexpr uint8_t vmxnet3_max_xmit_segment_frags = 16;
 
 static constexpr uint16_t inline_mbuf_size = inline_mbuf_data_size + mbuf_overhead;
+
+static size_t huge_page_size = 512 * CEPH_PAGE_SIZE;
 
 uint32_t qp_mempool_obj_size()
 {
@@ -220,7 +223,7 @@ int DPDKDevice::init_port_start()
     _dev_info.default_txconf.txq_flags |= ETH_TXQ_FLAGS_NOVLANOFFL;
   }
 
-  if (!_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_TSO) {
+  if (!(_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_TSO)) {
     _dev_info.default_txconf.txq_flags |= ETH_TXQ_FLAGS_NOMULTSEGS;
   }
 
@@ -686,7 +689,7 @@ inline Tub<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
           }, std::move(_bufs));
   p.construct(
       _frags.begin(), _frags.end(), make_deleter(std::move(del)));
-  return p;
+  return std::move(p);
 }
 
 inline Tub<Packet> DPDKQueuePair::from_mbuf(rte_mbuf* m)
