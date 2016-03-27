@@ -211,6 +211,7 @@ INIT_SYSTEMS = [
     'upstart',
     'sysvinit',
     'systemd',
+    'openrc',
     'auto',
     'none',
 ]
@@ -2844,6 +2845,20 @@ def start_daemon(
                     'ceph-osd@{osd_id}'.format(osd_id=osd_id),
                 ],
             )
+        elif os.path.exists(os.path.join(path, 'openrc')):
+            base_script = '/etc/init.d/ceph-osd'
+            osd_script = '{base}.{osd_id}'.format(
+                base=base_script,
+                osd_id=osd_id
+            )
+            if not os.path.exists(osd_script):
+                os.symlink(base_script, osd_script)
+            command_check_call(
+                [
+                    osd_script,
+                    'start',
+                ],
+            )
         else:
             raise Error('{cluster} osd.{osd_id} is not tagged '
                         'with an init system'.format(
@@ -2899,6 +2914,13 @@ def stop_daemon(
                     'systemctl',
                     'stop',
                     'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+                ],
+            )
+        elif os.path.exists(os.path.join(path, 'openrc')):
+            command_check_call(
+                [
+                    '/etc/init.d/ceph-osd.{osd_id}'.format(osd_id=osd_id),
+                    'stop',
                 ],
             )
         else:
