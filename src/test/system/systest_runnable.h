@@ -36,7 +36,7 @@
   RETURN1_IF_NOT_VAL(0, expr)
 
 extern void* systest_runnable_pthread_helper(void *arg);
-
+std::string get_temp_pool_name(const char* prefix);
 /* Represents a single test thread / process.
  *
  * Inherit from this class and implement the test body in run().
