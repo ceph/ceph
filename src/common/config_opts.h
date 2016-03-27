@@ -210,7 +210,7 @@ OPTION(ms_async_transport_type, OPT_STR, "posix")
 
 OPTION(ms_dpdk_port_id, OPT_INT, 0)
 OPTION(ms_dpdk_coremask, OPT_STR, "1")
-OPTION(ms_dpdk_memory_channel, OPT_STR, "1")
+OPTION(ms_dpdk_memory_channel, OPT_STR, "4")
 OPTION(ms_dpdk_hugepages, OPT_STR, "")
 OPTION(ms_dpdk_pmd, OPT_STR, "")
 OPTION(ms_dpdk_host_ipv4_addr, OPT_STR, "")

@@ -16,6 +16,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <chrono>
 #include <string>
 #include <unistd.h>
 #include <iostream>
@@ -25,7 +26,7 @@ using namespace std;
 #include "include/atomic.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
-#include "common/Cycles.h"
+#include "common/ceph_time.h"
 #include "global/global_init.h"
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
@@ -82,12 +83,13 @@ class MessengerClient {
     bufferlist data;
     int ops;
     ClientDispatcher dispatcher;
-    map<uint64_t, uint64_t> starts;
+    map<uint64_t, ceph::real_clock::time_point> starts;
 
    public:
     Mutex lock;
     Cond cond;
     uint64_t inflight = 0;
+    vector<uint64_t> dones;
 
     ClientThread(MessengerClient *cli, Messenger *m, int c, ConnectionRef con, int len, int ops, int think_time_us):
         client(cli), msgr(m), concurrent(c), conn(con), client_inc(0), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
@@ -103,9 +105,13 @@ class MessengerClient {
         if (inflight >= uint64_t(concurrent)) {
           cond.Wait(lock);
         }
+        for (auto &i : dones) {
+          record(i);
+        }
+        dones.clear();
         bufferlist c = data;
         auto j = client_inc.inc();
-        starts[j] = Cycles::rdtsc();
+        starts[j] = ceph::real_clock::now(g_ceph_context);
         MOSDOp *m = new MOSDOp(0, j, oid, oloc, pgid, 0, 0, 0);
         m->write(0, msg_len, c);
         inflight++;
@@ -113,20 +119,22 @@ class MessengerClient {
         conn->send_message(m);
         //cerr << __func__ << " send m=" << m << std::endl;
       }
+      while (inflight)
+        cond.Wait(lock);
       lock.Unlock();
       msgr->shutdown();
       return 0;
     }
     void record(uint64_t tid) {
       auto start = starts[tid];
-      assert(start);
-      starts.erase(tid);
+      assert(starts.erase(tid));
       if (tid <= 5 * (uint64_t)concurrent)
         return ;
-      auto us = Cycles::to_microseconds(Cycles::rdtsc() - start);
-      if (client->max.read() < us)
+      auto us = std::chrono::duration_cast<std::chrono::microseconds>(
+              ceph::real_clock::now(g_ceph_context) - start).count();
+      if (client->max.read() < (uint64_t)us)
         client->max.set(us);
-      if (client->min.read() > us)
+      if (client->min.read() > (uint64_t)us)
         client->min.set(us);
       client->total.add(us);
       client->count.inc();
@@ -184,7 +192,7 @@ class MessengerClient {
 void MessengerClient::ClientDispatcher::ms_fast_dispatch(Message *m) {
   usleep(think_time);
   Mutex::Locker l(thread->lock);
-  thread->record(m->get_tid());
+  thread->dones.push_back(m->get_tid());
   thread->inflight--;
   thread->cond.Signal();
   m->put();
@@ -232,12 +240,12 @@ int main(int argc, char **argv)
   cerr << "       message data bytes " << len << std::endl;
   MessengerClient client(g_ceph_context->_conf->ms_type, args[0], think_time);
   client.ready(concurrent, numjobs, ios, len, latency);
-  Cycles::init();
-  uint64_t start = Cycles::rdtsc();
+  auto start = ceph::real_clock::now(g_ceph_context);
   client.start();
-  uint64_t stop = Cycles::rdtsc();
+  auto gap = std::chrono::duration_cast<std::chrono::microseconds>(
+          ceph::real_clock::now(g_ceph_context) - start).count();
   auto avg = client.count.read() ? (double)(client.total.read())/client.count.read() : 0;
-  cerr << " Total op " << ios << " run time " << Cycles::to_microseconds(stop - start) << "us." << std::endl;
+  cerr << " Total op " << client.count.read() << " run time " << gap << "us." << std::endl;
   cerr << "          Max(us) " << client.max.read() << "us." << std::endl;
   cerr << "          Min(us) " << client.min.read() << "us." << std::endl;
   cerr << "          Avg(us) " << avg << "us." << std::endl;
