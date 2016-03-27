@@ -1443,6 +1443,7 @@ tcp_sequence tcp<InetTraits>::tcb::get_isn() {
   CryptoPP::Weak::MD5::Transform(hash, _isn_secret.key);
   auto seq = hash[0];
   auto m = duration_cast<microseconds>(clock_type::now(_tcp.cct).time_since_epoch());
+  seq += m.count() / 4;
   return make_seq(seq);
 }
 
