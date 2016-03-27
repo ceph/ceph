@@ -30,6 +30,7 @@ from ceph_detect_init import fedora
 from ceph_detect_init import main
 from ceph_detect_init import rhel
 from ceph_detect_init import suse
+from ceph_detect_init import gentoo
 
 logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.DEBUG)
@@ -95,6 +96,44 @@ class TestCephDetectInit(testtools.TestCase):
                         '13.2'):
             self.assertEqual('systemd', suse.choose_init())
 
+    def test_gentoo_is_openrc(self):
+        with mock.patch('os.path.isdir', return_value=True):
+            self.assertEqual(gentoo.is_openrc(), True)
+        with mock.patch('os.path.isdir', return_value=False):
+            self.assertEqual(gentoo.is_openrc(), False)
+
+    def test_gentoo_is_systemd(self):
+        f = mock.mock_open(read_data='systemd')
+        with mock.patch('__main__.file', f, create=True) as m:
+            self.assertEqual(gentoo.is_systemd(), True)
+            m.assert_called_once_with('/proc/1/comm')
+        f = mock.mock_open(read_data='init')
+        with mock.patch('__main__.file', f, create=True) as m:
+            self.assertEqual(gentoo.is_systemd(), False)
+            m.assert_called_once_with('/proc/1/comm')
+        f = mock.mock_open(read_data='upstart')
+        with mock.patch('__main__.file', f, create=True) as m:
+            self.assertEqual(gentoo.is_systemd(), False)
+            m.assert_called_once_with('/proc/1/comm')
+
+    def test_gentoo(self):
+        with mock.patch.multiple('ceph_detect_init.gentoo',
+                is_systemd=(lambda: True),
+                is_openrc=(lambda: True)):
+            self.assertEqual('openrc', gentoo.choose_init())
+        with mock.patch.multiple('ceph_detect_init.gentoo',
+                is_systemd=(lambda: True),
+                is_openrc=(lambda: False)):
+            self.assertEqual('systemd', gentoo.choose_init())
+        with mock.patch.multiple('ceph_detect_init.gentoo',
+                is_systemd=(lambda: False),
+                is_openrc=(lambda: True)):
+            self.assertEqual('openrc', gentoo.choose_init())
+        with mock.patch.multiple('ceph_detect_init.gentoo',
+                is_systemd=(lambda: False),
+                is_openrc=(lambda: False)):
+            self.assertEqual('unknown', gentoo.choose_init())
+
     def test_get(self):
         g = ceph_detect_init.get
         with mock.patch('platform.linux_distribution',
@@ -127,6 +166,7 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual(fedora, g('fedora'))
         self.assertEqual(suse, g('suse'))
         self.assertEqual(rhel, g('redhat', use_rhceph=True))
+        self.assertEqual(gentoo, g('gentoo'))
 
     def test_normalized_distro_name(self):
         n = ceph_detect_init._normalized_distro_name
@@ -148,6 +188,12 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual('debian', n('debian'))
         self.assertEqual('ubuntu', n('Ubuntu'))
         self.assertEqual('ubuntu', n('ubuntu'))
+        self.assertEqual('gentoo', n('Gentoo'))
+        self.assertEqual('gentoo', n('gentoo'))
+        self.assertEqual('gentoo', n('Funtoo'))
+        self.assertEqual('gentoo', n('funtoo'))
+        self.assertEqual('gentoo', n('Exherbo'))
+        self.assertEqual('gentoo', n('exherbo'))
 
     def test_platform_information(self):
         with mock.patch('platform.linux_distribution',
