@@ -588,6 +588,19 @@ class OpenStack(object):
     def get_ip(self, instance_id, network):
         return OpenStackInstance(instance_id).get_ip(network)
 
+    def net(self):
+        """
+        Return the network to be used when creating an OpenStack instance.
+        By default it should not be set. But some providers such as
+        entercloudsuite require it is.
+        """
+        if self.get_provider() == 'entercloudsuite':
+            return "--nic net-id=default"
+        elif self.get_provider() == 'cloudlab':
+            return "--nic net-id=flat-lan-1-net"
+        else:
+            return ""
+
     def get_available_archs(self):
         if (self.get_provider() == 'cloudlab' or
             (self.get_provider() == 'runabove' and
@@ -945,19 +958,6 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             hint['disk'] = self.args.controller_disk
 
         return self.flavor(hint, arch)
-
-    def net(self):
-        """
-        Return the network to be used when creating an OpenStack instance.
-        By default it should not be set. But some providers such as
-        entercloudsuite require it is.
-        """
-        if self.get_provider() == 'entercloudsuite':
-            return "--nic net-id=default"
-        elif self.get_provider() == 'cloudlab':
-            return "--nic net-id=flat-lan-1-net"
-        else:
-            return ""
 
     def get_user_data(self):
         """
