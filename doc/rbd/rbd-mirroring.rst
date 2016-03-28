@@ -232,7 +232,7 @@ rbd-mirror Daemon
 =================
 
 The two ``rbd-mirror`` daemons are responsible for watching image journals on the
-remote, peer cluster and replaying the journal events against the local
+remote peer cluster and replaying the journal events against the local
 cluster. The RBD image journaling feature records all modifications to the
 image in the order they occur. This ensures that a crash-consistent mirror of
 the remote image is available locally.
