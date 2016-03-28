@@ -523,6 +523,9 @@ TEST(LibRGW, GETATTR_DIRS1)
 	  ASSERT_TRUE(sobj.rgw_fh->is_dir());
 	  ASSERT_TRUE(S_ISDIR(st.st_mode));
 	}
+	/* validate Unix owners */
+	ASSERT_EQ(st.st_uid, owner_uid);
+	ASSERT_EQ(st.st_gid, owner_gid);
 	if (verbose) {
 	  obj_rec_st rec_st{sobj, st};
 	  std::cout << "\t"
