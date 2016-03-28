@@ -73,8 +73,9 @@ class parallel(object):
         return self
 
     def __exit__(self, type_, value, traceback):
+        self.group.join()
+
         if value is not None:
-            self.group.kill(block=True)
             return False
 
         try:
@@ -85,7 +86,6 @@ class parallel(object):
         except Exception:
             # Emit message here because traceback gets stomped when we re-raise
             log.exception("Exception in parallel execution")
-            self.group.kill(block=True)
             raise
         return True
 
