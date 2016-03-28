@@ -5723,7 +5723,11 @@ int BlueStore::_do_write_zero(
 {
   bufferlist zl;
   zl.append_zero(length);
-  return _do_write(txc, c, o, offset, length, zl, 0);
+  uint64_t old_size = o->onode.size;
+  int r = _do_write(txc, c, o, offset, length, zl, 0);
+  // we do not modify onode size
+  o->onode.size = old_size;
+  return r;
 }
 
 int BlueStore::_zero(TransContext *txc,
@@ -5956,7 +5960,6 @@ int BlueStore::_do_truncate(
         int r = _do_write_zero(txc, c, o, old_size, x_len);
         if (r < 0)
           return r;
-	o->onode.size = offset; // we (maybe) just wrote past eof; reset size
       } else {
 	bluestore_wal_op_t *op = _get_wal_op(txc, o);
 	op->op = bluestore_wal_op_t::OP_ZERO;
