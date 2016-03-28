@@ -30,7 +30,7 @@ ${HOME}/.ssh_agent:
 	grep -q ssh_agent ~/.bashrc_teuthology || echo 'source ${HOME}/.ssh_agent' >> ~/.bashrc_teuthology
 
 flock-${PKG_REPO}:
-	openstack server create --image 'teuthology-ubuntu-14.04-${HTTP_ARCH}' --flavor ${HTTP_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --user-data ${PKG_REPO_USER_DATA} --wait ${PKG_REPO}
+	openstack server create --image 'teuthology-ubuntu-14.04-${HTTP_ARCH}' ${OPENSTACK_NETWORK} --flavor ${HTTP_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --user-data ${PKG_REPO_USER_DATA} --wait ${PKG_REPO}
 	sleep 30
 	set -ex ; \
 	ip=$(call get_ip,${PKG_REPO}) ; \
@@ -50,7 +50,7 @@ ${PKG_REPO}:
 	touch ${D}/$@
 
 ceph-${CEPH_PKG_TYPE}-${CEPH_DIST}-${CEPH_ARCH}-${CEPH_FLAVOR}-${CEPH_SHA1}: ${PKG_REPO}
-	openstack server create --image 'teuthology-${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-${CEPH_ARCH}' --flavor ${BUILD_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --user-data ${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-user-data.txt --wait $@
+	openstack server create --image 'teuthology-${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-${CEPH_ARCH}' ${OPENSTACK_NETWORK} --flavor ${BUILD_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --user-data ${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-user-data.txt --wait $@
 	sleep 30
 	set -ex ; \
 	trap "openstack server delete $@" EXIT ; \
