@@ -979,7 +979,8 @@ remove_mirroring_image:
 		int order, uint64_t features, uint64_t stripe_unit,
 		uint64_t stripe_count, uint8_t journal_order,
                 uint8_t journal_splay_width, const std::string &journal_pool,
-                const std::string &non_primary_global_image_id)
+                const std::string &non_primary_global_image_id,
+                const std::string &primary_mirror_uuid)
   {
     ostringstream bid_ss;
     uint32_t extra;
@@ -1088,7 +1089,8 @@ remove_mirroring_image:
       }
 
       r = Journal<>::create(io_ctx, id, journal_order, journal_splay_width,
-			    journal_pool, force_non_primary);
+			    journal_pool, force_non_primary,
+                            primary_mirror_uuid);
       if (r < 0) {
         lderr(cct) << "error creating journal: " << cpp_strerror(r) << dendl;
         goto err_remove_object_map;
@@ -1287,7 +1289,7 @@ remove_mirroring_image:
 
       r = create_v2(io_ctx, imgname, bid, size, order, features, stripe_unit,
 		    stripe_count, journal_order, journal_splay_width,
-                    journal_pool, "");
+                    journal_pool, "", "");
     }
 
     int r1 = opts.set(RBD_IMAGE_OPTION_ORDER, order);
@@ -1630,7 +1632,7 @@ remove_mirroring_image:
 
           r = Journal<>::create(ictx->md_ctx, ictx->id, ictx->journal_order,
   			        ictx->journal_splay_width,
-  			        ictx->journal_pool, false);
+  			        ictx->journal_pool, false, "");
           if (r < 0) {
             lderr(cct) << "error creating image journal: " << cpp_strerror(r)
                        << dendl;
