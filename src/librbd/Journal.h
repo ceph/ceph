@@ -114,6 +114,7 @@ public:
   void close(Context *on_finish);
 
   bool is_tag_owner() const;
+  journal::TagData get_tag_data() const;
   int demote();
 
   void allocate_local_tag(Context *on_finish);

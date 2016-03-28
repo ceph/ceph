@@ -656,6 +656,11 @@ bool Journal<I>::is_tag_owner() const {
 }
 
 template <typename I>
+journal::TagData Journal<I>::get_tag_data() const {
+  return m_tag_data;
+}
+
+template <typename I>
 int Journal<I>::demote() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << __func__ << dendl;
