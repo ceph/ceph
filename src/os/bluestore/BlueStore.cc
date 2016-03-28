@@ -5126,7 +5126,8 @@ int BlueStore::_do_allocate(
   bool shared_head = false;
   bool shared_tail = false;
   uint64_t orig_end = orig_offset + orig_length;
-  if (orig_offset / min_alloc_size == (orig_end - 1)/ min_alloc_size && (orig_length != min_alloc_size)) {
+  if (orig_offset / min_alloc_size == (orig_end - 1) / min_alloc_size &&
+      (orig_length != min_alloc_size)) {
     // we fall within the same block
     offset = orig_offset - orig_offset % min_alloc_size;
     length = 0;
