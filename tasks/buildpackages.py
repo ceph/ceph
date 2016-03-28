@@ -109,19 +109,27 @@ def task(ctx, config):
     The config should be as follows:
 
     buildpackages:
-      machine:
+      good_machine:
         disk: 40 # GB
-        ram: 15000 # MB
+        ram: 48000 # MB
         cpus: 16
+      min_machine:
+        disk: 40 # GB
+        ram: 8000 # MB
+        cpus: 1
 
     example:
 
     tasks:
     - buildpackages:
-        machine:
+        good_machine:
           disk: 40 # GB
           ram: 15000 # MB
           cpus: 16
+        min_machine:
+          disk: 40 # GB
+          ram: 8000 # MB
+          cpus: 1
     - install:
 
     When a buildpackages task is already included, the values it contains can be
@@ -129,7 +137,11 @@ def task(ctx, config):
 
     overrides:
       buildpackages:
-        machine:
+        good_machine:
+          disk: 20 # GB
+          ram: 2000 # MB
+          cpus: 2
+        min_machine:
           disk: 10 # GB
           ram: 1000 # MB
           cpus: 1
@@ -145,7 +157,7 @@ def task(ctx, config):
     d = os.path.join(os.path.dirname(__file__), 'buildpackages')
     os_type = misc.get_distro(ctx)
     os_version = misc.get_distro_version(ctx)
-    arch = ctx.config.get('arch', 'x86_64')
+    arch = ctx.config.get('arch', OpenStack().get_default_arch())
     dist = LocalGitbuilderProject()._get_distro(distro=os_type,
                                                 version=os_version)
     pkg_type = get_pkg_type(os_type)
@@ -173,17 +185,23 @@ def task(ctx, config):
             select = '^(vps|eg)-'
         else:
             select = ''
-        openstack.image(os_type, os_version) # create if it does not exist
-        build_flavor = openstack.flavor(config['machine'], select)
+        network = openstack.net()
+        if network != "":
+            network = " OPENSTACK_NETWORK='" + network + "' "
+        openstack.image(os_type, os_version, arch) # create if it does not exist
+        build_flavor = openstack.flavor_range(
+            config['min_machine'], config['good_machine'], arch, select)
+        default_arch = openstack.get_default_arch()
         http_flavor = openstack.flavor({
             'disk': 40, # GB
             'ram': 1024, # MB
             'cpus': 1,
-        }, select)
+        }, default_arch, select)
         lock = "/tmp/buildpackages-" + sha1 + "-" + os_type + "-" + os_version
         cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; " +
                " flock --close " + lock +
                " make -C " + d +
+               network +
                " CEPH_GIT_URL=" + teuth_config.get_ceph_git_url() +
                " CEPH_PKG_TYPE=" + pkg_type +
                " CEPH_OS_TYPE=" + os_type +
@@ -196,6 +214,7 @@ def task(ctx, config):
                " CEPH_FLAVOR=" + flavor +
                " BUILD_FLAVOR=" + build_flavor +
                " HTTP_FLAVOR=" + http_flavor +
+               " HTTP_ARCH=" + default_arch +
                " " + target +
                " ")
         log.info("buildpackages: " + cmd)
