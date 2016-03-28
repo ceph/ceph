@@ -17,7 +17,7 @@ cluster. For a detailed discussion of CRUSH, see
 CRUSH maps contain a list of :abbr:`OSDs (Object Storage Devices)`, a list of
 'buckets' for aggregating the devices into physical locations, and a list of
 rules that tell CRUSH how it should replicate data in a Ceph cluster's pools. By
-reﬂecting the underlying physical organization of the installation, CRUSH can
+reflecting the underlying physical organization of the installation, CRUSH can
 model—and thereby address—potential sources of correlated device failures.
 Typical sources include physical proximity, a shared power source, and a shared
 network. By encoding this information into the cluster map, CRUSH placement
