@@ -198,6 +198,58 @@ struct C_AllocateTag : public Context {
   }
 };
 
+struct C_GetTag : public Context {
+  CephContext *cct;
+  librados::IoCtx &ioctx;
+  const std::string &oid;
+  AsyncOpTracker &async_op_tracker;
+  uint64_t tag_tid;
+  JournalMetadata::Tag *tag;
+  Context *on_finish;
+
+  bufferlist out_bl;
+
+  C_GetTag(CephContext *cct, librados::IoCtx &ioctx, const std::string &oid,
+           AsyncOpTracker &async_op_tracker, uint64_t tag_tid,
+           JournalMetadata::Tag *tag, Context *on_finish)
+    : cct(cct), ioctx(ioctx), oid(oid), async_op_tracker(async_op_tracker),
+      tag_tid(tag_tid), tag(tag), on_finish(on_finish) {
+    async_op_tracker.start_op();
+  }
+  virtual ~C_GetTag() {
+    async_op_tracker.finish_op();
+  }
+
+  void send() {
+    send_get_tag();
+  }
+
+  void send_get_tag() {
+    librados::ObjectReadOperation op;
+    client::get_tag_start(&op, tag_tid);
+
+    librados::AioCompletion *comp = librados::Rados::aio_create_completion(
+      this, nullptr, &utils::rados_state_callback<
+        C_GetTag, &C_GetTag::handle_get_tag>);
+
+    int r = ioctx.aio_operate(oid, comp, &op, &out_bl);
+    assert(r == 0);
+    comp->release();
+  }
+
+  void handle_get_tag(int r) {
+    if (r == 0) {
+      bufferlist::iterator iter = out_bl.begin();
+      r = client::get_tag_finish(&iter, tag);
+    }
+    complete(r);
+  }
+
+  virtual void finish(int r) override {
+    on_finish->complete(r);
+  }
+};
+
 struct C_GetTags : public Context {
   CephContext *cct;
   librados::IoCtx &ioctx;
@@ -426,6 +478,12 @@ void JournalMetadata::get_client(const std::string &client_id,
                                  Context *on_finish) {
   C_GetClient *ctx = new C_GetClient(m_cct, m_ioctx, m_oid, m_async_op_tracker,
                                      client_id, client, on_finish);
+  ctx->send();
+}
+
+void JournalMetadata::get_tag(uint64_t tag_tid, Tag *tag, Context *on_finish) {
+  C_GetTag *ctx = new C_GetTag(m_cct, m_ioctx, m_oid, m_async_op_tracker,
+                               tag_tid, tag, on_finish);
   ctx->send();
 }
 
