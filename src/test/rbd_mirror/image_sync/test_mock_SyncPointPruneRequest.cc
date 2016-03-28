@@ -109,6 +109,7 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncCompleteSuccess) {
   librbd::journal::MirrorPeerClientMeta client_meta;
   client_meta.sync_points.emplace_front("snap1", boost::none);
   m_client_meta = client_meta;
+  ASSERT_EQ(librbd::journal::MIRROR_PEER_STATE_SYNCING, m_client_meta.state);
 
   librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
@@ -124,6 +125,7 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncCompleteSuccess) {
   req->send();
   ASSERT_EQ(0, ctx.wait());
   ASSERT_TRUE(m_client_meta.sync_points.empty());
+  ASSERT_EQ(librbd::journal::MIRROR_PEER_STATE_REPLAYING, m_client_meta.state);
 }
 
 TEST_F(TestMockImageSyncSyncPointPruneRequest, RestartedSyncCompleteSuccess) {

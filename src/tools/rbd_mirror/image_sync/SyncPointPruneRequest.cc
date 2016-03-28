@@ -154,6 +154,9 @@ void SyncPointPruneRequest<I>::send_update_client() {
 
   if (m_sync_complete) {
     m_client_meta_copy.sync_points.pop_front();
+    if (m_client_meta_copy.sync_points.empty()) {
+      m_client_meta_copy.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
+    }
   } else {
     while (m_client_meta_copy.sync_points.size() > 1) {
       m_client_meta_copy.sync_points.pop_back();
