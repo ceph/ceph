@@ -8,6 +8,7 @@
 #include "include/rados/librados.hpp"
 #include "cls/journal/cls_journal_types.h"
 #include "librbd/journal/TypeTraits.h"
+#include <list>
 #include <string>
 
 class Context;
@@ -37,14 +38,16 @@ public:
                                   const std::string &global_image_id,
                                   ContextWQ *work_queue, SafeTimer *timer,
                                   Mutex *timer_lock,
-                                  const std::string &mirror_uuid,
+                                  const std::string &local_mirror_uuid,
+                                  const std::string &remote_mirror_uuid,
                                   Journaler *journaler,
                                   MirrorPeerClientMeta *client_meta,
                                   Context *on_finish) {
     return new BootstrapRequest(local_io_ctx, remote_io_ctx, local_image_ctx,
                                 local_image_name, remote_image_id,
                                 global_image_id, work_queue, timer, timer_lock,
-                                mirror_uuid, journaler, client_meta, on_finish);
+                                local_mirror_uuid, remote_mirror_uuid,
+                                journaler, client_meta, on_finish);
   }
 
   BootstrapRequest(librados::IoCtx &local_io_ctx,
@@ -54,7 +57,8 @@ public:
                    const std::string &remote_image_id,
                    const std::string &global_image_id, ContextWQ *work_queue,
                    SafeTimer *timer, Mutex *timer_lock,
-                   const std::string &mirror_uuid, Journaler *journaler,
+                   const std::string &local_mirror_uuid,
+                   const std::string &remote_mirror_uuid, Journaler *journaler,
                    MirrorPeerClientMeta *client_meta, Context *on_finish);
   ~BootstrapRequest();
 
@@ -68,6 +72,9 @@ private:
    *    |
    *    v
    * GET_LOCAL_IMAGE_ID * * * * * * * * * * * *
+   *    |                                     *
+   *    v                                     *
+   * GET_REMOTE_TAG_CLASS * * * * * * * * * * *
    *    |                                     *
    *    v                                     *
    * GET_CLIENT * * * * * * * * * * * * * * * *
@@ -94,9 +101,12 @@ private:
    *    |             \-----------------/     *
    *    |                                     *
    *    v (skip if not needed)                *
-   * UPDATE_CLIENT                            *
-   *    |                                     *
-   *    v (skip if not needed)                *
+   * UPDATE_CLIENT  * * * * * * * *           *
+   *    |                         *           *
+   *    v (skip if not needed)    *           *
+   * GET_REMOTE_TAGS  * * * * * * *           *
+   *    |                         *           *
+   *    v (skip if not needed)    v           *
    * IMAGE_SYNC * * * > CLOSE_LOCAL_IMAGE     *
    *    |                         |           *
    *    |     /-------------------/           *
@@ -109,6 +119,8 @@ private:
    *
    * @endverbatim
    */
+  typedef std::list<cls::journal::Tag> Tags;
+
   librados::IoCtx &m_local_io_ctx;
   librados::IoCtx &m_remote_io_ctx;
   ImageCtxT **m_local_image_ctx;
@@ -119,19 +131,26 @@ private:
   ContextWQ *m_work_queue;
   SafeTimer *m_timer;
   Mutex *m_timer_lock;
-  std::string m_mirror_uuid;
+  std::string m_local_mirror_uuid;
+  std::string m_remote_mirror_uuid;
   Journaler *m_journaler;
   MirrorPeerClientMeta *m_client_meta;
   Context *m_on_finish;
 
+  Tags m_remote_tags;
   cls::journal::Client m_client;
+  uint64_t m_remote_tag_class = 0;
   ImageCtxT *m_remote_image_ctx = nullptr;
+  bool m_created_local_image = false;
   int m_ret_val = 0;
 
   bufferlist m_out_bl;
 
   void get_local_image_id();
   void handle_get_local_image_id(int r);
+
+  void get_remote_tag_class();
+  void handle_get_remote_tag_class(int r);
 
   void get_client();
   void handle_get_client(int r);
@@ -153,6 +172,9 @@ private:
 
   void update_client();
   void handle_update_client(int r);
+
+  void get_remote_tags();
+  void handle_get_remote_tags(int r);
 
   void image_sync();
   void handle_image_sync(int r);

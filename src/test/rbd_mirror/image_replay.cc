@@ -185,7 +185,7 @@ int main(int argc, const char **argv)
   threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
     local->cct()));
   replayer = new rbd::mirror::ImageReplayer<>(threads, local, remote, client_id,
-					      local_pool_id, remote_pool_id,
+					      "", local_pool_id, remote_pool_id,
 					      remote_image_id,
                                               "global image id");
 
