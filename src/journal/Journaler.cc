@@ -279,6 +279,10 @@ void Journaler::allocate_tag(uint64_t tag_class, const bufferlist &data,
   m_metadata->allocate_tag(tag_class, data, tag, on_finish);
 }
 
+void Journaler::get_tag(uint64_t tag_tid, Tag *tag, Context *on_finish) {
+  m_metadata->get_tag(tag_tid, tag, on_finish);
+}
+
 void Journaler::get_tags(uint64_t tag_class, Tags *tags, Context *on_finish) {
   m_metadata->get_tags(tag_class, tags, on_finish);
 }
