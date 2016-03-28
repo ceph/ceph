@@ -67,7 +67,8 @@ public:
   };
 
   ImageReplayer(Threads *threads, RadosRef local, RadosRef remote,
-                const std::string &mirror_uuid, int64_t local_pool_id,
+		const std::string &local_mirror_uuid,
+                const std::string &remote_mirror_uuid, int64_t local_pool_id,
 		int64_t remote_pool_id, const std::string &remote_image_id,
                 const std::string &global_image_id);
   virtual ~ImageReplayer();
@@ -181,7 +182,8 @@ private:
 
   Threads *m_threads;
   RadosRef m_local, m_remote;
-  std::string m_mirror_uuid;
+  std::string m_local_mirror_uuid;
+  std::string m_remote_mirror_uuid;
   int64_t m_remote_pool_id, m_local_pool_id;
   std::string m_remote_image_id, m_local_image_id, m_global_image_id;
   std::string m_local_image_name;
@@ -203,6 +205,10 @@ private:
   librbd::journal::MirrorPeerClientMeta m_client_meta;
 
   ReplayEntry m_replay_entry;
+  bool m_replay_tag_valid = false;
+  uint64_t m_replay_tag_tid = 0;
+  cls::journal::Tag m_replay_tag;
+  librbd::journal::TagData m_replay_tag_data;
 
   struct C_ReplayCommitted : public Context {
     ImageReplayer *replayer;
