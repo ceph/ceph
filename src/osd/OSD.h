@@ -123,7 +123,6 @@ enum {
   l_osd_pg_replica,
   l_osd_pg_stray,
   l_osd_hb_to,
-  l_osd_hb_from,
   l_osd_map,
   l_osd_mape,
   l_osd_mape_dup,
