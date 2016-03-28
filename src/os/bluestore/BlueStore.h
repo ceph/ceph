@@ -898,6 +898,11 @@ private:
 		     CollectionRef &c,
 		     OnodeRef o,
 		     uint64_t offset, uint64_t length);
+  void _do_zero_tail_extent(
+    TransContext *txc,
+    OnodeRef& o,
+    uint64_t offset,
+    map<uint64_t, bluestore_extent_t>::iterator pp);
   int _do_zero(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o,
