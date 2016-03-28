@@ -405,7 +405,7 @@ feature.
    tracked by http://tracker.ceph.com, consider adding a ``Fixes:`` tag to
    connect this change to addressed issue(s). So a line saying ::
 
-     Fixes: #12345
+     Fixes: http://tracker.ceph.com/issues/12345
 
    is added before the ``Signed-off-by:`` line stating that this commit
    addresses http://tracker.ceph.com/issues/12345. It helps the reviewer to
@@ -419,7 +419,7 @@ feature.
      * update the man page for bar with the newly added "--foo" option.
      * fix a typo
 
-     Fixes: #12345
+     Fixes: http://tracker.ceph.com/issues/12345
      Signed-off-by: Random J Developer <random@developer.example.org>
 
 4. Separate your changes.
