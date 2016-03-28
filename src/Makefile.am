@@ -107,7 +107,7 @@ EXTRA_DIST += \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
 	$(srcdir)/tools/ceph-monstore-update-crush.sh \
-	$(srcdir)/script/subman.py \
+	$(srcdir)/script/subman \
 	$(srcdir)/upstart/ceph-all.conf \
 	$(srcdir)/upstart/ceph-disk.conf \
 	$(srcdir)/upstart/ceph-mon.conf \
@@ -155,7 +155,7 @@ ceph_libexec_SCRIPTS = ceph_common.sh ceph-osd-prestart.sh
 
 if ENABLE_SUBMAN
 submandir = /etc/cron.hourly
-subman_SCRIPTS = script/subman.py
+subman_SCRIPTS = script/subman
 endif
 
 # tests to actually run on "make check"; if you need extra, non-test,

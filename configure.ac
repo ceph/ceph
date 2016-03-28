@@ -211,8 +211,8 @@ AM_CONDITIONAL(ENABLE_SERVER, test "$enable_server" = "yes")
 AC_ARG_ENABLE([subman],
 	[AS_HELP_STRING([--enable-subman], [enable subman])],
 	[],
-	[enable_subman=yes])
-AM_CONDITIONAL([ENABLE_SUBMAN], test "$enable_subman" = "yes")
+	[enable_subman=no])
+AM_CONDITIONAL([ENABLE_SUBMAN], test "x$enable_subman" != "xno")
 
 # cython is required to build python bindings for libraries
 if test x"$with_cython" = xyes; then
