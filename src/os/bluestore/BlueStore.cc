@@ -5618,9 +5618,24 @@ int BlueStore::_do_write(
       goto out;
     assert(bp->first <= offset);
     assert(offset + length <= bp->first + bp->second.length);
+    bool is_orig_offset = offset == orig_offset;
+    if (offset > o->onode.size &&
+	o->onode.size > bp->first) {
+      uint64_t zlen = offset - o->onode.size;
+      dout(20) << __func__ << " padding " << zlen << " zeroes from eof "
+	       << o->onode.size << " to " << offset << dendl;
+      bufferlist z;
+      z.append_zero(zlen);
+      z.claim_append(bl);
+      bl.swap(z);
+      offset -= zlen;
+      length += zlen;
+      if (cow_rmw_head)
+	cow_rmw_head -= zlen;
+    }
     bluestore_wal_op_t *op = _get_wal_op(txc, o);
     op->op = bluestore_wal_op_t::OP_WRITE;
-    if (offset == orig_offset && cow_rmw_head) {
+    if (is_orig_offset && cow_rmw_head) {
       op->src_rmw_head = cow_rmw_head;
       dout(20) << __func__ << " src_rmw_head " << op->src_rmw_head << dendl;
     }
