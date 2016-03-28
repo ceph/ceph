@@ -5447,22 +5447,14 @@ int BlueStore::_do_write(
 
   bp = o->onode.seek_extent(orig_offset);
 
-  // zero tail of previous existing extent?
-  // (this happens if the old eof was partway through a previous extent,
-  // and we implicitly zero the rest of it by writing to a larger offset.)
   if (orig_offset > o->onode.size) {
-    uint64_t end = ROUND_UP_TO(o->onode.size, block_size);
-    map<uint64_t, bluestore_extent_t>::iterator pp = o->onode.find_extent(end);
-    if (orig_offset > end &&
-	pp != o->onode.block_map.end() &&
+    // zero tail of previous existing extent?
+    map<uint64_t, bluestore_extent_t>::iterator pp =
+      o->onode.find_extent(o->onode.size);
+    if (pp != o->onode.block_map.end() &&
 	pp != bp) {
       assert(pp->first < bp->first);
-      uint64_t x_off = end - pp->first;
-      uint64_t x_len = pp->second.length - x_off;
-      dout(10) << __func__ << " zero tail " << x_off << "~" << x_len
-	       << " of prior extent " << pp->first << ": " << pp->second
-	       << dendl;
-      bdev->aio_zero(pp->second.offset + x_off, x_len, &txc->ioc);
+      _do_zero_tail_extent(txc, o, orig_offset, pp);
     }
   }
 
@@ -5757,6 +5749,36 @@ int BlueStore::_zero(TransContext *txc,
   return r;
 }
 
+void BlueStore::_do_zero_tail_extent(
+  TransContext *txc,
+  OnodeRef& o,
+  uint64_t offset,
+  map<uint64_t, bluestore_extent_t>::iterator pp)
+{
+  const uint64_t block_size = bdev->get_block_size();
+  const uint64_t block_mask = ~(block_size - 1);
+
+  assert(offset > o->onode.size);
+  assert(pp != o->onode.block_map.end());
+
+  // we currently assume that any partial tail block is always zeroed
+  uint64_t end = ROUND_UP_TO(o->onode.size, block_size);
+
+  // we assume the caller will handle any partial block they start with
+  offset &= block_mask;
+
+  // zero tail of previous existing extent?
+  // (this happens if the old eof was partway through a previous extent,
+  // and we implicitly zero the rest of it by writing to a larger offset.)
+  if (offset > end) {
+    uint64_t x_off = end - pp->first;
+    uint64_t x_len = pp->second.length - x_off;
+    dout(10) << __func__ << " zero tail " << x_off << "~" << x_len
+	     << " of prior extent " << pp->first << ": " << pp->second
+	     << dendl;
+    bdev->aio_zero(pp->second.offset + x_off, x_len, &txc->ioc);
+  }
+}
 
 int BlueStore::_do_zero(TransContext *txc,
 			CollectionRef& c,
@@ -5778,20 +5800,11 @@ int BlueStore::_do_zero(TransContext *txc,
   uint64_t block_size = bdev->get_block_size();
   map<uint64_t,bluestore_extent_t>::iterator bp = o->onode.seek_extent(offset);
 
-  // zero tail of previous existing extent?
-  // (this happens if the old eof was partway through a previous extent,
-  // and we implicitly zero the rest of it by writing to a larger offset.)
   if (offset > o->onode.size) {
-    uint64_t end = ROUND_UP_TO(o->onode.size, block_size);
-    map<uint64_t, bluestore_extent_t>::iterator pp = o->onode.find_extent(end);
-    if (offset > end &&
-	pp != o->onode.block_map.end()) {
-      uint64_t x_off = end - pp->first;
-      uint64_t x_len = pp->second.length - x_off;
-      dout(10) << __func__ << " zero tail " << x_off << "~" << x_len
-	       << " of prior extent " << pp->first << ": " << pp->second
-	       << dendl;
-      bdev->aio_zero(pp->second.offset + x_off, x_len, &txc->ioc);
+    map<uint64_t, bluestore_extent_t>::iterator pp =
+      o->onode.find_extent(o->onode.size);
+    if (pp != o->onode.block_map.end()) {
+      _do_zero_tail_extent(txc, o, offset, pp);
     }
   }
 
