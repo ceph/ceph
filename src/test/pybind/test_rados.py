@@ -448,12 +448,12 @@ class TestIoctx(object):
         with ReadOpCtx(self.ioctx) as read_op:
             iter, ret = self.ioctx.get_omap_vals(read_op, "", "", 4)
             self.ioctx.operate_read_op(read_op, "hw")
-            iter.next()
+            next(iter)
             eq(list(iter), [("2", b"bbb"), ("3", b"ccc"), ("4", b"\x04\x04\x04\x04")])
         with ReadOpCtx(self.ioctx) as read_op:
             iter, ret = self.ioctx.get_omap_vals(read_op, "2", "", 4)
             self.ioctx.operate_read_op(read_op, "hw")
-            eq(("3", b"ccc"), iter.next())
+            eq(("3", b"ccc"), next(iter))
             eq(list(iter), [("4", b"\x04\x04\x04\x04")])
         with ReadOpCtx(self.ioctx) as read_op:
             iter, ret = self.ioctx.get_omap_vals(read_op, "", "2", 4)
