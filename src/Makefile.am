@@ -155,7 +155,7 @@ ceph_libexec_SCRIPTS = ceph_common.sh ceph-osd-prestart.sh
 
 if ENABLE_SUBMAN
 submandir = /etc/cron.hourly
-subman_SCRIPTS = script/subman
+subman_DATA = script/subman
 endif
 
 # tests to actually run on "make check"; if you need extra, non-test,
