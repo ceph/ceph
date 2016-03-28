@@ -373,6 +373,7 @@ void MirrorPeerSyncPoint::dump(Formatter *f) const {
 
 void MirrorPeerClientMeta::encode(bufferlist& bl) const {
   ::encode(image_id, bl);
+  ::encode(static_cast<uint32_t>(state), bl);
   ::encode(sync_object_count, bl);
   ::encode(static_cast<uint32_t>(sync_points.size()), bl);
   for (auto &sync_point : sync_points) {
@@ -383,6 +384,11 @@ void MirrorPeerClientMeta::encode(bufferlist& bl) const {
 
 void MirrorPeerClientMeta::decode(__u8 version, bufferlist::iterator& it) {
   ::decode(image_id, it);
+
+  uint32_t decode_state;
+  ::decode(decode_state, it);
+  state = static_cast<MirrorPeerState>(decode_state);
+
   ::decode(sync_object_count, it);
 
   uint32_t sync_point_count;
@@ -397,6 +403,7 @@ void MirrorPeerClientMeta::decode(__u8 version, bufferlist::iterator& it) {
 
 void MirrorPeerClientMeta::dump(Formatter *f) const {
   f->dump_string("image_id", image_id);
+  f->dump_stream("state") << state;
   f->dump_unsigned("sync_object_count", sync_object_count);
   f->open_array_section("sync_points");
   for (auto &sync_point : sync_points) {
@@ -605,8 +612,24 @@ std::ostream &operator<<(std::ostream &out, const MirrorPeerSyncPoint &sync) {
   return out;
 }
 
+std::ostream &operator<<(std::ostream &out, const MirrorPeerState &state) {
+  switch (state) {
+  case MIRROR_PEER_STATE_SYNCING:
+    out << "Syncing";
+    break;
+  case MIRROR_PEER_STATE_REPLAYING:
+    out << "Replaying";
+    break;
+  default:
+    out << "Unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return out;
+}
+
 std::ostream &operator<<(std::ostream &out, const MirrorPeerClientMeta &meta) {
   out << "[image_id=" << meta.image_id << ", "
+      << "state=" << meta.state << ", "
       << "sync_object_count=" << meta.sync_object_count << ", "
       << "sync_points=[";
   std::string delimiter;
