@@ -31,8 +31,7 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
   }
   if (r == 0 || type == "simple")
     return new SimpleMessenger(cct, name, lname, nonce, features);
-  else if ((r == 1 || type == "async") &&
-	   cct->check_experimental_feature_enabled("ms-type-async"))
+  else if (r == 1 || type == "async")
     return new AsyncMessenger(cct, name, lname, nonce, features);
 #ifdef HAVE_XIO
   else if ((type == "xio") &&
