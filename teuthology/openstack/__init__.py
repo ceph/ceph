@@ -64,7 +64,8 @@ class OpenStackInstance(object):
 
     def __init__(self, name_or_id, info=None):
         self.name_or_id = name_or_id
-        self.ip = None
+        self.private_or_floating_ip = None
+        self.private_ip = None
         if info is None:
             self.set_info()
         else:
@@ -140,26 +141,28 @@ class OpenStackInstance(object):
         """
         Return the private IP of the OpenStack instance_id.
         """
-        try:
-            return self.get_ip_neutron()
-        except Exception as e:
-            log.debug("ignoring get_ip_neutron exception " + str(e))
-            return re.findall(network + '=([\d.]+)',
-                              self.get_addresses())[0]
+        if self.private_ip is None:
+            try:
+                self.private_ip = self.get_ip_neutron()
+            except Exception as e:
+                log.debug("ignoring get_ip_neutron exception " + str(e))
+                self.private_ip = re.findall(network + '=([\d.]+)',
+                                             self.get_addresses())[0]
+        return self.private_ip
 
     def get_floating_ip(self):
         ips = json.loads(OpenStack().run("ip floating list -f json"))
         for ip in ips:
-            if ip['Instance ID'] == self['id']:
-                return ip['IP']
+            if ip['Fixed IP Address'] == self.get_ip(''):
+                return ip['Floating IP Address']
         return None
 
     def get_floating_ip_or_ip(self):
-        if not self.ip:
-            self.ip = self.get_floating_ip()
-            if not self.ip:
-                self.ip = self.get_ip('')
-        return self.ip
+        if not self.private_or_floating_ip:
+            self.private_or_floating_ip = self.get_floating_ip()
+            if not self.private_or_floating_ip:
+                self.private_or_floating_ip = self.get_ip('')
+        return self.private_or_floating_ip
 
     def destroy(self):
         """
@@ -283,6 +286,7 @@ class OpenStack(object):
             raise Exception('no OS_AUTH_URL environment variable')
         providers = (('runabove.io', 'runabove'),
                      ('cloud.ovh.net', 'ovh'),
+                     ('ctl:', 'cloudlab'),
                      ('entercloudsuite.com', 'entercloudsuite'),
                      ('rackspacecloud.com', 'rackspace'),
                      ('dream.io', 'dreamhost'))
@@ -1093,8 +1097,8 @@ openstack security group rule create --protocol udp --src-group {server} --dst-p
         """
         ips = json.loads(OpenStack().run("ip floating list -f json"))
         for ip in ips:
-            if not ip['Instance ID']:
-                return ip['IP']
+            if not ip['Port']:
+                return ip['Floating IP Address']
         return None
 
     @staticmethod
@@ -1110,10 +1114,9 @@ openstack security group rule create --protocol udp --src-group {server} --dst-p
         try:
             ip = json.loads(OpenStack().run(
                 "ip floating create -f json '" + pool + "'"))
-            return TeuthologyOpenStack.get_value(ip, 'ip')
+            return ip['ip']
         except subprocess.CalledProcessError:
             log.debug("create_floating_ip: not creating a floating ip")
-            pass
         return None
 
     @staticmethod
