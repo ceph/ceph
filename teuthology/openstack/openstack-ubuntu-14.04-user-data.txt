@@ -5,7 +5,7 @@ bootcmd:
  - echo 'supersede domain-name "{lab_domain}";' | sudo tee -a /etc/dhcp/dhclient.conf
  - ifdown eth0 ; ifup eth0
  - grep --quiet {nameserver} /etc/resolv.conf || ( echo 'nameserver {nameserver}' ; echo 'search {lab_domain}' ) | sudo tee /etc/resolv.conf
- - ( curl --silent http://169.254.169.254/2009-04-04/meta-data/hostname | sed -e 's/[\.-].*//' ; eval printf "%03d%03d%03d%03d.{lab_domain}" $(curl --silent http://169.254.169.254/2009-04-04/meta-data/local-ipv4 | tr . ' ' ) ) | tee /etc/hostname
+ - ( wget -qO - http://169.254.169.254/2009-04-04/meta-data/hostname | sed -e 's/[\.-].*//' ; eval printf "%03d%03d%03d%03d.{lab_domain}" $(wget -qO - http://169.254.169.254/2009-04-04/meta-data/local-ipv4 | tr . ' ' ) ) | tee /etc/hostname
  - hostname $(cat /etc/hostname)
  - echo "MaxSessions 1000" >> /etc/ssh/sshd_config
 manage_etc_hosts: true
