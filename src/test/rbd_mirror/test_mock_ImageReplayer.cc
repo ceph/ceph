@@ -61,7 +61,8 @@ struct BootstrapRequest<librbd::MockImageReplayerImageCtx> {
                                   const std::string &global_image_id,
                                   ContextWQ *work_queue, SafeTimer *timer,
                                   Mutex *timer_lock,
-                                  const std::string &mirror_uuid,
+                                  const std::string &local_mirror_uuid,
+                                  const std::string &remote_mirror_uuid,
                                   ::journal::MockJournalerProxy *journaler,
                                   librbd::journal::MirrorPeerClientMeta *client_meta,
                                   Context *on_finish) {

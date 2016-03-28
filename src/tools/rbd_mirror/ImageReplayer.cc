@@ -254,7 +254,8 @@ void ImageReplayer<I>::bootstrap() {
     m_local_ioctx, m_remote_ioctx, &m_local_image_ctx,
     m_local_image_name, m_remote_image_id, m_global_image_id,
     m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
-    m_local_mirror_uuid, m_remote_journaler, &m_client_meta, ctx);
+    m_local_mirror_uuid, m_remote_mirror_uuid, m_remote_journaler,
+    &m_client_meta, ctx);
   request->send();
 }
 
@@ -262,7 +263,11 @@ template <typename I>
 void ImageReplayer<I>::handle_bootstrap(int r) {
   dout(20) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r == -EREMOTEIO) {
+    dout(5) << "remote image is non-primary or local image is primary" << dendl;
+    on_start_fail_start(0);
+    return;
+  } else if (r < 0) {
     on_start_fail_start(r);
     return;
   } else if (on_start_interrupted()) {
@@ -391,6 +396,9 @@ void ImageReplayer<I>::on_start_fail_finish(int r)
 
   m_local_ioctx.close();
   m_remote_ioctx.close();
+
+  delete m_asok_hook;
+  m_asok_hook = nullptr;
 
   Context *on_start_finish(nullptr);
   Context *on_stop_finish(nullptr);
@@ -539,6 +547,9 @@ void ImageReplayer<I>::on_stop_local_image_close_finish(int r)
   m_replay_handler = nullptr;
 
   m_remote_ioctx.close();
+
+  delete m_asok_hook;
+  m_asok_hook = nullptr;
 
   Context *on_finish(nullptr);
 
@@ -775,12 +786,16 @@ void ImageReplayer<I>::allocate_local_tag() {
   if (mirror_uuid == librbd::Journal<>::LOCAL_MIRROR_UUID ||
       mirror_uuid == m_local_mirror_uuid) {
     mirror_uuid = m_remote_mirror_uuid;
+  } else if (mirror_uuid == librbd::Journal<>::ORPHAN_MIRROR_UUID) {
+    dout(5) << "encountered image demotion: stopping" << dendl;
+    Mutex::Locker locker(m_lock);
+    m_stop_requested = true;
   }
 
   std::string predecessor_mirror_uuid =
     m_replay_tag_data.predecessor_mirror_uuid;
   if (predecessor_mirror_uuid == librbd::Journal<>::LOCAL_MIRROR_UUID) {
-    mirror_uuid = m_remote_mirror_uuid;
+    predecessor_mirror_uuid = m_remote_mirror_uuid;
   } else if (predecessor_mirror_uuid == m_local_mirror_uuid) {
     predecessor_mirror_uuid = librbd::Journal<>::LOCAL_MIRROR_UUID;
   }
