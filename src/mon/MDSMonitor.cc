@@ -2112,7 +2112,6 @@ int MDSMonitor::filesystem_command(
 {
   dout(4) << __func__ << " prefix='" << prefix << "'" << dendl;
   op->mark_mdsmon_event(__func__);
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   int r = 0;
   string whostr;
   cmd_getval(g_ceph_context, cmdmap, "who", whostr);
