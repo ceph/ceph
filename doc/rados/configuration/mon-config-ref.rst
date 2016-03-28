@@ -286,8 +286,10 @@ Data
 
 Ceph provides a default path where Ceph Monitors store data. For optimal
 performance in a production Ceph Storage Cluster, we recommend running Ceph
-Monitors on separate hosts and drives from Ceph OSD Daemons. Ceph Monitors do
-lots of ``fsync()``, which can interfere with Ceph OSD Daemon workloads.
+Monitors on separate hosts and drives from Ceph OSD Daemons. As leveldb is using
+``mmap()`` for writing the data, Ceph Monitors flush their data from memory to disk
+very often, which can interfere with Ceph OSD Daemon workloads if the data
+store is co-located with the OSD Daemons.
 
 In Ceph versions 0.58 and earlier, Ceph Monitors store their data in files. This 
 approach allows users to inspect monitor data with common tools like ``ls``
