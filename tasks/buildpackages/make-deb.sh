@@ -105,6 +105,7 @@ function build_package() {
     #
     # create the packages (with ccache)
     #
+    export CEPH_EXTRA_CONFIGURE_ARGS=$(flavor2configure $flavor)
     j=$(maybe_parallel $NPROC $vers)
     PATH=/usr/lib/ccache:$PATH dpkg-buildpackage $j -uc -us -sa
 }

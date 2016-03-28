@@ -51,7 +51,9 @@ function init_ceph() {
 function flavor2configure() {
     local flavor=$1
 
-    if test $flavor = notcmalloc ; then
+    eval $(dpkg-architecture)
+
+    if test $flavor = notcmalloc || test $DEB_BUILD_ARCH = arm64 ; then
         echo --without-tcmalloc --without-cryptopp
     fi
 }
