@@ -7296,6 +7296,19 @@ done:
       goto reply;
     }
 
+    string sure;
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    if ((mode != pg_pool_t::CACHEMODE_WRITEBACK &&
+	 mode != pg_pool_t::CACHEMODE_NONE &&
+	 mode != pg_pool_t::CACHEMODE_PROXY &&
+	 mode != pg_pool_t::CACHEMODE_READPROXY) &&
+	sure != "--yes-i-really-mean-it") {
+      ss << "'" << modestr << "' is not a well-supported cache mode and may "
+	 << "corrupt your data.  pass --yes-i-really-mean-it to force.";
+      err = -EPERM;
+      goto reply;
+    }
+
     // pool already has this cache-mode set and there are no pending changes
     if (p->cache_mode == mode &&
 	(pending_inc.new_pools.count(pool_id) == 0 ||
