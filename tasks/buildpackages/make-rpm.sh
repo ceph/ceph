@@ -28,6 +28,7 @@ codename=$2
 git_ceph_url=$3
 sha1=$4
 flavor=$5
+arch=$6
 
 sudo yum install -y git
 
@@ -53,7 +54,6 @@ ceph_dir=$(pwd)
 # Create a repository in a directory with a name structured
 # as
 #
-arch=x86_64
 base=ceph-rpm-$codename-$arch-$flavor
 
 function setup_rpmmacros() {
