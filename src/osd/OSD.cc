@@ -3246,6 +3246,8 @@ void OSD::build_past_intervals_parallel()
   epoch_t end_epoch = superblock.oldest_map;
   epoch_t cur_epoch = superblock.newest_map;
   {
+    ObjectStore::Transaction t;
+    int num = 0;
     RWLock::RLocker l(pg_map_lock);
     for (ceph::unordered_map<spg_t, PG*>::iterator i = pg_map.begin();
         i != pg_map.end();
@@ -3254,8 +3256,17 @@ void OSD::build_past_intervals_parallel()
 
       epoch_t start, end;
       if (!pg->_calc_past_interval_range(&start, &end, superblock.oldest_map)) {
-        if (pg->info.history.same_interval_since == 0)
+        if (pg->info.history.same_interval_since == 0) {
           pg->info.history.same_interval_since = end;
+          pg->dirty_info = true;
+          pg->write_if_dirty(t);
+
+          if (++num >= cct->_conf->osd_target_transaction_size) {
+            store->apply_transaction(service.meta_osr.get(), std::move(t));
+            t = ObjectStore::Transaction();
+            num = 0;
+	  }
+        }
         continue;
       }
 
@@ -3270,6 +3281,9 @@ void OSD::build_past_intervals_parallel()
       if (end > end_epoch)
         end_epoch = end;
     }
+
+    if (num)
+      store->apply_transaction(service.meta_osr.get(), std::move(t));
   }
   if (pis.empty()) {
     dout(10) << __func__ << " nothing to build" << dendl;
