@@ -144,26 +144,6 @@ void PaxosService::post_refresh()
   }
 }
 
-void PaxosService::remove_legacy_versions()
-{
-  dout(10) << __func__ << dendl;
-  if (!mon->store->exists(get_service_name(), "conversion_first"))
-    return;
-
-  version_t cf = mon->store->get(get_service_name(), "conversion_first");
-  version_t fc = get_first_committed();
-
-  dout(10) << __func__ << " conversion_first " << cf
-	   << " first committed " << fc << dendl;
-
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-  if (cf < fc) {
-    trim(t, cf, fc);
-  }
-  t->erase(get_service_name(), "conversion_first");
-  mon->store->apply_transaction(t);
-}
-
 bool PaxosService::should_propose(double& delay)
 {
   // simple default policy: quick startup, then some damping.
@@ -277,8 +257,6 @@ void PaxosService::_active()
     return;
   }
   dout(10) << "_active" << dendl;
-
-  remove_legacy_versions();
 
   // create pending state?
   if (mon->is_leader() && is_active()) {
