@@ -5475,11 +5475,11 @@ int BlueStore::_do_write(
     assert(offset >= bp->first);
     assert(offset + length <= bp->first + bp->second.length);
 
-    // (pad and) overwrite unused portion of extent for an append?
+    // overwrite unused portion of extent for an append?
     if (offset > bp->first &&
-	offset >= o->onode.size &&                                  // past eof +
-	(offset / block_size != (o->onode.size - 1) / block_size)) {// diff block
-      dout(20) << __func__ << " append" << dendl;
+	offset >= o->onode.size &&                  // past eof +
+	(o->onode.size & ~block_mask) == 0) {       // eof was aligned
+      dout(20) << __func__ << " append after aligned eof" << dendl;
       _pad_zeros(txc, o, &bl, &offset, &length, block_size);
       assert(offset % block_size == 0);
       assert(length % block_size == 0);
