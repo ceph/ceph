@@ -5766,6 +5766,8 @@ void BlueStore::_do_zero_tail_extent(
 
   uint64_t end_block = ROUND_UP_TO(o->onode.size, block_size);
 
+  assert(!pp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
+
   if (end_block > o->onode.size) {
     // end was in a partial block, do wal r/m/w.
     bluestore_wal_op_t *op = _get_wal_op(txc, o);
@@ -5816,8 +5818,18 @@ int BlueStore::_do_zero(TransContext *txc,
   if (offset > o->onode.size) {
     map<uint64_t, bluestore_extent_t>::iterator pp =
       o->onode.find_extent(o->onode.size);
-    if (pp != o->onode.block_map.end()) {
-      _do_zero_tail_extent(txc, o, offset, pp);
+    if (pp != o->onode.block_map.end() &&
+	pp != bp) {
+      if (pp->second.has_flag(bluestore_extent_t::FLAG_SHARED)) {
+	dout(10) << __func__ << " shared tail extent; doing _do_write_zero"
+		 << dendl;
+	uint64_t old_size = o->onode.size;
+	uint64_t end = bp->first + bp->second.length - old_size;
+	uint64_t zlen = end - old_size;
+	_do_write_zero(txc, c, o, old_size, zlen);
+      } else {
+	_do_zero_tail_extent(txc, o, offset, pp);
+      }
     }
   }
 
@@ -5842,6 +5854,14 @@ int BlueStore::_do_zero(TransContext *txc,
     // start,end are offsets in the extent
     uint64_t x_off = 0;
     if (offset > bp->first) {
+      if (offset > o->onode.size &&
+	  o->onode.size >= bp->first) {
+	uint64_t zlen = offset - o->onode.size;
+	dout(10) << __func__ << " extending range by " << zlen
+		 << " to start from eof " << o->onode.size << dendl;
+	offset -= zlen;
+	length += zlen;
+      }
       x_off = offset - bp->first;
     }
     uint64_t x_len = MIN(offset + length - bp->first,
