@@ -1190,6 +1190,8 @@ fi
 %{_mandir}/man8/ceph-disk.8*
 %{_mandir}/man8/ceph-osd.8*
 %if 0%{?rhel} && ! 0%{?centos}
+%exclude /etc/cron.hourly/subman.pyc
+%exclude /etc/cron.hourly/subman.pyo
 /etc/cron.hourly/subman
 %endif
 %if 0%{?_with_systemd}
