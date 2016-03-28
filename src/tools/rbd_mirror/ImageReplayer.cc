@@ -156,7 +156,8 @@ private:
 
 template <typename I>
 ImageReplayer<I>::ImageReplayer(Threads *threads, RadosRef local, RadosRef remote,
-			     const std::string &mirror_uuid,
+			     const std::string &local_mirror_uuid,
+			     const std::string &remote_mirror_uuid,
 			     int64_t local_pool_id,
 			     int64_t remote_pool_id,
 			     const std::string &remote_image_id,
@@ -164,7 +165,8 @@ ImageReplayer<I>::ImageReplayer(Threads *threads, RadosRef local, RadosRef remot
   m_threads(threads),
   m_local(local),
   m_remote(remote),
-  m_mirror_uuid(mirror_uuid),
+  m_local_mirror_uuid(local_mirror_uuid),
+  m_remote_mirror_uuid(remote_mirror_uuid),
   m_remote_pool_id(remote_pool_id),
   m_local_pool_id(local_pool_id),
   m_remote_image_id(remote_image_id),
@@ -234,7 +236,7 @@ void ImageReplayer<I>::start(Context *on_finish,
   m_remote_journaler = new Journaler(m_threads->work_queue,
                                      m_threads->timer,
 				     &m_threads->timer_lock, m_remote_ioctx,
-				     m_remote_image_id, m_mirror_uuid,
+				     m_remote_image_id, m_local_mirror_uuid,
                                      commit_interval);
 
   bootstrap();
@@ -252,7 +254,7 @@ void ImageReplayer<I>::bootstrap() {
     m_local_ioctx, m_remote_ioctx, &m_local_image_ctx,
     m_local_image_name, m_remote_image_id, m_global_image_id,
     m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
-    m_mirror_uuid, m_remote_journaler, &m_client_meta, ctx);
+    m_local_mirror_uuid, m_remote_journaler, &m_client_meta, ctx);
   request->send();
 }
 
@@ -497,6 +499,8 @@ void ImageReplayer<I>::on_stop_journal_replay_shut_down_finish(int r)
     assert(m_state == STATE_STOPPING);
     m_local_image_ctx->journal->stop_external_replay();
     m_local_replay = nullptr;
+    m_replay_entry = ReplayEntry();
+    m_replay_tag_valid = false;
   }
 
   on_stop_local_image_close_start();
@@ -569,12 +573,16 @@ void ImageReplayer<I>::handle_replay_ready()
     return;
   }
 
-  if (!m_remote_journaler->try_pop_front(&m_replay_entry)) {
+  if (!m_remote_journaler->try_pop_front(&m_replay_entry, &m_replay_tag_tid)) {
     return;
   }
 
-  // TODO
-  process_entry();
+  if (m_replay_tag_valid && m_replay_tag.tid == m_replay_tag_tid) {
+    process_entry();
+    return;
+  }
+
+  replay_flush();
 }
 
 template <typename I>
@@ -592,6 +600,7 @@ void ImageReplayer<I>::flush(Context *on_finish)
           }
         });
       on_flush_local_replay_flush_start(ctx);
+      return;
     }
   }
 
@@ -704,42 +713,99 @@ template <typename I>
 void ImageReplayer<I>::replay_flush() {
   dout(20) << dendl;
 
-  // TODO
+  Context *ctx = create_context_callback<
+    ImageReplayer<I>, &ImageReplayer<I>::handle_replay_flush>(this);
+  flush(ctx);
 }
 
 template <typename I>
 void ImageReplayer<I>::handle_replay_flush(int r) {
   dout(20) << "r=" << r << dendl;
 
-  // TODO
+  if (r < 0) {
+    derr << "replay flush encountered an error: " << cpp_strerror(r) << dendl;
+    handle_replay_complete(r);
+    return;
+  }
+
+  get_remote_tag();
 }
 
 template <typename I>
 void ImageReplayer<I>::get_remote_tag() {
-  dout(20) << dendl;
+  dout(20) << "tag_tid: " << m_replay_tag_tid << dendl;
 
-  // TODO
+  Context *ctx = create_context_callback<
+    ImageReplayer, &ImageReplayer<I>::handle_get_remote_tag>(this);
+  m_remote_journaler->get_tag(m_replay_tag_tid, &m_replay_tag, ctx);
 }
 
 template <typename I>
 void ImageReplayer<I>::handle_get_remote_tag(int r) {
   dout(20) << "r=" << r << dendl;
 
-  // TODO
+  if (r == 0) {
+    try {
+      bufferlist::iterator it = m_replay_tag.data.begin();
+      ::decode(m_replay_tag_data, it);
+    } catch (const buffer::error &err) {
+      r = -EBADMSG;
+    }
+  }
+
+  if (r < 0) {
+    derr << "failed to retrieve remote tag " << m_replay_tag_tid << ": "
+         << cpp_strerror(r) << dendl;
+    handle_replay_complete(r);
+    return;
+  }
+
+  m_replay_tag_valid = true;
+  dout(20) << "decoded remote tag " << m_replay_tag_tid << ": "
+           << m_replay_tag_data << dendl;
+
+  allocate_local_tag();
 }
 
 template <typename I>
 void ImageReplayer<I>::allocate_local_tag() {
   dout(20) << dendl;
 
-  // TODO
+  std::string mirror_uuid = m_replay_tag_data.mirror_uuid;
+  if (mirror_uuid == librbd::Journal<>::LOCAL_MIRROR_UUID ||
+      mirror_uuid == m_local_mirror_uuid) {
+    mirror_uuid = m_remote_mirror_uuid;
+  }
+
+  std::string predecessor_mirror_uuid =
+    m_replay_tag_data.predecessor_mirror_uuid;
+  if (predecessor_mirror_uuid == librbd::Journal<>::LOCAL_MIRROR_UUID) {
+    mirror_uuid = m_remote_mirror_uuid;
+  } else if (predecessor_mirror_uuid == m_local_mirror_uuid) {
+    predecessor_mirror_uuid = librbd::Journal<>::LOCAL_MIRROR_UUID;
+  }
+
+  Context *ctx = create_context_callback<
+    ImageReplayer, &ImageReplayer<I>::handle_allocate_local_tag>(this);
+  m_local_image_ctx->journal->allocate_tag(
+    mirror_uuid, predecessor_mirror_uuid,
+    m_replay_tag_data.predecessor_commit_valid,
+    m_replay_tag_data.predecessor_tag_tid,
+    m_replay_tag_data.predecessor_entry_tid,
+    ctx);
 }
 
 template <typename I>
 void ImageReplayer<I>::handle_allocate_local_tag(int r) {
   dout(20) << "r=" << r << dendl;
 
-  // TODO
+  if (r < 0) {
+    derr << "failed to allocate journal tag: " << cpp_strerror(r) << dendl;
+    handle_replay_complete(r);
+    return;
+  }
+
+  process_entry();
 }
 
 template <typename I>

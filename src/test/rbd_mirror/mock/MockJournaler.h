@@ -66,7 +66,7 @@ struct MockJournaler {
                                           std::set<cls::journal::Client> *,
                                           Context*));
 
-  MOCK_METHOD1(try_pop_front, bool(MockReplayEntryProxy *));
+  MOCK_METHOD2(try_pop_front, bool(MockReplayEntryProxy *, uint64_t *));
   MOCK_METHOD2(start_live_replay, void(ReplayHandler *, double));
   MOCK_METHOD0(stop_replay, void());
 
@@ -74,6 +74,8 @@ struct MockJournaler {
   MOCK_METHOD1(flush_commit_position, void(Context*));
 
   MOCK_METHOD2(update_client, void(const bufferlist&, Context *on_safe));
+
+  MOCK_METHOD3(get_tag, void(uint64_t, cls::journal::Tag *, Context *));
 };
 
 struct MockJournalerProxy {
@@ -100,8 +102,8 @@ struct MockJournalerProxy {
                                                        on_finish);
   }
 
-  bool try_pop_front(MockReplayEntryProxy *entry) {
-    return MockJournaler::get_instance().try_pop_front(entry);
+  bool try_pop_front(MockReplayEntryProxy *entry, uint64_t *tag_tid) {
+    return MockJournaler::get_instance().try_pop_front(entry, tag_tid);
   }
   void start_live_replay(ReplayHandler *handler, double interval) {
     MockJournaler::get_instance().start_live_replay(handler, interval);
@@ -119,6 +121,10 @@ struct MockJournalerProxy {
 
   void update_client(const bufferlist& data, Context *on_safe) {
     MockJournaler::get_instance().update_client(data, on_safe);
+  }
+
+  void get_tag(uint64_t tag_tid, cls::journal::Tag *tag, Context *on_finish) {
+    MockJournaler::get_instance().get_tag(tag_tid, tag, on_finish);
   }
 };
 

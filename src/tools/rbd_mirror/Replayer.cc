@@ -319,11 +319,19 @@ void Replayer::set_sources(const PoolImageIds &pool_image_ids)
       continue;
     }
 
-    std::string mirror_uuid;
-    r = librbd::cls_client::mirror_uuid_get(&local_ioctx, &mirror_uuid);
+    std::string local_mirror_uuid;
+    r = librbd::cls_client::mirror_uuid_get(&local_ioctx, &local_mirror_uuid);
     if (r < 0) {
-      derr << "failed to retrieve mirror uuid from pool "
+      derr << "failed to retrieve local mirror uuid from pool "
         << local_ioctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;
+      continue;
+    }
+
+    std::string remote_mirror_uuid;
+    r = librbd::cls_client::mirror_uuid_get(&remote_ioctx, &remote_mirror_uuid);
+    if (r < 0) {
+      derr << "failed to retrieve remote mirror uuid from pool "
+        << remote_ioctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;
       continue;
     }
 
@@ -333,8 +341,8 @@ void Replayer::set_sources(const PoolImageIds &pool_image_ids)
       auto it = pool_replayers.find(image_id.id);
       if (it == pool_replayers.end()) {
 	unique_ptr<ImageReplayer<> > image_replayer(new ImageReplayer<>(
-          m_threads, m_local, m_remote, mirror_uuid, local_ioctx.get_id(),
-          pool_id, image_id.id, image_id.global_id));
+          m_threads, m_local, m_remote, local_mirror_uuid, remote_mirror_uuid,
+          local_ioctx.get_id(), pool_id, image_id.id, image_id.global_id));
 	it = pool_replayers.insert(
 	  std::make_pair(image_id.id, std::move(image_replayer))).first;
       }
