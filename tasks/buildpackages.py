@@ -185,6 +185,9 @@ def task(ctx, config):
             select = '^(vps|eg)-'
         else:
             select = ''
+        network = openstack.net()
+        if network != "":
+            network = " OPENSTACK_NETWORK='" + network + "' "
         openstack.image(os_type, os_version, arch) # create if it does not exist
         build_flavor = openstack.flavor_range(
             config['min_machine'], config['good_machine'], arch, select)
@@ -198,6 +201,7 @@ def task(ctx, config):
         cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; " +
                " flock --close " + lock +
                " make -C " + d +
+               network +
                " CEPH_GIT_URL=" + teuth_config.get_ceph_git_url() +
                " CEPH_PKG_TYPE=" + pkg_type +
                " CEPH_OS_TYPE=" + os_type +
