@@ -257,11 +257,6 @@ private:
    *	   active
    */
   void _active();
-  /**
-   * Scrub our versions after we convert the store from the old layout to
-   * the new k/v store.
-   */
-  void remove_legacy_versions();
 
 public:
   /**
