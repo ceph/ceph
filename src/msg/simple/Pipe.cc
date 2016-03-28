@@ -466,6 +466,16 @@ int Pipe::accept()
     existing = msgr->_lookup_pipe(peer_addr);
     if (existing) {
       existing->pipe_lock.Lock(true);  // skip lockdep check (we are locking a second Pipe here)
+      if (existing->state == STATE_CLOSED) {
+        ldout(msgr->cct, 1) << __func__ << " existing racing replace or mark_down happened while replacing."
+                            << " existing_state=" << existing->get_state_name() << dendl;
+	reply.tag = CEPH_MSGR_TAG_RETRY_GLOBAL;
+	reply.global_seq = existing->peer_global_seq;  // so we can send it below..
+	existing->pipe_lock.Unlock();
+	msgr->lock.Unlock();
+	goto reply;
+      }
+
       if (existing->reader_dispatching) {
 	/** we need to wait, or we can deadlock if downstream
 	 *  fast_dispatchers are (naughtily!) waiting on resources
