@@ -64,8 +64,12 @@ struct C_CreateImage : public Context {
     uint64_t journal_splay_width = cct->_conf->rbd_journal_splay_width;
     std::string journal_pool = cct->_conf->rbd_journal_pool;
 
-    r = librbd::create_v2(local_io_ctx, local_image_name.c_str(),
-                          reinterpret_cast<uint64_t>(this),
+    // NOTE: bid is 64bit but overflow will result due to
+    // RBD_MAX_BLOCK_NAME_SIZE being too small
+    librados::Rados rados(local_io_ctx);
+    uint64_t bid = rados.get_instance_id();
+
+    r = librbd::create_v2(local_io_ctx, local_image_name.c_str(), bid,
                           remote_image_ctx->size, order,
                           remote_image_ctx->features,
                           remote_image_ctx->stripe_unit,
