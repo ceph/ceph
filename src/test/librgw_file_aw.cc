@@ -32,10 +32,14 @@
 
 namespace {
   librgw_t rgw = nullptr;
-  string uid("testuser");
+  string userid("testuser");
   string access_key("");
   string secret_key("");
   struct rgw_fs *fs = nullptr;
+
+  uint32_t owner_uid = 867;
+  uint32_t owner_gid = 5309;
+  uint32_t create_mask = RGW_SETATTR_UID | RGW_SETATTR_GID | RGW_SETATTR_MODE;
 
   bool do_create = false;
   bool do_delete = false;
@@ -169,8 +173,8 @@ TEST(LibRGW, INIT) {
 }
 
 TEST(LibRGW, MOUNT) {
-  int ret = rgw_mount(rgw, uid.c_str(), access_key.c_str(), secret_key.c_str(),
-		      &fs, RGW_MOUNT_FLAG_NONE);
+  int ret = rgw_mount(rgw, userid.c_str(), access_key.c_str(),
+		      secret_key.c_str(), &fs, RGW_MOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
 }
@@ -179,8 +183,13 @@ TEST(LibRGW, CREATE_BUCKET) {
   if (do_create) {
     struct stat st;
     struct rgw_file_handle *fh;
-    int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st, &fh,
-			RGW_MKDIR_FLAG_NONE);
+
+    st.st_uid = owner_uid;
+    st.st_gid = owner_gid;
+    st.st_mode = 755;
+
+    int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), &st, create_mask,
+			&fh, RGW_MKDIR_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -314,12 +323,18 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--secret",
 				     (char*) nullptr)) {
       secret_key = val;
-    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--uid",
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--userid",
 				     (char*) nullptr)) {
-      uid = val;
+      userid = val;
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--bn",
 				     (char*) nullptr)) {
       bucket_name = val;
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--uid",
+				     (char*) nullptr)) {
+      owner_uid = std::stoi(val);
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--gid",
+				     (char*) nullptr)) {
+      owner_gid = std::stoi(val);
     } else if (ceph_argparse_flag(args, arg_iter, "--verify",
 					    (char*) nullptr)) {
       do_verify = true;
