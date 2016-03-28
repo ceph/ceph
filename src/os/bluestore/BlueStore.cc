@@ -32,30 +32,6 @@
 
 #define dout_subsys ceph_subsys_bluestore
 
-/*
-
-  TODO:
-
-  * superblock, features
-  * bdev: smarter zeroing
-  * zero overlay in onode?
-  * discard
-  * aio read?
-  * read uses local ioc
-  * refcounted extents (for efficient clone)
-  * overlay does inefficient zeroing on unwritten extent
-
- */
-
-/*
- * Some invariants:
- *
- * - If the end of the object is a partial block, and is not an overlay,
- *   the remainder of that block will always be zeroed.  (It has to be written
- *   anyway, so we may as well have written zeros.)
- *
- */
-
 const string PREFIX_SUPER = "S";   // field -> value
 const string PREFIX_COLL = "C";    // collection name -> cnode_t
 const string PREFIX_OBJ = "O";     // object name -> onode_t
@@ -5758,25 +5734,42 @@ void BlueStore::_do_zero_tail_extent(
   const uint64_t block_size = bdev->get_block_size();
   const uint64_t block_mask = ~(block_size - 1);
 
+  dout(10) << __func__ << " offset " << offset << " extent "
+	   << pp->first << ": " << pp->second << dendl;
   assert(offset > o->onode.size);
   assert(pp != o->onode.block_map.end());
 
-  // we currently assume that any partial tail block is always zeroed
-  uint64_t end = ROUND_UP_TO(o->onode.size, block_size);
-
   // we assume the caller will handle any partial block they start with
   offset &= block_mask;
+  if (offset <= o->onode.size)
+    return;
 
-  // zero tail of previous existing extent?
-  // (this happens if the old eof was partway through a previous extent,
-  // and we implicitly zero the rest of it by writing to a larger offset.)
-  if (offset > end) {
-    uint64_t x_off = end - pp->first;
-    uint64_t x_len = pp->second.length - x_off;
-    dout(10) << __func__ << " zero tail " << x_off << "~" << x_len
-	     << " of prior extent " << pp->first << ": " << pp->second
+  uint64_t end_block = ROUND_UP_TO(o->onode.size, block_size);
+
+  if (end_block > o->onode.size) {
+    // end was in a partial block, do wal r/m/w.
+    bluestore_wal_op_t *op = _get_wal_op(txc, o);
+    op->op = bluestore_wal_op_t::OP_ZERO;
+    uint64_t x_off = o->onode.size;
+    uint64_t x_len = end_block - x_off;
+    op->extent.offset = pp->second.offset + x_off - pp->first;
+    op->extent.length = x_len;
+    dout(10) << __func__ << " wal zero tail partial block "
+	     << x_off << "~" << x_len << " at " << op->extent
 	     << dendl;
-    bdev->aio_zero(pp->second.offset + x_off, x_len, &txc->ioc);
+    assert(!pp->second.has_flag(bluestore_extent_t::FLAG_COW_HEAD));
+    assert(!pp->second.has_flag(bluestore_extent_t::FLAG_COW_TAIL));
+  }
+  if (offset > end_block) {
+    // end was block-aligned.  zero the rest of the extent now.
+    uint64_t x_off = end_block - pp->first;
+    uint64_t x_len = pp->second.length - x_off;
+    if (x_len > 0) {
+      dout(10) << __func__ << " zero tail " << x_off << "~" << x_len
+	       << " of tail extent " << pp->first << ": " << pp->second
+	       << dendl;
+      bdev->aio_zero(pp->second.offset + x_off, x_len, &txc->ioc);
+    }
   }
 }
 
