@@ -6571,11 +6571,15 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   return 0;
 set_err_state:
+  if (copy_if_newer && ret == -ERR_NOT_MODIFIED) {
+    ret = 0;
+  }
   if (opstate) {
-    RGWOpState::OpState state = RGWOpState::OPSTATE_ERROR;
-    if (copy_if_newer && ret == -ERR_NOT_MODIFIED) {
+    RGWOpState::OpState state;
+    if (ret < 0) {
+      state = RGWOpState::OPSTATE_ERROR;
+    } else {
       state = RGWOpState::OPSTATE_COMPLETE;
-      ret = 0;
     }
     int r = opstate->set_state(state);
     if (r < 0) {

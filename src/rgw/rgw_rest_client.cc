@@ -672,12 +672,16 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
 int RGWRESTStreamRWRequest::complete(string& etag, real_time *mtime, map<string, string>& attrs)
 {
   set_str_from_headers(out_headers, "ETAG", etag);
-  if (mtime) {
+  if (status > 0 && mtime) {
     string mtime_str;
     set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
-    int ret = parse_rgwx_mtime(cct, mtime_str, mtime);
-    if (ret < 0) {
-      return ret;
+    if (!mtime_str.empty()) {
+      int ret = parse_rgwx_mtime(cct, mtime_str, mtime);
+      if (ret < 0) {
+        return ret;
+      }
+    } else {
+      *mtime = real_time();
     }
   }
 
