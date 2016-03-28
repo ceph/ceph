@@ -5950,26 +5950,6 @@ int BlueStore::_do_truncate(
 		 << " " << op->extent << dendl;
       }
     }
-  } else if (offset < old_size &&
-	     offset % block_size != 0) {
-    // zero trailing block?
-    map<uint64_t,bluestore_extent_t>::iterator bp = o->onode.find_extent(offset);
-    if (bp != o->onode.block_map.end()) {
-      uint64_t z_len = block_size - offset % block_size;
-      if (bp->second.has_flag(bluestore_extent_t::FLAG_SHARED)) {
-        int r = _do_write_zero(txc, c, o, offset, z_len);
-        if (r < 0)
-          return r;
-	o->onode.size = offset; // we just wrote past eof; reset size
-      } else {
-	bluestore_wal_op_t *op = _get_wal_op(txc, o);
-	op->op = bluestore_wal_op_t::OP_ZERO;
-	op->extent.offset = bp->second.offset + offset - bp->first;
-	op->extent.length = block_size - offset % block_size;
-	dout(20) << __func__ << " wal zero tail " << offset << "~" << z_len
-		 << " at " << op->extent << dendl;
-      }
-    }
   }
 
   // trim down overlays
