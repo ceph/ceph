@@ -898,6 +898,10 @@ private:
 		     CollectionRef &c,
 		     OnodeRef o,
 		     uint64_t offset, uint64_t length);
+  int _do_zero(TransContext *txc,
+	       CollectionRef& c,
+	       OnodeRef& o,
+	       uint64_t offset, size_t len);
   int _zero(TransContext *txc,
 	    CollectionRef& c,
 	    OnodeRef& o,

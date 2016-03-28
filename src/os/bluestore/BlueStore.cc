@@ -5750,6 +5750,22 @@ int BlueStore::_zero(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << offset << "~" << length
 	   << dendl;
+  int r = _do_zero(txc, c, o, offset, length);
+  dout(10) << __func__ << " " << c->cid << " " << o->oid
+	   << " " << offset << "~" << length
+	   << " = " << r << dendl;
+  return r;
+}
+
+
+int BlueStore::_do_zero(TransContext *txc,
+			CollectionRef& c,
+			OnodeRef& o,
+			uint64_t offset, size_t length)
+{
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
+	   << " " << offset << "~" << length
+	   << dendl;
   int r = 0;
   o->exists = true;
 
