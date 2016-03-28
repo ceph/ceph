@@ -180,7 +180,7 @@ enum {
   rs_repnotrecovering_latency,
   rs_repwaitrecoveryreserved_latency,
   rs_repwaitbackfillreserved_latency,
-  rs_RepRecovering_latency,
+  rs_reprecovering_latency,
   rs_activating_latency,
   rs_waitlocalrecoveryreserved_latency,
   rs_waitremoterecoveryreserved_latency,
