@@ -363,6 +363,7 @@ function delete_keypair() {
 }
 
 function setup_dnsmasq() {
+    local provider=$1
 
     if ! test -f /etc/dnsmasq.d/resolv ; then
         resolver=$(grep nameserver /etc/resolv.conf | head -1 | perl -ne 'print $1 if(/\s*nameserver\s+([\d\.]+)/)')
@@ -375,6 +376,10 @@ function setup_dnsmasq() {
         sudo sed -ie 's/^#IGNORE_RESOLVCONF=yes/IGNORE_RESOLVCONF=yes/' /etc/default/dnsmasq
         echo nameserver 127.0.0.1 | sudo tee /etc/resolvconf/resolv.conf.d/head
         sudo resolvconf -u
+        if test $provider = cloudlab ; then
+            sudo perl -pi -e 's/.*(prepend domain-name-servers 127.0.0.1;)/\1/' /etc/dhcp/dhclient.conf
+            sudo bash -c 'ifdown eth0 ; ifup eth0'
+        fi
         echo "INSTALLED dnsmasq and configured to be a resolver"
     else
         echo "OK dnsmasq installed"
@@ -400,6 +405,9 @@ function define_dnsmasq() {
         done | sudo tee $host_records > /tmp/dnsmasq
         head -2 /tmp/dnsmasq
         echo 'etc.'
+        if test "$OS_CLOUDLAB_CTL_IP" ; then
+            echo "host-record=ctl,$OS_CLOUDLAB_CTL_IP" | sudo tee -a $host_records
+        fi
         # restart is not always picking up changes
         sudo /etc/init.d/dnsmasq stop || true
         sudo /etc/init.d/dnsmasq start
@@ -462,6 +470,9 @@ function install_packages() {
 CAT=${CAT:-cat}
 
 function verify_openstack() {
+    if test "$OS_CLOUDLAB_CTL_IP" ; then
+        echo $OS_CLOUDLAB_CTL_IP ctl | sudo tee -a /etc/hosts >&2
+    fi
     if ! openstack server list > /dev/null ; then
         echo ERROR: the credentials from ~/openrc.sh are not working >&2
         return 1
@@ -472,6 +483,8 @@ function verify_openstack() {
         provider=ovh
     elif echo $OS_AUTH_URL | grep -qq entercloudsuite.com ; then
         provider=entercloudsuite
+    elif echo $OS_AUTH_URL | grep -qq ctl: ; then
+        provider=cloudlab
     else
         provider=any
     fi
@@ -593,14 +606,17 @@ function main() {
 
     local provider=$(verify_openstack)
 
-    eval local default_subnet=$(neutron subnet-list -f json -c cidr -c ip_version | jq '.[] | select(.ip_version == 4) | .cidr')
+    #
+    # assume the first available IPv4 subnet is going to be used to assign IP to the instance
+    #
+    eval local default_subnet=$(neutron subnet-list -f json -c cidr -c ip_version | jq '.[] | select(.ip_version == 4) | .cidr' | head -1)
     if test -z "$default_subnet" ; then
         default_subnet=$(nova tenant-network-list | grep / | cut -f6 -d' ' | head -1)
     fi
     : ${subnet:=$default_subnet}
 
     case $provider in
-        entercloudsuite)
+        entercloudsuite|cloudlab)
             eval local network=$(neutron net-list -f json | jq '.[] | select(.subnets | contains("'$subnet'")) | .name')
             ;;
     esac
@@ -632,12 +648,12 @@ function main() {
         setup_ceph_workbench $ceph_workbench_git_url $ceph_workbench_branch || return 1
     fi
 
-    if $do_setup_docker ; then
+    if test $provider != "cloudlab" && $do_setup_docker ; then
         setup_docker || return 1
     fi
 
     if $do_setup_dnsmasq ; then
-        setup_dnsmasq || return 1
+        setup_dnsmasq $provider || return 1
         define_dnsmasq $subnet $labdomain || return 1
     fi
 

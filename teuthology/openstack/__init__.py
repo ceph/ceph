@@ -557,9 +557,10 @@ class OpenStack(object):
         return OpenStackInstance(instance_id).get_ip(network)
 
     def get_available_archs(self):
-        if (self.get_provider() == 'runabove' and
-            'HZ1' in os.environ.get('OS_REGION_NAME', '')):
-            return ('aarch64',)
+        if (self.get_provider() == 'cloudlab' or
+            (self.get_provider() == 'runabove' and
+             'HZ1' in os.environ.get('OS_REGION_NAME', ''))):
+            return ('arm64',)
         else:
             return ('x86_64', 'i686')
 
@@ -904,6 +905,8 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         """
         if self.get_provider() == 'entercloudsuite':
             return "--nic net-id=default"
+        elif self.get_provider() == 'cloudlab':
+            return "--nic net-id=flat-lan-1-net"
         else:
             return ""
 
