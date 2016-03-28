@@ -344,7 +344,8 @@ bool Journal<I>::is_journal_supported(I &image_ctx) {
 template <typename I>
 int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
 		       uint8_t order, uint8_t splay_width,
-		       const std::string &object_pool, bool non_primary) {
+		       const std::string &object_pool, bool non_primary,
+                       const std::string &primary_mirror_uuid) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
@@ -374,8 +375,10 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
   cls::journal::Client client;
   cls::journal::Tag tag;
   journal::TagData tag_data;
-  std::string mirror_uuid = (!non_primary ? LOCAL_MIRROR_UUID :
-                                            ORPHAN_MIRROR_UUID);
+
+  assert(non_primary ^ primary_mirror_uuid.empty());
+  std::string mirror_uuid = (non_primary ? primary_mirror_uuid :
+                                           LOCAL_MIRROR_UUID);
   r = allocate_journaler_tag(cct, &journaler, client,
                              cls::journal::Tag::TAG_CLASS_NEW,
                              tag_data, mirror_uuid, &tag);
@@ -467,7 +470,7 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
     return r;
   }
 
-  r = create(io_ctx, image_id, order, splay_width, pool_name, false);
+  r = create(io_ctx, image_id, order, splay_width, pool_name, false, "");
   if (r < 0) {
     lderr(cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
     return r;
