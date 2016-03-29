@@ -15,13 +15,13 @@ There are a few known issues with this release candidate; see below.
 Known Issues with v10.1.0
 -------------------------
 
- * While running a mixed version cluster of jewel and infernalis or
-   hammer monitors, any MDSMap updates will cause the pre-jewel
-   monitors to crash.  Workaround is to simply upgrde all monitors.
-   There is a fix but it is still being tested.
+* While running a mixed version cluster of jewel and infernalis or
+  hammer monitors, any MDSMap updates will cause the pre-jewel
+  monitors to crash.  Workaround is to simply upgrde all monitors.
+  There is a fix but it is still being tested.
 
- * Some of the rbd-mirror functionality for switching between active
-   and replica images is not yet merged.
+* Some of the rbd-mirror functionality for switching between active
+  and replica images is not yet merged.
 
 
 Major Changes from Infernalis
@@ -2928,14 +2928,16 @@ be stopped and marked down before any Infernalis OSDs will be allowed
 to start up.  This fencing is enforced by the Infernalis monitor, so
 use an upgrade procedure like:
 
-  #. Upgrade Ceph on monitor hosts
-  #. Restart all ceph-mon daemons
-  #. Upgrade Ceph on all OSD hosts
-  #. Stop all ceph-osd daemons
-  #. Mark all OSDs down with something like::
-       ceph osd down `seq 0 1000`
-  #. Start all ceph-osd daemons
-  #. Upgrade and restart remaining daemons (ceph-mds, radosgw)
+#. Upgrade Ceph on monitor hosts
+#. Restart all ceph-mon daemons
+#. Upgrade Ceph on all OSD hosts
+#. Stop all ceph-osd daemons
+#. Mark all OSDs down with something like::
+
+     ceph osd down `seq 0 1000`
+
+#. Start all ceph-osd daemons
+#. Upgrade and restart remaining daemons (ceph-mds, radosgw)
 
 Upgrading from Hammer
 ---------------------
