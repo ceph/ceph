@@ -365,17 +365,8 @@ class TestMultiFilesystems(CephFSTestCase):
         self.mds_cluster.mds_restart(mds_c)
         self.wait_for_daemon_start([mds_a, mds_c])
 
-        # See that they take up standby replay roles
-        # mds_a should be in filesystem alpha following mds_b
-        info_a = get_info_by_name(fs_a, mds_a)
-        self.assertEqual(info_a['state'], "up:standby-replay")
-        self.assertEqual(info_a['standby_for_name'], mds_b)
-        self.assertEqual(info_a['rank'], 0)
-        # mds_c should be in filesystem alpha following mds_d
-        info_c = get_info_by_name(fs_b, mds_c)
-        self.assertEqual(info_c['state'], "up:standby-replay")
-        self.assertEqual(info_c['standby_for_name'], mds_d)
-        self.assertEqual(info_c['rank'], 0)
+        self.assertEqual(set(self.mds_cluster.get_standby_daemons()),
+                         {mds_a, mds_c})
 
     def test_standby_for_rank(self):
         use_daemons = sorted(self.mds_cluster.mds_ids[0:4])
