@@ -35,6 +35,7 @@
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
 #include "librbd/journal/Types.h"
+#include "librbd/MirroringWatcher.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/parent_types.h"
@@ -193,7 +194,7 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
       << dendl;
     return r;
   } else if (mirror_image_internal.state !=
-               cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED) {
+               cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
     lderr(cct) << "mirroring is not currently enabled" << dendl;
     return -EINVAL;
   }
@@ -218,8 +219,7 @@ int mirror_image_enable(CephContext *cct, librados::IoCtx &io_ctx,
     return -EINVAL;
   }
 
-  mirror_image_internal.state =
-    cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED;
+  mirror_image_internal.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
   if (global_image_id.empty()) {
     uuid_d uuid_gen;
     uuid_gen.generate_random();
@@ -231,6 +231,15 @@ int mirror_image_enable(CephContext *cct, librados::IoCtx &io_ctx,
   r = cls_client::mirror_image_set(&io_ctx, id, mirror_image_internal);
   if (r < 0) {
     lderr(cct) << "cannot enable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = MirroringWatcher<>::notify_image_updated(
+    io_ctx, cls::rbd::MIRROR_IMAGE_STATE_ENABLED, id,
+    mirror_image_internal.global_image_id);
+  if (r < 0) {
+    lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+               << dendl;
     return r;
   }
 
@@ -309,12 +318,20 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force) {
     goto remove_mirroring_image;
   }
 
-  mirror_image_internal.state =
-    cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_DISABLING;
+  mirror_image_internal.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
   r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id,
       mirror_image_internal);
   if (r < 0) {
     lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = MirroringWatcher<>::notify_image_updated(
+    ictx->md_ctx, cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
+    ictx->id, mirror_image_internal.global_image_id);
+  if (r < 0) {
+    lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+               << dendl;
     return r;
   }
 
@@ -1699,8 +1716,7 @@ remove_mirroring_image:
                 << cpp_strerror(r) << dendl;
             }
 
-            if (mirror_image.state ==
-                cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED) {
+            if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
               lderr(cct) << "cannot disable journaling: image mirroring "
                 " enabled and mirror pool mode set to image" << dendl;
               return -EINVAL;
@@ -2647,7 +2663,11 @@ remove_mirroring_image:
       return -EINVAL;
     }
 
-    return mirror_image_enable_internal(ictx);
+    r = mirror_image_enable_internal(ictx);
+    if (r < 0) {
+      return r;
+    }
+    return 0;
   }
 
   int mirror_image_disable(ImageCtx *ictx, bool force) {
@@ -2668,7 +2688,11 @@ remove_mirroring_image:
       return -EINVAL;
     }
 
-    return mirror_image_disable_internal(ictx, force);
+    r = mirror_image_disable_internal(ictx, force);
+    if (r < 0) {
+      return r;
+    }
+    return 0;
   }
 
   int mirror_image_promote(ImageCtx *ictx, bool force) {
@@ -2933,6 +2957,14 @@ remove_mirroring_image:
           << cpp_strerror(r) << dendl;
         return r;
       }
+
+      r = MirroringWatcher<>::notify_mode_updated(io_ctx,
+                                                  cls::rbd::MIRROR_MODE_IMAGE);
+      if (r < 0) {
+        lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+                   << dendl;
+        return r;
+      }
     }
 
     if (next_mirror_mode == cls::rbd::MIRROR_MODE_IMAGE) {
@@ -2959,6 +2991,12 @@ remove_mirroring_image:
           if (r < 0) {
             lderr(cct) << "Failed to rollback mirror mode: " << cpp_strerror(r)
               << dendl;
+          }
+
+          r = MirroringWatcher<>::notify_mode_updated(*io_ctx, mirror_mode);
+          if (r < 0) {
+            lderr(cct) << "failed to send update notification: "
+                       << cpp_strerror(r) << dendl;
           }
         }
         for (const auto& pair : img_ctxs) {
@@ -3077,6 +3115,12 @@ remove_mirroring_image:
       return r;
     }
 
+    r = MirroringWatcher<>::notify_mode_updated(io_ctx, next_mirror_mode);
+    if (r < 0) {
+      lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
     return 0;
   }
 
