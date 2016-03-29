@@ -15,7 +15,6 @@ tasks:
       - ceph osd pool set cache hit_set_period 3600
       - ceph osd pool set cache target_max_objects 250
       - ceph osd pool set cache min_read_recency_for_promote 0
-      - ceph osd pool set cache min_write_recency_for_promote 0
 - rados:
     clients: [client.0]
     pools: [base]
