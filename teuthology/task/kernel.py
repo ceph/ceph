@@ -975,6 +975,7 @@ def get_latest_image_version_deb(remote, ostype):
     Round-about way to get the newest kernel uname -r compliant version string
     from the virtual package which is the newest kenel for debian/ubuntu.
     """
+    remote.run(args=['sudo', 'apt-get', 'clean'])
     remote.run(args=['sudo', 'apt-get', 'update'])
     output = StringIO()
     newest = ''
