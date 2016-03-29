@@ -341,11 +341,20 @@ void FSMap::decode(bufferlist::iterator& p)
     if (ev >= 4)
       ::decode(legacy_mds_map.last_failure_osd_epoch, p);
     if (ev >= 6) {
-      ::decode(legacy_mds_map.ever_allowed_snaps, p);
-      ::decode(legacy_mds_map.explicitly_allowed_snaps, p);
+      if (ev < 10) {
+	// previously this was a bool about snaps, not a flag map
+	bool flag;
+	::decode(flag, p);
+	legacy_mds_map.ever_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
+	::decode(flag, p);
+	legacy_mds_map.explicitly_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
+      } else {
+	::decode(legacy_mds_map.ever_allowed_features, p);
+	::decode(legacy_mds_map.explicitly_allowed_features, p);
+      }
     } else {
-      legacy_mds_map.ever_allowed_snaps = true;
-      legacy_mds_map.explicitly_allowed_snaps = false;
+      legacy_mds_map.ever_allowed_features = CEPH_MDSMAP_ALLOW_SNAPS;
+      legacy_mds_map.explicitly_allowed_features = 0;
     }
     if (ev >= 7)
       ::decode(legacy_mds_map.inline_data_enabled, p);
