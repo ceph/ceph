@@ -155,6 +155,7 @@ H3C <contact@h3c.com> Zengran Zhang <zhangzengran@h3c.com>
 H3C <contact@h3c.com> Zeqiang Zhuang <zhuang.zeqiang@h3c.com>
 H3C <contact@h3c.com> Zhanyang Chen <Chen.zhanyang@h3c.com>
 Hastexo <contact@hastexo.com> Florian Haas <florian@hastexo.com>
+HGST <contact@hgst.com> Eric Lee <eric.lee@hgst.com>
 HGST <contact@hgst.com> Kevin Dalley <kevin@kelphead.org>
 HGST <contact@hgst.com> Lluis Pamies-Juarez <lluis.pamies-juarez@hgst.com>
 Hihuron <contact@huron.com> Tao Chang <changtao@hihuron.com>
@@ -332,6 +333,7 @@ Reliance Jio Infocomm Ltd. <contact@ril.com> Swami Reddy <swami.reddy@ril.com>
 Roald van Loon Consultancy <roald@roaldvanloon.nl> Roald J. van Loon <roald@roaldvanloon.nl>
 Ruijie Networks <contact@ruijie.com.cn> Ning Yao <yaoning@ruijie.com.cn>
 Sandia National Laboratories <contact@sandia.gov> Jim Schutt <jaschut@sandia.gov>
+Samsung <contact@samsung.com> James Liu <james.liu@ssi.samsung.com>
 Samsung <contact@samsung.com> Subramanyam Varanasi <s.varanasi@ssi.samsung.com>
 SanDisk <contact@sandisk.com> Allen Samuels <allen.samuels@sandisk.com>
 SanDisk <contact@sandisk.com> Anand Bhat <anand.bhat@sandisk.com>
@@ -353,8 +355,10 @@ SUSE <contact@suse.com> Hannes Reinecke <hare@suse.de>
 SUSE <contact@suse.com> Holger Macht <hmacht@suse.de>
 SUSE <contact@suse.com> João Eduardo Luís <joao@suse.de>
 SUSE <contact@suse.com> Karl Eichwalder <ke@suse.de>
+SUSE <contact@suse.com> Karol Mroz <kmroz@suse.com>
 SUSE <contact@suse.com> Nathan Cutler <ncutler@suse.com>
 SUSE <contact@suse.com> Owen Synge <osynge@suse.com>
+SUSE <contact@suse.com> Ricardo Dias <rdias@suse.com>
 SUSE <contact@suse.com> Thorsten Behrens <tbehrens@suse.com>
 SUSE <contact@suse.com> Tim Serong <tserong@suse.com>
 SWITCH <contact@switch.ch> Jens-Christian Fischer <jens-christian.fischer@switch.ch>
@@ -409,6 +413,7 @@ Unaffiliated <no@organization.net> Ding Dinghua <dingdinghua85@gmail.com>
 Unaffiliated <no@organization.net> Dominik Hannen <cantares1+github@gmail.com>
 Unaffiliated <no@organization.net> Drunkard Zhang <gongfan193@gmail.com>
 Unaffiliated <no@organization.net> Dunrong Huang <riegamaths@gmail.com>
+Unaffiliated <no@organization.net> Eric Cook <llua@gmx.com>
 Unaffiliated <no@organization.net> Erik Logtenberg <erik@logtenberg.eu>
 Unaffiliated <no@organization.net> Fabio Alessandro Locati <fabiolocati@gmail.com>
 Unaffiliated <no@organization.net> fangdong <yp.fangdong@gmail.com>
@@ -486,7 +491,9 @@ Unaffiliated <no@organization.net> Robin Tang <robintang974@gmail.com>
 Unaffiliated <no@organization.net> Rohan Mars <code@rohanmars.com>
 Unaffiliated <no@organization.net> Roman Haritonov <reclosedev@gmail.com>
 Unaffiliated <no@organization.net> Ruben Kerkhof <ruben@rubenkerkhof.com>
+Unaffiliated <no@organization.net> Rust Shen <rustinpeace@163.com>
 Unaffiliated <no@organization.net> Sahithi R V <tansy.rv@gmail.com>
+Unaffiliated <no@organization.net> Sarthak Munshi <sarthakmunshi@gmail.com>
 Unaffiliated <no@organization.net> Sergey Arkhipov <nineseconds@yandex.ru>
 Unaffiliated <no@organization.net> Shang Ding <dingshang2013@163.com>
 Unaffiliated <no@organization.net> Shanggao Qiu <qiushanggao@qq.com>
@@ -518,6 +525,7 @@ Unaffiliated <no@organization.net> Yannick Atchy Dalama <yannick.atchy.dalama@gm
 Unaffiliated <no@organization.net> YiQiang Chen <cyqsign@163.com>
 Unaffiliated <no@organization.net> Yongyue Sun <abioy.sun@gmail.com>
 Unaffiliated <no@organization.net> You Ji <jiyou09@gmail.com>
+Unaffiliated <no@organization.net> Zhao Junwang <zhjwpku@gmail.com>
 Unaffiliated <no@organization.net> Zhe Zhang <zzxuanyuan@gmail.com>
 Unaffiliated <no@organization.net> Zhicheng Wei <zhicheng@opensourceforge.net>
 Unilogic Networks B.V <contact@unilogicnetworks.net> Pascal de Bruijn <pascal@unilogicnetworks.net> 
@@ -568,6 +576,7 @@ ZTE <contact@zte.com.cn> Ren Huanwen <ren.huanwen@zte.com.cn>
 ZTE <contact@zte.com.cn> Xie Xingguo <xie.xingguo@zte.com.cn>
 ZTE <contact@zte.com.cn> Shun Song <song.shun3@zte.com.cn>
 ZTE <contact@zte.com.cn> Song Baisen <song.baisen@zte.com.cn>
+ZTE <contact@zte.com.cn> Yan Jun <yan.jun8@zte.com.cn>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \
