@@ -42,6 +42,10 @@ public:
     TestFixture::TearDown();
   }
 
+  virtual void SetUp() {
+    ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), m_ioctx));
+  }
+
   std::string image_name = "mirrorimg1";
 
   void check_mirror_image_enable(uint64_t features,
@@ -61,6 +65,7 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
 
+    image.mirror_image_disable(false);
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
   }
@@ -80,6 +85,7 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
 
+    image.mirror_image_disable(false);
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
   }
@@ -106,8 +112,47 @@ public:
     librbd::mirror_image_info_t mirror_image;
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
+    image.mirror_image_disable(false);
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+  }
+
+  void setup_images_with_mirror_mode(rbd_mirror_mode_t mirror_mode,
+                                        std::vector<uint64_t>& features_vec) {
+
+    ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, mirror_mode));
+
+    int id = 1;
+    int order = 20;
+    for (const auto& features : features_vec) {
+      std::stringstream img_name("img_");
+      img_name << id++;
+      std::string img_name_str = img_name.str();
+      ASSERT_EQ(0, m_rbd.create2(m_ioctx, img_name_str.c_str(), 2048, features, &order));
+    }
+  }
+
+  void check_mirroring_on_mirror_mode_set(rbd_mirror_mode_t mirror_mode,
+                            std::vector<rbd_mirror_image_state_t>& states_vec) {
+
+    ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, mirror_mode));
+
+    int id = 1;
+    for (const auto& mirror_state : states_vec) {
+      std::stringstream img_name("img_");
+      img_name << id++;
+      std::string img_name_str = img_name.str();
+      librbd::Image image;
+      ASSERT_EQ(0, m_rbd.open(m_ioctx, image, img_name_str.c_str()));
+
+      librbd::mirror_image_info_t mirror_image;
+      ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
+      ASSERT_EQ(mirror_state, mirror_image.state);
+
+      image.mirror_image_disable(false);
+      ASSERT_EQ(0, image.close());
+      ASSERT_EQ(0, m_rbd.remove(m_ioctx, img_name_str.c_str()));
+    }
   }
 
 };
@@ -215,5 +260,88 @@ TEST_F(TestMirroring, DisableJournaling_In_MirrorModeImage) {
   uint64_t features = RBD_FEATURE_JOURNALING;
   check_mirroring_on_update_features(init_features, false, true, features, -EINVAL,
                       RBD_MIRROR_MODE_IMAGE, RBD_MIRROR_IMAGE_ENABLED);
+}
+
+TEST_F(TestMirroring, MirrorModeSet_DisabledMode_To_PoolMode) {
+  std::vector<uint64_t> features_vec;
+  features_vec.push_back(RBD_FEATURE_EXCLUSIVE_LOCK);
+  features_vec.push_back(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING);
+
+  setup_images_with_mirror_mode(RBD_MIRROR_MODE_DISABLED, features_vec);
+
+  std::vector<rbd_mirror_image_state_t> states_vec;
+  states_vec.push_back(RBD_MIRROR_IMAGE_DISABLED);
+  states_vec.push_back(RBD_MIRROR_IMAGE_ENABLED);
+  check_mirroring_on_mirror_mode_set(RBD_MIRROR_MODE_POOL, states_vec);
+}
+
+TEST_F(TestMirroring, MirrorModeSet_PoolMode_To_DisabledMode) {
+  std::vector<uint64_t> features_vec;
+  features_vec.push_back(RBD_FEATURE_EXCLUSIVE_LOCK);
+  features_vec.push_back(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING);
+
+  setup_images_with_mirror_mode(RBD_MIRROR_MODE_POOL, features_vec);
+
+  std::vector<rbd_mirror_image_state_t> states_vec;
+  states_vec.push_back(RBD_MIRROR_IMAGE_DISABLED);
+  states_vec.push_back(RBD_MIRROR_IMAGE_DISABLED);
+  check_mirroring_on_mirror_mode_set(RBD_MIRROR_MODE_DISABLED, states_vec);
+}
+
+TEST_F(TestMirroring, MirrorModeSet_DisabledMode_To_ImageMode) {
+  std::vector<uint64_t> features_vec;
+  features_vec.push_back(RBD_FEATURE_EXCLUSIVE_LOCK);
+  features_vec.push_back(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING);
+
+  setup_images_with_mirror_mode(RBD_MIRROR_MODE_DISABLED, features_vec);
+
+  std::vector<rbd_mirror_image_state_t> states_vec;
+  states_vec.push_back(RBD_MIRROR_IMAGE_DISABLED);
+  states_vec.push_back(RBD_MIRROR_IMAGE_DISABLED);
+  check_mirroring_on_mirror_mode_set(RBD_MIRROR_MODE_IMAGE, states_vec);
+}
+
+
+TEST_F(TestMirroring, MirrorModeSet_PoolMode_To_ImageMode) {
+  std::vector<uint64_t> features_vec;
+  features_vec.push_back(RBD_FEATURE_EXCLUSIVE_LOCK);
+  features_vec.push_back(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING);
+
+  setup_images_with_mirror_mode(RBD_MIRROR_MODE_POOL, features_vec);
+
+  std::vector<rbd_mirror_image_state_t> states_vec;
+  states_vec.push_back(RBD_MIRROR_IMAGE_DISABLED);
+  states_vec.push_back(RBD_MIRROR_IMAGE_ENABLED);
+  check_mirroring_on_mirror_mode_set(RBD_MIRROR_MODE_IMAGE, states_vec);
+}
+
+TEST_F(TestMirroring, MirrorModeSet_ImageMode_To_PoolMode) {
+  std::vector<uint64_t> features_vec;
+  features_vec.push_back(RBD_FEATURE_EXCLUSIVE_LOCK);
+  features_vec.push_back(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING);
+
+  setup_images_with_mirror_mode(RBD_MIRROR_MODE_IMAGE, features_vec);
+
+  std::vector<rbd_mirror_image_state_t> states_vec;
+  states_vec.push_back(RBD_MIRROR_IMAGE_DISABLED);
+  states_vec.push_back(RBD_MIRROR_IMAGE_ENABLED);
+  check_mirroring_on_mirror_mode_set(RBD_MIRROR_MODE_POOL, states_vec);
+}
+
+TEST_F(TestMirroring, MirrorModeSet_ImageMode_To_DisabledMode) {
+  std::vector<uint64_t> features_vec;
+  features_vec.push_back(RBD_FEATURE_EXCLUSIVE_LOCK);
+  features_vec.push_back(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING);
+
+  setup_images_with_mirror_mode(RBD_MIRROR_MODE_POOL, features_vec);
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+  ASSERT_EQ(-EINVAL, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_POOL));
+
+  std::vector<rbd_mirror_image_state_t> states_vec;
+  states_vec.push_back(RBD_MIRROR_IMAGE_DISABLED);
+  states_vec.push_back(RBD_MIRROR_IMAGE_DISABLED);
+  check_mirroring_on_mirror_mode_set(RBD_MIRROR_MODE_DISABLED, states_vec);
 }
 
