@@ -67,7 +67,7 @@ import subprocess
 
 if os.path.exists("./CMakeCache.txt"):
     # Running in build dir of a cmake build
-    BIN_PREFIX = "./src/"
+    BIN_PREFIX = "./bin/"
 else:
     # Running in src/ of an autotools build
     BIN_PREFIX = "./"
@@ -454,7 +454,7 @@ class LocalCephManager(CephManager):
         return LocalRemote()
 
     def run_ceph_w(self):
-        proc = self.controller.run(["./ceph", "-w"], wait=False, stdout=StringIO())
+        proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph"), "-w"], wait=False, stdout=StringIO())
         return proc
 
     def raw_cluster_cmd(self, *args):
@@ -462,19 +462,19 @@ class LocalCephManager(CephManager):
         args like ["osd", "dump"}
         return stdout string
         """
-        proc = self.controller.run(["./ceph"] + list(args))
+        proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args))
         return proc.stdout.getvalue()
 
     def raw_cluster_cmd_result(self, *args):
         """
         like raw_cluster_cmd but don't check status, just return rc
         """
-        proc = self.controller.run(["./ceph"] + list(args), check_status=False)
+        proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args), check_status=False)
         return proc.exitstatus
 
     def admin_socket(self, daemon_type, daemon_id, command, check_status=True):
         return self.controller.run(
-            args=["./ceph", "daemon", "{0}.{1}".format(daemon_type, daemon_id)] + command, check_status=check_status
+            args=[os.path.join(BIN_PREFIX, "ceph"), "daemon", "{0}.{1}".format(daemon_type, daemon_id)] + command, check_status=check_status
         )
 
     # FIXME: copypasta
@@ -736,7 +736,7 @@ def exec_test():
         client_name = "client.{0}".format(client_id)
 
         if client_name not in open("./keyring").read():
-            p = remote.run(args=["./ceph", "auth", "get-or-create", client_name,
+            p = remote.run(args=[os.path.join(BIN_PREFIX, "ceph"), "auth", "get-or-create", client_name,
                                  "osd", "allow rw",
                                  "mds", "allow",
                                  "mon", "allow r"])
@@ -782,7 +782,7 @@ def exec_test():
 
     # For the benefit of polling tests like test_full -- in teuthology land we set this
     # in a .yaml, here it's just a hardcoded thing for the developer's pleasure.
-    remote.run(args=["./ceph", "tell", "osd.*", "injectargs", "--osd-mon-report-interval-max", "5"])
+    remote.run(args=[os.path.join(BIN_PREFIX, "ceph"), "tell", "osd.*", "injectargs", "--osd-mon-report-interval-max", "5"])
     filesystem.set_ceph_conf("osd", "osd_mon_report_interval_max", "5")
 
     # Vstart defaults to two segments, which very easily gets a "behind on trimming" health warning
