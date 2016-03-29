@@ -29,13 +29,28 @@ public:
   virtual void unregister_watch(Context *on_finish);
 
 protected:
+  struct C_NotifyAck : public Context {
+    ObjectWatcher *object_watcher;
+    uint64_t notify_id;
+    uint64_t handle;
+    bufferlist out;
+
+    C_NotifyAck(ObjectWatcher *object_watcher, uint64_t notify_id,
+                uint64_t handle);
+    virtual void finish(int r);
+
+    std::string get_oid() const {
+      return object_watcher->get_oid();
+    }
+  };
+
   librados::IoCtx &m_io_ctx;
   CephContext *m_cct;
 
   virtual std::string get_oid() const = 0;
 
   virtual void handle_notify(uint64_t notify_id, uint64_t handle,
-                             bufferlist &bl);
+                             bufferlist &bl) = 0;
   void acknowledge_notify(uint64_t notify_id, uint64_t handle, bufferlist &out);
 
   virtual void pre_unwatch(Context *on_finish);

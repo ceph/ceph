@@ -181,13 +181,6 @@ void ObjectWatcher<I>::post_rewatch(Context *on_finish) {
 }
 
 template <typename I>
-void ObjectWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
-                                     bufferlist &bl) {
-  ldout(m_cct, 15) << ": notify_id=" << notify_id << ", "
-                   << "handle=" << handle << dendl;
-}
-
-template <typename I>
 void ObjectWatcher<I>::acknowledge_notify(uint64_t notify_id, uint64_t handle,
                                           bufferlist &out) {
   ldout(m_cct, 15) << ": notify_id=" << notify_id << ", "
@@ -330,6 +323,24 @@ bool ObjectWatcher<I>::pending_unregister_watch(int r) {
   }
 
   return false;
+}
+
+template <typename I>
+ObjectWatcher<I>::C_NotifyAck::C_NotifyAck(ObjectWatcher *object_watcher,
+                                           uint64_t notify_id, uint64_t handle)
+  : object_watcher(object_watcher), notify_id(notify_id), handle(handle) {
+  CephContext *cct = object_watcher->m_cct;
+  ldout(cct, 10) << ": C_NotifyAck start: id=" << notify_id << ", "
+                 << "handle=" << handle << dendl;
+}
+
+template <typename I>
+void ObjectWatcher<I>::C_NotifyAck::finish(int r) {
+  assert(r == 0);
+  CephContext *cct = object_watcher->m_cct;
+  ldout(cct, 10) << ": C_NotifyAck finish: id=" << notify_id << ", "
+                 << "handle=" << handle << dendl;
+  object_watcher->acknowledge_notify(notify_id, handle, out);
 }
 
 } // namespace librbd

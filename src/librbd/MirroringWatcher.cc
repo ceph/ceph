@@ -69,6 +69,53 @@ int MirroringWatcher<I>::notify_image_updated(
   return 0;
 }
 
+template <typename I>
+void MirroringWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
+                                        bufferlist &bl) {
+  CephContext *cct = this->m_cct;
+  ldout(cct, 15) << ": notify_id=" << notify_id << ", "
+                 << "handle=" << handle << dendl;
+
+  Context *ctx = new typename ObjectWatcher<I>::C_NotifyAck(this, notify_id,
+                                                            handle);
+
+  NotifyMessage notify_message;
+  try {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(notify_message, iter);
+  } catch (const buffer::error &err) {
+    lderr(cct) << ": error decoding image notification: " << err.what()
+               << dendl;
+    ctx->complete(0);
+    return;
+  }
+
+  apply_visitor(HandlePayloadVisitor(this, ctx), notify_message.payload);
+}
+
+template <typename I>
+void MirroringWatcher<I>::handle_payload(const ModeUpdatedPayload &payload,
+                                         Context *on_notify_ack) {
+  CephContext *cct = this->m_cct;
+  ldout(cct, 20) << ": mode updated: " << payload.mirror_mode << dendl;
+  handle_mode_updated(payload.mirror_mode, on_notify_ack);
+}
+
+template <typename I>
+void MirroringWatcher<I>::handle_payload(const ImageUpdatedPayload &payload,
+                                         Context *on_notify_ack) {
+  CephContext *cct = this->m_cct;
+  ldout(cct, 20) << ": image state updated" << dendl;
+  handle_image_updated(payload.mirror_image_state, payload.image_id,
+                       payload.global_image_id, on_notify_ack);
+}
+
+template <typename I>
+void MirroringWatcher<I>::handle_payload(const UnknownPayload &payload,
+                                         Context *on_notify_ack) {
+  on_notify_ack->complete(0);
+}
+
 } // namespace librbd
 
 template class librbd::MirroringWatcher<librbd::ImageCtx>;
