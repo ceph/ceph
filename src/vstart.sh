@@ -12,8 +12,8 @@ if [ -n "$VSTART_DEST" ]; then
   CEPH_LIB=$SRC_PATH/.libs
 
   if [ -e CMakeCache.txt ]; then
-      CEPH_BIN=$VSTART_DEST/../../src
-      CEPH_LIB=$CEPH_BIN
+      CEPH_BIN=$VSTART_DEST/../../bin
+      CEPH_LIB=$VSTART_DEST/../../lib
   fi
 
   CEPH_CONF_PATH=$VSTART_DEST
