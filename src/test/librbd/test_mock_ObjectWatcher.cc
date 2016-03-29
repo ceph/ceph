@@ -30,6 +30,10 @@ struct MockObjectWatcher : public ObjectWatcher<MockImageCtx> {
   virtual std::string get_oid() const override {
     return oid;
   }
+
+  virtual void handle_notify(uint64_t notify_id, uint64_t handle,
+                             bufferlist &bl) {
+  }
 };
 
 } // anonymous namespace
