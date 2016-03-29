@@ -728,7 +728,7 @@ public:
 
       case OP_SPLIT_COLLECTION2:
         assert(op->cid < cm.size());
-        op->dest_cid = cm[op->dest_oid];
+	assert(op->dest_cid < cm.size());
         op->cid = cm[op->cid];
         op->dest_cid = cm[op->dest_cid];
         break;
