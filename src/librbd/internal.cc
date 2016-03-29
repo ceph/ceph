@@ -200,6 +200,181 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
   return 0;
 }
 
+int mirror_image_enable_internal(ImageCtx *ictx) {
+  CephContext *cct = ictx->cct;
+
+  if ((ictx->features & RBD_FEATURE_JOURNALING) == 0) {
+    lderr(cct) << "cannot enable mirroring: journaling is not enabled"
+      << dendl;
+    return -EINVAL;
+  }
+
+  bool is_primary;
+  int r = Journal<>::is_tag_owner(ictx, &is_primary);
+  if (r < 0) {
+    lderr(cct) << "cannot enable mirroring: failed to check tag ownership: "
+      << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (!is_primary) {
+    lderr(cct) <<
+      "cannot enable mirroring: last journal tag not owned by local cluster"
+      << dendl;
+    return -EINVAL;
+  }
+
+  cls::rbd::MirrorImage mirror_image_internal;
+  r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+      &mirror_image_internal);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "cannot enable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (mirror_image_internal.state ==
+      cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED) {
+    // mirroring is already enabled
+    return 0;
+  }
+  else if (r != -ENOENT) {
+    lderr(cct) << "cannot enable mirroring: mirroring image is in "
+      "disabling state" << dendl;
+    return -EINVAL;
+  }
+
+  mirror_image_internal.state =
+    cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED;
+
+  uuid_d uuid_gen;
+  uuid_gen.generate_random();
+  mirror_image_internal.global_image_id = uuid_gen.to_string();
+
+  r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id,
+      mirror_image_internal);
+  if (r < 0) {
+    lderr(cct) << "cannot enable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  ldout(cct, 20) << "image mirroring is enabled: global_id=" <<
+    mirror_image_internal.global_image_id << dendl;
+
+  return 0;
+}
+
+int mirror_image_disable_internal(ImageCtx *ictx, bool force) {
+  CephContext *cct = ictx->cct;
+
+  cls::rbd::MirrorImage mirror_image_internal;
+  std::vector<snap_info_t> snaps;
+  std::set<cls::journal::Client> clients;
+  std::string header_oid;
+
+  bool is_primary;
+  int r = Journal<>::is_tag_owner(ictx, &is_primary);
+  if (r < 0) {
+    lderr(cct) << "cannot disable mirroring: failed to check tag ownership: "
+      << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (!is_primary) {
+    if (!force) {
+      lderr(cct) << "Mirrored image is not the primary, add force option to"
+        " disable mirroring" << dendl;
+      return -EINVAL;
+    }
+    goto remove_mirroring_image;
+  }
+
+  r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+      &mirror_image_internal);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  else if (r == -ENOENT) {
+    // mirroring is not enabled for this image
+    ldout(cct, 20) << "ignoring disable command: mirroring is not enabled "
+      "for this image" << dendl;
+    return 0;
+  }
+
+  mirror_image_internal.state =
+    cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_DISABLING;
+  r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id,
+      mirror_image_internal);
+  if (r < 0) {
+    lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  header_oid = ::journal::Journaler::header_oid(ictx->id);
+
+  while(true) {
+    r = cls::journal::client::client_list(ictx->md_ctx, header_oid, &clients);
+    if (r < 0) {
+      lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    assert(clients.size() >= 1);
+
+    if (clients.size() == 1) {
+      // only local journal client remains
+      break;
+    }
+
+    for (auto client : clients) {
+      journal::ClientData client_data;
+      bufferlist::iterator bl = client.data.begin();
+      ::decode(client_data, bl);
+      journal::ClientMetaType type = client_data.get_client_meta_type();
+
+      if (type != journal::ClientMetaType::MIRROR_PEER_CLIENT_META_TYPE) {
+        continue;
+      }
+
+      journal::MirrorPeerClientMeta client_meta =
+        boost::get<journal::MirrorPeerClientMeta>(client_data.client_meta);
+
+      for (const auto& sync : client_meta.sync_points) {
+        r = ictx->operations->snap_remove(sync.snap_name.c_str());
+        if (r < 0 && r != -ENOENT) {
+          lderr(cct) << "cannot disable mirroring: failed to remove temporary"
+            " snapshot created by remote peer: " << cpp_strerror(r) << dendl;
+          return r;
+        }
+      }
+
+      r = cls::journal::client::client_unregister(ictx->md_ctx, header_oid,
+          client.id);
+      if (r < 0 && r != -ENOENT) {
+        lderr(cct) << "cannot disable mirroring: failed to unregister remote"
+          " journal client: " << cpp_strerror(r) << dendl;
+        return r;
+      }
+    }
+  }
+
+remove_mirroring_image:
+  r = cls_client::mirror_image_remove(&ictx->md_ctx, ictx->id);
+  if (r < 0) {
+    lderr(cct) << "failed to remove image from mirroring directory: "
+      << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  ldout(cct, 20) << "removed image state from rbd_mirroring object" << dendl;
+
+  if (is_primary) {
+    // TODO: send notification to mirroring object about update
+  }
+
+  return 0;
+}
+
 } // anonymous namespace
 
   int detect_format(IoCtx &io_ctx, const string &name,
@@ -917,7 +1092,7 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
           delete img_ctx;
           goto err_remove_object_map;
         }
-        r = mirror_image_enable(img_ctx);
+        r = mirror_image_enable_internal(img_ctx);
         if (r < 0) {
           lderr(cct) << "error enabling mirroring: " << cpp_strerror(r)
             << dendl;
@@ -1517,7 +1692,7 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
               return -EINVAL;
             }
           } else if (mirror_mode == RBD_MIRROR_MODE_POOL) {
-            r = mirror_image_disable(ictx, false);
+            r = mirror_image_disable_internal(ictx, false);
             if (r < 0) {
               lderr(cct) << "error disabling image mirroring: "
                 << cpp_strerror(r) << dendl;
@@ -1566,7 +1741,7 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
           lderr(cct) << "error opening image: " << cpp_strerror(r) << dendl;
           delete img_ctx;
         } else {
-          r = mirror_image_enable(img_ctx);
+          r = mirror_image_enable_internal(img_ctx);
           if (r < 0) {
             lderr(cct) << "error enabling mirroring: " << cpp_strerror(r)
               << dendl;
@@ -2433,177 +2608,42 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "mirror_image_enable " << ictx << dendl;
 
-    if ((ictx->features & RBD_FEATURE_JOURNALING) == 0) {
-      lderr(cct) << "cannot enable mirroring: journaling is not enabled"
-        << dendl;
-      return -EINVAL;
-    }
-
-    bool is_primary;
-    int r = Journal<>::is_tag_owner(ictx, &is_primary);
+    cls::rbd::MirrorMode mirror_mode;
+    int r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode);
     if (r < 0) {
-      lderr(cct) << "cannot enable mirroring: failed to check tag ownership: "
+      lderr(cct) << "cannot enable mirroring: failed to retrieve mirror mode: "
         << cpp_strerror(r) << dendl;
       return r;
     }
 
-    if (!is_primary) {
-      lderr(cct) <<
-        "cannot enable mirroring: last journal tag not owned by local cluster"
-        << dendl;
+    if (mirror_mode != cls::rbd::MIRROR_MODE_IMAGE) {
+      lderr(cct) << "cannot enable mirroring in the current pool mirroring "
+        "mode" << dendl;
       return -EINVAL;
     }
 
-    cls::rbd::MirrorImage mirror_image_internal;
-    r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
-                                 &mirror_image_internal);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "cannot enable mirroring: " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    if (mirror_image_internal.state ==
-        cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED) {
-      // mirroring is already enabled
-      return 0;
-    }
-    else if (r != -ENOENT) {
-      lderr(cct) << "cannot enable mirroring: mirroring image is in "
-        "disabling state" << dendl;
-      return -EINVAL;
-    }
-
-    mirror_image_internal.state =
-      cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED;
-
-    uuid_d uuid_gen;
-    uuid_gen.generate_random();
-    mirror_image_internal.global_image_id = uuid_gen.to_string();
-
-    r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id,
-                                     mirror_image_internal);
-    if (r < 0) {
-      lderr(cct) << "cannot enable mirroring: " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    ldout(cct, 20) << "image mirroring is enabled: global_id=" <<
-      mirror_image_internal.global_image_id << dendl;
-
-    return 0;
+    return mirror_image_enable_internal(ictx);
   }
 
   int mirror_image_disable(ImageCtx *ictx, bool force) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "mirror_image_disable " << ictx << dendl;
 
-    cls::rbd::MirrorImage mirror_image_internal;
-    std::vector<snap_info_t> snaps;
-    std::set<cls::journal::Client> clients;
-    std::string header_oid;
-
-    bool is_primary;
-    int r = Journal<>::is_tag_owner(ictx, &is_primary);
+    cls::rbd::MirrorMode mirror_mode;
+    int r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode);
     if (r < 0) {
-      lderr(cct) << "cannot disable mirroring: failed to check tag ownership: "
-        << cpp_strerror(r) << dendl;
+      lderr(cct) << "cannot disable mirroring: failed to retrieve pool "
+        "mirroring mode: " << cpp_strerror(r) << dendl;
       return r;
     }
 
-    if (!is_primary) {
-      if (!force) {
-        lderr(cct) << "Mirrored image is not the primary, add force option to"
-          " disable mirroring" << dendl;
-        return -EINVAL;
-      }
-      goto remove_mirroring_image;
+    if (mirror_mode != cls::rbd::MIRROR_MODE_IMAGE) {
+      lderr(cct) << "cannot disable mirroring in the current pool mirroring "
+        "mode" << dendl;
+      return -EINVAL;
     }
 
-    r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
-                                     &mirror_image_internal);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
-      return r;
-    }
-    else if (r == -ENOENT) {
-      // mirroring is not enabled for this image
-      ldout(cct, 20) << "ignoring disable command: mirroring is not enabled "
-        "for this image" << dendl;
-      return 0;
-    }
-
-    mirror_image_internal.state =
-      cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_DISABLING;
-    r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id,
-                                     mirror_image_internal);
-    if (r < 0) {
-      lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    header_oid = ::journal::Journaler::header_oid(ictx->id);
-
-    while(true) {
-      r = cls::journal::client::client_list(ictx->md_ctx, header_oid, &clients);
-      if (r < 0) {
-        lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
-        return r;
-      }
-
-      assert(clients.size() >= 1);
-
-      if (clients.size() == 1) {
-        // only local journal client remains
-        break;
-      }
-
-      for (auto client : clients) {
-        journal::ClientData client_data;
-        bufferlist::iterator bl = client.data.begin();
-        ::decode(client_data, bl);
-        journal::ClientMetaType type = client_data.get_client_meta_type();
-
-        if (type != journal::ClientMetaType::MIRROR_PEER_CLIENT_META_TYPE) {
-          continue;
-        }
-
-        journal::MirrorPeerClientMeta client_meta =
-          boost::get<journal::MirrorPeerClientMeta>(client_data.client_meta);
-
-        for (const auto& sync : client_meta.sync_points) {
-          r = ictx->operations->snap_remove(sync.snap_name.c_str());
-          if (r < 0 && r != -ENOENT) {
-            lderr(cct) << "cannot disable mirroring: failed to remove temporary"
-              " snapshot created by remote peer: " << cpp_strerror(r) << dendl;
-            return r;
-          }
-        }
-
-        r = cls::journal::client::client_unregister(ictx->md_ctx, header_oid,
-                                                    client.id);
-        if (r < 0 && r != -ENOENT) {
-          lderr(cct) << "cannot disable mirroring: failed to unregister remote"
-            " journal client: " << cpp_strerror(r) << dendl;
-          return r;
-        }
-      }
-    }
-
-  remove_mirroring_image:
-    r = cls_client::mirror_image_remove(&ictx->md_ctx, ictx->id);
-    if (r < 0) {
-      lderr(cct) << "failed to remove image from mirroring directory: "
-        << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    ldout(cct, 20) << "removed image state from rbd_mirroring object" << dendl;
-
-    if (is_primary) {
-      // TODO: send notification to mirroring object about update
-    }
-
-    return 0;
+    return mirror_image_disable_internal(ictx, force);
   }
 
   int mirror_image_promote(ImageCtx *ictx, bool force) {
