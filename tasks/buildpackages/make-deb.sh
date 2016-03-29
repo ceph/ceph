@@ -126,7 +126,7 @@ function build_repo() {
 Codename: $codename
 Suite: stable
 Components: main
-Architectures: i386 amd64 source
+Architectures: i386 amd64 arm64 source
 EOF
     reprepro --basedir $sha1_dir include $codename WORKDIR/*.changes
     echo $dvers > $sha1_dir/version
