@@ -4807,7 +4807,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   if (m->get_op() == CEPH_CAP_OP_IMPORT && m->get_wanted() != wanted)
     check = true;
 
-  check_cap_issue(in, cap, issued);
+  check_cap_issue(in, cap, new_caps);
 
   // update caps
   if (old_caps & ~new_caps) { 
