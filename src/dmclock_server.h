@@ -614,10 +614,11 @@ namespace crimson {
 	  for (auto const &c : client_map) {
 	    // don't use ourselves (or anything else that might be
 	    // listed as idle) since we're now in the map
-	    if (!c.idle) {
+	    if (!c.second->idle) {
 	      // use either lowest proportion tag or previous proportion tag
-	      if (c.has_request()) {
-		double p = c.next_request().tag.proportion + c.prop_delta;
+	      if (c.second->has_request()) {
+		double p = c.second->next_request().tag.proportion +
+		  c.second->prop_delta;
 		if (isnan(lowest_prop_tag) || p < lowest_prop_tag) {
 		  lowest_prop_tag = p;
 		}
@@ -790,7 +791,7 @@ namespace crimson {
       // data_mtx should be held when called
       void reduce_reservation_tags(ClientRec& client) {
 	client.increment_reserv_delta();
-	reserv_q.demote(*client.client_entry);
+	reserv_q.demote(client);
       }
 
 
@@ -801,7 +802,7 @@ namespace crimson {
 	// means the client was cleaned from map; should never happen
 	// as long as cleaning times are long enough
 	if (client_map.end() != client_it) {
-	  reduce_reservation_tags(client_it->second);
+	  reduce_reservation_tags(*client_it->second);
 	}
       }
 
@@ -1012,18 +1013,34 @@ namespace crimson {
 	}
 
 	if (erase_point > 0 || idle_point > 0) {
-	  for (auto i = client_map.begin();
-	       i != client_map.end();
-	       /* empty */) {
+	  for (auto i = client_map.begin(); i != client_map.end(); /* empty */) {
 	    auto i2 = i++;
-	    if (erase_point && i2->second.last_tick <= erase_point) {
+	    if (erase_point && i2->second->last_tick <= erase_point) {
 	      client_map.erase(i2);
-	    } else if (idle_point && i2->second.last_tick <= idle_point) {
-	      i2->second.idle = true;
+	      delete_from_heaps(i2->second);
+	    } else if (idle_point && i2->second->last_tick <= idle_point) {
+	      i2->second->idle = true;
 	    }
 	  } // for
 	} // if
       } // do_clean
+
+      template<IndIntruHeapData ClientRec::*C1,typename C2>
+      void delete_from_heap(ClientRecRef& client,
+			    c::IndIntruHeap<ClientRecRef,ClientRec,C1,C2>& heap) {
+	auto i = heap.rev_search(client);
+	heap.remove(i);
+      }
+
+
+      void delete_from_heaps(ClientRecRef& client) {
+	delete_from_heap(client, reserv_q);
+#if REMOVE_2
+	delete_from_heap(client, prop_q);
+#endif
+	delete_from_heap(client, limit_q);
+	delete_from_heap(client, ready_q);
+      }
     }; // class PriorityQueue
   } // namespace dmclock
 } // namespace crimson

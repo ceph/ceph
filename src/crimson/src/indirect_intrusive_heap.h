@@ -95,6 +95,23 @@ namespace crimson {
       sift_down(0);
     }
 
+    struct Iterator {
+    };
+
+    void remove(Iterator i) {
+#warning unimplemented
+    }
+
+    Iterator search(I& item) {
+#warning unimplemented
+      return Iterator();
+    }
+
+    Iterator rev_search(I& item) {
+#warning unimplemented
+      return Iterator();
+    }
+
     void promote(T& item) {
       sift_up(item.*heap_info);
     }
