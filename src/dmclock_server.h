@@ -13,6 +13,7 @@
 
 #include <assert.h>
 
+#include <cmath>
 #include <memory>
 #include <map>
 #include <deque>
@@ -157,10 +158,10 @@ namespace crimson {
 
       enum class ReadyOption {ignore, lowers, raises};
 
-      template<double RequestTag::*, ReadyOption, bool>
+      template<double RequestTag::*, ReadyOption, bool, bool>
       struct ClientCompare; // forward decl for friend decls
 
-      
+
       class ClientReq {
 	friend ClientEntry;
 	friend PriorityQueue;
@@ -205,7 +206,8 @@ namespace crimson {
 	std::deque<ClientReq> requests;
 	// amount subtracted from the reservation tag as a result of
 	// proportional scheduling
-	double                reserv_delta;
+	double                reserv_delta = 0.0;
+	double                prop_delta = 0.0;
 
 	c::IndIntruHeapData   reserv_heap_data;
 	c::IndIntruHeapData   lim_heap_data;
@@ -215,8 +217,7 @@ namespace crimson {
       public:
 
 	ClientEntry(C _client) :
-	  client(_client),
-	  reserv_delta(0.0)
+	  client(_client)
 	{
 	  // empty
 	}
@@ -358,7 +359,8 @@ namespace crimson {
 
       template<double RequestTag::*tag_field,
 	       ReadyOption ready_opt,
-	       bool reserv_delta>
+	       bool use_reserv_delta,
+	       bool use_prop_delta>
       struct ClientCompare {
 	bool operator()(const ClientEntry& n1, const ClientEntry& n2) const {
 	  if (n1.has_request()) {
@@ -367,9 +369,12 @@ namespace crimson {
 	      const auto& t2 = n2.next_request().tag;
 	      if (ReadyOption::ignore == ready_opt || t1.ready == t2.ready) {
 		// if we don't care about ready or the ready values are the same
-		if (reserv_delta) {
+		if (use_reserv_delta) {
 		  return (t1.*tag_field - n1.reserv_delta) <
 		    (t2.*tag_field - n2.reserv_delta);
+		} else if (use_prop_delta) {
+		  return (t1.*tag_field + n1.prop_delta) <
+		    (t2.*tag_field + n2.prop_delta);
 		} else {
 		  return t1.*tag_field < t2.*tag_field;
 		}
@@ -408,21 +413,21 @@ namespace crimson {
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::reserv_heap_data,
-		      ClientCompare<&RequestTag::reservation,ReadyOption::ignore,true>> reserv_q;
+		      ClientCompare<&RequestTag::reservation,ReadyOption::ignore,true,false>> reserv_q;
 #if REMOVE_2
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::prop_heap_data,
-		      ClientCompare<&RequestTag::proportion>> prop_q;
+		      ClientCompare<&RequestTag::proportion,ReadyOption::ignore,false,true>> prop_q;
 #endif
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::lim_heap_data,
-		      ClientCompare<&RequestTag::limit,ReadyOption::lowers,false>> limit_q;
+		      ClientCompare<&RequestTag::limit,ReadyOption::lowers,false,false>> limit_q;
       c::IndIntruHeap<ClientEntryRef,
 		      ClientEntry,
 		      &ClientEntry::ready_heap_data,
-		      ClientCompare<&RequestTag::proportion,ReadyOption::raises,false>> ready_q;
+		      ClientCompare<&RequestTag::proportion,ReadyOption::raises,false,true>> ready_q;
 
 
       // if all reservations are met and all other requestes are under
@@ -618,22 +623,24 @@ namespace crimson {
 	  // keeps the minimum on proportional tag alone (we're
 	  // instead using a ready queue), we'll have to check each
 	  // client.
-	  double lowest_prop_tag = -1.0;
+	  double lowest_prop_tag = NaN; // mark unset value as NaN
 	  for (auto const &c : client_map) {
-	    // don't use ourselves since we're now in the map
-	    if (c.first != client_it->first) {
+	    // don't use ourselves (or anything else that might be
+	    // listed as idle) since we're now in the map
+	    if (!c.second.idle) {
 	      const auto& entry = c.second.client_entry;
 	      // use either lowest proportion tag or previous proportion tag
-	      double p = entry->has_request() ?
-		entry->next_request().tag.proportion :
-		c.second.get_prev_prop_tag();
-	      if (0.0 != p && (lowest_prop_tag < 0 || p < lowest_prop_tag)) {
-		lowest_prop_tag = p;
+	      if (entry->has_request()) {
+		double p =
+		  entry->next_request().tag.proportion + entry->prop_delta;
+		if (isnan(lowest_prop_tag) || p < lowest_prop_tag) {
+		  lowest_prop_tag = p;
+		}
 	      }
 	    }
 	  }
-	  if (lowest_prop_tag > 0.0) {
-	    client_it->second.set_prev_prop_tag(lowest_prop_tag);
+	  if (!isnan(lowest_prop_tag)) {
+	    client_it->second.client_entry->prop_delta = lowest_prop_tag - time;
 	  }
 	  client_it->second.idle = false;
 	} // if this client was idle
@@ -799,15 +806,21 @@ namespace crimson {
 
 
       // data_mtx should be held when called
-      void reduce_reservation_tags(C client_id) {
+      void reduce_reservation_tags(ClientRec& client) {
+	client.increment_reserv_delta();
+	reserv_q.demote(*client.client_entry);
+      }
+
+
+      // data_mtx should be held when called
+      void reduce_reservation_tags(const C& client_id) {
 	auto client_it = client_map.find(client_id);
 
 	// means the client was cleaned from map; should never happen
 	// as long as cleaning times are long enough
-	if (client_map.end() == client_it) return;
-
-	client_it->second.increment_reserv_delta();
-	reserv_q.demote(*client_it->second.client_entry);
+	if (client_map.end() != client_it) {
+	  reduce_reservation_tags(client_it->second);
+	}
       }
 
 
