@@ -47,12 +47,83 @@ namespace crimson {
       "class C must define operator() to take two const T& and return a bool");
 
 
+    class Iterator {
+      friend IndIntruHeap<I, T, heap_info, C>;
+
+      IndIntruHeap<I, T, heap_info, C> heap;
+      size_t                           index;
+
+      Iterator(IndIntruHeap<I, T, heap_info, C>& _heap, size_t _index) :
+	heap(_heap),
+	index(_index)
+      {
+	// empty
+      }
+
+    public:
+
+      Iterator(Iterator&& other) :
+	heap(other.heap),
+	index(other.index)
+      {
+	// empty
+      }
+
+      Iterator(const Iterator& other) :
+	heap(other.heap),
+	index(other.index)
+      {
+	// empty
+      }
+
+      Iterator& operator=(Iterator&& other) {
+	std::swap(heap, other.heap);
+	std::swap(index, other.index);
+	return *this;
+      }
+
+      Iterator& operator=(const Iterator& other) {
+	heap = other.heap;
+	index = other.index;
+      }
+
+      Iterator& operator++() {
+	if (index <= heap.count) {
+	  ++index;
+	}
+	return *this;
+      }
+
+      bool operator==(const Iterator& other) const {
+	return index == other.index;
+      }
+
+      bool operator!=(const Iterator& other) const {
+	return !(*this == other);
+      }
+
+      T& operator*() {
+	return *heap.data[index];
+      }
+
+      T* operator->() {
+	return &(*heap.data[index]);
+      }
+
+#if 0
+      // the item this iterator refers to
+      void increase() {
+	heap.siftUp(index);
+      }
+#endif
+    }; // class Iterator
+
   protected:
     using index_t = IndIntruHeapData;
 
     std::vector<I> data;
-    index_t count;
-    C comparator;
+    index_t        count;
+    C              comparator;
 
   public:
 
@@ -89,27 +160,30 @@ namespace crimson {
     }
 
     void pop() {
-      std::swap(data[0], data[--count]);
-      intru_data_of(data[0]) = 0;
-      data.pop_back();
-      sift_down(0);
+      remove(0);
     }
 
-    struct Iterator {
-    };
-
-    void remove(Iterator i) {
-#warning unimplemented
+    void remove(Iterator& i) {
+      remove(i.index);
+      i = end();
     }
 
     Iterator search(I& item) {
-#warning unimplemented
-      return Iterator();
+      for (index_t i = 0; i < count; ++i) {
+	if (data[i] == item) {
+	  return Iterator(*this, i);
+	}
+      }
+      return end();
     }
 
     Iterator rev_search(I& item) {
-#warning unimplemented
-      return Iterator();
+      for (index_t i = count - 1; i >= 0; --i) {
+	if (data[i] == item) {
+	  return Iterator(*this, i);
+	}
+      }
+      return end();
     }
 
     void promote(T& item) {
@@ -122,6 +196,14 @@ namespace crimson {
 
     void adjust(T& item) {
       sift(item.*heap_info);
+    }
+
+    Iterator begin() {
+      return Iterator(*this, 0);
+    }
+
+    Iterator end() {
+      return Iterator(*this, count);
     }
 
     friend std::ostream& operator<<(std::ostream& out, const IndIntruHeap& h) {
@@ -167,6 +249,13 @@ namespace crimson {
 
     static index_t& intru_data_of(I& item) {
       return (*item).*heap_info;
+    }
+
+    void remove(index_t i) {
+      std::swap(data[i], data[--count]);
+      intru_data_of(data[i]) = i;
+      data.pop_back();
+      sift_down(i);
     }
 
     // default value of filter parameter to display_sorted

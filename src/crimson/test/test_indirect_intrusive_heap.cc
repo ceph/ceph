@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <memory>
+#include <set>
 
 #include "gtest/gtest.h"
 
@@ -178,7 +179,7 @@ TEST(IndIntruHeap, regular_ptr) {
 }
 
 
-TEST(IndIntruHeap, adjust_down) {
+TEST(IndIntruHeap, demote) {
   crimson::IndIntruHeap<std::unique_ptr<Elem>, Elem, &Elem::heap_data, ElemCompare> heap;
 
   heap.push(std::unique_ptr<Elem>(new Elem(2)));
@@ -191,7 +192,7 @@ TEST(IndIntruHeap, adjust_down) {
 
   heap.top().data = 24;
 
-  heap.adjust_down(heap.top());
+  heap.demote(heap.top());
 
   EXPECT_EQ(-7, heap.top().data);
 
@@ -205,7 +206,7 @@ TEST(IndIntruHeap, adjust_down) {
 }
 
 
-TEST(IndIntruHeap, adjust_down_not) {
+TEST(IndIntruHeap, demote_not) {
   crimson::IndIntruHeap<std::unique_ptr<Elem>, Elem, &Elem::heap_data, ElemCompare> heap;
 
   heap.push(std::unique_ptr<Elem>(new Elem(2)));
@@ -218,7 +219,7 @@ TEST(IndIntruHeap, adjust_down_not) {
 
   heap.top().data = -99;
 
-  heap.adjust_down(heap.top());
+  heap.demote(heap.top());
 
   EXPECT_EQ(-99, heap.top().data);
 
@@ -228,7 +229,7 @@ TEST(IndIntruHeap, adjust_down_not) {
 }
 
 
-TEST(IndIntruHeap, adjust_up_and_adjust_down) {
+TEST(IndIntruHeap, promote_and_demote) {
   crimson::IndIntruHeap<std::shared_ptr<Elem>,
     Elem,
     &Elem::heap_data,
@@ -247,17 +248,17 @@ TEST(IndIntruHeap, adjust_up_and_adjust_down) {
   EXPECT_EQ(-12, heap.top().data);
 
   data1->data = -99;
-  heap.adjust_up(*data1);
+  heap.promote(*data1);
 
   EXPECT_EQ(-99, heap.top().data);
 
   data1->data = 999;
-  heap.adjust_down(*data1);
+  heap.demote(*data1);
 
   EXPECT_EQ(-12, heap.top().data);
 
   data1->data = 9;
-  heap.adjust_up(*data1);
+  heap.promote(*data1);
 
   heap.pop(); // remove -12
   heap.pop(); // remove -7
@@ -369,3 +370,93 @@ TEST(IndIntruHeap, shared_data) {
   heap2.pop();
   EXPECT_EQ(-7, heap2.top().data);
 }
+
+
+TEST(IndIntruHeap, iterator_basics) {
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,Elem,&Elem::heap_data,ElemCompare> heap;
+
+  auto data1 = std::make_shared<Elem>(2);
+  auto data2 = std::make_shared<Elem>(99);
+  auto data3 = std::make_shared<Elem>(1);
+  auto data4 = std::make_shared<Elem>(-5);
+  auto data5 = std::make_shared<Elem>(12);
+  auto data6 = std::make_shared<Elem>(-12);
+  auto data7 = std::make_shared<Elem>(-7);
+
+  heap.push(data1);
+  heap.push(data2);
+  heap.push(data3);
+  heap.push(data4);
+  heap.push(data5);
+  heap.push(data6);
+  heap.push(data7);
+
+  {
+      uint count = 0;
+      for(auto i = heap.begin(); i != heap.end(); ++i) {
+          ++count;
+      }
+
+      EXPECT_EQ(7, count) << "count should be 7";
+  }
+  
+  EXPECT_EQ(-12, heap.begin()->data) <<
+      "first member with * operator must be smallest";
+
+  EXPECT_EQ(-12, (*heap.begin()).data) <<
+      "first member with -> operator must be smallest";
+
+  {
+      std::set<int> values;
+      values.insert(2);
+      values.insert(99);
+      values.insert(1);
+      values.insert(-5);
+      values.insert(12);
+      values.insert(-12);
+      values.insert(-7);
+
+      for(auto i = heap.begin(); i != heap.end(); ++i) {
+          auto v = *i;
+          EXPECT_NE(values.end(), values.find(v.data)) <<
+              "value in heap must be part of original set";
+          values.erase(v.data);
+      }
+      EXPECT_EQ(0, values.size()) << "all values must have been seen";
+  }
+
+  auto seven = heap.search(*data7);
+  EXPECT_NE(heap.end(), seven);
+  EXPECT_EQ(7, seven->data);
+
+#if 0
+  EXPECT_EQ(-12, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(-7, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(-5, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(2, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(12, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(32, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(99, heap.top().data);
+
+  EXPECT_EQ(32, heap2.top().data);
+  heap2.pop();
+  EXPECT_EQ(12, heap2.top().data);
+  heap2.pop();
+  EXPECT_EQ(2, heap2.top().data);
+  heap2.pop();
+  EXPECT_EQ(-12, heap2.top().data);
+  heap2.pop();
+  EXPECT_EQ(99, heap2.top().data);
+  heap2.pop();
+  EXPECT_EQ(-5, heap2.top().data);
+  heap2.pop();
+  EXPECT_EQ(-7, heap2.top().data);
+#endif
+}
+
