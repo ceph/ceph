@@ -274,11 +274,15 @@ void Replayer::set_sources(const PoolImageIds &pool_image_ids)
       for (auto images_it = pool_images.begin();
 	   images_it != pool_images.end();) {
 	if (stop_image_replayer(images_it->second)) {
-	  pool_images.erase(images_it++);
-	}
+	  images_it = pool_images.erase(images_it);
+	} else {
+          ++images_it;
+        }
       }
       if (pool_images.empty()) {
-	m_images.erase(it++);
+	it = m_images.erase(it);
+      } else {
+        ++it;
       }
       continue;
     }
@@ -289,7 +293,9 @@ void Replayer::set_sources(const PoolImageIds &pool_image_ids)
       auto &image_ids = pool_image_ids.at(pool_id);
       if (image_ids.find(ImageIds(images_it->first)) == image_ids.end()) {
 	if (stop_image_replayer(images_it->second)) {
-	  pool_images.erase(images_it++);
+	  images_it = pool_images.erase(images_it);
+	} else {
+	  ++images_it;
 	}
       } else {
 	++images_it;
