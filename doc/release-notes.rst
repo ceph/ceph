@@ -8,7 +8,7 @@ v10.1.0 Jewel (release candidate)
 This major release of Ceph will be the foundation for the next
 long-term stable release.  There have been many major changes since
 the Infernalis (9.2.x) and Hammer (0.94.x) releases, and the upgrade
-process is non-trivial Please read these release notes carefully.
+process is non-trivial. Please read these release notes carefully.
 
 There are a few known issues with this release candidate; see below.
 
@@ -117,9 +117,9 @@ Major Changes from Hammer
     dynamically.
   * You can now store user metadata and set persistent librbd options
     associated with individual images.
-  * The new deep-flatten features allows flattening of a clone and all
+  * The new deep-flatten features allow flattening of a clone and all
     of its snapshots.  (Previously snapshots could not be flattened.)
-  * The export-diff command command is now faster (it uses aio).  There is also
+  * The export-diff command is now faster (it uses aio).  There is also
     a new fast-diff feature.
   * The --size argument can be specified with a suffix for units
     (e.g., ``--size 64G``).
@@ -258,7 +258,7 @@ Upgrading from Hammer
   longer returns the number of bytes read upon success.  Instead, it returns 0
   upon success and a negative value upon failure.
 
-* 'ceph scrub', 'ceph compact' and 'ceph sync force are now DEPRECATED.  Users
+* 'ceph scrub', 'ceph compact' and 'ceph sync force' are now DEPRECATED.  Users
   should instead use 'ceph mon scrub', 'ceph mon compact' and
   'ceph mon sync force'.
 
@@ -285,14 +285,6 @@ Upgrading from Infernalis
 * The rbd legacy image format (version 1) is deprecated with the Jewel release.
   Attempting to create a new version 1 RBD image will result in a warning.
   Future releases of Ceph will remove support for version 1 RBD images.
-
-* The default RBD image features for new images have been updated to enable
-  the following: exclusive lock, object map, fast-diff, and deep-flatten.
-  These features are not currently supported by the RBD kernel driver nor older
-  RBD clients. These features can be disabled on a per-image basis via the RBD
-  CLI or the default features can be updated to the pre-Jewel setting by adding
-  the following to the client section of the Ceph configuration file:
-    rbd default features = 1
 
 * The 'send_pg_creates' and 'map_pg_creates' mon CLI commands are
   obsolete and no longer supported.
