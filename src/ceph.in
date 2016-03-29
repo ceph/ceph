@@ -72,41 +72,45 @@ def get_pythonlib_dir():
     f = "lib.{platform}-{version[0]}.{version[1]}"
     name = f.format(platform=sysconfig.get_platform(),
                     version=sys.version_info)
-    return os.path.join('build', name)
+    return name
 
 if MYDIR.endswith('src') and \
    os.path.exists(os.path.join(MYDIR, '.libs')) and \
    os.path.exists(os.path.join(MYDIR, 'pybind')) and \
    os.path.exists(os.path.join(MYDIR, 'build')):
 
-    pythonlib_path = get_pythonlib_dir()
-    respawn_in_path(os.path.join(MYDIR, '.libs'), "pybind", pythonlib_path)
+    respawn_in_path(os.path.join(MYDIR, '.libs'), "pybind/build",
+                                 get_pythonlib_dir())
     if os.environ.has_key('PATH') and MYDIR not in os.environ['PATH']:
         os.environ['PATH'] += ':' + MYDIR
 
 elif os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
-     and os.path.exists(os.path.join(os.getcwd(), "init-ceph")):
+     and os.path.exists(os.path.join(os.getcwd(), "bin/init-ceph")):
     src_path = None
     for l in open("./CMakeCache.txt").readlines():
         if l.startswith("Ceph_SOURCE_DIR:STATIC="):
             src_path = l.split("=")[1].strip()
+
 
     if src_path is None:
         # Huh, maybe we're not really in a cmake environment?
         pass
     else:
         # Developer mode, but in a cmake build dir instead of the src dir
-        lib_path = os.path.join(os.getcwd(), "src")
+        lib_path = os.path.join(os.getcwd(), "lib")
+        bin_path = os.path.join(os.getcwd(), "bin")
         pybind_path = os.path.join(src_path, "src", "pybind")
-        pythonlib_path = os.path.join(os.getcwd(), "../src/pybind", get_pythonlib_dir())
+
+        import sysconfig
+        f = "lib.{platform}-{version[0]}.{version[1]}"
+        name = f.format(platform=sysconfig.get_platform(),
+                        version=sys.version_info)
+        pythonlib_path = os.path.join(os.getcwd(), "lib/cython_modules", name)
+
         respawn_in_path(lib_path, pybind_path, pythonlib_path)
 
-        sys.path.insert(0, os.path.join(MYDIR, pybind_path))
-        sys.path.insert(0, os.path.join(MYDIR, pythonlib_path))
-
-    # Add src/ to path for e.g. ceph-conf
-    if os.environ.has_key('PATH') and lib_path not in os.environ['PATH']:
-        os.environ['PATH'] += ':' + lib_path
+        if os.environ.has_key('PATH') and bin_path not in os.environ['PATH']:
+            os.environ['PATH'] += ':' + bin_path
 
 import argparse
 import errno
