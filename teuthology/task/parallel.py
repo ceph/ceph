@@ -19,14 +19,23 @@ def task(ctx, config):
        - tasktest:
        - tasktest:
 
-    You can also reference the job from elsewhere:
+    You can also define tasks in a top-level section outside of
+    'tasks:', and reference them here.
 
-    foo:
-      tasktest:
+    The referenced section must contain a list of tasks to run
+    sequentially, or a single task as a dict. The latter is only
+    available for backwards compatibility with existing suites:
+
     tasks:
     - parallel:
-      - foo
-      - tasktest:
+      - tasktest: # task inline
+      - foo       # reference to top-level 'foo' section
+      - bar       # reference to top-level 'bar' section
+    foo:
+    - tasktest1:
+    - tasktest2:
+    bar:
+      tasktest: # note the list syntax from 'foo' is preferred
 
     That is, if the entry is not a dict, we will look it up in the top-level
     config.
@@ -39,10 +48,14 @@ def task(ctx, config):
         for entry in config:
             if not isinstance(entry, dict):
                 entry = ctx.config.get(entry, {})
+                # support the usual list syntax for tasks
+                if isinstance(entry, list):
+                    entry = dict(sequential=entry)
             ((taskname, confg),) = entry.iteritems()
             p.spawn(_run_spawned, ctx, confg, taskname)
 
-def _run_spawned(ctx,config,taskname):
+
+def _run_spawned(ctx, config, taskname):
     """Run one of the tasks (this runs in parallel with others)"""
     mgr = {}
     try:
