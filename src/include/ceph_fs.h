@@ -131,6 +131,9 @@ struct ceph_dir_layout {
 #define CEPH_MSG_OSD_OPREPLY            43
 #define CEPH_MSG_WATCH_NOTIFY           44
 
+/* FSMap subscribers (see all MDS clusters at once) */
+#define CEPH_MSG_FS_MAP                 45
+
 
 /* watch-notify operations */
 enum {
@@ -294,6 +297,9 @@ enum {
 	CEPH_SESSION_FLUSHMSG,
 	CEPH_SESSION_FLUSHMSG_ACK,
 	CEPH_SESSION_FORCE_RO,
+    // A response to REQUEST_OPEN indicating that the client should
+    // permanently desist from contacting the MDS
+	CEPH_SESSION_REJECT
 };
 
 extern const char *ceph_session_op_name(int op);
@@ -350,20 +356,24 @@ enum {
 	// internal op
 	CEPH_MDS_OP_FRAGMENTDIR= 0x01500,
 	CEPH_MDS_OP_EXPORTDIR  = 0x01501,
-	CEPH_MDS_OP_VALIDATE   = 0x01502,
-	CEPH_MDS_OP_FLUSH      = 0x01503
+	CEPH_MDS_OP_FLUSH      = 0x01502,
+	CEPH_MDS_OP_ENQUEUE_SCRUB  = 0x01503,
+	CEPH_MDS_OP_REPAIR_FRAGSTATS = 0x01504,
+	CEPH_MDS_OP_REPAIR_INODESTATS = 0x01505
 };
 
 extern const char *ceph_mds_op_name(int op);
 
 
-#define CEPH_SETATTR_MODE   1
-#define CEPH_SETATTR_UID    2
-#define CEPH_SETATTR_GID    4
-#define CEPH_SETATTR_MTIME  8
-#define CEPH_SETATTR_ATIME 16
-#define CEPH_SETATTR_SIZE  32
-#define CEPH_SETATTR_CTIME 64
+#define CEPH_SETATTR_MODE	(1 << 0)
+#define CEPH_SETATTR_UID	(1 << 1)
+#define CEPH_SETATTR_GID	(1 << 2)
+#define CEPH_SETATTR_MTIME	(1 << 3)
+#define CEPH_SETATTR_ATIME	(1 << 4)
+#define CEPH_SETATTR_SIZE	(1 << 5)
+#define CEPH_SETATTR_CTIME	(1 << 6)
+#define CEPH_SETATTR_MTIME_NOW	(1 << 7)
+#define CEPH_SETATTR_ATIME_NOW	(1 << 8)
 
 /*
  * Ceph setxattr request flags.
@@ -404,11 +414,12 @@ union ceph_mds_request_args {
 		__le32 stripe_count;         /* ... */
 		__le32 object_size;
 		__le32 pool;                 /* if >= 0 and CREATEPOOLID feature */
-		__le32 unused;               /* used to be preferred */
+		__le32 mask;                 /* CEPH_CAP_* */
 		__le64 old_size;             /* if O_TRUNC */
 	} __attribute__ ((packed)) open;
 	struct {
 		__le32 flags;
+		__le32 osdmap_epoch; 	    /* use for set file/dir layout */
 	} __attribute__ ((packed)) setxattr;
 	struct {
 		struct ceph_file_layout layout;
@@ -481,27 +492,6 @@ struct ceph_mds_reply_cap {
 
 #define CEPH_CAP_FLAG_AUTH	(1 << 0)	/* cap is issued by auth mds */
 #define CEPH_CAP_FLAG_RELEASE	(1 << 1)        /* ask client to release the cap */
-
-/* inode record, for bundling with mds reply */
-struct ceph_mds_reply_inode {
-	__le64 ino;
-	__le64 snapid;
-	__le32 rdev;
-	__le64 version;                /* inode version */
-	__le64 xattr_version;          /* version for xattr blob */
-	struct ceph_mds_reply_cap cap; /* caps issued for this inode */
-	struct ceph_file_layout layout;
-	struct ceph_timespec ctime, mtime, atime;
-	__le32 time_warp_seq;
-	__le64 size, max_size, truncate_size;
-	__le32 truncate_seq;
-	__le32 mode, uid, gid;
-	__le32 nlink;
-	__le64 files, subdirs, rbytes, rfiles, rsubdirs;  /* dir stats */
-	struct ceph_timespec rctime;
-	struct ceph_frag_tree_head fragtree;  /* (must be at end of struct) */
-} __attribute__ ((packed));
-/* followed by frag array, symlink string, dir layout, xattr blob */
 
 /* reply_lease follows dname, and reply_inode */
 struct ceph_mds_reply_lease {
@@ -669,7 +659,7 @@ struct ceph_mds_cap_peer {
 /*
  * caps message, used for capability callbacks, acks, requests, etc.
  */
-struct ceph_mds_caps {
+struct ceph_mds_caps_head {
 	__le32 op;                  /* CEPH_CAP_OP_* */
 	__le64 ino, realm;
 	__le64 cap_id;
@@ -688,7 +678,9 @@ struct ceph_mds_caps {
 	/* xattrlock */
 	__le32 xattr_len;
 	__le64 xattr_version;
+} __attribute__ ((packed));
 
+struct ceph_mds_caps_body_legacy {
 	union {
 		/* all except export */
 		struct {

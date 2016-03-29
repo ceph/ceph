@@ -27,8 +27,8 @@
 #define dout_prefix *_dout << name << " "
 
 
-ThreadPool::ThreadPool(CephContext *cct_, string nm, int n, const char *option)
-  : cct(cct_), name(nm),
+ThreadPool::ThreadPool(CephContext *cct_, string nm, string tn, int n, const char *option)
+  : cct(cct_), name(nm), thread_name(tn),
     lockname(nm + "::lock"),
     _lock(lockname.c_str()),  // this should be safe due to declaration order
     _stop(false),
@@ -169,7 +169,7 @@ void ThreadPool::start_threads()
     if (r < 0)
       lderr(cct) << " set_ioprio got " << cpp_strerror(r) << dendl;
 
-    wt->create();
+    wt->create(thread_name.c_str());
   }
 }
 
@@ -286,8 +286,8 @@ void ThreadPool::set_ioprio(int cls, int priority)
   }
 }
 
-ShardedThreadPool::ShardedThreadPool(CephContext *pcct_, string nm, 
-  uint32_t pnum_threads): cct(pcct_),name(nm),lockname(nm + "::lock"), 
+ShardedThreadPool::ShardedThreadPool(CephContext *pcct_, string nm, string tn,
+  uint32_t pnum_threads): cct(pcct_),name(nm),thread_name(tn),lockname(nm + "::lock"),
   shardedpool_lock(lockname.c_str()),num_threads(pnum_threads),stop_threads(0), 
   pause_threads(0),drain_threads(0), num_paused(0), num_drained(0), wq(NULL) {}
 
@@ -356,7 +356,7 @@ void ShardedThreadPool::start_threads()
     WorkThreadSharded *wt = new WorkThreadSharded(this, thread_index);
     ldout(cct, 10) << "start_threads creating and starting " << wt << dendl;
     threads_shardedpool.push_back(wt);
-    wt->create();
+    wt->create(thread_name.c_str());
     thread_index++;
   }
 }

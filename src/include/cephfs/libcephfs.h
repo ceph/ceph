@@ -15,6 +15,7 @@
 #ifndef CEPH_LIB_H
 #define CEPH_LIB_H
 
+#include <features.h>
 #include <utime.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -23,29 +24,22 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// FreeBSD compatibility
-#ifdef __FreeBSD__
-typedef off_t loff_t;
-typedef off_t off64_t;
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define LIBCEPHFS_VER_MAJOR 0
-#define LIBCEPHFS_VER_MINOR 94
-#define LIBCEPHFS_VER_EXTRA 0
+#define LIBCEPHFS_VER_MAJOR 10
+#define LIBCEPHFS_VER_MINOR 0
+#define LIBCEPHFS_VER_EXTRA 2
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
 
 /*
- * On FreeBSD and Apple the offset is 64 bit, but libc doesn't announce it in
- * the way glibc does.
+ * If using glibc check that file offset is 64-bit.
  */
-#if !defined(__FreeBSD__) && !defined(__APPLE__) && !defined(__USE_FILE_OFFSET64)
-# error libceph: must define __USE_FILE_OFFSET64 or readdir results will be corrupted
+#if defined(__GLIBC__) && !defined(__USE_FILE_OFFSET64)
+# error libceph: glibc must define __USE_FILE_OFFSET64 or readdir results will be corrupted
 #endif
 
 /*
@@ -163,6 +157,19 @@ int ceph_create(struct ceph_mount_info **cmount, const char * const id);
  * @returns 0 on success, negative error code on failure
  */
 int ceph_create_with_context(struct ceph_mount_info **cmount, struct CephContext *conf);
+
+
+typedef void *rados_t;
+
+/**
+ * Create a mount handle from a rados_t, for using libcephfs in the
+ * same process as librados.
+ *
+ * @param cmount the mount info handle to initialize
+ * @param cluster reference to already-initialized librados handle
+ * @returns 0 on success, negative error code on failure
+ */
+int ceph_create_from_rados(struct ceph_mount_info **cmount, rados_t cluster);
 
 /**
  * Initialize the filesystem client (but do not mount the filesystem yet)
@@ -1387,8 +1394,8 @@ int ceph_ll_setattr(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct stat *st, int mask, int uid, int gid);
 int ceph_ll_open(struct ceph_mount_info *cmount, struct Inode *in, int flags,
 		 struct Fh **fh, int uid, int gid);
-loff_t ceph_ll_lseek(struct ceph_mount_info *cmount, struct Fh* filehandle,
-		     loff_t offset, int whence);
+off_t ceph_ll_lseek(struct ceph_mount_info *cmount, struct Fh* filehandle,
+		     off_t offset, int whence);
 int ceph_ll_read(struct ceph_mount_info *cmount, struct Fh* filehandle,
 		 int64_t off, uint64_t len, char* buf);
 int ceph_ll_fsync(struct ceph_mount_info *cmount, struct Fh *fh,

@@ -533,6 +533,8 @@ static void generic_usage(bool is_server)
     cout << "\
   --debug_ms N      set message debug level (e.g. 1)\n";
   }
+
+  cout.flush();
 }
 
 void generic_server_usage()

@@ -1,13 +1,18 @@
 unitfiles = \
 	ceph.target \
+        ceph-osd.target \
+        ceph-mon.target \
+        ceph-mds.target \
+        ceph-radosgw.target \
+	ceph-rbd-mirror.target \
 	ceph-mds@.service \
 	ceph-mon@.service \
 	ceph-create-keys@.service \
 	ceph-osd@.service \
 	ceph-radosgw@.service \
-	ceph-disk-activate-journal@.service \
-	ceph-disk-activate@.service \
-	ceph-disk-dmcrypt-activate@.service
+	ceph-rbd-mirror@.service \
+	ceph-disk@.service \
+	rbdmap.service
 
 unitdir = $(systemd_unit_dir)
 
@@ -16,6 +21,4 @@ unit_DATA = $(unitfiles)
 EXTRA_DIST = \
 	$(unitfiles) \
 	ceph \
-	ceph.tmpfiles.d \
-	ceph-rgw.tmpfiles.d.in \
-	ceph-radosgw-prestart.sh
+	ceph.tmpfiles.d

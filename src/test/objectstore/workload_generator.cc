@@ -459,7 +459,7 @@ void WorkloadGenerator::run()
         break;
       }
 
-      c = new C_OnReadable(this, t);
+      c = new C_OnReadable(this);
       goto queue_tx;
     }
 
@@ -469,7 +469,7 @@ void WorkloadGenerator::run()
 
     if (destroy_collection) {
       do_destroy_collection(t, entry, stat_state);
-      c = new C_OnDestroyed(this, t, entry);
+      c = new C_OnDestroyed(this, entry);
       if (!m_num_ops)
         create_coll = true;
     } else {
@@ -480,7 +480,7 @@ void WorkloadGenerator::run()
       do_pgmeta_omap_set(t, entry->m_pgid, entry->m_coll, stat_state);
       do_append_log(t, entry, stat_state);
 
-      c = new C_OnReadable(this, t);
+      c = new C_OnReadable(this);
     }
 
 queue_tx:
@@ -490,7 +490,8 @@ queue_tx:
       c = new C_StatWrapper(stat_state, tmp);
     }
 
-    m_store->queue_transaction(&(entry->m_osr), t, c);
+    m_store->queue_transaction(&(entry->m_osr), std::move(*t), c);
+    delete t;
 
     inc_in_flight();
 

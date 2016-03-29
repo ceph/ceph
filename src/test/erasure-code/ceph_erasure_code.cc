@@ -88,6 +88,7 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
+  g_conf->set_val("erasure_code_dir", ".libs", false, false);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -187,7 +188,6 @@ int main(int argc, char** argv) {
  *   libtool --mode=execute valgrind --tool=memcheck --leak-check=full \
  *      ./ceph_erasure_code \
  *      --parameter plugin=jerasure \
- *      --parameter directory=.libs \
  *      --parameter technique=reed_sol_van \
  *      --parameter k=2 \
  *      --parameter m=2 \

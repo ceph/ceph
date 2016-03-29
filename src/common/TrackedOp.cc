@@ -38,10 +38,9 @@ void OpHistory::on_shutdown()
 
 void OpHistory::insert(utime_t now, TrackedOpRef op)
 {
+  Mutex::Locker history_lock(ops_history_lock);
   if (shutdown)
     return;
-
-  Mutex::Locker history_lock(ops_history_lock);
   duration.insert(make_pair(op->get_duration(), op));
   arrived.insert(make_pair(op->get_initiated(), op));
   cleanup(now);
@@ -88,14 +87,23 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
   f->close_section();
 }
 
-void OpTracker::dump_historic_ops(Formatter *f)
+bool OpTracker::dump_historic_ops(Formatter *f)
 {
+  RWLock::RLocker l(lock);
+  if (!tracking_enabled)
+    return false;
+
   utime_t now = ceph_clock_now(cct);
   history.dump_ops(now, f);
+  return true;
 }
 
-void OpTracker::dump_ops_in_flight(Formatter *f)
+bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
 {
+  RWLock::RLocker l(lock);
+  if (!tracking_enabled)
+    return false;
+
   f->open_object_section("ops_in_flight"); // overall dump
   uint64_t total_ops_in_flight = 0;
   f->open_array_section("ops"); // list of TrackedOps
@@ -103,8 +111,10 @@ void OpTracker::dump_ops_in_flight(Formatter *f)
   for (uint32_t i = 0; i < num_optracker_shards; i++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[i];
     assert(NULL != sdata); 
-    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);    
+    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
     for (xlist<TrackedOp*>::iterator p = sdata->ops_in_flight_sharded.begin(); !p.end(); ++p) {
+      if (print_only_blocked && (now - (*p)->get_initiated() <= complaint_time))
+	break;
       f->open_object_section("op");
       (*p)->dump(now, f);
       f->close_section(); // this TrackedOp
@@ -112,14 +122,20 @@ void OpTracker::dump_ops_in_flight(Formatter *f)
     }
   }
   f->close_section(); // list of TrackedOps
-  f->dump_int("num_ops", total_ops_in_flight);
+  if (print_only_blocked) {
+    f->dump_float("complaint_time", complaint_time);
+    f->dump_int("num_blocked_ops", total_ops_in_flight);
+  } else
+    f->dump_int("num_ops", total_ops_in_flight);
   f->close_section(); // overall dump
+  return true;
 }
 
-void OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
+bool OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
 {
+  RWLock::RLocker l(lock);
   if (!tracking_enabled)
-    return;
+    return false;
 
   uint64_t current_seq = seq.inc();
   uint32_t shard_index = current_seq % num_optracker_shards;
@@ -130,12 +146,13 @@ void OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
     sdata->ops_in_flight_sharded.push_back(i);
     sdata->ops_in_flight_sharded.back()->seq = current_seq;
   }
+  return true;
 }
 
 void OpTracker::unregister_inflight_op(TrackedOp *i)
 {
   // caller checks;
-  assert(tracking_enabled);
+  assert(i->is_tracked);
 
   uint32_t shard_index = i->seq % num_optracker_shards;
   ShardedTrackingData* sdata = sharded_in_flight_list[shard_index];
@@ -146,12 +163,18 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
     i->xitem.remove_myself();
   }
   i->_unregistered();
-  utime_t now = ceph_clock_now(cct);
-  history.insert(now, TrackedOpRef(i));
+
+  if (!tracking_enabled)
+    delete i;
+  else {
+    utime_t now = ceph_clock_now(cct);
+    history.insert(now, TrackedOpRef(i));
+  }
 }
 
 bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 {
+  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
@@ -192,8 +215,7 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 
   int slow = 0;     // total slow
   int warned = 0;   // total logged
-  for (uint32_t iter = 0;
-       iter < num_optracker_shards && warned < log_threshold; iter++) {
+  for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[iter];
     assert(NULL != sdata);
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
@@ -204,12 +226,10 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
       slow++;
 
       // exponential backoff of warning intervals
-      if (((*i)->get_initiated() +
-	 (complaint_time * (*i)->warn_interval_multiplier)) < now) {
-      // will warn
+      if (warned < log_threshold &&
+         ((*i)->get_initiated() + (complaint_time * (*i)->warn_interval_multiplier)) < now) {
+        // will warn, increase counter
         warned++;
-        if (warned > log_threshold)
-          break;
 
         utime_t age = now - (*i)->get_initiated();
         stringstream ss;
@@ -236,18 +256,14 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
     warning_vector[0] = ss.str();
   }
 
-  return warned;
+  return warned > 0;
 }
 
 void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
 {
   h->clear();
-
   utime_t now = ceph_clock_now(NULL);
-  unsigned bin = 30;
-  uint32_t lb = 1 << (bin-1);  // lower bound for this bin
-  int count = 0;
-  
+
   for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[iter];
     assert(NULL != sdata);
@@ -257,26 +273,14 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
                                                                !i.end(); ++i) {
       utime_t age = now - (*i)->get_initiated();
       uint32_t ms = (long)(age * 1000.0);
-      if (ms >= lb) {
-        count++;
-        continue;
-      }
-      if (count)
-        h->set_bin(bin, count);
-      while (lb > ms) {
-        bin--;
-        lb >>= 1;
-      }
-      count = 1;
+      h->add(ms);
     }
   }
-  if (count)
-    h->set_bin(bin, count);
 }
 
 void OpTracker::mark_event(TrackedOp *op, const string &dest, utime_t time)
 {
-  if (!tracking_enabled)
+  if (!op->is_tracked)
     return;
   return _mark_event(op, dest, time);
 }
@@ -294,7 +298,7 @@ void OpTracker::_mark_event(TrackedOp *op, const string &evt,
 }
 
 void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
-  if (!tracker->tracking_enabled) {
+  if (!op->is_tracked) {
     op->_unregistered();
     delete op;
     return;
@@ -306,7 +310,7 @@ void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
 
 void TrackedOp::mark_event(const string &event)
 {
-  if (!tracker->tracking_enabled)
+  if (!is_tracked)
     return;
 
   utime_t now = ceph_clock_now(g_ceph_context);
@@ -320,6 +324,9 @@ void TrackedOp::mark_event(const string &event)
 
 void TrackedOp::dump(utime_t now, Formatter *f) const
 {
+  // Ignore if still in the constructor
+  if (!is_tracked)
+    return;
   stringstream name;
   _dump_op_descriptor_unlocked(name);
   f->dump_string("description", name.str().c_str()); // this TrackedOp

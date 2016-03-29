@@ -99,8 +99,8 @@ void RecoveryQueue::_start(CInode *in)
 
     C_MDC_Recover *fin = new C_MDC_Recover(this, in);
     filer.probe(in->inode.ino, &in->inode.layout, in->last,
-		      pi->get_max_size(), &fin->size, &fin->mtime, false,
-		      0, fin);
+		pi->get_max_size(), &fin->size, &fin->mtime, false,
+		0, fin);
   } else {
     dout(10) << "skipping " << in->inode.size << " " << *in << dendl;
     in->state_clear(CInode::STATE_RECOVERING);

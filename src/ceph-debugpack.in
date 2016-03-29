@@ -4,11 +4,11 @@
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     BINDIR=.
-    LIBDIR=.
+    LIBEXECDIR=.
     ETCDIR=.
 else
     BINDIR=@bindir@
-    LIBDIR=@libdir@/ceph
+    LIBEXECDIR=@libexecdir@/ceph
     ETCDIR=@sysconfdir@/ceph
 fi
 
@@ -32,7 +32,7 @@ wait_pid_exit() {
 	fi
 }
 
-. $LIBDIR/ceph_common.sh
+. $LIBEXECDIR/ceph_common.sh
 
 dest_tar=''
 while [ $# -ge 1 ]; do

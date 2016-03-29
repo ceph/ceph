@@ -40,7 +40,7 @@ struct Subscription {
 struct MonSession : public RefCountedObject {
   ConnectionRef con;
   entity_inst_t inst;
-  utime_t until;
+  utime_t session_timeout;
   utime_t time_established;
   bool closed;
   xlist<MonSession*>::item item;
@@ -59,6 +59,7 @@ struct MonSession : public RefCountedObject {
   uint64_t proxy_tid;
 
   MonSession(const entity_inst_t& i, Connection *c) :
+    RefCountedObject(g_ceph_context),
     con(c), inst(i), closed(false), item(this),
     auid(0),
     global_id(0),
@@ -203,11 +204,11 @@ struct MonSessionMap {
   }
 };
 
-inline ostream& operator<<(ostream& out, const MonSession *s)
+inline ostream& operator<<(ostream& out, const MonSession& s)
 {
-  out << "MonSession: " << s->inst << " is "
-      << (s->closed ? "closed" : "open");
-  out << s->caps;
+  out << "MonSession(" << s.inst << " is "
+      << (s.closed ? "closed" : "open");
+  out << s.caps << ")";
   return out;
 }
 

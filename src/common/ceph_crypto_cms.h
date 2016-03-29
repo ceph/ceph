@@ -1,7 +1,7 @@
 #ifndef CEPH_CRYPTO_CMS_H
 #define CEPH_CRYPTO_CMS_H
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 
 class CephContext;
 

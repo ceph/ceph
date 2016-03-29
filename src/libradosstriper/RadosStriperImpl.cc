@@ -105,8 +105,17 @@
 /// format of the extension of rados objects created for a given striped object
 #define RADOS_OBJECT_EXTENSION_FORMAT ".%016llx"
 
-/// default object layout (external declaration)
-extern ceph_file_layout g_default_file_layout;
+/// default object layout
+struct ceph_file_layout default_file_layout = {
+ fl_stripe_unit: init_le32(1<<22),
+ fl_stripe_count: init_le32(1),
+ fl_object_size: init_le32(1<<22),
+ fl_cas_hash: init_le32(0),
+ fl_object_stripe_unit: init_le32(0),
+ fl_unused: init_le32(-1),
+ fl_pg_pool : init_le32(-1),
+};
+
 
 ///////////////////////// CompletionData /////////////////////////////
 
@@ -204,7 +213,7 @@ libradosstriper::RadosStriperImpl::RadosExclusiveLock::~RadosExclusiveLock() {
 
 libradosstriper::RadosStriperImpl::RadosStriperImpl(librados::IoCtx& ioctx, librados::IoCtxImpl *ioctx_impl) :
   m_refCnt(0),lock("RadosStriper Refcont", false, false), m_radosCluster(ioctx), m_ioCtx(ioctx), m_ioCtxImpl(ioctx_impl),
-  m_layout(g_default_file_layout) {}
+  m_layout(default_file_layout) {}
 
 ///////////////////////// layout /////////////////////////////
 
@@ -458,15 +467,18 @@ int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
   vector<ObjectExtent> *extents = new vector<ObjectExtent>();
   if (read_len > 0) {
     std::string format = soid + RADOS_OBJECT_EXTENSION_FORMAT;
-    Striper::file_to_extents(cct(), format.c_str(), &layout, off, read_len, 0, *extents);
+    file_layout_t l;
+    l.from_legacy(layout);
+    Striper::file_to_extents(cct(), format.c_str(), &l, off, read_len,
+			     0, *extents);
   }
   
   // create a completion object and transfer ownership of extents and resultbl
   vector<bufferlist> *resultbl = new vector<bufferlist>(extents->size());
-  c->is_read = true;
-  c->io = m_ioCtxImpl;
   ReadCompletionData *cdata = new ReadCompletionData(this, soid, lockCookie, c,
 						     bl, extents, resultbl);
+  c->is_read = true;
+  c->io = m_ioCtxImpl;
   libradosstriper::MultiAioCompletionImpl *nc = new libradosstriper::MultiAioCompletionImpl;
   nc->set_complete_callback(cdata, striper_read_aio_req_complete);
   // go through the extents
@@ -550,7 +562,7 @@ int libradosstriper::RadosStriperImpl::stat(const std::string& soid, uint64_t *p
   return 0;
 }
 
-int libradosstriper::RadosStriperImpl::remove(const std::string& soid)
+int libradosstriper::RadosStriperImpl::remove(const std::string& soid, int flags)
 {
   std::string firstObjOid = getObjectId(soid, 0);
   try {
@@ -591,11 +603,15 @@ int libradosstriper::RadosStriperImpl::remove(const std::string& soid)
     // delete rados objects in reverse order
     int rcr = 0;
     for (int i = nb_objects-1; i >= 0; i--) {
-      rcr = m_ioCtx.remove(getObjectId(soid, i));
+      if (flags == 0) {
+        rcr = m_ioCtx.remove(getObjectId(soid, i));
+      } else {
+        rcr = m_ioCtx.remove(getObjectId(soid, i), flags);  
+      }
       if (rcr < 0 and -ENOENT != rcr) {
         lderr(cct()) << "RadosStriperImpl::remove : deletion incomplete for " << soid
-  		   << ", as " << getObjectId(soid, i) << " could not be deleted (rc=" << rc << ")"
-  		   << dendl;
+		     << ", as " << getObjectId(soid, i) << " could not be deleted (rc=" << rc << ")"
+		     << dendl;
         break;
       }
     }
@@ -605,6 +621,7 @@ int libradosstriper::RadosStriperImpl::remove(const std::string& soid)
     // errror caught when trying to take the exclusive lock
     return e.m_code;
   }
+
 }
 
 int libradosstriper::RadosStriperImpl::trunc(const std::string& soid, uint64_t size)
@@ -756,7 +773,9 @@ libradosstriper::RadosStriperImpl::internal_aio_write(const std::string& soid,
   // get list of extents to be written to
   vector<ObjectExtent> extents;
   std::string format = soid + RADOS_OBJECT_EXTENSION_FORMAT;
-  Striper::file_to_extents(cct(), format.c_str(), &layout, off, len, 0, extents);
+  file_layout_t l;
+  l.from_legacy(layout);
+  Striper::file_to_extents(cct(), format.c_str(), &l, off, len, 0, extents);
   // go through the extents
   int r = 0;
   for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
@@ -824,9 +843,10 @@ int libradosstriper::RadosStriperImpl::extract_sizet_attr
   return 0;
 }
 
-int libradosstriper::RadosStriperImpl::internal_get_layout_and_size(const std::string& oid,
-								    ceph_file_layout *layout,
-								    uint64_t *size) 
+int libradosstriper::RadosStriperImpl::internal_get_layout_and_size(
+  const std::string& oid,
+  ceph_file_layout *layout,
+  uint64_t *size)
 {
   // get external attributes of the first rados object
   std::map<std::string, bufferlist> attrs;
@@ -848,10 +868,11 @@ int libradosstriper::RadosStriperImpl::internal_get_layout_and_size(const std::s
   return rc;
 }
 
-int libradosstriper::RadosStriperImpl::openStripedObjectForRead(const std::string& soid,
-								ceph_file_layout *layout,
-								uint64_t *size,
-								std::string *lockCookie)
+int libradosstriper::RadosStriperImpl::openStripedObjectForRead(
+  const std::string& soid,
+  ceph_file_layout *layout,
+  uint64_t *size,
+  std::string *lockCookie)
 {
   // take a lock the first rados object, if it exists and gets its size
   // check, lock and size reading must be atomic and are thus done within a single operation
@@ -1028,7 +1049,9 @@ int libradosstriper::RadosStriperImpl::truncate(const std::string& soid,
     }
     if (exists) {
       // truncate
-      uint64_t new_object_size = Striper::object_truncate_size(cct(), &layout, objectno, size);
+      file_layout_t l;
+      l.from_legacy(layout);
+      uint64_t new_object_size = Striper::object_truncate_size(cct(), &l, objectno, size);
       int rc;
       if (new_object_size > 0 or 0 == objectno) {
 	rc = m_ioCtx.trunc(getObjectId(soid, objectno), new_object_size);

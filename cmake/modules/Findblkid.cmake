@@ -46,6 +46,11 @@ else ()
   endif ()
 endif ()
 
+# handle the QUIETLY and REQUIRED arguments and set UUID_FOUND to TRUE if
+# all listed variables are TRUE
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(blkid DEFAULT_MSG BLKID_LIBRARIES BLKID_INCLUDE_DIR)
+
 mark_as_advanced(
   BLKID_LIBRARY
   BLKID_I

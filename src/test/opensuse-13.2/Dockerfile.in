@@ -27,4 +27,4 @@ RUN cd /root ; ./install-deps.sh
 # development tools
 # nc (ncat) is required to run make check on firefly only (giant+ do not use nc)
 RUN zypper --non-interactive install ccache valgrind gdb git python-virtualenv gdisk kpartx hdparm ncat sudo xmlstarlet parted
-RUN useradd -M --uid %%user_id%% %%USER%% && echo '%%USER%% ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+RUN if test %%USER%% != root ; then useradd -M --uid %%user_id%% %%USER%% && echo '%%USER%% ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers ; fi

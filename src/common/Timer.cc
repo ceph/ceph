@@ -33,7 +33,7 @@
 class SafeTimerThread : public Thread {
   SafeTimer *parent;
 public:
-  SafeTimerThread(SafeTimer *s) : parent(s) {}
+  explicit SafeTimerThread(SafeTimer *s) : parent(s) {}
   void *entry() {
     parent->timer_thread();
     return NULL;
@@ -62,7 +62,7 @@ void SafeTimer::init()
 {
   ldout(cct,10) << "init" << dendl;
   thread = new SafeTimerThread(this);
-  thread->create();
+  thread->create("safe_timer");
 }
 
 void SafeTimer::shutdown()

@@ -58,7 +58,7 @@ class ServerDispatcher : public Dispatcher {
       messages.pop_front();
       return m;
     }
-    void _process(Message *m, ThreadPool::TPHandle &handle) {
+    void _process(Message *m, ThreadPool::TPHandle &handle) override {
       MOSDOp *osd_op = static_cast<MOSDOp*>(m);
       MOSDOpReply *reply = new MOSDOpReply(osd_op, 0, 0, 0, false);
       m->get_connection()->send_message(reply);
@@ -72,7 +72,7 @@ class ServerDispatcher : public Dispatcher {
 
  public:
   ServerDispatcher(int threads, uint64_t delay): Dispatcher(g_ceph_context), think_time(delay),
-    op_tp(g_ceph_context, "ServerDispatcher::op_tp", threads, "serverdispatcher_op_threads"),
+    op_tp(g_ceph_context, "ServerDispatcher::op_tp", "tp_serv_disp", threads, "serverdispatcher_op_threads"),
     op_wq(30, 30, &op_tp) {
     op_tp.start();
   }

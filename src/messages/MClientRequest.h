@@ -46,7 +46,7 @@
 // metadata ops.
 
 class MClientRequest : public Message {
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -93,6 +93,17 @@ private:
 public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
   epoch_t get_mdsmap_epoch() { return head.mdsmap_epoch; }
+  epoch_t get_osdmap_epoch() const {
+    assert(head.op == CEPH_MDS_OP_SETXATTR);
+    if (header.version >= 3)
+      return head.args.setxattr.osdmap_epoch;
+    else
+      return 0;
+  }
+  void set_osdmap_epoch(epoch_t e) {
+    assert(head.op == CEPH_MDS_OP_SETXATTR);
+    head.args.setxattr.osdmap_epoch = e;
+  }
 
   metareqid_t get_reqid() {
     // FIXME: for now, assume clients always have 1 incarnation

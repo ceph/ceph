@@ -61,7 +61,7 @@ headers for C/C++ under ``/usr/include/rados``. ::
 Getting librados for Python
 ---------------------------
 
-The ``rados.py`` modules provides ``librados`` support to Python
+The ``rados`` module provides ``librados`` support to Python
 applications. The ``librados-dev`` package for Debian/Ubuntu
 and the ``librados2-devel`` package for RHEL/CentOS will install the
 ``python-rados`` package for you. You may install ``python-rados``
@@ -353,8 +353,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 			ret = cluster.init2(user_name, cluster_name, flags);
 			if (ret < 0) {
 				std::cerr << "Couldn't initialize the cluster handle! error " << ret << std::endl;
-				ret = EXIT_FAILURE;
-				return 1;
+				return EXIT_FAILURE;
 			} else {
 				std::cout << "Created a cluster handle." << std::endl;
 			}
@@ -365,8 +364,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 			ret = cluster.conf_read_file("/etc/ceph/ceph.conf");	
 			if (ret < 0) {
 				std::cerr << "Couldn't read the Ceph configuration file! error " << ret << std::endl;
-				ret = EXIT_FAILURE;
-				return 1;
+				return EXIT_FAILURE;
 			} else {
 				std::cout << "Read the Ceph configuration file." << std::endl;
 			}
@@ -377,8 +375,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 			ret = cluster.conf_parse_argv(argc, argv);
 			if (ret < 0) {
 				std::cerr << "Couldn't parse command line options! error " << ret << std::endl;
-				ret = EXIT_FAILURE;
-				return 1;
+				return EXIT_FAILURE;
 			} else {
 				std::cout << "Parsed command line options." << std::endl;
 			}
@@ -389,8 +386,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 			ret = cluster.connect();
 			if (ret < 0) {
 				std::cerr << "Couldn't connect to cluster! error " << ret << std::endl;
-				ret = EXIT_FAILURE;
-				return 1;
+				return EXIT_FAILURE;
 			} else {
 				std::cout << "Connected to the cluster." << std::endl;
 			}

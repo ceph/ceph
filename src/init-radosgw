@@ -100,11 +100,15 @@ case "$1" in
 
             echo "Starting $name..."
 	    if [ $DEBIAN -eq 1 ]; then
-		start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
+		start-stop-daemon --start -u $user -x $RADOSGW -p /var/run/ceph/client-$name.pid -- -n $name
 	    elif [ -n "$SYSTEMD_RUN" ]; then
                 $SYSTEMD_RUN -r su "$user" -c "ulimit -n 32768; $RADOSGW -n $name"
             else
-		ulimit -n 32768
+                ulimit -n 32768
+                core_limit=`ceph-conf -n $name 'core file limit'`
+                if [ -z $core_limit ]; then
+                    DAEMON_COREFILE_LIMIT=$core_limit
+                fi
                 daemon --user="$user" "$RADOSGW -n $name"
             fi
         done
@@ -114,7 +118,7 @@ case "$1" in
 	if [ $DEBIAN -eq 1 ]; then
             start-stop-daemon --stop --signal HUP -x $RADOSGW --oknodo
 	else
-            killproc $RADOSGW -SIGHUP
+            killproc $RADOSGW -HUP
 	fi
 	;;
     restart|force-reload)

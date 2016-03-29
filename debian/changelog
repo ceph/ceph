@@ -1,3 +1,57 @@
+ceph (10.1.0-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Thu, 24 Mar 2016 10:53:47 +0000
+
+ceph (10.0.5) stable; urgency=low
+
+  * New upstream release (just fixing changelog)
+
+ -- Sage Weil <sage@newdream.net>  Fri, 11 Mar 2016 12:04:26 -0500
+
+ceph (10.0.4) stable; urgency=low
+
+  * New upstream release 
+
+ -- Sage Weil <sage@newdream.net>  Thu, 03 Mar 2016 13:34:18 -0500
+
+ceph (10.0.3) stable; urgency=low
+
+  * New upstream release 
+
+ -- Sage Weil <sage@newdream.net>  Mon, 08 Feb 2016 17:10:25 -0500
+
+ceph (10.0.2-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Wed, 13 Jan 2016 16:22:26 +0000
+
+ceph (10.0.1-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Mon, 14 Dec 2015 23:48:54 +0000
+
+ceph (10.0.0-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Mon, 16 Nov 2015 21:41:53 +0000
+
+ceph (9.2.0-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Jenkins Build Slave User <jenkins-build@jenkins-slave-wheezy.localdomain>  Tue, 03 Nov 2015 16:58:32 +0000
+
+ceph (9.1.0-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Tue, 13 Oct 2015 05:56:36 -0700
+
 ceph (9.0.3-1) stable; urgency=low
 
   * New upstream release

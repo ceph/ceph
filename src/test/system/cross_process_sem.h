@@ -35,6 +35,6 @@ public:
   int reinit(int dval);
 
 private:
-  CrossProcessSem(struct cross_process_sem_data_t *data);
+  explicit CrossProcessSem(struct cross_process_sem_data_t *data);
   struct cross_process_sem_data_t *m_data;
 };

@@ -42,7 +42,7 @@ class DumbBackend : public Backend {
   class SyncThread : public Thread {
     DumbBackend *backend;
   public:
-    SyncThread(DumbBackend *backend) : backend(backend) {}
+    explicit SyncThread(DumbBackend *backend) : backend(backend) {}
     void *entry() {
       backend->sync_loop();
       return 0;
@@ -84,8 +84,7 @@ class DumbBackend : public Backend {
     bool _empty() {
       return item_queue.empty();
     }
-    using ThreadPool::WorkQueue<write_item>::_process;
-    void _process(write_item *item) {
+    void _process(write_item *item, ThreadPool::TPHandle &) override {
       return backend->_write(
 	item->oid,
 	item->offset,
@@ -123,13 +122,13 @@ public:
       do_fadvise(do_fadvise),
       sync_interval(sync_interval),
       sync_fd(sync_fd),
-      tp(cct, "DumbBackend::tp", worker_threads),
+      tp(cct, "DumbBackend::tp", "tp_dumb_backend", worker_threads),
       thread(this),
       sync_loop_mutex("DumbBackend::sync_loop_mutex"),
       sync_loop_stop(0),
       pending_commit_mutex("DumbBackend::pending_commit_mutex"),
       queue(this, 20, &tp) {
-    thread.create();
+    thread.create("thread");
     tp.start();
     for (unsigned i = 0; i < 10*worker_threads; ++i) {
       sem.Put();

@@ -231,14 +231,15 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw extended http attrs``
 
-:Description: Add new set of attributes that could be set on an object. These 
-              extra attributes can be set through HTTP header fields when 
-              putting the objects. If set, these attributes will return as HTTP 
-              fields when doing GET/HEAD on the object.
+:Description: Add new set of attributes that could be set on an entity
+              (user, bucket or object). These extra attributes can be set
+              through HTTP header fields when putting the entity or modifying
+              it using POST method. If set, these attributes will return as
+              HTTP  fields when doing GET/HEAD on the entity.
 
 :Type: String
 :Default: None
-:Example: "content_foo, content_bar"
+:Example: "content_foo, content_bar, x-foo-bar"
 
 
 ``rgw exit timeout secs``
@@ -708,9 +709,17 @@ configuration.
 ``rgw region root pool``
 
 :Description: The pool for storing all region-specific information.
+              Not used in Ceph version ``Jewel``.
 :Type: String
 :Default: ``.rgw.root``
 
+.. versionadded:: Jewel
+
+``rgw zonegroup root pool``
+
+:Description: The pool for storing all zonegroup-specific information.
+:Type: String
+:Default: ``.rgw.root``
 
 
 .. versionadded:: v.67
@@ -974,6 +983,11 @@ Keystone Settings
 :Default: ``15 * 60``
 
 
+``rgw keystone verify ssl`
+
+:Description: Verify SSL certificates while making token requests to keystone.
+:Type: Boolean
+:Default: ``true``
 
 .. _Architecture: ../../architecture#data-striping
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/

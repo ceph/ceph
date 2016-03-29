@@ -16,15 +16,20 @@
 #ifndef CEPH_DISPATCHER_H
 #define CEPH_DISPATCHER_H
 
-#include "Message.h"
-#include "common/config.h"
-#include "auth/Auth.h"
+#include "include/assert.h"
+#include "include/buffer_fwd.h"
+#include "include/assert.h"
 
 class Messenger;
+class Message;
+class Connection;
+class AuthAuthorizer;
+class CryptoKey;
+class CephContext;
 
 class Dispatcher {
 public:
-  Dispatcher(CephContext *cct_)
+  explicit Dispatcher(CephContext *cct_)
     : cct(cct_)
   {
   }
@@ -183,9 +188,13 @@ public:
    * @return True if we were able to prove or disprove correctness of
    * authorizer, false otherwise.
    */
-  virtual bool ms_verify_authorizer(Connection *con, int peer_type,
-				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-				    bool& isvalid, CryptoKey& session_key) { return false; }
+  virtual bool ms_verify_authorizer(Connection *con,
+				    int peer_type,
+				    int protocol,
+				    ceph::bufferlist& authorizer,
+				    ceph::bufferlist& authorizer_reply,
+				    bool& isvalid,
+				    CryptoKey& session_key) { return false; }
   /**
    * @} //Authentication
    */

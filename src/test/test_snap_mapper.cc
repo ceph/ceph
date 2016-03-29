@@ -45,7 +45,7 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   typedef ceph::shared_ptr<_Op> Op;
   struct Remove : public _Op {
     set<string> to_remove;
-    Remove(const set<string> &to_remove) : to_remove(to_remove) {}
+    explicit Remove(const set<string> &to_remove) : to_remove(to_remove) {}
     void operate(map<string, bufferlist> *store) {
       for (set<string>::iterator i = to_remove.begin();
 	   i != to_remove.end();
@@ -56,7 +56,7 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   };
   struct Insert : public _Op {
     map<string, bufferlist> to_insert;
-    Insert(const map<string, bufferlist> &to_insert) : to_insert(to_insert) {}
+    explicit Insert(const map<string, bufferlist> &to_insert) : to_insert(to_insert) {}
     void operate(map<string, bufferlist> *store) {
       for (map<string, bufferlist>::iterator i = to_insert.begin();
 	   i != to_insert.end();
@@ -68,7 +68,7 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   };
   struct Callback : public _Op {
     Context *context;
-    Callback(Context *c) : context(c) {}
+    explicit Callback(Context *c) : context(c) {}
     void operate(map<string, bufferlist> *store) {
       context->complete(0);
     }
@@ -103,7 +103,7 @@ private:
     bool paused;
     list<Op> queue;
   public:
-    Doer(PausyAsyncMap *parent) :
+    explicit Doer(PausyAsyncMap *parent) :
       parent(parent), lock("Doer lock"), stopping(0), paused(false) {}
     virtual void *entry() {
       while (1) {
@@ -167,7 +167,7 @@ private:
 
 public:
   PausyAsyncMap() : lock("PausyAsyncMap"), doer(this) {
-    doer.create();
+    doer.create("doer");
   }
   ~PausyAsyncMap() {
     doer.join();

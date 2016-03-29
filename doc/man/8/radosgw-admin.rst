@@ -148,6 +148,7 @@ which are as follows:
 
 :command:`log show`
   Dump a log from specific object or (bucket + date + bucket-id).
+  (NOTE: required to specify formatting of date to "YYYY-MM-DD-hh")
 
 :command:`log rm`
   Remove log object.
@@ -216,6 +217,12 @@ which are as follows:
 
 :command:`replicalog delete`
   Delete replica metadata log entry.
+
+:command:`orphans find`
+  Init and run search for leaked rados objects
+
+:command:`orphans finish`
+  Clean up search for leaked rados objects
 
 
 Options
@@ -316,10 +323,6 @@ Options
 
    Remove all objects before bucket removal.
 
-.. option:: --lazy-remove
-
-   Defer removal of object tail.
-
 .. option:: --metadata-key=<key>
 
 	Key to retrieve metadata from with ``metadata get``.
@@ -404,6 +407,18 @@ Quota Options
 	Scope of quota (bucket, user).
 
 
+Orphans Search Options
+======================
+
+.. option:: --pool
+
+	Data pool to scan for leaked rados objects
+
+.. option:: --num-shards
+
+	Number of shards to use for keeping the temporary scan info
+
+
 Examples
 ========
 
@@ -436,7 +451,7 @@ Remove a bucket::
 
 Show the logs of a bucket from April 1st, 2012::
 
-        $ radosgw-admin log show --bucket=foo --date=2012-04-01
+        $ radosgw-admin log show --bucket=foo --date=2012-04-01-01 --bucket-id=default.14193.1
 
 Show usage information for user from March 1st to (but not including) April 1st, 2012::
 

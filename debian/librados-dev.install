@@ -1,5 +1,6 @@
 usr/bin/librados-config
 usr/include/rados/buffer.h
+usr/include/rados/buffer_fwd.h
 usr/include/rados/crc32c.h
 usr/include/rados/librados.h
 usr/include/rados/librados.hpp

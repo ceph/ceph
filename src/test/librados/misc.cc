@@ -21,7 +21,6 @@
 #include <string>
 
 using namespace librados;
-using ceph::buffer;
 using std::map;
 using std::ostringstream;
 using std::string;
@@ -39,6 +38,16 @@ TEST(LibRadosMiscVersion, VersionPP) {
   Rados::version(&major, &minor, &extra);
 }
 
+static void test_rados_log_cb(void *arg,
+                              const char *line,
+                              const char *who,
+                              uint64_t sec, uint64_t nsec,
+                              uint64_t seq, const char *level,
+                              const char *msg)
+{
+    std::cerr << "monitor log callback invoked" << std::endl;
+}
+
 TEST(LibRadosMiscConnectFailure, ConnectFailure) {
   rados_t cluster;
 
@@ -50,7 +59,13 @@ TEST(LibRadosMiscConnectFailure, ConnectFailure) {
   ASSERT_EQ(0, rados_conf_read_file(cluster, NULL));
   ASSERT_EQ(0, rados_conf_parse_env(cluster, NULL));
 
-  ASSERT_EQ(0, rados_conf_set(cluster, "client_mount_timeout", "0.000001"));
+  ASSERT_EQ(0, rados_conf_set(cluster, "client_mount_timeout", "0.000000001"));
+  ASSERT_EQ(0, rados_conf_set(cluster, "debug_monc", "20"));
+  ASSERT_EQ(0, rados_conf_set(cluster, "debug_ms", "1"));
+  ASSERT_EQ(0, rados_conf_set(cluster, "log_to_stderr", "true"));
+
+  ASSERT_EQ(-ENOTCONN, rados_monitor_log(cluster, "error",
+                                         test_rados_log_cb, NULL));
 
   ASSERT_NE(0, rados_connect(cluster));
   ASSERT_NE(0, rados_connect(cluster));
@@ -610,18 +625,18 @@ TEST_F(LibRadosMiscPP, CopyPP) {
   {
     // pass future version
     ObjectWriteOperation op;
-    op.copy_from("foo", ioctx, uv + 1, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+    op.copy_from2("foo", ioctx, uv + 1, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     ASSERT_EQ(-EOVERFLOW, ioctx.operate("foo.copy", &op));
   }
   {
     // pass old version
     ObjectWriteOperation op;
-    op.copy_from("foo", ioctx, uv - 1, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+    op.copy_from2("foo", ioctx, uv - 1, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     ASSERT_EQ(-ERANGE, ioctx.operate("foo.copy", &op));
   }
   {
     ObjectWriteOperation op;
-    op.copy_from("foo", ioctx, uv, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+    op.copy_from2("foo", ioctx, uv, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     ASSERT_EQ(0, ioctx.operate("foo.copy", &op));
 
     bufferlist bl2, x2;
@@ -634,7 +649,7 @@ TEST_F(LibRadosMiscPP, CopyPP) {
   // small object without a version
   {
     ObjectWriteOperation op;
-    op.copy_from("foo", ioctx, 0, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+    op.copy_from2("foo", ioctx, 0, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     ASSERT_EQ(0, ioctx.operate("foo.copy2", &op));
 
     bufferlist bl2, x2;
@@ -655,7 +670,7 @@ TEST_F(LibRadosMiscPP, CopyPP) {
 
   {
     ObjectWriteOperation op;
-    op.copy_from("big", ioctx, ioctx.get_last_version(), LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+    op.copy_from2("big", ioctx, ioctx.get_last_version(), LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     ASSERT_EQ(0, ioctx.operate("big.copy", &op));
 
     bufferlist bl2, x2;
@@ -667,7 +682,7 @@ TEST_F(LibRadosMiscPP, CopyPP) {
 
   {
     ObjectWriteOperation op;
-    op.copy_from("big", ioctx, 0, LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL);
+    op.copy_from2("big", ioctx, 0, LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL);
     ASSERT_EQ(0, ioctx.operate("big.copy2", &op));
 
     bufferlist bl2, x2;
@@ -726,7 +741,7 @@ TEST_F(LibRadosTwoPoolsECPP, CopyFrom) {
 
   version_t uv = src_ioctx.get_last_version();
   ObjectWriteOperation op;
-  op.copy_from("foo", src_ioctx, uv, 0);
+  op.copy_from("foo", src_ioctx, uv);
   ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo.copy", &op));
 }
 
@@ -783,25 +798,25 @@ TEST_F(LibRadosMiscPP, CopyScrubPP) {
 
   {
     ObjectWriteOperation op;
-    op.copy_from("small", ioctx, 0, 0);
+    op.copy_from("small", ioctx, 0);
     ASSERT_EQ(0, ioctx.operate("small.copy", &op));
   }
 
   {
     ObjectWriteOperation op;
-    op.copy_from("big", ioctx, 0, 0);
+    op.copy_from("big", ioctx, 0);
     ASSERT_EQ(0, ioctx.operate("big.copy", &op));
   }
 
   {
     ObjectWriteOperation op;
-    op.copy_from("big2", ioctx, 0, 0);
+    op.copy_from("big2", ioctx, 0);
     ASSERT_EQ(0, ioctx.operate("big2.copy", &op));
   }
 
   {
     ObjectWriteOperation op;
-    op.copy_from("big3", ioctx, 0, 0);
+    op.copy_from("big3", ioctx, 0);
     ASSERT_EQ(0, ioctx.operate("big3.copy", &op));
   }
 

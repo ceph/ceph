@@ -9,8 +9,6 @@
 #include <iosfwd>
 #include <include/types.h>
 
-#include <expat.h>
-
 #include "include/str_list.h"
 #include "rgw_xml.h"
 #include "rgw_acl.h"
@@ -57,7 +55,7 @@ public:
 class RGWAccessControlList_S3 : public RGWAccessControlList, public XMLObj
 {
 public:
-  RGWAccessControlList_S3(CephContext *_cct) : RGWAccessControlList(_cct) {}
+  explicit RGWAccessControlList_S3(CephContext *_cct) : RGWAccessControlList(_cct) {}
   ~RGWAccessControlList_S3() {}
 
   bool xml_end(const char *el);
@@ -82,7 +80,7 @@ class RGWEnv;
 class RGWAccessControlPolicy_S3 : public RGWAccessControlPolicy, public XMLObj
 {
 public:
-  RGWAccessControlPolicy_S3(CephContext *_cct) : RGWAccessControlPolicy(_cct) {}
+  explicit RGWAccessControlPolicy_S3(CephContext *_cct) : RGWAccessControlPolicy(_cct) {}
   ~RGWAccessControlPolicy_S3() {}
 
   bool xml_end(const char *el);
@@ -110,7 +108,7 @@ class RGWACLXMLParser_S3 : public RGWXMLParser
 
   XMLObj *alloc_obj(const char *el);
 public:
-  RGWACLXMLParser_S3(CephContext *_cct) : cct(_cct) {}
+  explicit RGWACLXMLParser_S3(CephContext *_cct) : cct(_cct) {}
 };
 
 #endif

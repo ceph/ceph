@@ -19,9 +19,16 @@ License version 2, as published by the Free Software
 Foundation.  See file COPYING.
 """
 
+from __future__ import print_function
+import codecs
 import os
 import sys
 import platform
+
+try:
+    input = raw_input
+except NameError:
+    pass
 
 CEPH_GIT_VER="@CEPH_GIT_VER@"
 CEPH_GIT_NICE_VER="@CEPH_GIT_NICE_VER@"
@@ -35,7 +42,7 @@ MYPATH = os.path.abspath(__file__)
 MYDIR = os.path.dirname(MYPATH)
 DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***'
 
-def respawn_in_path(lib_path, pybind_path):
+def respawn_in_path(lib_path, pybind_path, pythonlib_path):
     execv_cmd = ['python']
     if 'CEPH_DBG' in os.environ:
         execv_cmd += ['-mpdb']
@@ -50,19 +57,30 @@ def respawn_in_path(lib_path, pybind_path):
     if lib_path_var in os.environ:
         if lib_path not in os.environ[lib_path_var]:
             os.environ[lib_path_var] += ':' + lib_path
-            print >> sys.stderr, DEVMODEMSG
+            print(DEVMODEMSG, file=sys.stderr)
             os.execvp(py_binary, execv_cmd + sys.argv)
     else:
         os.environ[lib_path_var] = lib_path
-        print >> sys.stderr, DEVMODEMSG
+        print(DEVMODEMSG, file=sys.stderr)
         os.execvp(py_binary, execv_cmd + sys.argv)
     sys.path.insert(0, os.path.join(MYDIR, pybind_path))
+    sys.path.insert(0, os.path.join(MYDIR, pythonlib_path))
+
+def get_pythonlib_dir():
+    """Returns the name of a distutils build directory"""
+    import sysconfig
+    f = "lib.{platform}-{version[0]}.{version[1]}"
+    name = f.format(platform=sysconfig.get_platform(),
+                    version=sys.version_info)
+    return os.path.join('build', name)
 
 if MYDIR.endswith('src') and \
    os.path.exists(os.path.join(MYDIR, '.libs')) and \
-   os.path.exists(os.path.join(MYDIR, 'pybind')):
+   os.path.exists(os.path.join(MYDIR, 'pybind')) and \
+   os.path.exists(os.path.join(MYDIR, 'build')):
 
-    respawn_in_path(os.path.join(MYDIR, '.libs'), "pybind")
+    pythonlib_path = get_pythonlib_dir()
+    respawn_in_path(os.path.join(MYDIR, '.libs'), "pybind", pythonlib_path)
     if os.environ.has_key('PATH') and MYDIR not in os.environ['PATH']:
         os.environ['PATH'] += ':' + MYDIR
 
@@ -80,9 +98,11 @@ elif os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
         # Developer mode, but in a cmake build dir instead of the src dir
         lib_path = os.path.join(os.getcwd(), "src")
         pybind_path = os.path.join(src_path, "src", "pybind")
-        respawn_in_path(lib_path, pybind_path)
+        pythonlib_path = os.path.join(src_path, "src", get_pythonlib_dir())
+        respawn_in_path(lib_path, pybind_path, pythonlib_path)
 
-    sys.path.insert(0, os.path.join(MYDIR, pybind_path))
+        sys.path.insert(0, os.path.join(MYDIR, pybind_path))
+        sys.path.insert(0, os.path.join(MYDIR, pythonlib_path))
 
     # Add src/ to path for e.g. ceph-conf
     if os.environ.has_key('PATH') and lib_path not in os.environ['PATH']:
@@ -100,7 +120,7 @@ import subprocess
 from ceph_argparse import \
     concise_sig, descsort, parse_json_funcsigs, \
     matchnum, validate_command, find_cmd_target, \
-    send_command, json_command
+    send_command, json_command, run_in_thread
 
 from ceph_daemon import DaemonWatcher, admin_socket
 
@@ -108,6 +128,12 @@ from ceph_daemon import DaemonWatcher, admin_socket
 
 verbose = False
 cluster_handle = None
+
+# Always use Unicode (UTF-8) for stdout
+raw_stdout = sys.__stdout__
+raw_stderr = sys.__stderr__
+sys.stdout = codecs.getwriter('utf-8')(raw_stdout)
+sys.stderr = codecs.getwriter('utf-8')(raw_stderr)
 
 ############################################################################
 
@@ -222,7 +248,7 @@ def parse_cmdargs(args=None, target=''):
 
 
 def hdr(s):
-    print '\n', s, '\n', '=' * len(s)
+    print('\n', s, '\n', '=' * len(s))
 
 def do_basic_help(parser, args):
     """
@@ -242,9 +268,8 @@ def do_extended_help(parser, args):
                                          prefix='get_command_descriptions',
                                          timeout=10)
         if ret:
-            print >> sys.stderr, \
-                "couldn't get command descriptions for {0}: {1}".\
-                format(target, outs)
+            print("couldn't get command descriptions for {0}: {1}".\
+                format(target, outs), file=sys.stderr)
         else:
             help_for_sigs(outbuf, partial)
 
@@ -364,7 +389,7 @@ PROMPT = 'ceph> '
 if sys.stdin.isatty():
     def read_input():
         while True:
-            line = raw_input(PROMPT).rstrip()
+            line = input(PROMPT).rstrip()
             if line in ['q', 'quit', 'Q', 'exit']:
                 return None
             if line:
@@ -392,16 +417,13 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
         for cmdtag in sorted(sigdict.keys()):
             cmd = sigdict[cmdtag]
             sig = cmd['sig']
-            print '{0}: {1}'.format(cmdtag, concise_sig(sig))
+            print('{0}: {1}'.format(cmdtag, concise_sig(sig)))
 
-    got_command = False
-
-    if not got_command:
+    if True:
         if cmdargs:
             # Validate input args against list of sigs
             valid_dict = validate_command(sigdict, cmdargs, verbose)
             if valid_dict:
-                got_command = True
                 if parsed_args.output_format:
                     valid_dict['format'] = parsed_args.output_format
             else:
@@ -409,7 +431,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
         else:
             if sys.stdin.isatty():
                 # do the command-interpreter looping
-                # for raw_input to do readline cmd editing
+                # for input to do readline cmd editing
                 import readline  # noqa
 
             while True:
@@ -420,31 +442,35 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                 try:
                     target = find_cmd_target(cmdargs)
                 except Exception as e:
-                    print >> sys.stderr, \
-                            'error handling command target: {0}'.format(e)
-                    return 1, '', ''
+                    print('error handling command target: {0}'.format(e), 
+                        file=sys.stderr)
+                    continue
+                if len(cmdargs) and cmdargs[0] == 'tell':
+                    print('Can not use \'tell\' in interactive mode.', 
+                        file=sys.stderr)
+                    continue
                 valid_dict = validate_command(sigdict, cmdargs, verbose)
                 if valid_dict:
                     if parsed_args.output_format:
                         valid_dict['format'] = parsed_args.output_format
                     if verbose:
-                        print >> sys.stderr, "Submitting command ", valid_dict
+                        print("Submitting command ", valid_dict, file=sys.stderr)
                     ret, outbuf, outs = json_command(cluster_handle,
                                                      target=target,
                                                      argdict=valid_dict)
                     if ret:
                         ret = abs(ret)
-                        print >> sys.stderr, \
-                            'Error: {0} {1}'.format(ret, errno.errorcode.get(ret, 'Unknown'))
+                        print('Error: {0} {1}'.format(ret, errno.errorcode.get(ret, 'Unknown')), 
+                            file=sys.stderr)
                     if outbuf:
-                        print outbuf
+                        print(outbuf)
                     if outs:
-                        print >> sys.stderr, 'Status:\n', outs
+                        print('Status:\n', outs, file=sys.stderr)
                 else:
-                    print >> sys.stderr, "Invalid command"
+                    print("Invalid command", file=sys.stderr)
 
     if verbose:
-        print >> sys.stderr, "Submitting command ", valid_dict
+        print("Submitting command ", valid_dict, file=sys.stderr)
     return json_command(cluster_handle, target=target, argdict=valid_dict,
                         inbuf=inbuf)
 
@@ -472,16 +498,14 @@ def complete(sigdict, args, target):
         matched = matchnum(args, sig, partial=True)
         if (matched > best_match_cnt):
             if complete_verbose:
-                print >> sys.stderr, \
-                    "better match: {0} > {1}: {2}:{3} ".format(matched,
-                                  best_match_cnt, cmdtag, concise_sig(sig))
+                print("better match: {0} > {1}: {2}:{3} ".format(matched,
+                        best_match_cnt, cmdtag, concise_sig(sig)),  file=sys.stderr)
             best_match_cnt = matched
             bestcmds = [{cmdtag:cmd}]
         elif matched == best_match_cnt:
             if complete_verbose:
-                print >> sys.stderr, \
-                    "equal match: {0} > {1}: {2}:{3} ".format(matched,
-                                  best_match_cnt, cmdtag, concise_sig(sig))
+                print("equal match: {0} > {1}: {2}:{3} ".format(matched,
+                        best_match_cnt, cmdtag, concise_sig(sig)), file=sys.stderr)
             bestcmds.append({cmdtag:cmd})
 
     # look through all matching sigs
@@ -495,15 +519,15 @@ def complete(sigdict, args, target):
             fullindex = matchnum(args, sig, partial=False) - 1
             partindex = matchnum(args, sig, partial=True) - 1
             if complete_verbose:
-                print >> sys.stderr, '{}: f {} p {} len {}'.format(sig, fullindex, partindex, len(sig))
+                print('{}: f {} p {} len {}'.format(sig, fullindex, partindex, len(sig)), file=sys.stderr)
             if fullindex == partindex and fullindex + 1 < len(sig):
                 d = sig[fullindex + 1]
             else:
                 d = sig[partindex]
             comps.append(str(d))
     if complete_verbose:
-        print >> sys.stderr, '\n'.join(comps)
-    print '\n'.join(comps)
+        print('\n'.join(comps), file=sys.stderr)
+    print('\n'.join(comps))
 
     return 0
 
@@ -512,18 +536,18 @@ def complete(sigdict, args, target):
 ###
 def ping_monitor(cluster_handle, name, timeout):
     if 'mon.' not in name:
-        print >> sys.stderr, '"ping" expects a monitor to ping; try "ping mon.<id>"'
+        print('"ping" expects a monitor to ping; try "ping mon.<id>"', file=sys.stderr)
         return 1
 
     mon_id = name[len('mon.'):]
     if (mon_id == '*') :
-        cluster_handle.connect(timeout=timeout)
+        run_in_thread(cluster_handle.connect, timeout=timeout)
         for m in monids() :
-            s = cluster_handle.ping_monitor(m)
-            print "mon.{0}".format(m) + '\n' + s
+            s = run_in_thread(cluster_handle.ping_monitor, m)
+            print("mon.{0}".format(m) + '\n' + s)
     else :
-            s = cluster_handle.ping_monitor(mon_id)
-            print s
+            s = run_in_thread(cluster_handle.ping_monitor, mon_id)
+            print(s)
     return 0
 
 ###
@@ -541,18 +565,18 @@ def main():
     parser, parsed_args, childargs = parse_cmdargs()
 
     if parsed_args.version:
-        print 'ceph version {0} ({1})'.format(CEPH_GIT_NICE_VER, CEPH_GIT_VER)  # noqa
+        print('ceph version {0} ({1})'.format(CEPH_GIT_NICE_VER, CEPH_GIT_VER))  # noqa
         return 0
 
     global verbose
     verbose = parsed_args.verbose
 
     if verbose:
-        print >> sys.stderr, "parsed_args: {0}, childargs: {1}".format(parsed_args, childargs)
+        print("parsed_args: {0}, childargs: {1}".format(parsed_args, childargs), file=sys.stderr)
 
     if parsed_args.admin_socket_nope:
-        print >> sys.stderr, '--admin-socket is used by daemons; '\
-        'you probably mean --admin-daemon/daemon'
+        print('--admin-socket is used by daemons; '\
+            'you probably mean --admin-daemon/daemon', file=sys.stderr)
         return 1
 
     # pass on --id, --name, --conf
@@ -589,14 +613,13 @@ def main():
                     sockpath = ceph_conf(parsed_args, 'admin_socket',
                                          childargs[1])
                 except Exception as e:
-                    print >> sys.stderr, \
-                        'Can\'t get admin socket path: ' + str(e)
+                    print('Can\'t get admin socket path: ' + str(e), file=sys.stderr)
                     return errno.EINVAL
             # for both:
             childargs = childargs[2:]
         else:
-            print >> sys.stderr, '{0} requires at least {1} arguments'.format(
-                childargs[0], require_args)
+            print('{0} requires at least {1} arguments'.format(childargs[0], require_args), 
+                file=sys.stderr) 
             return errno.EINVAL
 
     if sockpath and daemon_perf:
@@ -608,20 +631,21 @@ def main():
                 if interval < 0:
                     raise ValueError
             except ValueError:
-                print >> sys.stderr, 'daemonperf: interval should be a positive number'
+                print('daemonperf: interval should be a positive number', file=sys.stderr)
                 return errno.EINVAL
         if len(childargs) > 1:
             if not childargs[1].isdigit():
-                print >> sys.stderr, 'daemonperf: count should be a positive integer'
+                print('daemonperf: count should be a positive integer', file=sys.stderr)
                 return errno.EINVAL
             count = int(childargs[1])
         DaemonWatcher(sockpath).run(interval, count)
         return 0
     elif sockpath:
         try:
-            print admin_socket(sockpath, childargs, format)
+            print(admin_socket(sockpath, childargs, format))
         except Exception as e:
-            print >> sys.stderr, 'admin_socket: {0}'.format(e)
+            print('admin_socket: {0}'.format(e))
+            print('admin_socket: {0}'.format(e), file=sys.stderr)
             return errno.EINVAL
         return 0
 
@@ -650,23 +674,23 @@ def main():
         injectargs = childargs[position:]
         childargs = childargs[:position]
         if verbose:
-            print >> sys.stderr, 'Separate childargs {0} from injectargs {1}'.\
-                format(childargs, injectargs)
+            print('Separate childargs {0} from injectargs {1}'.format(childargs, injectargs), 
+                file=sys.stderr)
     else:
         injectargs = None
 
-    clustername = 'ceph'
+    clustername = None
     if parsed_args.cluster:
         clustername = parsed_args.cluster
 
     try:
-        cluster_handle = rados.Rados(name=name, clustername=clustername,
-                                     conf_defaults=conf_defaults,
-                                     conffile=conffile)
-        retargs = cluster_handle.conf_parse_argv(childargs)
+        cluster_handle = run_in_thread(rados.Rados,
+                                       name=name, clustername=clustername,
+                                       conf_defaults=conf_defaults,
+                                       conffile=conffile)
+        retargs = run_in_thread(cluster_handle.conf_parse_argv, childargs)
     except rados.Error as e:
-        print >> sys.stderr, 'Error initializing cluster client: {0}'.\
-            format(repr(e))
+        print('Error initializing cluster client: {0}'.format(repr(e)), file=sys.stderr)
         return 1
 
     childargs = retargs
@@ -684,7 +708,8 @@ def main():
     if len(childargs) >= 2 and \
         childargs[0] in ['mon', 'osd'] and \
         childargs[1] == 'tell':
-        print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id> <command> [options...]" instead (id can be "*") '.format(childargs[0])
+        print('"{0} tell" is deprecated; try "tell {0}.<id> <command> [options...]" instead (id can be "*") '.format(childargs[0]), 
+            file=sys.stderr)
         return 1
 
     if childargs in [['mon'], ['osd']]:
@@ -696,23 +721,25 @@ def main():
             timeout = 5
 
         hdr('Monitor commands:')
-        print '[Contacting monitor, timeout after %d seconds]' % timeout
+        print('[Contacting monitor, timeout after %d seconds]' % timeout)
 
     if childargs and childargs[0] == 'ping':
         if len(childargs) < 2:
-            print >> sys.stderr, '"ping" requires a monitor name as argument: "ping mon.<id>"'
+            print('"ping" requires a monitor name as argument: "ping mon.<id>"', file=sys.stderr)
             return 1
 
     try:
         if childargs and childargs[0] == 'ping':
             return ping_monitor(cluster_handle, childargs[1], timeout)
-        cluster_handle.connect(timeout=timeout)
+        run_in_thread(cluster_handle.connect, timeout=timeout)
     except KeyboardInterrupt:
-        print >> sys.stderr, 'Cluster connection aborted'
+        print('Cluster connection aborted', file=sys.stderr)
         return 1
+    except rados.PermissionDeniedError as e:
+        print('Error connecting to cluster: {0}'.format(e.__class__.__name__), file=sys.stderr)
+        return errno.EACCES
     except Exception as e:
-        print >> sys.stderr, 'Error connecting to cluster: {0}'.\
-            format(e.__class__.__name__)
+        print('Error connecting to cluster: {0}'.format(e.__class__.__name__), file=sys.stderr)
         return 1
 
     if parsed_args.help:
@@ -731,7 +758,7 @@ def main():
 
         # an awfully simple callback
         def watch_cb(arg, line, who, stamp_sec, stamp_nsec, seq, level, msg):
-            print line
+            print(line)
             sys.stdout.flush()
 
         # first do a ceph status
@@ -743,13 +770,13 @@ def main():
             if ret == 0:
                 outbuf += outs
         if ret:
-            print >> sys.stderr, "status query failed: ", outs
+            print("status query failed: ", outs, file=sys.stderr)
             return ret
-        print outbuf
+        print(outbuf)
 
         # this instance keeps the watch connection alive, but is
         # otherwise unused
-        rados.MonitorLog(cluster_handle, level, watch_cb, 0)
+        run_in_thread(cluster_handle.monitor_log, level, watch_cb, 0)
 
         # loop forever letting watch_cb print lines
         try:
@@ -765,7 +792,7 @@ def main():
             with open(parsed_args.input_file, 'r') as f:
                 inbuf = f.read()
         except Exception as e:
-            print >> sys.stderr, 'Can\'t open input file {0}: {1}'.format(parsed_args.input_file, e)
+            print('Can\'t open input file {0}: {1}'.format(parsed_args.input_file, e), file=sys.stderr)
             return 1
 
     # prepare output file, if any
@@ -773,9 +800,7 @@ def main():
         try:
             outf = open(parsed_args.output_file, 'w')
         except Exception as e:
-            print >> sys.stderr, \
-                'Can\'t open output file {0}: {1}'.\
-                format(parsed_args.output_file, e)
+            print('Can\'t open output file {0}: {1}'.format(parsed_args.output_file, e), file=sys.stderr)
             return 1
 
     # -s behaves like a command (ceph status).
@@ -785,8 +810,7 @@ def main():
     try:
         target = find_cmd_target(childargs)
     except Exception as e:
-        print >> sys.stderr, \
-                'error handling command target: {0}'.format(e)
+        print('error handling command target: {0}'.format(e), file=sys.stderr)
         return 1
 
     # Repulsive hack to handle tell: lop off 'tell' and target
@@ -801,10 +825,9 @@ def main():
         if injectargs:
             childargs = injectargs
         if not len(childargs):
-            print >> sys.stderr, \
-                'Cannot use \'tell\' with interactive mode.', \
-                'For an interactive shell,', \
-                'please start "{0}" without non-option arguments.'.format(sys.argv[0])
+            print('"{0} tell" requires additional arguments.'.format(sys.argv[0]),
+                'Try "{0} tell <name> <command> [options...]" instead.'.format(sys.argv[0]), 
+                file=sys.stderr)
             return errno.EINVAL
 
     # fetch JSON sigs from command
@@ -835,7 +858,7 @@ def main():
         if ret == -errno.EINVAL:
             # send command to old monitor or OSD
             if verbose:
-                print prefix + '{0} to old {1}'.format(' '.join(childargs), target[0])
+                print(prefix + '{0} to old {1}'.format(' '.join(childargs), target[0]))
             compat = True
             if parsed_args.output_format:
                 childargs.extend(['--format', parsed_args.output_format])
@@ -868,11 +891,12 @@ def main():
                                                           sigdict, inbuf, verbose)
                     if ret < 0:
                         ret = -ret
-                        print >> sys.stderr, prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs)
+                        print(prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs), 
+                            file=sys.stderr) 
 
         if ret < 0:
             ret = -ret
-            print >> sys.stderr, prefix + 'Error {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs)
+            print('Error {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs), file=sys.stderr)
             if len(targets) > 1:
                 final_ret = ret
             else:
@@ -882,10 +906,12 @@ def main():
         if compat:
             if ret == 0:
                 # old cli/mon would send status string to stdout on non-error
-                print outs
+                print(outs)
         else:
             if outs:
-                print >> sys.stderr, prefix + outs
+                print(prefix + outs, file=sys.stderr)
+
+        sys.stdout.flush()
 
         if (parsed_args.output_file):
             outf.write(outbuf)
@@ -897,13 +923,20 @@ def main():
             if parsed_args.output_format and \
                parsed_args.output_format.startswith('json') and \
                not compat:
-                sys.stdout.write('\n')
+                raw_stdout.write('\n')
 
             # if we are prettifying things, normalize newlines.  sigh.
             if suffix != '':
                 outbuf = outbuf.rstrip()
             if outbuf != '':
-                sys.stdout.write(prefix + outbuf + suffix)
+                try:
+                    # Write directly to binary stdout
+                    raw_stdout.write(prefix)
+                    raw_stdout.write(outbuf)
+                    raw_stdout.write(suffix)
+                except IOError as e:
+                    if e.errno != errno.EPIPE:
+                        raise e
 
         sys.stdout.flush()
 
@@ -919,5 +952,5 @@ if __name__ == '__main__':
     retval = main()
     # shutdown explicitly; Rados() does not
     if cluster_handle:
-        cluster_handle.shutdown()
+        run_in_thread(cluster_handle.shutdown)
     sys.exit(retval)

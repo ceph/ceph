@@ -20,10 +20,9 @@ bin_PROGRAMS += ceph-syn
 ceph: ceph.in ./ceph_ver.h Makefile
 	rm -f $@ $@.tmp
 	cp $@.in $@.tmp
-	sed -i "s|@PYTHON_EXECUTABLE@|/usr/bin/env python|" $@.tmp
-	grep CEPH_GIT_NICE_VER ./ceph_ver.h | cut -f 3 -d " " | sed s/\"//g | xargs -I "{}" sed -i "s/@CEPH_GIT_NICE_VER@/{}/g" $@.tmp
-	grep CEPH_GIT_VER ./ceph_ver.h | cut -f 3 -d " " | sed s/\"//g | xargs -I "{}" sed -i "s/@CEPH_GIT_VER@/{}/g" $@.tmp
-	cat $(srcdir)/$@.in >>$@.tmp
+	sed -ie "s|@PYTHON_EXECUTABLE@|/usr/bin/env python|" $@.tmp
+	grep CEPH_GIT_NICE_VER ./ceph_ver.h | cut -f 3 -d " " | sed s/\"//g | xargs -I "{}" sed -ie "s/@CEPH_GIT_NICE_VER@/{}/g" $@.tmp
+	grep CEPH_GIT_VER ./ceph_ver.h | cut -f 3 -d " " | sed s/\"//g | xargs -I "{}" sed -ie "s/@CEPH_GIT_VER@/{}/g" $@.tmp
 	chmod a+x $@.tmp
 	chmod a-w $@.tmp
 	mv $@.tmp $@
@@ -34,8 +33,6 @@ if WITH_RADOS
 bash_completion_DATA += \
 	$(srcdir)/bash_completion/rados \
 	$(srcdir)/bash_completion/radosgw-admin
-
-python_PYTHON += pybind/rados.py
 
 librados_config_SOURCES = librados-config.cc
 librados_config_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
@@ -48,20 +45,13 @@ bash_completion_DATA += \
 
 bin_SCRIPTS += \
 	ceph-rbdnamer \
-	rbd-replay-many
-
-python_PYTHON += pybind/rbd.py
+	rbd-replay-many \
+        rbdmap
 
 libkrbd_la_SOURCES = krbd.cc
 libkrbd_la_LIBADD = $(LIBSECRET) $(LIBCOMMON) -lblkid -ludev
 if LINUX
 noinst_LTLIBRARIES += libkrbd.la
-endif # LINUX
-
-rbd_SOURCES = rbd.cc
-rbd_LDADD = $(LIBKRBD) $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
-if LINUX
-bin_PROGRAMS += rbd
 endif # LINUX
 
 endif # WITH_RBD
@@ -75,7 +65,8 @@ bin_PROGRAMS += ceph-fuse
 
 if WITH_RBD
 rbd_fuse_SOURCES = rbd_fuse/rbd-fuse.cc
-rbd_fuse_LDADD = -lfuse $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
+rbd_fuse_CXXFLAGS = $(AM_CXXFLAGS) $(LIBFUSE_CFLAGS)
+rbd_fuse_LDADD = $(LIBFUSE_LIBS) $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
 bin_PROGRAMS += rbd-fuse
 endif # WITH_RBD
 endif # WITH_FUSE
@@ -86,14 +77,16 @@ cephfs_SOURCES = cephfs.cc
 cephfs_LDADD = $(LIBCOMMON)
 bin_PROGRAMS += cephfs
 
-python_PYTHON += pybind/cephfs.py
+python_PYTHON += pybind/ceph_volume_client.py
 
 # libcephfs (this should go somewhere else in the future)
 
 libcephfs_la_SOURCES = libcephfs.cc
 libcephfs_la_LIBADD = $(LIBCLIENT) $(LIBCOMMON) $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS)
 libcephfs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
+if LINUX
 libcephfs_la_LDFLAGS += -Xcompiler -Xlinker -Xcompiler '--exclude-libs=libcommon.a'
+endif # LINUX
 lib_LTLIBRARIES += libcephfs.la
 
 # jni library (java source is in src/java)

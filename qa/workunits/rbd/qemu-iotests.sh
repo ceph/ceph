@@ -8,32 +8,14 @@
 # This will only work with particular qemu versions, like 1.0. Later
 # versions of qemu include qemu-iotests directly in the qemu
 # repository.
-testlist='001 002 003 004 005 008 009 010 011 021 025'
+testlist='001 002 003 004 005 008 009 010 011 021 025 032 033 055 077'
 
-# See if we need to use the iotests suites in qemu (newer version).
-case `lsb_release -sc` in
-    trusty|Maipo)
-        iotests=qemu/tests/qemu-iotests
-        ;;
-    *)
-        iotests=qemu-iotests
-        ;;
-esac
+git clone https://github.com/qemu/qemu.git
+# use v2.2.0-rc3 (last released version that handles all the tests
+cd qemu
+git checkout 2528043f1f299e0e88cb026f1ca7c40bbb4e1f80
 
-if [ "$iotests" = "qemu/tests/qemu-iotests" ]
-then
-    git clone https://github.com/qemu/qemu.git
-    # use v2.2.0-rc3 (last released version that handles all the tests
-    cd qemu
-    git checkout 2528043f1f299e0e88cb026f1ca7c40bbb4e1f80
-    cd ..
-    testlist=$testlist' 032 033 055 077'
-else
-    git clone git://git.ceph.com/qemu-iotests.git
-fi
-
-cd "$iotests"
-
+cd tests/qemu-iotests
 mkdir bin
 # qemu-iotests expects a binary called just 'qemu' to be available
 if [ -x '/usr/bin/qemu-system-x86_64' ]
@@ -41,6 +23,10 @@ then
     QEMU='/usr/bin/qemu-system-x86_64'
 else
     QEMU='/usr/libexec/qemu-kvm'
+
+    # disable test 055 since qemu-kvm (RHEL/CentOS) doesn't support the
+    # required QMP commands
+    testlist=$(echo ${testlist} | sed "s/ 055//g")
 fi
 ln -s $QEMU bin/qemu
 
@@ -52,13 +38,5 @@ touch common.env
 # TEST_DIR is the pool for rbd
 TEST_DIR=rbd PATH="$PATH:$PWD/bin" ./check -rbd $testlist
 
-if [ "$iotests" = "qemu/tests/qemu-iotests" ]
-then
-    cd ../../..
-else
-    cd ..
-fi
-
-dname=`echo $iotests | cut -d "/" -f1`
-rm -rf $dname
-
+cd ../../..
+rm -rf qemu

@@ -187,7 +187,7 @@ struct libradosstriper::RadosStriperImpl {
 
   // stat, deletion and truncation
   int stat(const std::string& soid, uint64_t *psize, time_t *pmtime);
-  int remove(const std::string& soid);
+  int remove(const std::string& soid, int flags=0);
   int trunc(const std::string& soid, uint64_t size);
 
   // reference counting

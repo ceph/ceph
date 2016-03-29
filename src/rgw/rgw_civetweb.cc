@@ -27,8 +27,10 @@ int RGWMongoose::write_data(const char *buf, int len)
   return r;
 }
 
-RGWMongoose::RGWMongoose(mg_connection *_conn, int _port) : conn(_conn), port(_port), header_done(false), sent_header(false), has_content_length(false),
-                                                 explicit_keepalive(false), explicit_conn_close(false)
+RGWMongoose::RGWMongoose(mg_connection *_conn, int _port)
+  : conn(_conn), port(_port), status_num(0), header_done(false),
+    sent_header(false), has_content_length(false),
+    explicit_keepalive(false), explicit_conn_close(false)
 {
 }
 
@@ -45,15 +47,29 @@ int RGWMongoose::complete_request()
 {
   if (!sent_header) {
     if (!has_content_length) {
+
       header_done = false; /* let's go back to writing the header */
 
-      if (0 && data.length() == 0) {
+      /*
+       * Status 204 should not include a content-length header
+       * RFC7230 says so
+       *
+       * Same goes for status 304: Not Modified
+       *
+       * 'If a cache uses a received 304 response to update a cache entry,'
+       * 'the cache MUST update the entry to reflect any new field values'
+       * 'given in the response.'
+       *
+       */
+      if (status_num == 204 || status_num == 304) {
+        has_content_length = true;
+      } else if (0 && data.length() == 0) {
         has_content_length = true;
         print("Transfer-Enconding: %s\r\n", "chunked");
         data.append("0\r\n\r\n", sizeof("0\r\n\r\n")-1);
       } else {
-        int r = send_content_length(data.length());
-        if (r < 0)
+	int r = send_content_length(data.length());
+	if (r < 0)
 	  return r;
       }
     }
@@ -75,6 +91,7 @@ void RGWMongoose::init_env(CephContext *cct)
 {
   env.init(cct);
   struct mg_request_info *info = mg_get_request_info(conn);
+
   if (!info)
     return;
 
@@ -105,16 +122,16 @@ void RGWMongoose::init_env(CephContext *cct)
       char c = *src;
       switch (c) {
        case '-':
-         c = '_';
-         break;
-       default:
-         c = toupper(c);
-         break;
+	 c = '_';
+	 break;
+      default:
+	c = toupper(c);
+	break;
       }
       *dest = c;
     }
     *dest = '\0';
-    
+
     env.set(buf, header->value);
   }
 
@@ -127,23 +144,30 @@ void RGWMongoose::init_env(CephContext *cct)
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", port);
   env.set("SERVER_PORT", port_buf);
+
+  if (info->is_ssl) {
+    if (port == 0) {
+      strcpy(port_buf,"443");
+    }
+    env.set("SERVER_PORT_SECURE", port_buf);
+  }
 }
 
-int RGWMongoose::send_status(const char *status, const char *status_name)
+int RGWMongoose::send_status(int status, const char *status_name)
 {
   char buf[128];
 
   if (!status_name)
     status_name = "";
 
-  snprintf(buf, sizeof(buf), "HTTP/1.1 %s %s\r\n", status, status_name);
+  snprintf(buf, sizeof(buf), "HTTP/1.1 %d %s\r\n", status, status_name);
 
   bufferlist bl;
   bl.append(buf);
   bl.append(header_data);
   header_data = bl;
 
-  int status_num = atoi(status);
+  status_num = status;
   mg_set_http_status(conn, status_num);
 
   return 0;
@@ -166,7 +190,8 @@ static void dump_date_header(bufferlist &out)
   if (tmp == NULL)
     return;
 
-  if (strftime(timestr, sizeof(timestr), "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp))
+  if (strftime(timestr, sizeof(timestr),
+	       "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp))
     out.append(timestr);
 }
 

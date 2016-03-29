@@ -46,18 +46,26 @@ public:
   // piggybacked osd state
   eversion_t last_complete_ondisk;
 
+  bufferlist::iterator p;
+  // Decoding flags. Decoding is only needed for messages catched by pipe reader.
+  bool final_decode_needed;
 
   virtual void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+    p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
     ::decode(pgid, p);
+  }
 
+  void finish_decode() {
+    if (!final_decode_needed)
+      return; // Message is already final decoded
     ::decode(ack_type, p);
     ::decode(result, p);
     ::decode(last_complete_ondisk, p);
 
     ::decode(from, p);
+    final_decode_needed = false;
   }
   virtual void encode_payload(uint64_t features) {
     ::encode(map_epoch, payload);
@@ -91,12 +99,14 @@ public:
     from(from),
     pgid(req->pgid.pgid, req->from.shard),
     ack_type(at),
-    result(result_) {
+    result(result_),
+    final_decode_needed(false) {
     set_tid(req->get_tid());
   }
   MOSDRepOpReply() 
     : Message(MSG_OSD_REPOPREPLY), map_epoch(0),  
-      ack_type(0), result(0) {}
+      ack_type(0), result(0),
+      final_decode_needed(true) {}
 private:
   ~MOSDRepOpReply() {}
 
@@ -105,14 +115,16 @@ public:
 
   void print(ostream& out) const {
     out << "osd_repop_reply(" << reqid
-	<< " " << pgid;
-    if (ack_type & CEPH_OSD_FLAG_ONDISK)
-      out << " ondisk";
-    if (ack_type & CEPH_OSD_FLAG_ONNVRAM)
-      out << " onnvram";
-    if (ack_type & CEPH_OSD_FLAG_ACK)
-      out << " ack";
-    out << ", result = " << result;
+        << " " << pgid;
+    if (!final_decode_needed) {
+      if (ack_type & CEPH_OSD_FLAG_ONDISK)
+        out << " ondisk";
+      if (ack_type & CEPH_OSD_FLAG_ONNVRAM)
+        out << " onnvram";
+      if (ack_type & CEPH_OSD_FLAG_ACK)
+        out << " ack";
+      out << ", result = " << result;
+    }
     out << ")";
   }
 

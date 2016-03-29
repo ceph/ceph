@@ -138,12 +138,13 @@ public:
 
   EMetaBlob *get_metablob() { return &commit; }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ESlaveUpdate*>& ls);
 
   void replay(MDSRank *mds);
 };
+WRITE_CLASS_ENCODER_FEATURES(ESlaveUpdate)
 
 #endif

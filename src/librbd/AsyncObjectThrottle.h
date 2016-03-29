@@ -5,13 +5,14 @@
 
 #include "include/int_types.h"
 #include "include/Context.h"
+#include "common/RWLock.h"
 
 #include <boost/function.hpp>
 #include "include/assert.h"
 
 namespace librbd
 {
-class AsyncRequest;
+template <typename ImageCtxT> class AsyncRequest;
 class ProgressContext;
 struct ImageCtx;
 
@@ -21,31 +22,36 @@ public:
   virtual void finish_op(int r) = 0;
 };
 
+template <typename ImageCtxT = ImageCtx>
 class C_AsyncObjectThrottle : public Context {
 public:
   C_AsyncObjectThrottle(AsyncObjectThrottleFinisher &finisher,
-                        ImageCtx &image_ctx)
-    : m_image_ctx(image_ctx), m_finisher(finisher)
-  {
+                        ImageCtxT &image_ctx)
+    : m_image_ctx(image_ctx), m_finisher(finisher) {
   }
 
   virtual int send() = 0;
 
 protected:
-  ImageCtx &m_image_ctx;
+  ImageCtxT &m_image_ctx;
 
-  virtual void finish(int r);
+  virtual void finish(int r) {
+    m_finisher.finish_op(r);
+  }
 
 private:
   AsyncObjectThrottleFinisher &m_finisher;
 };
 
+template <typename ImageCtxT = ImageCtx>
 class AsyncObjectThrottle : public AsyncObjectThrottleFinisher {
 public:
-  typedef boost::function<C_AsyncObjectThrottle*(AsyncObjectThrottle&,
-      					   uint64_t)> ContextFactory;
+  typedef boost::function<
+    C_AsyncObjectThrottle<ImageCtxT>* (AsyncObjectThrottle&,
+                                       uint64_t)> ContextFactory;
 
-  AsyncObjectThrottle(const AsyncRequest *async_request, ImageCtx &image_ctx,
+  AsyncObjectThrottle(const AsyncRequest<ImageCtxT> *async_request,
+                      ImageCtxT &image_ctx,
                       const ContextFactory& context_factory, Context *ctx,
 		      ProgressContext *prog_ctx, uint64_t object_no,
 		      uint64_t end_object_no);
@@ -55,8 +61,8 @@ public:
 
 private:
   Mutex m_lock;
-  const AsyncRequest *m_async_request;
-  ImageCtx &m_image_ctx;
+  const AsyncRequest<ImageCtxT> *m_async_request;
+  ImageCtxT &m_image_ctx;
   ContextFactory m_context_factory;
   Context *m_ctx;
   ProgressContext *m_prog_ctx;
@@ -69,5 +75,7 @@ private:
 };
 
 } // namespace librbd
+
+extern template class librbd::AsyncObjectThrottle<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_ASYNC_OBJECT_THROTTLE_H

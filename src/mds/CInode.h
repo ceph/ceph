@@ -89,11 +89,11 @@ public:
   static object_t get_object_name(inodeno_t ino, frag_t fg, const char *suffix);
 
   /* Full serialization for use in ".inode" root inode objects */
-  void encode(bufferlist &bl, const bufferlist *snap_blob=NULL) const;
+  void encode(bufferlist &bl, uint64_t features, const bufferlist *snap_blob=NULL) const;
   void decode(bufferlist::iterator &bl, bufferlist& snap_blob);
 
   /* Serialization without ENCODE_START/FINISH blocks for use embedded in dentry */
-  void encode_bare(bufferlist &bl, const bufferlist *snap_blob=NULL) const;
+  void encode_bare(bufferlist &bl, uint64_t features, const bufferlist *snap_blob=NULL) const;
   void decode_bare(bufferlist::iterator &bl, bufferlist &snap_blob, __u8 struct_v=5);
 
   /* For test/debug output */
@@ -108,14 +108,14 @@ class InodeStore : public InodeStoreBase {
 public:
   bufferlist snap_blob;  // Encoded copy of SnapRealm, because we can't
 			 // rehydrate it without full MDCache
-  void encode(bufferlist &bl) const {
-    InodeStoreBase::encode(bl, &snap_blob);
+  void encode(bufferlist &bl, uint64_t features) const {
+    InodeStoreBase::encode(bl, features, &snap_blob);
   }
   void decode(bufferlist::iterator &bl) {
     InodeStoreBase::decode(bl, snap_blob);
   }
-  void encode_bare(bufferlist &bl) const {
-    InodeStoreBase::encode_bare(bl, &snap_blob);
+  void encode_bare(bufferlist &bl, uint64_t features) const {
+    InodeStoreBase::encode_bare(bl, features, &snap_blob);
   }
   void decode_bare(bufferlist::iterator &bl) {
     InodeStoreBase::decode_bare(bl, snap_blob);
@@ -123,6 +123,7 @@ public:
 
   static void generate_test_instances(std::list<InodeStore*>& ls);
 };
+WRITE_CLASS_ENCODER_FEATURES(InodeStore)
 
 // cached inode wrapper
 class CInode : public MDSCacheObject, public InodeStoreBase {
@@ -170,6 +171,7 @@ public:
   static const int PIN_EXPORTINGCAPS =    22;
   static const int PIN_DIRTYPARENT =      23;
   static const int PIN_DIRWAITER =        24;
+  static const int PIN_SCRUBQUEUE =       25;
 
   const char *pin_name(int p) const {
     switch (p) {
@@ -194,6 +196,7 @@ public:
     case PIN_DIRTYRSTAT: return "dirtyrstat";
     case PIN_DIRTYPARENT: return "dirtyparent";
     case PIN_DIRWAITER: return "dirwaiter";
+    case PIN_SCRUBQUEUE: return "scrubqueue";
     default: return generic_pin_name(p);
     }
   }
@@ -213,6 +216,7 @@ public:
   static const int STATE_STRAYPINNED = (1<<16);
   static const int STATE_FROZENAUTHPIN = (1<<17);
   static const int STATE_DIRTYPOOL =   (1<<18);
+  static const int STATE_REPAIRSTATS = (1<<19);
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 
@@ -241,6 +245,116 @@ public:
   SnapRealm        *containing_realm;
   snapid_t          first, last;
   compact_set<snapid_t> dirty_old_rstats;
+
+  class scrub_stamp_info_t {
+  public:
+    /// version we started our latest scrub (whether in-progress or finished)
+    version_t scrub_start_version;
+    /// time we started our latest scrub (whether in-progress or finished)
+    utime_t scrub_start_stamp;
+    /// version we started our most recent finished scrub
+    version_t last_scrub_version;
+    /// time we started our most recent finished scrub
+    utime_t last_scrub_stamp;
+    scrub_stamp_info_t() : scrub_start_version(0), last_scrub_version(0) {}
+    void reset() {
+      scrub_start_version = 0;
+      scrub_start_stamp = utime_t();
+    }
+  };
+
+  class scrub_info_t : public scrub_stamp_info_t {
+  public:
+    CDentry *scrub_parent;
+    MDSInternalContextBase *on_finish;
+
+    bool last_scrub_dirty; /// are our stamps dirty with respect to disk state?
+    bool scrub_in_progress; /// are we currently scrubbing?
+    bool children_scrubbed;
+
+    /// my own (temporary) stamps and versions for each dirfrag we have
+    std::map<frag_t, scrub_stamp_info_t> dirfrag_stamps;
+
+    ScrubHeaderRefConst header;
+
+    scrub_info_t() : scrub_stamp_info_t(),
+	scrub_parent(NULL), on_finish(NULL),
+	last_scrub_dirty(false), scrub_in_progress(false),
+	children_scrubbed(false) {}
+  };
+
+  const scrub_info_t *scrub_info() const{
+    if (!scrub_infop)
+      scrub_info_create();
+    return scrub_infop;
+  }
+
+  bool scrub_is_in_progress() const {
+    return (scrub_infop && scrub_infop->scrub_in_progress);
+  }
+  /**
+   * Start scrubbing on this inode. That could be very short if it's
+   * a file, or take a long time if we're recursively scrubbing a directory.
+   * @pre It is not currently scrubbing
+   * @post it has set up internal scrubbing state
+   * @param scrub_version What version are we scrubbing at (usually, parent
+   * directory's get_projected_version())
+   */
+  void scrub_initialize(CDentry *scrub_parent,
+			const ScrubHeaderRefConst& header,
+			MDSInternalContextBase *f);
+  /**
+   * Get the next dirfrag to scrub. Gives you a frag_t in output param which
+   * you must convert to a CDir (and possibly load off disk).
+   * @param dir A pointer to frag_t, will be filled in with the next dirfrag to
+   * scrub if there is one.
+   * @returns 0 on success, you should scrub the passed-out frag_t right now;
+   * ENOENT: There are no remaining dirfrags to scrub
+   * <0 There was some other error (It will return -ENOTDIR if not a directory)
+   */
+  int scrub_dirfrag_next(frag_t* out_dirfrag);
+  /**
+   * Get the currently scrubbing dirfrags. When returned, the
+   * passed-in list will be filled in with all frag_ts which have
+   * been returned from scrub_dirfrag_next but not sent back
+   * via scrub_dirfrag_finished.
+   */
+  void scrub_dirfrags_scrubbing(list<frag_t> *out_dirfrags);
+  /**
+   * Report to the CInode that a dirfrag it owns has been scrubbed. Call
+   * this for every frag_t returned from scrub_dirfrag_next().
+   * @param dirfrag The frag_t that was scrubbed
+   */
+  void scrub_dirfrag_finished(frag_t dirfrag);
+  /**
+   * Call this once the scrub has been completed, whether it's a full
+   * recursive scrub on a directory or simply the data on a file (or
+   * anything in between).
+   * @param c An out param which is filled in with a Context* that must
+   * be complete()ed.
+   */
+  void scrub_finished(MDSInternalContextBase **c);
+  /**
+   * Report to the CInode that alldirfrags it owns have been scrubbed.
+   */
+  void scrub_children_finished() {
+    scrub_infop->children_scrubbed = true;
+  }
+  void scrub_set_finisher(MDSInternalContextBase *c) {
+    assert(!scrub_infop->on_finish);
+    scrub_infop->on_finish = c;
+  }
+
+private:
+  /**
+   * Create a scrub_info_t struct for the scrub_infop poitner.
+   */
+  void scrub_info_create() const;
+  /**
+   * Delete the scrub_info_t struct if it's not got any useful data
+   */
+  void scrub_maybe_delete_info();
+public:
 
   bool is_multiversion() const {
     return snaprealm ||  // other snaprealms will link to me
@@ -401,6 +515,7 @@ public:
 private:
   compact_map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
   int stickydir_ref;
+  scrub_info_t *scrub_infop;
 
 public:
   bool has_dirfrags() { return !dirfrags.empty(); }
@@ -460,7 +575,7 @@ protected:
 
   ceph_lock_state_t *get_fcntl_lock_state() {
     if (!fcntl_locks)
-      fcntl_locks = new ceph_lock_state_t(g_ceph_context);
+      fcntl_locks = new ceph_lock_state_t(g_ceph_context, CEPH_LOCK_FCNTL);
     return fcntl_locks;
   }
   void clear_fcntl_lock_state() {
@@ -469,7 +584,7 @@ protected:
   }
   ceph_lock_state_t *get_flock_lock_state() {
     if (!flock_locks)
-      flock_locks = new ceph_lock_state_t(g_ceph_context);
+      flock_locks = new ceph_lock_state_t(g_ceph_context, CEPH_LOCK_FLOCK);
     return flock_locks;
   }
   void clear_flock_lock_state() {
@@ -514,6 +629,7 @@ public:
   elist<CInode*>::item item_dirty_dirfrag_dir;
   elist<CInode*>::item item_dirty_dirfrag_nest;
   elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
+  elist<CInode*>::item item_scrub;
 
 public:
   int auth_pin_freeze_allowance;
@@ -539,6 +655,7 @@ public:
     num_projected_xattrs(0),
     num_projected_srnodes(0),
     stickydir_ref(0),
+    scrub_infop(NULL),
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
@@ -660,10 +777,10 @@ public:
 
   void encode_snap_blob(bufferlist &bl);
   void decode_snap_blob(bufferlist &bl);
-  void encode_store(bufferlist& bl);
+  void encode_store(bufferlist& bl, uint64_t features);
   void decode_store(bufferlist::iterator& bl);
 
-  void encode_replica(mds_rank_t rep, bufferlist& bl) {
+  void encode_replica(mds_rank_t rep, bufferlist& bl, uint64_t features) {
     assert(is_auth());
     
     // relax locks?
@@ -673,7 +790,7 @@ public:
     __u32 nonce = add_replica(rep);
     ::encode(nonce, bl);
     
-    _encode_base(bl);
+    _encode_base(bl, features);
     _encode_locks_state_for_replica(bl);
   }
   void decode_replica(bufferlist::iterator& p, bool is_new) {
@@ -698,7 +815,7 @@ public:
   void take_waiting(uint64_t tag, std::list<MDSInternalContextBase*>& ls);
 
   // -- encode/decode helpers --
-  void _encode_base(bufferlist& bl);
+  void _encode_base(bufferlist& bl, uint64_t features);
   void _decode_base(bufferlist::iterator& p);
   void _encode_locks_full(bufferlist& bl);
   void _decode_locks_full(bufferlist::iterator& p);
@@ -812,7 +929,7 @@ public:
 
   // choose new lock state during recovery, based on issued caps
   void choose_lock_state(SimpleLock *lock, int allissued);
-  void choose_lock_states();
+  void choose_lock_states(int dirty_caps);
 
   int count_nonstale_caps() {
     int n = 0;
@@ -871,7 +988,7 @@ public:
   int get_caps_allowed_by_type(int type) const;
   int get_caps_careful() const;
   int get_xlocker_mask(client_t client) const;
-  int get_caps_allowed_for_client(client_t client) const;
+  int get_caps_allowed_for_client(Session *s, inode_t *file_i) const;
 
   // caps issued, wanted
   int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,
@@ -992,9 +1109,14 @@ public:
     bool performed_validation;
     bool passed_validation;
 
+    struct raw_stats_t {
+      frag_info_t dirstat;
+      nest_info_t rstat;
+    };
+
     member_status<inode_backtrace_t> backtrace;
     member_status<inode_t> inode;
-    member_status<nest_info_t> raw_rstats;
+    member_status<raw_stats_t> raw_stats;
 
     validated_data() : performed_validation(false),
         passed_validation(false) {}
@@ -1012,10 +1134,11 @@ public:
    * @param results A freshly-created validated_data struct, with values set
    * as described in the struct documentation.
    * @param mdr The request to be responeded upon the completion of the
-   * validation.
+   * validation (or NULL)
+   * @param fin Context to call back on completion (or NULL)
    */
   void validate_disk_state(validated_data *results,
-                           MDRequestRef& mdr);
+                           MDSInternalContext *fin);
   static void dump_validation_results(const validated_data& results,
                                       Formatter *f);
 private:
@@ -1024,5 +1147,7 @@ private:
   friend class ValidationContinuation;
   /** @} Scrubbing and fsck */
 };
+
+ostream& operator<<(ostream& out, const CInode::scrub_stamp_info_t& si);
 
 #endif

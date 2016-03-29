@@ -10,6 +10,7 @@ Copyright (C) 2013 Inktank Storage, Inc.
 LGPL2.  See file COPYING.
 """
 import copy
+import errno
 import json
 import os
 import pprint
@@ -17,6 +18,7 @@ import re
 import socket
 import stat
 import sys
+import threading
 import types
 import uuid
 
@@ -513,6 +515,13 @@ class CephPrefix(CephArgtype):
         self.prefix = prefix
 
     def valid(self, s, partial=False):
+        try:
+            # `prefix` can always be converted into unicode when being compared,
+            # but `s` could be anything passed by user.
+            s = unicode(s)
+        except UnicodeDecodeError:
+            raise ArgumentPrefix("no match for {0}".format(s))
+
         if partial:
             if self.prefix.startswith(s):
                 self.val = s
@@ -1082,6 +1091,63 @@ def find_cmd_target(childargs):
     return 'mon', ''
 
 
+class RadosThread(threading.Thread):
+    def __init__(self, target, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        self.target = target
+	self.exception = None
+        threading.Thread.__init__(self)
+
+    def run(self):
+        try:
+		self.retval = self.target(*self.args, **self.kwargs)
+	except Exception as e:
+		self.exception = e
+
+
+# time in seconds between each call to t.join() for child thread
+POLL_TIME_INCR = 0.5
+
+
+def run_in_thread(target, *args, **kwargs):
+    interrupt = False
+    timeout = kwargs.pop('timeout', 0)
+    countdown = timeout
+    t = RadosThread(target, *args, **kwargs)
+
+    # allow the main thread to exit (presumably, avoid a join() on this
+    # subthread) before this thread terminates.  This allows SIGINT
+    # exit of a blocked call.  See below.
+    t.daemon = True
+
+    t.start()
+    try:
+        # poll for thread exit
+        while t.is_alive():
+            t.join(POLL_TIME_INCR)
+            if timeout and t.is_alive():
+                countdown = countdown - POLL_TIME_INCR
+                if countdown <= 0:
+                    raise KeyboardInterrupt
+
+        t.join()        # in case t exits before reaching the join() above
+    except KeyboardInterrupt:
+        # ..but allow SIGINT to terminate the waiting.  Note: this
+        # relies on the Linux kernel behavior of delivering the signal
+        # to the main thread in preference to any subthread (all that's
+        # strictly guaranteed is that *some* thread that has the signal
+        # unblocked will receive it).  But there doesn't seem to be
+        # any interface to create t with SIGINT blocked.
+        interrupt = True
+
+    if interrupt:
+        t.retval = -errno.EINTR
+    if t.exception:
+        raise t.exception
+    return t.retval
+
+
 def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
                  verbose=False):
     """
@@ -1103,8 +1169,8 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
             if verbose:
                 print >> sys.stderr, 'submit {0} to osd.{1}'.\
                     format(cmd, osdid)
-            ret, outbuf, outs = \
-                cluster.osd_command(osdid, cmd, inbuf, timeout)
+            ret, outbuf, outs = run_in_thread(
+                cluster.osd_command, osdid, cmd, inbuf, timeout)
 
         elif target[0] == 'pg':
             pgid = target[1]
@@ -1119,17 +1185,19 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
             if verbose:
                 print >> sys.stderr, 'submit {0} for pgid {1}'.\
                     format(cmd, pgid)
-            ret, outbuf, outs = \
-                cluster.pg_command(pgid, cmd, inbuf, timeout)
+            ret, outbuf, outs = run_in_thread(
+                cluster.pg_command, pgid, cmd, inbuf, timeout)
 
         elif target[0] == 'mon':
             if verbose:
                 print >> sys.stderr, '{0} to {1}'.\
                     format(cmd, target[0])
             if target[1] == '':
-                ret, outbuf, outs = cluster.mon_command(cmd, inbuf, timeout)
+                ret, outbuf, outs = run_in_thread(
+                    cluster.mon_command, cmd, inbuf, timeout)
             else:
-                ret, outbuf, outs = cluster.mon_command(cmd, inbuf, timeout, target[1])
+                ret, outbuf, outs = run_in_thread(
+                    cluster.mon_command, cmd, inbuf, timeout, target[1])
         elif target[0] == 'mds':
             mds_spec = target[1]
 

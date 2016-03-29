@@ -53,13 +53,17 @@ EXTRA_DIST += \
 	ceph-detect-init/tests/test_all.py \
 	ceph-detect-init/tox.ini
 
-all-local::
-	cd $(srcdir)/ceph-detect-init ; python setup.py build
+export CEPH_DETECT_INIT_VIRTUALENV = ${CEPH_BUILD_VIRTUALENV}ceph-detect-init-virtualenv
 
-clean-local::
-	cd $(srcdir)/ceph-detect-init ; python setup.py clean ; rm -fr wheelhouse .tox build .coverage *.egg-info
+ceph-detect-init-all: ${CEPH_DETECT_INIT_VIRTUALENV}
 
-install-data-local::
+${CEPH_DETECT_INIT_VIRTUALENV}:
+	cd $(srcdir)/ceph-detect-init ; ../tools/setup-virtualenv.sh ${CEPH_DETECT_INIT_VIRTUALENV} ; test -d wheelhouse && export NO_INDEX=--no-index ; ${CEPH_DETECT_INIT_VIRTUALENV}/bin/pip install $$NO_INDEX --use-wheel --find-links=file://$$(pwd)/wheelhouse -e .
+
+ceph-detect-init-clean:
+	cd $(srcdir)/ceph-detect-init ; python setup.py clean ; rm -fr wheelhouse .tox build ${CEPH_DETECT_INIT_VIRTUALENV} .coverage *.egg-info
+
+ceph-detect-init-install-data:
 	cd $(srcdir)/ceph-detect-init ; \
 	if test "$(DESTDIR)" ; then \
 		if lsb_release -si | grep --quiet 'Ubuntu\|Debian\|Devuan' ; then \
@@ -70,3 +74,7 @@ install-data-local::
 		root="--root=$(DESTDIR)" ; \
 	fi ; \
 	python setup.py install $$root $$options
+
+LOCAL_ALL += ceph-detect-init-all
+LOCAL_CLEAN += ceph-detect-init-clean
+LOCAL_INSTALLDATA += ceph-detect-init-install-data

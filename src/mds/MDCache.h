@@ -156,6 +156,9 @@ public:
     stray_manager.eval_stray(dn);
   }
 
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set <std::string> &changed);
+
   void maybe_eval_stray(CInode *in, bool delay=false);
   bool is_readonly() { return readonly; }
   void force_readonly();
@@ -167,11 +170,11 @@ public:
 
   unsigned max_dir_commit_size;
 
-  static ceph_file_layout gen_default_file_layout(const MDSMap &mdsmap);
-  static ceph_file_layout gen_default_log_layout(const MDSMap &mdsmap);
+  static file_layout_t gen_default_file_layout(const MDSMap &mdsmap);
+  static file_layout_t gen_default_log_layout(const MDSMap &mdsmap);
 
-  ceph_file_layout default_file_layout;
-  ceph_file_layout default_log_layout;
+  file_layout_t default_file_layout;
+  file_layout_t default_log_layout;
 
   void register_perfcounters();
 
@@ -491,8 +494,9 @@ protected:
   map<inodeno_t,mds_rank_t> cap_export_targets; // ino -> auth mds
 
   map<inodeno_t,map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
-  map<inodeno_t,filepath> cap_import_paths;
+  map<inodeno_t,int> cap_imports_dirty;
   set<inodeno_t> cap_imports_missing;
+  map<inodeno_t, list<MDSInternalContextBase*> > cap_reconnect_waiters;
   int cap_imports_num_opening;
   
   set<CInode*> rejoin_undef_inodes;
@@ -534,7 +538,6 @@ public:
   void rejoin_recovered_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr, 
 			     mds_rank_t frommds=MDS_RANK_NONE) {
     cap_imports[ino][client][frommds] = icr.capinfo;
-    cap_import_paths[ino] = filepath(icr.path, (uint64_t)icr.capinfo.pathbase);
   }
   ceph_mds_cap_reconnect *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
     if (cap_imports.count(ino) &&
@@ -548,6 +551,12 @@ public:
     assert(cap_imports[ino].size() == 1);
     assert(cap_imports[ino][client].size() == 1);
     cap_imports.erase(ino);
+  }
+  void set_reconnect_dirty_caps(inodeno_t ino, int dirty) {
+    cap_imports_dirty[ino] |= dirty;
+  }
+  void wait_replay_cap_reconnect(inodeno_t ino, MDSInternalContextBase *c) {
+    cap_reconnect_waiters[ino].push_back(c);
   }
 
   // [reconnect/rejoin caps]
@@ -620,7 +629,7 @@ public:
   Migrator *migrator;
 
  public:
-  MDCache(MDSRank *m);
+  explicit MDCache(MDSRank *m);
   ~MDCache();
   
   // debug
@@ -980,10 +989,11 @@ public:
     ::encode(dn->last, bl);
     dn->encode_replica(to, bl);
   }
-  void replicate_inode(CInode *in, mds_rank_t to, bufferlist& bl) {
+  void replicate_inode(CInode *in, mds_rank_t to, bufferlist& bl,
+		       uint64_t features) {
     ::encode(in->inode.ino, bl);  // bleh, minor assymetry here
     ::encode(in->last, bl);
-    in->encode_replica(to, bl);
+    in->encode_replica(to, bl, features);
   }
   
   CDir* add_replica_dir(bufferlist::iterator& p, CInode *diri, mds_rank_t from, list<MDSInternalContextBase*>& finished);
@@ -1103,6 +1113,9 @@ public:
   void dump_cache(const std::string &filename);
   void dump_cache(Formatter *f);
 
+  void dump_resolve_status(Formatter *f) const;
+  void dump_rejoin_status(Formatter *f) const;
+
   // == crap fns ==
  public:
   void show_cache();
@@ -1115,10 +1128,31 @@ public:
     while (n--) ++p;
     return p->second;
   }
-  void scrub_dentry(const string& path, Formatter *f, Context *fin);
-  void scrub_dentry_work(MDRequestRef& mdr);
-  void flush_dentry(const string& path, Context *fin);
+
+protected:
   void flush_dentry_work(MDRequestRef& mdr);
+  /**
+   * Resolve path to a dentry and pass it onto the ScrubStack.
+   *
+   * TODO: return enough information to the original mdr formatter
+   * and completion that they can subsequeuntly check the progress of
+   * this scrub (we won't block them on a whole scrub as it can take a very
+   * long time)
+   */
+  void enqueue_scrub_work(MDRequestRef& mdr);
+  void repair_inode_stats_work(MDRequestRef& mdr);
+  void repair_dirfrag_stats_work(MDRequestRef& mdr);
+  friend class C_MDC_RepairDirfragStats;
+public:
+  void flush_dentry(const string& path, Context *fin);
+  /**
+   * Create and start an OP_ENQUEUE_SCRUB
+   */
+  void enqueue_scrub(const string& path, const std::string &tag,
+                     bool force, bool recursive, bool repair,
+		     Formatter *f, Context *fin);
+  void repair_inode_stats(CInode *diri);
+  void repair_dirfrag_stats(CDir *dir);
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {

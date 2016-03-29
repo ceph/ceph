@@ -1,9 +1,10 @@
-policy_module(ceph, 1.0.0)
+policy_module(ceph, 1.1.1)
 
 require {
 	type sysfs_t;
 	type var_run_t;
 	type random_device_t;
+	type urandom_device_t;
         type setfiles_t;
 	class sock_file unlink;
 	class lnk_file read;
@@ -42,8 +43,7 @@ files_pid_file(ceph_var_run_t)
 allow ceph_t self:process { signal_perms };
 allow ceph_t self:fifo_file rw_fifo_file_perms;
 allow ceph_t self:unix_stream_socket create_stream_socket_perms;
-# not needed at the moment, for future releases, not needed at all if we switch to systemd init scripts
-allow ceph_t self:capability { setuid setgid };
+allow ceph_t self:capability { setuid setgid dac_override };
 
 manage_dirs_pattern(ceph_t, ceph_log_t, ceph_log_t)
 manage_files_pattern(ceph_t, ceph_log_t, ceph_log_t)
@@ -83,9 +83,8 @@ logging_send_syslog_msg(ceph_t)
 
 sysnet_dns_name_resolve(ceph_t)
 
-# added 2015-06-17, need review
-
-allow ceph_t ceph_var_run_t:sock_file create;
+# basis for future security review
+allow ceph_t ceph_var_run_t:sock_file { create unlink write };
 allow ceph_t self:capability sys_rawio;
 
 allow ceph_t self:tcp_socket { accept listen };
@@ -95,15 +94,14 @@ files_list_tmp(ceph_t)
 fstools_exec(ceph_t)
 nis_use_ypbind_uncond(ceph_t)
 storage_raw_rw_fixed_disk(ceph_t)
+files_manage_generic_locks(ceph_t)
 
-# added 2015-07-28, needs review just as well
-allow ceph_t ceph_var_run_t:sock_file unlink;
 allow ceph_t sysfs_t:dir read;
 allow ceph_t sysfs_t:file { read getattr open };
 allow ceph_t sysfs_t:lnk_file read;
 
-
 allow ceph_t random_device_t:chr_file getattr;
+allow ceph_t urandom_device_t:chr_file getattr;
 allow ceph_t self:process setpgid;
 allow ceph_t var_run_t:dir { write create add_name };
 allow ceph_t var_run_t:file { write create open getattr };

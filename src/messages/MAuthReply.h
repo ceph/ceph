@@ -20,7 +20,7 @@
 
 struct MAuthReply : public Message {
   __u32 protocol;
-  __s32 result;
+  errorcode32_t result;
   uint64_t global_id;      // if zero, meaningless
   string result_msg;
   bufferlist result_bl;

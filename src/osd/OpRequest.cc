@@ -14,7 +14,11 @@
 #include "osd/osd_types.h"
 
 #ifdef WITH_LTTNG
+#define TRACEPOINT_DEFINE
+#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
 #include "tracing/oprequest.h"
+#undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#undef TRACEPOINT_DEFINE
 #else
 #define tracepoint(...)
 #endif
@@ -77,9 +81,11 @@ void OpRequest::_dump_op_descriptor_unlocked(ostream& stream) const
 void OpRequest::_unregistered() {
   request->clear_data();
   request->clear_payload();
+  request->release_message_throttle();
 }
 
 bool OpRequest::check_rmw(int flag) {
+  assert(rmw_flags != 0);
   return rmw_flags & flag;
 }
 bool OpRequest::may_read() { return need_read_cap() || need_class_read_cap(); }

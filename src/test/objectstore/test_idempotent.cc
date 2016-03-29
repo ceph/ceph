@@ -15,14 +15,13 @@
 #include <iostream>
 #include <sstream>
 #include <boost/scoped_ptr.hpp>
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "test/common/ObjectContents.h"
 #include "FileStoreTracker.h"
-#include "os/LevelDBStore.h"
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "os/ObjectStore.h"
 
 void usage(const string &name) {
@@ -63,11 +62,12 @@ int main(int argc, char **argv) {
   bool start_new = false;
   if (string(args[0]) == string("new")) start_new = true;
 
-  LevelDBStore *_db = new LevelDBStore(g_ceph_context, db_path);
+  KeyValueDB *_db = KeyValueDB::create(g_ceph_context, "leveldb", db_path);
   assert(!_db->create_and_open(std::cerr));
   boost::scoped_ptr<KeyValueDB> db(_db);
   boost::scoped_ptr<ObjectStore> store(new FileStore(store_path, store_dev));
 
+  ObjectStore::Sequencer osr(__func__);
   coll_t coll(spg_t(pg_t(0,12),shard_id_t::NO_SHARD));
 
   if (start_new) {
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
     ObjectStore::Transaction t;
     assert(!store->mount());
     t.create_collection(coll, 0);
-    store->apply_transaction(t);
+    store->apply_transaction(&osr, std::move(t));
   } else {
     assert(!store->mount());
   }

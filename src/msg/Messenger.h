@@ -160,6 +160,21 @@ public:
 			   uint64_t features = 0);
 
   /**
+   * create a new messenger
+   *
+   * Create a new messenger instance.
+   * Same as the above, but a slightly simpler interface for clients:
+   * - Generate a random nonce
+   * - use the default feature bits
+   * - get the messenger type from cct
+   * - use the client entity_type
+   *
+   * @param cct context
+   * @param lname logical name of the messenger in this process (e.g., "client")
+   */
+  static Messenger *create_client_messenger(CephContext *cct, string lname);
+
+  /**
    * @defgroup Accessors
    * @{
    */
@@ -532,6 +547,7 @@ public:
    * of one reference to it.
    */
   void ms_fast_dispatch(Message *m) {
+    m->set_dispatch_stamp(ceph_clock_now(cct));
     for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
 	 p != fast_dispatchers.end();
 	 ++p) {

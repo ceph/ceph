@@ -22,24 +22,35 @@
 
 struct MRoute : public Message {
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 2;
 
   uint64_t session_mon_tid;
   Message *msg;
   entity_inst_t dest;
+  epoch_t send_osdmap_first;
   
-  MRoute() : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION), msg(NULL) {}
+  MRoute() : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION),
+	     session_mon_tid(0),
+	     msg(NULL),
+	     send_osdmap_first(0) {}
   MRoute(uint64_t t, Message *m)
-    : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION), session_mon_tid(t), msg(m) {}
+    : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION),
+      session_mon_tid(t),
+      msg(m),
+      send_osdmap_first(0) {}
   MRoute(bufferlist bl, const entity_inst_t& i)
-    : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION), session_mon_tid(0), dest(i) {
+    : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION),
+      session_mon_tid(0),
+      dest(i),
+      send_osdmap_first(0) {
     bufferlist::iterator p = bl.begin();
     msg = decode_message(NULL, 0, p);
   }
 private:
   ~MRoute() {
-    if (msg) msg->put();
+    if (msg)
+      msg->put();
   }
 
 public:
@@ -55,23 +66,18 @@ public:
     } else {
       msg = decode_message(NULL, 0, p);
     }
+    if (header.version >= 3) {
+      ::decode(send_osdmap_first, p);
+    }
   }
   void encode_payload(uint64_t features) {
     ::encode(session_mon_tid, payload);
     ::encode(dest, payload);
-    if (features & CEPH_FEATURE_MON_NULLROUTE) {
-      header.version = HEAD_VERSION;
-      header.compat_version = COMPAT_VERSION;
-      bool m = msg ? true : false;
-      ::encode(m, payload);
-      if (msg)
-	encode_message(msg, features, payload);
-    } else {
-      header.version = 1;
-      header.compat_version = 1;
-      assert(msg);
+    bool m = msg ? true : false;
+    ::encode(m, payload);
+    if (msg)
       encode_message(msg, features, payload);
-    }
+    ::encode(send_osdmap_first, payload);
   }
 
   const char *get_type_name() const { return "route"; }
@@ -80,6 +86,8 @@ public:
       o << "route(" << *msg;
     else
       o << "route(no-reply";
+    if (send_osdmap_first)
+      o << " send_osdmap_first " << send_osdmap_first;
     if (session_mon_tid)
       o << " tid " << session_mon_tid << ")";
     else

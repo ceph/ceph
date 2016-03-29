@@ -8,15 +8,25 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "common/WorkQueue.h"
 
+#include "librbd/AioImageRequestWQ.h"
+#include "librbd/AioCompletion.h"
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
-#include "librbd/AsyncResizeRequest.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/Journal.h"
+#include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Operations.h"
+#include "librbd/operation/ResizeRequest.h"
+#include "librbd/Utils.h"
 
+#include "osdc/Striper.h"
 #include <boost/bind.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -39,14 +49,86 @@ namespace {
 
 class ThreadPoolSingleton : public ThreadPool {
 public:
-  ThreadPoolSingleton(CephContext *cct)
-    : ThreadPool(cct, "librbd::thread_pool", cct->_conf->rbd_op_threads,
+  explicit ThreadPoolSingleton(CephContext *cct)
+    : ThreadPool(cct, "librbd::thread_pool", "tp_librbd", cct->_conf->rbd_op_threads,
                  "rbd_op_threads") {
     start();
   }
   virtual ~ThreadPoolSingleton() {
     stop();
   }
+};
+
+struct C_FlushCache : public Context {
+  ImageCtx *image_ctx;
+  Context *on_safe;
+
+  C_FlushCache(ImageCtx *_image_ctx, Context *_on_safe)
+    : image_ctx(_image_ctx), on_safe(_on_safe) {
+  }
+  virtual void finish(int r) {
+    // successful cache flush indicates all IO is now safe
+    assert(image_ctx->owner_lock.is_locked());
+    image_ctx->flush_cache(on_safe);
+  }
+};
+
+struct C_ShutDownCache : public Context {
+  ImageCtx *image_ctx;
+  Context *on_finish;
+
+  C_ShutDownCache(ImageCtx *_image_ctx, Context *_on_finish)
+    : image_ctx(_image_ctx), on_finish(_on_finish) {
+  }
+  virtual void finish(int r) {
+    image_ctx->object_cacher->stop();
+    on_finish->complete(r);
+  }
+};
+
+struct C_InvalidateCache : public Context {
+  ImageCtx *image_ctx;
+  bool purge_on_error;
+  bool reentrant_safe;
+  Context *on_finish;
+
+  C_InvalidateCache(ImageCtx *_image_ctx, bool _purge_on_error,
+                    bool _reentrant_safe, Context *_on_finish)
+    : image_ctx(_image_ctx), purge_on_error(_purge_on_error),
+      reentrant_safe(_reentrant_safe), on_finish(_on_finish) {
+  }
+  virtual void finish(int r) {
+    assert(image_ctx->cache_lock.is_locked());
+    CephContext *cct = image_ctx->cct;
+
+    if (r == -EBLACKLISTED) {
+      lderr(cct) << "Blacklisted during flush!  Purging cache..." << dendl;
+      image_ctx->object_cacher->purge_set(image_ctx->object_set);
+    } else if (r != 0 && purge_on_error) {
+      lderr(cct) << "invalidate cache encountered error "
+                 << cpp_strerror(r) << " !Purging cache..." << dendl;
+      image_ctx->object_cacher->purge_set(image_ctx->object_set);
+    } else if (r != 0) {
+      lderr(cct) << "flush_cache returned " << r << dendl;
+    }
+
+    loff_t unclean = image_ctx->object_cacher->release_set(
+      image_ctx->object_set);
+    if (unclean == 0) {
+      r = 0;
+    } else {
+      lderr(cct) << "could not release all objects from cache: "
+                 << unclean << " bytes remain" << dendl;
+      r = -EBUSY;
+    }
+
+    if (reentrant_safe) {
+      on_finish->complete(r);
+    } else {
+      image_ctx->op_work_queue->queue(on_finish, r);
+    }
+  }
+
 };
 
 } // anonymous namespace
@@ -64,17 +146,16 @@ public:
       exclusive_locked(false),
       name(image_name),
       image_watcher(NULL),
-      refresh_seq(0),
-      last_refresh(0),
-      owner_lock(unique_lock_name("librbd::ImageCtx::owner_lock", this)),
-      md_lock(unique_lock_name("librbd::ImageCtx::md_lock", this)),
-      cache_lock(unique_lock_name("librbd::ImageCtx::cache_lock", this)),
-      snap_lock(unique_lock_name("librbd::ImageCtx::snap_lock", this)),
-      parent_lock(unique_lock_name("librbd::ImageCtx::parent_lock", this)),
-      refresh_lock(unique_lock_name("librbd::ImageCtx::refresh_lock", this)),
-      object_map_lock(unique_lock_name("librbd::ImageCtx::object_map_lock", this)),
-      async_ops_lock(unique_lock_name("librbd::ImageCtx::async_ops_lock", this)),
-      copyup_list_lock(unique_lock_name("librbd::ImageCtx::copyup_list_lock", this)),
+      journal(NULL),
+      owner_lock(util::unique_lock_name("librbd::ImageCtx::owner_lock", this)),
+      md_lock(util::unique_lock_name("librbd::ImageCtx::md_lock", this)),
+      cache_lock(util::unique_lock_name("librbd::ImageCtx::cache_lock", this)),
+      snap_lock(util::unique_lock_name("librbd::ImageCtx::snap_lock", this)),
+      parent_lock(util::unique_lock_name("librbd::ImageCtx::parent_lock", this)),
+      object_map_lock(util::unique_lock_name("librbd::ImageCtx::object_map_lock", this)),
+      async_ops_lock(util::unique_lock_name("librbd::ImageCtx::async_ops_lock", this)),
+      copyup_list_lock(util::unique_lock_name("librbd::ImageCtx::copyup_list_lock", this)),
+      completed_reqs_lock(util::unique_lock_name("librbd::ImageCtx::completed_reqs_lock", this)),
       extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),
@@ -83,8 +164,12 @@ public:
       stripe_unit(0), stripe_count(0), flags(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
-      total_bytes_read(0), copyup_finisher(NULL),
-      object_map(*this), aio_work_queue(NULL), op_work_queue(NULL)
+      total_bytes_read(0),
+      state(new ImageState<>(this)),
+      operations(new Operations<>(*this)),
+      exclusive_lock(nullptr), object_map(nullptr),
+      aio_work_queue(nullptr), op_work_queue(nullptr),
+      asok_hook(nullptr)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -92,21 +177,28 @@ public:
       snap_name = snap;
 
     memset(&header, 0, sizeof(header));
-    memset(&layout, 0, sizeof(layout));
 
     ThreadPoolSingleton *thread_pool_singleton;
     cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
       thread_pool_singleton, "librbd::thread_pool");
-    aio_work_queue = new ContextWQ("librbd::aio_work_queue",
-                                   cct->_conf->rbd_op_thread_timeout,
-                                   thread_pool_singleton);
+    aio_work_queue = new AioImageRequestWQ(this, "librbd::aio_work_queue",
+                                           cct->_conf->rbd_op_thread_timeout,
+                                           thread_pool_singleton);
     op_work_queue = new ContextWQ("librbd::op_work_queue",
                                   cct->_conf->rbd_op_thread_timeout,
                                   thread_pool_singleton);
   }
 
   ImageCtx::~ImageCtx() {
-    perf_stop();
+    assert(image_watcher == NULL);
+    assert(exclusive_lock == NULL);
+    assert(object_map == NULL);
+    assert(journal == NULL);
+    assert(asok_hook == NULL);
+
+    if (perfcounter) {
+      perf_stop();
+    }
     if (object_cacher) {
       delete object_cacher;
       object_cacher = NULL;
@@ -119,70 +211,37 @@ public:
       delete object_set;
       object_set = NULL;
     }
-    if (copyup_finisher != NULL) {
-      delete copyup_finisher;
-      copyup_finisher = NULL;
-    }
     delete[] format_string;
+
+    md_ctx.aio_flush();
+    data_ctx.aio_flush();
+    op_work_queue->drain();
+    aio_work_queue->drain();
 
     delete op_work_queue;
     delete aio_work_queue;
+    delete operations;
+    delete state;
   }
 
-  int ImageCtx::init() {
-    int r;
+  void ImageCtx::init() {
+    assert(!header_oid.empty());
+    assert(old_format || !id.empty());
+    if (!old_format) {
+      init_layout();
+    }
+    apply_metadata_confs();
+
+    asok_hook = new LibrbdAdminSocketHook(this);
+
     string pname = string("librbd-") + id + string("-") +
-      data_ctx.get_pool_name() + string("/") + name;
+      data_ctx.get_pool_name() + string("-") + name;
     if (!snap_name.empty()) {
-      pname += "@";
+      pname += "-";
       pname += snap_name;
     }
 
     perf_start(pname);
-
-    if (id.length()) {
-      old_format = false;
-    } else {
-      r = detect_format(md_ctx, name, &old_format, NULL);
-      if (r < 0) {
-	lderr(cct) << "error finding header: " << cpp_strerror(r) << dendl;
-	return r;
-      }
-    }
-
-    if (!old_format) {
-      if (!id.length()) {
-	r = cls_client::get_id(&md_ctx, id_obj_name(name), &id);
-	if (r < 0) {
-	  lderr(cct) << "error reading image id: " << cpp_strerror(r)
-		     << dendl;
-	  return r;
-	}
-      }
-
-      header_oid = header_name(id);
-      apply_metadata_confs();
-      r = cls_client::get_immutable_metadata(&md_ctx, header_oid,
-					     &object_prefix, &order);
-      if (r < 0) {
-	lderr(cct) << "error reading immutable metadata: "
-		   << cpp_strerror(r) << dendl;
-	return r;
-      }
-
-      r = cls_client::get_stripe_unit_count(&md_ctx, header_oid,
-					    &stripe_unit, &stripe_count);
-      if (r < 0 && r != -ENOEXEC && r != -EINVAL) {
-	lderr(cct) << "error reading striping metadata: "
-		   << cpp_strerror(r) << dendl;
-	return r;
-      }
-
-      init_layout();
-    } else {
-      apply_metadata_confs();
-      header_oid = old_header_name(name);
-    }
 
     if (cache) {
       Mutex::Locker l(cache_lock);
@@ -223,15 +282,16 @@ public:
       object_cacher->start();
     }
 
-    if (clone_copy_on_read) {
-      copyup_finisher = new Finisher(cct);
-      copyup_finisher->start();
-    }
-
     readahead.set_trigger_requests(readahead_trigger_requests);
     readahead.set_max_readahead_size(readahead_max_bytes);
+  }
 
-    return 0;
+  void ImageCtx::shutdown() {
+    delete image_watcher;
+    image_watcher = nullptr;
+
+    delete asok_hook;
+    asok_hook = nullptr;
   }
 
   void ImageCtx::init_layout()
@@ -247,11 +307,11 @@ public:
     alignments.push_back(stripe_unit); // stripe unit
     readahead.set_alignments(alignments);
 
-    memset(&layout, 0, sizeof(layout));
-    layout.fl_stripe_unit = stripe_unit;
-    layout.fl_stripe_count = stripe_count;
-    layout.fl_object_size = 1ull << order;
-    layout.fl_pg_pool = data_ctx.get_id();  // FIXME: pool id overflow?
+    layout = file_layout_t();
+    layout.stripe_unit = stripe_unit;
+    layout.stripe_count = stripe_count;
+    layout.object_size = 1ull << order;
+    layout.pool_id = data_ctx.get_id();  // FIXME: pool id overflow?
 
     delete[] format_string;
     size_t len = object_prefix.length() + 16;
@@ -264,7 +324,7 @@ public:
 
     ldout(cct, 10) << "init_layout stripe_unit " << stripe_unit
 		   << " stripe_count " << stripe_count
-		   << " object_size " << layout.fl_object_size
+		   << " object_size " << layout.object_size
 		   << " prefix " << object_prefix
 		   << " format " << format_string
 		   << dendl;
@@ -288,10 +348,12 @@ public:
     plb.add_u64_counter(l_librbd_snap_create, "snap_create", "Snap creations");
     plb.add_u64_counter(l_librbd_snap_remove, "snap_remove", "Snap removals");
     plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback", "Snap rollbacks");
+    plb.add_u64_counter(l_librbd_snap_rename, "snap_rename", "Snap rename");
     plb.add_u64_counter(l_librbd_notify, "notify", "Updated header notifications");
     plb.add_u64_counter(l_librbd_resize, "resize", "Resizes");
     plb.add_u64_counter(l_librbd_readahead, "readahead", "Read ahead");
     plb.add_u64_counter(l_librbd_readahead_bytes, "readahead_bytes", "Data size in read ahead");
+    plb.add_u64_counter(l_librbd_invalidate_cache, "invalidate_cache", "Cache invalidates");
 
     perfcounter = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perfcounter);
@@ -328,7 +390,6 @@ public:
       snap_name = in_snap_name;
       snap_exists = true;
       data_ctx.snap_set_read(snap_id);
-      object_map.refresh(in_snap_id);
       return 0;
     }
     return -ENOENT;
@@ -341,7 +402,6 @@ public:
     snap_name = "";
     snap_exists = true;
     data_ctx.snap_set_read(snap_id);
-    object_map.refresh(CEPH_NOSNAP);
   }
 
   snap_t ImageCtx::get_snap_id(string in_snap_name) const
@@ -468,9 +528,9 @@ public:
   {
     assert(snap_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
-      if (!async_resize_reqs.empty() &&
-          async_resize_reqs.front()->shrinking()) {
-        return async_resize_reqs.front()->get_image_size();
+      if (!resize_reqs.empty() &&
+          resize_reqs.front()->shrinking()) {
+        return resize_reqs.front()->get_image_size();
       }
       return size;
     }
@@ -482,10 +542,23 @@ public:
     return 0;
   }
 
-  bool ImageCtx::test_features(uint64_t test_features) const
+  uint64_t ImageCtx::get_object_count(snap_t in_snap_id) const {
+    assert(snap_lock.is_locked());
+    uint64_t image_size = get_image_size(in_snap_id);
+    return Striper::get_num_objects(layout, image_size);
+  }
+
+  bool ImageCtx::test_features(uint64_t features) const
   {
     RWLock::RLocker l(snap_lock);
-    return ((features & test_features) == test_features);
+    return test_features(features, snap_lock);
+  }
+
+  bool ImageCtx::test_features(uint64_t in_features,
+                               const RWLock &in_snap_lock) const
+  {
+    assert(snap_lock.is_locked());
+    return ((features & in_features) == in_features);
   }
 
   int ImageCtx::get_flags(librados::snap_t _snap_id, uint64_t *_flags) const
@@ -503,12 +576,18 @@ public:
     return -ENOENT;
   }
 
-  bool ImageCtx::test_flags(uint64_t test_flags) const
+  bool ImageCtx::test_flags(uint64_t flags) const
   {
     RWLock::RLocker l(snap_lock);
+    return test_flags(flags, snap_lock);
+  }
+
+  bool ImageCtx::test_flags(uint64_t flags, const RWLock &in_snap_lock) const
+  {
+    assert(snap_lock.is_locked());
     uint64_t snap_flags;
     get_flags(snap_id, &snap_flags);
-    return ((snap_flags & test_flags) == test_flags);
+    return ((snap_flags & flags) == flags);
   }
 
   int ImageCtx::update_flags(snap_t in_snap_id, uint64_t flag, bool enabled)
@@ -611,10 +690,10 @@ public:
 
   void ImageCtx::write_to_cache(object_t o, const bufferlist& bl, size_t len,
 				uint64_t off, Context *onfinish,
-				int fadvise_flags) {
+				int fadvise_flags, uint64_t journal_tid) {
     snap_lock.get_read();
-    ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
-							      utime_t(), fadvise_flags);
+    ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(
+      snapc, bl, ceph::real_time::min(), fadvise_flags, journal_tid);
     snap_lock.put_read();
     ObjectExtent extent(o, 0, off, len, 0);
     extent.oloc.pool = data_ctx.get_id();
@@ -647,54 +726,42 @@ public:
     }
   }
 
-  void ImageCtx::flush_cache_aio(Context *onfinish) {
+  void ImageCtx::flush_cache(Context *onfinish) {
     assert(owner_lock.is_locked());
     cache_lock.Lock();
     object_cacher->flush_set(object_set, onfinish);
     cache_lock.Unlock();
   }
 
-  int ImageCtx::flush_cache() {
-    int r = 0;
-    Mutex mylock("librbd::ImageCtx::flush_cache");
-    Cond cond;
-    bool done;
-    Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-    flush_cache_aio(onfinish);
-    mylock.Lock();
-    while (!done) {
-      ldout(cct, 20) << "waiting for cache to be flushed" << dendl;
-      cond.Wait(mylock);
+  void ImageCtx::shut_down_cache(Context *on_finish) {
+    if (object_cacher == NULL) {
+      on_finish->complete(0);
+      return;
     }
-    mylock.Unlock();
-    ldout(cct, 20) << "finished flushing cache" << dendl;
-    return r;
-  }
-
-  int ImageCtx::shutdown_cache() {
-    flush_async_operations();
 
     RWLock::RLocker owner_locker(owner_lock);
-    int r = invalidate_cache(true);
-    object_cacher->stop();
-    return r;
+    cache_lock.Lock();
+    object_cacher->release_set(object_set);
+    cache_lock.Unlock();
+
+    C_ShutDownCache *shut_down = new C_ShutDownCache(this, on_finish);
+    flush_cache(new C_InvalidateCache(this, true, false, shut_down));
   }
 
   int ImageCtx::invalidate_cache(bool purge_on_error) {
-    int result;
-    C_SaferCond ctx;
-    invalidate_cache(&ctx);
-    result = ctx.wait();
-
-    if (result && purge_on_error) {
-      cache_lock.Lock();
-      if (object_cacher != NULL) {
-	lderr(cct) << "invalidate cache met error " << cpp_strerror(result) << " !Purging cache..." << dendl;
-	object_cacher->purge_set(object_set);
-      }
-      cache_lock.Unlock();
+    flush_async_operations();
+    if (object_cacher == NULL) {
+      return 0;
     }
 
+    cache_lock.Lock();
+    object_cacher->release_set(object_set);
+    cache_lock.Unlock();
+
+    C_SaferCond ctx;
+    flush_cache(new C_InvalidateCache(this, purge_on_error, true, &ctx));
+
+    int result = ctx.wait();
     return result;
   }
 
@@ -708,29 +775,7 @@ public:
     object_cacher->release_set(object_set);
     cache_lock.Unlock();
 
-    flush_cache_aio(new FunctionContext(boost::bind(
-      &ImageCtx::invalidate_cache_completion, this, _1, on_finish)));
-  }
-
-  void ImageCtx::invalidate_cache_completion(int r, Context *on_finish) {
-    assert(cache_lock.is_locked());
-    if (r == -EBLACKLISTED) {
-      lderr(cct) << "Blacklisted during flush!  Purging cache..." << dendl;
-      object_cacher->purge_set(object_set);
-    } else if (r != 0) {
-      lderr(cct) << "flush_cache returned " << r << dendl;
-    }
-
-    loff_t unclean = object_cacher->release_set(object_set);
-    if (unclean == 0) {
-      r = 0;
-    } else {
-      lderr(cct) << "could not release all objects from cache: "
-                 << unclean << " bytes remain" << dendl;
-      r = -EBUSY;
-    }
-
-    op_work_queue->queue(on_finish, r);
+    flush_cache(new C_InvalidateCache(this, false, false, on_finish));
   }
 
   void ImageCtx::clear_nonexistence_cache() {
@@ -740,17 +785,10 @@ public:
     object_cacher->clear_nonexistence(object_set);
   }
 
-  int ImageCtx::register_watch() {
+  void ImageCtx::register_watch(Context *on_finish) {
     assert(image_watcher == NULL);
     image_watcher = new ImageWatcher(*this);
-    return image_watcher->register_watch();
-  }
-
-  void ImageCtx::unregister_watch() {
-    assert(image_watcher != NULL);
-    image_watcher->unregister_watch();
-    delete image_watcher;
-    image_watcher = NULL;
+    image_watcher->register_watch(on_finish);
   }
 
   uint64_t ImageCtx::prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
@@ -782,31 +820,65 @@ public:
   }
 
   void ImageCtx::flush_async_operations(Context *on_finish) {
-    Mutex::Locker l(async_ops_lock);
-    if (async_ops.empty()) {
-      op_work_queue->queue(on_finish, 0);
-      return;
+    {
+      Mutex::Locker l(async_ops_lock);
+      if (!async_ops.empty()) {
+        ldout(cct, 20) << "flush async operations: " << on_finish << " "
+                       << "count=" << async_ops.size() << dendl;
+        async_ops.front()->add_flush_context(on_finish);
+        return;
+      }
     }
+    on_finish->complete(0);
+  }
 
-    ldout(cct, 20) << "flush async operations: " << on_finish << " "
-                   << "count=" << async_ops.size() << dendl;
-    async_ops.front()->add_flush_context(on_finish);
+  int ImageCtx::flush() {
+    C_SaferCond cond_ctx;
+    flush(&cond_ctx);
+    return cond_ctx.wait();
+  }
+
+  void ImageCtx::flush(Context *on_safe) {
+    // ensure no locks are held when flush is complete
+    on_safe = util::create_async_context_callback(*this, on_safe);
+
+    assert(owner_lock.is_locked());
+    if (object_cacher != NULL) {
+      // flush cache after completing all in-flight AIO ops
+      on_safe = new C_FlushCache(this, on_safe);
+    }
+    flush_async_operations(on_safe);
   }
 
   void ImageCtx::cancel_async_requests() {
-    Mutex::Locker l(async_ops_lock);
-    ldout(cct, 10) << "canceling async requests: count="
-                   << async_requests.size() << dendl;
+    C_SaferCond ctx;
+    cancel_async_requests(&ctx);
+    ctx.wait();
+  }
 
-    for (xlist<AsyncRequest*>::iterator it = async_requests.begin();
-         !it.end(); ++it) {
-      ldout(cct, 10) << "canceling async request: " << *it << dendl;
-      (*it)->cancel();
+  void ImageCtx::cancel_async_requests(Context *on_finish) {
+    {
+      Mutex::Locker async_ops_locker(async_ops_lock);
+      if (!async_requests.empty()) {
+        ldout(cct, 10) << "canceling async requests: count="
+                       << async_requests.size() << dendl;
+        for (auto req : async_requests) {
+          ldout(cct, 10) << "canceling async request: " << req << dendl;
+          req->cancel();
+        }
+        async_requests_waiters.push_back(on_finish);
+        return;
+      }
     }
 
-    while (!async_requests.empty()) {
-      async_requests_cond.Wait(async_ops_lock);
-    }
+    on_finish->complete(0);
+  }
+
+  void ImageCtx::clear_pending_completions() {
+    Mutex::Locker l(completed_reqs_lock);
+    ldout(cct, 10) << "clear pending AioCompletion: count="
+                   << completed_reqs.size() << dendl;
+    completed_reqs.clear();
   }
 
   bool ImageCtx::_filter_metadata_confs(const string &prefix, map<string, bool> &configs,
@@ -815,17 +887,17 @@ public:
 
     string start = prefix;
     for (map<string, bufferlist>::iterator it = pairs.begin(); it != pairs.end(); ++it) {
-      if (it->first.size() <= conf_prefix_len || it->first.compare(0, conf_prefix_len, prefix))
+      if (it->first.compare(0, MIN(conf_prefix_len, it->first.size()), prefix) > 0)
         return false;
 
+      if (it->first.size() <= conf_prefix_len)
+        continue;
+
       string key = it->first.substr(conf_prefix_len, it->first.size() - conf_prefix_len);
-      for (map<string, bool>::iterator cit = configs.begin();
-           cit != configs.end(); ++cit) {
-        if (!key.compare(cit->first)) {
-          cit->second = true;
-          res->insert(make_pair(key, it->second));
-          break;
-        }
+      map<string, bool>::iterator cit = configs.find(key);
+      if ( cit != configs.end()) {
+        cit->second = true;
+        res->insert(make_pair(key, it->second));
       }
     }
     return true;
@@ -855,16 +927,22 @@ public:
         "rbd_clone_copy_on_read", false)(
         "rbd_blacklist_on_break_lock", false)(
         "rbd_blacklist_expire_seconds", false)(
-        "rbd_request_timed_out_seconds", false);
+        "rbd_request_timed_out_seconds", false)(
+        "rbd_journal_order", false)(
+        "rbd_journal_splay_width", false)(
+        "rbd_journal_commit_age", false)(
+        "rbd_journal_object_flush_interval", false)(
+        "rbd_journal_object_flush_bytes", false)(
+        "rbd_journal_object_flush_age", false)(
+        "rbd_journal_pool", false);
 
     string start = METADATA_CONF_PREFIX;
-    int r = 0, j = 0;
     md_config_t local_config_t;
 
     bool retrieve_metadata = !old_format;
     while (retrieve_metadata) {
       map<string, bufferlist> pairs, res;
-      r = cls_client::metadata_list(&md_ctx, header_oid, start, max_conf_items,
+      int r = cls_client::metadata_list(&md_ctx, header_oid, start, max_conf_items,
                                     &pairs);
       if (r == -EOPNOTSUPP || r == -EIO) {
         ldout(cct, 10) << "config metadata not supported by OSD" << dendl;
@@ -882,20 +960,22 @@ public:
                                                  pairs, &res);
       for (map<string, bufferlist>::iterator it = res.begin();
            it != res.end(); ++it) {
-        j = local_config_t.set_val(it->first.c_str(), it->second.c_str());
+        string val(it->second.c_str(), it->second.length());
+        int j = local_config_t.set_val(it->first.c_str(), val);
         if (j < 0) {
           lderr(cct) << __func__ << " failed to set config " << it->first
                      << " with value " << it->second.c_str() << ": " << j
                      << dendl;
         }
-        break;
       }
       start = pairs.rbegin()->first;
     }
 
 #define ASSIGN_OPTION(config)                                                  \
     do {                                                                       \
-      if (configs[#config])                                                    \
+      string key = "rbd_";						       \
+      key = key + #config;					      	       \
+      if (configs[key])                                                        \
         config = local_config_t.rbd_##config;                                  \
       else                                                                     \
         config = cct->_conf->rbd_##config;                                     \
@@ -923,5 +1003,47 @@ public:
     ASSIGN_OPTION(blacklist_expire_seconds);
     ASSIGN_OPTION(request_timed_out_seconds);
     ASSIGN_OPTION(enable_alloc_hint);
+    ASSIGN_OPTION(journal_order);
+    ASSIGN_OPTION(journal_splay_width);
+    ASSIGN_OPTION(journal_commit_age);
+    ASSIGN_OPTION(journal_object_flush_interval);
+    ASSIGN_OPTION(journal_object_flush_bytes);
+    ASSIGN_OPTION(journal_object_flush_age);
+    ASSIGN_OPTION(journal_pool);
+  }
+
+  ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {
+    return new ExclusiveLock<ImageCtx>(*this);
+  }
+
+  ObjectMap *ImageCtx::create_object_map(uint64_t snap_id) {
+    return new ObjectMap(*this, snap_id);
+  }
+
+  Journal<ImageCtx> *ImageCtx::create_journal() {
+    return new Journal<ImageCtx>(*this);
+  }
+
+  void ImageCtx::set_image_name(const std::string &image_name) {
+    // update the name so rename can be invoked repeatedly
+    RWLock::RLocker owner_locker(owner_lock);
+    RWLock::WLocker snap_locker(snap_lock);
+    name = image_name;
+    if (old_format) {
+      header_oid = util::old_header_name(image_name);
+    }
+  }
+
+  void ImageCtx::notify_update() {
+    state->handle_update_notification();
+
+    C_SaferCond ctx;
+    image_watcher->notify_header_update(&ctx);
+    ctx.wait();
+  }
+
+  void ImageCtx::notify_update(Context *on_finish) {
+    state->handle_update_notification();
+    image_watcher->notify_header_update(on_finish);
   }
 }

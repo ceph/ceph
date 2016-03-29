@@ -17,6 +17,7 @@
 #ifndef CEPH_MSG_EVENTKQUEUE_H
 #define CEPH_MSG_EVENTKQUEUE_H
 
+#include <sys/types.h>
 #include <sys/event.h>
 #include <unistd.h>
 
@@ -29,7 +30,7 @@ class KqueueDriver : public EventDriver {
   int size;
 
  public:
-  KqueueDriver(CephContext *c): kqfd(-1), events(NULL), cct(c), size(0) {}
+  explicit KqueueDriver(CephContext *c): kqfd(-1), events(NULL), cct(c), size(0) {}
   virtual ~KqueueDriver() {
     if (kqfd != -1)
       close(kqfd);

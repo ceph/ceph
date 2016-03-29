@@ -15,14 +15,16 @@
 #
 # git log --pretty='%aN <%aE>' $range | git -c mailmap.file=.peoplemap check-mailmap --stdin | sort | uniq | sed -e 's/\(.*\) \(<.*\)/\2 \1/' | uniq --skip-field=1 --all-repeated | sed -e 's/\(.*>\) \(.*\)/\2 \1/'
 #
+Abhishek Lekshmanan <abhishek@suse.com> Abhishek Lekshmanan <abhishek.lekshmanan@ril.com> 
 Alexandre Marangone <amarango@redhat.com> Alexandre Marangone <alexandre.marangone@inktank.com>
 Alfredo Deza <adeza@redhat.com> Alfredo Deza <alfredo.deza@inktank.com>
 Dan Mick <dmick@redhat.com> Dan Mick <dan.mick@inktank.com>
 David Zafman <dzafman@redhat.com> David Zafman <david.zafman@inktank.com>
 Greg Farnum <gfarnum@redhat.com> Greg Farnum <greg@inktank.com>
 Ilya Dryomov <idryomov@redhat.com> Ilya Dryomov <ilya.dryomov@inktank.com>
-Joao Eduardo Luis <joao@suse.de> João Eduardo Luís <joao@redhat.com>
-Joao Eduardo Luis <joao@suse.de> João Eduardo Luís <joao.luis@inktank.com>
+Jenkins <jenkins@ceph.com> Jenkins <jenkins@inktank.com>
+João Eduardo Luís <joao@suse.de> João Eduardo Luís <joao.luis@inktank.com>
+João Eduardo Luís <joao@suse.de> João Eduardo Luís <joao@redhat.com>
 John Spray <jspray@redhat.com> John Spray <john.spray@inktank.com>
 John Wilkins <jwilkins@redhat.com> John Wilkins <john.wilkins@inktank.com>
 Josh Durgin <jdurgin@redhat.com> Josh Durgin <josh.durgin@inktank.com>
@@ -44,3 +46,4 @@ Warren Usui <wusui@redhat.com> Warren Usui <warren.usui@inktank.com>
 Yan, Zheng <zyan@redhat.com> Yan, Zheng <zheng.z.yan@intel.com>
 Yehuda Sadeh <ysadehwe@redhat.com> Yehuda Sadeh <yehuda@inktank.com>
 Yuri Weinstein <yuri.weinstein@redhat.com> Yuri Weinstein <yuri.weinstein@inktank.com>
+Zhi Zhang <zhangz.david@outlook.com> Zhi (David) Zhang <zhangz@yahoo-inc.com>

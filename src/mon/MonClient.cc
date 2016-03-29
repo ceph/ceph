@@ -116,9 +116,10 @@ int MonClient::get_monmap_privately()
   bool temp_msgr = false;
   Messenger* smessenger = NULL;
   if (!messenger) {
-    messenger = smessenger = Messenger::create(cct, cct->_conf->ms_type,
-					       entity_name_t::CLIENT(-1),
-					       "temp_mon_client", getpid());
+    messenger = smessenger = Messenger::create_client_messenger(cct, "temp_mon_client");
+    if (NULL == messenger) {
+        return -1;
+    }
     messenger->add_dispatcher_head(this);
     smessenger->start();
     temp_msgr = true;
@@ -207,25 +208,30 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
 {
   ldout(cct, 10) << __func__ << dendl;
 
-  if (mon_id.empty()) {
+  string new_mon_id;
+  if (monmap.contains("noname-"+mon_id)) {
+    new_mon_id = "noname-"+mon_id;
+  } else {
+    new_mon_id = mon_id;
+  }
+
+  if (new_mon_id.empty()) {
     ldout(cct, 10) << __func__ << " specified mon id is empty!" << dendl;
     return -EINVAL;
-  } else if (!monmap.contains(mon_id)) {
-    ldout(cct, 10) << __func__ << " no such monitor 'mon." << mon_id << "'"
+  } else if (!monmap.contains(new_mon_id)) {
+    ldout(cct, 10) << __func__ << " no such monitor 'mon." << new_mon_id << "'"
                    << dendl;
     return -ENOENT;
   }
 
   MonClientPinger *pinger = new MonClientPinger(cct, result_reply);
 
-  Messenger *smsgr = Messenger::create(cct, cct->_conf->ms_type,
-				       entity_name_t::CLIENT(-1),
-				       "temp_ping_client", getpid());
+  Messenger *smsgr = Messenger::create_client_messenger(cct, "temp_ping_client");
   smsgr->add_dispatcher_head(pinger);
   smsgr->start();
 
-  ConnectionRef con = smsgr->get_connection(monmap.get_inst(mon_id));
-  ldout(cct, 10) << __func__ << " ping mon." << mon_id
+  ConnectionRef con = smsgr->get_connection(monmap.get_inst(new_mon_id));
+  ldout(cct, 10) << __func__ << " ping mon." << new_mon_id
                  << " " << con->get_peer_addr() << dendl;
   con->send_message(new MPing);
 
@@ -656,7 +662,13 @@ void MonClient::_reopen_session(int rank, string name)
   ::encode(global_id, m->auth_payload);
   _send_mon_message(m, true);
 
-  if (!sub_have.empty())
+  for (map<string,ceph_mon_subscribe_item>::iterator p = sub_sent.begin();
+       p != sub_sent.end();
+       ++p) {
+    if (sub_new.count(p->first) == 0)
+      sub_new[p->first] = p->second;
+  }
+  if (!sub_new.empty())
     _renew_subs();
 }
 
@@ -706,28 +718,30 @@ void MonClient::tick()
   } else if (!cur_mon.empty()) {
     // just renew as needed
     utime_t now = ceph_clock_now(cct);
-    ldout(cct, 10) << "renew subs? (now: " << now 
-		   << "; renew after: " << sub_renew_after << ") -- " 
-		   << (now > sub_renew_after ? "yes" : "no") 
-		   << dendl;
-    if (now > sub_renew_after)
-      _renew_subs();
+    if (!cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
+      ldout(cct, 10) << "renew subs? (now: " << now
+		     << "; renew after: " << sub_renew_after << ") -- "
+		     << (now > sub_renew_after ? "yes" : "no")
+		     << dendl;
+      if (now > sub_renew_after)
+	_renew_subs();
+    }
 
     cur_con->send_keepalive();
 
     if (state == MC_STATE_HAVE_SESSION) {
-      send_log();
-
       if (cct->_conf->mon_client_ping_timeout > 0 &&
 	  cur_con->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
 	utime_t lk = cur_con->get_last_keepalive_ack();
-	utime_t interval = ceph_clock_now(cct) - lk;
+	utime_t interval = now - lk;
 	if (interval > cct->_conf->mon_client_ping_timeout) {
 	  ldout(cct, 1) << "no keepalive since " << lk << " (" << interval
 			<< " seconds), reconnecting" << dendl;
 	  _reopen_session();
 	}
       }
+
+      send_log();
     }
   }
 
@@ -748,7 +762,7 @@ void MonClient::schedule_tick()
 void MonClient::_renew_subs()
 {
   assert(monc_lock.is_locked());
-  if (sub_have.empty()) {
+  if (sub_new.empty()) {
     ldout(cct, 10) << "renew_subs - empty" << dendl;
     return;
   }
@@ -761,14 +775,19 @@ void MonClient::_renew_subs()
       sub_renew_sent = ceph_clock_now(cct);
 
     MMonSubscribe *m = new MMonSubscribe;
-    m->what = sub_have;
+    m->what = sub_new;
     _send_mon_message(m);
+
+    sub_sent.insert(sub_new.begin(), sub_new.end());
+    sub_new.clear();
   }
 }
 
 void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 {
   if (sub_renew_sent != utime_t()) {
+    // NOTE: this is only needed for legacy (infernalis or older)
+    // mons; see tick().
     sub_renew_after = sub_renew_sent;
     sub_renew_after += m->interval / 2.0;
     ldout(cct, 10) << "handle_subscribe_ack sent " << sub_renew_sent << " renew after " << sub_renew_after << dendl;

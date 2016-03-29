@@ -42,7 +42,7 @@ protected:
     return sm->mds;
   }
 public:
-  StrayManagerIOContext(StrayManager *sm_) : sm(sm_) {}
+  explicit StrayManagerIOContext(StrayManager *sm_) : sm(sm_) {}
 };
 
 
@@ -54,7 +54,7 @@ protected:
     return sm->mds;
   }
 public:
-  StrayManagerContext(StrayManager *sm_) : sm(sm_) {}
+  explicit StrayManagerContext(StrayManager *sm_) : sm(sm_) {}
 };
 
 
@@ -107,8 +107,9 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
          ++p) {
       object_t oid = CInode::get_object_name(in->inode.ino, *p, "");
       dout(10) << __func__ << " remove dirfrag " << oid << dendl;
-      mds->objecter->remove(oid, oloc, nullsnapc, ceph_clock_now(g_ceph_context),
-                            0, NULL, gather.new_sub());
+      mds->objecter->remove(oid, oloc, nullsnapc,
+			    ceph::real_clock::now(g_ceph_context),
+			    0, NULL, gather.new_sub());
     }
     assert(gather.has_subs());
     gather.activate();
@@ -127,32 +128,31 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
   }
 
   if (in->is_file()) {
-    uint64_t period = (uint64_t)in->inode.layout.fl_object_size *
-		      (uint64_t)in->inode.layout.fl_stripe_count;
     uint64_t to = in->inode.get_max_size();
     to = MAX(in->inode.size, to);
     // when truncating a file, the filer does not delete stripe objects that are
     // truncated to zero. so we need to purge stripe objects up to the max size
     // the file has ever been.
     to = MAX(in->inode.max_size_ever, to);
-    if (to && period) {
-      uint64_t num = (to + period - 1) / period;
+    if (to > 0) {
+      uint64_t num = Striper::get_num_objects(in->inode.layout, to);
       dout(10) << __func__ << " 0~" << to << " objects 0~" << num
 	       << " snapc " << snapc << " on " << *in << dendl;
       filer.purge_range(in->inode.ino, &in->inode.layout, *snapc,
-			      0, num, ceph_clock_now(g_ceph_context), 0,
-			      gather.new_sub());
+			0, num, ceph::real_clock::now(g_ceph_context), 0,
+			gather.new_sub());
     }
   }
 
   inode_t *pi = in->get_projected_inode();
   object_t oid = CInode::get_object_name(pi->ino, frag_t(), "");
   // remove the backtrace object if it was not purged
-  if (!gather.has_subs()) {
-    object_locator_t oloc(pi->layout.fl_pg_pool);
+  if (!gather.has_subs() || !pi->layout.pool_ns.empty()) {
+    object_locator_t oloc(pi->layout.pool_id);
     dout(10) << __func__ << " remove backtrace object " << oid
 	     << " pool " << oloc.pool << " snapc " << snapc << dendl;
-    mds->objecter->remove(oid, oloc, *snapc, ceph_clock_now(g_ceph_context), 0,
+    mds->objecter->remove(oid, oloc, *snapc,
+			  ceph::real_clock::now(g_ceph_context), 0,
 			  NULL, gather.new_sub());
   }
   // remove old backtrace objects
@@ -162,7 +162,8 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
     object_locator_t oloc(*p);
     dout(10) << __func__ << " remove backtrace object " << oid
 	     << " old pool " << *p << " snapc " << snapc << dendl;
-    mds->objecter->remove(oid, oloc, *snapc, ceph_clock_now(g_ceph_context), 0,
+    mds->objecter->remove(oid, oloc, *snapc,
+			  ceph::real_clock::now(g_ceph_context), 0,
 			  NULL, gather.new_sub());
   }
   assert(gather.has_subs());
@@ -317,12 +318,6 @@ void StrayManager::enqueue(CDentry *dn, bool trunc)
   dn->get(CDentry::PIN_PURGING);
   in->state_set(CInode::STATE_PURGING);
 
-  if (dn->item_stray.is_on_list()) {
-    dn->item_stray.remove_myself();
-    num_strays_delayed--;
-    logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
-  }
-
   /* We must clear this as soon as enqueuing it, to prevent the journal
    * expiry code from seeing a dirty parent and trying to write a backtrace */
   if (!trunc) {
@@ -441,12 +436,10 @@ uint32_t StrayManager::_calculate_ops_required(CInode *in, bool trunc)
     ops_required = 1 + ls.size();
   } else {
     // File, work out concurrent Filer::purge deletes
-    const uint64_t period = (uint64_t)in->inode.layout.fl_object_size *
-		      (uint64_t)in->inode.layout.fl_stripe_count;
     const uint64_t to = MAX(in->inode.max_size_ever,
             MAX(in->inode.size, in->inode.get_max_size()));
 
-    const uint64_t num = MAX(1, (to + period - 1) / period);
+    const uint64_t num = (to > 0) ? Striper::get_num_objects(in->inode.layout, to) : 1;
     ops_required = MIN(num, g_conf->filer_max_purge_ops);
 
     // Account for removing (or zeroing) backtrace
@@ -544,6 +537,15 @@ bool StrayManager::__eval_stray(CDentry *dn, bool delay)
 
     in->mdcache->touch_dentry_bottom(dn);
     return false;
+  }
+
+  if (dn->item_stray.is_on_list()) {
+    if (delay)
+      return false;
+
+    dn->item_stray.remove_myself();
+    num_strays_delayed--;
+    logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
   }
 
   // purge?
@@ -801,28 +803,27 @@ void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
   dout(10) << " realm " << *realm << dendl;
   const SnapContext *snapc = &realm->get_snap_context();
 
-  uint64_t period = (uint64_t)in->inode.layout.fl_object_size *
-		    (uint64_t)in->inode.layout.fl_stripe_count;
   uint64_t to = in->inode.get_max_size();
   to = MAX(in->inode.size, to);
   // when truncating a file, the filer does not delete stripe objects that are
   // truncated to zero. so we need to purge stripe objects up to the max size
   // the file has ever been.
   to = MAX(in->inode.max_size_ever, to);
-  if (period && to > period) {
-    uint64_t num = (to - 1) / period;
+  if (to > 0) {
+    uint64_t num = Striper::get_num_objects(in->inode.layout, to);
     dout(10) << __func__ << " 0~" << to << " objects 0~" << num
-      << " snapc " << snapc << " on " << *in << dendl;
-    filer.purge_range(in->ino(), &in->inode.layout, *snapc,
-			    1, num, ceph_clock_now(g_ceph_context),
-			    0, gather.new_sub());
-  }
+	     << " snapc " << snapc << " on " << *in << dendl;
 
-  // keep backtrace object
-  if (period && to > 0) {
+    // keep backtrace object
+    if (num > 1) {
+      filer.purge_range(in->ino(), &in->inode.layout, *snapc,
+			1, num - 1, ceph::real_clock::now(g_ceph_context),
+			0, gather.new_sub());
+    }
     filer.zero(in->ino(), &in->inode.layout, *snapc,
-		     0, period, ceph_clock_now(g_ceph_context),
-		     0, true, NULL, gather.new_sub());
+	       0, in->inode.layout.object_size,
+	       ceph::real_clock::now(g_ceph_context),
+	       0, true, NULL, gather.new_sub());
   }
 
   assert(gather.has_subs());
@@ -844,54 +845,31 @@ void StrayManager::_truncate_stray_logged(CDentry *dn, LogSegment *ls)
 }
 
 
-const char** StrayManager::get_tracked_conf_keys() const
-{
-  static const char* KEYS[] = {
-    "mds_max_purge_ops",
-    "mds_max_purge_ops_per_pg",
-    NULL
-  };
-  return KEYS;
-}
-
-void StrayManager::handle_conf_change(const struct md_config_t *conf,
-			  const std::set <std::string> &changed)
-{
-  if (changed.count("mds_max_purge_ops")
-      || changed.count("mds_max_purge_ops_per_pg")) {
-    update_op_limit();
-  }
-}
-
-
 void StrayManager::update_op_limit()
 {
-  const OSDMap *osdmap = mds->objecter->get_osdmap_read();
-  assert(osdmap != NULL);
-
-  // Number of PGs across all data pools
   uint64_t pg_count = 0;
-  const std::set<int64_t> &data_pools = mds->mdsmap->get_data_pools();
-  for (std::set<int64_t>::iterator i = data_pools.begin();
-       i != data_pools.end(); ++i) {
-    if (osdmap->get_pg_pool(*i) == NULL) {
-      // It is possible that we have an older OSDMap than MDSMap, because
-      // we don't start watching every OSDMap until after MDSRank is
-      // initialized
-      dout(4) << __func__ << " data pool " << *i
-              << " not found in OSDMap" << dendl;
-      continue;
-    }
-    pg_count += osdmap->get_pg_num(*i);
-  }
-
-  mds->objecter->put_osdmap_read();
+  mds->objecter->with_osdmap([&](const OSDMap& o) {
+      // Number of PGs across all data pools
+      const std::set<int64_t> &data_pools = mds->mdsmap->get_data_pools();
+      for (const auto dp : data_pools) {
+	if (o.get_pg_pool(dp) == NULL) {
+	  // It is possible that we have an older OSDMap than MDSMap,
+	  // because we don't start watching every OSDMap until after
+	  // MDSRank is initialized
+	  dout(4) << __func__ << " data pool " << dp
+		  << " not found in OSDMap" << dendl;
+	  continue;
+	}
+	pg_count += o.get_pg_num(dp);
+      }
+    });
 
   uint64_t mds_count = mds->mdsmap->get_max_mds();
 
   // Work out a limit based on n_pgs / n_mdss, multiplied by the user's
   // preference for how many ops per PG
-  max_purge_ops = uint64_t(((double)pg_count / (double)mds_count) * g_conf->mds_max_purge_ops_per_pg);
+  max_purge_ops = uint64_t(((double)pg_count / (double)mds_count) *
+			   g_conf->mds_max_purge_ops_per_pg);
 
   // User may also specify a hard limit, apply this if so.
   if (g_conf->mds_max_purge_ops) {

@@ -201,8 +201,7 @@ The following entries describe each capability.
 Pool
 ----
 
-A pool is a logical partition where users store data. By default, a Ceph Storage
-Cluster has `pools`_ for ``data``, ``rbd`` and ``metadata`` (metadata server).
+A pool is a logical partition where users store data.
 In Ceph deployments, it is common to create a pool as a logical partition for
 similar types of data. For example, when deploying Ceph as a backend for
 OpenStack, a typical deployment would have pools for volumes, images, backups

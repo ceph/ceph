@@ -11,10 +11,146 @@
 
 #include "rgw_common.h"
 #include "rgw_keystone.h"
+#include "common/ceph_crypto_cms.h"
+#include "common/armor.h"
 
 #define dout_subsys ceph_subsys_rgw
 
-bool KeystoneToken::User::has_role(const string& r) {
+int rgw_open_cms_envelope(CephContext * const cct, string& src, string& dst)
+{
+#define BEGIN_CMS "-----BEGIN CMS-----"
+#define END_CMS "-----END CMS-----"
+
+  int start = src.find(BEGIN_CMS);
+  if (start < 0) {
+    ldout(cct, 0) << "failed to find " << BEGIN_CMS << " in response" << dendl;
+    return -EINVAL;
+  }
+  start += sizeof(BEGIN_CMS) - 1;
+
+  int end = src.find(END_CMS);
+  if (end < 0) {
+    ldout(cct, 0) << "failed to find " << END_CMS << " in response" << dendl;
+    return -EINVAL;
+  }
+
+  string s = src.substr(start, end - start);
+
+  int pos = 0;
+
+  do {
+    int next = s.find('\n', pos);
+    if (next < 0) {
+      dst.append(s.substr(pos));
+      break;
+    } else {
+      dst.append(s.substr(pos, next - pos));
+    }
+    pos = next + 1;
+  } while (pos < (int)s.size());
+
+  return 0;
+}
+
+int rgw_decode_b64_cms(CephContext * const cct,
+                       const string& signed_b64,
+                       bufferlist& bl)
+{
+  bufferptr signed_ber(signed_b64.size() * 2);
+  char *dest = signed_ber.c_str();
+  const char *src = signed_b64.c_str();
+  size_t len = signed_b64.size();
+  char buf[len + 1];
+  buf[len] = '\0';
+
+  for (size_t i = 0; i < len; i++, src++) {
+    if (*src != '-') {
+      buf[i] = *src;
+    } else {
+      buf[i] = '/';
+    }
+  }
+
+  int ret = ceph_unarmor(dest, dest + signed_ber.length(), buf,
+                         buf + signed_b64.size());
+  if (ret < 0) {
+    ldout(cct, 0) << "ceph_unarmor() failed, ret=" << ret << dendl;
+    return ret;
+  }
+
+  bufferlist signed_ber_bl;
+  signed_ber_bl.append(signed_ber);
+
+  ret = ceph_decode_cms(cct, signed_ber_bl, bl);
+  if (ret < 0) {
+    ldout(cct, 0) << "ceph_decode_cms returned " << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+#define PKI_ANS1_PREFIX "MII"
+
+bool rgw_is_pki_token(const string& token)
+{
+  return token.compare(0, sizeof(PKI_ANS1_PREFIX) - 1, PKI_ANS1_PREFIX) == 0;
+}
+
+void rgw_get_token_id(const string& token, string& token_id)
+{
+  if (!rgw_is_pki_token(token)) {
+    token_id = token;
+    return;
+  }
+
+  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+
+  MD5 hash;
+  hash.Update((const byte *)token.c_str(), token.size());
+  hash.Final(m);
+
+  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+  token_id = calc_md5;
+}
+
+bool rgw_decode_pki_token(CephContext * const cct,
+                          const string& token,
+                          bufferlist& bl)
+{
+  if (!rgw_is_pki_token(token)) {
+    return false;
+  }
+
+  int ret = rgw_decode_b64_cms(cct, token, bl);
+  if (ret < 0) {
+    return false;
+  }
+
+  ldout(cct, 20) << "successfully decoded pki token" << dendl;
+
+  return true;
+}
+
+
+KeystoneApiVersion KeystoneService::get_api_version()
+{
+  const int keystone_version = g_ceph_context->_conf->rgw_keystone_api_version;
+
+  if (keystone_version == 3) {
+    return KeystoneApiVersion::VER_3;
+  } else if (keystone_version == 2) {
+    return KeystoneApiVersion::VER_2;
+  } else {
+    dout(0) << "ERROR: wrong Keystone API version: " << keystone_version
+            << "; falling back to v2" <<  dendl;
+    return KeystoneApiVersion::VER_2;
+  }
+}
+
+bool KeystoneToken::has_role(const string& r)
+{
   list<Role>::iterator iter;
   for (iter = roles.begin(); iter != roles.end(); ++iter) {
       if (fnmatch(r.c_str(), ((*iter).name.c_str()), 0) == 0) {
@@ -24,7 +160,9 @@ bool KeystoneToken::User::has_role(const string& r) {
   return false;
 }
 
-int KeystoneToken::parse(CephContext *cct, bufferlist& bl)
+int KeystoneToken::parse(CephContext * const cct,
+                         const string& token_str,
+                         bufferlist& bl)
 {
   JSONParser parser;
   if (!parser.parse(bl.c_str(), bl.length())) {
@@ -33,7 +171,28 @@ int KeystoneToken::parse(CephContext *cct, bufferlist& bl)
   }
 
   try {
-    JSONDecoder::decode_json("access", *this, &parser);
+    const auto version = KeystoneService::get_api_version();
+
+    if (version == KeystoneApiVersion::VER_2) {
+      if (!JSONDecoder::decode_json("access", *this, &parser)) {
+        /* Token structure doesn't follow Identity API v2, so the token
+         * must be in v3. Otherwise we can assume it's wrongly formatted. */
+        JSONDecoder::decode_json("token", *this, &parser, true);
+        token.id = token_str;
+      }
+    } else if (version == KeystoneApiVersion::VER_3) {
+      if (!JSONDecoder::decode_json("token", *this, &parser)) {
+        /* If the token cannot be parsed according to V3, try V2. */
+        JSONDecoder::decode_json("access", *this, &parser, true);
+      } else {
+        /* v3 suceeded. We have to fill token.id from external input as it
+         * isn't a part of the JSON response anymore. It has been moved
+         * to X-Subject-Token HTTP header instead. */
+        token.id = token_str;
+      }
+    } else {
+      return -ENOTSUP;
+    }
   } catch (JSONDecoder::err& err) {
     ldout(cct, 0) << "Keystone token parse error: " << err.message << dendl;
     return -EINVAL;
@@ -72,7 +231,15 @@ bool RGWKeystoneTokenCache::find(const string& token_id, KeystoneToken& token)
   return true;
 }
 
-void RGWKeystoneTokenCache::add(const string& token_id, KeystoneToken& token)
+bool RGWKeystoneTokenCache::find_admin(KeystoneToken& token)
+{
+  Mutex::Locker l(lock);
+
+  return find(admin_token_id, token);
+}
+
+void RGWKeystoneTokenCache::add(const string& token_id,
+                                const KeystoneToken& token)
 {
   lock.Lock();
   map<string, token_entry>::iterator iter = tokens.find(token_id);
@@ -95,6 +262,14 @@ void RGWKeystoneTokenCache::add(const string& token_id, KeystoneToken& token)
   }
 
   lock.Unlock();
+}
+
+void RGWKeystoneTokenCache::add_admin(const KeystoneToken& token)
+{
+  Mutex::Locker l(lock);
+
+  rgw_get_token_id(token.token.id, admin_token_id);
+  add(admin_token_id, token);
 }
 
 void RGWKeystoneTokenCache::invalidate(const string& token_id)

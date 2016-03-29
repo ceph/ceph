@@ -7,11 +7,11 @@ install(TARGETS cls_hello DESTINATION lib/rados-classes)
 
 # cls_rbd
 if (WITH_RBD)
-  add_library(cls_rbd SHARED rbd/cls_rbd.cc)
+  add_library(cls_rbd SHARED rbd/cls_rbd.cc rbd/cls_rbd_types.cc)
   set_target_properties(cls_rbd PROPERTIES VERSION "1.0.0" SOVERSION "1")
   install(TARGETS cls_rbd DESTINATION lib/rados-classes)
 
-  add_library(cls_rbd_client rbd/cls_rbd_client.cc)
+  add_library(cls_rbd_client rbd/cls_rbd_client.cc rbd/cls_rbd_types.cc)
 endif (WITH_RBD)
 
 # cls_lock
@@ -60,6 +60,13 @@ install(TARGETS cls_statelog DESTINATION lib/rados-classes)
 
 add_library(cls_statelog_client statelog/cls_statelog_client.cc)
 
+# cls_timeindex
+add_library(cls_timeindex SHARED timeindex/cls_timeindex.cc)
+set_target_properties(cls_timeindex PROPERTIES VERSION "1.0.0" SOVERSION "1")
+install(TARGETS cls_timeindex DESTINATION lib/rados-classes)
+
+add_library(cls_timeindex_client timeindex/cls_timeindex_client.cc)
+
 # cls_replica_log
 add_library(cls_replica_log SHARED replica_log/cls_replica_log.cc)
 set_target_properties(cls_replica_log PROPERTIES VERSION "1.0.0" SOVERSION "1")
@@ -79,6 +86,17 @@ add_library(cls_user_client
   user/cls_user_client.cc
   user/cls_user_types.cc
   user/cls_user_ops.cc)
+
+# cls_journal
+add_library(cls_journal SHARED
+  journal/cls_journal.cc
+  journal/cls_journal_types.cc)
+set_target_properties(cls_journal PROPERTIES VERSION "1.0.0" SOVERSION "1")
+install(TARGETS cls_journal DESTINATION lib/rados-classes)
+
+add_library(cls_journal_client
+  journal/cls_journal_client.cc
+  journal/cls_journal_types.cc)
 
 # cls_rgw
 if (WITH_RADOSGW)
@@ -107,3 +125,6 @@ if (WITH_CEPHFS)
   add_library(cls_cephfs_client
     cephfs/cls_cephfs_client.cc)
 endif (WITH_CEPHFS)
+
+add_library(cls_numops_client STATIC numops/cls_numops_client.cc)
+

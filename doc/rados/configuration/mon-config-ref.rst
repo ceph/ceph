@@ -286,8 +286,10 @@ Data
 
 Ceph provides a default path where Ceph Monitors store data. For optimal
 performance in a production Ceph Storage Cluster, we recommend running Ceph
-Monitors on separate hosts and drives from Ceph OSD Daemons. Ceph Monitors do
-lots of ``fsync()``, which can interfere with Ceph OSD Daemon workloads.
+Monitors on separate hosts and drives from Ceph OSD Daemons. As leveldb is using
+``mmap()`` for writing the data, Ceph Monitors flush their data from memory to disk
+very often, which can interfere with Ceph OSD Daemon workloads if the data
+store is co-located with the OSD Daemons.
 
 In Ceph versions 0.58 and earlier, Ceph Monitors store their data in files. This 
 approach allows users to inspect monitor data with common tools like ``ls``
@@ -750,7 +752,7 @@ acceptable values.
 Client
 ------
 
-``mon client hung interval``
+``mon client hunt interval``
 
 :Description: The client will try a new monitor every ``N`` seconds until it
               establishes a connection.
@@ -841,6 +843,24 @@ Miscellaneous
 :Description: The maximum number of log entries per event. 
 :Type: Integer
 :Default: ``4096``
+
+
+``mon osd prime pg temp``
+
+:Description: Enables or disable priming the PGMap with the previous OSDs when an out
+              OSD comes back into the cluster. With the ``true`` setting the clients
+              will continue to use the previous OSDs until the newly in OSDs as that
+              PG peered.
+:Type: Boolean
+:Default: ``true``
+
+
+``mon osd prime pg temp max time``
+
+:Description: How much time in seconds the monitor should spend trying to prime the
+              PGMap when an out OSD comes back into the cluster.
+:Type: Float
+:Default: ``0.5``
 
 
 

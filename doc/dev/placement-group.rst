@@ -127,12 +127,12 @@ User-visible PG States
 *recovery_wait*
   the PG is waiting for the local/remote recovery reservations
 
-*backfill*
+*backfilling*
   a special case of recovery, in which the entire contents of
   the PG are scanned and synchronized, instead of inferring what
   needs to be transferred from the PG logs of recent operations
 
-*backfill-wait*
+*backfill_wait*
   the PG is waiting in line to start backfill
 
 *backfill_toofull*

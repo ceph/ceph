@@ -90,7 +90,7 @@ class TestStub : public Dispatcher
 
   struct C_Tick : public Context {
     TestStub *s;
-    C_Tick(TestStub *stub) : s(stub) {}
+    explicit C_Tick(TestStub *stub) : s(stub) {}
     void finish(int r) {
       generic_dout(20) << "C_Tick::" << __func__ << dendl;
       if (r == -ECANCELED) {
@@ -230,7 +230,7 @@ class ClientStub : public TestStub
   }
 
  public:
-  ClientStub(CephContext *cct)
+  explicit ClientStub(CephContext *cct)
     : TestStub(cct, "client"),
       gen((int) time(NULL))
   { }
@@ -244,8 +244,7 @@ class ClientStub : public TestStub
       return err;
     }
 
-    messenger.reset(Messenger::create(cct, cct->_conf->ms_type, entity_name_t::CLIENT(-1),
-				      "stubclient", getpid()));
+    messenger.reset(Messenger::create_client_messenger(cct, "stubclient"));
     assert(messenger.get() != NULL);
 
     messenger->set_default_policy(
@@ -329,7 +328,7 @@ class OSDStub : public TestStub
 
   struct C_CreatePGs : public Context {
     OSDStub *s;
-    C_CreatePGs(OSDStub *stub) : s(stub) {}
+    explicit C_CreatePGs(OSDStub *stub) : s(stub) {}
     void finish(int r) {
       if (r == -ECANCELED) {
 	generic_dout(20) << "C_CreatePGs::" << __func__
@@ -936,7 +935,7 @@ void handle_test_signal(int signum)
   if ((signum != SIGINT) && (signum != SIGTERM))
     return;
 
-  std::cerr << "*** Got signal " << sys_siglist[signum] << " ***" << std::endl;
+  std::cerr << "*** Got signal " << sig_str(signum) << " ***" << std::endl;
   Mutex::Locker l(shutdown_lock);
   if (shutdown_timer) {
     shutdown_timer->cancel_all_events();

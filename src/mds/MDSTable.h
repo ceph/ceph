@@ -17,7 +17,7 @@
 
 #include "mdstypes.h"
 #include "mds_table_types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 
 class MDSRank;
 class Context;

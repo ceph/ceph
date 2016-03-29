@@ -78,8 +78,15 @@ void Elector::start()
   init();
   
   // start by trying to elect me
-  if (epoch % 2 == 0) 
+  if (epoch % 2 == 0) {
     bump_epoch(epoch+1);  // odd == election cycle
+  } else {
+    // do a trivial db write just to ensure it is writeable.
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    t->put(Monitor::MONITOR_NAME, "election_writeable_test", rand());
+    int r = mon->store->apply_transaction(t);
+    assert(r >= 0);
+  }
   start_stamp = ceph_clock_now(g_ceph_context);
   electing_me = true;
   acked_me[mon->rank] = CEPH_FEATURES_ALL;
@@ -123,7 +130,7 @@ void Elector::reset_timer(double plus)
   // set the timer
   cancel_timer();
   expire_event = new C_ElectionExpire(this);
-  mon->timer.add_event_after(g_conf->mon_lease + plus,
+  mon->timer.add_event_after(g_conf->mon_election_timeout + plus,
 			     expire_event);
 }
 

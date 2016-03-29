@@ -35,6 +35,7 @@ private:
   BOOST_STATIC_ASSERT((_bit_count != 0) && !(_bit_count & (_bit_count - 1)));
   BOOST_STATIC_ASSERT(_bit_count <= BITS_PER_BYTE);
 public:
+  static const uint32_t BLOCK_SIZE;
 
   class ConstReference {
   public:
@@ -111,6 +112,9 @@ private:
 };
 
 template <uint8_t _b>
+const uint32_t BitVector<_b>::BLOCK_SIZE = 4096;
+
+template <uint8_t _b>
 BitVector<_b>::BitVector() : m_size(0), m_crc_enabled(true)
 {
 }
@@ -135,7 +139,7 @@ void BitVector<_b>::resize(uint64_t size) {
   }
   m_size = size;
 
-  uint64_t block_count = (buffer_size + CEPH_PAGE_SIZE - 1) / CEPH_PAGE_SIZE;
+  uint64_t block_count = (buffer_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
   m_data_crcs.resize(block_count);
 }
 
@@ -190,26 +194,26 @@ uint64_t BitVector<_b>::get_header_length() const {
 template <uint8_t _b>
 void BitVector<_b>::encode_data(bufferlist& bl, uint64_t byte_offset,
 				uint64_t byte_length) const {
-  assert(byte_offset % CEPH_PAGE_SIZE == 0);
+  assert(byte_offset % BLOCK_SIZE == 0);
   assert(byte_offset + byte_length == m_data.length() ||
-	 byte_length % CEPH_PAGE_SIZE == 0);
+	 byte_length % BLOCK_SIZE == 0);
 
   uint64_t end_offset = byte_offset + byte_length;
   while (byte_offset < end_offset) {
-    uint64_t len = MIN(CEPH_PAGE_SIZE, end_offset - byte_offset);
+    uint64_t len = MIN(BLOCK_SIZE, end_offset - byte_offset);
 
     bufferlist bit;
     bit.substr_of(m_data, byte_offset, len);
-    m_data_crcs[byte_offset / CEPH_PAGE_SIZE] = bit.crc32c(0);
+    m_data_crcs[byte_offset / BLOCK_SIZE] = bit.crc32c(0);
 
     bl.claim_append(bit);
-    byte_offset += CEPH_PAGE_SIZE;
+    byte_offset += BLOCK_SIZE;
   }
 }
 
 template <uint8_t _b>
 void BitVector<_b>::decode_data(bufferlist::iterator& it, uint64_t byte_offset) {
-  assert(byte_offset % CEPH_PAGE_SIZE == 0);
+  assert(byte_offset % BLOCK_SIZE == 0);
   if (it.end()) {
     return;
   }
@@ -225,12 +229,12 @@ void BitVector<_b>::decode_data(bufferlist::iterator& it, uint64_t byte_offset) 
   }
 
   while (byte_offset < end_offset) {
-    uint64_t len = MIN(CEPH_PAGE_SIZE, end_offset - byte_offset);
+    uint64_t len = MIN(BLOCK_SIZE, end_offset - byte_offset);
 
     bufferlist bit;
     it.copy(len, bit);
     if (m_crc_enabled &&
-	m_data_crcs[byte_offset / CEPH_PAGE_SIZE] != bit.crc32c(0)) {
+	m_data_crcs[byte_offset / BLOCK_SIZE] != bit.crc32c(0)) {
       throw buffer::malformed_input("invalid data block CRC");
     }
     data.append(bit);
@@ -250,15 +254,15 @@ template <uint8_t _b>
 void BitVector<_b>::get_data_extents(uint64_t offset, uint64_t length,
 				     uint64_t *byte_offset,
 				     uint64_t *byte_length) const {
-  // read CEPH_PAGE_SIZE-aligned chunks
+  // read BLOCK_SIZE-aligned chunks
   assert(length > 0 && offset + length <= m_size);
   uint64_t shift;
   compute_index(offset, byte_offset, &shift);
-  *byte_offset -= (*byte_offset % CEPH_PAGE_SIZE);
+  *byte_offset -= (*byte_offset % BLOCK_SIZE);
 
   uint64_t end_offset;
   compute_index(offset + length - 1, &end_offset, &shift);
-  end_offset += (CEPH_PAGE_SIZE - (end_offset % CEPH_PAGE_SIZE));
+  end_offset += (BLOCK_SIZE - (end_offset % BLOCK_SIZE));
   assert(*byte_offset <= end_offset);
 
   *byte_length = end_offset - *byte_offset;
@@ -292,7 +296,7 @@ void BitVector<_b>::decode_footer(bufferlist::iterator& it) {
       throw buffer::malformed_input("incorrect header CRC");
     }
 
-    uint64_t block_count = (m_data.length() + CEPH_PAGE_SIZE - 1) / CEPH_PAGE_SIZE;
+    uint64_t block_count = (m_data.length() + BLOCK_SIZE - 1) / BLOCK_SIZE;
     ::decode(m_data_crcs, footer_it);
     if (m_data_crcs.size() != block_count) {
       throw buffer::malformed_input("invalid data block CRCs");

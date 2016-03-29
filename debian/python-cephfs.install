@@ -1,1 +1,3 @@
-usr/lib/python*/dist-packages/cephfs.py*
+usr/lib/python*/dist-packages/ceph_volume_client.py*
+usr/lib/python*/dist-packages/cephfs.so
+usr/lib/python*/dist-packages/cephfs-*.egg-info

@@ -7,7 +7,7 @@ TOPDIR=`pwd`
 install -d -m0755 build-doc
 
 if command -v dpkg >/dev/null; then
-    for package in python-dev python-pip python-virtualenv doxygen ditaa ant; do
+    for package in python-dev python-pip python-virtualenv doxygen ditaa ant libxml2-dev libxslt1-dev zlib1g-dev cython graphviz; do
 	if [ "$(dpkg --status -- $package|sed -n 's/^Status: //p')" != "install ok installed" ]; then
             # add a space after old values
 	    missing="${missing:+$missing }$package"
@@ -19,7 +19,7 @@ if command -v dpkg >/dev/null; then
 	exit 1
     fi
 elif command -v yum >/dev/null; then
-    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml-devel libxslt-devel; do
+    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml-devel libxslt-devel Cython graphviz; do
 	if ! rpm -q $package >/dev/null ; then
 		missing="${missing:+$missing }$package"
 	fi
@@ -30,7 +30,7 @@ elif command -v yum >/dev/null; then
         exit 1
     fi
 else
-    for command in virtualenv doxygen ant ditaa; do
+    for command in virtualenv doxygen ant ditaa cython; do
 	command -v "$command" > /dev/null;
 	ret_code=$?
 	if [ $ret_code -ne 0 ]; then
@@ -49,22 +49,70 @@ fi
 # for availability of commands
 set -e
 
-cat src/osd/PG.h src/osd/PG.cc | doc/scripts/gen_state_diagram.py > doc/dev/peering_graph.generated.dot
+cat $TOPDIR/src/osd/PG.h $TOPDIR/src/osd/PG.cc | $TOPDIR/doc/scripts/gen_state_diagram.py > $TOPDIR/doc/dev/peering_graph.generated.dot
 
 cd build-doc
 
-[ -z "$vdir" ] && vdir="./virtualenv"
+[ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
 
 if [ ! -e $vdir ]; then
-    virtualenv --no-site-packages $vdir
+    virtualenv --system-site-packages $vdir
 fi
-$vdir/bin/pip install --quiet -r ../admin/doc-requirements.txt
+$vdir/bin/pip install --quiet -r $TOPDIR/admin/doc-requirements.txt
 
 install -d -m0755 \
-    output/html \
-    output/man
-PYTHONPATH=`pwd`/../src/pybind $vdir/bin/sphinx-build -a -n -b dirhtml -d doctrees ../doc output/html
-$vdir/bin/sphinx-build -a -b man -d doctrees ../doc output/man
+    $TOPDIR/build-doc/output/html \
+    $TOPDIR/build-doc/output/man
+
+# To avoid having to build librbd to build the Python bindings to build the docs,
+# create a dummy librbd.so that allows the module to be imported by sphinx.
+mkdir -p $vdir/lib
+export LD_LIBRARY_PATH="$vdir/lib"
+export PYTHONPATH=$TOPDIR/src/pybind
+
+ln -sf librados.so.2 $vdir/lib/librados.so
+gcc -shared -o $vdir/lib/librados.so.2 -xc /dev/null
+CFLAGS="-iquote $TOPDIR/src/include" \
+    CPPFLAGS="-iquote $TOPDIR/src/include" \
+    LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
+    $vdir/bin/pip install $TOPDIR/src/pybind/rados
+nm $vdir/lib/python*/*-packages/rados.so | grep 'U rados_' | \
+    awk '{ print "void "$2"(void) {}" }' | \
+    gcc -shared -o $vdir/lib/librados.so.2 -xc -
+
+# FIXME(sileht): I dunno how to pass the include-dirs correctly with pip
+# for build_ext step, it should be:
+# --global-option=build_ext --global-option="--cython-include-dirs $TOPDIR/src/pybind/rados/"
+# but that doesn't work, so copying the file in the rbd module directly, that's ok for docs
+cp -f $TOPDIR/src/pybind/rados/rados.pxd $TOPDIR/src/pybind/rbd/
+cp -f $TOPDIR/src/pybind/rados/rados.pxd $TOPDIR/src/pybind/cephfs/
+
+ln -sf librbd.so.1 $vdir/lib/librbd.so
+gcc -shared -o $vdir/lib/librbd.so.1 -xc /dev/null
+CFLAGS="-iquote $TOPDIR/src/include" \
+    CPPFLAGS="-iquote $TOPDIR/src/include" \
+    LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
+    $vdir/bin/pip install $TOPDIR/src/pybind/rbd
+nm $vdir/lib/python*/*-packages/rbd.so | grep 'U rbd_' | \
+    awk '{ print "void "$2"(void) {}" }' | \
+    gcc -shared -o $vdir/lib/librbd.so.1 -xc -
+
+
+ln -sf libcephfs.so.1 $vdir/lib/libcephfs.so
+gcc -shared -o $vdir/lib/libcephfs.so.1 -xc /dev/null
+CFLAGS="-iquote $TOPDIR/src/include" \
+    CPPFLAGS="-iquote $TOPDIR/src/include" \
+    LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
+    $vdir/bin/pip install $TOPDIR/src/pybind/cephfs
+nm $vdir/lib/python*/*-packages/cephfs.so | grep 'U cephfs_' | \
+    awk '{ print "void "$2"(void) {}" }' | \
+    gcc -shared -o $vdir/lib/libcephfs.so.1 -xc -
+
+rm -f $TOPDIR/src/pybind/rbd/rados.pxd $TOPDIR/src/pybind/cephfs/rados.pxd
+
+
+$vdir/bin/sphinx-build -a -n -b dirhtml -d doctrees $TOPDIR/doc $TOPDIR/build-doc/output/html
+$vdir/bin/sphinx-build -a -b man -d doctrees $TOPDIR/doc $TOPDIR/build-doc/output/man
 
 #
 # Build and install JavaDocs
@@ -76,7 +124,7 @@ rm -rf $JAVADIR/doc
 ant -buildfile $JAVADIR/build.xml docs
 
 # Create clean target directory
-JAVA_OUTDIR=output/html/api/libcephfs-java/javadoc
+JAVA_OUTDIR=$TOPDIR/build-doc/output/html/api/libcephfs-java/javadoc
 rm -rf $JAVA_OUTDIR
 mkdir $JAVA_OUTDIR
 

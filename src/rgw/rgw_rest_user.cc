@@ -8,6 +8,7 @@
 #include "rgw_rest_user.h"
 
 #include "include/str_list.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -29,10 +30,12 @@ void RGWOp_User_Info::execute()
 {
   RGWUserAdminOpState op_state;
 
-  std::string uid;
+  std::string uid_str;
   bool fetch_stats;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_bool(s, "stats", false, &fetch_stats);
 
   op_state.set_user_id(uid);
@@ -57,7 +60,7 @@ public:
 
 void RGWOp_User_Create::execute()
 {
-  std::string uid;
+  std::string uid_str;
   std::string display_name;
   std::string email;
   std::string access_key;
@@ -71,10 +74,13 @@ void RGWOp_User_Create::execute()
   bool exclusive;
 
   uint32_t max_buckets;
+  uint32_t default_max_buckets = s->cct->_conf->rgw_user_max_buckets;
 
   RGWUserAdminOpState op_state;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_string(s, "display-name", display_name, &display_name);
   RESTArgs::get_string(s, "email", email, &email);
   RESTArgs::get_string(s, "access-key", access_key, &access_key);
@@ -83,11 +89,11 @@ void RGWOp_User_Create::execute()
   RESTArgs::get_string(s, "user-caps", caps, &caps);
   RESTArgs::get_bool(s, "generate-key", true, &gen_key);
   RESTArgs::get_bool(s, "suspended", false, &suspended);
-  RESTArgs::get_uint32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets);
+  RESTArgs::get_uint32(s, "max-buckets", default_max_buckets, &max_buckets);
   RESTArgs::get_bool(s, "system", false, &system);
   RESTArgs::get_bool(s, "exclusive", false, &exclusive);
 
-  if (!s->user.system && system) {
+  if (!s->user->system && system) {
     ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
     http_ret = -EINVAL;
     return;
@@ -122,7 +128,7 @@ void RGWOp_User_Create::execute()
     op_state.set_key_type(key_type);
   }
 
-  if (max_buckets != RGW_DEFAULT_MAX_BUCKETS)
+  if (max_buckets != default_max_buckets)
     op_state.set_max_buckets(max_buckets);
 
   if (s->info.args.exists("suspended"))
@@ -156,7 +162,7 @@ public:
 
 void RGWOp_User_Modify::execute()
 {
-  std::string uid;
+  std::string uid_str;
   std::string display_name;
   std::string email;
   std::string access_key;
@@ -172,7 +178,9 @@ void RGWOp_User_Modify::execute()
 
   RGWUserAdminOpState op_state;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_string(s, "display-name", display_name, &display_name);
   RESTArgs::get_string(s, "email", email, &email);
   RESTArgs::get_string(s, "access-key", access_key, &access_key);
@@ -185,7 +193,7 @@ void RGWOp_User_Modify::execute()
 
   RESTArgs::get_bool(s, "system", false, &system);
 
-  if (!s->user.system && system) {
+  if (!s->user->system && system) {
     ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
     http_ret = -EINVAL;
     return;
@@ -250,12 +258,14 @@ public:
 
 void RGWOp_User_Remove::execute()
 {
-  std::string uid;
+  std::string uid_str;
   bool purge_data;
 
   RGWUserAdminOpState op_state;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_bool(s, "purge-data", false, &purge_data);
 
   // FIXME: no double checking
@@ -283,7 +293,7 @@ public:
 
 void RGWOp_Subuser_Create::execute()
 {
-  std::string uid;
+  std::string uid_str;
   std::string subuser;
   std::string secret_key;
   std::string perm_str;
@@ -297,7 +307,9 @@ void RGWOp_Subuser_Create::execute()
 
   RGWUserAdminOpState op_state;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_string(s, "subuser", subuser, &subuser);
   RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
   RESTArgs::get_string(s, "access", perm_str, &perm_str);
@@ -350,7 +362,7 @@ public:
 
 void RGWOp_Subuser_Modify::execute()
 {
-  std::string uid;
+  std::string uid_str;
   std::string subuser;
   std::string secret_key;
   std::string key_type_str;
@@ -363,7 +375,9 @@ void RGWOp_Subuser_Modify::execute()
 
   bool gen_secret;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_string(s, "subuser", subuser, &subuser);
   RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
   RESTArgs::get_string(s, "access", perm_str, &perm_str);
@@ -413,13 +427,15 @@ public:
 
 void RGWOp_Subuser_Remove::execute()
 {
-  std::string uid;
+  std::string uid_str;
   std::string subuser;
   bool purge_keys;
 
   RGWUserAdminOpState op_state;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_string(s, "subuser", subuser, &subuser);
   RESTArgs::get_bool(s, "purge-keys", true, &purge_keys);
 
@@ -452,7 +468,7 @@ public:
 
 void RGWOp_Key_Create::execute()
 {
-  std::string uid;
+  std::string uid_str;
   std::string subuser;
   std::string access_key;
   std::string secret_key;
@@ -462,7 +478,9 @@ void RGWOp_Key_Create::execute()
 
   RGWUserAdminOpState op_state;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_string(s, "subuser", subuser, &subuser);
   RESTArgs::get_string(s, "access-key", access_key, &access_key);
   RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
@@ -514,14 +532,16 @@ public:
 
 void RGWOp_Key_Remove::execute()
 {
-  std::string uid;
+  std::string uid_str;
   std::string subuser;
   std::string access_key;
   std::string key_type_str;
 
   RGWUserAdminOpState op_state;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_string(s, "subuser", subuser, &subuser);
   RESTArgs::get_string(s, "access-key", access_key, &access_key);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
@@ -565,12 +585,14 @@ public:
 
 void RGWOp_Caps_Add::execute()
 {
-  std::string uid;
+  std::string uid_str;
   std::string caps;
 
   RGWUserAdminOpState op_state;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_string(s, "user-caps", caps, &caps);
 
   // FIXME: no double checking
@@ -599,12 +621,14 @@ public:
 
 void RGWOp_Caps_Remove::execute()
 {
-  std::string uid;
+  std::string uid_str;
   std::string caps;
 
   RGWUserAdminOpState op_state;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_string(s, "user-caps", caps, &caps);
 
   // FIXME: no double checking
@@ -623,7 +647,7 @@ struct UserQuotas {
 
   UserQuotas() {}
 
-  UserQuotas(RGWUserInfo& info) : bucket_quota(info.bucket_quota), 
+  explicit UserQuotas(RGWUserInfo& info) : bucket_quota(info.bucket_quota), 
 				  user_quota(info.user_quota) {}
 
   void dump(Formatter *f) const {
@@ -655,16 +679,18 @@ void RGWOp_Quota_Info::execute()
 {
   RGWUserAdminOpState op_state;
 
-  std::string uid;
+  std::string uid_str;
   std::string quota_type;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "quota-type", quota_type, &quota_type);
 
-  if (uid.empty()) {
+  if (uid_str.empty()) {
     http_ret = -EINVAL;
     return;
   }
+
+  rgw_user uid(uid_str);
 
   bool show_all = quota_type.empty();
   bool show_bucket = show_all || (quota_type == "bucket");
@@ -767,16 +793,18 @@ void RGWOp_Quota_Set::execute()
 {
   RGWUserAdminOpState op_state;
 
-  std::string uid;
+  std::string uid_str;
   std::string quota_type;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "quota-type", quota_type, &quota_type);
 
-  if (uid.empty()) {
+  if (uid_str.empty()) {
     http_ret = -EINVAL;
     return;
   }
+
+  rgw_user uid(uid_str);
 
   bool set_all = quota_type.empty();
   bool set_bucket = set_all || (quota_type == "bucket");

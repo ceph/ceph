@@ -33,7 +33,7 @@ Synopsis
 
 | **ceph** **log** *<logtext>* [ *<logtext>*... ]
 
-| **ceph** **mds** [ *add_data_pool* \| *cluster_down* \| *cluster_up* \| *compat* \| *deactivate* \| *dump* \| *fail* \| *getmap* \| *newfs* \| *remove_data_pool* \| *rm* \| *rmfailed* \| *set* \| *set_max_mds* \| *set_state* \| *setmap* \| *stat* \| *stop* \| *tell* ] ...
+| **ceph** **mds** [ *add_data_pool* \| *cluster_down* \| *cluster_up* \| *compat* \| *deactivate* \| *dump* \| *fail* \| *getmap* \| *newfs* \| *remove_data_pool* \| *rm* \| *rmfailed* \| *set* \| *set_max_mds* \| *set_state* \| *stat* \| *stop* \| *tell* ] ...
 
 | **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
 
@@ -47,7 +47,7 @@ Synopsis
 
 | **ceph** **osd** **tier** [ *add* \| *add-cache* \| *cache-mode* \| *remove* \| *remove-overlay* \| *set-overlay* ] ...
 
-| **ceph** **pg** [ *debug* \| *deep-scrub* \| *dump* \| *dump_json* \| *dump_pools_json* \| *dump_stuck* \| *force_create_pg* \| *getmap* \| *ls* \| *ls-by-osd* \| *ls-by-pool* \| *ls-by-primary* \| *map* \| *repair* \| *scrub* \| *send_pg_creates* \| *set_full_ratio* \| *set_nearfull_ratio* \| *stat* ] ...
+| **ceph** **pg** [ *debug* \| *deep-scrub* \| *dump* \| *dump_json* \| *dump_pools_json* \| *dump_stuck* \| *force_create_pg* \| *getmap* \| *ls* \| *ls-by-osd* \| *ls-by-pool* \| *ls-by-primary* \| *map* \| *repair* \| *scrub* \| *set_full_ratio* \| *set_nearfull_ratio* \| *stat* ] ...
 
 | **ceph** **quorum** [ *enter* \| *exit* ]
 
@@ -432,12 +432,6 @@ Subcommand ``set_state`` sets mds state of <gid> to <numeric-state>.
 Usage::
 
 	ceph mds set_state <int[0-]> <int[0-20]>
-
-Subcommand ``setmap`` sets mds map; must supply correct epoch number.
-
-Usage::
-
-	ceph mds setmap <int[0-]>
 
 Subcommand ``stat`` shows MDS status.
 
@@ -829,7 +823,7 @@ Subcommand ``metadata`` fetches metadata for osd <id>.
 
 Usage::
 
-	ceph osd metadata <int[0-]>
+	ceph osd metadata {int[0-]} (default all)
 
 Subcommand ``out`` sets osd(s) <id> [<id>...] out.
 
@@ -884,7 +878,7 @@ Only for tiered pools::
 	ceph osd pool get <poolname> hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|
 	target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_dirty_high_ratio|
 	cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|
-	min_read_recency_for_promote
+	min_read_recency_for_promote|hit_set_grade_decay_rate|hit_set_search_last_n
 
 Only for erasure coded pools::
 
@@ -934,7 +928,8 @@ Usage::
 	target_max_bytes|target_max_objects|cache_target_dirty_ratio|
 	cache_target_dirty_high_ratio|
 	cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|
-	min_read_recency_for_promote|write_fadvise_dontneed
+	min_read_recency_for_promote|write_fadvise_dontneed|hit_set_grade_decay_rate|
+	hit_set_search_last_n
 	<val> {--yes-i-really-mean-it}
 
 Subcommand ``set-quota`` sets object or byte limit on pool.
@@ -981,6 +976,7 @@ Subcommand ``reweight-by-pg`` reweight OSDs by PG distribution
 Usage::
 
 	ceph osd reweight-by-pg {<int[100-]>} {<poolname> [<poolname...]}
+	{--no-increasing}
 
 Subcommand ``reweight-by-utilization`` reweight OSDs by utilization
 [overload-percentage-for-consideration, default 120].
@@ -988,6 +984,7 @@ Subcommand ``reweight-by-utilization`` reweight OSDs by utilization
 Usage::
 
 	ceph osd reweight-by-utilization {<int[100-]>}
+	{--no-increasing}
 
 Subcommand ``rm`` removes osd(s) <id> [<id>...] in the cluster.
 
@@ -1229,12 +1226,6 @@ Usage::
 
 	ceph pg scrub <pgid>
 
-Subcommand ``send_pg_creates`` triggers pg creates to be issued.
-
-Usage::
-
-	ceph pg send_pg_creates
-
 Subcommand ``set_full_ratio`` sets ratio at which pgs are considered full.
 
 Usage::
@@ -1365,9 +1356,9 @@ Options
 
 	Name of the Ceph cluster.
 
-.. option:: --admin-daemon ADMIN_SOCKET
+.. option:: --admin-daemon ADMIN_SOCKET, daemon DAEMON_NAME
 
-	Submit admin-socket commands.
+	Submit admin-socket commands via admin sockets in /var/run/ceph.
 
 .. option:: --admin-socket ADMIN_SOCKET_NOPE
 

@@ -1,5 +1,6 @@
 include test/erasure-code/Makefile.am
 include test/messenger/Makefile.am
+include test/compressor/Makefile.am
 
 if ENABLE_CLIENT
 include test/Makefile-client.am
@@ -69,31 +70,32 @@ check_SCRIPTS += \
 	test/cephtool-test-mon.sh \
 	test/cephtool-test-mds.sh \
 	test/cephtool-test-rados.sh \
+       test/test_pool_create.sh \
 	unittest_bufferlist.sh \
 	test/encoding/check-generated.sh \
 	test/mon/osd-pool-create.sh \
 	test/mon/misc.sh \
 	test/mon/osd-crush.sh \
+	test/mon/mon-ping.sh \
+	test/mon/mon-created-time.sh \
 	test/mon/osd-erasure-code-profile.sh \
 	test/mon/mkfs.sh \
+	test/mon/mon-scrub.sh \
+       test/mon/test_pool_quota.sh \
 	test/osd/osd-scrub-repair.sh \
+	test/osd/osd-scrub-snaps.sh \
 	test/osd/osd-config.sh \
+	test/osd/osd-reuse-id.sh \
 	test/osd/osd-bench.sh \
+	test/osd/osd-reactivate.sh \
 	test/osd/osd-copy-from.sh \
+	test/osd/osd-markdown.sh \
 	test/mon/mon-handle-forward.sh \
 	test/libradosstriper/rados-striper.sh \
-	test/test_objectstore_memstore.sh
-
-if ENABLE_ROOT_MAKE_CHECK
-check_SCRIPTS += test/ceph-disk-root.sh
-else
-check_SCRIPTS += test/ceph-disk.sh
-endif
+	test/test_objectstore_memstore.sh \
+        test/test_pidfile.sh
 
 EXTRA_DIST += \
-	$(srcdir)/test/python/ceph-disk/setup.py \
-	$(srcdir)/test/python/ceph-disk/tox.ini \
-	$(srcdir)/test/python/ceph-disk/tests/test_ceph_disk.py \
 	$(srcdir)/test/python/brag-client/setup.py \
 	$(srcdir)/test/python/brag-client/tox.ini \
 	$(srcdir)/test/python/brag-client/tests/test_ceph_brag.py \
@@ -121,14 +123,6 @@ EXTRA_DIST += \
         $(srcdir)/test/coverage.sh \
 	$(patsubst %,$(srcdir)/%,$(check_SCRIPTS))
 
-docker-check:
-	$(srcdir)/test/container-make-check-ubuntu-14.04.sh
-	$(srcdir)/test/container-make-check-centos-centos7.sh
-
-EXTRA_DIST += \
-	$(srcdir)/test/container-make-check-ubuntu-14.04.sh
-	$(srcdir)/test/container-make-check-centos-centos7.sh
-
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
 
@@ -144,6 +138,11 @@ UNITTEST_LDADD = \
 	$(top_builddir)/src/gmock/gtest/lib/libgtest.la \
 	$(PTHREAD_LIBS)
 
+if SOLARIS
+UNITTEST_LDADD += \
+	-lsocket -lnsl
+endif
+
 unittest_addrs_SOURCES = test/test_addrs.cc
 unittest_addrs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_addrs_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -152,7 +151,9 @@ check_TESTPROGRAMS += unittest_addrs
 unittest_blkdev_SOURCES = test/common/test_blkdev.cc
 unittest_blkdev_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_blkdev_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+if LINUX
 check_TESTPROGRAMS += unittest_blkdev
+endif
 
 unittest_bloom_filter_SOURCES = test/common/test_bloom_filter.cc
 unittest_bloom_filter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -169,11 +170,25 @@ unittest_prioritized_queue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_prioritized_queue_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_prioritized_queue
 
+unittest_weighted_priority_queue_SOURCES = test/common/test_weighted_priority_queue.cc
+unittest_weighted_priority_queue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_weighted_priority_queue_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_TESTPROGRAMS += unittest_weighted_priority_queue
 
 unittest_str_map_SOURCES = test/common/test_str_map.cc
 unittest_str_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_str_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_str_map
+
+unittest_mutex_debug_SOURCES = test/common/test_mutex_debug.cc
+unittest_mutex_debug_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_mutex_debug_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) ${EXTRALIBS}
+check_TESTPROGRAMS += unittest_mutex_debug
+
+unittest_shunique_lock_SOURCES = test/common/test_shunique_lock.cc
+unittest_shunique_lock_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_shunique_lock_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) ${EXTRALIBS}
+check_TESTPROGRAMS += unittest_shunique_lock
 
 unittest_sharedptr_registry_SOURCES = test/common/test_sharedptr_registry.cc
 unittest_sharedptr_registry_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -189,6 +204,11 @@ unittest_sloppy_crc_map_SOURCES = test/common/test_sloppy_crc_map.cc
 unittest_sloppy_crc_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_sloppy_crc_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_sloppy_crc_map
+
+unittest_time_SOURCES = test/common/test_time.cc
+unittest_time_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_time_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CRYPTO_LIBS) $(EXTRALIBS)
+check_TESTPROGRAMS += unittest_time
 
 unittest_util_SOURCES = test/common/test_util.cc
 unittest_util_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -412,6 +432,11 @@ unittest_bit_vector_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_bit_vector_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_bit_vector
 
+unittest_interval_set_SOURCES = test/common/test_interval_set.cc
+unittest_interval_set_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_interval_set_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_TESTPROGRAMS += unittest_interval_set
+
 unittest_subprocess_SOURCES = test/test_subprocess.cc
 unittest_subprocess_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
 unittest_subprocess_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -419,7 +444,7 @@ check_PROGRAMS += unittest_subprocess
 
 unittest_async_compressor_SOURCES = test/common/test_async_compressor.cc
 unittest_async_compressor_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR)
+unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR) $(LIBCOMMON)
 check_PROGRAMS += unittest_async_compressor
 
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
@@ -434,9 +459,11 @@ bin_DEBUGPROGRAMS += ceph_test_objectcacher_stress
 ceph_test_cfuse_cache_invalidate_SOURCES = test/test_cfuse_cache_invalidate.cc
 bin_DEBUGPROGRAMS += ceph_test_cfuse_cache_invalidate
 
+if LINUX
 ceph_test_get_blkdev_size_SOURCES = test/test_get_blkdev_size.cc
 ceph_test_get_blkdev_size_LDADD = $(LIBCOMMON)
 bin_DEBUGPROGRAMS += ceph_test_get_blkdev_size
+endif
 
 noinst_HEADERS += \
 	test/bench/backend.h \
@@ -459,8 +486,6 @@ noinst_HEADERS += \
 	test/librados/test.h \
 	test/librados/TestCase.h \
 	test/libradosstriper/TestCase.h \
-	test/librbd/test_fixture.h \
-	test/librbd/test_support.h \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
 	test/osdc/FakeWriteback.h \
@@ -476,4 +501,5 @@ noinst_HEADERS += \
 	test/system/st_rados_watch.h \
 	test/system/systest_runnable.h \
 	test/system/systest_settings.h \
-	test/unit.h
+	test/unit.h \
+	test/journal/RadosTestFixture.h

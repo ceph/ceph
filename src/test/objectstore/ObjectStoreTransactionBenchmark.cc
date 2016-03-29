@@ -92,7 +92,6 @@ class Transaction {
       switch (op->op) {
       case ObjectStore::Transaction::OP_WRITE:
         {
-          coll_t cid = i.get_cid(op->cid);
           ghobject_t oid = i.get_oid(op->oid);
           bufferlist bl;
           i.decode_bl(bl);
@@ -100,7 +99,6 @@ class Transaction {
         break;
       case ObjectStore::Transaction::OP_SETATTR:
         {
-          coll_t cid = i.get_cid(op->cid);
           ghobject_t oid = i.get_oid(op->oid);
           string name = i.decode_string();
           bufferlist bl;
@@ -111,7 +109,6 @@ class Transaction {
         break;
       case ObjectStore::Transaction::OP_OMAP_SETKEYS:
         {
-          coll_t cid = i.get_cid(op->cid);
           ghobject_t oid = i.get_oid(op->oid);
           map<string, bufferptr> aset;
           i.decode_attrset(aset);
@@ -119,7 +116,6 @@ class Transaction {
         break;
       case ObjectStore::Transaction::OP_OMAP_RMKEYS:
         {
-          coll_t cid = i.get_cid(op->cid);
           ghobject_t oid = i.get_oid(op->oid);
           set<string> keys;
           i.decode_keyset(keys);

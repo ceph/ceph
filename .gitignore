@@ -52,10 +52,9 @@ missing
 py-compile
 release
 stamp-h1
-systemd/ceph-osd@.service
-systemd/ceph-rgw.tmpfiles.d
 systemd/Makefile
 vgcore.*
+test-suite.log
 
 # specific local dir files
 /build-doc
@@ -85,3 +84,9 @@ GTAGS
 /examples/librados/.libs/
 /examples/librados/librados_hello_world
 /examples/librados/librados_hello_world_c
+
+# common cmake build dir
+/build
+
+# editor backup files etc.
+\#*\#

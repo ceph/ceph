@@ -21,6 +21,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "common/valgrind.h"
 #include "common/version.h"
 #include "include/color.h"
 
@@ -33,19 +34,24 @@
 #define STRINGIFY(x) _STR(x)
 
 CephContext *common_preinit(const CephInitParameters &iparams,
-			  enum code_environment_t code_env, int flags)
+			    enum code_environment_t code_env, int flags,
+			    const char *data_dir_option)
 {
   // set code environment
+  ANNOTATE_BENIGN_RACE_SIZED(&g_code_env, sizeof(g_code_env), "g_code_env");
   g_code_env = code_env;
 
   // Create a configuration object
-  CephContext *cct = new CephContext(iparams.module_type);
+  CephContext *cct = new CephContext(iparams.module_type, flags);
 
   md_config_t *conf = cct->_conf;
   // add config observers here
 
   // Set up our entity name.
   conf->name = iparams.name;
+
+  if (data_dir_option)
+    conf->data_dir_option = data_dir_option;
 
   // Set some defaults based on code type
   switch (code_env) {
@@ -113,10 +119,10 @@ void complain_about_parse_errors(CephContext *cct,
 
 /* Please be sure that this can safely be called multiple times by the
  * same application. */
-void common_init_finish(CephContext *cct, int flags)
+void common_init_finish(CephContext *cct)
 {
   cct->init_crypto();
 
-  if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
+  if (!(cct->get_init_flags() & CINIT_FLAG_NO_DAEMON_ACTIONS))
     cct->start_service_thread();
 }

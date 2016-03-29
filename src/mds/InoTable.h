@@ -26,7 +26,7 @@ class InoTable : public MDSTable {
   interval_set<inodeno_t> projected_free;
 
  public:
-  InoTable(MDSRank *m) : MDSTable(m, "inotable", true) { }
+  explicit InoTable(MDSRank *m) : MDSTable(m, "inotable", true) { }
 
   inodeno_t project_alloc_id(inodeno_t id=0);
   void apply_alloc_id(inodeno_t id);
@@ -78,6 +78,27 @@ class InoTable : public MDSTable {
   {
     if (free.contains(ino)) {
       free.erase(ino);
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  /**
+   * If this ino is in this rank's range, consume up to and including it.
+   * For use in tools, when we know the max ino in use and want to make
+   * sure we're only allocating new inodes from above it.
+   *
+   * @return true if the table was modified
+   */
+  bool force_consume_to(inodeno_t ino)
+  {
+    if (free.contains(ino)) {
+      inodeno_t min = free.begin().get_start();
+      std::cerr << "Erasing 0x" << std::hex << min << " to 0x" << ino << std::dec << std::endl;
+      free.erase(min, ino - min + 1);
+      projected_free = free;
+      projected_version = ++version;
       return true;
     } else {
       return false;

@@ -6,13 +6,16 @@
 
 #include "include/rados/librados.hpp"
 #include "common/config.h"
+#include "common/Cond.h"
+#include "common/Mutex.h"
 #include "include/atomic.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "test/librados_test_stub/TestWatchNotify.h"
 #include <boost/function.hpp>
 #include <boost/functional/hash.hpp>
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -25,12 +28,31 @@ class TestIoCtxImpl;
 class TestRadosClient {
 public:
 
+  static void Deallocate(librados::TestRadosClient* client)
+  {
+    client->put();
+  }
+
   typedef boost::function<int()> AioFunction;
 
   struct Object {
     std::string oid;
     std::string locator;
     std::string nspace;
+  };
+
+  class Transaction {
+  public:
+    Transaction(TestRadosClient *rados_client, const std::string &oid)
+      : rados_client(rados_client), oid(oid) {
+      rados_client->transaction_start(oid);
+    }
+    ~Transaction() {
+      rados_client->transaction_finish(oid);
+    }
+  private:
+    TestRadosClient *rados_client;
+    std::string oid;
   };
 
   TestRadosClient(CephContext *cct);
@@ -63,6 +85,7 @@ public:
   virtual int64_t pool_lookup(const std::string &name) = 0;
   virtual int pool_reverse_lookup(int64_t id, std::string *name) = 0;
 
+  virtual int aio_watch_flush(AioCompletionImpl *c);
   virtual int watch_flush() = 0;
 
   virtual int blacklist_add(const std::string& client_address,
@@ -76,6 +99,8 @@ public:
 			 const AioFunction &aio_function, AioCompletionImpl *c);
   void flush_aio_operations();
   void flush_aio_operations(AioCompletionImpl *c);
+
+  void finish_aio_completion(AioCompletionImpl *c, int r);
 
 protected:
   virtual ~TestRadosClient();
@@ -92,6 +117,13 @@ private:
   boost::hash<std::string> m_hash;
 
   TestWatchNotify m_watch_notify;
+
+  Mutex m_transaction_lock;
+  Cond m_transaction_cond;
+  std::set<std::string> m_transactions;
+
+  void transaction_start(const std::string &oid);
+  void transaction_finish(const std::string &oid);
 
 };
 

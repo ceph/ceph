@@ -64,7 +64,7 @@ public:
     STATE_KILLING = 5
   };
 
-  const char *get_state_name(int s) {
+  const char *get_state_name(int s) const {
     switch (s) {
     case STATE_CLOSED: return "closed";
     case STATE_OPENING: return "opening";
@@ -89,6 +89,8 @@ private:
   // Versions in this this session was projected: used to verify
   // that appropriate mark_dirty calls follow.
   std::deque<version_t> projected;
+
+
 
 public:
 
@@ -171,7 +173,7 @@ public:
   }
 
   int get_state() { return state; }
-  const char *get_state_name() { return get_state_name(state); }
+  const char *get_state_name() const { return get_state_name(state); }
   uint64_t get_state_seq() { return state_seq; }
   bool is_closed() const { return state == STATE_CLOSED; }
   bool is_opening() const { return state == STATE_OPENING; }
@@ -232,6 +234,7 @@ private:
   // wrote this session out?
   bool completed_requests_dirty;
 
+  unsigned num_trim_flushes_warnings;
   unsigned num_trim_requests_warnings;
 public:
   void add_completed_request(ceph_tid_t t, inodeno_t created) {
@@ -261,6 +264,30 @@ public:
     return true;
   }
 
+  void add_completed_flush(ceph_tid_t tid) {
+    info.completed_flushes.insert(tid);
+  }
+  bool trim_completed_flushes(ceph_tid_t mintid) {
+    bool erased_any = false;
+    while (!info.completed_flushes.empty() &&
+	(mintid == 0 || *info.completed_flushes.begin() < mintid)) {
+      info.completed_flushes.erase(info.completed_flushes.begin());
+      erased_any = true;
+    }
+    if (erased_any) {
+      completed_requests_dirty = true;
+    }
+    return erased_any;
+  }
+  bool have_completed_flush(ceph_tid_t tid) const {
+    return info.completed_flushes.count(tid);
+  }
+
+  unsigned get_num_completed_flushes() const { return info.completed_flushes.size(); }
+  unsigned get_num_trim_flushes_warnings() { return num_trim_flushes_warnings; }
+  void inc_num_trim_flushes_warnings() { ++num_trim_flushes_warnings; }
+  void reset_num_trim_flushes_warnings() { num_trim_flushes_warnings = 0; }
+
   unsigned get_num_completed_requests() const { return info.completed_requests.size(); }
   unsigned get_num_trim_requests_warnings() { return num_trim_requests_warnings; }
   void inc_num_trim_requests_warnings() { ++num_trim_requests_warnings; }
@@ -276,15 +303,20 @@ public:
     completed_requests_dirty = false;
   }
 
+  int check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
+		   int new_uid, int new_gid);
+
 
   Session() : 
     state(STATE_CLOSED), state_seq(0), importing_count(0),
     recalled_at(), recall_count(0), recall_release_count(0),
+    auth_caps(g_ceph_context),
     connection(NULL), item_session_list(this),
     requests(0),  // member_offset passed to front() manually
     cap_push_seq(0),
     lease_seq(0),
     completed_requests_dirty(false),
+    num_trim_flushes_warnings(0),
     num_trim_requests_warnings(0) { }
   ~Session() {
     assert(!item_session_list.is_on_list());
@@ -301,6 +333,33 @@ public:
     cap_push_seq = 0;
     last_cap_renew = utime_t();
 
+  }
+};
+
+class SessionFilter
+{
+protected:
+  // First is whether to filter, second is filter value
+  std::pair<bool, bool> reconnecting;
+
+public:
+  std::map<std::string, std::string> metadata;
+  std::string auth_name;
+  std::string state;
+  int64_t id;
+
+  SessionFilter()
+    : reconnecting(false, false), id(0)
+  {}
+
+  bool match(
+      const Session &session,
+      std::function<bool(client_t)> is_reconnecting) const;
+  int parse(const std::vector<std::string> &args, std::stringstream *ss);
+  void set_reconnecting(bool v)
+  {
+    reconnecting.first = true;
+    reconnecting.second = v;
   }
 };
 
@@ -369,7 +428,7 @@ public:
   uint64_t set_state(Session *session, int state);
   map<version_t, list<MDSInternalContextBase*> > commit_waiters;
 
-  SessionMap(MDSRank *m) : mds(m),
+  explicit SessionMap(MDSRank *m) : mds(m),
 		       projected(0), committing(0), committed(0),
                        loaded_legacy(false)
   { }

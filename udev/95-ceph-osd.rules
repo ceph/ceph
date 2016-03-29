@@ -1,43 +1,135 @@
-# activate ceph-tagged partitions
+# OSD_UUID
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-062c0ceff05d", \
-  RUN+="/usr/sbin/ceph-disk activate /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-062c0ceff05d", \
+  OWNER="ceph", GROUP="ceph", MODE="660"
 
-# activate ceph-tagged partitions
+# JOURNAL_UUID
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-b4b80ceff106", \
-  RUN+="/usr/sbin/ceph-disk activate-journal /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-b4b80ceff106", \
+  OWNER="ceph", GROUP="ceph", MODE="660"
 
-# Map journal if using dm-crypt and plain
+# BLOCK_UUID
+ACTION=="add", SUBSYSTEM=="block", \
+  ENV{DEVTYPE}=="partition", \
+  ENV{ID_PART_ENTRY_TYPE}=="cafecafe-9b03-4f30-b4c6-b4b80ceff106", \
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="cafecafe-9b03-4f30-b4c6-b4b80ceff106", \
+  OWNER="ceph", GROUP="ceph", MODE="660"
+
+# LOCKBOX_UUID
+ACTION=="add", SUBSYSTEM=="block", \
+  ENV{DEVTYPE}=="partition", \
+  ENV{ID_PART_ENTRY_TYPE}=="fb3aabf9-d25f-47cc-bf5e-721d1816496b", \
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="fb3aabf9-d25f-47cc-bf5e-721d1816496", \
+  OWNER="ceph", GROUP="ceph", MODE="660"
+
+# MPATH_OSD_UUID
+ACTION=="add", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-8ae0-4982-bf9d-5a8d867af560", \
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-8ae0-4982-bf9d-5a8d867af560", \
+  OWNER="ceph", GROUP="ceph", MODE="660"
+
+# MPATH_JOURNAL_UUID
+ACTION=="add", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="45b0969e-8ae0-4982-bf9d-5a8d867af560", \
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="45b0969e-8ae0-4982-bf9d-5a8d867af560", \
+  OWNER="ceph", GROUP="ceph", MODE="660"
+
+# MPATH_BLOCK_UUID
+ACTION=="add", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="cafecafe-8ae0-4982-bf9d-5a8d867af560", \
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="cafecafe-8ae0-4982-bf9d-5a8d867af560", \
+  OWNER="ceph", GROUP="ceph", MODE="660"
+
+# MPATH_BLOCK_UUID
+ACTION=="add", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="7f4a666a-16f3-47a2-8445-152ef4d03f6c", \
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="7f4a666a-16f3-47a2-8445-152ef4d03f6c", \
+  OWNER="ceph", GROUP="ceph", MODE="660"
+
+# DMCRYPT_JOURNAL_UUID
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-5ec00ceff106", \
-  RUN+="/sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/$env{ID_PART_ENTRY_UUID} --key-size 256 create $env{ID_PART_ENTRY_UUID} /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-5ec00ceff106", \
+  OWNER="ceph", GROUP="ceph", MODE="660"
 
-# Map journal if using dm-crypt and luks
+# DMCRYPT_BLOCK_UUID
+ACTION=="add" SUBSYSTEM=="block", \
+  ENV{DEVTYPE}=="partition", \
+  ENV{ID_PART_ENTRY_TYPE}=="cafecafe-9b03-4f30-b4c6-5ec00ceff106", \
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="cafecafe-9b03-4f30-b4c6-5ec00ceff106", \
+  OWNER="ceph", GROUP="ceph", MODE="660"
+
+# DMCRYPT_LUKS_JOURNAL_UUID
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-35865ceff106", \
-  RUN+="/sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/$env{ID_PART_ENTRY_UUID}.luks.key luksOpen /dev/$name $env{ID_PART_ENTRY_UUID}"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-35865ceff106", \
+  OWNER="ceph", GROUP="ceph", MODE="660"
 
-# Map data device and
-# activate ceph-tagged partitions
-# for dm-crypted data devices and plain
+# DMCRYPT_LUKS_BLOCK_UUID
+ACTION=="add" SUBSYSTEM=="block", \
+  ENV{DEVTYPE}=="partition", \
+  ENV{ID_PART_ENTRY_TYPE}=="cafecafe-9b03-4f30-b4c6-35865ceff106", \
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="cafecafe-9b03-4f30-b4c6-35865ceff106", \
+  OWNER="ceph", GROUP="ceph", MODE="660"
+
+# DMCRYPT_OID_UUID
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-5ec00ceff05d", \
-  RUN+="/sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/$env{ID_PART_ENTRY_UUID} --key-size 256 create $env{ID_PART_ENTRY_UUID} /dev/$name", \
-  RUN+="/bin/bash -c 'while [ ! -e /dev/mapper/$env{ID_PART_ENTRY_UUID} ];do sleep 1; done'", \
-  RUN+="/usr/sbin/ceph-disk activate /dev/mapper/$env{ID_PART_ENTRY_UUID}"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-5ec00ceff05d", \
+  OWNER="ceph", GROUP="ceph", MODE="660"
 
-# Map data device and
-# activate ceph-tagged partitions
-# for dm-crypted data devices and luks
+# DMCRYPT_LUKS_OSD_UUID
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-35865ceff05d", \
-  RUN+="/sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/$env{ID_PART_ENTRY_UUID}.luks.key luksOpen /dev/$name $env{ID_PART_ENTRY_UUID}", \
-  RUN+="/bin/bash -c 'while [ ! -e /dev/mapper/$env{ID_PART_ENTRY_UUID} ];do sleep 1; done'", \
-  RUN+="/usr/sbin/ceph-disk activate /dev/mapper/$env{ID_PART_ENTRY_UUID}"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
+  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+ACTION=="change", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-35865ceff05d", \
+  OWNER="ceph", GROUP="ceph", MODE="660"

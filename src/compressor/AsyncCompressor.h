@@ -25,7 +25,7 @@
 
 class AsyncCompressor {
  private:
-  Compressor *compressor;
+  CompressorRef compressor;
   CephContext *cct;
   atomic_t job_id;
   vector<int> coreids;
@@ -85,7 +85,7 @@ class AsyncCompressor {
       }
       return item;
     }
-    void _process(Job *item, ThreadPool::TPHandle &handle) {
+    void _process(Job *item, ThreadPool::TPHandle &) override {
       assert(item->status.read() == WORKING);
       bufferlist out;
       int r;
@@ -108,7 +108,7 @@ class AsyncCompressor {
   void _decompress(bufferlist &in, bufferlist &out);
 
  public:
-  AsyncCompressor(CephContext *c);
+  explicit AsyncCompressor(CephContext *c);
   virtual ~AsyncCompressor() {}
 
   int get_cpuid(int id) {

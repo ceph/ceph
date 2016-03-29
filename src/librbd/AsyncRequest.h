@@ -7,23 +7,23 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "include/xlist.h"
+#include "include/compat.h"
 
 namespace librbd {
 
 class ImageCtx;
 
+template <typename ImageCtxT = ImageCtx>
 class AsyncRequest
 {
 public:
-  AsyncRequest(ImageCtx &image_ctx, Context *on_finish);
+  AsyncRequest(ImageCtxT &image_ctx, Context *on_finish);
   virtual ~AsyncRequest();
 
   void complete(int r) {
-    if (m_canceled && safely_cancel(r)) {
-      m_on_finish->complete(-ERESTART);
-      delete this;
-    } else if (should_complete(r)) {
-      m_on_finish->complete(filter_return_code(r));
+    if (should_complete(r)) {
+      r = filter_return_code(r);
+      finish(r);
       delete this;
     }
   }
@@ -38,8 +38,7 @@ public:
   }
 
 protected:
-  ImageCtx &m_image_ctx;
-  Context *m_on_finish;
+  ImageCtxT &m_image_ctx;
 
   librados::AioCompletion *create_callback_completion();
   Context *create_callback_context();
@@ -47,35 +46,27 @@ protected:
 
   void async_complete(int r);
 
-  virtual bool safely_cancel(int r) {
-    return true;
-  }
   virtual bool should_complete(int r) = 0;
-  virtual int filter_return_code(int r) {
+  virtual int filter_return_code(int r) const {
     return r;
   }
-private:
-  bool m_canceled;
-  xlist<AsyncRequest *>::item m_xlist_item;
-};
 
-class C_AsyncRequest : public Context
-{
-public:
-  C_AsyncRequest(AsyncRequest *req)
-    : m_req(req)
-  {
-  }
-
-protected:
   virtual void finish(int r) {
-    m_req->complete(r);
+    finish_request();
+    m_on_finish->complete(r);
   }
 
 private:
-  AsyncRequest *m_req;
+  Context *m_on_finish;
+  bool m_canceled;
+  typename xlist<AsyncRequest<ImageCtxT> *>::item m_xlist_item;
+
+  void start_request();
+  void finish_request();
 };
 
 } // namespace librbd
+
+extern template class librbd::AsyncRequest<librbd::ImageCtx>;
 
 #endif //CEPH_LIBRBD_ASYNC_REQUEST_H

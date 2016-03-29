@@ -4,8 +4,10 @@
 #include <map>
 
 #include "include/types.h"
-#include "include/utime.h"
+#include "common/ceph_time.h"
 #include "common/Formatter.h"
+
+#include "rgw/rgw_basic_types.h"
 
 #define CEPH_RGW_REMOVE 'r'
 #define CEPH_RGW_UPDATE 'u'
@@ -20,6 +22,7 @@ namespace ceph {
 enum RGWPendingState {
   CLS_RGW_STATE_PENDING_MODIFY = 0,
   CLS_RGW_STATE_COMPLETE       = 1,
+  CLS_RGW_STATE_UNKNOWN        = 2,
 };
 
 enum RGWModifyOp {
@@ -36,9 +39,17 @@ enum RGWBILogFlags {
   RGW_BILOG_FLAG_VERSIONED_OP = 0x1,
 };
 
+enum RGWCheckMTimeType {
+  CLS_RGW_CHECK_TIME_MTIME_EQ = 0,
+  CLS_RGW_CHECK_TIME_MTIME_LT = 1,
+  CLS_RGW_CHECK_TIME_MTIME_LE = 2,
+  CLS_RGW_CHECK_TIME_MTIME_GT = 3,
+  CLS_RGW_CHECK_TIME_MTIME_GE = 4,
+};
+
 struct rgw_bucket_pending_info {
   RGWPendingState state;
-  utime_t timestamp;
+  ceph::real_time timestamp;
   uint8_t op;
 
   rgw_bucket_pending_info() : state(CLS_RGW_STATE_PENDING_MODIFY), op(0) {}
@@ -69,7 +80,7 @@ WRITE_CLASS_ENCODER(rgw_bucket_pending_info)
 struct rgw_bucket_dir_entry_meta {
   uint8_t category;
   uint64_t size;
-  utime_t mtime;
+  ceph::real_time mtime;
   string etag;
   string owner;
   string owner_display_name;
@@ -77,7 +88,7 @@ struct rgw_bucket_dir_entry_meta {
   uint64_t accounted_size;
 
   rgw_bucket_dir_entry_meta() :
-  category(0), size(0), accounted_size(0) { mtime.set_from_double(0); }
+  category(0), size(0), accounted_size(0) { }
 
   void encode(bufferlist &bl) const {
     ENCODE_START(4, 3, bl);
@@ -463,18 +474,20 @@ struct rgw_bi_log_entry {
   string id;
   string object;
   string instance;
-  utime_t timestamp;
+  ceph::real_time timestamp;
   rgw_bucket_entry_ver ver;
   RGWModifyOp op;
   RGWPendingState state;
   uint64_t index_ver;
   string tag;
   uint16_t bilog_flags;
+  string owner; /* only being set if it's a delete marker */
+  string owner_display_name; /* only being set if it's a delete marker */
 
   rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0), bilog_flags(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     ::encode(id, bl);
     ::encode(object, bl);
     ::encode(timestamp, bl);
@@ -487,6 +500,8 @@ struct rgw_bi_log_entry {
     encode_packed_val(index_ver, bl);
     ::encode(instance, bl);
     ::encode(bilog_flags, bl);
+    ::encode(owner, bl);
+    ::encode(owner_display_name, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -506,10 +521,19 @@ struct rgw_bi_log_entry {
       ::decode(instance, bl);
       ::decode(bilog_flags, bl);
     }
+    if (struct_v >= 3) {
+      ::decode(owner, bl);
+      ::decode(owner_display_name, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bi_log_entry*>& o);
+  
+  bool is_versioned() {
+    return ((bilog_flags & RGW_BILOG_FLAG_VERSIONED_OP) != 0);
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bi_log_entry)
 
@@ -640,7 +664,8 @@ WRITE_CLASS_ENCODER(rgw_usage_data)
 
 
 struct rgw_usage_log_entry {
-  string owner;
+  rgw_user owner;
+  rgw_user payer; /* if empty, same as owner */
   string bucket;
   uint64_t epoch;
   rgw_usage_data total_usage; /* this one is kept for backwards compatibility */
@@ -648,10 +673,11 @@ struct rgw_usage_log_entry {
 
   rgw_usage_log_entry() : epoch(0) {}
   rgw_usage_log_entry(string& o, string& b) : owner(o), bucket(b), epoch(0) {}
+  rgw_usage_log_entry(string& o, string& p, string& b) : owner(o), payer(p), bucket(b), epoch(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
-    ::encode(owner, bl);
+    ENCODE_START(3, 1, bl);
+    ::encode(owner.to_str(), bl);
     ::encode(bucket, bl);
     ::encode(epoch, bl);
     ::encode(total_usage.bytes_sent, bl);
@@ -659,13 +685,16 @@ struct rgw_usage_log_entry {
     ::encode(total_usage.ops, bl);
     ::encode(total_usage.successful_ops, bl);
     ::encode(usage_map, bl);
+    ::encode(payer.to_str(), bl);
     ENCODE_FINISH(bl);
   }
 
 
    void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
-    ::decode(owner, bl);
+    DECODE_START(3, bl);
+    string s;
+    ::decode(s, bl);
+    owner.from_str(s);
     ::decode(bucket, bl);
     ::decode(epoch, bl);
     ::decode(total_usage.bytes_sent, bl);
@@ -677,6 +706,11 @@ struct rgw_usage_log_entry {
     } else {
       ::decode(usage_map, bl);
     }
+    if (struct_v >= 3) {
+      string p;
+      ::decode(p, bl);
+      payer.from_str(p);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -685,7 +719,9 @@ struct rgw_usage_log_entry {
       owner = e.owner;
       bucket = e.bucket;
       epoch = e.epoch;
+      payer = e.payer;
     }
+
     map<string, rgw_usage_data>::const_iterator iter;
     for (iter = e.usage_map.begin(); iter != e.usage_map.end(); ++iter) {
       if (!categories || !categories->size() || categories->count(iter->first)) {
@@ -734,7 +770,7 @@ struct rgw_user_bucket {
   string bucket;
 
   rgw_user_bucket() {}
-  rgw_user_bucket(string &u, string& b) : user(u), bucket(b) {}
+  rgw_user_bucket(const string& u, const string& b) : user(u), bucket(b) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -855,7 +891,7 @@ struct cls_rgw_gc_obj_info
 {
   string tag;
   cls_rgw_obj_chain chain;
-  utime_t time;
+  ceph::real_time time;
 
   cls_rgw_gc_obj_info() {}
 
@@ -886,7 +922,8 @@ struct cls_rgw_gc_obj_info
     ls.push_back(new cls_rgw_gc_obj_info);
     ls.push_back(new cls_rgw_gc_obj_info);
     ls.back()->tag = "footag";
-    ls.back()->time = utime_t(21, 32);
+    ceph_timespec ts{21, 32};
+    ls.back()->time = ceph::real_clock::from_ceph_timespec(ts);
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_obj_info)

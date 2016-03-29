@@ -41,6 +41,14 @@ function get_processors() {
     fi
 }
 
+DEFAULT_MAKEOPTS=${DEFAULT_MAKEOPTS:--j$(get_processors)}
+BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
+if can_parallel_make_check ; then
+	CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
+else
+	CHECK_MAKEOPTS=""
+fi
+
 function run() {
     # Same logic as install-deps.sh for finding package installer
     local install_cmd
@@ -58,10 +66,10 @@ function run() {
 	$DRY_RUN ./install-deps.sh || return 1
     fi
     $DRY_RUN ./autogen.sh || return 1
-    $DRY_RUN ./configure "$@" --disable-static --with-radosgw --with-debug --without-lttng \
+    $DRY_RUN ./configure "$@"  --with-librocksdb-static --disable-static --with-radosgw --with-debug --without-lttng \
         CC="ccache gcc" CXX="ccache g++" CFLAGS="-Wall -g" CXXFLAGS="-Wall -g" || return 1
-    $DRY_RUN make -j$(get_processors) || return 1
-    $DRY_RUN make $(maybe_parallel_make_check) check || return 1
+    $DRY_RUN make $BUILD_MAKEOPTS || return 1
+    $DRY_RUN make $CHECK_MAKEOPTS check || return 1
     $DRY_RUN make dist || return 1
 }
 

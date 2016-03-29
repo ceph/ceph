@@ -28,4 +28,4 @@ RUN apt-get update
 RUN cd /root ; ./install-deps.sh
 # development tools
 RUN apt-get install -y sudo ccache valgrind gdb python-virtualenv gdisk kpartx hdparm xmlstarlet
-RUN useradd -M --uid %%user_id%% %%USER%% && echo '%%USER%% ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+RUN if test %%USER%% != root ; then useradd -M --uid %%user_id%% %%USER%% && echo '%%USER%% ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers ; fi

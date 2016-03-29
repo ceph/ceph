@@ -118,6 +118,15 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
   }
 
   {
+      bufferlist op_bl;
+      ObjectReadOperation op;
+      op.read(0, 0, NULL, NULL); //len=0 mean read the whole object data.
+      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      ASSERT_EQ(sizeof(buf), op_bl.length());
+      ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+  }
+
+  {
       bufferlist read_bl, op_bl;
       ObjectReadOperation op;
       op.read(0, sizeof(buf), &read_bl, NULL);
@@ -220,6 +229,25 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
       ASSERT_EQ(0, rval2);
       ASSERT_EQ(0, memcmp(read_bl1.c_str(), buf, sizeof(buf)));
       ASSERT_EQ(0, memcmp(read_bl2.c_str(), buf, sizeof(buf)));
+  }
+}
+
+TEST_F(LibRadosIoPP, SparseReadOpPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
+
+  {
+    std::map<uint64_t, uint64_t> extents;
+    bufferlist read_bl;
+    int rval = -1;
+    ObjectReadOperation op;
+    op.sparse_read(0, sizeof(buf), &extents, &read_bl, &rval);
+    ASSERT_EQ(0, ioctx.operate("foo", &op, nullptr));
+    ASSERT_EQ(0, rval);
+    assert_eq_sparse(bl, extents, read_bl);
   }
 }
 
@@ -531,11 +559,11 @@ TEST_F(LibRadosIo, XattrIter) {
       break;
     }
     ASSERT_LT(num_seen, 2);
-    if ((strcmp(name, attr1) == 0) && (memcmp(val, attr1_buf, len) == 0)) {
+    if ((strcmp(name, attr1) == 0) && (val != NULL) && (memcmp(val, attr1_buf, len) == 0)) {
       num_seen++;
       continue;
     }
-    else if ((strcmp(name, attr2) == 0) && (memcmp(val, attr2_buf, len) == 0)) {
+    else if ((strcmp(name, attr2) == 0) && (val != NULL) && (memcmp(val, attr2_buf, len) == 0)) {
       num_seen++;
       continue;
     }
@@ -613,6 +641,15 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
       ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+  }
+
+  {
+    bufferlist op_bl;
+    ObjectReadOperation op;
+    op.read(0, 0, NULL, NULL); //len=0 mean read the whole object data
+    ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+    ASSERT_EQ(sizeof(buf), op_bl.length());
+    ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
   }
 
   {
@@ -718,6 +755,25 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
       ASSERT_EQ(0, rval2);
       ASSERT_EQ(0, memcmp(read_bl1.c_str(), buf, sizeof(buf)));
       ASSERT_EQ(0, memcmp(read_bl2.c_str(), buf, sizeof(buf)));
+  }
+}
+
+TEST_F(LibRadosIoECPP, SparseReadOpPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
+
+  {
+    std::map<uint64_t, uint64_t> extents;
+    bufferlist read_bl;
+    int rval = -1;
+    ObjectReadOperation op;
+    op.sparse_read(0, sizeof(buf), &extents, &read_bl, &rval);
+    ASSERT_EQ(0, ioctx.operate("foo", &op, nullptr));
+    ASSERT_EQ(0, rval);
+    assert_eq_sparse(bl, extents, read_bl);
   }
 }
 
@@ -1053,11 +1109,11 @@ TEST_F(LibRadosIoEC, XattrIter) {
       break;
     }
     ASSERT_LT(num_seen, 2);
-    if ((strcmp(name, attr1) == 0) && (memcmp(val, attr1_buf, len) == 0)) {
+    if ((strcmp(name, attr1) == 0) && (val != NULL) && (memcmp(val, attr1_buf, len) == 0)) {
       num_seen++;
       continue;
     }
-    else if ((strcmp(name, attr2) == 0) && (memcmp(val, attr2_buf, len) == 0)) {
+    else if ((strcmp(name, attr2) == 0) && (val != NULL) && (memcmp(val, attr2_buf, len) == 0)) {
       num_seen++;
       continue;
     }

@@ -16,7 +16,7 @@ COPYING for a full inventory of licenses by file.
 
 Code contributions must include a valid "Signed-off-by" acknowledging
 the license for the modified or contributed file.  Please see the file
-SubmittingPatches for details on what that means and on how to
+SubmittingPatches.rst for details on what that means and on how to
 generate and submit patches.
 
 We do not require assignment of copyright to contribute code; code is
@@ -36,6 +36,9 @@ Debian Squeeze.  Backports for Ceph can be found at ceph.com/debian-leveldb.
 Building Ceph
 =============
 
+Autotools
+---------
+
 Developers, please refer to the [Developer
 Guide](doc/dev/quick_guide.rst) for more information, otherwise, you
 can build the server daemons, and FUSE client, by executing the
@@ -46,6 +49,21 @@ following:
 	make
 
 (Note that the FUSE client will only be built if libfuse is present.)
+
+CMake
+-----
+
+Prerequisite:
+        CMake 2.8.11
+
+Build instructions:
+
+	mkdir build
+	cd build
+	cmake [options] /path/to/ceph/src/dir
+	make
+
+(Note that /path/to/ceph/src/dir can be in the tree and out of the tree)
 
 Dependencies
 ------------

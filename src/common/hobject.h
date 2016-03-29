@@ -176,6 +176,8 @@ public:
   }
 
   static uint32_t _reverse_bits(uint32_t v) {
+    if (v == 0)
+      return v;
     // reverse bits
     // swap odd and even bits
     v = ((v >> 1) & 0x55555555) | ((v & 0x55555555) << 1);
@@ -256,6 +258,8 @@ public:
     return nspace;
   }
 
+  bool parse(const string& s);
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void decode(json_spirit::Value& v);
@@ -281,7 +285,7 @@ public:
 
   struct Comparator {
     bool bitwise;
-    Comparator(bool b) : bitwise(b) {}
+    explicit Comparator(bool b) : bitwise(b) {}
     bool operator()(const hobject_t& l, const hobject_t& r) const {
       if (bitwise)
 	return cmp_bitwise(l, r) < 0;
@@ -291,7 +295,7 @@ public:
   };
   struct ComparatorWithDefault {
     bool bitwise;
-    ComparatorWithDefault(bool b=true) : bitwise(b) {}
+    explicit ComparatorWithDefault(bool b=true) : bitwise(b) {}
     bool operator()(const hobject_t& l, const hobject_t& r) const {
       if (bitwise)
 	return cmp_bitwise(l, r) < 0;
@@ -413,6 +417,8 @@ public:
     shard_id = s;
   }
 
+  bool parse(const string& s);
+
   // maximum sorted value.
   static ghobject_t get_max() {
     ghobject_t h;
@@ -436,6 +442,7 @@ public:
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void decode(json_spirit::Value& v);
+  size_t encoded_size() const;
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ghobject_t*>& o);
   friend int cmp_nibblewise(const ghobject_t& l, const ghobject_t& r);
@@ -457,7 +464,7 @@ public:
 
   struct Comparator {
     bool bitwise;
-    Comparator(bool b) : bitwise(b) {}
+    explicit Comparator(bool b) : bitwise(b) {}
     bool operator()(const ghobject_t& l, const ghobject_t& r) const {
          if (bitwise)
 	return cmp_bitwise(l, r) < 0;

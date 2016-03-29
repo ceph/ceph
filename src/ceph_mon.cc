@@ -258,7 +258,7 @@ int main(int argc, const char **argv)
   }
 
   global_init(&def_args, args,
-              CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, flags);
+              CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, flags, "mon_data");
   ceph_heap_profiler_init();
 
   uuid_d fsid;
@@ -268,7 +268,6 @@ int main(int argc, const char **argv)
       break;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-      exit(0);
     } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
       mkfs = true;
     } else if (ceph_argparse_flag(args, i, "--compact", (char*)NULL)) {
@@ -339,7 +338,7 @@ int main(int argc, const char **argv)
     // resolve public_network -> public_addr
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
-    common_init_finish(g_ceph_context, flags);
+    common_init_finish(g_ceph_context);
 
     bufferlist monmapbl, osdmapbl;
     std::string error;
@@ -393,7 +392,7 @@ int main(int argc, const char **argv)
 	  string name;
 	  monmap.get_addr_name(local, name);
 
-	  if (name.find("noname-") == 0) {
+	  if (name.compare(0, 7, "noname-") == 0) {
 	    cout << argv[0] << ": mon." << name << " " << local
 		 << " is local, renaming to mon." << g_conf->name.get_id() << std::endl;
 	    monmap.rename(name, g_conf->name.get_id());
@@ -496,7 +495,7 @@ int main(int argc, const char **argv)
   // screwing us over
   Preforker prefork;
   if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
-    if (global_init_prefork(g_ceph_context, 0) >= 0) {
+    if (global_init_prefork(g_ceph_context) >= 0) {
       string err_msg;
       err = prefork.prefork(err_msg);
       if (err < 0) {
@@ -527,7 +526,7 @@ int main(int argc, const char **argv)
 
   bufferlist magicbl;
   err = store->get(Monitor::MONITOR_NAME, "magic", magicbl);
-  if (!magicbl.length()) {
+  if (err || !magicbl.length()) {
     derr << "unable to read magic from mon data" << dendl;
     prefork.exit(1);
   }
@@ -667,13 +666,15 @@ int main(int argc, const char **argv)
 				      entity_name_t::MON(rank),
 				      "mon",
 				      0);
+  if (!msgr)
+    exit(1);
   msgr->set_cluster_protocol(CEPH_MON_PROTOCOL);
   msgr->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
 
   uint64_t supported =
     CEPH_FEATURE_UID |
     CEPH_FEATURE_NOSRCADDR |
-    CEPH_FEATURE_MONCLOCKCHECK |
+    DEPRECATED_CEPH_FEATURE_MONCLOCKCHECK |
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_MSG_AUTH;
   msgr->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
@@ -749,7 +750,7 @@ int main(int argc, const char **argv)
   }
 
   if (g_conf->daemonize) {
-    global_init_postfork_finish(g_ceph_context, 0);
+    global_init_postfork_finish(g_ceph_context);
     prefork.daemonize();
   }
 

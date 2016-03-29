@@ -1,1 +1,2 @@
-usr/lib/python*/dist-packages/rbd.py*
+usr/lib/python*/dist-packages/rbd.so
+usr/lib/python*/dist-packages/rbd-*.egg-info

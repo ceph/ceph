@@ -40,7 +40,9 @@ bool PaxosService::dispatch(MonOpRequestRef op)
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   op->mark_event("psvc:dispatch");
 
-  dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
+  dout(10) << "dispatch " << m << " " << *m
+	   << " from " << m->get_orig_source_inst()
+	   << " con " << m->get_connection() << dendl;
 
   if (mon->is_shutdown()) {
     return true;
@@ -386,6 +388,9 @@ void PaxosService::trim(MonitorDBStore::TransactionRef t,
   if (g_conf->mon_compact_on_trim) {
     dout(20) << " compacting prefix " << get_service_name() << dendl;
     t->compact_range(get_service_name(), stringify(from - 1), stringify(to));
+    t->compact_range(get_service_name(),
+		     mon->store->combine_strings(full_prefix_name, from - 1),
+		     mon->store->combine_strings(full_prefix_name, to));
   }
 }
 

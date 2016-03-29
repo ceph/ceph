@@ -12,6 +12,7 @@ noinst_HEADERS += \
 	mds/CDentry.h \
 	mds/CDir.h \
 	mds/CInode.h \
+	mds/DamageTable.h \
 	mds/Capability.h \
 	mds/InoTable.h \
 	mds/JournalPointer.h \
@@ -30,12 +31,15 @@ noinst_HEADERS += \
 	mds/MDSContext.h \
 	mds/MDSAuthCaps.h \
 	mds/MDSMap.h \
+	mds/FSMap.h \
 	mds/MDSTable.h \
 	mds/MDSTableServer.h \
 	mds/MDSTableClient.h \
 	mds/Mutation.h \
 	mds/Migrator.h \
 	mds/ScatterLock.h \
+	mds/ScrubStack.h \
+	mds/ScrubHeader.h \
 	mds/Server.h \
 	mds/SessionMap.h \
 	mds/SimpleLock.h \

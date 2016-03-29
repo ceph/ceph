@@ -1,0 +1,8 @@
+[Unit]
+Description=Ceph disk activation: %f
+
+[Service]
+Type=oneshot
+KillMode=none
+ExecStart=/bin/sh -c 'flock /var/lock/ceph-disk /usr/sbin/ceph-disk --verbose --log-stdout trigger --sync %f'
+TimeoutSec=0

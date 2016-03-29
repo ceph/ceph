@@ -35,7 +35,7 @@ class SessionMapIOContext : public MDSIOContextBase
     SessionMap *sessionmap;
     MDSRank *get_mds() {return sessionmap->mds;}
   public:
-    SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
+    explicit SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
       assert(sessionmap != NULL);
     }
 };
@@ -253,7 +253,7 @@ void SessionMap::load(MDSInternalContextBase *onload)
 class C_IO_SM_LoadLegacy : public SessionMapIOContext {
 public:
   bufferlist bl;
-  C_IO_SM_LoadLegacy(SessionMap *cm) : SessionMapIOContext(cm) {}
+  explicit C_IO_SM_LoadLegacy(SessionMap *cm) : SessionMapIOContext(cm) {}
   void finish(int r) {
     sessionmap->_load_legacy_finish(r, bl);
   }
@@ -402,8 +402,10 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
   dirty_sessions.clear();
   null_sessions.clear();
 
-  mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
-      0, NULL, new C_OnFinisher(new C_IO_SM_Save(this, version), mds->finisher));
+  mds->objecter->mutate(oid, oloc, op, snapc,
+			ceph::real_clock::now(g_ceph_context),
+      0, NULL, new C_OnFinisher(new C_IO_SM_Save(this, version),
+				mds->finisher));
 }
 
 void SessionMap::_save_finish(version_t v)
@@ -545,27 +547,6 @@ void SessionMap::wipe_ino_prealloc()
   projected = ++version;
 }
 
-/**
- * Calculate the length of the `requests` member list,
- * because elist does not have a size() method.
- *
- * O(N) runtime.  This would be const, but elist doesn't
- * have const iterators.
- */
-size_t Session::get_request_count()
-{
-  size_t result = 0;
-
-  elist<MDRequestImpl*>::iterator p = requests.begin(
-      member_offset(MDRequestImpl, item_session_request));
-  while (!p.end()) {
-    ++result;
-    ++p;
-  }
-
-  return result;
-}
-
 void SessionMap::add_session(Session *s)
 {
   dout(10) << __func__ << " s=" << s << " name=" << s->info.inst.name << dendl;
@@ -604,85 +585,6 @@ void SessionMap::touch_session(Session *session)
   by_state[session->state]->push_back(&session->item_session_list);
 
   session->last_cap_renew = ceph_clock_now(g_ceph_context);
-}
-
-/**
- * Capped in response to a CEPH_MSG_CLIENT_CAPRELEASE message,
- * with n_caps equal to the number of caps that were released
- * in the message.  Used to update state about how many caps a
- * client has released since it was last instructed to RECALL_STATE.
- */
-void Session::notify_cap_release(size_t n_caps)
-{
-  if (!recalled_at.is_zero()) {
-    recall_release_count += n_caps;
-    if (recall_release_count >= recall_count) {
-      recalled_at = utime_t();
-      recall_count = 0;
-      recall_release_count = 0;
-    }
-  }
-}
-
-/**
- * Called when a CEPH_MSG_CLIENT_SESSION->CEPH_SESSION_RECALL_STATE
- * message is sent to the client.  Update our recall-related state
- * in order to generate health metrics if the session doesn't see
- * a commensurate number of calls to ::notify_cap_release
- */
-void Session::notify_recall_sent(int const new_limit)
-{
-  if (recalled_at.is_zero()) {
-    // Entering recall phase, set up counters so we can later
-    // judge whether the client has respected the recall request
-    recalled_at = ceph_clock_now(g_ceph_context);
-    assert (new_limit < caps.size());  // Behaviour of Server::recall_client_state
-    recall_count = caps.size() - new_limit;
-    recall_release_count = 0;
-  }
-}
-
-void Session::set_client_metadata(map<string, string> const &meta)
-{
-  info.client_metadata = meta;
-
-  _update_human_name();
-}
-
-/**
- * Use client metadata to generate a somewhat-friendlier
- * name for the client than its session ID.
- *
- * This is *not* guaranteed to be unique, and any machine
- * consumers of session-related output should always use
- * the session ID as a primary capacity and use this only
- * as a presentation hint.
- */
-void Session::_update_human_name()
-{
-  if (info.client_metadata.count("hostname")) {
-    // Happy path, refer to clients by hostname
-    human_name = info.client_metadata["hostname"];
-    if (info.client_metadata.count("entity_id")) {
-      EntityName entity;
-      entity.set_id(info.client_metadata["entity_id"]);
-      if (!entity.has_default_id()) {
-        // When a non-default entity ID is set by the user, assume they
-        // would like to see it in references to the client
-        human_name += std::string(":") + entity.get_id();
-      }
-    }
-  } else {
-    // Fallback, refer to clients by ID e.g. client.4567
-    human_name = stringify(info.inst.name.num());
-  }
-}
-
-void Session::decode(bufferlist::iterator &p)
-{
-  info.decode(p);
-
-  _update_human_name();
 }
 
 void SessionMap::_mark_dirty(Session *s)
@@ -823,10 +725,271 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
       object_t oid = get_object_name();
       object_locator_t oloc(mds->mdsmap->get_metadata_pool());
       MDSInternalContextBase *on_safe = gather_bld->new_sub();
-      mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
-          0, NULL, new C_OnFinisher(new C_IO_SM_Save_One(this, on_safe), mds->finisher));
+      mds->objecter->mutate(oid, oloc, op, snapc,
+			    ceph::real_clock::now(g_ceph_context),
+			    0, NULL, new C_OnFinisher(
+			      new C_IO_SM_Save_One(this, on_safe),
+			      mds->finisher));
     }
   }
 }
 
+// =================
+// Session
+
+#undef dout_prefix
+#define dout_prefix *_dout << "Session "
+
+/**
+ * Calculate the length of the `requests` member list,
+ * because elist does not have a size() method.
+ *
+ * O(N) runtime.  This would be const, but elist doesn't
+ * have const iterators.
+ */
+size_t Session::get_request_count()
+{
+  size_t result = 0;
+
+  elist<MDRequestImpl*>::iterator p = requests.begin(
+      member_offset(MDRequestImpl, item_session_request));
+  while (!p.end()) {
+    ++result;
+    ++p;
+  }
+
+  return result;
+}
+
+/**
+ * Capped in response to a CEPH_MSG_CLIENT_CAPRELEASE message,
+ * with n_caps equal to the number of caps that were released
+ * in the message.  Used to update state about how many caps a
+ * client has released since it was last instructed to RECALL_STATE.
+ */
+void Session::notify_cap_release(size_t n_caps)
+{
+  if (!recalled_at.is_zero()) {
+    recall_release_count += n_caps;
+    if (recall_release_count >= recall_count) {
+      recalled_at = utime_t();
+      recall_count = 0;
+      recall_release_count = 0;
+    }
+  }
+}
+
+/**
+ * Called when a CEPH_MSG_CLIENT_SESSION->CEPH_SESSION_RECALL_STATE
+ * message is sent to the client.  Update our recall-related state
+ * in order to generate health metrics if the session doesn't see
+ * a commensurate number of calls to ::notify_cap_release
+ */
+void Session::notify_recall_sent(int const new_limit)
+{
+  if (recalled_at.is_zero()) {
+    // Entering recall phase, set up counters so we can later
+    // judge whether the client has respected the recall request
+    recalled_at = ceph_clock_now(g_ceph_context);
+    assert (new_limit < caps.size());  // Behaviour of Server::recall_client_state
+    recall_count = caps.size() - new_limit;
+    recall_release_count = 0;
+  }
+}
+
+void Session::set_client_metadata(map<string, string> const &meta)
+{
+  info.client_metadata = meta;
+
+  _update_human_name();
+}
+
+/**
+ * Use client metadata to generate a somewhat-friendlier
+ * name for the client than its session ID.
+ *
+ * This is *not* guaranteed to be unique, and any machine
+ * consumers of session-related output should always use
+ * the session ID as a primary capacity and use this only
+ * as a presentation hint.
+ */
+void Session::_update_human_name()
+{
+  if (info.client_metadata.count("hostname")) {
+    // Happy path, refer to clients by hostname
+    human_name = info.client_metadata["hostname"];
+    if (!info.auth_name.has_default_id()) {
+      // When a non-default entity ID is set by the user, assume they
+      // would like to see it in references to the client, if it's
+      // reasonable short.  Limit the length because we don't want
+      // to put e.g. uuid-generated names into a "human readable"
+      // rendering.
+      const int arbitrarily_short = 16;
+      if (info.auth_name.get_id().size() < arbitrarily_short) {
+        human_name += std::string(":") + info.auth_name.get_id();
+      }
+    }
+  } else {
+    // Fallback, refer to clients by ID e.g. client.4567
+    human_name = stringify(info.inst.name.num());
+  }
+}
+
+void Session::decode(bufferlist::iterator &p)
+{
+  info.decode(p);
+
+  _update_human_name();
+}
+
+int Session::check_access(CInode *in, unsigned mask,
+			  int caller_uid, int caller_gid,
+			  int new_uid, int new_gid)
+{
+  string path;
+  CInode *diri = NULL;
+  if (!in->is_base())
+    diri = in->get_projected_parent_dn()->get_dir()->get_inode();
+  if (diri && diri->is_stray()){
+    path = in->get_projected_inode()->stray_prior_path;
+    dout(20) << __func__ << " stray_prior_path " << path << dendl;
+  } else {
+    in->make_path_string(path, false, in->get_projected_parent_dn());
+    dout(20) << __func__ << " path " << path << dendl;
+  }
+  if (path.length())
+    path = path.substr(1);    // drop leading /
+
+  if (in->inode.is_dir() &&
+      in->inode.has_layout() &&
+      in->inode.layout.pool_ns.length() &&
+      !connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
+    dout(10) << __func__ << " client doesn't support FS_FILE_LAYOUT_V2" << dendl;
+    return -EIO;
+  }
+
+  if (!auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
+			    caller_uid, caller_gid, mask,
+			    new_uid, new_gid)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+int SessionFilter::parse(
+    const std::vector<std::string> &args,
+    std::stringstream *ss)
+{
+  assert(ss != NULL);
+
+  for (const auto &s : args) {
+    dout(20) << __func__ << " parsing filter '" << s << "'" << dendl;
+
+    auto eq = s.find("=");
+    if (eq == std::string::npos || eq == s.size()) {
+      *ss << "Invalid filter '" << s << "'";
+      return -EINVAL;
+    }
+
+    // Keys that start with this are to be taken as referring
+    // to freeform client metadata fields.
+    const std::string metadata_prefix("client_metadata.");
+
+    auto k = s.substr(0, eq);
+    auto v = s.substr(eq + 1);
+
+    dout(20) << __func__ << " parsed k='" << k << "', v='" << v << "'" << dendl;
+
+    if (k.compare(0, metadata_prefix.size(), metadata_prefix) == 0
+        && k.size() > metadata_prefix.size()) {
+      // Filter on arbitrary metadata key (no fixed schema for this,
+      // so anything after the dot is a valid field to filter on)
+      auto metadata_key = k.substr(metadata_prefix.size());
+      metadata.insert(std::make_pair(metadata_key, v));
+    } else if (k == "auth_name") {
+      // Filter on client entity name
+      auth_name = v;
+    } else if (k == "state") {
+      state = v;
+    } else if (k == "id") {
+      std::string err;
+      id = strict_strtoll(v.c_str(), 10, &err);
+      if (!err.empty()) {
+        *ss << err;
+        return -EINVAL;
+      }
+    } else if (k == "reconnecting") {
+
+      /**
+       * Strict boolean parser.  Allow true/false/0/1.
+       * Anything else is -EINVAL.
+       */
+      auto is_true = [](const std::string &bstr, bool *out) -> bool
+      {
+        assert(out != nullptr);
+
+        if (bstr == "true" || bstr == "1") {
+          *out = true;
+          return 0;
+        } else if (bstr == "false" || bstr == "0") {
+          *out = false;
+          return 0;
+        } else {
+          return -EINVAL;
+        }
+      };
+
+      bool bval;
+      int r = is_true(v, &bval);
+      if (r == 0) {
+        set_reconnecting(bval);
+      } else {
+        *ss << "Invalid boolean value '" << v << "'";
+        return -EINVAL;
+      }
+    } else {
+      *ss << "Invalid filter key '" << k << "'";
+      return -EINVAL;
+    }
+  }
+
+  return 0;
+}
+
+bool SessionFilter::match(
+    const Session &session,
+    std::function<bool(client_t)> is_reconnecting) const
+{
+  for (auto m : metadata) {
+    auto k = m.first;
+    auto v = m.second;
+    if (session.info.client_metadata.count(k) == 0) {
+      return false;
+    }
+    if (session.info.client_metadata.at(k) != v) {
+      return false;
+    }
+  }
+
+  if (!auth_name.empty() && auth_name != session.info.auth_name.get_id()) {
+    return false;
+  }
+
+  if (!state.empty() && state != session.get_state_name()) {
+    return false;
+  }
+
+  if (id != 0 && id != session.info.inst.name.num()) {
+    return false;
+  }
+
+  if (reconnecting.first) {
+    const bool am_reconnecting = is_reconnecting(session.info.inst.name.num());
+    if (reconnecting.second != am_reconnecting) {
+      return false;
+    }
+  }
+
+  return true;
+}
 

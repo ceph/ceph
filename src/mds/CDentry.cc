@@ -621,4 +621,3 @@ std::string CDentry::linkage_t::get_remote_d_type_string() const
     default: assert(0); return "";
   }
 }
-

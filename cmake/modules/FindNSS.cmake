@@ -25,7 +25,7 @@ else (NSS_LIBRARIES AND NSS_INCLUDE_DIRS)
 
   find_path(NSS_INCLUDE_DIR
     NAMES
-      nss.h
+      pk11pub.h
     PATHS
       ${_NSS_INCLUDEDIR}
       /usr/include
@@ -34,6 +34,7 @@ else (NSS_LIBRARIES AND NSS_INCLUDE_DIRS)
       /sw/include
     PATH_SUFFIXES
       nss3
+      nss
   )
 
   find_library(SSL3_LIBRARY
@@ -114,6 +115,8 @@ else (NSS_LIBRARIES AND NSS_INCLUDE_DIRS)
   endif (NSSUTIL3_LIBRARY)
 
   include(FindPackageHandleStandardArgs)
+  message(STATUS "NSS_LIBRARIES: ${NSS_LIBRARIES}")
+  message(STATUS "NSS_INCLUDE_DIRS: ${NSS_INCLUDE_DIRS}")
   find_package_handle_standard_args(NSS DEFAULT_MSG NSS_LIBRARIES NSS_INCLUDE_DIRS)
 
   # show the NSS_INCLUDE_DIRS and NSS_LIBRARIES variables only in the advanced view

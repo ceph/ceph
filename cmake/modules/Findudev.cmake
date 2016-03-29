@@ -46,7 +46,12 @@ else()
   endif()
 endif()
 
+# handle the QUIETLY and REQUIRED arguments and set UUID_FOUND to TRUE if
+# all listed variables are TRUE
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(udev DEFAULT_MSG UDEV_LIBRARIES UDEV_INCLUDE_DIR)
+
 mark_as_advanced(
   UDEV_LIBRARY
-  UDEV_I
+  UDEV_INCLUDE_DIR
 )

@@ -55,7 +55,7 @@ protected:
   virtual MDSRank* get_mds();
 
 public:
-  MDSInternalContext(MDSRank *mds_) : mds(mds_) {
+  explicit MDSInternalContext(MDSRank *mds_) : mds(mds_) {
     assert(mds != NULL);
   }
 };
@@ -91,7 +91,7 @@ protected:
   virtual MDSRank* get_mds();
 
 public:
-  MDSIOContext(MDSRank *mds_) : mds(mds_) {
+  explicit MDSIOContext(MDSRank *mds_) : mds(mds_) {
     assert(mds != NULL);
   }
 };

@@ -19,7 +19,7 @@ echo "starting hadoop-wordcount test"
 $HADOOP_PREFIX/bin/hadoop fs -rm -r $WC_INPUT $WC_OUTPUT || true
 
 # Fetch and import testing data set
-curl http://ceph.com/qa/hadoop_input_files.tar | tar xf - -C $DATA_INPUT
+curl http://download.ceph.com/qa/hadoop_input_files.tar | tar xf - -C $DATA_INPUT
 $HADOOP_PREFIX/bin/hadoop fs -copyFromLocal $DATA_INPUT $WC_INPUT
 rm -rf $DATA_INPUT
 

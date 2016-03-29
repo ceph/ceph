@@ -8,10 +8,6 @@ ceph_test_msgr_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_msgr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_msgr
 
-ceph_streamtest_SOURCES = test/streamtest.cc
-ceph_streamtest_LDADD = $(LIBOS) $(CEPH_GLOBAL)
-bin_DEBUGPROGRAMS += ceph_streamtest
-
 ceph_test_trans_SOURCES = test/test_trans.cc
 ceph_test_trans_LDADD = $(LIBOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_trans
@@ -55,10 +51,26 @@ ceph_test_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_objectstore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_objectstore
 
+ceph_test_keyvaluedb_SOURCES = test/objectstore/test_kv.cc
+ceph_test_keyvaluedb_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_keyvaluedb_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_keyvaluedb
+
 ceph_test_filestore_SOURCES = test/filestore/TestFileStore.cc
 ceph_test_filestore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_filestore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_filestore
+
+unittest_bluefs_SOURCES = test/objectstore/test_bluefs.cc
+unittest_bluefs_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_bluefs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_bluefs
+
+unittest_bluestore_types_SOURCES = test/objectstore/test_bluestore_types.cc
+unittest_bluestore_types_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_bluestore_types_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_bluestore_types
+
 endif
 
 ceph_test_objectstore_workloadgen_SOURCES = \
@@ -81,6 +93,11 @@ ceph_test_filestore_idempotent_sequence_SOURCES = \
 	test/objectstore/FileStoreDiff.cc
 ceph_test_filestore_idempotent_sequence_LDADD = $(LIBOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_filestore_idempotent_sequence
+
+unittest_transaction_SOURCES = test/objectstore/test_transaction.cc
+unittest_transaction_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_transaction_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_transaction
 
 ceph_xattr_bench_SOURCES = test/xattr_bench.cc
 ceph_xattr_bench_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -147,7 +164,7 @@ ceph_test_keys_LDADD = $(LIBMON) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_keys
 
 get_command_descriptions_SOURCES = test/common/get_command_descriptions.cc
-get_command_descriptions_LDADD = $(LIBMON) $(LIBCOMMON) $(CEPH_GLOBAL)
+get_command_descriptions_LDADD = $(LIBMON) $(LIBMON_TYPES) $(LIBOS) $(LIBCOMMON) $(CEPH_GLOBAL)
 noinst_PROGRAMS += get_command_descriptions
 
 unittest_mon_moncap_SOURCES = test/mon/moncap.cc
@@ -200,12 +217,17 @@ ceph_test_snap_mapper_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_snap_mapper_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_snap_mapper
 
+unittest_pageset_SOURCES = test/test_pageset.cc
+unittest_pageset_LDADD = $(UNITTEST_LDADD)
+unittest_pageset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_pageset
+
 endif # WITH_OSD
 
 if WITH_SLIBROCKSDB
 unittest_rocksdb_option_static_SOURCES = test/objectstore/TestRocksdbOptionParse.cc
-unittest_rocksdb_option_static_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL) rocksdb/librocksdb.la
-unittest_rocksdb_option_static_CXXFLAGS = $(UNITTEST_CXXFLAGS) ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11 -I rocksdb/include
+unittest_rocksdb_option_static_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_rocksdb_option_static_CXXFLAGS = $(UNITTEST_CXXFLAGS) ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -I rocksdb/include
 check_TESTPROGRAMS += unittest_rocksdb_option_static
 endif
 

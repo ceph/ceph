@@ -90,7 +90,7 @@ public:
     ClassFilter *get_filter(const std::string &filter_name)
     {
       Mutex::Locker l(handler->mutex);
-      std::map<std::string, ClassFilter>::iterator i = filters_map.find(name);
+      std::map<std::string, ClassFilter>::iterator i = filters_map.find(filter_name);
       if (i == filters_map.end()) {
         return NULL;
       } else {
@@ -107,7 +107,7 @@ private:
   int _load_class(ClassData *cls);
 
 public:
-  ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}
+  explicit ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}
   
   int open_all_classes();
 

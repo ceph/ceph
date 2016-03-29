@@ -15,6 +15,7 @@
 #include "Clock.h"
 #include "common/dout.h"
 #include "common/environment.h"
+#include "common/valgrind.h"
 #include "include/types.h"
 #include "lockdep.h"
 
@@ -34,7 +35,7 @@ namespace std {
 
 /******* Constants **********/
 #define lockdep_dout(v) lsubdout(g_lockdep_ceph_ctx, lockdep, v)
-#define MAX_LOCKS  2000   // increase me as needed
+#define MAX_LOCKS  4096   // increase me as needed
 #define BACKTRACE_SKIP 2
 
 /******* Globals **********/
@@ -53,7 +54,8 @@ static map<int, std::string> lock_names;
 static map<int, int> lock_refs;
 static list<int> free_ids;
 static ceph::unordered_map<pthread_t, map<int,BackTrace*> > held;
-static BackTrace *follows[MAX_LOCKS][MAX_LOCKS];       // follows[a][b] means b taken after a
+static bool follows[MAX_LOCKS][MAX_LOCKS]; // follows[a][b] means b taken after a
+static BackTrace *follows_bt[MAX_LOCKS][MAX_LOCKS];
 
 static bool lockdep_force_backtrace()
 {
@@ -66,6 +68,10 @@ void lockdep_register_ceph_context(CephContext *cct)
 {
   pthread_mutex_lock(&lockdep_mutex);
   if (g_lockdep_ceph_ctx == NULL) {
+    ANNOTATE_BENIGN_RACE_SIZED(&g_lockdep_ceph_ctx, sizeof(g_lockdep_ceph_ctx),
+                               "lockdep cct");
+    ANNOTATE_BENIGN_RACE_SIZED(&g_lockdep, sizeof(g_lockdep),
+                               "lockdep enabled");
     g_lockdep = true;
     g_lockdep_ceph_ctx = cct;
     lockdep_dout(0) << "lockdep start" << dendl;
@@ -88,9 +94,12 @@ void lockdep_unregister_ceph_context(CephContext *cct)
 
     // blow away all of our state, too, in case it starts up again.
     held.clear();
-    for (unsigned i = 0; i < MAX_LOCKS; ++i)
-      for (unsigned j = 0; j < MAX_LOCKS; ++j)
-	follows[i][j] = NULL;
+    for (unsigned i = 0; i < MAX_LOCKS; ++i) {
+      for (unsigned j = 0; j < MAX_LOCKS; ++j) {
+        follows[i][j] = false;
+        follows_bt[i][j] = NULL;
+      }
+    }
     lock_names.clear();
     lock_ids.clear();
     lock_refs.clear();
@@ -129,7 +138,14 @@ int lockdep_register(const char *name)
   pthread_mutex_lock(&lockdep_mutex);
   ceph::unordered_map<std::string, int>::iterator p = lock_ids.find(name);
   if (p == lock_ids.end()) {
-    assert(!free_ids.empty());
+    if (free_ids.empty()) {
+      lockdep_dout(0) << "ERROR OUT OF IDS .. have " << free_ids.size()
+		      << " max " << MAX_LOCKS << dendl;
+      for (auto& p : lock_names) {
+	lockdep_dout(0) << "  lock " << p.first << " " << p.second << dendl;
+      }
+      assert(free_ids.empty());
+    }
     id = free_ids.front();
     free_ids.pop_front();
 
@@ -162,11 +178,13 @@ void lockdep_unregister(int id)
   if (--refs == 0) {
     // reset dependency ordering
     for (int i=0; i<MAX_LOCKS; ++i) {
-      delete follows[id][i];
-      follows[id][i] = NULL;
+      delete follows_bt[id][i];
+      follows_bt[id][i] = NULL;
+      follows[id][i] = false;
 
-      delete follows[i][id];
-      follows[i][id] = NULL;
+      delete follows_bt[i][id];
+      follows_bt[i][id] = NULL;
+      follows[i][id] = false;
     }
 
     lockdep_dout(10) << "unregistered '" << p->second << "' from " << id
@@ -191,7 +209,9 @@ static bool does_follow(int a, int b)
     *_dout << "------------------------------------" << "\n";
     *_dout << "existing dependency " << lock_names[a] << " (" << a << ") -> "
            << lock_names[b] << " (" << b << ") at:\n";
-    follows[a][b]->print(*_dout);
+    if (follows_bt[a][b]) {
+      follows_bt[a][b]->print(*_dout);
+    }
     *_dout << dendl;
     return true;
   }
@@ -201,7 +221,9 @@ static bool does_follow(int a, int b)
 	does_follow(i, b)) {
       lockdep_dout(0) << "existing intermediate dependency " << lock_names[a]
           << " (" << a << ") -> " << lock_names[i] << " (" << i << ") at:\n";
-      follows[a][i]->print(*_dout);
+      if (follows_bt[a][i]) {
+        follows_bt[a][i]->print(*_dout);
+      }
       *_dout << dendl;
       return true;
     }
@@ -271,7 +293,8 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace)
         if (force_backtrace || lockdep_force_backtrace()) {
           bt = new BackTrace(BACKTRACE_SKIP);
         }
-	follows[p->first][id] = bt;
+        follows[p->first][id] = true;
+        follows_bt[p->first][id] = bt;
 	lockdep_dout(10) << lock_names[p->first] << " -> " << name << " at" << dendl;
 	//bt->print(*_dout);
       }

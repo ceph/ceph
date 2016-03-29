@@ -21,7 +21,7 @@
 #include <set>
 
 #include "include/types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/lru.h"
 #include "include/elist.h"
 #include "include/filepath.h"
@@ -29,6 +29,7 @@
 
 #include "SimpleLock.h"
 #include "LocalLock.h"
+#include "ScrubHeader.h"
 
 class CInode;
 class CDir;
@@ -80,11 +81,14 @@ public:
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
   static const int PIN_FRAGMENTING = -2;  // containing dir is refragmenting
   static const int PIN_PURGING =      3;
+  static const int PIN_SCRUBPARENT =  4;
+
   const char *pin_name(int p) const {
     switch (p) {
     case PIN_INODEPIN: return "inodepin";
     case PIN_FRAGMENTING: return "fragmenting";
     case PIN_PURGING: return "purging";
+    case PIN_SCRUBPARENT: return "scrubparent";
     default: return generic_pin_name(p);
     }
   }
@@ -136,7 +140,7 @@ public:
     }
     void link_remote(CInode *in);
   };
-  
+
 protected:
   CDir *dir;     // containing dirfrag
   linkage_t linkage;

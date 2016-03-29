@@ -408,8 +408,8 @@ TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
   profile["m"] = "4";
   Isa.init(profile, &cerr);
 
-  int k = 12;
-  int m = 4;
+  const int k = 12;
+  const int m = 4;
 
 #define LARGE_ENOUGH 2048
   bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));

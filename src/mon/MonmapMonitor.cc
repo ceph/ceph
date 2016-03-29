@@ -240,10 +240,6 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
     if (p != mon->monmap)
        delete p;
   }
-  else if (prefix == "mon add")
-    return false;
-  else if (prefix == "mon remove")
-    return false;
 
 reply:
   if (r != -1) {
@@ -297,6 +293,57 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     return true;
   }
 
+  /* We should follow the following rules:
+   *
+   * - 'monmap' is the current, consistent version of the monmap
+   * - 'pending_map' is the uncommitted version of the monmap
+   *
+   * All checks for the current state must be made against 'monmap'.
+   * All changes are made against 'pending_map'.
+   *
+   * If there are concurrent operations modifying 'pending_map', please
+   * follow the following rules.
+   *
+   * - if pending_map has already been changed, the second operation must
+   *   wait for the proposal to finish and be run again; This is the easiest
+   *   path to guarantee correctness but may impact performance (i.e., it
+   *   will take longer for the user to get a reply).
+   *
+   * - if the result of the second operation can be guaranteed to be
+   *   idempotent, the operation may reply to the user once the proposal
+   *   finishes; still needs to wait for the proposal to finish.
+   *
+   * - An operation _NEVER_ returns to the user based on pending state.
+   *
+   * If an operation does not modify current stable monmap, it may be
+   * serialized before current pending map, regardless of any change that
+   * has been made to the pending map -- remember, pending is uncommitted
+   * state, thus we are not bound by it.
+   */
+
+  assert(mon->monmap);
+  MonMap &monmap = *mon->monmap;
+
+
+  /* Please note:
+   *
+   * Adding or removing monitors may lead to loss of quorum.
+   *
+   * Because quorum may be lost, it's important to reply something
+   * to the user, lest she end up waiting forever for a reply. And
+   * no reply will ever be sent until quorum is formed again.
+   *
+   * On the other hand, this means we're leaking uncommitted state
+   * to the user. As such, please be mindful of the reply message.
+   *
+   * e.g., 'adding monitor mon.foo' is okay ('adding' is an on-going
+   * operation and conveys its not-yet-permanent nature); whereas
+   * 'added monitor mon.foo' presumes the action has successfully
+   * completed and state has been committed, which may not be true.
+   */
+
+
+  bool propose = false;
   if (prefix == "mon add") {
     string name;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
@@ -308,7 +355,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     if (!addr.parse(addrstr.c_str())) {
       err = -EINVAL;
       ss << "addr " << addrstr << "does not parse";
-      goto out;
+      goto reply;
     }
 
     if (addr.get_port() == 0) {
@@ -319,8 +366,8 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     /**
      * If we have a monitor with the same name and different addr, then EEXIST
      * If we have a monitor with the same addr and different name, then EEXIST
-     * If we have a monitor with the same addr and same name, then return as if
-     * we had just added the monitor.
+     * If we have a monitor with the same addr and same name, then wait for
+     * the proposal to finish and return success.
      * If we don't have the monitor, add it.
      */
 
@@ -329,64 +376,107 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       ss << "; ";
 
     do {
-      if (pending_map.contains(addr)) {
-        string n = pending_map.get_name(addr);
-        if (n == name)
-          break;
-      } else if (pending_map.contains(name)) {
-        entity_addr_t tmp_addr = pending_map.get_addr(name);
-        if (tmp_addr == addr)
-          break;
+      if (monmap.contains(name)) {
+        if (monmap.get_addr(name) == addr) {
+          // stable map contains monitor with the same name at the same address.
+          // serialize before current pending map.
+          err = 0; // for clarity; this has already been set above.
+          ss << "mon." << name << " at " << addr << " already exists";
+          goto reply;
+        } else {
+          ss << "mon." << name
+             << " already exists at address " << monmap.get_addr(name);
+        }
+      } else if (monmap.contains(addr)) {
+        // we established on the previous branch that name is different
+        ss << "mon." << monmap.get_name(addr)
+           << " already exists at address " << addr;
       } else {
+        // go ahead and add
         break;
       }
       err = -EEXIST;
-      ss << "mon." << name << " at " << addr << " already exists";
-      goto out;
+      goto reply;
     } while (false);
 
-    ss << "added mon." << name << " at " << addr;
-    if (pending_map.contains(name)) {
-      goto out;
-    }
+    /* Given there's no delay between proposals on the MonmapMonitor (see
+     * MonmapMonitor::should_propose()), there is no point in checking for
+     * a mismatch between name and addr on pending_map.
+     *
+     * Once we established the monitor does not exist in the committed state,
+     * we can simply go ahead and add the monitor.
+     */
 
     pending_map.add(name, addr);
     pending_map.last_changed = ceph_clock_now(g_ceph_context);
-    getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
-                                                     get_last_committed() + 1));
-    return true;
+    ss << "adding mon." << name << " at " << addr;
+    propose = true;
+    dout(0) << __func__ << " proposing new mon." << name << dendl;
+    goto reply;
 
-  } else if (prefix == "mon remove") {
+  } else if (prefix == "mon remove" ||
+             prefix == "mon rm") {
     string name;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
-    if (!pending_map.contains(name)) {
+    if (!monmap.contains(name)) {
       err = 0;
-      ss << "mon " << name << " does not exist or has already been removed";
-      goto out;
+      ss << "mon." << name << " does not exist or has already been removed";
+      goto reply;
     }
 
-    if (pending_map.size() == 1) {
+    if (monmap.size() == 1) {
       err = -EINVAL;
       ss << "error: refusing removal of last monitor " << name;
-      goto out;
+      goto reply;
     }
+
+    /* At the time of writing, there is no risk of races when multiple clients
+     * attempt to use the same name. The reason is simple but may not be
+     * obvious.
+     *
+     * In a nutshell, we do not collate proposals on the MonmapMonitor. As
+     * soon as we return 'true' below, PaxosService::dispatch() will check if
+     * the service should propose, and - if so - the service will be marked as
+     * 'proposing' and a proposal will be triggered. The PaxosService class
+     * guarantees that once a service is marked 'proposing' no further writes
+     * will be handled.
+     *
+     * The decision on whether the service should propose or not is, in this
+     * case, made by MonmapMonitor::should_propose(), which always considers
+     * the proposal delay being 0.0 seconds. This is key for PaxosService to
+     * trigger the proposal immediately.
+     * 0.0 seconds of delay.
+     *
+     * From the above, there's no point in performing further checks on the
+     * pending_map, as we don't ever have multiple proposals in-flight in
+     * this service. As we've established the committed state contains the
+     * monitor, we can simply go ahead and remove it.
+     *
+     * Please note that the code hinges on all of the above to be true. It
+     * has been true since time immemorial and we don't see a good reason
+     * to make it sturdier at this time - mainly because we don't think it's
+     * going to change any time soon, lest for any bug that may be unwillingly
+     * introduced.
+     */
+
     entity_addr_t addr = pending_map.get_addr(name);
     pending_map.remove(name);
     pending_map.last_changed = ceph_clock_now(g_ceph_context);
-    ss << "removed mon." << name << " at " << addr << ", there are now " << pending_map.size() << " monitors" ;
-    getline(ss, rs);
-    // send reply immediately in case we get removed
-    mon->reply_command(op, 0, rs, get_last_committed());
-    return true;
-  }
-  else
-    ss << "unknown command " << prefix;
+    ss << "removing mon." << name << " at " << addr
+       << ", there will be " << pending_map.size() << " monitors" ;
+    propose = true;
+    goto reply;
 
-out:
+  } else {
+    ss << "unknown command " << prefix;
+    err = -EINVAL;
+  }
+
+reply:
   getline(ss, rs);
   mon->reply_command(op, err, rs, get_last_committed());
-  return false;
+  // we are returning to the user; do not propose.
+  return propose;
 }
 
 bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
@@ -435,7 +525,8 @@ void MonmapMonitor::tick()
 }
 
 void MonmapMonitor::get_health(list<pair<health_status_t, string> >& summary,
-			       list<pair<health_status_t, string> > *detail) const
+			       list<pair<health_status_t, string> > *detail,
+			       CephContext *cct) const
 {
   int max = mon->monmap->size();
   int actual = mon->get_quorum().size();
@@ -487,18 +578,5 @@ int MonmapMonitor::get_monmap(bufferlist &bl)
             << cpp_strerror(err) << dendl;
     return err;
   }
-  return 0;
-}
-
-int MonmapMonitor::get_monmap(MonMap &m)
-{
-  dout(10) << __func__ << dendl;
-  bufferlist monmap_bl;
-
-  int err = get_monmap(monmap_bl);
-  if (err < 0) {
-    return err;
-  }
-  m.decode(monmap_bl);
   return 0;
 }

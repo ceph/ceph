@@ -1,0 +1,1637 @@
+commit 752b6a3020c3de74e07d2a8b4c5e48dab5a6b6fd (tag: refs/tags/v9.2.1)
+Author: Jenkins Build Slave User <jenkins-build@jenkins-slave-wheezy.localdomain>
+Date:   Wed Feb 24 22:07:26 2016 +0000
+
+    9.2.1
+
+commit 71f380a81c6870466e11a74a597f847494ba23e9
+Merge: 8350215 b0c9176
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Feb 11 22:32:53 2016 +0700
+
+    Merge pull request #7484 from dillaman/wip-14610-infernalis
+    
+    librbd: flattening an rbd image with active IO can lead to hang
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 83502159f5b94139784b908dd4e4bdf1d420e62a
+Merge: f5e33cd 46ed443
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Feb 11 22:32:41 2016 +0700
+
+    Merge pull request #7406 from dillaman/wip-14542-infernalis
+    
+    librbd: ImageWatcher shouldn't block the notification thread
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit f5e33cd348532b4ed911f49240a5da0c6859a9ad
+Merge: a474c09 389ed34
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Feb 11 22:32:25 2016 +0700
+
+    Merge pull request #6981 from dillaman/wip-14062-infernalis
+    
+    librbd: fix merge-diff for >2GB diff-files
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit b0c91768d4ac81baaf9b5edec92adad91ade9b64
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Dec 23 12:06:50 2015 -0500
+
+    librbd: ensure librados callbacks are flushed prior to destroying image
+    
+    Fixes: #14092
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 98157ab3274bd960e4487e34f5a83e9c921a6ac8)
+
+commit f3987367920368cbce865533cf11a1eb207fb9c7
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Jul 30 22:31:55 2015 -0400
+
+    librbd: simplify IO flush handling
+    
+    Add a new convenience method to ImageCtx for handling flush
+    requests and cleanup flush handling with dealing with the cache.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (based on commit ee7c6f73992d3b09c6b401fbb782b2151f2399c7)
+
+commit da772fa88db47703d491ebaa9bd709e62858b3b0
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Aug 14 13:28:13 2015 -0400
+
+    WorkQueue: PointerWQ drain no longer waits for other queues
+    
+    If another (independent) queue was processing, drain could
+    block waiting.  Instead, allow drain to exit quickly if
+    no items are being processed and the queue is empty for
+    the current WQ.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit b118d7df1e34387b6e5649a5b205cf061598d0d4)
+
+commit 5593e57c1b1c198e95a636ffdda4922259582a5f
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Feb 2 10:54:53 2016 -0500
+
+    test: new librbd flatten test case
+    
+    AIO operations after a flatten operation were previously
+    hanging during the close of the parent image.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 5b3a4d2cbca51e5c6795ba7d1189920c7d9af806)
+
+commit 46ed443bf674c50a04705597f1caa4882c1ca5b3
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Jan 28 14:38:20 2016 -0500
+
+    librbd: ImageWatcher shouldn't block the notification thread
+    
+    Blocking the notification thread will also result in librados async
+    callbacks becoming blocked (since they use the same thread).
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 6f94bde44500cc4592ac9a842cbb150b8cabf96b)
+    
+    Conflicts:
+        src/librbd/ImageWatcher.[cc|h]: fewer RPC messages and synchronous
+                                        snapshot actions
+
+commit 2be722a3e944436deff7a8ae513e22b02fd31237
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Jan 28 14:35:54 2016 -0500
+
+    librados_test_stub: watch/notify now behaves similar to librados
+    
+    Notifications are executed via the same librados AIO callback
+    thread, so it's now possible to catch deadlock.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 0a3822f1559ba3fe3def6a65883b9c6c7c5a33fe)
+
+commit 8990ee87c9d943f01de68e772da213dc7aad9011
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Jan 28 12:40:18 2016 -0500
+
+    tests: simulate writeback flush during snap create
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 5e564ea9f869b987f3ada2465edfbe5edf9f6435)
+
+commit 389ed3462f6377d48d87a0e0952061585b0ea106
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Dec 18 15:22:13 2015 -0500
+
+    librbd: fix merge-diff for >2GB diff-files
+    
+    Fixes: #14062
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (derived from commit 68125dd01349edf93cfa1af5028c2d438b5ae089)
+
+commit a474c096a3084ef9f8453e76cebff49e4649d4ea
+Merge: 4c04050 0f50439
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Feb 11 13:59:30 2016 +0700
+
+    Merge pull request #6629 from Abhishekvrshny/wip-13733-infernalis
+    
+    rbd: misdirected op in rbd balance-reads test
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 4c04050379e5d8d8512dc51df6b0ecbd1e37dcd7
+Merge: 1aa60f6 29d30ec
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Feb 10 13:00:23 2016 +0700
+
+    Merge pull request #7431 from Abhishekvrshny/wip-14067-infernalis
+    
+    infernalis : Ceph file system is not freeing space
+    
+    Reviewed-by: Yan, Zheng <zyan@redhat.com>
+
+commit 1aa60f6680195a557ce81eeabc6794b4c84d87b1
+Merge: 4dc9791 7fd56ea
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Feb 10 12:59:30 2016 +0700
+
+    Merge pull request #7429 from Abhishekvrshny/wip-14490-infernalis
+    
+    infernalis: fsx failed to compile
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 4dc97912b6003069bc1582caf18bbc702a8864be
+Merge: 2bfc75a a2644ed
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Feb 10 12:57:48 2016 +0700
+
+    Merge pull request #6853 from Abhishekvrshny/wip-13889-infernalis
+    
+    infernalis: Segmentation fault accessing file using fuse mount
+    
+    Reviewed-by: Yan, Zheng <zyan@redhat.com>
+
+commit 2bfc75a0c32685f1151c923a2d84a29549b89ec9
+Merge: e71d062 6c68971
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Feb 10 12:57:09 2016 +0700
+
+    Merge pull request #6752 from ukernel/infernalis-11482
+    
+    mds: fix client capabilities during reconnect (client.XXXX isn't responding to mclientcaps warning)
+    
+    Reviewed-by: Yan, Zheng <zyan@redhat.com>
+
+commit e71d0629caaf0d639efdc9f081bcc2aa8ce156e1
+Merge: 6552eeb 58b43e6
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Feb 10 12:53:34 2016 +0700
+
+    Merge pull request #6628 from Abhishekvrshny/wip-13792-infernalis
+    
+    rbd-replay-* moved from ceph-test-dbg to ceph-common-dbg as well
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 6552eeb2c687e5c7eb8ffbed942f6d99b1c969f9
+Merge: e507a5f 7a44714
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue Feb 9 11:58:19 2016 +0700
+
+    Merge pull request #7079 from Abhishekvrshny/wip-14199-infernalis
+    
+    infernalis: [ FAILED ] TestLibRBD.SnapRemoveViaLockOwner
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit e507a5f90f5ec857359a985b28c64d3cb6366bc4
+Merge: 930ef94 83bba36
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue Feb 9 11:58:01 2016 +0700
+
+    Merge pull request #7080 from Abhishekvrshny/wip-14142-infernalis
+    
+    infernalis: Verify self-managed snapshot functionality on image create
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 930ef9462ad1d5a92225f2b83ef797b37e22aeba
+Merge: 1061db6 8175e16
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue Feb 9 11:57:37 2016 +0700
+
+    Merge pull request #7428 from Abhishekvrshny/wip-14321-infernalis
+    
+    infernalis: cls_rbd: object_map_save should enable checksums
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 1061db6ba16955ef2f3fa49dfed461872b970614
+Merge: 2de6016 2c5b90a
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Feb 8 22:23:18 2016 +0700
+
+    Merge pull request #7427 from Abhishekvrshny/wip-14465-infernalis
+    
+    infernalis: rbd-replay does not check for EOF and goes to endless loop
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 2de60165dd76ece7dc84326e2721d61cde05e004
+Merge: a8d147e f870ba9
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Feb 8 22:23:01 2016 +0700
+
+    Merge pull request #7426 from Abhishekvrshny/wip-14552-infernalis
+    
+    infernalis: rbd: TaskFinisher::cancel should remove event from SafeTimer
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit a8d147e813d157855f65e271569cedb0ac95a72d
+Merge: 77a26d8 fde4ec6
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Feb 8 08:49:41 2016 -0500
+
+    Merge pull request #6397 from SUSE/wip-13615-infernalis
+    
+    OSD::build_past_intervals_parallel() shall reset primary and up_primary when begin a new past_interval.
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 77a26d8e7bdb4f351c90a61e8ac87b251294a461
+Merge: cea356a af2ced5
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Feb 8 08:49:17 2016 -0500
+
+    Merge pull request #6840 from SUSE/wip-13791-infernalis
+    
+    Objecter: potential null pointer access when do pool_snap_list.
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit cea356a959ed410a6094140c9d03852e968ab7a8
+Merge: 5469e99 5ef86d7
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Feb 8 08:48:49 2016 -0500
+
+    Merge pull request #6851 from Abhishekvrshny/wip-14018-infernalis
+    
+    infernalis: osd/PG.cc: 288: FAILED assert(info.last_epoch_started >= info.history.last_epoch_started)
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 5469e9904ccc170d282d061308f6694e20ef8946
+Merge: ba4583f 7ac5b15
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Feb 8 08:48:25 2016 -0500
+
+    Merge pull request #6849 from Abhishekvrshny/wip-13979-infernalis
+    
+    osd: call on_new_interval on newly split child PG
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit ba4583f3a25a0d01d31e82cdfcd2be414a5648ae
+Merge: fbd96c8 b211686
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Feb 8 08:48:03 2016 -0500
+
+    Merge pull request #6907 from Abhishekvrshny/wip-13929-infernalis
+    
+    infernalis: Ceph Pools' MAX AVAIL is 0 if some OSDs' weight is 0
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit fbd96c8a49548a4cd6598c700111ac8b1be7b1d3
+Merge: cef8fc3 73564ac
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Feb 8 08:47:36 2016 -0500
+
+    Merge pull request #7421 from Abhishekvrshny/wip-14494-infernalis
+    
+    infernalis: pgs stuck inconsistent after infernalis upgrade
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit cef8fc305e2c52a09b4af9e5a54c3c4117325453
+Merge: 15c27ce 2647c20
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Feb 8 08:46:25 2016 -0500
+
+    Merge pull request #6627 from Abhishekvrshny/wip-13771-infernalis
+    
+    Objecter: pool op callback may hang forever.
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 15c27ce7328baf92ca904e1b92aa8e21b8452263
+Merge: d1da031 2b6d817
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Feb 8 18:18:07 2016 +0700
+
+    Merge pull request #7543 from SUSE/wip-14676-infernalis
+    
+    infernalis: rgw: radosgw-admin --help doesn't show the orphans find command
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit d1da03131acf735946c3a0deab72d8f7da9e44d8
+Merge: 22e0c6a 1665f81
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Feb 8 11:22:28 2016 +0700
+
+    Merge pull request #6993 from badone/wip-13993-infernalis
+    
+    log: Log.cc: Assign LOG_DEBUG priority to syslog calls
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 22e0c6a7388af5e3b3a085ef7f3e2ad162d2c0f8
+Merge: 489a13d e102e5a
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Feb 8 11:21:11 2016 +0700
+
+    Merge pull request #6882 from dachary/wip-13988-reuse-osd-id-infernalis
+    
+    tests: verify it is possible to reuse an OSD id
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 489a13d4dd4483937dd7bd7798cb6e7d1dbd240c
+Merge: de01ba4 7d90c01
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Feb 8 11:18:35 2016 +0700
+
+    Merge pull request #6852 from Abhishekvrshny/wip-14013-infernalis
+    
+    infernalis: systemd/ceph-disk@.service assumes /bin/flock
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit de01ba4ea2df67e5b732d6e71cdf324642becbd2
+Merge: b5427f4 5d1e6ae
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Feb 8 11:16:23 2016 +0700
+
+    Merge pull request #6846 from Abhishekvrshny/wip-13638-infernalis
+    
+    FileStore: potential memory leak if getattrs fails.
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit b5427f466eb8507dc865d80d0e3293652452f558
+Merge: 5dbd998 ac31f7f
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Feb 8 11:14:18 2016 +0700
+
+    Merge pull request #6836 from SUSE/wip-13891-infernalis
+    
+    infernalis: auth/cephx: large amounts of log are produced by osd
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 5dbd9984e09f3c520c69a406f98577bfdcd9b220
+Merge: 2016468 c968a40
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Feb 8 11:12:47 2016 +0700
+
+    Merge pull request #6833 from SUSE/wip-13935-infernalis
+    
+    infernalis: Ceph daemon failed to start, because the service name was already used.
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 201646882e2c05d2e2436f62b7bfb50a6466aa54
+Merge: b09670f edde13c
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Feb 8 11:12:00 2016 +0700
+
+    Merge pull request #6694 from xiexingguo/xxg-wip-13869
+    
+    osd: fix race condition during send_failures
+    
+    Reviewed-by: David Zafman <dzafman@redhat.com>
+    Reviewed-by: Sage Weil <sage@redhat.com>
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit b09670fea2ff844333c654fb73046dd1596fb2e3
+Merge: 59df52d 4d2a135
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Feb 8 11:09:30 2016 +0700
+
+    Merge pull request #6626 from Abhishekvrshny/wip-13655-infernalis
+    
+    crush: crash if we see CRUSH_ITEM_NONE in early rule step
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 59df52df1697ee8dccb39430940e683a7bdab275
+Merge: f8f36b6 0eb2ddb
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Feb 8 11:06:41 2016 +0700
+
+    Merge pull request #6449 from dachary/wip-13671-infernalis
+    
+    tests: testprofile must be removed before it is re-created
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 2b6d817187265686d21de76db14870ff22d549de
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Feb 1 16:33:55 2016 -0800
+
+    rgw-admin: document orphans commands in usage
+    
+    Fixes: #14516
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 105a76bf542e05b739d5a03ca8ae55432350f107)
+
+commit f8f36b6877c0d0d356d1c53a171d5a1a0be423b0
+Merge: 7ffe6ff 399b7c5
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Feb 4 16:23:51 2016 -0500
+
+    Merge pull request #6880 from dachary/wip-14044-infernalis
+    
+    infernalis: ceph-disk list fails on /dev/cciss!c0d0
+
+commit 7ffe6ff4e26db538335b8069ce4fd14fe4cdd76c
+Merge: a8fd5ba 8707b0b
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jan 29 09:05:14 2016 -0500
+
+    Merge pull request #6392 from SUSE/wip-13589-infernalis
+    
+    mon: should not set isvalid = true when cephx_verify_authorizer retur…
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit a8fd5ba7764b941aeb8a8ec2867a7e212159c84d
+Merge: 1296c2b 1bfb6f7
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jan 29 08:55:45 2016 -0500
+
+    Merge pull request #6500 from SUSE/wip-13678-infernalis
+    
+    systemd: no rbdmap systemd unit file
+
+commit 29d30ecd4667567a58a7f92641a8a7618e88fd44
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Thu Nov 12 21:57:27 2015 +0800
+
+    mds: properly set STATE_STRAY/STATE_ORPHAN for stray dentry/inode
+    
+    Fixes: #13777
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 460c74a0b872336a7279f0b40b17ed672b6e15a1)
+
+commit 5f54671e0715781146044e2d38ba79ad03634a64
+Author: John Spray <john.spray@redhat.com>
+Date:   Mon Nov 16 10:57:56 2015 +0000
+
+    mon: don't require OSD W for MRemoveSnaps
+    
+    Use ability to execute "osd pool rmsnap" command
+    as a signal that the client should be permitted
+    to send MRemoveSnaps too.
+    
+    Note that we don't also require the W ability,
+    unlike Monitor::_allowed_command -- this is slightly
+    more permissive handling, but anyone crafting caps
+    that explicitly permit "osd pool rmsnap" needs to
+    know what they are doing.
+    
+    Fixes: #13777
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 0b474c52abd3d528c041544f73b1d27d7d1b1320)
+
+commit 7fd56eaf215753156bdb6481835f399ad303faf0
+Author: Greg Farnum <gfarnum@redhat.com>
+Date:   Wed Jan 13 13:17:53 2016 -0800
+
+    fsx: checkout old version until it compiles properly on miras
+    
+    I sent a patch to xfstests upstream at
+    http://article.gmane.org/gmane.comp.file-systems.fstests/1665, but
+    until that's fixed we need a version that works in our test lab.
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+    (cherry picked from commit 7d52372ae74878ebd001036ff0a7aad525eb15b6)
+
+commit 8175e163fceb2bdc49ca291e183c08575e6c5d18
+Author: Douglas Fuller <dfuller@redhat.com>
+Date:   Thu Jan 7 11:01:19 2016 -0800
+
+    cls_rbd: enable object map checksums for object_map_save
+    
+    object_map_save disables CRCs when an object map footer isn't provided.
+    Unconditionally re-enable object map CRCs before re-encoding the new object
+    map.
+    
+    Fixes: #14280
+    Signed-off-by: Douglas Fuller <dfuller@redhat.com>
+    (cherry picked from commit d5c02f3ed26edec095d45d7a7f26ff26d1b5aacc)
+
+commit 2c5b90a268ebcdcd8c806ef72c08184cc4e0417a
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Thu Jan 21 13:45:42 2016 +0200
+
+    rbd-replay: handle EOF gracefully
+    
+    Fixes: #14452
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit c59b84c3e2c9bbda68219e4d2288a889dd9ca6cb)
+
+commit f870ba9ab41cac127d182a52f435c7adc628de71
+Author: Douglas Fuller <dfuller@redhat.com>
+Date:   Fri Jan 22 11:18:40 2016 -0800
+
+    rbd: remove canceled tasks from timer thread
+    
+    When canceling scheduled tasks using the timer thread, TaskFinisher::cancel
+    does not call SafeTimer::cancel_event, so events fire anyway. Add this call.
+    
+    Fixes: #14476
+    Signed-off-by: Douglas Fuller <dfuller@redhat.com>
+    (cherry picked from commit 2aa0f318c862dbe3027d74d345671506605778eb)
+
+commit 73564ac22319d158d4bade9ab1a3832a9669d099
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Sep 24 11:38:41 2015 -0400
+
+    osd/PG: For performance start scrub scan at pool to skip temp objects
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 05d79faa512210b0f0a91640d18db33b887a6e73)
+
+commit 2480fca93beb700aa9a963f5b568ab6bf8915e0f
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Dec 18 09:08:19 2015 -0800
+
+    osd/OSD: clear_temp_objects() include removal of Hammer temp objects
+    
+    Fixes: #13862
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 10b4a0825d9917b6fdd0d6450640238b78ba05d4)
+
+commit 9ff90acc3efdb1c5bdd23c8658e8692f2879231e
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Dec 17 18:04:08 2015 -0800
+
+    osd: Improve log message which isn't about a particular shard
+    
+    Remove redundant dout()
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit e85907fcc582922925609f595f68c597a88c39dc)
+
+commit 1296c2baef3412f462ee2124af747a892ea8b7a9
+Merge: 9dc5e6c d4c41d0
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Wed Jan 13 17:15:41 2016 -0800
+
+    Merge pull request #7225 from dillaman/wip-13810-infernalis
+    
+    tests: notification slave needs to wait for master
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit d4c41d041b7b176723ccd548102a9d2edf91956e
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Jan 13 12:44:01 2016 -0500
+
+    tests: notification slave needs to wait for master
+    
+    If the slave instance starts before the master, race
+    conditions are possible.
+    
+    Fixes: #13810
+    Backport: infernalis, hammer
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 3992d6fe67bbf82322cedc1582406caaf6d4de60)
+
+commit e102e5a0e261f407913c5d47991c2549f6664ffc
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Dec 10 15:20:32 2015 +0100
+
+    tests: verify it is possible to reuse an OSD id
+    
+    When an OSD id is removed via ceph osd rm, it will be reused by the next
+    ceph osd create command. Verify that and OSD reusing such an id
+    successfully comes up.
+    
+    http://tracker.ceph.com/issues/13988 Refs: #13988
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 7324615bdb829f77928fa10d4e988c6422945937)
+
+commit 399b7c5409d9801aa7f38533dd8b7c19c726a594
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Tue Jan 5 17:33:45 2016 +0100
+
+    ceph-disk: list accepts absolute dev names
+    
+    The ceph-disk list subcommand now accepts /dev/sda as well as sda.
+    The filtering is done on the full list of devices instead of restricting
+    the number of devices explored. Always obtaining the full list of
+    devices makes things simpler when trying to match a dmcrypted device to
+    the corresponding raw device.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 591d581c84cfd72d7c655ac88b0911a318b96e95)
+    
+    Conflicts:
+    	src/ceph-disk: as part of the implementation of deactivate /
+    	destroy in master, the prototype of list_device was changed
+            to take a list of paths instead of the all arguments (args).
+
+commit e222d7bce218b732025ce094ed2d1bb31af0d6f6
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Tue Jan 5 14:25:51 2016 +0100
+
+    ceph-disk: display OSD details when listing dmcrypt devices
+    
+    The details about a device that mapped via dmcrypt are directly
+    available. Do not try to fetch them from the device entry describing the
+    devicemapper entry.
+    
+    http://tracker.ceph.com/issues/14230 Fixes: #14230
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 7aab4ed6f108ddc7bc90300f1999a38f30da3a57)
+    
+    Conflicts:
+    	src/ceph-disk: an incorrect attempt was made to fix the same
+                           problem. It was not backported and does not
+                           need to be. It is entirely contained in the
+                           code block removed and is the reason for the
+                           conflict.
+
+commit 87db693eb7d52ad297e8d265ffffa0d7e1125478
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Dec 9 16:52:10 2015 +0100
+
+    tests: limit ceph-disk unit tests to test dir
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 499c80db606fe3926a8a603e03fdba6967d66003)
+
+commit 2c0d7ef2c72b7570a1304cad927a0b612ea3d4a8
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Tue Jan 5 17:38:59 2016 +0100
+
+    ceph-disk: factorize duplicated dmcrypt mapping
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 35a0c94c4cd3a57cfc382c64eaa9cfb9306dd2e6)
+
+commit 22881b1686dc040d8af01c66f59a935065bb680a
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Tue Jan 5 17:42:11 2016 +0100
+
+    ceph-disk: fix regression in cciss devices names
+    
+    The cciss driver has device paths such as /dev/cciss/c0d1 with a
+    matching /sys/block/cciss!c0d1. The general case is that whenever a
+    device name is found in /sys/block, the / is replaced by the !.
+    
+    When refactoring the ceph-disk list subcommand, this conversion was
+    overlooked in a few places. All explicit concatenation of /dev with a
+    device name are replaced with a call to get_dev_name which does the same
+    but also converts all ! in /.
+    
+    http://tracker.ceph.com/issues/13970 Fixes: #13970
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit a2fd3a535e66b3a2b694cda9c6add33383ccfa4a)
+    
+    Conflicts:
+    	src/ceph-disk : trivial resolution
+
+commit 9dc5e6cbf85681d0fb9ab249c571672456eb6556
+Merge: 64fab4f 5798d1e
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Jan 7 15:06:32 2016 +0100
+
+    Merge pull request #7001 from dachary/wip-14145-infernalis
+    
+    infernalis: ceph-disk: use blkid instead of sgdisk -i
+    
+    
+    On CentOS 7.1 and other operating systems with a version of udev greater or equal to 214,
+    running ceph-disk prepare triggered unexpected removal and addition of partitions on
+    the disk being prepared. That created problems ranging from the OSD not being activated
+    to failures because /dev/sdb1 does not exist although it should.
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 5798d1e76c380182472d08ec6f62ebe0f1a9897e
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Jan 6 23:36:57 2016 +0100
+
+    tests: ceph-disk cryptsetup close must try harder
+    
+    Similar to how it's done in dmcrpyt_unmap in master (
+    132e56615805cba0395898cf165b32b88600d633 ), the infernalis tests helper
+    that were deprecated by the addition of the deactivate / destroy
+    ceph-disk subcommand must try cryptsetup close a few times in some
+    contexts.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+
+commit 379bbe0613e8dbe2f4d38f4f9ee23a10ed39a64d
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sat Dec 19 00:53:03 2015 +0100
+
+    ceph-disk: protect deactivate with activate lock
+    
+    When ceph-disk prepares the disk, it triggers udev events and each of
+    them ceph-disk activate. If systemctl stop ceph-osd@2 happens while
+    there still are ceph-disk activate in flight, the systemctl stop may be
+    cancelled by the systemctl enable issued by one of the pending ceph-disk
+    activate.
+    
+    This only matters in a test environment where disks are destroyed
+    shortly after they are activated.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 6395bf856b4d4511f0758174ef915ebcafbe3777)
+    
+    Conflicts:
+    
+            src/ceph-disk: ceph-disk deactivate does not exist in ceph-disk
+                on infernalis. But the same feature is implemented in
+                ceph-test-disk.py for test purposes and has the same
+                problem. The patch is adapted to ceph-test-disk.py.
+
+commit 4da2f9494dbd72e84d381cc12125c61931a27628
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Jan 6 11:15:19 2016 +0100
+
+    ceph-disk: retry cryptsetup remove
+    
+    Retry a cryptsetup remove ten times. After the ceph-osd terminates, the
+    device is released asyncrhonously and an attempt to cryptsetup remove
+    will may fail because it is considered busy. Although a few attempts are
+    made before giving up, the number of attempts / the duration of the
+    attempts cannot be controlled with a cryptsetup option. The workaround
+    is to increase this by trying a few times.
+    
+    If cryptsetup remove fails for a reason that is unrelated to timeout,
+    the error will be repeated a few times. There is no undesirable side
+    effect. It will not hide a problem.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 132e56615805cba0395898cf165b32b88600d633)
+
+commit 676a4b42267133a9242a81503f7dd0eaeb0afd33
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Fri Dec 18 17:03:21 2015 +0100
+
+    ceph-disk: use blkid instead of sgdisk -i
+    
+    sgdisk -i 1 /dev/vdb opens /dev/vdb in write mode which indirectly
+    triggers a BLKRRPART ioctl from udev (starting version 214 and up) when
+    the device is closed (see below for the udev release note). The
+    implementation of this ioctl by the kernel (even old kernels) removes
+    all partitions and adds them again (similar to what partprobe does
+    explicitly).
+    
+    The side effects of partitions disappearing while ceph-disk is running
+    are devastating.
+    
+    sgdisk is replaced by blkid which only opens the device in read mode and
+    will not trigger this unexpected behavior.
+    
+    The problem does not show on Ubuntu 14.04 because it is running udev <
+    214 but shows on CentOS 7 which is running udev > 214.
+    
+    git clone git://anonscm.debian.org/pkg-systemd/systemd.git
+    systemd/NEWS:
+    CHANGES WITH 214:
+    
+            * As an experimental feature, udev now tries to lock the
+              disk device node (flock(LOCK_SH|LOCK_NB)) while it
+              executes events for the disk or any of its partitions.
+              Applications like partitioning programs can lock the
+              disk device node (flock(LOCK_EX)) and claim temporary
+              device ownership that way; udev will entirely skip all event
+              handling for this disk and its partitions. If the disk
+              was opened for writing, the close will trigger a partition
+              table rescan in udev's "watch" facility, and if needed
+              synthesize "change" events for the disk and all its partitions.
+              This is now unconditionally enabled, and if it turns out to
+              cause major problems, we might turn it on only for specific
+              devices, or might need to disable it entirely. Device Mapper
+              devices are excluded from this logic.
+    
+    http://tracker.ceph.com/issues/14080 Fixes: #14080
+    
+    Signed-off-by: Ilya Dryomov <idryomov@redhat.com>
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 9dce05a8cdfc564c5162885bbb67a04ad7b95c5a)
+
+commit bb8d53636d3a433bb7752e3a291a86a8af058215
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Dec 16 15:57:03 2015 +0100
+
+    ceph-disk: dereference symlinks in destroy and zap
+    
+    The behavior of partprobe or sgdisk may be subtly different if given a
+    symbolic link to a device instead of an actual device. The debug output
+    is also more confusing when the symlink shows instead of the device it
+    points to.
+    
+    Always dereference the symlink before running destroy and zap.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit fe71647bc9bd0f9ddc6d470ee7bee1e6b0983e2b)
+    
+    Conflicts:
+            src/ceph-disk
+              trivial, because destroy is not implemented
+              in infernalis
+
+commit 74c27423f4925c7a31d6675851ffa3d2f5265ef1
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Dec 16 12:33:25 2015 +0100
+
+    ceph-disk: increase partprobe / udevadm settle timeouts
+    
+    The default of 120 seconds may be exceeded when the disk is very slow
+    which can happen in cloud environments. Increase it to 600 seconds
+    instead.
+    
+    The partprobe command may fail for the same reason but it does not have
+    a timeout parameter. Instead, try a few times before failing.
+    
+    The udevadm settle guarding partprobe are not necessary because
+    partprobe already does the same. However, partprobe does not provide a
+    way to control the timeout. Having a udevadm settle after another is
+    going to be a noop most of the time and not add any delay. It matters
+    when the udevadm settle run by partprobe fails with a timeout because
+    partprobe will silentely ignores the failure.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 730b5d62d3cda7de4076bafa6e9e35f1eb8e2190)
+
+commit 263eb579ac7179a19157004ed2de294085dc4a63
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Dec 16 12:36:47 2015 +0100
+
+    tests: ceph-disk workunit increase verbosity
+    
+    So that reading the teuthology log is enough in most cases to figure out
+    the cause of the error.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit fd7fe8c4977658f66651dad5efb0d816ae71b38b)
+    
+    Conflicts:
+    	qa/workunits/ceph-disk/ceph-disk-test.py:
+              trivial, because destroy/deactivate are not implemented
+              in infernalis. The existing destroy_osd function
+              has to be modified so the id returned by sh() does
+              not have a trailing newline.
+
+commit 936dda76ce11baa9f2b7cce882b655550188a731
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Dec 16 12:30:20 2015 +0100
+
+    ceph-disk: log parted output
+    
+    Should parted output fail to parse, it is useful to get the full output
+    when running in verbose mode.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit f5d36b9ac299e9f6d52cc32d540cc1c3342de6e7)
+
+commit db26cc4b7fbd5b6f2a3da58fb7ac7736fc058065
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Dec 16 12:29:17 2015 +0100
+
+    ceph-disk: do not discard stderr
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 5fa35ba10e10b56262757afc43929ab8ee4164f2)
+    
+    Conflicts:
+    	src/ceph-disk : trivial, because destroy/deactivate
+            are not implemented in infernalis
+
+commit 83bba36afbae58ebe7cea2b0fb8ff51edb475fff
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Dec 14 17:49:55 2015 -0500
+
+    tests: new integration test for validating new RBD pools
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 00cfe4efacd664032f700afe9701d41bacf8700a)
+
+commit 96cb5e2888e698879f3d3663dfa6f556e983a555
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Dec 14 17:41:49 2015 -0500
+
+    librbd: optionally validate RBD pool configuration (snapshot support)
+    
+    Fixes: #13633
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 1fea4dadc60e13518e9ee55d136fbc4e9d3a621e)
+
+commit 7a44714b66218cf39aa6e1673059a13729c7c39e
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Dec 23 13:26:39 2015 -0500
+
+    librbd: properly handle replay of snap remove RPC message
+    
+    Fixes: #14164
+    Backport: infernalis
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit bc309d9d7612f005a3d50ecf099ddf9b706a1bf6)
+
+commit 64fab4f080c5b7d79b51b8db8c71428b507efec5
+Merge: f480cea 7676343
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Wed Dec 23 10:47:30 2015 -0800
+
+    Merge pull request #7038 from dillaman/wip-14121-infernalis
+    
+    tests: rebuild exclusive lock test should acquire exclusive lock
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 7676343c781e9c15e18c5960d221a29840835332
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Dec 23 10:31:07 2015 -0500
+
+    tests: rebuild exclusive lock test should acquire exclusive lock
+    
+    Starting with Jewel, the object map will not be loaded until the
+    exclusive lock is acquired since it might be updated by the
+    lock owner.
+    
+    Fixes: #14121
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 1665f8187b16c9b47238743a7a94f0850160eb71
+Author: Brad Hubbard <bhubbard@redhat.com>
+Date:   Mon Dec 7 11:31:28 2015 +1000
+
+    log: Log.cc: Assign LOG_DEBUG priority to syslog calls
+    
+    Fixes: #13993
+    Signed-off-by: Brad Hubbard <bhubbard@redhat.com>
+    (cherry picked from commit 8e93f3f45db681f82633ca695a7dc4e7bd030584)
+
+commit b211686dddf35d990c07ea50b868b98ac3abf8d3
+Author: Chengyuan Li <chengyli@ebay.com>
+Date:   Thu Nov 19 22:29:39 2015 -0700
+
+    mon/PGMonitor: MAX AVAIL is 0 if some OSDs' weight is 0
+    
+    In get_rule_avail(), even p->second is 0, it's possible to be used
+    as divisor and quotient is infinity, then is converted to an integer
+    which is negative value.
+    So we should check p->second value before calculation.
+    
+    It fixes BUG #13840.
+    
+    Signed-off-by: Chengyuan Li <chengyli@ebay.com>
+    (cherry picked from commit 18713e60edd1fe16ab571f7c83e6de026db483ca)
+
+commit f480cea217008fa7b1e476d30dcb13023e6431d1
+Merge: d3aaeae 34d0b69
+Author: Abhishek Varshney <Abhishekvrshny@users.noreply.github.com>
+Date:   Wed Dec 9 11:22:26 2015 +0530
+
+    Merge pull request #6395 from SUSE/wip-13593-infernalis
+    
+    Ceph-fuse won't start correctly when the option log_max_new in ceph.conf set to zero
+    
+    Reviewed-by: Greg Farnum <gfarnum@redhat.com>
+
+commit d3aaeae1884a26b6a069c6926ebe9cea62625850
+Merge: 476af49 ebc5e4e
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Dec 9 00:06:33 2015 +0100
+
+    Merge pull request #6828 from dachary/wip-ceph-disk-augeas
+    
+    tests: ceph-disk workunit uses configobj
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit ebc5e4ee46dce9ab17208cdebc31ae5cc8c7e828
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Oct 22 01:48:31 2015 +0200
+
+    tests: ceph-disk workunit uses the ceph task
+    
+    The ceph-disk workunit deploy keys that are not deployed by default by
+    the ceph teuthology task.
+    
+    The OSD created by the ceph task are removed from the default
+    bucket (via osd rm) so they do not interfere with the tests.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 163de5b0f8f46695ab41b3f2288e9b5c1feaedab)
+
+commit 0afaeb243448819dfce0de2778c27015a46e195a
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Oct 22 00:21:49 2015 +0200
+
+    tests: ceph-disk workunit uses configobj
+    
+    Instead of using augtool to modify the configuration file, use
+    configobj. It is also used by the install teuthology task. The .ini
+    lens (puppet lens really) is unable to read ini files created by
+    configobj.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit f4906a124cc194dccd855679a04a5c7ffc125a44)
+
+commit a2644ed52c4b8a075919866af9d333fa1f703644
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon Nov 9 11:37:02 2015 +0800
+
+    client: use null snapc to check pool permission
+    
+    snap inodes' ->snaprealm can be NULL, so dereferencing it in
+    check_pool_perm() can cause segment fault. The pool permission
+    check does not write any data, so it's safe to use null snapc.
+    
+    Fixes: #13714
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit fad3772fb7731272d47cbfd9e81f22f5df3701a2)
+
+commit 476af491ba03843e953dd257ad972f09c64dd816
+Merge: af86215 54c8af8
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue Dec 8 09:34:39 2015 +0100
+
+    Merge pull request #6845 from dachary/wip-14019-infernalis
+    
+    infernalis: libunwind package missing on CentOS 7
+    
+    Reviewed-by: Brad Hubbard <bhubbard@redhat.com>
+
+commit 7d90c018e5cfec982f96ce6dd45b6f89218f441d
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Fri Dec 4 21:11:09 2015 +0100
+
+    build/ops: systemd ceph-disk unit must not assume /bin/flock
+    
+    The flock command may be installed elsewhere, depending on the
+    system. Let the PATH search figure that out.
+    
+    http://tracker.ceph.com/issues/13975 Fixes: #13975
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit c8f7d44c935bd097db7d131b785bdab78a7a650c)
+
+commit 5ef86d78f86c8feeae5bade408ce03bd3b86573c
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Dec 3 14:52:24 2015 -0800
+
+    osd: Test osd_find_best_info_ignore_history_les config in another assert
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 02a9a41f151a3d968bf8066749658659dc6e3ac4)
+
+commit 7ac5b151224f618e2f81387f74b1b7c3159c2b43
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Dec 2 14:50:28 2015 -0500
+
+    osd: call on_new_interval on newly split child PG
+    
+    We must call on_new_interval() on any interval change *and* on the
+    creation of the PG.  Currently we call it from PG::init() and
+    PG::start_peering_interval().  However, PG::split_into() did not
+    do so for the child PG, which meant that the new child feature
+    bits were not properly initialized and the bitwise/nibblewise
+    debug bit was not correctly set.  That, in turn, could lead to
+    various misbehaviors, the most obvious of which is scrub errors
+    due to the sort order mismatch.
+    
+    Fixes: #13962
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit fb120d7b2da5715e7f7d1baa65bfa70d2e5d807a)
+
+commit 5d1e6ae408ee0d9e2972b3de9f81b6a95e86a0a3
+Author: xiexingguo <258156334@qq.com>
+Date:   Mon Oct 26 18:38:01 2015 +0800
+
+    FileStore: potential memory leak if _fgetattrs fails
+    
+    Memory leak happens if _fgetattrs encounters some error and simply returns.
+    Fixes: #13597
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    
+    (cherry picked from commit ace7dd096b58a88e25ce16f011aed09269f2a2b4)
+
+commit 54c8af80c6e253d13993931d55720c8da99a2b2c
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Tue Dec 8 08:02:56 2015 +0100
+
+    build/ops: enable CR in CentOS 7
+    
+    To get libunwind from the CR repositories until CentOS 7.2.1511 is released.
+    
+    http://tracker.ceph.com/issues/13997 Fixes: #13997
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 247ee6084b58861da601d349bdba739b252d96de)
+
+commit af2ced594699f95f2dcafd82fa15ca480fa844eb
+Author: xiexingguo <258156334@qq.com>
+Date:   Mon Nov 2 21:46:11 2015 +0800
+
+    Objecter: remove redundant result-check of _calc_target in _map_session.
+    
+    Result-code check is currently redundant since _calc_target never returns a negative value.
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    
+    (cherry picked from commit 5a6117e667024f51e65847f73f7589467b6cb762)
+
+commit 43dede3144f98de16f8373f376e716f2f73b6f82
+Author: xiexingguo <258156334@qq.com>
+Date:   Thu Oct 29 17:32:50 2015 +0800
+
+    Objecter: potential null pointer access when do pool_snap_list.
+    
+    Objecter: potential null pointer access when do pool_snap_list. Shall check pool existence first.
+    Fixes: #13639
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit 865541605b6c32f03e188ec33d079b44be42fa4a)
+
+commit ac31f7f8ac168e27b5a33093832aab3bfc97f667
+Author: qiankunzheng <zheng.qiankun@h3c.com>
+Date:   Thu Nov 5 07:29:49 2015 -0500
+
+    auth/cephx: large amounts of log are produced by osd
+    if the auth of osd is deleted when the osd is running, the osd will produce large amounts of log.
+    
+    Fixes:#13610
+    Signed-off-by: Qiankun Zheng <zheng.qiankun@h3c.com>
+    (cherry picked from commit 102f0b19326836e3b0754b4d32da89eb2bc0b03c)
+
+commit c968a40dfb0a0412d1feb7f8f085c8293b42bf4d
+Author: wangchaunhong <root@A22832429.(none)>
+Date:   Tue Oct 20 18:40:23 2015 +0800
+
+    init-ceph: fix systemd-run cant't start ceph daemon sometimes
+    
+    Fixes: #13474
+    Signed-off-by: Chuanhong Wang <wang.chuanhong@zte.com.cn>
+    (cherry picked from commit 2f36909e1e08bac993e77d1781a777b386335669)
+
+commit 0eb2ddb0adf39ef167012e85317e3cfdddf34598
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Tue Nov 3 00:21:51 2015 +0100
+
+    tests: test/librados/test.cc must create profile
+    
+    Now that the create_one_ec_pool function removes the testprofile each
+    time it is called, it must create the testprofile erasure code profile
+    again for the test to use.
+    
+    http://tracker.ceph.com/issues/13664 Refs: #13664
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit a60342942b5a42ee04d59af77a6b904ce62eefc4)
+
+commit 26adf7a3536d7fe5b3a04866e37a4e6afac08509
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Nov 2 20:24:51 2015 +0100
+
+    tests: destroy testprofile before creating one
+    
+    The testprofile erasure code profile is destroyed before creating a new
+    one so that it does not fail when another testprofile erasure code
+    profile already exists with different parameters.
+    
+    This must be done when creating erasure coded pools with the C++
+    interface, in the same way it's done with the C interface.
+    
+    http://tracker.ceph.com/issues/13664 Fixes: #13664
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 47abab9a6f182aa0abe5047c04402850379bcd6d)
+
+commit c3619f4c1ba16e3d0959c78865ee4218e911da39
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Nov 2 20:23:52 2015 +0100
+
+    tests: add destroy_ec_profile{,_pp} helpers
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit ab46d79bc09fc711fa35302f49eecac81a98519b)
+
+commit 1bfb6f767357fcd7ea424fc17b799fb2c171cf80
+Author: Boris Ranto <branto@redhat.com>
+Date:   Mon Nov 2 14:07:47 2015 +0100
+
+    rbdmap: systemd support
+    
+    Fixes: #13374
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 9224ac2ad25f7d017916f58b642c0ea25305c3e5)
+
+commit 4eded389eea931fd9cdb0b9700c022088e8825ec
+Author: Boris Ranto <branto@redhat.com>
+Date:   Fri Oct 30 18:33:36 2015 +0100
+
+    rbdmap: Move do_map and do_unmap shell functions to rbdmap script
+    
+    This patch creates rbdmap shell script that is called from init-rbdmap
+    init script. The patch also renames src/rbdmap configuration file to
+    src/etc-rbdmap so that rbdmap shell script can be installed via build
+    system directly. Finally, the patch accomodates these changes in spec
+    file and build system.
+    
+    Fixes: #13374
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit c0980af3c72f01e6f99fd1e7e91c446934d6d856)
+    
+    Conflicts:
+    	src/init-rbdmap
+                Trivial resolution.
+
+commit 6c68971d1cfc27d30f92a83119e922180b389b43
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Fri Oct 30 21:04:04 2015 +0800
+
+    mds: consider client's flushing caps when choosing lock states
+    
+    Client may flush and drop caps at the same time. If client need to
+    send cap reconnect before the caps get flushed. The issued caps in
+    the cap reconnect does not include the flushing caps. When choosing
+    lock states, MDS only consider the issued caps in cap reconnect, it
+    may choose wrong states.
+    
+    Fixes: #11482
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit ce9a596dcaf95dd4af0a3a9e28871462a6bcb930)
+
+commit 3fcf905dd65d6db514d403e2829b039df7bd9645
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Fri Oct 30 17:28:02 2015 +0800
+
+    client: cancel revoking caps when reconnecting the mds
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 9ab61b2779740d9038b169da0de616b89b07b813)
+
+commit 7e8706bada034ce428716963a5e3151723f83126
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Fri Oct 30 17:21:11 2015 +0800
+
+    mds: choose EXCL state for filelock when client has Fb capability
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 655ae79dd266dfd488aff67642aceab4ab383d01)
+
+commit af86215e0b178340055ff6ec7c8ec3b3c0bd1acf
+Merge: 899ff61 497c1f0
+Author: Abhishek Varshney <Abhishekvrshny@users.noreply.github.com>
+Date:   Tue Dec 1 17:44:24 2015 +0530
+
+    Merge pull request #6634 from Abhishekvrshny/wip-13761-infernalis
+    
+    unknown argument --quiet in udevadm settle
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 899ff6160a289dfeb5c287afa8d9b168e11382ed
+Merge: f2b323a fdb5dbd
+Author: Abhishek Varshney <Abhishekvrshny@users.noreply.github.com>
+Date:   Mon Nov 30 21:56:40 2015 +0530
+
+    Merge pull request #6650 from Abhishekvrshny/wip-13830-infernalis
+    
+    init script reload doesn't work on EL7
+    
+    Reviewed-by: Boris Ranto <branto@redhat.com>
+
+commit f2b323a69bb54ee99743bf53043d6a4e21e2a0bb
+Merge: 5c02e2b effaf26
+Author: Abhishek Varshney <Abhishekvrshny@users.noreply.github.com>
+Date:   Mon Nov 30 21:55:55 2015 +0530
+
+    Merge pull request #6477 from SUSE/wip-13705-infernalis
+    
+    rbd : enable feature objectmap
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 5c02e2bd78782f1ea19836806d3773748be66ed1
+Merge: ed8ac03 c2e7fe9
+Author: Abhishek Varshney <Abhishekvrshny@users.noreply.github.com>
+Date:   Mon Nov 30 21:55:22 2015 +0530
+
+    Merge pull request #6474 from SUSE/wip-13619-infernalis
+    
+    rbd clone issue
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit ed8ac030a979ca9fb2cbf340c316c4432e54cd0d
+Merge: 1551c1b ad84753
+Author: Abhishek Varshney <Abhishekvrshny@users.noreply.github.com>
+Date:   Mon Nov 30 21:54:44 2015 +0530
+
+    Merge pull request #6633 from Abhishekvrshny/wip-13759-infernalis
+    
+    rbd: pure virtual method called
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 1551c1be297cfc73457819c7c983b113ac9c86f6
+Merge: b8000d6 83c3880
+Author: Abhishek Varshney <Abhishekvrshny@users.noreply.github.com>
+Date:   Mon Nov 30 21:54:18 2015 +0530
+
+    Merge pull request #6632 from Abhishekvrshny/wip-13756-infernalis
+    
+    QEMU hangs after creating snapshot and stopping VM
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit b8000d6f489af3e13c4996b46363c3884ccfd0de
+Merge: fc6f21a 74cb593
+Author: Abhishek Varshney <Abhishekvrshny@users.noreply.github.com>
+Date:   Mon Nov 30 21:50:40 2015 +0530
+
+    Merge pull request #6630 from Abhishekvrshny/wip-13754-infernalis
+    
+    Avoid re-writing old-format image header on resize
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit fc6f21a1d3ff34b4ff522ef03b368b3ad4570a1c
+Merge: bb2ecea a2c6a21
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Nov 30 15:01:23 2015 +0100
+
+    Merge pull request #6396 from SUSE/wip-13342-infernalis
+    
+    ceph upstart script rbdmap.conf incorrectly processes parameters
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit edde13ce55d0789523a3101e5f435fc61bef5d69
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Sep 17 21:42:53 2015 -0400
+
+    osd: fix send_failures() locking
+    
+    It is unsafe to check failure_queue.empty() without the lock.
+    Fixes: #13869
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit b3ca828ae8ebc9068073494c46faf3e8e1443ada)
+
+commit 0f5043975dbde75036b9f9e8be757494b8cdc73b
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Oct 23 14:17:06 2015 -0400
+
+    osd: move misdirected op check from OSD thread to PG thread
+    
+    The op message isn't fully decoded until after the start of the PG
+    op handling.  Therefore, checking for misdirected ops needs to wait
+    until after the RWM flags have been initialized.
+    
+    Fixes: #13491
+    Backport: infernalis
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 56ba90f5e49d499ea9f6bda9665031ce90abdc32)
+    
+    Conflicts:
+    	src/osd/ReplicatedPG.cc
+    		In ReplicatedPG::do_op, resolved conflicts caused by afcfb050930e2e4086d631119022fd2dee9feb21 and 818d790f7d424520bc96c651571f2c86e94caf1e
+
+commit a2c6a212fbb8002fa95270c0f37c02496447624f
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Sep 30 08:29:05 2015 -0400
+
+    init-rbdmap: fix CMDPARAMS
+    
+    Fixes: #13214
+    Reported-by: Wyllys Ingersoll <wyllys.ingersoll@keepertech.com>
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 02113ac449cd7631f1c9a3840c94bbf253c052bd)
+
+commit fdb5dbd744a6cfa4f7497e3a98aed13ab8daf4d9
+Author: Herve Rousseau <hroussea@cern.ch>
+Date:   Fri Nov 6 09:52:28 2015 +0100
+
+    rgw: fix reload on non Debian systems.
+    
+    When using reload in non-debian systems, /bin/sh's kill is used to send the HUP signal to the radosgw process.
+    This kill version doesn't understand -SIGHUP as a valid signal, using -HUP does work.
+    
+    Fix: #13709
+    Backport: hammer
+    Signed-off-by: Hervé Rousseau <hroussea@cern.ch>
+    (cherry picked from commit 1b000abac3a02d1e788bf25eead4b6873133f5d2)
+
+commit 497c1f06a2e221631626ffb66bece310406a7491
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Oct 27 10:13:27 2015 -0400
+
+    krbd: remove deprecated --quiet param from udevadm
+    
+    This parameter has been removed since systemd 213, so this
+    effects Fedora 21+, Debian Jessie, and potentially future
+    releases of RHEL 7.
+    
+    Fixes: #13560
+    Backport: hammer, infernalis
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 4300f2a9fe29627eea580564ff2d576de3647467)
+
+commit d0536f9d2f5f54791daa476a9b951fcef9488a50
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Oct 27 10:12:34 2015 -0400
+
+    run_cmd: close parent process console file descriptors
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit f46f7dc94139c0bafe10361622416d7dc343d31f)
+
+commit ad84753ad2d2bfb9ef572a7d21cacb47be6eec1b
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jul 7 12:11:13 2015 -0400
+
+    WorkQueue: new PointerWQ base class for ContextWQ
+    
+    The existing work queues do not properly function if added to a running
+    thread pool.  librbd uses a singleton thread pool which requires
+    dynamically adding/removing work queues as images are opened and closed.
+    
+    Fixes: #13636
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 3e78b18b09d75626ca2599bac3b9f9c9889507a5)
+
+commit 83c38802a2be16faf7be4ac5ac3c589de8b2dbb0
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Nov 9 11:22:24 2015 -0500
+
+    librbd: fixed deadlock while attempting to flush AIO requests
+    
+    In-flight AIO requests might force a flush if a snapshot was created
+    out-of-band.  The flush completion was previously invoked asynchronously,
+    potentially via the same thread worker handling the AIO request. This
+    resulted in the flush operation deadlocking since it can't complete.
+    
+    Fixes: #13726
+    Backport: infernalis, hammer
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit bfeb90e5fe24347648c72345881fd3d932243c98)
+
+commit 0b21b3f0dc2a9676f3fb2b19141ce75324f53c72
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Nov 9 10:48:10 2015 -0500
+
+    tests: new test case to catch deadlock on RBD image refresh
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit a9729d9553e7fb925509cad8d388cf52a9fede9c)
+
+commit 74cb593a3d29a5549cbe89a974aaa4814d35b8e0
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Nov 2 16:50:19 2015 -0500
+
+    librbd: resize should only update image size within header
+    
+    Previously, the whole RBD image format 1 header struct was
+    re-written to disk on a resize operation.
+    
+    Fixes: #13674
+    Backport: infernalis, hammer, firefly
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit d5be20b6d4646284571568ab28cbf45b0729390b)
+
+commit 6750cab2d6f2c5f928f9c2d2c356047f93e9ce30
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Oct 23 14:15:54 2015 -0400
+
+    osd: ensure op rwm flags are checked before they are initialized
+    
+    These flags are now lazy-initialized within the PG thread at the
+    start of op processing instead of once the message is received.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 652856321b0f14293cd885c865552d5b7e787f9a)
+
+commit 58b43e656cd9278667af2b7ac4fee72f50a03caa
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Fri Nov 13 19:10:28 2015 +0100
+
+    build/ops: rbd-replay moved from ceph-test-dbg to ceph-common-dbg
+    
+    http://tracker.ceph.com/issues/13785 Fixes: #13785
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit a0204dc47acc0c50223e449fd23a2fc97bfd111a)
+
+commit 2647c20cee7ed5738c711a0c435e35938c7739bd
+Author: xiexingguo <258156334@qq.com>
+Date:   Thu Oct 29 20:04:11 2015 +0800
+
+    Objecter: pool_op callback may hang forever.
+    
+    pool_op callback may hang forever due to osdmap update during reply handling.
+    Fixes: #13642
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    
+    (cherry picked from commit 00c6fa9e31975a935ed2bb33a099e2b4f02ad7f2)
+
+commit 4d2a135c042039e0c48302ffd667dc88d024eed9
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Oct 13 09:55:01 2015 -0400
+
+    crush/mapper: ensure take bucket value is valid
+    
+    Ensure that the take argument is a valid bucket ID before indexing the
+    buckets array.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 93ec538e8a667699876b72459b8ad78966d89c61)
+
+commit ecb6aa232180e3226d56bc8fe0cb643c90f5101b
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Oct 27 20:55:26 2015 -0400
+
+    crush/mapper: ensure bucket id is valid before indexing buckets array
+    
+    We were indexing the buckets array without verifying the index was within
+    the [0,max_buckets) range.  This could happen because a multistep rule
+    does not have enough buckets and has CRUSH_ITEM_NONE
+    for an intermediate result, which would feed in CRUSH_ITEM_NONE and
+    make us crash.
+    
+    Fixes: #13477
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 976a24a326da8931e689ee22fce35feab5b67b76)
+
+commit effaf26acccf81675b74277eb0a75368668b0677
+Author: xinxin shu <xinxin.shu@intel.com>
+Date:   Wed Oct 21 19:01:21 2015 +0800
+
+    librbd : fix enable objectmap feature issue
+    
+    Fixes: #13558
+    
+    Signed-off-by: xinxin shu <xinxin.shu@intel.com>
+    (cherry picked from commit b0536ebab4e1f34e1ed87fe5efbb00d0f7b48abb)
+
+commit c2e7fe98738cd31c0886d594920c50a53cbf9bf4
+Author: xinxin shu <xinxin.shu@intel.com>
+Date:   Wed Oct 21 14:56:17 2015 +0800
+
+    rbd: fix clone issue when we specify image feature
+    
+    Fixes: #13553
+    
+    Signed-off-by: xinxin shu <xinxin.shu@intel.com>
+    (cherry picked from commit da48dbb8f8c9417343d2ca7819c58b7c46ef7ad0)
+
+commit fde4ec62888ba0aee97ce714bb15d191625b736f
+Author: xiexingguo <258156334@qq.com>
+Date:   Tue Oct 13 14:04:20 2015 +0800
+
+    OSD:shall reset primary and up_primary fields when beginning a new past_interval.
+    
+    Shall reset primary and up_primary fields when we start over a new past_interval in OSD::build_past_intervals_parallel().
+    Fixes: #13471
+    Signed-off-by: xie.xingguo@zte.com.cn
+    (cherry picked from commit 65064ca05bc7f8b6ef424806d1fd14b87add62a4)
+
+commit 34d0b692cf1b9c0c2ea508b81d252b901fe1f52b
+Author: wenjunhuang <wenjunhuang@tencent.com>
+Date:   Sat Oct 10 14:30:56 2015 +0800
+
+    ceph-fuse.cc: While starting ceph-fuse, start the log thread first
+    
+    http://tracker.ceph.com/issues/13443 Fixes: #13443
+    
+    Signed-off-by: Wenjun Huang <wenjunhuang@tencent.com>
+    (cherry picked from commit f2763085754462610730a23bb5652237714abc2a)
+
+commit 8707b0b083e7a7732d1e3563b00d3adf3e09807b
+Author: yangruifeng <yangruifeng.09209@h3c.com>
+Date:   Mon Oct 19 08:08:12 2015 -0400
+
+    mon: should not set isvalid = true when cephx_verify_authorizer return false
+    
+    Fixes: #13525
+    Signed-off-by: Ruifeng Yang <yangruifeng.09209@h3c.com>
+    (cherry picked from commit c7f75b8f7c0a773148ec16141941efd00ee76626)

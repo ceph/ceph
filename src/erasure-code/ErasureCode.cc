@@ -22,6 +22,7 @@
 
 #include "common/strtol.h"
 #include "ErasureCode.h"
+#include "include/buffer.h"
 
 const unsigned ErasureCode::SIMD_ALIGN = 32;
 
@@ -92,12 +93,12 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
 
     raw.copy((k - padded_chunks) * blocksize, remainder, buf.c_str());
     buf.zero(remainder, blocksize - remainder);
-    encoded[chunk_index(k-padded_chunks)].push_back(buf);
+    encoded[chunk_index(k-padded_chunks)].push_back(std::move(buf));
 
     for (unsigned int i = k - padded_chunks + 1; i < k; i++) {
       bufferptr buf(buffer::create_aligned(blocksize, SIMD_ALIGN));
       buf.zero();
-      encoded[chunk_index(i)].push_back(buf);
+      encoded[chunk_index(i)].push_back(std::move(buf));
     }
   }
   for (unsigned int i = k; i < k + m; i++) {

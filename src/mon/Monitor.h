@@ -53,6 +53,7 @@
 #include "include/memory.h"
 #include "include/str_map.h"
 #include <errno.h>
+#include <cmath>
 
 #include "common/TrackedOp.h"
 #include "mon/MonOpRequest.h"
@@ -260,14 +261,14 @@ private:
 
   struct C_Scrub : public Context {
     Monitor *mon;
-    C_Scrub(Monitor *m) : mon(m) { }
+    explicit C_Scrub(Monitor *m) : mon(m) { }
     void finish(int r) {
       mon->scrub_start();
     }
   };
   struct C_ScrubTimeout : public Context {
     Monitor *mon;
-    C_ScrubTimeout(Monitor *m) : mon(m) { }
+    explicit C_ScrubTimeout(Monitor *m) : mon(m) { }
     void finish(int r) {
       mon->scrub_timeout();
     }
@@ -351,7 +352,7 @@ private:
 
   struct C_SyncTimeout : public Context {
     Monitor *mon;
-    C_SyncTimeout(Monitor *m) : mon(m) {}
+    explicit C_SyncTimeout(Monitor *m) : mon(m) {}
     void finish(int r) {
       mon->sync_timeout();
     }
@@ -502,6 +503,15 @@ private:
   version_t timecheck_round;
   unsigned int timecheck_acks;
   utime_t timecheck_round_start;
+  /* When we hit a skew we will start a new round based off of
+   * 'mon_timecheck_skew_interval'. Each new round will be backed off
+   * until we hit 'mon_timecheck_interval' -- which is the typical
+   * interval when not in the presence of a skew.
+   *
+   * This variable tracks the number of rounds with skews since last clean
+   * so that we can report to the user and properly adjust the backoff.
+   */
+  uint64_t timecheck_rounds_since_clean;
   /**
    * Time Check event.
    */
@@ -509,7 +519,7 @@ private:
 
   struct C_TimeCheck : public Context {
     Monitor *mon;
-    C_TimeCheck(Monitor *m) : mon(m) { }
+    explicit C_TimeCheck(Monitor *m) : mon(m) { }
     void finish(int r) {
       mon->timecheck_start_round();
     }
@@ -521,6 +531,8 @@ private:
   void timecheck_finish_round(bool success = true);
   void timecheck_cancel_round();
   void timecheck_cleanup();
+  void timecheck_reset_event();
+  void timecheck_check_skews();
   void timecheck_report();
   void timecheck();
   health_status_t timecheck_status(ostringstream &ss,
@@ -529,6 +541,16 @@ private:
   void handle_timecheck_leader(MonOpRequestRef op);
   void handle_timecheck_peon(MonOpRequestRef op);
   void handle_timecheck(MonOpRequestRef op);
+
+  /**
+   * Returns 'true' if this is considered to be a skew; 'false' otherwise.
+   */
+  bool timecheck_has_skew(const double skew_bound, double *abs) const {
+    double abs_skew = std::fabs(skew_bound);
+    if (abs)
+      *abs = abs_skew;
+    return (abs_skew > g_conf->mon_clock_drift_allowed);
+  }
   /**
    * @}
    */
@@ -565,7 +587,7 @@ private:
 
   struct C_ProbeTimeout : public Context {
     Monitor *mon;
-    C_ProbeTimeout(Monitor *m) : mon(m) {}
+    explicit C_ProbeTimeout(Monitor *m) : mon(m) {}
     void finish(int r) {
       mon->probe_timeout(r);
     }
@@ -714,7 +736,7 @@ public:
 
   struct C_HealthToClogTick : public Context {
     Monitor *mon;
-    C_HealthToClogTick(Monitor *m) : mon(m) { }
+    explicit C_HealthToClogTick(Monitor *m) : mon(m) { }
     void finish(int r) {
       if (r < 0)
         return;
@@ -725,7 +747,7 @@ public:
 
   struct C_HealthToClogInterval : public Context {
     Monitor *mon;
-    C_HealthToClogInterval(Monitor *m) : mon(m) { }
+    explicit C_HealthToClogInterval(Monitor *m) : mon(m) { }
     void finish(int r) {
       if (r < 0)
         return;
@@ -882,8 +904,6 @@ public:
     lock.Unlock();
     return true;
   }
-  // dissociate message handling from session and connection logic
-  void dispatch(MonOpRequestRef op);
   void dispatch_op(MonOpRequestRef op);
   //mon_caps is used for un-connected messages from monitors
   MonCap * mon_caps;
@@ -966,7 +986,6 @@ public:
 					  bufferlist *rdata);
   void get_locally_supported_monitor_commands(const MonCommand **cmds, int *count);
   void get_classic_monitor_commands(const MonCommand **cmds, int *count);
-  void get_leader_supported_commands(const MonCommand **cmds, int *count);
   /// the Monitor owns this pointer once you pass it in
   void set_leader_supported_commands(const MonCommand *cmds, int size);
   static bool is_keyring_required();

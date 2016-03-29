@@ -111,7 +111,7 @@ public:
     : num(n),
       context(context),
       stat(stat),
-      done(0)
+      done(false)
   {}
 
   virtual ~TestOp() {};
@@ -122,7 +122,7 @@ public:
    */
   struct CallbackInfo {
     uint64_t id;
-    CallbackInfo(uint64_t id) : id(id) {}
+    explicit CallbackInfo(uint64_t id) : id(id) {}
     virtual ~CallbackInfo() {};
   };
 
@@ -526,11 +526,10 @@ public:
   string oid;
   librados::ObjectWriteOperation op;
   librados::AioCompletion *comp;
-  bool done;
   RemoveAttrsOp(int n, RadosTestContext *context,
 	       const string &oid,
 	       TestOpStat *stat)
-    : TestOp(n, context, stat), oid(oid), comp(NULL), done(false)
+    : TestOp(n, context, stat), oid(oid), comp(NULL)
   {}
 
   void _begin()
@@ -620,13 +619,12 @@ public:
   string oid;
   librados::ObjectWriteOperation op;
   librados::AioCompletion *comp;
-  bool done;
   SetAttrsOp(int n,
 	     RadosTestContext *context,
 	     const string &oid,
 	     TestOpStat *stat)
     : TestOp(n, context, stat),
-      oid(oid), comp(NULL), done(false)
+      oid(oid), comp(NULL)
   {}
 
   void _begin()
@@ -756,10 +754,18 @@ public:
       uint64_t prev_length = found && old_value.has_contents() ?
 	old_value.most_recent_gen()->get_length(old_value.most_recent()) :
 	0;
+      bool requires;
+      int r = context->io_ctx.pool_requires_alignment2(&requires);
+      assert(r == 0);
+      uint64_t alignment = 0;
+      if (requires) {
+        r = context->io_ctx.pool_required_alignment2(&alignment);
+        assert(r == 0);
+        assert(alignment != 0);
+      }
       cont_gen = new AppendGenerator(
 	prev_length,
-	(context->io_ctx.pool_requires_alignment() ?
-	 context->io_ctx.pool_required_alignment() : 0),
+	alignment,
 	context->min_stride_size,
 	context->max_stride_size,
 	3);
@@ -785,11 +791,8 @@ public:
     for (map<uint64_t, uint64_t>::iterator i = ranges.begin(); 
 	 i != ranges.end();
 	 ++i, ++tid) {
-      bufferlist to_write;
       gen_pos.seek(i->first);
-      for (uint64_t k = 0; k != i->second; ++k, ++gen_pos) {
-	to_write.append(*gen_pos);
-      }
+      bufferlist to_write = gen_pos.gen_bl_advance(i->second);
       assert(to_write.length() == i->second);
       assert(to_write.length() > 0);
       std::cout << num << ":  writing " << context->prefix+oid
@@ -992,6 +995,8 @@ public:
 
   vector<bufferlist> results;
   vector<int> retvals;
+  vector<std::map<uint64_t, uint64_t>> extent_results;
+  vector<bool> is_sparse_read;
   uint64_t waiting_on;
 
   map<string, bufferlist> attrs;
@@ -1016,10 +1021,32 @@ public:
       balance_reads(balance_reads),
       results(3),
       retvals(3),
+      extent_results(3),
+      is_sparse_read(3, false),
       waiting_on(0),
       attrretval(0)
   {}
-		
+
+  void _do_read(librados::ObjectReadOperation& read_op, int index) {
+    uint64_t len = 0;
+    if (old_value.has_contents())
+      len = old_value.most_recent_gen()->get_length(old_value.most_recent());
+    if (rand() % 2) {
+      is_sparse_read[index] = false;
+      read_op.read(0,
+		   len,
+		   &results[index],
+		   &retvals[index]);
+    } else {
+      is_sparse_read[index] = true;
+      read_op.sparse_read(0,
+			  len,
+			  &extent_results[index],
+			  &results[index],
+			  &retvals[index]);
+    }
+  }
+
   void _begin()
   {
     context->state_lock.Lock();
@@ -1065,13 +1092,7 @@ public:
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
     }
-
-    op.read(0,
-	    !old_value.has_contents() ? 0 :
-	    old_value.most_recent_gen()->get_length(old_value.most_recent()),
-	    &results[0],
-	    &retvals[0]);
-
+    _do_read(op, 0);
     for (map<string, ContDesc>::iterator i = old_value.attrs.begin();
 	 i != old_value.attrs.end();
 	 ++i) {
@@ -1103,12 +1124,7 @@ public:
     // OSD's read behavior in some scenarios
     for (uint32_t i = 1; i < 3; ++i) {
       librados::ObjectReadOperation pipeline_op;
-
-      pipeline_op.read(0,
-                       !old_value.has_contents() ? 0 :
-                       old_value.most_recent_gen()->get_length(old_value.most_recent()),
-                       &results[i],
-                       &retvals[i]);
+      _do_read(pipeline_op, i);
       assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[i], &pipeline_op, 0));
       waiting_on++;
     }
@@ -1182,11 +1198,17 @@ public:
 	       << ", expected " << old_value.most_recent() << std::endl;
 	  context->errors++;
 	}
-        for (vector<bufferlist>::iterator it = results.begin();
-             it != results.end(); ++it) {
-	  if (!old_value.check(*it)) {
-	    cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
-	    context->errors++;
+        for (unsigned i = 0; i < results.size(); i++) {
+	  if (is_sparse_read[i]) {
+	    if (!old_value.check_sparse(extent_results[i], results[i])) {
+	      cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
+	      context->errors++;
+	    }
+	  } else {
+	    if (!old_value.check(results[i])) {
+	      cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
+	      context->errors++;
+	    }
 	  }
 	}
 	if (context->errors) assert(0);
@@ -1455,7 +1477,6 @@ class RollbackOp : public TestOp {
 public:
   string oid;
   int roll_back_to;
-  bool done;
   librados::ObjectWriteOperation zero_write_op1;
   librados::ObjectWriteOperation zero_write_op2;
   librados::ObjectWriteOperation op;
@@ -1470,7 +1491,6 @@ public:
 	     TestOpStat *stat = 0)
     : TestOp(n, context, stat),
       oid(_oid), roll_back_to(-1), 
-      done(false),
       comps(3, NULL),
       last_finished(-1), outstanding(3)
   {}
@@ -1638,7 +1658,7 @@ public:
     }
 
     string src = context->prefix+oid_src;
-    op.copy_from(src.c_str(), context->io_ctx, src_value.version, 0);
+    op.copy_from(src.c_str(), context->io_ctx, src_value.version);
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -1720,7 +1740,6 @@ public:
 };
 
 class HitSetListOp : public TestOp {
-  bool done;
   librados::AioCompletion *comp1, *comp2;
   uint32_t hash;
   std::list< std::pair<time_t, time_t> > ls;
@@ -1732,7 +1751,7 @@ public:
 	       uint32_t hash,
 	       TestOpStat *stat = 0)
     : TestOp(n, context, stat),
-      done(false), comp1(NULL), comp2(NULL),
+      comp1(NULL), comp2(NULL),
       hash(hash)
   {}
 

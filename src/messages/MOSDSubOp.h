@@ -19,13 +19,15 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 
+#include "include/ceph_features.h"
+
 /*
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
 class MOSDSubOp : public Message {
 
-  static const int HEAD_VERSION = 11;
+  static const int HEAD_VERSION = 12;
   static const int COMPAT_VERSION = 7;
 
 public:
@@ -51,7 +53,6 @@ public:
   eversion_t old_version;
 
   SnapSet snapset;
-  SnapContext snapc;
 
   // transaction to exec
   bufferlist logbl;
@@ -128,7 +129,12 @@ public:
     ::decode(old_size, p);
     ::decode(old_version, p);
     ::decode(snapset, p);
-    ::decode(snapc, p);
+
+    if (header.version <= 11) {
+      SnapContext snapc_dont_need;
+      ::decode(snapc_dont_need, p);
+    }
+
     ::decode(logbl, p);
     ::decode(pg_stats, p);
     ::decode(pg_trim_to, p);
@@ -172,6 +178,8 @@ public:
     }
   }
 
+  void finish_decode() { }
+
   virtual void encode_payload(uint64_t features) {
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
@@ -194,7 +202,13 @@ public:
     ::encode(old_size, payload);
     ::encode(old_version, payload);
     ::encode(snapset, payload);
-    ::encode(snapc, payload);
+
+    if ((features & CEPH_FEATURE_OSDSUBOP_NO_SNAPCONTEXT) == 0) {
+      header.version = 11;
+      SnapContext dummy_snapc;
+      ::encode(dummy_snapc, payload);
+    }
+
     ::encode(logbl, payload);
     ::encode(pg_stats, payload);
     ::encode(pg_trim_to, payload);
@@ -256,7 +270,7 @@ public:
     if (complete)
       out << " complete";
     out << " v " << version
-	<< " snapset=" << snapset << " snapc=" << snapc;    
+	<< " snapset=" << snapset;
     if (!data_subset.empty()) out << " subset " << data_subset;
     if (updated_hit_set_history)
       out << ", has_updated_hit_set_history";

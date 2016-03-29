@@ -11,8 +11,8 @@ Access
 
 The perf counter data is accessed via the admin socket.  For example::
 
-   ceph --admin-daemon /var/run/ceph/ceph-osd.0.asok perf schema
-   ceph --admin-daemon /var/run/ceph/ceph-osd.0.asok perf dump
+   ceph daemon osd.0 perf schema
+   ceph daemon osd.0 perf dump
 
 
 Collections

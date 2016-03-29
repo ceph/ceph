@@ -19,14 +19,12 @@ usr/bin/ceph_smalliobench
 usr/bin/ceph_smalliobenchdumb
 usr/bin/ceph_smalliobenchfs
 usr/bin/ceph_smalliobenchrbd
-usr/bin/ceph_streamtest
 usr/bin/ceph_test_*
 usr/bin/ceph_tpbench
 usr/bin/ceph_xattr_bench
 usr/bin/ceph-monstore-tool
 usr/bin/ceph-osdomap-tool
 usr/bin/ceph-kvstore-tool
+usr/bin/librgw_file*
 usr/share/java/libcephfs-test.jar
-usr/bin/rbd-replay*
-usr/share/man/man8/rbd-replay*.8
 usr/lib/ceph/ceph-monstore-update-crush.sh

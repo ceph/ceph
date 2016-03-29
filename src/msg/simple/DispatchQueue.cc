@@ -123,16 +123,7 @@ void DispatchQueue::run_local_delivery()
     if (can_fast_dispatch(m)) {
       fast_dispatch(m);
     } else {
-      Mutex::Locker l(lock);
-      add_arrival(m);
-      if (priority >= CEPH_MSG_PRIO_LOW) {
-        mqueue.enqueue_strict(
-            0, priority, QueueItem(m));
-      } else {
-        mqueue.enqueue(
-            0, priority, m->get_cost(), QueueItem(m));
-      }
-      cond.Signal();
+      enqueue(m, priority, 0);
     }
     local_delivery_lock.Lock();
   }
@@ -217,14 +208,25 @@ void DispatchQueue::start()
 {
   assert(!stop);
   assert(!dispatch_thread.is_started());
-  dispatch_thread.create();
-  local_delivery_thread.create();
+  dispatch_thread.create("ms_dispatch");
+  local_delivery_thread.create("ms_local");
 }
 
 void DispatchQueue::wait()
 {
   local_delivery_thread.join();
   dispatch_thread.join();
+}
+
+void DispatchQueue::discard_local()
+{
+  for (list<pair<Message *, int> >::iterator p = local_messages.begin();
+       p != local_messages.end();
+       ++p) {
+    ldout(cct,20) << __func__ << " " << p->first << dendl;
+    p->first->put();
+  }
+  local_messages.clear();
 }
 
 void DispatchQueue::shutdown()

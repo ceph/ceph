@@ -29,13 +29,15 @@ void RGWOp_Bucket_Info::execute()
 
   bool fetch_stats;
 
-  std::string uid;
   std::string bucket;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  string uid_str;
+
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_string(s, "bucket", bucket, &bucket);
   RESTArgs::get_bool(s, "stats", false, &fetch_stats);
-
 
   op_state.set_user_id(uid);
   op_state.set_bucket_name(bucket);
@@ -124,16 +126,17 @@ public:
 
 void RGWOp_Bucket_Link::execute()
 {
-  std::string uid;
+  std::string uid_str;
   std::string bucket;
   std::string bucket_id;
 
   RGWBucketAdminOpState op_state;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "bucket", bucket, &bucket);
   RESTArgs::get_string(s, "bucket-id", bucket_id, &bucket_id);
 
+  rgw_user uid(uid_str);
   op_state.set_user_id(uid);
   op_state.set_bucket_name(bucket);
   op_state.set_bucket_id(bucket_id);
@@ -157,12 +160,14 @@ public:
 
 void RGWOp_Bucket_Unlink::execute()
 {
-  std::string uid;
+  std::string uid_str;
   std::string bucket;
 
   RGWBucketAdminOpState op_state;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_string(s, "bucket", bucket, &bucket);
 
   op_state.set_user_id(uid);

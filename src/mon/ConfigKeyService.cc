@@ -39,10 +39,12 @@ const string ConfigKeyService::STORE_PREFIX = "mon_config_key";
 
 int ConfigKeyService::store_get(string key, bufferlist &bl)
 {
-  if (!store_exists(key))
-    return -ENOENT;
-
   return mon->store->get(STORE_PREFIX, key, bl);
+}
+
+void ConfigKeyService::get_store_prefixes(set<string>& s)
+{
+  s.insert(STORE_PREFIX);
 }
 
 void ConfigKeyService::store_put(string key, bufferlist &bl, Context *cb)
@@ -91,13 +93,14 @@ void ConfigKeyService::store_list(stringstream &ss)
 bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 {
   Message *m = op->get_req();
+  assert(m != NULL);
   dout(10) << __func__ << " " << *m << dendl;
+
   if (!in_quorum()) {
     dout(1) << __func__ << " not in quorum -- ignore message" << dendl;
     return false;
   }
 
-  assert(m != NULL);
   assert(m->get_type() == MSG_MON_COMMAND);
 
   MMonCommand *cmd = static_cast<MMonCommand*>(m);
@@ -112,7 +115,6 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
   map<string, cmd_vartype> cmdmap;
 
   if (!cmdmap_from_json(cmd->cmd, &cmdmap, ss)) {
-    ret = -EINVAL;
     return false;
   }
 
@@ -158,7 +160,8 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     // return for now; we'll put the message once it's done.
     return true;
 
-  } else if (prefix == "config-key del") {
+  } else if (prefix == "config-key del" ||
+             prefix == "config-key rm") {
     if (!mon->is_leader()) {
       mon->forward_request_leader(op);
       return true;

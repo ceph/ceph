@@ -145,7 +145,7 @@
 #include <vector>
 #include <iostream>
 #include "include/memory.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 
 class CrushWrapper;
 

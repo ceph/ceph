@@ -13,13 +13,28 @@
 #define CEPH_COMPAT_H
 
 #if defined(__FreeBSD__)
-#define	ENODATA	61
+#define	ENODATA	ENOATTR
 #define	MSG_MORE 0
 #endif /* !__FreeBSD__ */
 
+#if defined(__APPLE__)
+/* PATH_MAX */
+#include <limits.h>
+#endif /* __APPLE__ */
+
+/* O_LARGEFILE is not defined/required on OSX/FreeBSD */
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0
+#endif
+
+/* Could be relevant for other platforms */
+#ifndef ERESTART
+#define ERESTART EINTR
+#endif
+
 #ifndef TEMP_FAILURE_RETRY
 #define TEMP_FAILURE_RETRY(expression) ({     \
-  typeof(expression) __result;                \
+  __typeof(expression) __result;              \
   do {                                        \
     __result = (expression);                  \
   } while (__result == -1 && errno == EINTR); \
@@ -36,6 +51,17 @@
 
 #if defined(__FreeBSD__) || defined(__APPLE__)
 #define lseek64(fd, offset, whence) lseek(fd, offset, whence)
+#endif
+
+#if defined(__sun) || defined(_AIX)
+#define LOG_AUTHPRIV    (10<<3)
+#define LOG_FTP         (11<<3)
+#define __STRING(x)     "x"
+#define IFTODT(mode)   (((mode) & 0170000) >> 12)
+#endif
+
+#if defined(_AIX)
+#define MSG_DONTWAIT MSG_NONBLOCK
 #endif
 
 #endif /* !CEPH_COMPAT_H */

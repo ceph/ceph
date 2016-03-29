@@ -6,11 +6,15 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/perf_counters.h"
+#include "common/WorkQueue.h"
 
-#include "librbd/AioRequest.h"
+#include "librbd/AioObjectRequest.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 
 #include "librbd/AioCompletion.h"
+#include "librbd/Journal.h"
 
 #ifdef WITH_LTTNG
 #include "tracing/librbd.h"
@@ -24,12 +28,6 @@
 
 namespace librbd {
 
-  void AioCompletion::finish_adding_requests(CephContext *cct)
-  {
-    ldout(cct, 20) << "AioCompletion::finish_adding_requests " << (void*)this << " pending " << pending_count << dendl;
-    unblock(cct);
-  }
-
   int AioCompletion::wait_for_complete() {
     tracepoint(librbd, aio_wait_for_complete_enter, this);
     lock.Lock();
@@ -42,24 +40,29 @@ namespace librbd {
 
   void AioCompletion::finalize(CephContext *cct, ssize_t rval)
   {
-    ldout(cct, 20) << "AioCompletion::finalize() " << (void*)this << " rval " << rval << " read_buf " << (void*)read_buf
-		   << " read_bl " << (void*)read_bl << dendl;
+    ldout(cct, 20) << this << " " << __func__ << ": r=" << rval << ", "
+                   << "read_buf=" << reinterpret_cast<void*>(read_buf) << ", "
+                   << "real_bl=" <<  reinterpret_cast<void*>(read_bl) << dendl;
     if (rval >= 0 && aio_type == AIO_TYPE_READ) {
-      // FIXME: make the destriper write directly into a buffer so
-      // that we avoid shuffling pointers and copying zeros around.
-      bufferlist bl;
-      destriper.assemble_result(cct, bl, true);
+      if (read_buf && !read_bl) {
+	destriper.assemble_result(cct, read_buf, read_buf_len);
+      } else {
+	// FIXME: make the destriper write directly into a buffer so
+	// that we avoid shuffling pointers and copying zeros around.
+	bufferlist bl;
+	destriper.assemble_result(cct, bl, true);
 
-      if (read_buf) {
-	assert(bl.length() == read_buf_len);
-	bl.copy(0, read_buf_len, read_buf);
-	ldout(cct, 20) << "AioCompletion::finalize() copied resulting " << bl.length()
-		       << " bytes to " << (void*)read_buf << dendl;
-      }
-      if (read_bl) {
-	ldout(cct, 20) << "AioCompletion::finalize() moving resulting " << bl.length()
-		       << " bytes to bl " << (void*)read_bl << dendl;
-	read_bl->claim(bl);
+	if (read_buf) {
+	  assert(bl.length() == read_buf_len);
+	  bl.copy(0, read_buf_len, read_buf);
+	  ldout(cct, 20) << "copied resulting " << bl.length()
+	    << " bytes to " << (void*)read_buf << dendl;
+	}
+	if (read_bl) {
+	  ldout(cct, 20) << " moving resulting " << bl.length()
+	    << " bytes to bl " << (void*)read_bl << dendl;
+	  read_bl->claim(bl);
+	}
       }
     }
   }
@@ -70,6 +73,9 @@ namespace librbd {
     assert(lock.is_locked());
     elapsed = ceph_clock_now(cct) - start_time;
     switch (aio_type) {
+    case AIO_TYPE_OPEN:
+    case AIO_TYPE_CLOSE:
+      break;
     case AIO_TYPE_READ:
       ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed); break;
     case AIO_TYPE_WRITE:
@@ -83,24 +89,54 @@ namespace librbd {
       break;
     }
 
-    // note: possible for image to be closed after op marked finished
-    if (async_op.started()) {
-      async_op.finish_op();
+    // inform the journal that the op has successfully committed
+    if (journal_tid != 0) {
+      assert(ictx->journal != NULL);
+      ictx->journal->commit_io_event(journal_tid, rval);
     }
 
+    done = true;
     if (complete_cb) {
       lock.Unlock();
       complete_cb(rbd_comp, complete_arg);
       lock.Lock();
     }
-    done = true;
+
+    if (ictx && event_notify && ictx->event_socket.is_valid()) {
+      ictx->completed_reqs_lock.Lock();
+      ictx->completed_reqs.push_back(&m_xlist_item);
+      ictx->completed_reqs_lock.Unlock();
+      ictx->event_socket.notify();
+    }
     cond.Signal();
+
+    // note: possible for image to be closed after op marked finished
+    if (async_op.started()) {
+      async_op.finish_op();
+    }
     tracepoint(librbd, aio_complete_exit);
+  }
+
+  void AioCompletion::init_time(ImageCtx *i, aio_type_t t) {
+    if (ictx == NULL) {
+      ictx = i;
+      aio_type = t;
+      start_time = ceph_clock_now(ictx->cct);
+    }
+  }
+
+  void AioCompletion::start_op(ImageCtx *i, aio_type_t t) {
+    init_time(i, t);
+
+    Mutex::Locker locker(lock);
+    if (!done && !async_op.started()) {
+      async_op.start_op(*ictx);
+    }
   }
 
   void AioCompletion::fail(CephContext *cct, int r)
   {
-    lderr(cct) << "AioCompletion::fail() " << this << ": " << cpp_strerror(r)
+    lderr(cct) << this << " " << __func__ << ": " << cpp_strerror(r)
                << dendl;
     lock.Lock();
     assert(pending_count == 0);
@@ -109,11 +145,19 @@ namespace librbd {
     put_unlock();
   }
 
+  void AioCompletion::set_request_count(CephContext *cct, uint32_t count) {
+    ldout(cct, 20) << this << " " << __func__ << ": pending=" << count << dendl;
+    lock.Lock();
+    assert(pending_count == 0);
+    pending_count = count;
+    lock.Unlock();
+
+    // if no pending requests, completion will fire now
+    unblock(cct);
+  }
+
   void AioCompletion::complete_request(CephContext *cct, ssize_t r)
   {
-    ldout(cct, 20) << "AioCompletion::complete_request() "
-		   << (void *)this << " complete_cb=" << (void *)complete_cb
-		   << " pending " << pending_count << dendl;
     lock.Lock();
     if (rval >= 0) {
       if (r < 0 && r != -EEXIST)
@@ -123,11 +167,20 @@ namespace librbd {
     }
     assert(pending_count);
     int count = --pending_count;
+
+    ldout(cct, 20) << this << " " << __func__ << ": cb=" << complete_cb << ", "
+                   << "pending=" << pending_count << dendl;
     if (!count && blockers == 0) {
       finalize(cct, rval);
       complete(cct);
     }
     put_unlock();
+  }
+
+  void AioCompletion::associate_journal_event(uint64_t tid) {
+    Mutex::Locker l(lock);
+    assert(!done);
+    journal_tid = tid;
   }
 
   bool AioCompletion::is_complete() {
@@ -170,7 +223,7 @@ namespace librbd {
       m_completion->lock.Unlock();
       r = m_req->m_object_len;
     }
-    m_completion->complete_request(m_cct, r);
+    C_AioRequest::finish(r);
   }
 
   void C_CacheRead::complete(int r) {

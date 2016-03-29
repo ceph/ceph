@@ -31,12 +31,13 @@
   tunable choose_local_fallback_tries 0
   tunable choose_total_tries 50
   tunable chooseleaf_descend_once 1
+  tunable chooseleaf_vary_r 1
   
   # devices
   device 0 osd.0
   
   # types
-  type 0 device
+  type 0 osd
   type 1 root
   
   # buckets

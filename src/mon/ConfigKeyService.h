@@ -69,7 +69,7 @@ public:
   virtual string get_name() const {
     return "config_key";
   }
-
+  virtual void get_store_prefixes(set<string>& s);
   /**
    * @} // ConfigKeyService_Inherited_h
    */

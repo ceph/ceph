@@ -20,7 +20,7 @@
 #include <string>
 
 #include "include/encoding.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "msg/msg_types.h"
 
 /* Represents a Ceph entity name.

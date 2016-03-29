@@ -27,6 +27,7 @@ class CephContext;
 enum {
   l_finisher_first = 997082,
   l_finisher_queue_len,
+  l_finisher_complete_lat,
   l_finisher_last
 };
 
@@ -47,6 +48,8 @@ class Finisher {
   /// should be completed in that place instead.
   vector<Context*> finisher_queue;
 
+  string thread_name;
+
   /// Queue for contexts for which the complete function will be called
   /// with a parameter other than 0.
   list<pair<Context*,int> > finisher_queue_rval;
@@ -59,7 +62,7 @@ class Finisher {
 
   struct FinisherThread : public Thread {
     Finisher *fin;    
-    FinisherThread(Finisher *f) : fin(f) {}
+    explicit FinisherThread(Finisher *f) : fin(f) {}
     void* entry() { return (void*)fin->finisher_thread_entry(); }
   } finisher_thread;
 
@@ -131,24 +134,26 @@ class Finisher {
 
   /// Construct an anonymous Finisher.
   /// Anonymous finishers do not log their queue length.
-  Finisher(CephContext *cct_) :
+  explicit Finisher(CephContext *cct_) :
     cct(cct_), finisher_lock("Finisher::finisher_lock"),
     finisher_stop(false), finisher_running(false),
-    logger(0),
+    thread_name("fn_anonymous"), logger(0),
     finisher_thread(this) {}
 
   /// Construct a named Finisher that logs its queue length.
-  Finisher(CephContext *cct_, string name) :
+  Finisher(CephContext *cct_, string name, string tn) :
     cct(cct_), finisher_lock("Finisher::finisher_lock"),
     finisher_stop(false), finisher_running(false),
-    logger(0),
+    thread_name(tn), logger(0),
     finisher_thread(this) {
     PerfCountersBuilder b(cct, string("finisher-") + name,
 			  l_finisher_first, l_finisher_last);
     b.add_u64(l_finisher_queue_len, "queue_len");
+    b.add_time_avg(l_finisher_complete_lat, "complete_latency");
     logger = b.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
     logger->set(l_finisher_queue_len, 0);
+    logger->set(l_finisher_complete_lat, 0);
   }
 
   ~Finisher() {

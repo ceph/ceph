@@ -20,6 +20,7 @@
 #include "common/Timer.h"
 
 #include "Beacon.h"
+#include "DamageTable.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
 #include "MDCache.h"
@@ -107,6 +108,7 @@ class Objecter;
 class MonClient;
 class Finisher;
 class MMDSMap;
+class ScrubStack;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -119,7 +121,7 @@ class MDSRank {
 
     // Incarnation as seen in MDSMap at the point where a rank is
     // assigned.
-    const int incarnation;
+    int incarnation;
 
   public:
     mds_rank_t get_nodeid() const { return whoami; }
@@ -151,6 +153,8 @@ class MDSRank {
     Locker       *locker;
     MDLog        *mdlog;
     MDBalancer   *balancer;
+    ScrubStack   *scrubstack;
+    DamageTable  damage_table;
 
     InoTable     *inotable;
 
@@ -176,21 +180,21 @@ class MDSRank {
     MDSMap::DaemonState get_state() const { return state; } 
     MDSMap::DaemonState get_want_state() const { return beacon.get_want_state(); } 
 
-    bool is_creating() { return state == MDSMap::STATE_CREATING; }
-    bool is_starting() { return state == MDSMap::STATE_STARTING; }
-    bool is_standby()  { return state == MDSMap::STATE_STANDBY; }
-    bool is_replay()   { return state == MDSMap::STATE_REPLAY; }
-    bool is_standby_replay() { return state == MDSMap::STATE_STANDBY_REPLAY; }
-    bool is_resolve()  { return state == MDSMap::STATE_RESOLVE; }
-    bool is_reconnect() { return state == MDSMap::STATE_RECONNECT; }
-    bool is_rejoin()   { return state == MDSMap::STATE_REJOIN; }
-    bool is_clientreplay()   { return state == MDSMap::STATE_CLIENTREPLAY; }
-    bool is_active()   { return state == MDSMap::STATE_ACTIVE; }
-    bool is_stopping() { return state == MDSMap::STATE_STOPPING; }
-    bool is_oneshot_replay()   { return state == MDSMap::STATE_ONESHOT_REPLAY; }
-    bool is_any_replay() { return (is_replay() || is_standby_replay() ||
+    bool is_creating() const { return state == MDSMap::STATE_CREATING; }
+    bool is_starting() const { return state == MDSMap::STATE_STARTING; }
+    bool is_standby() const { return state == MDSMap::STATE_STANDBY; }
+    bool is_replay() const { return state == MDSMap::STATE_REPLAY; }
+    bool is_standby_replay() const { return state == MDSMap::STATE_STANDBY_REPLAY; }
+    bool is_resolve() const { return state == MDSMap::STATE_RESOLVE; }
+    bool is_reconnect() const { return state == MDSMap::STATE_RECONNECT; }
+    bool is_rejoin() const { return state == MDSMap::STATE_REJOIN; }
+    bool is_clientreplay() const { return state == MDSMap::STATE_CLIENTREPLAY; }
+    bool is_active() const { return state == MDSMap::STATE_ACTIVE; }
+    bool is_stopping() const { return state == MDSMap::STATE_STOPPING; }
+    bool is_oneshot_replay() const { return state == MDSMap::STATE_ONESHOT_REPLAY; }
+    bool is_any_replay() const { return (is_replay() || is_standby_replay() ||
         is_oneshot_replay()); }
-    bool is_stopped()  { return mdsmap->is_stopped(whoami); }
+    bool is_stopped() const { return mdsmap->is_stopped(whoami); }
 
     void handle_write_error(int err);
 
@@ -203,7 +207,7 @@ class MDSRank {
       MDSRank *mds;
       Cond cond;
       public:
-      ProgressThread(MDSRank *mds_) : mds(mds_) {}
+      explicit ProgressThread(MDSRank *mds_) : mds(mds_) {}
       void * entry(); 
       void shutdown();
       void signal() {cond.Signal();}
@@ -265,7 +269,6 @@ class MDSRank {
 
     MDSRank(
         mds_rank_t whoami_,
-        int incarnation_,
         Mutex &mds_lock_,
         LogChannelRef &clog_,
         SafeTimer &timer_,
@@ -346,13 +349,7 @@ class MDSRank {
       replay_queue.push_back(c);
     }
 
-    bool queue_one_replay() {
-      if (replay_queue.empty())
-        return false;
-      queue_waiter(replay_queue.front());
-      replay_queue.pop_front();
-      return true;
-    }
+    bool queue_one_replay();
 
     void set_osd_epoch_barrier(epoch_t e);
     epoch_t get_osd_epoch_barrier() const {return osd_epoch_barrier;}
@@ -365,8 +362,13 @@ class MDSRank {
 
     int get_req_rate() { return logger->get(l_mds_request); }
 
+    void dump_status(Formatter *f) const;
+
   protected:
-    void command_scrub_path(Formatter *f, const string& path);
+    void dump_clientreplay_status(Formatter *f) const;
+    void command_scrub_path(Formatter *f, const string& path, vector<string>& scrubop_vec);
+    void command_tag_path(Formatter *f, const string& path,
+                          const string &tag);
     void command_flush_path(Formatter *f, const string& path);
     void command_flush_journal(Formatter *f);
     void command_get_subtrees(Formatter *f);
@@ -387,7 +389,6 @@ class MDSRank {
     CDir *_command_dirfrag_get(
         const cmdmap_t &cmdmap,
         std::ostream &ss);
-    // <<<
 
   protected:
     Messenger    *messenger;
@@ -491,12 +492,23 @@ public:
   void update_log_config();
   bool handle_command_legacy(std::vector<std::string> args);
 
+  bool handle_command(
+    const cmdmap_t &cmdmap,
+    bufferlist const &inbl,
+    int *r,
+    std::stringstream *ds,
+    std::stringstream *ss);
+
+  void dump_sessions(
+      const SessionFilter &filter, Formatter *f) const;
+  std::vector<entity_name_t> evict_sessions(
+      const SessionFilter &filter);
+
   // Call into me from MDS::ms_dispatch
   bool ms_dispatch(Message *m);
 
   MDSRankDispatcher(
       mds_rank_t whoami_,
-      int incarnation_,
       Mutex &mds_lock_,
       LogChannelRef &clog_,
       SafeTimer &timer_,

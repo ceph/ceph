@@ -325,9 +325,7 @@ int run_rgw_admin(string& cmd, string& resp) {
       argv[loop++] = (char *)(*it).c_str();
     }
     argv[loop] = NULL;
-    close(1);
-    stdout = fopen(RGW_ADMIN_RESP_PATH, "w+");
-    if (!stdout) {
+    if (!freopen(RGW_ADMIN_RESP_PATH, "w+", stdout)) {
       cout << "Unable to open stdout file" << std::endl;
     }
     execv((g_test->get_rgw_admin_path()).c_str(), argv); 
@@ -809,7 +807,7 @@ int main(int argc, char *argv[]){
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
-  store = RGWStoreManager::get_storage(g_ceph_context, false, false);
+  store = RGWStoreManager::get_storage(g_ceph_context, false, false, false);
   g_test = new admin_log::test_helper();
   finisher = new Finisher(g_ceph_context);
 #ifdef GTEST

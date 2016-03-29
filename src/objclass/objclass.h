@@ -9,6 +9,7 @@
 #include "../include/types.h"
 #include "msg/msg_types.h"
 #include "common/hobject.h"
+#include "common/ceph_time.h"
 
 extern "C" {
 #endif
@@ -22,9 +23,10 @@ int __cls_ver_min = min;
 int __cls_name__## name = 0; \
 const char *__cls_name = #name;
 
-#define CLS_METHOD_RD		0x1
-#define CLS_METHOD_WR		0x2
-#define CLS_METHOD_PUBLIC	0x4
+#define CLS_METHOD_RD       0x1 /// method executes read operations
+#define CLS_METHOD_WR       0x2 /// method executes write operations
+#define CLS_METHOD_PUBLIC   0x4 /// unused
+#define CLS_METHOD_PROMOTE  0x8 /// method cannot be proxied to base tier
 
 
 #define CLS_LOG(level, fmt, ...)					\
@@ -141,6 +143,7 @@ extern int cls_register_cxx_filter(cls_handle_t hclass,
 extern int cls_cxx_create(cls_method_context_t hctx, bool exclusive);
 extern int cls_cxx_remove(cls_method_context_t hctx);
 extern int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime);
+extern int cls_cxx_stat2(cls_method_context_t hctx, uint64_t *size, ceph::real_time *mtime);
 extern int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *bl);

@@ -9,7 +9,7 @@ C code
 
 For C code, we conform by the Linux kernel coding standards:
 
-    http://lxr.linux.no/linux/Documentation/CodingStyle
+    https://www.kernel.org/doc/Documentation/CodingStyle
 
 
 C++ code
@@ -18,7 +18,7 @@ C++ code
 For C++ code, things are a bit more complex.  As a baseline, we use Google's
 coding guide:
 
-       http://google-styleguide.googlecode.com/svn/trunk/cppguide.xml
+    https://google.github.io/styleguide/cppguide.html
 
 
 As an addendum to the above, we add the following guidelines, organized

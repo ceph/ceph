@@ -2,12 +2,18 @@
 Description=Ceph rados gateway
 After=network-online.target local-fs.target
 Wants=network-online.target local-fs.target
-PartOf=ceph.target
+PartOf=ceph-radosgw.target
 
 [Service]
+LimitNOFILE=1048576
+LimitNPROC=1048576
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
 ExecStart=/usr/bin/radosgw -f --cluster ${CLUSTER} --name client.%i --setuser ceph --setgroup ceph
+PrivateDevices=yes
+ProtectHome=true
+ProtectSystem=full
+PrivateTmp=true
 
 [Install]
-WantedBy=ceph.target
+WantedBy=ceph-radosgw.target

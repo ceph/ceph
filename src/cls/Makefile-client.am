@@ -13,23 +13,26 @@ libcls_refcount_client_la_SOURCES = \
 noinst_LTLIBRARIES += libcls_refcount_client.la
 DENCODER_DEPS += libcls_refcount_client.la
 
-libcls_version_client_a_SOURCES =  \
+libcls_version_client_la_SOURCES =  \
 	cls/version/cls_version_client.cc \
 	cls/version/cls_version_types.cc
-noinst_LIBRARIES += libcls_version_client.a
+noinst_LTLIBRARIES += libcls_version_client.la
 
-libcls_log_client_a_SOURCES = cls/log/cls_log_client.cc
-noinst_LIBRARIES += libcls_log_client.a
+libcls_log_client_la_SOURCES = cls/log/cls_log_client.cc
+noinst_LTLIBRARIES += libcls_log_client.la
 
-libcls_statelog_client_a_SOURCES = cls/statelog/cls_statelog_client.cc
-noinst_LIBRARIES += libcls_statelog_client.a
+libcls_statelog_client_la_SOURCES = cls/statelog/cls_statelog_client.cc
+noinst_LTLIBRARIES += libcls_statelog_client.la
 
-libcls_replica_log_client_a_SOURCES = \
+libcls_timeindex_client_la_SOURCES = cls/timeindex/cls_timeindex_client.cc
+noinst_LTLIBRARIES += libcls_timeindex_client.la
+
+libcls_replica_log_client_la_SOURCES = \
 	cls/replica_log/cls_replica_log_types.cc \
 	cls/replica_log/cls_replica_log_ops.cc \
 	cls/replica_log/cls_replica_log_client.cc
-noinst_LIBRARIES += libcls_replica_log_client.a
-DENCODER_DEPS += libcls_replica_log_client.a
+noinst_LTLIBRARIES += libcls_replica_log_client.la
+DENCODER_DEPS += libcls_replica_log_client.la
 
 libcls_rgw_client_la_SOURCES = \
 	cls/rgw/cls_rgw_client.cc \
@@ -38,25 +41,40 @@ libcls_rgw_client_la_SOURCES = \
 noinst_LTLIBRARIES += libcls_rgw_client.la
 DENCODER_DEPS += libcls_rgw_client.la
 
-libcls_rbd_client_la_SOURCES = cls/rbd/cls_rbd_client.cc
+libcls_rbd_client_la_SOURCES = \
+	cls/rbd/cls_rbd_client.cc \
+	cls/rbd/cls_rbd_types.cc
 noinst_LTLIBRARIES += libcls_rbd_client.la
+DENCODER_DEPS += libcls_rbd_client.la
 
-libcls_user_client_a_SOURCES = cls/user/cls_user_client.cc \
+libcls_user_client_la_SOURCES = cls/user/cls_user_client.cc \
 	cls/user/cls_user_types.cc \
 	cls/user/cls_user_ops.cc
-DENCODER_DEPS += libcls_user_client.a
+DENCODER_DEPS += libcls_user_client.la
 
-noinst_LIBRARIES += libcls_user_client.a
+noinst_LTLIBRARIES += libcls_user_client.la
 
 libcls_cephfs_client_la_SOURCES = cls/cephfs/cls_cephfs_client.cc
 noinst_LTLIBRARIES += libcls_cephfs_client.la
+
+libcls_numops_client_la_SOURCES = cls/numops/cls_numops_client.cc
+noinst_LTLIBRARIES += libcls_numops_client.la
+DENCODER_DEPS += libcls_numops_client.la
+
+libcls_journal_client_la_SOURCES = \
+	cls/journal/cls_journal_client.cc \
+	cls/journal/cls_journal_types.cc
+noinst_LTLIBRARIES += libcls_journal_client.la
+DENCODER_DEPS += libcls_journal_client.la
 
 noinst_HEADERS += \
 	cls/lock/cls_lock_types.h \
 	cls/lock/cls_lock_ops.h \
 	cls/lock/cls_lock_client.h \
+	cls/numops/cls_numops_client.h \
 	cls/rbd/cls_rbd.h \
 	cls/rbd/cls_rbd_client.h \
+	cls/rbd/cls_rbd_types.h \
 	cls/refcount/cls_refcount_ops.h \
 	cls/refcount/cls_refcount_client.h \
 	cls/version/cls_version_types.h \
@@ -68,6 +86,9 @@ noinst_HEADERS += \
 	cls/statelog/cls_statelog_types.h \
 	cls/statelog/cls_statelog_ops.h \
 	cls/statelog/cls_statelog_client.h \
+	cls/timeindex/cls_timeindex_types.h \
+	cls/timeindex/cls_timeindex_ops.h \
+	cls/timeindex/cls_timeindex_client.h \
 	cls/replica_log/cls_replica_log_types.h \
 	cls/replica_log/cls_replica_log_ops.h \
 	cls/replica_log/cls_replica_log_client.h \
@@ -78,4 +99,6 @@ noinst_HEADERS += \
 	cls/user/cls_user_ops.h \
 	cls/user/cls_user_types.h \
 	cls/cephfs/cls_cephfs.h \
-	cls/cephfs/cls_cephfs_client.h
+	cls/cephfs/cls_cephfs_client.h \
+	cls/journal/cls_journal_client.h \
+	cls/journal/cls_journal_types.h

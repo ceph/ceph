@@ -7,11 +7,13 @@
 #include "Dir.h"
 #include "MetaSession.h"
 #include "ClientSnapRealm.h"
+#include "UserGroups.h"
 
 ostream& operator<<(ostream &out, Inode &in)
 {
   out << in.vino() << "("
-      << "ref=" << in._ref
+      << "faked_ino=" << in.faked_ino
+      << " ref=" << in._ref
       << " ll_ref=" << in.ll_ref
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
@@ -278,34 +280,17 @@ Dir *Inode::open_dir()
   return dir;
 }
 
-bool Inode::check_mode(uid_t ruid, gid_t rgid, gid_t *sgids, int sgids_count, uint32_t rflags)
+bool Inode::check_mode(uid_t ruid, UserGroups& groups, unsigned want)
 {
-  unsigned fmode = 0;
-
-  if ((rflags & O_ACCMODE) == O_WRONLY)
-      fmode = 2;
-  else if ((rflags & O_ACCMODE) == O_RDWR)
-      fmode = 6;
-  else if ((rflags & O_ACCMODE) == O_RDONLY)
-      fmode = 4;
-
-  // if uid is owner, owner entry determines access
   if (uid == ruid) {
-    fmode = fmode << 6;
-  } else if (gid == rgid) {
+    // if uid is owner, owner entry determines access
+    want = want << 6;
+  } else if (groups.is_in(gid)) {
     // if a gid or sgid matches the owning group, group entry determines access
-    fmode = fmode << 3;
-  } else {
-    int i = 0;
-    for (; i < sgids_count; ++i) {
-      if (sgids[i] == gid) {
-        fmode = fmode << 3;
-	break;
-      }
-    }
+    want = want << 3;
   }
 
-  return (mode & fmode) == fmode;
+  return (mode & want) == want;
 }
 
 void Inode::get() {
@@ -344,9 +329,7 @@ void Inode::dump(Formatter *f) const
   f->dump_stream("atime") << atime;
   f->dump_int("time_warp_seq", time_warp_seq);
 
-  f->open_object_section("layout");
-  ::dump(layout, f);
-  f->close_section();
+  f->dump_object("layout", layout);
   if (is_dir()) {
     f->open_object_section("dir_layout");
     ::dump(dir_layout, f);
@@ -394,13 +377,12 @@ void Inode::dump(Formatter *f) const
   f->dump_stream("dirty_caps") << ccap_string(dirty_caps);
   if (flushing_caps) {
     f->dump_stream("flushings_caps") << ccap_string(flushing_caps);
-    f->dump_unsigned("flushing_cap_seq", flushing_cap_seq);
     f->open_object_section("flushing_cap_tid");
-    for (unsigned bit = 0; bit < CEPH_CAP_BITS; bit++) {
-      if (flushing_caps & (1 << bit)) {
-	string n(ccap_string(1 << bit));
-	f->dump_unsigned(n.c_str(), flushing_cap_tid[bit]);
-      }
+    for (map<ceph_tid_t, int>::const_iterator p = flushing_cap_tids.begin();
+	 p != flushing_cap_tids.end();
+	 ++p) {
+      string n(ccap_string(p->second));
+      f->dump_unsigned(n.c_str(), p->first);
     }
     f->close_section();
   }
@@ -412,7 +394,6 @@ void Inode::dump(Formatter *f) const
   }
 
   f->dump_stream("hold_caps_until") << hold_caps_until;
-  f->dump_unsigned("last_flush_tid", last_flush_tid);
 
   if (snaprealm) {
     f->open_object_section("snaprealm");

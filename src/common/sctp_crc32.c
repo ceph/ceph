@@ -30,8 +30,9 @@
 
 /* $KAME: sctp_crc32.c,v 1.12 2005/03/06 16:04:17 itojun Exp $	 */
 
-
+#ifdef HAVE_SYS_TYPES_H
 #include <sys/cdefs.h>
+#endif
 #if 0
 __FBSDID("$FreeBSD: src/sys/netinet/sctp_crc32.c,v 1.8 2007/05/08 17:01:10 rrs Exp $");
 

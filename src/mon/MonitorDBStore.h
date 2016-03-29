@@ -20,18 +20,23 @@
 #include <string>
 #include <boost/scoped_ptr.hpp>
 #include <sstream>
-#include "os/KeyValueDB.h"
+#include <fstream>
+#include "kv/KeyValueDB.h"
 
 #include "include/assert.h"
 #include "common/Formatter.h"
 #include "common/Finisher.h"
 #include "common/errno.h"
+#include "common/debug.h"
 
 class MonitorDBStore
 {
   boost::scoped_ptr<KeyValueDB> db;
   bool do_dump;
-  int dump_fd;
+  int dump_fd_binary;
+  std::ofstream dump_fd_json;
+  JSONFormatter dump_fmt;
+  
 
   Finisher io_work;
 
@@ -187,7 +192,7 @@ class MonitorDBStore
       return (size() == 0);
     }
 
-    bool size() {
+    size_t size() const {
       return ops.size();
     }
     uint64_t get_keys() const {
@@ -255,9 +260,15 @@ class MonitorDBStore
     KeyValueDB::Transaction dbt = db->get_transaction();
 
     if (do_dump) {
-      bufferlist bl;
-      t->encode(bl);
-      bl.write_fd(dump_fd);
+      if (!g_conf->mon_debug_dump_json) {
+        bufferlist bl;
+        t->encode(bl);
+        bl.write_fd(dump_fd_binary);
+      } else {
+        t->dump(&dump_fmt, true);
+        dump_fmt.flush(dump_fd_json);
+        dump_fd_json.flush();
+      }
     }
 
     list<pair<string, pair<string,string> > > compact;
@@ -291,6 +302,8 @@ class MonitorDBStore
 	  db->compact_range_async(compact.front().first, compact.front().second.first, compact.front().second.second);
 	compact.pop_front();
       }
+    } else {
+      assert(0 == "failed to write to db");
     }
     return r;
   }
@@ -451,8 +464,10 @@ class MonitorDBStore
 
       for (; iter->valid(); iter->next()) {
         pair<string,string> r = iter->raw_key();
-        if (sync_prefixes.count(r.first) > 0)
+        if (sync_prefixes.count(r.first) > 0) {
+          iter->next();
           return r;
+        }
       }
       return pair<string,string>();
     }
@@ -492,16 +507,8 @@ class MonitorDBStore
   }
 
   int get(const string& prefix, const string& key, bufferlist& bl) {
-    set<string> k;
-    k.insert(key);
-    map<string,bufferlist> out;
-
-    db->get(prefix, k, &out);
-    if (out.empty())
-      return -ENOENT;
-    bl.append(out[key]);
-
-    return 0;
+    assert(bl.length() == 0);
+    return db->get(prefix, key, &bl);
   }
 
   int get(const string& prefix, const version_t ver, bufferlist& bl) {
@@ -566,7 +573,8 @@ class MonitorDBStore
     for (iter = prefixes.begin(); iter != prefixes.end(); ++iter) {
       dbt->rmkeys_by_prefix((*iter));
     }
-    db->submit_transaction_sync(dbt);
+    int r = db->submit_transaction_sync(dbt);
+    assert(r >= 0);
   }
 
   int open(ostream &out) {
@@ -613,11 +621,12 @@ class MonitorDBStore
     return db->get_estimated_size(extras);
   }
 
-  MonitorDBStore(const string& path)
+  explicit MonitorDBStore(const string& path)
     : db(0),
       do_dump(false),
-      dump_fd(-1),
-      io_work(g_ceph_context, "monstore"),
+      dump_fd_binary(-1),
+      dump_fmt(true),
+      io_work(g_ceph_context, "monstore", "fn_monstore"),
       is_open(false) {
     string::const_reverse_iterator rit;
     int pos = 0;
@@ -641,21 +650,35 @@ class MonitorDBStore
     db.reset(db_ptr);
 
     if (g_conf->mon_debug_dump_transactions) {
-      do_dump = true;
-      dump_fd = ::open(
-	g_conf->mon_debug_dump_location.c_str(),
-	O_CREAT|O_APPEND|O_WRONLY, 0644);
-      if (!dump_fd) {
-	dump_fd = -errno;
-	derr << "Could not open log file, got "
-	     << cpp_strerror(dump_fd) << dendl;
+      if (!g_conf->mon_debug_dump_json) {
+        dump_fd_binary = ::open(
+          g_conf->mon_debug_dump_location.c_str(),
+          O_CREAT|O_APPEND|O_WRONLY, 0644);
+        if (!dump_fd_binary) {
+          dump_fd_binary = -errno;
+          derr << "Could not open log file, got "
+               << cpp_strerror(dump_fd_binary) << dendl;
+        }
+      } else {
+        dump_fmt.reset();
+        dump_fmt.open_array_section("dump");
+        dump_fd_json.open(g_conf->mon_debug_dump_location.c_str());
       }
+      do_dump = true;
     }
   }
   ~MonitorDBStore() {
     assert(!is_open);
-    if (do_dump)
-      ::close(dump_fd);
+    if (do_dump) {
+      if (!g_conf->mon_debug_dump_json) {
+        ::close(dump_fd_binary);
+      } else {
+        dump_fmt.close_section();
+        dump_fmt.flush(dump_fd_json);
+        dump_fd_json.flush();
+        dump_fd_json.close();
+      }
+    }
   }
 
 };

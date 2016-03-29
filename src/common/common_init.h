@@ -37,6 +37,9 @@ enum common_init_flags_t {
 
   // don't do anything daemonish, like create /var/run/ceph, or print a banner
   CINIT_FLAG_NO_DAEMON_ACTIONS = 0x8,
+
+  // don't drop privileges
+  CINIT_FLAG_DEFER_DROP_PRIVILEGES = 0x16,
 };
 
 /*
@@ -57,7 +60,8 @@ enum common_init_flags_t {
  * Your library may also supply functions to read a configuration file.
  */
 CephContext *common_preinit(const CephInitParameters &iparams,
-			    enum code_environment_t code_env, int flags);
+			    enum code_environment_t code_env, int flags,
+			    const char *data_dir_option = 0);
 
 /* Print out some parse errors. */
 void complain_about_parse_errors(CephContext *cct,
@@ -75,6 +79,6 @@ void complain_about_parse_errors(CephContext *cct,
  * libraries. The most obvious reason for this is that the threads started by
  * the Ceph libraries would be destroyed by a fork().
  */
-void common_init_finish(CephContext *cct, int flags = 0);
+void common_init_finish(CephContext *cct);
 
 #endif

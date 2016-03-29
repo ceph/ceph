@@ -15,11 +15,13 @@
 #ifndef OS_KEYVALUESTORE_H
 #define OS_KEYVALUESTORE_H
 
-#include "IndexManager.h"
-#include "SequencerPosition.h"
 #include <string>
 #include <vector>
 #include "include/memory.h"
+#include "kv/KeyValueDB.h"
+#include "common/hobject.h"
+
+class SequencerPosition;
 
 /**
  * Encapsulates the FileStore key value store
@@ -137,18 +139,7 @@ public:
 
   virtual bool check(std::ostream &out) { return true; }
 
-  class ObjectMapIteratorImpl {
-  public:
-    virtual int seek_to_first() = 0;
-    virtual int upper_bound(const string &after) = 0;
-    virtual int lower_bound(const string &to) = 0;
-    virtual bool valid() = 0;
-    virtual int next() = 0;
-    virtual string key() = 0;
-    virtual bufferlist value() = 0;
-    virtual int status() = 0;
-    virtual ~ObjectMapIteratorImpl() {}
-  };
+  typedef KeyValueDB::GenericIteratorImpl ObjectMapIteratorImpl;
   typedef ceph::shared_ptr<ObjectMapIteratorImpl> ObjectMapIterator;
   virtual ObjectMapIterator get_iterator(const ghobject_t &oid) {
     return ObjectMapIterator();

@@ -19,10 +19,10 @@
 #include <dirent.h>
 #include <stdlib.h>
 #include "include/int_types.h"
+#include "include/uuid.h"
 
 #ifdef __linux__
 #include <linux/fs.h>
-#include "include/uuid.h"
 #include <blkid/blkid.h>
 
 #define UUID_LEN 36
@@ -275,5 +275,24 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
   return -EOPNOTSUPP;
 }
 #else
-# error "Unable to query block device size: unsupported platform, please report."
+int get_block_device_size(int fd, int64_t *psize)
+{
+  return -EOPNOTSUPP;
+}
+
+bool block_device_support_discard(const char *devname)
+{
+  return false;
+}
+
+int block_device_discard(int fd, int64_t offset, int64_t len)
+{
+  return -EOPNOTSUPP;
+}
+
+int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
+	char* device)
+{
+  return -EOPNOTSUPP;
+}
 #endif

@@ -45,12 +45,6 @@ does not bound the total xattr metadata stored with a file.  ``XFS`` has a
 relatively large limit (64 KB) that most deployments won't encounter, but the
 ``ext4`` is too small to be usable.
 
-You should always add the following line to the ``[osd]`` section of your
-``ceph.conf`` file for ``ext4`` filesystems; you can optionally use
-it for ``btrfs`` and ``XFS``.::
-
-	filestore xattr use omap = true
-
 
 Filesystem Background Info
 ==========================

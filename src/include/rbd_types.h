@@ -58,7 +58,11 @@
 #define RBD_CHILDREN		"rbd_children"
 #define RBD_LOCK_NAME		"rbd_lock"
 
-#define RBD_DEFAULT_OBJ_ORDER	22   /* 4MB */
+/**
+ * rbd_mirroring object in each pool contains pool-specific settings
+ * for configuring mirroring.
+ */
+#define RBD_MIRRORING       "rbd_mirroring"
 
 #define RBD_MAX_OBJ_NAME_SIZE	96
 #define RBD_MAX_BLOCK_NAME_SIZE 24

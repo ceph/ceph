@@ -23,14 +23,14 @@ public:
   metareqid_t reqid;
 
   ECommitted() : LogEvent(EVENT_COMMITTED) { }
-  ECommitted(metareqid_t r) : 
+  explicit ECommitted(metareqid_t r) :
     LogEvent(EVENT_COMMITTED), reqid(r) { }
 
   void print(ostream& out) const {
     out << "ECommitted " << reqid;
   }
 
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ECommitted*>& ls);
@@ -38,5 +38,6 @@ public:
   void update_segment() {}
   void replay(MDSRank *mds);
 };
+WRITE_CLASS_ENCODER_FEATURES(ECommitted)
 
 #endif

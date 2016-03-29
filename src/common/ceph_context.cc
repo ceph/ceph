@@ -27,11 +27,14 @@
 #include "common/errno.h"
 #include "common/lockdep.h"
 #include "common/Formatter.h"
+#include "common/Graylog.h"
 #include "log/Log.h"
 #include "auth/Crypto.h"
 #include "include/str_list.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/PluginRegistry.h"
+#include "common/valgrind.h"
 
 #include <iostream>
 #include <pthread.h>
@@ -44,7 +47,7 @@ namespace {
 
 class LockdepObs : public md_config_obs_t {
 public:
-  LockdepObs(CephContext *cct) : m_cct(cct), m_registered(false) {
+  explicit LockdepObs(CephContext *cct) : m_cct(cct), m_registered(false) {
   }
   virtual ~LockdepObs() {
     if (m_registered) {
@@ -78,7 +81,7 @@ private:
 class CephContextServiceThread : public Thread
 {
 public:
-  CephContextServiceThread(CephContext *cct)
+  explicit CephContextServiceThread(CephContext *cct)
     : _lock("CephContextServiceThread::_lock"),
       _reopen_logs(false), _exit_thread(false), _cct(cct)
   {
@@ -106,6 +109,9 @@ public:
         _reopen_logs = false;
       }
       _cct->_heartbeat_map->check_touch_file();
+
+      // refresh the perf coutners
+      _cct->refresh_perf_values();
     }
     return NULL;
   }
@@ -144,7 +150,7 @@ class LogObs : public md_config_obs_t {
   ceph::log::Log *log;
 
 public:
-  LogObs(ceph::log::Log *l) : log(l) {}
+  explicit LogObs(ceph::log::Log *l) : log(l) {}
 
   const char** get_tracked_conf_keys() const {
     static const char *KEYS[] = {
@@ -155,6 +161,12 @@ public:
       "err_to_syslog",
       "log_to_stderr",
       "err_to_stderr",
+      "log_to_graylog",
+      "err_to_graylog",
+      "log_graylog_host",
+      "log_graylog_port",
+      "fsid",
+      "host",
       NULL
     };
     return KEYS;
@@ -181,11 +193,37 @@ public:
     }
 
     if (changed.count("log_max_new")) {
+
       log->set_max_new(conf->log_max_new);
     }
 
     if (changed.count("log_max_recent")) {
       log->set_max_recent(conf->log_max_recent);
+    }
+
+    // graylog
+    if (changed.count("log_to_graylog") || changed.count("err_to_graylog")) {
+      int l = conf->log_to_graylog ? 99 : (conf->err_to_graylog ? -1 : -2);
+      log->set_graylog_level(l, l);
+
+      if (conf->log_to_graylog || conf->err_to_graylog) {
+	log->start_graylog();
+      } else if (! (conf->log_to_graylog && conf->err_to_graylog)) {
+	log->stop_graylog();
+      }
+    }
+
+    if (log->graylog() && (changed.count("log_graylog_host") || changed.count("log_graylog_port"))) {
+      log->graylog()->set_destination(conf->log_graylog_host, conf->log_graylog_port);
+    }
+
+    // metadata
+    if (log->graylog() && changed.count("host")) {
+      log->graylog()->set_hostname(conf->host);
+    }
+
+    if (log->graylog() && changed.count("fsid")) {
+      log->graylog()->set_fsid(conf->fsid);
     }
   }
 };
@@ -196,7 +234,7 @@ class CephContextObs : public md_config_obs_t {
   CephContext *cct;
 
 public:
-  CephContextObs(CephContext *cct) : cct(cct) {}
+  explicit CephContextObs(CephContext *cct) : cct(cct) {}
 
   const char** get_tracked_conf_keys() const {
     static const char *KEYS[] = {
@@ -259,7 +297,7 @@ class CephContextHook : public AdminSocketHook {
   CephContext *m_cct;
 
 public:
-  CephContextHook(CephContext *cct) : m_cct(cct) {}
+  explicit CephContextHook(CephContext *cct) : m_cct(cct) {}
 
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) {
@@ -395,11 +433,16 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
 }
 
 
-CephContext::CephContext(uint32_t module_type_)
+CephContext::CephContext(uint32_t module_type_, int init_flags_)
   : nref(1),
     _conf(new md_config_t()),
     _log(NULL),
     _module_type(module_type_),
+    _init_flags(init_flags_),
+    _set_uid(0),
+    _set_gid(0),
+    _set_uid_string(),
+    _set_gid_string(),
     _crypto_inited(false),
     _service_thread(NULL),
     _log_obs(NULL),
@@ -409,11 +452,14 @@ CephContext::CephContext(uint32_t module_type_)
     _heartbeat_map(NULL),
     _crypto_none(NULL),
     _crypto_aes(NULL),
-    _lockdep_obs(NULL)
+    _plugin_registry(NULL),
+    _lockdep_obs(NULL),
+    _cct_perf(NULL)
 {
   ceph_spin_init(&_service_thread_lock);
   ceph_spin_init(&_associated_objs_lock);
   ceph_spin_init(&_feature_lock);
+  ceph_spin_init(&_cct_perf_lock);
 
   _log = new ceph::log::Log(&_conf->subsys);
   _log->start();
@@ -428,8 +474,11 @@ CephContext::CephContext(uint32_t module_type_)
   _conf->add_observer(_lockdep_obs);
 
   _perf_counters_collection = new PerfCountersCollection(this);
+ 
   _admin_socket = new AdminSocket(this);
   _heartbeat_map = new HeartbeatMap(this);
+
+  _plugin_registry = new PluginRegistry(this);
 
   _admin_hook = new CephContextHook(this);
   _admin_socket->register_command("perfcounters_dump", "perfcounters_dump", _admin_hook, "");
@@ -457,9 +506,17 @@ CephContext::~CephContext()
 {
   join_service_thread();
 
-  for (map<string, AssociatedSingletonObject*>::iterator it = _associated_objs.begin();
+  for (map<string, SingletonWrapper*>::iterator it = _associated_objs.begin();
        it != _associated_objs.end(); ++it)
     delete it->second;
+
+  if (_cct_perf) {
+    _perf_counters_collection->remove(_cct_perf);
+    delete _cct_perf;
+    _cct_perf = NULL;
+  }
+
+  delete _plugin_registry;
 
   _admin_socket->unregister_command("perfcounters_dump");
   _admin_socket->unregister_command("perf dump");
@@ -506,11 +563,22 @@ CephContext::~CephContext()
   ceph_spin_destroy(&_service_thread_lock);
   ceph_spin_destroy(&_associated_objs_lock);
   ceph_spin_destroy(&_feature_lock);
+  ceph_spin_destroy(&_cct_perf_lock);
 
   delete _crypto_none;
   delete _crypto_aes;
   if (_crypto_inited)
     ceph::crypto::shutdown();
+}
+
+void CephContext::put() {
+  if (nref.dec() == 0) {
+    ANNOTATE_HAPPENS_AFTER(&nref);
+    ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&nref);
+    delete this;
+  } else {
+    ANNOTATE_HAPPENS_BEFORE(&nref);
+  }
 }
 
 void CephContext::init_crypto()
@@ -527,7 +595,7 @@ void CephContext::start_service_thread()
     return;
   }
   _service_thread = new CephContextServiceThread(this);
-  _service_thread->create();
+  _service_thread->create("service");
   ceph_spin_unlock(&_service_thread_lock);
 
   // make logs flush on_exit()
@@ -573,9 +641,49 @@ uint32_t CephContext::get_module_type() const
   return _module_type;
 }
 
+int CephContext::get_init_flags() const
+{
+  return _init_flags;
+}
+
 PerfCountersCollection *CephContext::get_perfcounters_collection()
 {
   return _perf_counters_collection;
+}
+
+void CephContext::enable_perf_counter()
+{
+  PerfCountersBuilder plb(this, "cct", l_cct_first, l_cct_last);
+  plb.add_u64(l_cct_total_workers, "total_workers", "Total workers");
+  plb.add_u64(l_cct_unhealthy_workers, "unhealthy_workers", "Unhealthy workers");
+  PerfCounters *perf_tmp = plb.create_perf_counters();
+
+  ceph_spin_lock(&_cct_perf_lock);
+  assert(_cct_perf == NULL);
+  _cct_perf = perf_tmp;
+  ceph_spin_unlock(&_cct_perf_lock);
+
+  _perf_counters_collection->add(_cct_perf);
+}
+
+void CephContext::disable_perf_counter()
+{
+  _perf_counters_collection->remove(_cct_perf);
+
+  ceph_spin_lock(&_cct_perf_lock);
+  delete _cct_perf;
+  _cct_perf = NULL;
+  ceph_spin_unlock(&_cct_perf_lock);
+}
+
+void CephContext::refresh_perf_values()
+{
+  ceph_spin_lock(&_cct_perf_lock);
+  if (_cct_perf) {
+    _cct_perf->set(l_cct_total_workers, _heartbeat_map->get_total_workers());
+    _cct_perf->set(l_cct_unhealthy_workers, _heartbeat_map->get_unhealthy_workers());
+  }
+  ceph_spin_unlock(&_cct_perf_lock);
 }
 
 AdminSocket *CephContext::get_admin_socket()

@@ -44,6 +44,7 @@ devices simultaneously.
 	Commands <rados-rbd-cmds>
 	Kernel Modules <rbd-ko>
 	Snapshots<rbd-snapshot>
+        Mirroring <rbd-mirroring>
 	QEMU <qemu-rbd>
 	libvirt <libvirt>
 	Cache Settings <rbd-config-ref/>
@@ -51,6 +52,7 @@ devices simultaneously.
 	CloudStack <rbd-cloudstack>
 	Manpage rbd <../../man/8/rbd>
 	Manpage rbd-fuse <../../man/8/rbd-fuse>
+	Manpage rbd-nbd <../../man/8/rbd-nbd>
 	Manpage ceph-rbdnamer <../../man/8/ceph-rbdnamer>
 	RBD Replay <rbd-replay>
 	Manpage rbd-replay-prep <../../man/8/rbd-replay-prep>

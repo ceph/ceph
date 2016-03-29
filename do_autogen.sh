@@ -4,23 +4,24 @@ usage() {
     cat <<EOF
 do_autogen.sh: make a ceph build by running autogen, etc.
 
--h:                              this help message
+-C <parameter>                   add parameters to configure
+-c                               use cryptopp
 -d <level>                       debug build
                                  level 0: no debug
                                  level 1: -g
                                  level 3: -Wextra
                                  level 4: even more...
--T                               --without-tcmalloc
 -e <path>                        dump encoded objects to <path>
--P                               profiling build
--p                               google profiler
--O <level>                       optimize
--c                               use cryptopp
--C <parameter>                   add parameters to configure
+-h                               this help message
 -j                               with java
--r                               with rocksdb
 -J				 --with-jemalloc
 -L				 --without-lttng
+-O <level>                       optimize
+-p                               google profiler
+-P                               profiling build
+-R                               without rocksdb
+-T                               --without-tcmalloc
+-v                               verbose output
 
 EOF
 }
@@ -33,44 +34,33 @@ die() {
 debug_level=0
 verbose=0
 profile=0
+rocksdb=1
 CONFIGURE_FLAGS="--disable-static --with-lttng"
-while getopts  "d:e:hHrTPJLjpcvO:C:" flag
+while getopts  "C:cd:e:hjJLO:pPRTv" flag
 do
     case $flag in
-    d) debug_level=$OPTARG;;
-
-    O) CFLAGS="${CFLAGS} -O$OPTARG";;
-
-    c) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-cryptopp --without-nss";;
-
     C) CONFIGURE_FLAGS="$CONFIGURE_FLAGS $OPTARG";;
-
-    P) profile=1;;
-    p) with_profiler="--with-profiler" ;;
-
-    h) usage
-        exit 0;;
-
-    T) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --without-tcmalloc";;
-
+    c) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-cryptopp --without-nss";;
+    d) debug_level=$OPTARG;;
+    e) encode_dump=$OPTARG;;
+    h) usage ; exit 0;;
     j) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --enable-cephfs-java";;
-
-    r) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-librocksdb-static";;
-
+    J) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-jemalloc";;
+    L) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --without-lttng";;
+    O) CFLAGS="${CFLAGS} -O$OPTARG";;
+    p) with_profiler="--with-profiler" ;;
+    P) profile=1;;
+    R) rocksdb=0;;
+    T) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --without-tcmalloc";;
     v) verbose=1;;
 
-    e) encode_dump=$OPTARG;;
-
-    J) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-jemalloc";;
-
-    L) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --without-lttng";;
-
-    *)
-        echo
-        usage
-        exit 1;;
+    *) echo ; usage ; exit 1;;
     esac
 done
+
+if [ $rocksdb -eq 1 ]; then
+    CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-librocksdb-static"
+fi
 
 if [ $profile -eq 1 ]; then
     if [ $debug_level -ne 0 ]; then

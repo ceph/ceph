@@ -87,7 +87,7 @@ protected:
   class ReplayThread : public Thread {
     MDLog *log;
   public:
-    ReplayThread(MDLog *l) : log(l) {}
+    explicit ReplayThread(MDLog *l) : log(l) {}
     void* entry() {
       log->_replay_thread();
       return 0;
@@ -109,7 +109,7 @@ protected:
     MDSInternalContextBase *completion;
   public:
     void set_completion(MDSInternalContextBase *c) {completion = c;}
-    RecoveryThread(MDLog *l) : log(l), completion(NULL) {}
+    explicit RecoveryThread(MDLog *l) : log(l), completion(NULL) {}
     void* entry() {
       log->_recovery_thread(completion);
       return 0;
@@ -141,7 +141,7 @@ protected:
   class SubmitThread : public Thread {
     MDLog *log;
   public:
-    SubmitThread(MDLog *l) : log(l) {}
+    explicit SubmitThread(MDLog *l) : log(l) {}
     void* entry() {
       log->_submit_thread();
       return 0;
@@ -179,10 +179,10 @@ public:
   // replay state
   map<inodeno_t, set<inodeno_t> >   pending_exports;
 
-
+  void set_write_iohint(unsigned iohint_flags);
 
 public:
-  MDLog(MDSRank *m) : mds(m),
+  explicit MDLog(MDSRank *m) : mds(m),
                       num_events(0), 
                       unflushed(0),
                       capped(false),
@@ -254,6 +254,7 @@ public:
   bool is_capped() { return capped; }
   void cap();
 
+  void kick_submitter();
   void shutdown();
 
   // -- events --
@@ -315,6 +316,8 @@ public:
   void replay(MDSInternalContextBase *onfinish);
 
   void standby_trim_segments();
+
+  void dump_replay_status(Formatter *f) const;
 };
 
 #endif

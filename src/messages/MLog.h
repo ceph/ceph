@@ -37,7 +37,8 @@ public:
   void print(ostream& out) const {
     out << "log(";
     if (entries.size())
-      out << entries.size() << " entries";
+      out << entries.size() << " entries from seq " << entries.front().seq
+	  << " at " << entries.front().stamp;
     out << ")";
   }
 

@@ -30,7 +30,7 @@
 class SharedPtrRegistryTest : public SharedPtrRegistry<unsigned int, int> {
 public:
   Mutex &get_lock() { return lock; }
-  map<unsigned int, pair<weak_ptr<int>, int*> > &get_contents() {
+  map<unsigned int, pair<ceph::weak_ptr<int>, int*> > &get_contents() {
     return contents;
   }
 };
@@ -43,7 +43,7 @@ public:
     SharedPtrRegistryTest &registry;
     unsigned int key;
     int value;
-    shared_ptr<int> ptr;
+    ceph::shared_ptr<int> ptr;
     enum in_method_t { LOOKUP, LOOKUP_OR_CREATE } in_method;
 
     Thread_wait(SharedPtrRegistryTest& _registry, unsigned int _key, int _value, in_method_t _in_method) : 
@@ -63,7 +63,7 @@ public:
 	  ptr = registry.lookup_or_create(key);
 	break;
       case LOOKUP:
-	ptr = shared_ptr<int>(new int);
+	ptr = ceph::shared_ptr<int>(new int);
 	*ptr = value;
 	ptr = registry.lookup(key);
 	break;
@@ -103,7 +103,7 @@ TEST_F(SharedPtrRegistry_all, lookup_or_create) {
   SharedPtrRegistryTest registry;
   unsigned int key = 1;
   int value = 2;
-  shared_ptr<int> ptr = registry.lookup_or_create(key);
+  ceph::shared_ptr<int> ptr = registry.lookup_or_create(key);
   *ptr = value;
   ASSERT_EQ(value, *registry.lookup_or_create(key));
 }
@@ -124,13 +124,13 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
   {
     unsigned int key = 1;
     {
-      shared_ptr<int> ptr(new int);
+      ceph::shared_ptr<int> ptr(new int);
       registry.get_contents()[key] = make_pair(ptr, ptr.get());
     }
     EXPECT_FALSE(registry.get_contents()[key].first.lock());
 
     Thread_wait t(registry, key, 0, Thread_wait::LOOKUP_OR_CREATE);
-    t.create();
+    t.create("wait_lookcreate");
     ASSERT_TRUE(wait_for(registry, 1));
     EXPECT_FALSE(t.ptr);
     // waiting on a key does not block lookups on other keys
@@ -144,20 +144,20 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
     unsigned int key = 2;
     int value = 3;
     {
-      shared_ptr<int> ptr(new int);
+      ceph::shared_ptr<int> ptr(new int);
       registry.get_contents()[key] = make_pair(ptr, ptr.get());
     }
     EXPECT_FALSE(registry.get_contents()[key].first.lock());
 
     Thread_wait t(registry, key, value, Thread_wait::LOOKUP_OR_CREATE);
-    t.create();
+    t.create("wait_lookcreate");
     ASSERT_TRUE(wait_for(registry, 1));
     EXPECT_FALSE(t.ptr);
     // waiting on a key does not block lookups on other keys
     {
       int other_value = value + 1;
       unsigned int other_key = key + 1;
-      shared_ptr<int> ptr = registry.lookup_or_create<int>(other_key, other_value);
+      ceph::shared_ptr<int> ptr = registry.lookup_or_create<int>(other_key, other_value);
       EXPECT_TRUE(ptr.get());
       EXPECT_EQ(other_value, *ptr);
     }
@@ -173,7 +173,7 @@ TEST_F(SharedPtrRegistry_all, lookup) {
   SharedPtrRegistryTest registry;
   unsigned int key = 1;
   {
-    shared_ptr<int> ptr = registry.lookup_or_create(key);
+    ceph::shared_ptr<int> ptr = registry.lookup_or_create(key);
     int value = 2;
     *ptr = value;
     ASSERT_EQ(value, *registry.lookup(key));
@@ -187,13 +187,13 @@ TEST_F(SharedPtrRegistry_all, wait_lookup) {
   unsigned int key = 1;
   int value = 2;
   {
-    shared_ptr<int> ptr(new int);
+    ceph::shared_ptr<int> ptr(new int);
     registry.get_contents()[key] = make_pair(ptr, ptr.get());
   }
   EXPECT_FALSE(registry.get_contents()[key].first.lock());
 
   Thread_wait t(registry, key, value, Thread_wait::LOOKUP);
-  t.create();
+  t.create("wait_lookup");
   ASSERT_TRUE(wait_for(registry, 1));
   EXPECT_EQ(value, *t.ptr);
   // waiting on a key does not block lookups on other keys
@@ -216,15 +216,15 @@ TEST_F(SharedPtrRegistry_all, get_next) {
     SharedPtrRegistryTest registry;
 
     const unsigned int key2 = 333;
-    shared_ptr<int> ptr2 = registry.lookup_or_create(key2);
+    ceph::shared_ptr<int> ptr2 = registry.lookup_or_create(key2);
     const int value2 = *ptr2 = 400;
 
     // entries with expired pointers are silentely ignored
     const unsigned int key_gone = 222;
-    registry.get_contents()[key_gone] = make_pair(shared_ptr<int>(), (int*)0);
+    registry.get_contents()[key_gone] = make_pair(ceph::shared_ptr<int>(), (int*)0);
 
     const unsigned int key1 = 111;
-    shared_ptr<int> ptr1 = registry.lookup_or_create(key1);
+    ceph::shared_ptr<int> ptr1 = registry.lookup_or_create(key1);
     const int value1 = *ptr1 = 800;
 
     pair<unsigned int, int> i;
@@ -245,11 +245,11 @@ TEST_F(SharedPtrRegistry_all, get_next) {
     //
     SharedPtrRegistryTest registry;
     const unsigned int key1 = 111;
-    shared_ptr<int> *ptr1 = new shared_ptr<int>(registry.lookup_or_create(key1));
+    ceph::shared_ptr<int> *ptr1 = new ceph::shared_ptr<int>(registry.lookup_or_create(key1));
     const unsigned int key2 = 222;
-    shared_ptr<int> ptr2 = registry.lookup_or_create(key2);
+    ceph::shared_ptr<int> ptr2 = registry.lookup_or_create(key2);
     
-    pair<unsigned int, shared_ptr<int> > i;
+    pair<unsigned int, ceph::shared_ptr<int> > i;
     EXPECT_TRUE(registry.get_next(i.first, &i));
     EXPECT_EQ(key1, i.first);
     delete ptr1;
@@ -262,15 +262,15 @@ TEST_F(SharedPtrRegistry_all, remove) {
   {
     SharedPtrRegistryTest registry;
     const unsigned int key1 = 1;
-    shared_ptr<int> ptr1 = registry.lookup_or_create(key1);
+    ceph::shared_ptr<int> ptr1 = registry.lookup_or_create(key1);
     *ptr1 = 400;
     registry.remove(key1);
 
-    shared_ptr<int> ptr2 = registry.lookup_or_create(key1);
+    ceph::shared_ptr<int> ptr2 = registry.lookup_or_create(key1);
     *ptr2 = 500;
 
-    ptr1 = shared_ptr<int>();
-    shared_ptr<int> res = registry.lookup(key1);
+    ptr1 = ceph::shared_ptr<int>();
+    ceph::shared_ptr<int> res = registry.lookup(key1);
     assert(res);
     assert(res == ptr2);
     assert(*res == 500);
@@ -278,13 +278,13 @@ TEST_F(SharedPtrRegistry_all, remove) {
   {
     SharedPtrRegistryTest registry;
     const unsigned int key1 = 1;
-    shared_ptr<int> ptr1 = registry.lookup_or_create(key1, 400);
+    ceph::shared_ptr<int> ptr1 = registry.lookup_or_create(key1, 400);
     registry.remove(key1);
 
-    shared_ptr<int> ptr2 = registry.lookup_or_create(key1, 500);
+    ceph::shared_ptr<int> ptr2 = registry.lookup_or_create(key1, 500);
 
-    ptr1 = shared_ptr<int>();
-    shared_ptr<int> res = registry.lookup(key1);
+    ptr1 = ceph::shared_ptr<int>();
+    ceph::shared_ptr<int> res = registry.lookup(key1);
     assert(res);
     assert(res == ptr2);
     assert(*res == 500);
@@ -316,7 +316,7 @@ TEST_F(SharedPtrRegistry_destructor, destructor) {
   EXPECT_EQ(UNDEFINED, died);
   int key = 101;
   {
-    shared_ptr<TellDie> a = registry.lookup_or_create(key);
+    ceph::shared_ptr<TellDie> a = registry.lookup_or_create(key);
     EXPECT_EQ(NO, died);
     EXPECT_TRUE(a.get());
   }

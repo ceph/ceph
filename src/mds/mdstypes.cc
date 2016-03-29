@@ -7,24 +7,6 @@
 const mds_gid_t MDS_GID_NONE = mds_gid_t(0);
 const mds_rank_t MDS_RANK_NONE = mds_rank_t(-1);
 
-void dump(const ceph_file_layout& l, Formatter *f)
-{
-  f->dump_unsigned("stripe_unit", l.fl_stripe_unit);
-  f->dump_unsigned("stripe_count", l.fl_stripe_count);
-  f->dump_unsigned("object_size", l.fl_object_size);
-  if (l.fl_cas_hash)
-    f->dump_unsigned("cas_hash", l.fl_cas_hash);
-  if (l.fl_object_stripe_unit)
-    f->dump_unsigned("object_stripe_unit", l.fl_object_stripe_unit);
-  if (l.fl_pg_pool)
-    f->dump_unsigned("pg_pool", l.fl_pg_pool);
-}
-
-void dump(const ceph_dir_layout& l, Formatter *f)
-{
-  f->dump_unsigned("dir_hash", l.dl_dir_hash);
-}
-
 
 /*
  * frag_info_t
@@ -254,9 +236,9 @@ void inline_data_t::decode(bufferlist::iterator &p)
 /*
  * inode_t
  */
-void inode_t::encode(bufferlist &bl) const
+void inode_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(11, 6, bl);
+  ENCODE_START(13, 6, bl);
 
   ::encode(ino, bl);
   ::encode(rdev, bl);
@@ -274,7 +256,7 @@ void inode_t::encode(bufferlist &bl) const
   }
 
   ::encode(dir_layout, bl);
-  ::encode(layout, bl);
+  ::encode(layout, bl, features);
   ::encode(size, bl);
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
@@ -298,12 +280,17 @@ void inode_t::encode(bufferlist &bl) const
   ::encode(inline_data, bl);
   ::encode(quota, bl);
 
+  ::encode(stray_prior_path, bl);
+
+  ::encode(last_scrub_version, bl);
+  ::encode(last_scrub_stamp, bl);
+
   ENCODE_FINISH(bl);
 }
 
 void inode_t::decode(bufferlist::iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(11, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(13, 6, 6, p);
 
   ::decode(ino, p);
   ::decode(rdev, p);
@@ -368,6 +355,15 @@ void inode_t::decode(bufferlist::iterator &p)
   if (struct_v >= 11)
     ::decode(quota, p);
 
+  if (struct_v >= 12) {
+    ::decode(stray_prior_path, p);
+  }
+
+  if (struct_v >= 13) {
+    ::decode(last_scrub_version, p);
+    ::decode(last_scrub_stamp, p);
+  }
+
   DECODE_FINISH(p);
 }
 
@@ -385,9 +381,7 @@ void inode_t::dump(Formatter *f) const
   ::dump(dir_layout, f);
   f->close_section();
 
-  f->open_object_section("layout");
-  ::dump(layout, f);
-  f->close_section();
+  f->dump_object("layout", layout);
 
   f->open_array_section("old_pools");
   for (compact_set<int64_t>::const_iterator i = old_pools.begin();
@@ -430,6 +424,8 @@ void inode_t::dump(Formatter *f) const
   f->dump_unsigned("file_data_version", file_data_version);
   f->dump_unsigned("xattr_version", xattr_version);
   f->dump_unsigned("backtrace_version", backtrace_version);
+
+  f->dump_string("stray_prior_path", stray_prior_path);
 }
 
 void inode_t::generate_test_instances(list<inode_t*>& ls)
@@ -452,7 +448,7 @@ int inode_t::compare(const inode_t &other, bool *divergent) const
         gid != other.gid ||
         nlink != other.nlink ||
         memcmp(&dir_layout, &other.dir_layout, sizeof(dir_layout)) ||
-        memcmp(&layout, &other.layout, sizeof(layout)) ||
+        layout != other.layout ||
         old_pools != other.old_pools ||
         size != other.size ||
         max_size_ever != other.max_size_ever ||
@@ -504,11 +500,11 @@ bool inode_t::older_is_consistent(const inode_t &other) const
 /*
  * old_inode_t
  */
-void old_inode_t::encode(bufferlist& bl) const
+void old_inode_t::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(2, 2, bl);
   ::encode(first, bl);
-  ::encode(inode, bl);
+  ::encode(inode, bl, features);
   ::encode(xattrs, bl);
   ENCODE_FINISH(bl);
 }
@@ -552,7 +548,7 @@ void old_inode_t::generate_test_instances(list<old_inode_t*>& ls)
  */
 void fnode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(version, bl);
   ::encode(snap_purged_thru, bl);
   ::encode(fragstat, bl);
@@ -560,6 +556,10 @@ void fnode_t::encode(bufferlist &bl) const
   ::encode(rstat, bl);
   ::encode(accounted_rstat, bl);
   ::encode(damage_flags, bl);
+  ::encode(recursive_scrub_version, bl);
+  ::encode(recursive_scrub_stamp, bl);
+  ::encode(localized_scrub_version, bl);
+  ::encode(localized_scrub_stamp, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -574,6 +574,12 @@ void fnode_t::decode(bufferlist::iterator &bl)
   ::decode(accounted_rstat, bl);
   if (struct_v >= 3) {
     ::decode(damage_flags, bl);
+  }
+  if (struct_v >= 4) {
+    ::decode(recursive_scrub_version, bl);
+    ::decode(recursive_scrub_stamp, bl);
+    ::decode(localized_scrub_version, bl);
+    ::decode(localized_scrub_stamp, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -665,18 +671,20 @@ void old_rstat_t::generate_test_instances(list<old_rstat_t*>& ls)
  */
 void session_info_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(4, 3, bl);
+  ENCODE_START(6, 3, bl);
   ::encode(inst, bl);
   ::encode(completed_requests, bl);
   ::encode(prealloc_inos, bl);   // hacky, see below.
   ::encode(used_inos, bl);
   ::encode(client_metadata, bl);
+  ::encode(completed_flushes, bl);
+  ::encode(auth_name, bl);
   ENCODE_FINISH(bl);
 }
 
 void session_info_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, p);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, p);
   ::decode(inst, p);
   if (struct_v <= 2) {
     set<ceph_tid_t> s;
@@ -694,6 +702,12 @@ void session_info_t::decode(bufferlist::iterator& p)
   used_inos.clear();
   if (struct_v >= 4) {
     ::decode(client_metadata, p);
+  }
+  if (struct_v >= 5) {
+    ::decode(completed_flushes, p);
+  }
+  if (struct_v >= 6) {
+    ::decode(auth_name, p);
   }
   DECODE_FINISH(p);
 }
@@ -1084,8 +1098,10 @@ void MDSCacheObject::dump_states(Formatter *f) const
     f->dump_string("state", "rejoinundef");
 }
 
-void ceph_file_layout_wrapper::dump(Formatter *f) const
+
+ostream& operator<<(ostream &out, const mds_role_t &role)
 {
-  ::dump(static_cast<const ceph_file_layout&>(*this), f);
+  out << role.fscid << ":" << role.rank;
+  return out;
 }
 

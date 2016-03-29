@@ -1,10 +1,9 @@
 # vim: expandtab smarttab shiftwidth=4 softtabstop=4
 import functools
 import socket
-import struct
 import os
+import time
 
-from contextlib import nested
 from nose import with_setup, SkipTest
 from nose.tools import eq_ as eq, assert_raises
 from rados import (Rados,
@@ -16,7 +15,6 @@ from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
                  FunctionNotSupported, ArgumentOutOfRange,
                  RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
                  RBD_FEATURE_EXCLUSIVE_LOCK)
-
 
 rados = None
 ioctx = None
@@ -39,8 +37,7 @@ def setup_module():
     ioctx = rados.open_ioctx(pool_name)
     global features
     features = os.getenv("RBD_FEATURES")
-    if features is not None:
-        features = int(features)
+    features = int(features) if features is not None else 61
 
 def teardown_module():
     global ioctx
@@ -139,15 +136,13 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
                 with Image(ioctx, image_name) as image:
                     eq(format == 1, image.old_format())
 
-                    expected_order = order
-                    if not order:
-                        expected_order = 22
+                    expected_order = int(rados.conf_get('rbd_default_order'))
                     actual_order = image.stat()['order']
                     eq(expected_order, actual_order)
 
                     expected_features = features
                     if expected_features is None or format == 1:
-                        expected_features = 0 if format == 1 else 3
+                        expected_features = 0 if format == 1 else 61
                     eq(expected_features, image.features())
 
                     expected_stripe_count = stripe_count
@@ -166,17 +161,16 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
         else:
             assert_raises(exception, RBD().create, ioctx, image_name, IMG_SIZE)
     finally:
-        for k, v in orig_vals.iteritems():
+        for k, v in orig_vals.items():
             rados.conf_set(k, v)
 
 def test_create_defaults():
     # basic format 1 and 2
     check_default_params(1)
     check_default_params(2)
-    # default order still works
-    check_default_params(1, 0)
-    check_default_params(2, 0)
     # invalid order
+    check_default_params(1, 0, exception=ArgumentOutOfRange)
+    check_default_params(2, 0, exception=ArgumentOutOfRange)
     check_default_params(1, 11, exception=ArgumentOutOfRange)
     check_default_params(2, 11, exception=ArgumentOutOfRange)
     check_default_params(1, 65, exception=ArgumentOutOfRange)
@@ -240,13 +234,13 @@ def test_open_read_only():
             eq(data, read)
 
 def test_open_dne():
-    for i in xrange(100):
+    for i in range(100):
         image_name = get_temp_image_name()
         assert_raises(ImageNotFound, Image, ioctx, image_name + 'dne')
         assert_raises(ImageNotFound, Image, ioctx, image_name, 'snap')
 
 def test_open_readonly_dne():
-    for i in xrange(100):
+    for i in range(100):
         image_name = get_temp_image_name()
         assert_raises(ImageNotFound, Image, ioctx, image_name + 'dne',
                       read_only=True)
@@ -279,7 +273,7 @@ def check_stat(info, size, order):
     assert 'block_name_prefix' in info
     eq(info['size'], size)
     eq(info['order'], order)
-    eq(info['num_objs'], size / (1 << order))
+    eq(info['num_objs'], size // (1 << order))
     eq(info['obj_size'], 1 << order)
 
 class TestImage(object):
@@ -300,11 +294,29 @@ class TestImage(object):
         self.image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, True)
         eq(features | RBD_FEATURE_EXCLUSIVE_LOCK, self.image.features())
 
+    @require_features([RBD_FEATURE_STRIPINGV2])
+    def test_create_with_params(self):
+        global features
+        image_name = get_temp_image_name()
+        order = 20
+        stripe_unit = 1 << 20
+        stripe_count = 10
+        self.rbd.create(ioctx, image_name, IMG_SIZE, order,
+                        False, features, stripe_unit, stripe_count)
+        image = Image(ioctx, image_name)
+        info = image.stat()
+        check_stat(info, IMG_SIZE, order)
+        eq(image.features(), features)
+        eq(image.stripe_unit(), stripe_unit)
+        eq(image.stripe_count(), stripe_count)
+        image.close()
+        RBD().remove(ioctx, image_name)
+
     def test_invalidate_cache(self):
-        self.image.write('abc', 0)
-        eq('abc', self.image.read(0, 3))
+        self.image.write(b'abc', 0)
+        eq(b'abc', self.image.read(0, 3))
         self.image.invalidate_cache()
-        eq('abc', self.image.read(0, 3))
+        eq(b'abc', self.image.read(0, 3))
 
     def test_stat(self):
         info = self.image.stat()
@@ -313,6 +325,9 @@ class TestImage(object):
     def test_flags(self):
         flags = self.image.flags()
         eq(0, flags)
+
+    def test_image_auto_close(self):
+        image = Image(ioctx, image_name)
 
     def test_write(self):
         data = rand_data(256)
@@ -325,13 +340,13 @@ class TestImage(object):
 
     def test_read(self):
         data = self.image.read(0, 20)
-        eq(data, '\0' * 20)
+        eq(data, b'\0' * 20)
 
     def test_read_with_fadvise_flags(self):
         data = self.image.read(0, 20, LIBRADOS_OP_FLAG_FADVISE_DONTNEED)
-        eq(data, '\0' * 20)
+        eq(data, b'\0' * 20)
         data = self.image.read(0, 20, LIBRADOS_OP_FLAG_FADVISE_RANDOM)
-        eq(data, '\0' * 20)
+        eq(data, b'\0' * 20)
 
     def test_large_write(self):
         data = rand_data(IMG_SIZE)
@@ -339,7 +354,7 @@ class TestImage(object):
 
     def test_large_read(self):
         data = self.image.read(0, IMG_SIZE)
-        eq(data, '\0' * IMG_SIZE)
+        eq(data, b'\0' * IMG_SIZE)
 
     def test_write_read(self):
         data = rand_data(256)
@@ -374,31 +389,42 @@ class TestImage(object):
         self.image.remove_snap('snap2')
 
     def test_resize_down(self):
-        new_size = IMG_SIZE / 2
+        new_size = IMG_SIZE // 2
         data = rand_data(256)
-        self.image.write(data, IMG_SIZE / 2);
+        self.image.write(data, IMG_SIZE // 2);
         self.image.resize(new_size)
         self.image.resize(IMG_SIZE)
-        read = self.image.read(IMG_SIZE / 2, 256)
-        eq('\0' * 256, read)
+        read = self.image.read(IMG_SIZE // 2, 256)
+        eq(b'\0' * 256, read)
 
     def test_resize_bytes(self):
-        new_size = IMG_SIZE / 2 - 5
+        new_size = IMG_SIZE // 2 - 5
         data = rand_data(256)
-        self.image.write(data, IMG_SIZE / 2 - 10);
+        self.image.write(data, IMG_SIZE // 2 - 10);
         self.image.resize(new_size)
         self.image.resize(IMG_SIZE)
-        read = self.image.read(IMG_SIZE / 2 - 10, 5)
+        read = self.image.read(IMG_SIZE // 2 - 10, 5)
         eq(data[:5], read)
-        read = self.image.read(IMG_SIZE / 2 - 5, 251)
-        eq('\0' * 251, read)
+        read = self.image.read(IMG_SIZE // 2 - 5, 251)
+        eq(b'\0' * 251, read)
 
-    def test_copy(self):
+    def _test_copy(self, features=None, order=None, stripe_unit=None,
+                   stripe_count=None):
         global ioctx
         data = rand_data(256)
         self.image.write(data, 256)
         image_name = get_temp_image_name()
-        self.image.copy(ioctx, image_name)
+        if features is None:
+            self.image.copy(ioctx, image_name)
+        elif order is None:
+            self.image.copy(ioctx, image_name, features)
+        elif stripe_unit is None:
+            self.image.copy(ioctx, image_name, features, order)
+        elif stripe_count is None:
+            self.image.copy(ioctx, image_name, features, order, stripe_unit)
+        else:
+            self.image.copy(ioctx, image_name, features, order, stripe_unit,
+                            stripe_count)
         assert_raises(ImageExists, self.image.copy, ioctx, image_name)
         copy = Image(ioctx, image_name)
         copy_data = copy.read(256, 256)
@@ -406,11 +432,23 @@ class TestImage(object):
         self.rbd.remove(ioctx, image_name)
         eq(data, copy_data)
 
+    def test_copy(self):
+        self._test_copy()
+
+    def test_copy2(self):
+        self._test_copy(self.image.features(), self.image.stat()['order'])
+
+    @require_features([RBD_FEATURE_STRIPINGV2])
+    def test_copy3(self):
+        global features
+        self._test_copy(features, self.image.stat()['order'],
+                        self.image.stripe_unit(), self.image.stripe_count())
+
     def test_create_snap(self):
         global ioctx
         self.image.create_snap('snap1')
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         data = rand_data(256)
         self.image.write(data, 0)
         read = self.image.read(0, 256)
@@ -418,23 +456,37 @@ class TestImage(object):
         at_snapshot = Image(ioctx, image_name, 'snap1')
         snap_data = at_snapshot.read(0, 256)
         at_snapshot.close()
-        eq(snap_data, '\0' * 256)
+        eq(snap_data, b'\0' * 256)
         self.image.remove_snap('snap1')
 
     def test_list_snaps(self):
         eq([], list(self.image.list_snaps()))
         self.image.create_snap('snap1')
-        eq(['snap1'], map(lambda snap: snap['name'], self.image.list_snaps()))
+        eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
         self.image.create_snap('snap2')
-        eq(['snap1', 'snap2'], map(lambda snap: snap['name'], self.image.list_snaps()))
+        eq(['snap1', 'snap2'], [snap['name'] for snap in self.image.list_snaps()])
         self.image.remove_snap('snap1')
         self.image.remove_snap('snap2')
+
+    def test_list_snaps_iterator_auto_close(self):
+        self.image.create_snap('snap1')
+        self.image.list_snaps()
+        self.image.remove_snap('snap1')
 
     def test_remove_snap(self):
         eq([], list(self.image.list_snaps()))
         self.image.create_snap('snap1')
-        eq(['snap1'], map(lambda snap: snap['name'], self.image.list_snaps()))
+        eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
         self.image.remove_snap('snap1')
+        eq([], list(self.image.list_snaps()))
+
+    def test_rename_snap(self):
+        eq([], list(self.image.list_snaps()))
+        self.image.create_snap('snap1')
+        eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
+        self.image.rename_snap("snap1", "snap1-rename")
+        eq(['snap1-rename'], [snap['name'] for snap in self.image.list_snaps()])
+        self.image.remove_snap('snap1-rename')
         eq([], list(self.image.list_snaps()))
 
     @require_features([RBD_FEATURE_LAYERING])
@@ -469,35 +521,35 @@ class TestImage(object):
         eq(read, data)
 
     def test_rollback_to_snap(self):
-        self.image.write('\0' * 256, 0)
+        self.image.write(b'\0' * 256, 0)
         self.image.create_snap('snap1')
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         data = rand_data(256)
         self.image.write(data, 0)
         read = self.image.read(0, 256)
         eq(read, data)
         self.image.rollback_to_snap('snap1')
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         self.image.remove_snap('snap1')
 
     def test_rollback_to_snap_sparse(self):
         self.image.create_snap('snap1')
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         data = rand_data(256)
         self.image.write(data, 0)
         read = self.image.read(0, 256)
         eq(read, data)
         self.image.rollback_to_snap('snap1')
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         self.image.remove_snap('snap1')
 
     def test_rollback_with_resize(self):
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         data = rand_data(256)
         self.image.write(data, 0)
         self.image.create_snap('snap1')
@@ -521,31 +573,31 @@ class TestImage(object):
         self.image.remove_snap('snap2')
 
     def test_set_snap(self):
-        self.image.write('\0' * 256, 0)
+        self.image.write(b'\0' * 256, 0)
         self.image.create_snap('snap1')
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         data = rand_data(256)
         self.image.write(data, 0)
         read = self.image.read(0, 256)
         eq(read, data)
         self.image.set_snap('snap1')
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         self.image.remove_snap('snap1')
 
     def test_set_no_snap(self):
-        self.image.write('\0' * 256, 0)
+        self.image.write(b'\0' * 256, 0)
         self.image.create_snap('snap1')
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         data = rand_data(256)
         self.image.write(data, 0)
         read = self.image.read(0, 256)
         eq(read, data)
         self.image.set_snap('snap1')
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         self.image.set_snap(None)
         read = self.image.read(0, 256)
         eq(read, data)
@@ -554,19 +606,19 @@ class TestImage(object):
     def test_set_snap_sparse(self):
         self.image.create_snap('snap1')
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         data = rand_data(256)
         self.image.write(data, 0)
         read = self.image.read(0, 256)
         eq(read, data)
         self.image.set_snap('snap1')
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         self.image.remove_snap('snap1')
 
     def test_many_snaps(self):
         num_snaps = 200
-        for i in xrange(num_snaps):
+        for i in range(num_snaps):
             self.image.create_snap(str(i))
         snaps = sorted(self.image.list_snaps(),
                        key=lambda snap: int(snap['name']))
@@ -574,14 +626,14 @@ class TestImage(object):
         for i, snap in enumerate(snaps):
             eq(snap['size'], IMG_SIZE)
             eq(snap['name'], str(i))
-        for i in xrange(num_snaps):
+        for i in range(num_snaps):
             self.image.remove_snap(str(i))
 
     def test_set_snap_deleted(self):
-        self.image.write('\0' * 256, 0)
+        self.image.write(b'\0' * 256, 0)
         self.image.create_snap('snap1')
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         data = rand_data(256)
         self.image.write(data, 0)
         read = self.image.read(0, 256)
@@ -594,10 +646,10 @@ class TestImage(object):
         eq(read, data)
 
     def test_set_snap_recreated(self):
-        self.image.write('\0' * 256, 0)
+        self.image.write(b'\0' * 256, 0)
         self.image.create_snap('snap1')
         read = self.image.read(0, 256)
-        eq(read, '\0' * 256)
+        eq(read, b'\0' * 256)
         data = rand_data(256)
         self.image.write(data, 0)
         read = self.image.read(0, 256)
@@ -633,23 +685,23 @@ class TestImage(object):
         eq([], self.image.list_lockers())
 
         num_shared = 10
-        for i in xrange(num_shared):
+        for i in range(num_shared):
             self.image.lock_shared(str(i), 'tag')
         lockers = self.image.list_lockers()
         eq('tag', lockers['tag'])
         assert not lockers['exclusive']
         eq(num_shared, len(lockers['lockers']))
         cookies = sorted(map(lambda x: x[1], lockers['lockers']))
-        for i in xrange(num_shared):
+        for i in range(num_shared):
             eq(str(i), cookies[i])
             self.image.unlock(str(i))
         eq([], self.image.list_lockers())
 
     def test_diff_iterate(self):
         check_diff(self.image, 0, IMG_SIZE, None, [])
-        self.image.write('a' * 256, 0)
+        self.image.write(b'a' * 256, 0)
         check_diff(self.image, 0, IMG_SIZE, None, [(0, 256, True)])
-        self.image.write('b' * 256, 256)
+        self.image.write(b'b' * 256, 256)
         check_diff(self.image, 0, IMG_SIZE, None, [(0, 512, True)])
         self.image.discard(128, 256)
         check_diff(self.image, 0, IMG_SIZE, None, [(0, 512, True)])
@@ -680,7 +732,7 @@ class TestClone(object):
         create_image()
         self.image = Image(ioctx, image_name)
         data = rand_data(256)
-        self.image.write(data, IMG_SIZE / 2)
+        self.image.write(data, IMG_SIZE // 2)
         self.image.create_snap('snap1')
         global features
         self.image.protect_snap('snap1')
@@ -697,6 +749,19 @@ class TestClone(object):
         self.image.remove_snap('snap1')
         self.image.close()
         remove_image()
+
+    @require_features([RBD_FEATURE_STRIPINGV2])
+    def test_with_params(self):
+        global features
+        self.image.create_snap('snap2')
+        self.image.protect_snap('snap2')
+        clone_name2 = get_temp_image_name()
+        self.rbd.clone(ioctx, image_name, 'snap2', ioctx, clone_name2,
+                       features, self.image.stat()['order'],
+                       self.image.stripe_unit(), self.image.stripe_count())
+        self.rbd.remove(ioctx, clone_name2)
+        self.image.unprotect_snap('snap2')
+        self.image.remove_snap('snap2')
 
     def test_unprotected(self):
         self.image.create_snap('snap2')
@@ -758,52 +823,52 @@ class TestClone(object):
         eq(clone_info['size'], self.clone.overlap())
 
     def test_resize_stat(self):
-        self.clone.resize(IMG_SIZE / 2)
+        self.clone.resize(IMG_SIZE // 2)
         image_info = self.image.stat()
         clone_info = self.clone.stat()
-        eq(clone_info['size'], IMG_SIZE / 2)
+        eq(clone_info['size'], IMG_SIZE // 2)
         eq(image_info['size'], IMG_SIZE)
-        eq(self.clone.overlap(), IMG_SIZE / 2)
+        eq(self.clone.overlap(), IMG_SIZE // 2)
 
         self.clone.resize(IMG_SIZE * 2)
         image_info = self.image.stat()
         clone_info = self.clone.stat()
         eq(clone_info['size'], IMG_SIZE * 2)
         eq(image_info['size'], IMG_SIZE)
-        eq(self.clone.overlap(), IMG_SIZE / 2)
+        eq(self.clone.overlap(), IMG_SIZE // 2)
 
     def test_resize_io(self):
-        parent_data = self.image.read(IMG_SIZE / 2, 256)
+        parent_data = self.image.read(IMG_SIZE // 2, 256)
         self.image.resize(0)
-        self.clone.resize(IMG_SIZE / 2 + 128)
-        child_data = self.clone.read(IMG_SIZE / 2, 128)
+        self.clone.resize(IMG_SIZE // 2 + 128)
+        child_data = self.clone.read(IMG_SIZE // 2, 128)
         eq(child_data, parent_data[:128])
         self.clone.resize(IMG_SIZE)
-        child_data = self.clone.read(IMG_SIZE / 2, 256)
-        eq(child_data, parent_data[:128] + ('\0' * 128))
-        self.clone.resize(IMG_SIZE / 2 + 1)
-        child_data = self.clone.read(IMG_SIZE / 2, 1)
-        eq(child_data, parent_data[0])
+        child_data = self.clone.read(IMG_SIZE // 2, 256)
+        eq(child_data, parent_data[:128] + (b'\0' * 128))
+        self.clone.resize(IMG_SIZE // 2 + 1)
+        child_data = self.clone.read(IMG_SIZE // 2, 1)
+        eq(child_data, parent_data[0:1])
         self.clone.resize(0)
         self.clone.resize(IMG_SIZE)
-        child_data = self.clone.read(IMG_SIZE / 2, 256)
-        eq(child_data, '\0' * 256)
+        child_data = self.clone.read(IMG_SIZE // 2, 256)
+        eq(child_data, b'\0' * 256)
 
     def test_read(self):
-        parent_data = self.image.read(IMG_SIZE / 2, 256)
-        child_data = self.clone.read(IMG_SIZE / 2, 256)
+        parent_data = self.image.read(IMG_SIZE // 2, 256)
+        child_data = self.clone.read(IMG_SIZE // 2, 256)
         eq(child_data, parent_data)
 
     def test_write(self):
-        parent_data = self.image.read(IMG_SIZE / 2, 256)
+        parent_data = self.image.read(IMG_SIZE // 2, 256)
         new_data = rand_data(256)
-        self.clone.write(new_data, IMG_SIZE / 2 + 256)
-        child_data = self.clone.read(IMG_SIZE / 2 + 256, 256)
+        self.clone.write(new_data, IMG_SIZE // 2 + 256)
+        child_data = self.clone.read(IMG_SIZE // 2 + 256, 256)
         eq(child_data, new_data)
-        child_data = self.clone.read(IMG_SIZE / 2, 256)
+        child_data = self.clone.read(IMG_SIZE // 2, 256)
         eq(child_data, parent_data)
-        parent_data = self.image.read(IMG_SIZE / 2 + 256, 256)
-        eq(parent_data, '\0' * 256)
+        parent_data = self.image.read(IMG_SIZE // 2 + 256, 256)
+        eq(parent_data, b'\0' * 256)
 
     def check_children(self, expected):
         actual = self.image.list_children()
@@ -823,13 +888,13 @@ class TestClone(object):
 
         clone_name = get_temp_image_name() + '_'
         expected_children = []
-        for i in xrange(10):
+        for i in range(10):
             self.rbd.clone(ioctx, image_name, 'snap1', ioctx,
                            clone_name + str(i), features)
             expected_children.append((pool_name, clone_name + str(i)))
             self.check_children(expected_children)
 
-        for i in xrange(10):
+        for i in range(10):
             self.rbd.remove(ioctx, clone_name + str(i))
             expected_children.pop(0)
             self.check_children(expected_children)
@@ -867,7 +932,7 @@ class TestClone(object):
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
                        features, new_order)
         with Image(ioctx, clone_name2) as clone:
-            clone.resize(IMG_SIZE / 2 - 1)
+            clone.resize(IMG_SIZE // 2 - 1)
             clone.flatten()
             eq(0, clone.overlap())
         self.rbd.remove(ioctx, clone_name2)
@@ -876,7 +941,7 @@ class TestClone(object):
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
                        features, new_order)
         with Image(ioctx, clone_name2) as clone:
-            clone.resize(IMG_SIZE / 2 + 1)
+            clone.resize(IMG_SIZE // 2 + 1)
             clone.flatten()
             eq(clone.overlap(), 0)
         self.rbd.remove(ioctx, clone_name2)
@@ -899,15 +964,15 @@ class TestClone(object):
         with Image(ioctx, clone_name2) as clone:
             with Image(ioctx, clone_name2) as clone2:
                 # cache object non-existence
-                data = clone.read(IMG_SIZE / 2, 256)
-                clone2_data = clone2.read(IMG_SIZE / 2, 256)
+                data = clone.read(IMG_SIZE // 2, 256)
+                clone2_data = clone2.read(IMG_SIZE // 2, 256)
                 eq(data, clone2_data)
                 clone.flatten()
                 assert_raises(ImageNotFound, clone.parent_info)
                 assert_raises(ImageNotFound, clone2.parent_info)
-                after_flatten = clone.read(IMG_SIZE / 2, 256)
+                after_flatten = clone.read(IMG_SIZE // 2, 256)
                 eq(data, after_flatten)
-                after_flatten = clone2.read(IMG_SIZE / 2, 256)
+                after_flatten = clone2.read(IMG_SIZE // 2, 256)
                 eq(data, after_flatten)
         self.rbd.remove(ioctx, clone_name2)
 
@@ -962,9 +1027,8 @@ class TestExclusiveLock(object):
         rados2.shutdown()
 
     def test_ownership(self):
-        with nested(Image(ioctx, image_name), Image(ioctx2, image_name)) as (
-                image1, image2):
-            image1.write('0'*256, 0)
+        with Image(ioctx, image_name) as image1, Image(ioctx2, image_name) as image2:
+            image1.write(b'0'*256, 0)
             eq(image1.is_exclusive_lock_owner(), True)
             eq(image2.is_exclusive_lock_owner(), False)
 
@@ -974,7 +1038,7 @@ class TestExclusiveLock(object):
             eq(image.is_exclusive_lock_owner(), True)
         try:
             with Image(ioctx, image_name) as image:
-                image.write('0'*256, 0)
+                image.write(b'0'*256, 0)
                 eq(image.is_exclusive_lock_owner(), True)
                 image.set_snap('snap')
                 eq(image.is_exclusive_lock_owner(), False)
@@ -994,14 +1058,13 @@ class TestExclusiveLock(object):
             image.protect_snap('snap')
         try:
             RBD().clone(ioctx, image_name, 'snap', ioctx, 'clone', features)
-            with nested(Image(ioctx, 'clone'), Image(ioctx2, 'clone')) as (
-                    image1, image2):
+            with Image(ioctx, 'clone') as image1, Image(ioctx2, 'clone') as image2:
                 data = rand_data(256)
                 image1.write(data, 0)
                 image2.flatten()
                 assert_raises(ImageNotFound, image1.parent_info)
                 parent = True
-                for x in xrange(30):
+                for x in range(30):
                     try:
                         image2.parent_info()
                     except ImageNotFound:
@@ -1015,27 +1078,24 @@ class TestExclusiveLock(object):
                 image.remove_snap('snap')
 
     def test_follower_resize(self):
-        with nested(Image(ioctx, image_name), Image(ioctx2, image_name)) as (
-                image1, image2):
-            image1.write('0'*256, 0)
-            for new_size in [IMG_SIZE * 2, IMG_SIZE / 2]:
+        with Image(ioctx, image_name) as image1, Image(ioctx2, image_name) as image2:
+            image1.write(b'0'*256, 0)
+            for new_size in [IMG_SIZE * 2, IMG_SIZE // 2]:
                 image2.resize(new_size);
                 eq(new_size, image1.size())
-                for x in xrange(30):
+                for x in range(30):
                     if new_size == image2.size():
                         break
                     time.sleep(1)
                 eq(new_size, image2.size())
 
     def test_follower_snap_create(self):
-        with nested(Image(ioctx, image_name), Image(ioctx2, image_name)) as (
-                image1, image2):
+        with Image(ioctx, image_name) as image1, Image(ioctx2, image_name) as image2:
             image2.create_snap('snap1')
             image1.remove_snap('snap1')
 
     def test_follower_snap_rollback(self):
-        with nested(Image(ioctx, image_name), Image(ioctx2, image_name)) as (
-                image1, image2):
+        with Image(ioctx, image_name) as image1, Image(ioctx2, image_name) as image2:
             image1.create_snap('snap')
             try:
                 assert_raises(ReadOnlyImage, image2.rollback_to_snap, 'snap')
@@ -1044,24 +1104,22 @@ class TestExclusiveLock(object):
                 image1.remove_snap('snap')
 
     def test_follower_discard(self):
-        with nested(Image(ioctx, image_name), Image(ioctx2, image_name)) as (
-                image1, image2):
+        with Image(ioctx, image_name) as image1, Image(ioctx2, image_name) as image2:
             data = rand_data(256)
             image1.write(data, 0)
             image2.discard(0, 256)
             eq(image1.is_exclusive_lock_owner(), False)
             eq(image2.is_exclusive_lock_owner(), True)
             read = image2.read(0, 256)
-            eq(256*'\0', read)
+            eq(256 * b'\0', read)
 
     def test_follower_write(self):
-        with nested(Image(ioctx, image_name), Image(ioctx2, image_name)) as (
-                image1, image2):
+        with Image(ioctx, image_name) as image1, Image(ioctx2, image_name) as image2:
             data = rand_data(256)
             image1.write(data, 0)
-            image2.write(data, IMG_SIZE / 2)
+            image2.write(data, IMG_SIZE // 2)
             eq(image1.is_exclusive_lock_owner(), False)
             eq(image2.is_exclusive_lock_owner(), True)
-            for offset in [0, IMG_SIZE / 2]:
+            for offset in [0, IMG_SIZE // 2]:
                 read = image2.read(offset, 256)
                 eq(data, read)

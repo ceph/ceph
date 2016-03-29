@@ -14,5 +14,5 @@ implements a feature. Except on rare occasions, code cleanup that only
 involve coding style or whitespace modifications are discouraged,
 primarily because they cause problems when rebasing and backporting.
 
-.. _Submitting Patches: SubmittingPatches
+.. _Submitting Patches: SubmittingPatches.rst
 .. _Documenting Ceph:  doc/start/documenting-ceph.rst

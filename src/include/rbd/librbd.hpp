@@ -29,6 +29,7 @@ namespace librbd {
   using librados::IoCtx;
 
   class Image;
+  class ImageOptions;
   typedef void *image_ctx_t;
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
@@ -44,6 +45,20 @@ namespace librbd {
     std::string cookie;
     std::string address;
   } locker_t;
+
+  typedef struct {
+    std::string uuid;
+    std::string cluster_name;
+    std::string client_name;
+  } mirror_peer_t;
+
+  typedef rbd_mirror_image_state_t mirror_image_state_t;
+
+  typedef struct {
+    std::string global_id;
+    mirror_image_state_t state;
+    bool primary;
+  } mirror_image_info_t;
 
   typedef rbd_image_info_t image_info_t;
 
@@ -69,6 +84,7 @@ public:
     bool is_complete();
     int wait_for_complete();
     ssize_t get_return_value();
+    void *get_arg();
     void release();
   };
 
@@ -76,9 +92,13 @@ public:
 
   int open(IoCtx& io_ctx, Image& image, const char *name);
   int open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname);
+  int aio_open(IoCtx& io_ctx, Image& image, const char *name,
+	       const char *snapname, RBD::AioCompletion *c);
   // see librbd.h
   int open_read_only(IoCtx& io_ctx, Image& image, const char *name,
 		     const char *snapname);
+  int aio_open_read_only(IoCtx& io_ctx, Image& image, const char *name,
+			 const char *snapname, RBD::AioCompletion *c);
   int list(IoCtx& io_ctx, std::vector<std::string>& names);
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
@@ -86,20 +106,58 @@ public:
   int create3(IoCtx& io_ctx, const char *name, uint64_t size,
 	      uint64_t features, int *order,
 	      uint64_t stripe_unit, uint64_t stripe_count);
+  int create4(IoCtx& io_ctx, const char *name, uint64_t size,
+	      ImageOptions& opts);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
 	       IoCtx& c_ioctx, const char *c_name, uint64_t features,
 	       int *c_order);
   int clone2(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
 	     IoCtx& c_ioctx, const char *c_name, uint64_t features,
 	     int *c_order, uint64_t stripe_unit, int stripe_count);
+  int clone3(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
+	     IoCtx& c_ioctx, const char *c_name, ImageOptions& opts);
   int remove(IoCtx& io_ctx, const char *name);
   int remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& pctx);
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
+
+  // RBD pool mirroring support functions
+  int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
+  int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
+  int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
+                      const std::string &cluster_name,
+                      const std::string &client_name);
+  int mirror_peer_remove(IoCtx& io_ctx, const std::string &uuid);
+  int mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers);
+  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &uuid,
+                             const std::string &client_name);
+  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
+                              const std::string &cluster_name);
 
 private:
   /* We don't allow assignment or copying */
   RBD(const RBD& rhs);
   const RBD& operator=(const RBD& rhs);
+};
+
+class CEPH_RBD_API ImageOptions {
+public:
+  ImageOptions();
+  ImageOptions(rbd_image_options_t opts);
+  ~ImageOptions();
+
+  int set(int optname, const std::string& optval);
+  int set(int optname, uint64_t optval);
+  int get(int optname, std::string* optval) const;
+  int get(int optname, uint64_t* optval) const;
+  int unset(int optname);
+  void clear();
+  bool empty() const;
+
+private:
+  friend class RBD;
+  friend class Image;
+
+  rbd_image_options_t opts;
 };
 
 class CEPH_RBD_API Image
@@ -109,6 +167,7 @@ public:
   ~Image();
 
   int close();
+  int aio_close(RBD::AioCompletion *c);
 
   int resize(uint64_t size);
   int resize_with_progress(uint64_t size, ProgressContext& pctx);
@@ -121,6 +180,7 @@ public:
   int update_features(uint64_t features, bool enabled);
   int overlap(uint64_t *overlap);
   int get_flags(uint64_t *flags);
+  int set_image_notification(int fd, int type);
 
   /* exclusive lock feature */
   int is_exclusive_lock_owner(bool *is_owner);
@@ -130,9 +190,12 @@ public:
 
   int copy(IoCtx& dest_io_ctx, const char *destname);
   int copy2(Image& dest);
+  int copy3(IoCtx& dest_io_ctx, const char *destname, ImageOptions& opts);
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 			 ProgressContext &prog_ctx);
   int copy_with_progress2(Image& dest, ProgressContext &prog_ctx);
+  int copy_with_progress3(IoCtx& dest_io_ctx, const char *destname,
+			  ImageOptions& opts, ProgressContext &prog_ctx);
 
   /* striping */
   uint64_t get_stripe_unit() const;
@@ -156,7 +219,9 @@ public:
 
   /* snapshots */
   int snap_list(std::vector<snap_info_t>& snaps);
-  bool snap_exists(const char *snapname);
+  /* DEPRECATED; use snap_exists2 */
+  bool snap_exists(const char *snapname) __attribute__ ((deprecated));
+  int snap_exists2(const char *snapname, bool *exists);
   int snap_create(const char *snapname);
   int snap_remove(const char *snapname);
   int snap_rollback(const char *snap_name);
@@ -165,10 +230,11 @@ public:
   int snap_unprotect(const char *snap_name);
   int snap_is_protected(const char *snap_name, bool *is_protected);
   int snap_set(const char *snap_name);
+  int snap_rename(const char *srcname, const char *dstname);
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);
-  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   ssize_t read2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);
   int64_t read_iterate(uint64_t ofs, size_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
@@ -204,12 +270,12 @@ public:
 		    int (*cb)(uint64_t, size_t, int, void *), void *arg);
 
   ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
-  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   ssize_t write2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);
   int discard(uint64_t ofs, uint64_t len);
 
   int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
-  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   int aio_write2(uint64_t off, size_t len, ceph::bufferlist& bl,
 		  RBD::AioCompletion *c, int op_flags);
   /**
@@ -230,7 +296,7 @@ public:
    * @param c aio completion to notify when read is complete
    */
   int aio_read(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
-  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   int aio_read2(uint64_t off, size_t len, ceph::bufferlist& bl,
 		  RBD::AioCompletion *c, int op_flags);
   int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);
@@ -253,6 +319,8 @@ public:
    */
   int invalidate_cache();
 
+  int poll_io_events(RBD::AioCompletion **comps, int numcomp);
+
   int metadata_get(const std::string &key, std::string *value);
   int metadata_set(const std::string &key, const std::string &value);
   int metadata_remove(const std::string &key);
@@ -260,6 +328,15 @@ public:
    * Returns a pair of key/value for this image
    */
   int metadata_list(const std::string &start, uint64_t max, std::map<std::string, ceph::bufferlist> *pairs);
+
+  // RBD image mirroring support functions
+  int mirror_image_enable();
+  int mirror_image_disable(bool force);
+  int mirror_image_promote(bool force);
+  int mirror_image_demote();
+  int mirror_image_resync();
+  int mirror_image_get_info(mirror_image_info_t *mirror_image_info,
+                            size_t info_size);
 
 private:
   friend class RBD;

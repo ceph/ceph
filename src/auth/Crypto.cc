@@ -243,7 +243,6 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
 			 out_tmp.length()-written);
   PK11_DestroyContext(ectx, PR_TRUE);
   if (ret != SECSuccess) {
-    PK11_DestroyContext(ectx, PR_TRUE);
     if (error) {
       ostringstream oss;
       oss << "NSS AES final round failed: " << PR_GetError();
@@ -355,6 +354,7 @@ CryptoKeyHandler *CryptoAES::get_key_handler(const bufferptr& secret,
   ostringstream oss;
   if (ckh->init(secret, oss) < 0) {
     error = oss.str();
+    delete ckh;
     return NULL;
   }
   return ckh;
@@ -420,6 +420,8 @@ int CryptoKey::_set_secret(int t, const bufferptr& s)
     if (error.length()) {
       return -EIO;
     }
+  } else {
+      return -EOPNOTSUPP;
   }
   type = t;
   secret = s;

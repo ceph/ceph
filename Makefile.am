@@ -10,15 +10,22 @@ EXTRA_DIST += \
 	src/test/cli \
 	src/test/downloads \
 	systemd/ceph.tmpfiles.d \
-	etc/ceph.limits.d \
+	etc/default/ceph \
+	etc/sysconfig/ceph \
+	etc/sysconfig/SuSEfirewall2.d/services/ceph-mon \
+	etc/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds \
 	udev/50-rbd.rules \
 	udev/60-ceph-partuuid-workaround.rules \
 	udev/95-ceph-osd.rules \
-	udev/95-ceph-osd.rules.systemd \
 	udev/95-ceph-osd-alt.rules \
 	share/known_hosts_drop.ceph.com \
 	share/id_dsa_drop.ceph.com \
 	share/id_dsa_drop.ceph.com.pub
+
+NPROC = nproc
+if FREEBSD
+	NPROC = sysctl -n hw.ncpu
+endif
 
 # why is it so hard to make autotools to this?
 install-data-local::
@@ -44,7 +51,7 @@ check-local:: all
 	@cd src/gmock && $(MAKE) $(AM_MAKEFLAGS) lib/libgmock.la lib/libgmock_main.la
 #	exercise cli tools
 	u=`ulimit -u` ; \
-	p=`expr $(shell nproc) / 2` ; \
+	p=`expr $(shell ${NPROC}) / 2` ; \
 	n=`expr $$p \* 1024` ; \
 	if ${CHECK_ULIMIT} && echo ${MAKEFLAGS} | grep --quiet -e -j && test $$u -lt $$n ; then \
 		echo "ulimit -u is $$u which is lower than $$n = $$p / 2 * 1024" ; \
@@ -54,6 +61,11 @@ check-local:: all
 		echo "or run make CHECK_ULIMIT=false -j4 check to override this safeguard." ; \
 		exit 1 ; \
 	fi
+
+# display the output of failed check_SCRIPTS after a failed make check
+export VERBOSE = true
+
+TESTS = $(check_SCRIPTS)
 
 check_SCRIPTS = \
 	src/test/run-cli-tests

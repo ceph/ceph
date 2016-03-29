@@ -120,6 +120,10 @@ enum {
   LIBRADOS_OPERATION_IGNORE_CACHE       = 8,
   LIBRADOS_OPERATION_SKIPRWLOCKS        = 16,
   LIBRADOS_OPERATION_IGNORE_OVERLAY     = 32,
+  /* send requests to cluster despite the cluster or pool being marked
+     full; ops will either succeed (e.g., delete) or return EDQUOT or
+     ENOSPC. */
+  LIBRADOS_OPERATION_FULL_TRY           = 64,
 };
 /** @} */
 
@@ -141,7 +145,7 @@ enum {
 typedef void *rados_t;
 
 /**
- * @tyepdef rados_config_t
+ * @typedef rados_config_t
  *
  * A handle for the ceph configuration context for the rados_t cluster
  * instance.  This can be used to share configuration context/state
@@ -184,6 +188,25 @@ typedef void *rados_ioctx_t;
  * rados_nobjects_list_close().
  */
 typedef void *rados_list_ctx_t;
+
+/**
+ * @typedef rados_object_list_cursor
+ *
+ * The cursor used with rados_enumerate_objects
+ * and accompanying methods.
+ */
+typedef void * rados_object_list_cursor;
+
+typedef struct rados_object_list_item {
+  size_t oid_length;
+  char *oid;
+
+  size_t nspace_length;
+  char *nspace;
+
+  size_t locator_length;
+  char *locator;
+} rados_object_list_item;
 
 /**
  * @typedef rados_snap_t
@@ -592,6 +615,25 @@ CEPH_RADOS_API int rados_wait_for_latest_osdmap(rados_t cluster);
 CEPH_RADOS_API int rados_pool_list(rados_t cluster, char *buf, size_t len);
 
 /**
+ * List inconsistent placement groups of the given pool
+ *
+ * Gets a list of inconsistent placement groups as NULL-terminated strings.
+ * The placement group names will be placed in the supplied buffer one after
+ * another. After the last name, there will be two 0 types in a row.
+ *
+ * If len is too short to fit all the placement group entries we need, we  will
+ * fill as much as we can.
+ *
+ * @param cluster cluster handle
+ * @param pool pool ID
+ * @param buf output buffer
+ * @param len output buffer length
+ * @returns length of the buffer we would need to list all pools
+ */
+CEPH_RADOS_API int rados_inconsistent_pg_list(rados_t cluster, int64_t pool,
+					      char *buf, size_t len);
+
+/**
  * Get a configuration handle for a rados cluster handle
  *
  * This handle is valid only as long as the cluster handle is valid.
@@ -785,7 +827,7 @@ CEPH_RADOS_API int rados_pool_get_base_tier(rados_t cluster, int64_t pool,
 CEPH_RADOS_API int rados_pool_delete(rados_t cluster, const char *pool_name);
 
 /**
- * Attempt to change an io context's associated auid "owner."
+ * Attempt to change an io context's associated auid "owner"
  *
  * Requires that you have write permission on both the current and new
  * auid.
@@ -805,8 +847,33 @@ CEPH_RADOS_API int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
  */
 CEPH_RADOS_API int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
 
-CEPH_RADOS_API int rados_ioctx_pool_requires_alignment(rados_ioctx_t io);
-CEPH_RADOS_API uint64_t rados_ioctx_pool_required_alignment(rados_ioctx_t io);
+/* deprecated, use rados_ioctx_pool_requires_alignment2 instead */
+CEPH_RADOS_API int rados_ioctx_pool_requires_alignment(rados_ioctx_t io)
+  __attribute__((deprecated));
+
+/**
+ * Test whether the specified pool requires alignment or not.
+ *
+ * @param io pool to query
+ * @param requires 1 if alignment is supported, 0 if not. 
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_ioctx_pool_requires_alignment2(rados_ioctx_t io,
+  int *requires);
+
+/* deprecated, use rados_ioctx_pool_required_alignment2 instead */
+CEPH_RADOS_API uint64_t rados_ioctx_pool_required_alignment(rados_ioctx_t io)
+  __attribute__((deprecated));
+
+/**
+ * Get the alignment flavor of a pool
+ *
+ * @param io pool to query
+ * @param alignment where to store the alignment flavor
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_ioctx_pool_required_alignment2(rados_ioctx_t io,
+  uint64_t *alignment);
 
 /**
  * Get the pool id of the io context
@@ -926,6 +993,56 @@ CEPH_RADOS_API int rados_nobjects_list_next(rados_list_ctx_t ctx,
  * @param ctx the handle to close
  */
 CEPH_RADOS_API void rados_nobjects_list_close(rados_list_ctx_t ctx);
+
+CEPH_RADOS_API rados_object_list_cursor rados_object_list_begin(rados_ioctx_t io);
+CEPH_RADOS_API rados_object_list_cursor rados_object_list_end(rados_ioctx_t io);
+
+CEPH_RADOS_API int rados_object_list_is_end(rados_ioctx_t io,
+    rados_object_list_cursor cur);
+
+CEPH_RADOS_API void rados_object_list_cursor_free(rados_ioctx_t io,
+    rados_object_list_cursor cur);
+
+CEPH_RADOS_API int rados_object_list_cursor_cmp(rados_ioctx_t io,
+    rados_object_list_cursor lhs, rados_object_list_cursor rhs);
+
+/**
+ * @return the number of items set in the result array
+ */
+CEPH_RADOS_API int rados_object_list(rados_ioctx_t io,
+    const rados_object_list_cursor start,
+    const rados_object_list_cursor finish,
+    const size_t result_size,
+    const char *filter_buf,
+    const size_t filter_buf_len,
+    rados_object_list_item *results,
+    rados_object_list_cursor *next);
+
+CEPH_RADOS_API void rados_object_list_free(
+    const size_t result_size,
+    rados_object_list_item *results);
+
+/**
+ * Obtain cursors delineating a subset of a range.  Use this
+ * when you want to split up the work of iterating over the
+ * global namespace.  Expected use case is when you are iterating
+ * in parallel, with `m` workers, and each worker taking an id `n`.
+ *
+ * @param start start of the range to be sliced up (inclusive)
+ * @param finish end of the range to be sliced up (exclusive)
+ * @param m how many chunks to divide start-finish into
+ * @param n which of the m chunks you would like to get cursors for
+ * @param split_start cursor populated with start of the subrange (inclusive)
+ * @param split_finish cursor populated with end of the subrange (exclusive)
+ */
+CEPH_RADOS_API void rados_object_list_slice(rados_ioctx_t io,
+    const rados_object_list_cursor start,
+    const rados_object_list_cursor finish,
+    const size_t n,
+    const size_t m,
+    rados_object_list_cursor *split_start,
+    rados_object_list_cursor *split_finish);
+
 
 /** @} New Listing Objects */
 
@@ -1990,6 +2107,34 @@ CEPH_RADOS_API int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *cooki
 				void *arg);
 
 /**
+ * Asynchronous register an interest in an object
+ *
+ * A watch operation registers the client as being interested in
+ * notifications on an object. OSDs keep track of watches on
+ * persistent storage, so they are preserved across cluster changes by
+ * the normal recovery process. If the client loses its connection to
+ * the primary OSD for a watched object, the watch will be removed
+ * after 30 seconds. Watches are automatically reestablished when a new
+ * connection is made, or a placement group switches OSDs.
+ *
+ * @note BUG: watch timeout should be configurable
+ *
+ * @param io the pool the object is in
+ * @param o the object to watch
+ * @param completion what to do when operation has been attempted
+ * @param handle where to store the internal id assigned to this watch
+ * @param watchcb what to do when a notify is received on this object
+ * @param watcherrcb what to do when the watch session encounters an error
+ * @param arg opaque value to pass to the callback
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_watch(rados_ioctx_t io, const char *o,
+				   rados_completion_t completion, uint64_t *handle,
+				   rados_watchcb2_t watchcb,
+				   rados_watcherrcb_t watcherrcb,
+				   void *arg);
+
+/**
  * Check on the status of a watch
  *
  * Return the number of milliseconds since the watch was last confirmed.
@@ -2030,6 +2175,20 @@ CEPH_RADOS_API int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t cooki
  * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_unwatch2(rados_ioctx_t io, uint64_t cookie);
+
+/**
+ * Asynchronous unregister an interest in an object
+ *
+ * Once this completes, no more notifies will be sent to us for this
+ * watch. This should be called to clean up unneeded watchers.
+ *
+ * @param io the pool the object is in
+ * @param completion what to do when operation has been attempted
+ * @param cookie which watch to unregister
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_unwatch(rados_ioctx_t io, uint64_t cookie,
+                                     rados_completion_t completion);
 
 /**
  * Sychronously notify watchers of an object
@@ -2088,6 +2247,7 @@ CEPH_RADOS_API int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver,
  * -ETIMEDOUT).
  *
  * @param io the pool the object is in
+ * @param completion what to do when operation has been attempted
  * @param o the name of the object
  * @param buf data to send to watchers
  * @param buf_len length of buf in bytes
@@ -2100,6 +2260,11 @@ CEPH_RADOS_API int rados_notify2(rados_ioctx_t io, const char *o,
 				 const char *buf, int buf_len,
 				 uint64_t timeout_ms,
 				 char **reply_buffer, size_t *reply_buffer_len);
+CEPH_RADOS_API int rados_aio_notify(rados_ioctx_t io, const char *o,
+                                    rados_completion_t completion,
+                                    const char *buf, int buf_len,
+                                    uint64_t timeout_ms, char **reply_buffer,
+                                    size_t *reply_buffer_len);
 
 /**
  * Acknolwedge receipt of a notify
@@ -2129,8 +2294,46 @@ CEPH_RADOS_API int rados_notify_ack(rados_ioctx_t io, const char *o,
  * @param cluster the cluster handle
  */
 CEPH_RADOS_API int rados_watch_flush(rados_t cluster);
+/**
+ * Flush watch/notify callbacks
+ *
+ * This call will be nonblock, and the completion will be called
+ * until all pending watch/notify callbacks have been executed and
+ * the queue is empty.  It should usually be called after shutting
+ * down any watches before shutting down the ioctx or
+ * librados to ensure that any callbacks do not misuse the ioctx (for
+ * example by calling rados_notify_ack after the ioctx has been
+ * destroyed).
+ *
+ * @param cluster the cluster handle
+ * @param completion what to do when operation has been attempted
+ */
+CEPH_RADOS_API int rados_aio_watch_flush(rados_t cluster, rados_completion_t completion);
 
 /** @} Watch/Notify */
+
+/**
+ * Pin an object in the cache tier
+ *
+ * When an object is pinned in the cache tier, it stays in the cache
+ * tier, and won't be flushed out.
+ *
+ * @param io the pool the object is in
+ * @param o the object id
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_cache_pin(rados_ioctx_t io, const char *o);
+
+/**
+ * Unpin an object in the cache tier
+ *
+ * After an object is unpinned in the cache tier, it can be flushed out
+ *
+ * @param io the pool the object is in
+ * @param o the object id
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_cache_unpin(rados_ioctx_t io, const char *o);
 
 /**
  * @name Hints
@@ -2415,6 +2618,21 @@ CEPH_RADOS_API int rados_write_op_operate(rados_write_op_t write_op,
 			                  const char *oid,
 			                  time_t *mtime,
 			                  int flags);
+/**
+ * Perform a write operation synchronously
+ * @param write_op operation to perform
+ * @param io the ioctx that the object is in
+ * @param oid the object id
+ * @param mtime the time to set the mtime to, NULL for the current time
+ * @param flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
+ */
+
+CEPH_RADOS_API int rados_write_op_operate2(rados_write_op_t write_op,
+                                           rados_ioctx_t io,
+                                           const char *oid,
+                                           struct timespec *mtime,
+                                           int flags);
+
 /**
  * Perform a write operation asynchronously
  * @param write_op operation to perform

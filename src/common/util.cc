@@ -25,25 +25,10 @@
 #include <sys/vfs.h>
 #endif
 
-// test if an entire buf is zero in 8-byte chunks
-bool buf_is_zero(const char *buf, size_t len)
-{
-  size_t ofs;
-  int chunk = sizeof(uint64_t);
-
-  for (ofs = 0; ofs < len; ofs += sizeof(uint64_t)) {
-    if (*(uint64_t *)(buf + ofs) != 0) {
-      return false;
-    }
-  }
-  for (ofs = (len / chunk) * chunk; ofs < len; ofs++) {
-    if (buf[ofs] != '\0') {
-      return false;
-    }
-  }
-  return true;
-}
-
+#if defined(DARWIN) || defined(__FreeBSD__)
+#include <sys/param.h>
+#include <sys/mount.h>
+#endif
 
 int64_t unit_to_bytesize(string val, ostream *pss)
 {

@@ -21,6 +21,7 @@ static const __u8 MON_CAP_ANY   = 0xff;          // *
 struct mon_rwxa_t {
   __u8 val;
 
+  // cppcheck-suppress noExplicitConstructor
   mon_rwxa_t(__u8 v = 0) : val(v) {}
   mon_rwxa_t& operator=(__u8 v) {
     val = v;
@@ -79,8 +80,10 @@ struct MonCapGrant {
   void expand_profile(EntityName name) const;
 
   MonCapGrant() : allow(0) {}
+  // cppcheck-suppress noExplicitConstructor
   MonCapGrant(mon_rwxa_t a) : allow(a) {}
   MonCapGrant(string s, mon_rwxa_t a) : service(s), allow(a) {}
+  // cppcheck-suppress noExplicitConstructor  
   MonCapGrant(string c) : command(c) {}
   MonCapGrant(string c, string a, StringConstraint co) : command(c) {
     command_args[a] = co;
@@ -118,7 +121,7 @@ struct MonCap {
   std::vector<MonCapGrant> grants;
 
   MonCap() {}
-  MonCap(std::vector<MonCapGrant> g) : grants(g) {}
+  explicit MonCap(std::vector<MonCapGrant> g) : grants(g) {}
 
   string get_str() const {
     return text;

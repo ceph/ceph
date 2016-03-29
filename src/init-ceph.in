@@ -12,7 +12,10 @@
 # Description:       Enable Ceph distributed file system services.
 ### END INIT INFO
 
-. /lib/lsb/init-functions
+# TODO: on FreeBSD/OSX, use equivalent script file
+if [ -e /lib/lsb/init-functions ]; then
+    . /lib/lsb/init-functions
+fi
 
 # detect systemd, also check whether the systemd-run binary exists
 SYSTEMD_RUN=$(which systemd-run 2>/dev/null)
@@ -23,32 +26,48 @@ grep -qs systemd /proc/1/comm || SYSTEMD_RUN=""
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     BINDIR=.
     SBINDIR=.
-    LIBDIR=.
+    LIBEXECDIR=.
     ETCDIR=.
     SYSTEMD_RUN=""
     ASSUME_DEV=1
 else
     BINDIR=@bindir@
     SBINDIR=@prefix@/sbin
-    LIBDIR=@libdir@/ceph
+    LIBEXECDIR=@libexecdir@/ceph
     ETCDIR=@sysconfdir@/ceph
     ASSUME_DEV=0
 fi
 
 usage_exit() {
     echo "usage: $0 [options] {start|stop|restart|condrestart} [mon|osd|mds]..."
-    printf "\t-c ceph.conf\n"
-    printf "\t--cluster [cluster name]\tdefine the cluster name\n"
-    printf "\t--valgrind\trun via valgrind\n"
-    printf "\t--hostname [hostname]\toverride hostname lookup\n"
+    printf "Core options:\n"
+    printf "\t--allhosts / -a           execute (via ssh) on all hosts in conf file\n"
+    printf "\t--cluster [cluster name]  define the cluster name\n"
+    printf "\t--conf / -c [conf file]   use [conf file] instead of default\n"
+    printf "\t--help / -h               show this usage message\n"
+    printf "\t--hostname [hostname]     override hostname lookup\n"
+    printf "\t-m [mon addr]             mon address\n"
+    printf "\n"
+    printf "Other options:\n"
+    printf "\t--btrfs                   btrfs\n"
+    printf "\t--nobtrfs                 no btrfs\n"
+    printf "\t--btrfsumount             btrfs umount\n"
+    printf "\t--fsmount                 fsmount\n"
+    printf "\t--nofsmount               no fsmount\n"
+    printf "\t--fsumount                fsumount\n"
+    printf "\t--restart                 restart on core dump\n"
+    printf "\t--norestart               do not restart on core dump\n"
+    printf "\t--valgrind                run via valgrind\n"
+    printf "\t--novalgrind              do not run via valgrind\n"
+    printf "\t--verbose / -v            be verbose\n"
     exit
 }
 
 # behave if we are not completely installed (e.g., Debian "removed,
 # config remains" state)
-test -f $LIBDIR/ceph_common.sh || exit 0
+test -f $LIBEXECDIR/ceph_common.sh || exit 0
 
-. $LIBDIR/ceph_common.sh
+. $LIBEXECDIR/ceph_common.sh
 
 EXIT_STATUS=0
 
@@ -59,12 +78,12 @@ signal_daemon() {
     signal=$4
     action=$5
     [ -z "$action" ] && action="Stopping"
-    echo -n "$action Ceph $name on $host..."
+    printf "$action Ceph $name on $host..."
     do_cmd "if [ -e $pidfile ]; then
-        pid=`cat $pidfile`
-        if [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; then
+        pid=\`cat $pidfile\`
+        if ps -p \$pid -o args= | grep -q $daemon; then
 	    cmd=\"kill $signal \$pid\"
-	    echo -n \$cmd...
+	    printf \"\$cmd...\"
 	    \$cmd
         fi
     fi"
@@ -78,7 +97,7 @@ daemon_is_running() {
     pidfile=$4
     do_cmd "[ -e $pidfile ] || exit 1   # no pid, presumably not running
 	pid=\`cat $pidfile\`
-	[ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline && grep -qwe -i.$daemon_id /proc/\$pid/cmdline && exit 0 # running
+	ps -p \$pid -o args= | grep $daemon | grep -qwe -i.$daemon_id && exit 0 # running
         exit 1  # pid is something else" "" "okfail"
 }
 
@@ -89,12 +108,12 @@ stop_daemon() {
     signal=$4
     action=$5
     [ -z "$action" ] && action="Stopping"
-    echo -n "$action Ceph $name on $host..."
+    printf "$action Ceph $name on $host..."
     do_cmd "if [ -e $pidfile ] ; then 
 	pid=\`cat $pidfile\`
-	while [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; do
+	while ps -p \$pid -o args= | grep -q $daemon; do
 	    cmd=\"kill $signal \$pid\"
-	    echo -n \$cmd...
+	    printf \"\$cmd...\"
 	    \$cmd
 	    sleep 1
 	    continue
@@ -106,16 +125,26 @@ stop_daemon() {
 ## command line options
 options=
 
-version=0
+OPTS=$(getopt -n 'init-ceph' -o 'hvam:c:' -l 'help,verbose,valgrind,novalgrind,allhosts,restart,norestart,btrfs,nobtrfs,fsmount,nofsmount,btrfsumount,fsumount,conf:,cluster:,hostname:' -- "$@")
+if [ $? != 0 ]
+then
+    exit 1
+fi
+
+eval set -- "$OPTS"
+
 dovalgrind=
 docrun=
 allhosts=0
-debug=0
 monaddr=
 dofsmount=1
 dofsumount=0
 verbose=0
 use_default_conf=1
+
+## set variables like cluster or conf
+[ -e /etc/sysconfig/ceph ] && . /etc/sysconfig/ceph
+[ -e /etc/default/ceph ] && . /etc/default/ceph
 
 
 while echo $1 | grep -q '^-'; do     # FIXME: why not '^-'?
@@ -138,6 +167,9 @@ case $1 in
     --norestart)
 	    docrun=0
 	    ;;
+    -h | --help)
+            usage_exit
+            ;;
     -m )
 	    [ -z "$2" ] && usage_exit
 	    options="$options $1"
@@ -172,6 +204,10 @@ case $1 in
 	    shift
 	    hostname=$1
             ;;
+    -- )
+            shift
+            break
+            ;;
     *)
 	    echo unrecognized option \'$1\'
 	    usage_exit
@@ -180,7 +216,6 @@ esac
 options="$options $1"
 shift
 done
-
 
 # if `--cluster` was not passed in, fallback to looking at the config name
 if [ -z "$cluster" ]; then
@@ -282,7 +317,7 @@ for name in $what; do
 	lockfile=""
     fi
 
-    get_conf asok "$run_dir/ceph-$type.$id.asok" "admin socket"
+    get_conf asok "$run_dir/$cluster-$type.$id.asok" "admin socket"
 
     case "$command" in
 	start)
@@ -303,10 +338,13 @@ for name in $what; do
 	    [ -n "$wrap" ] && runmode="-f &" && runarg="-f"
 	    [ -n "$max_open_files" ] && files="ulimit -n $max_open_files;"
 
+	    [ -n "$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES" ] && tcmalloc="TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES"
+
 	    if [ -n "$SYSTEMD_RUN" ]; then
-		cmd="$SYSTEMD_RUN -r bash -c '$files $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
+                time=`date +%s.%N` 
+		cmd="$SYSTEMD_RUN --unit=ceph-$name.$time -r bash -c '$files $tcmalloc $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
 	    else
-		cmd="$files $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
+		cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
 	    fi
 
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
@@ -347,10 +385,10 @@ for name in $what; do
 		do_root_cmd_okfail "mkdir -p $fs_path"
 		if [ "$fs_type" = "btrfs" ]; then
 		    echo Mounting Btrfs on $host:$fs_path
-		    do_root_cmd_okfail "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts || mount -t btrfs $fs_opt $first_dev $fs_path"
+		    do_root_cmd_okfail "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts && umount $fs_path ; mount -t btrfs $fs_opt $first_dev $fs_path"
 		else
 		    echo Mounting $fs_type on $host:$fs_path
-		    do_root_cmd_okfail "modprobe $fs_type ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts || mount -t $fs_type $fs_opt $first_dev $fs_path"
+		    do_root_cmd_okfail "modprobe $fs_type ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts && umount $fs_path ; mount -t $fs_type $fs_opt $first_dev $fs_path"
 		fi
 		if [ "$ERR" != "0" ]; then
 		    EXIT_STATUS=$ERR
@@ -360,7 +398,7 @@ for name in $what; do
 
 	    if [ "$type" = "osd" ]; then
 		get_conf update_crush "" "osd crush update on start"
-		if [ "${update_crush:-1}" = "1" -o "${update_crush:-1}" = "true" ]; then
+		case "${update_crush:-1}" in 1|[Tt][Rr][Uu][Ee])
 		    # update location in crush
 		    get_conf osd_location_hook "$BINDIR/ceph-crush-location" "osd crush location hook"
 		    osd_location=`$osd_location_hook --cluster $cluster --id $id --type osd`
@@ -372,13 +410,13 @@ for name in $what; do
 			EXIT_STATUS=$ERR
 			continue
 		    fi
-		fi
+		esac
 	    fi
 
 	    echo Starting Ceph $name on $host...
 	    if [ ! -d $run_dir ]; then
 		# assume /var/run exists
-		install -d -m0755 -o ceph -g ceph /var/run/ceph
+		install -d -m0770 -o ceph -g ceph /var/run/ceph
 	    fi
 	    get_conf pre_start_eval "" "pre start eval"
 	    [ -n "$pre_start_eval" ] && $pre_start_eval
@@ -399,8 +437,8 @@ for name in $what; do
 		# these keys.  it's also true for legacy installs
 		# via mkcephfs, which is fine too; there is no harm
 		# in creating these keys.
-		get_conf mon_data "/var/lib/ceph/mon/ceph-$id" "mon data"
-		if [ "$mon_data" = "/var/lib/ceph/mon/ceph-$id" -a "$asok" = "/var/run/ceph/ceph-mon.$id.asok" ]; then
+		get_conf mon_data "/var/lib/ceph/mon/$cluster-$id" "mon data"
+		if [ "$mon_data" = "/var/lib/ceph/mon/$cluster-$id" -a "$asok" = "/var/run/ceph/$cluster-mon.$id.asok" ]; then
 		    echo Starting ceph-create-keys on $host...
 		    cmd2="$SBINDIR/ceph-create-keys --cluster $cluster -i $id 2> /dev/null &"
 		    do_cmd "$cmd2"
@@ -428,7 +466,7 @@ for name in $what; do
 
 	status)
 	    if daemon_is_running $name ceph-$type $id $pid_file; then
-		echo -n "$name: running "
+		printf "$name: running "
 		do_cmd "$BINDIR/ceph --admin-daemon $asok version 2>/dev/null" || echo unknown
             elif [ -e "$pid_file" ]; then
                 # daemon is dead, but pid file still exists
@@ -497,7 +535,9 @@ done
 # activate latent osds?
 if [ "$command" = "start" -a "$BINDIR" != "." ]; then
     if [ "$*" = "" ] || echo $* | grep -q ^osd\$ ; then
-	ceph-disk activate-all
+       if [ -x $SBINDIR/ceph-disk ]; then
+           ceph-disk activate-all
+       fi
     fi
 fi
 

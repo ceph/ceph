@@ -12,34 +12,37 @@ ls on empty pool never containing images
 create
 =======
   $ rbd create -s 1024 --image-format 1 foo
+  rbd: image format 1 is deprecated
   $ rbd create -s 512 --image-format 2 bar
-  $ rbd create -s 2048 --image-format 2 baz
+  $ rbd create -s 2048 --image-format 2 --image-feature layering baz
   $ rbd create -s 1 --image-format 1 quux
+  rbd: image format 1 is deprecated
   $ rbd create -s 1G --image-format 2 quuy
 
 snapshot
 ========
   $ rbd snap create bar@snap
-  $ rbd resize -s 1024 bar
-  
-  Resizing image: 100% complete...done.
-  $ rbd resize -s 2G  quuy
-  
-  Resizing image: 100% complete...done.
+  $ rbd resize -s 1024 --no-progress bar
+  $ rbd resize -s 2G --no-progress quuy
   $ rbd snap create bar@snap2
   $ rbd snap create foo@snap
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
 
 clone
 =====
   $ rbd snap protect bar@snap
-  $ rbd clone bar@snap rbd_other/child
+  $ rbd clone --image-feature layering,exclusive-lock,object-map,fast-diff bar@snap rbd_other/child
   $ rbd snap create rbd_other/child@snap
   $ rbd flatten rbd_other/child 2> /dev/null
   $ rbd bench-write rbd_other/child --io-pattern seq --io-total 1B > /dev/null 2>&1
+  $ rbd clone bar@snap rbd_other/deep-flatten-child
+  $ rbd snap create rbd_other/deep-flatten-child@snap
+  $ rbd flatten rbd_other/deep-flatten-child 2> /dev/null
 
 lock
 ====
   $ rbd lock add quux id
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   $ rbd lock add baz id1 --shared tag
   $ rbd lock add baz id2 --shared tag
   $ rbd lock add baz id3 --shared tag
@@ -47,18 +50,21 @@ lock
 test formatting
 ===============
   $ rbd children foo@snap
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   $ rbd children bar@snap
   rbd_other/child
   $ rbd children bar@snap2
 TODO: figure out why .* does not match the block_name_prefix line in rbd info.
 For now, use a more inclusive regex.
   $ rbd info foo
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   rbd image 'foo':
   \tsize 1024 MB in 256 objects (esc)
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   $ rbd info foo --format json | python -mjson.tool | sed 's/,$/, /'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -71,6 +77,7 @@ For now, use a more inclusive regex.
 The version of xml_pp included in ubuntu precise always prints a 'warning'
 whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd info foo --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <image>
     <name>foo</name>
     <size>1073741824</size>
@@ -81,6 +88,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>1</format>
   </image>
   $ rbd info foo@snap
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   rbd image 'foo':
   \tsize 1024 MB in 256 objects (esc)
   \torder 22 (4096 kB objects) (esc)
@@ -88,6 +96,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \tformat: 1 (esc)
   \tprotected: False (esc)
   $ rbd info foo@snap --format json | python -mjson.tool | sed 's/,$/, /'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -99,6 +108,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 1073741824
   }
   $ rbd info foo@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <image>
     <name>foo</name>
     <size>1073741824</size>
@@ -115,13 +125,17 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering (esc)
+  \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
   \tflags:  (esc)
   $ rbd info bar --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering"
+          "layering", 
+          "exclusive-lock", 
+          "object-map", 
+          "fast-diff", 
+          "deep-flatten"
       ], 
       "flags": [], 
       "format": 2, 
@@ -142,6 +156,10 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
+      <feature>exclusive-lock</feature>
+      <feature>object-map</feature>
+      <feature>fast-diff</feature>
+      <feature>deep-flatten</feature>
     </features>
     <flags></flags>
   </image>
@@ -151,14 +169,18 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering (esc)
+  \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
   \tflags:  (esc)
   \tprotected: True (esc)
   $ rbd info bar@snap --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering"
+          "layering", 
+          "exclusive-lock", 
+          "object-map", 
+          "fast-diff", 
+          "deep-flatten"
       ], 
       "flags": [], 
       "format": 2, 
@@ -180,6 +202,10 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
+      <feature>exclusive-lock</feature>
+      <feature>object-map</feature>
+      <feature>fast-diff</feature>
+      <feature>deep-flatten</feature>
     </features>
     <flags></flags>
     <protected>true</protected>
@@ -190,14 +216,18 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering (esc)
+  \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
   \tflags:  (esc)
   \tprotected: False (esc)
   $ rbd info bar@snap2 --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering"
+          "layering", 
+          "exclusive-lock", 
+          "object-map", 
+          "fast-diff", 
+          "deep-flatten"
       ], 
       "flags": [], 
       "format": 2, 
@@ -219,6 +249,10 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
+      <feature>exclusive-lock</feature>
+      <feature>object-map</feature>
+      <feature>fast-diff</feature>
+      <feature>deep-flatten</feature>
     </features>
     <flags></flags>
     <protected>false</protected>
@@ -260,12 +294,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <flags></flags>
   </image>
   $ rbd info quux
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   rbd image 'quux':
   \tsize 1024 kB in 1 objects (esc)
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   $ rbd info quux --format json | python -mjson.tool | sed 's/,$/, /'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -276,6 +312,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 1048576
   }
   $ rbd info quux --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <image>
     <name>quux</name>
     <size>1048576</size>
@@ -291,13 +328,16 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering (esc)
+  \tfeatures: layering, exclusive-lock, object-map, fast-diff (esc)
   \tflags:  (esc)
   $ rbd info rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering"
+          "layering", 
+          "exclusive-lock", 
+          "object-map", 
+          "fast-diff"
       ], 
       "flags": [], 
       "format": 2, 
@@ -318,6 +358,9 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
+      <feature>exclusive-lock</feature>
+      <feature>object-map</feature>
+      <feature>fast-diff</feature>
     </features>
     <flags></flags>
   </image>
@@ -327,7 +370,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering (esc)
+  \tfeatures: layering, exclusive-lock, object-map, fast-diff (esc)
   \tflags:  (esc)
   \tprotected: False (esc)
   \tparent: rbd/bar@snap (esc)
@@ -336,7 +379,10 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering"
+          "layering", 
+          "exclusive-lock", 
+          "object-map", 
+          "fast-diff"
       ], 
       "flags": [], 
       "format": 2, 
@@ -364,6 +410,9 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
+      <feature>exclusive-lock</feature>
+      <feature>object-map</feature>
+      <feature>fast-diff</feature>
     </features>
     <flags></flags>
     <protected>false</protected>
@@ -373,6 +422,97 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <snapshot>snap</snapshot>
       <overlap>536870912</overlap>
     </parent>
+  </image>
+  $ rbd info rbd_other/deep-flatten-child
+  rbd image 'deep-flatten-child':
+  \tsize 512 MB in 128 objects (esc)
+  \torder 22 (4096 kB objects) (esc)
+  [^^]+ (re)
+  \tformat: 2 (esc)
+  \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
+  \tflags:  (esc)
+  $ rbd info rbd_other/deep-flatten-child --format json | python -mjson.tool | sed 's/,$/, /'
+  {
+      "block_name_prefix": "rbd_data.*",  (glob)
+      "features": [
+          "layering", 
+          "exclusive-lock", 
+          "object-map", 
+          "fast-diff", 
+          "deep-flatten"
+      ], 
+      "flags": [], 
+      "format": 2, 
+      "name": "deep-flatten-child", 
+      "object_size": 4194304, 
+      "objects": 128, 
+      "order": 22, 
+      "size": 536870912
+  }
+  $ rbd info rbd_other/deep-flatten-child --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  <image>
+    <name>deep-flatten-child</name>
+    <size>536870912</size>
+    <objects>128</objects>
+    <order>22</order>
+    <object_size>4194304</object_size>
+    <block_name_prefix>rbd_data.*</block_name_prefix> (glob)
+    <format>2</format>
+    <features>
+      <feature>layering</feature>
+      <feature>exclusive-lock</feature>
+      <feature>object-map</feature>
+      <feature>fast-diff</feature>
+      <feature>deep-flatten</feature>
+    </features>
+    <flags></flags>
+  </image>
+  $ rbd info rbd_other/deep-flatten-child@snap
+  rbd image 'deep-flatten-child':
+  \tsize 512 MB in 128 objects (esc)
+  \torder 22 (4096 kB objects) (esc)
+  [^^]+ (re)
+  \tformat: 2 (esc)
+  \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
+  \tflags:  (esc)
+  \tprotected: False (esc)
+  $ rbd info rbd_other/deep-flatten-child@snap --format json | python -mjson.tool | sed 's/,$/, /'
+  {
+      "block_name_prefix": "rbd_data.*",  (glob)
+      "features": [
+          "layering", 
+          "exclusive-lock", 
+          "object-map", 
+          "fast-diff", 
+          "deep-flatten"
+      ], 
+      "flags": [], 
+      "format": 2, 
+      "name": "deep-flatten-child", 
+      "object_size": 4194304, 
+      "objects": 128, 
+      "order": 22, 
+      "protected": "false", 
+      "size": 536870912
+  }
+  $ rbd info rbd_other/deep-flatten-child@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  <image>
+    <name>deep-flatten-child</name>
+    <size>536870912</size>
+    <objects>128</objects>
+    <order>22</order>
+    <object_size>4194304</object_size>
+    <block_name_prefix>rbd_data.*</block_name_prefix> (glob)
+    <format>2</format>
+    <features>
+      <feature>layering</feature>
+      <feature>exclusive-lock</feature>
+      <feature>object-map</feature>
+      <feature>fast-diff</feature>
+      <feature>deep-flatten</feature>
+    </features>
+    <flags></flags>
+    <protected>false</protected>
   </image>
   $ rbd list
   foo
@@ -397,6 +537,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <name>quuy</name>
   </images>
   $ rbd list -l
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   NAME       SIZE PARENT FMT PROT LOCK 
   foo       1024M          1           
   foo@snap  1024M          1           
@@ -407,6 +549,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   baz       2048M          2      shr  
   quuy      2048M          2           
   $ rbd list -l --format json | python -mjson.tool | sed 's/,$/, /'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   [
       {
           "format": 1, 
@@ -458,6 +602,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       }
   ]
   $ rbd list -l --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <images>
     <image>
       <image>foo</image>
@@ -510,18 +656,23 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </images>
   $ rbd list rbd_other
   child
+  deep-flatten-child
   $ rbd list rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
   [
-      "child"
+      "child", 
+      "deep-flatten-child"
   ]
   $ rbd list rbd_other --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <images>
     <name>child</name>
+    <name>deep-flatten-child</name>
   </images>
   $ rbd list rbd_other -l
-  NAME       SIZE PARENT       FMT PROT LOCK 
-  child      512M                2           
-  child@snap 512M rbd/bar@snap   2           
+  NAME                    SIZE PARENT       FMT PROT LOCK 
+  child                   512M                2           
+  child@snap              512M rbd/bar@snap   2           
+  deep-flatten-child      512M                2           
+  deep-flatten-child@snap 512M                2           
   $ rbd list rbd_other -l --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -537,6 +688,18 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
               "pool": "rbd", 
               "snapshot": "snap"
           }, 
+          "protected": "false", 
+          "size": 536870912, 
+          "snapshot": "snap"
+      }, 
+      {
+          "format": 2, 
+          "image": "deep-flatten-child", 
+          "size": 536870912
+      }, 
+      {
+          "format": 2, 
+          "image": "deep-flatten-child", 
           "protected": "false", 
           "size": 536870912, 
           "snapshot": "snap"
@@ -561,17 +724,34 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <format>2</format>
       <protected>false</protected>
     </snapshot>
+    <image>
+      <image>deep-flatten-child</image>
+      <size>536870912</size>
+      <format>2</format>
+    </image>
+    <snapshot>
+      <image>deep-flatten-child</image>
+      <snapshot>snap</snapshot>
+      <size>536870912</size>
+      <format>2</format>
+      <protected>false</protected>
+    </snapshot>
   </images>
   $ rbd lock list foo
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   $ rbd lock list foo --format json | python -mjson.tool | sed 's/,$/, /'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   {}
   $ rbd lock list foo --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <locks></locks>
   $ rbd lock list quux
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   There is 1 exclusive lock on this image.
   Locker*ID*Address* (glob)
   client.* id * (glob)
   $ rbd lock list quux --format json | python -mjson.tool | sed 's/,$/, /'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   {
       "id": {
           "address": "*",  (glob)
@@ -579,6 +759,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       }
   }
   $ rbd lock list quux --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <locks>
     <id>
       <locker>client.*</locker> (glob)
@@ -623,9 +804,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </id*> (glob)
   </locks>
   $ rbd snap list foo
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   SNAPID NAME    SIZE 
       *snap*1024*MB* (glob)
   $ rbd snap list foo --format json | python -mjson.tool | sed 's/,$/, /'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   [
       {
           "id": *,  (glob)
@@ -634,6 +817,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       }
   ]
   $ rbd snap list foo --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <snapshots>
     <snapshot>
       <id>*</id> (glob)
@@ -696,55 +880,78 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
   </snapshots>
   $ rbd disk-usage --pool rbd_other
-  warning: fast-diff map is not enabled for child. operation may be slow.
-  NAME       PROVISIONED  USED 
-  child@snap        512M     0 
-  child             512M 4096k 
-  <TOTAL>           512M 4096k 
+  NAME                    PROVISIONED  USED 
+  child@snap                     512M  512M 
+  child                          512M  512M 
+  deep-flatten-child@snap        512M  512M 
+  deep-flatten-child             512M  512M 
+  <TOTAL>                       1024M 2048M 
   $ rbd disk-usage --pool rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
-  warning: fast-diff map is not enabled for child. operation may be slow.
   {
       "images": [
           {
               "name": "child", 
               "provisioned_size": 536870912, 
               "snapshot": "snap", 
-              "used_size": 0
+              "used_size": 536870912
           }, 
           {
               "name": "child", 
               "provisioned_size": 536870912, 
-              "used_size": 4194304
+              "used_size": 536870912
+          }, 
+          {
+              "name": "deep-flatten-child", 
+              "provisioned_size": 536870912, 
+              "snapshot": "snap", 
+              "used_size": 536870912
+          }, 
+          {
+              "name": "deep-flatten-child", 
+              "provisioned_size": 536870912, 
+              "used_size": 536870912
           }
       ], 
-      "total_provisioned_size": 536870912, 
-      "total_used_size": 4194304
+      "total_provisioned_size": 1073741824, 
+      "total_used_size": 2147483648
   }
   $ rbd disk-usage --pool rbd_other --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
-  warning: fast-diff map is not enabled for child. operation may be slow.
   <stats>
     <images>
       <image>
         <name>child</name>
         <snapshot>snap</snapshot>
         <provisioned_size>536870912</provisioned_size>
-        <used_size>0</used_size>
+        <used_size>536870912</used_size>
       </image>
       <image>
         <name>child</name>
         <provisioned_size>536870912</provisioned_size>
-        <used_size>4194304</used_size>
+        <used_size>536870912</used_size>
+      </image>
+      <image>
+        <name>deep-flatten-child</name>
+        <snapshot>snap</snapshot>
+        <provisioned_size>536870912</provisioned_size>
+        <used_size>536870912</used_size>
+      </image>
+      <image>
+        <name>deep-flatten-child</name>
+        <provisioned_size>536870912</provisioned_size>
+        <used_size>536870912</used_size>
       </image>
     </images>
-    <total_provisioned_size>536870912</total_provisioned_size>
-    <total_used_size>4194304</total_used_size>
+    <total_provisioned_size>1073741824</total_provisioned_size>
+    <total_used_size>2147483648</total_used_size>
   </stats>
 
 # cleanup
+  $ rbd snap remove rbd_other/deep-flatten-child@snap
   $ rbd snap remove rbd_other/child@snap
   $ rbd snap unprotect bar@snap
   $ rbd snap purge bar 2> /dev/null
   $ rbd snap purge foo 2> /dev/null
+  $ rbd rm rbd_other/deep-flatten-child 2> /dev/null
   $ rbd rm rbd_other/child 2> /dev/null
   $ rbd rm foo 2> /dev/null
   $ rbd rm bar 2> /dev/null

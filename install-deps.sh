@@ -28,7 +28,7 @@ if type apt-get > /dev/null 2>&1 ; then
 fi
 
 if type zypper > /dev/null 2>&1 ; then
-    $SUDO zypper --gpg-auto-import-keys --non-interactive install openSUSE-release lsb-release
+    $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release
 fi
 
 case $(lsb_release -si) in
@@ -62,7 +62,7 @@ CentOS|Fedora|RedHatEnterpriseServer)
             CentOS|RedHatEnterpriseServer)
                 $SUDO yum install -y yum-utils
                 MAJOR_VERSION=$(lsb_release -rs | cut -f1 -d.)
-                if test $(lsb_release -si) == RedHatEnterpriseServer ; then
+                if test $(lsb_release -si) = RedHatEnterpriseServer ; then
                     $SUDO yum install subscription-manager
                     $SUDO subscription-manager repos --enable=rhel-$MAJOR_VERSION-server-optional-rpms
                 fi
@@ -70,6 +70,9 @@ CentOS|Fedora|RedHatEnterpriseServer)
                 $SUDO yum install --nogpgcheck -y epel-release
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
+                if test $(lsb_release -si) = CentOS -a $MAJOR_VERSION = 7 ; then
+                    $SUDO yum-config-manager --enable cr
+                fi
                 ;;
         esac
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec

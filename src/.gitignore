@@ -6,6 +6,7 @@ Makefile
 /.git_version
 /.libs
 /acconfig.h*
+/build
 /ceph
 /cephfs
 /crushtool
@@ -25,6 +26,7 @@ Makefile
 /ceph-mon
 /ceph-osd
 /ceph-syn
+/ceph.tmpe
 /ceph.conf
 /ceph_bench_log
 /ceph-objectstore-tool
@@ -42,12 +44,12 @@ Makefile
 /ceph_rgw_multiparser
 /ceph_scratchtool
 /ceph_scratchtoolpp
-/ceph_streamtest
 /ceph_test_*
 /ceph_tpbench
 /ceph_xattr_bench
 /ceph_kvstorebench
 /ceph_omapbench
+/ceph_objectstore_bench
 /ceph_smalliobench
 /ceph_smalliobenchdumb
 /ceph_smalliobenchfs
@@ -55,12 +57,14 @@ Makefile
 /ceph-monstore-tool
 /ceph-osdomap-tool
 /ceph-kvstore-tool
+/ceph-bluefs-tool
 /ceph_ver.h
 /dev
 /get_command_descriptions
 /init-ceph
 /keyring
 /librados-config
+/librgw_file*
 /massif.out.*
 /mnt
 /monmaptool
@@ -70,7 +74,11 @@ Makefile
 /rados
 /radosgw
 /radosgw-admin
+/radosgw-token
+/radosgw-object-expirer
 /rbd
+/rbd-mirror
+/rbd-nbd
 /rbd-fuse
 /rbd-replay
 /rbd-replay-prep
@@ -92,3 +100,6 @@ Makefile
 /mkcephfs
 /.ceph_port
 /store_test_temp_dir
+
+# not sure what generates this...
+/ceph.tmpe

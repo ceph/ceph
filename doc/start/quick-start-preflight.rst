@@ -6,12 +6,12 @@
 
 Thank you for trying Ceph! We recommend setting up a ``ceph-deploy`` admin
 :term:`node` and a 3-node :term:`Ceph Storage Cluster` to explore the basics of
-Ceph. This **Preflight Checklist** will help you prepare a ``ceph-deploy`` 
-admin node and three Ceph Nodes (or virtual machines) that will host your Ceph 
-Storage Cluster. Before proceeding any further, see `OS Recommendations`_ to 
-verify that you have a supported distribution and version of Linux. When 
-you use a single Linux distribution and version across the cluster, it will 
-make it easier for you to troubleshoot issues that arise in production. 
+Ceph. This **Preflight Checklist** will help you prepare a ``ceph-deploy``
+admin node and three Ceph Nodes (or virtual machines) that will host your Ceph
+Storage Cluster. Before proceeding any further, see `OS Recommendations`_ to
+verify that you have a supported distribution and version of Linux. When
+you use a single Linux distribution and version across the cluster, it will
+make it easier for you to troubleshoot issues that arise in production.
 
 In the descriptions below, :term:`Node` refers to a single machine.
 
@@ -31,14 +31,14 @@ For Debian and Ubuntu distributions, perform the following steps:
 
 #. Add the release key::
 
-	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
+	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
 
 #. Add the Ceph packages to your repository. Replace ``{ceph-stable-release}``
    with a stable Ceph release (e.g., ``cuttlefish``, ``dumpling``,
    ``emperor``, ``firefly``, etc.).
    For example::
 
-	echo deb http://ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 #. Update your repository and install ``ceph-deploy``::
 
@@ -54,6 +54,16 @@ Red Hat Package Manager (RPM)
 For Red Hat(rhel6, rhel7), CentOS (el6, el7), and Fedora 19-20 (f19-f20) perform the
 following steps:
 
+#. On Red Hat Enterprise Linux 7, register the target machine with ``subscription-manager``, verify your subscriptions, and enable the "Extras" repoistory for package dependencies. For example::
+
+        sudo subscription-manager repos --enable=rhel-7-server-extras-rpms
+
+#. On Red Hat Enterprise Linux 6, install and enable the Extra Packages for Enterprise Linux (EPEL) repository. Please see the `EPEL wiki`_ page for more information.
+
+#. On CentOS, you can execute the following command chain::
+
+        sudo yum install -y yum-utils && sudo yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/7/x86_64/ && sudo yum install --nogpgcheck -y epel-release && sudo rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7 && sudo rm /etc/yum.repos.d/dl.fedoraproject.org*
+
 #. Add the package to your repository. Open a text editor and create a
    Yellowdog Updater, Modified (YUM) entry. Use the file path
    ``/etc/yum.repos.d/ceph.repo``. For example::
@@ -62,19 +72,19 @@ following steps:
 
    Paste the following example code. Replace ``{ceph-release}`` with
    the recent major release of Ceph (e.g., ``firefly``). Replace ``{distro}``
-   with your Linux distribution (e.g., ``el6`` for CentOS 6, 
+   with your Linux distribution (e.g., ``el6`` for CentOS 6,
    ``el7`` for CentOS 7, ``rhel6`` for
    Red Hat 6.5, ``rhel7`` for Red Hat 7, and ``fc19`` or ``fc20`` for Fedora 19
-   or Fedora 20. Finally, save the contents to the 
+   or Fedora 20. Finally, save the contents to the
    ``/etc/yum.repos.d/ceph.repo`` file. ::
 
 	[ceph-noarch]
 	name=Ceph noarch packages
-	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/noarch
+	baseurl=http://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 
 #. Update your repository and install ``ceph-deploy``::
@@ -89,7 +99,7 @@ following steps:
 Ceph Node Setup
 ===============
 
-The admin node must be have password-less SSH access to Ceph nodes. 
+The admin node must be have password-less SSH access to Ceph nodes.
 When ceph-deploy logs in to a Ceph node as a user, that particular
 user must have passwordless ``sudo`` privileges.
 
@@ -100,7 +110,7 @@ Install NTP
 We recommend installing NTP on Ceph nodes (especially on Ceph Monitor nodes) to
 prevent issues arising from clock drift. See `Clock`_ for details.
 
-On CentOS / RHEL, execute:: 
+On CentOS / RHEL, execute::
 
 	sudo yum install ntp ntpdate ntp-doc
 
@@ -108,7 +118,7 @@ On Debian / Ubuntu, execute::
 
 	sudo apt-get install ntp
 
-Ensure that you enable the NTP service. Ensure that each Ceph Node uses the 
+Ensure that you enable the NTP service. Ensure that each Ceph Node uses the
 same NTP time server. See `NTP`_ for details.
 
 
@@ -129,12 +139,12 @@ For **ALL** Ceph Nodes perform the following steps:
 #. Ensure the SSH server is running on **ALL** Ceph Nodes.
 
 
-Create a Ceph User
-------------------
+Create a Ceph Deploy User
+-------------------------
 
 The ``ceph-deploy`` utility must login to a Ceph node as a user
 that has passwordless ``sudo`` privileges, because it needs to install
-software and configuration files without prompting for passwords. 
+software and configuration files without prompting for passwords.
 
 Recent versions of ``ceph-deploy`` support a ``--username`` option so you can
 specify any user that has password-less ``sudo`` (including ``root``, although
@@ -142,20 +152,25 @@ this is **NOT** recommended). To use ``ceph-deploy --username {username}``, the
 user you specify must have password-less SSH access to the Ceph node, as
 ``ceph-deploy`` will not prompt you for a password.
 
-We recommend creating a Ceph user on **ALL** Ceph nodes in the cluster. A
-uniform user name across the cluster may improve ease of use  (not required),
-but you should avoid obvious user names, because hackers typically use them with
-brute force hacks (e.g., ``root``,  ``admin``, ``{productname}``). The following
-procedure, substituting  ``{username}`` for the user name you define, describes
-how to create a user  with passwordless ``sudo``.
+We recommend creating a specific user for ``ceph-deploy`` on **ALL** Ceph nodes
+in the cluster. Please do **NOT** use "ceph" as the user name. A uniform user
+name across the cluster may improve ease of use (not required), but you should
+avoid obvious user names, because hackers typically use them with brute force
+hacks (e.g., ``root``,  ``admin``, ``{productname}``). The following procedure,
+substituting  ``{username}`` for the user name you define, describes how to
+create a user with passwordless ``sudo``.
 
-#. Create a user on each Ceph Node. ::
+.. note:: Starting with the `Infernalis release`_ the "ceph" user name is reserved
+   for the Ceph daemons. If the "ceph" user already exists on the Ceph nodes,
+   removing the user must be done before attempting an upgrade.
+
+#. Create a new user on each Ceph Node. ::
 
 	ssh user@ceph-server
 	sudo useradd -d /home/{username} -m {username}
 	sudo passwd {username}
 
-#. For the user you added to each Ceph node, ensure that the user has
+#. For the new user you added to each Ceph node, ensure that the user has
    ``sudo`` privileges. ::
 
 	echo "{username} ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/{username}
@@ -174,7 +189,7 @@ monitors.
    ``root`` user. Leave the passphrase empty::
 
 	ssh-keygen
-	
+
 	Generating public/private key pair.
 	Enter file in which to save the key (/ceph-admin/.ssh/id_rsa):
 	Enter passphrase (empty for no passphrase):
@@ -183,15 +198,15 @@ monitors.
 	Your public key has been saved in /ceph-admin/.ssh/id_rsa.pub.
 
 #. Copy the key to each Ceph Node, replacing ``{username}`` with the user name
-   you created with `Create a Ceph User`_. ::
+   you created with `Create a Ceph Deploy User`_. ::
 
 	ssh-copy-id {username}@node1
 	ssh-copy-id {username}@node2
 	ssh-copy-id {username}@node3
 
-#. (Recommended) Modify the ``~/.ssh/config`` file of your ``ceph-deploy`` 
-   admin node so that ``ceph-deploy`` can log in to Ceph nodes as the user you 
-   created without requiring you to specify ``--username {username}`` each 
+#. (Recommended) Modify the ``~/.ssh/config`` file of your ``ceph-deploy``
+   admin node so that ``ceph-deploy`` can log in to Ceph nodes as the user you
+   created without requiring you to specify ``--username {username}`` each
    time you execute ``ceph-deploy``. This has the added benefit of streamlining
    ``ssh`` and ``scp`` usage. Replace ``{username}`` with the user name you
    created::
@@ -227,10 +242,10 @@ Ensure Connectivity
 
 Ensure connectivity using ``ping`` with short hostnames (``hostname -s``).
 Address hostname resolution issues as necessary.
-   
+
 .. note:: Hostnames should resolve to a network IP address, not to the
    loopback IP address (e.g., hostnames should resolve to an IP address other
-   than ``127.0.0.1``). If you use your admin node as a Ceph node, you 
+   than ``127.0.0.1``). If you use your admin node as a Ceph node, you
    should also ensure that it resolves to its hostname and IP address
    (i.e., not its loopback IP address).
 
@@ -273,7 +288,7 @@ On CentOS and RHEL, you may receive an error while trying to execute
 nodes, disable it by executing ``sudo visudo`` and locate the ``Defaults
 requiretty`` setting. Change it to ``Defaults:ceph !requiretty`` or comment it
 out to ensure that ``ceph-deploy`` can connect using the user you created with
-`Create a Ceph User`_.
+`Create a Ceph Deploy User`_.
 
 .. note:: If editing, ``/etc/sudoers``, ensure that you use
    ``sudo visudo`` rather than a text editor.
@@ -321,3 +336,5 @@ Quick Start`_.
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref
 .. _Clock: ../../rados/configuration/mon-config-ref#clock
 .. _NTP: http://www.ntp.org/
+.. _Infernalis release: ../../release-notes/#v9-1-0-infernalis-release-candidate
+.. _EPEL wiki: https://fedoraproject.org/wiki/EPEL

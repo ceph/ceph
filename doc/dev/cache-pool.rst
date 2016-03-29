@@ -55,6 +55,8 @@ Set the target size and enable the tiering agent for foo-hot::
  ceph osd pool set foo-hot hit_set_count 1
  ceph osd pool set foo-hot hit_set_period 3600   # 1 hour
  ceph osd pool set foo-hot target_max_bytes 1000000000000  # 1 TB
+ ceph osd pool set foo-hot min_read_recency_for_promote 1
+ ceph osd pool set foo-hot min_write_recency_for_promote 1
 
 Drain the cache in preparation for turning it off::
 
@@ -104,13 +106,27 @@ The hit_set_count and hit_set_period define how much time each HitSet
 should cover, and how many such HitSets to store.  Binning accesses
 over time allows Ceph to independently determine whether an object was
 accessed at least once and whether it was accessed more than once over
-some time period ("age" vs "temperature").  Note that the longer the
-period and the higher the count the more RAM will be consumed by the
-ceph-osd process.  In particular, when the agent is active to flush or
-evict cache objects, all hit_set_count HitSets are loaded into RAM.
+some time period ("age" vs "temperature").
 
-Currently there is minimal benefit for hit_set_count > 1 since the
-agent does not yet act intelligently on that information.
+The ``min_read_recency_for_promote`` defines how many HitSets to check for the
+existence of an object when handling a read operation. The checking result is
+used to decide whether to promote the object asynchronously. Its value should be
+between 0 and ``hit_set_count``. If it's set to 0, the object is always promoted.
+If it's set to 1, the current HitSet is checked. And if this object is in the
+current HitSet, it's promoted. Otherwise not. For the other values, the exact
+number of archive HitSets are checked. The object is promoted if the object is
+found in any of the most recent ``min_read_recency_for_promote`` HitSets.
+
+A similar parameter can be set for the write operation, which is
+``min_write_recency_for_promote``. ::
+
+ ceph osd pool set {cachepool} min_read_recency_for_promote 1
+ ceph osd pool set {cachepool} min_write_recency_for_promote 1
+
+Note that the longer the ``hit_set_period`` and the higher the
+``min_read_recency_for_promote``/``min_write_recency_for_promote`` the more RAM
+will be consumed by the ceph-osd process. In particular, when the agent is active
+to flush or evict cache objects, all hit_set_count HitSets are loaded into RAM.
 
 Cache mode
 ~~~~~~~~~~

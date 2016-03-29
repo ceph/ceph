@@ -8,13 +8,19 @@ Description=Ceph cluster monitor daemon
 After=network-online.target local-fs.target ceph-create-keys@%i.service
 Wants=network-online.target local-fs.target ceph-create-keys@%i.service
 
-PartOf=ceph.target
+PartOf=ceph-mon.target
 
 [Service]
+LimitNOFILE=1048576
+LimitNPROC=1048576
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
 ExecStart=/usr/bin/ceph-mon -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecReload=/bin/kill -HUP $MAINPID
+PrivateDevices=yes
+ProtectHome=true
+ProtectSystem=full
+PrivateTmp=true
 
 [Install]
-WantedBy=ceph.target
+WantedBy=ceph-mon.target

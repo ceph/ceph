@@ -16,6 +16,7 @@ LIBMDS_SOURCES = \
 	mds/CDentry.cc \
 	mds/CDir.cc \
 	mds/CInode.cc \
+	mds/DamageTable.cc \
 	mds/LogEvent.cc \
 	mds/MDSTable.cc \
 	mds/InoTable.cc \
@@ -23,14 +24,14 @@ LIBMDS_SOURCES = \
 	mds/MDSTableClient.cc \
 	mds/MDSTableServer.cc \
 	mds/SimpleLock.cc \
+	mds/ScrubStack.cc \
 	mds/SnapRealm.cc \
 	mds/SnapServer.cc \
 	mds/snap.cc \
 	mds/SessionMap.cc \
 	mds/MDSContext.cc \
 	mds/MDSAuthCaps.cc \
-	mds/MDLog.cc \
-	common/TrackedOp.cc
+	mds/MDLog.cc
 LIBMDS_DEPS = $(LIBOSDC)
 
 if ENABLE_CLIENT

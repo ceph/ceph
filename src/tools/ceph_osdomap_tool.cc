@@ -19,8 +19,8 @@
 #include "common/errno.h"
 #include "global/global_init.h"
 
-#include "os/DBObjectMap.h"
-#include "os/LevelDBStore.h"
+#include "os/filestore/DBObjectMap.h"
+#include "kv/KeyValueDB.h"
 
 namespace po = boost::program_options;
 using namespace std;
@@ -86,11 +86,11 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  LevelDBStore* store(new LevelDBStore(g_ceph_context, store_path));
-  if (vm.count("paranoid")) {
+  KeyValueDB* store(KeyValueDB::create(g_ceph_context, "leveldb", store_path));
+  /*if (vm.count("paranoid")) {
     std::cerr << "Enabling paranoid checks" << std::endl;
     store->options.paranoid_checks = true;
-  }
+    }*/
   DBObjectMap omap(store);
   stringstream out;
   int r = store->open(out);

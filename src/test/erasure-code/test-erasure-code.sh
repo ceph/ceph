@@ -22,10 +22,10 @@ function run() {
     local dir=$1
     shift
 
-    export CEPH_MON="127.0.0.1:7101"
+    export CEPH_MON="127.0.0.1:7101" # git grep '\<7101\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--mon-host=$CEPH_MON --mon-osd-prime-pg-temp=false"
 
     setup $dir || return 1
     run_mon $dir a || return 1

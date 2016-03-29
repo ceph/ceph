@@ -23,11 +23,17 @@
 #include "include/types.h"
 #include "include/timegm.h"
 #include "common/strtol.h"
+#include "common/ceph_time.h"
 
 
 // --------
 // utime_t
 
+/* WARNING: If add member in utime_t, please make sure the encode/decode funtion
+ * work well. For little-endian machine, we should make sure there is no padding
+ * in 32-bit machine and 64-bit machine.
+ * You should also modify the padding_check function.
+ */
 class utime_t {
 public:
   struct {
@@ -56,6 +62,10 @@ public:
     tv.tv_sec = v.tv_sec;
     tv.tv_nsec = v.tv_nsec;
   }
+  explicit utime_t(const ceph::real_time& rt) {
+    ceph_timespec ts = real_clock::to_ceph_timespec(rt);
+    decode_timeval(&ts);
+  }
   utime_t(const struct timeval &v) {
     set_from_timeval(&v);
   }
@@ -69,6 +79,12 @@ public:
   void set_from_double(double d) { 
     tv.tv_sec = (__u32)trunc(d);
     tv.tv_nsec = (__u32)((d - (double)tv.tv_sec) * (double)1000000000.0);
+  }
+
+  real_time to_real_time() const {
+    ceph_timespec ts;
+    encode_timeval(&ts);
+    return ceph::real_clock::from_ceph_timespec(ts);
   }
 
   // accessors
@@ -95,14 +111,29 @@ public:
     tv.tv_sec = v->tv_sec;
     tv.tv_nsec = v->tv_usec*1000;
   }
-
+  void padding_check() {
+    static_assert(
+      sizeof(utime_t) ==
+        sizeof(tv.tv_sec) +
+        sizeof(tv.tv_nsec)
+      ,
+      "utime_t have padding");
+  }
   void encode(bufferlist &bl) const {
+#if defined(CEPH_LITTLE_ENDIAN)
+    bl.append((char *)(this), sizeof(__u32) + sizeof(__u32));
+#else
     ::encode(tv.tv_sec, bl);
     ::encode(tv.tv_nsec, bl);
+#endif
   }
   void decode(bufferlist::iterator &p) {
+#if defined(CEPH_LITTLE_ENDIAN)
+    p.copy(sizeof(__u32) + sizeof(__u32), (char *)(this));
+#else
     ::decode(tv.tv_sec, p);
     ::decode(tv.tv_nsec, p);
+#endif
   }
 
   void encode_timeval(struct ceph_timespec *t) const {
@@ -180,6 +211,35 @@ public:
   }
 
   // output
+  ostream& gmtime_nsec(ostream& out) const {
+    out.setf(std::ios::right);
+    char oldfill = out.fill();
+    out.fill('0');
+    if (sec() < ((time_t)(60*60*24*365*10))) {
+      // raw seconds.  this looks like a relative time.
+      out << (long)sec() << "." << std::setw(6) << usec();
+    } else {
+      // localtime.  this looks like an absolute time.
+      //  aim for http://en.wikipedia.org/wiki/ISO_8601
+      struct tm bdt;
+      time_t tt = sec();
+      gmtime_r(&tt, &bdt);
+      out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
+	  << '-' << std::setw(2) << (bdt.tm_mon+1)
+	  << '-' << std::setw(2) << bdt.tm_mday
+	  << ' '
+	  << std::setw(2) << bdt.tm_hour
+	  << ':' << std::setw(2) << bdt.tm_min
+	  << ':' << std::setw(2) << bdt.tm_sec;
+      out << "." << std::setw(9) << nsec();
+      out << "Z";
+    }
+    out.fill(oldfill);
+    out.unsetf(std::ios::right);
+    return out;
+  }
+
+  // output
   ostream& asctime(ostream& out) const {
     out.setf(std::ios::right);
     char oldfill = out.fill();
@@ -239,10 +299,20 @@ public:
     time_t tt = sec();
     localtime_r(&tt, &bdt);
 
-    return snprintf(out, outlen,
+    return ::snprintf(out, outlen,
 		    "%04d-%02d-%02d %02d:%02d:%02d.%06ld",
 		    bdt.tm_year + 1900, bdt.tm_mon + 1, bdt.tm_mday,
 		    bdt.tm_hour, bdt.tm_min, bdt.tm_sec, usec());
+  }
+
+  static int snprintf(char *out, int outlen, time_t tt) {
+    struct tm bdt;
+    localtime_r(&tt, &bdt);
+
+    return ::snprintf(out, outlen,
+        "%04d-%02d-%02d %02d:%02d:%02d",
+        bdt.tm_year + 1900, bdt.tm_mon + 1, bdt.tm_mday,
+        bdt.tm_hour, bdt.tm_min, bdt.tm_sec);
   }
 
   static int parse_date(const string& date, uint64_t *epoch, uint64_t *nsec,

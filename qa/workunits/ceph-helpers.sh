@@ -17,7 +17,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-TIMEOUT=120
+TIMEOUT=300
 PG_NUM=4
 
 if type xmlstarlet > /dev/null 2>&1; then
@@ -115,7 +115,7 @@ function test_setup() {
 #
 function teardown() {
     local dir=$1
-    kill_daemons $dir
+    kill_daemons $dir KILL
     if [ $(stat -f -c '%T' .) == "btrfs" ]; then
         __teardown_btrfs $dir
     fi
@@ -126,13 +126,13 @@ function __teardown_btrfs() {
     local btrfs_base_dir=$1
 
     btrfs_dirs=`ls -l $btrfs_base_dir | egrep '^d' | awk '{print $9}'`
-    for btrfs_dir in $btrfs_dirs
-    do
-        btrfs_subdirs=`ls -l $btrfs_base_dir/$btrfs_dir | egrep '^d' | awk '{print $9}'`
-        for btrfs_subdir in $btrfs_subdirs
-        do
-            btrfs subvolume delete $btrfs_base_dir/$btrfs_dir/$btrfs_subdir
-        done
+    current_path=`pwd`
+    # extracting the current existing subvolumes
+    for subvolume in $(cd $btrfs_base_dir; btrfs subvolume list . -t |egrep '^[0-9]' | awk '{print $4}' |grep "$btrfs_base_dir/$btrfs_dir"); do
+       # Compute the relative path by removing the local path
+       # Like "erwan/chroot/ceph/src/testdir/test-7202/dev/osd1/snap_439" while we want "testdir/test-7202/dev/osd1/snap_439"
+       local_subvolume=$(echo $subvolume | sed -e "s|.*$current_path/||"g)
+       btrfs subvolume delete $local_subvolume
     done
 }
 
@@ -149,12 +149,15 @@ function test_teardown() {
 # Kill all daemons for which a .pid file exists in **dir**.  Each
 # daemon is sent a **signal** and kill_daemons waits for it to exit
 # during a few minutes. By default all daemons are killed. If a
-# **name_prefix** is provided, only the daemons matching it are
-# killed.
+# **name_prefix** is provided, only the daemons for which a pid
+# file is found matching the prefix are killed. See run_osd and
+# run_mon for more information about the name conventions for
+# the pid files.
 #
-# Send KILL to all daemons : kill_daemons $dir
-# Send TERM to all daemons : kill_daemons $dir TERM
-# Send TERM to all osds : kill_daemons $dir TERM osd
+# Send TERM to all daemons : kill_daemons $dir
+# Send KILL to all daemons : kill_daemons $dir KILL
+# Send KILL to all osds : kill_daemons $dir KILL osd
+# Send KILL to osd 1 : kill_daemons $dir KILL osd.1
 #
 # If a daemon is sent the TERM signal and does not terminate
 # within a few minutes, it will still be running even after
@@ -172,29 +175,29 @@ function test_teardown() {
 # sleep intervals can be specified as **delays** and defaults
 # to:
 #
-#  0 1 1 1 2 3 5 5 5 10 10 20 60
+#  0 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120
 #
 # This sequence is designed to not require a sleep time (0) if the
 # machine is fast enough and the daemon terminates in a fraction of a
 # second. The increasing sleep numbers should give plenty of time for
 # the daemon to die even on the slowest running machine. If a daemon
-# takes more than two minutes to stop (the sum of all sleep times),
+# takes more than a few minutes to stop (the sum of all sleep times),
 # there probably is no point in waiting more and a number of things
 # are likely to go wrong anyway: better give up and return on error.
 #
 # @param dir path name of the environment
-# @param signal name of the first signal (defaults to KILL)
+# @param signal name of the first signal (defaults to TERM)
 # @param name_prefix only kill match daemons (defaults to all)
-# @params delays sequence of sleep times before failure
+# @param delays sequence of sleep times before failure
 # @return 0 on success, 1 on error
 #
 function kill_daemons() {
     local trace=$(shopt -q -o xtrace && echo true || echo false)
     $trace && shopt -u -o xtrace
     local dir=$1
-    local signal=${2:-KILL}
+    local signal=${2:-TERM}
     local name_prefix=$3 # optional, osd, mon, osd.1
-    local delays=${4:-0 0 1 1 1 2 3 5 5 5 10 10 20 60}
+    local delays=${4:-0 0 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120}
 
     local status=0
     for pidfile in $(find $dir 2>/dev/null | grep $name_prefix'[^/]*\.pid') ; do
@@ -224,15 +227,23 @@ function test_kill_daemons() {
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_osd $dir 0 || return 1
+    #
     # sending signal 0 won't kill the daemon
     # waiting just for one second instead of the default schedule
     # allows us to quickly verify what happens when kill fails 
     # to stop the daemon (i.e. it must return false)
+    #
     ! kill_daemons $dir 0 osd 1 || return 1
+    #
+    # killing just the osd and verify the mon still is responsive
+    #
     kill_daemons $dir TERM osd || return 1
     ceph osd dump | grep "osd.0 down" || return 1
+    #
+    # kill the mon and verify it cannot be reached
+    #
     kill_daemons $dir TERM || return 1
-    ! ceph --connect-timeout 1 status || return 1
+    ! ceph --connect-timeout 60 status || return 1
     teardown $dir || return 1
 }
 
@@ -299,6 +310,7 @@ function run_mon() {
         --paxos-propose-interval=0.1 \
         --osd-crush-chooseleaf-type=0 \
         --erasure-code-dir=.libs \
+        --plugin-dir=.libs \
         --debug-mon 20 \
         --debug-ms 20 \
         --debug-paxos 20 \
@@ -422,6 +434,7 @@ function test_run_osd() {
     run_osd $dir 0 || return 1
     local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.0.asok \
         config get osd_max_backfills)
+    echo "$backfills" | grep --quiet 'osd_max_backfills' || return 1
 
     run_osd $dir 1 --osd-max-backfills 20 || return 1
     local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.1.asok \
@@ -433,6 +446,43 @@ function test_run_osd() {
         config get osd_max_backfills)
     test "$backfills" = '{"osd_max_backfills":"30"}' || return 1
 
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
+# Shutdown and remove all traces of the osd by the name osd.**id**.
+#
+# The OSD is shutdown with the TERM signal. It is then removed from
+# the auth list, crush map, osd map etc and the files associated with
+# it are also removed.
+#
+# @param dir path name of the environment
+# @param id osd identifier
+# @return 0 on success, 1 on error
+#
+function destroy_osd() {
+    local dir=$1
+    local id=$2
+
+    kill_daemons $dir TERM osd.$id || return 1
+    ceph osd out osd.$id || return 1
+    ceph auth del osd.$id || return 1
+    ceph osd crush remove osd.$id || return 1
+    ceph osd rm $id || return 1
+    teardown $dir/$id || return 1
+    rm -fr $dir/$id
+}
+
+function test_destroy_osd() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_osd $dir 0 || return 1
+    destroy_osd $dir 0 || return 1
+    ! ceph osd dump | grep "osd.$id " || return 1
     teardown $dir || return 1
 }
 
@@ -490,9 +540,11 @@ function activate_osd() {
     ceph_args+=" --osd-backfill-full-ratio=.99"
     ceph_args+=" --osd-failsafe-full-ratio=.99"
     ceph_args+=" --osd-journal-size=100"
+    ceph_args+=" --osd-scrub-load-threshold=2000"
     ceph_args+=" --osd-data=$osd_data"
     ceph_args+=" --chdir="
     ceph_args+=" --erasure-code-dir=.libs"
+    ceph_args+=" --plugin-dir=.libs"
     ceph_args+=" --osd-class-dir=.libs"
     ceph_args+=" --run-dir=$dir"
     ceph_args+=" --debug-osd=20"
@@ -523,6 +575,7 @@ function test_activate_osd() {
     run_osd $dir 0 || return 1
     local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.0.asok \
         config get osd_max_backfills)
+    echo "$backfills" | grep --quiet 'osd_max_backfills' || return 1
 
     kill_daemons $dir TERM osd || return 1
 
@@ -670,12 +723,14 @@ function test_get_config() {
     teardown $dir || return 1
 }
 
+#######################################################################
+
 ##
 # Set the **config** to specified **value**, via the config set command
 # of the admin socket of **daemon**.**id**
 #
 # @param daemon mon or osd
-# @parma id mon or osd ID
+# @param id mon or osd ID
 # @param config the configuration variable name as found in config_opts.h
 # @param value the config value
 # @return 0 on success, 1 on error
@@ -1015,9 +1070,7 @@ function test_wait_for_clean() {
 ##
 # Run repair on **pgid** and wait until it completes. The repair
 # function will fail if repair does not complete within $TIMEOUT
-# seconds. The repair is complete whenever the
-# **get_last_scrub_stamp** function reports a timestamp different from
-# the one stored before starting the repair.
+# seconds.
 #
 # @param pgid the id of the PG
 # @return 0 on success, 1 on error
@@ -1025,15 +1078,8 @@ function test_wait_for_clean() {
 function repair() {
     local pgid=$1
     local last_scrub=$(get_last_scrub_stamp $pgid)
-
     ceph pg repair $pgid
-    for ((i=0; i < $TIMEOUT; i++)); do
-        if test "$last_scrub" != "$(get_last_scrub_stamp $pgid)" ; then
-            return 0
-        fi
-        sleep 1
-    done
-    return 1
+    wait_for_scrub $pgid "$last_scrub"
 }
 
 function test_repair() {
@@ -1046,6 +1092,37 @@ function test_repair() {
     repair 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
     ! TIMEOUT=1 repair 1.0 || return 1
+    teardown $dir || return 1
+}
+#######################################################################
+
+##
+# Run scrub on **pgid** and wait until it completes. The pg_scrub
+# function will fail if repair does not complete within $TIMEOUT
+# seconds. The pg_scrub is complete whenever the
+# **get_last_scrub_stamp** function reports a timestamp different from
+# the one stored before starting the scrub.
+#
+# @param pgid the id of the PG
+# @return 0 on success, 1 on error
+#
+function pg_scrub() {
+    local pgid=$1
+    local last_scrub=$(get_last_scrub_stamp $pgid)
+    ceph pg scrub $pgid
+    wait_for_scrub $pgid "$last_scrub"
+}
+
+function test_pg_scrub() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
+    wait_for_clean || return 1
+    pg_scrub 1.0 || return 1
+    kill_daemons $dir KILL osd || return 1
+    ! TIMEOUT=1 pg_scrub 1.0 || return 1
     teardown $dir || return 1
 }
 
@@ -1103,6 +1180,48 @@ function test_expect_failure() {
 #######################################################################
 
 ##
+# Given the *last_scrub*, wait for scrub to happen on **pgid**.  It
+# will fail if scrub does not complete within $TIMEOUT seconds. The
+# repair is complete whenever the **get_last_scrub_stamp** function
+# reports a timestamp different from the one given in argument.
+#
+# @param pgid the id of the PG
+# @param last_scrub timestamp of the last scrub for *pgid*
+# @return 0 on success, 1 on error
+#
+function wait_for_scrub() {
+    local pgid=$1
+    local last_scrub="$2"
+
+    for ((i=0; i < $TIMEOUT; i++)); do
+        if test "$last_scrub" != "$(get_last_scrub_stamp $pgid)" ; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+function test_wait_for_scrub() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
+    wait_for_clean || return 1
+    local pgid=1.0
+    ceph pg repair $pgid
+    local last_scrub=$(get_last_scrub_stamp $pgid)
+    wait_for_scrub $pgid "$last_scrub" || return 1
+    kill_daemons $dir KILL osd || return 1
+    last_scrub=$(get_last_scrub_stamp $pgid)
+    ! TIMEOUT=1 wait_for_scrub $pgid "$last_scrub" || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
 # Return 0 if the erasure code *plugin* is available, 1 otherwise.
 #
 # @param plugin erasure code plugin
@@ -1136,8 +1255,40 @@ function test_erasure_code_plugin_exists() {
 #######################################################################
 
 ##
+# Display all log files from **dir** on stdout.
+#
+# @param dir directory in which all data is stored
+#
+
+function display_logs() {
+    local dir=$1
+
+    find $dir -maxdepth 1 -name '*.log' | \
+        while read file ; do
+            echo "======================= $file"
+            cat $file
+        done
+}
+
+function test_display_logs() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    kill_daemons $dir || return 1
+    display_logs $dir > $dir/log.out
+    grep --quiet mon.a.log $dir/log.out || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
 # Call the **run** function (which must be defined by the caller) with
 # the **dir** argument followed by the caller argument list.
+#
+# If the **run** function returns on error, all logs found in **dir**
+# are displayed for diagnostic purposes.
 #
 # **teardown** function is called when the **run** function returns
 # (on success or on error), to cleanup leftovers. The CEPH_CONF is set
@@ -1162,7 +1313,7 @@ function main() {
     shopt -s -o xtrace
     PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
-    export PATH=:$PATH # make sure program from sources are prefered
+    export PATH=ceph-disk/ceph-disk-virtualenv/bin:ceph-detect-init/ceph-detect-init-virtualenv/bin:.:$PATH # make sure program from sources are prefered
 
     export CEPH_CONF=/dev/null
     unset CEPH_ARGS
@@ -1171,6 +1322,7 @@ function main() {
     if run $dir "$@" ; then
         code=0
     else
+        display_logs $dir
         code=1
     fi
     teardown $dir || return 1
@@ -1183,8 +1335,9 @@ function run_tests() {
     shopt -s -o xtrace
     PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
-    export PATH=":$PATH"
-    export CEPH_MON="127.0.0.1:7109"
+    export PATH=ceph-disk/ceph-disk-virtualenv/bin:ceph-detect-init/ceph-detect-init-virtualenv/bin:.:$PATH # make sure program from sources are prefered
+
+    export CEPH_MON="127.0.0.1:7109" # git grep '\<7109\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "

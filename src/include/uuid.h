@@ -44,10 +44,14 @@ struct uuid_d {
     memcpy(s, boost::uuids::to_string(uuid).c_str(), 37);
   }
 
+ std::string to_string() const {
+    return boost::uuids::to_string(uuid);
+  }
+
   char *bytes() const {
     return (char*)uuid.data;
   }
-  
+
   void encode(bufferlist& bl) const {
     ::encode_raw(uuid, bl);
   }

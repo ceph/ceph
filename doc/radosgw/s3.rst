@@ -89,8 +89,6 @@ The following common request header fields are not supported:
 +----------------------------+------------+
 | **x-amz-id-2**             | Response   |
 +----------------------------+------------+
-| **x-amz-request-id**       | Response   |
-+----------------------------+------------+
 | **x-amz-version-id**       | Response   |
 +----------------------------+------------+
 

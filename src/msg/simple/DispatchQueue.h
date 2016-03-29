@@ -44,7 +44,7 @@ class DispatchQueue {
     ConnectionRef con;
     MessageRef m;
   public:
-    QueueItem(Message *m) : type(-1), con(0), m(m) {}
+    explicit QueueItem(Message *m) : type(-1), con(0), m(m) {}
     QueueItem(int type, Connection *con) : type(type), con(con), m(0) {}
     bool is_code() const {
       return type != -1;
@@ -98,7 +98,7 @@ class DispatchQueue {
   class DispatchThread : public Thread {
     DispatchQueue *dq;
   public:
-    DispatchThread(DispatchQueue *dq) : dq(dq) {}
+    explicit DispatchThread(DispatchQueue *dq) : dq(dq) {}
     void *entry() {
       dq->entry();
       return 0;
@@ -112,7 +112,7 @@ class DispatchQueue {
   class LocalDeliveryThread : public Thread {
     DispatchQueue *dq;
   public:
-    LocalDeliveryThread(DispatchQueue *dq) : dq(dq) {}
+    explicit LocalDeliveryThread(DispatchQueue *dq) : dq(dq) {}
     void *entry() {
       dq->run_local_delivery();
       return 0;
@@ -180,6 +180,7 @@ class DispatchQueue {
   void fast_preprocess(Message *m);
   void enqueue(Message *m, int priority, uint64_t id);
   void discard_queue(uint64_t id);
+  void discard_local();
   uint64_t get_id() {
     Mutex::Locker l(lock);
     return next_pipe_id++;

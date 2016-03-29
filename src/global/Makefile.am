@@ -2,10 +2,12 @@ libglobal_la_SOURCES = \
 	global/global_context.cc \
 	global/global_init.cc \
 	global/pidfile.cc \
-	global/signal_handler.cc
+	global/signal_handler.cc \
+	common/TrackedOp.cc
+
 libglobal_la_LIBADD = $(LIBCOMMON)
 if WITH_LTTNG
-libglobal_la_LIBADD += -llttng-ust -ldl
+libglobal_la_LIBADD += -ldl -llttng-ust
 endif
 noinst_LTLIBRARIES += libglobal.la
 

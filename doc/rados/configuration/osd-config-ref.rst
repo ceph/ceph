@@ -6,7 +6,7 @@
 
 You can configure Ceph OSD Daemons in the Ceph configuration file, but Ceph OSD
 Daemons can use the default values and a very minimal configuration. A minimal
-Ceph OSD Daemon configuration sets ``osd journal size`` and ``osd host``,  and
+Ceph OSD Daemon configuration sets ``osd journal size`` and ``host``,  and
 uses default values for nearly everything else.
 
 Ceph OSD Daemons are numerically identified in incremental fashion, beginning
@@ -19,7 +19,7 @@ with ``0`` using the following convention. ::
 In a configuration file, you may specify settings for all Ceph OSD Daemons in
 the cluster by adding configuration settings to the ``[osd]`` section of your
 configuration file. To add settings directly to a specific Ceph OSD Daemon
-(e.g., ``osd host``), enter  it in an OSD-specific section of your configuration
+(e.g., ``host``), enter  it in an OSD-specific section of your configuration
 file. For example:
 
 .. code-block:: ini
@@ -28,10 +28,10 @@ file. For example:
 		osd journal size = 1024
 	
 	[osd.0]
-		osd host = osd-host-a
+		host = osd-host-a
 		
 	[osd.1]
-		osd host = osd-host-b
+		host = osd-host-b
 
 
 .. index:: OSD; config settings
@@ -329,6 +329,42 @@ recovery operations to ensure optimal performance during recovery.
 
 :Type: 32-bit Integer
 :Default: ``2`` 
+
+
+``osd op queue``
+
+:Description: This sets the type of queue to be used for prioritizing ops
+              in the OSDs. Both queues feature a strict sub-queue which is
+              dequeued before the normal queue. The normal queue is different
+              between implementations. The original PrioritizedQueue (``prio``) uses a
+              token bucket system which when there are sufficient tokens will
+              dequeue high priority queues first. If there are not enough
+              tokens available, queues are dequeued low priority to high priority.
+              The new WeightedPriorityQueue (``wpq``) dequeues all priorities in
+              relation to their priorities to prevent starvation of any queue.
+              WPQ should help in cases where a few OSDs are more overloaded
+              than others. Requires a restart.
+
+:Type: String
+:Valid Choices: prio, wpq
+:Default: ``prio``
+
+
+``osd op queue cut off``
+
+:Description: This selects which priority ops will be sent to the strict
+              queue verses the normal queue. The ``low`` setting sends all
+              replication ops and higher to the strict queue, while the ``high``
+              option sends only replication acknowledgement ops and higher to
+              the strict queue. Setting this to ``high`` should help when a few
+              OSDs in the cluster are very busy especially when combined with
+              ``wpq`` in the ``osd op queue`` setting. OSDs that are very busy
+              handling replication traffic could starve primary client traffic
+              on these OSDs without these settings. Requires a restart.
+
+:Type: String
+:Valid Choices: low, high
+:Default: ``low``
 
 
 ``osd client op priority``

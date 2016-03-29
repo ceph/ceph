@@ -329,7 +329,7 @@ class CondPingPong {
   class Consumer : public Thread {
     CondPingPong *p;
    public:
-    Consumer(CondPingPong *p): p(p) {}
+    explicit Consumer(CondPingPong *p): p(p) {}
     void* entry() {
       p->consume();
       return 0;
@@ -340,7 +340,7 @@ class CondPingPong {
   CondPingPong(): mutex("CondPingPong::mutex"), prod(0), cons(0), count(10000), consumer(this) {}
 
   double run() {
-    consumer.create();
+    consumer.create("consumer");
     uint64_t start = Cycles::rdtsc();
     produce();
     uint64_t stop = Cycles::rdtsc();
@@ -451,7 +451,7 @@ double eventcenter_poll()
   int count = 1000000;
   EventCenter center(g_ceph_context);
   center.init(1000);
-  center.set_owner(pthread_self());
+  center.set_owner();
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
     center.process_events(0);
@@ -466,7 +466,7 @@ class CenterWorker : public Thread {
 
  public:
   EventCenter center;
-  CenterWorker(CephContext *c): cct(c), done(false), center(c) {
+  explicit CenterWorker(CephContext *c): cct(c), done(false), center(c) {
     center.init(100);
   }
   void stop() {
@@ -474,7 +474,7 @@ class CenterWorker : public Thread {
     center.wakeup();
   }
   void* entry() {
-    center.set_owner(pthread_self());
+    center.set_owner();
     bind_thread_to_cpu(2);
     while (!done)
       center.process_events(1000);
@@ -486,7 +486,7 @@ class CountEvent: public EventCallback {
   atomic_t *count;
 
  public:
-  CountEvent(atomic_t *atomic): count(atomic) {}
+  explicit CountEvent(atomic_t *atomic): count(atomic) {}
   void do_request(int id) {
     count->dec();
   }
@@ -498,7 +498,7 @@ double eventcenter_dispatch()
 
   CenterWorker worker(g_ceph_context);
   atomic_t flag(1);
-  worker.create();
+  worker.create("evt_center_disp");
   EventCallbackRef count_event(new CountEvent(&flag));
 
   worker.center.dispatch_event_external(count_event);
@@ -666,7 +666,7 @@ double perf_prefetch()
 #endif
 }
 
-#if defined(__i386__) || defined(__x86_64__)
+#if defined(__x86_64__)
 /**
  * This function is used to seralize machine instructions so that no
  * instructions that appear after it in the current thread can run before any
@@ -686,7 +686,7 @@ static inline void serialize() {
 
 // Measure the cost of cpuid
 double perf_serialize() {
-#if defined(__i386__) || defined(__x86_64__)
+#if defined(__x86_64__)
   int count = 1000000;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
@@ -759,7 +759,7 @@ double spawn_thread()
   ThreadHelper thread;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    thread.create();
+    thread.create("thread_helper");
     thread.join();
   }
   uint64_t stop = Cycles::rdtsc();

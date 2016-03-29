@@ -7,6 +7,7 @@
 #include "common/OutputDataSocket.h"
 #include "common/Formatter.h"
 
+#include "rgw_bucket.h"
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_rados.h"
@@ -22,7 +23,8 @@ static void set_param_str(struct req_state *s, const char *name, string& str)
 }
 
 string render_log_object_name(const string& format,
-			      struct tm *dt, string& bucket_id, const string& bucket_name)
+			      struct tm *dt, string& bucket_id,
+			      const string& bucket_name)
 {
   string o;
   for (unsigned i=0; i<format.size(); i++) {
@@ -94,7 +96,7 @@ class UsageLogger {
   class C_UsageLogTimeout : public Context {
     UsageLogger *logger;
   public:
-    C_UsageLogTimeout(UsageLogger *_l) : logger(_l) {}
+    explicit C_UsageLogTimeout(UsageLogger *_l) : logger(_l) {}
     void finish(int r) {
       logger->flush();
       logger->set_timer();
@@ -125,14 +127,16 @@ public:
     round_timestamp = ts.round_to_hour();
   }
 
-  void insert(utime_t& timestamp, rgw_usage_log_entry& entry) {
+  void insert_user(utime_t& timestamp, const rgw_user& user, rgw_usage_log_entry& entry) {
     lock.Lock();
     if (timestamp.sec() > round_timestamp + 3600)
       recalc_round_timestamp(timestamp);
     entry.epoch = round_timestamp.sec();
     bool account;
-    rgw_user_bucket ub(entry.owner, entry.bucket);
-    usage_map[ub].insert(round_timestamp, entry, &account);
+    string u = user.to_str();
+    rgw_user_bucket ub(u, entry.bucket);
+    real_time rt = round_timestamp.to_real_time();
+    usage_map[ub].insert(rt, entry, &account);
     if (account)
       num_entries++;
     bool need_flush = (num_entries > cct->_conf->rgw_usage_log_flush_threshold);
@@ -140,6 +144,14 @@ public:
     if (need_flush) {
       Mutex::Locker l(timer_lock);
       flush();
+    }
+  }
+
+  void insert(utime_t& timestamp, rgw_usage_log_entry& entry) {
+    if (entry.payer.empty()) {
+      insert_user(timestamp, entry.owner, entry);
+    } else {
+      insert_user(timestamp, entry.payer, entry);
     }
   }
 
@@ -175,14 +187,29 @@ static void log_usage(struct req_state *s, const string& op_name)
   if (!usage_logger)
     return;
 
-  string user;
+  rgw_user user;
+  rgw_user payer;
+  string bucket_name;
 
-  if (!s->bucket_name_str.empty())
+  bucket_name = s->bucket_name;
+
+  if (!bucket_name.empty()) {
     user = s->bucket_owner.get_id();
-  else
-    user = s->user.user_id;
+    if (s->bucket_info.requester_pays) {
+      payer = s->user->user_id;
+    }
+  } else {
+      user = s->user->user_id;
+  }
 
-  rgw_usage_log_entry entry(user, s->bucket.name);
+  bool error = s->err.is_err();
+  if (error && s->err.http_ret == 404) {
+    bucket_name = "-"; /* bucket not found, use the invalid '-' as bucket name */
+  }
+
+  string u = user.to_str();
+  string p = payer.to_str();
+  rgw_usage_log_entry entry(u, p, bucket_name);
 
   uint64_t bytes_sent = s->cio->get_bytes_sent();
   uint64_t bytes_received = s->cio->get_bytes_received();
@@ -190,7 +217,7 @@ static void log_usage(struct req_state *s, const string& op_name)
   rgw_usage_data data(bytes_sent, bytes_received);
 
   data.ops = 1;
-  if (!s->err.is_err())
+  if (!error)
     data.successful_ops = 1;
 
   entry.add(op_name, data);
@@ -207,8 +234,9 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   entry.time.gmtime(formatter->dump_stream("time"));      // UTC
   entry.time.localtime(formatter->dump_stream("time_local"));
   formatter->dump_string("remote_addr", entry.remote_addr);
-  if (entry.object_owner.length())
-    formatter->dump_string("object_owner", entry.object_owner);
+  string obj_owner = entry.object_owner.to_str();
+  if (obj_owner.length())
+    formatter->dump_string("object_owner", obj_owner);
   formatter->dump_string("user", entry.user);
   formatter->dump_string("operation", entry.op);
   formatter->dump_string("uri", entry.uri);
@@ -273,7 +301,7 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   if (!s->enable_ops_log)
     return 0;
 
-  if (s->bucket_name_str.empty()) {
+  if (s->bucket_name.empty()) {
     ldout(s->cct, 5) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
@@ -286,9 +314,9 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   } else {
     bucket_id = s->bucket.bucket_id;
   }
-  entry.bucket = s->bucket_name_str;
+  rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name, entry.bucket);
 
-  if (check_utf8(s->bucket_name_str.c_str(), entry.bucket.size()) != 0) {
+  if (check_utf8(s->bucket_name.c_str(), entry.bucket.size()) != 0) {
     ldout(s->cct, 5) << "not logging op on bucket with non-utf8 name" << dendl;
     return 0;
   }
@@ -302,19 +330,19 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   entry.obj_size = s->obj_size;
 
   if (s->cct->_conf->rgw_remote_addr_param.length())
-    set_param_str(s, s->cct->_conf->rgw_remote_addr_param.c_str(), entry.remote_addr);
+    set_param_str(s, s->cct->_conf->rgw_remote_addr_param.c_str(),
+		  entry.remote_addr);
   else
-    set_param_str(s, "REMOTE_ADDR", entry.remote_addr);    
+    set_param_str(s, "REMOTE_ADDR", entry.remote_addr);
   set_param_str(s, "HTTP_USER_AGENT", entry.user_agent);
   set_param_str(s, "HTTP_REFERRER", entry.referrer);
   set_param_str(s, "REQUEST_URI", entry.uri);
   set_param_str(s, "REQUEST_METHOD", entry.op);
 
-  entry.user = s->user.user_id;
+  entry.user = s->user->user_id.to_str();
   if (s->object_acl)
     entry.object_owner = s->object_acl->get_owner().get_id();
   entry.bucket_owner = s->bucket_owner.get_id();
-
 
   uint64_t bytes_sent = s->cio->get_bytes_sent();
   uint64_t bytes_received = s->cio->get_bytes_received();
@@ -349,11 +377,11 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
     string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
 				        s->bucket.bucket_id, entry.bucket);
 
-    rgw_obj obj(store->zone.log_pool, oid);
+    rgw_obj obj(store->get_zone_params().log_pool, oid);
 
     ret = store->append_async(obj, bl.length(), bl);
     if (ret == -ENOENT) {
-      ret = store->create_pool(store->zone.log_pool);
+      ret = store->create_pool(store->get_zone_params().log_pool);
       if (ret < 0)
         goto done;
       // retry

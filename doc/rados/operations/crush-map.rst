@@ -17,7 +17,7 @@ cluster. For a detailed discussion of CRUSH, see
 CRUSH maps contain a list of :abbr:`OSDs (Object Storage Devices)`, a list of
 'buckets' for aggregating the devices into physical locations, and a list of
 rules that tell CRUSH how it should replicate data in a Ceph cluster's pools. By
-reﬂecting the underlying physical organization of the installation, CRUSH can
+reflecting the underlying physical organization of the installation, CRUSH can
 model—and thereby address—potential sources of correlated device failures.
 Typical sources include physical proximity, a shared power source, and a shared
 network. By encoding this information into the cluster map, CRUSH placement
@@ -34,14 +34,13 @@ data cluster, you should give significant consideration to developing a custom
 CRUSH map, because it will help you manage your Ceph cluster, improve
 performance and ensure data safety. 
 
-For example, if an OSD goes down, a CRUSH map can help you can locate
+For example, if an OSD goes down, a CRUSH map can help you to locate
 the physical data center, room, row and rack of the host with the failed OSD in
 the event you need to use onsite support or replace hardware. 
 
 Similarly, CRUSH may help you identify faults more quickly. For example, if all
 OSDs in a particular rack go down simultaneously, the fault may lie with a
-network switch or power to the rack or the network switch rather than the 
-OSDs themselves.
+network switch or power to the rack rather than the OSDs themselves.
 
 A custom CRUSH map can also help you identify the physical locations where
 Ceph stores redundant copies of data when the placement group(s) associated
@@ -89,7 +88,7 @@ preference:
 In a typical deployment scenario, provisioning software (or the system
 administrator) can simply set the 'crush location' field in a host's
 ceph.conf to describe that machine's location within the datacenter or
-cluster.  This will be provide location awareness to both Ceph daemons
+cluster.  This will provide location awareness to both Ceph daemons
 and clients alike.
 
 It is possible to manage the CRUSH map entirely manually by toggling
@@ -100,8 +99,8 @@ the hook off in the configuration::
 Custom location hooks
 ---------------------
 
-A customize location hook can be used in place of the generic hook for OSD
-daemon placement in the hierarchy.  (On startup, each OSD ensure its position is
+A customized location hook can be used in place of the generic hook for OSD
+daemon placement in the hierarchy.  (On startup, each OSD ensures its position is
 correct.)::
 
   osd crush location hook = /path/to/script
@@ -126,7 +125,7 @@ To edit an existing CRUSH map:
 #. `Recompile`_ the CRUSH map.
 #. `Set the CRUSH map`_.
 
-To activate CRUSH Map rules for a specific pool, identify the common ruleset
+To activate CRUSH map rules for a specific pool, identify the common ruleset
 number for those rules and specify that ruleset number for the pool. See `Set
 Pool Values`_ for details. 
 
@@ -451,6 +450,8 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
    Enter ``0`` as your hash setting to select ``rjenkins1``.
 
 
+.. _weightingbucketitems:
+
 .. topic:: Weighting Bucket Items
 
    Ceph expresses bucket weights as doubles, which allows for fine
@@ -479,18 +480,14 @@ CRUSH maps support the notion of 'CRUSH rules', which are the rules that
 determine data placement for a pool. For large clusters, you will likely create
 many pools where each pool may have its own CRUSH ruleset and rules. The default
 CRUSH map has a rule for each pool, and one ruleset assigned to each of the
-default pools, which include:
-
-- ``data``
-- ``metadata``
-- ``rbd``
+default pools.
 
 .. note:: In most cases, you will not need to modify the default rules. When
    you create a new pool, its default ruleset is ``0``.
 
 
 CRUSH rules deﬁnes placement and replication strategies or distribution policies
-that  allow you to specify exactly how CRUSH places object replicas. For
+that allow you to specify exactly how CRUSH places object replicas. For
 example, you might create a rule selecting a pair of targets for 2-way
 mirroring, another rule for selecting three targets in two different data
 centers for 3-way mirroring, and yet another rule for erasure coding over six
@@ -506,7 +503,7 @@ A rule takes the following form::
 		type [ replicated | erasure ]
 		min_size <min-size>
 		max_size <max-size>
-		step take <bucket-type>
+		step take <bucket-name>
 		step [choose|chooseleaf] [firstn|indep] <N> <bucket-type>
 		step emit
 	}
@@ -952,37 +949,38 @@ The following example removes the ``rack12`` bucket from the hierarchy::
 Tunables
 ========
 
-.. versionadded:: 0.48
+Over time, we have made (and continue to make) improvements to the
+CRUSH algorithm used to calculate the placement of data.  In order to
+support the change in behavior, we have introduced a series of tunable
+options that control whether the legacy or improved variation of the
+algorithm is used.
 
-There are several magic numbers that were used in the original CRUSH
-implementation that have proven to be poor choices.  To support
-the transition away from them, newer versions of CRUSH (starting with
-the v0.48 argonaut series) allow the values to be adjusted or tuned.
+In order to use newer tunables, both clients and servers must support
+the new version of CRUSH.  For this reason, we have created
+``profiles`` that are named after the Ceph version in which they were
+introduced.  For example, the ``firefly`` tunables are first supported
+in the firefly release, and will not work with older (e.g., dumpling)
+clients.  Once a given set of tunables are changed from the legacy
+default behavior, the ``ceph-mon`` and ``ceph-osd`` will prevent older
+clients who do not support the new CRUSH features from connecting to
+the cluster.
 
-Clusters running recent Ceph releases support using the tunable values
-in the CRUSH maps.  However, older clients and daemons will not correctly interact
-with clusters using the "tuned" CRUSH maps.  To detect this situation,
-there are now features bits ``CRUSH_TUNABLES`` (value 0x40000) and ``CRUSH_TUNABLES2`` to
-reflect support for tunables.
+argonaut (legacy)
+-----------------
 
-If the OSDMap currently used by the ``ceph-mon`` or ``ceph-osd``
-daemon has non-legacy values, it will require the ``CRUSH_TUNABLES`` or ``CRUSH_TUNABLES2``
-feature bits from clients and daemons who connect to it.  This means
-that old clients will not be able to connect.
+The legacy CRUSH behavior used by argonaut and older releases works
+fine for most clusters, provided there are not too many OSDs that have
+been marked out.
 
-At some future point in time, newly created clusters will have
-improved default values for the tunables.  This is a matter of waiting
-until the support has been present in the Linux kernel clients long
-enough to make this a painless transition for most users.
+bobtail
+-------
 
-Impact of Legacy Values
------------------------
+The bobtail tunable profile (CRUSH_TUNABLES feature) fixes a few key
+misbehaviors:
 
-The legacy values result in several misbehaviors:
-
- * For hiearchies with a small number of devices in the leaf buckets,
+ * For hierarchies with a small number of devices in the leaf buckets,
    some PGs map to fewer than the desired number of replicas.  This
-   commonly happens for hiearchies with "host" nodes with a small
+   commonly happens for hierarchies with "host" nodes with a small
    number (1-3) of OSDs nested beneath each one.
 
  * For large clusters, some small percentages of PGs map to less than
@@ -992,8 +990,7 @@ The legacy values result in several misbehaviors:
  * When some OSDs are marked out, the data tends to get redistributed
    to nearby OSDs instead of across the entire hierarchy.
 
-CRUSH_TUNABLES
---------------
+The new tunables are:
 
  * ``choose_local_tries``: Number of local retries.  Legacy value is
    2, optimal value is 0.
@@ -1006,24 +1003,105 @@ CRUSH_TUNABLES
    50 is more appropriate for typical clusters.  For extremely large
    clusters, a larger value might be necessary.
 
-CRUSH_TUNABLES2
----------------
-
  * ``chooseleaf_descend_once``: Whether a recursive chooseleaf attempt
    will retry, or only try once and allow the original placement to
    retry.  Legacy default is 0, optimal value is 1.
 
-CRUSH_TUNABLES3
----------------
+Migration impact:
+
+ * Moving from argonaut to bobtail tunables triggers a moderate amount
+   of data movement.  Use caution on a cluster that is already
+   populated with data.
+
+firefly
+-------
+
+The firefly tunable profile (CRUSH_TUNABLES2 feature) fixes a problem
+with the ``chooseleaf`` CRUSH rule behavior that tends to result in PG
+mappings with too few results when too many OSDs have been marked out.
+
+The new tunable is:
 
  * ``chooseleaf_vary_r``: Whether a recursive chooseleaf attempt will
    start with a non-zero value of r, based on how many attempts the
    parent has already made.  Legacy default is 0, but with this value
    CRUSH is sometimes unable to find a mapping.  The optimal value (in
-   terms of computational cost and correctness) is 1.  However, for
-   legacy clusters that have lots of existing data, changing from 0 to
-   1 will cause a lot of data to move; a value of 4 or 5 will allow
-   CRUSH to find a valid mapping but will make less data move.
+   terms of computational cost and correctness) is 1.
+
+Migration impact: 
+
+ * For existing clusters that have lots of existing data, changing
+   from 0 to 1 will cause a lot of data to move; a value of 4 or 5
+   will allow CRUSH to find a valid mapping but will make less data
+   move.
+
+straw_calc_version tunable
+--------------------------
+
+There were some problems with the internal weights calculated and
+stored in the CRUSH map for ``straw`` buckets.  Specifically, when
+there were items with a CRUSH weight of 0 or both a mix of weights and
+some duplicated weights CRUSH would distribute data incorrectly (i.e.,
+not in proportion to the weights).
+
+The new tunable is:
+
+ * ``straw_calc_version``: A value of 0 preserves the old, broken
+   internal weight calculation; a value of 1 fixes the behavior.
+
+Migration impact:
+
+ * Moving to straw_calc_version 1 and then adjusting a straw bucket
+   (by adding, removing, or reweighting an item, or by using the
+   reweight-all command) can trigger a small to moderate amount of
+   data movement *if* the cluster has hit one of the problematic
+   conditions.
+
+hammer
+------
+
+The hammer tunable profile (CRUSH_V4 feature) does not affect the
+mapping of existing CRUSH maps simply by changing the profile.  However:
+
+ * There is a new bucket type (``straw2``) supported.  The new
+   ``straw2`` bucket type fixes several limitations in the original
+   ``straw`` bucket.  Specifically, the old ``straw`` buckets would
+   change some mappings that should have changed when a weight was
+   adjusted, while ``straw2`` achieves the original goal of only
+   changing mappings to or from the bucket item whose weight has
+   changed.
+
+ * ``straw2`` is the default for any newly created buckets.
+
+Migration impact:
+
+ * Changing a bucket type from ``straw`` to ``straw2`` will result in
+   a reasonably small amount of data movement, depending on how much
+   the bucket item weights vary from each other.  When the weights are
+   all the same no data will move, and when item weights vary
+   significantly there will be more movement.
+
+jewel
+-----
+
+The jewel tunable profile (CRUSH_TUNABLES5 feature) improves the
+overall behavior of CRUSH such that significantly fewer mappings
+change when an OSD is marked out of the cluster.
+
+The new tunable is:
+
+ * ``chooseleaf_stable``: Whether a recursive chooseleaf attempt will
+   use a better value for an inner loop that greatly reduces the number
+   of mapping changes when an OSD is marked out.  The legacy value is 0,
+   while the new value of 1 uses the new approach.
+
+Migration impact:
+
+ * Changing this value on an existing cluster will result in a very
+   large amount of data movement as almost every PG mapping is likely
+   to change.
+
+
 
 
 Which client versions support CRUSH_TUNABLES
@@ -1044,6 +1122,18 @@ Which client versions support CRUSH_TUNABLES3
 
  * v0.78 (firefly) or later
  * Linux kernel version v3.15 or later (for the file system and RBD kernel clients)
+
+Which client versions support CRUSH_V4
+--------------------------------------
+
+ * v0.94 (hammer) or later
+ * Linux kernel version v4.1 or later (for the file system and RBD kernel clients)
+
+Which client versions support CRUSH_TUNABLES5
+---------------------------------------------
+
+ * v10.0.2 (jewel) or later
+ * Linux kernel version v4.5 or later (for the file system and RBD kernel clients)
 
 Warning when tunables are non-optimal
 -------------------------------------
