@@ -546,7 +546,15 @@ class CephFSMount(object):
         cmd = ["ls"]
         if path:
             cmd.append(path)
-        return self.run_shell(cmd).stdout.getvalue().strip().split("\n")
+
+        ls_text = self.run_shell(cmd).stdout.getvalue().strip()
+
+        if ls_text:
+            return ls_text.split("\n")
+        else:
+            # Special case because otherwise split on empty string
+            # gives you [''] instead of []
+            return []
 
     def getfattr(self, path, attr):
         """
