@@ -35,6 +35,11 @@ void FSMap::dump(Formatter *f) const
   compat.dump(f);
   f->close_section();
 
+  f->open_object_section("feature flags");
+  f->dump_bool("enable_multiple", enable_multiple);
+  f->dump_bool("ever_enabled_multiple", ever_enabled_multiple);
+  f->close_section();
+
   f->open_array_section("standbys");
   for (const auto &i : standby_daemons) {
     f->open_object_section("info");
@@ -76,7 +81,8 @@ void FSMap::generate_test_instances(list<FSMap*>& ls)
 void FSMap::print(ostream& out) const
 {
   out << "e" << epoch << std::endl;
-  out << "enable_multiple: " << enable_multiple << std::endl;
+  out << "enable_multiple, ever_enabled_multiple: " << enable_multiple << ","
+      << ever_enabled_multiple << std::endl;
   out << "compat: " << compat << std::endl;
   out << " " << std::endl;
 
