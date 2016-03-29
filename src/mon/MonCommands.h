@@ -500,9 +500,9 @@ COMMAND("osd crush create-or-move " \
 	"create entry or move existing entry for <name> <weight> at/to location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush move " \
-	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=names,type=CephString " \
 	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]", \
-	"move existing entry for <name> to location <args>", \
+	"move existing entries for <names> (osd.1,hostname1,...) to location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush link " \
 	"name=name,type=CephString " \
@@ -510,14 +510,14 @@ COMMAND("osd crush link " \
 	"link existing entry for <name> under location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rm " \
-	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=names,type=CephString " \
 	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
-	"remove <name> from crush map (everywhere, or just at <ancestor>)",\
+	"remove <names> (osd.1,hostname1,...) from crush map (everywhere, or just at <ancestor>)",\
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush remove " \
-	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=names,type=CephString " \
 	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
-	"remove <name> from crush map (everywhere, or just at <ancestor>)", \
+	"remove <names> (osd.1,hostname1,...) from crush map (everywhere, or just at <ancestor>)",\
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush unlink " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
