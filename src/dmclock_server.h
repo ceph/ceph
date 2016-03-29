@@ -158,8 +158,9 @@ namespace crimson {
 
       enum class ReadyOption {ignore, lowers, raises};
 
+      // forward decl for friend decls
       template<double RequestTag::*, ReadyOption, bool, bool>
-      struct ClientCompare; // forward decl for friend decls
+      struct ClientCompare;
 
 
       class ClientReq {
@@ -183,7 +184,7 @@ namespace crimson {
 	  out << c.tag;
 	  return out;
 	}
-      };
+      }; // class ClientReq
 
 
       class ClientEntry {
@@ -243,7 +244,7 @@ namespace crimson {
 	    (e.has_request() ? e.next_request() : "none") << " }";
 	  return out;
 	}
-      }; // struct ClientEntry
+      }; // class ClientEntry
 
 
       using ClientEntryRef = std::shared_ptr<ClientEntry>;
