@@ -77,7 +77,7 @@ void FSMap::print(ostream& out) const
 {
   out << "e" << epoch << std::endl;
   out << "enable_multiple: " << enable_multiple << std::endl;
-  out << "compat: " << enable_multiple << std::endl;
+  out << "compat: " << compat << std::endl;
   out << " " << std::endl;
 
   if (filesystems.empty()) {
