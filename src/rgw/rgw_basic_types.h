@@ -14,6 +14,10 @@ struct rgw_user {
   rgw_user(const std::string& s) {
     from_str(s);
   }
+  rgw_user(const std::string& tenant, const std::string& id)
+    : tenant(tenant),
+      id(id) {
+  }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
