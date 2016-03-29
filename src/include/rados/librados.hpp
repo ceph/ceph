@@ -383,15 +383,6 @@ namespace librados
     void selfmanaged_snap_rollback(uint64_t snapid);
 
     /**
-     * Rollback an object to the specified snapshot id
-     *
-     * Used with pool snapshots
-     *
-     * @param snapid [in] snopshot id specified
-     */
-    void snap_rollback(uint64_t snapid);
-
-    /**
      * set keys and values according to map
      *
      * @param map [in] keys and values to set

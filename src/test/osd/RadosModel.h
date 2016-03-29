@@ -1536,11 +1536,7 @@ public:
     zero_write_op1.append(bl);
     zero_write_op2.append(bl2);
 
-    if (context->pool_snaps) {
-      op.snap_rollback(snap);
-    } else {
-      op.selfmanaged_snap_rollback(snap);
-    }
+    op.selfmanaged_snap_rollback(snap);
 
     if (existed_before) {
       pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =

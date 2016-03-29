@@ -533,13 +533,6 @@ void librados::ObjectWriteOperation::selfmanaged_snap_rollback(snap_t snapid)
   o->rollback(snapid);
 }
 
-// You must specify the snapid not the name normally used with pool snapshots
-void librados::ObjectWriteOperation::snap_rollback(snap_t snapid)
-{
-  ::ObjectOperation *o = &impl->o;
-  o->rollback(snapid);
-}
-
 void librados::ObjectWriteOperation::set_alloc_hint(
                                             uint64_t expected_object_size,
                                             uint64_t expected_write_size)
