@@ -130,7 +130,8 @@ TEST(LibRadosPools, PoolGetBaseTier) {
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
 
   cmdstr = "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" +
-     tier_pool_name + "\", \"mode\":\"readonly\"}";
+     tier_pool_name + "\", \"mode\":\"readonly\", \"sure\": " +
+    "\"--yes-i-really-mean-it\"}";
   cmd[0] = (char *)cmdstr.c_str();
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
 
