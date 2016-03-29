@@ -7943,6 +7943,14 @@ bool PG::PriorSet::affected_by_map(const OSDMapRef osdmap, const PG *debug_pg) c
       dout(10) << "affected_by_map osd." << o << " no longer exists" << dendl;
       return true;
     }
+    // did a down osd in down get (re)marked as lost?
+    map<int, epoch_t>::const_iterator r = blocked_by.find(o);
+    if (r != blocked_by.end()) {
+      if (osdmap->get_info(o).lost_at != r->second) {
+  dout(10) << "affected_by_map osd." << o << " (re)marked as lost" << dendl;
+  return true;
+      }
+    } 
   }
 
   return false;
