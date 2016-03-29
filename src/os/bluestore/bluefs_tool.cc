@@ -14,6 +14,11 @@
 
 #include "os/bluestore/BlueFS.h"
 
+void usage(char **argv)
+{
+  cout << argv[0] << " <outdir> <bdev[0..2]>" << std::endl;;
+}
+
 int main(int argc, char **argv)
 {
   vector<const char*> args;
@@ -28,6 +33,11 @@ int main(int argc, char **argv)
   g_ceph_context->_conf->apply_changes(NULL);
 
   BlueFS fs;
+
+  if (args.size() != 4) {
+    usage(argv);
+    exit(-1);
+  }
 
   cout << "args " << args << std::endl;
   string outdir = args[0];
@@ -73,7 +83,7 @@ int main(int argc, char **argv)
 	  r = fs.read(h, &h->buf, pos, left, &bl, NULL);
 	  assert(r > 0);
 	  int rc = bl.write_fd(fd);
-	  assert(rc == r);
+	  assert(rc == 0);
 	  pos += r;
 	  left -= r;
 	}
