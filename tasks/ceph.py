@@ -1414,7 +1414,9 @@ def task(ctx, config):
     overrides = ctx.config.get('overrides', {})
     teuthology.deep_merge(config, overrides.get('ceph', {}))
 
+    first_ceph_cluster = False
     if not hasattr(ctx, 'daemons'):
+        first_ceph_cluster = True
         ctx.daemons = DaemonGroup()
 
     testdir = teuthology.get_testdir(ctx)
@@ -1436,26 +1438,35 @@ def task(ctx, config):
 
     validate_config(ctx, config)
 
-    with contextutil.nested(
+    subtasks = []
+    if first_ceph_cluster:
+        # these tasks handle general log setup and parsing on all hosts,
+        # so they should only be run once
+        subtasks = [
             lambda: ceph_log(ctx=ctx, config=None),
             lambda: valgrind_post(ctx=ctx, config=config),
-            lambda: cluster(ctx=ctx, config=dict(
-                conf=config.get('conf', {}),
-                fs=config.get('fs', None),
-                mkfs_options=config.get('mkfs_options', None),
-                mount_options=config.get('mount_options', None),
-                block_journal=config.get('block_journal', None),
-                tmpfs_journal=config.get('tmpfs_journal', None),
-                log_whitelist=config.get('log-whitelist', []),
-                cpu_profile=set(config.get('cpu_profile', []),),
-                cluster=config['cluster'],
-            )),
-            lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
-            lambda: crush_setup(ctx=ctx, config=config),
-            lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
-            lambda: cephfs_setup(ctx=ctx, config=config),
-            lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
-    ):
+        ]
+
+    subtasks += [
+        lambda: cluster(ctx=ctx, config=dict(
+            conf=config.get('conf', {}),
+            fs=config.get('fs', None),
+            mkfs_options=config.get('mkfs_options', None),
+            mount_options=config.get('mount_options', None),
+            block_journal=config.get('block_journal', None),
+            tmpfs_journal=config.get('tmpfs_journal', None),
+            log_whitelist=config.get('log-whitelist', []),
+            cpu_profile=set(config.get('cpu_profile', []),),
+            cluster=config['cluster'],
+        )),
+        lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
+        lambda: crush_setup(ctx=ctx, config=config),
+        lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
+        lambda: cephfs_setup(ctx=ctx, config=config),
+        lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
+    ]
+
+    with contextutil.nested(*subtasks):
         try:
             if config.get('wait-for-healthy', True):
                 healthy(ctx=ctx, config=dict(cluster=config['cluster']))
