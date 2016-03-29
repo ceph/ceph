@@ -9,6 +9,8 @@ roles:
   - osd.3
 - - client.0
   - client.1
+  - client.2
+  - client.3
 overrides:
   ceph:
     log-whitelist:
