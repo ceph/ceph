@@ -366,7 +366,7 @@ namespace crimson {
 	      const auto& t1 = n1.next_request().tag;
 	      const auto& t2 = n2.next_request().tag;
 	      if (ReadyOption::ignore == ready_opt || t1.ready == t2.ready) {
-		  // if we don't care about ready or the ready values are the same
+		// if we don't care about ready or the ready values are the same
 		if (reserv_delta) {
 		  return (t1.*tag_field - n1.reserv_delta) <
 		    (t2.*tag_field - n2.reserv_delta);
@@ -380,12 +380,15 @@ namespace crimson {
 		return t2.ready;
 	      }
 	    } else {
+	      // n1 has request but n2 does not
 	      return true;
 	    }
 	  } else if (n2.has_request()) {
+	    // n2 has request but n1 does not
 	    return false;
 	  } else {
-	    return false; // both have none; keep stable w false
+	    // both have none; keep stable w false
+	    return false;
 	  }
 	}
       };
