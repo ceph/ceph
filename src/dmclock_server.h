@@ -166,19 +166,6 @@ namespace crimson {
 	friend ClientEntry;
 	friend PriorityQueue;
 
-#if 0
-	// NB: is there a better way than enumerating all possibilities?
-	friend ClientCompare<&RequestTag::reservation,ReadyOption::ignore>;
-	friend ClientCompare<&RequestTag::limit,ReadyOption::ignore>;
-	friend ClientCompare<&RequestTag::proportion,ReadyOption::ignore>;
-	friend ClientCompare<&RequestTag::reservation,ReadyOption::lowers>;
-	friend ClientCompare<&RequestTag::limit,ReadyOption::lowers>;
-	friend ClientCompare<&RequestTag::proportion,ReadyOption::lowers>;
-	friend ClientCompare<&RequestTag::reservation,ReadyOption::raises>;
-	friend ClientCompare<&RequestTag::limit,ReadyOption::raises>;
-	friend ClientCompare<&RequestTag::proportion,ReadyOption::raises>;
-#endif
-
 	RequestTag          tag;
 	RequestRef          request;
 
@@ -341,6 +328,7 @@ namespace crimson {
 	boost::variant<Retn,Time> data;
       };
 
+      
       // this is returned from next_req to tell the caller the situation
       struct NextReq {
 	NextReqType type;
