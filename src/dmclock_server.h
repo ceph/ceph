@@ -204,9 +204,16 @@ namespace crimson {
 
 	C                     client;
 	std::deque<ClientReq> requests;
-	// amount subtracted from the reservation tag as a result of
-	// proportional scheduling
+
+	// amount added to the reservation tag's for this client as a
+	// result of proportional scheduling; is always 0 or negative;
+	// NB: this implementation likely does not match the algorithm
+	// as these changes in reservation tags should only be for
+	// outstanding tags
 	double                reserv_delta = 0.0;
+
+	// amount added from the proportion tag as a result of
+	// an idle client becoming unidle
 	double                prop_delta = 0.0;
 
 	c::IndIntruHeapData   reserv_heap_data;
@@ -300,7 +307,7 @@ namespace crimson {
 	}
 
 	inline void increment_reserv_delta() {
-	  client_entry->reserv_delta += info.reservation_inv;
+	  client_entry->reserv_delta -= info.reservation_inv;
 	}
       }; // class ClientRec
 
@@ -370,8 +377,8 @@ namespace crimson {
 	      if (ReadyOption::ignore == ready_opt || t1.ready == t2.ready) {
 		// if we don't care about ready or the ready values are the same
 		if (use_reserv_delta) {
-		  return (t1.*tag_field - n1.reserv_delta) <
-		    (t2.*tag_field - n2.reserv_delta);
+		  return (t1.*tag_field + n1.reserv_delta) <
+		    (t2.*tag_field + n2.reserv_delta);
 		} else if (use_prop_delta) {
 		  return (t1.*tag_field + n1.prop_delta) <
 		    (t2.*tag_field + n2.prop_delta);
