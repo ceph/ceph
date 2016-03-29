@@ -19,6 +19,7 @@
 #
 TIMEOUT=300
 PG_NUM=4
+: ${CEPH_BUILD_VIRTUALENV:=/tmp}
 
 if type xmlstarlet > /dev/null 2>&1; then
     XMLSTARLET=xmlstarlet
@@ -1313,7 +1314,7 @@ function main() {
     shopt -s -o xtrace
     PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
-    export PATH=ceph-disk/ceph-disk-virtualenv/bin:ceph-detect-init/ceph-detect-init-virtualenv/bin:.:$PATH # make sure program from sources are prefered
+    export PATH=${CEPH_BUILD_VIRTUALENV}/ceph-disk-virtualenv/bin:${CEPH_BUILD_VIRTUALENV}/ceph-detect-init-virtualenv/bin:.:$PATH # make sure program from sources are prefered
 
     export CEPH_CONF=/dev/null
     unset CEPH_ARGS
@@ -1335,7 +1336,7 @@ function run_tests() {
     shopt -s -o xtrace
     PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
-    export PATH=ceph-disk/ceph-disk-virtualenv/bin:ceph-detect-init/ceph-detect-init-virtualenv/bin:.:$PATH # make sure program from sources are prefered
+    export PATH=${CEPH_BUILD_VIRTUALENV}/ceph-disk-virtualenv/bin:${CEPH_BUILD_VIRTUALENV}/ceph-detect-init-virtualenv/bin:.:$PATH # make sure program from sources are prefered
 
     export CEPH_MON="127.0.0.1:7109" # git grep '\<7109\>' : there must be only one
     export CEPH_ARGS
