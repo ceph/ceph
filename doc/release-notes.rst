@@ -5,7 +5,7 @@
 v10.0.4
 =======
 
-This is the fourth and last development release before Jewel.  The next release
+This is the fifth and last development release before Jewel.  The next release
 will be a release candidate with the final set of features.  Big items include
 RGW static website support, librbd journal framework, fixed mon sync of config-key
 data, C++11 updates, and bluestore/kstore.
