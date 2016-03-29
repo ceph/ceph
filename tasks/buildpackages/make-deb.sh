@@ -134,6 +134,7 @@ EOF
     link_same $codename/$base/ref $ceph_dir $sha1
     if test "$gitbuilder_host" ; then
         cd $codename
+        sudo apt-get install -y rsync
         RSYNC_RSH='ssh -o StrictHostKeyChecking=false' rsync -av $base/ $gitbuilder_host:/usr/share/nginx/html/$base/
     fi
 }
