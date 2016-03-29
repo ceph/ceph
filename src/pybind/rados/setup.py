@@ -42,7 +42,8 @@ setup(
     ext_modules = cythonize([
         Extension("rados",
             ["rados.pyx"],
-            libraries=["rados"]
+            libraries=["rados"],
+            language="c++"
             )
     ], build_dir=os.environ.get("CYTHON_BUILD_DIR", None)),
     cmdclass={

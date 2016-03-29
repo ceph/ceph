@@ -524,6 +524,8 @@ install(TARGETS rados librados-config DESTINATION bin)
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/
   DESTINATION ${PYTHON_INSTDIR})
 
+add_subdirectory(pybind)
+
 ## dencoder
 set(dencoder_srcs
   test/encoding/ceph_dencoder.cc
@@ -883,25 +885,25 @@ target_link_libraries(ceph-authtool global ${EXTRALIBS} ${CRYPTO_LIBS})
 install(TARGETS ceph-authtool DESTINATION bin)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
-  ${CMAKE_BINARY_DIR}/ceph-coverage @ONLY)
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-debugpack.in
-  ${CMAKE_BINARY_DIR}/ceph-debugpack @ONLY)
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph.in
-  ${CMAKE_BINARY_DIR}/ceph @ONLY)
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-crush-location.in
-  ${CMAKE_BINARY_DIR}/ceph-crush-location @ONLY)
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crush-location @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/init-ceph.in
-  ${CMAKE_BINARY_DIR}/init-ceph @ONLY)
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph @ONLY)
 
 install(PROGRAMS
-  ${CMAKE_BINARY_DIR}/ceph
-  ${CMAKE_BINARY_DIR}/ceph-debugpack
-  ${CMAKE_BINARY_DIR}/ceph-coverage
-  ${CMAKE_BINARY_DIR}/init-ceph
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph
   ${CMAKE_SOURCE_DIR}/src/ceph-run
   ${CMAKE_SOURCE_DIR}/src/vstart.sh
   ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
@@ -1313,6 +1315,7 @@ add_custom_target(vstart DEPENDS
 add_custom_target(cephfs_testing DEPENDS
     vstart
     rados
+    cython_modules
     cephfs
     cls_cephfs
     ceph-fuse

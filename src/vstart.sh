@@ -21,50 +21,34 @@ if [ -n "$VSTART_DEST" ]; then
   CEPH_OUT_DIR=$VSTART_DEST/out
 fi
 
+# for running out of the CMake build directory
 if [ -e CMakeCache.txt ]; then
   # Out of tree build, learn source location from CMakeCache.txt
-  SRC_ROOT=`grep Ceph_SOURCE_DIR CMakeCache.txt | cut -d "=" -f 2`
-  [ -z "$PYBIND" ] && PYBIND=$SRC_ROOT/src/pybind
-  [ -z "$CEPH_ADM" ] && CEPH_ADM=./ceph
-  [ -z "$INIT_CEPH" ] && INIT_CEPH=./init-ceph
-  [ -z "$CEPH_BIN" ] && CEPH_BIN=src
-  [ -z "$CEPH_LIB" ] && CEPH_LIB=src
-  [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=src/cls
-
-  # Gather symlinks to EC plugins in one dir, because with CMake they
-  # are built into multiple locations
-  mkdir -p ec_plugins
-  for file in ./src/erasure-code/*/libec_*.so*;
-  do
-    ln -sf ../${file} ec_plugins/`basename $file`
-  done
-  [ -z "$EC_PATH" ] && EC_PATH=./ec_plugins
-  # check for compression plugins
-  mkdir -p .libs/compressor
-  for file in ./src/compressor/*/libcs_*.so*;
-  do
-    ln -sf ../${file} .libs/compressor/`basename $file`
-  done
-else
-    mkdir -p .libs/compressor
-    for f in `ls -d compressor/*/`; 
-    do 
-        cp .libs/libceph_`basename $f`.so* .libs/compressor/;
-    done
+  CEPH_ROOT=`grep Ceph_SOURCE_DIR CMakeCache.txt | cut -d "=" -f 2`
+  CEPH_BUILD_DIR=`pwd`
 fi
 
-if [ -z "$CEPH_BUILD_ROOT" ]; then
-        [ -z "$CEPH_BIN" ] && CEPH_BIN=.
-        [ -z "$CEPH_LIB" ] && CEPH_LIB=.libs
-        [ -z $EC_PATH ] && EC_PATH=$CEPH_LIB
-        [ -z $CS_PATH ] && CS_PATH=$CEPH_LIB
-        [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB
-else
+# use CEPH_BUILD_ROOT to vstart from a 'make install' 
+if [ -n "$CEPH_BUILD_ROOT" ]; then
         [ -z $CEPH_BIN ] && CEPH_BIN=$CEPH_BUILD_ROOT/bin
         [ -z $CEPH_LIB ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
         [ -z $EC_PATH ] && EC_PATH=$CEPH_LIB/erasure-code
         [ -z $CS_PATH ] && CS_PATH=$CEPH_LIB/compressor
         [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
+elif [ -n "$CEPH_ROOT" ]; then
+        [ -z "$PYBIND" ] && PYBIND=$CEPH_ROOT/src/pybind
+        [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_DIR/bin
+        [ -z "$CEPH_ADM" ] && CEPH_ADM=$CEPH_BIN/ceph
+        [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
+        [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_DIR/lib
+        [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
+        [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
+else
+        [ -z "$CEPH_BIN" ] && CEPH_BIN=.
+        [ -z "$CEPH_LIB" ] && CEPH_LIB=.libs
+        [ -z $EC_PATH ] && EC_PATH=$CEPH_LIB
+        [ -z $CS_PATH ] && CS_PATH=$CEPH_LIB
+        [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB
 fi
 
 if [ -z "${CEPH_VSTART_WRAPPER}" ]; then
@@ -73,7 +57,7 @@ fi
 
 [ -z "$PYBIND" ] && PYBIND=./pybind
 
-export PYTHONPATH=$PYBIND
+export PYTHONPATH=$PYBIND:$PYTHONPATH
 export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
 export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 
@@ -800,7 +784,7 @@ fi
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 
 echo ""
-echo "export PYTHONPATH=./pybind"
+echo "export PYTHONPATH=./pybind:$PYTHONPATH"
 echo "export LD_LIBRARY_PATH=$CEPH_LIB"
 
 if [ "$CEPH_DIR" != "$PWD" ]; then
