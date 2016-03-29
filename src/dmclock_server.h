@@ -154,8 +154,6 @@ namespace crimson {
       using Duration = std::chrono::milliseconds;
       using MarkPoint = std::pair<TimePoint,Counter>;
 
-      class ClientEntry; // forward decl for friend decls
-
       enum class ReadyOption {ignore, lowers, raises};
 
       // forward decl for friend decls
@@ -164,7 +162,6 @@ namespace crimson {
 
 
       class ClientReq {
-	friend ClientEntry;
 	friend PriorityQueue;
 
 	RequestTag          tag;
@@ -187,10 +184,11 @@ namespace crimson {
       }; // class ClientReq
 
 
-      class ClientEntry {
+      class ClientRec {
 	friend PriorityQueue<C,R>;
 
 	C                     client;
+	RequestTag            prev_tag;
 	std::deque<ClientReq> requests;
 
 	// amount added to the reservation tag's for this client as a
@@ -211,66 +209,18 @@ namespace crimson {
 
       public:
 
-	ClientEntry(C _client) :
-	  client(_client)
-	{
-	  // empty
-	}
+	ClientInfo            info;
+	bool                  idle;
+	Counter               last_tick;
 
-	inline void add_request(const RequestTag& tag, RequestRef&& request) {
-	  requests.emplace_back(ClientReq(tag, std::move(request)));
-	}
-
-	inline const ClientReq& next_request() const {
-	  return requests.front();
-	}
-
-	inline ClientReq& next_request() {
-	  return requests.front();
-	}
-
-	inline void pop_request() {
-	  requests.pop_front();
-	}
-
-	inline bool has_request() const {
-	  return !requests.empty();
-	}
-
-	friend std::ostream&
-	operator<<(std::ostream& out,
-		   const typename PriorityQueue<C,R>::ClientEntry& e) {
-	  out << "{ client:" << e.client << " top req: " <<
-	    (e.has_request() ? e.next_request() : "none") << " }";
-	  return out;
-	}
-      }; // class ClientEntry
-
-
-      using ClientEntryRef = std::shared_ptr<ClientEntry>;
-
-
-      class ClientRec {
-	// we're keeping this private to force callers to use
-	// update_req_tag, to make sure the tick gets updated
-	RequestTag         prev_tag;
-
-      public:
-
-	ClientInfo         info;
-	bool               idle;
-	Counter            last_tick;
-	// TODO consider merging ClientEntry and ClientRec
-	ClientEntryRef     client_entry;
-
-	ClientRec(const ClientInfo& _info,
-		  Counter current_tick,
-		  const ClientEntryRef& _client_entry) :
+	ClientRec(C _client,
+		  const ClientInfo& _info,
+		  Counter current_tick) :
+	  client(_client),
 	  prev_tag(0.0, 0.0, 0.0),
 	  info(_info),
 	  idle(true),
-	  last_tick(current_tick),
-	  client_entry(_client_entry)
+	  last_tick(current_tick)
 	{
 	  // empty
 	}
@@ -295,9 +245,40 @@ namespace crimson {
 	}
 
 	inline void increment_reserv_delta() {
-	  client_entry->reserv_delta -= info.reservation_inv;
+	  reserv_delta -= info.reservation_inv;
+	}
+
+	inline void add_request(const RequestTag& tag, RequestRef&& request) {
+	  requests.emplace_back(ClientReq(tag, std::move(request)));
+	}
+
+	inline const ClientReq& next_request() const {
+	  return requests.front();
+	}
+
+	inline ClientReq& next_request() {
+	  return requests.front();
+	}
+
+	inline void pop_request() {
+	  requests.pop_front();
+	}
+
+	inline bool has_request() const {
+	  return !requests.empty();
+	}
+
+	friend std::ostream&
+	operator<<(std::ostream& out,
+		   const typename PriorityQueue<C,R>::ClientRec& e) {
+	  out << "{ client:" << e.client << " top req: " <<
+	    (e.has_request() ? e.next_request() : "none") << " }";
+	  return out;
 	}
       }; // class ClientRec
+
+
+      using ClientRecRef = std::shared_ptr<ClientRec>;
 
 
     public:
@@ -349,7 +330,7 @@ namespace crimson {
       // a function to submit a request to the server; the second
       // parameter is a callback when it's completed
       using HandleRequestFunc =
-	       std::function<void(const C&,RequestRef,PhaseType)>;
+	std::function<void(const C&,RequestRef,PhaseType)>;
 
     protected:
 
@@ -358,7 +339,7 @@ namespace crimson {
 	       bool use_reserv_delta,
 	       bool use_prop_delta>
       struct ClientCompare {
-	bool operator()(const ClientEntry& n1, const ClientEntry& n2) const {
+	bool operator()(const ClientRec& n1, const ClientRec& n2) const {
 	  if (n1.has_request()) {
 	    if (n2.has_request()) {
 	      const auto& t1 = n1.next_request().tag;
@@ -403,26 +384,26 @@ namespace crimson {
       using DataGuard = std::lock_guard<decltype(data_mtx)>;
 
       // stable mappiing between client ids and client queues
-      std::map<C,ClientRec> client_map;
+      std::map<C,ClientRecRef> client_map;
 
 
-      c::IndIntruHeap<ClientEntryRef,
-		      ClientEntry,
-		      &ClientEntry::reserv_heap_data,
+      c::IndIntruHeap<ClientRecRef,
+		      ClientRec,
+		      &ClientRec::reserv_heap_data,
 		      ClientCompare<&RequestTag::reservation,ReadyOption::ignore,true,false>> reserv_q;
 #if REMOVE_2
-      c::IndIntruHeap<ClientEntryRef,
-		      ClientEntry,
-		      &ClientEntry::prop_heap_data,
+      c::IndIntruHeap<ClientRecRef,
+		      ClientRec,
+		      &ClientRec::prop_heap_data,
 		      ClientCompare<&RequestTag::proportion,ReadyOption::ignore,false,true>> prop_q;
 #endif
-      c::IndIntruHeap<ClientEntryRef,
-		      ClientEntry,
-		      &ClientEntry::lim_heap_data,
+      c::IndIntruHeap<ClientRecRef,
+		      ClientRec,
+		      &ClientRec::lim_heap_data,
 		      ClientCompare<&RequestTag::limit,ReadyOption::lowers,false,false>> limit_q;
-      c::IndIntruHeap<ClientEntryRef,
-		      ClientEntry,
-		      &ClientEntry::ready_heap_data,
+      c::IndIntruHeap<ClientRecRef,
+		      ClientRec,
+		      &ClientRec::ready_heap_data,
 		      ClientCompare<&RequestTag::proportion,ReadyOption::raises,false,true>> ready_q;
 
 
@@ -594,21 +575,31 @@ namespace crimson {
 	DataGuard g(data_mtx);
 	++tick;
 
+	// this pointer will help us create a reference to a shared
+	// pointer, no matter which of two codepaths we take
+	ClientRec* temp_client;
+	
 	auto client_it = client_map.find(client_id);
-	if (client_map.end() == client_it) {
-	  ClientInfo ci = client_info_f(client_id);
-	  ClientEntryRef client_entry = std::make_shared<ClientEntry>(client_id);
-	  reserv_q.push(client_entry);
+	if (client_map.end() != client_it) {
+	  temp_client = &(*client_it->second); // address of obj of shared_ptr
+	} else {
+	  ClientInfo info = client_info_f(client_id);
+	  ClientRecRef client_rec =
+	    std::make_shared<ClientRec>(client_id, info, tick);
+	  reserv_q.push(client_rec);
 #if REMOVE_2
-	  prop_q.push(client_entry);
+	  prop_q.push(client_rec);
 #endif
-	  limit_q.push(client_entry);
-	  ready_q.push(client_entry);
-	  client_map.emplace(client_id, ClientRec(ci, tick, client_entry));
-	  client_it = client_map.find(client_id);
+	  limit_q.push(client_rec);
+	  ready_q.push(client_rec);
+	  client_map[client_id] = client_rec;
+	  temp_client = &(*client_rec); // address of obj of shared_ptr
 	}
 
-	if (client_it->second.idle) {
+	// for convenience, we'll create a reference to the shared pointer
+	ClientRec& client = *temp_client;
+
+	if (client.idle) {
 	  // We need to do an adjustment so that idle clients compete
 	  // fairly on proportional tags since those tags may have
 	  // drifted from real-time. Either use the lowest existing
@@ -623,12 +614,10 @@ namespace crimson {
 	  for (auto const &c : client_map) {
 	    // don't use ourselves (or anything else that might be
 	    // listed as idle) since we're now in the map
-	    if (!c.second.idle) {
-	      const auto& entry = c.second.client_entry;
+	    if (!c.idle) {
 	      // use either lowest proportion tag or previous proportion tag
-	      if (entry->has_request()) {
-		double p =
-		  entry->next_request().tag.proportion + entry->prop_delta;
+	      if (c.has_request()) {
+		double p = c.next_request().tag.proportion + c.prop_delta;
 		if (isnan(lowest_prop_tag) || p < lowest_prop_tag) {
 		  lowest_prop_tag = p;
 		}
@@ -636,28 +625,25 @@ namespace crimson {
 	    }
 	  }
 	  if (!isnan(lowest_prop_tag)) {
-	    client_it->second.client_entry->prop_delta = lowest_prop_tag - time;
+	    client.prop_delta = lowest_prop_tag - time;
 	  }
-	  client_it->second.idle = false;
+	  client.idle = false;
 	} // if this client was idle
 
-	ClientRec& client_rec = client_it->second;
-
-	RequestTag tag(client_rec.get_req_tag(),
-		       client_rec.info,
+	RequestTag tag(client.get_req_tag(),
+		       client.info,
 		       req_params,
 		       time);
-	client_rec.client_entry->add_request(tag,
-					     std::move(request));
+	client.add_request(tag, std::move(request));
 
 	// copy tag to previous tag for client
-	client_rec.update_req_tag(tag, tick);
+	client.update_req_tag(tag, tick);
 
-	reserv_q.adjust(*client_rec.client_entry);
-	limit_q.adjust(*client_rec.client_entry);
-	ready_q.adjust(*client_rec.client_entry);
+	reserv_q.adjust(client);
+	limit_q.adjust(client);
+	ready_q.adjust(client);
 #if REMOVE_2
-	prop_q.adjust(*client_rec.client_entry);
+	prop_q.adjust(client);
 #endif
 
 	if (Mechanism::push == mechanism) {
@@ -737,12 +723,12 @@ namespace crimson {
 
       // data_mtx should be held when called; top of heap should have
       // a ready request
-      template<typename C1, IndIntruHeapData ClientEntry::*C2, typename C3>
-      void pop_process_request(IndIntruHeap<C1, ClientEntry, C2, C3>& heap,
+      template<typename C1, IndIntruHeapData ClientRec::*C2, typename C3>
+      void pop_process_request(IndIntruHeap<C1, ClientRec, C2, C3>& heap,
 			       std::function<void(const C& client,
 						  RequestRef& request)> process) {
 	// gain access to data
-	ClientEntry& top = heap.top();
+	ClientRec& top = heap.top();
 	ClientReq& first = top.next_request();
 	RequestRef request = std::move(first.request);
 
@@ -763,8 +749,8 @@ namespace crimson {
       // data_mtx should be held when called; furthermore, the heap
       // should not be empty and the top element of the heap should
       // not be already handled
-      template<typename C1, IndIntruHeapData ClientEntry::*C2, typename C3>
-      C submit_top_request(IndIntruHeap<C1, ClientEntry, C2, C3>& heap,
+      template<typename C1, IndIntruHeapData ClientRec::*C2, typename C3>
+      C submit_top_request(IndIntruHeap<C1, ClientRec, C2, C3>& heap,
 			   PhaseType phase) {
 	C client_result;
 	pop_process_request(heap,
@@ -783,7 +769,7 @@ namespace crimson {
 			  bool show_lim = true,
 			  bool show_ready = true,
 			  bool show_prop = true) {
-	auto filter = [](const ClientEntryRef& e)->bool { return !e->handled; };
+	auto filter = [](const ClientRecRef& e)->bool { return !e->handled; };
 	if (show_res) {
 	  reserv_q.display_sorted(std::cout << "RESER:", filter) << std::endl;
 	}
