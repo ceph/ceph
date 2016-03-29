@@ -1604,13 +1604,12 @@ void FileJournal::check_aio_completion()
 
 int FileJournal::prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl) {
   dout(10) << "prepare_entry " << tls << dendl;
-  unsigned data_len = 0;
+  int data_len = g_conf->journal_align_min_size - 1;
   int data_align = -1; // -1 indicates that we don't care about the alignment
   bufferlist bl;
   for (vector<ObjectStore::Transaction>::iterator p = tls.begin();
       p != tls.end(); ++p) {
-   if ((*p).get_data_length() > data_len &&
-     (int)(*p).get_data_length() >= g_conf->journal_align_min_size) {
+   if ((int)(*p).get_data_length() > data_len) {
      data_len = (*p).get_data_length();
      data_align = ((*p).get_data_alignment() - bl.length()) & ~CEPH_PAGE_MASK;
     }
