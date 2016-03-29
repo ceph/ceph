@@ -4964,9 +4964,9 @@ void OSD::requeue_failures()
   unsigned old_pending = failure_pending.size();
   for (map<int,pair<utime_t,entity_inst_t> >::iterator p =
 	 failure_pending.begin();
-       p != failure_pending.end();
-       ++p) {
+       p != failure_pending.end(); ) {
     failure_queue[p->first] = p->second.first;
+    failure_pending.erase(p++);
   }
   dout(10) << __func__ << " " << old_queue << " + " << old_pending << " -> "
 	   << failure_queue.size() << dendl;
