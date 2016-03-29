@@ -134,6 +134,8 @@ void MDSMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", epoch);
   f->dump_unsigned("flags", flags);
+  f->dump_unsigned("ever_allowed_features", ever_allowed_features);
+  f->dump_unsigned("explicitly_allowed_features", explicitly_allowed_features);
   f->dump_stream("created") << created;
   f->dump_stream("modified") << modified;
   f->dump_int("tableserver", tableserver);
@@ -547,7 +549,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(cas_pool, bl);
 
   // kclient ignores everything from here
-  __u16 ev = 9;
+  __u16 ev = 10;
   ::encode(ev, bl);
   ::encode(compat, bl);
   ::encode(metadata_pool, bl);
@@ -560,8 +562,8 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(failed, bl);
   ::encode(stopped, bl);
   ::encode(last_failure_osd_epoch, bl);
-  ::encode(ever_allowed_snaps, bl);
-  ::encode(explicitly_allowed_snaps, bl);
+  ::encode(ever_allowed_features, bl);
+  ::encode(explicitly_allowed_features, bl);
   ::encode(inline_data_enabled, bl);
   ::encode(enabled, bl);
   ::encode(fs_name, bl);
@@ -624,11 +626,20 @@ void MDSMap::decode(bufferlist::iterator& p)
   if (ev >= 4)
     ::decode(last_failure_osd_epoch, p);
   if (ev >= 6) {
-    ::decode(ever_allowed_snaps, p);
-    ::decode(explicitly_allowed_snaps, p);
+    if (ev < 10) {
+      // previously this was a bool about snaps, not a flag map
+      bool flag;
+      ::decode(flag, p);
+      legacy_mds_map.ever_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
+      ::decode(flag, p);
+      legacy_mds_map.explicitly_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
+    } else {
+      ::decode(ever_allowed_features, p);
+      ::decode(explicitly_allowed_features, p);
+    }
   } else {
-    ever_allowed_snaps = true;
-    explicitly_allowed_snaps = false;
+    ever_allowed_features = CEPH_MDSMAP_ALLOW_SNAPS;
+    explicitly_allowed_features = 0;
   }
   if (ev >= 7)
     ::decode(inline_data_enabled, p);
