@@ -25,6 +25,7 @@
 #include "include/atomic.h"
 #include "common/cmdparse.h"
 #include "include/Spinlock.h"
+#include "crush/CrushLocation.h"
 #include <boost/noncopyable.hpp>
 
 class AdminSocket;
@@ -246,6 +247,10 @@ private:
   PluginRegistry *_plugin_registry;
 
   md_config_obs_t *_lockdep_obs;
+
+public:
+  CrushLocation crush_location;
+private:
 
   enum {
     l_cct_first,
