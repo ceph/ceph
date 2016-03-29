@@ -79,8 +79,8 @@ if MYDIR.endswith('src') and \
    os.path.exists(os.path.join(MYDIR, 'pybind')) and \
    os.path.exists(os.path.join(MYDIR, 'build')):
 
-    respawn_in_path(os.path.join(MYDIR, '.libs'), "pybind",
-                                 get_pythonlib_dir())
+    python_libpath = os.path.join(MYDIR, 'build', get_pythonlib_dir())
+    respawn_in_path(os.path.join(MYDIR, '.libs'), 'pybind', python_libpath)
     if os.environ.has_key('PATH') and MYDIR not in os.environ['PATH']:
         os.environ['PATH'] += ':' + MYDIR
 
