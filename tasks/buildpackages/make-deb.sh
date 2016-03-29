@@ -27,6 +27,7 @@ codename=$2
 git_ceph_url=$3
 sha1=$4
 flavor=$5
+arch=$6
 
 sudo apt-get update
 sudo apt-get install -y git
@@ -104,6 +105,7 @@ function build_package() {
     #
     # create the packages (with ccache)
     #
+    export CEPH_EXTRA_CONFIGURE_ARGS=$(flavor2configure $flavor)
     j=$(maybe_parallel $NPROC $vers)
     PATH=/usr/lib/ccache:$PATH dpkg-buildpackage $j -uc -us -sa
 }
@@ -117,7 +119,6 @@ function build_repo() {
     # Create a repository in a directory with a name structured
     # as
     #
-    arch=x86_64
     base=ceph-deb-$codename-$arch-$flavor
     sha1_dir=$codename/$base/sha1/$sha1
     mkdir -p $sha1_dir/conf
