@@ -417,6 +417,8 @@ OPTION(client_use_faked_inos, OPT_BOOL, false)
 OPTION(client_mds_namespace, OPT_INT, -1)
 
 OPTION(crush_location, OPT_STR, "")       // whitespace-separated list of key=value pairs describing crush location
+OPTION(crush_location_hook, OPT_STR, "")
+OPTION(crush_location_hook_timeout, OPT_INT, 10)
 
 OPTION(objecter_tick_interval, OPT_DOUBLE, 5.0)
 OPTION(objecter_timeout, OPT_DOUBLE, 10.0)    // before we ask for a map
