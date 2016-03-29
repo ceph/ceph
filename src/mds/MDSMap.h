@@ -209,8 +209,8 @@ protected:
   std::map<mds_rank_t, mds_gid_t> up;        // who is in those roles
   std::map<mds_gid_t, mds_info_t> mds_info;
 
-  bool ever_allowed_snaps; //< the cluster has ever allowed snap creation
-  bool explicitly_allowed_snaps; //< the user has explicitly enabled snap creation
+  uint8_t ever_allowed_features; //< bitmap of features the cluster has allowed
+  uint8_t explicitly_allowed_features; //< bitmap of features explicitly enabled 
 
   bool inline_data_enabled;
 
@@ -235,8 +235,8 @@ public:
       cas_pool(-1),
       metadata_pool(0),
       max_mds(0),
-      ever_allowed_snaps(false),
-      explicitly_allowed_snaps(false),
+      ever_allowed_features(0),
+      explicitly_allowed_features(0),
       inline_data_enabled(false),
       cached_up_features(0)
   { }
@@ -259,8 +259,8 @@ public:
 
   void set_snaps_allowed() {
     set_flag(CEPH_MDSMAP_ALLOW_SNAPS);
-    ever_allowed_snaps = true;
-    explicitly_allowed_snaps = true;
+    ever_allowed_features &= CEPH_MDSMAP_ALLOW_SNAPS;
+    explicitly_allowed_features &= CEPH_MDSMAP_ALLOW_SNAPS;
   }
   bool allows_snaps() { return test_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
   void clear_snaps_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
