@@ -286,30 +286,35 @@ function test_tiering()
   expect_false ceph osd tier add slow2 cache
   # test some state transitions
   ceph osd tier cache-mode cache writeback
-  ceph osd tier cache-mode cache forward
-  ceph osd tier cache-mode cache readonly
-  ceph osd tier cache-mode cache forward
+  expect_false ceph osd tier cache-mode cache forward
+  ceph osd tier cache-mode cache forward --yes-i-really-mean-it
+  expect_false ceph osd tier cache-mode cache readonly
+  ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
+  expect_false ceph osd tier cache-mode cache forward
+  ceph osd tier cache-mode cache forward --yes-i-really-mean-it
   ceph osd tier cache-mode cache none
   ceph osd tier cache-mode cache writeback
+  ceph osd tier cache-mode cache proxy
+  ceph osd tier cache-mode cache writeback
   expect_false ceph osd tier cache-mode cache none
-  expect_false ceph osd tier cache-mode cache readonly
+  expect_false ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
   # test with dirty objects in the tier pool
   # tier pool currently set to 'writeback'
   rados -p cache put /etc/passwd /etc/passwd
   ceph tell osd.\* flush_pg_stats || true
   # 1 dirty object in pool 'cache'
-  ceph osd tier cache-mode cache forward
+  ceph osd tier cache-mode cache proxy
   expect_false ceph osd tier cache-mode cache none
-  expect_false ceph osd tier cache-mode cache readonly
+  expect_false ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
   ceph osd tier cache-mode cache writeback
   # remove object from tier pool
   rados -p cache rm /etc/passwd
   rados -p cache cache-flush-evict-all
   ceph tell osd.\* flush_pg_stats || true
   # no dirty objects in pool 'cache'
-  ceph osd tier cache-mode cache forward
+  ceph osd tier cache-mode cache proxy
   ceph osd tier cache-mode cache none
-  ceph osd tier cache-mode cache readonly
+  ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
   TRIES=0
   while ! ceph osd pool set cache pg_num 3 --yes-i-really-mean-it 2>$TMPFILE
   do
@@ -900,7 +905,7 @@ function test_mon_mds()
   tier_poolnum=$(ceph osd dump | grep "pool.* 'mds-tier" | awk '{print $2;}')
 
   # Use of a readonly tier should be forbidden
-  ceph osd tier cache-mode mds-tier readonly
+  ceph osd tier cache-mode mds-tier readonly --yes-i-really-mean-it
   set +e
   ceph fs new $FS_NAME fs_metadata mds-ec-pool 2>$TMPFILE
   check_response 'has a write tier (mds-tier) that is configured to forward' $? 22
@@ -960,7 +965,7 @@ function test_mon_mds()
 
   # Removing tier should be permitted because the underlying pool is
   # replicated (#11504 case)
-  ceph osd tier cache-mode mds-tier forward
+  ceph osd tier cache-mode mds-tier proxy
   ceph osd tier remove-overlay fs_metadata
   ceph osd tier remove fs_metadata mds-tier
   ceph osd pool delete mds-tier mds-tier --yes-i-really-really-mean-it
