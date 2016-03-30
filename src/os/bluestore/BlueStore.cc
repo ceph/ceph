@@ -5808,6 +5808,11 @@ int BlueStore::_do_zero(TransContext *txc,
   int r = 0;
   o->exists = true;
 
+  if (offset > o->onode.size) {
+    // we are past eof; just truncate up.
+    return _do_truncate(txc, c, o, offset + length);
+  }
+
   _dump_onode(o);
   _assign_nid(txc, o);
 
@@ -5815,26 +5820,8 @@ int BlueStore::_do_zero(TransContext *txc,
   _do_overlay_trim(txc, o, offset, length);
 
   uint64_t block_size = bdev->get_block_size();
+
   map<uint64_t,bluestore_extent_t>::iterator bp = o->onode.seek_extent(offset);
-
-  if (offset > o->onode.size) {
-    map<uint64_t, bluestore_extent_t>::iterator pp =
-      o->onode.find_extent(o->onode.size);
-    if (pp != o->onode.block_map.end() &&
-	pp != bp) {
-      if (pp->second.has_flag(bluestore_extent_t::FLAG_SHARED)) {
-	dout(10) << __func__ << " shared tail extent; doing _do_write_zero"
-		 << dendl;
-	uint64_t old_size = o->onode.size;
-	uint64_t end = bp->first + bp->second.length - old_size;
-	uint64_t zlen = end - old_size;
-	_do_write_zero(txc, c, o, old_size, zlen);
-      } else {
-	_do_zero_tail_extent(txc, o, offset, pp);
-      }
-    }
-  }
-
   while (bp != o->onode.block_map.end()) {
     if (bp->first >= offset + length)
       break;
