@@ -1023,6 +1023,7 @@ if(${WITH_RBD})
     librbd/Utils.cc
     librbd/exclusive_lock/AcquireRequest.cc
     librbd/exclusive_lock/ReleaseRequest.cc
+    librbd/exclusive_lock/StandardPolicy.cc
     librbd/image/CloseRequest.cc
     librbd/image/OpenRequest.cc
     librbd/image/RefreshParentRequest.cc
@@ -1031,6 +1032,7 @@ if(${WITH_RBD})
     librbd/image_watcher/Notifier.cc
     librbd/image_watcher/NotifyLockOwner.cc
     librbd/journal/Replay.cc
+    librbd/journal/StandardPolicy.cc
     librbd/journal/Types.cc
     librbd/object_map/InvalidateRequest.cc
     librbd/object_map/LockRequest.cc
