@@ -1125,7 +1125,8 @@ struct pg_pool_t {
     CACHEMODE_FORWARD = 2,               ///< forward if not in cache
     CACHEMODE_READONLY = 3,              ///< handle reads, forward writes [not strongly consistent]
     CACHEMODE_READFORWARD = 4,           ///< forward reads, write to cache flush later
-    CACHEMODE_READPROXY = 5              ///< proxy reads, write to cache flush later
+    CACHEMODE_READPROXY = 5,             ///< proxy reads, write to cache flush later
+    CACHEMODE_PROXY = 6,                 ///< proxy if not in cache
   } cache_mode_t;
   static const char *get_cache_mode_name(cache_mode_t m) {
     switch (m) {
@@ -1135,6 +1136,7 @@ struct pg_pool_t {
     case CACHEMODE_READONLY: return "readonly";
     case CACHEMODE_READFORWARD: return "readforward";
     case CACHEMODE_READPROXY: return "readproxy";
+    case CACHEMODE_PROXY: return "proxy";
     default: return "unknown";
     }
   }
@@ -1151,6 +1153,8 @@ struct pg_pool_t {
       return CACHEMODE_READFORWARD;
     if (s == "readproxy")
       return CACHEMODE_READPROXY;
+    if (s == "proxy")
+      return CACHEMODE_PROXY;
     return (cache_mode_t)-1;
   }
   const char *get_cache_mode_name() const {
@@ -1161,6 +1165,7 @@ struct pg_pool_t {
     case CACHEMODE_NONE:
     case CACHEMODE_FORWARD:
     case CACHEMODE_READONLY:
+    case CACHEMODE_PROXY:
       return false;
     case CACHEMODE_WRITEBACK:
     case CACHEMODE_READFORWARD:
