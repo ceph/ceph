@@ -157,7 +157,7 @@ namespace crimson {
       enum class ReadyOption {ignore, lowers, raises};
 
       // forward decl for friend decls
-      template<double RequestTag::*, ReadyOption, bool, bool>
+      template<double RequestTag::*, ReadyOption, bool>
       struct ClientCompare;
 
 
@@ -190,13 +190,6 @@ namespace crimson {
 	C                     client;
 	RequestTag            prev_tag;
 	std::deque<ClientReq> requests;
-
-	// amount added to the reservation tag's for this client as a
-	// result of proportional scheduling; is always 0 or negative;
-	// NB: this implementation likely does not match the algorithm
-	// as these changes in reservation tags should only be for
-	// outstanding tags
-	double                reserv_delta = 0.0;
 
 	// amount added from the proportion tag as a result of
 	// an idle client becoming unidle
@@ -242,10 +235,6 @@ namespace crimson {
 	inline void set_prev_prop_tag(double value,
 				      bool adjust_by_inc = false) {
 	  prev_tag.proportion = value - (adjust_by_inc ? info.weight_inv : 0.0);
-	}
-
-	inline void increment_reserv_delta() {
-	  reserv_delta -= info.reservation_inv;
 	}
 
 	inline void add_request(const RequestTag& tag, RequestRef&& request) {
@@ -336,7 +325,6 @@ namespace crimson {
 
       template<double RequestTag::*tag_field,
 	       ReadyOption ready_opt,
-	       bool use_reserv_delta,
 	       bool use_prop_delta>
       struct ClientCompare {
 	bool operator()(const ClientRec& n1, const ClientRec& n2) const {
@@ -346,10 +334,7 @@ namespace crimson {
 	      const auto& t2 = n2.next_request().tag;
 	      if (ReadyOption::ignore == ready_opt || t1.ready == t2.ready) {
 		// if we don't care about ready or the ready values are the same
-		if (use_reserv_delta) {
-		  return (t1.*tag_field + n1.reserv_delta) <
-		    (t2.*tag_field + n2.reserv_delta);
-		} else if (use_prop_delta) {
+		if (use_prop_delta) {
 		  return (t1.*tag_field + n1.prop_delta) <
 		    (t2.*tag_field + n2.prop_delta);
 		} else {
@@ -390,22 +375,29 @@ namespace crimson {
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
 		      &ClientRec::reserv_heap_data,
-		      ClientCompare<&RequestTag::reservation,ReadyOption::ignore,true,false>> reserv_q;
+		      ClientCompare<&RequestTag::reservation,
+				    ReadyOption::ignore,
+				    false>> reserv_q;
 #if REMOVE_2
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
 		      &ClientRec::prop_heap_data,
-		      ClientCompare<&RequestTag::proportion,ReadyOption::ignore,false,true>> prop_q;
+		      ClientCompare<&RequestTag::proportion,
+				    ReadyOption::ignore,
+				    true>> prop_q;
 #endif
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
 		      &ClientRec::lim_heap_data,
-		      ClientCompare<&RequestTag::limit,ReadyOption::lowers,false,false>> limit_q;
+		      ClientCompare<&RequestTag::limit,
+				    ReadyOption::lowers,
+				    false>> limit_q;
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
 		      &ClientRec::ready_heap_data,
-		      ClientCompare<&RequestTag::proportion,ReadyOption::raises,false,true>> ready_q;
-
+		      ClientCompare<&RequestTag::proportion,
+				    ReadyOption::raises,
+				    true>> ready_q;
 
       // if all reservations are met and all other requestes are under
       // limit, this will allow the request next in terms of
@@ -790,19 +782,12 @@ namespace crimson {
 
       // data_mtx should be held when called
       void reduce_reservation_tags(ClientRec& client) {
-	// IMPORTANT: I (Eric) do not believe this is implemented
-	// correctly as according to the algorithm specification. My
-	// modifying a delta it affects all future reservation
-	// reqeusts. The paper, however, states, "Whenever a request
-	// from VM v_i is scheduled in a weight-based phase, the R
-	// tags of the outstanding requests of v_i are decreated by
-	// 1/r_i." This implementating affects not only outstanding
-	// requests but all future requests. So we will in fact have
-	// to modify all request tags for a given client, modify its
-	// last request tag, and promote the client in the reservation
-	// queue.
-	client.increment_reserv_delta();
-	reserv_q.demote(client);
+	for (auto& r : client.requests) {
+	  r.tag.reservation -= client.info.reservation_inv;
+	}
+	// don't forget to update previous tag
+	client.prev_tag.reservation -= client.info.reservation_inv;
+	reserv_q.promote(client);
       }
 
 
@@ -812,9 +797,8 @@ namespace crimson {
 
 	// means the client was cleaned from map; should never happen
 	// as long as cleaning times are long enough
-	if (client_map.end() != client_it) {
-	  reduce_reservation_tags(*client_it->second);
-	}
+	assert(client_map.end() != client_it);
+	reduce_reservation_tags(*client_it->second);
       }
 
 
