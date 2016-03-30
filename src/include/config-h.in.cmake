@@ -256,6 +256,10 @@
 /* Defined if DPDK */
 #cmakedefine HAVE_DPDK
 
+/* Defined if CEPH_PERF_DEV */
+#cmakedefine CEPH_PERF_DEV
+
+/* Defined if LTTNG */
 /* Defined if LTTNG */
 #cmakedefine WITH_LTTNG 1
 

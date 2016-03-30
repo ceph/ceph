@@ -301,6 +301,11 @@ if(WITH_DPDK)
   set(HAVE_DPDK 1)
 endif(WITH_DPDK)
 
+option(WITH_PERF_DEV "Enable details performance counter print" OFF)
+if(WITH_PERF_DEV)
+  set(CEPH_PERF_DEV 1)
+endif(WITH_PERF_DEV)
+
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 

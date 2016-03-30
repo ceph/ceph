@@ -779,6 +779,13 @@ class DPDKQueuePair {
   std::vector<char*> _bufs;
   size_t _num_rx_free_segs = 0;
 
+#ifdef CEPH_PERF_DEV
+  uint64_t rx_cycles = 0;
+  uint64_t rx_count = 0;
+  uint64_t tx_cycles = 0;
+  uint64_t tx_count = 0;
+#endif
+
   class DPDKTXPoller : public EventCenter::Poller {
     DPDKQueuePair *qp;
 

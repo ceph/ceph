@@ -365,6 +365,15 @@ class AsyncConnection : public Connection {
   EventCenter *center;
   ceph::shared_ptr<AuthSessionHandler> session_security;
 
+  // perf developer zone
+#ifdef CEPH_PERF_DEV
+  uint64_t rx_count = 0;
+  uint64_t rx_cycles = 0;
+  uint64_t tx_prepare_count = 0;
+  uint64_t tx_prepare_cycles = 0;
+  uint64_t tx_send_count = 0;
+  uint64_t tx_send_cycles = 0;
+#endif
  public:
   // used by eventcallback
   void handle_write();

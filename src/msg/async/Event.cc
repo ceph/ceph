@@ -469,6 +469,6 @@ void EventCenter::dispatch_event_external(EventCallbackRef e)
   external_events.push_back(e);
   ++external_num_events;
   external_lock.unlock();
-  if (local_id != id)
+  if (!in_thread())
     wakeup();
 }

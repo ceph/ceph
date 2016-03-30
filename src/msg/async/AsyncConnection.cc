@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "include/Context.h"
+#include "common/Cycles.h"
 #include "common/errno.h"
 #include "AsyncMessenger.h"
 #include "AsyncConnection.h"
@@ -494,6 +495,9 @@ ssize_t AsyncConnection::read_data<false>(unsigned len, bufferlist &bl)
 
 void AsyncConnection::process()
 {
+#ifdef CEPH_PERF_DEV
+  uint64_t start = Cycles::rdtsc();
+#endif
   ssize_t r = 0;
   int prev_state = state;
   bool already_dispatch_writer = false;
@@ -964,6 +968,9 @@ void AsyncConnection::process()
     }
   } while (prev_state != state);
 
+#ifdef CEPH_PERF_DEV
+  rx_cycles += Cycles::rdtsc() - start;
+#endif
   return;
 
  fail:
@@ -2289,6 +2296,9 @@ void AsyncConnection::_stop()
 
 void AsyncConnection::prepare_send_message(uint64_t features, Message *m, bufferlist &bl)
 {
+#ifdef CEPH_PERF_DEV
+  uint64_t start = Cycles::rdtsc();
+#endif
   ldout(async_msgr->cct, 20) << __func__ << " m" << " " << *m << dendl;
 
   // associate message with Connection (for benefit of encode_payload)
@@ -2305,10 +2315,17 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
   bl.append(m->get_payload());
   bl.append(m->get_middle());
   bl.append(m->get_data());
+#ifdef CEPH_PERF_DEV
+  tx_prepare_count++;
+  tx_prepare_cycles += Cycles::rdtsc() - start;
+#endif
 }
 
 ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
 {
+#ifdef CEPH_PERF_DEV
+  uint64_t start = Cycles::rdtsc();
+#endif
   assert(can_write == WriteStatus::CANWRITE);
   m->set_seq(out_seq.inc());
 
@@ -2406,6 +2423,17 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
   }
   m->put();
 
+#ifdef CEPH_PERF_DEV
+  tx_send_count++;
+  tx_send_cycles = Cycles::rdtsc() - start;
+  if (tx_send_count > 30000 && rx_count) {
+    ldout(async_msgr->cct, 0) << __func__ << " rx msg=" << rx_count << " avg rx=" << Cycles::to_nanoseconds(rx_cycles)/rx_count << "ns "
+                              << " tx prepare count=" << tx_prepare_count << " avg tx_prepare=" << Cycles::to_nanoseconds(tx_prepare_cycles)/tx_prepare_count << "ns "
+                              << " tx send count=" << tx_send_count << " avg tx_send=" << Cycles::to_nanoseconds(tx_send_cycles)/tx_send_count << "ns "
+                              << dendl;
+    rx_count = rx_cycles = tx_prepare_count = tx_prepare_cycles = tx_send_count = tx_send_cycles = 0;
+  }
+#endif
   return rc;
 }
 

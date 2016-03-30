@@ -53,6 +53,7 @@
 #include "DPDK.h"
 #include "toeplitz.h"
 
+#include "common/Cycles.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "include/assert.h"
@@ -644,9 +645,13 @@ DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, 
 
 inline bool DPDKQueuePair::poll_tx() {
   bool nonloopback = !cct->_conf->ms_dpdk_debug_allow_loopback;
+#ifdef CEPH_PERF_DEV
+  uint64_t start = Cycles::rdtsc();
+#endif
+  uint32_t total_work = 0;
   if (_tx_packetq.size() < 16) {
     // refill send queue from upper layers
-    uint32_t total_work = 0, work;
+    uint32_t work;
     do {
       work = 0;
       for (auto&& pr : _pkt_providers) {
@@ -674,6 +679,10 @@ inline bool DPDKQueuePair::poll_tx() {
   }
   if (!_tx_packetq.empty()) {
     _stats.tx.good.update_pkts_bunch(send(_tx_packetq));
+#ifdef CEPH_PERF_DEV
+    tx_count += total_work;
+    tx_cycles += Cycles::rdtsc() - start;
+#endif
     return true;
   }
 
@@ -833,15 +842,32 @@ bool DPDKQueuePair::poll_rx_once()
   struct rte_mbuf *buf[packet_read_size];
 
   /* read a port */
-  uint16_t rx_count = rte_eth_rx_burst(_dev_port_idx, _qid,
+#ifdef CEPH_PERF_DEV
+  uint64_t start = Cycles::rdtsc();
+#endif
+  uint16_t count = rte_eth_rx_burst(_dev_port_idx, _qid,
                                        buf, packet_read_size);
 
   /* Now process the NIC packets read */
-  if (likely(rx_count > 0)) {
-    process_packets(buf, rx_count);
+  if (likely(count > 0)) {
+    process_packets(buf, count);
+#ifdef CEPH_PERF_DEV
+    rx_cycles = Cycles::rdtsc() - start;
+    rx_count += count;
+#endif
   }
+#ifdef CEPH_PERF_DEV
+  else {
+    if (rx_count > 10000 && tx_count) {
+      ldout(cct, 0) << __func__ << " rx count=" << rx_count << " avg rx=" << Cycles::to_nanoseconds(rx_cycles)/rx_count << "ns "
+                    << " tx count=" << tx_count << " avg tx=" << Cycles::to_nanoseconds(tx_cycles)/tx_count << "ns"
+                    << dendl;
+      rx_count = rx_cycles = tx_count = tx_cycles = 0;
+    }
+  }
+#endif
 
-  return rx_count;
+  return count;
 }
 
 DPDKQueuePair::tx_buf_factory::tx_buf_factory(CephContext *c,
