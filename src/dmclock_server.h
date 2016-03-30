@@ -1025,10 +1025,11 @@ namespace crimson {
 	} // if
       } // do_clean
 
+
       template<IndIntruHeapData ClientRec::*C1,typename C2>
       void delete_from_heap(ClientRecRef& client,
 			    c::IndIntruHeap<ClientRecRef,ClientRec,C1,C2>& heap) {
-	auto i = heap.rev_search(client);
+	auto i = heap.rfind(client);
 	heap.remove(i);
       }
 

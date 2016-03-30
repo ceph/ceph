@@ -55,8 +55,46 @@ struct ElemCompareAlt {
 };
 
 
+class HeapFixture1: public ::testing::Test { 
+
+public:
+
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare> heap;
+
+  std::shared_ptr<Elem> data1, data2, data3, data4, data5, data6, data7;
+
+  void SetUp() {
+    data1 = std::make_shared<Elem>(2);
+    data2 = std::make_shared<Elem>(99);
+    data3 = std::make_shared<Elem>(1);
+    data4 = std::make_shared<Elem>(-5);
+    data5 = std::make_shared<Elem>(12);
+    data6 = std::make_shared<Elem>(-12);
+    data7 = std::make_shared<Elem>(-7);
+
+    heap.push(data1);
+    heap.push(data2);
+    heap.push(data3);
+    heap.push(data4);
+    heap.push(data5);
+    heap.push(data6);
+    heap.push(data7);
+  }
+
+  void TearDown() { 
+    // nothing to do
+  }
+}; // class HeapFixture1
+
+
 TEST(IndIntruHeap, shared_ptr) {
-  crimson::IndIntruHeap<std::shared_ptr<Elem>, Elem, &Elem::heap_data, ElemCompare> heap;
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare> heap;
 
   EXPECT_TRUE(heap.empty());
 
@@ -96,7 +134,10 @@ TEST(IndIntruHeap, shared_ptr) {
 
 
 TEST(IndIntruHeap, unique_ptr) {
-  crimson::IndIntruHeap<std::unique_ptr<Elem>, Elem, &Elem::heap_data, ElemCompare> heap;
+  crimson::IndIntruHeap<std::unique_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare> heap;
 
   EXPECT_TRUE(heap.empty());
 
@@ -180,7 +221,10 @@ TEST(IndIntruHeap, regular_ptr) {
 
 
 TEST(IndIntruHeap, demote) {
-  crimson::IndIntruHeap<std::unique_ptr<Elem>, Elem, &Elem::heap_data, ElemCompare> heap;
+  crimson::IndIntruHeap<std::unique_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare> heap;
 
   heap.push(std::unique_ptr<Elem>(new Elem(2)));
   heap.push(std::unique_ptr<Elem>(new Elem(99)));
@@ -207,7 +251,10 @@ TEST(IndIntruHeap, demote) {
 
 
 TEST(IndIntruHeap, demote_not) {
-  crimson::IndIntruHeap<std::unique_ptr<Elem>, Elem, &Elem::heap_data, ElemCompare> heap;
+  crimson::IndIntruHeap<std::unique_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare> heap;
 
   heap.push(std::unique_ptr<Elem>(new Elem(2)));
   heap.push(std::unique_ptr<Elem>(new Elem(99)));
@@ -231,9 +278,9 @@ TEST(IndIntruHeap, demote_not) {
 
 TEST(IndIntruHeap, promote_and_demote) {
   crimson::IndIntruHeap<std::shared_ptr<Elem>,
-    Elem,
-    &Elem::heap_data,
-    ElemCompare> heap;
+			Elem,
+			&Elem::heap_data,
+			ElemCompare> heap;
 
   auto data1 = std::make_shared<Elem>(1);
 
@@ -270,7 +317,10 @@ TEST(IndIntruHeap, promote_and_demote) {
 
 
 TEST(IndIntruHeap, adjust) {
-  crimson::IndIntruHeap<std::shared_ptr<Elem>,Elem,&Elem::heap_data,ElemCompare> heap;
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare> heap;
 
   auto data1 = std::make_shared<Elem>(1);
 
@@ -310,25 +360,9 @@ TEST(IndIntruHeap, adjust) {
 }
 
 
-TEST(IndIntruHeap, shared_data) {
-  crimson::IndIntruHeap<std::shared_ptr<Elem>,Elem,&Elem::heap_data,ElemCompare> heap;
+TEST_F(HeapFixture1, shared_data) {
+
   crimson::IndIntruHeap<std::shared_ptr<Elem>,Elem,&Elem::heap_data_alt,ElemCompareAlt> heap2;
-
-  auto data1 = std::make_shared<Elem>(2);
-  auto data2 = std::make_shared<Elem>(99);
-  auto data3 = std::make_shared<Elem>(1);
-  auto data4 = std::make_shared<Elem>(-5);
-  auto data5 = std::make_shared<Elem>(12);
-  auto data6 = std::make_shared<Elem>(-12);
-  auto data7 = std::make_shared<Elem>(-7);
-
-  heap.push(data1);
-  heap.push(data2);
-  heap.push(data3);
-  heap.push(data4);
-  heap.push(data5);
-  heap.push(data6);
-  heap.push(data7);
 
   heap2.push(data1);
   heap2.push(data2);
@@ -372,25 +406,7 @@ TEST(IndIntruHeap, shared_data) {
 }
 
 
-TEST(IndIntruHeap, iterator_basics) {
-  crimson::IndIntruHeap<std::shared_ptr<Elem>,Elem,&Elem::heap_data,ElemCompare> heap;
-
-  auto data1 = std::make_shared<Elem>(2);
-  auto data2 = std::make_shared<Elem>(99);
-  auto data3 = std::make_shared<Elem>(1);
-  auto data4 = std::make_shared<Elem>(-5);
-  auto data5 = std::make_shared<Elem>(12);
-  auto data6 = std::make_shared<Elem>(-12);
-  auto data7 = std::make_shared<Elem>(-7);
-
-  heap.push(data1);
-  heap.push(data2);
-  heap.push(data3);
-  heap.push(data4);
-  heap.push(data5);
-  heap.push(data6);
-  heap.push(data7);
-
+TEST_F(HeapFixture1, iterator_basics) {
   {
     uint count = 0;
     for(auto i = heap.begin(); i != heap.end(); ++i) {
@@ -427,25 +443,7 @@ TEST(IndIntruHeap, iterator_basics) {
 }
 
 
-TEST(IndIntruHeap, iterator_find_rfind) {
-  crimson::IndIntruHeap<std::shared_ptr<Elem>,Elem,&Elem::heap_data,ElemCompare> heap;
-
-  auto data1 = std::make_shared<Elem>(2);
-  auto data2 = std::make_shared<Elem>(99);
-  auto data3 = std::make_shared<Elem>(1);
-  auto data4 = std::make_shared<Elem>(-5);
-  auto data5 = std::make_shared<Elem>(12);
-  auto data6 = std::make_shared<Elem>(-12);
-  auto data7 = std::make_shared<Elem>(-7);
-
-  heap.push(data1);
-  heap.push(data2);
-  heap.push(data3);
-  heap.push(data4);
-  heap.push(data5);
-  heap.push(data6);
-  heap.push(data7);
-
+TEST_F(HeapFixture1, iterator_find_rfind) {
   {
     auto it1 = heap.find(data7);
     EXPECT_NE(heap.end(), it1) << "find for included element should succeed";
@@ -459,36 +457,20 @@ TEST(IndIntruHeap, iterator_find_rfind) {
 
   {
     auto it1 = heap.rfind(data7);
-    EXPECT_NE(heap.end(), it1) << "reverse find for included element should succeed";
+    EXPECT_NE(heap.end(), it1) <<
+      "reverse find for included element should succeed";
     EXPECT_EQ(-7, it1->data) <<
       "reverse find for included element should result in right value";
 
     auto fake_data = std::make_shared<Elem>(-7);
     auto it2 = heap.rfind(fake_data);
-    EXPECT_EQ(heap.end(), it2) << "reverse find for not included element should fail";
+    EXPECT_EQ(heap.end(), it2) <<
+      "reverse find for not included element should fail";
   }
 }
 
 
-TEST(IndIntruHeap, iterator_remove) {
-  crimson::IndIntruHeap<std::shared_ptr<Elem>,Elem,&Elem::heap_data,ElemCompare> heap;
-
-  auto data1 = std::make_shared<Elem>(2);
-  auto data2 = std::make_shared<Elem>(99);
-  auto data3 = std::make_shared<Elem>(1);
-  auto data4 = std::make_shared<Elem>(-5);
-  auto data5 = std::make_shared<Elem>(12);
-  auto data6 = std::make_shared<Elem>(-12);
-  auto data7 = std::make_shared<Elem>(-7);
-
-  heap.push(data1);
-  heap.push(data2);
-  heap.push(data3);
-  heap.push(data4);
-  heap.push(data5);
-  heap.push(data6);
-  heap.push(data7);
-
+TEST_F(HeapFixture1, iterator_remove) {
   auto it1 = heap.find(data7);
   EXPECT_NE(heap.end(), it1) << "find for included element should succeed";
 
