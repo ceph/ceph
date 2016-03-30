@@ -26,14 +26,14 @@ class RemoteProcess(object):
         'client', 'args', 'check_status', 'command', 'hostname',
         'stdin', 'stdout', 'stderr',
         '_stdin_buf', '_stdout_buf', '_stderr_buf',
-        'returncode', 'exitstatus',
+        'returncode', 'exitstatus', 'timeout',
         'greenlets',
         # for orchestra.remote.Remote to place a backreference
         'remote',
         'label',
         ]
 
-    def __init__(self, client, args, check_status=True, hostname=None, label=None):
+    def __init__(self, client, args, check_status=True, hostname=None, label=None, timeout=None):
         """
         Create the object. Does not initiate command execution.
 
@@ -46,6 +46,8 @@ class RemoteProcess(object):
         :param hostname:     Name of remote host (optional)
         :param label:        Can be used to label or describe what the
                              command is doing.
+        :param timeout:      timeout value for arg that is passed to
+                             exec_command of paramiko
         """
         self.client = client
         self.args = args
@@ -56,7 +58,8 @@ class RemoteProcess(object):
 
         self.check_status = check_status
         self.label = label
-
+        if timeout:
+            self.timeout = timeout
         if hostname:
             self.hostname = hostname
         else:
@@ -76,8 +79,12 @@ class RemoteProcess(object):
         log.getChild(self.hostname).info(u"{prefix} {cmd!r}".format(
             cmd=self.command, prefix=prefix))
 
-        (self._stdin_buf, self._stdout_buf, self._stderr_buf) = \
-            self.client.exec_command(self.command)
+        if hasattr(self, 'timeout'):
+            (self._stdin_buf, self._stdout_buf, self._stderr_buf) = \
+                self.client.exec_command(self.command, timeout=self.timeout)
+        else:
+            (self._stdin_buf, self._stdout_buf, self._stderr_buf) = \
+                self.client.exec_command(self.command)
         (self.stdin, self.stdout, self.stderr) = \
             (self._stdin_buf, self._stdout_buf, self._stderr_buf)
 
@@ -296,7 +303,8 @@ def run(
     check_status=True,
     wait=True,
     name=None,
-    label=None
+    label=None,
+    timeout=None,
 ):
     """
     Run a command remotely.  If any of 'args' contains shell metacharacters
@@ -326,6 +334,8 @@ def run(
     :param name: Human readable name (probably hostname) of the destination
                  host
     :param label: Can be used to label or describe what the command is doing.
+    :param timeout: timeout value for args to complete on remote channel of
+                    paramiko
     """
     try:
         (host, port) = client.get_transport().getpeername()
@@ -335,7 +345,10 @@ def run(
     if name is None:
         name = host
 
-    r = RemoteProcess(client, args, check_status=check_status, hostname=name, label=label)
+    if timeout:
+        log.info("Running command with timeout %d", timeout)
+    r = RemoteProcess(client, args, check_status=check_status, hostname=name,
+                      label=label, timeout=timeout)
     r.execute()
 
     r.stdin = KludgeFile(wrapped=r.stdin)
@@ -388,6 +401,8 @@ def wait(processes, timeout=None):
 
     Optionally, timeout after 'timeout' seconds.
     """
+    if timeout:
+        log.info("waiting for %d", timeout)
     if timeout and timeout > 0:
         with safe_while(tries=(timeout / 6)) as check_time:
             not_ready = list(processes)
