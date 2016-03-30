@@ -168,7 +168,7 @@ namespace crimson {
       i = end();
     }
 
-    Iterator search(I& item) {
+    Iterator find(const I& item) {
       for (index_t i = 0; i < count; ++i) {
 	if (data[i] == item) {
 	  return Iterator(*this, i);
@@ -177,10 +177,35 @@ namespace crimson {
       return end();
     }
 
-    Iterator rev_search(I& item) {
-      for (index_t i = count - 1; i >= 0; --i) {
-	if (data[i] == item) {
+    // NB: should we be using operator== instead of address check?
+    Iterator find(const T& item) {
+      for (index_t i = 0; i < count; ++i) {
+	if (data[i].get() == &item) {
 	  return Iterator(*this, i);
+	}
+      }
+      return end();
+    }
+
+    // reverse find -- start looking from bottom of heap
+    Iterator rfind(const I& item) {
+      // index_t is unsigned, so we can't allow to go negative; so
+      // we'll keep it one more than actual index
+      for (index_t i = count; i > 0; --i) {
+	if (data[i-1] == item) {
+	  return Iterator(*this, i-1);
+	}
+      }
+      return end();
+    }
+
+    // reverse find -- start looking from bottom of heap
+    Iterator rfind(const T& item) {
+      // index_t is unsigned, so we can't allow to go negative; so
+      // we'll keep it one more than actual index
+      for (index_t i = count; i > 0; --i) {
+	if (data[i-1].get() == &item) {
+	  return Iterator(*this, i-1);
 	}
       }
       return end();

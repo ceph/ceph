@@ -392,71 +392,127 @@ TEST(IndIntruHeap, iterator_basics) {
   heap.push(data7);
 
   {
-      uint count = 0;
-      for(auto i = heap.begin(); i != heap.end(); ++i) {
-          ++count;
-      }
+    uint count = 0;
+    for(auto i = heap.begin(); i != heap.end(); ++i) {
+      ++count;
+    }
 
-      EXPECT_EQ(7, count) << "count should be 7";
+    EXPECT_EQ(7, count) << "count should be 7";
   }
   
   EXPECT_EQ(-12, heap.begin()->data) <<
-      "first member with * operator must be smallest";
+    "first member with * operator must be smallest";
 
   EXPECT_EQ(-12, (*heap.begin()).data) <<
-      "first member with -> operator must be smallest";
+    "first member with -> operator must be smallest";
 
   {
-      std::set<int> values;
-      values.insert(2);
-      values.insert(99);
-      values.insert(1);
-      values.insert(-5);
-      values.insert(12);
-      values.insert(-12);
-      values.insert(-7);
+    std::set<int> values;
+    values.insert(2);
+    values.insert(99);
+    values.insert(1);
+    values.insert(-5);
+    values.insert(12);
+    values.insert(-12);
+    values.insert(-7);
 
-      for(auto i = heap.begin(); i != heap.end(); ++i) {
-          auto v = *i;
-          EXPECT_NE(values.end(), values.find(v.data)) <<
-              "value in heap must be part of original set";
-          values.erase(v.data);
-      }
-      EXPECT_EQ(0, values.size()) << "all values must have been seen";
+    for(auto i = heap.begin(); i != heap.end(); ++i) {
+      auto v = *i;
+      EXPECT_NE(values.end(), values.find(v.data)) <<
+	"value in heap must be part of original set";
+      values.erase(v.data);
+    }
+    EXPECT_EQ(0, values.size()) << "all values must have been seen";
+  }
+}
+
+
+TEST(IndIntruHeap, iterator_find_rfind) {
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,Elem,&Elem::heap_data,ElemCompare> heap;
+
+  auto data1 = std::make_shared<Elem>(2);
+  auto data2 = std::make_shared<Elem>(99);
+  auto data3 = std::make_shared<Elem>(1);
+  auto data4 = std::make_shared<Elem>(-5);
+  auto data5 = std::make_shared<Elem>(12);
+  auto data6 = std::make_shared<Elem>(-12);
+  auto data7 = std::make_shared<Elem>(-7);
+
+  heap.push(data1);
+  heap.push(data2);
+  heap.push(data3);
+  heap.push(data4);
+  heap.push(data5);
+  heap.push(data6);
+  heap.push(data7);
+
+  {
+    auto it1 = heap.find(data7);
+    EXPECT_NE(heap.end(), it1) << "find for included element should succeed";
+    EXPECT_EQ(-7, it1->data) <<
+      "find for included element should result in right value";
+
+    auto fake_data = std::make_shared<Elem>(-7);
+    auto it2 = heap.find(fake_data);
+    EXPECT_EQ(heap.end(), it2) << "find for not included element should fail";
   }
 
-  auto seven = heap.search(*data7);
-  EXPECT_NE(heap.end(), seven);
-  EXPECT_EQ(7, seven->data);
+  {
+    auto it1 = heap.rfind(data7);
+    EXPECT_NE(heap.end(), it1) << "reverse find for included element should succeed";
+    EXPECT_EQ(-7, it1->data) <<
+      "reverse find for included element should result in right value";
 
-#if 0
+    auto fake_data = std::make_shared<Elem>(-7);
+    auto it2 = heap.rfind(fake_data);
+    EXPECT_EQ(heap.end(), it2) << "reverse find for not included element should fail";
+  }
+}
+
+
+TEST(IndIntruHeap, iterator_remove) {
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,Elem,&Elem::heap_data,ElemCompare> heap;
+
+  auto data1 = std::make_shared<Elem>(2);
+  auto data2 = std::make_shared<Elem>(99);
+  auto data3 = std::make_shared<Elem>(1);
+  auto data4 = std::make_shared<Elem>(-5);
+  auto data5 = std::make_shared<Elem>(12);
+  auto data6 = std::make_shared<Elem>(-12);
+  auto data7 = std::make_shared<Elem>(-7);
+
+  heap.push(data1);
+  heap.push(data2);
+  heap.push(data3);
+  heap.push(data4);
+  heap.push(data5);
+  heap.push(data6);
+  heap.push(data7);
+
+  auto it1 = heap.find(data7);
+  EXPECT_NE(heap.end(), it1) << "find for included element should succeed";
+
+  heap.remove(it1);
+
+  auto it2 = heap.find(data7);
+  EXPECT_EQ(heap.end(), it1) << "find for removed element should fail";
+
+  for (auto it3 = heap.begin(); it3 != heap.end(); ++it3) {
+    EXPECT_NE(-7, it3->data) <<
+      "iterating through heap should not find removed value";
+  }
+
+  // move through heap without -7
   EXPECT_EQ(-12, heap.top().data);
   heap.pop();
-  EXPECT_EQ(-7, heap.top().data);
-  heap.pop();
   EXPECT_EQ(-5, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(1, heap.top().data);
   heap.pop();
   EXPECT_EQ(2, heap.top().data);
   heap.pop();
   EXPECT_EQ(12, heap.top().data);
   heap.pop();
-  EXPECT_EQ(32, heap.top().data);
-  heap.pop();
   EXPECT_EQ(99, heap.top().data);
-
-  EXPECT_EQ(32, heap2.top().data);
-  heap2.pop();
-  EXPECT_EQ(12, heap2.top().data);
-  heap2.pop();
-  EXPECT_EQ(2, heap2.top().data);
-  heap2.pop();
-  EXPECT_EQ(-12, heap2.top().data);
-  heap2.pop();
-  EXPECT_EQ(99, heap2.top().data);
-  heap2.pop();
-  EXPECT_EQ(-5, heap2.top().data);
-  heap2.pop();
-  EXPECT_EQ(-7, heap2.top().data);
-#endif
+  heap.pop();
 }
-
