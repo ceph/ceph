@@ -3091,8 +3091,12 @@ int image_set(cls_method_context_t hctx, const string &image_id,
     std::string global_id_key = global_key(mirror_image.global_image_id);
     std::string image_id;
     r = read_key(hctx, global_id_key, &image_id);
-    if (r != -ENOENT) {
+    if (r >= 0) {
       return -EEXIST;
+    } else if (r != -ENOENT) {
+      CLS_ERR("error reading global image id: '%s': '%s'", image_id.c_str(),
+              cpp_strerror(r).c_str());
+      return r;
     }
   } else if (r < 0) {
     CLS_ERR("error reading mirrored image '%s': '%s'", image_id.c_str(),
