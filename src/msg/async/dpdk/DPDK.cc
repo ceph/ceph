@@ -104,7 +104,7 @@ static constexpr size_t inline_mbuf_data_size = 2048;
 // inline_mbuf_data_size value will unlikely change due to reasons described
 // above.
 //
-static constexpr size_t mbuf_data_size = 2048;
+static constexpr size_t mbuf_data_size = 4096;
 
 // (INLINE_MBUF_DATA_SIZE(2K)*32 = 64K = Max TSO/LRO size) + 1 mbuf for headers
 static constexpr uint8_t max_frags = 32 + 1;
