@@ -8,8 +8,6 @@
 #include "common/perf_counters.h"
 #include "BlockDevice.h"
 #include "Allocator.h"
-#include "StupidAllocator.h"
-
 
 #define dout_subsys ceph_subsys_bluefs
 #undef dout_prefix
@@ -282,7 +280,7 @@ void BlueFS::_init_alloc()
   for (unsigned id = 0; id < bdev.size(); ++id) {
     if (!bdev[id])
       continue;
-    alloc[id] = new StupidAllocator;
+    alloc[id] = Allocator::create("stupid");
     interval_set<uint64_t>& p = block_all[id];
     for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
       alloc[id]->init_add_free(q.get_start(), q.get_len());
