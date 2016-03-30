@@ -182,7 +182,12 @@ void FSMap::print_summary(Formatter *f, ostream *out)
         }
         *out << " " << pretty;
       } else {
-        *out << " " << by_rank;
+        // Omit FSCID in output when only one filesystem exists
+        std::map<mds_rank_t, std::string> shortened;
+        for (auto i : by_rank) {
+          shortened[i.first.rank] = i.second;
+        }
+        *out << " " << shortened;
       }
     }
   }
