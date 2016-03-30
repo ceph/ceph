@@ -295,6 +295,7 @@ set(HAVE_XIO ${XIO_FOUND})
 endif(WITH_XIO)
 
 option(WITH_DPDK "Enable DPDK messaging" OFF)
+option(WITH_DPDK_MLX5 "Enable DPDK MLX5 PMD" OFF)
 if(WITH_DPDK)
   find_package(dpdk REQUIRED)
   set(HAVE_DPDK 1)

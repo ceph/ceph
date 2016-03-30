@@ -55,12 +55,21 @@ mark_as_advanced(DPDK_INCLUDE_DIR
   DPDK_rte_pmd_ring_LIBRARY
   DPDK_rte_pmd_af_packet_LIBRARY)
 
+if (EXISTS ${WITH_DPDK_MLX5})
+  find_library(DPDK_rte_pmd_mlx5_LIBRARY rte_pmd_mlx5)
+  list(APPEND check_LIBRARIES ${DPDK_rte_pmd_mlx5_LIBRARY})
+  mark_as_advanced(DPDK_rte_pmd_mlx5_LIBRARY)
+endif()
+
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(dpdk DEFAULT_MSG
   DPDK_INCLUDE_DIR
   check_LIBRARIES)
 
 if(DPDK_FOUND)
+if (EXISTS ${WITH_DPDK_MLX5})
+  list(APPEND check_LIBRARIES -libverbs)
+endif()
   set(DPDK_LIBRARIES
     -Wl,--whole-archive ${check_LIBRARIES} -Wl,--no-whole-archive)
 endif(DPDK_FOUND)
