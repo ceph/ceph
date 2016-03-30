@@ -5006,7 +5006,6 @@ void PG::start_peering_interval(
   state_clear(PG_STATE_RECOVERY_WAIT);
   state_clear(PG_STATE_RECOVERING);
 
-  peer_missing.clear();
   peer_purged.clear();
   actingbackfill.clear();
   snap_trim_queued = false;
