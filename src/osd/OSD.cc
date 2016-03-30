@@ -4268,6 +4268,7 @@ void OSD::tick_without_osd_lock()
 	dout(20) << __func__ << " stats backoff " << backoff
 		 << " adjusted_min " << adjusted_min << " - sending report"
 		 << dendl;
+        osd_stat_updated = true;
 	report = true;
       }
     }
