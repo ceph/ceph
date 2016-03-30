@@ -2025,7 +2025,7 @@ cdef class Ioctx(object):
 
         :raises: IoctxStateError
         """
-        if self.state != b"open":
+        if self.state != "open":
             raise IoctxStateError("The pool is %s" % self.state)
 
     def change_auid(self, auid):
