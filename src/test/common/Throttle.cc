@@ -52,6 +52,7 @@ protected:
     }
 
     virtual void *entry() {
+      usleep(5);
       waited = throttle.get(count);
       throttle.put(count);
       return NULL;
