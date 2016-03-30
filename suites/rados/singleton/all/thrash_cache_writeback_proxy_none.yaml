@@ -32,8 +32,8 @@ tasks:
     mon.a:
       - while true
       - do sleep 30
-      - echo forward
-      - sudo ceph osd tier cache-mode cache forward
+      - echo proxy
+      - sudo ceph osd tier cache-mode cache proxy
       - sleep 10
       - sudo ceph osd pool set cache cache_target_full_ratio .001
       - echo cache-try-flush-evict-all
@@ -50,7 +50,7 @@ tasks:
       - sudo ceph osd pool set cache cache_target_full_ratio .8
       - sudo ceph osd tier set-overlay base cache
       - sleep 30
-      - sudo ceph osd tier cache-mode cache readforward
+      - sudo ceph osd tier cache-mode cache readproxy
       - done
 - rados:
     clients: [client.0]
