@@ -4027,6 +4027,13 @@ void OSD::heartbeat_check()
   for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
        p != heartbeat_peers.end();
        ++p) {
+
+    if (p->second.first_tx == utime_t()) {
+      dout(25) << "heartbeat_check we haven't sent ping to osd." << p->first
+               << "yet, skipping" << dendl;
+      continue;
+    }
+
     dout(25) << "heartbeat_check osd." << p->first
 	     << " first_tx " << p->second.first_tx
 	     << " last_tx " << p->second.last_tx
