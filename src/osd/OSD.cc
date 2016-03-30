@@ -4917,6 +4917,17 @@ void OSD::request_full_map(epoch_t first, epoch_t last)
   monc->send_mon_message(req);
 }
 
+void OSD::finish_full_map_request()
+{
+  if (requested_full_first == 0 && requested_full_last == 0)
+    return;
+  //Had requested some map but didn't receive in this message,
+  //This might because monitor capping the message to osd_map_message_max
+  dout(10) << __func__ << "still missing " << requested_full_first
+	   << ".." << requested_full_last << ", but now give up." << dendl;
+  requested_full_first = requested_full_last = 0;
+}
+
 void OSD::got_full_map(epoch_t e)
 {
   assert(requested_full_first <= requested_full_last);
@@ -6688,6 +6699,9 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // even if this map isn't from a mon, we may have satisfied our subscription
   monc->sub_got("osdmap", last);
+
+  if (!m->maps.empty())
+    finish_full_map_request();
 
   if (last <= superblock.newest_map) {
     dout(10) << " no new maps here, dropping" << dendl;
