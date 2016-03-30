@@ -280,8 +280,20 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force) {
   std::set<cls::journal::Client> clients;
   std::string header_oid;
 
+  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+      &mirror_image_internal);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
+  } else if (r == -ENOENT) {
+    // mirroring is not enabled for this image
+    ldout(cct, 20) << "ignoring disable command: mirroring is not enabled "
+      "for this image" << dendl;
+    return 0;
+  }
+
   bool is_primary;
-  int r = Journal<>::is_tag_owner(ictx, &is_primary);
+  r = Journal<>::is_tag_owner(ictx, &is_primary);
   if (r < 0) {
     lderr(cct) << "cannot disable mirroring: failed to check tag ownership: "
       << cpp_strerror(r) << dendl;
@@ -295,19 +307,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force) {
       return -EINVAL;
     }
     goto remove_mirroring_image;
-  }
-
-  r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
-      &mirror_image_internal);
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  else if (r == -ENOENT) {
-    // mirroring is not enabled for this image
-    ldout(cct, 20) << "ignoring disable command: mirroring is not enabled "
-      "for this image" << dendl;
-    return 0;
   }
 
   mirror_image_internal.state =
@@ -1941,6 +1940,17 @@ remove_mirroring_image:
 	ictx->owner_lock.put_read();
         ictx->state->close();
 	return r;
+      }
+
+      if (!old_format) {
+        r = mirror_image_disable_internal(ictx, false);
+        if (r < 0) {
+          lderr(cct) << "error disabling image mirroring: " << cpp_strerror(r)
+                     << dendl;
+          ictx->owner_lock.put_read();
+          ictx->state->close();
+          return r;
+        }
       }
 
       ictx->owner_lock.put_read();

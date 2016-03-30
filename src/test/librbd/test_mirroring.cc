@@ -26,7 +26,6 @@
 #include <boost/assign/list_of.hpp>
 #include <utility>
 #include <vector>
-#include <tuple>
 
 void register_test_mirroring() {
 }
@@ -69,10 +68,6 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
 
-    ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
-    if (mirror_state != RBD_MIRROR_IMAGE_DISABLED) {
-      ASSERT_EQ(0, image.mirror_image_disable(false));
-    }
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
@@ -98,10 +93,6 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
 
-    ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
-    if (mirror_state != RBD_MIRROR_IMAGE_DISABLED) {
-      ASSERT_EQ(0, image.mirror_image_disable(false));
-    }
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
@@ -122,10 +113,6 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
 
-    ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
-    if (mirror_state != RBD_MIRROR_IMAGE_DISABLED) {
-      ASSERT_EQ(0, image.mirror_image_disable(false));
-    }
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
@@ -154,10 +141,6 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
 
-    ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
-    if (mirror_state != RBD_MIRROR_IMAGE_DISABLED) {
-      ASSERT_EQ(0, image.mirror_image_disable(false));
-    }
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
@@ -198,22 +181,27 @@ public:
       ASSERT_EQ(mirror_state, mirror_image.state);
 
       ASSERT_EQ(0, image.close());
+      ASSERT_EQ(0, m_rbd.remove(m_ioctx, img_name_str.c_str()));
+    }
+  }
+
+  void check_remove_image(rbd_mirror_mode_t mirror_mode, uint64_t features,
+                          bool enable_mirroring) {
+
+    ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, mirror_mode));
+
+    int order = 20;
+    ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 4096, features,
+              &order));
+    librbd::Image image;
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
+
+    if (enable_mirroring) {
+      ASSERT_EQ(0, image.mirror_image_enable());
     }
 
-    ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
-    for (const auto& tuple : images) {
-      std::string img_name;
-      rbd_mirror_image_state_t mirror_state;
-      std::tie(img_name, mirror_state) = tuple;
-
-      librbd::Image image;
-      ASSERT_EQ(0, m_rbd.open(m_ioctx, image, img_name.c_str()));
-      if (mirror_state != RBD_MIRROR_IMAGE_DISABLED) {
-        ASSERT_EQ(0, image.mirror_image_disable(false));
-      }
-      ASSERT_EQ(0, image.close());
-      ASSERT_EQ(0, m_rbd.remove(m_ioctx, img_name.c_str()));
-    }
+    image.close();
+    ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
   }
 
@@ -452,5 +440,23 @@ TEST_F(TestMirroring, MirrorModeSet_ImageMode_To_DisabledMode) {
   states_vec.push_back(RBD_MIRROR_IMAGE_DISABLED);
   states_vec.push_back(RBD_MIRROR_IMAGE_DISABLED);
   check_mirroring_on_mirror_mode_set(RBD_MIRROR_MODE_DISABLED, states_vec);
+}
+
+TEST_F(TestMirroring, RemoveImage_With_MirrorImageEnabled) {
+  check_remove_image(RBD_MIRROR_MODE_IMAGE,
+                     RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING,
+                     true);
+}
+
+TEST_F(TestMirroring, RemoveImage_With_MirrorImageDisabled) {
+  check_remove_image(RBD_MIRROR_MODE_IMAGE,
+                     RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING,
+                     false);
+}
+
+TEST_F(TestMirroring, RemoveImage_With_ImageWithoutJournal) {
+  check_remove_image(RBD_MIRROR_MODE_IMAGE,
+                     RBD_FEATURE_EXCLUSIVE_LOCK,
+                     false);
 }
 
