@@ -164,6 +164,7 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
   }
   i->_unregistered();
 
+  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     delete i;
   else {
