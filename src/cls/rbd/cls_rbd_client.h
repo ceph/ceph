@@ -47,6 +47,7 @@ namespace librbd {
 			     parent_info *parent);
 
     // low-level interface (mainly for testing)
+    int create_cg(librados::IoCtx *ioctx, const std::string &oid);
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
 		     uint64_t size, uint8_t order, uint64_t features,
 		     const std::string &object_prefix);
@@ -162,6 +163,8 @@ namespace librbd {
 		 map<string, string> *images);
     int dir_add_image(librados::IoCtx *ioctx, const std::string &oid,
 		      const std::string &name, const std::string &id);
+    int dir_add_cg(librados::IoCtx *ioctx, const std::string &oid,
+	           const std::string &name, const std::string &id);
     int dir_remove_image(librados::IoCtx *ioctx, const std::string &oid,
 			 const std::string &name, const std::string &id);
     // atomic remove and add

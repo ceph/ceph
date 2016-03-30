@@ -93,8 +93,10 @@ struct C_AsyncCallback : public Context {
 
 } // namespace detail
 
+const std::string id_cg_name(const std::string &name);
 const std::string id_obj_name(const std::string &name);
 const std::string header_name(const std::string &image_id);
+const std::string cg_header_name(const std::string &cg_id);
 const std::string old_header_name(const std::string &image_name);
 std::string unique_lock_name(const std::string &name, void *address);
 

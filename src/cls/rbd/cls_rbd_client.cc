@@ -149,6 +149,13 @@ namespace librbd {
                                          parent);
     }
 
+    int create_cg(librados::IoCtx *ioctx, const std::string &oid)
+    {
+      bufferlist bl, bl2;
+
+      return ioctx->exec(oid, "rbd", "create_cg", bl, bl2);
+    }
+
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
 		     uint64_t size, uint8_t order, uint64_t features,
 		     const std::string &object_prefix)
@@ -808,6 +815,15 @@ namespace librbd {
       }
 
       return 0;
+    }
+
+    int dir_add_cg(librados::IoCtx *ioctx, const std::string &oid,
+		   const std::string &name, const std::string &id)
+    {
+      bufferlist in, out;
+      ::encode(name, in);
+      ::encode(id, in);
+      return ioctx->exec(oid, "rbd", "dir_add_cg", in, out);
     }
 
     int dir_add_image(librados::IoCtx *ioctx, const std::string &oid,

@@ -65,6 +65,7 @@ CLS_NAME(rbd)
 
 cls_handle_t h_class;
 cls_method_handle_t h_create;
+cls_method_handle_t h_create_cg;
 cls_method_handle_t h_get_features;
 cls_method_handle_t h_set_features;
 cls_method_handle_t h_get_size;
@@ -95,6 +96,7 @@ cls_method_handle_t h_dir_get_id;
 cls_method_handle_t h_dir_get_name;
 cls_method_handle_t h_dir_list;
 cls_method_handle_t h_dir_add_image;
+cls_method_handle_t h_dir_add_cg;
 cls_method_handle_t h_dir_remove_image;
 cls_method_handle_t h_dir_rename_image;
 cls_method_handle_t h_object_map_load;
@@ -225,6 +227,28 @@ static bool is_valid_id(const string &id) {
     }
   }
   return true;
+}
+
+/**
+ * Initialize the header with basic metadata.
+ * Everything is stored as key/value pairs as omaps in the header object.
+ *
+ * If features the OSD does not understand are requested, -ENOSYS is
+ * returned.
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
+int create_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist snap_seqbl;
+  uint64_t snap_seq = 0;
+  ::encode(snap_seq, snap_seqbl);
+  int r = cls_cxx_map_set_val(hctx, "snap_seq", &snap_seqbl);
+  if (r < 0)
+    return r;
+
+  return 0;
 }
 
 /**
@@ -1852,6 +1876,53 @@ static const string dir_key_for_name(const string &name)
 static const string dir_name_from_key(const string &key)
 {
   return key.substr(strlen(RBD_DIR_NAME_KEY_PREFIX));
+}
+
+static int dir_add_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int r = cls_cxx_create(hctx, false);
+
+  if (r < 0) {
+    CLS_ERR("could not create consistency group directory: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  string name, id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(name, iter);
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  if (!name.size() || !is_valid_id(id)) {
+    CLS_ERR("invalid consistency group name '%s' or id '%s'", name.c_str(), id.c_str());
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "dir_add_cg name=%s id=%s", name.c_str(), id.c_str());
+
+  string tmp;
+  string name_key = dir_key_for_name(name);
+  string id_key = dir_key_for_id(id);
+  r = read_key(hctx, name_key, &tmp);
+  if (r != -ENOENT) {
+    CLS_LOG(10, "name already exists");
+    return -EEXIST;
+  }
+  r = read_key(hctx, id_key, &tmp);
+  if (r != -ENOENT) {
+    CLS_LOG(10, "id already exists");
+    return -EBADF;
+  }
+  bufferlist id_bl, name_bl;
+  ::encode(id, id_bl);
+  ::encode(name, name_bl);
+  map<string, bufferlist> omap_vals;
+  omap_vals[name_key] = id_bl;
+  omap_vals[id_key] = name_bl;
+  return cls_cxx_map_set_vals(hctx, &omap_vals);
 }
 
 static int dir_add_image_helper(cls_method_context_t hctx,
@@ -3592,6 +3663,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "create",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  create, &h_create);
+  cls_register_cxx_method(h_class, "create_cg",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  create_cg, &h_create_cg);
   cls_register_cxx_method(h_class, "get_features",
 			  CLS_METHOD_RD,
 			  get_features, &h_get_features);
@@ -3700,6 +3774,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "dir_add_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  dir_add_image, &h_dir_add_image);
+  cls_register_cxx_method(h_class, "dir_add_cg",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  dir_add_cg, &h_dir_add_cg);
   cls_register_cxx_method(h_class, "dir_remove_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  dir_remove_image, &h_dir_remove_image);

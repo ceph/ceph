@@ -45,6 +45,7 @@ static const std::string PATH_NAME("path-name");
 
 // optional arguments
 static const std::string CONFIG_PATH("conf");
+static const std::string CG_NAME("cg-name");
 static const std::string POOL_NAME("pool");
 static const std::string DEST_POOL_NAME("dest-pool");
 static const std::string IMAGE_NAME("image");

@@ -101,6 +101,7 @@ public:
 			 const char *snapname, RBD::AioCompletion *c);
   int list(IoCtx& io_ctx, std::vector<std::string>& names);
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
+  int create_cg(IoCtx& io_ctx, const char *cg_name);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
 	      uint64_t features, int *order);
   int create3(IoCtx& io_ctx, const char *name, uint64_t size,

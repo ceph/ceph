@@ -13,9 +13,19 @@ const std::string id_obj_name(const std::string &name)
   return RBD_ID_PREFIX + name;
 }
 
+const std::string id_cg_name(const std::string &name)
+{
+  return CG_ID_PREFIX + name;
+}
+
 const std::string header_name(const std::string &image_id)
 {
   return RBD_HEADER_PREFIX + image_id;
+}
+
+const std::string cg_header_name(const std::string &cg_id)
+{
+  return CG_HEADER_PREFIX + cg_id;
 }
 
 const std::string old_header_name(const std::string &image_name)

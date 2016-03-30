@@ -945,6 +945,64 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
     return r;
   }
 
+  int create_cg(librados::IoCtx& io_ctx, const char *cg_name)
+  {
+    ostringstream bid_ss;
+    uint32_t extra;
+    string id, id_cg, header_oid;
+
+    CephContext *cct = (CephContext *)io_ctx.cct();
+
+    Rados rados(io_ctx);
+    uint64_t bid = rados.get_instance_id();
+
+    int r = validate_pool(io_ctx, cct);
+    if (r < 0) {
+      return r;
+    }
+
+    id_cg = util::id_cg_name(cg_name);
+
+    r = io_ctx.create(id_cg, true);
+    if (r < 0) {
+      lderr(cct) << "error creating consistency group id object: " << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+
+    extra = rand() % 0xFFFFFFFF;
+    bid_ss << std::hex << bid << std::hex << extra;
+    id = bid_ss.str();
+    r = cls_client::set_id(&io_ctx, id_cg, id);
+    if (r < 0) {
+      lderr(cct) << "error setting consistency group id: " << cpp_strerror(r) << dendl;
+      goto err_remove_id;
+    }
+
+    ldout(cct, 2) << "adding consistency group to directory..." << dendl;
+
+    r = cls_client::dir_add_cg(&io_ctx, CG_DIRECTORY, cg_name, id);
+    if (r < 0) {
+      lderr(cct) << "error adding consistency group to directory: " << cpp_strerror(r)
+		 << dendl;
+      goto err_remove_id;
+    }
+    header_oid = util::cg_header_name(id);
+
+    r = cls_client::create_cg(&io_ctx, header_oid);
+    if (r < 0) {
+      lderr(cct) << "error writing header: " << cpp_strerror(r) << dendl;
+      goto err_remove_from_dir;
+    }
+
+    return 0;
+
+err_remove_id:
+err_remove_from_dir:
+
+    return r;
+  }
+
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order)
   {
