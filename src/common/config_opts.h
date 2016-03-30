@@ -221,6 +221,7 @@ OPTION(ms_dpdk_hw_flow_control, OPT_BOOL, true)
 // Weighing of a hardware network queue relative to a software queue (0=no work, 1=equal share)")
 OPTION(ms_dpdk_hw_queue_weight, OPT_FLOAT, 1)
 OPTION(ms_dpdk_debug_allow_loopback, OPT_BOOL, false)
+OPTION(ms_dpdk_rx_buffer_count_per_core, OPT_INT, 8192)
 
 OPTION(inject_early_sigterm, OPT_BOOL, false)
 
