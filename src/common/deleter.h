@@ -26,6 +26,8 @@
 #include <cstdlib>
 #include <type_traits>
 
+#include "include/assert.h"
+
 /// \addtogroup memory-module
 /// @{
 
@@ -205,8 +207,7 @@ inline void deleter::append(deleter d) {
   impl* next_impl = _impl;
   deleter* next_d = this;
   while (next_impl) {
-    if (next_impl == d._impl)
-      return ;
+    assert(next_impl != d._impl);
     if (is_raw_object(next_impl)) {
       next_d->_impl = next_impl = new free_deleter_impl(to_raw_object(next_impl));
     }
