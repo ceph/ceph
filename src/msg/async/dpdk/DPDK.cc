@@ -643,7 +643,7 @@ DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, 
   cct->get_perfcounters_collection()->add(perf_logger);
 }
 
-inline bool DPDKQueuePair::poll_tx() {
+bool DPDKQueuePair::poll_tx() {
   bool nonloopback = !cct->_conf->ms_dpdk_debug_allow_loopback;
 #ifdef CEPH_PERF_DEV
   uint64_t start = Cycles::rdtsc();
