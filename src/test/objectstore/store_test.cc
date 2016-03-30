@@ -723,6 +723,87 @@ TEST_P(StoreTest, AppendWalVsTailCache) {
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
+TEST_P(StoreTest, AppendZeroTrailingSharedBlock) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t a(hobject_t(sobject_t("fooo", CEPH_NOSNAP)));
+  ghobject_t b = a;
+  b.hobj.snap = 1;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(&osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  unsigned min_alloc = g_conf->bluestore_min_alloc_size;
+  unsigned size = min_alloc / 3;
+  bufferptr bpa(size);
+  memset(bpa.c_str(), 1, bpa.length());
+  bufferlist bla;
+  bla.append(bpa);
+  // make sure there is some trailing gunk in the last block
+  {
+    bufferlist bt;
+    bt.append(bla);
+    bt.append("BADBADBADBAD");
+    ObjectStore::Transaction t;
+    t.write(cid, a, 0, bt.length(), bt, 0);
+    r = store->apply_transaction(&osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.truncate(cid, a, size);
+    r = store->apply_transaction(&osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // clone
+  {
+    ObjectStore::Transaction t;
+    t.clone(cid, a, b);
+    r = store->apply_transaction(&osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // append with implicit zeroing
+  bufferptr bpb(size);
+  memset(bpb.c_str(), 2, bpb.length());
+  bufferlist blb;
+  blb.append(bpb);
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, a, min_alloc * 3, blb.length(), blb, 0);
+    r = store->apply_transaction(&osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist final;
+  final.append(bla);
+  bufferlist zeros;
+  zeros.append_zero(min_alloc * 3 - size);
+  final.append(zeros);
+  final.append(blb);
+  bufferlist actual;
+  {
+    ASSERT_EQ((int)final.length(),
+	      store->read(cid, a, 0, final.length(), actual));
+    final.hexdump(cout);
+    actual.hexdump(cout);
+    ASSERT_TRUE(final.contents_equal(actual));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, a);
+    t.remove(cid, b);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(&osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, SmallSequentialUnaligned) {
   ObjectStore::Sequencer osr("test");
   int r;

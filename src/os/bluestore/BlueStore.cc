@@ -5417,6 +5417,11 @@ int BlueStore::_do_write(
   uint64_t cow_rmw_head = 0;
   uint64_t cow_rmw_tail = 0;
 
+  if (orig_offset > o->onode.size) {
+    // zero tail of previous existing extent?
+    _do_zero_tail_extent(txc, c, o, orig_offset);
+  }
+
   r = _do_allocate(txc, c, o, orig_offset, orig_length, fadvise_flags, true,
 		   &cow_rmw_head, &cow_rmw_tail);
   if (r < 0) {
@@ -5425,17 +5430,6 @@ int BlueStore::_do_write(
   }
 
   bp = o->onode.seek_extent(orig_offset);
-
-  if (orig_offset > o->onode.size) {
-    // zero tail of previous existing extent?
-    map<uint64_t, bluestore_extent_t>::iterator pp =
-      o->onode.find_extent(o->onode.size);
-    if (pp != o->onode.block_map.end() &&
-	pp != bp) {
-      assert(pp->first < bp->first);
-      _do_zero_tail_extent(txc, o, orig_offset, pp);
-    }
-  }
 
   for (uint64_t offset = orig_offset;
        offset < orig_offset + orig_length;
@@ -5749,50 +5743,63 @@ int BlueStore::_zero(TransContext *txc,
 
 void BlueStore::_do_zero_tail_extent(
   TransContext *txc,
+  CollectionRef& c,
   OnodeRef& o,
-  uint64_t offset,
-  map<uint64_t, bluestore_extent_t>::iterator pp)
+  uint64_t offset)
 {
   const uint64_t block_size = bdev->get_block_size();
   const uint64_t block_mask = ~(block_size - 1);
 
+  map<uint64_t, bluestore_extent_t>::iterator bp, pp;
+  bp = o->onode.seek_extent(offset);
+  pp = o->onode.find_extent(o->onode.size);
+
   dout(10) << __func__ << " offset " << offset << " extent "
 	   << pp->first << ": " << pp->second << dendl;
   assert(offset > o->onode.size);
-  assert(pp != o->onode.block_map.end());
 
   // we assume the caller will handle any partial block they start with
   offset &= block_mask;
   if (offset <= o->onode.size)
     return;
 
-  uint64_t end_block = ROUND_UP_TO(o->onode.size, block_size);
-
-  assert(!pp->second.has_flag(bluestore_extent_t::FLAG_SHARED));
-
-  if (end_block > o->onode.size) {
-    // end was in a partial block, do wal r/m/w.
-    bluestore_wal_op_t *op = _get_wal_op(txc, o);
-    op->op = bluestore_wal_op_t::OP_ZERO;
-    uint64_t x_off = o->onode.size;
-    uint64_t x_len = end_block - x_off;
-    op->extent.offset = pp->second.offset + x_off - pp->first;
-    op->extent.length = x_len;
-    dout(10) << __func__ << " wal zero tail partial block "
-	     << x_off << "~" << x_len << " at " << op->extent
-	     << dendl;
-    assert(!pp->second.has_flag(bluestore_extent_t::FLAG_COW_HEAD));
-    assert(!pp->second.has_flag(bluestore_extent_t::FLAG_COW_TAIL));
-  }
-  if (offset > end_block) {
-    // end was block-aligned.  zero the rest of the extent now.
-    uint64_t x_off = end_block - pp->first;
-    uint64_t x_len = pp->second.length - x_off;
-    if (x_len > 0) {
-      dout(10) << __func__ << " zero tail " << x_off << "~" << x_len
-	       << " of tail extent " << pp->first << ": " << pp->second
+  if (pp != o->onode.block_map.end() &&
+      pp != bp) {
+    if (pp->second.has_flag(bluestore_extent_t::FLAG_SHARED)) {
+      dout(10) << __func__ << " shared tail extent; doing _do_write_zero"
 	       << dendl;
-      bdev->aio_zero(pp->second.offset + x_off, x_len, &txc->ioc);
+      uint64_t old_size = o->onode.size;
+      uint64_t end = pp->first + pp->second.length;
+      uint64_t zlen = end - old_size;
+      _do_write_zero(txc, c, o, old_size, zlen);
+    } else {
+      uint64_t end_block = ROUND_UP_TO(o->onode.size, block_size);
+
+      if (end_block > o->onode.size) {
+	// end was in a partial block, do wal r/m/w.
+	bluestore_wal_op_t *op = _get_wal_op(txc, o);
+	op->op = bluestore_wal_op_t::OP_ZERO;
+	uint64_t x_off = o->onode.size;
+	uint64_t x_len = end_block - x_off;
+	op->extent.offset = pp->second.offset + x_off - pp->first;
+	op->extent.length = x_len;
+	dout(10) << __func__ << " wal zero tail partial block "
+		 << x_off << "~" << x_len << " at " << op->extent
+		 << dendl;
+	assert(!pp->second.has_flag(bluestore_extent_t::FLAG_COW_HEAD));
+	assert(!pp->second.has_flag(bluestore_extent_t::FLAG_COW_TAIL));
+      }
+      if (offset > end_block) {
+	// end was block-aligned.  zero the rest of the extent now.
+	uint64_t x_off = end_block - pp->first;
+	uint64_t x_len = pp->second.length - x_off;
+	if (x_len > 0) {
+	  dout(10) << __func__ << " zero tail " << x_off << "~" << x_len
+		   << " of tail extent " << pp->first << ": " << pp->second
+		   << dendl;
+	  bdev->aio_zero(pp->second.offset + x_off, x_len, &txc->ioc);
+	}
+      }
     }
   }
 }
