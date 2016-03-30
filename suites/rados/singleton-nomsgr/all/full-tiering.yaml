@@ -13,7 +13,7 @@ tasks:
       - ceph osd pool create ec-ca 1 1
       - ceph osd pool create ec 1 1 erasure default
       - ceph osd tier add ec ec-ca
-      - ceph osd tier cache-mode ec-ca readforward
+      - ceph osd tier cache-mode ec-ca readproxy
       - ceph osd tier set-overlay ec ec-ca
       - ceph osd pool set ec-ca hit_set_type bloom
       - ceph osd pool set-quota ec-ca max_bytes 20480000
