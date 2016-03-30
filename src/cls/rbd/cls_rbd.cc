@@ -3014,6 +3014,10 @@ int read_peers(cls_method_context_t hctx,
 	return -EIO;
       }
     }
+
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    }
   }
   return 0;
 }
