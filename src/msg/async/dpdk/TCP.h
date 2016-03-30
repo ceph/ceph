@@ -1073,7 +1073,7 @@ Packet tcp<InetTraits>::tcb::get_transmit_packet() {
   }
   can_send = std::min(can_send, len);
   // easy case: one small packet
-  if (_snd.unsent.size() == 1 && _snd.unsent.front().len() <= can_send) {
+  if (_snd.unsent.front().len() <= can_send) {
     auto p = std::move(_snd.unsent.front());
     _snd.unsent.pop_front();
     _snd.unsent_len -= p.len();
@@ -1096,11 +1096,13 @@ Packet tcp<InetTraits>::tcb::get_transmit_packet() {
     p.append(std::move(_snd.unsent.front()));
     _snd.unsent.pop_front();
   }
-  if (!_snd.unsent.empty() && can_send) {
-    auto& q = _snd.unsent.front();
-    p.append(q.share(0, can_send));
-    q.trim_front(can_send);
-  }
+  // FIXME: this will result in calling "deleter" of packet which free managed objects
+  // will used later
+  // if (!_snd.unsent.empty() && can_send) {
+  //   auto& q = _snd.unsent.front();
+  //   p.append(q.share(0, can_send));
+  //   q.trim_front(can_send);
+  // }
   _snd.unsent_len -= p.len();
   return p;
 }
