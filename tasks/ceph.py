@@ -7,6 +7,7 @@ from cStringIO import StringIO
 
 import argparse
 import contextlib
+import errno
 import logging
 import os
 import json
@@ -902,7 +903,13 @@ def cluster(ctx, config):
             # archive mon data, too
             log.info('Archiving mon data...')
             path = os.path.join(ctx.archive, 'data')
-            os.makedirs(path)
+            try:
+                os.makedirs(path)
+            except OSError as e:
+                if e.errno == errno.EEXIST:
+                    pass
+                else:
+                    raise
             for remote, roles in mons.remotes.iteritems():
                 for role in roles:
                     is_mon = teuthology.is_type('mon', cluster_name)
