@@ -508,8 +508,9 @@ void BlueStore::OnodeHashLRU::clear()
   onode_map.clear();
 }
 
-void BlueStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
-				    const ghobject_t& new_oid)
+void BlueStore::OnodeHashLRU::rename(OnodeRef& oldo,
+				     const ghobject_t& old_oid,
+				     const ghobject_t& new_oid)
 {
   std::lock_guard<std::mutex> l(lock);
   dout(30) << __func__ << " " << old_oid << " -> " << new_oid << dendl;
@@ -528,7 +529,8 @@ void BlueStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
   OnodeRef o = po->second;
 
   // install a non-existent onode at old location
-  po->second.reset(new Onode(old_oid, o->key));
+  oldo.reset(new Onode(old_oid, o->key));
+  po->second = oldo;
   lru.push_back(*po->second);
 
   // add at new position and fix oid, key
@@ -6504,8 +6506,10 @@ int BlueStore::_rename(TransContext *txc,
   txc->t->rmkey(PREFIX_OBJ, oldo->key);
   txc->write_onode(oldo);
   newo = oldo;
-  oldo.reset(NULL);
-  c->onode_map.rename(old_oid, new_oid);  // this adjusts oldo->{oid,key}
+
+  // this adjusts oldo->{oid,key}, and reset oldo to a fresh empty
+  // Onode in the old slot
+  c->onode_map.rename(oldo, old_oid, new_oid);
   r = 0;
 
  out:
