@@ -3325,7 +3325,13 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
     ret = _write(cid, oid, offset, len, bl);
   }
 
+#ifdef CEPH_HAVE_FALLOCATE
+# if !defined(DARWIN) && !defined(__FreeBSD__)
+#    ifdef FALLOC_FL_KEEP_SIZE
  out:
+#    endif
+# endif
+#endif
   dout(20) << "zero " << cid << "/" << oid << " " << offset << "~" << len << " = " << ret << dendl;
   return ret;
 }
