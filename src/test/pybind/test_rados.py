@@ -219,7 +219,7 @@ class TestRados(object):
                 eq(ret, 0)
 
                 try:
-                    cmd = {"prefix":"osd tier cache-mode", "pool":"foo-cache", "tierpool":"foo-cache", "mode":"readonly"}
+                    cmd = {"prefix":"osd tier cache-mode", "pool":"foo-cache", "tierpool":"foo-cache", "mode":"readonly", "sure":"--yes-i-really-mean-it"}
                     ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
                     eq(ret, 0)
 
