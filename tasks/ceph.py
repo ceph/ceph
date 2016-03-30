@@ -907,9 +907,12 @@ def cluster(ctx, config):
                 for role in roles:
                     is_mon = teuthology.is_type('mon', cluster_name)
                     if is_mon(role):
+                        _, _, id_ = teuthology.split_role(role)
+                        mon_dir = '/var/lib/ceph/mon/' + \
+                                  '{0}-{1}'.format(cluster_name, id_)
                         teuthology.pull_directory_tarball(
                             remote,
-                            '/var/lib/ceph/mon',
+                            mon_dir,
                             path + '/' + role + '.tgz')
 
         log.info('Cleaning ceph cluster...')
