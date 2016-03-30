@@ -659,7 +659,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   public:
     struct xio_reg_mem *mp;
     xio_mempool(struct xio_reg_mem *_mp, unsigned l) :
-      raw((char*)mp->addr, l), mp(_mp)
+      raw((char*)_mp->addr, l), mp(_mp)
     { }
     ~xio_mempool() {}
     raw* clone_empty() {
