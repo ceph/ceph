@@ -600,7 +600,7 @@ public:
     const OpContext& operator=(const OpContext& other);
 
     bool release_snapset_obc;
-
+    ThreadPool::TPHandle *handle;
     OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectContextRef& obc,
 	      ReplicatedPG *_pg) :
@@ -622,7 +622,8 @@ public:
       inflightreads(0),
       lock_to_release(NONE),
       on_finish(NULL),
-      release_snapset_obc(false) {
+      release_snapset_obc(false),
+      handle(NULL) {
       if (obc->ssc) {
 	new_snapset = obc->ssc->snapset;
 	snapset = &obc->ssc->snapset;
@@ -644,7 +645,8 @@ public:
       inflightreads(0),
       lock_to_release(NONE),
       on_finish(NULL),
-      release_snapset_obc(false) { }
+      release_snapset_obc(false),
+      handle(NULL) { }
     void reset_obs(ObjectContextRef obc) {
       new_obs = ObjectState(obc->obs.oi, obc->obs.exists);
       if (obc->ssc) {
@@ -1464,7 +1466,8 @@ public:
   void do_request(
     OpRequestRef& op,
     ThreadPool::TPHandle &handle);
-  void do_op(OpRequestRef& op);
+  void do_op(OpRequestRef& op,
+	     ThreadPool::TPHandle &handle);
   bool pg_op_must_wait(MOSDOp *op);
   void do_pg_op(OpRequestRef op);
   void do_sub_op(OpRequestRef op);

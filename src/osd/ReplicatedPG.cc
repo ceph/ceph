@@ -1429,7 +1429,7 @@ void ReplicatedPG::do_request(
       osd->reply_op_error(op, -EOPNOTSUPP);
       return;
     }
-    do_op(op); // do it now
+    do_op(op, handle); // do it now
     break;
 
   case MSG_OSD_SUBOP:
@@ -1508,7 +1508,7 @@ bool ReplicatedPG::check_src_targ(const hobject_t& soid, const hobject_t& toid) 
  * pg lock will be held (if multithreaded)
  * osd_lock NOT held.
  */
-void ReplicatedPG::do_op(OpRequestRef& op)
+void ReplicatedPG::do_op(OpRequestRef& op, ThreadPool::TPHandle &handle)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
@@ -1969,6 +1969,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   }
 
   OpContext *ctx = new OpContext(op, m->get_reqid(), m->ops, obc, this);
+  ctx->handle = &handle;
 
   if (!obc->obs.exists)
     ctx->snapset_obc = get_object_context(obc->obs.oi.soid.get_snapdir(), false);
@@ -2043,6 +2044,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   ctx->src_obc.swap(src_obc);
 
   execute_ctx(ctx);
+  ctx->handle = NULL;
   utime_t prepare_latency = ceph_clock_now(cct);
   prepare_latency -= op->get_dequeued_time();
   osd->logger->tinc(l_osd_op_prepare_lat, prepare_latency);
@@ -2831,7 +2833,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     tracepoint(osd, prepare_tx_enter, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }
-
+  
   int result = prepare_transaction(ctx);
 
   {
@@ -6400,11 +6402,18 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     dout(10) << " invalid snapc " << ctx->snapc << dendl;
     return -EINVAL;
   }
-
+  //when disk load too full, objects_read_sync maybe stuck very long. 
+  if (ctx->handle) {
+    ctx->handle->suspend_tp_timeout();
+  }
   // prepare the actual mutation
   int result = do_osd_ops(ctx, ctx->ops);
-  if (result < 0)
+  if (ctx->handle) {
+    ctx->handle->reset_tp_timeout();
+  }
+  if (result < 0) {    
     return result;
+  }
 
   // read-op?  done?
   if (ctx->op_t->empty() && !ctx->modify) {
@@ -8324,6 +8333,10 @@ void ReplicatedPG::issue_repop(RepGather *repop)
     repop->obc,
     repop->ctx->clone_obc,
     unlock_snapset_obc ? repop->ctx->snapset_obc : ObjectContextRef());
+  //queue_transactions maybe cost too long.
+  if (ctx->handle) {
+      ctx->handle->suspend_tp_timeout();
+  }
   pgbackend->submit_transaction(
     soid,
     repop->ctx->at_version,
@@ -8338,6 +8351,9 @@ void ReplicatedPG::issue_repop(RepGather *repop)
     repop->rep_tid,
     repop->ctx->reqid,
     repop->ctx->op);
+  if (ctx->handle) {
+    ctx->handle->reset_tp_timeout();
+  }
   repop->ctx->op_t = NULL;
 }
 
