@@ -3393,7 +3393,6 @@ void OSD::handle_pg_peering_evt(
   const pg_history_t& orig_history,
   pg_interval_map_t& pi,
   epoch_t epoch,
-  bool same_primary,
   PG::CephPeeringEvtRef evt)
 {
   if (service.splitting(pgid)) {
@@ -3415,14 +3414,7 @@ void OSD::handle_pg_peering_evt(
     bool valid_history = project_pg_history(
       pgid, history, epoch, up, up_primary, acting, acting_primary);
 
-    if (same_primary && epoch < history.same_primary_since) {
-      dout(10) << "get_or_create_pg " << pgid << " primary changed in "
-	       << history.same_primary_since << " (msg from " << epoch << ")"
-	       << dendl;
-      return;
-    }
-    if (!valid_history ||
-	(!same_primary && epoch < history.same_interval_since)) {
+    if (!valid_history || epoch < history.same_interval_since) {
       dout(10) << "get_or_create_pg " << pgid << " acting changed in "
 	       << history.same_interval_since << " (msg from " << epoch << ")"
 	       << dendl;
@@ -3548,15 +3540,7 @@ void OSD::handle_pg_peering_evt(
   } else {
     // already had it.  did the mapping change?
     PG *pg = _lookup_lock_pg(pgid);
-    if (same_primary && epoch < pg->info.history.same_primary_since) {
-      dout(10) << "get_or_create_pg " << pgid << " primary changed in "
-	       << pg->info.history.same_primary_since
-	       << " (msg from " << epoch << ")"
-	       << dendl;
-      pg->unlock();
-      return;
-    }
-    if (!same_primary && epoch < pg->info.history.same_interval_since) {
+    if (epoch < pg->info.history.same_interval_since) {
       dout(10) << *pg << " get_or_create_pg acting changed in "
 	       << pg->info.history.same_interval_since
 	       << " (msg from " << epoch << ")" << dendl;
@@ -7502,16 +7486,28 @@ void OSD::handle_pg_create(OpRequestRef op)
     // cannot be on the other side of a map gap
     assert(valid_history);
 
+    // The mon won't resend unless the primary changed, so
+    // we ignore same_interval_since.  We'll pass this history
+    // to handle_pg_peering_evt with the current epoch as the
+    // event -- the project_pg_history check in
+    // handle_pg_peering_evt will be a noop.
+    if (history.same_primary_since > m->epoch) {
+      dout(10) << __func__ << ": got obsolete pg create on pgid "
+	       << pgid << " from epoch " << m->epoch
+	       << ", primary changed in " << history.same_primary_since
+	       << dendl;
+      continue;
+    }
+
     handle_pg_peering_evt(
       pgid,
       history,
       pi,
-      m->epoch,
-      true,  // same primary, bc this is a create
+      osdmap->get_epoch(),
       PG::CephPeeringEvtRef(
 	new PG::CephPeeringEvt(
-	  m->epoch,
-	  m->epoch,
+	  osdmap->get_epoch(),
+	  osdmap->get_epoch(),
 	  PG::NullEvt()))
       );
   }
@@ -7740,7 +7736,6 @@ void OSD::handle_pg_notify(OpRequestRef op)
       spg_t(it->first.info.pgid.pgid, it->first.to),
       it->first.info.history, it->second,
       it->first.query_epoch,
-      false, // same interval
       PG::CephPeeringEvtRef(
 	new PG::CephPeeringEvt(
 	  it->first.epoch_sent, it->first.query_epoch,
@@ -7772,7 +7767,6 @@ void OSD::handle_pg_log(OpRequestRef op)
   handle_pg_peering_evt(
     spg_t(m->info.pgid.pgid, m->to),
     m->info.history, m->past_intervals, m->get_epoch(),
-    false, // same interval
     PG::CephPeeringEvtRef(
       new PG::CephPeeringEvt(
 	m->get_epoch(), m->get_query_epoch(),
@@ -7806,7 +7800,6 @@ void OSD::handle_pg_info(OpRequestRef op)
     handle_pg_peering_evt(
       spg_t(p->first.info.pgid.pgid, p->first.to),
       p->first.info.history, p->second, p->first.epoch_sent,
-      false, // same interval
       PG::CephPeeringEvtRef(
 	new PG::CephPeeringEvt(
 	  p->first.epoch_sent, p->first.query_epoch,
