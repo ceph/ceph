@@ -790,6 +790,17 @@ namespace crimson {
 
       // data_mtx should be held when called
       void reduce_reservation_tags(ClientRec& client) {
+	// IMPORTANT: I (Eric) do not believe this is implemented
+	// correctly as according to the algorithm specification. My
+	// modifying a delta it affects all future reservation
+	// reqeusts. The paper, however, states, "Whenever a request
+	// from VM v_i is scheduled in a weight-based phase, the R
+	// tags of the outstanding requests of v_i are decreated by
+	// 1/r_i." This implementating affects not only outstanding
+	// requests but all future requests. So we will in fact have
+	// to modify all request tags for a given client, modify its
+	// last request tag, and promote the client in the reservation
+	// queue.
 	client.increment_reserv_delta();
 	reserv_q.demote(client);
       }
