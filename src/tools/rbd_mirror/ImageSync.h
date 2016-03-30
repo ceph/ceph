@@ -6,7 +6,7 @@
 
 #include "include/int_types.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/Journal.h"
+#include "librbd/journal/TypeTraits.h"
 #include "common/Mutex.h"
 #include <map>
 #include <vector>
@@ -28,6 +28,16 @@ public:
   typedef librbd::journal::TypeTraits<ImageCtxT> TypeTraits;
   typedef typename TypeTraits::Journaler Journaler;
   typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
+
+  static ImageSync* create(ImageCtxT *local_image_ctx,
+                           ImageCtxT *remote_image_ctx, SafeTimer *timer,
+                           Mutex *timer_lock, const std::string &mirror_uuid,
+                           Journaler *journaler,
+                           MirrorPeerClientMeta *client_meta,
+                           Context *on_finish) {
+    return new ImageSync(local_image_ctx, remote_image_ctx, timer, timer_lock,
+                         mirror_uuid, journaler, client_meta, on_finish);
+  }
 
   ImageSync(ImageCtxT *local_image_ctx, ImageCtxT *remote_image_ctx,
             SafeTimer *timer, Mutex *timer_lock, const std::string &mirror_uuid,

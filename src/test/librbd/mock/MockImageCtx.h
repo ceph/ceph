@@ -4,6 +4,7 @@
 #ifndef CEPH_TEST_LIBRBD_MOCK_IMAGE_CTX_H
 #define CEPH_TEST_LIBRBD_MOCK_IMAGE_CTX_H
 
+#include "include/rados/librados.hpp"
 #include "test/librbd/mock/MockAioImageRequestWQ.h"
 #include "test/librbd/mock/MockContextWQ.h"
 #include "test/librbd/mock/MockExclusiveLock.h"
@@ -17,6 +18,7 @@
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "gmock/gmock.h"
+#include <string>
 
 namespace librbd {
 
@@ -25,6 +27,15 @@ template <typename> class ResizeRequest;
 }
 
 struct MockImageCtx {
+  static MockImageCtx *s_instance;
+  static MockImageCtx *create(const std::string &image_name,
+                              const std::string &image_id,
+                              const char *snap, librados::IoCtx& p,
+                              bool read_only) {
+    assert(s_instance != nullptr);
+    return s_instance;
+  }
+
   MockImageCtx(librbd::ImageCtx &image_ctx)
     : image_ctx(&image_ctx),
       cct(image_ctx.cct),
@@ -55,6 +66,7 @@ struct MockImageCtx {
       object_prefix(image_ctx.object_prefix),
       header_oid(image_ctx.header_oid),
       id(image_ctx.id),
+      name(image_ctx.name),
       parent_md(image_ctx.parent_md),
       layout(image_ctx.layout),
       aio_work_queue(new MockAioImageRequestWQ()),
@@ -148,6 +160,8 @@ struct MockImageCtx {
   MOCK_METHOD0(notify_update, void());
   MOCK_METHOD1(notify_update, void(Context *));
 
+  MOCK_CONST_METHOD0(get_journal_policy, journal::Policy*());
+
   ImageCtx *image_ctx;
   CephContext *cct;
 
@@ -188,6 +202,7 @@ struct MockImageCtx {
   std::string object_prefix;
   std::string header_oid;
   std::string id;
+  std::string name;
   parent_info parent_md;
 
   file_layout_t layout;

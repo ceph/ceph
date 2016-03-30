@@ -230,6 +230,13 @@ namespace librbd {
     int mirror_image_list(librados::IoCtx *ioctx,
 		          const std::string &start, uint64_t max_return,
                           std::map<std::string, std::string> *mirror_image_ids);
+    void mirror_image_get_image_id_start(librados::ObjectReadOperation *op,
+                                         const std::string &global_image_id);
+    int mirror_image_get_image_id_finish(bufferlist::iterator *it,
+                                         std::string *image_id);
+    int mirror_image_get_image_id(librados::IoCtx *ioctx,
+                                  const std::string &global_image_id,
+                                  std::string *image_id);
     int mirror_image_get(librados::IoCtx *ioctx, const std::string &image_id,
 			 cls::rbd::MirrorImage *mirror_image);
     int mirror_image_set(librados::IoCtx *ioctx, const std::string &image_id,

@@ -8,6 +8,7 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
+#include "librbd/journal/Types.h"
 #include "tools/rbd_mirror/ImageSync.h"
 #include "tools/rbd_mirror/Threads.h"
 

@@ -1382,9 +1382,13 @@ TEST_F(TestClsRbd, mirror_image) {
 
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id1", image1));
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id2", image2));
-  ASSERT_EQ(-EEXIST, mirror_image_set(&ioctx, "image_id1", image2));
-  ASSERT_EQ(-EEXIST, mirror_image_set(&ioctx, "image_id2", image3));
+  ASSERT_EQ(-EINVAL, mirror_image_set(&ioctx, "image_id1", image2));
+  ASSERT_EQ(-EEXIST, mirror_image_set(&ioctx, "image_id3", image2));
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id3", image3));
+
+  std::string image_id;
+  ASSERT_EQ(0, mirror_image_get_image_id(&ioctx, "uuid2", &image_id));
+  ASSERT_EQ("image_id2", image_id);
 
   cls::rbd::MirrorImage read_image;
   ASSERT_EQ(0, mirror_image_get(&ioctx, "image_id1", &read_image));
@@ -1404,6 +1408,7 @@ TEST_F(TestClsRbd, mirror_image) {
   ASSERT_EQ(expected_mirror_image_ids, mirror_image_ids);
 
   ASSERT_EQ(0, mirror_image_remove(&ioctx, "image_id2"));
+  ASSERT_EQ(-ENOENT, mirror_image_get_image_id(&ioctx, "uuid2", &image_id));
   ASSERT_EQ(-EBUSY, mirror_image_remove(&ioctx, "image_id1"));
 
   ASSERT_EQ(0, mirror_image_list(&ioctx, "", 3, &mirror_image_ids));

@@ -41,6 +41,7 @@ public:
     Mutex timer_lock;
   };
 
+  typedef cls::journal::Tag Tag;
   typedef std::list<cls::journal::Tag> Tags;
   typedef std::set<cls::journal::Client> RegisteredClients;
 
@@ -76,7 +77,8 @@ public:
   void unregister_client(Context *on_finish);
 
   void update_client(const bufferlist &data, Context *on_finish);
-
+  void get_client(const std::string &client_id, cls::journal::Client *client,
+                  Context *on_finish);
   int get_cached_client(const std::string &client_id,
                         cls::journal::Client *client);
 
@@ -86,6 +88,7 @@ public:
                     Context *on_finish);
   void allocate_tag(uint64_t tag_class, const bufferlist &data,
                     cls::journal::Tag *tag, Context *on_finish);
+  void get_tag(uint64_t tag_tid, Tag *tag, Context *on_finish);
   void get_tags(uint64_t tag_class, Tags *tags, Context *on_finish);
 
   void start_replay(ReplayHandler *replay_handler);

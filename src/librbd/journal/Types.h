@@ -34,7 +34,8 @@ enum EventType {
   EVENT_TYPE_SNAP_ROLLBACK  = 9,
   EVENT_TYPE_RENAME         = 10,
   EVENT_TYPE_RESIZE         = 11,
-  EVENT_TYPE_FLATTEN        = 12
+  EVENT_TYPE_FLATTEN        = 12,
+  EVENT_TYPE_DEMOTE         = 13
 };
 
 struct AioDiscardEvent {
@@ -256,6 +257,14 @@ struct FlattenEvent : public OpEventBase {
   using OpEventBase::dump;
 };
 
+struct DemoteEvent {
+  static const EventType TYPE = static_cast<EventType>(EVENT_TYPE_DEMOTE);
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
 struct UnknownEvent {
   static const EventType TYPE = static_cast<EventType>(-1);
 
@@ -277,6 +286,7 @@ typedef boost::variant<AioDiscardEvent,
                        RenameEvent,
                        ResizeEvent,
                        FlattenEvent,
+                       DemoteEvent,
                        UnknownEvent> Event;
 
 struct EventEntry {
@@ -351,6 +361,11 @@ struct MirrorPeerSyncPoint {
   void dump(Formatter *f) const;
 };
 
+enum MirrorPeerState {
+  MIRROR_PEER_STATE_SYNCING,
+  MIRROR_PEER_STATE_REPLAYING
+};
+
 struct MirrorPeerClientMeta {
   typedef std::list<MirrorPeerSyncPoint> SyncPoints;
   typedef std::map<uint64_t, uint64_t> SnapSeqs;
@@ -358,6 +373,7 @@ struct MirrorPeerClientMeta {
   static const ClientMetaType TYPE = MIRROR_PEER_CLIENT_META_TYPE;
 
   std::string image_id;
+  MirrorPeerState state = MIRROR_PEER_STATE_SYNCING; ///< replay state
   uint64_t sync_object_count = 0; ///< maximum number of objects ever sync'ed
   SyncPoints sync_points;         ///< max two in-use snapshots for sync
   SnapSeqs snap_seqs;             ///< local to peer snap seq mapping
@@ -372,6 +388,7 @@ struct MirrorPeerClientMeta {
 
   inline bool operator==(const MirrorPeerClientMeta &meta) const {
     return (image_id == meta.image_id &&
+            state == meta.state &&
             sync_object_count == meta.sync_object_count &&
             sync_points == meta.sync_points &&
             snap_seqs == meta.snap_seqs);
@@ -458,6 +475,7 @@ std::ostream &operator<<(std::ostream &out, const EventType &type);
 std::ostream &operator<<(std::ostream &out, const ClientMetaType &type);
 std::ostream &operator<<(std::ostream &out, const ImageClientMeta &meta);
 std::ostream &operator<<(std::ostream &out, const MirrorPeerSyncPoint &sync);
+std::ostream &operator<<(std::ostream &out, const MirrorPeerState &meta);
 std::ostream &operator<<(std::ostream &out, const MirrorPeerClientMeta &meta);
 std::ostream &operator<<(std::ostream &out, const TagData &tag_data);
 

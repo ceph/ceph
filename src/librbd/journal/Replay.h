@@ -152,6 +152,8 @@ private:
                     Context *on_safe);
   void handle_event(const FlattenEvent &event, Context *on_ready,
                     Context *on_safe);
+  void handle_event(const DemoteEvent &event, Context *on_ready,
+                    Context *on_safe);
   void handle_event(const UnknownEvent &event, Context *on_ready,
                     Context *on_safe);
 

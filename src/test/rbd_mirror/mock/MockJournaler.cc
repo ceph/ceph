@@ -5,6 +5,11 @@
 
 namespace journal {
 
+MockReplayEntry *MockReplayEntry::s_instance = nullptr;
 MockJournaler *MockJournaler::s_instance = nullptr;
+
+std::ostream &operator<<(std::ostream &os, const MockJournalerProxy &) {
+  return os;
+}
 
 } // namespace journal

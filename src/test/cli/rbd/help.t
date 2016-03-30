@@ -42,7 +42,8 @@
       lock remove (lock rm)       Release a lock on an image.
       map                         Map image to a block device using the kernel.
       merge-diff                  Merge two diff exports together.
-      mirror image demote         Demote an image to secondary for RBD mirroring.
+      mirror image demote         Demote an image to non-primary for RBD
+                                  mirroring.
       mirror image disable        Disable RBD mirroring for an image.
       mirror image enable         Enable RBD mirroring for an image.
       mirror image promote        Promote an image to primary for RBD mirroring.
@@ -755,7 +756,7 @@
   usage: rbd mirror image demote [--pool <pool>] [--image <image>] 
                                  <image-spec> 
   
-  Demote an image to secondary for RBD mirroring.
+  Demote an image to non-primary for RBD mirroring.
   
   Positional arguments
     <image-spec>         image specification

@@ -248,6 +248,12 @@ void Journaler::unregister_client(Context *on_finish) {
   return m_metadata->unregister_client(on_finish);
 }
 
+void Journaler::get_client(const std::string &client_id,
+                           cls::journal::Client *client,
+                           Context *on_finish) {
+  m_metadata->get_client(client_id, client, on_finish);
+}
+
 int Journaler::get_cached_client(const std::string &client_id,
                                  cls::journal::Client *client) {
   RegisteredClients clients;
@@ -271,6 +277,10 @@ void Journaler::allocate_tag(const bufferlist &data, cls::journal::Tag *tag,
 void Journaler::allocate_tag(uint64_t tag_class, const bufferlist &data,
                              cls::journal::Tag *tag, Context *on_finish) {
   m_metadata->allocate_tag(tag_class, data, tag, on_finish);
+}
+
+void Journaler::get_tag(uint64_t tag_tid, Tag *tag, Context *on_finish) {
+  m_metadata->get_tag(tag_tid, tag, on_finish);
 }
 
 void Journaler::get_tags(uint64_t tag_class, Tags *tags, Context *on_finish) {
